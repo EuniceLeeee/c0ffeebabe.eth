@@ -30,7 +30,9 @@
    token/ETH delta 独立复算；builder payment 同时检查 priority fee 和 trace 中的直接 coinbase transfer。
 6. 在声明根因前主动排除替代解释：错误 parent/prefix、同块前序状态、历史 state 不可读、universe/config 不同、
    hop/template 限制、coarse rank/exact refinement、candidate/top-N cap、deadline/TTL、warm/cache、profit-token
-   valuation 或 flash liquidity。第一个被生产证据证明失败的阶段才是 gap，后续未跑阶段写 `not-run`。
+   valuation 或 flash liquidity。第一个被生产证据证明失败、拒绝或无法继续的阶段才是 gap；机器证据是从步骤 1
+   开始的有序前缀，并在该条 `fail | reject | not_reached` 记录后立即终止。人工六行展示若补齐余下行，只能把它们
+   标成展示用 `not_reached`，不得再发出额外 machine evidence。
 7. 如果分析器无法区分核心闭环与利润处置而输出 `MANUAL REQUIRED`，这是 fail-closed；用上述 token continuity、
    同块关系和可信 replay 消歧，不能把 touched venue 集合强行拼成路线。
 
@@ -94,7 +96,8 @@
 
 先回答当前结论。不得把历史缺口写成当前缺口，也不得用 `build 通过`、`in_graph=true` 或手工拼路线代替生产可复现证据。
 独立 Adapter Replay runner 通过只记录 `adapter_replay_pass`；完成当前 trusted promotion 后才记录 `adapter_fixed`。
-只有 Production Replay 在不提供 route/amount 时由生产入口自发发现并通过，才能记录 `production_fixed`，并把当前
+只有 Production Replay 不向生产 producer 提供 route/amount、并在输出冻结后才由 verifier 对照 expected route，
+由生产入口自发发现并通过时，才能记录 `production_fixed`，并把当前
 生产结论写为 `已修复/可复现`。
 
 ## 2. 调用工具
@@ -163,36 +166,69 @@ tx 时刻 pin，**当前状态**用 §1 审计基线 SHA。当前状态词表：
 - **路线外动作：** `<例如：核心环赚取 USDT 后再换 WETH，属于利润退出腿>`
 - **路线真值来源：** `<receipt/call trace token continuity + 同块交易关系 + trusted self-enumerating replay>`
 
-## 5. 生产漏斗定位（route-stage / 等价声明的固定六步）
+## 5. 生产漏斗定位（统一领域六步）
 
-这六步只用于某笔交易的 route-stage 修复或等价性声明，是诊断与该声明的验收证据，不是 deploy、A/B decision、close
-或 merge 的通用强制开关。systemic protocol scanner、graph/universe、覆盖率、分布或性能改动必须改用预声明的正负
-cohort、输出/覆盖率、同输入公平性和资源/性能 A/B；不能被一笔无关六步样本阻断，也不能用这笔样本冒充系统性结论。
+这六步是架构无关的领域证据合同，不是固定文件或函数调用表。每项先选择一个验收轨道：
 
-| # | 六步判据 | 结果 | 必填证据 |
+| 轨道 | 能证明什么 | 六步要求 |
+|---|---|---|
+| `family_execution` | trace-proven route 上，一个 quote-bearing `RouteLeg` execution family 的 quote、plan/size、encode、final sim、守恒与 EV 正确；funding-only family 不作为本轨 subject | route 可固定，amount/quote/plan/calldata 不得固定；步骤 1–2 明记 `bypassed`，步骤 3–6 必须由生产代码通过；结论最多 `adapter_fixed` |
+| `production_route_stage` | 生产漏斗能自发发现并推进这条历史路线 | 生产运行只能收到交易与状态锚；expected route 由 verifier 保留，等输出冻结后再比较；六步按实际到达状态记录 |
+| `systemic_live` | intake、admission、universe、ranking、分布、延迟、并发、deadline 或资源行为 | 单笔六步仅作诊断；正式结论来自预声明正负 cohort、同输入公平性、资源/性能和 Hermes A/B |
+
+统一的六步顺序如下。状态词表固定为 `pass | fail | reject | bypassed | not_reached`：
+
+| # | 稳定领域阶段 | 结果 | 必填核心证据 |
 |---:|---|---|---|
-| 1 | Scanner/detector 自发发现 | `<pass/fail/bypassed/not-run>` | `<source/identity/discovery/admission → runtime route/edge/graph/view → scanner/refinement；input/config anchor；各层 cap 的语义映射；live/replay view count+hash+目标成员关系；coarse/exact rank；mid source>` |
-| 2 | Planner 产出 plan | `<pass/fail/not-run>` | `<candidate_plans；ordered route identity；hop/template 约束>` |
-| 3 | Solver quote 与 sizing | `<pass/fail/not-run>` | `<逐腿 amountIn/amountOut、fee、rounding、warm/prepared 状态与 state block>` |
-| 4 | Fork/final sim 逐 wei | `<pass/fail/not-run>` | `<plan build/compile；calldata/script hash；正确 parent/prefix；success/revert；profit/gas/standing position>` |
-| 5 | 生产 EV gate | `<pass/fail/not-run>` | `<生产估值、gas/bid/haircut、allow/reject reason 与 submission policy>` |
-| 6 | 同输入翻转 / 等价性 | `<pass/fail/not-run>` | `<baseline 首败阶段 → 当前阶段；功能修复的 stage advance，或重构的集合/逐 wei/calldata/EV 等价；必要时另列 live performance>` |
+| 1 | `discovery_admission_graph`（发现/身份准入/图） | `<status>` | `<候选来源与状态锚；identity/admission proof；canonical edge identities；runtime graph membership；配置/universe hash>` |
+| 2 | `route_enumeration`（路线枚举） | `<status>` | `<生产枚举自然产出的 canonical ordered route identities；是否包含目标路线；不得由 expected route 影响枚举/筛选>` |
+| 3 | `exact_quote_refine`（精确报价/精炼） | `<status>` | `<state block/root；逐腿 exact amountIn/amountOut、fee、rounding；refine 前后语义结果>` |
+| 4 | `plan_and_size`（计划与 sizing） | `<status>` | `<canonical plan identity；solver 自选 amount；resolved 逐腿金额与约束>` |
+| 5 | `fork_final_sim`（fork 最终模拟） | `<status>` | `<编译 calldata/script hash；正确 parent/trigger/full-prefix 锚；success/revert；profit/gas；repayment/conservation/standing position>` |
+| 6 | `production_ev`（生产 EV） | `<status>` | `<估值与 policy 输入；gas/bid/haircut；allow/reject、reason、net EV>` |
 
-Gap 定位到第一个失败阶段。同一历史输入下，Adapter Replay 用 trace-proven route、但不提供 amount 的 runner 通过只记
-`adapter_replay_pass`；trusted promotion 后才记 `adapter_fixed`。只有 Production Replay 不提供 route/amount、由生产
-入口自发发现并翻转，才能记 `production_fixed`。手工注入 path/amount 只证明可执行性，不证明生产能找到。
-Adapter Replay 按契约绕过 active-pool admission 与 scanner/backrun discovery，因此第 1 步记 `bypassed`，不能伪写
-`pass`；Production Replay 才要求第 1 步由生产入口自发通过。
+Gap 定位到有序证据前缀末尾的第一个 `fail | reject | not_reached`，并在该记录处终止；未执行的后续阶段不再生成
+machine evidence。人工六行报告可把余下行显示为 `not_reached`，但不得参与哈希、等价性或伪装成实际执行结果。
+baseline→fix 的 stage advance 与重构等价性是比较共同执行到的规范化领域证据，不是第七步。功能修复记录第一个失败
+阶段如何前进；等价重构比较所有受影响 fixture 的规范化核心字段。全局
+registry/state/planner/quoter 重构还必须有跨 family 正负 cohort；触及热路径、资源或分布就进入 `systemic_live`。
 
-第 1 步必须把 `source/identity/admission`、`runtime graph/view` 和 `scanner/refinement` 的子阶段分别写清；其中任何
-一层先失败，就在那里停止并将后续步骤记为 `not-run`，不能用 `in_graph=true` 代替自发发现。第 4 步必须同时留下
-编译产物和执行结果，不能只报 fork 成功。
+Adapter Replay 用 trace-proven route，但不提供 amount、quote、plan 或 calldata；步骤 1–2 必须诚实写 `bypassed`，
+runner 通过只记 `adapter_replay_pass`，trusted promotion 后才记 `adapter_fixed`。它不证明 production discovery、
+candidate rank 或 stage advance。只有 Production Replay 不向生产 producer 提供 route/amount，并由生产入口自然完成
+适用阶段，才能记录 `production_fixed`。
+若 diff 同时影响多个 family，必须由 base/challenger production registry 与 active ActionAdapter catalog 自动派生
+所有 owner；去重后的 changed-owner 集合必须与 fixture subject 集合完全相等。共享实现文件不能只验一个 owner，
+也不能靠手工协议清单声明“其余不受影响”。baseline 的可翻转失败还必须具备稳定
+`{ownerFamilyId, stageId, code}`；timeout、abort、RPC/provider 和未分类错误只算基础设施失败。
 
-每步证据必须注明代码、输入和状态锚。准入证据按 §0.3 使用审计 SHA 反查出的实际窗口、活动阈值、各层独立 cap、
-identity policy 与 builder，并证明 production replay 的配置按消费阶段映射到 live，runtime view 的 count/hash 与目标池
-成员关系一致；pin 只作生产行为证据。现算与 pin 分歧写成刷新/配置漂移。当前 runtime 若在 scanner
-后还有 exact mid/refinement，必须记录 refinement 前后的 rank/set；未来该能力改名或搬家，仍按真实调用链检查，
-不能因旧文件名不存在就跳过。tx 时刻与当前状态不一致也必须分两行，不能合并成一个 pass/fail。
+`expected_route` 只能是 verifier 的 output oracle：先让生产枚举、筛选、排序、候选保留、top-K、solve-set 选择和 sizing
+全部结束并冻结输出，再进行完整有序身份比较。不得把 expected route/pools/tokens、其 hash 或派生选择提示传入生产
+producer；不得把目标追加到 solve set、强制 probe 或因目标存在而扩大局部预算。若自然输出未包含目标，步骤 2
+`fail`；若包含但未自然进入后续选择，在第一个无法继续的步骤记录 `not_reached` 并终止证据前缀。
+
+每个阶段可带 namespaced `extensions`，记录 wall time、rank、计数器、debug 文本、源码位置或实现特有中间值。
+extensions 保留用于诊断，但不参加语义等价。若本轮声明就是 latency/rank/resource，则这些字段属于
+`systemic_live` 的预声明 metric/cohort，而不是六步等价字段。
+
+证据绑定 capability ID、canonical edge/route identity、状态锚和领域数值，不绑定文件路径、函数名、类名或模块数量。
+能力搬家、拆分、合并或改为 registry dispatch 后仍使用同一六步语义。未知 extension 字段保留且不参与旧版语义比较；
+缺少核心字段 fail closed；新增或修改必填核心字段必须升级 schema，并由独立 trusted verifier 更新。
+
+对 backrun，未收到 victim、transition/decode、identity/admission/graph 都定位到第 1 步；其中
+`input_not_received` 的“已修复”声明必须由 live orderflow 证据完成，历史 fork 只能记录，不能证明。必要 edge
+都在但未形成 route 是第 2 步；状态/overlay/exact quote 是第 3 步；planner、borrowability、sizing 以及 resolved
+plan 产生前的 solver 内部 sim 是第 4 步；solver 返回后独立 mandatory final sim 是第 5 步。六步全过但仍错过
+区块属于 latency/submission/inclusion，进入 `systemic_live`，不是第 7 步。
+
+步骤 1 必须把 candidate source、identity/admission 和 runtime graph membership 分开记录；`in_graph=true` 不能替代
+自发发现。步骤 5 必须同时留下编译产物和执行结果，不能只报 fork 成功。准入证据按 §0.3 使用审计 SHA 反查实际
+窗口、阈值、独立 cap、identity policy 与 builder，并证明 Production Replay 配置按消费语义映射到 live。pin 与现算
+分歧写成刷新/配置漂移；tx 时刻与当前状态不一致也必须分列，不能合并成一个 pass/fail。
+
+人工裁决只拥有轨道与 scope 分类权：可以保留某个 machine failure 并说明它不属于当前声明，但不能把 `fail` 改成
+`pass`、代替必填阶段，或用 prose 证明 identity/probe、quote、plan/size、encoding、final sim、守恒、EV、状态/config
+锚或安全边界。只有另一可信机器 producer 已覆盖当前声明全部必需性质时，范围外失败才不阻断该声明。
 
 ## 6. 精确代码定位
 
@@ -230,21 +266,22 @@ capability id 为主，行号为辅。若当前已修复，列“能力现在落
 - **冻结 universe 锚：** `<实际生产 pin 与 SHA；pre-tx 重建参数/输出 SHA；窗口必须 toBlock ≤ tx_block - 1；builder 代码 SHA>`
 - **生效配置锚：** `<live process/deploy/fallback manifest + SHA；replay manifest + SHA；按消费阶段映射；diff=none | 预声明实验差异 | trusted acceptance-only override + 授权 SHA>`
 - **运行时视图锚：** `<live/replay 各 view 的 count+hash；目标池/edge membership；差异解释>`
-- **验收层级：** `<diagnosis | Adapter Replay runner | trusted adapter promotion | Production Replay | systemic cohort/A-B>`
+- **验收轨道 / 层级：** `<family_execution / Adapter Replay runner | family_execution / trusted adapter promotion | production_route_stage / Production Replay | systemic_live / cohort+A/B>`
 - **baseline：** `<first failing stage>`
 - **fix commit：** `<sha or none>`
-- **可信入口：** `<在审计 SHA 的 gates/runbook/manifest 中发现的 existing pinned harness + source hash>`
-- **期望翻转：** `<no_candidate → path_found → final_sim_success, etc.>`
+- **可信入口：** `<在审计 SHA 的 gate/runbook/manifest 中发现的 trusted producer+verifier 及 source hash；source identity 仅作防漂移元数据，不参加六步语义等价>`
+- **期望翻转：** `<canonical 首败阶段 fail/not_reached → pass，或受影响 fixture 的六步核心字段等价>`
 - **实际结果：** `<adapter_replay_pass | adapter_fixed | production_fixed | stage result | cohort/A-B result>`
-- **scanner 是否自发产出路线：** `是 | 否 | 不适用（Adapter Replay）`
-- **是否提供 route / amount：** `<Adapter Replay 可提供 trace-proven ordered route、不得提供 amount；Production Replay 两者都不得提供>`
+- **生产是否自发产出路线：** `是 | 否 | 不适用（family_execution 的步骤 1–2 bypassed）`
+- **是否提供 route / amount：** `<Adapter Replay 可 route-pinned、不得提供 amount/quote/plan/calldata；Production Replay 的 producer 两者都不得获得，expected route 仅由 verifier 在输出冻结后读取>`
 - **逐 wei / calldata / EV：** `<quote amounts；calldata/script hash；final-sim profit/gas；EV decision>`
 - **是否需要 live：** `<确定性 route correctness 通常不需要；systemic scanner/universe/分布/性能、延迟或 intake 可见性需要>`
 
-route-stage 功能修复必须由同一历史输入从第一个失败阶段翻转；等价重构必须证明 §5 各阶段集合、逐 wei、calldata 和
-EV 判定一致，再单独比较 live performance。六步不作为无关系统性改动的部署/决策开关；后者按预声明 cohort 和 A/B
-验收。trusted harness、fixture 和 gate runner 从审计基线读取，challenger
-不得随实现一起修改。若 sender/full-prefix 审计发现未声明的多交易依赖，先修正交易分类和状态锚，再谈翻转。
+route-stage 功能修复必须由同一历史输入从第一个失败阶段翻转；family 等价重构必须证明所有受影响 fixture 的 §5
+核心字段一致；extensions 不参与语义等价。共享热路径或跨 family 重构另做 cohort 与 live performance。六步不作为
+无关系统性改动的部署/决策开关；后者按预声明 cohort 和 A/B 验收。trusted producer/verifier 从审计基线或独立可信
+tooling 读取，challenger 不得随实现一起弱化。若 sender/full-prefix 审计发现未声明的多交易依赖，先修正交易分类和
+状态锚，再谈翻转。
 Adapter Replay runner 只证明已知 route 的 execution family 能力并产出 `adapter_replay_pass`；trusted promotion 后才是
 `adapter_fixed`。只有不提供 route/amount、由生产入口自发发现的 Production Replay 才能产出 `production_fixed`。
 
@@ -264,8 +301,12 @@ Adapter Replay runner 只证明已知 route 的 execution family 能力并产出
 - 核心闭环是四腿：`USDT→PAXG→GOLDx→USDx→USDT`。
 - Moxie `0x1bc610…` 把闭环赚到的约 `0.442405 USDT` 换成 WETH，是利润退出腿，不是核心闭环第五腿。
 - GOLDx 能力位于 `venues/protocols/goldx.ts::goldxAdapter`；Curve underlying 能力位于 `venues/swaps/curve-underlying.ts::curveUnderlyingAdapter`；两者均在 `production-registry.ts::PRODUCTION_ROUTE_ADAPTERS` 注册。
-- `blockscan-hunt-tx149.ts` 使用冻结 production universe，让未改造的 scanner 自发枚举四腿；不注入 path/amount，结果从 `not_admitted` 翻转为 `final_sim_success`，`net_profit_raw=442380`。
-- 因此这笔在该示例审计 main 已修复，不需要再补 adapter。历史修复也不只是 adapter：rank 89 路线还依赖通用 block-scan candidate cap 从 20 扩到 100。
+- 该示例当时的 `blockscan-hunt-tx149.ts` 报告记录了冻结 production universe 与
+  `not_admitted → final_sim_success`、`net_profit_raw=442380`。按当前合同复用这份证据前，还必须重新证明 expected
+  route 没有进入枚举、筛选或 solve-set 选择；旧报告本身不能自动升级为新的 `production_fixed`。
+- 该示例当时判定 main 已修复且不需要再补 adapter；按当前合同重新引用这个结论时必须重跑
+  `production_route_stage`。历史改动也不只是 adapter：rank 89 路线还依赖通用 block-scan candidate cap 从 20
+  扩到 100，因此不能拿 family replay 单独证明生产会选中它。
 - 当前 `bundle-postmortem` 已通过 `GOLDx target + mint(address,uint256)` 识别 `protocol`，但故意不从 touch-set 自动猜核心闭环，因此 `MANUAL REQUIRED` 是诚实降级，不是工具缺陷。
 
 ### 示例：`0x14026eed…f4fd53` 的逐腿双锚表（§4 的填法范本）

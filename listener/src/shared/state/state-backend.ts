@@ -83,6 +83,27 @@ export class StateCallAbortedError extends Error {
   }
 }
 
+/**
+ * Structured proof that a submitted local-fork transaction was mined with a
+ * failing status. Consumers must inspect these fields, never parse `message`.
+ */
+export class TransactionRevertedError extends Error {
+  readonly code = "TRANSACTION_REVERTED";
+  readonly kind = "revert";
+
+  constructor(
+    readonly transactionHash: string,
+    readonly detail?: string,
+  ) {
+    super(
+      `transaction reverted: ${transactionHash}${
+        detail ? ` ${detail}` : ""
+      }`,
+    );
+    this.name = "TransactionRevertedError";
+  }
+}
+
 export function isStateCallAbortedError(error: unknown): error is StateCallAbortedError {
   return error instanceof StateCallAbortedError || (
     typeof error === "object" &&
@@ -907,7 +928,7 @@ export class AnvilStateBackend implements StateBackend {
     const receipt = await getReceipt(this.provider, hash, "send receipt");
     if (!receipt || receipt.status !== 1) {
       const detail = await traceRevert(this.provider, hash);
-      throw new Error(`transaction reverted: ${hash}${detail ? ` ${detail}` : ""}`);
+      throw new TransactionRevertedError(hash, detail || undefined);
     }
     return hash;
   }

@@ -24,6 +24,90 @@ same-block fairness, CPU/pass-latency, budget-censoring, candidate-composition, 
 criteria as applicable. Its decisive check is that cohort contract plus Hermes A/B; the optional six-step
 route diagnostic is not a deployment, decision, close, or merge switch.
 
+### Three validation tracks
+
+Every claim selects exactly one track before evidence is produced:
+
+| Track | Claim it may close | Decisive evidence |
+|---|---|---|
+| `family_execution` | Every registry-derived quote-bearing `RouteLeg` family affected by the diff can build its family-owned edges, quote, plan/size, encode and execute a trace-proven route safely. Funding-only families are not subjects of this track. | Exact changed-owner-family ↔ fixture-subject coverage, trusted route-pinned Family/Adapter Replay, family conformance/isolation, fork final sim, repayment/conservation and production EV. Production discovery and route enumeration are `bypassed`; the verdict is `adapter_fixed`, never `production_fixed`. |
+| `production_route_stage` | The production funnel can self-discover and advance a particular historical route. | Trusted Production Replay with no route or amount supplied to discovery, enumeration, pruning, ranking, solve selection or sizing. The expected route is an output-only oracle applied after production output is frozen. |
+| `systemic_live` | Intake, universe/admission, scanner/ranking, candidate distribution, shared hot-path latency, concurrency, deadlines or resource behavior improved without unacceptable regressions. | Predeclared positive/negative cohort, same-input coverage/output/resource evidence and Hermes paired A/B. A single-route six-step record is diagnostic only. |
+
+`family_execution` never proves that a newly observed instance enters production: its route pin means steps
+1–2 are absent by definition. An unchanged identity/probe path may be checked as supporting evidence, but the
+verdict remains execution-only. Adding or changing a discovery source, production registry activation,
+universe-wide admission, or any behavior capable of changing cross-opportunity cardinality is `systemic_live`,
+even if one historical instance passes.
+
+Manual review chooses the track and may classify a failed check as outside the declared claim. It cannot turn a
+machine `fail` into `pass`. A claim may proceed past an out-of-scope failure only when another trusted machine
+producer covers every required property of that claim. Identity/probe, quote, plan/size, encoding, final sim,
+repayment/conservation, production EV, state/config anchors and safety boundaries are claim-relevant when the
+claim names them and are never manually waivable.
+
+### Canonical six-step semantic contract
+
+All route evidence uses one stable, architecture-independent sequence:
+
+1. `discovery_admission_graph`
+2. `route_enumeration`
+3. `exact_quote_refine`
+4. `plan_and_size`
+5. `fork_final_sim`
+6. `production_ev`
+
+Each ordered stage record has `schema_version`, `profile`, `step`, `stage_id`,
+`status=pass|fail|reject|bypassed|not_reached`, canonical input/state anchors,
+stage-owned `output` plus `output_sha256`, and optional `metrics` / `extensions`.
+Required semantic output is:
+
+- step 1: candidate provenance, identity/admission proof, canonical edge identities and runtime graph membership;
+- step 2: canonical ordered route identities emitted by production enumeration;
+- step 3: state block/root and exact per-leg input/output, fee and rounding results;
+- step 4: canonical plan identity, solver-selected input and resolved per-leg amounts;
+- step 5: compiled calldata/script hash, success/revert, gross/net profit, gas, repayment/conservation and
+  standing-position result;
+- step 6: production valuation inputs, policy inputs, allow/reject, reason and net EV.
+
+Baseline/fix stage advance and equivalence are comparisons over these six records, not a seventh stage.
+`family_execution` must truthfully mark steps 1–2 `bypassed`; route pinning must never be relabelled as production
+discovery or enumeration. `production_route_stage` must produce the applicable stages without an expected route
+or amount entering the production run.
+
+Evidence may include a namespaced `extensions` object for wall time, counters, ranks, debug text, source
+locations or producer-specific telemetry. Extensions are retained for diagnosis but excluded from semantic
+equivalence. If latency, rank, counters or resource use is the claim, it belongs to the predeclared
+`systemic_live` metric/cohort contract instead of being smuggled into route equivalence.
+The same exclusion applies to the top-level `metrics` object; neither `metrics` nor `extensions` can satisfy a
+missing core output or turn a failed stage into a pass.
+
+For backrun, “victim/raw input not received” and transition/decode/identity/admission/graph failures are step 1;
+for block-scan the corresponding input is the source-block/state anchor. A route whose required edges are
+present but is not enumerated fails step 2. State/overlay/exact-quote failure is step 3. Planner, borrowability,
+sizing and solver-internal simulations performed before a resolved plan is selected belong to step 4. Step 5
+is the independent mandatory fork final simulation after the solver returns a resolved plan. If steps 1–6 all
+pass but the opportunity misses the block, the remaining claim is `systemic_live` latency/submission/inclusion,
+not a seventh deterministic stage.
+
+The contract binds capability IDs and canonical domain values, not file paths, function names, class layout or
+the number of internal modules. Producers may move, split, merge or be registry-dispatched without changing
+the evidence meaning. Unknown extension fields are preserved and ignored by semantic comparison; a missing
+required core field fails closed. Adding or changing a required core field requires a schema-version bump and
+a trusted verifier update independent of the challenger.
+
+Step 4 execution identity is derived from the solver-selected resolved subtree, not copied from the expected
+edge. Address-backed families use the resolved node target by default. A singleton vault or manager whose
+physical call target differs from its logical venue must declare a family-owned projection from that subtree;
+the trusted runner independently compares the projected logical target and optional opaque pool id with the
+graph edge. This keeps protocol semantics out of the central runner while preventing two pools behind one
+singleton from satisfying each other's witness.
+
+For step 5, only an explicit EVM/domain witness (for example a typed revert or `CALL_EXCEPTION`) may establish a
+stable family-owned failure. Timeout, abort, provider/network errors and structured errors with no recognized
+domain classification are non-promotable infrastructure evidence. Error prose alone can neither attribute a
+failure to a family nor establish a baseline-to-challenger flip.
+
 ### `fixed` vs `implemented` (the definition of "fixed")
 For a transaction-bound deterministic searcher change (path / pool / decoder / template / planner / adapter / graph):
 - `implemented` = code written + build/tests pass.
@@ -76,7 +160,7 @@ competitiveness** — never conflate ([[feedback-validate-live-not-backtest]]).
 | latency / full pipeline | `npm run searcher:replay-live-fixtures` | per-stage `stageMs` p50/p95 (incl. preSolver) + revm profit equivalence (1 wei). Record live first with `SEARCHER_RECORD_LIVE_FIXTURES=1`. |
 | quote / math equivalence | `npm run searcher:finaloverlayequiv` / `:curvemath` / `:balanceslots` | local-quote vs on-chain quoter bit-exactness. |
 | final verify / bundle safety | `npm run searcher:finalverifygate` / `:bundle-router-safety` | terminal balance-assert flash-repay guard; standing-position rejection. |
-| execution-family Adapter Replay (route-pinned equivalence; independent; never deploy-blocking) | `npm run searcher:adapter-family-replay -- --fixture <fixture>` | trace-bound route is emitted by one registered `ExecutionFamilyId`; production planner/solver/quote/encode/fork sim/repayment/conservation/EV all pass without fixture amounts, tolerance or calldata. Conservation forbids consuming pre-existing intermediate inventory; positive safety-margin surplus is recorded and conservatively excluded from EV. It does not prove discovery, candidate rank or stage advance. Emits `adapter_replay_pass`, not `adapter_fixed`. |
+| execution-family Adapter Replay (`family_execution`; route-pinned, independent, never deploy-blocking) | `npm run searcher:adapter-family-replay -- --fixture <fixture>` | a trace-bound route contains one registered quote-bearing `RouteLeg` family under test; canonical steps 1–2 are `bypassed`, while production quote, plan/size, encode, fork sim, repayment/conservation and EV satisfy steps 3–6 without fixture amounts, tolerance or calldata. Funding is replay infrastructure, not the subject family. Conservation forbids consuming pre-existing intermediate inventory; positive safety-margin surplus is recorded and conservatively excluded from EV. It does not prove discovery, candidate rank or production stage advance. Emits `adapter_replay_pass`, not `adapter_fixed`. |
 | reference arb (Foundry fork) | `forge test --match-test testReplayArbitrage --fork-url $MAINNET_RPC_URL --fork-block-number 24710787` | the wstUSR replay (see `test/WstUSRArb.t.sol`, `test/BotVM.t.sol`). |
 
 ## Correctness properties — MUST be test assertions, not prose (the #4 migration)
@@ -178,22 +262,22 @@ When invoked, the six-step check requires a fully populated `production_evidence
   trusted hunt harness invoked directly by Node (not through challenger npm configuration). The wrapper runs
   `blockscan-hunt.ts` from the untouched sample parent block and `backrun-hunt.ts` across the exact
   boundary/trigger-only/full-prefix states,
-  with the same frozen universe and the sample's on-chain DEX pool IDs. Harness/test/fixture changes in B
-  are forbidden. The measured A/B hunt stages, not a challenger-authored success string, must show the same
-  sample advances at least one
-  mechanically observable production stage: `not_admitted → path_found → final_sim_success`. A backrun
+  with the same frozen universe. The verifier retains the sample's expected pool/route identity outside the
+  production process and compares it only after output is frozen. Harness/test/fixture changes in B are
+  forbidden. The measured A/B canonical stage records, not a challenger-authored success string, must show the
+  same sample advances past its declared first failing stage. A backrun
   `final_sim_success` additionally requires trigger-only and full-prefix route/sim/EV buckets to match, the
   full-prefix route transaction to land at the winner index, and no historical sender balance/nonce rewrite;
   oracle victims require an
   independent trusted quote delta on the declared route edge. A later quote-only or submit-only stage
   requires its own trusted harness before it may satisfy acceptance.
 
-For block-scan, acceptance records the six physical stages separately: (1) graph/admission, (2) route
-enumeration, (3) exact quote/refine, (4) planner+solver, (5) resolved-plan fork re-sim with calldata/profit/gas,
-and (6) production EV allow/reject. The final comparison binds those facts across baseline and challenger.
-Backrun uses the same six-slot evidence shape as (1) raw trigger/state anchor, (2) route enumeration,
-(3) pre/post counterfactual quote, (4) resolved-plan fork sim, (5) production EV, and (6) trigger-only versus
-full-prefix replay equivalence.
+Block-scan now emits the canonical semantic schema directly. Backrun retains read compatibility with its
+legacy diagnostics until its trigger-only/full-prefix producer is migrated; the verifier must not relabel the
+legacy slots as canonical plan/sim/EV evidence. Once migrated, lane-specific facts such as a raw trigger,
+trigger-only/full-prefix anchors and counterfactual quote belong in the canonical input/state anchors and
+stage-owned fields; they do not renumber or replace the six stages. Trigger-only/full-prefix equivalence is
+then a comparison over the complete six-stage records, not a backrun-specific sixth-stage meaning.
 For a stage-advance change the challenger must emit the ordered diagnostics through its declared stage and the baseline must fail at its
 declared stage; for an equivalence refactor both sides must emit one ordered `pass` result for steps 1..6.
 The canonical human evidence contract remains `.claude/commands/tx-gap.md`.
@@ -204,20 +288,23 @@ disables only the `challenger_stage > baseline_stage` assertion in that check. I
 `acceptance <id>` runs and cannot block deployment. Wallet, port, runtime, lane and posture protections are
 independent hard boundaries.
 
-The optional six-step checker is diagnostic and cannot block starting a bounded-live B or an unrelated systemic
-cohort/A-B decision. A nonzero result remains recorded with its exact failed stage and logs; manual review may
-classify it as irrelevant to the declared change or as a gate/harness bug and continue the dry-run/diagnosis.
-Never rewrite a failed machine result to `pass`. If the claimed fix itself is a deterministic route/adapter
-change, Rule 12 still applies: repair the harness, add its regression, review it, and rerun before promotion or a
-`fixed` verdict. Wallet/signing/broadcast posture, target SHA, port/process stability, shared-input fairness and
-the other hard safety boundaries remain non-overridable.
+The optional six-step checker is diagnostic and cannot block starting a bounded-live B or an unrelated
+`systemic_live` cohort/A-B decision. A nonzero result remains recorded with its exact failed stage and logs;
+manual review may classify it as outside the declared track or as a suspected gate/harness defect and continue
+the dry-run/diagnosis. It may not rewrite the result or satisfy a required stage. If the failed predicate belongs
+to the claimed track, repair the trusted producer/verifier and add its regression, or supply another independently
+trusted machine producer for the same predicate, then rerun before promotion or a `fixed` verdict.
+Wallet/signing/broadcast posture, target SHA, port/process stability, shared-input fairness and the other hard
+safety boundaries remain non-overridable.
 
 Only this explicit `require_stage_advance=false` equivalence replay receives the closed-loop search budget:
 the already-frozen A/B universe is reused, at most 20,000 pools are loaded, 512 coarse candidates may be
 exact-refined, the final admitted set may extend through rank 300, and scan/pass budgets are 600/1,200 seconds.
-The expected route is still matched by its complete ordered identity and appended to the eight-route solve
-set, so this widens discovery without injecting a path or bypassing simulation/EV. Shared-input runs first
-require byte-identical universe snapshots, and the report must declare the 3,600-second per-side timeout.
+The expected route may be compared only after each side's production enumeration and solve output is frozen. It
+must not be supplied to enumeration, pruning, ranking, candidate retention, top-K or solve-set selection. If the
+route is outside the naturally selected solve set, the stage is `not_reached`; the checker must not append or
+force-probe it. Shared-input runs first require byte-identical universe snapshots, and the report must declare
+the 3,600-second per-side timeout.
 Standalone historical repair, ordinary stage-advance acceptance, and live searcher defaults keep their
 production-shaped limits. These widened values are acceptance-only and never change live searcher defaults.
 
@@ -248,10 +335,11 @@ and EV in this strict profile. The solver chooses amounts and the production com
 Acceptance-only changes to min-spread/EV, candidate/rank caps or deadlines are forbidden; a real production
 parameter change requires its own candidate-distribution, resource and paired A/B evidence.
 
-All six physical block-scan stages emit monotonic `stage_ms` and `cumulative_ms`, timed from
+All six canonical semantic stages emit monotonic `stage_ms` and `cumulative_ms` extensions, timed from
 `source_head_seen` before runtime preparation through the production EV decision. Their machine boundaries
 are `state_ready`, `enumeration_done`, `exact_refine_done`, `planner_solver_done`, `final_sim_done` and
-`ev_decision`. Every boundary is mandatory, but there are no target-tuned per-stage pass budgets. The only
+`ev_decision`; boundary names and timing fields are producer telemetry, not alternate stage meanings or semantic
+equivalence fields. Every boundary is mandatory, but there are no target-tuned per-stage pass budgets. The only
 hard timing gate is steady-process/fresh-source-state p95 `<10,000ms` end to end. If it misses, retain the
 real breakdown and report `implemented_not_validated`; never reduce the graph, reuse target dynamic caches,
 force a candidate or loosen production policy to manufacture a pass.
@@ -300,7 +388,8 @@ degraded diagnostic but cannot make the effective pricing graph smaller and stil
 
 An EV `reject` may be the correct decision for this sample. A passing sixth-stage record is
 `execution_status=pass` plus independently reproduced `decision=allow|reject` and `decision_reason`; it
-does not force submission. A `bypassed/not-run` stage is a correctness failure and remains in the report.
+does not force submission. A `bypassed/not_reached` stage is a correctness failure in this strict
+`production_route_stage` profile and remains in the report.
 
 Pure refactors require exact ordered edge identity, metadata/ownership, funding-provider, action-encoder and
 resolved-state coverage parity. A predeclared activation may add edges but may not delete baseline edges;
@@ -348,7 +437,7 @@ the sealed algorithm. Too few eligible samples or no qualifying sample yields
 `freshness_evidence=missing`; the challenger must not be able to enumerate a tiny set or choose a sample after
 inspecting output.
 
-Eligibility requires the trusted reference's natural candidate to reach all six production boundaries and
+Eligibility requires the trusted reference's natural candidate to reach all six canonical production stages and
 excludes updates that also touch the target active DEX/routes. If that exclusion cannot prove isolation, the
 trusted oracle supplies a fixed-boundary causal pair: the same prefix immediately before/after the update, or
 fixed N state with only the conversion update reverted. Removing the conversion update must remove the target
@@ -366,7 +455,7 @@ N-1/N mids, candidates/ranks, exact quotes, plan/final-sim and EV raw outputs be
 reveals the oracle.
 
 A pass requires natural family admission, a fresh N stateKey read, same-block `deriveMids` change, the
-causally isolated oracle-predicted candidate/rank delta, all six physical production stages for that natural
+causally isolated oracle-predicted candidate/rank delta, all six canonical production stages for that natural
 candidate, and same-input baseline/challenger output and resource differences within the declared A/B
 contract. Producer-side synthetic state overrides, target prewarming, fixture/route injection, candidate
 append, graph reduction, TTL fallback and acceptance-only policy changes invalidate the result. A synthetic
@@ -403,8 +492,19 @@ the optional six-step checker.
 `historical-gap-gate` enforces three mutually exclusive tracks:
 
 - analysis tools/classifiers/gates: build, regression tests and fresh review, then direct-to-main without B;
-- deterministic single-route searcher behavior (adapter/identity/graph/detector/planner/quote/execution)
-  uses the schema-v3 six-step check, unchanged trusted replay, and >=10 minute process-liveness smoke;
+- `family_execution` behavior uses trusted route-pinned Family/Adapter Replay, family conformance/isolation,
+  canonical steps 3–6, repayment/conservation and production EV; canonical production steps 1–2 remain
+  explicitly bypassed. It neither runs nor requires a production-universe replay or process-liveness smoke.
+  A separate non-injected identity/probe assertion is supporting evidence only; it does not upgrade the
+  execution verdict into production instance intake, route discovery or enumeration. The signed promotion
+  receipt binds the fixed trusted conformance-script inventory,
+  each script's frozen source SHA-256 and successful output SHA-256, both registry-derived ownership-manifest
+  hashes (including the exact retained bytes of central registry/catalog skeletons after only trusted
+  registration ranges are removed) and the exact affected/fixture subject family set. Every changed family-owned implementation must be
+  covered; shared files require every owner, while central registry/catalog logic, reordering, orphan files and
+  funding-only subjects fail closed;
+- `production_route_stage` behavior uses the canonical six-step check with an unchanged trusted Production
+  Replay, no expected route/amount fed into the production producer, and >=10 minute process-liveness smoke;
 - systemic scanner/graph/universe work uses its predeclared cohort/coverage/equivalence contract and proceeds
   to the paired Hermes A/B window instead of the historical smoke/replay path;
 - flow admission, latency and candidate ranking: historical evidence may classify the gap, but promotion is
@@ -419,8 +519,15 @@ The only accepted samples are position-conserving `DEX↔DEX` or `DEX↔permissi
 from either scanner standing state or a real swap/oracle backrun trigger. Every sample binds one complete
 ordered route (`adapterId`, `slotKind`, `target`, `tokenIn`, `tokenOut`, optional `poolId`) to canonical
 on-chain swap order/direction, factory-backed V2/V3 venue identity, and one successful state-changing call
-trace that matches every DEX and protocol adapter target/selector in the declared interleaved order. Protocol
-token flow and the exact trusted replay route are checked separately. A protocol target equal to
+trace that matches every DEX and protocol leg in the declared interleaved order. A hash-bound, finite
+reference-witness declaration supplies ABI signatures, exact empty-calldata value calls and relational
+token/call constraints; the trusted
+interpreter rejects arbitrary code, family-name branches and bare `target+selector` protocol matches. Swap
+direction remains independently bound by receipt-level family observation. For every leg, the landed root
+selector must also equal the selector independently decoded from the solver-selected final resolved-plan
+subtree compiled with its real child bytes and selected amount; final-sim calldata must match that resolved
+plan byte-for-byte. A probe-time fragment or challenger-authored permissive `matchTrace` cannot create the binding. Protocol token flow and the exact
+trusted replay route are checked separately. A protocol target equal to
 the winner's private caller/executor is rejected; pool-set membership alone is insufficient. Build/test
 without sample replay is
 always `implemented_not_validated`. Before a new searcher branch is accepted, the gate binds an inventory of
@@ -460,7 +567,8 @@ close state is included in a newly issued node-root authentication tag. Hermes-r
 work emits none and closes through the A/B gate.
 Historical close requires that receipt plus byte-identical candidate reports, tool manifests,
 review and universe-provenance artifacts on main before branch/worktree deletion can pass. Close revalidates
-track-specific replay, reth/universe and smoke evidence and rejects unsigned or edited receipts. An open receipt
+track-specific replay, family conformance/source attestations, reth/universe and smoke evidence and rejects
+unsigned or edited receipts. An open receipt
 blocks inventory for the next gap. A reusable prior ref must contribute a concrete
 commit to challenger ancestry; prose-only reuse cannot promote.
 Replay worktrees containing a root `.env` are rejected, close requires the merge tree to equal the frozen

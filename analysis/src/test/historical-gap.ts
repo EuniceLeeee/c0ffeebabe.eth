@@ -16,6 +16,7 @@ import {
   validateHistoricalBranchAuditCoverage,
   validateDirectMainPackageManifest,
   validateHistoricalDiffScope,
+  validateFamilyExecutionDiffCoverage,
   validateHistoricalArtifactCommit,
   validateHistoricalGap,
   validateHistoricalMergeTree,
@@ -26,6 +27,7 @@ import {
   trustedSsmTunnelReady,
   type HistoricalAuditInventory,
   type HistoricalGapRecord,
+  type HistoricalFamilyOwnershipManifest,
   type HistoricalProductionUniverseAttestation,
   type HistoricalUniverseProvenance,
 } from "../historical-gap.js";
@@ -108,11 +110,29 @@ function record(overrides: Partial<HistoricalGapRecord> = {}): HistoricalGapReco
   };
 }
 
+function familyExecutionRecord(): HistoricalGapRecord {
+  const value = record({
+    components: ["family-execution"],
+    hypothesis: "The trace-bound family route flips from unsupported to a complete Adapter Replay pass.",
+  });
+  delete value.samples[0].candidate_report;
+  value.samples[0].adapter_replay_fixture = "docs/research/reports/family-fixture.json";
+  value.samples[0].adapter_replay_fixture_sha256 = HASH;
+  value.samples[0].adapter_replay_evidence = "docs/research/reports/family-evidence.md";
+  value.samples[0].adapter_replay_evidence_sha256 = HASH;
+  delete value.validation.replay_environment;
+  delete value.validation.smoke;
+  value.decision.evidence = "The same hash-bound fixture failed on the base and passed Adapter Replay on the challenger.";
+  return value;
+}
+
 test("validation tracks are exclusive and derived from change components", () => {
   assert.equal(historicalValidationTrack(["analysis-tool", "classifier"]), "direct-main");
+  assert.equal(historicalValidationTrack(["family-execution"]), "family-execution");
   assert.equal(historicalValidationTrack(["adapter", "planner"]), "historical-replay");
   assert.equal(historicalValidationTrack(["scanner"]), "hermes-ab");
   assert.equal(historicalValidationTrack(["latency"]), "hermes-ab");
+  assert.equal(historicalValidationTrack(["family-execution", "adapter"]), null);
   assert.equal(historicalValidationTrack(["adapter", "latency"]), null);
 });
 
@@ -132,6 +152,68 @@ test("systemic protocol scanner routes to cohort A/B without a transaction sampl
 
 test("deterministic production repair can promote after replay and smoke evidence", () => {
   assert.deepEqual(validateHistoricalGap(record(), "promote"), []);
+});
+
+test("family execution promotes through hash-bound Adapter Replay evidence without changing old replay schema", () => {
+  const value = familyExecutionRecord();
+  assert.deepEqual(validateHistoricalGap(value, "promote"), []);
+  assert.equal(value.schema_version, 1);
+  assert.equal(value.samples[0].candidate_report, undefined);
+  assert.equal(value.validation.replay_environment, undefined);
+  assert.equal(value.validation.smoke, undefined);
+
+  const old = record();
+  assert.equal(historicalValidationTrack(old.components), "historical-replay");
+  assert.deepEqual(validateHistoricalGap(old, "promote"), []);
+});
+
+test("family execution requires exact fixture and landed-evidence paths plus hashes", () => {
+  for (const field of [
+    "adapter_replay_fixture",
+    "adapter_replay_fixture_sha256",
+    "adapter_replay_evidence",
+    "adapter_replay_evidence_sha256",
+  ] as const) {
+    const value = familyExecutionRecord();
+    delete value.samples[0][field];
+    assert.ok(
+      validateHistoricalGap(value, "promote").some((error) => error.includes(field)),
+      field,
+    );
+  }
+
+  const escapedFixture = familyExecutionRecord();
+  escapedFixture.samples[0].adapter_replay_fixture =
+    "docs/research/reports/../../../listener/src/searcher/main.json";
+  assert.ok(validateHistoricalGap(escapedFixture, "promote")
+    .some((error) => error.includes("adapter_replay_fixture")));
+
+  const wrongFixtureType = familyExecutionRecord();
+  wrongFixtureType.samples[0].adapter_replay_fixture = "docs/research/reports/family-fixture.md";
+  assert.ok(validateHistoricalGap(wrongFixtureType, "promote")
+    .some((error) => error.includes("adapter_replay_fixture")));
+
+  const escapedEvidence = familyExecutionRecord();
+  escapedEvidence.samples[0].adapter_replay_evidence = "../family-evidence.md";
+  assert.ok(validateHistoricalGap(escapedEvidence, "promote")
+    .some((error) => error.includes("adapter_replay_evidence")));
+
+  const badHash = familyExecutionRecord();
+  badHash.samples[0].adapter_replay_evidence_sha256 = "not-a-sha";
+  assert.ok(validateHistoricalGap(badHash, "promote")
+    .some((error) => error.includes("adapter_replay_evidence_sha256")));
+});
+
+test("family execution requires a real sample and a non-author no-distribution review", () => {
+  const noSamples = familyExecutionRecord();
+  noSamples.samples = [];
+  assert.ok(validateHistoricalGap(noSamples, "promote")
+    .some((error) => error.includes("family-execution requires at least one")));
+
+  const noDistributionReview = familyExecutionRecord();
+  delete noDistributionReview.validation.review.live_distribution_verdict;
+  assert.ok(validateHistoricalGap(noDistributionReview, "promote")
+    .some((error) => error.includes("no cross-opportunity live-distribution change")));
 });
 
 test("deterministic promotion requires a non-author live-distribution attestation", () => {
@@ -594,6 +676,190 @@ test("diff classification admits adapters but rejects self-authored evidence and
     assert.ok(validateHistoricalDiffScope([file], "historical-replay")
       .some((error) => error.includes("test, fixture, dependency, or runner")), file);
   }
+});
+
+test("family execution admits family-owned code plus thin registration but rejects central expansion", () => {
+  assert.deepEqual(validateHistoricalDiffScope([
+    "listener/src/searcher/venues/protocols/self-burn-native.ts",
+    "listener/src/adapters/self-burn-native.ts",
+    "listener/src/searcher/venues/production-registry.ts",
+    "listener/src/adapters/index.ts",
+  ], "family-execution"), []);
+  assert.deepEqual(validateHistoricalDiffScope([
+    "listener/src/searcher/venues/liquidity/curve-single-coin.ts",
+  ], "family-execution"), []);
+
+  assert.ok(validateHistoricalDiffScope([
+    "listener/src/searcher/venues/production-registry.ts",
+    "listener/src/adapters/index.ts",
+  ], "family-execution")
+    .some((error) => error.includes("registry-only graph expansion")));
+
+  for (const file of [
+    "listener/src/searcher/main.ts",
+    "listener/src/searcher/detector/blockscan-scanner.ts",
+    "listener/src/searcher/planner/planner.ts",
+    "listener/src/searcher/planner/token-graph.ts",
+    "listener/src/searcher/solver/solver.ts",
+    "listener/src/searcher/venues/adapter-family-registry.ts",
+    "listener/src/searcher/venues/route-leg-adapter.ts",
+    "listener/src/searcher/venues/protocols/protocol-quote.ts",
+    "listener/src/searcher/venues/protocols/self-burn-native-discovery.ts",
+    "listener/src/adapters/erc20.ts",
+  ]) {
+    assert.ok(validateHistoricalDiffScope([
+      "listener/src/searcher/venues/protocols/self-burn-native.ts",
+      file,
+    ], "family-execution").some((error) => error.includes("family-owned")), file);
+  }
+});
+
+function familyOwnershipManifest(
+  families: Array<{
+    id: string;
+    kind?: string;
+    source: string;
+    actionSource?: string;
+    activation?: string;
+  }>,
+  overrides: Partial<HistoricalFamilyOwnershipManifest> = {},
+): HistoricalFamilyOwnershipManifest {
+  return {
+    schema_version: 1,
+    registry_order: families.map((family) => family.id),
+    registry_skeleton_sha256: "1".repeat(64),
+    action_index_skeleton_sha256: "2".repeat(64),
+    families: families.map((family) => ({
+      id: family.id,
+      kind: family.kind ?? "protocol-conversion",
+      root_source: family.source,
+      root_export: `${family.id.replace(/[^A-Za-z0-9_$]/g, "_")}Adapter`,
+      source_files: [
+        family.source,
+        ...(family.actionSource ? [family.actionSource] : []),
+      ].sort(),
+      owned_action_adapter_ids: [`${family.id}:action`],
+      owned_action_bindings: [{
+        id: `${family.id}:action`,
+        binding: `${family.actionSource ?? family.source}#action`,
+      }],
+      required_action_adapter_ids: [],
+      required_action_bindings: [],
+      activation_sha256: family.activation ?? "3".repeat(64),
+    })),
+    ...overrides,
+  };
+}
+
+test("family diff coverage requires a fixture for every changed owner", () => {
+  const baseline = familyOwnershipManifest([
+    { id: "family:a", source: "src/searcher/venues/protocols/a.ts" },
+    { id: "family:b", source: "src/searcher/venues/protocols/b.ts" },
+  ]);
+  const challenger = familyOwnershipManifest([
+    {
+      id: "family:a",
+      source: "src/searcher/venues/protocols/a.ts",
+      activation: "4".repeat(64),
+    },
+    {
+      id: "family:b",
+      source: "src/searcher/venues/protocols/b.ts",
+      activation: "5".repeat(64),
+    },
+  ]);
+  const changed = [
+    "listener/src/searcher/venues/protocols/a.ts",
+    "listener/src/searcher/venues/protocols/b.ts",
+  ];
+  const missing = validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: changed,
+    baseline,
+    challenger,
+    subjectFamilyIds: ["family:a"],
+  });
+  assert.deepEqual(missing.affected_family_ids, ["family:a", "family:b"]);
+  assert.match(missing.errors.join("\n"), /do not cover.*family:b/);
+  assert.deepEqual(validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: changed,
+    baseline,
+    challenger,
+    subjectFamilyIds: ["family:b", "family:a", "family:a"],
+  }).errors, []);
+});
+
+test("family diff coverage attributes shared implementation and action files", () => {
+  const shared = "src/searcher/venues/protocols/shared.ts";
+  const action = "src/adapters/shared-action.ts";
+  const baseline = familyOwnershipManifest([
+    { id: "family:a", source: shared, actionSource: action },
+    { id: "family:b", source: shared, actionSource: action },
+  ]);
+  const coverage = validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: [`listener/${action}`],
+    baseline,
+    challenger: baseline,
+    subjectFamilyIds: ["family:a"],
+  });
+  assert.deepEqual(coverage.affected_family_ids, ["family:a", "family:b"]);
+  assert.match(coverage.errors.join("\n"), /family:b/);
+});
+
+test("family diff coverage rejects orphan, central logic, reordering and funding-only changes", () => {
+  const baseline = familyOwnershipManifest([
+    { id: "family:a", source: "src/searcher/venues/protocols/a.ts" },
+    {
+      id: "flash-loan:test",
+      kind: "flash-loan",
+      source: "src/searcher/venues/funding/test.ts",
+    },
+  ]);
+  assert.match(validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: ["listener/src/adapters/orphan.ts"],
+    baseline,
+    challenger: baseline,
+    subjectFamilyIds: [],
+  }).errors.join("\n"), /no registered family owner/);
+
+  assert.match(validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: ["listener/src/searcher/venues/protocols/a.ts"],
+    baseline,
+    challenger: {
+      ...baseline,
+      registry_skeleton_sha256: "9".repeat(64),
+      registry_order: [...baseline.registry_order].reverse(),
+      families: [...baseline.families].reverse(),
+    },
+    subjectFamilyIds: ["family:a"],
+  }).errors.join("\n"), /central production-registry logic.*relative production registry order/s);
+
+  assert.match(validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: ["listener/src/searcher/venues/funding/test.ts"],
+    baseline,
+    challenger: baseline,
+    subjectFamilyIds: ["flash-loan:test"],
+  }).errors.join("\n"), /funding-only families/);
+});
+
+test("family diff coverage derives added and removed families without a name table", () => {
+  const baseline = familyOwnershipManifest([
+    { id: "family:old", source: "src/searcher/venues/protocols/old.ts" },
+  ]);
+  const challenger = familyOwnershipManifest([
+    { id: "family:new", source: "src/searcher/venues/protocols/new.ts" },
+  ]);
+  const coverage = validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: [
+      "listener/src/searcher/venues/protocols/old.ts",
+      "listener/src/searcher/venues/protocols/new.ts",
+      "listener/src/searcher/venues/production-registry.ts",
+    ],
+    baseline,
+    challenger,
+    subjectFamilyIds: ["family:old", "family:new"],
+  });
+  assert.deepEqual(coverage.affected_family_ids, ["family:new", "family:old"]);
+  assert.deepEqual(coverage.errors, []);
 });
 
 test("runtime paths and semantic diff tokens force live-distribution changes to Hermes", () => {

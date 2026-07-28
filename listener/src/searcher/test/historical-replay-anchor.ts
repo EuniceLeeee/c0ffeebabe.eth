@@ -283,15 +283,35 @@ async function fetchRawHistoricalTransaction(
   provider: ethers.JsonRpcProvider,
   hash: string,
 ): Promise<string> {
-  const raw = await provider.send("eth_getRawTransactionByHash", [hash]);
-  if (typeof raw !== "string" || !/^0x[0-9a-f]+$/i.test(raw)) {
-    throw new Error(`archive RPC did not return raw historical transaction ${hash}`);
+  let raw: unknown = null;
+  try {
+    raw = await provider.send("eth_getRawTransactionByHash", [hash]);
+  } catch {
+    // Some otherwise-complete archive providers omit this non-standard RPC.
   }
-  const parsed = ethers.Transaction.from(raw);
+  if (typeof raw !== "string" || !/^0x[0-9a-f]+$/i.test(raw)) {
+    const tx = await provider.getTransaction(hash);
+    if (!tx) throw new Error(`archive RPC did not return historical transaction ${hash}`);
+    raw = ethers.Transaction.from({
+      type: tx.type,
+      to: tx.to,
+      nonce: tx.nonce,
+      gasLimit: tx.gasLimit,
+      gasPrice: tx.gasPrice,
+      maxFeePerGas: tx.maxFeePerGas,
+      maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
+      data: tx.data,
+      value: tx.value,
+      chainId: tx.chainId,
+      accessList: tx.accessList,
+      signature: tx.signature,
+    }).serialized;
+  }
+  const parsed = ethers.Transaction.from(raw as string);
   if (parsed.hash?.toLowerCase() !== hash.toLowerCase()) {
     throw new Error(`raw historical transaction hash mismatch: ${parsed.hash ?? "null"} != ${hash}`);
   }
-  return raw;
+  return raw as string;
 }
 
 function normalizeTxHash(value: string, field: string): string {

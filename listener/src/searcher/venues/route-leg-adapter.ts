@@ -99,6 +99,25 @@ export interface PlanFragment {
   nodes: readonly ResolvedPlanNode[];
 }
 
+export interface PlanExecutionIdentity {
+  /**
+   * Logical route venue, not necessarily the physical call target. Singleton
+   * vaults/managers recover this from their family-owned resolved subtree.
+   */
+  readonly routeTarget: string;
+  /** Opaque singleton pool discriminator when TokenEdge.poolId is present. */
+  readonly poolId?: string;
+}
+
+export interface PlanExecutionIdentityCapability {
+  /**
+   * Project the final solver-resolved subtree back to the logical edge
+   * identity. The callback receives no expected edge, so it cannot satisfy the
+   * comparison by echoing fixture input.
+   */
+  resolve(node: ResolvedPlanNode): PlanExecutionIdentity;
+}
+
 export interface ExactQuoteContext {
   state: StateBackend;
   /** Actual BotVM caller for caller-sensitive execution simulations. */
@@ -426,6 +445,12 @@ export interface RouteLegAdapter<
    * mature default; singleton managers declare their own opaque keys here.
    */
   readonly routeIdentity?: RouteInstanceIdentityCapability;
+  /**
+   * Optional override for families whose physical execution target differs
+   * from the logical route target, or whose singleton target needs poolId
+   * disambiguation. Address-backed families use node.target by default.
+   */
+  readonly planExecutionIdentity?: PlanExecutionIdentityCapability;
   readonly edgeAdapterIds: readonly string[];
   readonly allowedTaxonomy: readonly AllowedTaxonomy[];
   /**

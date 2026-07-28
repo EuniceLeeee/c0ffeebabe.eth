@@ -22,35 +22,60 @@ import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import "../../shared/adapters/index.js";
 import { get as getActionAdapter } from "../../adapters/registry.js";
-import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
 import { compilePlan } from "../../shared/compiler/compiler.js";
 import { ADDR } from "../../shared/constants/addresses.js";
+import {
+  createSemanticSixStepEvidence,
+  semanticSixStepStageId,
+  type SemanticJson,
+  type SemanticSixStepEvidence,
+  type SemanticSixStepStageId,
+  type SemanticSixStepStatus,
+} from "../../shared/evidence/semantic-six-step.js";
 import { buildExecuteCalldata } from "../../shared/executor/botvm-executor.js";
 import {
   DEFAULT_SEARCHER_EXECUTOR,
   DEFAULT_SEARCHER_OWNER,
   installForkBotVm,
 } from "../../shared/executor/botvm-executor.js";
-import { AnvilStateBackend } from "../../shared/state/state-backend.js";
+import {
+  AnvilStateBackend,
+  StateCallAbortedError,
+  TransactionRevertedError,
+  isStateCallAbortedError,
+  type StateBackend,
+} from "../../shared/state/state-backend.js";
 import { canonicalTokenRing, cycleFingerprint } from "../detector/cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import {
   createVictimSourceGeneration,
   detectImpactTransitionFromLogs,
 } from "../detector/pool-impact.js";
+import {
+  BlockScanFamilyAttributedError,
+  blockScanAttributedFailureFamilyId,
+} from "../detector/blockscan-family-budget.js";
 import { evaluateEv } from "../ev-evaluator.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
 import { createProfitTokenValuation } from "../profit-token-valuation.js";
 import { DEFAULT_BRIBE_BPS } from "../live-envelope.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
+import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
 import { AnvilSolver, type ResolvedPlan } from "../solver/solver.js";
-import { BotVMSimulator } from "../simulator/botvm-simulator.js";
+import {
+  BotVMSimulator,
+  type SimulationResult,
+} from "../simulator/botvm-simulator.js";
 import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 import type { ProtocolAction } from "../strategy-taxonomy.js";
 import { FLASH_SWAP_REPAY, type PathTemplate } from "../templates/path-template.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import type { ExecutionFamilyId } from "../venues/route-leg-adapter.js";
+import {
+  planExecutionIdentityMatchesEdge,
+  resolvedPlanExecutionIdentity,
+} from "../venues/route-instance-identity.js";
 import {
   anchorHistoricalSenderNoncePrefix,
   type HistoricalSenderNonceAnchorResult,
@@ -99,10 +124,52 @@ interface AdapterReplayLeg {
   edgeAdapterId: string;
   tokenIn: string;
   tokenOut: string;
+  referenceWitness: ReferenceWitness;
+}
+
+type ReferenceWitnessRef =
+  | "execution-target"
+  | "token-in"
+  | "token-out"
+  | "zero"
+  | `call:${string}:from`
+  | `call:${string}:arg:${number}`;
+
+type ReferenceArgRule =
+  | { readonly index: number; readonly op: "positive" }
+  | {
+    readonly index: number;
+    readonly op: "eq" | "gte";
+    readonly ref: ReferenceWitnessRef;
+  };
+
+interface ReferenceCallRule {
+  readonly id: string;
+  readonly within?: string;
+  readonly from?: ReferenceWitnessRef;
+  readonly target: ReferenceWitnessRef;
+  readonly signature?: string;
+  readonly calldata?: "empty";
+  readonly args: readonly ReferenceArgRule[];
+  readonly value: "positive" | null;
+}
+
+interface ReferenceTransferRule {
+  readonly token: ReferenceWitnessRef;
+  readonly from: ReferenceWitnessRef | "any";
+  readonly to: ReferenceWitnessRef | "any";
+  readonly amount:
+    | "positive"
+    | { readonly op: "eq"; readonly ref: ReferenceWitnessRef };
+}
+
+interface ReferenceWitness {
+  readonly calls: readonly [ReferenceCallRule, ...ReferenceCallRule[]];
+  readonly receiptTransfers: readonly ReferenceTransferRule[];
 }
 
 interface AdapterReplayFixture {
-  schemaVersion: 2;
+  schemaVersion: 3;
   id: string;
   executionFamilyId: ExecutionFamilyId;
   referenceTx: string;
@@ -115,7 +182,7 @@ interface AdapterReplayFixture {
   route: AdapterReplayLeg[];
   landedReference: {
     /** Independently computed classification evidence; never enters sizing. */
-    canonicalNetProfitUsd: number;
+    classificationNetProfitUsd: number;
     evidencePath: string;
     evidenceSha256: string;
   };
@@ -130,8 +197,14 @@ interface ConservationResult {
   executorDeltas: Record<string, string>;
 }
 
+interface AdapterReplayFailureIdentity {
+  ownerFamilyId: ExecutionFamilyId;
+  stageId: SemanticSixStepStageId;
+  code: string;
+}
+
 interface AdapterReplayReport {
-  schemaVersion: 2;
+  schemaVersion: 3;
   fixtureId: string;
   fixturePath: string;
   fixtureSha256: string;
@@ -158,6 +231,11 @@ interface AdapterReplayReport {
     | null;
   baseCommit: string | null;
   adapterCommit: string | null;
+  /**
+   * Registry-derived execution contract fingerprint. Runtime source changes
+   * are bound separately by runtimeSourceSha256, so file moves never require a
+   * trusted harness allowlist update.
+   */
   familySourceSha256: string;
   sharedApiSha256: string;
   runtimeSourceSha256: string;
@@ -207,8 +285,13 @@ interface AdapterReplayReport {
     repaymentAndConservation: boolean;
     productionEvPositive: boolean;
   };
+  sixStepEvidence: SemanticSixStepEvidence[];
   /** A promotion gate still owns baseline flip and the stronger adapter_fixed verdict. */
   verdict: "adapter_replay_pass" | "implemented_not_validated";
+  /** Set only by a typed family-owned failure; null means shared/ambiguous. */
+  failureOwnerFamilyId: string | null;
+  /** Stable project-owned cause; provider/control/generic failures stay null. */
+  failureIdentity: AdapterReplayFailureIdentity | null;
   failure: string | null;
 }
 
@@ -216,6 +299,9 @@ interface CliArgs {
   fixtures: string[];
   rpcUrl: string;
   outDir?: string;
+  artifactRoot?: string;
+  probeFamily?: string;
+  useExistingBotVmArtifact: boolean;
   validateOnly: boolean;
 }
 
@@ -230,42 +316,6 @@ const ADDRESS_FIELDS = [
   "address", "token0", "token1", "currency0", "currency1", "hooks",
   "fixedTokenIn", "fixedTokenOut", "redeemTokenOut",
 ] as const;
-
-const FAMILY_SOURCE_FILES: Readonly<Partial<Record<ExecutionFamilyId, readonly string[]>>> = {
-  "univ2-standard": ["src/searcher/venues/swaps/univ2-standard.ts"],
-  "univ3-standard": ["src/searcher/venues/swaps/univ3-standard.ts"],
-  univ4: ["src/searcher/venues/swaps/univ4.ts", "src/searcher/venues/swaps/univ4-common.ts"],
-  "curve-plain": ["src/searcher/venues/swaps/curve-plain.ts", "src/searcher/venues/swaps/curve-shared.ts"],
-  "curve-underlying": ["src/searcher/venues/swaps/curve-underlying.ts", "src/searcher/venues/curve-underlying.ts"],
-  "balancer-v3": ["src/searcher/venues/swaps/balancer-v3.ts"],
-  "fluid-dex": ["src/searcher/venues/swaps/fluid-dex.ts"],
-  "custom-swap:dodo-v2": ["src/searcher/venues/swaps/dodo-v2.ts"],
-  "protocol:erc4626": ["src/searcher/venues/protocols/erc4626.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
-  "protocol:erc4626-silo-redeem": [
-    "src/searcher/venues/protocols/erc4626-silo-redeem.ts",
-    "src/searcher/venues/protocols/erc4626-silo-redeem-discovery.ts",
-    "src/searcher/venues/protocols/protocol-plan.ts",
-    "src/searcher/venues/protocols/protocol-quote.ts",
-  ],
-  "protocol:eigenpie": [
-    "src/searcher/venues/protocols/eigenpie.ts",
-    "src/searcher/venues/protocols/eigenpie-discovery.ts",
-    "src/searcher/venues/protocols/receipt-deposit-framework.ts",
-    "src/adapters/eigenpie-deposit.ts",
-  ],
-  "protocol:goldx": ["src/searcher/venues/protocols/goldx.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
-  "protocol:metronome-synth": ["src/searcher/venues/protocols/metronome.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
-  "protocol:metronome-hgusdc": ["src/searcher/venues/protocols/metronome.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
-  "protocol:psm": ["src/searcher/venues/protocols/psm.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
-  "protocol:rocksolid": ["src/searcher/venues/protocols/rocksolid.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
-  "protocol:wsteth": ["src/searcher/venues/protocols/wsteth.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
-  "protocol:self-burn-native": [
-    "src/searcher/venues/protocols/self-burn-native.ts",
-    "src/searcher/venues/protocols/self-burn-native-discovery.ts",
-    "src/adapters/self-burn-native.ts",
-  ],
-  "credit:fluid": ["src/searcher/venues/credit/fluid.ts"],
-};
 
 const SHARED_API_FILES = [
   "src/searcher/venues/route-leg-adapter.ts",
@@ -308,43 +358,89 @@ function loadRpcEnv(): void {
 function parseArgs(): CliArgs {
   loadRpcEnv();
   const argv = process.argv.slice(2);
-  const fixtures: string[] = [];
+  const fixtureValues: string[] = [];
   let outDir: string | undefined;
+  let artifactRoot: string | undefined;
+  let probeFamily: string | undefined;
+  let useExistingBotVmArtifact = false;
   let validateOnly = false;
   for (let i = 0; i < argv.length; i++) {
     const name = argv[i];
     if (name === "--fixture") {
       const value = argv[++i];
       if (!value) throw new Error("--fixture requires a path");
-      fixtures.push(resolve(value));
+      fixtureValues.push(value);
     } else if (name === "--out-dir") {
       const value = argv[++i];
       if (!value) throw new Error("--out-dir requires a path");
       outDir = resolve(value);
+    } else if (name === "--artifact-root") {
+      const value = argv[++i];
+      if (!value) throw new Error("--artifact-root requires a path");
+      if (artifactRoot !== undefined) {
+        throw new Error("--artifact-root may appear only once");
+      }
+      artifactRoot = resolve(value);
+    } else if (name === "--probe-family") {
+      const value = argv[++i];
+      if (!value) throw new Error("--probe-family requires an execution family id");
+      if (probeFamily !== undefined) {
+        throw new Error("--probe-family may appear only once");
+      }
+      probeFamily = value;
     } else if (name === "--validate-only") {
       validateOnly = true;
+    } else if (name === "--use-existing-botvm-artifact") {
+      if (useExistingBotVmArtifact) {
+        throw new Error("--use-existing-botvm-artifact may appear only once");
+      }
+      useExistingBotVmArtifact = true;
     } else if (name === "--rpc") {
       throw new Error("--rpc is forbidden because argv may be logged; use MAINNET_RPC_URL in the environment");
     } else {
       throw new Error(`unknown adapter-family replay option ${name}`);
     }
   }
-  if (fixtures.length === 0) throw new Error("at least one --fixture is required");
+  if (probeFamily && (
+    fixtureValues.length > 0 ||
+    validateOnly ||
+    outDir !== undefined ||
+    artifactRoot !== undefined ||
+    useExistingBotVmArtifact
+  )) {
+    throw new Error("--probe-family must be used alone");
+  }
+  if (!probeFamily && fixtureValues.length === 0) {
+    throw new Error("at least one --fixture is required");
+  }
+  const fixtures = fixtureValues.map((value) => {
+    if (!artifactRoot) return resolve(value);
+    const relativePath = safeArtifactRelativePath(value, "--fixture");
+    return resolve(artifactRoot, relativePath);
+  });
   const rpcUrl = process.env.SEARCHER_LIVE_RPC_URL ?? process.env.MAINNET_RPC_URL ?? "";
-  if (!validateOnly && !rpcUrl) {
+  if (!validateOnly && !probeFamily && !rpcUrl) {
     throw new Error("SEARCHER_LIVE_RPC_URL or MAINNET_RPC_URL is required");
   }
-  return { fixtures, rpcUrl, outDir, validateOnly };
+  return {
+    fixtures,
+    rpcUrl,
+    outDir,
+    artifactRoot,
+    probeFamily,
+    useExistingBotVmArtifact,
+    validateOnly,
+  };
 }
 
-function loadFixture(path: string): AdapterReplayFixture {
+function loadFixture(path: string, artifactRoot?: string): AdapterReplayFixture {
   const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
   const root = record(raw, path);
   exactKeys(root, [
     "schemaVersion", "id", "executionFamilyId", "referenceTx", "lane",
     "stateAnchor", "flash", "route", "landedReference",
   ], path);
-  if (root.schemaVersion !== 2) throw new Error(`${path}: unsupported schemaVersion`);
+  if (root.schemaVersion !== 3) throw new Error(`${path}: unsupported schemaVersion`);
   const id = fixtureId(root.id, `${path}.id`);
   const executionFamilyId = nonEmptyString(root.executionFamilyId, `${path}.executionFamilyId`) as ExecutionFamilyId;
   PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(executionFamilyId);
@@ -388,17 +484,22 @@ function loadFixture(path: string): AdapterReplayFixture {
   const landedRaw = record(root.landedReference, `${path}.landedReference`);
   exactKeys(
     landedRaw,
-    ["canonicalNetProfitUsd", "evidencePath", "evidenceSha256"],
+    ["classificationNetProfitUsd", "evidencePath", "evidenceSha256"],
     `${path}.landedReference`,
   );
-  if (typeof landedRaw.canonicalNetProfitUsd !== "number") {
-    throw new Error(`${path}.landedReference.canonicalNetProfitUsd must be a number`);
+  if (typeof landedRaw.classificationNetProfitUsd !== "number") {
+    throw new Error(`${path}.landedReference.classificationNetProfitUsd must be a number`);
   }
-  const canonicalNetProfitUsd = landedRaw.canonicalNetProfitUsd;
-  if (!Number.isFinite(canonicalNetProfitUsd) || canonicalNetProfitUsd <= 0) {
-    throw new Error(`${path}.landedReference.canonicalNetProfitUsd must be positive`);
+  const classificationNetProfitUsd = landedRaw.classificationNetProfitUsd;
+  if (!Number.isFinite(classificationNetProfitUsd) || classificationNetProfitUsd <= 0) {
+    throw new Error(`${path}.landedReference.classificationNetProfitUsd must be positive`);
   }
-  const evidencePath = safeRepoRelativePath(
+  const evidencePath = artifactRoot
+    ? safeArtifactRelativePath(
+      nonEmptyString(landedRaw.evidencePath, `${path}.landedReference.evidencePath`),
+      `${path}.landedReference.evidencePath`,
+    )
+    : safeRepoRelativePath(
     nonEmptyString(landedRaw.evidencePath, `${path}.landedReference.evidencePath`),
     `${path}.landedReference.evidencePath`,
   );
@@ -406,18 +507,21 @@ function loadFixture(path: string): AdapterReplayFixture {
     landedRaw.evidenceSha256,
     `${path}.landedReference.evidenceSha256`,
   );
-  const evidence = readFileSync(resolve(REPO_ROOT, evidencePath), "utf8");
+  const evidence = readFileSync(
+    resolve(artifactRoot ?? REPO_ROOT, evidencePath),
+    "utf8",
+  );
   if (sha256(evidence) !== evidenceSha256) throw new Error(`${path}: landed evidence hash mismatch`);
   if (!evidence.toLowerCase().includes(referenceTx)) throw new Error(`${path}: landed evidence omits reference tx`);
   if (stateAnchor.kind === "after-transaction" &&
       !evidence.toLowerCase().includes(stateAnchor.triggerTxHash)) {
     throw new Error(`${path}: landed evidence omits backrun trigger tx`);
   }
-  if (!evidence.includes(String(canonicalNetProfitUsd))) {
-    throw new Error(`${path}: landed evidence omits canonical net profit`);
+  if (!evidence.includes(String(classificationNetProfitUsd))) {
+    throw new Error(`${path}: landed evidence omits classification net profit`);
   }
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id,
     executionFamilyId,
     referenceTx,
@@ -425,7 +529,7 @@ function loadFixture(path: string): AdapterReplayFixture {
     stateAnchor,
     flash,
     route,
-    landedReference: { canonicalNetProfitUsd, evidencePath, evidenceSha256 },
+    landedReference: { classificationNetProfitUsd, evidencePath, evidenceSha256 },
   };
 }
 
@@ -449,14 +553,219 @@ function parseAnchor(raw: unknown, field: string): StateAnchor {
 
 function parseLeg(raw: unknown, field: string): AdapterReplayLeg {
   const value = record(raw, field);
-  exactKeys(value, ["seq", "pool", "edgeAdapterId", "tokenIn", "tokenOut"], field);
+  exactKeys(
+    value,
+    ["seq", "pool", "edgeAdapterId", "tokenIn", "tokenOut", "referenceWitness"],
+    field,
+  );
   return {
     seq: positiveInt(value.seq, `${field}.seq`),
     pool: parsePool(value.pool, `${field}.pool`),
     edgeAdapterId: nonEmptyString(value.edgeAdapterId, `${field}.edgeAdapterId`),
     tokenIn: address(value.tokenIn, `${field}.tokenIn`),
     tokenOut: address(value.tokenOut, `${field}.tokenOut`),
+    referenceWitness: parseReferenceWitness(
+      value.referenceWitness,
+      `${field}.referenceWitness`,
+    ),
   };
+}
+
+function parseReferenceWitness(raw: unknown, field: string): ReferenceWitness {
+  const value = record(raw, field);
+  exactKeys(value, ["calls", "receiptTransfers"], field, ["calls"]);
+  if (!Array.isArray(value.calls) || value.calls.length === 0 || value.calls.length > 8) {
+    throw new Error(`${field}.calls must contain 1..8 rules`);
+  }
+  const calls = value.calls.map((item, index) =>
+    parseReferenceCallRule(item, `${field}.calls[${index}]`)
+  );
+  const ids = new Set<string>();
+  calls.forEach((call, index) => {
+    if (ids.has(call.id)) throw new Error(`${field}.calls has duplicate id ${call.id}`);
+    if (index === 0) {
+      if (
+        call.id !== "root" ||
+        call.within !== undefined ||
+        call.target !== "execution-target" ||
+        call.signature === undefined
+      ) {
+        throw new Error(
+          `${field}.calls[0] must be an ABI root at execution-target without within`,
+        );
+      }
+    } else if (call.within && !ids.has(call.within)) {
+      throw new Error(`${field}.calls[${index}].within must name a prior call`);
+    }
+    validateReferenceRuleRefs(call, ids, `${field}.calls[${index}]`);
+    ids.add(call.id);
+  });
+  const transfersRaw = value.receiptTransfers ?? [];
+  if (!Array.isArray(transfersRaw) || transfersRaw.length > 8) {
+    throw new Error(`${field}.receiptTransfers must contain at most 8 rules`);
+  }
+  const receiptTransfers = transfersRaw.map((item, index) =>
+    parseReferenceTransferRule(item, `${field}.receiptTransfers[${index}]`)
+  );
+  for (let index = 0; index < receiptTransfers.length; index++) {
+    const transfer = receiptTransfers[index];
+    for (const ref of [transfer.token, transfer.from, transfer.to]) {
+      if (ref !== "any") validateReferenceWitnessRef(ref, ids, `${field}.receiptTransfers[${index}]`);
+    }
+    if (transfer.amount !== "positive") {
+      validateReferenceWitnessRef(
+        transfer.amount.ref,
+        ids,
+        `${field}.receiptTransfers[${index}].amount.ref`,
+      );
+    }
+  }
+  return {
+    calls: calls as [ReferenceCallRule, ...ReferenceCallRule[]],
+    receiptTransfers,
+  };
+}
+
+function parseReferenceCallRule(raw: unknown, field: string): ReferenceCallRule {
+  const value = record(raw, field);
+  exactKeys(value, [
+    "id", "within", "from", "target", "signature", "calldata", "args", "value",
+  ], field, [
+    "id", "target",
+  ]);
+  const id = fixtureId(value.id, `${field}.id`);
+  const within = value.within === undefined
+    ? undefined
+    : fixtureId(value.within, `${field}.within`);
+  const from = value.from === undefined
+    ? undefined
+    : referenceWitnessRef(value.from, `${field}.from`);
+  const target = referenceWitnessRef(value.target, `${field}.target`);
+  const signature = value.signature === undefined
+    ? undefined
+    : nonEmptyString(value.signature, `${field}.signature`);
+  const calldata = value.calldata === undefined
+    ? undefined
+    : value.calldata;
+  if ((signature === undefined) === (calldata === undefined)) {
+    throw new Error(`${field} must declare exactly one of signature or calldata`);
+  }
+  if (signature !== undefined) referenceCallInterface(signature, field);
+  if (calldata !== undefined && calldata !== "empty") {
+    throw new Error(`${field}.calldata must be empty`);
+  }
+  const argsRaw = value.args ?? [];
+  if (!Array.isArray(argsRaw) || argsRaw.length > 16) {
+    throw new Error(`${field}.args must contain at most 16 rules`);
+  }
+  if (calldata === "empty" && argsRaw.length > 0) {
+    throw new Error(`${field}.args require an ABI signature`);
+  }
+  const args = argsRaw.map((item, index) =>
+    parseReferenceArgRule(item, `${field}.args[${index}]`)
+  );
+  const valueRule = value.value ?? null;
+  if (valueRule !== null && valueRule !== "positive") {
+    throw new Error(`${field}.value must be positive`);
+  }
+  return {
+    id,
+    within,
+    from,
+    target,
+    signature,
+    calldata: calldata as "empty" | undefined,
+    args,
+    value: valueRule,
+  };
+}
+
+function parseReferenceArgRule(raw: unknown, field: string): ReferenceArgRule {
+  const value = record(raw, field);
+  const op = value.op;
+  if (op === "positive") {
+    exactKeys(value, ["index", "op"], field);
+    return { index: nonNegativeInt(value.index, `${field}.index`), op };
+  }
+  if (op === "eq" || op === "gte") {
+    exactKeys(value, ["index", "op", "ref"], field);
+    return {
+      index: nonNegativeInt(value.index, `${field}.index`),
+      op,
+      ref: referenceWitnessRef(value.ref, `${field}.ref`),
+    };
+  }
+  throw new Error(`${field}.op invalid`);
+}
+
+function parseReferenceTransferRule(
+  raw: unknown,
+  field: string,
+): ReferenceTransferRule {
+  const value = record(raw, field);
+  exactKeys(value, ["token", "from", "to", "amount"], field);
+  let amount: ReferenceTransferRule["amount"];
+  if (value.amount === "positive") {
+    amount = "positive";
+  } else {
+    const amountRule = record(value.amount, `${field}.amount`);
+    exactKeys(amountRule, ["op", "ref"], `${field}.amount`);
+    if (amountRule.op !== "eq") throw new Error(`${field}.amount.op must be eq`);
+    amount = {
+      op: "eq",
+      ref: referenceWitnessRef(amountRule.ref, `${field}.amount.ref`),
+    };
+  }
+  const parseParty = (input: unknown, partyField: string) =>
+    input === "any" ? "any" as const : referenceWitnessRef(input, partyField);
+  return {
+    token: referenceWitnessRef(value.token, `${field}.token`),
+    from: parseParty(value.from, `${field}.from`),
+    to: parseParty(value.to, `${field}.to`),
+    amount,
+  };
+}
+
+function referenceWitnessRef(value: unknown, field: string): ReferenceWitnessRef {
+  const ref = nonEmptyString(value, field);
+  if (
+    ref === "execution-target" ||
+    ref === "token-in" ||
+    ref === "token-out" ||
+    ref === "zero" ||
+    /^call:[a-z0-9][a-z0-9-]{0,63}:from$/.test(ref) ||
+    /^call:[a-z0-9][a-z0-9-]{0,63}:arg:[0-9]+$/.test(ref)
+  ) {
+    return ref as ReferenceWitnessRef;
+  }
+  throw new Error(`${field} invalid`);
+}
+
+function validateReferenceRuleRefs(
+  call: ReferenceCallRule,
+  priorIds: ReadonlySet<string>,
+  field: string,
+): void {
+  if (call.from !== undefined) {
+    validateReferenceWitnessRef(call.from, priorIds, `${field}.from`);
+  }
+  validateReferenceWitnessRef(call.target, priorIds, `${field}.target`);
+  call.args.forEach((rule, index) => {
+    if (rule.op !== "positive") {
+      validateReferenceWitnessRef(rule.ref, priorIds, `${field}.args[${index}].ref`);
+    }
+  });
+}
+
+function validateReferenceWitnessRef(
+  ref: ReferenceWitnessRef,
+  availableIds: ReadonlySet<string>,
+  field: string,
+): void {
+  const match = ref.match(/^call:([^:]+):(from|arg:[0-9]+)$/);
+  if (match && !availableIds.has(match[1])) {
+    throw new Error(`${field} references unavailable call ${match[1]}`);
+  }
 }
 
 function parsePool(raw: unknown, field: string): RoutePoolIdentity {
@@ -628,6 +937,7 @@ interface TraceCall {
   readonly from?: string;
   readonly to?: string;
   readonly input?: string;
+  readonly value?: string;
   readonly error?: string;
   readonly calls?: readonly TraceCall[];
 }
@@ -637,6 +947,7 @@ interface FlattenedTraceCall {
   readonly selector: string;
   readonly input: string;
   readonly from?: string;
+  readonly value: bigint;
   readonly depth?: number;
 }
 
@@ -655,223 +966,614 @@ interface ReferenceObservedImpact {
   readonly poolId?: string;
 }
 
-const PROTOCOL_LEG_DESCRIPTOR_BY_ID = new Map(
-  PROTOCOL_LEG_DESCRIPTORS.map((descriptor) => [descriptor.id, descriptor] as const),
-);
-const PSM_SELL_GEM_SELECTOR = ethers.id("sellGem(address,uint256)").slice(0, 10).toLowerCase();
-const PSM_BUY_GEM_SELECTOR = ethers.id("buyGem(address,uint256)").slice(0, 10).toLowerCase();
-const REFERENCE_EIGENPIE_DEPOSIT_IFACE = new ethers.Interface([
-  "function depositAsset(address asset,uint256 depositAmount,uint256 minRec,address referral)",
-]);
-const REFERENCE_ERC20_FLOW_IFACE = new ethers.Interface([
-  "function transferFrom(address from,address to,uint256 amount) returns (bool)",
-  "function mint(address to,uint256 amount)",
-]);
-const REFERENCE_TRANSFER_FROM_SELECTOR = REFERENCE_ERC20_FLOW_IFACE
-  .getFunction("transferFrom")!.selector.toLowerCase();
-const REFERENCE_MINT_SELECTOR = REFERENCE_ERC20_FLOW_IFACE
-  .getFunction("mint")!.selector.toLowerCase();
-
-function expectedReferenceTarget(leg: AdapterReplayLeg, familyId: ExecutionFamilyId): string {
-  // Balancer V3 separates logical pool identity from its singleton execution
-  // target. The receipt observation below proves the exact logical pool.
-  return familyId === "balancer-v3"
-    ? ADDR.BALANCER_V3_VAULT.toLowerCase()
-    : leg.pool.address.toLowerCase();
+interface MatchedReferenceCall {
+  readonly call: FlattenedTraceCall;
+  readonly index: number;
+  readonly args: readonly unknown[];
 }
 
-function traceCallMatchesLegSemantics(
-  leg: AdapterReplayLeg,
-  call: FlattenedTraceCall,
-  descendants: readonly FlattenedTraceCall[] = [],
-): boolean {
-  return traceCallSemanticEvidence(leg, call, descendants) !== null;
+interface ReferenceExecutionSurface {
+  readonly adapterId: string;
+  readonly target: string;
+  readonly selector: string;
 }
 
-function traceCallSemanticEvidence(
-  leg: AdapterReplayLeg,
-  call: FlattenedTraceCall,
-  descendants: readonly FlattenedTraceCall[] = [],
-): ReferenceTraceSemanticEvidence | null {
-  if (leg.edgeAdapterId === "eigenpie-deposit-asset") {
-    return eigenpieDepositTraceEvidence(leg, call, descendants);
-  }
+const ERC20_TRANSFER_TOPIC = ethers.id(
+  "Transfer(address,address,uint256)",
+).toLowerCase();
 
-  if (leg.edgeAdapterId === "psm") {
-    const tokenIn = leg.tokenIn.toLowerCase();
-    const tokenOut = leg.tokenOut.toLowerCase();
-    const usdc = ADDR.USDC.toLowerCase();
-    if (tokenIn === usdc && call.selector === PSM_SELL_GEM_SELECTOR) {
-      return { kind: "psm-sell-gem", selector: call.selector };
-    }
-    if (tokenOut === usdc && call.selector === PSM_BUY_GEM_SELECTOR) {
-      return { kind: "psm-buy-gem", selector: call.selector };
-    }
-    return null;
-  }
-
-  const descriptor = PROTOCOL_LEG_DESCRIPTOR_BY_ID.get(leg.edgeAdapterId);
-  if (!descriptor || (descriptor.tokenInArg === undefined && descriptor.tokenOutArg === undefined)) {
-    return { kind: "target-selector", selector: call.selector };
-  }
-  try {
-    const iface = new ethers.Interface([`function ${descriptor.signature}`]);
-    const fnName = descriptor.signature.slice(0, descriptor.signature.indexOf("("));
-    const decoded = iface.decodeFunctionData(fnName, call.input);
-    if (descriptor.tokenInArg !== undefined &&
-        String(decoded[descriptor.tokenInArg]).toLowerCase() !== leg.tokenIn.toLowerCase()) {
-      return null;
-    }
-    if (descriptor.tokenOutArg !== undefined &&
-        String(decoded[descriptor.tokenOutArg]).toLowerCase() !== leg.tokenOut.toLowerCase()) {
-      return null;
-    }
-    return { kind: "protocol-token-args", input: call.input };
-  } catch {
-    return null;
-  }
-}
-
-function eigenpieDepositTraceEvidence(
-  leg: AdapterReplayLeg,
-  call: FlattenedTraceCall,
-  descendants: readonly FlattenedTraceCall[],
-): ReferenceTraceSemanticEvidence | null {
-  if (!call.from) return null;
-  try {
-    const depositor = ethers.getAddress(call.from);
-    const target = ethers.getAddress(leg.pool.address);
-    const tokenIn = ethers.getAddress(leg.tokenIn);
-    const tokenOut = ethers.getAddress(leg.tokenOut);
-    const decoded = REFERENCE_EIGENPIE_DEPOSIT_IFACE.decodeFunctionData("depositAsset", call.input);
-    const observedTokenIn = ethers.getAddress(String(decoded[0]));
-    const amountIn = BigInt(decoded[1]);
-    const minAmountOut = BigInt(decoded[2]);
-    if (observedTokenIn !== tokenIn || amountIn <= 0n) return null;
-
-    let transferFromWitness: FlattenedTraceCall | null = null;
-    let mintWitness: { call: FlattenedTraceCall; amount: bigint } | null = null;
-    for (const child of descendants) {
-      if (
-        transferFromWitness === null &&
-        child.target === tokenIn.toLowerCase() &&
-        child.selector === REFERENCE_TRANSFER_FROM_SELECTOR
-      ) {
-        try {
-          const args = REFERENCE_ERC20_FLOW_IFACE.decodeFunctionData("transferFrom", child.input);
-          if (
-            ethers.getAddress(String(args[0])) === depositor &&
-            ethers.getAddress(String(args[1])) === target &&
-            BigInt(args[2]) === amountIn
-          ) {
-            transferFromWitness = child;
-          }
-        } catch {
-          // A malformed child cannot establish input-token causality.
-        }
-      }
-      if (
-        mintWitness === null &&
-        child.target === tokenOut.toLowerCase() &&
-        child.selector === REFERENCE_MINT_SELECTOR
-      ) {
-        try {
-          const args = REFERENCE_ERC20_FLOW_IFACE.decodeFunctionData("mint", child.input);
-          const mintedAmount = BigInt(args[1]);
-          if (
-            ethers.getAddress(String(args[0])) === depositor &&
-            mintedAmount > 0n &&
-            mintedAmount >= minAmountOut
-          ) {
-            mintWitness = { call: child, amount: mintedAmount };
-          }
-        } catch {
-          // A malformed child cannot establish output-token causality.
-        }
-      }
-    }
-    if (!transferFromWitness || !mintWitness) return null;
-    return {
-      kind: "eigenpie-deposit-asset",
-      depositor: depositor.toLowerCase(),
-      tokenIn: tokenIn.toLowerCase(),
-      tokenOut: tokenOut.toLowerCase(),
-      amountIn: amountIn.toString(),
-      minAmountOut: minAmountOut.toString(),
-      mintedAmount: mintWitness.amount.toString(),
-      transferFromTarget: transferFromWitness.target,
-      transferFromInput: transferFromWitness.input,
-      mintTarget: mintWitness.call.target,
-      mintInput: mintWitness.call.input,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function descendantCalls(
+function descendantCallIndexes(
   calls: readonly FlattenedTraceCall[],
   parentIndex: number,
-): readonly FlattenedTraceCall[] {
+): readonly number[] {
   const parentDepth = calls[parentIndex]?.depth;
   if (parentDepth === undefined) return [];
   let end = parentIndex + 1;
   while (end < calls.length && (calls[end].depth ?? 0) > parentDepth) end++;
-  return calls.slice(parentIndex + 1, end);
+  return Array.from({ length: end - parentIndex - 1 }, (_, index) =>
+    parentIndex + index + 1
+  );
 }
 
 async function validateReferenceRoute(
   provider: ethers.JsonRpcProvider,
   fixture: AdapterReplayFixture,
+  executionSurfaces: readonly ReferenceExecutionSurface[],
 ): Promise<string> {
   const trace = await provider.send("debug_traceTransaction", [
     fixture.referenceTx,
     { tracer: "callTracer", tracerConfig: { onlyTopCall: false } },
   ]) as TraceCall;
+  const receipt = await provider.getTransactionReceipt(fixture.referenceTx);
+  if (!receipt) throw new Error(`reference receipt unavailable: ${fixture.referenceTx}`);
   const calls: FlattenedTraceCall[] = [];
   flattenSuccessfulCalls(trace, calls);
-  const matched: Array<{
-    target: string;
-    selector: string;
-    input: string;
-    edgeAdapterId: string;
-    semanticEvidence: ReferenceTraceSemanticEvidence;
-  }> = [];
+  const matched: ReferenceTraceSemanticEvidence[] = [];
   let cursor = 0;
-  for (const leg of fixture.route) {
+  for (let legIndex = 0; legIndex < fixture.route.length; legIndex++) {
+    const leg = fixture.route[legIndex];
     const familyId = familyForLeg(leg, fixture.id);
-    const action = getActionAdapter(leg.edgeAdapterId);
-    const expectedTarget = expectedReferenceTarget(leg, familyId);
-    let found = -1;
-    for (let index = cursor; index < calls.length; index++) {
-      const call = calls[index];
-      if (call.target !== expectedTarget) continue;
-      if (!action.matchTrace(call.target, call.selector)) continue;
-      const semanticEvidence = traceCallSemanticEvidence(
+    let result: ReturnType<typeof matchReferenceWitness>;
+    try {
+      result = matchReferenceWitness({
+        calls,
+        receiptLogs: receipt.logs,
+        cursor,
         leg,
-        call,
-        descendantCalls(calls, index),
-      );
-      if (semanticEvidence === null) continue;
-      found = index;
-      matched.push({
-        target: call.target,
-        selector: call.selector,
-        input: call.input,
-        edgeAdapterId: leg.edgeAdapterId,
-        semanticEvidence,
+        executionTarget: executionSurfaces[legIndex].target,
+        expectedEncodedSelector: executionSurfaces[legIndex].selector,
+        requireTokenCoverage:
+          PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyId).kind !== "swap",
       });
-      break;
-    }
-    if (found < 0) {
-      throw new Error(
-        `reference trace does not contain ordered leg ${leg.seq} ` +
-          `${leg.edgeAdapterId}@${leg.pool.address}`,
+    } catch (error) {
+      throw new BlockScanFamilyAttributedError(
+        familyId,
+        "landed reference witness",
+        new AdapterReplayDomainFailure(
+          "landed_reference_witness_mismatch",
+          `landed reference witness failed for leg ${leg.seq}`,
+          { cause: error },
+        ),
       );
     }
-    cursor = found + 1;
+    cursor = result.nextCursor;
+    matched.push(result.evidence);
   }
   return sha256(JSON.stringify(matched));
+}
+
+function matchReferenceWitness(input: {
+  readonly calls: readonly FlattenedTraceCall[];
+  readonly receiptLogs: readonly ethers.Log[];
+  readonly cursor: number;
+  readonly leg: AdapterReplayLeg;
+  readonly executionTarget: string;
+  readonly expectedEncodedSelector: string;
+  readonly requireTokenCoverage: boolean;
+}): { readonly nextCursor: number; readonly evidence: ReferenceTraceSemanticEvidence } {
+  const matched = new Map<string, MatchedReferenceCall>();
+  const callEvidence: Array<Record<string, unknown>> = [];
+  let rootIndex = -1;
+  let topLevelCursor = input.cursor;
+  for (const rule of input.leg.referenceWitness.calls) {
+    const candidateIndexes = rule.within
+      ? descendantCallIndexes(input.calls, matched.get(rule.within)!.index)
+      : Array.from(
+        { length: input.calls.length - topLevelCursor },
+        (_, index) => topLevelCursor + index,
+      );
+    let selected: MatchedReferenceCall | null = null;
+    for (const index of candidateIndexes) {
+      const candidate = matchReferenceCallRule(
+        rule,
+        input.calls[index],
+        index,
+        input.leg,
+        input.executionTarget,
+        matched,
+      );
+      if (candidate) {
+        selected = candidate;
+        break;
+      }
+    }
+    if (!selected) {
+      throw new Error(
+        `reference trace witness ${rule.id} failed for leg ${input.leg.seq}`,
+      );
+    }
+    if (rule.id === "root") {
+      const action = getActionAdapter(input.leg.edgeAdapterId);
+      if (selected.call.selector !== input.expectedEncodedSelector) {
+        throw new Error(
+          `reference root selector ${selected.call.selector} differs from encoded ` +
+            `${input.leg.edgeAdapterId} selector ${input.expectedEncodedSelector}`,
+        );
+      }
+      if (!action.matchTrace(selected.call.target, selected.call.selector)) {
+        throw new Error(
+          `reference root selector is not owned by ${input.leg.edgeAdapterId}`,
+        );
+      }
+      rootIndex = selected.index;
+    }
+    if (!rule.within) topLevelCursor = selected.index + 1;
+    matched.set(rule.id, selected);
+    callEvidence.push({
+      id: rule.id,
+      target: selected.call.target,
+      selector: selected.call.selector,
+      ...(rule.id === "root"
+        ? { encoded_selector: input.expectedEncodedSelector }
+        : {}),
+      input_sha256: sha256(selected.call.input),
+    });
+  }
+  if (rootIndex < 0) throw new Error(`reference leg ${input.leg.seq} lacks root witness`);
+
+  const tokenBindings = new Set<"token-in" | "token-out">();
+  for (const entry of matched.values()) {
+    markReferenceTokenBinding(tokenBindings, entry.call.target, input.leg);
+  }
+  for (const rule of input.leg.referenceWitness.calls) {
+    for (const arg of rule.args) {
+      if (arg.op === "positive") continue;
+      const value = resolveReferenceWitnessRef(
+        arg.ref,
+        input.leg,
+        input.executionTarget,
+        matched,
+      );
+      markReferenceTokenBinding(tokenBindings, value, input.leg);
+    }
+  }
+
+  const transferEvidence: Array<Record<string, unknown>> = [];
+  for (const rule of input.leg.referenceWitness.receiptTransfers) {
+    const evidence = matchReferenceTransfer(
+      rule,
+      input.receiptLogs,
+      input.leg,
+      input.executionTarget,
+      matched,
+    );
+    if (!evidence) {
+      throw new Error(
+        `reference receipt transfer witness failed for leg ${input.leg.seq}`,
+      );
+    }
+    markReferenceTokenBinding(tokenBindings, evidence.token, input.leg);
+    transferEvidence.push(evidence);
+  }
+  if (
+    input.requireTokenCoverage &&
+    (!tokenBindings.has("token-in") || !tokenBindings.has("token-out"))
+  ) {
+    throw new Error(
+      `reference witness for non-swap leg ${input.leg.seq} does not bind both tokens`,
+    );
+  }
+  return {
+    nextCursor: topLevelCursor,
+    evidence: {
+      kind: "declarative-reference-witness",
+      seq: input.leg.seq,
+      edgeAdapterId: input.leg.edgeAdapterId,
+      tokenBindings: [...tokenBindings].sort(),
+      calls: callEvidence,
+      transfers: transferEvidence,
+    },
+  };
+}
+
+function matchReferenceCallRule(
+  rule: ReferenceCallRule,
+  call: FlattenedTraceCall,
+  index: number,
+  leg: AdapterReplayLeg,
+  executionTarget: string,
+  matched: ReadonlyMap<string, MatchedReferenceCall>,
+): MatchedReferenceCall | null {
+  try {
+    const expectedFrom = rule.from === undefined
+      ? null
+      : String(resolveReferenceWitnessRef(
+        rule.from,
+        leg,
+        executionTarget,
+        matched,
+      )).toLowerCase();
+    const expectedTarget = String(resolveReferenceWitnessRef(
+      rule.target,
+      leg,
+      executionTarget,
+      matched,
+    )).toLowerCase();
+    const descriptor = rule.signature === undefined
+      ? null
+      : referenceCallInterface(rule.signature, "reference witness");
+    if (
+      (expectedFrom !== null && call.from !== expectedFrom) ||
+      call.target !== expectedTarget ||
+      (descriptor !== null && call.selector !== descriptor.selector) ||
+      (rule.calldata === "empty" && call.input !== "0x") ||
+      (rule.value === "positive" && call.value <= 0n)
+    ) {
+      return null;
+    }
+    const args: readonly unknown[] = descriptor === null
+      ? []
+      : descriptor.iface.decodeFunctionData(
+        descriptor.functionName,
+        call.input,
+      );
+    for (const argRule of rule.args) {
+      if (argRule.index >= args.length) return null;
+      const actual = args[argRule.index];
+      if (argRule.op === "positive") {
+        if (referenceBigInt(actual) <= 0n) return null;
+        continue;
+      }
+      const expected = resolveReferenceWitnessRef(
+        argRule.ref,
+        leg,
+        executionTarget,
+        matched,
+      );
+      if (argRule.op === "eq" && !referenceValuesEqual(actual, expected)) {
+        return null;
+      }
+      if (
+        argRule.op === "gte" &&
+        referenceBigInt(actual) < referenceBigInt(expected)
+      ) {
+        return null;
+      }
+    }
+    return { call, index, args };
+  } catch {
+    return null;
+  }
+}
+
+function matchReferenceTransfer(
+  rule: ReferenceTransferRule,
+  logs: readonly ethers.Log[],
+  leg: AdapterReplayLeg,
+  executionTarget: string,
+  matched: ReadonlyMap<string, MatchedReferenceCall>,
+): Record<string, string> | null {
+  const token = String(resolveReferenceWitnessRef(
+    rule.token,
+    leg,
+    executionTarget,
+    matched,
+  )).toLowerCase();
+  const expectedFrom = rule.from === "any" ? null : String(
+    resolveReferenceWitnessRef(rule.from, leg, executionTarget, matched),
+  ).toLowerCase();
+  const expectedTo = rule.to === "any" ? null : String(
+    resolveReferenceWitnessRef(rule.to, leg, executionTarget, matched),
+  ).toLowerCase();
+  const expectedAmount = rule.amount === "positive"
+    ? null
+    : BigInt(resolveReferenceWitnessRef(
+      rule.amount.ref,
+      leg,
+      executionTarget,
+      matched,
+    ));
+  for (const log of logs) {
+    if (
+      log.address.toLowerCase() !== token ||
+      log.topics.length !== 3 ||
+      log.topics[0].toLowerCase() !== ERC20_TRANSFER_TOPIC
+    ) {
+      continue;
+    }
+    const from = `0x${log.topics[1].slice(-40)}`.toLowerCase();
+    const to = `0x${log.topics[2].slice(-40)}`.toLowerCase();
+    const amount = BigInt(log.data);
+    if (
+      amount > 0n &&
+      (expectedAmount === null || amount === expectedAmount) &&
+      (expectedFrom === null || from === expectedFrom) &&
+      (expectedTo === null || to === expectedTo)
+    ) {
+      return { token, from, to, amount: amount.toString() };
+    }
+  }
+  return null;
+}
+
+function resolveReferenceWitnessRef(
+  ref: ReferenceWitnessRef,
+  leg: AdapterReplayLeg,
+  executionTarget: string,
+  matched: ReadonlyMap<string, MatchedReferenceCall>,
+): string | bigint {
+  if (ref === "execution-target") return executionTarget.toLowerCase();
+  if (ref === "token-in") return leg.tokenIn.toLowerCase();
+  if (ref === "token-out") return leg.tokenOut.toLowerCase();
+  if (ref === "zero") return ethers.ZeroAddress.toLowerCase();
+  const from = ref.match(/^call:([^:]+):from$/);
+  if (from) {
+    const value = matched.get(from[1])?.call.from;
+    if (!value) throw new Error(`reference call ${from[1]} has no caller`);
+    return value.toLowerCase();
+  }
+  const arg = ref.match(/^call:([^:]+):arg:([0-9]+)$/);
+  if (arg) {
+    const value = matched.get(arg[1])?.args[Number(arg[2])];
+    if (value === undefined) throw new Error(`reference call ${arg[1]} arg missing`);
+    return typeof value === "bigint" ? value : String(value).toLowerCase();
+  }
+  throw new Error(`unsupported reference witness ref ${ref}`);
+}
+
+function referenceValuesEqual(left: unknown, right: string | bigint): boolean {
+  if (typeof right === "bigint") return BigInt(left as bigint) === right;
+  return String(left).toLowerCase() === right.toLowerCase();
+}
+
+function referenceBigInt(value: unknown): bigint {
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number" && Number.isSafeInteger(value)) return BigInt(value);
+  if (typeof value === "string" && /^(?:0x[0-9a-f]+|[0-9]+)$/i.test(value)) {
+    return BigInt(value);
+  }
+  throw new Error("reference witness value is not an integer");
+}
+
+function markReferenceTokenBinding(
+  bindings: Set<"token-in" | "token-out">,
+  value: unknown,
+  leg: AdapterReplayLeg,
+): void {
+  const normalized = String(value).toLowerCase();
+  if (normalized === leg.tokenIn.toLowerCase()) bindings.add("token-in");
+  if (normalized === leg.tokenOut.toLowerCase()) bindings.add("token-out");
+}
+
+function normalizedFailureOwnerFamilyId(
+  error: unknown,
+  routeExecutionFamilies: readonly ExecutionFamilyId[],
+): string | null {
+  const attributed = blockScanAttributedFailureFamilyId(error);
+  if (attributed === null) return null;
+  const normalized = routeExecutionFamilies.includes(
+    attributed as ExecutionFamilyId,
+  )
+    ? attributed
+    : PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(attributed)?.id ?? null;
+  return normalized !== null
+    && routeExecutionFamilies.includes(normalized as ExecutionFamilyId)
+    ? normalized
+    : null;
+}
+
+class AdapterReplayDomainFailure extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "AdapterReplayDomainFailure";
+    this.code = code;
+  }
+}
+
+function stabilizeFamilyAttributedFailure(
+  error: unknown,
+  stage: string,
+  code: string,
+  message: string,
+): unknown {
+  if (!(error instanceof BlockScanFamilyAttributedError)) return error;
+  return new BlockScanFamilyAttributedError(
+    error.familyId,
+    stage,
+    new AdapterReplayDomainFailure(
+      code,
+      message,
+      { cause: error.failureCause },
+    ),
+    error.canonicalEdgeId,
+  );
+}
+
+function subjectFamilyDomainFailure(
+  fixture: Pick<AdapterReplayFixture, "executionFamilyId">,
+  stage: string,
+  code: string,
+  message: string,
+  cause?: unknown,
+): BlockScanFamilyAttributedError {
+  return new BlockScanFamilyAttributedError(
+    fixture.executionFamilyId,
+    stage,
+    new AdapterReplayDomainFailure(
+      code,
+      message,
+      cause === undefined ? undefined : { cause },
+    ),
+  );
+}
+
+const INFRASTRUCTURE_ERROR_CODES = new Set([
+  "ABORT_ERR",
+  "EAI_AGAIN",
+  "ECONNABORTED",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ENETDOWN",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "ETIMEDOUT",
+  "NETWORK_ERROR",
+  "SERVER_ERROR",
+  "STATE_CALL_ABORTED",
+  "TIMEOUT",
+  "UNKNOWN_ERROR",
+]);
+
+function normalizedFailureIdentity(
+  error: unknown,
+  routeExecutionFamilies: readonly ExecutionFamilyId[],
+  stageId: SemanticSixStepStageId,
+): AdapterReplayFailureIdentity | null {
+  if (!(error instanceof BlockScanFamilyAttributedError)) return null;
+  const ownerFamilyId = normalizedFailureOwnerFamilyId(
+    error,
+    routeExecutionFamilies,
+  );
+  if (ownerFamilyId === null) return null;
+  const causes = failureCauseChain(error.failureCause);
+  if (causes.some(isInfrastructureFailureCause)) return null;
+  const domainFailure = [...causes].reverse().find(
+    (cause): cause is AdapterReplayDomainFailure =>
+      cause instanceof AdapterReplayDomainFailure,
+  );
+  if (!domainFailure) return null;
+  return {
+    ownerFamilyId: ownerFamilyId as ExecutionFamilyId,
+    stageId,
+    code: domainFailure.code,
+  };
+}
+
+function failureCauseChain(error: unknown): unknown[] {
+  const causes: unknown[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current !== undefined && current !== null && !seen.has(current)) {
+    seen.add(current);
+    causes.push(current);
+    if (current instanceof BlockScanFamilyAttributedError) {
+      current = current.failureCause;
+      continue;
+    }
+    current = typeof current === "object" && "cause" in current
+      ? (current as { cause?: unknown }).cause
+      : undefined;
+  }
+  return causes;
+}
+
+function isInfrastructureFailureCause(error: unknown): boolean {
+  if (isStateCallAbortedError(error)) return true;
+  const code = errorCode(error);
+  if (
+    code !== null &&
+    (
+      INFRASTRUCTURE_ERROR_CODES.has(code) ||
+      code.startsWith("UND_ERR_")
+    )
+  ) {
+    return true;
+  }
+  const constructorName = errorConstructorName(error).toUpperCase();
+  if (
+    constructorName === "ABORTERROR" ||
+    constructorName === "TIMEOUTERROR"
+  ) {
+    return true;
+  }
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /\b(?:rpc|socket|network|connection|connect|timeout|timed out|rate limit|too many requests|bad gateway|service unavailable|fetch failed)\b/i
+    .test(message);
+}
+
+interface FinalSimulationFailureClassification {
+  readonly ownerFamilyId: ExecutionFamilyId | null;
+  readonly code:
+    | "family_final_sim_failed"
+    | "infrastructure_failure"
+    | "unclassified_failure";
+  readonly promotable: boolean;
+  readonly cause: unknown;
+  readonly sourceKind: string | null;
+  readonly sourceCode: string | number | null;
+}
+
+function classifyFinalSimulationFailure(
+  fixture: Pick<AdapterReplayFixture, "executionFamilyId">,
+  sim: SimulationResult,
+): FinalSimulationFailureClassification {
+  const structuredFailure = sim.failure;
+  const infrastructure = structuredFailure !== undefined && (
+    failureCauseChain(structuredFailure.cause).some(isInfrastructureFailureCause) ||
+    isInfrastructureFailureCause({
+      code: structuredFailure.code,
+      kind: structuredFailure.kind,
+    })
+  );
+  if (infrastructure) {
+    return {
+      ownerFamilyId: null,
+      code: "infrastructure_failure",
+      promotable: false,
+      cause: structuredFailure.cause,
+      sourceKind: structuredFailure.kind,
+      sourceCode: structuredFailure.code,
+    };
+  }
+  const deterministicDomainFailure = structuredFailure === undefined ||
+    structuredFailure.kind?.toLowerCase() === "revert" ||
+    (
+      typeof structuredFailure.code === "string" &&
+      structuredFailure.code.toUpperCase() === "CALL_EXCEPTION"
+    );
+  if (!deterministicDomainFailure) {
+    return {
+      ownerFamilyId: null,
+      code: "unclassified_failure",
+      promotable: false,
+      cause: structuredFailure.cause,
+      sourceKind: structuredFailure.kind,
+      sourceCode: structuredFailure.code,
+    };
+  }
+  return {
+    ownerFamilyId: fixture.executionFamilyId,
+    code: "family_final_sim_failed",
+    promotable: true,
+    cause: structuredFailure?.cause,
+    sourceKind: structuredFailure?.kind ?? null,
+    sourceCode: structuredFailure?.code ?? null,
+  };
+}
+
+function errorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code.length > 0
+    ? code.toUpperCase()
+    : null;
+}
+
+function errorConstructorName(error: unknown): string {
+  if (!error || typeof error !== "object") return "";
+  const constructor = (error as { constructor?: { name?: unknown } }).constructor;
+  return typeof constructor?.name === "string" ? constructor.name : "";
+}
+
+function referenceCallInterface(
+  signature: string,
+  field: string,
+): { iface: ethers.Interface; functionName: string; selector: string } {
+  try {
+    const iface = new ethers.Interface([`function ${signature}`]);
+    const functionName = signature.slice(0, signature.indexOf("("));
+    const fragment = iface.getFunction(functionName);
+    if (!fragment) throw new Error("missing function");
+    return {
+      iface,
+      functionName,
+      selector: fragment.selector.toLowerCase(),
+    };
+  } catch {
+    throw new Error(`${field}.signature invalid`);
+  }
 }
 
 async function validateReferenceSwapImpacts(
@@ -918,14 +1620,13 @@ async function validateReferenceSwapImpacts(
       ...(impact.poolId ? { poolId: impact.poolId } : {}),
     })));
 
-  const matched = matchReferenceSwapImpacts(fixture, edges, logs, observed);
+  const matched = matchReferenceSwapImpacts(fixture, edges, observed);
   return sha256(JSON.stringify(matched));
 }
 
 function matchReferenceSwapImpacts(
   fixture: AdapterReplayFixture,
   edges: readonly TokenEdge[],
-  logs: readonly { address: string; topics: readonly string[]; data: string }[],
   observed: readonly ReferenceObservedImpact[],
 ): Array<{ seq: number } & ReferenceObservedImpact> {
   const consumed = new Set<number>();
@@ -951,40 +1652,10 @@ function matchReferenceSwapImpacts(
       );
     }
     const impact = observed[observedIndex];
-    if (family.id === "curve-plain" || family.id === "curve-underlying") {
-      validateExactCurveIds(logs, impact.logIndex, edge, leg.seq);
-    }
     consumed.add(observedIndex);
     previousLogIndex = impact.logIndex;
     return [{ seq: leg.seq, ...impact }];
   });
-}
-
-function validateExactCurveIds(
-  logs: readonly { address: string; topics: readonly string[]; data: string }[],
-  logIndex: number,
-  edge: TokenEdge,
-  legSeq: number,
-): void {
-  const log = logs[logIndex];
-  if (!log || edge.curveI === undefined || edge.curveJ === undefined) {
-    throw new Error(`reference Curve leg ${legSeq} lacks exact coin-index evidence`);
-  }
-  try {
-    const [soldId, , boughtId] = ethers.AbiCoder.defaultAbiCoder().decode(
-      ["uint256", "uint256", "uint256", "uint256"],
-      log.data,
-    );
-    if (BigInt(edge.curveI) !== BigInt(soldId) || BigInt(edge.curveJ) !== BigInt(boughtId)) {
-      throw new Error(
-        `reference Curve leg ${legSeq} coin ids do not match edge ` +
-          `${edge.curveI}->${edge.curveJ}`,
-      );
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith("reference Curve leg")) throw error;
-    throw new Error(`reference Curve leg ${legSeq} has undecodable coin ids`);
-  }
 }
 
 function flattenSuccessfulCalls(
@@ -993,12 +1664,17 @@ function flattenSuccessfulCalls(
   depth = 0,
 ): void {
   if (call.error) return;
-  if (typeof call.to === "string" && typeof call.input === "string" && call.input.length >= 10) {
+  if (
+    typeof call.to === "string" &&
+    typeof call.input === "string" &&
+    (call.input === "0x" || call.input.length >= 10)
+  ) {
     output.push({
       target: call.to.toLowerCase(),
-      selector: call.input.slice(0, 10).toLowerCase(),
+      selector: call.input === "0x" ? "0x" : call.input.slice(0, 10).toLowerCase(),
       input: call.input.toLowerCase(),
       ...(typeof call.from === "string" ? { from: call.from.toLowerCase() } : {}),
+      value: typeof call.value === "string" ? BigInt(call.value) : 0n,
       depth,
     });
   }
@@ -1010,186 +1686,162 @@ function runReferenceMatcherSelfTests(): void {
   const tokenB = "0x0000000000000000000000000000000000000002";
   const tokenC = "0x0000000000000000000000000000000000000003";
   const target = "0x0000000000000000000000000000000000000010";
-
-  const psmSellLeg: AdapterReplayLeg = {
-    seq: 1,
-    pool: { adapter: "psm", address: target },
-    edgeAdapterId: "psm",
-    tokenIn: ADDR.USDC,
-    tokenOut: tokenB,
+  const depositor = "0x0000000000000000000000000000000000000020";
+  const depositIface = new ethers.Interface([
+    "function depositAsset(address,uint256,uint256,address)",
+  ]);
+  const transferIface = new ethers.Interface([
+    "function transferFrom(address,address,uint256)",
+  ]);
+  const mintIface = new ethers.Interface(["function mint(address,uint256)"]);
+  const witness: ReferenceWitness = {
+    calls: [
+      {
+        id: "root",
+        target: "execution-target",
+        signature: "depositAsset(address,uint256,uint256,address)",
+        args: [
+          { index: 0, op: "eq", ref: "token-in" },
+          { index: 1, op: "positive" },
+        ],
+        value: null,
+      },
+      {
+        id: "pull",
+        within: "root",
+        target: "token-in",
+        signature: "transferFrom(address,address,uint256)",
+        args: [
+          { index: 0, op: "eq", ref: "call:root:from" },
+          { index: 1, op: "eq", ref: "execution-target" },
+          { index: 2, op: "eq", ref: "call:root:arg:1" },
+        ],
+        value: null,
+      },
+      {
+        id: "mint",
+        within: "root",
+        target: "token-out",
+        signature: "mint(address,uint256)",
+        args: [
+          { index: 0, op: "eq", ref: "call:root:from" },
+          { index: 1, op: "gte", ref: "call:root:arg:2" },
+        ],
+        value: null,
+      },
+    ],
+    receiptTransfers: [],
   };
-  assert(traceCallMatchesLegSemantics(psmSellLeg, {
-    target,
-    selector: PSM_SELL_GEM_SELECTOR,
-    input: PSM_SELL_GEM_SELECTOR,
-  }));
-  assert(!traceCallMatchesLegSemantics(psmSellLeg, {
-    target,
-    selector: PSM_BUY_GEM_SELECTOR,
-    input: PSM_BUY_GEM_SELECTOR,
-  }));
-
-  const synthIface = new ethers.Interface(["function swap(address,address,uint256)"]);
-  const synthLeg: AdapterReplayLeg = {
+  const leg: AdapterReplayLeg = {
     seq: 1,
-    pool: { adapter: "metronome-synth", address: target },
-    edgeAdapterId: "metronome-synth-swap",
-    tokenIn: tokenA,
-    tokenOut: tokenB,
-  };
-  const synthSelector = synthIface.getFunction("swap")!.selector.toLowerCase();
-  assert(traceCallMatchesLegSemantics(synthLeg, {
-    target,
-    selector: synthSelector,
-    input: synthIface.encodeFunctionData("swap", [tokenA, tokenB, 1n]),
-  }));
-  assert(!traceCallMatchesLegSemantics(synthLeg, {
-    target,
-    selector: synthSelector,
-    input: synthIface.encodeFunctionData("swap", [tokenA, tokenC, 1n]),
-  }));
-
-  const siloIface = new ethers.Interface(["function redeem(address,uint256,address,address)"]);
-  const siloLeg: AdapterReplayLeg = {
-    seq: 1,
-    pool: { adapter: "erc4626", address: target },
-    edgeAdapterId: "erc4626-redeem-silo",
-    tokenIn: tokenA,
-    tokenOut: tokenB,
-  };
-  const siloSelector = siloIface.getFunction("redeem")!.selector.toLowerCase();
-  assert(traceCallMatchesLegSemantics(siloLeg, {
-    target,
-    selector: siloSelector,
-    input: siloIface.encodeFunctionData("redeem", [tokenB, 1n, target, target]),
-  }));
-  assert(!traceCallMatchesLegSemantics(siloLeg, {
-    target,
-    selector: siloSelector,
-    input: siloIface.encodeFunctionData("redeem", [tokenC, 1n, target, target]),
-  }));
-
-  const quotedDepositor = "0x0000000000000000000000000000000000000020";
-  const quotedLeg: AdapterReplayLeg = {
-    seq: 1,
-    pool: { adapter: "eigenpie-deposit-router", address: target },
+    pool: {
+      adapter: "eigenpie-deposit-router",
+      address: target,
+      fixedTokenIn: tokenA,
+      fixedTokenOut: tokenB,
+      fixedSlotKind: "protocol",
+      fixedProtocolAction: "wrap",
+    },
     edgeAdapterId: "eigenpie-deposit-asset",
     tokenIn: tokenA,
     tokenOut: tokenB,
+    referenceWitness: witness,
   };
-  const quotedDepositInput = REFERENCE_EIGENPIE_DEPOSIT_IFACE.encodeFunctionData(
-    "depositAsset",
-    [tokenA, 10n, 9n, ethers.ZeroAddress],
-  );
-  const quotedParent: FlattenedTraceCall = {
-    target,
-    from: quotedDepositor,
-    selector: quotedDepositInput.slice(0, 10).toLowerCase(),
-    input: quotedDepositInput,
-    depth: 1,
-  };
-  const quotedTransferInput = REFERENCE_ERC20_FLOW_IFACE.encodeFunctionData(
-    "transferFrom",
-    [quotedDepositor, target, 10n],
-  );
-  const quotedTransfer: FlattenedTraceCall = {
-    target: tokenA,
-    selector: REFERENCE_TRANSFER_FROM_SELECTOR,
-    input: quotedTransferInput,
-    depth: 2,
-  };
-  const quotedMintInput = REFERENCE_ERC20_FLOW_IFACE.encodeFunctionData(
-    "mint",
-    [quotedDepositor, 9n],
-  );
-  const quotedMint: FlattenedTraceCall = {
-    target: tokenB,
-    selector: REFERENCE_MINT_SELECTOR,
-    input: quotedMintInput,
-    depth: 2,
-  };
-  const quotedEvidence = traceCallSemanticEvidence(
-    quotedLeg,
-    quotedParent,
-    [quotedTransfer, quotedMint],
-  );
-  assert(quotedEvidence);
-  assert.equal(quotedEvidence.tokenIn, tokenA);
-  assert.equal(quotedEvidence.tokenOut, tokenB);
-  assert(!traceCallMatchesLegSemantics(
-    { ...quotedLeg, tokenIn: tokenC },
-    quotedParent,
-    [quotedTransfer, quotedMint],
-  ));
-  assert(!traceCallMatchesLegSemantics(
-    quotedLeg,
-    quotedParent,
-    [quotedTransfer, { ...quotedMint, target: tokenC }],
-  ));
-  const siblingScoped = [
-    quotedParent,
-    quotedTransfer,
+  const rootInput = depositIface.encodeFunctionData("depositAsset", [
+    tokenA, 10n, 9n, ethers.ZeroAddress,
+  ]);
+  const pullInput = transferIface.encodeFunctionData("transferFrom", [
+    depositor, target, 10n,
+  ]);
+  const mintInput = mintIface.encodeFunctionData("mint", [depositor, 9n]);
+  const calls: FlattenedTraceCall[] = [
     {
-      target: tokenC,
-      selector: "0x12345678",
-      input: "0x12345678",
+      target,
+      from: depositor,
+      selector: rootInput.slice(0, 10).toLowerCase(),
+      input: rootInput,
+      value: 0n,
       depth: 1,
     },
-    quotedMint,
+    {
+      target: tokenA,
+      selector: pullInput.slice(0, 10).toLowerCase(),
+      input: pullInput,
+      value: 0n,
+      depth: 2,
+    },
+    {
+      target: tokenB,
+      selector: mintInput.slice(0, 10).toLowerCase(),
+      input: mintInput,
+      value: 0n,
+      depth: 2,
+    },
   ];
-  assert(!traceCallMatchesLegSemantics(
-    quotedLeg,
-    quotedParent,
-    descendantCalls(siblingScoped, 0),
-  ));
+  assert.doesNotThrow(() => matchReferenceWitness({
+    calls,
+    receiptLogs: [],
+    cursor: 0,
+    leg,
+    executionTarget: target,
+    expectedEncodedSelector: rootInput.slice(0, 10).toLowerCase(),
+    requireTokenCoverage: true,
+  }));
+  assert.throws(() => matchReferenceWitness({
+    calls,
+    receiptLogs: [],
+    cursor: 0,
+    leg,
+    executionTarget: target,
+    expectedEncodedSelector: "0x12345678",
+    requireTokenCoverage: true,
+  }), /differs from encoded/);
+  assert.throws(() => matchReferenceWitness({
+    calls: [
+      calls[0],
+      calls[1],
+      {
+        target: tokenC,
+        selector: "0x12345678",
+        input: "0x12345678",
+        value: 0n,
+        depth: 1,
+      },
+      calls[2],
+    ],
+    receiptLogs: [],
+    cursor: 0,
+    leg,
+    executionTarget: target,
+    expectedEncodedSelector: rootInput.slice(0, 10).toLowerCase(),
+    requireTokenCoverage: true,
+  }), /witness mint failed/);
 
-  const materializedQuotedPool = materializeReplayPool(quotedLeg, "quoted-family-self-test");
-  assert.equal(
-    materializedQuotedPool.logicalInstanceId,
-    `${tokenA.toLowerCase()}>${tokenB.toLowerCase()}`,
-  );
-  assert.deepEqual(materializedQuotedPool.verifiedRoutes, [{
+  const incompleteLeg: AdapterReplayLeg = {
+    ...leg,
+    referenceWitness: {
+      calls: [witness.calls[0]],
+      receiptTransfers: [],
+    },
+  };
+  assert.throws(() => matchReferenceWitness({
+    calls,
+    receiptLogs: [],
+    cursor: 0,
+    leg: incompleteLeg,
+    executionTarget: target,
+    expectedEncodedSelector: rootInput.slice(0, 10).toLowerCase(),
+    requireTokenCoverage: true,
+  }), /does not bind both tokens/);
+
+  const materializedPool = materializeReplayPool(leg);
+  assert.deepEqual(materializedPool.verifiedRoutes, [{
     edgeAdapterId: "eigenpie-deposit-asset",
     tokenIn: ethers.getAddress(tokenA),
     tokenOut: ethers.getAddress(tokenB),
     slotKind: "protocol",
     protocolAction: "wrap",
   }]);
-  assert.throws(
-    () => materializeReplayPool({
-      ...quotedLeg,
-      pool: { ...quotedLeg.pool, fixedTokenOut: tokenC },
-    }, "quoted-family-self-test"),
-    /fixedTokenOut disagrees/,
-  );
-
-  const balancerLeg: AdapterReplayLeg = {
-    seq: 1,
-    pool: { adapter: "balancer-v3", address: target },
-    edgeAdapterId: "balancer-v3-unlock",
-    tokenIn: tokenA,
-    tokenOut: tokenB,
-  };
-  assert.equal(expectedReferenceTarget(balancerLeg, "balancer-v3"), ADDR.BALANCER_V3_VAULT.toLowerCase());
-
-  const curveEdge = {
-    adapterId: "curve-exchange-underlying",
-    target,
-    tokenIn: tokenA,
-    tokenOut: tokenB,
-    curveI: 1,
-    curveJ: 2,
-  } as TokenEdge;
-  const curveLog = (soldId: bigint, boughtId: bigint) => ({
-    address: target,
-    topics: [],
-    data: ethers.AbiCoder.defaultAbiCoder().encode(
-      ["uint256", "uint256", "uint256", "uint256"],
-      [soldId, 10n, boughtId, 9n],
-    ),
-  });
-  assert.doesNotThrow(() => validateExactCurveIds([curveLog(1n, 2n)], 0, curveEdge, 1));
-  assert.throws(() => validateExactCurveIds([curveLog(0n, 1n)], 0, curveEdge, 1), /coin ids do not match/);
 
   const repeatedLeg: AdapterReplayLeg = {
     seq: 1,
@@ -1197,6 +1849,16 @@ function runReferenceMatcherSelfTests(): void {
     edgeAdapterId: "univ2-swap",
     tokenIn: tokenA,
     tokenOut: tokenB,
+    referenceWitness: {
+      calls: [{
+        id: "root",
+        target: "execution-target",
+        signature: "swap(uint256,uint256,address,bytes)",
+        args: [],
+        value: null,
+      }],
+      receiptTransfers: [],
+    },
   };
   const repeatedFixture = {
     id: "reference-matcher-self-test",
@@ -1217,8 +1879,318 @@ function runReferenceMatcherSelfTests(): void {
     tokenOut: tokenB,
   };
   assert.throws(
-    () => matchReferenceSwapImpacts(repeatedFixture, [repeatedEdge, repeatedEdge], [], [oneImpact]),
+    () => matchReferenceSwapImpacts(repeatedFixture, [repeatedEdge, repeatedEdge], [oneImpact]),
     /leg 2/,
+  );
+
+  const logicalSelfBurnLeg: AdapterReplayLeg = {
+    seq: 1,
+    pool: {
+      adapter: "self-burn-native-token" as PoolEntry["adapter"],
+      address: tokenA,
+      fixedTokenIn: tokenA,
+      fixedTokenOut: ADDR.WETH,
+      fixedSlotKind: "protocol",
+      fixedProtocolAction: "redeem",
+    },
+    edgeAdapterId: "self-burn-native-redeem",
+    tokenIn: tokenA,
+    tokenOut: ADDR.WETH,
+    referenceWitness: {
+      calls: [{
+        id: "root",
+        target: "execution-target",
+        signature: "transfer(address,uint256)",
+        args: [],
+        value: null,
+      }],
+      receiptTransfers: [],
+    },
+  };
+  const logicalSelfBurnFixture = {
+    id: "self-burn-final-plan-self-test",
+    route: [logicalSelfBurnLeg],
+  } as AdapterReplayFixture;
+  const logicalSelfBurnEdge = {
+    adapterId: "self-burn-native-redeem",
+    target: tokenA,
+    tokenIn: tokenA,
+    tokenOut: ADDR.WETH,
+  } as TokenEdge;
+  const selfBurnAction = {
+    adapterId: "self-burn-native-redeem",
+    target: tokenA,
+    tokenIn: tokenA,
+    // The physical burn action pays native ETH; the following helper realizes
+    // the logical WETH output.
+    tokenOut: tokenA,
+    amount: 10n,
+    params: {},
+    children: [],
+  } as ResolvedPlan["root"];
+  const wethHelper = {
+    adapterId: "weth-deposit-value",
+    target: ADDR.WETH,
+    tokenIn: ADDR.ZERO,
+    tokenOut: ADDR.WETH,
+    amount: 9n,
+    params: {},
+    children: [],
+  } as ResolvedPlan["root"];
+  const syntheticRoot = {
+    adapterId: "synthetic-root",
+    target: ethers.ZeroAddress,
+    tokenIn: tokenA,
+    tokenOut: tokenA,
+    amount: 10n,
+    params: {},
+    children: [selfBurnAction, wethHelper],
+  } as ResolvedPlan["root"];
+  assert.deepEqual(
+    referenceExecutionSurfaces(
+      logicalSelfBurnFixture,
+      [logicalSelfBurnEdge],
+      syntheticRoot,
+    ),
+    [{
+      adapterId: "self-burn-native-redeem",
+      target: tokenA,
+      selector: "0xa9059cbb",
+    }],
+  );
+  assert.throws(
+    () => referenceExecutionSurfaces(
+      logicalSelfBurnFixture,
+      [{ ...logicalSelfBurnEdge, target: tokenC } as TokenEdge],
+      syntheticRoot,
+    ),
+    /out of order/,
+  );
+  assert.throws(
+    () => referenceExecutionSurfaces(
+      {
+        ...logicalSelfBurnFixture,
+        route: [{ ...logicalSelfBurnLeg, tokenIn: tokenC }],
+      },
+      [logicalSelfBurnEdge],
+      syntheticRoot,
+    ),
+    /out of order/,
+  );
+  const secondSelfBurnLeg = {
+    ...logicalSelfBurnLeg,
+    seq: 2,
+    pool: {
+      ...logicalSelfBurnLeg.pool,
+      address: tokenC,
+      fixedTokenIn: tokenC,
+    },
+    tokenIn: tokenC,
+  };
+  assert.throws(
+    () => referenceExecutionSurfaces(
+      {
+        ...logicalSelfBurnFixture,
+        route: [logicalSelfBurnLeg, secondSelfBurnLeg],
+      },
+      [
+        logicalSelfBurnEdge,
+        { ...logicalSelfBurnEdge, target: tokenC, tokenIn: tokenC } as TokenEdge,
+      ],
+      {
+        ...syntheticRoot,
+        children: [
+          { ...selfBurnAction, target: tokenC, tokenIn: tokenC, tokenOut: tokenC },
+          selfBurnAction,
+          wethHelper,
+        ],
+      },
+    ),
+    /out of order/,
+  );
+
+  const balancerLeg: AdapterReplayLeg = {
+    seq: 1,
+    pool: {
+      adapter: "balancer-v3",
+      address: tokenC,
+      token0: tokenA,
+      token1: tokenB,
+    },
+    edgeAdapterId: "balancer-v3-unlock",
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+    referenceWitness: {
+      calls: [{
+        id: "root",
+        target: "execution-target",
+        signature: "unlock(bytes)",
+        args: [],
+        value: null,
+      }],
+      receiptTransfers: [],
+    },
+  };
+  const balancerFixture = {
+    id: "singleton-final-plan-self-test",
+    route: [balancerLeg],
+  } as AdapterReplayFixture;
+  const balancerEdge = {
+    adapterId: "balancer-v3-unlock",
+    target: tokenC,
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+  } as TokenEdge;
+  const balancerNode = {
+    adapterId: "balancer-v3-unlock",
+    target: ADDR.BALANCER_V3_VAULT,
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+    amount: 0n,
+    params: {},
+    children: [
+      {
+        adapterId: "erc20-transfer",
+        target: tokenA,
+        tokenIn: tokenA,
+        tokenOut: tokenA,
+        amount: 10n,
+        params: { to: ADDR.BALANCER_V3_VAULT, amount: 10n },
+        children: [],
+      },
+      {
+        adapterId: "balancer-v3-settle",
+        target: ADDR.BALANCER_V3_VAULT,
+        tokenIn: tokenA,
+        tokenOut: tokenA,
+        amount: 10n,
+        params: { token: tokenA },
+        children: [],
+      },
+      {
+        adapterId: "balancer-v3-swap",
+        target: ADDR.BALANCER_V3_VAULT,
+        tokenIn: tokenA,
+        tokenOut: tokenB,
+        amount: 10n,
+        params: {
+          kind: 0n,
+          pool: tokenC,
+          limitRaw: 0n,
+          userData: "0x",
+        },
+        children: [],
+      },
+      {
+        adapterId: "balancer-v3-send-to",
+        target: ADDR.BALANCER_V3_VAULT,
+        tokenIn: tokenB,
+        tokenOut: tokenB,
+        amount: 9n,
+        params: { token: tokenB },
+        children: [],
+      },
+    ],
+  } as ResolvedPlan["root"];
+  const balancerRoot = {
+    ...syntheticRoot,
+    children: [balancerNode],
+  } as ResolvedPlan["root"];
+  const balancerSurface = referenceExecutionSurfaces(
+    balancerFixture,
+    [balancerEdge],
+    balancerRoot,
+  );
+  assert.equal(
+    balancerSurface[0].target,
+    ADDR.BALANCER_V3_VAULT.toLowerCase(),
+  );
+  assert.throws(
+    () => referenceExecutionSurfaces(
+      balancerFixture,
+      [balancerEdge],
+      {
+        ...balancerRoot,
+        children: [{
+          ...balancerNode,
+          children: balancerNode.children.map((child) =>
+            child.adapterId === "balancer-v3-swap"
+              ? { ...child, params: { ...child.params, pool: target } }
+              : child
+          ),
+        }],
+      },
+    ),
+    /out of order/,
+  );
+
+  const v4PoolKey = {
+    currency0: tokenA,
+    currency1: tokenB,
+    fee: 3_000,
+    tickSpacing: 60,
+    hooks: ethers.ZeroAddress,
+  };
+  const v4PoolId = ethers.keccak256(
+    ethers.AbiCoder.defaultAbiCoder().encode(
+      [
+        "tuple(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)",
+      ],
+      [[
+        v4PoolKey.currency0,
+        v4PoolKey.currency1,
+        v4PoolKey.fee,
+        v4PoolKey.tickSpacing,
+        v4PoolKey.hooks,
+      ]],
+    ),
+  ).toLowerCase();
+  const v4Node = {
+    adapterId: "univ4-unlock",
+    target: ADDR.UNISWAP_V4_POOL_MANAGER,
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+    amount: 0n,
+    params: {},
+    children: [{
+      adapterId: "univ4-swap",
+      target: ADDR.UNISWAP_V4_POOL_MANAGER,
+      tokenIn: tokenA,
+      tokenOut: tokenB,
+      amount: 10n,
+      params: {
+        currency0: v4PoolKey.currency0,
+        currency1: v4PoolKey.currency1,
+        fee: BigInt(v4PoolKey.fee),
+        tickSpacing: BigInt(v4PoolKey.tickSpacing),
+        hooks: v4PoolKey.hooks,
+      },
+      children: [],
+    }],
+  } as ResolvedPlan["root"];
+  const v4Identity = resolvedPlanExecutionIdentity(
+    PRODUCTION_ADAPTER_FAMILIES.routes().forFamily("univ4"),
+    v4Node,
+  );
+  assert.deepEqual(v4Identity, {
+    routeTarget: ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
+    poolId: v4PoolId,
+  });
+  const v4Edge = {
+    adapterId: "univ4-unlock",
+    target: ADDR.UNISWAP_V4_POOL_MANAGER,
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+    poolId: v4PoolId,
+    v4PoolKey,
+  } as TokenEdge;
+  assert.equal(planExecutionIdentityMatchesEdge(v4Identity, v4Edge), true);
+  assert.equal(
+    planExecutionIdentityMatchesEdge(
+      v4Identity,
+      { ...v4Edge, poolId: `0x${"ff".repeat(32)}` },
+    ),
+    false,
   );
 
   assert.doesNotThrow(() => assertIntermediateBalanceConserved(tokenA, tokenB, 1n));
@@ -1231,6 +2203,291 @@ function runReferenceMatcherSelfTests(): void {
     () => assertNoPreexistingRouteInventory(new Map([[tokenA, 1n]])),
     /pre-existing route-token inventory/,
   );
+  assert.equal(
+    normalizedFailureOwnerFamilyId(
+      new BlockScanFamilyAttributedError(
+        "protocol:eigenpie",
+        "self-test",
+        new Error("owned"),
+      ),
+      ["protocol:eigenpie"],
+    ),
+    "protocol:eigenpie",
+  );
+  assert.equal(
+    normalizedFailureOwnerFamilyId(
+      new BlockScanFamilyAttributedError(
+        "univ3-swap",
+        "self-test",
+        new Error("edge-owned"),
+      ),
+      ["univ3-standard"],
+    ),
+    "univ3-standard",
+  );
+  assert.equal(
+    normalizedFailureOwnerFamilyId(
+      new BlockScanFamilyAttributedError(
+        "univ2-standard",
+        "self-test",
+        new Error("sibling"),
+      ),
+      ["univ3-standard"],
+    ),
+    null,
+  );
+  assert.equal(
+    normalizedFailureOwnerFamilyId(
+      new Error("unattributed"),
+      ["protocol:eigenpie"],
+    ),
+    null,
+  );
+  const stableFailure = new BlockScanFamilyAttributedError(
+    "protocol:eigenpie",
+    "self-test",
+    new AdapterReplayDomainFailure(
+      "family_edge_cardinality_mismatch",
+      "dynamic prose is not identity",
+    ),
+  );
+  assert.deepEqual(
+    normalizedFailureIdentity(
+      stableFailure,
+      ["protocol:eigenpie"],
+      "exact_quote_refine",
+    ),
+    {
+      ownerFamilyId: "protocol:eigenpie",
+      stageId: "exact_quote_refine",
+      code: "family_edge_cardinality_mismatch",
+    },
+  );
+  assert.equal(
+    normalizedFailureIdentity(
+      new BlockScanFamilyAttributedError(
+        "protocol:eigenpie",
+        "self-test",
+        new Error("generic attributed errors are not stable proof"),
+      ),
+      ["protocol:eigenpie"],
+      "exact_quote_refine",
+    ),
+    null,
+  );
+  for (const infrastructure of [
+    new StateCallAbortedError("deadline", "deadline"),
+    Object.assign(new Error("network"), { code: "NETWORK_ERROR" }),
+  ]) {
+    assert.equal(
+      normalizedFailureIdentity(
+        new BlockScanFamilyAttributedError(
+          "protocol:eigenpie",
+          "self-test",
+          new AdapterReplayDomainFailure(
+            "family_edge_cardinality_mismatch",
+            "must not override infrastructure",
+            { cause: infrastructure },
+          ),
+        ),
+        ["protocol:eigenpie"],
+        "exact_quote_refine",
+      ),
+      null,
+    );
+  }
+}
+
+async function runFinalSimulationFailureSelfTests(): Promise<void> {
+  const fixture = {
+    executionFamilyId: "protocol:eigenpie",
+  } as const;
+  const plan = {
+    root: {
+      adapterId: "skip",
+      target: ethers.ZeroAddress,
+      tokenIn: ethers.ZeroAddress,
+      tokenOut: ethers.ZeroAddress,
+      amount: 0n,
+      params: {},
+      children: [],
+    },
+    netProfit: 0n,
+    profitToken: ethers.ZeroAddress,
+    flashAmount: 0n,
+    templateName: "final-sim-failure-self-test",
+  } as ResolvedPlan;
+  const simulateFailure = async (error: Error): Promise<SimulationResult> => {
+    const backend = {
+      async snapshot() {
+        return "0x1";
+      },
+      async revert() {},
+      async getTokenBalance() {
+        return 0n;
+      },
+      async send() {
+        throw error;
+      },
+      async getGasUsed() {
+        throw new Error("unreachable");
+      },
+    } as unknown as StateBackend;
+    return new BotVMSimulator(
+      backend,
+      DEFAULT_SEARCHER_EXECUTOR,
+      DEFAULT_SEARCHER_OWNER,
+    ).simulate(plan);
+  };
+
+  const infrastructureCases = [
+    new StateCallAbortedError("opaque aborted call", "deadline"),
+    ...(["ETIMEDOUT", "NETWORK_ERROR", "SERVER_ERROR"] as const).map((code) =>
+      Object.assign(new Error("opaque transport failure"), { code })
+    ),
+  ];
+  for (const infrastructure of infrastructureCases) {
+    const sim = await simulateFailure(infrastructure);
+    assert.equal(sim.success, false);
+    assert.equal(sim.failure?.cause, infrastructure);
+    assert.equal(
+      sim.failure?.code,
+      (infrastructure as { readonly code?: unknown }).code ?? null,
+    );
+    assert.equal(
+      sim.failure?.kind,
+      (infrastructure as { readonly kind?: unknown }).kind ?? null,
+    );
+    const classification = classifyFinalSimulationFailure(fixture, sim);
+    assert.deepEqual(
+      {
+        ownerFamilyId: classification.ownerFamilyId,
+        code: classification.code,
+        promotable: classification.promotable,
+        sourceKind: classification.sourceKind,
+        sourceCode: classification.sourceCode,
+      },
+      {
+        ownerFamilyId: null,
+        code: "infrastructure_failure",
+        promotable: false,
+        sourceKind:
+          (infrastructure as { readonly kind?: unknown }).kind ?? null,
+        sourceCode:
+          (infrastructure as { readonly code?: unknown }).code ?? null,
+      },
+    );
+    assert.equal(
+      normalizedFailureIdentity(
+        classification.cause,
+        ["protocol:eigenpie"],
+        "fork_final_sim",
+      ),
+      null,
+    );
+  }
+
+  const unknownCases = [
+    new Error("opaque unclassified failure"),
+    Object.assign(new Error("opaque numeric provider failure"), { code: -32_000 }),
+    new Error(`transaction reverted: 0x${"ab".repeat(32)}`),
+  ];
+  for (const unknown of unknownCases) {
+    const sim = await simulateFailure(unknown);
+    assert.equal(sim.failure?.cause, unknown);
+    const classification = classifyFinalSimulationFailure(fixture, sim);
+    assert.deepEqual(
+      {
+        ownerFamilyId: classification.ownerFamilyId,
+        code: classification.code,
+        promotable: classification.promotable,
+      },
+      {
+        ownerFamilyId: null,
+        code: "unclassified_failure",
+        promotable: false,
+      },
+    );
+    assert.equal(
+      normalizedFailureIdentity(
+        classification.cause,
+        ["protocol:eigenpie"],
+        "fork_final_sim",
+      ),
+      null,
+    );
+  }
+
+  const backendRevertHash = `0x${"ab".repeat(32)}`;
+  const domainCases = [
+    Object.assign(new Error("opaque execution failure"), {
+      code: "CALL_EXCEPTION",
+    }),
+    Object.assign(new Error("opaque execution failure"), { kind: "revert" }),
+    new TransactionRevertedError(backendRevertHash),
+  ];
+  for (const domainRevert of domainCases) {
+    const domainSim = await simulateFailure(domainRevert);
+    assert.equal(domainSim.failure?.cause, domainRevert);
+    const domainClassification = classifyFinalSimulationFailure(
+      fixture,
+      domainSim,
+    );
+    assert.deepEqual(
+      {
+        ownerFamilyId: domainClassification.ownerFamilyId,
+        code: domainClassification.code,
+        promotable: domainClassification.promotable,
+      },
+      {
+        ownerFamilyId: "protocol:eigenpie",
+        code: "family_final_sim_failed",
+        promotable: true,
+      },
+    );
+    assert.deepEqual(
+      normalizedFailureIdentity(
+        subjectFamilyDomainFailure(
+          fixture,
+          "final sim",
+          domainClassification.code,
+          "stable domain revert",
+          domainClassification.cause,
+        ),
+        ["protocol:eigenpie"],
+        "fork_final_sim",
+      ),
+      {
+        ownerFamilyId: "protocol:eigenpie",
+        stageId: "fork_final_sim",
+        code: "family_final_sim_failed",
+      },
+    );
+  }
+
+  const nonPositiveWithoutFailure = classifyFinalSimulationFailure(
+    fixture,
+    {
+      success: false,
+      profitToken: ethers.ZeroAddress,
+      grossProfit: 0n,
+      gasUsed: 0n,
+      netProfit: 0n,
+      calldata: "0x",
+    },
+  );
+  assert.deepEqual(
+    {
+      ownerFamilyId: nonPositiveWithoutFailure.ownerFamilyId,
+      code: nonPositiveWithoutFailure.code,
+      promotable: nonPositiveWithoutFailure.promotable,
+    },
+    {
+      ownerFamilyId: "protocol:eigenpie",
+      code: "family_final_sim_failed",
+      promotable: true,
+    },
+  );
 }
 
 async function buildPinnedRoute(
@@ -1239,30 +2496,177 @@ async function buildPinnedRoute(
 ): Promise<TokenEdge[]> {
   const edges: TokenEdge[] = [];
   for (const leg of fixture.route) {
-    const pool = materializeReplayPool(leg, fixture.id);
-    if (pool.adapter === "univ4") {
-      pool.fixedTokenIn = leg.tokenIn;
-      pool.fixedTokenOut = leg.tokenOut;
+    const familyId = familyForLeg(leg, fixture.id);
+    try {
+      const pool = materializeReplayPool(leg);
+      const emitted = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(pool, state);
+      const matches = emitted.filter((candidate) =>
+        candidate.adapterId === leg.edgeAdapterId &&
+        candidate.tokenIn.toLowerCase() === leg.tokenIn.toLowerCase() &&
+        candidate.tokenOut.toLowerCase() === leg.tokenOut.toLowerCase() &&
+        candidate.target.toLowerCase() === pool.address.toLowerCase() &&
+        (!pool.poolId || candidate.poolId?.toLowerCase() === pool.poolId.toLowerCase())
+      );
+      if (matches.length !== 1) {
+        throw new AdapterReplayDomainFailure(
+          "family_edge_cardinality_mismatch",
+          `route leg ${leg.seq} emitted ${matches.length} exact family edges`,
+        );
+      }
+      edges.push(matches[0]);
+    } catch (error) {
+      if (error instanceof BlockScanFamilyAttributedError) throw error;
+      throw new BlockScanFamilyAttributedError(
+        familyId,
+        "family edge build",
+        error,
+      );
     }
-    const emitted = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(pool, state);
-    const matches = emitted.filter((candidate) =>
-      candidate.adapterId === leg.edgeAdapterId &&
-      candidate.tokenIn.toLowerCase() === leg.tokenIn.toLowerCase() &&
-      candidate.tokenOut.toLowerCase() === leg.tokenOut.toLowerCase() &&
-      candidate.target.toLowerCase() === pool.address.toLowerCase() &&
-      (!pool.poolId || candidate.poolId?.toLowerCase() === pool.poolId.toLowerCase())
-    );
-    if (matches.length !== 1) {
-      throw new Error(`route leg ${leg.seq} emitted ${matches.length} exact family edges`);
-    }
-    edges.push(matches[0]);
   }
   return edges;
 }
 
+function referenceExecutionSurfaces(
+  fixture: AdapterReplayFixture,
+  edges: readonly TokenEdge[],
+  root: ResolvedPlan["root"],
+): readonly ReferenceExecutionSurface[] {
+  if (edges.length !== fixture.route.length) {
+    throw new Error(
+      `final plan witness received ${edges.length} edges for ` +
+        `${fixture.route.length} fixture legs`,
+    );
+  }
+  const planNodes: ResolvedPlan["root"][] = [];
+  const visit = (node: ResolvedPlan["root"]): void => {
+    planNodes.push(node);
+    node.children.forEach(visit);
+  };
+  visit(root);
+  const routeAdapterIds = new Set(
+    fixture.route.map((leg) => leg.edgeAdapterId),
+  );
+  const executionNodes = planNodes.filter((node) =>
+    routeAdapterIds.has(node.adapterId)
+  );
+  if (executionNodes.length !== fixture.route.length) {
+    throw new Error(
+      `final plan has ${executionNodes.length} route execution nodes for ` +
+        `${fixture.route.length} fixture legs`,
+    );
+  }
+  const surfaces: ReferenceExecutionSurface[] = [];
+  for (let index = 0; index < fixture.route.length; index++) {
+    const leg = fixture.route[index];
+    const familyId = familyForLeg(leg, fixture.id);
+    try {
+      const node = executionNodes[index];
+      const edge = edges[index];
+      const family =
+        PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyId);
+      const planIdentity = resolvedPlanExecutionIdentity(family, node);
+      if (
+        node.adapterId !== leg.edgeAdapterId ||
+        !planExecutionIdentityMatchesEdge(planIdentity, edge) ||
+        node.tokenIn.toLowerCase() !== leg.tokenIn.toLowerCase()
+      ) {
+        throw new AdapterReplayDomainFailure(
+          "final_plan_route_order_mismatch",
+          `route leg ${leg.seq} final plan execution identity is out of order`,
+        );
+      }
+      // A logical route leg may compile into more than one physical action.
+      // For example self-burn-native first transfers/burns the input token and
+      // pays native ETH, then a sibling WETH action realizes the logical
+      // tokenOut. The family-owned action node therefore cannot be required to
+      // repeat the logical edge tokenOut. Ordered adapter/target/tokenIn binds
+      // the route action; the full final calldata, independent simulation and
+      // conservation checks bind every helper action that realizes tokenOut.
+      // Compile this exact resolved subtree so selector/target witness checks
+      // bind solver-selected amounts and real child bytes, not a probe-time
+      // fragment encoded with empty children.
+      const encoded = compilePlan(node, DEFAULT_SEARCHER_EXECUTOR);
+      const call = firstEncodedExternalCall(encoded);
+      if (call.target !== node.target.toLowerCase()) {
+        throw new AdapterReplayDomainFailure(
+          "final_plan_encoded_target_mismatch",
+          `route leg ${leg.seq} encoded target ${call.target} != plan target ${node.target}`,
+        );
+      }
+      surfaces.push({
+        adapterId: leg.edgeAdapterId,
+        target: call.target,
+        selector: call.selector,
+      });
+    } catch (error) {
+      if (error instanceof BlockScanFamilyAttributedError) throw error;
+      throw new BlockScanFamilyAttributedError(
+        familyId,
+        "final execution witness",
+        error,
+      );
+    }
+  }
+  return surfaces;
+}
+
+function firstEncodedExternalCall(
+  encoded: Uint8Array,
+): { readonly target: string; readonly selector: string } {
+  let cursor = 0;
+  const requireBytes = (count: number): void => {
+    if (cursor + count > encoded.length) {
+      throw new Error("encoded action is truncated");
+    }
+  };
+  const uint24At = (offset: number): number =>
+    encoded[offset] * 0x1_0000 + encoded[offset + 1] * 0x100 + encoded[offset + 2];
+  while (cursor < encoded.length) {
+    const opcode = encoded[cursor];
+    if (opcode === 0x00 || opcode === 0x01) {
+      const headerLength = opcode === 0x00 ? 24 : 36;
+      requireBytes(headerLength);
+      const lengthOffset = cursor + (opcode === 0x00 ? 21 : 33);
+      const payloadOffset = cursor + headerLength;
+      const payloadLength = uint24At(lengthOffset);
+      if (payloadLength < 4 || payloadOffset + payloadLength > encoded.length) {
+        throw new Error("encoded external call lacks complete calldata");
+      }
+      return {
+        target: ethers.hexlify(encoded.slice(cursor + 1, cursor + 21)).toLowerCase(),
+        selector: ethers.hexlify(
+          encoded.slice(payloadOffset, payloadOffset + 4),
+        ).toLowerCase(),
+      };
+    }
+    if (opcode === 0x02 || opcode === 0x06) {
+      requireBytes(4);
+      cursor += 4;
+      continue;
+    }
+    if (opcode === 0x03) {
+      requireBytes(4);
+      const payloadLength = uint24At(cursor + 1);
+      requireBytes(4 + payloadLength);
+      cursor += 4 + payloadLength;
+      continue;
+    }
+    if (opcode === 0x04 || opcode === 0x05 || opcode === 0x07) {
+      cursor += 1;
+      continue;
+    }
+    if (opcode === 0x08) {
+      requireBytes(53);
+      cursor += 53;
+      continue;
+    }
+    throw new Error(`encoded action has unknown BotVM opcode 0x${opcode.toString(16)}`);
+  }
+  throw new Error("encoded action contains no external call");
+}
+
 function materializeReplayPool(
   leg: AdapterReplayLeg,
-  fixtureId: string,
 ): PoolEntry {
   const pool: PoolEntry = { ...leg.pool };
   if (
@@ -1289,43 +2693,6 @@ function materializeReplayPool(
     }];
     return pool;
   }
-  if (familyForLeg(leg, fixtureId) !== "protocol:eigenpie") {
-    return pool;
-  }
-
-  const tokenIn = ethers.getAddress(leg.tokenIn);
-  const tokenOut = ethers.getAddress(leg.tokenOut);
-  if (
-    pool.fixedTokenIn !== undefined &&
-    ethers.getAddress(pool.fixedTokenIn) !== tokenIn
-  ) {
-    throw new Error(`route leg ${leg.seq} fixedTokenIn disagrees with trace route`);
-  }
-  if (
-    pool.fixedTokenOut !== undefined &&
-    ethers.getAddress(pool.fixedTokenOut) !== tokenOut
-  ) {
-    throw new Error(`route leg ${leg.seq} fixedTokenOut disagrees with trace route`);
-  }
-  if (pool.fixedSlotKind !== undefined && pool.fixedSlotKind !== "protocol") {
-    throw new Error(`route leg ${leg.seq} fixedSlotKind disagrees with Eigenpie deposit semantics`);
-  }
-  if (pool.fixedProtocolAction !== undefined && pool.fixedProtocolAction !== "wrap") {
-    throw new Error(`route leg ${leg.seq} fixedProtocolAction disagrees with Eigenpie deposit semantics`);
-  }
-
-  pool.fixedTokenIn = tokenIn;
-  pool.fixedTokenOut = tokenOut;
-  pool.fixedSlotKind = "protocol";
-  pool.fixedProtocolAction = "wrap";
-  pool.logicalInstanceId = `${tokenIn.toLowerCase()}>${tokenOut.toLowerCase()}`;
-  pool.verifiedRoutes = [{
-    edgeAdapterId: leg.edgeAdapterId,
-    tokenIn,
-    tokenOut,
-    slotKind: "protocol",
-    protocolAction: "wrap",
-  }];
   return pool;
 }
 
@@ -1461,20 +2828,49 @@ async function proveConservation(
   }
 }
 
+function appendAdapterReplayEvidence(
+  report: AdapterReplayReport,
+  step: 3 | 4 | 5 | 6,
+  status: SemanticSixStepStatus,
+  output: Readonly<Record<string, unknown>>,
+  reasonCode: string | null = null,
+  extensions: Readonly<Record<string, unknown>> = {},
+): void {
+  if (report.sixStepEvidence.length + 1 !== step) {
+    throw new Error(
+      `adapter replay six-step evidence is out of order at step ${step}`,
+    );
+  }
+  const jsonObject = (
+    value: Readonly<Record<string, unknown>>,
+  ): Readonly<Record<string, SemanticJson>> =>
+    JSON.parse(JSON.stringify(
+      value,
+      (_key, item) => typeof item === "bigint" ? item.toString() : item,
+    )) as Record<string, SemanticJson>;
+  report.sixStepEvidence.push(createSemanticSixStepEvidence({
+    profile: "family_execution",
+    step,
+    status,
+    output: jsonObject(output),
+    reasonCode,
+    extensions: jsonObject(extensions),
+  }));
+}
+
 async function replayFixture(
   path: string,
   rpcUrl: string,
   adapterCommit: string | null,
   baseCommit: string | null,
+  artifactRoot?: string,
 ): Promise<AdapterReplayReport> {
-  const fixture = loadFixture(path);
-  const familySources = FAMILY_SOURCE_FILES[fixture.executionFamilyId];
-  if (!familySources || familySources.length === 0) throw new Error(`no source binding for ${fixture.executionFamilyId}`);
-  const fixtureRelative = safeRelativeFixture(path);
+  const fixture = loadFixture(path, artifactRoot);
+  const fixtureRelative = safeRelativeFixture(path, artifactRoot);
   const anvilPort = await allocateLoopbackPort();
   const state = new AnvilStateBackend(rpcUrl, `http://127.0.0.1:${anvilPort}`, anvilPort);
   const report: AdapterReplayReport = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     fixtureId: fixture.id,
     fixturePath: fixtureRelative,
     fixtureSha256: sha256(readFileSync(path)),
@@ -1492,7 +2888,7 @@ async function replayFixture(
     anchorReconstruction: null,
     baseCommit,
     adapterCommit,
-    familySourceSha256: hashFiles(familySources),
+    familySourceSha256: familyContractSha256(fixture.executionFamilyId),
     sharedApiSha256: hashFiles(SHARED_API_FILES),
     runtimeSourceSha256: hashRuntimeSources(),
     harnessSha256: hashFiles(HARNESS_SOURCE_FILES),
@@ -1520,14 +2916,45 @@ async function replayFixture(
       repaymentAndConservation: false,
       productionEvPositive: false,
     },
+    sixStepEvidence: [
+      createSemanticSixStepEvidence({
+        profile: "family_execution",
+        step: 1,
+        status: "bypassed",
+        output: {
+          mode: "route_pinned",
+          execution_family_id: fixture.executionFamilyId,
+          state_anchor: {
+            kind: fixture.stateAnchor.kind,
+            block_number: fixture.stateAnchor.blockNumber,
+            trigger_tx_hash: fixture.stateAnchor.kind === "after-transaction"
+              ? fixture.stateAnchor.triggerTxHash.toLowerCase()
+              : null,
+          },
+        },
+        reasonCode: "adapter_replay_bypasses_discovery",
+      }),
+      createSemanticSixStepEvidence({
+        profile: "family_execution",
+        step: 2,
+        status: "bypassed",
+        output: {
+          mode: "route_pinned",
+          fixture_route_sha256: sha256(JSON.stringify(fixture.route)),
+          route_leg_count: fixture.route.length,
+        },
+        reasonCode: "adapter_replay_uses_trace_route",
+      }),
+    ],
     verdict: "implemented_not_validated",
+    failureOwnerFamilyId: null,
+    failureIdentity: null,
     failure: null,
   };
 
   const upstream = new ethers.JsonRpcProvider(rpcUrl);
   try {
     const winner = await validateChainAnchor(upstream, fixture);
-    const referenceTraceHash = await validateReferenceRoute(upstream, fixture);
     const senderPrefix = await anchorState(
       state,
       upstream,
@@ -1552,8 +2979,6 @@ async function replayFixture(
     report.routeHash = routeHash(edges);
     report.stages.familyEdges = true;
     const referenceSwapImpactHash = await validateReferenceSwapImpacts(upstream, fixture, edges);
-    report.referenceRouteHash = sha256(`${referenceTraceHash}:${referenceSwapImpactHash}`);
-    report.stages.referenceRoute = true;
 
     const flashFamily = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(
       fixture.flash.adapterId,
@@ -1565,6 +2990,43 @@ async function replayFixture(
     const sizing = fullDomainSearch(maxInput);
     report.maxFlashAmount = maxInput.toString();
 
+    const probe = await (async () => {
+      try {
+        return await propagateAmountsWithRawOutputs(
+          { edges },
+          sizing.searchCenter,
+          state,
+          {
+            executor: DEFAULT_SEARCHER_EXECUTOR,
+            safetyBps: 10_000n,
+          },
+        );
+      } catch (error) {
+        throw stabilizeFamilyAttributedFailure(
+          error,
+          "exact quote",
+          "family_exact_quote_failed",
+          "family exact quote failed",
+        );
+      }
+    })();
+    appendAdapterReplayEvidence(report, 3, "pass", {
+      source_block: fixture.stateAnchor.blockNumber,
+      route_sha256: report.routeHash,
+      quote_status: "available",
+      probe_amount_in: sizing.searchCenter.toString(),
+      quoted_amount_out: probe.amounts.at(-1)!.toString(),
+      leg_quotes: edges.map((edge, index) => ({
+        adapter_id: edge.adapterId,
+        target: edge.target.toLowerCase(),
+        token_in: edge.tokenIn.toLowerCase(),
+        token_out: edge.tokenOut.toLowerCase(),
+        amount_in: probe.amounts[index].toString(),
+        raw_amount_out: probe.rawOutputs[index].toString(),
+        amount_out: probe.amounts[index + 1].toString(),
+      })),
+    });
+
     await installForkBotVm(state.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR);
     const executorRuntime = await state.provider.getCode(DEFAULT_SEARCHER_EXECUTOR);
     if (executorRuntime === "0x") throw new Error("BotVM executor runtime is absent after install");
@@ -1575,7 +3037,14 @@ async function replayFixture(
       opportunity(fixture, edges, maxInput, sizing.searchCenter),
       [pinnedFlashTemplate(fixture.flash.adapterId)],
     );
-    if (plans.length === 0) throw new Error("production planner produced no candidate plan");
+    if (plans.length === 0) {
+      throw subjectFamilyDomainFailure(
+        fixture,
+        "plan",
+        "family_plan_unavailable",
+        "production planner produced no candidate plan for subject family route",
+      );
+    }
     report.stages.planner = true;
 
     const simulator = new BotVMSimulator(state, DEFAULT_SEARCHER_EXECUTOR, DEFAULT_SEARCHER_OWNER);
@@ -1584,18 +3053,89 @@ async function replayFixture(
     // Pancake V3, whose execution semantics match but whose Quoter may not.
     const cache = new PoolStateCache(upstream);
     cache.setTickBlock(fixture.stateAnchor.blockNumber);
-    const solved = await solver.solve(plans[0], state, simulator, {
-      finalSimTopN: 5,
-      gssMaxTries: 16,
-      gridHalfWidth: sizing.gridHalfWidth,
-      quoteProfitFloorBps: 0n,
-      quoteSafetyBps: 9_999n,
-      cache,
-    });
+    const solved = await (async () => {
+      try {
+        return await solver.solve(plans[0], state, simulator, {
+          finalSimTopN: 5,
+          gssMaxTries: 16,
+          gridHalfWidth: sizing.gridHalfWidth,
+          quoteProfitFloorBps: 0n,
+          quoteSafetyBps: 9_999n,
+          cache,
+        });
+      } catch (error) {
+        throw stabilizeFamilyAttributedFailure(
+          error,
+          "solve",
+          "family_solver_quote_or_plan_failed",
+          "family-attributed solver quote or plan failed",
+        );
+      }
+    })();
     report.solverSelectedAmount = solved.flashAmount.toString();
     report.stages.solver = true;
+    const solvedAmounts = await (async () => {
+      try {
+        return await propagateAmountsWithRawOutputs(
+          plans[0].tokenPath,
+          solved.flashAmount,
+          state,
+          {
+            executor: DEFAULT_SEARCHER_EXECUTOR,
+            safetyBps: 10_000n,
+          },
+        );
+      } catch (error) {
+        throw stabilizeFamilyAttributedFailure(
+          error,
+          "solved amount propagation",
+          "family_solved_amount_quote_failed",
+          "family-attributed solved amount quote failed",
+        );
+      }
+    })();
+    const resolvedCalldata = buildExecuteCalldata(
+      compilePlan(solved.root, DEFAULT_SEARCHER_EXECUTOR),
+    );
+    const executionSurfaces = referenceExecutionSurfaces(
+      fixture,
+      edges,
+      solved.root,
+    );
+    const referenceTraceHash = await validateReferenceRoute(
+      upstream,
+      fixture,
+      executionSurfaces,
+    );
+    report.referenceRouteHash = sha256(`${referenceTraceHash}:${referenceSwapImpactHash}`);
+    report.stages.referenceRoute = true;
+    appendAdapterReplayEvidence(report, 4, "pass", {
+      route_sha256: report.routeHash,
+      template_name: solved.templateName,
+      solver_selected_amount: solved.flashAmount.toString(),
+      resolved_plan_sha256: sha256(resolvedCalldata.toLowerCase()),
+      selected_by_solve_policy: true,
+      solve_succeeded: true,
+      hop_amounts: edges.map((edge, index) => ({
+        adapter_id: edge.adapterId,
+        target: edge.target.toLowerCase(),
+        token_in: edge.tokenIn.toLowerCase(),
+        token_out: edge.tokenOut.toLowerCase(),
+        amount_in: solvedAmounts.amounts[index].toString(),
+        raw_amount_out: solvedAmounts.rawOutputs[index].toString(),
+        amount_out: solvedAmounts.amounts[index + 1].toString(),
+      })),
+    });
 
     const sim = await simulator.simulate(solved);
+    if (sim.calldata.toLowerCase() !== resolvedCalldata.toLowerCase()) {
+      throw subjectFamilyDomainFailure(
+        fixture,
+        "final sim calldata",
+        "family_final_calldata_mismatch",
+        "fork final sim calldata differs from the resolved plan witness",
+      );
+    }
     report.finalSim = {
       success: sim.success,
       grossProfit: sim.grossProfit.toString(),
@@ -1604,22 +3144,75 @@ async function replayFixture(
       revertReason: sim.revertReason ?? null,
     };
     if (!sim.success || sim.grossProfit <= 0n) {
-      throw new Error(`fork final sim failed: ${sim.revertReason ?? "non-positive gross profit"}`);
+      const failure = classifyFinalSimulationFailure(fixture, sim);
+      appendAdapterReplayEvidence(report, 5, "fail", {
+        success: sim.success,
+        profit_token: sim.profitToken.toLowerCase(),
+        gross_profit: sim.grossProfit.toString(),
+        net_profit: sim.netProfit.toString(),
+        gas_used: sim.gasUsed.toString(),
+        calldata_sha256: sha256(sim.calldata.toLowerCase()),
+        failure_owner_family_id: failure.ownerFamilyId,
+        failure_stage_id: "fork_final_sim",
+        failure_code: failure.code,
+        failure_promotable: failure.promotable,
+      }, failure.promotable
+        ? "final_sim_revert"
+        : failure.code === "infrastructure_failure"
+        ? "final_sim_infrastructure_failure"
+        : "final_sim_unclassified_failure", {
+        revert_reason: sim.revertReason ?? null,
+        failure_kind: failure.sourceKind,
+        failure_source_code: failure.sourceCode,
+      });
+      if (!failure.promotable) throw failure.cause;
+      throw subjectFamilyDomainFailure(
+        fixture,
+        "final sim",
+        "family_final_sim_failed",
+        `fork final sim failed: ${sim.revertReason ?? "non-positive gross profit"}`,
+        failure.cause,
+      );
     }
     report.stages.finalSim = true;
 
-    report.conservation = await proveConservation(
-      state,
-      solved,
-      edges,
-      flashFamily.funding.liquidityHolder,
-      sim.calldata,
-    );
+    try {
+      report.conservation = await proveConservation(
+        state,
+        solved,
+        edges,
+        flashFamily.funding.liquidityHolder,
+        sim.calldata,
+      );
+    } catch (error) {
+      throw subjectFamilyDomainFailure(
+        fixture,
+        "repayment and conservation",
+        "family_repayment_or_conservation_failed",
+        "subject family route failed repayment or conservation proof",
+        error,
+      );
+    }
     if (report.conservation.grossProfit !== sim.grossProfit.toString() ||
         report.conservation.gasUsed !== sim.gasUsed.toString()) {
-      throw new Error("conservation replay differs from production final sim");
+      throw subjectFamilyDomainFailure(
+        fixture,
+        "repayment and conservation",
+        "family_conservation_replay_mismatch",
+        "conservation replay differs from production final sim",
+      );
     }
     report.stages.repaymentAndConservation = true;
+    appendAdapterReplayEvidence(report, 5, "pass", {
+      success: true,
+      profit_token: sim.profitToken.toLowerCase(),
+      gross_profit: sim.grossProfit.toString(),
+      net_profit: sim.netProfit.toString(),
+      gas_used: sim.gasUsed.toString(),
+      calldata_sha256: sha256(sim.calldata.toLowerCase()),
+      repayment_and_conservation: "pass",
+      leaves_standing_position: false,
+    });
 
     const decisionParentBlock = fixture.lane === "backrun"
       ? fixture.stateAnchor.blockNumber - 1
@@ -1660,20 +3253,108 @@ async function replayFixture(
       gasCostEth: ev.gasCostEth.toString(),
       bidEth: ev.bidEth.toString(),
     };
+    const evPasses = ev.valuationAvailable &&
+      ev.gasMeasurementAvailable &&
+      ev.feeStateAvailable &&
+      ev.netEvWei > ADAPTER_REPLAY_EV_POLICY.minNetEth;
+    const deterministicEvRejection = ev.valuationAvailable &&
+      ev.gasMeasurementAvailable &&
+      ev.feeStateAvailable &&
+      ev.netEvWei <= ADAPTER_REPLAY_EV_POLICY.minNetEth;
+    appendAdapterReplayEvidence(
+      report,
+      6,
+      evPasses ? "pass" : "reject",
+      {
+        decision: evPasses ? "allow" : "reject",
+        valuation_available: ev.valuationAvailable,
+        gas_measurement_available: ev.gasMeasurementAvailable,
+        fee_state_available: ev.feeStateAvailable,
+        source_block_hash: ev.sourceBlockHash,
+        decision_parent_block: decisionParentBlock,
+        target_block: Number(winner.blockNumber),
+        eth_usd: ev.ethUsd,
+        eth_usd_round_id: ev.ethUsdRoundId?.toString() ?? null,
+        eth_usd_updated_at: ev.ethUsdUpdatedAt?.toString() ?? null,
+        net_ev_wei: ev.netEvWei.toString(),
+        expected_profit_eth: ev.expectedProfitEth.toString(),
+        max_base_fee_per_gas: ev.maxBaseFeePerGas.toString(),
+        gas_cost_eth: ev.gasCostEth.toString(),
+        bid_eth: ev.bidEth.toString(),
+        ...(evPasses
+          ? {}
+          : {
+              failure_owner_family_id: deterministicEvRejection
+                ? fixture.executionFamilyId
+                : null,
+              failure_stage_id: "production_ev",
+              failure_code: deterministicEvRejection
+                ? "family_execution_ev_rejected"
+                : "ev_evidence_unavailable",
+              failure_promotable: deterministicEvRejection,
+            }),
+      },
+      evPasses ? null : "production_ev_rejected",
+    );
     if (!ev.valuationAvailable) throw new Error(`production EV cannot value ${sim.profitToken}`);
     if (!ev.gasMeasurementAvailable) throw new Error("production EV missing measured gas");
     if (!ev.feeStateAvailable) {
       throw new Error(`production EV missing fee state at ${fixture.stateAnchor.blockNumber}`);
     }
     if (ev.netEvWei <= ADAPTER_REPLAY_EV_POLICY.minNetEth) {
-      throw new Error(
+      throw subjectFamilyDomainFailure(
+        fixture,
+        "production EV",
+        "family_execution_ev_rejected",
         `production EV decision rejected: net=${ev.netEvWei} min=${ADAPTER_REPLAY_EV_POLICY.minNetEth}`,
       );
     }
     report.stages.productionEvPositive = true;
     report.verdict = "adapter_replay_pass";
   } catch (error) {
+    const lastEvidence = report.sixStepEvidence.at(-1);
+    const failureStageId = lastEvidence &&
+        (lastEvidence.status === "fail" ||
+          lastEvidence.status === "reject" ||
+          lastEvidence.status === "not_reached")
+      ? lastEvidence.stage_id
+      : semanticSixStepStageId(
+        Math.min(report.sixStepEvidence.length + 1, 6) as
+          SemanticSixStepEvidence["step"],
+      );
+    report.failureIdentity = normalizedFailureIdentity(
+      error,
+      report.routeExecutionFamilies,
+      failureStageId,
+    );
+    report.failureOwnerFamilyId =
+      report.failureIdentity?.ownerFamilyId
+        ?? normalizedFailureOwnerFamilyId(error, report.routeExecutionFamilies);
     report.failure = redactError(error, rpcUrl);
+    if (
+      report.sixStepEvidence.length < 6 &&
+      (lastEvidence?.status === "pass" || lastEvidence?.status === "bypassed")
+    ) {
+      const nextStep = (report.sixStepEvidence.length + 1) as 3 | 4 | 5 | 6;
+      appendAdapterReplayEvidence(
+        report,
+        nextStep,
+        "fail",
+        {
+          completed: false,
+          failure_owner_family_id:
+            report.failureIdentity?.ownerFamilyId ?? null,
+          failure_stage_id: failureStageId,
+          failure_code: report.failureIdentity?.code ??
+            (failureCauseChain(error).some(isInfrastructureFailureCause)
+              ? "infrastructure_failure"
+              : "unclassified_failure"),
+          failure_promotable: report.failureIdentity !== null,
+        },
+        "adapter_replay_execution_error",
+        { error: report.failure },
+      );
+    }
   } finally {
     state.stop();
     upstream.destroy();
@@ -1683,22 +3364,44 @@ async function replayFixture(
 
 async function main(): Promise<void> {
   const args = parseArgs();
-  assertFamilySourceCoverage();
-  const fixtures = args.fixtures.map((path) => ({ path, fixture: loadFixture(path) }));
+  if (args.probeFamily) {
+    const registered = PRODUCTION_ADAPTER_FAMILIES.routes().list()
+      .some((adapter) => adapter.id === args.probeFamily);
+    console.log(`ADAPTER_FAMILY_REGISTRY_PROBE=${JSON.stringify({
+      schemaVersion: 1,
+      executionFamilyId: args.probeFamily,
+      registered,
+    })}`);
+    return;
+  }
+  const fixtures = args.fixtures.map((path) => ({
+    path,
+    fixture: loadFixture(path, args.artifactRoot),
+  }));
   const duplicateIds = fixtures
     .map(({ fixture }) => fixture.id)
     .filter((id, index, all) => all.indexOf(id) !== index);
   if (duplicateIds.length > 0) throw new Error(`duplicate fixture id(s): ${[...new Set(duplicateIds)].join(",")}`);
   if (args.validateOnly) {
     runReferenceMatcherSelfTests();
+    await runFinalSimulationFailureSelfTests();
     console.log("adapter-family reference matcher regressions: PASS");
     for (const { path, fixture } of fixtures) {
-      console.log(`adapter-family-fixture PASS id=${fixture.id} family=${fixture.executionFamilyId} path=${safeRelativeFixture(path)}`);
+      console.log(
+        `adapter-family-fixture PASS id=${fixture.id} family=${fixture.executionFamilyId} ` +
+          `path=${safeRelativeFixture(path, args.artifactRoot)}`,
+      );
     }
     printFamilyCoverage(fixtures.map(({ fixture }) => fixture));
     return;
   }
-  await ensureBotVmArtifact();
+  if (args.useExistingBotVmArtifact) {
+    if (!existsSync(BOTVM_ARTIFACT_PATH)) {
+      throw new Error("--use-existing-botvm-artifact requires the trusted BotVM artifact");
+    }
+  } else {
+    await ensureBotVmArtifact();
+  }
   const [commit, baseCommit, worktreeStatus] = await Promise.all([
     gitRequired(["rev-parse", "HEAD"]),
     gitRequired(["merge-base", "origin/main", "HEAD"]),
@@ -1707,7 +3410,13 @@ async function main(): Promise<void> {
   if (worktreeStatus) throw new Error("adapter-family replay requires a clean committed worktree");
   const reports: AdapterReplayReport[] = [];
   for (const { path } of fixtures) {
-    const report = await replayFixture(path, args.rpcUrl, commit, baseCommit);
+    const report = await replayFixture(
+      path,
+      args.rpcUrl,
+      commit,
+      baseCommit,
+      args.artifactRoot,
+    );
     reports.push(report);
     console.log(`ADAPTER_FAMILY_REPLAY_RESULT=${JSON.stringify(report)}`);
     if (args.outDir) {
@@ -1741,11 +3450,92 @@ function printFamilyCoverage(fixtures: readonly AdapterReplayFixture[]): void {
   console.log(`ADAPTER_FAMILY_COVERAGE=${JSON.stringify(coverage)}`);
 }
 
-function assertFamilySourceCoverage(): void {
-  const missing = PRODUCTION_ADAPTER_FAMILIES.routes().list()
-    .map((adapter) => adapter.id)
-    .filter((family) => !FAMILY_SOURCE_FILES[family]?.length);
-  if (missing.length > 0) throw new Error(`missing execution-family source binding(s): ${missing.join(",")}`);
+function familyContractSha256(executionFamilyId: ExecutionFamilyId): string {
+  const family = PRODUCTION_ADAPTER_FAMILIES.forFamily(executionFamilyId);
+  const route = "poolAdapters" in family
+    ? {
+        poolAdapters: [...family.poolAdapters].sort(),
+        edgeAdapterIds: [...family.edgeAdapterIds].sort(),
+        allowedTaxonomy: family.allowedTaxonomy
+          .map((entry) => JSON.stringify([
+            entry.slotKind,
+            entry.protocolAction ?? null,
+          ]))
+          .sort(),
+        identityPolicies: family.identityPolicies
+          .map((entry) => JSON.stringify({
+            poolAdapter: entry.poolAdapter,
+            policy: entry.policy,
+            registeredVenueIds: [...(entry.registeredVenueIds ?? [])].sort(),
+            registeredIdentitySources: [
+              ...(entry.registeredIdentitySources ?? []),
+            ].sort(),
+            canonicalAddress:
+              "canonicalAddress" in entry
+                ? entry.canonicalAddress?.toLowerCase() ?? null
+                : null,
+          }))
+          .sort(),
+        requiresProtocolEdgesFlag: family.requiresProtocolEdgesFlag,
+        livePoolState: family.livePoolState?.kind ?? null,
+        hasPreparedQuote: family.prepared?.quote !== null,
+        hasDiscovery: family.discovery !== undefined,
+        discovery: family.discovery
+          ? {
+              candidateSources: [...family.discovery.candidateSources].sort(),
+              eventTopics: [...family.discovery.eventTopics]
+                .map((topic) => topic.toLowerCase())
+                .sort(),
+              callSelectors: [...family.discovery.callSelectors]
+                .map((selector) => selector.toLowerCase())
+                .sort(),
+              addressMatcherVersion:
+                family.discovery.addressMatcherVersion ?? null,
+              observedMatcherVersion:
+                family.discovery.observedMatcherVersion ?? null,
+            }
+          : null,
+        declaredVenues:
+          "declaredVenues" in family
+            ? family.declaredVenues
+              .map((venue) => JSON.stringify([
+                venue.adapter,
+                venue.address.toLowerCase(),
+                venue.poolId?.toLowerCase() ?? null,
+                venue.logicalInstanceId ?? null,
+                venue.fixedTokenIn?.toLowerCase() ?? null,
+                venue.fixedTokenOut?.toLowerCase() ?? null,
+              ]))
+              .sort()
+            : [],
+        matureDexUniverseDiscovery:
+          "matureDexUniverseDiscovery" in family
+            ? family.matureDexUniverseDiscovery === true
+            : false,
+      }
+    : null;
+  const funding = "funding" in family
+    ? {
+        familyId: family.funding.familyId,
+        actionAdapterId: family.funding.actionAdapterId,
+        lineage: family.funding.lineage,
+        target: family.funding.target.toLowerCase(),
+        liquidityHolder: family.funding.liquidityHolder.toLowerCase(),
+        repayment: family.funding.repayment,
+        paramShape: family.funding.paramShape,
+        planningPriority: family.funding.planningPriority,
+        liquidityPriority: family.funding.liquidityPriority,
+      }
+    : null;
+  return sha256(JSON.stringify({
+    id: family.id,
+    kind: family.kind,
+    ownedActionAdapterIds: [...family.ownedActionAdapterIds].sort(),
+    requiredInfraActionAdapterIds:
+      [...family.requiredInfraActionAdapterIds].sort(),
+    route,
+    funding,
+  }));
 }
 
 async function ensureBotVmArtifact(): Promise<void> {
@@ -1883,9 +3673,15 @@ function walkFiles(root: string, include: (path: string) => boolean = () => true
   return output;
 }
 
-function safeRelativeFixture(path: string): string {
+function safeRelativeFixture(path: string, artifactRoot?: string): string {
+  if (artifactRoot) {
+    const value = relative(artifactRoot, path).replaceAll("\\", "/");
+    return safeArtifactRelativePath(value, "fixture");
+  }
   const value = relative(LISTENER_ROOT, path).replaceAll("\\", "/");
-  if (!value || value === ".." || value.startsWith("../")) throw new Error("fixture must live under listener/");
+  if (!value || value === ".." || value.startsWith("../")) {
+    throw new Error("fixture must live under listener/");
+  }
   return value;
 }
 
@@ -1896,6 +3692,20 @@ function safeRepoRelativePath(value: string, field: string): string {
     throw new Error(`${field} must stay under the repository`);
   }
   return fromRoot;
+}
+
+function safeArtifactRelativePath(value: string, field: string): string {
+  const normalized = value.replaceAll("\\", "/");
+  if (
+    !normalized.startsWith("docs/research/reports/") ||
+    normalized.startsWith("/") ||
+    normalized.split("/").some((segment) =>
+      !segment || segment === "." || segment === ".."
+    )
+  ) {
+    throw new Error(`${field} must stay under docs/research/reports`);
+  }
+  return normalized;
 }
 
 function redactError(error: unknown, rpcUrl: string): string {

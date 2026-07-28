@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import {
+  createSemanticSixStepEvidence,
+  semanticSixStepSequenceError,
+  type SemanticSixStepEvidence,
+  type SemanticSixStepStatus,
+} from "../../shared/evidence/semantic-six-step.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { canonicalEdgeId } from "../venues/blockscan-state-capability.js";
 import {
@@ -101,21 +108,11 @@ export function resolveBlockScanHuntVerdict(
 export function selectedReplayOpportunityIndexes(
   opportunityCount: number,
   topK: number,
-  expectedIndex: number | null,
 ): number[] {
-  const indexes = Array.from(
+  return Array.from(
     { length: Math.min(Math.max(0, topK), opportunityCount) },
     (_, index) => index,
   );
-  if (
-    expectedIndex !== null
-    && expectedIndex >= 0
-    && expectedIndex < opportunityCount
-    && !indexes.includes(expectedIndex)
-  ) {
-    indexes.push(expectedIndex);
-  }
-  return indexes;
 }
 
 export function solveForOpportunityIndex<T extends { opportunityIndex: number }>(
@@ -123,6 +120,17 @@ export function solveForOpportunityIndex<T extends { opportunityIndex: number }>
   opportunityIndex: number,
 ): T | null {
   return solved.find((entry) => entry.opportunityIndex === opportunityIndex) ?? null;
+}
+
+/**
+ * Production-route evidence is one ordered prefix. A non-pass stage is
+ * terminal even when the operator did not request `--stop-after`.
+ */
+export function productionDiagnosticStageTerminates(
+  status: SemanticSixStepStatus,
+  stopAfterStage: boolean,
+): boolean {
+  return status !== "pass" || stopAfterStage;
 }
 
 /**
@@ -304,11 +312,7 @@ function runTests(): void {
     resolveBlockScanHuntVerdict(2, 0n, true),
     "candidates_all_negative",
   );
-  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, null), [0, 1, 2]);
-  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, 1), [0, 1, 2]);
-  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, 4), [0, 1, 2, 4]);
-  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, -1), [0, 1, 2]);
-  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, 5), [0, 1, 2]);
+  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3), [0, 1, 2]);
   assert.equal(
     solveForOpportunityIndex([{ opportunityIndex: 0 }, { opportunityIndex: 4 }], 4)?.opportunityIndex,
     4,
@@ -447,7 +451,168 @@ function runTests(): void {
     remapExpectedRouteToVerifiedGraph([], [verifiedEdge], [rawEdge]),
     null,
   );
+  const prefixPasses = productionDiagnosticPasses();
+  const planFailure = createSemanticSixStepEvidence({
+    profile: "production_route_stage",
+    step: 4,
+    status: "fail",
+    output: { solve_succeeded: false },
+    reasonCode: "plan_or_solver_failed",
+  });
+  const planFailurePrefix = [...prefixPasses.slice(0, 3), planFailure];
+  assert.equal(
+    productionDiagnosticStageTerminates(planFailure.status, false),
+    true,
+  );
+  assert.equal(
+    semanticSixStepSequenceError(planFailurePrefix),
+    null,
+    "a plan/sizing failure must be a valid terminal semantic prefix",
+  );
+  assert.match(
+    semanticSixStepSequenceError([
+      ...planFailurePrefix,
+      prefixPasses[4],
+    ]) ?? "",
+    /terminate after step 4/,
+  );
+
+  const finalSimFailure = createSemanticSixStepEvidence({
+    profile: "production_route_stage",
+    step: 5,
+    status: "fail",
+    output: { success: false },
+    reasonCode: "final_sim_revert",
+  });
+  const finalSimFailurePrefix = [...prefixPasses.slice(0, 4), finalSimFailure];
+  assert.equal(
+    productionDiagnosticStageTerminates(finalSimFailure.status, false),
+    true,
+  );
+  assert.equal(
+    semanticSixStepSequenceError(finalSimFailurePrefix),
+    null,
+    "a final-sim failure must be a valid terminal semantic prefix",
+  );
+  assert.match(
+    semanticSixStepSequenceError([
+      ...finalSimFailurePrefix,
+      prefixPasses[5],
+    ]) ?? "",
+    /terminate after step 5/,
+  );
+  assert.equal(
+    productionDiagnosticStageTerminates("pass", true),
+    true,
+    "stop-after must retain its existing successful-stage semantics",
+  );
+  assert.equal(productionDiagnosticStageTerminates("pass", false), false);
+
+  const producerSource = readFileSync(
+    new URL("./blockscan-hunt.ts", import.meta.url),
+    "utf8",
+  );
+  const planTerminal = producerSource.search(
+    /productionDiagnosticStageTerminates\(\s*solveStatus,/,
+  );
+  const finalSimRead = producerSource.indexOf(
+    "const simulation = expectedSolve?.diagnosticSimulation",
+  );
+  const simTerminal = producerSource.search(
+    /productionDiagnosticStageTerminates\(\s*finalSimStatus,/,
+  );
+  const evRead = producerSource.indexOf("const ev = expectedSolve?.diagnosticEv");
+  assert(
+    planTerminal >= 0 && finalSimRead > planTerminal,
+    "producer must terminate a non-pass step 4 before reading step 5 evidence",
+  );
+  assert(
+    simTerminal >= 0 && evRead > simTerminal,
+    "producer must terminate a non-pass step 5 before reading step 6 evidence",
+  );
   console.log("blockscan-hunt-selection PASS");
+}
+
+function productionDiagnosticPasses(): SemanticSixStepEvidence[] {
+  const sha = "a".repeat(64);
+  return [
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 1,
+      status: "pass",
+      output: {
+        source_block: 1,
+        edge_set_sha256: sha,
+        edge_set_size: 1,
+        target_membership: "present",
+      },
+    }),
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 2,
+      status: "pass",
+      output: {
+        route_set_sha256: sha,
+        route_set_size: 1,
+        target_present: true,
+      },
+    }),
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 3,
+      status: "pass",
+      output: {
+        source_block: 1,
+        route_sha256: sha,
+        quote_status: "positive",
+        probe_amount_in: "1",
+        quoted_amount_out: "2",
+        leg_quotes: [{ amount_in: "1", amount_out: "2" }],
+      },
+    }),
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 4,
+      status: "pass",
+      output: {
+        route_sha256: sha,
+        selected_by_solve_policy: true,
+        solve_succeeded: true,
+        solver_selected_amount: "1",
+        resolved_plan_sha256: sha,
+        hop_amounts: [{ amount_in: "1", amount_out: "2" }],
+      },
+    }),
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 5,
+      status: "pass",
+      output: {
+        success: true,
+        profit_token: "0x1",
+        gross_profit: "1",
+        net_profit: "1",
+        gas_used: "1",
+        calldata_sha256: sha,
+        repayment_and_conservation: true,
+        leaves_standing_position: false,
+      },
+    }),
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 6,
+      status: "pass",
+      output: {
+        decision: "allow",
+        net_ev_wei: "1",
+        gas_cost_eth: "1",
+        bid_eth: "0",
+        valuation_available: true,
+        gas_measurement_available: true,
+        fee_state_available: true,
+      },
+    }),
+  ];
 }
 
 function optionalNonNegativeInt(raw: string | undefined, name: string): number | undefined {

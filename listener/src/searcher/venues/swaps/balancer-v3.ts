@@ -667,6 +667,19 @@ export const balancerV3Adapter = Object.freeze({
   id: "balancer-v3",
   kind: "swap",
   poolAdapters: ["balancer-v3"],
+  planExecutionIdentity: {
+    resolve(node) {
+      const swaps = node.children.filter((child) =>
+        child.adapterId === "balancer-v3-swap"
+      );
+      if (swaps.length !== 1 || typeof swaps[0].params.pool !== "string") {
+        throw new Error(
+          "balancer-v3 resolved plan must contain one pool-bound swap child",
+        );
+      }
+      return { routeTarget: swaps[0].params.pool };
+    },
+  },
   identityPolicies: [{
     poolAdapter: "balancer-v3",
     policy: "onchain-resolver",

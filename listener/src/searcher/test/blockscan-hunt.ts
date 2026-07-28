@@ -11,11 +11,18 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { ethers } from "ethers";
 import "../../shared/adapters/index.js";
+import { compilePlan } from "../../shared/compiler/compiler.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
   AnvilStateBackend,
 } from "../../shared/state/state-backend.js";
 import {
+  createSemanticSixStepEvidence,
+  type SemanticJson,
+  type SemanticSixStepStatus,
+} from "../../shared/evidence/semantic-six-step.js";
+import {
+  buildExecuteCalldata,
   DEFAULT_SEARCHER_EXECUTOR,
   DEFAULT_SEARCHER_OWNER,
   installForkBotVm,
@@ -29,7 +36,6 @@ import {
 } from "../detector/blockscan-scanner-core.js";
 import {
   refineBlockScanCandidates,
-  type BlockScanProbeDiagnostic,
 } from "../detector/blockscan-candidate-refinement.js";
 import {
   BlockScanStateCoordinator,
@@ -42,6 +48,7 @@ import {
   assessAdapterFamilyQuoteCoverage,
   blockScanPassBudgetExceeded,
   remapExpectedRouteToVerifiedGraph,
+  productionDiagnosticStageTerminates,
   resolveBlockScanHuntVerdict,
   resolveBlockScanHuntBudgets,
   routeMatchesExpected,
@@ -199,6 +206,7 @@ interface SolveReport {
   spreadBps: number | null;
   planCount: number;
   solved: string | null;
+  solvedAmount?: string;
   solveError: string | null;
   searchCenter: string | null;
   diagnosticHopAmounts?: Array<{
@@ -211,6 +219,10 @@ interface SolveReport {
     rawAmountOut: string;
   }>;
   diagnosticAmountError?: string;
+  resolvedPlanSha256?: string;
+  repaymentAndConservation?: boolean;
+  leavesStandingPosition?: boolean;
+  diagnosticConservationError?: string;
   diagnosticSimulation?: {
     success: boolean;
     profitToken: string;
@@ -300,17 +312,149 @@ function diagnosticPositiveInt(name: string, value: string): number {
 
 function emitDiagnostic(
   step: 1 | 2 | 3 | 4 | 5 | 6,
-  stage: string,
-  status: "pass" | "fail" | "reject" | "not_reached",
-  details: Record<string, unknown>,
+  status: SemanticSixStepStatus,
+  input: {
+    output: Readonly<Record<string, unknown>>;
+    reasonCode?: string | null;
+    metrics?: Readonly<Record<string, unknown>>;
+    extensions?: Readonly<Record<string, unknown>>;
+  },
 ): void {
   if (!DIAGNOSTIC.enabled) return;
   lastDiagnosticStep = Math.max(lastDiagnosticStep, step);
-  console.log(`SIX_STEP_DIAGNOSTIC=${JSON.stringify({ step, stage, status, ...details })}`);
+  console.log(
+    `SEMANTIC_SIX_STEP_EVIDENCE=${JSON.stringify(createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step,
+      status,
+      output: diagnosticJsonObject(input.output),
+      reasonCode: input.reasonCode,
+      metrics: diagnosticJsonObject(input.metrics ?? {}),
+      extensions: diagnosticJsonObject(input.extensions ?? {}),
+    }))}`,
+  );
+}
+
+function diagnosticJsonObject(
+  value: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, SemanticJson>> {
+  return JSON.parse(JSON.stringify(
+    value,
+    (_key, item) => typeof item === "bigint" ? item.toString() : item,
+  )) as Record<string, SemanticJson>;
+}
+
+function stableDiagnosticReason(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  const normalized = String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!normalized) return "unspecified_failure";
+  const prefixed = /^[a-z]/.test(normalized)
+    ? normalized
+    : `error_${normalized}`;
+  return prefixed.slice(0, 96).replace(/_+$/g, "") || "unspecified_failure";
 }
 
 function diagnosticStopsAfter(stage: DiagnosticStopAfter): boolean {
   return DIAGNOSTIC.enabled && DIAGNOSTIC.stopAfter === stage;
+}
+
+interface DiagnosticExactQuote {
+  readonly status: "positive" | "negative" | "failed" | "not_reached";
+  readonly routeSha256: string;
+  readonly probeAmountIn: string | null;
+  readonly quotedAmountOut: string | null;
+  readonly marginBps: number | null;
+  readonly legQuotes: readonly {
+    adapter_id: string;
+    target: string;
+    token_in: string;
+    token_out: string;
+    amount_in: string;
+    raw_amount_out: string;
+    amount_out: string;
+  }[];
+  readonly error: string | null;
+}
+
+async function quoteDiagnosticRoute(
+  state: AnvilStateBackend,
+  opportunity: BlockScanOpportunity | undefined,
+): Promise<DiagnosticExactQuote> {
+  if (!opportunity) {
+    return {
+      status: "not_reached",
+      routeSha256: createHash("sha256").update("route-not-enumerated").digest("hex"),
+      probeAmountIn: null,
+      quotedAmountOut: null,
+      marginBps: null,
+      legQuotes: [],
+      error: null,
+    };
+  }
+  const ceiling = opportunity.searchSeed.searchCenter <
+      opportunity.searchSeed.maxInput
+    ? opportunity.searchSeed.searchCenter
+    : opportunity.searchSeed.maxInput;
+  const probeAmount = ceiling / 1024n > 0n ? ceiling / 1024n : ceiling;
+  const routeSha256 = createHash("sha256")
+    .update(canonicalRingIdentity(opportunity.seedEdges))
+    .digest("hex");
+  if (probeAmount <= 0n) {
+    return {
+      status: "failed",
+      routeSha256,
+      probeAmountIn: probeAmount.toString(),
+      quotedAmountOut: null,
+      marginBps: null,
+      legQuotes: [],
+      error: "diagnostic probe amount is zero",
+    };
+  }
+  try {
+    const propagated = await propagateAmountsWithRawOutputs(
+      { edges: opportunity.seedEdges },
+      probeAmount,
+      state,
+      {
+        executor: DEFAULT_SEARCHER_EXECUTOR,
+        safetyBps: 10_000n,
+      },
+    );
+    const quotedAmountOut = propagated.amounts.at(-1)!;
+    const profit = quotedAmountOut - probeAmount;
+    const marginBps = Number(profit) * 10_000 / Number(probeAmount);
+    return {
+      status: profit > 0n ? "positive" : "negative",
+      routeSha256,
+      probeAmountIn: probeAmount.toString(),
+      quotedAmountOut: quotedAmountOut.toString(),
+      marginBps: Number.isFinite(marginBps) ? marginBps : null,
+      legQuotes: opportunity.seedEdges.map((edge, index) => ({
+        adapter_id: edge.adapterId,
+        target: edge.target.toLowerCase(),
+        token_in: edge.tokenIn.toLowerCase(),
+        token_out: edge.tokenOut.toLowerCase(),
+        amount_in: propagated.amounts[index].toString(),
+        raw_amount_out: propagated.rawOutputs[index].toString(),
+        amount_out: propagated.amounts[index + 1].toString(),
+      })),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      routeSha256,
+      probeAmountIn: probeAmount.toString(),
+      quotedAmountOut: null,
+      marginBps: null,
+      legQuotes: [],
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function loadEnv(): void {
@@ -1093,23 +1237,50 @@ async function main(): Promise<void> {
       );
       emitDiagnostic(
         1,
-        "graph",
         missingEdges.length === 0 && ambiguousEdges.length === 0
           ? "pass"
           : "fail",
         {
-        mode: topologyOnly ? "protocol_topology_cache" : "route",
-        graphEdges: edges.length,
-        edgeSetSize: new Set(edgeIdentities).size,
-        edgeSetSha256: canonicalSetSha256(edgeIdentities),
-        expectedEdges: expectedRoute.length,
-        missingEdges,
-        ambiguousEdges,
-        poolAdmission,
+          output: {
+            source_block: cfg.blockNumber,
+            edge_set_sha256: canonicalSetSha256(edgeIdentities),
+            edge_set_size: new Set(edgeIdentities).size,
+            target_edge_count: expectedRoute.length,
+            target_membership: missingEdges.length > 0
+              ? "missing"
+              : ambiguousEdges.length > 0
+                ? "ambiguous"
+                : "present",
+          },
+          reasonCode: missingEdges.length > 0
+            ? "target_edges_missing"
+            : ambiguousEdges.length > 0
+              ? "target_edges_ambiguous"
+              : null,
+          metrics: {
+            graph_edge_count: edges.length,
+          },
+          extensions: {
+            mode: topologyOnly ? "protocol_topology_cache" : "route",
+            missing_edges: missingEdges,
+            ambiguous_edges: ambiguousEdges,
+            pool_admission: poolAdmission,
+          },
         },
       );
-      if (diagnosticStopsAfter("graph")) return;
-      if (missingEdges.length > 0 || ambiguousEdges.length > 0) return;
+      if (
+        diagnosticStopsAfter("graph") ||
+        missingEdges.length > 0 ||
+        ambiguousEdges.length > 0
+      ) {
+        emitProductionReplayResult(
+          cfg,
+          [],
+          [],
+          readExpectedReplayTarget([]),
+        );
+        return;
+      }
     }
 
     const [baseBlock, sourceBlock] = await Promise.all([
@@ -1172,7 +1343,7 @@ async function main(): Promise<void> {
           `${prewarm.issues[0]?.message ?? "unknown"}`,
       );
     }
-    const passDeadlineAtMs = Date.now() + cfg.passBudgetMs;
+    let passDeadlineAtMs = Date.now() + cfg.passBudgetMs;
     console.log(
       `[blockscan-hunt] budgets prewarm=${prewarmBudgetMs}ms ` +
         `scan=${cfg.scanBudgetMs}ms pass=${cfg.passBudgetMs}ms`,
@@ -1295,8 +1466,33 @@ async function main(): Promise<void> {
       cfg.maxCandidates,
       envInt("HUNT_REFINE_CANDIDATES", 512),
     );
-    const expectedRouteDiagnosis =
-      DIAGNOSTIC.enabled && verifiedDiagnosticExpectedEdges
+    const coarseScan = scanBlockStateFromResolvedMids({
+      edges: [...scanEdges],
+      sourceBlock: cfg.blockNumber,
+      swapTouched: null,
+      cfg: { ...scanCfg, maxCandidates: coarseMaxCandidates },
+      mids: pricing.mids,
+    });
+    let diagnosticCoarseTarget: ExpectedReplayTarget | null = null;
+    if (DIAGNOSTIC.enabled) {
+      // Freeze production enumeration before running any expected-route
+      // verifier work. The oracle may explain a frozen miss, but its CPU cannot
+      // consume the producer's scan/pass deadline or alter the route set.
+      const passBudgetExceeded = blockScanPassBudgetExceeded(
+        passDeadlineAtMs,
+        false,
+      );
+      const verifierStartedAtMs = Date.now();
+      const coarseReports = coarseScan.opportunities.map((opp, index) =>
+        describeOpportunity(index + 1, opp, pricing.mids),
+      );
+      const ringIdentities = coarseScan.opportunities.map((opp) =>
+        canonicalRingIdentity(opp.seedEdges),
+      );
+      diagnosticCoarseTarget = readExpectedReplayTarget(coarseReports);
+      const found = (diagnosticCoarseTarget?.opportunityIndex ?? -1) >= 0;
+      const rankComplete = coarseScan.outcome === "ran";
+      const expectedRouteDiagnosis = verifiedDiagnosticExpectedEdges
         ? diagnoseExpectedRouteEnumeration({
             edges: scanEdges,
             route: verifiedDiagnosticExpectedEdges,
@@ -1307,28 +1503,20 @@ async function main(): Promise<void> {
             mids: pricing.mids,
           })
         : null;
-    const coarseScan = scanBlockStateFromResolvedMids({
-      edges: [...scanEdges],
-      sourceBlock: cfg.blockNumber,
-      swapTouched: null,
-      cfg: { ...scanCfg, maxCandidates: coarseMaxCandidates },
-      mids: pricing.mids,
-    });
-    let diagnosticCoarseTarget: ExpectedReplayTarget | null = null;
-    if (DIAGNOSTIC.enabled) {
-      const coarseReports = coarseScan.opportunities.map((opp, index) =>
-        describeOpportunity(index + 1, opp, pricing.mids),
-      );
-      const ringIdentities = coarseScan.opportunities.map((opp) =>
-        canonicalRingIdentity(opp.seedEdges),
-      );
-      diagnosticCoarseTarget = readExpectedReplayTarget(coarseReports);
-      const found = (diagnosticCoarseTarget?.opportunityIndex ?? -1) >= 0;
-      const rankComplete = coarseScan.outcome === "ran";
-      const passBudgetExceeded = blockScanPassBudgetExceeded(passDeadlineAtMs, false);
+      const enumerationReason = passBudgetExceeded
+        ? "pass_budget_exceeded"
+        : !found && !rankComplete
+          ? "scan_budget_exceeded_before_target"
+          : !found
+            ? expectedRouteDiagnosis?.status === "rejected"
+              ? expectedRouteDiagnosis.reason
+              : coarseScan.selection.enumeratedCount >
+                  coarseScan.selection.selectedCount
+                ? "rank_or_family_cap"
+                : "absent_after_post_score_checks"
+            : null;
       emitDiagnostic(
         2,
-        "enumeration",
         passBudgetExceeded
           ? "not_reached"
           : found
@@ -1337,49 +1525,46 @@ async function main(): Promise<void> {
               ? "fail"
               : "not_reached",
         {
-          observedRank: found
-            ? diagnosticCoarseTarget!.opportunityIndex + 1
-            : null,
-          rankComplete,
-          candidatesSearched: coarseReports.length,
-          ringSetSize: new Set(ringIdentities).size,
-          ringSetSha256: canonicalSetSha256(ringIdentities),
-          candidateCap: coarseMaxCandidates,
-          scannerOutcome: coarseScan.outcome,
-          scannedPairs: coarseScan.scannedPairs,
-          passBudgetExceeded,
-          expectedRouteDiagnosis,
-          reason: passBudgetExceeded
-            ? "pass_budget_exceeded"
-            : !found && !rankComplete
-              ? "scan_budget_exceeded_before_target"
-              : !found
-                ? expectedRouteDiagnosis?.status === "rejected"
-                  ? expectedRouteDiagnosis.reason
-                  : coarseScan.selection.enumeratedCount >
-                      coarseScan.selection.selectedCount
-                    ? "rank_or_family_cap"
-                    : "absent_after_post_score_checks"
-                : null,
+          output: {
+            route_set_sha256: canonicalSetSha256(ringIdentities),
+            route_set_size: new Set(ringIdentities).size,
+            target_present: found,
+          },
+          reasonCode: stableDiagnosticReason(enumerationReason),
+          metrics: {
+            candidates_searched: coarseReports.length,
+            candidate_cap: coarseMaxCandidates,
+            scanner_outcome: coarseScan.outcome,
+            scanned_pairs: coarseScan.scannedPairs,
+            pass_budget_exceeded: passBudgetExceeded,
+            target_rank: found
+              ? diagnosticCoarseTarget!.opportunityIndex + 1
+              : null,
+            rank_complete: rankComplete,
+          },
+          extensions: {
+            expected_route_diagnosis: expectedRouteDiagnosis,
+          },
         },
       );
-      if (diagnosticStopsAfter("enumeration")) return;
-      if (passBudgetExceeded || !found) return;
+      if (
+        diagnosticStopsAfter("enumeration") ||
+        passBudgetExceeded ||
+        !found
+      ) {
+        emitProductionReplayResult(
+          cfg,
+          coarseReports,
+          [],
+          diagnosticCoarseTarget,
+        );
+        return;
+      }
+      passDeadlineAtMs += Date.now() - verifierStartedAtMs;
     }
-    requirePassBudget("scan", passDeadlineAtMs);
-    const probeDiagnostics = new Map<number, BlockScanProbeDiagnostic>();
-    const probeFailureCounts = new Map<string, {
-      reason: NonNullable<BlockScanProbeDiagnostic["failure"]>["reason"];
-      familyIds: readonly string[];
-      attributedFamilyId: string | null;
-      attributedInstanceCircuitKey: string | null;
-      blockingCircuitScope: "family" | "instance" | "composite" | null;
-      stage: string | null;
-      causeName: string | null;
-      causeCode: string | null;
-      causeKind: string | null;
-      count: number;
-    }>();
+    if (!DIAGNOSTIC.enabled) {
+      requirePassBudget("scan", passDeadlineAtMs);
+    }
     const diagnosticTargetIndex = diagnosticCoarseTarget?.opportunityIndex ?? -1;
     const refineConcurrency = envInt("HUNT_REFINE_CONCURRENCY", 24);
     const refineFamilyTimeoutMs = envInt(
@@ -1400,28 +1585,7 @@ async function main(): Promise<void> {
       cfg.maxCandidates,
       passDeadlineAtMs,
       pricedTokenLimits,
-      DIAGNOSTIC.enabled && diagnosticTargetIndex >= 0
-        ? (probe) => {
-            if (probe.failure) {
-              const failureKey = JSON.stringify([
-                probe.failure.reason,
-                probe.failure.familyIds,
-                probe.failure.attributedFamilyId,
-                probe.failure.attributedInstanceCircuitKey,
-                probe.failure.blockingCircuitScope,
-                probe.failure.stage,
-                probe.failure.causeName,
-                probe.failure.causeCode,
-                probe.failure.causeKind,
-              ]);
-              const previous = probeFailureCounts.get(failureKey);
-              probeFailureCounts.set(failureKey, previous
-                ? { ...previous, count: previous.count + 1 }
-                : { ...probe.failure, count: 1 });
-            }
-            if (probe.index === diagnosticTargetIndex) probeDiagnostics.set(probe.index, probe);
-          }
-        : undefined,
+      undefined,
       refineConcurrency,
       {
         familyTimeoutMs: refineFamilyTimeoutMs,
@@ -1431,6 +1595,13 @@ async function main(): Promise<void> {
     );
     const scan = { ...coarseScan, opportunities: refinement.opportunities };
     if (DIAGNOSTIC.enabled) {
+      // Everything above this line is target-blind producer work. Freeze its
+      // budget result before the verifier performs a target-specific exact
+      // quote, so changing AB_EXPECTED_* cannot change selection or timeout.
+      const passBudgetExceeded = blockScanPassBudgetExceeded(
+        passDeadlineAtMs,
+        refinement.deadlineHit,
+      );
       const refinedReports = scan.opportunities.map((opp, index) =>
         describeOpportunity(index + 1, opp, pricing.mids),
       );
@@ -1438,63 +1609,79 @@ async function main(): Promise<void> {
       const refinedRank = (refinedTarget?.opportunityIndex ?? -1) >= 0
         ? refinedTarget!.opportunityIndex + 1
         : null;
-      const targetProbe = probeDiagnostics.get(diagnosticTargetIndex);
-      const probeStatus = targetProbe?.status
-        ?? (diagnosticTargetIndex < 0 ? "not_enumerated" : "unprobed");
-      const passBudgetExceeded = blockScanPassBudgetExceeded(
-        passDeadlineAtMs,
-        refinement.deadlineHit,
+      const exactQuote = await quoteDiagnosticRoute(
+        state,
+        diagnosticTargetIndex >= 0
+          ? coarseScan.opportunities[diagnosticTargetIndex]
+          : undefined,
       );
+      const refinementReason = exactQuote.status === "positive" && refinedRank === null
+        ? "positive_but_below_candidate_cap"
+        : exactQuote.status === "failed"
+          ? "exact_quote_failed"
+          : exactQuote.status === "negative"
+            ? "exact_quote_non_positive"
+            : exactQuote.status === "not_reached"
+              ? "target_not_enumerated"
+              : passBudgetExceeded
+                ? "exact_quote_not_reached"
+                : null;
       emitDiagnostic(
         3,
-        "exact_quote_refine",
-        passBudgetExceeded || probeStatus === "unprobed"
+        passBudgetExceeded
           ? "not_reached"
-          : probeStatus === "positive" && refinedRank !== null
+          : exactQuote.status === "positive" && refinedRank !== null
             ? "pass"
             : "fail",
         {
-          refinedRank,
-          probeStatus,
-          probeMarginBps: targetProbe?.marginBps ?? null,
-          probeAttempted: targetProbe?.attempted ?? false,
-          probeFailure: targetProbe?.failure ?? null,
-          probeFailureSummary: [...probeFailureCounts.values()].sort(
-            (left, right) =>
-              right.count - left.count ||
-              JSON.stringify(left).localeCompare(JSON.stringify(right)),
-          ),
-          refinementConfig: {
-            concurrency: refineConcurrency,
-            familyTimeoutMs: refineFamilyTimeoutMs,
-            maxConcurrentPerFamily: refineMaxConcurrentPerFamily,
+          output: {
+            source_block: cfg.blockNumber,
+            route_sha256: exactQuote.routeSha256,
+            quote_status: exactQuote.status,
+            probe_amount_in: exactQuote.probeAmountIn,
+            quoted_amount_out: exactQuote.quotedAmountOut,
+            leg_quotes: exactQuote.legQuotes,
           },
-          retainedAsFallback: refinedRank !== null && probeStatus === "failed",
-          reason: probeStatus === "positive" && refinedRank === null
-            ? "positive_but_below_candidate_cap"
-            : probeStatus === "failed"
-              ? targetProbe?.failure?.reason ?? "exact_quote_failed"
-              : probeStatus === "negative"
-                ? "exact_quote_non_positive"
-                : probeStatus === "not_enumerated"
-                  ? "target_not_enumerated"
-                  : null,
-          selectedCandidates: refinedReports.length,
-          attempted: refinement.attempted,
-          positive: refinement.positive,
-          negative: refinement.negative,
-          failed: refinement.failed,
-          deadlineHit: refinement.deadlineHit,
-          openFamilyIds: refinement.openFamilyIds,
-          openInstanceCircuitKeys: refinement.openInstanceCircuitKeys,
-          openCompositeKeys: refinement.openCompositeKeys,
-          passBudgetExceeded,
+          reasonCode: stableDiagnosticReason(refinementReason),
+          metrics: {
+            selected_candidate_count: refinedReports.length,
+            attempted: refinement.attempted,
+            positive: refinement.positive,
+            negative: refinement.negative,
+            failed: refinement.failed,
+            deadline_hit: refinement.deadlineHit,
+            pass_budget_exceeded: passBudgetExceeded,
+            concurrency: refineConcurrency,
+            family_timeout_ms: refineFamilyTimeoutMs,
+            max_concurrent_per_family: refineMaxConcurrentPerFamily,
+            target_refined_rank: refinedRank,
+            target_margin_bps: exactQuote.marginBps,
+          },
+          extensions: {
+            verifier_quote_error: exactQuote.error,
+            open_family_ids: refinement.openFamilyIds,
+            open_instance_circuit_keys: refinement.openInstanceCircuitKeys,
+            open_composite_keys: refinement.openCompositeKeys,
+          },
         },
       );
-      if (diagnosticStopsAfter("refine")) return;
-      if (passBudgetExceeded || probeStatus !== "positive" || refinedRank === null) return;
+      if (
+        diagnosticStopsAfter("refine") ||
+        passBudgetExceeded ||
+        exactQuote.status !== "positive" ||
+        refinedRank === null
+      ) {
+        emitProductionReplayResult(
+          cfg,
+          refinedReports,
+          [],
+          refinedTarget,
+        );
+        return;
+      }
+    } else {
+      requirePassBudget("refine", passDeadlineAtMs, refinement.deadlineHit);
     }
-    requirePassBudget("refine", passDeadlineAtMs, refinement.deadlineHit);
     console.log(
       `[blockscan-hunt] exact route probes attempted=${refinement.attempted} ` +
         `positive=${refinement.positive} negative=${refinement.negative} ` +
@@ -1524,7 +1711,6 @@ async function main(): Promise<void> {
     const solveIndexes = selectedReplayOpportunityIndexes(
       scan.opportunities.length,
       cfg.topK,
-      expectedTarget?.opportunityIndex ?? null,
     );
     const solvedReports = await solveSelected(
       state,
@@ -1547,46 +1733,154 @@ async function main(): Promise<void> {
         && expectedSolve.solveError === null
         && expectedSolve.diagnosticAmountError === undefined
         && expectedSolve.diagnosticHopAmounts?.length === expectedTarget?.expectedRoute.length;
-      emitDiagnostic(
-        4,
-        "planner_and_solver",
-        solveSucceeded ? "pass" : "fail",
-        {
-          opportunityRank: expectedTarget && expectedTarget.opportunityIndex >= 0
+      const solveReason = !selectedByTopK && expectedOpportunityIndex >= 0
+        ? "target_outside_solve_set"
+        : expectedTarget?.opportunityIndex === -1
+          ? "route_not_enumerated"
+          : expectedSolve?.solveError
+            ? "solver_error"
+            : expectedSolve?.diagnosticAmountError
+              ? "amount_propagation_error"
+              : !solveSucceeded
+                ? "plan_or_solver_failed"
+                : null;
+      const solveStatus = solveSucceeded && selectedByTopK ? "pass" : "fail";
+      emitDiagnostic(4, solveStatus, {
+        output: {
+          route_sha256: expectedTarget && expectedTarget.opportunityIndex >= 0
+            ? createHash("sha256")
+                .update(canonicalRingIdentity(
+                  scan.opportunities[expectedTarget.opportunityIndex].seedEdges,
+                ))
+                .digest("hex")
+            : createHash("sha256").update("route-not-selected").digest("hex"),
+          selected_by_solve_policy: selectedByTopK,
+          solve_succeeded: solveSucceeded,
+          solver_selected_amount: expectedSolve?.solvedAmount ?? null,
+          resolved_plan_sha256: expectedSolve?.resolvedPlanSha256 ?? null,
+          hop_amounts: expectedSolve?.diagnosticHopAmounts ?? [],
+        },
+        reasonCode: solveReason,
+        metrics: {
+          solve_set_size: solveIndexes.length,
+          configured_top_k: cfg.topK,
+          target_rank: expectedTarget && expectedTarget.opportunityIndex >= 0
             ? expectedTarget.opportunityIndex + 1
             : null,
-          selectedByTopK,
-          forcedProbe,
-          selectionMode: selectedByTopK ? "top_k" : forcedProbe ? "forced_probe" : "not_found",
-          planCount: expectedSolve?.planCount ?? 0,
-          solveSucceeded,
-          includesInternalFinalSim: true,
-          searchCenter: expectedSolve?.searchCenter ?? null,
-          hopAmounts: expectedSolve?.diagnosticHopAmounts ?? [],
+          plan_count: expectedSolve?.planCount ?? 0,
+        },
+        extensions: {
+          target_outside_solve_set: forcedProbe,
+          includes_internal_final_sim: true,
+          search_center: expectedSolve?.searchCenter ?? null,
           error: expectedSolve?.solveError
             ?? expectedSolve?.diagnosticAmountError
-            ?? (expectedTarget?.opportunityIndex === -1 ? "route_not_enumerated" : null),
+            ?? null,
         },
-      );
-      if (diagnosticStopsAfter("solve")) return;
-      const simulation = expectedSolve?.diagnosticSimulation;
-      emitDiagnostic(5, "resolved_plan_resim", simulation?.success ? "pass" : "fail", {
-        ...(simulation ?? {
-          success: false,
-          netProfit: expectedSolve?.solved ?? null,
-          error: expectedSolve?.solveError ?? "simulation_not_reached",
-        }),
       });
-      if (diagnosticStopsAfter("sim")) return;
+      if (productionDiagnosticStageTerminates(
+        solveStatus,
+        diagnosticStopsAfter("solve"),
+      )) {
+        emitProductionReplayResult(
+          cfg,
+          opportunityReports,
+          solvedReports,
+          expectedTarget,
+        );
+        return;
+      }
+      const simulation = expectedSolve?.diagnosticSimulation;
+      const terminalSafetyPass = simulation?.success === true &&
+        expectedSolve?.repaymentAndConservation === true &&
+        expectedSolve?.leavesStandingPosition === false;
+      const finalSimStatus = terminalSafetyPass ? "pass" : "fail";
+      emitDiagnostic(5, finalSimStatus, {
+        output: {
+          success: simulation?.success ?? false,
+          profit_token: simulation?.profitToken ?? null,
+          gross_profit: simulation?.grossProfit ?? null,
+          net_profit: simulation?.netProfit ?? expectedSolve?.solved ?? null,
+          gas_used: simulation?.gasUsed ?? null,
+          calldata_sha256: simulation?.calldataHash ?? null,
+          repayment_and_conservation:
+            expectedSolve?.repaymentAndConservation ?? false,
+          leaves_standing_position:
+            expectedSolve?.leavesStandingPosition ?? null,
+        },
+        reasonCode: terminalSafetyPass
+          ? null
+          : simulation?.success &&
+              expectedSolve?.repaymentAndConservation !== true
+            ? "repayment_or_conservation_failed"
+            : expectedSolve?.leavesStandingPosition === true
+              ? "standing_position_rejected"
+          : expectedSolve?.solveError
+            ? "final_sim_revert"
+            : "final_sim_not_reached",
+        extensions: {
+          error: expectedSolve?.diagnosticConservationError
+            ?? expectedSolve?.solveError
+            ?? null,
+        },
+      });
+      if (productionDiagnosticStageTerminates(
+        finalSimStatus,
+        diagnosticStopsAfter("sim"),
+      )) {
+        emitProductionReplayResult(
+          cfg,
+          opportunityReports,
+          solvedReports,
+          expectedTarget,
+        );
+        return;
+      }
       const ev = expectedSolve?.diagnosticEv;
-      emitDiagnostic(6, "ev", ev?.decision === "allow"
+      emitDiagnostic(6, ev?.decision === "allow"
         ? "pass"
         : ev?.decision === "disabled" || !ev
           ? "not_reached"
           : "reject", {
-        ...(ev ?? { decision: null, error: "simulation_not_reached" }),
+        output: {
+          decision: ev?.decision ?? null,
+          net_ev_wei: ev?.netEvWei ?? null,
+          expected_profit_eth: ev?.expectedProfitEth ?? null,
+          gas_cost_eth: ev?.gasCostEth ?? null,
+          bid_eth: ev?.bidEth ?? null,
+          min_net_eth: ev?.minNetEth ?? null,
+          valuation_available: ev
+            ? ev.decision !== "unpriceable_profit_token"
+            : false,
+          gas_measurement_available: ev
+            ? ev.decision !== "missing_gas_estimate"
+            : false,
+          fee_state_available: ev
+            ? ev.decision !== "missing_fee_state"
+            : false,
+          source_block_hash: ev?.decisionParentHash ?? null,
+          decision_parent_block: ev?.decisionParentBlock ?? null,
+          target_block: ev?.targetBlock ?? null,
+          eth_usd: ev?.ethUsd ?? null,
+          max_base_fee_per_gas: ev?.maxBaseFeePerGas ?? null,
+        },
+        reasonCode: ev?.decision === "allow"
+          ? null
+          : ev?.decision === "disabled"
+            ? "ev_disabled"
+            : ev
+              ? stableDiagnosticReason(ev.decision)
+              : "ev_not_reached",
       });
-      if (diagnosticStopsAfter("ev")) return;
+      if (diagnosticStopsAfter("ev")) {
+        emitProductionReplayResult(
+          cfg,
+          opportunityReports,
+          solvedReports,
+          expectedTarget,
+        );
+        return;
+      }
     }
 
     const bestNet = bestSolvedNet(solvedReports);
@@ -1843,6 +2137,93 @@ function summarizeAdapterFamilyQuotes(
   });
 }
 
+async function proveDiagnosticConservation(
+  state: AnvilStateBackend,
+  solved: ResolvedPlan,
+  edges: readonly TokenEdge[],
+  flashAdapterId: string,
+  expectedCalldata: string,
+): Promise<boolean> {
+  const funding = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(
+    flashAdapterId,
+  );
+  if (!funding) {
+    throw new Error(
+      `diagnostic conservation cannot resolve flash family ${flashAdapterId}`,
+    );
+  }
+  const tokens = [...new Set(
+    edges
+      .flatMap((edge) => [edge.tokenIn, edge.tokenOut])
+      .map((token) => token.toLowerCase()),
+  )].map(ethers.getAddress);
+  const snapshot = await state.snapshot();
+  try {
+    const executorBefore = new Map<string, bigint>();
+    for (const token of tokens) {
+      const balance = await state.getTokenBalance(
+        token,
+        DEFAULT_SEARCHER_EXECUTOR,
+      );
+      if (balance !== 0n) {
+        throw new Error(
+          `diagnostic executor has pre-existing route-token inventory ` +
+            `${token}:${balance}`,
+        );
+      }
+      executorBefore.set(token, balance);
+    }
+    const lender = funding.funding.liquidityHolder;
+    const lenderBefore = await state.getTokenBalance(
+      solved.profitToken,
+      lender,
+    );
+    const calldata = buildExecuteCalldata(
+      compilePlan(solved.root, DEFAULT_SEARCHER_EXECUTOR),
+    );
+    if (calldata.toLowerCase() !== expectedCalldata.toLowerCase()) {
+      throw new Error(
+        "diagnostic conservation calldata differs from independent final sim",
+      );
+    }
+    await state.send({
+      from: DEFAULT_SEARCHER_OWNER,
+      to: DEFAULT_SEARCHER_EXECUTOR,
+      data: calldata,
+      gas: "0x1000000",
+    });
+    let grossProfit = 0n;
+    for (const token of tokens) {
+      const after = await state.getTokenBalance(
+        token,
+        DEFAULT_SEARCHER_EXECUTOR,
+      );
+      const delta = after - executorBefore.get(token)!;
+      if (token.toLowerCase() === solved.profitToken.toLowerCase()) {
+        grossProfit = delta;
+      } else if (delta < 0n) {
+        throw new Error(
+          `diagnostic conservation consumed intermediate inventory ` +
+            `${token}:${delta}`,
+        );
+      }
+    }
+    if (grossProfit <= 0n) {
+      throw new Error("diagnostic conservation produced no positive profit");
+    }
+    const lenderAfter = await state.getTokenBalance(
+      solved.profitToken,
+      lender,
+    );
+    if (lenderAfter < lenderBefore) {
+      throw new Error("diagnostic conservation decreased flash lender balance");
+    }
+    return true;
+  } finally {
+    await state.revert(snapshot);
+  }
+}
+
 async function solveSelected(
   state: AnvilStateBackend,
   canonicalProvider: ethers.JsonRpcProvider,
@@ -1877,6 +2258,10 @@ async function solveSelected(
     let diagnosticAmountError: string | undefined;
     let diagnosticSimulation: SolveReport["diagnosticSimulation"];
     let diagnosticEv: SolveReport["diagnosticEv"];
+    let resolvedPlanSha256: string | undefined;
+    let repaymentAndConservation: boolean | undefined;
+    let leavesStandingPosition: boolean | undefined;
+    let diagnosticConservationError: string | undefined;
     try {
       planner.setGraph(opp.seedEdges);
       const plans = await planner.planBlockScanFromSeedEdges(opp, [FLASH_SWAP_REPAY]);
@@ -1932,6 +2317,25 @@ async function solveSelected(
         calldataHash: createHash("sha256").update(simulation.calldata).digest("hex"),
         revertReason: simulation.revertReason ?? null,
       };
+      resolvedPlanSha256 = diagnosticSimulation.calldataHash;
+      leavesStandingPosition = pathLeavesStandingPosition(opp.seedEdges);
+      if (simulation.success && !leavesStandingPosition) {
+        try {
+          repaymentAndConservation = await proveDiagnosticConservation(
+            state,
+            solved,
+            opp.seedEdges,
+            solved.root.adapterId,
+            simulation.calldata,
+          );
+        } catch (error) {
+          repaymentAndConservation = false;
+          diagnosticConservationError =
+            error instanceof Error ? error.message : String(error);
+        }
+      } else {
+        repaymentAndConservation = false;
+      }
       if (simulation.success) {
         const minNetEth = BigInt(process.env.SEARCHER_MIN_NET_ETH ?? "0");
         const evGate = process.env.SEARCHER_EV_GATE === "1";
@@ -1995,10 +2399,21 @@ async function solveSelected(
       spreadBps,
       planCount,
       solved: solved ? solved.netProfit.toString() : null,
+      ...(solved ? { solvedAmount: solved.flashAmount.toString() } : {}),
       solveError,
       searchCenter,
       ...(diagnosticHopAmounts ? { diagnosticHopAmounts } : {}),
       ...(diagnosticAmountError ? { diagnosticAmountError } : {}),
+      ...(resolvedPlanSha256 ? { resolvedPlanSha256 } : {}),
+      ...(repaymentAndConservation !== undefined
+        ? { repaymentAndConservation }
+        : {}),
+      ...(leavesStandingPosition !== undefined
+        ? { leavesStandingPosition }
+        : {}),
+      ...(diagnosticConservationError
+        ? { diagnosticConservationError }
+        : {}),
       ...(diagnosticSimulation ? { diagnosticSimulation } : {}),
       ...(diagnosticEv ? { diagnosticEv } : {}),
     };
@@ -2485,9 +2900,14 @@ main().catch((err) => {
   const message = err instanceof Error ? err.message : String(err);
   if (DIAGNOSTIC.enabled && lastDiagnosticStep < 6) {
     const nextStep = Math.max(1, Math.min(6, lastDiagnosticStep + 1)) as 1 | 2 | 3 | 4 | 5 | 6;
-    emitDiagnostic(nextStep, "execution_error", "fail", {
-      afterStep: lastDiagnosticStep,
-      error: message.replace(/https?:\/\/[^\s]+/g, "<rpc-url>").slice(0, 500),
+    emitDiagnostic(nextStep, "fail", {
+      output: {
+        completed_step_count: lastDiagnosticStep,
+      },
+      reasonCode: "execution_error",
+      extensions: {
+        error: message.replace(/https?:\/\/[^\s]+/g, "<rpc-url>").slice(0, 500),
+      },
     });
   }
   console.error(`blockscan-hunt FAIL: ${message}`);

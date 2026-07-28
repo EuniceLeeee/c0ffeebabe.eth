@@ -518,6 +518,30 @@ export const univ4Adapter = Object.freeze({
       return JSON.stringify([edge.adapterId, edge.poolId.toLowerCase()]);
     },
   },
+  planExecutionIdentity: {
+    resolve(node) {
+      const swaps = node.children.filter((child) =>
+        child.adapterId === "univ4-swap"
+      );
+      if (swaps.length !== 1) {
+        throw new Error(
+          "univ4 resolved plan must contain one pool-bound swap child",
+        );
+      }
+      const swap = swaps[0];
+      const key = normalizeV4PoolKey({
+        currency0: resolvedPlanString(swap, "currency0"),
+        currency1: resolvedPlanString(swap, "currency1"),
+        fee: resolvedPlanSafeNumber(swap, "fee"),
+        tickSpacing: resolvedPlanSafeNumber(swap, "tickSpacing"),
+        hooks: resolvedPlanString(swap, "hooks"),
+      }, "univ4 resolved plan execution identity");
+      return {
+        routeTarget: node.target,
+        poolId: v4PoolId(key),
+      };
+    },
+  },
   identityPolicies: [{
     poolAdapter: "univ4",
     policy: "trusted-singleton-seed",
@@ -588,6 +612,32 @@ export const univ4Adapter = Object.freeze({
   quoteExact: quoteUniV4Exact,
   buildPlanFragment: buildUniV4PlanFragment,
 } satisfies SwapAdapter);
+
+function resolvedPlanString(
+  node: ResolvedPlanNode,
+  field: string,
+): string {
+  const value = node.params[field];
+  if (typeof value !== "string") {
+    throw new Error(`univ4 resolved plan ${field} must be a string`);
+  }
+  return value;
+}
+
+function resolvedPlanSafeNumber(
+  node: ResolvedPlanNode,
+  field: string,
+): number {
+  const value = node.params[field];
+  if (typeof value !== "bigint") {
+    throw new Error(`univ4 resolved plan ${field} must be an integer`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`univ4 resolved plan ${field} exceeds safe integer range`);
+  }
+  return parsed;
+}
 
 function applyUniV4Victim(
   ctx: LocalVictimApplyContext,

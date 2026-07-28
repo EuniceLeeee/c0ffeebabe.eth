@@ -209,6 +209,12 @@ function fixture(verdict: "win" | "lose" | "needs_escalation", hermesPass = true
   git(repo, ["remote", "add", "origin", remote]);
   fs.mkdirSync(path.join(repo, "analysis"), { recursive: true });
   fs.cpSync(path.join(sourceRoot, "analysis/src"), path.join(repo, "analysis/src"), { recursive: true });
+  fs.mkdirSync(path.join(repo, "listener/src/shared"), { recursive: true });
+  fs.cpSync(
+    path.join(sourceRoot, "listener/src/shared/evidence"),
+    path.join(repo, "listener/src/shared/evidence"),
+    { recursive: true },
+  );
   fs.copyFileSync(path.join(sourceRoot, "analysis/package.json"), path.join(repo, "analysis/package.json"));
   fs.copyFileSync(path.join(sourceRoot, "analysis/tsconfig.json"), path.join(repo, "analysis/tsconfig.json"));
   fs.cpSync(path.join(sourceRoot, "scripts"), path.join(repo, "scripts"), { recursive: true });

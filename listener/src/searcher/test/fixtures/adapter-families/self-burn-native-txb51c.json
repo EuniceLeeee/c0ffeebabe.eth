@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "id": "self-burn-native-txb51c",
   "executionFamilyId": "protocol:self-burn-native",
   "referenceTx": "0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7",
@@ -24,7 +24,16 @@
       },
       "edgeAdapterId": "univ3-swap",
       "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
-      "tokenOut": "0x292a477e521230fe230c13c93374adde8ddec1c1"
+      "tokenOut": "0x292a477e521230fe230c13c93374adde8ddec1c1",
+      "referenceWitness": {
+        "calls": [
+          {
+            "id": "root",
+            "target": "execution-target",
+            "signature": "swap(address,bool,int256,uint160,bytes)"
+          }
+        ]
+      }
     },
     {
       "seq": 2,
@@ -39,7 +48,34 @@
       },
       "edgeAdapterId": "self-burn-native-redeem",
       "tokenIn": "0x292a477e521230fe230c13c93374adde8ddec1c1",
-      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "referenceWitness": {
+        "calls": [
+          {
+            "id": "root",
+            "target": "execution-target",
+            "signature": "transfer(address,uint256)",
+            "args": [
+              {
+                "index": 0,
+                "op": "eq",
+                "ref": "token-in"
+              },
+              {
+                "index": 1,
+                "op": "positive"
+              }
+            ]
+        },
+        {
+          "id": "wrap",
+          "from": "call:root:from",
+          "target": "token-out",
+          "calldata": "empty",
+          "value": "positive"
+        }
+        ]
+      }
     },
     {
       "seq": 3,
@@ -51,11 +87,20 @@
       },
       "edgeAdapterId": "univ3-swap",
       "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7"
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "referenceWitness": {
+        "calls": [
+          {
+            "id": "root",
+            "target": "execution-target",
+            "signature": "swap(address,bool,int256,uint160,bytes)"
+          }
+        ]
+      }
     }
   ],
   "landedReference": {
-    "canonicalNetProfitUsd": 0.12,
+    "classificationNetProfitUsd": 0.12,
     "evidencePath": "docs/research/reports/txb51c-self-burn-native-evidence.md",
     "evidenceSha256": "2415db6f563c274548a70cb805ccc89b11961baf9780f0536c1cc79e04dd7998"
   }

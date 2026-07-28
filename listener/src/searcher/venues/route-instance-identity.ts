@@ -1,4 +1,9 @@
+import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
+import type {
+  PlanExecutionIdentity,
+  PlanExecutionIdentityCapability,
+} from "./route-leg-adapter.js";
 
 export interface RouteInstanceIdentityCapability {
   /**
@@ -148,6 +153,94 @@ export function edgeExecutionVariantKey(edge: TokenEdge): string {
     edge.curveI ?? null,
     edge.curveJ ?? null,
   ]);
+}
+
+const DEFAULT_PLAN_EXECUTION_IDENTITY: PlanExecutionIdentityCapability =
+  Object.freeze({
+    resolve(node: ResolvedPlanNode): PlanExecutionIdentity {
+      return Object.freeze({ routeTarget: node.target });
+    },
+  });
+
+/**
+ * Resolve and validate the final-plan identity once at the trusted registry
+ * boundary. The family callback sees only the resolved subtree; the caller
+ * independently compares this result with the graph edge.
+ */
+export function resolvedPlanExecutionIdentity(
+  family: {
+    readonly id: string;
+    readonly planExecutionIdentity?: PlanExecutionIdentityCapability;
+  },
+  node: ResolvedPlanNode,
+): PlanExecutionIdentity {
+  const capability =
+    family.planExecutionIdentity ?? DEFAULT_PLAN_EXECUTION_IDENTITY;
+  const first = normalizePlanExecutionIdentity(
+    capability.resolve(node),
+    family.id,
+  );
+  const second = normalizePlanExecutionIdentity(
+    capability.resolve(node),
+    family.id,
+  );
+  if (JSON.stringify(first) !== JSON.stringify(second)) {
+    throw new Error(`${family.id} produced an unstable plan execution identity`);
+  }
+  return first;
+}
+
+export function planExecutionIdentityMatchesEdge(
+  identity: PlanExecutionIdentity,
+  edge: TokenEdge,
+): boolean {
+  if (identity.routeTarget !== normalizedAddress(edge.target, "edge target")) {
+    return false;
+  }
+  if (edge.poolId === undefined) return identity.poolId === undefined;
+  return identity.poolId === normalizedBytes32(edge.poolId, "edge poolId");
+}
+
+function normalizePlanExecutionIdentity(
+  value: PlanExecutionIdentity,
+  familyId: string,
+): PlanExecutionIdentity {
+  if (!value || typeof value !== "object") {
+    throw new Error(`${familyId} produced an invalid plan execution identity`);
+  }
+  const routeTarget = normalizedAddress(
+    value.routeTarget,
+    `${familyId} plan route target`,
+  );
+  const poolId = value.poolId === undefined
+    ? undefined
+    : normalizedBytes32(value.poolId, `${familyId} plan poolId`);
+  return Object.freeze({
+    routeTarget,
+    ...(poolId === undefined ? {} : { poolId }),
+  });
+}
+
+function normalizedAddress(value: string, label: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be an address`);
+  }
+  const normalized = value.toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(normalized)) {
+    throw new Error(`${label} must be an address`);
+  }
+  return normalized;
+}
+
+function normalizedBytes32(value: string, label: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be bytes32`);
+  }
+  const normalized = value.toLowerCase();
+  if (!/^0x[0-9a-f]{64}$/.test(normalized)) {
+    throw new Error(`${label} must be bytes32`);
+  }
+  return normalized;
 }
 
 function stableNonemptyKey(value: string, label: string): string {

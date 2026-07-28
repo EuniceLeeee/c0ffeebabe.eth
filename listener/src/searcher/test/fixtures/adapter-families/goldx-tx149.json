@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "id": "goldx-tx149",
   "executionFamilyId": "protocol:goldx",
   "referenceTx": "0x149df3ec17a6044e0c66c25aa55ce044abe33bf14cedea26295e1b6d4c9fde60",
@@ -21,7 +21,14 @@
       },
       "edgeAdapterId": "univ3-swap",
       "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
-      "tokenOut": "0x45804880de22913dafe09f4980848ece6ecbaf78"
+      "tokenOut": "0x45804880de22913dafe09f4980848ece6ecbaf78",
+      "referenceWitness": {
+        "calls": [{
+          "id": "root",
+          "target": "execution-target",
+          "signature": "swap(address,bool,int256,uint160,bytes)"
+        }]
+      }
     },
     {
       "seq": 2,
@@ -35,7 +42,21 @@
       },
       "edgeAdapterId": "goldx-mint",
       "tokenIn": "0x45804880de22913dafe09f4980848ece6ecbaf78",
-      "tokenOut": "0x355c665e101b9da58704a8fddb5feef210ef20c0"
+      "tokenOut": "0x355c665e101b9da58704a8fddb5feef210ef20c0",
+      "referenceWitness": {
+        "calls": [{
+          "id": "root",
+          "target": "execution-target",
+          "signature": "mint(address,uint256)",
+          "args": [{ "index": 1, "op": "positive" }]
+        }],
+        "receiptTransfers": [{
+          "token": "token-in",
+          "from": "call:root:from",
+          "to": "execution-target",
+          "amount": { "op": "eq", "ref": "call:root:arg:1" }
+        }]
+      }
     },
     {
       "seq": 3,
@@ -45,7 +66,14 @@
       },
       "edgeAdapterId": "univ2-swap",
       "tokenIn": "0x355c665e101b9da58704a8fddb5feef210ef20c0",
-      "tokenOut": "0xeb269732ab75a6fd61ea60b06fe994cd32a83549"
+      "tokenOut": "0xeb269732ab75a6fd61ea60b06fe994cd32a83549",
+      "referenceWitness": {
+        "calls": [{
+          "id": "root",
+          "target": "execution-target",
+          "signature": "swap(uint256,uint256,address,bytes)"
+        }]
+      }
     },
     {
       "seq": 4,
@@ -55,11 +83,18 @@
       },
       "edgeAdapterId": "curve-exchange-underlying",
       "tokenIn": "0xeb269732ab75a6fd61ea60b06fe994cd32a83549",
-      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7"
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "referenceWitness": {
+        "calls": [{
+          "id": "root",
+          "target": "execution-target",
+          "signature": "exchange_underlying(int128,int128,uint256,uint256)"
+        }]
+      }
     }
   ],
   "landedReference": {
-    "canonicalNetProfitUsd": 0.22099604616880186,
+    "classificationNetProfitUsd": 0.22099604616880186,
     "evidencePath": "docs/research/reports/ab-20260715-tx149-gap-repair-v2-hermes.md",
     "evidenceSha256": "1ec533468f5a53747074b546afc539ba7a8d282b95f9df08d6e2dd8810302b28"
   }
