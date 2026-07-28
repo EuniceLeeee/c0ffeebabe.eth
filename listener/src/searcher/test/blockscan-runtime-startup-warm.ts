@@ -13,6 +13,7 @@ import type {
 import {
   BlockScanRuntimeLoop,
   dexRuntimeAdmissionCompleteThrough,
+  incompleteBlockScanFamilies,
   type BlockScanRuntimeLoopDependencies,
 } from "../blockscan-runtime-loop.js";
 import {
@@ -77,11 +78,40 @@ await shutdownDrainsActivePassAndDropsPendingHead();
 await nMinusOneTrackerStaysOutsideNormalRuntimePublication();
 await nMinusOneWaitsForItsOnlyAdjacentProducer();
 blindModeDoesNotEnterOrdinaryStartupWarm();
+familyFailureSummaryNamesOnlyNonCompleteFamilies();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (20/20)",
+    "PASS (21/21)",
 );
+
+function familyFailureSummaryNamesOnlyNonCompleteFamilies(): void {
+  assert.deepEqual(
+    incompleteBlockScanFamilies([
+      {
+        familyId: "univ2-standard",
+        lane: "swap",
+        wallMs: 12,
+        uniqueStateKeys: 1,
+        reads: 1,
+        batches: 1,
+        status: "complete",
+        issueCount: 0,
+      },
+      {
+        familyId: "protocol:fixture",
+        lane: "protocol",
+        wallMs: 25,
+        uniqueStateKeys: 1,
+        reads: 1,
+        batches: 1,
+        status: "incomplete",
+        issueCount: 1,
+      },
+    ]).map((family) => family.familyId),
+    ["protocol:fixture"],
+  );
+}
 
 async function distantStartupCatchesUpInSameHead(): Promise<void> {
   const harness = createHarness(

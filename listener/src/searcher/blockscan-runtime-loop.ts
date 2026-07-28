@@ -25,6 +25,7 @@ import {
   type AdapterRuntimeSnapshot,
 } from "./adapter-runtime-coordinator.js";
 import type {
+  BlockScanFamilyTelemetry,
   BlockScanStatePrepareResult,
   BlockScanStateSnapshot,
 } from "./blockscan-state-coordinator.js";
@@ -98,6 +99,14 @@ export function dexRuntimeAdmissionCompleteThrough(
   return blindEnabled
     ? state.dexGraphCoverage.graphCompleteThrough
     : state.dexGraphCoverage.sourceCompleteThrough;
+}
+
+export function incompleteBlockScanFamilies(
+  families: readonly BlockScanFamilyTelemetry[] | undefined,
+): readonly BlockScanFamilyTelemetry[] {
+  return Object.freeze(
+    (families ?? []).filter((family) => family.status !== "complete"),
+  );
 }
 
 export interface BlockScanRejectBlacklistEntry {
@@ -1147,6 +1156,28 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             ),
           })}`,
         );
+        const familyFailures = incompleteBlockScanFamilies(
+          runtime.pricing.familyTelemetry,
+        );
+        if (familyFailures.length > 0) {
+          console.warn(
+            `[searcher/blockscan-family-local-failures] ${JSON.stringify({
+              block: blockNumber,
+              sourceBlock: runtime.pricing.sourceBlock,
+              failed: familyFailures.length,
+              total: runtime.pricing.familyTelemetry?.length ?? 0,
+              families: familyFailures.map((family) => ({
+                familyId: family.familyId,
+                lane: family.lane,
+                status: family.status,
+                wallMs: family.wallMs,
+                issueCount: family.issueCount,
+                fullFallbackReason: family.fullFallbackReason,
+                fullFallbackDetail: family.fullFallbackDetail,
+              })),
+            })}`,
+          );
+        }
         if (runtime.status === "incomplete") {
           outcome = Date.now() >= passDeadlineAtMs
             ? "budget_exceeded"
