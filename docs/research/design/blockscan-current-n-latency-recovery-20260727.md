@@ -573,9 +573,9 @@ Only then may the result be called `fixed`.
 | R1 mutation proof | implemented, live-insufficient | `a156cf5`, `e59cdd5`, `df397c1` | completed exact-range header reuse, independent header/descriptor/final-CAS transports, bounded descriptor concurrency, off-path log/final-CAS rejection, abort and reorg controls pass | Round 3 still produced three hot source-N failures; proof calls reached `header-read:deadline` after discovery/queue time had already depleted the window |
 | R2 recovery bases | implemented; live partial | `8f741b4`, `d685a1e` | degraded-N/healthy-N+1 recovery, sibling isolation, family-local partial publication, generation-abort, schema and reorg controls pass | UniV2 carried 7,327 and 7,324 state keys in the first two non-zero N−1 live publications |
 | R3 discovery policy | not started; precondition unmet | n/a | D0 code exists, but no live evidence that the six declared venues are material | pending D0 live attribution |
-| R4 runtime join | not started; live precondition met | n/a | no code change | adjacent N−1 consumption failed exact funding-context preparation with about `211ms` left, before enumeration |
+| R4 runtime join | implemented for the R6 consumer; live validation pending | `c26bdfb` | zero-candidate exact-context skip, serialized exact-pipeline-then-producer ordering and content-addressed graph/source join pass | prior consumer prepared funding/workers before enumeration; revised consumer enumerates first and joins exact N only for candidates |
 | R5 scanner priority | not started; precondition unmet | n/a | scanner production-boundary control passes unchanged | pending post-R1/R3 live attribution |
-| R6 N−1 coarse fallback | implemented; pricing live-nonzero; consumer incomplete | `1b486aa`, `6297b4b`, `ef4caa0`, `d685a1e`, `9961b18` | stale coarse-envelope rejection, exact-source join, head/hash fence, compact header proof, publication reserve, family-local partial, outer-abort and live-validated default controls pass | `14649/30979` and `14640/30981` published under the fixed `20000ms` outer budget; adjacent enumeration/planner/final sim did not run |
+| R6 N−1 coarse fallback | producer live-nonzero; serialized consumer implemented; live validation pending | `1b486aa`, `6297b4b`, `ef4caa0`, `d685a1e`, `9961b18`, `c26bdfb` | stale coarse-envelope rejection, exact-source join, head/hash fence, compact header proof, publication reserve, family-local partial, zero-candidate skip and exact/producer serialization pass | `14649/30979` and `14640/30981` published under the fixed `20000ms` outer budget; the next sole-main live deployment tests enumeration-first consumption |
 
 ### 7.1 Implementation evidence
 
@@ -697,6 +697,63 @@ Immutable archived evidence:
   `0247a8991f9d43e528525b842e8b02c22542e625f82732c8fca9ac60135eda99`.
 
 Both A and diagnostic B were inactive when the successful family-12 evidence was sealed.
+
+### 7.4 Serialized N−1 consumer scheduling (2026-07-28)
+
+The next live deployment tests the already-authorized degraded N−1 lane without deleting or changing the
+source-N implementation. Activation remains an explicit node marker (`.blockscan-nminus1`); removing it and
+running the guarded deploy restores source-N.
+
+Code review found a second resource conflict in the first R6 consumer:
+
+```text
+receive N
+├─ start pricing-only producer for N (future N+1 predecessor)
+└─ concurrently prepare current-N funding + every execution worker
+   └─ only afterwards enumerate the already-completed N−1 pricing view
+```
+
+Both branches used the same local reth before the scanner had established that the head contained any coarse
+candidate. The revised order is:
+
+```text
+consume completed N−1 pricing → enumerate against the full current graph
+├─ zero candidates → skip funding/workers; start the N producer
+└─ candidates      → settle current-N funding/execution join
+                      → whole-route current-N refine → planner/solver/final sim
+                      → start the N producer after this head exits
+```
+
+The run-head `finally` resumes the producer after success, rejection, deadline or exception, so an
+exact-context failure cannot permanently stop future predecessor production and producer reads cannot overlap
+the candidate-bearing exact pipeline. The exact join additionally compares generation, source block/hash, graph id,
+ordered-edge hash, metadata hash and ownership hash before current-N resources reach refinement. N−1 mids
+remain branded coarse-only and cannot authorize planning or execution.
+
+Observability in the same deployment is bounded and redacted:
+
+- each failed pricing family records issue kind/count plus at most two source/state/edge samples;
+- funding, execution and final-CAS issues are reported separately from pricing-family issues;
+- URLs are removed and raw state-key failure arrays are never printed.
+
+Deterministic controls before deployment:
+
+- zero-candidate N−1 heads perform no exact-context/worker preparation;
+- candidate scheduling is `exact pipeline start → whole head settles → next producer start`, including exceptional settlement;
+- N−1 coarse/current-N exact provenance and production scanner boundaries remain green;
+- listener normal/live TypeScript builds, state coordinator/backend and adapter runtime coordinator remain green.
+
+The final generated tool inventory selected capabilities `blockscan,state,runtime`; actual `tool-run`
+receipts for `listener:searcher:blockscan-runtime-startup-warm` and
+`listener:searcher:blockscan-state-backend` both exited `0`. Manifest:
+`/private/tmp/blockscan-scheduling-tools-final.json`, SHA-256
+`731d7a3f295f3647b80d494fc6431ab94d50d083b131174f7a436eda4408f799`.
+
+The live cohort freezes all existing pass/state/family budgets and the full graph/universe. It enables only
+the marker-controlled N−1 mode on the sole main searcher. Required evidence is nonzero predecessor pricing,
+`coarse-enumerated` before any exact join, no overlapping producer/exact work, and bounded failure causes when
+a stage fails. This slice is `implemented_not_fixed` until a natural scanner candidate reaches current-N
+exact refinement and final simulation; nonzero N−1 pricing or enumeration alone does not satisfy `fixed`.
 
 ## 8. Stop and rollback rules
 
