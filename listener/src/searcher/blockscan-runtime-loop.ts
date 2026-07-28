@@ -243,6 +243,18 @@ export class NMinusOneProducerGate {
   }
 }
 
+export function blockScanCandidateFundingTokens(
+  opportunities: readonly Pick<BlockScanOpportunity, "flashToken">[],
+): readonly string[] {
+  return Object.freeze(
+    [...new Set(
+      opportunities.map((opportunity) =>
+        opportunity.flashToken.toLowerCase()
+      ),
+    )].sort(),
+  );
+}
+
 function boundedLogField(value: string | undefined): string | null {
   return value ? value.replace(/\s+/g, " ").slice(0, 160) : null;
 }
@@ -385,6 +397,13 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
    * budget is reserved for abort drain, partial aggregation and canonical CAS.
    */
   readonly nMinusOneFamilySettleBudgetMs?: number;
+  /**
+   * Maximum age of the already-published discovery graph used by the N-1
+   * consumer. Pricing and exact execution remain source-pinned; this bound
+   * affects recall only and keeps current-head discovery I/O out of the
+   * latency-critical consume path.
+   */
+  readonly nMinusOneMaxGraphLagBlocks?: number;
   /**
    * Ordinary-live per-family pricing cutoff. This is deliberately shorter
    * than the generation deadline so one slow family degrades locally instead
@@ -702,6 +721,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           passWorkerStartedAtMs + Math.max(1, this.deps.startupWarmBudgetMs),
         )
       : hotPassDeadlineAtMs;
+    const useNMinusOneFallback =
+      this.deps.nMinusOneFallbackEnabled === true &&
+      !startupWarmAttempt &&
+      !this.deps.blind.enabled;
+    const nMinusOneMaxGraphLagBlocks = Math.max(
+      1,
+      Math.floor(this.deps.nMinusOneMaxGraphLagBlocks ?? 10),
+    );
     let outcome:
       | "ran"
       | "startup_warm"
@@ -978,7 +1005,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           state,
           this.deps.blind.enabled,
         );
-      const requiredPredecessor = Math.max(0, blockNumber - 1);
+      const requiredPredecessor = Math.max(
+        0,
+        blockNumber -
+          (useNMinusOneFallback ? nMinusOneMaxGraphLagBlocks : 1),
+      );
       if (
         dexAdmissionCompleteThrough(base) < requiredPredecessor
       ) {
@@ -1029,6 +1060,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           dexAdmissionCompleteThrough(base) < requiredPredecessor;
         const canStrictlyCatchCurrentHead =
           !startupWarmAttempt &&
+          !useNMinusOneFallback &&
           consumedPreparedSource !== null &&
           dexAdmissionCompleteThrough(base) >= consumedPreparedSource;
         // A complete prepared generation can only be behind because heads
@@ -1053,58 +1085,76 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         }
       }
 
-      const hotControl: DiscoveryBackfillControl = {
-        signal: this.deps.runtimeAbort.signal,
-        deadlineAtMs: passDeadlineAtMs,
-        run: (work) => work(this.deps.runtimeAbort.signal),
-      };
-      const preparedDiscovery = await discovery.prepare(base, {
-        source: {
-          number: sourceHeader.number,
-          hash: sourceHeader.hash,
-        },
-        through: blockNumber,
-        control: hotControl,
-      });
-      const canonicalAfter = await discovery.observeHeader(blockNumber);
-      const nextDiscovery = await discovery.queue.enqueue(
-        "dex-refresh",
-        async () => {
-          if (canonicalAfter.hash !== sourceHeader.hash) {
-            return null;
-          }
-          const current = discovery.capture();
-          const rebased = discovery.validateHot(
-            current,
-            preparedDiscovery,
-          );
-          if (rebased === null) return null;
-          discovery.publish(rebased);
-          return rebased;
-        },
-      );
-      if (nextDiscovery === null) {
-        outcome = "degraded";
-        skippedReason = "discovery_hot_rebase_conflict";
-        finishStage("state", "failed");
-        void discovery.scheduleBackfill(blockNumber);
-        return;
+      let nextDiscovery: LiveDiscoveryPublicationState;
+      if (useNMinusOneFallback) {
+        /*
+         * The fallback consumes an already-completed predecessor price view.
+         * Running current-head discovery before that consume recreated the
+         * original local-reth conflict and aged exact refinement past its
+         * deadline. Use the bounded, already-published graph here; the
+         * coordinator's periodic backfill lane continues healing topology
+         * without being force-started by every scanner head.
+         */
+        nextDiscovery = base;
+      } else {
+        const hotControl: DiscoveryBackfillControl = {
+          signal: this.deps.runtimeAbort.signal,
+          deadlineAtMs: passDeadlineAtMs,
+          run: (work) => work(this.deps.runtimeAbort.signal),
+        };
+        const preparedDiscovery = await discovery.prepare(base, {
+          source: {
+            number: sourceHeader.number,
+            hash: sourceHeader.hash,
+          },
+          through: blockNumber,
+          control: hotControl,
+        });
+        const canonicalAfter = await discovery.observeHeader(blockNumber);
+        const publishedDiscovery = await discovery.queue.enqueue(
+          "dex-refresh",
+          async () => {
+            if (canonicalAfter.hash !== sourceHeader.hash) {
+              return null;
+            }
+            const current = discovery.capture();
+            const rebased = discovery.validateHot(
+              current,
+              preparedDiscovery,
+            );
+            if (rebased === null) return null;
+            discovery.publish(rebased);
+            return rebased;
+          },
+        );
+        if (publishedDiscovery === null) {
+          outcome = "degraded";
+          skippedReason = "discovery_hot_rebase_conflict";
+          finishStage("state", "failed");
+          void discovery.scheduleBackfill(blockNumber);
+          return;
+        }
+        discovery.finish(preparedDiscovery);
+        nextDiscovery = publishedDiscovery;
       }
-      discovery.finish(preparedDiscovery);
       const nextDescriptor =
         describeLiveDiscoveryPublicationState(nextDiscovery);
       const nextAdmissionThrough = dexAdmissionCompleteThrough(nextDiscovery);
-      if (nextAdmissionThrough < blockNumber) {
+      const requiredAdmissionThrough = useNMinusOneFallback
+        ? requiredPredecessor
+        : blockNumber;
+      if (nextAdmissionThrough < requiredAdmissionThrough) {
         outcome = "degraded";
         skippedReason =
           `discovery_current_incomplete:` +
-          `${nextAdmissionThrough}<${blockNumber}`;
+          `${nextAdmissionThrough}<${requiredAdmissionThrough}`;
         finishStage("state", "failed");
         void discovery.scheduleBackfill(blockNumber);
         return;
       }
       if (
-        nextDiscovery.dexGraphCoverage.graphCompleteThrough < blockNumber
+        nextDiscovery.dexGraphCoverage.graphCompleteThrough <
+          requiredAdmissionThrough
       ) {
         // The source range is canonical and complete, but one or more family
         // projections remain retryable. Keep healing in the background while
@@ -1112,9 +1162,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         void discovery.scheduleBackfill(blockNumber);
       }
       const discoveryPass = {
-        dexComplete: nextAdmissionThrough >= blockNumber,
-        protocolComplete:
-          nextDescriptor.graphCompleteThrough >= blockNumber,
+        dexComplete: nextAdmissionThrough >= requiredAdmissionThrough,
+        protocolComplete: nextDescriptor.graphCompleteThrough >=
+          requiredAdmissionThrough,
         sourceBlockHash: sourceHeader.hash,
         landedCoverage: nextDiscovery.landedCoverage,
       };
@@ -1260,10 +1310,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             new Error("block-scan runtime shutting down");
         }
       };
-      const useNMinusOneFallback =
-        this.deps.nMinusOneFallbackEnabled === true &&
-        !startupWarmAttempt &&
-        !this.deps.blind.enabled;
       let coarse: BlockScanOutcome;
       let fallbackEnvelopes: readonly NMinusOneCoarseCandidate[] | null = null;
       let enumerationFinished = false;
@@ -1494,6 +1540,15 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             recallMode: fallbackCoarse.recallMode,
             fullCoverage: fallbackCoarse.fullCoverage,
             degradedRecallReasons: fallbackCoarse.degradedRecallReasons,
+            graphCompleteThrough: nextAdmissionThrough,
+            graphLagBlocks: Math.max(
+              0,
+              blockNumber - nextAdmissionThrough,
+            ),
+            stateReadyHeadAgeMs: Math.max(
+              0,
+              Date.now() - passStartedAtMs,
+            ),
             exactContextTiming: null,
           })}`,
         );
@@ -1502,6 +1557,29 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         timing.enumerationMs = stageBoundaries.enumeration.stage_ms;
         scannedPairs = coarse.scannedPairs;
         candidates = coarse.opportunities.length;
+        if (
+          candidates > 0 &&
+          Date.now() >=
+            passDeadlineAtMs - Math.max(1, this.deps.solveReserveMs)
+        ) {
+          this.enqueueCoarsePricing({
+            coordinator: adapterRuntimeCoordinator,
+            graph: graphView,
+          });
+          outcome = "budget_exceeded";
+          skippedReason = "nminus1_exact_reserve_exhausted";
+          console.log(
+            `[searcher/blockscan-nminus1] ${JSON.stringify({
+              block: blockNumber,
+              status: "exact-deferred-stale-head",
+              reason: skippedReason,
+              candidates,
+              headAgeMs: Math.max(0, Date.now() - passStartedAtMs),
+              exactReserveMs: Math.max(1, this.deps.solveReserveMs),
+            })}`,
+          );
+          return;
+        }
         const requiresExact = nMinusOneProducerGate.afterEnumeration(
           coarse.opportunities.length,
           () => {
@@ -1520,13 +1598,16 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
          * A candidate-bearing head keeps exclusive priority through final
          * simulation; the outer finally releases the next coarse producer.
          */
+        const exactFundingTokens = blockScanCandidateFundingTokens(
+          coarse.opportunities,
+        );
         beginStage("exact_refine");
         exactRefineStarted = true;
         const exactContext: CurrentNExactExecutionContextResult =
           await adapterRuntimeCoordinator
             .prepareCurrentNExactExecutionContext({
               graph: graphView,
-              fundingTokens: this.deps.flashTokens(),
+              fundingTokens: exactFundingTokens,
               deadlineAtMs: runtimeDeadlineAtMs,
               preparationSettleDeadlineAtMs,
               signal: this.deps.runtimeAbort.signal,
@@ -1546,6 +1627,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               status: "exact-context-incomplete",
               reason: skippedReason,
               timing: exactContext.timing,
+              requestedFundingTokens: exactFundingTokens.length,
               funding: exactContext.fundingCoverage,
               causes: summarizeBlockScanIssueCauses(exactContext.issues),
             })}`,
@@ -1564,6 +1646,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             graphId: exactContext.context.graph.id,
             status: exactContext.status,
             timing: exactContext.timing,
+            requestedFundingTokens: exactFundingTokens.length,
             funding: exactContext.fundingCoverage,
           })}`,
         );

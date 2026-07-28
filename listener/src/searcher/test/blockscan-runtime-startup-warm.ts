@@ -12,6 +12,7 @@ import type {
 } from "../blockscan-state-coordinator.js";
 import {
   assertExactContextMatchesGraph,
+  blockScanCandidateFundingTokens,
   BlockScanRuntimeLoop,
   dexRuntimeAdmissionCompleteThrough,
   incompleteBlockScanFamilies,
@@ -82,14 +83,27 @@ await nMinusOneTrackerStaysOutsideNormalRuntimePublication();
 await nMinusOneWaitsForItsOnlyAdjacentProducer();
 await nMinusOneExactJoinPrecedesNextProducer();
 nMinusOneExactJoinRejectsMixedAnchor();
+nMinusOneFundingIsCandidateLocal();
 blindModeDoesNotEnterOrdinaryStartupWarm();
 familyFailureSummaryNamesOnlyNonCompleteFamilies();
 failureCauseSummaryIsBoundedAndRedacted();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (24/24)",
+    "PASS (25/25)",
 );
+
+function nMinusOneFundingIsCandidateLocal(): void {
+  assert.deepEqual(
+    blockScanCandidateFundingTokens([
+      { flashToken: "0xB" },
+      { flashToken: "0xa" },
+      { flashToken: "0xb" },
+    ]),
+    ["0xa", "0xb"],
+    "exact funding must be deduplicated from enumerated candidate flash tokens",
+  );
+}
 
 function familyFailureSummaryNamesOnlyNonCompleteFamilies(): void {
   assert.deepEqual(
@@ -591,6 +605,8 @@ async function nMinusOneTrackerStaysOutsideNormalRuntimePublication(): Promise<v
   });
   await harness.run(700);
   assert.equal(harness.publishedPricing, 1);
+  const startupDiscoveryPrepareCount =
+    harness.discoveryPrepareBases.length;
   await harness.run(701);
   await waitFor(() => harness.coarsePricingBlocks.includes(701));
   await harness.run(702);
@@ -604,6 +620,11 @@ async function nMinusOneTrackerStaysOutsideNormalRuntimePublication(): Promise<v
     harness.exactContextBlocks,
     [],
     "zero-candidate heads must not acquire unused funding/execution state",
+  );
+  assert.equal(
+    harness.discoveryPrepareBases.length,
+    startupDiscoveryPrepareCount,
+    "N-1 consumers must not run synchronous current-head discovery",
   );
   assert.ok(
     harness.coarsePricingDeadlineRemainingMs.every(

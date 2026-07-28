@@ -18,6 +18,9 @@ import {
   awaitBlockScanDeadline,
   BlockScanPassDeadlineError,
 } from "./blockscan-pass-deadline.js";
+import {
+  resolveBlockScanPricingSourceMode,
+} from "./blockscan-pricing-source-mode.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import {
@@ -790,8 +793,12 @@ async function main(): Promise<void> {
   const maxPoolsPerToken = Number(process.env.SEARCHER_MAX_POOLS_PER_TOKEN ?? "8");
   const maxRotationsPerPath = Number(process.env.SEARCHER_MAX_ROTATIONS_PER_PATH ?? "3");
   const enableBlockScan = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1";
+  const blockScanPricingSource = resolveBlockScanPricingSourceMode(
+    process.argv.slice(2),
+    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK,
+  );
   const blockScanNMinusOneFallback =
-    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK === "1";
+    blockScanPricingSource.mode === "n-1";
   if (blindProductionAudit && !enableBlockScan) {
     throw new Error("blind production audit requires SEARCHER_ENABLE_BLOCK_SCAN=1");
   }
@@ -844,6 +851,14 @@ async function main(): Promise<void> {
       blockScanNMinusOneFamilySettleRaw > 0
       ? Math.floor(blockScanNMinusOneFamilySettleRaw)
       : 12_000;
+  const blockScanNMinusOneMaxGraphLagRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_MAX_GRAPH_LAG_BLOCKS ?? "10",
+  );
+  const blockScanNMinusOneMaxGraphLagBlocks =
+    Number.isFinite(blockScanNMinusOneMaxGraphLagRaw) &&
+      blockScanNMinusOneMaxGraphLagRaw > 0
+      ? Math.floor(blockScanNMinusOneMaxGraphLagRaw)
+      : 10;
   const blockScanLargeGraphPassBudgetRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS ?? "30000",
   );
@@ -1091,9 +1106,12 @@ async function main(): Promise<void> {
       `largeGraphBudgetMs=${blockScanLargeGraphPassBudgetMs} ` +
       `largeGraphEdges=${blockScanLargeGraphEdgeThreshold} ` +
       `solveReserveMs=${blockScanSolveReserveMs} ` +
+      `pricingSource=${blockScanPricingSource.mode} ` +
+      `pricingSourceSelection=${blockScanPricingSource.source} ` +
       `nMinusOneFallback=${blockScanNMinusOneFallback ? "on" : "off"} ` +
       `nMinusOneStateBudgetMs=${blockScanNMinusOneStateBudgetMs} ` +
       `nMinusOneFamilySettleMs=${blockScanNMinusOneFamilySettleMs} ` +
+      `nMinusOneMaxGraphLagBlocks=${blockScanNMinusOneMaxGraphLagBlocks} ` +
       `(SEARCHER_BLOCKSCAN_SUBMIT=${process.env.SEARCHER_BLOCKSCAN_SUBMIT ?? "0"})`,
   );
   console.log(`[searcher/live] hashOnly=${config.enableHashOnly ? "enabled" : "disabled"}`);
@@ -2194,6 +2212,7 @@ async function main(): Promise<void> {
     nMinusOneFallbackEnabled: blockScanNMinusOneFallback,
     nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
     nMinusOneFamilySettleBudgetMs: blockScanNMinusOneFamilySettleMs,
+    nMinusOneMaxGraphLagBlocks: blockScanNMinusOneMaxGraphLagBlocks,
     hotPricingFamilyBudgetMs: blockScanHotPricingFamilyBudgetMs,
     runtimePublicationReserveMs: blockScanRuntimePublicationReserveMs,
     refineCandidates: blockScanRefineCandidates,
@@ -2316,6 +2335,7 @@ async function main(): Promise<void> {
       solveReserveMs: blockScanSolveReserveMs,
       nMinusOneFallback: blockScanNMinusOneFallback,
       nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
+      nMinusOneMaxGraphLagBlocks: blockScanNMinusOneMaxGraphLagBlocks,
     },
   }) as Readonly<Record<string, unknown>>;
   const blindStaticArtifacts = blindProductionAudit

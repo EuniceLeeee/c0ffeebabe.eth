@@ -139,11 +139,21 @@ const mainSource = readFileSync(
   new URL("../main.ts", import.meta.url),
   "utf8",
 );
+const pricingSourceModeSource = readFileSync(
+  new URL("../blockscan-pricing-source-mode.ts", import.meta.url),
+  "utf8",
+);
 assert(
   mainSource.includes(
-    'process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK === "1"',
-  ),
-  "N-1 degraded fallback must remain explicit opt-in",
+    "resolveBlockScanPricingSourceMode(",
+  ) &&
+    mainSource.includes(
+      'blockScanPricingSource.mode === "n-1"',
+    ) &&
+    pricingSourceModeSource.includes(
+      'environmentFallback === "1" ? "n-1" : "n"',
+    ),
+  "N-1 degraded fallback must remain an explicit CLI/environment selection",
 );
 assert(
   mainSource.includes(
@@ -156,6 +166,12 @@ assert(
     'process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FAMILY_SETTLE_MS ?? "12000"',
   ),
   "N-1 family settlement must retain the live-validated 12s allocation",
+);
+assert(
+  mainSource.includes(
+    'process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_MAX_GRAPH_LAG_BLOCKS ?? "10"',
+  ),
+  "N-1 graph reuse must retain its declared 10-block ceiling",
 );
 console.log("[runtime-defaults] N-1 fallback remains explicit opt-in: PASS");
 assert(
