@@ -219,6 +219,19 @@ try {
     },
     sourceComplete: true as const,
     evaluationComplete: true as const,
+    familySourceCoverage: [
+      "protocol:eigenpie",
+      "fluid-dex",
+      "credit:fluid",
+      "protocol:erc4626",
+      "protocol:erc4626-silo-redeem",
+      "protocol:rocksolid",
+    ].map((familyId) => ({
+      familyId,
+      sourceId: "fixture-source",
+      complete: true,
+      issues: [],
+    })),
     discoveredPoolKeys: [
       discoveredKey,
       dynamicSwapKey,
@@ -254,11 +267,41 @@ try {
   assert.equal(poolProjectionRowKey(loaded[4]), siloVaultKey);
   assert.equal(loaded[4].adapter, "erc4626-silo-redeem");
 
-  const oldSchemaPath = resolve(root, "artifact-v2.json");
+  const isolatedIncompletePath = resolve(
+    root,
+    "artifact-isolated-incomplete.json",
+  );
+  const isolatedIncompleteSha = writeProductionReplayDiscoveryArtifact(
+    isolatedIncompletePath,
+    {
+      ...artifact,
+      sourceComplete: false,
+      evaluationComplete: false,
+      familySourceCoverage: artifact.familySourceCoverage.map((item) =>
+        item.familyId === "protocol:rocksolid"
+          ? {
+              ...item,
+              complete: false,
+              issues: ["fixture timeout"],
+            }
+          : item
+      ),
+    },
+  );
+  assert.equal(
+    loadProductionReplayDiscoveredPools(
+      isolatedIncompletePath,
+      isolatedIncompleteSha,
+    ).length,
+    loaded.length,
+    "transporting an unrelated incomplete shard must not invent a global-complete requirement",
+  );
+
+  const oldSchemaPath = resolve(root, "artifact-v3.json");
   const oldSchemaBytes = `${JSON.stringify({
     ...artifact,
-    schemaVersion: 2,
-    producer: "shared-protocol-discovery-v2",
+    schemaVersion: 3,
+    producer: "shared-protocol-discovery-v3",
   })}\n`;
   writeFileSync(oldSchemaPath, oldSchemaBytes, { mode: 0o600 });
   assert.throws(
@@ -267,7 +310,7 @@ try {
       createHash("sha256").update(oldSchemaBytes).digest("hex"),
     ),
     /incomplete or unsupported/,
-    "schema-v2 artifacts must fail closed after projection-key migration",
+    "schema-v3 artifacts must fail closed after shard-coverage migration",
   );
 
   assert.throws(

@@ -9,8 +9,8 @@
 
 ## Rule 12 — repair-replay double-gate (anti-instrument-drift)
 
-Every transaction-bound deterministic turn that claims to improve a specific route ships a pinned replay
-fixture that flips, run BEFORE the next dry-run:
+Every transaction-bound deterministic turn that claims to improve a specific route ships a pinned sample and
+runs the target-blind lightweight checkpoint before merge:
 - **single-route correctness / coverage / path** → a deterministic replay asserts the behavior flip
   (`no_candidate → plans>0` / pool now routes / `sim.success`). No flip = not fixed, or the change was
   instrument-only.
@@ -18,11 +18,13 @@ fixture that flips, run BEFORE the next dry-run:
   (harness-bound), valid ONLY if the harness faithfully reproduces the latency source (cold state / real
   backend).
 
-A systemic protocol scanner, graph/universe, distribution, or performance change is not proven by one
+A checkpoint flip proves enough to merge and start bounded-live main; the deterministic claim becomes
+`fixed` only after the post-merge/deployed-main full validation below. A systemic protocol scanner,
+graph/universe, distribution, or performance change is not proven by one
 transaction. It predeclares a representative positive/negative cohort plus coverage/output equivalence,
 same-block fairness, CPU/pass-latency, budget-censoring, candidate-composition, and final-sim false-positive
-criteria as applicable. Its decisive check is that cohort contract plus Hermes A/B; the optional six-step
-route diagnostic is not a deployment, decision, close, or merge switch.
+criteria as applicable. Its decisive check is that cohort contract plus Hermes A/B; a single-route six-step
+diagnostic is not a deployment, decision, close, or merge switch for that systemic claim.
 
 ### Three validation tracks
 
@@ -30,15 +32,19 @@ Every claim selects exactly one track before evidence is produced:
 
 | Track | Claim it may close | Decisive evidence |
 |---|---|---|
-| `family_execution` | Every registry-derived quote-bearing `RouteLeg` family affected by the diff can build its family-owned edges, quote, plan/size, encode and execute a trace-proven route safely. Funding-only families are not subjects of this track. | Exact changed-owner-family ↔ fixture-subject coverage, trusted route-pinned Family/Adapter Replay, family conformance/isolation, fork final sim, repayment/conservation and production EV. Production discovery and route enumeration are `bypassed`; the verdict is `adapter_fixed`, never `production_fixed`. |
-| `production_route_stage` | The production funnel can self-discover and advance a particular historical route. | Trusted Production Replay with no route or amount supplied to discovery, enumeration, pruning, ranking, solve selection or sizing. The expected route is an output-only oracle applied after production output is frozen. |
+| `family_execution` | Supporting precheck: every registry-derived quote-bearing `RouteLeg` family affected by the diff can build its family-owned edges, quote, plan/size, encode and execute a trace-proven route safely. Funding-only families are not subjects of this track. | Exact changed-owner-family ↔ fixture-subject coverage, trusted route-pinned Family/Adapter Replay, family conformance/isolation, fork final sim, repayment/conservation and production EV. Production discovery and route enumeration are `bypassed`; the result is `adapter_replay_pass`, not a merge/cleanup verdict. |
+| `production_route_stage` | The production funnel can self-discover and advance a particular historical route. | Target-blind Production Replay with no route or amount supplied to discovery, enumeration, pruning, ranking, solve selection or sizing: checkpoint before merge, then full validation against the exact deployed merge. The expected route is an output-only oracle applied after production output is frozen. |
 | `systemic_live` | Intake, universe/admission, scanner/ranking, candidate distribution, shared hot-path latency, concurrency, deadlines or resource behavior improved without unacceptable regressions. | Predeclared positive/negative cohort, same-input coverage/output/resource evidence and Hermes paired A/B. A single-route six-step record is diagnostic only. |
 
 `family_execution` never proves that a newly observed instance enters production: its route pin means steps
 1–2 are absent by definition. An unchanged identity/probe path may be checked as supporting evidence, but the
-verdict remains execution-only. Adding or changing a discovery source, production registry activation,
-universe-wide admission, or any behavior capable of changing cross-opportunity cardinality is `systemic_live`,
-even if one historical instance passes.
+verdict remains execution-only. It cannot by itself authorize merge, bounded-live deployment, a `fixed`
+claim or branch deletion. A normal adapter-family change uses it as a fast precheck, then uses
+`production_route_stage` for both lifecycle validations below. Family-owned discovery/probe and thin
+registration are part of a family-local deterministic change when they affect only that family's
+instances/edges and leave shared discovery/admission/ranking/resource behavior unchanged. A shared discovery
+source, universe-wide admission/cap/ranking rule, central capability, or cross-family cardinality/resource
+change is `systemic_live`; one historical route cannot prove that distribution/resource claim.
 
 Manual review chooses the track and may classify a failed check as outside the declared claim. It cannot turn a
 machine `fail` into `pass`. A claim may proceed past an out-of-scope failure only when another trusted machine
@@ -74,6 +80,164 @@ Baseline/fix stage advance and equivalence are comparisons over these six record
 `family_execution` must truthfully mark steps 1–2 `bypassed`; route pinning must never be relabelled as production
 discovery or enumeration. `production_route_stage` must produce the applicable stages without an expected route
 or amount entering the production run.
+
+### Canonical state anchor
+
+Every `production_route_stage` receipt binds one lane-aware `StateAnchor`; a block number alone is not an
+anchor. The required fields are:
+
+```text
+lane
+opportunity_block
+base_block
+base_block_hash
+base_state_root
+applied_prefix_tx_hashes
+trigger_tx_hash
+target_tx_index
+effective_state_hash
+```
+
+The trusted producer/comparator recomputes these values from canonical headers, receipts and the applied
+transaction prefix. All six semantic-v4 records bind the same `StateAnchor` hash. The permitted shapes are:
+
+- `block_scan_standing`: opportunity in block `N`, base is canonical `N-1`, with no applied transaction or
+  trigger;
+- `backrun`: opportunity in block `N`, base is canonical `N-1`, then either the declared trigger-only prefix
+  or the complete real prefix before the target is applied in order. The effective state is therefore an
+  intermediate state inside `N`, not the untouched parent and not post-entire-`N`;
+- `post_block_scan`: a pass built after canonical block `N` for opportunities targeting `N+1` uses `N` as
+  its base, with no synthetic prefix.
+
+Wrong-chain same-height state, a reordered/incomplete prefix, a post-winner state, or an anchor that cannot be
+recomputed is `infrastructure_missing` or a semantic failure; prose cannot waive it.
+
+### Two-tier six-step lifecycle for deterministic route work
+
+Ordinary adapter-family, quote, plan, encoding and other deterministic route changes use the same six-stage
+schema twice. The two runs differ only in lifecycle timing and input strictness; they do not have different
+definitions of a stage.
+
+#### Lightweight checkpoint — before merge
+
+The trusted baseline freezes the production-equivalent input snapshot once. Creating that snapshot attests
+the active main commit/config/universe and canonical sample state; checkpoint reruns consume the immutable
+snapshot and do not require the live process to remain online. Content-addressed DEX and unrelated-family
+shards may be reused when their source-closure/config/provenance hashes are unchanged; only the impacted
+family shard is recomputed. The assembled materialized graph and completeness vector are always rehashed
+before natural enumeration.
+
+The development branch then binds:
+
+- candidate SHA and rollback/base SHA;
+- the lane-correct `StateAnchor`;
+- complete content-addressed input universe, normalized production config, materialized graph,
+  per-shard completeness vector, active-family manifest and their hashes;
+- the registry-derived relevant-family completeness proofs; and
+- the trusted producer/comparator SHA and output.
+
+Production graph construction and enumeration run naturally. The controller receives the sample transaction
+only to derive its canonical parent state and, after selection, the comparison oracle. The isolated
+enumeration subprocess receives only that state, normalized config and content-addressed universe; every
+`AB_EXPECTED_*`/`HUNT_*` target oracle is stripped and audited. It writes, fsyncs and hashes its complete graph,
+natural route set and stage output before the comparator checks whether the sample route is present. No
+expected route/pools/tokens/amount/calldata or derived selection hint enters enumeration. The controller may
+have a larger *outer process timeout* so a development checkpoint does not die while waiting for
+infrastructure; production thresholds,
+ranking, candidate/top-K/refinement/solve caps, EV policy and ordering remain unchanged. Target append,
+force-probe, target-specific warm, reduced graph and fixture-only instance injection invalidate the receipt.
+
+Completeness is lane-scoped: the DEX shard and every family shard used by the route must be complete. A
+DEX-only route needs the complete DEX discovery/identity/graph proof; a DEX-protocol route additionally needs
+the actual protocol family's discovery/probe proof. An unrelated incomplete family is recorded as a typed,
+isolated shard in the completeness vector; the graph hash still binds the entire graph that was actually
+materialized, but the receipt does not falsely call every family globally complete. Conversely, missing
+proof for a family on the naturally produced route is a real step-1 failure.
+
+The gate accepts a request, not a caller-authored pass envelope. It resolves the branch tip, recomputes
+universe/config/graph/manifest/producer hashes, derives family ownership from the registry and Git diff, runs
+the fixed producer, and computes `status` itself. The controller runs from a clean trusted `origin/main`
+checkout and creates a disposable detached worktree at the exact candidate SHA; a feature
+candidate that changes the controller, lifecycle validator, semantic evidence schema, family manifest
+producer or production replay is tooling/framework work and cannot self-certify through this gate. All six
+`production_route_stage` semantic-v4 records bind one
+`run_id`, `StateAnchor` and target route; route membership, exact quote, resolved plan, final sim and EV form
+one checked hash chain. A route-pinned
+Adapter Replay may support steps 3–6 but cannot replace steps 1–2. A successful run emits
+`checkpoint_pass`, which authorizes merge to `main` and bounded-live deployment under the existing wallet,
+signing, EV, position and broadcast envelope. It does not emit `fixed` or authorize branch deletion.
+
+#### Full final validation — after merge and deployed-main start
+
+After merge and guarded deployment, rerun the same six steps against:
+
+- the exact candidate merge SHA that is actually running;
+- the deployed process's normalized effective config and content-addressed full universe/manifest;
+- exact production caps, thresholds, ordering and policy; and
+- every mechanically impacted family. A family-local change additionally proves the central behavior
+  contract is byte-identical and all unchanged-family source closures are unchanged.
+
+The final controller loads and authenticates the retained checkpoint, reads the committed review artifact,
+and independently attests the active process's runtime commit, exact caps, universe/manifest hashes and
+sample state through the trusted node boundary before and after the run. Caller-provided runtime env or RPC
+URLs are not evidence. `origin/main` may be a report-only descendant that adds the independent review; the
+controller must prove no runtime/dependency/config source changed after the deployed merge. The receipt binds `branch_tip`,
+`candidate_commit`, `merge_commit`, `deployed_commit`, `rollback_commit`, the
+retained pre-merge checkpoint receipt, exact deployment/config/graph receipts, all six stage hashes and a
+fresh non-author review.
+The exact candidate patch, deployed merge, review-only descendant and ancestry remain bound. The branch
+remains present locally and remotely until this run emits `final_validated`.
+
+The final validator may, when resource isolation is required, capture the running A SHA/config/posture,
+guardedly pause that single searcher, keep B off, use the local reth/CPU/Anvil exclusively, and restore the
+same A SHA/posture afterwards. This is an execution option for final validation, not permission to stop a
+searcher during planning or documentation work.
+
+Both checkpoint and final may increase only the outer wrapper wall-clock timeout. That ceiling does not
+change any production deadline, graph/candidate/refinement/solve cap, rank, ordering, threshold, EV policy or
+safety predicate.
+
+Outcomes are deliberately asymmetric:
+
+- `final_validated`: remove the clean candidate worktree, then the cleanup finalizer exact-deletes the
+  retained local/remote branch refs;
+- semantic failure: stop or keep the live process only as allowed by the hard safety envelope, perform the
+  guarded rollback/revert to the frozen rollback SHA, verify the restored running SHA, and retain the branch
+  with the failed stage;
+- infrastructure failure: do not relabel it as semantic failure or pass. A safe bounded-live process may
+  continue, but the branch stays `pending_final_validation` until the same full validation is rerun.
+
+The currently implemented trusted controller accepts `block_scan_standing` only. A `backrun` request fails
+closed until a producer can apply and bind the complete ordered prefix; sender-only or trigger-only
+reconstruction is not silently promoted to canonical backrun evidence.
+
+The legacy historical/Hermes harnesses remain useful diagnostic producers. Their nonzero exit does not force
+feature-code changes or rollback when the canonical full receipt covers every property of the declared
+deterministic claim and the legacy failure is independently shown to be unrelated or a same-fingerprint
+harness defect. Wallet/signing, anchor, repayment, conservation, standing-position, exact-SHA and other hard
+safety failures are never downgraded. Missing canonical evidence still blocks `final_validated` and cleanup.
+
+#### Family-local boundary
+
+A normal new family is a plugin-sized change: its family implementation, family-owned
+identity/discovery/probe, optional low-level `ActionAdapter`, registry declaration and fixtures/tests. It must
+not change `main`, shared graph/quoter/planner/solver/coordinator behavior, another family, or the central
+capability contract. Registration data is not central behavior.
+
+`family_local` is an evidence claim, not a filename guess: it additionally needs independently frozen
+baseline and challenger source-closure sets proving every other family unchanged. When that proof is not
+available, the trusted controller conservatively emits `framework`; it never compares the challenger graph
+to itself or accepts caller-supplied isolation hashes merely to obtain the lighter label.
+
+The minimum existing capability surface remains compositional: identity/discovery is optional;
+`buildEdges` is required; `quoteExact` is required for quote-bearing legs; `buildPlanFragment` is required
+for executable legs; `blockScanState` and `victimObservation` are optional capabilities. If a family needs a
+new central capability, it is not eligible for this controller today: split it into an explicit framework
+change and route it to Hermes A/B with a predeclared cross-family cohort instead of hiding it in a
+family-local patch. A future deterministic framework-cohort runner may narrow that requirement, but prose
+alone cannot. A future stricter TypeScript interface may improve ergonomics,
+but it is not a prerequisite for this lifecycle; the mechanical invariant is an empty central-behavior diff,
+not an arbitrary file-count limit.
 
 Evidence may include a namespaced `extensions` object for wall time, counters, ranks, debug text, source
 locations or producer-specific telemetry. Extensions are retained for diagnosis but excluded from semantic
@@ -111,17 +275,27 @@ failure to a family nor establish a baseline-to-challenger flip.
 ### `fixed` vs `implemented` (the definition of "fixed")
 For a transaction-bound deterministic searcher change (path / pool / decoder / template / planner / adapter / graph):
 - `implemented` = code written + build/tests pass.
-- **`fixed` = the SAME failing sample, replayed locally, shows the expected bucket transition.**
-  **"Build passes" is NEVER enough.**
+- `checkpoint_pass` = the same failing sample advances through the target-blind six-stage checkpoint; merge
+  and bounded-live main are allowed, but the branch remains.
+- **`fixed` / `final_validated` = the same sample passes again against the exact deployed merge SHA,
+  normalized production config and attested full production universe/manifest, with the independent review
+  bound by a report-only `origin/main` descendant that does not require redeployment.**
+  **Build or one local replay is never enough.**
 
-Final Approval MUST record, or the verdict is `implemented_not_validated` (not `fixed`):
+Final Approval MUST record both receipts, or the verdict remains `pending_final_validation` or
+`implemented_not_validated` (not `fixed`):
 ```
-failing_sample: / baseline_failure: / fix_commit: / replay_command: / replay_result: /
-expected_transition: / verdict: fixed | implemented_not_validated | deferred
+failing_sample: / baseline_failure: / candidate_commit: / checkpoint_receipt: /
+merge_commit: / deployed_commit: / final_receipt: / expected_transition: /
+verdict: final_validated | pending_final_validation | implemented_not_validated | deferred
 ```
 Systemic changes instead record the predeclared cohort identity, positive/negative controls, before/after
 coverage/output/resource results, same-block fairness evidence, and reviewer verdict; they do not fabricate
 the fields above for an unrelated transaction.
+The branch-deletion hook defaults to blocking raw `codex/*` cleanup. For an explicitly human-authorized
+non-route branch (for example already accepted observability-only tooling), the operator may set
+`MEV_NON_ROUTE_CODEX_CLEANUP=1`; this bypasses only the local accident guard and cannot manufacture
+`checkpoint_pass`, `final_validated`, or authorization for a deterministic route branch.
 Example `expected_transition`s: graph_gap → `pool_in_routing_graph false→true`; no_candidate_plans →
 `candidate_plans>0` (ideally `solverEntered>0`); v4 decode → poolId→token pair emitted; pricing → old
 wrong number gone + auditable artifact.
@@ -152,10 +326,11 @@ rate before vs after. A turn with no flippable / speed-up fixture is `turn_class
 and does NOT count as improving extraction. **Replay gates the FIX; live dry-run still gates
 competitiveness** — never conflate ([[feedback-validate-live-not-backtest]]).
 
-## The harnesses (use the EXISTING ones — don't build new)
+## Evidence producers and supporting harnesses
 
 | gate | command | what it asserts |
 |---|---|---|
+| deterministic route lifecycle | `npm run six-step-validation-gate -- --request <request.json> --out <generated-receipt.json> --phase checkpoint|final` (from `analysis/`) | trusted controller runs the fixed target-blind producer, recomputes frozen inputs, emits one causally chained semantic-v4 six-stage receipt and binds the exact branch/SHA lifecycle; caller-authored pass envelopes are rejected and `--finalize-cleanup` is final-only. |
 | correctness / coverage / path | `npm run searcher:planner` | plan count + `no_candidate` classification (pure, deterministic, no anvil). Pin real cases as named `REPLAY_FIXTURES`. |
 | latency / full pipeline | `npm run searcher:replay-live-fixtures` | per-stage `stageMs` p50/p95 (incl. preSolver) + revm profit equivalence (1 wei). Record live first with `SEARCHER_RECORD_LIVE_FIXTURES=1`. |
 | quote / math equivalence | `npm run searcher:finaloverlayequiv` / `:curvemath` / `:balanceslots` | local-quote vs on-chain quoter bit-exactness. |
@@ -215,7 +390,7 @@ The agent's causal judgment owns `win|lose|needs_escalation`. A raw metric can c
 fix (for example, filtering a high-scoring honeypot); in that case a fresh reviewer may confirm the win.
 Hard safety/correctness/fairness failures can only veto or escalate. They cannot create a win.
 
-### Optional production six-step acceptance (schema v3, independent of deployment)
+### Legacy optional A/B six-step diagnostic (schema v3)
 
 `deploy-ab-challenger.sh deploy` does **not** invoke or wait for historical replay. It runs only the fast
 `--phase binding` check (report/experiment/branch/base/challenger/input/config/lane identity) plus the hard
@@ -224,8 +399,9 @@ equivalence claim, pause B after the paired live window and optionally run
 `deploy-ab-challenger.sh acceptance <id>`. This invokes the legacy-named `ab-canary-gate --phase acceptance`
 checker from trusted tooling against the frozen A/B commits and immutable universes. The status
 `not_run|running|pass|fail|not_applicable` is diagnostic evidence for that claim only; it is never a deploy, decision, close, or
-promotion switch. Scanner, universe, distribution, and performance changes use their own predeclared A/B
-criteria.
+promotion switch **inside the legacy A/B lifecycle**. It is not the canonical checkpoint/final validator
+defined above and cannot issue `checkpoint_pass` or `final_validated`. Scanner, universe, distribution, and
+performance changes use their own predeclared A/B criteria.
 The check may use the latest report/JSON-only descendant of the frozen B SHA and the then-current trusted
 `origin/main` checker (which must descend from A and retain dependency compatibility). Therefore correcting
 an acceptance report or external checker never requires a new B deployment or another warmup. A
@@ -288,7 +464,7 @@ disables only the `challenger_stage > baseline_stage` assertion in that check. I
 `acceptance <id>` runs and cannot block deployment. Wallet, port, runtime, lane and posture protections are
 independent hard boundaries.
 
-The optional six-step checker is diagnostic and cannot block starting a bounded-live B or an unrelated
+This legacy checker is diagnostic and cannot block starting a bounded-live B or an unrelated
 `systemic_live` cohort/A-B decision. A nonzero result remains recorded with its exact failed stage and logs;
 manual review may classify it as outside the declared track or as a suspected gate/harness defect and continue
 the dry-run/diagnosis. It may not rewrite the result or satisfy a required stage. If the failed predicate belongs
@@ -297,7 +473,7 @@ trusted machine producer for the same predicate, then rerun before promotion or 
 Wallet/signing/broadcast posture, target SHA, port/process stability, shared-input fairness and the other hard
 safety boundaries remain non-overridable.
 
-Only this explicit `require_stage_advance=false` equivalence replay receives the closed-loop search budget:
+Only this legacy `require_stage_advance=false` equivalence replay receives the closed-loop search budget:
 the already-frozen A/B universe is reused, at most 20,000 pools are loaded, 512 coarse candidates may be
 exact-refined, the final admitted set may extend through rank 300, and scan/pass budgets are 600/1,200 seconds.
 The expected route may be compared only after each side's production enumeration and solve output is frozen. It
@@ -488,27 +664,23 @@ the optional six-step checker.
 
 ## Historical transaction repair gate
 
-`docs/research/HISTORICAL-GAP.md` is the non-live entry to this same validation contract. Its mechanical
-`historical-gap-gate` enforces three mutually exclusive tracks:
+`docs/research/HISTORICAL-GAP.md` is the non-live entry to this same validation contract. New deterministic
+family/route work uses `six-step-validation-gate`:
 
 - analysis tools/classifiers/gates: build, regression tests and fresh review, then direct-to-main without B;
-- `family_execution` behavior uses trusted route-pinned Family/Adapter Replay, family conformance/isolation,
-  canonical steps 3–6, repayment/conservation and production EV; canonical production steps 1–2 remain
-  explicitly bypassed. It neither runs nor requires a production-universe replay or process-liveness smoke.
-  A separate non-injected identity/probe assertion is supporting evidence only; it does not upgrade the
-  execution verdict into production instance intake, route discovery or enumeration. The signed promotion
-  receipt binds the fixed trusted conformance-script inventory,
-  each script's frozen source SHA-256 and successful output SHA-256, both registry-derived ownership-manifest
-  hashes (including the exact retained bytes of central registry/catalog skeletons after only trusted
-  registration ranges are removed) and the exact affected/fixture subject family set. Every changed family-owned implementation must be
-  covered; shared files require every owner, while central registry/catalog logic, reordering, orphan files and
-  funding-only subjects fail closed;
-- `production_route_stage` behavior uses the canonical six-step check with an unchanged trusted Production
-  Replay, no expected route/amount fed into the production producer, and >=10 minute process-liveness smoke;
+- `family_execution` uses route-pinned Family/Adapter Replay and conformance/isolation as a supporting
+  steps-3–6 precheck. It cannot promote or clean up a branch;
+- `production_route_stage` uses all six stages twice: `checkpoint_pass` before merge and
+  `final_validated` against the exact deployed merge SHA before cleanup. A report-only review descendant
+  does not require redeploying identical runtime code. No expected route/amount enters the
+  producer;
 - systemic scanner/graph/universe work uses its predeclared cohort/coverage/equivalence contract and proceeds
-  to the paired Hermes A/B window instead of the historical smoke/replay path;
-- flow admission, latency and candidate ranking: historical evidence may classify the gap, but promotion is
+  to the paired Hermes A/B window instead of this deterministic lifecycle;
+- flow admission, latency and candidate ranking: historical evidence may classify the gap, but merge authority is
   rejected and the branch routes to Hermes A/B.
+
+`historical-gap-gate` remains a legacy report reader and supporting replay/conformance runner. It is not the
+new deterministic family promotion/cleanup authority.
 
 The direct-main gate surface includes only `analysis/src` implementation files, same-named analysis tests,
 script-only changes to `analysis/package.json`, archived report artifacts, and the exact trusted
@@ -537,12 +709,11 @@ prior unmerged fix is inspected rather than duplicated. Every entry requires an 
 explicit resolved disposition; remote-only objects are fetched temporarily for same-gap inspection. A
 reportless ref/worktree that overlaps a candidate runtime path cannot be dismissed as unrelated; it must be
 reused, superseded or left blocking. A
-challenger may contain only deploy-wrapper-approved `.ts` runtime files: no tests,
-fixtures, dependency files, scripts, reports or validation runners. Adapter and shared runtime paths count as
-production. Only explicitly enumerated deterministic runtime owners may promote historically. Mixed
-orchestration owners are routed to Hermes regardless of identifier names; diff signals add a second veto for
-intake, ranking, caps, thresholds, budgets, deadlines, concurrency and latency inside otherwise deterministic
-files.
+family-local candidate may contain its implementation, family-owned identity/discovery/probe, optional
+low-level action encoder, thin registration and fixtures/tests. It may not change trusted validation
+producers/runners or shared central behavior. Framework changes declare that scope explicitly; mixed
+orchestration owners affecting intake, ranking, caps, thresholds, budgets, deadlines, concurrency or latency
+route to Hermes regardless of identifier names.
 The non-author review separately attests that an allowlisted diff contains no cross-opportunity intake,
 ordering, cardinality, timing or resource-budget change. The report binds that review to the exact base,
 challenger and Git-patch SHA-256 and the gate requires the separate committed review artifact. Historical
@@ -557,20 +728,15 @@ The short smoke uses
 a disposable signer and never receives a production private key. It proves full-duration process liveness,
 not lane activity from challenger-authored stdout; unchanged replay gates provide the lane capability proof.
 A historical causal backrun fixture does not prove public/private network propagation. Any visibility or
-source-intake claim is flow-admission work and routes to Hermes. Successful direct-main or deterministic
-promotion emits an authenticated shared-Git-dir receipt only after trusted subprocesses finish. Authentication
-is computed by node root through SSM from a root-only key. Candidate subprocesses run under a macOS sandbox
-that permits outbound network only to loopback, permits writes only under a gate-owned temporary directory,
-and permits file-content reads only from gate-created detached worktrees, content-hashed dependencies,
-required system runtimes and the gate-owned universe copy. They receive no AWS credential environment or SSH agent. Receipt
-close state is included in a newly issued node-root authentication tag. Hermes-routed
-work emits none and closes through the A/B gate.
-Historical close requires that receipt plus byte-identical candidate reports, tool manifests,
-review and universe-provenance artifacts on main before branch/worktree deletion can pass. Close revalidates
-track-specific replay, family conformance/source attestations, reth/universe and smoke evidence and rejects
-unsigned or edited receipts. An open receipt
-blocks inventory for the next gap. A reusable prior ref must contribute a concrete
-commit to challenger ancestry; prose-only reuse cannot promote.
-Replay worktrees containing a root `.env` are rejected, close requires the merge tree to equal the frozen
-challenger tree, and challenger-descendant worktrees outside `origin/main` must be removed before
-the promotion receipt can close.
+source-intake claim is flow-admission work and routes to Hermes.
+
+The lifecycle envelope binds the candidate/rollback branch identity, lane-aware state anchor, complete
+universe/config/graph/family manifest, registry-derived family scope, six semantic records and trusted
+producer/comparator hashes. Final evidence additionally binds merge/deployed SHA, deployment/config receipts
+and fresh non-author review. The finalizer revalidates Git ancestry and exact refs; raw branch/update-ref/
+remote-delete commands are blocked by the hook as an accidental-misuse defense, not as cleanup
+authorization. There is no replayable marker; the finalizer's just-generated receipt plus exact-ref lease is
+the authority. Remove a clean candidate
+worktree, then invoke the finalizer from another checkout. `checkpoint_pass` may merge/deploy but cannot
+delete. A true semantic failure rolls back and retains the branch; infrastructure failure retains it for
+rerun. Hermes-routed work emits no six-step lifecycle cleanup receipt and closes through the A/B gate.

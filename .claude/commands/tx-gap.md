@@ -21,8 +21,9 @@
 - **代码锚**：独立 worktree；`HEAD == challenger SHA`；tracked worktree clean。
 - **输入锚**：universe、runtime graph、config 与节点 live searcher 使用的文件按 SHA-256 对齐。
   fixture 子集只供开发，最终验收使用完整 production view。
-- **状态锚**：scanner 样本 fork 在交易父块态；backrun 样本 fork 在父块态并按原交易顺序重放真实
-  prefix/victim。核对 block number、state root、tx index。
+- **状态锚**：standing scanner 的机会块 `N` 从 canonical `N-1` 开始；backrun 从 `N-1` 开始并按原
+  顺序重放真实 trigger-only/full-prefix，得到块内有效态；处理完 `N` 后面向 `N+1` 的 post-block scan
+  使用 `N`。绑定 block hash/root、完整 applied-prefix tx hashes、trigger、target tx index 和 effective-state hash。
 
 每次验收保存命令、report/log 和 SHA-256。口头结论不算证据。
 
@@ -94,7 +95,8 @@ fixed_by: null
 - 禁止用工具修复、文档整理、可观测性增强或 fixture 增长冒充本轮成果；
 - 如果当前 branch 已含上述辅助改动，先拆掉，只留下生产 diff；
 - 开新 branch 前，按 stable gap/problem id 检查现有 branch、report 和 main，避免重复修同一 gap；
-- 每个 gap 从最新 `origin/main` 新建短生命周期 branch；通过即合并并删除，失败则记录证据后保留或关闭。
+- 每个 gap 从最新 `origin/main` 新建短生命周期 branch；checkpoint 通过后合并但保留 branch，只有
+  post-merge/deployed-main full validation 通过才由 trusted finalizer 删除；失败则记录证据并保留。
 
 ## 3. 身份硬编码与通用容量参数必须分开
 
@@ -113,28 +115,47 @@ fixed_by: null
 发现自己“往地址表加一项让样本过”时立即停止；发现自己调整通用 cap 时，按分布类改动验收，而不是
 误判成硬编码。
 
-## 4. 人工六步物理事实链
+## 4. 统一六步物理事实链
 
 现有工具可提供旁证，但六步的事实来源必须是原始链上数据、未修改的生产入口和 fork 执行结果。
 challenger 不得修改 harness、fixture 或验收入口。
-六步独立于 A/B deployment：`deploy` 不运行也不等待它；需要时在 live 窗口结束并 pause B 后执行。
-它是 route-stage/等价声明的可选诊断，不是 deploy、decision、close 或 merge 的强制开关。若本轮
-预声明目标就是某笔交易的六步推进，失败只否定该声明；protocol scanner、universe、分布或性能改动
-按各自预声明的 cohort/覆盖率/公平性标准验收，不得被无关的六步样本否决。
+确定性 adapter/route 改动以六步作为主验收；protocol scanner、universe、分布或性能改动仍按自己的
+cohort/覆盖率/公平性/Hermes 标准，不得被无关单笔样本否决。
 
 | # | 步骤 | 独立判据 |
 |---|---|---|
-| 1 | scanner/detector 自发发现 | 完整 production universe 下，真实入口自行产生目标 route；不得手工注入 route/opportunity。Backrun 必须由真实 prefix/victim 触发。 |
-| 2 | planner 出 plan | `candidate_plans > 0`，plan 边序与 trace 的调用腿序一致。 |
-| 3 | solver 定价与 sizing | 逐腿 quote 与目标块真实池状态及 receipt/trace 成交量对齐；人工列出输入、输出、fee 和 rounding。 |
-| 4 | fork sim 逐 wei | 在正确 parent/prefix 状态执行生产 calldata，成功还贷且无 standing position；用 fork 前后原始 `balanceOf`/ETH delta 独立复算 gross。 |
-| 5 | 生产 EV gate | 调用生产同一 EV-gate/成本口径得到 net；不以手算美元值代替生产判定。 |
-| 6 | 同桶翻转/等价 | 功能修复：同一历史输入从 baseline 的明确失败阶段推进到 `path_found`、`plans>0` 或 `final_sim_success`。等价重构：步骤 1–5 的集合/逐 wei/calldata/EV 判定一致，再单独检查 live performance 不低于预定阈值；build/test 通过不等于 fixed。 |
+| 1 | 输入、transition、发现/身份准入/图 | 完整 production universe 下真实入口自发产生 canonical edges；backrun 必须由真实 raw trigger/prefix 驱动；不得注入 route/opportunity。 |
+| 2 | 路线枚举 | production enumerator 自然输出完整有序 route；expected route 只能在输出冻结后由 comparator 比较。 |
+| 3 | 状态与 exact quote | 在同一 lane-aware anchor 上逐腿记录 amountIn/out、fee、rounding 和 overlay；报价不可用/≤0 在此失败。 |
+| 4 | plan、sizing 与 solver | production planner/solver 自选 input，产出 resolved plan 和逐腿金额；不得固定 landed amount 或预建 plan。 |
+| 5 | fork final sim | 在正确 effective state 执行生产 calldata，成功还贷、守恒且无 standing position；独立复算 profit/gas。 |
+| 6 | production EV | 运行生产 evaluator 并记录 allow/reject、reason、valuation/gas/bid 与 signed net EV；正 EV 修复的生命周期 gate 另要求 allow + net EV > 0。 |
 
-若 canonical 工具无法生成某一步，不修改工具：保存原始 RPC/trace/fork 命令与输出哈希，由主持 agent
-人工完成六步，并让 fresh non-author reviewer 以 REFUTE 为目标复核。人工与 reviewer 均必须明确引用
-每一步的证据；无法证明时只能放弃该 route-stage 声明，不能拿它证明 `fixed`。无关类型的改动仍按
-自己预声明的 cohort/覆盖率/公平性标准决定。
+六步是 machine evidence 的有序前缀；第一个 `fail/reject/not_reached` 后停止。人工可判断失败属于本次
+scope、旧 harness 假阴性还是基础设施问题，但不能把 machine fail 写成 pass。若旧 harness 与 canonical
+证据冲突，保留旧工具输出作诊断；只要 canonical producer 已覆盖本声明全部字段、独立 reviewer 证明旧失败
+与本 diff 无关且不涉及硬安全，便不为旧工具改生产代码。
+
+### 两级执行
+
+1. **合并前 checkpoint：**先冻结一次 production-equivalent input snapshot，再绑定 candidate/base、
+   StateAnchor、完整 input universe/config、实际 materialized graph、逐 shard completeness、family
+   manifest；family-local 重跑可复用哈希不变的 DEX/无关 family shard，只重算 impacted shard。把小型
+   run request 交给 `six-step-validation-gate`，由 gate 运行固定 producer 并计算
+   status，禁止把人工填写的六个 pass record 当输入。六步必须 target-blind 自然通过。只允许增大
+   runner 外层 wall-clock timeout，不改生产
+   cap/rank/top-K/threshold/EV，不缩图、不插目标。通过记 `checkpoint_pass`。
+2. **合并后 full：**允许在 checkpoint 后合并并 guarded 部署 exact merge SHA，状态记
+   `pending_final_validation`，branch 保留。review 可作为 report-only `origin/main` descendant 提交，
+   不因相同 runtime 多部署一次；controller 必须证明 merge→review commit 没有 runtime/config/dependency
+   diff。随后对实际 deployed merge SHA、normalized config、经 attestation 对齐的完整 production
+   universe/manifest、精确生产参数和所有 impacted family 重跑六步。通过记 `final_validated`；先移除 clean
+   candidate worktree，再由 trusted finalizer 精确删除本地/远端 branch refs。
+3. semantic fail 走 guarded rollback 并保留 branch；infra fail 不判产品失败，安全时 live 可继续，但
+   branch 保留等待重跑。
+
+当前 canonical controller 只支持 `block_scan_standing`。Backrun 仍可分析并走 legacy causal
+replay/Hermes，但在完整 ordered-prefix producer 落地前不能取得 `checkpoint_pass`/`final_validated`。
 
 ## 5. Cohort、分布和资源验收
 
@@ -148,9 +169,12 @@ challenger 不得修改 harness、fixture 或验收入口。
 
 ## 6. 合并与分支生命周期
 
-- 本轮预声明的验收标准、必要 smoke/reviewer 全绿（route-stage 声明才包含六步）：rebase/merge 到最新 `origin/main`，确认生产 diff 未漂移，
-  push 后立即删除对应本地/远端 branch 和 worktree。
-- 红或证据不足：不合并为 fixed；记录 exact base/challenger、失败步骤、复现命令和未解问题。
+- `checkpoint_pass`：rebase/merge 到最新 `origin/main`，确认生产 diff 未漂移，可 guarded bounded-live；
+  branch/worktree 保留并标 `pending_final_validation`。
+- `final_validated`：绑定 exact candidate/merge/deployed/config/graph/review receipt 后，先移除 clean
+  candidate worktree，再由 trusted finalizer 删除对应本地/远端 branch refs。
+- checkpoint 红：不合并为 fixed；记录 exact base/challenger、失败步骤、复现命令和未解问题。
+- full semantic 红：guarded rollback，branch 保留；full infra 红：不伪报 semantic fail，branch 保留重跑。
 - 后续 main 修复同一 stable problem id 时，重跑该问题原先声明的 pinned 验收；通过后归档旧报告并删除旧 branch。
 - main 是 champion。下一 gap 永远从最新 main 新切，不在旧 challenger 上堆叠。
 

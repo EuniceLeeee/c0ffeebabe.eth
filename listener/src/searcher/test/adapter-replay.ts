@@ -3266,7 +3266,11 @@ async function replayFixture(
       6,
       evPasses ? "pass" : "reject",
       {
+        execution_status: "pass",
         decision: evPasses ? "allow" : "reject",
+        decision_reason: evPasses
+          ? "policy_allow"
+          : "net_ev_below_policy_minimum",
         valuation_available: ev.valuationAvailable,
         gas_measurement_available: ev.gasMeasurementAvailable,
         fee_state_available: ev.feeStateAvailable,

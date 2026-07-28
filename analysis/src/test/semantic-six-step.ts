@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createSemanticSixStepEvidence,
+  semanticExactQuoteCommitmentSha256,
+  semanticFinalSimCommitmentSha256,
+  semanticJsonSha256,
+  semanticProductionRouteChainError,
+  semanticRouteMembershipProofSha256,
   semanticSixStepEquivalenceError,
   semanticSixStepSequenceError,
   validateSemanticSixStepEvidence,
@@ -9,50 +14,130 @@ import {
 
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
+const RUN_SHA = "c".repeat(64);
+const STATE_SHA = "d".repeat(64);
+const ROUTE_SHA = "e".repeat(64);
+const PLAN_SHA = "f".repeat(64);
 
 function productionPass(
   step: 1 | 2 | 3 | 4 | 5 | 6,
 ) {
+  const common = {
+    run_id: RUN_SHA,
+    state_anchor_sha256: STATE_SHA,
+    target_route_sha256: ROUTE_SHA,
+  } as const;
+  const membership = {
+    ...common,
+    route_set_sha256: SHA_A,
+    route_set_size: 1,
+    target_present: true,
+  };
+  const quote = {
+    ...common,
+    source_block: 100,
+    route_sha256: ROUTE_SHA,
+    quote_status: "positive",
+    probe_amount_in: "1",
+    quoted_amount_out: "2",
+    leg_quotes: [{ amount_in: "1", amount_out: "2" }],
+  } as const;
+  const finalSim = {
+    ...common,
+    input_resolved_plan_sha256: PLAN_SHA,
+    success: true,
+    profit_token: "0xprofit",
+    gross_profit: "2",
+    net_profit: "1",
+    gas_used: "100",
+    calldata_sha256: SHA_A,
+    repayment_and_conservation: "pass",
+    leaves_standing_position: false,
+  } as const;
   const outputs = {
     1: {
+      ...common,
       source_block: 100,
       edge_set_sha256: SHA_A,
       edge_set_size: 2,
       target_membership: "present",
+      materialized_graph: {
+        scope: "all_materialized_edges",
+        edge_count: 2,
+        sha256: SHA_A,
+        family_edges: [{
+          family_id: "univ2-standard",
+          edge_count: 2,
+          sha256: SHA_A,
+        }],
+        target_injected: false,
+        graph_reduced: false,
+        cap_mode: "production_config",
+      },
+      shard_completeness: {
+        schema_version: 1,
+        selection: "selected",
+        dex_shard: {
+          shard_id: "dex-universe",
+          source_kind: "dex-universe",
+          status: "complete",
+          required: true,
+          edge_count: 2,
+          sha256: SHA_A,
+          issues: [],
+        },
+        family_shards: [{
+          shard_id: "family:univ2-standard",
+          family_id: "univ2-standard",
+          source_kind: "dex-universe",
+          status: "complete",
+          required: true,
+          disposition: "required",
+          edge_count: 2,
+          sha256: SHA_A,
+          source_coverage: [],
+          issues: [],
+        }],
+        required_family_ids: ["univ2-standard"],
+        required_complete: true,
+        isolated_incomplete_family_ids: [],
+        cache_reuse: {
+          status: "not_measured",
+          claimed_hit: false,
+        },
+      },
     },
     2: {
-      route_set_sha256: SHA_A,
-      route_set_size: 1,
-      target_present: true,
+      ...membership,
+      target_route_membership_proof_sha256:
+        semanticRouteMembershipProofSha256(membership),
     },
     3: {
-      source_block: 100,
-      route_sha256: SHA_A,
-      quote_status: "positive",
-      probe_amount_in: "1",
-      quoted_amount_out: "2",
-      leg_quotes: [{ amount_in: "1", amount_out: "2" }],
+      ...quote,
+      selected_exact_quote_sha256:
+        semanticExactQuoteCommitmentSha256(quote),
     },
     4: {
-      route_sha256: SHA_A,
+      ...common,
+      route_sha256: ROUTE_SHA,
+      input_exact_quote_sha256:
+        semanticExactQuoteCommitmentSha256(quote),
       selected_by_solve_policy: true,
       solve_succeeded: true,
       solver_selected_amount: "1",
-      resolved_plan_sha256: SHA_A,
+      resolved_plan_sha256: PLAN_SHA,
       hop_amounts: [{ amount_in: "1", amount_out: "2" }],
     },
     5: {
-      success: true,
-      profit_token: "0xprofit",
-      gross_profit: "2",
-      net_profit: "1",
-      gas_used: "100",
-      calldata_sha256: SHA_A,
-      repayment_and_conservation: "pass",
-      leaves_standing_position: false,
+      ...finalSim,
+      final_sim_sha256: semanticFinalSimCommitmentSha256(finalSim),
     },
     6: {
+      ...common,
+      input_final_sim_sha256: semanticFinalSimCommitmentSha256(finalSim),
+      execution_status: "pass",
       decision: "allow",
+      decision_reason: "policy_allow",
       net_ev_wei: "1",
       gas_cost_eth: "1",
       bid_eth: "0",
@@ -70,16 +155,12 @@ function productionPass(
 }
 
 test("semantic six-step evidence is independent of metrics and extensions", () => {
+  const graphOutput = productionPass(1).output;
   const baseline = createSemanticSixStepEvidence({
     profile: "production_route_stage",
     step: 1,
     status: "pass",
-    output: {
-      source_block: 100,
-      edge_set_sha256: SHA_A,
-      edge_set_size: 2,
-      target_membership: "present",
-    },
+    output: graphOutput,
     metrics: { elapsed_ms: 11, edge_count: 100 },
     extensions: { producer_module: "old-layout" },
   });
@@ -87,12 +168,7 @@ test("semantic six-step evidence is independent of metrics and extensions", () =
     profile: "production_route_stage",
     step: 1,
     status: "pass",
-    output: {
-      target_membership: "present",
-      edge_set_size: 2,
-      edge_set_sha256: SHA_A,
-      source_block: 100,
-    },
+    output: { ...graphOutput },
     metrics: { elapsed_ms: 7, edge_count: 100 },
     extensions: { producer_module: "new-layout" },
   });
@@ -112,7 +188,7 @@ test("semantic six-step evidence rejects output drift and forged digests", () =>
     status: "pass",
     output: {
       ...baseline.output,
-      edge_set_sha256: SHA_B,
+      source_block: 101,
     },
   });
   assert.match(
@@ -137,6 +213,27 @@ test("semantic six-step evidence is an ordered domain-stage prefix", () => {
   );
   assert.equal(graph.stage_id, "discovery_admission_graph");
   assert.equal(quote.stage_id, "exact_quote_refine");
+});
+
+test("current production evidence forms one causally linked run", () => {
+  const chain = [1, 2, 3, 4, 5, 6].map(
+    (step) => productionPass(step as 1 | 2 | 3 | 4 | 5 | 6),
+  );
+  assert.equal(semanticProductionRouteChainError(chain), null);
+
+  chain[2] = createSemanticSixStepEvidence({
+    profile: "production_route_stage",
+    step: 3,
+    status: "pass",
+    output: {
+      ...chain[2].output,
+      target_route_sha256: SHA_B,
+    },
+  });
+  assert.match(
+    semanticProductionRouteChainError(chain) ?? "",
+    /target_route_sha256 differs at step 3/,
+  );
 });
 
 test("semantic six-step pass is fail-closed on empty or incomplete core output", () => {
@@ -175,8 +272,11 @@ test("semantic six-step pass rejects contradictory domain outcomes", () => {
     [4, { ...productionPass(4).output, solve_succeeded: false }, /solve_succeeded must be true/],
     [5, { ...productionPass(5).output, success: false }, /success must be true/],
     [5, { ...productionPass(5).output, leaves_standing_position: true }, /leaves_standing_position must be false/],
-    [6, { ...productionPass(6).output, decision: "reject" }, /decision must be the string allow/],
-    [6, { ...productionPass(6).output, net_ev_wei: "0" }, /net_ev_wei must be a positive/],
+    [6, { ...productionPass(6).output, execution_status: "reject" }, /execution_status must be the string pass/],
+    [6, { ...productionPass(6).output, decision: "skip" }, /decision must be allow or reject/],
+    [6, { ...productionPass(6).output, decision_reason: "" }, /decision_reason must be a non-empty stable snake_case string/],
+    [6, { ...productionPass(6).output, decision_reason: "Policy Allow" }, /decision_reason must be a non-empty stable snake_case string/],
+    [6, { ...productionPass(6).output, net_ev_wei: "1.5" }, /net_ev_wei must be a signed decimal integer string/],
     [6, { ...productionPass(6).output, valuation_available: false }, /valuation_available must be true/],
   ] as const;
 
@@ -189,6 +289,90 @@ test("semantic six-step pass rejects contradictory domain outcomes", () => {
     });
     assert.match(validateSemanticSixStepEvidence(evidence).join("\n"), expected);
   }
+});
+
+test("semantic step 6 pass records a reproducible allow or reject decision", () => {
+  const allowed = productionPass(6);
+  assert.deepEqual(validateSemanticSixStepEvidence(allowed), []);
+
+  const rejected = createSemanticSixStepEvidence({
+    profile: "production_route_stage",
+    step: 6,
+    status: "pass",
+    output: {
+      ...allowed.output,
+      decision: "reject",
+      decision_reason: "net_ev_below_policy_minimum",
+      net_ev_wei: "-42",
+    },
+  });
+  assert.deepEqual(validateSemanticSixStepEvidence(rejected), []);
+
+  const zeroEv = createSemanticSixStepEvidence({
+    profile: "production_route_stage",
+    step: 6,
+    status: "pass",
+    output: {
+      ...allowed.output,
+      decision: "reject",
+      decision_reason: "net_ev_zero",
+      net_ev_wei: "0",
+    },
+  });
+  assert.deepEqual(validateSemanticSixStepEvidence(zeroEv), []);
+  assert.equal(rejected.reason_code, null);
+});
+
+test("semantic schemas v1, v2, and v3 remain readable while new producers emit v4", () => {
+  const current = productionPass(6);
+  const legacyOutput = {
+    decision: "allow",
+    net_ev_wei: "1",
+    gas_cost_eth: "1",
+    bid_eth: "0",
+    valuation_available: true,
+    gas_measurement_available: true,
+    fee_state_available: true,
+  };
+  const legacy = {
+    ...current,
+    schema_version: 1,
+    output: legacyOutput,
+    output_sha256: semanticJsonSha256(legacyOutput),
+  };
+  assert.deepEqual(validateSemanticSixStepEvidence(legacy), []);
+  assert.deepEqual(validateSemanticSixStepEvidence({
+    ...current,
+    schema_version: 2,
+    output: {
+      execution_status: "pass",
+      decision: "allow",
+      decision_reason: "positive_ev",
+      net_ev_wei: "1",
+      gas_cost_eth: "1",
+      bid_eth: "0",
+      valuation_available: true,
+      gas_measurement_available: true,
+      fee_state_available: true,
+    },
+    output_sha256: semanticJsonSha256({
+      execution_status: "pass",
+      decision: "allow",
+      decision_reason: "positive_ev",
+      net_ev_wei: "1",
+      gas_cost_eth: "1",
+      bid_eth: "0",
+      valuation_available: true,
+      gas_measurement_available: true,
+      fee_state_available: true,
+    }),
+  }), []);
+  assert.deepEqual(validateSemanticSixStepEvidence({
+    ...current,
+    schema_version: 3,
+    output: current.output,
+    output_sha256: semanticJsonSha256(current.output),
+  }), []);
 });
 
 test("semantic six-step sequence terminates after fail, reject, or not_reached", () => {

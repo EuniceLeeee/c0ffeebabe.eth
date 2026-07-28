@@ -7,6 +7,13 @@ const gate = readFileSync(
   "utf8",
 );
 
+test("legacy deterministic historical tracks remain independently runnable", () => {
+  assert.doesNotMatch(gate, /legacy deterministic promotion is retired/);
+  assert.match(gate, /if \(track === "historical-replay"\)/);
+  assert.match(gate, /else if \(track === "family-execution"\)/);
+  assert.match(gate, /if \(phase === "close" && errors\.length === 0\)/);
+});
+
 test("family execution dispatch bypasses the production hunt path", () => {
   const start = gate.indexOf('} else if (track === "family-execution") {');
   const end = gate.indexOf("\n      }\n      assertFrozenWorktree", start);

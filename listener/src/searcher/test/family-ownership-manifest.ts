@@ -19,6 +19,8 @@ export interface FamilyOwnershipManifestEntry {
   readonly root_source: string;
   readonly root_export: string;
   readonly source_files: readonly string[];
+  readonly pool_adapter_ids: readonly string[];
+  readonly edge_adapter_ids: readonly string[];
   readonly owned_action_adapter_ids: readonly string[];
   readonly owned_action_bindings: readonly FamilyOwnedActionBinding[];
   readonly required_action_adapter_ids: readonly string[];
@@ -33,6 +35,10 @@ export interface FamilyOwnershipManifest {
   readonly action_index_skeleton_sha256: string;
   readonly families: readonly FamilyOwnershipManifestEntry[];
 }
+
+export type FamilyOwnershipSourceKind =
+  | "production-registry"
+  | "action-index";
 
 interface FamilyRoot {
   readonly binding: string;
@@ -89,6 +95,12 @@ export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
         `family ownership root ${root.binding} has unregistered id ${root.id}`,
       );
     }
+    const poolAdapterIds = "poolAdapters" in family
+      ? [...family.poolAdapters].sort()
+      : [];
+    const edgeAdapterIds = "edgeAdapterIds" in family
+      ? [...family.edgeAdapterIds].sort()
+      : [];
     const files = relativeFamilyImportClosure(program, root.path);
     const actionBindings = [...family.ownedActionAdapterIds]
       .sort()
@@ -128,6 +140,8 @@ export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
       root_source: repoRelative(root.path),
       root_export: root.imported,
       source_files: [...files].map(repoRelative).sort(),
+      pool_adapter_ids: poolAdapterIds,
+      edge_adapter_ids: edgeAdapterIds,
       owned_action_adapter_ids: [...family.ownedActionAdapterIds].sort(),
       owned_action_bindings: actionBindings,
       required_action_adapter_ids:
@@ -138,17 +152,13 @@ export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
         kind: family.kind,
         root_source: repoRelative(root.path),
         root_export: root.imported,
+        pool_adapter_ids: poolAdapterIds,
+        edge_adapter_ids: edgeAdapterIds,
         owned_action_bindings: actionBindings,
         owned_action_adapter_ids: [...family.ownedActionAdapterIds].sort(),
         required_action_bindings: requiredActionBindings,
         required_infra_action_adapter_ids:
           [...family.requiredInfraActionAdapterIds].sort(),
-        ...("poolAdapters" in family
-          ? {
-              pool_adapters: [...family.poolAdapters].sort(),
-              edge_adapter_ids: [...family.edgeAdapterIds].sort(),
-            }
-          : {}),
         ...("funding" in family
           ? {
               funding_action_adapter_id: family.funding.actionAdapterId,
@@ -161,13 +171,13 @@ export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
   return {
     schema_version: 1,
     registry_order: roots.map((root) => root.id),
-    registry_skeleton_sha256: sourceSkeletonSha256(
-      sourceFile(program, PRODUCTION_REGISTRY),
-      registryAllowedRanges(program, checker),
+    registry_skeleton_sha256: familyOwnershipSourceSkeletonSha256(
+      "production-registry",
+      sourceFile(program, PRODUCTION_REGISTRY).getFullText(),
     ),
-    action_index_skeleton_sha256: sourceSkeletonSha256(
-      sourceFile(program, ACTION_INDEX),
-      actionIndexAllowedRanges(program, checker),
+    action_index_skeleton_sha256: familyOwnershipSourceSkeletonSha256(
+      "action-index",
+      sourceFile(program, ACTION_INDEX).getFullText(),
     ),
     families,
   };
@@ -448,11 +458,7 @@ function relativeActionImportClosure(
   return closure;
 }
 
-function registryAllowedRanges(
-  program: ts.Program,
-  _checker: ts.TypeChecker,
-): readonly ts.TextRange[] {
-  const source = sourceFile(program, PRODUCTION_REGISTRY);
+function registryAllowedRanges(source: ts.SourceFile): readonly ts.TextRange[] {
   const ranges: ts.TextRange[] = [];
   const declaration = findVariable(source, "PRODUCTION_ADAPTER_FAMILIES");
   const registered = declaration?.initializer &&
@@ -472,14 +478,12 @@ function registryAllowedRanges(
       ts.isImportDeclaration(statement) &&
       ts.isStringLiteral(statement.moduleSpecifier)
     ) {
-      const resolved = resolveTsImport(source.fileName, statement.moduleSpecifier.text);
       const bindings = statement.importClause?.namedBindings &&
           ts.isNamedImports(statement.importClause.namedBindings)
         ? statement.importClause.namedBindings.elements
         : [];
       if (
-        resolved &&
-        isFamilyModule(resolved) &&
+        isFamilyImportSpecifier(statement.moduleSpecifier.text) &&
         bindings.length > 0 &&
         bindings.every((binding) => usedBindings.has(binding.name.text))
       ) {
@@ -491,11 +495,7 @@ function registryAllowedRanges(
   return ranges;
 }
 
-function actionIndexAllowedRanges(
-  program: ts.Program,
-  _checker: ts.TypeChecker,
-): readonly ts.TextRange[] {
-  const source = sourceFile(program, ACTION_INDEX);
+function actionIndexAllowedRanges(source: ts.SourceFile): readonly ts.TextRange[] {
   const ranges: ts.TextRange[] = [];
   const declaration = findVariable(source, "PRODUCTION_ACTION_CATALOG");
   const catalog = declaration?.initializer
@@ -511,8 +511,7 @@ function actionIndexAllowedRanges(
     ) {
       continue;
     }
-    const resolved = resolveTsImport(source.fileName, statement.moduleSpecifier.text);
-    if (!resolved || !resolved.includes("/src/adapters/")) continue;
+    if (!isActionImportSpecifier(statement.moduleSpecifier.text)) continue;
     const bindings = statement.importClause?.namedBindings &&
         ts.isNamedImports(statement.importClause.namedBindings)
       ? statement.importClause.namedBindings.elements
@@ -528,6 +527,25 @@ function actionIndexAllowedRanges(
   return ranges;
 }
 
+export function familyOwnershipSourceSkeletonSha256(
+  kind: FamilyOwnershipSourceKind,
+  sourceText: string,
+): string {
+  const source = ts.createSourceFile(
+    kind === "production-registry"
+      ? "production-registry.ts"
+      : "action-index.ts",
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const ranges = kind === "production-registry"
+    ? registryAllowedRanges(source)
+    : actionIndexAllowedRanges(source);
+  return sourceSkeletonSha256(source, ranges);
+}
+
 function sourceSkeletonSha256(
   source: ts.SourceFile,
   ranges: readonly ts.TextRange[],
@@ -540,6 +558,34 @@ function sourceSkeletonSha256(
   // TypeScript semantics through comments, ASI, literals and regular
   // expressions; normalizing them would reopen a central-logic bypass.
   return sha256(text);
+}
+
+function isFamilyImportSpecifier(specifier: string): boolean {
+  const segments = relativeImportSegments(specifier);
+  return segments !== null &&
+    segments.length >= 2 &&
+    [
+      "swaps",
+      "protocols",
+      "credit",
+      "funding",
+      "liquidity",
+    ].includes(segments[0]);
+}
+
+function isActionImportSpecifier(specifier: string): boolean {
+  return relativeImportSegments(specifier) !== null;
+}
+
+function relativeImportSegments(specifier: string): readonly string[] | null {
+  if (!specifier.startsWith("./")) return null;
+  const segments = specifier.slice(2).split("/");
+  return segments.length > 0 &&
+      segments.every((segment) =>
+        segment.length > 0 && segment !== "." && segment !== ".."
+      )
+    ? segments
+    : null;
 }
 
 function findVariable(
@@ -852,6 +898,54 @@ function runOwnershipManifestSelfTests(): void {
     sourceSkeletonSha256(added.file, added.ranges),
     "thin registration cardinality must not change the central skeleton",
   );
+  const registrySource = (families: readonly string[]): string =>
+    `${families.map((name) =>
+      `import { ${name} } from "./swaps/${name}.js";`).join("\n")}\n` +
+    `export const PRODUCTION_ADAPTER_FAMILIES = ` +
+    `new Registry([${families.join(",")}]);\n` +
+    "const centralLogic = true;\n";
+  assert.equal(
+    familyOwnershipSourceSkeletonSha256(
+      "production-registry",
+      registrySource(["familyA"]),
+    ),
+    familyOwnershipSourceSkeletonSha256(
+      "production-registry",
+      registrySource(["familyA", "familyB"]),
+    ),
+    "canonical registry hashing must ignore thin family registration",
+  );
+  const actionSource = (actions: readonly string[]): string =>
+    `${actions.map((name) =>
+      `import { ${name} } from "./${name}.js";`).join("\n")}\n` +
+    `const PRODUCTION_ACTION_CATALOG = ` +
+    `new Map([${actions.join(",")}]);\n` +
+    "registerProductionActions();\n";
+  assert.equal(
+    familyOwnershipSourceSkeletonSha256(
+      "action-index",
+      actionSource(["actionA"]),
+    ),
+    familyOwnershipSourceSkeletonSha256(
+      "action-index",
+      actionSource(["actionA", "actionB"]),
+    ),
+    "canonical action hashing must ignore thin action registration",
+  );
+  assert.notEqual(
+    familyOwnershipSourceSkeletonSha256(
+      "production-registry",
+      registrySource(["familyA"]),
+    ),
+    familyOwnershipSourceSkeletonSha256(
+      "production-registry",
+      registrySource(["familyA"]).replace(
+        "const centralLogic = true",
+        "const centralLogic = false",
+      ),
+    ),
+    "canonical registry hashing must retain central logic",
+  );
   assertDistinctSkeletons(
     "centralCall(); // trusted boundary\nnextCall();\n",
     "centralCall(); // trusted boundary nextCall();\n",
@@ -889,4 +983,9 @@ function main(): void {
   }
 }
 
-main();
+if (
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  main();
+}

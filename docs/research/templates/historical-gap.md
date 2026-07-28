@@ -1,5 +1,10 @@
 # Historical Gap `<gap_id>`
 
+> This markdown keeps the human classification/audit context and the legacy `historical_gap` record below
+> readable. New deterministic family/route work uses
+> `docs/research/templates/six-step-validation.md`: checkpoint before merge, full validation after exact-SHA
+> deployment, then trusted cleanup. A route-pinned `family_execution` result is supporting evidence only.
+
 ## Manual Classification
 
 - Transactions and causal source:
@@ -27,6 +32,11 @@
 - Replay transitions by sample:
 - Short smoke:
 - Fresh review:
+
+## Legacy schema-v1 record — read/close existing records only
+
+Do not copy this block for new deterministic route work. It remains here so an already-open legacy report can
+be audited and closed without silently reinterpreting its fields.
 
 ```historical_gap
 {
@@ -138,6 +148,8 @@ specific inspection evidence. The gate rejects omitted, extra, stale, or same-ga
 When `disposition=reusable`, also add `reused_commit`: the concrete prior SHA that is reachable from that
 inventoried ref and included in challenger history.
 
-After promote, copy the printed authenticated promotion receipt digest and artifact commit into the final close report as
-`decision.promotion_receipt_sha256` and `decision.promotion_artifact_commit`. Close also requires every
-candidate report, tool execution manifest, review artifact, and universe provenance artifact on main.
+For an already-open legacy promotion only, copy the printed authenticated promotion receipt digest and
+artifact commit into its final close report as `decision.promotion_receipt_sha256` and
+`decision.promotion_artifact_commit`. Legacy close also requires every candidate report, tool execution
+manifest, review artifact, and universe provenance artifact on main. New deterministic work never enters this
+promote/close path.

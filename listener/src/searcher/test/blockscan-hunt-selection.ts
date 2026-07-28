@@ -4,9 +4,17 @@ import { pathToFileURL } from "node:url";
 import {
   createSemanticSixStepEvidence,
   semanticSixStepSequenceError,
+  type SemanticJson,
   type SemanticSixStepEvidence,
   type SemanticSixStepStatus,
 } from "../../shared/evidence/semantic-six-step.js";
+import {
+  canonicalEdgeSetEvidence,
+  canonicalMaterializedGraphEvidence,
+  productionShardCompleteness,
+  semanticMaterializedGraphEvidence,
+  semanticShardCompletenessEvidence,
+} from "../../shared/evidence/canonical-edge-set.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { canonicalEdgeId } from "../venues/blockscan-state-capability.js";
 import {
@@ -451,6 +459,101 @@ function runTests(): void {
     remapExpectedRouteToVerifiedGraph([], [verifiedEdge], [rawEdge]),
     null,
   );
+  const secondEdge: TokenEdge = {
+    ...rawEdge,
+    target: "0x4444444444444444444444444444444444444444",
+  };
+  assert.deepEqual(
+    canonicalEdgeSetEvidence([rawEdge, secondEdge]),
+    canonicalEdgeSetEvidence([secondEdge, rawEdge]),
+    "graph evidence must be order-independent",
+  );
+  assert.notEqual(
+    canonicalEdgeSetEvidence([rawEdge]).sha256,
+    canonicalEdgeSetEvidence([{
+      ...rawEdge,
+      leavesStandingPosition: true,
+    }]).sha256,
+    "graph evidence must bind safety taxonomy",
+  );
+  assert.notEqual(
+    canonicalEdgeSetEvidence([rawEdge]).sha256,
+    canonicalEdgeSetEvidence([{
+      ...rawEdge,
+      executionVariantKey: "fee:500",
+      v3Fee: 500,
+      v3TickSpacing: 10,
+      factory: "0x5555555555555555555555555555555555555555",
+    }]).sha256,
+    "graph evidence must bind family-owned execution metadata",
+  );
+  assert.notEqual(
+    canonicalEdgeSetEvidence([rawEdge, rawEdge]).sha256,
+    canonicalEdgeSetEvidence([rawEdge]).sha256,
+    "graph evidence must bind duplicate multiplicity",
+  );
+  const materialized = canonicalMaterializedGraphEvidence(
+    [rawEdge, secondEdge],
+    () => "univ2-standard",
+  );
+  assert.equal(materialized.edgeCount, 2);
+  assert.equal(materialized.familyEdges[0]?.edgeCount, 2);
+  assert.equal(materialized.familyEdges[0]?.sha256, materialized.sha256);
+  assert.equal(materialized.targetInjected, false);
+  assert.equal(materialized.graphReduced, false);
+  const productionEdge = { ...rawEdge, adapterId: "univ2-swap" };
+  const common = {
+    run_id: "b".repeat(64),
+    state_anchor_sha256: "c".repeat(64),
+    target_route_sha256: "d".repeat(64),
+  };
+  const shardPass = createSemanticSixStepEvidence({
+    profile: "production_route_stage",
+    step: 1,
+    status: "pass",
+    output: {
+      ...common,
+      source_block: 1,
+      edge_set_sha256: canonicalEdgeSetEvidence([productionEdge]).sha256,
+      edge_set_size: 1,
+      target_membership: "present",
+      materialized_graph: semanticMaterializedGraphEvidence(
+        canonicalMaterializedGraphEvidence(
+          [productionEdge],
+          () => "univ2-standard",
+        ),
+      ),
+      shard_completeness: semanticShardCompletenessEvidence(
+        productionShardCompleteness({
+          edges: [productionEdge],
+          familySourceCoverage: [],
+          requiredFamilyIds: ["univ2-standard"],
+        }),
+      ),
+    },
+  });
+  assert.equal(
+    semanticSixStepSequenceError([shardPass]),
+    null,
+    "an unrelated incomplete family must remain typed and non-blocking",
+  );
+  const requiredIncomplete = createSemanticSixStepEvidence({
+    profile: "production_route_stage",
+    step: 1,
+    status: "pass",
+    output: {
+      ...shardPass.output,
+      shard_completeness: {
+        ...(shardPass.output.shard_completeness as Record<string, SemanticJson>),
+        required_complete: false,
+      },
+    },
+  });
+  assert.match(
+    semanticSixStepSequenceError([requiredIncomplete]) ?? "",
+    /required shard complete|shard evidence/,
+    "a required incomplete shard cannot satisfy step 1",
+  );
   const prefixPasses = productionDiagnosticPasses();
   const planFailure = createSemanticSixStepEvidence({
     profile: "production_route_stage",
@@ -522,6 +625,11 @@ function runTests(): void {
     /productionDiagnosticStageTerminates\(\s*finalSimStatus,/,
   );
   const evRead = producerSource.indexOf("const ev = expectedSolve?.diagnosticEv");
+  assert.match(
+    producerSource,
+    /edgeSetSha256:\s*graphEvidence\.sha256/,
+    "raw hunt report must bind the child graph edge set",
+  );
   assert(
     planTerminal >= 0 && finalSimRead > planTerminal,
     "producer must terminate a non-pass step 4 before reading step 5 evidence",
@@ -612,7 +720,7 @@ function productionDiagnosticPasses(): SemanticSixStepEvidence[] {
         fee_state_available: true,
       },
     }),
-  ];
+  ].map((evidence) => ({ ...evidence, schema_version: 1 as const }));
 }
 
 function optionalNonNegativeInt(raw: string | undefined, name: string): number | undefined {

@@ -4,9 +4,10 @@ import { ethers } from "ethers";
 import { poolProjectionRowKey } from "../pool-universe.js";
 import type { PoolEntry, VerifiedRouteSpec } from "../planner/token-graph.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import type { FamilySourceCoverage } from "../../shared/evidence/canonical-edge-set.js";
 
-export const PRODUCTION_REPLAY_ARTIFACT_SCHEMA = 3 as const;
-export const PRODUCTION_REPLAY_ARTIFACT_PRODUCER = "shared-protocol-discovery-v3" as const;
+export const PRODUCTION_REPLAY_ARTIFACT_SCHEMA = 4 as const;
+export const PRODUCTION_REPLAY_ARTIFACT_PRODUCER = "shared-protocol-discovery-v4" as const;
 
 export interface ProductionReplayUniverseEvidence {
   readonly sha256: string;
@@ -27,10 +28,20 @@ export interface ProductionReplayDiscoveryArtifact {
   readonly sourceToBlock: number;
   readonly identityBlock: number;
   readonly sourceUniverse: ProductionReplayUniverseEvidence;
-  readonly sourceComplete: true;
-  readonly evaluationComplete: true;
+  /** Compatibility summaries only; never interpreted as all-family proof. */
+  readonly sourceComplete: boolean;
+  readonly evaluationComplete: boolean;
+  readonly familySourceCoverage: readonly FamilySourceCoverage[];
   readonly discoveredPoolKeys: readonly string[];
   /** Exact discovered subset; static/legacy pools stay in the ordinary universe. */
+  readonly pools: readonly PoolEntry[];
+}
+
+export interface LoadedProductionReplayDiscoveryArtifact {
+  readonly sourceComplete: boolean;
+  readonly evaluationComplete: boolean;
+  readonly familySourceCoverage:
+    ProductionReplayDiscoveryArtifact["familySourceCoverage"];
   readonly pools: readonly PoolEntry[];
 }
 
@@ -41,17 +52,22 @@ export function writeProductionReplayDiscoveryArtifact(
   if (
     artifact.schemaVersion !== PRODUCTION_REPLAY_ARTIFACT_SCHEMA ||
     artifact.producer !== PRODUCTION_REPLAY_ARTIFACT_PRODUCER ||
-    artifact.sourceComplete !== true ||
-    artifact.evaluationComplete !== true ||
+    typeof artifact.sourceComplete !== "boolean" ||
+    typeof artifact.evaluationComplete !== "boolean" ||
     artifact.sourceFromBlock > artifact.sourceToBlock ||
     artifact.sourceToBlock > artifact.identityBlock ||
     artifact.pools.length !== artifact.discoveredPoolKeys.length
   ) {
     throw new Error("production replay discovery artifact is incomplete or unsupported");
   }
+  parseFamilySourceCoverage(artifact.familySourceCoverage);
   selectProductionReplayDiscoveredPools(
     artifact.pools,
     artifact.discoveredPoolKeys,
+  );
+  assertDiscoveredPoolCoverage(
+    artifact.pools,
+    artifact.familySourceCoverage,
   );
   const bytes = `${JSON.stringify(artifact, null, 2)}\n`;
   writeFileSync(path, bytes, { encoding: "utf8", mode: 0o600 });
@@ -66,6 +82,16 @@ export function loadProductionReplayDiscoveredPools(
   path: string,
   expectedSha256: string,
 ): PoolEntry[] {
+  return [...loadProductionReplayDiscoveryArtifact(
+    path,
+    expectedSha256,
+  ).pools];
+}
+
+export function loadProductionReplayDiscoveryArtifact(
+  path: string,
+  expectedSha256: string,
+): LoadedProductionReplayDiscoveryArtifact {
   const bytes = readFileSync(path, "utf8");
   if (!/^[0-9a-f]{64}$/.test(expectedSha256) || sha256(bytes) !== expectedSha256) {
     throw new Error("production replay discovery artifact hash mismatch");
@@ -75,8 +101,8 @@ export function loadProductionReplayDiscoveredPools(
   if (
     raw.schemaVersion !== PRODUCTION_REPLAY_ARTIFACT_SCHEMA ||
     raw.producer !== PRODUCTION_REPLAY_ARTIFACT_PRODUCER ||
-    raw.sourceComplete !== true ||
-    raw.evaluationComplete !== true
+    typeof raw.sourceComplete !== "boolean" ||
+    typeof raw.evaluationComplete !== "boolean"
   ) {
     throw new Error("production replay discovery artifact is incomplete or unsupported");
   }
@@ -89,6 +115,9 @@ export function loadProductionReplayDiscoveredPools(
   if (!Array.isArray(raw.pools) || !Array.isArray(raw.discoveredPoolKeys)) {
     throw new Error("production replay discovery artifact omits pools or discoveredPoolKeys");
   }
+  const familySourceCoverage = parseFamilySourceCoverage(
+    raw.familySourceCoverage,
+  );
   const sourceUniverse = parseUniverseEvidence(raw.sourceUniverse);
   const expectedUniverseSha256 = process.env.PRODUCTION_REPLAY_UNIVERSE_SHA256;
   if (
@@ -115,7 +144,13 @@ export function loadProductionReplayDiscoveredPools(
     throw new Error("production replay artifact pools must exactly match discoveredPoolKeys");
   }
   const pools = raw.pools.map((item, index) => parseProjectedPool(item, index));
-  return selectProductionReplayDiscoveredPools(pools, keys);
+  assertDiscoveredPoolCoverage(pools, familySourceCoverage);
+  return Object.freeze({
+    sourceComplete: raw.sourceComplete,
+    evaluationComplete: raw.evaluationComplete,
+    familySourceCoverage,
+    pools: Object.freeze(selectProductionReplayDiscoveredPools(pools, keys)),
+  });
 }
 
 export function selectProductionReplayDiscoveredPools(
@@ -182,6 +217,68 @@ function parseUniverseEvidence(raw: unknown): ProductionReplayUniverseEvidence {
     maxPools,
     minScore,
   };
+}
+
+function parseFamilySourceCoverage(raw: unknown): ProductionReplayDiscoveryArtifact[
+  "familySourceCoverage"
+] {
+  if (!Array.isArray(raw)) {
+    throw new Error("production replay discovery artifact omits familySourceCoverage");
+  }
+  const keys = new Set<string>();
+  const parsed = raw.map((item, index) => {
+    if (!isRecord(item)) {
+      throw new Error(`familySourceCoverage[${index}] must be an object`);
+    }
+    if (typeof item.complete !== "boolean" || !Array.isArray(item.issues)) {
+      throw new Error(
+        `familySourceCoverage[${index}] has invalid complete/issues`,
+      );
+    }
+    const parsedItem = Object.freeze({
+      familyId: stringField(
+        item.familyId,
+        `familySourceCoverage[${index}].familyId`,
+      ),
+      sourceId: stringField(
+        item.sourceId,
+        `familySourceCoverage[${index}].sourceId`,
+      ),
+      complete: item.complete,
+      issues: Object.freeze(item.issues.map((issue, issueIndex) =>
+        stringField(
+          issue,
+          `familySourceCoverage[${index}].issues[${issueIndex}]`,
+        ))),
+    });
+    if (parsedItem.complete && parsedItem.issues.length > 0) {
+      throw new Error("complete production replay family source has issues");
+    }
+    const key = `${parsedItem.familyId}\u001f${parsedItem.sourceId}`;
+    if (keys.has(key)) {
+      throw new Error(`duplicate production replay family source ${key}`);
+    }
+    keys.add(key);
+    return parsedItem;
+  });
+  return Object.freeze(parsed);
+}
+
+function assertDiscoveredPoolCoverage(
+  pools: readonly PoolEntry[],
+  coverage: ProductionReplayDiscoveryArtifact["familySourceCoverage"],
+): void {
+  const familyIds = new Set(coverage.map((item) => item.familyId));
+  for (const pool of pools) {
+    if (
+      !pool.discoveryOwnerAdapterId ||
+      !familyIds.has(pool.discoveryOwnerAdapterId)
+    ) {
+      throw new Error(
+        `discovered pool ${poolProjectionRowKey(pool)} has no family source coverage`,
+      );
+    }
+  }
 }
 
 function parseProjectedPool(raw: unknown, index: number): PoolEntry {

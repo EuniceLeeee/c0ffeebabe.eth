@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
-export const SEMANTIC_SIX_STEP_SCHEMA_VERSION = 1 as const;
+export const SEMANTIC_SIX_STEP_SCHEMA_VERSION = 4 as const;
+export const SEMANTIC_SIX_STEP_READ_SCHEMA_VERSIONS =
+  Object.freeze([1, 2, 3, SEMANTIC_SIX_STEP_SCHEMA_VERSION] as const);
 
 export const SEMANTIC_SIX_STEP_PROFILES = Object.freeze([
   "production_route_stage",
@@ -38,7 +40,7 @@ export type SemanticJson =
   | { readonly [key: string]: SemanticJson };
 
 export interface SemanticSixStepEvidence {
-  readonly schema_version: typeof SEMANTIC_SIX_STEP_SCHEMA_VERSION;
+  readonly schema_version: typeof SEMANTIC_SIX_STEP_READ_SCHEMA_VERSIONS[number];
   readonly profile: SemanticSixStepProfile;
   readonly step: 1 | 2 | 3 | 4 | 5 | 6;
   readonly stage_id: SemanticSixStepStageId;
@@ -95,8 +97,12 @@ export function validateSemanticSixStepEvidence(
     return ["six-step evidence must be an object"];
   }
   const item = value as Partial<SemanticSixStepEvidence>;
-  if (item.schema_version !== SEMANTIC_SIX_STEP_SCHEMA_VERSION) {
-    errors.push(`six-step schema_version must be ${SEMANTIC_SIX_STEP_SCHEMA_VERSION}`);
+  const schemaVersion = Number(item.schema_version);
+  if (!Number.isInteger(schemaVersion) ||
+    schemaVersion < 1 || schemaVersion > SEMANTIC_SIX_STEP_SCHEMA_VERSION) {
+    errors.push(
+      `six-step schema_version must be one of ${SEMANTIC_SIX_STEP_READ_SCHEMA_VERSIONS.join(",")}`,
+    );
   }
   if (!SEMANTIC_SIX_STEP_PROFILES.includes(item.profile as SemanticSixStepProfile)) {
     errors.push("six-step profile is invalid");
@@ -144,6 +150,7 @@ export function validateSemanticSixStepEvidence(
     )
   ) {
     errors.push(...validateStatusOutput(
+      schemaVersion,
       item.profile as SemanticSixStepProfile,
       item.step as SemanticSixStepEvidence["step"],
       item.status as SemanticSixStepStatus,
@@ -180,6 +187,76 @@ export function semanticSixStepSequenceError(
   return null;
 }
 
+/**
+ * Verifies that six individually valid production records are one causal run,
+ * rather than six compatible-looking records spliced from different runs.
+ */
+export function semanticProductionRouteChainError(
+  evidence: readonly SemanticSixStepEvidence[],
+): string | null {
+  const sequenceError = semanticSixStepSequenceError(evidence);
+  if (sequenceError) return sequenceError;
+  if (evidence.length !== 6) {
+    return "production route chain must contain all six stages";
+  }
+  if (evidence.some((item) =>
+    item.schema_version !== SEMANTIC_SIX_STEP_SCHEMA_VERSION
+  )) {
+    return `production route chain requires current schema v${SEMANTIC_SIX_STEP_SCHEMA_VERSION}`;
+  }
+  if (evidence.some((item) => item.profile !== "production_route_stage")) {
+    return "production route chain requires production_route_stage records";
+  }
+
+  const outputs = evidence.map((item) => item.output);
+  const [first] = outputs;
+  for (const [index, output] of outputs.entries()) {
+    for (const key of [
+      "run_id",
+      "state_anchor_sha256",
+      "target_route_sha256",
+    ] as const) {
+      if (output[key] !== first[key]) {
+        return `production route chain ${key} differs at step ${index + 1}`;
+      }
+    }
+  }
+
+  const targetRoute = first.target_route_sha256;
+  return ([
+    [
+      outputs[1].target_route_membership_proof_sha256 !==
+        semanticRouteMembershipProofSha256(outputs[1]),
+      "step 2 target route membership proof does not bind the route set",
+    ],
+    [outputs[2].route_sha256 !== targetRoute,
+      "step 3 quote route does not equal target_route_sha256"],
+    [
+      outputs[2].selected_exact_quote_sha256 !==
+        semanticExactQuoteCommitmentSha256(outputs[2]),
+      "step 3 selected exact quote commitment does not bind quote output",
+    ],
+    [outputs[3].route_sha256 !== targetRoute,
+      "step 4 plan route does not equal target_route_sha256"],
+    [
+      outputs[3].input_exact_quote_sha256 !==
+        outputs[2].selected_exact_quote_sha256,
+      "step 4 does not consume the selected step 3 exact quote",
+    ],
+    [
+      outputs[4].input_resolved_plan_sha256 !== outputs[3].resolved_plan_sha256,
+      "step 5 does not execute the resolved step 4 plan",
+    ],
+    [
+      outputs[4].final_sim_sha256 !==
+        semanticFinalSimCommitmentSha256(outputs[4]),
+      "step 5 final sim commitment does not bind execution output",
+    ],
+    [outputs[5].input_final_sim_sha256 !== outputs[4].final_sim_sha256,
+      "step 6 does not evaluate the step 5 final sim"],
+  ] as const).find(([failed]) => failed)?.[1] ?? null;
+}
+
 export function semanticSixStepEquivalenceError(
   baseline: readonly SemanticSixStepEvidence[],
   challenger: readonly SemanticSixStepEvidence[],
@@ -210,6 +287,60 @@ export function semanticSixStepEquivalenceError(
 
 export function semanticJsonSha256(value: SemanticJson): string {
   return createHash("sha256").update(stableJson(value)).digest("hex");
+}
+
+export function semanticRouteMembershipProofSha256(
+  output: Readonly<Record<string, SemanticJson>>,
+): string {
+  return semanticOutputCommitment(output, [
+    "run_id",
+    "state_anchor_sha256",
+    "route_set_sha256",
+    "target_route_sha256",
+  ]);
+}
+
+export function semanticExactQuoteCommitmentSha256(
+  output: Readonly<Record<string, SemanticJson>>,
+): string {
+  return semanticOutputCommitment(output, [
+    "run_id",
+    "state_anchor_sha256",
+    "target_route_sha256",
+    "source_block",
+    "quote_status",
+    "probe_amount_in",
+    "quoted_amount_out",
+    "leg_quotes",
+  ]);
+}
+
+export function semanticFinalSimCommitmentSha256(
+  output: Readonly<Record<string, SemanticJson>>,
+): string {
+  return semanticOutputCommitment(output, [
+    "run_id",
+    "state_anchor_sha256",
+    "target_route_sha256",
+    "input_resolved_plan_sha256",
+    "success",
+    "profit_token",
+    "gross_profit",
+    "net_profit",
+    "gas_used",
+    "calldata_sha256",
+    "repayment_and_conservation",
+    "leaves_standing_position",
+  ]);
+}
+
+function semanticOutputCommitment(
+  output: Readonly<Record<string, SemanticJson>>,
+  keys: readonly string[],
+): string {
+  return semanticJsonSha256(
+    Object.fromEntries(keys.map((key) => [key, output[key] ?? null])),
+  );
 }
 
 function stableJson(value: SemanticJson): string {
@@ -313,8 +444,14 @@ const PASS_OUTPUT_REQUIREMENTS: Readonly<
     ["leaves_standing_position", isFalse, "false"],
   ],
   6: [
-    ["decision", isAllowDecision, "the string allow"],
-    ["net_ev_wei", isPositiveDecimalString, "a positive decimal integer string"],
+    ["execution_status", isPassExecutionStatus, "the string pass"],
+    ["decision", isEvDecision, "allow or reject"],
+    [
+      "decision_reason",
+      isStableDecisionReason,
+      "a non-empty stable snake_case string",
+    ],
+    ["net_ev_wei", isDecimalString, "a signed decimal integer string"],
     ["gas_cost_eth", isDecimalNumberString, "a decimal number string"],
     ["bid_eth", isDecimalNumberString, "a decimal number string"],
     ["valuation_available", isTrue, "true"],
@@ -322,6 +459,22 @@ const PASS_OUTPUT_REQUIREMENTS: Readonly<
     ["fee_state_available", isTrue, "true"],
   ],
 });
+
+const CURRENT_PRODUCTION_COMMON_REQUIREMENTS:
+  readonly OutputRequirement[] = Object.freeze([
+    ["run_id", isSha256, "a lowercase SHA-256 digest"],
+    ["state_anchor_sha256", isSha256, "a lowercase SHA-256 digest"],
+    ["target_route_sha256", isSha256, "a lowercase SHA-256 digest"],
+  ]);
+
+const CURRENT_PRODUCTION_HASH_FIELDS = Object.freeze({
+  1: [],
+  2: ["target_route_membership_proof_sha256"],
+  3: ["selected_exact_quote_sha256"],
+  4: ["input_exact_quote_sha256"],
+  5: ["input_resolved_plan_sha256", "final_sim_sha256"],
+  6: ["input_final_sim_sha256"],
+} satisfies Record<SemanticSixStepEvidence["step"], readonly string[]>);
 
 const FAMILY_BYPASS_REQUIREMENTS: Readonly<
   Partial<Record<SemanticSixStepEvidence["step"], readonly OutputRequirement[]>>
@@ -339,6 +492,7 @@ const FAMILY_BYPASS_REQUIREMENTS: Readonly<
 });
 
 function validateStatusOutput(
+  schemaVersion: number,
   profile: SemanticSixStepProfile,
   step: SemanticSixStepEvidence["step"],
   status: SemanticSixStepStatus,
@@ -346,11 +500,64 @@ function validateStatusOutput(
   reasonCode: string | null | undefined,
 ): string[] {
   if (status === "pass") {
+    const requirements = schemaVersion === 1 && step === 6
+      ? LEGACY_STEP_SIX_PASS_OUTPUT_REQUIREMENTS
+      : PASS_OUTPUT_REQUIREMENTS[step];
     const errors = validateOutputRequirements(
       output,
-      PASS_OUTPUT_REQUIREMENTS[step],
+      requirements,
       `${profile} step ${step} pass`,
     );
+    if (
+      schemaVersion === SEMANTIC_SIX_STEP_SCHEMA_VERSION &&
+      profile === "production_route_stage"
+    ) {
+      errors.push(
+        ...validateOutputRequirements(
+          output,
+          CURRENT_PRODUCTION_COMMON_REQUIREMENTS,
+          `${profile} step ${step} pass`,
+        ),
+        ...validateOutputRequirements(
+          output,
+          CURRENT_PRODUCTION_HASH_FIELDS[step].map((key) =>
+            [key, isSha256, "a lowercase SHA-256 digest"] as const
+          ),
+          `${profile} step ${step} pass`,
+        ),
+      );
+      if (step === 1) {
+        errors.push(...validateOutputRequirements(output, [
+          ["materialized_graph", isMaterializedGraphEvidence,
+            "all-materialized-edge evidence with no target injection or graph reduction"],
+          ["shard_completeness", isSelectedShardCompletenessEvidence,
+            "selected-route shard evidence with every required shard complete"],
+        ], `${profile} step ${step} pass`));
+      }
+      if (
+        step === 1 &&
+        isSemanticJsonObject(output.materialized_graph) &&
+        (
+          output.edge_set_sha256 !== output.materialized_graph.sha256 ||
+          output.edge_set_size !== output.materialized_graph.edge_count
+        )
+      ) {
+        errors.push(
+          "six-step production_route_stage step 1 edge-set aliases must bind materialized_graph",
+        );
+      }
+      if (
+        step === 1 &&
+        isSemanticJsonObject(output.materialized_graph) &&
+        isSemanticJsonObject(output.shard_completeness)
+      ) {
+        const bindingError = materializedGraphShardBindingError(
+          output.materialized_graph,
+          output.shard_completeness,
+        );
+        if (bindingError) errors.push(bindingError);
+      }
+    }
     if (reasonCode !== null) {
       errors.push("six-step pass reason_code must be null");
     }
@@ -381,6 +588,17 @@ function validateStatusOutput(
   }
   return errors;
 }
+
+const LEGACY_STEP_SIX_PASS_OUTPUT_REQUIREMENTS:
+  readonly OutputRequirement[] = Object.freeze([
+    ["decision", isLegacyAllowDecision, "the string allow"],
+    ["net_ev_wei", isPositiveDecimalString, "a positive decimal integer string"],
+    ["gas_cost_eth", isDecimalNumberString, "a decimal number string"],
+    ["bid_eth", isDecimalNumberString, "a decimal number string"],
+    ["valuation_available", isTrue, "true"],
+    ["gas_measurement_available", isTrue, "true"],
+    ["fee_state_available", isTrue, "true"],
+  ]);
 
 function validateOutputRequirements(
   output: Readonly<Record<string, SemanticJson>>,
@@ -461,8 +679,21 @@ function isAvailableQuoteStatus(value: SemanticJson): boolean {
   return value === "available" || value === "positive";
 }
 
-function isAllowDecision(value: SemanticJson): boolean {
+function isPassExecutionStatus(value: SemanticJson): boolean {
+  return value === "pass";
+}
+
+function isEvDecision(value: SemanticJson): boolean {
+  return value === "allow" || value === "reject";
+}
+
+function isLegacyAllowDecision(value: SemanticJson): boolean {
   return value === "allow";
+}
+
+function isStableDecisionReason(value: SemanticJson): boolean {
+  return typeof value === "string" &&
+    /^[a-z][a-z0-9_]{0,95}$/.test(value);
 }
 
 function isRoutePinnedMode(value: SemanticJson): boolean {
@@ -482,4 +713,127 @@ function isNonEmptyJsonObject(value: SemanticJson): boolean {
 
 function isConservationResult(value: SemanticJson): boolean {
   return value === true || value === "pass";
+}
+
+function isMaterializedGraphEvidence(value: SemanticJson): boolean {
+  if (!isSemanticJsonObject(value)) return false;
+  const families = objectArray(value.family_edges);
+  return value.scope === "all_materialized_edges" &&
+    isPositiveInteger(value.edge_count) &&
+    isSha256(value.sha256) &&
+    value.target_injected === false &&
+    value.graph_reduced === false &&
+    value.cap_mode === "production_config" &&
+    families.length > 0 &&
+    uniqueStrings(families.map((family) => family.family_id)) !== null &&
+    families.every((family) =>
+      isNonEmptyString(family.family_id) &&
+      isPositiveInteger(family.edge_count) &&
+      isSha256(family.sha256)
+    ) &&
+    families.reduce((sum, family) => sum + Number(family.edge_count), 0) ===
+      value.edge_count;
+}
+
+function isSelectedShardCompletenessEvidence(value: SemanticJson): boolean {
+  if (!isSemanticJsonObject(value)) return false;
+  const required = uniqueStrings(value.required_family_ids);
+  const isolated = uniqueStrings(value.isolated_incomplete_family_ids);
+  const families = objectArray(value.family_shards);
+  const dex = value.dex_shard;
+  const cache = value.cache_reuse;
+  if (!isSemanticJsonObject(dex) || !isSemanticJsonObject(cache) ||
+    required === null || isolated === null ||
+    value.schema_version !== 1 || value.selection !== "selected" ||
+    value.required_complete !== true ||
+    dex.shard_id !== "dex-universe" || dex.source_kind !== "dex-universe" ||
+    dex.status !== "complete" || dex.required !== true ||
+    !isPositiveInteger(dex.edge_count) || !isSha256(dex.sha256) ||
+    !Array.isArray(dex.issues) || dex.issues.length !== 0 ||
+    cache.status !== "not_measured" || cache.claimed_hit !== false) {
+    return false;
+  }
+  const byId = new Map<string, Readonly<Record<string, SemanticJson>>>();
+  for (const family of families) {
+    const id = family.family_id;
+    if (typeof id !== "string" || id.length === 0 || byId.has(id) ||
+      family.shard_id !== `family:${id}` ||
+      !["complete", "incomplete"].includes(String(family.status)) ||
+      typeof family.required !== "boolean" ||
+      !isNonNegativeInteger(family.edge_count) || !isSha256(family.sha256) ||
+      !Array.isArray(family.source_coverage) ||
+      !Array.isArray(family.issues)) return false;
+    byId.set(id, family);
+  }
+  const requiredSet = new Set(required);
+  const isolatedSet = new Set(isolated);
+  return required.every((id) => {
+    const family = byId.get(id);
+    return family?.required === true && family.status === "complete" &&
+      family.disposition === "required" &&
+      isPositiveInteger(family.edge_count);
+  }) && isolated.every((id) => {
+    const family = byId.get(id);
+    return family?.required === false && family.status === "incomplete" &&
+      family.disposition === "isolated_non_blocking";
+  }) && [...byId].every(([id, family]) =>
+    family.required === requiredSet.has(id) &&
+    isolatedSet.has(id) === (family.disposition === "isolated_non_blocking") &&
+    (requiredSet.has(id) ||
+      family.disposition ===
+        (family.status === "complete" ? "not_required" : "isolated_non_blocking"))
+  );
+}
+
+function materializedGraphShardBindingError(
+  materialized: Readonly<Record<string, SemanticJson>>,
+  completeness: Readonly<Record<string, SemanticJson>>,
+): string | null {
+  const graphFamilies = keyedObjects(materialized.family_edges, "family_id");
+  const shardFamilies = keyedObjects(completeness.family_shards, "family_id");
+  if (!graphFamilies || !shardFamilies) return null;
+  for (const [familyId, graph] of graphFamilies) {
+    const shard = shardFamilies.get(familyId);
+    if (!shard || shard.edge_count !== graph.edge_count ||
+      shard.sha256 !== graph.sha256) {
+      return `six-step step 1 shard ${familyId} does not bind materialized graph`;
+    }
+  }
+  for (const [familyId, shard] of shardFamilies) {
+    if (Number(shard.edge_count) > 0 && !graphFamilies.has(familyId)) {
+      return `six-step step 1 shard ${familyId} claims unmaterialized edges`;
+    }
+  }
+  return null;
+}
+
+function objectArray(
+  value: SemanticJson | undefined,
+): Readonly<Record<string, SemanticJson>>[] {
+  return Array.isArray(value) && value.every(isSemanticJsonObject)
+    ? value
+    : [];
+}
+
+function uniqueStrings(value: SemanticJson | undefined): string[] | null {
+  if (!Array.isArray(value) ||
+    !value.every((item) => typeof item === "string" && item.length > 0)) {
+    return null;
+  }
+  const values = value as string[];
+  return new Set(values).size === values.length ? values : null;
+}
+
+function keyedObjects(
+  value: SemanticJson | undefined,
+  key: string,
+): Map<string, Readonly<Record<string, SemanticJson>>> | null {
+  const entries = objectArray(value);
+  const map = new Map<string, Readonly<Record<string, SemanticJson>>>();
+  for (const entry of entries) {
+    const id = entry[key];
+    if (typeof id !== "string" || map.has(id)) return null;
+    map.set(id, entry);
+  }
+  return map;
 }

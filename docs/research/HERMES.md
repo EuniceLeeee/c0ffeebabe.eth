@@ -99,7 +99,8 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
                  (kept from Codex); Codex, handed ONLY raw material as DATA → B blind to A. Agree = high-confidence;
                  differ = the disagreement is the signal. Only the Brief drives code.
 5. IMPLEMENT     Codex writes → Claude review ↔ Codex fix (≤3 passes) → Final Approval or explicit stop.
-6. GATE          deterministic → local FORK/REPLAY flip confirms (rule 12, docs/research/gates.md; no flip = not fixed);
+6. GATE          deterministic → pre-merge checkpoint, then post-merge/deployed-main full six-step validation
+                 (rule 12, docs/research/gates.md); retain the branch until final_validated.
                  non-deterministic (latency/inclusion/economics/bid/mempool) → record with carry_to_round, next
                  round's metrics decide.
 7. CARRY         Next round READS this round's conclusion + open findings FIRST; resolve any finding past its
@@ -112,13 +113,15 @@ machine**: the agent chooses/implements/judges; a thin JSON journal plus small m
 safety, fairness, evidence, recovery, and branch lifecycle. Metrics provide evidence but **never own the
 merge decision** (a honeypot filter can correctly reduce `quotePositive` and look worse numerically).
 
-Pinned historical batches begin in `docs/research/HISTORICAL-GAP.md`. Changes classified there as
-live-distribution dependent (`flow-admission`, `latency`, `candidate-ranking`) or systemic
-scanner/graph/universe/coverage work enter this A/B loop; analysis tool fixes merge separately, while
-deterministic single-route searcher fixes must first exhaust replay+short-smoke validation. Both entry points
-share the schema-v3 production scope. The six-step route diagnostic is
-available when it matches the hypothesis, but historical semantic replay is not part of the live deployment,
-decision, or promotion critical path.
+Pinned historical batches begin in `docs/research/HISTORICAL-GAP.md`. Deterministic family/route work uses the
+two-tier six-step lifecycle there: checkpoint before merge, bounded-live main allowed while
+`pending_final_validation`, then full validation against the exact deployed merge SHA before branch cleanup.
+A committed review may be a report-only `origin/main` descendant and does not trigger a redundant deployment
+when no runtime/config/dependency source changed.
+Changes classified as live-distribution dependent (`flow-admission`, `latency`, `candidate-ranking`) or
+systemic scanner/graph/universe/coverage work enter this A/B loop; analysis tool fixes merge separately.
+The legacy A/B six-step command below remains diagnostic for an A/B hypothesis and is not the canonical
+checkpoint/final producer.
 
 - **A = champion:** deployed `/opt/MEV` (`mev-searcher`), bounded-live wallet/BotVM 1.
 - **B = challenger:** literal `ab/*` branch in `/opt/MEV-ab/b` (`mev-ab-b`), bounded-live wallet/BotVM 2.
@@ -276,12 +279,12 @@ decision, or promotion critical path.
    sample. A fairness failure cannot yield a decisive verdict.
 7. **PAUSE B BEFORE JUDGMENT.** Run `deploy-ab-challenger.sh pause <id>` to stop broadcasts and restore all
    CPUs to A. Preserve logs/events and copy only redacted evidence into the report bundle.
-7a. **OPTIONAL INDEPENDENT SIX-STEP ACCEPTANCE.** For a predeclared route-stage/equivalence claim, run
+7a. **LEGACY OPTIONAL A/B SIX-STEP DIAGNOSTIC.** For a predeclared route-stage/equivalence claim, run
    `deploy-ab-challenger.sh acceptance <id>` only after pause. It uses the frozen A/B commits, immutable
    universes, trusted harness and A's private archive endpoint to record scanner/graph, enumeration,
    quote/solve, resolved-plan sim, production EV and baseline↔challenger evidence. It may take much longer
    than deployment and holds the A/B slot lock while the already-stopped B is inspected. Its status is
-   diagnostic evidence for that claim only; it never controls deploy, close, or promotion for an unrelated
+   diagnostic evidence for that A/B claim only; it never controls deploy, close, or promotion for an unrelated
    scanner, universe, distribution, or performance experiment. Correcting an acceptance report or external
    checker does not require re-warming or redeploying B: runtime SHA/universes remain frozen, while acceptance
    may consume only a report/JSON-only descendant of B and compatible trusted `origin/main` tooling that
@@ -407,7 +410,7 @@ in-session timer is required. All node ops use SSM to `i-0ff908dedeec9ebc6`; sec
     - **Stalled:** alive + under hard timeout = running (retrying). Hard timeout + empty `git diff` = one stalled attempt. 2 consecutive = Codex stalled. Never declare stalled before the hard timeout.
     - **One Codex task = one narrow patch** (≤1–3 files, allowed/forbidden files stated). No racing. Resume a fix pass with `codex exec resume <SESSION_ID>` (prefer the recorded id over `--last`).
     - **Fallback:** genuinely stalled → Claude takes over only fully-specified mechanical edits, labelled `authored_by: claude (codex stalled)`; NEVER judgment/design (the turn stops and waits). *(Unattended rounds override the stop-and-wait: fall back to an Opus 4.8 generator — Fable stays the non-author evaluator.)*
-12. **Repair-replay double-gate → see `docs/research/gates.md` (the validation contract).** A deterministic change is `fixed` only when the SAME failing sample, replayed, flips buckets; "build passes" is never enough. No flip = not fixed. `turn_class: observability-only` if there's nothing to replay.
+12. **Two-tier six-step gate → see `docs/research/gates.md` (the validation contract).** Deterministic route work needs a pre-merge `checkpoint_pass` and post-merge/deployed-main `final_validated`; build or a route-pinned adapter replay alone is never enough. Systemic/live-distribution work still uses its cohort + Hermes A/B. `turn_class: observability-only` if there is no behavior evidence.
 13. **Convert findings to fixes — forcing functions.** Rules 1–12 prevent bad changes; none forces impactful ones, so analysis commits masquerade as progress. Counterweights:
     - **Anti-drift cap:** at most ONE consecutive `observability-only` turn; the next Brief MUST change searcher behavior (proven by a rule-12 flip) or STOP + escalate — no third analysis turn.
     - **No orphan findings:** every finding → `owner` + `carry_to_round: N`. Deferred past it blocks new work until done or human-killed.
@@ -417,7 +420,7 @@ in-session timer is required. All node ops use SSM to `i-0ff908dedeec9ebc6`; sec
     - **Impact counterweight:** a round that shipped a clean analysis patch but changed nothing the searcher does is a **null round** — label it so.
 14. **Multi-round = user-away autonomy.** >1 round means the user is NOT at the keyboard: self-serve architecture/scope calls (pick the option best for the extraction goal + PROCEED + **record the decision: choice + rationale + explicit not-doing**), do NOT block with `AskUserQuestion`. This includes **auto-firing the rule-13 arch review when its trigger hits — just run it; do NOT ask "should I run the architecture review?"**. Real stop conditions still wait for the human (out-of-envelope broadcast/funding/cap/key/standing-credit, CU-cap). The dated dual-live A/B, merge-on-proven-win, and gate-authorized literal `ab/*` cleanup are already authorized and are not ask points. **ENFORCED** by `scripts/hooks/guard-workflow-noask.py` (`touch /tmp/mev-workflow-active` at start; the hook blocks AskUserQuestion unless it names a real stop condition — full rationale in the hook's docstring).
 15. **A status report is NOT a stop.** While `/tmp/mev-workflow-active` exists, every turn ends with either a work-continuing / self-re-invoking tool call OR an explicit real stop condition — reporting rides ALONGSIDE the next action, never instead of it. **ENFORCED** by `scripts/hooks/guard-workflow-nostall.py` (full rationale in the hook's docstring).
-16. **Fable manual analysis is also a TEST of our tooling — codify its findings (hard).** The fresh fable analyst works from raw data with ad-hoc curl/jq, routinely finding where our permanent scripts are wrong (valuation artifacts) or missing a metric. When manual and canonical results disagree about tool correctness, a fresh non-author reviewer MUST adjudicate before the tool is changed. If both analyses agree the tool is wrong/incomplete, the loop MUST create the exact `tooling_defect` LearningCase, fix/extend the script, add a regression test, and cite its `codify_commit` **in this same round** (Codex writes, non-author gates). An agreed tool defect cannot be deferred to a historical backlog or a later round. Only defects explicitly referenced by the current Method Trace block this cycle; unrelated historical cases remain evidence, not a global stop. *(Honest: public-mempool membership for out-of-window txs + positive MEV-Share identification are NOT determinable from data we hold; `sender_flow` returns labeled-confidence proxies, never a fabricated proof.)*
+16. **Fable manual analysis is also a TEST of our tooling — codify its findings (hard).** The fresh fable analyst works from raw data with ad-hoc curl/jq, routinely finding where our permanent scripts are wrong (valuation artifacts) or missing a metric. When manual and canonical results disagree about tool correctness, a fresh non-author reviewer MUST adjudicate before the tool is changed. If both analyses agree the tool is wrong/incomplete, the loop MUST create the exact `tooling_defect` LearningCase, fix/extend the script, add a regression test, and cite its `codify_commit` **in this same round** (Codex writes, non-author gates). An agreed tool defect cannot be deferred to a historical backlog or a later round. Only defects explicitly referenced by the current Method Trace block this cycle; unrelated historical cases remain evidence, not a global stop. In the separate deterministic six-step lifecycle, a legacy architecture-specific harness proven stale against a complete canonical receipt is an out-of-scope diagnostic rather than the selected canonical tool, so it need not be repaired in that same adapter turn; defects in the canonical producer/verifier or hard safety predicates remain subject to this rule. *(Honest: public-mempool membership for out-of-window txs + positive MEV-Share identification are NOT determinable from data we hold; `sender_flow` returns labeled-confidence proxies, never a fabricated proof.)*
     - **Method Trace (MANDATORY — the auditable frame, not the hidden chain-of-thought).** Every handoff
       whose `step1` block declares `fable_manual: yes` MUST end with a `## Method Trace`.
       **Missing Method Trace = invalid handoff** (`hermes-gate` enforces its presence + fields). The
@@ -437,7 +440,7 @@ in-session timer is required. All node ops use SSM to `i-0ff908dedeec9ebc6`; sec
                         - comparable vs non-comparable before gap classification
                         - protocol constraint vs market PnL
                         - source visibility before funnel attribution
-                        - fixed vs implemented via replay flip
+                        - fixed vs implemented via checkpoint + deployed-main full validation
       sanity_checks:    - gross/net/block-netting  - same tx/block/source verified
                         - pool-in-graph vs venue-adapter separated  - landed/stale/phantom hint  - no positive-leg-only PnL
       tool_gap:         none | <tool missed: native-ETH delta / one-leg inventory / protocol mint / stale hint / …>

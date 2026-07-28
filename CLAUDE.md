@@ -21,8 +21,8 @@ companion doc, not here.
   remove only the orphans *your* change created; mention unrelated dead code, don't delete it. Every changed
   line traces to the request. **Never `rg -rn`/`-rln`** (`-r` = `--replace`, corrupts reads).
 - **Goal-driven execution.** Turn tasks into `[step] → verify: [check]` pairs; loop until verified. **Build
-  passing is `implemented`, not `fixed`** — a deterministic searcher fix needs a replay/harness flip
-  (`docs/research/gates.md`).
+  passing is `implemented`, not `fixed`** — deterministic route work needs the pre-merge six-step checkpoint
+  and post-merge/deployed-main full validation in `docs/research/gates.md`.
 - **Verify against code/data, not memory.** A recalled fact / a stale memory is a hypothesis to re-check by
   reading the actual file or on-chain data, never a conclusion.
 - **Derive identity on-chain; never gate admission on a hardcoded allowlist.** Venue / pool / factory /
@@ -126,7 +126,12 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   the tool is wrong or incomplete, file the exact `tooling_defect` LearningCase, fix the tool, add its regression
   test, and cite the `codify_commit` before closing that same turn/Hermes round. Do not defer an agreed tool bug
   into a historical backlog. `hermes-gate` blocks only defects explicitly referenced by the current Method
-  Trace; unrelated old cases neither block the round nor excuse skipping this closure.
+  Trace; unrelated old cases neither block the round nor excuse skipping this closure. **Narrow deterministic
+  lifecycle exception:** when the canonical six-step producer covers the entire declared claim and a fresh
+  reviewer proves that only a legacy architecture-specific harness rejects the same immutable evidence, that
+  legacy result is recorded as an out-of-scope diagnostic and does not force a same-turn harness repair.
+  A defect in the canonical producer/verifier, or any state/SHA/config/repayment/conservation/standing/safety
+  predicate, is never covered by this exception.
 - **Live-run follow-up** — after a run, auto-analyze without waiting; first pass **zero-CU** where possible
   (read JSONL / redacted logs / code / registries before RPC/traces). The `no_candidate_plans` drill-down +
   its classification live in HERMES + the `redact-live-run` tool.
@@ -142,6 +147,17 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   Each new round starts from the current `origin/main` champion: `A_n → fresh B_n`. A proven win atomically
   promotes the exact frozen B SHA to `A_{n+1}` and deletes B; the next challenger is then cut fresh from
   `A_{n+1}`. Never stack the next experiment on an old B branch.
+- **Deterministic route branch lifecycle** — normal adapter/route work uses `codex/*`: a target-blind
+  trusted controller accepts a run request (never a caller-authored pass envelope), recomputes the frozen
+  inputs and emits one causally chained six-stage semantic-v4 receipt. `checkpoint_pass` permits merge and bounded-live
+  main, but the branch remains
+  `pending_final_validation`. Only full six-step validation against the exact deployed merge SHA emits
+  `final_validated`; then a newly generated final run with `--finalize-cleanup` exact-deletes it. The deletion
+  hook prevents accidental raw branch/ref deletion but is not an authorization boundary. An explicitly
+  human-authorized `codex/*` branch outside this deterministic-route lifecycle may use
+  `MEV_NON_ROUTE_CODEX_CLEANUP=1`; that opt-in only bypasses the accident guard and cannot issue or replace a
+  checkpoint/final receipt. Semantic failure rolls back and retains the branch; infrastructure failure retains
+  it for rerun.
 - **Daily analysis = a light learning round (one Learning Kernel, two entrances: Hermes = heavy, daily =
   light).** When you do a **reusable judgment** outside a Hermes round (architecture review / competitor-path
   analysis / bundle postmortem / a tool found wrong / repo diagnosis), capture it via steps 1–4 below.
@@ -177,9 +193,11 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   numbers are load-bearing; do not renumber.
 - `docs/research/HISTORICAL-GAP.md` — batch repair from pinned historical transactions without a full live
   research window. It accepts only scanner/backrun conserving DEX or DEX+permissionless-protocol loops and
-  mechanically routes tooling work direct-to-main, deterministic fixes through replay+smoke, and
+  mechanically routes tooling work direct-to-main, deterministic fixes through the two-tier six-step
+  lifecycle, and
   admission/latency/ranking changes back to Hermes A/B.
-- `docs/research/gates.md` — the validation contract (`fixed` vs `implemented`, replay flips, test harnesses).
+- `docs/research/gates.md` — the validation contract (two-tier six-step lifecycle, `fixed` vs `implemented`,
+  replay and live/systemic boundaries).
   Read before claiming a deterministic change is fixed.
 - `docs/research/tx-gap-analysis-format.md` — required user-facing format when one landed transaction is
   supplied for production-gap, tool, file, or function diagnosis. It separates the core conserving route

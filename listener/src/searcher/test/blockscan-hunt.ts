@@ -22,6 +22,14 @@ import {
   type SemanticSixStepStatus,
 } from "../../shared/evidence/semantic-six-step.js";
 import {
+  canonicalEdgeEvidenceIdentity,
+  canonicalEdgeSetEvidence,
+  canonicalMaterializedGraphEvidence,
+  productionShardCompleteness,
+  semanticMaterializedGraphEvidence,
+  semanticShardCompletenessEvidence,
+} from "../../shared/evidence/canonical-edge-set.js";
+import {
   buildExecuteCalldata,
   DEFAULT_SEARCHER_EXECUTOR,
   DEFAULT_SEARCHER_OWNER,
@@ -124,6 +132,7 @@ import {
   createVerifiedGraphView,
 } from "../venues/blockscan-state-capability.js";
 import {
+  loadProductionReplayDiscoveryArtifact,
   loadProductionReplayDiscoveredPools,
   PRODUCTION_REPLAY_ARTIFACT_PRODUCER,
   PRODUCTION_REPLAY_ARTIFACT_SCHEMA,
@@ -360,6 +369,13 @@ function stableDiagnosticReason(value: unknown): string | null {
 
 function diagnosticStopsAfter(stage: DiagnosticStopAfter): boolean {
   return DIAGNOSTIC.enabled && DIAGNOSTIC.stopAfter === stage;
+}
+
+function diagnosticChangesProductionCaps(): boolean {
+  return DIAGNOSTIC.maxCandidates !== undefined ||
+    DIAGNOSTIC.scanBudgetMs !== undefined ||
+    DIAGNOSTIC.passBudgetMs !== undefined ||
+    DIAGNOSTIC.topK !== undefined;
 }
 
 interface DiagnosticExactQuote {
@@ -659,7 +675,7 @@ function huntGraphView(input: {
   return createVerifiedGraphView({
     id:
       `blockscan-hunt:${canonicalSetSha256(
-        input.edges.map(canonicalEdgeIdentity),
+        input.edges.map(canonicalEdgeEvidenceIdentity),
       )}`,
     generation: input.generation,
     sourceBlock: input.sourceBlock,
@@ -671,7 +687,7 @@ function huntGraphView(input: {
         familyId: family.familyId,
         sourceId: "frozen-hunt-inputs",
         sourceFingerprint: canonicalSetSha256(
-          input.edges.filter(family.ownsEdge).map(canonicalEdgeIdentity),
+          input.edges.filter(family.ownsEdge).map(canonicalEdgeEvidenceIdentity),
         ),
         completeThroughBlock: input.sourceBlock,
         completeThroughHash: input.sourceBlockHash,
@@ -680,6 +696,26 @@ function huntGraphView(input: {
     familyIdForEdge: (edge) =>
       PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id,
   });
+}
+
+function diagnosticShardCompleteness(
+  graph: readonly TokenEdge[],
+  familySourceCoverage: readonly {
+    readonly familyId: string;
+    readonly sourceId: string;
+    readonly complete: boolean;
+    readonly issues: readonly string[];
+  }[],
+  requiredRoute: readonly TokenEdge[],
+): Readonly<Record<string, SemanticJson>> {
+  const routes = PRODUCTION_ADAPTER_FAMILIES.routes();
+  return semanticShardCompletenessEvidence(productionShardCompleteness({
+    edges: graph,
+    familySourceCoverage,
+    requiredFamilyIds: [...new Set(requiredRoute.map((edge) =>
+      routes.forEdge(edge.adapterId).id
+    ))],
+  }));
 }
 
 async function check(name: string, run: () => boolean | Promise<boolean>): Promise<void> {
@@ -807,6 +843,12 @@ async function main(): Promise<void> {
     let protocolPools = staticProtocolPools;
     let pools = basePools;
     let rawEdges = baseGraph;
+    let familySourceCoverageForEvidence: readonly {
+      readonly familyId: string;
+      readonly sourceId: string;
+      readonly complete: boolean;
+      readonly issues: readonly string[];
+    }[] = [];
     let retainedProtocolTopologyProof:
       VerifiedRetainedTopologyProof | null = null;
     if (
@@ -1031,6 +1073,8 @@ async function main(): Promise<void> {
             sourceId: item.sourceId,
             issues: item.issues,
           }));
+      familySourceCoverageForEvidence =
+        protocolDiscovery.result.familySourceCoverage;
       console.log(
         `PROTOCOL_DISCOVERY_DIAGNOSTIC=${JSON.stringify({
           scannerSourceComplete: protocolDiscovery.scanner.sourceComplete,
@@ -1152,6 +1196,13 @@ async function main(): Promise<void> {
             ),
             sourceComplete: true,
             evaluationComplete: true,
+            familySourceCoverage:
+              protocolDiscovery.result.familySourceCoverage.map((item) => ({
+                familyId: item.familyId,
+                sourceId: item.sourceId,
+                complete: item.complete,
+                issues: [...item.issues],
+              })),
             discoveredPoolKeys,
             pools: artifactPools,
           },
@@ -1179,6 +1230,20 @@ async function main(): Promise<void> {
           `admitted=${protocolDiscovery.projection.ownership.admissions.size}`,
       );
     } else {
+      const artifactPath =
+        process.env.PRODUCTION_REPLAY_DISCOVERY_ARTIFACT;
+      const artifactSha256 =
+        process.env.PRODUCTION_REPLAY_DISCOVERY_SHA256;
+      if (!artifactPath || !artifactSha256) {
+        throw new Error(
+          "verified replay preload is missing its artifact hash binding",
+        );
+      }
+      familySourceCoverageForEvidence =
+        loadProductionReplayDiscoveryArtifact(
+          artifactPath,
+          artifactSha256,
+        ).familySourceCoverage;
       console.log(
         "[blockscan-hunt] active protocol discovery supplied by verified replay preload",
       );
@@ -1209,7 +1274,15 @@ async function main(): Promise<void> {
       const expectedRoute = topologyOnly
         ? []
         : parseExpectedRoute(expectedRouteRaw);
-      const edgeIdentities = edges.map(canonicalEdgeIdentity);
+      const edgeSetEvidence = canonicalEdgeSetEvidence(edges);
+      const materializedGraph = canonicalMaterializedGraphEvidence(
+        edges,
+        (edge) =>
+          PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id,
+        diagnosticChangesProductionCaps()
+          ? "diagnostic_override"
+          : "production_config",
+      );
       const routeMatches = expectedRoute.map((expected) => ({
         expected,
         matches: edges.filter((edge) =>
@@ -1229,6 +1302,11 @@ async function main(): Promise<void> {
       if (missingEdges.length === 0 && ambiguousEdges.length === 0) {
         diagnosticExpectedEdges = routeMatches.map(({ matches }) => matches[0]);
       }
+      const shardCompleteness = diagnosticShardCompleteness(
+        edges,
+        familySourceCoverageForEvidence,
+        diagnosticExpectedEdges ?? [],
+      );
       const poolAdmission = describeExpectedPoolAdmission(
         expectedPoolIds(),
         universePools,
@@ -1243,14 +1321,17 @@ async function main(): Promise<void> {
         {
           output: {
             source_block: cfg.blockNumber,
-            edge_set_sha256: canonicalSetSha256(edgeIdentities),
-            edge_set_size: new Set(edgeIdentities).size,
+            edge_set_sha256: edgeSetEvidence.sha256,
+            edge_set_size: edgeSetEvidence.edgeCount,
             target_edge_count: expectedRoute.length,
             target_membership: missingEdges.length > 0
               ? "missing"
               : ambiguousEdges.length > 0
                 ? "ambiguous"
                 : "present",
+            materialized_graph:
+              semanticMaterializedGraphEvidence(materializedGraph),
+            shard_completeness: shardCompleteness,
           },
           reasonCode: missingEdges.length > 0
             ? "target_edges_missing"
@@ -1843,7 +1924,13 @@ async function main(): Promise<void> {
           ? "not_reached"
           : "reject", {
         output: {
+          execution_status: ev ? "pass" : null,
           decision: ev?.decision ?? null,
+          decision_reason: ev?.decision === "allow"
+            ? "policy_allow"
+            : ev
+              ? stableDiagnosticReason(ev.decision)
+              : null,
           net_ev_wei: ev?.netEvWei ?? null,
           expected_profit_eth: ev?.expectedProfitEth ?? null,
           gas_cost_eth: ev?.gasCostEth ?? null,
@@ -1889,11 +1976,13 @@ async function main(): Promise<void> {
       bestNet,
       familyCoverageAssessment.globallyComplete,
     );
+    const graphEvidence = canonicalEdgeSetEvidence(edges);
     const report = {
       stateBlock: cfg.blockNumber,
       universePools: universePools.length,
       graphPools: pools.length,
       edges: edges.length,
+      edgeSetSha256: graphEvidence.sha256,
       maxHops: cfg.maxHops,
       protocolEdges: protocolEdges.length,
       protocolMids: pricing.mids.size,
@@ -2507,21 +2596,8 @@ function opportunityRoute(edges: TokenEdge[]): OpportunityReport["route"] {
   }));
 }
 
-function canonicalEdgeIdentity(edge: TokenEdge): string {
-  return JSON.stringify([
-    edge.adapterId,
-    edge.target.toLowerCase(),
-    edge.tokenIn.toLowerCase(),
-    edge.tokenOut.toLowerCase(),
-    edge.slotKind,
-    edge.edgeKind,
-    edge.leavesStandingPosition,
-    edge.poolId?.toLowerCase() ?? null,
-  ]);
-}
-
 function canonicalRingIdentity(edges: TokenEdge[]): string {
-  return JSON.stringify(edges.map(canonicalEdgeIdentity));
+  return JSON.stringify(edges.map(canonicalEdgeEvidenceIdentity));
 }
 
 interface ExpectedEnumerationAttempt {

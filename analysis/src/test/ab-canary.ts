@@ -24,6 +24,9 @@ import {
 } from "../ab-canary.js";
 import {
   createSemanticSixStepEvidence,
+  semanticExactQuoteCommitmentSha256,
+  semanticFinalSimCommitmentSha256,
+  semanticRouteMembershipProofSha256,
 } from "../../../listener/src/shared/evidence/semantic-six-step.js";
 import {
   isStrictPositiveBackrunEv,
@@ -327,7 +330,8 @@ test("acceptance preserves production replay and emits explicit six-step equival
   assert.match(gate, /parseSixStepDiagnostics/);
   assert.match(gate, /sixStepEquivalenceError\(baseline\.diagnostics, challenger\.diagnostics\)/);
   assert.match(blockscan, /hop_amounts: expectedSolve\?\.diagnosticHopAmounts/);
-  assert.match(blockscan, /edge_set_sha256: canonicalSetSha256\(edgeIdentities\)/);
+  assert.match(blockscan, /const edgeSetEvidence = canonicalEdgeSetEvidence\(edges\)/);
+  assert.match(blockscan, /edge_set_sha256: edgeSetEvidence\.sha256/);
   assert.match(blockscan, /route_set_sha256: canonicalSetSha256\(ringIdentities\)/);
   assert.match(blockscan, /edge\.edgeKind/);
   assert.match(blockscan, /edge\.leavesStandingPosition/);
@@ -368,16 +372,94 @@ test("six-step stage evidence rejects budget truncation and equivalence compares
     { step: 1, stage: "graph", status: "fail", missingEdges: ["edge"] },
   ], "not_admitted"), null);
 
+  const common = {
+    run_id: "9".repeat(64),
+    state_anchor_sha256: "8".repeat(64),
+    target_route_sha256: "c".repeat(64),
+  } as const;
+  const membership = {
+    ...common,
+    route_set_sha256: "b".repeat(64),
+    route_set_size: 1,
+    target_present: true,
+  };
+  const quote = {
+    ...common,
+    source_block: 1,
+    route_sha256: "c".repeat(64),
+    quote_status: "positive",
+    probe_amount_in: "1",
+    quoted_amount_out: "2",
+    leg_quotes: [{ amount_in: "1", amount_out: "2" }],
+  } as const;
+  const finalSim = {
+    ...common,
+    input_resolved_plan_sha256: "d".repeat(64),
+    success: true,
+    profit_token: "0xprofit",
+    gross_profit: "4",
+    calldata_sha256: "a".repeat(64),
+    gas_used: "7",
+    net_profit: "3",
+    repayment_and_conservation: true,
+    leaves_standing_position: false,
+  } as const;
   const pass = [
     createSemanticSixStepEvidence({
       profile: "production_route_stage",
       step: 1,
       status: "pass",
       output: {
+        ...common,
         source_block: 1,
         edge_set_sha256: "e".repeat(64),
         edge_set_size: 3,
         target_membership: "present",
+        materialized_graph: {
+          scope: "all_materialized_edges",
+          edge_count: 3,
+          sha256: "e".repeat(64),
+          family_edges: [{
+            family_id: "univ2-standard",
+            edge_count: 3,
+            sha256: "e".repeat(64),
+          }],
+          target_injected: false,
+          graph_reduced: false,
+          cap_mode: "production_config",
+        },
+        shard_completeness: {
+          schema_version: 1,
+          selection: "selected",
+          dex_shard: {
+            shard_id: "dex-universe",
+            source_kind: "dex-universe",
+            status: "complete",
+            required: true,
+            edge_count: 3,
+            sha256: "e".repeat(64),
+            issues: [],
+          },
+          family_shards: [{
+            shard_id: "family:univ2-standard",
+            family_id: "univ2-standard",
+            source_kind: "dex-universe",
+            status: "complete",
+            required: true,
+            disposition: "required",
+            edge_count: 3,
+            sha256: "e".repeat(64),
+            source_coverage: [],
+            issues: [],
+          }],
+          required_family_ids: ["univ2-standard"],
+          required_complete: true,
+          isolated_incomplete_family_ids: [],
+          cache_reuse: {
+            status: "not_measured",
+            claimed_hit: false,
+          },
+        },
       },
       metrics: { graph_edges: 10 },
     }),
@@ -386,9 +468,9 @@ test("six-step stage evidence rejects budget truncation and equivalence compares
       step: 2,
       status: "pass",
       output: {
-        route_set_sha256: "b".repeat(64),
-        route_set_size: 1,
-        target_present: true,
+        ...membership,
+        target_route_membership_proof_sha256:
+          semanticRouteMembershipProofSha256(membership),
       },
       metrics: { observed_rank: 2 },
     }),
@@ -397,12 +479,9 @@ test("six-step stage evidence rejects budget truncation and equivalence compares
       step: 3,
       status: "pass",
       output: {
-        source_block: 1,
-        route_sha256: "c".repeat(64),
-        quote_status: "positive",
-        probe_amount_in: "1",
-        quoted_amount_out: "2",
-        leg_quotes: [{ amount_in: "1", amount_out: "2" }],
+        ...quote,
+        selected_exact_quote_sha256:
+          semanticExactQuoteCommitmentSha256(quote),
       },
       metrics: { probe_margin_bps: 12 },
     }),
@@ -411,7 +490,10 @@ test("six-step stage evidence rejects budget truncation and equivalence compares
       step: 4,
       status: "pass",
       output: {
+        ...common,
         route_sha256: "c".repeat(64),
+        input_exact_quote_sha256:
+          semanticExactQuoteCommitmentSha256(quote),
         selected_by_solve_policy: true,
         solve_succeeded: true,
         solver_selected_amount: "1",
@@ -424,14 +506,8 @@ test("six-step stage evidence rejects budget truncation and equivalence compares
       step: 5,
       status: "pass",
       output: {
-        success: true,
-        profit_token: "0xprofit",
-        gross_profit: "4",
-        calldata_sha256: "a".repeat(64),
-        gas_used: "7",
-        net_profit: "3",
-        repayment_and_conservation: true,
-        leaves_standing_position: false,
+        ...finalSim,
+        final_sim_sha256: semanticFinalSimCommitmentSha256(finalSim),
       },
     }),
     createSemanticSixStepEvidence({
@@ -439,7 +515,11 @@ test("six-step stage evidence rejects budget truncation and equivalence compares
       step: 6,
       status: "pass",
       output: {
+        ...common,
+        input_final_sim_sha256: semanticFinalSimCommitmentSha256(finalSim),
+        execution_status: "pass",
         decision: "allow",
+        decision_reason: "policy_allow",
         net_ev_wei: "2",
         gas_cost_eth: "1",
         bid_eth: "0",
@@ -456,14 +536,8 @@ test("six-step stage evidence rejects budget truncation and equivalence compares
     step: 5,
     status: "pass",
     output: {
-      success: true,
-      profit_token: "0xprofit",
-      gross_profit: "4",
-      calldata_sha256: "a".repeat(64),
+      ...pass[4].output,
       gas_used: "8",
-      net_profit: "3",
-      repayment_and_conservation: true,
-      leaves_standing_position: false,
     },
   });
   assert.match(sixStepEquivalenceError(pass, changed) ?? "", /differs at step 5/);
@@ -473,10 +547,8 @@ test("six-step stage evidence rejects budget truncation and equivalence compares
     step: 1,
     status: "pass",
     output: {
-      source_block: 1,
-      edge_set_sha256: "f".repeat(64),
-      edge_set_size: 3,
-      target_membership: "present",
+      ...pass[0].output,
+      source_block: 2,
     },
   });
   assert.match(sixStepEquivalenceError(pass, changedGraph) ?? "", /differs at step 1/);
@@ -486,9 +558,8 @@ test("six-step stage evidence rejects budget truncation and equivalence compares
     step: 2,
     status: "pass",
     output: {
+      ...pass[1].output,
       route_set_sha256: "c".repeat(64),
-      route_set_size: 1,
-      target_present: true,
     },
   });
   assert.match(sixStepEquivalenceError(pass, changedRings) ?? "", /differs at step 2/);

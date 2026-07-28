@@ -14,14 +14,33 @@
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import "../../shared/adapters/index.js";
+import { compilePlan } from "../../shared/compiler/compiler.js";
 import {
+  canonicalMaterializedGraphEvidence,
+  type CanonicalMaterializedGraphEvidence,
+  type CanonicalShardCompleteness,
+  type FamilySourceCoverage,
+  productionShardCompleteness,
+} from "../../shared/evidence/canonical-edge-set.js";
+import {
+  semanticJsonSha256,
+  type SemanticJson,
+} from "../../shared/evidence/semantic-six-step.js";
+import {
+  buildExecuteCalldata,
   DEFAULT_SEARCHER_EXECUTOR,
   DEFAULT_SEARCHER_OWNER,
   installForkBotVm,
@@ -102,8 +121,14 @@ interface CliConfig {
   maxHops: number;
   maxCandidates: number;
   topK: number;
+  minSpreadBps: number;
+  prewarmBudgetMs: number;
   scanBudgetMs: number;
   passBudgetMs: number;
+  largeGraphPassBudgetMs: number;
+  largeGraphEdgeThreshold: number;
+  refineCandidates: number;
+  refineFamilyTimeoutMs: number;
   outPath: string | null;
 }
 
@@ -113,6 +138,8 @@ interface HuntEdge {
   tokenIn: string;
   tokenOut: string;
   slotKind: TokenEdge["slotKind"];
+  edgeKind: TokenEdge["edgeKind"];
+  leavesStandingPosition: boolean;
   poolId?: string;
 }
 
@@ -131,6 +158,8 @@ interface HuntSolve {
 
 interface HuntReport {
   stateBlock: number;
+  edges: number;
+  edgeSetSha256: string;
   opportunities: HuntOpportunity[];
   solved: HuntSolve[];
 }
@@ -159,8 +188,22 @@ interface FrozenUniverseInput {
   pools: PoolEntry[];
 }
 
+interface NaturalRouteSetEvidence {
+  opportunityCount: number;
+  routeCount: number;
+  routeSha256s: string[];
+  sha256: string;
+}
+
+interface ProducerOutputEvidence {
+  materializedGraph: CanonicalMaterializedGraphEvidence;
+  fullGraph: { edgeCount: number; sha256: string };
+  naturalRouteSet: NaturalRouteSetEvidence | null;
+  frozenHuntArtifact: { byteLength: number; sha256: string } | null;
+}
+
 interface ReplayReport {
-  schemaVersion: 2;
+  schemaVersion: 4;
   evidenceClass: "candidate-authored-diagnostic";
   trustedAcceptance: false;
   laneCoverage: "parent-block-blockscan" | "sender-prefix-post-trigger-blockscan";
@@ -188,6 +231,7 @@ interface ReplayReport {
     amountSource: "solver";
     dynamicPoolsFromDiscoveryArtifact: true;
   };
+  actualRunnerConfig: ReturnType<typeof runnerConfigEvidence>;
   discovery: {
     sourceComplete: boolean;
     evaluationComplete: boolean;
@@ -195,7 +239,11 @@ interface ReplayReport {
     admittedInstances: number;
     discoveredPools: number;
     artifactSha256: string;
+    familySourceCoverage: FamilySourceCoverage[];
+    completeFamilyIds: string[];
+    shardCompleteness: CanonicalShardCompleteness;
   };
+  producerOutput: ProducerOutputEvidence;
   reference: {
     observedAdmissions: number;
     subjectEdges: HuntEdge[];
@@ -239,6 +287,7 @@ interface ReplayReport {
       reason: string | null;
       markerPath: string;
     };
+    repaymentAndConservation: null | { allowed: true };
     offlineHistorical: {
       headStaleCheck: "not_applicable";
       submissionCoordinator: "not_run";
@@ -250,11 +299,17 @@ interface ReplayReport {
   selected: null | {
     rank: number;
     route: HuntEdge[];
+    routeSha256: string;
     solverAmount: string;
     hopAmounts: Array<{ amountIn: string; amountOut: string; rawAmountOut: string }>;
+    profitToken: string;
+    grossProfit: string;
     netProfit: string;
     gasUsed: string;
     calldataHash: string;
+    resolvedPlanSha256: string;
+    repaymentAndConservation: true;
+    leavesStandingPosition: boolean;
     ev: {
       valuationAvailable: boolean;
       gasMeasurementAvailable: boolean;
@@ -436,6 +491,10 @@ async function main(): Promise<void> {
     const referenceAdmissions = [...referencePass.projection.ownership.admissions.values()];
     const referenceEdges = referenceAdmissions.flatMap((item) => item.edges).map(lowerEdge);
     const fullGraph = pass.projection.blockscanGraph ?? pass.projection.backrunGraph;
+    const effectivePassBudgetMs = productionPassBudgetMs(
+      cfg,
+      fullGraph.length,
+    );
     const winnerLogs = winner.logs.map((log) => ({
       address: log.address,
       topics: [...log.topics],
@@ -458,6 +517,12 @@ async function main(): Promise<void> {
     const referenceCycle = referenceCycles.length === 1 ? referenceCycles[0] : [];
     const sourceComplete = pass.scanner.sourceComplete && pass.result.sourceComplete;
     const evaluationComplete = pass.result.evaluationComplete;
+    const familySourceCoverage = pass.result.familySourceCoverage.map((item) => ({
+      familyId: item.familyId,
+      sourceId: item.sourceId,
+      complete: item.complete,
+      issues: [...item.issues],
+    }));
     const discoveredProtocolPools = [
       ...pass.projection.ownership.admissions.values(),
     ].map((item) => lowerPoolEntry(projectVerifiedProtocolPool(item)));
@@ -470,6 +535,11 @@ async function main(): Promise<void> {
     );
     const artifactPath = resolve(tempRoot, "verified-universe.json");
     let artifactSha256 = "";
+    const initialShardProof = productionShardCompleteness({
+      edges: fullGraph,
+      familySourceCoverage,
+      requiredFamilyIds: null,
+    });
     report = emptyReport(
       cfg,
       parentBlock,
@@ -479,11 +549,17 @@ async function main(): Promise<void> {
       frozenUniverse,
       inputAudit,
       validationPolicy,
+      fullGraph,
       {
         candidates: [...pass.scanner.candidatesByAdapter.values()].reduce((sum, items) => sum + items.length, 0),
         admittedInstances: pass.result.wouldAdmit.length,
         discoveredPools: discoveredPoolKeys.length,
         artifactSha256,
+        familySourceCoverage,
+        completeFamilyIds: initialShardProof.familyShards
+          .filter((shard) => shard.status === "complete")
+          .map((shard) => shard.familyId),
+        shardCompleteness: initialShardProof,
       },
     );
     report.reference = {
@@ -494,16 +570,6 @@ async function main(): Promise<void> {
       subjectCycle: referenceCycle.map(toHuntEdge),
       exactCycleMatched: false,
     };
-    if (!sourceComplete || !evaluationComplete || discoveredPoolKeys.length === 0) {
-      report.failure =
-        "source discovery was incomplete or admitted no dynamic protocol instance; " +
-        summarizeDiscoveryRejections(
-          pass.result.events,
-          pass.result.familySourceCoverage,
-        );
-      finish(report, cfg.outPath);
-      return;
-    }
     artifactSha256 = writeProductionReplayDiscoveryArtifact(artifactPath, {
       schemaVersion: PRODUCTION_REPLAY_ARTIFACT_SCHEMA,
       producer: PRODUCTION_REPLAY_ARTIFACT_PRODUCER,
@@ -511,8 +577,9 @@ async function main(): Promise<void> {
       sourceToBlock: parentBlock,
       identityBlock: parentBlock,
       sourceUniverse: frozenUniverse.evidence,
-      sourceComplete: true,
-      evaluationComplete: true,
+      sourceComplete,
+      evaluationComplete,
+      familySourceCoverage,
       discoveredPoolKeys,
       pools: discoveredPools,
     });
@@ -539,7 +606,6 @@ async function main(): Promise<void> {
       finish(report, cfg.outPath);
       return;
     }
-    report.stages.sourceAndIdentity = "pass";
     report.stages.graphProjection = pass.projection.blockscanGraph &&
       pass.projection.blockscanGraph.length > baseGraph.length ? "pass" : "fail";
     if (report.stages.graphProjection !== "pass") {
@@ -604,9 +670,42 @@ async function main(): Promise<void> {
       universeSnapshotPath: frozenUniverse.snapshotPath,
       universeSha256: frozenUniverse.evidence.sha256,
       cfg,
+      passBudgetMs: effectivePassBudgetMs,
     });
     assertFileSha256(frozenUniverse.snapshotPath, frozenUniverse.evidence.sha256);
-    const hunt = parseHuntReport(huntOut);
+    const frozenHunt = readFrozenHuntReport(huntOut);
+    const hunt = frozenHunt.report;
+    report.producerOutput.frozenHuntArtifact = frozenHunt.artifact;
+    report.producerOutput.naturalRouteSet = naturalRouteSetEvidence(
+      hunt.opportunities,
+    );
+    if (hunt.opportunities.length > cfg.maxCandidates) {
+      report.failure =
+        `frozen hunt emitted ${hunt.opportunities.length} opportunities above ` +
+          `production maxCandidates ${cfg.maxCandidates}`;
+      finish(report, cfg.outPath);
+      return;
+    }
+    if (hunt.stateBlock !== anchorBlock) {
+      report.failure =
+        `frozen hunt state block ${hunt.stateBlock} != anchor ${anchorBlock}`;
+      finish(report, cfg.outPath);
+      return;
+    }
+    if (hunt.edges !== report.producerOutput.materializedGraph.edgeCount) {
+      report.failure =
+        `frozen hunt graph edge count ${hunt.edges} != independently built ` +
+          `${report.producerOutput.materializedGraph.edgeCount}`;
+      finish(report, cfg.outPath);
+      return;
+    }
+    if (hunt.edgeSetSha256 !== report.producerOutput.materializedGraph.sha256) {
+      report.failure =
+        `frozen hunt graph ${hunt.edgeSetSha256} != independently built ` +
+          `${report.producerOutput.materializedGraph.sha256}`;
+      finish(report, cfg.outPath);
+      return;
+    }
     const relevant = hunt.opportunities
       .map((opportunity, index) => ({ opportunity, index }))
       .filter(({ opportunity }) => opportunity.rank <= cfg.topK)
@@ -616,13 +715,32 @@ async function main(): Promise<void> {
       ));
     report.reference.referenceEdgeMatched = relevant.length > 0;
     report.reference.exactCycleMatched = relevant.length > 0;
-    report.stages.enumeration = relevant.length > 0 ? "pass" : "fail";
     if (relevant.length === 0) {
+      report.stages.enumeration = "fail";
       report.failure =
         `scanner did not enumerate the winner-bound protocol edge within top ${cfg.topK}`;
       finish(report, cfg.outPath);
       return;
     }
+    const requiredFamilyIds = routeFamilyIds(
+      relevant[0].opportunity.seedEdges,
+    );
+    report.discovery.shardCompleteness = productionShardCompleteness({
+      edges: fullGraph,
+      familySourceCoverage,
+      requiredFamilyIds,
+    });
+    if (report.discovery.shardCompleteness.requiredComplete !== true) {
+      report.failure =
+        "selected route lacks complete required discovery shards: " +
+        summarizeRequiredShardFailure(
+          report.discovery.shardCompleteness,
+        );
+      finish(report, cfg.outPath);
+      return;
+    }
+    report.stages.sourceAndIdentity = "pass";
+    report.stages.enumeration = "pass";
 
     const validationPort = await allocatePort();
     validationState = new AnvilStateBackend(
@@ -645,6 +763,18 @@ async function main(): Promise<void> {
     const validationFailures: string[] = [];
     for (const selected of relevant) {
       try {
+        const selectedRouteSha256 = huntRouteSha256(
+          selected.opportunity.seedEdges,
+        );
+        if (
+          !report.producerOutput.naturalRouteSet?.routeSha256s.includes(
+            selectedRouteSha256,
+          )
+        ) {
+          throw new Error(
+            "selected route is absent from the frozen natural route set",
+          );
+        }
         const routeEdges = selected.opportunity.seedEdges.map((edge, index) =>
           findExactEdge(fullGraph, edge, index));
         const opportunity = reconstructedOpportunity(
@@ -664,7 +794,7 @@ async function main(): Promise<void> {
         const cache = new PoolStateCache(provider);
         cache.setTickBlock(anchorBlock);
         const solved = await new AnvilSolver().solve(plans[0], validationState, simulator, {
-          deadlineMs: cfg.passBudgetMs,
+          deadlineMs: effectivePassBudgetMs,
           finalSimTopN: 3,
           gssMaxTries: 8,
           quoteProfitFloorBps: validationPolicy.quoteProfitFloorBps,
@@ -725,6 +855,22 @@ async function main(): Promise<void> {
               `${validationPolicy.maxProfitBpsOfFlash}bps of flash ${solved.flashAmount}`,
           );
         }
+        let conservation: NonNullable<
+          ReplayReport["terminalGates"]["repaymentAndConservation"]
+        >;
+        try {
+          conservation = await proveReplayConservation(
+            validationState,
+            solved,
+            routeEdges,
+            sim.calldata,
+            sim.grossProfit,
+          );
+        } catch (error) {
+          report.stages.finalSim = "fail";
+          throw error;
+        }
+        report.terminalGates.repaymentAndConservation = conservation;
         const ev = await evaluateEv(
           // A sender-prefix reconstruction has a synthetic block-N header.
           // Economics for target N+1 must use the canonical block-N header and
@@ -751,15 +897,23 @@ async function main(): Promise<void> {
         report.selected = {
           rank: selected.opportunity.rank,
           route: selected.opportunity.seedEdges,
+          routeSha256: selectedRouteSha256,
           solverAmount: solved.flashAmount.toString(),
           hopAmounts: routeEdges.map((_edge, index) => ({
             amountIn: propagated.amounts[index].toString(),
             amountOut: propagated.amounts[index + 1].toString(),
             rawAmountOut: propagated.rawOutputs[index].toString(),
           })),
+          profitToken: sim.profitToken.toLowerCase(),
+          grossProfit: sim.grossProfit.toString(),
           netProfit: sim.netProfit.toString(),
           gasUsed: sim.gasUsed.toString(),
           calldataHash: createHash("sha256").update(sim.calldata).digest("hex"),
+          resolvedPlanSha256: createHash("sha256")
+            .update(compilePlan(solved.root, DEFAULT_SEARCHER_EXECUTOR))
+            .digest("hex"),
+          repaymentAndConservation: true,
+          leavesStandingPosition: pathLeavesStandingPosition(routeEdges),
           ev: {
             valuationAvailable: ev.valuationAvailable,
             gasMeasurementAvailable: ev.gasMeasurementAvailable,
@@ -847,10 +1001,11 @@ function emptyReport(
   frozenUniverse: FrozenUniverseInput,
   inputAudit: ReplayInputAudit,
   validationPolicy: ReplayValidationPolicy,
+  fullGraph: readonly TokenEdge[],
   discovery: Omit<ReplayReport["discovery"], "sourceComplete" | "evaluationComplete">,
 ): ReplayReport {
   return {
-    schemaVersion: 2,
+    schemaVersion: 4,
     evidenceClass: "candidate-authored-diagnostic",
     trustedAcceptance: false,
     laneCoverage: cfg.triggerTx
@@ -880,7 +1035,9 @@ function emptyReport(
       amountSource: "solver",
       dynamicPoolsFromDiscoveryArtifact: true,
     },
+    actualRunnerConfig: runnerConfigEvidence(cfg, fullGraph.length),
     discovery: { sourceComplete, evaluationComplete, ...discovery },
+    producerOutput: initialProducerOutput(fullGraph),
     reference: {
       observedAdmissions: 0,
       subjectEdges: [],
@@ -909,6 +1066,7 @@ function emptyReport(
       finalVerifyAdmission: null,
       phantomProfit: null,
       standingGuard: null,
+      repaymentAndConservation: null,
       offlineHistorical: {
         headStaleCheck: "not_applicable",
         submissionCoordinator: "not_run",
@@ -922,6 +1080,100 @@ function emptyReport(
   };
 }
 
+async function proveReplayConservation(
+  state: AnvilStateBackend,
+  solved: Awaited<ReturnType<AnvilSolver["solve"]>>,
+  edges: readonly TokenEdge[],
+  expectedCalldata: string,
+  expectedGrossProfit: bigint,
+): Promise<NonNullable<ReplayReport["terminalGates"]["repaymentAndConservation"]>> {
+  const flashAdapterId = solved.root.adapterId;
+  const funding = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(flashAdapterId);
+  if (!funding) {
+    throw new Error(
+      `repayment/conservation cannot resolve flash family ${flashAdapterId}`,
+    );
+  }
+  const tokens = [...new Set(
+    edges
+      .flatMap((edge) => [edge.tokenIn, edge.tokenOut])
+      .map((token) => token.toLowerCase()),
+  )]
+    .sort()
+    .map(ethers.getAddress);
+  const snapshot = await state.snapshot();
+  try {
+    for (const token of tokens) {
+      const balance = await state.getTokenBalance(
+        token,
+        DEFAULT_SEARCHER_EXECUTOR,
+      );
+      if (balance !== 0n) {
+        throw new Error(
+          `repayment/conservation executor has pre-existing route-token ` +
+          `inventory ${token}:${balance}`,
+        );
+      }
+    }
+    const liquidityHolder = ethers.getAddress(funding.funding.liquidityHolder);
+    const profitToken = ethers.getAddress(solved.profitToken);
+    const lenderBalanceBefore = await state.getTokenBalance(
+      profitToken,
+      liquidityHolder,
+    );
+    const calldata = buildExecuteCalldata(
+      compilePlan(solved.root, DEFAULT_SEARCHER_EXECUTOR),
+    );
+    if (calldata.toLowerCase() !== expectedCalldata.toLowerCase()) {
+      throw new Error(
+        "repayment/conservation calldata differs from independent final sim",
+      );
+    }
+    await state.send({
+      from: DEFAULT_SEARCHER_OWNER,
+      to: DEFAULT_SEARCHER_EXECUTOR,
+      data: calldata,
+      gas: "0x1000000",
+    });
+    let grossProfit = 0n;
+    for (const token of tokens) {
+      const balance = await state.getTokenBalance(
+        token,
+        DEFAULT_SEARCHER_EXECUTOR,
+      );
+      if (token.toLowerCase() === profitToken.toLowerCase()) {
+        grossProfit = balance;
+      } else if (balance < 0n) {
+        throw new Error(
+          `repayment/conservation consumed intermediate inventory ` +
+            `${token}:${balance}`,
+        );
+      }
+    }
+    if (grossProfit <= 0n) {
+      throw new Error("repayment/conservation produced no positive profit");
+    }
+    if (grossProfit !== expectedGrossProfit) {
+      throw new Error(
+        `repayment/conservation gross profit ${grossProfit} differs from ` +
+          `independent final sim ${expectedGrossProfit}`,
+      );
+    }
+    const lenderBalanceAfter = await state.getTokenBalance(
+      profitToken,
+      liquidityHolder,
+    );
+    if (lenderBalanceAfter < lenderBalanceBefore) {
+      throw new Error(
+        "repayment/conservation decreased flash liquidity-holder balance",
+      );
+    }
+    return { allowed: true };
+  } finally {
+    await state.revert(snapshot);
+  }
+}
+
 async function runHunt(input: {
   upstreamRpc: string;
   anchorBlock: number;
@@ -932,6 +1184,7 @@ async function runHunt(input: {
   universeSnapshotPath: string;
   universeSha256: string;
   cfg: CliConfig;
+  passBudgetMs: number;
 }): Promise<void> {
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
@@ -946,24 +1199,16 @@ async function runHunt(input: {
     HUNT_UNIVERSE_PATH: input.universeSnapshotPath,
     HUNT_MAX_POOLS: String(input.cfg.maxPools),
     HUNT_MAX_HOPS: String(input.cfg.maxHops),
-    HUNT_MIN_SPREAD_BPS: "0",
+    HUNT_MIN_SPREAD_BPS: String(input.cfg.minSpreadBps),
     // A content-addressed full live graph may need a cold, one-time state
     // bootstrap. Keep this separate from the measured current-block pass.
-    HUNT_PREWARM_BUDGET_MS: String(input.cfg.scanBudgetMs),
+    HUNT_PREWARM_BUDGET_MS: String(input.cfg.prewarmBudgetMs),
     HUNT_SCAN_BUDGET_MS: String(input.cfg.scanBudgetMs),
-    HUNT_PASS_BUDGET_MS: String(input.cfg.passBudgetMs),
+    HUNT_PASS_BUDGET_MS: String(input.passBudgetMs),
     HUNT_MAX_CANDIDATES: String(input.cfg.maxCandidates),
-    HUNT_REFINE_CANDIDATES: String(input.cfg.maxCandidates),
-    // This runner proves deterministic route correctness, not live latency.
-    // Reusing blockscan-hunt's 1s hot-path family timeout makes a cold full
-    // graph replay reject exact-positive routes merely because other probes
-    // share the same local Anvil. The enclosing pass budget remains the hard
-    // bound; live block-scan keeps its independent production timeout.
-    HUNT_REFINE_FAMILY_TIMEOUT_MS: String(input.cfg.passBudgetMs),
-    // This subprocess supplies production enumeration only. The wrapper owns
-    // winner-bound exact solve/final-sim with the correct execution-family
-    // cache, so avoid spending time solving unrelated ranked candidates here.
-    HUNT_TOP_K: "1",
+    HUNT_REFINE_CANDIDATES: String(input.cfg.refineCandidates),
+    HUNT_REFINE_FAMILY_TIMEOUT_MS: String(input.cfg.refineFamilyTimeoutMs),
+    HUNT_TOP_K: String(input.cfg.topK),
     HUNT_OUT: input.huntOut,
     PRODUCTION_REPLAY_DISCOVERY_ARTIFACT: input.artifactPath,
     PRODUCTION_REPLAY_DISCOVERY_SHA256: input.artifactSha256,
@@ -1037,13 +1282,27 @@ function findExactEdge(graph: TokenEdge[], wanted: HuntEdge, index: number): Tok
   return matches[0];
 }
 
-function edgeIdentity(edge: Pick<TokenEdge, "adapterId" | "target" | "tokenIn" | "tokenOut" | "slotKind" | "poolId">): string {
+function edgeIdentity(
+  edge: Pick<
+    TokenEdge,
+    | "adapterId"
+    | "target"
+    | "tokenIn"
+    | "tokenOut"
+    | "slotKind"
+    | "edgeKind"
+    | "leavesStandingPosition"
+    | "poolId"
+  >,
+): string {
   return [
     edge.adapterId,
     edge.target.toLowerCase(),
     edge.tokenIn.toLowerCase(),
     edge.tokenOut.toLowerCase(),
     edge.slotKind,
+    edge.edgeKind,
+    edge.leavesStandingPosition ? "standing" : "conserving",
     edge.poolId?.toLowerCase() ?? "",
   ].join("|");
 }
@@ -1055,6 +1314,8 @@ function huntEdgeIdentity(edge: HuntEdge): string {
     edge.tokenIn.toLowerCase(),
     edge.tokenOut.toLowerCase(),
     edge.slotKind,
+    edge.edgeKind,
+    edge.leavesStandingPosition ? "standing" : "conserving",
     edge.poolId?.toLowerCase() ?? "",
   ].join("|");
 }
@@ -1143,16 +1404,133 @@ function toHuntEdge(edge: TokenEdge): HuntEdge {
     tokenIn: edge.tokenIn.toLowerCase(),
     tokenOut: edge.tokenOut.toLowerCase(),
     slotKind: edge.slotKind,
+    edgeKind: edge.edgeKind,
+    leavesStandingPosition: edge.leavesStandingPosition,
     ...(edge.poolId === undefined ? {} : { poolId: edge.poolId.toLowerCase() }),
   };
 }
 
-function parseHuntReport(path: string): HuntReport {
-  const raw = JSON.parse(readFileSync(path, "utf8")) as Partial<HuntReport>;
-  if (!Number.isSafeInteger(raw.stateBlock) || !Array.isArray(raw.opportunities) || !Array.isArray(raw.solved)) {
+function readFrozenHuntReport(path: string): {
+  report: HuntReport;
+  artifact: NonNullable<ProducerOutputEvidence["frozenHuntArtifact"]>;
+} {
+  const bytes = readFileSync(path);
+  const raw = JSON.parse(bytes.toString("utf8")) as Partial<HuntReport>;
+  if (
+    !Number.isSafeInteger(raw.stateBlock) ||
+    !Number.isSafeInteger(raw.edges) ||
+    (raw.edges ?? -1) < 0 ||
+    !/^[0-9a-f]{64}$/.test(raw.edgeSetSha256 ?? "") ||
+    !Array.isArray(raw.opportunities) ||
+    !Array.isArray(raw.solved)
+  ) {
     throw new Error("blockscan-hunt report has an invalid shape");
   }
-  return raw as HuntReport;
+  return {
+    report: raw as HuntReport,
+    artifact: {
+      byteLength: bytes.byteLength,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+    },
+  };
+}
+
+function materializedGraphEvidence(
+  graph: readonly TokenEdge[],
+): CanonicalMaterializedGraphEvidence {
+  return canonicalMaterializedGraphEvidence(
+    graph.map((edge) => lowerEdge(edge)),
+    (edge) => PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id,
+  );
+}
+
+function initialProducerOutput(
+  graph: readonly TokenEdge[],
+): ProducerOutputEvidence {
+  const materializedGraph = materializedGraphEvidence(graph);
+  return {
+    materializedGraph,
+    fullGraph: {
+      edgeCount: materializedGraph.edgeCount,
+      sha256: materializedGraph.sha256,
+    },
+    naturalRouteSet: null,
+    frozenHuntArtifact: null,
+  };
+}
+
+function runnerConfigEvidence(cfg: CliConfig, graphEdgeCount: number) {
+  return {
+    maxPools: cfg.maxPools,
+    maxHops: cfg.maxHops,
+    maxCandidates: cfg.maxCandidates,
+    refineCandidates: cfg.refineCandidates,
+    topK: cfg.topK,
+    minSpreadBps: cfg.minSpreadBps,
+    prewarmBudgetMs: cfg.prewarmBudgetMs,
+    scanBudgetMs: cfg.scanBudgetMs,
+    passBudgetMs: productionPassBudgetMs(cfg, graphEdgeCount),
+    basePassBudgetMs: cfg.passBudgetMs,
+    largeGraphPassBudgetMs: cfg.largeGraphPassBudgetMs,
+    largeGraphEdgeThreshold: cfg.largeGraphEdgeThreshold,
+    refineFamilyTimeoutMs: cfg.refineFamilyTimeoutMs,
+  };
+}
+
+function naturalRouteSetEvidence(
+  opportunities: readonly HuntOpportunity[],
+): NaturalRouteSetEvidence {
+  const routeSha256s = [...new Set(
+    opportunities.map((opportunity) => huntRouteSha256(opportunity.seedEdges)),
+  )].sort();
+  return {
+    opportunityCount: opportunities.length,
+    routeCount: routeSha256s.length,
+    routeSha256s,
+    sha256: semanticJsonSha256(routeSha256s),
+  };
+}
+
+function huntRouteSha256(route: readonly HuntEdge[]): string {
+  return semanticJsonSha256(
+    route.map(canonicalHuntEdge) as unknown as SemanticJson,
+  );
+}
+
+function canonicalHuntEdge(edge: HuntEdge): HuntEdge {
+  return {
+    adapterId: edge.adapterId,
+    target: edge.target.toLowerCase(),
+    tokenIn: edge.tokenIn.toLowerCase(),
+    tokenOut: edge.tokenOut.toLowerCase(),
+    slotKind: edge.slotKind,
+    edgeKind: edge.edgeKind,
+    leavesStandingPosition: edge.leavesStandingPosition,
+    ...(edge.poolId === undefined ? {} : { poolId: edge.poolId.toLowerCase() }),
+  };
+}
+
+function routeFamilyIds(route: readonly HuntEdge[]): string[] {
+  return [...new Set(route.map((edge) =>
+    PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id
+  ))].sort();
+}
+
+function summarizeRequiredShardFailure(
+  completeness: CanonicalShardCompleteness,
+): string {
+  const failures = [
+    ...(completeness.dexShard.status === "incomplete"
+      ? [`${completeness.dexShard.shardId}:` +
+        `${completeness.dexShard.issues.join(",") || "incomplete"}`]
+      : []),
+    ...completeness.familyShards
+      .filter((shard) => shard.required && shard.status === "incomplete")
+      .map((shard) =>
+        `${shard.shardId}:${shard.issues.join(",") || "incomplete"}`
+      ),
+  ];
+  return failures.join(" | ") || "requiredComplete=false without a failed shard";
 }
 
 function tokenBackend(provider: ethers.JsonRpcProvider, blockNumber: number): TokenQueryBackend {
@@ -1372,29 +1750,90 @@ function parseArgs(): CliConfig {
   const allowed = new Set([
     "--winner-tx", "--trigger-tx", "--source-from-block", "--universe",
     "--max-pools", "--max-hops", "--max-candidates", "--top-k",
-    "--scan-budget-ms", "--pass-budget-ms", "--out",
+    "--min-spread-bps", "--prewarm-budget-ms", "--scan-budget-ms",
+    "--pass-budget-ms", "--large-graph-pass-budget-ms",
+    "--large-graph-edge-threshold", "--refine-candidates",
+    "--refine-family-timeout-ms", "--out",
   ]);
   const unknown = [...values.keys()].filter((name) => !allowed.has(name));
   if (unknown.length > 0) throw new Error(`unknown production replay option(s): ${unknown.join(",")}`);
   const winnerTx = txHash(required(values, "--winner-tx"), "--winner-tx");
   const triggerRaw = values.get("--trigger-tx");
   const sourceFromBlock = positiveInt(required(values, "--source-from-block"), "--source-from-block");
-  const maxCandidates = positiveInt(values.get("--max-candidates") ?? "300", "--max-candidates");
-  const topK = positiveInt(values.get("--top-k") ?? String(maxCandidates), "--top-k");
+  const configured = (
+    flag: string,
+    env: string | null,
+    fallback: number,
+    allowZero = false,
+  ) => (allowZero ? nonNegativeInt : positiveInt)(
+    values.get(flag) ?? (env ? process.env[env] : undefined) ?? String(fallback),
+    flag,
+  );
+  const maxCandidates = configured(
+    "--max-candidates", "SEARCHER_BLOCKSCAN_MAX_CANDIDATES", 100,
+  );
+  const topK = configured("--top-k", null, maxCandidates);
   if (topK > maxCandidates) throw new Error("--top-k cannot exceed --max-candidates");
+  const passBudgetMs = configured(
+    "--pass-budget-ms", "SEARCHER_BLOCKSCAN_PASS_BUDGET_MS", 11_000,
+  );
+  const largeGraphPassBudgetMs = Math.max(
+    passBudgetMs,
+    configured(
+      "--large-graph-pass-budget-ms",
+      "SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS",
+      30_000,
+    ),
+  );
+  const refineCandidates = Math.max(
+    maxCandidates,
+    configured(
+      "--refine-candidates", "SEARCHER_BLOCKSCAN_REFINE_CANDIDATES", 512,
+    ),
+  );
   return {
     winnerTx,
     triggerTx: triggerRaw ? txHash(triggerRaw, "--trigger-tx") : null,
     sourceFromBlock,
     universePath: resolve(values.get("--universe") ?? DEFAULT_POOL_UNIVERSE_PATH),
-    maxPools: positiveInt(values.get("--max-pools") ?? "20000", "--max-pools"),
-    maxHops: positiveInt(values.get("--max-hops") ?? "4", "--max-hops"),
+    maxPools: configured("--max-pools", "SEARCHER_POOL_UNIVERSE_TOP_N", 20_000),
+    maxHops: configured("--max-hops", "SEARCHER_BLOCKSCAN_MAX_HOPS", 4),
     maxCandidates,
     topK,
-    scanBudgetMs: positiveInt(values.get("--scan-budget-ms") ?? "600000", "--scan-budget-ms"),
-    passBudgetMs: positiveInt(values.get("--pass-budget-ms") ?? "1200000", "--pass-budget-ms"),
+    minSpreadBps: configured(
+      "--min-spread-bps", "SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS", 10, true,
+    ),
+    prewarmBudgetMs: configured(
+      "--prewarm-budget-ms",
+      "SEARCHER_BLOCKSCAN_STARTUP_PREWARM_BUDGET_MS",
+      120_000,
+    ),
+    scanBudgetMs: configured(
+      "--scan-budget-ms", "SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS", 1_500,
+    ),
+    passBudgetMs,
+    largeGraphPassBudgetMs,
+    largeGraphEdgeThreshold: configured(
+      "--large-graph-edge-threshold",
+      "SEARCHER_BLOCKSCAN_LARGE_GRAPH_EDGE_THRESHOLD",
+      20_000,
+    ),
+    refineCandidates,
+    refineFamilyTimeoutMs: configured("--refine-family-timeout-ms", null, 1_000),
     outPath: values.has("--out") ? resolve(values.get("--out")!) : null,
   };
+}
+
+export function productionPassBudgetMs(
+  config: Pick<
+    CliConfig,
+    "passBudgetMs" | "largeGraphPassBudgetMs" | "largeGraphEdgeThreshold"
+  >,
+  graphEdgeCount: number,
+): number {
+  return graphEdgeCount >= config.largeGraphEdgeThreshold
+    ? Math.max(config.passBudgetMs, config.largeGraphPassBudgetMs)
+    : config.passBudgetMs;
 }
 
 function required(values: Map<string, string>, name: string): string {
@@ -1412,6 +1851,14 @@ function txHash(value: string, name: string): string {
 function positiveInt(value: string, name: string): number {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error(`${name} must be a positive integer`);
+  return parsed;
+}
+
+function nonNegativeInt(value: string, name: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`${name} must be a non-negative integer`);
+  }
   return parsed;
 }
 
