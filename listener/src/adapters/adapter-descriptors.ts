@@ -5,7 +5,7 @@ import type { FundingLineageId } from "../searcher/venues/funding/funding-capabi
 export type Lineage =
   | "univ2" | "univ3" | "univ4" | "curve" | "balancer-flash" | "morpho-flash"
   | "psm" | "erc4626" | "goldx" | "rocksolid" | "wsteth" | "metronome" | "weth"
-  | "eigenpie"
+  | "eigenpie" | "self-burn-native"
   | "fluid-credit" | "fluid-dex" | "balancer-v3" | "dodo-v2" | "erc20-infra"
   | FundingLineageId;
 
@@ -262,6 +262,14 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     lineage: "eigenpie",
     edgeKind: "protocol",
     action: "deposit",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
+  "self-burn-native-redeem": {
+    adapterId: "self-burn-native-redeem",
+    lineage: "self-burn-native",
+    edgeKind: "protocol",
+    action: "redeem",
     canSendValue: false,
     leavesStandingPositionDefault: false,
   },

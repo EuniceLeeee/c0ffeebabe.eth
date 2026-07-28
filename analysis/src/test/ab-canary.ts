@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   compareBlockScanLogs,
   parseAbExperiment,
+  parseAbSixStepDiagnostics,
   parseBlockScanLog,
   readAbLocalReportArtifact,
   resolveAbLocalReportArtifactPath,
@@ -21,6 +22,9 @@ import {
   type AbExperiment,
   type AbSixStepDiagnostic,
 } from "../ab-canary.js";
+import {
+  createSemanticSixStepEvidence,
+} from "../../../listener/src/shared/evidence/semantic-six-step.js";
 import {
   isStrictPositiveBackrunEv,
   type BackrunEvEvidence,
@@ -242,22 +246,36 @@ test("acceptance preserves production replay and emits explicit six-step equival
   assert.match(gate, /HUNT_PASS_BUDGET_MS: "600000"/);
   assert.match(gate, /HUNT_MAX_CANDIDATES: "100"/);
   assert.match(gate, /HUNT_TOP_K: "8"/);
-  assert.match(gate, /timeout: 20 \* 60 \* 1000/);
   assert.match(gate, /timeout: 30 \* 60 \* 1000/);
-  assert.match(gate, /const baselineDiagnostics = runHuntDiagnostics/);
-  assert.match(gate, /const challengerDiagnostics = runHuntDiagnostics/);
-  assert.match(gate, /requireStageDiagnostics\(\s*"baseline"/);
+  assert.doesNotMatch(gate, /runHuntDiagnostics/);
+  assert.match(gate, /const diagnostics = isAcceptancePhase[\s\S]*parseSixStepDiagnostics/);
+  assert.match(blockscan, /SEMANTIC_SIX_STEP_EVIDENCE=/);
+  assert.match(gate, /validateHuntRun\(\s*"baseline"/);
+  assert.match(gate, /requireStageDiagnostics\(label, run\.diagnostics, expectedStage\)/);
+  assert.match(
+    gate,
+    /const legacyPrefix = diagnostics\.length > 0[\s\S]*if \(legacyPrefix\) return \{ result: null, diagnostics \}/,
+    "a frozen legacy baseline may prove an early stage from its diagnostic prefix",
+  );
+  assert.match(
+    gate,
+    /if \(expectedStage === "final_sim_success"\)[\s\S]*final_sim_success requires a machine hunt result/,
+    "legacy compatibility must never manufacture a final-sim machine result",
+  );
   assert.match(gate, /backrunSixStepDiagnostics\(baseline, expectedPools\)/);
   assert.match(gate, /"full_prefix_replay"/);
   assert.match(gate, /SIX_STEP_ACCEPTANCE=/);
   assert.equal((gate.match(/phase === "acceptance"/g) ?? []).length, 1,
     "candidate compatibility phase must execute the same diagnostics as acceptance");
-  assert.match(gate, /if \(isAcceptancePhase\) \{[\s\S]*runHuntDiagnostics/);
+  assert.match(
+    gate,
+    /const diagnostics = isAcceptancePhase[\s\S]*parseSixStepDiagnostics/,
+  );
   assert.equal(
     (gate.match(/const childEnv = isolatedBlockscanHuntEnv\(\);/g) ?? [])
       .length,
-    2,
-    "both trusted blockscan hunt modes must use the isolated child environment",
+    1,
+    "the single trusted blockscan hunt must use the isolated child environment",
   );
   for (const prefix of [
     "HUNT_",
@@ -308,9 +326,9 @@ test("acceptance preserves production replay and emits explicit six-step equival
   assert.match(gate, /--diagnostic-max-candidates/);
   assert.match(gate, /parseSixStepDiagnostics/);
   assert.match(gate, /sixStepEquivalenceError\(baseline\.diagnostics, challenger\.diagnostics\)/);
-  assert.match(blockscan, /hopAmounts: expectedSolve\?\.diagnosticHopAmounts/);
-  assert.match(blockscan, /edgeSetSha256: canonicalSetSha256\(edgeIdentities\)/);
-  assert.match(blockscan, /ringSetSha256: canonicalSetSha256\(ringIdentities\)/);
+  assert.match(blockscan, /hop_amounts: expectedSolve\?\.diagnosticHopAmounts/);
+  assert.match(blockscan, /edge_set_sha256: canonicalSetSha256\(edgeIdentities\)/);
+  assert.match(blockscan, /route_set_sha256: canonicalSetSha256\(ringIdentities\)/);
   assert.match(blockscan, /edge\.edgeKind/);
   assert.match(blockscan, /edge\.leavesStandingPosition/);
   assert.match(blockscan, /amountIn: propagated\.amounts\[index\]\.toString\(\)/);
@@ -351,23 +369,179 @@ test("six-step stage evidence rejects budget truncation and equivalence compares
   ], "not_admitted"), null);
 
   const pass = [
-    { step: 1, stage: "graph", status: "pass", graphEdges: 10, edgeSetSha256: "e".repeat(64) },
-    { step: 2, stage: "enumeration", status: "pass", observedRank: 2, ringSetSha256: "r".repeat(64) },
-    { step: 3, stage: "exact_quote_refine", status: "pass", probeMarginBps: 12 },
-    { step: 4, stage: "planner_and_solver", status: "pass", hopAmounts: [{ amountIn: "1", amountOut: "2" }] },
-    { step: 5, stage: "resolved_plan_resim", status: "pass", calldataHash: "a".repeat(64), gasUsed: "7", netProfit: "3" },
-    { step: 6, stage: "ev", status: "pass", decision: "allow", netEvWei: "2" },
-  ] as AbSixStepDiagnostic[];
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 1,
+      status: "pass",
+      output: {
+        source_block: 1,
+        edge_set_sha256: "e".repeat(64),
+        edge_set_size: 3,
+        target_membership: "present",
+      },
+      metrics: { graph_edges: 10 },
+    }),
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 2,
+      status: "pass",
+      output: {
+        route_set_sha256: "b".repeat(64),
+        route_set_size: 1,
+        target_present: true,
+      },
+      metrics: { observed_rank: 2 },
+    }),
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 3,
+      status: "pass",
+      output: {
+        source_block: 1,
+        route_sha256: "c".repeat(64),
+        quote_status: "positive",
+        probe_amount_in: "1",
+        quoted_amount_out: "2",
+        leg_quotes: [{ amount_in: "1", amount_out: "2" }],
+      },
+      metrics: { probe_margin_bps: 12 },
+    }),
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 4,
+      status: "pass",
+      output: {
+        route_sha256: "c".repeat(64),
+        selected_by_solve_policy: true,
+        solve_succeeded: true,
+        solver_selected_amount: "1",
+        resolved_plan_sha256: "d".repeat(64),
+        hop_amounts: [{ amount_in: "1", amount_out: "2" }],
+      },
+    }),
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 5,
+      status: "pass",
+      output: {
+        success: true,
+        profit_token: "0xprofit",
+        gross_profit: "4",
+        calldata_sha256: "a".repeat(64),
+        gas_used: "7",
+        net_profit: "3",
+        repayment_and_conservation: true,
+        leaves_standing_position: false,
+      },
+    }),
+    createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step: 6,
+      status: "pass",
+      output: {
+        decision: "allow",
+        net_ev_wei: "2",
+        gas_cost_eth: "1",
+        bid_eth: "0",
+        valuation_available: true,
+        gas_measurement_available: true,
+        fee_state_available: true,
+      },
+    }),
+  ] as const;
   assert.equal(sixStepEquivalenceError(pass, structuredClone(pass)), null);
-  const changed = structuredClone(pass);
-  changed[4].gasUsed = "8";
+  const changed = [...pass];
+  changed[4] = createSemanticSixStepEvidence({
+    profile: "production_route_stage",
+    step: 5,
+    status: "pass",
+    output: {
+      success: true,
+      profit_token: "0xprofit",
+      gross_profit: "4",
+      calldata_sha256: "a".repeat(64),
+      gas_used: "8",
+      net_profit: "3",
+      repayment_and_conservation: true,
+      leaves_standing_position: false,
+    },
+  });
   assert.match(sixStepEquivalenceError(pass, changed) ?? "", /differs at step 5/);
-  const changedGraph = structuredClone(pass);
-  changedGraph[0].edgeSetSha256 = "f".repeat(64);
+  const changedGraph = [...pass];
+  changedGraph[0] = createSemanticSixStepEvidence({
+    profile: "production_route_stage",
+    step: 1,
+    status: "pass",
+    output: {
+      source_block: 1,
+      edge_set_sha256: "f".repeat(64),
+      edge_set_size: 3,
+      target_membership: "present",
+    },
+  });
   assert.match(sixStepEquivalenceError(pass, changedGraph) ?? "", /differs at step 1/);
-  const changedRings = structuredClone(pass);
-  changedRings[1].ringSetSha256 = "s".repeat(64);
+  const changedRings = [...pass];
+  changedRings[1] = createSemanticSixStepEvidence({
+    profile: "production_route_stage",
+    step: 2,
+    status: "pass",
+    output: {
+      route_set_sha256: "c".repeat(64),
+      route_set_size: 1,
+      target_present: true,
+    },
+  });
   assert.match(sixStepEquivalenceError(pass, changedRings) ?? "", /differs at step 2/);
+
+  const telemetryOnly = pass.map((entry) =>
+    createSemanticSixStepEvidence({
+      profile: entry.profile,
+      step: entry.step,
+      status: entry.status,
+      output: entry.output,
+      reasonCode: entry.reason_code,
+      metrics: { implementation_specific_latency_ms: 99_999 },
+      extensions: { module_layout: "rewritten" },
+    }));
+  assert.equal(
+    sixStepEquivalenceError(pass, telemetryOnly),
+    null,
+    "metrics and family-owned extensions must not define semantic equivalence",
+  );
+});
+
+test("six-step parser reads legacy evidence but prefers and validates semantic schema", () => {
+  const semantic = createSemanticSixStepEvidence({
+    profile: "production_route_stage",
+    step: 1,
+    status: "fail",
+    output: { target_membership: "missing" },
+    reasonCode: "target_edges_missing",
+  });
+  const legacyLine = `SIX_STEP_DIAGNOSTIC=${JSON.stringify({
+    step: 1,
+    stage: "graph",
+    status: "fail",
+    missingEdges: ["edge"],
+  })}`;
+  const legacy = parseAbSixStepDiagnostics(legacyLine);
+  assert.equal(legacy.length, 1);
+  assert.ok("stage" in legacy[0]);
+  assert.equal(legacy[0].stage, "graph");
+
+  const parsed = parseAbSixStepDiagnostics([
+    legacyLine,
+    `SEMANTIC_SIX_STEP_EVIDENCE=${JSON.stringify(semantic)}`,
+  ].join("\n"));
+  assert.deepEqual(parsed, [semantic], "semantic evidence wins during marker migration");
+
+  const forged = { ...semantic, output_sha256: "0".repeat(64) };
+  assert.throws(
+    () => parseAbSixStepDiagnostics(
+      `SEMANTIC_SIX_STEP_EVIDENCE=${JSON.stringify(forged)}`,
+    ),
+    /does not bind output/,
+  );
 });
 
 test("systemic A/B decisions do not require a single-transaction six-step receipt", () => {

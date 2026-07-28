@@ -1,34 +1,62 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  semanticSixStepEquivalenceError as semanticEvidenceEquivalenceError,
+  semanticSixStepSequenceError,
+  validateSemanticSixStepEvidence,
+  type SemanticSixStepEvidence,
+} from "../../listener/src/shared/evidence/semantic-six-step.js";
 
 export type AbVerdict = "win" | "lose" | "inconclusive";
 export type ScriptAssessment = "supports" | "contradicts" | "inconclusive";
 export type FinalVerdict = "win" | "lose" | "needs_escalation";
 export type ChangeClass = "performance" | "correctness" | "capability";
 
-export interface AbSixStepDiagnostic {
+export interface LegacyAbSixStepDiagnostic {
   step: 1 | 2 | 3 | 4 | 5 | 6;
   stage: string;
   status: "pass" | "fail" | "reject" | "not_reached";
   [key: string]: unknown;
 }
 
+export type AbSixStepDiagnostic =
+  | SemanticSixStepEvidence
+  | LegacyAbSixStepDiagnostic;
+
 export function sixStepDiagnosticsError(
-  diagnostics: AbSixStepDiagnostic[],
+  diagnostics: readonly AbSixStepDiagnostic[],
   expectedStage: "not_admitted" | "path_found" | "final_sim_success",
 ): string | null {
-  const steps = diagnostics.map((entry) => entry.step);
-  if (steps.length === 0 || new Set(steps).size !== steps.length
-      || steps.some((step, index) => index > 0 && step <= steps[index - 1])) {
-    return "did not emit ordered, unique six-step diagnostics";
+  if (diagnostics.some((entry) =>
+    !isSemanticSixStepEvidence(entry) &&
+    !isLegacySixStepDiagnostic(entry)
+  )) {
+    return "emitted malformed six-step evidence";
+  }
+  const semantic = diagnostics.filter(isSemanticSixStepEvidence);
+  if (semantic.length !== 0 && semantic.length !== diagnostics.length) {
+    return "mixed legacy and semantic six-step evidence in one run";
+  }
+  if (semantic.length > 0) {
+    const sequenceError = semanticSixStepSequenceError(semantic);
+    if (sequenceError) return sequenceError;
+  } else {
+    const legacy = diagnostics as readonly LegacyAbSixStepDiagnostic[];
+    const steps = legacy.map((entry) => entry.step);
+    if (steps.length === 0 || new Set(steps).size !== steps.length
+        || steps.some((step, index) => index > 0 && step <= steps[index - 1])) {
+      return "did not emit ordered, unique six-step diagnostics";
+    }
   }
   if (expectedStage === "final_sim_success") {
-    if (JSON.stringify(steps) !== JSON.stringify([1, 2, 3, 4, 5, 6])) {
+    if (diagnostics.length !== 6) {
       return "did not emit exactly one ordered diagnostic for steps 1..6";
     }
     const failed = diagnostics.find((entry) => entry.status !== "pass");
     return failed
-      ? `six-step acceptance failed at step ${failed.step} (${failed.stage}): ${failed.status}`
+      ? `six-step acceptance failed at step ${failed.step} (${
+        isSemanticSixStepEvidence(failed) ? failed.stage_id : failed.stage
+      }): ${failed.status}`
       : null;
   }
   if (expectedStage === "path_found") {
@@ -37,7 +65,8 @@ export function sixStepDiagnosticsError(
         return `did not prove path_found at diagnostic step ${step}`;
       }
     }
-    return diagnostics.length === 6 && diagnostics.every((entry) => entry.status === "pass")
+    return diagnostics.length === 6 &&
+        diagnostics.every((entry) => entry.status === "pass")
       ? "diagnostics reached final_sim_success but the declared stage is path_found"
       : null;
   }
@@ -49,19 +78,95 @@ export function sixStepDiagnosticsError(
 }
 
 export function sixStepEquivalenceError(
-  baseline: AbSixStepDiagnostic[],
-  challenger: AbSixStepDiagnostic[],
+  baseline: readonly AbSixStepDiagnostic[],
+  challenger: readonly AbSixStepDiagnostic[],
 ): string | null {
   const baselineError = sixStepDiagnosticsError(baseline, "final_sim_success");
   if (baselineError) return `baseline ${baselineError}`;
   const challengerError = sixStepDiagnosticsError(challenger, "final_sim_success");
   if (challengerError) return `challenger ${challengerError}`;
+  const baselineSemantic = baseline.every(isSemanticSixStepEvidence);
+  const challengerSemantic = challenger.every(isSemanticSixStepEvidence);
+  if (baselineSemantic !== challengerSemantic) {
+    return "six-step evidence schema differs between baseline and challenger";
+  }
+  if (baselineSemantic && challengerSemantic) {
+    return semanticEvidenceEquivalenceError(
+      baseline as readonly SemanticSixStepEvidence[],
+      challenger as readonly SemanticSixStepEvidence[],
+    );
+  }
   for (let index = 0; index < baseline.length; index++) {
     if (stableJson(baseline[index]) !== stableJson(challenger[index])) {
-      return `six-step equivalence differs at step ${baseline[index].step} (${baseline[index].stage})`;
+      const entry = baseline[index] as LegacyAbSixStepDiagnostic;
+      return `six-step equivalence differs at step ${entry.step} (${entry.stage})`;
     }
   }
   return null;
+}
+
+/**
+ * Parses the current semantic marker while preserving read compatibility with
+ * pre-schema acceptance logs. If both are present, the semantic stream wins:
+ * wrappers may echo legacy lines while migrating, but one run still owns one
+ * semantic prefix.
+ */
+export function parseAbSixStepDiagnostics(
+  output: string,
+): AbSixStepDiagnostic[] {
+  const semantic: SemanticSixStepEvidence[] = [];
+  const legacy: LegacyAbSixStepDiagnostic[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const marker = line.startsWith("SEMANTIC_SIX_STEP_EVIDENCE=")
+      ? "SEMANTIC_SIX_STEP_EVIDENCE="
+      : line.startsWith("SIX_STEP_DIAGNOSTIC=")
+        ? "SIX_STEP_DIAGNOSTIC="
+        : null;
+    if (!marker) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line.slice(marker.length));
+    } catch (error) {
+      throw new Error(
+        `invalid ${marker.slice(0, -1)} JSON: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    if (marker === "SEMANTIC_SIX_STEP_EVIDENCE=") {
+      const errors = validateSemanticSixStepEvidence(parsed);
+      if (errors.length > 0) {
+        throw new Error(`invalid semantic six-step evidence: ${errors.join("; ")}`);
+      }
+      semantic.push(parsed as SemanticSixStepEvidence);
+    } else {
+      legacy.push(parsed as LegacyAbSixStepDiagnostic);
+    }
+  }
+  return semantic.length > 0
+    ? semantic
+    : legacy;
+}
+
+function isSemanticSixStepEvidence(
+  diagnostic: AbSixStepDiagnostic,
+): diagnostic is SemanticSixStepEvidence {
+  return Boolean(diagnostic) &&
+    typeof diagnostic === "object" &&
+    "schema_version" in diagnostic;
+}
+
+function isLegacySixStepDiagnostic(
+  diagnostic: AbSixStepDiagnostic,
+): diagnostic is LegacyAbSixStepDiagnostic {
+  return Boolean(diagnostic) &&
+    typeof diagnostic === "object" &&
+    !("schema_version" in diagnostic) &&
+    Number.isInteger(diagnostic.step) &&
+    diagnostic.step >= 1 &&
+    diagnostic.step <= 6 &&
+    typeof diagnostic.stage === "string" &&
+    ["pass", "fail", "reject", "not_reached"].includes(diagnostic.status);
 }
 
 function stableJson(value: unknown): string {

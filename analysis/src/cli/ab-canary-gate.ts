@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import {
   parseAbExperiment,
+  parseAbSixStepDiagnostics,
   readAbLocalReportArtifact,
   resolveAbReportArtifactPath,
   sixStepDiagnosticsError,
@@ -240,6 +241,11 @@ interface HuntResult {
   net_profit_raw: string | null;
 }
 
+/**
+ * Block-scan emits the semantic schema. Backrun remains the legacy shape until
+ * its trigger/full-prefix envelope can be represented without pretending that
+ * the old fourth, fifth, and sixth slots are plan/sim/EV.
+ */
 type SixStepDiagnostic = AbSixStepDiagnostic;
 
 type ProductionEvidence = NonNullable<AbExperiment["production_evidence"]>;
@@ -267,6 +273,11 @@ interface BlockscanHuntResult extends HuntResult {
   expected_route: ProductionRouteStep[];
   matched_route: ProductionRouteStep[];
   six_step_diagnostics?: SixStepDiagnostic[];
+}
+
+interface BlockscanHuntRun {
+  result: BlockscanHuntResult | null;
+  diagnostics: SixStepDiagnostic[];
 }
 
 interface BackrunHuntResult extends HuntResult, BackrunCausalReplayResult {
@@ -349,35 +360,17 @@ function runCandidateReplay(observation: ProductionSampleObservation): void {
     "challenger", challengerRoot, 8569, challengerUniverse, sample.block_number - 1,
     expectedPools, expectedSwapPath, expectedRoute, maxPools,
   );
-  validateHuntResult(
+  validateHuntRun(
     "baseline", baseline, evidence.baseline_stage,
     sample.block_number - 1, expectedPools, expectedSwapPath, expectedRoute,
   );
-  validateHuntResult(
+  validateHuntRun(
     "challenger", challenger, evidence.challenger_stage,
     sample.block_number - 1, expectedPools, expectedSwapPath, expectedRoute,
   );
   if (isAcceptancePhase) {
-    const baselineDiagnostics = runHuntDiagnostics(
-      "baseline", baseRoot, 8568, baselineUniverse, sample.block_number - 1,
-      expectedPools, expectedSwapPath, expectedRoute, maxPools,
-    );
-    const challengerDiagnostics = runHuntDiagnostics(
-      "challenger", challengerRoot, 8569, challengerUniverse, sample.block_number - 1,
-      expectedPools, expectedSwapPath, expectedRoute, maxPools,
-    );
-    baseline.six_step_diagnostics = baselineDiagnostics;
-    challenger.six_step_diagnostics = challengerDiagnostics;
-    requireStageDiagnostics(
-      "baseline",
-      baselineDiagnostics,
-      evidence.baseline_stage,
-    );
-    requireStageDiagnostics(
-      "challenger",
-      challengerDiagnostics,
-      evidence.challenger_stage,
-    );
+    const baselineDiagnostics = baseline.diagnostics;
+    const challengerDiagnostics = challenger.diagnostics;
     emitSixStepDiagnostics("baseline", baselineDiagnostics);
     emitSixStepDiagnostics("challenger", challengerDiagnostics);
   }
@@ -516,18 +509,15 @@ function runDeclaredResolutionReplay(
 }
 
 function parseSixStepDiagnostics(output: string, label: string): SixStepDiagnostic[] {
-  const diagnostics: SixStepDiagnostic[] = [];
-  for (const line of output.split(/\r?\n/)) {
-    if (!line.startsWith("SIX_STEP_DIAGNOSTIC=")) continue;
-    try {
-      diagnostics.push(JSON.parse(line.slice("SIX_STEP_DIAGNOSTIC=".length)) as SixStepDiagnostic);
-    } catch (error) {
-      throw new Error(
-        `${label} emitted invalid six-step diagnostic JSON: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+  try {
+    return parseAbSixStepDiagnostics(output);
+  } catch (error) {
+    throw new Error(
+      `${label} emitted invalid six-step evidence: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
-  return diagnostics;
 }
 
 function requireSixStepPass(label: string, diagnostics: SixStepDiagnostic[]): void {
@@ -923,17 +913,28 @@ function runHunt(
   expectedSwapPath: ProductionSampleObservation["arb_swap_path"],
   expectedRoute: ProductionRouteStep[],
   maxPools: number,
-): BlockscanHuntResult {
+): BlockscanHuntRun {
   const outDir = fs.mkdtempSync(path.join(gateTmpRoot, `mev-ab-${label}-`));
   const childEnv = isolatedBlockscanHuntEnv();
   const result = spawnSync(
     process.execPath,
-    ["--import", "tsx", "src/searcher/test/blockscan-hunt.ts"],
+    [
+      "--import", "tsx", "src/searcher/test/blockscan-hunt.ts",
+      ...(isAcceptancePhase
+        ? [
+            "--diagnostic",
+            "--max-candidates", "100",
+            "--scan-budget-ms", "120000",
+            "--pass-budget-ms", "600000",
+            "--top-k", "8",
+          ]
+        : []),
+    ],
     {
     cwd: path.join(root, "listener"),
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 20 * 60 * 1000,
+    timeout: 30 * 60 * 1000,
     maxBuffer: 32 * 1024 * 1024,
     env: {
       ...childEnv,
@@ -951,13 +952,13 @@ function runHunt(
       HUNT_PASS_BUDGET_MS: "600000",
       // Keep the trusted replay on the same generic candidate budget as
       // production. A route admitted at rank 9..100 is a production route, not
-      // a replay failure; the expected target is still matched by its full
-      // ordered route before it can satisfy the gate.
+      // a replay failure. The expected route is used only to validate the
+      // immutable machine output after production selection has completed.
       HUNT_MAX_CANDIDATES: "100",
-      // The hunt always appends the exact matched target to the solve set, so
-      // solving the first eight plus that target preserves coverage without
-      // spending the gate on every unrelated candidate.
+      // Solve exactly the production-shaped top-K; the expected route is never
+      // appended or force-selected by acceptance.
       HUNT_TOP_K: "8",
+      HUNT_REFINE_CANDIDATES: "512",
       HUNT_OUT: path.join(outDir, "hunt.json"),
       AB_EXPECTED_POOL_IDS: expectedPools.join(","),
       AB_EXPECTED_SWAP_PATH_JSON: JSON.stringify(expectedSwapPath),
@@ -971,83 +972,31 @@ function runHunt(
     const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim().slice(-4000);
     throw new Error(`${label} blockscan hunt exited ${result.status ?? "signal"}: ${output}`);
   }
-  const marker = String(result.stdout ?? "").split(/\r?\n/)
+  const stdout = String(result.stdout ?? "");
+  const diagnostics = isAcceptancePhase
+    ? parseSixStepDiagnostics(stdout, label)
+    : [];
+  if (isAcceptancePhase && diagnostics.length === 0) {
+    throw new Error(`${label} blockscan hunt emitted no six-step evidence`);
+  }
+  const marker = stdout.split(/\r?\n/)
     .filter((line) => line.startsWith("BLOCKSCAN_HUNT_RESULT="))
     .at(-1);
-  if (!marker) throw new Error(`${label} blockscan hunt emitted no machine result`);
+  if (!marker) {
+    const legacyPrefix = diagnostics.length > 0 &&
+      diagnostics.every((entry) => !("schema_version" in entry));
+    if (legacyPrefix) return { result: null, diagnostics };
+    throw new Error(`${label} blockscan hunt emitted no machine result`);
+  }
+  let parsed: BlockscanHuntResult;
   try {
-    return JSON.parse(marker.slice("BLOCKSCAN_HUNT_RESULT=".length)) as BlockscanHuntResult;
+    parsed = JSON.parse(
+      marker.slice("BLOCKSCAN_HUNT_RESULT=".length),
+    ) as BlockscanHuntResult;
   } catch (error) {
     throw new Error(`${label} blockscan hunt result is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
-}
-
-/** Run the same production-shaped historical hunt in diagnostic mode.
- * Diagnostic mode may intentionally return after the first failing stage, so this parser consumes only
- * ordered SIX_STEP_DIAGNOSTIC markers and never requires a final BLOCKSCAN_HUNT_RESULT marker. */
-function runHuntDiagnostics(
-  label: string,
-  root: string,
-  anvilPort: number,
-  universe: string,
-  forkBlock: number,
-  expectedPools: string[],
-  expectedSwapPath: ProductionSampleObservation["arb_swap_path"],
-  expectedRoute: ProductionRouteStep[],
-  maxPools: number,
-): SixStepDiagnostic[] {
-  const outDir = fs.mkdtempSync(path.join(gateTmpRoot, `mev-ab-${label}-diagnostic-`));
-  const childEnv = isolatedBlockscanHuntEnv();
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--import", "tsx", "src/searcher/test/blockscan-hunt.ts",
-      "--diagnostic",
-      "--max-candidates", "100",
-      "--scan-budget-ms", "120000",
-      "--pass-budget-ms", "600000",
-      "--top-k", "8",
-    ],
-    {
-      cwd: path.join(root, "listener"),
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 30 * 60 * 1000,
-      maxBuffer: 32 * 1024 * 1024,
-      env: {
-        ...childEnv,
-        SEARCHER_LIVE_RPC_URL: requiredArg("--rpc"),
-        SEARCHER_BLOCKSCAN_HUNT_ANVIL_PORT: String(anvilPort),
-        HUNT_BLOCK: String(forkBlock),
-        HUNT_UNIVERSE_PATH: universe,
-        HUNT_MAX_POOLS: String(maxPools),
-        HUNT_MAX_HOPS: "4",
-        HUNT_MIN_SPREAD_BPS: "0",
-        HUNT_SCAN_BUDGET_MS: "120000",
-        HUNT_PASS_BUDGET_MS: "600000",
-        HUNT_MAX_CANDIDATES: "100",
-        HUNT_REFINE_CANDIDATES: "512",
-        HUNT_TOP_K: "8",
-        HUNT_OUT: path.join(outDir, "hunt.json"),
-        AB_EXPECTED_POOL_IDS: expectedPools.join(","),
-        AB_EXPECTED_SWAP_PATH_JSON: JSON.stringify(expectedSwapPath),
-        AB_EXPECTED_ROUTE_JSON: JSON.stringify(expectedRoute),
-        AB_EXPECTED_ROUTE_SCOPE: acceptanceEvidence().route_scope,
-      },
-    },
-  );
-  if (result.error) {
-    throw new Error(`${label} six-step diagnostic failed to start: ${result.error.message}`);
-  }
-  if (result.status !== 0) {
-    const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim().slice(-4_000);
-    throw new Error(`${label} six-step diagnostic exited ${result.status ?? "signal"}: ${output}`);
-  }
-  const diagnostics = parseSixStepDiagnostics(String(result.stdout ?? ""), label);
-  if (diagnostics.length === 0) {
-    throw new Error(`${label} six-step diagnostic emitted no stage markers`);
-  }
-  return diagnostics;
+  return { result: parsed, diagnostics };
 }
 
 function isolatedBlockscanHuntEnv(): NodeJS.ProcessEnv {
@@ -1069,6 +1018,33 @@ function isolatedBlockscanHuntEnv(): NodeJS.ProcessEnv {
   // retained topology/cache artifact after the trusted gate cleared it.
   childEnv.SEARCHER_TEST_DISABLE_DOTENV = "1";
   return childEnv;
+}
+
+function validateHuntRun(
+  label: string,
+  run: BlockscanHuntRun,
+  expectedStage: string,
+  forkBlock: number,
+  expectedPools: string[],
+  expectedSwapPath: ProductionSampleObservation["arb_swap_path"],
+  expectedRoute: ProductionRouteStep[],
+): void {
+  requireStageDiagnostics(label, run.diagnostics, expectedStage);
+  if (run.result === null) {
+    if (expectedStage === "final_sim_success") {
+      throw new Error(`${label} final_sim_success requires a machine hunt result`);
+    }
+    return;
+  }
+  validateHuntResult(
+    label,
+    run.result,
+    expectedStage,
+    forkBlock,
+    expectedPools,
+    expectedSwapPath,
+    expectedRoute,
+  );
 }
 
 function validateHuntResult(

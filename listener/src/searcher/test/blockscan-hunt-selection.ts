@@ -101,21 +101,11 @@ export function resolveBlockScanHuntVerdict(
 export function selectedReplayOpportunityIndexes(
   opportunityCount: number,
   topK: number,
-  expectedIndex: number | null,
 ): number[] {
-  const indexes = Array.from(
+  return Array.from(
     { length: Math.min(Math.max(0, topK), opportunityCount) },
     (_, index) => index,
   );
-  if (
-    expectedIndex !== null
-    && expectedIndex >= 0
-    && expectedIndex < opportunityCount
-    && !indexes.includes(expectedIndex)
-  ) {
-    indexes.push(expectedIndex);
-  }
-  return indexes;
 }
 
 export function solveForOpportunityIndex<T extends { opportunityIndex: number }>(
@@ -304,11 +294,7 @@ function runTests(): void {
     resolveBlockScanHuntVerdict(2, 0n, true),
     "candidates_all_negative",
   );
-  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, null), [0, 1, 2]);
-  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, 1), [0, 1, 2]);
-  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, 4), [0, 1, 2, 4]);
-  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, -1), [0, 1, 2]);
-  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, 5), [0, 1, 2]);
+  assert.deepEqual(selectedReplayOpportunityIndexes(5, 3), [0, 1, 2]);
   assert.equal(
     solveForOpportunityIndex([{ opportunityIndex: 0 }, { opportunityIndex: 4 }], 4)?.opportunityIndex,
     4,

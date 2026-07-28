@@ -4,6 +4,7 @@ export type HistoricalChangeComponent =
   | "analysis-tool"
   | "classifier"
   | "gate"
+  | "family-execution"
   | "adapter"
   | "venue-identity"
   | "graph"
@@ -16,7 +17,11 @@ export type HistoricalChangeComponent =
   | "latency"
   | "candidate-ranking";
 
-export type HistoricalValidationTrack = "direct-main" | "historical-replay" | "hermes-ab";
+export type HistoricalValidationTrack =
+  | "direct-main"
+  | "family-execution"
+  | "historical-replay"
+  | "hermes-ab";
 export type HistoricalStrategyKind = "block-scan" | "backrun";
 export type HistoricalTriggerKind = "standing-state" | "victim-swap" | "oracle-update";
 export type HistoricalRouteScope = "dex-dex" | "dex-permissionless-protocol";
@@ -38,7 +43,11 @@ export interface HistoricalGapSample {
   position_conserving: boolean;
   victim_tx_hash?: string;
   evidence: string;
-  candidate_report: string;
+  candidate_report?: string;
+  adapter_replay_fixture?: string;
+  adapter_replay_fixture_sha256?: string;
+  adapter_replay_evidence?: string;
+  adapter_replay_evidence_sha256?: string;
   posture: {
     keeper: boolean;
     inventory: boolean;
@@ -164,6 +173,9 @@ export interface HistoricalSmokePlan {
 const DIRECT_MAIN_COMPONENTS = new Set<HistoricalChangeComponent>([
   "analysis-tool", "classifier", "gate",
 ]);
+const FAMILY_EXECUTION_COMPONENTS = new Set<HistoricalChangeComponent>([
+  "family-execution",
+]);
 const HISTORICAL_REPLAY_COMPONENTS = new Set<HistoricalChangeComponent>([
   "adapter", "venue-identity", "graph", "detector", "planner", "quote", "execution",
 ]);
@@ -200,6 +212,7 @@ export function historicalValidationTrack(components: HistoricalChangeComponent[
   const tracks = new Set<HistoricalValidationTrack>();
   for (const component of components) {
     if (DIRECT_MAIN_COMPONENTS.has(component)) tracks.add("direct-main");
+    else if (FAMILY_EXECUTION_COMPONENTS.has(component)) tracks.add("family-execution");
     else if (HISTORICAL_REPLAY_COMPONENTS.has(component)) tracks.add("historical-replay");
     else if (HERMES_COMPONENTS.has(component)) tracks.add("hermes-ab");
     else return null;
@@ -237,7 +250,10 @@ export function validateHistoricalGap(
   }
   const track = historicalValidationTrack(record.components ?? []);
   if (track === null) {
-    errors.push("one historical record may contain only one validation track: direct-main, historical-replay, or hermes-ab");
+    errors.push(
+      "one historical record may contain only one validation track: "
+        + "direct-main, family-execution, historical-replay, or hermes-ab",
+    );
   }
 
   if (track !== "direct-main" && (!record.branch_audit || typeof record.branch_audit !== "object")) {
@@ -280,11 +296,16 @@ export function validateHistoricalGap(
     errors.push("searcher behavior work must use a literal ab/* branch for lifecycle enforcement");
   }
 
-  if (track === "historical-replay" && (!Array.isArray(record.samples) || record.samples.length === 0)) {
-    errors.push("single-route historical replay requires at least one real +EV historical sample");
+  if ((track === "family-execution" || track === "historical-replay")
+      && (!Array.isArray(record.samples) || record.samples.length === 0)) {
+    errors.push(`${track} requires at least one real +EV historical sample`);
   }
   for (const [index, sample] of (record.samples ?? []).entries()) {
     errors.push(...validateSample(sample).map((error) => `samples[${index}]: ${error}`));
+    if (track === "family-execution") {
+      errors.push(...validateFamilyExecutionSample(sample)
+        .map((error) => `samples[${index}]: ${error}`));
+    }
   }
 
   if (phase !== "classify") {
@@ -311,8 +332,9 @@ export function validateHistoricalGap(
         || !validIsoDate(review?.reviewed_at)) {
       errors.push("fresh review requires a committed report artifact, SHA-256, and reviewed_at timestamp");
     }
-    if (track === "historical-replay" && review?.live_distribution_verdict !== "none") {
-      errors.push("historical replay requires the fresh reviewer to attest no cross-opportunity live-distribution change");
+    if ((track === "family-execution" || track === "historical-replay")
+        && review?.live_distribution_verdict !== "none") {
+      errors.push(`${track} requires the fresh reviewer to attest no cross-opportunity live-distribution change`);
     }
     if (track === "historical-replay") {
       const environment = record.validation?.replay_environment;
@@ -328,6 +350,8 @@ export function validateHistoricalGap(
 
   if (phase === "promote") {
     if (track === "direct-main") {
+      requireDecision(record, errors, "promote", "fixed", "pending_merge");
+    } else if (track === "family-execution") {
       requireDecision(record, errors, "promote", "fixed", "pending_merge");
     } else if (track === "historical-replay") {
       if (!record.validation?.smoke) errors.push("deterministic searcher promotion requires a trusted short-smoke plan");
@@ -519,7 +543,21 @@ export function validateHistoricalDiffScope(
     if (unapproved.length > 0) {
       errors.push(`searcher challenger contains non-runtime, test, fixture, dependency, or runner changes: ${unapproved.join(",")}`);
     }
-    if (track === "historical-replay") {
+    if (track === "family-execution") {
+      const outsideFamily = changed.filter((file) => !isFamilyExecutionFile(file));
+      if (outsideFamily.length > 0) {
+        errors.push(
+          "family execution may modify only family-owned implementations and thin production registration: "
+            + outsideFamily.join(","),
+        );
+      }
+      if (!changed.some(isFamilyExecutionOwnedImplementationFile)) {
+        errors.push(
+          "family execution requires a family-owned implementation change; "
+            + "registry-only graph expansion cannot use this track",
+        );
+      }
+    } else if (track === "historical-replay") {
       const ambiguous = changed.filter((file) => !isHistoricalReplayDeterministicFile(file));
       if (ambiguous.length > 0) {
         errors.push(
@@ -686,6 +724,23 @@ function validateSample(sample: HistoricalGapSample): string[] {
   return errors;
 }
 
+function validateFamilyExecutionSample(sample: HistoricalGapSample): string[] {
+  const errors: string[] = [];
+  if (!normalizeHistoricalReportArtifactPath(sample?.adapter_replay_fixture ?? "", [".json"])) {
+    errors.push("adapter_replay_fixture must be a committed docs/research/reports/*.json path");
+  }
+  if (!SHA64_RE.test(sample?.adapter_replay_fixture_sha256 ?? "")) {
+    errors.push("adapter_replay_fixture_sha256 must bind the exact fixture bytes");
+  }
+  if (!normalizeHistoricalReportArtifactPath(sample?.adapter_replay_evidence ?? "", [".md", ".json"])) {
+    errors.push("adapter_replay_evidence must be a committed docs/research/reports/*.md|*.json path");
+  }
+  if (!SHA64_RE.test(sample?.adapter_replay_evidence_sha256 ?? "")) {
+    errors.push("adapter_replay_evidence_sha256 must bind the exact landed evidence bytes");
+  }
+  return errors;
+}
+
 function requireDecision(
   record: HistoricalGapRecord,
   errors: string[],
@@ -780,6 +835,51 @@ function directMainTestPairErrors(changed: string[]): string[] {
       ? []
       : [`direct-main analysis test has no same-named implementation change: ${file}`];
   });
+}
+
+const FAMILY_EXECUTION_REGISTRATION_FILES = new Set([
+  "listener/src/adapters/index.ts",
+  "listener/src/searcher/venues/production-registry.ts",
+]);
+
+const FAMILY_EXECUTION_SHARED_FILES = new Set([
+  "listener/src/adapters/assert-balance.ts",
+  "listener/src/adapters/erc20.ts",
+  "listener/src/adapters/protocol-legs.ts",
+  "listener/src/adapters/wrap.ts",
+  "listener/src/searcher/venues/funding/flash-loan-framework.ts",
+  "listener/src/searcher/venues/funding/funding-capability.ts",
+  "listener/src/searcher/venues/protocols/protocol-plan.ts",
+  "listener/src/searcher/venues/protocols/protocol-quote.ts",
+  "listener/src/searcher/venues/protocols/protocol-state-framework.ts",
+  "listener/src/searcher/venues/protocols/receipt-deposit-framework.ts",
+  "listener/src/searcher/venues/swaps/adaptive-view-quote-blockscan-state.ts",
+  "listener/src/searcher/venues/swaps/blockscan-state-shared.ts",
+  "listener/src/searcher/venues/swaps/view-quote-blockscan-state.ts",
+]);
+
+const FAMILY_EXECUTION_OWNED_PREFIXES = [
+  "listener/src/adapters/",
+  "listener/src/searcher/venues/credit/",
+  "listener/src/searcher/venues/funding/",
+  "listener/src/searcher/venues/liquidity/",
+  "listener/src/searcher/venues/protocols/",
+  "listener/src/searcher/venues/swaps/",
+];
+
+function isFamilyExecutionOwnedImplementationFile(file: string): boolean {
+  if (!file.endsWith(".ts")
+      || FAMILY_EXECUTION_REGISTRATION_FILES.has(file)
+      || FAMILY_EXECUTION_SHARED_FILES.has(file)
+      || file.endsWith("-discovery.ts")) return false;
+  if (file === "listener/src/adapters/registry.ts"
+      || file === "listener/src/adapters/adapter-descriptors.ts") return false;
+  return FAMILY_EXECUTION_OWNED_PREFIXES.some((prefix) => file.startsWith(prefix));
+}
+
+function isFamilyExecutionFile(file: string): boolean {
+  return FAMILY_EXECUTION_REGISTRATION_FILES.has(file)
+    || isFamilyExecutionOwnedImplementationFile(file);
 }
 
 const ALWAYS_LIVE_DISTRIBUTION_FILES = new Set([
