@@ -23,9 +23,12 @@ import { FLASH_SWAP_REPAY } from "./templates/path-template.js";
 import {
   AdapterRuntimeCoordinator,
   type AdapterRuntimeSnapshot,
+  type CurrentNExactExecutionContext,
+  type CurrentNExactExecutionContextResult,
 } from "./adapter-runtime-coordinator.js";
 import type {
   BlockScanFamilyTelemetry,
+  BlockScanStateIssue,
   BlockScanStatePrepareResult,
   BlockScanStateSnapshot,
 } from "./blockscan-state-coordinator.js";
@@ -107,6 +110,148 @@ export function incompleteBlockScanFamilies(
   return Object.freeze(
     (families ?? []).filter((family) => family.status !== "complete"),
   );
+}
+
+export interface BlockScanIssueCauseSummary {
+  readonly familyId: string | null;
+  readonly lane: string | null;
+  readonly issueCount: number;
+  readonly kinds: readonly {
+    readonly kind: BlockScanStateIssue["kind"];
+    readonly count: number;
+    readonly samples: readonly {
+      readonly sourceId: string | null;
+      readonly stateKey: string | null;
+      readonly edgeKey: string | null;
+      readonly message: string;
+    }[];
+  }[];
+}
+
+/**
+ * Bound and redact live failure evidence before it reaches stdout. A single
+ * failed read batch can expand into thousands of state-key issues, so logging
+ * raw issues would hide the scheduling cause and can expose an RPC URL.
+ */
+export function summarizeBlockScanIssueCauses(
+  issues: readonly BlockScanStateIssue[],
+  limits: {
+    readonly families?: number;
+    readonly kindsPerFamily?: number;
+    readonly samplesPerKind?: number;
+  } = {},
+): readonly BlockScanIssueCauseSummary[] {
+  const familyLimit = Math.max(1, limits.families ?? 24);
+  const kindLimit = Math.max(1, limits.kindsPerFamily ?? 8);
+  const sampleLimit = Math.max(1, limits.samplesPerKind ?? 2);
+  const groups = new Map<string, {
+    familyId: string | null;
+    lane: string | null;
+    issueCount: number;
+    kinds: Map<BlockScanStateIssue["kind"], {
+      count: number;
+      samples: Array<{
+        sourceId: string | null;
+        stateKey: string | null;
+        edgeKey: string | null;
+        message: string;
+      }>;
+    }>;
+  }>();
+  for (const issue of issues) {
+    const familyId = issue.familyId ?? null;
+    const lane = issue.lane ?? null;
+    const groupKey = `${familyId ?? "<global>"}\u0000${lane ?? "<none>"}`;
+    let group = groups.get(groupKey);
+    if (!group) {
+      if (groups.size >= familyLimit) continue;
+      group = {
+        familyId,
+        lane,
+        issueCount: 0,
+        kinds: new Map(),
+      };
+      groups.set(groupKey, group);
+    }
+    group.issueCount++;
+    let kind = group.kinds.get(issue.kind);
+    if (!kind) {
+      if (group.kinds.size >= kindLimit) continue;
+      kind = { count: 0, samples: [] };
+      group.kinds.set(issue.kind, kind);
+    }
+    kind.count++;
+    if (kind.samples.length < sampleLimit) {
+      kind.samples.push({
+        sourceId: boundedLogField(issue.sourceId),
+        stateKey: boundedLogField(issue.stateKey),
+        edgeKey: boundedLogField(issue.edgeKey),
+        message: sanitizeBlockScanFailureMessage(issue.message),
+      });
+    }
+  }
+  return Object.freeze(
+    [...groups.values()].map((group) =>
+      Object.freeze({
+        familyId: group.familyId,
+        lane: group.lane,
+        issueCount: group.issueCount,
+        kinds: Object.freeze(
+          [...group.kinds.entries()].map(([kind, summary]) =>
+            Object.freeze({
+              kind,
+              count: summary.count,
+              samples: Object.freeze(
+                summary.samples.map((sample) => Object.freeze(sample)),
+              ),
+            })
+          ),
+        ),
+      })
+    ),
+  );
+}
+
+/**
+ * Candidate-bearing heads own the local node until their entire exact
+ * pipeline exits. Zero-candidate heads resume predecessor production
+ * immediately; success, rejection, deadline and exception paths release a
+ * deferred producer through the run-head finally boundary.
+ */
+export class NMinusOneProducerGate {
+  private deferred: (() => void) | null = null;
+
+  afterEnumeration(
+    candidateCount: number,
+    startNextProducer: () => void,
+  ): boolean {
+    if (candidateCount <= 0) {
+      startNextProducer();
+      return false;
+    }
+    if (this.deferred) {
+      throw new Error("N-1 producer gate already owns a deferred producer");
+    }
+    this.deferred = startNextProducer;
+    return true;
+  }
+
+  release(): void {
+    const deferred = this.deferred;
+    this.deferred = null;
+    deferred?.();
+  }
+}
+
+function boundedLogField(value: string | undefined): string | null {
+  return value ? value.replace(/\s+/g, " ").slice(0, 160) : null;
+}
+
+function sanitizeBlockScanFailureMessage(message: string): string {
+  return message
+    .replace(/(?:https?|wss?):\/\/[^\s"'`]+/gi, "<redacted-url>")
+    .replace(/\s+/g, " ")
+    .slice(0, 240);
 }
 
 export interface BlockScanRejectBlacklistEntry {
@@ -417,6 +562,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           publicationReserveMs,
           families: prepared.familyTelemetry ?? [],
           lanes: prepared.laneTelemetry,
+          causes: summarizeBlockScanIssueCauses(prepared.issues),
         })}`,
       );
     }).catch((error) => {
@@ -755,6 +901,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       }
     };
 
+    const nMinusOneProducerGate = new NMinusOneProducerGate();
     beginStage("state", {
       atMs: passStartedAtMs,
       atPerf: passStarted,
@@ -1119,6 +1266,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         !this.deps.blind.enabled;
       let coarse: BlockScanOutcome;
       let fallbackEnvelopes: readonly NMinusOneCoarseCandidate[] | null = null;
+      let enumerationFinished = false;
+      let exactRefineStarted = false;
       if (!useNMinusOneFallback) {
         const runtime = await adapterRuntimeCoordinator.prepare({
           graph: graphView,
@@ -1159,6 +1308,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         const familyFailures = incompleteBlockScanFamilies(
           runtime.pricing.familyTelemetry,
         );
+        const pricingIssueSet = new Set(runtime.pricing.issues);
+        const downstreamIssues = runtime.issues.filter(
+          (issue) => !pricingIssueSet.has(issue),
+        );
         if (familyFailures.length > 0) {
           console.warn(
             `[searcher/blockscan-family-local-failures] ${JSON.stringify({
@@ -1175,6 +1328,16 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                 fullFallbackReason: family.fullFallbackReason,
                 fullFallbackDetail: family.fullFallbackDetail,
               })),
+              causes: summarizeBlockScanIssueCauses(runtime.pricing.issues),
+            })}`,
+          );
+        }
+        if (downstreamIssues.length > 0) {
+          console.warn(
+            `[searcher/blockscan-runtime-failure-causes] ${JSON.stringify({
+              block: blockNumber,
+              sourceBlock: runtime.pricing.sourceBlock,
+              causes: summarizeBlockScanIssueCauses(downstreamIssues),
             })}`,
           );
         }
@@ -1250,10 +1413,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         auditSelectionMode = productionCoarse.selectionMode;
         auditForcedSelectionCount = productionCoarse.forcedSelectionCount;
       } else {
-        this.enqueueCoarsePricing({
-          coordinator: adapterRuntimeCoordinator,
-          graph: graphView,
-        });
         const predecessorPricing = await this.waitForAdjacentCoarsePricing(
           adapterRuntimeCoordinator,
           blockNumber - 1,
@@ -1263,6 +1422,12 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           !predecessorPricing ||
           predecessorPricing.sourceBlock + 1 !== blockNumber
         ) {
+          // Make progress for N+1 even when N has no usable predecessor.
+          // This pricing-only producer cannot publish funding or worker state.
+          this.enqueueCoarsePricing({
+            coordinator: adapterRuntimeCoordinator,
+            graph: graphView,
+          });
           finishStage("state", "failed");
           timing.stateMs = stageBoundaries.state.stage_ms;
           outcome = "degraded";
@@ -1285,43 +1450,13 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         const predecessorHeader = await discovery.observeHeader(
           blockNumber - 1,
         );
-        const exactContext = await
-          adapterRuntimeCoordinator.prepareCurrentNExactExecutionContext({
-            graph: graphView,
-            fundingTokens: this.deps.flashTokens(),
-            deadlineAtMs: runtimeDeadlineAtMs,
-            preparationSettleDeadlineAtMs,
-            signal: this.deps.runtimeAbort.signal,
-            prepareExecution,
-          });
-        finishStage(
-          "state",
-          exactContext.status === "incomplete" ? "failed" : "ran",
-        );
+        finishStage("state", "ran");
         timing.stateMs = stageBoundaries.state.stage_ms;
-        if (exactContext.status === "incomplete") {
-          outcome = Date.now() >= passDeadlineAtMs
-            ? "budget_exceeded"
-            : "stale_state";
-          skippedReason = exactContext.issues[0]?.message ??
-            "current-N exact execution context incomplete";
-          console.log(
-            `[searcher/blockscan-nminus1] ${JSON.stringify({
-              block: blockNumber,
-              status: "exact-context-incomplete",
-              reason: skippedReason,
-              timing: exactContext.timing,
-              funding: exactContext.fundingCoverage,
-            })}`,
-          );
-          return;
-        }
-        runtimeSourceBlock = exactContext.context.sourceBlock;
-        exactSourceBlockHash = exactContext.context.sourceBlockHash;
-        blockScanPlanner.setFlashLiquidity(exactContext.context.funding);
         pricingMode = "n_minus_one_coarse_current_n_exact";
         coarseSourceBlock = predecessorPricing.sourceBlock;
         coarseSourceBlockHash = predecessorPricing.sourceBlockHash;
+        runtimeSourceBlock = predecessorPricing.sourceBlock;
+        exactSourceBlockHash = graphView.sourceBlockHash;
         fullCoverage = false;
         degradedRecallReasons = Object.freeze([
           "current_n_mutation_anchors_unavailable",
@@ -1331,7 +1466,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         const fallbackCoarse = enumerateNMinusOneCoarseCandidates({
           coarsePricing: predecessorPricing,
           canonicalPredecessorHash: predecessorHeader.hash,
-          exactGraph: exactContext.context.graph,
+          exactGraph: graphView,
           cfg: {
             ...blockScanCfg,
             maxCandidates: this.deps.refineCandidates,
@@ -1359,7 +1494,77 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             recallMode: fallbackCoarse.recallMode,
             fullCoverage: fallbackCoarse.fullCoverage,
             degradedRecallReasons: fallbackCoarse.degradedRecallReasons,
-            exactContextTiming: exactContext.timing,
+            exactContextTiming: null,
+          })}`,
+        );
+        finishStage("enumeration");
+        enumerationFinished = true;
+        timing.enumerationMs = stageBoundaries.enumeration.stage_ms;
+        scannedPairs = coarse.scannedPairs;
+        candidates = coarse.opportunities.length;
+        const requiresExact = nMinusOneProducerGate.afterEnumeration(
+          coarse.opportunities.length,
+          () => {
+            this.enqueueCoarsePricing({
+              coordinator: adapterRuntimeCoordinator,
+              graph: graphView,
+            });
+          },
+        );
+        if (!requiresExact) {
+          // Zero candidates cannot consume funding or execution state.
+          return;
+        }
+        /*
+         * Exact current-N resources are an on-demand content-addressed join.
+         * A candidate-bearing head keeps exclusive priority through final
+         * simulation; the outer finally releases the next coarse producer.
+         */
+        beginStage("exact_refine");
+        exactRefineStarted = true;
+        const exactContext: CurrentNExactExecutionContextResult =
+          await adapterRuntimeCoordinator
+            .prepareCurrentNExactExecutionContext({
+              graph: graphView,
+              fundingTokens: this.deps.flashTokens(),
+              deadlineAtMs: runtimeDeadlineAtMs,
+              preparationSettleDeadlineAtMs,
+              signal: this.deps.runtimeAbort.signal,
+              prepareExecution,
+            });
+        if (exactContext.status === "incomplete") {
+          finishStage("exact_refine", "failed");
+          timing.exactRefineMs = stageBoundaries.exact_refine.stage_ms;
+          outcome = Date.now() >= passDeadlineAtMs
+            ? "budget_exceeded"
+            : "stale_state";
+          skippedReason = exactContext.issues[0]?.message ??
+            "current-N exact execution context incomplete";
+          console.log(
+            `[searcher/blockscan-nminus1] ${JSON.stringify({
+              block: blockNumber,
+              status: "exact-context-incomplete",
+              reason: skippedReason,
+              timing: exactContext.timing,
+              funding: exactContext.fundingCoverage,
+              causes: summarizeBlockScanIssueCauses(exactContext.issues),
+            })}`,
+          );
+          return;
+        }
+        assertExactContextMatchesGraph(exactContext.context, graphView);
+        runtimeSourceBlock = exactContext.context.sourceBlock;
+        exactSourceBlockHash = exactContext.context.sourceBlockHash;
+        blockScanPlanner.setFlashLiquidity(exactContext.context.funding);
+        console.log(
+          `[searcher/blockscan-nminus1-exact-join] ${JSON.stringify({
+            block: blockNumber,
+            sourceBlock: exactContext.context.sourceBlock,
+            sourceBlockHash: exactContext.context.sourceBlockHash,
+            graphId: exactContext.context.graph.id,
+            status: exactContext.status,
+            timing: exactContext.timing,
+            funding: exactContext.fundingCoverage,
           })}`,
         );
       }
@@ -1372,8 +1577,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           );
         }
       }
-      finishStage("enumeration");
-      timing.enumerationMs = stageBoundaries.enumeration.stage_ms;
+      if (!enumerationFinished) {
+        finishStage("enumeration");
+        timing.enumerationMs = stageBoundaries.enumeration.stage_ms;
+      }
       sealAuditBoundary("enumeration_done", "enumeration");
       scannedPairs = coarse.scannedPairs;
       candidates = coarse.opportunities.length;
@@ -1391,7 +1598,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         Date.now(),
         passDeadlineAtMs - refinementReserveMs,
       );
-      beginStage("exact_refine");
+      if (!exactRefineStarted) beginStage("exact_refine");
       const refinement = await refineBlockScanCandidates(
         blockScanExecutionWorkers[0].state,
         coarse.opportunities,
@@ -1727,10 +1934,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       skippedReason = `runtime_error:${blockScanErrorMessage(error)}`;
       throw error;
     } finally {
-      const activeStage = passTimeline.activeStage();
-      if (activeStage) finishStage(activeStage, "failed");
-      completeAuditStages();
-      recordPass();
+      try {
+        const activeStage = passTimeline.activeStage();
+        if (activeStage) finishStage(activeStage, "failed");
+        completeAuditStages();
+        recordPass();
+      } finally {
+        nMinusOneProducerGate.release();
+      }
     }
   };
 }
@@ -1773,9 +1984,40 @@ function blindOpportunityRoute(
 }
 
 function blockScanErrorMessage(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error))
-    .replace(/\s+/g, " ")
-    .slice(0, 200);
+  return sanitizeBlockScanFailureMessage(
+    error instanceof Error ? error.message : String(error),
+  ).slice(0, 200);
+}
+
+export function assertExactContextMatchesGraph(
+  context: CurrentNExactExecutionContext,
+  graph: VerifiedGraphView,
+): void {
+  const numberFields = [
+    ["generation", context.generation, graph.generation],
+    ["source block", context.sourceBlock, graph.sourceBlock],
+  ] as const;
+  for (const [label, actual, expected] of numberFields) {
+    if (actual !== expected) {
+      throw new Error(
+        `N-1 exact join rejected mixed ${label}: ${actual} != ${expected}`,
+      );
+    }
+  }
+  const stringFields = [
+    ["source block hash", context.sourceBlockHash, graph.sourceBlockHash],
+    ["graph id", context.graph.id, graph.id],
+    ["edge hash", context.graph.orderedEdgeHash, graph.orderedEdgeHash],
+    ["metadata hash", context.graph.metadataHash, graph.metadataHash],
+    ["ownership hash", context.graph.ownershipHash, graph.ownershipHash],
+  ] as const;
+  for (const [label, actual, expected] of stringFields) {
+    if (actual.toLowerCase() !== expected.toLowerCase()) {
+      throw new Error(
+        `N-1 exact join rejected mixed ${label}: ${actual} != ${expected}`,
+      );
+    }
+  }
 }
 
 async function waitForBackfillSettlement(

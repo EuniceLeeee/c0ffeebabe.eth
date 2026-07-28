@@ -11,9 +11,12 @@ import type {
   BlockScanStateSnapshot,
 } from "../blockscan-state-coordinator.js";
 import {
+  assertExactContextMatchesGraph,
   BlockScanRuntimeLoop,
   dexRuntimeAdmissionCompleteThrough,
   incompleteBlockScanFamilies,
+  NMinusOneProducerGate,
+  summarizeBlockScanIssueCauses,
   type BlockScanRuntimeLoopDependencies,
 } from "../blockscan-runtime-loop.js";
 import {
@@ -77,12 +80,15 @@ await shutdownInterruptsStartupBackfillWait();
 await shutdownDrainsActivePassAndDropsPendingHead();
 await nMinusOneTrackerStaysOutsideNormalRuntimePublication();
 await nMinusOneWaitsForItsOnlyAdjacentProducer();
+await nMinusOneExactJoinPrecedesNextProducer();
+nMinusOneExactJoinRejectsMixedAnchor();
 blindModeDoesNotEnterOrdinaryStartupWarm();
 familyFailureSummaryNamesOnlyNonCompleteFamilies();
+failureCauseSummaryIsBoundedAndRedacted();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (21/21)",
+    "PASS (24/24)",
 );
 
 function familyFailureSummaryNamesOnlyNonCompleteFamilies(): void {
@@ -110,6 +116,48 @@ function familyFailureSummaryNamesOnlyNonCompleteFamilies(): void {
       },
     ]).map((family) => family.familyId),
     ["protocol:fixture"],
+  );
+}
+
+function failureCauseSummaryIsBoundedAndRedacted(): void {
+  const summary = summarizeBlockScanIssueCauses([
+    {
+      kind: "deadline",
+      lane: "swap",
+      familyId: "univ3-standard",
+      sourceId: "mutation-range",
+      stateKey: "state:1",
+      message: "header read https://secret.example/v1 timed out",
+    },
+    {
+      kind: "deadline",
+      lane: "swap",
+      familyId: "univ3-standard",
+      sourceId: "mutation-range",
+      stateKey: "state:2",
+      message: "second deadline",
+    },
+    {
+      kind: "backend",
+      lane: "protocol",
+      familyId: "protocol:fixture",
+      message: "rpc wss://secret.example/ws failed",
+    },
+  ], {
+    families: 1,
+    samplesPerKind: 1,
+  });
+  assert.equal(summary.length, 1);
+  assert.equal(summary[0]?.familyId, "univ3-standard");
+  assert.equal(summary[0]?.issueCount, 2);
+  assert.equal(summary[0]?.kinds[0]?.count, 2);
+  assert.match(
+    summary[0]?.kinds[0]?.samples[0]?.message ?? "",
+    /<redacted-url>/,
+  );
+  assert.doesNotMatch(
+    JSON.stringify(summary),
+    /secret\.example/,
   );
 }
 
@@ -552,7 +600,11 @@ async function nMinusOneTrackerStaysOutsideNormalRuntimePublication(): Promise<v
     "fallback heads must not invoke or publish a mixed-source normal runtime",
   );
   assert.deepEqual(harness.coarsePricingBlocks, [701, 702]);
-  assert.deepEqual(harness.exactContextBlocks, [701, 702]);
+  assert.deepEqual(
+    harness.exactContextBlocks,
+    [],
+    "zero-candidate heads must not acquire unused funding/execution state",
+  );
   assert.ok(
     harness.coarsePricingDeadlineRemainingMs.every(
       (remainingMs) => remainingMs > 19_000 && remainingMs <= 20_000,
@@ -602,8 +654,93 @@ async function nMinusOneWaitsForItsOnlyAdjacentProducer(): Promise<void> {
   hold701.resolve();
   await head702;
   assert(
-    harness.exactContextBlocks.includes(702),
-    "the only adjacent completed predecessor must reach exact-N context",
+    harness.coarsePricingBlocks.includes(702),
+    "the only adjacent completed predecessor must enumerate before N is produced",
+  );
+  assert.deepEqual(
+    harness.exactContextBlocks,
+    [],
+    "waiting for an adjacent producer must not force an exact join without candidates",
+  );
+}
+
+async function nMinusOneExactJoinPrecedesNextProducer(): Promise<void> {
+  const activity: string[] = [];
+  const candidateGate = new NMinusOneProducerGate();
+  assert.equal(
+    candidateGate.afterEnumeration(
+      1,
+      () => activity.push("producer:start"),
+    ),
+    true,
+  );
+  activity.push("exact:start");
+  await Promise.resolve();
+  activity.push("pipeline:settled");
+  assert.deepEqual(activity, ["exact:start", "pipeline:settled"]);
+  candidateGate.release();
+  assert.deepEqual(activity, [
+    "exact:start",
+    "pipeline:settled",
+    "producer:start",
+  ]);
+  candidateGate.release();
+  assert.equal(
+    activity.filter((entry) => entry === "producer:start").length,
+    1,
+    "producer release must be idempotent",
+  );
+
+  activity.length = 0;
+  const emptyGate = new NMinusOneProducerGate();
+  const skipped = emptyGate.afterEnumeration(
+    0,
+    () => activity.push("producer:start"),
+  );
+  assert.equal(skipped, false);
+  assert.deepEqual(
+    activity,
+    ["producer:start"],
+    "zero-candidate head must skip exact resources and resume producer",
+  );
+
+  activity.length = 0;
+  const failedGate = new NMinusOneProducerGate();
+  assert.equal(
+    failedGate.afterEnumeration(
+      1,
+      () => activity.push("producer:start"),
+    ),
+    true,
+  );
+  activity.push("pipeline:error");
+  failedGate.release();
+  assert.deepEqual(
+    activity,
+    ["pipeline:error", "producer:start"],
+    "failed exact join must not permanently stop predecessor production",
+  );
+}
+
+function nMinusOneExactJoinRejectsMixedAnchor(): void {
+  const graph = graphAt(7, 900, hash(900));
+  const runtime = runtimeResult("complete", graph);
+  if (runtime.status === "incomplete") throw new Error("fixture bug");
+  const context = {
+    generation: graph.generation,
+    sourceBlock: graph.sourceBlock,
+    sourceBlockHash: graph.sourceBlockHash,
+    graph,
+    funding: runtime.snapshot.funding,
+  };
+  assert.doesNotThrow(() => assertExactContextMatchesGraph(context, graph));
+  assert.throws(
+    () =>
+      assertExactContextMatchesGraph(
+        { ...context, sourceBlockHash: hash(899) },
+        graph,
+      ),
+    /mixed source block hash/,
   );
 }
 

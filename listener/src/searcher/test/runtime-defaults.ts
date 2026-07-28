@@ -158,6 +158,17 @@ assert(
   "N-1 family settlement must retain the live-validated 12s allocation",
 );
 console.log("[runtime-defaults] N-1 fallback remains explicit opt-in: PASS");
+assert(
+  deployNode.includes("N_MINUS_ONE_MARKER=$REPO/.blockscan-nminus1") &&
+    deployNode.includes(
+      '[ -f "$N_MINUS_ONE_MARKER" ] && echo "SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK=1"',
+    ) &&
+    deployNode.includes(
+      "N-1 fallback remained enabled without its marker",
+    ),
+  "deploy must own N-1 activation through one reversible marker",
+);
+console.log("[runtime-defaults] deploy marker owns N-1 activation: PASS");
 
 const atomicStart = mainSource.indexOf(
   "async function maybeSubmitBlockScanAtomic",
@@ -182,4 +193,4 @@ assert(
 );
 console.log("[runtime-defaults] final-sim head/hash fence ordering: PASS");
 
-console.log("runtime-defaults PASS (8/8)");
+console.log("runtime-defaults PASS (9/9)");
