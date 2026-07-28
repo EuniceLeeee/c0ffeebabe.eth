@@ -21,18 +21,36 @@ let runId = "";
 let chainId = 1;
 const EVENT_SCHEMA_VERSION = 1;
 
-export function initEvents(path?: string): void {
+export interface SearcherEventContext {
+  readonly enabled: boolean;
+  readonly path: string;
+  readonly runId: string;
+  readonly chainId: number;
+}
+
+export function initEvents(path?: string): SearcherEventContext {
   eventsPath = (path ?? process.env.SEARCHER_EVENTS_PATH ?? "").trim();
+  runId = "";
+  chainId = parseChainId(process.env.SEARCHER_CHAIN_ID);
   if (eventsPath) {
     runId = randomUUID();
-    chainId = parseChainId(process.env.SEARCHER_CHAIN_ID);
     try {
       mkdirSync(dirname(eventsPath), { recursive: true });
+      // Establish the exact formal-events inode before the optional route
+      // sidecar performs its same-file safety checks. This is startup-only;
+      // hot-path writes remain unchanged below.
+      appendFileSync(eventsPath, "");
     } catch {
       // emitEvent remains fail-open; mkdir failure just means writes will no-op.
     }
     console.log(`[searcher/live] events emit → ${eventsPath}`);
   }
+  return Object.freeze({
+    enabled: eventsPath.length > 0,
+    path: eventsPath,
+    runId: runId || "unknown",
+    chainId,
+  });
 }
 
 export function makeOpportunityId(input: {
@@ -144,6 +162,7 @@ export type SearcherEvent =
       blockscan_view_hash?: string;
       backrun_view_hash?: string;
       path_id?: string;
+      route_id?: string;
       template_id?: string;
       ok: boolean;
       simulated_profit?: string;
@@ -176,6 +195,7 @@ export type SearcherEvent =
 	      pool?: string;
 	      tokens?: string[];
 	      path_id?: string;
+	      route_id?: string;
 	      template_id?: string;
 	      plans?: number;
 	      no_candidate_diagnostic?: unknown;
@@ -209,6 +229,7 @@ export type SearcherEvent =
       backrun_view_hash?: string;
       mode: string;
       path_id?: string;
+      route_id?: string;
       template_id?: string;
       simulated_profit?: string;
       simulated_profit_eth?: string;

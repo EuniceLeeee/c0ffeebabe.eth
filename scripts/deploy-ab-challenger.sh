@@ -17,6 +17,7 @@ LOCK=$ROOT/slot.lock
 UNIT=mev-ab-b
 A_UNIT=mev-searcher
 LOG=/var/log/mev-ab-b.log
+B_BLOCKSCAN_ROUTE_EVENTS_PATH=/var/log/mev/events/searcher-ab-b.blockscan-routes.jsonl
 EXPECTED_WALLET=0x2a6b8024190CF537efA3685792f201FD1Aac7294
 EXPECTED_BOTVM=0xCF471995e8FbD99F8dBE8377FA67Db89Ab18af24
 EXPECTED_A_WALLET=0xb8578B6de173C8554FF0390dB5a7effA567DDA3c
@@ -879,7 +880,7 @@ preflight() {
   [ -f "$ENVF" ] || die "missing $ENVF"
   [ "$(stat -c %a "$ENVF")" = "600" ] || die "$ENVF must be mode 600"
   [ "$(systemctl is-active "$A_UNIT" 2>/dev/null || true)" = "active" ] || die "champion unit is not active"
-  local apid mode sources expected_backrun expected_mempool expected_mev_share a_rpc a_ws a_log a_runtime_commit a_router_path
+  local apid mode sources expected_backrun expected_mempool expected_mev_share a_rpc a_ws a_log a_runtime_commit a_router_path a_route_path
   mode=$(lane_mode)
   sources=$(victim_mode)
   if [ "$mode" = "dual" ]; then
@@ -919,6 +920,16 @@ preflight() {
   a_router_path=$(file_env_get "$A_PROCESS_ENV" SEARCHER_FORCE_INCLUDE_ROUTERS_PATH)
   [[ "$a_router_path" = /* ]] && [ -f "$a_router_path" ] \
     || die "champion router admission snapshot is unavailable"
+  a_route_path=$(file_env_get "$A_PROCESS_ENV" SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH)
+  if [ -n "$a_route_path" ]; then
+    [ "$(readlink -m -- "$a_route_path")" != \
+        "$(readlink -m -- "$B_BLOCKSCAN_ROUTE_EVENTS_PATH")" ] \
+      || die "champion route sidecar aliases challenger route path"
+    if [ -e "$a_route_path" ] && [ -e "$B_BLOCKSCAN_ROUTE_EVENTS_PATH" ]; then
+      ! [ "$a_route_path" -ef "$B_BLOCKSCAN_ROUTE_EVENTS_PATH" ] \
+        || die "champion route sidecar aliases challenger route inode"
+    fi
+  fi
 
   for pair in \
     SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=$expected_backrun \
@@ -1094,7 +1105,7 @@ build_runtime_env() {
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$a_common"
@@ -1121,6 +1132,7 @@ SEARCHER_BLOCKSCAN_SUBMIT=1
 SEARCHER_ANVIL_PORT=8566
 SEARCHER_BLOCKSCAN_ANVIL_PORT=8567
 SEARCHER_EVENTS_PATH=/var/log/mev/events/searcher-ab-b.jsonl
+SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH=/var/log/mev/events/searcher-ab-b.blockscan-routes.jsonl
 SEARCHER_LIVE_RPC_URL=http://127.0.0.1:8545
 SEARCHER_LIVE_WS_URL=ws://127.0.0.1:8546
 SEARCHER_RUNTIME_COMMIT=$b_commit
@@ -1156,7 +1168,7 @@ PY
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$b_common"
@@ -1570,6 +1582,10 @@ deploy() {
   [[ "$b_started_pid" =~ ^[1-9][0-9]*$ ]] \
     || safety_abort challenger_main_pid_unavailable
   grep -q '\[searcher/live\] mode=live' "$LOG" || safety_abort challenger_live_banner_missing
+  tail -c "+$((b_log_offset + 1))" "$LOG" 2>/dev/null \
+    | grep -F "[searcher/live] block-scan route events emit → $B_BLOCKSCAN_ROUTE_EVENTS_PATH" \
+      >/dev/null \
+    || safety_abort challenger_blockscan_route_telemetry_banner_missing
   local mode sources expected_mev_share
   mode=$(lane_mode)
   sources=$(victim_mode)

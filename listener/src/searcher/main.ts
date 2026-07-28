@@ -21,6 +21,10 @@ import {
 import {
   resolveBlockScanPricingSourceMode,
 } from "./blockscan-pricing-source-mode.js";
+import {
+  initBlockScanEnumerationSolverTelemetry,
+} from "./blockscan-enumeration-solver-telemetry.js";
+import { blockScanRouteId } from "./blockscan-route-identity.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import {
@@ -1060,7 +1064,21 @@ async function main(): Promise<void> {
   });
 
   console.log("[searcher/live] starting V5 searcher");
-  initEvents();
+  const eventContext = initEvents();
+  const blockScanRouteTelemetry =
+    await initBlockScanEnumerationSolverTelemetry({
+      path: enableBlockScan && !blindProductionAudit
+        ? process.env.SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH
+        : "",
+      eventsPath: eventContext.path,
+      runId: eventContext.runId,
+    });
+  if (blockScanRouteTelemetry.enabled) {
+    console.log(
+      `[searcher/live] block-scan route events emit → ` +
+        `${process.env.SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH}`,
+    );
+  }
   console.log(`[searcher/live] runtime_commit=${process.env.SEARCHER_RUNTIME_COMMIT ?? "unavailable"}`);
   const sourceMode = victimSourceMode(
     config.enableBackrun,
@@ -2196,6 +2214,7 @@ async function main(): Promise<void> {
     runtimeAbort: blockScanRuntimeAbort,
     sharedPlanner: planner,
     backrunStatePublisher,
+    routeTelemetry: blockScanRouteTelemetry,
     discovery: liveDiscovery.blockScanHooks,
     blind: {
       enabled: blindProductionAudit,
@@ -2599,6 +2618,14 @@ async function main(): Promise<void> {
       } catch (error) {
         console.warn(
           `[searcher/live] block-scan shutdown failed: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      try {
+        await blockScanRouteTelemetry.shutdown();
+      } catch (error) {
+        console.warn(
+          `[searcher/live] block-scan route telemetry shutdown failed: ` +
             `${error instanceof Error ? error.message : String(error)}`,
         );
       }
@@ -4404,6 +4431,7 @@ async function maybeSubmitBlockScanAtomic(params: {
     strategyVersions,
   } = params;
   const route = resolvedRouteSummary(resolved.root);
+  const routeId = blockScanRouteId(opp.seedEdges);
   const opportunityId = makeBlockScanOpportunityId({
     sourceBlock,
     cycleId: opp.cycleId,
@@ -4412,6 +4440,7 @@ async function maybeSubmitBlockScanAtomic(params: {
   });
   const eventBase = (targetBlock: number) => ({
     opportunity_id: opportunityId,
+    route_id: routeId,
     target_block: targetBlock,
     opportunity_kind: "block-scan-arb" as const,
     source_block: sourceBlock,

@@ -107,7 +107,35 @@ test("deploy freezes immutable universes for independent acceptance", () => {
   assert.deepEqual(liveTsconfig.include, [
     "src/searcher/main.ts",
     "src/searcher/build-active-pool-universe.ts",
-  ], "trusted live typecheck must include both entries executed by the A/B wrapper");
+    "src/searcher/blockscan-enumeration-solver-worker.ts",
+  ], "trusted live typecheck must include every entry executed by the A/B wrapper");
+  assert.match(
+    wrapper,
+    /SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH=\/var\/log\/mev\/events\/searcher-ab-b\.blockscan-routes\.jsonl/,
+    "challenger route telemetry must use a dedicated sidecar",
+  );
+  assert.match(
+    wrapper,
+    /champion route sidecar aliases challenger route path/,
+    "challenger preflight must reject a shared champion route path",
+  );
+  assert.match(
+    wrapper,
+    /champion route sidecar aliases challenger route inode/,
+    "challenger preflight must reject a hardlink alias",
+  );
+  assert.match(
+    wrapper,
+    /challenger_blockscan_route_telemetry_banner_missing/,
+    "challenger startup must prove its route writer safely opened",
+  );
+  assert.equal(
+    wrapper.match(
+      /SEARCHER_EVENTS_PATH\|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH/g,
+    )?.length,
+    2,
+    "the dedicated route sidecar must be excluded from both A/B common-config comparisons",
+  );
   assert.match(wrapper, /POOL_UNIVERSE_FROM_BLOCK="\$from_block"/);
   assert.match(wrapper, /POOL_UNIVERSE_TO_BLOCK="\$to_block"/);
   const universeBuildStart = wrapper.indexOf("timeout 900");

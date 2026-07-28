@@ -17,6 +17,15 @@ interface ScheduledHead extends LatestHeadObservation {
   readonly blockNumber: number;
 }
 
+export type LatestHeadDropReason =
+  | "scheduler_coalesced"
+  | "shutdown_pending_dropped";
+
+export interface DroppedLatestHead extends LatestHeadObservation {
+  readonly blockNumber: number;
+  readonly reason: LatestHeadDropReason;
+}
+
 /**
  * Single-worker, latest-pending head scheduler.
  *
@@ -42,6 +51,7 @@ export class LatestHeadScheduler {
     ) => Promise<void>,
     private readonly onError: (blockNumber: number, error: unknown) => void =
       () => {},
+    private readonly onDrop: (head: DroppedLatestHead) => void = () => {},
   ) {}
 
   schedule(
@@ -69,7 +79,10 @@ export class LatestHeadScheduler {
     this.latestSubmitted = blockNumber;
     const scheduled = Object.freeze({ blockNumber, ...observation });
     if (this.active !== null) {
-      if (this.pending !== null) this.coalesced++;
+      if (this.pending !== null) {
+        this.coalesced++;
+        this.reportDrop(this.pending, "scheduler_coalesced");
+      }
       this.pending = scheduled;
       return;
     }
@@ -84,6 +97,9 @@ export class LatestHeadScheduler {
    */
   async shutdown(): Promise<void> {
     this.accepting = false;
+    if (this.pending !== null) {
+      this.reportDrop(this.pending, "shutdown_pending_dropped");
+    }
     this.pending = null;
     await this.drainTask;
   }
@@ -118,6 +134,17 @@ export class LatestHeadScheduler {
       const next = this.pending;
       this.pending = null;
       this.active = next;
+    }
+  }
+
+  private reportDrop(
+    head: ScheduledHead,
+    reason: LatestHeadDropReason,
+  ): void {
+    try {
+      this.onDrop(Object.freeze({ ...head, reason }));
+    } catch {
+      // Observability must never disrupt latest-head admission.
     }
   }
 }

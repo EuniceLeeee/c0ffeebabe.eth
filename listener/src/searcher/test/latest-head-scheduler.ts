@@ -16,16 +16,23 @@ async function coalescesToNewestWithOneWorker(): Promise<void> {
   }>();
   let active = 0;
   let maxActive = 0;
-  const scheduler = new LatestHeadScheduler(async (blockNumber, observation) => {
-    active++;
-    maxActive = Math.max(maxActive, active);
-    runs.push(blockNumber);
-    observations.set(blockNumber, observation);
-    const gate = deferred();
-    gates.set(blockNumber, gate);
-    await gate.promise;
-    active--;
-  });
+  const dropped: Array<{ blockNumber: number; reason: string }> = [];
+  const scheduler = new LatestHeadScheduler(
+    async (blockNumber, observation) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      runs.push(blockNumber);
+      observations.set(blockNumber, observation);
+      const gate = deferred();
+      gates.set(blockNumber, gate);
+      await gate.promise;
+      active--;
+    },
+    undefined,
+    (head) => {
+      dropped.push({ blockNumber: head.blockNumber, reason: head.reason });
+    },
+  );
 
   assert.throws(() => scheduler.schedule(-1), /invalid scheduled head/);
   assert.throws(() => scheduler.schedule(1.5), /invalid scheduled head/);
@@ -94,6 +101,10 @@ async function coalescesToNewestWithOneWorker(): Promise<void> {
   assert.deepEqual(runs, [100, 102, 105]);
   assert.equal(scheduler.telemetry().coalesced, 6);
   assert.equal(scheduler.telemetry().latestSubmitted, 105);
+  assert.deepEqual(dropped, [
+    { blockNumber: 101, reason: "scheduler_coalesced" },
+    { blockNumber: 103, reason: "scheduler_coalesced" },
+  ]);
 }
 
 async function continuesAfterWorkerFailure(): Promise<void> {
@@ -125,10 +136,17 @@ async function continuesAfterWorkerFailure(): Promise<void> {
 async function shutdownDropsPendingAndDrainsActive(): Promise<void> {
   const activeGate = deferred();
   const runs: number[] = [];
-  const scheduler = new LatestHeadScheduler(async (blockNumber) => {
-    runs.push(blockNumber);
-    await activeGate.promise;
-  });
+  const dropped: Array<{ blockNumber: number; reason: string }> = [];
+  const scheduler = new LatestHeadScheduler(
+    async (blockNumber) => {
+      runs.push(blockNumber);
+      await activeGate.promise;
+    },
+    undefined,
+    (head) => {
+      dropped.push({ blockNumber: head.blockNumber, reason: head.reason });
+    },
+  );
   scheduler.schedule(300);
   await waitFor(() => scheduler.telemetry().active === 300);
   scheduler.schedule(301);
@@ -156,6 +174,10 @@ async function shutdownDropsPendingAndDrainsActive(): Promise<void> {
   );
   assert.equal(scheduler.telemetry().active, null);
   assert.equal(scheduler.telemetry().submitted, 2);
+  assert.deepEqual(dropped, [{
+    blockNumber: 301,
+    reason: "shutdown_pending_dropped",
+  }]);
 }
 
 function deferred(): {

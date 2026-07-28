@@ -155,7 +155,19 @@ test("node deploy installs and verifies production analysis tooling before resta
     "analysis verification must fail before the live service restart",
   );
   assert.match(script, /echo "SEARCHER_EVENTS_PATH=\$EVENTS_PATH"/);
+  assert.match(
+    script,
+    /echo "SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH=\$BLOCKSCAN_ROUTE_EVENTS_PATH"/,
+  );
   assert.match(script, /events telemetry banner missing for \$EVENTS_PATH/);
+  assert.match(
+    script,
+    /block-scan route telemetry banner missing for \$BLOCKSCAN_ROUTE_EVENTS_PATH/,
+  );
+  assert.match(
+    script,
+    /block-scan route sidecar must differ from SEARCHER_EVENTS_PATH/,
+  );
   assert.match(script, /victim-source markers require \.backrun/);
   assert.match(script, /\.backrun requires \.mempool and\/or \.mev-share/);
   assert.match(script, /echo "SEARCHER_ENABLE_MEMPOOL=\$MEMPOOL_VAL"/);

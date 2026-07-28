@@ -363,6 +363,33 @@ interface BlockScanBlindDependencies {
   dynamicResetNonce(): string | null;
 }
 
+export interface BlockScanEnumerationSolverPass {
+  recordEnumeration(opportunities: readonly BlockScanOpportunity[]): void;
+  recordSolver(opportunity: BlockScanOpportunity): void;
+  finish(input: {
+    readonly sourceBlockHash: string | null;
+    readonly pricingMode:
+      | "source_n"
+      | "n_minus_one_coarse_current_n_exact"
+      | null;
+    readonly passOutcome: string;
+    readonly passReason: string | null;
+  }): void;
+}
+
+export interface BlockScanEnumerationSolverTelemetrySink {
+  beginPass(sourceBlock: number): BlockScanEnumerationSolverPass | null;
+  recordNotStarted(input: {
+    readonly sourceBlock: number;
+    readonly sourceBlockHash: null;
+    readonly pricingMode: null;
+    readonly passOutcome: "not_started";
+    readonly passReason:
+      | "scheduler_coalesced"
+      | "shutdown_pending_dropped";
+  }): void;
+}
+
 export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly enabled: boolean;
   readonly blockScanConfig: BlockScanCoreConfig | undefined;
@@ -375,6 +402,7 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   >;
   readonly discovery: BlockScanDiscoveryDependencies<PreparedDiscovery>;
   readonly blind: BlockScanBlindDependencies;
+  readonly routeTelemetry?: BlockScanEnumerationSolverTelemetrySink;
   readonly largeGraphEdgeThreshold: number;
   readonly largeGraphPassBudgetMs: number;
   readonly passBudgetMs: number;
@@ -475,6 +503,15 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           `[searcher/blockscan-family] block=${blockNumber} error=` +
             `${error instanceof Error ? error.message : String(error)}`,
         );
+      },
+      (head) => {
+        this.deps.routeTelemetry?.recordNotStarted({
+          sourceBlock: head.blockNumber,
+          sourceBlockHash: null,
+          pricingMode: null,
+          passOutcome: "not_started",
+          passReason: head.reason,
+        });
       },
     );
   }
@@ -680,6 +717,29 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     blockNumber: number,
     sourceHead: LatestHeadObservation,
   ): Promise<void> => {
+    let routeTelemetryPass: BlockScanEnumerationSolverPass | null = null;
+    try {
+      routeTelemetryPass =
+        this.deps.routeTelemetry?.beginPass(blockNumber) ?? null;
+    } catch {
+      // Route evidence is fail-open and cannot suppress a production pass.
+    }
+    const recordEnumeration = (
+      opportunities: readonly BlockScanOpportunity[],
+    ): void => {
+      try {
+        routeTelemetryPass?.recordEnumeration(opportunities);
+      } catch {
+        // Route evidence is fail-open and cannot alter enumeration.
+      }
+    };
+    const recordSolver = (opportunity: BlockScanOpportunity): void => {
+      try {
+        routeTelemetryPass?.recordSolver(opportunity);
+      } catch {
+        // Route evidence is fail-open and cannot alter solver admission.
+      }
+    };
     const blockScanGraph = this.deps.blockScanGraph();
     const blockScanCfg = this.deps.blockScanConfig;
     const blockScanPlanner = this.deps.blockScanPlanner();
@@ -693,7 +753,21 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       !blockScanPlanner ||
       !adapterRuntimeCoordinator ||
       blockScanExecutionWorkers.length === 0
-    ) return;
+    ) {
+      try {
+        routeTelemetryPass?.finish({
+          sourceBlockHash: null,
+          pricingMode: null,
+          passOutcome: "disabled",
+          passReason: this.deps.isShuttingDown()
+            ? "shutdown"
+            : "runtime_dependencies_unavailable",
+        });
+      } catch {
+        // Route evidence is fail-open and cannot suppress a production pass.
+      }
+      return;
+    }
 
     // Strict latency begins when the production block listener observed the
     // head, not when this single-worker scheduler eventually began running.
@@ -745,6 +819,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     let coarseSourceBlock: number | null = null;
     let coarseSourceBlockHash: string | null = null;
     let exactSourceBlockHash: string | null = null;
+    let observedSourceBlockHash: string | null = null;
     let fullCoverage = true;
     let degradedRecallReasons: readonly string[] = Object.freeze([]);
     let scannedPairs = 0;
@@ -895,6 +970,16 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           ...structuredFields,
         })}`,
       );
+      try {
+        routeTelemetryPass?.finish({
+          sourceBlockHash: observedSourceBlockHash,
+          pricingMode,
+          passOutcome: outcome,
+          passReason: skippedReason ?? null,
+        });
+      } catch {
+        // Route evidence is fail-open and cannot alter the pass decision.
+      }
       const blindSource = this.deps.blind.activeSource();
       const blindBase = this.deps.blind.preparedBase();
       if (
@@ -940,6 +1025,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       // delta fold and one synchronous publication; no provider/trace/probe
       // I/O runs inside it.
       const sourceHeader = await discovery.observeHeader(blockNumber);
+      observedSourceBlockHash = sourceHeader.hash;
       const consumePreparedBackfill = async (): Promise<number | null> => {
         const ready = discovery.lane.readyDescriptor();
         if (!ready) return null;
@@ -1456,6 +1542,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           },
         });
         coarse = productionCoarse;
+        recordEnumeration(coarse.opportunities);
         auditSelectionMode = productionCoarse.selectionMode;
         auditForcedSelectionCount = productionCoarse.forcedSelectionCount;
       } else {
@@ -1526,6 +1613,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             (candidate) => candidate.exactProbeOpportunity,
           ),
         });
+        recordEnumeration(coarse.opportunities);
         console.log(
           `[searcher/blockscan-nminus1] ${JSON.stringify({
             block: blockNumber,
@@ -1843,6 +1931,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           if (solverFamilyBudget.blocks(item.opp.seedEdges)) continue;
           try {
             let deferredCandidates: readonly ResolvedPlan[] = [];
+            recordSolver(item.opp);
             const solved = await worker.solver.solve(
               item.plan,
               worker.state,

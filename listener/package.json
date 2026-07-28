@@ -167,6 +167,8 @@
     "searcher:blockscan-state-coordinator": "node --import tsx src/searcher/test/blockscan-state-coordinator.ts",
     "searcher:adapter-runtime-coordinator": "node --import tsx src/searcher/test/adapter-runtime-coordinator.ts",
     "searcher:latest-head-scheduler": "node --import tsx src/searcher/test/latest-head-scheduler.ts",
+    "searcher:blockscan-route-telemetry": "node --import tsx --test src/searcher/test/blockscan-enumeration-solver-telemetry.ts",
+    "searcher:blockscan-route-telemetry-performance": "node --import tsx src/searcher/test/blockscan-enumeration-solver-telemetry-performance.ts",
     "searcher:blockscan-runtime-startup-warm": "node --import tsx src/searcher/test/blockscan-runtime-startup-warm.ts",
     "searcher:blockscan-pricing-source-mode": "node --import tsx src/searcher/test/blockscan-pricing-source-mode.ts",
     "searcher:swap-blockscan-state": "node --import tsx src/searcher/test/swap-blockscan-state-capabilities.ts",

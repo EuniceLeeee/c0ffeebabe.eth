@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { ethers } from "ethers";
 import {
   AdapterRuntimeCoordinator,
   FlashFundingSnapshot,
@@ -18,6 +19,7 @@ import {
   incompleteBlockScanFamilies,
   NMinusOneProducerGate,
   summarizeBlockScanIssueCauses,
+  type BlockScanEnumerationSolverTelemetrySink,
   type BlockScanRuntimeLoopDependencies,
 } from "../blockscan-runtime-loop.js";
 import {
@@ -45,9 +47,11 @@ import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { buildStrategyViews } from "../strategy-views.js";
 import {
   createVerifiedGraphView,
+  blockScanEdgeKey,
   exactSetHash,
   type VerifiedGraphView,
 } from "../venues/blockscan-state-capability.js";
+import type { RouteVenueMid } from "../venues/mid-readers.js";
 
 const HOT_BUDGET_MS = 25;
 const STARTUP_BUDGET_MS = 500;
@@ -55,6 +59,16 @@ const HOT_FAMILY_BUDGET_MS = 10;
 const N_MINUS_ONE_FAMILY_SETTLE_BUDGET_MS = 10;
 const PUBLICATION_RESERVE_MS = 5;
 const EMPTY_HASH = exactSetHash([]);
+const ROUTE_TOKEN_A = address(0xb001);
+const ROUTE_TOKEN_B = address(0xb002);
+const ROUTE_POOL_CHEAP = address(0xc001);
+const ROUTE_POOL_RICH = address(0xc002);
+const ROUTE_V2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+const routePairInterface = new ethers.Interface([
+  "function token0() view returns (address)",
+  "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function factory() view returns (address)",
+]);
 
 interface PreparedDiscovery {
   readonly block: number;
@@ -68,6 +82,7 @@ await activeBackfillSettlesBeforeHotCatchup();
 await failedBackfillDoesNotBecomeUnboundedHotScan();
 await steadyStateBehindRemainsFailClosed();
 await steadyStateCompleteReadyCatchesCurrentHead();
+await productionRuntimeRecordsNonzeroEnumerationAndSolver();
 await steadyStateIncompleteReadyRemainsFailClosed();
 await incompleteRetriesAndHotBudgetResumes();
 await startupStateGetsAnIndependentPhaseBudget();
@@ -90,7 +105,7 @@ failureCauseSummaryIsBoundedAndRedacted();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (25/25)",
+    "PASS (26/26)",
 );
 
 function nMinusOneFundingIsCandidateLocal(): void {
@@ -290,6 +305,52 @@ async function steadyStateCompleteReadyCatchesCurrentHead(): Promise<void> {
   assert.deepEqual(harness.discoveryPrepareBases, [165]);
   assert.deepEqual(harness.runtimeBlocks, [170]);
   assert.deepEqual(harness.backfillBlocks, []);
+  assert.deepEqual(
+    harness.routeTelemetryRecords.map((record) => ({
+      sourceBlock: record.sourceBlock,
+      enumerationCalls: record.enumerationCalls,
+      enumerationCount: record.enumerationCount,
+      solverCalls: record.solverCalls,
+      finished: record.finished,
+      pricingMode: record.pricingMode,
+    })),
+    [{
+      sourceBlock: 170,
+      enumerationCalls: 1,
+      enumerationCount: 0,
+      solverCalls: 0,
+      finished: true,
+      pricingMode: "source_n",
+    }],
+    "current-N must publish one Enumeration boundary even with zero routes",
+  );
+}
+
+async function productionRuntimeRecordsNonzeroEnumerationAndSolver(): Promise<void> {
+  const harness = createHarness(
+    100,
+    ["complete"],
+    {
+      startupWarmEnabled: false,
+      initialLaneReadyBlock: 165,
+      routePipeline: true,
+    },
+  );
+  await harness.run(170);
+  assert.equal(harness.solverInvocations, 1);
+  assert.equal(harness.routeTelemetryRecords.length, 1);
+  const record = harness.routeTelemetryRecords[0]!;
+  assert.equal(record.sourceBlock, 170);
+  assert.equal(record.enumerationCount, 1);
+  assert.equal(record.solverCalls, 1);
+  assert.equal(record.finished, true);
+  assert.equal(record.pricingMode, "source_n");
+  assert.deepEqual(
+    record.enumerationRoutes,
+    record.solverRoutes,
+    "the naturally enumerated production route must be recorded immediately " +
+      "before the same route enters solver.solve",
+  );
 }
 
 async function steadyStateIncompleteReadyRemainsFailClosed(): Promise<void> {
@@ -650,6 +711,37 @@ async function nMinusOneTrackerStaysOutsideNormalRuntimePublication(): Promise<v
     "the background producer must leave a real abort-drain and CAS window",
   );
   assert.equal(harness.publishedPricing, 1);
+  assert.deepEqual(
+    harness.routeTelemetryRecords
+      .filter((record) => record.sourceBlock >= 701)
+      .map((record) => ({
+        sourceBlock: record.sourceBlock,
+        enumerationCalls: record.enumerationCalls,
+        enumerationCount: record.enumerationCount,
+        solverCalls: record.solverCalls,
+        finished: record.finished,
+        pricingMode: record.pricingMode,
+      })),
+    [
+      {
+        sourceBlock: 701,
+        enumerationCalls: 1,
+        enumerationCount: 0,
+        solverCalls: 0,
+        finished: true,
+        pricingMode: "n_minus_one_coarse_current_n_exact",
+      },
+      {
+        sourceBlock: 702,
+        enumerationCalls: 1,
+        enumerationCount: 0,
+        solverCalls: 0,
+        finished: true,
+        pricingMode: "n_minus_one_coarse_current_n_exact",
+      },
+    ],
+    "N-1 fallback must publish one Enumeration boundary per consumed head",
+  );
 }
 
 async function nMinusOneWaitsForItsOnlyAdjacentProducer(): Promise<void> {
@@ -795,6 +887,7 @@ function createHarness(
     readonly beforeCoarsePricingResult?: (
       sourceBlock: number,
     ) => Promise<void>;
+    readonly routePipeline?: boolean;
   } = {},
 ) {
   let publication = publicationAt(
@@ -828,7 +921,61 @@ function createHarness(
   const coarsePricingDeadlineRemainingMs: number[] = [];
   const coarsePricingFamilyDeadlineRemainingMs: number[] = [];
   const exactContextBlocks: number[] = [];
+  const pipelineEdges = options.routePipeline
+    ? routePipelineEdges()
+    : [];
+  let solverInvocations = 0;
+  const routeTelemetryRecords: Array<{
+    sourceBlock: number;
+    enumerationCalls: number;
+    enumerationCount: number;
+    solverCalls: number;
+    enumerationRoutes: string[];
+    solverRoutes: string[];
+    finished: boolean;
+    pricingMode:
+      | "source_n"
+      | "n_minus_one_coarse_current_n_exact"
+      | null;
+  }> = [];
   let latestPricing: BlockScanStateSnapshot | null = null;
+
+  const routeTelemetry: BlockScanEnumerationSolverTelemetrySink = {
+    beginPass(sourceBlock) {
+      const record: typeof routeTelemetryRecords[number] = {
+        sourceBlock,
+        enumerationCalls: 0,
+        enumerationCount: 0,
+        solverCalls: 0,
+        enumerationRoutes: [],
+        solverRoutes: [],
+        finished: false,
+        pricingMode: null as
+          | "source_n"
+          | "n_minus_one_coarse_current_n_exact"
+          | null,
+      };
+      routeTelemetryRecords.push(record);
+      return {
+        recordEnumeration(opportunities) {
+          record.enumerationCalls++;
+          record.enumerationCount += opportunities.length;
+          record.enumerationRoutes.push(
+            ...opportunities.map(telemetryRouteKey),
+          );
+        },
+        recordSolver(opportunity) {
+          record.solverCalls++;
+          record.solverRoutes.push(telemetryRouteKey(opportunity));
+        },
+        finish(input) {
+          record.finished = true;
+          record.pricingMode = input.pricingMode;
+        },
+      };
+    },
+    recordNotStarted() {},
+  };
 
   const runtimeCoordinator = {
     async prepare(
@@ -860,6 +1007,7 @@ function createHarness(
       const result = runtimeResult(
         statuses.shift() ?? "complete",
         input.graph,
+        options.routePipeline === true,
       );
       if (result.status !== "incomplete") {
         latestPricing = result.snapshot.pricing;
@@ -880,7 +1028,11 @@ function createHarness(
         (input.familySettleDeadlineAtMs ?? input.deadlineAtMs) - Date.now(),
       );
       await options.beforeCoarsePricingResult?.(input.graph.sourceBlock);
-      const prepared = runtimeResult("complete", input.graph);
+      const prepared = runtimeResult(
+        "complete",
+        input.graph,
+        options.routePipeline === true,
+      );
       if (prepared.status === "incomplete") throw new Error("fixture bug");
       latestPricing = prepared.snapshot.pricing;
       return prepared.pricing;
@@ -944,14 +1096,51 @@ function createHarness(
     setGraph() {
       plannerGraphCalls++;
     },
+    async planBlockScanFromSeedEdges() {
+      return options.routePipeline ? [{}] : [];
+    },
   };
   const workerState = {
     provider: {},
     async forkAt() {},
+    async call(req: { readonly to: string; readonly data: string }) {
+      if (!options.routePipeline) {
+        throw new Error("empty startup harness unexpectedly quoted a route");
+      }
+      const selector = req.data.slice(0, 10);
+      if (selector === routePairInterface.getFunction("token0")!.selector) {
+        return routePairInterface.encodeFunctionResult(
+          "token0",
+          [ROUTE_TOKEN_A],
+        );
+      }
+      if (selector === routePairInterface.getFunction("factory")!.selector) {
+        return routePairInterface.encodeFunctionResult(
+          "factory",
+          [ROUTE_V2_FACTORY],
+        );
+      }
+      if (selector === routePairInterface.getFunction("getReserves")!.selector) {
+        const rich = req.to.toLowerCase() === ROUTE_POOL_CHEAP;
+        return routePairInterface.encodeFunctionResult(
+          "getReserves",
+          rich
+            ? [1_000_000_000_000_000_000n, 2_000_000_000_000_000_000n, 0]
+            : [2_000_000_000_000_000_000n, 2_000_000_000_000_000_000n, 0],
+        );
+      }
+      throw new Error(`unexpected route fixture selector ${selector}`);
+    },
     stop() {
       workerStops++;
     },
     async stopAndWait() {},
+  };
+  const workerSolver = {
+    async solve() {
+      solverInvocations++;
+      return { netProfit: 0n };
+    },
   };
   const deps: BlockScanRuntimeLoopDependencies<PreparedDiscovery> = {
     enabled: true,
@@ -959,12 +1148,16 @@ function createHarness(
       maxHops: 3,
       minSpreadBps: 0,
       maxCandidates: 1,
-      budgetMs: 1,
-      pricedTokens: new Map(),
+      budgetMs: options.routePipeline ? 1_000 : 1,
+      pricedTokens: options.routePipeline
+        ? new Map([[ROUTE_TOKEN_A, {
+            maxBorrow: 1_000_000_000_000_000_000n,
+          }]])
+        : new Map(),
     },
     executionWorkers: ([{
       state: workerState,
-      solver: {},
+      solver: workerSolver,
       simulator: {},
     }] as unknown) as BlockScanRuntimeLoopDependencies<
       PreparedDiscovery
@@ -1117,9 +1310,10 @@ function createHarness(
       preparedArtifacts: () => null,
       dynamicResetNonce: () => null,
     },
+    routeTelemetry,
     largeGraphEdgeThreshold: 20_000,
     largeGraphPassBudgetMs: 30_000,
-    passBudgetMs: HOT_BUDGET_MS,
+    passBudgetMs: options.routePipeline ? 2_000 : HOT_BUDGET_MS,
     startupWarmEnabled:
       (options.startupWarmEnabled ?? true) &&
       !(options.blindEnabled ?? false),
@@ -1133,7 +1327,7 @@ function createHarness(
     solveReserveMs: 0,
     midConcurrency: 1,
     isShuttingDown: () => shuttingDown,
-    blockScanGraph: () => [],
+    blockScanGraph: () => pipelineEdges,
     blockScanPlanner: () =>
       blockScanPlanner as unknown as BlockScanRuntimeLoopDependencies<
         PreparedDiscovery
@@ -1144,6 +1338,7 @@ function createHarness(
       input.generation,
       input.sourceBlock,
       input.sourceBlockHash,
+      pipelineEdges,
     ),
     readBlockHash: async (_provider, blockNumber) => hash(blockNumber),
     formatRouteKey: () => "fixture-route",
@@ -1186,6 +1381,10 @@ function createHarness(
     coarsePricingDeadlineRemainingMs,
     coarsePricingFamilyDeadlineRemainingMs,
     exactContextBlocks,
+    get solverInvocations() {
+      return solverInvocations;
+    },
+    routeTelemetryRecords,
     get publication() {
       return cloneLiveDiscoveryPublicationState(publication);
     },
@@ -1204,7 +1403,12 @@ function createHarness(
 function runtimeResult(
   status: "complete" | "degraded" | "incomplete",
   graph: VerifiedGraphView,
+  routePipeline = false,
 ): AdapterRuntimePrepareResult {
+  const edgeKeys = routePipeline
+    ? graph.edges.map(blockScanEdgeKey)
+    : [];
+  const edgeHash = exactSetHash(edgeKeys);
   const coverage = {
     expectedStateKeys: [],
     resolvedStateKeys: [],
@@ -1212,8 +1416,8 @@ function runtimeResult(
     expectedReadKeys: [],
     resolvedReadKeys: [],
     unresolvedReadKeys: [],
-    expectedEdgeKeys: [],
-    resolvedEdgeKeys: [],
+    expectedEdgeKeys: edgeKeys,
+    resolvedEdgeKeys: edgeKeys,
     unavailableEdgeKeys: [],
     unresolvedEdgeKeys: [],
     expectedStateKeyHash: EMPTY_HASH,
@@ -1222,8 +1426,8 @@ function runtimeResult(
     expectedReadKeyHash: EMPTY_HASH,
     resolvedReadKeyHash: EMPTY_HASH,
     unresolvedReadKeyHash: EMPTY_HASH,
-    expectedEdgeKeyHash: EMPTY_HASH,
-    resolvedEdgeKeyHash: EMPTY_HASH,
+    expectedEdgeKeyHash: edgeHash,
+    resolvedEdgeKeyHash: edgeHash,
     unavailableEdgeKeyHash: EMPTY_HASH,
     unresolvedEdgeKeyHash: EMPTY_HASH,
   };
@@ -1262,12 +1466,14 @@ function runtimeResult(
       sourceBlock: graph.sourceBlock,
       sourceBlockHash: graph.sourceBlockHash,
       graph,
-      mids: new Map(),
+      mids: routePipelineMids(graph.edges),
       coverageByReadKey: new Map(),
-      coverageByEdgeKey: new Map(),
+      coverageByEdgeKey: new Map(
+        edgeKeys.map((edgeKey) => [edgeKey, { status: "resolved" as const }]),
+      ),
       freshnessByReadKey: new Map(),
       stateByStateKey: new Map(),
-      resolvedFamilyIds: [],
+      resolvedFamilyIds: routePipeline ? ["univ2-swap"] : [],
       incompleteFamilyIds: status === "degraded" ? ["fixture-family"] : [],
       coverage,
       laneTelemetry: [],
@@ -1304,6 +1510,7 @@ function graphAt(
   generation: number,
   block: number,
   blockHash: string,
+  edges: readonly TokenEdge[] = [],
 ): VerifiedGraphView {
   return createVerifiedGraphView({
     id: `startup-warm:${generation}`,
@@ -1318,8 +1525,64 @@ function graphAt(
       completeThroughBlock: block,
       completeThroughHash: blockHash,
     }],
-    edges: [],
+    edges,
   });
+}
+
+function routePipelineEdges(): TokenEdge[] {
+  return [ROUTE_POOL_CHEAP, ROUTE_POOL_RICH].flatMap((target) => [
+    {
+      adapterId: "univ2-swap",
+      target,
+      tokenIn: ROUTE_TOKEN_A,
+      tokenOut: ROUTE_TOKEN_B,
+      poolToken0: ROUTE_TOKEN_A,
+      poolToken1: ROUTE_TOKEN_B,
+      v2FeeBps: 30n,
+      slotKind: "swap" as const,
+      ...deriveEdgeTaxonomy("swap"),
+    },
+    {
+      adapterId: "univ2-swap",
+      target,
+      tokenIn: ROUTE_TOKEN_B,
+      tokenOut: ROUTE_TOKEN_A,
+      poolToken0: ROUTE_TOKEN_A,
+      poolToken1: ROUTE_TOKEN_B,
+      v2FeeBps: 30n,
+      slotKind: "swap" as const,
+      ...deriveEdgeTaxonomy("swap"),
+    },
+  ]);
+}
+
+function routePipelineMids(
+  edges: readonly TokenEdge[],
+): Map<string, RouteVenueMid> {
+  return new Map(edges.map((edge) => {
+    const cheap = edge.target.toLowerCase() === ROUTE_POOL_CHEAP;
+    const forward =
+      edge.tokenIn.toLowerCase() === ROUTE_TOKEN_A;
+    const mid = cheap
+      ? (forward ? 2 : 0.5)
+      : 1;
+    return [blockScanEdgeKey(edge), {
+      kind: "v2",
+      pool: edge.target.toLowerCase(),
+      edges: [edge],
+      mid,
+      feeBps: 30,
+      reserveA: 1_000_000_000_000_000_000n,
+      reserveB: 2_000_000_000_000_000_000n,
+      depthProxy: 1e18,
+    }];
+  }));
+}
+
+function telemetryRouteKey(opportunity: {
+  readonly seedEdges: readonly TokenEdge[];
+}): string {
+  return opportunity.seedEdges.map(blockScanEdgeKey).join(">");
 }
 
 function publicationAt(
