@@ -87,6 +87,7 @@ const CURATED: Record<string, Curated> = {
   "analysis:census-report": meta("analysis", ["competitor-window", "classification", "pnl", "graph"], "local-rpc", "Enumerate and classify a watchlist over a bounded block window.", 90),
   "analysis:tx-profit": meta("view", ["single-transaction", "pnl"], "archive-rpc", "Thin PnL-only transaction view over the canonical pricer.", 95),
   "analysis:tx-flow": meta("view", ["single-transaction", "flow"], "archive-rpc", "Thin ordered token-flow transaction view.", 95),
+  "analysis:tx-source-shape": meta("analysis", ["single-transaction", "causality", "classification", "backrun", "block-scan"], "archive-rpc", "Classify one landed swap transaction as victim-driven or block-scan from a strict preceding opposite-direction same-pool swap.", 100),
   "analysis:redact-live-run": meta("ops", ["redaction", "live-window", "production-events"], "zero-cu", "Redact and summarize live-run artifacts before analysis or commit.", 100),
   "analysis:hermes-gate": meta("gate", ["hermes", "close-gate", "method-trace"], "zero-cu", "Mechanical Hermes report close gate.", 100),
   "analysis:ab-canary-compare": meta("analysis", ["ab", "comparison", "block-scan"], "zero-cu", "Compare paired A/B block-scan logs after manual analysis.", 100),
