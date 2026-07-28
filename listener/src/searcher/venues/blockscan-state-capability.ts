@@ -841,6 +841,11 @@ export function stateSchemaFingerprint(edges: readonly TokenEdge[]): string {
   );
 }
 
+/** Exact immutable graph-edge identity, ownership and execution metadata. */
+export function blockScanEdgeMetadataFingerprint(edge: TokenEdge): string {
+  return deterministicHash(canonicalEdgeRecord(edge));
+}
+
 export function canonicalEdgeId(
   familyId: string,
   edge: TokenEdge,

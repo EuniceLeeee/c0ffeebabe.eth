@@ -1,8 +1,16 @@
 import { AnvilStateBackend } from "../shared/state/state-backend.js";
 import type { BlockScanOpportunity } from "./detector/detector.js";
 import { detectProductionBlockScanOpportunities } from "./detector/blockscan-scanner-production.js";
-import type { BlockScanCoreConfig } from "./detector/blockscan-scanner-core.js";
+import type {
+  BlockScanCoreConfig,
+  BlockScanOutcome,
+} from "./detector/blockscan-scanner-core.js";
 import { refineBlockScanCandidates } from "./detector/blockscan-candidate-refinement.js";
+import {
+  enumerateNMinusOneCoarseCandidates,
+  promoteNMinusOneExactCandidates,
+  type NMinusOneCoarseCandidate,
+} from "./detector/blockscan-nminus1-fallback.js";
 import { BlockScanFamilyStageBudget } from "./detector/blockscan-family-budget.js";
 import { BlockScanPassTimeline } from "./blockscan-pass-timeline.js";
 import { emitEvent } from "./events.js";
@@ -17,6 +25,10 @@ import {
   type AdapterRuntimeSnapshot,
 } from "./adapter-runtime-coordinator.js";
 import type {
+  BlockScanStatePrepareResult,
+  BlockScanStateSnapshot,
+} from "./blockscan-state-coordinator.js";
+import type {
   BufferedBlockScanBackrunStatePublisher,
 } from "./blockscan-backrun-state-bridge.js";
 import {
@@ -27,7 +39,11 @@ import {
   type DiscoveryBackfillControl,
   DiscoveryBackfillLane,
 } from "./discovery-backfill-lane.js";
-import { CanonicalHeaderJournal, type CanonicalHeader } from "./canonical-header-journal.js";
+import {
+  CanonicalHeaderJournal,
+  CanonicalHeaderOutsideRetentionError,
+  type CanonicalHeader,
+} from "./canonical-header-journal.js";
 import {
   describeLiveDiscoveryPublicationState,
   type LiveDiscoveryPublicationState,
@@ -201,6 +217,21 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   /** One-time ordinary-live budget for the first current-head runtime snapshot. */
   readonly startupWarmBudgetMs: number;
   /**
+   * Explicit degraded availability mode. It never changes the normal
+   * production scanner boundary and remains disabled for blind replay.
+   */
+  readonly nMinusOneFallbackEnabled?: boolean;
+  /**
+   * Independent wall-clock allowance for the background predecessor pricing
+   * producer. This does not extend the current-head scanner pass deadline.
+   */
+  readonly nMinusOneStateBudgetMs?: number;
+  /**
+   * Family-local work window inside the N-1 producer. The remaining state
+   * budget is reserved for abort drain, partial aggregation and canonical CAS.
+   */
+  readonly nMinusOneFamilySettleBudgetMs?: number;
+  /**
    * Ordinary-live per-family pricing cutoff. This is deliberately shorter
    * than the generation deadline so one slow family degrades locally instead
    * of letting the outer deadline erase every healthy sibling.
@@ -250,6 +281,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   private generation = 0;
   private startupWarmPending: boolean;
   private readonly scheduler: LatestHeadScheduler;
+  private coarsePricingActive: Promise<void> | null = null;
+  private coarsePricingActiveSourceBlock: number | null = null;
+  private readonly completedCoarsePricingByBlock =
+    new Map<number, BlockScanStateSnapshot>();
+  private pendingCoarsePricing: {
+    readonly coordinator: AdapterRuntimeCoordinator;
+    readonly graph: VerifiedGraphView;
+  } | null = null;
 
   constructor(
     private readonly deps: BlockScanRuntimeLoopDependencies<PreparedDiscovery>,
@@ -286,10 +325,162 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     return this.startupWarmPending;
   }
 
+  private enqueueCoarsePricing(input: {
+    readonly coordinator: AdapterRuntimeCoordinator;
+    readonly graph: VerifiedGraphView;
+  }): void {
+    if (this.coarsePricingActive) {
+      if (
+        !this.pendingCoarsePricing ||
+        input.graph.sourceBlock >= this.pendingCoarsePricing.graph.sourceBlock
+      ) {
+        this.pendingCoarsePricing = input;
+      }
+      return;
+    }
+    this.startCoarsePricing(input);
+  }
+
+  private startCoarsePricing(input: {
+    readonly coordinator: AdapterRuntimeCoordinator;
+    readonly graph: VerifiedGraphView;
+  }): void {
+    const startedAtMs = Date.now();
+    const stateBudgetMs = Math.max(
+      1,
+      this.deps.nMinusOneStateBudgetMs ?? 20_000,
+    );
+    const publicationReserveMs = Math.min(
+      stateBudgetMs,
+      Math.max(1, this.deps.runtimePublicationReserveMs ?? 1_500),
+    );
+    const familySettleBudgetMs = Math.min(
+      stateBudgetMs,
+      Math.max(
+        1,
+        this.deps.nMinusOneFamilySettleBudgetMs ??
+          Math.min(12_000, stateBudgetMs),
+      ),
+    );
+    const deadlineAtMs = startedAtMs + stateBudgetMs;
+    const familySettleDeadlineAtMs = Math.min(
+      startedAtMs + familySettleBudgetMs,
+      Math.max(
+        startedAtMs,
+        deadlineAtMs - publicationReserveMs,
+      ),
+    );
+    let result: BlockScanStatePrepareResult | null = null;
+    const task = input.coordinator.prepareCoarsePricing({
+      graph: input.graph,
+      deadlineAtMs,
+      /*
+       * Family-local deadlines must settle before the generation deadline.
+       * Otherwise the outer abort wins the same instant as a slow family,
+       * erases healthy sibling results and leaves no time for canonical CAS.
+       */
+      familySettleDeadlineAtMs,
+      signal: this.deps.runtimeAbort.signal,
+    }).then((prepared) => {
+      result = prepared;
+      if (prepared.status !== "incomplete") {
+        this.completedCoarsePricingByBlock.set(
+          prepared.snapshot.sourceBlock,
+          prepared.snapshot,
+        );
+        for (const sourceBlock of this.completedCoarsePricingByBlock.keys()) {
+          if (sourceBlock < prepared.snapshot.sourceBlock - 2) {
+            this.completedCoarsePricingByBlock.delete(sourceBlock);
+          }
+        }
+      }
+      console.log(
+        `[searcher/blockscan-nminus1-state] ${JSON.stringify({
+          sourceBlock: prepared.sourceBlock,
+          generation: prepared.generation,
+          status: prepared.status,
+          priced: prepared.coverage.resolvedEdgeKeys.length,
+          expected: prepared.coverage.expectedEdgeKeys.length,
+          issueCount: prepared.issues.length,
+          wallMs: Math.max(0, Date.now() - startedAtMs),
+          budgetMs: stateBudgetMs,
+          familySettleBudgetMs,
+          publicationReserveMs,
+          families: prepared.familyTelemetry ?? [],
+          lanes: prepared.laneTelemetry,
+        })}`,
+      );
+    }).catch((error) => {
+      console.log(
+        `[searcher/blockscan-nminus1-state] ${JSON.stringify({
+          sourceBlock: input.graph.sourceBlock,
+          generation: input.graph.generation,
+          status: "failed",
+          error: blockScanErrorMessage(error),
+          wallMs: Math.max(0, Date.now() - startedAtMs),
+          budgetMs: stateBudgetMs,
+        })}`,
+      );
+    }).finally(() => {
+      if (this.coarsePricingActive !== task) return;
+      this.coarsePricingActive = null;
+      this.coarsePricingActiveSourceBlock = null;
+      const pending = this.pendingCoarsePricing;
+      this.pendingCoarsePricing = null;
+      if (
+        pending &&
+        !this.deps.runtimeAbort.signal.aborted &&
+        pending.graph.sourceBlock >
+          (result?.sourceBlock ?? input.graph.sourceBlock)
+      ) {
+        this.startCoarsePricing(pending);
+      }
+    });
+    this.coarsePricingActive = task;
+    this.coarsePricingActiveSourceBlock = input.graph.sourceBlock;
+  }
+
+  private completedCoarsePricing(
+    coordinator: AdapterRuntimeCoordinator,
+    sourceBlock: number,
+  ): BlockScanStateSnapshot | null {
+    const tracked = this.completedCoarsePricingByBlock.get(sourceBlock);
+    if (tracked) return tracked;
+    const coordinatorLatest = coordinator.latestPricingSnapshot();
+    return coordinatorLatest?.sourceBlock === sourceBlock
+      ? coordinatorLatest
+      : null;
+  }
+
+  private async waitForAdjacentCoarsePricing(
+    coordinator: AdapterRuntimeCoordinator,
+    sourceBlock: number,
+    deadlineAtMs: number,
+  ): Promise<BlockScanStateSnapshot | null> {
+    const completed = this.completedCoarsePricing(coordinator, sourceBlock);
+    if (completed) return completed;
+    const active = this.coarsePricingActive;
+    if (
+      !active ||
+      this.coarsePricingActiveSourceBlock !== sourceBlock
+    ) {
+      return null;
+    }
+    const finished = await waitForTaskUntil(
+      active,
+      deadlineAtMs,
+      this.deps.runtimeAbort.signal,
+    );
+    return finished
+      ? this.completedCoarsePricing(coordinator, sourceBlock)
+      : null;
+  }
+
   stopExecutionWorkers(): void {
     if (!this.deps.runtimeAbort.signal.aborted) {
       this.deps.runtimeAbort.abort(new Error("searcher shutdown"));
     }
+    this.pendingCoarsePricing = null;
     for (const worker of this.deps.executionWorkers) worker.state.stop();
   }
 
@@ -305,6 +496,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       stopError = error;
     }
     await drained;
+    if (this.coarsePricingActive) {
+      await this.coarsePricingActive;
+    }
     if (stopError !== undefined) throw stopError;
   }
 
@@ -364,12 +558,24 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       | "breaker_open" = "ran";
     let skippedReason: string | undefined;
     let runtimeSourceBlock: number | null = null;
+    let pricingMode: "source_n" | "n_minus_one_coarse_current_n_exact" =
+      "source_n";
+    let coarseSourceBlock: number | null = null;
+    let coarseSourceBlockHash: string | null = null;
+    let exactSourceBlockHash: string | null = null;
+    let fullCoverage = true;
+    let degradedRecallReasons: readonly string[] = Object.freeze([]);
     let scannedPairs = 0;
     let candidates = 0;
     let plannedCount = 0;
     let quotePositive = 0;
     let bestNet: bigint | null = null;
     const atomicResults: BlockScanAtomicResult[] = [];
+    const workerResetTimings: Array<{
+      readonly worker: number;
+      readonly wallMs: number;
+      readonly status: "complete" | "failed";
+    }> = [];
     let auditRuntime: AdapterRuntimeSnapshot | null = null;
     let auditGraphView: VerifiedGraphView | null = null;
     let auditPricingCoverage: BlindProductionPricingCoverageSource | null =
@@ -471,6 +677,12 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         },
         stages: stageBoundaries,
         decision: passDecision,
+        pricing_mode: pricingMode,
+        coarse_source_block: coarseSourceBlock,
+        coarse_source_block_hash: coarseSourceBlockHash,
+        exact_source_block_hash: exactSourceBlockHash,
+        full_coverage: fullCoverage,
+        degraded_recall_reasons: degradedRecallReasons,
         atomic_decisions: atomicResults.map((result) => ({
           decision: result.decision,
           submitted: result.submitted,
@@ -554,9 +766,22 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           // current head's canonical journal into its future.
           return null;
         }
-        const preparedHeader = await discovery.observeHeader(
-          ready.source.number,
-        );
+        let preparedHeader: CanonicalHeader;
+        try {
+          preparedHeader = await discovery.observeHeader(
+            ready.source.number,
+          );
+        } catch (error) {
+          if (!(error instanceof CanonicalHeaderOutsideRetentionError)) {
+            throw error;
+          }
+          discovery.lane.invalidate(
+            `prepared source ${ready.source.number} fell outside ` +
+              `retained canonical journal at ` +
+              `${error.retainedHeadNumber}`,
+          );
+          return null;
+        }
         const proof = discovery.journal.proof(preparedHeader.number);
         const taken = await discovery.queue.enqueue(
           "dex-refresh",
@@ -815,19 +1040,19 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             Date.now() +
               Math.max(1, this.deps.hotPricingFamilyBudgetMs ?? 5_000),
           );
-      const runtime = await adapterRuntimeCoordinator.prepare({
-        graph: graphView,
-        fundingTokens: [...new Set([
-          ...this.deps.flashTokens(),
-          ...graphEdges.flatMap((edge) => [edge.tokenIn, edge.tokenOut]),
-        ])],
-        deadlineAtMs: runtimeDeadlineAtMs,
-        preparationSettleDeadlineAtMs,
-        pricingFamilySettleDeadlineAtMs,
-        signal: this.deps.runtimeAbort.signal,
-        prepareExecution: async ({ sourceBlock, sourceBlockHash, signal }) => {
-          const settled = await Promise.allSettled(
-            blockScanExecutionWorkers.map(async (worker) => {
+      const prepareExecution = async (
+        input: {
+          readonly sourceBlock: number;
+          readonly sourceBlockHash: string;
+          readonly signal: AbortSignal;
+        },
+      ): Promise<void> => {
+        const { sourceBlock, sourceBlockHash, signal } = input;
+        const settled = await Promise.allSettled(
+          blockScanExecutionWorkers.map(async (worker, workerIndex) => {
+            const resetStartedAtMs = Date.now();
+            let status: "complete" | "failed" = "failed";
+            try {
               if (this.deps.isShuttingDown() || signal.aborted) {
                 throw signal.reason;
               }
@@ -847,120 +1072,266 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                   `worker fork hash mismatch ${forkHash} != ${sourceBlockHash}`,
                 );
               }
-            }),
-          );
-          const failure = settled.find(
-            (result): result is PromiseRejectedResult =>
-              result.status === "rejected",
-          );
-          if (
-            failure ||
-            this.deps.isShuttingDown() ||
-            signal.aborted
-          ) {
-            // Promise cancellation does not stop an in-flight anvil_reset.
-            // Settle every worker first, then reap every process before this
-            // generation releases the coordinator's reuse barrier.
-            await Promise.all(
-              blockScanExecutionWorkers.map((worker) =>
-                worker.state.stopAndWait()
-              ),
-            );
-            throw failure?.reason ??
-              signal.reason ??
-              new Error("block-scan runtime shutting down");
-          }
-        },
-      });
-      finishStage(
-        "state",
-        runtime.status === "incomplete" ? "failed" : "ran",
-      );
-      timing.stateMs = stageBoundaries.state.stage_ms;
-      if (this.deps.blind.enabled) {
-        auditPricingCoverage = runtime.pricing.coverage;
-        sealAuditBoundary("state_ready", "state");
-      }
-      console.log(
-        `[searcher/blockscan-family-telemetry] ${JSON.stringify({
-          block: blockNumber,
-          sourceBlock: runtime.pricing.sourceBlock,
-          generation: runtime.pricing.generation,
-          status: runtime.pricing.status,
-          issueCount: runtime.pricing.issues.length,
-          families: runtime.pricing.familyTelemetry ?? [],
-          lanes: runtime.pricing.laneTelemetry,
-        })}`,
-      );
-      if (runtime.status === "incomplete") {
-        outcome = Date.now() >= passDeadlineAtMs
-          ? "budget_exceeded"
-          : "stale_state";
-        skippedReason = runtime.issues[0]?.message ??
-          `funding unresolved=${runtime.fundingCoverage.unresolvedKeys.length}`;
-        console.log(
-          `[searcher/blockscan-family] block=${blockNumber} state_incomplete ` +
-            `priced=${runtime.pricing.coverage.resolvedEdgeKeys.length}/` +
-            `${runtime.pricing.coverage.expectedEdgeKeys.length} ` +
-            `funding=${runtime.fundingCoverage.resolvedKeys.length}/` +
-            `${runtime.fundingCoverage.expectedKeys.length} ` +
-            `reason=${skippedReason}`,
+              status = "complete";
+            } finally {
+              workerResetTimings.push(Object.freeze({
+                worker: workerIndex,
+                wallMs: Math.max(0, Date.now() - resetStartedAtMs),
+                status,
+              }));
+            }
+          }),
         );
-        return;
-      }
-      if (runtime.status === "degraded") {
-        outcome = "degraded";
-        console.warn(
-          `[searcher/blockscan-family] block=${blockNumber} degraded ` +
-            `families=${runtime.snapshot.pricing.incompleteFamilyIds.join(",") || "unknown"} ` +
-            `priced=${runtime.pricing.coverage.resolvedEdgeKeys.length}/` +
-            `${runtime.pricing.coverage.expectedEdgeKeys.length}`,
+        const failure = settled.find(
+          (result): result is PromiseRejectedResult =>
+            result.status === "rejected",
         );
-      }
-      if (this.deps.isShuttingDown()) {
-        outcome = "disabled";
-        skippedReason = "shutdown";
-        return;
-      }
-
-      const snapshot = runtime.snapshot;
-      this.deps.backrunStatePublisher.publish(snapshot.pricing);
-      if (this.deps.blind.enabled) auditRuntime = snapshot;
-      runtimeSourceBlock = snapshot.sourceBlock;
-      blockScanPlanner.setFlashLiquidity(snapshot.funding);
-      this.deps.sharedPlanner.setFlashLiquidity(snapshot.funding);
-      if (startupWarmAttempt) {
-        // A current-head complete/degraded publication is a valid incremental
-        // predecessor for the healthy state keys. Do not enumerate this
-        // one-time, non-steady-state head; the latest-head scheduler retains
-        // any newer head that arrived while preparation was running.
-        this.startupWarmPending = false;
-        outcome = "startup_warm";
-        skippedReason = `startup_warm_${runtime.status}`;
+        if (
+          failure ||
+          this.deps.isShuttingDown() ||
+          signal.aborted
+        ) {
+          // Promise cancellation does not stop an in-flight anvil_reset.
+          // Settle every worker first, then reap every process before this
+          // generation releases the coordinator's reuse barrier.
+          await Promise.all(
+            blockScanExecutionWorkers.map((worker) =>
+              worker.state.stopAndWait()
+            ),
+          );
+          throw failure?.reason ??
+            signal.reason ??
+            new Error("block-scan runtime shutting down");
+        }
+      };
+      const useNMinusOneFallback =
+        this.deps.nMinusOneFallbackEnabled === true &&
+        !startupWarmAttempt &&
+        !this.deps.blind.enabled;
+      let coarse: BlockScanOutcome;
+      let fallbackEnvelopes: readonly NMinusOneCoarseCandidate[] | null = null;
+      if (!useNMinusOneFallback) {
+        const runtime = await adapterRuntimeCoordinator.prepare({
+          graph: graphView,
+          fundingTokens: [...new Set([
+            ...this.deps.flashTokens(),
+            ...graphEdges.flatMap((edge) => [edge.tokenIn, edge.tokenOut]),
+          ])],
+          deadlineAtMs: runtimeDeadlineAtMs,
+          preparationSettleDeadlineAtMs,
+          pricingFamilySettleDeadlineAtMs,
+          signal: this.deps.runtimeAbort.signal,
+          prepareExecution,
+        });
+        finishStage(
+          "state",
+          runtime.status === "incomplete" ? "failed" : "ran",
+        );
+        timing.stateMs = stageBoundaries.state.stage_ms;
+        if (this.deps.blind.enabled) {
+          auditPricingCoverage = runtime.pricing.coverage;
+          sealAuditBoundary("state_ready", "state");
+        }
         console.log(
-          `[searcher/blockscan-startup-warm] ${JSON.stringify({
-            sourceBlock: snapshot.sourceBlock,
-            generation: snapshot.generation,
-            status: runtime.status,
-            wallMs: Math.max(0, Date.now() - passWorkerStartedAtMs),
-            issueCount: runtime.issues.length,
+          `[searcher/blockscan-family-telemetry] ${JSON.stringify({
+            block: blockNumber,
+            sourceBlock: runtime.pricing.sourceBlock,
+            generation: runtime.pricing.generation,
+            status: runtime.pricing.status,
+            issueCount: runtime.pricing.issues.length,
+            families: runtime.pricing.familyTelemetry ?? [],
+            lanes: runtime.pricing.laneTelemetry,
+            runtime: runtime.timing,
+            workerResets: [...workerResetTimings].sort(
+              (a, b) => a.worker - b.worker,
+            ),
           })}`,
         );
-        return;
-      }
+        if (runtime.status === "incomplete") {
+          outcome = Date.now() >= passDeadlineAtMs
+            ? "budget_exceeded"
+            : "stale_state";
+          skippedReason = runtime.issues[0]?.message ??
+            `funding unresolved=${runtime.fundingCoverage.unresolvedKeys.length}`;
+          console.log(
+            `[searcher/blockscan-family] block=${blockNumber} state_incomplete ` +
+              `priced=${runtime.pricing.coverage.resolvedEdgeKeys.length}/` +
+              `${runtime.pricing.coverage.expectedEdgeKeys.length} ` +
+              `funding=${runtime.fundingCoverage.resolvedKeys.length}/` +
+              `${runtime.fundingCoverage.expectedKeys.length} ` +
+              `reason=${skippedReason}`,
+          );
+          return;
+        }
+        if (runtime.status === "degraded") {
+          outcome = "degraded";
+          console.warn(
+            `[searcher/blockscan-family] block=${blockNumber} degraded ` +
+              `families=${runtime.snapshot.pricing.incompleteFamilyIds.join(",") || "unknown"} ` +
+              `priced=${runtime.pricing.coverage.resolvedEdgeKeys.length}/` +
+              `${runtime.pricing.coverage.expectedEdgeKeys.length}`,
+          );
+        }
+        if (this.deps.isShuttingDown()) {
+          outcome = "disabled";
+          skippedReason = "shutdown";
+          return;
+        }
 
-      beginStage("enumeration");
-      const coarse = detectProductionBlockScanOpportunities({
-        runtime: snapshot,
-        swapTouched: null,
-        cfg: {
-          ...blockScanCfg,
-          maxCandidates: this.deps.refineCandidates,
-          pinnedOutsideBudget: true,
-        },
-      });
-      auditSelectionMode = coarse.selectionMode;
-      auditForcedSelectionCount = coarse.forcedSelectionCount;
+        const snapshot = runtime.snapshot;
+        this.deps.backrunStatePublisher.publish(snapshot.pricing);
+        if (this.deps.blind.enabled) auditRuntime = snapshot;
+        runtimeSourceBlock = snapshot.sourceBlock;
+        exactSourceBlockHash = snapshot.sourceBlockHash;
+        blockScanPlanner.setFlashLiquidity(snapshot.funding);
+        this.deps.sharedPlanner.setFlashLiquidity(snapshot.funding);
+        if (startupWarmAttempt) {
+          // A current-head complete/degraded publication is a valid incremental
+          // predecessor for the healthy state keys. Do not enumerate this
+          // one-time, non-steady-state head; the latest-head scheduler retains
+          // any newer head that arrived while preparation was running.
+          this.startupWarmPending = false;
+          outcome = "startup_warm";
+          skippedReason = `startup_warm_${runtime.status}`;
+          console.log(
+            `[searcher/blockscan-startup-warm] ${JSON.stringify({
+              sourceBlock: snapshot.sourceBlock,
+              generation: snapshot.generation,
+              status: runtime.status,
+              wallMs: Math.max(0, Date.now() - passWorkerStartedAtMs),
+              issueCount: runtime.issues.length,
+            })}`,
+          );
+          return;
+        }
+
+        beginStage("enumeration");
+        const productionCoarse = detectProductionBlockScanOpportunities({
+          runtime: snapshot,
+          swapTouched: null,
+          cfg: {
+            ...blockScanCfg,
+            maxCandidates: this.deps.refineCandidates,
+            pinnedOutsideBudget: true,
+          },
+        });
+        coarse = productionCoarse;
+        auditSelectionMode = productionCoarse.selectionMode;
+        auditForcedSelectionCount = productionCoarse.forcedSelectionCount;
+      } else {
+        this.enqueueCoarsePricing({
+          coordinator: adapterRuntimeCoordinator,
+          graph: graphView,
+        });
+        const predecessorPricing = await this.waitForAdjacentCoarsePricing(
+          adapterRuntimeCoordinator,
+          blockNumber - 1,
+          passDeadlineAtMs - Math.max(1, this.deps.solveReserveMs),
+        );
+        if (
+          !predecessorPricing ||
+          predecessorPricing.sourceBlock + 1 !== blockNumber
+        ) {
+          finishStage("state", "failed");
+          timing.stateMs = stageBoundaries.state.stage_ms;
+          outcome = "degraded";
+          skippedReason = "no_adjacent_precompleted_coarse";
+          fullCoverage = false;
+          degradedRecallReasons = Object.freeze([
+            "current_n_mutation_anchors_unavailable",
+            "off_event_dependencies_uncovered",
+          ]);
+          console.log(
+            `[searcher/blockscan-nminus1] ${JSON.stringify({
+              block: blockNumber,
+              status: "ineligible",
+              reason: skippedReason,
+              latestCoarseBlock: predecessorPricing?.sourceBlock ?? null,
+            })}`,
+          );
+          return;
+        }
+        const predecessorHeader = await discovery.observeHeader(
+          blockNumber - 1,
+        );
+        const exactContext = await
+          adapterRuntimeCoordinator.prepareCurrentNExactExecutionContext({
+            graph: graphView,
+            fundingTokens: this.deps.flashTokens(),
+            deadlineAtMs: runtimeDeadlineAtMs,
+            preparationSettleDeadlineAtMs,
+            signal: this.deps.runtimeAbort.signal,
+            prepareExecution,
+          });
+        finishStage(
+          "state",
+          exactContext.status === "incomplete" ? "failed" : "ran",
+        );
+        timing.stateMs = stageBoundaries.state.stage_ms;
+        if (exactContext.status === "incomplete") {
+          outcome = Date.now() >= passDeadlineAtMs
+            ? "budget_exceeded"
+            : "stale_state";
+          skippedReason = exactContext.issues[0]?.message ??
+            "current-N exact execution context incomplete";
+          console.log(
+            `[searcher/blockscan-nminus1] ${JSON.stringify({
+              block: blockNumber,
+              status: "exact-context-incomplete",
+              reason: skippedReason,
+              timing: exactContext.timing,
+              funding: exactContext.fundingCoverage,
+            })}`,
+          );
+          return;
+        }
+        runtimeSourceBlock = exactContext.context.sourceBlock;
+        exactSourceBlockHash = exactContext.context.sourceBlockHash;
+        blockScanPlanner.setFlashLiquidity(exactContext.context.funding);
+        pricingMode = "n_minus_one_coarse_current_n_exact";
+        coarseSourceBlock = predecessorPricing.sourceBlock;
+        coarseSourceBlockHash = predecessorPricing.sourceBlockHash;
+        fullCoverage = false;
+        degradedRecallReasons = Object.freeze([
+          "current_n_mutation_anchors_unavailable",
+          "off_event_dependencies_uncovered",
+        ]);
+        beginStage("enumeration");
+        const fallbackCoarse = enumerateNMinusOneCoarseCandidates({
+          coarsePricing: predecessorPricing,
+          canonicalPredecessorHash: predecessorHeader.hash,
+          exactGraph: exactContext.context.graph,
+          cfg: {
+            ...blockScanCfg,
+            maxCandidates: this.deps.refineCandidates,
+            pinnedOutsideBudget: true,
+          },
+        });
+        fallbackEnvelopes = fallbackCoarse.candidates;
+        coarse = Object.freeze({
+          ...fallbackCoarse.scan,
+          opportunities: fallbackCoarse.candidates.map(
+            (candidate) => candidate.exactProbeOpportunity,
+          ),
+        });
+        console.log(
+          `[searcher/blockscan-nminus1] ${JSON.stringify({
+            block: blockNumber,
+            status: "coarse-enumerated",
+            pricingMode: fallbackCoarse.pricingMode,
+            coarseSourceBlock: fallbackCoarse.coarseSourceBlock,
+            coarseSourceBlockHash: fallbackCoarse.coarseSourceBlockHash,
+            exactSourceBlock: fallbackCoarse.requiredExactSourceBlock,
+            exactSourceBlockHash: fallbackCoarse.requiredExactSourceBlockHash,
+            candidates: fallbackCoarse.candidates.length,
+            rejectedRouteCount: fallbackCoarse.rejectedRouteCount,
+            recallMode: fallbackCoarse.recallMode,
+            fullCoverage: fallbackCoarse.fullCoverage,
+            degradedRecallReasons: fallbackCoarse.degradedRecallReasons,
+            exactContextTiming: exactContext.timing,
+          })}`,
+        );
+      }
       if (auditOpportunities) {
         for (let index = 0; index < coarse.opportunities.length; index++) {
           const opportunity = coarse.opportunities[index]!;
@@ -1033,12 +1404,18 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           : "post_refinement_deadline";
         return;
       }
+      const exactOpportunities = fallbackEnvelopes
+        ? promoteNMinusOneExactCandidates(
+            fallbackEnvelopes,
+            refinement.opportunities,
+          )
+        : refinement.opportunities;
 
       beginStage("planner_solver");
       const planned: PlannedBlockScanSolve[] = [];
       const plannerFamilyBudget = new BlockScanFamilyStageBudget();
       const plannerQueue = plannerFamilyBudget.order(
-        refinement.opportunities,
+        exactOpportunities,
         (opp) => opp.seedEdges,
       );
       for (const opp of plannerQueue) {
@@ -1403,6 +1780,42 @@ async function waitForBackfillSettlement(
     void settlement.then(
       () => finish(),
       (error) => finish(error),
+    );
+  });
+}
+
+async function waitForTaskUntil(
+  task: Promise<void>,
+  deadlineAtMs: number,
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (signal.aborted) {
+    throw signal.reason ?? new Error("searcher shutdown");
+  }
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) return false;
+  return await new Promise<boolean>((resolve, reject) => {
+    let finished = false;
+    const finish = (value?: boolean, error?: unknown): void => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      if (error !== undefined) reject(error);
+      else resolve(value ?? false);
+    };
+    const onAbort = (): void => {
+      finish(undefined, signal.reason ?? new Error("searcher shutdown"));
+    };
+    const timer = setTimeout(() => finish(false), remainingMs);
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    void task.then(
+      () => finish(true),
+      (error) => finish(undefined, error),
     );
   });
 }

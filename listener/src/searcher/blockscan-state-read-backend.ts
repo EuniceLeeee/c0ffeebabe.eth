@@ -21,6 +21,7 @@ import {
   BLOCKSCAN_MULTICALL3,
   blockScanMulticallIface,
 } from "./blockscan-multicall.js";
+import { decodeRlp, keccak256 } from "ethers";
 
 interface JsonRpcSuccess {
   readonly jsonrpc: "2.0";
@@ -43,13 +44,82 @@ type JsonRpcResponse = JsonRpcSuccess | JsonRpcFailure;
 export interface JsonRpcBlockScanStateReadBackendOptions {
   readonly maxBatchSize?: number;
   readonly maxConcurrentBatches?: number;
+  readonly maxConcurrentMutationProofs?: number;
   /**
    * Local reth is faster with parallel JSON-RPC eth_call batches than with an
    * on-chain Multicall3 aggregate. Remote providers may opt into aggregate3
    * when network round trips dominate.
    */
   readonly multicallMode?: "rpc-batch" | "aggregate3";
+  /**
+   * Local reth can return only the canonical RLP header. This preserves the
+   * exact number/hash/parent proof while avoiding the transaction-hash payload
+   * included by eth_getBlockByNumber(..., false).
+   */
+  readonly mutationHeaderMode?:
+    | "eth-block"
+    | "debug-raw-header-with-fallback";
   readonly fetchImpl?: typeof fetch;
+  readonly onMutationProofTelemetry?: (
+    telemetry: MutationProofTransportTelemetry,
+  ) => void;
+  readonly now?: () => number;
+}
+
+export type MutationProofTransportPhase =
+  | "descriptor-validation"
+  | "header-read"
+  | "header-validation"
+  | "log-read"
+  | "log-validation"
+  | "final-cas";
+
+export type MutationProofFailureKind =
+  | "deadline"
+  | "aborted"
+  | "rpc"
+  | "validation"
+  | "unknown";
+
+export interface MutationProofPhaseTelemetry {
+  readonly queueWaitMs: number;
+  readonly wallMs: number;
+  readonly rpcRequests: number;
+  readonly rpcItems: number;
+  readonly responseBytes: number;
+  readonly shared?: boolean;
+  readonly transport?:
+    | "eth-block"
+    | "debug-raw-header"
+    | "debug-raw-header+eth-block-fallback";
+}
+
+export interface MutationProofTransportTelemetry {
+  readonly descriptorFingerprint: string;
+  readonly fromBlock: number;
+  readonly throughBlock: number;
+  readonly status: "complete" | "failed";
+  readonly failurePhase?: MutationProofTransportPhase;
+  readonly failureKind?: MutationProofFailureKind;
+  readonly wallMs: number;
+  readonly validationMs: number;
+  readonly phases: Readonly<{
+    readonly headers: MutationProofPhaseTelemetry;
+    readonly logs: MutationProofPhaseTelemetry;
+    readonly finalCas: MutationProofPhaseTelemetry;
+  }>;
+}
+
+export class MutationRangeReadError extends Error {
+  constructor(
+    readonly phase: MutationProofTransportPhase,
+    readonly kind: MutationProofFailureKind,
+    message: string,
+    readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "MutationRangeReadError";
+  }
 }
 
 interface IndexedStateRead {
@@ -61,6 +131,19 @@ interface PinnedReadControl {
   readonly sourceBlock: number;
   readonly sourceBlockHash: string;
   readonly sourceGeneration: number;
+}
+
+interface CanonicalMutationHeader {
+  readonly number: number;
+  readonly hash: string;
+  readonly parentHash: string;
+}
+
+interface CanonicalHeaderProof {
+  readonly headers: readonly CanonicalMutationHeader[];
+  readonly canonicalPathFingerprint: string;
+  readonly telemetry: MutationProofPhaseTelemetry;
+  readonly validationMs: number;
 }
 
 /**
@@ -79,15 +162,38 @@ export class JsonRpcBlockScanStateReadBackend
   private readonly maxBatchSize: number;
   private readonly maxConcurrentBatches: number;
   private readonly multicallMode: "rpc-batch" | "aggregate3";
+  private readonly mutationHeaderMode:
+    | "eth-block"
+    | "debug-raw-header-with-fallback";
   private readonly rpcSlots: AbortableSemaphore;
   /**
    * Mutation proofs are the prerequisite for carrying unchanged state into the
-   * current generation. Keep one bounded transport slot outside the bulk
+   * current generation. Keep bounded transport slots outside the bulk
    * current/static/funding FIFO so a full state-read queue cannot force every
-   * incremental family back to a full current-N refresh.
+   * incremental family back to a full current-N refresh. Header proofs use
+   * their own slot and remain reusable for the exact content-addressed range;
+   * one slow descriptor log therefore cannot force sibling families to repeat
+   * or time out before reading the same canonical path. Final canonical CAS
+   * likewise has an independent slot so completed logs do not wait behind
+   * later descriptor queries.
    */
-  private readonly mutationProofSlots: AbortableSemaphore;
+  private readonly mutationHeaderSlots: AbortableSemaphore;
+  private readonly mutationDescriptorSlots: AbortableSemaphore;
+  private readonly mutationFinalCasSlots: AbortableSemaphore;
   private readonly fetchImpl: typeof fetch;
+  private readonly onMutationProofTelemetry:
+    | ((telemetry: MutationProofTransportTelemetry) => void)
+    | undefined;
+  private readonly now: () => number;
+  private readonly mutationRangeSessions = new Map<
+    string,
+    Promise<CanonicalMutationRange>
+  >();
+  private readonly canonicalHeaderSessions = new Map<
+    string,
+    Promise<CanonicalHeaderProof>
+  >();
+  private canonicalHeaderSessionScope: string | null = null;
   private nextId = 1;
 
   constructor(
@@ -110,9 +216,26 @@ export class JsonRpcBlockScanStateReadBackend
     }
     this.maxConcurrentBatches = maxConcurrentBatches;
     this.multicallMode = options.multicallMode ?? "rpc-batch";
+    this.mutationHeaderMode = options.mutationHeaderMode ?? "eth-block";
     this.rpcSlots = new AbortableSemaphore(maxConcurrentBatches);
-    this.mutationProofSlots = new AbortableSemaphore(1);
+    const maxConcurrentMutationProofs =
+      options.maxConcurrentMutationProofs ?? 1;
+    if (
+      !Number.isSafeInteger(maxConcurrentMutationProofs) ||
+      maxConcurrentMutationProofs <= 0
+    ) {
+      throw new Error(
+        `invalid mutation proof concurrency ${maxConcurrentMutationProofs}`,
+      );
+    }
+    this.mutationHeaderSlots = new AbortableSemaphore(1);
+    this.mutationDescriptorSlots = new AbortableSemaphore(
+      maxConcurrentMutationProofs,
+    );
+    this.mutationFinalCasSlots = new AbortableSemaphore(1);
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.onMutationProofTelemetry = options.onMutationProofTelemetry;
+    this.now = options.now ?? (() => performance.now());
   }
 
   async readBatch(
@@ -353,8 +476,64 @@ export class JsonRpcBlockScanStateReadBackend
     control: {
       readonly deadlineAtMs: number;
       readonly signal: AbortSignal;
+      readonly sharedSignal?: AbortSignal;
     },
   ): Promise<CanonicalMutationRange> {
+    if (control.signal.aborted) {
+      throw control.signal.reason ?? new DOMException("Aborted", "AbortError");
+    }
+    if (
+      descriptor.fingerprint !==
+      mutationQueryDescriptorFingerprint(descriptor)
+    ) {
+      throw new MutationRangeReadError(
+        "descriptor-validation",
+        "validation",
+        "mutation descriptor fingerprint mismatch",
+      );
+    }
+    const sessionKey = mutationRangeSessionKey(
+      descriptor,
+      fromExclusive,
+      through,
+    );
+    let session = this.mutationRangeSessions.get(sessionKey);
+    if (!session) {
+      const ownerSignal = control.sharedSignal ?? control.signal;
+      const created = this.computeCanonicalMutationRange(
+        descriptor,
+        fromExclusive,
+        through,
+        {
+          deadlineAtMs: control.deadlineAtMs,
+          signal: ownerSignal,
+        },
+      );
+      session = created.finally(() => {
+        if (this.mutationRangeSessions.get(sessionKey) === session) {
+          this.mutationRangeSessions.delete(sessionKey);
+        }
+      });
+      this.mutationRangeSessions.set(sessionKey, session);
+    }
+    return await awaitWithSignal(session, control.signal);
+  }
+
+  private async computeCanonicalMutationRange(
+    descriptor: MutationQueryDescriptor,
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<CanonicalMutationRange> {
+    const startedAtMs = this.now();
+    let phase: MutationProofTransportPhase = "descriptor-validation";
+    let validationMs = 0;
+    let headerTelemetry = emptyMutationProofPhaseTelemetry();
+    let logTelemetry = emptyMutationProofPhaseTelemetry();
+    let finalCasTelemetry = emptyMutationProofPhaseTelemetry();
     if (
       fromExclusive.number >= through.number ||
       fromExclusive.generation >= through.generation
@@ -377,76 +556,31 @@ export class JsonRpcBlockScanStateReadBackend
       () => controller.abort(new Error("mutation range deadline reached")),
       Math.max(0, remainingMs),
     );
+    let completed = false;
+    let failure:
+      | {
+          readonly phase: MutationProofTransportPhase;
+          readonly kind: MutationProofFailureKind;
+        }
+      | undefined;
     try {
       if (remainingMs <= 0) {
         controller.abort(new Error("mutation range deadline reached"));
       }
-      const headerRequests: object[] = [];
-      const headerIds: number[] = [];
-      for (
-        let blockNumber = fromExclusive.number;
-        blockNumber <= through.number;
-        blockNumber++
-      ) {
-        const id = this.nextId++;
-        headerIds.push(id);
-        headerRequests.push({
-          jsonrpc: "2.0",
-          id,
-          method: "eth_getBlockByNumber",
-          params: [toBlockTag(blockNumber), false],
-        });
-      }
-      const headerResponses = await this.postWithSlots(
-        this.mutationProofSlots,
-        headerRequests,
-        controller.signal,
+      phase = "header-read";
+      const headerProof = await this.readSharedCanonicalHeaders(
+        fromExclusive,
+        through,
+        {
+          deadlineAtMs: control.deadlineAtMs,
+          signal: controller.signal,
+        },
       );
-      const headers = headerIds.map((id, index) => {
-        const response = headerResponses.find((candidate) => candidate.id === id);
-        if (!response || "error" in response) {
-          throw new Error(
-            `cannot prove canonical mutation block ${fromExclusive.number + index}`,
-          );
-        }
-        const result = response.result as {
-          readonly number?: unknown;
-          readonly hash?: unknown;
-          readonly parentHash?: unknown;
-        } | null;
-        const number = parseRpcQuantity(
-          result?.number,
-          `mutation header ${fromExclusive.number + index} number`,
-        );
-        const hash = parseHash(
-          result?.hash,
-          `mutation header ${number} hash`,
-        );
-        const parentHash = parseHash(
-          result?.parentHash,
-          `mutation header ${number} parentHash`,
-        );
-        if (number !== fromExclusive.number + index) {
-          throw new Error(
-            `mutation header number mismatch ${number} != ${fromExclusive.number + index}`,
-          );
-        }
-        return Object.freeze({ number, hash, parentHash });
-      });
-      if (headers[0]?.hash !== fromExclusive.hash.toLowerCase()) {
-        throw new Error("mutation range previous source is no longer canonical");
-      }
-      if (headers.at(-1)?.hash !== through.hash.toLowerCase()) {
-        throw new Error("mutation range through source is no longer canonical");
-      }
-      for (let index = 1; index < headers.length; index++) {
-        if (headers[index].parentHash !== headers[index - 1].hash) {
-          throw new Error(
-            `mutation range canonical path discontinuity at ${headers[index].number}`,
-          );
-        }
-      }
+      const headers = headerProof.headers;
+      headerTelemetry = headerProof.telemetry;
+      validationMs += headerProof.validationMs;
 
+      phase = "log-read";
       const logId = this.nextId++;
       const logFilter = {
         fromBlock: toBlockTag(fromExclusive.number + 1),
@@ -460,12 +594,20 @@ export class JsonRpcBlockScanStateReadBackend
             }),
         topics: descriptor.topics,
       };
-      const logResponses = await this.postWithSlots(this.mutationProofSlots, [{
+      const logRead = await this.postWithSlotsMeasured(
+        this.mutationDescriptorSlots,
+        [{
         jsonrpc: "2.0",
         id: logId,
         method: "eth_getLogs",
         params: [logFilter],
-      }], controller.signal);
+        }],
+        controller.signal,
+      );
+      logTelemetry = logRead.telemetry;
+      const logResponses = logRead.responses;
+      phase = "log-validation";
+      const logValidationStartedAtMs = this.now();
       const logResponse = logResponses.find((candidate) => candidate.id === logId);
       if (!logResponse || "error" in logResponse) {
         throw new Error(
@@ -502,12 +644,14 @@ export class JsonRpcBlockScanStateReadBackend
           throw new Error("eth_getLogs returned duplicate canonical log identity");
         }
       }
-      await this.verifyCanonicalSourceWithSlots(
+      validationMs += Math.max(0, this.now() - logValidationStartedAtMs);
+      phase = "final-cas";
+      finalCasTelemetry = await this.verifyCanonicalSourceWithSlotsMeasured(
         through,
         controller.signal,
-        this.mutationProofSlots,
+        this.mutationFinalCasSlots,
       );
-      const canonicalPathFingerprint = deterministicHash(headers);
+      const canonicalPathFingerprint = headerProof.canonicalPathFingerprint;
       const rangeFingerprint = deterministicHash({
         fromExclusive,
         through,
@@ -515,7 +659,7 @@ export class JsonRpcBlockScanStateReadBackend
         canonicalPathFingerprint,
         events,
       });
-      return Object.freeze({
+      const range = Object.freeze({
         fromExclusive,
         through,
         events: Object.freeze(events),
@@ -524,10 +668,315 @@ export class JsonRpcBlockScanStateReadBackend
         canonicalPathFingerprint,
         rangeFingerprint,
       });
+      completed = true;
+      return range;
+    } catch (error) {
+      if (error instanceof MutationRangeReadError) {
+        failure = { phase: error.phase, kind: error.kind };
+        throw error;
+      }
+      const classified = classifyMutationProofFailure(
+        error,
+        controller.signal,
+        phase,
+      );
+      failure = { phase, kind: classified };
+      throw new MutationRangeReadError(
+        phase,
+        classified,
+        formatError(error),
+        error,
+      );
     } finally {
       clearTimeout(timer);
       detach();
+      const telemetry = Object.freeze({
+        descriptorFingerprint: descriptor.fingerprint,
+        fromBlock: fromExclusive.number,
+        throughBlock: through.number,
+        status: completed ? "complete" as const : "failed" as const,
+        ...(failure === undefined
+          ? {}
+          : {
+              failurePhase: failure.phase,
+              failureKind: failure.kind,
+            }),
+        wallMs: Math.max(0, this.now() - startedAtMs),
+        validationMs,
+        phases: Object.freeze({
+          headers: headerTelemetry,
+          logs: logTelemetry,
+          finalCas: finalCasTelemetry,
+        }),
+      });
+      try {
+        this.onMutationProofTelemetry?.(telemetry);
+      } catch {
+        // Observability must never change proof transport behavior.
+      }
     }
+  }
+
+  private async readSharedCanonicalHeaders(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<CanonicalHeaderProof> {
+    const scope = [
+      through.number,
+      through.hash.toLowerCase(),
+      through.generation,
+    ].join("\u001f");
+    if (this.canonicalHeaderSessionScope !== scope) {
+      this.canonicalHeaderSessions.clear();
+      this.canonicalHeaderSessionScope = scope;
+    }
+    const key = canonicalHeaderSessionKey(fromExclusive, through);
+    let session = this.canonicalHeaderSessions.get(key);
+    let shared = true;
+    if (!session) {
+      shared = false;
+      const created = this.readCanonicalHeaders(
+        fromExclusive,
+        through,
+        control.signal,
+      );
+      session = created.catch((error) => {
+        if (this.canonicalHeaderSessions.get(key) === session) {
+          this.canonicalHeaderSessions.delete(key);
+        }
+        throw error;
+      });
+      this.canonicalHeaderSessions.set(key, session);
+    }
+    const sharedWaitStartedAtMs = this.now();
+    const proof = await awaitWithSignal(session, control.signal);
+    if (!shared) return proof;
+    return Object.freeze({
+      ...proof,
+      telemetry: Object.freeze({
+        ...emptyMutationProofPhaseTelemetry(),
+        wallMs: Math.max(0, this.now() - sharedWaitStartedAtMs),
+        shared: true,
+        ...(proof.telemetry.transport === undefined
+          ? {}
+          : { transport: proof.telemetry.transport }),
+      }),
+      validationMs: 0,
+    });
+  }
+
+  private async readCanonicalHeaders(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    signal: AbortSignal,
+  ): Promise<CanonicalHeaderProof> {
+    let phase: MutationProofTransportPhase = "header-read";
+    try {
+      const headerRead = await this.readCanonicalHeaderBatch(
+        fromExclusive.number,
+        through.number,
+        signal,
+      );
+      phase = "header-validation";
+      const validationStartedAtMs = this.now();
+      const headers = headerRead.items.map((item, index) => {
+        if (item.number !== fromExclusive.number + index) {
+          throw new Error(
+            `mutation header number mismatch ${item.number} != ${
+              fromExclusive.number + index
+            }`,
+          );
+        }
+        return item;
+      });
+      if (headers[0]?.hash !== fromExclusive.hash.toLowerCase()) {
+        throw new Error(
+          "mutation range previous source is no longer canonical",
+        );
+      }
+      if (headers.at(-1)?.hash !== through.hash.toLowerCase()) {
+        throw new Error(
+          "mutation range through source is no longer canonical",
+        );
+      }
+      for (let index = 1; index < headers.length; index++) {
+        if (headers[index].parentHash !== headers[index - 1].hash) {
+          throw new Error(
+            `mutation range canonical path discontinuity at ${
+              headers[index].number
+            }`,
+          );
+        }
+      }
+      return Object.freeze({
+        headers: Object.freeze(headers),
+        canonicalPathFingerprint: deterministicHash(headers),
+        telemetry: headerRead.telemetry,
+        validationMs: Math.max(0, this.now() - validationStartedAtMs),
+      });
+    } catch (error) {
+      if (error instanceof MutationRangeReadError) throw error;
+      throw new MutationRangeReadError(
+        phase,
+        classifyMutationProofFailure(error, signal, phase),
+        formatError(error),
+        error,
+      );
+    }
+  }
+
+  private async readCanonicalHeaderBatch(
+    fromBlock: number,
+    throughBlock: number,
+    signal: AbortSignal,
+    slots: AbortableSemaphore = this.mutationHeaderSlots,
+  ): Promise<{
+    readonly items: readonly CanonicalMutationHeader[];
+    readonly telemetry: MutationProofPhaseTelemetry;
+  }> {
+    const blockNumbers = Array.from(
+      { length: throughBlock - fromBlock + 1 },
+      (_value, index) => fromBlock + index,
+    );
+    if (this.mutationHeaderMode === "debug-raw-header-with-fallback") {
+      const rawIds = blockNumbers.map(() => this.nextId++);
+      const rawRead = await this.postWithSlotsMeasured(
+        slots,
+        rawIds.map((id, index) => ({
+          jsonrpc: "2.0",
+          id,
+          method: "debug_getRawHeader",
+          params: [toBlockTag(blockNumbers[index])],
+        })),
+        signal,
+      );
+      const rawUnavailable =
+        rawRead.responses.length === rawIds.length &&
+        rawRead.responses.every(
+          (response) =>
+            "error" in response && isRawHeaderMethodUnavailable(response),
+        );
+      if (!rawUnavailable) {
+        return Object.freeze({
+          items: parseRawHeaderResponses(
+            rawRead.responses,
+            rawIds,
+            blockNumbers,
+          ),
+          telemetry: Object.freeze({
+            ...rawRead.telemetry,
+            transport: "debug-raw-header" as const,
+          }),
+        });
+      }
+      const fallback = await this.readEthBlockHeaderBatch(
+        blockNumbers,
+        signal,
+        slots,
+      );
+      return Object.freeze({
+        items: fallback.items,
+        telemetry: combineMutationProofPhaseTelemetry(
+          rawRead.telemetry,
+          fallback.telemetry,
+          "debug-raw-header+eth-block-fallback",
+        ),
+      });
+    }
+    return this.readEthBlockHeaderBatch(blockNumbers, signal, slots);
+  }
+
+  private async readEthBlockHeaderBatch(
+    blockNumbers: readonly number[],
+    signal: AbortSignal,
+    slots: AbortableSemaphore,
+  ): Promise<{
+    readonly items: readonly CanonicalMutationHeader[];
+    readonly telemetry: MutationProofPhaseTelemetry;
+  }> {
+    const ids = blockNumbers.map(() => this.nextId++);
+    const measured = await this.postWithSlotsMeasured(
+      slots,
+      ids.map((id, index) => ({
+        jsonrpc: "2.0",
+        id,
+        method: "eth_getBlockByNumber",
+        params: [toBlockTag(blockNumbers[index]), false],
+      })),
+      signal,
+    );
+    return Object.freeze({
+      items: parseEthBlockHeaderResponses(
+        measured.responses,
+        ids,
+        blockNumbers,
+      ),
+      telemetry: Object.freeze({
+        ...measured.telemetry,
+        transport: "eth-block" as const,
+      }),
+    });
+  }
+
+  private async verifyCanonicalSourceWithSlotsMeasured(
+    source: BlockSource,
+    signal: AbortSignal,
+    slots: AbortableSemaphore,
+  ): Promise<MutationProofPhaseTelemetry> {
+    if (this.mutationHeaderMode === "debug-raw-header-with-fallback") {
+      const measured = await this.readCanonicalHeaderBatch(
+        source.number,
+        source.number,
+        signal,
+        slots,
+      );
+      const item = measured.items[0];
+      if (
+        item?.number !== source.number ||
+        item.hash !== source.hash.toLowerCase()
+      ) {
+        throw new Error(
+          `source block hash mismatch: expected ${source.hash}, got ${
+            item?.hash ?? "null"
+          }`,
+        );
+      }
+      return measured.telemetry;
+    }
+    const id = this.nextId++;
+    const measured = await this.postWithSlotsMeasured(slots, [{
+      jsonrpc: "2.0",
+      id,
+      method: "eth_getBlockByNumber",
+      params: [toBlockTag(source.number), false],
+    }], signal);
+    const response = measured.responses[0];
+    if (!response || "error" in response) {
+      throw new Error(
+        `cannot verify source block: ${
+          response && "error" in response
+            ? response.error.message ?? response.error.code ?? "RPC error"
+            : "missing RPC response"
+        }`,
+      );
+    }
+    const block = response.result as { readonly hash?: unknown } | null;
+    const hash = typeof block?.hash === "string"
+      ? block.hash.toLowerCase()
+      : null;
+    if (hash !== source.hash.toLowerCase()) {
+      throw new Error(
+        `source block hash mismatch: expected ${source.hash}, got ${hash ?? "null"}`,
+      );
+    }
+    return Object.freeze({
+      ...measured.telemetry,
+      transport: "eth-block" as const,
+    });
   }
 
   private async readMulticallChunk(
@@ -702,6 +1151,46 @@ export class JsonRpcBlockScanStateReadBackend
       return value as readonly JsonRpcResponse[];
     });
   }
+
+  private async postWithSlotsMeasured(
+    slots: AbortableSemaphore,
+    body: readonly object[],
+    signal: AbortSignal,
+  ): Promise<{
+    readonly responses: readonly JsonRpcResponse[];
+    readonly telemetry: MutationProofPhaseTelemetry;
+  }> {
+    const startedAtMs = this.now();
+    let queueWaitMs = 0;
+    const responses = await slots.run(signal, async (waitMs) => {
+      queueWaitMs = waitMs;
+      if (signal.aborted) {
+        throw signal.reason ?? new DOMException("Aborted", "AbortError");
+      }
+      const response = await this.fetchImpl(this.rpcUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal,
+      });
+      if (!response.ok) {
+        throw new Error(`JSON-RPC HTTP ${response.status} ${response.statusText}`);
+      }
+      const value: unknown = await response.json();
+      if (!Array.isArray(value)) throw new Error("JSON-RPC batch returned non-array");
+      return value as readonly JsonRpcResponse[];
+    }, this.now);
+    return Object.freeze({
+      responses,
+      telemetry: Object.freeze({
+        queueWaitMs,
+        wallMs: Math.max(0, this.now() - startedAtMs),
+        rpcRequests: 1,
+        rpcItems: body.length,
+        responseBytes: JSON.stringify(responses).length,
+      }),
+    });
+  }
 }
 
 interface SemaphoreWaiter {
@@ -718,10 +1207,15 @@ class AbortableSemaphore {
 
   constructor(private readonly capacity: number) {}
 
-  async run<T>(signal: AbortSignal, task: () => Promise<T>): Promise<T> {
+  async run<T>(
+    signal: AbortSignal,
+    task: (waitMs: number) => Promise<T>,
+    now: () => number = () => performance.now(),
+  ): Promise<T> {
+    const queuedAtMs = now();
     const release = await this.acquire(signal);
     try {
-      return await task();
+      return await task(Math.max(0, now() - queuedAtMs));
     } finally {
       release();
     }
@@ -774,6 +1268,101 @@ class AbortableSemaphore {
       }
     };
   }
+}
+
+function emptyMutationProofPhaseTelemetry(): MutationProofPhaseTelemetry {
+  return Object.freeze({
+    queueWaitMs: 0,
+    wallMs: 0,
+    rpcRequests: 0,
+    rpcItems: 0,
+    responseBytes: 0,
+  });
+}
+
+function mutationRangeSessionKey(
+  descriptor: MutationQueryDescriptor,
+  fromExclusive: BlockSource,
+  through: BlockSource,
+): string {
+  return `${canonicalHeaderSessionKey(fromExclusive, through)}\u001f${
+    descriptor.fingerprint
+  }`;
+}
+
+function canonicalHeaderSessionKey(
+  fromExclusive: BlockSource,
+  through: BlockSource,
+): string {
+  return [
+    fromExclusive.number,
+    fromExclusive.hash.toLowerCase(),
+    fromExclusive.generation,
+    through.number,
+    through.hash.toLowerCase(),
+    through.generation,
+  ].join("\u001f");
+}
+
+async function awaitWithSignal<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) {
+    promise.catch(() => undefined);
+    throw signal.reason ?? new DOMException("Aborted", "AbortError");
+  }
+  let remove = (): void => {};
+  const aborted = new Promise<never>((_resolve, reject) => {
+    const onAbort = (): void =>
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    remove = () => signal.removeEventListener("abort", onAbort);
+  });
+  try {
+    return await Promise.race([promise, aborted]);
+  } finally {
+    remove();
+  }
+}
+
+function classifyMutationProofFailure(
+  error: unknown,
+  signal: AbortSignal,
+  phase: MutationProofTransportPhase,
+): MutationProofFailureKind {
+  const reason = signal.aborted ? signal.reason : error;
+  const message = formatError(reason).toLowerCase();
+  if (message.includes("deadline") || message.includes("timed out")) {
+    return "deadline";
+  }
+  if (
+    signal.aborted ||
+    (reason instanceof DOMException && reason.name === "AbortError") ||
+    message.includes("aborted") ||
+    message.includes("cancelled") ||
+    message.includes("superseded")
+  ) {
+    return "aborted";
+  }
+  if (
+    phase === "descriptor-validation" ||
+    phase === "header-validation" ||
+    phase === "log-validation"
+  ) {
+    return "validation";
+  }
+  if (
+    message.includes("rpc") ||
+    message.includes("http") ||
+    message.includes("json") ||
+    message.includes("fetch") ||
+    message.includes("logs") ||
+    message.includes("block")
+  ) {
+    return "rpc";
+  }
+  return "unknown";
 }
 
 function assertPinnedReadSet(
@@ -1028,6 +1617,112 @@ function parseChainLog(
     topics,
     data,
     removed: false,
+  });
+}
+
+function parseEthBlockHeaderResponses(
+  responses: readonly JsonRpcResponse[],
+  ids: readonly number[],
+  blockNumbers: readonly number[],
+): readonly CanonicalMutationHeader[] {
+  return Object.freeze(ids.map((id, index) => {
+    const response = responses.find((candidate) => candidate.id === id);
+    if (!response || "error" in response) {
+      throw new Error(
+        `cannot prove canonical mutation block ${blockNumbers[index]}`,
+      );
+    }
+    const result = response.result as {
+      readonly number?: unknown;
+      readonly hash?: unknown;
+      readonly parentHash?: unknown;
+    } | null;
+    const number = parseRpcQuantity(
+      result?.number,
+      `mutation header ${blockNumbers[index]} number`,
+    );
+    return Object.freeze({
+      number,
+      hash: parseHash(result?.hash, `mutation header ${number} hash`),
+      parentHash: parseHash(
+        result?.parentHash,
+        `mutation header ${number} parentHash`,
+      ),
+    });
+  }));
+}
+
+function parseRawHeaderResponses(
+  responses: readonly JsonRpcResponse[],
+  ids: readonly number[],
+  blockNumbers: readonly number[],
+): readonly CanonicalMutationHeader[] {
+  return Object.freeze(ids.map((id, index) => {
+    const response = responses.find((candidate) => candidate.id === id);
+    if (!response || "error" in response) {
+      throw new Error(
+        `cannot prove canonical raw mutation block ${blockNumbers[index]}`,
+      );
+    }
+    const raw = parseHexBytes(
+      response.result,
+      `mutation raw header ${blockNumbers[index]}`,
+    );
+    const decoded = decodeRlp(raw);
+    if (!Array.isArray(decoded) || decoded.length < 9) {
+      throw new Error(
+        `mutation raw header ${blockNumbers[index]} is not an Ethereum header`,
+      );
+    }
+    return Object.freeze({
+      number: parseRlpQuantity(
+        decoded[8],
+        `mutation raw header ${blockNumbers[index]} number`,
+      ),
+      hash: keccak256(raw).toLowerCase(),
+      parentHash: parseHash(
+        decoded[0],
+        `mutation raw header ${blockNumbers[index]} parentHash`,
+      ),
+    });
+  }));
+}
+
+function parseRlpQuantity(value: unknown, label: string): number {
+  if (
+    typeof value !== "string" ||
+    !/^0x(?:[0-9a-fA-F]{2})*$/.test(value)
+  ) {
+    throw new Error(`${label} is not an RLP byte quantity`);
+  }
+  const parsed = value === "0x" ? 0 : Number(BigInt(value));
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`${label} is outside the safe integer range`);
+  }
+  return parsed;
+}
+
+function isRawHeaderMethodUnavailable(response: JsonRpcFailure): boolean {
+  return (
+    response.error.code === -32601 ||
+    /method (?:not found|unsupported)|unsupported method/i.test(
+      response.error.message ?? "",
+    )
+  );
+}
+
+function combineMutationProofPhaseTelemetry(
+  first: MutationProofPhaseTelemetry,
+  second: MutationProofPhaseTelemetry,
+  transport: NonNullable<MutationProofPhaseTelemetry["transport"]>,
+): MutationProofPhaseTelemetry {
+  return Object.freeze({
+    queueWaitMs: first.queueWaitMs + second.queueWaitMs,
+    wallMs: first.wallMs + second.wallMs,
+    rpcRequests: first.rpcRequests + second.rpcRequests,
+    rpcItems: first.rpcItems + second.rpcItems,
+    responseBytes: first.responseBytes + second.responseBytes,
+    transport,
   });
 }
 

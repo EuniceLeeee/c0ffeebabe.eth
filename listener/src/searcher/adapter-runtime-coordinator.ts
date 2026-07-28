@@ -86,6 +86,54 @@ export interface AdapterRuntimeSnapshot {
   readonly funding: FlashFundingSnapshot;
 }
 
+export interface CurrentNExactExecutionContext {
+  readonly generation: number;
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+  readonly graph: VerifiedGraphView;
+  readonly funding: FlashFundingSnapshot;
+}
+
+export type CurrentNExactExecutionContextResult =
+  | {
+      readonly status: "complete" | "degraded";
+      readonly context: CurrentNExactExecutionContext;
+      readonly fundingCoverage: FlashFundingCoverage;
+      readonly issues: readonly BlockScanStateIssue[];
+      readonly timing: Readonly<{
+        startedAtMs: number;
+        finishedAtMs: number;
+        wallMs: number;
+        fundingMs: number;
+        executionMs: number;
+        finalCanonicalCasMs: number;
+      }>;
+    }
+  | {
+      readonly status: "incomplete";
+      readonly context?: never;
+      readonly fundingCoverage: FlashFundingCoverage;
+      readonly issues: readonly BlockScanStateIssue[];
+      readonly timing: Readonly<{
+        startedAtMs: number;
+        finishedAtMs: number;
+        wallMs: number;
+        fundingMs: number;
+        executionMs: number;
+        finalCanonicalCasMs: number;
+      }>;
+    };
+
+export interface AdapterRuntimePrepareTiming {
+  readonly startedAtMs: number;
+  readonly finishedAtMs: number;
+  readonly wallMs: number;
+  readonly pricingMs: number;
+  readonly fundingMs: number;
+  readonly executionMs: number;
+  readonly finalCanonicalCasMs: number;
+}
+
 export type AdapterRuntimePrepareResult =
   | {
       readonly status: "complete";
@@ -93,6 +141,7 @@ export type AdapterRuntimePrepareResult =
       readonly pricing: BlockScanStatePrepareResult;
       readonly fundingCoverage: FlashFundingCoverage;
       readonly issues: readonly BlockScanStateIssue[];
+      readonly timing?: AdapterRuntimePrepareTiming;
     }
   | {
       readonly status: "degraded";
@@ -100,6 +149,7 @@ export type AdapterRuntimePrepareResult =
       readonly pricing: BlockScanStatePrepareResult;
       readonly fundingCoverage: FlashFundingCoverage;
       readonly issues: readonly BlockScanStateIssue[];
+      readonly timing?: AdapterRuntimePrepareTiming;
     }
   | {
       readonly status: "incomplete";
@@ -107,6 +157,7 @@ export type AdapterRuntimePrepareResult =
       readonly pricing: BlockScanStatePrepareResult;
       readonly fundingCoverage: FlashFundingCoverage;
       readonly issues: readonly BlockScanStateIssue[];
+      readonly timing?: AdapterRuntimePrepareTiming;
     };
 
 export interface PrepareAdapterRuntimeInput {
@@ -142,6 +193,15 @@ export interface PrepareAdapterRuntimeInput {
   }) => Promise<void>;
 }
 
+export interface PrepareCurrentNExactExecutionContextInput {
+  readonly graph: VerifiedGraphView;
+  readonly fundingTokens: readonly string[];
+  readonly deadlineAtMs: number;
+  readonly preparationSettleDeadlineAtMs?: number;
+  readonly signal?: AbortSignal;
+  readonly prepareExecution?: PrepareAdapterRuntimeInput["prepareExecution"];
+}
+
 /**
  * One current-N activation boundary for graph, route pricing and flash funding.
  * Publication is atomic: incomplete pricing or one unresolved required lender
@@ -171,6 +231,31 @@ export class AdapterRuntimeCoordinator {
     return this.published;
   }
 
+  latestPricingSnapshot(): BlockScanStateSnapshot | null {
+    return this.pricing.latestSnapshot();
+  }
+
+  /**
+   * Background coarse producer. It updates only the pricing coordinator's
+   * independently proven snapshot; it never publishes a normal atomic runtime
+   * and therefore cannot donate stale funding or worker state.
+   */
+  async prepareCoarsePricing(input: {
+    readonly graph: VerifiedGraphView;
+    readonly deadlineAtMs: number;
+    readonly familySettleDeadlineAtMs?: number;
+    readonly signal?: AbortSignal;
+  }): Promise<BlockScanStatePrepareResult> {
+    return await this.pricing.prepare({
+      graph: input.graph,
+      families: this.registry.blockScanStateFamilies(),
+      requiresPricing: (edge) => this.registry.isBlockScanPricedEdge(edge),
+      deadlineAtMs: input.deadlineAtMs,
+      familySettleDeadlineAtMs: input.familySettleDeadlineAtMs,
+      signal: input.signal,
+    });
+  }
+
   /**
    * Trusted historical blind-run hook. It waits for every execution-prep
    * mutation to settle, then drops only dynamic source state. Static family
@@ -183,6 +268,23 @@ export class AdapterRuntimeCoordinator {
   }
 
   async prepare(input: PrepareAdapterRuntimeInput): Promise<AdapterRuntimePrepareResult> {
+    const startedAtMs = Date.now();
+    let pricingMs = 0;
+    let fundingMs = 0;
+    let executionMs = 0;
+    let finalCanonicalCasMs = 0;
+    const timing = (): AdapterRuntimePrepareTiming => {
+      const finishedAtMs = Date.now();
+      return Object.freeze({
+        startedAtMs,
+        finishedAtMs,
+        wallMs: Math.max(0, finishedAtMs - startedAtMs),
+        pricingMs,
+        fundingMs,
+        executionMs,
+        finalCanonicalCasMs,
+      });
+    };
     const controller = new AbortController();
     const detach = linkAbort(input.signal, controller);
     const remainingMs = input.deadlineAtMs - Date.now();
@@ -222,7 +324,7 @@ export class AdapterRuntimeCoordinator {
         );
       }
       const [pricing, funding, executionIssue] = await Promise.all([
-        this.pricing.prepare({
+        measureWallMs(() => this.pricing.prepare({
           graph: input.graph,
           families: this.registry.blockScanStateFamilies(),
           requiresPricing: (edge) => this.registry.isBlockScanPricedEdge(edge),
@@ -236,21 +338,27 @@ export class AdapterRuntimeCoordinator {
           // generation signal for its canonical CAS. Aborting it at the
           // preparation boundary would erase healthy sibling results.
           signal: controller.signal,
+        }), (wallMs) => {
+          pricingMs = wallMs;
         }),
-        this.prepareFunding(
+        measureWallMs(() => this.prepareFunding(
           input.graph,
           input.fundingTokens,
           preparationSettleDeadlineAtMs,
           input.deadlineAtMs,
           preparationController.signal,
           controller.signal,
-        ),
+        ), (wallMs) => {
+          fundingMs = wallMs;
+        }),
         input.prepareExecution
-          ? this.prepareExecution(
+          ? measureWallMs(() => this.prepareExecution(
               input,
               preparationSettleDeadlineAtMs,
               preparationController.signal,
-            )
+            ), (wallMs) => {
+              executionMs = wallMs;
+            })
           : Promise.resolve(null),
       ]);
       clearTimeout(preparationTimer);
@@ -262,6 +370,7 @@ export class AdapterRuntimeCoordinator {
         !executionIssue &&
         !controller.signal.aborted
       ) {
+        const finalCanonicalCasStartedAtMs = Date.now();
         try {
           await awaitWithAbort(
             this.reads.verifyCanonicalSource(
@@ -285,6 +394,11 @@ export class AdapterRuntimeCoordinator {
             "adapter runtime final canonical CAS failed",
             error,
             controller.signal,
+          );
+        } finally {
+          finalCanonicalCasMs = Math.max(
+            0,
+            Date.now() - finalCanonicalCasStartedAtMs,
           );
         }
       }
@@ -314,6 +428,7 @@ export class AdapterRuntimeCoordinator {
           pricing,
           fundingCoverage: funding.coverage,
           issues,
+          timing: timing(),
         });
       }
       const snapshot: AdapterRuntimeSnapshot = Object.freeze({
@@ -345,8 +460,9 @@ export class AdapterRuntimeCoordinator {
               message:
                 `runtime generation ${snapshot.generation} is not newer than ` +
                 previous.generation,
-            },
-          ]),
+              },
+            ]),
+          timing: timing(),
         });
       }
       this.published = snapshot;
@@ -356,6 +472,180 @@ export class AdapterRuntimeCoordinator {
         pricing,
         fundingCoverage: funding.coverage,
         issues,
+        timing: timing(),
+      });
+    } finally {
+      clearTimeout(preparationTimer);
+      detachPreparation();
+      clearTimeout(deadlineTimer);
+      detach();
+    }
+  }
+
+  /**
+   * Prepare only the current-N resources needed after a coarse candidate has
+   * been found. Pricing is intentionally absent: planner admission remains
+   * gated by a separate whole-route current-N exact quote.
+   */
+  async prepareCurrentNExactExecutionContext(
+    input: PrepareCurrentNExactExecutionContextInput,
+  ): Promise<CurrentNExactExecutionContextResult> {
+    const startedAtMs = Date.now();
+    let fundingMs = 0;
+    let executionMs = 0;
+    let finalCanonicalCasMs = 0;
+    const timing = () => {
+      const finishedAtMs = Date.now();
+      return Object.freeze({
+        startedAtMs,
+        finishedAtMs,
+        wallMs: Math.max(0, finishedAtMs - startedAtMs),
+        fundingMs,
+        executionMs,
+        finalCanonicalCasMs,
+      });
+    };
+    const controller = new AbortController();
+    const detach = linkAbort(input.signal, controller);
+    const settleDeadlineAtMs = Math.min(
+      input.deadlineAtMs,
+      input.preparationSettleDeadlineAtMs ?? input.deadlineAtMs,
+    );
+    if (!Number.isFinite(settleDeadlineAtMs)) {
+      throw new Error(
+        `invalid exact execution preparation deadline ` +
+          `${String(input.preparationSettleDeadlineAtMs)}`,
+      );
+    }
+    const deadlineTimer = setTimeout(
+      () => controller.abort(new AdapterRuntimeDeadline()),
+      Math.max(0, input.deadlineAtMs - Date.now()),
+    );
+    const preparationController = new AbortController();
+    const detachPreparation = linkAbort(
+      controller.signal,
+      preparationController,
+    );
+    const preparationTimer = setTimeout(
+      () =>
+        preparationController.abort(
+          new AdapterRuntimePreparationDeadline(),
+        ),
+      Math.max(0, settleDeadlineAtMs - Date.now()),
+    );
+    try {
+      if (input.deadlineAtMs <= Date.now()) {
+        controller.abort(new AdapterRuntimeDeadline());
+      }
+      if (settleDeadlineAtMs <= Date.now()) {
+        preparationController.abort(
+          controller.signal.aborted
+            ? controller.signal.reason
+            : new AdapterRuntimePreparationDeadline(),
+        );
+      }
+      const [funding, executionIssue] = await Promise.all([
+        measureWallMs(() => this.prepareFunding(
+          input.graph,
+          input.fundingTokens,
+          settleDeadlineAtMs,
+          input.deadlineAtMs,
+          preparationController.signal,
+          controller.signal,
+        ), (wallMs) => {
+          fundingMs = wallMs;
+        }),
+        input.prepareExecution
+          ? measureWallMs(() => this.prepareExecution(
+              input,
+              settleDeadlineAtMs,
+              preparationController.signal,
+            ), (wallMs) => {
+              executionMs = wallMs;
+            })
+          : Promise.resolve(null),
+      ]);
+      clearTimeout(preparationTimer);
+      detachPreparation();
+
+      let finalCanonicalIssue: BlockScanStateIssue | null = null;
+      if (
+        funding.snapshot &&
+        !executionIssue &&
+        !controller.signal.aborted
+      ) {
+        const finalCanonicalCasStartedAtMs = Date.now();
+        try {
+          await awaitWithAbort(
+            this.reads.verifyCanonicalSource(
+              Object.freeze({
+                number: input.graph.sourceBlock,
+                hash: input.graph.sourceBlockHash,
+                generation: input.graph.generation,
+              }),
+              controller.signal,
+            ),
+            controller.signal,
+          );
+          if (
+            controller.signal.aborted ||
+            Date.now() >= input.deadlineAtMs
+          ) {
+            throw controller.signal.reason ?? new AdapterRuntimeDeadline();
+          }
+        } catch (error) {
+          finalCanonicalIssue = runtimeIssue(
+            "exact execution context final canonical CAS failed",
+            error,
+            controller.signal,
+          );
+        } finally {
+          finalCanonicalCasMs = Math.max(
+            0,
+            Date.now() - finalCanonicalCasStartedAtMs,
+          );
+        }
+      }
+      const runtimeAbortIssue = controller.signal.aborted
+        ? runtimeIssue(
+            "exact execution context preparation failed",
+            controller.signal.reason,
+            controller.signal,
+          )
+        : null;
+      const issues = Object.freeze([
+        ...funding.issues,
+        ...(executionIssue ? [executionIssue] : []),
+        ...(finalCanonicalIssue ? [finalCanonicalIssue] : []),
+        ...(runtimeAbortIssue ? [runtimeAbortIssue] : []),
+      ]);
+      if (
+        !funding.snapshot ||
+        executionIssue ||
+        finalCanonicalIssue ||
+        runtimeAbortIssue
+      ) {
+        return Object.freeze({
+          status: "incomplete" as const,
+          fundingCoverage: funding.coverage,
+          issues,
+          timing: timing(),
+        });
+      }
+      const context: CurrentNExactExecutionContext = Object.freeze({
+        generation: input.graph.generation,
+        sourceBlock: input.graph.sourceBlock,
+        sourceBlockHash: input.graph.sourceBlockHash,
+        graph: input.graph,
+        funding: funding.snapshot,
+      });
+      return Object.freeze({
+        status:
+          funding.status === "degraded" ? "degraded" as const : "complete" as const,
+        context,
+        fundingCoverage: funding.coverage,
+        issues,
+        timing: timing(),
       });
     } finally {
       clearTimeout(preparationTimer);
@@ -366,7 +656,10 @@ export class AdapterRuntimeCoordinator {
   }
 
   private async prepareExecution(
-    input: PrepareAdapterRuntimeInput,
+    input: Pick<
+      PrepareAdapterRuntimeInput,
+      "graph" | "prepareExecution"
+    >,
     preparationSettleDeadlineAtMs: number,
     signal: AbortSignal,
   ): Promise<BlockScanStateIssue | null> {
@@ -931,6 +1224,18 @@ function linkAbort(
   if (parent.aborted) abort();
   else parent.addEventListener("abort", abort, { once: true });
   return () => parent.removeEventListener("abort", abort);
+}
+
+async function measureWallMs<T>(
+  operation: () => Promise<T>,
+  record: (wallMs: number) => void,
+): Promise<T> {
+  const startedAtMs = Date.now();
+  try {
+    return await operation();
+  } finally {
+    record(Math.max(0, Date.now() - startedAtMs));
+  }
 }
 
 class FrozenReadonlyMap<K, V> implements ReadonlyMap<K, V> {

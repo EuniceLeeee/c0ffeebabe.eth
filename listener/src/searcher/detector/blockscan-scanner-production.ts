@@ -1,7 +1,9 @@
 import type { AdapterRuntimeSnapshot } from "../adapter-runtime-coordinator.js";
+import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import {
   blockScanEdgeKey,
   exactSetHash,
+  type VerifiedGraphView,
 } from "../venues/blockscan-state-capability.js";
 import {
   blockScanSelectionProvenance,
@@ -71,26 +73,97 @@ export function assertAtomicBlockScanRuntime(
 
 function assertAtomicRuntime(runtime: AdapterRuntimeSnapshot): void {
   const { graph, pricing, funding } = runtime;
+  assertAtomicBlockScanPricingView(graph, pricing);
   assertEqualNumber("generation", [
     runtime.generation,
     graph.generation,
-    pricing.generation,
-    pricing.graph.generation,
     funding.generation,
   ]);
   assertEqualNumber("source block", [
     runtime.sourceBlock,
     graph.sourceBlock,
-    pricing.sourceBlock,
-    pricing.graph.sourceBlock,
     funding.sourceBlock,
   ]);
   assertEqualString("source block hash", [
     runtime.sourceBlockHash,
     graph.sourceBlockHash,
+    funding.sourceBlockHash,
+  ]);
+  if (runtime.completeness === "complete") {
+    assertCompleteCoverage("state keys", pricing.coverage.unresolvedStateKeys);
+    assertCompleteCoverage("read keys", pricing.coverage.unresolvedReadKeys);
+    assertCompleteCoverage("edge keys", pricing.coverage.unresolvedEdgeKeys);
+    if (pricing.incompleteFamilyIds.length > 0) {
+      throw new Error("complete runtime contains incomplete pricing families");
+    }
+  } else if (
+    pricing.incompleteFamilyIds.length === 0 &&
+    funding.coverage.unresolvedKeys.length === 0
+  ) {
+    throw new Error("degraded runtime has no incomplete pricing family");
+  }
+
+  const fundingCoverage = funding.coverage;
+  assertCoverageIntegrity(
+    "funding keys",
+    fundingCoverage.expectedKeys,
+    fundingCoverage.resolvedKeys,
+    fundingCoverage.unresolvedKeys,
+    fundingCoverage.expectedHash,
+    fundingCoverage.resolvedHash,
+    fundingCoverage.unresolvedHash,
+  );
+  if (
+    funding.coverageByFundingId.size !== fundingCoverage.expectedKeys.length ||
+    funding.freshnessByFundingId.size !== fundingCoverage.resolvedKeys.length ||
+    fundingCoverage.expectedKeys.some((fundingId) => {
+      const expectedStatus = fundingCoverage.resolvedKeys.includes(fundingId)
+        ? "resolved"
+        : "unresolved";
+      return funding.coverageByFundingId.get(fundingId)?.status !== expectedStatus;
+    }) ||
+    fundingCoverage.resolvedKeys.some(
+      (fundingId) => !funding.freshnessByFundingId.has(fundingId),
+    )
+  ) {
+    throw new Error("production scanner rejected funding coverage/freshness");
+  }
+  for (const source of funding.sources.values()) {
+    if (
+      !source.fundingId ||
+      !fundingCoverage.resolvedKeys.includes(source.fundingId)
+    ) {
+      throw new Error("production scanner rejected unresolved funding source");
+    }
+  }
+  if (runtime.completeness === "complete") {
+    assertCompleteCoverage("funding keys", fundingCoverage.unresolvedKeys);
+  }
+}
+
+/**
+ * Shared strict boundary for normal source-N production and the branded
+ * N-1 coarse-only lane. It validates graph/pricing atomicity without
+ * accepting or constructing a mixed-source funding snapshot.
+ */
+export function assertAtomicBlockScanPricingView(
+  graph: VerifiedGraphView,
+  pricing: BlockScanStateSnapshot,
+): void {
+  assertEqualNumber("generation", [
+    graph.generation,
+    pricing.generation,
+    pricing.graph.generation,
+  ]);
+  assertEqualNumber("source block", [
+    graph.sourceBlock,
+    pricing.sourceBlock,
+    pricing.graph.sourceBlock,
+  ]);
+  assertEqualString("source block hash", [
+    graph.sourceBlockHash,
     pricing.sourceBlockHash,
     pricing.graph.sourceBlockHash,
-    funding.sourceBlockHash,
   ]);
   assertEqualString("graph id", [graph.id, pricing.graph.id]);
   assertEqualString("graph edge hash", [
@@ -197,56 +270,6 @@ function assertAtomicRuntime(runtime: AdapterRuntimeSnapshot): void {
         ? `production scanner missing current-N mid for ${missing}`
         : "production scanner pricing coverage does not exactly match its graph",
     );
-  }
-  if (runtime.completeness === "complete") {
-    assertCompleteCoverage("state keys", coverage.unresolvedStateKeys);
-    assertCompleteCoverage("read keys", coverage.unresolvedReadKeys);
-    assertCompleteCoverage("edge keys", coverage.unresolvedEdgeKeys);
-    if (pricing.incompleteFamilyIds.length > 0) {
-      throw new Error("complete runtime contains incomplete pricing families");
-    }
-  } else if (
-    pricing.incompleteFamilyIds.length === 0 &&
-    funding.coverage.unresolvedKeys.length === 0
-  ) {
-    throw new Error("degraded runtime has no incomplete pricing family");
-  }
-
-  const fundingCoverage = funding.coverage;
-  assertCoverageIntegrity(
-    "funding keys",
-    fundingCoverage.expectedKeys,
-    fundingCoverage.resolvedKeys,
-    fundingCoverage.unresolvedKeys,
-    fundingCoverage.expectedHash,
-    fundingCoverage.resolvedHash,
-    fundingCoverage.unresolvedHash,
-  );
-  if (
-    funding.coverageByFundingId.size !== fundingCoverage.expectedKeys.length ||
-    funding.freshnessByFundingId.size !== fundingCoverage.resolvedKeys.length ||
-    fundingCoverage.expectedKeys.some((fundingId) => {
-      const expectedStatus = fundingCoverage.resolvedKeys.includes(fundingId)
-        ? "resolved"
-        : "unresolved";
-      return funding.coverageByFundingId.get(fundingId)?.status !== expectedStatus;
-    }) ||
-    fundingCoverage.resolvedKeys.some(
-      (fundingId) => !funding.freshnessByFundingId.has(fundingId),
-    )
-  ) {
-    throw new Error("production scanner rejected funding coverage/freshness");
-  }
-  for (const source of funding.sources.values()) {
-    if (
-      !source.fundingId ||
-      !fundingCoverage.resolvedKeys.includes(source.fundingId)
-    ) {
-      throw new Error("production scanner rejected unresolved funding source");
-    }
-  }
-  if (runtime.completeness === "complete") {
-    assertCompleteCoverage("funding keys", fundingCoverage.unresolvedKeys);
   }
 }
 

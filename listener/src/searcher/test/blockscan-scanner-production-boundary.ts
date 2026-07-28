@@ -14,6 +14,10 @@ import {
   assertAtomicBlockScanRuntime,
   detectProductionBlockScanOpportunities,
 } from "../detector/blockscan-scanner-production.js";
+import {
+  enumerateNMinusOneCoarseCandidates,
+  promoteNMinusOneExactCandidates,
+} from "../detector/blockscan-nminus1-fallback.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
@@ -322,6 +326,134 @@ console.log("[blockscan-production-boundary] exact edge/mid coverage: PASS");
   );
 }
 console.log("[blockscan-production-boundary] atomic funding coverage: PASS");
+
+{
+  const exactBlockHash = `0x${"33".repeat(32)}`;
+  const exactGraph = createVerifiedGraphView({
+    id: "production-boundary-exact-n",
+    generation: runtime.generation + 1,
+    sourceBlock: block + 1,
+    sourceBlockHash: exactBlockHash,
+    completenessWatermark: block + 1,
+    perSourceCoverage: [{
+      familyId: "fixture",
+      sourceId: "fixture",
+      sourceFingerprint: "fixture-v1",
+      completeThroughBlock: block + 1,
+      completeThroughHash: exactBlockHash,
+    }],
+    edges: runtime.graph.edges,
+  });
+  const fallback = enumerateNMinusOneCoarseCandidates({
+    coarsePricing: runtime.pricing,
+    canonicalPredecessorHash: blockHash,
+    exactGraph,
+    cfg,
+  });
+  assert(fallback.candidates.length > 0);
+  assert.equal(fallback.fullCoverage, false);
+  assert.equal(fallback.recallMode, "stale-positive-only");
+  assert(
+    fallback.candidates.every(
+      (candidate) =>
+        candidate.exactProbeOpportunity.sourceBlock === block + 1 &&
+        candidate.exactProbeOpportunity.seedEdges.every(
+          (edge) => exactGraph.edges.includes(edge),
+        ),
+    ),
+  );
+  const promoted = promoteNMinusOneExactCandidates(
+    fallback.candidates,
+    [fallback.candidates[0]!.exactProbeOpportunity],
+  );
+  assert.equal(promoted[0]!.sourceBlock, block + 1);
+  assert.throws(
+    () =>
+      promoteNMinusOneExactCandidates(
+        fallback.candidates,
+        [{ ...fallback.candidates[0]!.exactProbeOpportunity }],
+      ),
+    /outside the exact probe set/,
+  );
+  assert.throws(
+    () =>
+      enumerateNMinusOneCoarseCandidates({
+        coarsePricing: runtime.pricing,
+        canonicalPredecessorHash: `0x${"44".repeat(32)}`,
+        exactGraph,
+        cfg,
+      }),
+    /no longer canonical/,
+  );
+  const nPlusTwoGraph = createVerifiedGraphView({
+    ...exactGraph,
+    id: "production-boundary-n-plus-two",
+    generation: exactGraph.generation + 1,
+    sourceBlock: block + 2,
+    sourceBlockHash: `0x${"55".repeat(32)}`,
+    completenessWatermark: block + 2,
+    perSourceCoverage: [{
+      familyId: "fixture",
+      sourceId: "fixture",
+      sourceFingerprint: "fixture-v1",
+      completeThroughBlock: block + 2,
+      completeThroughHash: `0x${"55".repeat(32)}`,
+    }],
+  });
+  assert.throws(
+    () =>
+      enumerateNMinusOneCoarseCandidates({
+        coarsePricing: runtime.pricing,
+        canonicalPredecessorHash: blockHash,
+        exactGraph: nPlusTwoGraph,
+        cfg,
+      }),
+    /must be adjacent/,
+  );
+  const changedEdges = exactGraph.edges.map((edgeValue) => ({
+    ...edgeValue,
+    v2FeeBps: 31n,
+  }));
+  const changedGraph = createVerifiedGraphView({
+    id: "production-boundary-changed-edge",
+    generation: exactGraph.generation,
+    sourceBlock: exactGraph.sourceBlock,
+    sourceBlockHash: exactGraph.sourceBlockHash,
+    completenessWatermark: exactGraph.sourceBlock,
+    perSourceCoverage: exactGraph.perSourceCoverage,
+    edges: changedEdges,
+  });
+  const changed = enumerateNMinusOneCoarseCandidates({
+    coarsePricing: runtime.pricing,
+    canonicalPredecessorHash: blockHash,
+    exactGraph: changedGraph,
+    cfg,
+  });
+  assert(changed.rejectedRouteCount > 0);
+  const taxonomyChangedGraph = createVerifiedGraphView({
+    id: "production-boundary-changed-taxonomy",
+    generation: exactGraph.generation,
+    sourceBlock: exactGraph.sourceBlock,
+    sourceBlockHash: exactGraph.sourceBlockHash,
+    completenessWatermark: exactGraph.sourceBlock,
+    perSourceCoverage: exactGraph.perSourceCoverage,
+    edges: exactGraph.edges.map((edgeValue) => ({
+      ...edgeValue,
+      leavesStandingPosition: !edgeValue.leavesStandingPosition,
+    })),
+  });
+  const taxonomyChanged = enumerateNMinusOneCoarseCandidates({
+    coarsePricing: runtime.pricing,
+    canonicalPredecessorHash: blockHash,
+    exactGraph: taxonomyChangedGraph,
+    cfg,
+  });
+  assert(
+    taxonomyChanged.rejectedRouteCount > 0,
+    "taxonomy/ownership metadata changes must reject a stale route",
+  );
+}
+console.log("[blockscan-production-boundary] N-1 coarse isolation: PASS");
 
 const coreSource = readFileSync(
   new URL("../detector/blockscan-scanner-core.ts", import.meta.url),

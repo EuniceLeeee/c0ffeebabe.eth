@@ -52,6 +52,17 @@ async function exactFundingResultContract(): Promise<void> {
   });
   assert.equal(first.status, "complete");
   if (first.status !== "complete") throw new Error("expected complete runtime");
+  assert(first.timing, "production coordinator must emit split preparation timing");
+  assert(
+    [
+      first.timing.wallMs,
+      first.timing.pricingMs,
+      first.timing.fundingMs,
+      first.timing.executionMs,
+      first.timing.finalCanonicalCasMs,
+    ].every((value) => Number.isFinite(value) && value >= 0),
+    "runtime preparation timings must be monotonic and non-negative",
+  );
   const published = first.snapshot;
   assert.equal(coordinator.latestSnapshot(), published);
   assert.equal(published.sourceBlock, 101);
@@ -277,6 +288,87 @@ async function finalCanonicalCasFailureDoesNotPublish(): Promise<void> {
   assert.match(
     reorged.issues.map((issue) => issue.message).join("\n"),
     /final canonical CAS failed.*reorged/,
+  );
+}
+
+async function exactContextIsIndependentFromPricingPublication(): Promise<void> {
+  const funding = new FundingReadBackend();
+  let rejectCanonical = false;
+  let expectedCanonicalBlock = 251;
+  let executionCalls = 0;
+  const coordinator = runtimeCoordinator(fundingRegistry(), {
+    readPinned: funding.readPinned.bind(funding),
+    async verifyCanonicalSource(source) {
+      assert.equal(source.number, expectedCanonicalBlock);
+      if (rejectCanonical) throw new Error("exact context source reorged");
+    },
+  });
+  const exact = await coordinator.prepareCurrentNExactExecutionContext({
+    graph: graph(1, 251, HASH_A),
+    fundingTokens: [TOKEN_A],
+    deadlineAtMs: Date.now() + 10_000,
+    prepareExecution: async (input) => {
+      executionCalls++;
+      assert.equal(input.sourceBlock, 251);
+      assert.equal(input.sourceBlockHash, HASH_A);
+    },
+  });
+  assert.notEqual(exact.status, "incomplete");
+  if (exact.status === "incomplete") throw new Error("expected exact context");
+  assert.equal(exact.context.sourceBlock, 251);
+  assert.equal(exact.context.funding.sourceBlock, 251);
+  assert.equal(executionCalls, 1);
+  assert.equal(
+    coordinator.latestSnapshot(),
+    null,
+    "exact context must not publish a normal pricing runtime",
+  );
+
+  rejectCanonical = true;
+  expectedCanonicalBlock = 252;
+  const reorged = await coordinator.prepareCurrentNExactExecutionContext({
+    graph: graph(2, 252, HASH_B),
+    fundingTokens: [TOKEN_A],
+    deadlineAtMs: Date.now() + 10_000,
+    prepareExecution: async () => {
+      executionCalls++;
+    },
+  });
+  assert.equal(reorged.status, "incomplete");
+  assert.match(
+    reorged.issues.map((issue) => issue.message).join("\n"),
+    /exact execution context final canonical CAS failed.*reorged/,
+  );
+  assert.equal(coordinator.latestSnapshot(), null);
+
+  rejectCanonical = false;
+  expectedCanonicalBlock = 253;
+  const executionFailed =
+    await coordinator.prepareCurrentNExactExecutionContext({
+      graph: graph(3, 253, HASH_A),
+      fundingTokens: [TOKEN_A],
+      deadlineAtMs: Date.now() + 10_000,
+      prepareExecution: async () => {
+        throw new Error("exact worker hash mismatch");
+      },
+    });
+  assert.equal(executionFailed.status, "incomplete");
+  assert.match(
+    executionFailed.issues.map((issue) => issue.message).join("\n"),
+    /execution preparation failed.*exact worker hash mismatch/,
+  );
+  assert.equal(coordinator.latestSnapshot(), null);
+
+  const coarse = await coordinator.prepareCoarsePricing({
+    graph: graph(4, 254, HASH_B),
+    deadlineAtMs: Date.now() + 10_000,
+  });
+  assert.equal(coarse.status, "complete");
+  assert.equal(coordinator.latestPricingSnapshot()?.sourceBlock, 254);
+  assert.equal(
+    coordinator.latestSnapshot(),
+    null,
+    "coarse pricing must remain unreachable through the normal runtime slot",
   );
 }
 
@@ -916,6 +1008,7 @@ async function waitUntil(predicate: () => boolean): Promise<void> {
 await exactFundingResultContract();
 await preparationRunsConcurrently();
 await finalCanonicalCasFailureDoesNotPublish();
+await exactContextIsIndependentFromPricingPublication();
 await fundingFamilyFailuresAreIsolated();
 await hungFundingPrepareIsDeadlineBoundAndLateFenced();
 await hungExecutionIsDeadlineBound();
