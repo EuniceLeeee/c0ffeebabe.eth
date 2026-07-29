@@ -65,3 +65,62 @@ This proves family-owned instance discovery and edge construction for the real
 sample. It does not relabel the route-pinned Adapter Replay's steps 1–2 as
 passed; natural full-graph route enumeration remains a separate
 `production_route_stage` check.
+
+## Target-blind full-graph checkpoint
+
+The development checkpoint used parent block `25635364` and a complete
+content-addressed candidate universe built without a target route, pool or
+amount:
+
+- universe SHA-256:
+  `1fb28d2b57529a5e1457c0f5166e6d4fe5a313a6446ecd4f9cace2d8bbc0cdf8`;
+- pending-execution-evidence SHA-256:
+  `b8469d7f7eb234e4f3ab9704fae8efdd7e1aa5e41abb8a5ee4d36b3774c8fd52`;
+- unrelated protocol-shard marker SHA-256:
+  `beffa3da757a4645dd8b6c14ca08e084149d624b264206baa401fa4483807eaa`;
+- candidate code SHA:
+  `2be4bf12d42fa7c04f034bfda9357a07405634cd`.
+
+A first run with no `AB_EXPECTED_*` input naturally enumerated the target
+PoolId plus the UniV3 return pool at refined rank 27. The semantic run then
+rebuilt the same full graph and froze its natural route set before using the
+landed route as an output comparator. It emitted:
+
+| Step | Result | Bound output |
+|---|---|---|
+| 1 discovery/admission/graph | pass | 30,932 edges; edge-set SHA `19f5280ba58368a50cc171065ffd92242ce7663e906ca69b992060dfcbc9f5d3`; four `custom-swap:angstrom-v4` edges; target membership present; required Angstrom and UniV3 shards complete |
+| 2 route enumeration | pass | 1,287 natural coarse routes; route-set SHA `f14c2c6401f20f7da9fd9e028d7ef6ff9ee138ea90067efa35de224a4b456b6f`; target present at coarse rank 59 |
+| 3 exact quote/refine | pass | target refined rank 27; probe `2249430444741851` WETH returned `2250489926561685` WETH; route SHA `ac065e0be8b2570a95a7d62dfb83e2f03325d542a847bcd75379e2bdd00ad733` |
+| 4 plan/size | pass | solver selected `647592015151193554` WETH; plan SHA `a281be03fbfacd44dedec671925ca66f1a323170a3588408b0dcd792b1cacb66` |
+| 5 fork final sim | pass | profit `154762303487137` WETH wei; gas `374076`; repayment/conservation true; no standing position |
+| 6 production EV | pass | `allow`; net EV `52917226277367` wei; parent hash `0x70170e1d5fd98684d48596555e22f57a12e94fa4d689f99e6cdebb9a1bace189` |
+
+The output comparator did not participate in graph construction, enumeration,
+ranking, refinement selection or sizing. No realized amount was supplied.
+Development-only outer budgets and candidate limits were widened, so this is
+the agreed lightweight semantic checkpoint rather than a claim of production
+latency or a canonical `checkpoint_pass`.
+
+## Bugs found by the checkpoint
+
+The checkpoint found and closed four production defects rather than weakening
+the sample:
+
+1. `loadPoolUniverse()` discarded `logicalInstanceId`, causing two Angstrom
+   PoolIds behind the singleton PoolManager to collide. The parser now
+   preserves the logical instance and has a same-target/two-instance
+   regression.
+2. A valid old-block Angstrom signature could activate a current-head pass.
+   Current-head evidence is now required before authority reads.
+3. Family isolation only examined the capped visible view, allowing a hidden
+   same-family pool to replace the quarantined row. Isolation now derives exact
+   keys from the complete uncapped inventory.
+4. Angstrom edges omitted PoolKey token order. They now publish
+   `poolToken0/poolToken1`, which the shared swap-observation path needs for
+   direction decoding.
+
+The legacy protocol-oriented production-replay wrapper still cannot certify a
+pure swap-only route without rebuilding unrelated protocol history. That
+architecture-specific harness limitation was not changed to make this sample
+pass. Post-merge deployed-main validation remains required before deleting the
+feature branch.
