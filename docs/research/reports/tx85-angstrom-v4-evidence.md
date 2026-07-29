@@ -107,6 +107,38 @@ Development-only outer budgets and candidate limits were widened, so this is
 the agreed lightweight semantic checkpoint rather than a claim of production
 latency or a canonical `checkpoint_pass`.
 
+## Post-merge deployed-main validation
+
+The feature was merged into `main` as
+`17454f8cbd19ae3709ddce0b81bc9e1df71b07d2`. Guarded deploy command
+`d66e9b05-c521-4854-b6e1-80cccaefb0fc` completed successfully and verified
+that `/opt/MEV` was running that exact SHA inside the bounded live-wallet
+envelope with `SEARCHER_EV_GATE=1`.
+
+The same frozen source block, universe, pending-evidence artifact, discovery
+artifact and target-blind comparator were then replayed from that deployed
+merge SHA by command `25d851b3-8fb2-4798-8f4f-39d318f17f26`. It completed
+successfully with:
+
+- node-local semantic log SHA-256
+  `771c3ae5601ab6cf0e58a3272d05e0a2ac62e3f682d144ccbd8bd191facb9ec7`;
+- node-local full hunt report SHA-256
+  `7e628fddc14e48125f29dbe311c360334544070e4a586744d0a32dfa100c2cc7`;
+- verdict `ev_positive_found`, 300 retained opportunities and 27 solved;
+- all six semantic stages `pass`; and
+- the same six bound output hashes as the pre-merge candidate:
+  `8146f400d39fa8726bb00ddf50ac66e68257233f91d84b14250cb4ffd36a8e32`,
+  `e1f7961d3ec7bf46bf15b3bbeda37f1e2944ef1fb9de269e2bae85fe59aec985`,
+  `312decf874748613e164b7e160de67c4312edded4d75b15b73ee8be7cfd84254`,
+  `a6fc28b2d6672ffd896bc087fa604d5aabf5a086e6318eb7e460be63755ea10d`,
+  `7717d6b42d57219f5a5504e487470413b7fc38ffc35749c22ca48fbe50630a92`,
+  and
+  `9a143c5a7728bf97f82f3f6a0b6eba55991a47036ea46f8510c47c89bbf74210`.
+
+The deployed-main run therefore reproduced the graph, natural route set,
+exact quote, selected sizing, calldata/final simulation and EV decision
+without changing the legacy Hermes or protocol-oriented replay harnesses.
+
 ## Bugs found by the checkpoint
 
 The checkpoint found and closed four production defects rather than weakening
@@ -128,5 +160,4 @@ the sample:
 The legacy protocol-oriented production-replay wrapper still cannot certify a
 pure swap-only route without rebuilding unrelated protocol history. That
 architecture-specific harness limitation was not changed to make this sample
-pass. Post-merge deployed-main validation remains required before deleting the
-feature branch.
+pass. It does not override the successful post-merge six-step evidence above.
