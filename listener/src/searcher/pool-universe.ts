@@ -511,6 +511,10 @@ function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry 
     swapCount30d: numberField(raw.swapCount30d, `${field}.swapCount30d`),
     lastSwapBlock: numberField(raw.lastSwapBlock, `${field}.lastSwapBlock`),
     source: typeof raw.source === "string" ? raw.source : undefined,
+    logicalInstanceId: stringField(
+      raw.logicalInstanceId,
+      `${field}.logicalInstanceId`,
+    ),
     topologyRetained: trueField(
       raw.topologyRetained,
       `${field}.topologyRetained`,

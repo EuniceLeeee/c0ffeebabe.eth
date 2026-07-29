@@ -104,6 +104,48 @@ async function main(): Promise<void> {
     );
     console.log("[pool-universe] retained family topology bypasses activity ranking: PASS");
 
+    const multiInstanceFile = join(dir, "multi-instance-family-pools.json");
+    const singletonTarget = poolAddress(0x45);
+    writeFileSync(multiInstanceFile, JSON.stringify({
+      pools: [
+        {
+          address: singletonTarget,
+          adapter: "angstrom-v4",
+          poolId: CFG_V4_POOL_ID,
+          logicalInstanceId: CFG_V4_POOL_ID,
+          currency0: poolAddress(0xa0),
+          currency1: poolAddress(0xb1),
+          fee: 8_388_608,
+          tickSpacing: 10,
+          hooks: poolAddress(0x46),
+          score: 10,
+        },
+        {
+          address: singletonTarget,
+          adapter: "angstrom-v4",
+          poolId: OTHER_V4_POOL_ID,
+          logicalInstanceId: OTHER_V4_POOL_ID,
+          currency0: poolAddress(0xa0),
+          currency1: poolAddress(0xc1),
+          fee: 8_388_608,
+          tickSpacing: 10,
+          hooks: poolAddress(0x46),
+          score: 9,
+        },
+      ],
+    }));
+    const multiInstancePools = loadPoolUniverse(multiInstanceFile, {
+      maxPools: 2,
+      minScore: 1,
+    });
+    assert(
+      multiInstancePools.length === 2 &&
+        multiInstancePools[0].logicalInstanceId === CFG_V4_POOL_ID &&
+        multiInstancePools[1].logicalInstanceId === OTHER_V4_POOL_ID,
+      "serialized logical instances sharing one execution target must remain distinct",
+    );
+    console.log("[pool-universe] logical instance round-trip/dedup: PASS");
+
     const legacyCoverage = loadPoolUniverseCoverageMetadata(file);
     assert(
       legacyCoverage.registrySourceFingerprints === null,
@@ -501,7 +543,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe PASS (12/12)");
+  console.log("pool-universe PASS (13/13)");
 }
 
 main().catch((err) => {
