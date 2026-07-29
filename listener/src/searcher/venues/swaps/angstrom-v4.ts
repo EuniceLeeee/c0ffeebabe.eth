@@ -887,6 +887,13 @@ async function verifyCurrentAngstromAttestations(
       verification: "eoa",
     }));
   }
+  if (
+    !verified.some(
+      (attestation) => attestation.blockNumber === BigInt(head.number),
+    )
+  ) {
+    return Object.freeze([]);
+  }
   return Object.freeze(verified);
 }
 

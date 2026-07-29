@@ -264,6 +264,47 @@ async function main(): Promise<void> {
   );
   assert.equal(observerReads, 0);
 
+  const mixedEvidenceCall = adapterIface.encodeFunctionData("swap", [
+    key,
+    true,
+    1_000_000n,
+    900_000n,
+    [{
+      blockNumber: staleBlock,
+      unlockData: await signedUnlockData(staleBlock),
+    }, {
+      blockNumber: BigInt(sourceBlock),
+      unlockData: await signedUnlockData(staleBlock),
+    }],
+    "0x3333333333333333333333333333333333333333",
+    (1n << 256n) - 1n,
+  ]);
+  observerReads = 0;
+  const mixedObserved = await PRODUCTION_ADAPTER_FAMILIES
+    .pendingTransactionEvidence()
+    .observe(
+      {
+        hash: ethers.keccak256(mixedEvidenceCall),
+        to: ANGSTROM_MAINNET_ADAPTER,
+        data: mixedEvidenceCall,
+      },
+      {
+        head: evidenceContext.head,
+        call: (read) => evidenceContext.call(read),
+      },
+      {
+        familyIds: [angstromV4Adapter.id],
+        timeoutMs: 1_000,
+        maxReadsPerFamily: 3,
+      },
+    );
+  assert.equal(
+    mixedObserved.matched,
+    false,
+    "a stale valid proof plus an invalid current decoy must not activate",
+  );
+  assert.equal(observerReads, 3);
+
   const contractUnlockData = ethers.concat([
     contractValidator,
     `0x${"cd".repeat(103)}`,
