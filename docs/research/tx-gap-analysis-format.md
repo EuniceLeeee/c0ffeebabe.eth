@@ -50,26 +50,39 @@
 
 ### 0.3 Universe 与禁止 look-ahead
 
-1. universe 成员关系的判定标准是**按交易前窗口现算**。先在审计 SHA 上从生产启动/部署配置、实际进程环境与代码
+本流程默认做**轻量分析**。“轻量/全量”只描述 Step 1 的 universe/graph 取证方式以及是否另跑完整
+Production Replay，不降低其他要求：完整 trace、同块交易、核心闭环/利润退出拆分、工具 reconciliation、代码定位，
+以及 enumeration、planner、solver、final sim、EV 的证据标准均不变。轻量分析优先复用目标区块已有的、内容寻址的
+live universe/graph/view pin 与 route lifecycle/formal events；已有 live 未运行或未保留的阶段必须写
+`not-run/证据不足`，不能根据 landed route 或当前代码补成 `pass`。
+
+1. 轻量分析先验证 tx 时刻 live pin/view 的来源 SHA、内容哈希、source block/hash、生效配置与目标 pool/edge
+   membership；证据完整时不重复重建 universe。`graph-in` 只证明快照成员关系，不证明 edge 已成功生成，也不证明
+   scanner 自发枚举；后者必须继续与同一 source block/run 的 enumeration、solver 和正式 final-sim/EV 事件关联。
+   只有以下情况才升级为**全量重新分析**：目标区块的可验证 live pin/view 不存在；pin 的来源或配置无法绑定；
+   目标成员关系仍 unresolved；live pin 与其他证据冲突；或用户明确要求全量。
+2. 全量重新分析时，universe 成员关系按交易前窗口现算。先在审计 SHA 上从生产启动/部署配置、实际进程环境与代码
    fallback 反查 lookback、min-swaps、identity policy、canonical builder，以及 universe、strategy view、per-token、
-   path、candidate、refinement 等每一层独立 cap 的**生效值**；再用相同代码与参数重建 `[tx-lookback, tx-1]`。
-   不得把本文曾出现过的天数、块数、命令、路径或今日配置当成常量，也不得用一个阶段的 top-N 代替另一个阶段的 cap。
-2. 为 live 与 replay 各生成一份生效配置清单（字段、值、来源：process env / deploy injection / code fallback、来源 SHA）并
+   path、candidate、refinement 等每一层独立 cap 的**生效值**；再用相同代码与参数重建 `[tx-lookback, tx-1]`，
+   并以 target-blind Production Replay 运行六步。不得把本文曾出现过的天数、块数、命令、路径或今日配置当成常量，
+   也不得用一个阶段的 top-N 代替另一个阶段的 cap。
+3. 全量重新分析为 live 与 replay 各生成一份生效配置清单（字段、值、来源：process env / deploy injection /
+   code fallback、来源 SHA）并
    比对内容哈希。做 production gap 判定或 Production Replay 时，必须按**实际消费阶段**逐字段复制 live 值；env 未设置时
    也要记录实际采用的 fallback，不能静默使用 replay 自己的默认值。匹配依据是语义而不是变量名：在 replay 入口截断
    整个 frozen universe 的 cap 必须对应 live base-universe admission cap，不能拿“在 base graph 之外额外补池”的 strategy-
    view cap 代替。若目标池存在于 live runtime view，却仅因 replay 更小的入口 cap 消失，结论是
    `replay_config_mismatch`，不是 production `pool/admission` gap。
-3. 配置差异只允许两类：本轮预声明的实验变量；或当前 `gates.md`/trusted checker 明文授权、绑定其来源 SHA 的
+4. 配置差异只允许两类：本轮预声明的实验变量；或当前 `gates.md`/trusted checker 明文授权、绑定其来源 SHA 的
    acceptance-only override。后者只可用于等价性验收，不得证明 live admission、candidate rank 或性能。除此之外，任何
    漏项或差异都记 `config_mismatch/证据不足`。
-4. tx 时刻进程实际加载的 content-addressed pin 是“生产当时行为证据”；pre-tx 现算是可复算的分类证据。两者分歧
-   写成**刷新/配置漂移**并保留两份 hash，不得静默选一份。今日刚生成的文件不能回答历史成员关系。
-5. 活动阈值只适用于当前生产 discovery 明确定义为 activity-gated 的 venue。protocol/registry/behavior-discovered
+5. tx 时刻进程实际加载的 content-addressed pin 是“生产当时行为证据”；pre-tx 现算是全量分析中的可复算分类证据。
+   两者分歧写成**刷新/配置漂移**并保留两份 hash，不得静默选一份。今日刚生成的文件不能回答历史成员关系。
+6. 活动阈值只适用于当前生产 discovery 明确定义为 activity-gated 的 venue。protocol/registry/behavior-discovered
    family 应沿审计 SHA 的真实 identity/admission 路径判断，不能套 DEX swap 事件阈值，也不能假定它永远是静态 entry。
-6. 身份读取若需要旧 storage 而本地节点已裁剪，判定为证据能力不足；用 archive RPC、可验证的历史 pin 或 landed
+7. 身份读取若需要旧 storage 而本地节点已裁剪，判定为证据能力不足；用 archive RPC、可验证的历史 pin 或 landed
    event + identity root 交叉验证，不能把 RPC 读不到写成 `identity fail`。
-7. **禁止 look-ahead：**任何 universe/replay 输入都必须止于 tx 之前（`toBlock ≤ tx_block - 1`），或使用 tx 当时已经
+8. **禁止 look-ahead：**任何 universe/replay 输入都必须止于 tx 之前（`toBlock ≤ tx_block - 1`），或使用 tx 当时已经
    生效的 pin。包含目标 tx 的窗口会被该 tx 自身污染，只能证明“事后可见”，不能证明当时会自发发现。
 
 ### 0.4 架构无关的代码定位启发式
@@ -291,9 +304,9 @@ capability id 为主，行号为辅。若当前已修复，列“能力现在落
 - **失败样本：** `<tx hash>`
 - **同块 sender 审计：** `<完整 block artifact/hash；同 sender txIndex 集；dependency verdict>`
 - **状态锚：** `<parent block/state root；backrun 另列 trigger-only/full-prefix prefix>`
-- **冻结 universe 锚：** `<实际生产 pin 与 SHA；pre-tx 重建参数/输出 SHA；窗口必须 toBlock ≤ tx_block - 1；builder 代码 SHA>`
-- **生效配置锚：** `<live process/deploy/fallback manifest + SHA；replay manifest + SHA；按消费阶段映射；diff=none | 预声明实验差异 | trusted acceptance-only override + 授权 SHA>`
-- **运行时视图锚：** `<live/replay 各 view 的 count+hash；目标池/edge membership；差异解释>`
+- **冻结 universe 锚：** `<轻量：实际生产 pin、来源 SHA、内容 hash；全量另填 pre-tx 重建参数/输出 SHA；窗口必须 toBlock ≤ tx_block - 1；builder 代码 SHA>`
+- **生效配置锚：** `<轻量：live process/deploy/fallback manifest + SHA；全量另填 replay manifest + SHA、按消费阶段映射；diff=none | 预声明实验差异 | trusted acceptance-only override + 授权 SHA>`
+- **运行时视图锚：** `<轻量：live view count+hash+目标池/edge membership；全量另填 replay view 与差异解释>`
 - **验收轨道 / 层级：** `<family_execution / supporting Adapter Replay | production_route_stage / pre-merge checkpoint | production_route_stage / deployed-main full validation | systemic_live / cohort+A/B>`
 - **baseline：** `<first failing stage>`
 - **fix commit：** `<sha or none>`
@@ -322,6 +335,14 @@ Adapter Replay runner 只证明已知 route 的 execution-family 能力并产出
 - **解释：** `<例如：postmortem 识别 protocol touch，但因未重建有序核心路线而 MANUAL REQUIRED>`
 - **工具分歧：** `none | <divergence_id；status=open_frozen；记录路径；本轮新增 tx hash>`
 - **对抗审查：** `<reviewer + verdict；仅在人工/工具覆盖冲突时必填>`
+
+## 10. 固定收尾问题
+
+当本轮以轻量分析结束时，最终回答的最后一行必须原样询问：
+
+> **是否需要我继续跑全量重新分析（按交易前窗口重建 universe/graph，并运行 target-blind Production Replay 六步）？**
+
+若本轮已经完成全量重新分析，则明确写“本轮已完成全量重新分析”，不重复询问。
 
 ## 历史示例（只示范填法）
 
