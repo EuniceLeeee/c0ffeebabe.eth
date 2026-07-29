@@ -21,7 +21,7 @@ const UNIVERSE_PATH =
 
 function fixture(): TrustedSixStepRuntimeAttestation {
   const unsigned = {
-    schema_version: 1,
+    schema_version: 2,
     kind: "trusted-six-step-runtime-attestation",
     instance_id: TRUSTED_SIX_STEP_PRODUCTION_INSTANCE_ID,
     runtime_commit: "c".repeat(40),
@@ -122,6 +122,18 @@ test("accepts a strict, cross-bound runtime attestation", () => {
   assert.equal(
     value.payload_sha256,
     canonicalTrustedSixStepRuntimePayloadSha256(value),
+  );
+});
+
+test("rejects the legacy runtime-attestation v1 shape explicitly", () => {
+  const value = fixture() as unknown as Record<string, unknown>;
+  value.schema_version = 1;
+  value.payload_sha256 = canonicalTrustedSixStepRuntimePayloadSha256(
+    value as unknown as TrustedSixStepRuntimeAttestation,
+  );
+  assert.match(
+    validateTrustedSixStepRuntimeAttestation(value, TX).join("\n"),
+    /schema\/kind is invalid/,
   );
 });
 

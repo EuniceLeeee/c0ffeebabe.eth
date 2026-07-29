@@ -43,7 +43,7 @@ function runtimeAttestation(
   commandSuffix: "1" | "2",
 ): TrustedSixStepRuntimeAttestation {
   const unsigned = {
-    schema_version: 1,
+    schema_version: 2,
     kind: "trusted-six-step-runtime-attestation",
     instance_id: "i-0ff908dedeec9ebc6",
     runtime_commit: commit,

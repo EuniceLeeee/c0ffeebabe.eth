@@ -19,7 +19,7 @@ export const TRUSTED_SIX_STEP_PRODUCTION_INSTANCE_ID =
   HISTORICAL_PRODUCTION_INSTANCE_ID;
 
 export interface TrustedSixStepRuntimePayload {
-  schema_version: 1; kind: "trusted-six-step-runtime-attestation";
+  schema_version: 2; kind: "trusted-six-step-runtime-attestation";
   instance_id: string; runtime_commit: string;
   process: { pid: number; starttime_ticks: string; n_restarts: number };
   universe: { path: string; sha256: string };
@@ -105,7 +105,7 @@ export function validateTrustedSixStepRuntimeAttestation(
     "payload_sha256", "command_id",
   ];
   if (!exactKeys(value, expectedKeys)) errors.push("runtime attestation has unknown top-level fields");
-  if (value.schema_version !== 1 ||
+  if (value.schema_version !== 2 ||
       value.kind !== "trusted-six-step-runtime-attestation") {
     errors.push("runtime attestation schema/kind is invalid");
   }
@@ -451,7 +451,7 @@ if not receipt or receipt["transactionHash"].lower()!=tx: raise SystemExit("samp
 block=int(receipt["blockNumber"],16); parent=rpc("eth_getBlockByNumber",[hex(block-1),False])
 receipt_bytes=(json.dumps(receipt,sort_keys=True,separators=(",",":"))+"\n").encode()
 payload={
- "schema_version":1,"kind":"trusted-six-step-runtime-attestation",
+ "schema_version":2,"kind":"trusted-six-step-runtime-attestation",
  "instance_id":"${TRUSTED_SIX_STEP_PRODUCTION_INSTANCE_ID}","runtime_commit":commit,
  "process":{"pid":pid,"starttime_ticks":start,"n_restarts":restarts},
  "universe":{"path":universe,"sha256":ush},

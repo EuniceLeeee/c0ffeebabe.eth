@@ -227,12 +227,20 @@ export async function runTrustedSixStepValidation(input: {
     );
     const runtimeJsonInputs = await fetchTrustedSixStepRuntimeJsonInputs(before);
     const localRuntimeInputEnv: Record<string, string> = {};
+    const localRuntimeInputBindings: Array<{
+      path: string;
+      sha256: string;
+    }> = [];
     for (const [key, bytes] of Object.entries(runtimeJsonInputs)) {
       const attested = before.runtime_json_inputs[key];
       if (!attested) throw new Error(`runtime JSON input is not attested: ${key}`);
       const localPath = resolve(temp, `runtime-input-${attested.sha256}.json`);
-      writeFileSync(localPath, bytes, { mode: 0o600 });
+      writeFileSync(localPath, bytes, { mode: 0o400 });
       localRuntimeInputEnv[key] = localPath;
+      localRuntimeInputBindings.push({
+        path: localPath,
+        sha256: attested.sha256,
+      });
     }
     transport = await openTrustedSixStepRpcTransport();
     const env = {
@@ -248,6 +256,11 @@ export async function runTrustedSixStepValidation(input: {
       request.mode === "checkpoint" ? tip : deployed);
     await runProducer(request, rawPath, universePath,
       universeFromBlock(universe), runner, env, worktree);
+    for (const binding of localRuntimeInputBindings) {
+      if (sha256(readFileSync(binding.path)) !== binding.sha256) {
+        throw new Error("candidate mutated a frozen runtime JSON input");
+      }
+    }
     const rawBytes = readFileSync(rawPath);
     const raw = parseRaw(rawBytes, request, runner);
     const familyManifest = loadFamilyManifest(worktree);
