@@ -378,6 +378,8 @@ export const angstromV4Adapter = Object.freeze({
   ownedActionAdapterIds: [ANGSTROM_EDGE_ADAPTER_ID],
   requiredInfraActionAdapterIds: ["erc20-approve"],
   pendingTransactionEvidence: {
+    routeActivation: "current-head-block-scan",
+    routeActivationScope: { kind: "family" },
     mightMatch(tx) {
       return hasAngstromSwapCandidate(tx);
     },

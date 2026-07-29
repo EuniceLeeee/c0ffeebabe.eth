@@ -185,6 +185,15 @@ async function main(): Promise<void> {
     }),
     true,
   );
+  assert.equal(
+    angstromV4Adapter.pendingTransactionEvidence!.routeActivation,
+    "current-head-block-scan",
+  );
+  assert.deepEqual(
+    angstromV4Adapter.pendingTransactionEvidence!.routeActivationScope,
+    { kind: "family" },
+    "an empty-block attestation authorizes the current-head Angstrom family",
+  );
   const observed = await PRODUCTION_ADAPTER_FAMILIES
     .pendingTransactionEvidence()
     .observe(
