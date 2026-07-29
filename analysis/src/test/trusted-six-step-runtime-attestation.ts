@@ -6,6 +6,7 @@ import {
   canonicalTrustedSixStepInputSnapshotPayloadSha256,
   canonicalTrustedSixStepRuntimePayload,
   canonicalTrustedSixStepRuntimePayloadSha256,
+  decodeTrustedSixStepRuntimeJsonInputs,
   validateTrustedSixStepInputSnapshot,
   validateTrustedSixStepRuntimeAttestation,
   type TrustedSixStepInputSnapshot,
@@ -37,6 +38,7 @@ function fixture(): TrustedSixStepRuntimeAttestation {
       path: `${UNIVERSE_PATH}.manifest.json`,
       sha256: SHA_B,
     },
+    runtime_json_inputs: {},
     pool_universe_top_n: 20_000,
     searcher_config: {
       SEARCHER_BLOCKSCAN_MAX_CANDIDATES: "100",
@@ -162,6 +164,67 @@ test("rejects non-content-addressed or cross-universe paths", () => {
   assert.match(
     validateTrustedSixStepRuntimeAttestation(wrongManifest, TX).join("\n"),
     /does not belong|manifest path does not match/,
+  );
+});
+
+test("binds and decodes portable content-addressed runtime JSON inputs", () => {
+  const value = fixture();
+  const bytes = Buffer.from('{"routers":[]}\n');
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  const path =
+    `/opt/MEV-runtime/routers/force-include-routers-${digest}.json`;
+  value.searcher_config.SEARCHER_FORCE_INCLUDE_ROUTERS_PATH = path;
+  value.runtime_json_inputs = {
+    SEARCHER_FORCE_INCLUDE_ROUTERS_PATH: { path, sha256: digest },
+  };
+  value.payload_sha256 =
+    canonicalTrustedSixStepRuntimePayloadSha256(value);
+  assert.deepEqual(validateTrustedSixStepRuntimeAttestation(value, TX), []);
+  assert.deepEqual(
+    decodeTrustedSixStepRuntimeJsonInputs({
+      SEARCHER_FORCE_INCLUDE_ROUTERS_PATH: {
+        path,
+        sha256: digest,
+        base64: bytes.toString("base64"),
+      },
+    }, value),
+    { SEARCHER_FORCE_INCLUDE_ROUTERS_PATH: bytes },
+  );
+
+  assert.throws(
+    () => decodeTrustedSixStepRuntimeJsonInputs({
+      SEARCHER_FORCE_INCLUDE_ROUTERS_PATH: {
+        path,
+        sha256: digest,
+        base64: Buffer.from('{"routers":["tampered"]}\n').toString("base64"),
+      },
+    }, value),
+    /hash mismatch/,
+  );
+});
+
+test("rejects missing or non-content-addressed runtime JSON inputs", () => {
+  const value = fixture();
+  value.searcher_config.SEARCHER_V2_LINEAGES_PATH =
+    "/opt/MEV-runtime/v2-lineages/v2-lineages-latest.json";
+  value.payload_sha256 =
+    canonicalTrustedSixStepRuntimePayloadSha256(value);
+  assert.match(
+    validateTrustedSixStepRuntimeAttestation(value, TX).join("\n"),
+    /do not cover exact production JSON paths/,
+  );
+
+  value.runtime_json_inputs = {
+    SEARCHER_V2_LINEAGES_PATH: {
+      path: value.searcher_config.SEARCHER_V2_LINEAGES_PATH,
+      sha256: SHA_A,
+    },
+  };
+  value.payload_sha256 =
+    canonicalTrustedSixStepRuntimePayloadSha256(value);
+  assert.match(
+    validateTrustedSixStepRuntimeAttestation(value, TX).join("\n"),
+    /not content-addressed/,
   );
 });
 

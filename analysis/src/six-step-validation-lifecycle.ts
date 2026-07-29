@@ -320,6 +320,7 @@ function validateFinal(
     const stable = (item: TrustedSixStepRuntimeAttestation): unknown => ({
       runtime_commit: item.runtime_commit, process: item.process,
       universe: item.universe, universe_manifest: item.universe_manifest,
+      runtime_json_inputs: item.runtime_json_inputs,
       pool_universe_top_n: item.pool_universe_top_n,
       searcher_config: item.searcher_config, sample_receipt: item.sample_receipt,
       parent_block: item.parent_block,

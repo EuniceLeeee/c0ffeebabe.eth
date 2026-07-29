@@ -32,7 +32,9 @@ import {
 import {
   canonicalTrustedSixStepInputSnapshotPayloadSha256,
   canonicalTrustedSixStepRuntimePayloadSha256,
-  fetchTrustedSixStepRuntimeAttestation, openTrustedSixStepRpcTransport,
+  fetchTrustedSixStepRuntimeAttestation,
+  fetchTrustedSixStepRuntimeJsonInputs,
+  openTrustedSixStepRpcTransport,
   validateTrustedSixStepInputSnapshot,
   type TrustedSixStepInputSnapshot, type TrustedSixStepRuntimeAttestation,
   type TrustedSixStepRpcTransport,
@@ -223,9 +225,19 @@ export async function runTrustedSixStepValidation(input: {
       { universe_path: universePath, universe_manifest_path: manifestPath },
       universe, universeManifest, before,
     );
+    const runtimeJsonInputs = await fetchTrustedSixStepRuntimeJsonInputs(before);
+    const localRuntimeInputEnv: Record<string, string> = {};
+    for (const [key, bytes] of Object.entries(runtimeJsonInputs)) {
+      const attested = before.runtime_json_inputs[key];
+      if (!attested) throw new Error(`runtime JSON input is not attested: ${key}`);
+      const localPath = resolve(temp, `runtime-input-${attested.sha256}.json`);
+      writeFileSync(localPath, bytes, { mode: 0o600 });
+      localRuntimeInputEnv[key] = localPath;
+    }
     transport = await openTrustedSixStepRpcTransport();
     const env = {
       ...before.searcher_config,
+      ...localRuntimeInputEnv,
       SEARCHER_POOL_UNIVERSE_PATH: universePath,
       SEARCHER_POOL_UNIVERSE_MANIFEST_PATH: manifestPath,
       MAINNET_RPC_URL: transport.rpcUrl,
@@ -1054,6 +1066,7 @@ function assertStable(
   const stable = (value: TrustedSixStepRuntimeAttestation): unknown => ({
     runtime_commit: value.runtime_commit, process: value.process,
     universe: value.universe, universe_manifest: value.universe_manifest,
+    runtime_json_inputs: value.runtime_json_inputs,
     pool_universe_top_n: value.pool_universe_top_n,
     searcher_config: value.searcher_config, sample_receipt: value.sample_receipt,
     parent_block: value.parent_block,

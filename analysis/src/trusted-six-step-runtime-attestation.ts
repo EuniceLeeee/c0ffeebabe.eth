@@ -24,6 +24,7 @@ export interface TrustedSixStepRuntimePayload {
   process: { pid: number; starttime_ticks: string; n_restarts: number };
   universe: { path: string; sha256: string };
   universe_manifest: { path: string; sha256: string };
+  runtime_json_inputs: Record<string, { path: string; sha256: string }>;
   pool_universe_top_n: number; searcher_config: Record<string, string>;
   sample_receipt: {
     tx_hash: string;
@@ -98,7 +99,8 @@ export function validateTrustedSixStepRuntimeAttestation(
   const errors: string[] = [];
   const expectedKeys = [
     "schema_version", "kind", "instance_id", "runtime_commit", "process",
-    "universe", "universe_manifest", "pool_universe_top_n",
+    "universe", "universe_manifest", "runtime_json_inputs",
+    "pool_universe_top_n",
     "searcher_config", "sample_receipt", "parent_block", "observed_at",
     "payload_sha256", "command_id",
   ];
@@ -131,6 +133,7 @@ export function validateTrustedSixStepRuntimeAttestation(
     errors.push("pool_universe_top_n must be positive");
   }
   validateConfig(value, errors);
+  validateRuntimeJsonInputs(value, errors);
   validateReceiptAndParent(value, expectedSampleTx.toLowerCase(), errors);
   if (typeof value.observed_at !== "string" ||
       !Number.isFinite(Date.parse(value.observed_at))) {
@@ -208,6 +211,46 @@ export async function fetchTrustedSixStepRuntimeAttestation(
   return candidate as unknown as TrustedSixStepRuntimeAttestation;
 }
 
+export async function fetchTrustedSixStepRuntimeJsonInputs(
+  attestation: TrustedSixStepRuntimeAttestation,
+): Promise<Record<string, Buffer>> {
+  const commandId = sendSsm(runtimeJsonInputScript(
+    attestation.runtime_json_inputs,
+  ));
+  return decodeTrustedSixStepRuntimeJsonInputs(
+    await readSsmJson(commandId),
+    attestation,
+  );
+}
+
+export function decodeTrustedSixStepRuntimeJsonInputs(
+  value: unknown,
+  attestation: TrustedSixStepRuntimeAttestation,
+): Record<string, Buffer> {
+  if (!record(value)) throw new Error("runtime JSON input bundle must be an object");
+  const expected = Object.keys(attestation.runtime_json_inputs).sort();
+  if (Object.keys(value).sort().join("\n") !== expected.join("\n")) {
+    throw new Error("runtime JSON input bundle keys do not match attestation");
+  }
+  const decoded: Record<string, Buffer> = {};
+  for (const key of expected) {
+    const item = value[key];
+    const attested = attestation.runtime_json_inputs[key];
+    if (!record(item) || !attested ||
+        item.path !== attested.path ||
+        item.sha256 !== attested.sha256 ||
+        typeof item.base64 !== "string") {
+      throw new Error(`runtime JSON input bundle metadata mismatch: ${key}`);
+    }
+    const bytes = Buffer.from(item.base64, "base64");
+    if (bytes.length === 0 || sha256(bytes) !== attested.sha256) {
+      throw new Error(`runtime JSON input bundle hash mismatch: ${key}`);
+    }
+    decoded[key] = bytes;
+  }
+  return decoded;
+}
+
 export async function openTrustedSixStepRpcTransport():
 Promise<TrustedSixStepRpcTransport> {
   const localPort = await availablePort();
@@ -262,6 +305,38 @@ function validateConfig(value: Record<string, unknown>, errors: string[]): void 
       config.SEARCHER_POOL_UNIVERSE_TOP_N !==
         String(value.pool_universe_top_n)) {
     errors.push("runtime universe/top-N does not match searcher config");
+  }
+}
+
+function validateRuntimeJsonInputs(
+  value: Record<string, unknown>,
+  errors: string[],
+): void {
+  if (!record(value.searcher_config) || !record(value.runtime_json_inputs)) {
+    errors.push("runtime_json_inputs must be an object");
+    return;
+  }
+  const config = value.searcher_config as Record<string, string>;
+  const expected = Object.entries(config)
+    .filter(([, path]) =>
+      path.startsWith("/opt/MEV-runtime/") &&
+      path.endsWith(".json") &&
+      path !== (value.universe as { path?: string })?.path &&
+      path !== (value.universe_manifest as { path?: string })?.path)
+    .map(([key]) => key)
+    .sort();
+  const actual = Object.keys(value.runtime_json_inputs).sort();
+  if (actual.join("\n") !== expected.join("\n")) {
+    errors.push("runtime_json_inputs do not cover exact production JSON paths");
+    return;
+  }
+  for (const key of expected) {
+    const input = pathHash(value.runtime_json_inputs[key], true, false);
+    if (!input ||
+        input.path !== config[key] ||
+        !input.path.endsWith(`-${input.sha256}.json`)) {
+      errors.push(`runtime JSON input is not content-addressed: ${key}`);
+    }
   }
 }
 
@@ -353,6 +428,12 @@ if manifest != universe+".manifest.json": raise SystemExit("manifest mismatch")
 forbidden=re.compile(r"(?:^|_)(?:URL|URI|WS|RPC|KEY|SECRET|TOKEN|SIGNER|PASSWORD|AUTH|CREDENTIAL|MNEMONIC|SEED|ENDPOINT|WEBHOOK|DSN)(?:_|$)",re.I)
 config={k:v for k,v in env.items() if re.fullmatch(r"SEARCHER_[A-Z0-9_]+",k)
         and not forbidden.search(k) and "://" not in v and "\n" not in v}
+runtime_json_inputs={
+ k:{"path":v,"sha256":digest(v)}
+ for k,v in sorted(config.items())
+ if v.startswith("/opt/MEV-runtime/") and v.endswith(".json")
+ and v not in (universe,manifest)
+}
 url=env.get("SEARCHER_LIVE_RPC_URL") or env.get("MAINNET_RPC_URL")
 parsed=urllib.parse.urlparse(url or "")
 if parsed.scheme!="http" or parsed.hostname not in ("localhost","127.0.0.1","::1") or not parsed.port:
@@ -375,6 +456,7 @@ payload={
  "process":{"pid":pid,"starttime_ticks":start,"n_restarts":restarts},
  "universe":{"path":universe,"sha256":ush},
  "universe_manifest":{"path":manifest,"sha256":msh},
+ "runtime_json_inputs":runtime_json_inputs,
  "pool_universe_top_n":top_n,"searcher_config":config,
  "sample_receipt":{"tx_hash":tx,"receipt_sha256":hashlib.sha256(receipt_bytes).hexdigest(),
    "block_hash":receipt["blockHash"].lower(),"block_number":block,
@@ -388,6 +470,28 @@ print(json.dumps(payload,sort_keys=True,separators=(",",":")))
 PY
 test "$(systemctl show -p MainPID --value mev-searcher)" = "$pid"
 test "$(systemctl show -p NRestarts --value mev-searcher)" = "$restarts"`;
+}
+
+function runtimeJsonInputScript(
+  inputs: Record<string, { path: string; sha256: string }>,
+): string {
+  const encoded = Buffer.from(JSON.stringify(inputs)).toString("base64");
+  return String.raw`set -eu
+python3 - "${encoded}" <<'PY'
+import base64,hashlib,json,pathlib,sys
+inputs=json.loads(base64.b64decode(sys.argv[1]))
+result={}
+total=0
+for key,item in sorted(inputs.items()):
+  data=pathlib.Path(item["path"]).read_bytes()
+  digest=hashlib.sha256(data).hexdigest()
+  if digest != item["sha256"]: raise SystemExit("runtime JSON input hash drift")
+  total += len(data)
+  if total > 12288: raise SystemExit("runtime JSON inputs exceed SSM transfer bound")
+  result[key]={"path":item["path"],"sha256":digest,
+               "base64":base64.b64encode(data).decode()}
+print(json.dumps(result,sort_keys=True,separators=(",",":")))
+PY`;
 }
 
 function sendSsm(script: string): string {
@@ -511,10 +615,14 @@ async function rpc<T>(url: string, method: string, params: unknown[]): Promise<T
 function pathHash(
   value: unknown,
   production = true,
+  universeOnly = true,
 ): { path: string; sha256: string } | null {
   if (!record(value) || typeof value.path !== "string" ||
       typeof value.sha256 !== "string" || !SHA64.test(value.sha256) ||
-      (production && !value.path.startsWith("/opt/MEV-runtime/universe/")) ||
+      (production && universeOnly &&
+        !value.path.startsWith("/opt/MEV-runtime/universe/")) ||
+      (production && !universeOnly &&
+        !value.path.startsWith("/opt/MEV-runtime/")) ||
       (!production && !value.path.startsWith("/"))) return null;
   return value as { path: string; sha256: string };
 }

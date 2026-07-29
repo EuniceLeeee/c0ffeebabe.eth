@@ -60,6 +60,7 @@ function runtimeAttestation(
       path: `${UNIVERSE_PATH}.manifest.json`,
       sha256: SHA_B,
     },
+    runtime_json_inputs: {},
     pool_universe_top_n: 20_000,
     searcher_config: {
       SEARCHER_POOL_UNIVERSE_MANIFEST_PATH:
