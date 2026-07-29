@@ -136,16 +136,79 @@ The development branch then binds:
 - the registry-derived relevant-family completeness proofs; and
 - the trusted producer/comparator SHA and output.
 
-Production graph construction and enumeration run naturally. The controller receives the sample transaction
-only to derive its canonical parent state and, after selection, the comparison oracle. The isolated
-enumeration subprocess receives only that state, normalized config and content-addressed universe; every
-`AB_EXPECTED_*`/`HUNT_*` target oracle is stripped and audited. It writes, fsyncs and hashes its complete graph,
-natural route set and stage output before the comparator checks whether the sample route is present. No
-expected route/pools/tokens/amount/calldata or derived selection hint enters enumeration. The controller may
-have a larger *outer process timeout* so a development checkpoint does not die while waiting for
-infrastructure; production thresholds,
+Before the candidate run, the controller runs the rollback commit's same target-blind producer against the
+same anchor, universe, runtime inputs, normalized config and production caps. Its sealed receipt must fail
+before completing step 6 and is content-bound into the checkpoint. A rollback route that already reaches
+final EV rejects the checkpoint: a no-op/comment-only or unrelated same-family change cannot borrow an
+already-working historical route. Final validation reruns and binds this same rollback failure as well as
+the deployed candidate success.
+The current controller accepts rollback failure only when the target route is absent from natural output or
+is naturally enumerated but not solved. A later solver/final-sim/EV baseline failure needs a typed,
+infrastructure-distinguishing domain witness before this gate may accept it; error prose or a transient RPC
+failure is rejected.
+Both producers bind the actual universe, universe manifest and exact runtime-JSON key/SHA set, rehash those
+inputs before and after the hunt, and must match the controller's frozen tuple. This is explicit-input
+integrity for normal candidate code, not a same-UID hostile-code sandbox. A scanner `budget_exceeded`,
+incomplete natural rank or exact-refinement deadline on either side invalidates the comparison rather than
+counting as a baseline miss.
+Here `rankComplete` is the legacy receipt name for **production-policy completion** under the exact frozen
+caps (including the production DFS/path cap); it does not claim exhaustive enumeration of every graph path.
+A route must still appear naturally inside that production-policy output. Therefore a family-local change
+that moves a route into the real production top-K is an observable production fix, while this receipt makes
+no stronger claim that the graph was exhaustively searched.
+
+Production graph construction and enumeration then run naturally. The candidate producer receives only the
+canonical parent anchor, normalized config and content-addressed universe; its argv and allowlisted
+environment contain neither the sample transaction nor a reference/expected oracle. Every
+`AB_EXPECTED_*`/`HUNT_*` target control is stripped and audited. The producer freezes its complete graph,
+shard-completeness vector, natural top-K, resolved hop amounts and raw calldata, then exits. The trusted
+controller seals that same-directory artifact with file fsync, atomic rename, read-only permissions and
+directory fsync. Only after that durable seal may a rollback/main-owned verifier receive the sample and read
+the rollback/main-owned reference under `docs/research/references/production-routes/`. The verifier checks
+the target receipt/call-trace hash and lane anchor, matches the normalized frozen route, and interprets the
+same finite declarative `ReferenceWitness` against both the target and final-sim traces. The witness binds
+ABI signatures, token direction, pool identity where it differs from the execution target, argument
+relations, receipt transfers and parent/descendant call structure; a bare target/selector sequence is not
+evidence. For final sim, every witnessed root input must additionally byte-match the external calldata
+independently compiled from that leg's solver-selected resolved-plan subtree (including the selected amount
+and real child bytes). The verifier then resolves the frozen funding
+action through the rollback registry, runs the frozen raw calldata on a fresh fork, and independently
+recomputes repayment/conservation, standing, profit, production policy and EV. It rehashes both producer and
+reference artifacts after verification. The disposable producer worktree omits the checked-out trusted
+reference directory, and the rollback verifier worktree is created only after the seal. No expected
+route/pools/tokens/amount/calldata or derived selection hint enters the producer. This proves only
+explicit-input target-late regression: candidate code can still access repository Git objects and the
+archive RPC. Even a sample chosen after candidate SHA freeze does not by itself prove generalization.
+That stronger claim requires a future hidden reference plus source-filesystem and source-block-limited RPC
+isolation. The controller may have a
+larger *outer process timeout* so a development checkpoint does not die while waiting for infrastructure;
+production thresholds,
 ranking, candidate/top-K/refinement/solve caps, EV policy and ordering remain unchanged. Target append,
 force-probe, target-specific warm, reduced graph and fixture-only instance injection invalidate the receipt.
+Each physical trace call and receipt log is consumed at most once across the whole ordered route; duplicate
+declarative rules or two legs cannot reuse one physical item as two pieces of evidence.
+
+The frozen execution surface also binds each graph edge to one family-owned route-root `ActionAdapter`, the
+ordered action-id closure of its resolved subtree and every external call emitted by that subtree. The
+trusted controller re-derives ownership from the candidate manifest: the root must be owned by the route
+family; descendants may only be owned by that family or be ownerless infra explicitly required by it.
+Unattributed direct siblings are accepted only as ownerless, declared support actions. Every external call
+they emit is frozen, must be covered by one bounded declarative route witness in the target trace, and must
+byte-match in final sim; same-token transfer is not treated as token-preserving. An owned/foreign sibling,
+unwitnessed support call, ignored non-wrapper child or ambiguous family-owned multi-node fragment fails
+closed until production retains explicit per-leg fragment provenance. A later route leg's root also cannot
+be borrowed from a prior leg's descendant subtree. The one family changed by a `family_local` candidate must
+occur in the selected route's required-family set; an unrelated mature route cannot validate a new adapter
+branch.
+
+The candidate manifest must also keep shared infra globally ownerless. An ActionAdapter that appears in any
+family's `requiredInfraActionAdapterIds` cannot simultaneously appear in any family's
+`ownedActionAdapterIds`; reclassifying `erc20-transfer`-like infra as a new family's owned route root is a
+framework failure, not a family-local extension.
+Manifest import closure proves dependency reachability but never grants edit authority. A candidate cannot
+newly import and claim a pre-existing central/shared runtime file; new family-owned runtime files are limited
+to the family venue/action structural zones, while central registration remains the two explicit thin
+surfaces.
 
 Completeness is lane-scoped: the DEX shard and every family shard used by the route must be complete. A
 DEX-only route needs the complete DEX discovery/identity/graph proof; a DEX-protocol route additionally needs
@@ -166,6 +229,10 @@ one checked hash chain. A route-pinned
 Adapter Replay may support steps 3–6 but cannot replace steps 1–2. A successful run emits
 `checkpoint_pass`, which authorizes merge to `main` and bounded-live deployment under the existing wallet,
 signing, EV, position and broadcast envelope. It does not emit `fixed` or authorize branch deletion.
+Existing family root identity is immutable for this classification, supplemental paths derive their token
+only from the stable family ID, and the trusted producer/manifest/witness paths are an unconditional deny
+prefix set covering their helper families. Renaming a candidate export/action—or staging a same-named family
+in an earlier commit—can never grant edit authority over the gate that evaluates it.
 
 #### Full final validation — after merge and deployed-main start
 
@@ -185,6 +252,12 @@ controller must prove no runtime/dependency/config source changed after the depl
 `candidate_commit`, `merge_commit`, `deployed_commit`, `rollback_commit`, the
 retained pre-merge checkpoint receipt, exact deployment/config/graph receipts, all six stage hashes and a
 fresh non-author review.
+The deployed commit must be a real two-parent merge: parent 1 is the reviewed integration-base main and
+parent 2 is the exact candidate tip. The review binds the candidate patch, parent-1→merge patch,
+candidate→merge tree delta and the exact sorted overlap between concurrent main and candidate paths. The
+trusted validator recomputes those values and reruns the same family boundary on the actual
+parent-1→merge delta. Any overlap still requires function-level human review and both sides' regressions;
+an empty Git conflict set or a machine hash is not semantic merge approval.
 The exact candidate patch, deployed merge, review-only descendant and ancestry remain bound. The branch
 remains present locally and remotely until this run emits `final_validated`.
 

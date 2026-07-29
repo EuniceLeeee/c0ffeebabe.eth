@@ -25,6 +25,7 @@ export interface FamilyOwnershipManifestEntry {
   readonly owned_action_bindings: readonly FamilyOwnedActionBinding[];
   readonly required_action_adapter_ids: readonly string[];
   readonly required_action_bindings: readonly FamilyOwnedActionBinding[];
+  readonly candidate_source_ids: readonly string[];
   /** Route is excluded from ordinary block-scan until same-head evidence exists. */
   readonly requires_current_head_execution_evidence: boolean;
   readonly activation_sha256: string;
@@ -33,6 +34,7 @@ export interface FamilyOwnershipManifestEntry {
 export interface FamilyOwnershipManifest {
   readonly schema_version: 1;
   readonly registry_order: readonly string[];
+  readonly action_catalog_ids: readonly string[];
   readonly registry_skeleton_sha256: string;
   readonly action_index_skeleton_sha256: string;
   readonly families: readonly FamilyOwnershipManifestEntry[];
@@ -136,6 +138,10 @@ export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
         }
         return { id: actionId, binding: source.binding };
       });
+    const candidateSourceIds =
+      "discovery" in family && family.discovery
+        ? [...family.discovery.candidateSources].sort()
+        : [];
     return {
       id: family.id,
       kind: family.kind,
@@ -149,6 +155,7 @@ export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
       required_action_adapter_ids:
         [...family.requiredInfraActionAdapterIds].sort(),
       required_action_bindings: requiredActionBindings,
+      candidate_source_ids: candidateSourceIds,
       requires_current_head_execution_evidence:
         "pendingTransactionEvidence" in family &&
         family.pendingTransactionEvidence?.routeActivation ===
@@ -165,6 +172,7 @@ export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
         required_action_bindings: requiredActionBindings,
         required_infra_action_adapter_ids:
           [...family.requiredInfraActionAdapterIds].sort(),
+        candidate_source_ids: candidateSourceIds,
         requires_current_head_execution_evidence:
           "pendingTransactionEvidence" in family &&
           family.pendingTransactionEvidence?.routeActivation ===
@@ -181,6 +189,7 @@ export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
   return {
     schema_version: 1,
     registry_order: roots.map((root) => root.id),
+    action_catalog_ids: listAll().map((adapter) => adapter.id),
     registry_skeleton_sha256: familyOwnershipSourceSkeletonSha256(
       "production-registry",
       sourceFile(program, PRODUCTION_REGISTRY).getFullText(),

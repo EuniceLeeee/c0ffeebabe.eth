@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  parseSixStepValidationRequest,
   productionPassBudgetMs,
   productionRunnerConfig,
+  SIX_STEP_VALIDATION_REQUEST_SCHEMA_VERSION,
 } from "../six-step-validation-controller.js";
+
+const COMMIT = "a".repeat(40);
+const SAMPLE = `0x${"b".repeat(64)}`;
 
 test("six-step runner mirrors current live refinement and large-graph defaults", () => {
   const liveMain = readFileSync("../listener/src/searcher/main.ts", "utf8");
@@ -38,6 +43,32 @@ test("six-step runner mirrors current live refinement and large-graph defaults",
   assert.equal(productionPassBudgetMs(config, 20_000), 30_000);
 });
 
+test("validation request accepts schema v2 and rejects stale schema v1", () => {
+  const request = {
+    schema_version: SIX_STEP_VALIDATION_REQUEST_SCHEMA_VERSION,
+    request: "trusted-six-step-validation-request",
+    mode: "checkpoint",
+    branch: "codex/example-family",
+    rollback_commit: COMMIT,
+    sample_tx_hash: SAMPLE,
+    lane: "block_scan_standing",
+    trusted_reference_path:
+      "docs/research/references/production-routes/example.json",
+    input_snapshot_path: "snapshot.json",
+  };
+  assert.equal(
+    parseSixStepValidationRequest(request, "/tmp").schema_version,
+    SIX_STEP_VALIDATION_REQUEST_SCHEMA_VERSION,
+  );
+  assert.throws(
+    () => parseSixStepValidationRequest(
+      { ...request, schema_version: 1 },
+      "/tmp",
+    ),
+    /validation request identity is invalid/,
+  );
+});
+
 test("six-step runner applies the same live clamps before producing argv", () => {
   const config = productionRunnerConfig({
     SEARCHER_BLOCKSCAN_MAX_CANDIDATES: "200",
@@ -64,15 +95,15 @@ test("trusted producer passes the selected caps to the actual hunt child", () =>
   );
   assert.match(
     controller,
-    /"--refine-candidates",\s*String\(config\.refineCandidates\)/,
+    /"--refine-candidates",\s*String\(input\.config\.refineCandidates\)/,
   );
   assert.match(
     controller,
-    /"--large-graph-pass-budget-ms",\s*String\(config\.largeGraphPassBudgetMs\)/,
+    /"--large-graph-pass-budget-ms",\s*String\(input\.config\.largeGraphPassBudgetMs\)/,
   );
   assert.match(
     controller,
-    /"--large-graph-edge-threshold",\s*String\(config\.largeGraphEdgeThreshold\)/,
+    /"--large-graph-edge-threshold",\s*String\(input\.config\.largeGraphEdgeThreshold\)/,
   );
   assert.match(
     producer,

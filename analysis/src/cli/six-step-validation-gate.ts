@@ -57,6 +57,7 @@ try {
     phase, status: result.evidence.status, request_path: requestPath,
     evidence_path: result.evidencePath,
     raw_producer_path: result.rawProducerPath,
+    baseline_raw_producer_path: result.baselineRawProducerPath,
     ...(removed ? { cleanup: removed } : {}),
   });
 } catch (error) {

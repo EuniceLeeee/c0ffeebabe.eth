@@ -3,6 +3,7 @@ import test from "node:test";
 import { ethers } from "ethers";
 import {
   assertPendingExecutionEvidence,
+  assertShardCompleteness,
   requiredPendingExecutionEvidenceSha256,
 } from "../six-step-validation-controller.js";
 import type {
@@ -26,6 +27,7 @@ const anchor = {
 const manifest: FamilyOwnershipManifest = {
   schema_version: 1,
   registry_order: [FAMILY_A, FAMILY_B, FAMILY_PLAIN],
+  action_catalog_ids: [],
   registry_skeleton_sha256: SHA,
   action_index_skeleton_sha256: SHA,
   families: [
@@ -167,6 +169,67 @@ test("final equivalence ignores unrelated full-artifact churn", () => {
   );
 });
 
+test("required dynamic source coverage is an exact manifest-owned set", () => {
+  const dynamicManifest: FamilyOwnershipManifest = {
+    ...manifest,
+    families: manifest.families.map((entry) =>
+      entry.id === FAMILY_B
+        ? {
+            ...entry,
+            candidate_source_ids: [
+              "dex-token-domain",
+              "observed-interaction",
+            ],
+          }
+        : entry),
+  };
+  const proof = (sourceIds: readonly string[]) => ({
+    discovery: {
+      shardCompleteness: {
+        requiredFamilyIds: [FAMILY_B],
+        requiredComplete: true,
+        familyShards: [{
+          familyId: FAMILY_B,
+          sourceKind: "dynamic-discovery",
+          status: "complete",
+          required: true,
+          disposition: "required",
+          sourceCoverage: sourceIds.map((sourceId) => ({
+            sourceId,
+            complete: true,
+            issues: [],
+          })),
+        }],
+      },
+    },
+  });
+  assert.doesNotThrow(() => assertShardCompleteness(
+    proof(["observed-interaction", "dex-token-domain"]),
+    [FAMILY_B],
+    dynamicManifest,
+  ));
+  assert.throws(
+    () => assertShardCompleteness(
+      proof(["observed-interaction"]),
+      [FAMILY_B],
+      dynamicManifest,
+    ),
+    /source coverage is not exact/,
+  );
+  assert.throws(
+    () => assertShardCompleteness(
+      proof([
+        "observed-interaction",
+        "dex-token-domain",
+        "unexpected-source",
+      ]),
+      [FAMILY_B],
+      dynamicManifest,
+    ),
+    /source coverage is not exact/,
+  );
+});
+
 function raw(required: readonly string[]): {
   executionEvidence: {
     schemaVersion: number;
@@ -227,6 +290,7 @@ function family(
     owned_action_bindings: [],
     required_action_adapter_ids: [],
     required_action_bindings: [],
+    candidate_source_ids: [],
     requires_current_head_execution_evidence: pendingExecutionEvidence,
     activation_sha256: SHA,
   };

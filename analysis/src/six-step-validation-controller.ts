@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import {
-  existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
+  chmodSync, closeSync, existsSync, fsyncSync, mkdtempSync, openSync, readFileSync,
+  realpathSync, renameSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +20,6 @@ import {
   type SemanticSixStepEvidence,
 } from "../../listener/src/shared/evidence/semantic-six-step.js";
 import {
-  familyOwnershipSourceSkeletonSha256,
   type FamilyOwnershipManifest,
 } from "../../listener/src/searcher/test/family-ownership-manifest.js";
 import {
@@ -26,7 +27,8 @@ import {
   SIX_STEP_VALIDATION_LIFECYCLE_SCHEMA_VERSION, createGitInspector,
   sixStepLifecycleEnvelopeSha256, sixStepStateAnchorSha256,
   validateSixStepValidationLifecycle, type SixStepCheckpointEvidence,
-  type SixStepFinalEvidence, type SixStepStateAnchor,
+  type BaselineRouteOutcome, type SixStepFinalEvidence,
+  type SixStepStateAnchor,
   type SixStepValidationEvidence,
 } from "./six-step-validation-lifecycle.js";
 import {
@@ -39,8 +41,12 @@ import {
   type TrustedSixStepInputSnapshot, type TrustedSixStepRuntimeAttestation,
   type TrustedSixStepRpcTransport,
 } from "./trusted-six-step-runtime-attestation.js";
+import {
+  evaluateAdapterFamilyBoundary,
+  type AdapterFamilyBoundaryResult,
+} from "./adapter-family-boundary.js";
 
-export const SIX_STEP_VALIDATION_REQUEST_SCHEMA_VERSION = 1 as const;
+export const SIX_STEP_VALIDATION_REQUEST_SCHEMA_VERSION = 2 as const;
 export const SIX_STEP_VALIDATION_REQUEST =
   "trusted-six-step-validation-request" as const;
 export const SIX_STEP_CONTROLLER_ID =
@@ -52,8 +58,6 @@ const PENDING_EVIDENCE_PRODUCER =
   "listener/src/searcher/test/production-replay-pending-evidence.ts";
 const MANIFEST = "listener/src/searcher/test/family-ownership-manifest.ts";
 const GRAPH_BUILDER = "listener/src/searcher/planner/token-graph.ts";
-const REGISTRY = "listener/src/searcher/venues/production-registry.ts";
-const ACTION_INDEX = "listener/src/adapters/index.ts";
 const TSX = import.meta.resolve("tsx");
 const SHA40 = /^[a-f0-9]{40}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -67,15 +71,23 @@ const TRUSTED_SURFACES = [
   PRODUCER,
   PENDING_EVIDENCE_PRODUCER,
   MANIFEST,
+  "listener/src/searcher/test/adapter-replay.ts",
   "listener/src/searcher/test/blockscan-hunt.ts",
+  "listener/src/searcher/test/blockscan-hunt-protocol-cache.ts",
+  "listener/src/searcher/test/blockscan-hunt-selection.ts",
+  "listener/src/searcher/test/historical-replay-anchor.ts",
+  "listener/src/searcher/test/production-replay-artifact.ts",
+  "listener/src/searcher/test/production-replay-preload.ts",
+  "listener/src/searcher/test/route-execution-witness.ts",
   "listener/src/shared/evidence/canonical-edge-set.ts",
   "listener/src/shared/evidence/semantic-six-step.ts",
 ] as const;
 
 interface CommonRequest {
-  schema_version: 1; request: typeof SIX_STEP_VALIDATION_REQUEST;
+  schema_version: 2; request: typeof SIX_STEP_VALIDATION_REQUEST;
   branch: string; rollback_commit: string; sample_tx_hash: string;
   lane: "block_scan_standing";
+  trusted_reference_path: string;
   runner_overrides?: { wall_clock_timeout_ms?: number };
 }
 interface CheckpointRequest extends CommonRequest {
@@ -105,11 +117,21 @@ interface RouteEdge {
   poolId?: string;
 }
 type RawReplay = Record<string, any>;
+export interface ProducerExplicitInputBindings {
+  universeSha256: string;
+  universeManifestSha256: string;
+  runtimeJsonInputs: Array<{ key: string; sha256: string }>;
+  sha256: string;
+}
 interface ReviewArtifact {
-  schema_version: 1; artifact: "six-step-independent-review";
+  schema_version: 2; artifact: "six-step-independent-review";
   reviewer_email: string; rollback_commit: string;
   reviewed_candidate_commit: string; reviewed_merge_commit: string;
-  diff_sha256: string; reviewed_at: string; evidence: string; verdict: "pass";
+  integration_base_commit: string;
+  diff_sha256: string; merge_patch_sha256: string;
+  candidate_tree_delta_sha256: string;
+  overlap_paths: string[];
+  reviewed_at: string; evidence: string; verdict: "pass";
 }
 interface ReviewContext {
   review: ReviewArtifact; bytes: Buffer; path: string; commit: string;
@@ -117,6 +139,7 @@ interface ReviewContext {
 export interface SixStepControllerResult {
   evidence: SixStepValidationEvidence; evidencePath: string;
   rawProducerPath: string;
+  baselineRawProducerPath: string;
 }
 
 export async function freezeTrustedSixStepInputs(input: {
@@ -178,7 +201,7 @@ export async function runTrustedSixStepValidation(input: {
   cwd?: string;
 }): Promise<SixStepControllerResult> {
   const cwd = trustedRoot(input.cwd ?? process.cwd());
-  const request = parseRequest(input.request, cwd);
+  const request = parseSixStepValidationRequest(input.request, cwd);
   const main = gitOut(cwd, ["rev-parse", "refs/remotes/origin/main^{commit}"]);
   const tip = gitOut(cwd, ["rev-parse", `refs/heads/${request.branch}^{commit}`]);
   if (request.mode === "checkpoint") {
@@ -196,6 +219,68 @@ export async function runTrustedSixStepValidation(input: {
   ]);
   if (trustedDiff) throw new Error(`candidate modifies trusted gate: ${trustedDiff}`);
 
+  // The family boundary is deliberately evaluated before live attestation,
+  // RPC transport, universe reads, or the production producer. A family that
+  // needs central behavior stops here and must continue on a separate branch.
+  const temp = realpathSync(mkdtempSync(resolve(tmpdir(), "six-step-")));
+  let worktree: string | null = null;
+  let boundaryBaseWorktree: string | null = null;
+  let boundaryCandidateWorktree: string | null = null;
+  let boundary: AdapterFamilyBoundaryResult;
+  try {
+    boundaryBaseWorktree = createWorktree(
+      cwd,
+      temp,
+      request.rollback_commit,
+      "boundary-base",
+    );
+    const baseManifest = loadFamilyManifest(boundaryBaseWorktree);
+    git(cwd, ["worktree", "remove", "--force", boundaryBaseWorktree]);
+    boundaryBaseWorktree = null;
+    boundaryCandidateWorktree = createWorktree(
+      cwd,
+      temp,
+      tip,
+      "boundary-candidate",
+    );
+    hideTrustedReferencesFromProducerWorktree(boundaryCandidateWorktree);
+    const candidateManifest = loadFamilyManifest(boundaryCandidateWorktree);
+    boundary = evaluateAdapterFamilyBoundary({
+      baseCommit: request.rollback_commit,
+      candidateCommit: tip,
+      changedPaths: gitOut(cwd, [
+        "diff", "--name-only", `${request.rollback_commit}..${tip}`,
+      ]).split(/\r?\n/).filter(Boolean),
+      baseManifest,
+      candidateManifest,
+      sourceAt: (commit, path) => gitShowOptional(cwd, commit, path),
+    });
+    if (boundary.classification !== "family_local") {
+      throw new Error(
+        `adapter changes left the family boundary: ` +
+          `${boundary.reasons.join("; ")}`,
+      );
+    }
+    if (request.mode === "checkpoint") {
+      worktree = boundaryCandidateWorktree;
+      boundaryCandidateWorktree = null;
+    } else {
+      git(cwd, [
+        "worktree", "remove", "--force", boundaryCandidateWorktree,
+      ]);
+      boundaryCandidateWorktree = null;
+    }
+  } catch (error) {
+    if (boundaryBaseWorktree) {
+      git(cwd, ["worktree", "remove", "--force", boundaryBaseWorktree]);
+    }
+    if (boundaryCandidateWorktree) {
+      git(cwd, ["worktree", "remove", "--force", boundaryCandidateWorktree]);
+    }
+    rmSync(temp, { recursive: true, force: true });
+    throw error;
+  }
+
   const snapshot = request.mode === "checkpoint"
     ? loadSnapshot(request.input_snapshot_path, request.sample_tx_hash) : null;
   if (snapshot && snapshot.source_runtime_commit !== request.rollback_commit) {
@@ -203,16 +288,58 @@ export async function runTrustedSixStepValidation(input: {
   }
   const review = request.mode === "final"
     ? loadReview(request, cwd, tip, main) : null;
+  if (review) {
+    const deployedBoundary = evaluateDeployedMergeBoundary({
+      cwd,
+      temp,
+      review: review.review,
+    });
+    if (deployedBoundary.classification !== "family_local") {
+      throw new Error(
+        `deployed merge left the family boundary: ` +
+          `${deployedBoundary.reasons.join("; ")}`,
+      );
+    }
+    if (
+      stableJson(deployedBoundary.impactedFamilyIds) !==
+        stableJson(boundary.impactedFamilyIds)
+    ) {
+      throw new Error(
+        "deployed merge impacted family differs from checkpoint candidate",
+      );
+    }
+    boundary = deployedBoundary;
+  }
   const universePath = snapshot?.local_universe.path ??
     (request as FinalRequest).universe_path;
   const manifestPath = snapshot?.local_universe_manifest.path ??
     (request as FinalRequest).universe_manifest_path;
   const universe = readFileSync(universePath);
   const universeManifest = readFileSync(manifestPath);
-  const temp = mkdtempSync(resolve(tmpdir(), "six-step-"));
-  const rawPath = resolve(temp, "producer.json");
-  let worktree: string | null = null;
+  const sealedUniversePath = resolve(
+    temp,
+    `universe-${sha256(universe)}.json`,
+  );
+  const sealedUniverseManifestPath = resolve(
+    temp,
+    `universe-manifest-${sha256(universeManifest)}.json`,
+  );
+  writeReadOnlyInput(sealedUniversePath, universe);
+  writeReadOnlyInput(sealedUniverseManifestPath, universeManifest);
+  const producerPendingPath = resolve(temp, "natural-output.pending.json");
+  const producerSealedPath = resolve(temp, "natural-output.sealed.json");
+  const baselineProducerPendingPath = resolve(
+    temp,
+    "baseline-natural-output.pending.json",
+  );
+  const baselineProducerSealedPath = resolve(
+    temp,
+    "baseline-natural-output.sealed.json",
+  );
+  const rawPath = resolve(temp, "trusted-verifier.json");
+  const baselineRawPath = resolve(temp, "baseline-trusted-verifier.json");
   let transport: TrustedSixStepRpcTransport | null = null;
+  let baselineWorktree: string | null = null;
   try {
     const before = snapshot?.runtime_attestation ??
       await fetchTrustedSixStepRuntimeAttestation(request.sample_tx_hash);
@@ -228,6 +355,7 @@ export async function runTrustedSixStepValidation(input: {
     const runtimeJsonInputs = await fetchTrustedSixStepRuntimeJsonInputs(before);
     const localRuntimeInputEnv: Record<string, string> = {};
     const localRuntimeInputBindings: Array<{
+      key: string;
       path: string;
       sha256: string;
     }> = [];
@@ -238,6 +366,7 @@ export async function runTrustedSixStepValidation(input: {
       writeFileSync(localPath, bytes, { mode: 0o400 });
       localRuntimeInputEnv[key] = localPath;
       localRuntimeInputBindings.push({
+        key,
         path: localPath,
         sha256: attested.sha256,
       });
@@ -246,43 +375,189 @@ export async function runTrustedSixStepValidation(input: {
     const env = {
       ...before.searcher_config,
       ...localRuntimeInputEnv,
-      SEARCHER_POOL_UNIVERSE_PATH: universePath,
-      SEARCHER_POOL_UNIVERSE_MANIFEST_PATH: manifestPath,
+      SEARCHER_POOL_UNIVERSE_PATH: sealedUniversePath,
+      SEARCHER_POOL_UNIVERSE_MANIFEST_PATH: sealedUniverseManifestPath,
+      PRODUCTION_REPLAY_FROZEN_RUNTIME_JSON_KEYS:
+        localRuntimeInputBindings.map((item) => item.key).sort().join(","),
       MAINNET_RPC_URL: transport.rpcUrl,
       SEARCHER_LIVE_RPC_URL: transport.rpcUrl,
     };
     const runner = productionRunnerConfig(env);
-    worktree = createWorktree(cwd, temp,
-      request.mode === "checkpoint" ? tip : deployed);
-    await runProducer(request, rawPath, universePath,
-      universeFromBlock(universe), runner, env, worktree);
+    worktree ??= createWorktree(cwd, temp, deployed);
+    hideTrustedReferencesFromProducerWorktree(worktree);
+    const provider = new ethers.JsonRpcProvider(transport.rpcUrl);
+    await assertCanonicalUniverse(provider, coverage);
+    const anchor = await standingAnchor(
+      provider,
+      request.sample_tx_hash,
+      before,
+    );
+    provider.destroy();
+    if (snapshot && stableJson(anchor) !== stableJson(snapshot.state_anchor)) {
+      throw new Error("checkpoint replay state differs from frozen snapshot");
+    }
+    baselineWorktree = createWorktree(
+      cwd,
+      temp,
+      request.rollback_commit,
+      "baseline-producer",
+    );
+    hideTrustedReferencesFromProducerWorktree(baselineWorktree);
+    const baselineProducerPort = await allocatePort();
+    await runTargetBlindProducer({
+      request,
+      out: baselineProducerPendingPath,
+      universe: sealedUniversePath,
+      fromBlock: universeFromBlock(universe),
+      config: runner,
+      runtimeEnv: env,
+      cwd: baselineWorktree,
+      anchor,
+      workspace: resolve(temp, "baseline-target-blind-producer"),
+      anvilPort: baselineProducerPort,
+    });
+    const frozenBaselineProducerSha256 = sealArtifact(
+      baselineProducerPendingPath,
+      baselineProducerSealedPath,
+    );
+    const producerPort = await allocatePort();
+    await runTargetBlindProducer({
+      request,
+      out: producerPendingPath,
+      universe: sealedUniversePath,
+      fromBlock: universeFromBlock(universe),
+      config: runner,
+      runtimeEnv: env,
+      cwd: worktree,
+      anchor,
+      workspace: resolve(temp, "target-blind-producer"),
+      anvilPort: producerPort,
+    });
+    // The producer process is gone before the controller makes the natural
+    // result durable. Only after this same-directory fsync+rename barrier may
+    // the target/reference be exposed to rollback/main verification.
+    const frozenProducerSha256 = sealArtifact(
+      producerPendingPath,
+      producerSealedPath,
+    );
+    // The rollback/main verifier tree is intentionally absent until after the
+    // candidate producer has exited and its output is durably sealed.
+    boundaryBaseWorktree = createWorktree(
+      cwd,
+      temp,
+      request.rollback_commit,
+      "verifier-base",
+    );
+    const trustedReferencePath = resolve(
+      boundaryBaseWorktree,
+      request.trusted_reference_path,
+    );
+    const trustedReferenceSha256 = sha256(
+      readFileSync(trustedReferencePath),
+    );
+    const verifierPort = await allocatePort();
+    await runTargetAwareVerifier({
+      request,
+      out: rawPath,
+      producerArtifact: producerSealedPath,
+      producerArtifactSha256: frozenProducerSha256,
+      trustedReference: trustedReferencePath,
+      trustedReferenceSha256,
+      runtimeEnv: env,
+      cwd: boundaryBaseWorktree,
+      anvilPort: verifierPort,
+    });
+    const baselineVerifierPort = await allocatePort();
+    await runTargetAwareVerifier({
+      request,
+      out: baselineRawPath,
+      producerArtifact: baselineProducerSealedPath,
+      producerArtifactSha256: frozenBaselineProducerSha256,
+      trustedReference: trustedReferencePath,
+      trustedReferenceSha256,
+      runtimeEnv: env,
+      cwd: boundaryBaseWorktree,
+      anvilPort: baselineVerifierPort,
+    });
+    assertFrozenArtifactsUnchanged([
+      {
+        path: producerSealedPath,
+        sha256: frozenProducerSha256,
+      },
+      {
+        path: trustedReferencePath,
+        sha256: trustedReferenceSha256,
+      },
+      {
+        path: baselineProducerSealedPath,
+        sha256: frozenBaselineProducerSha256,
+      },
+    ]);
     for (const binding of localRuntimeInputBindings) {
       if (sha256(readFileSync(binding.path)) !== binding.sha256) {
         throw new Error("candidate mutated a frozen runtime JSON input");
       }
     }
+    assertFrozenArtifactsUnchanged([
+      { path: sealedUniversePath, sha256: sha256(universe) },
+      {
+        path: sealedUniverseManifestPath,
+        sha256: sha256(universeManifest),
+      },
+    ]);
+    const expectedExplicitInputBindings =
+      expectedProducerExplicitInputBindings({
+        universeSha256: sha256(universe),
+        universeManifestSha256: sha256(universeManifest),
+        runtimeJsonInputs: localRuntimeInputBindings,
+      });
     const rawBytes = readFileSync(rawPath);
-    const raw = parseRaw(rawBytes, request, runner);
+    const raw = parseRaw(
+      rawBytes,
+      request,
+      runner,
+      expectedExplicitInputBindings,
+    );
+    const baselineRawBytes = readFileSync(baselineRawPath);
+    const baselineOutcome = parseBaselineRouteOutcome(
+      baselineRawBytes,
+      request,
+      runner,
+      {
+        baselineCommit: request.rollback_commit,
+        producerArtifactSha256: frozenBaselineProducerSha256,
+        trustedReferenceArtifactSha256: trustedReferenceSha256,
+        targetRouteSha256: raw.reference.trustedRouteSha256,
+        explicitInputBindings: expectedExplicitInputBindings,
+      },
+    );
+    if (
+      raw.reference.trustedReferenceArtifactSha256 !==
+        trustedReferenceSha256
+    ) {
+      throw new Error("trusted verifier receipt does not bind reference bytes");
+    }
     const familyManifest = loadFamilyManifest(worktree);
     const route = raw.selected.route.map(normalizeEdge) as RouteEdge[];
     const routeHash = semanticJsonSha256(route as unknown as SemanticJson);
     if (!raw.producerOutput.naturalRouteSet.routeSha256s.includes(routeHash)) {
       throw new Error("selected route is absent from natural route set");
     }
-    const isolation = classifyDiff(cwd, request.rollback_commit, tip, familyManifest);
-    if (isolation.diffClass !== "family_local") {
-      throw new Error("framework/systemic changes require cohort/Hermes validation");
-    }
     const required = routeFamilies(route, familyManifest);
-    assertShardCompleteness(raw, required);
+    assertImpactedFamilyParticipates(
+      boundary.impactedFamilyIds,
+      required,
+    );
+    assertRouteExecutionOwnership(
+      raw.selected,
+      route,
+      familyManifest,
+    );
+    assertShardCompleteness(raw, required, familyManifest);
     const complete = raw.discovery.shardCompleteness.familyShards
       .filter((shard: any) => shard.status === "complete")
       .map((shard: any) => shard.familyId).sort();
-    const impacted = [...new Set([...isolation.impacted, ...required])].sort();
-    const provider = new ethers.JsonRpcProvider(transport.rpcUrl);
-    await assertCanonicalUniverse(provider, coverage);
-    const anchor = await standingAnchor(provider, request.sample_tx_hash, before);
-    provider.destroy();
+    const impacted = [...boundary.impactedFamilyIds].sort();
     assertPendingExecutionEvidence(
       raw,
       required,
@@ -290,9 +565,6 @@ export async function runTrustedSixStepValidation(input: {
       request.sample_tx_hash,
       anchor,
     );
-    if (snapshot && stableJson(anchor) !== stableJson(snapshot.state_anchor)) {
-      throw new Error("checkpoint replay state differs from frozen snapshot");
-    }
     if (raw.stateAnchor.blockNumber !== anchor.base_block ||
         raw.sourceWindow.toBlock !== anchor.base_block) {
       throw new Error("producer does not bind the sample parent block");
@@ -301,7 +573,9 @@ export async function runTrustedSixStepValidation(input: {
       anchor as unknown as Readonly<Record<string, unknown>>,
     );
     const rawHash = sha256(rawBytes);
+    const baselineRawHash = sha256(baselineRawBytes);
     const runId = semanticJsonSha256({
+      baseline_raw_producer_receipt_sha256: baselineRawHash,
       candidate_commit: tip,
       raw_producer_receipt_sha256: rawHash,
       sample_tx_hash: request.sample_tx_hash,
@@ -333,6 +607,7 @@ export async function runTrustedSixStepValidation(input: {
         id: SIX_STEP_CONTROLLER_ID,
         controller_sha256: sha256(readFileSync(CONTROLLER_PATH)),
         raw_producer_receipt_sha256: rawHash,
+        baseline_raw_producer_receipt_sha256: baselineRawHash,
       },
       state_anchor: anchor,
       state_anchor_sha256: anchorHash,
@@ -346,6 +621,10 @@ export async function runTrustedSixStepValidation(input: {
         graph_builder_sha256: sha256(readFileSync(resolve(worktree, GRAPH_BUILDER))),
         graph_snapshot_source_sha256:
           raw.producerOutput.frozenHuntArtifact.sha256,
+        target_blind_producer_artifact_sha256: frozenProducerSha256,
+        baseline_target_blind_producer_artifact_sha256:
+          frozenBaselineProducerSha256,
+        trusted_reference_artifact_sha256: trustedReferenceSha256,
         producer_sha256: executedTrustedSourceSha256(
           cwd,
           worktree,
@@ -375,18 +654,21 @@ export async function runTrustedSixStepValidation(input: {
         graph_reduced: false,
       },
       route_scope: routeScope(required, familyManifest),
-      diff_class: isolation.diffClass,
+      diff_class: boundary.classification,
       impacted_family_ids: impacted,
       required_family_ids: required,
       complete_family_ids: complete,
       central_behavior_diff_sha256: EMPTY_SHA256,
-      other_family_source_set_baseline_sha256: isolation.otherBaseline,
-      other_family_source_set_challenger_sha256: isolation.otherCandidate,
+      other_family_source_set_baseline_sha256:
+        boundary.otherFamilySourceSetBaselineSha256,
+      other_family_source_set_challenger_sha256:
+        boundary.otherFamilySourceSetCandidateSha256,
       exact_production_caps: true,
       runner_overrides: request.runner_overrides?.wall_clock_timeout_ms
         ? { wall_clock_timeout_ms: request.runner_overrides.wall_clock_timeout_ms }
         : {},
       production_route_stage: stages,
+      baseline_route_outcome: baselineOutcome,
     };
     const evidence = request.mode === "checkpoint"
       ? checkpointEvidence(common, snapshot!)
@@ -398,10 +680,27 @@ export async function runTrustedSixStepValidation(input: {
     writeJson(input.evidencePath, evidence);
     const durableRaw = `${input.evidencePath}.producer.json`;
     writeFileSync(durableRaw, rawBytes, { mode: 0o600 });
-    return { evidence, evidencePath: input.evidencePath, rawProducerPath: durableRaw };
+    const durableBaselineRaw =
+      `${input.evidencePath}.baseline.producer.json`;
+    writeFileSync(durableBaselineRaw, baselineRawBytes, { mode: 0o600 });
+    return {
+      evidence,
+      evidencePath: input.evidencePath,
+      rawProducerPath: durableRaw,
+      baselineRawProducerPath: durableBaselineRaw,
+    };
   } finally {
     await transport?.close();
     if (worktree) git(cwd, ["worktree", "remove", "--force", worktree]);
+    if (boundaryBaseWorktree) {
+      git(cwd, ["worktree", "remove", "--force", boundaryBaseWorktree]);
+    }
+    if (boundaryCandidateWorktree) {
+      git(cwd, ["worktree", "remove", "--force", boundaryCandidateWorktree]);
+    }
+    if (baselineWorktree) {
+      git(cwd, ["worktree", "remove", "--force", baselineWorktree]);
+    }
     rmSync(temp, { recursive: true, force: true });
   }
 }
@@ -445,6 +744,22 @@ function finalEvidence(
       throw new Error(`final does not match checkpoint ${field}`);
     }
   }
+  const checkpointBaseline = checkpoint.baseline_route_outcome as
+    Record<string, unknown>;
+  const finalBaseline = common.baseline_route_outcome as
+    Record<string, unknown>;
+  for (const field of [
+    "baseline_commit",
+    "target_route_sha256",
+    "highest_passed_step",
+    "first_unpassed_step",
+    "natural_route_set_sha256",
+    "materialized_graph_sha256",
+  ]) {
+    if (checkpointBaseline[field] !== finalBaseline[field]) {
+      throw new Error(`final does not match checkpoint baseline ${field}`);
+    }
+  }
   const checkpointFrozen = checkpoint.frozen_inputs as
     Record<string, unknown>;
   const finalFrozen = common.frozen_inputs as Record<string, unknown>;
@@ -452,6 +767,7 @@ function finalEvidence(
     "producer_sha256",
     "pending_evidence_producer_sha256",
     "pending_evidence_required_sha256",
+    "trusted_reference_artifact_sha256",
   ]) {
     if (checkpointFrozen[field] !== finalFrozen[field]) {
       throw new Error(`final does not match checkpoint frozen_inputs.${field}`);
@@ -472,7 +788,12 @@ function finalEvidence(
       rollback_commit: review.rollback_commit,
       reviewed_candidate_commit: review.reviewed_candidate_commit,
       reviewed_merge_commit: review.reviewed_merge_commit,
+      integration_base_commit: review.integration_base_commit,
       diff_sha256: review.diff_sha256,
+      merge_patch_sha256: review.merge_patch_sha256,
+      candidate_tree_delta_sha256:
+        review.candidate_tree_delta_sha256,
+      overlap_paths: review.overlap_paths,
       reviewed_at: review.reviewed_at,
       evidence: review.evidence,
       verdict: "pass" as const,
@@ -606,50 +927,295 @@ function snakeShard(shard: any): Record<string, SemanticJson> {
   };
 }
 
-async function runProducer(
-  request: SixStepValidationRequest, out: string, universe: string,
-  fromBlock: number, config: ProductionRunnerConfig,
-  runtimeEnv: Record<string, string>, cwd: string,
-): Promise<void> {
-  const args = [
-    "--import", TSX, resolve(cwd, PRODUCER),
-    "--winner-tx", request.sample_tx_hash,
-    "--source-from-block", String(fromBlock), "--universe", universe,
-    "--max-pools", String(config.maxPools), "--max-hops", String(config.maxHops),
-    "--max-candidates", String(config.maxCandidates), "--top-k", String(config.topK),
-    "--min-spread-bps", String(config.minSpreadBps),
-    "--prewarm-budget-ms", String(config.prewarmBudgetMs),
-    "--scan-budget-ms", String(config.scanBudgetMs),
-    "--pass-budget-ms", String(config.passBudgetMs),
-    "--large-graph-pass-budget-ms", String(config.largeGraphPassBudgetMs),
-    "--large-graph-edge-threshold", String(config.largeGraphEdgeThreshold),
-    "--refine-candidates", String(config.refineCandidates),
-    "--refine-family-timeout-ms", String(config.refineFamilyTimeoutMs),
-    "--out", out,
-  ];
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  for (const key of Object.keys(env)) {
-    if (key.startsWith("SEARCHER_") || key.startsWith("HUNT_") ||
-        key.startsWith("AB_EXPECTED_")) delete env[key];
-  }
-  Object.assign(env, runtimeEnv);
+async function runTargetBlindProducer(input: {
+  request: SixStepValidationRequest;
+  out: string;
+  universe: string;
+  fromBlock: number;
+  config: ProductionRunnerConfig;
+  runtimeEnv: Record<string, string>;
+  cwd: string;
+  anchor: SixStepStateAnchor;
+  workspace: string;
+  anvilPort: number;
+}): Promise<void> {
+  const {
+    request,
+    out,
+    universe,
+    fromBlock,
+    config,
+    runtimeEnv,
+    cwd,
+    anchor,
+    workspace,
+    anvilPort,
+  } = input;
+  const args = targetBlindProducerArgs({
+    producerPath: resolve(cwd, PRODUCER),
+    anchor,
+    fromBlock,
+    universe,
+    anvilPort,
+    workspace,
+    config,
+    out,
+  });
+  assertTargetAbsentFromProcessInput(
+    request.sample_tx_hash,
+    args,
+    runtimeEnv,
+    "target-blind producer",
+  );
+  const env = isolatedChildEnvironment(runtimeEnv);
   const timeout = request.runner_overrides?.wall_clock_timeout_ms ??
     DEFAULT_WALL_TIMEOUT_MS;
+  await runReplayChild({
+    args,
+    cwd,
+    env,
+    timeout,
+    label: "target-blind producer",
+  });
+}
+
+export function targetBlindProducerArgs(input: {
+  producerPath: string;
+  anchor: Pick<
+    SixStepStateAnchor,
+    "base_block" | "base_block_hash" | "base_state_root"
+  >;
+  fromBlock: number;
+  universe: string;
+  anvilPort: number;
+  workspace: string;
+  config: ProductionRunnerConfig;
+  out: string;
+}): string[] {
+  return [
+    "--import", TSX, input.producerPath,
+    "--phase", "produce",
+    "--base-block", String(input.anchor.base_block),
+    "--base-block-hash", input.anchor.base_block_hash,
+    "--base-state-root", input.anchor.base_state_root,
+    "--source-from-block", String(input.fromBlock),
+    "--universe", input.universe,
+    "--anvil-port", String(input.anvilPort),
+    "--workspace", input.workspace,
+    "--max-pools", String(input.config.maxPools),
+    "--max-hops", String(input.config.maxHops),
+    "--max-candidates", String(input.config.maxCandidates),
+    "--top-k", String(input.config.topK),
+    "--min-spread-bps", String(input.config.minSpreadBps),
+    "--prewarm-budget-ms", String(input.config.prewarmBudgetMs),
+    "--scan-budget-ms", String(input.config.scanBudgetMs),
+    "--pass-budget-ms", String(input.config.passBudgetMs),
+    "--large-graph-pass-budget-ms",
+    String(input.config.largeGraphPassBudgetMs),
+    "--large-graph-edge-threshold",
+    String(input.config.largeGraphEdgeThreshold),
+    "--refine-candidates", String(input.config.refineCandidates),
+    "--refine-family-timeout-ms",
+    String(input.config.refineFamilyTimeoutMs),
+    "--out", input.out,
+  ];
+}
+
+async function runTargetAwareVerifier(input: {
+  request: SixStepValidationRequest;
+  out: string;
+  producerArtifact: string;
+  producerArtifactSha256: string;
+  trustedReference: string;
+  trustedReferenceSha256: string;
+  runtimeEnv: Record<string, string>;
+  cwd: string;
+  anvilPort: number;
+}): Promise<void> {
+  const args = [
+    "--import", TSX, resolve(input.cwd, PRODUCER),
+    "--phase", "verify",
+    "--winner-tx", input.request.sample_tx_hash,
+    "--producer-artifact", input.producerArtifact,
+    "--producer-artifact-sha256", input.producerArtifactSha256,
+    "--trusted-reference", input.trustedReference,
+    "--trusted-reference-sha256", input.trustedReferenceSha256,
+    "--anvil-port", String(input.anvilPort),
+    "--out", input.out,
+  ];
+  const timeout =
+    input.request.runner_overrides?.wall_clock_timeout_ms ??
+      DEFAULT_WALL_TIMEOUT_MS;
+  await runReplayChild({
+    args,
+    cwd: input.cwd,
+    env: isolatedChildEnvironment(input.runtimeEnv),
+    timeout,
+    label: "rollback/main target-aware verifier",
+  });
+}
+
+async function runReplayChild(input: {
+  args: string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  timeout: number;
+  label: string;
+}): Promise<void> {
   await new Promise<void>((done, reject) => {
-    const child = spawn(process.execPath, args, {
-      cwd, env, stdio: ["ignore", "inherit", "inherit"],
+    const child = spawn(process.execPath, input.args, {
+      cwd: input.cwd,
+      env: input.env,
+      stdio: ["ignore", "inherit", "inherit"],
     });
     const timer = setTimeout(() => {
       child.kill("SIGTERM");
-      reject(new Error(`production replay exceeded outer timeout ${timeout}ms`));
-    }, timeout);
+      reject(new Error(
+        `${input.label} exceeded outer timeout ${input.timeout}ms`,
+      ));
+    }, input.timeout);
     child.once("error", (error) => {
       clearTimeout(timer);
       reject(error);
     });
     child.once("exit", (code) => {
       clearTimeout(timer);
-      code === 0 ? done() : reject(new Error(`production replay exited ${code}`));
+      code === 0
+        ? done()
+        : reject(new Error(`${input.label} exited ${code}`));
+    });
+  });
+}
+
+export function isolatedChildEnvironment(
+  runtimeEnv: Readonly<Record<string, string>>,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  const allowedSearcherKeys: string[] = [];
+  for (const key of [
+    "PATH",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "LANG",
+    "LC_ALL",
+    "TZ",
+  ]) {
+    if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
+  for (const [key, value] of Object.entries(runtimeEnv)) {
+    const upper = key.toUpperCase();
+    if (
+      upper.startsWith("AB_") ||
+      upper.startsWith("HUNT_") ||
+      upper.includes("EXPECTED") ||
+      upper.includes("TARGET") ||
+      upper.includes("WINNER") ||
+      upper.includes("REFERENCE")
+    ) {
+      continue;
+    }
+    env[key] = value;
+    if (/^SEARCHER_[A-Z0-9_]+$/.test(key)) {
+      allowedSearcherKeys.push(key);
+    }
+  }
+  env.PRODUCTION_REPLAY_ALLOWED_SEARCHER_CONFIG_KEYS =
+    [...new Set(allowedSearcherKeys)].sort().join(",");
+  env.SEARCHER_TEST_DISABLE_DOTENV = "1";
+  return env;
+}
+
+export function assertTargetAbsentFromProcessInput(
+  targetTxHash: string,
+  args: readonly string[],
+  env: Readonly<Record<string, string>>,
+  label: string,
+): void {
+  const needle = targetTxHash.toLowerCase();
+  if (
+    args.some((entry) => entry.toLowerCase().includes(needle)) ||
+    Object.entries(env).some(([key, value]) =>
+      key.toLowerCase().includes(needle) ||
+      value.toLowerCase().includes(needle))
+  ) {
+    throw new Error(`${label} process input contains target transaction`);
+  }
+}
+
+export function sealArtifact(
+  pendingPath: string,
+  sealedPath: string,
+): string {
+  if (resolve(pendingPath) === resolve(sealedPath) ||
+      resolve(pendingPath, "..") !== resolve(sealedPath, "..")) {
+    throw new Error("artifact seal requires distinct same-directory paths");
+  }
+  const pendingFd = openSync(pendingPath, "r");
+  try {
+    fsyncSync(pendingFd);
+  } finally {
+    closeSync(pendingFd);
+  }
+  renameSync(pendingPath, sealedPath);
+  chmodSync(sealedPath, 0o400);
+  const directoryFd = openSync(resolve(sealedPath, ".."), "r");
+  try {
+    fsyncSync(directoryFd);
+  } finally {
+    closeSync(directoryFd);
+  }
+  return sha256(readFileSync(sealedPath));
+}
+
+export function assertFrozenArtifactsUnchanged(
+  artifacts: readonly { path: string; sha256: string }[],
+): void {
+  for (const artifact of artifacts) {
+    if (sha256(readFileSync(artifact.path)) !== artifact.sha256) {
+      throw new Error(
+        `frozen artifact mutated during verification: ${artifact.path}`,
+      );
+    }
+  }
+}
+
+export function hideTrustedReferencesFromProducerWorktree(
+  worktree: string,
+): void {
+  const references = resolve(
+    worktree,
+    "docs/research/references/production-routes",
+  );
+  rmSync(references, { recursive: true, force: true });
+  if (existsSync(references)) {
+    throw new Error("target-blind producer worktree still exposes references");
+  }
+}
+
+function writeReadOnlyInput(path: string, bytes: Buffer): void {
+  writeFileSync(path, bytes, { mode: 0o400, flag: "wx" });
+  const fd = openSync(path, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+async function allocatePort(): Promise<number> {
+  return await new Promise<number>((done, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() =>
+          reject(new Error("could not allocate loopback port")));
+        return;
+      }
+      server.close((error) =>
+        error ? reject(error) : done(address.port));
     });
   });
 }
@@ -658,6 +1224,7 @@ function parseRaw(
   bytes: Buffer,
   request: SixStepValidationRequest,
   runner: ProductionRunnerConfig,
+  expectedExplicitInputBindings: ProducerExplicitInputBindings,
 ): RawReplay {
   const raw = JSON.parse(bytes.toString()) as RawReplay;
   if (raw.schemaVersion !== 5 ||
@@ -676,13 +1243,17 @@ function parseRaw(
   if (!record(raw.executionEvidence)) {
     throw new Error("producer execution evidence report is missing");
   }
-  const expected = {
-    ...runner,
-    basePassBudgetMs: runner.passBudgetMs,
-    passBudgetMs: productionPassBudgetMs(
-      runner, raw.producerOutput.fullGraph.edgeCount,
-    ),
-  };
+  assertProducerExplicitInputBindings(
+    raw.inputs?.explicitInputBindings,
+    expectedExplicitInputBindings,
+  );
+  assertCompleteNaturalScan(raw);
+  if (raw.discovery?.evaluationComplete !== true) {
+    throw new Error(
+      "producer scanner evaluation is incomplete",
+    );
+  }
+  const expected = expectedRunnerEvidence(raw, runner);
   if (stableJson(raw.actualRunnerConfig) !== stableJson(expected)) {
     throw new Error("producer did not use exact production caps");
   }
@@ -707,10 +1278,238 @@ function parseRaw(
   const routeHash = semanticJsonSha256(
     raw.selected.route.map(normalizeEdge) as SemanticJson,
   );
-  if (raw.selected.routeSha256 !== routeHash) {
+  if (
+    raw.selected.routeSha256 !== routeHash ||
+    raw.reference.targetInputVerified !== true ||
+    raw.reference.trustedRouteSha256 !== routeHash ||
+    raw.reference.frozenHuntArtifactSha256 !==
+      raw.producerOutput.frozenHuntArtifact.sha256 ||
+    typeof raw.reference.targetInputSha256 !== "string" ||
+    !SHA256.test(raw.reference.targetInputSha256) ||
+    typeof raw.reference.trustedReferenceArtifactSha256 !== "string" ||
+    !SHA256.test(raw.reference.trustedReferenceArtifactSha256)
+  ) {
     throw new Error("selected route hash is invalid");
   }
+  const first = raw.selected.route[0];
+  const last = raw.selected.route.at(-1);
+  if (
+    !first ||
+    !last ||
+    first.tokenIn.toLowerCase() !== last.tokenOut.toLowerCase() ||
+    raw.selected.profitToken.toLowerCase() !== first.tokenIn.toLowerCase()
+  ) {
+    throw new Error("selected route does not close in the profit token");
+  }
   return raw;
+}
+
+function parseBaselineRouteOutcome(
+  bytes: Buffer,
+  request: SixStepValidationRequest,
+  runner: ProductionRunnerConfig,
+  expected: {
+    baselineCommit: string;
+    producerArtifactSha256: string;
+    trustedReferenceArtifactSha256: string;
+    targetRouteSha256: string;
+    explicitInputBindings: ProducerExplicitInputBindings;
+  },
+): BaselineRouteOutcome {
+  const raw = JSON.parse(bytes.toString()) as RawReplay;
+  assertProducerExplicitInputBindings(
+    raw.inputs?.explicitInputBindings,
+    expected.explicitInputBindings,
+  );
+  assertCompleteNaturalScan(raw);
+  if (
+    raw.schemaVersion !== 5 ||
+    raw.evidenceClass !== "candidate-authored-diagnostic" ||
+    raw.trustedAcceptance !== false ||
+    raw.laneCoverage !== "parent-block-blockscan" ||
+    raw.triggerTx !== null ||
+    raw.stateAnchor?.kind !== "parent-block" ||
+    raw.winnerTx !== request.sample_tx_hash ||
+    raw.inputs?.explicitRouteInjected !== false ||
+    raw.inputs?.explicitAmountInjected !== false ||
+    raw.inputs?.explicitRouteInputs?.length !== 0 ||
+    raw.inputs?.explicitAmountInputs?.length !== 0 ||
+    raw.inputs?.amountSource !== "solver" ||
+    raw.discovery?.evaluationComplete !== true ||
+    stableJson(raw.actualRunnerConfig) !==
+      stableJson(expectedRunnerEvidence(raw, runner)) ||
+    raw.reference?.trustedReferenceArtifactSha256 !==
+      expected.trustedReferenceArtifactSha256 ||
+    raw.reference?.targetInputVerified !== true ||
+    raw.reference?.trustedRouteSha256 !== expected.targetRouteSha256 ||
+    !SHA256.test(String(raw.producerOutput?.naturalRouteSet?.sha256 ?? "")) ||
+    !SHA256.test(String(raw.producerOutput?.materializedGraph?.sha256 ?? ""))
+  ) {
+    throw new Error("baseline replay identity/config binding is invalid");
+  }
+  const exactCycle =
+    raw.reference.exactCycleMatched === true &&
+    raw.reference.cycleCandidates === 1;
+  const solver = raw.stages?.solver === "pass";
+  const finalSim = raw.stages?.finalSim === "pass";
+  const ev = raw.stages?.ev === "allow";
+  if (
+    (solver && !exactCycle) ||
+    (finalSim && !solver) ||
+    (ev && !finalSim)
+  ) {
+    throw new Error("baseline replay stages are not monotonic");
+  }
+  const highestPassedStep = ev
+    ? 6
+    : finalSim
+    ? 5
+    : solver
+    ? 4
+    : exactCycle
+    ? 2
+    : 0;
+  if (highestPassedStep === 6) {
+    throw new Error(
+      "rollback baseline already passes the target route through final EV",
+    );
+  }
+  if (solver || finalSim) {
+    throw new Error(
+      "rollback failure after natural solve lacks a typed deterministic " +
+        "domain witness",
+    );
+  }
+  if (typeof raw.failure !== "string" || raw.failure.length === 0) {
+    throw new Error("baseline replay failure is not recorded");
+  }
+  const firstUnpassedStep = highestPassedStep + 1;
+  return Object.freeze({
+    baseline_commit: expected.baselineCommit,
+    target_route_sha256: expected.targetRouteSha256,
+    highest_passed_step: highestPassedStep,
+    first_unpassed_step: firstUnpassedStep,
+    raw_producer_receipt_sha256: sha256(bytes),
+    target_blind_producer_artifact_sha256:
+      expected.producerArtifactSha256,
+    natural_route_set_sha256:
+      raw.producerOutput.naturalRouteSet.sha256,
+    materialized_graph_sha256:
+      raw.producerOutput.materializedGraph.sha256,
+    failure_sha256: sha256(Buffer.from(raw.failure)),
+  });
+}
+
+function assertCompleteNaturalScan(raw: RawReplay): void {
+  const scan = raw.producerOutput?.scanCompleteness;
+  if (!record(scan)) {
+    throw new Error(
+      "producer scanner output is budget-censored or incomplete",
+    );
+  }
+  exactKeys(scan, [
+    "outcome",
+    "rankComplete",
+    "refinementDeadlineHit",
+    "evaluationComplete",
+    "enumeratedCount",
+    "selectedCount",
+    "forcedSelectionCount",
+    "scannedPairs",
+  ], "producer scan completeness");
+  if (
+    scan.outcome !== "ran" ||
+    scan.rankComplete !== true ||
+    scan.refinementDeadlineHit !== false ||
+    scan.evaluationComplete !== true ||
+    !Number.isSafeInteger(scan.enumeratedCount) ||
+    Number(scan.enumeratedCount) < 0 ||
+    !Number.isSafeInteger(scan.selectedCount) ||
+    Number(scan.selectedCount) < 0 ||
+    Number(scan.selectedCount) > Number(scan.enumeratedCount) ||
+    scan.forcedSelectionCount !== 0 ||
+    !Number.isSafeInteger(scan.scannedPairs) ||
+    Number(scan.scannedPairs) < 0
+  ) {
+    throw new Error(
+      "producer scanner output is budget-censored or incomplete",
+    );
+  }
+}
+
+export function expectedProducerExplicitInputBindings(input: {
+  universeSha256: string;
+  universeManifestSha256: string;
+  runtimeJsonInputs: readonly {
+    key: string;
+    sha256: string;
+  }[];
+}): ProducerExplicitInputBindings {
+  if (
+    !SHA256.test(input.universeSha256) ||
+    !SHA256.test(input.universeManifestSha256)
+  ) {
+    throw new Error("expected producer input hash is invalid");
+  }
+  const runtimeJsonInputs = input.runtimeJsonInputs
+    .map(({ key, sha256: digest }) => ({ key, sha256: digest }))
+    .sort((left, right) => left.key.localeCompare(right.key));
+  if (
+    new Set(runtimeJsonInputs.map((item) => item.key)).size !==
+      runtimeJsonInputs.length ||
+    runtimeJsonInputs.some((item) =>
+      !/^SEARCHER_[A-Z0-9_]+$/.test(item.key) ||
+      !SHA256.test(item.sha256)
+    )
+  ) {
+    throw new Error("expected runtime JSON input binding is invalid");
+  }
+  const payload = {
+    universeSha256: input.universeSha256,
+    universeManifestSha256: input.universeManifestSha256,
+    runtimeJsonInputs,
+  };
+  return {
+    ...payload,
+    sha256: semanticJsonSha256(payload as unknown as SemanticJson),
+  };
+}
+
+export function assertProducerExplicitInputBindings(
+  value: unknown,
+  expected: ProducerExplicitInputBindings,
+): void {
+  if (!record(value)) {
+    throw new Error("producer explicit input binding is missing");
+  }
+  exactKeys(value, [
+    "universeSha256",
+    "universeManifestSha256",
+    "runtimeJsonInputs",
+    "sha256",
+  ], "producer explicit input binding");
+  if (
+    stableJson(value) !== stableJson(expected)
+  ) {
+    throw new Error(
+      "producer did not consume the frozen universe/manifest/runtime inputs",
+    );
+  }
+}
+
+function expectedRunnerEvidence(
+  raw: RawReplay,
+  runner: ProductionRunnerConfig,
+): Record<string, number> {
+  const edgeCount = raw.producerOutput?.fullGraph?.edgeCount;
+  if (!Number.isSafeInteger(edgeCount) || edgeCount < 0) {
+    throw new Error("producer full graph edge count is invalid");
+  }
+  return {
+    ...runner,
+    basePassBudgetMs: runner.passBudgetMs,
+    passBudgetMs: productionPassBudgetMs(runner, edgeCount),
+  };
 }
 
 export function assertPendingExecutionEvidence(
@@ -872,8 +1671,48 @@ function loadReview(
   if (review.diff_sha256 !== sha256(patch.stdout)) {
     throw new Error("review does not bind exact candidate patch");
   }
-  ancestor(cwd, tip, review.reviewed_merge_commit);
+  const parents = gitOut(cwd, [
+    "show", "-s", "--format=%P", review.reviewed_merge_commit,
+  ]).split(/\s+/).filter(Boolean);
+  if (
+    parents.length !== 2 ||
+    parents[0] !== review.integration_base_commit ||
+    parents[1] !== tip
+  ) {
+    throw new Error(
+      "reviewed merge must have integration base first and exact candidate second",
+    );
+  }
+  ancestor(cwd, request.rollback_commit, review.integration_base_commit);
   ancestor(cwd, review.reviewed_merge_commit, main);
+  const mergePatch = git(cwd, [
+    "diff", "--binary", "--full-index",
+    `${review.integration_base_commit}..${review.reviewed_merge_commit}`,
+  ]);
+  const candidateTreeDelta = git(cwd, [
+    "diff", "--binary", "--full-index",
+    `${tip}..${review.reviewed_merge_commit}`,
+  ]);
+  if (
+    review.merge_patch_sha256 !== sha256(mergePatch.stdout) ||
+    review.candidate_tree_delta_sha256 !==
+      sha256(candidateTreeDelta.stdout)
+  ) {
+    throw new Error("review does not bind actual merge trees");
+  }
+  const integrationPaths = new Set(changedPaths(
+    cwd,
+    request.rollback_commit,
+    review.integration_base_commit,
+  ));
+  const overlapPaths = changedPaths(
+    cwd,
+    request.rollback_commit,
+    tip,
+  ).filter((path) => integrationPaths.has(path));
+  if (stableJson(review.overlap_paths) !== stableJson(overlapPaths)) {
+    throw new Error("review does not bind exact integration overlap paths");
+  }
   const changed = gitOut(cwd, [
     "diff", "--name-only", `${review.reviewed_merge_commit}..${main}`,
   ]).split(/\r?\n/).filter(Boolean);
@@ -892,47 +1731,68 @@ function loadReview(
   return { review, bytes, path: request.review_artifact_path, commit: main };
 }
 
-function classifyDiff(
+function evaluateDeployedMergeBoundary(input: {
+  cwd: string;
+  temp: string;
+  review: ReviewArtifact;
+}): AdapterFamilyBoundaryResult {
+  let baseWorktree: string | null = null;
+  let mergeWorktree: string | null = null;
+  try {
+    baseWorktree = createWorktree(
+      input.cwd,
+      input.temp,
+      input.review.integration_base_commit,
+      "merge-boundary-base",
+    );
+    const baseManifest = loadFamilyManifest(baseWorktree);
+    git(input.cwd, ["worktree", "remove", "--force", baseWorktree]);
+    baseWorktree = null;
+    mergeWorktree = createWorktree(
+      input.cwd,
+      input.temp,
+      input.review.reviewed_merge_commit,
+      "merge-boundary-deployed",
+    );
+    hideTrustedReferencesFromProducerWorktree(mergeWorktree);
+    const candidateManifest = loadFamilyManifest(mergeWorktree);
+    return evaluateAdapterFamilyBoundary({
+      baseCommit: input.review.integration_base_commit,
+      candidateCommit: input.review.reviewed_merge_commit,
+      changedPaths: changedPaths(
+        input.cwd,
+        input.review.integration_base_commit,
+        input.review.reviewed_merge_commit,
+      ),
+      baseManifest,
+      candidateManifest,
+      sourceAt: (commit, path) =>
+        gitShowOptional(input.cwd, commit, path),
+    });
+  } finally {
+    if (baseWorktree) {
+      git(input.cwd, ["worktree", "remove", "--force", baseWorktree]);
+    }
+    if (mergeWorktree) {
+      git(input.cwd, ["worktree", "remove", "--force", mergeWorktree]);
+    }
+  }
+}
+
+function changedPaths(
   cwd: string,
   base: string,
-  candidate: string,
-  manifest: FamilyOwnershipManifest,
-): { diffClass: "family_local" | "framework"; impacted: string[];
-  otherBaseline: string; otherCandidate: string } {
-  const changed = gitOut(cwd, ["diff", "--name-only", `${base}..${candidate}`])
-    .split(/\r?\n/).filter(isRuntimeFile);
-  const impacted = manifest.families.filter((family) =>
-    family.source_files.some((file) => changed.includes(`listener/${file}`)))
-    .map((family) => family.id).sort();
-  const owned = new Set(manifest.families
-    .filter((family) => impacted.includes(family.id))
-    .flatMap((family) => family.source_files.map((file) => `listener/${file}`)));
-  let framework = impacted.length === 0 ||
-    changed.some((file) => !owned.has(file) &&
-      file !== REGISTRY && file !== ACTION_INDEX);
-  for (const [file, kind] of [
-    [REGISTRY, "production-registry"], [ACTION_INDEX, "action-index"],
-  ] as const) {
-    if (changed.includes(file) &&
-        familyOwnershipSourceSkeletonSha256(kind,
-          gitOut(cwd, ["show", `${base}:${file}`])) !==
-        familyOwnershipSourceSkeletonSha256(kind,
-          gitOut(cwd, ["show", `${candidate}:${file}`]))) framework = true;
+  head: string,
+): string[] {
+  const result = git(cwd, [
+    "diff", "--name-only", `${base}..${head}`,
+  ]);
+  if (result.status !== 0) {
+    throw new Error(result.stderr || "git diff --name-only failed");
   }
-  const otherFiles = [...new Set(manifest.families
-    .filter((family) => !impacted.includes(family.id))
-    .flatMap((family) => family.source_files.map((file) => `listener/${file}`)))]
-    .sort();
-  const closure = (commit: string): string => semanticJsonSha256(otherFiles.map(
-    (file) => ({ file, sha256: sha256(gitOut(cwd, ["show", `${commit}:${file}`])) }),
-  ) as SemanticJson);
-  const otherBaseline = closure(base);
-  const otherCandidate = closure(candidate);
-  if (otherBaseline !== otherCandidate) framework = true;
-  return {
-    diffClass: framework ? "framework" : "family_local",
-    impacted, otherBaseline, otherCandidate,
-  };
+  return [...new Set(
+    result.stdout.split(/\r?\n/).filter(Boolean),
+  )].sort();
 }
 
 function routeFamilies(
@@ -941,10 +1801,7 @@ function routeFamilies(
 ): string[] {
   const result = new Set<string>();
   for (const edge of route) {
-    const matches = manifest.families.filter((family) =>
-      family.pool_adapter_ids.includes(edge.adapterId) ||
-      family.edge_adapter_ids.includes(edge.adapterId) ||
-      family.owned_action_adapter_ids.includes(edge.adapterId));
+    const matches = routeFamilyEntries(edge, manifest);
     if (matches.length !== 1) {
       throw new Error(`route adapter ${edge.adapterId} has ${matches.length} owners`);
     }
@@ -953,7 +1810,155 @@ function routeFamilies(
   return [...result].sort();
 }
 
-function assertShardCompleteness(raw: RawReplay, required: string[]): void {
+function routeFamilyEntries(
+  edge: RouteEdge,
+  manifest: FamilyOwnershipManifest,
+): FamilyOwnershipManifest["families"][number][] {
+  return manifest.families.filter((family) =>
+    family.edge_adapter_ids.includes(edge.adapterId));
+}
+
+export function assertImpactedFamilyParticipates(
+  impactedFamilyIds: readonly string[],
+  requiredFamilyIds: readonly string[],
+): void {
+  if (
+    impactedFamilyIds.length !== 1 ||
+    impactedFamilyIds.some((familyId) =>
+      !requiredFamilyIds.includes(familyId))
+  ) {
+    throw new Error(
+      "family-local candidate is not exercised by the selected route",
+    );
+  }
+}
+
+export function assertRouteExecutionOwnership(
+  selected: RawReplay["selected"],
+  route: RouteEdge[],
+  manifest: FamilyOwnershipManifest,
+): void {
+  if (
+    !record(selected) ||
+    !Array.isArray(selected.executionSurfaces) ||
+    selected.executionSurfaces.length !== route.length ||
+    !Array.isArray(selected.supportActionAdapterIds) ||
+    !Array.isArray(selected.supportExecutionCalls) ||
+    typeof selected.fundingActionId !== "string"
+  ) {
+    throw new Error("selected route execution ownership evidence is missing");
+  }
+  const actionOwner = (actionAdapterId: string): string | null => {
+    const owners = manifest.families.filter((family) =>
+      family.owned_action_adapter_ids.includes(actionAdapterId));
+    if (owners.length > 1) {
+      throw new Error(
+        `ActionAdapter ${actionAdapterId} has ${owners.length} owners`,
+      );
+    }
+    return owners[0]?.id ?? null;
+  };
+  const fundingOwner = actionOwner(selected.fundingActionId);
+  const fundingFamily = manifest.families.find(
+    (family) =>
+      family.id === fundingOwner &&
+      family.kind === "flash-loan",
+  );
+  if (!fundingFamily) {
+    throw new Error("selected funding ActionAdapter lacks one funding owner");
+  }
+  const routeFamiliesForSupport =
+    new Map<string, FamilyOwnershipManifest["families"][number]>();
+  for (let index = 0; index < route.length; index++) {
+    const edge = route[index];
+    const families = routeFamilyEntries(edge, manifest);
+    if (families.length !== 1) {
+      throw new Error(
+        `route adapter ${edge.adapterId} has ${families.length} owners`,
+      );
+    }
+    const family = families[0];
+    routeFamiliesForSupport.set(family.id, family);
+    const surface = selected.executionSurfaces[index] as
+      Record<string, unknown>;
+    if (
+      !record(surface) ||
+      surface.adapterId !== edge.adapterId ||
+      surface.familyId !== family.id ||
+      typeof surface.rootActionAdapterId !== "string" ||
+      actionOwner(surface.rootActionAdapterId) !== family.id ||
+      !Array.isArray(surface.subtreeActionAdapterIds) ||
+      surface.subtreeActionAdapterIds.length === 0 ||
+      surface.subtreeActionAdapterIds[0] !==
+        surface.rootActionAdapterId ||
+      !Array.isArray(surface.actionCalls)
+    ) {
+      throw new Error(
+        `route leg ${index + 1} lacks a family-owned execution root`,
+      );
+    }
+    for (const actionAdapterId of surface.subtreeActionAdapterIds) {
+      if (typeof actionAdapterId !== "string") {
+        throw new Error("route subtree action identity is malformed");
+      }
+      const owner = actionOwner(actionAdapterId);
+      if (
+        owner !== family.id &&
+        (
+          owner !== null ||
+          !family.required_action_adapter_ids.includes(actionAdapterId)
+        )
+      ) {
+        throw new Error(
+          `route leg ${index + 1} uses foreign action ${actionAdapterId}`,
+        );
+      }
+    }
+    for (const call of surface.actionCalls) {
+      if (
+        !record(call) ||
+        typeof call.actionAdapterId !== "string" ||
+        !surface.subtreeActionAdapterIds.includes(call.actionAdapterId)
+      ) {
+        throw new Error("route execution call is outside its subtree");
+      }
+    }
+  }
+  const allowedSupport = new Set([
+    ...fundingFamily.required_action_adapter_ids,
+    ...[...routeFamiliesForSupport.values()].flatMap(
+      (family) => family.required_action_adapter_ids,
+    ),
+  ]);
+  for (const actionAdapterId of selected.supportActionAdapterIds) {
+    if (
+      typeof actionAdapterId !== "string" ||
+      actionOwner(actionAdapterId) !== null ||
+      !allowedSupport.has(actionAdapterId)
+    ) {
+      throw new Error(
+        `selected plan has undeclared support action ${String(actionAdapterId)}`,
+      );
+    }
+  }
+  for (const call of selected.supportExecutionCalls) {
+    if (
+      !record(call) ||
+      typeof call.actionAdapterId !== "string" ||
+      !selected.supportActionAdapterIds.includes(call.actionAdapterId)
+    ) {
+      throw new Error(
+        "support execution call is outside the declared support closure",
+      );
+    }
+  }
+}
+
+export function assertShardCompleteness(
+  raw: RawReplay,
+  required: string[],
+  manifest: FamilyOwnershipManifest,
+): void {
   const proof = raw.discovery.shardCompleteness;
   if (stableJson([...proof.requiredFamilyIds].sort()) !== stableJson(required)) {
     throw new Error("shard proof does not bind route families");
@@ -965,11 +1970,33 @@ function assertShardCompleteness(raw: RawReplay, required: string[]): void {
         shard.sourceCoverage.some((source: any) => !source.complete)) {
       throw new Error(`required family ${family} lacks a complete shard`);
     }
+    if (shard.sourceKind === "dynamic-discovery") {
+      const owned = manifest.families.find((entry) => entry.id === family);
+      if (!owned) {
+        throw new Error(`required family ${family} is absent from manifest`);
+      }
+      const expectedSources = [...owned.candidate_source_ids].sort();
+      const actualSources = (shard.sourceCoverage as Array<{
+        sourceId: string;
+      }>).map((source) => source.sourceId).sort();
+      if (
+        stableJson(expectedSources) !== stableJson(actualSources)
+      ) {
+        throw new Error(
+          `required family ${family} source coverage is not exact`,
+        );
+      }
+    }
   }
 }
 
-function createWorktree(cwd: string, temp: string, commit: string): string {
-  const target = resolve(temp, "runtime");
+function createWorktree(
+  cwd: string,
+  temp: string,
+  commit: string,
+  name = "runtime",
+): string {
+  const target = resolve(temp, name);
   const added = git(cwd, ["worktree", "add", "--detach", target, commit]);
   if (added.status !== 0) throw new Error(added.stderr || "worktree add failed");
   for (const path of ["analysis/node_modules", "listener/node_modules"]) {
@@ -983,10 +2010,33 @@ function createWorktree(cwd: string, temp: string, commit: string): string {
   return target;
 }
 
+function gitShowOptional(
+  cwd: string,
+  commit: string,
+  path: string,
+): string | null {
+  const shown = git(cwd, ["show", `${commit}:${path}`]);
+  return shown.status === 0 ? shown.stdout : null;
+}
+
 function loadFamilyManifest(cwd: string): FamilyOwnershipManifest {
+  const env: NodeJS.ProcessEnv = {
+    SEARCHER_TEST_DISABLE_DOTENV: "1",
+  };
+  for (const key of [
+    "PATH",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "LANG",
+    "LC_ALL",
+    "TZ",
+  ]) {
+    if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
   const result = spawnSync(process.execPath, [
     "--import", TSX, resolve(cwd, MANIFEST), "--json",
-  ], { cwd, encoding: "utf8" });
+  ], { cwd, encoding: "utf8", env });
   if (result.status !== 0) throw new Error(result.stderr || "manifest failed");
   const prefix = "ADAPTER_FAMILY_OWNERSHIP_MANIFEST=";
   const line = result.stdout.split(/\r?\n/).find((entry) => entry.startsWith(prefix));
@@ -1123,8 +2173,13 @@ export function productionPassBudgetMs(
     ? config.largeGraphPassBudgetMs : config.passBudgetMs;
 }
 
-function parseRequest(value: unknown, cwd: string): SixStepValidationRequest {
-  if (!record(value) || value.schema_version !== 1 ||
+export function parseSixStepValidationRequest(
+  value: unknown,
+  cwd: string,
+): SixStepValidationRequest {
+  if (
+      !record(value) ||
+      value.schema_version !== SIX_STEP_VALIDATION_REQUEST_SCHEMA_VERSION ||
       value.request !== SIX_STEP_VALIDATION_REQUEST ||
       (value.mode !== "checkpoint" && value.mode !== "final") ||
       typeof value.branch !== "string" ||
@@ -1132,7 +2187,9 @@ function parseRequest(value: unknown, cwd: string): SixStepValidationRequest {
       typeof value.rollback_commit !== "string" ||
       !SHA40.test(value.rollback_commit) ||
       typeof value.sample_tx_hash !== "string" ||
-      !HASH32.test(value.sample_tx_hash)) {
+      !HASH32.test(value.sample_tx_hash) ||
+      typeof value.trusted_reference_path !== "string" ||
+      !trustedReferencePath(value.trusted_reference_path)) {
     throw new Error("validation request identity is invalid");
   }
   if (value.lane !== "block_scan_standing") {
@@ -1148,9 +2205,11 @@ function parseRequest(value: unknown, cwd: string): SixStepValidationRequest {
     throw new Error("only a positive outer wall_clock_timeout_ms may be overridden");
   }
   const common = {
-    schema_version: 1 as const, request: SIX_STEP_VALIDATION_REQUEST,
+    schema_version: SIX_STEP_VALIDATION_REQUEST_SCHEMA_VERSION,
+    request: SIX_STEP_VALIDATION_REQUEST,
     branch: value.branch, rollback_commit: value.rollback_commit,
     sample_tx_hash: value.sample_tx_hash, lane: "block_scan_standing" as const,
+    trusted_reference_path: value.trusted_reference_path,
     ...(overrides ? { runner_overrides: overrides } : {}),
   };
   if (value.mode === "checkpoint") {
@@ -1183,7 +2242,8 @@ function parseRequest(value: unknown, cwd: string): SixStepValidationRequest {
 }
 
 function parseFreezeRequest(value: unknown, cwd: string): SixStepInputFreezeRequest {
-  if (!record(value) || value.schema_version !== 1 ||
+  if (!record(value) ||
+      value.schema_version !== 1 ||
       value.request !== "trusted-six-step-input-freeze-request" ||
       value.lane !== "block_scan_standing" ||
       typeof value.sample_tx_hash !== "string" ||
@@ -1201,17 +2261,34 @@ function parseFreezeRequest(value: unknown, cwd: string): SixStepInputFreezeRequ
 }
 
 function parseReview(value: unknown): ReviewArtifact {
-  if (!record(value) || value.schema_version !== 1 ||
+  if (!record(value) || value.schema_version !== 2 ||
       value.artifact !== "six-step-independent-review" ||
       typeof value.reviewer_email !== "string" ||
       typeof value.rollback_commit !== "string" ||
       typeof value.reviewed_candidate_commit !== "string" ||
       typeof value.reviewed_merge_commit !== "string" ||
+      typeof value.integration_base_commit !== "string" ||
       typeof value.diff_sha256 !== "string" ||
+      typeof value.merge_patch_sha256 !== "string" ||
+      typeof value.candidate_tree_delta_sha256 !== "string" ||
+      !Array.isArray(value.overlap_paths) ||
+      value.overlap_paths.some((path) => typeof path !== "string") ||
       typeof value.reviewed_at !== "string" ||
       typeof value.evidence !== "string" || value.evidence.length < 20 ||
       value.verdict !== "pass") {
     throw new Error("independent review artifact is invalid");
+  }
+  if (
+    !SHA40.test(value.integration_base_commit) ||
+    !SHA40.test(value.reviewed_merge_commit) ||
+    !SHA256.test(value.diff_sha256) ||
+    !SHA256.test(value.merge_patch_sha256) ||
+    !SHA256.test(value.candidate_tree_delta_sha256) ||
+    stableJson(value.overlap_paths) !==
+      stableJson([...value.overlap_paths].sort()) ||
+    new Set(value.overlap_paths).size !== value.overlap_paths.length
+  ) {
+    throw new Error("independent review merge binding is invalid");
   }
   return value as unknown as ReviewArtifact;
 }
@@ -1238,13 +2315,13 @@ function universeFromBlock(bytes: Buffer): number {
   }
   return Number(value.fromBlock);
 }
-function isRuntimeFile(file: string): boolean {
-  return file.startsWith("listener/src/") && !file.includes("/test/") &&
-    !file.startsWith("listener/src/shared/evidence/");
-}
 function reportPath(value: string): boolean {
   return /^docs\/research\/reports\/[A-Za-z0-9._/-]+\.json$/.test(value) &&
     !value.includes("..");
+}
+function trustedReferencePath(value: string): boolean {
+  return /^docs\/research\/references\/production-routes\/[A-Za-z0-9._/-]+\.json$/
+    .test(value) && !value.includes("..");
 }
 function positive(env: Readonly<Record<string, string>>, key: string, fallback: number):
 number {

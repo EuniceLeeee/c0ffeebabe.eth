@@ -18,6 +18,7 @@ import {
 } from "../../shared/state/state-backend.js";
 import {
   createSemanticSixStepEvidence,
+  semanticJsonSha256,
   type SemanticJson,
   type SemanticSixStepStatus,
 } from "../../shared/evidence/semantic-six-step.js";
@@ -152,6 +153,11 @@ import {
   type FrozenPendingExecutionEvidence,
 } from "./production-replay-pending-evidence.js";
 import {
+  resolvedPlanExecutionEvidence,
+  type ResolvedActionExecutionSurface,
+  type ResolvedRouteExecutionSurface,
+} from "./route-execution-witness.js";
+import {
   createBlockScanExecutionAvailability,
   pendingEvidenceEdgeScopeKey,
   pendingEvidenceScopeKeys,
@@ -169,6 +175,8 @@ interface DiagnosticOptions {
 }
 
 const DIAGNOSTIC = parseDiagnosticArgs(process.argv.slice(2));
+const TARGET_BLIND_FREEZE =
+  process.env.SEARCHER_TARGET_BLIND_EVIDENCE === "1";
 const HUNT_PROTOCOL_CURSOR_SEMANTICS_VERSION =
   "family-source-contiguous-v3-hash-anchored";
 
@@ -251,7 +259,27 @@ interface SolveReport {
     gasUsed: string;
     netProfit: string;
     calldataHash: string;
+    rawCalldata?: string;
     revertReason: string | null;
+  };
+  frozenResult?: {
+    schemaVersion: 2;
+    executor: string;
+    routeSha256: string;
+    flashAmount: string;
+    quotedNetProfit: string;
+    profitToken: string;
+    rawCalldata: string;
+    calldataSha256: string;
+    resolvedPlanSha256: string;
+    fundingActionId: string;
+    executionSurfaces: readonly ResolvedRouteExecutionSurface[];
+    supportActionAdapterIds: readonly string[];
+    supportExecutionCalls: readonly ResolvedActionExecutionSurface[];
+    leavesStandingPosition: boolean;
+    requiredFamilyIds: string[];
+    shardCompleteness: ReturnType<typeof productionShardCompleteness>;
+    bindingSha256: string;
   };
   diagnosticEv?: {
     decision:
@@ -1344,8 +1372,10 @@ async function main(): Promise<void> {
         `edges=${protocolEdges.length}`,
     );
 
-    await check("graph has swap edges and protocol edges", () =>
-      edges.length > 0 && protocolEdges.length > 0,
+    // Production block-scan supports pure swap rings. Protocol edges are
+    // optional graph members, not an acceptance precondition.
+    await check("graph has routable swap edges", () =>
+      edges.some((edge) => edge.slotKind === "swap"),
     );
     let diagnosticExpectedEdges: TokenEdge[] | null = null;
     if (DIAGNOSTIC.enabled) {
@@ -1526,10 +1556,20 @@ async function main(): Promise<void> {
           `${prewarm.issues[0]?.message ?? "unknown"}`,
       );
     }
-    let passDeadlineAtMs = Date.now() + cfg.passBudgetMs;
+    const effectivePassBudgetMs = TARGET_BLIND_FREEZE &&
+        edges.length >= envInt(
+          "HUNT_LARGE_GRAPH_EDGE_THRESHOLD",
+          Number.MAX_SAFE_INTEGER,
+        )
+      ? Math.max(
+          cfg.passBudgetMs,
+          envInt("HUNT_LARGE_GRAPH_PASS_BUDGET_MS", cfg.passBudgetMs),
+        )
+      : cfg.passBudgetMs;
+    let passDeadlineAtMs = Date.now() + effectivePassBudgetMs;
     console.log(
       `[blockscan-hunt] budgets prewarm=${prewarmBudgetMs}ms ` +
-        `scan=${cfg.scanBudgetMs}ms pass=${cfg.passBudgetMs}ms`,
+        `scan=${cfg.scanBudgetMs}ms pass=${effectivePassBudgetMs}ms`,
     );
     const graphView = huntGraphView({
       edges,
@@ -1658,6 +1698,12 @@ async function main(): Promise<void> {
       edgeEligible: executionAvailability.edgeEligible,
       routeEligible: executionAvailability.routeEligible,
     });
+    if (TARGET_BLIND_FREEZE && coarseScan.outcome !== "ran") {
+      throw new Error(
+        "target-blind scanner rank is incomplete: " +
+          `${coarseScan.outcome}`,
+      );
+    }
     let diagnosticCoarseTarget: ExpectedReplayTarget | null = null;
     if (DIAGNOSTIC.enabled) {
       // Freeze production enumeration before running any expected-route
@@ -1779,7 +1825,23 @@ async function main(): Promise<void> {
         executionEvidence,
       },
     );
+    if (TARGET_BLIND_FREEZE && refinement.deadlineHit) {
+      throw new Error(
+        "target-blind scanner exact refinement is incomplete",
+      );
+    }
     const scan = { ...coarseScan, opportunities: refinement.opportunities };
+    const scanCompleteness = {
+      outcome: coarseScan.outcome,
+      rankComplete: coarseScan.outcome === "ran",
+      refinementDeadlineHit: refinement.deadlineHit,
+      evaluationComplete:
+        coarseScan.outcome === "ran" && !refinement.deadlineHit,
+      enumeratedCount: coarseScan.selection.enumeratedCount,
+      selectedCount: coarseScan.selection.selectedCount,
+      forcedSelectionCount: coarseScan.selection.forcedSelectionCount,
+      scannedPairs: coarseScan.scannedPairs,
+    };
     if (DIAGNOSTIC.enabled) {
       // Everything above this line is target-blind producer work. Freeze its
       // budget result before the verifier performs a target-specific exact
@@ -1907,6 +1969,8 @@ async function main(): Promise<void> {
       pricing.mids,
       solveIndexes,
       executionEvidence,
+      edges,
+      familySourceCoverageForEvidence,
     );
     await check("fork-solve top candidates recorded", () =>
       solvedReports.length === solveIndexes.length,
@@ -2084,14 +2148,26 @@ async function main(): Promise<void> {
       familyCoverageAssessment.globallyComplete,
     );
     const graphEvidence = canonicalEdgeSetEvidence(edges);
+    const materializedGraph = canonicalMaterializedGraphEvidence(
+      edges,
+      (edge) =>
+        PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id,
+    );
     const report = {
       stateBlock: cfg.blockNumber,
       universePools: universePools.length,
       graphPools: pools.length,
       edges: edges.length,
       edgeSetSha256: graphEvidence.sha256,
+      effectivePassBudgetMs,
+      scanCompleteness,
+      materializedGraph,
+      familySourceCoverage: familySourceCoverageForEvidence,
       pendingExecutionEvidenceArtifactSha256:
-        pendingEvidenceInput?.artifactSha256 ?? null,
+        pendingEvidenceInput?.artifactSha256 ??
+          (TARGET_BLIND_FREEZE
+            ? createHash("sha256").update("").digest("hex")
+            : null),
       maxHops: cfg.maxHops,
       protocolEdges: protocolEdges.length,
       protocolMids: pricing.mids.size,
@@ -2430,6 +2506,13 @@ async function solveSelected(
   mids: ReadonlyMap<string, ResolvedBlockScanMid>,
   opportunityIndexes: readonly number[],
   executionEvidence: readonly PendingExecutionEvidence[],
+  fullGraph: readonly TokenEdge[],
+  familySourceCoverage: readonly {
+    readonly familyId: string;
+    readonly sourceId: string;
+    readonly complete: boolean;
+    readonly issues: readonly string[];
+  }[],
 ): Promise<SolveReport[]> {
   if (opportunityIndexes.length === 0) return [];
 
@@ -2489,7 +2572,8 @@ async function solveSelected(
     } catch (err) {
       solveError = err instanceof Error ? err.message : String(err);
     }
-    if (DIAGNOSTIC.enabled && solved && solvedTokenPath) {
+    if ((DIAGNOSTIC.enabled || TARGET_BLIND_FREEZE) &&
+        solved && solvedTokenPath) {
       try {
         const propagated = await propagateAmountsWithRawOutputs(
           solvedTokenPath,
@@ -2521,6 +2605,9 @@ async function solveSelected(
         gasUsed: simulation.gasUsed.toString(),
         netProfit: simulation.netProfit.toString(),
         calldataHash: createHash("sha256").update(simulation.calldata).digest("hex"),
+        ...(TARGET_BLIND_FREEZE
+          ? { rawCalldata: simulation.calldata.toLowerCase() }
+          : {}),
         revertReason: simulation.revertReason ?? null,
       };
       resolvedPlanSha256 = diagnosticSimulation.calldataHash;
@@ -2598,6 +2685,71 @@ async function solveSelected(
         };
       }
     }
+    let frozenResult: SolveReport["frozenResult"];
+    if (
+      TARGET_BLIND_FREEZE &&
+      solved &&
+      diagnosticSimulation?.success &&
+      diagnosticSimulation.rawCalldata
+    ) {
+      const funding = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(
+        solved.root.adapterId,
+      );
+      if (!funding) {
+        throw new Error(
+          `target-blind result has no funding owner for ${solved.root.adapterId}`,
+        );
+      }
+      const planExecution = resolvedPlanExecutionEvidence(
+        opp.seedEdges,
+        solved.root,
+      );
+      if (
+        planExecution.fundingActionAdapterId !==
+          funding.funding.actionAdapterId
+      ) {
+        throw new Error("target-blind funding execution identity differs");
+      }
+      const core = {
+        schemaVersion: 2 as const,
+        executor: DEFAULT_SEARCHER_EXECUTOR.toLowerCase(),
+        routeSha256: semanticJsonSha256(
+          opportunityRoute(opp.seedEdges) as unknown as SemanticJson,
+        ),
+        flashAmount: solved.flashAmount.toString(),
+        quotedNetProfit: solved.netProfit.toString(),
+        profitToken: solved.profitToken.toLowerCase(),
+        rawCalldata: diagnosticSimulation.rawCalldata,
+        calldataSha256: diagnosticSimulation.calldataHash,
+        resolvedPlanSha256: createHash("sha256")
+          .update(compilePlan(solved.root, DEFAULT_SEARCHER_EXECUTOR))
+          .digest("hex"),
+        // This identifies the funding capability; the trusted rollback/main
+        // verifier resolves its liquidity holder from its own registry.
+        fundingActionId: funding.funding.actionAdapterId,
+        executionSurfaces: planExecution.routes,
+        supportActionAdapterIds: planExecution.supportActionAdapterIds,
+        supportExecutionCalls: planExecution.supportExecutionCalls,
+        leavesStandingPosition:
+          leavesStandingPosition ?? pathLeavesStandingPosition(opp.seedEdges),
+        requiredFamilyIds: [...new Set(opp.seedEdges.map((edge) =>
+          PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id
+        ))].sort(),
+        shardCompleteness: productionShardCompleteness({
+          edges: fullGraph,
+          familySourceCoverage,
+          requiredFamilyIds: [...new Set(opp.seedEdges.map((edge) =>
+            PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id
+          ))].sort(),
+        }),
+      };
+      frozenResult = {
+        ...core,
+        bindingSha256: semanticJsonSha256(
+          core as unknown as SemanticJson,
+        ),
+      };
+    }
     const report = {
       opportunityIndex,
       ring: ringTokens(opp.seedEdges),
@@ -2622,6 +2774,7 @@ async function solveSelected(
         : {}),
       ...(diagnosticSimulation ? { diagnosticSimulation } : {}),
       ...(diagnosticEv ? { diagnosticEv } : {}),
+      ...(frozenResult ? { frozenResult } : {}),
     };
     reports.push(report);
     console.log(
