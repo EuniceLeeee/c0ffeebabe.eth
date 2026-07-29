@@ -39,8 +39,12 @@ import {
 import type {
   LandedPoolMaterializationCapability,
   LandedPoolMaterializationContext,
-  LandedPoolMaterializationResult,
+  LandedPoolSharedIdentityCapability,
+  LandedPoolSharedIdentityProjection,
 } from "../landed-pool-discovery.js";
+import {
+  materializeSharedLandedPoolIdentity,
+} from "../landed-pool-shared-identity.js";
 import {
   ANGSTROM_MAINNET_ADAPTER,
   ANGSTROM_MAINNET_HOOK,
@@ -70,7 +74,7 @@ import {
   uniV4QuoterIface,
 } from "./univ4.js";
 import {
-  univ4PoolDiscovery,
+  univ4PoolIdentityMaterializer,
 } from "./univ4-pool-discovery.js";
 
 const ANGSTROM_POOL_ADAPTER = poolAdapterId("angstrom-v4");
@@ -82,7 +86,6 @@ const UINT128_MAX = (1n << 128n) - 1n;
 const UINT256_MAX = (1n << 256n) - 1n;
 const ANGSTROM_CONTROLLER_SLOT = 0n;
 const ANGSTROM_NODE_MAPPING_SLOT = 1n;
-const ERC1271_MAGIC_VALUE = "0x1626ba7e";
 
 const angstromHookStateIface = new ethers.Interface([
   // The deployed Angstrom hook defines this custom single-slot ABI. It does
@@ -91,9 +94,6 @@ const angstromHookStateIface = new ethers.Interface([
 ]);
 const angstromControllerIface = new ethers.Interface([
   "function ANGSTROM() view returns (address)",
-]);
-const erc1271Iface = new ethers.Interface([
-  "function isValidSignature(bytes32 hash,bytes signature) view returns (bytes4 magicValue)",
 ]);
 
 const angstromEmitter = singletonIndexedBytes32Emitter(
@@ -115,62 +115,62 @@ const angstromLandedEvents = defineSwapLandedEvents({
   mutations: [],
 });
 
-/**
- * Reuse the mature V4 PoolKey resolver, then keep only instances whose
- * immutable hook address identifies the Angstrom execution semantics. The
- * wrapper translates retained/retry rows only for the duration of the shared
- * resolver; the published row is owned by this family and has its own logical
- * instance identity.
- */
+function asUniV4IdentityPool(pool: PoolEntry): PoolEntry {
+  return {
+    ...pool,
+    adapter: "univ4",
+    venueId: "univ4",
+    identitySource: "v4-manager",
+    discoveryOwnerAdapterId: undefined,
+  };
+}
+
+function fromUniV4IdentityPool(pool: PoolEntry): PoolEntry {
+  return {
+    ...pool,
+    adapter: ANGSTROM_POOL_ADAPTER,
+    venueId: ANGSTROM_VENUE_ID,
+    identitySource: ANGSTROM_IDENTITY_SOURCE,
+    logicalInstanceId: pool.poolId,
+    discoveryOwnerAdapterId: undefined,
+  };
+}
+
+const angstromPoolIdentityProjection = Object.freeze({
+  version: "angstrom-v4-poolkey-projection-v1",
+  toIdentityPool(pool: PoolEntry): PoolEntry | null {
+    return pool.adapter === ANGSTROM_POOL_ADAPTER
+      ? asUniV4IdentityPool(pool)
+      : null;
+  },
+  projectPool(pool: PoolEntry): PoolEntry | null {
+    return sameAddress(pool.hooks, ANGSTROM_MAINNET_HOOK)
+      ? fromUniV4IdentityPool(pool)
+      : null;
+  },
+  projectRetry(pool: PoolEntry): PoolEntry {
+    return {
+      ...fromUniV4IdentityPool(pool),
+      source: "landed-event-retry:angstrom-v4-swap",
+    } as PoolEntry;
+  },
+} satisfies LandedPoolSharedIdentityProjection);
+
+const angstromSharedPoolIdentity = Object.freeze({
+  materializer: univ4PoolIdentityMaterializer,
+  projection: angstromPoolIdentityProjection,
+} satisfies LandedPoolSharedIdentityCapability);
+
 const angstromPoolDiscovery = Object.freeze({
   version: "angstrom-v4-poolkey-materializer-v1",
   eventIds: ["angstrom-v4-swap"],
   consumesOpaqueRetries: true,
-  async materialize(
-    context: LandedPoolMaterializationContext,
-  ): Promise<LandedPoolMaterializationResult> {
-    const asUniV4 = (pool: PoolEntry): PoolEntry => ({
-      ...pool,
-      adapter: "univ4",
-      venueId: "univ4",
-      identitySource: "v4-manager",
-      discoveryOwnerAdapterId: undefined,
-    });
-    const fromUniV4 = (pool: PoolEntry): PoolEntry => ({
-      ...pool,
-      adapter: ANGSTROM_POOL_ADAPTER,
-      venueId: ANGSTROM_VENUE_ID,
-      identitySource: ANGSTROM_IDENTITY_SOURCE,
-      logicalInstanceId: pool.poolId,
-      discoveryOwnerAdapterId: undefined,
-    });
-    const retained = context.retainedPools
-      .filter((pool) => pool.adapter === ANGSTROM_POOL_ADAPTER)
-      .map(asUniV4);
-    const retryable = context.retryablePools
-      .filter((pool) => pool.adapter === ANGSTROM_POOL_ADAPTER)
-      .map(asUniV4);
-    const base = await univ4PoolDiscovery.materialize({
-      ...context,
-      retainedPools: retained,
-      retryablePools: retryable,
-      isKnownPool: (pool) => context.isKnownPool(fromUniV4(pool)),
-    });
-    const pools = base.pools
-      .filter((pool) => sameAddress(pool.hooks, ANGSTROM_MAINNET_HOOK))
-      .map(fromUniV4);
-    return Object.freeze({
-      pools: Object.freeze(pools),
-      complete: base.complete,
-      issues: Object.freeze([...(base.issues ?? [])]),
-      ...(base.retryablePools === undefined
-        ? {}
-        : {
-            retryablePools: Object.freeze(
-              base.retryablePools.map(fromUniV4),
-            ),
-          }),
-    });
+  sharedIdentity: angstromSharedPoolIdentity,
+  materialize(context: LandedPoolMaterializationContext) {
+    return materializeSharedLandedPoolIdentity(
+      angstromSharedPoolIdentity,
+      context,
+    );
   },
 } satisfies LandedPoolMaterializationCapability);
 
@@ -832,17 +832,6 @@ async function verifyCurrentAngstromAttestations(
     ),
     allowFailure: true,
   }));
-  for (const candidate of candidates) {
-    items.push({
-      label: angstromSignatureProofLabel(candidate),
-      target: candidate.validator,
-      callData: erc1271Iface.encodeFunctionData(
-        "isValidSignature",
-        [candidate.digest, candidate.signature],
-      ),
-      allowFailure: true,
-    });
-  }
   const proofRaw = await context.call({
     to: BLOCKSCAN_MULTICALL3,
     data: encodeMulticall(items),
@@ -877,20 +866,14 @@ async function verifyCurrentAngstromAttestations(
   const verified: VerifiedAngstromAttestation[] = [];
   for (const candidate of candidates) {
     if (!authorized.has(candidate.validator.toLowerCase())) continue;
-    const contractResult = proofs.get(
-      angstromSignatureProofLabel(candidate),
-    );
-    const erc1271Valid = Boolean(
-      contractResult?.success &&
-      ethers.isHexString(contractResult.returnData) &&
-      ethers.dataLength(contractResult.returnData) >= 4 &&
-      ethers.dataSlice(contractResult.returnData, 0, 4).toLowerCase() ===
-        ERC1271_MAGIC_VALUE,
-    );
-    if (!candidate.eoaSignatureValid && !erc1271Valid) continue;
+    // SignatureChecker invokes ERC-1271 from the canonical Hook. A generic
+    // eth_call or Multicall changes msg.sender and is therefore not equivalent
+    // for caller-sensitive contract validators. Until the evidence transport
+    // can simulate the Hook caller exactly, contract nodes fail closed.
+    if (!candidate.eoaSignatureValid) continue;
     verified.push(Object.freeze({
       ...candidate,
-      verification: erc1271Valid ? "erc1271" : "eoa",
+      verification: "eoa",
     }));
   }
   return Object.freeze(verified);
@@ -907,12 +890,6 @@ function angstromNodeMappingStorageSlot(validator: string): bigint {
 
 function angstromNodeProofLabel(validator: string): string {
   return `angstrom-v4-node:${validator.toLowerCase()}`;
-}
-
-function angstromSignatureProofLabel(
-  candidate: AngstromAttestationCandidate,
-): string {
-  return `angstrom-v4-signature:${candidate.evidenceHash}`;
 }
 
 function angstromZeroForOne(

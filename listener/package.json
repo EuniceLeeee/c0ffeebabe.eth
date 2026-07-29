@@ -41,7 +41,7 @@
     "searcher:v4-hook-admission": "tsx src/searcher/test/v4-hook-admission.ts",
     "searcher:pending-transaction-evidence": "node --import tsx src/searcher/test/pending-transaction-evidence.ts",
     "searcher:pending-evidence-session": "node --import tsx src/searcher/test/pending-evidence-session.ts",
-    "searcher:angstrom-v4": "npm run --silent searcher:pending-transaction-evidence && node --import tsx src/searcher/test/angstrom-attestation.ts && node --import tsx src/searcher/test/angstrom-v4-action-adapter.ts && node --import tsx src/searcher/test/angstrom-v4-family.ts",
+    "searcher:angstrom-v4": "npm run --silent searcher:pending-transaction-evidence && node --import tsx src/searcher/test/angstrom-attestation.ts && node --import tsx src/searcher/test/angstrom-v4-action-adapter.ts && node --import tsx src/searcher/test/angstrom-v4-family.ts && node --import tsx src/searcher/test/angstrom-v4-shared-poolkey-discovery.ts",
     "searcher:validate-v4-quote": "tsx src/searcher/test/validate-v4-quote.ts",
     "searcher:victim-source-filter": "tsx src/searcher/test/victim-source-filter.ts",
     "searcher:victim-effect": "node --import tsx src/searcher/test/victim-effect.ts",

@@ -10,6 +10,14 @@ import {
   isProductionVenueId,
   isProductionVenueIdentitySource,
 } from "./venues/pool-adapter-policy.js";
+import {
+  poolProjectionRowKey,
+  poolRegistryKey,
+} from "./pool-registry-key.js";
+export {
+  poolProjectionRowKey,
+  poolRegistryKey,
+} from "./pool-registry-key.js";
 
 export const DEFAULT_POOL_UNIVERSE_PATH = resolve("searcher", "pools", "active-pools.json");
 export const POOL_UNIVERSE_BUILD_MANIFEST_PROFILE =
@@ -582,49 +590,6 @@ function parseFixedSlotKind(value: unknown, field: string): PoolEntry["fixedSlot
 function unorderedTokenPairKey(pool: Pick<PoolEntry, "token0" | "token1">): string | null {
   if (!pool.token0 || !pool.token1) return null;
   return [pool.token0.toLowerCase(), pool.token1.toLowerCase()].sort().join("/");
-}
-
-export function poolRegistryKey(pool: PoolEntry): string {
-  if (pool.adapter !== "univ4") {
-    const address = pool.address.toLowerCase();
-    // Composite key: a second logical instance at the same address stays a
-    // distinct registry row instead of being swallowed by address dedup.
-    return pool.logicalInstanceId === undefined
-      ? address
-      : `${address}:${pool.logicalInstanceId}`;
-  }
-  return [
-    pool.address.toLowerCase(),
-    pool.poolId?.toLowerCase() ?? "",
-    pool.currency0?.toLowerCase() ?? "",
-    pool.currency1?.toLowerCase() ?? "",
-    pool.fee === undefined ? "" : String(pool.fee),
-    pool.tickSpacing === undefined ? "" : String(pool.tickSpacing),
-    pool.hooks?.toLowerCase() ?? "",
-  ].join(":");
-}
-
-/**
- * Collection-only identity for runtime rows projected by protocol discovery.
- *
- * poolRegistryKey intentionally remains the physical-pool key used by the DEX
- * universe. A behavior-probed contract may, however, expose two independently
- * verified route families at one address. Qualifying only those discovery
- * rows by their owner keeps both projections without teaching the ordinary DEX
- * path to accept two conflicting adapter classifications for one pool.
- *
- * This key must never replace routeInstanceKey/semanticRouteKey: family-neutral
- * route identity is what lets global route arbitration quarantine conflicting
- * execution claims.
- */
-export function poolProjectionRowKey(pool: PoolEntry): string {
-  const physicalKey = poolRegistryKey(pool);
-  const owner = pool.discoveryOwnerAdapterId;
-  if (owner === undefined) return physicalKey;
-  if (!owner || owner !== owner.trim() || /[\u0000-\u001f\u007f]/.test(owner)) {
-    throw new Error("discovery projection owner must be a stable non-empty id");
-  }
-  return JSON.stringify([owner, physicalKey]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -52,9 +52,6 @@ const hookStateIface = new ethers.Interface([
 const controllerIface = new ethers.Interface([
   "function ANGSTROM() view returns (address)",
 ]);
-const erc1271Iface = new ethers.Interface([
-  "function isValidSignature(bytes32 hash,bytes signature) view returns (bytes4 magicValue)",
-]);
 const controller = "0x4444444444444444444444444444444444444444";
 const contractValidator =
   "0x5555555555555555555555555555555555555555";
@@ -175,27 +172,7 @@ async function main(): Promise<void> {
               ),
             };
           }
-          if (
-            ethers.getAddress(call.target) ===
-              ethers.getAddress(contractValidator)
-          ) {
-            erc1271Iface.decodeFunctionData(
-              "isValidSignature",
-              call.callData,
-            );
-            return {
-              success: true,
-              returnData: erc1271Iface.encodeFunctionResult(
-                "isValidSignature",
-                ["0x1626ba7e"],
-              ),
-            };
-          }
-          assert.equal(
-            ethers.getAddress(call.target),
-            ethers.getAddress(signer.address),
-          );
-          return { success: true, returnData: "0x" };
+          assert.fail("authority batch must only read the hook node mapping");
         }),
       ]]);
     },
@@ -273,8 +250,8 @@ async function main(): Promise<void> {
     );
   assert.equal(
     contractObserved.matched,
-    true,
-    "current hook-authorized ERC-1271 evidence must be admitted",
+    false,
+    "contract-node evidence must fail closed without Hook-caller simulation",
   );
   assert.equal(observerReads, 3);
 

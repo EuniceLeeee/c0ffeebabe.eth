@@ -10,6 +10,10 @@ import {
   type LandedSwapEventDescriptor,
   type LandedEventRegistry,
 } from "./landed-event-registry.js";
+import {
+  materializeSharedLandedPoolIdentityMembers,
+  type SharedLandedIdentityOutcome,
+} from "./landed-pool-shared-identity.js";
 
 export interface LandedPoolDiscoveryLog {
   readonly address: string;
@@ -38,6 +42,30 @@ export interface LandedPoolDiscoveryReadBackend {
     address: string,
     control?: { readonly signal?: AbortSignal },
   ): Promise<string>;
+}
+
+export class LandedPoolDiscoverySourceMismatchError extends Error {
+  readonly code = "LANDED_DISCOVERY_SOURCE_MISMATCH";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "LandedPoolDiscoverySourceMismatchError";
+  }
+}
+
+export function isLandedPoolDiscoverySourceMismatchError(
+  error: unknown,
+): error is LandedPoolDiscoverySourceMismatchError {
+  return (
+    error instanceof LandedPoolDiscoverySourceMismatchError ||
+    (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { readonly code?: unknown }).code ===
+        "LANDED_DISCOVERY_SOURCE_MISMATCH"
+    )
+  );
 }
 
 export interface LandedPoolDiscoveryScanResult {
@@ -101,12 +129,80 @@ export interface LandedPoolMaterializationResult {
    * state; an incomplete result without this proof remains globally fail-closed.
    */
   readonly retryablePools?: readonly PoolEntry[];
+  /**
+   * A shared physical-identity kernel may discover that persisted family rows
+   * disagree about one canonical identity. Once the source-pinned
+   * revalidation reaches a terminal result, these exact projection-row keys
+   * must be removed before the revalidated rows are published.
+   *
+   * `revalidatedPoolKeys` identifies returned rows which must bypass the
+   * ordinary "already known" fast path. It can be empty when revalidation
+   * proves that the stale family projection is no longer applicable.
+   */
+  readonly cacheRevalidation?: LandedPoolCacheRevalidation;
+}
+
+export interface LandedPoolCacheRevalidation {
+  readonly stalePoolKeys: readonly string[];
+  readonly revalidatedPoolKeys: readonly string[];
+}
+
+export interface LandedPoolSharedIdentityMaterializer {
+  readonly id: string;
+  readonly version: string;
+  /**
+   * Stable physical identity for canonical rows and unresolved retry rows.
+   * Two family projections which return the same key share one identity
+   * resolution inside a discovery invocation.
+   */
+  identityKey(pool: PoolEntry): string;
+  /**
+   * Strip family/cache-owned identity claims while retaining only the
+   * physical key and activity needed to re-attest one conflicting cache row
+   * against the source-pinned backend.
+   */
+  revalidationPool(pool: PoolEntry): PoolEntry;
+  materialize(
+    context: LandedPoolMaterializationContext,
+  ): Promise<LandedPoolMaterializationResult>;
+}
+
+export interface LandedPoolSharedIdentityProjection {
+  readonly version: string;
+  /**
+   * Translate a family-owned retained/retry row into the canonical physical
+   * identity consumed by the shared materializer. Unrelated rows return null.
+   */
+  toIdentityPool(pool: PoolEntry): PoolEntry | null;
+  /**
+   * Project one terminal canonical identity into this family. A terminal
+   * null is family-local "not applicable" and does not make the shared
+   * identity source incomplete.
+   */
+  projectPool(pool: PoolEntry): PoolEntry | null;
+  /**
+   * An unresolved physical identity must remain retryable for every family
+   * subscribed to the shared kernel; the hook/config needed to reject a
+   * projection is not known yet.
+   */
+  projectRetry(pool: PoolEntry): PoolEntry;
+}
+
+export interface LandedPoolSharedIdentityCapability {
+  readonly materializer: LandedPoolSharedIdentityMaterializer;
+  readonly projection: LandedPoolSharedIdentityProjection;
 }
 
 export interface LandedPoolMaterializationCapability {
   readonly version: string;
   /** Landed swap declaration ids owned by this materializer. */
   readonly eventIds: readonly string[];
+  /**
+   * Optional physical-identity kernel shared by sibling execution families.
+   * The coordinator groups it by materializer id plus physical event source,
+   * resolves once, then applies each family-owned projection independently.
+   */
+  readonly sharedIdentity?: LandedPoolSharedIdentityCapability;
   /**
    * This materializer can reconstruct an address-emitter candidate from a
    * persisted PoolEntry after the original log leaves the incremental range.
@@ -432,6 +528,8 @@ export interface LandedPoolDiscoveryDescriptor {
   readonly event: LandedSwapEventDescriptor;
   readonly sourceId: string;
   readonly sourceFingerprint: string;
+  readonly physicalEventKey: string;
+  readonly sharedIdentityGroupKey: string | null;
   readonly materializer: LandedPoolMaterializationCapability | null;
   readonly materializerFamilyId: ExecutionFamilyId | null;
 }
@@ -457,6 +555,7 @@ export interface LandedPoolDiscoveryResult {
   readonly activity: Map<string, LandedPoolActivity>;
   readonly materializedPools: readonly PoolEntry[];
   readonly retryablePools: readonly PoolEntry[];
+  readonly cacheRevalidation: LandedPoolCacheRevalidation;
   readonly coverage: readonly LandedPoolDiscoveryCoverage[];
   readonly logCountsByEventId: ReadonlyMap<string, number>;
 }
@@ -509,6 +608,8 @@ export class LandedPoolDiscoveryRegistry {
           `landed-pool discovery: ${event.id} has multiple family materializers`,
         );
       }
+      const physicalEventKey = landedPhysicalEventKey(event);
+      const sharedIdentity = materializers[0]?.materializer.sharedIdentity;
       descriptors.push(Object.freeze({
         event,
         sourceId: `landed-event:${event.id}`,
@@ -516,6 +617,13 @@ export class LandedPoolDiscoveryRegistry {
           event,
           materializers[0]?.materializer ?? null,
         ),
+        physicalEventKey,
+        sharedIdentityGroupKey: sharedIdentity === undefined
+          ? null
+          : JSON.stringify([
+              sharedIdentity.materializer.id,
+              physicalEventKey,
+            ]),
         materializer: materializers[0]?.materializer ?? null,
         materializerFamilyId:
           (materializers[0]?.familyId as ExecutionFamilyId | undefined) ?? null,
@@ -539,7 +647,8 @@ export class LandedPoolDiscoveryRegistry {
         family.poolDiscovery !== undefined &&
         (
           !family.poolDiscovery.version.trim() ||
-          family.poolDiscovery.eventIds.length === 0
+          family.poolDiscovery.eventIds.length === 0 ||
+          !validSharedIdentityDeclaration(family.poolDiscovery.sharedIdentity)
         )
       ) {
         throw new Error(
@@ -547,6 +656,7 @@ export class LandedPoolDiscoveryRegistry {
         );
       }
     }
+    assertSharedIdentityGroups(descriptors);
     this.descriptors = Object.freeze(descriptors);
     this.addressRetryPoolAdapters = new Set(
       descriptors
@@ -608,69 +718,61 @@ export async function discoverLandedPools(input: {
   }
 
   const activity = new Map<string, LandedPoolActivity>();
-  const materializedPools: PoolEntry[] = [];
-  const retryablePools: PoolEntry[] = [];
-  const coverage: LandedPoolDiscoveryCoverage[] = [];
   const logCountsByEventId = new Map<string, number>();
-  for (const descriptor of input.registry.list()) {
+  const sourceScans = new Map<
+    LandedPoolDiscoveryDescriptor,
+    LandedPoolDiscoveryScanResult
+  >();
+  const outcomes = new Map<
+    LandedPoolDiscoveryDescriptor,
+    LandedMaterializationOutcome
+  >();
+  const processedGroups = new Set<string>();
+  const descriptors = input.registry.list();
+  for (const descriptor of descriptors) {
     throwIfAborted(input.signal);
-    let complete = true;
-    const issues: string[] = [];
     if (descriptor.materializer) {
+      const groupKey = descriptor.sharedIdentityGroupKey ??
+        `materializer:${descriptor.event.id}`;
+      if (processedGroups.has(groupKey)) continue;
+      processedGroups.add(groupKey);
+      const group = descriptors.filter((candidate) =>
+        candidate.materializer !== null &&
+        (
+          candidate.sharedIdentityGroupKey ??
+            `materializer:${candidate.event.id}`
+        ) === groupKey
+      );
+      const representative = group[0];
+      if (!representative) {
+        throw new Error(`empty landed materializer group ${groupKey}`);
+      }
       const eventScan = await scanDescriptorRange(
         input.backend,
-        descriptor.event,
+        representative.event,
         input.fromBlock,
         input.toBlock,
         input.batchSize,
         input.signal,
       );
-      logCountsByEventId.set(descriptor.event.id, eventScan.logs.length);
-      assertStrictSourceComplete(
-        input.strict,
-        descriptor.sourceId,
-        eventScan.complete,
-        eventScan.issues,
-      );
-      complete &&= eventScan.complete;
-      issues.push(...eventScan.issues);
-      try {
-        const result = await descriptor.materializer.materialize({
-          familyId: descriptor.materializerFamilyId ??
-            descriptor.event.executionFamilies[0] as ExecutionFamilyId,
-          event: descriptor.event,
-          logs: eventScan.logs,
-          retainedPools: input.retainedPools ?? [],
-          retryablePools: input.retryablePools ?? [],
-          isKnownPool: input.isKnownPool ?? (() => false),
-          fromBlock: input.fromBlock,
-          toBlock: input.toBlock,
-          minSwaps: input.minSwaps,
-          admissionPolicy: input.admissionPolicy,
-          historicalResolution: input.historicalResolution ?? "complete",
-          ...(input.signal === undefined ? {} : { signal: input.signal }),
-          backend: input.backend,
-          scanLogs: (filter) =>
-            scanFilterRange(
-              input.backend,
-              filter,
-              input.batchSize,
-              input.signal,
-            ),
-        });
-        materializedPools.push(...result.pools);
-        retryablePools.push(...(result.retryablePools ?? []));
-        complete &&= result.complete;
-        issues.push(...(result.issues ?? []));
-        assertStrictMaterializationDeferred(
+      for (const member of group) {
+        logCountsByEventId.set(member.event.id, eventScan.logs.length);
+        assertStrictSourceComplete(
           input.strict,
-          descriptor.sourceId,
-          result,
+          member.sourceId,
+          eventScan.complete,
+          eventScan.issues,
         );
-      } catch (error) {
-        if (input.strict || input.signal?.aborted) throw error;
-        complete = false;
-        issues.push(errorMessage(error));
+        sourceScans.set(member, eventScan);
+      }
+      const groupOutcomes = await materializeRegisteredDescriptors(
+        input,
+        group,
+        sourceScans,
+        false,
+      );
+      for (const [member, outcome] of groupOutcomes) {
+        outcomes.set(member, outcome);
       }
     } else {
       const eventScan = await scanGenericActivityRange(
@@ -689,8 +791,67 @@ export async function discoverLandedPools(input: {
         eventScan.complete,
         eventScan.issues,
       );
-      complete &&= eventScan.complete;
-      issues.push(...eventScan.issues);
+      sourceScans.set(descriptor, {
+        logs: Object.freeze([]),
+        complete: eventScan.complete,
+        issues: eventScan.issues,
+      });
+    }
+  }
+
+  const materializedPools: PoolEntry[] = [];
+  const retryablePools: PoolEntry[] = [];
+  const stalePoolKeys = new Set<string>();
+  const revalidatedPoolKeys = new Set<string>();
+  const coverage: LandedPoolDiscoveryCoverage[] = [];
+  for (const descriptor of descriptors) {
+    const source = sourceScans.get(descriptor);
+    if (!source) {
+      throw new Error(
+        `missing landed source scan for ${descriptor.event.id}`,
+      );
+    }
+    let complete = source.complete;
+    const issues = [...source.issues];
+    if (descriptor.materializer) {
+      const outcome = outcomes.get(descriptor);
+      if (!outcome) {
+        throw new Error(
+          `missing landed materialization result for ${descriptor.event.id}`,
+        );
+      }
+      if (outcome.scope !== "success") {
+        if (input.signal?.aborted) {
+          throw input.signal.reason ?? outcome.error;
+        }
+        if (outcome.scope !== "projection" && input.strict) {
+          throw outcome.error;
+        }
+        complete = false;
+        issues.push(errorMessage(outcome.error));
+        if (outcome.scope === "projection") {
+          retryablePools.push(...outcome.retryablePools);
+        }
+      } else {
+        const result = outcome.result;
+        assertStrictMaterializationDeferred(
+          input.strict,
+          descriptor.sourceId,
+          result,
+        );
+        materializedPools.push(...result.pools);
+        retryablePools.push(...(result.retryablePools ?? []));
+        for (const key of result.cacheRevalidation?.stalePoolKeys ?? []) {
+          stalePoolKeys.add(key);
+        }
+        for (
+          const key of result.cacheRevalidation?.revalidatedPoolKeys ?? []
+        ) {
+          revalidatedPoolKeys.add(key);
+        }
+        complete &&= result.complete;
+        issues.push(...(result.issues ?? []));
+      }
     }
     for (const familyId of descriptor.event.executionFamilies) {
       coverage.push(Object.freeze({
@@ -709,6 +870,10 @@ export async function discoverLandedPools(input: {
     activity,
     materializedPools: Object.freeze(materializedPools),
     retryablePools: Object.freeze(retryablePools),
+    cacheRevalidation: Object.freeze({
+      stalePoolKeys: Object.freeze([...stalePoolKeys]),
+      revalidatedPoolKeys: Object.freeze([...revalidatedPoolKeys]),
+    }),
     coverage: Object.freeze(coverage),
     logCountsByEventId,
   };
@@ -843,90 +1008,79 @@ async function discoverLandedPoolsByTopicUnion(input: {
     }
   }
 
-  const materializationResults = new Map<string, {
-    readonly pools: readonly PoolEntry[];
-    readonly retryablePools: readonly PoolEntry[];
-    readonly complete: boolean;
-    readonly issues: readonly string[];
-  }>();
-  await Promise.all(
-    descriptors
-      .filter((descriptor) => descriptor.materializer !== null)
-      .map(async (descriptor) => {
-        let complete = unionComplete;
-        const issues = [...unionIssues];
-        const pools: PoolEntry[] = [];
-        try {
-          const result = await descriptor.materializer!.materialize({
-            familyId: descriptor.materializerFamilyId ??
-              descriptor.event.executionFamilies[0] as ExecutionFamilyId,
-            event: descriptor.event,
-            logs: materializerLogs.get(descriptor.event.id) ?? [],
-            retainedPools: input.retainedPools ?? [],
-            retryablePools: input.retryablePools ?? [],
-            isKnownPool: input.isKnownPool ?? (() => false),
-            fromBlock: input.fromBlock,
-            toBlock: input.toBlock,
-            minSwaps: input.minSwaps,
-            admissionPolicy: input.admissionPolicy,
-            historicalResolution: input.historicalResolution ?? "complete",
-            ...(input.signal === undefined ? {} : { signal: input.signal }),
-            backend: input.backend,
-            scanLogs: (filter) =>
-              scanFilterRange(
-                input.backend,
-                filter,
-                input.batchSize,
-                input.signal,
-              ),
-          });
-          pools.push(...result.pools);
-          assertStrictMaterializationDeferred(
-            input.strict,
-            descriptor.sourceId,
-            result,
-          );
-          complete &&= result.complete;
-          issues.push(...(result.issues ?? []));
-          materializationResults.set(descriptor.event.id, {
-            pools: Object.freeze(pools),
-            retryablePools: Object.freeze([
-              ...(result.retryablePools ?? []),
-            ]),
-            complete,
-            issues: Object.freeze(issues),
-          });
-        } catch (error) {
-          if (input.strict || input.signal?.aborted) throw error;
-          complete = false;
-          issues.push(errorMessage(error));
-          materializationResults.set(descriptor.event.id, {
-            pools: Object.freeze(pools),
-            retryablePools: Object.freeze([]),
-            complete,
-            issues: Object.freeze(issues),
-          });
-        }
-      }),
+  const sourceScans = new Map<
+    LandedPoolDiscoveryDescriptor,
+    LandedPoolDiscoveryScanResult
+  >();
+  for (const descriptor of descriptors) {
+    sourceScans.set(descriptor, {
+      logs: Object.freeze([
+        ...(materializerLogs.get(descriptor.event.id) ?? []),
+      ]),
+      complete: unionComplete,
+      issues: Object.freeze([...unionIssues]),
+    });
+  }
+  const outcomes = await materializeRegisteredDescriptors(
+    input,
+    descriptors,
+    sourceScans,
+    true,
   );
 
   const materializedPools: PoolEntry[] = [];
   const retryablePools: PoolEntry[] = [];
+  const stalePoolKeys = new Set<string>();
+  const revalidatedPoolKeys = new Set<string>();
   const coverage: LandedPoolDiscoveryCoverage[] = [];
   for (const descriptor of descriptors) {
     let complete = unionComplete;
     let issues: readonly string[] = unionIssues;
     if (descriptor.materializer) {
-      const result = materializationResults.get(descriptor.event.id);
-      if (!result) {
+      const outcome = outcomes.get(descriptor);
+      if (!outcome) {
         throw new Error(
           `missing landed materialization result for ${descriptor.event.id}`,
         );
       }
-      materializedPools.push(...result.pools);
-      retryablePools.push(...result.retryablePools);
-      complete = result.complete;
-      issues = result.issues;
+      if (outcome.scope !== "success") {
+        if (input.signal?.aborted) {
+          throw input.signal.reason ?? outcome.error;
+        }
+        if (outcome.scope !== "projection" && input.strict) {
+          throw outcome.error;
+        }
+        complete = false;
+        issues = Object.freeze([
+          ...unionIssues,
+          errorMessage(outcome.error),
+        ]);
+        if (outcome.scope === "projection") {
+          retryablePools.push(...outcome.retryablePools);
+        }
+      } else {
+        const result = outcome.result;
+        assertStrictMaterializationDeferred(
+          input.strict,
+          descriptor.sourceId,
+          result,
+        );
+        materializedPools.push(...result.pools);
+        retryablePools.push(...(result.retryablePools ?? []));
+        for (const key of result.cacheRevalidation?.stalePoolKeys ?? []) {
+          stalePoolKeys.add(key);
+        }
+        for (
+          const key of result.cacheRevalidation?.revalidatedPoolKeys ?? []
+        ) {
+          revalidatedPoolKeys.add(key);
+        }
+        complete &&= result.complete;
+        issues = Object.freeze([
+          ...unionIssues,
+          ...(result.issues ?? []),
+        ]);
+      }
     }
     for (const familyId of descriptor.event.executionFamilies) {
       coverage.push(Object.freeze({
@@ -945,8 +1099,163 @@ async function discoverLandedPoolsByTopicUnion(input: {
     activity,
     materializedPools: Object.freeze(materializedPools),
     retryablePools: Object.freeze(retryablePools),
+    cacheRevalidation: Object.freeze({
+      stalePoolKeys: Object.freeze([...stalePoolKeys]),
+      revalidatedPoolKeys: Object.freeze([...revalidatedPoolKeys]),
+    }),
     coverage: Object.freeze(coverage),
     logCountsByEventId,
+  };
+}
+
+type LandedMaterializationOutcome =
+  | SharedLandedIdentityOutcome
+  | {
+      readonly scope: "family-materializer";
+      readonly error: unknown;
+    };
+
+async function materializeRegisteredDescriptors(
+  input: {
+    readonly backend: LandedPoolDiscoveryReadBackend;
+    readonly fromBlock: number;
+    readonly toBlock: number;
+    readonly batchSize: number;
+    readonly minSwaps: number;
+    readonly admissionPolicy: IdentityAdmissionPolicy;
+    readonly retainedPools?: readonly PoolEntry[];
+    readonly retryablePools?: readonly PoolEntry[];
+    readonly isKnownPool?: (pool: PoolEntry) => boolean;
+    readonly historicalResolution?: "bounded" | "complete";
+    readonly signal?: AbortSignal;
+  },
+  descriptors: readonly LandedPoolDiscoveryDescriptor[],
+  sourceScans: ReadonlyMap<
+    LandedPoolDiscoveryDescriptor,
+    LandedPoolDiscoveryScanResult
+  >,
+  parallel: boolean,
+): Promise<
+  ReadonlyMap<LandedPoolDiscoveryDescriptor, LandedMaterializationOutcome>
+> {
+  const groups = new Map<string, LandedPoolDiscoveryDescriptor[]>();
+  for (const descriptor of descriptors) {
+    if (!descriptor.materializer) continue;
+    const key = descriptor.sharedIdentityGroupKey ??
+      `materializer:${descriptor.event.id}`;
+    const members = groups.get(key) ?? [];
+    members.push(descriptor);
+    groups.set(key, members);
+  }
+
+  const outcomes = new Map<
+    LandedPoolDiscoveryDescriptor,
+    LandedMaterializationOutcome
+  >();
+  const runGroup = async (
+    descriptors: readonly LandedPoolDiscoveryDescriptor[],
+  ): Promise<void> => {
+    const members = descriptors.map((descriptor) => {
+      const scan = sourceScans.get(descriptor);
+      if (!scan) {
+        throw new Error(
+          `missing landed source scan for ${descriptor.event.id}`,
+        );
+      }
+      return {
+        descriptor,
+        context: materializationContext(input, descriptor, scan.logs),
+      };
+    });
+    const firstShared = members[0]?.descriptor.materializer?.sharedIdentity;
+    if (firstShared === undefined) {
+      for (const member of members) {
+        try {
+          outcomes.set(member.descriptor, {
+            scope: "success",
+            result: await member.descriptor.materializer!.materialize(
+              member.context,
+            ),
+          });
+        } catch (error) {
+          outcomes.set(member.descriptor, {
+            scope: "family-materializer",
+            error,
+          });
+        }
+      }
+      return;
+    }
+
+    const sharedOutcomes =
+      await materializeSharedLandedPoolIdentityMembers(
+        members.map((member) => ({
+          id: member.descriptor.event.id,
+          context: member.context,
+          sharedIdentity:
+            member.descriptor.materializer!.sharedIdentity!,
+        })),
+      );
+    for (const member of members) {
+      const outcome = sharedOutcomes.get(member.descriptor.event.id);
+      if (!outcome) {
+        throw new Error(
+          `shared landed identity omitted ${member.descriptor.event.id}`,
+        );
+      }
+      outcomes.set(member.descriptor, outcome);
+    }
+  };
+
+  if (parallel) {
+    await Promise.all([...groups.values()].map(runGroup));
+  } else {
+    for (const descriptors of groups.values()) {
+      await runGroup(descriptors);
+    }
+  }
+  return outcomes;
+}
+
+function materializationContext(
+  input: {
+    readonly backend: LandedPoolDiscoveryReadBackend;
+    readonly fromBlock: number;
+    readonly toBlock: number;
+    readonly batchSize: number;
+    readonly minSwaps: number;
+    readonly admissionPolicy: IdentityAdmissionPolicy;
+    readonly retainedPools?: readonly PoolEntry[];
+    readonly retryablePools?: readonly PoolEntry[];
+    readonly isKnownPool?: (pool: PoolEntry) => boolean;
+    readonly historicalResolution?: "bounded" | "complete";
+    readonly signal?: AbortSignal;
+  },
+  descriptor: LandedPoolDiscoveryDescriptor,
+  logs: readonly LandedPoolDiscoveryLog[],
+): LandedPoolMaterializationContext {
+  return {
+    familyId: descriptor.materializerFamilyId ??
+      descriptor.event.executionFamilies[0] as ExecutionFamilyId,
+    event: descriptor.event,
+    logs,
+    retainedPools: input.retainedPools ?? [],
+    retryablePools: input.retryablePools ?? [],
+    isKnownPool: input.isKnownPool ?? (() => false),
+    fromBlock: input.fromBlock,
+    toBlock: input.toBlock,
+    minSwaps: input.minSwaps,
+    admissionPolicy: input.admissionPolicy,
+    historicalResolution: input.historicalResolution ?? "complete",
+    ...(input.signal === undefined ? {} : { signal: input.signal }),
+    backend: input.backend,
+    scanLogs: (filter) =>
+      scanFilterRange(
+        input.backend,
+        filter,
+        input.batchSize,
+        input.signal,
+      ),
   };
 }
 
@@ -1117,6 +1426,9 @@ async function scanFilterSlice(
     if (signal?.aborted || isDiscoveryCancellationError(error)) {
       throw signal?.reason ?? error;
     }
+    if (isLandedPoolDiscoverySourceMismatchError(error)) {
+      throw error;
+    }
     if (filter.fromBlock < filter.toBlock) {
       const middle = Math.floor((filter.fromBlock + filter.toBlock) / 2);
       const [left, right] = await Promise.all([
@@ -1189,6 +1501,7 @@ function discoverySourceFingerprint(
   event: LandedSwapEventDescriptor,
   materializer: LandedPoolMaterializationCapability | null,
 ): string {
+  const sharedIdentity = materializer?.sharedIdentity;
   return ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify({
     eventId: event.id,
     topic: event.topic.toLowerCase(),
@@ -1202,7 +1515,72 @@ function discoverySourceFingerprint(
     poolAdapter: event.discovery.poolAdapter,
     materialization: event.materialization ?? "generic",
     materializerVersion: materializer?.version ?? null,
+    sharedIdentity: sharedIdentity === undefined
+      ? null
+      : {
+          materializerId: sharedIdentity.materializer.id,
+          materializerVersion: sharedIdentity.materializer.version,
+          projectionVersion: sharedIdentity.projection.version,
+        },
   })));
+}
+
+function landedPhysicalEventKey(
+  event: LandedSwapEventDescriptor,
+): string {
+  return JSON.stringify({
+    topic: event.topic.toLowerCase(),
+    emitter: event.emitter.mode === "address"
+      ? { mode: event.emitter.mode }
+      : {
+          mode: event.emitter.mode,
+          address: event.emitter.address.toLowerCase(),
+          topicIndex: event.emitter.topicIndex,
+        },
+  });
+}
+
+function validSharedIdentityDeclaration(
+  sharedIdentity: LandedPoolSharedIdentityCapability | undefined,
+): boolean {
+  if (sharedIdentity === undefined) return true;
+  return (
+    sharedIdentity.materializer.id.trim().length > 0 &&
+    sharedIdentity.materializer.version.trim().length > 0 &&
+    sharedIdentity.projection.version.trim().length > 0
+  );
+}
+
+function assertSharedIdentityGroups(
+  descriptors: readonly LandedPoolDiscoveryDescriptor[],
+): void {
+  const kernels = new Map<string, LandedPoolSharedIdentityMaterializer>();
+  for (const descriptor of descriptors) {
+    const sharedIdentity = descriptor.materializer?.sharedIdentity;
+    if (!sharedIdentity || !descriptor.sharedIdentityGroupKey) continue;
+    const previous = kernels.get(sharedIdentity.materializer.id);
+    if (!previous) {
+      kernels.set(
+        sharedIdentity.materializer.id,
+        sharedIdentity.materializer,
+      );
+      continue;
+    }
+    if (
+      previous.version !== sharedIdentity.materializer.version ||
+      previous.identityKey !==
+        sharedIdentity.materializer.identityKey ||
+      previous.revalidationPool !==
+        sharedIdentity.materializer.revalidationPool ||
+      previous.materialize !==
+        sharedIdentity.materializer.materialize
+    ) {
+      throw new Error(
+        `landed-pool discovery: conflicting shared identity kernel ` +
+          sharedIdentity.materializer.id,
+      );
+    }
+  }
 }
 
 function assertRange(fromBlock: number, toBlock: number): void {

@@ -155,8 +155,9 @@ function errorMessage(error: unknown): string {
  * Validates the evidence accepted by Angstrom's
  * `unlockWithEmptyAttestation`: the first 20 bytes name the validator and the
  * remaining bytes sign the exact target block using Angstrom's EIP-712
- * domain. EOAs use ECDSA here; contract-node signatures are verified by the
- * family observer against ERC-1271 at the same frozen canonical head.
+ * domain. EOAs use ECDSA here. Contract-node signatures remain structural
+ * candidates only: the current pending-evidence transport cannot reproduce
+ * the Hook as ERC-1271 caller and therefore fails them closed.
  *
  * Validator-set membership is intentionally not inferred here. The on-chain
  * hook remains authoritative for membership, while this pure module prevents
@@ -188,9 +189,10 @@ export function verifyAngstromAttestation(
 }
 
 /**
- * Structural/EIP-712 decode shared by EOA and ERC-1271 nodes. This function
- * never treats a contract signature as verified; the pending-evidence
- * observer must prove ERC-1271 plus hook membership before promotion.
+ * Structural/EIP-712 decode shared by EOA and potential ERC-1271 nodes. This
+ * function never treats a contract signature as verified. Promotion currently
+ * accepts only EOA recovery plus hook membership; a future transport may add
+ * exact Hook-caller simulation for ERC-1271 without weakening this parser.
  */
 export function parseAngstromAttestation(
   input: AngstromAttestationInput,
@@ -231,7 +233,9 @@ export function parseAngstromAttestation(
     );
     eoaSignatureValid = recovered === validator;
   } catch {
-    // Arbitrary-length ERC-1271 signatures are verified on-chain by observer.
+    // Preserve arbitrary-length contract-signature candidates for diagnostics;
+    // the current observer fails them closed until it can reproduce Hook caller
+    // semantics exactly.
   }
 
   const unlockData = ethers.hexlify(bytes);

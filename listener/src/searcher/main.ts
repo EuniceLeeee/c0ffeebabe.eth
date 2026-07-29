@@ -87,8 +87,10 @@ import {
   type TokenQueryBackend,
 } from "./planner/token-graph.js";
 import {
+  filterStartupActivePoolIncumbents,
   scanActivePoolsDetailed,
   indexFactoryPools,
+  mergeStartupActivePoolDiscovery,
   mergePoolRegistries,
   sendDexDiscoveryRpc,
 } from "./active-pool-discovery.js";
@@ -1543,23 +1545,42 @@ async function main(): Promise<void> {
     retryableDexIdentityPools.set(poolRegistryKey(pool), pool);
   }
   const swapPools = [...startupActivePoolDiscovery.pools];
+  const routeFamilies = PRODUCTION_ADAPTER_FAMILIES.routes();
+  const familyIdForStartupPool = (pool: PoolEntry): string | null =>
+    routeFamilies.findForPool(pool.adapter)?.id ?? null;
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
   // Apply the registry-declared family admission switch. No venue identity is
   // interpreted here; families that do not require the switch remain active.
-  const basePools = mergePoolRegistries(
+  const incumbentPools =
     mergePoolRegistries(
       mergePoolRegistries(
         mergePoolRegistries(liveRegistry, pinnedWarmPools),
         universePools,
       ),
       factoryPools,
-    ),
-    swapPools,
+    );
+  const basePools = mergeStartupActivePoolDiscovery(
+    incumbentPools,
+    startupActivePoolDiscovery,
+    familyIdForStartupPool,
+  );
+  const startupBlockscanUniverse = filterStartupActivePoolIncumbents(
+    blockscanUniverse,
+    startupActivePoolDiscovery,
+    familyIdForStartupPool,
+  );
+  const startupBlockScanOverrides = filterStartupActivePoolIncumbents(
+    blockScanOverrides,
+    startupActivePoolDiscovery,
+    familyIdForStartupPool,
+  );
+  const suppressedDexPoolKeys = new Set(
+    startupActivePoolDiscovery.cacheRevalidation.stalePoolKeys,
   );
   const pairCompletionCandidates = config.pairCompletion
     ? selectPairCompletionPools(
       basePools,
-      blockscanUniverse,
+      startupBlockscanUniverse,
     )
     : [];
   const allPools = mergePoolRegistries(basePools, pairCompletionCandidates);
@@ -1585,13 +1606,25 @@ async function main(): Promise<void> {
     blockscanMaxPools: Number(process.env.SEARCHER_BLOCKSCAN_VIEW_MAX_POOLS ?? 6000),
     poolUniverseGeneratedAt: loadPoolUniverseGeneratedAt(config.poolUniversePath),
   };
-  const rebuildStrategyViews = (backrunPools: PoolEntry[]) => buildStrategyViews(
+  const rebuildStrategyViews = (
+    backrunPools: PoolEntry[],
+    suppressedSupplementalPoolKeys: ReadonlySet<string> = new Set<string>(),
+  ) => buildStrategyViews(
     backrunPools,
-    blockscanUniverse,
-    blockScanOverrides,
+    blockscanUniverse.filter((pool) =>
+      !suppressedSupplementalPoolKeys.has(poolProjectionRowKey(pool))
+    ),
+    blockScanOverrides.filter((pool) =>
+      !suppressedSupplementalPoolKeys.has(poolProjectionRowKey(pool))
+    ),
     strategyViewOptions,
   );
-  let strategyViews = rebuildStrategyViews(allPools);
+  let strategyViews = buildStrategyViews(
+    allPools,
+    startupBlockscanUniverse,
+    startupBlockScanOverrides,
+    strategyViewOptions,
+  );
   let protocolDiscoveryOwnership: ProtocolDiscoveryOwnership =
     EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP;
   const enabledProtocolDiscoveryFamilies = PRODUCTION_ADAPTER_FAMILIES
@@ -2158,6 +2191,7 @@ async function main(): Promise<void> {
       flashTokens,
       knownPoolKeys,
       knownPoolAddresses: knownPoolAddrs,
+      suppressedDexPoolKeys,
       retryableDexGraphPools,
       retryableDexIdentityPools,
     },

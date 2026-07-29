@@ -55,6 +55,7 @@ async function deepCloneDetachesEveryNestedContainer(): Promise<void> {
   mutableMap(source.protocolEvidenceCache.runtime.recentProcessedTxs)
     .set(blockHash(0xdef), 100);
   source.retryableDexGraphPools.get("retry:graph")!.score = 999;
+  mutableSet(source.suppressedDexPoolKeys!).add("stale:late");
 
   const evidence = source.protocolEvidenceCache.verifiedCandidates
     .get("univ2|fixture")!.candidate.evidence![0] as {
@@ -75,6 +76,7 @@ async function deepCloneDetachesEveryNestedContainer(): Promise<void> {
   assert.notStrictEqual(clone.strategyViews, source.strategyViews);
   assert.notStrictEqual(clone.backrunGraph, source.backrunGraph);
   assert.notStrictEqual(clone.tokenIndex, source.tokenIndex);
+  assert.equal(clone.suppressedDexPoolKeys?.has("stale:late"), false);
   assert.notStrictEqual(
     clone.protocolEvidenceCache,
     source.protocolEvidenceCache,
@@ -174,6 +176,14 @@ function canonicalFingerprintCoversEveryPublicationClass(): void {
     retryState,
     expected.baseFingerprint,
     "DEX retry state",
+  );
+
+  const suppressionState = cloneLiveDiscoveryPublicationState(base);
+  mutableSet(suppressionState.suppressedDexPoolKeys!).add("stale:new");
+  assertBaseChanged(
+    suppressionState,
+    expected.baseFingerprint,
+    "DEX stale-row tombstone",
   );
 }
 
@@ -341,6 +351,7 @@ function stateAt(block: number): LiveDiscoveryPublicationState {
     flashTokens: [TOKEN_A, TOKEN_B],
     knownPoolKeys: new Set(["pool:a", "pool:b"]),
     knownPoolAddresses: new Set([POOL_A, POOL_B]),
+    suppressedDexPoolKeys: new Set(["stale:fixture"]),
     protocolOwnership: {
       version: 0,
       admissions: new Map(),

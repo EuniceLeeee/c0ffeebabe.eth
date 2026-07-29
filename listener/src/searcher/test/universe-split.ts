@@ -12,6 +12,9 @@ import {
   edgeKindFromPoolEntry,
   type EdgeKind,
 } from "../strategy-taxonomy.js";
+import {
+  isLandedPoolDiscoverySourceMismatchError,
+} from "../venues/landed-pool-discovery.js";
 
 function assert(cond: boolean, msg: string): asserts cond {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -578,10 +581,12 @@ async function testRuntimeV4DiscoveryUsesHistoricalLogLane(): Promise<void> {
     "only historical Initialize reads may leave the current-state provider",
   );
   let misalignedLogReads = 0;
+  let misalignedHeaderReads = 0;
   let rejectedMisalignment = false;
   const misalignedHistoricalProvider = {
     async send(method: string): Promise<unknown> {
       if (method === "eth_getBlockByNumber") {
+        misalignedHeaderReads++;
         return {
           hash: ethers.keccak256(ethers.toUtf8Bytes("wrong-source")),
         };
@@ -607,11 +612,14 @@ async function testRuntimeV4DiscoveryUsesHistoricalLogLane(): Promise<void> {
     );
   } catch (err) {
     rejectedMisalignment =
-      err instanceof Error && err.message.includes("not aligned");
+      isLandedPoolDiscoverySourceMismatchError(err) &&
+      err.message.includes("not aligned");
   }
   assert(
-    rejectedMisalignment && misalignedLogReads === 0,
-    "historical lane must fail closed before reading logs when the source hash differs",
+    rejectedMisalignment &&
+      misalignedHeaderReads === 1 &&
+      misalignedLogReads === 0,
+    "historical lane must reject one typed source check immediately without splitting log reads",
   );
   console.log("[universe-split] runtime v4 split-horizon history: PASS");
 }

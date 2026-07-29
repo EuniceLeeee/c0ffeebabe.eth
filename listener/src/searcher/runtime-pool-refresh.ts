@@ -183,7 +183,15 @@ export function createPinnedDexReadBackend(
   });
 }
 
-export type RuntimeStrategyViewBuilder = (backrunPools: PoolEntry[]) => StrategyViews;
+export type RuntimeStrategyViewBuilder = (
+  backrunPools: PoolEntry[],
+  /**
+   * Supplemental universe/override rows carrying one of these projection keys
+   * must not be reintroduced into the block-scan view. Base rows were already
+   * filtered before this callback.
+   */
+  suppressedSupplementalPoolKeys?: ReadonlySet<string>,
+) => StrategyViews;
 
 export interface RuntimePoolRefreshInput {
   backend: TokenQueryBackend;
@@ -191,9 +199,27 @@ export interface RuntimePoolRefreshInput {
   /** Pools whose edge build has already succeeded, not merely been discovered. */
   knownPoolKeys?: ReadonlySet<string>;
   currentBackrunPools: PoolEntry[];
+  /** Current pool inventory feeding the block-scan view, including supplements. */
+  currentBlockscanPools?: PoolEntry[];
   currentBackrunGraph: TokenEdge[];
   currentBlockscanGraph?: TokenEdge[];
   buildStrategyViews: RuntimeStrategyViewBuilder;
+  /**
+   * A family-local discovery/projection failure quarantines its incumbent
+   * pools and edges for this generation without blocking healthy siblings.
+   * The prepared delta stores exact row/edge keys so publication replay stays
+   * pure and cannot depend on a later registry revision.
+   */
+  isolatedFamilyIds?: ReadonlySet<string>;
+  /** Exact persisted rows invalidated by a successful source revalidation. */
+  replacedPoolKeys?: ReadonlySet<string>;
+  /** Revalidated output rows which must bypass known-pool deduplication. */
+  revalidatedPoolKeys?: ReadonlySet<string>;
+  /** Stale cache tombstones retained by the current publication generation. */
+  suppressedPoolKeys?: ReadonlySet<string>;
+  familyIdForPool?: (pool: PoolEntry) => string | null;
+  familyIdForEdge?: (edge: TokenEdge) => string;
+  instanceKeyForPool?: (pool: PoolEntry) => string;
 }
 
 export interface RuntimePoolRefreshSuccessfulBuild {
@@ -211,6 +237,10 @@ export interface RuntimePoolRefreshDelta {
   readonly attemptedPools: readonly PoolEntry[];
   readonly successfulBuilds: readonly RuntimePoolRefreshSuccessfulBuild[];
   readonly failedPools: readonly PoolGraphBuildFailure[];
+  readonly isolatedPoolKeys?: readonly string[];
+  readonly isolatedEdgeKeys?: readonly string[];
+  readonly replacedPoolKeys?: readonly string[];
+  readonly replacedEdgeKeys?: readonly string[];
 }
 
 export interface RuntimePoolRefreshProjection {
@@ -226,6 +256,7 @@ export interface RuntimePoolRefreshProjection {
   flashTokens: string[];
   knownPoolKeys: Set<string>;
   knownPoolAddresses: Set<string>;
+  suppressedPoolKeys: Set<string>;
 }
 
 /**
@@ -237,10 +268,14 @@ export function selectRefreshCandidates(
   registryVenues: readonly PoolEntry[],
   discovered: readonly PoolEntry[],
   knownPoolKeys: ReadonlySet<string>,
+  revalidatedPoolKeys: ReadonlySet<string> = new Set<string>(),
 ): PoolEntry[] {
+  const isRequired = (pool: PoolEntry): boolean =>
+    revalidatedPoolKeys.has(poolProjectionRowKey(pool)) ||
+    !knownPoolKeys.has(poolRegistryKey(pool));
   return [
-    ...registryVenues.filter((pool) => !knownPoolKeys.has(poolRegistryKey(pool))),
-    ...discovered.filter((pool) => !knownPoolKeys.has(poolRegistryKey(pool))),
+    ...registryVenues.filter(isRequired),
+    ...discovered.filter(isRequired),
   ];
 }
 
@@ -253,10 +288,89 @@ export function selectRefreshCandidates(
 export async function prepareRuntimePoolRefresh(
   input: RuntimePoolRefreshInput,
 ): Promise<RuntimePoolRefreshProjection> {
+  const isolatedFamilyIds = input.isolatedFamilyIds ?? new Set<string>();
+  const replacedPoolKeys = input.replacedPoolKeys ?? new Set<string>();
+  const revalidatedPoolKeys =
+    input.revalidatedPoolKeys ?? new Set<string>();
+  if (
+    (isolatedFamilyIds.size > 0 || replacedPoolKeys.size > 0) &&
+    (
+      input.familyIdForPool === undefined ||
+      input.familyIdForEdge === undefined
+    )
+  ) {
+    throw new Error(
+      "runtime family isolation/replacement requires pool and edge ownership resolvers",
+    );
+  }
+  if (replacedPoolKeys.size > 0 && input.instanceKeyForPool === undefined) {
+    throw new Error(
+      "runtime pool replacement requires an instance-key resolver",
+    );
+  }
+  const currentPoolRows = [
+    ...input.currentBackrunPools,
+    ...(input.currentBlockscanPools ?? []),
+  ];
+  const isolatedPoolKeys = new Set(
+    currentPoolRows.flatMap((pool) =>
+      input.familyIdForPool !== undefined &&
+        isolatedFamilyIds.has(input.familyIdForPool(pool) ?? "")
+        ? [poolProjectionRowKey(pool)]
+      : []
+    ),
+  );
+  const replacedInstances = new Set<string>();
+  for (const pool of currentPoolRows) {
+    if (!replacedPoolKeys.has(poolProjectionRowKey(pool))) continue;
+    const familyId = input.familyIdForPool?.(pool);
+    if (familyId === null || familyId === undefined) {
+      throw new Error(
+        `runtime replacement cannot resolve owner for ${pool.adapter}`,
+      );
+    }
+    replacedInstances.add(
+      familyInstanceKey(familyId, input.instanceKeyForPool!(pool)),
+    );
+  }
+  const isolatedEdgeKeys = new Set(
+    [
+      ...input.currentBackrunGraph,
+      ...(input.currentBlockscanGraph ?? []),
+    ].flatMap((edge) =>
+      input.familyIdForEdge !== undefined &&
+        isolatedFamilyIds.has(input.familyIdForEdge(edge))
+        ? [edgeKey(edge)]
+      : []
+    ),
+  );
+  const replacedEdgeKeys = new Set(
+    [
+      ...input.currentBackrunGraph,
+      ...(input.currentBlockscanGraph ?? []),
+    ].flatMap((edge) =>
+      input.familyIdForEdge !== undefined &&
+        replacedInstances.has(
+          familyInstanceKey(
+            input.familyIdForEdge(edge),
+            edgeInstanceKey(edge),
+          ),
+        )
+        ? [edgeKey(edge)]
+        : []
+    ),
+  );
   const currentKeys = input.knownPoolKeys ??
     new Set(input.currentBackrunPools.map(poolProjectionRowKey));
   const attemptedPools = uniquePools(input.freshPools)
-    .filter((pool) => !currentKeys.has(poolRegistryKey(pool)));
+    .filter((pool) =>
+      revalidatedPoolKeys.has(poolProjectionRowKey(pool)) ||
+      !currentKeys.has(poolRegistryKey(pool))
+    )
+    .filter((pool) =>
+      input.familyIdForPool === undefined ||
+      !isolatedFamilyIds.has(input.familyIdForPool(pool) ?? "")
+    );
   const built = await buildTokenGraphWithResults(input.backend, attemptedPools);
   const delta: RuntimePoolRefreshDelta = Object.freeze({
     attemptedPools: Object.freeze([...attemptedPools]),
@@ -267,6 +381,10 @@ export async function prepareRuntimePoolRefresh(
       })
     )),
     failedPools: Object.freeze([...built.failed]),
+    isolatedPoolKeys: Object.freeze([...isolatedPoolKeys]),
+    isolatedEdgeKeys: Object.freeze([...isolatedEdgeKeys]),
+    replacedPoolKeys: Object.freeze([...replacedPoolKeys]),
+    replacedEdgeKeys: Object.freeze([...replacedEdgeKeys]),
   });
   return applyRuntimePoolRefreshDelta({
     delta,
@@ -276,6 +394,7 @@ export async function prepareRuntimePoolRefresh(
       ? {}
       : { currentBlockscanGraph: input.currentBlockscanGraph }),
     knownPoolKeys: currentKeys,
+    suppressedPoolKeys: input.suppressedPoolKeys,
     buildStrategyViews: input.buildStrategyViews,
   });
 }
@@ -291,17 +410,43 @@ export function applyRuntimePoolRefreshDelta(input: {
   readonly currentBackrunGraph: readonly TokenEdge[];
   readonly currentBlockscanGraph?: readonly TokenEdge[];
   readonly knownPoolKeys?: ReadonlySet<string>;
+  readonly suppressedPoolKeys?: ReadonlySet<string>;
   readonly buildStrategyViews: RuntimeStrategyViewBuilder;
 }): RuntimePoolRefreshProjection {
+  const isolatedPoolKeys = new Set(input.delta.isolatedPoolKeys ?? []);
+  const isolatedEdgeKeys = new Set(input.delta.isolatedEdgeKeys ?? []);
+  const removedPoolKeys = new Set([
+    ...isolatedPoolKeys,
+    ...(input.delta.replacedPoolKeys ?? []),
+  ]);
+  const removedEdgeKeys = new Set([
+    ...isolatedEdgeKeys,
+    ...(input.delta.replacedEdgeKeys ?? []),
+  ]);
+  const suppressedPoolKeys = new Set(input.suppressedPoolKeys ?? []);
+  for (const key of input.delta.replacedPoolKeys ?? []) {
+    suppressedPoolKeys.add(key);
+  }
+  const suppressedForThisView = new Set([
+    ...suppressedPoolKeys,
+    ...isolatedPoolKeys,
+  ]);
   const admittedPools = input.delta.successfulBuilds.map((item) => item.pool);
   const nextBackrunPools = mergePoolProjectionRows(
-    input.currentBackrunPools,
+    input.currentBackrunPools.filter((pool) =>
+      !removedPoolKeys.has(poolProjectionRowKey(pool))
+    ),
     admittedPools,
   );
-  const strategyViews = input.buildStrategyViews(nextBackrunPools);
+  const strategyViews = input.buildStrategyViews(
+    nextBackrunPools,
+    suppressedForThisView,
+  );
 
   const backrunGraph = mergeEdges(
-    input.currentBackrunGraph,
+    input.currentBackrunGraph.filter((edge) =>
+      !removedEdgeKeys.has(edgeKey(edge))
+    ),
     input.delta.successfulBuilds.flatMap((item) => [...item.edges]),
   );
   const blockscanPoolKeys = new Set(
@@ -312,7 +457,12 @@ export function applyRuntimePoolRefreshDelta(input: {
   );
   const blockscanGraph = input.currentBlockscanGraph === undefined
     ? undefined
-    : mergeEdges(input.currentBlockscanGraph, blockscanAdditions);
+    : mergeEdges(
+        input.currentBlockscanGraph.filter((edge) =>
+          !removedEdgeKeys.has(edgeKey(edge))
+        ),
+        blockscanAdditions,
+      );
   const tokenIndex = buildTokenIndex(backrunGraph);
   const poolAddressMap = new Map<string, string>();
   for (const pool of strategyViews.backrun) {
@@ -323,6 +473,7 @@ export function applyRuntimePoolRefreshDelta(input: {
     input.knownPoolKeys ??
       input.currentBackrunPools.map(poolProjectionRowKey),
   );
+  for (const key of removedPoolKeys) knownPoolKeys.delete(key);
   for (const pool of admittedPools) {
     knownPoolKeys.add(poolProjectionRowKey(pool));
   }
@@ -342,7 +493,12 @@ export function applyRuntimePoolRefreshDelta(input: {
     knownPoolAddresses: new Set(
       strategyViews.backrun.map((pool) => pool.address.toLowerCase()),
     ),
+    suppressedPoolKeys,
   };
+}
+
+function familyInstanceKey(familyId: string, instanceKey: string): string {
+  return JSON.stringify([familyId, instanceKey]);
 }
 
 /** Signals an address-filtered mempool subscription to rebuild and reconnect. */
