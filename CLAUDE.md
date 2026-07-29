@@ -199,6 +199,10 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
 - `docs/research/gates.md` — the validation contract (two-tier six-step lifecycle, `fixed` vs `implemented`,
   replay and live/systemic boundaries).
   Read before claiming a deterministic change is fixed.
+- `docs/research/adapter-family-extension-boundary-and-six-step-acceptance.md` — the implementation contract
+  for adding or changing a Swap/Protocol Adapter Family, including V4/Ekubo-style hook/extension variants,
+  the family-local/framework boundary, development-time live-graph diagnostics, and checkpoint/final cleanup.
+  Read it before implementing any new route family or changing an existing family's execution semantics.
 - `docs/research/tx-gap-analysis-format.md` — required user-facing format when one landed transaction is
   supplied for production-gap, tool, file, or function diagnosis. It separates the core conserving route
   from profit-disposal touches and requires current-main funnel/replay evidence before saying `fixed`.
