@@ -615,6 +615,25 @@ async function assertStrictProjectionIsolation(
     { includeSwap: true, resolvePoolKey: true },
   );
   const currentPools = [...healthyShared.materializedPools];
+  const incumbentAngstrom = currentPools.find((pool) =>
+    pool.adapter === "angstrom-v4"
+  )!;
+  const hiddenKey = {
+    ...key,
+    currency1: ethers.getAddress(
+      "0x0000000000000000000000000000000000000033",
+    ),
+  };
+  const hiddenPoolId = v4PoolId(hiddenKey);
+  const hiddenAngstrom = {
+    ...incumbentAngstrom,
+    poolId: hiddenPoolId,
+    logicalInstanceId: hiddenPoolId,
+    currency1: hiddenKey.currency1,
+    fixedTokenOut: hiddenKey.currency1,
+    score: 0,
+  } satisfies PoolEntry;
+  const isolationPoolInventory = [...currentPools, hiddenAngstrom];
   const graphBackend = {
     async call() {
       throw new Error("inline PoolKey graph projection must not read");
@@ -648,7 +667,7 @@ async function assertStrictProjectionIsolation(
     buildStrategyViews: (pools, suppressed = new Set<string>()) =>
       buildStrategyViews(
         pools,
-        currentPools.filter((pool) =>
+        isolationPoolInventory.filter((pool) =>
           !suppressed.has(poolProjectionRowKey(pool))
         ),
         [],
@@ -658,6 +677,7 @@ async function assertStrictProjectionIsolation(
         },
       ),
     isolatedFamilyIds: incompleteFamilyIds,
+    isolationPoolInventory,
     familyIdForPool: (pool) =>
       registry.routes().findForPool(pool.adapter)?.id ?? null,
     familyIdForEdge: (edge) =>
@@ -665,8 +685,8 @@ async function assertStrictProjectionIsolation(
   });
   assert.equal(
     projection.delta.isolatedPoolKeys?.length,
-    1,
-    `${mode}: publication delta must carry the exact bad-family pool key`,
+    2,
+    `${mode}: publication delta must carry visible and capped bad-family pool keys`,
   );
   assert(
     (projection.delta.isolatedEdgeKeys?.length ?? 0) > 0,

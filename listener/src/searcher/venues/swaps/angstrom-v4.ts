@@ -783,6 +783,13 @@ async function verifyCurrentAngstromAttestations(
   ) {
     throw new Error("angstrom-v4 validator snapshot received an invalid head");
   }
+  if (
+    !candidates.some(
+      (candidate) => candidate.blockNumber === BigInt(head.number),
+    )
+  ) {
+    return Object.freeze([]);
+  }
   const controllerWord = await context.call({
     to: ANGSTROM_MAINNET_HOOK,
     data: angstromHookStateIface.encodeFunctionData(

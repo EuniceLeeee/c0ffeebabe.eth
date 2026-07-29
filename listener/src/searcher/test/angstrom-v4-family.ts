@@ -222,6 +222,48 @@ async function main(): Promise<void> {
     ethers.keccak256(executionEvidence.canonicalPayload),
   );
 
+  const staleBlock = BigInt(sourceBlock - 1);
+  const staleEvidenceCall = adapterIface.encodeFunctionData("swap", [
+    key,
+    true,
+    1_000_000n,
+    900_000n,
+    [{
+      blockNumber: staleBlock,
+      unlockData: await signedUnlockData(staleBlock),
+    }],
+    "0x3333333333333333333333333333333333333333",
+    (1n << 256n) - 1n,
+  ]);
+  observerReads = 0;
+  const staleObserved = await PRODUCTION_ADAPTER_FAMILIES
+    .pendingTransactionEvidence()
+    .observe(
+      {
+        hash: ethers.keccak256(staleEvidenceCall),
+        to: ANGSTROM_MAINNET_ADAPTER,
+        data: staleEvidenceCall,
+      },
+      {
+        head: evidenceContext.head,
+        async call() {
+          observerReads++;
+          throw new Error("stale-only evidence must not read authority state");
+        },
+      },
+      {
+        familyIds: [angstromV4Adapter.id],
+        timeoutMs: 1_000,
+        maxReadsPerFamily: 3,
+      },
+    );
+  assert.equal(
+    staleObserved.matched,
+    false,
+    "a valid historical signature must not activate the current head",
+  );
+  assert.equal(observerReads, 0);
+
   const contractUnlockData = ethers.concat([
     contractValidator,
     `0x${"cd".repeat(103)}`,

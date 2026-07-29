@@ -625,6 +625,7 @@ export async function createLiveDiscoveryCoordinator(
             : [...current.blockscanGraph],
           buildStrategyViews: rebuildStrategyViews,
           isolatedFamilyIds: isolatedLandedFamilyIds,
+          isolationPoolInventory: retainedDexUniverse,
           replacedPoolKeys: new Set(
             swapDiscovery.cacheRevalidation.stalePoolKeys,
           ),

@@ -211,6 +211,12 @@ export interface RuntimePoolRefreshInput {
    * pure and cannot depend on a later registry revision.
    */
   isolatedFamilyIds?: ReadonlySet<string>;
+  /**
+   * Complete uncapped pool inventory which may feed a strategy view. Required
+   * for family isolation so a hidden supplemental row cannot replace the
+   * visible row removed from a capped block-scan view.
+   */
+  isolationPoolInventory?: readonly PoolEntry[];
   /** Exact persisted rows invalidated by a successful source revalidation. */
   replacedPoolKeys?: ReadonlySet<string>;
   /** Revalidated output rows which must bypass known-pool deduplication. */
@@ -303,6 +309,14 @@ export async function prepareRuntimePoolRefresh(
       "runtime family isolation/replacement requires pool and edge ownership resolvers",
     );
   }
+  if (
+    isolatedFamilyIds.size > 0 &&
+    input.isolationPoolInventory === undefined
+  ) {
+    throw new Error(
+      "runtime family isolation requires the complete pool inventory",
+    );
+  }
   if (replacedPoolKeys.size > 0 && input.instanceKeyForPool === undefined) {
     throw new Error(
       "runtime pool replacement requires an instance-key resolver",
@@ -312,8 +326,12 @@ export async function prepareRuntimePoolRefresh(
     ...input.currentBackrunPools,
     ...(input.currentBlockscanPools ?? []),
   ];
+  const isolationPoolRows = [
+    ...currentPoolRows,
+    ...(input.isolationPoolInventory ?? []),
+  ];
   const isolatedPoolKeys = new Set(
-    currentPoolRows.flatMap((pool) =>
+    isolationPoolRows.flatMap((pool) =>
       input.familyIdForPool !== undefined &&
         isolatedFamilyIds.has(input.familyIdForPool(pool) ?? "")
         ? [poolProjectionRowKey(pool)]
