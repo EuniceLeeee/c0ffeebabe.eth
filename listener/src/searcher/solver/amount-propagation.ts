@@ -11,6 +11,7 @@ import type { PoolStateCache } from "./pool-state-cache.js";
 import { quote, type V4QuotePathStats } from "./quoter.js";
 import type { QuoteRequest, QuoteResult } from "../live-state-backend.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import type { PendingExecutionEvidence } from "../venues/route-leg-adapter.js";
 
 export interface AmountQuoteSource {
   quote(req: QuoteRequest): Promise<QuoteResult>;
@@ -41,6 +42,7 @@ export async function propagateAmounts(
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
+    executionEvidence?: readonly PendingExecutionEvidence[];
     safetyBps?: bigint;
     /** Abort between hops when the solver deadline passes, so a single cold
      *  quote point doesn't run past the TTL uninterrupted. */
@@ -60,6 +62,7 @@ export async function propagateAmountsWithRawOutputs(
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
+    executionEvidence?: readonly PendingExecutionEvidence[];
     safetyBps?: bigint;
     /** Abort between hops when the solver deadline passes, so a single cold
      *  quote point doesn't run past the TTL uninterrupted. */
@@ -130,6 +133,7 @@ async function quoteEdge(
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
+    executionEvidence?: readonly PendingExecutionEvidence[];
   },
 ): Promise<bigint> {
   try {
@@ -146,9 +150,12 @@ async function quoteEdge(
       edge.poolToken1,
       options.v4QuoteStats,
       options.executor,
+      options.executionEvidence,
     );
   } catch (err) {
     if (!options.quoteSource) throw err;
+    const routeAdapter =
+      PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(edge.adapterId);
     return (await options.quoteSource.quote({
       adapterId: edge.adapterId,
       target: edge.target,
@@ -158,6 +165,9 @@ async function quoteEdge(
       v4PoolKey: edge.v4PoolKey,
       poolToken0: edge.poolToken0,
       poolToken1: edge.poolToken1,
+      executionEvidence: options.executionEvidence?.find(
+        (evidence) => evidence.familyId === routeAdapter?.id,
+      ),
     })).amountOut;
   }
 }

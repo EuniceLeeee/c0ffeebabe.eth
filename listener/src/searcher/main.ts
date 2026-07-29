@@ -90,6 +90,7 @@ import {
   scanActivePoolsDetailed,
   indexFactoryPools,
   mergePoolRegistries,
+  sendDexDiscoveryRpc,
 } from "./active-pool-discovery.js";
 import {
   attestPoolIdentities,
@@ -104,10 +105,25 @@ import {
   PRODUCTION_ADAPTER_FAMILIES,
   productionPoolUniverseSourceFingerprints,
 } from "./venues/production-registry.js";
+import {
+  DEFAULT_PENDING_EVIDENCE_MAX_READS,
+  DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
+  type PendingTransactionEvidenceProjection,
+} from "./venues/adapter-family-registry.js";
 import type {
+  ExecutionFamilyId,
+  PendingExecutionEvidence,
+  PendingTransactionEvidenceHead,
+  PendingTransactionEvidenceInput,
   ProtocolDiscoveryReceipt,
 } from "./venues/route-leg-adapter.js";
 import { buildMempoolIntakePlan, type MempoolIntakePlan } from "./mempool-intake.js";
+import {
+  PendingEvidenceAdmissionQueue,
+  PendingEvidenceHeadSnapshot,
+  PendingEvidenceTaskScheduler,
+  type PendingEvidenceTaskPriority,
+} from "./pending-evidence-admission-queue.js";
 import {
   buildStrategyViews,
   hashTokenGraph,
@@ -363,6 +379,96 @@ interface HintEnvelope {
   /** For mempool victims: the already-fetched full tx + raw signed bytes, so
    *  handleHint skips MEV-Share log matching and applies the rawTx directly. */
   prefetched?: { tx: ethers.TransactionResponse; rawTx: string };
+  /** Immutable, tx/head-bound execution evidence for this hint only. */
+  executionEvidence?: readonly PendingExecutionEvidence[];
+  /**
+   * Evidence observation is family-addressable: planning awaits only the
+   * families present in the resolved candidate routes, never unrelated
+   * observers.
+   */
+  resolvePendingExecutionEvidence?: (
+    familyIds: readonly ExecutionFamilyId[],
+  ) => Promise<readonly PendingExecutionEvidence[]>;
+}
+
+async function validateHintExecutionEvidence(
+  evidence: readonly PendingExecutionEvidence[],
+  txHash: string,
+  provider: ethers.JsonRpcProvider,
+  timeoutMs = DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
+): Promise<readonly PendingExecutionEvidence[]> {
+  if (evidence.length === 0) return Object.freeze([]);
+  const normalizedTxHash = txHash.toLowerCase();
+  const canonicalHeads = new Map<string, string>();
+  const seenFamilies = new Set<ExecutionFamilyId>();
+  const controller = new AbortController();
+  const deadlineAtMs = Date.now() + timeoutMs;
+  const timer = setTimeout(
+    () => controller.abort(new Error("pending evidence canonical validation deadline")),
+    timeoutMs,
+  );
+  try {
+    for (const item of evidence) {
+      if (item.txHash.toLowerCase() !== normalizedTxHash) {
+        throw new Error("pending execution evidence tx binding mismatch");
+      }
+      if (seenFamilies.has(item.familyId)) {
+        throw new Error(
+          `duplicate pending execution evidence for family ${item.familyId}`,
+        );
+      }
+      seenFamilies.add(item.familyId);
+      const payloadHash = ethers.keccak256(item.canonicalPayload);
+      if (payloadHash.toLowerCase() !== item.payloadHash.toLowerCase()) {
+        throw new Error(
+          `pending execution evidence payload hash mismatch for ${item.familyId}`,
+        );
+      }
+      const evidenceHash = ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ["string", "bytes32", "uint256", "bytes32", "bytes32"],
+          [
+            item.familyId,
+            item.txHash,
+            item.headBlockNumber,
+            item.headHash,
+            item.payloadHash,
+          ],
+        ),
+      );
+      if (evidenceHash.toLowerCase() !== item.evidenceHash.toLowerCase()) {
+        throw new Error(
+          `pending execution evidence binding hash mismatch for ${item.familyId}`,
+        );
+      }
+      const key = `${item.headBlockNumber}:${item.headHash.toLowerCase()}`;
+      let canonical = canonicalHeads.get(key);
+      if (canonical === undefined) {
+        const tag = `0x${item.headBlockNumber.toString(16)}`;
+        const block = await sendDexDiscoveryRpc<{
+          readonly hash?: string;
+        } | null>(
+          provider,
+          "eth_getBlockByNumber",
+          [tag, false],
+          { deadlineAtMs, signal: controller.signal },
+        );
+        if (!block?.hash) {
+          throw new Error("pending execution evidence canonical head unavailable");
+        }
+        canonical = block.hash;
+        canonicalHeads.set(key, canonical);
+      }
+      if (canonical.toLowerCase() !== item.headHash.toLowerCase()) {
+        throw new Error(
+          `pending execution evidence canonical head changed for ${item.familyId}`,
+        );
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+  return Object.freeze([...evidence]);
 }
 
 type ActiveBlockScanRejectBlacklistEntry = BlockScanRejectBlacklistEntry & { expiryBlock: number };
@@ -2811,6 +2917,39 @@ async function handleHint(
   // Use the WS-tracked block instead of polling eth_blockNumber every hint; fall
   // back to a one-off poll only if the stream hasn't delivered a block yet.
   const latestBlock = ctx.blockTracker.latest || (await ctx.provider.getBlockNumber());
+  const validatedExecutionEvidence = new Map<
+    string,
+    Promise<readonly PendingExecutionEvidence[]>
+  >();
+  const resolveExecutionEvidence = (
+    familyIds: readonly ExecutionFamilyId[],
+  ) => {
+    const requested = [...new Set(familyIds)].sort();
+    const key = requested.join(",");
+    let pending = validatedExecutionEvidence.get(key);
+    if (pending) return pending;
+    pending = (async () => {
+      const immediate = (hint.executionEvidence ?? []).filter((item) =>
+        requested.includes(item.familyId)
+      );
+      const missing = requested.filter((familyId) =>
+        !immediate.some((item) => item.familyId === familyId)
+      );
+      const observed = missing.length > 0
+        ? await (
+          hint.resolvePendingExecutionEvidence?.(missing) ??
+            Promise.resolve(Object.freeze([]))
+        )
+        : Object.freeze([]);
+      return validateHintExecutionEvidence(
+        Object.freeze([...immediate, ...observed]),
+        txHash,
+        ctx.provider,
+      );
+    })();
+    validatedExecutionEvidence.set(key, pending);
+    return pending;
+  };
   await drainPendingVictimOutcomes(ctx, latestBlock);
   let anvilForkReady = false;
   const ensureHintFork = async (blockNumber: number, forceRefresh = false): Promise<void> => {
@@ -3302,6 +3441,7 @@ async function handleHint(
       eventBlockNumber,
       victimRawTx: rawTx,
       submissionMode,
+      resolveExecutionEvidence,
     },
     {
       recordFinalState,
@@ -3326,6 +3466,9 @@ type BackrunSourceMeta = {
   eventBlockNumber: number;
   victimRawTx: string | undefined;
   submissionMode: BundleSubmission["mode"];
+  resolveExecutionEvidence(
+    familyIds: readonly ExecutionFamilyId[],
+  ): Promise<readonly PendingExecutionEvidence[]>;
 };
 
 interface ProcessOppsDeps {
@@ -3450,6 +3593,18 @@ async function processOpportunities(
       );
       continue;
     }
+    const evidenceFamilyIds = [...new Set(plans.flatMap((plan) =>
+      plan.tokenPath.edges.flatMap((edge) => {
+        const owner = PRODUCTION_ADAPTER_FAMILIES.routes()
+          .findForEdge(edge.adapterId);
+        return owner?.pendingTransactionEvidence === undefined
+          ? []
+          : [owner.id];
+      })
+    ))];
+    const executionEvidence = evidenceFamilyIds.length > 0
+      ? await sourceMeta.resolveExecutionEvidence(evidenceFamilyIds)
+      : Object.freeze([]);
 
     // Backend selection happens after planning. Preparing an overlay for an
     // opportunity with zero candidate paths is pure latency waste (observed as
@@ -3522,7 +3677,11 @@ async function processOpportunities(
       baseBlock: prepareBaseBlock,
       baseBlockHash: prepareBaseBlockHash,
       path: fixturePath,
-      routeHops: dedupeRouteHops(plans, ctx.config.revmPrewarmRouteHops),
+      routeHops: dedupeRouteHops(
+        plans,
+        ctx.config.revmPrewarmRouteHops,
+        executionEvidence,
+      ),
       postImpact: exactPostImpact ?? undefined,
       deadlineAtMs: oppDeadlineAtMs,
     };
@@ -3541,7 +3700,12 @@ async function processOpportunities(
         tokenIn: oppImpact.tokenIn,
         tokenOut: oppImpact.tokenOut,
       }, oppImpact.amountIn, prepareInput.baseBlock, ctx.pinnedWarmTargets);
-      for (const hop of dedupeRouteHops(plans, Number.MAX_SAFE_INTEGER)) {
+      for (
+        const hop of dedupeRouteHops(
+          plans,
+          Number.MAX_SAFE_INTEGER,
+        )
+      ) {
         ctx.recentWarmPools.record(hop, oppImpact.amountIn, prepareInput.baseBlock, ctx.pinnedWarmTargets);
       }
     }
@@ -3816,6 +3980,7 @@ async function processOpportunities(
             ? ctx.liveBackend
             : undefined,
           deferPhase2Sim: localVictimApply !== null && useConfiguredBackend && ctx.config.liveBackend !== "rpc",
+          executionEvidence,
         });
         deps.segMark("solve");
         ctx.counters.solverSuccess++;
@@ -5156,6 +5321,7 @@ function dedupeRouteHops(
     tokenPath: { edges: TokenEdge[] };
   }>,
   maxHops: number,
+  executionEvidence: readonly PendingExecutionEvidence[] = [],
 ): QuoteHop[] {
   if (maxHops <= 0) return [];
   const seen = new Set<string>();
@@ -5165,6 +5331,9 @@ function dedupeRouteHops(
       const key = quoteHopKey(edge);
       if (seen.has(key)) continue;
       seen.add(key);
+      const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
+        edge.adapterId,
+      );
       hops.push({
         adapterId: edge.adapterId,
         target: edge.target,
@@ -5173,6 +5342,9 @@ function dedupeRouteHops(
         poolToken0: edge.poolToken0,
         poolToken1: edge.poolToken1,
         v4PoolKey: edge.v4PoolKey,
+        executionEvidence: executionEvidence.find(
+          (evidence) => evidence.familyId === owner?.id,
+        ),
       });
       if (hops.length >= maxHops) return hops;
     }
@@ -5462,10 +5634,36 @@ async function* mempoolHints(
   );
   const interesting = (to: string | null | undefined): boolean =>
     isMempoolIntakeTarget(to, fullAddressSet, liveGraphTargets);
+  const pendingEvidence =
+    PRODUCTION_ADAPTER_FAMILIES.pendingTransactionEvidence();
+  const reportedEvidenceFailures = new Set<string>();
+  const pendingEvidenceTimeoutMs = Number(
+    process.env.SEARCHER_PENDING_EVIDENCE_TIMEOUT_MS ??
+      String(DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS),
+  );
+  const pendingEvidenceMaxReads = Number(
+    process.env.SEARCHER_PENDING_EVIDENCE_MAX_READS ??
+      String(DEFAULT_PENDING_EVIDENCE_MAX_READS),
+  );
   const mode = parseMempoolMode();
-  if (mode === "local_firehose") {
-    reportMempoolIntake(mode, initialIntake, maxAddresses);
-    yield* localFirehoseMempoolHints(wsUrl, provider, interesting, counters);
+  if (mode === "alchemy_filtered" && pendingEvidence.familyIds.length > 0) {
+    throw new FatalMempoolSubscriptionError(
+      "pending execution-evidence families require a full mempool firehose; " +
+        "alchemy_filtered cannot observe unknown outer executors",
+    );
+  }
+  if (mode === "local_firehose" || pendingEvidence.familyIds.length > 0) {
+    reportMempoolIntake("local_firehose", initialIntake, maxAddresses);
+    yield* localFirehoseMempoolHints(
+      wsUrl,
+      provider,
+      interesting,
+      pendingEvidence,
+      pendingEvidenceTimeoutMs,
+      pendingEvidenceMaxReads,
+      reportedEvidenceFailures,
+      counters,
+    );
     return;
   }
 
@@ -5495,7 +5693,16 @@ async function* mempoolHints(
               `[searcher/live] mempool filtered subscription unsupported by local node; ` +
                 `falling back to newPendingTransactions firehose`,
             );
-            yield* localFirehoseMempoolHints(wsUrl, provider, interesting, counters);
+            yield* localFirehoseMempoolHints(
+              wsUrl,
+              provider,
+              interesting,
+              pendingEvidence,
+              pendingEvidenceTimeoutMs,
+              pendingEvidenceMaxReads,
+              reportedEvidenceFailures,
+              counters,
+            );
             return;
           }
           throw err;
@@ -5525,29 +5732,37 @@ async function* mempoolHints(
       ws.addEventListener("close", fail);
 
       ws.addEventListener("message", (event) => {
-        const msg = parseWsJson(event.data);
-        const result = msg?.method === "eth_subscription" ? msg.params?.result : undefined;
-        if (!isRecord(result)) return;
-        counters.pendingReceived++;
-        const tx = pendingTxFromAlchemy(result);
-        if (!tx || !interesting(tx.to)) return;
-        const hash = tx.hash.toLowerCase();
-        if (seen.has(hash)) return;
-        seen.add(hash);
-        if (seen.size > 100_000) seen.clear();
+        void (async () => {
+          const msg = parseWsJson(event.data);
+          const result = msg?.method === "eth_subscription"
+            ? msg.params?.result
+            : undefined;
+          if (!isRecord(result)) return;
+          counters.pendingReceived++;
+          const tx = pendingTxFromAlchemy(result);
+          if (!tx) return;
+          if (!interesting(tx.to)) return;
+          const hash = tx.hash.toLowerCase();
+          if (seen.has(hash)) return;
+          seen.add(hash);
+          if (seen.size > 100_000) seen.clear();
 
-        const rawTx = rebuildSignedRawTx(hash, tx);
-        if (!rawTx) return;
+          const rawTx = rebuildSignedRawTx(hash, tx);
+          if (!rawTx) return;
 
-        counters.pendingFilteredReceived++;
-        queue.push({
-          payload: { mempool: true },
-          hashes: [tx.hash],
-          source: "mempool",
-          prefetched: { tx, rawTx },
+          counters.pendingFilteredReceived++;
+          queue.push({
+            payload: { mempool: true },
+            hashes: [tx.hash],
+            source: "mempool",
+            prefetched: { tx, rawTx },
+          });
+          if (queue.length > 64) queue.shift();
+          wake?.();
+        })().catch(() => {
+          // Registry failures are isolated and reported above; malformed
+          // provider messages remain ordinary non-matches.
         });
-        if (queue.length > 64) queue.shift();
-        wake?.();
       });
 
       for (;;) {
@@ -5613,24 +5828,184 @@ function parseMempoolMode(): MempoolMode {
   throw new FatalMempoolSubscriptionError(`unknown SEARCHER_MEMPOOL_MODE=${raw}`);
 }
 
+interface PendingEvidenceSession {
+  readonly candidateFamilyIds: readonly ExecutionFamilyId[];
+  head(priority: PendingEvidenceTaskPriority): Promise<PendingTransactionEvidenceHead>;
+  observeFamily(
+    familyId: ExecutionFamilyId,
+    priority: PendingEvidenceTaskPriority,
+  ): Promise<PendingExecutionEvidence | undefined>;
+  resolve(
+    familyIds: readonly ExecutionFamilyId[],
+    priority: PendingEvidenceTaskPriority,
+  ): Promise<readonly PendingExecutionEvidence[]>;
+}
+
+function createPendingEvidenceSession(
+  tx: Pick<ethers.TransactionResponse, "hash" | "to" | "data">,
+  provider: ethers.JsonRpcProvider,
+  projection: PendingTransactionEvidenceProjection,
+  observerScheduler: PendingEvidenceTaskScheduler,
+  readScheduler: PendingEvidenceTaskScheduler,
+  currentHead: (
+    priority: PendingEvidenceTaskPriority,
+  ) => Promise<PendingTransactionEvidenceHead>,
+  timeoutMs: number,
+  maxReadsPerFamily: number,
+  reportFailure: (familyId: ExecutionFamilyId | "kernel", code: string) => void,
+): PendingEvidenceSession {
+  const input: PendingTransactionEvidenceInput = Object.freeze({
+    hash: tx.hash,
+    to: tx.to,
+    data: tx.data,
+  });
+  const candidateFamilyIds = projection.candidateFamilyIds(input);
+  let frozenHead:
+    Promise<PendingTransactionEvidenceHead> | undefined;
+  const byFamily = new Map<
+    ExecutionFamilyId,
+    Promise<PendingExecutionEvidence | undefined>
+  >();
+
+  const head = (
+    priority: PendingEvidenceTaskPriority,
+  ): Promise<PendingTransactionEvidenceHead> => {
+    frozenHead ??= currentHead(priority);
+    return frozenHead;
+  };
+
+  const observeFamily = (
+    familyId: ExecutionFamilyId,
+    priority: PendingEvidenceTaskPriority,
+  ): Promise<PendingExecutionEvidence | undefined> => {
+    let pending = byFamily.get(familyId);
+    if (pending) return pending;
+    pending = (async () => {
+      const dispatchHead = await head(priority);
+      return observerScheduler.run(priority, async () => {
+        const result = await projection.observe(
+          input,
+          {
+            head: dispatchHead,
+            call(read, control) {
+              return readScheduler.run(priority, () =>
+                sendDexDiscoveryRpc<string>(
+                  provider,
+                  "eth_call",
+                  [
+                    provider.getRpcTransaction({
+                      to: read.to,
+                      data: read.data,
+                    }),
+                    {
+                      blockHash: dispatchHead.hash,
+                      requireCanonical: true,
+                    },
+                  ],
+                  control,
+                ),
+                familyId,
+              );
+            },
+          },
+          {
+            familyIds: [familyId],
+            timeoutMs,
+            maxReadsPerFamily,
+          },
+        );
+        for (const failure of result.failures) {
+          reportFailure(failure.familyId, failure.code);
+        }
+        return result.evidence[0];
+      }, familyId);
+    })();
+    byFamily.set(familyId, pending);
+    return pending;
+  };
+
+  return Object.freeze({
+    candidateFamilyIds,
+    head,
+    observeFamily,
+    async resolve(
+      familyIds: readonly ExecutionFamilyId[],
+      priority: PendingEvidenceTaskPriority,
+    ) {
+      const selected = [...new Set(familyIds)]
+        .filter((familyId) => candidateFamilyIds.includes(familyId));
+      const observed = await Promise.all(
+        selected.map((familyId) => observeFamily(familyId, priority)),
+      );
+      return Object.freeze(observed.filter(
+        (item): item is PendingExecutionEvidence => item !== undefined,
+      ));
+    },
+  });
+}
+
 async function* localFirehoseMempoolHints(
   wsUrl: string,
   provider: ethers.JsonRpcProvider,
   interesting: (to: string | null | undefined) => boolean,
+  pendingEvidence: PendingTransactionEvidenceProjection,
+  pendingEvidenceTimeoutMs: number,
+  pendingEvidenceMaxReads: number,
+  reportedEvidenceFailures: Set<string>,
   counters: StageCounters,
 ): AsyncGenerator<HintEnvelope> {
   const maxInFlight = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_MAX_INFLIGHT ?? "64");
   const maxQueue = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_QUEUE_MAX ?? "64");
   const txTimeoutMs = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_TX_TIMEOUT_MS ?? "1500");
+  const evidenceAdmissionsPerFamilyPerHead = Number(
+    process.env.SEARCHER_PENDING_EVIDENCE_ADMISSIONS_PER_FAMILY_PER_HEAD ?? "16",
+  );
+  const evidenceMaxInFlight = Number(
+    process.env.SEARCHER_PENDING_EVIDENCE_MAX_INFLIGHT ?? "4",
+  );
+  const evidenceReadMaxInFlight = Number(
+    process.env.SEARCHER_PENDING_EVIDENCE_READ_MAX_INFLIGHT ?? "8",
+  );
+  const evidenceFamilyCount = Math.max(
+    1,
+    pendingEvidence.familyIds.length,
+  );
+  const observerScheduler = new PendingEvidenceTaskScheduler(
+    evidenceMaxInFlight,
+    maxQueue,
+  );
+  const readScheduler = new PendingEvidenceTaskScheduler(
+    evidenceReadMaxInFlight,
+    maxQueue * pendingEvidenceMaxReads,
+  );
+  const reportEvidenceFailure = (
+    familyId: ExecutionFamilyId | "kernel",
+    code: string,
+  ) => {
+    const key = `${familyId}:${code}`;
+    if (reportedEvidenceFailures.has(key)) return;
+    reportedEvidenceFailures.add(key);
+    console.log(
+      `[searcher/live] pending execution evidence family=${familyId} ` +
+        `failed code=${code}`,
+    );
+  };
   console.log(
     `[searcher/live] mempool local firehose subscription ` +
-      `maxInFlight=${maxInFlight} queueMax=${maxQueue} txTimeoutMs=${txTimeoutMs}`,
+      `maxInFlight=${maxInFlight} queueMax=${maxQueue} txTimeoutMs=${txTimeoutMs} ` +
+      `evidenceMaxInFlight=${evidenceMaxInFlight} ` +
+      `evidenceReadMaxInFlight=${evidenceReadMaxInFlight}`,
   );
 
   for (;;) {
     let ws: WebSocket | null = null;
+    let pendingSubscriptionId = "";
+    let headSubscriptionId = "";
     try {
-      ws = await connectStandardMempool(wsUrl);
+      const connection = await connectStandardMempool(wsUrl);
+      ws = connection.ws;
+      pendingSubscriptionId = connection.pendingSubscriptionId;
+      headSubscriptionId = connection.headSubscriptionId;
     } catch (err) {
       console.log(
         `[searcher/live] mempool local firehose connect failed: ` +
@@ -5641,30 +6016,159 @@ async function* localFirehoseMempoolHints(
       continue;
     }
 
-    const queue: HintEnvelope[] = [];
+    // Canonical intake and evidence-promoted unknown targets never share an
+    // eviction queue. Each evidence family gets its own bounded FIFO, drained
+    // round-robin after canonical traffic.
+    const admissionQueue = new PendingEvidenceAdmissionQueue<HintEnvelope>(
+      maxQueue,
+      evidenceFamilyCount,
+      evidenceAdmissionsPerFamilyPerHead,
+    );
     const seen = new Set<string>();
     let wake: (() => void) | null = null;
     let failed = false;
     let inFlight = 0;
+    const evidenceHeadSnapshot = new PendingEvidenceHeadSnapshot();
 
     const fail = () => {
       if (!failed) console.log("[searcher/live] mempool_state=disconnected");
       failed = true;
       wake?.();
     };
-    const enqueue = (hint: HintEnvelope) => {
-      queue.push(hint);
-      if (queue.length > maxQueue) queue.shift();
+    const enqueueCanonical = (hint: HintEnvelope) => {
+      admissionQueue.enqueueCanonical(hint);
       wake?.();
+    };
+    const enqueueEvidence = (
+      familyId: ExecutionFamilyId,
+      hint: HintEnvelope,
+    ) => {
+      admissionQueue.enqueueEvidence(familyId, hint);
+      wake?.();
+    };
+    const parseEvidenceHead = (
+      raw: { readonly number?: unknown; readonly hash?: unknown },
+    ): PendingTransactionEvidenceHead | undefined => {
+      if (
+        typeof raw.number !== "string" ||
+        typeof raw.hash !== "string" ||
+        !ethers.isHexString(raw.hash, 32)
+      ) {
+        return undefined;
+      }
+      const number = Number(BigInt(raw.number));
+      if (!Number.isSafeInteger(number) || number < 0) return undefined;
+      return Object.freeze({ number, hash: raw.hash });
+    };
+    const currentEvidenceHead = (
+      priority: PendingEvidenceTaskPriority,
+    ): Promise<PendingTransactionEvidenceHead> =>
+      evidenceHeadSnapshot.current(() =>
+        readScheduler.run(priority, async () => {
+        const controller = new AbortController();
+        const deadlineAtMs = Date.now() + pendingEvidenceTimeoutMs;
+        const timer = setTimeout(
+          () => controller.abort(new Error("pending evidence head deadline")),
+          pendingEvidenceTimeoutMs,
+        );
+        try {
+          const block = await sendDexDiscoveryRpc<{
+            readonly number?: string;
+            readonly hash?: string;
+          } | null>(
+            provider,
+            "eth_getBlockByNumber",
+            ["latest", false],
+            { deadlineAtMs, signal: controller.signal },
+          );
+          const head = block ? parseEvidenceHead(block) : undefined;
+          if (!head) {
+            throw new Error(
+              "pending execution evidence could not freeze canonical head",
+            );
+          }
+          return head;
+        } catch (error) {
+          reportEvidenceFailure("kernel", "backend");
+          throw error;
+        } finally {
+          clearTimeout(timer);
+        }
+        }, "head")
+      );
+    const evidenceSession = (
+      tx: Pick<ethers.TransactionResponse, "hash" | "to" | "data">,
+    ) =>
+      createPendingEvidenceSession(
+        tx,
+        provider,
+        pendingEvidence,
+        observerScheduler,
+        readScheduler,
+        currentEvidenceHead,
+        pendingEvidenceTimeoutMs,
+        pendingEvidenceMaxReads,
+        reportEvidenceFailure,
+      );
+    const startUnknownEvidenceAdmission = (
+      session: PendingEvidenceSession,
+      baseHint: HintEnvelope,
+    ): void => {
+      if (session.candidateFamilyIds.length === 0) return;
+      void (async () => {
+        const head = await session.head("unknown");
+        let admitted = false;
+        await Promise.allSettled(session.candidateFamilyIds.map(
+          async (familyId) => {
+            if (!admissionQueue.beginUnknownAttempt(familyId, head.hash)) {
+              return;
+            }
+            let finished = false;
+            try {
+              const evidence = await session.observeFamily(
+                familyId,
+                "unknown",
+              );
+              const commit = evidence !== undefined && !admitted;
+              const accepted = admissionQueue.finishUnknownAttempt(
+                familyId,
+                head.hash,
+                commit,
+              );
+              finished = true;
+              if (!evidence || !accepted) return;
+              admitted = true;
+              counters.pendingFilteredReceived++;
+              enqueueEvidence(familyId, {
+                ...baseHint,
+                executionEvidence: Object.freeze([evidence]),
+                resolvePendingExecutionEvidence: (familyIds) =>
+                  session.resolve(familyIds, "canonical"),
+              });
+            } finally {
+              if (!finished) {
+                admissionQueue.finishUnknownAttempt(
+                  familyId,
+                  head.hash,
+                  false,
+                );
+              }
+            }
+          },
+        ));
+      })().catch(() => {
+        // Speculative unknown-target admission has its own bounded scheduler;
+        // failure cannot consume or disconnect canonical intake.
+      });
     };
     const processHash = (hash: string) => {
       const normalized = hash.toLowerCase();
       if (!TX_HASH_RE.test(normalized)) return;
       counters.pendingReceived++;
       if (seen.has(normalized)) return;
+      if (inFlight >= maxInFlight) return;
       seen.add(normalized);
       if (seen.size > 100_000) seen.clear();
-      if (inFlight >= maxInFlight) return;
 
       inFlight++;
       void (async () => {
@@ -5674,20 +6178,31 @@ async function* localFirehoseMempoolHints(
             txTimeoutMs,
             `getTransaction ${normalized.slice(0, 10)}`,
           );
-          if (!tx || !interesting(tx.to)) return;
+          if (!tx) return;
+          const canonicalTarget = interesting(tx.to);
           const rawTx = await withTimeout(
             rawTxByHash(provider, normalized, tx, true),
             txTimeoutMs,
             `rawTx ${normalized.slice(0, 10)}`,
           );
           if (!rawTx) return;
-          counters.pendingFilteredReceived++;
-          enqueue({
+          const baseHint = {
             payload: { mempool: true },
             hashes: [tx.hash],
             source: "mempool",
             prefetched: { tx, rawTx },
-          });
+          } satisfies HintEnvelope;
+          const session = evidenceSession(tx);
+          if (canonicalTarget) {
+            counters.pendingFilteredReceived++;
+            enqueueCanonical({
+              ...baseHint,
+              resolvePendingExecutionEvidence: (familyIds) =>
+                session.resolve(familyIds, "canonical"),
+            });
+            return;
+          }
+          startUnknownEvidenceAdmission(session, baseHint);
         } catch {
           // Pending hashes can vanish or arrive before the tx is queryable.
         } finally {
@@ -5695,46 +6210,80 @@ async function* localFirehoseMempoolHints(
         }
       })();
     };
+    const processFullTransaction = (result: Record<string, unknown>) => {
+      const tx = pendingTxFromAlchemy(result);
+      if (!tx) return;
+      const hash = tx.hash.toLowerCase();
+      counters.pendingReceived++;
+      if (seen.has(hash)) return;
+      if (inFlight >= maxInFlight) return;
+      seen.add(hash);
+      if (seen.size > 100_000) seen.clear();
+
+      inFlight++;
+      void (async () => {
+        try {
+          const canonicalTarget = interesting(tx.to);
+          const rawTx = rebuildSignedRawTx(hash, tx);
+          if (!rawTx) return;
+          const baseHint = {
+            payload: { mempool: true },
+            hashes: [tx.hash],
+            source: "mempool",
+            prefetched: { tx, rawTx },
+          } satisfies HintEnvelope;
+          const session = evidenceSession(tx);
+          if (canonicalTarget) {
+            counters.pendingFilteredReceived++;
+            enqueueCanonical({
+              ...baseHint,
+              resolvePendingExecutionEvidence: (familyIds) =>
+                session.resolve(familyIds, "canonical"),
+            });
+            return;
+          }
+          startUnknownEvidenceAdmission(session, baseHint);
+        } finally {
+          inFlight--;
+        }
+      })().catch(() => {
+        // Malformed full transaction notifications and family-local evidence
+        // failures remain isolated from the shared subscription.
+      });
+    };
 
     ws.addEventListener("error", fail);
     ws.addEventListener("close", fail);
     ws.addEventListener("message", (event) => {
       const msg = parseWsJson(event.data);
-      const result = msg?.method === "eth_subscription" ? msg.params?.result : undefined;
+      if (msg?.method !== "eth_subscription") return;
+      const subscription = msg.params?.subscription;
+      const result = msg.params?.result;
+      if (subscription === headSubscriptionId && isRecord(result)) {
+        const head = parseEvidenceHead(result);
+        if (head) evidenceHeadSnapshot.update(head);
+        return;
+      }
+      if (subscription !== pendingSubscriptionId) return;
       if (typeof result === "string") {
         processHash(result);
         return;
       }
-      if (isRecord(result)) {
-        const tx = pendingTxFromAlchemy(result);
-        if (!tx || !interesting(tx.to)) return;
-        const hash = tx.hash.toLowerCase();
-        counters.pendingReceived++;
-        if (seen.has(hash)) return;
-        seen.add(hash);
-        const rawTx = rebuildSignedRawTx(hash, tx);
-        if (!rawTx) return;
-        counters.pendingFilteredReceived++;
-        enqueue({
-          payload: { mempool: true },
-          hashes: [tx.hash],
-          source: "mempool",
-          prefetched: { tx, rawTx },
-        });
-      }
+      if (isRecord(result)) processFullTransaction(result);
     });
 
     try {
       for (;;) {
         if (failed) break;
-        if (queue.length === 0) {
+        const hint = admissionQueue.dequeue();
+        if (!hint) {
           await new Promise<void>((res) => {
             wake = res;
           });
           wake = null;
           continue;
         }
-        yield queue.shift()!;
+        yield hint;
       }
     } finally {
       try { ws.close(); } catch { /* already closed */ }
@@ -5744,16 +6293,48 @@ async function* localFirehoseMempoolHints(
   }
 }
 
-async function connectStandardMempool(wsUrl: string): Promise<WebSocket> {
+interface StandardMempoolConnection {
+  readonly ws: WebSocket;
+  readonly pendingSubscriptionId: string;
+  readonly headSubscriptionId: string;
+}
+
+async function connectStandardMempool(
+  wsUrl: string,
+): Promise<StandardMempoolConnection> {
   const ws = await openWebSocket(wsUrl);
   try {
-    const subId = await wsRequest(ws, "eth_subscribe", ["newPendingTransactions"]);
-    if (typeof subId !== "string") {
-      throw new Error(`unexpected subscription id ${String(subId)}`);
+    // Subscribe to the auxiliary head stream first. The pending subscription
+    // is activated last, immediately before returning to the caller that
+    // installs the notification handler, so there is no multi-request window
+    // in which orderflow is live but unconsumed.
+    const headSubscriptionId = await wsRequest(
+      ws,
+      "eth_subscribe",
+      ["newHeads"],
+    );
+    const pendingSubscriptionId = await wsRequest(
+      ws,
+      "eth_subscribe",
+      ["newPendingTransactions"],
+    );
+    if (
+      typeof pendingSubscriptionId !== "string" ||
+      typeof headSubscriptionId !== "string"
+    ) {
+      throw new Error("unexpected standard mempool subscription id");
     }
-    console.log(`[searcher/live] mempool WS connected localFirehoseSub=${subId}`);
+    console.log(
+      `[searcher/live] mempool WS connected ` +
+        `localFirehoseSub=${pendingSubscriptionId} ` +
+        `headSub=${headSubscriptionId}`,
+    );
     console.log("[searcher/live] mempool_state=connected");
-    return ws;
+    return Object.freeze({
+      ws,
+      pendingSubscriptionId,
+      headSubscriptionId,
+    });
   } catch (err) {
     try { ws.close(); } catch { /* already closed */ }
     throw err;

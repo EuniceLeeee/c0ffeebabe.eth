@@ -65,6 +65,80 @@ export interface RouteEdgeBuildControl {
   readonly signal?: AbortSignal;
 }
 
+export interface PendingTransactionEvidenceInput {
+  readonly hash: string;
+  readonly to: string | null;
+  readonly data: string;
+}
+
+export interface PendingTransactionEvidenceHead {
+  readonly number: number;
+  readonly hash: string;
+}
+
+export interface PendingTransactionEvidenceRead {
+  readonly to: string;
+  readonly data: string;
+}
+
+/**
+ * Immutable family evidence admitted from one pending transaction. The
+ * registry, not the family, binds the opaque payload to its tx and canonical
+ * head so concurrent transactions cannot overwrite one another's execution
+ * inputs.
+ */
+export interface PendingExecutionEvidence {
+  readonly familyId: ExecutionFamilyId;
+  readonly txHash: string;
+  readonly headBlockNumber: number;
+  readonly headHash: string;
+  readonly canonicalPayload: string;
+  readonly payloadHash: string;
+  readonly evidenceHash: string;
+}
+
+export interface PendingTransactionEvidenceMatch {
+  /** Canonical family-owned ABI bytes. The registry enforces size and hex. */
+  readonly canonicalPayload: string;
+}
+
+/**
+ * Protocol-neutral, bounded access to the single canonical head frozen for
+ * this dispatch. Families own addresses and ABI; the kernel owns transport,
+ * deadline, cancellation, and read budgets.
+ */
+export interface PendingTransactionEvidenceContext {
+  readonly head: PendingTransactionEvidenceHead;
+  readonly deadlineAtMs: number;
+  readonly signal: AbortSignal;
+  call(read: PendingTransactionEvidenceRead): Promise<string>;
+}
+
+/**
+ * Optional family-owned observation of public pending transactions.
+ *
+ * Intake evaluates every pure prefilter before address-based filtering, then
+ * invokes nominated observers through family-isolated bounded workers.
+ * Implementations return protocol-specific execution evidence, but must not
+ * decide global transaction admission.
+ */
+export interface PendingTransactionEvidenceCapability {
+  /**
+   * Cheap, synchronous and side-effect-free prefilter. False prevents all RPC
+   * work for this family; true only nominates the transaction for observation.
+   */
+  mightMatch(tx: PendingTransactionEvidenceInput): boolean;
+  /**
+   * Return canonical family evidence only after authenticating it against the
+   * frozen context head. Null is an ordinary non-match.
+   */
+  observe(
+    tx: PendingTransactionEvidenceInput,
+    context: PendingTransactionEvidenceContext,
+  ): PendingTransactionEvidenceMatch | null |
+    Promise<PendingTransactionEvidenceMatch | null>;
+}
+
 export interface AdapterFamilyBase<
   Kind extends AdapterFamilyKind = AdapterFamilyKind,
 > {
@@ -88,6 +162,8 @@ export interface PlanBuildContext {
   rawOut?: bigint;
   executor: string;
   state: StateBackend;
+  /** Evidence for this edge's owning family only. */
+  executionEvidence?: PendingExecutionEvidence;
 }
 
 export type PlanRequirement =
@@ -133,6 +209,8 @@ export interface ExactQuoteContext {
   cache?: PoolStateCache;
   v4PoolKey?: TokenEdge["v4PoolKey"];
   v4QuoteStats?: V4QuotePathStats;
+  /** Evidence for this edge's owning family only. */
+  executionEvidence?: PendingExecutionEvidence;
 }
 
 export interface V4QuotePathStats {
@@ -381,6 +459,8 @@ export interface PreparedRouteRequest {
   poolToken0?: string;
   poolToken1?: string;
   v4PoolKey?: TokenEdge["v4PoolKey"];
+  /** Evidence for this request's owning family only. */
+  executionEvidence?: PendingExecutionEvidence;
 }
 
 export interface PreparedRouteCall {
@@ -425,6 +505,8 @@ export interface PreparedRouteCapability {
 export interface RouteLegAdapter<
   Kind extends RouteLegKind = RouteLegKind,
 > extends AdapterFamilyBase<Kind> {
+  /** Optional public-pending execution evidence observer. */
+  readonly pendingTransactionEvidence?: PendingTransactionEvidenceCapability;
   readonly poolAdapters: readonly PoolEntry["adapter"][];
   /**
    * Optional projection into the mature low-latency PoolStateCache used by

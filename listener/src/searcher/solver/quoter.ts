@@ -2,7 +2,10 @@ import { ethers } from "ethers";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { V4PoolKey } from "../planner/token-graph.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
-import type { V4QuotePathStats } from "../venues/route-leg-adapter.js";
+import type {
+  PendingExecutionEvidence,
+  V4QuotePathStats,
+} from "../venues/route-leg-adapter.js";
 export type { V4QuotePathStats } from "../venues/route-leg-adapter.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 
@@ -39,10 +42,14 @@ export async function quote(
   poolToken1?: string,
   v4QuoteStats?: V4QuotePathStats,
   executor?: string,
+  executionEvidence?: readonly PendingExecutionEvidence[],
 ): Promise<bigint> {
   if (amountIn <= 0n) return 0n;
   const routeAdapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(adapterId);
   if (routeAdapter) {
+    const familyEvidence = executionEvidence?.find(
+      (evidence) => evidence.familyId === routeAdapter.id,
+    );
     return routeAdapter.quoteExact({
       state,
       executor,
@@ -56,6 +63,7 @@ export async function quote(
       cache,
       v4PoolKey,
       v4QuoteStats,
+      executionEvidence: familyEvidence,
     });
   }
   throw new MissingRouteQuoterError(adapterId);

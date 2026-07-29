@@ -39,6 +39,7 @@
     "searcher:route-gap-watcher": "node --import tsx src/searcher/test/route-gap-watcher.ts",
     "searcher:force-include": "tsx src/searcher/test/force-include.ts",
     "searcher:v4-hook-admission": "tsx src/searcher/test/v4-hook-admission.ts",
+    "searcher:pending-transaction-evidence": "node --import tsx src/searcher/test/pending-transaction-evidence.ts",
     "searcher:validate-v4-quote": "tsx src/searcher/test/validate-v4-quote.ts",
     "searcher:victim-source-filter": "tsx src/searcher/test/victim-source-filter.ts",
     "searcher:victim-effect": "node --import tsx src/searcher/test/victim-effect.ts",

@@ -55,6 +55,7 @@ import {
   BlockScanFamilyAttributedError,
   blockScanAttributedFailureFamilyId,
 } from "../detector/blockscan-family-budget.js";
+import { sendDexDiscoveryRpc } from "../active-pool-discovery.js";
 import { evaluateEv } from "../ev-evaluator.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
@@ -71,7 +72,14 @@ import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 import type { ProtocolAction } from "../strategy-taxonomy.js";
 import { FLASH_SWAP_REPAY, type PathTemplate } from "../templates/path-template.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
-import type { ExecutionFamilyId } from "../venues/route-leg-adapter.js";
+import {
+  DEFAULT_PENDING_EVIDENCE_MAX_READS,
+  DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
+} from "../venues/adapter-family-registry.js";
+import type {
+  ExecutionFamilyId,
+  PendingExecutionEvidence,
+} from "../venues/route-leg-adapter.js";
 import {
   planExecutionIdentityMatchesEdge,
   resolvedPlanExecutionIdentity,
@@ -2526,6 +2534,97 @@ async function buildPinnedRoute(
   return edges;
 }
 
+async function bootstrapPendingExecutionEvidence(
+  state: AnvilStateBackend,
+  upstream: ethers.JsonRpcProvider,
+  fixture: AdapterReplayFixture,
+): Promise<readonly PendingExecutionEvidence[]> {
+  const family = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(
+    fixture.executionFamilyId,
+  );
+  if (!family.pendingTransactionEvidence) return Object.freeze([]);
+
+  const transaction = await upstream.getTransaction(fixture.referenceTx);
+  if (!transaction) {
+    throw subjectFamilyDomainFailure(
+      fixture,
+      "pending execution evidence",
+      "family_reference_transaction_missing",
+      "reference transaction is unavailable for family execution evidence",
+    );
+  }
+  const localHead = await state.provider.getBlock("latest");
+  if (!localHead?.hash) {
+    throw new Error("adapter replay could not read local canonical head");
+  }
+  const result = await PRODUCTION_ADAPTER_FAMILIES
+    .pendingTransactionEvidence()
+    .observe(
+      {
+        hash: transaction.hash,
+        to: transaction.to,
+        data: transaction.data,
+      },
+      {
+        head: Object.freeze({
+          number: localHead.number,
+          hash: localHead.hash,
+        }),
+        call(read, control) {
+          return sendDexDiscoveryRpc<string>(
+            state.provider,
+            "eth_call",
+            [
+              state.provider.getRpcTransaction({
+                to: read.to,
+                data: read.data,
+              }),
+              {
+                blockHash: localHead.hash,
+                requireCanonical: true,
+              },
+            ],
+            control,
+          );
+        },
+      },
+      {
+        familyIds: [fixture.executionFamilyId],
+        timeoutMs: Number(
+          process.env.SEARCHER_PENDING_EVIDENCE_TIMEOUT_MS ??
+            DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
+        ),
+        maxReadsPerFamily: Number(
+          process.env.SEARCHER_PENDING_EVIDENCE_MAX_READS ??
+            DEFAULT_PENDING_EVIDENCE_MAX_READS,
+        ),
+      },
+    );
+  const familyFailure = result.failures.find(
+    (failure) => failure.familyId === fixture.executionFamilyId,
+  );
+  if (familyFailure) {
+    throw subjectFamilyDomainFailure(
+      fixture,
+      "pending execution evidence",
+      "family_execution_evidence_failed",
+      familyFailure.code,
+    );
+  }
+  const subjectEvidence = result.evidence.filter(
+    (evidence) => evidence.familyId === fixture.executionFamilyId,
+  );
+  if (subjectEvidence.length !== 1) {
+    throw subjectFamilyDomainFailure(
+      fixture,
+      "pending execution evidence",
+      "family_execution_evidence_unmatched",
+      "reference transaction did not produce subject-family execution evidence",
+    );
+  }
+  return Object.freeze(subjectEvidence);
+}
+
 function referenceExecutionSurfaces(
   fixture: AdapterReplayFixture,
   edges: readonly TokenEdge[],
@@ -2974,6 +3073,11 @@ async function replayFixture(
     }
     report.stages.chainAnchor = true;
 
+    const executionEvidence = await bootstrapPendingExecutionEvidence(
+      state,
+      upstream,
+      fixture,
+    );
     const edges = await buildPinnedRoute(state, fixture);
     assertClosedRoute(edges, fixture.flash.token);
     report.routeHash = routeHash(edges);
@@ -2999,6 +3103,7 @@ async function replayFixture(
           {
             executor: DEFAULT_SEARCHER_EXECUTOR,
             safetyBps: 10_000n,
+            executionEvidence,
           },
         );
       } catch (error) {
@@ -3062,6 +3167,7 @@ async function replayFixture(
           quoteProfitFloorBps: 0n,
           quoteSafetyBps: 9_999n,
           cache,
+          executionEvidence,
         });
       } catch (error) {
         throw stabilizeFamilyAttributedFailure(
@@ -3083,6 +3189,7 @@ async function replayFixture(
           {
             executor: DEFAULT_SEARCHER_EXECUTOR,
             safetyBps: 10_000n,
+            executionEvidence,
           },
         );
       } catch (error) {

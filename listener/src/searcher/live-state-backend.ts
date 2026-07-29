@@ -5,6 +5,7 @@ import type { OrderflowEvent } from "./orderflow/manual-source.js";
 import type { SimulationResult } from "./simulator/botvm-simulator.js";
 import type { PostImpactSeed } from "./solver/pool-state-cache.js";
 import type { V4PoolKey } from "./planner/token-graph.js";
+import type { PendingExecutionEvidence } from "./venues/route-leg-adapter.js";
 
 export type LiveBackendKind = "rpc" | "revm" | "hybrid";
 
@@ -47,6 +48,8 @@ export interface QuoteRequest {
   poolToken0?: string;
   poolToken1?: string;
   v4PoolKey?: V4PoolKey;
+  /** Evidence for adapterId's owning family only. */
+  executionEvidence?: PendingExecutionEvidence;
 }
 
 export type QuoteHop = Omit<QuoteRequest, "amountIn">;

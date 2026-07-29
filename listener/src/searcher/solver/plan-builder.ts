@@ -19,7 +19,10 @@ import {
 import type { TokenPath } from "../planner/token-graph.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import { buildFlashLoanRoot } from "../venues/funding/flash-loan-framework.js";
-import type { PlanFragment } from "../venues/route-leg-adapter.js";
+import type {
+  PendingExecutionEvidence,
+  PlanFragment,
+} from "../venues/route-leg-adapter.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
 
@@ -47,6 +50,7 @@ export async function buildResolvedPlanFromPath(
   flashAdapterId: string =
     PRODUCTION_ADAPTER_FAMILIES.defaultFunding().funding.actionAdapterId,
   rawOutputs?: bigint[],
+  executionEvidence?: readonly PendingExecutionEvidence[],
 ): Promise<ResolvedPlanNode> {
   if (amounts.length !== path.edges.length + 1) {
     throw new Error(
@@ -106,6 +110,9 @@ export async function buildResolvedPlanFromPath(
           rawOut,
           executor,
           state,
+          executionEvidence: executionEvidence?.find(
+            (evidence) => evidence.familyId === routeAdapter.id,
+          ),
         });
       } catch (error) {
         if (

@@ -32,6 +32,7 @@ import {
 import type { CandidatePlan } from "../planner/planner.js";
 import type { V4PoolKey } from "../planner/token-graph.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import type { PendingExecutionEvidence } from "../venues/route-leg-adapter.js";
 import { geometricGrid, goldenSectionMaximize } from "./amount-bounds.js";
 import {
   propagateAmounts,
@@ -109,6 +110,8 @@ export interface SolveOptions {
   /** Optional per-call timing sink. Reset at solve entry and updated before
    *  returns or throws, so callers can account for rejected solver attempts. */
   timing?: SolverTiming;
+  /** Immutable evidence carried by the current pending transaction. */
+  executionEvidence?: readonly PendingExecutionEvidence[];
 }
 
 export interface Solver {
@@ -268,6 +271,7 @@ export class AnvilSolver implements Solver {
         cache: opts.cache,
         quoteSource: controlledQuoteSource,
         v4QuoteStats,
+        executionEvidence: opts.executionEvidence,
         shouldStop: pastDeadline,
       }),
     );
@@ -306,6 +310,7 @@ export class AnvilSolver implements Solver {
             cache: opts.cache,
             quoteSource: controlledQuoteSource,
             v4QuoteStats,
+            executionEvidence: opts.executionEvidence,
             safetyBps: quoteSafetyBps,
             shouldStop: pastDeadline,
           }),
@@ -435,6 +440,7 @@ export class AnvilSolver implements Solver {
             fluidDebtBps: cand.fluidDebtBps,
             cache: opts.cache,
             quoteSource: controlledQuoteSource,
+            executionEvidence: opts.executionEvidence,
             safetyBps: quoteSafetyBps,
             shouldStop: pastDeadline,
           }),
@@ -472,6 +478,7 @@ export class AnvilSolver implements Solver {
               targetNetProfit,
               flashAdapterId,
               rawOutputs,
+              opts.executionEvidence,
             ),
           );
         } catch (err) {
@@ -770,6 +777,7 @@ export async function resolveSearchCenter(
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
+    executionEvidence?: readonly PendingExecutionEvidence[];
     shouldStop?: () => boolean;
   },
 ): Promise<bigint> {
@@ -867,6 +875,7 @@ async function quoteImpactOutput(
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
+    executionEvidence?: readonly PendingExecutionEvidence[];
     shouldStop?: () => boolean;
   },
   v4PoolKey?: V4PoolKey,
@@ -886,6 +895,8 @@ async function quoteImpactOutput(
       impact.poolToken0,
       impact.poolToken1,
       options.v4QuoteStats,
+      options.executor,
+      options.executionEvidence,
     );
   } catch (err) {
     if (!options.quoteSource) throw err;
@@ -898,6 +909,11 @@ async function quoteImpactOutput(
       v4PoolKey,
       poolToken0: impact.poolToken0,
       poolToken1: impact.poolToken1,
+      executionEvidence: options.executionEvidence?.find(
+        (evidence) => evidence.familyId ===
+          PRODUCTION_ADAPTER_FAMILIES.routes()
+            .findForEdge(impact.matchedAdapterId)?.id,
+      ),
     })).amountOut;
   }
   return quoted > 0n ? quoted : 1n;
@@ -913,6 +929,7 @@ async function approximatePrefixInputForOutput(
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
+    executionEvidence?: readonly PendingExecutionEvidence[];
     shouldStop?: () => boolean;
   },
 ): Promise<bigint> {
@@ -930,6 +947,7 @@ async function approximatePrefixInputForOutput(
         cache: options.cache,
         quoteSource: options.quoteSource,
         v4QuoteStats: options.v4QuoteStats,
+        executionEvidence: options.executionEvidence,
         shouldStop: options.shouldStop,
       });
       return amounts[amounts.length - 1] ?? 0n;

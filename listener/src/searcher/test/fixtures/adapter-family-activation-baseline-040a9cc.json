@@ -2,6 +2,19 @@
   "schemaVersion": 1,
   "baselineCommit": "040a9ccdc190c7d0b4eb31fa9ae192079920d1f6",
   "staticDeclaredVenueCount": 6,
+  "preparedQuoteFamilyIds": [
+    "univ2-standard",
+    "univ3-standard",
+    "curve-plain",
+    "curve-underlying",
+    "univ4",
+    "custom-swap:dodo-v2",
+    "fluid-dex",
+    "protocol:goldx",
+    "protocol:metronome-synth",
+    "protocol:psm",
+    "protocol:eigenpie"
+  ],
   "fundingPlanningOrder": [
     "flash-loan:morpho",
     "flash-loan:balancer-v2"
@@ -12,7 +25,7 @@
   ],
   "defaultFundingFamilyId": "flash-loan:morpho",
   "defaultFundingActionAdapterId": "morpho-flash",
-  "declaredAdditionFamilyIds": [],
+  "declaredAdditionFamilyIds": ["protocol:self-burn-native"],
   "declaredDiscoveryMigrations": {
     "fluid-dex": ["dex-token-domain"],
     "credit:fluid": ["dex-token-domain"]

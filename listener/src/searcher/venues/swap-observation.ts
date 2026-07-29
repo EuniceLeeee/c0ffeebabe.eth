@@ -539,6 +539,12 @@ export function createUniV4SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
   landedEvents: readonly LandedSwapEventDeclaration[];
+  /**
+   * Swap-affecting hooks may alter the final caller balance after PoolManager
+   * emits Swap. Such families still reuse the exact PoolKey/post-state decoder,
+   * but must not publish the pre-hook BalanceDelta as an exact amountOut.
+   */
+  includeAmountOut?: boolean;
 }): SwapObservationCapability {
   const events = input.landedEvents;
   return createStrictSwapObservation({
@@ -592,7 +598,9 @@ export function createUniV4SwapObservation(input: {
               tokenIn: edge.tokenIn,
               tokenOut: edge.tokenOut,
               amountIn,
-              amountOut: zeroForOne ? a1 : a0,
+              ...(input.includeAmountOut === false
+                ? {}
+                : { amountOut: zeroForOne ? a1 : a0 }),
               matchedAdapterId: edge.adapterId,
               poolId,
               v4PostState: {

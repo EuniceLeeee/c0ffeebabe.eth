@@ -1193,31 +1193,8 @@ async function main(): Promise<void> {
   }
   console.log("[route-adapters] current-N protocol pricing capability coverage: PASS");
 
-  const preparedQuoteEdges = new Set([
-    "curve-exchange",
-    "curve-exchange-nr",
-    "curve-exchange-plain",
-    "curve-exchange-received-uint",
-    "curve-exchange-underlying",
-    "univ2-swap",
-    "univ3-swap",
-    "univ4-unlock",
-    "dodo-v2-swap",
-    "fluid-dex-swap",
-    "psm",
-    "metronome-synth-swap",
-    "goldx-mint",
-    "eigenpie-deposit-asset",
-  ]);
   for (const routeAdapter of adapters) {
     assert("prepared" in routeAdapter, `${routeAdapter.id} must declare prepared capability`);
-    const expectsPreparedQuote = routeAdapter.edgeAdapterIds.some((edgeId) =>
-      preparedQuoteEdges.has(edgeId)
-    );
-    assert(
-      Boolean(routeAdapter.prepared?.quote) === expectsPreparedQuote,
-      `${routeAdapter.id} prepared quote coverage`,
-    );
     if (routeAdapter.prepared) {
       assert(
         (routeAdapter.prepared.quote === null) !==

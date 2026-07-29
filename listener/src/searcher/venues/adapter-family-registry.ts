@@ -6,7 +6,13 @@ import type {
   DiscoverableRouteLegAdapter,
   ExecutionFamilyId,
   FlashLoanAdapterFamily,
+  PendingExecutionEvidence,
   LiquidityAdapterFamily,
+  PendingTransactionEvidenceContext,
+  PendingTransactionEvidenceHead,
+  PendingTransactionEvidenceInput,
+  PendingTransactionEvidenceMatch,
+  PendingTransactionEvidenceRead,
   ProtocolConversionAdapter,
   RouteLegAdapter,
   SwapAdapter,
@@ -31,6 +37,73 @@ import type { VictimModelDescriptor } from "./victim-model-registry.js";
 
 export type PricingLane = "swap" | "protocol-conversion";
 
+export type PendingTransactionEvidenceFailureCode =
+  | "matcher_error"
+  | "deadline"
+  | "aborted"
+  | "read_budget"
+  | "backend"
+  | "observer_error"
+  | "invalid_result";
+
+export interface PendingTransactionEvidenceFailure {
+  readonly familyId: ExecutionFamilyId;
+  readonly code: PendingTransactionEvidenceFailureCode;
+}
+
+export interface PendingTransactionEvidenceDispatchResult {
+  readonly attemptedFamilyIds: readonly ExecutionFamilyId[];
+  readonly successfulFamilyIds: readonly ExecutionFamilyId[];
+  readonly evidence: readonly PendingExecutionEvidence[];
+  readonly matched: boolean;
+  readonly failures: readonly PendingTransactionEvidenceFailure[];
+}
+
+export interface PendingTransactionEvidenceTransport {
+  readonly head: PendingTransactionEvidenceHead;
+  readonly signal?: AbortSignal;
+  readonly deadlineAtMs?: number;
+  call(
+    read: PendingTransactionEvidenceRead,
+    control: {
+      readonly signal: AbortSignal;
+      readonly deadlineAtMs: number;
+    },
+  ): Promise<string>;
+}
+
+export interface PendingTransactionEvidenceDispatchPolicy {
+  readonly familyIds?: readonly ExecutionFamilyId[];
+  readonly timeoutMs?: number;
+  readonly maxReadsPerFamily?: number;
+}
+
+export interface PendingTransactionEvidenceProjection {
+  readonly familyIds: readonly ExecutionFamilyId[];
+  candidateFamilyIds(
+    tx: PendingTransactionEvidenceInput,
+  ): readonly ExecutionFamilyId[];
+  observe(
+    tx: PendingTransactionEvidenceInput,
+    transport: PendingTransactionEvidenceTransport,
+    policy?: PendingTransactionEvidenceDispatchPolicy,
+  ): Promise<PendingTransactionEvidenceDispatchResult>;
+}
+
+interface RegisteredPendingTransactionEvidenceObserver {
+  readonly familyId: ExecutionFamilyId;
+  readonly mightMatch: (tx: PendingTransactionEvidenceInput) => boolean;
+  readonly observe: (
+    tx: PendingTransactionEvidenceInput,
+    context: PendingTransactionEvidenceContext,
+  ) => PendingTransactionEvidenceMatch | null |
+    Promise<PendingTransactionEvidenceMatch | null>;
+}
+
+export const DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS = 1_000;
+export const DEFAULT_PENDING_EVIDENCE_MAX_READS = 8;
+const MAX_PENDING_EVIDENCE_PAYLOAD_BYTES = 64 * 1024;
+
 /**
  * The sole high-level production registration surface. Every consumer obtains
  * a typed projection from this object; category-specific arrays are never
@@ -49,6 +122,7 @@ export class AdapterFamilyRegistry {
   private readonly victimModelRegistry: VictimModelRegistry;
   private readonly oracleVictimDescriptors: readonly OracleVictimDescriptor[];
   private readonly landedPoolDiscoveryRegistry: LandedPoolDiscoveryRegistry;
+  private readonly pendingEvidenceProjection: PendingTransactionEvidenceProjection;
   private readonly ownedActionOwners = new Map<string, ExecutionFamilyId>();
   private readonly registeredVenueOwners = new Map<string, ExecutionFamilyId>();
   private readonly registeredIdentitySourceOwners = new Map<string, ExecutionFamilyId>();
@@ -60,9 +134,13 @@ export class AdapterFamilyRegistry {
     const credit: CreditAdapterFamily[] = [];
     const liquidity: LiquidityAdapterFamily[] = [];
     const routes: RouteLegAdapter[] = [];
+    const pendingEvidenceObservers: RegisteredPendingTransactionEvidenceObserver[] = [];
 
     for (const family of families) {
-      this.registerBase(family);
+      this.registerBase(family, pendingEvidenceObservers);
+      if (family.kind !== "flash-loan") {
+        assertPreparedRouteCapability(family);
+      }
       switch (family.kind) {
         case "swap":
           assertRoutePricingCapability(family);
@@ -122,6 +200,9 @@ export class AdapterFamilyRegistry {
       this.swapFamilies,
       this.landedEventRegistry,
     );
+    this.pendingEvidenceProjection = createPendingTransactionEvidenceProjection(
+      pendingEvidenceObservers,
+    );
   }
 
   list(): readonly AdapterFamily[] {
@@ -152,6 +233,10 @@ export class AdapterFamilyRegistry {
 
   oracleVictims(): readonly OracleVictimDescriptor[] {
     return this.oracleVictimDescriptors;
+  }
+
+  pendingTransactionEvidence(): PendingTransactionEvidenceProjection {
+    return this.pendingEvidenceProjection;
   }
 
   landedPoolDiscovery(): LandedPoolDiscoveryRegistry {
@@ -301,9 +386,27 @@ export class AdapterFamilyRegistry {
       (typeof value === "string" && this.registeredIdentitySourceOwners.has(value));
   }
 
-  private registerBase(family: AdapterFamily): void {
+  private registerBase(
+    family: AdapterFamily,
+    pendingEvidenceObservers: RegisteredPendingTransactionEvidenceObserver[],
+  ): void {
     if (this.byId.has(family.id)) {
       throw new Error(`adapter-family registry: duplicate family ${family.id}`);
+    }
+    const pendingEvidence = family.kind === "flash-loan"
+      ? undefined
+      : family.pendingTransactionEvidence;
+    if (
+      pendingEvidence !== undefined &&
+      (
+        typeof pendingEvidence.mightMatch !== "function" ||
+        typeof pendingEvidence.observe !== "function"
+      )
+    ) {
+      throw new Error(
+        `adapter-family registry: ${family.id} pending transaction evidence ` +
+          `requires mightMatch + observe`,
+      );
     }
     const local = new Set<string>();
     for (const id of family.ownedActionAdapterIds) {
@@ -327,7 +430,374 @@ export class AdapterFamilyRegistry {
       }
     }
     this.byId.set(family.id, family);
+    if (pendingEvidence !== undefined) {
+      pendingEvidenceObservers.push(Object.freeze({
+        familyId: family.id,
+        mightMatch: pendingEvidence.mightMatch.bind(pendingEvidence),
+        observe: pendingEvidence.observe.bind(pendingEvidence),
+      }));
+    }
   }
+}
+
+function createPendingTransactionEvidenceProjection(
+  observers: readonly RegisteredPendingTransactionEvidenceObserver[],
+): PendingTransactionEvidenceProjection {
+  const registered = Object.freeze([...observers]);
+  const familyIds = Object.freeze(registered.map((observer) => observer.familyId));
+  const byFamilyId = new Map(
+    registered.map((observer) => [observer.familyId, observer] as const),
+  );
+  return Object.freeze({
+    familyIds,
+    candidateFamilyIds(
+      tx: PendingTransactionEvidenceInput,
+    ): readonly ExecutionFamilyId[] {
+      const input = freezePendingEvidenceInput(tx);
+      return Object.freeze(registered
+        .filter((observer) => {
+          try {
+            return observer.mightMatch(input);
+          } catch {
+            // Include the faulty matcher in bounded dispatch so telemetry can
+            // attribute the stable matcher_error code to its family.
+            return true;
+          }
+        })
+        .map((observer) => observer.familyId));
+    },
+    async observe(
+      tx: PendingTransactionEvidenceInput,
+      transport: PendingTransactionEvidenceTransport,
+      policy: PendingTransactionEvidenceDispatchPolicy = {},
+    ): Promise<PendingTransactionEvidenceDispatchResult> {
+      const input = freezePendingEvidenceInput(tx);
+      const head = freezePendingEvidenceHead(transport.head);
+      const timeoutMs = finitePositiveInteger(
+        policy.timeoutMs ?? DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
+        "pending evidence timeoutMs",
+      );
+      const maxReadsPerFamily = finitePositiveInteger(
+        policy.maxReadsPerFamily ?? DEFAULT_PENDING_EVIDENCE_MAX_READS,
+        "pending evidence maxReadsPerFamily",
+      );
+      const selected = policy.familyIds === undefined
+        ? registered
+        : Object.freeze(policy.familyIds.map((familyId) => {
+            const observer = byFamilyId.get(familyId);
+            if (!observer) {
+              throw new Error(
+                `pending transaction evidence family is not registered: ${familyId}`,
+              );
+            }
+            return observer;
+          }));
+      const outcomes = await Promise.all(selected.map((observer) =>
+        runPendingEvidenceObserver(
+          observer,
+          input,
+          head,
+          transport,
+          timeoutMs,
+          maxReadsPerFamily,
+        )
+      ));
+      const successfulFamilyIds = outcomes
+        .filter((outcome) => outcome.failure === null)
+        .map((outcome) => outcome.familyId);
+      const evidence = outcomes
+        .map((outcome) => outcome.evidence)
+        .filter(
+          (item): item is PendingExecutionEvidence => item !== null,
+        );
+      const failures = outcomes
+        .filter(
+          (
+            outcome,
+          ): outcome is typeof outcome & {
+            readonly failure: PendingTransactionEvidenceFailureCode;
+          } =>
+            outcome.failure !== null,
+        )
+        .map((outcome) => Object.freeze({
+          familyId: outcome.familyId,
+          code: outcome.failure,
+        }));
+      return Object.freeze({
+        attemptedFamilyIds: Object.freeze(
+          selected.map((observer) => observer.familyId),
+        ),
+        successfulFamilyIds: Object.freeze(successfulFamilyIds),
+        evidence: Object.freeze(evidence),
+        matched: evidence.length > 0,
+        failures: Object.freeze(failures),
+      });
+    },
+  });
+}
+
+interface PendingEvidenceObserverOutcome {
+  readonly familyId: ExecutionFamilyId;
+  readonly evidence: PendingExecutionEvidence | null;
+  readonly failure: PendingTransactionEvidenceFailureCode | null;
+}
+
+class PendingEvidenceDispatchError extends Error {
+  constructor(readonly code: PendingTransactionEvidenceFailureCode) {
+    super(code);
+    this.name = "PendingEvidenceDispatchError";
+  }
+}
+
+async function runPendingEvidenceObserver(
+  observer: RegisteredPendingTransactionEvidenceObserver,
+  input: PendingTransactionEvidenceInput,
+  head: PendingTransactionEvidenceHead,
+  transport: PendingTransactionEvidenceTransport,
+  timeoutMs: number,
+  maxReadsPerFamily: number,
+): Promise<PendingEvidenceObserverOutcome> {
+  let mightMatch: boolean;
+  try {
+    mightMatch = observer.mightMatch(input);
+    if (typeof mightMatch !== "boolean") {
+      throw new PendingEvidenceDispatchError("invalid_result");
+    }
+  } catch (error) {
+    return pendingEvidenceFailureOutcome(
+      observer.familyId,
+      error instanceof PendingEvidenceDispatchError
+        ? error.code
+        : "matcher_error",
+    );
+  }
+  if (!mightMatch) {
+    return Object.freeze({
+      familyId: observer.familyId,
+      evidence: null,
+      failure: null,
+    });
+  }
+
+  const controller = new AbortController();
+  const detachParent = linkPendingEvidenceAbort(transport.signal, controller);
+  const deadlineAtMs = Math.min(
+    transport.deadlineAtMs ?? Number.POSITIVE_INFINITY,
+    Date.now() + timeoutMs,
+  );
+  let deadlineExpired = false;
+  const timer = setTimeout(() => {
+    deadlineExpired = true;
+    controller.abort(new PendingEvidenceDispatchError("deadline"));
+  }, Math.max(0, deadlineAtMs - Date.now()));
+  let reads = 0;
+  const context: PendingTransactionEvidenceContext = Object.freeze({
+    head,
+    deadlineAtMs,
+    signal: controller.signal,
+    async call(read: PendingTransactionEvidenceRead): Promise<string> {
+      if (controller.signal.aborted) {
+        throw controller.signal.reason ??
+          new PendingEvidenceDispatchError(
+            deadlineExpired ? "deadline" : "aborted",
+          );
+      }
+      reads += 1;
+      if (reads > maxReadsPerFamily) {
+        throw new PendingEvidenceDispatchError("read_budget");
+      }
+      try {
+        return await awaitPendingEvidenceAbort(
+          transport.call(
+            freezePendingEvidenceRead(read),
+            Object.freeze({ signal: controller.signal, deadlineAtMs }),
+          ),
+          controller.signal,
+        );
+      } catch (error) {
+        if (error instanceof PendingEvidenceDispatchError) throw error;
+        if (controller.signal.aborted) {
+          throw controller.signal.reason ??
+            new PendingEvidenceDispatchError(
+              deadlineExpired ? "deadline" : "aborted",
+            );
+        }
+        throw new PendingEvidenceDispatchError("backend");
+      }
+    },
+  });
+
+  try {
+    const result = await awaitPendingEvidenceAbort(
+      Promise.resolve(observer.observe(input, context)),
+      controller.signal,
+    );
+    if (result === null) {
+      return Object.freeze({
+        familyId: observer.familyId,
+        evidence: null,
+        failure: null,
+      });
+    }
+    const canonicalPayload = canonicalPendingEvidencePayload(result);
+    const payloadHash = ethers.keccak256(canonicalPayload);
+    const evidenceHash = ethers.keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(
+        ["string", "bytes32", "uint256", "bytes32", "bytes32"],
+        [
+          observer.familyId,
+          input.hash,
+          head.number,
+          head.hash,
+          payloadHash,
+        ],
+      ),
+    );
+    return Object.freeze({
+      familyId: observer.familyId,
+      evidence: Object.freeze({
+        familyId: observer.familyId,
+        txHash: input.hash,
+        headBlockNumber: head.number,
+        headHash: head.hash,
+        canonicalPayload,
+        payloadHash,
+        evidenceHash,
+      }),
+      failure: null,
+    });
+  } catch (error) {
+    const code = error instanceof PendingEvidenceDispatchError
+      ? error.code
+      : controller.signal.aborted
+        ? deadlineExpired ? "deadline" : "aborted"
+        : "observer_error";
+    return pendingEvidenceFailureOutcome(observer.familyId, code);
+  } finally {
+    clearTimeout(timer);
+    detachParent();
+  }
+}
+
+function pendingEvidenceFailureOutcome(
+  familyId: ExecutionFamilyId,
+  code: PendingTransactionEvidenceFailureCode,
+): PendingEvidenceObserverOutcome {
+  return Object.freeze({ familyId, evidence: null, failure: code });
+}
+
+function freezePendingEvidenceInput(
+  tx: PendingTransactionEvidenceInput,
+): PendingTransactionEvidenceInput {
+  if (!ethers.isHexString(tx.hash, 32)) {
+    throw new Error("pending transaction evidence requires a bytes32 tx hash");
+  }
+  if (!ethers.isHexString(tx.data)) {
+    throw new Error("pending transaction evidence requires hex calldata");
+  }
+  if (tx.to !== null && !ethers.isAddress(tx.to)) {
+    throw new Error("pending transaction evidence requires a valid to address");
+  }
+  return Object.freeze({
+    hash: tx.hash.toLowerCase(),
+    to: tx.to === null ? null : ethers.getAddress(tx.to),
+    data: ethers.hexlify(ethers.getBytes(tx.data)),
+  });
+}
+
+function freezePendingEvidenceHead(
+  head: PendingTransactionEvidenceHead,
+): PendingTransactionEvidenceHead {
+  if (!Number.isSafeInteger(head.number) || head.number < 0) {
+    throw new Error("pending transaction evidence requires a valid head number");
+  }
+  if (!ethers.isHexString(head.hash, 32)) {
+    throw new Error("pending transaction evidence requires a bytes32 head hash");
+  }
+  return Object.freeze({
+    number: head.number,
+    hash: head.hash.toLowerCase(),
+  });
+}
+
+function freezePendingEvidenceRead(
+  read: PendingTransactionEvidenceRead,
+): PendingTransactionEvidenceRead {
+  if (!ethers.isAddress(read.to) || !ethers.isHexString(read.data)) {
+    throw new PendingEvidenceDispatchError("invalid_result");
+  }
+  return Object.freeze({
+    to: ethers.getAddress(read.to),
+    data: ethers.hexlify(ethers.getBytes(read.data)),
+  });
+}
+
+function canonicalPendingEvidencePayload(
+  result: PendingTransactionEvidenceMatch,
+): string {
+  if (
+    typeof result !== "object" ||
+    result === null ||
+    !("canonicalPayload" in result) ||
+    typeof result.canonicalPayload !== "string" ||
+    !ethers.isHexString(result.canonicalPayload)
+  ) {
+    throw new PendingEvidenceDispatchError("invalid_result");
+  }
+  const bytes = ethers.getBytes(result.canonicalPayload);
+  if (bytes.length === 0 || bytes.length > MAX_PENDING_EVIDENCE_PAYLOAD_BYTES) {
+    throw new PendingEvidenceDispatchError("invalid_result");
+  }
+  return ethers.hexlify(bytes);
+}
+
+function finitePositiveInteger(value: number, label: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${label} must be a positive safe integer`);
+  }
+  return value;
+}
+
+function linkPendingEvidenceAbort(
+  source: AbortSignal | undefined,
+  target: AbortController,
+): () => void {
+  if (!source) return () => {};
+  if (source.aborted) {
+    target.abort(source.reason ?? new PendingEvidenceDispatchError("aborted"));
+    return () => {};
+  }
+  const abort = (): void =>
+    target.abort(source.reason ?? new PendingEvidenceDispatchError("aborted"));
+  source.addEventListener("abort", abort, { once: true });
+  return () => source.removeEventListener("abort", abort);
+}
+
+function awaitPendingEvidenceAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(
+      signal.reason ?? new PendingEvidenceDispatchError("aborted"),
+    );
+  }
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => {
+      reject(signal.reason ?? new PendingEvidenceDispatchError("aborted"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
 }
 
 function assertRoutePricingCapability(
@@ -336,6 +806,31 @@ function assertRoutePricingCapability(
   if (!family.pricingState) {
     throw new Error(
       `adapter-family registry: ${family.id} lacks production block-scan pricing capability`,
+    );
+  }
+}
+
+function assertPreparedRouteCapability(family: RouteLegAdapter): void {
+  const prepared = family.prepared;
+  if (prepared === null) return;
+  const hasQuote = typeof prepared.quote === "function";
+  const hasReason =
+    typeof prepared.quoteUnsupportedReason === "string" &&
+    prepared.quoteUnsupportedReason.trim().length > 0;
+  if (hasQuote === hasReason) {
+    throw new Error(
+      `adapter-family registry: ${family.id} prepared capability must declare ` +
+        `exactly one of quote or quoteUnsupportedReason`,
+    );
+  }
+  if (
+    typeof prepared.encodeQuotePrewarm !== "function" ||
+    typeof prepared.allowanceSpender !== "function" ||
+    typeof prepared.prewarmAddresses !== "function"
+  ) {
+    throw new Error(
+      `adapter-family registry: ${family.id} prepared capability lacks ` +
+        `prewarm/allowance/address helpers`,
     );
   }
 }

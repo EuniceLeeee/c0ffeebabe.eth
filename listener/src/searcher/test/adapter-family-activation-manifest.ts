@@ -46,6 +46,7 @@ interface FrozenBaseline {
   readonly schemaVersion: 1;
   readonly baselineCommit: string;
   readonly staticDeclaredVenueCount: number;
+  readonly preparedQuoteFamilyIds: readonly string[];
   readonly fundingPlanningOrder: readonly string[];
   readonly fundingLiquidityOrder: readonly string[];
   readonly defaultFundingFamilyId: string;
@@ -101,6 +102,7 @@ function testFrozenActivationSet(): void {
     "baseline current family ids",
   );
   unique(baseline.declaredAdditionFamilyIds, "declared addition ids");
+  unique(baseline.preparedQuoteFamilyIds, "prepared quote family ids");
 
   const currentById = new Map(manifest.families.map((row) => [row.familyId, row]));
   for (const expected of baseline.baselineActive) {
@@ -143,7 +145,17 @@ function testFrozenActivationSet(): void {
   for (const addition of baseline.declaredAdditionFamilyIds) {
     assert(currentById.has(addition), `declared addition ${addition} is absent`);
   }
+
+  const preparedQuoteFamilyIds = manifest.families
+    .filter((row) => row.route?.pricing?.hasPreparedQuote)
+    .map((row) => row.familyId);
+  assert.deepEqual(
+    preparedQuoteFamilyIds,
+    baseline.preparedQuoteFamilyIds,
+    "prepared quote family coverage changed",
+  );
   console.log("[adapter-family-activation] frozen baseline-active set: PASS");
+  console.log("[adapter-family-activation] frozen prepared quote coverage: PASS");
 }
 
 function testUniversalDerivedViews(): void {
