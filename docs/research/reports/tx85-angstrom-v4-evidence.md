@@ -80,6 +80,9 @@ amount:
   `beffa3da757a4645dd8b6c14ca08e084149d624b264206baa401fa4483807eaa`;
 - candidate code SHA:
   `2be4bf12d42fa7c04f034bfda9357a07405634cd`.
+- node-local semantic log SHA-256:
+  `6eab2bb5e1189cd6df4aedd342e521ecfe98e085268721e88335521785b53b6c`
+  (six ordered `SEMANTIC_SIX_STEP_EVIDENCE` records).
 
 A first run with no `AB_EXPECTED_*` input naturally enumerated the target
 PoolId plus the UniV3 return pool at refined rank 27. The semantic run then
