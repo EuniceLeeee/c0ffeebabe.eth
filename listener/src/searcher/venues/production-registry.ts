@@ -22,6 +22,7 @@ import { curveUnderlyingAdapter } from "./swaps/curve-underlying.js";
 import { univ2StandardAdapter } from "./swaps/univ2-standard.js";
 import { univ3StandardAdapter } from "./swaps/univ3-standard.js";
 import { univ4Adapter } from "./swaps/univ4.js";
+import { angstromV4Adapter } from "./swaps/angstrom-v4.js";
 import { dodoV2Adapter } from "./swaps/dodo-v2.js";
 import { fluidDexAdapter } from "./swaps/fluid-dex.js";
 import {
@@ -44,6 +45,7 @@ export const PRODUCTION_ADAPTER_FAMILIES = new AdapterFamilyRegistry([
     curveUnderlyingAdapter,
     balancerV3Adapter,
     univ4Adapter,
+    angstromV4Adapter,
     dodoV2Adapter,
     fluidDexAdapter,
     erc4626Adapter,

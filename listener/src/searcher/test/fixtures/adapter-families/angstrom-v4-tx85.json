@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 3,
+  "id": "angstrom-v4-tx85",
+  "executionFamilyId": "custom-swap:angstrom-v4",
+  "referenceTx": "0x85e9c8d4b8f799dca214f6057d9caea6ca9485d7d4f9ae7603a7aec3427ac8b0",
+  "lane": "block-scan",
+  "stateAnchor": {
+    "kind": "parent-block",
+    "blockNumber": 25635364
+  },
+  "flash": {
+    "adapterId": "balancer-flash",
+    "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+  },
+  "route": [
+    {
+      "seq": 1,
+      "pool": {
+        "adapter": "angstrom-v4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "poolId": "0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3",
+        "currency0": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "currency1": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "fee": 8388608,
+        "tickSpacing": 10,
+        "hooks": "0x0000000aa232009084bd71a5797d089aa4edfad4",
+        "logicalInstanceId": "0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3"
+      },
+      "edgeAdapterId": "angstrom-v4-swap",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "referenceWitness": {
+        "calls": [{
+          "id": "root",
+          "target": "execution-target",
+          "signature": "swap((address,address,uint24,int24,address),bool,uint128,uint128,(uint64,bytes)[],address,uint256)"
+        }]
+      }
+    },
+    {
+      "seq": 2,
+      "pool": {
+        "adapter": "univ3",
+        "address": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+        "token0": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "token1": "0xdac17f958d2ee523a2206206994597c13d831ec7"
+      },
+      "edgeAdapterId": "univ3-swap",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "referenceWitness": {
+        "calls": [{
+          "id": "root",
+          "target": "execution-target",
+          "signature": "swap(address,bool,int256,uint160,bytes)"
+        }]
+      }
+    }
+  ],
+  "landedReference": {
+    "classificationNetProfitUsd": 1.62,
+    "evidencePath": "docs/research/reports/tx85-angstrom-v4-evidence.md",
+    "evidenceSha256": "cd5c5214537d54a7ce403117aac231ae7cdfb43830743a3cfd08319109748260"
+  }
+}

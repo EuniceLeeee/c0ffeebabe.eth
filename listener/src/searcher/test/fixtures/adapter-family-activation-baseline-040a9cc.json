@@ -8,6 +8,7 @@
     "curve-plain",
     "curve-underlying",
     "univ4",
+    "custom-swap:angstrom-v4",
     "custom-swap:dodo-v2",
     "fluid-dex",
     "protocol:goldx",
@@ -25,7 +26,10 @@
   ],
   "defaultFundingFamilyId": "flash-loan:morpho",
   "defaultFundingActionAdapterId": "morpho-flash",
-  "declaredAdditionFamilyIds": ["protocol:self-burn-native"],
+  "declaredAdditionFamilyIds": [
+    "custom-swap:angstrom-v4",
+    "protocol:self-burn-native"
+  ],
   "declaredDiscoveryMigrations": {
     "fluid-dex": ["dex-token-domain"],
     "credit:fluid": ["dex-token-domain"]
