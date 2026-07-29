@@ -2,10 +2,57 @@ import assert from "node:assert/strict";
 import { LatestHeadScheduler } from "../latest-head-scheduler.js";
 
 await coalescesToNewestWithOneWorker();
+await rerunsSameHeadForNewRevision();
 await continuesAfterWorkerFailure();
 await shutdownDropsPendingAndDrainsActive();
 
 console.log("[latest-head-scheduler] newest-head/draining shutdown: PASS");
+
+async function rerunsSameHeadForNewRevision(): Promise<void> {
+  const first = deferred();
+  const runs: Array<{ block: number; revision: number }> = [];
+  const scheduler = new LatestHeadScheduler(
+    async (block, observation) => {
+      runs.push({ block, revision: observation.revision ?? 0 });
+      if (runs.length === 1) await first.promise;
+    },
+  );
+  scheduler.schedule(150);
+  await waitFor(() => runs.length === 1);
+  scheduler.scheduleRevision(150, 1, {
+    sourceHeadSeenAtMs: Date.now(),
+    sourceHeadSeenAtMonotonicMs: performance.now(),
+  });
+  scheduler.scheduleRevision(150, 1, {
+    sourceHeadSeenAtMs: Date.now(),
+    sourceHeadSeenAtMonotonicMs: performance.now(),
+  });
+  first.resolve();
+  await waitFor(() => scheduler.telemetry().active === null);
+  assert.deepEqual(runs, [
+    { block: 150, revision: 0 },
+    { block: 150, revision: 1 },
+  ]);
+
+  scheduler.scheduleRevision(151, 1, {
+    sourceHeadSeenAtMs: Date.now(),
+    sourceHeadSeenAtMonotonicMs: performance.now(),
+  });
+  scheduler.schedule(151);
+  await waitFor(() => scheduler.telemetry().active === null);
+  assert.deepEqual(
+    runs.at(-1),
+    { block: 151, revision: 1 },
+    "evidence arriving before the ordinary head must become one combined pass",
+  );
+  assert.throws(
+    () => scheduler.scheduleRevision(151, 0, {
+      sourceHeadSeenAtMs: Date.now(),
+      sourceHeadSeenAtMonotonicMs: performance.now(),
+    }),
+    /invalid scheduled head revision/,
+  );
+}
 
 async function coalescesToNewestWithOneWorker(): Promise<void> {
   const gates = new Map<number, ReturnType<typeof deferred>>();

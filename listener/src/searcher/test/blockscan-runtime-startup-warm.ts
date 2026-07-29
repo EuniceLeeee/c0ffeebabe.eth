@@ -19,7 +19,10 @@ import {
   incompleteBlockScanFamilies,
   NMinusOneProducerGate,
   summarizeBlockScanIssueCauses,
+  type BlockScanAtomicExecutionInput,
+  type BlockScanAtomicResult,
   type BlockScanEnumerationSolverTelemetrySink,
+  type BlockScanPendingEvidenceTrigger,
   type BlockScanRuntimeLoopDependencies,
 } from "../blockscan-runtime-loop.js";
 import {
@@ -52,6 +55,13 @@ import {
   type VerifiedGraphView,
 } from "../venues/blockscan-state-capability.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from
+  "../venues/production-registry.js";
+import type {
+  ExactQuoteContext,
+  ExecutionFamilyId,
+  PendingExecutionEvidence,
+} from "../venues/route-leg-adapter.js";
 
 const HOT_BUDGET_MS = 25;
 const STARTUP_BUDGET_MS = 500;
@@ -64,6 +74,8 @@ const ROUTE_TOKEN_B = address(0xb002);
 const ROUTE_POOL_CHEAP = address(0xc001);
 const ROUTE_POOL_RICH = address(0xc002);
 const ROUTE_V2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+const PENDING_EVIDENCE_FAMILY: ExecutionFamilyId =
+  "custom-swap:fixture-current-head";
 const routePairInterface = new ethers.Interface([
   "function token0() view returns (address)",
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
@@ -90,6 +102,17 @@ await degradedSnapshotCompletesStartupWithoutScanning();
 await latestHeadCoalescesDuringStartupWarm();
 await protocolLagDoesNotBlockDexRuntime();
 await familyProjectionLagDoesNotBlockOrdinaryDexRuntime();
+await sameHeadEvidenceTransactionsRemainFifoAndIsolated();
+await exactRefineAndSolverShareOneBoundEvidenceContext();
+await pendingEvidenceCooperativelyInterruptsOrdinaryPass();
+await pendingEvidenceInterruptsNonCooperativeAtomicFinalSim();
+await startupWarmRequeuesEvidenceWithinOriginalDeadline();
+await startupWarmRecordsExpiredEvidenceInsteadOfSilentlyDropping();
+await evidenceReorgKeepsFollowingEvidencePassCombined();
+await unavailableDependenciesDrainEvidenceFifoWithoutLeakingKeys();
+await sameHeightReorgForcesEvidenceBackToCombinedMode();
+await newerEvidenceHeadCancelsBlockedEvidencePass();
+await workerForkReceivesPassCancellationControl();
 blindModeStillRequiresExecutableDexGraph();
 await observedPublicationDoesNotInvalidateHotDexCommit();
 await shutdownInterruptsStartupBackfillWait();
@@ -105,7 +128,7 @@ failureCauseSummaryIsBoundedAndRedacted();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (26/26)",
+    "PASS (37/37)",
 );
 
 function nMinusOneFundingIsCandidateLocal(): void {
@@ -544,6 +567,628 @@ async function familyProjectionLagDoesNotBlockOrdinaryDexRuntime(): Promise<void
   );
 }
 
+async function sameHeadEvidenceTransactionsRemainFifoAndIsolated(): Promise<void> {
+  const sourceBlock = 610;
+  const harness = createHarness(
+    sourceBlock - 1,
+    ["complete", "complete"],
+    {
+      startupWarmEnabled: false,
+      routePipeline: true,
+      pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
+    },
+  );
+  const first = pendingEvidenceTrigger(sourceBlock, 0x6101);
+  const second = pendingEvidenceTrigger(sourceBlock, 0x6102);
+
+  assert.equal(harness.loop.schedulePendingEvidence(first), true);
+  assert.equal(harness.loop.schedulePendingEvidence(second), true);
+  await waitFor(() => harness.solverExecutionEvidence.length === 2);
+
+  assert.deepEqual(
+    harness.solverExecutionEvidence.map((items) =>
+      items.map((item) => ({
+        familyId: item.familyId,
+        txHash: item.txHash,
+      }))
+    ),
+    [
+      [{
+        familyId: PENDING_EVIDENCE_FAMILY,
+        txHash: first.txHash,
+      }],
+      [{
+        familyId: PENDING_EVIDENCE_FAMILY,
+        txHash: second.txHash,
+      }],
+    ],
+    "same-head evidence must remain FIFO and each solver invocation must see " +
+      "exactly one immutable transaction context",
+  );
+  await harness.loop.shutdown();
+}
+
+async function exactRefineAndSolverShareOneBoundEvidenceContext(): Promise<void> {
+  const sourceBlock = 615;
+  const edgeAdapterId = "fixture-current-head-swap";
+  const routeRegistry = PRODUCTION_ADAPTER_FAMILIES.routes() as unknown as {
+    readonly byEdgeAdapter: Map<string, {
+      readonly id: ExecutionFamilyId;
+      quoteExact(ctx: ExactQuoteContext): Promise<bigint>;
+    }>;
+  };
+  assert.equal(
+    routeRegistry.byEdgeAdapter.has(edgeAdapterId),
+    false,
+    "the test-only edge adapter id must not collide with production",
+  );
+  const exactQuoteEvidence: PendingExecutionEvidence[] = [];
+  let harness: ReturnType<typeof createHarness> | null = null;
+
+  // quote() deliberately resolves through the production registry singleton.
+  // Register one synthetic family edge for this isolated process, then remove
+  // it in finally, so the test exercises the real dispatcher without naming
+  // or mutating any production family adapter.
+  routeRegistry.byEdgeAdapter.set(edgeAdapterId, Object.freeze({
+    id: PENDING_EVIDENCE_FAMILY,
+    async quoteExact(ctx: ExactQuoteContext): Promise<bigint> {
+      assert(
+        ctx.executionEvidence,
+        "the custom current-head family must receive exact quote evidence",
+      );
+      exactQuoteEvidence.push(ctx.executionEvidence);
+      return ctx.amountIn + 1n;
+    },
+  }));
+  try {
+    harness = createHarness(
+      sourceBlock - 1,
+      ["complete"],
+      {
+        startupWarmEnabled: false,
+        routePipeline: true,
+        routeEdgeAdapterId: edgeAdapterId,
+        pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
+      },
+    );
+    const trigger = pendingEvidenceTrigger(
+      sourceBlock,
+      0x6151,
+      PENDING_EVIDENCE_FAMILY,
+    );
+    const expectedEvidence = trigger.evidence[0]!;
+
+    assert.equal(harness.loop.schedulePendingEvidence(trigger), true);
+    await waitFor(() => harness!.solverExecutionEvidence.length === 1);
+
+    assert(
+      exactQuoteEvidence.length > 0,
+      "the combined pass must run at least one exact family quote",
+    );
+    for (const observed of exactQuoteEvidence) {
+      assert.strictEqual(
+        observed,
+        expectedEvidence,
+        "every exact quote hop must receive the immutable tx/head-bound " +
+          "evidence object from this pass",
+      );
+    }
+    assert.strictEqual(
+      harness.solverExecutionEvidence[0]?.[0],
+      expectedEvidence,
+      "solver must receive the same evidence object used by exact refinement",
+    );
+    const recomputedEvidenceHash = ethers.keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(
+        ["string", "bytes32", "uint256", "bytes32", "bytes32"],
+        [
+          expectedEvidence.familyId,
+          trigger.txHash,
+          trigger.head.number,
+          trigger.head.hash,
+          expectedEvidence.payloadHash,
+        ],
+      ),
+    );
+    assert.deepEqual(
+      {
+        txHash: expectedEvidence.txHash,
+        headBlockNumber: expectedEvidence.headBlockNumber,
+        headHash: expectedEvidence.headHash,
+        payloadHash: expectedEvidence.payloadHash,
+        evidenceHash: expectedEvidence.evidenceHash,
+      },
+      {
+        txHash: trigger.txHash,
+        headBlockNumber: trigger.head.number,
+        headHash: trigger.head.hash,
+        payloadHash: ethers.keccak256(expectedEvidence.canonicalPayload),
+        evidenceHash: recomputedEvidenceHash,
+      },
+      "the shared object must remain bound to the triggering tx and head",
+    );
+  } finally {
+    routeRegistry.byEdgeAdapter.delete(edgeAdapterId);
+    await harness?.loop.shutdown();
+  }
+}
+
+async function pendingEvidenceCooperativelyInterruptsOrdinaryPass(): Promise<void> {
+  const sourceBlock = 620;
+  const ordinaryEntered = deferred<void>();
+  const ordinaryInterrupted = deferred<void>();
+  const harness = createHarness(
+    sourceBlock - 1,
+    ["complete"],
+    {
+      startupWarmEnabled: false,
+      routePipeline: true,
+      pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
+      beforePrepareResult: async (call, input) => {
+        if (call !== 1) return;
+        ordinaryEntered.resolve();
+        const signal = input.signal;
+        assert(signal, "ordinary runtime preparation must receive pass-local cancellation");
+        await new Promise<void>((_resolve, reject) => {
+          const interrupted = () => {
+            ordinaryInterrupted.resolve();
+            reject(signal.reason);
+          };
+          if (signal.aborted) interrupted();
+          else signal.addEventListener("abort", interrupted, { once: true });
+        });
+      },
+    },
+  );
+  harness.loop.schedule(sourceBlock);
+  await ordinaryEntered.promise;
+
+  const trigger = pendingEvidenceTrigger(sourceBlock, 0x6201);
+  assert.equal(harness.loop.schedulePendingEvidence(trigger), true);
+  await ordinaryInterrupted.promise;
+  await waitFor(() => harness.solverExecutionEvidence.length === 1);
+
+  assert.equal(
+    harness.routeTelemetryRecords[0]?.passReason,
+    "pending_evidence_priority",
+    "the interrupted ordinary pass must close with a structured priority reason",
+  );
+  assert.deepEqual(
+    harness.solverExecutionEvidence[0]?.map((item) => item.txHash),
+    [trigger.txHash],
+    "the prioritized combined pass must carry the triggering evidence to solver",
+  );
+  await harness.loop.shutdown();
+}
+
+async function pendingEvidenceInterruptsNonCooperativeAtomicFinalSim(): Promise<void> {
+  const sourceBlock = 625;
+  const ordinaryAtomicEntered = deferred<void>();
+  const ordinaryAtomicAborted = deferred<void>();
+  const evidenceAtomicEntered = deferred<void>();
+  let atomicCalls = 0;
+  let activeAtomicCalls = 0;
+  let maxActiveAtomicCalls = 0;
+  let ordinaryWorkerReleased = false;
+  let evidencePassMode: string | null = null;
+  let ordinaryCompletedAtEvidenceAtomic: boolean | null = null;
+  let harness!: ReturnType<typeof createHarness>;
+
+  harness = createHarness(
+    sourceBlock - 1,
+    ["complete", "complete"],
+    {
+      startupWarmEnabled: false,
+      routePipeline: true,
+      pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
+      pendingEvidenceRouteEdgeAdapterId: null,
+      solverNetProfit: 1n,
+      submitAtomic: async (input) => {
+        atomicCalls++;
+        activeAtomicCalls++;
+        maxActiveAtomicCalls = Math.max(
+          maxActiveAtomicCalls,
+          activeAtomicCalls,
+        );
+        if (atomicCalls === 1) {
+          ordinaryAtomicEntered.resolve();
+          return await new Promise<BlockScanAtomicResult>(
+            (_resolve, reject) => {
+              let settled = false;
+              const abort = () => {
+                if (settled) return;
+                settled = true;
+                activeAtomicCalls--;
+                ordinaryWorkerReleased = true;
+                ordinaryAtomicAborted.resolve();
+                reject(input.signal.reason);
+              };
+              if (input.signal.aborted) abort();
+              else input.signal.addEventListener("abort", abort, { once: true });
+            },
+          );
+        }
+
+        assert.equal(
+          ordinaryWorkerReleased,
+          true,
+          "the ordinary atomic worker must settle before evidence execution starts",
+        );
+        evidencePassMode = harness.activePassMode;
+        ordinaryCompletedAtEvidenceAtomic =
+          harness.ordinaryCompleted(sourceBlock);
+        evidenceAtomicEntered.resolve();
+        activeAtomicCalls--;
+        return successfulAtomicResult();
+      },
+    },
+  );
+  harness.loop.schedule(sourceBlock);
+  await ordinaryAtomicEntered.promise;
+
+  const trigger = pendingEvidenceTrigger(sourceBlock, 0x6251);
+  assert.equal(harness.loop.schedulePendingEvidence(trigger), true);
+  await ordinaryAtomicAborted.promise;
+  await evidenceAtomicEntered.promise;
+  await waitFor(() => harness.solverExecutionEvidence.length === 2);
+
+  assert.equal(
+    harness.routeTelemetryRecords[0]?.passReason,
+    "pending_evidence_priority",
+    "an ordinary pass blocked in atomic execution must close as prioritized",
+  );
+  assert.equal(
+    evidencePassMode,
+    "combined",
+    "aborting ordinary final sim must leave the evidence pass combined",
+  );
+  assert.equal(
+    ordinaryCompletedAtEvidenceAtomic,
+    false,
+    "an aborted ordinary final sim must not mark the head complete",
+  );
+  assert.equal(
+    maxActiveAtomicCalls,
+    1,
+    "the same worker must never remain owned by both atomic passes",
+  );
+  assert.deepEqual(
+    harness.solverExecutionEvidence.map((items) =>
+      items.map((item) => item.txHash)
+    ),
+    [[], [trigger.txHash]],
+    "the released worker must start a fresh evidence-bound solver pass",
+  );
+  await harness.loop.shutdown();
+}
+
+async function startupWarmRequeuesEvidenceWithinOriginalDeadline(): Promise<void> {
+  const sourceBlock = 630;
+  const harness = createHarness(
+    sourceBlock - 1,
+    ["complete", "complete"],
+    {
+      routePipeline: true,
+      pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
+      passBudgetMs: 2_000,
+    },
+  );
+  const trigger = pendingEvidenceTrigger(sourceBlock, 0x6301);
+
+  assert.equal(harness.loop.schedulePendingEvidence(trigger), true);
+  await waitFor(() => harness.solverExecutionEvidence.length === 1);
+
+  assert.equal(harness.loop.isStartupWarmPending(), false);
+  assert.deepEqual(
+    harness.solverExecutionEvidence[0]?.map((item) => item.txHash),
+    [trigger.txHash],
+    "startup warm must requeue the same immutable evidence context",
+  );
+  assert.deepEqual(
+    harness.notStartedRecords,
+    [],
+    "an in-deadline startup requeue must not be reported as dropped",
+  );
+  await harness.loop.shutdown();
+}
+
+async function startupWarmRecordsExpiredEvidenceInsteadOfSilentlyDropping(): Promise<void> {
+  const sourceBlock = 640;
+  const harness = createHarness(
+    sourceBlock - 1,
+    ["complete"],
+    {
+      routePipeline: true,
+      pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
+      passBudgetMs: 10,
+      beforePrepareResult: async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+      },
+    },
+  );
+  const trigger = pendingEvidenceTrigger(sourceBlock, 0x6401);
+
+  assert.equal(harness.loop.schedulePendingEvidence(trigger), true);
+  await waitFor(() =>
+    harness.notStartedRecords.some((record) =>
+      record.passReason === "pending_evidence_deadline_before_schedule"
+    )
+  );
+
+  assert.equal(
+    harness.solverExecutionEvidence.length,
+    0,
+    "expired startup evidence must never reach solver",
+  );
+  assert.deepEqual(
+    harness.notStartedRecords.at(-1),
+    {
+      sourceBlock,
+      sourceBlockHash: hash(sourceBlock),
+      passReason: "pending_evidence_deadline_before_schedule",
+    },
+    "deadline expiry after startup warm must be a structured, hash-bound drop",
+  );
+  await harness.loop.shutdown();
+}
+
+async function evidenceReorgKeepsFollowingEvidencePassCombined(): Promise<void> {
+  const sourceBlock = 650;
+  let observeHeaderCalls = 0;
+  let secondPassMode: string | null = null;
+  let ordinaryCompletedAtSecondPrepare: boolean | null = null;
+  let harness!: ReturnType<typeof createHarness>;
+  harness = createHarness(
+    sourceBlock - 1,
+    ["complete"],
+    {
+      startupWarmEnabled: false,
+      routePipeline: true,
+      pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
+      observeHeader: (blockNumber) => {
+        observeHeaderCalls++;
+        return {
+          number: blockNumber,
+          hash: observeHeaderCalls === 1
+            ? hash(blockNumber + 1_000)
+            : hash(blockNumber),
+        };
+      },
+      beforePrepareResult: async () => {
+        secondPassMode = harness.activePassMode;
+        ordinaryCompletedAtSecondPrepare =
+          harness.ordinaryCompleted(sourceBlock);
+      },
+    },
+  );
+  const reorged = pendingEvidenceTrigger(sourceBlock, 0x6501);
+  const canonical = pendingEvidenceTrigger(sourceBlock, 0x6502);
+
+  assert.equal(harness.loop.schedulePendingEvidence(reorged), true);
+  assert.equal(harness.loop.schedulePendingEvidence(canonical), true);
+  await waitFor(() => harness.solverExecutionEvidence.length === 1);
+
+  assert.equal(
+    harness.routeTelemetryRecords[0]?.passReason,
+    "pending_evidence_head_reorged",
+  );
+  assert.equal(
+    ordinaryCompletedAtSecondPrepare,
+    false,
+    "a reorged combined pass must not mark ordinary enumeration complete",
+  );
+  assert.equal(
+    secondPassMode,
+    "combined",
+    "the next same-head evidence transaction must still run a combined pass",
+  );
+  assert.deepEqual(
+    harness.solverExecutionEvidence[0]?.map((item) => item.txHash),
+    [canonical.txHash],
+    "reorged evidence must not leak into the following canonical context",
+  );
+  await harness.loop.shutdown();
+}
+
+async function unavailableDependenciesDrainEvidenceFifoWithoutLeakingKeys(): Promise<void> {
+  const sourceBlock = 655;
+  const harness = createHarness(
+    sourceBlock - 1,
+    ["complete"],
+    {
+      startupWarmEnabled: false,
+      routePipeline: true,
+      pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
+      runtimeDependenciesAvailable: false,
+    },
+  );
+  const first = pendingEvidenceTrigger(sourceBlock, 0x6551);
+  const second = pendingEvidenceTrigger(sourceBlock, 0x6552);
+
+  assert.equal(harness.loop.schedulePendingEvidence(first), true);
+  assert.equal(harness.loop.schedulePendingEvidence(second), true);
+  await waitFor(() =>
+    harness.routeTelemetryRecords.filter((record) =>
+      record.finished &&
+      record.passReason === "runtime_dependencies_unavailable"
+    ).length === 2
+  );
+  assert.deepEqual(
+    harness.routeTelemetryRecords.map((record) => record.passReason),
+    [
+      "runtime_dependencies_unavailable",
+      "runtime_dependencies_unavailable",
+    ],
+    "dependency-unavailable evidence must drain one FIFO context at a time",
+  );
+
+  harness.setRuntimeDependenciesAvailable(true);
+  assert.equal(
+    harness.loop.schedulePendingEvidence(first),
+    true,
+    "a dropped evidence key must be reusable after structured dispatch cleanup",
+  );
+  await waitFor(() => harness.solverExecutionEvidence.length === 1);
+  assert.deepEqual(
+    harness.solverExecutionEvidence[0]?.map((item) => item.txHash),
+    [first.txHash],
+    "the third dispatch must not be blocked by a leaked key from the first",
+  );
+  await harness.loop.shutdown();
+}
+
+async function sameHeightReorgForcesEvidenceBackToCombinedMode(): Promise<void> {
+  const sourceBlock = 660;
+  const oldHash = hash(sourceBlock + 10_000);
+  const newHash = hash(sourceBlock + 20_000);
+  let canonicalHash = oldHash;
+  let evidencePassMode: string | null = null;
+  let prepareCalls = 0;
+  let harness!: ReturnType<typeof createHarness>;
+  harness = createHarness(
+    sourceBlock - 1,
+    ["complete", "complete"],
+    {
+      startupWarmEnabled: false,
+      routePipeline: true,
+      pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
+      observeHeader: (blockNumber) => ({
+        number: blockNumber,
+        hash: canonicalHash,
+      }),
+      readBlockHash: () => canonicalHash,
+      beforePrepareResult: async () => {
+        prepareCalls++;
+        if (prepareCalls === 2) {
+          evidencePassMode = harness.activePassMode;
+        }
+      },
+    },
+  );
+
+  await harness.run(sourceBlock);
+  assert.equal(
+    harness.ordinaryCompletedHash(sourceBlock),
+    oldHash,
+    "ordinary completion must retain the canonical hash, not just the height",
+  );
+
+  canonicalHash = newHash;
+  const evidence = pendingEvidenceTrigger(
+    sourceBlock,
+    0x6601,
+    PENDING_EVIDENCE_FAMILY,
+    newHash,
+  );
+  assert.equal(harness.loop.schedulePendingEvidence(evidence), true);
+  await waitFor(() => harness.solverExecutionEvidence.length === 1);
+
+  assert.equal(
+    evidencePassMode,
+    "combined",
+    "same-height evidence on a new canonical hash must rerun ordinary enumeration",
+  );
+  assert.equal(
+    harness.ordinaryCompletedHash(sourceBlock),
+    newHash,
+    "the completed ordinary marker must advance to the replacement hash",
+  );
+  assert.deepEqual(
+    harness.solverExecutionEvidence.at(-1)?.map((item) => item.txHash),
+    [evidence.txHash],
+  );
+  await harness.loop.shutdown();
+}
+
+async function newerEvidenceHeadCancelsBlockedEvidencePass(): Promise<void> {
+  const oldHead = 670;
+  const entered = deferred<void>();
+  const interrupted = deferred<void>();
+  const harness = createHarness(
+    oldHead - 1,
+    ["complete", "complete"],
+    {
+      startupWarmEnabled: false,
+      routePipeline: true,
+      pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
+      beforePrepareResult: async (call, input) => {
+        if (call !== 1) return;
+        entered.resolve();
+        const signal = input.signal;
+        assert(signal, "the old evidence pass must receive a cancellation signal");
+        await new Promise<void>((_resolve, reject) => {
+          const abort = () => {
+            interrupted.resolve();
+            reject(signal.reason);
+          };
+          if (signal.aborted) abort();
+          else signal.addEventListener("abort", abort, { once: true });
+        });
+      },
+    },
+  );
+  const oldEvidence = pendingEvidenceTrigger(oldHead, 0x6701);
+  const newEvidence = pendingEvidenceTrigger(oldHead + 1, 0x6711);
+
+  assert.equal(harness.loop.schedulePendingEvidence(oldEvidence), true);
+  await entered.promise;
+  assert.equal(
+    harness.loop.schedulePendingEvidence(newEvidence),
+    true,
+    "the evidence API itself must admit the advancing head",
+  );
+  await interrupted.promise;
+  await waitFor(() => harness.solverExecutionEvidence.length === 1);
+
+  assert.equal(
+    harness.routeTelemetryRecords[0]?.passReason,
+    "source_head_superseded",
+    "advancing evidence must cooperatively cancel the blocked older pass",
+  );
+  assert.deepEqual(
+    harness.solverExecutionEvidence[0]?.map((item) => item.txHash),
+    [newEvidence.txHash],
+    "only the newest evidence head may reach solver",
+  );
+  await harness.loop.shutdown();
+}
+
+async function workerForkReceivesPassCancellationControl(): Promise<void> {
+  const sourceBlock = 680;
+  let expectedSignal: AbortSignal | undefined;
+  let expectedDeadlineAtMs: number | undefined;
+  const harness = createHarness(
+    sourceBlock - 1,
+    ["complete"],
+    {
+      startupWarmEnabled: false,
+      beforePrepareResult: async (_call, input) => {
+        expectedSignal = input.signal;
+        expectedDeadlineAtMs = input.preparationSettleDeadlineAtMs;
+      },
+    },
+  );
+
+  await harness.run(sourceBlock);
+  assert.equal(harness.forkAtControls.length, 1);
+  assert.strictEqual(
+    harness.forkAtControls[0]?.signal,
+    expectedSignal,
+    "worker reset must receive the exact pass-local cancellation signal",
+  );
+  assert.equal(
+    harness.forkAtControls[0]?.deadlineAtMs,
+    expectedDeadlineAtMs,
+    "worker reset must receive the pass preparation deadline",
+  );
+  assert(
+    typeof expectedDeadlineAtMs === "number" &&
+      Number.isFinite(expectedDeadlineAtMs),
+    "worker reset deadline must be finite",
+  );
+  await harness.loop.shutdown();
+}
+
 function blindModeStillRequiresExecutableDexGraph(): void {
   const state: LiveDiscoveryPublicationState = {
     ...publicationAt(650),
@@ -871,7 +1516,10 @@ function createHarness(
   statuses: Array<"complete" | "degraded" | "incomplete">,
   options: {
     readonly stopAfterPrepareCall?: number;
-    readonly beforePrepareResult?: (call: number) => Promise<void>;
+    readonly beforePrepareResult?: (
+      call: number,
+      input: PrepareAdapterRuntimeInput,
+    ) => Promise<void>;
     readonly blindEnabled?: boolean;
     readonly initialProtocolCompleteThrough?: number;
     readonly publishObservedDuringDiscoveryPrepare?: boolean;
@@ -888,6 +1536,19 @@ function createHarness(
       sourceBlock: number,
     ) => Promise<void>;
     readonly routePipeline?: boolean;
+    readonly routeEdgeAdapterId?: string;
+    readonly pendingEvidenceFamilyId?: ExecutionFamilyId;
+    readonly pendingEvidenceRouteEdgeAdapterId?: string | null;
+    readonly solverNetProfit?: bigint;
+    readonly submitAtomic?: (
+      input: BlockScanAtomicExecutionInput,
+    ) => Promise<BlockScanAtomicResult>;
+    readonly passBudgetMs?: number;
+    readonly runtimeDependenciesAvailable?: boolean;
+    readonly observeHeader?: (
+      blockNumber: number,
+    ) => { readonly number: number; readonly hash: string };
+    readonly readBlockHash?: (blockNumber: number) => string;
   } = {},
 ) {
   let publication = publicationAt(
@@ -922,9 +1583,17 @@ function createHarness(
   const coarsePricingFamilyDeadlineRemainingMs: number[] = [];
   const exactContextBlocks: number[] = [];
   const pipelineEdges = options.routePipeline
-    ? routePipelineEdges()
+    ? routePipelineEdges(options.routeEdgeAdapterId)
     : [];
   let solverInvocations = 0;
+  const solverExecutionEvidence: Array<
+    readonly PendingExecutionEvidence[]
+  > = [];
+  const notStartedRecords: Array<{
+    readonly sourceBlock: number;
+    readonly sourceBlockHash: string | null;
+    readonly passReason: string;
+  }> = [];
   const routeTelemetryRecords: Array<{
     sourceBlock: number;
     enumerationCalls: number;
@@ -937,8 +1606,16 @@ function createHarness(
       | "source_n"
       | "n_minus_one_coarse_current_n_exact"
       | null;
+    passOutcome: string | null;
+    passReason: string | null;
   }> = [];
   let latestPricing: BlockScanStateSnapshot | null = null;
+  let runtimeDependenciesAvailable =
+    options.runtimeDependenciesAvailable ?? true;
+  const forkAtControls: Array<{
+    readonly signal?: AbortSignal;
+    readonly deadlineAtMs?: number;
+  }> = [];
 
   const routeTelemetry: BlockScanEnumerationSolverTelemetrySink = {
     beginPass(sourceBlock) {
@@ -954,6 +1631,8 @@ function createHarness(
           | "source_n"
           | "n_minus_one_coarse_current_n_exact"
           | null,
+        passOutcome: null,
+        passReason: null,
       };
       routeTelemetryRecords.push(record);
       return {
@@ -971,10 +1650,18 @@ function createHarness(
         finish(input) {
           record.finished = true;
           record.pricingMode = input.pricingMode;
+          record.passOutcome = input.passOutcome;
+          record.passReason = input.passReason;
         },
       };
     },
-    recordNotStarted() {},
+    recordNotStarted(input) {
+      notStartedRecords.push({
+        sourceBlock: input.sourceBlock,
+        sourceBlockHash: input.sourceBlockHash,
+        passReason: input.passReason,
+      });
+    },
   };
 
   const runtimeCoordinator = {
@@ -994,7 +1681,7 @@ function createHarness(
           ? null
           : input.pricingFamilySettleDeadlineAtMs - Date.now(),
       );
-      await options.beforePrepareResult?.(call);
+      await options.beforePrepareResult?.(call, input);
       await input.prepareExecution?.({
         generation: input.graph.generation,
         sourceBlock: input.graph.sourceBlock,
@@ -1102,7 +1789,15 @@ function createHarness(
   };
   const workerState = {
     provider: {},
-    async forkAt() {},
+    async forkAt(
+      _blockNumber: number,
+      control?: {
+        readonly signal?: AbortSignal;
+        readonly deadlineAtMs?: number;
+      },
+    ) {
+      forkAtControls.push(Object.freeze({ ...control }));
+    },
     async call(req: { readonly to: string; readonly data: string }) {
       if (!options.routePipeline) {
         throw new Error("empty startup harness unexpectedly quoted a route");
@@ -1137,9 +1832,19 @@ function createHarness(
     async stopAndWait() {},
   };
   const workerSolver = {
-    async solve() {
+    async solve(
+      _plan: unknown,
+      _state: unknown,
+      _simulator: unknown,
+      solveOptions?: {
+        readonly executionEvidence?: readonly PendingExecutionEvidence[];
+      },
+    ) {
       solverInvocations++;
-      return { netProfit: 0n };
+      solverExecutionEvidence.push(Object.freeze([
+        ...(solveOptions?.executionEvidence ?? []),
+      ]));
+      return { netProfit: options.solverNetProfit ?? 0n };
     },
   };
   const deps: BlockScanRuntimeLoopDependencies<PreparedDiscovery> = {
@@ -1223,7 +1928,7 @@ function createHarness(
             blockNumber + 2_048,
           );
         }
-        return header(blockNumber);
+        return options.observeHeader?.(blockNumber) ?? header(blockNumber);
       },
       capture: () => cloneLiveDiscoveryPublicationState(publication),
       publish: (next: LiveDiscoveryPublicationState) => {
@@ -1313,7 +2018,8 @@ function createHarness(
     routeTelemetry,
     largeGraphEdgeThreshold: 20_000,
     largeGraphPassBudgetMs: 30_000,
-    passBudgetMs: options.routePipeline ? 2_000 : HOT_BUDGET_MS,
+    passBudgetMs: options.passBudgetMs ??
+      (options.routePipeline ? 2_000 : HOT_BUDGET_MS),
     startupWarmEnabled:
       (options.startupWarmEnabled ?? true) &&
       !(options.blindEnabled ?? false),
@@ -1326,8 +2032,37 @@ function createHarness(
     refineCandidates: 1,
     solveReserveMs: 0,
     midConcurrency: 1,
+    currentHeadEvidenceFamilyForEdge: (edgeAdapterId) => {
+      const evidenceRouteEdgeAdapterId =
+        options.pendingEvidenceRouteEdgeAdapterId === undefined
+          ? options.routeEdgeAdapterId ?? "univ2-swap"
+          : options.pendingEvidenceRouteEdgeAdapterId;
+      return options.pendingEvidenceFamilyId &&
+          evidenceRouteEdgeAdapterId !== null &&
+          edgeAdapterId === evidenceRouteEdgeAdapterId
+        ? options.pendingEvidenceFamilyId
+        : null;
+    },
+    currentHeadEvidenceScopeKeyForEdge: (edge) => {
+      const evidenceRouteEdgeAdapterId =
+        options.pendingEvidenceRouteEdgeAdapterId === undefined
+          ? options.routeEdgeAdapterId ?? "univ2-swap"
+          : options.pendingEvidenceRouteEdgeAdapterId;
+      return options.pendingEvidenceFamilyId &&
+          evidenceRouteEdgeAdapterId !== null &&
+          edge.adapterId === evidenceRouteEdgeAdapterId
+        ? "fixture-family-scope"
+        : null;
+    },
+    currentHeadEvidenceScopeKeys: (evidence) =>
+      evidence.familyId === options.pendingEvidenceFamilyId
+        ? Object.freeze(["fixture-family-scope"])
+        : Object.freeze([]),
+    isCurrentHeadEvidenceFamily: (familyId) =>
+      familyId === options.pendingEvidenceFamilyId,
     isShuttingDown: () => shuttingDown,
-    blockScanGraph: () => pipelineEdges,
+    blockScanGraph: () =>
+      runtimeDependenciesAvailable ? pipelineEdges : undefined,
     blockScanPlanner: () =>
       blockScanPlanner as unknown as BlockScanRuntimeLoopDependencies<
         PreparedDiscovery
@@ -1340,13 +2075,15 @@ function createHarness(
       input.sourceBlockHash,
       pipelineEdges,
     ),
-    readBlockHash: async (_provider, blockNumber) => hash(blockNumber),
+    readBlockHash: async (_provider, blockNumber) =>
+      options.readBlockHash?.(blockNumber) ?? hash(blockNumber),
     formatRouteKey: () => "fixture-route",
     formatRing: () => "fixture-ring",
     isRouteBlacklisted: () => false,
-    submitAtomic: async () => {
-      throw new Error("startup warm unexpectedly reached final simulation");
-    },
+    submitAtomic: options.submitAtomic ??
+      (async () => {
+        throw new Error("startup warm unexpectedly reached final simulation");
+      }),
   };
   const loop = new BlockScanRuntimeLoop(deps);
 
@@ -1384,12 +2121,35 @@ function createHarness(
     get solverInvocations() {
       return solverInvocations;
     },
+    solverExecutionEvidence,
+    forkAtControls,
+    notStartedRecords,
     routeTelemetryRecords,
+    get activePassMode(): string | null {
+      return (
+        loop as unknown as {
+          readonly activePass: { readonly mode: string } | null;
+        }
+      ).activePass?.mode ?? null;
+    },
+    ordinaryCompletedHash(blockNumber: number): string | undefined {
+      return (
+        loop as unknown as {
+          readonly completedOrdinaryHeads: ReadonlyMap<number, string>;
+        }
+      ).completedOrdinaryHeads.get(blockNumber);
+    },
+    ordinaryCompleted(blockNumber: number): boolean {
+      return this.ordinaryCompletedHash(blockNumber) !== undefined;
+    },
     get publication() {
       return cloneLiveDiscoveryPublicationState(publication);
     },
     setPublication(block: number) {
       publication = publicationAt(block, publication.revision + 1);
+    },
+    setRuntimeDependenciesAvailable(available: boolean) {
+      runtimeDependenciesAvailable = available;
     },
     run(block: number) {
       return loop.runHead(block, {
@@ -1529,10 +2289,12 @@ function graphAt(
   });
 }
 
-function routePipelineEdges(): TokenEdge[] {
+function routePipelineEdges(
+  edgeAdapterId = "univ2-swap",
+): TokenEdge[] {
   return [ROUTE_POOL_CHEAP, ROUTE_POOL_RICH].flatMap((target) => [
     {
-      adapterId: "univ2-swap",
+      adapterId: edgeAdapterId,
       target,
       tokenIn: ROUTE_TOKEN_A,
       tokenOut: ROUTE_TOKEN_B,
@@ -1543,7 +2305,7 @@ function routePipelineEdges(): TokenEdge[] {
       ...deriveEdgeTaxonomy("swap"),
     },
     {
-      adapterId: "univ2-swap",
+      adapterId: edgeAdapterId,
       target,
       tokenIn: ROUTE_TOKEN_B,
       tokenOut: ROUTE_TOKEN_A,
@@ -1673,6 +2435,72 @@ function runtimeStrategyViews(pools: PoolEntry[]) {
     blockscanMaxPools: 10_000,
     poolUniverseGeneratedAt: "2026-07-26T00:00:00.000Z",
   });
+}
+
+function pendingEvidenceTrigger(
+  sourceBlock: number,
+  txSeed: number,
+  familyId: ExecutionFamilyId = PENDING_EVIDENCE_FAMILY,
+  headHash: string = hash(sourceBlock),
+): BlockScanPendingEvidenceTrigger {
+  const txHash = hash(txSeed);
+  const sourceHash = headHash;
+  const canonicalPayload = ethers.toBeHex(txSeed, 32);
+  const payloadHash = ethers.keccak256(canonicalPayload);
+  const evidenceHash = ethers.keccak256(
+    ethers.AbiCoder.defaultAbiCoder().encode(
+      ["string", "bytes32", "uint256", "bytes32", "bytes32"],
+      [
+        familyId,
+        txHash,
+        sourceBlock,
+        sourceHash,
+        payloadHash,
+      ],
+    ),
+  );
+  const observedAtMs = Date.now();
+  const observedAtMonotonicMs = performance.now();
+  const evidence: PendingExecutionEvidence = Object.freeze({
+    familyId,
+    txHash,
+    headBlockNumber: sourceBlock,
+    headHash: sourceHash,
+    canonicalPayload,
+    payloadHash,
+    evidenceHash,
+  });
+  return Object.freeze({
+    txHash,
+    head: Object.freeze({
+      number: sourceBlock,
+      hash: sourceHash,
+    }),
+    observedAtMs,
+    observedAtMonotonicMs,
+    evidenceReadyAtMs: observedAtMs,
+    evidenceReadyAtMonotonicMs: observedAtMonotonicMs,
+    evidence: Object.freeze([evidence]),
+  });
+}
+
+function successfulAtomicResult(): BlockScanAtomicResult {
+  return {
+    decision: "fixture_complete",
+    submitted: false,
+    terminalForQuoteSet: true,
+    finalSimStatus: "succeeded",
+    workerReusable: true,
+    audit: null,
+    timing: {
+      finalSimMs: 0,
+      evMs: 0,
+      finalSimStartedAtMs: null,
+      finalSimFinishedAtMs: null,
+      evStartedAtMs: null,
+      evFinishedAtMs: null,
+    },
+  };
 }
 
 function address(value: number): string {

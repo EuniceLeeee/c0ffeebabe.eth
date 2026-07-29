@@ -114,7 +114,6 @@ import type {
   ExecutionFamilyId,
   PendingExecutionEvidence,
   PendingTransactionEvidenceHead,
-  PendingTransactionEvidenceInput,
   ProtocolDiscoveryReceipt,
 } from "./venues/route-leg-adapter.js";
 import { buildMempoolIntakePlan, type MempoolIntakePlan } from "./mempool-intake.js";
@@ -124,6 +123,10 @@ import {
   PendingEvidenceTaskScheduler,
   type PendingEvidenceTaskPriority,
 } from "./pending-evidence-admission-queue.js";
+import {
+  createPendingEvidenceSession,
+  type PendingEvidenceSession,
+} from "./pending-evidence-session.js";
 import {
   buildStrategyViews,
   hashTokenGraph,
@@ -176,9 +179,14 @@ import {
 import {
   BlockScanRuntimeLoop,
   type BlockScanAtomicResult,
+  type BlockScanPendingEvidenceTrigger,
   type BlockScanRejectBlacklistEntry,
   type BlockScanRejectBlacklistState,
 } from "./blockscan-runtime-loop.js";
+import {
+  pendingEvidenceEdgeScopeKey,
+  pendingEvidenceScopeKeys,
+} from "./blockscan-pending-evidence.js";
 import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import {
@@ -2344,6 +2352,38 @@ async function main(): Promise<void> {
     solveReserveMs: blockScanSolveReserveMs,
     midConcurrency: blockScanMidConcurrency,
     executorAddress: config.botvmAddress,
+    currentHeadEvidenceFamilyForEdge(edgeAdapterId) {
+      const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
+        edgeAdapterId,
+      );
+      return owner?.pendingTransactionEvidence?.routeActivation ===
+          "current-head-block-scan"
+        ? owner.id
+        : null;
+    },
+    currentHeadEvidenceScopeKeyForEdge(edge) {
+      const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
+        edge.adapterId,
+      );
+      const capability = owner?.pendingTransactionEvidence;
+      return capability
+        ? pendingEvidenceEdgeScopeKey(capability, edge)
+        : null;
+    },
+    currentHeadEvidenceScopeKeys(evidence) {
+      const owner = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(
+        evidence.familyId,
+      );
+      const capability = owner.pendingTransactionEvidence;
+      return capability
+        ? pendingEvidenceScopeKeys(capability, evidence)
+        : Object.freeze([]);
+    },
+    isCurrentHeadEvidenceFamily(familyId) {
+      const owner = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyId);
+      return owner.pendingTransactionEvidence?.routeActivation ===
+        "current-head-block-scan";
+    },
     isShuttingDown: () => shuttingDown,
     blockScanGraph: () => blockScanGraph,
     blockScanPlanner: () => blockScanPlanner,
@@ -2763,6 +2803,9 @@ async function main(): Promise<void> {
       counters,
       knownPoolAddrs,
       mempoolIntakeRefresh,
+      (trigger) => {
+        blockScanRuntimeLoop.schedulePendingEvidence(trigger);
+      },
     );
   };
   const hintStream = sourceMode === "disabled"
@@ -4504,6 +4547,7 @@ async function maybeSubmitBlockScanAtomic(params: {
   rejectBlacklist: BlockScanRejectBlacklistState;
   profitTokenValuation: ProfitTokenValuation;
   sourceBlockHash: string;
+  signal: AbortSignal;
   collectBlindAudit: boolean;
   strategyVersions: {
     strategy_view_version: string;
@@ -4592,9 +4636,13 @@ async function maybeSubmitBlockScanAtomic(params: {
     rejectBlacklist,
     profitTokenValuation,
     sourceBlockHash,
+    signal,
     collectBlindAudit,
     strategyVersions,
   } = params;
+  if (signal.aborted) {
+    throw signal.reason ?? new Error("block-scan atomic execution aborted");
+  }
   const route = resolvedRouteSummary(resolved.root);
   const routeId = blockScanRouteId(opp.seedEdges);
   const opportunityId = makeBlockScanOpportunityId({
@@ -4665,6 +4713,8 @@ async function maybeSubmitBlockScanAtomic(params: {
       readUncachedLatestBlock(provider),
       passDeadlineAtMs,
       "source-head verification",
+      undefined,
+      signal,
     );
     const currentHead = latestAtVerify.number;
     targetBlock = Math.max(sourceBlock, currentHead) + 1;
@@ -4693,6 +4743,7 @@ async function maybeSubmitBlockScanAtomic(params: {
         // forkAt waits stopBarrier before this worker can be reused.
         state.stop();
       },
+      signal,
     ).finally(() => {
         timing.finalSimMs += Math.max(0, performance.now() - finalSimStarted);
         timing.finalSimFinishedAtMs = Date.now();
@@ -4712,6 +4763,8 @@ async function maybeSubmitBlockScanAtomic(params: {
         readUncachedLatestBlock(provider),
         passDeadlineAtMs,
         "post-simulation source-head verification",
+        undefined,
+        signal,
       );
       if (
         latestAfterSim.number !== sourceBlock ||
@@ -4806,6 +4859,8 @@ async function maybeSubmitBlockScanAtomic(params: {
       ),
       passDeadlineAtMs,
       "EV evaluation",
+      undefined,
+      signal,
     );
     const {
       valuationAvailable,
@@ -4961,6 +5016,8 @@ async function maybeSubmitBlockScanAtomic(params: {
       readUncachedLatestBlock(provider),
       passDeadlineAtMs,
       "pre-submit source-head verification",
+      undefined,
+      signal,
     );
     const submitHead = latestAtSubmit.number;
     const submitHeadHash = latestAtSubmit.hash;
@@ -4993,6 +5050,9 @@ async function maybeSubmitBlockScanAtomic(params: {
       return finish(decision.reason);
     }
 
+    if (signal.aborted) {
+      throw signal.reason ?? new Error("block-scan atomic execution aborted");
+    }
     const results = await bundleRouter.submit({
       victimTxHash: "",
       mode: "standalone",
@@ -5059,6 +5119,9 @@ async function maybeSubmitBlockScanAtomic(params: {
       true,
     );
   } catch (err) {
+    if (signal.aborted) {
+      throw signal.reason ?? err;
+    }
     if (err instanceof BlockScanPassDeadlineError) {
       const reason = err.stage === "final simulation"
         ? "final_sim_deadline"
@@ -5624,6 +5687,9 @@ async function* mempoolHints(
   counters: StageCounters,
   liveGraphTargets?: ReadonlySet<string>,
   refreshSignal?: MempoolIntakeRefreshSignal,
+  onPendingExecutionEvidence?: (
+    trigger: BlockScanPendingEvidenceTrigger,
+  ) => void,
 ): AsyncGenerator<HintEnvelope> {
   const routersPath = process.env.SEARCHER_FORCE_INCLUDE_ROUTERS_PATH ?? undefined;
   const forceIncludeRouters = loadForceIncludeRouters(routersPath);
@@ -5663,6 +5729,7 @@ async function* mempoolHints(
       pendingEvidenceMaxReads,
       reportedEvidenceFailures,
       counters,
+      onPendingExecutionEvidence,
     );
     return;
   }
@@ -5702,6 +5769,7 @@ async function* mempoolHints(
               pendingEvidenceMaxReads,
               reportedEvidenceFailures,
               counters,
+              onPendingExecutionEvidence,
             );
             return;
           }
@@ -5828,122 +5896,6 @@ function parseMempoolMode(): MempoolMode {
   throw new FatalMempoolSubscriptionError(`unknown SEARCHER_MEMPOOL_MODE=${raw}`);
 }
 
-interface PendingEvidenceSession {
-  readonly candidateFamilyIds: readonly ExecutionFamilyId[];
-  head(priority: PendingEvidenceTaskPriority): Promise<PendingTransactionEvidenceHead>;
-  observeFamily(
-    familyId: ExecutionFamilyId,
-    priority: PendingEvidenceTaskPriority,
-  ): Promise<PendingExecutionEvidence | undefined>;
-  resolve(
-    familyIds: readonly ExecutionFamilyId[],
-    priority: PendingEvidenceTaskPriority,
-  ): Promise<readonly PendingExecutionEvidence[]>;
-}
-
-function createPendingEvidenceSession(
-  tx: Pick<ethers.TransactionResponse, "hash" | "to" | "data">,
-  provider: ethers.JsonRpcProvider,
-  projection: PendingTransactionEvidenceProjection,
-  observerScheduler: PendingEvidenceTaskScheduler,
-  readScheduler: PendingEvidenceTaskScheduler,
-  currentHead: (
-    priority: PendingEvidenceTaskPriority,
-  ) => Promise<PendingTransactionEvidenceHead>,
-  timeoutMs: number,
-  maxReadsPerFamily: number,
-  reportFailure: (familyId: ExecutionFamilyId | "kernel", code: string) => void,
-): PendingEvidenceSession {
-  const input: PendingTransactionEvidenceInput = Object.freeze({
-    hash: tx.hash,
-    to: tx.to,
-    data: tx.data,
-  });
-  const candidateFamilyIds = projection.candidateFamilyIds(input);
-  let frozenHead:
-    Promise<PendingTransactionEvidenceHead> | undefined;
-  const byFamily = new Map<
-    ExecutionFamilyId,
-    Promise<PendingExecutionEvidence | undefined>
-  >();
-
-  const head = (
-    priority: PendingEvidenceTaskPriority,
-  ): Promise<PendingTransactionEvidenceHead> => {
-    frozenHead ??= currentHead(priority);
-    return frozenHead;
-  };
-
-  const observeFamily = (
-    familyId: ExecutionFamilyId,
-    priority: PendingEvidenceTaskPriority,
-  ): Promise<PendingExecutionEvidence | undefined> => {
-    let pending = byFamily.get(familyId);
-    if (pending) return pending;
-    pending = (async () => {
-      const dispatchHead = await head(priority);
-      return observerScheduler.run(priority, async () => {
-        const result = await projection.observe(
-          input,
-          {
-            head: dispatchHead,
-            call(read, control) {
-              return readScheduler.run(priority, () =>
-                sendDexDiscoveryRpc<string>(
-                  provider,
-                  "eth_call",
-                  [
-                    provider.getRpcTransaction({
-                      to: read.to,
-                      data: read.data,
-                    }),
-                    {
-                      blockHash: dispatchHead.hash,
-                      requireCanonical: true,
-                    },
-                  ],
-                  control,
-                ),
-                familyId,
-              );
-            },
-          },
-          {
-            familyIds: [familyId],
-            timeoutMs,
-            maxReadsPerFamily,
-          },
-        );
-        for (const failure of result.failures) {
-          reportFailure(failure.familyId, failure.code);
-        }
-        return result.evidence[0];
-      }, familyId);
-    })();
-    byFamily.set(familyId, pending);
-    return pending;
-  };
-
-  return Object.freeze({
-    candidateFamilyIds,
-    head,
-    observeFamily,
-    async resolve(
-      familyIds: readonly ExecutionFamilyId[],
-      priority: PendingEvidenceTaskPriority,
-    ) {
-      const selected = [...new Set(familyIds)]
-        .filter((familyId) => candidateFamilyIds.includes(familyId));
-      const observed = await Promise.all(
-        selected.map((familyId) => observeFamily(familyId, priority)),
-      );
-      return Object.freeze(observed.filter(
-        (item): item is PendingExecutionEvidence => item !== undefined,
-      ));
-    },
-  });
-}
-
 async function* localFirehoseMempoolHints(
   wsUrl: string,
   provider: ethers.JsonRpcProvider,
@@ -5953,6 +5905,9 @@ async function* localFirehoseMempoolHints(
   pendingEvidenceMaxReads: number,
   reportedEvidenceFailures: Set<string>,
   counters: StageCounters,
+  onPendingExecutionEvidence?: (
+    trigger: BlockScanPendingEvidenceTrigger,
+  ) => void,
 ): AsyncGenerator<HintEnvelope> {
   const maxInFlight = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_MAX_INFLIGHT ?? "64");
   const maxQueue = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_QUEUE_MAX ?? "64");
@@ -5966,6 +5921,10 @@ async function* localFirehoseMempoolHints(
   const evidenceReadMaxInFlight = Number(
     process.env.SEARCHER_PENDING_EVIDENCE_READ_MAX_INFLIGHT ?? "8",
   );
+  const evidenceCanonicalQueueMax = Number(
+    process.env.SEARCHER_PENDING_EVIDENCE_CANONICAL_QUEUE_MAX ??
+      String(maxQueue),
+  );
   const evidenceFamilyCount = Math.max(
     1,
     pendingEvidence.familyIds.length,
@@ -5973,10 +5932,12 @@ async function* localFirehoseMempoolHints(
   const observerScheduler = new PendingEvidenceTaskScheduler(
     evidenceMaxInFlight,
     maxQueue,
+    evidenceCanonicalQueueMax,
   );
   const readScheduler = new PendingEvidenceTaskScheduler(
     evidenceReadMaxInFlight,
     maxQueue * pendingEvidenceMaxReads,
+    evidenceCanonicalQueueMax * pendingEvidenceMaxReads,
   );
   const reportEvidenceFailure = (
     familyId: ExecutionFamilyId | "kernel",
@@ -6110,6 +6071,83 @@ async function* localFirehoseMempoolHints(
         pendingEvidenceMaxReads,
         reportEvidenceFailure,
       );
+    const publishCurrentHeadExecutionEvidence = async (
+      tx: Pick<ethers.TransactionResponse, "hash">,
+      evidence: readonly PendingExecutionEvidence[],
+      observation: {
+        readonly observedAtMs: number;
+        readonly observedAtMonotonicMs: number;
+      },
+    ): Promise<readonly PendingExecutionEvidence[]> => {
+      const validated = await validateHintExecutionEvidence(
+        evidence,
+        tx.hash,
+        provider,
+        pendingEvidenceTimeoutMs,
+      );
+      const activating = validated.filter((item) => {
+        const owner = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(
+          item.familyId,
+        );
+        return owner.pendingTransactionEvidence?.routeActivation ===
+          "current-head-block-scan";
+      });
+      if (activating.length === 0 || !onPendingExecutionEvidence) {
+        return validated;
+      }
+      const head = activating[0]!;
+      if (activating.some((item) =>
+        item.headBlockNumber !== head.headBlockNumber ||
+        item.headHash.toLowerCase() !== head.headHash.toLowerCase()
+      )) {
+        throw new Error("pending execution evidence spans multiple heads");
+      }
+      const evidenceReadyAtMs = Date.now();
+      const evidenceReadyAtMonotonicMs = performance.now();
+      onPendingExecutionEvidence(Object.freeze({
+        txHash: tx.hash,
+        head: Object.freeze({
+          number: head.headBlockNumber,
+          hash: head.headHash,
+        }),
+        observedAtMs: observation.observedAtMs,
+        observedAtMonotonicMs: observation.observedAtMonotonicMs,
+        evidenceReadyAtMs,
+        evidenceReadyAtMonotonicMs,
+        evidence: Object.freeze(activating),
+      }));
+      return validated;
+    };
+    const startCurrentHeadRouteActivation = (
+      session: PendingEvidenceSession,
+      tx: Pick<ethers.TransactionResponse, "hash">,
+      observation: {
+        readonly observedAtMs: number;
+        readonly observedAtMonotonicMs: number;
+      },
+    ): void => {
+      const familyIds = session.candidateFamilyIds.filter((familyId) => {
+        const owner = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyId);
+        return owner.pendingTransactionEvidence?.routeActivation ===
+          "current-head-block-scan";
+      });
+      if (familyIds.length === 0) return;
+      void session.resolve(familyIds, "canonical")
+        .then((evidence) =>
+          publishCurrentHeadExecutionEvidence(tx, evidence, observation)
+        )
+        .catch((error) => {
+          const code = error instanceof Error &&
+              error.message.includes("queue full")
+            ? "canonical_queue_full"
+            : "route_activation_error";
+          for (const familyId of familyIds) {
+            reportEvidenceFailure(familyId, code);
+          }
+          // Route activation is independently bounded and cannot disrupt
+          // victim intake.
+        });
+    };
     const startUnknownEvidenceAdmission = (
       session: PendingEvidenceSession,
       baseHint: HintEnvelope,
@@ -6129,6 +6167,14 @@ async function* localFirehoseMempoolHints(
                 familyId,
                 "unknown",
               );
+              const validated = evidence
+                ? await validateHintExecutionEvidence(
+                    [evidence],
+                    baseHint.prefetched!.tx.hash,
+                    provider,
+                    pendingEvidenceTimeoutMs,
+                  )
+                : Object.freeze([]);
               const commit = evidence !== undefined && !admitted;
               const accepted = admissionQueue.finishUnknownAttempt(
                 familyId,
@@ -6141,7 +6187,7 @@ async function* localFirehoseMempoolHints(
               counters.pendingFilteredReceived++;
               enqueueEvidence(familyId, {
                 ...baseHint,
-                executionEvidence: Object.freeze([evidence]),
+                executionEvidence: validated,
                 resolvePendingExecutionEvidence: (familyIds) =>
                   session.resolve(familyIds, "canonical"),
               });
@@ -6162,6 +6208,10 @@ async function* localFirehoseMempoolHints(
       });
     };
     const processHash = (hash: string) => {
+      const observation = Object.freeze({
+        observedAtMs: Date.now(),
+        observedAtMonotonicMs: performance.now(),
+      });
       const normalized = hash.toLowerCase();
       if (!TX_HASH_RE.test(normalized)) return;
       counters.pendingReceived++;
@@ -6179,6 +6229,8 @@ async function* localFirehoseMempoolHints(
             `getTransaction ${normalized.slice(0, 10)}`,
           );
           if (!tx) return;
+          const session = evidenceSession(tx);
+          startCurrentHeadRouteActivation(session, tx, observation);
           const canonicalTarget = interesting(tx.to);
           const rawTx = await withTimeout(
             rawTxByHash(provider, normalized, tx, true),
@@ -6192,7 +6244,6 @@ async function* localFirehoseMempoolHints(
             source: "mempool",
             prefetched: { tx, rawTx },
           } satisfies HintEnvelope;
-          const session = evidenceSession(tx);
           if (canonicalTarget) {
             counters.pendingFilteredReceived++;
             enqueueCanonical({
@@ -6211,6 +6262,10 @@ async function* localFirehoseMempoolHints(
       })();
     };
     const processFullTransaction = (result: Record<string, unknown>) => {
+      const observation = Object.freeze({
+        observedAtMs: Date.now(),
+        observedAtMonotonicMs: performance.now(),
+      });
       const tx = pendingTxFromAlchemy(result);
       if (!tx) return;
       const hash = tx.hash.toLowerCase();
@@ -6223,6 +6278,8 @@ async function* localFirehoseMempoolHints(
       inFlight++;
       void (async () => {
         try {
+          const session = evidenceSession(tx);
+          startCurrentHeadRouteActivation(session, tx, observation);
           const canonicalTarget = interesting(tx.to);
           const rawTx = rebuildSignedRawTx(hash, tx);
           if (!rawTx) return;
@@ -6232,7 +6289,6 @@ async function* localFirehoseMempoolHints(
             source: "mempool",
             prefetched: { tx, rawTx },
           } satisfies HintEnvelope;
-          const session = evidenceSession(tx);
           if (canonicalTarget) {
             counters.pendingFilteredReceived++;
             enqueueCanonical({

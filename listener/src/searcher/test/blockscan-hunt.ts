@@ -120,7 +120,10 @@ import {
   PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
-import type { ProtocolCandidate } from "../venues/route-leg-adapter.js";
+import type {
+  PendingExecutionEvidence,
+  ProtocolCandidate,
+} from "../venues/route-leg-adapter.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
 import {
   attestPoolIdentities,
@@ -144,6 +147,15 @@ import {
   loadTrustedHuntProtocolDiscoveryCache,
   type VerifiedRetainedTopologyProof,
 } from "./blockscan-hunt-protocol-cache.js";
+import {
+  loadFrozenPendingExecutionEvidenceArtifact,
+  type FrozenPendingExecutionEvidence,
+} from "./production-replay-pending-evidence.js";
+import {
+  createBlockScanExecutionAvailability,
+  pendingEvidenceEdgeScopeKey,
+  pendingEvidenceScopeKeys,
+} from "../blockscan-pending-evidence.js";
 
 type DiagnosticStopAfter = "graph" | "enumeration" | "refine" | "solve" | "sim" | "ev";
 
@@ -399,6 +411,7 @@ interface DiagnosticExactQuote {
 async function quoteDiagnosticRoute(
   state: AnvilStateBackend,
   opportunity: BlockScanOpportunity | undefined,
+  executionEvidence: readonly PendingExecutionEvidence[],
 ): Promise<DiagnosticExactQuote> {
   if (!opportunity) {
     return {
@@ -438,6 +451,7 @@ async function quoteDiagnosticRoute(
       {
         executor: DEFAULT_SEARCHER_EXECUTOR,
         safetyBps: 10_000n,
+        executionEvidence,
       },
     );
     const quotedAmountOut = propagated.amounts.at(-1)!;
@@ -736,6 +750,36 @@ async function check(name: string, run: () => boolean | Promise<boolean>): Promi
   console.log(`[blockscan-hunt] ${name}: PASS`);
 }
 
+function loadProductionReplayPendingExecutionEvidence(): {
+  readonly artifactSha256: string;
+  readonly frozen: FrozenPendingExecutionEvidence;
+} | null {
+  const artifactPath =
+    process.env.PRODUCTION_REPLAY_PENDING_EVIDENCE_ARTIFACT;
+  const artifactSha256 =
+    process.env.PRODUCTION_REPLAY_PENDING_EVIDENCE_SHA256;
+  const productionReplay =
+    process.env.PRODUCTION_REPLAY_DISCOVERY_ARTIFACT !== undefined;
+  if (!productionReplay && (artifactPath || artifactSha256)) {
+    throw new Error(
+      "pending execution evidence artifact is wrapper-owned",
+    );
+  }
+  if (!productionReplay) return null;
+  if (!artifactPath || !artifactSha256) {
+    throw new Error(
+      "production replay requires its frozen pending execution evidence artifact",
+    );
+  }
+  return Object.freeze({
+    artifactSha256,
+    frozen: loadFrozenPendingExecutionEvidenceArtifact(
+      artifactPath,
+      artifactSha256,
+    ),
+  });
+}
+
 async function main(): Promise<void> {
   loadEnv();
   const rpcUrl = process.env.SEARCHER_LIVE_RPC_URL || process.env.MAINNET_RPC_URL;
@@ -776,10 +820,55 @@ async function main(): Promise<void> {
       throw new Error(`upstream latest block ${latest} is before HUNT_BLOCK ${blockNumber}`);
     }
     const cfg = readConfig(rpcUrl, blockNumber);
+    const pendingEvidenceInput =
+      loadProductionReplayPendingExecutionEvidence();
+    if (
+      pendingEvidenceInput &&
+      pendingEvidenceInput.frozen.headBlockNumber !== cfg.blockNumber &&
+      pendingEvidenceInput.frozen.headBlockNumber !== cfg.blockNumber - 1
+    ) {
+      throw new Error(
+        "production replay pending evidence does not bind the hunt state lineage",
+      );
+    }
+    const executionEvidence =
+      pendingEvidenceInput?.frozen.evidence ?? Object.freeze([]);
+    const executionAvailability = createBlockScanExecutionAvailability({
+      mode: pendingEvidenceInput === null ? "periodic" : "combined",
+      evidence: executionEvidence,
+      familyForEdge: (edgeAdapterId) => {
+        const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
+          edgeAdapterId,
+        );
+        return owner?.pendingTransactionEvidence?.routeActivation ===
+            "current-head-block-scan"
+          ? owner.id
+          : null;
+      },
+      edgeScopeKey: (edge) => {
+        const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
+          edge.adapterId,
+        );
+        const capability = owner?.pendingTransactionEvidence;
+        return capability
+          ? pendingEvidenceEdgeScopeKey(capability, edge)
+          : null;
+      },
+      evidenceScopeKeys: (evidence) => {
+        const owner = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(
+          evidence.familyId,
+        );
+        const capability = owner.pendingTransactionEvidence;
+        return capability
+          ? pendingEvidenceScopeKeys(capability, evidence)
+          : Object.freeze([]);
+      },
+    });
     console.log(
       `[blockscan-hunt] upstream=${redactRpcUrl(rpcUrl)} block=${cfg.blockNumber} ` +
         `universe=${cfg.universePath} maxPools=${cfg.maxPools} maxHops=${cfg.maxHops} ` +
-        `observedHistory=${observedHistoryProvider ? "separate-aligned" : "primary"}`,
+        `observedHistory=${observedHistoryProvider ? "separate-aligned" : "primary"} ` +
+        `pendingEvidenceFamilies=${executionEvidence.length}`,
     );
 
     const graphBackend = tokenBackend(provider, cfg.blockNumber);
@@ -1376,6 +1465,19 @@ async function main(): Promise<void> {
     if (!sourceBlock?.hash) {
       throw new Error(`cannot resolve canonical source hash for ${cfg.blockNumber}`);
     }
+    if (
+      pendingEvidenceInput &&
+      pendingEvidenceInput.frozen.headHash.toLowerCase() !==
+        (
+          pendingEvidenceInput.frozen.headBlockNumber === cfg.blockNumber
+            ? sourceBlock.hash
+            : baseBlock.hash
+        ).toLowerCase()
+    ) {
+      throw new Error(
+        "production replay pending evidence does not bind its canonical head",
+      );
+    }
     const stateBackend = new JsonRpcBlockScanStateReadBackend(cfg.rpcUrl, {
       maxBatchSize: envInt(
         "SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_SIZE",
@@ -1553,6 +1655,8 @@ async function main(): Promise<void> {
       swapTouched: null,
       cfg: { ...scanCfg, maxCandidates: coarseMaxCandidates },
       mids: pricing.mids,
+      edgeEligible: executionAvailability.edgeEligible,
+      routeEligible: executionAvailability.routeEligible,
     });
     let diagnosticCoarseTarget: ExpectedReplayTarget | null = null;
     if (DIAGNOSTIC.enabled) {
@@ -1672,6 +1776,7 @@ async function main(): Promise<void> {
         familyTimeoutMs: refineFamilyTimeoutMs,
         maxConcurrentPerFamily: refineMaxConcurrentPerFamily,
         executor: DEFAULT_SEARCHER_EXECUTOR,
+        executionEvidence,
       },
     );
     const scan = { ...coarseScan, opportunities: refinement.opportunities };
@@ -1695,6 +1800,7 @@ async function main(): Promise<void> {
         diagnosticTargetIndex >= 0
           ? coarseScan.opportunities[diagnosticTargetIndex]
           : undefined,
+        executionEvidence,
       );
       const refinementReason = exactQuote.status === "positive" && refinedRank === null
         ? "positive_but_below_candidate_cap"
@@ -1800,6 +1906,7 @@ async function main(): Promise<void> {
       scan.opportunities,
       pricing.mids,
       solveIndexes,
+      executionEvidence,
     );
     await check("fork-solve top candidates recorded", () =>
       solvedReports.length === solveIndexes.length,
@@ -1983,6 +2090,8 @@ async function main(): Promise<void> {
       graphPools: pools.length,
       edges: edges.length,
       edgeSetSha256: graphEvidence.sha256,
+      pendingExecutionEvidenceArtifactSha256:
+        pendingEvidenceInput?.artifactSha256 ?? null,
       maxHops: cfg.maxHops,
       protocolEdges: protocolEdges.length,
       protocolMids: pricing.mids.size,
@@ -2320,6 +2429,7 @@ async function solveSelected(
   opportunities: BlockScanOpportunity[],
   mids: ReadonlyMap<string, ResolvedBlockScanMid>,
   opportunityIndexes: readonly number[],
+  executionEvidence: readonly PendingExecutionEvidence[],
 ): Promise<SolveReport[]> {
   if (opportunityIndexes.length === 0) return [];
 
@@ -2362,13 +2472,19 @@ async function solveSelected(
       // Exact solve reads the FORK directly (matches searcher:blockscan-fork-solve); do NOT pass
       // the detection cache — it holds metadata-only v3 ticks for cheap mids, which would corrupt
       // a cache-local exact quote. The fork + eth_call quoter is the source of truth for EV.
-      const center = await resolveSearchCenter(plans[0], opp.flashToken, state, {});
+      const center = await resolveSearchCenter(
+        plans[0],
+        opp.flashToken,
+        state,
+        { executionEvidence },
+      );
       searchCenter = center.toString();
       solved = await solver.solve(plans[0], state, simulator, {
         finalSimTopN: 3,
         gssMaxTries: 8,
         quoteProfitFloorBps: 0n,
         quoteSafetyBps: 10000n,
+        executionEvidence,
       });
     } catch (err) {
       solveError = err instanceof Error ? err.message : String(err);
@@ -2382,6 +2498,7 @@ async function solveSelected(
           {
             executor: DEFAULT_SEARCHER_EXECUTOR,
             safetyBps: 10000n,
+            executionEvidence,
           },
         );
         diagnosticHopAmounts = opp.seedEdges.map((edge, index) => ({

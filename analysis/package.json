@@ -45,7 +45,7 @@
     "test:hermes-gate-tooling": "node --import tsx --test src/test/hermes-gate-tooling.ts",
     "test:ab-canary": "node --import tsx --test src/test/ab-canary.ts",
     "test:historical-gap": "node --import tsx --test src/test/historical-gap.ts",
-    "test:six-step-validation-lifecycle": "node --import tsx --test src/test/six-step-validation-lifecycle.ts src/test/six-step-validation-gate-cli.ts src/test/six-step-validation-runner-config.ts src/test/trusted-six-step-runtime-attestation.ts",
+    "test:six-step-validation-lifecycle": "node --import tsx --test src/test/six-step-validation-lifecycle.ts src/test/six-step-validation-pending-evidence.ts src/test/six-step-validation-gate-cli.ts src/test/six-step-validation-runner-config.ts src/test/trusted-six-step-runtime-attestation.ts",
     "test:ab-promotion-close": "node --import tsx --test src/test/ab-promotion-close.ts",
     "test:ab-resolution-sweep": "node --import tsx --test src/test/ab-resolution-sweep.ts",
     "test:tool-index": "node --import tsx --test src/test/tool-index.ts",

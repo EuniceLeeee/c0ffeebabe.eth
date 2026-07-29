@@ -42,4 +42,27 @@ await assert.rejects(
 lateResolve(9);
 await new Promise((resolve) => setTimeout(resolve, 0));
 
-console.log("blockscan-pass-deadline PASS (3/3)");
+let abortedReap = 0;
+const controller = new AbortController();
+const abortReason = new Error("evidence priority");
+const abortedStage = awaitBlockScanDeadline(
+  new Promise<number>(() => {}),
+  Date.now() + 1_000,
+  "ordinary final simulation",
+  () => {
+    abortedReap++;
+  },
+  controller.signal,
+);
+controller.abort(abortReason);
+await assert.rejects(
+  abortedStage,
+  (error) => error === abortReason,
+);
+assert.equal(
+  abortedReap,
+  1,
+  "caller cancellation must synchronously reap the non-cooperative worker",
+);
+
+console.log("blockscan-pass-deadline PASS (4/4)");

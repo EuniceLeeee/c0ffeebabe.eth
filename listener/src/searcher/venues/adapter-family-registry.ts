@@ -408,6 +408,39 @@ export class AdapterFamilyRegistry {
           `requires mightMatch + observe`,
       );
     }
+    if (
+      pendingEvidence?.routeActivation === "current-head-block-scan" &&
+      (
+        pendingEvidence.routeActivationScope === undefined ||
+        (
+          pendingEvidence.routeActivationScope.kind !== "family" &&
+          pendingEvidence.routeActivationScope.kind !== "instance"
+        ) ||
+        (
+          pendingEvidence.routeActivationScope.kind === "instance" &&
+          (
+            typeof pendingEvidence.routeActivationScope.edgeScopeKey !==
+              "function" ||
+            typeof pendingEvidence.routeActivationScope.evidenceScopeKeys !==
+              "function"
+          )
+        )
+      )
+    ) {
+      throw new Error(
+        `adapter-family registry: ${family.id} current-head route activation ` +
+          `requires an explicit family or instance scope`,
+      );
+    }
+    if (
+      pendingEvidence?.routeActivation === undefined &&
+      pendingEvidence?.routeActivationScope !== undefined
+    ) {
+      throw new Error(
+        `adapter-family registry: ${family.id} declares a route activation ` +
+          `scope without route activation`,
+      );
+    }
     const local = new Set<string>();
     for (const id of family.ownedActionAdapterIds) {
       if (!id || local.has(id)) {

@@ -153,12 +153,23 @@ export function scanBlockStateFromResolvedMids(input: {
   cfg: BlockScanCoreConfig;
   /** Required exact edge-key map; this kernel has no cache or legacy fallback. */
   mids: ReadonlyMap<string, ResolvedBlockScanMid>;
+  /**
+   * Per-pass execution availability. This never removes graph edges; it
+   * prevents routes that cannot execute in the current immutable context from
+   * consuming ranking/candidate capacity.
+   */
+  routeEligible?: (edges: readonly TokenEdge[]) => boolean;
+  /** Per-edge execution availability applied only to this scanner pass. */
+  edgeEligible?: (edge: TokenEdge) => boolean;
 }): BlockScanOutcome {
   const deadlineAtMs = Date.now() + input.cfg.budgetMs;
   const touched = input.swapTouched
     ? new Set([...input.swapTouched].map((pool) => pool.toLowerCase()))
     : null;
-  const groups = groupPairs(input.edges);
+  const eligibleEdges = input.edgeEligible
+    ? input.edges.filter(input.edgeEligible)
+    : input.edges;
+  const groups = groupPairs(eligibleEdges);
   const ranked: RankedOpportunity[] = [];
   const anchorTokens = new Set<string>(
     [...input.cfg.pricedTokens.keys()].map((token) => token.toLowerCase()),
@@ -251,6 +262,7 @@ export function scanBlockStateFromResolvedMids(input: {
     const sellRich = findEdge(richVenue.edges, otherToken, flashToken);
     if (!buyCheap || !sellRich) continue;
     const seedEdges = [buyCheap, sellRich];
+    if (input.routeEligible && !input.routeEligible(seedEdges)) continue;
 
     const maxBorrow = input.cfg.pricedTokens.get(flashToken)?.maxBorrow ?? 0n;
     const routeScore = scoreRing(seedEdges, input.mids);
@@ -295,7 +307,7 @@ export function scanBlockStateFromResolvedMids(input: {
   }
 
   const protocolEdges = orderByBlockScanFamily(
-    input.edges.filter(
+    eligibleEdges.filter(
       (edge) => edge.slotKind === "protocol" && !edge.leavesStandingPosition,
     ),
     (edge) => [blockScanEdgeFamilyId(edge)],
@@ -305,6 +317,7 @@ export function scanBlockStateFromResolvedMids(input: {
     anchorTokens.add(edge.tokenOut.toLowerCase());
   }
   const considerRing = (ringEdges: TokenEdge[]): void => {
+    if (input.routeEligible && !input.routeEligible(ringEdges)) return;
     if (touched && !ringEdges.some((edge) => touched.has(edgeVenueIdentity(edge)))) return;
     if (pathLeavesStandingPosition(ringEdges)) return;
     if (!isAdmissibleBlockScanRingShape(ringEdges, input.cfg.pricedTokens)) return;
@@ -373,7 +386,7 @@ export function scanBlockStateFromResolvedMids(input: {
   for (const protocolEdge of protocolEdges) {
     if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
     const expansionEdges = selectFamilyFairExpansionEdges({
-      edges: input.edges,
+      edges: eligibleEdges,
       profitToken: protocolEdge.tokenIn,
       maxPoolsPerToken: 20,
       pinnedOutsideBudget: input.cfg.pinnedOutsideBudget === true,
@@ -392,7 +405,7 @@ export function scanBlockStateFromResolvedMids(input: {
   }
 
   const generalExpansionEdges = selectFamilyFairExpansionEdges({
-    edges: input.edges,
+    edges: eligibleEdges,
     profitToken: "",
     maxPoolsPerToken: 20,
     pinnedOutsideBudget: input.cfg.pinnedOutsideBudget === true,

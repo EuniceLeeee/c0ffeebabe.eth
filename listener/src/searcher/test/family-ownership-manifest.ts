@@ -25,6 +25,8 @@ export interface FamilyOwnershipManifestEntry {
   readonly owned_action_bindings: readonly FamilyOwnedActionBinding[];
   readonly required_action_adapter_ids: readonly string[];
   readonly required_action_bindings: readonly FamilyOwnedActionBinding[];
+  /** Route is excluded from ordinary block-scan until same-head evidence exists. */
+  readonly requires_current_head_execution_evidence: boolean;
   readonly activation_sha256: string;
 }
 
@@ -147,6 +149,10 @@ export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
       required_action_adapter_ids:
         [...family.requiredInfraActionAdapterIds].sort(),
       required_action_bindings: requiredActionBindings,
+      requires_current_head_execution_evidence:
+        "pendingTransactionEvidence" in family &&
+        family.pendingTransactionEvidence?.routeActivation ===
+          "current-head-block-scan",
       activation_sha256: sha256(canonicalJson({
         id: family.id,
         kind: family.kind,
@@ -159,6 +165,10 @@ export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
         required_action_bindings: requiredActionBindings,
         required_infra_action_adapter_ids:
           [...family.requiredInfraActionAdapterIds].sort(),
+        requires_current_head_execution_evidence:
+          "pendingTransactionEvidence" in family &&
+          family.pendingTransactionEvidence?.routeActivation ===
+            "current-head-block-scan",
         ...("funding" in family
           ? {
               funding_action_adapter_id: family.funding.actionAdapterId,

@@ -124,6 +124,30 @@ export interface PendingTransactionEvidenceContext {
  */
 export interface PendingTransactionEvidenceCapability {
   /**
+   * The family cannot execute a standing route until this evidence is present
+   * for the current canonical head. The generic runtime then excludes the
+   * route from ordinary passes and schedules a same-head evidence pass when a
+   * matching public transaction arrives.
+   */
+  readonly routeActivation?: "current-head-block-scan";
+  /**
+   * Pure coarse-ranking scope for route activation. A block-wide attestation
+   * may deliberately activate the whole family; instance-bound evidence must
+   * project stable keys so unrelated sibling instances cannot consume the
+   * bounded candidate set before exact quote.
+   */
+  readonly routeActivationScope?:
+    | {
+        readonly kind: "family";
+      }
+    | {
+        readonly kind: "instance";
+        edgeScopeKey(edge: TokenEdge): string | null;
+        evidenceScopeKeys(
+          evidence: PendingExecutionEvidence,
+        ): readonly string[];
+      };
+  /**
    * Cheap, synchronous and side-effect-free prefilter. False prevents all RPC
    * work for this family; true only nominates the transaction for observation.
    */

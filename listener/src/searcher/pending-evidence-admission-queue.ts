@@ -5,6 +5,15 @@ import type {
 
 export type PendingEvidenceTaskPriority = "canonical" | "unknown";
 
+export class PendingEvidenceTaskQueueFullError extends Error {
+  readonly code = "PENDING_EVIDENCE_TASK_QUEUE_FULL";
+
+  constructor(readonly priority: PendingEvidenceTaskPriority) {
+    super(`${priority} evidence task queue full`);
+    this.name = "PendingEvidenceTaskQueueFullError";
+  }
+}
+
 interface PendingEvidenceTask<T> {
   readonly work: () => Promise<T>;
   readonly resolve: (value: T) => void;
@@ -56,11 +65,16 @@ export class PendingEvidenceTaskScheduler {
   constructor(
     private readonly concurrency: number,
     private readonly unknownCapacityPerLane: number,
+    private readonly canonicalCapacity: number = unknownCapacityPerLane,
   ) {
     assertPositiveSafeInteger(concurrency, "evidence task concurrency");
     assertPositiveSafeInteger(
       unknownCapacityPerLane,
       "unknown evidence task capacity per lane",
+    );
+    assertPositiveSafeInteger(
+      canonicalCapacity,
+      "canonical evidence task capacity",
     );
   }
 
@@ -72,11 +86,15 @@ export class PendingEvidenceTaskScheduler {
     return new Promise<T>((resolve, reject) => {
       const task: PendingEvidenceTask<T> = { work, resolve, reject };
       if (priority === "canonical") {
+        if (this.canonical.length >= this.canonicalCapacity) {
+          reject(new PendingEvidenceTaskQueueFullError(priority));
+          return;
+        }
         this.canonical.push(task as PendingEvidenceTask<unknown>);
       } else {
         const queue = this.unknownByLane.get(lane) ?? [];
         if (queue.length >= this.unknownCapacityPerLane) {
-          reject(new Error("unknown evidence task queue full"));
+          reject(new PendingEvidenceTaskQueueFullError(priority));
           return;
         }
         queue.push(task as PendingEvidenceTask<unknown>);

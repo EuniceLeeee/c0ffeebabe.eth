@@ -1,5 +1,6 @@
 import type { AdapterRuntimeSnapshot } from "../adapter-runtime-coordinator.js";
 import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
+import type { TokenEdge } from "../planner/token-graph.js";
 import {
   blockScanEdgeKey,
   exactSetHash,
@@ -21,6 +22,8 @@ export interface ProductionBlockScanInput {
   readonly runtime: AdapterRuntimeSnapshot;
   readonly swapTouched: Set<string> | null;
   readonly cfg: BlockScanCoreConfig;
+  readonly routeEligible?: (edges: readonly TokenEdge[]) => boolean;
+  readonly edgeEligible?: (edge: TokenEdge) => boolean;
 }
 
 export interface ProductionBlockScanOutcome extends BlockScanOutcome {
@@ -51,6 +54,8 @@ export function detectProductionBlockScanOpportunities(
     swapTouched: input.swapTouched,
     cfg: input.cfg,
     mids: input.runtime.pricing.mids,
+    routeEligible: input.routeEligible,
+    edgeEligible: input.edgeEligible,
   });
   return Object.freeze({
     ...outcome,

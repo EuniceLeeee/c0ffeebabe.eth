@@ -11,10 +11,13 @@ export interface LatestHeadSchedulerTelemetry {
 export interface LatestHeadObservation {
   readonly sourceHeadSeenAtMs: number;
   readonly sourceHeadSeenAtMonotonicMs: number;
+  /** Positive only for a same-head execution-context refresh. */
+  readonly revision?: number;
 }
 
 interface ScheduledHead extends LatestHeadObservation {
   readonly blockNumber: number;
+  readonly revisionNumber: number;
 }
 
 export type LatestHeadDropReason =
@@ -39,6 +42,7 @@ export class LatestHeadScheduler {
   private accepting = true;
   private drainTask: Promise<void> | null = null;
   private latestSubmitted: number | null = null;
+  private latestRevision = 0;
   private submitted = 0;
   private started = 0;
   private completed = 0;
@@ -64,12 +68,7 @@ export class LatestHeadScheduler {
     if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) {
       throw new Error(`invalid scheduled head ${blockNumber}`);
     }
-    if (
-      !Number.isFinite(observation.sourceHeadSeenAtMs) ||
-      !Number.isFinite(observation.sourceHeadSeenAtMonotonicMs)
-    ) {
-      throw new Error(`invalid source-head observation for ${blockNumber}`);
-    }
+    this.validateObservation(blockNumber, observation);
     if (!this.accepting) return;
     this.submitted++;
     if (this.latestSubmitted !== null && blockNumber <= this.latestSubmitted) {
@@ -77,7 +76,61 @@ export class LatestHeadScheduler {
       return;
     }
     this.latestSubmitted = blockNumber;
-    const scheduled = Object.freeze({ blockNumber, ...observation });
+    this.latestRevision = 0;
+    this.admit(Object.freeze({
+      blockNumber,
+      revisionNumber: 0,
+      ...observation,
+    }));
+  }
+
+  /**
+   * Admit a new immutable execution context for the same canonical head.
+   * Revisions are caller-owned monotonic sequence numbers. A newer block
+   * always dominates every pending refresh from an older block.
+   */
+  scheduleRevision(
+    blockNumber: number,
+    revision: number,
+    observation: LatestHeadObservation,
+  ): boolean {
+    if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) {
+      throw new Error(`invalid scheduled head ${blockNumber}`);
+    }
+    if (!Number.isSafeInteger(revision) || revision <= 0) {
+      throw new Error(`invalid scheduled head revision ${revision}`);
+    }
+    this.validateObservation(blockNumber, observation);
+    if (!this.accepting) return false;
+    this.submitted++;
+    if (
+      this.latestSubmitted !== null &&
+      (
+        blockNumber < this.latestSubmitted ||
+        (
+          blockNumber === this.latestSubmitted &&
+          revision <= this.latestRevision
+        )
+      )
+    ) {
+      this.coalesced++;
+      return false;
+    }
+    if (this.latestSubmitted === null || blockNumber > this.latestSubmitted) {
+      this.latestSubmitted = blockNumber;
+      this.latestRevision = 0;
+    }
+    this.latestRevision = revision;
+    this.admit(Object.freeze({
+      blockNumber,
+      revisionNumber: revision,
+      ...observation,
+      revision,
+    }));
+    return true;
+  }
+
+  private admit(scheduled: ScheduledHead): void {
     if (this.active !== null) {
       if (this.pending !== null) {
         this.coalesced++;
@@ -125,6 +178,9 @@ export class LatestHeadScheduler {
         await this.runHead(blockNumber, {
           sourceHeadSeenAtMs: scheduled.sourceHeadSeenAtMs,
           sourceHeadSeenAtMonotonicMs: scheduled.sourceHeadSeenAtMonotonicMs,
+          ...(scheduled.revisionNumber === 0
+            ? {}
+            : { revision: scheduled.revisionNumber }),
         });
       } catch (error) {
         this.onError(blockNumber, error);
@@ -145,6 +201,18 @@ export class LatestHeadScheduler {
       this.onDrop(Object.freeze({ ...head, reason }));
     } catch {
       // Observability must never disrupt latest-head admission.
+    }
+  }
+
+  private validateObservation(
+    blockNumber: number,
+    observation: LatestHeadObservation,
+  ): void {
+    if (
+      !Number.isFinite(observation.sourceHeadSeenAtMs) ||
+      !Number.isFinite(observation.sourceHeadSeenAtMonotonicMs)
+    ) {
+      throw new Error(`invalid source-head observation for ${blockNumber}`);
     }
   }
 }

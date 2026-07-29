@@ -46,12 +46,15 @@ export const SIX_STEP_CONTROLLER_ID =
 
 const CONTROLLER_PATH = fileURLToPath(import.meta.url);
 const PRODUCER = "listener/src/searcher/test/production-replay.ts";
+const PENDING_EVIDENCE_PRODUCER =
+  "listener/src/searcher/test/production-replay-pending-evidence.ts";
 const MANIFEST = "listener/src/searcher/test/family-ownership-manifest.ts";
 const GRAPH_BUILDER = "listener/src/searcher/planner/token-graph.ts";
 const REGISTRY = "listener/src/searcher/venues/production-registry.ts";
 const ACTION_INDEX = "listener/src/adapters/index.ts";
 const TSX = import.meta.resolve("tsx");
 const SHA40 = /^[a-f0-9]{40}$/;
+const SHA256 = /^[a-f0-9]{64}$/;
 const HASH32 = /^0x[a-f0-9]{64}$/;
 const DEFAULT_WALL_TIMEOUT_MS = 30 * 60 * 1_000;
 const TRUSTED_SURFACES = [
@@ -60,6 +63,7 @@ const TRUSTED_SURFACES = [
   "analysis/src/six-step-validation-lifecycle.ts",
   "analysis/src/trusted-six-step-runtime-attestation.ts",
   PRODUCER,
+  PENDING_EVIDENCE_PRODUCER,
   MANIFEST,
   "listener/src/searcher/test/blockscan-hunt.ts",
   "listener/src/shared/evidence/canonical-edge-set.ts",
@@ -254,6 +258,13 @@ export async function runTrustedSixStepValidation(input: {
     await assertCanonicalUniverse(provider, coverage);
     const anchor = await standingAnchor(provider, request.sample_tx_hash, before);
     provider.destroy();
+    assertPendingExecutionEvidence(
+      raw,
+      required,
+      familyManifest,
+      request.sample_tx_hash,
+      anchor,
+    );
     if (snapshot && stableJson(anchor) !== stableJson(snapshot.state_anchor)) {
       throw new Error("checkpoint replay state differs from frozen snapshot");
     }
@@ -310,7 +321,21 @@ export async function runTrustedSixStepValidation(input: {
         graph_builder_sha256: sha256(readFileSync(resolve(worktree, GRAPH_BUILDER))),
         graph_snapshot_source_sha256:
           raw.producerOutput.frozenHuntArtifact.sha256,
-        producer_sha256: sha256(readFileSync(resolve(cwd, PRODUCER))),
+        producer_sha256: executedTrustedSourceSha256(
+          cwd,
+          worktree,
+          PRODUCER,
+        ),
+        pending_evidence_producer_sha256:
+          executedTrustedSourceSha256(
+            cwd,
+            worktree,
+            PENDING_EVIDENCE_PRODUCER,
+          ),
+        pending_evidence_artifact_sha256:
+          raw.executionEvidence.artifactSha256,
+        pending_evidence_required_sha256:
+          requiredPendingExecutionEvidenceSha256(raw.executionEvidence),
         comparator_sha256: sha256(readFileSync(CONTROLLER_PATH)),
         ...(snapshot
           ? { input_snapshot_sha256: snapshot.payload_sha256 }
@@ -395,6 +420,18 @@ function finalEvidence(
       throw new Error(`final does not match checkpoint ${field}`);
     }
   }
+  const checkpointFrozen = checkpoint.frozen_inputs as
+    Record<string, unknown>;
+  const finalFrozen = common.frozen_inputs as Record<string, unknown>;
+  for (const field of [
+    "producer_sha256",
+    "pending_evidence_producer_sha256",
+    "pending_evidence_required_sha256",
+  ]) {
+    if (checkpointFrozen[field] !== finalFrozen[field]) {
+      throw new Error(`final does not match checkpoint frozen_inputs.${field}`);
+    }
+  }
   const review = context.review;
   const draft = {
     ...common,
@@ -455,6 +492,7 @@ function semanticStages(
       amount_in: hop.amountIn, amount_out: hop.amountOut,
       raw_amount_out: hop.rawAmountOut,
     })),
+    execution_evidence: raw.executionEvidence,
   };
   const quoteHash = semanticExactQuoteCommitmentSha256(quote);
   const sim = {
@@ -597,7 +635,7 @@ function parseRaw(
   runner: ProductionRunnerConfig,
 ): RawReplay {
   const raw = JSON.parse(bytes.toString()) as RawReplay;
-  if (raw.schemaVersion !== 4 ||
+  if (raw.schemaVersion !== 5 ||
       raw.evidenceClass !== "candidate-authored-diagnostic" ||
       raw.trustedAcceptance !== false ||
       raw.laneCoverage !== "parent-block-blockscan" ||
@@ -609,6 +647,9 @@ function parseRaw(
       raw.inputs.explicitRouteInputs.length || raw.inputs.explicitAmountInputs.length ||
       raw.inputs.amountSource !== "solver") {
     throw new Error("producer received a target route/amount oracle");
+  }
+  if (!record(raw.executionEvidence)) {
+    throw new Error("producer execution evidence report is missing");
   }
   const expected = {
     ...runner,
@@ -645,6 +686,145 @@ function parseRaw(
     throw new Error("selected route hash is invalid");
   }
   return raw;
+}
+
+export function assertPendingExecutionEvidence(
+  raw: RawReplay,
+  requiredFamilyIds: readonly string[],
+  familyManifest: FamilyOwnershipManifest,
+  sampleTxHash: string,
+  anchor: SixStepStateAnchor,
+): void {
+  const report = raw.executionEvidence as Record<string, unknown>;
+  exactKeys(report, [
+    "schemaVersion", "freezePoint", "artifactSha256",
+    "candidateFamilyIds", "attemptedFamilyIds", "requiredFamilyIds",
+    "commitments",
+  ], "producer execution evidence report");
+  if (
+    report.schemaVersion !== 1 ||
+    report.freezePoint !== "before-natural-route-scan" ||
+    typeof report.artifactSha256 !== "string" ||
+    !SHA256.test(report.artifactSha256)
+  ) {
+    throw new Error("producer execution evidence report identity is invalid");
+  }
+  const pendingFamilies = new Set(
+    familyManifest.families
+      .filter((family) =>
+        family.requires_current_head_execution_evidence === true
+      )
+      .map((family) => family.id),
+  );
+  const candidates = exactSortedStringSet(
+    report.candidateFamilyIds,
+    "candidate execution evidence families",
+  );
+  const attempted = exactSortedStringSet(
+    report.attemptedFamilyIds,
+    "attempted execution evidence families",
+  );
+  if (
+    stableJson(candidates) !== stableJson(attempted) ||
+    candidates.some((familyId) => !pendingFamilies.has(familyId))
+  ) {
+    throw new Error(
+      "producer execution evidence candidate/attempted set is invalid",
+    );
+  }
+  const expectedRequired = requiredFamilyIds
+    .filter((familyId) => pendingFamilies.has(familyId))
+    .sort();
+  const declaredRequired = exactSortedStringSet(
+    report.requiredFamilyIds,
+    "required execution evidence families",
+  );
+  if (
+    stableJson(declaredRequired) !== stableJson(expectedRequired) ||
+    declaredRequired.some((familyId) => !candidates.includes(familyId))
+  ) {
+    throw new Error("producer execution evidence required set is invalid");
+  }
+  if (!Array.isArray(report.commitments)) {
+    throw new Error("producer execution evidence commitments are missing");
+  }
+  const commitments = report.commitments as unknown[];
+  if (commitments.length !== expectedRequired.length) {
+    throw new Error("producer execution evidence set is incomplete");
+  }
+  const normalizedTxHash = String(sampleTxHash).toLowerCase();
+  const normalizedHeadHash = anchor.base_block_hash.toLowerCase();
+  const seen = new Set<string>();
+  for (let index = 0; index < commitments.length; index += 1) {
+    if (!record(commitments[index])) {
+      throw new Error("producer execution evidence commitment is invalid");
+    }
+    const item = commitments[index] as Record<string, unknown>;
+    exactKeys(item, [
+      "familyId", "txHash", "headBlockNumber", "headHash",
+      "canonicalPayload", "payloadHash", "evidenceHash",
+    ], "producer execution evidence commitment");
+    const familyId =
+      typeof item.familyId === "string" ? item.familyId : "";
+    if (
+      familyId !== expectedRequired[index] ||
+      seen.has(familyId) ||
+      typeof item.txHash !== "string" ||
+      item.txHash.toLowerCase() !== normalizedTxHash ||
+      typeof item.headBlockNumber !== "number" ||
+      !Number.isSafeInteger(item.headBlockNumber) ||
+      item.headBlockNumber !== anchor.base_block ||
+      typeof item.headHash !== "string" ||
+      item.headHash.toLowerCase() !== normalizedHeadHash
+    ) {
+      throw new Error(
+        "producer execution evidence family/tx/head binding is invalid",
+      );
+    }
+    seen.add(familyId);
+    const canonicalPayload =
+      typeof item.canonicalPayload === "string"
+        ? item.canonicalPayload
+        : "";
+    if (
+      !ethers.isHexString(canonicalPayload) ||
+      ethers.dataLength(canonicalPayload) === 0 ||
+      ethers.dataLength(canonicalPayload) > 64 * 1024
+    ) {
+      throw new Error(
+        `producer execution evidence payload is invalid: ${familyId}`,
+      );
+    }
+    const payloadHash = ethers.keccak256(canonicalPayload).toLowerCase();
+    if (
+      typeof item.payloadHash !== "string" ||
+      item.payloadHash.toLowerCase() !== payloadHash
+    ) {
+      throw new Error(
+        `producer execution evidence payload hash is invalid: ${familyId}`,
+      );
+    }
+    const evidenceHash = ethers.keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(
+        ["string", "bytes32", "uint256", "bytes32", "bytes32"],
+        [
+          familyId,
+          normalizedTxHash,
+          anchor.base_block,
+          normalizedHeadHash,
+          payloadHash,
+        ],
+      ),
+    ).toLowerCase();
+    if (
+      typeof item.evidenceHash !== "string" ||
+      item.evidenceHash.toLowerCase() !== evidenceHash
+    ) {
+      throw new Error(
+        `producer execution evidence binding hash is invalid: ${familyId}`,
+      );
+    }
+  }
 }
 
 function loadReview(
@@ -1090,6 +1270,54 @@ function git(
 }
 function writeJson(path: string, value: unknown): void {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+}
+function executedTrustedSourceSha256(
+  trustedRootPath: string,
+  executedWorktree: string,
+  path: string,
+): string {
+  const trusted = sha256(readFileSync(resolve(trustedRootPath, path)));
+  const executed = sha256(readFileSync(resolve(executedWorktree, path)));
+  if (trusted !== executed) {
+    throw new Error(`executed trusted producer differs from controller source: ${path}`);
+  }
+  return executed;
+}
+function exactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  label: string,
+): void {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (stableJson(actual) !== stableJson(wanted)) {
+    throw new Error(`${label} fields are invalid`);
+  }
+}
+function exactSortedStringSet(
+  value: unknown,
+  label: string,
+): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.some((entry) => typeof entry !== "string" || entry.length === 0) ||
+    new Set(value).size !== value.length
+  ) {
+    throw new Error(`${label} must be a unique string array`);
+  }
+  const sorted = [...value].sort();
+  if (stableJson(sorted) !== stableJson(value)) {
+    throw new Error(`${label} must be sorted`);
+  }
+  return sorted;
+}
+export function requiredPendingExecutionEvidenceSha256(
+  report: RawReplay["executionEvidence"],
+): string {
+  return sha256(stableJson({
+    requiredFamilyIds: report.requiredFamilyIds,
+    commitments: report.commitments,
+  }));
 }
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");

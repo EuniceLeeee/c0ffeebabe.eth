@@ -20,6 +20,9 @@ import {
   orderByBlockScanFamily,
   selectByBlockScanFamily,
 } from "./blockscan-family-budget.js";
+import type {
+  PendingExecutionEvidence,
+} from "../venues/route-leg-adapter.js";
 
 const DEFAULT_CONCURRENCY = 24;
 const DEFAULT_FAMILY_PROBE_TIMEOUT_MS = 1_000;
@@ -74,6 +77,10 @@ export interface BlockScanRefinementOptions {
    * shared QuoteContext.
    */
   readonly executor?: string;
+  /** Immutable evidence context for this exact route pass only. */
+  readonly executionEvidence?: readonly PendingExecutionEvidence[];
+  /** Caller-owned pass cancellation. */
+  readonly signal?: AbortSignal;
 }
 
 interface RankedProbe {
@@ -130,6 +137,9 @@ export async function refineBlockScanCandidates(
     "family concurrency",
   );
   const deadlineController = new AbortController();
+  const detachCaller = options.signal
+    ? linkAbort(options.signal, deadlineController)
+    : () => {};
   // One shared signal owns every in-flight worker call. Each call removes its
   // listener in finally; lift EventTarget's warning threshold for this bounded
   // fan-out so 24 legitimate workers do not emit a false leak warning.
@@ -260,6 +270,7 @@ export async function refineBlockScanCandidates(
         familyDeadlineAtMs,
         familyController.signal,
         options.executor,
+        options.executionEvidence,
         () =>
           familyDeadlineAtMs < deadlineAtMs
             ? new FamilyProbeDeadlineError(familyIds, localBudgetMs)
@@ -419,6 +430,7 @@ export async function refineBlockScanCandidates(
   } finally {
     if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
     await Promise.allSettled(active);
+    detachCaller();
   }
 
   ranked.sort((a, b) =>
@@ -483,6 +495,7 @@ async function exactProbeMarginBps(
   deadlineAtMs: number,
   signal: AbortSignal,
   executor?: string,
+  executionEvidence?: readonly PendingExecutionEvidence[],
   deadlineError: () => Error = () =>
     new ProbeDeadlineError("exact probe deadline reached"),
   onEdgeSuccess: (
@@ -518,6 +531,7 @@ async function exactProbeMarginBps(
           edge.poolToken1,
           undefined,
           executor,
+          executionEvidence,
         ),
         signal,
       );

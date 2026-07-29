@@ -26,7 +26,6 @@ function compactSnapshot(): readonly string[] {
 function testOneToOneProjection(): void {
   const adapters = PRODUCTION_ADAPTER_FAMILIES.routes().list();
   const derived = deriveRouteFamilyManifest(adapters);
-  assert(adapters.length === 18, `expected 18 production adapters, got ${adapters.length}`);
   assert(derived.length === adapters.length, "manifest must contain exactly one row per adapter");
   assert(
     new Set(derived.map((entry) => entry.executionFamilyId)).size === adapters.length,
@@ -45,7 +44,7 @@ function testDynamicAdmission(): void {
   const dynamic = PRODUCTION_ROUTE_FAMILY_MANIFEST.filter(
     (entry) => entry.dynamicAdmission !== null,
   );
-  assert(dynamic.length === 3, `expected three dynamic families, got ${dynamic.length}`);
+  assert(dynamic.length === 4, `expected four dynamic families, got ${dynamic.length}`);
   assert(dynamic[0]?.executionFamilyId === "protocol:erc4626", "ERC4626 dynamic family order");
   assert(
     dynamic[0]?.dynamicAdmission?.candidateSources.join(",") ===
@@ -66,6 +65,12 @@ function testDynamicAdmission(): void {
     dynamic[2]?.executionFamilyId === "protocol:eigenpie" &&
       dynamic[2]?.dynamicAdmission?.candidateSources.join(",") === "observed-interaction",
     "Eigenpie deposit must declare only the shared observed source",
+  );
+  assert(
+    dynamic[3]?.executionFamilyId === "protocol:self-burn-native" &&
+      dynamic[3]?.dynamicAdmission?.candidateSources.join(",") ===
+        "dex-token-domain,observed-interaction",
+    "self-burn-native must declare address and observed provenance",
   );
   console.log("[route-family-compatibility] dynamic admission: PASS");
 }
@@ -122,6 +127,7 @@ function testFieldAndOrderSnapshot(): void {
     "protocol:eigenpie|protocol-conversion|eigenpie-deposit-router|eigenpie-deposit-asset|eigenpie-deposit-asset|erc20-approve|0|true|observed-interaction|true",
     "protocol:rocksolid|protocol-conversion|rocksolid|rocksolid-sync-deposit|rocksolid-sync-deposit|erc20-approve|1|true|-|-",
     "protocol:wsteth|protocol-conversion|wsteth|wsteth-wrap,wsteth-unwrap|wsteth-wrap,wsteth-unwrap|erc20-approve|1|true|-|-",
+    "protocol:self-burn-native|protocol-conversion|self-burn-native-token|self-burn-native-redeem|self-burn-native-redeem|weth-deposit-value|0|true|dex-token-domain,observed-interaction|true",
     "credit:fluid|credit|fluid-vault|fluid-vault|fluid-vault,fluid-dex-liquidate|erc20-approve|0|false|-|-",
   ] as const;
   const actual = compactSnapshot();

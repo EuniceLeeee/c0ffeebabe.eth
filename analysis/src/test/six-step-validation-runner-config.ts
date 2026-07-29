@@ -90,3 +90,39 @@ test("trusted producer passes the selected caps to the actual hunt child", () =>
     /passBudgetMs: productionPassBudgetMs\(cfg, graphEdgeCount\)/);
   assert.match(producer, /basePassBudgetMs: cfg\.passBudgetMs/);
 });
+
+test("trusted producer freezes and hash-binds pending evidence before hunt", () => {
+  const producer = readFileSync(
+    "../listener/src/searcher/test/production-replay.ts",
+    "utf8",
+  );
+  const hunt = readFileSync(
+    "../listener/src/searcher/test/blockscan-hunt.ts",
+    "utf8",
+  );
+  const freeze = producer.indexOf(
+    "await observeFrozenTransactionExecutionEvidence",
+  );
+  const run = producer.indexOf("await runHunt({");
+  assert(freeze >= 0 && run > freeze);
+  assert.match(
+    producer,
+    /PRODUCTION_REPLAY_PENDING_EVIDENCE_ARTIFACT:\s*input\.pendingEvidenceArtifactPath/,
+  );
+  assert.match(
+    producer,
+    /PRODUCTION_REPLAY_PENDING_EVIDENCE_SHA256:\s*input\.pendingEvidenceArtifactSha256/,
+  );
+  assert.match(
+    hunt,
+    /loadFrozenPendingExecutionEvidenceArtifact\(\s*artifactPath,\s*artifactSha256/,
+  );
+  assert.match(
+    hunt,
+    /refineBlockScanCandidates\([\s\S]*?\{\s*familyTimeoutMs:[\s\S]*?executionEvidence,\s*\}/,
+  );
+  assert.match(
+    hunt,
+    /solver\.solve\([\s\S]*?quoteSafetyBps: 10000n,\s*executionEvidence,/,
+  );
+});

@@ -202,7 +202,10 @@ function validateFrozenInputs(
   for (const field of [
     "universe_sha256", "universe_manifest_sha256", "config_sha256",
     "graph_sha256", "family_manifest_sha256", "graph_builder_sha256",
-    "graph_snapshot_source_sha256", "producer_sha256", "comparator_sha256",
+    "graph_snapshot_source_sha256", "producer_sha256",
+    "pending_evidence_producer_sha256",
+    "pending_evidence_artifact_sha256",
+    "pending_evidence_required_sha256", "comparator_sha256",
   ]) require(errors, sha(frozen[field]), `${field} must be a SHA-256 digest`);
   require(errors, frozen.target_injected === false,
     "target_injected must be false");

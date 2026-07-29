@@ -48,6 +48,7 @@ import {
 import { AnvilStateBackend } from "../../shared/state/state-backend.js";
 import {
   mergePoolRegistries,
+  sendDexDiscoveryRpc,
 } from "../active-pool-discovery.js";
 import { canonicalTokenRing, cycleFingerprint } from "../detector/cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
@@ -101,6 +102,10 @@ import {
   PRODUCTION_ADAPTER_FAMILIES,
 } from "../venues/production-registry.js";
 import {
+  DEFAULT_PENDING_EVIDENCE_MAX_READS,
+  DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
+} from "../venues/adapter-family-registry.js";
+import {
   PRODUCTION_REPLAY_ARTIFACT_PRODUCER,
   PRODUCTION_REPLAY_ARTIFACT_SCHEMA,
   selectProductionReplayDiscoveredPools,
@@ -111,6 +116,14 @@ import {
   anchorHistoricalSenderNoncePrefix,
   type HistoricalSenderNonceAnchorResult,
 } from "./historical-replay-anchor.js";
+import {
+  observeFrozenTransactionExecutionEvidence,
+  pendingExecutionEvidenceFamilyIds,
+  pendingExecutionEvidenceReport,
+  selectFrozenRouteExecutionEvidence,
+  writeFrozenPendingExecutionEvidenceArtifact,
+  type PendingExecutionEvidenceReport,
+} from "./production-replay-pending-evidence.js";
 
 interface CliConfig {
   winnerTx: string;
@@ -160,6 +173,7 @@ interface HuntReport {
   stateBlock: number;
   edges: number;
   edgeSetSha256: string;
+  pendingExecutionEvidenceArtifactSha256: string;
   opportunities: HuntOpportunity[];
   solved: HuntSolve[];
 }
@@ -203,7 +217,7 @@ interface ProducerOutputEvidence {
 }
 
 interface ReplayReport {
-  schemaVersion: 4;
+  schemaVersion: 5;
   evidenceClass: "candidate-authored-diagnostic";
   trustedAcceptance: false;
   laneCoverage: "parent-block-blockscan" | "sender-prefix-post-trigger-blockscan";
@@ -244,6 +258,7 @@ interface ReplayReport {
     shardCompleteness: CanonicalShardCompleteness;
   };
   producerOutput: ProducerOutputEvidence;
+  executionEvidence: PendingExecutionEvidenceReport;
   reference: {
     observedAdmissions: number;
     subjectEdges: HuntEdge[];
@@ -361,9 +376,68 @@ async function main(): Promise<void> {
       // discovery failure. Top-N remains enforced by maxPools.
       0,
     );
-    const winner = await provider.getTransactionReceipt(cfg.winnerTx);
+    const [winner, winnerTransaction] = await Promise.all([
+      provider.getTransactionReceipt(cfg.winnerTx),
+      provider.getTransaction(cfg.winnerTx),
+    ]);
     if (!winner || winner.status !== 1) throw new Error("winner receipt missing or reverted");
+    if (!winnerTransaction) throw new Error("winner transaction missing");
     const parentBlock = winner.blockNumber - 1;
+    const parentHeader = await provider.getBlock(parentBlock);
+    if (!parentHeader?.hash) throw new Error("winner parent header missing");
+    const frozenPendingExecutionEvidence =
+      await observeFrozenTransactionExecutionEvidence({
+        projection: PRODUCTION_ADAPTER_FAMILIES.pendingTransactionEvidence(),
+        transaction: Object.freeze({
+          hash: winnerTransaction.hash,
+          to: winnerTransaction.to,
+          data: winnerTransaction.data,
+        }),
+        familyRequiresCurrentHeadEvidence(familyId) {
+          return PRODUCTION_ADAPTER_FAMILIES.routes()
+            .forFamily(familyId)
+            .pendingTransactionEvidence?.routeActivation ===
+              "current-head-block-scan";
+        },
+        transport: {
+          head: Object.freeze({
+            number: parentBlock,
+            hash: parentHeader.hash,
+          }),
+          call(read, control) {
+            return sendDexDiscoveryRpc<string>(
+              provider,
+              "eth_call",
+              [
+                provider.getRpcTransaction({
+                  to: read.to,
+                  data: read.data,
+                }),
+                {
+                  blockHash: parentHeader.hash,
+                  requireCanonical: true,
+                },
+              ],
+              control,
+            );
+          },
+        },
+        timeoutMs: Number(
+          process.env.SEARCHER_PENDING_EVIDENCE_TIMEOUT_MS ??
+            DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
+        ),
+        maxReadsPerFamily: Number(
+          process.env.SEARCHER_PENDING_EVIDENCE_MAX_READS ??
+            DEFAULT_PENDING_EVIDENCE_MAX_READS,
+        ),
+      });
+    const pendingEvidenceArtifactPath =
+      resolve(tempRoot, "pending-execution-evidence.json");
+    const pendingEvidenceArtifactSha256 =
+      writeFrozenPendingExecutionEvidenceArtifact(
+        pendingEvidenceArtifactPath,
+        frozenPendingExecutionEvidence,
+      );
     if (cfg.sourceFromBlock > parentBlock) {
       throw new Error("source-from-block must not exceed the winner parent block");
     }
@@ -550,6 +624,11 @@ async function main(): Promise<void> {
       inputAudit,
       validationPolicy,
       fullGraph,
+      pendingExecutionEvidenceReport(
+        frozenPendingExecutionEvidence,
+        [],
+        pendingEvidenceArtifactSha256,
+      ),
       {
         candidates: [...pass.scanner.candidatesByAdapter.values()].reduce((sum, items) => sum + items.length, 0),
         admittedInstances: pass.result.wouldAdmit.length,
@@ -669,6 +748,8 @@ async function main(): Promise<void> {
       huntPort,
       universeSnapshotPath: frozenUniverse.snapshotPath,
       universeSha256: frozenUniverse.evidence.sha256,
+      pendingEvidenceArtifactPath,
+      pendingEvidenceArtifactSha256,
       cfg,
       passBudgetMs: effectivePassBudgetMs,
     });
@@ -703,6 +784,15 @@ async function main(): Promise<void> {
       report.failure =
         `frozen hunt graph ${hunt.edgeSetSha256} != independently built ` +
           `${report.producerOutput.materializedGraph.sha256}`;
+      finish(report, cfg.outPath);
+      return;
+    }
+    if (
+      hunt.pendingExecutionEvidenceArtifactSha256 !==
+        pendingEvidenceArtifactSha256
+    ) {
+      report.failure =
+        "frozen hunt did not bind the wrapper-owned pending evidence artifact";
       finish(report, cfg.outPath);
       return;
     }
@@ -763,6 +853,14 @@ async function main(): Promise<void> {
     const validationFailures: string[] = [];
     for (const selected of relevant) {
       try {
+        const evidenceFamilyIds = pendingExecutionEvidenceFamilyIds(
+          selected.opportunity.seedEdges,
+          PRODUCTION_ADAPTER_FAMILIES.routes(),
+        );
+        const executionEvidence = selectFrozenRouteExecutionEvidence(
+          frozenPendingExecutionEvidence,
+          evidenceFamilyIds,
+        );
         const selectedRouteSha256 = huntRouteSha256(
           selected.opportunity.seedEdges,
         );
@@ -800,6 +898,7 @@ async function main(): Promise<void> {
           quoteProfitFloorBps: validationPolicy.quoteProfitFloorBps,
           quoteSafetyBps: validationPolicy.quoteSafetyBps,
           cache,
+          executionEvidence,
         });
         solverReached = true;
         report.stages.solver = "pass";
@@ -828,6 +927,7 @@ async function main(): Promise<void> {
             executor: DEFAULT_SEARCHER_EXECUTOR,
             safetyBps: validationPolicy.quoteSafetyBps,
             cache,
+            executionEvidence,
           },
         );
         const sim = await simulator.simulate(solved);
@@ -894,6 +994,11 @@ async function main(): Promise<void> {
             `predicted=${ev.maxBaseFeePerGas} actual=${targetHeader?.baseFeePerGas ?? "missing"}`,
           );
         }
+        report.executionEvidence = pendingExecutionEvidenceReport(
+          frozenPendingExecutionEvidence,
+          evidenceFamilyIds,
+          pendingEvidenceArtifactSha256,
+        );
         report.selected = {
           rank: selected.opportunity.rank,
           route: selected.opportunity.seedEdges,
@@ -1002,10 +1107,11 @@ function emptyReport(
   inputAudit: ReplayInputAudit,
   validationPolicy: ReplayValidationPolicy,
   fullGraph: readonly TokenEdge[],
+  executionEvidence: PendingExecutionEvidenceReport,
   discovery: Omit<ReplayReport["discovery"], "sourceComplete" | "evaluationComplete">,
 ): ReplayReport {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     evidenceClass: "candidate-authored-diagnostic",
     trustedAcceptance: false,
     laneCoverage: cfg.triggerTx
@@ -1038,6 +1144,7 @@ function emptyReport(
     actualRunnerConfig: runnerConfigEvidence(cfg, fullGraph.length),
     discovery: { sourceComplete, evaluationComplete, ...discovery },
     producerOutput: initialProducerOutput(fullGraph),
+    executionEvidence,
     reference: {
       observedAdmissions: 0,
       subjectEdges: [],
@@ -1183,6 +1290,8 @@ async function runHunt(input: {
   huntPort: number;
   universeSnapshotPath: string;
   universeSha256: string;
+  pendingEvidenceArtifactPath: string;
+  pendingEvidenceArtifactSha256: string;
   cfg: CliConfig;
   passBudgetMs: number;
 }): Promise<void> {
@@ -1213,6 +1322,10 @@ async function runHunt(input: {
     PRODUCTION_REPLAY_DISCOVERY_ARTIFACT: input.artifactPath,
     PRODUCTION_REPLAY_DISCOVERY_SHA256: input.artifactSha256,
     PRODUCTION_REPLAY_UNIVERSE_SHA256: input.universeSha256,
+    PRODUCTION_REPLAY_PENDING_EVIDENCE_ARTIFACT:
+      input.pendingEvidenceArtifactPath,
+    PRODUCTION_REPLAY_PENDING_EVIDENCE_SHA256:
+      input.pendingEvidenceArtifactSha256,
   });
   const args = [
     "--import", TSX_IMPORT_URL,
@@ -1421,6 +1534,9 @@ function readFrozenHuntReport(path: string): {
     !Number.isSafeInteger(raw.edges) ||
     (raw.edges ?? -1) < 0 ||
     !/^[0-9a-f]{64}$/.test(raw.edgeSetSha256 ?? "") ||
+    !/^[0-9a-f]{64}$/.test(
+      raw.pendingExecutionEvidenceArtifactSha256 ?? "",
+    ) ||
     !Array.isArray(raw.opportunities) ||
     !Array.isArray(raw.solved)
   ) {

@@ -368,6 +368,9 @@ function checkpoint(): Record<string, unknown> {
       graph_builder_sha256: SHA_A,
       graph_snapshot_source_sha256: SHA_A,
       producer_sha256: SHA_A,
+      pending_evidence_producer_sha256: SHA_B,
+      pending_evidence_artifact_sha256: SHA_A,
+      pending_evidence_required_sha256: SHA_B,
       comparator_sha256: SHA_A,
       input_snapshot_sha256: snapshot.payload_sha256,
       graph_snapshot_kind: "content_addressed",
@@ -608,6 +611,36 @@ test("checkpoint rejects incomplete stages, target injection, and unrelated over
   assert.match(errors, /all six stages/);
   assert.match(errors, /target_injected must be false/);
   assert.match(errors, /only wall_clock_timeout_ms/);
+});
+
+test("checkpoint binds the pending evidence producer and frozen artifact", () => {
+  const missingProducer = checkpoint();
+  delete (
+    missingProducer.frozen_inputs as Record<string, unknown>
+  ).pending_evidence_producer_sha256;
+  missingProducer.checkpoint_evidence_sha256 =
+    sixStepLifecycleEnvelopeSha256(missingProducer);
+  assert.match(
+    validateSixStepValidationLifecycle(
+      missingProducer,
+      gitInspector(),
+    ).join("\n"),
+    /pending_evidence_producer_sha256 must be a SHA-256 digest/,
+  );
+
+  const invalidArtifact = checkpoint();
+  (
+    invalidArtifact.frozen_inputs as Record<string, unknown>
+  ).pending_evidence_artifact_sha256 = "not-a-sha";
+  invalidArtifact.checkpoint_evidence_sha256 =
+    sixStepLifecycleEnvelopeSha256(invalidArtifact);
+  assert.match(
+    validateSixStepValidationLifecycle(
+      invalidArtifact,
+      gitInspector(),
+    ).join("\n"),
+    /pending_evidence_artifact_sha256 must be a SHA-256 digest/,
+  );
 });
 
 test("checkpoint enforces positive production EV independently of stage shape", () => {

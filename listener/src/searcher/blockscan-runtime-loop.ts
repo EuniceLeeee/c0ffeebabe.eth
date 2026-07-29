@@ -86,6 +86,20 @@ import {
   type PreparedBlindProductionArtifacts,
 } from "./blind-production-runtime.js";
 import { hashTokenGraph } from "./strategy-views.js";
+import type {
+  ExecutionFamilyId,
+  PendingExecutionEvidence,
+} from "./venues/route-leg-adapter.js";
+import {
+  createBlockScanExecutionAvailability,
+  validateBlockScanPendingEvidenceTrigger,
+  type BlockScanExecutionPassMode,
+  type BlockScanPendingEvidenceTrigger,
+} from "./blockscan-pending-evidence.js";
+import { awaitBlockScanDeadline } from "./blockscan-pass-deadline.js";
+export type {
+  BlockScanPendingEvidenceTrigger,
+} from "./blockscan-pending-evidence.js";
 
 const EMPTY_BLIND_PRICING_COVERAGE: BlindProductionPricingCoverageSource =
   Object.freeze({
@@ -94,6 +108,36 @@ const EMPTY_BLIND_PRICING_COVERAGE: BlindProductionPricingCoverageSource =
     expectedEdgeKeys: Object.freeze([]),
     resolvedEdgeKeys: Object.freeze([]),
   });
+
+const MAX_PENDING_EVIDENCE_CONTEXTS_PER_HEAD = 32;
+
+interface PendingEvidenceQueueItem {
+  readonly key: string;
+  readonly context: BlockScanPendingEvidenceTrigger;
+}
+
+type ScheduledExecutionRefresh =
+  | {
+      readonly kind: "evidence";
+      readonly item: PendingEvidenceQueueItem;
+    }
+  | {
+      readonly kind: "ordinary-retry";
+    };
+
+class PendingEvidencePriorityInterruption extends Error {
+  constructor(readonly evidenceHead: number) {
+    super(`pending evidence prioritized for head ${evidenceHead}`);
+    this.name = "PendingEvidencePriorityInterruption";
+  }
+}
+
+class BlockScanHeadSupersededInterruption extends Error {
+  constructor(readonly newerHead: number) {
+    super(`block-scan head superseded by ${newerHead}`);
+    this.name = "BlockScanHeadSupersededInterruption";
+  }
+}
 
 export function dexRuntimeAdmissionCompleteThrough(
   state: LiveDiscoveryPublicationState,
@@ -314,6 +358,7 @@ export interface BlockScanAtomicExecutionInput {
   readonly plans: number;
   readonly passDeadlineAtMs: number;
   readonly sourceBlockHash: string;
+  readonly signal: AbortSignal;
 }
 
 interface PlannedBlockScanSolve {
@@ -381,12 +426,10 @@ export interface BlockScanEnumerationSolverTelemetrySink {
   beginPass(sourceBlock: number): BlockScanEnumerationSolverPass | null;
   recordNotStarted(input: {
     readonly sourceBlock: number;
-    readonly sourceBlockHash: null;
+    readonly sourceBlockHash: string | null;
     readonly pricingMode: null;
     readonly passOutcome: "not_started";
-    readonly passReason:
-      | "scheduler_coalesced"
-      | "shutdown_pending_dropped";
+    readonly passReason: string;
   }): void;
 }
 
@@ -448,6 +491,18 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly midConcurrency: number;
   /** BotVM execution contract supplied to generic route quote contexts. */
   readonly executorAddress: string;
+  /**
+   * Registry-derived execution requirement. Null means the edge is executable
+   * in an ordinary periodic pass.
+   */
+  currentHeadEvidenceFamilyForEdge(
+    edgeAdapterId: string,
+  ): ExecutionFamilyId | null;
+  currentHeadEvidenceScopeKeyForEdge(edge: TokenEdge): string | null;
+  currentHeadEvidenceScopeKeys(
+    evidence: PendingExecutionEvidence,
+  ): readonly string[];
+  isCurrentHeadEvidenceFamily(familyId: ExecutionFamilyId): boolean;
   isShuttingDown(): boolean;
   blockScanGraph(): readonly TokenEdge[] | undefined;
   blockScanPlanner(): TemplatePlanner | undefined;
@@ -490,6 +545,24 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     readonly coordinator: AdapterRuntimeCoordinator;
     readonly graph: VerifiedGraphView;
   } | null = null;
+  private latestScheduledHead: number | null = null;
+  private evidenceRevision = 0;
+  private readonly scheduledExecutionRefreshes = new Map<
+    string,
+    ScheduledExecutionRefresh
+  >();
+  private readonly pendingEvidenceByHead = new Map<
+    number,
+    PendingEvidenceQueueItem[]
+  >();
+  private readonly pendingEvidenceKeys = new Set<string>();
+  private readonly evidenceDispatchScheduledHeads = new Set<number>();
+  private readonly completedOrdinaryHeads = new Map<number, string>();
+  private activePass: {
+    readonly blockNumber: number;
+    readonly mode: BlockScanExecutionPassMode;
+    readonly controller: AbortController;
+  } | null = null;
 
   constructor(
     private readonly deps: BlockScanRuntimeLoopDependencies<PreparedDiscovery>,
@@ -505,6 +578,18 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         );
       },
       (head) => {
+        if (head.revision !== undefined) {
+          const key = executionRefreshKey(
+            head.blockNumber,
+            head.revision,
+          );
+          const refresh = this.scheduledExecutionRefreshes.get(key);
+          this.scheduledExecutionRefreshes.delete(key);
+          if (refresh?.kind === "evidence") {
+            this.pendingEvidenceKeys.delete(refresh.item.key);
+            this.evidenceDispatchScheduledHeads.delete(head.blockNumber);
+          }
+        }
         this.deps.routeTelemetry?.recordNotStarted({
           sourceBlock: head.blockNumber,
           sourceBlockHash: null,
@@ -520,7 +605,200 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     blockNumber: number,
     observation?: LatestHeadObservation,
   ): void {
+    this.advanceLatestHead(blockNumber);
     this.scheduler.schedule(blockNumber, observation);
+  }
+
+  private advanceLatestHead(blockNumber: number): void {
+    if (
+      this.latestScheduledHead === null ||
+      blockNumber > this.latestScheduledHead
+    ) {
+      this.latestScheduledHead = blockNumber;
+      this.pruneEvidenceContexts(blockNumber);
+      const active = this.activePass;
+      if (
+        active !== null &&
+        active.blockNumber < blockNumber &&
+        !active.controller.signal.aborted
+      ) {
+        active.controller.abort(
+          new BlockScanHeadSupersededInterruption(blockNumber),
+        );
+      }
+    }
+  }
+
+  schedulePendingEvidence(
+    trigger: BlockScanPendingEvidenceTrigger,
+  ): boolean {
+    return this.enqueuePendingEvidence(trigger, false);
+  }
+
+  private enqueuePendingEvidence(
+    trigger: BlockScanPendingEvidenceTrigger,
+    resumeInterruptedContext: boolean,
+  ): boolean {
+    validateBlockScanPendingEvidenceTrigger(trigger);
+    const evidence = Object.freeze(trigger.evidence.filter((item) =>
+      this.deps.isCurrentHeadEvidenceFamily(item.familyId)
+    ));
+    if (evidence.length === 0) return false;
+    if (
+      this.latestScheduledHead !== null &&
+      trigger.head.number < this.latestScheduledHead
+    ) {
+      return false;
+    }
+    if (
+      this.latestScheduledHead === null ||
+      trigger.head.number > this.latestScheduledHead
+    ) {
+      this.advanceLatestHead(trigger.head.number);
+    }
+    const context = Object.freeze({ ...trigger, evidence });
+    if (Date.now() >= this.pendingEvidenceDeadlineAtMs(context)) {
+      this.recordPendingEvidenceNotStarted(
+        context,
+        "pending_evidence_deadline_before_schedule",
+      );
+      return false;
+    }
+    const item = Object.freeze({
+      key: pendingEvidenceContextKey(context),
+      context,
+    });
+    if (this.pendingEvidenceKeys.has(item.key)) return false;
+    const pendingForHead = this.pendingEvidenceCount(
+      trigger.head.number,
+    );
+    if (pendingForHead >= MAX_PENDING_EVIDENCE_CONTEXTS_PER_HEAD) {
+      this.recordPendingEvidenceNotStarted(
+        context,
+        "pending_evidence_queue_full",
+      );
+      return false;
+    }
+    this.pendingEvidenceKeys.add(item.key);
+    const queue = this.pendingEvidenceByHead.get(trigger.head.number);
+    if (queue) {
+      if (resumeInterruptedContext) queue.unshift(item);
+      else queue.push(item);
+    }
+    else this.pendingEvidenceByHead.set(trigger.head.number, [item]);
+    this.dispatchNextPendingEvidence(trigger.head.number);
+    const active = this.activePass;
+    if (
+      active?.mode === "periodic" &&
+      active.blockNumber <= trigger.head.number &&
+      !active.controller.signal.aborted
+    ) {
+      active.controller.abort(
+        new PendingEvidencePriorityInterruption(trigger.head.number),
+      );
+    }
+    return true;
+  }
+
+  private dispatchNextPendingEvidence(blockNumber: number): void {
+    if (this.evidenceDispatchScheduledHeads.has(blockNumber)) return;
+    const queue = this.pendingEvidenceByHead.get(blockNumber);
+    const item = queue?.shift();
+    if (!item) {
+      this.pendingEvidenceByHead.delete(blockNumber);
+      return;
+    }
+    if (queue!.length === 0) this.pendingEvidenceByHead.delete(blockNumber);
+    const revision = ++this.evidenceRevision;
+    const key = executionRefreshKey(blockNumber, revision);
+    this.scheduledExecutionRefreshes.set(
+      key,
+      Object.freeze({ kind: "evidence", item }),
+    );
+    this.evidenceDispatchScheduledHeads.add(blockNumber);
+    const admitted = this.scheduler.scheduleRevision(
+      blockNumber,
+      revision,
+      {
+        sourceHeadSeenAtMs: item.context.observedAtMs,
+        sourceHeadSeenAtMonotonicMs:
+          item.context.observedAtMonotonicMs,
+      },
+    );
+    if (!admitted) {
+      this.scheduledExecutionRefreshes.delete(key);
+      this.evidenceDispatchScheduledHeads.delete(blockNumber);
+      this.pendingEvidenceKeys.delete(item.key);
+      this.recordPendingEvidenceNotStarted(
+        item.context,
+        "pending_evidence_scheduler_rejected",
+      );
+    }
+  }
+
+  private scheduleOrdinaryRetry(
+    blockNumber: number,
+    observation: LatestHeadObservation,
+  ): void {
+    const revision = ++this.evidenceRevision;
+    const key = executionRefreshKey(blockNumber, revision);
+    this.scheduledExecutionRefreshes.set(
+      key,
+      Object.freeze({ kind: "ordinary-retry" }),
+    );
+    if (!this.scheduler.scheduleRevision(blockNumber, revision, observation)) {
+      this.scheduledExecutionRefreshes.delete(key);
+    }
+  }
+
+  private pendingEvidenceCount(blockNumber: number): number {
+    let count = this.pendingEvidenceByHead.get(blockNumber)?.length ?? 0;
+    for (const refresh of this.scheduledExecutionRefreshes.values()) {
+      if (
+        refresh.kind === "evidence" &&
+        refresh.item.context.head.number === blockNumber
+      ) {
+        count++;
+      }
+    }
+    if (
+      this.activePass?.mode !== "periodic" &&
+      this.activePass?.blockNumber === blockNumber
+    ) {
+      count++;
+    }
+    return count;
+  }
+
+  private pendingEvidenceDeadlineAtMs(
+    trigger: BlockScanPendingEvidenceTrigger,
+  ): number {
+    const graphSize = this.deps.blockScanGraph()?.length ?? 0;
+    const budgetMs = graphSize >= this.deps.largeGraphEdgeThreshold
+      ? this.deps.largeGraphPassBudgetMs
+      : this.deps.passBudgetMs;
+    return trigger.observedAtMs + Math.max(1, budgetMs);
+  }
+
+  private recordPendingEvidenceNotStarted(
+    trigger: BlockScanPendingEvidenceTrigger,
+    reason: string,
+  ): void {
+    this.deps.routeTelemetry?.recordNotStarted({
+      sourceBlock: trigger.head.number,
+      sourceBlockHash: trigger.head.hash,
+      pricingMode: null,
+      passOutcome: "not_started",
+      passReason: reason,
+    });
+    console.log(
+      `[searcher/blockscan-pending-evidence] ${JSON.stringify({
+        block: trigger.head.number,
+        tx: trigger.txHash.toLowerCase(),
+        status: "not_started",
+        reason,
+      })}`,
+    );
   }
 
   nextGeneration(): number {
@@ -667,6 +945,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     coordinator: AdapterRuntimeCoordinator,
     sourceBlock: number,
     deadlineAtMs: number,
+    signal: AbortSignal,
   ): Promise<BlockScanStateSnapshot | null> {
     const completed = this.completedCoarsePricing(coordinator, sourceBlock);
     if (completed) return completed;
@@ -680,7 +959,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     const finished = await waitForTaskUntil(
       active,
       deadlineAtMs,
-      this.deps.runtimeAbort.signal,
+      signal,
     );
     return finished
       ? this.completedCoarsePricing(coordinator, sourceBlock)
@@ -692,6 +971,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       this.deps.runtimeAbort.abort(new Error("searcher shutdown"));
     }
     this.pendingCoarsePricing = null;
+    this.pendingEvidenceByHead.clear();
+    this.pendingEvidenceKeys.clear();
+    this.scheduledExecutionRefreshes.clear();
+    this.evidenceDispatchScheduledHeads.clear();
     for (const worker of this.deps.executionWorkers) worker.state.stop();
   }
 
@@ -717,6 +1000,50 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     blockNumber: number,
     sourceHead: LatestHeadObservation,
   ): Promise<void> => {
+    const revision = sourceHead.revision ?? 0;
+    const refresh = revision === 0
+      ? null
+      : this.scheduledExecutionRefreshes.get(
+        executionRefreshKey(blockNumber, revision),
+      ) ?? null;
+    if (revision > 0) {
+      this.scheduledExecutionRefreshes.delete(
+        executionRefreshKey(blockNumber, revision),
+      );
+      if (!refresh) return;
+    }
+    const activeEvidenceItem = refresh?.kind === "evidence"
+      ? refresh.item
+      : null;
+    const executionContext = activeEvidenceItem?.context ?? null;
+    const completedOrdinaryHash =
+      this.completedOrdinaryHeads.get(blockNumber);
+    const ordinaryAlreadyCompleted =
+      completedOrdinaryHash !== undefined &&
+      (
+        executionContext === null ||
+        completedOrdinaryHash.toLowerCase() ===
+          executionContext.head.hash.toLowerCase()
+      );
+    const passMode = executionContext === null
+      ? "periodic"
+      : ordinaryAlreadyCompleted
+        ? "evidence-only"
+        : "combined";
+    const executionEvidence = executionContext?.evidence ?? Object.freeze([]);
+    let requeueExecutionContext = false;
+    let retryOrdinaryAfterEvidenceReorg = false;
+    const { edgeEligible, routeEligible } =
+      createBlockScanExecutionAvailability({
+        mode: passMode,
+        evidence: executionEvidence,
+        familyForEdge: (edgeAdapterId) =>
+          this.deps.currentHeadEvidenceFamilyForEdge(edgeAdapterId),
+        edgeScopeKey: (edge) =>
+          this.deps.currentHeadEvidenceScopeKeyForEdge(edge),
+        evidenceScopeKeys: (evidence) =>
+          this.deps.currentHeadEvidenceScopeKeys(evidence),
+      });
     let routeTelemetryPass: BlockScanEnumerationSolverPass | null = null;
     try {
       routeTelemetryPass =
@@ -766,8 +1093,36 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       } catch {
         // Route evidence is fail-open and cannot suppress a production pass.
       }
+      if (activeEvidenceItem) {
+        this.pendingEvidenceKeys.delete(activeEvidenceItem.key);
+        this.evidenceDispatchScheduledHeads.delete(blockNumber);
+        console.log(
+          `[searcher/blockscan-pending-evidence] ${JSON.stringify({
+            block: executionContext!.head.number,
+            tx: executionContext!.txHash.toLowerCase(),
+            status: "not_started",
+            reason: this.deps.isShuttingDown()
+              ? "shutdown"
+              : "runtime_dependencies_unavailable",
+          })}`,
+        );
+        if (!this.deps.isShuttingDown()) {
+          this.dispatchNextPendingEvidence(blockNumber);
+        }
+      }
       return;
     }
+    const passController = new AbortController();
+    const detachRuntimeAbort = linkAbortController(
+      this.deps.runtimeAbort.signal,
+      passController,
+    );
+    const passSignal = passController.signal;
+    this.activePass = Object.freeze({
+      blockNumber,
+      mode: passMode,
+      controller: passController,
+    });
 
     // Strict latency begins when the production block listener observed the
     // head, not when this single-worker scheduler eventually began running.
@@ -827,6 +1182,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     let plannedCount = 0;
     let quotePositive = 0;
     let bestNet: bigint | null = null;
+    let enumerationFinished = false;
     const atomicResults: BlockScanAtomicResult[] = [];
     const workerResetTimings: Array<{
       readonly worker: number;
@@ -934,6 +1290,18 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         },
         stages: stageBoundaries,
         decision: passDecision,
+        pass_mode: passMode,
+        execution_evidence_tx:
+          executionContext?.txHash.toLowerCase() ?? null,
+        evidence_ready_at_ms:
+          executionContext?.evidenceReadyAtMs ?? null,
+        evidence_observation_ms: executionContext
+          ? Math.max(
+              0,
+              executionContext.evidenceReadyAtMs -
+                executionContext.observedAtMs,
+            )
+          : null,
         pricing_mode: pricingMode,
         coarse_source_block: coarseSourceBlock,
         coarse_source_block_hash: coarseSourceBlockHash,
@@ -1014,6 +1382,17 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     };
 
     const nMinusOneProducerGate = new NMinusOneProducerGate();
+    const observeCanonicalHeader = (
+      canonicalBlock: number,
+      stage: string,
+    ): Promise<CanonicalHeader> =>
+      awaitBlockScanDeadline(
+        this.deps.discovery.observeHeader(canonicalBlock),
+        passDeadlineAtMs,
+        stage,
+        undefined,
+        passSignal,
+      );
     beginStage("state", {
       atMs: passStartedAtMs,
       atPerf: passStarted,
@@ -1024,8 +1403,22 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       // The mutation queue performs only descriptor/hash checks, a pure DEX
       // delta fold and one synchronous publication; no provider/trace/probe
       // I/O runs inside it.
-      const sourceHeader = await discovery.observeHeader(blockNumber);
+      const sourceHeader = await observeCanonicalHeader(
+        blockNumber,
+        "source canonical header",
+      );
       observedSourceBlockHash = sourceHeader.hash;
+      if (
+        executionContext &&
+        sourceHeader.hash.toLowerCase() !==
+          executionContext.head.hash.toLowerCase()
+      ) {
+        outcome = "stale_state";
+        skippedReason = "pending_evidence_head_reorged";
+        retryOrdinaryAfterEvidenceReorg = !ordinaryAlreadyCompleted;
+        finishStage("state", "failed");
+        return;
+      }
       const consumePreparedBackfill = async (): Promise<number | null> => {
         const ready = discovery.lane.readyDescriptor();
         if (!ready) return null;
@@ -1037,8 +1430,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         }
         let preparedHeader: CanonicalHeader;
         try {
-          preparedHeader = await discovery.observeHeader(
+          preparedHeader = await observeCanonicalHeader(
             ready.source.number,
+            "prepared canonical header",
           );
         } catch (error) {
           if (!(error instanceof CanonicalHeaderOutsideRetentionError)) {
@@ -1110,7 +1504,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           await waitForBackfillSettlement(
             discovery.lane.settled(),
             passDeadlineAtMs,
-            this.deps.runtimeAbort.signal,
+            passSignal,
           );
           await consumePreparedBackfill();
           base = discovery.capture();
@@ -1125,12 +1519,12 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                 discovery.scheduleBackfill(blockNumber),
               ).then(() => undefined),
               passDeadlineAtMs,
-              this.deps.runtimeAbort.signal,
+              passSignal,
             );
             await waitForBackfillSettlement(
               discovery.lane.settled(),
               passDeadlineAtMs,
-              this.deps.runtimeAbort.signal,
+              passSignal,
             );
             const consumed = await consumePreparedBackfill();
             base = discovery.capture();
@@ -1184,9 +1578,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         nextDiscovery = base;
       } else {
         const hotControl: DiscoveryBackfillControl = {
-          signal: this.deps.runtimeAbort.signal,
+          signal: passSignal,
           deadlineAtMs: passDeadlineAtMs,
-          run: (work) => work(this.deps.runtimeAbort.signal),
+          run: (work) => work(passSignal),
         };
         const preparedDiscovery = await discovery.prepare(base, {
           source: {
@@ -1196,7 +1590,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           through: blockNumber,
           control: hotControl,
         });
-        const canonicalAfter = await discovery.observeHeader(blockNumber);
+        const canonicalAfter = await observeCanonicalHeader(
+          blockNumber,
+          "post-discovery canonical header",
+        );
         const publishedDiscovery = await discovery.queue.enqueue(
           "dex-refresh",
           async () => {
@@ -1348,13 +1745,22 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               if (this.deps.isShuttingDown() || signal.aborted) {
                 throw signal.reason;
               }
-              await worker.state.forkAt(sourceBlock);
+              await worker.state.forkAt(sourceBlock, {
+                deadlineAtMs: preparationSettleDeadlineAtMs,
+                signal,
+              });
               if (this.deps.isShuttingDown() || signal.aborted) {
                 throw signal.reason;
               }
-              const forkHash = await this.deps.readBlockHash(
-                worker.state.provider,
-                sourceBlock,
+              const forkHash = await awaitBlockScanDeadline(
+                this.deps.readBlockHash(
+                  worker.state.provider,
+                  sourceBlock,
+                ),
+                preparationSettleDeadlineAtMs,
+                "execution worker fork hash",
+                () => worker.state.stop(),
+                signal,
               );
               if (this.deps.isShuttingDown() || signal.aborted) {
                 throw signal.reason;
@@ -1398,7 +1804,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       };
       let coarse: BlockScanOutcome;
       let fallbackEnvelopes: readonly NMinusOneCoarseCandidate[] | null = null;
-      let enumerationFinished = false;
       let exactRefineStarted = false;
       if (!useNMinusOneFallback) {
         const runtime = await adapterRuntimeCoordinator.prepare({
@@ -1410,7 +1815,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           deadlineAtMs: runtimeDeadlineAtMs,
           preparationSettleDeadlineAtMs,
           pricingFamilySettleDeadlineAtMs,
-          signal: this.deps.runtimeAbort.signal,
+          signal: passSignal,
           prepareExecution,
         });
         finishStage(
@@ -1487,6 +1892,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               `${runtime.fundingCoverage.expectedKeys.length} ` +
               `reason=${skippedReason}`,
           );
+          if (executionContext) requeueExecutionContext = true;
           return;
         }
         if (runtime.status === "degraded") {
@@ -1528,6 +1934,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               issueCount: runtime.issues.length,
             })}`,
           );
+          if (executionContext) requeueExecutionContext = true;
           return;
         }
 
@@ -1540,6 +1947,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             maxCandidates: this.deps.refineCandidates,
             pinnedOutsideBudget: true,
           },
+          routeEligible,
+          edgeEligible,
         });
         coarse = productionCoarse;
         recordEnumeration(coarse.opportunities);
@@ -1550,6 +1959,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           adapterRuntimeCoordinator,
           blockNumber - 1,
           passDeadlineAtMs - Math.max(1, this.deps.solveReserveMs),
+          passSignal,
         );
         if (
           !predecessorPricing ||
@@ -1580,8 +1990,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           );
           return;
         }
-        const predecessorHeader = await discovery.observeHeader(
+        const predecessorHeader = await observeCanonicalHeader(
           blockNumber - 1,
+          "predecessor canonical header",
         );
         finishStage("state", "ran");
         timing.stateMs = stageBoundaries.state.stage_ms;
@@ -1605,6 +2016,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             maxCandidates: this.deps.refineCandidates,
             pinnedOutsideBudget: true,
           },
+          routeEligible,
+          edgeEligible,
         });
         fallbackEnvelopes = fallbackCoarse.candidates;
         coarse = Object.freeze({
@@ -1698,7 +2111,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               fundingTokens: exactFundingTokens,
               deadlineAtMs: runtimeDeadlineAtMs,
               preparationSettleDeadlineAtMs,
-              signal: this.deps.runtimeAbort.signal,
+              signal: passSignal,
               prepareExecution,
             });
         if (exactContext.status === "incomplete") {
@@ -1750,6 +2163,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       }
       if (!enumerationFinished) {
         finishStage("enumeration");
+        enumerationFinished = true;
         timing.enumerationMs = stageBoundaries.enumeration.stage_ms;
       }
       sealAuditBoundary("enumeration_done", "enumeration");
@@ -1797,7 +2211,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             }
           : undefined,
         this.deps.midConcurrency,
-        { executor: this.deps.executorAddress },
+        {
+          executor: this.deps.executorAddress,
+          executionEvidence,
+          signal: passSignal,
+        },
       );
       finishStage(
         "exact_refine",
@@ -1830,7 +2248,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       for (const opp of plannerQueue) {
         if (planned.length >= blockScanCfg.maxCandidates) break;
         if (plannerFamilyBudget.blocks(opp.seedEdges)) continue;
-        if (Date.now() >= passDeadlineAtMs) {
+        if (passSignal.aborted || Date.now() >= passDeadlineAtMs) {
+          if (passSignal.aborted) throw passSignal.reason;
           outcome = "budget_exceeded";
           skippedReason = "planner_deadline";
           break;
@@ -1925,6 +2344,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           if (
             !queued ||
             Date.now() >= passDeadlineAtMs ||
+            passSignal.aborted ||
             this.deps.isShuttingDown()
           ) return;
           const { item, index } = queued;
@@ -1944,6 +2364,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                 gssMaxTries: 8,
                 quoteProfitFloorBps: 0n,
                 quoteSafetyBps: 10000n,
+                executionEvidence,
+                signal: passSignal,
                 onDeferredCandidates: (resolved) => {
                   deferredCandidates = resolved;
                 },
@@ -2016,6 +2438,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         }
       };
       await Promise.all(blockScanExecutionWorkers.map(workerLoop));
+      if (passSignal.aborted) throw passSignal.reason;
       finishStage("planner_solver");
       timing.plannerSolverMs = stageBoundaries.planner_solver.stage_ms;
       sealAuditBoundary("planner_solver_done", "planner_solver");
@@ -2036,8 +2459,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         if (unavailableFinalSimStates.has(quoted.state)) continue;
         if (
           Date.now() >= passDeadlineAtMs ||
+          passSignal.aborted ||
           this.deps.isShuttingDown()
         ) {
+          if (passSignal.aborted) throw passSignal.reason;
           outcome = this.deps.isShuttingDown()
             ? "disabled"
             : "budget_exceeded";
@@ -2057,6 +2482,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           plans: quoted.item.planCount,
           passDeadlineAtMs,
           sourceBlockHash,
+          signal: passSignal,
         });
         atomicResults.push(atomic);
         if (!atomic.workerReusable) {
@@ -2100,6 +2526,22 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         skippedReason ??= "solve_deadline";
       }
     } catch (error) {
+      if (
+        passSignal.aborted &&
+        passSignal.reason instanceof PendingEvidencePriorityInterruption
+      ) {
+        outcome = "skipped_busy";
+        skippedReason = "pending_evidence_priority";
+        return;
+      }
+      if (
+        passSignal.aborted &&
+        passSignal.reason instanceof BlockScanHeadSupersededInterruption
+      ) {
+        outcome = "stale_state";
+        skippedReason = "source_head_superseded";
+        return;
+      }
       outcome = Date.now() >= passDeadlineAtMs
         ? "budget_exceeded"
         : "stale_state";
@@ -2112,10 +2554,110 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         completeAuditStages();
         recordPass();
       } finally {
+        if (
+          passMode !== "evidence-only" &&
+          enumerationFinished &&
+          observedSourceBlockHash !== null &&
+          !passSignal.aborted &&
+          outcome !== "stale_state" &&
+          outcome !== "disabled" &&
+          outcome !== "skipped_busy" &&
+          outcome !== "budget_exceeded"
+        ) {
+          this.completedOrdinaryHeads.set(
+            blockNumber,
+            observedSourceBlockHash,
+          );
+          for (const completed of this.completedOrdinaryHeads.keys()) {
+            if (completed < blockNumber - 1) {
+              this.completedOrdinaryHeads.delete(completed);
+            }
+          }
+        }
+        if (this.activePass?.controller === passController) {
+          this.activePass = null;
+        }
+        detachRuntimeAbort();
+        if (activeEvidenceItem) {
+          this.pendingEvidenceKeys.delete(activeEvidenceItem.key);
+          this.evidenceDispatchScheduledHeads.delete(blockNumber);
+        }
         nMinusOneProducerGate.release();
+        if (
+          requeueExecutionContext &&
+          executionContext &&
+          !this.deps.isShuttingDown()
+        ) {
+          this.enqueuePendingEvidence(executionContext, true);
+        } else if (
+          retryOrdinaryAfterEvidenceReorg &&
+          !this.deps.isShuttingDown() &&
+          !this.evidenceDispatchScheduledHeads.has(blockNumber) &&
+          (this.pendingEvidenceByHead.get(blockNumber)?.length ?? 0) === 0
+        ) {
+          this.scheduleOrdinaryRetry(blockNumber, sourceHead);
+        }
+        if (
+          activeEvidenceItem &&
+          !this.deps.isShuttingDown() &&
+          (
+            !retryOrdinaryAfterEvidenceReorg ||
+            (this.pendingEvidenceByHead.get(blockNumber)?.length ?? 0) > 0
+          )
+        ) {
+          this.dispatchNextPendingEvidence(blockNumber);
+        }
       }
     }
   };
+
+  private pruneEvidenceContexts(minimumHead: number): void {
+    for (const [head, queue] of this.pendingEvidenceByHead) {
+      if (head >= minimumHead) continue;
+      this.pendingEvidenceByHead.delete(head);
+      for (const item of queue) {
+        this.pendingEvidenceKeys.delete(item.key);
+        this.recordPendingEvidenceNotStarted(
+          item.context,
+          "pending_evidence_head_superseded",
+        );
+      }
+    }
+    for (const [key, refresh] of this.scheduledExecutionRefreshes) {
+      if (
+        refresh.kind !== "evidence" ||
+        refresh.item.context.head.number >= minimumHead
+      ) {
+        continue;
+      }
+      this.scheduledExecutionRefreshes.delete(key);
+      this.pendingEvidenceKeys.delete(refresh.item.key);
+      this.evidenceDispatchScheduledHeads.delete(
+        refresh.item.context.head.number,
+      );
+      this.recordPendingEvidenceNotStarted(
+        refresh.item.context,
+        "pending_evidence_head_superseded",
+      );
+    }
+  }
+}
+
+function executionRefreshKey(blockNumber: number, revision: number): string {
+  return `${blockNumber}:${revision}`;
+}
+
+function pendingEvidenceContextKey(
+  context: BlockScanPendingEvidenceTrigger,
+): string {
+  return [
+    context.head.number,
+    context.head.hash.toLowerCase(),
+    context.txHash.toLowerCase(),
+    ...context.evidence
+      .map((item) => item.evidenceHash.toLowerCase())
+      .sort(),
+  ].join(":");
 }
 
 function blindOpportunityEvidence(
@@ -2190,6 +2732,19 @@ export function assertExactContextMatchesGraph(
       );
     }
   }
+}
+
+function linkAbortController(
+  source: AbortSignal,
+  target: AbortController,
+): () => void {
+  if (source.aborted) {
+    target.abort(source.reason);
+    return () => {};
+  }
+  const abort = (): void => target.abort(source.reason);
+  source.addEventListener("abort", abort, { once: true });
+  return () => source.removeEventListener("abort", abort);
 }
 
 async function waitForBackfillSettlement(

@@ -20,7 +20,7 @@ function makeAnvilProvider(anvilUrl: string): ethers.JsonRpcProvider {
 }
 
 export interface StateBackend {
-  forkAt(blockNumber: number): Promise<void>;
+  forkAt(blockNumber: number, control?: StateCallControl): Promise<void>;
   forkAfterTx(txHash: string): Promise<void>;
   prepareVictimPostState(params: VictimStateParams): Promise<VictimStateResult>;
   applyRawTx(rawTx: string): Promise<string>;
@@ -181,6 +181,9 @@ export class AnvilStateBackend implements StateBackend {
   provider: ethers.JsonRpcProvider;
   private proc: ChildProcess | null = null;
   private stopBarrier: Promise<void> = Promise.resolve();
+  /** Serializes reset/spawn ownership so a cancelled generation cannot race
+   * a successor for the same process and loopback port. */
+  private forkBarrier: Promise<void> = Promise.resolve();
   /** Fork-reuse state (see refreshFork / resetToBaseline / ensureFreshFork). */
   private baselineSnapshot: string | null = null;
   private forkedBlock = 0;
@@ -246,45 +249,110 @@ export class AnvilStateBackend implements StateBackend {
     await this.stopBarrier;
   }
 
-  async forkAt(blockNumber: number): Promise<void> {
-    if (this.proc) {
-      try {
-        const proc = this.proc;
-        await withTimeout(
-          this.provider.send("anvil_reset", [{
-            forking: { jsonRpcUrl: this.rpcUrl, blockNumber },
-          }]),
-          60_000,
-          `anvil_reset block ${blockNumber}`,
-        );
-        await waitForOwnedAnvil(
-          this.provider,
-          proc,
-          3,
-          50,
-          `anvil reset block ${blockNumber} readiness`,
-          blockNumber,
-        );
-        return;
-      } catch {
-        // anvil_reset failed — fall through to kill/spawn
-        await this.stopAndWait();
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      }
-    }
-
-    await this.spawnForkAt(blockNumber);
+  forkAt(
+    blockNumber: number,
+    control: StateCallControl = {},
+  ): Promise<void> {
+    const operation = this.forkBarrier.then(() =>
+      this.forkAtExclusive(blockNumber, control)
+    );
+    this.forkBarrier = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation;
   }
 
+  private async forkAtExclusive(
+    blockNumber: number,
+    control: StateCallControl,
+  ): Promise<void> {
+    const controller = new AbortController();
+    const abortFromCaller = (): void =>
+      controller.abort(control.signal?.reason);
+    const stopOnAbort = (): void => this.stop();
+    control.signal?.addEventListener("abort", abortFromCaller, { once: true });
+    controller.signal.addEventListener("abort", stopOnAbort, { once: true });
+    const deadlineRemaining = control.deadlineAtMs === undefined
+      ? null
+      : control.deadlineAtMs - Date.now();
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const abortForDeadline = (): void =>
+      controller.abort(new StateCallAbortedError(
+        `anvil fork block ${blockNumber} aborted: absolute deadline reached`,
+        "deadline",
+      ));
+    if (deadlineRemaining !== null && deadlineRemaining <= 0) {
+      abortForDeadline();
+    } else if (deadlineRemaining !== null) {
+      deadlineTimer = setTimeout(abortForDeadline, deadlineRemaining);
+    }
+    if (control.signal?.aborted) abortFromCaller();
+    try {
+      throwIfForkAborted(controller.signal, blockNumber);
+      if (this.proc) {
+        try {
+          const proc = this.proc;
+          await awaitAbortableForkOperation(
+            withTimeout(
+              this.provider.send("anvil_reset", [{
+                forking: { jsonRpcUrl: this.rpcUrl, blockNumber },
+              }]),
+              60_000,
+              `anvil_reset block ${blockNumber}`,
+            ),
+            controller.signal,
+            blockNumber,
+          );
+          throwIfForkAborted(controller.signal, blockNumber);
+          await waitForOwnedAnvil(
+            this.provider,
+            proc,
+            3,
+            50,
+            `anvil reset block ${blockNumber} readiness`,
+            blockNumber,
+          );
+          throwIfForkAborted(controller.signal, blockNumber);
+          return;
+        } catch (error) {
+          // anvil_reset failed — fall through to kill/spawn only while this
+          // serialized generation still owns the operation.
+          await this.stopAndWait();
+          throwIfForkAborted(controller.signal, blockNumber, error);
+          await waitForForkRetry(controller.signal, blockNumber);
+        }
+      }
+
+      throwIfForkAborted(controller.signal, blockNumber);
+      await this.spawnForkAt(blockNumber, controller.signal);
+      throwIfForkAborted(controller.signal, blockNumber);
+    } finally {
+      if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+      control.signal?.removeEventListener("abort", abortFromCaller);
+      controller.signal.removeEventListener("abort", stopOnAbort);
+    }
+  }
+
+  /*
+   * Keep restartForkAt outside the hot forkAt ownership queue: victim replay
+   * calls it only from an already exclusive StateBackend workflow.
+   */
   private async restartForkAt(blockNumber: number): Promise<void> {
     await this.stopAndWait();
     await new Promise((resolve) => setTimeout(resolve, 250));
     await this.spawnForkAt(blockNumber);
   }
 
-  private async spawnForkAt(blockNumber: number): Promise<void> {
+  private async spawnForkAt(
+    blockNumber: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    throwIfForkAborted(signal, blockNumber);
     await this.stopBarrier;
+    throwIfForkAborted(signal, blockNumber);
     await assertLoopbackPortAvailable(this.port);
+    throwIfForkAborted(signal, blockNumber);
     this.resetProvider();
     const proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
@@ -300,6 +368,7 @@ export class AnvilStateBackend implements StateBackend {
     });
 
     try {
+      throwIfForkAborted(signal, blockNumber);
       await waitForOwnedAnvil(
         this.provider,
         proc,
@@ -308,6 +377,7 @@ export class AnvilStateBackend implements StateBackend {
         `anvil block ${blockNumber} readiness`,
         blockNumber,
       );
+      throwIfForkAborted(signal, blockNumber);
     } catch (error) {
       if (this.proc === proc) await this.stopAndWait();
       throw error;
@@ -1329,6 +1399,93 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
       },
     );
   });
+}
+
+/**
+ * Reject the reset owner as soon as its generation is cancelled, even when
+ * the JSON-RPC promise itself ignores process teardown. The original promise
+ * remains observed by the handlers below, so a late rejection cannot become
+ * unhandled; more importantly, only the serialized owner decides whether a
+ * reset failure may fall back to spawning a replacement process.
+ */
+function awaitAbortableForkOperation<T>(
+  operation: Promise<T>,
+  signal: AbortSignal,
+  blockNumber: number,
+): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(forkAbortError(signal, blockNumber));
+  }
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const cleanup = (): void => {
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onAbort = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(forkAbortError(signal, blockNumber));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    operation.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(value);
+      },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      },
+    );
+  });
+}
+
+function throwIfForkAborted(
+  signal: AbortSignal | undefined,
+  blockNumber: number,
+  cause?: unknown,
+): void {
+  if (!signal?.aborted) return;
+  throw forkAbortError(signal, blockNumber, cause);
+}
+
+function forkAbortError(
+  signal: AbortSignal,
+  blockNumber: number,
+  cause?: unknown,
+): StateCallAbortedError {
+  if (signal.reason instanceof StateCallAbortedError) {
+    return signal.reason;
+  }
+  return new StateCallAbortedError(
+    `anvil fork block ${blockNumber} aborted: caller signal aborted`,
+    "signal",
+    signal.reason === undefined && cause === undefined
+      ? undefined
+      : { cause: signal.reason ?? cause },
+  );
+}
+
+function waitForForkRetry(
+  signal: AbortSignal,
+  blockNumber: number,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const delay = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, 250);
+  });
+  return awaitAbortableForkOperation(
+    delay.finally(() => {
+      if (timer !== undefined) clearTimeout(timer);
+    }),
+    signal,
+    blockNumber,
+  );
 }
 
 function earliestDeadline(a: number | undefined, b: number | undefined): number | undefined {

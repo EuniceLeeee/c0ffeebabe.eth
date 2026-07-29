@@ -106,6 +106,50 @@ assert.deepEqual(
 console.log("[blockscan-production-boundary] legacy/current-N kernel equivalence: PASS");
 
 {
+  const graphHashBefore = runtime.graph.orderedEdgeHash;
+  const eligibleFixtureEdges = runtime.graph.edges.filter(
+    (edge) => edge.target.toLowerCase() !== pool2,
+  );
+  assert.equal(
+    eligibleFixtureEdges.length,
+    2,
+    `fixture predicate retained unexpected targets: ${eligibleFixtureEdges
+      .map((edge) => edge.target)
+      .join(",")}`,
+  );
+  const unavailable = detectProductionBlockScanOpportunities({
+    runtime,
+    swapTouched: null,
+    cfg: { ...cfg, maxCandidates: 1 },
+    edgeEligible: (edge) => edge.target.toLowerCase() !== pool2,
+    routeEligible: () => true,
+  });
+  assert.equal(
+    unavailable.opportunities.length,
+    0,
+    "an unavailable venue must be removed before it can consume ranking",
+  );
+  assert.equal(
+    runtime.graph.orderedEdgeHash,
+    graphHashBefore,
+    "per-pass execution availability must not mutate the frozen graph",
+  );
+  const routeRejected = detectProductionBlockScanOpportunities({
+    runtime,
+    swapTouched: null,
+    cfg: { ...cfg, maxCandidates: 1 },
+    edgeEligible: () => true,
+    routeEligible: () => false,
+  });
+  assert.equal(
+    routeRejected.selection.enumeratedCount,
+    0,
+    "route availability must apply before candidate selection",
+  );
+}
+console.log("[blockscan-production-boundary] execution availability before ranking: PASS");
+
+{
   const precisionPool = "0x00000000000000000000000000000000000000c1";
   const precisionCache = new PoolStateCache();
   precisionCache.seedV3Ticks({

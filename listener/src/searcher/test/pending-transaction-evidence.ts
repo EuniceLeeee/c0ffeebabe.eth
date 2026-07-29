@@ -370,6 +370,31 @@ assert(
   "canonical evidence work must overtake queued false-positive observers",
 );
 
+const canonicalBoundedScheduler = new PendingEvidenceTaskScheduler(1, 4, 1);
+let releaseCanonicalBound!: () => void;
+const canonicalBoundRunning = canonicalBoundedScheduler.run(
+  "unknown",
+  () => new Promise<void>((resolve) => {
+    releaseCanonicalBound = resolve;
+  }),
+);
+const canonicalBoundQueued = canonicalBoundedScheduler.run(
+  "canonical",
+  async () => {},
+);
+let canonicalOverflow = "";
+try {
+  await canonicalBoundedScheduler.run("canonical", async () => {});
+} catch (error) {
+  canonicalOverflow = error instanceof Error ? error.message : String(error);
+}
+assert(
+  /canonical evidence task queue full/.test(canonicalOverflow),
+  "selector spam must not create an unbounded canonical activation queue",
+);
+releaseCanonicalBound();
+await Promise.all([canonicalBoundRunning, canonicalBoundQueued]);
+
 const boundedScheduler = new PendingEvidenceTaskScheduler(1, 1);
 let releaseBounded!: () => void;
 const boundedRunning = boundedScheduler.run("unknown", () =>

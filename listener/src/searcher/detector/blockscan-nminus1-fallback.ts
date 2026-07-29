@@ -59,6 +59,8 @@ export function enumerateNMinusOneCoarseCandidates(input: {
   readonly canonicalPredecessorHash: string;
   readonly exactGraph: VerifiedGraphView;
   readonly cfg: BlockScanCoreConfig;
+  readonly routeEligible?: (edges: readonly TokenEdge[]) => boolean;
+  readonly edgeEligible?: (edge: TokenEdge) => boolean;
 }): NMinusOneCoarseOutcome {
   const coarse = input.coarsePricing;
   const exact = input.exactGraph;
@@ -87,6 +89,8 @@ export function enumerateNMinusOneCoarseCandidates(input: {
     swapTouched: null,
     cfg: input.cfg,
     mids: coarse.mids,
+    routeEligible: input.routeEligible,
+    edgeEligible: input.edgeEligible,
   });
   const exactByEdgeKey = exactEdgeMap(exact.edges);
   const candidates: NMinusOneCoarseCandidate[] = [];
