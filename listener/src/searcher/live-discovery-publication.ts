@@ -60,6 +60,12 @@ export interface LiveDiscoveryPublicationState {
   readonly flashTokens: readonly string[];
   readonly knownPoolKeys: ReadonlySet<string>;
   readonly knownPoolAddresses: ReadonlySet<string>;
+  /**
+   * Source-revalidated stale DEX projection rows. These process-lifetime
+   * tombstones prevent the immutable file-backed universe or overrides from
+   * reintroducing a superseded cache row during an unrelated later refresh.
+   */
+  readonly suppressedDexPoolKeys?: ReadonlySet<string>;
 
   readonly protocolOwnership: ProtocolDiscoveryOwnership;
   readonly protocolEvidenceCache: ProtocolDiscoveryEvidenceCache;
@@ -109,6 +115,9 @@ export function cloneLiveDiscoveryPublicationState(
     flashTokens: deepClone(source.flashTokens),
     knownPoolKeys: deepClone(source.knownPoolKeys),
     knownPoolAddresses: deepClone(source.knownPoolAddresses),
+    suppressedDexPoolKeys: deepClone(
+      source.suppressedDexPoolKeys ?? new Set<string>(),
+    ),
     protocolOwnership: deepClone(source.protocolOwnership),
     protocolEvidenceCache: deepClone(
       cloneProtocolDiscoveryEvidenceCache(source.protocolEvidenceCache),
@@ -148,6 +157,7 @@ export function describeLiveDiscoveryPublicationState(
       flashTokens: state.flashTokens,
       knownPoolKeys: state.knownPoolKeys,
       knownPoolAddresses: state.knownPoolAddresses,
+      suppressedDexPoolKeys: state.suppressedDexPoolKeys ?? new Set<string>(),
       protocolOwnership: state.protocolOwnership,
       protocolEvidenceCache: state.protocolEvidenceCache,
       retryableDexGraphPools: state.retryableDexGraphPools,
@@ -190,6 +200,7 @@ export function describeDexPublicationSlice(
     blockscanGraph: dexEdges(state.blockscanGraph),
     retryableDexGraphPools: state.retryableDexGraphPools,
     retryableDexIdentityPools: state.retryableDexIdentityPools,
+    suppressedDexPoolKeys: state.suppressedDexPoolKeys ?? new Set<string>(),
     dexGraphCoverage: state.dexGraphCoverage,
     dexSourceAnchor: state.dexSourceAnchor,
     dexGraphAnchor: state.dexGraphAnchor,
@@ -227,6 +238,7 @@ export function describeDexRoutingSlice(
     blockscanGraph: dexEdges(state.blockscanGraph),
     knownPoolKeys: state.knownPoolKeys,
     knownPoolAddresses: state.knownPoolAddresses,
+    suppressedDexPoolKeys: state.suppressedDexPoolKeys ?? new Set<string>(),
   });
 }
 
@@ -314,6 +326,8 @@ export function rebaseHotDexPublication(input: {
           ? {}
           : { currentBlockscanGraph: current.blockscanGraph }),
         knownPoolKeys: current.knownPoolKeys,
+        suppressedPoolKeys:
+          current.suppressedDexPoolKeys ?? new Set<string>(),
         buildStrategyViews: input.buildStrategyViews,
       });
   const next = cloneLiveDiscoveryPublicationState({
@@ -333,6 +347,10 @@ export function rebaseHotDexPublication(input: {
     knownPoolKeys: projection?.knownPoolKeys ?? current.knownPoolKeys,
     knownPoolAddresses:
       projection?.knownPoolAddresses ?? current.knownPoolAddresses,
+    suppressedDexPoolKeys:
+      projection?.suppressedPoolKeys ??
+        current.suppressedDexPoolKeys ??
+        new Set<string>(),
     protocolOwnership: current.protocolOwnership,
     protocolEvidenceCache: current.protocolEvidenceCache,
     retryableDexGraphPools: patch.retryableDexGraphPools,
@@ -436,6 +454,8 @@ export function projectObservedProtocolPublication(input: {
     flashTokens: input.projection.flashTokens,
     knownPoolKeys: input.projection.knownPoolKeys,
     knownPoolAddresses: input.projection.knownPoolAddresses,
+    suppressedDexPoolKeys:
+      input.base.suppressedDexPoolKeys ?? new Set<string>(),
     protocolOwnership: input.projection.ownership,
     protocolEvidenceCache: nextCache,
     retryableDexGraphPools: input.base.retryableDexGraphPools,
@@ -470,6 +490,12 @@ export function assertLiveDiscoveryPublicationState(
   assertArray(state.flashTokens, "flashTokens");
   assertStringSet(state.knownPoolKeys, "knownPoolKeys");
   assertStringSet(state.knownPoolAddresses, "knownPoolAddresses");
+  if (state.suppressedDexPoolKeys !== undefined) {
+    assertStringSet(
+      state.suppressedDexPoolKeys,
+      "suppressedDexPoolKeys",
+    );
+  }
   assertPoolMap(state.retryableDexGraphPools, "retryableDexGraphPools");
   assertPoolMap(
     state.retryableDexIdentityPools,

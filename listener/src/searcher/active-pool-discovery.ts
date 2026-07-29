@@ -27,6 +27,8 @@ import {
 } from "./venues/production-registry.js";
 import {
   discoverLandedPools,
+  LandedPoolDiscoverySourceMismatchError,
+  type LandedPoolCacheRevalidation,
   type LandedPoolDiscoveryCoverage,
   type LandedPoolDiscoveryLog,
   type LandedPoolDiscoveryLogFilter,
@@ -294,6 +296,12 @@ export interface ActivePoolDiscoveryResult {
   readonly coverage: readonly LandedPoolDiscoveryCoverage[];
   /** Source-complete candidates whose current-N identity remains unresolved. */
   readonly retryablePools: readonly PoolEntry[];
+  /**
+   * Source-pinned corrections for conflicting persisted family projections.
+   * The stale keys must be removed atomically with graph publication, while
+   * the revalidated keys bypass ordinary known-pool deduplication.
+   */
+  readonly cacheRevalidation: LandedPoolCacheRevalidation;
   /** True when ranking omitted admitted positives; never completeness-safe. */
   readonly truncated: boolean;
 }
@@ -348,8 +356,13 @@ export async function scanActivePoolsDetailed(
       adapter: bestAdapter(item.adapterCounts),
       score: item.count,
     }));
+  const forceRevalidated = new Set(
+    landed.cacheRevalidation.revalidatedPoolKeys,
+  );
   const materializedCandidates = landed.materializedPools.filter(
-    (pool) => !isKnownPool(pool),
+    (pool) =>
+      forceRevalidated.has(poolProjectionRowKey(pool)) ||
+      !isKnownPool(pool),
   );
   throwIfDexDiscoveryCancelled(options.control);
   const identityCandidates = genericCandidates.filter(
@@ -473,8 +486,64 @@ export async function scanActivePoolsDetailed(
     pools: Object.freeze(ranked),
     coverage: landed.coverage,
     retryablePools: Object.freeze(retryablePools),
+    cacheRevalidation: landed.cacheRevalidation,
     truncated,
   };
+}
+
+export function incompleteLandedFamilyIds(
+  coverage: readonly LandedPoolDiscoveryCoverage[],
+): ReadonlySet<string> {
+  return new Set(
+    coverage
+      .filter((item) => !item.complete)
+      .map((item) => item.familyId),
+  );
+}
+
+/**
+ * Startup has no detached publication pass in front of its first graph.
+ * Remove stale cache claims and every incumbent row owned by an incomplete
+ * landed family before that graph becomes visible. The same generic filter is
+ * used for the base registry, block-scan universe, and explicit overrides.
+ */
+export function filterStartupActivePoolIncumbents(
+  pools: readonly PoolEntry[],
+  discovery: Pick<
+    ActivePoolDiscoveryResult,
+    "coverage" | "cacheRevalidation"
+  >,
+  familyIdForPool: (pool: PoolEntry) => string | null,
+): PoolEntry[] {
+  const stalePoolKeys = new Set(
+    discovery.cacheRevalidation.stalePoolKeys,
+  );
+  const isolatedFamilyIds = incompleteLandedFamilyIds(discovery.coverage);
+  return pools.filter((pool) =>
+    !stalePoolKeys.has(poolProjectionRowKey(pool)) &&
+    !isolatedFamilyIds.has(familyIdForPool(pool) ?? "")
+  );
+}
+
+export function mergeStartupActivePoolDiscovery(
+  incumbentPools: readonly PoolEntry[],
+  discovery: Pick<
+    ActivePoolDiscoveryResult,
+    "pools" | "coverage" | "cacheRevalidation"
+  >,
+  familyIdForPool: (pool: PoolEntry) => string | null,
+): PoolEntry[] {
+  const isolatedFamilyIds = incompleteLandedFamilyIds(discovery.coverage);
+  return mergePoolRegistries(
+    filterStartupActivePoolIncumbents(
+      incumbentPools,
+      discovery,
+      familyIdForPool,
+    ),
+    discovery.pools.filter((pool) =>
+      !isolatedFamilyIds.has(familyIdForPool(pool) ?? "")
+    ),
+  );
 }
 
 function identityCandidateKey(
@@ -554,7 +623,7 @@ function ethersPoolDiscoveryBackend(
         header.hash.toLowerCase() !==
           historicalLogAnchor.blockHash.toLowerCase()
       ) {
-        throw new Error(
+        throw new LandedPoolDiscoverySourceMismatchError(
           "historical log provider is not aligned at block " +
             historicalLogAnchor.blockNumber,
         );

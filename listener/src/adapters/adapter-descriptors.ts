@@ -4,6 +4,7 @@ import type { FundingLineageId } from "../searcher/venues/funding/funding-capabi
 
 export type Lineage =
   | "univ2" | "univ3" | "univ4" | "curve" | "balancer-flash" | "morpho-flash"
+  | "angstrom-v4"
   | "psm" | "erc4626" | "goldx" | "rocksolid" | "wsteth" | "metronome" | "weth"
   | "eigenpie" | "self-burn-native"
   | "fluid-credit" | "fluid-dex" | "balancer-v3" | "dodo-v2" | "erc20-infra"
@@ -159,6 +160,14 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     edgeKind: "swap",
     action: "swap",
     canSendValue: true,
+    leavesStandingPositionDefault: false,
+  },
+  "angstrom-v4-swap": {
+    adapterId: "angstrom-v4-swap",
+    lineage: "angstrom-v4",
+    edgeKind: "swap",
+    action: "swap",
+    canSendValue: false,
     leavesStandingPositionDefault: false,
   },
   "balancer-v3-unlock": {

@@ -27,6 +27,10 @@ import {
   balancerV3Adapter,
 } from "../venues/swaps/balancer-v3.js";
 import {
+  ANGSTROM_MAINNET_HOOK,
+} from "../venues/swaps/angstrom-attestation.js";
+import { angstromV4Adapter } from "../venues/swaps/angstrom-v4.js";
+import {
   BLOCKSCAN_MULTICALL3,
   blockScanErc20Iface,
   blockScanMulticallIface,
@@ -148,6 +152,7 @@ await runUniV3ExtremePrice();
 await runUniV3FactoryBoundPrecision();
 await runUniV3FactoryBoundQuotes();
 await runUniV4();
+await runAngstromV4();
 await runUniV4ExtremePrice();
 await runUniV4DirectionIsolation();
 await runInactiveUniPools();
@@ -915,6 +920,53 @@ async function runUniV4(): Promise<void> {
   assert.equal(result.mids.get(blockScanEdgeKey(edges[0]))?.mid, 4);
   assert.equal(result.mids.get(blockScanEdgeKey(edges[1]))?.mid, 0.25);
   assert.equal(result.initialReads.length, 2);
+}
+
+async function runAngstromV4(): Promise<void> {
+  const key = {
+    currency0: TOKEN0,
+    currency1: TOKEN1,
+    fee: 0x80_0000,
+    tickSpacing: 10,
+    hooks: ANGSTROM_MAINNET_HOOK,
+  };
+  const poolId = v4PoolId(key);
+  const edges = twoTokenEdges("angstrom-v4-swap").map((edge) => ({
+    ...edge,
+    target: ADDR.UNISWAP_V4_POOL_MANAGER,
+    poolId,
+    v4PoolKey: key,
+  }));
+  const result = await execute(
+    angstromV4Adapter.id,
+    angstromV4Adapter.pricingState,
+    edges,
+    (read) => {
+      const selector = read.data.slice(0, 10);
+      if (selector === v4StateIface.getFunction("getSlot0")!.selector) {
+        return v4StateIface.encodeFunctionResult("getSlot0", [
+          2n * Q96,
+          0,
+          0,
+          3_000,
+        ]);
+      }
+      if (
+        selector === v4StateIface.getFunction("getLiquidity")!.selector
+      ) {
+        return v4StateIface.encodeFunctionResult(
+          "getLiquidity",
+          [1_000n * UNIT],
+        );
+      }
+      throw new Error(`unexpected Angstrom spot-state read ${read.id}`);
+    },
+  );
+  assert.equal(result.staticReads.length, 0);
+  assert.equal(result.initialReads.length, 2);
+  assert.equal(result.dependentReads.length, 0);
+  assert.equal(result.mids.get(blockScanEdgeKey(edges[0]))?.mid, 4);
+  assert.equal(result.mids.get(blockScanEdgeKey(edges[1]))?.mid, 0.25);
 }
 
 async function runUniV4ExtremePrice(): Promise<void> {

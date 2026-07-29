@@ -361,12 +361,24 @@ async function slowTraceDoesNotBlockShortPublicationQueue(): Promise<void> {
 }
 
 function hotDexRebasePreservesReplacedProtocolPublication(): void {
-  const empty = publicationAt({
+  const staleSupplement: PoolEntry = {
+    address: address(0x70ff),
+    adapter: "univ2",
+    token0: address(0x71ff),
+    token1: address(0x72ff),
+  };
+  const emptyBase = publicationAt({
     dexSource: 600,
     dexGraph: 600,
     observed: 600,
     address: 600,
   });
+  const empty: LiveDiscoveryPublicationState = {
+    ...emptyBase,
+    suppressedDexPoolKeys: new Set([
+      poolProjectionRowKey(staleSupplement),
+    ]),
+  };
   const oldAdmission = protocolAdmission(0x7100, 0x7200);
   const base = replaceProtocolPublication(empty, oldAdmission, 600);
   const replacement = protocolAdmission(0x7101, 0x7201);
@@ -409,7 +421,18 @@ function hotDexRebasePreservesReplacedProtocolPublication(): void {
       dexGraphAnchor: sourceAnchor,
       landedCoverage: concurrent.landedCoverage,
     },
-    buildStrategyViews: fixtureStrategyViews,
+    buildStrategyViews: (pools, suppressed = new Set<string>()) =>
+      buildStrategyViews(
+        pools,
+        suppressed.has(poolProjectionRowKey(staleSupplement))
+          ? []
+          : [staleSupplement],
+        [],
+        {
+          blockscanMaxPools: 10_000,
+          poolUniverseGeneratedAt: "2026-07-26T00:00:00.000Z",
+        },
+      ),
   });
   assert(rebased);
   assert.equal(rebased.revision, concurrent.revision + 1);
@@ -425,6 +448,13 @@ function hotDexRebasePreservesReplacedProtocolPublication(): void {
         delta.successfulBuilds[0]!.pool.address.toLowerCase()
     ),
     "the prepared non-empty DEX delta must enter the rebased graph",
+  );
+  assert.equal(
+    rebased.strategyViews.blockscan.some((pool) =>
+      poolProjectionRowKey(pool) === poolProjectionRowKey(staleSupplement)
+    ),
+    false,
+    "a hot DEX rebase must preserve stale-row tombstones when rebuilding supplements",
   );
   assert(
     rebased.strategyViews.backrun.some((pool) =>

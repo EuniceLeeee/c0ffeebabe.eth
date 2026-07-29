@@ -116,6 +116,7 @@ function testFieldAndOrderSnapshot(): void {
     "curve-underlying|swap|curve-underlying|curve-exchange-underlying|curve-exchange-underlying|erc20-approve|0|false|-|-",
     "balancer-v3|swap|balancer-v3|balancer-v3-unlock|balancer-v3-unlock,balancer-v3-settle,balancer-v3-swap,balancer-v3-send-to|erc20-transfer|0|false|-|-",
     "univ4|swap|univ4|univ4-unlock|univ4-unlock,univ4-swap,univ4-take,univ4-sync,univ4-settle,univ4-settle-value|erc20-transfer,weth-deposit-value,weth-withdraw-amount|0|false|-|-",
+    "custom-swap:angstrom-v4|swap|angstrom-v4|angstrom-v4-swap|angstrom-v4-swap|erc20-approve|0|false|-|-",
     "custom-swap:dodo-v2|swap|dodo-v2|dodo-v2-swap|dodo-v2-swap|erc20-transfer|0|false|-|-",
     "fluid-dex|swap|fluid-dex|fluid-dex-swap|fluid-dex-swap|erc20-approve|0|false|-|-",
     "protocol:erc4626|protocol-conversion|erc4626|erc4626-deposit,erc4626-redeem|erc4626-deposit,erc4626-redeem|erc20-approve|0|true|dex-token-domain,observed-interaction|true",

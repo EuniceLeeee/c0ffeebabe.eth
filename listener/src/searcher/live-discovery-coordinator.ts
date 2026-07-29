@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { CoalescingAsyncWriter } from "./coalescing-async-writer.js";
 import {
   indexFactoryPools,
+  incompleteLandedFamilyIds,
   mergePoolRegistries,
   scanActivePoolsDetailed,
   sendDexDiscoveryRpc,
@@ -105,6 +106,7 @@ import type {
   ProtocolDiscoveryReadControl,
   ProtocolDiscoveryReceipt,
 } from "./venues/route-leg-adapter.js";
+import { routeInstanceKey } from "./venues/route-instance-identity.js";
 import { poolRegistryKey } from "./pool-universe.js";
 
 interface LiveDiscoveryConfig {
@@ -127,6 +129,7 @@ interface LiveDiscoveryInitialState {
   readonly flashTokens: string[];
   readonly knownPoolKeys: Set<string>;
   readonly knownPoolAddresses: Set<string>;
+  readonly suppressedDexPoolKeys: Set<string>;
   readonly retryableDexGraphPools: Map<string, PoolEntry>;
   readonly retryableDexIdentityPools: Map<string, PoolEntry>;
 }
@@ -257,6 +260,7 @@ export async function createLiveDiscoveryCoordinator(
     flashTokens,
     knownPoolKeys,
     knownPoolAddresses: knownPoolAddrs,
+    suppressedDexPoolKeys,
     retryableDexGraphPools,
     retryableDexIdentityPools,
   } = deps.initial;
@@ -348,6 +352,7 @@ export async function createLiveDiscoveryCoordinator(
       flashTokens,
       knownPoolKeys,
       knownPoolAddresses: knownPoolAddrs,
+      suppressedDexPoolKeys,
       protocolOwnership: protocolDiscoveryOwnership,
       protocolEvidenceCache: protocolDiscoveryCache,
       retryableDexGraphPools,
@@ -367,6 +372,7 @@ export async function createLiveDiscoveryCoordinator(
     readonly retryablePools: ReadonlyMap<string, PoolEntry>;
     readonly retryableIdentityPools: ReadonlyMap<string, PoolEntry>;
     readonly knownPoolKeys: ReadonlySet<string>;
+    readonly suppressedPoolKeys: ReadonlySet<string>;
     readonly strategyViews: StrategyViews;
     readonly backrunGraph: readonly TokenEdge[];
     readonly blockscanGraph: readonly TokenEdge[] | undefined;
@@ -380,6 +386,9 @@ export async function createLiveDiscoveryCoordinator(
       current.retryableDexIdentityPools,
     ),
     knownPoolKeys: new Set(current.knownPoolKeys),
+    suppressedPoolKeys: new Set(
+      current.suppressedDexPoolKeys ?? [],
+    ),
     strategyViews: {
       backrun: [...current.strategyViews.backrun],
       blockscan: [...current.strategyViews.blockscan],
@@ -560,6 +569,9 @@ export async function createLiveDiscoveryCoordinator(
           : Promise.resolve(null),
     ]);
     const swapFresh = [...swapDiscovery.pools];
+    const isolatedLandedFamilyIds = incompleteLandedFamilyIds(
+      swapDiscovery.coverage,
+    );
     const fresh = mergePoolRegistries(
       mergePoolRegistries(factoryFresh, swapFresh),
       [...(identityRetry?.accepted ?? [])],
@@ -572,6 +584,7 @@ export async function createLiveDiscoveryCoordinator(
       retryableAndStatic,
       fresh,
       current.knownPoolKeys,
+      new Set(swapDiscovery.cacheRevalidation.revalidatedPoolKeys),
     );
     let projection: Awaited<ReturnType<typeof prepareRuntimePoolRefresh>> | null = null;
     const nextRetryableDexGraphPools = new Map(current.retryablePools);
@@ -595,17 +608,47 @@ export async function createLiveDiscoveryCoordinator(
       pool: PoolEntry;
       reason: string;
     }> = [];
-    if (candidates.length > 0) {
+    if (
+      candidates.length > 0 ||
+      isolatedLandedFamilyIds.size > 0 ||
+      swapDiscovery.cacheRevalidation.stalePoolKeys.length > 0
+    ) {
       projection = await measured("projection", () => prepareRuntimePoolRefresh({
           backend: readBackend,
           freshPools: candidates,
           knownPoolKeys: current.knownPoolKeys,
           currentBackrunPools: [...current.strategyViews.backrun],
+          currentBlockscanPools: [...current.strategyViews.blockscan],
           currentBackrunGraph: [...current.backrunGraph],
           currentBlockscanGraph: current.blockscanGraph === undefined
             ? undefined
             : [...current.blockscanGraph],
           buildStrategyViews: rebuildStrategyViews,
+          isolatedFamilyIds: isolatedLandedFamilyIds,
+          isolationPoolInventory: retainedDexUniverse,
+          replacedPoolKeys: new Set(
+            swapDiscovery.cacheRevalidation.stalePoolKeys,
+          ),
+          revalidatedPoolKeys: new Set(
+            swapDiscovery.cacheRevalidation.revalidatedPoolKeys,
+          ),
+          suppressedPoolKeys: current.suppressedPoolKeys,
+          familyIdForPool: (pool) =>
+            PRODUCTION_ADAPTER_FAMILIES.routes()
+              .findForPool(pool.adapter)?.id ?? null,
+          familyIdForEdge: (edge) =>
+            PRODUCTION_ADAPTER_FAMILIES.routes()
+              .forEdge(edge.adapterId).id,
+          instanceKeyForPool: (pool) => {
+            const family = PRODUCTION_ADAPTER_FAMILIES.routes()
+              .findForPool(pool.adapter);
+            if (!family) {
+              throw new Error(
+                `runtime replacement has no route family for ${pool.adapter}`,
+              );
+            }
+            return routeInstanceKey(family, pool);
+          },
       }));
       for (const admitted of projection.admittedPools) {
         nextRetryableDexGraphPools.delete(poolRegistryKey(admitted));
@@ -1300,6 +1343,10 @@ export async function createLiveDiscoveryCoordinator(
       knownPoolAddresses:
         finalProjection?.knownPoolAddresses ??
         base.knownPoolAddresses,
+      suppressedDexPoolKeys:
+        dex?.projection?.suppressedPoolKeys ??
+        base.suppressedDexPoolKeys ??
+        new Set<string>(),
       protocolOwnership: nextOwnership,
       protocolEvidenceCache: nextCache,
       retryableDexGraphPools:
@@ -1443,6 +1490,10 @@ export async function createLiveDiscoveryCoordinator(
     replaceArray(flashTokens, next.flashTokens);
     replaceSet(knownPoolKeys, next.knownPoolKeys);
     replaceSet(knownPoolAddrs, next.knownPoolAddresses);
+    replaceSet(
+      suppressedDexPoolKeys,
+      next.suppressedDexPoolKeys ?? new Set<string>(),
+    );
     protocolDiscoveryOwnership = {
       version: next.protocolOwnership.version,
       admissions: new Map(next.protocolOwnership.admissions),

@@ -6,9 +6,19 @@ import type {
   LandedPoolDiscoveryLog,
   LandedPoolDiscoveryLogFilter,
   LandedPoolDiscoveryReadBackend,
+  LandedPoolMaterializationContext,
   LandedPoolMaterializationCapability,
   LandedPoolMaterializationResult,
+  LandedPoolSharedIdentityCapability,
+  LandedPoolSharedIdentityMaterializer,
+  LandedPoolSharedIdentityProjection,
 } from "../landed-pool-discovery.js";
+import {
+  isLandedPoolDiscoverySourceMismatchError,
+} from "../landed-pool-discovery.js";
+import {
+  materializeSharedLandedPoolIdentity,
+} from "../landed-pool-shared-identity.js";
 import { UNIV4_INITIALIZE_TOPIC } from "../landed-event-registry.js";
 import { UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK } from "./univ4-common.js";
 
@@ -48,11 +58,49 @@ export interface UniV4PoolActivity {
   readonly lastSwapBlock: number;
 }
 
-export const univ4PoolDiscovery = Object.freeze({
-  version: "univ4-poolkey-materializer-v2",
-  eventIds: ["univ4-swap"],
-  consumesOpaqueRetries: true,
-  async materialize(context): Promise<LandedPoolMaterializationResult> {
+export const univ4PoolIdentityMaterializer = Object.freeze({
+  id: "univ4-poolkey",
+  version: "univ4-poolkey-identity-v1",
+  identityKey(pool: PoolEntry): string {
+    if (
+      ethers.getAddress(pool.address).toLowerCase() !==
+        ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase() ||
+      pool.poolId === undefined
+    ) {
+      throw new Error("univ4 identity kernel requires manager + poolId");
+    }
+    return `${pool.address.toLowerCase()}|${
+      normalizeBytes32Topic(pool.poolId, "identity poolId")
+    }`;
+  },
+  revalidationPool(pool: PoolEntry): PoolEntry {
+    if (pool.poolId === undefined) {
+      throw new Error("univ4 revalidation requires poolId");
+    }
+    const activity = pool as PoolEntry & {
+      readonly swapCount30d?: number;
+      readonly lastSwapBlock?: number;
+    };
+    return Object.freeze({
+      address: ethers.getAddress(pool.address),
+      adapter: "univ4",
+      poolId: normalizeBytes32Topic(
+        pool.poolId,
+        "revalidation poolId",
+      ),
+      ...(pool.score === undefined ? {} : { score: pool.score }),
+      ...(activity.swapCount30d === undefined
+        ? {}
+        : { swapCount30d: activity.swapCount30d }),
+      ...(activity.lastSwapBlock === undefined
+        ? {}
+        : { lastSwapBlock: activity.lastSwapBlock }),
+      source: "landed-event-retry:univ4-swap",
+    });
+  },
+  async materialize(
+    context: LandedPoolMaterializationContext,
+  ): Promise<LandedPoolMaterializationResult> {
     const retainedByPoolId = new Map(
       context.retainedPools.flatMap((pool) => {
         const parsed = retainedV4PoolKey(pool);
@@ -141,6 +189,9 @@ export const univ4PoolDiscovery = Object.freeze({
             if (context.signal?.aborted) {
               throw context.signal.reason ?? error;
             }
+            if (isLandedPoolDiscoverySourceMismatchError(error)) {
+              throw error;
+            }
             if (controller?.signal.aborted) {
               resolutionIssue =
                 `univ4 PoolKey materialization exceeded ` +
@@ -174,6 +225,43 @@ export const univ4PoolDiscovery = Object.freeze({
         ? {}
         : { retryablePools: Object.freeze(retryablePools) }),
     };
+  },
+} satisfies LandedPoolSharedIdentityMaterializer);
+
+const univ4PoolIdentityProjection = Object.freeze({
+  version: "univ4-poolkey-projection-v1",
+  toIdentityPool(pool: PoolEntry): PoolEntry | null {
+    return pool.adapter === "univ4" ? pool : null;
+  },
+  projectPool(pool: PoolEntry): PoolEntry | null {
+    if (pool.adapter !== "univ4") {
+      throw new Error("univ4 identity kernel emitted a non-univ4 row");
+    }
+    return pool;
+  },
+  projectRetry(pool: PoolEntry): PoolEntry {
+    if (pool.adapter !== "univ4") {
+      throw new Error("univ4 identity kernel emitted a foreign retry row");
+    }
+    return pool;
+  },
+} satisfies LandedPoolSharedIdentityProjection);
+
+const univ4SharedIdentity = Object.freeze({
+  materializer: univ4PoolIdentityMaterializer,
+  projection: univ4PoolIdentityProjection,
+} satisfies LandedPoolSharedIdentityCapability);
+
+export const univ4PoolDiscovery = Object.freeze({
+  version: "univ4-poolkey-materializer-v2",
+  eventIds: ["univ4-swap"],
+  consumesOpaqueRetries: true,
+  sharedIdentity: univ4SharedIdentity,
+  materialize(context: LandedPoolMaterializationContext) {
+    return materializeSharedLandedPoolIdentity(
+      univ4SharedIdentity,
+      context,
+    );
   },
 } satisfies LandedPoolMaterializationCapability);
 
@@ -575,6 +663,7 @@ async function getLogsWithAdaptiveRange(
   } catch (error) {
     throwIfAborted(signal, error);
     if (isAbortError(error)) throw error;
+    if (isLandedPoolDiscoverySourceMismatchError(error)) throw error;
     if (isPrunedHistoryError(error)) return [];
     if (filter.fromBlock >= filter.toBlock) throw error;
 

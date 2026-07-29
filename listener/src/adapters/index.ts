@@ -23,6 +23,7 @@ import {
   univ4SettleAdapter,
   univ4SettleValueAdapter,
 } from "./univ4.js";
+import { angstromV4SwapActionAdapter } from "./angstrom-v4.js";
 import {
   curveExchangeUnderlyingAdapter,
   curvePlainExchangeAdapter,
@@ -65,6 +66,7 @@ const PRODUCTION_ACTION_CATALOG = new Map<string, ActionAdapter>(
     univ4SyncAdapter,
     univ4SettleAdapter,
     univ4SettleValueAdapter,
+    angstromV4SwapActionAdapter,
     balancerV3UnlockAdapter,
     balancerV3SettleAdapter,
     balancerV3SwapAdapter,
