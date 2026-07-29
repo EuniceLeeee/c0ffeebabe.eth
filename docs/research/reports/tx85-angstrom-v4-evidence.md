@@ -79,10 +79,13 @@ amount:
 - unrelated protocol-shard marker SHA-256:
   `beffa3da757a4645dd8b6c14ca08e084149d624b264206baa401fa4483807eaa`;
 - candidate code SHA:
-  `2be4bf12d42fa7c04f034bfda9357a07405634cd`.
+  `53b6ce700603cedb8c3bbd5e686bad77a6233d75`.
 - node-local semantic log SHA-256:
-  `6eab2bb5e1189cd6df4aedd342e521ecfe98e085268721e88335521785b53b6c`
+  `9f9f70dd90f6fbd220fc5fb3645db9e3a57f67ebdf1e437930aa72887ae2dc4b`
   (six ordered `SEMANTIC_SIX_STEP_EVIDENCE` records).
+- node-local full hunt report SHA-256:
+  `2e8e3fd59e318b69f2e42d7b13d93819c6789ca74675267fe67d5853edd4d8bc`
+  (`ev_positive_found`, 300 retained opportunities, 27 solved).
 
 A first run with no `AB_EXPECTED_*` input naturally enumerated the target
 PoolId plus the UniV3 return pool at refined rank 27. The semantic run then
