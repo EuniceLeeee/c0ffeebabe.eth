@@ -510,6 +510,8 @@ async function buildAngstromEdges(
     adapterId: ANGSTROM_EDGE_ADAPTER_ID,
     target: ethers.getAddress(ADDR.UNISWAP_V4_POOL_MANAGER),
     slotKind: "swap" as const,
+    poolToken0: key.currency0,
+    poolToken1: key.currency1,
     v4PoolKey: key,
     poolId,
     score: pool.score,

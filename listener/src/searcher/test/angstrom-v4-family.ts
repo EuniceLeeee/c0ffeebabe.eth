@@ -371,6 +371,13 @@ async function main(): Promise<void> {
   );
   assert.equal(edges.length, 2);
   assert(edges.every((edge) => edge.adapterId === "angstrom-v4-swap"));
+  assert(
+    edges.every((edge) =>
+      edge.poolToken0 === key.currency0 &&
+      edge.poolToken1 === key.currency1
+    ),
+    "Angstrom edges must preserve PoolKey token order for shared swap observation",
+  );
   await assert.rejects(
     () => univ4Adapter.buildEdges(
       { ...pool, adapter: "univ4" },
