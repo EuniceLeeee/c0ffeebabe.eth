@@ -1,7 +1,7 @@
 # Adapter Family 扩展边界、实现合同与六步验收
 
-> 状态：设计与实施合同；不是完成报告。
-> 基线：`origin/main@3e36b657cb80aaa47083959dcba308fc8508e536`。
+> 状态：架构与验收合同；核心 family boundary gate 与 target-late 结果契约已在前置工具分支实现，仍不是某个 family 的完成报告。
+> 实现基线：`origin/main@3c8a04b9c31960d39992d139a310f868edbe5631`。
 > 日期：2026-07-29。
 > 范围：新增 Swap / Protocol Adapter Family、V4/Ekubo 一类 hook/extension 例外，以及从开发到删除分支的验收生命周期。
 > 不在范围：某一笔 Ekubo 交易的 ABI、地址、路径或盈利结论；具体实现必须另立 feature branch。
@@ -289,22 +289,17 @@ Gate 应在开发早期即可独立运行，并在 checkpoint 中再次强制运
 - production family ownership manifest；
 - registry/action catalog skeleton；
 - family source closures；
-- 受限 import/side-effect AST 结果。
 
-输出必须是结构化结果：
+输出必须是结构化结果，但核心 gate 只做两类判断：
 
 ```text
 classification:
   family_local
   | framework
-  | systemic_live
 
 impacted_family_ids:
 changed_runtime_files:
-central_behavior_files:
-forbidden_imports:
-side_effect_findings:
-ownership_conflicts:
+reasons:
 required_action:
 ```
 
@@ -314,9 +309,9 @@ required_action:
 |---|---|---|
 | 仅 family source closure + 薄注册 | `family_local` | 允许继续 family 开发 |
 | 修改中央 capability/interface/hash | `framework` | 非零退出，停止 family 自证 |
-| 修改多个既有 family 共享 host | `framework` | 非零退出，要求 cross-family cohort |
-| 修改 scanner/rank/cap/deadline/queue/cache | `systemic_live` | 非零退出，要求 Hermes A/B |
-| family import/修改中央 mutable runtime | `framework` | 非零退出，报告具体 import/写入 |
+| 修改多个既有 family 共享 host | `framework` | 非零退出，移到独立 branch |
+| 修改 scanner/rank/cap/deadline/queue/cache | `framework` | 非零退出，移到独立 branch |
+| family 修改中央 mutable runtime | `framework` | 非零退出，报告具体路径 |
 | 协议专属字段进入中央 graph/planner | `framework` | 非零退出，要求协议无关 capability 设计 |
 | registry/catalog 超出薄注册 skeleton | `framework` | 非零退出 |
 
@@ -326,21 +321,22 @@ Gate 发现越界后必须执行的流程动作：
 停止在当前 family branch 继续堆实现
 → 输出 exact changed files / findings / missing capability
 → 将中央改动从 family diff 中拆出
-→ 建立独立 framework 或 systemic 计划
-→ framework/systemic 变更先合入 main
+→ 将 family 外改动移到独立 branch
+→ 该独立 branch 按自己的风险使用现有验收
+→ 先合入 main
 → 从新 main 重新创建或重放 family-local diff
 ```
 
 Gate 不应自动删除用户代码或重置分支；它负责 fail closed、保留现场并给出确定的拆分动作。
 
-当前 `six-step-validation-controller.ts::classifyDiff` 已有部分晚期分类能力，但还不够：
+实现使用同一个纯函数 `evaluateAdapterFamilyBoundary`：
 
-- 只在 canonical checkpoint 较晚阶段运行；
-- 主要依赖路径/source closure；
-- 尚未覆盖 family 模块副作用；
-- 尚未输出完整的升级原因与动作 artifact。
+- 开发期由 `adapter-family-boundary-gate` CLI 调用；
+- checkpoint 在任何 RPC、universe 读取和 producer 之前调用；
+- 两处都只从 registry-derived ownership manifest、source closure 和两张薄注册表的 skeleton 得出结论；
+- `framework` 非零退出，并输出 exact runtime paths 与 reasons。
 
-因此需要把它抽成可复用的 early preflight，并由 checkpoint 调用同一实现，避免开发期 gate 与最终 gate 发生语义漂移。
+这道核心 gate 不再细分 `systemic_live`，也不实现一套庞大的 AST 安全框架。标准 `SwapAdapter` / `ProtocolConversionAdapter` 类型、ownership manifest、source closure、薄注册 skeleton 和正常 code review 共同约束 family；若日后有真实绕过样本，再在独立工具 branch 增加协议无关规则。
 
 ## 5. Hook / Extension 的例外模型
 
@@ -538,6 +534,9 @@ Ekubo pool config 包含 extension 和执行配置。Extension 可以影响 swap
 Route-root 执行编码器必须属于该 family 的 `ownedActionAdapterIds`。
 
 `requiredInfraActionAdapterIds` 只允许真正共享、ownerless 的基础动作，例如经过中央预声明的 transfer/approve 类 infra。不得把 Ekubo/V4 swap encoder 伪装成 infra，从而借用另一个 family 的执行权限。
+反方向同样禁止：只要某 ActionAdapter 被任一 family 声明为 required shared infra，就不能再被任何
+family 声明为 owned。候选把既有 `erc20-transfer` 一类 shared infra 重新包装成自己的 route root，
+boundary 必须输出 `framework` 并停止。
 
 ### 6.3 Canonical metadata
 
@@ -630,6 +629,21 @@ ActionAdapter：
 listener/src/adapters/ekubo.ts
 ```
 
+Import closure 只证明依赖关系，**不能给 candidate 授予新的编辑权**。某个 baseline 已存在、
+但此前不属于该 family 的 runtime 文件，即使被 candidate 新增 import 后出现在 manifest，
+仍分类为 `framework`。Candidate 新建的 runtime 文件只允许位于
+`venues/{swaps,protocols,credit,funding,liquidity}` 的该 family 路径或该 family 的
+`src/adapters/` 路径；中央 scheduler/planner/solver/runtime 文件不能靠“纳入 closure”变成
+family-owned。
+
+既有 family 的 `kind`、`root_source`、`root_export` 是稳定身份，candidate 不得靠重命名它们
+扩大 supplemental test/doc 的命名权限。Supplemental 路径只使用稳定 family ID 派生 token；
+新 family 不得认领 baseline 已存在的测试文件。`production-replay`、`blockscan-hunt`、
+ownership manifest、Adapter Replay 与 execution witness 等 trusted TCB 路径无条件排除，不能
+因为文件名恰好包含某个 candidate-controlled token 就变成 family-owned；这些保留项按稳定
+入口/helper 前缀族匹配，避免先新增同名 family、下一次提交再认领既有 trusted helper 的
+两阶段洗白。
+
 Family 根导出应保留显式静态 ID，便于 ownership manifest 的 AST producer 读取：
 
 ```ts
@@ -648,19 +662,14 @@ export const EKUBO_EXTENSION_X =
 
 因为当前 manifest producer 未必能从任意 factory call 静态解析 family ID。
 
-### 7.1 Family-side-effect 门
+### 7.1 核心门的有意边界
 
-当前 source closure 主要证明“文件归属”，不能单独证明“无中央副作用”。正式允许普通 family 自证前，必须补 AST/conformance 门：
+本次 gate 只机械保证用户要求的两件事：
 
-- 禁止写入 imported binding；
-- 禁止 prototype mutation；
-- 禁止 `Object.defineProperty` / `Reflect.set` 修改外部对象；
-- 禁止 global/process/registry mutation；
-- 禁止 module augmentation 改运行时对象；
-- 禁止从 main/coordinator/scanner/planner/solver 导入可变运行时对象；
-- type-only import 与批准的纯 helper import 可保留。
+1. family runtime 改动归属于唯一 family，中央文件只允许既有薄注册；
+2. family 继续实现标准 `SwapAdapter` / `ProtocolConversionAdapter` capability，不修改中央接口或共享生产行为。
 
-必须包含恶意 synthetic family 负向测试，证明上述路径会在 checkpoint 前失败。
+它不宣称能静态证明任意 TypeScript 都无恶意副作用。出现 prototype/global mutation 一类非常规实现时由正常 review 拒绝；不要为了假想攻击把普通 adapter 开发变成另一套编译器工程。
 
 ## 8. 实现顺序
 
@@ -671,8 +680,7 @@ export const EKUBO_EXTENSION_X =
 1. 修复 target-blind producer/comparator；
 2. 修复纯 DEX graph 的 protocol-only harness 假设；
 3. 把 Step 1 改成 route-required shard completeness，而不是“图必须增长”；
-4. 增加 family-side-effect/import 门；
-5. 修复当前 activation baseline 红灯。
+4. 将同一个核心 family boundary evaluator 接入开发期 CLI 和 checkpoint preflight。
 
 这些是 trusted tooling/framework 变更，不能由 Ekubo branch 修改并自证。
 
@@ -743,7 +751,7 @@ export const EKUBO_EXTENSION_X =
 - host-scoped swap intent；
 - host wrapper；
 - route-root ActionAdapter；
-- execution target/selector；
+- execution target、ABI、参数关系与 pool identity；
 - settlement/transfer/wrapping；
 - plan execution identity；
 - conservation。
@@ -781,83 +789,108 @@ source / identity
 - solve selection；
 - sizing。
 
-## 9. 当前六步验收器的前置缺陷
+## 9. Target-late 结果契约
 
-### 9.1 Subject edge 不是 protocol kind
+### 9.1 已实现的 producer / verifier 分离
 
-当前变量名 `requiredProtocolEdgeKeys` 和错误信息具有误导性。实际 reference edge 来自所有带 `discovery` 的 `discoverableRoutes()`，可以包含 dynamic swap，例如 `fluid-dex`。
-
-因此：
-
-- 纯 swap Ekubo 路线不因 `slotKind: "swap"` 自动失败；
-- 至少一个 Ekubo edge 必须由 observed dynamic discovery 产生，并在 source window 独立发现；
-- 只实现 quote/plan 而不实现所需 discovery，应该失败。
-
-仍需修复：
-
-- `blockscan-hunt` 对整张图的 protocol-edge 全局要求；
-- Production Replay 对 graph 必须增长的要求；
-- protocol-only 命名和错误信息；
-- mature DEX-only 正向测试。
-
-### 9.2 P0：Expected route 泄漏进 solve selection
-
-当前 controller 把 sample winner tx 传给 Production Replay。Producer 在完整 funnel 输出冻结前读取 winner receipt/trace，并在自然 enumeration 后用 winner-derived cycle 选择继续 planner/solver/final-sim/EV 的路线。
-
-这只能证明：
-
-- scanner 曾自然枚举该路线。
-
-不能证明：
-
-- production 会自然把该路线推进到 solve；
-- production 会自然对它运行 final sim；
-- production top-K/selection 没有被 expected route 帮助。
-
-因此当前 gate 即使全绿，也不足以单独签发可信 `fixed`。
-
-### 9.3 必须采用 producer/comparator 分离
-
-可信结构必须是：
+同一套 canonical six-step lifecycle 现在复用如下结果契约，不建立第二套六步 schema：
 
 ```text
-Trusted producer 不接收 winner tx / expected route
-→ 自然运行生产 graph/enumeration/refine/selection/solve/final-sim/EV
-→ 冻结并哈希全部输出
+candidate producer argv/env 不含 winner tx、reference route、target pool 或 target amount
+→ 自然运行完整 graph / enumeration / refine / top-K solve
+→ 冻结 natural top-K、hop amounts、raw calldata、calldata hash 和 required shard proof
 → producer 退出
-→ trusted comparator 才读取 winner receipt/trace
-→ 独立匹配目标闭环与自然 funnel 输出
+→ controller 对同目录 pending artifact 执行 file fsync
+→ rename 为只读 sealed artifact并 fsync directory
+→ 此后才把 winner tx 与 rollback/main-owned reference 交给 verifier
+→ rollback/main verifier 匹配冻结路线
+→ 在新 fork 执行冻结 raw calldata
+→ 重算 funding holder、final-verify、phantom-profit、standing、零库存/偿还和 EV
+→ target trace 与 final-sim trace 都由同一个有限声明式 ReferenceWitness 解释
+→ witness 绑定 ABI、token 方向、pool identity、参数关系、receipt transfer 与父子调用分支
+→ final-sim 每条腿的 root calldata 必须逐字节等于 solver-selected resolved subtree 的编译结果
+→ verifier 后再次校验 sealed artifact/reference hash 未变化
 ```
 
-Candidate-owned matcher 用于证明生产 discovery；独立 trace witness 用于证明落地交易的目标路线。两者不能由同一段 candidate family 逻辑自证。
+Reference artifact 必须在 adapter candidate 的 `rollback_commit` 中已存在并经过人工语义审查；family branch 不能新增或修改它。它绑定：
 
-Trusted witness 必须是 hash-bound、有限、声明式 schema，只允许表达：
+- target receipt + call trace 的 canonical SHA；
+- parent block/hash/state root；
+- normalized ordered route 与 route SHA；
+- 每个 route leg 的 execution identity 与有限声明式 `ReferenceWitness`。
 
-- 精确 ABI signature / calldata shape；
-- `value` 约束；
-- parent/child/descendant call 关系；
-- token-flow 与方向约束；
-- return amount/成功状态；
-- route leg 顺序；
-- pool/manager logical identity。
+`ReferenceWitness` 只允许固定 schema 的 ABI/参数/调用层级/receipt-transfer 关系，不执行任意代码，
+也不得退化为 bare `target + selector`。每条腿必须同时绑定 `token-in` 与 `token-out`；当
+`poolId !== execution target` 时还必须显式使用 `pool-id`。final sim 另以 producer 冻结的
+`executionSurfaces[]` 验证每条腿的 selector 和完整 calldata SHA；该 calldata 来自真实
+solver-selected resolved-plan subtree，包含 selected amount 与 child bytes。
 
-Comparator 不得：
+每个 execution surface 还冻结：
 
-- 执行 candidate family 提供的 callback；
-- 接受裸 `target + selector` 就认定 route leg；
-- 从 candidate 的 `candidateFromObservedCall` 直接复制 expected route；
-- 在 producer 运行前把 witness 转成 pool/token/amount hint。
+- family-owned `rootActionAdapterId`；
+- ordered `subtreeActionAdapterIds`；
+- subtree 实际产生的全部 external call target/selector/calldata SHA；
+- funding wrapper 下未归入 route subtree 的 support action IDs 与实际 external calls。
 
-Step 4/5 还必须从 solver-resolved subtree 和最终 calldata 独立反解 selector、target、poolId/variant 和 child bytes，与 witness/canonical execution identity 对比。只比较 scanner seed edge 不足以证明最终执行的是同一语义。
+trusted controller 用 candidate ownership manifest 重算：route root 必须由对应 family owned；
+subtree 其余 action 只能是同 family owned，或该 family 显式 required 且全局 ownerless 的 shared
+infra。未归属 sibling 只允许 declared、ownerless support action；它实际产生的每个 external
+call 都必须在 target trace 被某条有限声明式 route witness 覆盖，并在 final sim 完整 calldata
+byte-match。不能把 `tokenIn === tokenOut` 当作“无价值变化”，ERC-20 transfer 也必须绑定。
+foreign owned action、额外 owned sibling、未声明或未绑定的 support call、non-wrapper 的 ignored
+child 都直接失败。由于当前生产 `PlanFragment.nodes[]` 不保留逐 leg provenance，多 sibling
+family-owned fragment（例如一条 leg 用两个并列的 family node）会保守 fail closed；需先在独立
+协议无关 capability branch 保留 fragment provenance，不能在 gate 猜测 sibling 属于哪条腿。
+后一条逻辑 route leg 也不得借用前一条 route root 的 descendant internal call 充当自己的 root。
 
-新的 comparator/oracle 必须加入 trusted-surface diff guard。Family branch 不得修改：
+此外，boundary 判定出的唯一 changed family 必须实际出现在 selected route 的
+`requiredFamilyIds` 中。只改 family B、却用既有 family A 的自然路线与 reference 来过门会被拒绝。
+
+当前标量 `pool-id` 可直接表达 address/bytes32 参数。若某协议只把 pool identity 藏在嵌套 tuple
+中，或必须由 tuple 派生（Ekubo PoolKey 属于此类），本 gate 会 fail closed；必须先在独立的、
+协议无关 capability branch 扩展有限 witness schema，不能在 family 内写 Ekubo 特判绕过。
+
+Family branch 同样不得修改：
 
 - controller；
 - producer；
 - hunt runner；
 - semantic schema；
-- trace witness；
-- comparator。
+- trusted reference；
+- verifier。
+
+Producer 启动前会从 disposable candidate worktree 删除
+`docs/research/references/production-routes`，rollback verifier worktree 只在 producer 退出并 seal 后创建。
+这缩小了普通误读面，但不是安全沙箱：candidate 仍共享 repository Git object database，并持有可读取
+archive RPC 的 transport。
+
+纯 swap 路线是合法输入；`blockscan-hunt` 不再把“图里必须有 protocol edge”当作全局验收前提。Step 1 的 completeness 只对最终选中路线的 required family shards fail closed，其他 family 的局部不完整保持隔离。
+
+Rollback 与 candidate producer 都必须记录实际 scanner completion。任一边出现
+`budget_exceeded`、rank 不完整或 exact-refine deadline，整份 checkpoint 失败；不得把冷启动时的
+预算截断当成 baseline “没有路线”。两边还要在 producer 内对 universe、universe manifest 和
+精确 runtime JSON key→SHA 集合在 hunt 前后重算，并由 verifier receipt 与 controller 预期值
+共同绑定。
+
+`rankComplete` 是现有 receipt 的历史字段名，精确含义是：在冻结的生产配置与生产 cap 下，
+scanner 正常走到策略终点，没有 deadline、强制注入或未完成 refine；它**不表示穷举完整图的所有
+路径**。生产 DFS 的 `maxPaths` 属于被冻结的生产策略。候选仍必须自然进入该策略的 top-K 并通过
+final sim；验收结论只覆盖“生产策略输出已翻转”，不得写成“全图穷举完成”。
+
+### 9.2 证据强度限制
+
+这套隔离是 **explicit-input target-late isolation**：目标值不会通过 argv/env/reference 进入自然 producer。它不是恶意 candidate-source 隔离；candidate 作者理论上仍可把一个公开样本常量硬编码进自己的 family 实现。
+
+同样，0400 文件与 producer 前后重哈希用于捕获正常代码的输入漂移，不是不同 UID / mount
+namespace 的 hostile-code sandbox；同 UID 恶意代码临时替换后恢复文件不在当前结论范围内。
+
+因此：
+
+- 对开发前已经公开、反复使用的交易，只能称为已知样本回归证据；
+- 不得仅凭公开样本把“泛化捕获能力”写成已证明；
+- candidate SHA 冻结后再选 held-out 样本，单独看仍不足以证明泛化，因为当前 producer 仍可读 Git object 与 archive RPC；
+- 强泛化证据需要未来的 hidden reference、source filesystem isolation 与 source-block-limited RPC isolation；当前 gate 不签发这一结论；
+- `fixed` 的既有要求不变：scanner 自发枚举、mandatory final sim、production EV、合并后 exact deployed-main full final 全部通过。
 
 ## 10. 三类验收轨道
 
@@ -889,7 +922,7 @@ Adapter Replay 可以支持 Steps 3–6，但它是 route-pinned，不能证明 
 
 只有该轨道能支持确定性 route/family 的 `checkpoint_pass` 和 `final_validated`。
 
-### 10.3 Systemic Live
+### 10.3 Family 外生产变化
 
 以下改动不属于 family-local deterministic route：
 
@@ -902,7 +935,7 @@ Adapter Replay 可以支持 Steps 3–6，但它是 route-pinned，不能证明 
 - resource use；
 - live submission/inclusion。
 
-它们必须走预声明 cohort/Hermes A/B，不能借一笔六步 replay 自证。
+核心 family gate 不再给它们细分标签，只输出 `framework` 和 exact paths/reasons，并要求移到独立 branch。独立 branch 再按实际风险复用项目已有的确定性 gate 或 live cohort；不能借一笔六步 replay 自证延时/提交类结论。
 
 ## 11. 开发、合并、部署与删除分支
 
@@ -953,6 +986,15 @@ Live graph 在开发期非常有价值，可以快速判断：
 → isolated dry-run/Adapter Replay
 → target-blind checkpoint
 ```
+
+checkpoint 不是只跑 candidate。trusted controller 先在完全相同的 anchor、universe、runtime
+inputs、production caps 上运行并封存 rollback producer/verifier receipt，要求 rollback 在 step 6
+之前失败；再运行 candidate 并要求六步全过。若 rollback 已经全过，comment/no-op 或同 family
+无关 action 改动不得借成熟路线领取 checkpoint。final 对 deployed merge 重跑 candidate，同时
+再次绑定同一 rollback failure。
+当前 controller 只接受“自然输出中没有目标 route”或“已自然枚举但未 solve”的 rollback failure。
+若 baseline 已进入 solve/final sim/EV，必须先有能区分确定性 EVM/domain failure 与 RPC/infra 的
+typed witness；仅靠错误字符串一律 fail closed。
 
 查 live graph 不要求先重建 universe；若已有目标区块的 content-addressed graph/view/pin，优先复用。只有现有 graph 不能回答目标 edge 在当时是否存在、证据冲突或 hash/anchor 不可验证时，才升级重建。
 
@@ -1009,6 +1051,11 @@ checkpoint_pass
 - 所有 mechanically impacted families；
 
 重新运行完整六步。
+
+合并前必须重新获取最新 `origin/main`，对同时发生的 adapter、registry、identity/discovery、quote、
+plan/encoding 和测试改动逐文件做语义审查。不得用 `ours`、`theirs`、盲目 cherry-pick 或仅以“无文本
+冲突”为完成标准；若另一个改动修复了同一 capability，应合并不变量与测试、删除重复实现，并在
+整合后的实际 candidate SHA 上重新运行 family boundary gate、受影响 family 测试和 checkpoint。
 
 成功结果是：
 
@@ -1093,9 +1140,9 @@ final_validated
 - duplicate edge adapter owner；
 - duplicate owned ActionAdapter；
 - route-root ActionAdapter 伪装 infra；
-- family import scanner/planner/solver mutable runtime；
-- family prototype/global/process mutation；
-- opaque hook metadata 未进入 canonical hash；
+- unowned/shared runtime path；
+- 中央 registry/action index 超出薄注册 skeleton；
+- 多个 family source closure 同时变化；
 - unknown extension 回退 base quote。
 
 ### Discovery/Identity
@@ -1111,10 +1158,26 @@ final_validated
 
 ### Target-blind 六步
 
-- producer 使用不同 expected oracle 时，producer 输出字节相同；
-- comparator 只能在 producer 输出冻结后读取 winner；
+- producer argv/env 不含 winner/reference/expected oracle；
+- controller 只在 producer 退出并完成 fsync/rename seal 后调用 verifier；
+- verifier 前后 producer/reference artifact hash 不变；
+- rollback baseline 已自然通过六步时失败；
+- baseline receipt/artifact 未与 candidate 使用同一冻结输入或未被 receipt hash 绑定时失败；
 - target 不在自然 route set 时失败；
 - target 在 enumeration 但不在 natural solve set 时失败；
+- changed family 不在 selected route required-family set 时失败；
+- route-root ActionAdapter 为 ownerless infra 或其他 family owned 时失败；
+- resolved subtree 含 foreign action 或未归属 owned sibling 时失败；
+- ownerless support external call 未被 target witness 覆盖或 final bytes 不同即失败；
+- target/final trace 只有正确 target+selector、但参数或 token 方向错误时失败；
+- 两个 sibling branch 拼成的伪路线失败；
+- 后一条 route root 借用前一条 root 的 descendant call 时失败；
+- 同一个 physical trace call 或 receipt Transfer log 被两个规则或两个 route leg 重复消费时失败；
+- reverted/failed call 不参与 witness；
+- `poolId !== target` 却没有显式 `pool-id` 绑定时失败；
+- final-sim root calldata 与 solver-selected resolved subtree 不同即失败；
+- funding action 无法由 rollback/main registry 重算 holder 时失败；
+- profit token 不是闭环首尾 token 时失败；
 - pure dynamic swap route 正向；
 - mature DEX-only route 正向；
 - swap + protocol route 正向；
@@ -1131,28 +1194,31 @@ final_validated
 - semantic failure 保留 branch；
 - infrastructure failure 保留 branch 等待重跑。
 
-## 15. 当前基线阻塞项
+## 15. 当前实施状态与剩余边界
 
-在基线 `3e36b657...` 上，以下事项尚未完成：
+前置工具分支已实现：
 
-1. Production Replay 仍把 winner-derived route 用于 solve/final-sim 路线选择；
-2. trusted comparator 没有独立计算 expected route；
-3. `blockscan-hunt` 仍有整图 protocol-edge 要求；
-4. Production Replay 仍把 graph growth 当作 Step 1；
-5. family source closure 尚无模块副作用门；
-6. route-root ActionAdapter 的 owned/infra 约束还需收紧；
-7. hook/extension claim 还没有完整 canonical typed schema；
-8. family/source-local completeness 已有基础实现，但 Ekubo composite 尚无“坏 sibling 不影响健康 sibling”的回归证据；当前证据不足以宣告存在全局连坐 bug，只有新测试复现后才能升级为代码 blocker并定位函数；
-9. `searcher:adapter-family-activation` 当前因 `protocol:self-burn-native` 未预声明而失败；
-10. final semantic failure的 guarded rollback 仍需单独核验/实现为机器动作；
-11. 尚无独立 early family-boundary preflight；现有 `classifyDiff` 运行较晚且诊断维度不足；
-12. `gates.md` 中部分 capability 术语仍写作概念性的 `blockScanState` / `victimObservation`，与当前 TypeScript 强制字段 `pricingState` / `observation` 不完全一致，需要同步，验收实现以实际接口为准。
+1. 开发期 CLI 与 checkpoint 共享的核心 family boundary evaluator；
+2. preflight 在 RPC/universe/producer 之前 fail closed；
+3. candidate target-blind producer 与 rollback/main target-aware verifier；
+4. producer artifact 的 durable seal 与 verifier 前后不可变复核；
+5. natural top-K、raw calldata、required shard、final sim、还款/零库存、EV 的结果绑定；
+6. pure swap graph 不再被 protocol-edge 全局条件拒绝。
+
+仍不能声称完成的部分：
+
+1. 这条工具分支尚未合入 `origin/main`；
+2. 每个验收样本仍需在 adapter branch 之前，把人工审查的 trusted reference artifact 提交到 main；
+3. 尚未针对 Ekubo candidate 实际跑出 checkpoint/final receipt；
+4. 已公开样本只证明 explicit-input target-late 回归，不证明恶意 source isolation 或泛化；
+5. Ekubo 的 identity/state/quote/plan/canonical extension identity 仍属于后续纯 family branch；
+6. `fixed` 仍必须等 exact deployed-main full final。
 
 因此当前状态只能写：
 
 ```text
-architecture_contract = specified
-trusted_acceptance = blocked
+architecture_contract = implemented_in_prerequisite_branch
+trusted_acceptance = implemented_not_yet_executed_for_ekubo
 ekubo_family = not_started_under_this_contract
 fixed = false
 ```
@@ -1167,11 +1233,8 @@ Slice A — trusted acceptance tooling
   route-required shard semantics
 
 Slice B — family boundary hardening
-  early boundary preflight + structured escalation artifact
-  side-effect/import AST gate
-  ActionAdapter owned-root gate
-  canonical extension identity contract
-  activation baseline repair
+  early boundary preflight + exact path/reason artifact
+  standard interface / ownership / thin-registration gate
 
 Slice C — Ekubo family
   host-local variants
@@ -1194,7 +1257,7 @@ Slice F — cleanup
   branch deletion
 ```
 
-Slice A/B 必须先于 Ekubo branch 落到 main。Slice C 必须从包含 A/B 的新 `origin/main` 创建，不能把可信验收器和 feature 放在同一 branch 自证。
+Slice A/B 必须先于 Ekubo branch 落到 main。Trusted reference 也必须先存在于该 rollback/main。Slice C 必须从包含 A/B 的新 `origin/main` 创建，不能把可信验收器和 feature 放在同一 branch 自证。
 
 ## 17. 命令层级
 
@@ -1202,9 +1265,17 @@ Slice A/B 必须先于 Ekubo branch 落到 main。Slice C 必须从包含 A/B �
 
 ### 17.0 Early boundary preflight
 
-这是 §4.5 要新增的 gate，当前 main 尚无独立 CLI。实现前不得编造一个命令假装已经有门；临时只能由现有 ownership manifest、shared-surface conformance 和 checkpoint 内部 `classifyDiff` 组合诊断，且必须诚实标记为晚期/不完整覆盖。
+开发期运行：
 
-正式实现后，CLI 必须只接 baseline/candidate/ref，不接受调用者自报的 `family_local`，并用非零退出码阻止越界 family 进入 checkpoint。
+```bash
+cd analysis
+npm run --silent adapter-family-boundary-gate -- \
+  --baseline origin/main \
+  --candidate HEAD \
+  --out /tmp/adapter-family-boundary.json
+```
+
+CLI 只接 baseline/candidate/out，不接受调用者自报的 family ID 或 `family_local`。它与 checkpoint 调用同一个 evaluator；输出 `framework` 时以非零退出，并要求把 exact paths/reasons 对应的 family 外改动移到独立 branch。
 
 ### 17.1 Family 静态与状态合同
 
@@ -1244,7 +1315,7 @@ npm run --silent six-step-validation-gate -- \
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "request": "trusted-six-step-input-freeze-request",
   "sample_tx_hash": "0x<64-hex>",
   "lane": "block_scan_standing",
@@ -1267,13 +1338,14 @@ npm run --silent six-step-validation-gate -- \
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "request": "trusted-six-step-validation-request",
   "mode": "checkpoint",
   "branch": "codex/<family>",
   "rollback_commit": "<40-hex-origin-main>",
   "sample_tx_hash": "0x<64-hex>",
   "lane": "block_scan_standing",
+  "trusted_reference_path": "docs/research/references/production-routes/<sample>.json",
   "input_snapshot_path": "/tmp/<family>-input-snapshot.json"
 }
 ```
@@ -1292,13 +1364,14 @@ npm run --silent six-step-validation-gate -- \
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "request": "trusted-six-step-validation-request",
   "mode": "final",
   "branch": "codex/<family>",
   "rollback_commit": "<40-hex-pre-change-main>",
   "sample_tx_hash": "0x<64-hex>",
   "lane": "block_scan_standing",
+  "trusted_reference_path": "docs/research/references/production-routes/<sample>.json",
   "universe_path": "/absolute/path/to/deployed-pool-universe.json",
   "universe_manifest_path": "/absolute/path/to/deployed-pool-universe.manifest.json",
   "checkpoint_receipt_path": "/absolute/path/to/<family>-checkpoint-receipt.json",
@@ -1311,15 +1384,19 @@ Review artifact 必须由独立 reviewer 提交到 `review_commit`：
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "artifact": "six-step-independent-review",
   "reviewer_email": "reviewer@example.com",
   "rollback_commit": "<40-hex-pre-change-main>",
   "reviewed_candidate_commit": "<40-hex-candidate-tip>",
   "reviewed_merge_commit": "<40-hex-deployed-merge>",
+  "integration_base_commit": "<40-hex-first-parent-latest-main>",
   "diff_sha256": "<64-hex>",
+  "merge_patch_sha256": "<64-hex-first-parent-to-merge>",
+  "candidate_tree_delta_sha256": "<64-hex-candidate-to-merge>",
+  "overlap_paths": ["<sorted-semantic-overlap-path>"],
   "reviewed_at": "<ISO-8601>",
-  "evidence": "<at-least-20-characters-of-review-evidence>",
+  "evidence": "<per-overlap semantic disposition and retained regressions>",
   "verdict": "pass"
 }
 ```
@@ -1337,7 +1414,7 @@ npm run --silent six-step-validation-gate -- \
 
 `--finalize-cleanup` 只能与 `--phase final` 同时使用。
 
-> 当前基线仍受 §15 的 trusted-acceptance P0 阻塞。上述命令存在不等于它们已经能对 Ekubo 签发可信 `fixed`；必须先完成 Slice A/B。
+> 公开已知样本仍受 §9.2 的证据强度限制。命令存在不等于某个 Ekubo family 已经 `fixed`；必须实际产出 checkpoint 和 exact deployed-main final receipt。
 
 ## 18. Definition of Done
 
@@ -1352,7 +1429,7 @@ npm run --silent six-step-validation-gate -- \
 - [ ] 无私有 scheduler/cache/enumerator/solver/final sim；
 - [ ] source closure 完整；
 - [ ] early family-boundary gate 分类为 `family_local`；
-- [ ] family-side-effect 门通过。
+- [ ] 普通 code review 未发现 family 内私建中央调度/枚举/solver 或全局副作用；
 
 ### 身份与状态
 
@@ -1392,4 +1469,4 @@ npm run --silent six-step-validation-gate -- \
 5. Hook 权限只覆盖 identity、state、quote 和 typed execution intent；不能触碰中央 funnel。
 6. 开发期可以基础设施轻量，但 checkpoint 仍是完整六步。
 7. 合并后必须对 exact deployed main 运行 full final；只有 `final_validated` 后才能删除 branch。
-8. 在当前 target-blind 和 family-side-effect 缺陷修复前，不得用现有六步绿灯宣布 Ekubo `fixed`。
+8. 当前只证明 explicit-input target-late 回归；即使 SHA 后再选 held-out，也不能单独证明泛化，强结论还需 hidden reference + source/RPC isolation。

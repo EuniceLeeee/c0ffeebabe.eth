@@ -88,6 +88,9 @@ import {
   anchorHistoricalSenderNoncePrefix,
   type HistoricalSenderNonceAnchorResult,
 } from "./historical-replay-anchor.js";
+import {
+  resolvedRouteExecutionSurfaces,
+} from "./route-execution-witness.js";
 
 interface ParentBlockAnchor {
   kind: "parent-block";
@@ -125,20 +128,25 @@ interface RoutePoolIdentity {
   logicalInstanceId?: string;
 }
 
-interface AdapterReplayLeg {
+export interface ReferenceWitnessLeg {
   seq: number;
-  pool: RoutePoolIdentity;
   /** Trace-proven edge alias; mandatory so another ABI cannot be selected. */
   edgeAdapterId: string;
   tokenIn: string;
   tokenOut: string;
+  poolId?: string;
   referenceWitness: ReferenceWitness;
 }
 
-type ReferenceWitnessRef =
+interface AdapterReplayLeg extends ReferenceWitnessLeg {
+  pool: RoutePoolIdentity;
+}
+
+export type ReferenceWitnessRef =
   | "execution-target"
   | "token-in"
   | "token-out"
+  | "pool-id"
   | "zero"
   | `call:${string}:from`
   | `call:${string}:arg:${number}`;
@@ -171,7 +179,7 @@ interface ReferenceTransferRule {
     | { readonly op: "eq"; readonly ref: ReferenceWitnessRef };
 }
 
-interface ReferenceWitness {
+export interface ReferenceWitness {
   readonly calls: readonly [ReferenceCallRule, ...ReferenceCallRule[]];
   readonly receiptTransfers: readonly ReferenceTransferRule[];
 }
@@ -566,12 +574,14 @@ function parseLeg(raw: unknown, field: string): AdapterReplayLeg {
     ["seq", "pool", "edgeAdapterId", "tokenIn", "tokenOut", "referenceWitness"],
     field,
   );
+  const pool = parsePool(value.pool, `${field}.pool`);
   return {
     seq: positiveInt(value.seq, `${field}.seq`),
-    pool: parsePool(value.pool, `${field}.pool`),
+    pool,
     edgeAdapterId: nonEmptyString(value.edgeAdapterId, `${field}.edgeAdapterId`),
     tokenIn: address(value.tokenIn, `${field}.tokenIn`),
     tokenOut: address(value.tokenOut, `${field}.tokenOut`),
+    ...(pool.poolId ? { poolId: pool.poolId } : {}),
     referenceWitness: parseReferenceWitness(
       value.referenceWitness,
       `${field}.referenceWitness`,
@@ -579,7 +589,10 @@ function parseLeg(raw: unknown, field: string): AdapterReplayLeg {
   };
 }
 
-function parseReferenceWitness(raw: unknown, field: string): ReferenceWitness {
+export function parseReferenceWitness(
+  raw: unknown,
+  field: string,
+): ReferenceWitness {
   const value = record(raw, field);
   exactKeys(value, ["calls", "receiptTransfers"], field, ["calls"]);
   if (!Array.isArray(value.calls) || value.calls.length === 0 || value.calls.length > 8) {
@@ -740,6 +753,7 @@ function referenceWitnessRef(value: unknown, field: string): ReferenceWitnessRef
     ref === "execution-target" ||
     ref === "token-in" ||
     ref === "token-out" ||
+    ref === "pool-id" ||
     ref === "zero" ||
     /^call:[a-z0-9][a-z0-9-]{0,63}:from$/.test(ref) ||
     /^call:[a-z0-9][a-z0-9-]{0,63}:arg:[0-9]+$/.test(ref)
@@ -941,16 +955,19 @@ async function validateChainAnchor(
   return winner;
 }
 
-interface TraceCall {
+export interface TraceCall {
   readonly from?: string;
   readonly to?: string;
   readonly input?: string;
   readonly value?: string;
   readonly error?: string;
+  readonly success?: boolean;
+  readonly failed?: boolean;
+  readonly revertReason?: string;
   readonly calls?: readonly TraceCall[];
 }
 
-interface FlattenedTraceCall {
+export interface FlattenedTraceCall {
   readonly target: string;
   readonly selector: string;
   readonly input: string;
@@ -962,6 +979,13 @@ interface FlattenedTraceCall {
 interface ReferenceTraceSemanticEvidence {
   readonly kind: string;
   readonly [key: string]: unknown;
+}
+
+export interface MatchedReferenceWitnessCall {
+  readonly id: string;
+  readonly target: string;
+  readonly selector: string;
+  readonly inputSha256: string;
 }
 
 interface ReferenceObservedImpact {
@@ -1017,6 +1041,7 @@ async function validateReferenceRoute(
   const calls: FlattenedTraceCall[] = [];
   flattenSuccessfulCalls(trace, calls);
   const matched: ReferenceTraceSemanticEvidence[] = [];
+  const usedReceiptLogIndexes = new Set<number>();
   let cursor = 0;
   for (let legIndex = 0; legIndex < fixture.route.length; legIndex++) {
     const leg = fixture.route[legIndex];
@@ -1032,6 +1057,7 @@ async function validateReferenceRoute(
         expectedEncodedSelector: executionSurfaces[legIndex].selector,
         requireTokenCoverage:
           PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyId).kind !== "swap",
+        usedReceiptLogIndexes,
       });
     } catch (error) {
       throw new BlockScanFamilyAttributedError(
@@ -1044,23 +1070,40 @@ async function validateReferenceRoute(
         ),
       );
     }
+    for (const logIndex of result.matchedReceiptLogIndexes) {
+      usedReceiptLogIndexes.add(logIndex);
+    }
     cursor = result.nextCursor;
     matched.push(result.evidence);
   }
   return sha256(JSON.stringify(matched));
 }
 
-function matchReferenceWitness(input: {
+export function matchReferenceWitness(input: {
   readonly calls: readonly FlattenedTraceCall[];
-  readonly receiptLogs: readonly ethers.Log[];
+  readonly receiptLogs: readonly {
+    readonly address: string;
+    readonly topics: readonly string[];
+    readonly data: string;
+  }[];
   readonly cursor: number;
-  readonly leg: AdapterReplayLeg;
+  readonly leg: ReferenceWitnessLeg;
   readonly executionTarget: string;
   readonly expectedEncodedSelector: string;
   readonly requireTokenCoverage: boolean;
-}): { readonly nextCursor: number; readonly evidence: ReferenceTraceSemanticEvidence } {
+  readonly requireActionOwnership?: boolean;
+  readonly usedReceiptLogIndexes?: ReadonlySet<number>;
+}): {
+  readonly nextCursor: number;
+  readonly evidence: ReferenceTraceSemanticEvidence;
+  readonly rootInputSha256: string;
+  readonly matchedCalls: readonly MatchedReferenceWitnessCall[];
+  readonly matchedReceiptLogIndexes: readonly number[];
+} {
   const matched = new Map<string, MatchedReferenceCall>();
   const callEvidence: Array<Record<string, unknown>> = [];
+  const matchedCalls: MatchedReferenceWitnessCall[] = [];
+  const usedCallIndexes = new Set<number>();
   let rootIndex = -1;
   let topLevelCursor = input.cursor;
   for (const rule of input.leg.referenceWitness.calls) {
@@ -1072,6 +1115,7 @@ function matchReferenceWitness(input: {
       );
     let selected: MatchedReferenceCall | null = null;
     for (const index of candidateIndexes) {
+      if (usedCallIndexes.has(index)) continue;
       const candidate = matchReferenceCallRule(
         rule,
         input.calls[index],
@@ -1091,22 +1135,31 @@ function matchReferenceWitness(input: {
       );
     }
     if (rule.id === "root") {
-      const action = getActionAdapter(input.leg.edgeAdapterId);
       if (selected.call.selector !== input.expectedEncodedSelector) {
         throw new Error(
           `reference root selector ${selected.call.selector} differs from encoded ` +
             `${input.leg.edgeAdapterId} selector ${input.expectedEncodedSelector}`,
         );
       }
-      if (!action.matchTrace(selected.call.target, selected.call.selector)) {
-        throw new Error(
-          `reference root selector is not owned by ${input.leg.edgeAdapterId}`,
-        );
+      if (input.requireActionOwnership !== false) {
+        const action = getActionAdapter(input.leg.edgeAdapterId);
+        if (!action.matchTrace(selected.call.target, selected.call.selector)) {
+          throw new Error(
+            `reference root selector is not owned by ${input.leg.edgeAdapterId}`,
+          );
+        }
       }
       rootIndex = selected.index;
     }
+    usedCallIndexes.add(selected.index);
     if (!rule.within) topLevelCursor = selected.index + 1;
     matched.set(rule.id, selected);
+    matchedCalls.push(Object.freeze({
+      id: rule.id,
+      target: selected.call.target,
+      selector: selected.call.selector,
+      inputSha256: sha256(selected.call.input),
+    }));
     callEvidence.push({
       id: rule.id,
       target: selected.call.target,
@@ -1118,6 +1171,16 @@ function matchReferenceWitness(input: {
     });
   }
   if (rootIndex < 0) throw new Error(`reference leg ${input.leg.seq} lacks root witness`);
+  const rootDepth = input.calls[rootIndex].depth;
+  let rootSubtreeEnd = rootIndex + 1;
+  if (rootDepth !== undefined) {
+    while (
+      rootSubtreeEnd < input.calls.length &&
+      (input.calls[rootSubtreeEnd].depth ?? 0) > rootDepth
+    ) {
+      rootSubtreeEnd++;
+    }
+  }
 
   const tokenBindings = new Set<"token-in" | "token-out">();
   for (const entry of matched.values()) {
@@ -1137,19 +1200,27 @@ function matchReferenceWitness(input: {
   }
 
   const transferEvidence: Array<Record<string, unknown>> = [];
+  const usedReceiptLogIndexes = new Set(
+    input.usedReceiptLogIndexes ?? [],
+  );
+  const matchedReceiptLogIndexes: number[] = [];
   for (const rule of input.leg.referenceWitness.receiptTransfers) {
-    const evidence = matchReferenceTransfer(
+    const matchedTransfer = matchReferenceTransfer(
       rule,
       input.receiptLogs,
       input.leg,
       input.executionTarget,
       matched,
+      usedReceiptLogIndexes,
     );
-    if (!evidence) {
+    if (!matchedTransfer) {
       throw new Error(
         `reference receipt transfer witness failed for leg ${input.leg.seq}`,
       );
     }
+    usedReceiptLogIndexes.add(matchedTransfer.index);
+    matchedReceiptLogIndexes.push(matchedTransfer.index);
+    const evidence = matchedTransfer.evidence;
     markReferenceTokenBinding(tokenBindings, evidence.token, input.leg);
     transferEvidence.push(evidence);
   }
@@ -1158,11 +1229,18 @@ function matchReferenceWitness(input: {
     (!tokenBindings.has("token-in") || !tokenBindings.has("token-out"))
   ) {
     throw new Error(
-      `reference witness for non-swap leg ${input.leg.seq} does not bind both tokens`,
+      `reference witness for leg ${input.leg.seq} does not bind both tokens`,
     );
   }
   return {
-    nextCursor: topLevelCursor,
+    // A later logical route leg cannot borrow a descendant of this leg's
+    // execution root. Internal protocol calls belong to this leg's witness,
+    // not to a second graph edge.
+    nextCursor: Math.max(topLevelCursor, rootSubtreeEnd),
+    rootInputSha256: sha256(input.calls[rootIndex].input),
+    matchedCalls: Object.freeze(matchedCalls),
+    matchedReceiptLogIndexes:
+      Object.freeze(matchedReceiptLogIndexes),
     evidence: {
       kind: "declarative-reference-witness",
       seq: input.leg.seq,
@@ -1178,7 +1256,7 @@ function matchReferenceCallRule(
   rule: ReferenceCallRule,
   call: FlattenedTraceCall,
   index: number,
-  leg: AdapterReplayLeg,
+  leg: ReferenceWitnessLeg,
   executionTarget: string,
   matched: ReadonlyMap<string, MatchedReferenceCall>,
 ): MatchedReferenceCall | null {
@@ -1246,11 +1324,19 @@ function matchReferenceCallRule(
 
 function matchReferenceTransfer(
   rule: ReferenceTransferRule,
-  logs: readonly ethers.Log[],
-  leg: AdapterReplayLeg,
+  logs: readonly {
+    readonly address: string;
+    readonly topics: readonly string[];
+    readonly data: string;
+  }[],
+  leg: ReferenceWitnessLeg,
   executionTarget: string,
   matched: ReadonlyMap<string, MatchedReferenceCall>,
-): Record<string, string> | null {
+  usedLogIndexes: ReadonlySet<number>,
+): {
+  readonly index: number;
+  readonly evidence: Record<string, string>;
+} | null {
   const token = String(resolveReferenceWitnessRef(
     rule.token,
     leg,
@@ -1271,7 +1357,9 @@ function matchReferenceTransfer(
       executionTarget,
       matched,
     ));
-  for (const log of logs) {
+  for (let index = 0; index < logs.length; index++) {
+    if (usedLogIndexes.has(index)) continue;
+    const log = logs[index];
     if (
       log.address.toLowerCase() !== token ||
       log.topics.length !== 3 ||
@@ -1288,7 +1376,10 @@ function matchReferenceTransfer(
       (expectedFrom === null || from === expectedFrom) &&
       (expectedTo === null || to === expectedTo)
     ) {
-      return { token, from, to, amount: amount.toString() };
+      return {
+        index,
+        evidence: { token, from, to, amount: amount.toString() },
+      };
     }
   }
   return null;
@@ -1296,13 +1387,17 @@ function matchReferenceTransfer(
 
 function resolveReferenceWitnessRef(
   ref: ReferenceWitnessRef,
-  leg: AdapterReplayLeg,
+  leg: ReferenceWitnessLeg,
   executionTarget: string,
   matched: ReadonlyMap<string, MatchedReferenceCall>,
 ): string | bigint {
   if (ref === "execution-target") return executionTarget.toLowerCase();
   if (ref === "token-in") return leg.tokenIn.toLowerCase();
   if (ref === "token-out") return leg.tokenOut.toLowerCase();
+  if (ref === "pool-id") {
+    if (!leg.poolId) throw new Error("reference leg has no pool-id binding");
+    return leg.poolId.toLowerCase();
+  }
   if (ref === "zero") return ethers.ZeroAddress.toLowerCase();
   const from = ref.match(/^call:([^:]+):from$/);
   if (from) {
@@ -1336,7 +1431,7 @@ function referenceBigInt(value: unknown): bigint {
 function markReferenceTokenBinding(
   bindings: Set<"token-in" | "token-out">,
   value: unknown,
-  leg: AdapterReplayLeg,
+  leg: ReferenceWitnessLeg,
 ): void {
   const normalized = String(value).toLowerCase();
   if (normalized === leg.tokenIn.toLowerCase()) bindings.add("token-in");
@@ -1666,12 +1761,19 @@ function matchReferenceSwapImpacts(
   });
 }
 
-function flattenSuccessfulCalls(
+export function flattenSuccessfulCalls(
   call: TraceCall,
   output: FlattenedTraceCall[],
   depth = 0,
 ): void {
-  if (call.error) return;
+  if (
+    call.error ||
+    call.success === false ||
+    call.failed === true ||
+    (typeof call.revertReason === "string" && call.revertReason.length > 0)
+  ) {
+    return;
+  }
   if (
     typeof call.to === "string" &&
     typeof call.input === "string" &&
@@ -2633,135 +2735,27 @@ function referenceExecutionSurfaces(
   if (edges.length !== fixture.route.length) {
     throw new Error(
       `final plan witness received ${edges.length} edges for ` +
-        `${fixture.route.length} fixture legs`,
+      `${fixture.route.length} fixture legs`,
     );
   }
-  const planNodes: ResolvedPlan["root"][] = [];
-  const visit = (node: ResolvedPlan["root"]): void => {
-    planNodes.push(node);
-    node.children.forEach(visit);
-  };
-  visit(root);
-  const routeAdapterIds = new Set(
-    fixture.route.map((leg) => leg.edgeAdapterId),
-  );
-  const executionNodes = planNodes.filter((node) =>
-    routeAdapterIds.has(node.adapterId)
-  );
-  if (executionNodes.length !== fixture.route.length) {
-    throw new Error(
-      `final plan has ${executionNodes.length} route execution nodes for ` +
-        `${fixture.route.length} fixture legs`,
-    );
-  }
-  const surfaces: ReferenceExecutionSurface[] = [];
   for (let index = 0; index < fixture.route.length; index++) {
     const leg = fixture.route[index];
-    const familyId = familyForLeg(leg, fixture.id);
-    try {
-      const node = executionNodes[index];
-      const edge = edges[index];
-      const family =
-        PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyId);
-      const planIdentity = resolvedPlanExecutionIdentity(family, node);
-      if (
-        node.adapterId !== leg.edgeAdapterId ||
-        !planExecutionIdentityMatchesEdge(planIdentity, edge) ||
-        node.tokenIn.toLowerCase() !== leg.tokenIn.toLowerCase()
-      ) {
-        throw new AdapterReplayDomainFailure(
-          "final_plan_route_order_mismatch",
-          `route leg ${leg.seq} final plan execution identity is out of order`,
-        );
-      }
-      // A logical route leg may compile into more than one physical action.
-      // For example self-burn-native first transfers/burns the input token and
-      // pays native ETH, then a sibling WETH action realizes the logical
-      // tokenOut. The family-owned action node therefore cannot be required to
-      // repeat the logical edge tokenOut. Ordered adapter/target/tokenIn binds
-      // the route action; the full final calldata, independent simulation and
-      // conservation checks bind every helper action that realizes tokenOut.
-      // Compile this exact resolved subtree so selector/target witness checks
-      // bind solver-selected amounts and real child bytes, not a probe-time
-      // fragment encoded with empty children.
-      const encoded = compilePlan(node, DEFAULT_SEARCHER_EXECUTOR);
-      const call = firstEncodedExternalCall(encoded);
-      if (call.target !== node.target.toLowerCase()) {
-        throw new AdapterReplayDomainFailure(
-          "final_plan_encoded_target_mismatch",
-          `route leg ${leg.seq} encoded target ${call.target} != plan target ${node.target}`,
-        );
-      }
-      surfaces.push({
-        adapterId: leg.edgeAdapterId,
-        target: call.target,
-        selector: call.selector,
-      });
-    } catch (error) {
-      if (error instanceof BlockScanFamilyAttributedError) throw error;
-      throw new BlockScanFamilyAttributedError(
-        familyId,
-        "final execution witness",
-        error,
+    const edge = edges[index];
+    if (
+      edge.adapterId !== leg.edgeAdapterId ||
+      edge.tokenIn.toLowerCase() !== leg.tokenIn.toLowerCase() ||
+      edge.tokenOut.toLowerCase() !== leg.tokenOut.toLowerCase()
+    ) {
+      throw new Error(
+        `route leg ${leg.seq} final plan execution identity is out of order`,
       );
     }
   }
-  return surfaces;
-}
-
-function firstEncodedExternalCall(
-  encoded: Uint8Array,
-): { readonly target: string; readonly selector: string } {
-  let cursor = 0;
-  const requireBytes = (count: number): void => {
-    if (cursor + count > encoded.length) {
-      throw new Error("encoded action is truncated");
-    }
-  };
-  const uint24At = (offset: number): number =>
-    encoded[offset] * 0x1_0000 + encoded[offset + 1] * 0x100 + encoded[offset + 2];
-  while (cursor < encoded.length) {
-    const opcode = encoded[cursor];
-    if (opcode === 0x00 || opcode === 0x01) {
-      const headerLength = opcode === 0x00 ? 24 : 36;
-      requireBytes(headerLength);
-      const lengthOffset = cursor + (opcode === 0x00 ? 21 : 33);
-      const payloadOffset = cursor + headerLength;
-      const payloadLength = uint24At(lengthOffset);
-      if (payloadLength < 4 || payloadOffset + payloadLength > encoded.length) {
-        throw new Error("encoded external call lacks complete calldata");
-      }
-      return {
-        target: ethers.hexlify(encoded.slice(cursor + 1, cursor + 21)).toLowerCase(),
-        selector: ethers.hexlify(
-          encoded.slice(payloadOffset, payloadOffset + 4),
-        ).toLowerCase(),
-      };
-    }
-    if (opcode === 0x02 || opcode === 0x06) {
-      requireBytes(4);
-      cursor += 4;
-      continue;
-    }
-    if (opcode === 0x03) {
-      requireBytes(4);
-      const payloadLength = uint24At(cursor + 1);
-      requireBytes(4 + payloadLength);
-      cursor += 4 + payloadLength;
-      continue;
-    }
-    if (opcode === 0x04 || opcode === 0x05 || opcode === 0x07) {
-      cursor += 1;
-      continue;
-    }
-    if (opcode === 0x08) {
-      requireBytes(53);
-      cursor += 53;
-      continue;
-    }
-    throw new Error(`encoded action has unknown BotVM opcode 0x${opcode.toString(16)}`);
-  }
-  throw new Error("encoded action contains no external call");
+  return resolvedRouteExecutionSurfaces(edges, root).map((surface) => ({
+    adapterId: surface.adapterId,
+    target: surface.target,
+    selector: surface.selector,
+  }));
 }
 
 function materializeReplayPool(
@@ -3849,7 +3843,19 @@ async function exec(args: string[], cwd: string): Promise<void> {
   });
 }
 
-main().catch((error) => {
-  console.error(`adapter-family-replay FAIL: ${redactError(error, process.env.SEARCHER_LIVE_RPC_URL ?? process.env.MAINNET_RPC_URL ?? "")}`);
-  process.exit(1);
-});
+if (
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  main().catch((error) => {
+    console.error(
+      `adapter-family-replay FAIL: ${redactError(
+        error,
+        process.env.SEARCHER_LIVE_RPC_URL ??
+          process.env.MAINNET_RPC_URL ??
+          "",
+      )}`,
+    );
+    process.exit(1);
+  });
+}

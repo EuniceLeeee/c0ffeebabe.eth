@@ -142,27 +142,26 @@ test("landed witness binds the solver-selected resolved plan and final calldata"
     runner.slice(witness, reference),
     /fixture,\s*edges,\s*solved\.root/,
   );
-  const helperStart = runner.indexOf("function referenceExecutionSurfaces");
-  const helperEnd = runner.indexOf("\nfunction firstEncodedExternalCall", helperStart);
-  const helper = runner.slice(helperStart, helperEnd);
+  const helper = readFileSync(
+    new URL(
+      "../../../listener/src/searcher/test/route-execution-witness.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   assert.match(helper, /compilePlan\(node, DEFAULT_SEARCHER_EXECUTOR\)/);
-  assert.match(helper, /executionNodes\.length !== fixture\.route\.length/);
   assert.match(
     helper,
     /resolvedPlanExecutionIdentity\(family, node\)/,
   );
   assert.match(
     helper,
-    /!planExecutionIdentityMatchesEdge\(planIdentity, edge\)/,
+    /planExecutionIdentityMatchesEdge\(/,
   );
-  assert.doesNotMatch(
-    helper,
-    /resolvedPlanExecutionIdentity\([^,]+,\s*edge/,
-  );
-  assert.doesNotMatch(
-    helper,
-    /node\.tokenOut\.toLowerCase\(\) !== leg\.tokenOut\.toLowerCase\(\)/,
-  );
+  assert.match(helper, /rootActionAdapterId: node\.adapterId/);
+  assert.match(helper, /subtreeActionAdapterIds:/);
+  assert.match(helper, /resolved subtree uses foreign action/);
+  assert.match(helper, /ambiguous non-route action/);
   assert.doesNotMatch(helper, /buildPlanFragment|new Uint8Array\(\)/);
   assert.match(
     runner.slice(finalSim, finalSim + 600),

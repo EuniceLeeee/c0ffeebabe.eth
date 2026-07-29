@@ -30,6 +30,18 @@ export interface SixStepStateAnchor {
   effective_state_hash: string;
 }
 
+export interface BaselineRouteOutcome {
+  baseline_commit: string;
+  target_route_sha256: string;
+  highest_passed_step: number;
+  first_unpassed_step: number;
+  raw_producer_receipt_sha256: string;
+  target_blind_producer_artifact_sha256: string;
+  natural_route_set_sha256: string;
+  materialized_graph_sha256: string;
+  failure_sha256: string;
+}
+
 interface CommonEvidence {
   schema_version: 1; gate: typeof SIX_STEP_VALIDATION_LIFECYCLE_GATE;
   mode: SixStepValidationMode; status: "checkpoint_pass" | "final_validated";
@@ -39,6 +51,7 @@ interface CommonEvidence {
     id: "trusted-production-replay-controller";
     controller_sha256: string;
     raw_producer_receipt_sha256: string;
+    baseline_raw_producer_receipt_sha256: string;
   };
   state_anchor: SixStepStateAnchor; state_anchor_sha256: string;
   frozen_inputs: Record<string, unknown>;
@@ -49,6 +62,7 @@ interface CommonEvidence {
   other_family_source_set_baseline_sha256: string;
   other_family_source_set_challenger_sha256: string; exact_production_caps: boolean;
   runner_overrides: Readonly<Record<string, SemanticJson>>;
+  baseline_route_outcome: BaselineRouteOutcome;
   production_route_stage: readonly SemanticSixStepEvidence[];
 }
 
@@ -68,7 +82,10 @@ export interface SixStepFinalEvidence extends CommonEvidence {
   review: {
     reviewer_email: string; review_commit: string; artifact_path: string;
     rollback_commit: string; reviewed_candidate_commit: string;
-    reviewed_merge_commit: string; diff_sha256: string; reviewed_at: string;
+    reviewed_merge_commit: string; integration_base_commit: string;
+    diff_sha256: string; merge_patch_sha256: string;
+    candidate_tree_delta_sha256: string; overlap_paths: readonly string[];
+    reviewed_at: string;
     evidence: string; verdict: "pass"; artifact_sha256: string;
   };
   checkpoint_receipt_sha256: string; deployment_receipt_sha256: string;
@@ -122,7 +139,8 @@ export function validateSixStepValidationLifecycle(
     require(errors,
       controller.id === "trusted-production-replay-controller" &&
       sha(controller.controller_sha256) &&
-      sha(controller.raw_producer_receipt_sha256),
+      sha(controller.raw_producer_receipt_sha256) &&
+      sha(controller.baseline_raw_producer_receipt_sha256),
       "controller identity/hashes are invalid");
   }
   validateAnchor(value, errors);
@@ -137,6 +155,7 @@ export function validateSixStepValidationLifecycle(
   require(errors, value.exact_production_caps === true,
     "exact_production_caps must be true");
   validateRunnerOverrides(value.runner_overrides, errors);
+  validateBaselineOutcome(value, errors);
   validateStages(value, errors);
   if (checkpoint) validateCheckpoint(value, errors);
   else validateFinal(value, git, errors);
@@ -203,6 +222,9 @@ function validateFrozenInputs(
     "universe_sha256", "universe_manifest_sha256", "config_sha256",
     "graph_sha256", "family_manifest_sha256", "graph_builder_sha256",
     "graph_snapshot_source_sha256", "producer_sha256",
+    "target_blind_producer_artifact_sha256",
+    "baseline_target_blind_producer_artifact_sha256",
+    "trusted_reference_artifact_sha256",
     "pending_evidence_producer_sha256",
     "pending_evidence_artifact_sha256",
     "pending_evidence_required_sha256", "comparator_sha256",
@@ -223,6 +245,51 @@ function validateFrozenInputs(
   }
 }
 
+function validateBaselineOutcome(
+  value: Record<string, unknown>,
+  errors: string[],
+): void {
+  const baseline = record(value.baseline_route_outcome)
+    ? value.baseline_route_outcome
+    : null;
+  require(errors, Boolean(baseline),
+    "baseline_route_outcome must be an object");
+  if (!baseline) return;
+  const controller = record(value.controller) ? value.controller : null;
+  const frozen = record(value.frozen_inputs) ? value.frozen_inputs : null;
+  require(errors, baseline.baseline_commit === value.rollback_commit,
+    "baseline outcome does not bind rollback_commit");
+  require(errors, baseline.target_route_sha256 === value.target_route_sha256,
+    "baseline outcome does not bind target route");
+  require(errors,
+    Number.isSafeInteger(baseline.highest_passed_step) &&
+      [0, 2].includes(Number(baseline.highest_passed_step)),
+    "baseline must be absent or enumerated-unsolved before candidate success");
+  require(errors,
+    Number.isSafeInteger(baseline.first_unpassed_step) &&
+      Number(baseline.first_unpassed_step) ===
+        Number(baseline.highest_passed_step) + 1,
+    "baseline first_unpassed_step is invalid");
+  for (const field of [
+    "raw_producer_receipt_sha256",
+    "target_blind_producer_artifact_sha256",
+    "natural_route_set_sha256",
+    "materialized_graph_sha256",
+    "failure_sha256",
+  ]) {
+    require(errors, sha(baseline[field]),
+      `baseline ${field} must be a SHA-256 digest`);
+  }
+  require(errors,
+    controller?.baseline_raw_producer_receipt_sha256 ===
+      baseline.raw_producer_receipt_sha256,
+    "controller does not bind baseline producer receipt");
+  require(errors,
+    frozen?.baseline_target_blind_producer_artifact_sha256 ===
+      baseline.target_blind_producer_artifact_sha256,
+    "frozen inputs do not bind baseline producer artifact");
+}
+
 function validateFamilyIsolation(
   value: Record<string, unknown>,
   errors: string[],
@@ -230,6 +297,9 @@ function validateFamilyIsolation(
   const impacted = familySet(value.impacted_family_ids, "impacted_family_ids", errors);
   const required = familySet(value.required_family_ids, "required_family_ids", errors);
   const complete = familySet(value.complete_family_ids, "complete_family_ids", errors);
+  require(errors, impacted.size === 1 &&
+    [...impacted].every((id) => required.has(id)),
+  "impacted family is not exercised by the required route");
   require(errors, [...required].every((id) => complete.has(id)),
     "required families are not complete");
   require(errors, [...impacted].every((id) => complete.has(id)) ||
@@ -363,6 +433,27 @@ function validateReview(
     review.reviewed_candidate_commit === value.candidate_commit &&
     review.reviewed_merge_commit === value.merge_commit,
     "review does not bind rollback/candidate/merge");
+  require(errors, typeof review.integration_base_commit === "string" &&
+    SHA40.test(review.integration_base_commit),
+    "review integration_base_commit is invalid");
+  for (const field of [
+    "diff_sha256",
+    "merge_patch_sha256",
+    "candidate_tree_delta_sha256",
+  ]) {
+    require(errors, sha(review[field]),
+      `review ${field} must be a SHA-256 digest`);
+  }
+  require(errors,
+    Array.isArray(review.overlap_paths) &&
+      review.overlap_paths.every((path) =>
+        typeof path === "string" &&
+        path.length > 0 &&
+        !path.includes("..")) &&
+      new Set(review.overlap_paths).size === review.overlap_paths.length &&
+      stableJson(review.overlap_paths) ===
+        stableJson([...review.overlap_paths].sort()),
+    "review overlap_paths must be an exact sorted path set");
   require(errors, review.review_commit ===
     git?.resolveRef("refs/remotes/origin/main"),
     "review_commit must equal origin/main");

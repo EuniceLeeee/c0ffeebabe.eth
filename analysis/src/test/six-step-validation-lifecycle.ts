@@ -29,6 +29,7 @@ const HASH_B = `0x${SHA_B}`;
 const TX_A = `0x${"1".repeat(64)}`;
 const CANDIDATE = "1".repeat(40);
 const BRANCH_TIP = CANDIDATE;
+const INTEGRATION_BASE = "2".repeat(40);
 const MERGE = "3".repeat(40);
 const ROLLBACK = "4".repeat(40);
 const ORIGIN_MAIN = "5".repeat(40);
@@ -357,6 +358,7 @@ function checkpoint(): Record<string, unknown> {
       id: "trusted-production-replay-controller",
       controller_sha256: SHA_A,
       raw_producer_receipt_sha256: SHA_B,
+      baseline_raw_producer_receipt_sha256: SHA_A,
     },
     state_anchor: stateAnchor,
     state_anchor_sha256: stateAnchorSha256,
@@ -369,6 +371,9 @@ function checkpoint(): Record<string, unknown> {
       graph_builder_sha256: SHA_A,
       graph_snapshot_source_sha256: SHA_A,
       producer_sha256: SHA_A,
+      target_blind_producer_artifact_sha256: SHA_A,
+      baseline_target_blind_producer_artifact_sha256: SHA_B,
+      trusted_reference_artifact_sha256: SHA_B,
       pending_evidence_producer_sha256: SHA_B,
       pending_evidence_artifact_sha256: SHA_A,
       pending_evidence_required_sha256: SHA_B,
@@ -390,6 +395,17 @@ function checkpoint(): Record<string, unknown> {
     other_family_source_set_challenger_sha256: SHA_B,
     exact_production_caps: true,
     runner_overrides: { wall_clock_timeout_ms: 600_000 },
+    baseline_route_outcome: {
+      baseline_commit: ROLLBACK,
+      target_route_sha256: TARGET_ROUTE,
+      highest_passed_step: 2,
+      first_unpassed_step: 3,
+      raw_producer_receipt_sha256: SHA_A,
+      target_blind_producer_artifact_sha256: SHA_B,
+      natural_route_set_sha256: SHA_A,
+      materialized_graph_sha256: SHA_B,
+      failure_sha256: SHA_A,
+    },
     production_route_stage: [1, 2, 3, 4, 5, 6].map(
       (stepNumber) =>
         stage(
@@ -434,7 +450,13 @@ function finalEvidence(
       rollback_commit: ROLLBACK,
       reviewed_candidate_commit: CANDIDATE,
       reviewed_merge_commit: MERGE,
+      integration_base_commit: INTEGRATION_BASE,
       diff_sha256: SHA_A,
+      merge_patch_sha256: SHA_A,
+      candidate_tree_delta_sha256: SHA_B,
+      overlap_paths: [
+        "listener/src/searcher/venues/swaps/receipt-deposit.ts",
+      ],
       reviewed_at: "2026-07-28T01:02:06.000Z",
       evidence: "Independent review checked the exact candidate patch.",
       verdict: "pass",
@@ -479,6 +501,52 @@ test("checkpoint accepts full production six-step evidence with only a timeout o
   assert.deepEqual(
     validateSixStepValidationLifecycle(checkpoint(), gitInspector()),
     [],
+  );
+});
+
+test("checkpoint requires a bound rollback failure before candidate success", () => {
+  const noBaseline = checkpoint();
+  delete noBaseline.baseline_route_outcome;
+  noBaseline.checkpoint_evidence_sha256 =
+    sixStepLifecycleEnvelopeSha256(noBaseline);
+  assert.match(
+    validateSixStepValidationLifecycle(
+      noBaseline,
+      gitInspector(),
+    ).join("\n"),
+    /baseline_route_outcome must be an object/,
+  );
+
+  const alreadyPassing = checkpoint();
+  Object.assign(
+    alreadyPassing.baseline_route_outcome as Record<string, unknown>,
+    {
+      highest_passed_step: 6,
+      first_unpassed_step: 7,
+    },
+  );
+  alreadyPassing.checkpoint_evidence_sha256 =
+    sixStepLifecycleEnvelopeSha256(alreadyPassing);
+  assert.match(
+    validateSixStepValidationLifecycle(
+      alreadyPassing,
+      gitInspector(),
+    ).join("\n"),
+    /baseline must be absent or enumerated-unsolved/,
+  );
+
+  const unbound = checkpoint();
+  (
+    unbound.baseline_route_outcome as Record<string, unknown>
+  ).raw_producer_receipt_sha256 = SHA_B;
+  unbound.checkpoint_evidence_sha256 =
+    sixStepLifecycleEnvelopeSha256(unbound);
+  assert.match(
+    validateSixStepValidationLifecycle(
+      unbound,
+      gitInspector(),
+    ).join("\n"),
+    /controller does not bind baseline producer receipt/,
   );
 });
 
@@ -756,6 +824,13 @@ test("family-local evidence proves central and other-family isolation", () => {
   assert.match(
     validateSixStepValidationLifecycle(otherFamilyDrift, gitInspector()).join("\n"),
     /other-family source closures differ/,
+  );
+
+  const unrelatedSample = checkpoint();
+  unrelatedSample.impacted_family_ids = ["unrelated-family"];
+  assert.match(
+    validateSixStepValidationLifecycle(unrelatedSample, gitInspector()).join("\n"),
+    /impacted family is not exercised by the required route/,
   );
 });
 
