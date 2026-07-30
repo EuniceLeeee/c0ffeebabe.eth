@@ -561,6 +561,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   private activePass: {
     readonly blockNumber: number;
     readonly mode: BlockScanExecutionPassMode;
+    readonly startupWarm: boolean;
     readonly controller: AbortController;
   } | null = null;
 
@@ -617,9 +618,12 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       this.latestScheduledHead = blockNumber;
       this.pruneEvidenceContexts(blockNumber);
       const active = this.activePass;
+      // The one-time periodic startup warm must publish once. The scheduler
+      // already coalesces newer heads; steady-state/evidence passes stay abortable.
       if (
         active !== null &&
         active.blockNumber < blockNumber &&
+        !(active.mode === "periodic" && active.startupWarm) &&
         !active.controller.signal.aborted
       ) {
         active.controller.abort(
@@ -1112,6 +1116,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       }
       return;
     }
+    const startupWarmAttempt =
+      this.startupWarmPending && !this.deps.blind.enabled;
     const passController = new AbortController();
     const detachRuntimeAbort = linkAbortController(
       this.deps.runtimeAbort.signal,
@@ -1121,6 +1127,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     this.activePass = Object.freeze({
       blockNumber,
       mode: passMode,
+      startupWarm: startupWarmAttempt && passMode === "periodic",
       controller: passController,
     });
 
@@ -1131,8 +1138,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     const passStarted = sourceHead.sourceHeadSeenAtMonotonicMs;
     const passStartedAtMs = sourceHead.sourceHeadSeenAtMs;
     const passWorkerStartedAtMs = Date.now();
-    const startupWarmAttempt =
-      this.startupWarmPending && !this.deps.blind.enabled;
     const passTimeline = new BlockScanPassTimeline(passStartedAtMs);
     const timing = passTimeline.timing;
     const stageBoundaries = passTimeline.boundaries;

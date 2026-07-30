@@ -511,10 +511,29 @@ async function latestHeadCoalescesDuringStartupWarm(): Promise<void> {
   harness.loop.schedule(402);
   holdFirst.resolve();
   await waitFor(() => harness.runtimeBlocks.length === 2);
+  await waitFor(() =>
+    harness.routeTelemetryRecords.length === 2 &&
+    harness.routeTelemetryRecords.every((record) => record.finished)
+  );
   assert.deepEqual(
     harness.runtimeBlocks,
     [400, 402],
     "the scheduler must retain only the newest head during startup warm",
+  );
+  assert.equal(
+    harness.routeTelemetryRecords[0]?.passOutcome,
+    "startup_warm",
+    "a newer head must not abort the active startup warm",
+  );
+  assert.equal(
+    harness.publishedPricing,
+    1,
+    "the protected startup warm must publish before the latest pending head runs",
+  );
+  assert.equal(
+    harness.loop.isStartupWarmPending(),
+    false,
+    "the protected startup warm must release the one-time startup barrier",
   );
 }
 
