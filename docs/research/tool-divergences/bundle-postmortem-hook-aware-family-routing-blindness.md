@@ -30,8 +30,8 @@ transactions:
   - tx_hash: 0x4bc637dbae3fe4960ab32c36ac7cdc273b44feba20e6ee9e0e7474c71bcc3ad5
     block: 25642822
     tx_index: 128
-    role: backrun_candidate
-    production_gap_id: pending-orderflow-and-angstrom-evidence-coverage
+    role: scanner
+    production_gap_id: blockscan-startup-warm-head-supersession
     pool_id: 0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3
     hook: 0x0000000aa232009084bd71a5797d089aa4edfad4
     tool_actual: "routing_admitted=false; routing_reason=hooked_v4; landed_adapter=null"
