@@ -762,7 +762,7 @@ async function testV2EnrichmentIsPinnedToSourceGeneration(): Promise<void> {
         }
         if (selector === V2_READ_IFACE.getFunction("factory")!.selector) {
           return V2_READ_IFACE.encodeFunctionResult("factory", [
-            "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+            "0x0000000000000000000000000000000000000fac",
           ]);
         }
         if (selector === V2_READ_IFACE.getFunction("token0")!.selector) {
@@ -778,6 +778,10 @@ async function testV2EnrichmentIsPinnedToSourceGeneration(): Promise<void> {
   assert(transition.complete, "source-pinned V2 enrichment should decode");
   assert(transition.impacts[0]?.v2PostState?.reserve0 === 110n, "V2 final reserve0");
   assert(transition.impacts[0]?.v2PostState?.reserve1 === 191n, "V2 final reserve1");
+  assert(
+    transition.impacts[0]?.v2PostState?.feeBps === 30n,
+    "unmeasured V2 enrichment must use the standard fee",
+  );
   assert(seenBlockTags.length === 4, "all V2 enrichment reads should be source-pinned");
   assert(
     seenBlockTags.every((blockTag) => blockTag === sourceGeneration.sourceBlock),

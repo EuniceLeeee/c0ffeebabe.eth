@@ -1,8 +1,8 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
+import { v2FeeBpsForFactory } from "../solver/v2-fee.js";
 import { v4PoolId } from "./swaps/univ4-common.js";
-import { findV2LineageByFactory } from "./v2-lineage.js";
 import {
   BALANCER_V3_SWAP_TOPIC,
   CURVE_TOKEN_EXCHANGE_TOPICS,
@@ -897,8 +897,8 @@ async function computeFinalUniV2PostStateFromPreReserves(
   const factory = ethers.getAddress(
     String(univ2PairIface.decodeFunctionResult("factory", factoryRaw)[0]),
   );
-  const feeBps = findV2LineageByFactory(factory)?.measuredFeeRule?.feeBps;
-  if (feeBps === undefined) return null;
+  const feeBps = v2FeeBpsForFactory(factory);
+  if (feeBps === null) return null;
   let reserve0 = BigInt(decoded[0]);
   let reserve1 = BigInt(decoded[1]);
   for (const swap of swaps) {

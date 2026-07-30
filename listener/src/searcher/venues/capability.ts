@@ -1,4 +1,4 @@
-import { findV2LineageByFactory, V2_LINEAGES } from "./v2-lineage.js";
+import { V2_LINEAGES } from "./v2-lineage.js";
 import type { VenueId } from "./registry-ids.js";
 export type { VenueId } from "./registry-ids.js";
 
@@ -43,8 +43,8 @@ export type VenueIdentityCatalogEntry =
  * This catalog deliberately contains no runtime readiness booleans and no
  * protocol/singleton instance seeds. Execution support comes from the sole
  * AdapterFamilyRegistry; protocol instances come from each registered
- * family's declared venues or behavior discovery. V2 fee evidence remains in
- * V2_LINEAGES and is checked separately before admission/discovery.
+ * family's declared venues or behavior discovery. V2 fee evidence refines
+ * quote accuracy but does not own instance admission.
  */
 export const VENUE_IDENTITY_CATALOG: readonly VenueIdentityCatalogEntry[] =
   Object.freeze([
@@ -173,7 +173,7 @@ export function findVenueByPoolRegistry(
 /**
  * Join identity roots with the registry-derived mature DEX projection.
  * Removing a family registration therefore removes all of its factory sources
- * without editing this catalog. Unmeasured V2 lineages always fail closed.
+ * without editing this catalog.
  */
 export function factoryDiscoverySourcesForPoolAdapters(
   registeredPoolAdapters: readonly string[],
@@ -191,14 +191,6 @@ export function factoryDiscoverySourcesForPoolAdapters(
       (factory) => findVenueByFactory(factory) === entry,
     );
     if (!isSelectedIdentity) continue;
-    if (
-      entry.poolAdapter === "univ2" &&
-      entry.discovery.factories.some(
-        (factory) => findV2LineageByFactory(factory)?.measuredFeeRule == null,
-      )
-    ) {
-      continue;
-    }
     selected.push(entry);
   }
   return Object.freeze(selected);

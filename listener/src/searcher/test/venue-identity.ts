@@ -32,7 +32,13 @@ function assert(condition: boolean, message: string): asserts condition {
 
 const factoryIface = new ethers.Interface([
   "function factory() view returns (address)",
+  "function getPair(address tokenA,address tokenB) view returns (address)",
   "function getPool(address tokenA,address tokenB,uint24 fee) view returns (address)",
+]);
+const v2IdentityIface = new ethers.Interface([
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+  "function getReserves() view returns (uint112 reserve0,uint112 reserve1,uint32 blockTimestampLast)",
 ]);
 const v3IdentityIface = new ethers.Interface([
   "function token0() view returns (address)",
@@ -89,6 +95,8 @@ const FAKE_V3_POOL = address(0x10f);
 const PROVISIONAL_V3_TOKEN0 = address(0x110);
 const PROVISIONAL_V3_TOKEN1 = address(0x111);
 const UNMEASURED_V2_PAIR = address(0x112);
+const V2_TOKEN0 = address(0x122);
+const V2_TOKEN1 = address(0x123);
 
 const V2_SWAP_TOPIC = ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)");
 const V3_SWAP_TOPIC = ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)");
@@ -113,6 +121,13 @@ class FakeProvider {
     [FAKE_V3_POOL.toLowerCase(), UNKNOWN_FACTORY],
   ]);
   readonly registeredCurvePools = new Set([CURVE_POOL.toLowerCase()]);
+  readonly v2PairsByFactory = new Map<string, string>([
+    [UNIV2_FACTORY.toLowerCase(), UNI_PAIR],
+    [SUSHI_V2_FACTORY.toLowerCase(), SUSHI_PAIR],
+    [PANCAKE_V2_FACTORY.toLowerCase(), PANCAKE_V2_PAIR],
+    [UNMEASURED_V2_LINEAGE.factory.toLowerCase(), UNMEASURED_V2_PAIR],
+    [UNKNOWN_FACTORY.toLowerCase(), UNKNOWN_PAIR],
+  ]);
 
   async getBlockNumber(): Promise<number> {
     throw new Error("pinned test must not query the head");
@@ -186,6 +201,14 @@ class FakeProvider {
   async call(req: { to: string; data: string }): Promise<string> {
     const target = req.to.toLowerCase();
     const selector = req.data.slice(0, 10).toLowerCase();
+    if (
+      selector === factoryIface.getFunction("getPair")!.selector &&
+      this.v2PairsByFactory.has(target)
+    ) {
+      return factoryIface.encodeFunctionResult("getPair", [
+        this.v2PairsByFactory.get(target)!,
+      ]);
+    }
     if (
       target === REPLAYED_V3_FORK_FACTORY.toLowerCase() &&
       selector === factoryIface.getFunction("getPool")!.selector
@@ -261,6 +284,29 @@ class FakeProvider {
       }
       if (selector === v3IdentityIface.getFunction("liquidity")!.selector) {
         return v3IdentityIface.encodeFunctionResult("liquidity", [0n]);
+      }
+    }
+    if (
+      [
+        UNI_PAIR,
+        SUSHI_PAIR,
+        PANCAKE_V2_PAIR,
+        UNMEASURED_V2_PAIR,
+        UNKNOWN_PAIR,
+      ].some((pair) => pair.toLowerCase() === target)
+    ) {
+      if (selector === v2IdentityIface.getFunction("token0")!.selector) {
+        return v2IdentityIface.encodeFunctionResult("token0", [V2_TOKEN0]);
+      }
+      if (selector === v2IdentityIface.getFunction("token1")!.selector) {
+        return v2IdentityIface.encodeFunctionResult("token1", [V2_TOKEN1]);
+      }
+      if (selector === v2IdentityIface.getFunction("getReserves")!.selector) {
+        return v2IdentityIface.encodeFunctionResult("getReserves", [
+          1_000_000n,
+          2_000_000n,
+          1,
+        ]);
       }
     }
     if (
@@ -351,13 +397,13 @@ async function testV2LineageDescriptor(): Promise<void> {
     "measured V2 identity must join the registered mature family",
   );
   assert(
-    !productionFactorySources.some((source) =>
+    productionFactorySources.some((source) =>
       source.discovery.factories.some(
         (factory) =>
           factory.toLowerCase() === UNMEASURED_V2_LINEAGE.factory.toLowerCase(),
       )
     ),
-    "unmeasured V2 identity must not become a factory discovery source",
+    "unmeasured V2 identity must remain a factory discovery source",
   );
   const registryWithoutV2 = new AdapterFamilyRegistry(
     PRODUCTION_ADAPTER_FAMILIES.list().filter(
@@ -398,8 +444,10 @@ async function testV2LineageDescriptor(): Promise<void> {
     { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS },
   );
   assert(
-    !unmeasured.ok && unmeasured.reason === "unmeasured_v2_fee",
-    "known V2 lineage without a measured fee must fail closed",
+    unmeasured.ok &&
+      unmeasured.adapter === "univ2" &&
+      v2FeeBpsForFactory(UNMEASURED_V2_LINEAGE.factory) === 30n,
+    "known reverse-bound V2 lineage without a measured fee must use the default quote fee",
   );
   console.log("[venue-identity] V2 lineage identity/discovery/fee projection: PASS");
 }
@@ -796,8 +844,45 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   });
   assert(
-    !provisionalV2.ok && provisionalV2.reason === "unmeasured_v2_fee",
-    "provisional V2 without a measured fee rule must fail closed",
+    provisionalV2.ok &&
+      provisionalV2.identitySource === "factory-call-provisional" &&
+      provisionalV2.factory?.toLowerCase() === UNKNOWN_FACTORY.toLowerCase(),
+    "reverse-bound provisional V2 must be admitted independently of fee measurement",
+  );
+  const mismatchedV2Pool = address(0x124);
+  const mismatchedV2Factory = address(0x125);
+  const reverseMismatchedV2 = await resolvePoolIdentity({
+    call: async ({ to, data }) => {
+      const selector = data.slice(0, 10);
+      if (to.toLowerCase() === mismatchedV2Pool.toLowerCase()) {
+        if (selector === factoryIface.getFunction("factory")!.selector) {
+          return factoryIface.encodeFunctionResult("factory", [mismatchedV2Factory]);
+        }
+        if (selector === v2IdentityIface.getFunction("token0")!.selector) {
+          return v2IdentityIface.encodeFunctionResult("token0", [V2_TOKEN0]);
+        }
+        if (selector === v2IdentityIface.getFunction("token1")!.selector) {
+          return v2IdentityIface.encodeFunctionResult("token1", [V2_TOKEN1]);
+        }
+        if (selector === v2IdentityIface.getFunction("getReserves")!.selector) {
+          return v2IdentityIface.encodeFunctionResult("getReserves", [1n, 1n, 1]);
+        }
+      }
+      if (
+        to.toLowerCase() === mismatchedV2Factory.toLowerCase() &&
+        selector === factoryIface.getFunction("getPair")!.selector
+      ) {
+        return factoryIface.encodeFunctionResult("getPair", [address(0x126)]);
+      }
+      throw new Error(`unexpected V2 reverse-binding call ${to}:${selector}`);
+    },
+  }, mismatchedV2Pool, "univ2", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  });
+  assert(
+    !reverseMismatchedV2.ok && reverseMismatchedV2.reason === "behavior_mismatch",
+    "a provisional V2 selector lookalike without factory reverse-binding must fail closed",
   );
   const provisionalV3 = await resolvePoolIdentity(provider, UNKNOWN_PAIR, "univ3", {
     identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,

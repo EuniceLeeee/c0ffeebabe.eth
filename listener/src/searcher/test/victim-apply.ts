@@ -85,7 +85,7 @@ function testV2FeeTable(): void {
   assert(v2FeeBpsForFactory(SUSHI_FACTORY) === 30n, "SushiV2 fee bps should be 30");
   // Fork-swap-verified 0.25% fork (see v2-fee.ts proof); other tail forks stay 30.
   assert(v2FeeBpsForFactory(PANCAKE_V2_FACTORY) === 25n, "verified 0.25% fork should be 25");
-  assert(v2FeeBpsForFactory("0x000000000000000000000000000000000000dEaD") === null, "unknown factory must fail closed");
+  assert(v2FeeBpsForFactory("0x000000000000000000000000000000000000dEaD") === 30n, "unknown identified factory must use the standard quote fee");
   assert(v2FeeBpsForFactory(undefined) === null, "missing factory must fail closed");
   console.log("[victim-apply] v2 fee table: PASS");
 }

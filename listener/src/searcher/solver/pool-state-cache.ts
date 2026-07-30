@@ -833,7 +833,7 @@ export class PoolStateCache {
     const factory = univ2Iface.decodeFunctionResult("factory", factoryRes)[0] as string;
     const feeBps = v2FeeBpsForFactory(factory);
     if (feeBps === null) {
-      throw new Error(`v2 ${pool.slice(0, 10)} factory fee is not attested`);
+      throw new Error(`v2 ${pool.slice(0, 10)} factory identity is missing`);
     }
     return {
       token0,

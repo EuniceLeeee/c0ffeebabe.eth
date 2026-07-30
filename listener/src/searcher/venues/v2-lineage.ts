@@ -21,7 +21,7 @@ export interface V2LineageDescriptor {
   readonly venue: V2LineageVenueId;
   readonly factory: string;
   readonly executionFamily: "univ2-standard";
-  /** Absent means the factory is not fee-verified and cannot be priced. */
+  /** Absent means quote paths use the standard V2 fee until measured. */
   readonly measuredFeeRule: V2MeasuredFeeRule | null;
 }
 

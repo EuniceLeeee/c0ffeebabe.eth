@@ -8,7 +8,6 @@ import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import { quoteV2ExactInput, v2FeeBpsForFactory } from "../../solver/v2-fee.js";
 import type { V2PostImpactSeed } from "../../solver/pool-state-cache.js";
-import { findV2LineageByFactory } from "../v2-lineage.js";
 import { factoryIdentityResolver } from "../identity.js";
 import type {
   BlockScanStateCapability,
@@ -129,7 +128,7 @@ export const univ2BlockScanState = Object.freeze({
       const token0 = ethers.getAddress(edge.poolToken0);
       const token1 = ethers.getAddress(edge.poolToken1);
       if (edge.v2FeeBps === undefined || edge.v2FeeBps < 0n) {
-        throw new Error(`univ2 block-scan edge ${pool} is missing attested fee`);
+        throw new Error(`univ2 block-scan edge ${pool} is missing quote fee`);
       }
       const feeBps = edge.v2FeeBps;
       const existing = pools.get(pool);
@@ -447,9 +446,9 @@ async function buildUniV2Edges(
       }),
     )[0],
   ));
-  const feeRule = findV2LineageByFactory(factory)?.measuredFeeRule;
-  if (!feeRule) {
-    throw new Error(`${pool.address} has no measured V2 fee rule for factory ${factory}`);
+  const feeBps = v2FeeBpsForFactory(factory);
+  if (feeBps === null) {
+    throw new Error(`${pool.address} is missing V2 factory identity`);
   }
   const taxonomy = deriveEdgeTaxonomy("swap");
   return [
@@ -461,7 +460,7 @@ async function buildUniV2Edges(
       slotKind: "swap",
       poolToken0: token0,
       poolToken1: token1,
-      v2FeeBps: feeRule.feeBps,
+      v2FeeBps: feeBps,
       score: pool.score,
       ...taxonomy,
     },
@@ -473,7 +472,7 @@ async function buildUniV2Edges(
       slotKind: "swap",
       poolToken0: token0,
       poolToken1: token1,
-      v2FeeBps: feeRule.feeBps,
+      v2FeeBps: feeBps,
       score: pool.score,
       ...taxonomy,
     },
@@ -531,7 +530,7 @@ async function resolveFeeBps(state: Pick<StateBackend, "call">, pool: string): P
   const factory = pairIface.decodeFunctionResult("factory", raw)[0] as string;
   const feeBps = v2FeeBpsForFactory(factory);
   if (feeBps === null) {
-    throw new Error(`v2 ${pool.slice(0, 10)} factory fee is not attested`);
+    throw new Error(`v2 ${pool.slice(0, 10)} factory identity is missing`);
   }
   feeBpsCache.set(key, feeBps);
   return feeBps;

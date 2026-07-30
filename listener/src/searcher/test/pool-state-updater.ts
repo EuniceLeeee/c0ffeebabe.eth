@@ -13,10 +13,12 @@ function assert(cond: boolean, msg: string): void {
 const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
 const TICK_LENS = "0xbfd8137f7d1516D3ea5cA83523914859ec47F573";
 const V2_POOL = "0x0000000000000000000000000000000000000a02";
+const DEFAULT_FEE_V2_POOL = "0x0000000000000000000000000000000000000a04";
 const V3_POOL = "0x0000000000000000000000000000000000000a03";
 const TOKEN0 = "0x00000000000000000000000000000000000000a0";
 const TOKEN1 = "0x00000000000000000000000000000000000000b1";
 const PANCAKE_V2_FACTORY = "0x1097053fd2ea711dad45caccc45eff7548fcb362";
+const UNKNOWN_V2_FACTORY = "0x0000000000000000000000000000000000000fac";
 const SQRT_PRICE_1_1 = 1n << 96n;
 const V4_KEY: V4PoolKey = {
   currency0: TOKEN0,
@@ -77,8 +79,19 @@ async function main(): Promise<void> {
           };
         }
         mutableCalls++;
-        if (target === V2_POOL.toLowerCase()) {
-          return { success: true, returnData: encodeV2(selector) };
+        if (
+          target === V2_POOL.toLowerCase() ||
+          target === DEFAULT_FEE_V2_POOL.toLowerCase()
+        ) {
+          return {
+            success: true,
+            returnData: encodeV2(
+              selector,
+              target === V2_POOL.toLowerCase()
+                ? PANCAKE_V2_FACTORY
+                : UNKNOWN_V2_FACTORY,
+            ),
+          };
         }
         if (target === V3_POOL.toLowerCase()) {
           return { success: true, returnData: encodeV3(selector) };
@@ -106,6 +119,13 @@ async function main(): Promise<void> {
   });
   await updater.update(123, [
     { adapterId: "fixture-v2", target: V2_POOL, tokenIn: TOKEN0, tokenOut: TOKEN1, amountIn: 10_000n },
+    {
+      adapterId: "fixture-v2",
+      target: DEFAULT_FEE_V2_POOL,
+      tokenIn: TOKEN0,
+      tokenOut: TOKEN1,
+      amountIn: 10_000n,
+    },
     { adapterId: "fixture-v3", target: V3_POOL, tokenIn: TOKEN0, tokenOut: TOKEN1, amountIn: 10_000n },
     {
       adapterId: "fixture-v4",
@@ -117,7 +137,7 @@ async function main(): Promise<void> {
     },
   ]);
   assert(aggregateCalls === 2, `expected mutable aggregate + tick aggregate, got ${aggregateCalls}`);
-  assert(mutableCalls === 12, `expected 12 mutable/static subcalls, got ${mutableCalls}`);
+  assert(mutableCalls === 16, `expected 16 mutable/static subcalls, got ${mutableCalls}`);
   assert(tickCalls > 0, `expected TickLens subcalls in aggregate`);
   const v4 = cache.snapshotV4(V4_POOL_ID, 123);
   assert(v4?.sqrtPriceX96 === SQRT_PRICE_1_1, "v4 slot0 seeded by PoolStateUpdater");
@@ -130,17 +150,34 @@ async function main(): Promise<void> {
   } as unknown as StateBackend;
   cache.beginHint(123);
   const v2Out = await cache.quoteV2(noState, V2_POOL, TOKEN0, TOKEN1, 10_000n);
+  const defaultFeeV2Out = await cache.quoteV2(
+    noState,
+    DEFAULT_FEE_V2_POOL,
+    TOKEN0,
+    TOKEN1,
+    10_000n,
+  );
   const v3Out = await cache.quoteV3(noState, V3_POOL, TOKEN0, TOKEN1, 1_000n);
   // The mocked factory() is the fork-swap-verified 0.25% fork, so the updater must
   // resolve it end-to-end to 25bps (proves factory()→feeBps→quote wiring for a
   // real non-30 fee, not just the default).
   const expectedV2Out = quoteV2ExactInput(2_000_000n, 1_000_000n, 10_000n, 25n);
   assert(v2Out === expectedV2Out, `seeded v2 quote ${v2Out} != ${expectedV2Out}`);
+  const expectedDefaultFeeV2Out = quoteV2ExactInput(
+    2_000_000n,
+    1_000_000n,
+    10_000n,
+    30n,
+  );
+  assert(
+    defaultFeeV2Out === expectedDefaultFeeV2Out,
+    `default-fee v2 quote ${defaultFeeV2Out} != ${expectedDefaultFeeV2Out}`,
+  );
   assert(v3Out > 0n, `seeded v3 quote should produce output`);
   console.log("[pool-updater] multicall seed + local quote: PASS");
 }
 
-function encodeV2(selector: string): string {
+function encodeV2(selector: string, factory: string): string {
   if (selector === v2Iface.getFunction("token0")!.selector) {
     return v2Iface.encodeFunctionResult("token0", [TOKEN0]);
   }
@@ -148,7 +185,7 @@ function encodeV2(selector: string): string {
     return v2Iface.encodeFunctionResult("token1", [TOKEN1]);
   }
   if (selector === v2Iface.getFunction("factory")!.selector) {
-    return v2Iface.encodeFunctionResult("factory", [PANCAKE_V2_FACTORY]);
+    return v2Iface.encodeFunctionResult("factory", [factory]);
   }
   if (selector === v2Iface.getFunction("getReserves")!.selector) {
     return v2Iface.encodeFunctionResult("getReserves", [2_000_000n, 1_000_000n, 0]);

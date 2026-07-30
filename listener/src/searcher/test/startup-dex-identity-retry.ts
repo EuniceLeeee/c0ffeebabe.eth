@@ -119,7 +119,6 @@ await assert.rejects(
 const allReasons: readonly PoolIdentityFailureReason[] = [
   "identity_call_failed",
   "unknown_factory",
-  "unmeasured_v2_fee",
   "unsupported_venue",
   "adapter_mismatch",
   "curve_unregistered",

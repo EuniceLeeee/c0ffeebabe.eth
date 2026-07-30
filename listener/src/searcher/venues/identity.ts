@@ -18,7 +18,6 @@ import {
   type IdentityAdmissionPolicy,
 } from "./admission.js";
 import type { PoolEntry } from "../planner/token-graph.js";
-import { findV2LineageByFactory } from "./v2-lineage.js";
 import {
   isKnownVenueIdentitySource,
   isKnownVenueId,
@@ -292,7 +291,6 @@ export function assertIdentityResolverCoverage(
 export type PoolIdentityFailureReason =
   | "identity_call_failed"
   | "unknown_factory"
-  | "unmeasured_v2_fee"
   | "unsupported_venue"
   | "adapter_mismatch"
   | "curve_unregistered"
@@ -363,6 +361,9 @@ export type PoolIdentityResult =
 
 const factoryIface = new ethers.Interface([
   "function factory() view returns (address)",
+]);
+const v2FactoryIface = new ethers.Interface([
+  "function getPair(address tokenA,address tokenB) view returns (address)",
 ]);
 const v3FactoryIface = new ethers.Interface([
   "function getPool(address tokenA,address tokenB,uint24 fee) view returns (address)",
@@ -697,17 +698,6 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
     };
   }
   if (identity?.compatibility === "standard") {
-    if (
-      identity.poolAdapter === "univ2" &&
-      !findV2LineageByFactory(factory)?.measuredFeeRule
-    ) {
-      return {
-        ok: false,
-        reason: "unmeasured_v2_fee",
-        venueId: identity.venue,
-        factory,
-      };
-    }
     if (!isPoolAdapterSupported(identity.poolAdapter)) {
       return {
         ok: false,
@@ -716,21 +706,26 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
         factory,
       };
     }
-    if (identity.poolAdapter === "univ3") {
-      const binding = await proveCanonicalV3FactoryBinding(
+    const binding = identity.poolAdapter === "univ2"
+      ? await proveStandardV2Behavior(
+        backend,
+        pool,
+        factory,
+        candidate,
+      )
+      : await proveCanonicalV3FactoryBinding(
         backend,
         pool,
         factory,
         candidate,
       );
-      if (!binding.ok) {
-        return {
-          ok: false,
-          reason: binding.reason,
-          venueId: identity.venue,
-          factory,
-        };
-      }
+    if (!binding.ok) {
+      return {
+        ok: false,
+        reason: binding.reason,
+        venueId: identity.venue,
+        factory,
+      };
     }
     return {
       ok: true,
@@ -744,16 +739,10 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
   if (!allowProvisionalFactories(admissionPolicy)) {
     return { ok: false, reason: "unknown_factory", factory };
   }
-  if (poolAdapter === "univ2" && !findV2LineageByFactory(factory)?.measuredFeeRule) {
-    return {
-      ok: false,
-      reason: "unmeasured_v2_fee",
-      factory,
-    };
-  }
   const behaviorProof = await proveProvisionalFactoryPoolBehavior(
     backend,
     pool,
+    factory,
     standardPoolAdapter,
     candidate,
   );
@@ -874,17 +863,19 @@ type ProvisionalFactoryBehaviorProof =
 async function proveProvisionalFactoryPoolBehavior(
   backend: IdentityCallBackend,
   pool: string,
+  factory: string,
   poolAdapter: "univ2" | "univ3",
   candidate: Readonly<IdentityPoolEntry>,
 ): Promise<ProvisionalFactoryBehaviorProof> {
   return poolAdapter === "univ2"
-    ? proveProvisionalV2Behavior(backend, pool, candidate)
+    ? proveStandardV2Behavior(backend, pool, factory, candidate)
     : proveProvisionalV3Behavior(backend, pool, candidate);
 }
 
-async function proveProvisionalV2Behavior(
+async function proveStandardV2Behavior(
   backend: IdentityCallBackend,
   pool: string,
+  factory: string,
   candidate: Readonly<IdentityPoolEntry>,
 ): Promise<ProvisionalFactoryBehaviorProof> {
   let raw: readonly [string, string, string];
@@ -924,11 +915,27 @@ async function proveProvisionalV2Behavior(
       v2IdentityIface.decodeFunctionResult("token1", raw[1])[0],
     ));
     v2IdentityIface.decodeFunctionResult("getReserves", raw[2]);
-    return tokensProveCandidatePair(token0, token1, candidate)
+    if (!tokensProveCandidatePair(token0, token1, candidate)) {
+      return { ok: false, reason: "behavior_mismatch" };
+    }
+    const rawBinding = await backend.call({
+      to: factory,
+      data: v2FactoryIface.encodeFunctionData("getPair", [token0, token1]),
+    });
+    if (!hasExactStaticReturnShape(rawBinding, 1)) {
+      return { ok: false, reason: "behavior_mismatch" };
+    }
+    const boundPool = ethers.getAddress(String(
+      v2FactoryIface.decodeFunctionResult("getPair", rawBinding)[0],
+    ));
+    return boundPool === ethers.getAddress(pool)
       ? { ok: true }
       : { ok: false, reason: "behavior_mismatch" };
-  } catch {
-    return { ok: false, reason: "behavior_mismatch" };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: provisionalBehaviorCallFailureReason(error),
+    };
   }
 }
 
