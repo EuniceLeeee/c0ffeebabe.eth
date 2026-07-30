@@ -27,6 +27,15 @@ transactions:
     hook: 0x0000000aa232009084bd71a5797d089aa4edfad4
     tool_actual: "routing_admitted=false; routing_reason=hooked_v4; landed_adapter=null"
     manual_ground_truth: "live runtime graph contains the separate angstrom-v4 projection for this PoolKey; custom-swap:angstrom-v4 owns two directed USDC/WETH edges, while univ4-standard remains correctly excluded"
+  - tx_hash: 0x4bc637dbae3fe4960ab32c36ac7cdc273b44feba20e6ee9e0e7474c71bcc3ad5
+    block: 25642822
+    tx_index: 128
+    role: backrun_candidate
+    production_gap_id: pending-orderflow-and-angstrom-evidence-coverage
+    pool_id: 0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3
+    hook: 0x0000000aa232009084bd71a5797d089aa4edfad4
+    tool_actual: "routing_admitted=false; routing_reason=hooked_v4; landed_adapter=null"
+    manual_ground_truth: "live runtime graph contains the separate angstrom-v4 projection for this PoolKey; custom-swap:angstrom-v4 owns the directed WETH/USDT edges, while univ4-standard remains correctly excluded"
 ```
 
 The indexed run was executed through `tool-run` on the active node against its
@@ -51,3 +60,10 @@ This divergence invalidates only the analyzer's `hooked_v4` routing verdict.
 It does not invalidate the receipt, trace, flow, PnL or standing-state
 classification. Under the analysis-tool freeze, the analyzer is not repaired
 in this transaction-gap round.
+
+The second indexed run used selection manifest SHA-256
+`ca7e850c816977337b272014949fea372bebf06fa91d8c1007efc3edf3e68ffc`
+and bundle output SHA-256
+`622e7900556ae57a47b84b88e7850495f11269f7b674acc135caf648919a7430`.
+Its receipt, trace and PnL evidence remain usable; only the generic hooked-V4
+routing verdict is frozen as divergent.
