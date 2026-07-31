@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import type { StateBackend } from "../../shared/state/state-backend.js";
-import type { V4PoolKey } from "../planner/token-graph.js";
+import type { TokenEdge, V4PoolKey } from "../planner/token-graph.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import type {
   PendingExecutionEvidence,
@@ -43,6 +43,7 @@ export async function quote(
   v4QuoteStats?: V4QuotePathStats,
   executor?: string,
   executionEvidence?: readonly PendingExecutionEvidence[],
+  edge?: TokenEdge,
 ): Promise<bigint> {
   if (amountIn <= 0n) return 0n;
   const routeAdapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(adapterId);
@@ -64,6 +65,7 @@ export async function quote(
       v4PoolKey,
       v4QuoteStats,
       executionEvidence: familyEvidence,
+      edge,
     });
   }
   throw new MissingRouteQuoterError(adapterId);

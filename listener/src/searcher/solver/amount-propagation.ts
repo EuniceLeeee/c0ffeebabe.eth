@@ -151,6 +151,7 @@ async function quoteEdge(
       options.v4QuoteStats,
       options.executor,
       options.executionEvidence,
+      edge,
     );
   } catch (err) {
     if (!options.quoteSource) throw err;
