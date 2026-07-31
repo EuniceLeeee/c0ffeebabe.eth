@@ -159,7 +159,7 @@ export const ekuboAdapter = Object.freeze({
         gasLimit: 3_000_000,
       })]);
     },
-    allowanceSpender: () => ethers.getAddress(EKUBO_CORE),
+    allowanceSpender: () => ethers.getAddress(EKUBO_ROUTER),
     prewarmAddresses: (request) => Object.freeze([
       ethers.getAddress(EKUBO_ROUTER),
       ethers.getAddress(EKUBO_CORE),
@@ -242,7 +242,7 @@ async function buildEkuboPlanFragment(
     requirements.push({
       kind: "approve",
       token: rawInput,
-      spender: ethers.getAddress(EKUBO_CORE),
+      spender: ethers.getAddress(EKUBO_ROUTER),
       amount: MAX_UINT256,
     });
   }

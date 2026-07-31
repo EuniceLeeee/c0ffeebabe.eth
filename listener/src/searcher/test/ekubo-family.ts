@@ -182,6 +182,23 @@ async function main(): Promise<void> {
     await quoteWithUpdate(knownForward, parsedSwap),
     -parsedSwap.delta1,
   );
+  const erc20InputPlan = await ekuboAdapter.buildPlanFragment({
+    edge: unknownEdges[0],
+    amountIn: 2n,
+    amountOut: 1n,
+    rawOut: 1n,
+    executor: EXECUTOR,
+    state: noReadState(),
+  });
+  assert.equal(erc20InputPlan.requirements.length, 1);
+  const approval = erc20InputPlan.requirements[0];
+  assert.equal(approval.kind, "approve");
+  if (approval.kind !== "approve") throw new Error("missing Ekubo approval");
+  assert.equal(
+    approval.spender.toLowerCase(),
+    EKUBO_ROUTER.toLowerCase(),
+    "the Router executes transferFrom and must own the allowance",
+  );
   const reverseKnown = swapLog(
     known.poolId,
     `0x${EKUBO_ROUTER.slice(2).toLowerCase()}` +
