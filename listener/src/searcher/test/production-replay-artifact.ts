@@ -4,7 +4,6 @@ import { ethers } from "ethers";
 import { poolProjectionRowKey } from "../pool-universe.js";
 import type { PoolEntry, VerifiedRouteSpec } from "../planner/token-graph.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
-import { validateRouteImmutableBinding } from "../venues/route-immutable-binding.js";
 import type { FamilySourceCoverage } from "../../shared/evidence/canonical-edge-set.js";
 
 export const PRODUCTION_REPLAY_ARTIFACT_SCHEMA = 4 as const;
@@ -306,25 +305,6 @@ function parseProjectedPool(raw: unknown, index: number): PoolEntry {
   if (raw.venueId !== undefined) pool.venueId = stringField(raw.venueId, `pools[${index}].venueId`) as PoolEntry["venueId"];
   if (raw.identitySource !== undefined) pool.identitySource = stringField(raw.identitySource, `pools[${index}].identitySource`) as PoolEntry["identitySource"];
   if (raw.poolId !== undefined) pool.poolId = stringField(raw.poolId, `pools[${index}].poolId`);
-  if (raw.routeBinding !== undefined) {
-    if (!isRecord(raw.routeBinding)) {
-      throw new Error(`pools[${index}].routeBinding must be an object`);
-    }
-    pool.routeBinding = validateRouteImmutableBinding({
-      schema: stringField(
-        raw.routeBinding.schema,
-        `pools[${index}].routeBinding.schema`,
-      ),
-      payload: stringField(
-        raw.routeBinding.payload,
-        `pools[${index}].routeBinding.payload`,
-      ),
-      hash: stringField(
-        raw.routeBinding.hash,
-        `pools[${index}].routeBinding.hash`,
-      ),
-    });
-  }
   if (raw.fixedSlotKind !== undefined) pool.fixedSlotKind = stringField(raw.fixedSlotKind, `pools[${index}].fixedSlotKind`) as PoolEntry["fixedSlotKind"];
   if (raw.fixedProtocolAction !== undefined) pool.fixedProtocolAction = stringField(raw.fixedProtocolAction, `pools[${index}].fixedProtocolAction`) as PoolEntry["fixedProtocolAction"];
   if (raw.logicalInstanceId !== undefined) pool.logicalInstanceId = stringField(raw.logicalInstanceId, `pools[${index}].logicalInstanceId`);

@@ -66,7 +66,6 @@
     "searcher:production-replay-pending-evidence": "node --import tsx src/searcher/test/production-replay-pending-evidence-contract.ts",
     "searcher:route-immutable-binding": "node --import tsx src/searcher/test/route-immutable-binding-boundaries.ts",
     "searcher:anonymous-landed-log-boundary": "node --import tsx src/searcher/test/anonymous-landed-log-boundary.ts",
-    "searcher:canonical-route-identity-witness": "node --import tsx --test src/searcher/test/canonical-route-identity-witness-test.ts",
     "searcher:erc4626-instance-discovery": "node --import tsx src/searcher/test/erc4626-instance-discovery.ts",
     "searcher:observed-protocol-discovery": "node --import tsx src/searcher/test/observed-protocol-discovery.ts",
     "searcher:protocol-multi-adapter-fixture": "node --import tsx src/searcher/test/protocol-multi-adapter-fixture.ts",

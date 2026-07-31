@@ -60,31 +60,3 @@ test("gate refuses cleanup outside a generated final run", () => {
   assert.equal(output.verdict, "fail");
   assert.equal(output.cleanup, undefined);
 });
-
-test("bootstrap phase can never request branch cleanup", () => {
-  const result = spawnSync(process.execPath, [
-    "--import",
-    TSX_IMPORT_URL,
-    CLI,
-    "--phase",
-    "bootstrap",
-    "--finalize-cleanup",
-    "--request",
-    "/tmp/not-read-bootstrap-request.json",
-    "--out",
-    "/tmp/not-written-bootstrap-receipt.json",
-  ], {
-    cwd: resolve("."),
-    encoding: "utf8",
-    shell: false,
-  });
-  assert.equal(result.status, 1);
-  const output = JSON.parse(result.stdout) as {
-    verdict: string;
-    cleanup?: unknown;
-    errors: string[];
-  };
-  assert.equal(output.verdict, "fail");
-  assert.equal(output.cleanup, undefined);
-  assert.match(output.errors.join("\n"), /allowed only in final phase/);
-});

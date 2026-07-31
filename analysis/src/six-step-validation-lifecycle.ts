@@ -20,7 +20,7 @@ export const SIX_STEP_VALIDATION_LIFECYCLE_GATE =
 export const EMPTY_SHA256 =
   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
-export type SixStepValidationMode = "bootstrap" | "checkpoint" | "final";
+export type SixStepValidationMode = "checkpoint" | "final";
 export type SixStepDiffClass = "family_local" | "framework" | "systemic_live";
 export interface SixStepStateAnchor {
   lane: "block_scan_standing" | "backrun" | "post_block_scan";
@@ -44,8 +44,7 @@ export interface BaselineRouteOutcome {
 
 interface CommonEvidence {
   schema_version: 1; gate: typeof SIX_STEP_VALIDATION_LIFECYCLE_GATE;
-  mode: SixStepValidationMode;
-  status: "bootstrap_pass" | "checkpoint_pass" | "final_validated";
+  mode: SixStepValidationMode; status: "checkpoint_pass" | "final_validated";
   branch: string; branch_tip: string; candidate_commit: string;
   rollback_commit: string; sample_tx_hash: string; target_route_sha256: string;
   controller: {
@@ -65,17 +64,6 @@ interface CommonEvidence {
   runner_overrides: Readonly<Record<string, SemanticJson>>;
   baseline_route_outcome: BaselineRouteOutcome;
   production_route_stage: readonly SemanticSixStepEvidence[];
-}
-
-export interface SixStepBootstrapEvidence extends CommonEvidence {
-  mode: "bootstrap"; status: "bootstrap_pass";
-  framework_parent_commit: string;
-  validation_scope: "stacked_premerge_only";
-  fixed: false;
-  branch_cleanup_allowed: false;
-  canonical_checkpoint_required: true;
-  input_snapshot: TrustedSixStepInputSnapshot;
-  bootstrap_evidence_sha256: string;
 }
 
 export interface SixStepCheckpointEvidence extends CommonEvidence {
@@ -105,7 +93,6 @@ export interface SixStepFinalEvidence extends CommonEvidence {
 }
 
 export type SixStepValidationEvidence =
-  | SixStepBootstrapEvidence
   | SixStepCheckpointEvidence
   | SixStepFinalEvidence;
 
@@ -136,17 +123,10 @@ export function validateSixStepValidationLifecycle(
   require(errors, value.schema_version === 1, "schema_version must be 1");
   require(errors, value.gate === SIX_STEP_VALIDATION_LIFECYCLE_GATE,
     `gate must be ${SIX_STEP_VALIDATION_LIFECYCLE_GATE}`);
-  const bootstrap = value.mode === "bootstrap";
   const checkpoint = value.mode === "checkpoint";
-  const final = value.mode === "final";
-  require(errors, bootstrap || checkpoint || final,
-    "mode must be bootstrap, checkpoint, or final");
-  const expectedStatus = bootstrap
-    ? "bootstrap_pass"
-    : checkpoint
-    ? "checkpoint_pass"
-    : "final_validated";
-  require(errors, value.status === expectedStatus,
+  require(errors, checkpoint || value.mode === "final",
+    "mode must be checkpoint or final");
+  require(errors, value.status === (checkpoint ? "checkpoint_pass" : "final_validated"),
     "status does not match mode");
   validateGit(value, git, errors);
   require(errors, typeof value.sample_tx_hash === "string" &&
@@ -164,7 +144,7 @@ export function validateSixStepValidationLifecycle(
       "controller identity/hashes are invalid");
   }
   validateAnchor(value, errors);
-  validateFrozenInputs(value, bootstrap || checkpoint, errors);
+  validateFrozenInputs(value, checkpoint, errors);
   require(errors, value.route_scope === "dex-dex" ||
     value.route_scope === "dex-permissionless-protocol", "route_scope is invalid");
   require(errors, value.diff_class === "family_local",
@@ -177,8 +157,7 @@ export function validateSixStepValidationLifecycle(
   validateRunnerOverrides(value.runner_overrides, errors);
   validateBaselineOutcome(value, errors);
   validateStages(value, errors);
-  if (bootstrap) validateBootstrap(value, git, errors);
-  else if (checkpoint) validateCheckpoint(value, errors);
+  if (checkpoint) validateCheckpoint(value, errors);
   else validateFinal(value, git, errors);
   return errors;
 }
@@ -233,7 +212,7 @@ function validateAnchor(value: Record<string, unknown>, errors: string[]): void 
 
 function validateFrozenInputs(
   value: Record<string, unknown>,
-  snapshotMode: boolean,
+  checkpoint: boolean,
   errors: string[],
 ): void {
   const frozen = record(value.frozen_inputs) ? value.frozen_inputs : null;
@@ -256,56 +235,14 @@ function validateFrozenInputs(
   require(errors, frozen.graph_snapshot_kind === "content_addressed" ||
     frozen.graph_snapshot_kind === "honest_reconstruction",
     "graph_snapshot_kind is invalid");
-  if (snapshotMode) {
+  if (checkpoint) {
     require(errors, sha(frozen.input_snapshot_sha256),
-      "pre-merge validation must bind input_snapshot_sha256");
+      "checkpoint must bind input_snapshot_sha256");
   } else {
     require(errors, sha(frozen.runtime_attestation_before_sha256) &&
       sha(frozen.runtime_attestation_after_sha256),
       "final must bind both runtime attestations");
   }
-}
-
-function validateBootstrap(
-  value: Record<string, unknown>,
-  git: GitInspector | undefined,
-  errors: string[],
-): void {
-  validateSnapshot(value, errors);
-  require(errors,
-    typeof value.framework_parent_commit === "string" &&
-      SHA40.test(value.framework_parent_commit),
-    "framework_parent_commit must be a full git SHA");
-  require(errors, value.framework_parent_commit === value.rollback_commit,
-    "framework_parent_commit must equal rollback_commit");
-  require(errors, value.validation_scope === "stacked_premerge_only",
-    "bootstrap validation_scope must be stacked_premerge_only");
-  require(errors, value.fixed === false,
-    "bootstrap receipt must explicitly set fixed=false");
-  require(errors, value.branch_cleanup_allowed === false,
-    "bootstrap receipt must explicitly forbid branch cleanup");
-  require(errors, value.canonical_checkpoint_required === true,
-    "bootstrap receipt must require a canonical checkpoint");
-  require(errors, !Object.hasOwn(value, "runtime_attestations"),
-    "bootstrap must not contain runtime attestations");
-  require(errors, !Object.hasOwn(value, "checkpoint_evidence_sha256"),
-    "bootstrap cannot masquerade as a canonical checkpoint");
-  require(errors, !Object.hasOwn(value, "full_evidence_sha256"),
-    "bootstrap cannot masquerade as final validation");
-  const snapshot = record(value.input_snapshot) ? value.input_snapshot : null;
-  if (
-    git &&
-    typeof snapshot?.source_runtime_commit === "string" &&
-    typeof value.framework_parent_commit === "string"
-  ) {
-    require(errors,
-      git.isAncestor(
-        snapshot.source_runtime_commit,
-        value.framework_parent_commit,
-      ),
-      "bootstrap input runtime commit is not an ancestor of framework parent");
-  }
-  validateDigest(value, "bootstrap_evidence_sha256", errors);
 }
 
 function validateBaselineOutcome(
@@ -366,7 +303,7 @@ function validateFamilyIsolation(
   require(errors, [...required].every((id) => complete.has(id)),
     "required families are not complete");
   require(errors, [...impacted].every((id) => complete.has(id)) ||
-    value.mode !== "final", "impacted families are not complete");
+    value.mode === "checkpoint", "impacted families are not complete");
   require(errors, value.central_behavior_diff_sha256 === EMPTY_SHA256,
     "central_behavior_diff_sha256 must prove no central behavior change");
   require(errors, sha(value.other_family_source_set_baseline_sha256) &&
@@ -417,19 +354,6 @@ function validateCheckpoint(
   value: Record<string, unknown>,
   errors: string[],
 ): void {
-  validateSnapshot(value, errors);
-  const snapshot = record(value.input_snapshot) ? value.input_snapshot : null;
-  require(errors, snapshot?.source_runtime_commit === value.rollback_commit,
-    "input snapshot does not bind rollback_commit");
-  require(errors, !Object.hasOwn(value, "runtime_attestations"),
-    "checkpoint must not contain runtime attestations");
-  validateDigest(value, "checkpoint_evidence_sha256", errors);
-}
-
-function validateSnapshot(
-  value: Record<string, unknown>,
-  errors: string[],
-): void {
   const snapshotErrors = validateTrustedSixStepInputSnapshot(
     value.input_snapshot,
     String(value.sample_tx_hash ?? ""),
@@ -439,8 +363,13 @@ function validateSnapshot(
   const frozen = record(value.frozen_inputs) ? value.frozen_inputs : null;
   require(errors, snapshot?.payload_sha256 === frozen?.input_snapshot_sha256,
     "input_snapshot_sha256 does not bind input snapshot");
+  require(errors, snapshot?.source_runtime_commit === value.rollback_commit,
+    "input snapshot does not bind rollback_commit");
   require(errors, stableJson(snapshot?.state_anchor) === stableJson(value.state_anchor),
     "input_snapshot state anchor does not equal lifecycle state anchor");
+  require(errors, !Object.hasOwn(value, "runtime_attestations"),
+    "checkpoint must not contain runtime attestations");
+  validateDigest(value, "checkpoint_evidence_sha256", errors);
 }
 
 function validateFinal(
@@ -557,8 +486,7 @@ export function sixStepLifecycleEnvelopeSha256(
 ): string {
   const payload = Object.fromEntries(Object.entries(value).filter(
     ([key]) => key !== "full_evidence_sha256" &&
-      key !== "checkpoint_evidence_sha256" &&
-      key !== "bootstrap_evidence_sha256",
+      key !== "checkpoint_evidence_sha256",
   ));
   return sha256(stableJson(payload));
 }
@@ -593,14 +521,6 @@ export function cleanupFinalValidatedBranch(
   evidence: SixStepFinalEvidence,
   cwd: string,
 ): BranchCleanupResult {
-  if (
-    (evidence as SixStepValidationEvidence).mode !== "final" ||
-    (evidence as SixStepValidationEvidence).status !== "final_validated"
-  ) {
-    throw new Error(
-      "only a final_validated receipt can authorize branch cleanup",
-    );
-  }
   const inspector = createGitInspector(cwd);
   const errors = validateSixStepValidationLifecycle(evidence, inspector);
   if (errors.length) throw new Error(`final validation failed: ${errors.join("; ")}`);

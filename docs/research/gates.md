@@ -166,15 +166,12 @@ controller seals that same-directory artifact with file fsync, atomic rename, re
 directory fsync. Only after that durable seal may a rollback/main-owned verifier receive the sample and read
 the rollback/main-owned reference under `docs/research/references/production-routes/`. The verifier checks
 the target receipt/call-trace hash and lane anchor, matches the normalized frozen route, and interprets the
-finite declarative route witnesses against both the target and final-sim traces. Legacy schema-v2 uses one
-`ReferenceWitness` for both traces. Schema-v3 may use distinct `targetWitness` and `executionWitness`
-declarations when the landed transaction and our executable route call different public functions, but
-both witnesses must match independently and derive the same canonical token direction and pool identity.
-The witnesses bind ABI signatures, argument relations, receipt transfers and parent/descendant call
-structure; a bare target/selector sequence is not evidence. For final sim, every execution-witness root
-input must additionally byte-match the external calldata independently compiled from that leg's
-solver-selected resolved-plan subtree (including the selected amount and real child bytes). The verifier
-then resolves the frozen funding
+same finite declarative `ReferenceWitness` against both the target and final-sim traces. The witness binds
+ABI signatures, token direction, pool identity where it differs from the execution target, argument
+relations, receipt transfers and parent/descendant call structure; a bare target/selector sequence is not
+evidence. For final sim, every witnessed root input must additionally byte-match the external calldata
+independently compiled from that leg's solver-selected resolved-plan subtree (including the selected amount
+and real child bytes). The verifier then resolves the frozen funding
 action through the rollback registry, runs the frozen raw calldata on a fresh fork, and independently
 recomputes repayment/conservation, standing, profit, production policy and EV. It rehashes both producer and
 reference artifacts after verification. The disposable producer worktree omits the checked-out trusted
@@ -222,13 +219,8 @@ proof for a family on the naturally produced route is a real step-1 failure.
 
 The gate accepts a request, not a caller-authored pass envelope. It resolves the branch tip, recomputes
 universe/config/graph/manifest/producer hashes, derives family ownership from the registry and Git diff, runs
-the fixed producer, and computes `status` itself. Canonical `checkpoint`/`final` runs execute from a clean
-trusted `origin/main` checkout and create a disposable detached worktree at the exact candidate SHA. An
-optional `bootstrap` run may instead execute from one exact clean, unmerged framework-parent SHA and evaluate
-only `framework-parent..family-child`; it emits `bootstrap_pass` with `fixed=false`,
-`branch_cleanup_allowed=false` and `canonical_checkpoint_required=true`. It cannot be consumed by final,
-authorize feature promotion, or replace the canonical checkpoint after the framework parent reaches main.
-A feature
+the fixed producer, and computes `status` itself. The controller runs from a clean trusted `origin/main`
+checkout and creates a disposable detached worktree at the exact candidate SHA; a feature
 candidate that changes the controller, lifecycle validator, semantic evidence schema, family manifest
 producer or production replay is tooling/framework work and cannot self-certify through this gate. All six
 `production_route_stage` semantic-v4 records bind one
@@ -411,7 +403,7 @@ competitiveness** — never conflate ([[feedback-validate-live-not-backtest]]).
 
 | gate | command | what it asserts |
 |---|---|---|
-| deterministic route lifecycle | `npm run six-step-validation-gate -- --request <request.json> --out <generated-receipt.json> --phase bootstrap|checkpoint|final` (from `analysis/`) | trusted controller runs the fixed target-blind producer, recomputes frozen inputs, emits one causally chained semantic-v4 six-stage receipt and binds the exact branch/SHA lifecycle; stacked `bootstrap_pass` carries no promotion/fixed/cleanup authority, caller-authored pass envelopes are rejected, and `--finalize-cleanup` is final-only. |
+| deterministic route lifecycle | `npm run six-step-validation-gate -- --request <request.json> --out <generated-receipt.json> --phase checkpoint|final` (from `analysis/`) | trusted controller runs the fixed target-blind producer, recomputes frozen inputs, emits one causally chained semantic-v4 six-stage receipt and binds the exact branch/SHA lifecycle; caller-authored pass envelopes are rejected and `--finalize-cleanup` is final-only. |
 | correctness / coverage / path | `npm run searcher:planner` | plan count + `no_candidate` classification (pure, deterministic, no anvil). Pin real cases as named `REPLAY_FIXTURES`. |
 | latency / full pipeline | `npm run searcher:replay-live-fixtures` | per-stage `stageMs` p50/p95 (incl. preSolver) + revm profit equivalence (1 wei). Record live first with `SEARCHER_RECORD_LIVE_FIXTURES=1`. |
 | quote / math equivalence | `npm run searcher:finaloverlayequiv` / `:curvemath` / `:balanceslots` | local-quote vs on-chain quoter bit-exactness. |

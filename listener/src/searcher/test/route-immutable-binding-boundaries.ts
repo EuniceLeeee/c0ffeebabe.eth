@@ -1,9 +1,4 @@
 import assert from "node:assert/strict";
-import {
-  blindCompatibilityCanonicalEdgeId,
-  blindCompatibilityPoolIdentity,
-} from "../blind-production-compatibility.js";
-import { blindProductionAuditHash } from "../blind-production-audit.js";
 import { blockScanRouteId } from "../blockscan-route-identity.js";
 import {
   findPreparedQuoteEdge,
@@ -110,11 +105,6 @@ assert.equal(
   "0x75c89340d127d2f7e1c4c68b78ba06b1ee92ddd8d5519a052a0ff0ca888a3a45",
   "an absent binding must not migrate the frozen legacy graph hash",
 );
-assert.equal(
-  blindCompatibilityCanonicalEdgeId(edge),
-  "edge:0100c1ef337990cd0d425a90ec6ceb3e49c0ea9fd5711a3901c0baa93bfe7567",
-  "an absent binding must not migrate frozen blind edge evidence",
-);
 const pool: PoolEntry = {
   address: POOL,
   adapter: "univ2",
@@ -126,11 +116,6 @@ assert.equal(
   poolRegistryKey(pool),
   POOL,
   "an absent binding must not migrate the frozen legacy registry identity",
-);
-assert.equal(
-  blindProductionAuditHash([blindCompatibilityPoolIdentity(pool)]),
-  "50c7e4179f7ea054b77147eb58c77496a8b3214da9865d61de24cb2ade4c0cd6",
-  "an absent binding must not migrate frozen blind pool evidence",
 );
 assert.notEqual(
   poolRegistryKey({ ...pool, routeBinding: binding }),
@@ -294,26 +279,6 @@ assert.notEqual(
   hashTokenGraph([boundEdge]),
   hashTokenGraph([siblingEdge]),
   "runtime graph hashes must distinguish binding-only routes",
-);
-assert.notEqual(
-  blindCompatibilityCanonicalEdgeId(boundEdge),
-  blindCompatibilityCanonicalEdgeId(siblingEdge),
-  "trusted blind edge evidence must distinguish binding-only routes",
-);
-assert.notEqual(
-  blindProductionAuditHash([
-    blindCompatibilityPoolIdentity({
-      ...pool,
-      routeBinding: binding,
-    }),
-  ]),
-  blindProductionAuditHash([
-    blindCompatibilityPoolIdentity({
-      ...pool,
-      routeBinding: siblingBinding,
-    }),
-  ]),
-  "trusted blind pool evidence must distinguish binding-only routes",
 );
 
 let buildCalls = 0;

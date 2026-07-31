@@ -8,7 +8,7 @@ import {
 const PRODUCTION_REGISTRY =
   "listener/src/searcher/venues/production-registry.ts";
 const ACTION_INDEX = "listener/src/adapters/index.ts";
-const CENTRAL_REGISTRATIONS =
+const THIN_REGISTRATIONS =
   new Map<string, FamilyOwnershipSourceKind>([
   [PRODUCTION_REGISTRY, "production-registry"],
   [ACTION_INDEX, "action-index"],
@@ -16,7 +16,6 @@ const CENTRAL_REGISTRATIONS =
 const TRUSTED_FAMILY_BOUNDARY_PREFIXES = Object.freeze([
   "listener/src/searcher/test/adapter-replay",
   "listener/src/searcher/test/blockscan-hunt",
-  "listener/src/searcher/test/canonical-route-identity-witness",
   "listener/src/searcher/test/family-ownership-manifest",
   "listener/src/searcher/test/historical-replay-anchor",
   "listener/src/searcher/test/production-replay",
@@ -106,7 +105,7 @@ export function evaluateAdapterFamilyBoundary(
 
   const impacted = new Set<string>();
   for (const path of runtimeChangedPaths) {
-    const registrationKind = CENTRAL_REGISTRATIONS.get(path);
+    const registrationKind = THIN_REGISTRATIONS.get(path);
     if (registrationKind) {
       const before = input.sourceAt(input.baseCommit, path);
       const after = input.sourceAt(input.candidateCommit, path);
@@ -313,8 +312,9 @@ function allowedSupplementalPath(
     (entry) => entry.id === family.id,
   );
   if (!baselineFamily && sourceAt(baseCommit, path) !== null) return false;
-  const ownerId = supplementalPathOwnerId(path, candidateManifest);
-  if (ownerId !== family.id) return false;
+  const tokens = familyIdTokens(baselineFamily ?? family);
+  if (tokens.length === 0) return false;
+  const normalizedPath = path.toLowerCase();
   if (
     path.startsWith("listener/src/searcher/test/") &&
     (
@@ -324,7 +324,7 @@ function allowedSupplementalPath(
       )
     )
   ) {
-    return true;
+    return tokens.some((token) => normalizedPath.includes(token));
   }
   if (
     path.startsWith("docs/research/") &&
@@ -336,75 +336,9 @@ function allowedSupplementalPath(
       "docs/research/tx-gap-analysis-format.md",
     ].includes(path)
   ) {
-    return true;
+    return tokens.some((token) => normalizedPath.includes(token));
   }
   return false;
-}
-
-function supplementalPathOwnerId(
-  path: string,
-  manifest: FamilyOwnershipManifest,
-): string | null {
-  const relative = path.startsWith(
-    "listener/src/searcher/test/fixtures/adapter-families/",
-  )
-    ? path.slice(
-        "listener/src/searcher/test/fixtures/adapter-families/".length,
-      )
-    : path.startsWith("listener/src/searcher/test/")
-      ? path.slice("listener/src/searcher/test/".length)
-      : path.startsWith("docs/research/")
-        ? path.slice("docs/research/".length)
-        : path;
-  const normalized = relative.toLowerCase();
-  const matches = manifest.families.flatMap((entry) =>
-    familySupplementalNamespaces(entry)
-      .filter((namespace) => supplementalNamespaceMatches(
-        normalized,
-        namespace,
-      ))
-      .map((namespace) => ({
-        familyId: entry.id,
-        length: namespace.length,
-      }))
-  );
-  if (matches.length === 0) return null;
-  const longest = Math.max(...matches.map((entry) => entry.length));
-  const owners = [...new Set(
-    matches
-      .filter((entry) => entry.length === longest)
-      .map((entry) => entry.familyId),
-  )];
-  return owners.length === 1 ? owners[0] : null;
-}
-
-function familySupplementalNamespaces(
-  family: FamilyOwnershipManifest["families"][number],
-): string[] {
-  const sourceParts = family.root_source.toLowerCase().split("/");
-  const sourceName = sourceParts.at(-1)
-    ?.replace(/\.production\.[^.]+$/, "")
-    .replace(/\.[^.]+$/, "") ?? "";
-  const rootName = sourceName === "family"
-    ? sourceParts.at(-2) ?? ""
-    : sourceName;
-  const fullId = family.id.toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return [...new Set([fullId, rootName])]
-    .filter((entry) => entry.length >= 3)
-    .sort((left, right) => right.length - left.length);
-}
-
-function supplementalNamespaceMatches(
-  relativePath: string,
-  namespace: string,
-): boolean {
-  return relativePath === namespace ||
-    relativePath.startsWith(`${namespace}.`) ||
-    relativePath.startsWith(`${namespace}-`) ||
-    relativePath.startsWith(`${namespace}_`) ||
-    relativePath.startsWith(`${namespace}/`);
 }
 
 function trustedFamilyBoundaryPath(path: string): boolean {

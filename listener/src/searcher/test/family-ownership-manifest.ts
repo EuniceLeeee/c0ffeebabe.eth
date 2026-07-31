@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
@@ -1065,29 +1065,11 @@ function runOwnershipManifestSelfTests(): void {
 
 function main(): void {
   const args = process.argv.slice(2);
-  const outputPath = args[0] === "--out" && args.length === 2
-    ? resolve(args[1])
-    : null;
-  if (
-    !outputPath &&
-    (args.length > 1 || (args.length === 1 && args[0] !== "--json"))
-  ) {
-    throw new Error(
-      "usage: family-ownership-manifest.ts [--json | --out <new-file>]",
-    );
+  if (args.length > 1 || (args.length === 1 && args[0] !== "--json")) {
+    throw new Error("usage: family-ownership-manifest.ts [--json]");
   }
   runOwnershipManifestSelfTests();
   const manifest = createFamilyOwnershipManifest();
-  if (outputPath) {
-    writeFileSync(outputPath, `${JSON.stringify(manifest)}\n`, {
-      encoding: "utf8",
-      flag: "wx",
-      mode: 0o600,
-    });
-    // Candidate imports cannot race a later event-loop turn to replace the
-    // exclusive manifest artifact after the trusted writer succeeds.
-    process.exit(0);
-  }
   console.log(`ADAPTER_FAMILY_OWNERSHIP_MANIFEST=${JSON.stringify(manifest)}`);
   if (args.length === 0) {
     console.log(

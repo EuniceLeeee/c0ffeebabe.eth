@@ -24,16 +24,11 @@ try {
   if (parsed.error) throw new Error(parsed.error);
   if (!requestPath || !outputPath) throw new Error(
     "usage: --freeze-inputs --request <json> --out <snapshot> | " +
-    "--phase bootstrap|checkpoint|final --request <json> --out <receipt>",
+    "--phase checkpoint|final --request <json> --out <receipt>",
   );
   if (freeze && phase) throw new Error("--freeze-inputs does not accept --phase");
-  if (
-    !freeze &&
-    phase !== "bootstrap" &&
-    phase !== "checkpoint" &&
-    phase !== "final"
-  ) {
-    throw new Error("--phase must be bootstrap, checkpoint, or final");
+  if (!freeze && phase !== "checkpoint" && phase !== "final") {
+    throw new Error("--phase must be checkpoint or final");
   }
   if (cleanup && phase !== "final") {
     throw new Error("--finalize-cleanup is allowed only in final phase");

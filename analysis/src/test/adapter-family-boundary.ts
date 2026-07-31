@@ -48,7 +48,7 @@ test("family boundary accepts one manifest-owned family plus its production entr
   assert.deepEqual(result.reasons, []);
 });
 
-test("family boundary rejects central registration even when its old skeleton is unchanged", () => {
+test("family boundary rejects central registration after production entry exists", () => {
   const base = manifest([family("swap:a", ["src/searcher/venues/swaps/a.ts"])]);
   const candidate = manifest([
     family("swap:a", ["src/searcher/venues/swaps/a.ts"]),
@@ -410,7 +410,6 @@ test("family boundary reserves trusted helper prefixes across staged changes", (
     changedPaths: [
       "listener/src/searcher/venues/swaps/production-replay-artifact.ts",
       "listener/src/searcher/test/production-replay-artifact.ts",
-      "listener/src/searcher/test/canonical-route-identity-witness.ts",
     ],
     baseManifest: manifest([owned]),
     candidateManifest: manifest([owned]),
@@ -423,20 +422,12 @@ test("family boundary reserves trusted helper prefixes across staged changes", (
         "trusted-helper",
       "candidate:listener/src/searcher/test/production-replay-artifact.ts":
         "self-certifying-helper",
-      "base:listener/src/searcher/test/canonical-route-identity-witness.ts":
-        "trusted-route-identity",
-      "candidate:listener/src/searcher/test/canonical-route-identity-witness.ts":
-        "self-certifying-route-identity",
     }),
   });
   assert.equal(result.classification, "framework");
   assert.match(
     result.reasons.join("\n"),
     /outside the family boundary.*production-replay-artifact\.ts/,
-  );
-  assert.match(
-    result.reasons.join("\n"),
-    /outside the family boundary.*canonical-route-identity-witness\.ts/,
   );
 });
 
@@ -498,59 +489,6 @@ test("family boundary rejects a new runtime file outside family zones", () => {
   assert.match(
     result.reasons.join("\n"),
     /runtime source is outside the family structure/,
-  );
-});
-
-test("family-local test ownership uses the longest exact family namespace", () => {
-  const standard = family("protocol:erc4626", [
-    "src/searcher/venues/protocols/erc4626.ts",
-  ]);
-  const silo = family("protocol:erc4626-silo-redeem", [
-    "src/searcher/venues/protocols/erc4626-silo-redeem.ts",
-  ]);
-  const families = manifest([standard, silo]);
-  const sourceAt = sources({
-    "base:listener/src/searcher/venues/protocols/erc4626.ts": "standard",
-    "candidate:listener/src/searcher/venues/protocols/erc4626.ts":
-      "standard2",
-    "base:listener/src/searcher/venues/protocols/erc4626-silo-redeem.ts":
-      "silo",
-    "candidate:listener/src/searcher/venues/protocols/erc4626-silo-redeem.ts":
-      "silo2",
-  });
-
-  const siloClaimingStandard = evaluateAdapterFamilyBoundary({
-    baseCommit: "base",
-    candidateCommit: "candidate",
-    changedPaths: [
-      "listener/src/searcher/venues/protocols/erc4626-silo-redeem.ts",
-      "listener/src/searcher/test/erc4626.ts",
-    ],
-    baseManifest: families,
-    candidateManifest: families,
-    sourceAt,
-  });
-  assert.equal(siloClaimingStandard.classification, "framework");
-  assert.match(
-    siloClaimingStandard.reasons.join("\n"),
-    /outside the family boundary.*test\/erc4626\.ts/,
-  );
-
-  const standardClaimingSilo = evaluateAdapterFamilyBoundary({
-    baseCommit: "base",
-    candidateCommit: "candidate",
-    changedPaths: [
-      "listener/src/searcher/venues/protocols/erc4626.ts",
-      "listener/src/searcher/test/erc4626-silo-redeem.ts",
-    ],
-    baseManifest: families,
-    candidateManifest: families,
-    sourceAt,
-  });
-  assert.equal(standardClaimingSilo.classification, "framework");
-  assert.match(
-    standardClaimingSilo.reasons.join("\n"),
-    /outside the family boundary.*test\/erc4626-silo-redeem\.ts/,
   );
 });
 

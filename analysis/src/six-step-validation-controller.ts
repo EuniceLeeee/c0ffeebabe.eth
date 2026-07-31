@@ -26,8 +26,7 @@ import {
   EMPTY_SHA256, SIX_STEP_VALIDATION_LIFECYCLE_GATE,
   SIX_STEP_VALIDATION_LIFECYCLE_SCHEMA_VERSION, createGitInspector,
   sixStepLifecycleEnvelopeSha256, sixStepStateAnchorSha256,
-  validateSixStepValidationLifecycle, type SixStepBootstrapEvidence,
-  type SixStepCheckpointEvidence,
+  validateSixStepValidationLifecycle, type SixStepCheckpointEvidence,
   type BaselineRouteOutcome, type SixStepFinalEvidence,
   type SixStepStateAnchor,
   type SixStepValidationEvidence,
@@ -76,7 +75,6 @@ const TRUSTED_SURFACES = [
   "listener/src/searcher/test/blockscan-hunt.ts",
   "listener/src/searcher/test/blockscan-hunt-protocol-cache.ts",
   "listener/src/searcher/test/blockscan-hunt-selection.ts",
-  "listener/src/searcher/test/canonical-route-identity-witness.ts",
   "listener/src/searcher/test/historical-replay-anchor.ts",
   "listener/src/searcher/test/production-replay-artifact.ts",
   "listener/src/searcher/test/production-replay-preload.ts",
@@ -95,19 +93,12 @@ interface CommonRequest {
 interface CheckpointRequest extends CommonRequest {
   mode: "checkpoint"; input_snapshot_path: string;
 }
-interface BootstrapRequest extends CommonRequest {
-  mode: "bootstrap"; input_snapshot_path: string;
-  framework_parent_commit: string;
-}
 interface FinalRequest extends CommonRequest {
   mode: "final"; universe_path: string; universe_manifest_path: string;
   checkpoint_receipt_path: string; review_commit: string;
   review_artifact_path: string;
 }
-export type SixStepValidationRequest =
-  | BootstrapRequest
-  | CheckpointRequest
-  | FinalRequest;
+export type SixStepValidationRequest = CheckpointRequest | FinalRequest;
 export interface SixStepInputFreezeRequest {
   schema_version: 1; request: "trusted-six-step-input-freeze-request";
   sample_tx_hash: string; lane: "block_scan_standing";
@@ -124,7 +115,6 @@ interface RouteEdge {
   adapterId: string; target: string; tokenIn: string; tokenOut: string;
   slotKind: string; edgeKind: string; leavesStandingPosition: boolean;
   poolId?: string;
-  routeBindingHash?: string;
 }
 type RawReplay = Record<string, any>;
 export interface ProducerExplicitInputBindings {
@@ -210,28 +200,11 @@ export async function runTrustedSixStepValidation(input: {
   request: unknown; evidencePath: string;
   cwd?: string;
 }): Promise<SixStepControllerResult> {
-  const cwd = repositoryRoot(input.cwd ?? process.cwd());
+  const cwd = trustedRoot(input.cwd ?? process.cwd());
   const request = parseSixStepValidationRequest(input.request, cwd);
   const main = gitOut(cwd, ["rev-parse", "refs/remotes/origin/main^{commit}"]);
-  const trustedCommit = request.mode === "bootstrap"
-    ? request.framework_parent_commit
-    : main;
-  assertTrustedRoot(cwd, trustedCommit, request.mode);
   const tip = gitOut(cwd, ["rev-parse", `refs/heads/${request.branch}^{commit}`]);
-  if (request.mode === "bootstrap") {
-    if (
-      request.rollback_commit !== request.framework_parent_commit ||
-      request.framework_parent_commit === main ||
-      tip === request.framework_parent_commit
-    ) {
-      throw new Error(
-        "bootstrap requires a strict framework-parent between origin/main " +
-          "and the child candidate",
-      );
-    }
-    ancestor(cwd, main, request.framework_parent_commit);
-    ancestor(cwd, request.framework_parent_commit, tip);
-  } else if (request.mode === "checkpoint") {
+  if (request.mode === "checkpoint") {
     if (request.rollback_commit !== main || tip === main) {
       throw new Error("checkpoint rollback must be the strict origin/main ancestor");
     }
@@ -288,7 +261,7 @@ export async function runTrustedSixStepValidation(input: {
           `${boundary.reasons.join("; ")}`,
       );
     }
-    if (request.mode === "bootstrap" || request.mode === "checkpoint") {
+    if (request.mode === "checkpoint") {
       worktree = boundaryCandidateWorktree;
       boundaryCandidateWorktree = null;
     } else {
@@ -308,21 +281,10 @@ export async function runTrustedSixStepValidation(input: {
     throw error;
   }
 
-  const snapshot = request.mode === "bootstrap" || request.mode === "checkpoint"
+  const snapshot = request.mode === "checkpoint"
     ? loadSnapshot(request.input_snapshot_path, request.sample_tx_hash) : null;
-  if (
-    request.mode === "checkpoint" &&
-    snapshot?.source_runtime_commit !== request.rollback_commit
-  ) {
+  if (snapshot && snapshot.source_runtime_commit !== request.rollback_commit) {
     throw new Error("snapshot does not bind rollback_commit");
-  }
-  if (
-    request.mode === "bootstrap" &&
-    snapshot?.source_runtime_commit !== main
-  ) {
-    throw new Error(
-      "bootstrap snapshot must bind the current trusted origin/main runtime",
-    );
   }
   const review = request.mode === "final"
     ? loadReview(request, cwd, tip, main) : null;
@@ -381,9 +343,8 @@ export async function runTrustedSixStepValidation(input: {
   try {
     const before = snapshot?.runtime_attestation ??
       await fetchTrustedSixStepRuntimeAttestation(request.sample_tx_hash);
-    const deployed = request.mode === "final"
-      ? review!.review.reviewed_merge_commit
-      : snapshot!.source_runtime_commit;
+    const deployed = request.mode === "checkpoint"
+      ? request.rollback_commit : review!.review.reviewed_merge_commit;
     if (before.runtime_commit !== deployed) {
       throw new Error("attested live commit differs from expected deployed commit");
     }
@@ -634,11 +595,8 @@ export async function runTrustedSixStepValidation(input: {
       schema_version: SIX_STEP_VALIDATION_LIFECYCLE_SCHEMA_VERSION,
       gate: SIX_STEP_VALIDATION_LIFECYCLE_GATE,
       mode: request.mode,
-      status: request.mode === "bootstrap"
-        ? "bootstrap_pass" as const
-        : request.mode === "checkpoint"
-        ? "checkpoint_pass" as const
-        : "final_validated" as const,
+      status: request.mode === "checkpoint" ?
+        "checkpoint_pass" as const : "final_validated" as const,
       branch: request.branch,
       branch_tip: tip,
       candidate_commit: tip,
@@ -712,9 +670,7 @@ export async function runTrustedSixStepValidation(input: {
       production_route_stage: stages,
       baseline_route_outcome: baselineOutcome,
     };
-    const evidence = request.mode === "bootstrap"
-      ? bootstrapEvidence(common, request, snapshot!)
-      : request.mode === "checkpoint"
+    const evidence = request.mode === "checkpoint"
       ? checkpointEvidence(common, snapshot!)
       : finalEvidence(common, request, review!, before, after!, cwd);
     const errors = validateSixStepValidationLifecycle(
@@ -747,28 +703,6 @@ export async function runTrustedSixStepValidation(input: {
     }
     rmSync(temp, { recursive: true, force: true });
   }
-}
-
-function bootstrapEvidence(
-  common: Record<string, unknown>,
-  request: BootstrapRequest,
-  snapshot: TrustedSixStepInputSnapshot,
-): SixStepBootstrapEvidence {
-  const draft = {
-    ...common,
-    mode: "bootstrap" as const,
-    status: "bootstrap_pass" as const,
-    framework_parent_commit: request.framework_parent_commit,
-    validation_scope: "stacked_premerge_only" as const,
-    fixed: false as const,
-    branch_cleanup_allowed: false as const,
-    canonical_checkpoint_required: true as const,
-    input_snapshot: snapshot,
-  };
-  return {
-    ...draft,
-    bootstrap_evidence_sha256: sixStepLifecycleEnvelopeSha256(draft),
-  } as unknown as SixStepBootstrapEvidence;
 }
 
 function checkpointEvidence(
@@ -2086,10 +2020,6 @@ function gitShowOptional(
 }
 
 function loadFamilyManifest(cwd: string): FamilyOwnershipManifest {
-  const manifestTemp = realpathSync(
-    mkdtempSync(resolve(tmpdir(), "six-step-family-manifest-")),
-  );
-  const outputPath = resolve(manifestTemp, "manifest.json");
   const env: NodeJS.ProcessEnv = {
     SEARCHER_TEST_DISABLE_DOTENV: "1",
   };
@@ -2104,19 +2034,14 @@ function loadFamilyManifest(cwd: string): FamilyOwnershipManifest {
   ]) {
     if (process.env[key] !== undefined) env[key] = process.env[key];
   }
-  try {
-    const result = spawnSync(process.execPath, [
-      "--import", TSX, resolve(cwd, MANIFEST), "--out", outputPath,
-    ], { cwd, encoding: "utf8", env });
-    if (result.status !== 0) {
-      throw new Error(result.stderr || "manifest failed");
-    }
-    return JSON.parse(
-      readFileSync(outputPath, "utf8"),
-    ) as FamilyOwnershipManifest;
-  } finally {
-    rmSync(manifestTemp, { recursive: true, force: true });
-  }
+  const result = spawnSync(process.execPath, [
+    "--import", TSX, resolve(cwd, MANIFEST), "--json",
+  ], { cwd, encoding: "utf8", env });
+  if (result.status !== 0) throw new Error(result.stderr || "manifest failed");
+  const prefix = "ADAPTER_FAMILY_OWNERSHIP_MANIFEST=";
+  const line = result.stdout.split(/\r?\n/).find((entry) => entry.startsWith(prefix));
+  if (!line) throw new Error("family manifest was not emitted");
+  return JSON.parse(line.slice(prefix.length)) as FamilyOwnershipManifest;
 }
 
 async function standingAnchor(
@@ -2256,11 +2181,7 @@ export function parseSixStepValidationRequest(
       !record(value) ||
       value.schema_version !== SIX_STEP_VALIDATION_REQUEST_SCHEMA_VERSION ||
       value.request !== SIX_STEP_VALIDATION_REQUEST ||
-      (
-        value.mode !== "bootstrap" &&
-        value.mode !== "checkpoint" &&
-        value.mode !== "final"
-      ) ||
+      (value.mode !== "checkpoint" && value.mode !== "final") ||
       typeof value.branch !== "string" ||
       !/^codex\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value.branch) ||
       typeof value.rollback_commit !== "string" ||
@@ -2291,30 +2212,14 @@ export function parseSixStepValidationRequest(
     trusted_reference_path: value.trusted_reference_path,
     ...(overrides ? { runner_overrides: overrides } : {}),
   };
-  if (value.mode === "bootstrap" || value.mode === "checkpoint") {
+  if (value.mode === "checkpoint") {
     if (typeof value.input_snapshot_path !== "string") {
-      throw new Error(`${value.mode} requires input_snapshot_path`);
-    }
-    if (
-      value.mode === "bootstrap" &&
-      (
-        typeof value.framework_parent_commit !== "string" ||
-        !SHA40.test(value.framework_parent_commit) ||
-        value.framework_parent_commit !== value.rollback_commit
-      )
-    ) {
-      throw new Error(
-        "bootstrap requires framework_parent_commit equal to rollback_commit",
-      );
+      throw new Error("checkpoint requires input_snapshot_path");
     }
     return {
-      ...common,
-      mode: value.mode,
+      ...common, mode: "checkpoint",
       input_snapshot_path: resolve(cwd, value.input_snapshot_path),
-      ...(value.mode === "bootstrap"
-        ? { framework_parent_commit: value.framework_parent_commit }
-        : {}),
-    } as BootstrapRequest | CheckpointRequest;
+    } as CheckpointRequest;
   }
   for (const field of [
     "universe_path", "universe_manifest_path", "checkpoint_receipt_path",
@@ -2389,19 +2294,10 @@ function parseReview(value: unknown): ReviewArtifact {
 }
 
 function normalizeEdge(edge: RouteEdge): RouteEdge {
-  if (
-    edge.routeBindingHash !== undefined &&
-    !/^0x[0-9a-fA-F]{64}$/.test(edge.routeBindingHash)
-  ) {
-    throw new Error("route edge immutable binding hash is invalid");
-  }
   return {
     ...edge, target: edge.target.toLowerCase(),
     tokenIn: edge.tokenIn.toLowerCase(), tokenOut: edge.tokenOut.toLowerCase(),
     ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
-    ...(edge.routeBindingHash
-      ? { routeBindingHash: edge.routeBindingHash.toLowerCase() }
-      : {}),
   };
 }
 function routeScope(
@@ -2444,30 +2340,13 @@ function nonNegative(
   }
   return value;
 }
-function repositoryRoot(cwd: string): string {
-  return gitOut(cwd, ["rev-parse", "--show-toplevel"]);
-}
-
-function assertTrustedRoot(
-  root: string,
-  expectedCommit: string,
-  mode: SixStepValidationRequest["mode"],
-): void {
-  const head = gitOut(root, ["rev-parse", "HEAD"]);
-  if (head !== expectedCommit || gitOut(root, [
-    "status", "--porcelain=v1", "--untracked-files=no",
-  ])) {
-    const label = mode === "bootstrap"
-      ? "exact clean framework-parent"
-      : "clean origin/main";
-    throw new Error(`gate must run from the ${label} checkout`);
-  }
-}
-
 function trustedRoot(cwd: string): string {
-  const root = repositoryRoot(cwd);
+  const root = gitOut(cwd, ["rev-parse", "--show-toplevel"]);
+  const head = gitOut(root, ["rev-parse", "HEAD"]);
   const main = gitOut(root, ["rev-parse", "refs/remotes/origin/main^{commit}"]);
-  assertTrustedRoot(root, main, "checkpoint");
+  if (head !== main || gitOut(root, [
+    "status", "--porcelain=v1", "--untracked-files=no",
+  ])) throw new Error("gate must run from a clean origin/main checkout");
   return root;
 }
 function ancestor(cwd: string, base: string, head: string): void {

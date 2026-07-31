@@ -162,19 +162,6 @@ Swap 和 Protocol 在进入 graph 后都产生统一 `TokenEdge`，并共享：
 
 禁止为新 family 再建立第二张中央手写表。
 
-新 family 通过
-[`ProductionFamilyModule`](../../listener/src/searcher/venues/production-families/contract.ts)
-进入该 registry。生产 loader 只枚举 Git index 中已追踪、且精确匹配
-`production-families/*.production.ts` 的入口；节点残留的 untracked source 和 stale `dist`
-不能成为激活依据。每个入口必须同时导出一个 family 及其全部 owned ActionAdapter，并在进入
-全局 registry 前独立完成接口、descriptor、action closure、shared-infra 和 ID 冲突校验。
-失败入口记录稳定的 source/code 后隔离，不能留下半注册状态；成功入口按路径确定性加载并生成
-scan hash。自动注册只证明“进入生产 closure”，不证明报价、枚举或执行正确。
-Git activation source 整体不可读属于系统故障，必须阻止启动；只有单个 entry 的 import、
-contract 或 ID 冲突才允许 family-local 隔离。单个 import 有启动时限，且 family/action source
-closure 不得反向 import production registry、ActionAdapter bootstrap/registry 或任何
-`searcher/test/**` 与 fixture。
-
 状态层遵循相同边界：family 的 [`BlockScanStateCapability`](../../listener/src/searcher/venues/blockscan-state-capability.ts) 只声明：
 
 - `stateKey`；
@@ -205,9 +192,9 @@ closure 不得反向 import production registry、ActionAdapter bootstrap/regist
 ```text
 listener/src/searcher/venues/swaps/<family>/**
 listener/src/adapters/<family>.ts
-listener/src/searcher/venues/production-families/<family>.production.ts
-listener/src/searcher/test/<family>*                    # 仅 family-local 测试
-listener/src/searcher/test/fixtures/adapter-families/<family>*
+listener/src/searcher/venues/production-registry.ts    # 薄注册
+listener/src/adapters/index.ts                         # 薄 ActionAdapter 注册
+listener/src/searcher/test/**                          # family 测试与 fixture
 ```
 
 普通 Protocol family 原则上只修改：
@@ -215,23 +202,16 @@ listener/src/searcher/test/fixtures/adapter-families/<family>*
 ```text
 listener/src/searcher/venues/protocols/<family>/**
 listener/src/adapters/<family>.ts
-listener/src/searcher/venues/production-families/<family>.production.ts
-listener/src/searcher/test/<family>*                    # 仅 family-local 测试
-listener/src/searcher/test/fixtures/adapter-families/<family>*
+listener/src/searcher/venues/production-registry.ts    # 薄注册
+listener/src/adapters/index.ts                         # 薄 ActionAdapter 注册
+listener/src/searcher/test/**                          # family 测试与 fixture
 ```
 
-普通 family branch 不得修改 `production-registry.ts`、`adapters/index.ts`、共享 descriptor
-catalog 或全局 snapshot。唯一激活声明是 family-owned `.production.ts` 入口；入口只允许用
-`defineProductionFamilyModule` 绑定一个标准 family 与该 family 的 owned ActionAdapter。
-需要新增 shared infra、capability 或中央接口时，boundary gate 必须非零并转独立 framework
-branch。
+`production-registry.ts` 和 `adapters/index.ts` 只允许：
 
-测试权限也按 ownership 约束，而不是放开整个 `test/**`：只允许新增或修改能由唯一稳定 family
-ID 推导出的 family-local 测试与 fixture。Shared/trusted producer、verifier、boundary gate、
-ownership manifest、全局 registry snapshot 及 package script 不属于 family 测试；若 family
-实现必须修改它们，boundary gate 必须输出 `framework`、列出 exact paths，并把这些改动移到
-独立 framework branch。Family-local 测试只是辅助证据，不能替代 scanner 自发枚举和
-mandatory final sim。
+- import 新 family / ActionAdapter；
+- 在既有 catalog 中增加直接 binding；
+- 保持既有中央控制流和 AST skeleton 不变。
 
 ### 4.2 正常禁止
 
@@ -307,7 +287,7 @@ Gate 应在开发早期即可独立运行，并在 checkpoint 中再次强制运
 - 冻结的 `origin/main` baseline；
 - candidate SHA；
 - production family ownership manifest；
-- registry/action loader skeleton；
+- registry/action catalog skeleton；
 - family source closures；
 
 输出必须是结构化结果，但核心 gate 只做两类判断：
@@ -327,13 +307,13 @@ required_action:
 
 | 发现 | 分类 | Gate 动作 |
 |---|---|---|
-| 仅 family source closure + family-owned production entry | `family_local` | 允许继续 family 开发 |
+| 仅 family source closure + 薄注册 | `family_local` | 允许继续 family 开发 |
 | 修改中央 capability/interface/hash | `framework` | 非零退出，停止 family 自证 |
 | 修改多个既有 family 共享 host | `framework` | 非零退出，移到独立 branch |
 | 修改 scanner/rank/cap/deadline/queue/cache | `framework` | 非零退出，移到独立 branch |
 | family 修改中央 mutable runtime | `framework` | 非零退出，报告具体路径 |
 | 协议专属字段进入中央 graph/planner | `framework` | 非零退出，要求协议无关 capability 设计 |
-| 修改中央 registry/catalog/loader skeleton | `framework` | 非零退出 |
+| registry/catalog 超出薄注册 skeleton | `framework` | 非零退出 |
 
 Gate 发现越界后必须执行的流程动作：
 
@@ -353,15 +333,10 @@ Gate 不应自动删除用户代码或重置分支；它负责 fail closed、保
 
 - 开发期由 `adapter-family-boundary-gate` CLI 调用；
 - checkpoint 在任何 RPC、universe 读取和 producer 之前调用；
-- 两处都只从 registry-derived ownership manifest、source closure、family-owned production
-  entry 和中央 loader skeleton 得出结论；
+- 两处都只从 registry-derived ownership manifest、source closure 和两张薄注册表的 skeleton 得出结论；
 - `framework` 非零退出，并输出 exact runtime paths 与 reasons。
 
-这道核心 gate 不再细分 `systemic_live`，也不实现一套庞大的 AST 安全框架。标准 `SwapAdapter` / `ProtocolConversionAdapter` 类型、ownership manifest、source closure、production-entry contract、中央 loader skeleton 和正常 code review 共同约束 family；若日后有真实绕过样本，再在独立工具 branch 增加协议无关规则。
-
-两份既有全局冻结测试只作为历史回归地板：旧 family 的字段与相对顺序必须保持不变；新增
-family 走通用接口、ownership、action closure、pricing/identity/discovery 断言，不得要求把
-新 ID 手工追加到全局 allowlist。它们不是 live graph/state snapshot，也不能替代六步结果验收。
+这道核心 gate 不再细分 `systemic_live`，也不实现一套庞大的 AST 安全框架。标准 `SwapAdapter` / `ProtocolConversionAdapter` 类型、ownership manifest、source closure、薄注册 skeleton 和正常 code review 共同约束 family；若日后有真实绕过样本，再在独立工具 branch 增加协议无关规则。
 
 ## 5. Hook / Extension 的例外模型
 
@@ -662,10 +637,8 @@ Import closure 只证明依赖关系，**不能给 candidate 授予新的编辑�
 family-owned。
 
 既有 family 的 `kind`、`root_source`、`root_export` 是稳定身份，candidate 不得靠重命名它们
-扩大 supplemental test/doc 的命名权限。Supplemental 路径按完整 family ID 与 root namespace
-做最长精确前缀归属，不使用任意单词包含匹配；例如 Silo redeem 不能因为名字含 `erc4626`
-就修改标准 ERC4626 测试，反向也不允许。新 family 不得认领 baseline 已存在的测试文件。
-`production-replay`、`blockscan-hunt`、
+扩大 supplemental test/doc 的命名权限。Supplemental 路径只使用稳定 family ID 派生 token；
+新 family 不得认领 baseline 已存在的测试文件。`production-replay`、`blockscan-hunt`、
 ownership manifest、Adapter Replay 与 execution witness 等 trusted TCB 路径无条件排除，不能
 因为文件名恰好包含某个 candidate-controlled token 就变成 family-owned；这些保留项按稳定
 入口/helper 前缀族匹配，避免先新增同名 family、下一次提交再认领既有 trusted helper 的
@@ -693,7 +666,7 @@ export const EKUBO_EXTENSION_X =
 
 本次 gate 只机械保证用户要求的两件事：
 
-1. family runtime 改动归属于唯一 family，激活只通过 family-owned production entry，中央文件零修改；
+1. family runtime 改动归属于唯一 family，中央文件只允许既有薄注册；
 2. family 继续实现标准 `SwapAdapter` / `ProtocolConversionAdapter` capability，不修改中央接口或共享生产行为。
 
 它不宣称能静态证明任意 TypeScript 都无恶意副作用。出现 prototype/global mutation 一类非常规实现时由正常 review 拒绝；不要为了假想攻击把普通 adapter 开发变成另一套编译器工程。
@@ -719,7 +692,7 @@ export const EKUBO_EXTENSION_X =
 - pool/edge adapter IDs；
 - taxonomy；
 - ActionAdapter ownership；
-- explicit production-entry binding；
+- explicit registry/catalog binding；
 - source closure；
 - unsupported-by-default 的 variant registry。
 
@@ -833,9 +806,8 @@ candidate producer argv/env 不含 winner tx、reference route、target pool 或
 → rollback/main verifier 匹配冻结路线
 → 在新 fork 执行冻结 raw calldata
 → 重算 funding holder、final-verify、phantom-profit、standing、零库存/偿还和 EV
-→ schema-v2 用同一 ReferenceWitness；schema-v3 可分别声明 targetWitness / executionWitness
-→ 两套 witness 必须独立匹配并派生同一 canonical token 方向和 pool identity
-→ witness 绑定 ABI、参数关系、receipt transfer 与父子调用分支
+→ target trace 与 final-sim trace 都由同一个有限声明式 ReferenceWitness 解释
+→ witness 绑定 ABI、token 方向、pool identity、参数关系、receipt transfer 与父子调用分支
 → final-sim 每条腿的 root calldata 必须逐字节等于 solver-selected resolved subtree 的编译结果
 → verifier 后再次校验 sealed artifact/reference hash 未变化
 ```
@@ -845,19 +817,13 @@ Reference artifact 必须在 adapter candidate 的 `rollback_commit` 中已存�
 - target receipt + call trace 的 canonical SHA；
 - parent block/hash/state root；
 - normalized ordered route 与 route SHA；
-- 每个 route leg 的 canonical identity 与有限声明式 route witness。
+- 每个 route leg 的 execution identity 与有限声明式 `ReferenceWitness`。
 
 `ReferenceWitness` 只允许固定 schema 的 ABI/参数/调用层级/receipt-transfer 关系，不执行任意代码，
 也不得退化为 bare `target + selector`。每条腿必须同时绑定 `token-in` 与 `token-out`；当
 `poolId !== execution target` 时还必须显式使用 `pool-id`。final sim 另以 producer 冻结的
 `executionSurfaces[]` 验证每条腿的 selector 和完整 calldata SHA；该 calldata 来自真实
 solver-selected resolved-plan subtree，包含 selected amount 与 child bytes。
-
-Schema-v2 复用同一个 witness 解释 target 与 final-sim。Schema-v3 只在两边公共调用形态确实
-不同时允许拆成 `targetWitness` / `executionWitness`；两边仍须分别完成 ABI/参数/调用树匹配，
-并通过受限 `routeIdentity` 表达式派生完全相同的 `tokenIn`、`tokenOut`、方向与 `poolId`。
-`executionWitness` 的 root calldata 仍必须逐字节绑定 solver 编译结果，不能用 target 的较弱
-入口冒充我们已实现的 execution surface。
 
 每个 execution surface 还冻结：
 
@@ -880,10 +846,9 @@ family-owned fragment（例如一条 leg 用两个并列的 family node）会保
 此外，boundary 判定出的唯一 changed family 必须实际出现在 selected route 的
 `requiredFamilyIds` 中。只改 family B、却用既有 family A 的自然路线与 reference 来过门会被拒绝。
 
-当前 schema-v3 可用受限、无 I/O 的 `call-field`、`abi-decode-bytes-field` 与
-`keccak256-abi` 从静态 ABI tuple/bytes 派生 canonical identity；类型、字段索引、静态长度和
-hash 输入都由 trusted schema 限定。超出这套有限表达式的嵌套或动态 identity 仍 fail closed，
-必须先在独立、协议无关 capability branch 扩展 schema，不能在 family 内写协议特判绕过。
+当前标量 `pool-id` 可直接表达 address/bytes32 参数。若某协议只把 pool identity 藏在嵌套 tuple
+中，或必须由 tuple 派生（Ekubo PoolKey 属于此类），本 gate 会 fail closed；必须先在独立的、
+协议无关 capability branch 扩展有限 witness schema，不能在 family 内写 Ekubo 特判绕过。
 
 Family branch 同样不得修改：
 
@@ -1176,7 +1141,7 @@ final_validated
 - duplicate owned ActionAdapter；
 - route-root ActionAdapter 伪装 infra；
 - unowned/shared runtime path；
-- 修改中央 registry/action loader skeleton；
+- 中央 registry/action index 超出薄注册 skeleton；
 - 多个 family source closure 同时变化；
 - unknown extension 回退 base quote。
 
@@ -1271,24 +1236,14 @@ Slice B — family boundary hardening
   early boundary preflight + exact path/reason artifact
   standard interface / ownership / thin-registration gate
 
-Slice C — Ekubo family child on the exact Slice A/B parent
+Slice C — Ekubo family
   host-local variants
   discovery/identity/probe
   pricing/quote
   ActionAdapter/plan
   unit/parity/Adapter Replay
 
-Slice D0 — stacked bootstrap (while A/B is still unmerged)
-  exact framework-parent..family-child boundary
-  same target-blind six steps
-  bootstrap_pass only; no merge/fixed/cleanup authority
-
-Slice D1 — merge trusted A/B, refresh family child from main
-  independently review and merge framework parent
-  ensure trusted reference exists in main
-  update/recreate pure family child
-
-Slice D2 — canonical checkpoint
+Slice D — checkpoint
   full target-blind six steps
   checkpoint_pass
 
@@ -1302,11 +1257,7 @@ Slice F — cleanup
   branch deletion
 ```
 
-Slice A/B 与 Slice C 不能放在同一提交范围内。允许 Slice C 先作为 A/B 的 child 做一次
-`bootstrap`，但 trusted controller/reference 必须已经存在于 exact framework parent，child 相对该
-parent 仍须是纯 family-local；`bootstrap_pass` 不能替代 canonical checkpoint、不能授权 child
-合并或删除。A/B 独立验收并落到 main 后，Slice C 必须从该 main 更新/重建，再跑 canonical
-checkpoint。Trusted reference 也必须在 canonical checkpoint 前存在于 `origin/main`。
+Slice A/B 必须先于 Ekubo branch 落到 main。Trusted reference 也必须先存在于该 rollback/main。Slice C 必须从包含 A/B 的新 `origin/main` 创建，不能把可信验收器和 feature 放在同一 branch 自证。
 
 ## 17. 命令层级
 
@@ -1319,17 +1270,12 @@ checkpoint。Trusted reference 也必须在 canonical checkpoint 前存在于 `o
 ```bash
 cd analysis
 npm run --silent adapter-family-boundary-gate -- \
-  --baseline <exact-framework-parent-SHA> \
-  --candidate <exact-family-child-SHA> \
+  --baseline origin/main \
+  --candidate HEAD \
   --out /tmp/adapter-family-boundary.json
 ```
 
 CLI 只接 baseline/candidate/out，不接受调用者自报的 family ID 或 `family_local`。它与 checkpoint 调用同一个 evaluator；输出 `framework` 时以非零退出，并要求把 exact paths/reasons 对应的 family 外改动移到独立 branch。
-`changed_paths` 在加载 manifest 之前冻结；即使 candidate manifest/schema/import 本身失败，失败
-receipt 仍包含 resolved baseline/candidate SHA、完整 `changed_paths` 和原始 `gate_error`，不得只
-打印一个不可定位的异常。
-Stacked 开发期以 exact framework parent 为 baseline；framework parent 合并后，canonical
-checkpoint 前必须再以新的 exact `origin/main` 为 baseline 运行，前一次结果不能继承。
 
 ### 17.1 Family 静态与状态合同
 
@@ -1369,7 +1315,7 @@ npm run --silent six-step-validation-gate -- \
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "request": "trusted-six-step-input-freeze-request",
   "sample_tx_hash": "0x<64-hex>",
   "lane": "block_scan_standing",
@@ -1378,48 +1324,7 @@ npm run --silent six-step-validation-gate -- \
 }
 ```
 
-### 17.4 Optional stacked bootstrap
-
-从 clean exact framework-parent checkout 运行：
-
-```bash
-cd analysis
-npm run --silent six-step-validation-gate -- \
-  --phase bootstrap \
-  --request /tmp/<family>-bootstrap-request.json \
-  --out /tmp/<family>-bootstrap-receipt.json
-```
-
-```json
-{
-  "schema_version": 2,
-  "request": "trusted-six-step-validation-request",
-  "mode": "bootstrap",
-  "branch": "codex/<family-child>",
-  "rollback_commit": "<40-hex-exact-framework-parent>",
-  "framework_parent_commit": "<same-40-hex-exact-framework-parent>",
-  "sample_tx_hash": "0x<64-hex>",
-  "lane": "block_scan_standing",
-  "trusted_reference_path": "docs/research/references/production-routes/<sample>.json",
-  "input_snapshot_path": "/tmp/<family>-input-snapshot.json"
-}
-```
-
-该模式要求当前 `origin/main` 是 framework parent 的严格祖先、snapshot 来自该 current main，
-family child 是 framework parent 的严格后代。成功只签发：
-
-```text
-status = bootstrap_pass
-validation_scope = stacked_premerge_only
-fixed = false
-branch_cleanup_allowed = false
-canonical_checkpoint_required = true
-```
-
-它不能作为 final 的 `checkpoint_receipt_path`，也不能授权 child 合并/部署/删 branch。Framework
-parent 合并 main 后必须更新 child，再运行下一节 canonical checkpoint。
-
-### 17.4a Canonical pre-merge checkpoint
+### 17.4 Pre-merge checkpoint
 
 ```bash
 cd analysis
@@ -1519,7 +1424,7 @@ npm run --silent six-step-validation-gate -- \
 
 - [ ] 中央运行逻辑零协议特有分支；
 - [ ] 只使用标准 RouteLegAdapter capability；
-- [ ] 只新增 family-owned `.production.ts` 入口，中央 registry/catalog 零修改；
+- [ ] registry/catalog 仅薄注册；
 - [ ] pool/edge/action owner 唯一；
 - [ ] 无私有 scheduler/cache/enumerator/solver/final sim；
 - [ ] source closure 完整；

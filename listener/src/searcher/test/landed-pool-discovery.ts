@@ -34,9 +34,6 @@ import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { retainVerifiedSwapFamilyInstances } from "../venues/swap-family-inventory.js";
 import { curveUnderlyingAdapter } from "../venues/swaps/curve-underlying.js";
 import { CURVE_METAREGISTRY } from "../venues/curve-underlying.js";
-import {
-  projectLandedDiscoveryForBlockScanHunt,
-} from "./blockscan-hunt-selection.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -394,33 +391,6 @@ assert(
       item.adapter === healthyAdapter
     ),
   "a timed-out family must stay incomplete while a healthy sibling publishes",
-);
-const isolatedHuntProjection =
-  projectLandedDiscoveryForBlockScanHunt({
-    familySources: [slowFamily, healthyFamily].map((candidate) => ({
-      familyId: candidate.id,
-      sourceIds: isolatedRegistry.list()
-        .filter((descriptor) =>
-          descriptor.event.executionFamilies.includes(candidate.id)
-        )
-        .map((descriptor) => descriptor.sourceId),
-    })),
-    coverage: isolatedResult.coverage,
-    materializedPools: isolatedResult.materializedPools,
-    familyIdForPool: (candidate) =>
-      candidate.adapter === slowAdapter
-        ? slowFamily.id
-        : candidate.adapter === healthyAdapter
-          ? healthyFamily.id
-          : null,
-  });
-assert(
-  isolatedHuntProjection.pools.length === 1 &&
-    isolatedHuntProjection.pools[0].adapter === healthyAdapter &&
-    isolatedHuntProjection.completeFamilyIds.includes(healthyFamily.id) &&
-    isolatedHuntProjection.incompleteFamilyIds.includes(slowFamily.id),
-  "target-blind hunt projection must keep the successful discovery family " +
-    "while quarantining a failed sibling",
 );
 slowFamilyShouldTimeout = false;
 const recoveredIsolatedResult = await discoverLandedPools({
