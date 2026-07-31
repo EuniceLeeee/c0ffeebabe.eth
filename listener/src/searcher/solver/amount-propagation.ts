@@ -158,6 +158,7 @@ async function quoteEdge(
     const routeAdapter =
       PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(edge.adapterId);
     return (await options.quoteSource.quote({
+      canonicalEdgeId: edge.canonicalEdgeId,
       adapterId: edge.adapterId,
       target: edge.target,
       tokenIn: edge.tokenIn,

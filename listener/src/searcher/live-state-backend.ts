@@ -4,7 +4,7 @@ import type { LiveFixturePath } from "./live-fixture-recorder.js";
 import type { OrderflowEvent } from "./orderflow/manual-source.js";
 import type { SimulationResult } from "./simulator/botvm-simulator.js";
 import type { PostImpactSeed } from "./solver/pool-state-cache.js";
-import type { V4PoolKey } from "./planner/token-graph.js";
+import type { TokenEdge, V4PoolKey } from "./planner/token-graph.js";
 import type { PendingExecutionEvidence } from "./venues/route-leg-adapter.js";
 
 export type LiveBackendKind = "rpc" | "revm" | "hybrid";
@@ -40,6 +40,8 @@ export interface PreparedState {
 }
 
 export interface QuoteRequest {
+  /** Exact graph-edge identity. Prepared backends use this before structural fallback. */
+  canonicalEdgeId?: TokenEdge["canonicalEdgeId"];
   adapterId: string;
   target: string;
   tokenIn: string;
@@ -53,6 +55,40 @@ export interface QuoteRequest {
 }
 
 export type QuoteHop = Omit<QuoteRequest, "amountIn">;
+
+export function quoteHopIdentityKey(hop: QuoteHop): string {
+  if (hop.canonicalEdgeId !== undefined) {
+    return `canonical:${hop.canonicalEdgeId}`;
+  }
+  return [
+    hop.adapterId,
+    hop.target.toLowerCase(),
+    hop.tokenIn.toLowerCase(),
+    hop.tokenOut.toLowerCase(),
+    hop.poolToken0?.toLowerCase() ?? "",
+    hop.poolToken1?.toLowerCase() ?? "",
+    v4PoolKeyIdentity(hop.v4PoolKey),
+  ].join(":");
+}
+
+export function findPreparedQuoteEdge(
+  graph: readonly TokenEdge[],
+  request: QuoteRequest,
+): TokenEdge | undefined {
+  const target = request.target.toLowerCase();
+  const tokenIn = request.tokenIn.toLowerCase();
+  const tokenOut = request.tokenOut.toLowerCase();
+  const poolKey = v4PoolKeyIdentity(request.v4PoolKey);
+  return graph.find((edge) =>
+    (request.canonicalEdgeId === undefined ||
+      edge.canonicalEdgeId === request.canonicalEdgeId) &&
+    edge.adapterId === request.adapterId &&
+    edge.target.toLowerCase() === target &&
+    edge.tokenIn.toLowerCase() === tokenIn &&
+    edge.tokenOut.toLowerCase() === tokenOut &&
+    (poolKey === "" || v4PoolKeyIdentity(edge.v4PoolKey) === poolKey)
+  );
+}
 
 export interface QuoteResult {
   amountOut: bigint;
@@ -88,4 +124,15 @@ export interface LiveStateBackend {
 export function parseLiveBackendKind(value: string): LiveBackendKind {
   if (value === "rpc" || value === "revm" || value === "hybrid") return value;
   throw new Error(`unsupported live backend: ${value}`);
+}
+
+function v4PoolKeyIdentity(key: V4PoolKey | undefined): string {
+  if (!key) return "";
+  return [
+    key.currency0.toLowerCase(),
+    key.currency1.toLowerCase(),
+    String(key.fee),
+    String(key.tickSpacing),
+    key.hooks.toLowerCase(),
+  ].join(":");
 }

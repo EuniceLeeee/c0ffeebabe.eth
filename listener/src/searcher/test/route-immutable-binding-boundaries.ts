@@ -5,6 +5,11 @@ import {
 } from "../blind-production-compatibility.js";
 import { blindProductionAuditHash } from "../blind-production-audit.js";
 import { blockScanRouteId } from "../blockscan-route-identity.js";
+import {
+  findPreparedQuoteEdge,
+  quoteHopIdentityKey,
+  type QuoteRequest,
+} from "../live-state-backend.js";
 import type {
   PoolEntry,
   TokenEdge,
@@ -16,6 +21,7 @@ import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import {
   blockScanEdgeKey,
   blockScanEdgeMetadataFingerprint,
+  canonicalEdgeId,
   stateSchemaFingerprint,
 } from "../venues/blockscan-state-capability.js";
 import { RouteLegRegistry } from "../venues/route-leg-registry.js";
@@ -170,6 +176,57 @@ assert.notEqual(
 
 const boundEdge = { ...edge, routeBinding: binding };
 const siblingEdge = { ...edge, routeBinding: siblingBinding };
+const canonicalBoundEdge = {
+  ...boundEdge,
+  canonicalEdgeId: canonicalEdgeId(identityFamily.id, boundEdge),
+};
+const canonicalSiblingEdge = {
+  ...siblingEdge,
+  canonicalEdgeId: canonicalEdgeId(identityFamily.id, siblingEdge),
+};
+const preparedRequest: QuoteRequest = {
+  canonicalEdgeId: canonicalSiblingEdge.canonicalEdgeId,
+  adapterId: siblingEdge.adapterId,
+  target: siblingEdge.target,
+  tokenIn: siblingEdge.tokenIn,
+  tokenOut: siblingEdge.tokenOut,
+  amountIn: 1n,
+};
+const siblingGraph = [canonicalBoundEdge, canonicalSiblingEdge];
+assert.equal(
+  findPreparedQuoteEdge(siblingGraph, preparedRequest),
+  canonicalSiblingEdge,
+  "prepared quote lookup must select the exact canonical sibling",
+);
+assert.equal(
+  findPreparedQuoteEdge(siblingGraph, {
+    ...preparedRequest,
+    canonicalEdgeId: undefined,
+  }),
+  canonicalBoundEdge,
+  "legacy prepared quote lookup must retain structural first-match behavior",
+);
+assert.equal(
+  findPreparedQuoteEdge(siblingGraph, {
+    ...preparedRequest,
+    canonicalEdgeId: "edge:missing" as NonNullable<TokenEdge["canonicalEdgeId"]>,
+  }),
+  undefined,
+  "missing canonical identity must not fall back to another sibling",
+);
+assert.equal(
+  findPreparedQuoteEdge(siblingGraph, {
+    ...preparedRequest,
+    tokenOut: TOKEN_A,
+  }),
+  undefined,
+  "canonical identity with conflicting structural fields must fail closed",
+);
+assert.notEqual(
+  quoteHopIdentityKey(canonicalBoundEdge),
+  quoteHopIdentityKey(canonicalSiblingEdge),
+  "route-hop dedupe must retain canonical siblings",
+);
 assert.notEqual(
   edgeExecutionVariantKey(boundEdge),
   edgeExecutionVariantKey(siblingEdge),

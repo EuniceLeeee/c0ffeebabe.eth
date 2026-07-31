@@ -212,7 +212,11 @@ import {
   type LiveFinalState,
   type LiveFixturePath,
 } from "./live-fixture-recorder.js";
-import { parseLiveBackendKind, type LiveBackendKind } from "./live-state-backend.js";
+import {
+  parseLiveBackendKind,
+  quoteHopIdentityKey,
+  type LiveBackendKind,
+} from "./live-state-backend.js";
 import type { LiveStateBackend, QuoteHop, QuoteRequest } from "./live-state-backend.js";
 import { DEFAULT_BRIBE_BPS, validateLiveEnvelope } from "./live-envelope.js";
 import { RevmSimClient } from "./revm-sim-client.js";
@@ -5442,7 +5446,7 @@ class RecentWarmTracker {
   ): void {
     if (amountIn <= 0n) return;
     if (excludeTargets.has(hop.target.toLowerCase())) return;
-    const key = quoteHopKey(hop);
+    const key = quoteHopIdentityKey(hop);
     const existing = this.hops.get(key);
     if (existing) {
       existing.count++;
@@ -5479,7 +5483,8 @@ function topPinnedWarmHops(
   return [...hops]
     .sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1))
     .slice(0, k)
-    .map(({ adapterId, target, tokenIn, tokenOut, amountIn, poolToken0, poolToken1, v4PoolKey }) => ({
+    .map(({ canonicalEdgeId, adapterId, target, tokenIn, tokenOut, amountIn, poolToken0, poolToken1, v4PoolKey }) => ({
+      canonicalEdgeId,
       adapterId,
       target,
       tokenIn,
@@ -5503,13 +5508,14 @@ function dedupeRouteHops(
   const hops: QuoteHop[] = [];
   for (const plan of plans) {
     for (const edge of plan.tokenPath.edges) {
-      const key = quoteHopKey(edge);
+      const key = quoteHopIdentityKey(edge);
       if (seen.has(key)) continue;
       seen.add(key);
       const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
         edge.adapterId,
       );
       hops.push({
+        canonicalEdgeId: edge.canonicalEdgeId,
         adapterId: edge.adapterId,
         target: edge.target,
         tokenIn: edge.tokenIn,
@@ -5525,29 +5531,6 @@ function dedupeRouteHops(
     }
   }
   return hops;
-}
-
-function quoteHopKey(hop: QuoteHop): string {
-  return [
-    hop.adapterId,
-    hop.target.toLowerCase(),
-    hop.tokenIn.toLowerCase(),
-    hop.tokenOut.toLowerCase(),
-    hop.poolToken0?.toLowerCase() ?? "",
-    hop.poolToken1?.toLowerCase() ?? "",
-    v4PoolKeyIdentity(hop.v4PoolKey),
-  ].join(":");
-}
-
-function v4PoolKeyIdentity(key: TokenEdge["v4PoolKey"] | undefined): string {
-  if (!key) return "";
-  return [
-    key.currency0.toLowerCase(),
-    key.currency1.toLowerCase(),
-    String(key.fee),
-    String(key.tickSpacing),
-    key.hooks.toLowerCase(),
-  ].join(":");
 }
 
 function poolImpactFromOpportunity(

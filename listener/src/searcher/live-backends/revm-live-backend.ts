@@ -10,6 +10,7 @@ import type {
   QuoteRequest,
   QuoteResult,
 } from "../live-state-backend.js";
+import { findPreparedQuoteEdge } from "../live-state-backend.js";
 import {
   RevmSimClient,
   type OverlayPreCall,
@@ -480,19 +481,6 @@ export class RevmLiveBackend implements LiveStateBackend {
     return raw;
   }
 
-  private findEdge(req: QuoteRequest): TokenEdge | undefined {
-    const target = req.target.toLowerCase();
-    const tokenIn = req.tokenIn.toLowerCase();
-    const tokenOut = req.tokenOut.toLowerCase();
-    const poolKey = v4PoolKeyIdentity(req.v4PoolKey);
-    return this.graph.find((edge) =>
-      edge.target.toLowerCase() === target &&
-      edge.tokenIn.toLowerCase() === tokenIn &&
-      edge.tokenOut.toLowerCase() === tokenOut &&
-      (poolKey === "" || v4PoolKeyIdentity(edge.v4PoolKey) === poolKey)
-    );
-  }
-
   private async callPrepared(
     to: string,
     data: string,
@@ -528,7 +516,7 @@ export class RevmLiveBackend implements LiveStateBackend {
     const request = this.preparedRequest(hop, amountIn);
     return {
       request,
-      edge: this.findEdge(request),
+      edge: findPreparedQuoteEdge(this.graph, request),
       callPrepared: (to, data, options) => this.callPrepared(to, data, options),
       readChain: ({ to, data }) => this.provider.call({ to, data }),
     };
@@ -548,15 +536,4 @@ function overlayApproveSpender(hop: QuoteHop | QuoteRequest): string | null {
     amountIn: "amountIn" in hop ? hop.amountIn : 0n,
   };
   return adapter?.prepared?.allowanceSpender?.(request) ?? null;
-}
-
-function v4PoolKeyIdentity(key: TokenEdge["v4PoolKey"] | undefined): string {
-  if (!key) return "";
-  return [
-    key.currency0.toLowerCase(),
-    key.currency1.toLowerCase(),
-    String(key.fee),
-    String(key.tickSpacing),
-    key.hooks.toLowerCase(),
-  ].join(":");
 }
