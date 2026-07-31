@@ -838,7 +838,7 @@ export async function discoverLandedPools(input: {
         complete = false;
         issues.push(errorMessage(outcome.error));
         if (outcome.scope === "projection") {
-          retryablePools.push(...outcome.retryablePools);
+          appendAll(retryablePools, outcome.retryablePools);
         }
       } else {
         const result = outcome.result;
@@ -847,8 +847,8 @@ export async function discoverLandedPools(input: {
           descriptor.sourceId,
           result,
         );
-        materializedPools.push(...result.pools);
-        retryablePools.push(...(result.retryablePools ?? []));
+        appendAll(materializedPools, result.pools);
+        appendAll(retryablePools, result.retryablePools ?? []);
         for (const key of result.cacheRevalidation?.stalePoolKeys ?? []) {
           stalePoolKeys.add(key);
         }
@@ -858,7 +858,7 @@ export async function discoverLandedPools(input: {
           revalidatedPoolKeys.add(key);
         }
         complete &&= result.complete;
-        issues.push(...(result.issues ?? []));
+        appendAll(issues, result.issues ?? []);
       }
     }
     for (const familyId of descriptor.event.executionFamilies) {
@@ -979,7 +979,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
     );
     for (const slice of slices) {
       unionComplete &&= slice.complete;
-      unionIssues.push(...slice.issues);
+      appendAll(unionIssues, slice.issues);
       for (const log of slice.logs) {
         const topic = log.topics[0]?.toLowerCase();
         if (!topic) continue;
@@ -1110,7 +1110,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
           errorMessage(outcome.error),
         ]);
         if (outcome.scope === "projection") {
-          retryablePools.push(...outcome.retryablePools);
+          appendAll(retryablePools, outcome.retryablePools);
         }
       } else {
         const result = outcome.result;
@@ -1119,8 +1119,8 @@ async function discoverLandedPoolsByTopicUnion(input: {
           descriptor.sourceId,
           result,
         );
-        materializedPools.push(...result.pools);
-        retryablePools.push(...(result.retryablePools ?? []));
+        appendAll(materializedPools, result.pools);
+        appendAll(retryablePools, result.retryablePools ?? []);
         for (const key of result.cacheRevalidation?.stalePoolKeys ?? []) {
           stalePoolKeys.add(key);
         }
@@ -1386,7 +1386,7 @@ async function scanGenericActivityRange(
     );
     logCount += slice.logs.length;
     complete &&= slice.complete;
-    issues.push(...slice.issues);
+    appendAll(issues, slice.issues);
     for (const log of slice.logs) {
       if (!recordGenericActivity(activity, event, log)) {
         complete = false;
@@ -1461,7 +1461,7 @@ async function scanFilterRange(
       logs.push(log);
     }
     complete &&= slice.complete;
-    issues.push(...slice.issues);
+    appendAll(issues, slice.issues);
   }
   return {
     logs: Object.freeze(logs),
@@ -1799,4 +1799,8 @@ function throwIfAborted(signal?: AbortSignal): void {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function appendAll<T>(target: T[], values: readonly T[]): void {
+  for (const value of values) target.push(value);
 }

@@ -803,6 +803,36 @@ assert(
   "a production-sized log slice must aggregate without a call-stack limit",
 );
 
+const largeMaterializedSlice = await discoverLandedPools({
+  registry: bytesRegistry.landedPoolDiscovery(),
+  backend: {
+    async getLogs() {
+      const logs: LandedPoolDiscoveryLog[] = [];
+      for (let index = 0; index < largeSliceLogCount; index += 1) {
+        logs.push(log(bytesTopic, poolId));
+      }
+      return logs;
+    },
+    async call() {
+      throw new Error("large family discovery must not call");
+    },
+  },
+  fromBlock: 100,
+  toBlock: 100,
+  batchSize: 10,
+  minSwaps: 1,
+  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  topicScanMode: "union",
+  strict: true,
+});
+assert(
+  largeMaterializedSlice.materializedPools.length === largeSliceLogCount &&
+    largeMaterializedSlice.logCountsByEventId.get(
+      "custom-singleton-bytes32",
+    ) === largeSliceLogCount,
+  "a production-sized family materialization must aggregate without a call-stack limit",
+);
+
 const streamed = await discoverLandedPools({
   registry: addressRegistry.landedPoolDiscovery(),
   backend: {
