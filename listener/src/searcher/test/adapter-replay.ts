@@ -347,7 +347,7 @@ const SHARED_API_FILES = [
 ];
 
 const ADAPTER_REPLAY_EV_POLICY = Object.freeze({
-  profitHaircutBps: 2_000,
+  profitHaircutBps: 0,
   evGate: true,
   bribeAllAboveGas: false,
   bribeBps: DEFAULT_BRIBE_BPS,
