@@ -308,9 +308,8 @@ function allowedSupplementalPath(
     (entry) => entry.id === family.id,
   );
   if (!baselineFamily && sourceAt(baseCommit, path) !== null) return false;
-  const tokens = familyIdTokens(baselineFamily ?? family);
-  if (tokens.length === 0) return false;
-  const normalizedPath = path.toLowerCase();
+  const ownerId = supplementalPathOwnerId(path, candidateManifest);
+  if (ownerId !== family.id) return false;
   if (
     path.startsWith("listener/src/searcher/test/") &&
     (
@@ -320,7 +319,7 @@ function allowedSupplementalPath(
       )
     )
   ) {
-    return tokens.some((token) => normalizedPath.includes(token));
+    return true;
   }
   if (
     path.startsWith("docs/research/") &&
@@ -332,9 +331,73 @@ function allowedSupplementalPath(
       "docs/research/tx-gap-analysis-format.md",
     ].includes(path)
   ) {
-    return tokens.some((token) => normalizedPath.includes(token));
+    return true;
   }
   return false;
+}
+
+function supplementalPathOwnerId(
+  path: string,
+  manifest: FamilyOwnershipManifest,
+): string | null {
+  const relative = path.startsWith(
+    "listener/src/searcher/test/fixtures/adapter-families/",
+  )
+    ? path.slice(
+        "listener/src/searcher/test/fixtures/adapter-families/".length,
+      )
+    : path.startsWith("listener/src/searcher/test/")
+      ? path.slice("listener/src/searcher/test/".length)
+      : path.startsWith("docs/research/")
+        ? path.slice("docs/research/".length)
+        : path;
+  const normalized = relative.toLowerCase();
+  const matches = manifest.families.flatMap((entry) =>
+    familySupplementalNamespaces(entry)
+      .filter((namespace) => supplementalNamespaceMatches(
+        normalized,
+        namespace,
+      ))
+      .map((namespace) => ({
+        familyId: entry.id,
+        length: namespace.length,
+      }))
+  );
+  if (matches.length === 0) return null;
+  const longest = Math.max(...matches.map((entry) => entry.length));
+  const owners = [...new Set(
+    matches
+      .filter((entry) => entry.length === longest)
+      .map((entry) => entry.familyId),
+  )];
+  return owners.length === 1 ? owners[0] : null;
+}
+
+function familySupplementalNamespaces(
+  family: FamilyOwnershipManifest["families"][number],
+): string[] {
+  const sourceParts = family.root_source.toLowerCase().split("/");
+  const sourceName = sourceParts.at(-1)?.replace(/\.[^.]+$/, "") ?? "";
+  const rootName = sourceName === "family"
+    ? sourceParts.at(-2) ?? ""
+    : sourceName;
+  const fullId = family.id.toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return [...new Set([fullId, rootName])]
+    .filter((entry) => entry.length >= 3)
+    .sort((left, right) => right.length - left.length);
+}
+
+function supplementalNamespaceMatches(
+  relativePath: string,
+  namespace: string,
+): boolean {
+  return relativePath === namespace ||
+    relativePath.startsWith(`${namespace}.`) ||
+    relativePath.startsWith(`${namespace}-`) ||
+    relativePath.startsWith(`${namespace}_`) ||
+    relativePath.startsWith(`${namespace}/`);
 }
 
 function trustedFamilyBoundaryPath(path: string): boolean {

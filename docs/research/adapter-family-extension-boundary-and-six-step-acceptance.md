@@ -646,8 +646,10 @@ Import closure 只证明依赖关系，**不能给 candidate 授予新的编辑�
 family-owned。
 
 既有 family 的 `kind`、`root_source`、`root_export` 是稳定身份，candidate 不得靠重命名它们
-扩大 supplemental test/doc 的命名权限。Supplemental 路径只使用稳定 family ID 派生 token；
-新 family 不得认领 baseline 已存在的测试文件。`production-replay`、`blockscan-hunt`、
+扩大 supplemental test/doc 的命名权限。Supplemental 路径按完整 family ID 与 root namespace
+做最长精确前缀归属，不使用任意单词包含匹配；例如 Silo redeem 不能因为名字含 `erc4626`
+就修改标准 ERC4626 测试，反向也不允许。新 family 不得认领 baseline 已存在的测试文件。
+`production-replay`、`blockscan-hunt`、
 ownership manifest、Adapter Replay 与 execution witness 等 trusted TCB 路径无条件排除，不能
 因为文件名恰好包含某个 candidate-controlled token 就变成 family-owned；这些保留项按稳定
 入口/helper 前缀族匹配，避免先新增同名 family、下一次提交再认领既有 trusted helper 的
@@ -815,8 +817,9 @@ candidate producer argv/env 不含 winner tx、reference route、target pool 或
 → rollback/main verifier 匹配冻结路线
 → 在新 fork 执行冻结 raw calldata
 → 重算 funding holder、final-verify、phantom-profit、standing、零库存/偿还和 EV
-→ target trace 与 final-sim trace 都由同一个有限声明式 ReferenceWitness 解释
-→ witness 绑定 ABI、token 方向、pool identity、参数关系、receipt transfer 与父子调用分支
+→ schema-v2 用同一 ReferenceWitness；schema-v3 可分别声明 targetWitness / executionWitness
+→ 两套 witness 必须独立匹配并派生同一 canonical token 方向和 pool identity
+→ witness 绑定 ABI、参数关系、receipt transfer 与父子调用分支
 → final-sim 每条腿的 root calldata 必须逐字节等于 solver-selected resolved subtree 的编译结果
 → verifier 后再次校验 sealed artifact/reference hash 未变化
 ```
@@ -826,13 +829,19 @@ Reference artifact 必须在 adapter candidate 的 `rollback_commit` 中已存�
 - target receipt + call trace 的 canonical SHA；
 - parent block/hash/state root；
 - normalized ordered route 与 route SHA；
-- 每个 route leg 的 execution identity 与有限声明式 `ReferenceWitness`。
+- 每个 route leg 的 canonical identity 与有限声明式 route witness。
 
 `ReferenceWitness` 只允许固定 schema 的 ABI/参数/调用层级/receipt-transfer 关系，不执行任意代码，
 也不得退化为 bare `target + selector`。每条腿必须同时绑定 `token-in` 与 `token-out`；当
 `poolId !== execution target` 时还必须显式使用 `pool-id`。final sim 另以 producer 冻结的
 `executionSurfaces[]` 验证每条腿的 selector 和完整 calldata SHA；该 calldata 来自真实
 solver-selected resolved-plan subtree，包含 selected amount 与 child bytes。
+
+Schema-v2 复用同一个 witness 解释 target 与 final-sim。Schema-v3 只在两边公共调用形态确实
+不同时允许拆成 `targetWitness` / `executionWitness`；两边仍须分别完成 ABI/参数/调用树匹配，
+并通过受限 `routeIdentity` 表达式派生完全相同的 `tokenIn`、`tokenOut`、方向与 `poolId`。
+`executionWitness` 的 root calldata 仍必须逐字节绑定 solver 编译结果，不能用 target 的较弱
+入口冒充我们已实现的 execution surface。
 
 每个 execution surface 还冻结：
 
@@ -855,9 +864,10 @@ family-owned fragment（例如一条 leg 用两个并列的 family node）会保
 此外，boundary 判定出的唯一 changed family 必须实际出现在 selected route 的
 `requiredFamilyIds` 中。只改 family B、却用既有 family A 的自然路线与 reference 来过门会被拒绝。
 
-当前标量 `pool-id` 可直接表达 address/bytes32 参数。若某协议只把 pool identity 藏在嵌套 tuple
-中，或必须由 tuple 派生（Ekubo PoolKey 属于此类），本 gate 会 fail closed；必须先在独立的、
-协议无关 capability branch 扩展有限 witness schema，不能在 family 内写 Ekubo 特判绕过。
+当前 schema-v3 可用受限、无 I/O 的 `call-field`、`abi-decode-bytes-field` 与
+`keccak256-abi` 从静态 ABI tuple/bytes 派生 canonical identity；类型、字段索引、静态长度和
+hash 输入都由 trusted schema 限定。超出这套有限表达式的嵌套或动态 identity 仍 fail closed，
+必须先在独立、协议无关 capability branch 扩展 schema，不能在 family 内写协议特判绕过。
 
 Family branch 同样不得修改：
 

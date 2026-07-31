@@ -144,9 +144,11 @@ The file paths locate bytes; they are not evidence by themselves. The supplied f
 trusted frozen snapshot. `trusted_reference_path` is repository-relative and must already exist in the
 trusted baseline tree (framework parent for bootstrap; `origin/main` for canonical checkpoint/final) under
 `docs/research/references/production-routes/`; a family candidate may neither add nor modify it. It binds
-the target receipt/call-trace hash, lane-correct anchor, normalized ordered route and one finite declarative
-`ReferenceWitness` per leg. The witness binds both route tokens, ABI/argument
-relations, call ancestry, receipt transfers and (when distinct from the execution target) `pool-id`.
+the target receipt/call-trace hash, lane-correct anchor and normalized ordered route. Schema-v2 carries one
+finite declarative `ReferenceWitness` per leg for both traces. Schema-v3 may carry separate
+`targetWitness`/`executionWitness` declarations, but each must match independently and derive the same
+canonical route identity. The witnesses bind both route tokens, ABI/argument relations, call ancestry,
+receipt transfers and (when distinct from the execution target) `pool-id`.
 Bare target/selector sequences are rejected, and one physical call/log cannot satisfy two witness rules or
 two route legs. Caller-provided RPC URLs and runtime env files are rejected.
 
@@ -158,7 +160,7 @@ reviewed shape is:
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "artifact": "trusted-production-reference-route",
   "sampleTxHash": "0x<64 lowercase hex>",
   "targetInputSha256": "<64 lowercase hex>",
@@ -240,6 +242,30 @@ reviewed shape is:
   ]
 }
 ```
+
+For each schema-v3 `routeWitnesses[]` leg, the minimal split shape is:
+
+```json
+{
+  "seq": 1,
+  "edgeAdapterId": "<family-owned adapter id>",
+  "tokenIn": "0x<40 lowercase hex>",
+  "tokenOut": "0x<40 lowercase hex>",
+  "poolId": "<normalized pool identity>",
+  "targetWitness": {
+    "witness": { "calls": ["<bounded declarative call rule>"], "receiptTransfers": [] },
+    "routeIdentity": "<bounded call-field/ABI/hash expression>"
+  },
+  "executionWitness": {
+    "witness": { "calls": ["<bounded declarative call rule>"], "receiptTransfers": [] },
+    "routeIdentity": "<must derive the same canonical identity>"
+  }
+}
+```
+
+This split is not a relaxation: target and execution rules are both mandatory, their normalized
+token-direction/pool identity must be equal, and the execution root still byte-matches the compiled
+resolved-plan calldata. Use schema-v2 when the same public call shape truthfully covers both traces.
 
 The concrete ABI and rules come from independent trace review; the placeholder signatures above are schema
 examples, not universal swap ABIs. A leg may add bounded child-call rules with `within`, relational

@@ -4,6 +4,7 @@ import {
   blindCompatibilityPoolIdentity,
 } from "../blind-production-compatibility.js";
 import { blindProductionAuditHash } from "../blind-production-audit.js";
+import { blockScanRouteId } from "../blockscan-route-identity.js";
 import type {
   PoolEntry,
   TokenEdge,
@@ -178,6 +179,11 @@ assert.notEqual(
   blockScanEdgeKey(boundEdge),
   blockScanEdgeKey(siblingEdge),
   "state edge keys must distinguish binding-only routes",
+);
+assert.notEqual(
+  blockScanRouteId([boundEdge]),
+  blockScanRouteId([siblingEdge]),
+  "reject-blacklist route keys must distinguish binding-only routes",
 );
 assert.notEqual(
   stateSchemaFingerprint([boundEdge]),

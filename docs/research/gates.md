@@ -166,12 +166,15 @@ controller seals that same-directory artifact with file fsync, atomic rename, re
 directory fsync. Only after that durable seal may a rollback/main-owned verifier receive the sample and read
 the rollback/main-owned reference under `docs/research/references/production-routes/`. The verifier checks
 the target receipt/call-trace hash and lane anchor, matches the normalized frozen route, and interprets the
-same finite declarative `ReferenceWitness` against both the target and final-sim traces. The witness binds
-ABI signatures, token direction, pool identity where it differs from the execution target, argument
-relations, receipt transfers and parent/descendant call structure; a bare target/selector sequence is not
-evidence. For final sim, every witnessed root input must additionally byte-match the external calldata
-independently compiled from that leg's solver-selected resolved-plan subtree (including the selected amount
-and real child bytes). The verifier then resolves the frozen funding
+finite declarative route witnesses against both the target and final-sim traces. Legacy schema-v2 uses one
+`ReferenceWitness` for both traces. Schema-v3 may use distinct `targetWitness` and `executionWitness`
+declarations when the landed transaction and our executable route call different public functions, but
+both witnesses must match independently and derive the same canonical token direction and pool identity.
+The witnesses bind ABI signatures, argument relations, receipt transfers and parent/descendant call
+structure; a bare target/selector sequence is not evidence. For final sim, every execution-witness root
+input must additionally byte-match the external calldata independently compiled from that leg's
+solver-selected resolved-plan subtree (including the selected amount and real child bytes). The verifier
+then resolves the frozen funding
 action through the rollback registry, runs the frozen raw calldata on a fresh fork, and independently
 recomputes repayment/conservation, standing, profit, production policy and EV. It rehashes both producer and
 reference artifacts after verification. The disposable producer worktree omits the checked-out trusted

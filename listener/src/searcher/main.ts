@@ -5638,11 +5638,7 @@ function formatBlockScanRing(opp: { affectedTokens?: string[]; seedEdges: TokenE
 }
 
 function formatBlockScanRouteKey(opp: { seedEdges: TokenEdge[] }): string {
-  return opp.seedEdges.map((edge) => `${edge.adapterId}:${blockScanEdgeIdentity(edge)}`).join("|");
-}
-
-function blockScanEdgeIdentity(edge: TokenEdge): string {
-  return (edge.poolId ?? edge.target).toLowerCase();
+  return blockScanRouteId(opp.seedEdges);
 }
 
 function activeBlockScanRejectBlacklistEntry(

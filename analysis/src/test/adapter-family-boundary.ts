@@ -467,6 +467,59 @@ test("family boundary rejects a new runtime file outside family zones", () => {
   );
 });
 
+test("family-local test ownership uses the longest exact family namespace", () => {
+  const standard = family("protocol:erc4626", [
+    "src/searcher/venues/protocols/erc4626.ts",
+  ]);
+  const silo = family("protocol:erc4626-silo-redeem", [
+    "src/searcher/venues/protocols/erc4626-silo-redeem.ts",
+  ]);
+  const families = manifest([standard, silo]);
+  const sourceAt = sources({
+    "base:listener/src/searcher/venues/protocols/erc4626.ts": "standard",
+    "candidate:listener/src/searcher/venues/protocols/erc4626.ts":
+      "standard2",
+    "base:listener/src/searcher/venues/protocols/erc4626-silo-redeem.ts":
+      "silo",
+    "candidate:listener/src/searcher/venues/protocols/erc4626-silo-redeem.ts":
+      "silo2",
+  });
+
+  const siloClaimingStandard = evaluateAdapterFamilyBoundary({
+    baseCommit: "base",
+    candidateCommit: "candidate",
+    changedPaths: [
+      "listener/src/searcher/venues/protocols/erc4626-silo-redeem.ts",
+      "listener/src/searcher/test/erc4626.ts",
+    ],
+    baseManifest: families,
+    candidateManifest: families,
+    sourceAt,
+  });
+  assert.equal(siloClaimingStandard.classification, "framework");
+  assert.match(
+    siloClaimingStandard.reasons.join("\n"),
+    /outside the family boundary.*test\/erc4626\.ts/,
+  );
+
+  const standardClaimingSilo = evaluateAdapterFamilyBoundary({
+    baseCommit: "base",
+    candidateCommit: "candidate",
+    changedPaths: [
+      "listener/src/searcher/venues/protocols/erc4626.ts",
+      "listener/src/searcher/test/erc4626-silo-redeem.ts",
+    ],
+    baseManifest: families,
+    candidateManifest: families,
+    sourceAt,
+  });
+  assert.equal(standardClaimingSilo.classification, "framework");
+  assert.match(
+    standardClaimingSilo.reasons.join("\n"),
+    /outside the family boundary.*test\/erc4626-silo-redeem\.ts/,
+  );
+});
+
 function manifest(
   families: readonly FamilyOwnershipManifestEntry[],
 ): FamilyOwnershipManifest {
