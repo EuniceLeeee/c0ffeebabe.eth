@@ -1495,52 +1495,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         blockNumber -
           (useNMinusOneFallback ? nMinusOneMaxGraphLagBlocks : 1),
       );
+      let useLaggingPublishedDiscovery = false;
       if (
         dexAdmissionCompleteThrough(base) < requiredPredecessor
       ) {
-        if (startupWarmAttempt) {
-          // Startup has a separate bounded budget. Let the already-running
-          // historical lane finish and consume its canonical result
-          // immediately. If its bounded chunk predates N-1, keep advancing
-          // through the same background-concurrency lane. The hot transition
-          // below therefore remains a current-head transition, never an
-          // unbounded historical scan. Publication still happens only through
-          // the mutation queue; timeout/shutdown remains fail-closed.
-          await waitForBackfillSettlement(
-            discovery.lane.settled(),
-            passDeadlineAtMs,
-            passSignal,
-          );
-          await consumePreparedBackfill();
-          base = discovery.capture();
-          while (
-            dexAdmissionCompleteThrough(base) < requiredPredecessor &&
-            Date.now() < passDeadlineAtMs
-          ) {
-            const previousCompleteThrough =
-              dexAdmissionCompleteThrough(base);
-            await waitForBackfillSettlement(
-              Promise.resolve(
-                discovery.scheduleBackfill(blockNumber),
-              ).then(() => undefined),
-              passDeadlineAtMs,
-              passSignal,
-            );
-            await waitForBackfillSettlement(
-              discovery.lane.settled(),
-              passDeadlineAtMs,
-              passSignal,
-            );
-            const consumed = await consumePreparedBackfill();
-            base = discovery.capture();
-            if (
-              consumed === null ||
-              dexAdmissionCompleteThrough(base) <= previousCompleteThrough
-            ) {
-              break;
-            }
-          }
-        }
         const predecessorStillBehind =
           dexAdmissionCompleteThrough(base) < requiredPredecessor;
         const canStrictlyCatchCurrentHead =
@@ -1548,13 +1506,30 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           !useNMinusOneFallback &&
           consumedPreparedSource !== null &&
           dexAdmissionCompleteThrough(base) >= consumedPreparedSource;
+        if (!this.deps.blind.enabled && predecessorStillBehind) {
+          // A verified published graph is safe to price at current N even when
+          // its source-coverage watermark is catching up: it may miss newly
+          // landed venues, but it cannot invent an edge. Keep the historical
+          // scan in its bounded background lane and publish honest degraded
+          // recall instead of starving every current-state pass behind it.
+          useLaggingPublishedDiscovery = true;
+          outcome = "degraded";
+          fullCoverage = false;
+          degradedRecallReasons = Object.freeze([
+            `discovery_source_coverage_behind:` +
+            `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`,
+          ]);
+        }
         // A complete prepared generation can only be behind because heads
         // advanced while it was running. The existing hot transition may
         // strictly scan that elapsed suffix within the ordinary pass budget.
         // An incomplete/failed historical generation never enters this path.
         if (
-          Date.now() >= passDeadlineAtMs ||
-          (predecessorStillBehind && !canStrictlyCatchCurrentHead)
+          !useLaggingPublishedDiscovery &&
+          (
+            Date.now() >= passDeadlineAtMs ||
+            (predecessorStillBehind && !canStrictlyCatchCurrentHead)
+          )
         ) {
           outcome = "degraded";
           const admissionThrough = dexAdmissionCompleteThrough(base);
@@ -1571,14 +1546,12 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       }
 
       let nextDiscovery: LiveDiscoveryPublicationState;
-      if (useNMinusOneFallback) {
+      if (useNMinusOneFallback || useLaggingPublishedDiscovery) {
         /*
-         * The fallback consumes an already-completed predecessor price view.
-         * Running current-head discovery before that consume recreated the
-         * original local-reth conflict and aged exact refinement past its
-         * deadline. Use the bounded, already-published graph here; the
-         * coordinator's periodic backfill lane continues healing topology
-         * without being force-started by every scanner head.
+         * N-1 fallback consumes an already-completed predecessor price view.
+         * A lagging discovery watermark likewise uses only its verified
+         * published graph while the bounded backfill lane heals topology.
+         * Neither case moves historical work into the current-head RPC path.
          */
         nextDiscovery = base;
       } else {
@@ -1631,7 +1604,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       const requiredAdmissionThrough = useNMinusOneFallback
         ? requiredPredecessor
         : blockNumber;
-      if (nextAdmissionThrough < requiredAdmissionThrough) {
+      if (
+        nextAdmissionThrough < requiredAdmissionThrough &&
+        !useLaggingPublishedDiscovery
+      ) {
         outcome = "degraded";
         skippedReason =
           `discovery_current_incomplete:` +
@@ -1641,6 +1617,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         return;
       }
       if (
+        useLaggingPublishedDiscovery ||
         nextDiscovery.dexGraphCoverage.graphCompleteThrough <
           requiredAdmissionThrough
       ) {
@@ -1985,6 +1962,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           skippedReason = "no_adjacent_precompleted_coarse";
           fullCoverage = false;
           degradedRecallReasons = Object.freeze([
+            ...degradedRecallReasons,
             "current_n_mutation_anchors_unavailable",
             "off_event_dependencies_uncovered",
           ]);
@@ -2011,6 +1989,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         exactSourceBlockHash = graphView.sourceBlockHash;
         fullCoverage = false;
         degradedRecallReasons = Object.freeze([
+          ...degradedRecallReasons,
           "current_n_mutation_anchors_unavailable",
           "off_event_dependencies_uncovered",
         ]);
@@ -2753,43 +2732,6 @@ function linkAbortController(
   const abort = (): void => target.abort(source.reason);
   source.addEventListener("abort", abort, { once: true });
   return () => source.removeEventListener("abort", abort);
-}
-
-async function waitForBackfillSettlement(
-  settlement: Promise<void>,
-  deadlineAtMs: number,
-  signal: AbortSignal,
-): Promise<void> {
-  if (signal.aborted) {
-    throw signal.reason ?? new Error("searcher shutdown");
-  }
-  const remainingMs = deadlineAtMs - Date.now();
-  if (remainingMs <= 0) {
-    throw new Error("startup discovery backfill wait deadline exceeded");
-  }
-  await new Promise<void>((resolve, reject) => {
-    let finished = false;
-    const finish = (error?: unknown): void => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      signal.removeEventListener("abort", onAbort);
-      if (error === undefined) resolve();
-      else reject(error);
-    };
-    const onAbort = (): void => {
-      finish(signal.reason ?? new Error("searcher shutdown"));
-    };
-    const timer = setTimeout(() => {
-      finish(new Error("startup discovery backfill wait deadline exceeded"));
-    }, remainingMs);
-    signal.addEventListener("abort", onAbort, { once: true });
-    if (signal.aborted) onAbort();
-    void settlement.then(
-      () => finish(),
-      (error) => finish(error),
-    );
-  });
 }
 
 async function waitForTaskUntil(
