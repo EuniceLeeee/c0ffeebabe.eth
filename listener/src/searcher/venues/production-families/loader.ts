@@ -306,6 +306,14 @@ function validateModuleContract(
         `${typedFamily.id} ActionAdapter ${action.id} must own a matching descriptor`,
       );
     }
+    const expectedEdgeKind = edgeKindForFamily(typedFamily);
+    if (action.descriptor.edgeKind !== expectedEdgeKind) {
+      throw new Error(
+        `${typedFamily.id} ActionAdapter ${action.id} descriptor edgeKind ` +
+          `${String(action.descriptor.edgeKind)} does not match family kind ` +
+          `${typedFamily.kind} (${expectedEdgeKind})`,
+      );
+    }
   }
   for (const infraId of typedFamily.requiredInfraActionAdapterIds) {
     if (!sharedInfraIds.has(infraId)) {
@@ -321,6 +329,26 @@ function validateModuleContract(
       typedActions as ProductionFamilyModule["actionAdapters"],
     ),
   });
+}
+
+function edgeKindForFamily(
+  family: AdapterFamily,
+): "swap" | "protocol" | "flash" | "credit" {
+  switch (family.kind) {
+    case "swap":
+      return "swap";
+    case "protocol-conversion":
+      return "protocol";
+    case "flash-loan":
+      return "flash";
+    case "credit":
+      return "credit";
+    case "liquidity":
+      throw new Error(
+        `${family.id} uses unsupported automatic family kind liquidity; ` +
+          "runtime liquidity taxonomy requires a protocol-neutral framework upgrade",
+      );
+  }
 }
 
 function listenerRoot(): string {

@@ -31,6 +31,21 @@ const validModule = defineProductionFamilyModule({
   })],
 });
 
+const wrongTaxonomyModule = defineProductionFamilyModule({
+  family: dodoV2Adapter,
+  actionAdapters: [Object.freeze({
+    ...dodoV2ActionAdapter,
+    descriptor: Object.freeze({
+      adapterId: dodoV2ActionAdapter.id,
+      lineage: "dodo-v2",
+      edgeKind: "protocol",
+      action: "swap",
+      canSendValue: false,
+      leavesStandingPositionDefault: false,
+    }),
+  })],
+});
+
 const directory = await mkdtemp(join(tmpdir(), "mev-production-families-"));
 try {
   for (const name of [
@@ -39,6 +54,7 @@ try {
     "c-import-failure.production.ts",
     "d-conflict.production.ts",
     "e-timeout.production.ts",
+    "f-wrong-taxonomy.production.ts",
     "ignored.ts",
   ]) {
     await writeFile(join(directory, name), "");
@@ -60,6 +76,8 @@ try {
             throw new Error("synthetic import failure");
           case "e-timeout.production.ts":
             return await new Promise<never>(() => {});
+          case "f-wrong-taxonomy.production.ts":
+            return { productionFamilyModule: wrongTaxonomyModule };
           default:
             throw new Error(`unexpected source ${sourceFile}`);
         }
@@ -78,6 +96,7 @@ try {
       ["c-import-failure.production.ts", "module_import_failed"],
       ["d-conflict.production.ts", "family_registration_conflict"],
       ["e-timeout.production.ts", "module_import_timeout"],
+      ["f-wrong-taxonomy.production.ts", "invalid_module_contract"],
     ],
   );
   assert.match(result.scanSha256, /^[a-f0-9]{64}$/);
