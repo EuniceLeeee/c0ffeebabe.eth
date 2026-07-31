@@ -8,7 +8,7 @@ import {
 const PRODUCTION_REGISTRY =
   "listener/src/searcher/venues/production-registry.ts";
 const ACTION_INDEX = "listener/src/adapters/index.ts";
-const THIN_REGISTRATIONS =
+const CENTRAL_REGISTRATIONS =
   new Map<string, FamilyOwnershipSourceKind>([
   [PRODUCTION_REGISTRY, "production-registry"],
   [ACTION_INDEX, "action-index"],
@@ -106,7 +106,7 @@ export function evaluateAdapterFamilyBoundary(
 
   const impacted = new Set<string>();
   for (const path of runtimeChangedPaths) {
-    const registrationKind = THIN_REGISTRATIONS.get(path);
+    const registrationKind = CENTRAL_REGISTRATIONS.get(path);
     if (registrationKind) {
       const before = input.sourceAt(input.baseCommit, path);
       const after = input.sourceAt(input.candidateCommit, path);
@@ -117,6 +117,11 @@ export function evaluateAdapterFamilyBoundary(
           familyOwnershipSourceSkeletonSha256(registrationKind, after)
       ) {
         reasons.push(`central registration behavior changed: ${path}`);
+      } else {
+        reasons.push(
+          `central registration file changed; use a family-owned ` +
+            `production entry instead: ${path}`,
+        );
       }
       continue;
     }
@@ -377,7 +382,9 @@ function familySupplementalNamespaces(
   family: FamilyOwnershipManifest["families"][number],
 ): string[] {
   const sourceParts = family.root_source.toLowerCase().split("/");
-  const sourceName = sourceParts.at(-1)?.replace(/\.[^.]+$/, "") ?? "";
+  const sourceName = sourceParts.at(-1)
+    ?.replace(/\.production\.[^.]+$/, "")
+    .replace(/\.[^.]+$/, "") ?? "";
   const rootName = sourceName === "family"
     ? sourceParts.at(-2) ?? ""
     : sourceName;
@@ -447,6 +454,15 @@ function inFamilyRuntimeStructure(path: string): boolean {
   const relative = path.startsWith("listener/")
     ? path.slice("listener/".length)
     : path;
+  if (relative.startsWith(
+    "src/searcher/venues/production-families/",
+  )) {
+    return /^[a-z0-9][a-z0-9-]*\.production\.ts$/.test(
+      relative.slice(
+        "src/searcher/venues/production-families/".length,
+      ),
+    );
+  }
   return [
     "src/searcher/venues/swaps/",
     "src/searcher/venues/protocols/",

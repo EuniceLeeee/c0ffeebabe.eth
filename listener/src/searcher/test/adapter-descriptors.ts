@@ -1,14 +1,15 @@
 import "../../shared/adapters/index.js";
 
 import {
-  ADAPTER_DESCRIPTORS,
   descriptorFor,
   type AdapterDescriptor,
 } from "../../adapters/adapter-descriptors.js";
 import {
   assertDescriptorCoverage,
   classifyCall,
+  get,
   listAll,
+  listDescriptors,
 } from "../../adapters/registry.js";
 import type { EdgeKind } from "../strategy-taxonomy.js";
 
@@ -42,13 +43,17 @@ function assertDescriptor(
 function testCoverage(): void {
   assertDescriptorCoverage();
   const registeredIds = listAll().map((adapter) => adapter.id);
-  const descriptorIds = Object.keys(ADAPTER_DESCRIPTORS);
+  const descriptors = listDescriptors();
+  const descriptorIds = descriptors.map((descriptor) => descriptor.adapterId);
+  const descriptorById = new Map(
+    descriptors.map((descriptor) => [descriptor.adapterId, descriptor]),
+  );
 
   assert(new Set(registeredIds).size === registeredIds.length, "registered adapter IDs must be unique");
   assert(descriptorIds.length === registeredIds.length, `descriptor count ${descriptorIds.length}`);
   for (const id of registeredIds) {
-    const descriptor = descriptorFor(id);
-    assert(descriptor !== null, `descriptor missing for ${id}`);
+    const descriptor = descriptorById.get(id);
+    assert(descriptor !== undefined, `descriptor missing for ${id}`);
     assert(descriptor.adapterId === id, `${id}: descriptor adapterId ${descriptor.adapterId}`);
   }
   console.log("[adapter-descriptors] coverage: PASS");
@@ -64,7 +69,7 @@ function testEdgeKindCounts(): void {
     null: 0,
   };
 
-  for (const descriptor of Object.values(ADAPTER_DESCRIPTORS)) {
+  for (const descriptor of listDescriptors()) {
     counts[edgeKindKey(descriptor.edgeKind)] += 1;
   }
 
@@ -112,20 +117,33 @@ function testClassifyCall(): void {
 }
 
 function testValueSenders(): void {
-  const valueSenderIds = Object.values(ADAPTER_DESCRIPTORS)
+  const valueSenderIds = listDescriptors()
     .filter((descriptor) => descriptor.canSendValue)
     .map((descriptor) => descriptor.adapterId)
     .sort();
 
-  assert(
-    valueSenderIds.join(",") === "univ4-settle-value,weth-deposit-value",
-    `value sender ids ${valueSenderIds.join(",")}`,
-  );
+  for (const baselineId of [
+    "univ4-settle-value",
+    "weth-deposit-value",
+  ]) {
+    assert(valueSenderIds.includes(baselineId), `${baselineId}: value sender`);
+  }
+  for (const adapterId of valueSenderIds) {
+    if (
+      adapterId !== "univ4-settle-value" &&
+      adapterId !== "weth-deposit-value"
+    ) {
+      assert(
+        get(adapterId).descriptor?.canSendValue === true,
+        `${adapterId}: new value sender must declare its descriptor inline`,
+      );
+    }
+  }
   console.log("[adapter-descriptors] canSendValue: PASS");
 }
 
 function testCreditStandingPositionDefault(): void {
-  const creditDescriptors = Object.values(ADAPTER_DESCRIPTORS)
+  const creditDescriptors = listDescriptors()
     .filter((descriptor) => descriptor.edgeKind === "credit");
   assert(creditDescriptors.length === 2, `credit descriptor count ${creditDescriptors.length}`);
   for (const descriptor of creditDescriptors) {

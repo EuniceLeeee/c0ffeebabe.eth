@@ -1,3 +1,5 @@
+import type { AdapterDescriptor } from "./adapters/adapter-descriptors.js";
+
 export interface PendingTx {
   hash: string;
   from: string;
@@ -121,6 +123,12 @@ export interface ActionAdapter {
   id: string;
   isWrapper: boolean;
   field2Offset: number | ((node: ResolvedPlanNode) => number) | null;
+  /**
+   * New family-owned actions declare their semantic descriptor beside their
+   * encoder. Existing actions may continue using the legacy central catalog
+   * until migrated.
+   */
+  readonly descriptor?: AdapterDescriptor;
 
   /** Encode action as BotVM opcodes. Only accepts ResolvedPlanNode. */
   encode(

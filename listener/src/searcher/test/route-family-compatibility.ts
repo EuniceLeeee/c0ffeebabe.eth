@@ -41,34 +41,36 @@ function testOneToOneProjection(): void {
 }
 
 function testDynamicAdmission(): void {
-  const dynamic = PRODUCTION_ROUTE_FAMILY_MANIFEST.filter(
-    (entry) => entry.dynamicAdmission !== null,
+  const byId = new Map(
+    PRODUCTION_ROUTE_FAMILY_MANIFEST.map((entry) => [
+      entry.executionFamilyId,
+      entry,
+    ]),
   );
-  assert(dynamic.length === 4, `expected four dynamic families, got ${dynamic.length}`);
-  assert(dynamic[0]?.executionFamilyId === "protocol:erc4626", "ERC4626 dynamic family order");
+  const erc4626 = byId.get("protocol:erc4626");
+  const silo = byId.get("protocol:erc4626-silo-redeem");
+  const eigenpie = byId.get("protocol:eigenpie");
+  const selfBurn = byId.get("protocol:self-burn-native");
   assert(
-    dynamic[0]?.dynamicAdmission?.candidateSources.join(",") ===
+    erc4626?.dynamicAdmission?.candidateSources.join(",") ===
       "dex-token-domain,observed-interaction",
     "ERC4626 candidate-source derivation",
   );
   assert(
-    dynamic[0]?.dynamicAdmission?.requiresProtocolEdgesFlag === true,
+    erc4626?.dynamicAdmission?.requiresProtocolEdgesFlag === true,
     "dynamic admission must stay protocol-edge gated",
   );
   assert(
-    dynamic[1]?.executionFamilyId === "protocol:erc4626-silo-redeem" &&
-      dynamic[1]?.dynamicAdmission?.candidateSources.join(",") ===
+    silo?.dynamicAdmission?.candidateSources.join(",") ===
         "dex-token-domain,observed-interaction",
     "silo redeem must declare address and observed provenance",
   );
   assert(
-    dynamic[2]?.executionFamilyId === "protocol:eigenpie" &&
-      dynamic[2]?.dynamicAdmission?.candidateSources.join(",") === "observed-interaction",
+    eigenpie?.dynamicAdmission?.candidateSources.join(",") === "observed-interaction",
     "Eigenpie deposit must declare only the shared observed source",
   );
   assert(
-    dynamic[3]?.executionFamilyId === "protocol:self-burn-native" &&
-      dynamic[3]?.dynamicAdmission?.candidateSources.join(",") ===
+    selfBurn?.dynamicAdmission?.candidateSources.join(",") ===
         "dex-token-domain,observed-interaction",
     "self-burn-native must declare address and observed provenance",
   );
@@ -108,7 +110,7 @@ function testReceiptDepositFrameworkIsNotARegisteredFamily(): void {
   console.log("[route-family-compatibility] receipt-deposit framework boundary: PASS");
 }
 
-function testFieldAndOrderSnapshot(): void {
+function testBaselineFieldAndOrderFloor(): void {
   const expected = [
     "univ2-standard|swap|univ2|univ2-swap|univ2-swap|erc20-transfer|0|false|-|-",
     "univ3-standard|swap|univ3|univ3-swap|univ3-swap|erc20-transfer|0|false|-|-",
@@ -132,11 +134,72 @@ function testFieldAndOrderSnapshot(): void {
     "credit:fluid|credit|fluid-vault|fluid-vault|fluid-vault,fluid-dex-liquidate|erc20-approve|0|false|-|-",
   ] as const;
   const actual = compactSnapshot();
-  assert(
-    JSON.stringify(actual) === JSON.stringify(expected),
-    `field/order snapshot changed:\n${actual.join("\n")}`,
+  const actualById = new Map(
+    actual.map((row) => [row.slice(0, row.indexOf("|")), row]),
   );
-  console.log("[route-family-compatibility] field/order snapshot: PASS");
+  let priorIndex = -1;
+  for (const protectedRow of expected) {
+    const familyId = protectedRow.slice(0, protectedRow.indexOf("|"));
+    assert(
+      actualById.get(familyId) === protectedRow,
+      `protected route row changed: ${familyId}`,
+    );
+    const index = actual.indexOf(protectedRow);
+    assert(index > priorIndex, "protected route relative order changed");
+    priorIndex = index;
+  }
+  console.log("[route-family-compatibility] baseline field/order floor: PASS");
+}
+
+function testGenericManifestContract(): void {
+  const ids = new Set<string>();
+  for (const entry of PRODUCTION_ROUTE_FAMILY_MANIFEST) {
+    assert(!ids.has(entry.executionFamilyId), `${entry.executionFamilyId}: duplicate family id`);
+    ids.add(entry.executionFamilyId);
+    for (const [label, values] of [
+      ["pool adapters", entry.poolAdapters],
+      ["edge adapters", entry.edgeAdapterIds],
+      ["owned actions", entry.ownedActionAdapterIds],
+      ["required infra", entry.requiredInfraActionAdapterIds],
+    ] as const) {
+      assert(
+        new Set(values).size === values.length,
+        `${entry.executionFamilyId}: duplicate ${label}`,
+      );
+    }
+    const owned = new Set(entry.ownedActionAdapterIds);
+    assert(
+      entry.requiredInfraActionAdapterIds.every((id) => !owned.has(id)),
+      `${entry.executionFamilyId}: owned/infra overlap`,
+    );
+    assert(
+      JSON.stringify(entry.actionAdapterIds) === JSON.stringify([
+        ...entry.ownedActionAdapterIds,
+        ...entry.requiredInfraActionAdapterIds,
+      ]),
+      `${entry.executionFamilyId}: action projection`,
+    );
+    assert(
+      Number.isInteger(entry.declaredVenueCount) &&
+        entry.declaredVenueCount >= 0,
+      `${entry.executionFamilyId}: declared venue count`,
+    );
+    if (entry.dynamicAdmission) {
+      assert(
+        entry.familyKind === "protocol-conversion" &&
+          entry.staticRequiresProtocolEdgesFlag &&
+          entry.dynamicAdmission.requiresProtocolEdgesFlag,
+        `${entry.executionFamilyId}: dynamic admission protocol gate`,
+      );
+      assert(
+        entry.dynamicAdmission.candidateSources.length > 0 &&
+          new Set(entry.dynamicAdmission.candidateSources).size ===
+            entry.dynamicAdmission.candidateSources.length,
+        `${entry.executionFamilyId}: dynamic candidate sources`,
+      );
+    }
+  }
+  console.log("[route-family-compatibility] generic manifest contract: PASS");
 }
 
 function main(): void {
@@ -144,8 +207,9 @@ function main(): void {
   testDynamicAdmission();
   testPsmCompatibilitySemantics();
   testReceiptDepositFrameworkIsNotARegisteredFamily();
-  testFieldAndOrderSnapshot();
-  console.log("route-family-compatibility PASS (5/5)");
+  testBaselineFieldAndOrderFloor();
+  testGenericManifestContract();
+  console.log("route-family-compatibility PASS (6/6)");
 }
 
 main();

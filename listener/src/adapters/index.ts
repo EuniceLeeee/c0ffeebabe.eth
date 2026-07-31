@@ -5,7 +5,10 @@
  */
 import { register } from "./registry.js";
 import type { ActionAdapter } from "../types.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../searcher/venues/production-registry.js";
+import {
+  PRODUCTION_ADAPTER_FAMILIES,
+  PRODUCTION_FAMILY_MODULES,
+} from "../searcher/venues/production-registry.js";
 import { balancerFlashAdapter } from "./balancer-flash.js";
 import { morphoFlashAdapter } from "./morpho-flash.js";
 import { fluidVaultAdapter } from "./fluid-vault.js";
@@ -79,6 +82,17 @@ const PRODUCTION_ACTION_CATALOG = new Map<string, ActionAdapter>(
     assertBalanceAdapter,
   ].map((adapter) => [adapter.id, adapter]),
 );
+
+for (const module of PRODUCTION_FAMILY_MODULES) {
+  for (const adapter of module.actionAdapters) {
+    if (PRODUCTION_ACTION_CATALOG.has(adapter.id)) {
+      throw new Error(
+        `production family loader admitted duplicate ActionAdapter ${adapter.id}`,
+      );
+    }
+    PRODUCTION_ACTION_CATALOG.set(adapter.id, adapter);
+  }
+}
 
 const productionActions = PRODUCTION_ADAPTER_FAMILIES.actionIds();
 const requiredActionIds = new Set([

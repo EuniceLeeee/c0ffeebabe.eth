@@ -9,7 +9,10 @@ import {
   PRODUCTION_ADAPTER_FAMILY_ACTIVATION_MANIFEST,
   type AdapterFamilyActivationRow,
 } from "../venues/adapter-family-activation-manifest.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import {
+  PRODUCTION_ADAPTER_FAMILIES,
+  PRODUCTION_FAMILY_LOAD_ISSUES,
+} from "../venues/production-registry.js";
 import type { ProtocolConversionAdapter } from "../venues/route-leg-adapter.js";
 
 interface BaselineFunding {
@@ -66,6 +69,18 @@ const manifest = PRODUCTION_ADAPTER_FAMILY_ACTIVATION_MANIFEST;
 
 function unique(values: readonly string[], label: string): void {
   assert.equal(new Set(values).size, values.length, `${label} must be unique`);
+}
+
+function testProductionModuleLoadHealth(): void {
+  assert.deepEqual(
+    PRODUCTION_FAMILY_LOAD_ISSUES,
+    [],
+    `production family entry failed to load: ` +
+      PRODUCTION_FAMILY_LOAD_ISSUES.map((issue) =>
+        `${issue.sourceFile}:${issue.code}:${issue.message}`
+      ).join(";"),
+  );
+  console.log("[adapter-family-activation] production module load health: PASS");
 }
 
 function baselineProjection(row: AdapterFamilyActivationRow): Omit<
@@ -135,32 +150,49 @@ function testFrozenActivationSet(): void {
     );
   }
 
-  const baselineIds = new Set(baseline.baselineActive.map((entry) => entry.familyId));
-  const actualAdditions = manifest.familyOrder.filter((id) => !baselineIds.has(id));
-  assert.deepEqual(
-    actualAdditions,
-    baseline.declaredAdditionFamilyIds,
-    "new family must be predeclared as an activation addition",
-  );
+  // Historical additions remain protected, but this list is a floor rather
+  // than a future-family allowlist.
   for (const addition of baseline.declaredAdditionFamilyIds) {
     assert(currentById.has(addition), `declared addition ${addition} is absent`);
   }
 
-  const preparedQuoteFamilyIds = manifest.families
+  const preparedQuoteFamilyIds = new Set(manifest.families
     .filter((row) => row.route?.pricing?.hasPreparedQuote)
-    .map((row) => row.familyId);
-  assert.deepEqual(
-    preparedQuoteFamilyIds,
-    baseline.preparedQuoteFamilyIds,
-    "prepared quote family coverage changed",
-  );
+    .map((row) => row.familyId));
+  for (const familyId of baseline.preparedQuoteFamilyIds) {
+    assert(
+      preparedQuoteFamilyIds.has(familyId),
+      `baseline prepared quote family disappeared: ${familyId}`,
+    );
+  }
   console.log("[adapter-family-activation] frozen baseline-active set: PASS");
-  console.log("[adapter-family-activation] frozen prepared quote coverage: PASS");
+  console.log("[adapter-family-activation] prepared quote baseline floor: PASS");
 }
 
 function testUniversalDerivedViews(): void {
+  const knownKinds = new Set([
+    "swap",
+    "protocol-conversion",
+    "flash-loan",
+    "credit",
+    "liquidity",
+  ]);
   unique(manifest.familyOrder, "family order");
   unique(manifest.routeFamilyOrder, "route family order");
+  assert.equal(
+    Object.values(manifest.kindCounts).reduce((sum, count) => sum + count, 0),
+    manifest.families.length,
+    "kind counts must cover every family",
+  );
+  for (const row of manifest.families) {
+    assert(row.familyId.length > 0, "family id must be nonempty");
+    assert(knownKinds.has(row.kind), `${row.familyId}: unknown family kind ${row.kind}`);
+    assert(row.ownedActionAdapterIds.length > 0, `${row.familyId}: no owned action`);
+    assert(
+      row.ownedActionAdapterIds.every((id) => id.length > 0),
+      `${row.familyId}: empty owned action id`,
+    );
+  }
   assert.equal(manifest.families.length, PRODUCTION_ADAPTER_FAMILIES.list().length);
   assert.deepEqual(
     manifest.familyOrder,
@@ -239,6 +271,27 @@ function testRouteAndPricingCapabilities(): void {
     const row = manifest.families.find((candidate) => candidate.familyId === family.id);
     assert(row?.route, `${family.id} route inventory missing`);
     assert.equal(row.funding, null, `${family.id} route family declares funding`);
+    assert(family.poolAdapters.length > 0, `${family.id} pool adapters`);
+    assert(family.edgeAdapterIds.length > 0, `${family.id} edge adapters`);
+    assert(family.allowedTaxonomy.length > 0, `${family.id} allowed taxonomy`);
+    assert(
+      [...family.poolAdapters, ...family.edgeAdapterIds].every(
+        (id) => id.length > 0,
+      ),
+      `${family.id} route ids must be nonempty`,
+    );
+    if (family.kind !== "protocol-conversion") {
+      assert.equal(
+        family.requiresProtocolEdgesFlag,
+        false,
+        `${family.id} non-protocol route must not require protocol admission`,
+      );
+      assert.equal(
+        row.route.staticDeclaredVenueCount,
+        0,
+        `${family.id} non-protocol route declares protocol venues`,
+      );
+    }
     assert.equal(typeof family.buildEdges, "function", `${family.id} buildEdges`);
     assert.equal(typeof family.quoteExact, "function", `${family.id} quoteExact`);
     assert.equal(
@@ -308,21 +361,43 @@ function testFundingAndFrameworkBoundary(): void {
     manifest.familyOrder.every((id) => !id.toLowerCase().includes("framework")),
     "shared frameworks must never become registry owners",
   );
-  assert.deepEqual(manifest.fundingPlanningOrder, baseline.fundingPlanningOrder);
-  assert.deepEqual(manifest.fundingLiquidityOrder, baseline.fundingLiquidityOrder);
+  assertRelativeOrder(
+    manifest.fundingPlanningOrder,
+    baseline.fundingPlanningOrder,
+    "funding planning",
+  );
+  assertRelativeOrder(
+    manifest.fundingLiquidityOrder,
+    baseline.fundingLiquidityOrder,
+    "funding liquidity",
+  );
   assert.equal(manifest.defaultFundingFamilyId, baseline.defaultFundingFamilyId);
   assert.equal(
     manifest.defaultFundingActionAdapterId,
     baseline.defaultFundingActionAdapterId,
   );
-  assert.equal(
-    manifest.staticDeclaredVenueCount,
-    baseline.staticDeclaredVenueCount,
-    "static declared venue count",
+  assert(
+    manifest.staticDeclaredVenueCount >= baseline.staticDeclaredVenueCount,
+    "static declared venue count fell below its baseline",
   );
   console.log("[adapter-family-activation] funding order/default + framework boundary: PASS");
 }
 
+function assertRelativeOrder(
+  actual: readonly string[],
+  protectedOrder: readonly string[],
+  label: string,
+): void {
+  let priorIndex = -1;
+  for (const familyId of protectedOrder) {
+    const index = actual.indexOf(familyId);
+    assert(index >= 0, `${label} family disappeared: ${familyId}`);
+    assert(index > priorIndex, `${label} baseline relative order changed`);
+    priorIndex = index;
+  }
+}
+
+testProductionModuleLoadHealth();
 testFrozenActivationSet();
 testUniversalDerivedViews();
 testOwnershipAndActionClosure();

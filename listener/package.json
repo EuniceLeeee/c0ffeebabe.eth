@@ -147,6 +147,7 @@
     "searcher:token-graph-family-isolation": "node --import tsx src/searcher/test/token-graph-family-isolation.ts",
     "searcher:landed-pool-discovery": "node --import tsx src/searcher/test/landed-pool-discovery.ts",
     "searcher:route-family-compatibility": "node --import tsx src/searcher/test/route-family-compatibility.ts",
+    "searcher:production-family-loader": "node --import tsx src/searcher/test/production-family-loader.ts",
     "searcher:adapter-family-activation": "node --import tsx src/searcher/test/adapter-family-activation-manifest.ts",
     "searcher:adapter-family-shared-surface": "node --import tsx src/searcher/test/adapter-family-shared-surface-conformance.ts",
     "searcher:adapter-family-blind-contract": "node --import tsx src/searcher/test/adapter-family-blind-contract-test.ts",

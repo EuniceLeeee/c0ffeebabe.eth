@@ -38,29 +38,54 @@ import {
   VENUE_IDENTITY_CATALOG,
   type VenueIdentityCatalogEntry,
 } from "./capability.js";
+import type { AdapterFamily } from "./route-leg-adapter.js";
+import {
+  loadProductionFamilyModules,
+} from "./production-families/loader.js";
+
+const LEGACY_PRODUCTION_ADAPTER_FAMILIES = Object.freeze([
+  univ2StandardAdapter,
+  univ3StandardAdapter,
+  curvePlainAdapter,
+  curveUnderlyingAdapter,
+  balancerV3Adapter,
+  univ4Adapter,
+  angstromV4Adapter,
+  dodoV2Adapter,
+  fluidDexAdapter,
+  erc4626Adapter,
+  erc4626SiloRedeemAdapter,
+  goldxAdapter,
+  metronomeSynthAdapter,
+  metronomeHgusdcAdapter,
+  psmAdapter,
+  eigenpieAdapter,
+  rocksolidAdapter,
+  wstethAdapter,
+  selfBurnNativeAdapter,
+  fluidCreditAdapter,
+  balancerFlashFamily,
+  morphoFlashFamily,
+] satisfies readonly AdapterFamily[]);
+
+const productionFamilyLoad = await loadProductionFamilyModules(
+  LEGACY_PRODUCTION_ADAPTER_FAMILIES,
+);
+
+export const PRODUCTION_FAMILY_MODULES = productionFamilyLoad.modules;
+export const PRODUCTION_FAMILY_LOAD_ISSUES = productionFamilyLoad.issues;
+export const PRODUCTION_FAMILY_SCAN_SHA256 = productionFamilyLoad.scanSha256;
+
+for (const issue of PRODUCTION_FAMILY_LOAD_ISSUES) {
+  console.error(
+    `[adapter-family/load] source=${issue.sourceFile} ` +
+      `code=${issue.code} message=${JSON.stringify(issue.message)}`,
+  );
+}
+
 export const PRODUCTION_ADAPTER_FAMILIES = new AdapterFamilyRegistry([
-    univ2StandardAdapter,
-    univ3StandardAdapter,
-    curvePlainAdapter,
-    curveUnderlyingAdapter,
-    balancerV3Adapter,
-    univ4Adapter,
-    angstromV4Adapter,
-    dodoV2Adapter,
-    fluidDexAdapter,
-    erc4626Adapter,
-    erc4626SiloRedeemAdapter,
-    goldxAdapter,
-    metronomeSynthAdapter,
-    metronomeHgusdcAdapter,
-    psmAdapter,
-    eigenpieAdapter,
-    rocksolidAdapter,
-    wstethAdapter,
-    selfBurnNativeAdapter,
-    fluidCreditAdapter,
-    balancerFlashFamily,
-    morphoFlashFamily,
+  ...LEGACY_PRODUCTION_ADAPTER_FAMILIES,
+  ...PRODUCTION_FAMILY_MODULES.map((module) => module.family),
 ]);
 
 const CODE_OWNED_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] =

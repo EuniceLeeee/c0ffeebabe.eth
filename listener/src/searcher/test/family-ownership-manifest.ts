@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
 import "../../adapters/index.js";
 import { listAll } from "../../adapters/registry.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import {
+  PRODUCTION_ADAPTER_FAMILIES,
+  PRODUCTION_FAMILY_MODULES,
+} from "../venues/production-registry.js";
 
 export interface FamilyOwnedActionBinding {
   readonly id: string;
@@ -245,22 +248,13 @@ function productionFamilyRoots(
 ): readonly FamilyRoot[] {
   const registry = sourceFile(program, PRODUCTION_REGISTRY);
   const imports = directNamedImports(registry);
-  const declaration = findVariable(registry, "PRODUCTION_ADAPTER_FAMILIES");
-  const registered = declaration?.initializer &&
-      ts.isNewExpression(declaration.initializer) &&
-      declaration.initializer.arguments?.[0] &&
-      ts.isArrayLiteralExpression(declaration.initializer.arguments[0])
-    ? declaration.initializer.arguments[0]
-    : null;
+  const registered = familyRegistrationArray(registry);
   if (!registered) {
     throw new Error("family ownership cannot derive production registry");
   }
-  return registered.elements.map((element, index) => {
-    if (!ts.isIdentifier(element)) {
-      throw new Error(
-        `family registration must be a direct binding: ${element.getText(registry)}`,
-      );
-    }
+  const roots: FamilyRoot[] = registered.elements
+    .filter(ts.isIdentifier)
+    .map((element) => {
     const imported = imports.get(element.text);
     if (!imported) {
       throw new Error(`family registration ${element.text} is not imported`);
@@ -270,9 +264,9 @@ function productionFamilyRoots(
       imported.imported,
       checker,
     );
-    if (id === null || id !== runtimeIds[index]) {
+    if (id === null) {
       throw new Error(
-        `family registration ${element.text} disagrees with runtime order`,
+        `family registration ${element.text} has no static id`,
       );
     }
     return {
@@ -282,6 +276,22 @@ function productionFamilyRoots(
       path: imported.path,
     };
   });
+  for (const module of PRODUCTION_FAMILY_MODULES) {
+    roots.push({
+      binding: "productionFamilyModule",
+      imported: "productionFamilyModule.family",
+      id: module.family.id,
+      path: resolve(
+        LISTENER_ROOT,
+        "src/searcher/venues/production-families",
+        module.sourceFile,
+      ),
+    });
+  }
+  if (canonicalJson(roots.map((root) => root.id)) !== canonicalJson(runtimeIds)) {
+    throw new Error("family ownership registry AST/runtime order mismatch");
+  }
+  return roots;
 }
 
 function activeActionSources(
@@ -362,6 +372,20 @@ function activeActionSources(
     throw new Error(
       `family ownership cannot resolve action catalog entry ${element.getText(index)}`,
     );
+  }
+  for (const module of PRODUCTION_FAMILY_MODULES) {
+    const entryPath = resolve(
+      LISTENER_ROOT,
+      "src/searcher/venues/production-families",
+      module.sourceFile,
+    );
+    for (const adapter of module.actionAdapters) {
+      bind(adapter.id, {
+        paths: [entryPath],
+        binding:
+          `${repoRelative(entryPath)}#productionFamilyModule.actionAdapters[${adapter.id}]`,
+      });
+    }
   }
   return sources;
 }
@@ -479,13 +503,7 @@ function relativeActionImportClosure(
 
 function registryAllowedRanges(source: ts.SourceFile): readonly ts.TextRange[] {
   const ranges: ts.TextRange[] = [];
-  const declaration = findVariable(source, "PRODUCTION_ADAPTER_FAMILIES");
-  const registered = declaration?.initializer &&
-      ts.isNewExpression(declaration.initializer) &&
-      declaration.initializer.arguments?.[0] &&
-      ts.isArrayLiteralExpression(declaration.initializer.arguments[0])
-    ? declaration.initializer.arguments[0]
-    : null;
+  const registered = familyRegistrationArray(source);
   if (!registered) throw new Error("family registry array is missing");
   const usedBindings = new Set(
     registered.elements
@@ -512,6 +530,23 @@ function registryAllowedRanges(source: ts.SourceFile): readonly ts.TextRange[] {
   }
   ranges.push(registered);
   return ranges;
+}
+
+function familyRegistrationArray(
+  source: ts.SourceFile,
+): ts.ArrayLiteralExpression | null {
+  const legacy = findVariable(source, "LEGACY_PRODUCTION_ADAPTER_FAMILIES");
+  if (legacy?.initializer) {
+    const found = firstArrayLiteral(legacy.initializer);
+    if (found) return found;
+  }
+  const declaration = findVariable(source, "PRODUCTION_ADAPTER_FAMILIES");
+  return declaration?.initializer &&
+      ts.isNewExpression(declaration.initializer) &&
+      declaration.initializer.arguments?.[0] &&
+      ts.isArrayLiteralExpression(declaration.initializer.arguments[0])
+    ? declaration.initializer.arguments[0]
+    : null;
 }
 
 function actionIndexAllowedRanges(source: ts.SourceFile): readonly ts.TextRange[] {

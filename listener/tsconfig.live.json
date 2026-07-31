@@ -8,7 +8,8 @@
   "include": [
     "src/searcher/main.ts",
     "src/searcher/build-active-pool-universe.ts",
-    "src/searcher/blockscan-enumeration-solver-worker.ts"
+    "src/searcher/blockscan-enumeration-solver-worker.ts",
+    "src/searcher/venues/production-families/*.production.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

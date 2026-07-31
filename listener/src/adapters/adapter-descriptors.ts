@@ -8,6 +8,7 @@ export type Lineage =
   | "psm" | "erc4626" | "goldx" | "rocksolid" | "wsteth" | "metronome" | "weth"
   | "eigenpie" | "self-burn-native"
   | "fluid-credit" | "fluid-dex" | "balancer-v3" | "dodo-v2" | "erc20-infra"
+  | `custom-swap:${string}`
   | FundingLineageId;
 
 /** Descriptor action vocabulary: superset covering all edge kinds. Do not reuse ProtocolAction. */

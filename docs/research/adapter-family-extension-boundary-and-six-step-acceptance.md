@@ -162,6 +162,15 @@ Swap 和 Protocol 在进入 graph 后都产生统一 `TokenEdge`，并共享：
 
 禁止为新 family 再建立第二张中央手写表。
 
+新 family 通过
+[`ProductionFamilyModule`](../../listener/src/searcher/venues/production-families/contract.ts)
+进入该 registry。生产 loader 只枚举 Git index 中已追踪、且精确匹配
+`production-families/*.production.ts` 的入口；节点残留的 untracked source 和 stale `dist`
+不能成为激活依据。每个入口必须同时导出一个 family 及其全部 owned ActionAdapter，并在进入
+全局 registry 前独立完成接口、descriptor、action closure、shared-infra 和 ID 冲突校验。
+失败入口记录稳定的 source/code 后隔离，不能留下半注册状态；成功入口按路径确定性加载并生成
+scan hash。自动注册只证明“进入生产 closure”，不证明报价、枚举或执行正确。
+
 状态层遵循相同边界：family 的 [`BlockScanStateCapability`](../../listener/src/searcher/venues/blockscan-state-capability.ts) 只声明：
 
 - `stateKey`；
@@ -192,8 +201,7 @@ Swap 和 Protocol 在进入 graph 后都产生统一 `TokenEdge`，并共享：
 ```text
 listener/src/searcher/venues/swaps/<family>/**
 listener/src/adapters/<family>.ts
-listener/src/searcher/venues/production-registry.ts    # 薄注册
-listener/src/adapters/index.ts                         # 薄 ActionAdapter 注册
+listener/src/searcher/venues/production-families/<family>.production.ts
 listener/src/searcher/test/<family>*                    # 仅 family-local 测试
 listener/src/searcher/test/fixtures/adapter-families/<family>*
 ```
@@ -203,17 +211,16 @@ listener/src/searcher/test/fixtures/adapter-families/<family>*
 ```text
 listener/src/searcher/venues/protocols/<family>/**
 listener/src/adapters/<family>.ts
-listener/src/searcher/venues/production-registry.ts    # 薄注册
-listener/src/adapters/index.ts                         # 薄 ActionAdapter 注册
+listener/src/searcher/venues/production-families/<family>.production.ts
 listener/src/searcher/test/<family>*                    # 仅 family-local 测试
 listener/src/searcher/test/fixtures/adapter-families/<family>*
 ```
 
-`production-registry.ts` 和 `adapters/index.ts` 只允许：
-
-- import 新 family / ActionAdapter；
-- 在既有 catalog 中增加直接 binding；
-- 保持既有中央控制流和 AST skeleton 不变。
+普通 family branch 不得修改 `production-registry.ts`、`adapters/index.ts`、共享 descriptor
+catalog 或全局 snapshot。唯一激活声明是 family-owned `.production.ts` 入口；入口只允许用
+`defineProductionFamilyModule` 绑定一个标准 family 与该 family 的 owned ActionAdapter。
+需要新增 shared infra、capability 或中央接口时，boundary gate 必须非零并转独立 framework
+branch。
 
 测试权限也按 ownership 约束，而不是放开整个 `test/**`：只允许新增或修改能由唯一稳定 family
 ID 推导出的 family-local 测试与 fixture。Shared/trusted producer、verifier、boundary gate、
@@ -296,7 +303,7 @@ Gate 应在开发早期即可独立运行，并在 checkpoint 中再次强制运
 - 冻结的 `origin/main` baseline；
 - candidate SHA；
 - production family ownership manifest；
-- registry/action catalog skeleton；
+- registry/action loader skeleton；
 - family source closures；
 
 输出必须是结构化结果，但核心 gate 只做两类判断：
@@ -316,13 +323,13 @@ required_action:
 
 | 发现 | 分类 | Gate 动作 |
 |---|---|---|
-| 仅 family source closure + 薄注册 | `family_local` | 允许继续 family 开发 |
+| 仅 family source closure + family-owned production entry | `family_local` | 允许继续 family 开发 |
 | 修改中央 capability/interface/hash | `framework` | 非零退出，停止 family 自证 |
 | 修改多个既有 family 共享 host | `framework` | 非零退出，移到独立 branch |
 | 修改 scanner/rank/cap/deadline/queue/cache | `framework` | 非零退出，移到独立 branch |
 | family 修改中央 mutable runtime | `framework` | 非零退出，报告具体路径 |
 | 协议专属字段进入中央 graph/planner | `framework` | 非零退出，要求协议无关 capability 设计 |
-| registry/catalog 超出薄注册 skeleton | `framework` | 非零退出 |
+| 修改中央 registry/catalog/loader skeleton | `framework` | 非零退出 |
 
 Gate 发现越界后必须执行的流程动作：
 
@@ -342,10 +349,15 @@ Gate 不应自动删除用户代码或重置分支；它负责 fail closed、保
 
 - 开发期由 `adapter-family-boundary-gate` CLI 调用；
 - checkpoint 在任何 RPC、universe 读取和 producer 之前调用；
-- 两处都只从 registry-derived ownership manifest、source closure 和两张薄注册表的 skeleton 得出结论；
+- 两处都只从 registry-derived ownership manifest、source closure、family-owned production
+  entry 和中央 loader skeleton 得出结论；
 - `framework` 非零退出，并输出 exact runtime paths 与 reasons。
 
-这道核心 gate 不再细分 `systemic_live`，也不实现一套庞大的 AST 安全框架。标准 `SwapAdapter` / `ProtocolConversionAdapter` 类型、ownership manifest、source closure、薄注册 skeleton 和正常 code review 共同约束 family；若日后有真实绕过样本，再在独立工具 branch 增加协议无关规则。
+这道核心 gate 不再细分 `systemic_live`，也不实现一套庞大的 AST 安全框架。标准 `SwapAdapter` / `ProtocolConversionAdapter` 类型、ownership manifest、source closure、production-entry contract、中央 loader skeleton 和正常 code review 共同约束 family；若日后有真实绕过样本，再在独立工具 branch 增加协议无关规则。
+
+两份既有全局冻结测试只作为历史回归地板：旧 family 的字段与相对顺序必须保持不变；新增
+family 走通用接口、ownership、action closure、pricing/identity/discovery 断言，不得要求把
+新 ID 手工追加到全局 allowlist。它们不是 live graph/state snapshot，也不能替代六步结果验收。
 
 ## 5. Hook / Extension 的例外模型
 
@@ -677,7 +689,7 @@ export const EKUBO_EXTENSION_X =
 
 本次 gate 只机械保证用户要求的两件事：
 
-1. family runtime 改动归属于唯一 family，中央文件只允许既有薄注册；
+1. family runtime 改动归属于唯一 family，激活只通过 family-owned production entry，中央文件零修改；
 2. family 继续实现标准 `SwapAdapter` / `ProtocolConversionAdapter` capability，不修改中央接口或共享生产行为。
 
 它不宣称能静态证明任意 TypeScript 都无恶意副作用。出现 prototype/global mutation 一类非常规实现时由正常 review 拒绝；不要为了假想攻击把普通 adapter 开发变成另一套编译器工程。
@@ -703,7 +715,7 @@ export const EKUBO_EXTENSION_X =
 - pool/edge adapter IDs；
 - taxonomy；
 - ActionAdapter ownership；
-- explicit registry/catalog binding；
+- explicit production-entry binding；
 - source closure；
 - unsupported-by-default 的 variant registry。
 
@@ -1160,7 +1172,7 @@ final_validated
 - duplicate owned ActionAdapter；
 - route-root ActionAdapter 伪装 infra；
 - unowned/shared runtime path；
-- 中央 registry/action index 超出薄注册 skeleton；
+- 修改中央 registry/action loader skeleton；
 - 多个 family source closure 同时变化；
 - unknown extension 回退 base quote。
 
@@ -1503,7 +1515,7 @@ npm run --silent six-step-validation-gate -- \
 
 - [ ] 中央运行逻辑零协议特有分支；
 - [ ] 只使用标准 RouteLegAdapter capability；
-- [ ] registry/catalog 仅薄注册；
+- [ ] 只新增 family-owned `.production.ts` 入口，中央 registry/catalog 零修改；
 - [ ] pool/edge/action owner 唯一；
 - [ ] 无私有 scheduler/cache/enumerator/solver/final sim；
 - [ ] source closure 完整；

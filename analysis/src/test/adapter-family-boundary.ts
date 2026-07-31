@@ -11,33 +11,31 @@ import {
 const REGISTRY = "listener/src/searcher/venues/production-registry.ts";
 const ACTION_INDEX = "listener/src/adapters/index.ts";
 
-test("family boundary accepts one manifest-owned family plus thin registration", () => {
+test("family boundary accepts one manifest-owned family plus its production entry", () => {
   const base = manifest([family("swap:a", ["src/searcher/venues/swaps/a.ts"])]);
   const candidate = manifest([
     family("swap:a", ["src/searcher/venues/swaps/a.ts"]),
     family("swap:beta", [
       "src/adapters/beta.ts",
       "src/searcher/venues/swaps/beta.ts",
+      "src/searcher/venues/production-families/beta.production.ts",
     ]),
   ]);
   const source = sources({
-    [`base:${REGISTRY}`]: registry(["a"]),
-    [`candidate:${REGISTRY}`]: registry(["a", "beta"]),
-    [`base:${ACTION_INDEX}`]: actions(["aAction"]),
-    [`candidate:${ACTION_INDEX}`]: actions(["aAction", "betaAction"]),
     "base:listener/src/searcher/venues/swaps/a.ts": "export const a = 1;",
     "candidate:listener/src/searcher/venues/swaps/a.ts": "export const a = 1;",
     "candidate:listener/src/searcher/venues/swaps/beta.ts": "export const beta = 1;",
     "candidate:listener/src/adapters/beta.ts": "export const betaAction = 1;",
+    "candidate:listener/src/searcher/venues/production-families/beta.production.ts":
+      "export const productionFamilyModule = beta;",
   });
   const result = evaluateAdapterFamilyBoundary({
     baseCommit: "base",
     candidateCommit: "candidate",
     changedPaths: [
-      REGISTRY,
-      ACTION_INDEX,
       "listener/src/searcher/venues/swaps/beta.ts",
       "listener/src/adapters/beta.ts",
+      "listener/src/searcher/venues/production-families/beta.production.ts",
       "listener/src/searcher/test/beta.ts",
       "docs/research/beta.md",
     ],
@@ -48,6 +46,42 @@ test("family boundary accepts one manifest-owned family plus thin registration",
   assert.equal(result.classification, "family_local", result.reasons.join("; "));
   assert.deepEqual(result.impactedFamilyIds, ["swap:beta"]);
   assert.deepEqual(result.reasons, []);
+});
+
+test("family boundary rejects central registration even when its old skeleton is unchanged", () => {
+  const base = manifest([family("swap:a", ["src/searcher/venues/swaps/a.ts"])]);
+  const candidate = manifest([
+    family("swap:a", ["src/searcher/venues/swaps/a.ts"]),
+    family("swap:beta", [
+      "src/searcher/venues/swaps/beta.ts",
+      "src/searcher/venues/production-families/beta.production.ts",
+    ]),
+  ]);
+  const result = evaluateAdapterFamilyBoundary({
+    baseCommit: "base",
+    candidateCommit: "candidate",
+    changedPaths: [
+      REGISTRY,
+      "listener/src/searcher/venues/swaps/beta.ts",
+      "listener/src/searcher/venues/production-families/beta.production.ts",
+    ],
+    baseManifest: base,
+    candidateManifest: candidate,
+    sourceAt: sources({
+      [`base:${REGISTRY}`]: registry(["a"]),
+      [`candidate:${REGISTRY}`]: registry(["a", "beta"]),
+      "base:listener/src/searcher/venues/swaps/a.ts": "a",
+      "candidate:listener/src/searcher/venues/swaps/a.ts": "a",
+      "candidate:listener/src/searcher/venues/swaps/beta.ts": "beta",
+      "candidate:listener/src/searcher/venues/production-families/beta.production.ts":
+        "entry",
+    }),
+  });
+  assert.equal(result.classification, "framework");
+  assert.match(
+    result.reasons.join("\n"),
+    /central registration file changed; use a family-owned production entry/,
+  );
 });
 
 test("family boundary rejects repo code/config outside the family closure", () => {

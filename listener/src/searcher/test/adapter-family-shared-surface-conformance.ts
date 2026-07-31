@@ -3,7 +3,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import {
+  PRODUCTION_ADAPTER_FAMILIES,
+  PRODUCTION_FAMILY_MODULES,
+} from "../venues/production-registry.js";
 
 type FindingRule =
   | "id-equality"
@@ -193,13 +196,10 @@ function productionFamilySources(
     if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
-      node.name.text === "PRODUCTION_ADAPTER_FAMILIES" &&
-      node.initializer &&
-      ts.isNewExpression(node.initializer) &&
-      node.initializer.arguments?.[0] &&
-      ts.isArrayLiteralExpression(node.initializer.arguments[0])
+      node.name.text === "LEGACY_PRODUCTION_ADAPTER_FAMILIES" &&
+      node.initializer
     ) {
-      registered = node.initializer.arguments[0].elements;
+      registered = firstArrayLiteral(node.initializer)?.elements ?? null;
     }
     ts.forEachChild(node, visit);
   };
@@ -229,7 +229,58 @@ function productionFamilySources(
       path: imported.path,
     });
   }
+  for (const module of PRODUCTION_FAMILY_MODULES) {
+    const entryPath = resolve(
+      LISTENER_ROOT,
+      "src/searcher/venues/production-families",
+      module.sourceFile,
+    );
+    const root = productionEntryFamilySource(
+      program,
+      sourceFile(program, entryPath),
+      module.family.id,
+      checker,
+    );
+    if (!root) {
+      throw new Error(
+        `production entry ${module.sourceFile} has no imported family root`,
+      );
+    }
+    results.push(root);
+  }
   return results;
+}
+
+function productionEntryFamilySource(
+  program: ts.Program,
+  entry: ts.SourceFile,
+  familyId: string,
+  checker: ts.TypeChecker,
+): FamilySource | null {
+  for (const statement of entry.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !statement.importClause?.namedBindings ||
+      !ts.isNamedImports(statement.importClause.namedBindings)
+    ) {
+      continue;
+    }
+    const path = resolveTsImport(entry.fileName, statement.moduleSpecifier.text);
+    if (!path) continue;
+    const importedSource = sourceFile(program, path);
+    for (const element of statement.importClause.namedBindings.elements) {
+      const imported = element.propertyName?.text ?? element.name.text;
+      if (readFamilyId(importedSource, imported, checker) === familyId) {
+        return {
+          binding: element.name.text,
+          familyId,
+          path,
+        };
+      }
+    }
+  }
+  return null;
 }
 
 function readFamilyId(
@@ -284,6 +335,25 @@ function unwrapObjectLiteral(expression: ts.Expression): ts.ObjectLiteralExpress
     return unwrapObjectLiteral(current.arguments[0]);
   }
   return ts.isObjectLiteralExpression(current) ? current : null;
+}
+
+function firstArrayLiteral(
+  expression: ts.Expression,
+): ts.ArrayLiteralExpression | null {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isTypeAssertionExpression(current)
+  ) {
+    current = current.expression;
+  }
+  if (ts.isArrayLiteralExpression(current)) return current;
+  if (ts.isCallExpression(current) && current.arguments[0]) {
+    return firstArrayLiteral(current.arguments[0]);
+  }
+  return null;
 }
 
 function propertyName(name: ts.PropertyName): string | null {

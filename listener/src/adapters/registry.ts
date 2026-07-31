@@ -10,6 +10,9 @@ export function register(adapter: ActionAdapter): void {
   if (adapters.has(adapter.id)) {
     throw new Error(`adapter already registered: ${adapter.id}`);
   }
+  if (descriptorForRegisteredAdapter(adapter) === null) {
+    throw new Error(`missing adapter descriptor: ${adapter.id}`);
+  }
   adapters.set(adapter.id, adapter);
 }
 
@@ -32,11 +35,13 @@ export function matchCall(
 
 export function classifyCall(target: string, selector: string): AdapterDescriptor | null {
   const adapter = matchCall(target, selector);
-  return adapter ? descriptorFor(adapter.id) : null;
+  return adapter ? descriptorForRegisteredAdapter(adapter) : null;
 }
 
 export function assertDescriptorCoverage(): void {
-  const missing = [...adapters.keys()].filter((id) => descriptorFor(id) === null);
+  const missing = [...adapters.values()]
+    .filter((adapter) => descriptorForRegisteredAdapter(adapter) === null)
+    .map((adapter) => adapter.id);
   if (missing.length > 0) {
     throw new Error(`missing adapter descriptor(s): ${missing.join(", ")}`);
   }
@@ -44,4 +49,51 @@ export function assertDescriptorCoverage(): void {
 
 export function listAll(): ActionAdapter[] {
   return [...adapters.values()];
+}
+
+export function listDescriptors(): AdapterDescriptor[] {
+  return [...adapters.values()].map((adapter) => {
+    const descriptor = descriptorForRegisteredAdapter(adapter);
+    if (!descriptor) {
+      throw new Error(`missing adapter descriptor: ${adapter.id}`);
+    }
+    return descriptor;
+  });
+}
+
+function descriptorForRegisteredAdapter(
+  adapter: ActionAdapter,
+): AdapterDescriptor | null {
+  const inline = adapter.descriptor;
+  if (inline !== undefined) {
+    if (inline.adapterId !== adapter.id) {
+      throw new Error(
+        `adapter ${adapter.id} descriptor id mismatch: ${inline.adapterId}`,
+      );
+    }
+    const legacy = descriptorFor(adapter.id);
+    if (
+      legacy !== null &&
+      !sameDescriptor(legacy, inline)
+    ) {
+      throw new Error(
+        `adapter ${adapter.id} inline descriptor conflicts with legacy catalog`,
+      );
+    }
+    return inline;
+  }
+  return descriptorFor(adapter.id);
+}
+
+function sameDescriptor(
+  left: AdapterDescriptor,
+  right: AdapterDescriptor,
+): boolean {
+  return left.adapterId === right.adapterId &&
+    left.lineage === right.lineage &&
+    left.edgeKind === right.edgeKind &&
+    left.action === right.action &&
+    left.canSendValue === right.canSendValue &&
+    left.leavesStandingPositionDefault ===
+      right.leavesStandingPositionDefault;
 }
