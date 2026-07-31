@@ -780,7 +780,7 @@ async function productionEvEvidence(
     netProfit,
     gasUsed,
     {
-      profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "2000"),
+      profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "0"),
       evGate,
       bribeAllAboveGas: process.env.SEARCHER_BRIBE_ALL_ABOVE_GAS === "1",
       bribeBps: Number(process.env.SEARCHER_BRIBE_BPS ?? DEFAULT_BRIBE_BPS.toString()),

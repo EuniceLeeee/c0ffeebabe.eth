@@ -3880,7 +3880,7 @@ function readValidationPolicy(
     "SEARCHER_FINAL_VERIFY_FLOOR_BPS",
     defaultFinalVerifyFloorBps(quoteSafetyBps, cfg.maxHops),
   );
-  const profitHaircutBps = numberEnv("SEARCHER_PROFIT_HAIRCUT_BPS", 2_000);
+  const profitHaircutBps = numberEnv("SEARCHER_PROFIT_HAIRCUT_BPS", 0);
   const bribeBps = numberEnv("SEARCHER_BRIBE_BPS", Number(DEFAULT_BRIBE_BPS));
   if (
     !Number.isInteger(profitHaircutBps) ||
