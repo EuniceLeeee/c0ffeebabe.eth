@@ -27,6 +27,7 @@ import {
   ASTRA_MULTITOKEN_EDGE_ADAPTER,
   astraMultiTokenIface,
   astraMultiTokenInstanceId,
+  readAstraTokenSet,
 } from "../venues/protocols/astra-multitoken-discovery.js";
 import { astraMultiTokenAdapter } from "../venues/protocols/astra-multitoken.js";
 import type {
@@ -48,6 +49,10 @@ const TARGET_TOKENS = new Map<string, readonly string[]>([
   [TARGET_A.toLowerCase(), [TOKEN_A, TOKEN_B, TOKEN_C]],
   [TARGET_B.toLowerCase(), [TOKEN_C, TOKEN_D]],
 ]);
+
+function callException(message: string): Error & { readonly code: string } {
+  return Object.assign(new Error(message), { code: "CALL_EXCEPTION" });
+}
 
 assert.deepEqual(
   PRODUCTION_FAMILY_LOAD_ISSUES,
@@ -154,6 +159,9 @@ const backend: ProtocolDiscoveryReadBackend = {
         astraMultiTokenIface.getFunction("supportsInterface")!.selector
           .toLowerCase()
     ) {
+      if (req.to.toLowerCase() === TARGET_B.toLowerCase()) {
+        throw callException("legacy Astra has no ERC-165 surface");
+      }
       return astraMultiTokenIface.encodeFunctionResult(
         "supportsInterface",
         [true],
@@ -202,9 +210,12 @@ const backend: ProtocolDiscoveryReadBackend = {
         astraMultiTokenIface.getFunction("inLendingMode")!.selector
           .toLowerCase()
     ) {
+      if (req.to.toLowerCase() === TARGET_B.toLowerCase()) {
+        throw callException("legacy Astra has no lending-mode getter");
+      }
       return astraMultiTokenIface.encodeFunctionResult(
         "inLendingMode",
-        [req.to.toLowerCase() === TARGET_B.toLowerCase() ? 1n : 0n],
+        [0n],
       );
     }
     if (
@@ -415,6 +426,47 @@ assert(
       !edge.leavesStandingPosition,
   ),
   "Astra edges must be standing-safe protocol conversions",
+);
+
+await assert.rejects(
+  readAstraTokenSet({
+    ...backend,
+    async call(req) {
+      if (
+        req.data.slice(0, 10).toLowerCase() ===
+          astraMultiTokenIface.getFunction("supportsInterface")!.selector
+            .toLowerCase()
+      ) {
+        return astraMultiTokenIface.encodeFunctionResult(
+          "supportsInterface",
+          [false],
+        );
+      }
+      return backend.call(req);
+    },
+  }, TARGET_A, true),
+  /identity surface is not supported/,
+  "an implementation that explicitly denies the Astra interfaces must fail closed",
+);
+
+await assert.rejects(
+  readAstraTokenSet({
+    ...backend,
+    async call(req) {
+      if (
+        req.data.slice(0, 10).toLowerCase() ===
+          astraMultiTokenIface.getFunction("supportsInterface")!.selector
+            .toLowerCase()
+      ) {
+        throw Object.assign(new Error("temporary RPC failure"), {
+          code: "NETWORK_ERROR",
+        });
+      }
+      return backend.call(req);
+    },
+  }, TARGET_A, true),
+  /temporary RPC failure/,
+  "a transport failure must not be downgraded to a legacy-ABI absence",
 );
 
 for (const admission of discovery.wouldAdmit) {

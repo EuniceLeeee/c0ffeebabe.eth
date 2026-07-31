@@ -77,7 +77,11 @@ interface AstraTokenSet {
   readonly tokens: readonly string[];
   readonly totalPercents: bigint;
   readonly changeFee: bigint;
-  readonly inLendingMode: bigint;
+  /**
+   * Newer Astra implementations expose this version capability. Legacy
+   * implementations use the same getReturn/change execution ABI without it.
+   */
+  readonly inLendingMode: bigint | null;
 }
 
 export const astraMultiTokenDiscovery = Object.freeze({
@@ -200,23 +204,27 @@ export async function readAstraTokenSet(
   const [
     supportsPrimaryRaw,
     supportsBaseRaw,
+    lendingModeRaw,
     tokenCountRaw,
     changesEnabledRaw,
-    lendingModeRaw,
     changeFeeRaw,
     totalPercentsRaw,
   ] = await Promise.all([
-    backend.call({
+    readOptionalAstraVersionCall(backend, {
       to: normalizedTarget,
       data: astraMultiTokenIface.encodeFunctionData("supportsInterface", [
         ASTRA_MULTITOKEN_INTERFACE_ID,
       ]),
     }),
-    backend.call({
+    readOptionalAstraVersionCall(backend, {
       to: normalizedTarget,
       data: astraMultiTokenIface.encodeFunctionData("supportsInterface", [
         ASTRA_MULTITOKEN_BASE_INTERFACE_ID,
       ]),
+    }),
+    readOptionalAstraVersionCall(backend, {
+      to: normalizedTarget,
+      data: astraMultiTokenIface.encodeFunctionData("inLendingMode"),
     }),
     backend.call({
       to: normalizedTarget,
@@ -228,10 +236,6 @@ export async function readAstraTokenSet(
     }),
     backend.call({
       to: normalizedTarget,
-      data: astraMultiTokenIface.encodeFunctionData("inLendingMode"),
-    }),
-    backend.call({
-      to: normalizedTarget,
       data: astraMultiTokenIface.encodeFunctionData("changeFee"),
     }),
     backend.call({
@@ -239,18 +243,18 @@ export async function readAstraTokenSet(
       data: astraMultiTokenIface.encodeFunctionData("TOTAL_PERCRENTS"),
     }),
   ]);
-  const supportsPrimary = Boolean(
-    astraMultiTokenIface.decodeFunctionResult(
+  const supportsPrimary = supportsPrimaryRaw === null
+    ? null
+    : Boolean(astraMultiTokenIface.decodeFunctionResult(
       "supportsInterface",
       supportsPrimaryRaw,
-    )[0],
-  );
-  const supportsBase = Boolean(
-    astraMultiTokenIface.decodeFunctionResult(
+    )[0]);
+  const supportsBase = supportsBaseRaw === null
+    ? null
+    : Boolean(astraMultiTokenIface.decodeFunctionResult(
       "supportsInterface",
       supportsBaseRaw,
-    )[0],
-  );
+    )[0]);
   const tokenCount = Number(
     astraMultiTokenIface.decodeFunctionResult("tokensCount", tokenCountRaw)[0],
   );
@@ -260,12 +264,12 @@ export async function readAstraTokenSet(
       changesEnabledRaw,
     )[0],
   );
-  const inLendingMode = BigInt(
-    astraMultiTokenIface.decodeFunctionResult(
+  const inLendingMode = lendingModeRaw === null
+    ? null
+    : BigInt(astraMultiTokenIface.decodeFunctionResult(
       "inLendingMode",
       lendingModeRaw,
-    )[0],
-  );
+    )[0]);
   const changeFee = BigInt(
     astraMultiTokenIface.decodeFunctionResult("changeFee", changeFeeRaw)[0],
   );
@@ -276,13 +280,14 @@ export async function readAstraTokenSet(
     )[0],
   );
   if (
-    !supportsPrimary ||
-    !supportsBase ||
+    !(
+      (supportsPrimary === true && supportsBase === true) ||
+      (supportsPrimary === null && supportsBase === null)
+    ) ||
     !changesEnabled ||
     !Number.isSafeInteger(tokenCount) ||
     tokenCount < 2 ||
     tokenCount > MAX_ASTRA_TOKENS ||
-    inLendingMode < 0n ||
     totalPercents <= 0n ||
     changeFee < 0n ||
     changeFee > totalPercents
@@ -333,6 +338,30 @@ export async function readAstraTokenSet(
     changeFee,
     inLendingMode,
   });
+}
+
+async function readOptionalAstraVersionCall(
+  backend: {
+    call(req: { to: string; data: string; from?: string }): Promise<string>;
+  },
+  request: { readonly to: string; readonly data: string },
+): Promise<string | null> {
+  try {
+    const result = await backend.call(request);
+    // A legacy fallback may return no data instead of reverting. The required
+    // registry, quote and active execution gates remain fail-closed.
+    return result === "0x" ? null : result;
+  } catch (error) {
+    if (isOptionalAstraVersionAbsence(error)) return null;
+    throw error;
+  }
+}
+
+function isOptionalAstraVersionAbsence(error: unknown): boolean {
+  const code = error && typeof error === "object" && "code" in error
+    ? String((error as { code?: unknown }).code).toUpperCase()
+    : "";
+  return code === "CALL_EXCEPTION" || code === "BAD_DATA";
 }
 
 export async function quoteAstraMultiToken(
