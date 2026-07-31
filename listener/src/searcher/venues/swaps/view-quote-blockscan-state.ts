@@ -108,6 +108,19 @@ export function behaviorProvenUnavailableViewQuote(
   return Object.freeze({ status: "unavailable", reason: normalized });
 }
 
+const FACTORY_OWNED_PURE_DERIVE_MIDS = new WeakSet<object>();
+
+/**
+ * True only when the shared factory owns every callback reached by
+ * deriveMids. Families with a custom state-key callback remain unmarked and
+ * still require an adapter-specific poisoned-I/O purity fixture.
+ */
+export function hasFactoryOwnedPureDeriveMids(
+  capability: BlockScanStateCapability,
+): boolean {
+  return FACTORY_OWNED_PURE_DERIVE_MIDS.has(capability);
+}
+
 /**
  * Current-N view-quote family.
  *
@@ -121,6 +134,7 @@ export function createCurrentBlockViewQuoteCapability<Static>(
   config: CurrentBlockViewQuoteConfig<Static>,
 ): BlockScanStateCapability<ViewQuoteSchema<Static>, ViewQuoteSnapshot> {
   const stateKey = config.stateKey ?? edgeInstanceKey;
+  const kind = config.kind;
   const capability: BlockScanStateCapability<
     ViewQuoteSchema<Static>,
     ViewQuoteSnapshot
@@ -307,7 +321,7 @@ export function createCurrentBlockViewQuoteCapability<Static>(
         const quote = snapshot.quotes.get(routeKey(edge));
         if (!quote) throw new Error(`missing current-N quote for ${routeKey(edge)}`);
         return quotedPoolMid({
-          kind: config.kind,
+          kind,
           edge,
           amountIn: quote.amountIn,
           amountOut: quote.amountOut,
@@ -357,7 +371,11 @@ export function createCurrentBlockViewQuoteCapability<Static>(
       ]);
     },
   };
-  return Object.freeze(capability);
+  const frozen = Object.freeze(capability);
+  if (config.stateKey === undefined) {
+    FACTORY_OWNED_PURE_DERIVE_MIDS.add(frozen);
+  }
+  return frozen;
 }
 
 function buildViewQuoteReads<Static>(

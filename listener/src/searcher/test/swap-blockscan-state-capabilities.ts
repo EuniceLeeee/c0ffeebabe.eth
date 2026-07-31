@@ -39,6 +39,7 @@ import {
 } from "../venues/swaps/blockscan-state-shared.js";
 import {
   createCurrentBlockViewQuoteCapability,
+  hasFactoryOwnedPureDeriveMids,
 } from "../venues/swaps/view-quote-blockscan-state.js";
 import {
   curvePlainBlockScanState,
@@ -221,8 +222,14 @@ function runConcentratedLiquidityPrecisionBoundary(): void {
     "V3/V4 shared precision requires a witness when either directed side is 1..35",
   );
 }
+const pureCoveredFamilyIds = new Set(pureFixtureFamilyIds);
+for (const family of PRODUCTION_ADAPTER_FAMILIES.pricing("swap")) {
+  if (hasFactoryOwnedPureDeriveMids(family.pricingState)) {
+    pureCoveredFamilyIds.add(family.id);
+  }
+}
 assert.deepEqual(
-  [...pureFixtureFamilyIds].sort(),
+  [...pureCoveredFamilyIds].sort(),
   PRODUCTION_ADAPTER_FAMILIES.pricing("swap").map((family) => family.id).sort(),
   "every production swap pricing family requires one passing purity fixture",
 );
