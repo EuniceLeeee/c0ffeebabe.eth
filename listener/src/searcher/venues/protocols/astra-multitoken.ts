@@ -155,7 +155,7 @@ export const astraMultiTokenAdapter = Object.freeze({
     const verified = pool.verifiedRoutes;
     if (
       !verified ||
-      verified.length !== expected.size ||
+      verified.length === 0 ||
       new Set(verified.map(verifiedRouteKey)).size !== verified.length ||
       verified.some((route) => !expected.has(verifiedRouteKey(route)))
     ) {
@@ -163,7 +163,11 @@ export const astraMultiTokenAdapter = Object.freeze({
         "AstraMultiToken pool routes differ from its current token registry",
       );
     }
-    return [...expected.values()];
+    // Discovery projects the complete actively-probed registry, while a
+    // route-pinned execution replay intentionally carries only the witnessed
+    // route. Re-attest every supplied route against the current registry and
+    // emit only that verified permission set; never regrow an unverified pair.
+    return verified.map((route) => expected.get(verifiedRouteKey(route))!);
   },
 
   async quoteExact(ctx: ExactQuoteContext): Promise<bigint> {

@@ -41,6 +41,7 @@ const TOKEN_A = "0x00000000000000000000000000000000000000B1";
 const TOKEN_B = "0x00000000000000000000000000000000000000B2";
 const TOKEN_C = "0x00000000000000000000000000000000000000B3";
 const TOKEN_D = "0x00000000000000000000000000000000000000B4";
+const FOREIGN_TOKEN = "0x00000000000000000000000000000000000000B5";
 const CHANGER = "0x00000000000000000000000000000000000000C1";
 const BALANCE_SLOT = ethers.toBeHex(19n, 32);
 const TARGET_TOKENS = new Map<string, readonly string[]>([
@@ -427,6 +428,43 @@ for (const admission of discovery.wouldAdmit) {
     "verified projection must rebuild the exact current registry",
   );
 }
+
+const routePinnedPool = projectVerifiedProtocolPool(
+  discovery.wouldAdmit[0],
+);
+routePinnedPool.verifiedRoutes = routePinnedPool.verifiedRoutes!.slice(0, 1);
+const routePinnedEdges = await astraMultiTokenAdapter.buildEdges(
+  routePinnedPool,
+  { call: (req) => backend.call(req) },
+);
+assert.deepEqual(
+  routePinnedEdges.map((edge) => [
+    edge.adapterId,
+    edge.tokenIn,
+    edge.tokenOut,
+  ]),
+  discovery.wouldAdmit[0].edges.slice(0, 1).map((edge) => [
+    edge.adapterId,
+    edge.tokenIn,
+    edge.tokenOut,
+  ]),
+  "route-pinned replay must emit only its registry-revalidated verified subset",
+);
+
+await assert.rejects(
+  astraMultiTokenAdapter.buildEdges(
+    {
+      ...routePinnedPool,
+      verifiedRoutes: [{
+        ...routePinnedPool.verifiedRoutes![0],
+        tokenOut: FOREIGN_TOKEN,
+      }],
+    },
+    { call: (req) => backend.call(req) },
+  ),
+  /routes differ from its current token registry/,
+  "a route-pinned subset may not introduce a non-registry pair",
+);
 
 const selectedEdge = discovery.wouldAdmit[0].edges[0];
 const amountIn = 11n;
