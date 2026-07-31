@@ -11,8 +11,7 @@
 
 1. 钉死三锚：审计代码 SHA；生产实际输入/config/universe 的内容哈希；lane-correct 状态锚。standing scanner
    的机会块为 `N` 时使用 canonical `N-1`；backrun 从 `N-1` 开始，再按真实顺序构造 `trigger-only` 与
-   `full-prefix` 的块内有效态；处理完 `N` 后面向 `N+1` 的 post-block scan 使用 `N`。任何一锚不明都先写
-   `证据不足`，不能用当前状态代替历史状态。
+   `full-prefix` 的块内有效态。任何一锚不明都先写 `证据不足`，不能用当前状态代替历史状态。
 2. 读取完整 block、transaction、receipt、logs、call trace/state diff 和 token/native balance delta，人工重建
    `(target, selector, tokenIn, tokenOut, amount, identity evidence)` 的有序事实链。mint/burn、wrap/unwrap、
    protocol conversion 必须同时核对调用与资产变化，不能只看 event 名。**venue 取"顶层直接调用锚"，
@@ -85,6 +84,36 @@ live universe/graph/view pin 与 route lifecycle/formal events；已有 live 未
 8. **禁止 look-ahead：**任何 universe/replay 输入都必须止于 tx 之前（`toBlock ≤ tx_block - 1`），或使用 tx 当时已经
    生效的 pin。包含目标 tx 的窗口会被该 tx 自身污染，只能证明“事后可见”，不能证明当时会自发发现。
 
+### 0.3.1 Live 日志的 lane-correct 绑定
+
+若目标区块落在一个可验证 live run 的日志覆盖范围内，必须先消费该 run 已保留的结构化 events、graph/view pin
+与 route lifecycle，再决定是否需要重建 universe 或运行 replay。日志证据必须绑定 `run_id`、runtime 完整 SHA、
+生效配置/输入哈希、日志覆盖窗口与内容哈希，以及对应的 state anchor；无法完成绑定时写 `证据不足`，不能把
+“日志里没有”直接写成生产未发现。
+
+先从交易事实与同块因果关系判定 lane，不能因为某条日志更容易查询而反向选择 lane：
+
+1. **Backrun：**先从完整 block、trace 与有序 token continuity 找到真实 swap/oracle trigger。目标 winner 落在
+   区块 `N` 时，以 `victim_hash=<trigger hash>`、`target_block=N`、`opportunity_kind=backrun-arb` 和同一个
+   `run_id` 做精确关联；竞争者 winner hash 不是生产提前可知的 join key。只有日志源完整性已经证明，才能把
+   trigger 缺席记为 `input_not_received`；否则是 `证据不足`。
+2. **Block-scan：**目标交易落在区块 `N` 时，唯一用于判断“我们是否捕捉到该机会”的 live 窗口是
+   `target_block=N`、`source_block=N-1`，并且 source block hash 必须与 canonical parent 相同。不得用模糊的
+   “相近区块”或“相邻区块”替代这个锚。
+3. 相邻区块日志只可作为服务存活、日志连续性、warm/cache、deadline 或调度健康的背景证据；它们不能把目标区块
+   的步骤 1 或步骤 2 改写为 `pass` 或 `fail`，也不能证明目标路线曾被发现。
+
+Live 日志对六步前两步的证明边界固定如下：
+
+| 阶段 | 可接受的 live 证据 | 不足以证明 |
+|---|---|---|
+| `discovery_admission_graph` | lane-correct state anchor；source/intake 完整性；目标实例的 identity/admission；当时生效 graph/view pin 中的 canonical edge membership | 今日 graph、只出现一次地址字符串、未绑定 run/config 的 `in_graph=true` |
+| `route_enumeration` | 同一 run/source anchor 下由生产枚举自然写出的完整 canonical route identity（至少 token ring、venue path、route id）及 rank；并记录是否被选择进入下一阶段 | `opportunity_seen`/plan 总数、token overlap、venue mention、其他区块出现相似路线 |
+
+若 route lifecycle 缺失、writer 有 gap、catalog reference 无法解析、日志仅有汇总计数，或不能证明记录覆盖完整枚举，
+步骤 2 必须写 `证据不足`；只有完整 lifecycle 明确给出自然 route set，才能判定目标路线 `pass` 或 `fail`。若步骤 1
+已经因 source/intake/graph 不完整而失败，按有序证据前缀在步骤 1 终止，不能越过它用后续汇总日志补结论。
+
 ### 0.4 架构无关的代码定位启发式
 
 1. 在审计 SHA 上从实际 service/deploy command、package script 或 executable manifest 找生产入口，不预设它叫
@@ -103,6 +132,8 @@ live universe/graph/view pin 与 route lifecycle/formal events；已有 live 未
 
 - **交易：** `<full tx hash>`
 - **审计基线：** `<canonical main ref> @ <full sha>`
+- **Live run 绑定：** `<not-covered | run_id；runtime SHA；日志覆盖窗口/内容哈希；effective config/input hash；graph/view pin hash>`
+- **Lane-correct 日志锚：** `<backrun: trigger hash + target_block=N | block-scan: target_block=N + source_block=N-1>`
 - **当前生产结论：** `可复现 | 不可复现 | 已修复 | 不在生产目标 | 证据不足`
 - **Gap 类型：** `scope | causality/multi-tx | pool | identity/admission | edge | path/enumeration | quote | plan | final-sim | EV | intake/causality | none`
 - **是否只需补 adapter：** `已完成 | 是 | 否 | 部分 | 不适用`
@@ -307,6 +338,7 @@ capability id 为主，行号为辅。若当前已修复，列“能力现在落
 - **冻结 universe 锚：** `<轻量：实际生产 pin、来源 SHA、内容 hash；全量另填 pre-tx 重建参数/输出 SHA；窗口必须 toBlock ≤ tx_block - 1；builder 代码 SHA>`
 - **生效配置锚：** `<轻量：live process/deploy/fallback manifest + SHA；全量另填 replay manifest + SHA、按消费阶段映射；diff=none | 预声明实验差异 | trusted acceptance-only override + 授权 SHA>`
 - **运行时视图锚：** `<轻量：live view count+hash+目标池/edge membership；全量另填 replay view 与差异解释>`
+- **Live 日志前两步：** `<not-covered | discovery_admission_graph 证据/结果；route_enumeration lifecycle 证据/结果；缺失时写证据不足>`
 - **验收轨道 / 层级：** `<family_execution / supporting Adapter Replay | production_route_stage / pre-merge checkpoint | production_route_stage / deployed-main full validation | systemic_live / cohort+A/B>`
 - **baseline：** `<first failing stage>`
 - **fix commit：** `<sha or none>`
