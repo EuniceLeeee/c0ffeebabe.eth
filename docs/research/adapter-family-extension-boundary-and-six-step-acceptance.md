@@ -194,7 +194,8 @@ listener/src/searcher/venues/swaps/<family>/**
 listener/src/adapters/<family>.ts
 listener/src/searcher/venues/production-registry.ts    # 薄注册
 listener/src/adapters/index.ts                         # 薄 ActionAdapter 注册
-listener/src/searcher/test/**                          # family 测试与 fixture
+listener/src/searcher/test/<family>*                    # 仅 family-local 测试
+listener/src/searcher/test/fixtures/adapter-families/<family>*
 ```
 
 普通 Protocol family 原则上只修改：
@@ -204,7 +205,8 @@ listener/src/searcher/venues/protocols/<family>/**
 listener/src/adapters/<family>.ts
 listener/src/searcher/venues/production-registry.ts    # 薄注册
 listener/src/adapters/index.ts                         # 薄 ActionAdapter 注册
-listener/src/searcher/test/**                          # family 测试与 fixture
+listener/src/searcher/test/<family>*                    # 仅 family-local 测试
+listener/src/searcher/test/fixtures/adapter-families/<family>*
 ```
 
 `production-registry.ts` 和 `adapters/index.ts` 只允许：
@@ -212,6 +214,13 @@ listener/src/searcher/test/**                          # family 测试与 fixtur
 - import 新 family / ActionAdapter；
 - 在既有 catalog 中增加直接 binding；
 - 保持既有中央控制流和 AST skeleton 不变。
+
+测试权限也按 ownership 约束，而不是放开整个 `test/**`：只允许新增或修改能由唯一稳定 family
+ID 推导出的 family-local 测试与 fixture。Shared/trusted producer、verifier、boundary gate、
+ownership manifest、全局 registry snapshot 及 package script 不属于 family 测试；若 family
+实现必须修改它们，boundary gate 必须输出 `framework`、列出 exact paths，并把这些改动移到
+独立 framework branch。Family-local 测试只是辅助证据，不能替代 scanner 自发枚举和
+mandatory final sim。
 
 ### 4.2 正常禁止
 
@@ -1236,14 +1245,24 @@ Slice B — family boundary hardening
   early boundary preflight + exact path/reason artifact
   standard interface / ownership / thin-registration gate
 
-Slice C — Ekubo family
+Slice C — Ekubo family child on the exact Slice A/B parent
   host-local variants
   discovery/identity/probe
   pricing/quote
   ActionAdapter/plan
   unit/parity/Adapter Replay
 
-Slice D — checkpoint
+Slice D0 — stacked bootstrap (while A/B is still unmerged)
+  exact framework-parent..family-child boundary
+  same target-blind six steps
+  bootstrap_pass only; no merge/fixed/cleanup authority
+
+Slice D1 — merge trusted A/B, refresh family child from main
+  independently review and merge framework parent
+  ensure trusted reference exists in main
+  update/recreate pure family child
+
+Slice D2 — canonical checkpoint
   full target-blind six steps
   checkpoint_pass
 
@@ -1257,7 +1276,11 @@ Slice F — cleanup
   branch deletion
 ```
 
-Slice A/B 必须先于 Ekubo branch 落到 main。Trusted reference 也必须先存在于该 rollback/main。Slice C 必须从包含 A/B 的新 `origin/main` 创建，不能把可信验收器和 feature 放在同一 branch 自证。
+Slice A/B 与 Slice C 不能放在同一提交范围内。允许 Slice C 先作为 A/B 的 child 做一次
+`bootstrap`，但 trusted controller/reference 必须已经存在于 exact framework parent，child 相对该
+parent 仍须是纯 family-local；`bootstrap_pass` 不能替代 canonical checkpoint、不能授权 child
+合并或删除。A/B 独立验收并落到 main 后，Slice C 必须从该 main 更新/重建，再跑 canonical
+checkpoint。Trusted reference 也必须在 canonical checkpoint 前存在于 `origin/main`。
 
 ## 17. 命令层级
 
@@ -1270,12 +1293,17 @@ Slice A/B 必须先于 Ekubo branch 落到 main。Trusted reference 也必须先
 ```bash
 cd analysis
 npm run --silent adapter-family-boundary-gate -- \
-  --baseline origin/main \
-  --candidate HEAD \
+  --baseline <exact-framework-parent-SHA> \
+  --candidate <exact-family-child-SHA> \
   --out /tmp/adapter-family-boundary.json
 ```
 
 CLI 只接 baseline/candidate/out，不接受调用者自报的 family ID 或 `family_local`。它与 checkpoint 调用同一个 evaluator；输出 `framework` 时以非零退出，并要求把 exact paths/reasons 对应的 family 外改动移到独立 branch。
+`changed_paths` 在加载 manifest 之前冻结；即使 candidate manifest/schema/import 本身失败，失败
+receipt 仍包含 resolved baseline/candidate SHA、完整 `changed_paths` 和原始 `gate_error`，不得只
+打印一个不可定位的异常。
+Stacked 开发期以 exact framework parent 为 baseline；framework parent 合并后，canonical
+checkpoint 前必须再以新的 exact `origin/main` 为 baseline 运行，前一次结果不能继承。
 
 ### 17.1 Family 静态与状态合同
 
@@ -1315,7 +1343,7 @@ npm run --silent six-step-validation-gate -- \
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 1,
   "request": "trusted-six-step-input-freeze-request",
   "sample_tx_hash": "0x<64-hex>",
   "lane": "block_scan_standing",
@@ -1324,7 +1352,48 @@ npm run --silent six-step-validation-gate -- \
 }
 ```
 
-### 17.4 Pre-merge checkpoint
+### 17.4 Optional stacked bootstrap
+
+从 clean exact framework-parent checkout 运行：
+
+```bash
+cd analysis
+npm run --silent six-step-validation-gate -- \
+  --phase bootstrap \
+  --request /tmp/<family>-bootstrap-request.json \
+  --out /tmp/<family>-bootstrap-receipt.json
+```
+
+```json
+{
+  "schema_version": 2,
+  "request": "trusted-six-step-validation-request",
+  "mode": "bootstrap",
+  "branch": "codex/<family-child>",
+  "rollback_commit": "<40-hex-exact-framework-parent>",
+  "framework_parent_commit": "<same-40-hex-exact-framework-parent>",
+  "sample_tx_hash": "0x<64-hex>",
+  "lane": "block_scan_standing",
+  "trusted_reference_path": "docs/research/references/production-routes/<sample>.json",
+  "input_snapshot_path": "/tmp/<family>-input-snapshot.json"
+}
+```
+
+该模式要求当前 `origin/main` 是 framework parent 的严格祖先、snapshot 来自该 current main，
+family child 是 framework parent 的严格后代。成功只签发：
+
+```text
+status = bootstrap_pass
+validation_scope = stacked_premerge_only
+fixed = false
+branch_cleanup_allowed = false
+canonical_checkpoint_required = true
+```
+
+它不能作为 final 的 `checkpoint_receipt_path`，也不能授权 child 合并/部署/删 branch。Framework
+parent 合并 main 后必须更新 child，再运行下一节 canonical checkpoint。
+
+### 17.4a Canonical pre-merge checkpoint
 
 ```bash
 cd analysis

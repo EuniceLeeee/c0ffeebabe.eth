@@ -1,15 +1,76 @@
 # Six-step validation request and generated receipt
 
-This template defines the new two-tier lifecycle for **deterministic adapter/route work**. It does not delete
-or reinterpret an existing historical/Hermes report. Legacy harnesses remain available as diagnostic and
-legacy-record evidence; they are not allowed to veto a complete canonical six-step receipt merely because
-their architecture-specific matcher became stale.
+This template defines one non-promotable stacked bootstrap plus the canonical two-tier lifecycle for
+**deterministic adapter/route work**. It does not delete or reinterpret an existing historical/Hermes
+report. Legacy harnesses remain available as diagnostic and legacy-record evidence; they are not allowed to
+veto a complete canonical six-step receipt merely because their architecture-specific matcher became stale.
 
 The operator writes a small run request. A trusted controller computes all stage records and the verdict.
 Neither a feature branch nor a human may submit pre-filled `pass` stages.
 
 The current controller supports `block_scan_standing`. It rejects `backrun` until a trusted producer can
 apply and bind the complete ordered prefix before the target transaction.
+
+## 0. Optional stacked bootstrap on an unmerged framework parent
+
+Use this only when a protocol-neutral framework prerequisite must remain on its own reviewed branch while a
+family child proves that the prerequisite is sufficient. It runs the same target-blind producer, target-late
+verifier, natural scanner enumeration, exact quote, plan/solve, mandatory final sim and production-EV
+acceptance as the canonical checkpoint. It does not introduce a second verifier or an
+architecture-specific family acceptance path.
+
+First freeze inputs from a clean checkout at the current `origin/main` with the schema-v1 freeze request in
+§1. Then run the bootstrap controller from a clean checkout whose `HEAD` is the exact framework-parent SHA.
+The current `origin/main` must be a strict ancestor of that parent, the child candidate must be a strict
+descendant of it, and the frozen snapshot's `source_runtime_commit` must equal the current `origin/main`.
+The child may not modify the trusted controller, lifecycle, producer, manifest producer, semantic evidence
+schema or trusted reference relative to the framework parent. The family boundary is evaluated only on the
+exact `framework-parent..child` range.
+
+```json
+{
+  "schema_version": 2,
+  "request": "trusted-six-step-validation-request",
+  "mode": "bootstrap",
+  "branch": "codex/<family-child>",
+  "rollback_commit": "<40-char exact framework-parent commit>",
+  "framework_parent_commit": "<same exact framework-parent commit>",
+  "sample_tx_hash": "0x<64 lowercase hex>",
+  "lane": "block_scan_standing",
+  "trusted_reference_path": "docs/research/references/production-routes/<sample>.json",
+  "input_snapshot_path": "/path/to/production-input-snapshot.json",
+  "runner_overrides": {
+    "wall_clock_timeout_ms": 1800000
+  }
+}
+```
+
+```bash
+npm run six-step-validation-gate -- \
+  --phase bootstrap \
+  --request /path/to/bootstrap-request.json \
+  --out /path/to/bootstrap-receipt.json
+```
+
+A successful receipt has all of these machine-checked fields:
+
+```json
+{
+  "mode": "bootstrap",
+  "status": "bootstrap_pass",
+  "validation_scope": "stacked_premerge_only",
+  "fixed": false,
+  "branch_cleanup_allowed": false,
+  "canonical_checkpoint_required": true
+}
+```
+
+`bootstrap_pass` is integration evidence only. It cannot be supplied as
+`checkpoint_receipt_path`, cannot authorize family-child merge or deployment, cannot mean `fixed`, and
+cannot authorize local or remote branch deletion. After the framework parent is independently accepted and
+merged to `main`, update/recreate the family child from that `main`, ensure the trusted reference exists in
+`main`, and run the canonical checkpoint and deployed-main final below. Only those canonical receipts carry
+promotion and cleanup authority.
 
 ## 1. Pre-merge lightweight checkpoint
 
@@ -56,9 +117,9 @@ This first result-contract implementation accepts only a route absent from natur
 enumerated-but-unsolved rollback failure. Post-solve baseline failures fail closed until a typed domain
 witness distinguishes deterministic EVM/policy failure from infrastructure; error text is insufficient.
 
-Run the checkpoint controller from a clean checkout whose `HEAD` is the trusted baseline commit recorded in
-the snapshot. It resolves the exact branch tip and creates its own detached candidate worktree. The candidate
-does not run or modify the controller.
+Run the checkpoint controller from a clean checkout whose `HEAD` is the current `origin/main` commit recorded
+in the snapshot. It resolves the exact branch tip and creates its own detached candidate worktree. The
+candidate does not run or modify the controller.
 
 Request:
 
@@ -81,16 +142,19 @@ Request:
 
 The file paths locate bytes; they are not evidence by themselves. The supplied files must byte-match the
 trusted frozen snapshot. `trusted_reference_path` is repository-relative and must already exist in the
-rollback/main tree under `docs/research/references/production-routes/`; a family candidate may neither add
-nor modify it. It binds the target receipt/call-trace hash, lane-correct anchor, normalized ordered route
-and one finite declarative `ReferenceWitness` per leg. The witness binds both route tokens, ABI/argument
+trusted baseline tree (framework parent for bootstrap; `origin/main` for canonical checkpoint/final) under
+`docs/research/references/production-routes/`; a family candidate may neither add nor modify it. It binds
+the target receipt/call-trace hash, lane-correct anchor, normalized ordered route and one finite declarative
+`ReferenceWitness` per leg. The witness binds both route tokens, ABI/argument
 relations, call ancestry, receipt transfers and (when distinct from the execution target) `pool-id`.
 Bare target/selector sequences are rejected, and one physical call/log cannot satisfy two witness rules or
 two route legs. Caller-provided RPC URLs and runtime env files are rejected.
 
-The trusted reference is produced by an independent transaction/trace analysis and merged into main
-**before** the adapter branch is cut. There is deliberately no candidate-side CLI that manufactures this
-oracle. Its minimal reviewed shape is:
+The trusted reference is produced by an independent transaction/trace analysis. For stacked bootstrap it
+must be committed to the framework parent **before** the family child is cut; for canonical checkpoint/final
+that exact trusted surface must already be merged into `main` **before** the canonical family branch is
+created or updated. There is deliberately no candidate-side CLI that manufactures this oracle. Its minimal
+reviewed shape is:
 
 ```json
 {

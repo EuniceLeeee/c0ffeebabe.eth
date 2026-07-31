@@ -15,8 +15,12 @@ import {
   semanticMaterializedGraphEvidence,
   semanticShardCompletenessEvidence,
 } from "../../shared/evidence/canonical-edge-set.js";
-import type { TokenEdge } from "../planner/token-graph.js";
+import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
 import { canonicalEdgeId } from "../venues/blockscan-state-capability.js";
+import {
+  createRouteImmutableBinding,
+} from "../venues/route-immutable-binding.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
   isVerifiedRetainedTopologyProof,
   type VerifiedRetainedTopologyProof,
@@ -73,6 +77,161 @@ export interface ExpectedRouteStep {
   readonly edgeKind?: string;
   readonly leavesStandingPosition?: boolean;
   readonly poolId?: string;
+  readonly routeBindingHash?: string;
+}
+
+export interface BlockScanHuntFamilySourceCoverage {
+  readonly familyId: string;
+  readonly sourceId: string;
+  readonly complete: boolean;
+  readonly issues: readonly string[];
+}
+
+export interface BlockScanHuntDynamicFamilySources {
+  readonly familyId: string;
+  readonly sourceIds: readonly string[];
+}
+
+/**
+ * Convert one landed-discovery result into the exact family-local evidence
+ * and fresh pool delta that the target-blind hunt may publish.
+ *
+ * A positive materialization is not sufficient by itself: every declared
+ * landed source for its family must be present and complete. Missing,
+ * duplicate, or internally contradictory coverage therefore quarantines
+ * only that family's fresh rows while healthy siblings remain publishable.
+ */
+export function projectLandedDiscoveryForBlockScanHunt(input: {
+  readonly familySources: readonly BlockScanHuntDynamicFamilySources[];
+  readonly coverage: readonly BlockScanHuntFamilySourceCoverage[];
+  readonly materializedPools: readonly PoolEntry[];
+  readonly familyIdForPool: (pool: PoolEntry) => string | null;
+}): {
+  readonly pools: readonly PoolEntry[];
+  readonly familySourceCoverage:
+    readonly BlockScanHuntFamilySourceCoverage[];
+  readonly completeFamilyIds: readonly string[];
+  readonly incompleteFamilyIds: readonly string[];
+} {
+  const expectedSources = new Map<string, readonly string[]>();
+  for (const family of input.familySources) {
+    if (
+      !family.familyId ||
+      expectedSources.has(family.familyId) ||
+      family.sourceIds.length === 0 ||
+      new Set(family.sourceIds).size !== family.sourceIds.length ||
+      family.sourceIds.some((sourceId) => !sourceId)
+    ) {
+      throw new Error(
+        `invalid target-blind landed source declaration for ${family.familyId}`,
+      );
+    }
+    expectedSources.set(
+      family.familyId,
+      Object.freeze([...family.sourceIds].sort()),
+    );
+  }
+
+  const observedByKey = new Map<
+    string,
+    BlockScanHuntFamilySourceCoverage[]
+  >();
+  for (const source of input.coverage) {
+    if (!expectedSources.has(source.familyId)) continue;
+    const expected = expectedSources.get(source.familyId)!;
+    if (!expected.includes(source.sourceId)) {
+      throw new Error(
+        `landed discovery returned undeclared source ` +
+          `${source.familyId}/${source.sourceId}`,
+      );
+    }
+    const key = `${source.familyId}\u001f${source.sourceId}`;
+    const observed = observedByKey.get(key) ?? [];
+    observed.push(source);
+    observedByKey.set(key, observed);
+  }
+
+  const projectedCoverage: BlockScanHuntFamilySourceCoverage[] = [];
+  const completeFamilyIds: string[] = [];
+  const incompleteFamilyIds: string[] = [];
+  for (
+    const [familyId, sourceIds] of [...expectedSources.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+  ) {
+    let familyComplete = true;
+    for (const sourceId of sourceIds) {
+      const observed =
+        observedByKey.get(`${familyId}\u001f${sourceId}`) ?? [];
+      if (observed.length !== 1) {
+        familyComplete = false;
+        projectedCoverage.push(Object.freeze({
+          familyId,
+          sourceId,
+          complete: false,
+          issues: Object.freeze([
+            observed.length === 0
+              ? "landed discovery omitted the declared family source"
+              : `landed discovery returned ${observed.length} records for one family source`,
+            ...observed.flatMap((item) => item.issues),
+          ]),
+        }));
+        continue;
+      }
+      const source = observed[0];
+      const contradictory = source.complete && source.issues.length > 0;
+      const complete = source.complete && !contradictory;
+      familyComplete &&= complete;
+      projectedCoverage.push(Object.freeze({
+        familyId,
+        sourceId,
+        complete,
+        issues: Object.freeze(
+          contradictory
+            ? [
+                "landed discovery marked a source complete while reporting issues",
+                ...source.issues,
+              ]
+            : [...source.issues],
+        ),
+      }));
+    }
+    (familyComplete ? completeFamilyIds : incompleteFamilyIds).push(familyId);
+  }
+
+  const complete = new Set(completeFamilyIds);
+  const pools = input.materializedPools.filter((pool) => {
+    const familyId = input.familyIdForPool(pool);
+    return familyId !== null &&
+      expectedSources.has(familyId) &&
+      complete.has(familyId);
+  });
+  return Object.freeze({
+    pools: Object.freeze(pools),
+    familySourceCoverage: Object.freeze(projectedCoverage),
+    completeFamilyIds: Object.freeze(completeFamilyIds),
+    incompleteFamilyIds: Object.freeze(incompleteFamilyIds),
+  });
+}
+
+export function mergeBlockScanHuntFamilySourceCoverage(
+  first: readonly BlockScanHuntFamilySourceCoverage[],
+  second: readonly BlockScanHuntFamilySourceCoverage[],
+): readonly BlockScanHuntFamilySourceCoverage[] {
+  if (first.length === 0) return second;
+  if (second.length === 0) return first;
+  const merged: BlockScanHuntFamilySourceCoverage[] = [];
+  const seen = new Set<string>();
+  for (const source of [...first, ...second]) {
+    const key = `${source.familyId}\u001f${source.sourceId}`;
+    if (seen.has(key)) {
+      throw new Error(
+        `duplicate blockscan-hunt family source ${source.familyId}/${source.sourceId}`,
+      );
+    }
+    seen.add(key);
+    merged.push(source);
+  }
+  return Object.freeze(merged);
 }
 
 export function resolveBlockScanHuntBudgets(
@@ -253,7 +412,11 @@ export function routeStepMatchesExpected(
     && (expected.edgeKind === undefined || actual.edgeKind === expected.edgeKind)
     && (expected.leavesStandingPosition === undefined
       || actual.leavesStandingPosition === expected.leavesStandingPosition)
-    && (expected.poolId === undefined || actual.poolId === expected.poolId);
+    && (expected.poolId === undefined || actual.poolId === expected.poolId)
+    && (
+      expected.routeBindingHash === undefined ||
+      actual.routeBindingHash === expected.routeBindingHash
+    );
 }
 
 /**
@@ -434,6 +597,25 @@ function runTests(): void {
     leavesStandingPosition: true,
   }]), false);
   assert.equal(routeMatchesExpected(actualRoute, []), false);
+  const boundRoute = [{
+    ...actualRoute[0],
+    routeBindingHash: `0x${"11".repeat(32)}`,
+  }];
+  assert.equal(
+    routeMatchesExpected(boundRoute, [{
+      ...expectedRoute[0],
+      routeBindingHash: `0x${"11".repeat(32)}`,
+    }]),
+    true,
+  );
+  assert.equal(
+    routeMatchesExpected(boundRoute, [{
+      ...expectedRoute[0],
+      routeBindingHash: `0x${"22".repeat(32)}`,
+    }]),
+    false,
+    "trusted route matching must not merge distinct immutable bindings",
+  );
   const rawEdge: TokenEdge = {
     adapterId: "fixture-swap",
     target: "0x1111111111111111111111111111111111111111",
@@ -488,6 +670,17 @@ function runTests(): void {
     "graph evidence must bind family-owned execution metadata",
   );
   assert.notEqual(
+    canonicalEdgeSetEvidence([rawEdge]).sha256,
+    canonicalEdgeSetEvidence([{
+      ...rawEdge,
+      routeBinding: createRouteImmutableBinding(
+        "fixture.binding.v1",
+        "0x1234",
+      ),
+    }]).sha256,
+    "graph evidence must bind the family-owned immutable carrier",
+  );
+  assert.notEqual(
     canonicalEdgeSetEvidence([rawEdge, rawEdge]).sha256,
     canonicalEdgeSetEvidence([rawEdge]).sha256,
     "graph evidence must bind duplicate multiplicity",
@@ -502,6 +695,142 @@ function runTests(): void {
   assert.equal(materialized.targetInjected, false);
   assert.equal(materialized.graphReduced, false);
   const productionEdge = { ...rawEdge, adapterId: "univ2-swap" };
+  const dynamicSwapFamilies = PRODUCTION_ADAPTER_FAMILIES.swaps()
+    .filter((family) =>
+      family.poolDiscovery !== undefined &&
+      family.matureDexUniverseDiscovery !== true &&
+      family.discovery === undefined
+    );
+  assert.ok(
+    dynamicSwapFamilies.length >= 2,
+    "fixture requires two protocol-neutral dynamic swap families",
+  );
+  const healthyDynamicFamily = dynamicSwapFamilies[0];
+  const failingDynamicFamily = dynamicSwapFamilies[1];
+  const healthyDynamicPool: PoolEntry = {
+    address: "0x5555555555555555555555555555555555555555",
+    adapter: healthyDynamicFamily.poolAdapters[0],
+  };
+  const failingDynamicPool: PoolEntry = {
+    address: "0x6666666666666666666666666666666666666666",
+    adapter: failingDynamicFamily.poolAdapters[0],
+  };
+  const dynamicFamilySources = [
+    {
+      familyId: healthyDynamicFamily.id,
+      sourceIds: ["fixture-landed-source"],
+    },
+    {
+      familyId: failingDynamicFamily.id,
+      sourceIds: ["fixture-landed-source"],
+    },
+  ];
+  const missingDynamicCoverage =
+    projectLandedDiscoveryForBlockScanHunt({
+      familySources: dynamicFamilySources,
+      coverage: [],
+      materializedPools: [healthyDynamicPool],
+      familyIdForPool: (pool) =>
+        PRODUCTION_ADAPTER_FAMILIES.routes()
+          .findForPool(pool.adapter)?.id ?? null,
+    });
+  assert.deepEqual(missingDynamicCoverage.pools, []);
+  assert.ok(
+    missingDynamicCoverage.incompleteFamilyIds.includes(
+      healthyDynamicFamily.id,
+    ),
+    "a dynamic swap family without its declared coverage must fail closed",
+  );
+  const isolatedDynamicCoverage =
+    projectLandedDiscoveryForBlockScanHunt({
+      familySources: dynamicFamilySources,
+      coverage: [
+        {
+          familyId: healthyDynamicFamily.id,
+          sourceId: "fixture-landed-source",
+          complete: true,
+          issues: [],
+        },
+        {
+          familyId: failingDynamicFamily.id,
+          sourceId: "fixture-landed-source",
+          complete: false,
+          issues: ["fixture family materialization failed"],
+        },
+      ],
+      materializedPools: [healthyDynamicPool, failingDynamicPool],
+      familyIdForPool: (pool) =>
+        PRODUCTION_ADAPTER_FAMILIES.routes()
+          .findForPool(pool.adapter)?.id ?? null,
+    });
+  assert.deepEqual(
+    isolatedDynamicCoverage.pools,
+    [healthyDynamicPool],
+    "a failing landed sibling must not erase a healthy family's fresh pool",
+  );
+  assert.deepEqual(
+    isolatedDynamicCoverage.completeFamilyIds,
+    [healthyDynamicFamily.id],
+    "the successful discovery family must retain complete local coverage",
+  );
+  const healthyDynamicEdge: TokenEdge = {
+    ...rawEdge,
+    adapterId: healthyDynamicFamily.edgeAdapterIds[0],
+    target: healthyDynamicPool.address,
+  };
+  const failingDynamicEdge: TokenEdge = {
+    ...rawEdge,
+    adapterId: failingDynamicFamily.edgeAdapterIds[0],
+    target: failingDynamicPool.address,
+  };
+  assert.equal(
+    productionShardCompleteness({
+      edges: [productionEdge, healthyDynamicEdge],
+      familySourceCoverage: [],
+      requiredFamilyIds: [healthyDynamicFamily.id],
+    }).requiredComplete,
+    false,
+    "a poolDiscovery family must not be treated as registry-declared",
+  );
+  const isolatedDynamicShard = productionShardCompleteness({
+    edges: [productionEdge, healthyDynamicEdge, failingDynamicEdge],
+    familySourceCoverage:
+      isolatedDynamicCoverage.familySourceCoverage,
+    requiredFamilyIds: [healthyDynamicFamily.id],
+  });
+  assert.equal(
+    isolatedDynamicShard.requiredComplete,
+    true,
+    "complete family-local landed evidence must satisfy the selected route",
+  );
+  assert.ok(
+    isolatedDynamicShard.isolatedIncompleteFamilyIds.includes(
+      failingDynamicFamily.id,
+    ),
+    "an incomplete dynamic sibling must remain explicitly isolated",
+  );
+  const unchangedProtocolCoverage = [{
+    familyId: "fixture-protocol-family",
+    sourceId: "fixture-protocol-source",
+    complete: true,
+    issues: Object.freeze([]),
+  }];
+  assert.equal(
+    mergeBlockScanHuntFamilySourceCoverage(
+      Object.freeze([]),
+      unchangedProtocolCoverage,
+    ),
+    unchangedProtocolCoverage,
+    "an absent landed delta must preserve existing protocol coverage by identity",
+  );
+  assert.throws(
+    () => mergeBlockScanHuntFamilySourceCoverage(
+      unchangedProtocolCoverage,
+      unchangedProtocolCoverage,
+    ),
+    /duplicate blockscan-hunt family source/,
+    "two discovery lanes may not silently overwrite one family source",
+  );
   const common = {
     run_id: "b".repeat(64),
     state_anchor_sha256: "c".repeat(64),

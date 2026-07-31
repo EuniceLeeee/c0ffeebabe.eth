@@ -18,6 +18,10 @@ export {
   poolProjectionRowKey,
   poolRegistryKey,
 } from "./pool-registry-key.js";
+import {
+  validateRouteImmutableBinding,
+  type RouteImmutableBinding,
+} from "./venues/route-immutable-binding.js";
 
 export const DEFAULT_POOL_UNIVERSE_PATH = resolve("searcher", "pools", "active-pools.json");
 export const POOL_UNIVERSE_BUILD_MANIFEST_PROFILE =
@@ -436,10 +440,20 @@ function appendForceIncluded(
       throw new Error(`forceInclude entry must be an address or bytes32 poolId: ${item}`);
     }
   }
+  // Preserve the historical address-level behavior for every unbound
+  // non-V4 row. Only explicitly binding-aware rows opt into multi-instance
+  // force inclusion at one physical address.
   const seenAddrs = new Set(
     selected
-      .filter((pool) => pool.adapter !== "univ4")
+      .filter((pool) =>
+        pool.adapter !== "univ4" && pool.routeBinding === undefined
+      )
       .map((pool) => pool.address.toLowerCase()),
+  );
+  const seenBoundPoolKeys = new Set(
+    selected
+      .filter((pool) => pool.routeBinding !== undefined)
+      .map(poolRegistryKey),
   );
   const seenV4PoolIds = new Set(
     selected
@@ -449,7 +463,7 @@ function appendForceIncluded(
   const warnedV4 = new Set<string>();
   const out = [...selected];
   for (const pool of allPools) {
-    const key = pool.address.toLowerCase();
+    const addressKey = pool.address.toLowerCase();
     if (pool.adapter === "univ4") {
       const poolId = pool.poolId?.toLowerCase();
       if (poolId && wantedPoolIds.has(poolId)) {
@@ -458,19 +472,26 @@ function appendForceIncluded(
         seenV4PoolIds.add(poolId);
         continue;
       }
-      if (wantedAddrs.has(key) && !warnedV4.has(key)) {
+      if (wantedAddrs.has(addressKey) && !warnedV4.has(addressKey)) {
         console.warn(
           `[pool-universe] forceInclude skipped univ4 entry ${pool.address}: ` +
             "address-only identity is ambiguous for the v4 PoolManager",
         );
-        warnedV4.add(key);
+        warnedV4.add(addressKey);
       }
       continue;
     }
-    if (!wantedAddrs.has(key)) continue;
-    if (seenAddrs.has(key)) continue;
+    if (!wantedAddrs.has(addressKey)) continue;
+    if (pool.routeBinding === undefined) {
+      if (seenAddrs.has(addressKey)) continue;
+      out.push(pool);
+      seenAddrs.add(addressKey);
+      continue;
+    }
+    const poolKey = poolRegistryKey(pool);
+    if (seenBoundPoolKeys.has(poolKey)) continue;
     out.push(pool);
-    seenAddrs.add(key);
+    seenBoundPoolKeys.add(poolKey);
   }
   return out;
 }
@@ -492,6 +513,10 @@ function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry 
     factory: optionalAddress(raw.factory, `${field}.factory`),
     identitySource: identitySourceField(raw.identitySource, `${field}.identitySource`),
     poolId: stringField(raw.poolId, `${field}.poolId`),
+    routeBinding: routeImmutableBindingField(
+      raw.routeBinding,
+      `${field}.routeBinding`,
+    ),
     score,
     fixedTokenIn: isV4
       ? optionalCurrency(raw.fixedTokenIn, `${field}.fixedTokenIn`)
@@ -594,6 +619,25 @@ function parseFixedSlotKind(value: unknown, field: string): PoolEntry["fixedSlot
 function unorderedTokenPairKey(pool: Pick<PoolEntry, "token0" | "token1">): string | null {
   if (!pool.token0 || !pool.token1) return null;
   return [pool.token0.toLowerCase(), pool.token1.toLowerCase()].sort().join("/");
+}
+
+function routeImmutableBindingField(
+  value: unknown,
+  field: string,
+): RouteImmutableBinding | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!isRecord(value)) throw new Error(`${field} must be an object`);
+  try {
+    return validateRouteImmutableBinding({
+      schema: value.schema as string,
+      payload: value.payload as string,
+      hash: value.hash as string,
+    });
+  } catch (error) {
+    throw new Error(
+      `${field}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

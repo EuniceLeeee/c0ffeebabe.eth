@@ -1,6 +1,9 @@
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { OrderflowEvent } from "../orderflow/manual-source.js";
-import { detectPoolImpactTransition } from "./pool-impact.js";
+import {
+  detectPoolImpactTransition,
+  mutationOnlyTransitionDiagnostic,
+} from "./pool-impact.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import {
   matchOracleVictimEffect,
@@ -107,20 +110,48 @@ export class BackrunDetector implements Detector {
         !transition.hashOnlyReplayable
       ? []
       : transition.impacts;
+    const mutationOnly = mutationOnlyTransitionDiagnostic(transition);
+    if (mutationOnly) {
+      console.log(
+        `[searcher/detector] ${mutationOnly.reason} ` +
+          mutationOnly.mutations
+            .slice(0, 4)
+            .map((mutation) =>
+              `${mutation.familyId}:${mutation.poolIdentity}:${mutation.reason}`
+            )
+            .join(","),
+      );
+    }
 
     // Build set of tokens that exist in the routing graph
     const graphTokens = new Set(
       graph.flatMap((e) => [e.tokenIn.toLowerCase(), e.tokenOut.toLowerCase()]),
     );
 
-    const transitionPools = uniqueAddresses(
-      transition.impacts.map((impact) => impact.poolId ?? impact.pool),
-    );
+    const routeRegistry = PRODUCTION_ADAPTER_FAMILIES.routes();
+    const mutationEdges = graph.filter((edge) => {
+      const owner = routeRegistry.findForEdge(edge.adapterId);
+      if (!owner) return false;
+      return transition.mutations.some((mutation) =>
+        owner.id === mutation.familyId &&
+        (
+          edge.poolId?.toLowerCase() === mutation.poolIdentity.toLowerCase() ||
+          edge.target.toLowerCase() === mutation.poolIdentity.toLowerCase()
+        )
+      );
+    });
+    const transitionPools = uniqueAddresses([
+      ...transition.impacts.map((impact) => impact.poolId ?? impact.pool),
+      ...transition.mutations.map((mutation) => mutation.poolIdentity),
+    ]);
     const transitionTokens = uniqueAddresses(
-      transition.impacts.flatMap((impact) => [
-        impact.tokenIn,
-        impact.tokenOut,
-      ]),
+      [
+        ...transition.impacts.flatMap((impact) => [
+          impact.tokenIn,
+          impact.tokenOut,
+        ]),
+        ...mutationEdges.flatMap((edge) => [edge.tokenIn, edge.tokenOut]),
+      ],
     );
     const opportunities: Opportunity[] = [];
     for (const impact of impacts) {

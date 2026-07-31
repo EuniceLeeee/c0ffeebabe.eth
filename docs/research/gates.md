@@ -219,8 +219,13 @@ proof for a family on the naturally produced route is a real step-1 failure.
 
 The gate accepts a request, not a caller-authored pass envelope. It resolves the branch tip, recomputes
 universe/config/graph/manifest/producer hashes, derives family ownership from the registry and Git diff, runs
-the fixed producer, and computes `status` itself. The controller runs from a clean trusted `origin/main`
-checkout and creates a disposable detached worktree at the exact candidate SHA; a feature
+the fixed producer, and computes `status` itself. Canonical `checkpoint`/`final` runs execute from a clean
+trusted `origin/main` checkout and create a disposable detached worktree at the exact candidate SHA. An
+optional `bootstrap` run may instead execute from one exact clean, unmerged framework-parent SHA and evaluate
+only `framework-parent..family-child`; it emits `bootstrap_pass` with `fixed=false`,
+`branch_cleanup_allowed=false` and `canonical_checkpoint_required=true`. It cannot be consumed by final,
+authorize feature promotion, or replace the canonical checkpoint after the framework parent reaches main.
+A feature
 candidate that changes the controller, lifecycle validator, semantic evidence schema, family manifest
 producer or production replay is tooling/framework work and cannot self-certify through this gate. All six
 `production_route_stage` semantic-v4 records bind one
@@ -403,7 +408,7 @@ competitiveness** — never conflate ([[feedback-validate-live-not-backtest]]).
 
 | gate | command | what it asserts |
 |---|---|---|
-| deterministic route lifecycle | `npm run six-step-validation-gate -- --request <request.json> --out <generated-receipt.json> --phase checkpoint|final` (from `analysis/`) | trusted controller runs the fixed target-blind producer, recomputes frozen inputs, emits one causally chained semantic-v4 six-stage receipt and binds the exact branch/SHA lifecycle; caller-authored pass envelopes are rejected and `--finalize-cleanup` is final-only. |
+| deterministic route lifecycle | `npm run six-step-validation-gate -- --request <request.json> --out <generated-receipt.json> --phase bootstrap|checkpoint|final` (from `analysis/`) | trusted controller runs the fixed target-blind producer, recomputes frozen inputs, emits one causally chained semantic-v4 six-stage receipt and binds the exact branch/SHA lifecycle; stacked `bootstrap_pass` carries no promotion/fixed/cleanup authority, caller-authored pass envelopes are rejected, and `--finalize-cleanup` is final-only. |
 | correctness / coverage / path | `npm run searcher:planner` | plan count + `no_candidate` classification (pure, deterministic, no anvil). Pin real cases as named `REPLAY_FIXTURES`. |
 | latency / full pipeline | `npm run searcher:replay-live-fixtures` | per-stage `stageMs` p50/p95 (incl. preSolver) + revm profit equivalence (1 wei). Record live first with `SEARCHER_RECORD_LIVE_FIXTURES=1`. |
 | quote / math equivalence | `npm run searcher:finaloverlayequiv` / `:curvemath` / `:balanceslots` | local-quote vs on-chain quoter bit-exactness. |

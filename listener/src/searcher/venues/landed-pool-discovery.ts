@@ -6,6 +6,7 @@ import type {
 } from "./route-leg-adapter.js";
 import type { IdentityAdmissionPolicy } from "./admission.js";
 import {
+  landedEventMatches,
   observedLandedPoolIdentity,
   type LandedSwapEventDescriptor,
   type LandedEventRegistry,
@@ -269,11 +270,16 @@ export function createAddressLandedPoolMaterializer(
     async materialize(
       context: LandedPoolMaterializationContext,
     ): Promise<LandedPoolMaterializationResult> {
-      if (context.event.emitter.mode === "singleton-indexed-bytes32") {
+      if (
+        context.event.emitter.mode === "singleton-indexed-bytes32" ||
+        context.event.emitter.mode === "singleton-anonymous-data-bytes32"
+      ) {
         return {
           pools: [],
           complete: false,
-          issues: ["address materializer cannot consume a bytes32 pool identity"],
+          issues: [
+            "address materializer cannot consume a singleton bytes32 pool identity",
+          ],
         };
       }
       const candidates = new Map<string, {
@@ -347,6 +353,7 @@ export function createAddressLandedPoolMaterializer(
         const identity = observedLandedPoolIdentity(context.event, {
           address: log.address,
           topics: log.topics,
+          data: log.data,
         });
         if (!identity) {
           sourceIssues.push(
@@ -594,6 +601,7 @@ export class LandedPoolDiscoveryRegistry {
       const requiresFamilyMaterializer =
         event.materialization === "family" ||
         event.emitter.mode === "singleton-indexed-bytes32" ||
+        event.emitter.mode === "singleton-anonymous-data-bytes32" ||
         event.executionFamilies.some((familyId) =>
           familyById.get(familyId as ExecutionFamilyId)
             ?.matureDexUniverseDiscovery !== true
@@ -914,12 +922,18 @@ async function discoverLandedPoolsByTopicUnion(input: {
     Map<string, LandedPoolActivity>
   >();
   const logCountsByEventId = new Map<string, number>();
+  const sourceCompleteByEventId = new Map<string, boolean>();
+  const sourceIssuesByEventId = new Map<string, readonly string[]>();
   for (const descriptor of descriptors) {
-    const topic = descriptor.event.topic.toLowerCase();
-    const owners = descriptorsByTopic.get(topic) ?? [];
-    owners.push(descriptor);
-    descriptorsByTopic.set(topic, owners);
+    const topic = descriptor.event.topic?.toLowerCase() ?? null;
+    if (topic !== null) {
+      const owners = descriptorsByTopic.get(topic) ?? [];
+      owners.push(descriptor);
+      descriptorsByTopic.set(topic, owners);
+    }
     logCountsByEventId.set(descriptor.event.id, 0);
+    sourceCompleteByEventId.set(descriptor.event.id, true);
+    sourceIssuesByEventId.set(descriptor.event.id, Object.freeze([]));
     if (descriptor.materializer) {
       materializerLogs.set(descriptor.event.id, []);
     } else {
@@ -945,7 +959,11 @@ async function discoverLandedPoolsByTopicUnion(input: {
   // independent range reads keep that work parallel without retaining the
   // whole historical result in memory. Results are still folded in block
   // order, preserving the previous deterministic insertion/tie behavior.
-  for (let groupStart = 0; groupStart < ranges.length; groupStart += 4) {
+  for (
+    let groupStart = 0;
+    topics.length > 0 && groupStart < ranges.length;
+    groupStart += 4
+  ) {
     const slices = await Promise.all(
       ranges.slice(groupStart, groupStart + 4).map((range) =>
         scanFilterSlice(
@@ -987,12 +1005,43 @@ async function discoverLandedPoolsByTopicUnion(input: {
       }
     }
   }
-  assertStrictSourceComplete(
-    input.strict,
-    "landed-event-union",
-    unionComplete,
-    unionIssues,
+  for (const descriptor of descriptors) {
+    if (descriptor.event.topic === null) continue;
+    sourceCompleteByEventId.set(descriptor.event.id, unionComplete);
+    sourceIssuesByEventId.set(
+      descriptor.event.id,
+      Object.freeze([...unionIssues]),
+    );
+  }
+  await Promise.all(
+    descriptors
+      .filter((descriptor) => descriptor.event.topic === null)
+      .map(async (descriptor) => {
+        const result = await scanDescriptorRange(
+          input.backend,
+          descriptor.event,
+          input.fromBlock,
+          input.toBlock,
+          input.batchSize,
+          input.signal,
+        );
+        logCountsByEventId.set(descriptor.event.id, result.logs.length);
+        materializerLogs.set(
+          descriptor.event.id,
+          [...result.logs],
+        );
+        sourceCompleteByEventId.set(descriptor.event.id, result.complete);
+        sourceIssuesByEventId.set(descriptor.event.id, result.issues);
+      }),
   );
+  for (const descriptor of descriptors) {
+    assertStrictSourceComplete(
+      input.strict,
+      descriptor.sourceId,
+      sourceCompleteByEventId.get(descriptor.event.id) ?? false,
+      sourceIssuesByEventId.get(descriptor.event.id) ?? [],
+    );
+  }
 
   // Rebuild the public activity map in registry descriptor order. The legacy
   // path scans one complete event before the next; preserving that insertion
@@ -1017,8 +1066,11 @@ async function discoverLandedPoolsByTopicUnion(input: {
       logs: Object.freeze([
         ...(materializerLogs.get(descriptor.event.id) ?? []),
       ]),
-      complete: unionComplete,
-      issues: Object.freeze([...unionIssues]),
+      complete:
+        sourceCompleteByEventId.get(descriptor.event.id) ?? false,
+      issues: Object.freeze([
+        ...(sourceIssuesByEventId.get(descriptor.event.id) ?? []),
+      ]),
     });
   }
   const outcomes = await materializeRegisteredDescriptors(
@@ -1034,8 +1086,10 @@ async function discoverLandedPoolsByTopicUnion(input: {
   const revalidatedPoolKeys = new Set<string>();
   const coverage: LandedPoolDiscoveryCoverage[] = [];
   for (const descriptor of descriptors) {
-    let complete = unionComplete;
-    let issues: readonly string[] = unionIssues;
+    let complete =
+      sourceCompleteByEventId.get(descriptor.event.id) ?? false;
+    let issues: readonly string[] =
+      sourceIssuesByEventId.get(descriptor.event.id) ?? [];
     if (descriptor.materializer) {
       const outcome = outcomes.get(descriptor);
       if (!outcome) {
@@ -1052,7 +1106,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
         }
         complete = false;
         issues = Object.freeze([
-          ...unionIssues,
+          ...issues,
           errorMessage(outcome.error),
         ]);
         if (outcome.scope === "projection") {
@@ -1077,7 +1131,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
         }
         complete &&= result.complete;
         issues = Object.freeze([
-          ...unionIssues,
+          ...issues,
           ...(result.issues ?? []),
         ]);
       }
@@ -1263,8 +1317,7 @@ function landedEmitterMatches(
   event: LandedSwapEventDescriptor,
   log: LandedPoolDiscoveryLog,
 ): boolean {
-  if (event.emitter.mode === "address") return true;
-  return log.address.toLowerCase() === event.emitter.address.toLowerCase();
+  return landedEventMatches(event, log);
 }
 
 function mergeLandedActivity(
@@ -1316,7 +1369,7 @@ async function scanGenericActivityRange(
   readonly issues: readonly string[];
 }> {
   const filter: LandedPoolDiscoveryLogFilter = {
-    topics: [event.topic],
+    topics: event.topic === null ? [] : [event.topic],
     fromBlock,
     toBlock,
   };
@@ -1359,17 +1412,24 @@ async function scanDescriptorRange(
   const address = event.emitter.mode === "address"
     ? undefined
     : event.emitter.address;
-  return scanFilterRange(
+  const scanned = await scanFilterRange(
     backend,
     {
       ...(address === undefined ? {} : { address }),
-      topics: [event.topic],
+      topics: event.topic === null ? [] : [event.topic],
       fromBlock,
       toBlock,
     },
     batchSize,
     signal,
   );
+  return {
+    logs: Object.freeze(
+      scanned.logs.filter((log) => landedEventMatches(event, log)),
+    ),
+    complete: scanned.complete,
+    issues: scanned.issues,
+  };
 }
 
 async function scanFilterRange(
@@ -1467,8 +1527,13 @@ function recordGenericActivity(
   const identity = observedLandedPoolIdentity(event, {
     address: log.address,
     topics: log.topics,
+    data: log.data,
   });
-  if (!identity || event.emitter.mode === "singleton-indexed-bytes32") {
+  if (
+    !identity ||
+    event.emitter.mode === "singleton-indexed-bytes32" ||
+    event.emitter.mode === "singleton-anonymous-data-bytes32"
+  ) {
     return false;
   }
   let address: string;
@@ -1504,9 +1569,16 @@ function discoverySourceFingerprint(
   const sharedIdentity = materializer?.sharedIdentity;
   return ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify({
     eventId: event.id,
-    topic: event.topic.toLowerCase(),
+    topic: event.topic?.toLowerCase() ?? null,
     emitter: event.emitter.mode === "address"
       ? { mode: event.emitter.mode }
+      : event.emitter.mode === "singleton-anonymous-data-bytes32"
+      ? {
+          mode: event.emitter.mode,
+          address: event.emitter.address.toLowerCase(),
+          dataLengthBytes: event.emitter.dataLengthBytes,
+          identityOffsetBytes: event.emitter.identityOffsetBytes,
+        }
       : {
           mode: event.emitter.mode,
           address: event.emitter.address.toLowerCase(),
@@ -1529,9 +1601,16 @@ function landedPhysicalEventKey(
   event: LandedSwapEventDescriptor,
 ): string {
   return JSON.stringify({
-    topic: event.topic.toLowerCase(),
+    topic: event.topic?.toLowerCase() ?? null,
     emitter: event.emitter.mode === "address"
       ? { mode: event.emitter.mode }
+      : event.emitter.mode === "singleton-anonymous-data-bytes32"
+      ? {
+          mode: event.emitter.mode,
+          address: event.emitter.address.toLowerCase(),
+          dataLengthBytes: event.emitter.dataLengthBytes,
+          identityOffsetBytes: event.emitter.identityOffsetBytes,
+        }
       : {
           mode: event.emitter.mode,
           address: event.emitter.address.toLowerCase(),

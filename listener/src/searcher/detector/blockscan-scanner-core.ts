@@ -15,6 +15,10 @@ import {
   orderByBlockScanFamily,
   selectByBlockScanFamily,
 } from "./blockscan-family-budget.js";
+import { edgeInstanceKey } from "../venues/route-instance-identity.js";
+import {
+  validatedRouteImmutableBindingHash,
+} from "../venues/route-immutable-binding.js";
 
 export interface BlockScanCoreConfig {
   maxHops: number;
@@ -520,7 +524,7 @@ function groupPairs(edges: TokenEdge[]): Map<string, PairGroup> {
       group = { a, b, venues: new Map() };
       groups.set(key, group);
     }
-    const pool = edgeVenueIdentity(edge);
+    const pool = routeVenueIdentity(edge);
     const venueEdges = group.venues.get(pool);
     if (venueEdges) venueEdges.push(edge);
     else group.venues.set(pool, [edge]);
@@ -529,8 +533,10 @@ function groupPairs(edges: TokenEdge[]): Map<string, PairGroup> {
 }
 
 function pairTouches(group: PairGroup, touched: Set<string>): boolean {
-  for (const pool of group.venues.keys()) {
-    if (touched.has(pool)) return true;
+  for (const edges of group.venues.values()) {
+    if (edges.some((edge) => touched.has(edgeVenueIdentity(edge)))) {
+      return true;
+    }
   }
   return false;
 }
@@ -581,6 +587,23 @@ function edgeVenueIdentity(edge: TokenEdge): string {
   if (edge.poolId) return edge.poolId.toLowerCase();
   if (edge.v4PoolKey) return v4PoolId(edge.v4PoolKey).toLowerCase();
   return edge.target.toLowerCase();
+}
+
+/**
+ * Pricing venue identity retains immutable family metadata even when logical
+ * instances share one physical target and token pair. Touched matching remains
+ * tied to the physical identity above.
+ */
+function routeVenueIdentity(edge: TokenEdge): string {
+  const physicalIdentity = edgeVenueIdentity(edge);
+  const routeBindingHash =
+    validatedRouteImmutableBindingHash(edge.routeBinding);
+  if (routeBindingHash === null) return physicalIdentity;
+  return [
+    physicalIdentity,
+    edgeInstanceKey(edge),
+    routeBindingHash,
+  ].join("\u001f");
 }
 
 function scoreRing(
@@ -879,10 +902,16 @@ function uniqueLowercase(values: string[]): string[] {
 }
 
 function directedRouteFingerprint(edges: TokenEdge[]): string {
-  const parts = edges.map((edge) =>
-    `${edge.adapterId.toLowerCase()}|${edgeVenueIdentity(edge)}|` +
-      `${edge.tokenIn.toLowerCase()}>${edge.tokenOut.toLowerCase()}`
-  );
+  const parts = edges.map((edge) => {
+    const legacy =
+      `${edge.adapterId.toLowerCase()}|${edgeVenueIdentity(edge)}|` +
+      `${edge.tokenIn.toLowerCase()}>${edge.tokenOut.toLowerCase()}`;
+    const bindingHash =
+      validatedRouteImmutableBindingHash(edge.routeBinding);
+    return bindingHash === null
+      ? legacy
+      : `${legacy}|${edgeInstanceKey(edge)}|${bindingHash}`;
+  });
   if (parts.length <= 1) return parts.join(";");
   let canonical = parts.join(";");
   for (let i = 1; i < parts.length; i++) {

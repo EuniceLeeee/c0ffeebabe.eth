@@ -69,6 +69,38 @@ test("validation request accepts schema v2 and rejects stale schema v1", () => {
   );
 });
 
+test("stacked bootstrap request binds one exact framework parent", () => {
+  const request = {
+    schema_version: SIX_STEP_VALIDATION_REQUEST_SCHEMA_VERSION,
+    request: "trusted-six-step-validation-request",
+    mode: "bootstrap",
+    branch: "codex/example-family",
+    rollback_commit: COMMIT,
+    framework_parent_commit: COMMIT,
+    sample_tx_hash: SAMPLE,
+    lane: "block_scan_standing",
+    trusted_reference_path:
+      "docs/research/references/production-routes/example.json",
+    input_snapshot_path: "snapshot.json",
+  };
+  const parsed = parseSixStepValidationRequest(request, "/tmp");
+  assert.equal(parsed.mode, "bootstrap");
+  assert.equal(
+    parsed.mode === "bootstrap" ? parsed.framework_parent_commit : null,
+    COMMIT,
+  );
+  assert.throws(
+    () => parseSixStepValidationRequest(
+      {
+        ...request,
+        framework_parent_commit: "c".repeat(40),
+      },
+      "/tmp",
+    ),
+    /framework_parent_commit equal to rollback_commit/,
+  );
+});
+
 test("six-step runner applies the same live clamps before producing argv", () => {
   const config = productionRunnerConfig({
     SEARCHER_BLOCKSCAN_MAX_CANDIDATES: "200",

@@ -492,6 +492,48 @@ async function main(): Promise<void> {
     );
     console.log("[pool-universe] forceInclude minScore-bypass non-v4: PASS");
 
+    const legacySharedAddressFile = join(
+      dir,
+      "force-shared-address-legacy-pools.json",
+    );
+    const legacySharedAddress = poolAddress(0x2006);
+    writeFileSync(legacySharedAddressFile, JSON.stringify({
+      pools: [
+        {
+          address: legacySharedAddress,
+          adapter: "univ2",
+          logicalInstanceId: "legacy-first",
+          token0: poolAddress(0xc101),
+          token1: poolAddress(0xc102),
+          score: 10,
+        },
+        {
+          address: legacySharedAddress,
+          adapter: "univ2",
+          logicalInstanceId: "legacy-second",
+          token0: poolAddress(0xc101),
+          token1: poolAddress(0xc102),
+          score: 9,
+        },
+      ],
+    }));
+    const forcedLegacySharedAddress = loadPoolUniverse(
+      legacySharedAddressFile,
+      {
+        maxPools: 1,
+        minScore: 1,
+        forceInclude: [legacySharedAddress],
+      },
+    );
+    assert(
+      forcedLegacySharedAddress.length === 1 &&
+        forcedLegacySharedAddress[0].logicalInstanceId === "legacy-first",
+      "unbound non-v4 forceInclude must retain legacy address-level cardinality",
+    );
+    console.log(
+      "[pool-universe] forceInclude unbound shared-address compatibility: PASS",
+    );
+
     const v4Warnings: string[] = [];
     console.warn = (message?: unknown) => { v4Warnings.push(String(message)); };
     let forcedV4: ReturnType<typeof loadPoolUniverse> = [];
@@ -543,7 +585,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe PASS (13/13)");
+  console.log("pool-universe PASS (14/14)");
 }
 
 main().catch((err) => {

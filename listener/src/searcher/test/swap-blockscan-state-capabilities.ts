@@ -34,8 +34,12 @@ import {
   BLOCKSCAN_MULTICALL3,
   blockScanErc20Iface,
   blockScanMulticallIface,
+  currentBlockRead,
   q96PrecisionProbeAmount,
 } from "../venues/swaps/blockscan-state-shared.js";
+import {
+  createCurrentBlockViewQuoteCapability,
+} from "../venues/swaps/view-quote-blockscan-state.js";
 import {
   curvePlainBlockScanState,
   curvePlainAdapter,
@@ -163,6 +167,7 @@ await runCurveUnderlying();
 await runBalancerV3();
 await runDodoV2();
 await runFluidDex();
+await runViewQuoteDecodeAmountBinding();
 
 function runConcentratedLiquidityPrecisionBoundary(): void {
   const edges = twoTokenEdges("univ3-swap").map((edge) => ({
@@ -223,6 +228,62 @@ assert.deepEqual(
 );
 
 console.log("[swap-blockscan-state-capabilities] current-N + pure derive: PASS");
+
+async function runViewQuoteDecodeAmountBinding(): Promise<void> {
+  const quoteAmount = 12_345n;
+  let decodedAmount: bigint | null = null;
+  const capability =
+    createCurrentBlockViewQuoteCapability<Record<string, never>>({
+      kind: "external-swap",
+      edgeAdapterIds: new Set(["fixture-view-quote"]),
+      compileGroup: () => Object.freeze({}),
+      quoteAmountIn: () => quoteAmount,
+      quoteRead(ctx) {
+        return currentBlockRead({
+          id: `fixture-view-quote:${ctx.amountIn}`,
+          sourceBlock: ctx.sourceBlock,
+          sourceBlockHash: ctx.sourceBlockHash,
+          to: ctx.edge.target,
+          data: ethers.AbiCoder.defaultAbiCoder().encode(
+            ["uint256"],
+            [ctx.amountIn],
+          ),
+        });
+      },
+      decodeQuote(_edge, data, amountIn) {
+        decodedAmount = amountIn;
+        assert.equal(
+          BigInt(
+            ethers.AbiCoder.defaultAbiCoder().decode(["uint256"], data)[0],
+          ),
+          amountIn,
+          "decodeQuote amount must match the exact amount encoded in quoteRead",
+        );
+        return amountIn * 2n;
+      },
+    });
+  const edge = twoTokenEdges("fixture-view-quote")[0];
+  const result = await execute(
+    "fixture-view-quote",
+    capability,
+    [edge],
+    (read) =>
+      read.id.startsWith("static-decimals:")
+        ? blockScanErc20Iface.encodeFunctionResult("decimals", [18])
+        : read.data,
+    { recordProductionFixture: false },
+  );
+  assert.equal(
+    decodedAmount,
+    quoteAmount,
+    "view-quote decoder receives the selected executable probe amount",
+  );
+  assert.equal(
+    result.mids.get(blockScanEdgeKey(edge))?.mid,
+    2,
+    "the mid is derived from that same selected amount",
+  );
+}
 
 async function runUniV2(): Promise<void> {
   const edges = twoTokenEdges("univ2-swap");

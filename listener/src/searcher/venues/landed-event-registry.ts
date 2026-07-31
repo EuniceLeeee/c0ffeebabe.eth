@@ -17,11 +17,23 @@ export type LandedEventEmitter =
       readonly mode: "singleton-indexed-bytes32";
       readonly address: string;
       readonly topicIndex: number;
+    }
+  | {
+      /**
+       * Anonymous singleton log with a bytes32 instance id embedded in data.
+       * Exact byte length prevents unrelated anonymous logs at the singleton
+       * from becoming swap triggers.
+       */
+      readonly mode: "singleton-anonymous-data-bytes32";
+      readonly address: string;
+      readonly dataLengthBytes: number;
+      readonly identityOffsetBytes: number;
     };
 
 export interface LandedSwapEventDeclaration {
   readonly id: string;
-  readonly topic: string;
+  /** null only for an explicitly bounded anonymous-data emitter. */
+  readonly topic: string | null;
   readonly emitter: LandedEventEmitter;
   /**
    * Generic materialization covers address and singleton-indexed-address
@@ -58,7 +70,10 @@ export interface LandedMutationEventDescriptor extends LandedMutationEventDeclar
 export interface LandedEventFamilyRegistration {
   readonly id: string;
   readonly poolAdapters: readonly PoolEntry["adapter"][];
-  readonly observation: { readonly topics: readonly string[] };
+  readonly observation: {
+    readonly topics: readonly string[];
+    readonly anonymousLogs?: readonly AnonymousLandedLogSelector[];
+  };
   readonly landedEvents: SwapLandedEventDeclaration;
 }
 
@@ -68,6 +83,12 @@ export const landedEventTopic = (signature: string): string =>
 export const ADDRESS_LANDED_EVENT_EMITTER = Object.freeze({
   mode: "address",
 } as const);
+
+export interface AnonymousLandedLogSelector {
+  readonly address: string;
+  readonly dataLengthBytes: number;
+  readonly identityOffsetBytes: number;
+}
 
 export function singletonIndexedAddressEmitter(
   address: string,
@@ -88,6 +109,19 @@ export function singletonIndexedBytes32Emitter(
     mode: "singleton-indexed-bytes32",
     address: ethers.getAddress(address),
     topicIndex,
+  });
+}
+
+export function singletonAnonymousDataBytes32Emitter(
+  address: string,
+  dataLengthBytes: number,
+  identityOffsetBytes: number,
+): LandedEventEmitter {
+  return Object.freeze({
+    mode: "singleton-anonymous-data-bytes32",
+    address: ethers.getAddress(address),
+    dataLengthBytes,
+    identityOffsetBytes,
   });
 }
 
@@ -180,7 +214,7 @@ export class LandedEventRegistry {
             })
           : Object.freeze({
               ...declaration,
-              topic: declaration.topic.toLowerCase(),
+              topic: declaration.topic?.toLowerCase() ?? null,
               executionFamilies: Object.freeze([family.id]),
             });
         swapsById.set(declaration.id, descriptor);
@@ -255,12 +289,31 @@ export class LandedEventRegistry {
     return typeof eventTopic === "string" &&
       this.swapsByTopic.has(eventTopic.toLowerCase());
   }
+
+  isSwapLog(log: {
+    readonly address: string;
+    readonly topics: readonly string[];
+    readonly data: string;
+  }): boolean {
+    const topic = log.topics[0];
+    if (topic && this.isSwapTopic(topic)) return true;
+    return this.swapEvents.some((event) =>
+      event.topic === null && landedEventMatches(event, log)
+    );
+  }
 }
 
 export function observedLandedPoolIdentity(
   event: Pick<LandedSwapEventDeclaration | LandedMutationEventDeclaration, "topic" | "emitter">,
-  log: { address: string; topics: readonly string[] },
+  log: { address: string; topics: readonly string[]; data?: string },
 ): string | null {
+  if (event.topic === null) {
+    if (event.emitter.mode !== "singleton-anonymous-data-bytes32") return null;
+    if (!anonymousEmitterMatches(event.emitter, log)) return null;
+    const data = log.data!.slice(2);
+    const start = event.emitter.identityOffsetBytes * 2;
+    return `0x${data.slice(start, start + 64)}`.toLowerCase();
+  }
   if (log.topics[0]?.toLowerCase() !== event.topic.toLowerCase()) return null;
   if (event.emitter.mode === "address") {
     try {
@@ -269,6 +322,7 @@ export function observedLandedPoolIdentity(
       return null;
     }
   }
+  if (event.emitter.mode === "singleton-anonymous-data-bytes32") return null;
   if (log.address.toLowerCase() !== event.emitter.address.toLowerCase()) return null;
   const indexed = log.topics[event.emitter.topicIndex];
   if (!indexed) return null;
@@ -313,7 +367,9 @@ function validateFamilyDeclaration(family: LandedEventFamilyRegistration): void 
   }
 
   const declaredTopics = new Set(
-    family.landedEvents.swaps.map((event) => event.topic.toLowerCase()),
+    family.landedEvents.swaps.flatMap((event) =>
+      event.topic === null ? [] : [event.topic.toLowerCase()]
+    ),
   );
   const observedTopics = new Set(
     family.observation.topics.map((eventTopic) => eventTopic.toLowerCase()),
@@ -324,6 +380,25 @@ function validateFamilyDeclaration(family: LandedEventFamilyRegistration): void 
   ) {
     throw new Error(
       `landed-event registry: ${family.id} observation topics do not match its declaration`,
+    );
+  }
+  const declaredAnonymous = new Set(
+    family.landedEvents.swaps.flatMap((event) =>
+      event.topic === null
+        ? [anonymousSelectorKey(event.emitter)]
+        : []
+    ),
+  );
+  const observedAnonymous = new Set(
+    (family.observation.anonymousLogs ?? []).map(anonymousSelectorKey),
+  );
+  if (
+    declaredAnonymous.size !== observedAnonymous.size ||
+    [...declaredAnonymous].some((selector) => !observedAnonymous.has(selector))
+  ) {
+    throw new Error(
+      `landed-event registry: ${family.id} anonymous observation selectors ` +
+        "do not match its declaration",
     );
   }
 }
@@ -338,7 +413,10 @@ function validateEvent(
   if (!event.id.trim()) {
     throw new Error(`landed-event registry: ${owner} has empty event id`);
   }
-  if (!/^0x[0-9a-fA-F]{64}$/.test(event.topic)) {
+  if (
+    event.topic !== null &&
+    !/^0x[0-9a-fA-F]{64}$/.test(event.topic)
+  ) {
     throw new Error(`landed-event registry: ${owner} ${event.id} has invalid topic`);
   }
   if (
@@ -348,6 +426,21 @@ function validateEvent(
   ) {
     throw new Error(
       `landed-event registry: ${owner} ${event.id} has invalid materialization`,
+    );
+  }
+  if (event.topic === null) {
+    if (event.emitter.mode !== "singleton-anonymous-data-bytes32") {
+      throw new Error(
+        `landed-event registry: ${owner} ${event.id} null topic requires ` +
+          "an anonymous-data emitter",
+      );
+    }
+    validateAnonymousEmitter(event.emitter, owner, event.id);
+    return;
+  }
+  if (event.emitter.mode === "singleton-anonymous-data-bytes32") {
+    throw new Error(
+      `landed-event registry: ${owner} ${event.id} anonymous emitter requires null topic`,
     );
   }
   if (event.emitter.mode === "address") return;
@@ -368,7 +461,7 @@ function sameSwapDeclaration(
   left: LandedSwapEventDeclaration,
   right: LandedSwapEventDeclaration,
 ): boolean {
-  return left.topic.toLowerCase() === right.topic.toLowerCase() &&
+  return left.topic?.toLowerCase() === right.topic?.toLowerCase() &&
     sameEmitter(left.emitter, right.emitter) &&
     left.discovery.poolAdapter === right.discovery.poolAdapter &&
     left.discovery.label === right.discovery.label &&
@@ -388,22 +481,123 @@ function sameMutationDeclaration(
 function sameEmitter(left: LandedEventEmitter, right: LandedEventEmitter): boolean {
   if (left.mode !== right.mode) return false;
   if (left.mode === "address" || right.mode === "address") return true;
+  if (
+    left.mode === "singleton-anonymous-data-bytes32" ||
+    right.mode === "singleton-anonymous-data-bytes32"
+  ) {
+    return left.mode === "singleton-anonymous-data-bytes32" &&
+      right.mode === "singleton-anonymous-data-bytes32" &&
+      left.address.toLowerCase() === right.address.toLowerCase() &&
+      left.dataLengthBytes === right.dataLengthBytes &&
+      left.identityOffsetBytes === right.identityOffsetBytes;
+  }
   return left.address.toLowerCase() === right.address.toLowerCase() &&
     left.topicIndex === right.topicIndex;
 }
 
-function uniqueTopics(events: readonly { readonly topic: string }[]): string[] {
-  return [...new Set(events.map((event) => event.topic.toLowerCase()))];
+function uniqueTopics(
+  events: readonly { readonly topic: string | null }[],
+): string[] {
+  return [...new Set(events.flatMap((event) =>
+    event.topic === null ? [] : [event.topic.toLowerCase()]
+  ))];
 }
 
-function groupByTopic<T extends { topic: string }>(
+function groupByTopic<T extends { topic: string | null }>(
   events: readonly T[],
 ): ReadonlyMap<string, readonly T[]> {
   const grouped = new Map<string, T[]>();
   for (const event of events) {
+    if (event.topic === null) continue;
     const items = grouped.get(event.topic.toLowerCase()) ?? [];
     items.push(event);
     grouped.set(event.topic.toLowerCase(), items);
   }
   return grouped;
+}
+
+export function landedEventMatches(
+  event: Pick<LandedSwapEventDeclaration, "topic" | "emitter">,
+  log: {
+    readonly address: string;
+    readonly topics: readonly string[];
+    readonly data: string;
+  },
+): boolean {
+  if (event.topic === null) {
+    return event.emitter.mode === "singleton-anonymous-data-bytes32" &&
+      anonymousEmitterMatches(event.emitter, log);
+  }
+  if (log.topics[0]?.toLowerCase() !== event.topic.toLowerCase()) return false;
+  if (event.emitter.mode === "address") return true;
+  if (event.emitter.mode === "singleton-anonymous-data-bytes32") return false;
+  return log.address.toLowerCase() === event.emitter.address.toLowerCase();
+}
+
+function anonymousEmitterMatches(
+  selector: Extract<
+    LandedEventEmitter,
+    { readonly mode: "singleton-anonymous-data-bytes32" }
+  >,
+  log: {
+    readonly address: string;
+    readonly topics: readonly string[];
+    readonly data?: string;
+  },
+): boolean {
+  if (
+    log.address.toLowerCase() !== selector.address.toLowerCase() ||
+    log.topics.length !== 0 ||
+    typeof log.data !== "string" ||
+    !/^0x(?:[0-9a-fA-F]{2})*$/.test(log.data) ||
+    (log.data.length - 2) / 2 !== selector.dataLengthBytes
+  ) {
+    return false;
+  }
+  return selector.identityOffsetBytes + 32 <= selector.dataLengthBytes;
+}
+
+function validateAnonymousEmitter(
+  emitter: Extract<
+    LandedEventEmitter,
+    { readonly mode: "singleton-anonymous-data-bytes32" }
+  >,
+  owner: string,
+  eventId: string,
+): void {
+  try {
+    ethers.getAddress(emitter.address);
+  } catch {
+    throw new Error(
+      `landed-event registry: ${owner} ${eventId} has invalid emitter`,
+    );
+  }
+  if (
+    !Number.isSafeInteger(emitter.dataLengthBytes) ||
+    emitter.dataLengthBytes < 32 ||
+    !Number.isSafeInteger(emitter.identityOffsetBytes) ||
+    emitter.identityOffsetBytes < 0 ||
+    emitter.identityOffsetBytes + 32 > emitter.dataLengthBytes
+  ) {
+    throw new Error(
+      `landed-event registry: ${owner} ${eventId} has invalid anonymous data bounds`,
+    );
+  }
+}
+
+function anonymousSelectorKey(
+  selector: LandedEventEmitter | AnonymousLandedLogSelector,
+): string {
+  if (
+    !("dataLengthBytes" in selector) ||
+    !("identityOffsetBytes" in selector) ||
+    !("address" in selector)
+  ) {
+    throw new Error("anonymous landed selector is not data-bounded");
+  }
+  return JSON.stringify([
+    ethers.getAddress(selector.address).toLowerCase(),
+    selector.dataLengthBytes,
+    selector.identityOffsetBytes,
+  ]);
 }

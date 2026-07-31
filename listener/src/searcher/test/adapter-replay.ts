@@ -85,9 +85,19 @@ import {
   resolvedPlanExecutionIdentity,
 } from "../venues/route-instance-identity.js";
 import {
+  validateRouteImmutableBinding,
+  type RouteImmutableBinding,
+} from "../venues/route-immutable-binding.js";
+import {
   anchorHistoricalSenderNoncePrefix,
   type HistoricalSenderNonceAnchorResult,
 } from "./historical-replay-anchor.js";
+import {
+  referencedRouteIdentityCallIds,
+  resolveCanonicalRouteIdentity,
+  type CanonicalRouteIdentity,
+  type CanonicalRouteIdentityWitness,
+} from "./canonical-route-identity-witness.js";
 import {
   resolvedRouteExecutionSurfaces,
 } from "./route-execution-witness.js";
@@ -109,6 +119,7 @@ type StateAnchor = ParentBlockAnchor | AfterTransactionAnchor;
 interface RoutePoolIdentity {
   adapter: PoolEntry["adapter"];
   address: string;
+  routeBinding?: RouteImmutableBinding;
   poolId?: string;
   token0?: string;
   token1?: string;
@@ -135,6 +146,7 @@ export interface ReferenceWitnessLeg {
   tokenIn: string;
   tokenOut: string;
   poolId?: string;
+  routeBindingHash?: string;
   referenceWitness: ReferenceWitness;
 }
 
@@ -180,6 +192,12 @@ interface ReferenceTransferRule {
 }
 
 export interface ReferenceWitness {
+  /**
+   * Defaults to "root" for schema-v3 fixtures.  A trusted split witness may
+   * name a later rule so a bounded, explicitly declared prelude can precede
+   * the route root without weakening root ownership or selector checks.
+   */
+  readonly rootCallId?: string;
   readonly calls: readonly [ReferenceCallRule, ...ReferenceCallRule[]];
   readonly receiptTransfers: readonly ReferenceTransferRule[];
 }
@@ -582,6 +600,9 @@ function parseLeg(raw: unknown, field: string): AdapterReplayLeg {
     tokenIn: address(value.tokenIn, `${field}.tokenIn`),
     tokenOut: address(value.tokenOut, `${field}.tokenOut`),
     ...(pool.poolId ? { poolId: pool.poolId } : {}),
+    ...(pool.routeBinding
+      ? { routeBindingHash: pool.routeBinding.hash }
+      : {}),
     referenceWitness: parseReferenceWitness(
       value.referenceWitness,
       `${field}.referenceWitness`,
@@ -594,7 +615,16 @@ export function parseReferenceWitness(
   field: string,
 ): ReferenceWitness {
   const value = record(raw, field);
-  exactKeys(value, ["calls", "receiptTransfers"], field, ["calls"]);
+  exactKeys(
+    value,
+    ["rootCallId", "calls", "receiptTransfers"],
+    field,
+    ["calls"],
+  );
+  const explicitRootCallId = value.rootCallId === undefined
+    ? undefined
+    : fixtureId(value.rootCallId, `${field}.rootCallId`);
+  const rootCallId = explicitRootCallId ?? "root";
   if (!Array.isArray(value.calls) || value.calls.length === 0 || value.calls.length > 8) {
     throw new Error(`${field}.calls must contain 1..8 rules`);
   }
@@ -604,7 +634,7 @@ export function parseReferenceWitness(
   const ids = new Set<string>();
   calls.forEach((call, index) => {
     if (ids.has(call.id)) throw new Error(`${field}.calls has duplicate id ${call.id}`);
-    if (index === 0) {
+    if (explicitRootCallId === undefined && index === 0) {
       if (
         call.id !== "root" ||
         call.within !== undefined ||
@@ -621,6 +651,18 @@ export function parseReferenceWitness(
     validateReferenceRuleRefs(call, ids, `${field}.calls[${index}]`);
     ids.add(call.id);
   });
+  const rootCall = calls.find((call) => call.id === rootCallId);
+  if (
+    !rootCall ||
+    rootCall.within !== undefined ||
+    rootCall.target !== "execution-target" ||
+    rootCall.signature === undefined
+  ) {
+    throw new Error(
+      `${field}.${explicitRootCallId === undefined ? "calls[0]" : "rootCallId"} ` +
+        "must name an ABI root at execution-target without within",
+    );
+  }
   const transfersRaw = value.receiptTransfers ?? [];
   if (!Array.isArray(transfersRaw) || transfersRaw.length > 8) {
     throw new Error(`${field}.receiptTransfers must contain at most 8 rules`);
@@ -642,9 +684,28 @@ export function parseReferenceWitness(
     }
   }
   return {
+    ...(explicitRootCallId === undefined
+      ? {}
+      : { rootCallId: explicitRootCallId }),
     calls: calls as [ReferenceCallRule, ...ReferenceCallRule[]],
     receiptTransfers,
   };
+}
+
+export function referenceWitnessRootSelector(
+  witness: ReferenceWitness,
+): string {
+  const rootCallId = witness.rootCallId ?? "root";
+  const root = witness.calls.find((call) => call.id === rootCallId);
+  if (!root?.signature) {
+    throw new Error(
+      `reference witness root ${rootCallId} lacks an ABI signature`,
+    );
+  }
+  return referenceCallInterface(
+    root.signature,
+    `reference witness root ${rootCallId}`,
+  ).selector;
 }
 
 function parseReferenceCallRule(raw: unknown, field: string): ReferenceCallRule {
@@ -793,7 +854,7 @@ function validateReferenceWitnessRef(
 function parsePool(raw: unknown, field: string): RoutePoolIdentity {
   const value = record(raw, field);
   exactKeys(value, [
-    "adapter", "address", "poolId", "token0", "token1", "underlyingCoins",
+    "adapter", "address", "routeBinding", "poolId", "token0", "token1", "underlyingCoins",
     "currency0", "currency1", "fee", "tickSpacing", "hooks", "fixedTokenIn",
     "fixedTokenOut", "fixedSlotKind", "fixedProtocolAction", "nonStandardRedeem",
     "redeemTokenOut", "receiptEmitters", "logicalInstanceId",
@@ -801,6 +862,28 @@ function parsePool(raw: unknown, field: string): RoutePoolIdentity {
   const adapter = nonEmptyString(value.adapter, `${field}.adapter`) as PoolEntry["adapter"];
   PRODUCTION_ADAPTER_FAMILIES.routes().forPool(adapter);
   const pool: RoutePoolIdentity = { adapter, address: address(value.address, `${field}.address`) };
+  if (value.routeBinding !== undefined) {
+    const binding = record(value.routeBinding, `${field}.routeBinding`);
+    exactKeys(
+      binding,
+      ["schema", "payload", "hash"],
+      `${field}.routeBinding`,
+    );
+    pool.routeBinding = validateRouteImmutableBinding({
+      schema: nonEmptyString(
+        binding.schema,
+        `${field}.routeBinding.schema`,
+      ),
+      payload: nonEmptyString(
+        binding.payload,
+        `${field}.routeBinding.payload`,
+      ),
+      hash: nonEmptyString(
+        binding.hash,
+        `${field}.routeBinding.hash`,
+      ),
+    });
+  }
   for (const name of ADDRESS_FIELDS) {
     if (name === "address" || value[name] === undefined) continue;
     pool[name] = address(value[name], `${field}.${name}`) as never;
@@ -1002,6 +1085,7 @@ interface MatchedReferenceCall {
   readonly call: FlattenedTraceCall;
   readonly index: number;
   readonly args: readonly unknown[];
+  readonly inputTypes: readonly ethers.ParamType[];
 }
 
 interface ReferenceExecutionSurface {
@@ -1093,17 +1177,20 @@ export function matchReferenceWitness(input: {
   readonly requireTokenCoverage: boolean;
   readonly requireActionOwnership?: boolean;
   readonly usedReceiptLogIndexes?: ReadonlySet<number>;
+  readonly routeIdentityWitness?: CanonicalRouteIdentityWitness;
 }): {
   readonly nextCursor: number;
   readonly evidence: ReferenceTraceSemanticEvidence;
   readonly rootInputSha256: string;
   readonly matchedCalls: readonly MatchedReferenceWitnessCall[];
   readonly matchedReceiptLogIndexes: readonly number[];
+  readonly routeIdentity?: CanonicalRouteIdentity;
 } {
   const matched = new Map<string, MatchedReferenceCall>();
   const callEvidence: Array<Record<string, unknown>> = [];
   const matchedCalls: MatchedReferenceWitnessCall[] = [];
   const usedCallIndexes = new Set<number>();
+  const rootCallId = input.leg.referenceWitness.rootCallId ?? "root";
   let rootIndex = -1;
   let topLevelCursor = input.cursor;
   for (const rule of input.leg.referenceWitness.calls) {
@@ -1134,7 +1221,7 @@ export function matchReferenceWitness(input: {
         `reference trace witness ${rule.id} failed for leg ${input.leg.seq}`,
       );
     }
-    if (rule.id === "root") {
+    if (rule.id === rootCallId) {
       if (selected.call.selector !== input.expectedEncodedSelector) {
         throw new Error(
           `reference root selector ${selected.call.selector} differs from encoded ` +
@@ -1164,7 +1251,7 @@ export function matchReferenceWitness(input: {
       id: rule.id,
       target: selected.call.target,
       selector: selected.call.selector,
-      ...(rule.id === "root"
+      ...(rule.id === rootCallId
         ? { encoded_selector: input.expectedEncodedSelector }
         : {}),
       input_sha256: sha256(selected.call.input),
@@ -1224,6 +1311,39 @@ export function matchReferenceWitness(input: {
     markReferenceTokenBinding(tokenBindings, evidence.token, input.leg);
     transferEvidence.push(evidence);
   }
+  let routeIdentity: CanonicalRouteIdentity | undefined;
+  if (input.routeIdentityWitness !== undefined) {
+    const referencedCallIds = referencedRouteIdentityCallIds(
+      input.routeIdentityWitness,
+    );
+    for (const callId of referencedCallIds) {
+      if (!matched.has(callId)) {
+        throw new Error(
+          `route identity references undeclared/unmatched call ${callId}`,
+        );
+      }
+    }
+    routeIdentity = resolveCanonicalRouteIdentity(
+      input.routeIdentityWitness,
+      new Map([...matched].map(([id, entry]) => [
+        id,
+        {
+          args: entry.args,
+          inputTypes: entry.inputTypes,
+        },
+      ])),
+    );
+    markReferenceTokenBinding(
+      tokenBindings,
+      routeIdentity.tokenIn,
+      input.leg,
+    );
+    markReferenceTokenBinding(
+      tokenBindings,
+      routeIdentity.tokenOut,
+      input.leg,
+    );
+  }
   if (
     input.requireTokenCoverage &&
     (!tokenBindings.has("token-in") || !tokenBindings.has("token-out"))
@@ -1241,6 +1361,7 @@ export function matchReferenceWitness(input: {
     matchedCalls: Object.freeze(matchedCalls),
     matchedReceiptLogIndexes:
       Object.freeze(matchedReceiptLogIndexes),
+    ...(routeIdentity === undefined ? {} : { routeIdentity }),
     evidence: {
       kind: "declarative-reference-witness",
       seq: input.leg.seq,
@@ -1293,6 +1414,9 @@ function matchReferenceCallRule(
         descriptor.functionName,
         call.input,
       );
+    const inputTypes = descriptor === null
+      ? []
+      : descriptor.iface.getFunction(descriptor.functionName)!.inputs;
     for (const argRule of rule.args) {
       if (argRule.index >= args.length) return null;
       const actual = args[argRule.index];
@@ -1316,7 +1440,7 @@ function matchReferenceCallRule(
         return null;
       }
     }
-    return { call, index, args };
+    return { call, index, args, inputTypes };
   } catch {
     return null;
   }
@@ -2825,6 +2949,9 @@ function routeHash(edges: TokenEdge[]): string {
     adapterId: edge.adapterId,
     target: edge.target.toLowerCase(),
     poolId: edge.poolId?.toLowerCase() ?? null,
+    ...(edge.routeBinding === undefined
+      ? {}
+      : { routeBindingHash: edge.routeBinding.hash }),
     tokenIn: edge.tokenIn.toLowerCase(),
     tokenOut: edge.tokenOut.toLowerCase(),
   }))));

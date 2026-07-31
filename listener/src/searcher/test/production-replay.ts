@@ -128,10 +128,20 @@ import {
   flattenSuccessfulCalls,
   matchReferenceWitness,
   parseReferenceWitness,
+  referenceWitnessRootSelector,
   type FlattenedTraceCall,
+  type ReferenceWitness,
   type ReferenceWitnessLeg,
   type TraceCall,
 } from "./adapter-replay.js";
+import {
+  assertCanonicalRouteIdentitiesEqual,
+  assertCanonicalRouteIdentityMatchesEdge,
+  parseCanonicalRouteIdentityWitness,
+  referencedRouteIdentityCallIds,
+  type CanonicalRouteIdentity,
+  type CanonicalRouteIdentityWitness,
+} from "./canonical-route-identity-witness.js";
 import type {
   ResolvedActionExecutionSurface,
   ResolvedRouteExecutionSurface,
@@ -205,6 +215,7 @@ export interface HuntEdge {
   edgeKind: TokenEdge["edgeKind"];
   leavesStandingPosition: boolean;
   poolId?: string;
+  routeBindingHash?: string;
 }
 
 interface HuntOpportunity {
@@ -314,7 +325,7 @@ interface TargetBlindProducerArtifact {
 }
 
 export interface TrustedReferenceRoute {
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   artifact: "trusted-production-reference-route";
   sampleTxHash: string;
   targetInputSha256: string;
@@ -326,7 +337,31 @@ export interface TrustedReferenceRoute {
   };
   route: HuntEdge[];
   routeSha256: string;
-  routeWitnesses: Array<ReferenceWitnessLeg>;
+  routeWitnesses: Array<
+    ReferenceWitnessLeg | SplitRouteReferenceWitnessLeg
+  >;
+}
+
+export interface SplitRouteReferenceWitnessLeg {
+  readonly seq: number;
+  readonly edgeAdapterId: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly poolId?: string;
+  readonly routeBindingHash?: string;
+  /**
+   * Target and execution declarations are both part of the rollback/main-owned
+   * trusted reference.  Candidate output supplies neither declaration.
+   */
+  readonly targetWitness: {
+    readonly executionTarget: string;
+    readonly witness: ReferenceWitness;
+    readonly routeIdentity: CanonicalRouteIdentityWitness;
+  };
+  readonly executionWitness: {
+    readonly witness: ReferenceWitness;
+    readonly routeIdentity: CanonicalRouteIdentityWitness;
+  };
 }
 
 interface ReplayValidationPolicy {
@@ -1498,7 +1533,7 @@ async function verifyTargetBlind(
     }
     const frozen = selected.frozenResult;
     assertFrozenResult(frozen, selected.routeSha256, selected.route);
-    assertRouteReferenceWitnesses({
+    const targetRouteIdentities = assertRouteReferenceWitnesses({
       trace: callTrace,
       receipt,
       reference,
@@ -1561,7 +1596,7 @@ async function verifyTargetBlind(
       expectedGrossProfit: sim.grossProfit,
       expectedGasUsed: sim.gasUsed,
     });
-    assertRouteReferenceWitnesses({
+    const executionRouteIdentities = assertRouteReferenceWitnesses({
       trace: conservation.callTrace,
       receipt: conservation.receipt,
       reference,
@@ -1570,6 +1605,11 @@ async function verifyTargetBlind(
       label: "frozen final sim",
       requireResolvedCallBytes: true,
     });
+    assertSplitRouteIdentityPhasesMatch(
+      targetRouteIdentities,
+      executionRouteIdentities,
+      reference.route,
+    );
     const policy = trustedPolicy;
     const finalVerifyAllowed = shouldRunFinalVerify(
       BigInt(frozen.quotedNetProfit),
@@ -2006,6 +2046,9 @@ export function normalizeReplayEdge(edge: HuntEdge): HuntEdge {
     ...(edge.poolId === undefined
       ? {}
       : { poolId: edge.poolId.toLowerCase() }),
+    ...(edge.routeBindingHash === undefined
+      ? {}
+      : { routeBindingHash: edge.routeBindingHash.toLowerCase() }),
   };
 }
 
@@ -2526,7 +2569,7 @@ export function assertTrustedReference(
   winnerTx: string,
 ): void {
   if (
-    reference.schemaVersion !== 2 ||
+    (reference.schemaVersion !== 2 && reference.schemaVersion !== 3) ||
     reference.artifact !== "trusted-production-reference-route" ||
     reference.sampleTxHash !== winnerTx ||
     !/^[0-9a-f]{64}$/.test(reference.targetInputSha256) ||
@@ -2552,16 +2595,21 @@ export function assertTrustedReference(
     throw new Error("trusted target route hash is invalid");
   }
   assertClosedProfitToken(route, route[0].tokenIn);
+  let splitWitnessCount = 0;
   for (let index = 0; index < reference.routeWitnesses.length; index++) {
     const witness = reference.routeWitnesses[index];
     const edge = route[index];
+    const split = isSplitRouteReferenceWitnessLeg(witness);
     const expectedKeys = [
       "seq",
       "edgeAdapterId",
       "tokenIn",
       "tokenOut",
       ...(edge.poolId ? ["poolId"] : []),
-      "referenceWitness",
+      ...(edge.routeBindingHash ? ["routeBindingHash"] : []),
+      ...(split
+        ? ["targetWitness", "executionWitness"]
+        : ["referenceWitness"]),
     ].sort().join("\n");
     if (
       !isPlainRecord(witness) ||
@@ -2571,9 +2619,25 @@ export function assertTrustedReference(
       witness.edgeAdapterId !== edge.adapterId ||
       ethers.getAddress(witness.tokenIn).toLowerCase() !== edge.tokenIn ||
       ethers.getAddress(witness.tokenOut).toLowerCase() !== edge.tokenOut ||
-      (witness.poolId?.toLowerCase() ?? undefined) !== edge.poolId
+      (witness.poolId?.toLowerCase() ?? undefined) !== edge.poolId ||
+      (witness.routeBindingHash?.toLowerCase() ?? undefined) !==
+        edge.routeBindingHash
     ) {
       throw new Error("trusted route witness identity is invalid");
+    }
+    if (split) {
+      splitWitnessCount++;
+      if (reference.schemaVersion !== 3) {
+        throw new Error(
+          "split target/execution witnesses require reference schemaVersion 3",
+        );
+      }
+      assertCanonicalSplitRouteWitness(
+        witness,
+        edge,
+        index + 1,
+      );
+      continue;
     }
     const parsed = parseReferenceWitness(
       witness.referenceWitness,
@@ -2595,6 +2659,122 @@ export function assertTrustedReference(
       );
     }
   }
+  if (reference.schemaVersion === 3 && splitWitnessCount === 0) {
+    throw new Error(
+      "trusted reference schemaVersion 3 requires a split route witness",
+    );
+  }
+}
+
+function isSplitRouteReferenceWitnessLeg(
+  witness: ReferenceWitnessLeg | SplitRouteReferenceWitnessLeg,
+): witness is SplitRouteReferenceWitnessLeg {
+  return "targetWitness" in witness || "executionWitness" in witness;
+}
+
+function assertCanonicalSplitRouteWitness(
+  leg: SplitRouteReferenceWitnessLeg,
+  edge: HuntEdge,
+  sequence: number,
+): void {
+  const target = parseSplitWitnessSide(
+    leg.targetWitness,
+    `trusted route witness ${sequence}.targetWitness`,
+    true,
+  );
+  const execution = parseSplitWitnessSide(
+    leg.executionWitness,
+    `trusted route witness ${sequence}.executionWitness`,
+    false,
+  );
+  const poolIdRequired = edge.poolId !== undefined;
+  if (!poolIdRequired) {
+    throw new Error(
+      `trusted route witness ${sequence} split identity requires a ` +
+        "calldata-derived frozen poolId",
+    );
+  }
+  if (
+    (target.routeIdentity.poolId !== undefined) !== poolIdRequired ||
+    (execution.routeIdentity.poolId !== undefined) !== poolIdRequired
+  ) {
+    throw new Error(
+      `trusted route witness ${sequence} poolId derivation differs from edge`,
+    );
+  }
+  for (const [label, side] of [
+    ["target", target],
+    ["execution", execution],
+  ] as const) {
+    const callIds = new Set(side.witness.calls.map((call) => call.id));
+    for (const callId of referencedRouteIdentityCallIds(
+      side.routeIdentity,
+    )) {
+      if (!callIds.has(callId)) {
+        throw new Error(
+          `trusted route witness ${sequence} ${label} identity ` +
+            `references undeclared call ${callId}`,
+        );
+      }
+    }
+  }
+}
+
+function parseSplitWitnessSide(
+  raw: SplitRouteReferenceWitnessLeg["targetWitness"] |
+    SplitRouteReferenceWitnessLeg["executionWitness"],
+  field: string,
+  target: boolean,
+): {
+  readonly executionTarget?: string;
+  readonly witness: ReferenceWitness;
+  readonly routeIdentity: CanonicalRouteIdentityWitness;
+} {
+  if (!isPlainRecord(raw)) {
+    throw new Error(`${field} must be an object`);
+  }
+  const expected = target
+    ? ["executionTarget", "witness", "routeIdentity"]
+    : ["witness", "routeIdentity"];
+  if (
+    stableObjectKeys(raw as unknown as Record<string, unknown>) !==
+      [...expected].sort().join("\n")
+  ) {
+    throw new Error(`${field} has invalid fields`);
+  }
+  const executionTarget = target
+    ? ethers.getAddress(
+        String((raw as Record<string, unknown>).executionTarget),
+      ).toLowerCase()
+    : undefined;
+  if (
+    target &&
+    executionTarget !==
+      (raw as Record<string, unknown>).executionTarget
+  ) {
+    throw new Error(`${field}.executionTarget is not canonical`);
+  }
+  const witness = parseReferenceWitness(
+    (raw as Record<string, unknown>).witness,
+    `${field}.witness`,
+  );
+  const routeIdentity = parseCanonicalRouteIdentityWitness(
+    (raw as Record<string, unknown>).routeIdentity,
+    `${field}.routeIdentity`,
+  );
+  if (
+    stableJsonValue(JSON.parse(JSON.stringify(witness))) !==
+      stableJsonValue((raw as Record<string, unknown>).witness) ||
+    stableJsonValue(JSON.parse(JSON.stringify(routeIdentity))) !==
+      stableJsonValue((raw as Record<string, unknown>).routeIdentity)
+  ) {
+    throw new Error(`${field} is not canonical`);
+  }
+  return {
+    ...(executionTarget === undefined ? {} : { executionTarget }),
+    witness,
+    routeIdentity,
+  };
 }
 
 export function trustedTargetInputSha256(input: {
@@ -3076,7 +3256,7 @@ export function assertRouteReferenceWitnesses(input: {
     readonly ResolvedActionExecutionSurface[];
   readonly label: string;
   readonly requireResolvedCallBytes: boolean;
-}): void {
+}): readonly (CanonicalRouteIdentity | null)[] {
   if (
     input.reference.routeWitnesses.length !== input.reference.route.length ||
     input.executionSurfaces.length !== input.reference.route.length
@@ -3093,26 +3273,63 @@ export function assertRouteReferenceWitnesses(input: {
     ReturnType<typeof matchReferenceWitness>["matchedCalls"][number]
   > = [];
   const usedReceiptLogIndexes = new Set<number>();
+  const routeIdentities: Array<CanonicalRouteIdentity | null> = [];
   let cursor = 0;
   for (let index = 0; index < input.reference.route.length; index++) {
     const edge = input.reference.route[index];
-    const leg = input.reference.routeWitnesses[index];
+    const declaredLeg = input.reference.routeWitnesses[index];
     const surface = input.executionSurfaces[index];
     if (
       surface.adapterId !== edge.adapterId ||
-      leg.edgeAdapterId !== edge.adapterId
+      declaredLeg.edgeAdapterId !== edge.adapterId
     ) {
       throw new Error(
         `${input.label} route execution surface ${index + 1} differs`,
       );
     }
+    const split = isSplitRouteReferenceWitnessLeg(declaredLeg);
+    const splitSide = split
+      ? parseSplitWitnessSide(
+          input.requireResolvedCallBytes
+            ? declaredLeg.executionWitness
+            : declaredLeg.targetWitness,
+          `${input.label} route witness ${index + 1}.` +
+            (input.requireResolvedCallBytes
+              ? "executionWitness"
+              : "targetWitness"),
+          !input.requireResolvedCallBytes,
+        )
+      : null;
+    const leg: ReferenceWitnessLeg = split
+      ? {
+          seq: declaredLeg.seq,
+          edgeAdapterId: declaredLeg.edgeAdapterId,
+          tokenIn: declaredLeg.tokenIn,
+          tokenOut: declaredLeg.tokenOut,
+          ...(declaredLeg.poolId === undefined
+            ? {}
+            : { poolId: declaredLeg.poolId }),
+          ...(declaredLeg.routeBindingHash === undefined
+            ? {}
+            : { routeBindingHash: declaredLeg.routeBindingHash }),
+          referenceWitness: splitSide!.witness,
+        }
+      : declaredLeg;
+    const executionTarget =
+      split && !input.requireResolvedCallBytes
+        ? splitSide!.executionTarget!
+        : surface.target;
+    const expectedSelector =
+      split && !input.requireResolvedCallBytes
+        ? referenceWitnessRootSelector(splitSide!.witness)
+        : surface.selector;
     const matched = matchReferenceWitness({
       calls,
       receiptLogs,
       cursor,
       leg,
-      executionTarget: surface.target,
-      expectedEncodedSelector: surface.selector,
+      executionTarget,
+      expectedEncodedSelector: expectedSelector,
       // The rollback verifier cannot rely on a newly added family's
       // observation code. The independently reviewed witness must therefore
       // bind both route tokens for every leg, including swaps.
@@ -3122,9 +3339,27 @@ export function assertRouteReferenceWitnesses(input: {
       // resolved execution surface and the family manifest.
       requireActionOwnership: false,
       usedReceiptLogIndexes,
+      ...(splitSide === null
+        ? {}
+        : { routeIdentityWitness: splitSide.routeIdentity }),
     });
     for (const logIndex of matched.matchedReceiptLogIndexes) {
       usedReceiptLogIndexes.add(logIndex);
+    }
+    if (split) {
+      if (!matched.routeIdentity) {
+        throw new Error(
+          `${input.label} route witness ${index + 1} lacks canonical identity`,
+        );
+      }
+      assertCanonicalRouteIdentityMatchesEdge(
+        matched.routeIdentity,
+        edge,
+        `${input.label} route witness ${index + 1}`,
+      );
+      routeIdentities.push(matched.routeIdentity);
+    } else {
+      routeIdentities.push(null);
     }
     if (
       input.requireResolvedCallBytes &&
@@ -3134,6 +3369,10 @@ export function assertRouteReferenceWitnesses(input: {
         `${input.label} route call ${index + 1} differs from the ` +
         "solver-selected resolved subtree",
       );
+    }
+    if (split && !input.requireResolvedCallBytes) {
+      cursor = matched.nextCursor;
+      continue;
     }
     const unmatched = [...matched.matchedCalls];
     for (const action of surface.actionCalls) {
@@ -3160,6 +3399,12 @@ export function assertRouteReferenceWitnesses(input: {
     witnessCalls.push(...unmatched);
     cursor = matched.nextCursor;
   }
+  if (
+    !input.requireResolvedCallBytes &&
+    input.reference.schemaVersion === 3
+  ) {
+    return Object.freeze(routeIdentities);
+  }
   for (const action of input.supportExecutionCalls) {
     const matchedIndex = witnessCalls.findIndex((call) =>
       call.target === action.target &&
@@ -3180,6 +3425,45 @@ export function assertRouteReferenceWitnesses(input: {
       );
     }
     witnessCalls.splice(matchedIndex, 1);
+  }
+  return Object.freeze(routeIdentities);
+}
+
+export function assertSplitRouteIdentityPhasesMatch(
+  target: readonly (CanonicalRouteIdentity | null)[],
+  execution: readonly (CanonicalRouteIdentity | null)[],
+  route: readonly HuntEdge[],
+): void {
+  if (
+    target.length !== route.length ||
+    execution.length !== route.length
+  ) {
+    throw new Error("target/execution route identity cardinality differs");
+  }
+  for (let index = 0; index < route.length; index++) {
+    const targetIdentity = target[index];
+    const executionIdentity = execution[index];
+    if (targetIdentity === null && executionIdentity === null) continue;
+    if (targetIdentity === null || executionIdentity === null) {
+      throw new Error(
+        `route ${index + 1} has an unpaired target/execution identity`,
+      );
+    }
+    assertCanonicalRouteIdentityMatchesEdge(
+      targetIdentity,
+      route[index],
+      `target route ${index + 1}`,
+    );
+    assertCanonicalRouteIdentityMatchesEdge(
+      executionIdentity,
+      route[index],
+      `execution route ${index + 1}`,
+    );
+    assertCanonicalRouteIdentitiesEqual(
+      targetIdentity,
+      executionIdentity,
+      `route ${index + 1}`,
+    );
   }
 }
 
@@ -3567,9 +3851,10 @@ function edgeIdentity(
     | "edgeKind"
     | "leavesStandingPosition"
     | "poolId"
+    | "routeBinding"
   >,
 ): string {
-  return [
+  const identity = [
     edge.adapterId,
     edge.target.toLowerCase(),
     edge.tokenIn.toLowerCase(),
@@ -3578,11 +3863,15 @@ function edgeIdentity(
     edge.edgeKind,
     edge.leavesStandingPosition ? "standing" : "conserving",
     edge.poolId?.toLowerCase() ?? "",
-  ].join("|");
+  ];
+  if (edge.routeBinding !== undefined) {
+    identity.push(edge.routeBinding.hash);
+  }
+  return identity.join("|");
 }
 
 function huntEdgeIdentity(edge: HuntEdge): string {
-  return [
+  const identity = [
     edge.adapterId,
     edge.target.toLowerCase(),
     edge.tokenIn.toLowerCase(),
@@ -3591,7 +3880,11 @@ function huntEdgeIdentity(edge: HuntEdge): string {
     edge.edgeKind,
     edge.leavesStandingPosition ? "standing" : "conserving",
     edge.poolId?.toLowerCase() ?? "",
-  ].join("|");
+  ];
+  if (edge.routeBindingHash !== undefined) {
+    identity.push(edge.routeBindingHash.toLowerCase());
+  }
+  return identity.join("|");
 }
 
 function findSwapImpactEdge(graph: readonly TokenEdge[], impact: PoolImpact): TokenEdge {
@@ -3681,6 +3974,9 @@ function toHuntEdge(edge: TokenEdge): HuntEdge {
     edgeKind: edge.edgeKind,
     leavesStandingPosition: edge.leavesStandingPosition,
     ...(edge.poolId === undefined ? {} : { poolId: edge.poolId.toLowerCase() }),
+    ...(edge.routeBinding === undefined
+      ? {}
+      : { routeBindingHash: edge.routeBinding.hash }),
   };
 }
 
@@ -3786,6 +4082,9 @@ function canonicalHuntEdge(edge: HuntEdge): HuntEdge {
     edgeKind: edge.edgeKind,
     leavesStandingPosition: edge.leavesStandingPosition,
     ...(edge.poolId === undefined ? {} : { poolId: edge.poolId.toLowerCase() }),
+    ...(edge.routeBindingHash === undefined
+      ? {}
+      : { routeBindingHash: edge.routeBindingHash.toLowerCase() }),
   };
 }
 

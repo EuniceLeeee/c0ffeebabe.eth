@@ -10,6 +10,7 @@ import {
 } from "../../../listener/src/shared/evidence/semantic-six-step.js";
 import {
   EMPTY_SHA256,
+  cleanupFinalValidatedBranch,
   sixStepLifecycleEnvelopeSha256,
   sixStepStateAnchorSha256,
   validateSixStepValidationLifecycle,
@@ -420,6 +421,21 @@ function checkpoint(): Record<string, unknown> {
   return evidence;
 }
 
+function bootstrap(): Record<string, unknown> {
+  const evidence = checkpoint();
+  evidence.mode = "bootstrap";
+  evidence.status = "bootstrap_pass";
+  evidence.framework_parent_commit = ROLLBACK;
+  evidence.validation_scope = "stacked_premerge_only";
+  evidence.fixed = false;
+  evidence.branch_cleanup_allowed = false;
+  evidence.canonical_checkpoint_required = true;
+  delete evidence.checkpoint_evidence_sha256;
+  evidence.bootstrap_evidence_sha256 =
+    sixStepLifecycleEnvelopeSha256(evidence);
+  return evidence;
+}
+
 function finalEvidence(
   mutate?: (evidence: Record<string, unknown>) => void,
 ): Record<string, unknown> {
@@ -477,6 +493,7 @@ function gitInspector(overrides: Partial<GitInspector> = {}): GitInspector {
     `${MERGE}:${ORIGIN_MAIN}`,
     `${CANDIDATE}:${BRANCH_TIP}`,
     `${ROLLBACK}:${CANDIDATE}`,
+    `${ROLLBACK}:${ROLLBACK}`,
   ]);
   return {
     resolveRef: (ref) => ref === "refs/remotes/origin/main"
@@ -501,6 +518,65 @@ test("checkpoint accepts full production six-step evidence with only a timeout o
   assert.deepEqual(
     validateSixStepValidationLifecycle(checkpoint(), gitInspector()),
     [],
+  );
+});
+
+test("stacked bootstrap runs the same six steps but grants no promotion or cleanup authority", () => {
+  assert.deepEqual(
+    validateSixStepValidationLifecycle(bootstrap(), gitInspector()),
+    [],
+  );
+
+  const authorityEscalation = bootstrap();
+  authorityEscalation.fixed = true;
+  authorityEscalation.branch_cleanup_allowed = true;
+  authorityEscalation.canonical_checkpoint_required = false;
+  authorityEscalation.checkpoint_evidence_sha256 = SHA_A;
+  authorityEscalation.bootstrap_evidence_sha256 =
+    sixStepLifecycleEnvelopeSha256(authorityEscalation);
+  const errors = validateSixStepValidationLifecycle(
+    authorityEscalation,
+    gitInspector(),
+  ).join("\n");
+  assert.match(errors, /fixed=false/);
+  assert.match(errors, /forbid branch cleanup/);
+  assert.match(errors, /require a canonical checkpoint/);
+  assert.match(errors, /cannot masquerade as a canonical checkpoint/);
+  assert.throws(
+    () => cleanupFinalValidatedBranch(
+      authorityEscalation as never,
+      "/path-is-never-read-for-bootstrap",
+    ),
+    /only a final_validated receipt/,
+  );
+});
+
+test("stacked bootstrap binds its exact framework parent and trusted runtime ancestry", () => {
+  const wrongParent = bootstrap();
+  wrongParent.framework_parent_commit = INTEGRATION_BASE;
+  wrongParent.bootstrap_evidence_sha256 =
+    sixStepLifecycleEnvelopeSha256(wrongParent);
+  assert.match(
+    validateSixStepValidationLifecycle(
+      wrongParent,
+      gitInspector({
+        isAncestor: () => false,
+      }),
+    ).join("\n"),
+    /framework_parent_commit must equal rollback_commit/,
+  );
+
+  const staleRuntime = bootstrap();
+  staleRuntime.bootstrap_evidence_sha256 =
+    sixStepLifecycleEnvelopeSha256(staleRuntime);
+  assert.match(
+    validateSixStepValidationLifecycle(
+      staleRuntime,
+      gitInspector({
+        isAncestor: () => false,
+      }),
+    ).join("\n"),
+    /input runtime commit is not an ancestor/,
   );
 });
 

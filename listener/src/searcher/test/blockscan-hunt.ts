@@ -56,6 +56,8 @@ import {
 import {
   assessAdapterFamilyQuoteCoverage,
   blockScanPassBudgetExceeded,
+  mergeBlockScanHuntFamilySourceCoverage,
+  projectLandedDiscoveryForBlockScanHunt,
   remapExpectedRouteToVerifiedGraph,
   productionDiagnosticStageTerminates,
   resolveBlockScanHuntVerdict,
@@ -86,6 +88,7 @@ import {
   DEFAULT_POOL_UNIVERSE_PATH,
   loadPoolUniverse,
   poolProjectionRowKey,
+  poolRegistryKey,
 } from "../pool-universe.js";
 import {
   protocolCandidateAddressesFromDexGraph,
@@ -121,6 +124,11 @@ import {
   PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
+import {
+  discoverLandedPools,
+  type LandedPoolDiscoveryLog,
+  type LandedPoolDiscoveryReadBackend,
+} from "../venues/landed-pool-discovery.js";
 import type {
   PendingExecutionEvidence,
   ProtocolCandidate,
@@ -179,6 +187,7 @@ const TARGET_BLIND_FREEZE =
   process.env.SEARCHER_TARGET_BLIND_EVIDENCE === "1";
 const HUNT_PROTOCOL_CURSOR_SEMANTICS_VERSION =
   "family-source-contiguous-v3-hash-anchored";
+const HUNT_LANDED_DISCOVERY_BATCH_SIZE = 1_000;
 
 interface HuntConfig {
   rpcUrl: string;
@@ -214,6 +223,7 @@ interface OpportunityReport {
     edgeKind: string;
     leavesStandingPosition: boolean;
     poolId?: string;
+    routeBindingHash?: string;
   }>;
   swapPath: Array<{ pool_id: string; direction: "0for1" | "1for0" }> | null;
   route: Array<{
@@ -225,6 +235,7 @@ interface OpportunityReport {
     edgeKind?: string;
     leavesStandingPosition?: boolean;
     poolId?: string;
+    routeBindingHash?: string;
   }>;
 }
 
@@ -952,10 +963,129 @@ async function main(): Promise<void> {
       );
     }
     const universePools = universeIdentity.accepted.map(lowerPoolEntry);
+    let landedPools: readonly PoolEntry[] = Object.freeze([]);
+    let landedFamilySourceCoverage: readonly {
+      readonly familyId: string;
+      readonly sourceId: string;
+      readonly complete: boolean;
+      readonly issues: readonly string[];
+    }[] = Object.freeze([]);
+    if (!process.env.PRODUCTION_REPLAY_DISCOVERY_ARTIFACT) {
+      const landedRegistry =
+        PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery();
+      const dynamicLandedFamilies =
+        PRODUCTION_ADAPTER_FAMILIES.swaps()
+          .filter((family) => family.poolDiscovery !== undefined);
+      const dynamicFamilyIds = new Set(
+        dynamicLandedFamilies.map((family) => family.id),
+      );
+      const familySources = dynamicLandedFamilies.map((family) => ({
+        familyId: family.id,
+        sourceIds: landedRegistry.list()
+          .filter((descriptor) =>
+            descriptor.materializerFamilyId === family.id
+          )
+          .map((descriptor) => descriptor.sourceId),
+      }));
+      const sourceHeaderBefore = await provider.getBlock(cfg.blockNumber);
+      if (!sourceHeaderBefore?.hash) {
+        throw new Error(
+          `cannot resolve landed discovery source ${cfg.blockNumber}`,
+        );
+      }
+      const logProvider = observedHistoryProvider ?? provider;
+      if (observedHistoryProvider) {
+        const historyHeader = await observedHistoryProvider.getBlock(
+          cfg.blockNumber,
+        );
+        if (
+          !historyHeader?.hash ||
+          historyHeader.hash.toLowerCase() !==
+            sourceHeaderBefore.hash.toLowerCase()
+        ) {
+          throw new Error(
+            `landed discovery history RPC is not aligned at ` +
+              `${cfg.blockNumber}`,
+          );
+        }
+      }
+      const knownPoolKeys = new Set(
+        universePools.flatMap((pool) => [
+          poolProjectionRowKey(pool),
+          poolRegistryKey(pool),
+        ]),
+      );
+      const landed = await discoverLandedPools({
+        registry: landedRegistry,
+        backend: createHuntLandedDiscoveryBackend(
+          provider,
+          logProvider,
+          cfg.blockNumber,
+        ),
+        fromBlock: universeDiscoveryFromBlock(
+          cfg.universePath,
+          cfg.blockNumber,
+        ),
+        toBlock: cfg.blockNumber,
+        batchSize: HUNT_LANDED_DISCOVERY_BATCH_SIZE,
+        minSwaps: 1,
+        admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+        retainedPools: universePools,
+        isKnownPool: (pool) =>
+          knownPoolKeys.has(poolProjectionRowKey(pool)) ||
+          knownPoolKeys.has(poolRegistryKey(pool)),
+        topicScanMode: "union",
+        historicalResolution: "complete",
+        strict: false,
+      });
+      const landedProjection =
+        projectLandedDiscoveryForBlockScanHunt({
+          familySources,
+          coverage: landed.coverage,
+          materializedPools: landed.materializedPools.map(lowerPoolEntry),
+          familyIdForPool: (pool) => {
+            const family = PRODUCTION_ADAPTER_FAMILIES.routes()
+              .findForPool(pool.adapter);
+            return family && dynamicFamilyIds.has(family.id)
+              ? family.id
+              : null;
+          },
+        });
+      const sourceHeaderAfter = await provider.getBlock(cfg.blockNumber);
+      if (
+        !sourceHeaderAfter?.hash ||
+        sourceHeaderAfter.hash.toLowerCase() !==
+          sourceHeaderBefore.hash.toLowerCase()
+      ) {
+        throw new Error(
+          `landed discovery source ${cfg.blockNumber} changed during the pass`,
+        );
+      }
+      landedPools = landedProjection.pools;
+      landedFamilySourceCoverage =
+        landedProjection.familySourceCoverage;
+      console.log(
+        `LANDED_SWAP_DISCOVERY=${JSON.stringify({
+          sourceBlock: cfg.blockNumber,
+          materialized: landed.materializedPools.length,
+          published: landedPools.length,
+          completeFamilyIds: landedProjection.completeFamilyIds,
+          incompleteFamilyIds: landedProjection.incompleteFamilyIds,
+          retryable: landed.retryablePools.length,
+          logCounts: Object.fromEntries(
+            [...landed.logCountsByEventId.entries()]
+              .sort(([left], [right]) => left.localeCompare(right)),
+          ),
+        })}`,
+      );
+    }
     // Production starts from code-owned protocol seeds, then admits the
     // file-backed universe. Keep the same precedence so stale file metadata
     // cannot replace a newer exact adapter classification in the replay.
-    const basePools = mergePoolRegistries(staticProtocolPools, universePools);
+    const basePools = mergePoolProjectionRows(
+      mergePoolRegistries(staticProtocolPools, universePools),
+      landedPools,
+    );
     const baseGraph = await buildTokenGraph(graphBackend, basePools);
     let protocolPools = staticProtocolPools;
     let pools = basePools;
@@ -965,7 +1095,7 @@ async function main(): Promise<void> {
       readonly sourceId: string;
       readonly complete: boolean;
       readonly issues: readonly string[];
-    }[] = [];
+    }[] = landedFamilySourceCoverage;
     let retainedProtocolTopologyProof:
       VerifiedRetainedTopologyProof | null = null;
     if (
@@ -1191,7 +1321,10 @@ async function main(): Promise<void> {
             issues: item.issues,
           }));
       familySourceCoverageForEvidence =
-        protocolDiscovery.result.familySourceCoverage;
+        mergeBlockScanHuntFamilySourceCoverage(
+          familySourceCoverageForEvidence,
+          protocolDiscovery.result.familySourceCoverage,
+        );
       console.log(
         `PROTOCOL_DISCOVERY_DIAGNOSTIC=${JSON.stringify({
           scannerSourceComplete: protocolDiscovery.scanner.sourceComplete,
@@ -2359,6 +2492,44 @@ function tokenBackend(provider: ethers.JsonRpcProvider, blockNumber: number): To
   };
 }
 
+function createHuntLandedDiscoveryBackend(
+  stateProvider: ethers.JsonRpcProvider,
+  logProvider: ethers.JsonRpcProvider,
+  sourceBlock: number,
+): LandedPoolDiscoveryReadBackend {
+  const pinned = createPinnedDexReadBackend(
+    stateProvider,
+    sourceBlock,
+  );
+  const backend: LandedPoolDiscoveryReadBackend = {
+    async getLogs(filter, control) {
+      throwIfDiscoveryAborted(control?.signal);
+      const logs = await logProvider.send("eth_getLogs", [{
+        ...(filter.address === undefined
+          ? {}
+          : { address: filter.address }),
+        topics: [...filter.topics],
+        fromBlock: ethers.toQuantity(filter.fromBlock),
+        toBlock: ethers.toQuantity(filter.toBlock),
+      }]) as readonly LandedPoolDiscoveryLog[];
+      throwIfDiscoveryAborted(control?.signal);
+      return logs;
+    },
+    call(req, control) {
+      return pinned.call(req, control);
+    },
+    getCode(address, control) {
+      return pinned.getCode(address, control);
+    },
+  };
+  return Object.freeze(backend);
+}
+
+function throwIfDiscoveryAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return;
+  throw signal.reason ?? new Error("landed discovery aborted");
+}
+
 function pricedTokens(): Map<string, { maxBorrow: bigint }> {
   return new Map([
     [ADDR.WETH.toLowerCase(), { maxBorrow: 2_000n * 10n ** 18n }],
@@ -2809,6 +2980,9 @@ function describeOpportunity(
       edgeKind: edge.edgeKind,
       leavesStandingPosition: edge.leavesStandingPosition,
       ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
+      ...(edge.routeBinding
+        ? { routeBindingHash: edge.routeBinding.hash }
+        : {}),
     })),
     swapPath: opportunitySwapPath(opp.seedEdges),
     route: opportunityRoute(opp.seedEdges),
@@ -2832,7 +3006,11 @@ function parseExpectedRoute(value: string): OpportunityReport["route"] {
       || (edge.edgeKind !== undefined && typeof edge.edgeKind !== "string")
       || (edge.leavesStandingPosition !== undefined
         && typeof edge.leavesStandingPosition !== "boolean")
-      || (edge.poolId !== undefined && typeof edge.poolId !== "string");
+      || (edge.poolId !== undefined && typeof edge.poolId !== "string")
+      || (
+        edge.routeBindingHash !== undefined &&
+        typeof edge.routeBindingHash !== "string"
+      );
   })) {
     throw new Error("AB_EXPECTED_ROUTE_JSON must contain 2..8 complete ordered route edges");
   }
@@ -2849,6 +3027,9 @@ function parseExpectedRoute(value: string): OpportunityReport["route"] {
         ? { leavesStandingPosition: edge.leavesStandingPosition }
         : {}),
       ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
+      ...(edge.routeBindingHash
+        ? { routeBindingHash: edge.routeBindingHash.toLowerCase() }
+        : {}),
     };
   });
 }
@@ -2863,6 +3044,9 @@ function opportunityRoute(edges: TokenEdge[]): OpportunityReport["route"] {
     edgeKind: edge.edgeKind,
     leavesStandingPosition: edge.leavesStandingPosition,
     ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
+    ...(edge.routeBinding
+      ? { routeBindingHash: edge.routeBinding.hash }
+      : {}),
   }));
 }
 

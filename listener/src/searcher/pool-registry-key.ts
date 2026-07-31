@@ -1,4 +1,7 @@
 import type { PoolEntry } from "./planner/token-graph.js";
+import {
+  validatedRouteImmutableBindingHash,
+} from "./venues/route-immutable-binding.js";
 
 /**
  * Low-level physical registry identity. This module deliberately has no
@@ -6,11 +9,26 @@ import type { PoolEntry } from "./planner/token-graph.js";
  * without creating a registry initialization cycle.
  */
 export function poolRegistryKey(pool: PoolEntry): string {
-  if (pool.adapter !== "univ4") {
+  const routeBindingHash =
+    validatedRouteImmutableBindingHash(pool.routeBinding);
+  if (routeBindingHash === null && pool.adapter !== "univ4") {
     const address = pool.address.toLowerCase();
     return pool.logicalInstanceId === undefined
       ? address
       : `${address}:${pool.logicalInstanceId}`;
+  }
+  if (routeBindingHash !== null) {
+    return JSON.stringify([
+      pool.address.toLowerCase(),
+      pool.logicalInstanceId ?? null,
+      pool.poolId?.toLowerCase() ?? null,
+      routeBindingHash,
+      pool.currency0?.toLowerCase() ?? null,
+      pool.currency1?.toLowerCase() ?? null,
+      pool.fee ?? null,
+      pool.tickSpacing ?? null,
+      pool.hooks?.toLowerCase() ?? null,
+    ]);
   }
   return [
     pool.address.toLowerCase(),

@@ -4,6 +4,10 @@ import type {
   PlanExecutionIdentity,
   PlanExecutionIdentityCapability,
 } from "./route-leg-adapter.js";
+import {
+  validateRouteImmutableBindingCarrier,
+  validatedRouteImmutableBindingHash,
+} from "./route-immutable-binding.js";
 
 export interface RouteInstanceIdentityCapability {
   /**
@@ -51,15 +55,20 @@ export function routeInstanceKey(
   },
   pool: PoolEntry,
 ): string {
+  const validatedPool = validateRouteImmutableBindingCarrier(pool);
   const capability = routeIdentityCapability(family);
   const instanceKey = stableNonemptyKey(
-    capability.instanceKey(pool),
+    capability.instanceKey(validatedPool),
     `${family.id} instance`,
   );
-  if (capability.instanceKey(pool) !== instanceKey) {
+  if (capability.instanceKey(validatedPool) !== instanceKey) {
     throw new Error(`${family.id} produced an unstable instance key`);
   }
-  return instanceKey;
+  const bindingHash =
+    validatedRouteImmutableBindingHash(validatedPool.routeBinding);
+  return bindingHash === null
+    ? instanceKey
+    : JSON.stringify([instanceKey, bindingHash]);
 }
 
 /**
@@ -97,22 +106,36 @@ export function bindRouteInstanceIdentity(
   pool: PoolEntry,
   edges: readonly TokenEdge[],
 ): TokenEdge[] {
+  const validatedPool = validateRouteImmutableBindingCarrier(pool);
   const capability = routeIdentityCapability(family);
-  const instanceKey = routeInstanceKey(family, pool);
+  const instanceKey = routeInstanceKey(family, validatedPool);
+  const poolBindingHash =
+    validatedRouteImmutableBindingHash(validatedPool.routeBinding);
 
   const seen = new Set<string>();
   return edges.map((edge) => {
+    const validatedEdge = validateRouteImmutableBindingCarrier(edge);
+    const edgeBindingHash =
+      validatedRouteImmutableBindingHash(validatedEdge.routeBinding);
+    if (edgeBindingHash !== poolBindingHash) {
+      throw new Error(
+        `${family.id} emitted an edge with a mismatched immutable route binding`,
+      );
+    }
     const executionVariantKey = stableNonemptyKey(
-      capability.executionVariantKey(edge, pool),
+      capability.executionVariantKey(validatedEdge, validatedPool),
       `${family.id} execution variant`,
     );
-    if (capability.executionVariantKey(edge, pool) !== executionVariantKey) {
+    if (
+      capability.executionVariantKey(validatedEdge, validatedPool) !==
+        executionVariantKey
+    ) {
       throw new Error(`${family.id} produced an unstable execution variant key`);
     }
     const directedKey = [
       instanceKey,
-      edge.tokenIn.toLowerCase(),
-      edge.tokenOut.toLowerCase(),
+      validatedEdge.tokenIn.toLowerCase(),
+      validatedEdge.tokenOut.toLowerCase(),
       executionVariantKey,
     ].join("\u001f");
     if (seen.has(directedKey)) {
@@ -121,7 +144,10 @@ export function bindRouteInstanceIdentity(
       );
     }
     seen.add(directedKey);
-    const { canonicalEdgeId: _staleCanonicalEdgeId, ...unbound } = edge;
+    const {
+      canonicalEdgeId: _staleCanonicalEdgeId,
+      ...unbound
+    } = validatedEdge;
     return {
       ...unbound,
       instanceKey,
@@ -135,6 +161,8 @@ export function edgeInstanceKey(edge: TokenEdge): string {
 }
 
 export function edgeExecutionVariantKey(edge: TokenEdge): string {
+  const bindingHash =
+    validatedRouteImmutableBindingHash(edge.routeBinding);
   if (edge.executionVariantKey) return edge.executionVariantKey;
   /**
    * Compatibility identity for edges that have not crossed the registry
@@ -146,13 +174,15 @@ export function edgeExecutionVariantKey(edge: TokenEdge): string {
    * venues (for example two opaque pool ids sharing one target).  This is a
    * protocol-agnostic tuple, not a venue switch.
    */
-  return JSON.stringify([
+  const identity: unknown[] = [
     edge.adapterId,
     edge.poolId?.toLowerCase() ?? null,
     canonicalV4PoolKey(edge.v4PoolKey),
     edge.curveI ?? null,
     edge.curveJ ?? null,
-  ]);
+  ];
+  if (bindingHash !== null) identity.push(bindingHash);
+  return JSON.stringify(identity);
 }
 
 const DEFAULT_PLAN_EXECUTION_IDENTITY: PlanExecutionIdentityCapability =

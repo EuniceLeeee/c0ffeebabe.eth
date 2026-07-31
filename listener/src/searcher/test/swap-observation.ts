@@ -9,6 +9,7 @@ import {
   detectImpactTransitionFromLogs,
   detectPoolImpact,
   detectPoolImpactTransition,
+  mutationOnlyTransitionDiagnostic,
 } from "../detector/pool-impact.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
@@ -239,8 +240,14 @@ async function testStrictTriggerConsumptionContract(): Promise<void> {
     amountIn: 10n,
     matchedAdapterId: "univ2-swap",
   };
-  let mode: "missing" | "duplicate" | "unknown" | "empty" | "valid" =
-    "valid";
+  let mode:
+    | "missing"
+    | "duplicate"
+    | "unknown"
+    | "empty"
+    | "empty-mutation-reason"
+    | "mutation-only"
+    | "valid" = "valid";
   const observation = createStrictSwapObservation({
     topics: [logs[0].topics[0]],
     canonicalIntakeTargets: [],
@@ -252,6 +259,21 @@ async function testStrictTriggerConsumptionContract(): Promise<void> {
       }
       if (mode === "missing") {
         return [{ logIndex: 0, impact: baseImpact }];
+      }
+      if (mode === "empty-mutation-reason") {
+        return [
+          { logIndex: 0, impact: baseImpact },
+          { logIndex: 1, mutationOnlyReason: " " },
+        ];
+      }
+      if (mode === "mutation-only") {
+        return [
+          { logIndex: 0, impact: baseImpact },
+          {
+            logIndex: 1,
+            mutationOnlyReason: "canonical no-flow state mutation",
+          },
+        ];
       }
       if (mode === "duplicate") {
         return [
@@ -290,7 +312,13 @@ async function testStrictTriggerConsumptionContract(): Promise<void> {
       signal: new AbortController().signal,
     },
   };
-  for (const invalid of ["missing", "duplicate", "unknown", "empty"] as const) {
+  for (const invalid of [
+    "missing",
+    "duplicate",
+    "unknown",
+    "empty",
+    "empty-mutation-reason",
+  ] as const) {
     mode = invalid;
     const result = await observation.decodeReceiptImpacts(context);
     assert(
@@ -305,6 +333,42 @@ async function testStrictTriggerConsumptionContract(): Promise<void> {
       resolved.impacts.length === 2 &&
       resolved.consumedTriggerIds.length === 2,
     "exact trigger consumption must resolve",
+  );
+  mode = "mutation-only";
+  const mutationOnly = await observation.decodeReceiptImpacts(context);
+  assert(
+    mutationOnly.status === "resolved" &&
+      mutationOnly.impacts.length === 1 &&
+      mutationOnly.mutations.length === 1 &&
+      mutationOnly.mutations[0].logIndex === 1 &&
+      mutationOnly.consumedTriggerIds.length === 2,
+    "an explicit mutation-only observation must consume its trigger without a fake impact",
+  );
+  const standaloneMutationDiagnostic = mutationOnlyTransitionDiagnostic({
+    complete: true,
+    impacts: [],
+    mutations: [{
+      sequence: 1,
+      logIndex: 1,
+      origin: "family-receipt",
+      familyId: "swap:fixture",
+      poolIdentity: POOL,
+      reason: "canonical no-flow state mutation",
+    }],
+  });
+  assert(
+    standaloneMutationDiagnostic?.reason ===
+        "mutation_only_no_direction" &&
+      standaloneMutationDiagnostic.mutations[0]?.poolIdentity === POOL,
+    "a standalone mutation must terminate with a typed no-direction reason",
+  );
+  assert(
+    mutationOnlyTransitionDiagnostic({
+      complete: true,
+      impacts: [baseImpact],
+      mutations: [],
+    }) === null,
+    "a directional impact must not be mislabeled as mutation-only",
   );
 
   const hanging = createStrictSwapObservation({
@@ -980,7 +1044,11 @@ async function testV4SwapperDeltaSign(): Promise<void> {
 function testRegistryConformance(): void {
   const registry = PRODUCTION_ADAPTER_FAMILIES.landedEvents();
   for (const adapter of PRODUCTION_ADAPTER_FAMILIES.swaps()) {
-    assert(adapter.observation.topics.length > 0, `${adapter.id} observation topics`);
+    assert(
+      adapter.observation.topics.length > 0 ||
+        (adapter.observation.anonymousLogs?.length ?? 0) > 0,
+      `${adapter.id} observation trigger declarations`,
+    );
     assert(
       adapter.observation.canonicalIntakeTargets.every((target) => ethers.isAddress(target)),
       `${adapter.id} canonical intake targets`,
@@ -988,7 +1056,16 @@ function testRegistryConformance(): void {
   }
   assert(CURVE_TOKEN_EXCHANGE_TOPICS.length === 4, "all Curve plain/underlying swap topics");
   assert(
-    registry.swapEvents.every((event) => registry.isSwapTopic(event.topic)),
+    registry.swapEvents.every((event) =>
+      event.topic === null
+        ? event.emitter.mode === "singleton-anonymous-data-bytes32" &&
+          registry.isSwapLog({
+            address: event.emitter.address,
+            topics: [],
+            data: `0x${"00".repeat(event.emitter.dataLengthBytes)}`,
+          })
+        : registry.isSwapTopic(event.topic)
+    ),
     "debug swap classification must derive from landed events",
   );
   const warmTopics = new Set(registry.warmTopics);
@@ -999,7 +1076,8 @@ function testRegistryConformance(): void {
   assert(
     registry.swapEvents
       .filter((event) => event.invalidatesWarmState)
-      .every((event) => warmTopics.has(event.topic)),
+      .filter((event) => event.topic !== null)
+      .every((event) => warmTopics.has(event.topic!)),
     "warm invalidation must contain every state-changing swap event",
   );
   let missingEventError = "";

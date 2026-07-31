@@ -7,6 +7,9 @@ import {
   edgeExecutionVariantKey,
   edgeInstanceKey,
 } from "./venues/route-instance-identity.js";
+import {
+  validatedRouteImmutableBindingHash,
+} from "./venues/route-immutable-binding.js";
 
 /**
  * Strategy-scoped pool views plus attributable P1-5 view-version hashes.
@@ -95,35 +98,43 @@ function sortedPoolKeys(pools: PoolEntry[]): string[] {
 }
 
 export function hashTokenGraph(edges: TokenEdge[]): string {
-  const keys = edges.map((edge) => [
-    edgeInstanceKey(edge),
-    edgeExecutionVariantKey(edge),
-    edge.adapterId,
-    edge.target.toLowerCase(),
-    edge.tokenIn.toLowerCase(),
-    edge.tokenOut.toLowerCase(),
-    edge.slotKind,
-    edge.protocolAction ?? "",
-    edge.edgeKind,
-    edge.leavesStandingPosition ? "1" : "0",
-    edge.curveI ?? "",
-    edge.curveJ ?? "",
-    edge.poolToken0?.toLowerCase() ?? "",
-    edge.poolToken1?.toLowerCase() ?? "",
-    edge.score ?? "",
-    edge.poolId?.toLowerCase() ?? "",
-    edge.nativeCurrency0 ? "1" : "0",
-    edge.nativeCurrency1 ? "1" : "0",
-    edge.v4PoolKey
-      ? [
-        edge.v4PoolKey.currency0.toLowerCase(),
-        edge.v4PoolKey.currency1.toLowerCase(),
-        edge.v4PoolKey.fee,
-        edge.v4PoolKey.tickSpacing,
-        edge.v4PoolKey.hooks.toLowerCase(),
-      ].join(":")
-      : "",
-  ].join("|")).sort();
+  const keys = edges.map((edge) => {
+    const bindingHash =
+      validatedRouteImmutableBindingHash(edge.routeBinding);
+    const parts: Array<string | number> = [
+      edgeInstanceKey(edge),
+      edgeExecutionVariantKey(edge),
+      edge.adapterId,
+      edge.target.toLowerCase(),
+      edge.tokenIn.toLowerCase(),
+      edge.tokenOut.toLowerCase(),
+      edge.slotKind,
+      edge.protocolAction ?? "",
+      edge.edgeKind,
+      edge.leavesStandingPosition ? "1" : "0",
+      edge.curveI ?? "",
+      edge.curveJ ?? "",
+      edge.poolToken0?.toLowerCase() ?? "",
+      edge.poolToken1?.toLowerCase() ?? "",
+      edge.score ?? "",
+      edge.poolId?.toLowerCase() ?? "",
+    ];
+    if (bindingHash !== null) parts.push(bindingHash);
+    parts.push(
+      edge.nativeCurrency0 ? "1" : "0",
+      edge.nativeCurrency1 ? "1" : "0",
+      edge.v4PoolKey
+        ? [
+          edge.v4PoolKey.currency0.toLowerCase(),
+          edge.v4PoolKey.currency1.toLowerCase(),
+          edge.v4PoolKey.fee,
+          edge.v4PoolKey.tickSpacing,
+          edge.v4PoolKey.hooks.toLowerCase(),
+        ].join(":")
+        : "",
+    );
+    return parts.join("|");
+  }).sort();
   return keccakUtf8(keys.join(","));
 }
 

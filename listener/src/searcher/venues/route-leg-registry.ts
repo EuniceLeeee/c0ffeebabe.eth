@@ -10,6 +10,9 @@ import type {
   RouteLegAdapter,
 } from "./route-leg-adapter.js";
 import { bindRouteInstanceIdentity } from "./route-instance-identity.js";
+import {
+  validateRouteImmutableBindingCarrier,
+} from "./route-immutable-binding.js";
 
 export class RouteLegRegistry {
   private readonly byFamily = new Map<ExecutionFamilyId, RouteLegAdapter>();
@@ -55,11 +58,12 @@ export class RouteLegRegistry {
     backend: TokenQueryBackend,
     control: RouteEdgeBuildControl = {},
   ): Promise<TokenEdge[]> {
-    const adapter = this.forPool(pool.adapter);
+    const validatedPool = validateRouteImmutableBindingCarrier(pool);
+    const adapter = this.forPool(validatedPool.adapter);
     assertBuildActive(adapter.id, control);
     const controlledBackend = withBuildControl(backend, control);
     const built = await raceBuildControl(
-      adapter.buildEdges(pool, controlledBackend, control),
+      adapter.buildEdges(validatedPool, controlledBackend, control),
       adapter.id,
       control,
     );
@@ -68,7 +72,7 @@ export class RouteLegRegistry {
     assertBuildActive(adapter.id, control);
     const edges = bindRouteInstanceIdentity(
       adapter,
-      pool,
+      validatedPool,
       built,
     );
     for (const edge of edges) this.assertEdge(adapter, edge);

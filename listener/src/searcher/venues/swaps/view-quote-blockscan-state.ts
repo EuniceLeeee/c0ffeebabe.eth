@@ -80,7 +80,11 @@ export interface CurrentBlockViewQuoteConfig<Static> {
     ctx: DependentViewQuoteReadContext<Static>,
   ): bigint | BehaviorProvenUnavailableViewQuote;
   quoteRead(ctx: DependentViewQuoteReadContext<Static>): StateRead;
-  decodeQuote(edge: TokenEdge, data: string): bigint;
+  /**
+   * Decode against the exact probe amount encoded in the read. Families whose
+   * quote endpoint permits partial fills must reject incomplete consumption.
+   */
+  decodeQuote(edge: TokenEdge, data: string, amountIn: bigint): bigint;
   dependencies?(group: ViewQuoteGroup<Static>): readonly string[];
 }
 
@@ -271,6 +275,7 @@ export function createCurrentBlockViewQuoteCapability<Static>(
         const amountOut = config.decodeQuote(
           edge,
           result.data,
+          amountIn,
         );
         if (amountOut <= 0n) {
           throw new Error(

@@ -13,6 +13,7 @@ import {
   UNIV3_SWAP_TOPIC,
   UNIV4_SWAP_TOPIC,
   observedLandedPoolIdentity,
+  type AnonymousLandedLogSelector,
   type LandedSwapEventDeclaration,
 } from "./landed-event-registry.js";
 export {
@@ -109,10 +110,25 @@ export interface ObservedSwapImpact {
   readonly consumedTriggerIds: readonly string[];
 }
 
+export interface ObservedMutationOnly {
+  readonly logIndex: number;
+  readonly reason: string;
+  readonly consumedTriggerIds: readonly string[];
+}
+
 interface CandidateSwapImpact {
   readonly logIndex: number;
   readonly impact: PoolImpact;
 }
+
+interface CandidateMutationOnly {
+  readonly logIndex: number;
+  readonly mutationOnlyReason: string;
+}
+
+type CandidateReceiptObservation =
+  | CandidateSwapImpact
+  | CandidateMutationOnly;
 
 export interface OwnedReceiptTrigger {
   readonly triggerId: string;
@@ -127,7 +143,8 @@ export type ReceiptImpactResult =
   | { readonly status: "no-match" }
   | {
       readonly status: "resolved";
-      readonly impacts: NonEmptyReadonlyArray<ObservedSwapImpact>;
+      readonly impacts: readonly ObservedSwapImpact[];
+      readonly mutations: readonly ObservedMutationOnly[];
       readonly consumedTriggerIds: NonEmptyReadonlyArray<string>;
     }
   | { readonly status: "unresolved"; readonly reason: string };
@@ -143,6 +160,8 @@ export interface ReceiptSwapObservationContext extends SwapObservationContext {
 export interface SwapObservationCapability {
   /** Receipt topics which make this observer relevant. */
   readonly topics: readonly string[];
+  /** Structurally bounded anonymous receipt logs owned by this family. */
+  readonly anonymousLogs?: readonly AnonymousLandedLogSelector[];
   /** Direct public-mempool entrypoints owned by this execution family. */
   readonly canonicalIntakeTargets: readonly string[];
   /** Logical pool identity for discovery; singleton emitters use an indexed id. */
@@ -164,11 +183,12 @@ export interface SwapObservationCapability {
 
 interface StrictSwapObservationInput {
   readonly topics: readonly string[];
+  readonly anonymousLogs?: readonly AnonymousLandedLogSelector[];
   readonly canonicalIntakeTargets: readonly string[];
   observedPoolIdentity(log: SwapEventLog): string | null;
   decodeSwapImpacts(
     ctx: ReceiptSwapObservationContext,
-  ): Promise<readonly CandidateSwapImpact[]>;
+  ): Promise<readonly CandidateReceiptObservation[]>;
   readonly directCallSelectors?: readonly string[];
   decodeDirectCallImpacts?(
     ctx: SwapDirectCallContext,
@@ -185,6 +205,16 @@ export function createStrictSwapObservation(
 ): SwapObservationCapability {
   return Object.freeze({
     topics: Object.freeze([...input.topics]),
+    ...(input.anonymousLogs === undefined
+      ? {}
+      : {
+          anonymousLogs: Object.freeze(
+            input.anonymousLogs.map((selector) => Object.freeze({
+              ...selector,
+              address: ethers.getAddress(selector.address),
+            })),
+          ),
+        }),
     canonicalIntakeTargets: Object.freeze([
       ...input.canonicalIntakeTargets,
     ]),
@@ -226,7 +256,7 @@ export function createStrictSwapObservation(
         byLogIndex.set(trigger.logIndex, trigger);
       }
 
-      let candidates: readonly CandidateSwapImpact[];
+      let candidates: readonly CandidateReceiptObservation[];
       try {
         if (
           ctx.control.signal.aborted ||
@@ -251,6 +281,7 @@ export function createStrictSwapObservation(
       }
       const consumedCounts = new Map<string, number>();
       const impacts: ObservedSwapImpact[] = [];
+      const mutations: ObservedMutationOnly[] = [];
       for (const candidate of candidates) {
         const trigger = byLogIndex.get(candidate.logIndex);
         if (!trigger) {
@@ -263,13 +294,27 @@ export function createStrictSwapObservation(
           trigger.triggerId,
           (consumedCounts.get(trigger.triggerId) ?? 0) + 1,
         );
-        impacts.push(Object.freeze({
-          ...candidate,
-          consumedTriggerIds: Object.freeze([trigger.triggerId]),
-        }));
+        if ("impact" in candidate) {
+          impacts.push(Object.freeze({
+            ...candidate,
+            consumedTriggerIds: Object.freeze([trigger.triggerId]),
+          }));
+        } else {
+          const reason = candidate.mutationOnlyReason.trim();
+          if (!reason) {
+            return Object.freeze({
+              status: "unresolved" as const,
+              reason: "mutation-only receipt observation requires a reason",
+            });
+          }
+          mutations.push(Object.freeze({
+            logIndex: candidate.logIndex,
+            reason,
+            consumedTriggerIds: Object.freeze([trigger.triggerId]),
+          }));
+        }
       }
       if (
-        impacts.length === 0 ||
         triggers.some(
           (trigger) => consumedCounts.get(trigger.triggerId) !== 1,
         )
@@ -281,9 +326,8 @@ export function createStrictSwapObservation(
       }
       return Object.freeze({
         status: "resolved" as const,
-        impacts: Object.freeze(impacts) as NonEmptyReadonlyArray<
-          ObservedSwapImpact
-        >,
+        impacts: Object.freeze(impacts),
+        mutations: Object.freeze(mutations),
         consumedTriggerIds: Object.freeze(
           triggers.map((trigger) => trigger.triggerId),
         ) as NonEmptyReadonlyArray<string>,
@@ -735,7 +779,9 @@ function topicsFromDeclarations(
   events: readonly LandedSwapEventDeclaration[],
 ): readonly string[] {
   return Object.freeze([
-    ...new Set(events.map((event) => event.topic.toLowerCase())),
+    ...new Set(events.flatMap((event) =>
+      event.topic === null ? [] : [event.topic.toLowerCase()]
+    )),
   ]);
 }
 

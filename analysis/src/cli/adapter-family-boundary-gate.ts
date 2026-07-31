@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -31,17 +32,24 @@ const temp = realpathSync(
 );
 let baseWorktree: string | null = null;
 let candidateWorktree: string | null = null;
+let outputPath: string | null = null;
+let baselineCommit: string | null = null;
+let candidateCommit: string | null = null;
+let changedPaths: string[] = [];
 try {
   const cfg = parseArgs(process.argv.slice(2));
+  outputPath = resolve(cfg.out);
   const root = gitOut(process.cwd(), ["rev-parse", "--show-toplevel"]);
   const baseline = gitOut(root, [
     "rev-parse",
     `${cfg.baseline}^{commit}`,
   ]).toLowerCase();
+  baselineCommit = baseline;
   const candidate = gitOut(root, [
     "rev-parse",
     `${cfg.candidate}^{commit}`,
   ]).toLowerCase();
+  candidateCommit = candidate;
   if (
     git(root, [
       "merge-base",
@@ -52,6 +60,11 @@ try {
   ) {
     throw new Error("baseline must be an ancestor of candidate");
   }
+  changedPaths = gitOut(root, [
+    "diff",
+    "--name-only",
+    `${baseline}..${candidate}`,
+  ]).split(/\r?\n/).filter(Boolean);
   baseWorktree = createWorktree(root, temp, baseline, "baseline");
   candidateWorktree = createWorktree(
     root,
@@ -59,11 +72,6 @@ try {
     candidate,
     "candidate",
   );
-  const changedPaths = gitOut(root, [
-    "diff",
-    "--name-only",
-    `${baseline}..${candidate}`,
-  ]).split(/\r?\n/).filter(Boolean);
   const result = evaluateAdapterFamilyBoundary({
     baseCommit: baseline,
     candidateCommit: candidate,
@@ -80,6 +88,7 @@ try {
     gate: "adapter-family-boundary",
     baseline_commit: baseline,
     candidate_commit: candidate,
+    changed_paths: changedPaths,
     classification: result.classification,
     impacted_family_ids: result.impactedFamilyIds,
     changed_runtime_files: result.runtimeChangedPaths,
@@ -93,7 +102,7 @@ try {
       : "keep family-local work here; move every listed non-family change " +
         "to a separate branch before continuing",
   };
-  writeFileSync(resolve(cfg.out), `${JSON.stringify(output, null, 2)}\n`, {
+  writeFileSync(outputPath, `${JSON.stringify(output, null, 2)}\n`, {
     mode: 0o600,
   });
   process.stdout.write(
@@ -101,10 +110,38 @@ try {
   );
   if (result.classification !== "family_local") process.exitCode = 1;
 } catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const output = {
+    schema_version: 1,
+    gate: "adapter-family-boundary",
+    baseline_commit: baselineCommit,
+    candidate_commit: candidateCommit,
+    changed_paths: changedPaths,
+    classification: "framework",
+    impacted_family_ids: [],
+    changed_runtime_files: changedPaths.filter(
+      (path) => path.startsWith("listener/src/") && !path.includes("/test/"),
+    ),
+    reasons: [`gate_error: ${message}`],
+    required_action:
+      "keep family-local work here; inspect every changed path and move " +
+      "non-family or manifest-incompatible changes to a separate branch",
+  };
+  if (outputPath) {
+    try {
+      writeFileSync(outputPath, `${JSON.stringify(output, null, 2)}\n`, {
+        mode: 0o600,
+      });
+    } catch {
+      // The machine-readable stdout result remains available even when the
+      // requested output path itself is unusable.
+    }
+  }
+  process.stdout.write(
+    `ADAPTER_FAMILY_BOUNDARY_RESULT=${JSON.stringify(output)}\n`,
+  );
   process.stderr.write(
-    `adapter-family-boundary-gate: ${
-      error instanceof Error ? error.message : String(error)
-    }\n`,
+    `adapter-family-boundary-gate: ${message}\n`,
   );
   process.exitCode = 1;
 } finally {
@@ -183,6 +220,10 @@ function createWorktree(
 }
 
 function loadManifest(cwd: string): FamilyOwnershipManifest {
+  const manifestTemp = realpathSync(
+    mkdtempSync(resolve(tmpdir(), "adapter-family-manifest-")),
+  );
+  const outputPath = resolve(manifestTemp, "manifest.json");
   const env: NodeJS.ProcessEnv = {
     SEARCHER_TEST_DISABLE_DOTENV: "1",
   };
@@ -197,20 +238,23 @@ function loadManifest(cwd: string): FamilyOwnershipManifest {
   ]) {
     if (process.env[key] !== undefined) env[key] = process.env[key];
   }
-  const result = spawnSync(process.execPath, [
-    "--import",
-    TSX,
-    resolve(cwd, MANIFEST),
-    "--json",
-  ], { cwd, env, encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(result.stderr || "family manifest failed");
+  try {
+    const result = spawnSync(process.execPath, [
+      "--import",
+      TSX,
+      resolve(cwd, MANIFEST),
+      "--out",
+      outputPath,
+    ], { cwd, env, encoding: "utf8" });
+    if (result.status !== 0) {
+      throw new Error(result.stderr || "family manifest failed");
+    }
+    return JSON.parse(
+      readFileSync(outputPath, "utf8"),
+    ) as FamilyOwnershipManifest;
+  } finally {
+    rmSync(manifestTemp, { recursive: true, force: true });
   }
-  const prefix = "ADAPTER_FAMILY_OWNERSHIP_MANIFEST=";
-  const line = result.stdout.split(/\r?\n/)
-    .find((entry) => entry.startsWith(prefix));
-  if (!line) throw new Error("family manifest output is missing");
-  return JSON.parse(line.slice(prefix.length)) as FamilyOwnershipManifest;
 }
 
 function gitOut(cwd: string, args: readonly string[]): string {

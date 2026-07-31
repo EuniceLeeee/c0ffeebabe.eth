@@ -7,6 +7,7 @@ import type { CanonicalEdgeId } from "../venues/blockscan-state-capability.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import type { DeclaredProtocolVenue } from "../venues/route-leg-adapter.js";
 import type { RouteEdgeBuildControl } from "../venues/route-leg-adapter.js";
+import type { RouteImmutableBinding } from "../venues/route-immutable-binding.js";
 import { isRouteInstanceNotApplicableError } from "../venues/route-instance-availability.js";
 import {
   edgeExecutionVariantKey,
@@ -76,6 +77,11 @@ export interface TokenEdge {
   /** Uniswap v4 poolId = keccak256(abi.encode(PoolKey)). Disambiguates v4 pools
    *  that share the singleton PoolManager target (same address, different pool). */
   poolId?: string;
+  /**
+   * Family-owned immutable execution metadata. The kernel validates and hashes
+   * this schema-tagged payload but never decodes protocol-specific contents.
+   */
+  routeBinding?: RouteImmutableBinding;
   /** v4 PoolKey currencyN is native ETH (0x0); the graph node is aliased to WETH, execution (slice 2b) wraps/unwraps. */
   nativeCurrency0?: boolean;
   nativeCurrency1?: boolean;
@@ -105,6 +111,11 @@ export interface PoolEntry {
   underlyingCoins?: string[];
   /** Optional v4 pool id from Initialize/Swap logs. address remains the PoolManager target. */
   poolId?: string;
+  /**
+   * Family-owned immutable metadata projected by discovery and carried through
+   * persistence into graph construction without protocol-specific kernel fields.
+   */
+  routeBinding?: RouteImmutableBinding;
   /** Uniswap v4 PoolKey fields. Required for univ4 entries. */
   currency0?: string;
   currency1?: string;

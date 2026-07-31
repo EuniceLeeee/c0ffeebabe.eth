@@ -131,6 +131,11 @@ export function productionShardCompleteness(input: {
       .filter((family) => family.matureDexUniverseDiscovery)
       .map((family) => family.id),
   );
+  const dynamicSwap = new Set(
+    PRODUCTION_ADAPTER_FAMILIES.swaps()
+      .filter((family) => family.poolDiscovery)
+      .map((family) => family.id),
+  );
   const graph = canonicalMaterializedGraphEvidence(
     input.edges,
     (edge) => routes.forEdge(edge.adapterId).id,
@@ -152,7 +157,7 @@ export function productionShardCompleteness(input: {
       .sort((a, b) => a.sourceId.localeCompare(b.sourceId));
     const sourceKind = matureDex.has(family.id)
       ? "dex-universe"
-      : family.discovery
+      : family.discovery || dynamicSwap.has(family.id)
         ? "dynamic-discovery"
         : "registry-declared";
     const issues = sourceKind === "dex-universe"

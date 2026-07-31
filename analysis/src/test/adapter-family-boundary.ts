@@ -376,6 +376,7 @@ test("family boundary reserves trusted helper prefixes across staged changes", (
     changedPaths: [
       "listener/src/searcher/venues/swaps/production-replay-artifact.ts",
       "listener/src/searcher/test/production-replay-artifact.ts",
+      "listener/src/searcher/test/canonical-route-identity-witness.ts",
     ],
     baseManifest: manifest([owned]),
     candidateManifest: manifest([owned]),
@@ -388,12 +389,20 @@ test("family boundary reserves trusted helper prefixes across staged changes", (
         "trusted-helper",
       "candidate:listener/src/searcher/test/production-replay-artifact.ts":
         "self-certifying-helper",
+      "base:listener/src/searcher/test/canonical-route-identity-witness.ts":
+        "trusted-route-identity",
+      "candidate:listener/src/searcher/test/canonical-route-identity-witness.ts":
+        "self-certifying-route-identity",
     }),
   });
   assert.equal(result.classification, "framework");
   assert.match(
     result.reasons.join("\n"),
     /outside the family boundary.*production-replay-artifact\.ts/,
+  );
+  assert.match(
+    result.reasons.join("\n"),
+    /outside the family boundary.*canonical-route-identity-witness\.ts/,
   );
 });
 

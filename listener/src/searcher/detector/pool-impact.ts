@@ -31,6 +31,16 @@ export interface PoolImpactStep {
   readonly impact: PoolImpact;
 }
 
+export interface PoolMutationOnlyStep {
+  readonly sequence: number;
+  readonly logIndex: number;
+  readonly origin: "family-receipt";
+  readonly familyId: string;
+  /** Address emitters use the pool address; singleton venues use logical poolId. */
+  readonly poolIdentity: string;
+  readonly reason: string;
+}
+
 export type PoolImpactUnresolvedReason =
   | "observer-error"
   | "observer-decode-failed"
@@ -59,17 +69,57 @@ export interface PoolImpactUnresolved {
  *
  * `steps` retains every admitted non-exact swap in receipt order. `impacts`
  * collapses an exact-state pool to its last exact receipt state while preserving
- * every affected pool. Hash-only replay is safe only when this transition is
- * complete and has exactly one final impact; current backends do not yet apply a
- * multi-pool transition atomically.
+ * every affected pool. `mutations` retains owned state changes whose log proves
+ * no directed token flow and therefore cannot honestly become a fabricated
+ * PoolImpact. Hash-only replay is safe only when this transition is complete,
+ * has exactly one final impact, and has no mutation-only state change.
  */
 export interface PoolImpactTransition {
   readonly sourceGeneration: VictimSourceGeneration;
   readonly steps: readonly PoolImpactStep[];
+  readonly mutations: readonly PoolMutationOnlyStep[];
   readonly impacts: readonly PoolImpact[];
   readonly unresolved: readonly PoolImpactUnresolved[];
   readonly complete: boolean;
   readonly hashOnlyReplayable: boolean;
+}
+
+export interface MutationOnlyTransitionDiagnostic {
+  readonly reason: "mutation_only_no_direction";
+  readonly mutations: readonly {
+    readonly familyId: string;
+    readonly poolIdentity: string;
+    readonly reason: string;
+  }[];
+}
+
+/**
+ * A complete mutation-only transition is relevant state evidence, but it does
+ * not provide an honest token direction from which to construct PoolImpact.
+ */
+export function mutationOnlyTransitionDiagnostic(
+  transition: Pick<
+    PoolImpactTransition,
+    "complete" | "impacts" | "mutations"
+  >,
+): MutationOnlyTransitionDiagnostic | null {
+  if (
+    !transition.complete ||
+    transition.impacts.length !== 0 ||
+    transition.mutations.length === 0
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    reason: "mutation_only_no_direction" as const,
+    mutations: Object.freeze(transition.mutations.map((mutation) =>
+      Object.freeze({
+        familyId: mutation.familyId,
+        poolIdentity: mutation.poolIdentity,
+        reason: mutation.reason,
+      })
+    )),
+  });
 }
 
 export interface VictimSourceGenerationInput {
@@ -214,7 +264,7 @@ export async function detectImpactTransitionFromLogs(
     logsCompleteness: sourceGeneration.logsCompleteness,
   });
   if (expectedGeneration.id !== sourceGeneration.id) {
-    return transitionFromSteps(sourceGeneration, [], [{
+    return transitionFromSteps(sourceGeneration, [], [], [{
       reason: "source-generation-mismatch",
       pool: null,
       logIndex: null,
@@ -224,6 +274,7 @@ export async function detectImpactTransitionFromLogs(
   }
   const edgesByTarget = groupEdgesByTarget(graph);
   const steps: PoolImpactStep[] = [];
+  const mutations: PoolMutationOnlyStep[] = [];
   const unresolved: PoolImpactUnresolved[] = [];
   const coveredPools = new Set<string>();
 
@@ -292,6 +343,9 @@ export async function detectImpactTransitionFromLogs(
 
     const groupUnresolved: PoolImpactUnresolved[] = [];
     const admittedByLog = new Map<number, PoolImpactStep[]>();
+    const mutationByLog = new Map(
+      result.mutations.map((mutation) => [mutation.logIndex, mutation] as const),
+    );
     for (const candidate of result.impacts) {
       const consumed = new Set(candidate.consumedTriggerIds);
       const ownsLog = matchedOwnedTriggers.some(
@@ -337,6 +391,7 @@ export async function detectImpactTransitionFromLogs(
     }
 
     const groupSteps: PoolImpactStep[] = [];
+    const groupMutations: PoolMutationOnlyStep[] = [];
     for (const trigger of matchedOwnedTriggers) {
       const logIndex = trigger.logIndex;
       const atLog = dedupeSameObservationSteps(
@@ -354,6 +409,33 @@ export async function detectImpactTransitionFromLogs(
           familyIds: group.familyIds,
           detail: `observer produced ${atLog.length} distinct admitted impacts`,
         });
+        continue;
+      }
+      const mutation = mutationByLog.get(logIndex);
+      if (mutation) {
+        const identity = observedPoolIdentity(
+          group.observation,
+          logs[logIndex],
+        );
+        if (!identity || group.familyIds.length !== 1) {
+          groupUnresolved.push({
+            reason: "observer-error",
+            pool: identity,
+            logIndex,
+            familyIds: group.familyIds,
+            detail:
+              "mutation-only trigger has no unique family-owned pool identity",
+          });
+          continue;
+        }
+        groupMutations.push(Object.freeze({
+          sequence: mutation.logIndex,
+          logIndex: mutation.logIndex,
+          origin: "family-receipt" as const,
+          familyId: group.familyIds[0],
+          poolIdentity: identity,
+          reason: mutation.reason,
+        }));
         continue;
       }
 
@@ -374,6 +456,7 @@ export async function detectImpactTransitionFromLogs(
       continue;
     }
     steps.push(...groupSteps);
+    mutations.push(...groupMutations);
     for (const step of groupSteps) {
       coveredPools.add(step.impact.pool.toLowerCase());
     }
@@ -389,6 +472,7 @@ export async function detectImpactTransitionFromLogs(
   return transitionFromSteps(
     sourceGeneration,
     steps,
+    mutations,
     unresolved,
   );
 }
@@ -454,6 +538,7 @@ export async function detectPoolImpactTransition(
   return transitionFromSteps(
     sourceGeneration,
     [...directSteps, ...receipt.steps],
+    receipt.mutations,
     [
       ...direct.unresolved,
       ...receipt.unresolved,
@@ -571,6 +656,7 @@ async function detectDirectCallSteps(
 function transitionFromSteps(
   sourceGeneration: VictimSourceGeneration,
   rawSteps: readonly PoolImpactStep[],
+  rawMutations: readonly PoolMutationOnlyStep[],
   initialUnresolved: readonly PoolImpactUnresolved[],
 ): PoolImpactTransition {
   const collapsed = collapseImpactSteps(rawSteps, sourceGeneration);
@@ -601,10 +687,19 @@ function transitionFromSteps(
   return Object.freeze({
     sourceGeneration,
     steps: Object.freeze(collapsed.steps),
+    mutations: Object.freeze(
+      [...rawMutations].sort((left, right) =>
+        left.sequence - right.sequence ||
+        left.poolIdentity.localeCompare(right.poolIdentity)
+      ),
+    ),
     impacts: Object.freeze(collapsed.impacts),
     unresolved: Object.freeze(uniqueUnresolved),
     complete,
-    hashOnlyReplayable: complete && collapsed.impacts.length === 1,
+    hashOnlyReplayable:
+      complete &&
+      collapsed.impacts.length === 1 &&
+      rawMutations.length === 0,
   });
 }
 
@@ -775,11 +870,20 @@ function matchOwnedReceiptTriggers(
   const topics = new Set(
     group.observation.topics.map((topic) => topic.toLowerCase()),
   );
+  const anonymousLogs = group.observation.anonymousLogs ?? [];
   const triggers: OwnedReceiptTrigger[] = [];
   for (let logIndex = 0; logIndex < logs.length; logIndex++) {
     const log = logs[logIndex];
     const currentTopic = log.topics[0]?.toLowerCase() ?? "";
-    if (!topics.has(currentTopic)) continue;
+    const anonymousMatch = currentTopic === "" &&
+      anonymousLogs.some((selector) =>
+        selector.address.toLowerCase() === log.address.toLowerCase() &&
+        log.topics.length === 0 &&
+        /^0x(?:[0-9a-fA-F]{2})*$/.test(log.data) &&
+        (log.data.length - 2) / 2 === selector.dataLengthBytes &&
+        selector.identityOffsetBytes + 32 <= selector.dataLengthBytes
+      );
+    if (!topics.has(currentTopic) && !anonymousMatch) continue;
     const identity = observedPoolIdentity(group.observation, log);
     if (
       identity === null ||
@@ -866,7 +970,7 @@ function validateConsumedTriggerExactSet(
     matched.map((trigger) => [trigger.triggerId, trigger] as const),
   );
   const consumedCounts = new Map<string, number>();
-  for (const observed of result.impacts) {
+  for (const observed of [...result.impacts, ...result.mutations]) {
     if (observed.consumedTriggerIds.length === 0) {
       return "resolved impact consumed no owned trigger";
     }

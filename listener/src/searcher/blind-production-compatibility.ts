@@ -22,6 +22,10 @@ import {
 import {
   PRODUCTION_ADAPTER_FAMILIES,
 } from "./venues/production-registry.js";
+import {
+  validateRouteImmutableBinding,
+  type RouteImmutableBinding,
+} from "./venues/route-immutable-binding.js";
 
 type BlindBaselineWarmKind =
   | "mutable-pool"
@@ -136,6 +140,11 @@ export function blindCompatibilityCanonicalEdgeId(edge: TokenEdge): string {
     poolToken0: edge.poolToken0?.toLowerCase() ?? null,
     poolToken1: edge.poolToken1?.toLowerCase() ?? null,
     poolId: edge.poolId?.toLowerCase() ?? null,
+    ...(edge.routeBinding === undefined
+      ? {}
+      : {
+          routeBinding: blindCompatibilityRouteBinding(edge.routeBinding),
+        }),
     nativeCurrency0: edge.nativeCurrency0 ?? false,
     nativeCurrency1: edge.nativeCurrency1 ?? false,
     v4PoolKey: edge.v4PoolKey
@@ -175,6 +184,13 @@ export function blindCompatibilityPoolIdentity(pool: PoolEntry): unknown {
     underlyingCoins:
       pool.underlyingCoins?.map((address) => address.toLowerCase()) ?? [],
     poolId: pool.poolId,
+    ...(pool.routeBinding === undefined
+      ? {}
+      : {
+          routeBinding: blindCompatibilityRouteBinding(
+            pool.routeBinding,
+          ),
+        }),
     currency0: pool.currency0?.toLowerCase() ?? null,
     currency1: pool.currency1?.toLowerCase() ?? null,
     fee: pool.fee,
@@ -396,7 +412,26 @@ function t1EdgeMetadata(edge: TokenEdge): Readonly<Record<string, unknown>> {
     poolId: edge.poolId,
     nativeCurrency0: edge.nativeCurrency0,
     nativeCurrency1: edge.nativeCurrency1,
+    ...(edge.routeBinding === undefined
+      ? {}
+      : {
+          routeBinding: blindCompatibilityRouteBinding(
+            edge.routeBinding,
+          ),
+        }),
   };
+}
+
+function blindCompatibilityRouteBinding(
+  binding: RouteImmutableBinding | undefined,
+): Readonly<Record<string, string>> | undefined {
+  if (binding === undefined) return undefined;
+  const validated = validateRouteImmutableBinding(binding);
+  return Object.freeze({
+    schema: validated.schema,
+    payload: validated.payload,
+    hash: validated.hash,
+  });
 }
 
 function currentFamilyIdForEdge(edge: TokenEdge): string {

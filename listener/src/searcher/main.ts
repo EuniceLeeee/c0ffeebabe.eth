@@ -118,6 +118,9 @@ import type {
   PendingTransactionEvidenceHead,
   ProtocolDiscoveryReceipt,
 } from "./venues/route-leg-adapter.js";
+import {
+  validateRouteImmutableBinding,
+} from "./venues/route-immutable-binding.js";
 import { buildMempoolIntakePlan, type MempoolIntakePlan } from "./mempool-intake.js";
 import {
   PendingEvidenceAdmissionQueue,
@@ -230,6 +233,7 @@ import type { BundleRouter, BundleSubmission } from "./execution/bundle-router.j
 import {
   createVictimSourceGeneration,
   detectImpactTransitionFromLogs,
+  mutationOnlyTransitionDiagnostic,
   type PoolImpact,
   type PoolImpactTransition,
 } from "./detector/pool-impact.js";
@@ -691,6 +695,9 @@ function serializeRuntimeGraphPools(pools: readonly PoolEntry[]): string {
     factory: pool.factory?.toLowerCase(),
     identitySource: pool.identitySource,
     poolId: pool.poolId?.toLowerCase(),
+    routeBinding: pool.routeBinding === undefined
+      ? undefined
+      : validateRouteImmutableBinding(pool.routeBinding),
     currency0: pool.currency0?.toLowerCase(),
     currency1: pool.currency1?.toLowerCase(),
     logicalInstanceId: pool.logicalInstanceId,
@@ -3114,6 +3121,8 @@ async function handleHint(
       admittedHintImpacts.length === 1
     ? admittedHintImpacts[0]
     : null;
+  const hintMutationOnly =
+    mutationOnlyTransitionDiagnostic(hintTransition);
   if (!hintTransition.complete) {
     console.log(
       `[searcher/live] ${txHash.slice(0, 10)} victim transition unresolved: ` +
@@ -3128,10 +3137,23 @@ async function handleHint(
         `impacts=${hintTransition.impacts.length}; hash-only replay disabled`,
     );
   }
+  if (hintTransition.mutations.length > 0) {
+    console.log(
+      `[searcher/live] ${txHash.slice(0, 10)} mutation-only receipt steps ` +
+        hintTransition.mutations
+          .slice(0, 4)
+          .map((mutation) =>
+            `${mutation.familyId}:${mutation.poolIdentity}:${mutation.reason}`
+          )
+          .join(","),
+    );
+  }
   segMark("match"); // pool-impact matching against the graph
 
   // Token-index check: does any hint Transfer involve a token we track?
-  const hintTokenHit = hintTransition.impacts.length > 0 ||
+  const hintTokenHit =
+    hintTransition.impacts.length > 0 ||
+    hintTransition.mutations.length > 0 ||
     hintLogsMatchTokenIndex(hintLogs, ctx.tokenIndex);
 
   let rawTx: string | undefined;
@@ -3371,7 +3393,7 @@ async function handleHint(
       };
       // Debug: classify receipt log events
       const swapCount = eventLogs.filter((log) =>
-        PRODUCTION_ADAPTER_FAMILIES.landedEvents().isSwapTopic(log.topics[0])
+        PRODUCTION_ADAPTER_FAMILIES.landedEvents().isSwapLog(log)
       ).length;
       const xferCount = eventLogs.filter((l) => l.topics[0]?.toLowerCase() === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef").length;
       console.log(
@@ -3523,7 +3545,26 @@ async function handleHint(
     ctx.counters.impacts += opportunities.length;
   }
   if (opportunities.length === 0) {
-    console.log(`[searcher/live] ${txHash.slice(0, 10)} no matching graph pool`);
+    if (hintMutationOnly) {
+      const detail = hintMutationOnly.mutations
+        .slice(0, 4)
+        .map((mutation) =>
+          `${mutation.familyId}:${mutation.poolIdentity}:${mutation.reason}`
+        )
+        .join(",");
+      emitPipelineDropped(
+        "detect",
+        hintMutationOnly.reason,
+        detail,
+      );
+      console.log(
+        `[searcher/live] ${txHash.slice(0, 10)} ` +
+          `${hintMutationOnly.reason}; no directional PoolImpact fabricated ` +
+          detail,
+      );
+    } else {
+      console.log(`[searcher/live] ${txHash.slice(0, 10)} no matching graph pool`);
+    }
     return;
   }
   fixtureOpportunities = opportunities.length;

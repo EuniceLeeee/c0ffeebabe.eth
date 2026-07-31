@@ -16,6 +16,7 @@ const THIN_REGISTRATIONS =
 const TRUSTED_FAMILY_BOUNDARY_PREFIXES = Object.freeze([
   "listener/src/searcher/test/adapter-replay",
   "listener/src/searcher/test/blockscan-hunt",
+  "listener/src/searcher/test/canonical-route-identity-witness",
   "listener/src/searcher/test/family-ownership-manifest",
   "listener/src/searcher/test/historical-replay-anchor",
   "listener/src/searcher/test/production-replay",

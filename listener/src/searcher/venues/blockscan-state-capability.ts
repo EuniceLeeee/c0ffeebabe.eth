@@ -9,6 +9,10 @@ import {
   edgeExecutionVariantKey,
   edgeInstanceKey,
 } from "./route-instance-identity.js";
+import {
+  validateRouteImmutableBinding,
+  validatedRouteImmutableBindingHash,
+} from "./route-immutable-binding.js";
 
 export type BlockScanPricingLane = "swap" | "protocol";
 export type StateReadTransport =
@@ -809,16 +813,20 @@ export function verifiedGraphCompletenessIssueDetails(
  * singleton-pool discriminators and Curve indices, not just target address.
  */
 export function blockScanEdgeKey(edge: TokenEdge): string {
+  const bindingHash =
+    validatedRouteImmutableBindingHash(edge.routeBinding);
   if (edge.canonicalEdgeId) return edge.canonicalEdgeId;
-  return [
+  const identity = [
     edgeInstanceKey(edge),
     normalizeAddressLike(edge.target),
     normalizeAddressLike(edge.tokenIn),
     normalizeAddressLike(edge.tokenOut),
     edge.slotKind,
     edge.protocolAction ?? "",
-    edgeExecutionVariantKey(edge),
-  ].join("\u001f");
+  ];
+  if (bindingHash !== null) identity.push(bindingHash);
+  identity.push(edgeExecutionVariantKey(edge));
+  return identity.join("\u001f");
 }
 
 export function stateSchemaFingerprint(edges: readonly TokenEdge[]): string {
@@ -835,6 +843,13 @@ export function stateSchemaFingerprint(edges: readonly TokenEdge[]): string {
         curveI: edge.curveI ?? null,
         curveJ: edge.curveJ ?? null,
         poolId: edge.poolId?.toLowerCase() ?? null,
+        ...(edge.routeBinding === undefined
+          ? {}
+          : {
+              routeBinding: validateRouteImmutableBinding(
+                edge.routeBinding,
+              ),
+            }),
         v4PoolKey: edge.v4PoolKey ?? null,
       }))
       .sort((a, b) => a.edgeKey.localeCompare(b.edgeKey)),
@@ -854,13 +869,17 @@ export function canonicalEdgeId(
     throw new Error("canonical edge identity requires a separator-safe family owner");
   }
   const executionVariantKey = blockScanExecutionVariantKey(edge);
-  return [
+  const bindingHash =
+    validatedRouteImmutableBindingHash(edge.routeBinding);
+  const identity = [
     familyId,
     edgeInstanceKey(edge),
     normalizeAddressLike(edge.target),
     `${normalizeAddressLike(edge.tokenIn)}>${normalizeAddressLike(edge.tokenOut)}`,
-    executionVariantKey,
-  ].join("\u001f") as CanonicalEdgeId;
+  ];
+  if (bindingHash !== null) identity.push(bindingHash);
+  identity.push(executionVariantKey);
+  return identity.join("\u001f") as CanonicalEdgeId;
 }
 
 export function blockScanExecutionVariantKey(edge: TokenEdge): string {
@@ -984,6 +1003,13 @@ function canonicalEdgeRecord(edge: TokenEdge): Record<string, unknown> {
     v3TickSpacing: edge.v3TickSpacing ?? null,
     factory: edge.factory ? normalizeAddressLike(edge.factory) : null,
     poolId: edge.poolId ? normalizeAddressLike(edge.poolId) : null,
+    ...(edge.routeBinding === undefined
+      ? {}
+      : {
+          routeBinding: validateRouteImmutableBinding(
+            edge.routeBinding,
+          ),
+        }),
     v4PoolKey: edge.v4PoolKey
       ? {
           currency0: normalizeAddressLike(edge.v4PoolKey.currency0),
@@ -1001,6 +1027,13 @@ function canonicalEdgeRecord(edge: TokenEdge): Record<string, unknown> {
 function freezeEdge(edge: TokenEdge): TokenEdge {
   return Object.freeze({
     ...edge,
+    ...(edge.routeBinding === undefined
+      ? {}
+      : {
+          routeBinding: validateRouteImmutableBinding(
+            edge.routeBinding,
+          ),
+        }),
     v4PoolKey: edge.v4PoolKey ? Object.freeze({ ...edge.v4PoolKey }) : undefined,
   });
 }

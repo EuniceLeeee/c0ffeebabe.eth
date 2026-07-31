@@ -39,6 +39,9 @@ import {
   edgeExecutionVariantKey,
   edgeInstanceKey,
 } from "./venues/route-instance-identity.js";
+import {
+  validatedRouteImmutableBindingHash,
+} from "./venues/route-immutable-binding.js";
 
 export function createPinnedProtocolDiscoveryContext(input: {
   provider: ethers.JsonRpcProvider;
@@ -1818,12 +1821,20 @@ function sameSemanticRoute(a: TokenEdge, b: TokenEdge): boolean {
 
 export function protocolInstanceKey(
   adapterId: string,
-  pool: string | { readonly address: string; readonly logicalInstanceId?: string },
+  pool:
+    | string
+    | Pick<PoolEntry, "address" | "logicalInstanceId" | "routeBinding">,
 ): string {
   const address = typeof pool === "string" ? pool : pool.address;
   const logicalInstanceId = typeof pool === "string" ? undefined : pool.logicalInstanceId;
+  const routeBindingHash = typeof pool === "string"
+    ? null
+    : validatedRouteImmutableBindingHash(pool.routeBinding);
   const base = `${adapterId}|${ethers.getAddress(address).toLowerCase()}`;
-  return logicalInstanceId === undefined ? base : `${base}|${logicalInstanceId}`;
+  const logical = logicalInstanceId === undefined ? base : `${base}|${logicalInstanceId}`;
+  return routeBindingHash === null
+    ? logical
+    : `${logical}|route-binding:${routeBindingHash}`;
 }
 
 /** Address-level prefix of an instance key (adapterId|address). */
@@ -1920,10 +1931,13 @@ function stableEvidenceKey(value: unknown): string {
 }
 
 function poolShapeKey(pool: PoolEntry): string {
+  const routeBindingHash =
+    validatedRouteImmutableBindingHash(pool.routeBinding);
   return JSON.stringify({
     address: pool.address.toLowerCase(),
     adapter: pool.adapter,
     logicalInstanceId: pool.logicalInstanceId,
+    routeBindingHash,
     token0: pool.token0?.toLowerCase(),
     token1: pool.token1?.toLowerCase(),
     fixedTokenIn: pool.fixedTokenIn?.toLowerCase(),
