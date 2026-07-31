@@ -5483,8 +5483,10 @@ function topPinnedWarmHops(
   return [...hops]
     .sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1))
     .slice(0, k)
-    .map(({ canonicalEdgeId, adapterId, target, tokenIn, tokenOut, amountIn, poolToken0, poolToken1, v4PoolKey }) => ({
+    .map(({ canonicalEdgeId, instanceKey, executionVariantKey, adapterId, target, tokenIn, tokenOut, amountIn, poolToken0, poolToken1, v4PoolKey }) => ({
       canonicalEdgeId,
+      instanceKey,
+      executionVariantKey,
       adapterId,
       target,
       tokenIn,
@@ -5516,6 +5518,8 @@ function dedupeRouteHops(
       );
       hops.push({
         canonicalEdgeId: edge.canonicalEdgeId,
+        instanceKey: edge.instanceKey,
+        executionVariantKey: edge.executionVariantKey,
         adapterId: edge.adapterId,
         target: edge.target,
         tokenIn: edge.tokenIn,

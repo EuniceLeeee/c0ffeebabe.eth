@@ -42,6 +42,9 @@ export interface PreparedState {
 export interface QuoteRequest {
   /** Exact graph-edge identity. Prepared backends use this before structural fallback. */
   canonicalEdgeId?: TokenEdge["canonicalEdgeId"];
+  /** Family-bound identity is available before a graph becomes a verified view. */
+  instanceKey?: TokenEdge["instanceKey"];
+  executionVariantKey?: TokenEdge["executionVariantKey"];
   adapterId: string;
   target: string;
   tokenIn: string;
@@ -59,6 +62,19 @@ export type QuoteHop = Omit<QuoteRequest, "amountIn">;
 export function quoteHopIdentityKey(hop: QuoteHop): string {
   if (hop.canonicalEdgeId !== undefined) {
     return `canonical:${hop.canonicalEdgeId}`;
+  }
+  if (
+    hop.instanceKey !== undefined &&
+    hop.executionVariantKey !== undefined
+  ) {
+    return JSON.stringify([
+      "route-instance",
+      hop.instanceKey,
+      hop.executionVariantKey,
+      hop.adapterId,
+      hop.tokenIn.toLowerCase(),
+      hop.tokenOut.toLowerCase(),
+    ]);
   }
   return [
     hop.adapterId,
@@ -82,6 +98,10 @@ export function findPreparedQuoteEdge(
   return graph.find((edge) =>
     (request.canonicalEdgeId === undefined ||
       edge.canonicalEdgeId === request.canonicalEdgeId) &&
+    (request.instanceKey === undefined ||
+      edge.instanceKey === request.instanceKey) &&
+    (request.executionVariantKey === undefined ||
+      edge.executionVariantKey === request.executionVariantKey) &&
     edge.adapterId === request.adapterId &&
     edge.target.toLowerCase() === target &&
     edge.tokenIn.toLowerCase() === tokenIn &&

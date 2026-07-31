@@ -67,6 +67,8 @@ export function pinnedWarmHopsFromGraph(
       }
       hops.push({
         canonicalEdgeId: edge.canonicalEdgeId,
+        instanceKey: edge.instanceKey,
+        executionVariantKey: edge.executionVariantKey,
         adapterId: edge.adapterId,
         target: edge.target,
         tokenIn: edge.tokenIn,

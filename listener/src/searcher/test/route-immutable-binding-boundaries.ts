@@ -184,6 +184,22 @@ const canonicalSiblingEdge = {
   ...siblingEdge,
   canonicalEdgeId: canonicalEdgeId(identityFamily.id, siblingEdge),
 };
+const preverifiedBoundEdge = {
+  ...boundEdge,
+  instanceKey: routeInstanceKey(identityFamily, {
+    ...pool,
+    routeBinding: binding,
+  }),
+  executionVariantKey: identityFamily.routeIdentity.executionVariantKey(),
+};
+const preverifiedSiblingEdge = {
+  ...siblingEdge,
+  instanceKey: routeInstanceKey(identityFamily, {
+    ...pool,
+    routeBinding: siblingBinding,
+  }),
+  executionVariantKey: identityFamily.routeIdentity.executionVariantKey(),
+};
 const preparedRequest: QuoteRequest = {
   canonicalEdgeId: canonicalSiblingEdge.canonicalEdgeId,
   adapterId: siblingEdge.adapterId,
@@ -226,6 +242,28 @@ assert.notEqual(
   quoteHopIdentityKey(canonicalBoundEdge),
   quoteHopIdentityKey(canonicalSiblingEdge),
   "route-hop dedupe must retain canonical siblings",
+);
+const preverifiedRequest: QuoteRequest = {
+  instanceKey: preverifiedSiblingEdge.instanceKey,
+  executionVariantKey: preverifiedSiblingEdge.executionVariantKey,
+  adapterId: preverifiedSiblingEdge.adapterId,
+  target: preverifiedSiblingEdge.target,
+  tokenIn: preverifiedSiblingEdge.tokenIn,
+  tokenOut: preverifiedSiblingEdge.tokenOut,
+  amountIn: 1n,
+};
+assert.equal(
+  findPreparedQuoteEdge(
+    [preverifiedBoundEdge, preverifiedSiblingEdge],
+    preverifiedRequest,
+  ),
+  preverifiedSiblingEdge,
+  "prepared lookup must retain family-bound identity before graph verification",
+);
+assert.notEqual(
+  quoteHopIdentityKey(preverifiedBoundEdge),
+  quoteHopIdentityKey(preverifiedSiblingEdge),
+  "route-hop dedupe must retain preverified family siblings",
 );
 assert.notEqual(
   edgeExecutionVariantKey(boundEdge),
