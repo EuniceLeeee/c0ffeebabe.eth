@@ -1562,13 +1562,14 @@ p95 `<10s`。
   常量改成 `1900`；
 - target fee 使用 EIP-1559 由 canonical parent 精确推导的 next-block base fee；
 - gas 只使用 final sim 的 measured gas，不再乘静态 `2x`；
-- `20%` profit haircut 保留为安全折扣；
+- profit haircut 的生产默认值为 `0`；只有经过独立验证并在部署调用中显式传入的 operator policy
+  才能设置非零折扣；
 - bribe 是扣 gas 后 surplus 的比例，且 production/live envelope 与 A/B deploy 均拒绝
   `BRIBE_ALL_ABOVE_GAS=1` 或 `BRIBE_BPS=10000`；
 - Chainlink、parent hash、fee 或 measured gas 任一不可用时 fail closed；bundle 只允许投
   `parent+1`，不能把旧价格或旧 base fee 带到后续块。
 
-同一 final-sim 结果按新 policy 的可复算结果为：
+下面保留的是当时显式 `20%` haircut 场景的历史复算结果，用于对照，不代表当前生产默认：
 
 ```text
 source_block=25599789
