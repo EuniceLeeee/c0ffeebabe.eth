@@ -1091,6 +1091,12 @@ async function main(): Promise<void> {
       `http://127.0.0.1:${blockScanAnvilPort}`,
       blockScanAnvilPort,
     );
+    process.once("exit", () => isolatedState.stop());
+    await isolatedState.start();
+    console.log(
+      `[searcher/live] eager block-scan state backend ready ` +
+        `port=${blockScanAnvilPort}`,
+    );
     const isolatedPlanner = new TemplatePlanner();
     isolatedPlanner.setProfitTokenValuation(profitTokenValuation);
     isolatedPlanner.setMaxCandidates(maxCandidates);
