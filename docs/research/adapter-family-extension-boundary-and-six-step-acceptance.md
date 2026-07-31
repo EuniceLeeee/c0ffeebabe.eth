@@ -1,9 +1,15 @@
 # Adapter Family 扩展边界、实现合同与六步验收
 
-> 状态：架构与验收合同；核心 family boundary gate 与 target-late 结果契约已在前置工具分支实现，仍不是某个 family 的完成报告。
+> 状态：**family 架构边界继续有效；旧 checkpoint/final lifecycle 已退役。** 本文中仍保留的
+> `checkpoint_pass`、`final_validated`、`--phase`、`--freeze-inputs`、`--finalize-cleanup` 内容只用于记录
+> 历史设计，不能执行，也没有合并/部署/删分支权限。当前权威判决见
+> [`gates.md`](gates.md) 与 [`templates/six-step-validation.md`](templates/six-step-validation.md)：
+> Adapter Replay baseline flip + `family_local` → `adapter_merge_ready`；target-blind natural six-step →
+> `production_gap_fixed`。
 > 实现基线：`origin/main@3c8a04b9c31960d39992d139a310f868edbe5631`。
 > 日期：2026-07-29。
-> 范围：新增 Swap / Protocol Adapter Family、V4/Ekubo 一类 hook/extension 例外，以及从开发到删除分支的验收生命周期。
+> 范围：新增 Swap / Protocol Adapter Family、V4/Ekubo 一类 hook/extension 例外，以及 family-local
+> adapter merge 判断。
 > 不在范围：某一笔 Ekubo 交易的 ABI、地址、路径或盈利结论；具体实现必须另立 feature branch。
 
 规范层级：[`CLAUDE.md`](../../CLAUDE.md) 和 [`gates.md`](gates.md) 仍是上位规则。本文件把本次架构裁决具体化，并诚实记录当前实现与上位规则之间尚未修复的缺口；不得用本文件的目标状态冒充当前代码已经具备的能力。
@@ -14,7 +20,8 @@
 
 1. 普通新增 Adapter Family 应是插件级改动，不修改中央运行语义。
 2. 当 V4 hook、Ekubo extension 等确实需要扩展执行语义时，允许扩展，但不给它任意中央权限。
-3. 开发期可以快速迭代；合并与删除分支仍必须分别通过可信的六步 checkpoint 和 deployed-main final validation。
+3. 开发期可以快速迭代；family-local adapter merge 与 production gap fixed 使用两个独立结果，不让
+   ranking/enumeration 阻塞已经正确的 adapter。
 
 核心原则是：
 
@@ -31,7 +38,7 @@
 - 所有 extension 共用一种报价数学；
 - 为了通过验收把 swap edge 标成 protocol edge；
 - 让旧 Hermes/harness 覆盖或替代 canonical six-step receipt；
-- 在 Adapter Replay 通过后就声称 `fixed`；
+- 只凭单次 Adapter Replay pass、没有稳定 baseline flip 与 family boundary 就声称 adapter fixed；
 - 把协议特有字段直接加入中央 `TokenEdge`。
 
 “插件级”表示行为边界和 source closure 受控，不表示机械限制为恰好两个文件。
@@ -192,8 +199,7 @@ Swap 和 Protocol 在进入 graph 后都产生统一 `TokenEdge`，并共享：
 ```text
 listener/src/searcher/venues/swaps/<family>/**
 listener/src/adapters/<family>.ts
-listener/src/searcher/venues/production-registry.ts    # 薄注册
-listener/src/adapters/index.ts                         # 薄 ActionAdapter 注册
+listener/src/searcher/venues/production-families/<family>.production.ts
 listener/src/searcher/test/**                          # family 测试与 fixture
 ```
 
@@ -202,16 +208,14 @@ listener/src/searcher/test/**                          # family 测试与 fixtur
 ```text
 listener/src/searcher/venues/protocols/<family>/**
 listener/src/adapters/<family>.ts
-listener/src/searcher/venues/production-registry.ts    # 薄注册
-listener/src/adapters/index.ts                         # 薄 ActionAdapter 注册
+listener/src/searcher/venues/production-families/<family>.production.ts
 listener/src/searcher/test/**                          # family 测试与 fixture
 ```
 
-`production-registry.ts` 和 `adapters/index.ts` 只允许：
-
-- import 新 family / ActionAdapter；
-- 在既有 catalog 中增加直接 binding；
-- 保持既有中央控制流和 AST skeleton 不变。
+`*.production.ts` 是 family-owned 的唯一新增生产激活入口。它通过
+`defineProductionFamilyModule` 同时声明 family 与该 family 拥有的 ActionAdapter，并由 tracked-source
+loader 自动发现。普通新 family 不修改 `production-registry.ts` 或 `adapters/index.ts`；文件存在本身
+也不够，必须满足 module contract、ownership、唯一 ID 和完整 family activation 校验。
 
 ### 4.2 正常禁止
 
@@ -307,13 +311,13 @@ required_action:
 
 | 发现 | 分类 | Gate 动作 |
 |---|---|---|
-| 仅 family source closure + 薄注册 | `family_local` | 允许继续 family 开发 |
+| 仅 family source closure + 自动加载的 family-owned production module | `family_local` | 允许继续 family 开发 |
 | 修改中央 capability/interface/hash | `framework` | 非零退出，停止 family 自证 |
 | 修改多个既有 family 共享 host | `framework` | 非零退出，移到独立 branch |
 | 修改 scanner/rank/cap/deadline/queue/cache | `framework` | 非零退出，移到独立 branch |
 | family 修改中央 mutable runtime | `framework` | 非零退出，报告具体路径 |
 | 协议专属字段进入中央 graph/planner | `framework` | 非零退出，要求协议无关 capability 设计 |
-| registry/catalog 超出薄注册 skeleton | `framework` | 非零退出 |
+| 修改中央 registry/action catalog | `framework` | 非零退出 |
 
 Gate 发现越界后必须执行的流程动作：
 
@@ -332,11 +336,15 @@ Gate 不应自动删除用户代码或重置分支；它负责 fail closed、保
 实现使用同一个纯函数 `evaluateAdapterFamilyBoundary`：
 
 - 开发期由 `adapter-family-boundary-gate` CLI 调用；
-- checkpoint 在任何 RPC、universe 读取和 producer 之前调用；
-- 两处都只从 registry-derived ownership manifest、source closure 和两张薄注册表的 skeleton 得出结论；
+- trusted evidence producer 在任何 RPC、universe 读取和 replay 之前调用；
+- 两处都只从 registry-derived ownership manifest、source closure、自动加载 production module 和
+  未变化的中央 registry/action skeleton 得出结论；
 - `framework` 非零退出，并输出 exact runtime paths 与 reasons。
 
-这道核心 gate 不再细分 `systemic_live`，也不实现一套庞大的 AST 安全框架。标准 `SwapAdapter` / `ProtocolConversionAdapter` 类型、ownership manifest、source closure、薄注册 skeleton 和正常 code review 共同约束 family；若日后有真实绕过样本，再在独立工具 branch 增加协议无关规则。
+这道核心 gate 不再细分 `systemic_live`，也不实现一套庞大的 AST 安全框架。标准 `SwapAdapter` /
+`ProtocolConversionAdapter` 类型、ownership manifest、source closure、production module contract、
+未变化的中央 registry/action skeleton 和正常 code review 共同约束 family；若日后有真实绕过样本，
+再在独立工具 branch 增加协议无关规则。
 
 ## 5. Hook / Extension 的例外模型
 
@@ -666,7 +674,8 @@ export const EKUBO_EXTENSION_X =
 
 本次 gate 只机械保证用户要求的两件事：
 
-1. family runtime 改动归属于唯一 family，中央文件只允许既有薄注册；
+1. family runtime 改动归属于唯一 family，新增激活只通过 family-owned `*.production.ts`，中央
+   registry/action 文件保持不变；
 2. family 继续实现标准 `SwapAdapter` / `ProtocolConversionAdapter` capability，不修改中央接口或共享生产行为。
 
 它不宣称能静态证明任意 TypeScript 都无恶意副作用。出现 prototype/global mutation 一类非常规实现时由正常 review 拒绝；不要为了假想攻击把普通 adapter 开发变成另一套编译器工程。
@@ -692,7 +701,7 @@ export const EKUBO_EXTENSION_X =
 - pool/edge adapter IDs；
 - taxonomy；
 - ActionAdapter ownership；
-- explicit registry/catalog binding；
+- family-owned `*.production.ts` module；
 - source closure；
 - unsupported-by-default 的 variant registry。
 
@@ -890,7 +899,9 @@ namespace 的 hostile-code sandbox；同 UID 恶意代码临时替换后恢复�
 - 不得仅凭公开样本把“泛化捕获能力”写成已证明；
 - candidate SHA 冻结后再选 held-out 样本，单独看仍不足以证明泛化，因为当前 producer 仍可读 Git object 与 archive RPC；
 - 强泛化证据需要未来的 hidden reference、source filesystem isolation 与 source-block-limited RPC isolation；当前 gate 不签发这一结论；
-- `fixed` 的既有要求不变：scanner 自发枚举、mandatory final sim、production EV、合并后 exact deployed-main full final 全部通过。
+- Adapter verdict 与 production verdict 必须分开：route-pinned baseline flip 可证明
+  `adapter_fixed`；scanner 自发枚举、mandatory final sim 与 positive production EV 才证明
+  `production_gap_fixed`。
 
 ## 10. 三类验收轨道
 
@@ -905,7 +916,10 @@ namespace 的 hostile-code sandbox；同 UID 恶意代码临时替换后恢复�
 - family fixture；
 - ActionAdapter/compiler 测试。
 
-Adapter Replay 可以支持 Steps 3–6，但它是 route-pinned，不能证明 Steps 1–2，也不能授权合并或删除分支。
+Adapter Replay 可以支持 Steps 3–6，但它是 route-pinned，不能证明 Steps 1–2。只有同一 fixture 的稳定
+baseline failure/未注册 → challenger pass 翻转，加 exact family ownership/conformance 与
+`family_local` boundary，核心 judgment 才输出 `adapter_merge_ready`。该权限只覆盖 family-owned diff，
+不包括部署或删分支。
 
 ### 10.2 Production Route Stage
 
@@ -920,7 +934,7 @@ Adapter Replay 可以支持 Steps 3–6，但它是 route-pinned，不能证明 
 5. independent mandatory final sim；
 6. production EV。
 
-只有该轨道能支持确定性 route/family 的 `checkpoint_pass` 和 `final_validated`。
+只有该轨道能支持 `production_gap_fixed`。它不否定已经单独证明的 adapter verdict。
 
 ### 10.3 Family 外生产变化
 
@@ -984,17 +998,13 @@ Live graph 在开发期非常有价值，可以快速判断：
 当前 live graph/telemetry 定位
 → family code + unit/parity
 → isolated dry-run/Adapter Replay
-→ target-blind checkpoint
+→ baseline flip + family-local core judgment
 ```
 
-checkpoint 不是只跑 candidate。trusted controller 先在完全相同的 anchor、universe、runtime
-inputs、production caps 上运行并封存 rollback producer/verifier receipt，要求 rollback 在 step 6
-之前失败；再运行 candidate 并要求六步全过。若 rollback 已经全过，comment/no-op 或同 family
-无关 action 改动不得借成熟路线领取 checkpoint。final 对 deployed merge 重跑 candidate，同时
-再次绑定同一 rollback failure。
-当前 controller 只接受“自然输出中没有目标 route”或“已自然枚举但未 solve”的 rollback failure。
-若 baseline 已进入 solve/final sim/EV，必须先有能区分确定性 EVM/domain failure 与 RPC/infra 的
-typed witness；仅靠错误字符串一律 fail closed。
+Adapter judgment 不是只跑 candidate。trusted producer 必须先封存 baseline 未注册或稳定
+family-owned typed failure，再封存 candidate `adapter_replay_pass`；comment/no-op 或无关 action 改动
+不得借成熟路线领取 `adapter_fixed`。若 baseline 是 timeout/RPC/infra failure，仅靠错误字符串一律
+fail closed。
 
 查 live graph 不要求先重建 universe；若已有目标区块的 content-addressed graph/view/pin，优先复用。只有现有 graph 不能回答目标 edge 在当时是否存在、证据冲突或 hash/anchor 不可验证时，才升级重建。
 
@@ -1004,9 +1014,9 @@ typed witness；仅靠错误字符串一律 fail closed。
 diagnostic_only
 ```
 
-不能单独写成 `checkpoint_pass`、`final_validated` 或 `fixed`。
+不能单独写成 `adapter_fixed`、`adapter_merge_ready` 或 `production_gap_fixed`。
 
-### 11.2 Pre-merge checkpoint
+### 11.2 Retired：Pre-merge checkpoint（历史）
 
 Checkpoint 必须：
 
@@ -1038,7 +1048,7 @@ checkpoint_pass
 - 宣布 `fixed`；
 - 删除 branch。
 
-### 11.3 Post-merge full final
+### 11.3 Retired：Post-merge full final（历史）
 
 合并并启动 deployed main 后，必须针对：
 
@@ -1065,7 +1075,7 @@ final_validated
 
 只有这一步允许把 deterministic route/family 声明为 `fixed`。
 
-### 11.4 Branch cleanup
+### 11.4 Retired：Branch cleanup（历史）
 
 分支清理必须：
 
@@ -1089,7 +1099,7 @@ final_validated
 
 ## 12. Hermes 与旧 Harness 的关系
 
-普通 family-local 改动在 canonical checkpoint/final 完整后，不需要由旧架构 Hermes/harness 再次授权。
+普通 family-local 改动在 `adapter_merge_ready` 后，不需要由旧架构 Hermes/harness 再次授权。
 
 旧 harness 可以作为诊断，但只有在以下条件全部成立时，它的无关失败才不阻塞：
 
@@ -1141,7 +1151,7 @@ final_validated
 - duplicate owned ActionAdapter；
 - route-root ActionAdapter 伪装 infra；
 - unowned/shared runtime path；
-- 中央 registry/action index 超出薄注册 skeleton；
+- 新 family 修改中央 registry/action index；
 - 多个 family source closure 同时变化；
 - unknown extension 回退 base quote。
 
@@ -1212,7 +1222,8 @@ final_validated
 3. 尚未针对 Ekubo candidate 实际跑出 checkpoint/final receipt；
 4. 已公开样本只证明 explicit-input target-late 回归，不证明恶意 source isolation 或泛化；
 5. Ekubo 的 identity/state/quote/plan/canonical extension identity 仍属于后续纯 family branch；
-6. `fixed` 仍必须等 exact deployed-main full final。
+6. Adapter 是否修好由 baseline flip + family-local core judgment 决定；生产 gap 是否修好另看
+   target-blind `production_gap_fixed`。
 
 因此当前状态只能写：
 
@@ -1226,15 +1237,14 @@ fixed = false
 ## 16. 推荐交付顺序
 
 ```text
-Slice A — trusted acceptance tooling
-  target-blind producer
-  independent comparator
-  DEX-only coverage
-  route-required shard semantics
+Slice A — core result judgment
+  native trusted receipts
+  adapter baseline flip
+  target-blind production result contract
 
 Slice B — family boundary hardening
   early boundary preflight + exact path/reason artifact
-  standard interface / ownership / thin-registration gate
+  standard interface / ownership / auto-loaded production entry
 
 Slice C — Ekubo family
   host-local variants
@@ -1243,18 +1253,15 @@ Slice C — Ekubo family
   ActionAdapter/plan
   unit/parity/Adapter Replay
 
-Slice D — checkpoint
-  full target-blind six steps
-  checkpoint_pass
+Slice D — adapter judgment
+  adapter_fixed
+  adapter_merge_ready
 
-Slice E — merge/deploy/final
-  exact deployed main
-  full production universe/config
-  final_validated
+Slice E — production gap judgment（需要时）
+  target-blind natural six steps
+  production_gap_fixed
 
-Slice F — cleanup
-  exact ref validation
-  branch deletion
+Slice F — deployment/cleanup（独立人类或 Hermes 生命周期）
 ```
 
 Slice A/B 必须先于 Ekubo branch 落到 main。Trusted reference 也必须先存在于该 rollback/main。Slice C 必须从包含 A/B 的新 `origin/main` 创建，不能把可信验收器和 feature 放在同一 branch 自证。
@@ -1275,7 +1282,9 @@ npm run --silent adapter-family-boundary-gate -- \
   --out /tmp/adapter-family-boundary.json
 ```
 
-CLI 只接 baseline/candidate/out，不接受调用者自报的 family ID 或 `family_local`。它与 checkpoint 调用同一个 evaluator；输出 `framework` 时以非零退出，并要求把 exact paths/reasons 对应的 family 外改动移到独立 branch。
+CLI 只接 baseline/candidate/out，不接受调用者自报的 family ID 或 `family_local`。核心 judgment 直接消费
+它的原生 receipt；输出 `framework` 时以非零退出，并要求把 exact paths/reasons 对应的 family 外改动移到
+独立 branch。
 
 ### 17.1 Family 静态与状态合同
 
@@ -1299,9 +1308,27 @@ npm run --silent searcher:adapter-family-replay -- \
   --out-dir /tmp/<family>-adapter-replay
 ```
 
-该命令不证明 scanner discovery/enumeration，不能签发 checkpoint/final。
+该命令不证明 scanner discovery/enumeration；单独运行只产生 `adapter_replay_pass`，需再结合 baseline flip、
+ownership/conformance 与 boundary 才能得到 `adapter_merge_ready`。
 
-### 17.3 Freeze checkpoint inputs
+### 17.3 Core result judgment（当前）
+
+先由现有 trusted producer 生成原生 family-execution promotion receipt 与
+`adapter-family-boundary` receipt，再执行：
+
+```bash
+cd analysis
+npm run --silent six-step-validation-gate -- \
+  --input /tmp/<family>-semantic-receipt.json \
+  --out /tmp/<family>-judgment.json
+```
+
+`adapter_fixed + adapter_merge_ready` 允许只合并 `family_local` 内的 adapter diff。自然枚举不是
+adapter merge 条件；需要关闭生产 gap 时，另用 `claim=production_gap` 的 target-blind current-v4 六步
+receipt 取得 `production_gap_fixed`。输入格式见
+[`templates/six-step-validation.md`](templates/six-step-validation.md)。
+
+### 17.4 Retired：Freeze checkpoint inputs（历史，不执行）
 
 ```bash
 cd analysis
@@ -1324,7 +1351,7 @@ npm run --silent six-step-validation-gate -- \
 }
 ```
 
-### 17.4 Pre-merge checkpoint
+### 17.5 Retired：Pre-merge checkpoint（历史，不执行）
 
 ```bash
 cd analysis
@@ -1350,7 +1377,7 @@ npm run --silent six-step-validation-gate -- \
 }
 ```
 
-### 17.5 Deployed-main final
+### 17.6 Retired：Deployed-main final（历史，不执行）
 
 ```bash
 cd analysis
@@ -1401,7 +1428,7 @@ Review artifact 必须由独立 reviewer 提交到 `review_commit`：
 }
 ```
 
-### 17.6 Final + cleanup
+### 17.7 Retired：Final + cleanup（历史，不执行）
 
 ```bash
 cd analysis
@@ -1412,9 +1439,9 @@ npm run --silent six-step-validation-gate -- \
   --out /tmp/<family>-cleanup-final-receipt.json
 ```
 
-`--finalize-cleanup` 只能与 `--phase final` 同时使用。
+该旧 CLI 形态已被当前入口拒绝；保留在此仅为解释历史 receipt。
 
-> 公开已知样本仍受 §9.2 的证据强度限制。命令存在不等于某个 Ekubo family 已经 `fixed`；必须实际产出 checkpoint 和 exact deployed-main final receipt。
+> 公开已知样本仍受 §9.2 的证据强度限制。历史命令文本不等于某个 Ekubo family 已经通过当前判断。
 
 ## 18. Definition of Done
 
@@ -1424,7 +1451,7 @@ npm run --silent six-step-validation-gate -- \
 
 - [ ] 中央运行逻辑零协议特有分支；
 - [ ] 只使用标准 RouteLegAdapter capability；
-- [ ] registry/catalog 仅薄注册；
+- [ ] 新增生产激活仅通过 family-owned `*.production.ts`；中央 registry/action catalog 未修改；
 - [ ] pool/edge/action owner 唯一；
 - [ ] 无私有 scheduler/cache/enumerator/solver/final sim；
 - [ ] source closure 完整；
@@ -1452,13 +1479,13 @@ npm run --silent six-step-validation-gate -- \
 
 ### 生命周期
 
-- [ ] Adapter Replay 仅作为支持证据；
-- [ ] pre-merge `checkpoint_pass`；
-- [ ] exact deployed-main `final_validated`；
-- [ ] independent review 已绑定；
-- [ ] full universe/config/runtime attestation 已绑定；
-- [ ] cleanup 使用新 final receipt 和 exact ref lease；
-- [ ] 只有上述全部完成后才写 `fixed`。
+- [ ] 同一 fixture 的 baseline miss/typed family failure 可稳定复现；
+- [ ] challenger 原生 Adapter Replay 通过 Steps 3–6；
+- [ ] exact family ownership/conformance 与 `family_local` receipt 已绑定；
+- [ ] core judgment 输出 `adapter_fixed + adapter_merge_ready`；
+- [ ] 只把 family-owned diff 合并；
+- [ ] 若声称生产 gap fixed，另有 target-blind natural 六步 `production_gap_fixed`；
+- [ ] judgment 没有 deployment/cleanup 副作用。
 
 ## 19. 最终裁决
 
@@ -1467,6 +1494,6 @@ npm run --silent six-step-validation-gate -- \
 3. Swap 与 Protocol 已有标准接口，不需要各自建立旁路生产线。
 4. V4/Ekubo hook/extension 采用 **host-local variant → 标准 composite SwapAdapter**，不增加全局任意 HookFamily。
 5. Hook 权限只覆盖 identity、state、quote 和 typed execution intent；不能触碰中央 funnel。
-6. 开发期可以基础设施轻量，但 checkpoint 仍是完整六步。
-7. 合并后必须对 exact deployed main 运行 full final；只有 `final_validated` 后才能删除 branch。
+6. 开发期 Adapter Replay 可 route-pinned；稳定 flip + `family_local` 足以证明 adapter merge-ready。
+7. 自然枚举失败不否定 adapter verdict；只有关闭 production gap 时才要求 target-blind 完整六步。
 8. 当前只证明 explicit-input target-late 回归；即使 SHA 后再选 held-out，也不能单独证明泛化，强结论还需 hidden reference + source/RPC isolation。

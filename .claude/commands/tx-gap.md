@@ -95,8 +95,8 @@ fixed_by: null
 - 禁止用工具修复、文档整理、可观测性增强或 fixture 增长冒充本轮成果；
 - 如果当前 branch 已含上述辅助改动，先拆掉，只留下生产 diff；
 - 开新 branch 前，按 stable gap/problem id 检查现有 branch、report 和 main，避免重复修同一 gap；
-- 每个 gap 从最新 `origin/main` 新建短生命周期 branch；checkpoint 通过后合并但保留 branch，只有
-  post-merge/deployed-main full validation 通过才由 trusted finalizer 删除；失败则记录证据并保留。
+- 每个 gap 从最新 `origin/main` 新建短生命周期 branch；`adapter_merge_ready` 只允许合并
+  `family_local` diff。判断器不删除 branch；cleanup 需要独立明确授权或适用的 Hermes A/B 生命周期。
 
 ## 3. 身份硬编码与通用容量参数必须分开
 
@@ -136,26 +136,17 @@ scope、旧 harness 假阴性还是基础设施问题，但不能把 machine fai
 证据冲突，保留旧工具输出作诊断；只要 canonical producer 已覆盖本声明全部字段、独立 reviewer 证明旧失败
 与本 diff 无关且不涉及硬安全，便不为旧工具改生产代码。
 
-### 两级执行
+### 两种独立结果
 
-1. **合并前 checkpoint：**先冻结一次 production-equivalent input snapshot，再绑定 candidate/base、
-   StateAnchor、完整 input universe/config、实际 materialized graph、逐 shard completeness、family
-   manifest；family-local 重跑可复用哈希不变的 DEX/无关 family shard，只重算 impacted shard。把小型
-   run request 交给 `six-step-validation-gate`，由 gate 运行固定 producer 并计算
-   status，禁止把人工填写的六个 pass record 当输入。六步必须 target-blind 自然通过。只允许增大
-   runner 外层 wall-clock timeout，不改生产
-   cap/rank/top-K/threshold/EV，不缩图、不插目标。通过记 `checkpoint_pass`。
-2. **合并后 full：**允许在 checkpoint 后合并并 guarded 部署 exact merge SHA，状态记
-   `pending_final_validation`，branch 保留。review 可作为 report-only `origin/main` descendant 提交，
-   不因相同 runtime 多部署一次；controller 必须证明 merge→review commit 没有 runtime/config/dependency
-   diff。随后对实际 deployed merge SHA、normalized config、经 attestation 对齐的完整 production
-   universe/manifest、精确生产参数和所有 impacted family 重跑六步。通过记 `final_validated`；先移除 clean
-   candidate worktree，再由 trusted finalizer 精确删除本地/远端 branch refs。
-3. semantic fail 走 guarded rollback 并保留 branch；infra fail 不判产品失败，安全时 live 可继续，但
-   branch 保留等待重跑。
-
-当前 canonical controller 只支持 `block_scan_standing`。Backrun 仍可分析并走 legacy causal
-replay/Hermes，但在完整 ordered-prefix producer 落地前不能取得 `checkpoint_pass`/`final_validated`。
+1. **Adapter 结果：**同一 fixture 的稳定 baseline family-owned failure/未注册必须翻转为
+   `adapter_replay_pass`；步骤 1–2 诚实 bypass，步骤 3–6 由生产 quote/planner/solver/calldata/final
+   sim/EV 通过。再绑定 exact family ownership/conformance 与 `family_local` boundary。核心 judgment
+   输出 `adapter_fixed + adapter_merge_ready`，只允许合并 boundary 内的 adapter diff；不要求自然枚举。
+2. **Production gap 结果：**producer 不得获得 expected route/amount；自然输出先冻结，verifier 后比较。
+   同一 run/state/route 的当前六步必须自然完成，solver 自选 amount，mandatory final sim 成功，Step 6
+   `allow` 且 `net_ev_wei > 0`。核心 judgment 输出 `production_gap_fixed`。
+3. 两种 judgment 都没有部署、回滚或删 branch 副作用。基础设施失败不判产品失败；系统性分布/延迟/资源
+   声明继续走 cohort + Hermes A/B。
 
 ## 5. Cohort、分布和资源验收
 
@@ -169,12 +160,13 @@ replay/Hermes，但在完整 ordered-prefix producer 落地前不能取得 `chec
 
 ## 6. 合并与分支生命周期
 
-- `checkpoint_pass`：rebase/merge 到最新 `origin/main`，确认生产 diff 未漂移，可 guarded bounded-live；
-  branch/worktree 保留并标 `pending_final_validation`。
-- `final_validated`：绑定 exact candidate/merge/deployed/config/graph/review receipt 后，先移除 clean
-  candidate worktree，再由 trusted finalizer 删除对应本地/远端 branch refs。
-- checkpoint 红：不合并为 fixed；记录 exact base/challenger、失败步骤、复现命令和未解问题。
-- full semantic 红：guarded rollback，branch 保留；full infra 红：不伪报 semantic fail，branch 保留重跑。
+- `adapter_merge_ready`：确认 exact base/challenger、原生 replay flip 与 `family_local` boundary 未漂移；
+  只合并 family-owned diff。
+- boundary 红但 `adapter_fixed=true`：adapter execution 已修，停止子分支；把超范围文件移到新的 framework
+  分支，不得扩大 adapter branch 权限。
+- `production_gap_fixed` 红：不否定已通过的 adapter verdict；记录首个失败生产阶段，并按
+  enumeration/ranking/state/runtime 等独立 gap 处理。
+- judgment 不负责 deployment/rollback/cleanup；这些动作遵循明确的人类授权或适用的 Hermes A/B 生命周期。
 - 后续 main 修复同一 stable problem id 时，重跑该问题原先声明的 pinned 验收；通过后归档旧报告并删除旧 branch。
 - main 是 champion。下一 gap 永远从最新 main 新切，不在旧 challenger 上堆叠。
 

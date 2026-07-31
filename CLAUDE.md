@@ -21,8 +21,10 @@ companion doc, not here.
   remove only the orphans *your* change created; mention unrelated dead code, don't delete it. Every changed
   line traces to the request. **Never `rg -rn`/`-rln`** (`-r` = `--replace`, corrupts reads).
 - **Goal-driven execution.** Turn tasks into `[step] → verify: [check]` pairs; loop until verified. **Build
-  passing is `implemented`, not `fixed`** — deterministic route work needs the pre-merge six-step checkpoint
-  and post-merge/deployed-main full validation in `docs/research/gates.md`.
+  passing is `implemented`, not `fixed`**. An adapter is `adapter_fixed` only after the same route-pinned
+  execution gap flips under Adapter Replay; it is merge-ready only with a `family_local` boundary receipt.
+  A production gap is separately `production_gap_fixed` only when target-blind natural output passes all six
+  semantic stages (`docs/research/gates.md`).
 - **Verify against code/data, not memory.** A recalled fact / a stale memory is a hypothesis to re-check by
   reading the actual file or on-chain data, never a conclusion.
 - **Derive identity on-chain; never gate admission on a hardcoded allowlist.** Venue / pool / factory /
@@ -147,17 +149,15 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   Each new round starts from the current `origin/main` champion: `A_n → fresh B_n`. A proven win atomically
   promotes the exact frozen B SHA to `A_{n+1}` and deletes B; the next challenger is then cut fresh from
   `A_{n+1}`. Never stack the next experiment on an old B branch.
-- **Deterministic route branch lifecycle** — normal adapter/route work uses `codex/*`: a target-blind
-  trusted controller accepts a run request (never a caller-authored pass envelope), recomputes the frozen
-  inputs and emits one causally chained six-stage semantic-v4 receipt. `checkpoint_pass` permits merge and bounded-live
-  main, but the branch remains
-  `pending_final_validation`. Only full six-step validation against the exact deployed merge SHA emits
-  `final_validated`; then a newly generated final run with `--finalize-cleanup` exact-deletes it. The deletion
-  hook prevents accidental raw branch/ref deletion but is not an authorization boundary. An explicitly
-  human-authorized `codex/*` branch outside this deterministic-route lifecycle may use
-  `MEV_NON_ROUTE_CODEX_CLEANUP=1`; that opt-in only bypasses the accident guard and cannot issue or replace a
-  checkpoint/final receipt. Semantic failure rolls back and retains the branch; infrastructure failure retains
-  it for rerun.
+- **Adapter-family branch lifecycle** — normal family work uses `codex/*`. The core gate judges stable,
+  preauthenticated receipts, not the current coordinator/module layout: exact baseline→candidate Adapter Replay flip plus
+  `family_local` boundary and conformance emits `adapter_fixed + adapter_merge_ready`, which permits merging
+  only the family-owned diff. Natural enumeration is deliberately not required for that Adapter verdict.
+  The separate `production_gap_fixed` claim requires target-blind natural enumeration, solver-selected sizing,
+  mandatory final sim and production EV across all six semantic stages. Neither judgment deletes branches.
+  The deletion hook remains an accidental raw-ref guard; cleanup requires explicit human authorization or the
+  applicable A/B lifecycle. `MEV_NON_ROUTE_CODEX_CLEANUP=1` only bypasses that accident guard and cannot
+  manufacture either verdict.
 - **Daily analysis = a light learning round (one Learning Kernel, two entrances: Hermes = heavy, daily =
   light).** When you do a **reusable judgment** outside a Hermes round (architecture review / competitor-path
   analysis / bundle postmortem / a tool found wrong / repo diagnosis), capture it via steps 1–4 below.
@@ -193,15 +193,15 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   numbers are load-bearing; do not renumber.
 - `docs/research/HISTORICAL-GAP.md` — batch repair from pinned historical transactions without a full live
   research window. It accepts only scanner/backrun conserving DEX or DEX+permissionless-protocol loops and
-  mechanically routes tooling work direct-to-main, deterministic fixes through the two-tier six-step
-  lifecycle, and
+  mechanically routes tooling work direct-to-main, adapter-family fixes through the core
+  `adapter_merge_ready` judgment, production-route fixes through `production_gap_fixed`, and
   admission/latency/ranking changes back to Hermes A/B.
-- `docs/research/gates.md` — the validation contract (two-tier six-step lifecycle, `fixed` vs `implemented`,
-  replay and live/systemic boundaries).
+- `docs/research/gates.md` — the validation contract (`adapter_fixed` / `adapter_merge_ready` vs
+  `production_gap_fixed`, replay and live/systemic boundaries).
   Read before claiming a deterministic change is fixed.
 - `docs/research/adapter-family-extension-boundary-and-six-step-acceptance.md` — the implementation contract
   for adding or changing a Swap/Protocol Adapter Family, including V4/Ekubo-style hook/extension variants,
-  the family-local/framework boundary, development-time live-graph diagnostics, and checkpoint/final cleanup.
+  the family-local/framework boundary, development-time live-graph diagnostics, and core result judgment.
   Read it before implementing any new route family or changing an existing family's execution semantics.
 - `docs/research/tx-gap-analysis-format.md` — required user-facing format when one landed transaction is
   supplied for production-gap, tool, file, or function diagnosis. It separates the core conserving route

@@ -14,10 +14,9 @@ Only the current production target is admissible:
   oracle-update transaction, with boundary / trigger-only / full-prefix causal replay;
 - canonical net PnL must be positive.
 
-Backrun remains valid analysis scope, but the new two-tier controller currently supports
-`block_scan_standing` only. Until its producer binds the complete ordered prefix, a backrun may use the
-legacy causal replay/Hermes path and may reach `implemented_not_validated`; it cannot receive
-`checkpoint_pass` or `final_validated`.
+Backrun remains valid analysis scope. Its production-gap receipt must bind the complete ordered prefix and
+one canonical state anchor; if that evidence is missing, record `implemented_not_validated` and use causal
+replay/Hermes rather than weakening the core judgment.
 
 Exclude inventory, keeper/reward, credit, sandwich, JIT-LP, private paths/vaults and any route that leaves
 a standing position. A transaction may execute atomically and still be a backrun; its source is decided by
@@ -28,8 +27,8 @@ the causal replay, not by the word `atomic` or by its bundle container.
 | Change | Required evidence | Destination |
 |---|---|---|
 | analysis tool, classifier, gate | build + regression tests + fresh non-author review | merge directly to `main`; never deploy as B |
-| `family_execution`: quote-bearing `RouteLeg` family-owned identity/edge, quote, plan/size or execution semantics | registry-derived ownership plus route-pinned Family/Adapter Replay, conformance/isolation and canonical stages 3–6 | supporting precheck only; it cannot authorize merge/deploy/delete or claim production discovery |
-| `production_route_stage`: a deterministic family/route change should advance through the production funnel | pre-merge lightweight checkpoint and post-merge/deployed-main full validation, both using all six canonical stages with target-blind natural production enumeration | checkpoint permits merge + bounded live as `pending_final_validation`; full pass emits `final_validated`, then branch cleanup |
+| `family_execution`: quote-bearing `RouteLeg` family-owned identity/edge, quote, plan/size or execution semantics | stable baseline→candidate Family/Adapter Replay flip, exact family coverage, conformance/isolation and `family_local` boundary | `adapter_merge_ready`; may merge only the family-owned diff, but does not claim production discovery |
+| `production_route_stage`: a deterministic route should advance through the production funnel | one target-blind natural six-stage chain with solver sizing, mandatory final sim and positive production EV | `production_gap_fixed`; no branch cleanup or deployment side effect |
 | systemic protocol scanner, graph/universe construction, coverage or cross-opportunity distribution/performance | predeclared positive/negative cohort, coverage and output contract, then same-input fairness/resource evidence | route to `HERMES.md`; no per-sample candidate or single-route stage flip |
 | flow admission, latency, candidate ranking | pinned replay where applicable, then full Hermes A/B | route to `HERMES.md`; history alone cannot promote |
 | build/test only | `implemented_not_validated` | retain; never claim fixed |
@@ -44,8 +43,8 @@ cohort plus Hermes A/B. Do not split adapter execution and solver sizing into se
 
 | Validation level | Supplied by the fixture | Must be produced by production code | Verdict |
 |---|---|---|---|
-| **Family/Adapter Replay (`family_execution`)** | The subject quote-bearing `RouteLeg` `ExecutionFamilyId` plus the complete ordered route recovered from the landed trace: route-leg adapter identity, target or pool id, token direction, finite reference-witness rules and lane-correct state anchor. Funding is replay infrastructure, not the subject. | Steps 1–2 explicitly `bypassed`; registry-validated family edges, exact quotes, production planner/solver-selected input amount, encoding, fork final simulation, flash repayment, token conservation and EV satisfy canonical steps 3–6. | supporting `adapter_replay_pass` only |
-| **Production Replay (`production_route_stage`)** | Only the historical transaction and its lane-correct state anchor. The trace-derived expected route is retained by the verifier and withheld from the production producer until its output is frozen; no amount is supplied. | Discovery/admission/graph, route enumeration, exact quote/refine, plan/size, encoding/fork final simulation, repayment/conservation and production EV satisfy canonical steps 1–6. | pre-merge `checkpoint_pass`; post-merge/deploy `final_validated` |
+| **Family/Adapter Replay (`family_execution`)** | The subject quote-bearing `RouteLeg` `ExecutionFamilyId` plus the complete ordered route recovered from the landed trace: route-leg adapter identity, target or pool id, token direction, finite reference-witness rules and lane-correct state anchor. Funding is replay infrastructure, not the subject. | Steps 1–2 explicitly `bypassed`; registry-validated family edges, exact quotes, production planner/solver-selected input amount, encoding, fork final simulation, flash repayment, token conservation and EV satisfy canonical steps 3–6. The baseline miss/failure reproduces and the challenger flips. | `adapter_fixed`; with exact conformance/ownership and `family_local`, `adapter_merge_ready` |
+| **Production Replay (`production_route_stage`)** | Only the historical transaction and its lane-correct state anchor. The trace-derived expected route is retained by the verifier and withheld from the production producer until its output is frozen; no amount is supplied. | Discovery/admission/graph, route enumeration, exact quote/refine, plan/size, encoding/fork final simulation, repayment/conservation and production EV satisfy one causal canonical chain across steps 1–6. | `production_gap_fixed` |
 | **Systemic cohort (`systemic_live`)** | A predeclared positive/negative cohort and the one behavior variable under test. | Coverage/output, same-input fairness, candidate composition, false-positive and resource/performance evidence over the cohort. | Hermes `win|lose|needs_escalation` |
 
 Adapter Replay deliberately bypasses active-pool admission and scanner/backrun discovery so one deterministic
@@ -73,8 +72,10 @@ family-appropriate identity contract: dynamic protocols declare candidate/eviden
 probe; swaps provide observation and an identity resolver over the DEX universe; infrastructure singletons use
 attested `declaredVenues`. A compat adapter supplies none of those promises. Registering quote/plan code alone
 therefore never means that new pools will be discovered automatically.
-The standalone command is `npm run searcher:adapter-family-replay -- --fixture <fixture>`; it is supporting
-evidence and is never a deployment, merge, cleanup or A/B start condition.
+The standalone command is `npm run searcher:adapter-family-replay -- --fixture <fixture>`. Its raw pass proves
+route-pinned execution. The core judgment additionally requires the stable baseline flip, exact family
+coverage/conformance and `family_local` receipt before emitting `adapter_merge_ready`. It never claims
+production discovery or performs deployment/cleanup.
 
 Adapter Replay is always route-pinned equivalence evidence; it makes no claim about production candidate rank,
 top-K admission or scanner stage advance. Those claims require Production Replay with no expected route fed to
@@ -86,10 +87,9 @@ rounding/tolerance override: token rounding remains adapter-owned.
 Fluid DEX is still the explicit legacy execution switch and is absent from family coverage until a Fluid-specific
 fixture passes; moving that switch into a family would not, by itself, discover any additional Fluid instance.
 An Adapter Replay failure may be manually triaged as a gate/harness defect and retained as diagnostic evidence,
-but it cannot be relabelled `adapter_replay_pass`. The canonical checkpoint/final producer, rather than this
-legacy supporting runner, decides the deterministic route claim. A legacy failure does not force production
-code changes when the canonical producer covers the same predicate and a fresh review proves the legacy
-failure is a harness defect; hard safety predicates are never waived.
+but it cannot be relabelled `adapter_replay_pass`. A failed harness does not force production code changes
+when another trusted producer covers the same predicate and a fresh review proves the failure is a harness
+defect; hard safety predicates are never waived.
 
 Every successful Adapter Replay writes a compact, redacted supporting receipt containing the transaction hash, ordered
 route hash, reference-trace route hash, state block and state root, base and adapter commit, execution-family
@@ -145,11 +145,9 @@ family fixture; a shared registry/state/planner/quoter refactor additionally nee
 negative family cohort, and any hot-path/resource change routes to Hermes.
 
 For `production_route_stage`, process startup/smoke is supplemental liveness evidence, not a substitute for
-the six stages. The checkpoint uses a disposable signer and no project `.env` or production private key.
-After merge, guarded bounded-live deployment uses the existing safety envelope; full validation binds the
-exact running SHA/config before any optional resource-isolation pause. Challenger-authored log markers do not
-prove lane activity or a stage pass. `family_execution` does not bind a production universe because it makes
-no production-discovery claim. This runbook grants no new broadcast authority.
+the six stages. Challenger-authored log markers do not prove lane activity or a stage pass.
+`family_execution` does not bind a production universe because it makes no production-discovery claim. This
+runbook grants no new broadcast authority.
 
 A landed backrun transaction is a deterministic causal fixture; the chain cannot prove whether its trigger
 was propagated through the public mempool. Historical validation therefore makes no claim about that past
@@ -157,29 +155,23 @@ transaction's propagation. `private_path=false` means the execution route itself
 the trigger's network provenance was reconstructed. Any change to feed visibility, intake, or source
 admission is `flow-admission` and must go to Hermes A/B rather than using this historical gate.
 
-## Two-tier deterministic workflow
+## Core deterministic workflow
 
-The authoritative lifecycle is the two-tier contract in `docs/research/gates.md`, not the legacy
-route-pinned promotion path:
+The authoritative contract is result-scoped, not a two-phase branch/deployment controller:
 
-1. Freeze one trusted production-equivalent input snapshot, then bind candidate/base SHA, lane-aware
-   `StateAnchor`, complete input-universe/config hashes, the actually materialized graph hash,
-   per-shard completeness vector, family manifest and target-blind expected-route oracle. A family-local
-   rerun may reuse unchanged content-addressed shards and recompute only its impacted family shard.
-2. Run all six `production_route_stage` steps. Only the comparator sees the expected route after producer
-   output is immutable. A larger outer timeout is allowed; production caps, thresholds, ranking, ordering
-   and EV policy are not.
-3. `checkpoint_pass` permits merge to `main` and bounded-live deployment. Record
-   `pending_final_validation`; retain the local/remote branch.
-4. After guarded deployment, rerun all six steps against the exact running merge SHA, deployed normalized
-   config, and attested full production universe/manifest. A fresh review may land as a report-only
-   `origin/main` descendant without redeploying identical runtime code; the validator proves no runtime
-   surface changed after the deployed merge. This run uses exact production limits and covers every mechanically
-   impacted family, and its final envelope binds the retained pre-merge checkpoint receipt by SHA-256.
-5. `final_validated` authorizes removal of the clean candidate worktree and then trusted exact deletion of
-   the retained local/remote branch refs. A semantic
-   failure uses the frozen rollback SHA and keeps the branch; an infrastructure failure leaves the branch
-   pending and is rerun without being called a product failure.
+1. Produce the native baseline and challenger Adapter Replay artifacts for every impacted family fixture.
+   A registered baseline failure must reproduce the same typed
+   `{ownerFamilyId, stageId, code}`; infrastructure failures do not count.
+2. Produce the exact registry-derived ownership/conformance receipt and the mechanical
+   `adapter-family-boundary` receipt.
+3. Run the core judgment with `claim=adapter_merge`. A pass emits
+   `adapter_fixed + adapter_merge_ready` and permits merging only the `family_local` diff. It does not require
+   natural enumeration and does not delete the branch.
+4. If the claim is that a historical production gap is closed, independently run the target-blind producer,
+   freeze its output before the expected route is revealed, and provide one current-schema causal six-stage
+   chain. Run the core judgment with `claim=production_gap`.
+5. Only `production_gap_fixed` closes that production route gap. Ranking, latency, distribution and shared
+   runtime claims still require their systemic cohort/Hermes evidence.
 
 Completeness is route-lane scoped. The DEX shard and every family shard used by the route must be complete. A
 DEX-only route is not globally blocked by an unrelated protocol-family watermark; a route using a protocol
@@ -191,9 +183,10 @@ runtime pool file: reconstruct honestly from frozen inputs and bind the builder/
 missing evidence.
 
 Normal family-local work changes only family-owned implementation/identity/discovery/probe, an optional
-low-level action encoder, thin registration and fixtures/tests. A central interface/coordinator/planner/
-solver/quoter change is a separate `framework` slice. `family_execution` remains a useful fast precheck for
-steps 3–6, but it cannot skip the production discovery/enumeration required by either lifecycle validation.
+low-level action encoder, automatically loaded family production descriptors and fixtures/tests. A central
+interface/coordinator/planner/solver/quoter change is a separate `framework` slice. `family_execution`
+deliberately bypasses production discovery/enumeration; that is why it may prove an adapter merge without
+claiming the production gap fixed.
 
 ## Workflow
 
@@ -234,8 +227,8 @@ steps 3–6, but it cannot skip the production discovery/enumeration required by
    This branch-reuse audit applies to searcher behavior gaps. An auxiliary analysis-tool correction goes
    directly through tests/review to main and does not occupy a searcher-gap branch or audit.
 5. **Group by root cause.** One gap class gets one branch and may carry multiple transactions. Do not create
-   one branch per transaction. Deterministic work uses a short-lived `codex/*` branch and the two-tier
-   lifecycle; only a `systemic_live` experiment occupies literal `ab/*` and B.
+   one branch per transaction. Deterministic family work uses a short-lived `codex/*` branch and the core
+   result judgment; only a `systemic_live` experiment occupies literal `ab/*` and B.
 6. **Build the evidence artifact for the selected track.** For `family_execution`, place one strict schema-v3
    Adapter Replay fixture plus its independently produced landed evidence for every sample in the report-only
    artifact descendant; bind both by SHA-256 in the historical report. Every leg carries a finite
@@ -270,50 +263,31 @@ steps 3–6, but it cannot skip the production discovery/enumeration required by
    scanner, graph/universe, coverage, distribution or performance work does not create these per-sample
    candidate reports. It predeclares a representative positive/negative cohort plus coverage, output,
    fairness and resource criteria, then proceeds through Hermes A/B.
-7. **Run the lightweight checkpoint.** The trusted six-step producer runs from the frozen candidate SHA over
-   the complete frozen inputs. It receives no expected route, amount or target-derived hint. The independent
-   comparator validates the lane-aware anchor, relevant-family proofs, natural route, quote, plan/size,
-   calldata/final sim and EV. `family_execution` replay may run first as a fast diagnostic but cannot satisfy
-   the checkpoint. A registered deterministic baseline failure must have a stable
+7. **Judge the adapter result.** Feed the authenticated native family-execution promotion receipt and exact
+   boundary receipt to the core gate. `adapter_merge_ready` permits merging only the family-owned diff.
+   A registered deterministic baseline failure must have a stable
    `{ownerFamilyId, stageId, code}`; timeout, abort, provider/network and unclassified errors remain
-   infrastructure evidence. A `checkpoint_pass` receipt is the only deterministic-route authorization to
-   merge and enter bounded live.
-8. **Merge, deploy, then close by exact SHA.** Merge the frozen candidate into current `main`, deploy that
-   exact merge SHA through the guarded wrapper, and set `pending_final_validation`. Do not delete the branch.
-   Commit the fresh review as a report-only descendant; do not redeploy unchanged runtime code. Run full
-   validation against the exact deployed SHA/config/materialized graph and every impacted family. Only
-   `final_validated` lets the operator remove the clean candidate worktree and then lets the trusted
-   finalizer exact-delete local/remote refs. A true
-   semantic failure rolls back through the guarded path and retains the branch; an infrastructure failure
-   keeps the deployed process only when safe and retains the branch for rerun. Systemic work instead closes
-   through the Hermes A/B lifecycle.
+   infrastructure evidence.
+8. **Judge production separately when claimed.** Run the target-blind natural producer with exact production
+   caps and freeze its output before comparison. `production_gap_fixed` requires all six current-schema
+   stages, solver-selected sizing, mandatory final sim and positive allowed EV. Failure here does not undo an
+   already proven adapter fix; classify the remaining enumeration/ranking/state/runtime stage. Systemic work
+   closes through the Hermes A/B lifecycle.
 
 ## Commands
 
-Run the lifecycle gate from a clean checkout. Supply the small request defined in
-`docs/research/templates/six-step-validation.md`; the trusted controller runs the producer/comparator and
-writes the receipt. Caller-authored pass envelopes are rejected.
+Run the trusted evidence producers first, then judge their native receipts using the stable input contract in
+`docs/research/templates/six-step-validation.md`.
 
 ```bash
 cd analysis
 
-# Pre-merge development checkpoint.
-node --import tsx src/cli/six-step-validation-gate.ts \
-  --phase checkpoint --request /path/to/checkpoint-request.json \
-  --out /path/to/checkpoint-receipt.json
-
-# After merge + exact-SHA guarded deployment.
-node --import tsx src/cli/six-step-validation-gate.ts \
-  --phase final --request /path/to/final-request.json \
-  --out /path/to/final-receipt.json
-
-# Only after the previous command reports final_validated; run from a non-candidate checkout.
-node --import tsx src/cli/six-step-validation-gate.ts \
-  --phase final --request /path/to/final-request.json \
-  --out /path/to/final-receipt.json --finalize-cleanup
+npm run six-step-validation-gate -- \
+  --input /path/to/semantic-receipt.json \
+  --out /path/to/judgment.json
 ```
 
-Use `docs/research/templates/six-step-validation.md` for the request, generated receipt contract and
+Use `docs/research/templates/six-step-validation.md` for the result contract and
 `docs/research/templates/historical-gap.md` for human context. Raw RPC URLs, keys and unredacted logs remain
-off Git. The legacy `historical-gap-gate` remains available to inspect old reports and supporting
-family-execution artifacts; it is not the new family promotion/cleanup authority.
+off Git. The `historical-gap-gate` remains the trusted producer/authenticator for native family-execution
+promotion receipts; the core judgment does not replace its evidence production and does not own cleanup.

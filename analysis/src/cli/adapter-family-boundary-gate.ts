@@ -16,6 +16,10 @@ import {
 import type {
   FamilyOwnershipManifest,
 } from "../../../listener/src/searcher/test/family-ownership-manifest.js";
+import {
+  semanticJsonSha256,
+  type SemanticJson,
+} from "../../../listener/src/shared/evidence/semantic-six-step.js";
 
 const MANIFEST = "listener/src/searcher/test/family-ownership-manifest.ts";
 const TSX = import.meta.resolve("tsx");
@@ -75,7 +79,7 @@ try {
       return shown.status === 0 ? shown.stdout : null;
     },
   });
-  const output = {
+  const payload = {
     schema_version: 1,
     gate: "adapter-family-boundary",
     baseline_commit: baseline,
@@ -92,6 +96,12 @@ try {
       ? "continue adapter-family implementation"
       : "keep family-local work here; move every listed non-family change " +
         "to a separate branch before continuing",
+  };
+  const output = {
+    ...payload,
+    receipt_sha256: semanticJsonSha256(
+      payload as unknown as SemanticJson,
+    ),
   };
   writeFileSync(resolve(cfg.out), `${JSON.stringify(output, null, 2)}\n`, {
     mode: 0o600,

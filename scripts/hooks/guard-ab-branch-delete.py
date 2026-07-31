@@ -103,9 +103,9 @@ def blocked_message(target: str, *, non_route_codex_cleanup: bool) -> str | None
     if branch.startswith("codex/") and not non_route_codex_cleanup:
         return (
             "BLOCKED: raw deletion of codex/* is forbidden. "
-            "Use `six-step-validation-gate --finalize-cleanup` after final validation, "
-            "or set MEV_NON_ROUTE_CODEX_CLEANUP=1 only for an explicitly authorized "
-            "branch outside the deterministic-route lifecycle.\n"
+            "The semantic judgment gate never deletes branches. "
+            "Set MEV_NON_ROUTE_CODEX_CLEANUP=1 only after explicit authorization "
+            "for this exact non-A/B branch.\n"
         )
     if branch.startswith("ab/") and not ab_cleanup_authorized(branch):
         return (

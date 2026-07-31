@@ -38,7 +38,7 @@ class GuardTest(unittest.TestCase):
         self.assert_blocked("git branch -D main", "main branch deletion")
         self.assert_blocked("git push origin --delete main", "main branch deletion")
 
-    def test_codex_requires_six_step_finalizer(self) -> None:
+    def test_codex_requires_explicit_cleanup_authorization(self) -> None:
         for command in (
             "git branch -d codex/test",
             "git branch -D codex/test",
@@ -48,7 +48,7 @@ class GuardTest(unittest.TestCase):
             "git update-ref -d refs/heads/codex/test",
         ):
             with self.subTest(command=command):
-                self.assert_blocked(command, "six-step-validation-gate --finalize-cleanup")
+                self.assert_blocked(command, "semantic judgment gate never deletes")
 
     def test_explicit_non_route_codex_cleanup_is_untouched(self) -> None:
         for command in (
@@ -103,7 +103,7 @@ class GuardTest(unittest.TestCase):
             "git status",
             "git push origin codex/test",
             "npm run ab-canary-gate -- report.md --phase decision --authorize-cleanup",
-            "npm run six-step-validation-gate -- --phase final --finalize-cleanup",
+            "npm run six-step-validation-gate -- --input receipt.json",
         ):
             with self.subTest(command=command):
                 self.assertEqual(run(command).returncode, 0)

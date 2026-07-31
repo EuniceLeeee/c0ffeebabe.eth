@@ -99,8 +99,9 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
                  (kept from Codex); Codex, handed ONLY raw material as DATA → B blind to A. Agree = high-confidence;
                  differ = the disagreement is the signal. Only the Brief drives code.
 5. IMPLEMENT     Codex writes → Claude review ↔ Codex fix (≤3 passes) → Final Approval or explicit stop.
-6. GATE          deterministic → pre-merge checkpoint, then post-merge/deployed-main full six-step validation
-                 (rule 12, docs/research/gates.md); retain the branch until final_validated.
+6. GATE          adapter family → Adapter Replay flip + family-local boundary = adapter_merge_ready.
+                 production gap → target-blind natural six-step output = production_gap_fixed.
+                 (rule 12, docs/research/gates.md)
                  non-deterministic (latency/inclusion/economics/bid/mempool) → record with carry_to_round, next
                  round's metrics decide.
 7. CARRY         Next round READS this round's conclusion + open findings FIRST; resolve any finding past its
@@ -113,15 +114,13 @@ machine**: the agent chooses/implements/judges; a thin JSON journal plus small m
 safety, fairness, evidence, recovery, and branch lifecycle. Metrics provide evidence but **never own the
 merge decision** (a honeypot filter can correctly reduce `quotePositive` and look worse numerically).
 
-Pinned historical batches begin in `docs/research/HISTORICAL-GAP.md`. Deterministic family/route work uses the
-two-tier six-step lifecycle there: checkpoint before merge, bounded-live main allowed while
-`pending_final_validation`, then full validation against the exact deployed merge SHA before branch cleanup.
-A committed review may be a report-only `origin/main` descendant and does not trigger a redundant deployment
-when no runtime/config/dependency source changed.
+Pinned historical batches begin in `docs/research/HISTORICAL-GAP.md`. Family-local adapter work uses the
+core `adapter_fixed + adapter_merge_ready` result there; natural enumeration is a separate
+`production_gap_fixed` claim. Neither judgment owns deployment or branch cleanup.
 Changes classified as live-distribution dependent (`flow-admission`, `latency`, `candidate-ranking`) or
 systemic scanner/graph/universe/coverage work enter this A/B loop; analysis tool fixes merge separately.
 The legacy A/B six-step command below remains diagnostic for an A/B hypothesis and is not the canonical
-checkpoint/final producer.
+core judgment producer.
 
 - **A = champion:** deployed `/opt/MEV` (`mev-searcher`), bounded-live wallet/BotVM 1.
 - **B = challenger:** literal `ab/*` branch in `/opt/MEV-ab/b` (`mev-ab-b`), bounded-live wallet/BotVM 2.
@@ -410,7 +409,10 @@ in-session timer is required. All node ops use SSM to `i-0ff908dedeec9ebc6`; sec
     - **Stalled:** alive + under hard timeout = running (retrying). Hard timeout + empty `git diff` = one stalled attempt. 2 consecutive = Codex stalled. Never declare stalled before the hard timeout.
     - **One Codex task = one narrow patch** (≤1–3 files, allowed/forbidden files stated). No racing. Resume a fix pass with `codex exec resume <SESSION_ID>` (prefer the recorded id over `--last`).
     - **Fallback:** genuinely stalled → Claude takes over only fully-specified mechanical edits, labelled `authored_by: claude (codex stalled)`; NEVER judgment/design (the turn stops and waits). *(Unattended rounds override the stop-and-wait: fall back to an Opus 4.8 generator — Fable stays the non-author evaluator.)*
-12. **Two-tier six-step gate → see `docs/research/gates.md` (the validation contract).** Deterministic route work needs a pre-merge `checkpoint_pass` and post-merge/deployed-main `final_validated`; build or a route-pinned adapter replay alone is never enough. Systemic/live-distribution work still uses its cohort + Hermes A/B. `turn_class: observability-only` if there is no behavior evidence.
+12. **Core result gate → see `docs/research/gates.md` (the validation contract).** Adapter merge authority is
+    scoped to `adapter_fixed + family_local`; natural enumeration is not part of the Adapter verdict.
+    `production_gap_fixed` separately requires target-blind natural six-step output. Systemic/live-distribution
+    work still uses its cohort + Hermes A/B. `turn_class: observability-only` if there is no behavior evidence.
 13. **Convert findings to fixes — forcing functions.** Rules 1–12 prevent bad changes; none forces impactful ones, so analysis commits masquerade as progress. Counterweights:
     - **Anti-drift cap:** at most ONE consecutive `observability-only` turn; the next Brief MUST change searcher behavior (proven by a rule-12 flip) or STOP + escalate — no third analysis turn.
     - **No orphan findings:** every finding → `owner` + `carry_to_round: N`. Deferred past it blocks new work until done or human-killed.
@@ -440,7 +442,7 @@ in-session timer is required. All node ops use SSM to `i-0ff908dedeec9ebc6`; sec
                         - comparable vs non-comparable before gap classification
                         - protocol constraint vs market PnL
                         - source visibility before funnel attribution
-                        - fixed vs implemented via checkpoint + deployed-main full validation
+                        - adapter_fixed/merge_ready vs production_gap_fixed
       sanity_checks:    - gross/net/block-netting  - same tx/block/source verified
                         - pool-in-graph vs venue-adapter separated  - landed/stale/phantom hint  - no positive-leg-only PnL
       tool_gap:         none | <tool missed: native-ETH delta / one-leg inventory / protocol mint / stale hint / …>

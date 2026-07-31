@@ -140,10 +140,11 @@ Live 日志对六步前两步的证明边界固定如下：
 - **一句话根因：** `<最先失败的生产阶段；已修复时写当前通过到哪一阶段>`
 
 先回答当前结论。不得把历史缺口写成当前缺口，也不得用 `build 通过`、`in_graph=true` 或手工拼路线代替生产可复现证据。
-独立 Adapter Replay runner 通过只记录 supporting `adapter_replay_pass`。只有 target-blind Production Replay
-由生产入口自发发现并通过全部六步，才能记录 `checkpoint_pass`；合并并部署 exact SHA 后再以 production config/
-materialized graph + shard-completeness vector 通过全量六步，才记录 `final_validated` 并把当前生产结论写为
-`已修复/可复现`。
+独立 Adapter Replay runner 的原始结果是 `adapter_replay_pass`。同一 fixture 的稳定 baseline
+失败/未注册 → challenger pass 翻转，再加 exact family coverage、conformance 和 `family_local` boundary，
+可记录 `adapter_fixed + adapter_merge_ready`，允许只合并 family boundary 内的 adapter 改动。它不要求自然
+枚举，也不能把生产 gap 写成已修复。只有 target-blind 生产入口自发枚举、solver 自选 amount、mandatory final
+sim 和正 EV 全部通过，才能记录 `production_gap_fixed` 并把当前生产结论写为 `已修复/可复现`。
 
 ## 2. 调用工具
 
@@ -217,7 +218,7 @@ tx 时刻 pin，**当前状态**用 §1 审计基线 SHA。当前状态词表：
 
 | 轨道 | 能证明什么 | 六步要求 |
 |---|---|---|
-| `family_execution` | trace-proven route 上，一个 quote-bearing `RouteLeg` execution family 的 quote、plan/size、encode、final sim、守恒与 EV 正确；funding-only family 不作为本轨 subject | route 可固定，amount/quote/plan/calldata 不得固定；步骤 1–2 明记 `bypassed`，步骤 3–6 必须由生产代码通过；结论最多是 supporting `adapter_replay_pass` |
+| `family_execution` | trace-proven route 上，一个 quote-bearing `RouteLeg` execution family 的 quote、plan/size、encode、final sim、守恒与 EV 正确；funding-only family 不作为本轨 subject | route 可固定，amount/quote/plan/calldata 不得固定；步骤 1–2 明记 `bypassed`，步骤 3–6 必须由生产代码通过；稳定 baseline flip + exact coverage/conformance + `family_local` 可得 `adapter_merge_ready` |
 | `production_route_stage` | 生产漏斗能自发发现并推进这条历史路线 | 生产运行只能收到交易与状态锚；expected route 由 verifier 保留，等输出冻结后再比较；六步按实际到达状态记录 |
 | `systemic_live` | intake、admission、universe、ranking、分布、延迟、并发、deadline 或资源行为 | 单笔六步仅作诊断；正式结论来自预声明正负 cohort、同输入公平性、资源/性能和 Hermes A/B |
 
@@ -228,7 +229,7 @@ lane / opportunity_block / base_block / base_block_hash / base_state_root /
 applied_prefix_tx_hashes / trigger_tx_hash / target_tx_index / effective_state_hash
 ```
 
-六个 v3 阶段都绑定同一个 anchor hash。只有 block number、今日 latest state、整个目标块执行后的状态或被
+六个当前 v4 阶段都绑定同一个 anchor hash。只有 block number、今日 latest state、整个目标块执行后的状态或被
 重排/删减的 prefix 都不成立。
 
 统一的六步顺序如下。状态词表固定为 `pass | fail | reject | bypassed | not_reached`：
@@ -248,27 +249,22 @@ baseline→fix 的 stage advance 与重构等价性是比较共同执行到的�
 阶段如何前进；等价重构比较所有受影响 fixture 的规范化核心字段。全局
 registry/state/planner/quoter 重构还必须有跨 family 正负 cohort；触及热路径、资源或分布就进入 `systemic_live`。
 
-Adapter Replay 用 trace-proven route，但不提供 amount、quote、plan 或 calldata；步骤 1–2 必须诚实写 `bypassed`，
-runner 通过只记 supporting `adapter_replay_pass`。它不证明 production discovery、candidate rank 或 stage
-advance，也不能单独授权 merge/deploy/delete。只有 Production Replay 不向 producer 提供 route/amount，并由生产
-入口自然完成全部六步，才能进入下面的两级生命周期。
+Adapter Replay 用 trace-proven route，但不提供 amount、quote、plan 或 calldata；步骤 1–2 必须诚实写
+`bypassed`。原始 pass 结合稳定 baseline flip、exact family coverage/conformance 与 `family_local` receipt，
+核心判断可输出 `adapter_fixed + adapter_merge_ready`。它不证明 production discovery、candidate rank 或
+stage advance，且权限只覆盖 family boundary 内的改动。
 
-生命周期 gate 的输入是 run request，不是人工构造的 pass receipt。controller 只用 sample tx 确定 canonical
-parent state，并从隔离枚举子进程删除所有 expected-route/amount 控制；子进程先落盘并哈希实际 materialized
-graph、逐 shard completeness 与自然 route set，
-comparator 再检查 sample route。status、六阶段 v3 record 与因果 hash chain 全由 gate 生成。
+Production Replay 不向 producer 提供 route/amount；producer 输出先冻结，verifier 后读取 expected route。
+核心判断只消费当前 v4 因果链，并分别输出以下结果：
 
-| 生命周期 | 输入与限制 | 通过后允许什么 |
+| 判断 | 输入与限制 | 通过后允许什么 |
 |---|---|---|
-| `checkpoint_pass`（合并前） | 一次冻结 production-equivalent inputs；绑定 candidate/base/state/input universe/config/materialized graph/shard completeness/family manifest；哈希不变的 shard 可复用；expected route 仅在 producer 输出冻结后比较；只可放宽 runner 外层 timeout，不能改生产 cap/rank/top-K/threshold/EV 或缩图/强插目标 | 合并到 main，并在既有安全 envelope 下 bounded-live；状态为 `pending_final_validation`，不得删 branch |
-| `final_validated`（合并并部署后） | 对实际运行的 exact merge SHA、normalized effective config、经 attestation 对齐的完整 production universe/manifest、精确生产参数和全部受影响 family 重跑六步；review 可作为无 runtime diff 的 report-only main descendant，不触发相同代码重部署 | 先移除 clean candidate worktree，再由 trusted finalizer 删除 local/remote branch refs |
+| `adapter_merge_ready` | 原生、已认证的 family-execution promotion receipt；稳定 baseline flip；exact impacted family/fixture coverage；conformance；`family_local` boundary | 只合并 family-owned adapter diff；不宣称自然枚举或生产 gap fixed |
+| `production_gap_fixed` | target-blind natural output；同一 run/state/route；无 forced selection；solver amount；mandatory final sim；Step 6 `allow` 且正 EV | 关闭这笔 production route gap；不自动部署或删除 branch |
 
-full semantic fail 使用冻结 rollback SHA 走 guarded rollback 并保留 branch；基础设施失败不伪装 semantic
-fail，安全时 live 可继续，但 branch 保持 `pending_final_validation` 直至重跑。旧 harness/Hermes 可辅助定位；
-当 canonical 六步已经覆盖本声明且旧工具被独立证明是假阴性时，不为迎合旧工具修改生产代码。状态锚、偿还、
-守恒、standing position、SHA/config 和钱包/签名等硬安全失败永远不能人工豁免。
-当前 canonical controller 只支持 `block_scan_standing`；backrun 在完整 ordered-prefix producer 落地前最多
-是 legacy replay/Hermes 证据或 `implemented_not_validated`，不能取得两级 lifecycle verdict。
+基础设施失败不伪装 semantic fail。旧 harness/Hermes 可辅助定位；当 canonical evidence 已覆盖本声明且旧工具
+被独立证明是假阴性时，不为迎合旧工具修改生产代码。状态锚、偿还、守恒、standing position、SHA/config 和
+钱包/签名等硬安全失败永远不能人工豁免。
 若 diff 同时影响多个 family，必须由 base/challenger production registry 与 active ActionAdapter catalog 自动派生
 所有 owner；去重后的 changed-owner 集合必须与 fixture subject 集合完全相等。共享实现文件不能只验一个 owner，
 也不能靠手工协议清单声明“其余不受影响”。baseline 的可翻转失败还必须具备稳定
@@ -339,27 +335,26 @@ capability id 为主，行号为辅。若当前已修复，列“能力现在落
 - **生效配置锚：** `<轻量：live process/deploy/fallback manifest + SHA；全量另填 replay manifest + SHA、按消费阶段映射；diff=none | 预声明实验差异 | trusted acceptance-only override + 授权 SHA>`
 - **运行时视图锚：** `<轻量：live view count+hash+目标池/edge membership；全量另填 replay view 与差异解释>`
 - **Live 日志前两步：** `<not-covered | discovery_admission_graph 证据/结果；route_enumeration lifecycle 证据/结果；缺失时写证据不足>`
-- **验收轨道 / 层级：** `<family_execution / supporting Adapter Replay | production_route_stage / pre-merge checkpoint | production_route_stage / deployed-main full validation | systemic_live / cohort+A/B>`
+- **验收轨道 / 层级：** `<family_execution / adapter_fixed+adapter_merge_ready | production_route_stage / production_gap_fixed | systemic_live / cohort+A/B>`
 - **baseline：** `<first failing stage>`
 - **fix commit：** `<sha or none>`
 - **可信入口：** `<在审计 SHA 的 gate/runbook/manifest 中发现的 trusted producer+verifier 及 source hash；source identity 仅作防漂移元数据，不参加六步语义等价>`
 - **期望翻转：** `<canonical 首败阶段 fail/not_reached → pass，或受影响 fixture 的六步核心字段等价>`
-- **实际结果：** `<adapter_replay_pass | checkpoint_pass | pending_final_validation | final_validated | stage result | cohort/A-B result>`
+- **实际结果：** `<adapter_replay_pass | adapter_fixed | adapter_merge_ready | production_gap_fixed | stage result | cohort/A-B result>`
 - **生产是否自发产出路线：** `是 | 否 | 不适用（family_execution 的步骤 1–2 bypassed）`
 - **是否提供 route / amount：** `<Adapter Replay 可 route-pinned、不得提供 amount/quote/plan/calldata；Production Replay 的 producer 两者都不得获得，expected route 仅由 verifier 在输出冻结后读取>`
 - **逐 wei / calldata / EV：** `<quote amounts；calldata/script hash；final-sim profit/gas；EV decision>`
-- **是否需要 live：** `<确定性 route correctness 不需要 Hermes paired A/B，但 final_validated 必须对实际
-  deployed merge/process 做 attestation；systemic scanner/universe/分布/性能、延迟或 intake 可见性需要 Hermes live A/B>`
+- **是否需要 live：** `<adapter family execution correctness 不需要 Hermes paired A/B；production_gap_fixed 需要可信 target-blind production receipt，但不必绑定当前内部架构；systemic scanner/universe/分布/性能、延迟或 intake 可见性需要 Hermes live A/B>`
 
 route-stage 功能修复必须由同一历史输入从第一个失败阶段翻转；family 等价重构必须证明所有受影响 fixture 的 §5
 核心字段一致；extensions 不参与语义等价。共享热路径或跨 family 重构另做 cohort 与 live performance。六步不作为
 无关系统性改动的部署/决策开关；后者按预声明 cohort 和 A/B 验收。trusted producer/verifier 从审计基线或独立可信
 tooling 读取，challenger 不得随实现一起弱化。若 sender/full-prefix 审计发现未声明的多交易依赖，先修正交易分类和
 状态锚，再谈翻转。
-Adapter Replay runner 只证明已知 route 的 execution-family 能力并产出 supporting
-`adapter_replay_pass`，不能升级为独立 promotion verdict。只有不向 producer 提供 route/amount、由生产入口
-自发发现的 Production Replay 才能先产出 `checkpoint_pass`；合并、部署 exact SHA 并重跑 full validation 后
-才能产出 `final_validated`。
+Adapter Replay runner 的原始结果是 `adapter_replay_pass`；稳定 baseline flip 加 exact family
+coverage/conformance 和 `family_local` boundary 后，可由核心判断升级为 `adapter_merge_ready`。只有不向
+producer 提供 route/amount、由生产入口自发发现并通过完整六步的 Production Replay 才能产出
+`production_gap_fixed`。
 
 ## 9. 工具一致性
 
@@ -388,7 +383,7 @@ Adapter Replay runner 只证明已知 route 的 execution-family 能力并产出
 - 该示例当时的 `blockscan-hunt-tx149.ts` 报告记录了冻结 production universe 与
   `not_admitted → final_sim_success`、`net_profit_raw=442380`。按当前合同复用这份证据前，还必须重新证明 expected
   route 没有进入枚举、筛选或 solve-set 选择；旧报告本身不能自动升级为当前的
-  `checkpoint_pass` 或 `final_validated`。
+  `production_gap_fixed`。
 - 该示例当时判定 main 已修复且不需要再补 adapter；按当前合同重新引用这个结论时必须重跑
   `production_route_stage`。历史改动也不只是 adapter：rank 89 路线还依赖通用 block-scan candidate cap 从 20
   扩到 100，因此不能拿 family replay 单独证明生产会选中它。

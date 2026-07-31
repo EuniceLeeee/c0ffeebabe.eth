@@ -1,62 +1,50 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 const CLI = resolve("src/cli/six-step-validation-gate.ts");
-const TSX_IMPORT_URL = import.meta.resolve("tsx");
+const TSX = import.meta.resolve("tsx");
 
-test("gate rejects a caller-authored pass envelope instead of validating it", () => {
-  const temp = mkdtempSync(resolve(tmpdir(), "six-step-cli-test-"));
+test("core gate reads semantic receipts and rejects lifecycle flags", () => {
+  const root = mkdtempSync(resolve(tmpdir(), "six-step-judgment-cli-"));
   try {
-    const fake = resolve(temp, "handwritten-pass.json");
-    writeFileSync(fake, JSON.stringify({
-      status: "final_validated",
-      production_route_stage: Array(6).fill({ status: "pass" }),
+    const input = resolve(root, "input.json");
+    const output = resolve(root, "output.json");
+    writeFileSync(input, JSON.stringify({
+      schema_version: 1,
+      gate: "six-step-judgment",
+      claim: "adapter_merge",
+      adapter_replays: [],
     }));
-    const result = spawnSync(process.execPath, [
+    const judged = spawnSync(process.execPath, [
       "--import",
-      TSX_IMPORT_URL,
+      TSX,
       CLI,
-      "--evidence",
-      fake,
+      "--input",
+      input,
+      "--out",
+      output,
+    ], { encoding: "utf8" });
+    assert.equal(judged.status, 1);
+    const receipt = JSON.parse(judged.stdout);
+    assert.equal(receipt.gate, "six-step-judgment");
+    assert.equal(receipt.adapter_merge_ready, false);
+    assert.match(receipt.errors.join("\n"), /promotion_receipt/);
+
+    const retired = spawnSync(process.execPath, [
+      "--import",
+      TSX,
+      CLI,
       "--phase",
       "final",
-    ], {
-      cwd: resolve("."),
-      encoding: "utf8",
-      shell: false,
-    });
-    assert.equal(result.status, 1);
-    const output = JSON.parse(result.stdout) as {
-      verdict: string;
-      errors: string[];
-    };
-    assert.equal(output.verdict, "fail");
-    assert.match(output.errors.join("\n"), /unknown option --evidence/);
+      "--finalize-cleanup",
+    ], { encoding: "utf8" });
+    assert.equal(retired.status, 1);
+    assert.match(retired.stdout, /usage: --input/);
   } finally {
-    rmSync(temp, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   }
-});
-
-test("gate refuses cleanup outside a generated final run", () => {
-  const result = spawnSync(process.execPath, [
-    "--import",
-    TSX_IMPORT_URL,
-    CLI,
-    "--finalize-cleanup",
-  ], {
-    cwd: resolve("."),
-    encoding: "utf8",
-    shell: false,
-  });
-  assert.equal(result.status, 1);
-  const output = JSON.parse(result.stdout) as {
-    verdict: string;
-    cleanup?: unknown;
-  };
-  assert.equal(output.verdict, "fail");
-  assert.equal(output.cleanup, undefined);
 });
