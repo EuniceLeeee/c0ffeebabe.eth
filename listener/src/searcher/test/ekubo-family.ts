@@ -169,6 +169,40 @@ async function main(): Promise<void> {
     scanFilters.some((filter) => filter.fromBlock === EKUBO_CORE_DEPLOY_BLOCK),
     "unresolved PoolKeys must not use an arbitrary historical lookback",
   );
+  const largeHistoricalIssues = Array(150_000).fill("historical scan issue");
+  const largeIssueMaterialization = await ekuboPoolDiscovery.materialize({
+    familyId: EKUBO_FAMILY_ID,
+    event,
+    logs: [knownSwap],
+    retainedPools: [],
+    retryablePools: [],
+    isKnownPool: () => false,
+    fromBlock: TARGET_BLOCK,
+    toBlock: TARGET_BLOCK,
+    minSwaps: 1,
+    admissionPolicy: STRICT_IDENTITY_ADMISSION,
+    historicalResolution: "bounded",
+    backend: {
+      getLogs: async () => [],
+      call: async () => {
+        throw new Error("unexpected materializer call");
+      },
+    },
+    scanLogs: async (filter) => ({
+      logs: filter.fromBlock === EKUBO_CORE_DEPLOY_BLOCK
+        ? [ORACLE_INITIALIZE]
+        : [],
+      complete: true,
+      issues: filter.fromBlock === EKUBO_CORE_DEPLOY_BLOCK
+        ? largeHistoricalIssues
+        : [],
+    }),
+  } satisfies LandedPoolMaterializationContext);
+  assert.equal(
+    largeIssueMaterialization.issues?.length,
+    largeHistoricalIssues.length,
+    "large historical issue sets must materialize without argument-list overflow",
+  );
   const knownPool = requirePool(materialized.pools, known.poolId);
   const unknownPool = requirePool(materialized.pools, unknownPoolId);
 

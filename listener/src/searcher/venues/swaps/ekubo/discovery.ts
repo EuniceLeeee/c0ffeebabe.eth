@@ -85,7 +85,7 @@ export const ekuboPoolDiscovery = Object.freeze({
         toBlock: context.toBlock,
       });
       historicalComplete = historical.complete;
-      issues.push(...historical.issues);
+      for (const issue of historical.issues) issues.push(issue);
       for (const [poolId, parsed] of parseInitializeLogs(historical.logs)) {
         initialized.set(poolId, parsed);
       }
