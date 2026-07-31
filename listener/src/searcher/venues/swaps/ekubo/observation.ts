@@ -81,6 +81,13 @@ export const ekuboSwapObservation = createStrictSwapObservation({
         parsed.delta0,
         parsed.delta1,
       );
+      if (!edge) {
+        return Object.freeze({
+          logIndex: trigger.logIndex,
+          mutationOnlyReason:
+            `canonical Ekubo swap direction is absent from the admitted graph`,
+        });
+      }
       return Object.freeze({
         logIndex: trigger.logIndex,
         impact: impactForEdge(
@@ -99,7 +106,7 @@ function edgeForBalanceUpdate(
   poolId: string,
   delta0: bigint,
   delta1: bigint,
-): TokenEdge {
+): TokenEdge | null {
   const zeroForOne = delta0 > 0n && delta1 < 0n;
   const oneForZero = delta1 > 0n && delta0 < 0n;
   if (!zeroForOne && !oneForZero) {
@@ -119,10 +126,7 @@ function edgeForBalanceUpdate(
       : candidate.tokenIn.toLowerCase() === candidate.poolToken1.toLowerCase() &&
           candidate.tokenOut.toLowerCase() === candidate.poolToken0.toLowerCase();
   });
-  if (!edge) {
-    throw new Error(`Ekubo pool ${poolId} balance update has no admitted edge`);
-  }
-  return edge;
+  return edge ?? null;
 }
 
 function impactForEdge(

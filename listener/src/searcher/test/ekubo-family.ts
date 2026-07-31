@@ -182,6 +182,47 @@ async function main(): Promise<void> {
     await quoteWithUpdate(knownForward, parsedSwap),
     -parsedSwap.delta1,
   );
+  const reverseKnown = swapLog(
+    known.poolId,
+    `0x${EKUBO_ROUTER.slice(2).toLowerCase()}` +
+      known.poolId.slice(2) +
+      packBalanceUpdate(-2n, 1n).slice(2) +
+      ethers.ZeroHash.slice(2),
+  );
+  const partialGraphLogs = [knownSwap, reverseKnown].map((log) => ({
+    address: log.address,
+    topics: [...log.topics],
+    data: log.data,
+    blockNumber: TARGET_BLOCK,
+  }));
+  const partialGraphGeneration = createVictimSourceGeneration({
+    sourceBlock: TARGET_BLOCK - 1,
+    sourceBlockHash: `0x${"11".repeat(32)}`,
+    receiptId: "ekubo-partial-graph-fixture",
+    receiptBlockNumber: TARGET_BLOCK,
+    receiptBlockHash: `0x${"22".repeat(32)}`,
+    receiptParentBlockHash: `0x${"11".repeat(32)}`,
+    receiptTransactionHash:
+      "0x73078d54fe1bac89e934d71a574e290ddb98e9d9a2e44c6ec7ae2a05cc88c823",
+    logs: partialGraphLogs,
+    logsCompleteness: "complete-receipt",
+  });
+  const partialGraphTransition = await detectImpactTransitionFromLogs(
+    partialGraphLogs,
+    [knownForward],
+    partialGraphGeneration,
+  );
+  assert.equal(
+    partialGraphTransition.complete,
+    true,
+    JSON.stringify(partialGraphTransition.unresolved),
+  );
+  assert.equal(partialGraphTransition.steps.length, 1);
+  assert.equal(partialGraphTransition.mutations.length, 1);
+  assert.match(
+    partialGraphTransition.mutations[0].reason,
+    /direction is absent from the admitted graph/,
+  );
 
   const receiptLogs = [{
     address: knownSwap.address,
