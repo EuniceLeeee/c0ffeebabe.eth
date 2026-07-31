@@ -108,17 +108,18 @@ export function behaviorProvenUnavailableViewQuote(
   return Object.freeze({ status: "unavailable", reason: normalized });
 }
 
-const FACTORY_OWNED_PURE_DERIVE_MIDS = new WeakSet<object>();
+export interface FactoryOwnedDeriveMidsPurityCase {
+  readonly snapshot: ViewQuoteSnapshot;
+  readonly edges: readonly TokenEdge[];
+}
 
-/**
- * True only when the shared factory owns every callback reached by
- * deriveMids. Families with a custom state-key callback remain unmarked and
- * still require an adapter-specific poisoned-I/O purity fixture.
- */
-export function hasFactoryOwnedPureDeriveMids(
+const FACTORY_OWNED_DERIVE_MIDS_PURITY_CASES =
+  new WeakMap<object, FactoryOwnedDeriveMidsPurityCase>();
+
+export function factoryOwnedDeriveMidsPurityCase(
   capability: BlockScanStateCapability,
-): boolean {
-  return FACTORY_OWNED_PURE_DERIVE_MIDS.has(capability);
+): FactoryOwnedDeriveMidsPurityCase | null {
+  return FACTORY_OWNED_DERIVE_MIDS_PURITY_CASES.get(capability) ?? null;
 }
 
 /**
@@ -133,7 +134,8 @@ export function hasFactoryOwnedPureDeriveMids(
 export function createCurrentBlockViewQuoteCapability<Static>(
   config: CurrentBlockViewQuoteConfig<Static>,
 ): BlockScanStateCapability<ViewQuoteSchema<Static>, ViewQuoteSnapshot> {
-  const stateKey = config.stateKey ?? edgeInstanceKey;
+  const configuredStateKey = config.stateKey;
+  const stateKey = configuredStateKey ?? edgeInstanceKey;
   const kind = config.kind;
   const capability: BlockScanStateCapability<
     ViewQuoteSchema<Static>,
@@ -372,10 +374,43 @@ export function createCurrentBlockViewQuoteCapability<Static>(
     },
   };
   const frozen = Object.freeze(capability);
-  if (config.stateKey === undefined) {
-    FACTORY_OWNED_PURE_DERIVE_MIDS.add(frozen);
+  if (configuredStateKey === undefined) {
+    FACTORY_OWNED_DERIVE_MIDS_PURITY_CASES.set(
+      frozen,
+      createFactoryOwnedDeriveMidsPurityCase(config.edgeAdapterIds),
+    );
   }
   return frozen;
+}
+
+function createFactoryOwnedDeriveMidsPurityCase(
+  edgeAdapterIds: ReadonlySet<string>,
+): FactoryOwnedDeriveMidsPurityCase {
+  const adapterId = [...edgeAdapterIds].sort()[0];
+  if (!adapterId) {
+    throw new Error("view-quote capability must own at least one edge adapter");
+  }
+  const edge: TokenEdge = Object.freeze({
+    adapterId,
+    target: "0x1111111111111111111111111111111111111111",
+    tokenIn: "0x2222222222222222222222222222222222222222",
+    tokenOut: "0x3333333333333333333333333333333333333333",
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+  });
+  const snapshot: ViewQuoteSnapshot = Object.freeze({
+    stateKey: edgeInstanceKey(edge),
+    quotes: new Map([[
+      routeKey(edge),
+      Object.freeze({ amountIn: 1n, amountOut: 2n }),
+    ]]),
+    unavailable: new Map(),
+  });
+  return Object.freeze({
+    snapshot,
+    edges: Object.freeze([edge]),
+  });
 }
 
 function buildViewQuoteReads<Static>(

@@ -39,7 +39,7 @@ import {
 } from "../venues/swaps/blockscan-state-shared.js";
 import {
   createCurrentBlockViewQuoteCapability,
-  hasFactoryOwnedPureDeriveMids,
+  factoryOwnedDeriveMidsPurityCase,
 } from "../venues/swaps/view-quote-blockscan-state.js";
 import {
   curvePlainBlockScanState,
@@ -169,6 +169,7 @@ await runBalancerV3();
 await runDodoV2();
 await runFluidDex();
 await runViewQuoteDecodeAmountBinding();
+runViewQuoteFactoryStateKeyCaptureBoundary();
 
 function runConcentratedLiquidityPrecisionBoundary(): void {
   const edges = twoTokenEdges("univ3-swap").map((edge) => ({
@@ -224,9 +225,19 @@ function runConcentratedLiquidityPrecisionBoundary(): void {
 }
 const pureCoveredFamilyIds = new Set(pureFixtureFamilyIds);
 for (const family of PRODUCTION_ADAPTER_FAMILIES.pricing("swap")) {
-  if (hasFactoryOwnedPureDeriveMids(family.pricingState)) {
-    pureCoveredFamilyIds.add(family.id);
-  }
+  const factoryCase = factoryOwnedDeriveMidsPurityCase(family.pricingState);
+  if (!factoryCase) continue;
+  const purity = assertPureSynchronousDeriveMids({
+    capability: family.pricingState,
+    snapshot: factoryCase.snapshot,
+    edges: factoryCase.edges,
+    harness: createAmbientIoPoisonHarness(),
+  });
+  assert(
+    purity.edgeKeys.length > 0,
+    `${family.id}: factory purity case must exercise a non-empty mid`,
+  );
+  pureCoveredFamilyIds.add(family.id);
 }
 assert.deepEqual(
   [...pureCoveredFamilyIds].sort(),
@@ -290,6 +301,40 @@ async function runViewQuoteDecodeAmountBinding(): Promise<void> {
     2,
     "the mid is derived from that same selected amount",
   );
+}
+
+function runViewQuoteFactoryStateKeyCaptureBoundary(): void {
+  let getterReads = 0;
+  let customStateKeyCalls = 0;
+  const config = {
+    kind: "external-swap" as const,
+    edgeAdapterIds: new Set(["fixture-custom-state-key"]),
+    compileGroup: () => Object.freeze({}),
+    quoteRead(): never {
+      throw new Error("state-key capture fixture must not build reads");
+    },
+    decodeQuote: () => 1n,
+  };
+  Object.defineProperty(config, "stateKey", {
+    configurable: false,
+    enumerable: true,
+    get() {
+      getterReads += 1;
+      return () => {
+        customStateKeyCalls += 1;
+        return "family-custom-state-key";
+      };
+    },
+  });
+  const capability = createCurrentBlockViewQuoteCapability(config);
+  assert.equal(getterReads, 1, "view-quote stateKey config is captured once");
+  assert.equal(
+    factoryOwnedDeriveMidsPurityCase(capability),
+    null,
+    "custom stateKey capability requires its own family purity fixture",
+  );
+  capability.stateKey(twoTokenEdges("fixture-custom-state-key")[0]);
+  assert.equal(customStateKeyCalls, 1);
 }
 
 async function runUniV2(): Promise<void> {
