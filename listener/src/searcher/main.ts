@@ -373,9 +373,10 @@ interface LiveConfig {
   evGate: boolean;
   /** Minimum kept profit (ETH wei) after gas + bribe, for the EV gate. */
   minNetEth: bigint;
-  /** Discount applied to simulated profit before the EV gate AND bribe sizing,
-   *  in bps. Scale-invariant margin for sim-vs-real error; calibrate from the
-   *  reconciliation of landed txs. 2000 = trust 80% of sim profit. */
+  /** Optional discount applied to simulated profit before the EV gate and
+   *  bribe sizing, in bps. The production default is zero because mandatory
+   *  final sim already supplies the measured execution result; operators may
+   *  set an explicit nonzero value for a separately validated risk policy. */
   profitHaircutBps: number;
   /** Allow broadcasting approximate hash-only (synthetic-overlay) bundles. */
   allowHashOnlySubmit: boolean;
@@ -849,7 +850,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     bribeAllAboveGas: process.env.SEARCHER_BRIBE_ALL_ABOVE_GAS === "1",
     evGate: process.env.SEARCHER_EV_GATE === "1",
     minNetEth: BigInt(process.env.SEARCHER_MIN_NET_ETH ?? "0"),
-    profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "2000"),
+    profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "0"),
     allowHashOnlySubmit: process.env.SEARCHER_ALLOW_HASHONLY_SUBMIT === "1",
     allowHashOnlyMevShareSubmit: process.env.SEARCHER_SUBMIT_HASHONLY_MEVSHARE === "1",
     victimSourceFilter: {

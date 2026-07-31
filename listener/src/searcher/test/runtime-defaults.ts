@@ -139,6 +139,49 @@ const mainSource = readFileSync(
   new URL("../main.ts", import.meta.url),
   "utf8",
 );
+const adapterReplaySource = readFileSync(
+  new URL("./adapter-replay.ts", import.meta.url),
+  "utf8",
+);
+const productionReplaySource = readFileSync(
+  new URL("./production-replay.ts", import.meta.url),
+  "utf8",
+);
+const backrunHuntSource = readFileSync(
+  new URL("./backrun-hunt.ts", import.meta.url),
+  "utf8",
+);
+const blockscanHuntSource = readFileSync(
+  new URL("./blockscan-hunt.ts", import.meta.url),
+  "utf8",
+);
+const deployHaircutStripCount =
+  deployNode.match(/\|SEARCHER_PROFIT_HAIRCUT_BPS\|/g)?.length ?? 0;
+const deployHaircutWriteCount =
+  deployNode.match(/echo "SEARCHER_PROFIT_HAIRCUT_BPS=\$PROFIT_HAIRCUT_BPS"/g)
+    ?.length ?? 0;
+assert(
+  mainSource.includes(
+    'process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "0"',
+  ) &&
+    adapterReplaySource.includes("profitHaircutBps: 0,") &&
+    productionReplaySource.includes(
+      'numberEnv("SEARCHER_PROFIT_HAIRCUT_BPS", 0)',
+    ) &&
+    backrunHuntSource.includes(
+      'process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "0"',
+    ) &&
+    blockscanHuntSource.includes(
+      'process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "0"',
+    ) &&
+    deployNode.includes(
+      'PROFIT_HAIRCUT_BPS="${SEARCHER_PROFIT_HAIRCUT_BPS:-0}"',
+    ) &&
+    deployHaircutStripCount === 2 &&
+    deployHaircutWriteCount === 2,
+  "live, historical harnesses and deploy must share the zero-haircut default",
+);
+console.log("[runtime-defaults] profit haircut defaults to zero everywhere: PASS");
 const pricingSourceModeSource = readFileSync(
   new URL("../blockscan-pricing-source-mode.ts", import.meta.url),
   "utf8",
