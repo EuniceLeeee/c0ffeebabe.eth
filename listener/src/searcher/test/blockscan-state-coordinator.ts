@@ -951,6 +951,7 @@ async function graphIncompleteSwapFamilyPreservesHealthySibling(): Promise<void>
     graph: incompleteSwapGraph,
     families: families().list,
     deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "startup-bootstrap",
   });
   assert.equal(result.status, "degraded");
   if (result.status !== "degraded") {
@@ -958,10 +959,253 @@ async function graphIncompleteSwapFamilyPreservesHealthySibling(): Promise<void>
   }
   assert.deepEqual(result.snapshot.resolvedFamilyIds, ["protocol:fixture"]);
   assert.deepEqual(result.snapshot.incompleteFamilyIds, ["univ2-standard"]);
+  assert.equal(result.snapshot.mids.size, 3);
+  assert(
+    readTargets.includes(SWAP_POOL.toLowerCase()) &&
+      readTargets.includes(PROTOCOL_POOL.toLowerCase()),
+    "startup bootstrap may establish admitted swap state while retaining degraded topology",
+  );
+  assert(
+    result.issues.some((issue) =>
+      issue.kind === "graph-incomplete" &&
+      issue.familyId === "univ2-standard"
+    ),
+    "bootstrap must retain the topology coverage gap",
+  );
+
+  readTargets.length = 0;
+  const withoutBootstrap = await new BlockScanStateCoordinator(backend).prepare({
+    graph: incompleteSwapGraph,
+    families: families().list,
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "proof-scoped",
+  });
+  assert.equal(withoutBootstrap.status, "degraded");
+  if (withoutBootstrap.status !== "degraded") {
+    throw new Error("expected first steady generation to fail closed");
+  }
+  assert.equal(withoutBootstrap.snapshot.mids.size, 1);
+  assert.deepEqual(
+    readTargets,
+    [PROTOCOL_POOL.toLowerCase()],
+    "only explicit startup bootstrap may establish an initial lagging swap family",
+  );
+}
+
+async function graphSourceHashMismatchBlocksOwningFamily(): Promise<void> {
+  const readTargets: string[] = [];
+  const backend: BlockScanStateReadBackend = {
+    async readBatch(_lane, reads, control) {
+      readTargets.push(...reads.map((read) => read.to.toLowerCase()));
+      return reads.map((read) =>
+        successfulRead(read, control.sourceGeneration)
+      );
+    },
+    async verifyCanonicalSource() {},
+  };
+  const hashMismatchGraph = createVerifiedGraphView({
+    id: "graph-source-hash-mismatch",
+    generation: 1,
+    sourceBlock: SOURCE_BLOCK,
+    sourceBlockHash: SOURCE_HASH,
+    completenessWatermark: SOURCE_BLOCK,
+    perSourceCoverage: [{
+      familyId: "univ2-standard",
+      sourceId: "landed-event:fixture",
+      sourceFingerprint: "fixture-swap-wrong-fork-v1",
+      completeThroughBlock: SOURCE_BLOCK,
+      completeThroughHash: `0x${"cd".repeat(32)}`,
+    }],
+    edges: [swapForward, swapReverse, protocol],
+  });
+  const result = await new BlockScanStateCoordinator(backend).prepare({
+    graph: hashMismatchGraph,
+    families: families().list,
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "startup-bootstrap",
+  });
+  assert.equal(result.status, "degraded");
+  if (result.status !== "degraded") {
+    throw new Error("expected source-hash mismatch degradation");
+  }
+  assert.deepEqual(result.snapshot.resolvedFamilyIds, ["protocol:fixture"]);
+  assert.deepEqual(result.snapshot.incompleteFamilyIds, ["univ2-standard"]);
   assert.equal(result.snapshot.mids.size, 1);
   assert(
     readTargets.every((target) => target === PROTOCOL_POOL.toLowerCase()),
-    "an incomplete swap family must issue no state reads while a healthy sibling remains current-N",
+    "same-height source hash mismatch must remain blocked during bootstrap",
+  );
+}
+
+async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void> {
+  const backend = new StateKeyIncrementalBackend();
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const swapFamily = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: incrementalFakeCapability(),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+  const protocolCalls = { schema: 0, reads: 0, derives: 0 };
+  const protocolFamily = registerBlockScanStateFamily({
+    familyId: "protocol:fixture",
+    lane: "protocol",
+    capability: fakeCapability("protocol", protocolCalls),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "protocol-action",
+  });
+  const laggingGraph = (
+    generation: number,
+    edges: readonly TokenEdge[] = [
+      swapForward,
+      swapReverse,
+      swapBForward,
+      swapBReverse,
+      protocol,
+    ],
+  ) => {
+    const sourceBlock = SOURCE_BLOCK + generation;
+    const sourceBlockHash =
+      `0x${generation.toString(16).padStart(64, "0")}`;
+    return createVerifiedGraphView({
+      id: `proof-scoped-lagging-${generation}`,
+      generation,
+      sourceBlock,
+      sourceBlockHash,
+      completenessWatermark: sourceBlock - 1,
+      perSourceCoverage: [
+        {
+          familyId: "univ2-standard",
+          sourceId: "landed-event:fixture",
+          sourceFingerprint: "fixture-swap-lagging-v1",
+          completeThroughBlock: sourceBlock - 1,
+          completeThroughHash: sourceBlockHash,
+        },
+        {
+          familyId: "protocol:fixture",
+          sourceId: "protocol-observed:fixture",
+          sourceFingerprint: "fixture-protocol-current-v1",
+          completeThroughBlock: sourceBlock,
+          completeThroughHash: sourceBlockHash,
+        },
+      ],
+      edges,
+    });
+  };
+
+  backend.failTargets.add(SWAP_POOL_B.toLowerCase());
+  const bootstrap = await coordinator.prepare({
+    graph: laggingGraph(1),
+    families: [swapFamily, protocolFamily],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "startup-bootstrap",
+  });
+  assert.equal(bootstrap.status, "degraded");
+  if (bootstrap.status !== "degraded") {
+    throw new Error("expected degraded startup bootstrap");
+  }
+  assert.equal(bootstrap.snapshot.stateByStateKey.size, 2);
+  assert(
+    bootstrap.coverage.unresolvedStateKeys.some((stateKey) =>
+      stateKey.includes(SWAP_POOL_B.toLowerCase())
+    ),
+    "startup must record an admitted key whose dynamic read failed",
+  );
+
+  backend.failTargets.clear();
+  backend.readTargets.length = 0;
+  backend.rangeFailure = true;
+  const steady = await coordinator.prepare({
+    graph: laggingGraph(2),
+    families: [swapFamily, protocolFamily],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "proof-scoped",
+  });
+  assert.equal(steady.status, "degraded");
+  if (steady.status !== "degraded") {
+    throw new Error("expected proof-scoped degradation");
+  }
+  assert.deepEqual(
+    backend.readTargets,
+    [PROTOCOL_POOL.toLowerCase()],
+    "failed mutation proof must not trigger a whole-family swap read",
+  );
+  assert.equal(steady.snapshot.mids.size, 1);
+  assert(
+    [...steady.snapshot.mids.values()].every(
+      (value) => value.pool.toLowerCase() === PROTOCOL_POOL.toLowerCase(),
+    ),
+    "healthy protocol sibling must still publish",
+  );
+  const swapTelemetry = steady.familyTelemetry?.find(
+    (entry) => entry.familyId === "univ2-standard",
+  );
+  assert.equal(swapTelemetry?.directStateKeys, 0);
+  assert.equal(swapTelemetry?.fullFallbackReason, "mutation-range-failed");
+  assert(
+    steady.coverage.unresolvedStateKeys.some((stateKey) =>
+      stateKey.includes(SWAP_POOL.toLowerCase())
+    ),
+    "unproven swap state must remain explicit unresolved coverage",
+  );
+
+  backend.readTargets.length = 0;
+  const withNewKey = await coordinator.prepare({
+    graph: laggingGraph(3, [
+      swapForward,
+      swapReverse,
+      swapCForward,
+      swapCReverse,
+      protocol,
+    ]),
+    families: [swapFamily, protocolFamily],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "proof-scoped",
+  });
+  assert.equal(withNewKey.status, "degraded");
+  if (withNewKey.status !== "degraded") {
+    throw new Error("expected new-key proof-scoped degradation");
+  }
+  assert.deepEqual(
+    [...backend.readTargets].sort(),
+    [SWAP_POOL_C, PROTOCOL_POOL].map((value) => value.toLowerCase()).sort(),
+    "a genuinely new key may read current N while established unproven keys stay unresolved",
+  );
+  assert.equal(
+    withNewKey.familyTelemetry?.find(
+      (entry) => entry.familyId === "univ2-standard",
+    )?.directStateKeys,
+    1,
+  );
+
+  backend.rangeFailure = false;
+  backend.mutationTargets.add(SWAP_POOL.toLowerCase());
+  backend.readTargets.length = 0;
+  const withChangedKey = await coordinator.prepare({
+    graph: laggingGraph(4, [
+      swapForward,
+      swapReverse,
+      swapCForward,
+      swapCReverse,
+      protocol,
+    ]),
+    families: [swapFamily, protocolFamily],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "proof-scoped",
+  });
+  assert.equal(withChangedKey.status, "degraded");
+  if (withChangedKey.status !== "degraded") {
+    throw new Error("expected changed-key proof-scoped degradation");
+  }
+  assert.deepEqual(
+    [...backend.readTargets].sort(),
+    [SWAP_POOL, PROTOCOL_POOL].map((value) => value.toLowerCase()).sort(),
+    "a canonically classified changed key reads current N without rereading an unchanged sibling",
+  );
+  assert.equal(
+    withChangedKey.familyTelemetry?.find(
+      (entry) => entry.familyId === "univ2-standard",
+    )?.directStateKeys,
+    1,
   );
 }
 
@@ -2180,6 +2424,8 @@ await simulationSemanticsParticipateInDedupIdentity();
 await replayResetDropsOnlyDynamicPublication();
 await failedFamilyPublishesHealthyFamiliesAsDegraded();
 await graphIncompleteSwapFamilyPreservesHealthySibling();
+await graphSourceHashMismatchBlocksOwningFamily();
+await laggingSwapProofFailureDoesNotFallbackWholeFamily();
 await oneFailedStateKeyPreservesHealthySiblingInstance();
 await incrementalRefreshIsStateKeyLocal();
 await emptyPublishedSnapshotDoesNotEraseRecoveryBase();

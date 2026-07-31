@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import {
   BlockScanStateCoordinator,
+  type BlockScanLaggingTopologyRefreshMode,
   type BlockScanStateIssue,
   type BlockScanStatePrepareResult,
   type BlockScanStateSnapshot,
@@ -178,6 +179,12 @@ export interface PrepareAdapterRuntimeInput {
    * scoped.
    */
   readonly pricingFamilySettleDeadlineAtMs?: number;
+  /**
+   * Explicit startup/steady-state contract for families whose topology
+   * completeness proof is lagging. The coordinator forwards it unchanged.
+   */
+  readonly pricingLaggingTopologyRefreshMode?:
+    BlockScanLaggingTopologyRefreshMode;
   readonly signal?: AbortSignal;
   /**
    * Current-N exact/final-sim workers (for example isolated Anvil forks).
@@ -252,6 +259,7 @@ export class AdapterRuntimeCoordinator {
       requiresPricing: (edge) => this.registry.isBlockScanPricedEdge(edge),
       deadlineAtMs: input.deadlineAtMs,
       familySettleDeadlineAtMs: input.familySettleDeadlineAtMs,
+      laggingTopologyRefreshMode: "proof-scoped",
       signal: input.signal,
     });
   }
@@ -334,6 +342,8 @@ export class AdapterRuntimeCoordinator {
             input.pricingFamilySettleDeadlineAtMs ??
               preparationSettleDeadlineAtMs,
           ),
+          laggingTopologyRefreshMode:
+            input.pricingLaggingTopologyRefreshMode ?? "proof-scoped",
           // Pricing owns family-local settlement and still needs the outer
           // generation signal for its canonical CAS. Aborting it at the
           // preparation boundary would erase healthy sibling results.

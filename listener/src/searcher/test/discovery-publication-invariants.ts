@@ -22,6 +22,7 @@ import {
 } from "../live-discovery-publication.js";
 import {
   planLiveDiscoveryBackfillLanes,
+  prepareDexIdentityRetryForResolution,
 } from "../live-discovery-coordinator.js";
 import {
   createProtocolDiscoveryEvidenceCache,
@@ -75,10 +76,42 @@ hotDexRebaseRejectsProtocolSemanticCollision();
 dexRoutingSliceIgnoresCoverageOnlyPublication();
 dexRoutingSliceDetectsTopologyChange();
 projectionRetryDoesNotPreemptProtocolBackfill();
+await identityRetryRunsOnlyInDetachedCompleteLane();
 
 console.log(
-  "[discovery-publication-invariants] cursor/CAS/reorg/hot/queue: PASS (11/11)",
+  "[discovery-publication-invariants] cursor/CAS/reorg/hot/queue: PASS (12/12)",
 );
+
+async function identityRetryRunsOnlyInDetachedCompleteLane(): Promise<void> {
+  let invoked = false;
+  const gate = deferred<string>();
+  const operation = () => {
+    invoked = true;
+    return gate.promise;
+  };
+  const hot = await prepareDexIdentityRetryForResolution(
+    "bounded",
+    operation,
+  );
+  assert.equal(hot, null);
+  assert.equal(
+    invoked,
+    false,
+    "current-head bounded discovery must neither invoke nor await the identity backlog",
+  );
+
+  const detached = prepareDexIdentityRetryForResolution(
+    "complete",
+    operation,
+  );
+  assert.equal(
+    invoked,
+    true,
+    "detached complete discovery owns identity backlog healing",
+  );
+  gate.resolve("healed");
+  assert.equal(await detached, "healed");
+}
 
 function projectionRetryDoesNotPreemptProtocolBackfill(): void {
   assert.deepEqual(

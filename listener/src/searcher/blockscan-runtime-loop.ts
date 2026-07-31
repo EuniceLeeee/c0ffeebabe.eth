@@ -1820,6 +1820,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           deadlineAtMs: runtimeDeadlineAtMs,
           preparationSettleDeadlineAtMs,
           pricingFamilySettleDeadlineAtMs,
+          pricingLaggingTopologyRefreshMode: startupWarmAttempt
+            ? "startup-bootstrap"
+            : "proof-scoped",
           signal: passSignal,
           prepareExecution,
         });

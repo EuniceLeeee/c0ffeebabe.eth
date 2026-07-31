@@ -455,6 +455,11 @@ async function incompleteRetriesAndHotBudgetResumes(): Promise<void> {
       PUBLICATION_RESERVE_MS - 2,
     "ordinary live must retain the publication reserve",
   );
+  assert.deepEqual(
+    harness.pricingLaggingTopologyModes,
+    ["startup-bootstrap", "startup-bootstrap", "proof-scoped"],
+    "startup retries may bootstrap once; steady-state pricing must be proof-scoped",
+  );
 }
 
 async function startupStateGetsAnIndependentPhaseBudget(): Promise<void> {
@@ -1582,6 +1587,9 @@ function createHarness(
   const runtimeBlocks: number[] = [];
   const deadlineRemainingMs: number[] = [];
   const pricingSettleRemainingMs: Array<number | null> = [];
+  const pricingLaggingTopologyModes: Array<
+    PrepareAdapterRuntimeInput["pricingLaggingTopologyRefreshMode"]
+  > = [];
   const preparationSettleRemainingMs: Array<number | null> = [];
   const backfillBlocks: number[] = [];
   const queue = new ProtocolDiscoveryMutationQueue();
@@ -1699,6 +1707,9 @@ function createHarness(
         input.pricingFamilySettleDeadlineAtMs === undefined
           ? null
           : input.pricingFamilySettleDeadlineAtMs - Date.now(),
+      );
+      pricingLaggingTopologyModes.push(
+        input.pricingLaggingTopologyRefreshMode,
       );
       await options.beforePrepareResult?.(call, input);
       await input.prepareExecution?.({
@@ -2112,6 +2123,7 @@ function createHarness(
     deadlineRemainingMs,
     preparationSettleRemainingMs,
     pricingSettleRemainingMs,
+    pricingLaggingTopologyModes,
     backfillBlocks,
     get publishedPricing() {
       return publishedPricing;

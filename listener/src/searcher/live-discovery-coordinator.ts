@@ -159,6 +159,15 @@ export function planLiveDiscoveryBackfillLanes(input: {
   });
 }
 
+export function prepareDexIdentityRetryForResolution<T>(
+  historicalResolution: "bounded" | "complete",
+  operation: () => Promise<T>,
+): Promise<T | null> {
+  return historicalResolution === "complete"
+    ? operation()
+    : Promise.resolve(null);
+}
+
 export interface LiveDiscoveryCoordinatorDeps {
   readonly provider: ethers.JsonRpcProvider;
   /** Historical range evidence only; live state and probes stay on provider. */
@@ -500,6 +509,9 @@ export async function createLiveDiscoveryCoordinator(
     ].filter((pool) =>
       !landedPoolDiscoveryRegistry.consumesMaterializationRetries(pool.adapter)
     );
+    // The current-head pass prices the already-admitted graph. Retrying an
+    // older generic identity backlog belongs to the detached complete/backfill
+    // lane; awaiting it here lets unknown candidates delay healthy state.
     const [
       swapDiscovery,
       factoryFresh,
@@ -558,14 +570,20 @@ export async function createLiveDiscoveryCoordinator(
             )
           : Promise.resolve(null),
         pinnedReadBackend
-          ? measured("identityRetry", () => prepareBoundedDexIdentityRetry({
-              currentN: targetBlock,
-              backend: pinnedReadBackend,
-              remaining: genericIdentityRetries,
-              identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-              seedEntries: liveRegistry,
-              admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-            }))
+          ? prepareDexIdentityRetryForResolution(
+              options.historicalResolution,
+              () => measured(
+                "identityRetry",
+                () => prepareBoundedDexIdentityRetry({
+                  currentN: targetBlock,
+                  backend: pinnedReadBackend,
+                  remaining: genericIdentityRetries,
+                  identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+                  seedEntries: liveRegistry,
+                  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+                }),
+              ),
+            )
           : Promise.resolve(null),
     ]);
     const swapFresh = [...swapDiscovery.pools];
@@ -735,6 +753,7 @@ export async function createLiveDiscoveryCoordinator(
       `[searcher/discovery-stage-telemetry] ${JSON.stringify({
         targetBlock,
         strict: options.strict,
+        historicalResolution: options.historicalResolution,
         scan,
         timing,
         swapPools: swapFresh.length,
@@ -743,7 +762,7 @@ export async function createLiveDiscoveryCoordinator(
         incumbentSuccesses: staticAttestation?.successful.length ?? 0,
         incumbentFailures: staticAttestation?.failed.length ?? 0,
         identityAccepted: identityRetry?.accepted.length ?? 0,
-        identityRemaining: identityRetry?.remaining.length ?? 0,
+        identityRemaining: nextRetryableDexIdentityPools.size,
       })}`,
     );
     return {
