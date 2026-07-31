@@ -28,6 +28,7 @@ const execFileAsync = promisify(execFile);
 export type ProductionFamilyLoadIssueCode =
   | "source_scan_failed"
   | "module_import_failed"
+  | "module_import_timeout"
   | "invalid_module_contract"
   | "family_registration_conflict";
 
@@ -49,6 +50,7 @@ export interface ProductionFamilyLoadResult {
 
 interface ProductionFamilyLoaderOptions {
   readonly sourceDirectory?: string;
+  readonly importTimeoutMs?: number;
   readonly importEntry?: (
     sourceFile: string,
     runtimeUrl: URL,
@@ -65,6 +67,10 @@ export async function loadProductionFamilyModules(
 ): Promise<ProductionFamilyLoadResult> {
   const sourceDirectory = options.sourceDirectory ??
     resolve(listenerRoot(), "src/searcher/venues/production-families");
+  const importTimeoutMs = options.importTimeoutMs ?? 10_000;
+  if (!Number.isInteger(importTimeoutMs) || importTimeoutMs <= 0) {
+    throw new Error("production family importTimeoutMs must be a positive integer");
+  }
   let sourceFiles: readonly string[];
   try {
     sourceFiles = options.sourceDirectory === undefined
@@ -102,13 +108,19 @@ export async function loadProductionFamilyModules(
     let imported: unknown;
     try {
       const runtimeUrl = runtimeModuleUrl(sourcePath);
-      imported = options.importEntry
-        ? await options.importEntry(sourceFile, runtimeUrl)
-        : await import(runtimeUrl.href);
+      const pendingImport = options.importEntry
+        ? options.importEntry(sourceFile, runtimeUrl)
+        : import(runtimeUrl.href);
+      imported = await withTimeout(
+        Promise.resolve(pendingImport),
+        importTimeoutMs,
+        sourceFile,
+      );
     } catch (error) {
+      const timeout = error instanceof ProductionFamilyImportTimeoutError;
       issues.push(freezeIssue(
         sourceFile,
-        "module_import_failed",
+        timeout ? "module_import_timeout" : "module_import_failed",
         errorMessage(error),
       ));
       continue;
@@ -166,6 +178,30 @@ export async function loadProductionFamilyModules(
   }
 
   return freezeResult(accepted, issues);
+}
+
+class ProductionFamilyImportTimeoutError extends Error {}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  sourceFile: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(new ProductionFamilyImportTimeoutError(
+            `production family import timed out after ${timeoutMs}ms: ${sourceFile}`,
+          ));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 async function trackedProductionSourceFiles(

@@ -72,6 +72,16 @@ const productionFamilyLoad = await loadProductionFamilyModules(
   LEGACY_PRODUCTION_ADAPTER_FAMILIES,
 );
 
+const sourceScanFailure = productionFamilyLoad.issues.find(
+  (issue) => issue.code === "source_scan_failed",
+);
+if (sourceScanFailure) {
+  throw new Error(
+    `production family activation source is unavailable: ` +
+      sourceScanFailure.message,
+  );
+}
+
 export const PRODUCTION_FAMILY_MODULES = productionFamilyLoad.modules;
 export const PRODUCTION_FAMILY_LOAD_ISSUES = productionFamilyLoad.issues;
 export const PRODUCTION_FAMILY_SCAN_SHA256 = productionFamilyLoad.scanSha256;

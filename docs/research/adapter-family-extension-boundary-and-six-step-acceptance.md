@@ -170,6 +170,10 @@ Swap 和 Protocol 在进入 graph 后都产生统一 `TokenEdge`，并共享：
 全局 registry 前独立完成接口、descriptor、action closure、shared-infra 和 ID 冲突校验。
 失败入口记录稳定的 source/code 后隔离，不能留下半注册状态；成功入口按路径确定性加载并生成
 scan hash。自动注册只证明“进入生产 closure”，不证明报价、枚举或执行正确。
+Git activation source 整体不可读属于系统故障，必须阻止启动；只有单个 entry 的 import、
+contract 或 ID 冲突才允许 family-local 隔离。单个 import 有启动时限，且 family/action source
+closure 不得反向 import production registry、ActionAdapter bootstrap/registry 或任何
+`searcher/test/**` 与 fixture。
 
 状态层遵循相同边界：family 的 [`BlockScanStateCapability`](../../listener/src/searcher/venues/blockscan-state-capability.ts) 只声明：
 

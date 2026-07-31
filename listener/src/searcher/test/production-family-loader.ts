@@ -38,6 +38,7 @@ try {
     "b-invalid.production.ts",
     "c-import-failure.production.ts",
     "d-conflict.production.ts",
+    "e-timeout.production.ts",
     "ignored.ts",
   ]) {
     await writeFile(join(directory, name), "");
@@ -47,6 +48,7 @@ try {
     [univ2StandardAdapter],
     {
       sourceDirectory: directory,
+      importTimeoutMs: 20,
       async importEntry(sourceFile) {
         switch (sourceFile) {
           case "a-valid.production.ts":
@@ -56,6 +58,8 @@ try {
             return { productionFamilyModule: { family: dodoV2Adapter } };
           case "c-import-failure.production.ts":
             throw new Error("synthetic import failure");
+          case "e-timeout.production.ts":
+            return await new Promise<never>(() => {});
           default:
             throw new Error(`unexpected source ${sourceFile}`);
         }
@@ -73,6 +77,7 @@ try {
       ["b-invalid.production.ts", "invalid_module_contract"],
       ["c-import-failure.production.ts", "module_import_failed"],
       ["d-conflict.production.ts", "family_registration_conflict"],
+      ["e-timeout.production.ts", "module_import_timeout"],
     ],
   );
   assert.match(result.scanSha256, /^[a-f0-9]{64}$/);

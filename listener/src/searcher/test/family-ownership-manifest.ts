@@ -462,6 +462,7 @@ function relativeFamilyImportClosure(
           : undefined;
       if (!specifier || !ts.isStringLiteral(specifier)) continue;
       const resolved = resolveTsImport(source.fileName, specifier.text);
+      if (resolved) assertFamilyRuntimeImportBoundary(source.fileName, resolved);
       if (resolved && isFamilyModule(resolved) && !closure.has(resolved)) {
         pending.push(resolved);
       }
@@ -489,6 +490,7 @@ function relativeActionImportClosure(
           : undefined;
       if (!specifier || !ts.isStringLiteral(specifier)) continue;
       const resolved = resolveTsImport(source.fileName, specifier.text);
+      if (resolved) assertFamilyRuntimeImportBoundary(source.fileName, resolved);
       if (
         resolved &&
         repoRelative(resolved).startsWith("src/adapters/") &&
@@ -499,6 +501,27 @@ function relativeActionImportClosure(
     }
   }
   return closure;
+}
+
+function assertFamilyRuntimeImportBoundary(
+  importer: string,
+  imported: string,
+): void {
+  const importedPath = repoRelative(imported);
+  if (
+    importedPath.startsWith("src/searcher/test/") ||
+    [
+      "src/searcher/venues/production-registry.ts",
+      "src/adapters/index.ts",
+      "src/adapters/registry.ts",
+      "src/shared/adapters/index.ts",
+    ].includes(importedPath)
+  ) {
+    throw new Error(
+      `family runtime import boundary: ${repoRelative(importer)} ` +
+        `must not import ${importedPath}`,
+    );
+  }
 }
 
 function registryAllowedRanges(source: ts.SourceFile): readonly ts.TextRange[] {
@@ -1019,6 +1042,24 @@ function runOwnershipManifestSelfTests(): void {
     "const centralPattern = /a b/;\n",
     "const centralPattern = /a  b/;\n",
     "semantic whitespace must change the central skeleton",
+  );
+  assert.throws(
+    () =>
+      assertFamilyRuntimeImportBoundary(
+        resolve(LISTENER_ROOT, "src/searcher/venues/swaps/example.ts"),
+        resolve(LISTENER_ROOT, "src/searcher/test/example.ts"),
+      ),
+    /family runtime import boundary/,
+    "production family source must not import its tests",
+  );
+  assert.throws(
+    () =>
+      assertFamilyRuntimeImportBoundary(
+        resolve(LISTENER_ROOT, "src/adapters/example.ts"),
+        PRODUCTION_REGISTRY,
+      ),
+    /family runtime import boundary/,
+    "production family source must not import the registry bootstrap",
   );
 }
 

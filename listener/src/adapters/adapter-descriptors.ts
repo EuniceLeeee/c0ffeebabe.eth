@@ -9,6 +9,7 @@ export type Lineage =
   | "eigenpie" | "self-burn-native"
   | "fluid-credit" | "fluid-dex" | "balancer-v3" | "dodo-v2" | "erc20-infra"
   | `custom-swap:${string}`
+  | `custom-protocol:${string}`
   | FundingLineageId;
 
 /** Descriptor action vocabulary: superset covering all edge kinds. Do not reuse ProtocolAction. */
