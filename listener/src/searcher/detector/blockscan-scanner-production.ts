@@ -263,18 +263,12 @@ export function assertAtomicBlockScanPricingView(
       "production scanner rejected non-exact atomic mid coverage",
     );
   }
-  const scannerEdgeKeys = graph.edges
-    .filter(scannerConsumesEdge)
-    .map(blockScanEdgeKey);
   if (
-    scannerEdgeKeys.length !== expectedEdgeSet.size ||
-    exactSetHash(scannerEdgeKeys) !== coverage.expectedEdgeKeyHash
+    graph.scannerEdgeCount !== expectedEdgeSet.size ||
+    graph.scannerEdgeKeyHash !== coverage.expectedEdgeKeyHash
   ) {
-    const missing = scannerEdgeKeys.find((key) => !expectedEdgeSet.has(key));
     throw new Error(
-      missing
-        ? `production scanner missing current-N mid for ${missing}`
-        : "production scanner pricing coverage does not exactly match its graph",
+      "production scanner missing current-N mid or pricing coverage does not exactly match its graph",
     );
   }
 }

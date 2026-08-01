@@ -215,6 +215,9 @@ export interface VerifiedGraphView {
   readonly orderedEdgeHash: string;
   readonly metadataHash: string;
   readonly ownershipHash: string;
+  /** Exact scanner-consumed edge set, computed once with the verified graph. */
+  readonly scannerEdgeCount: number;
+  readonly scannerEdgeKeyHash: string;
   readonly edges: readonly TokenEdge[];
 }
 
@@ -747,6 +750,17 @@ export function createVerifiedGraphView(
     );
   }
   const edgeRecords = edges.map(canonicalEdgeRecord);
+  const scannerEdgeKeys = edges
+    .filter(
+      (edge) => edge.slotKind === "swap" ||
+        (edge.slotKind === "protocol" && !edge.leavesStandingPosition),
+    )
+    .map((edge) => {
+      if (!edge.canonicalEdgeId) {
+        throw new Error("verified graph edge lacks canonical identity");
+      }
+      return edge.canonicalEdgeId;
+    });
   return Object.freeze({
     id: input.id,
     generation: input.generation,
@@ -759,6 +773,8 @@ export function createVerifiedGraphView(
     ownershipHash: deterministicHash(
       edgeRecords.map((edge) => ({ identity: edge.identity, adapterId: edge.adapterId })),
     ),
+    scannerEdgeCount: scannerEdgeKeys.length,
+    scannerEdgeKeyHash: exactSetHash(scannerEdgeKeys),
     edges,
   });
 }
