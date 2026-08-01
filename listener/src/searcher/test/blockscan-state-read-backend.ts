@@ -2080,21 +2080,32 @@ async function testCanonicalAddressTouchesIncludeNestedCalls(): Promise<void> {
         transactions: [number === sourceBlock - 1 ? firstTxHash : txHash],
       });
     }
-    if (request.method === "debug_traceBlockByHash") {
-      const first = request.params[0] === intermediateHash;
+    if (request.method === "trace_block") {
+      const first = request.params[0] === "0x63";
+      const blockHash = first ? intermediateHash : sourceBlockHash;
+      const transactionHash = first ? firstTxHash : txHash;
+      const transactionPosition = "0x0";
       return success(request.id, [{
-        txHash: first ? firstTxHash : txHash,
-        result: {
-          type: "CALL",
-          from: callerAddress,
-          to: targetAddress,
-          calls: first ? [] : [{
-            type: "CALL",
-            from: targetAddress,
-            to: nestedAddress,
-          }],
-        },
-      }]);
+        blockHash,
+        blockNumber: Number(BigInt(request.params[0])),
+        transactionHash,
+        transactionPosition: Number(BigInt(transactionPosition)),
+        traceAddress: [],
+        subtraces: first ? 0 : 1,
+        type: "call",
+        action: { callType: "call", from: callerAddress, to: targetAddress },
+        result: { gasUsed: "0x1", output: "0x" },
+      }, ...(first ? [] : [{
+        blockHash,
+        blockNumber: Number(BigInt(request.params[0])),
+        transactionHash,
+        transactionPosition: Number(BigInt(transactionPosition)),
+        traceAddress: [0],
+        subtraces: 0,
+        type: "call",
+        action: { callType: "call", from: targetAddress, to: nestedAddress },
+        result: { gasUsed: "0x1", output: "0x" },
+      }])]);
     }
     throw new Error(`unexpected method ${request.method}`);
   }));
@@ -2138,7 +2149,7 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
         transactions: [txHash],
       });
     }
-    if (request.method === "debug_traceBlockByHash") {
+    if (request.method === "trace_block") {
       return success(request.id, []);
     }
     throw new Error(`unexpected method ${request.method}`);
@@ -2151,6 +2162,38 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
     /does not cover every block transaction/,
   );
 
+  const missingNestedCall = backendWith(async (body) => body.map((request) => {
+    if (request.method === "eth_getBlockByNumber") {
+      return success(request.id, {
+        number: "0x64",
+        hash: sourceBlockHash,
+        parentHash: previousHash,
+        transactions: [txHash],
+      });
+    }
+    if (request.method === "trace_block") {
+      return success(request.id, [{
+        blockHash: sourceBlockHash,
+        blockNumber: sourceBlock,
+        transactionHash: txHash,
+        transactionPosition: 0,
+        traceAddress: [],
+        subtraces: 1,
+        type: "call",
+        action: { callType: "call", from: callerAddress, to: targetAddress },
+        result: { gasUsed: "0x1", output: "0x" },
+      }]);
+    }
+    throw new Error(`unexpected method ${request.method}`);
+  }));
+  await assert.rejects(
+    () => missingNestedCall.readCanonicalAddressTouches(previous, through, {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    }),
+    /expected 1 direct children, got 0/,
+  );
+
   const wrongParent = backendWith(async (body) => body.map((request) => {
     if (request.method === "eth_getBlockByNumber") {
       return success(request.id, {
@@ -2160,7 +2203,7 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
         transactions: [],
       });
     }
-    if (request.method === "debug_traceBlockByHash") {
+    if (request.method === "trace_block") {
       return success(request.id, []);
     }
     throw new Error(`unexpected method ${request.method}`);
@@ -2308,7 +2351,7 @@ interface RpcRequest {
   readonly jsonrpc: "2.0";
   readonly id: number;
   readonly method:
-    | "debug_traceBlockByHash"
+    | "trace_block"
     | "debug_getRawHeader"
     | "eth_call"
     | "eth_getBlockByHash"
