@@ -2031,6 +2031,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             selectedRoutes: fallbackCoarse.scan.selection.selectedCount,
             scanBudgetMs: blockScanCfg.budgetMs,
             scanTimingMs: fallbackCoarse.scanTimingMs,
+            wrapperTimingMs: fallbackCoarse.wrapperTimingMs,
             recallMode: fallbackCoarse.recallMode,
             fullCoverage: fallbackCoarse.fullCoverage,
             degradedRecallReasons: fallbackCoarse.degradedRecallReasons,

@@ -216,13 +216,14 @@ export function assertAtomicBlockScanPricingView(
   );
 
   const expectedEdgeSet = new Set(coverage.expectedEdgeKeys);
+  const resolvedReadSet = new Set(coverage.resolvedReadKeys);
   const resolvedEdgeSet = new Set(coverage.resolvedEdgeKeys);
   const unavailableEdgeSet = new Set(coverage.unavailableEdgeKeys);
   if (
     pricing.coverageByReadKey.size !== coverage.expectedReadKeys.length ||
     pricing.freshnessByReadKey.size !== coverage.resolvedReadKeys.length ||
     coverage.expectedReadKeys.some((readKey) => {
-      const expectedStatus = coverage.resolvedReadKeys.includes(readKey)
+      const expectedStatus = resolvedReadSet.has(readKey)
         ? "resolved"
         : "unresolved";
       return pricing.coverageByReadKey.get(readKey)?.status !== expectedStatus;

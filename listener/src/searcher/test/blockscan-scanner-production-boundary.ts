@@ -11,6 +11,7 @@ import {
   type BlockScanConfig,
 } from "../detector/blockscan-scanner.js";
 import {
+  assertAtomicBlockScanPricingView,
   assertAtomicBlockScanRuntime,
   detectProductionBlockScanOpportunities,
 } from "../detector/blockscan-scanner-production.js";
@@ -352,6 +353,44 @@ console.log("[blockscan-production-boundary] generation/block/hash pinning: PASS
   );
 }
 console.log("[blockscan-production-boundary] exact edge/mid coverage: PASS");
+
+{
+  const readKeys = Array.from(
+    { length: 20_000 },
+    (_, index) => `large-read-key-${index.toString().padStart(5, "0")}`,
+  );
+  const coverage = coverageFor(
+    runtime.pricing.coverage.expectedStateKeys,
+    runtime.pricing.coverage.resolvedStateKeys,
+    runtime.pricing.coverage.unresolvedStateKeys,
+    readKeys,
+    readKeys,
+    [],
+    runtime.pricing.coverage.expectedEdgeKeys,
+    runtime.pricing.coverage.resolvedEdgeKeys,
+    runtime.pricing.coverage.unresolvedEdgeKeys,
+  );
+  const freshness = runtime.pricing.freshnessByReadKey.values().next().value!;
+  const pricing = {
+    ...runtime.pricing,
+    coverage,
+    coverageByReadKey: new Map(readKeys.map((key) => [
+      key,
+      { status: "resolved" as const },
+    ])),
+    freshnessByReadKey: new Map(readKeys.map((key) => [key, freshness])),
+  };
+  const startedAtMs = performance.now();
+  assert.doesNotThrow(() =>
+    assertAtomicBlockScanPricingView(pricing.graph, pricing)
+  );
+  const wallMs = performance.now() - startedAtMs;
+  assert.ok(
+    wallMs < 2_000,
+    `atomic pricing validation must remain linear at 20k read keys; wallMs=${wallMs}`,
+  );
+}
+console.log("[blockscan-production-boundary] large coverage validation: PASS");
 
 {
   const invalidFunding = {

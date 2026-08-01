@@ -46,8 +46,18 @@ export interface NMinusOneCoarseOutcome {
   readonly requiredExactSourceBlockHash: string;
   readonly scan: BlockScanOutcome;
   readonly scanTimingMs: BlockScanScanTiming | null;
+  readonly wrapperTimingMs: NMinusOneCoarseTiming;
   readonly candidates: readonly NMinusOneCoarseCandidate[];
   readonly rejectedRouteCount: number;
+}
+
+export interface NMinusOneCoarseTiming {
+  readonly atomicValidation: number;
+  readonly edgeFilter: number;
+  readonly scan: number;
+  readonly exactEdgeMap: number;
+  readonly candidateRebase: number;
+  readonly total: number;
 }
 
 /**
@@ -64,9 +74,11 @@ export function enumerateNMinusOneCoarseCandidates(input: {
   readonly routeEligible?: (edges: readonly TokenEdge[]) => boolean;
   readonly edgeEligible?: (edge: TokenEdge) => boolean;
 }): NMinusOneCoarseOutcome {
+  const startedAtMs = Date.now();
   const coarse = input.coarsePricing;
   const exact = input.exactGraph;
   assertAtomicBlockScanPricingView(coarse.graph, coarse);
+  const atomicValidationFinishedAtMs = Date.now();
   if (coarse.sourceBlock + 1 !== exact.sourceBlock) {
     throw new Error(
       `N-1 coarse source must be adjacent: ${coarse.sourceBlock} -> ` +
@@ -81,13 +93,15 @@ export function enumerateNMinusOneCoarseCandidates(input: {
   }
 
   const resolvedEdgeKeys = new Set(coarse.coverage.resolvedEdgeKeys);
+  const scannerEdges = coarse.graph.edges.filter(
+    (edge) =>
+      !scannerConsumesEdge(edge) ||
+      resolvedEdgeKeys.has(blockScanEdgeKey(edge)),
+  );
+  const edgeFilterFinishedAtMs = Date.now();
   let scanTimingMs: BlockScanScanTiming | null = null;
   const scan = scanBlockStateFromResolvedMids({
-    edges: coarse.graph.edges.filter(
-      (edge) =>
-        !scannerConsumesEdge(edge) ||
-        resolvedEdgeKeys.has(blockScanEdgeKey(edge)),
-    ),
+    edges: scannerEdges,
     sourceBlock: coarse.sourceBlock,
     swapTouched: null,
     cfg: input.cfg,
@@ -98,7 +112,9 @@ export function enumerateNMinusOneCoarseCandidates(input: {
       scanTimingMs = timing;
     },
   });
+  const scanFinishedAtMs = Date.now();
   const exactByEdgeKey = exactEdgeMap(exact.edges);
+  const exactEdgeMapFinishedAtMs = Date.now();
   const candidates: NMinusOneCoarseCandidate[] = [];
   let rejectedRouteCount = 0;
   for (const opportunity of scan.opportunities) {
@@ -135,6 +151,7 @@ export function enumerateNMinusOneCoarseCandidates(input: {
       requiredExactSourceBlockHash: exact.sourceBlockHash,
     }));
   }
+  const finishedAtMs = Date.now();
 
   return Object.freeze({
     pricingMode: "n_minus_one_coarse_current_n_exact" as const,
@@ -150,6 +167,26 @@ export function enumerateNMinusOneCoarseCandidates(input: {
     requiredExactSourceBlockHash: exact.sourceBlockHash,
     scan,
     scanTimingMs,
+    wrapperTimingMs: Object.freeze({
+      atomicValidation: Math.max(
+        0,
+        atomicValidationFinishedAtMs - startedAtMs,
+      ),
+      edgeFilter: Math.max(
+        0,
+        edgeFilterFinishedAtMs - atomicValidationFinishedAtMs,
+      ),
+      scan: Math.max(0, scanFinishedAtMs - edgeFilterFinishedAtMs),
+      exactEdgeMap: Math.max(
+        0,
+        exactEdgeMapFinishedAtMs - scanFinishedAtMs,
+      ),
+      candidateRebase: Math.max(
+        0,
+        finishedAtMs - exactEdgeMapFinishedAtMs,
+      ),
+      total: Math.max(0, finishedAtMs - startedAtMs),
+    }),
     candidates: Object.freeze(candidates),
     rejectedRouteCount,
   });
