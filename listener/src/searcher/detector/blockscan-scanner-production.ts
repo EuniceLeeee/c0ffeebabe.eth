@@ -325,6 +325,7 @@ function assertCoverageIntegrity(
   ) {
     throw new Error(`production scanner rejected invalid ${label} coverage hash`);
   }
+  const expectedSet = new Set(expected);
   const resolvedSet = new Set(resolved);
   const unresolvedSet = new Set(unresolved);
   const unavailableSet = new Set(unavailable);
@@ -340,7 +341,7 @@ function assertCoverageIntegrity(
         !unavailableSet.has(key),
     ) ||
     [...resolvedSet, ...unresolvedSet, ...unavailableSet].some(
-      (key) => !expected.includes(key),
+      (key) => !expectedSet.has(key),
     )
   ) {
     throw new Error(`production scanner rejected non-partitioned ${label} coverage`);
