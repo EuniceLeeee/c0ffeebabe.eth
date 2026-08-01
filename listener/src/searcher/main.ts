@@ -1189,6 +1189,13 @@ async function main(): Promise<void> {
       },
     );
     blockScanStateReadBackend = familyStateReads;
+    const protocolTouchMode =
+      process.env.SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE ?? "off";
+    if (protocolTouchMode !== "off" && protocolTouchMode !== "shadow") {
+      throw new Error(
+        "SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE must be off or shadow",
+      );
+    }
     adapterRuntimeCoordinator = new AdapterRuntimeCoordinator(
       PRODUCTION_ADAPTER_FAMILIES,
       new BlockScanStateCoordinator(familyStateReads, {
@@ -1201,6 +1208,14 @@ async function main(): Promise<void> {
             process.env.SEARCHER_BLOCKSCAN_STATE_FAMILY_TIMEOUT_MS ?? "120000",
           ),
         ),
+        protocolAddressTouchShadow: protocolTouchMode === "shadow",
+        onProtocolAddressTouchShadowTelemetry: (telemetry) => {
+          console.log(
+            `[searcher/blockscan-protocol-touch-shadow] ${
+              JSON.stringify(telemetry)
+            }`,
+          );
+        },
       }),
       fundingStateReads,
     );

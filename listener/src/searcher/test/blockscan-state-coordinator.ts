@@ -3,6 +3,8 @@ import {
   BlockScanStateCoordinator,
   type BlockScanFamilyTelemetry,
   type BlockScanStateReadBackend,
+  type CanonicalAddressTouchRange,
+  type ProtocolAddressTouchShadowTelemetry,
 } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import {
@@ -402,6 +404,49 @@ class StateKeyIncrementalBackend implements BlockScanStateReadBackend {
         queryDescriptorFingerprint: descriptor.fingerprint,
         canonicalPathFingerprint,
         events,
+      }),
+    });
+  }
+}
+
+class AddressTouchShadowBackend implements BlockScanStateReadBackend {
+  value = 3n;
+  readonly touchedAddresses = new Set<string>();
+  traceFailure = false;
+
+  async readBatch(
+    _lane: BlockScanPricingLane,
+    reads: readonly StateRead[],
+    control: { readonly sourceGeneration: number },
+  ): Promise<readonly StateReadResult[]> {
+    return reads.map((read) => Object.freeze({
+      ...successfulRead(read, control.sourceGeneration),
+      data: `0x${this.value.toString(16)}`,
+    }));
+  }
+
+  async verifyCanonicalSource(): Promise<void> {
+    return;
+  }
+
+  async readCanonicalAddressTouches(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+  ): Promise<CanonicalAddressTouchRange> {
+    if (this.traceFailure) throw new Error("injected trace failure");
+    const touchedAddresses = Object.freeze(
+      [...this.touchedAddresses].map((value) => value.toLowerCase()).sort(),
+    );
+    return Object.freeze({
+      fromExclusive,
+      through,
+      touchedAddresses,
+      transactionCount: 1,
+      complete: true,
+      rangeFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+        touchedAddresses,
       }),
     });
   }
@@ -2419,6 +2464,116 @@ function successfulRead(
   });
 }
 
+function protocolTouchGraph(generation: number) {
+  const sourceBlock = SOURCE_BLOCK + generation;
+  const sourceBlockHash = `0x${generation.toString(16).padStart(64, "0")}`;
+  return createVerifiedGraphView({
+    id: `protocol-touch-${generation}`,
+    generation,
+    sourceBlock,
+    sourceBlockHash,
+    completenessWatermark: sourceBlock,
+    perSourceCoverage: [{
+      familyId: "protocol:fixture",
+      sourceId: "protocol-touch-fixture",
+      sourceFingerprint: "protocol-touch-fixture-v1",
+      completeThroughBlock: sourceBlock,
+      completeThroughHash: sourceBlockHash,
+    }],
+    edges: [protocol],
+  });
+}
+
+async function protocolAddressTouchShadowIsObservational(): Promise<void> {
+  const backend = new AddressTouchShadowBackend();
+  const telemetry: ProtocolAddressTouchShadowTelemetry[] = [];
+  const family = registerBlockScanStateFamily({
+    familyId: "protocol:fixture",
+    lane: "protocol",
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "protocol-action",
+    capability: {
+      stateKey: (edgeValue) => edgeValue.target.toLowerCase(),
+      compileStaticSchema: () => Object.freeze({}),
+      buildCurrentBlockReads: ({ sourceBlock, sourceBlockHash, edges }) => [{
+        id: "state",
+        sourceBlock,
+        sourceBlockHash,
+        to: edges[0].target,
+        data: "0x12345678",
+        transport: "rpc-batch",
+      }],
+      decodeState: (_schema, results) => ({
+        numerator: BigInt(results[0]?.ok ? results[0].data : "0x0"),
+        denominator: 1n,
+      }),
+      deriveMids: (snapshot: FakeSnapshot, edges) => new Map(
+        edges.map((edgeValue) => [
+          blockScanEdgeKey(edgeValue),
+          mid(edgeValue, Number(snapshot.numerator)),
+        ]),
+      ),
+      dependencies: (edges) => edges.flatMap((edgeValue) => [
+        edgeValue.target,
+        edgeValue.tokenIn,
+        edgeValue.tokenOut,
+      ]),
+    },
+  });
+  const coordinator = new BlockScanStateCoordinator(backend, {
+    protocolAddressTouchShadow: true,
+    onProtocolAddressTouchShadowTelemetry: (value) => telemetry.push(value),
+  });
+  const prepare = (generation: number) => coordinator.prepare({
+    graph: protocolTouchGraph(generation),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+
+  assert.equal((await prepare(1)).status, "complete");
+  assert.equal(telemetry.length, 0, "first generation has no carry base");
+
+  assert.equal((await prepare(2)).status, "complete");
+  await Promise.resolve();
+  assert.deepEqual(telemetry.at(-1), {
+    status: "complete",
+    fromBlock: SOURCE_BLOCK + 1,
+    throughBlock: SOURCE_BLOCK + 2,
+    wallMs: telemetry.at(-1)?.wallMs,
+    touchedAddresses: 0,
+    transactionCount: 1,
+    protocolStateKeys: 1,
+    predictedDirtyStateKeys: 0,
+    predictedCarryStateKeys: 1,
+    comparableCarryStateKeys: 1,
+    mismatchStateKeys: 0,
+    mismatchFamilyIds: [],
+  });
+
+  backend.value = 4n;
+  assert.equal((await prepare(3)).status, "complete");
+  await Promise.resolve();
+  assert.equal(telemetry.at(-1)?.mismatchStateKeys, 1);
+  assert.deepEqual(telemetry.at(-1)?.mismatchFamilyIds, ["protocol:fixture"]);
+
+  backend.touchedAddresses.add(PROTOCOL_POOL);
+  backend.value = 5n;
+  assert.equal((await prepare(4)).status, "complete");
+  await Promise.resolve();
+  assert.equal(telemetry.at(-1)?.predictedDirtyStateKeys, 1);
+  assert.equal(telemetry.at(-1)?.predictedCarryStateKeys, 0);
+  assert.equal(telemetry.at(-1)?.mismatchStateKeys, 0);
+
+  backend.touchedAddresses.clear();
+  backend.traceFailure = true;
+  assert.equal((await prepare(5)).status, "complete");
+  await Promise.resolve();
+  assert.equal(telemetry.at(-1)?.status, "unavailable");
+  assert.equal(
+    telemetry.at(-1)?.unavailableReason,
+    "trace-incomplete",
+  );
+}
+
 await completeAndDeterministic();
 await simulationSemanticsParticipateInDedupIdentity();
 await replayResetDropsOnlyDynamicPublication();
@@ -2441,5 +2596,6 @@ await staticSchemaReadsAreCachedAndDynamicReadsStayCurrent();
 await publishCasFailureDoesNotCommitStaticSchema();
 await supersededGenerationCannotDonateStaticSchema();
 await immutableForkNeedsBackendAttestation();
+await protocolAddressTouchShadowIsObservational();
 purityHook();
 console.log("blockscan-state-coordinator PASS");

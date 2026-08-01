@@ -1,5 +1,6 @@
 import type {
   BlockScanStateReadBackend,
+  CanonicalAddressTouchRange,
 } from "./blockscan-state-coordinator.js";
 import type {
   BlockSource,
@@ -180,6 +181,7 @@ export class JsonRpcBlockScanStateReadBackend
   private readonly mutationHeaderSlots: AbortableSemaphore;
   private readonly mutationDescriptorSlots: AbortableSemaphore;
   private readonly mutationFinalCasSlots: AbortableSemaphore;
+  private readonly addressTouchSlots: AbortableSemaphore;
   private readonly fetchImpl: typeof fetch;
   private readonly onMutationProofTelemetry:
     | ((telemetry: MutationProofTransportTelemetry) => void)
@@ -233,6 +235,7 @@ export class JsonRpcBlockScanStateReadBackend
       maxConcurrentMutationProofs,
     );
     this.mutationFinalCasSlots = new AbortableSemaphore(1);
+    this.addressTouchSlots = new AbortableSemaphore(1);
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.onMutationProofTelemetry = options.onMutationProofTelemetry;
     this.now = options.now ?? (() => performance.now());
@@ -274,6 +277,90 @@ export class JsonRpcBlockScanStateReadBackend
      * fence exactly.
      */
     return this.readAtPinnedHash(reads, control, true);
+  }
+
+  async readCanonicalAddressTouches(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<CanonicalAddressTouchRange> {
+    if (
+      through.number !== fromExclusive.number + 1 ||
+      through.generation <= fromExclusive.generation
+    ) {
+      throw new Error("address-touch proof requires one forward canonical block");
+    }
+    const controller = new AbortController();
+    const detach = linkAbort(control.signal, controller);
+    const remainingMs = control.deadlineAtMs - Date.now();
+    const timer = setTimeout(
+      () => controller.abort(new Error("address-touch proof deadline reached")),
+      Math.max(0, remainingMs),
+    );
+    try {
+      if (remainingMs <= 0) {
+        controller.abort(new Error("address-touch proof deadline reached"));
+      }
+      const blockId = this.nextId++;
+      const traceId = this.nextId++;
+      const responses = await this.postWithSlots(
+        this.addressTouchSlots,
+        [
+          {
+            jsonrpc: "2.0",
+            id: blockId,
+            method: "eth_getBlockByHash",
+            params: [through.hash, false],
+          },
+          {
+            jsonrpc: "2.0",
+            id: traceId,
+            method: "debug_traceBlockByHash",
+            params: [through.hash, {
+              tracer: "callTracer",
+              timeout: "5s",
+              tracerConfig: { onlyTopCall: false, withLog: false },
+            }],
+          },
+        ],
+        controller.signal,
+      );
+      const block = requiredRpcResult(responses, blockId, "block");
+      const traces = requiredRpcResult(responses, traceId, "trace");
+      const parsedBlock = parseAddressTouchBlock(
+        block,
+        fromExclusive,
+        through,
+      );
+      const touchedAddresses = parseAddressTouchTraces(
+        traces,
+        parsedBlock.transactionHashes,
+      );
+      await this.verifyCanonicalSourceWithSlotsMeasured(
+        through,
+        controller.signal,
+        this.addressTouchSlots,
+      );
+      return Object.freeze({
+        fromExclusive,
+        through,
+        touchedAddresses,
+        transactionCount: parsedBlock.transactionHashes.length,
+        complete: true as const,
+        rangeFingerprint: deterministicHash({
+          fromExclusive,
+          through,
+          transactionHashes: parsedBlock.transactionHashes,
+          touchedAddresses,
+        }),
+      });
+    } finally {
+      clearTimeout(timer);
+      detach();
+    }
   }
 
   private async readAtPinnedHash(
@@ -1561,6 +1648,120 @@ function sourceFrom(control: PinnedReadControl): BlockSource {
     hash: control.sourceBlockHash.toLowerCase(),
     generation: control.sourceGeneration,
   });
+}
+
+function requiredRpcResult(
+  responses: readonly JsonRpcResponse[],
+  id: number,
+  label: string,
+): unknown {
+  const response = responses.find((candidate) => candidate.id === id);
+  if (!response) throw new Error(`address-touch ${label} response is missing`);
+  if ("error" in response) {
+    throw new Error(
+      `address-touch ${label} RPC failed: ` +
+        `${response.error.message ?? response.error.code ?? "unknown"}`,
+    );
+  }
+  return response.result;
+}
+
+function parseAddressTouchBlock(
+  value: unknown,
+  fromExclusive: BlockSource,
+  through: BlockSource,
+): { readonly transactionHashes: readonly string[] } {
+  if (!value || typeof value !== "object") {
+    throw new Error("address-touch block is not an object");
+  }
+  const block = value as Record<string, unknown>;
+  if (
+    parseRpcQuantity(block.number, "address-touch block number") !==
+      through.number ||
+    parseHash(block.hash, "address-touch block hash") !==
+      through.hash.toLowerCase() ||
+    parseHash(block.parentHash, "address-touch block parentHash") !==
+      fromExclusive.hash.toLowerCase()
+  ) {
+    throw new Error("address-touch block is not the requested canonical child");
+  }
+  if (!Array.isArray(block.transactions)) {
+    throw new Error("address-touch block transactions is not an array");
+  }
+  return Object.freeze({
+    transactionHashes: Object.freeze(block.transactions.map(
+      (hash, index) => parseHash(hash, `address-touch transaction ${index}`),
+    )),
+  });
+}
+
+function parseAddressTouchTraces(
+  value: unknown,
+  transactionHashes: readonly string[],
+): readonly string[] {
+  if (!Array.isArray(value) || value.length !== transactionHashes.length) {
+    throw new Error("address-touch trace does not cover every block transaction");
+  }
+  const touched = new Set<string>();
+  for (let index = 0; index < value.length; index++) {
+    const item = value[index];
+    if (!item || typeof item !== "object") {
+      throw new Error(`address-touch trace ${index} is not an object`);
+    }
+    const record = item as Record<string, unknown>;
+    if (
+      parseHash(record.txHash, `address-touch trace ${index} txHash`) !==
+        transactionHashes[index]
+    ) {
+      throw new Error(`address-touch trace ${index} transaction order mismatch`);
+    }
+    if (record.result === undefined || record.error !== undefined) {
+      throw new Error(`address-touch trace ${index} is incomplete`);
+    }
+    collectCallFrameAddresses(record.result, touched, index);
+  }
+  return Object.freeze([...touched].sort());
+}
+
+function collectCallFrameAddresses(
+  root: unknown,
+  touched: Set<string>,
+  transactionIndex: number,
+): void {
+  const pending: unknown[] = [root];
+  let frameIndex = 0;
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (!value || typeof value !== "object") {
+      throw new Error(
+        `address-touch trace ${transactionIndex} frame ${frameIndex} is invalid`,
+      );
+    }
+    const frame = value as Record<string, unknown>;
+    touched.add(parseAddress(
+      frame.from,
+      `address-touch trace ${transactionIndex} frame ${frameIndex} from`,
+    ));
+    if (frame.to !== undefined) {
+      touched.add(parseAddress(
+        frame.to,
+        `address-touch trace ${transactionIndex} frame ${frameIndex} to`,
+      ));
+    } else if (frame.type !== "CREATE" && frame.type !== "CREATE2") {
+      throw new Error(
+        `address-touch trace ${transactionIndex} frame ${frameIndex} lacks to`,
+      );
+    }
+    if (frame.calls !== undefined) {
+      if (!Array.isArray(frame.calls)) {
+        throw new Error(
+          `address-touch trace ${transactionIndex} frame ${frameIndex} calls is invalid`,
+        );
+      }
+      pending.push(...frame.calls);
+    }
+    frameIndex++;
+  }
 }
 
 function parseChainLog(

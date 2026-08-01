@@ -449,6 +449,7 @@ export interface RegisteredBlockScanStateFamily {
   readonly lane: BlockScanPricingLane;
   stateKey(edge: TokenEdge): string;
   ownsEdge(edge: TokenEdge): boolean;
+  dependencies(edges: readonly TokenEdge[]): readonly string[];
   compile(
     input: RegisteredBlockScanStateFamilyCompileInput,
   ): Promise<CompiledBlockScanStateFamily>;
@@ -622,6 +623,8 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     lane,
     stateKey: (edge: TokenEdge) => capability.stateKey(edge),
     ownsEdge: (edge: TokenEdge) => input.ownsEdge(edge),
+    dependencies: (edges: readonly TokenEdge[]) =>
+      capability.dependencies(edges),
     compile,
   });
 }

@@ -69,6 +69,49 @@ export interface BlockScanStateReadBackend {
       readonly sharedSignal?: AbortSignal;
     },
   ): Promise<CanonicalMutationRange>;
+
+  /**
+   * Optional whole-block call proof used only to evaluate a conservative
+   * protocol carry-forward rule. The proof is hash-pinned, includes nested
+   * call frames and is rejected unless the previous source is its parent.
+   */
+  readCanonicalAddressTouches?(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<CanonicalAddressTouchRange>;
+}
+
+export interface CanonicalAddressTouchRange {
+  readonly fromExclusive: BlockSource;
+  readonly through: BlockSource;
+  readonly touchedAddresses: readonly string[];
+  readonly transactionCount: number;
+  readonly complete: true;
+  readonly rangeFingerprint: string;
+}
+
+export type ProtocolAddressTouchShadowStatus =
+  | "complete"
+  | "unavailable";
+
+export interface ProtocolAddressTouchShadowTelemetry {
+  readonly status: ProtocolAddressTouchShadowStatus;
+  readonly fromBlock?: number;
+  readonly throughBlock: number;
+  readonly wallMs: number;
+  readonly touchedAddresses?: number;
+  readonly transactionCount?: number;
+  readonly protocolStateKeys: number;
+  readonly predictedDirtyStateKeys?: number;
+  readonly predictedCarryStateKeys?: number;
+  readonly comparableCarryStateKeys?: number;
+  readonly mismatchStateKeys?: number;
+  readonly mismatchFamilyIds?: readonly string[];
+  readonly unavailableReason?: string;
 }
 
 export interface BlockScanStateCoverage {
@@ -256,6 +299,11 @@ export interface BlockScanStateCoordinatorOptions {
    * timing one out never aborts a sibling or the generation controller.
    */
   readonly familyTimeoutMs?: number;
+  /** Shadow never changes production reads or publication. */
+  readonly protocolAddressTouchShadow?: boolean;
+  readonly onProtocolAddressTouchShadowTelemetry?: (
+    telemetry: ProtocolAddressTouchShadowTelemetry,
+  ) => void;
   readonly now?: () => number;
 }
 
@@ -317,6 +365,15 @@ interface BehaviorProvenUnavailableEdge {
   readonly familyId: string;
   readonly stateKey: string;
   readonly reason: string;
+}
+
+interface ProtocolAddressTouchShadowAttempt {
+  readonly startedAtMs: number;
+  readonly fromExclusive: BlockSource;
+  readonly through: BlockSource;
+  readonly groups: readonly StateGroup[];
+  readonly previousByStateKey: ReadonlyMap<string, PublishedStateKey>;
+  readonly proof: Promise<CanonicalAddressTouchRange>;
 }
 
 interface FamilyLaneStaging {
@@ -428,6 +485,10 @@ export class BlockScanStateCoordinator {
    */
   private previousCanonicalGraphStateKeys: ReadonlySet<string> | null = null;
   private readonly familyTimeoutMs: number;
+  private readonly protocolAddressTouchShadow: boolean;
+  private readonly onProtocolAddressTouchShadowTelemetry:
+    | ((telemetry: ProtocolAddressTouchShadowTelemetry) => void)
+    | undefined;
   private readonly now: () => number;
 
   constructor(
@@ -442,6 +503,10 @@ export class BlockScanStateCoordinator {
       );
     }
     this.familyTimeoutMs = Math.max(1, Math.floor(familyTimeoutMs));
+    this.protocolAddressTouchShadow =
+      options.protocolAddressTouchShadow ?? false;
+    this.onProtocolAddressTouchShadowTelemetry =
+      options.onProtocolAddressTouchShadowTelemetry;
     this.now = options.now ?? Date.now;
   }
 
@@ -488,6 +553,7 @@ export class BlockScanStateCoordinator {
 
   async prepare(input: PrepareBlockScanStateInput): Promise<BlockScanStatePrepareResult> {
     const { graph } = input;
+    const previousPublished = this.published;
     const familySettleDeadlineAtMs = Math.min(
       input.deadlineAtMs,
       input.familySettleDeadlineAtMs ?? input.deadlineAtMs,
@@ -605,6 +671,14 @@ export class BlockScanStateCoordinator {
             !stateBlockedFamilyIds.has(group.familyId),
         ),
       } as const;
+      const protocolAddressTouchShadow =
+        this.beginProtocolAddressTouchShadow(
+          previousPublished,
+          laneGroups.protocol,
+          graph,
+          input.deadlineAtMs,
+          controller.signal,
+        );
       const [swap, protocol] = await Promise.all([
         this.runLane(
           "swap",
@@ -840,6 +914,10 @@ export class BlockScanStateCoordinator {
         }));
       }
       this.published = snapshot;
+      this.finishProtocolAddressTouchShadow(
+        protocolAddressTouchShadow,
+        snapshot,
+      );
       const degraded =
         incompleteFamilyIds.length > 0 ||
         coverage.unresolvedStateKeys.length > 0 ||
@@ -862,6 +940,131 @@ export class BlockScanStateCoordinator {
       detachExternal();
       if (this.active?.token === token) this.active = null;
     }
+  }
+
+  private beginProtocolAddressTouchShadow(
+    previous: BlockScanStateSnapshot | null,
+    groups: readonly StateGroup[],
+    graph: VerifiedGraphView,
+    deadlineAtMs: number,
+    signal: AbortSignal,
+  ): ProtocolAddressTouchShadowAttempt | null {
+    if (
+      !this.protocolAddressTouchShadow ||
+      !this.onProtocolAddressTouchShadowTelemetry ||
+      !this.backend.readCanonicalAddressTouches ||
+      !previous ||
+      previous.sourceBlock + 1 !== graph.sourceBlock ||
+      graph.generation <= previous.generation ||
+      groups.length === 0
+    ) {
+      return null;
+    }
+    const fromExclusive = Object.freeze({
+      number: previous.sourceBlock,
+      hash: previous.sourceBlockHash,
+      generation: previous.generation,
+    });
+    const through = Object.freeze({
+      number: graph.sourceBlock,
+      hash: graph.sourceBlockHash,
+      generation: graph.generation,
+    });
+    const previousByStateKey = new Map<string, PublishedStateKey>();
+    for (const group of groups) {
+      const recovery = this.recoveryBaseForGroup(group);
+      if (
+        recovery &&
+        recovery.schemaFingerprint === stateSchemaFingerprint(group.edges) &&
+        sameBlockSource(recovery.state.source, fromExclusive)
+      ) {
+        previousByStateKey.set(group.stateKey, recovery.state);
+      }
+    }
+    const proof = this.backend.readCanonicalAddressTouches(
+      fromExclusive,
+      through,
+      { deadlineAtMs, signal },
+    );
+    // The full state lanes can take seconds; attach a rejection observer now
+    // and let the terminal shadow comparison classify it later.
+    proof.catch(() => undefined);
+    return Object.freeze({
+      startedAtMs: this.now(),
+      fromExclusive,
+      through,
+      groups: Object.freeze([...groups]),
+      previousByStateKey,
+      proof,
+    });
+  }
+
+  private finishProtocolAddressTouchShadow(
+    attempt: ProtocolAddressTouchShadowAttempt | null,
+    current: BlockScanStateSnapshot,
+  ): void {
+    if (!attempt || !this.onProtocolAddressTouchShadowTelemetry) return;
+    const callback = this.onProtocolAddressTouchShadowTelemetry;
+    void attempt.proof.then((proof) => {
+      const touched = new Set(proof.touchedAddresses);
+      let predictedDirtyStateKeys = 0;
+      let predictedCarryStateKeys = 0;
+      let comparableCarryStateKeys = 0;
+      let mismatchStateKeys = 0;
+      const mismatchFamilyIds = new Set<string>();
+      for (const group of attempt.groups) {
+        const previous = attempt.previousByStateKey.get(group.stateKey);
+        const dependencies = group.family.dependencies(group.edges);
+        const dependencySetValid = dependencies.every(isCanonicalAddress);
+        const dirty =
+          !previous ||
+          !dependencySetValid ||
+          dependencies.some((address) => touched.has(address.toLowerCase()));
+        if (dirty) {
+          predictedDirtyStateKeys++;
+          continue;
+        }
+        predictedCarryStateKeys++;
+        const next = current.stateByStateKey.get(group.stateKey);
+        if (!next) continue;
+        comparableCarryStateKeys++;
+        try {
+          if (
+            semanticStateHash(previous, group.edges) !==
+              semanticStateHash(next, group.edges)
+          ) {
+            mismatchStateKeys++;
+            mismatchFamilyIds.add(group.familyId);
+          }
+        } catch {
+          mismatchStateKeys++;
+          mismatchFamilyIds.add(group.familyId);
+        }
+      }
+      safelyEmitProtocolAddressTouchShadow(callback, Object.freeze({
+        status: "complete" as const,
+        fromBlock: proof.fromExclusive.number,
+        throughBlock: proof.through.number,
+        wallMs: Math.max(0, this.now() - attempt.startedAtMs),
+        touchedAddresses: proof.touchedAddresses.length,
+        transactionCount: proof.transactionCount,
+        protocolStateKeys: attempt.groups.length,
+        predictedDirtyStateKeys,
+        predictedCarryStateKeys,
+        comparableCarryStateKeys,
+        mismatchStateKeys,
+        mismatchFamilyIds: Object.freeze([...mismatchFamilyIds].sort()),
+      }));
+    }).catch((error) => {
+      safelyEmitProtocolAddressTouchShadow(callback, Object.freeze({
+        status: "unavailable" as const,
+        fromBlock: attempt.fromExclusive.number,
+        throughBlock: attempt.through.number,
+        wallMs: Math.max(0, this.now() - attempt.startedAtMs),
+        protocolStateKeys: attempt.groups.length,
+        unavailableReason: protocolAddressTouchUnavailableReason(error),
+      }));
+    });
   }
 
   /**
@@ -3024,6 +3227,51 @@ function sanitizedIncrementalFailureDetail(
     ? "validation"
     : "unknown";
   return `${phase}:${kind}`;
+}
+
+function semanticStateHash(
+  state: PublishedStateKey,
+  edges: readonly TokenEdge[],
+): string {
+  const mids = [...state.snapshot.deriveMids(edges)]
+    .sort(([left], [right]) => left.localeCompare(right));
+  const unavailable = state.snapshot.behaviorProvenUnavailableEdges
+    ? [...state.snapshot.behaviorProvenUnavailableEdges(edges)]
+      .sort(([left], [right]) => left.localeCompare(right))
+    : [];
+  return deterministicHash({ mids, unavailable });
+}
+
+function isCanonicalAddress(value: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(value);
+}
+
+function protocolAddressTouchUnavailableReason(error: unknown): string {
+  const message = formatError(error).toLowerCase();
+  if (message.includes("deadline") || message.includes("timed out")) {
+    return "deadline";
+  }
+  if (isAbortError(error) || message.includes("superseded")) {
+    return "aborted";
+  }
+  if (message.includes("canonical") || message.includes("parent")) {
+    return "canonical-proof-failed";
+  }
+  if (message.includes("trace") || message.includes("transaction")) {
+    return "trace-incomplete";
+  }
+  return "rpc-or-validation-failed";
+}
+
+function safelyEmitProtocolAddressTouchShadow(
+  callback: (telemetry: ProtocolAddressTouchShadowTelemetry) => void,
+  telemetry: ProtocolAddressTouchShadowTelemetry,
+): void {
+  try {
+    callback(telemetry);
+  } catch {
+    // Observability must never affect pricing publication.
+  }
 }
 
 function formatError(error: unknown): string {

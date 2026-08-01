@@ -56,6 +56,8 @@ await testFinalCanonicalCasBypassesDescriptorQueue();
 await testCachedHeaderStillRejectsLogAndFinalCasReorg();
 await testFamilyAbortDoesNotCancelSharedHeader();
 await testMutationRangeRejectsReorgAndRemovedLog();
+await testCanonicalAddressTouchesIncludeNestedCalls();
+await testCanonicalAddressTouchesFailClosed();
 
 console.log("blockscan-state-read-backend PASS");
 
@@ -2048,6 +2050,123 @@ async function testMutationRangeRejectsReorgAndRemovedLog(): Promise<void> {
   console.log("[state-read-backend] mutation reorg/removed fail closed: PASS");
 }
 
+async function testCanonicalAddressTouchesIncludeNestedCalls(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const txHash = `0x${"33".repeat(32)}`;
+  const nestedAddress = "0x0000000000000000000000000000000000000003";
+  const previous: BlockSource = {
+    number: sourceBlock - 1,
+    hash: previousHash,
+    generation: sourceGeneration - 1,
+  };
+  const through: BlockSource = {
+    number: sourceBlock,
+    hash: sourceBlockHash,
+    generation: sourceGeneration,
+  };
+  const backend = backendWith(async (body) => body.map((request) => {
+    if (request.method === "eth_getBlockByHash") {
+      return success(request.id, {
+        number: "0x64",
+        hash: sourceBlockHash,
+        parentHash: previousHash,
+        transactions: [txHash],
+      });
+    }
+    if (request.method === "debug_traceBlockByHash") {
+      return success(request.id, [{
+        txHash,
+        result: {
+          type: "CALL",
+          from: callerAddress,
+          to: targetAddress,
+          calls: [{
+            type: "CALL",
+            from: targetAddress,
+            to: nestedAddress,
+          }],
+        },
+      }]);
+    }
+    return success(request.id, { hash: sourceBlockHash });
+  }));
+  const proof = await backend.readCanonicalAddressTouches(
+    previous,
+    through,
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    },
+  );
+  assert.deepEqual(proof.touchedAddresses, [
+    targetAddress,
+    callerAddress,
+    nestedAddress,
+  ]);
+  assert.equal(proof.transactionCount, 1);
+  assert.equal(proof.complete, true);
+  console.log("[state-read-backend] nested address-touch proof: PASS");
+}
+
+async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const txHash = `0x${"33".repeat(32)}`;
+  const previous: BlockSource = {
+    number: sourceBlock - 1,
+    hash: previousHash,
+    generation: sourceGeneration - 1,
+  };
+  const through: BlockSource = {
+    number: sourceBlock,
+    hash: sourceBlockHash,
+    generation: sourceGeneration,
+  };
+  const incomplete = backendWith(async (body) => body.map((request) => {
+    if (request.method === "eth_getBlockByHash") {
+      return success(request.id, {
+        number: "0x64",
+        hash: sourceBlockHash,
+        parentHash: previousHash,
+        transactions: [txHash],
+      });
+    }
+    if (request.method === "debug_traceBlockByHash") {
+      return success(request.id, []);
+    }
+    return success(request.id, { hash: sourceBlockHash });
+  }));
+  await assert.rejects(
+    () => incomplete.readCanonicalAddressTouches(previous, through, {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    }),
+    /does not cover every block transaction/,
+  );
+
+  const wrongParent = backendWith(async (body) => body.map((request) => {
+    if (request.method === "eth_getBlockByHash") {
+      return success(request.id, {
+        number: "0x64",
+        hash: sourceBlockHash,
+        parentHash: otherBlockHash,
+        transactions: [],
+      });
+    }
+    if (request.method === "debug_traceBlockByHash") {
+      return success(request.id, []);
+    }
+    return success(request.id, { hash: sourceBlockHash });
+  }));
+  await assert.rejects(
+    () => wrongParent.readCanonicalAddressTouches(previous, through, {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    }),
+    /not the requested canonical child/,
+  );
+  console.log("[state-read-backend] address-touch proof fails closed: PASS");
+}
+
 function backendWith(
   responder: (body: RpcRequest[], signal: AbortSignal | null) => Promise<unknown[]>,
   maxBatchSize = 500,
@@ -2181,8 +2300,10 @@ interface RpcRequest {
   readonly jsonrpc: "2.0";
   readonly id: number;
   readonly method:
+    | "debug_traceBlockByHash"
     | "debug_getRawHeader"
     | "eth_call"
+    | "eth_getBlockByHash"
     | "eth_getBlockByNumber"
     | "eth_getLogs";
   readonly params: readonly any[];
