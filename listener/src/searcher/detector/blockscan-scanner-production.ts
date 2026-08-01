@@ -3,6 +3,7 @@ import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import {
   blockScanEdgeKey,
+  deterministicHash,
   exactSetHash,
   type VerifiedGraphView,
 } from "../venues/blockscan-state-capability.js";
@@ -256,8 +257,8 @@ export function assertAtomicBlockScanPricingView(
   }
   const midKeys = [...pricing.mids.keys()];
   if (
-    exactSetHash(midKeys) !== coverage.resolvedEdgeKeyHash ||
-    midKeys.length !== coverage.resolvedEdgeKeys.length
+    midKeys.length !== resolvedEdgeSet.size ||
+    midKeys.some((edgeKey) => !resolvedEdgeSet.has(edgeKey))
   ) {
     throw new Error(
       "production scanner rejected non-exact atomic mid coverage",
@@ -293,18 +294,10 @@ function assertCoverageIntegrity(
   unavailableHash: string = exactSetHash([]),
 ): void {
   if (
-    expected.length !== new Set(expected).size ||
-    resolved.length !== new Set(resolved).size ||
-    unresolved.length !== new Set(unresolved).size ||
-    unavailable.length !== new Set(unavailable).size
-  ) {
-    throw new Error(`production scanner rejected duplicate ${label} coverage`);
-  }
-  if (
-    exactSetHash(expected) !== expectedHash ||
-    exactSetHash(resolved) !== resolvedHash ||
-    exactSetHash(unresolved) !== unresolvedHash ||
-    exactSetHash(unavailable) !== unavailableHash
+    canonicalSetHash(label, expected) !== expectedHash ||
+    canonicalSetHash(label, resolved) !== resolvedHash ||
+    canonicalSetHash(label, unresolved) !== unresolvedHash ||
+    canonicalSetHash(label, unavailable) !== unavailableHash
   ) {
     throw new Error(`production scanner rejected invalid ${label} coverage hash`);
   }
@@ -328,6 +321,28 @@ function assertCoverageIntegrity(
   ) {
     throw new Error(`production scanner rejected non-partitioned ${label} coverage`);
   }
+}
+
+/**
+ * Coordinator coverage is already frozen in canonical sort order. Hash it in
+ * one pass after proving that order. Legacy/fixture inputs retain exact set
+ * semantics through the original sort/dedupe hash path.
+ */
+function canonicalSetHash(label: string, values: readonly string[]): string {
+  let canonical = true;
+  for (let index = 1; index < values.length; index++) {
+    const previous = values[index - 1];
+    const current = values[index];
+    if (previous === current) {
+      throw new Error(`production scanner rejected duplicate ${label} coverage`);
+    }
+    if (previous > current) canonical = false;
+  }
+  if (canonical) return deterministicHash(values);
+  if (values.length !== new Set(values).size) {
+    throw new Error(`production scanner rejected duplicate ${label} coverage`);
+  }
+  return exactSetHash(values);
 }
 
 function assertCompleteCoverage(
