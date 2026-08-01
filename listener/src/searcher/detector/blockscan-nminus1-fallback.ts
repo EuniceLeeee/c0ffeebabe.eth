@@ -9,6 +9,7 @@ import {
 import { cycleFingerprint } from "./cycle-fingerprint.js";
 import {
   assertAtomicBlockScanPricingView,
+  type AtomicBlockScanPricingValidationTiming,
 } from "./blockscan-scanner-production.js";
 import {
   scanBlockStateFromResolvedMids,
@@ -46,6 +47,8 @@ export interface NMinusOneCoarseOutcome {
   readonly requiredExactSourceBlockHash: string;
   readonly scan: BlockScanOutcome;
   readonly scanTimingMs: BlockScanScanTiming | null;
+  readonly atomicValidationTimingMs:
+    AtomicBlockScanPricingValidationTiming | null;
   readonly wrapperTimingMs: NMinusOneCoarseTiming;
   readonly candidates: readonly NMinusOneCoarseCandidate[];
   readonly rejectedRouteCount: number;
@@ -77,7 +80,11 @@ export function enumerateNMinusOneCoarseCandidates(input: {
   const startedAtMs = Date.now();
   const coarse = input.coarsePricing;
   const exact = input.exactGraph;
-  assertAtomicBlockScanPricingView(coarse.graph, coarse);
+  let atomicValidationTimingMs:
+    AtomicBlockScanPricingValidationTiming | null = null;
+  assertAtomicBlockScanPricingView(coarse.graph, coarse, (timing) => {
+    atomicValidationTimingMs = timing;
+  });
   const atomicValidationFinishedAtMs = Date.now();
   if (coarse.sourceBlock + 1 !== exact.sourceBlock) {
     throw new Error(
@@ -167,6 +174,7 @@ export function enumerateNMinusOneCoarseCandidates(input: {
     requiredExactSourceBlockHash: exact.sourceBlockHash,
     scan,
     scanTimingMs,
+    atomicValidationTimingMs,
     wrapperTimingMs: Object.freeze({
       atomicValidation: Math.max(
         0,

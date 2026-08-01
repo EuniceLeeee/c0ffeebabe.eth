@@ -35,6 +35,15 @@ export interface ProductionBlockScanOutcome extends BlockScanOutcome {
   readonly selectionProvenance: NaturalBlockScanSelectionProvenance;
 }
 
+export interface AtomicBlockScanPricingValidationTiming {
+  readonly identity: number;
+  readonly coverage: number;
+  readonly indexes: number;
+  readonly mids: number;
+  readonly graphDigest: number;
+  readonly total: number;
+}
+
 /**
  * Strict production boundary: callers cannot independently supply a graph,
  * cache, block number or partial mid map.
@@ -155,7 +164,9 @@ function assertAtomicRuntime(runtime: AdapterRuntimeSnapshot): void {
 export function assertAtomicBlockScanPricingView(
   graph: VerifiedGraphView,
   pricing: BlockScanStateSnapshot,
+  onTiming?: (timing: AtomicBlockScanPricingValidationTiming) => void,
 ): void {
+  const startedAtMs = Date.now();
   assertEqualNumber("generation", [
     graph.generation,
     pricing.generation,
@@ -184,6 +195,7 @@ export function assertAtomicBlockScanPricingView(
     graph.ownershipHash,
     pricing.graph.ownershipHash,
   ]);
+  const identityFinishedAtMs = Date.now();
 
   const coverage = pricing.coverage;
   assertCoverageIntegrity(
@@ -215,6 +227,7 @@ export function assertAtomicBlockScanPricingView(
     coverage.unavailableEdgeKeys,
     coverage.unavailableEdgeKeyHash,
   );
+  const coverageFinishedAtMs = Date.now();
 
   const expectedEdgeSet = new Set(coverage.expectedEdgeKeys);
   const resolvedReadSet = new Set(coverage.resolvedReadKeys);
@@ -255,6 +268,7 @@ export function assertAtomicBlockScanPricingView(
       "production scanner rejected incomplete edge availability coverage",
     );
   }
+  const indexesFinishedAtMs = Date.now();
   const midKeys = [...pricing.mids.keys()];
   if (
     midKeys.length !== resolvedEdgeSet.size ||
@@ -264,6 +278,7 @@ export function assertAtomicBlockScanPricingView(
       "production scanner rejected non-exact atomic mid coverage",
     );
   }
+  const midsFinishedAtMs = Date.now();
   if (
     graph.scannerEdgeCount !== expectedEdgeSet.size ||
     graph.scannerEdgeKeyHash !== coverage.expectedEdgeKeyHash
@@ -272,6 +287,15 @@ export function assertAtomicBlockScanPricingView(
       "production scanner missing current-N mid or pricing coverage does not exactly match its graph",
     );
   }
+  const finishedAtMs = Date.now();
+  onTiming?.(Object.freeze({
+    identity: Math.max(0, identityFinishedAtMs - startedAtMs),
+    coverage: Math.max(0, coverageFinishedAtMs - identityFinishedAtMs),
+    indexes: Math.max(0, indexesFinishedAtMs - coverageFinishedAtMs),
+    mids: Math.max(0, midsFinishedAtMs - indexesFinishedAtMs),
+    graphDigest: Math.max(0, finishedAtMs - midsFinishedAtMs),
+    total: Math.max(0, finishedAtMs - startedAtMs),
+  }));
 }
 
 function scannerConsumesEdge(edge: {
