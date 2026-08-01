@@ -353,8 +353,15 @@ tar czf "$REPO-deploy-$TS.tar.gz" -T "/tmp/dirty-$TS.txt" 2>/dev/null
 # above, then remove only the two namespaces scanned by the production tool index.
 find "$REPO/analysis/src/cli" "$REPO/scripts" -type f -name '._*' -delete 2>/dev/null || true
 git fetch origin -q || abort_runtime "git fetch origin failed"
-git reset --hard origin/main || abort_runtime "git reset to origin/main failed"
-say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
+DEPLOY_REF=${SEARCHER_DEPLOY_REF:-origin/main}
+case "$DEPLOY_REF" in
+  origin/main|origin/codex/*|origin/ab/*) ;;
+  *) abort_runtime "SEARCHER_DEPLOY_REF must be origin/main or an origin/codex|origin/ab ref" ;;
+esac
+git show-ref --verify --quiet "refs/remotes/$DEPLOY_REF" \
+  || abort_runtime "deployment ref is unavailable: $DEPLOY_REF"
+git reset --hard "$DEPLOY_REF" || abort_runtime "git reset to $DEPLOY_REF failed"
+say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1) ref=$DEPLOY_REF"
 
 # ── 4. Build + production-analysis preflight ──
 ( cd "$REPO/listener" && npm run build ) \
