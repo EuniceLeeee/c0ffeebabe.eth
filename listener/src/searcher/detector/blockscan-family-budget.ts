@@ -148,6 +148,25 @@ export function orderByBlockScanFamily<T>(
   items: readonly T[],
   families: (item: T) => readonly string[],
 ): T[] {
+  return orderBlockScanFamilyPrefix(items, items.length, families);
+}
+
+/**
+ * Produce the exact prefix of the family-fair order that the caller will
+ * consume.  Selection used to order every eligible route and only then slice
+ * the first `limit` entries.  On a large graph that turned a bounded 512-route
+ * admission into work proportional to every enumerated route after the scan
+ * deadline had already expired.
+ *
+ * Stopping after the requested prefix does not change ordering or admission:
+ * each iteration is byte-for-byte the same greedy decision as the full order;
+ * unobserved suffix entries cannot influence an earlier choice.
+ */
+function orderBlockScanFamilyPrefix<T>(
+  items: readonly T[],
+  limit: number,
+  families: (item: T) => readonly string[],
+): T[] {
   const work = items.map((item, index) => {
     const familyIds = [...new Set(families(item))].sort();
     return {
@@ -171,7 +190,8 @@ export function orderByBlockScanFamily<T>(
   }
   const served = new Map<string, number>();
   const ordered: T[] = [];
-  while (ordered.length < work.length) {
+  const targetLength = Math.min(items.length, Math.max(0, Math.trunc(limit)));
+  while (ordered.length < targetLength) {
     let selectedBucket:
       | { readonly entries: typeof work; next: number }
       | undefined;
@@ -222,7 +242,7 @@ export function selectByBlockScanFamily<T>(
   families: (item: T) => readonly string[],
 ): T[] {
   if (limit <= 0) return [];
-  return orderByBlockScanFamily(items, families).slice(0, limit);
+  return orderBlockScanFamilyPrefix(items, limit, families);
 }
 
 /**

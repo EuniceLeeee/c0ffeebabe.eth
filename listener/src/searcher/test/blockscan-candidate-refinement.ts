@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { performance } from "node:perf_hooks";
 import { ethers } from "ethers";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import {
@@ -14,6 +15,7 @@ import {
   blockScanEdgeFamilyId,
   blockScanFailureCircuitAttribution,
   blockScanRouteFamilyIds,
+  orderByBlockScanFamily,
   selectByBlockScanFamily,
 } from "../detector/blockscan-family-budget.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
@@ -161,6 +163,8 @@ assert.equal(diagnostics[0]?.failure?.attributedFamilyId, "univ2-swap");
 assert.equal(diagnostics[0]?.failure?.stage, "exact quote");
 
 familyFairAdmissionAndCircuit();
+boundedFamilySelectionStopsAtConsumedPrefix();
+expiredPathSearchUnwindsAllFrames();
 instanceAttributionCannotEscapeCurrentRoute();
 singletonManagerInstancesDoNotCollide();
 badFamilyHighScoreFloodCannotConsumeExpansionCap();
@@ -405,6 +409,99 @@ function familyFairAdmissionAndCircuit(): void {
     false,
     "typed per-leg failures strike only their owner",
   );
+}
+
+function boundedFamilySelectionStopsAtConsumedPrefix(): void {
+  const fixture = Array.from({ length: 50_000 }, (_, index) => ({
+    index,
+    familyIds: [
+      `family-${index % 800}`,
+      `sibling-${(index * 17) % 800}`,
+    ].sort(),
+  }));
+  const referenceFixture = fixture.slice(0, 4_000);
+  assert.deepEqual(
+    selectByBlockScanFamily(
+      referenceFixture,
+      512,
+      (item) => item.familyIds,
+    ),
+    orderByBlockScanFamily(
+      referenceFixture,
+      (item) => item.familyIds,
+    ).slice(0, 512),
+    "bounded selection must preserve the exact prefix of the full fair order",
+  );
+
+  const started = performance.now();
+  const selected = selectByBlockScanFamily(
+    fixture,
+    512,
+    (item) => item.familyIds,
+  );
+  const elapsedMs = performance.now() - started;
+  assert.equal(selected.length, 512);
+  assert(
+    elapsedMs < 1_000,
+    `bounded family selection regressed to a full suffix order: ${elapsedMs}ms`,
+  );
+}
+
+function expiredPathSearchUnwindsAllFrames(): void {
+  const edges = Array.from({ length: 130 }, (_, index) =>
+    familyEdge("deadline-family", 10_000 + index, {
+      tokenIn: TOKEN_6,
+      tokenOut:
+        `0x${(20_000 + index).toString(16).padStart(40, "0")}`,
+    })
+  );
+  const originalNow = Date.now;
+  let deadlineChecks = 0;
+  Date.now = () => {
+    deadlineChecks++;
+    return deadlineChecks < 3 ? 0 : 1_000;
+  };
+  try {
+    const paths = buildTokenPaths(edges, TOKEN_6, TOKEN_18, {
+      maxHops: 2,
+      maxPoolsPerToken: Infinity,
+      maxPaths: 2_000,
+      deadlineAtMs: 500,
+    });
+    assert.deepEqual(paths, []);
+    assert.equal(
+      deadlineChecks,
+      3,
+      "one deadline hit must unwind the whole DFS instead of resuming parent loops",
+    );
+  } finally {
+    Date.now = originalNow;
+  }
+
+  let inspectedEdges = 0;
+  const expiredEdge = {
+    ...familyEdge("deadline-family", 20_000),
+    get tokenIn(): string {
+      inspectedEdges++;
+      return TOKEN_6;
+    },
+  };
+  Date.now = () => 1_000;
+  try {
+    assert.deepEqual(
+      buildTokenPaths([expiredEdge], TOKEN_6, TOKEN_18, {
+        deadlineAtMs: 500,
+      }),
+      [],
+    );
+    assert.equal(
+      inspectedEdges,
+      0,
+      "an already-expired search must not build its adjacency map",
+    );
+  } finally {
+    Date.now = originalNow;
+  }
 }
 
 function instanceAttributionCannotEscapeCurrentRoute(): void {

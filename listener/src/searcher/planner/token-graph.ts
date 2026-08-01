@@ -598,6 +598,8 @@ export function buildTokenPaths(
   const maxPaths = opts.maxPaths ?? 20000;
   const deadlineAtMs = opts.deadlineAtMs;
 
+  if (deadlineAtMs !== undefined && Date.now() >= deadlineAtMs) return [];
+
   const isPinned = (e: TokenEdge): boolean =>
     e.score === undefined || (pinnedPools?.has(e.target.toLowerCase()) ?? false);
 
@@ -631,13 +633,23 @@ export function buildTokenPaths(
     }
   }
 
+  if (deadlineAtMs !== undefined && Date.now() >= deadlineAtMs) return [];
+
   const paths: TokenPath[] = [];
   let nodeExpansions = 0;
+  let deadlineHit = false;
 
   function walk(token: string, path: TokenEdge[]): void {
-    if (paths.length >= maxPaths) return;
+    if (deadlineHit || paths.length >= maxPaths) return;
     nodeExpansions++;
-    if (nodeExpansions % 64 === 0 && deadlineAtMs !== undefined && Date.now() >= deadlineAtMs) return;
+    if (
+      nodeExpansions % 64 === 0 &&
+      deadlineAtMs !== undefined &&
+      Date.now() >= deadlineAtMs
+    ) {
+      deadlineHit = true;
+      return;
+    }
     if (path.length > 0 && token.toLowerCase() === profitToken.toLowerCase()) {
       paths.push({ edges: path });
       return;
@@ -649,7 +661,7 @@ export function buildTokenPaths(
     for (const edge of outs) {
       if (path.some((used) => sameDirectedEdge(used, edge))) continue;
       walk(edge.tokenOut, [...path, edge]);
-      if (paths.length >= maxPaths) return;
+      if (deadlineHit || paths.length >= maxPaths) return;
     }
   }
 

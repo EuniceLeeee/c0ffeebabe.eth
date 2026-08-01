@@ -88,14 +88,14 @@ interface PreparedDiscovery {
   readonly delta: RuntimePoolRefreshDelta;
 }
 
-await distantStartupCatchesUpInSameHead();
-await stalePreparedSourceRestartsFromCurrentHead();
-await activeBackfillSettlesBeforeHotCatchup();
-await failedBackfillDoesNotBecomeUnboundedHotScan();
-await steadyStateBehindRemainsFailClosed();
-await steadyStateCompleteReadyCatchesCurrentHead();
+await distantStartupUsesPublishedGraphWhileBackfillContinues();
+await stalePreparedSourceFallsBackToPublishedGraph();
+await activeBackfillDoesNotBlockCurrentState();
+await failedBackfillStillAllowsCurrentState();
+await steadyStateBehindRunsDegradedCurrentState();
+await steadyStateReadyBackfillRunsPublishedGraph();
 await productionRuntimeRecordsNonzeroEnumerationAndSolver();
-await steadyStateIncompleteReadyRemainsFailClosed();
+await steadyStateIncompleteReadyRunsPublishedGraph();
 await incompleteRetriesAndHotBudgetResumes();
 await startupStateGetsAnIndependentPhaseBudget();
 await degradedSnapshotCompletesStartupWithoutScanning();
@@ -115,7 +115,7 @@ await newerEvidenceHeadCancelsBlockedEvidencePass();
 await workerForkReceivesPassCancellationControl();
 blindModeStillRequiresExecutableDexGraph();
 await observedPublicationDoesNotInvalidateHotDexCommit();
-await shutdownInterruptsStartupBackfillWait();
+await shutdownDoesNotWaitForHistoricalBackfill();
 await shutdownDrainsActivePassAndDropsPendingHead();
 await nMinusOneTrackerStaysOutsideNormalRuntimePublication();
 await nMinusOneWaitsForItsOnlyAdjacentProducer();
@@ -213,7 +213,8 @@ function failureCauseSummaryIsBoundedAndRedacted(): void {
   );
 }
 
-async function distantStartupCatchesUpInSameHead(): Promise<void> {
+async function distantStartupUsesPublishedGraphWhileBackfillContinues():
+  Promise<void> {
   const harness = createHarness(
     100,
     ["complete"],
@@ -223,14 +224,20 @@ async function distantStartupCatchesUpInSameHead(): Promise<void> {
   assert.deepEqual(
     harness.runtimeBlocks,
     [140],
-    "startup must strictly catch discovery up to the current head",
+    "startup must price the verified published graph at current N",
   );
-  assert.deepEqual(harness.backfillBlocks, []);
+  assert.deepEqual(harness.backfillBlocks, [140]);
+  assert.equal(
+    harness.publication.dexGraphCoverage.sourceCompleteThrough,
+    100,
+    "current-state progress must not fabricate the discovery watermark",
+  );
+  assert.equal(harness.laneSettledCalls, 0);
   assert.equal(harness.loop.isStartupWarmPending(), false);
   assert.equal(harness.publishedPricing, 1);
 }
 
-async function stalePreparedSourceRestartsFromCurrentHead(): Promise<void> {
+async function stalePreparedSourceFallsBackToPublishedGraph(): Promise<void> {
   const harness = createHarness(
     100,
     ["complete"],
@@ -248,73 +255,84 @@ async function stalePreparedSourceRestartsFromCurrentHead(): Promise<void> {
   );
   assert.deepEqual(
     harness.laneTakeBlocks,
-    [139],
-    "startup must consume only the replacement current-branch generation",
+    [],
+    "an invalid prepared source must not be published",
   );
   assert.deepEqual(harness.runtimeBlocks, [140]);
+  assert.deepEqual(harness.backfillBlocks, [140]);
+  assert.equal(
+    harness.publication.dexGraphCoverage.sourceCompleteThrough,
+    100,
+  );
 }
 
-async function activeBackfillSettlesBeforeHotCatchup(): Promise<void> {
-  const holdLane = deferred<void>();
+async function activeBackfillDoesNotBlockCurrentState(): Promise<void> {
   const harness = createHarness(
     100,
     ["complete"],
     {
       laneReadyBlocksAfterSettlement: [130, 149],
       beforeLaneSettled: async () => {
-        await holdLane.promise;
+        throw new Error("current-state pass awaited historical backfill");
       },
     },
   );
-  const run = harness.run(150);
-  await waitFor(() => harness.laneSettledCalls === 1);
+  await harness.run(150);
   assert.deepEqual(
     harness.runtimeBlocks,
-    [],
-    "startup must not race hot discovery against the active backfill lane",
+    [150],
+    "startup current-state preparation must not wait for historical backfill",
   );
-  holdLane.resolve();
-  await run;
-  assert.deepEqual(harness.runtimeBlocks, [150]);
-  assert.deepEqual(
-    harness.laneTakeBlocks,
-    [130, 149],
-    "bounded canonical chunks must publish in the same startup head",
-  );
-  assert.deepEqual(
-    harness.discoveryPrepareBases,
-    [149],
-    "strict current-head catch-up must start from the consumed watermark",
-  );
+  assert.equal(harness.laneSettledCalls, 0);
+  assert.deepEqual(harness.laneTakeBlocks, []);
+  assert.deepEqual(harness.discoveryPrepareBases, []);
+  assert.deepEqual(harness.backfillBlocks, [150]);
   assert.equal(harness.loop.isStartupWarmPending(), false);
 }
 
-async function failedBackfillDoesNotBecomeUnboundedHotScan(): Promise<void> {
+async function failedBackfillStillAllowsCurrentState(): Promise<void> {
   const harness = createHarness(100, ["complete"]);
   await harness.run(180);
-  assert.deepEqual(harness.runtimeBlocks, []);
+  assert.deepEqual(harness.runtimeBlocks, [180]);
   assert.deepEqual(
     harness.discoveryPrepareBases,
     [],
     "a failed historical lane must not move the entire gap to hot RPC",
   );
-  assert.deepEqual(harness.backfillBlocks, [180, 180]);
-  assert.equal(harness.loop.isStartupWarmPending(), true);
+  assert.deepEqual(harness.backfillBlocks, [180]);
+  assert.equal(harness.loop.isStartupWarmPending(), false);
+  assert.equal(harness.publishedPricing, 1);
+  assert.equal(
+    harness.publication.dexGraphCoverage.sourceCompleteThrough,
+    100,
+  );
 }
 
-async function steadyStateBehindRemainsFailClosed(): Promise<void> {
+async function steadyStateBehindRunsDegradedCurrentState(): Promise<void> {
   const harness = createHarness(
     100,
     ["complete"],
-    { startupWarmEnabled: false },
+    {
+      startupWarmEnabled: false,
+      routePipeline: true,
+    },
   );
   await harness.run(170);
-  assert.deepEqual(harness.runtimeBlocks, []);
+  assert.deepEqual(harness.runtimeBlocks, [170]);
   assert.deepEqual(harness.discoveryPrepareBases, []);
   assert.deepEqual(harness.backfillBlocks, [170]);
+  assert.equal(harness.solverInvocations, 1);
+  assert.equal(harness.routeTelemetryRecords[0]?.enumerationCount, 1);
+  assert.equal(harness.routeTelemetryRecords[0]?.passOutcome, "degraded");
+  assert.deepEqual(harness.pricingLaggingTopologyModes, ["proof-scoped"]);
+  assert.equal(
+    harness.publication.dexGraphCoverage.sourceCompleteThrough,
+    100,
+    "degraded current-state work must retain the real lagging watermark",
+  );
 }
 
-async function steadyStateCompleteReadyCatchesCurrentHead(): Promise<void> {
+async function steadyStateReadyBackfillRunsPublishedGraph(): Promise<void> {
   const harness = createHarness(
     100,
     ["complete"],
@@ -325,9 +343,17 @@ async function steadyStateCompleteReadyCatchesCurrentHead(): Promise<void> {
   );
   await harness.run(170);
   assert.deepEqual(harness.laneTakeBlocks, [165]);
-  assert.deepEqual(harness.discoveryPrepareBases, [165]);
+  assert.deepEqual(
+    harness.discoveryPrepareBases,
+    [],
+    "a consumed historical chunk must not move its remaining gap to hot RPC",
+  );
   assert.deepEqual(harness.runtimeBlocks, [170]);
-  assert.deepEqual(harness.backfillBlocks, []);
+  assert.deepEqual(harness.backfillBlocks, [170]);
+  assert.equal(
+    harness.publication.dexGraphCoverage.sourceCompleteThrough,
+    165,
+  );
   assert.deepEqual(
     harness.routeTelemetryRecords.map((record) => ({
       sourceBlock: record.sourceBlock,
@@ -376,7 +402,7 @@ async function productionRuntimeRecordsNonzeroEnumerationAndSolver(): Promise<vo
   );
 }
 
-async function steadyStateIncompleteReadyRemainsFailClosed(): Promise<void> {
+async function steadyStateIncompleteReadyRunsPublishedGraph(): Promise<void> {
   const harness = createHarness(
     100,
     ["complete"],
@@ -391,11 +417,14 @@ async function steadyStateIncompleteReadyRemainsFailClosed(): Promise<void> {
   assert.deepEqual(
     harness.discoveryPrepareBases,
     [],
-    "a prepared generation incomplete at its own pinned source must not " +
-      "enter strict hot catch-up",
+    "an incomplete prepared generation must not enter hot catch-up",
   );
-  assert.deepEqual(harness.runtimeBlocks, []);
+  assert.deepEqual(harness.runtimeBlocks, [170]);
   assert.deepEqual(harness.backfillBlocks, [170]);
+  assert.equal(
+    harness.publication.dexGraphCoverage.sourceCompleteThrough,
+    160,
+  );
 }
 
 async function incompleteRetriesAndHotBudgetResumes(): Promise<void> {
@@ -1271,24 +1300,22 @@ async function observedPublicationDoesNotInvalidateHotDexCommit(): Promise<void>
   );
 }
 
-async function shutdownInterruptsStartupBackfillWait(): Promise<void> {
-  const holdLane = deferred<void>();
+async function shutdownDoesNotWaitForHistoricalBackfill(): Promise<void> {
   const harness = createHarness(
     100,
-    [],
+    ["complete"],
     {
       beforeLaneSettled: async () => {
-        await holdLane.promise;
+        throw new Error("startup unexpectedly awaited backfill settlement");
       },
     },
   );
-  harness.loop.schedule(520);
-  await waitFor(() => harness.laneSettledCalls === 1);
+  await harness.run(520);
   await harness.loop.shutdown();
-  assert.deepEqual(harness.runtimeBlocks, []);
-  assert.equal(harness.loop.isStartupWarmPending(), true);
+  assert.deepEqual(harness.runtimeBlocks, [520]);
+  assert.equal(harness.laneSettledCalls, 0);
+  assert.equal(harness.loop.isStartupWarmPending(), false);
   assert.equal(harness.runtimeAborted, true);
-  holdLane.resolve();
 }
 
 async function shutdownDrainsActivePassAndDropsPendingHead(): Promise<void> {

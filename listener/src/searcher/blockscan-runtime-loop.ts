@@ -2025,6 +2025,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             exactSourceBlockHash: fallbackCoarse.requiredExactSourceBlockHash,
             candidates: fallbackCoarse.candidates.length,
             rejectedRouteCount: fallbackCoarse.rejectedRouteCount,
+            scanOutcome: fallbackCoarse.scan.outcome,
+            naturallyEnumeratedRoutes:
+              fallbackCoarse.scan.selection.enumeratedCount,
+            selectedRoutes: fallbackCoarse.scan.selection.selectedCount,
+            scanBudgetMs: blockScanCfg.budgetMs,
             recallMode: fallbackCoarse.recallMode,
             fullCoverage: fallbackCoarse.fullCoverage,
             degradedRecallReasons: fallbackCoarse.degradedRecallReasons,
