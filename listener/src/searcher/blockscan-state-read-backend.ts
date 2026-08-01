@@ -287,11 +287,15 @@ export class JsonRpcBlockScanStateReadBackend
       readonly signal: AbortSignal;
     },
   ): Promise<CanonicalAddressTouchRange> {
+    const distance = through.number - fromExclusive.number;
     if (
-      through.number !== fromExclusive.number + 1 ||
+      distance <= 0 ||
+      distance > 8 ||
       through.generation <= fromExclusive.generation
     ) {
-      throw new Error("address-touch proof requires one forward canonical block");
+      throw new Error(
+        "address-touch proof requires 1..8 forward canonical blocks",
+      );
     }
     const controller = new AbortController();
     const detach = linkAbort(control.signal, controller);
@@ -304,41 +308,60 @@ export class JsonRpcBlockScanStateReadBackend
       if (remainingMs <= 0) {
         controller.abort(new Error("address-touch proof deadline reached"));
       }
-      const blockId = this.nextId++;
-      const traceId = this.nextId++;
-      const responses = await this.postWithSlots(
+      const blockNumbers = Array.from(
+        { length: distance },
+        (_value, index) => fromExclusive.number + index + 1,
+      );
+      const blockIds = blockNumbers.map(() => this.nextId++);
+      const blockResponses = await this.postWithSlots(
         this.addressTouchSlots,
-        [
-          {
+        blockIds.map((id, index) => ({
             jsonrpc: "2.0",
-            id: blockId,
-            method: "eth_getBlockByHash",
-            params: [through.hash, false],
-          },
-          {
+            id,
+            method: "eth_getBlockByNumber",
+            params: [toBlockTag(blockNumbers[index]), false],
+        })),
+        controller.signal,
+      );
+      const blocks = parseAddressTouchBlocks(
+        blockResponses,
+        blockIds,
+        blockNumbers,
+        fromExclusive,
+        through,
+      );
+      const traceIds = blocks.map(() => this.nextId++);
+      const traceResponses = await this.postWithSlots(
+        this.addressTouchSlots,
+        traceIds.map((id, index) => ({
             jsonrpc: "2.0",
-            id: traceId,
+            id,
             method: "debug_traceBlockByHash",
-            params: [through.hash, {
+            params: [blocks[index].hash, {
               tracer: "callTracer",
               timeout: "5s",
               tracerConfig: { onlyTopCall: false, withLog: false },
             }],
-          },
-        ],
+        })),
         controller.signal,
       );
-      const block = requiredRpcResult(responses, blockId, "block");
-      const traces = requiredRpcResult(responses, traceId, "trace");
-      const parsedBlock = parseAddressTouchBlock(
-        block,
-        fromExclusive,
-        through,
-      );
-      const touchedAddresses = parseAddressTouchTraces(
-        traces,
-        parsedBlock.transactionHashes,
-      );
+      const touched = new Set<string>();
+      let transactionCount = 0;
+      for (let index = 0; index < blocks.length; index++) {
+        const traces = requiredRpcResult(
+          traceResponses,
+          traceIds[index],
+          `trace block ${blocks[index].number}`,
+        );
+        for (const address of parseAddressTouchTraces(
+          traces,
+          blocks[index].transactionHashes,
+        )) {
+          touched.add(address);
+        }
+        transactionCount += blocks[index].transactionHashes.length;
+      }
+      const touchedAddresses = Object.freeze([...touched].sort());
       await this.verifyCanonicalSourceWithSlotsMeasured(
         through,
         controller.signal,
@@ -348,12 +371,12 @@ export class JsonRpcBlockScanStateReadBackend
         fromExclusive,
         through,
         touchedAddresses,
-        transactionCount: parsedBlock.transactionHashes.length,
+        transactionCount,
         complete: true as const,
         rangeFingerprint: deterministicHash({
           fromExclusive,
           through,
-          transactionHashes: parsedBlock.transactionHashes,
+          blocks,
           touchedAddresses,
         }),
       });
@@ -1666,33 +1689,66 @@ function requiredRpcResult(
   return response.result;
 }
 
-function parseAddressTouchBlock(
-  value: unknown,
+function parseAddressTouchBlocks(
+  responses: readonly JsonRpcResponse[],
+  ids: readonly number[],
+  blockNumbers: readonly number[],
   fromExclusive: BlockSource,
   through: BlockSource,
-): { readonly transactionHashes: readonly string[] } {
-  if (!value || typeof value !== "object") {
-    throw new Error("address-touch block is not an object");
-  }
-  const block = value as Record<string, unknown>;
-  if (
-    parseRpcQuantity(block.number, "address-touch block number") !==
-      through.number ||
-    parseHash(block.hash, "address-touch block hash") !==
-      through.hash.toLowerCase() ||
-    parseHash(block.parentHash, "address-touch block parentHash") !==
-      fromExclusive.hash.toLowerCase()
-  ) {
-    throw new Error("address-touch block is not the requested canonical child");
-  }
-  if (!Array.isArray(block.transactions)) {
-    throw new Error("address-touch block transactions is not an array");
-  }
-  return Object.freeze({
-    transactionHashes: Object.freeze(block.transactions.map(
-      (hash, index) => parseHash(hash, `address-touch transaction ${index}`),
-    )),
+): readonly {
+  readonly number: number;
+  readonly hash: string;
+  readonly transactionHashes: readonly string[];
+}[] {
+  let expectedParentHash = fromExclusive.hash.toLowerCase();
+  const blocks = ids.map((id, index) => {
+    const value = requiredRpcResult(
+      responses,
+      id,
+      `block ${blockNumbers[index]}`,
+    );
+    if (!value || typeof value !== "object") {
+      throw new Error(`address-touch block ${blockNumbers[index]} is invalid`);
+    }
+    const block = value as Record<string, unknown>;
+    const number = parseRpcQuantity(
+      block.number,
+      `address-touch block ${blockNumbers[index]} number`,
+    );
+    const hash = parseHash(
+      block.hash,
+      `address-touch block ${blockNumbers[index]} hash`,
+    );
+    if (
+      number !== blockNumbers[index] ||
+      parseHash(
+        block.parentHash,
+        `address-touch block ${blockNumbers[index]} parentHash`,
+      ) !== expectedParentHash
+    ) {
+      throw new Error("address-touch blocks are not one canonical chain");
+    }
+    if (!Array.isArray(block.transactions)) {
+      throw new Error(
+        `address-touch block ${blockNumbers[index]} transactions is invalid`,
+      );
+    }
+    expectedParentHash = hash;
+    return Object.freeze({
+      number,
+      hash,
+      transactionHashes: Object.freeze(block.transactions.map(
+        (transactionHash, transactionIndex) => parseHash(
+          transactionHash,
+          `address-touch block ${number} transaction ${transactionIndex}`,
+        ),
+      )),
+    });
   });
+  if (blocks.at(-1)?.hash !== through.hash.toLowerCase()) {
+    throw new Error("address-touch through block is not canonical");
+  }
+  return Object.freeze(blocks);
 }
 
 function parseAddressTouchTraces(

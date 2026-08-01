@@ -954,7 +954,8 @@ export class BlockScanStateCoordinator {
       !this.onProtocolAddressTouchShadowTelemetry ||
       !this.backend.readCanonicalAddressTouches ||
       !previous ||
-      previous.sourceBlock + 1 !== graph.sourceBlock ||
+      previous.sourceBlock >= graph.sourceBlock ||
+      graph.sourceBlock - previous.sourceBlock > 8 ||
       graph.generation <= previous.generation ||
       groups.length === 0
     ) {

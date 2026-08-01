@@ -2051,11 +2051,13 @@ async function testMutationRangeRejectsReorgAndRemovedLog(): Promise<void> {
 }
 
 async function testCanonicalAddressTouchesIncludeNestedCalls(): Promise<void> {
-  const previousHash = `0x${"10".repeat(32)}`;
+  const previousHash = `0x${"09".repeat(32)}`;
+  const intermediateHash = `0x${"10".repeat(32)}`;
+  const firstTxHash = `0x${"32".repeat(32)}`;
   const txHash = `0x${"33".repeat(32)}`;
   const nestedAddress = "0x0000000000000000000000000000000000000003";
   const previous: BlockSource = {
-    number: sourceBlock - 1,
+    number: sourceBlock - 2,
     hash: previousHash,
     generation: sourceGeneration - 1,
   };
@@ -2065,22 +2067,28 @@ async function testCanonicalAddressTouchesIncludeNestedCalls(): Promise<void> {
     generation: sourceGeneration,
   };
   const backend = backendWith(async (body) => body.map((request) => {
-    if (request.method === "eth_getBlockByHash") {
+    if (request.method === "eth_getBlockByNumber") {
+      const number = Number(BigInt(request.params[0]));
       return success(request.id, {
-        number: "0x64",
-        hash: sourceBlockHash,
-        parentHash: previousHash,
-        transactions: [txHash],
+        number: request.params[0],
+        hash: number === sourceBlock - 1
+          ? intermediateHash
+          : sourceBlockHash,
+        parentHash: number === sourceBlock - 1
+          ? previousHash
+          : intermediateHash,
+        transactions: [number === sourceBlock - 1 ? firstTxHash : txHash],
       });
     }
     if (request.method === "debug_traceBlockByHash") {
+      const first = request.params[0] === intermediateHash;
       return success(request.id, [{
-        txHash,
+        txHash: first ? firstTxHash : txHash,
         result: {
           type: "CALL",
           from: callerAddress,
           to: targetAddress,
-          calls: [{
+          calls: first ? [] : [{
             type: "CALL",
             from: targetAddress,
             to: nestedAddress,
@@ -2088,7 +2096,7 @@ async function testCanonicalAddressTouchesIncludeNestedCalls(): Promise<void> {
         },
       }]);
     }
-    return success(request.id, { hash: sourceBlockHash });
+    throw new Error(`unexpected method ${request.method}`);
   }));
   const proof = await backend.readCanonicalAddressTouches(
     previous,
@@ -2103,7 +2111,7 @@ async function testCanonicalAddressTouchesIncludeNestedCalls(): Promise<void> {
     callerAddress,
     nestedAddress,
   ]);
-  assert.equal(proof.transactionCount, 1);
+  assert.equal(proof.transactionCount, 2);
   assert.equal(proof.complete, true);
   console.log("[state-read-backend] nested address-touch proof: PASS");
 }
@@ -2122,7 +2130,7 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
     generation: sourceGeneration,
   };
   const incomplete = backendWith(async (body) => body.map((request) => {
-    if (request.method === "eth_getBlockByHash") {
+    if (request.method === "eth_getBlockByNumber") {
       return success(request.id, {
         number: "0x64",
         hash: sourceBlockHash,
@@ -2133,7 +2141,7 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
     if (request.method === "debug_traceBlockByHash") {
       return success(request.id, []);
     }
-    return success(request.id, { hash: sourceBlockHash });
+    throw new Error(`unexpected method ${request.method}`);
   }));
   await assert.rejects(
     () => incomplete.readCanonicalAddressTouches(previous, through, {
@@ -2144,7 +2152,7 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
   );
 
   const wrongParent = backendWith(async (body) => body.map((request) => {
-    if (request.method === "eth_getBlockByHash") {
+    if (request.method === "eth_getBlockByNumber") {
       return success(request.id, {
         number: "0x64",
         hash: sourceBlockHash,
@@ -2155,14 +2163,14 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
     if (request.method === "debug_traceBlockByHash") {
       return success(request.id, []);
     }
-    return success(request.id, { hash: sourceBlockHash });
+    throw new Error(`unexpected method ${request.method}`);
   }));
   await assert.rejects(
     () => wrongParent.readCanonicalAddressTouches(previous, through, {
       deadlineAtMs: Date.now() + 10_000,
       signal: new AbortController().signal,
     }),
-    /not the requested canonical child/,
+    /not one canonical chain/,
   );
   console.log("[state-read-backend] address-touch proof fails closed: PASS");
 }
