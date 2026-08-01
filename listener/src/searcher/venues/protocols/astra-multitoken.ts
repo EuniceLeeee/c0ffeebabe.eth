@@ -31,6 +31,7 @@ import {
 const astraMultiTokenPricingState = createProtocolQuoteStateCapability({
   familyId: "protocol:astra-multitoken",
   edgeAdapterIds: [ASTRA_MULTITOKEN_EDGE_ADAPTER],
+  addressTouchCarryPolicy: "dependency-touch",
   stateKey: (edge) =>
     `${edge.target}:${edge.tokenIn}:${edge.tokenOut}`.toLowerCase(),
   buildQuoteReads(edge, amountIn) {

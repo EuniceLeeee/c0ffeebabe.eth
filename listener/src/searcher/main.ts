@@ -1191,9 +1191,13 @@ async function main(): Promise<void> {
     blockScanStateReadBackend = familyStateReads;
     const protocolTouchMode =
       process.env.SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE ?? "off";
-    if (protocolTouchMode !== "off" && protocolTouchMode !== "shadow") {
+    if (
+      protocolTouchMode !== "off" &&
+      protocolTouchMode !== "shadow" &&
+      protocolTouchMode !== "enabled"
+    ) {
       throw new Error(
-        "SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE must be off or shadow",
+        "SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE must be off, shadow or enabled",
       );
     }
     adapterRuntimeCoordinator = new AdapterRuntimeCoordinator(
@@ -1208,11 +1212,11 @@ async function main(): Promise<void> {
             process.env.SEARCHER_BLOCKSCAN_STATE_FAMILY_TIMEOUT_MS ?? "120000",
           ),
         ),
-        protocolAddressTouchShadow: protocolTouchMode === "shadow",
+        protocolAddressTouchMode: protocolTouchMode,
         onProtocolAddressTouchShadowTelemetry: (telemetry) => {
           console.log(
             `[searcher/blockscan-protocol-touch-shadow] ${
-              JSON.stringify(telemetry)
+              JSON.stringify({ mode: protocolTouchMode, ...telemetry })
             }`,
           );
         },

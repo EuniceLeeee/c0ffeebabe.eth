@@ -19,6 +19,7 @@ const wstethIface = new ethers.Interface([
 const wstethPricingState = createProtocolQuoteStateCapability({
   familyId: "protocol:wsteth",
   edgeAdapterIds: ["wsteth-wrap", "wsteth-unwrap"],
+  addressTouchCarryPolicy: "dependency-touch",
   buildQuoteReads(edge, amountIn) {
     const functionName = edge.adapterId === "wsteth-wrap"
       ? "getWstETHByStETH"

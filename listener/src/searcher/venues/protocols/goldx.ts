@@ -20,6 +20,7 @@ const GOLDX_WAD = 10n ** 18n;
 const goldxPricingState = createProtocolQuoteStateCapability({
   familyId: "protocol:goldx",
   edgeAdapterIds: ["goldx-mint"],
+  addressTouchCarryPolicy: "dependency-touch",
   buildQuoteReads(edge) {
     return [{
       suffix: "unit",

@@ -299,7 +299,13 @@ export interface BlockScanStateCoordinatorOptions {
    * timing one out never aborts a sibling or the generation controller.
    */
   readonly familyTimeoutMs?: number;
-  /** Shadow never changes production reads or publication. */
+  /**
+   * Shadow compares the proposed carry rule with direct current-block reads.
+   * Enabled applies only family-explicit dependency-touch opt-ins and falls
+   * back to direct reads whenever the canonical trace proof is unavailable.
+   */
+  readonly protocolAddressTouchMode?: "off" | "shadow" | "enabled";
+  /** Backward-compatible test/config alias for shadow mode. */
   readonly protocolAddressTouchShadow?: boolean;
   readonly onProtocolAddressTouchShadowTelemetry?: (
     telemetry: ProtocolAddressTouchShadowTelemetry,
@@ -431,6 +437,7 @@ interface ActiveGeneration {
 
 const MAX_INCREMENTAL_RANGE_BLOCKS = 32;
 const DEFAULT_FAMILY_TIMEOUT_MS = 5_000;
+const ENABLED_PROTOCOL_ADDRESS_TOUCH_BUDGET_MS = 4_000;
 
 class DeadlineAbort extends Error {
   constructor() {
@@ -485,7 +492,7 @@ export class BlockScanStateCoordinator {
    */
   private previousCanonicalGraphStateKeys: ReadonlySet<string> | null = null;
   private readonly familyTimeoutMs: number;
-  private readonly protocolAddressTouchShadow: boolean;
+  private readonly protocolAddressTouchMode: "off" | "shadow" | "enabled";
   private readonly onProtocolAddressTouchShadowTelemetry:
     | ((telemetry: ProtocolAddressTouchShadowTelemetry) => void)
     | undefined;
@@ -503,8 +510,8 @@ export class BlockScanStateCoordinator {
       );
     }
     this.familyTimeoutMs = Math.max(1, Math.floor(familyTimeoutMs));
-    this.protocolAddressTouchShadow =
-      options.protocolAddressTouchShadow ?? false;
+    this.protocolAddressTouchMode = options.protocolAddressTouchMode ??
+      (options.protocolAddressTouchShadow ? "shadow" : "off");
     this.onProtocolAddressTouchShadowTelemetry =
       options.onProtocolAddressTouchShadowTelemetry;
     this.now = options.now ?? Date.now;
@@ -676,19 +683,32 @@ export class BlockScanStateCoordinator {
           previousPublished,
           laneGroups.protocol,
           graph,
-          input.deadlineAtMs,
+          this.protocolAddressTouchMode === "enabled"
+            ? Math.min(
+                familySettleDeadlineAtMs,
+                this.now() + ENABLED_PROTOCOL_ADDRESS_TOUCH_BUDGET_MS,
+              )
+            : input.deadlineAtMs,
           controller.signal,
         );
+      const swapRun = this.runLane(
+        "swap",
+        laneGroups.swap,
+        graph,
+        familySettleDeadlineAtMs,
+        controller.signal,
+        proofScopedFamilyIds,
+        previousCanonicalGraphStateKeys,
+      );
+      const protocolAddressTouchPlans =
+        this.protocolAddressTouchMode === "enabled"
+          ? await this.resolveProtocolAddressTouchPlans(
+              protocolAddressTouchShadow,
+              controller.signal,
+            )
+          : new Map<string, FamilyIncrementalPlan>();
       const [swap, protocol] = await Promise.all([
-        this.runLane(
-          "swap",
-          laneGroups.swap,
-          graph,
-          familySettleDeadlineAtMs,
-          controller.signal,
-          proofScopedFamilyIds,
-          previousCanonicalGraphStateKeys,
-        ),
+        swapRun,
         this.runLane(
           "protocol",
           laneGroups.protocol,
@@ -697,6 +717,7 @@ export class BlockScanStateCoordinator {
           controller.signal,
           proofScopedFamilyIds,
           previousCanonicalGraphStateKeys,
+          protocolAddressTouchPlans,
         ),
       ]);
       const lanes = [swap, protocol] as const;
@@ -914,10 +935,12 @@ export class BlockScanStateCoordinator {
         }));
       }
       this.published = snapshot;
-      this.finishProtocolAddressTouchShadow(
-        protocolAddressTouchShadow,
-        snapshot,
-      );
+      if (this.protocolAddressTouchMode === "shadow") {
+        this.finishProtocolAddressTouchShadow(
+          protocolAddressTouchShadow,
+          snapshot,
+        );
+      }
       const degraded =
         incompleteFamilyIds.length > 0 ||
         coverage.unresolvedStateKeys.length > 0 ||
@@ -950,8 +973,9 @@ export class BlockScanStateCoordinator {
     signal: AbortSignal,
   ): ProtocolAddressTouchShadowAttempt | null {
     if (
-      !this.protocolAddressTouchShadow ||
-      !this.onProtocolAddressTouchShadowTelemetry ||
+      this.protocolAddressTouchMode === "off" ||
+      (this.protocolAddressTouchMode === "shadow" &&
+        !this.onProtocolAddressTouchShadowTelemetry) ||
       !this.backend.readCanonicalAddressTouches ||
       !previous ||
       previous.sourceBlock >= graph.sourceBlock ||
@@ -1066,6 +1090,139 @@ export class BlockScanStateCoordinator {
         unavailableReason: protocolAddressTouchUnavailableReason(error),
       }));
     });
+  }
+
+  private async resolveProtocolAddressTouchPlans(
+    attempt: ProtocolAddressTouchShadowAttempt | null,
+    signal: AbortSignal,
+  ): Promise<ReadonlyMap<string, FamilyIncrementalPlan>> {
+    if (!attempt) return new Map();
+    try {
+      const proof = await awaitWithAbort(attempt.proof, signal);
+      const touched = new Set(proof.touchedAddresses);
+      const plans = new Map<string, FamilyIncrementalPlan>();
+      let predictedDirtyStateKeys = 0;
+      let predictedCarryStateKeys = 0;
+      const groupsByFamily = new Map<string, StateGroup[]>();
+      for (const group of attempt.groups) {
+        if (group.family.addressTouchCarryPolicy !== "dependency-touch") {
+          continue;
+        }
+        const familyGroups = groupsByFamily.get(group.familyId) ?? [];
+        familyGroups.push(group);
+        groupsByFamily.set(group.familyId, familyGroups);
+      }
+      for (const [familyId, groups] of groupsByFamily) {
+        const rangeByStateKey = new Map<string, CanonicalMutationRange>();
+        const previousByStateKey = new Map<string, PublishedStateKey>();
+        const schemaCompatibleStateKeys = new Set<string>();
+        const changedReadKeysByStateKey = new Map<
+          string,
+          ReadonlySet<string>
+        >();
+        const dependencyFingerprint = deterministicHash(
+          groups.map((group) => ({
+            stateKey: group.stateKey,
+            dependencies: [...group.family.dependencies(group.edges)]
+              .map((address) => address.toLowerCase())
+              .sort(),
+          })),
+        );
+        const range: CanonicalMutationRange = Object.freeze({
+          fromExclusive: proof.fromExclusive,
+          through: proof.through,
+          events: Object.freeze([]),
+          complete: true as const,
+          queryDescriptorFingerprint: dependencyFingerprint,
+          canonicalPathFingerprint: proof.rangeFingerprint,
+          rangeFingerprint: deterministicHash({
+            proof: proof.rangeFingerprint,
+            familyId,
+            dependencyFingerprint,
+          }),
+        });
+        for (const group of groups) {
+          const previous = attempt.previousByStateKey.get(group.stateKey);
+          const dependencies = group.family.dependencies(group.edges);
+          if (
+            !previous ||
+            dependencies.length === 0 ||
+            dependencies.some((address) => !isCanonicalAddress(address))
+          ) {
+            predictedDirtyStateKeys++;
+            continue;
+          }
+          rangeByStateKey.set(group.stateKey, range);
+          previousByStateKey.set(group.stateKey, previous);
+          schemaCompatibleStateKeys.add(group.stateKey);
+          if (
+            dependencies.some((address) => touched.has(address.toLowerCase()))
+          ) {
+            predictedDirtyStateKeys++;
+            changedReadKeysByStateKey.set(
+              group.rawStateKey,
+              new Set(previous.requiredReadKeys),
+            );
+          } else {
+            predictedCarryStateKeys++;
+          }
+        }
+        if (schemaCompatibleStateKeys.size === 0) continue;
+        const classification: FamilyMutationClassification = Object.freeze({
+          mutationRangeFingerprint: range.rangeFingerprint,
+          classifierFingerprint: deterministicHash({
+            kind: "canonical-address-touch",
+            familyId,
+            dependencyFingerprint,
+          }),
+          changedReadKeysByStateKey,
+        });
+        plans.set(familyId, Object.freeze({
+          familyId,
+          rangeByStateKey,
+          classificationByStateKey: new Map(
+            [...schemaCompatibleStateKeys].map((stateKey) => [
+              stateKey,
+              classification,
+            ] as const),
+          ),
+          previousByStateKey,
+          schemaCompatibleStateKeys,
+        }));
+      }
+      if (this.onProtocolAddressTouchShadowTelemetry) {
+        safelyEmitProtocolAddressTouchShadow(
+          this.onProtocolAddressTouchShadowTelemetry,
+          Object.freeze({
+            status: "complete" as const,
+            fromBlock: proof.fromExclusive.number,
+            throughBlock: proof.through.number,
+            wallMs: Math.max(0, this.now() - attempt.startedAtMs),
+            touchedAddresses: proof.touchedAddresses.length,
+            transactionCount: proof.transactionCount,
+            protocolStateKeys: attempt.groups.length,
+            predictedDirtyStateKeys,
+            predictedCarryStateKeys,
+          }),
+        );
+      }
+      return plans;
+    } catch (error) {
+      if (this.onProtocolAddressTouchShadowTelemetry) {
+        safelyEmitProtocolAddressTouchShadow(
+          this.onProtocolAddressTouchShadowTelemetry,
+          Object.freeze({
+            status: "unavailable" as const,
+            fromBlock: attempt.fromExclusive.number,
+            throughBlock: attempt.through.number,
+            wallMs: Math.max(0, this.now() - attempt.startedAtMs),
+            protocolStateKeys: attempt.groups.length,
+            unavailableReason: protocolAddressTouchUnavailableReason(error),
+          }),
+        );
+      }
+      return new Map();
+    }
   }
 
   /**
@@ -1380,6 +1537,7 @@ export class BlockScanStateCoordinator {
     signal: AbortSignal,
     proofScopedFamilyIds: ReadonlySet<string>,
     previousCanonicalGraphStateKeys: ReadonlySet<string> | null,
+    addressTouchPlans: ReadonlyMap<string, FamilyIncrementalPlan> = new Map(),
   ): Promise<LaneResult> {
     const startedAtMs = this.now();
     if (groups.length === 0) {
@@ -1442,6 +1600,7 @@ export class BlockScanStateCoordinator {
         staging,
         proofScopedFamilyIds.has(family.familyId),
         previousCanonicalGraphStateKeys,
+        addressTouchPlans.get(family.familyId),
       );
       try {
         /*
@@ -1495,6 +1654,7 @@ export class BlockScanStateCoordinator {
     staging: FamilyLaneStaging,
     proofScoped: boolean,
     previousCanonicalGraphStateKeys: ReadonlySet<string> | null,
+    addressTouchPlan?: FamilyIncrementalPlan,
   ): Promise<LaneResult> {
     const startedAtMs = this.now();
     if (groups.length === 0) {
@@ -1618,6 +1778,9 @@ export class BlockScanStateCoordinator {
       generationSignal,
     );
     const incrementalPlans = incrementalPreparation.plans;
+    if (addressTouchPlan && !incrementalPlans.has(familyId)) {
+      incrementalPlans.set(familyId, addressTouchPlan);
+    }
     let fullFallbackReason =
       incrementalPreparation.fullFallbackReasonByFamily.get(familyId);
     let fullFallbackDetail =

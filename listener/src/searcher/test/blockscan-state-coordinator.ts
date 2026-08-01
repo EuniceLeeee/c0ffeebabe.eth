@@ -411,6 +411,7 @@ class StateKeyIncrementalBackend implements BlockScanStateReadBackend {
 
 class AddressTouchShadowBackend implements BlockScanStateReadBackend {
   value = 3n;
+  readBatchCount = 0;
   readonly touchedAddresses = new Set<string>();
   traceFailure = false;
 
@@ -419,6 +420,7 @@ class AddressTouchShadowBackend implements BlockScanStateReadBackend {
     reads: readonly StateRead[],
     control: { readonly sourceGeneration: number },
   ): Promise<readonly StateReadResult[]> {
+    this.readBatchCount++;
     return reads.map((read) => Object.freeze({
       ...successfulRead(read, control.sourceGeneration),
       data: `0x${this.value.toString(16)}`,
@@ -2523,6 +2525,7 @@ async function protocolAddressTouchShadowIsObservational(): Promise<void> {
     protocolAddressTouchShadow: true,
     onProtocolAddressTouchShadowTelemetry: (value) => telemetry.push(value),
   });
+  assert.equal(family.addressTouchCarryPolicy, "always-current");
   const prepare = (generation: number) => coordinator.prepare({
     graph: protocolTouchGraph(generation),
     families: [family],
@@ -2574,6 +2577,75 @@ async function protocolAddressTouchShadowIsObservational(): Promise<void> {
   );
 }
 
+async function protocolAddressTouchEnabledIsOptInAndFailClosed(): Promise<void> {
+  const backend = new AddressTouchShadowBackend();
+  const family = registerBlockScanStateFamily({
+    familyId: "protocol:fixture",
+    lane: "protocol",
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "protocol-action",
+    capability: {
+      addressTouchCarryPolicy: "dependency-touch",
+      stateKey: (edgeValue) => edgeValue.target.toLowerCase(),
+      compileStaticSchema: () => Object.freeze({}),
+      buildCurrentBlockReads: ({ sourceBlock, sourceBlockHash, edges }) => [{
+        id: "state",
+        sourceBlock,
+        sourceBlockHash,
+        to: edges[0].target,
+        data: "0x12345678",
+        transport: "rpc-batch",
+      }],
+      decodeState: (_schema, results) => ({
+        numerator: BigInt(results[0]?.ok ? results[0].data : "0x0"),
+        denominator: 1n,
+      }),
+      deriveMids: (snapshot: FakeSnapshot, edges) => new Map(
+        edges.map((edgeValue) => [
+          blockScanEdgeKey(edgeValue),
+          mid(edgeValue, Number(snapshot.numerator)),
+        ]),
+      ),
+      dependencies: (edges) => edges.flatMap((edgeValue) => [
+        edgeValue.target,
+        edgeValue.tokenIn,
+        edgeValue.tokenOut,
+      ]),
+    },
+  });
+  const coordinator = new BlockScanStateCoordinator(backend, {
+    protocolAddressTouchMode: "enabled",
+  });
+  const prepare = (generation: number) => coordinator.prepare({
+    graph: protocolTouchGraph(generation),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+
+  assert.equal(family.addressTouchCarryPolicy, "dependency-touch");
+  assert.equal((await prepare(1)).status, "complete");
+  assert.equal(backend.readBatchCount, 1);
+
+  backend.value = 4n;
+  const carried = await prepare(2);
+  assert.equal(carried.status, "complete");
+  assert.equal(backend.readBatchCount, 1, "untouched opt-in family must carry");
+
+  backend.touchedAddresses.add(PROTOCOL_POOL);
+  backend.value = 5n;
+  assert.equal((await prepare(3)).status, "complete");
+  assert.equal(backend.readBatchCount, 2, "touched family must refresh directly");
+
+  backend.touchedAddresses.clear();
+  backend.traceFailure = true;
+  backend.value = 6n;
+  assert.equal((await prepare(4)).status, "complete");
+  assert.equal(
+    backend.readBatchCount,
+    3,
+    "trace failure must fail closed to direct current-block reads",
+  );
+}
+
 await completeAndDeterministic();
 await simulationSemanticsParticipateInDedupIdentity();
 await replayResetDropsOnlyDynamicPublication();
@@ -2597,5 +2669,6 @@ await publishCasFailureDoesNotCommitStaticSchema();
 await supersededGenerationCannotDonateStaticSchema();
 await immutableForkNeedsBackendAttestation();
 await protocolAddressTouchShadowIsObservational();
+await protocolAddressTouchEnabledIsOptInAndFailClosed();
 purityHook();
 console.log("blockscan-state-coordinator PASS");

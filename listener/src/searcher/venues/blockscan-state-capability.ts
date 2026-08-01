@@ -322,6 +322,12 @@ export interface BuildDependentBlockReadsInput<Schema>
  * batching and publication remain coordinator-owned.
  */
 export interface BlockScanStateCapability<Schema = unknown, Snapshot = unknown> {
+  /**
+   * Opt-in only when every value used by deriveMids is invariant across block
+   * source changes unless this family-owned dependency set appears in a
+   * complete canonical call trace. Absence is the safe always-current default.
+   */
+  readonly addressTouchCarryPolicy?: "dependency-touch";
   stateKey(edge: TokenEdge): string;
   compileStaticSchema(input: CompileStaticSchemaInput): Schema | Promise<Schema>;
   /**
@@ -447,6 +453,7 @@ export interface RegisteredBlockScanStateFamilyCompileInput
 export interface RegisteredBlockScanStateFamily {
   readonly familyId: string;
   readonly lane: BlockScanPricingLane;
+  readonly addressTouchCarryPolicy: "always-current" | "dependency-touch";
   stateKey(edge: TokenEdge): string;
   ownsEdge(edge: TokenEdge): boolean;
   dependencies(edges: readonly TokenEdge[]): readonly string[];
@@ -621,6 +628,8 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
   return Object.freeze({
     familyId,
     lane,
+    addressTouchCarryPolicy:
+      capability.addressTouchCarryPolicy ?? "always-current",
     stateKey: (edge: TokenEdge) => capability.stateKey(edge),
     ownsEdge: (edge: TokenEdge) => input.ownsEdge(edge),
     dependencies: (edges: readonly TokenEdge[]) =>

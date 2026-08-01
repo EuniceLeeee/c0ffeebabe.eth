@@ -28,6 +28,8 @@ export interface ProtocolQuoteSnapshot {
 export interface ProtocolQuoteStateConfig {
   readonly familyId: string;
   readonly edgeAdapterIds: readonly string[];
+  /** See BlockScanStateCapability.addressTouchCarryPolicy. */
+  readonly addressTouchCarryPolicy?: "dependency-touch";
   /**
    * The default groups all directions at one contract. Multi-pair singleton
    * protocols can add their pair identity so unrelated instances fail
@@ -93,6 +95,9 @@ export function createProtocolQuoteStateCapability(
     ProtocolQuoteSchema,
     ProtocolQuoteSnapshot
   > = {
+    ...(config.addressTouchCarryPolicy
+      ? { addressTouchCarryPolicy: config.addressTouchCarryPolicy }
+      : {}),
     stateKey(edge: TokenEdge): string {
       requireOwnedEdge(config.familyId, allowed, edge);
       return (config.stateKey?.(edge) ?? edgeInstanceKey(edge)).toLowerCase();

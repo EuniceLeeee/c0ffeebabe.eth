@@ -25,6 +25,7 @@ const litePsmIface = new ethers.Interface([
 const psmPricingState = createProtocolQuoteStateCapability({
   familyId: "protocol:psm",
   edgeAdapterIds: ["psm"],
+  addressTouchCarryPolicy: "dependency-touch",
   buildQuoteReads(edge) {
     const functionName = psmDirection(edge.tokenIn, edge.tokenOut) === "sell"
       ? "tin"
