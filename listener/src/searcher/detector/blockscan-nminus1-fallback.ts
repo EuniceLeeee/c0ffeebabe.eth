@@ -14,6 +14,7 @@ import {
   scanBlockStateFromResolvedMids,
   type BlockScanCoreConfig,
   type BlockScanOutcome,
+  type BlockScanScanTiming,
 } from "./blockscan-scanner-core.js";
 import type { BlockScanOpportunity } from "./detector.js";
 
@@ -44,6 +45,7 @@ export interface NMinusOneCoarseOutcome {
   readonly requiredExactSourceBlock: number;
   readonly requiredExactSourceBlockHash: string;
   readonly scan: BlockScanOutcome;
+  readonly scanTimingMs: BlockScanScanTiming | null;
   readonly candidates: readonly NMinusOneCoarseCandidate[];
   readonly rejectedRouteCount: number;
 }
@@ -79,6 +81,7 @@ export function enumerateNMinusOneCoarseCandidates(input: {
   }
 
   const resolvedEdgeKeys = new Set(coarse.coverage.resolvedEdgeKeys);
+  let scanTimingMs: BlockScanScanTiming | null = null;
   const scan = scanBlockStateFromResolvedMids({
     edges: coarse.graph.edges.filter(
       (edge) =>
@@ -91,6 +94,9 @@ export function enumerateNMinusOneCoarseCandidates(input: {
     mids: coarse.mids,
     routeEligible: input.routeEligible,
     edgeEligible: input.edgeEligible,
+    onTiming: (timing) => {
+      scanTimingMs = timing;
+    },
   });
   const exactByEdgeKey = exactEdgeMap(exact.edges);
   const candidates: NMinusOneCoarseCandidate[] = [];
@@ -143,6 +149,7 @@ export function enumerateNMinusOneCoarseCandidates(input: {
     requiredExactSourceBlock: exact.sourceBlock,
     requiredExactSourceBlockHash: exact.sourceBlockHash,
     scan,
+    scanTimingMs,
     candidates: Object.freeze(candidates),
     rejectedRouteCount,
   });

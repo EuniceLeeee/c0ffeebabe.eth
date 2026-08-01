@@ -12,6 +12,7 @@ import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import {
   blockScanEdgeFamilyId,
   blockScanRouteFamilyIds,
+  iterateByBlockScanFamily,
   orderByBlockScanFamily,
   selectByBlockScanFamily,
 } from "./blockscan-family-budget.js";
@@ -48,6 +49,15 @@ export interface BlockScanOutcome {
     readonly forcedSelectionCount: number;
   };
   debug?: { skippedVenues: number };
+}
+
+export interface BlockScanScanTiming {
+  readonly preprocessing: number;
+  readonly pairs: number;
+  readonly protocol: number;
+  readonly general: number;
+  readonly finalization: number;
+  readonly total: number;
 }
 
 export interface NaturalBlockScanSelectionProvenance {
@@ -165,8 +175,11 @@ export function scanBlockStateFromResolvedMids(input: {
   routeEligible?: (edges: readonly TokenEdge[]) => boolean;
   /** Per-edge execution availability applied only to this scanner pass. */
   edgeEligible?: (edge: TokenEdge) => boolean;
+  /** Non-semantic timing observer; never becomes part of scanner output. */
+  onTiming?: (timing: BlockScanScanTiming) => void;
 }): BlockScanOutcome {
-  const deadlineAtMs = Date.now() + input.cfg.budgetMs;
+  const scanStartedAtMs = Date.now();
+  const deadlineAtMs = scanStartedAtMs + input.cfg.budgetMs;
   const touched = input.swapTouched
     ? new Set([...input.swapTouched].map((pool) => pool.toLowerCase()))
     : null;
@@ -180,8 +193,20 @@ export function scanBlockStateFromResolvedMids(input: {
   );
   let scannedPairs = 0;
   let skippedVenues = 0;
+  const preprocessingFinishedAtMs = Date.now();
+  let activePhase: "pairs" | "protocol" | "general" = "pairs";
+  let phaseStartedAtMs = preprocessingFinishedAtMs;
+  const phaseMs = { pairs: 0, protocol: 0, general: 0 };
+  const enterPhase = (next: typeof activePhase): void => {
+    const now = Date.now();
+    phaseMs[activePhase] += Math.max(0, now - phaseStartedAtMs);
+    activePhase = next;
+    phaseStartedAtMs = now;
+  };
 
   const finish = (outcome: BlockScanOutcome["outcome"]): BlockScanOutcome => {
+    const finalizeStartedAtMs = Date.now();
+    phaseMs[activePhase] += Math.max(0, finalizeStartedAtMs - phaseStartedAtMs);
     ranked.sort((a, b) => b.rank - a.rank);
     const deduped: RankedOpportunity[] = [];
     const seenRoutes = new Set<string>();
@@ -196,7 +221,7 @@ export function scanBlockStateFromResolvedMids(input: {
       input.cfg.maxCandidates,
       (entry) => blockScanRouteFamilyIds(entry.opportunity.seedEdges),
     );
-    return {
+    const result: BlockScanOutcome = {
       outcome,
       stateBlock: input.sourceBlock,
       scannedPairs,
@@ -210,9 +235,17 @@ export function scanBlockStateFromResolvedMids(input: {
       }),
       debug: { skippedVenues },
     };
+    const finishedAtMs = Date.now();
+    input.onTiming?.(Object.freeze({
+      preprocessing: Math.max(0, preprocessingFinishedAtMs - scanStartedAtMs),
+      ...phaseMs,
+      finalization: Math.max(0, finishedAtMs - finalizeStartedAtMs),
+      total: Math.max(0, finishedAtMs - scanStartedAtMs),
+    }));
+    return result;
   };
 
-  const fairPairGroups = orderByBlockScanFamily(
+  const fairPairGroups = iterateByBlockScanFamily(
     [...groups.values()],
     (group) =>
       blockScanRouteFamilyIds(
@@ -310,7 +343,8 @@ export function scanBlockStateFromResolvedMids(input: {
     });
   }
 
-  const protocolEdges = orderByBlockScanFamily(
+  enterPhase("protocol");
+  const protocolEdges = iterateByBlockScanFamily(
     eligibleEdges.filter(
       (edge) => edge.slotKind === "protocol" && !edge.leavesStandingPosition,
     ),
@@ -408,6 +442,7 @@ export function scanBlockStateFromResolvedMids(input: {
     }
   }
 
+  enterPhase("general");
   const generalExpansionEdges = selectFamilyFairExpansionEdges({
     edges: eligibleEdges,
     profitToken: "",

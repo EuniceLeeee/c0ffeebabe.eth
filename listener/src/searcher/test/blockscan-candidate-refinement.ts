@@ -15,6 +15,7 @@ import {
   blockScanEdgeFamilyId,
   blockScanFailureCircuitAttribution,
   blockScanRouteFamilyIds,
+  iterateByBlockScanFamily,
   orderByBlockScanFamily,
   selectByBlockScanFamily,
 } from "../detector/blockscan-family-budget.js";
@@ -431,6 +432,22 @@ function boundedFamilySelectionStopsAtConsumedPrefix(): void {
       (item) => item.familyIds,
     ).slice(0, 512),
     "bounded selection must preserve the exact prefix of the full fair order",
+  );
+  const iteratedPrefix = [];
+  for (const item of iterateByBlockScanFamily(
+    referenceFixture,
+    (entry) => entry.familyIds,
+  )) {
+    iteratedPrefix.push(item);
+    if (iteratedPrefix.length === 512) break;
+  }
+  assert.deepEqual(
+    iteratedPrefix,
+    orderByBlockScanFamily(
+      referenceFixture,
+      (item) => item.familyIds,
+    ).slice(0, 512),
+    "lazy family iteration must preserve the exact full-order prefix",
   );
 
   const started = performance.now();
