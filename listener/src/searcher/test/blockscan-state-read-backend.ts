@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { encodeRlp, keccak256 } from "ethers";
 import {
   JsonRpcBlockScanStateReadBackend,
+  MutationRangeReadError,
 } from "../blockscan-state-read-backend.js";
 import type {
   BlockSource,
@@ -49,6 +50,8 @@ await testRawHeaderRejectsParentDiscontinuity();
 await testRawHeaderUnavailableFallsBack();
 await testCanonicalMutationRange();
 await testMutationProofTelemetry();
+await testMutationProofReadsHeadersAndLogsConcurrently();
+await testMutationProofPreservesPrimaryTransportFailure();
 await testSharedMutationProofSessions();
 await testSharedGenerationBatchesMutationTransport();
 await testCompletedHeaderProofIsReusedByStaggeredDescriptors();
@@ -966,7 +969,8 @@ async function testMutationProofParentAbort(): Promise<void> {
     fetchImpl: (async (_url, init) => {
       const body = JSON.parse(String(init?.body)) as RpcRequest[];
       assert(body.every((request) =>
-        request.method === "eth_getBlockByNumber"
+        request.method === "eth_getBlockByNumber" ||
+        request.method === "eth_getLogs"
       ));
       const proofSignal = init?.signal;
       if (!proofSignal) throw new Error("mutation proof missing AbortSignal");
@@ -1082,6 +1086,8 @@ async function testRawHeaderRejectsParentDiscontinuity(): Promise<void> {
     fetchImpl: (async (_url, init) => {
       const body = JSON.parse(String(init?.body)) as RpcRequest[];
       return fakeResponse(body.map((request) => {
+        if (request.method === "eth_getLogs") return success(request.id, []);
+        assert.equal(request.method, "debug_getRawHeader");
         const number = Number(BigInt(request.params[0]));
         return success(
           request.id,
@@ -1320,6 +1326,176 @@ async function testMutationProofTelemetry(): Promise<void> {
   assert(Object.isFrozen(proof));
   assert(Object.isFrozen(proof.phases));
   console.log("[state-read-backend] mutation proof phase telemetry: PASS");
+}
+
+async function testMutationProofReadsHeadersAndLogsConcurrently(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  let markHeaderStarted!: () => void;
+  const headerStarted = new Promise<void>((resolve) => {
+    markHeaderStarted = resolve;
+  });
+  let releaseHeader!: () => void;
+  const headerRelease = new Promise<void>((resolve) => {
+    releaseHeader = resolve;
+  });
+  let markLogStarted!: () => void;
+  const logStarted = new Promise<void>((resolve) => {
+    markLogStarted = resolve;
+  });
+  let releaseLog!: () => void;
+  const logRelease = new Promise<void>((resolve) => {
+    releaseLog = resolve;
+  });
+  let headerFinished = false;
+  let logFinished = false;
+  let finalCasCalls = 0;
+  const backend = backendWith(async (body) => {
+    if (body[0]?.method === "eth_getLogs") {
+      markLogStarted();
+      await logRelease;
+      logFinished = true;
+      return [success(body[0].id, [])];
+    }
+    if (body.length === 1) {
+      finalCasCalls++;
+      assert.equal(headerFinished, true);
+      assert.equal(logFinished, true);
+      return [success(body[0].id, { hash: sourceBlockHash })];
+    }
+    markHeaderStarted();
+    await headerRelease;
+    headerFinished = true;
+    return body.map((request) => {
+      const number = Number(BigInt(request.params[0]));
+      return success(request.id, {
+        number: request.params[0],
+        hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+        parentHash: number === sourceBlock
+          ? previousHash
+          : `0x${"09".repeat(32)}`,
+      });
+    });
+  });
+  const pending = backend.readCanonicalMutationRange(
+    descriptor,
+    {
+      number: sourceBlock - 1,
+      hash: previousHash,
+      generation: sourceGeneration - 1,
+    },
+    {
+      number: sourceBlock,
+      hash: sourceBlockHash,
+      generation: sourceGeneration,
+    },
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    },
+  );
+  const concurrentStart = await Promise.race([
+    Promise.all([headerStarted, logStarted]).then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
+  ]);
+  if (!concurrentStart) {
+    releaseHeader();
+    releaseLog();
+    await pending;
+  }
+  assert.equal(concurrentStart, true, "headers and logs must start concurrently");
+  releaseLog();
+  await Promise.resolve();
+  assert.equal(finalCasCalls, 0, "final CAS must wait for both transports");
+  releaseHeader();
+  const range = await pending;
+  assert.equal(range.complete, true);
+  assert.equal(finalCasCalls, 1);
+  console.log("[state-read-backend] concurrent mutation transports: PASS");
+}
+
+async function testMutationProofPreservesPrimaryTransportFailure(): Promise<void> {
+  for (const firstFailure of ["header-read", "log-read"] as const) {
+    const previousHash = `0x${"10".repeat(32)}`;
+    const descriptor = createMutationQueryDescriptor({
+      topics: [[`0x${"aa".repeat(32)}`]],
+    });
+    let markHeaderStarted!: () => void;
+    const headerStarted = new Promise<void>((resolve) => {
+      markHeaderStarted = resolve;
+    });
+    let markLogStarted!: () => void;
+    const logStarted = new Promise<void>((resolve) => {
+      markLogStarted = resolve;
+    });
+    let releaseFailure!: () => void;
+    const failureRelease = new Promise<void>((resolve) => {
+      releaseFailure = resolve;
+    });
+    let siblingAborted = false;
+    let finalCasCalls = 0;
+    const backend = backendWith(async (body, signal) => {
+      if (!signal) throw new Error("mutation proof missing AbortSignal");
+      if (body[0]?.method === "eth_getLogs") {
+        markLogStarted();
+        if (firstFailure === "log-read") {
+          await failureRelease;
+          throw new Error("primary log transport failed");
+        }
+        try {
+          return await rejectWhenAborted(signal);
+        } catch (error) {
+          siblingAborted = signal.aborted;
+          throw error;
+        }
+      }
+      if (body.length === 1) {
+        finalCasCalls++;
+        return [success(body[0].id, { hash: sourceBlockHash })];
+      }
+      markHeaderStarted();
+      if (firstFailure === "header-read") {
+        await failureRelease;
+        throw new Error("primary header transport failed");
+      }
+      try {
+        return await rejectWhenAborted(signal);
+      } catch (error) {
+        siblingAborted = signal.aborted;
+        throw error;
+      }
+    });
+    const pending = backend.readCanonicalMutationRange(
+      descriptor,
+      {
+        number: sourceBlock - 1,
+        hash: previousHash,
+        generation: sourceGeneration - 1,
+      },
+      {
+        number: sourceBlock,
+        hash: sourceBlockHash,
+        generation: sourceGeneration,
+      },
+      {
+        deadlineAtMs: Date.now() + 10_000,
+        signal: new AbortController().signal,
+      },
+    );
+    await Promise.all([headerStarted, logStarted]);
+    releaseFailure();
+    const error = await pending.then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    assert(error instanceof MutationRangeReadError);
+    assert.equal(error.phase, firstFailure);
+    assert.equal(siblingAborted, true);
+    assert.equal(finalCasCalls, 0);
+  }
+  console.log("[state-read-backend] primary mutation failure attribution: PASS");
 }
 
 async function testSharedMutationProofSessions(): Promise<void> {
@@ -2128,6 +2304,7 @@ async function testMutationRangeRejectsReorgAndRemovedLog(): Promise<void> {
     generation: sourceGeneration,
   };
   const reorg = backendWith(async (body) => body.map((request) => {
+    if (request.method === "eth_getLogs") return success(request.id, []);
     assert.equal(request.method, "eth_getBlockByNumber");
     const number = Number(BigInt(request.params[0]));
     return success(request.id, {

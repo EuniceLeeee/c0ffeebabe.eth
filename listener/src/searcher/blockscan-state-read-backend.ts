@@ -807,20 +807,33 @@ export class JsonRpcBlockScanStateReadBackend
       if (remainingMs <= 0) {
         controller.abort(new Error("mutation range deadline reached"));
       }
+      let primaryFailure: MutationRangeReadError | undefined;
       phase = "header-read";
-      const headerProof = await this.readSharedCanonicalHeaders(
+      const headerProofPending = this.readSharedCanonicalHeaders(
         fromExclusive,
         through,
         {
           deadlineAtMs: control.deadlineAtMs,
           signal: controller.signal,
         },
-      );
-      const headers = headerProof.headers;
-      headerTelemetry = headerProof.telemetry;
-      validationMs += headerProof.validationMs;
+      ).catch((error: unknown) => {
+        const typed = error instanceof MutationRangeReadError
+          ? error
+          : new MutationRangeReadError(
+              "header-read",
+              classifyMutationProofFailure(
+                error,
+                controller.signal,
+                "header-read",
+              ),
+              formatError(error),
+              error,
+            );
+        primaryFailure ??= typed;
+        if (!controller.signal.aborted) controller.abort(typed);
+        throw typed;
+      });
 
-      phase = "log-read";
       const logId = this.nextId++;
       const logFilter = {
         fromBlock: toBlockTag(fromExclusive.number + 1),
@@ -834,16 +847,61 @@ export class JsonRpcBlockScanStateReadBackend
             }),
         topics: transportDescriptor.topics,
       };
-      const logRead = await this.postWithSlotsMeasured(
+      const logReadPending = this.postWithSlotsMeasured(
         this.mutationDescriptorSlots,
         [{
-        jsonrpc: "2.0",
-        id: logId,
-        method: "eth_getLogs",
-        params: [logFilter],
+          jsonrpc: "2.0",
+          id: logId,
+          method: "eth_getLogs",
+          params: [logFilter],
         }],
         controller.signal,
-      );
+      ).catch((error: unknown) => {
+        const typed = error instanceof MutationRangeReadError
+          ? error
+          : new MutationRangeReadError(
+              "log-read",
+              classifyMutationProofFailure(
+                error,
+                controller.signal,
+                "log-read",
+              ),
+              formatError(error),
+              error,
+            );
+        primaryFailure ??= typed;
+        if (!controller.signal.aborted) controller.abort(typed);
+        throw typed;
+      });
+
+      /*
+       * Header continuity and the widened family log query are independent
+       * reads over the same pinned range. Start both before awaiting either so
+       * local-reth latency is max(header, logs), not header + logs. A failure
+       * aborts its sibling and both settle before control can reach the final
+       * canonical CAS. The existing per-log block-hash validation below still
+       * binds every returned event to the proven header chain.
+       */
+      const [headerProofSettled, logReadSettled] = await Promise.allSettled([
+        headerProofPending,
+        logReadPending,
+      ]);
+      if (primaryFailure) {
+        throw primaryFailure;
+      }
+      if (
+        headerProofSettled.status === "rejected" ||
+        logReadSettled.status === "rejected"
+      ) {
+        throw new Error(
+          "mutation proof transport rejected without a primary failure",
+        );
+      }
+      const headerProof = headerProofSettled.value;
+      const logRead = logReadSettled.value;
+      const headers = headerProof.headers;
+      headerTelemetry = headerProof.telemetry;
+      validationMs += headerProof.validationMs;
       logTelemetry = logRead.telemetry;
       const logResponses = logRead.responses;
       phase = "log-validation";
