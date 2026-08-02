@@ -35,9 +35,6 @@ const erc4626PricingState = createProtocolQuoteStateCapability({
         suffix: "deposit",
         to: edge.target,
         data: erc4626Iface.encodeFunctionData("previewDeposit", [amountIn]),
-        // ERC-4626 preview methods are caller-independent by contract, so
-        // current-N reads may be aggregated without changing quote semantics.
-        transport: "multicall-safe",
       }];
     }
     if (edge.adapterId === "erc4626-redeem") {
@@ -45,7 +42,6 @@ const erc4626PricingState = createProtocolQuoteStateCapability({
         suffix: "redeem",
         to: edge.target,
         data: erc4626Iface.encodeFunctionData("previewRedeem", [amountIn]),
-        transport: "multicall-safe",
       }];
     }
     throw new Error(`protocol:erc4626 received foreign edge ${edge.adapterId}`);

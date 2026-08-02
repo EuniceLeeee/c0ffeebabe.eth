@@ -62,6 +62,22 @@ assert(
 );
 console.log("[runtime-defaults] deploy preserves block-scan multicall mode: PASS");
 
+const searcherMain = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+const blockscanHunt = readFileSync(
+  new URL("./blockscan-hunt.ts", import.meta.url),
+  "utf8",
+);
+for (const source of [searcherMain, blockscanHunt]) {
+  assert(
+    source.includes("SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_SIZE") &&
+      source.includes("SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY") &&
+      /STATE_RPC_BATCH_SIZE[\s\S]{0,120}(?:\?\? \"100\"|,\s*100,)/.test(source) &&
+      /STATE_RPC_BATCH_CONCURRENCY[\s\S]{0,120}(?:\?\? \"4\"|,\s*4,)/.test(source),
+    "live and trusted hunt must share the 100x4 block-scan RPC defaults",
+  );
+}
+console.log("[runtime-defaults] live/hunt block-scan RPC defaults match: PASS");
+
 assert(
   deployNode.includes('POOL_UNIVERSE_TO_BLOCK="$DISCOVERY_TO_BLOCK"'),
   "deploy must build the universe at the same frozen source as the searcher",

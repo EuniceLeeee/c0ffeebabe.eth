@@ -1511,7 +1511,7 @@ async function main(): Promise<void> {
     const stateBackend = new JsonRpcBlockScanStateReadBackend(cfg.rpcUrl, {
       maxBatchSize: envInt(
         "SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_SIZE",
-        500,
+        100,
       ),
       maxConcurrentBatches: envInt(
         "SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY",

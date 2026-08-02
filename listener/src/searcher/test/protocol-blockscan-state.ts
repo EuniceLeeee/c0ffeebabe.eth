@@ -305,11 +305,6 @@ for (const item of cases) {
     for (const read of reads) {
       assert.equal(read.sourceBlock, block, `${item.name}: source block`);
       assert.equal(read.sourceBlockHash, blockHash, `${item.name}: source hash`);
-      assert.equal(
-        read.transport,
-        item.familyId === erc4626Adapter.id ? "multicall-safe" : "rpc-batch",
-        `${item.name}: family-owned quote transport`,
-      );
       results.push({
         id: read.id,
         ok: true,
