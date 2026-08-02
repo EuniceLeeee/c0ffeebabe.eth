@@ -16,6 +16,7 @@ import {
   BLOCKSCAN_MULTICALL3,
   blockScanMulticallIface,
 } from "../blockscan-multicall.js";
+import { LiveRethReadPriority } from "../live-reth-read-priority.js";
 
 const sourceBlock = 100;
 const sourceGeneration = 7;
@@ -53,6 +54,7 @@ await testCanonicalMutationRangeBatchesExactBlockHashes();
 await testExactBlockHashLogBatchFailsClosed();
 await testMutationProofAbortDuringLogRead();
 await testMutationPriorityIsScopedToCanonicalProof();
+await testMutationProofPreemptsBulkStateTransport();
 await testMutationProofTelemetry();
 await testMutationProofReadsHeadersBeforeLogs();
 await testMutationProofPreservesPrimaryTransportFailure();
@@ -923,8 +925,7 @@ async function testMutationProofBypassesSaturatedStateSlots(): Promise<void> {
       }));
     }) as typeof fetch,
   });
-  const normal = backend.readBatch(
-    "swap",
+  const normal = backend.readPinned(
     [read("saturated-normal-slot", "0x01")],
     control(),
   );
@@ -1609,6 +1610,145 @@ async function testMutationPriorityIsScopedToCanonicalProof(): Promise<void> {
   assert.equal(ordinary[0]?.ok, true);
   assert.equal(criticalCalls, 1);
   console.log("[state-read-backend] mutation priority scope: PASS");
+}
+
+async function testMutationProofPreemptsBulkStateTransport(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const olderHash = `0x${"09".repeat(32)}`;
+  const descriptorA = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const descriptorB = createMutationQueryDescriptor({
+    topics: [[`0x${"bb".repeat(32)}`]],
+  });
+  const globalPriority = new LiveRethReadPriority();
+  let bulkAttempts = 0;
+  let firstBulkSignalAborted = false;
+  let proofStartedAfterBulkSettled = false;
+  let proofsFinished = 0;
+  let markFirstBulkStarted!: () => void;
+  const firstBulkStarted = new Promise<void>((resolve) => {
+    markFirstBulkStarted = resolve;
+  });
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    mutationReadPriority: globalPriority,
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      const signal = init?.signal;
+      if (!signal) throw new Error("state transport missing AbortSignal");
+      if (body.every((request) => request.method === "eth_call")) {
+        bulkAttempts++;
+        if (bulkAttempts === 1) {
+          markFirstBulkStarted();
+          try {
+            await rejectWhenAborted(signal);
+          } catch (error) {
+            firstBulkSignalAborted = signal.aborted;
+            throw error;
+          }
+          throw new Error("unreachable");
+        }
+        assert.equal(
+          proofsFinished,
+          2,
+          "bulk retry must wait until every queued mutation proof releases",
+        );
+        return fakeResponse(body.map((request) =>
+          success(request.id, "0x1234")
+        ));
+      }
+      proofStartedAfterBulkSettled = firstBulkSignalAborted;
+      if (body[0]?.method === "eth_getLogs") {
+        return fakeResponse(body.map((request) => success(request.id, [])));
+      }
+      if (body.length === 1) {
+        proofsFinished++;
+        return fakeResponse([
+          success(body[0].id, { hash: sourceBlockHash }),
+        ]);
+      }
+      return fakeResponse(body.map((request) => {
+        const number = Number(BigInt(request.params[0]));
+        return success(request.id, {
+          number: request.params[0],
+          hash: number === sourceBlock
+            ? sourceBlockHash
+            : number === sourceBlock - 1
+            ? previousHash
+            : olderHash,
+          parentHash: number === sourceBlock
+            ? previousHash
+            : number === sourceBlock - 1
+            ? olderHash
+            : `0x${"08".repeat(32)}`,
+        });
+      }));
+    }) as typeof fetch,
+  });
+  await globalPriority.runForeground(async () => {
+    const control = {
+      sourceBlock,
+      sourceBlockHash,
+      sourceGeneration,
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    };
+    const bulk = backend.readBatch(
+      "protocol",
+      [read("bulk", "0x12345678")],
+      control,
+    );
+    await firstBulkStarted;
+    const proofA = backend.readCanonicalMutationRange(
+      descriptorA,
+      {
+        number: sourceBlock - 1,
+        hash: previousHash,
+        generation: sourceGeneration - 1,
+      },
+      {
+        number: sourceBlock,
+        hash: sourceBlockHash,
+        generation: sourceGeneration,
+      },
+      {
+        deadlineAtMs: control.deadlineAtMs,
+        signal: control.signal,
+        sharedSignal: control.signal,
+      },
+    );
+    const proofB = backend.readCanonicalMutationRange(
+      descriptorB,
+      {
+        number: sourceBlock - 2,
+        hash: olderHash,
+        generation: sourceGeneration - 2,
+      },
+      {
+        number: sourceBlock,
+        hash: sourceBlockHash,
+        generation: sourceGeneration,
+      },
+      {
+        deadlineAtMs: control.deadlineAtMs,
+        signal: control.signal,
+        sharedSignal: control.signal,
+      },
+    );
+    const [results, rangeA, rangeB] = await Promise.all([
+      bulk,
+      proofA,
+      proofB,
+    ]);
+    assert.equal(results[0]?.ok, true);
+    assert.equal(rangeA.complete, true);
+    assert.equal(rangeB.complete, true);
+  });
+  assert.equal(firstBulkSignalAborted, true);
+  assert.equal(proofStartedAfterBulkSettled, true);
+  assert.equal(proofsFinished, 2);
+  assert.equal(bulkAttempts, 2);
+  console.log("[state-read-backend] mutation preempts bulk state: PASS");
 }
 
 async function testMutationProofTelemetry(): Promise<void> {

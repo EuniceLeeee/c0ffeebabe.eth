@@ -22,7 +22,7 @@ import {
   BLOCKSCAN_MULTICALL3,
   blockScanMulticallIface,
 } from "./blockscan-multicall.js";
-import type { LiveRethReadPriority } from "./live-reth-read-priority.js";
+import { LiveRethReadPriority } from "./live-reth-read-priority.js";
 import { decodeRlp, keccak256 } from "ethers";
 
 interface JsonRpcSuccess {
@@ -203,6 +203,14 @@ export class JsonRpcBlockScanStateReadBackend
   private readonly mutationDescriptorSlots: AbortableSemaphore;
   private readonly mutationFinalCasSlots: AbortableSemaphore;
   private readonly addressTouchSlots: AbortableSemaphore;
+  /**
+   * State families start concurrently. Keep their retry-safe pinned reads in
+   * one local background lane so a canonical mutation proof can preempt and
+   * drain bulk state transport before reading headers/logs/final CAS. The
+   * separate process-wide priority still keeps discovery behind the whole
+   * blockscan generation.
+   */
+  private readonly stateTransportPriority = new LiveRethReadPriority();
   private readonly fetchImpl: typeof fetch;
   private readonly onMutationProofTelemetry:
     | ((telemetry: MutationProofTransportTelemetry) => void)
@@ -287,7 +295,31 @@ export class JsonRpcBlockScanStateReadBackend
      * number->hash header reads around every family batch only serializes the
      * shared RPC queue without strengthening the final publication boundary.
      */
-    return this.readAtPinnedHash(reads, control, false);
+    try {
+      return await this.stateTransportPriority.runBackground(
+        (signal) => this.readAtPinnedHash(
+          reads,
+          { ...control, signal },
+          false,
+        ),
+        control.signal,
+      );
+    } catch (error) {
+      // Preserve the StateReadBackend contract: caller cancellation is a
+      // per-read failure, not a transport exception. Local priority
+      // preemption is handled internally by runBackground() and retries only
+      // after the canonical mutation proof releases its foreground lease.
+      const kind = failureKind(error, control);
+      const message = formatError(error);
+      return Object.freeze(reads.map((read): StateReadFailure => Object.freeze({
+        id: read.id,
+        ok: false,
+        sourceBlock: control.sourceBlock,
+        sourceBlockHash: control.sourceBlockHash,
+        kind,
+        error: message,
+      })));
+    }
   }
 
   async readPinned(
@@ -787,7 +819,9 @@ export class JsonRpcBlockScanStateReadBackend
   }
 
   private runMutationCritical<T>(work: () => Promise<T>): Promise<T> {
-    return this.mutationReadPriority?.runCritical(work) ?? work();
+    return this.stateTransportPriority.runForeground(() =>
+      this.mutationReadPriority?.runCritical(work) ?? work()
+    );
   }
 
   private async computeCanonicalMutationRange(
