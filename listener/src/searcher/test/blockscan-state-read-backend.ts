@@ -55,6 +55,7 @@ await testExactBlockHashLogBatchFailsClosed();
 await testMutationProofAbortDuringLogRead();
 await testMutationPriorityIsScopedToCanonicalProof();
 await testMutationProofPreemptsBulkStateTransport();
+await testAddressTouchProofPreemptsBulkStateTransport();
 await testMutationProofTelemetry();
 await testMutationProofReadsHeadersBeforeLogs();
 await testMutationProofPreservesPrimaryTransportFailure();
@@ -1749,6 +1750,102 @@ async function testMutationProofPreemptsBulkStateTransport(): Promise<void> {
   assert.equal(proofsFinished, 2);
   assert.equal(bulkAttempts, 2);
   console.log("[state-read-backend] mutation preempts bulk state: PASS");
+}
+
+async function testAddressTouchProofPreemptsBulkStateTransport(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const txHash = `0x${"33".repeat(32)}`;
+  let bulkAttempts = 0;
+  let firstBulkSignalAborted = false;
+  let touchProofFinished = false;
+  let markFirstBulkStarted!: () => void;
+  const firstBulkStarted = new Promise<void>((resolve) => {
+    markFirstBulkStarted = resolve;
+  });
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      const signal = init?.signal;
+      if (!signal) throw new Error("state transport missing AbortSignal");
+      if (body.every((request) => request.method === "eth_call")) {
+        bulkAttempts++;
+        if (bulkAttempts === 1) {
+          markFirstBulkStarted();
+          try {
+            await rejectWhenAborted(signal);
+          } catch (error) {
+            firstBulkSignalAborted = signal.aborted;
+            throw error;
+          }
+          throw new Error("unreachable");
+        }
+        assert.equal(
+          touchProofFinished,
+          true,
+          "bulk retry must wait until address-touch proof releases",
+        );
+        return fakeResponse(body.map((request) =>
+          success(request.id, "0x1234")
+        ));
+      }
+      if (body[0]?.method === "eth_getLogs") {
+        return fakeResponse(body.map((request) => success(request.id, [])));
+      }
+      if (body[0]?.method === "eth_getBlockByNumber") {
+        const fullTransactions = body[0].params[1] === true;
+        if (!fullTransactions) touchProofFinished = true;
+        return fakeResponse(body.map((request) => success(request.id, {
+          number: request.params[0],
+          hash: sourceBlockHash,
+          parentHash: previousHash,
+          ...(fullTransactions
+            ? {
+                transactions: [{
+                  hash: txHash,
+                  blockHash: sourceBlockHash,
+                  blockNumber: request.params[0],
+                  transactionIndex: "0x0",
+                  to: targetAddress,
+                }],
+              }
+            : {}),
+        })));
+      }
+      throw new Error(`unexpected method ${body[0]?.method}`);
+    }) as typeof fetch,
+  });
+  const control = {
+    sourceBlock,
+    sourceBlockHash,
+    sourceGeneration,
+    deadlineAtMs: Date.now() + 10_000,
+    signal: new AbortController().signal,
+  };
+  const bulk = backend.readBatch(
+    "protocol",
+    [read("bulk", "0x12345678")],
+    control,
+  );
+  await firstBulkStarted;
+  const proof = backend.readCanonicalAddressTouches(
+    {
+      number: sourceBlock - 1,
+      hash: previousHash,
+      generation: sourceGeneration - 1,
+    },
+    {
+      number: sourceBlock,
+      hash: sourceBlockHash,
+      generation: sourceGeneration,
+    },
+    control,
+  );
+  const [results, range] = await Promise.all([bulk, proof]);
+  assert.equal(firstBulkSignalAborted, true);
+  assert.equal(results[0]?.ok, true);
+  assert.equal(range.complete, true);
+  assert.equal(bulkAttempts, 2);
+  console.log("[state-read-backend] address touch preempts bulk state: PASS");
 }
 
 async function testMutationProofTelemetry(): Promise<void> {

@@ -348,6 +348,26 @@ export class JsonRpcBlockScanStateReadBackend
       readonly signal: AbortSignal;
     },
   ): Promise<CanonicalAddressTouchRange> {
+    /*
+     * Address-touch completeness is a prerequisite for deciding which
+     * protocol states may be carried. Give it the same transport priority as
+     * canonical swap-mutation proofs: otherwise bulk current-state reads can
+     * saturate reth first, the touch proof times out, and the protocol lane
+     * pays both the failed proof and the full fallback scan.
+     */
+    return this.runMutationCritical(() =>
+      this.computeCanonicalAddressTouches(fromExclusive, through, control)
+    );
+  }
+
+  private async computeCanonicalAddressTouches(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<CanonicalAddressTouchRange> {
     const distance = through.number - fromExclusive.number;
     if (
       distance <= 0 ||
