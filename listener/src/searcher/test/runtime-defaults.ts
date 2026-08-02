@@ -94,12 +94,17 @@ assert(
   "deploy must wait through one normal cron universe publication instead of killing the live searcher after 30 seconds",
 );
 assert(
-  deployNode.includes("loadPoolUniverseCoverageMetadata") &&
-    deployNode.includes("loadPoolUniverse") &&
-    deployNode.includes("!metadata.manifestVerified") &&
-    deployNode.includes("toBlock > frozenSource") &&
-    deployNode.includes("metadata.source?.number !== toBlock"),
-  "deploy must use the production universe/manifest validator before selection",
+  deployNode.includes("node dist/searcher/pool-universe-deploy-trust.js") &&
+    deployNode.includes(
+      'POOL_UNIVERSE_DISCOVERY_BLOCKS=$(env_value SEARCHER_DISCOVERY_BLOCKS "$ENVF")',
+    ) &&
+    deployNode.includes(
+      'POOL_UNIVERSE_V2_LINEAGES_PATH=$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")',
+    ) &&
+    deployNode.includes(
+      'env SEARCHER_V2_LINEAGES_PATH="$v2_lineages_path"',
+    ),
+  "deploy must validate universe trust with the next runtime registry and landed window",
 );
 assert(
   deployNode.includes(
@@ -115,6 +120,14 @@ const universeCron = readFileSync(
     import.meta.url,
   ),
   "utf8",
+);
+assert(
+  universeCron.includes(
+    "V2_LINEAGES_PATH=$(sed -n 's/^SEARCHER_V2_LINEAGES_PATH=//p' \"$ENVF\"",
+  ) && universeCron.includes(
+    'SEARCHER_V2_LINEAGES_PATH="$V2_LINEAGES_PATH"',
+  ),
+  "cron universe builds must use the same V2 lineage snapshot as the runtime",
 );
 const cronLockAt = universeCron.indexOf("flock -n 9");
 const cronUniversePublishAt = universeCron.indexOf('mv "$TMP" "$OUT"');

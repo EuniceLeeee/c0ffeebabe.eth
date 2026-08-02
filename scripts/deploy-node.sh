@@ -515,44 +515,23 @@ UNIVERSE_LOCK_WAIT_SECONDS="${POOL_UNIVERSE_LOCK_WAIT_SECONDS:-300}"
   && [ "$UNIVERSE_LOCK_WAIT_SECONDS" -ge 30 ] \
   && [ "$UNIVERSE_LOCK_WAIT_SECONDS" -le 600 ] \
   || abort_runtime "POOL_UNIVERSE_LOCK_WAIT_SECONDS must be 30..600"
+POOL_UNIVERSE_DISCOVERY_BLOCKS=$(env_value SEARCHER_DISCOVERY_BLOCKS "$ENVF")
+POOL_UNIVERSE_DISCOVERY_BLOCKS="${POOL_UNIVERSE_DISCOVERY_BLOCKS:-300}"
+[[ "$POOL_UNIVERSE_DISCOVERY_BLOCKS" =~ ^[0-9]+$ ]] \
+  || abort_runtime "SEARCHER_DISCOVERY_BLOCKS must be a non-negative integer"
+POOL_UNIVERSE_V2_LINEAGES_PATH=$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")
 validate_pool_universe_selection() {
   local universe_path=$1 manifest_path=$2 frozen_source=$3
+  local discovery_blocks=$4 v2_lineages_path=$5
   (
     cd "$REPO/listener" &&
-      node --input-type=module - \
-        "$universe_path" "$manifest_path" "$frozen_source" <<'JS'
-import {
-  loadPoolUniverse,
-  loadPoolUniverseCoverageMetadata,
-} from "./dist/searcher/pool-universe.js";
-
-const [universePath, manifestPath, frozenSourceRaw] =
-  process.argv.slice(2);
-const frozenSource = Number(frozenSourceRaw);
-const pools = loadPoolUniverse(universePath, {
-  missingOk: false,
-  maxPools: 0,
-  minScore: 0,
-});
-const metadata = loadPoolUniverseCoverageMetadata(
-  universePath,
-  manifestPath,
-);
-const toBlock = metadata.toBlock;
-if (
-  pools.length === 0 ||
-  !metadata.manifestVerified ||
-  !Number.isSafeInteger(toBlock) ||
-  toBlock <= 0 ||
-  !Number.isSafeInteger(frozenSource) ||
-  frozenSource <= 0 ||
-  toBlock > frozenSource ||
-  metadata.source?.number !== toBlock
-) {
-  process.exit(1);
-}
-process.stdout.write(String(toBlock));
-JS
+      env SEARCHER_V2_LINEAGES_PATH="$v2_lineages_path" \
+        node dist/searcher/pool-universe-deploy-trust.js \
+          "$universe_path" \
+          "$manifest_path" \
+          "$frozen_source" \
+          "$discovery_blocks" \
+          "$LOCAL_RPC"
   )
 }
 # The cron writer owns the same lock across its build + atomic publication.
@@ -564,14 +543,23 @@ flock -w "$UNIVERSE_LOCK_WAIT_SECONDS" 9 \
   || abort_runtime \
     "could not lock pool universe selection at $UNIVERSE_LOCK after ${UNIVERSE_LOCK_WAIT_SECONDS}s"
 # Debounce: with frequent dry-run on/off toggles, re-scanning on EVERY restart is wasteful. Skip if the
-# universe is already fresh — its data toBlock is within MAX_STALE_BLOCKS of this deploy's frozen source
-# (~7200 = ~1 day) and is not from the future relative to that source.
+# universe is already runtime-trusted — its manifest uses the selected V2
+# lineage/production registry, its source is still canonical, and its landed
+# window bridges the next process's SEARCHER_DISCOVERY_BLOCKS contract. The
+# optional MAX_STALE_BLOCKS controls when deploy must attempt a refresh. The
+# runtime-trust validator below remains the acceptance boundary if that refresh
+# fails; setting the value to 0 therefore forces an attempt without making a
+# transient indexer failure take down an otherwise runtime-compatible deploy.
 # (The 30-min cron keeps it far fresher, so this check usually skips; it only fires if the cron lapsed.)
 # Block-based, NOT mtime — mtime is a deceptive deploy re-save; toBlock is the real data freshness.
 REINDEX_MAX_STALE_BLOCKS="${POOL_UNIVERSE_MAX_STALE_BLOCKS:-7200}"
 if ! REINDEX_CUR_TOBLOCK=$(
   validate_pool_universe_selection \
-    "$REINDEX_OUT" "$REINDEX_MANIFEST" "$DISCOVERY_TO_BLOCK" \
+    "$REINDEX_OUT" \
+    "$REINDEX_MANIFEST" \
+    "$DISCOVERY_TO_BLOCK" \
+    "$POOL_UNIVERSE_DISCOVERY_BLOCKS" \
+    "$POOL_UNIVERSE_V2_LINEAGES_PATH" \
     2>/dev/null
 ); then
   REINDEX_CUR_TOBLOCK=0
@@ -621,9 +609,13 @@ fi
 # discovery generation.
 REINDEX_SELECTED_TOBLOCK=$(
   validate_pool_universe_selection \
-    "$REINDEX_OUT" "$REINDEX_MANIFEST" "$DISCOVERY_TO_BLOCK"
+    "$REINDEX_OUT" \
+    "$REINDEX_MANIFEST" \
+    "$DISCOVERY_TO_BLOCK" \
+    "$POOL_UNIVERSE_DISCOVERY_BLOCKS" \
+    "$POOL_UNIVERSE_V2_LINEAGES_PATH"
 ) || abort_runtime \
-  "selected pool universe/manifest does not match frozen source $DISCOVERY_TO_BLOCK"
+  "selected pool universe/manifest is not runtime-trusted at frozen source $DISCOVERY_TO_BLOCK"
 
 # Pin the running process to an immutable, content-addressed universe. The 30-minute indexer may replace
 # active-pools.json while an A/B window is running; that file update must become input to the NEXT deploy,
