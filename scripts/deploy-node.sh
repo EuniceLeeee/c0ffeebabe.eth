@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Safe node deploy: update /opt/MEV to latest origin/main and restart the searcher.
+# Safe node deploy: update /opt/MEV to an allowlisted remote ref and restart the searcher.
 #
 # Runs ON the EC2 node (SSM-only, no SSH). Bootstraps itself from git so it is always
 # the latest version:
 #   aws ssm send-command ... --parameters 'commands=[
 #     "git -C /opt/MEV fetch origin -q && git -C /opt/MEV show origin/main:scripts/deploy-node.sh | sudo bash"]'
+# Set SEARCHER_DEPLOY_REF=origin/codex/<branch> only for an intentional branch
+# validation; the default and every unqualified deploy remain origin/main.
 #
 # DRY-RUN vs LIVE (broadcast) — the guard, and the one bounded escape hatch:
 #  - DEFAULT = DRY-RUN. If SEARCHER_DRY_RUN=1 cannot be ensured, ABORT without restarting
@@ -199,7 +201,7 @@ recover_running_env() {
     [ -n "$line" ] || continue
     key=${line%%=*}
     case "$key" in
-      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_PROFIT_HAIRCUT_BPS|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ETH_USD|SEARCHER_GAS_BUFFER_MULT_X10|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ENABLE_MEV_SHARE|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT|SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK) continue ;;
+      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_PROFIT_HAIRCUT_BPS|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ETH_USD|SEARCHER_GAS_BUFFER_MULT_X10|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ENABLE_MEV_SHARE|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT|SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK|SEARCHER_DEPLOY_REF) continue ;;
       SEARCHER_*) echo "$line"; continue ;;
     esac
     for wanted in $NON_SEARCHER_KEYS; do
@@ -268,7 +270,7 @@ else
   BLOCKSCAN_ROUTE_EVENTS_PATH=${SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH:-${EXISTING_BLOCKSCAN_ROUTE_EVENTS_PATH:-$DEFAULT_BLOCKSCAN_ROUTE_EVENTS_PATH}}
   tmp=$(mktemp)
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
-  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_PROFIT_HAIRCUT_BPS|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ETH_USD|SEARCHER_GAS_BUFFER_MULT_X10|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ENABLE_MEV_SHARE|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT|SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK)=' "$ENVF" > "$tmp"
+  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_PROFIT_HAIRCUT_BPS|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ETH_USD|SEARCHER_GAS_BUFFER_MULT_X10|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ENABLE_MEV_SHARE|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT|SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK|SEARCHER_DEPLOY_REF)=' "$ENVF" > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
   echo "SEARCHER_PROFIT_HAIRCUT_BPS=$PROFIT_HAIRCUT_BPS" >> "$tmp"
@@ -353,8 +355,15 @@ tar czf "$REPO-deploy-$TS.tar.gz" -T "/tmp/dirty-$TS.txt" 2>/dev/null
 # above, then remove only the two namespaces scanned by the production tool index.
 find "$REPO/analysis/src/cli" "$REPO/scripts" -type f -name '._*' -delete 2>/dev/null || true
 git fetch origin -q || abort_runtime "git fetch origin failed"
-git reset --hard origin/main || abort_runtime "git reset to origin/main failed"
-say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
+DEPLOY_REF=${SEARCHER_DEPLOY_REF:-origin/main}
+case "$DEPLOY_REF" in
+  origin/main|origin/codex/*|origin/ab/*) ;;
+  *) abort_runtime "SEARCHER_DEPLOY_REF must be origin/main or an origin/codex|origin/ab ref" ;;
+esac
+git show-ref --verify --quiet "refs/remotes/$DEPLOY_REF" \
+  || abort_runtime "deployment ref is unavailable: $DEPLOY_REF"
+git reset --hard "$DEPLOY_REF" || abort_runtime "git reset to $DEPLOY_REF failed"
+say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1) ref=$DEPLOY_REF"
 
 # ── 4. Build + production-analysis preflight ──
 ( cd "$REPO/listener" && npm run build ) \
@@ -829,5 +838,5 @@ if [ "$MODE" = "LIVE" ]; then
   say "### to revert to dry-run on the next deploy.                           ###"
   say "########################################################################"
 else
-  say "DONE — dry-run on latest main. backup: $REPO-deploy-$TS.tar.gz"
+  say "DONE — dry-run on $DEPLOY_REF. backup: $REPO-deploy-$TS.tar.gz"
 fi
