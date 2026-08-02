@@ -502,6 +502,11 @@ REINDEX_TMP_MANIFEST="$REINDEX_TMP.manifest.json"
 REINDEX_RETAIN="${POOL_UNIVERSE_RETAIN_PATH:-$REINDEX_OUT}"
 UNIVERSE_SNAPSHOT_DIR=/opt/MEV-runtime/universe
 UNIVERSE_LOCK=/run/lock/mev-pooluniverse.lock
+UNIVERSE_LOCK_WAIT_SECONDS="${POOL_UNIVERSE_LOCK_WAIT_SECONDS:-300}"
+[[ "$UNIVERSE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]] \
+  && [ "$UNIVERSE_LOCK_WAIT_SECONDS" -ge 30 ] \
+  && [ "$UNIVERSE_LOCK_WAIT_SECONDS" -le 600 ] \
+  || abort_runtime "POOL_UNIVERSE_LOCK_WAIT_SECONDS must be 30..600"
 validate_pool_universe_selection() {
   local universe_path=$1 manifest_path=$2 frozen_source=$3
   (
@@ -547,8 +552,9 @@ JS
 # publication, otherwise cron can replace the canonical files between the
 # freshness check, validation and copy.
 exec 9>"$UNIVERSE_LOCK"
-flock -w 30 9 \
-  || abort_runtime "could not lock pool universe selection at $UNIVERSE_LOCK"
+flock -w "$UNIVERSE_LOCK_WAIT_SECONDS" 9 \
+  || abort_runtime \
+    "could not lock pool universe selection at $UNIVERSE_LOCK after ${UNIVERSE_LOCK_WAIT_SECONDS}s"
 # Debounce: with frequent dry-run on/off toggles, re-scanning on EVERY restart is wasteful. Skip if the
 # universe is already fresh — its data toBlock is within MAX_STALE_BLOCKS of this deploy's frozen source
 # (~7200 = ~1 day) and is not from the future relative to that source.

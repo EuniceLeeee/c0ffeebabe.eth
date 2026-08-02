@@ -65,6 +65,12 @@ assert(
   "deploy must hold the cron universe lock from selection through immutable snapshot",
 );
 assert(
+  deployNode.includes(
+    'UNIVERSE_LOCK_WAIT_SECONDS="${POOL_UNIVERSE_LOCK_WAIT_SECONDS:-300}"',
+  ) && deployNode.includes('flock -w "$UNIVERSE_LOCK_WAIT_SECONDS" 9'),
+  "deploy must wait through one normal cron universe publication instead of killing the live searcher after 30 seconds",
+);
+assert(
   deployNode.includes("loadPoolUniverseCoverageMetadata") &&
     deployNode.includes("loadPoolUniverse") &&
     deployNode.includes("!metadata.manifestVerified") &&
