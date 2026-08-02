@@ -1,6 +1,6 @@
 import type { DiscoveryRange } from "./discovery-source-watermark.js";
 
-export const DEFAULT_DISCOVERY_BACKFILL_CHUNK_BLOCKS = 512;
+export const DEFAULT_DISCOVERY_BACKFILL_CHUNK_BLOCKS = 8;
 
 /**
  * Historical retention and one worker's CPU/RPC unit are different limits.

@@ -50,7 +50,7 @@ function chunkSizingSeparatesRetentionFromWorkUnits(): void {
     resolveDiscoveryBackfillChunkBlocks(20_000, undefined),
     DEFAULT_DISCOVERY_BACKFILL_CHUNK_BLOCKS,
   );
-  assert.equal(resolveDiscoveryBackfillChunkBlocks(128, undefined), 128);
+  assert.equal(resolveDiscoveryBackfillChunkBlocks(4, undefined), 4);
   assert.equal(
     resolveDiscoveryBackfillChunkBlocks(20_000, "1024"),
     1_024,
