@@ -1,0 +1,231 @@
+import assert from "node:assert/strict";
+import { LiveRethReadPriority } from "../live-reth-read-priority.js";
+
+await criticalPreemptsDrainsAndRetriesBackground();
+await announcedCriticalClosesBackgroundAdmissionRace();
+await backgroundWaitsForQueuedCriticalWork();
+await externalAbortWhileWaitingDoesNotStartOrRetry();
+await externalAbortDuringAttemptTerminatesWithoutRetry();
+
+console.log("[live-reth-read-priority] preemption/abort: PASS (5/5)");
+
+async function criticalPreemptsDrainsAndRetriesBackground(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const firstStarted = deferred();
+  const firstAbortObserved = deferred();
+  const allowFirstCleanup = deferred();
+  const criticalStarted = deferred();
+  const allowCritical = deferred();
+  const events: string[] = [];
+  let attempts = 0;
+
+  const background = priority.runBackground(async (signal) => {
+    attempts++;
+    events.push(`background-${attempts}-start`);
+    if (attempts === 1) {
+      firstStarted.resolve();
+      await aborted(signal);
+      firstAbortObserved.resolve();
+      await allowFirstCleanup.promise;
+      events.push("background-1-cleaned");
+      throw signal.reason;
+    }
+    events.push("background-2-complete");
+    return "retried";
+  });
+  await firstStarted.promise;
+
+  const critical = priority.runCritical(async () => {
+    events.push("critical-start");
+    criticalStarted.resolve();
+    await allowCritical.promise;
+    events.push("critical-complete");
+  });
+  await firstAbortObserved.promise;
+  assert.equal(
+    criticalStarted.isResolved(),
+    false,
+    "critical work must wait for the cancelled transport attempt to settle",
+  );
+
+  allowFirstCleanup.resolve();
+  await criticalStarted.promise;
+  assert.equal(attempts, 1, "background must not retry during critical work");
+  allowCritical.resolve();
+  await critical;
+  assert.equal(await background, "retried");
+  assert.equal(attempts, 2);
+  assert.deepEqual(events, [
+    "background-1-start",
+    "background-1-cleaned",
+    "critical-start",
+    "critical-complete",
+    "background-2-start",
+    "background-2-complete",
+  ]);
+}
+
+async function announcedCriticalClosesBackgroundAdmissionRace(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const releaseCritical = deferred();
+  const events: string[] = [];
+
+  const background = priority.runBackground(async () => {
+    events.push("background");
+  });
+  const critical = priority.runCritical(async () => {
+    events.push("critical-start");
+    await releaseCritical.promise;
+    events.push("critical-end");
+  });
+
+  await nextTurn();
+  assert.deepEqual(events, ["critical-start"]);
+  releaseCritical.resolve();
+  await Promise.all([critical, background]);
+  assert.deepEqual(events, ["critical-start", "critical-end", "background"]);
+}
+
+async function backgroundWaitsForQueuedCriticalWork(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const releaseFirst = deferred();
+  const firstStarted = deferred();
+  const secondStarted = deferred();
+  const events: string[] = [];
+
+  const first = priority.runCritical(async () => {
+    events.push("critical-1-start");
+    firstStarted.resolve();
+    await releaseFirst.promise;
+    events.push("critical-1-end");
+  });
+  await firstStarted.promise;
+  const second = priority.runCritical(async () => {
+    events.push("critical-2");
+    secondStarted.resolve();
+  });
+  let backgroundStarted = false;
+  const background = priority.runBackground(async () => {
+    backgroundStarted = true;
+    events.push("background");
+    return 7;
+  });
+
+  await nextTurn();
+  assert.equal(backgroundStarted, false);
+  releaseFirst.resolve();
+  await secondStarted.promise;
+  assert.equal(backgroundStarted, false, "queued critical work keeps priority");
+  await Promise.all([first, second]);
+  assert.equal(await background, 7);
+  assert.deepEqual(events, [
+    "critical-1-start",
+    "critical-1-end",
+    "critical-2",
+    "background",
+  ]);
+}
+
+async function externalAbortWhileWaitingDoesNotStartOrRetry(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const criticalStarted = deferred();
+  const releaseCritical = deferred();
+  const critical = priority.runCritical(async () => {
+    criticalStarted.resolve();
+    await releaseCritical.promise;
+  });
+  await criticalStarted.promise;
+
+  const parent = new AbortController();
+  let attempts = 0;
+  const background = priority.runBackground(async () => {
+    attempts++;
+    return "unexpected";
+  }, parent.signal);
+  parent.abort(new Error("caller stopped while waiting"));
+  await assert.rejects(background, /caller stopped while waiting/);
+  assert.equal(attempts, 0);
+
+  releaseCritical.resolve();
+  await critical;
+  await nextTurn();
+  assert.equal(attempts, 0, "external abort must never schedule a retry");
+}
+
+async function externalAbortDuringAttemptTerminatesWithoutRetry(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const parent = new AbortController();
+  const started = deferred();
+  const allowTransportCleanup = deferred();
+  let attempts = 0;
+  const background = priority.runBackground(async (signal) => {
+    attempts++;
+    started.resolve();
+    await aborted(signal);
+    await allowTransportCleanup.promise;
+    throw signal.reason;
+  }, parent.signal);
+  await started.promise;
+
+  parent.abort(new Error("caller stopped active attempt"));
+  await assert.rejects(
+    settlesBefore(background, 20),
+    /timed out after 20ms/,
+    "caller cancellation must retain the transport settle barrier",
+  );
+  assert.equal(attempts, 1);
+  allowTransportCleanup.resolve();
+  await assert.rejects(background, /caller stopped active attempt/);
+  assert.equal(attempts, 1, "caller cancellation must not be retried");
+}
+
+function aborted(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
+}
+
+function deferred(): {
+  readonly promise: Promise<void>;
+  resolve(): void;
+  isResolved(): boolean;
+} {
+  let resolved = false;
+  let resolvePromise!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve() {
+      resolved = true;
+      resolvePromise();
+    },
+    isResolved: () => resolved,
+  };
+}
+
+async function nextTurn(): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
+async function settlesBefore<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}

@@ -178,6 +178,7 @@ import {
 } from "./blockscan-backrun-state-bridge.js";
 import { JsonRpcBlockScanStateReadBackend } from "./blockscan-state-read-backend.js";
 import { AdapterRuntimeCoordinator } from "./adapter-runtime-coordinator.js";
+import { LiveRethReadPriority } from "./live-reth-read-priority.js";
 import {
   AdapterFamilyGraphViewCoordinator,
 } from "./adapter-family-graph-view-coordinator.js";
@@ -988,6 +989,7 @@ async function main(): Promise<void> {
   planner.setMaxRotationsPerPath(maxRotationsPerPath);
   let blockScanPlanner: TemplatePlanner | undefined;
   let adapterRuntimeCoordinator: AdapterRuntimeCoordinator | undefined;
+  const liveRethReadPriority = new LiveRethReadPriority();
   let blockScanStateReadBackend:
     JsonRpcBlockScanStateReadBackend | undefined;
   const blockScanExecutionWorkers: Array<{
@@ -1222,6 +1224,7 @@ async function main(): Promise<void> {
         },
       }),
       fundingStateReads,
+      liveRethReadPriority,
     );
   }
   const solver = new AnvilSolver();
@@ -2297,6 +2300,7 @@ async function main(): Promise<void> {
     onFatalReorg() {
       shuttingDown = true;
     },
+    readPriority: liveRethReadPriority,
   });
   liveDiscovery.start();
 

@@ -91,6 +91,7 @@ import {
   prepareStartupDexIdentityRetryStage,
   type StartupDexIdentityRetryStage,
 } from "./startup-dex-identity-retry.js";
+import type { LiveRethReadPriority } from "./live-reth-read-priority.js";
 import type { StrategyViews } from "./strategy-views.js";
 import {
   PRODUCTION_IDENTITY_ADMISSION,
@@ -222,6 +223,8 @@ export interface LiveDiscoveryCoordinatorDeps {
     label?: string,
   ) => void;
   readonly onFatalReorg: (reason: string) => void;
+  /** Coarse N-1 state reads preempt retryable discovery transport reads. */
+  readonly readPriority?: Pick<LiveRethReadPriority, "runBackground">;
 }
 
 /**
@@ -1040,7 +1043,11 @@ export async function createLiveDiscoveryCoordinator(
       : {
           signal: input.control.signal,
           deadlineAtMs: input.control.deadlineAtMs,
-          run: input.control.run,
+          run: <T>(work: (signal: AbortSignal) => Promise<T>) =>
+            input.control!.run((budgetSignal) =>
+              deps.readPriority?.runBackground(work, budgetSignal) ??
+                work(budgetSignal)
+            ),
         };
     const canonicalBefore = await readDexDiscoveryBlockHash(
       provider,
@@ -2070,7 +2077,9 @@ export async function createLiveDiscoveryCoordinator(
     const control: ProtocolDiscoveryReadControl = {
       signal: controller.signal,
       deadlineAtMs,
-      run: (work) => work(controller.signal),
+      run: (work) =>
+        deps.readPriority?.runBackground(work, controller.signal) ??
+          work(controller.signal),
     };
     try {
       // A current-block publication may legitimately win while trace/probe is

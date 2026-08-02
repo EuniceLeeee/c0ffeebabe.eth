@@ -7,6 +7,7 @@ import {
   type BlockScanStateSnapshot,
 } from "./blockscan-state-coordinator.js";
 import type { JsonRpcBlockScanStateReadBackend } from "./blockscan-state-read-backend.js";
+import type { LiveRethReadPriority } from "./live-reth-read-priority.js";
 import type { FlashLiquidityView, FlashSource } from "./solver/flash-liquidity.js";
 import type { AdapterFamilyRegistry } from "./venues/adapter-family-registry.js";
 import {
@@ -232,6 +233,7 @@ export class AdapterRuntimeCoordinator {
       JsonRpcBlockScanStateReadBackend,
       "readPinned" | "verifyCanonicalSource"
     >,
+    private readonly readPriority?: Pick<LiveRethReadPriority, "runCritical">,
   ) {}
 
   latestSnapshot(): AdapterRuntimeSnapshot | null {
@@ -254,7 +256,7 @@ export class AdapterRuntimeCoordinator {
     readonly laggingTopologyRefreshMode?: BlockScanLaggingTopologyRefreshMode;
     readonly signal?: AbortSignal;
   }): Promise<BlockScanStatePrepareResult> {
-    return await this.pricing.prepare({
+    const prepare = () => this.pricing.prepare({
       graph: input.graph,
       families: this.registry.blockScanStateFamilies(),
       requiresPricing: (edge) => this.registry.isBlockScanPricedEdge(edge),
@@ -264,6 +266,7 @@ export class AdapterRuntimeCoordinator {
         input.laggingTopologyRefreshMode ?? "proof-scoped",
       signal: input.signal,
     });
+    return await (this.readPriority?.runCritical(prepare) ?? prepare());
   }
 
   /**
