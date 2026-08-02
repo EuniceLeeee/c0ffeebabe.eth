@@ -144,6 +144,7 @@ interface CanonicalMutationHeader {
   readonly number: number;
   readonly hash: string;
   readonly parentHash: string;
+  readonly gasUsed?: bigint;
 }
 
 interface CanonicalHeaderProof {
@@ -166,6 +167,16 @@ interface PendingMutationTransportBatch {
   ) => void;
   readonly reject: (reason?: unknown) => void;
   started: boolean;
+}
+
+interface CanonicalBlockActivity {
+  readonly fromExclusive: BlockSource;
+  readonly through: BlockSource;
+  readonly events: readonly ChainLog[];
+  readonly touchedAddresses: readonly string[];
+  readonly transactionCount: number;
+  readonly canonicalPathFingerprint: string;
+  readonly rangeFingerprint: string;
 }
 
 /**
@@ -232,6 +243,11 @@ export class JsonRpcBlockScanStateReadBackend
     Promise<CanonicalHeaderProof>
   >();
   private canonicalHeaderSessionScope: string | null = null;
+  private readonly canonicalActivitySessions = new Map<
+    string,
+    Promise<CanonicalBlockActivity>
+  >();
+  private canonicalActivitySessionScope: string | null = null;
   private nextId = 1;
 
   constructor(
@@ -355,19 +371,78 @@ export class JsonRpcBlockScanStateReadBackend
      * saturate reth first, the touch proof times out, and the protocol lane
      * pays both the failed proof and the full fallback scan.
      */
-    return this.runMutationCritical(() =>
-      this.computeCanonicalAddressTouches(fromExclusive, through, control)
+    const activity = await awaitWithSignal(
+      this.readSharedCanonicalActivity(fromExclusive, through, control),
+      control.signal,
     );
+    return Object.freeze({
+      fromExclusive: activity.fromExclusive,
+      through: activity.through,
+      touchedAddresses: activity.touchedAddresses,
+      transactionCount: activity.transactionCount,
+      complete: true as const,
+      rangeFingerprint: activity.rangeFingerprint,
+    });
   }
 
-  private async computeCanonicalAddressTouches(
+  private readSharedCanonicalActivity(
     fromExclusive: BlockSource,
     through: BlockSource,
     control: {
       readonly deadlineAtMs: number;
       readonly signal: AbortSignal;
     },
-  ): Promise<CanonicalAddressTouchRange> {
+  ): Promise<CanonicalBlockActivity> {
+    const scope = canonicalActivitySessionScope(through);
+    if (this.canonicalActivitySessionScope !== scope) {
+      this.canonicalActivitySessions.clear();
+      this.canonicalActivitySessionScope = scope;
+    }
+    const key = canonicalHeaderSessionKey(fromExclusive, through);
+    let session = this.canonicalActivitySessions.get(key);
+    if (!session) {
+      const created = this.runMutationCritical(
+        (signal) =>
+          this.computeCanonicalBlockActivity(fromExclusive, through, {
+            deadlineAtMs: control.deadlineAtMs,
+            signal,
+          }),
+        control,
+      );
+      session = created.catch((error) => {
+        if (this.canonicalActivitySessions.get(key) === session) {
+          this.canonicalActivitySessions.delete(key);
+        }
+        throw error;
+      });
+      this.canonicalActivitySessions.set(key, session);
+    }
+    return session;
+  }
+
+  private canonicalActivitySession(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+  ): Promise<CanonicalBlockActivity> | undefined {
+    if (
+      this.canonicalActivitySessionScope !==
+        canonicalActivitySessionScope(through)
+    ) {
+      return undefined;
+    }
+    return this.canonicalActivitySessions.get(
+      canonicalHeaderSessionKey(fromExclusive, through),
+    );
+  }
+
+  private async computeCanonicalBlockActivity(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<CanonicalBlockActivity> {
     const distance = through.number - fromExclusive.number;
     if (
       distance <= 0 ||
@@ -389,74 +464,74 @@ export class JsonRpcBlockScanStateReadBackend
       if (remainingMs <= 0) {
         controller.abort(new Error("address-touch proof deadline reached"));
       }
-      const blockNumbers = Array.from(
-        { length: distance },
-        (_value, index) => fromExclusive.number + index + 1,
+      const headerProof = await this.readSharedCanonicalHeaders(
+        fromExclusive,
+        through,
+        {
+          deadlineAtMs: control.deadlineAtMs,
+          signal: controller.signal,
+        },
       );
-      const blockIds = blockNumbers.map(() => this.nextId++);
-      const blockResponses = await this.postWithSlots(
+      const receiptHeaders = headerProof.headers.slice(1);
+      const receiptIds = receiptHeaders.map(() => this.nextId++);
+      const receiptResponses = await this.postWithSlots(
         this.addressTouchSlots,
-        blockIds.map((id, index) => ({
-            jsonrpc: "2.0",
-            id,
-            method: "eth_getBlockByNumber",
-            params: [toBlockTag(blockNumbers[index]), true],
+        receiptIds.map((id, index) => ({
+          jsonrpc: "2.0",
+          id,
+          method: "eth_getBlockReceipts",
+          // Reth accepts an exact block hash here. This keeps an empty receipt
+          // set bound to the header proof instead of relying on a number-range
+          // query that could race a short reorg.
+          params: [receiptHeaders[index].hash],
         })),
         controller.signal,
       );
-      const blocks = parseAddressTouchBlocks(
-        blockResponses,
-        blockIds,
-        blockNumbers,
+      const receipts = parseCanonicalBlockReceipts(
+        receiptResponses,
+        receiptIds,
+        receiptHeaders,
         fromExclusive,
         through,
       );
-      const logIds = blocks.map(() => this.nextId++);
-      const logResponses = await this.postWithSlots(
-        this.addressTouchSlots,
-        logIds.map((id, index) => ({
-          jsonrpc: "2.0",
-          id,
-          method: "eth_getLogs",
-          // EIP-234 binds completeness to the exact block selected above;
-          // a number-range query could otherwise race a short reorg and
-          // return an empty result from a different canonical branch.
-          params: [{ blockHash: blocks[index].hash }],
-        })),
-        controller.signal,
-      );
       const headerByNumber = new Map(
-        blocks.map((block) => [block.number, { hash: block.hash }]),
+        receiptHeaders.map((header) => [header.number, header]),
       );
-      const logs = logIds.flatMap((id, blockIndex) => {
-        const rawLogs = requiredRpcResult(
-          logResponses,
-          id,
-          `activity logs ${blocks[blockIndex].number}`,
-        );
-        if (!Array.isArray(rawLogs)) {
-          throw new Error("address-touch activity logs are not an array");
-        }
-        return rawLogs.map((value, logIndex) => {
-          const log = parseChainLog(
-            value,
-            blockIndex * 1_000_000 + logIndex,
-            fromExclusive,
-            through,
-            headerByNumber,
-          );
-          if (
-            log.blockNumber !== blocks[blockIndex].number ||
-            log.blockHash !== blocks[blockIndex].hash
-          ) {
-            throw new Error(
-              `address-touch block-hash query returned log outside ` +
-                `${blocks[blockIndex].number}/${blocks[blockIndex].hash}`,
+      let rawLogIndex = 0;
+      const logs = receipts.flatMap((blockReceipts) =>
+        blockReceipts.receipts.flatMap((receipt) =>
+          receipt.logs.map((value) => {
+            const log = parseChainLog(
+              value,
+              rawLogIndex++,
+              fromExclusive,
+              through,
+              headerByNumber,
             );
-          }
-          return log;
-        });
-      }).sort((left, right) =>
+            if (
+              log.blockNumber !== blockReceipts.number ||
+              log.blockHash !== blockReceipts.hash
+            ) {
+              throw new Error(
+                `block receipt returned log outside ` +
+                  `${blockReceipts.number}/${blockReceipts.hash}`,
+              );
+            }
+            if (
+              log.transactionIndex !== receipt.transactionIndex ||
+              parseHash(
+                (value as Record<string, unknown>).transactionHash,
+                `block receipt log ${rawLogIndex - 1} transactionHash`,
+              ) !== receipt.transactionHash
+            ) {
+              throw new Error(
+                "block receipt log does not match its transaction",
+              );
+            }
+            return log;
+          })
+        )
+      ).sort((left, right) =>
         left.blockNumber - right.blockNumber ||
         left.transactionIndex - right.transactionIndex ||
         left.logIndex - right.logIndex
@@ -472,11 +547,17 @@ export class JsonRpcBlockScanStateReadBackend
           throw new Error("address-touch activity logs contain a duplicate");
         }
       }
-      const touched = new Set(blocks.flatMap((block) => block.directTargets));
+      const touched = new Set(
+        receipts.flatMap((block) =>
+          block.receipts.flatMap((receipt) =>
+            receipt.directTarget === null ? [] : [receipt.directTarget]
+          )
+        ),
+      );
       for (const log of logs) touched.add(log.address);
       const touchedAddresses = Object.freeze([...touched].sort());
-      const transactionCount = blocks.reduce(
-        (sum, block) => sum + block.transactionHashes.length,
+      const transactionCount = receipts.reduce(
+        (sum, block) => sum + block.receipts.length,
         0,
       );
       await this.verifyCanonicalSourceWithSlotsMeasured(
@@ -484,19 +565,21 @@ export class JsonRpcBlockScanStateReadBackend
         controller.signal,
         this.addressTouchSlots,
       );
+      const rangeFingerprint = deterministicHash({
+        fromExclusive,
+        through,
+        receipts,
+        logs,
+        touchedAddresses,
+      });
       return Object.freeze({
         fromExclusive,
         through,
+        events: Object.freeze(logs),
         touchedAddresses,
         transactionCount,
-        complete: true as const,
-        rangeFingerprint: deterministicHash({
-          fromExclusive,
-          through,
-          blocks,
-          logs,
-          touchedAddresses,
-        }),
+        canonicalPathFingerprint: headerProof.canonicalPathFingerprint,
+        rangeFingerprint,
       });
     } finally {
       clearTimeout(timer);
@@ -728,18 +811,13 @@ export class JsonRpcBlockScanStateReadBackend
     let session = this.mutationRangeSessions.get(sessionKey);
     if (!session) {
       const ownerSignal = control.sharedSignal ?? control.signal;
-      const created = control.sharedSignal
-        ? this.enqueueSharedMutationTransport(
-            descriptor,
-            fromExclusive,
-            through,
-            {
-              deadlineAtMs: control.deadlineAtMs,
-              signal: ownerSignal,
-            },
-          )
-        : this.runMutationCritical(() =>
-            this.computeCanonicalMutationRange(
+      const activitySession = this.canonicalActivitySession(
+        fromExclusive,
+        through,
+      );
+      const fallback = () =>
+        control.sharedSignal
+          ? this.enqueueSharedMutationTransport(
               descriptor,
               fromExclusive,
               through,
@@ -748,7 +826,32 @@ export class JsonRpcBlockScanStateReadBackend
                 signal: ownerSignal,
               },
             )
-          );
+          : this.runMutationCritical(
+              (signal) =>
+                this.computeCanonicalMutationRange(
+                  descriptor,
+                  fromExclusive,
+                  through,
+                  {
+                    deadlineAtMs: control.deadlineAtMs,
+                    signal,
+                  },
+                ),
+              {
+                deadlineAtMs: control.deadlineAtMs,
+                signal: ownerSignal,
+              },
+            );
+      const created = activitySession
+        ? this.readMutationRangeFromActivityOrFallback(
+            activitySession,
+            descriptor,
+            fromExclusive,
+            through,
+            ownerSignal,
+            fallback,
+          )
+        : fallback();
       session = created.finally(() => {
         if (this.mutationRangeSessions.get(sessionKey) === session) {
           this.mutationRangeSessions.delete(sessionKey);
@@ -757,6 +860,62 @@ export class JsonRpcBlockScanStateReadBackend
       this.mutationRangeSessions.set(sessionKey, session);
     }
     return await awaitWithSignal(session, control.signal);
+  }
+
+  private async readMutationRangeFromActivityOrFallback(
+    session: Promise<CanonicalBlockActivity>,
+    descriptor: MutationQueryDescriptor,
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    signal: AbortSignal,
+    fallback: () => Promise<CanonicalMutationRange>,
+  ): Promise<CanonicalMutationRange> {
+    const startedAtMs = this.now();
+    let activity: CanonicalBlockActivity;
+    try {
+      activity = await awaitWithSignal(session, signal);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return await fallback();
+    }
+    const validationStartedAtMs = this.now();
+    const matchingEvents = Object.freeze(activity.events.filter((event) =>
+      mutationLogMatchesDescriptor(event, descriptor)
+    ));
+    const range: CanonicalMutationRange = Object.freeze({
+      fromExclusive,
+      through,
+      events: matchingEvents,
+      complete: true as const,
+      queryDescriptorFingerprint: descriptor.fingerprint,
+      canonicalPathFingerprint: activity.canonicalPathFingerprint,
+      rangeFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+        queryDescriptorFingerprint: descriptor.fingerprint,
+        canonicalPathFingerprint: activity.canonicalPathFingerprint,
+        events: matchingEvents,
+      }),
+    });
+    const validationMs = Math.max(0, this.now() - validationStartedAtMs);
+    try {
+      this.onMutationProofTelemetry?.(Object.freeze({
+        descriptorFingerprint: descriptor.fingerprint,
+        fromBlock: fromExclusive.number,
+        throughBlock: through.number,
+        status: "complete" as const,
+        wallMs: Math.max(0, this.now() - startedAtMs),
+        validationMs,
+        phases: Object.freeze({
+          headers: sharedActivityPhase(),
+          logs: sharedActivityPhase(),
+          finalCas: sharedActivityPhase(),
+        }),
+      }));
+    } catch {
+      // Observability must never change proof transport behavior.
+    }
+    return range;
   }
 
   private enqueueSharedMutationTransport(
@@ -818,16 +977,21 @@ export class JsonRpcBlockScanStateReadBackend
   ): Promise<void> {
     batch.started = true;
     try {
-      batch.resolve(await this.runMutationCritical(() =>
-        this.computeCanonicalMutationRanges(
-          [...batch.descriptors.values()],
-          batch.fromExclusive,
-          batch.through,
-          {
-            deadlineAtMs: batch.deadlineAtMs,
-            signal: batch.sharedSignal,
-          },
-        )
+      batch.resolve(await this.runMutationCritical(
+        (signal) =>
+          this.computeCanonicalMutationRanges(
+            [...batch.descriptors.values()],
+            batch.fromExclusive,
+            batch.through,
+            {
+              deadlineAtMs: batch.deadlineAtMs,
+              signal,
+            },
+          ),
+        {
+          deadlineAtMs: batch.deadlineAtMs,
+          signal: batch.sharedSignal,
+        },
       ));
     } catch (error) {
       batch.reject(error);
@@ -838,10 +1002,41 @@ export class JsonRpcBlockScanStateReadBackend
     }
   }
 
-  private runMutationCritical<T>(work: () => Promise<T>): Promise<T> {
-    return this.stateTransportPriority.runForeground(() =>
-      this.mutationReadPriority?.runCritical(work) ?? work()
+  private async runMutationCritical<T>(
+    work: (signal: AbortSignal) => Promise<T>,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<T> {
+    if (control.signal.aborted) {
+      throw control.signal.reason ?? new DOMException("Aborted", "AbortError");
+    }
+    const remainingMs = control.deadlineAtMs - Date.now();
+    if (remainingMs <= 0) {
+      throw new Error("mutation priority deadline reached");
+    }
+    const controller = new AbortController();
+    const detach = linkAbort(control.signal, controller);
+    const timer = setTimeout(
+      () => controller.abort(new Error("mutation priority deadline reached")),
+      remainingMs,
     );
+    try {
+      if (controller.signal.aborted) {
+        throw controller.signal.reason ??
+          new DOMException("Aborted", "AbortError");
+      }
+      return await this.stateTransportPriority.runForeground(() =>
+        this.mutationReadPriority?.runCritical(
+          () => work(controller.signal),
+          controller.signal,
+        ) ?? work(controller.signal)
+      );
+    } finally {
+      clearTimeout(timer);
+      detach();
+    }
   }
 
   private async computeCanonicalMutationRange(
@@ -1782,6 +1977,21 @@ function sharedMutationPhase(
   });
 }
 
+function sharedActivityPhase(): MutationProofPhaseTelemetry {
+  return Object.freeze({
+    ...emptyMutationProofPhaseTelemetry(),
+    shared: true,
+  });
+}
+
+function canonicalActivitySessionScope(through: BlockSource): string {
+  return [
+    through.number,
+    through.hash.toLowerCase(),
+    through.generation,
+  ].join("\u001f");
+}
+
 function canonicalHeaderSessionKey(
   fromExclusive: BlockSource,
   through: BlockSource,
@@ -2071,102 +2281,129 @@ function requiredRpcResult(
   return response.result;
 }
 
-function parseAddressTouchBlocks(
+function parseCanonicalBlockReceipts(
   responses: readonly JsonRpcResponse[],
   ids: readonly number[],
-  blockNumbers: readonly number[],
+  headers: readonly CanonicalMutationHeader[],
   fromExclusive: BlockSource,
   through: BlockSource,
 ): readonly {
   readonly number: number;
   readonly hash: string;
-  readonly transactionHashes: readonly string[];
-  readonly directTargets: readonly string[];
+  readonly receipts: readonly {
+    readonly transactionHash: string;
+    readonly transactionIndex: number;
+    readonly directTarget: string | null;
+    readonly cumulativeGasUsed: bigint;
+    readonly logs: readonly unknown[];
+  }[];
 }[] {
-  let expectedParentHash = fromExclusive.hash.toLowerCase();
   const blocks = ids.map((id, index) => {
+    const header = headers[index];
+    if (!header) throw new Error(`missing receipt header ${index}`);
     const value = requiredRpcResult(
       responses,
       id,
-      `block ${blockNumbers[index]}`,
+      `block receipts ${header.number}`,
     );
-    if (!value || typeof value !== "object") {
-      throw new Error(`address-touch block ${blockNumbers[index]} is invalid`);
+    if (!Array.isArray(value)) {
+      throw new Error(`block receipts ${header.number} are not an array`);
     }
-    const block = value as Record<string, unknown>;
-    const number = parseRpcQuantity(
-      block.number,
-      `address-touch block ${blockNumbers[index]} number`,
-    );
-    const hash = parseHash(
-      block.hash,
-      `address-touch block ${blockNumbers[index]} hash`,
-    );
-    if (
-      number !== blockNumbers[index] ||
-      parseHash(
-        block.parentHash,
-        `address-touch block ${blockNumbers[index]} parentHash`,
-      ) !== expectedParentHash
-    ) {
-      throw new Error("address-touch blocks are not one canonical chain");
+    const seenTransactionHashes = new Set<string>();
+    const seenTransactionIndexes = new Set<number>();
+    let previousCumulativeGasUsed = -1n;
+    const receipts = value.map((receipt, receiptIndex) => {
+      if (!receipt || typeof receipt !== "object") {
+        throw new Error(
+          `block receipt ${header.number}/${receiptIndex} is invalid`,
+        );
+      }
+      const record = receipt as Record<string, unknown>;
+      const blockNumber = parseRpcQuantity(
+        record.blockNumber,
+        `block receipt ${header.number}/${receiptIndex} blockNumber`,
+      );
+      const blockHash = parseHash(
+        record.blockHash,
+        `block receipt ${header.number}/${receiptIndex} blockHash`,
+      );
+      const transactionIndex = parseRpcQuantity(
+        record.transactionIndex,
+        `block receipt ${header.number}/${receiptIndex} transactionIndex`,
+      );
+      const transactionHash = parseHash(
+        record.transactionHash,
+        `block receipt ${header.number}/${receiptIndex} transactionHash`,
+      );
+      const cumulativeGasUsed = parseRpcBigQuantity(
+        record.cumulativeGasUsed,
+        `block receipt ${header.number}/${receiptIndex} cumulativeGasUsed`,
+      );
+      if (
+        blockNumber !== header.number ||
+        blockHash !== header.hash ||
+        transactionIndex !== receiptIndex
+      ) {
+        throw new Error(
+          `block receipt ${header.number}/${receiptIndex} is outside ` +
+            "the proven block or out of order",
+        );
+      }
+      if (
+        seenTransactionHashes.has(transactionHash) ||
+        seenTransactionIndexes.has(transactionIndex)
+      ) {
+        throw new Error(`block receipts ${header.number} contain a duplicate`);
+      }
+      seenTransactionHashes.add(transactionHash);
+      seenTransactionIndexes.add(transactionIndex);
+      if (cumulativeGasUsed <= previousCumulativeGasUsed) {
+        throw new Error(
+          `block receipts ${header.number} cumulative gas is not increasing`,
+        );
+      }
+      previousCumulativeGasUsed = cumulativeGasUsed;
+      if (!Array.isArray(record.logs)) {
+        throw new Error(
+          `block receipt ${header.number}/${receiptIndex} logs are invalid`,
+        );
+      }
+      const directTarget = record.to === null || record.to === undefined
+        ? null
+        : parseAddress(
+            record.to,
+            `block receipt ${header.number}/${receiptIndex} to`,
+          );
+      return Object.freeze({
+        transactionHash,
+        transactionIndex,
+        directTarget,
+        cumulativeGasUsed,
+        logs: Object.freeze([...record.logs]),
+      });
+    });
+    if (header.gasUsed === undefined) {
+      throw new Error(`canonical header ${header.number} omitted gasUsed`);
     }
-    if (!Array.isArray(block.transactions)) {
+    const receiptGasUsed = receipts.at(-1)?.cumulativeGasUsed ?? 0n;
+    if (receiptGasUsed !== header.gasUsed) {
       throw new Error(
-        `address-touch block ${blockNumbers[index]} transactions is invalid`,
+        `block receipts ${header.number} are incomplete: cumulative gas ` +
+          `${receiptGasUsed} != header gasUsed ${header.gasUsed}`,
       );
     }
-    expectedParentHash = hash;
-    const directTargets = new Set<string>();
-    const transactionHashes = block.transactions.map(
-      (transaction, transactionIndex) => {
-        if (!transaction || typeof transaction !== "object") {
-          throw new Error(
-            `address-touch block ${number} transaction ${transactionIndex} ` +
-              "is not a full transaction",
-          );
-        }
-        const record = transaction as Record<string, unknown>;
-        if (
-          parseHash(
-            record.blockHash,
-            `address-touch block ${number} transaction ${transactionIndex} blockHash`,
-          ) !== hash ||
-          parseRpcQuantity(
-            record.blockNumber,
-            `address-touch block ${number} transaction ${transactionIndex} blockNumber`,
-          ) !== number ||
-          parseRpcQuantity(
-            record.transactionIndex,
-            `address-touch block ${number} transaction ${transactionIndex} index`,
-          ) !== transactionIndex
-        ) {
-          throw new Error(
-            `address-touch block ${number} transaction ${transactionIndex} ` +
-              "is outside the proven block",
-          );
-        }
-        if (record.to !== null && record.to !== undefined) {
-          directTargets.add(parseAddress(
-            record.to,
-            `address-touch block ${number} transaction ${transactionIndex} to`,
-          ));
-        }
-        return parseHash(
-          record.hash,
-          `address-touch block ${number} transaction ${transactionIndex} hash`,
-        );
-      },
-    );
     return Object.freeze({
-      number,
-      hash,
-      transactionHashes: Object.freeze(transactionHashes),
-      directTargets: Object.freeze([...directTargets].sort()),
+      number: header.number,
+      hash: header.hash,
+      receipts: Object.freeze(receipts),
     });
   });
-  if (blocks.at(-1)?.hash !== through.hash.toLowerCase()) {
-    throw new Error("address-touch through block is not canonical");
+  if (
+    blocks[0]?.number !== fromExclusive.number + 1 ||
+    blocks.at(-1)?.number !== through.number ||
+    blocks.at(-1)?.hash !== through.hash.toLowerCase()
+  ) {
+    throw new Error("block receipts do not match the canonical activity range");
   }
   return Object.freeze(blocks);
 }
@@ -2244,6 +2481,7 @@ function parseEthBlockHeaderResponses(
       readonly number?: unknown;
       readonly hash?: unknown;
       readonly parentHash?: unknown;
+      readonly gasUsed?: unknown;
     } | null;
     const number = parseRpcQuantity(
       result?.number,
@@ -2256,6 +2494,14 @@ function parseEthBlockHeaderResponses(
         result?.parentHash,
         `mutation header ${number} parentHash`,
       ),
+      ...(result?.gasUsed === undefined
+        ? {}
+        : {
+            gasUsed: parseRpcBigQuantity(
+              result.gasUsed,
+              `mutation header ${number} gasUsed`,
+            ),
+          }),
     });
   }));
 }
@@ -2292,8 +2538,33 @@ function parseRawHeaderResponses(
         decoded[0],
         `mutation raw header ${blockNumbers[index]} parentHash`,
       ),
+      ...(decoded.length <= 10
+        ? {}
+        : {
+            gasUsed: parseRlpBigQuantity(
+              decoded[10],
+              `mutation raw header ${blockNumbers[index]} gasUsed`,
+            ),
+          }),
     });
   }));
+}
+
+function parseRpcBigQuantity(value: unknown, label: string): bigint {
+  if (typeof value !== "string" || !/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(value)) {
+    throw new Error(`${label} is not a canonical RPC quantity`);
+  }
+  return BigInt(value);
+}
+
+function parseRlpBigQuantity(value: unknown, label: string): bigint {
+  if (
+    typeof value !== "string" ||
+    !/^0x(?:[0-9a-fA-F]{2})*$/.test(value)
+  ) {
+    throw new Error(`${label} is not an RLP byte quantity`);
+  }
+  return value === "0x" ? 0n : BigInt(value);
 }
 
 function parseRlpQuantity(value: unknown, label: string): number {

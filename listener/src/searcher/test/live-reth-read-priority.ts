@@ -6,12 +6,13 @@ await foregroundPreemptsDrainsAndRetriesBackground();
 await announcedCriticalClosesBackgroundAdmissionRace();
 await announcedForegroundClosesBackgroundAdmissionRace();
 await backgroundWaitsForQueuedCriticalWork();
+await abortedQueuedCriticalNeverStartsOrBlocksItsSuccessor();
 await backgroundWaitsForAllForegroundWork();
 await foregroundMayNestCriticalWork();
 await externalAbortWhileWaitingDoesNotStartOrRetry();
 await externalAbortDuringAttemptTerminatesWithoutRetry();
 
-console.log("[live-reth-read-priority] preemption/abort: PASS (9/9)");
+console.log("[live-reth-read-priority] preemption/abort: PASS (10/10)");
 
 async function criticalPreemptsDrainsAndRetriesBackground(): Promise<void> {
   const priority = new LiveRethReadPriority();
@@ -207,6 +208,54 @@ async function backgroundWaitsForQueuedCriticalWork(): Promise<void> {
     "critical-1-end",
     "critical-2",
     "background",
+  ]);
+}
+
+async function abortedQueuedCriticalNeverStartsOrBlocksItsSuccessor(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const firstStarted = deferred();
+  const releaseFirst = deferred();
+  const thirdStarted = deferred();
+  const events: string[] = [];
+
+  const first = priority.runCritical(async () => {
+    events.push("critical-1-start");
+    firstStarted.resolve();
+    await releaseFirst.promise;
+    events.push("critical-1-end");
+  });
+  await firstStarted.promise;
+
+  const cancelled = new AbortController();
+  let cancelledWorkStarted = false;
+  const second = priority.runCritical(async () => {
+    cancelledWorkStarted = true;
+    events.push("critical-2");
+  }, cancelled.signal);
+  const third = priority.runCritical(async () => {
+    events.push("critical-3");
+    thirdStarted.resolve();
+  });
+
+  cancelled.abort(new Error("queued critical deadline reached"));
+  await assert.rejects(
+    settlesBefore(second, 20),
+    /queued critical deadline reached/,
+  );
+  assert.equal(cancelledWorkStarted, false);
+  assert.equal(
+    thirdStarted.isResolved(),
+    false,
+    "a cancelled queued turn must not let its successor overlap active work",
+  );
+
+  releaseFirst.resolve();
+  await Promise.all([first, thirdStarted.promise, third]);
+  assert.equal(cancelledWorkStarted, false);
+  assert.deepEqual(events, [
+    "critical-1-start",
+    "critical-1-end",
+    "critical-3",
   ]);
 }
 

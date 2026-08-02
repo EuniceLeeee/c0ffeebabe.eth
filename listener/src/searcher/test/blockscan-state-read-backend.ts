@@ -55,6 +55,7 @@ await testExactBlockHashLogBatchFailsClosed();
 await testMutationProofAbortDuringLogRead();
 await testMutationPriorityIsScopedToCanonicalProof();
 await testMutationProofPreemptsBulkStateTransport();
+await testExpiredMutationProofDoesNotPreemptBulkStateTransport();
 await testAddressTouchProofPreemptsBulkStateTransport();
 await testMutationProofTelemetry();
 await testMutationProofReadsHeadersBeforeLogs();
@@ -67,6 +68,8 @@ await testFinalCanonicalCasBypassesDescriptorQueue();
 await testCachedHeaderStillRejectsLogAndFinalCasReorg();
 await testFamilyAbortDoesNotCancelSharedHeader();
 await testMutationRangeRejectsReorgAndRemovedLog();
+await testCanonicalActivityIsSharedWithExactMutationDescriptors();
+await testCanonicalActivityFailureFallsBackToMutationTransport();
 await testCanonicalAddressTouchesIncludeDirectTargetsAndLogEmitters();
 await testCanonicalAddressTouchesFailClosed();
 
@@ -1752,6 +1755,94 @@ async function testMutationProofPreemptsBulkStateTransport(): Promise<void> {
   console.log("[state-read-backend] mutation preempts bulk state: PASS");
 }
 
+async function testExpiredMutationProofDoesNotPreemptBulkStateTransport(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  let bulkAttempts = 0;
+  let bulkSignalAborted = false;
+  let unexpectedProofCalls = 0;
+  let markBulkStarted!: () => void;
+  let releaseBulk!: () => void;
+  const bulkStarted = new Promise<void>((resolve) => {
+    markBulkStarted = resolve;
+  });
+  const bulkReleased = new Promise<void>((resolve) => {
+    releaseBulk = resolve;
+  });
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      const signal = init?.signal;
+      if (!signal) throw new Error("state transport missing AbortSignal");
+      if (body.every((request) => request.method === "eth_call")) {
+        bulkAttempts++;
+        markBulkStarted();
+        try {
+          await Promise.race([
+            bulkReleased,
+            rejectWhenAborted(signal),
+          ]);
+        } catch (error) {
+          bulkSignalAborted = signal.aborted;
+          throw error;
+        }
+        return fakeResponse(body.map((request) =>
+          success(request.id, "0x1234")
+        ));
+      }
+      unexpectedProofCalls++;
+      throw new Error(`expired proof called ${body[0]?.method}`);
+    }) as typeof fetch,
+  });
+  const liveControl = {
+    sourceBlock,
+    sourceBlockHash,
+    sourceGeneration,
+    deadlineAtMs: Date.now() + 10_000,
+    signal: new AbortController().signal,
+  };
+  const bulk = backend.readBatch(
+    "protocol",
+    [read("bulk", "0x12345678")],
+    liveControl,
+  );
+  await bulkStarted;
+  try {
+    await assert.rejects(
+      () => backend.readCanonicalMutationRange(
+        descriptor,
+        {
+          number: sourceBlock - 1,
+          hash: previousHash,
+          generation: sourceGeneration - 1,
+        },
+        {
+          number: sourceBlock,
+          hash: sourceBlockHash,
+          generation: sourceGeneration,
+        },
+        {
+          deadlineAtMs: Date.now() - 1,
+          signal: new AbortController().signal,
+        },
+      ),
+      /mutation priority deadline reached/,
+    );
+  } finally {
+    releaseBulk();
+  }
+  const results = await bulk;
+  assert.equal(results[0]?.ok, true);
+  assert.equal(bulkAttempts, 1);
+  assert.equal(bulkSignalAborted, false);
+  assert.equal(unexpectedProofCalls, 0);
+  console.log(
+    "[state-read-backend] expired mutation does not preempt bulk state: PASS",
+  );
+}
+
 async function testAddressTouchProofPreemptsBulkStateTransport(): Promise<void> {
   const previousHash = `0x${"10".repeat(32)}`;
   const txHash = `0x${"33".repeat(32)}`;
@@ -1788,27 +1879,30 @@ async function testAddressTouchProofPreemptsBulkStateTransport(): Promise<void> 
           success(request.id, "0x1234")
         ));
       }
-      if (body[0]?.method === "eth_getLogs") {
-        return fakeResponse(body.map((request) => success(request.id, [])));
+      if (body[0]?.method === "eth_getBlockReceipts") {
+        return fakeResponse(body.map((request) => success(request.id, [{
+          transactionHash: txHash,
+          blockHash: sourceBlockHash,
+          blockNumber: "0x64",
+          transactionIndex: "0x0",
+          cumulativeGasUsed: "0x5208",
+          to: targetAddress,
+          logs: [],
+        }])));
       }
       if (body[0]?.method === "eth_getBlockByNumber") {
-        const fullTransactions = body[0].params[1] === true;
-        if (!fullTransactions) touchProofFinished = true;
+        if (body.length === 1) touchProofFinished = true;
         return fakeResponse(body.map((request) => success(request.id, {
           number: request.params[0],
-          hash: sourceBlockHash,
-          parentHash: previousHash,
-          ...(fullTransactions
-            ? {
-                transactions: [{
-                  hash: txHash,
-                  blockHash: sourceBlockHash,
-                  blockNumber: request.params[0],
-                  transactionIndex: "0x0",
-                  to: targetAddress,
-                }],
-              }
-            : {}),
+          hash: Number(BigInt(request.params[0])) === sourceBlock - 1
+            ? previousHash
+            : sourceBlockHash,
+          parentHash: Number(BigInt(request.params[0])) === sourceBlock
+            ? previousHash
+            : `0x${"09".repeat(32)}`,
+          gasUsed: Number(BigInt(request.params[0])) === sourceBlock
+            ? "0x5208"
+            : "0x0",
         })));
       }
       throw new Error(`unexpected method ${body[0]?.method}`);
@@ -2919,6 +3013,230 @@ async function testMutationRangeRejectsReorgAndRemovedLog(): Promise<void> {
   console.log("[state-read-backend] mutation reorg/removed fail closed: PASS");
 }
 
+async function testCanonicalActivityIsSharedWithExactMutationDescriptors(): Promise<void> {
+  const topicA = `0x${"aa".repeat(32)}`;
+  const topicB = `0x${"bb".repeat(32)}`;
+  const txHash = `0x${"33".repeat(32)}`;
+  const rawPrevious = rawHeader(sourceBlock - 1, `0x${"09".repeat(32)}`);
+  const previousHash = keccak256(rawPrevious).toLowerCase();
+  const rawThrough = rawHeader(sourceBlock, previousHash, 0x5208n);
+  const throughHash = keccak256(rawThrough).toLowerCase();
+  const descriptorA = createMutationQueryDescriptor({
+    addresses: [targetAddress],
+    topics: [[topicA]],
+  });
+  const descriptorB = createMutationQueryDescriptor({
+    addresses: [callerAddress],
+    topics: [[topicB]],
+  });
+  let headerBatches = 0;
+  let receiptBatches = 0;
+  let finalCasCalls = 0;
+  let filteredLogCalls = 0;
+  const telemetry: import("../blockscan-state-read-backend.js")
+    .MutationProofTransportTelemetry[] = [];
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    mutationHeaderMode: "debug-raw-header-with-fallback",
+    onMutationProofTelemetry: (value) => telemetry.push(value),
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      if (body[0]?.method === "debug_getRawHeader") {
+        if (body.length === 1) finalCasCalls++;
+        else headerBatches++;
+        return fakeResponse(body.map((request) => {
+          const number = Number(BigInt(request.params[0]));
+          return success(
+            request.id,
+            number === sourceBlock - 1 ? rawPrevious : rawThrough,
+          );
+        }));
+      }
+      if (body[0]?.method === "eth_getBlockReceipts") {
+        receiptBatches++;
+        assert.deepEqual(body.map((request) => request.params[0]), [throughHash]);
+        return fakeResponse(body.map((request) => success(request.id, [{
+          transactionHash: txHash,
+          blockHash: throughHash,
+          blockNumber: "0x64",
+          transactionIndex: "0x0",
+          cumulativeGasUsed: "0x5208",
+          to: targetAddress,
+          logs: [
+            receiptLog(txHash, throughHash, 0, targetAddress, topicA),
+            receiptLog(txHash, throughHash, 1, callerAddress, topicB),
+            receiptLog(txHash, throughHash, 2, targetAddress, topicB),
+          ],
+        }])));
+      }
+      if (body[0]?.method === "eth_getLogs") {
+        filteredLogCalls++;
+        return fakeResponse(body.map((request) => success(request.id, [])));
+      }
+      throw new Error(`unexpected method ${body[0]?.method}`);
+    }) as typeof fetch,
+  });
+  const previous: BlockSource = {
+    number: sourceBlock - 1,
+    hash: previousHash,
+    generation: sourceGeneration - 1,
+  };
+  const through: BlockSource = {
+    number: sourceBlock,
+    hash: throughHash,
+    generation: sourceGeneration,
+  };
+  const generation = new AbortController();
+  const control = {
+    deadlineAtMs: Date.now() + 10_000,
+    signal: generation.signal,
+    sharedSignal: generation.signal,
+  };
+  const touch = backend.readCanonicalAddressTouches(previous, through, control);
+  const [touches, rangeA, rangeB] = await Promise.all([
+    touch,
+    backend.readCanonicalMutationRange(
+      descriptorA,
+      previous,
+      through,
+      control,
+    ),
+    backend.readCanonicalMutationRange(
+      descriptorB,
+      previous,
+      through,
+      control,
+    ),
+  ]);
+  assert.deepEqual(touches.touchedAddresses, [targetAddress, callerAddress].sort());
+  assert.deepEqual(
+    rangeA.events.map((event) => [event.address, event.topics[0]]),
+    [[targetAddress, topicA]],
+  );
+  assert.deepEqual(
+    rangeB.events.map((event) => [event.address, event.topics[0]]),
+    [[callerAddress, topicB]],
+  );
+  assert.equal(headerBatches, 1);
+  assert.equal(receiptBatches, 1);
+  assert.equal(finalCasCalls, 1);
+  assert.equal(filteredLogCalls, 0);
+  assert.equal(telemetry.length, 2);
+  assert(
+    telemetry.every((row) =>
+      row.phases.headers.shared === true &&
+      row.phases.logs.shared === true &&
+      row.phases.finalCas.shared === true
+    ),
+  );
+
+  // A descriptor arriving after the activity proof completed still reuses
+  // the successful session until the through-generation scope changes.
+  const repeated = await backend.readCanonicalMutationRange(
+    descriptorA,
+    previous,
+    through,
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    },
+  );
+  assert.equal(repeated.rangeFingerprint, rangeA.rangeFingerprint);
+  assert.equal(headerBatches, 1);
+  assert.equal(receiptBatches, 1);
+  assert.equal(finalCasCalls, 1);
+  assert.equal(filteredLogCalls, 0);
+  console.log("[state-read-backend] shared canonical activity + exact descriptors: PASS");
+}
+
+async function testCanonicalActivityFailureFallsBackToMutationTransport(): Promise<void> {
+  const topic = `0x${"aa".repeat(32)}`;
+  const txHash = `0x${"33".repeat(32)}`;
+  const rawPrevious = rawHeader(sourceBlock - 1, `0x${"09".repeat(32)}`);
+  const previousHash = keccak256(rawPrevious).toLowerCase();
+  const rawThrough = rawHeader(sourceBlock, previousHash, 0x5208n);
+  const throughHash = keccak256(rawThrough).toLowerCase();
+  const reorgThrough = rawHeader(sourceBlock, previousHash, 0x5209n);
+  const descriptor = createMutationQueryDescriptor({
+    addresses: [targetAddress],
+    topics: [[topic]],
+  });
+  let finalCasCalls = 0;
+  let filteredLogCalls = 0;
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    mutationHeaderMode: "debug-raw-header-with-fallback",
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      if (body[0]?.method === "debug_getRawHeader") {
+        if (body.length === 1) {
+          finalCasCalls++;
+          return fakeResponse([success(
+            body[0].id,
+            finalCasCalls === 1 ? reorgThrough : rawThrough,
+          )]);
+        }
+        return fakeResponse(body.map((request) => {
+          const number = Number(BigInt(request.params[0]));
+          return success(
+            request.id,
+            number === sourceBlock - 1 ? rawPrevious : rawThrough,
+          );
+        }));
+      }
+      if (body[0]?.method === "eth_getBlockReceipts") {
+        return fakeResponse(body.map((request) => success(request.id, [{
+          transactionHash: txHash,
+          blockHash: throughHash,
+          blockNumber: "0x64",
+          transactionIndex: "0x0",
+          cumulativeGasUsed: "0x5208",
+          to: targetAddress,
+          logs: [],
+        }])));
+      }
+      if (body[0]?.method === "eth_getLogs") {
+        filteredLogCalls++;
+        return fakeResponse(body.map((request) => success(request.id, [
+          receiptLog(txHash, throughHash, 0, targetAddress, topic),
+        ])));
+      }
+      throw new Error(`unexpected method ${body[0]?.method}`);
+    }) as typeof fetch,
+  });
+  const previous: BlockSource = {
+    number: sourceBlock - 1,
+    hash: previousHash,
+    generation: sourceGeneration - 1,
+  };
+  const through: BlockSource = {
+    number: sourceBlock,
+    hash: throughHash,
+    generation: sourceGeneration,
+  };
+  const control = {
+    deadlineAtMs: Date.now() + 10_000,
+    signal: new AbortController().signal,
+  };
+  const touch = backend.readCanonicalAddressTouches(previous, through, control);
+  const mutation = backend.readCanonicalMutationRange(
+    descriptor,
+    previous,
+    through,
+    control,
+  );
+  const [touchRejected, mutationRange] = await Promise.all([
+    touch.then(
+      () => false,
+      () => true,
+    ),
+    mutation,
+  ]);
+  assert.equal(touchRejected, true);
+  assert.equal(mutationRange.events.length, 1);
+  assert.equal(filteredLogCalls, 1);
+  assert.equal(finalCasCalls, 2);
+  console.log("[state-read-backend] failed activity falls back to mutation transport: PASS");
+}
+
 async function testCanonicalAddressTouchesIncludeDirectTargetsAndLogEmitters(): Promise<void> {
   const previousHash = `0x${"09".repeat(32)}`;
   const intermediateHash = `0x${"10".repeat(32)}`;
@@ -2938,40 +3256,51 @@ async function testCanonicalAddressTouchesIncludeDirectTargetsAndLogEmitters(): 
   const backend = backendWith(async (body) => body.map((request) => {
     if (request.method === "eth_getBlockByNumber") {
       const number = Number(BigInt(request.params[0]));
-      const blockHash = number === sourceBlock - 1
+      const blockHash = number === sourceBlock - 2
+        ? previousHash
+        : number === sourceBlock - 1
         ? intermediateHash
         : sourceBlockHash;
-      const transactionHash = number === sourceBlock - 1
-        ? firstTxHash
-        : txHash;
       return success(request.id, {
         number: request.params[0],
         hash: blockHash,
         parentHash: number === sourceBlock - 1
           ? previousHash
-          : intermediateHash,
-        transactions: [{
-          hash: transactionHash,
-          blockHash,
-          blockNumber: request.params[0],
-          transactionIndex: "0x0",
-          to: targetAddress,
-        }],
+          : number === sourceBlock
+          ? intermediateHash
+          : `0x${"08".repeat(32)}`,
+        gasUsed: number === sourceBlock - 2 ? "0x0" : "0x5208",
       });
     }
-    if (request.method === "eth_getLogs") {
-      return success(request.id, request.params[0].blockHash === sourceBlockHash
-        ? [{
-        blockNumber: "0x64",
-        blockHash: sourceBlockHash,
+    if (request.method === "eth_getBlockReceipts") {
+      const blockHash = String(request.params[0]);
+      const blockNumber = blockHash === intermediateHash
+        ? "0x63"
+        : "0x64";
+      const transactionHash = blockHash === intermediateHash
+        ? firstTxHash
+        : txHash;
+      return success(request.id, [{
+        transactionHash,
+        blockHash,
+        blockNumber,
         transactionIndex: "0x0",
-        logIndex: "0x0",
-        address: nestedAddress,
-        topics: [`0x${"aa".repeat(32)}`],
-        data: "0x",
-        removed: false,
-      }]
-        : []);
+        cumulativeGasUsed: "0x5208",
+        to: blockHash === intermediateHash ? null : targetAddress,
+        logs: blockHash === sourceBlockHash
+          ? [{
+              transactionHash,
+              blockNumber,
+              blockHash,
+              transactionIndex: "0x0",
+              logIndex: "0x0",
+              address: nestedAddress,
+              topics: [`0x${"aa".repeat(32)}`],
+              data: "0x",
+              removed: false,
+            }]
+          : [],
+      }]);
     }
     throw new Error(`unexpected method ${request.method}`);
   }));
@@ -3007,15 +3336,25 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
   };
   const incomplete = backendWith(async (body) => body.map((request) => {
     if (request.method === "eth_getBlockByNumber") {
+      const number = Number(BigInt(request.params[0]));
       return success(request.id, {
-        number: "0x64",
-        hash: sourceBlockHash,
-        parentHash: previousHash,
-        transactions: [txHash],
+        number: request.params[0],
+        hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+        parentHash: number === sourceBlock
+          ? previousHash
+          : `0x${"09".repeat(32)}`,
+        gasUsed: number === sourceBlock ? "0x5208" : "0x0",
       });
     }
-    if (request.method === "eth_getLogs") {
-      return success(request.id, []);
+    if (request.method === "eth_getBlockReceipts") {
+      return success(request.id, [{
+        blockHash: sourceBlockHash,
+        blockNumber: "0x64",
+        transactionIndex: "0x0",
+        cumulativeGasUsed: "0x5208",
+        to: targetAddress,
+        logs: [],
+      }]);
     }
     throw new Error(`unexpected method ${request.method}`);
   }));
@@ -3024,34 +3363,73 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
       deadlineAtMs: Date.now() + 10_000,
       signal: new AbortController().signal,
     }),
-    /is not a full transaction/,
+    /transactionHash/,
+  );
+
+  const truncated = backendWith(async (body) => body.map((request) => {
+    if (request.method === "eth_getBlockByNumber") {
+      const number = Number(BigInt(request.params[0]));
+      return success(request.id, {
+        number: request.params[0],
+        hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+        parentHash: number === sourceBlock
+          ? previousHash
+          : `0x${"09".repeat(32)}`,
+        gasUsed: number === sourceBlock ? "0x5209" : "0x0",
+      });
+    }
+    if (request.method === "eth_getBlockReceipts") {
+      return success(request.id, [{
+        transactionHash: txHash,
+        blockHash: sourceBlockHash,
+        blockNumber: "0x64",
+        transactionIndex: "0x0",
+        cumulativeGasUsed: "0x5208",
+        to: null,
+        logs: [],
+      }]);
+    }
+    throw new Error(`unexpected method ${request.method}`);
+  }));
+  await assert.rejects(
+    () => truncated.readCanonicalAddressTouches(previous, through, {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    }),
+    /receipts 100 are incomplete/,
   );
 
   const wrongLogBlock = backendWith(async (body) => body.map((request) => {
     if (request.method === "eth_getBlockByNumber") {
+      const number = Number(BigInt(request.params[0]));
       return success(request.id, {
-        number: "0x64",
-        hash: sourceBlockHash,
-        parentHash: previousHash,
-        transactions: [{
-          hash: txHash,
-          blockHash: sourceBlockHash,
-          blockNumber: "0x64",
-          transactionIndex: "0x0",
-          to: targetAddress,
-        }],
+        number: request.params[0],
+        hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+        parentHash: number === sourceBlock
+          ? previousHash
+          : `0x${"09".repeat(32)}`,
+        gasUsed: number === sourceBlock ? "0x5208" : "0x0",
       });
     }
-    if (request.method === "eth_getLogs") {
+    if (request.method === "eth_getBlockReceipts") {
       return success(request.id, [{
+        transactionHash: txHash,
+        blockHash: sourceBlockHash,
         blockNumber: "0x64",
-        blockHash: otherBlockHash,
         transactionIndex: "0x0",
-        logIndex: "0x0",
-        address: targetAddress,
-        topics: [`0x${"aa".repeat(32)}`],
-        data: "0x",
-        removed: false,
+        cumulativeGasUsed: "0x5208",
+        to: targetAddress,
+        logs: [{
+          transactionHash: txHash,
+          blockNumber: "0x64",
+          blockHash: otherBlockHash,
+          transactionIndex: "0x0",
+          logIndex: "0x0",
+          address: targetAddress,
+          topics: [`0x${"aa".repeat(32)}`],
+          data: "0x",
+          removed: false,
+        }],
       }]);
     }
     throw new Error(`unexpected method ${request.method}`);
@@ -3066,14 +3444,16 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
 
   const wrongParent = backendWith(async (body) => body.map((request) => {
     if (request.method === "eth_getBlockByNumber") {
+      const number = Number(BigInt(request.params[0]));
       return success(request.id, {
-        number: "0x64",
-        hash: sourceBlockHash,
-        parentHash: otherBlockHash,
-        transactions: [],
+        number: request.params[0],
+        hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+        parentHash: number === sourceBlock
+          ? otherBlockHash
+          : `0x${"09".repeat(32)}`,
       });
     }
-    if (request.method === "eth_getLogs") {
+    if (request.method === "eth_getBlockReceipts") {
       return success(request.id, []);
     }
     throw new Error(`unexpected method ${request.method}`);
@@ -3083,7 +3463,7 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
       deadlineAtMs: Date.now() + 10_000,
       signal: new AbortController().signal,
     }),
-    /not one canonical chain/,
+    /canonical path discontinuity/,
   );
   console.log("[state-read-backend] address-touch proof fails closed: PASS");
 }
@@ -3113,11 +3493,15 @@ function fakeResponse(payload: unknown): Response {
   } as Response;
 }
 
-function rawHeader(number: number, parentHash: string): string {
-  const numberHex = number === 0
+function rawHeader(
+  number: number,
+  parentHash: string,
+  gasUsed = 0n,
+): string {
+  const quantityBytes = (value: bigint): string => value === 0n
     ? "0x"
-    : `0x${number.toString(16).padStart(
-        Math.ceil(number.toString(16).length / 2) * 2,
+    : `0x${value.toString(16).padStart(
+        Math.ceil(value.toString(16).length / 2) * 2,
         "0",
       )}`;
   return encodeRlp([
@@ -3129,8 +3513,30 @@ function rawHeader(number: number, parentHash: string): string {
     "0x",
     "0x",
     "0x",
-    numberHex,
+    quantityBytes(BigInt(number)),
+    "0x",
+    quantityBytes(gasUsed),
   ]);
+}
+
+function receiptLog(
+  transactionHash: string,
+  blockHash: string,
+  logIndex: number,
+  address: string,
+  topic: string,
+): Record<string, unknown> {
+  return {
+    transactionHash,
+    blockNumber: `0x${sourceBlock.toString(16)}`,
+    blockHash,
+    transactionIndex: "0x0",
+    logIndex: `0x${logIndex.toString(16)}`,
+    address,
+    topics: [topic],
+    data: "0x",
+    removed: false,
+  };
 }
 
 function read(
@@ -3226,6 +3632,7 @@ interface RpcRequest {
     | "eth_call"
     | "eth_getBlockByHash"
     | "eth_getBlockByNumber"
+    | "eth_getBlockReceipts"
     | "eth_getLogs";
   readonly params: readonly any[];
 }

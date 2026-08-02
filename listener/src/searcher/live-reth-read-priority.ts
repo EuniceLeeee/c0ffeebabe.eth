@@ -44,7 +44,11 @@ export class LiveRethReadPriority {
     }
   }
 
-  async runCritical<T>(work: CriticalWork<T>): Promise<T> {
+  async runCritical<T>(
+    work: CriticalWork<T>,
+    parentSignal?: AbortSignal,
+  ): Promise<T> {
+    throwIfAborted(parentSignal);
     this.criticalCount++;
 
     const previous = this.criticalTail;
@@ -56,7 +60,8 @@ export class LiveRethReadPriority {
 
     try {
       await this.preemptBackground();
-      await previous;
+      await waitForSettlement(previous, parentSignal);
+      throwIfAborted(parentSignal);
       return await work();
     } finally {
       release();
@@ -163,6 +168,30 @@ export class LiveRethReadPriority {
     }
     await Promise.allSettled(active.map((attempt) => attempt.settled));
   }
+}
+
+function waitForSettlement(
+  promise: Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  throwIfAborted(signal);
+  if (!signal) return promise;
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (operation: () => void) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAborted);
+      operation();
+    };
+    const onAborted = () => finish(() => reject(abortReason(signal)));
+    signal.addEventListener("abort", onAborted, { once: true });
+    promise.then(
+      () => finish(resolve),
+      (error) => finish(() => reject(error)),
+    );
+    if (signal.aborted) onAborted();
+  });
 }
 
 class LiveRethBackgroundPreempted extends Error {
