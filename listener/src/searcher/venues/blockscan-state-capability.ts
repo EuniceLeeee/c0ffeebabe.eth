@@ -324,8 +324,11 @@ export interface BuildDependentBlockReadsInput<Schema>
 export interface BlockScanStateCapability<Schema = unknown, Snapshot = unknown> {
   /**
    * Opt-in only when every value used by deriveMids is invariant across block
-   * source changes unless this family-owned dependency set appears in a
-   * complete canonical call trace. Absence is the safe always-current default.
+   * source changes unless this family-owned dependency set appears either as
+   * a direct transaction destination or as a canonical receipt-log emitter.
+   * Internal calls that emit no log are intentionally outside this proof, so
+   * a family may opt in only when its own semantics make that omission safe.
+   * Absence is the safe always-current default.
    */
   readonly addressTouchCarryPolicy?: "dependency-touch";
   stateKey(edge: TokenEdge): string;
@@ -453,8 +456,6 @@ export interface RegisteredBlockScanStateFamilyCompileInput
 export interface RegisteredBlockScanStateFamily {
   readonly familyId: string;
   readonly lane: BlockScanPricingLane;
-  /** Scheduling metadata derived from the capability, never a family allowlist. */
-  readonly hasIncrementalState: boolean;
   readonly addressTouchCarryPolicy: "always-current" | "dependency-touch";
   stateKey(edge: TokenEdge): string;
   ownsEdge(edge: TokenEdge): boolean;
@@ -630,7 +631,6 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
   return Object.freeze({
     familyId,
     lane,
-    hasIncrementalState: capability.incremental !== undefined,
     addressTouchCarryPolicy:
       capability.addressTouchCarryPolicy ?? "always-current",
     stateKey: (edge: TokenEdge) => capability.stateKey(edge),

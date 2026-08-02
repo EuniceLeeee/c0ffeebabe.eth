@@ -36,7 +36,6 @@ const SWAP_POOL = "0x0000000000000000000000000000000000000011";
 const SWAP_POOL_B = "0x0000000000000000000000000000000000000033";
 const SWAP_POOL_C = "0x0000000000000000000000000000000000000044";
 const PROTOCOL_POOL = "0x0000000000000000000000000000000000000022";
-const PROTOCOL_POOL_B = "0x0000000000000000000000000000000000000055";
 
 interface FakeSnapshot {
   readonly numerator: bigint;
@@ -50,13 +49,6 @@ const swapBReverse = edge("swap-action", SWAP_POOL_B, TOKEN_C, TOKEN_A);
 const swapCForward = edge("swap-action", SWAP_POOL_C, TOKEN_A, TOKEN_D);
 const swapCReverse = edge("swap-action", SWAP_POOL_C, TOKEN_D, TOKEN_A);
 const protocol = edge("protocol-action", PROTOCOL_POOL, TOKEN_B, TOKEN_C, "protocol");
-const protocolB = edge(
-  "protocol-action",
-  PROTOCOL_POOL_B,
-  TOKEN_C,
-  TOKEN_D,
-  "protocol",
-);
 
 function edge(
   adapterId: string,
@@ -212,57 +204,6 @@ function staticSchemaFixtureFamily(
     capability: staticSchemaFixtureCapability(calls),
     ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
   });
-}
-
-function staticProtocolFixtureCapability(): BlockScanStateCapability<
-  { readonly hydrated: boolean },
-  FakeSnapshot
-> {
-  return {
-    stateKey: (edgeValue) => edgeValue.target.toLowerCase(),
-    compileStaticSchema: () => ({ hydrated: false }),
-    buildStaticSchemaReads({ sourceBlock, sourceBlockHash, edges }) {
-      return [{
-        id: "metadata",
-        sourceBlock,
-        sourceBlockHash,
-        to: edges[0]?.target ?? PROTOCOL_POOL,
-        data: "0x01",
-        transport: "rpc-batch",
-      }];
-    },
-    hydrateStaticSchema(_schema, results) {
-      assert.equal(results.length, 1);
-      assert.equal(results[0]?.ok, true);
-      return { hydrated: true };
-    },
-    buildCurrentBlockReads({ sourceBlock, sourceBlockHash, edges, schema }) {
-      assert.equal(schema.hydrated, true);
-      return [{
-        id: "state",
-        sourceBlock,
-        sourceBlockHash,
-        to: edges[0]?.target ?? PROTOCOL_POOL,
-        data: "0x02",
-        transport: "rpc-batch",
-      }];
-    },
-    decodeState(_schema, results) {
-      assert.equal(results.length, 1);
-      assert.equal(results[0]?.ok, true);
-      return { numerator: 3n, denominator: 1n };
-    },
-    deriveMids(snapshot, edges) {
-      return new Map(edges.map((edgeValue) => [
-        blockScanEdgeKey(edgeValue),
-        mid(
-          edgeValue,
-          Number(snapshot.numerator) / Number(snapshot.denominator),
-        ),
-      ]));
-    },
-    dependencies: (edges) => edges.map((edgeValue) => edgeValue.target),
-  };
 }
 
 function families() {
@@ -472,7 +413,7 @@ class AddressTouchShadowBackend implements BlockScanStateReadBackend {
   value = 3n;
   readBatchCount = 0;
   readonly touchedAddresses = new Set<string>();
-  traceFailure = false;
+  activityFailure = false;
 
   async readBatch(
     _lane: BlockScanPricingLane,
@@ -494,7 +435,7 @@ class AddressTouchShadowBackend implements BlockScanStateReadBackend {
     fromExclusive: BlockSource,
     through: BlockSource,
   ): Promise<CanonicalAddressTouchRange> {
-    if (this.traceFailure) throw new Error("injected trace failure");
+    if (this.activityFailure) throw new Error("injected activity failure");
     const touchedAddresses = Object.freeze(
       [...this.touchedAddresses].map((value) => value.toLowerCase()).sort(),
     );
@@ -544,7 +485,7 @@ class BarrierBackend implements BlockScanStateReadBackend {
   }
 }
 
-class ProofFirstBackend implements BlockScanStateReadBackend {
+class ConcurrentProofBackend implements BlockScanStateReadBackend {
   readBatchCalls = 0;
   readBatchCallsWhileProofPending = 0;
   proofPending = false;
@@ -606,59 +547,8 @@ class ProofFirstBackend implements BlockScanStateReadBackend {
   }
 }
 
-async function mutationProofsPrecedeAllDynamicReads(): Promise<void> {
-  const backend = new ProofFirstBackend();
-  const coordinator = new BlockScanStateCoordinator(backend);
-  const swapFamily = registerBlockScanStateFamily({
-    familyId: "univ2-standard",
-    lane: "swap",
-    capability: incrementalFakeCapability(),
-    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
-  });
-  const protocolFamily = registerBlockScanStateFamily({
-    familyId: "protocol:fixture",
-    lane: "protocol",
-    capability: staticProtocolFixtureCapability(),
-    ownsEdge: (edgeValue) => edgeValue.adapterId === "protocol-action",
-  });
-  const familyList = [swapFamily, protocolFamily];
-  const edges = [swapForward, swapReverse, protocol];
-
-  const bootstrap = await coordinator.prepare({
-    graph: incrementalGraph(1, edges),
-    families: familyList,
-    deadlineAtMs: Date.now() + 2_000,
-  });
-  assert.equal(bootstrap.status, "complete");
-  const bootstrapReadCalls = backend.readBatchCalls;
-
-  const next = coordinator.prepare({
-    graph: incrementalGraph(2, [...edges, protocolB]),
-    families: familyList,
-    deadlineAtMs: Date.now() + 2_000,
-  });
-  await backend.proofStarted;
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  assert.equal(
-    backend.readBatchCalls,
-    bootstrapReadCalls,
-    "no family may start current-block reads before all mutation proofs settle",
-  );
-  assert.equal(backend.readBatchCallsWhileProofPending, 0);
-
-  backend.finishProof();
-  const result = await next;
-  assert.equal(result.status, "complete");
-  assert.equal(backend.readBatchCallsWhileProofPending, 0);
-  assert.equal(
-    backend.readBatchCalls,
-    bootstrapReadCalls + 2,
-    "protocol static and dynamic reads both wait while unchanged swap carries",
-  );
-}
-
-async function familyTimeoutDoesNotReleasePhysicalProofBarrier(): Promise<void> {
-  const backend = new ProofFirstBackend();
+async function familyTimeoutDoesNotOrphanProofOrBlockSibling(): Promise<void> {
+  const backend = new ConcurrentProofBackend();
   const coordinator = new BlockScanStateCoordinator(backend, {
     familyTimeoutMs: 25,
   });
@@ -687,27 +577,36 @@ async function familyTimeoutDoesNotReleasePhysicalProofBarrier(): Promise<void> 
   assert.equal(bootstrap.status, "complete");
   const bootstrapReadCalls = backend.readBatchCalls;
 
+  let settled = false;
   const next = coordinator.prepare({
     graph: incrementalGraph(2, edges),
     families: familyList,
     deadlineAtMs: Date.now() + 2_000,
+  }).finally(() => {
+    settled = true;
   });
   await backend.proofStarted;
   await new Promise<void>((resolve) => setTimeout(resolve, 40));
   assert.equal(
     backend.readBatchCalls,
-    bootstrapReadCalls,
-    "family timeout must not release waiters while shared proof transport is active",
+    bootstrapReadCalls + 1,
+    "a direct-only sibling must not wait behind another family's mutation proof",
+  );
+  assert.equal(
+    backend.readBatchCallsWhileProofPending,
+    1,
+    "the healthy sibling is allowed to finish while the physical proof remains owned by the generation",
+  );
+  assert.equal(
+    settled,
+    false,
+    "a family timeout must not orphan an in-flight physical mutation proof",
   );
 
   backend.finishProof();
   const result = await next;
   assert.equal(result.status, "degraded");
-  assert.equal(
-    backend.readBatchCalls,
-    bootstrapReadCalls + 1,
-    "healthy direct-only sibling reads after physical proof settlement",
-  );
+  assert.equal(backend.proofPending, false);
   assert.deepEqual(result.snapshot.resolvedFamilyIds, ["protocol:fixture"]);
 }
 
@@ -3111,6 +3010,14 @@ async function protocolAddressTouchShadowIsObservational(): Promise<void> {
     comparableCarryStateKeys: 1,
     mismatchStateKeys: 0,
     mismatchFamilyIds: [],
+    families: [{
+      familyId: "protocol:fixture",
+      stateKeys: 1,
+      predictedDirtyStateKeys: 0,
+      predictedCarryStateKeys: 1,
+      comparableCarryStateKeys: 1,
+      mismatchStateKeys: 0,
+    }],
   });
 
   backend.value = 4n;
@@ -3128,13 +3035,13 @@ async function protocolAddressTouchShadowIsObservational(): Promise<void> {
   assert.equal(telemetry.at(-1)?.mismatchStateKeys, 0);
 
   backend.touchedAddresses.clear();
-  backend.traceFailure = true;
+  backend.activityFailure = true;
   assert.equal((await prepare(5)).status, "complete");
   await Promise.resolve();
   assert.equal(telemetry.at(-1)?.status, "unavailable");
   assert.equal(
     telemetry.at(-1)?.unavailableReason,
-    "trace-incomplete",
+    "activity-incomplete",
   );
 }
 
@@ -3197,18 +3104,17 @@ async function protocolAddressTouchEnabledIsOptInAndFailClosed(): Promise<void> 
   assert.equal(backend.readBatchCount, 2, "touched family must refresh directly");
 
   backend.touchedAddresses.clear();
-  backend.traceFailure = true;
+  backend.activityFailure = true;
   backend.value = 6n;
   assert.equal((await prepare(4)).status, "complete");
   assert.equal(
     backend.readBatchCount,
     3,
-    "trace failure must fail closed to direct current-block reads",
+    "activity proof failure must fail closed to direct current-block reads",
   );
 }
 
-await mutationProofsPrecedeAllDynamicReads();
-await familyTimeoutDoesNotReleasePhysicalProofBarrier();
+await familyTimeoutDoesNotOrphanProofOrBlockSibling();
 await completeAndDeterministic();
 await simulationSemanticsParticipateInDedupIdentity();
 await replayResetDropsOnlyDynamicPublication();

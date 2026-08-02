@@ -61,7 +61,7 @@ await testFinalCanonicalCasBypassesDescriptorQueue();
 await testCachedHeaderStillRejectsLogAndFinalCasReorg();
 await testFamilyAbortDoesNotCancelSharedHeader();
 await testMutationRangeRejectsReorgAndRemovedLog();
-await testCanonicalAddressTouchesIncludeNestedCalls();
+await testCanonicalAddressTouchesIncludeDirectTargetsAndLogEmitters();
 await testCanonicalAddressTouchesFailClosed();
 
 console.log("blockscan-state-read-backend PASS");
@@ -2436,7 +2436,7 @@ async function testMutationRangeRejectsReorgAndRemovedLog(): Promise<void> {
   console.log("[state-read-backend] mutation reorg/removed fail closed: PASS");
 }
 
-async function testCanonicalAddressTouchesIncludeNestedCalls(): Promise<void> {
+async function testCanonicalAddressTouchesIncludeDirectTargetsAndLogEmitters(): Promise<void> {
   const previousHash = `0x${"09".repeat(32)}`;
   const intermediateHash = `0x${"10".repeat(32)}`;
   const firstTxHash = `0x${"32".repeat(32)}`;
@@ -2455,43 +2455,40 @@ async function testCanonicalAddressTouchesIncludeNestedCalls(): Promise<void> {
   const backend = backendWith(async (body) => body.map((request) => {
     if (request.method === "eth_getBlockByNumber") {
       const number = Number(BigInt(request.params[0]));
+      const blockHash = number === sourceBlock - 1
+        ? intermediateHash
+        : sourceBlockHash;
+      const transactionHash = number === sourceBlock - 1
+        ? firstTxHash
+        : txHash;
       return success(request.id, {
         number: request.params[0],
-        hash: number === sourceBlock - 1
-          ? intermediateHash
-          : sourceBlockHash,
+        hash: blockHash,
         parentHash: number === sourceBlock - 1
           ? previousHash
           : intermediateHash,
-        transactions: [number === sourceBlock - 1 ? firstTxHash : txHash],
+        transactions: [{
+          hash: transactionHash,
+          blockHash,
+          blockNumber: request.params[0],
+          transactionIndex: "0x0",
+          to: targetAddress,
+        }],
       });
     }
-    if (request.method === "trace_block") {
-      const first = request.params[0] === "0x63";
-      const blockHash = first ? intermediateHash : sourceBlockHash;
-      const transactionHash = first ? firstTxHash : txHash;
-      const transactionPosition = "0x0";
-      return success(request.id, [{
-        blockHash,
-        blockNumber: Number(BigInt(request.params[0])),
-        transactionHash,
-        transactionPosition: Number(BigInt(transactionPosition)),
-        traceAddress: [],
-        subtraces: first ? 0 : 1,
-        type: "call",
-        action: { callType: "call", from: callerAddress, to: targetAddress },
-        result: { gasUsed: "0x1", output: "0x" },
-      }, ...(first ? [] : [{
-        blockHash,
-        blockNumber: Number(BigInt(request.params[0])),
-        transactionHash,
-        transactionPosition: Number(BigInt(transactionPosition)),
-        traceAddress: [0],
-        subtraces: 0,
-        type: "call",
-        action: { callType: "call", from: targetAddress, to: nestedAddress },
-        result: { gasUsed: "0x1", output: "0x" },
-      }])]);
+    if (request.method === "eth_getLogs") {
+      return success(request.id, request.params[0].blockHash === sourceBlockHash
+        ? [{
+        blockNumber: "0x64",
+        blockHash: sourceBlockHash,
+        transactionIndex: "0x0",
+        logIndex: "0x0",
+        address: nestedAddress,
+        topics: [`0x${"aa".repeat(32)}`],
+        data: "0x",
+        removed: false,
+      }]
+        : []);
     }
     throw new Error(`unexpected method ${request.method}`);
   }));
@@ -2505,12 +2502,11 @@ async function testCanonicalAddressTouchesIncludeNestedCalls(): Promise<void> {
   );
   assert.deepEqual(proof.touchedAddresses, [
     targetAddress,
-    callerAddress,
     nestedAddress,
-  ]);
+  ].sort());
   assert.equal(proof.transactionCount, 2);
   assert.equal(proof.complete, true);
-  console.log("[state-read-backend] nested address-touch proof: PASS");
+  console.log("[state-read-backend] direct/log address-touch proof: PASS");
 }
 
 async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
@@ -2535,7 +2531,7 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
         transactions: [txHash],
       });
     }
-    if (request.method === "trace_block") {
+    if (request.method === "eth_getLogs") {
       return success(request.id, []);
     }
     throw new Error(`unexpected method ${request.method}`);
@@ -2545,39 +2541,44 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
       deadlineAtMs: Date.now() + 10_000,
       signal: new AbortController().signal,
     }),
-    /does not cover every block transaction/,
+    /is not a full transaction/,
   );
 
-  const missingNestedCall = backendWith(async (body) => body.map((request) => {
+  const wrongLogBlock = backendWith(async (body) => body.map((request) => {
     if (request.method === "eth_getBlockByNumber") {
       return success(request.id, {
         number: "0x64",
         hash: sourceBlockHash,
         parentHash: previousHash,
-        transactions: [txHash],
+        transactions: [{
+          hash: txHash,
+          blockHash: sourceBlockHash,
+          blockNumber: "0x64",
+          transactionIndex: "0x0",
+          to: targetAddress,
+        }],
       });
     }
-    if (request.method === "trace_block") {
+    if (request.method === "eth_getLogs") {
       return success(request.id, [{
-        blockHash: sourceBlockHash,
-        blockNumber: sourceBlock,
-        transactionHash: txHash,
-        transactionPosition: 0,
-        traceAddress: [],
-        subtraces: 1,
-        type: "call",
-        action: { callType: "call", from: callerAddress, to: targetAddress },
-        result: { gasUsed: "0x1", output: "0x" },
+        blockNumber: "0x64",
+        blockHash: otherBlockHash,
+        transactionIndex: "0x0",
+        logIndex: "0x0",
+        address: targetAddress,
+        topics: [`0x${"aa".repeat(32)}`],
+        data: "0x",
+        removed: false,
       }]);
     }
     throw new Error(`unexpected method ${request.method}`);
   }));
   await assert.rejects(
-    () => missingNestedCall.readCanonicalAddressTouches(previous, through, {
+    () => wrongLogBlock.readCanonicalAddressTouches(previous, through, {
       deadlineAtMs: Date.now() + 10_000,
       signal: new AbortController().signal,
     }),
-    /expected 1 direct children, got 0/,
+    /not on canonical path/,
   );
 
   const wrongParent = backendWith(async (body) => body.map((request) => {
@@ -2589,7 +2590,7 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
         transactions: [],
       });
     }
-    if (request.method === "trace_block") {
+    if (request.method === "eth_getLogs") {
       return success(request.id, []);
     }
     throw new Error(`unexpected method ${request.method}`);

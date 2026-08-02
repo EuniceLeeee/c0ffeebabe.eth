@@ -348,7 +348,7 @@ export class JsonRpcBlockScanStateReadBackend
             jsonrpc: "2.0",
             id,
             method: "eth_getBlockByNumber",
-            params: [toBlockTag(blockNumbers[index]), false],
+            params: [toBlockTag(blockNumbers[index]), true],
         })),
         controller.signal,
       );
@@ -359,34 +359,74 @@ export class JsonRpcBlockScanStateReadBackend
         fromExclusive,
         through,
       );
-      const traceIds = blocks.map(() => this.nextId++);
-      const traceResponses = await this.postWithSlots(
+      const logIds = blocks.map(() => this.nextId++);
+      const logResponses = await this.postWithSlots(
         this.addressTouchSlots,
-        traceIds.map((id, index) => ({
-            jsonrpc: "2.0",
-            id,
-            method: "trace_block",
-            params: [toBlockTag(blocks[index].number)],
+        logIds.map((id, index) => ({
+          jsonrpc: "2.0",
+          id,
+          method: "eth_getLogs",
+          // EIP-234 binds completeness to the exact block selected above;
+          // a number-range query could otherwise race a short reorg and
+          // return an empty result from a different canonical branch.
+          params: [{ blockHash: blocks[index].hash }],
         })),
         controller.signal,
       );
-      const touched = new Set<string>();
-      let transactionCount = 0;
-      for (let index = 0; index < blocks.length; index++) {
-        const traces = requiredRpcResult(
-          traceResponses,
-          traceIds[index],
-          `trace block ${blocks[index].number}`,
+      const headerByNumber = new Map(
+        blocks.map((block) => [block.number, { hash: block.hash }]),
+      );
+      const logs = logIds.flatMap((id, blockIndex) => {
+        const rawLogs = requiredRpcResult(
+          logResponses,
+          id,
+          `activity logs ${blocks[blockIndex].number}`,
         );
-        for (const address of parseAddressTouchTraces(
-          traces,
-          blocks[index],
-        )) {
-          touched.add(address);
+        if (!Array.isArray(rawLogs)) {
+          throw new Error("address-touch activity logs are not an array");
         }
-        transactionCount += blocks[index].transactionHashes.length;
+        return rawLogs.map((value, logIndex) => {
+          const log = parseChainLog(
+            value,
+            blockIndex * 1_000_000 + logIndex,
+            fromExclusive,
+            through,
+            headerByNumber,
+          );
+          if (
+            log.blockNumber !== blocks[blockIndex].number ||
+            log.blockHash !== blocks[blockIndex].hash
+          ) {
+            throw new Error(
+              `address-touch block-hash query returned log outside ` +
+                `${blocks[blockIndex].number}/${blocks[blockIndex].hash}`,
+            );
+          }
+          return log;
+        });
+      }).sort((left, right) =>
+        left.blockNumber - right.blockNumber ||
+        left.transactionIndex - right.transactionIndex ||
+        left.logIndex - right.logIndex
+      );
+      for (let index = 1; index < logs.length; index++) {
+        const previous = logs[index - 1];
+        const current = logs[index];
+        if (
+          previous.blockNumber === current.blockNumber &&
+          previous.transactionIndex === current.transactionIndex &&
+          previous.logIndex === current.logIndex
+        ) {
+          throw new Error("address-touch activity logs contain a duplicate");
+        }
       }
+      const touched = new Set(blocks.flatMap((block) => block.directTargets));
+      for (const log of logs) touched.add(log.address);
       const touchedAddresses = Object.freeze([...touched].sort());
+      const transactionCount = blocks.reduce(
+        (sum, block) => sum + block.transactionHashes.length,
+        0,
+      );
       await this.verifyCanonicalSourceWithSlotsMeasured(
         through,
         controller.signal,
@@ -402,6 +442,7 @@ export class JsonRpcBlockScanStateReadBackend
           fromExclusive,
           through,
           blocks,
+          logs,
           touchedAddresses,
         }),
       });
@@ -1992,6 +2033,7 @@ function parseAddressTouchBlocks(
   readonly number: number;
   readonly hash: string;
   readonly transactionHashes: readonly string[];
+  readonly directTargets: readonly string[];
 }[] {
   let expectedParentHash = fromExclusive.hash.toLowerCase();
   const blocks = ids.map((id, index) => {
@@ -2027,222 +2069,58 @@ function parseAddressTouchBlocks(
       );
     }
     expectedParentHash = hash;
+    const directTargets = new Set<string>();
+    const transactionHashes = block.transactions.map(
+      (transaction, transactionIndex) => {
+        if (!transaction || typeof transaction !== "object") {
+          throw new Error(
+            `address-touch block ${number} transaction ${transactionIndex} ` +
+              "is not a full transaction",
+          );
+        }
+        const record = transaction as Record<string, unknown>;
+        if (
+          parseHash(
+            record.blockHash,
+            `address-touch block ${number} transaction ${transactionIndex} blockHash`,
+          ) !== hash ||
+          parseRpcQuantity(
+            record.blockNumber,
+            `address-touch block ${number} transaction ${transactionIndex} blockNumber`,
+          ) !== number ||
+          parseRpcQuantity(
+            record.transactionIndex,
+            `address-touch block ${number} transaction ${transactionIndex} index`,
+          ) !== transactionIndex
+        ) {
+          throw new Error(
+            `address-touch block ${number} transaction ${transactionIndex} ` +
+              "is outside the proven block",
+          );
+        }
+        if (record.to !== null && record.to !== undefined) {
+          directTargets.add(parseAddress(
+            record.to,
+            `address-touch block ${number} transaction ${transactionIndex} to`,
+          ));
+        }
+        return parseHash(
+          record.hash,
+          `address-touch block ${number} transaction ${transactionIndex} hash`,
+        );
+      },
+    );
     return Object.freeze({
       number,
       hash,
-      transactionHashes: Object.freeze(block.transactions.map(
-        (transactionHash, transactionIndex) => parseHash(
-          transactionHash,
-          `address-touch block ${number} transaction ${transactionIndex}`,
-        ),
-      )),
+      transactionHashes: Object.freeze(transactionHashes),
+      directTargets: Object.freeze([...directTargets].sort()),
     });
   });
   if (blocks.at(-1)?.hash !== through.hash.toLowerCase()) {
     throw new Error("address-touch through block is not canonical");
   }
   return Object.freeze(blocks);
-}
-
-function parseAddressTouchTraces(
-  value: unknown,
-  block: {
-    readonly number: number;
-    readonly hash: string;
-    readonly transactionHashes: readonly string[];
-  },
-): readonly string[] {
-  if (!Array.isArray(value)) {
-    throw new Error("address-touch trace is not an array");
-  }
-  const touched = new Set<string>();
-  const rootByTransaction = new Map<number, string>();
-  const pathsByTransaction = new Map<number, Set<string>>();
-  const subtracesByTransaction = new Map<number, Map<string, number>>();
-  const childCountsByTransaction = new Map<number, Map<string, number>>();
-  for (let index = 0; index < value.length; index++) {
-    const item = value[index];
-    if (!item || typeof item !== "object") {
-      throw new Error(`address-touch trace ${index} is not an object`);
-    }
-    const record = item as Record<string, unknown>;
-    const blockNumber = parseRpcIndex(
-      record.blockNumber,
-      `address-touch trace ${index} blockNumber`,
-    );
-    const blockHash = parseHash(
-      record.blockHash,
-      `address-touch trace ${index} blockHash`,
-    );
-    if (blockNumber !== block.number || blockHash !== block.hash) {
-      throw new Error(`address-touch trace ${index} is outside the proven block`);
-    }
-    const transactionIndex = parseRpcIndex(
-      record.transactionPosition,
-      `address-touch trace ${index} transactionPosition`,
-    );
-    const expectedHash = block.transactionHashes[transactionIndex];
-    if (
-      expectedHash === undefined ||
-      parseHash(
-        record.transactionHash,
-        `address-touch trace ${index} transactionHash`,
-      ) !== expectedHash
-    ) {
-      throw new Error(`address-touch trace ${index} transaction order mismatch`);
-    }
-    if (!Array.isArray(record.traceAddress)) {
-      throw new Error(`address-touch trace ${index} traceAddress is invalid`);
-    }
-    const traceAddress = record.traceAddress.map((part, partIndex) =>
-      parseTraceAddressPart(
-        part,
-        `address-touch trace ${index} path ${partIndex}`,
-      )
-    );
-    const path = traceAddress.join("/");
-    const transactionPaths = pathsByTransaction.get(transactionIndex) ?? new Set();
-    if (transactionPaths.has(path)) {
-      throw new Error(`address-touch trace ${index} duplicates call path ${path}`);
-    }
-    transactionPaths.add(path);
-    pathsByTransaction.set(transactionIndex, transactionPaths);
-    if (traceAddress.length > 0) {
-      const separator = path.lastIndexOf("/");
-      const parentPath = separator < 0 ? "" : path.slice(0, separator);
-      const childCounts = childCountsByTransaction.get(transactionIndex) ??
-        new Map<string, number>();
-      childCounts.set(parentPath, (childCounts.get(parentPath) ?? 0) + 1);
-      childCountsByTransaction.set(transactionIndex, childCounts);
-    }
-    const subtraces = parseRpcIndex(
-      record.subtraces,
-      `address-touch trace ${index} subtraces`,
-    );
-    const transactionSubtraces = subtracesByTransaction.get(transactionIndex) ??
-      new Map<string, number>();
-    transactionSubtraces.set(path, subtraces);
-    subtracesByTransaction.set(transactionIndex, transactionSubtraces);
-    if (traceAddress.length === 0) {
-      if (rootByTransaction.has(transactionIndex)) {
-        throw new Error(
-          `address-touch transaction ${transactionIndex} has duplicate roots`,
-        );
-      }
-      rootByTransaction.set(transactionIndex, expectedHash);
-    }
-    collectFlatTraceAddresses(record, touched, index);
-  }
-  if (rootByTransaction.size !== block.transactionHashes.length) {
-    throw new Error("address-touch trace does not cover every block transaction");
-  }
-  for (let transactionIndex = 0;
-    transactionIndex < block.transactionHashes.length;
-    transactionIndex++
-  ) {
-    if (!rootByTransaction.has(transactionIndex)) {
-      throw new Error(
-        `address-touch trace lacks transaction ${transactionIndex} root`,
-      );
-    }
-    const paths = pathsByTransaction.get(transactionIndex);
-    const subtraces = subtracesByTransaction.get(transactionIndex);
-    const childCounts = childCountsByTransaction.get(transactionIndex) ??
-      new Map<string, number>();
-    if (!paths || !subtraces) {
-      throw new Error(
-        `address-touch trace lacks transaction ${transactionIndex} paths`,
-      );
-    }
-    for (const path of paths) {
-      if (path === "") continue;
-      const separator = path.lastIndexOf("/");
-      const parentPath = separator < 0 ? "" : path.slice(0, separator);
-      if (!paths.has(parentPath)) {
-        throw new Error(
-          `address-touch transaction ${transactionIndex} path ${path} lacks parent`,
-        );
-      }
-    }
-    for (const [path, expectedChildren] of subtraces) {
-      const actualChildren = childCounts.get(path) ?? 0;
-      if (actualChildren !== expectedChildren) {
-        throw new Error(
-          `address-touch transaction ${transactionIndex} path ${path} ` +
-            `expected ${expectedChildren} direct children, got ${actualChildren}`,
-        );
-      }
-    }
-  }
-  return Object.freeze([...touched].sort());
-}
-
-function collectFlatTraceAddresses(
-  record: Readonly<Record<string, unknown>>,
-  touched: Set<string>,
-  traceIndex: number,
-): void {
-  if (!record.action || typeof record.action !== "object") {
-    throw new Error(`address-touch trace ${traceIndex} action is invalid`);
-  }
-  const action = record.action as Record<string, unknown>;
-  const type = String(record.type ?? "").toLowerCase();
-  if (type === "call") {
-    touched.add(parseAddress(
-      action.from,
-      `address-touch trace ${traceIndex} call from`,
-    ));
-    touched.add(parseAddress(
-      action.to,
-      `address-touch trace ${traceIndex} call to`,
-    ));
-    return;
-  }
-  if (type === "create") {
-    touched.add(parseAddress(
-      action.from,
-      `address-touch trace ${traceIndex} create from`,
-    ));
-    if (record.result && typeof record.result === "object") {
-      const result = record.result as Record<string, unknown>;
-      if (result.address !== undefined) {
-        touched.add(parseAddress(
-          result.address,
-          `address-touch trace ${traceIndex} created address`,
-        ));
-      }
-    }
-    return;
-  }
-  if (type === "suicide" || type === "selfdestruct") {
-    touched.add(parseAddress(
-      action.address,
-      `address-touch trace ${traceIndex} selfdestruct address`,
-    ));
-    touched.add(parseAddress(
-      action.refundAddress,
-      `address-touch trace ${traceIndex} selfdestruct refund`,
-    ));
-    return;
-  }
-  throw new Error(`address-touch trace ${traceIndex} has unsupported type ${type}`);
-}
-
-function parseTraceAddressPart(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`${label} is not a non-negative integer`);
-  }
-  return value;
-}
-
-function parseRpcIndex(value: unknown, label: string): number {
-  if (typeof value === "number") {
-    if (!Number.isSafeInteger(value) || value < 0) {
-      throw new Error(`${label} is outside the safe integer range`);
-    }
-    return value;
-  }
-  return parseRpcQuantity(value, label);
 }
 
 function parseChainLog(
