@@ -71,7 +71,9 @@ assert(
   "deploy must wait through one normal cron universe publication instead of killing the live searcher after 30 seconds",
 );
 assert(
-  deployNode.includes("node dist/searcher/pool-universe-deploy-trust.js") &&
+  deployNode.includes(
+    "node --import tsx src/searcher/pool-universe-deploy-trust.ts",
+  ) &&
     deployNode.includes(
       'POOL_UNIVERSE_DISCOVERY_BLOCKS=$(env_value SEARCHER_DISCOVERY_BLOCKS "$ENVF")',
     ) &&
