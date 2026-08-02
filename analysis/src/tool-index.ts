@@ -105,6 +105,7 @@ const CURATED: Record<string, Curated> = {
   "analysis:venue-registry": meta("ops", ["venue-discovery", "venue-registry"], "zero-cu", "Ingest and inspect the durable venue evidence registry.", 70),
   "analysis:graph-in": meta("view", ["graph", "single-venue"], "zero-cu", "Check canonical runtime graph membership without conflating unavailable and absent.", 95),
   "analysis:block-activity": meta("view", ["single-block", "production-events", "block-scan"], "zero-cu", "Summarize one block's production funnel and block-scan evidence.", 90),
+  "analysis:blockscan-kpi": meta("analysis", ["block-scan", "production-events", "state-coverage", "kpi"], "zero-cu", "Measure periodic non-warm block-scan passes whose joined N-1 coarse state has at least 80% price coverage.", 100),
   "analysis:tool-index": meta("ops", ["tool-discovery", "tool-selection"], "zero-cu", "Generate and query the current analysis/replay capability index.", 100),
   "analysis:tool-run": meta("ops", ["tool-execution", "tool-evidence"], "zero-cu", "Run one dynamically selected read-only tool and append a machine execution receipt.", 100),
   "listener:auto-close-route-gap": meta("ops", ["route-gap", "auto-close", "graph"], "local-rpc", "Close a confirmed route gap from a canonical report.", 90),

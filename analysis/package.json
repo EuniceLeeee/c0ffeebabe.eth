@@ -55,9 +55,11 @@
     "test:onchain-loss-scan": "node --import tsx --test src/test/onchain-loss-scan.ts",
     "test:tx-shape": "node --import tsx --test src/test/tx-shape.ts",
     "test:tx-source-shape": "node --import tsx --test src/test/tx-source-shape.ts",
+    "test:blockscan-kpi": "node --import tsx --test src/test/blockscan-kpi.ts",
     "build": "tsc --noEmit",
     "graph-in": "node --import tsx src/cli/graph-in.ts",
-    "block-activity": "node --import tsx src/cli/block-activity.ts"
+    "block-activity": "node --import tsx src/cli/block-activity.ts",
+    "blockscan-kpi": "node --import tsx src/cli/blockscan-kpi.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"
