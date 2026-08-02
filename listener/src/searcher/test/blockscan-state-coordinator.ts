@@ -1456,6 +1456,10 @@ async function hotRecoveryIsBoundedPerFamily(): Promise<void> {
     deadlineAtMs: Date.now() + 2_000,
     laggingTopologyRefreshMode: "startup-bootstrap",
   });
+  assert.notEqual(bootstrap.status, "incomplete");
+  if (bootstrap.status === "incomplete") {
+    throw new Error("expected bounded recovery bootstrap snapshot");
+  }
   assert.equal(bootstrap.snapshot.stateByStateKey.size, pools.length);
 
   backend.readTargets.length = 0;
