@@ -156,6 +156,14 @@ export function incompleteBlockScanFamilies(
   );
 }
 
+export function blockScanStateNeedsRecoveryBootstrap(
+  prepared: BlockScanStatePrepareResult,
+): boolean {
+  return (prepared.familyTelemetry ?? []).some(
+    (family) => (family.recoveryRequiredStateKeys ?? 0) > 0,
+  );
+}
+
 export interface BlockScanIssueCauseSummary {
   readonly familyId: string | null;
   readonly lane: string | null;
@@ -539,6 +547,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   private readonly scheduler: LatestHeadScheduler;
   private coarsePricingActive: Promise<void> | null = null;
   private coarsePricingActiveSourceBlock: number | null = null;
+  private coarsePricingRecoveryPending = false;
   private readonly completedCoarsePricingByBlock =
     new Map<number, BlockScanStateSnapshot>();
   private pendingCoarsePricing: {
@@ -838,22 +847,31 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     readonly graph: VerifiedGraphView;
   }): void {
     const startedAtMs = Date.now();
-    const stateBudgetMs = Math.max(
+    const recoveryBootstrap = this.coarsePricingRecoveryPending;
+    const ordinaryStateBudgetMs = Math.max(
       1,
       this.deps.nMinusOneStateBudgetMs ?? 20_000,
     );
+    const stateBudgetMs = recoveryBootstrap
+      ? Math.max(
+          ordinaryStateBudgetMs,
+          Math.max(1, this.deps.startupWarmBudgetMs),
+        )
+      : ordinaryStateBudgetMs;
     const publicationReserveMs = Math.min(
       stateBudgetMs,
       Math.max(1, this.deps.runtimePublicationReserveMs ?? 1_500),
     );
-    const familySettleBudgetMs = Math.min(
-      stateBudgetMs,
-      Math.max(
-        1,
-        this.deps.nMinusOneFamilySettleBudgetMs ??
-          Math.min(12_000, stateBudgetMs),
-      ),
-    );
+    const familySettleBudgetMs = recoveryBootstrap
+      ? Math.max(1, stateBudgetMs - publicationReserveMs)
+      : Math.min(
+          stateBudgetMs,
+          Math.max(
+            1,
+            this.deps.nMinusOneFamilySettleBudgetMs ??
+              Math.min(12_000, stateBudgetMs),
+          ),
+        );
     const deadlineAtMs = startedAtMs + stateBudgetMs;
     const familySettleDeadlineAtMs = Math.min(
       startedAtMs + familySettleBudgetMs,
@@ -872,9 +890,21 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
        * erases healthy sibling results and leaves no time for canonical CAS.
        */
       familySettleDeadlineAtMs,
+      laggingTopologyRefreshMode: recoveryBootstrap
+        ? "startup-bootstrap"
+        : "proof-scoped",
       signal: this.deps.runtimeAbort.signal,
     }).then((prepared) => {
       result = prepared;
+      const recoveryStillRequired = blockScanStateNeedsRecoveryBootstrap(
+        prepared,
+      );
+      if (recoveryBootstrap) {
+        this.coarsePricingRecoveryPending =
+          prepared.status === "incomplete" || recoveryStillRequired;
+      } else if (recoveryStillRequired) {
+        this.coarsePricingRecoveryPending = true;
+      }
       if (prepared.status !== "incomplete") {
         this.completedCoarsePricingByBlock.set(
           prepared.snapshot.sourceBlock,
@@ -898,6 +928,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           budgetMs: stateBudgetMs,
           familySettleBudgetMs,
           publicationReserveMs,
+          recoveryBootstrap,
+          recoveryPending: this.coarsePricingRecoveryPending,
           families: prepared.familyTelemetry ?? [],
           lanes: prepared.laneTelemetry,
           causes: summarizeBlockScanIssueCauses(prepared.issues),
@@ -912,6 +944,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           error: blockScanErrorMessage(error),
           wallMs: Math.max(0, Date.now() - startedAtMs),
           budgetMs: stateBudgetMs,
+          recoveryBootstrap,
         })}`,
       );
     }).finally(() => {
@@ -1849,6 +1882,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                 issueCount: family.issueCount,
                 fullFallbackReason: family.fullFallbackReason,
                 fullFallbackDetail: family.fullFallbackDetail,
+                recoveryRequiredStateKeys:
+                  family.recoveryRequiredStateKeys,
               })),
               causes: summarizeBlockScanIssueCauses(runtime.pricing.issues),
             })}`,

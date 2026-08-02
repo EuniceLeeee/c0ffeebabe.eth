@@ -8,6 +8,7 @@ import {
   type PrepareAdapterRuntimeInput,
 } from "../adapter-runtime-coordinator.js";
 import type {
+  BlockScanLaggingTopologyRefreshMode,
   BlockScanStatePrepareResult,
   BlockScanStateSnapshot,
 } from "../blockscan-state-coordinator.js";
@@ -118,6 +119,7 @@ await observedPublicationDoesNotInvalidateHotDexCommit();
 await shutdownDoesNotWaitForHistoricalBackfill();
 await shutdownDrainsActivePassAndDropsPendingHead();
 await nMinusOneTrackerStaysOutsideNormalRuntimePublication();
+await nMinusOneRecoveryBootstrapRebasesStaleMutationState();
 await nMinusOneWaitsForItsOnlyAdjacentProducer();
 await nMinusOneExactJoinPrecedesNextProducer();
 nMinusOneExactJoinRejectsMixedAnchor();
@@ -127,8 +129,8 @@ familyFailureSummaryNamesOnlyNonCompleteFamilies();
 failureCauseSummaryIsBoundedAndRedacted();
 
 console.log(
-  "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (37/37)",
+    "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
+    "PASS (38/38)",
 );
 
 function nMinusOneFundingIsCandidateLocal(): void {
@@ -1440,6 +1442,39 @@ async function nMinusOneTrackerStaysOutsideNormalRuntimePublication(): Promise<v
   );
 }
 
+async function nMinusOneRecoveryBootstrapRebasesStaleMutationState(): Promise<void> {
+  const harness = createHarness(699, ["complete"], {
+    nMinusOneFallbackEnabled: true,
+    startupWarmBudgetMs: 40_000,
+    coarsePricingRecoveryRequiredStateKeys: [2, 0, 0],
+  });
+  await harness.run(700);
+  await harness.run(701);
+  await waitFor(() => harness.coarsePricingBlocks.length === 1);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await harness.run(702);
+  await waitFor(() => harness.coarsePricingBlocks.length === 2);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await harness.run(703);
+  await waitFor(() => harness.coarsePricingBlocks.length === 3);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(harness.coarsePricingBlocks, [701, 702, 703]);
+  assert.deepEqual(
+    harness.coarsePricingLaggingTopologyModes,
+    ["proof-scoped", "startup-bootstrap", "proof-scoped"],
+    "an out-of-range proof must schedule exactly one protected direct recovery",
+  );
+  assert(
+    harness.coarsePricingDeadlineRemainingMs[1]! > 39_000,
+    "the recovery bootstrap must receive the long startup-warm budget",
+  );
+  assert(
+    harness.coarsePricingFamilyDeadlineRemainingMs[1]! > 38_000,
+    "the recovery family must retain time for direct reads and canonical CAS",
+  );
+}
+
 async function nMinusOneWaitsForItsOnlyAdjacentProducer(): Promise<void> {
   const hold701 = deferred<void>();
   const harness = createHarness(699, ["complete"], {
@@ -1586,6 +1621,8 @@ function createHarness(
     readonly beforeCoarsePricingResult?: (
       sourceBlock: number,
     ) => Promise<void>;
+    readonly coarsePricingRecoveryRequiredStateKeys?: readonly number[];
+    readonly startupWarmBudgetMs?: number;
     readonly routePipeline?: boolean;
     readonly routeEdgeAdapterId?: string;
     readonly pendingEvidenceFamilyId?: ExecutionFamilyId;
@@ -1635,6 +1672,9 @@ function createHarness(
   const coarsePricingBlocks: number[] = [];
   const coarsePricingDeadlineRemainingMs: number[] = [];
   const coarsePricingFamilyDeadlineRemainingMs: number[] = [];
+  const coarsePricingLaggingTopologyModes:
+    BlockScanLaggingTopologyRefreshMode[] = [];
+  let coarsePricingCalls = 0;
   const exactContextBlocks: number[] = [];
   const pipelineEdges = options.routePipeline
     ? routePipelineEdges(options.routeEdgeAdapterId)
@@ -1765,8 +1805,14 @@ function createHarness(
       readonly graph: VerifiedGraphView;
       readonly deadlineAtMs: number;
       readonly familySettleDeadlineAtMs?: number;
+      readonly laggingTopologyRefreshMode?:
+        BlockScanLaggingTopologyRefreshMode;
     }): Promise<BlockScanStatePrepareResult> {
+      const coarsePricingCall = coarsePricingCalls++;
       coarsePricingBlocks.push(input.graph.sourceBlock);
+      coarsePricingLaggingTopologyModes.push(
+        input.laggingTopologyRefreshMode ?? "proof-scoped",
+      );
       coarsePricingDeadlineRemainingMs.push(input.deadlineAtMs - Date.now());
       coarsePricingFamilyDeadlineRemainingMs.push(
         (input.familySettleDeadlineAtMs ?? input.deadlineAtMs) - Date.now(),
@@ -1779,7 +1825,26 @@ function createHarness(
       );
       if (prepared.status === "incomplete") throw new Error("fixture bug");
       latestPricing = prepared.snapshot.pricing;
-      return prepared.pricing;
+      const recoveryRequiredStateKeys =
+        options.coarsePricingRecoveryRequiredStateKeys?.[
+          coarsePricingCall
+        ] ?? 0;
+      return Object.freeze({
+        ...prepared.pricing,
+        familyTelemetry: Object.freeze([Object.freeze({
+          familyId: "univ2-standard",
+          lane: "swap" as const,
+          wallMs: 1,
+          uniqueStateKeys: 2,
+          reads: 0,
+          batches: 0,
+          status: recoveryRequiredStateKeys > 0
+            ? "degraded" as const
+            : "complete" as const,
+          issueCount: recoveryRequiredStateKeys > 0 ? 1 : 0,
+          recoveryRequiredStateKeys,
+        })]),
+      });
     },
     async prepareCurrentNExactExecutionContext(input: {
       readonly graph: VerifiedGraphView;
@@ -2080,7 +2145,8 @@ function createHarness(
     startupWarmEnabled:
       (options.startupWarmEnabled ?? true) &&
       !(options.blindEnabled ?? false),
-    startupWarmBudgetMs: STARTUP_BUDGET_MS,
+    startupWarmBudgetMs:
+      options.startupWarmBudgetMs ?? STARTUP_BUDGET_MS,
     nMinusOneFallbackEnabled: options.nMinusOneFallbackEnabled,
     nMinusOneFamilySettleBudgetMs:
       N_MINUS_ONE_FAMILY_SETTLE_BUDGET_MS,
@@ -2175,6 +2241,7 @@ function createHarness(
     coarsePricingBlocks,
     coarsePricingDeadlineRemainingMs,
     coarsePricingFamilyDeadlineRemainingMs,
+    coarsePricingLaggingTopologyModes,
     exactContextBlocks,
     get solverInvocations() {
       return solverInvocations;

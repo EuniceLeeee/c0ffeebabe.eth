@@ -200,6 +200,13 @@ export interface BlockScanFamilyTelemetry {
   readonly directStateKeys?: number;
   readonly missingPreviousStateKeys?: number;
   /**
+   * Established state keys that cannot enter the bounded mutation proof
+   * because their safe base is missing or outside the proof window, and that
+   * still lack a current-generation replacement. A successful recovery
+   * bootstrap clears this count even when topology remains degraded.
+   */
+  readonly recoveryRequiredStateKeys?: number;
+  /**
    * Set only when a family that could otherwise refresh incrementally had to
    * fall back to direct current-N reads for every stateKey.
    */
@@ -359,6 +366,7 @@ interface FamilyExecutionTelemetry {
   readonly carryStateKeys?: number;
   readonly directStateKeys?: number;
   readonly missingPreviousStateKeys?: number;
+  readonly recoveryRequiredStateKeys?: number;
   readonly fullFallbackReason?: string;
   readonly fullFallbackDetail?: string;
   readonly incrementalDescriptorMs?: number;
@@ -390,6 +398,7 @@ interface FamilyLaneStaging {
   carryStateKeys?: number;
   directStateKeys?: number;
   missingPreviousStateKeys?: number;
+  recoveryRequiredStateKeys?: number;
   fullFallbackReason?: string;
   fullFallbackDetail?: string;
   incrementalDescriptorMs?: number;
@@ -1664,6 +1673,7 @@ export class BlockScanStateCoordinator {
     if (!familyId) {
       throw new Error("non-empty family lane has no familyId");
     }
+    let recoveryCandidateStateKeys = new Set<string>();
     const issues: BlockScanStateIssue[] = [];
     const compiledFamilies = new Map<string, CompiledBlockScanStateFamily>();
     let schemaPhysicalReads = 0;
@@ -1764,6 +1774,26 @@ export class BlockScanStateCoordinator {
         lane,
         message: formatError(error),
       });
+    }
+    if (compiledFamilies.get(familyId)?.incremental) {
+      recoveryCandidateStateKeys = new Set(
+        groups.flatMap((group) => {
+          const base = this.recoveryBaseForGroup(group);
+          const previouslyEstablished =
+            previousCanonicalGraphStateKeys?.has(group.stateKey) ?? false;
+          return (
+              base &&
+                graph.sourceBlock - base.state.source.number >
+                  MAX_INCREMENTAL_RANGE_BLOCKS
+            ) || (previouslyEstablished && !base)
+            ? [group.stateKey]
+            : [];
+        }),
+      );
+      staging.recoveryRequiredStateKeys =
+        recoveryCandidateStateKeys.size > 0
+          ? recoveryCandidateStateKeys.size
+          : undefined;
     }
     const incrementalPreparation = await this.prepareIncrementalPlans(
       proofScoped
@@ -2465,6 +2495,13 @@ export class BlockScanStateCoordinator {
     }
 
     const finishedAtMs = this.now();
+    const resolvedStateKeySet = new Set(resolvedStateKeys);
+    const recoveryRequiredStateKeys = [...recoveryCandidateStateKeys].filter(
+      (stateKey) => !resolvedStateKeySet.has(stateKey),
+    ).length;
+    staging.recoveryRequiredStateKeys = recoveryRequiredStateKeys > 0
+      ? recoveryRequiredStateKeys
+      : undefined;
     const familyExecution = Object.freeze({
       familyId,
       lane,
@@ -2475,6 +2512,9 @@ export class BlockScanStateCoordinator {
       carryStateKeys,
       directStateKeys,
       missingPreviousStateKeys,
+      ...(recoveryRequiredStateKeys === 0
+        ? {}
+        : { recoveryRequiredStateKeys }),
       ...(fullFallbackReason === undefined
         ? {}
         : { fullFallbackReason }),
@@ -2964,6 +3004,12 @@ function createFamilyTelemetry(input: {
             missingPreviousStateKeys:
               execution.missingPreviousStateKeys,
           }),
+      ...(execution?.recoveryRequiredStateKeys === undefined
+        ? {}
+        : {
+            recoveryRequiredStateKeys:
+              execution.recoveryRequiredStateKeys,
+          }),
       ...(execution?.fullFallbackReason === undefined
         ? {}
         : { fullFallbackReason: execution.fullFallbackReason }),
@@ -3091,6 +3137,12 @@ function failedFamilyLane(
       ...(staging.missingPreviousStateKeys === undefined
         ? {}
         : { missingPreviousStateKeys: staging.missingPreviousStateKeys }),
+      ...(staging.recoveryRequiredStateKeys === undefined
+        ? {}
+        : {
+            recoveryRequiredStateKeys:
+              staging.recoveryRequiredStateKeys,
+          }),
       ...(staging.fullFallbackReason === undefined
         ? {}
         : { fullFallbackReason: staging.fullFallbackReason }),

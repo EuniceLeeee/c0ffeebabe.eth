@@ -251,6 +251,7 @@ export class AdapterRuntimeCoordinator {
     readonly graph: VerifiedGraphView;
     readonly deadlineAtMs: number;
     readonly familySettleDeadlineAtMs?: number;
+    readonly laggingTopologyRefreshMode?: BlockScanLaggingTopologyRefreshMode;
     readonly signal?: AbortSignal;
   }): Promise<BlockScanStatePrepareResult> {
     return await this.pricing.prepare({
@@ -259,7 +260,8 @@ export class AdapterRuntimeCoordinator {
       requiresPricing: (edge) => this.registry.isBlockScanPricedEdge(edge),
       deadlineAtMs: input.deadlineAtMs,
       familySettleDeadlineAtMs: input.familySettleDeadlineAtMs,
-      laggingTopologyRefreshMode: "proof-scoped",
+      laggingTopologyRefreshMode:
+        input.laggingTopologyRefreshMode ?? "proof-scoped",
       signal: input.signal,
     });
   }
