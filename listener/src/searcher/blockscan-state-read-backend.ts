@@ -866,125 +866,119 @@ export class JsonRpcBlockScanStateReadBackend
       if (remainingMs <= 0) {
         controller.abort(new Error("mutation range deadline reached"));
       }
-      let primaryFailure: MutationRangeReadError | undefined;
       phase = "header-read";
-      const headerProofPending = this.readSharedCanonicalHeaders(
+      const headerProof = await this.readSharedCanonicalHeaders(
         fromExclusive,
         through,
         {
           deadlineAtMs: control.deadlineAtMs,
           signal: controller.signal,
         },
-      ).catch((error: unknown) => {
-        const typed = error instanceof MutationRangeReadError
-          ? error
-          : new MutationRangeReadError(
-              "header-read",
-              classifyMutationProofFailure(
-                error,
-                controller.signal,
-                "header-read",
-              ),
-              formatError(error),
-              error,
-            );
-        primaryFailure ??= typed;
-        if (!controller.signal.aborted) controller.abort(typed);
-        throw typed;
-      });
-
-      const logId = this.nextId++;
-      const logFilter = {
-        fromBlock: toBlockTag(fromExclusive.number + 1),
-        toBlock: toBlockTag(through.number),
-        ...(transportDescriptor.addresses.length === 0
-          ? {}
-          : {
-              address: transportDescriptor.addresses.length === 1
-                ? transportDescriptor.addresses[0]
-                : transportDescriptor.addresses,
-            }),
-        topics: transportDescriptor.topics,
-      };
-      const logReadPending = this.postWithSlotsMeasured(
-        this.mutationDescriptorSlots,
-        [{
-          jsonrpc: "2.0",
-          id: logId,
-          method: "eth_getLogs",
-          params: [logFilter],
-        }],
-        controller.signal,
-      ).catch((error: unknown) => {
-        const typed = error instanceof MutationRangeReadError
-          ? error
-          : new MutationRangeReadError(
-              "log-read",
-              classifyMutationProofFailure(
-                error,
-                controller.signal,
-                "log-read",
-              ),
-              formatError(error),
-              error,
-            );
-        primaryFailure ??= typed;
-        if (!controller.signal.aborted) controller.abort(typed);
-        throw typed;
-      });
-
-      /*
-       * Header continuity and the widened family log query are independent
-       * reads over the same pinned range. Start both before awaiting either so
-       * local-reth latency is max(header, logs), not header + logs. A failure
-       * aborts its sibling and both settle before control can reach the final
-       * canonical CAS. The existing per-log block-hash validation below still
-       * binds every returned event to the proven header chain.
-       */
-      const [headerProofSettled, logReadSettled] = await Promise.allSettled([
-        headerProofPending,
-        logReadPending,
-      ]);
-      if (primaryFailure) {
-        throw primaryFailure;
-      }
-      if (
-        headerProofSettled.status === "rejected" ||
-        logReadSettled.status === "rejected"
-      ) {
-        throw new Error(
-          "mutation proof transport rejected without a primary failure",
-        );
-      }
-      const headerProof = headerProofSettled.value;
-      const logRead = logReadSettled.value;
+      );
       const headers = headerProof.headers;
       headerTelemetry = headerProof.telemetry;
       validationMs += headerProof.validationMs;
+
+      /*
+       * A block-number log range can race a short reorg: an empty result from
+       * the old chain has no log blockHash to compare with headers from the
+       * replacement chain. Prove the header path first, then bind every log
+       * query to that exact path with EIP-234 blockHash filters. The calls are
+       * still one JSON-RPC batch, so correctness does not add one round trip
+       * per block.
+       */
+      phase = "log-read";
+      const logHeaders = headers.slice(1);
+      const logIds = logHeaders.map(() => this.nextId++);
+      const logRead = await this.postWithSlotsMeasured(
+        this.mutationDescriptorSlots,
+        logIds.map((id, index) => ({
+          jsonrpc: "2.0",
+          id,
+          method: "eth_getLogs",
+          params: [{
+            blockHash: logHeaders[index].hash,
+            ...(transportDescriptor.addresses.length === 0
+              ? {}
+              : {
+                  address: transportDescriptor.addresses.length === 1
+                    ? transportDescriptor.addresses[0]
+                    : transportDescriptor.addresses,
+                }),
+            topics: transportDescriptor.topics,
+          }],
+        })),
+        controller.signal,
+      );
       logTelemetry = logRead.telemetry;
       const logResponses = logRead.responses;
       phase = "log-validation";
       const logValidationStartedAtMs = this.now();
-      const logResponse = logResponses.find((candidate) => candidate.id === logId);
-      if (!logResponse || "error" in logResponse) {
-        throw new Error(
-          `cannot read complete mutation logs: ${
-            logResponse && "error" in logResponse
-              ? logResponse.error.message ?? logResponse.error.code ?? "RPC error"
-              : "missing RPC response"
-          }`,
-        );
+      const expectedLogIds = new Set(logIds);
+      const seenLogIds = new Set<number>();
+      for (const response of logResponses) {
+        if (!expectedLogIds.has(response.id)) {
+          throw new Error(
+            `eth_getLogs returned unexpected RPC response id ${response.id}`,
+          );
+        }
+        if (seenLogIds.has(response.id)) {
+          throw new Error(
+            `eth_getLogs returned duplicate RPC response id ${response.id}`,
+          );
+        }
+        seenLogIds.add(response.id);
       }
-      if (!Array.isArray(logResponse.result)) {
-        throw new Error("eth_getLogs returned a non-array result");
+      if (seenLogIds.size !== expectedLogIds.size) {
+        throw new Error("eth_getLogs omitted an RPC response id");
       }
       const headerByNumber = new Map(
         headers.map((header) => [header.number, header]),
       );
-      const events = (logResponse.result as readonly unknown[])
-        .map((value, index) =>
-          parseChainLog(value, index, fromExclusive, through, headerByNumber)
-        )
+      let rawLogIndex = 0;
+      const events = logIds
+        .flatMap((id, headerIndex) => {
+          const logResponse = logResponses.find((candidate) =>
+            candidate.id === id
+          );
+          if (!logResponse || "error" in logResponse) {
+            throw new Error(
+              `cannot read complete mutation logs for block ${
+                logHeaders[headerIndex].number
+              }: ${
+                logResponse && "error" in logResponse
+                  ? logResponse.error.message ??
+                    logResponse.error.code ??
+                    "RPC error"
+                  : "missing RPC response"
+              }`,
+            );
+          }
+          if (!Array.isArray(logResponse.result)) {
+            throw new Error("eth_getLogs returned a non-array result");
+          }
+          const expectedHeader = logHeaders[headerIndex];
+          return (logResponse.result as readonly unknown[]).map((value) => {
+            const event = parseChainLog(
+              value,
+              rawLogIndex++,
+              fromExclusive,
+              through,
+              headerByNumber,
+            );
+            if (
+              event.blockNumber !== expectedHeader.number ||
+              event.blockHash !== expectedHeader.hash
+            ) {
+              throw new Error(
+                `EIP-234 mutation log response crossed block ${
+                  expectedHeader.number
+                }`,
+              );
+            }
+            return event;
+          });
+        })
         .sort((a, b) =>
           a.blockNumber - b.blockNumber ||
           a.transactionIndex - b.transactionIndex ||

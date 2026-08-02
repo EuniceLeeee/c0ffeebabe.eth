@@ -49,9 +49,12 @@ await testRawHeaderCanonicalMutationRange();
 await testRawHeaderRejectsParentDiscontinuity();
 await testRawHeaderUnavailableFallsBack();
 await testCanonicalMutationRange();
+await testCanonicalMutationRangeBatchesExactBlockHashes();
+await testExactBlockHashLogBatchFailsClosed();
+await testMutationProofAbortDuringLogRead();
 await testMutationPriorityIsScopedToCanonicalProof();
 await testMutationProofTelemetry();
-await testMutationProofReadsHeadersAndLogsConcurrently();
+await testMutationProofReadsHeadersBeforeLogs();
 await testMutationProofPreservesPrimaryTransportFailure();
 await testSharedMutationProofSessions();
 await testSharedGenerationBatchesMutationTransport();
@@ -1208,8 +1211,7 @@ async function testCanonicalMutationRange(): Promise<void> {
       }
       assert.equal(request.method, "eth_getLogs");
       assert.deepEqual(request.params[0], {
-        fromBlock: "0x64",
-        toBlock: "0x64",
+        blockHash: sourceBlockHash,
         topics: descriptor.topics,
       });
       return success(request.id, [{
@@ -1260,6 +1262,271 @@ async function testCanonicalMutationRange(): Promise<void> {
     ],
   );
   console.log("[state-read-backend] canonical mutation range proof: PASS");
+}
+
+async function testCanonicalMutationRangeBatchesExactBlockHashes(): Promise<void> {
+  const earlierHash = `0x${"0f".repeat(32)}`;
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  let logBatchCalls = 0;
+  const backend = backendWith(async (body) => {
+    if (body[0]?.method === "eth_getLogs") {
+      logBatchCalls++;
+      assert.equal(body.length, 2, "all exact-block log reads share one batch");
+      assert.deepEqual(
+        body.map((request) => request.params[0]),
+        [
+          { blockHash: previousHash, topics: descriptor.topics },
+          { blockHash: sourceBlockHash, topics: descriptor.topics },
+        ],
+      );
+      return body.map((request, index) => success(request.id, index === 0
+        ? []
+        : [{
+            blockNumber: "0x64",
+            blockHash: sourceBlockHash,
+            transactionIndex: "0x2",
+            logIndex: "0x3",
+            address: targetAddress,
+            topics: [`0x${"aa".repeat(32)}`],
+            data: "0x1234",
+            removed: false,
+          }]));
+    }
+    if (body.length === 1) {
+      return [success(body[0].id, { hash: sourceBlockHash })];
+    }
+    return body.map((request) => {
+      const number = Number(BigInt(request.params[0]));
+      return success(request.id, {
+        number: request.params[0],
+        hash: number === sourceBlock - 2
+          ? earlierHash
+          : number === sourceBlock - 1
+          ? previousHash
+          : sourceBlockHash,
+        parentHash: number === sourceBlock
+          ? previousHash
+          : number === sourceBlock - 1
+          ? earlierHash
+          : `0x${"09".repeat(32)}`,
+      });
+    });
+  });
+  const range = await backend.readCanonicalMutationRange(
+    descriptor,
+    {
+      number: sourceBlock - 2,
+      hash: earlierHash,
+      generation: sourceGeneration - 2,
+    },
+    {
+      number: sourceBlock,
+      hash: sourceBlockHash,
+      generation: sourceGeneration,
+    },
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    },
+  );
+  assert.equal(logBatchCalls, 1);
+  assert.equal(range.events.length, 1);
+  console.log("[state-read-backend] exact block-hash log batch: PASS");
+}
+
+async function testExactBlockHashLogBatchFailsClosed(): Promise<void> {
+  const earlierHash = `0x${"0f".repeat(32)}`;
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const previous = {
+    number: sourceBlock - 2,
+    hash: earlierHash,
+    generation: sourceGeneration - 2,
+  };
+  const through = {
+    number: sourceBlock,
+    hash: sourceBlockHash,
+    generation: sourceGeneration,
+  };
+  const control = {
+    deadlineAtMs: Date.now() + 10_000,
+    signal: new AbortController().signal,
+  };
+  const headers = (body: RpcRequest[]): unknown[] => body.map((request) => {
+    const number = Number(BigInt(request.params[0]));
+    return success(request.id, {
+      number: request.params[0],
+      hash: number === sourceBlock - 2
+        ? earlierHash
+        : number === sourceBlock - 1
+        ? previousHash
+        : sourceBlockHash,
+      parentHash: number === sourceBlock
+        ? previousHash
+        : number === sourceBlock - 1
+        ? earlierHash
+        : `0x${"09".repeat(32)}`,
+    });
+  });
+
+  let missingResponseFinalCas = 0;
+  const missingResponse = backendWith(async (body) => {
+    if (body[0]?.method === "eth_getLogs") {
+      assert.equal(body.length, 2);
+      return [success(body[0].id, [])];
+    }
+    if (body.length === 1) {
+      missingResponseFinalCas++;
+      return [success(body[0].id, { hash: sourceBlockHash })];
+    }
+    return headers(body);
+  });
+  const missingError = await missingResponse.readCanonicalMutationRange(
+    descriptor,
+    previous,
+    through,
+    control,
+  ).then(() => undefined, (reason: unknown) => reason);
+  assert(missingError instanceof MutationRangeReadError);
+  assert.equal(missingError.phase, "log-validation");
+  assert.equal(missingError.kind, "validation");
+  assert.equal(missingResponseFinalCas, 0);
+
+  let duplicateResponseFinalCas = 0;
+  const duplicateResponse = backendWith(async (body) => {
+    if (body[0]?.method === "eth_getLogs") {
+      assert.equal(body.length, 2);
+      return [success(body[0].id, []), success(body[0].id, [])];
+    }
+    if (body.length === 1) {
+      duplicateResponseFinalCas++;
+      return [success(body[0].id, { hash: sourceBlockHash })];
+    }
+    return headers(body);
+  });
+  const duplicateError = await duplicateResponse.readCanonicalMutationRange(
+    descriptor,
+    previous,
+    through,
+    control,
+  ).then(() => undefined, (reason: unknown) => reason);
+  assert(duplicateError instanceof MutationRangeReadError);
+  assert.equal(duplicateError.phase, "log-validation");
+  assert.equal(duplicateError.kind, "validation");
+  assert.match(duplicateError.message, /duplicate RPC response id/);
+  assert.equal(duplicateResponseFinalCas, 0);
+
+  let crossedBlockFinalCas = 0;
+  const crossedBlock = backendWith(async (body) => {
+    if (body[0]?.method === "eth_getLogs") {
+      return body.map((request, index) => success(request.id, index === 0
+        ? [{
+            // This log is on the proven path, but not in the exact blockHash
+            // requested by the first item in the batch.
+            blockNumber: "0x64",
+            blockHash: sourceBlockHash,
+            transactionIndex: "0x2",
+            logIndex: "0x3",
+            address: targetAddress,
+            topics: [`0x${"aa".repeat(32)}`],
+            data: "0x1234",
+            removed: false,
+          }]
+        : []));
+    }
+    if (body.length === 1) {
+      crossedBlockFinalCas++;
+      return [success(body[0].id, { hash: sourceBlockHash })];
+    }
+    return headers(body);
+  });
+  const crossedError = await crossedBlock.readCanonicalMutationRange(
+    descriptor,
+    previous,
+    through,
+    control,
+  ).then(() => undefined, (reason: unknown) => reason);
+  assert(crossedError instanceof MutationRangeReadError);
+  assert.equal(crossedError.phase, "log-validation");
+  assert.equal(crossedError.kind, "validation");
+  assert.match(crossedError.message, /crossed block/);
+  assert.equal(crossedBlockFinalCas, 0);
+  console.log("[state-read-backend] exact-block log failures close: PASS");
+}
+
+async function testMutationProofAbortDuringLogRead(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const controller = new AbortController();
+  let markLogStarted!: () => void;
+  const logStarted = new Promise<void>((resolve) => {
+    markLogStarted = resolve;
+  });
+  let logSignalAborted = false;
+  let finalCasCalls = 0;
+  const backend = backendWith(async (body, signal) => {
+    if (!signal) throw new Error("mutation proof missing AbortSignal");
+    if (body[0]?.method === "eth_getLogs") {
+      markLogStarted();
+      try {
+        return await rejectWhenAborted(signal);
+      } catch (error) {
+        logSignalAborted = signal.aborted;
+        throw error;
+      }
+    }
+    if (body.length === 1) {
+      finalCasCalls++;
+      return [success(body[0].id, { hash: sourceBlockHash })];
+    }
+    return body.map((request) => {
+      const number = Number(BigInt(request.params[0]));
+      return success(request.id, {
+        number: request.params[0],
+        hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+        parentHash: number === sourceBlock
+          ? previousHash
+          : `0x${"09".repeat(32)}`,
+      });
+    });
+  });
+  const pending = backend.readCanonicalMutationRange(
+    descriptor,
+    {
+      number: sourceBlock - 1,
+      hash: previousHash,
+      generation: sourceGeneration - 1,
+    },
+    {
+      number: sourceBlock,
+      hash: sourceBlockHash,
+      generation: sourceGeneration,
+    },
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+      sharedSignal: controller.signal,
+    },
+  );
+  await logStarted;
+  controller.abort(new Error("caller aborted during mutation log read"));
+  const error = await pending.then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  assert(error instanceof MutationRangeReadError);
+  assert.equal(error.phase, "log-read");
+  assert.equal(error.kind, "aborted");
+  assert.equal(logSignalAborted, true);
+  assert.equal(finalCasCalls, 0);
+  console.log("[state-read-backend] mutation log abort propagation: PASS");
 }
 
 async function testMutationPriorityIsScopedToCanonicalProof(): Promise<void> {
@@ -1411,7 +1678,7 @@ async function testMutationProofTelemetry(): Promise<void> {
   console.log("[state-read-backend] mutation proof phase telemetry: PASS");
 }
 
-async function testMutationProofReadsHeadersAndLogsConcurrently(): Promise<void> {
+async function testMutationProofReadsHeadersBeforeLogs(): Promise<void> {
   const previousHash = `0x${"10".repeat(32)}`;
   const descriptor = createMutationQueryDescriptor({
     topics: [[`0x${"aa".repeat(32)}`]],
@@ -1428,24 +1695,21 @@ async function testMutationProofReadsHeadersAndLogsConcurrently(): Promise<void>
   const logStarted = new Promise<void>((resolve) => {
     markLogStarted = resolve;
   });
-  let releaseLog!: () => void;
-  const logRelease = new Promise<void>((resolve) => {
-    releaseLog = resolve;
-  });
   let headerFinished = false;
-  let logFinished = false;
   let finalCasCalls = 0;
   const backend = backendWith(async (body) => {
     if (body[0]?.method === "eth_getLogs") {
+      assert.equal(
+        headerFinished,
+        true,
+        "EIP-234 log reads must start only after the header path is proven",
+      );
       markLogStarted();
-      await logRelease;
-      logFinished = true;
       return [success(body[0].id, [])];
     }
     if (body.length === 1) {
       finalCasCalls++;
       assert.equal(headerFinished, true);
-      assert.equal(logFinished, true);
       return [success(body[0].id, { hash: sourceBlockHash })];
     }
     markHeaderStarted();
@@ -1479,105 +1743,88 @@ async function testMutationProofReadsHeadersAndLogsConcurrently(): Promise<void>
       signal: new AbortController().signal,
     },
   );
-  const concurrentStart = await Promise.race([
-    Promise.all([headerStarted, logStarted]).then(() => true),
-    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
+  await headerStarted;
+  const logStartedBeforeHeaderProof = await Promise.race([
+    logStarted.then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 50)),
   ]);
-  if (!concurrentStart) {
-    releaseHeader();
-    releaseLog();
-    await pending;
-  }
-  assert.equal(concurrentStart, true, "headers and logs must start concurrently");
-  releaseLog();
-  await Promise.resolve();
-  assert.equal(finalCasCalls, 0, "final CAS must wait for both transports");
+  assert.equal(
+    logStartedBeforeHeaderProof,
+    false,
+    "logs must not race an unproven canonical header path",
+  );
   releaseHeader();
+  await logStarted;
   const range = await pending;
   assert.equal(range.complete, true);
   assert.equal(finalCasCalls, 1);
-  console.log("[state-read-backend] concurrent mutation transports: PASS");
+  console.log("[state-read-backend] header-first mutation transports: PASS");
 }
 
 async function testMutationProofPreservesPrimaryTransportFailure(): Promise<void> {
-  for (const firstFailure of ["header-read", "log-read"] as const) {
-    const previousHash = `0x${"10".repeat(32)}`;
-    const descriptor = createMutationQueryDescriptor({
-      topics: [[`0x${"aa".repeat(32)}`]],
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const previous = {
+    number: sourceBlock - 1,
+    hash: previousHash,
+    generation: sourceGeneration - 1,
+  };
+  const through = {
+    number: sourceBlock,
+    hash: sourceBlockHash,
+    generation: sourceGeneration,
+  };
+  const control = {
+    deadlineAtMs: Date.now() + 10_000,
+    signal: new AbortController().signal,
+  };
+
+  let headerFailureLogCalls = 0;
+  const headerFailure = backendWith(async (body) => {
+    if (body[0]?.method === "eth_getLogs") headerFailureLogCalls++;
+    throw new Error("primary header transport failed");
+  });
+  const headerError = await headerFailure.readCanonicalMutationRange(
+    descriptor,
+    previous,
+    through,
+    control,
+  ).then(() => undefined, (reason: unknown) => reason);
+  assert(headerError instanceof MutationRangeReadError);
+  assert.equal(headerError.phase, "header-read");
+  assert.equal(headerFailureLogCalls, 0, "header failure must prevent log reads");
+
+  let finalCasCalls = 0;
+  const logFailure = backendWith(async (body) => {
+    if (body[0]?.method === "eth_getLogs") {
+      throw new Error("primary log transport failed");
+    }
+    if (body.length === 1) {
+      finalCasCalls++;
+      return [success(body[0].id, { hash: sourceBlockHash })];
+    }
+    return body.map((request) => {
+      const number = Number(BigInt(request.params[0]));
+      return success(request.id, {
+        number: request.params[0],
+        hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+        parentHash: number === sourceBlock
+          ? previousHash
+          : `0x${"09".repeat(32)}`,
+      });
     });
-    let markHeaderStarted!: () => void;
-    const headerStarted = new Promise<void>((resolve) => {
-      markHeaderStarted = resolve;
-    });
-    let markLogStarted!: () => void;
-    const logStarted = new Promise<void>((resolve) => {
-      markLogStarted = resolve;
-    });
-    let releaseFailure!: () => void;
-    const failureRelease = new Promise<void>((resolve) => {
-      releaseFailure = resolve;
-    });
-    let siblingAborted = false;
-    let finalCasCalls = 0;
-    const backend = backendWith(async (body, signal) => {
-      if (!signal) throw new Error("mutation proof missing AbortSignal");
-      if (body[0]?.method === "eth_getLogs") {
-        markLogStarted();
-        if (firstFailure === "log-read") {
-          await failureRelease;
-          throw new Error("primary log transport failed");
-        }
-        try {
-          return await rejectWhenAborted(signal);
-        } catch (error) {
-          siblingAborted = signal.aborted;
-          throw error;
-        }
-      }
-      if (body.length === 1) {
-        finalCasCalls++;
-        return [success(body[0].id, { hash: sourceBlockHash })];
-      }
-      markHeaderStarted();
-      if (firstFailure === "header-read") {
-        await failureRelease;
-        throw new Error("primary header transport failed");
-      }
-      try {
-        return await rejectWhenAborted(signal);
-      } catch (error) {
-        siblingAborted = signal.aborted;
-        throw error;
-      }
-    });
-    const pending = backend.readCanonicalMutationRange(
-      descriptor,
-      {
-        number: sourceBlock - 1,
-        hash: previousHash,
-        generation: sourceGeneration - 1,
-      },
-      {
-        number: sourceBlock,
-        hash: sourceBlockHash,
-        generation: sourceGeneration,
-      },
-      {
-        deadlineAtMs: Date.now() + 10_000,
-        signal: new AbortController().signal,
-      },
-    );
-    await Promise.all([headerStarted, logStarted]);
-    releaseFailure();
-    const error = await pending.then(
-      () => undefined,
-      (reason: unknown) => reason,
-    );
-    assert(error instanceof MutationRangeReadError);
-    assert.equal(error.phase, firstFailure);
-    assert.equal(siblingAborted, true);
-    assert.equal(finalCasCalls, 0);
-  }
+  });
+  const logError = await logFailure.readCanonicalMutationRange(
+    descriptor,
+    previous,
+    through,
+    control,
+  ).then(() => undefined, (reason: unknown) => reason);
+  assert(logError instanceof MutationRangeReadError);
+  assert.equal(logError.phase, "log-read");
+  assert.equal(finalCasCalls, 0, "log failure must prevent final CAS");
   console.log("[state-read-backend] primary mutation failure attribution: PASS");
 }
 
@@ -1757,8 +2004,7 @@ async function testSharedGenerationBatchesMutationTransport(): Promise<void> {
       if (body[0]?.method === "eth_getLogs") {
         logCalls++;
         assert.deepEqual(body[0].params[0], {
-          fromBlock: "0x64",
-          toBlock: "0x64",
+          blockHash: sourceBlockHash,
           address: [targetAddress, callerAddress].sort(),
           topics: [[topicA, topicB].sort()],
         });
