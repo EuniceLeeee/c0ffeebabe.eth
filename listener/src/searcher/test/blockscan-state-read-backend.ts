@@ -55,7 +55,6 @@ await testMutationProofReadsHeadersAndLogsConcurrently();
 await testMutationProofPreservesPrimaryTransportFailure();
 await testSharedMutationProofSessions();
 await testSharedGenerationBatchesMutationTransport();
-await testLargeMutationAddressSetUsesBroadTransport();
 await testCompletedHeaderProofIsReusedByStaggeredDescriptors();
 await testCanonicalHeaderBypassesSaturatedDescriptorSlot();
 await testFinalCanonicalCasBypassesDescriptorQueue();
@@ -1857,87 +1856,6 @@ async function testSharedGenerationBatchesMutationTransport(): Promise<void> {
     1,
   );
   console.log("[state-read-backend] shared generation mutation batch: PASS");
-}
-
-async function testLargeMutationAddressSetUsesBroadTransport(): Promise<void> {
-  const previousHash = `0x${"10".repeat(32)}`;
-  const topic = `0x${"aa".repeat(32)}`;
-  const addresses = Array.from(
-    { length: 257 },
-    (_value, index) =>
-      `0x${(index + 1).toString(16).padStart(40, "0")}`,
-  );
-  const descriptor = createMutationQueryDescriptor({
-    addresses,
-    topics: [[topic]],
-  });
-  const unrelatedAddress = "0xffffffffffffffffffffffffffffffffffffffff";
-  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
-    fetchImpl: (async (_url, init) => {
-      const body = JSON.parse(String(init?.body)) as RpcRequest[];
-      if (body[0]?.method === "eth_getLogs") {
-        assert.deepEqual(body[0].params[0], {
-          fromBlock: "0x64",
-          toBlock: "0x64",
-          topics: descriptor.topics,
-        });
-        return fakeResponse([success(body[0].id, [
-          {
-            blockNumber: "0x64",
-            blockHash: sourceBlockHash,
-            transactionIndex: "0x0",
-            logIndex: "0x0",
-            address: addresses[0],
-            topics: [topic],
-            data: "0x",
-            removed: false,
-          },
-          {
-            blockNumber: "0x64",
-            blockHash: sourceBlockHash,
-            transactionIndex: "0x1",
-            logIndex: "0x0",
-            address: unrelatedAddress,
-            topics: [topic],
-            data: "0x",
-            removed: false,
-          },
-        ])]);
-      }
-      if (body.length === 1) {
-        return fakeResponse([success(body[0].id, { hash: sourceBlockHash })]);
-      }
-      return fakeResponse(body.map((request) => {
-        const number = Number(BigInt(request.params[0]));
-        return success(request.id, {
-          number: request.params[0],
-          hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
-          parentHash: number === sourceBlock
-            ? previousHash
-            : `0x${"09".repeat(32)}`,
-        });
-      }));
-    }) as typeof fetch,
-  });
-  const range = await backend.readCanonicalMutationRange(
-    descriptor,
-    {
-      number: sourceBlock - 1,
-      hash: previousHash,
-      generation: sourceGeneration - 1,
-    },
-    {
-      number: sourceBlock,
-      hash: sourceBlockHash,
-      generation: sourceGeneration,
-    },
-    {
-      deadlineAtMs: Date.now() + 10_000,
-      signal: new AbortController().signal,
-    },
-  );
-  assert.deepEqual(range.events.map((event) => event.address), [addresses[0]]);
-  console.log("[state-read-backend] broad mutation transport + exact local match: PASS");
 }
 
 async function testCompletedHeaderProofIsReusedByStaggeredDescriptors(): Promise<void> {

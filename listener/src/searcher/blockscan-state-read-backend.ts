@@ -25,8 +25,6 @@ import {
 import type { LiveRethReadPriority } from "./live-reth-read-priority.js";
 import { decodeRlp, keccak256 } from "ethers";
 
-const MAX_MUTATION_LOG_FILTER_ADDRESSES = 256;
-
 interface JsonRpcSuccess {
   readonly jsonrpc: "2.0";
   readonly id: number;
@@ -1665,11 +1663,11 @@ function mergeMutationQueryDescriptors(
 ): Pick<MutationQueryDescriptor, "addresses" | "topics"> {
   if (descriptors.length === 1) {
     return Object.freeze({
-      addresses: mutationTransportAddresses(descriptors[0].addresses),
+      addresses: descriptors[0].addresses,
       topics: descriptors[0].topics,
     });
   }
-  const mergedAddresses = descriptors.some((descriptor) =>
+  const addresses = descriptors.some((descriptor) =>
     descriptor.addresses.length === 0
   )
     ? []
@@ -1694,24 +1692,9 @@ function mergeMutationQueryDescriptors(
     topics.push(values.length === 1 ? values[0] : Object.freeze(values));
   }
   return Object.freeze({
-    addresses: mutationTransportAddresses(mergedAddresses),
+    addresses: Object.freeze(addresses),
     topics: Object.freeze(topics),
   });
-}
-
-function mutationTransportAddresses(
-  addresses: readonly string[],
-): readonly string[] {
-  /*
-   * A huge address OR-list is pathological on local reth even for one block.
-   * Broadening only the transport query is safe: every returned log is still
-   * matched against the exact immutable family descriptor below. One bounded
-   * current-block response is also substantially smaller than the JSON body
-   * and index work for the full live pool universe.
-   */
-  return addresses.length <= MAX_MUTATION_LOG_FILTER_ADDRESSES
-    ? addresses
-    : Object.freeze([]);
 }
 
 function mutationLogMatchesDescriptor(
