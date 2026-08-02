@@ -526,7 +526,7 @@ validate_pool_universe_selection() {
   (
     cd "$REPO/listener" &&
       env SEARCHER_V2_LINEAGES_PATH="$v2_lineages_path" \
-        node dist/searcher/pool-universe-deploy-trust.js \
+        node --import tsx src/searcher/pool-universe-deploy-trust.ts \
           "$universe_path" \
           "$manifest_path" \
           "$frozen_source" \
