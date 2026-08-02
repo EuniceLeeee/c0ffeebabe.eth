@@ -1542,6 +1542,40 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           consumedPreparedSource !== null &&
           dexAdmissionCompleteThrough(base) >= consumedPreparedSource;
         if (!this.deps.blind.enabled && predecessorStillBehind) {
+          if (startupWarmAttempt) {
+            /*
+             * Cold state preparation saturates the same local reth that owns
+             * the bounded discovery backfill. Starting both during boot can
+             * repeatedly preempt the same retry-safe discovery RPC until its
+             * 120s job expires, while the state generation also misses its
+             * deadline. Keep startupWarmPending set and let the latest-head
+             * scheduler retry after the canonical backfill publishes. This is
+             * a one-time fail-closed bootstrap barrier; ordinary live retains
+             * the degraded published-graph path below.
+             */
+            outcome = "degraded";
+            fullCoverage = false;
+            skippedReason =
+              `startup_discovery_backfill_behind:` +
+              `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`;
+            degradedRecallReasons = Object.freeze([
+              `discovery_source_coverage_behind:` +
+              `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`,
+            ]);
+            if (executionContext) {
+              // Current-head authorization cannot survive an unbounded cold
+              // discovery catch-up. Record the fail-closed rejection instead
+              // of silently consuming it or immediately requeueing a tight
+              // same-head loop that would starve the backfill itself.
+              this.recordPendingEvidenceNotStarted(
+                executionContext,
+                "pending_evidence_startup_discovery_behind",
+              );
+            }
+            finishStage("state", "failed");
+            void discovery.scheduleBackfill(blockNumber);
+            return;
+          }
           // A verified published graph is safe to price at current N even when
           // its source-coverage watermark is catching up: it may miss newly
           // landed venues, but it cannot invent an edge. Keep the historical
