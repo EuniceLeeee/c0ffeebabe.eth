@@ -39,6 +39,29 @@ for (const retiredKey of [
 }
 console.log("[runtime-defaults] deploy rejects/strips retired EV controls: PASS");
 
+const blockscanMulticallWrites =
+  deployNode.match(
+    /echo "SEARCHER_BLOCKSCAN_STATE_MULTICALL=\$BLOCKSCAN_STATE_MULTICALL"/g,
+  )?.length ?? 0;
+assert(
+  blockscanMulticallWrites === 2 &&
+    deployNode.includes(
+      "BLOCKSCAN_STATE_MULTICALL=${SEARCHER_BLOCKSCAN_STATE_MULTICALL:-${RUNNING_BLOCKSCAN_STATE_MULTICALL:-0}}",
+    ) &&
+    deployNode.includes(
+      "BLOCKSCAN_STATE_MULTICALL=${SEARCHER_BLOCKSCAN_STATE_MULTICALL:-${EXISTING_BLOCKSCAN_STATE_MULTICALL:-0}}",
+    ) &&
+    deployNode.includes("SEARCHER_BLOCKSCAN_STATE_MULTICALL must be 0 or 1") &&
+    deployNode.includes(
+      'process_env_count SEARCHER_BLOCKSCAN_STATE_MULTICALL "$NEWPID"',
+    ) &&
+    deployNode.includes(
+      "restarted process SEARCHER_BLOCKSCAN_STATE_MULTICALL != $BLOCKSCAN_STATE_MULTICALL",
+    ),
+  "deploy must persist and verify block-scan multicall mode on both restart paths",
+);
+console.log("[runtime-defaults] deploy preserves block-scan multicall mode: PASS");
+
 assert(
   deployNode.includes('POOL_UNIVERSE_TO_BLOCK="$DISCOVERY_TO_BLOCK"'),
   "deploy must build the universe at the same frozen source as the searcher",
