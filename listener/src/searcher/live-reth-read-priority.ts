@@ -4,8 +4,20 @@ type BackgroundWork<T> = (signal: AbortSignal) => Promise<T>;
 
 interface ActiveBackgroundAttempt {
   readonly controller: AbortController;
+  readonly foregroundHandoffMs: number;
   settled: Promise<void>;
   preempted: boolean;
+}
+
+export interface LiveRethBackgroundOptions {
+  /**
+   * Let one already-started background RPC finish before a newly announced
+   * foreground lease begins. The lease still owns the transport exclusively:
+   * no new background attempt may start, and the retained attempt is aborted
+   * once this grace period expires. Foreground still drains the abort-aware
+   * transport before starting, so it never overlaps the retained attempt.
+   */
+  readonly foregroundHandoffMs?: number;
 }
 
 type BackgroundOutcome<T> =
@@ -18,10 +30,11 @@ type BackgroundOutcome<T> =
  *
  * Background work must be one idempotent RPC attempt and must pass the
  * supplied signal to its transport. Foreground leases may overlap each other;
- * critical work remains serial. Either kind aborts and drains active
- * background attempts before it starts. Internally preempted attempts retry
- * after every foreground/critical lease drains; caller cancellation never
- * retries.
+ * critical work remains serial. Critical work always preempts background.
+ * Foreground work normally does the same, but may grant one explicitly opted
+ * in attempt a bounded exclusive handoff before it starts. Internally
+ * preempted attempts retry after every foreground/critical lease drains;
+ * caller cancellation never retries.
  */
 export class LiveRethReadPriority {
   private readonly activeBackground = new Set<ActiveBackgroundAttempt>();
@@ -29,12 +42,13 @@ export class LiveRethReadPriority {
   private foregroundCount = 0;
   private criticalCount = 0;
   private criticalTail: Promise<void> = Promise.resolve();
+  private foregroundHandoff: Promise<void> | null = null;
 
   async runForeground<T>(work: ForegroundWork<T>): Promise<T> {
     this.foregroundCount++;
 
     try {
-      await this.preemptBackground();
+      await this.prepareForeground();
       return await work();
     } finally {
       this.foregroundCount--;
@@ -75,6 +89,7 @@ export class LiveRethReadPriority {
   async runBackground<T>(
     work: BackgroundWork<T>,
     parentSignal?: AbortSignal,
+    options: LiveRethBackgroundOptions = {},
   ): Promise<T> {
     for (;;) {
       await this.waitForForegroundQueue(parentSignal);
@@ -88,6 +103,9 @@ export class LiveRethReadPriority {
       const controller = new AbortController();
       const attempt: ActiveBackgroundAttempt = {
         controller,
+        foregroundHandoffMs: normalizeHandoffMs(
+          options.foregroundHandoffMs,
+        ),
         settled: Promise.resolve(),
         preempted: false,
       };
@@ -160,14 +178,71 @@ export class LiveRethReadPriority {
     for (const release of [...this.backgroundWaiters]) release();
   }
 
-  private async preemptBackground(): Promise<void> {
+  private prepareForeground(): Promise<void> {
+    if (this.foregroundHandoff !== null) {
+      return this.foregroundHandoff;
+    }
+
+    const retained = [...this.activeBackground].find((attempt) =>
+      !attempt.preempted && attempt.foregroundHandoffMs > 0
+    );
+    if (!retained) return this.preemptBackground();
+
+    const handoff = this.drainForForegroundWithHandoff(retained);
+    this.foregroundHandoff = handoff;
+    const clearHandoff = () => {
+      if (this.foregroundHandoff === handoff) {
+        this.foregroundHandoff = null;
+      }
+    };
+    void handoff.then(clearHandoff, clearHandoff);
+    return handoff;
+  }
+
+  private async drainForForegroundWithHandoff(
+    retained: ActiveBackgroundAttempt,
+  ): Promise<void> {
     const active = [...this.activeBackground];
     for (const attempt of active) {
-      attempt.preempted = true;
-      attempt.controller.abort(new LiveRethBackgroundPreempted());
+      if (attempt === retained) continue;
+      preemptBackgroundAttempt(attempt);
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const outcome = await Promise.race([
+      retained.settled.then(() => "settled" as const),
+      new Promise<"expired">((resolve) => {
+        timer = setTimeout(
+          () => resolve("expired"),
+          retained.foregroundHandoffMs,
+        );
+      }),
+    ]);
+    if (timer !== undefined) clearTimeout(timer);
+    if (outcome === "expired") {
+      preemptBackgroundAttempt(retained);
     }
     await Promise.allSettled(active.map((attempt) => attempt.settled));
   }
+
+  private async preemptBackground(): Promise<void> {
+    const active = [...this.activeBackground];
+    for (const attempt of active) {
+      preemptBackgroundAttempt(attempt);
+    }
+    await Promise.allSettled(active.map((attempt) => attempt.settled));
+  }
+}
+
+function preemptBackgroundAttempt(attempt: ActiveBackgroundAttempt): void {
+  if (attempt.preempted) return;
+  attempt.preempted = true;
+  attempt.controller.abort(new LiveRethBackgroundPreempted());
+}
+
+function normalizeHandoffMs(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.max(1, Math.floor(value));
 }
 
 function waitForSettlement(
@@ -196,7 +271,7 @@ function waitForSettlement(
 
 class LiveRethBackgroundPreempted extends Error {
   constructor() {
-    super("live reth background read preempted by critical work");
+    super("live reth background read preempted by higher-priority work");
     this.name = "LiveRethBackgroundPreempted";
   }
 }

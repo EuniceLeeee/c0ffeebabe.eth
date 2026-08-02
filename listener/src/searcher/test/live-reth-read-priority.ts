@@ -11,8 +11,11 @@ await backgroundWaitsForAllForegroundWork();
 await foregroundMayNestCriticalWork();
 await externalAbortWhileWaitingDoesNotStartOrRetry();
 await externalAbortDuringAttemptTerminatesWithoutRetry();
+await foregroundLetsOneOptedInAttemptFinishExclusively();
+await foregroundRetainsAtMostOneOptedInAttempt();
+await foregroundBoundsAndRetriesStuckOptedInAttempt();
 
-console.log("[live-reth-read-priority] preemption/abort: PASS (10/10)");
+console.log("[live-reth-read-priority] preemption/abort: PASS (13/13)");
 
 async function criticalPreemptsDrainsAndRetriesBackground(): Promise<void> {
   const priority = new LiveRethReadPriority();
@@ -361,6 +364,126 @@ async function externalAbortDuringAttemptTerminatesWithoutRetry(): Promise<void>
   allowTransportCleanup.resolve();
   await assert.rejects(background, /caller stopped active attempt/);
   assert.equal(attempts, 1, "caller cancellation must not be retried");
+}
+
+async function foregroundLetsOneOptedInAttemptFinishExclusively(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const backgroundStarted = deferred();
+  const releaseBackground = deferred();
+  const foregroundStarted = deferred();
+  const events: string[] = [];
+
+  const background = priority.runBackground(async (signal) => {
+    events.push("background-start");
+    backgroundStarted.resolve();
+    await releaseBackground.promise;
+    assert.equal(signal.aborted, false);
+    events.push("background-complete");
+    return 7;
+  }, undefined, { foregroundHandoffMs: 50 });
+  await backgroundStarted.promise;
+
+  const foreground = priority.runForeground(async () => {
+    events.push("foreground");
+    foregroundStarted.resolve();
+  });
+  await nextTurn();
+  assert.equal(
+    foregroundStarted.isResolved(),
+    false,
+    "foreground must wait for the one retained background RPC",
+  );
+  releaseBackground.resolve();
+  assert.equal(await background, 7);
+  await foreground;
+  assert.deepEqual(events, [
+    "background-start",
+    "background-complete",
+    "foreground",
+  ]);
+}
+
+async function foregroundRetainsAtMostOneOptedInAttempt(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const firstStarted = deferred();
+  const secondStarted = deferred();
+  const secondAborted = deferred();
+  const releaseFirst = deferred();
+  const releaseForeground = deferred();
+  const foregroundStarted = deferred();
+  let secondAttempts = 0;
+
+  const first = priority.runBackground(async (signal) => {
+    firstStarted.resolve();
+    await releaseFirst.promise;
+    assert.equal(signal.aborted, false);
+    return "first";
+  }, undefined, { foregroundHandoffMs: 50 });
+  await firstStarted.promise;
+
+  const second = priority.runBackground(async (signal) => {
+    secondAttempts++;
+    if (secondAttempts === 1) {
+      secondStarted.resolve();
+      await aborted(signal);
+      secondAborted.resolve();
+      throw signal.reason;
+    }
+    return "second-retried";
+  }, undefined, { foregroundHandoffMs: 50 });
+  await secondStarted.promise;
+
+  const foreground = priority.runForeground(async () => {
+    foregroundStarted.resolve();
+    await releaseForeground.promise;
+  });
+  await settlesBefore(secondAborted.promise, 20);
+  assert.equal(
+    foregroundStarted.isResolved(),
+    false,
+    "only one background RPC may receive the exclusive handoff",
+  );
+  releaseFirst.resolve();
+  assert.equal(await first, "first");
+  await foregroundStarted.promise;
+  assert.equal(secondAttempts, 1);
+  releaseForeground.resolve();
+  await foreground;
+  assert.equal(await second, "second-retried");
+  assert.equal(secondAttempts, 2);
+}
+
+async function foregroundBoundsAndRetriesStuckOptedInAttempt(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const firstStarted = deferred();
+  const firstAborted = deferred();
+  const releaseForeground = deferred();
+  const foregroundStarted = deferred();
+  let attempts = 0;
+
+  const background = priority.runBackground(async (signal) => {
+    attempts++;
+    if (attempts === 1) {
+      firstStarted.resolve();
+      await aborted(signal);
+      firstAborted.resolve();
+      throw signal.reason;
+    }
+    return "retried";
+  }, undefined, { foregroundHandoffMs: 5 });
+  await firstStarted.promise;
+
+  const foreground = priority.runForeground(async () => {
+    foregroundStarted.resolve();
+    await releaseForeground.promise;
+  });
+  await settlesBefore(firstAborted.promise, 50);
+  await foregroundStarted.promise;
+  assert.equal(attempts, 1, "retry must wait until foreground releases reth");
+  releaseForeground.resolve();
+  await foreground;
+  assert.equal(await background, "retried");
+  assert.equal(attempts, 2);
 }
 
 function aborted(signal: AbortSignal): Promise<void> {

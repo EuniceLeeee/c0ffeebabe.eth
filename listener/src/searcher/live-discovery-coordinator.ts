@@ -111,6 +111,8 @@ import type {
 import { routeInstanceKey } from "./venues/route-instance-identity.js";
 import { poolRegistryKey } from "./pool-universe.js";
 
+const DISCOVERY_BACKFILL_FOREGROUND_HANDOFF_MS = 1_000;
+
 interface LiveDiscoveryConfig {
   readonly poolUniverseTopN: number;
   readonly enableProtocolEdges: boolean;
@@ -1045,7 +1047,21 @@ export async function createLiveDiscoveryCoordinator(
           deadlineAtMs: input.control.deadlineAtMs,
           run: <T>(work: (signal: AbortSignal) => Promise<T>) =>
             input.control!.run((budgetSignal) =>
-              deps.readPriority?.runBackground(work, budgetSignal) ??
+              deps.readPriority?.runBackground(
+                work,
+                budgetSignal,
+                input.mode === "hot"
+                  ? undefined
+                  : {
+                      foregroundHandoffMs: Math.min(
+                        DISCOVERY_BACKFILL_FOREGROUND_HANDOFF_MS,
+                        Math.max(
+                          0,
+                          input.control!.deadlineAtMs - Date.now(),
+                        ),
+                      ),
+                    },
+              ) ??
                 work(budgetSignal)
             ),
         };
