@@ -36,6 +36,7 @@ const SWAP_POOL = "0x0000000000000000000000000000000000000011";
 const SWAP_POOL_B = "0x0000000000000000000000000000000000000033";
 const SWAP_POOL_C = "0x0000000000000000000000000000000000000044";
 const PROTOCOL_POOL = "0x0000000000000000000000000000000000000022";
+const PROTOCOL_POOL_B = "0x0000000000000000000000000000000000000055";
 
 interface FakeSnapshot {
   readonly numerator: bigint;
@@ -49,6 +50,13 @@ const swapBReverse = edge("swap-action", SWAP_POOL_B, TOKEN_C, TOKEN_A);
 const swapCForward = edge("swap-action", SWAP_POOL_C, TOKEN_A, TOKEN_D);
 const swapCReverse = edge("swap-action", SWAP_POOL_C, TOKEN_D, TOKEN_A);
 const protocol = edge("protocol-action", PROTOCOL_POOL, TOKEN_B, TOKEN_C, "protocol");
+const protocolB = edge(
+  "protocol-action",
+  PROTOCOL_POOL_B,
+  TOKEN_C,
+  TOKEN_D,
+  "protocol",
+);
 
 function edge(
   adapterId: string,
@@ -204,6 +212,57 @@ function staticSchemaFixtureFamily(
     capability: staticSchemaFixtureCapability(calls),
     ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
   });
+}
+
+function staticProtocolFixtureCapability(): BlockScanStateCapability<
+  { readonly hydrated: boolean },
+  FakeSnapshot
+> {
+  return {
+    stateKey: (edgeValue) => edgeValue.target.toLowerCase(),
+    compileStaticSchema: () => ({ hydrated: false }),
+    buildStaticSchemaReads({ sourceBlock, sourceBlockHash, edges }) {
+      return [{
+        id: "metadata",
+        sourceBlock,
+        sourceBlockHash,
+        to: edges[0]?.target ?? PROTOCOL_POOL,
+        data: "0x01",
+        transport: "rpc-batch",
+      }];
+    },
+    hydrateStaticSchema(_schema, results) {
+      assert.equal(results.length, 1);
+      assert.equal(results[0]?.ok, true);
+      return { hydrated: true };
+    },
+    buildCurrentBlockReads({ sourceBlock, sourceBlockHash, edges, schema }) {
+      assert.equal(schema.hydrated, true);
+      return [{
+        id: "state",
+        sourceBlock,
+        sourceBlockHash,
+        to: edges[0]?.target ?? PROTOCOL_POOL,
+        data: "0x02",
+        transport: "rpc-batch",
+      }];
+    },
+    decodeState(_schema, results) {
+      assert.equal(results.length, 1);
+      assert.equal(results[0]?.ok, true);
+      return { numerator: 3n, denominator: 1n };
+    },
+    deriveMids(snapshot, edges) {
+      return new Map(edges.map((edgeValue) => [
+        blockScanEdgeKey(edgeValue),
+        mid(
+          edgeValue,
+          Number(snapshot.numerator) / Number(snapshot.denominator),
+        ),
+      ]));
+    },
+    dependencies: (edges) => edges.map((edgeValue) => edgeValue.target),
+  };
 }
 
 function families() {
@@ -483,6 +542,173 @@ class BarrierBackend implements BlockScanStateReadBackend {
   async verifyCanonicalSource(): Promise<void> {
     return;
   }
+}
+
+class ProofFirstBackend implements BlockScanStateReadBackend {
+  readBatchCalls = 0;
+  readBatchCallsWhileProofPending = 0;
+  proofPending = false;
+  private resolveProofStarted: (() => void) | null = null;
+  readonly proofStarted = new Promise<void>((resolve) => {
+    this.resolveProofStarted = resolve;
+  });
+  private releaseProof: (() => void) | null = null;
+  private readonly proofRelease = new Promise<void>((resolve) => {
+    this.releaseProof = resolve;
+  });
+
+  async readBatch(
+    _lane: BlockScanPricingLane,
+    reads: readonly StateRead[],
+    control: { readonly sourceGeneration: number },
+  ): Promise<readonly StateReadResult[]> {
+    this.readBatchCalls++;
+    if (this.proofPending) this.readBatchCallsWhileProofPending++;
+    return reads.map((read) => successfulRead(read, control.sourceGeneration));
+  }
+
+  async readCanonicalMutationRange(
+    descriptor: MutationQueryDescriptor,
+    fromExclusive: BlockSource,
+    through: BlockSource,
+  ): Promise<CanonicalMutationRange> {
+    this.proofPending = true;
+    this.resolveProofStarted?.();
+    await this.proofRelease;
+    this.proofPending = false;
+    const canonicalPathFingerprint = deterministicHash({
+      fromExclusive,
+      through,
+    });
+    return Object.freeze({
+      fromExclusive,
+      through,
+      events: Object.freeze([]),
+      complete: true,
+      queryDescriptorFingerprint: descriptor.fingerprint,
+      canonicalPathFingerprint,
+      rangeFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+        queryDescriptorFingerprint: descriptor.fingerprint,
+        canonicalPathFingerprint,
+        events: [],
+      }),
+    });
+  }
+
+  finishProof(): void {
+    this.releaseProof?.();
+  }
+
+  async verifyCanonicalSource(): Promise<void> {
+    return;
+  }
+}
+
+async function mutationProofsPrecedeAllDynamicReads(): Promise<void> {
+  const backend = new ProofFirstBackend();
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const swapFamily = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: incrementalFakeCapability(),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+  const protocolFamily = registerBlockScanStateFamily({
+    familyId: "protocol:fixture",
+    lane: "protocol",
+    capability: staticProtocolFixtureCapability(),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "protocol-action",
+  });
+  const familyList = [swapFamily, protocolFamily];
+  const edges = [swapForward, swapReverse, protocol];
+
+  const bootstrap = await coordinator.prepare({
+    graph: incrementalGraph(1, edges),
+    families: familyList,
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  assert.equal(bootstrap.status, "complete");
+  const bootstrapReadCalls = backend.readBatchCalls;
+
+  const next = coordinator.prepare({
+    graph: incrementalGraph(2, [...edges, protocolB]),
+    families: familyList,
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  await backend.proofStarted;
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  assert.equal(
+    backend.readBatchCalls,
+    bootstrapReadCalls,
+    "no family may start current-block reads before all mutation proofs settle",
+  );
+  assert.equal(backend.readBatchCallsWhileProofPending, 0);
+
+  backend.finishProof();
+  const result = await next;
+  assert.equal(result.status, "complete");
+  assert.equal(backend.readBatchCallsWhileProofPending, 0);
+  assert.equal(
+    backend.readBatchCalls,
+    bootstrapReadCalls + 2,
+    "protocol static and dynamic reads both wait while unchanged swap carries",
+  );
+}
+
+async function familyTimeoutDoesNotReleasePhysicalProofBarrier(): Promise<void> {
+  const backend = new ProofFirstBackend();
+  const coordinator = new BlockScanStateCoordinator(backend, {
+    familyTimeoutMs: 25,
+  });
+  const swapFamily = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: incrementalFakeCapability(),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+  const protocolCalls = { schema: 0, reads: 0, derives: 0 };
+  const protocolFamily = registerBlockScanStateFamily({
+    familyId: "protocol:fixture",
+    lane: "protocol",
+    capability: fakeCapability("protocol", protocolCalls),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "protocol-action",
+  });
+  const familyList = [swapFamily, protocolFamily];
+  const edges = [swapForward, swapReverse, protocol];
+
+  const bootstrap = await coordinator.prepare({
+    graph: incrementalGraph(1, edges),
+    families: familyList,
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "startup-bootstrap",
+  });
+  assert.equal(bootstrap.status, "complete");
+  const bootstrapReadCalls = backend.readBatchCalls;
+
+  const next = coordinator.prepare({
+    graph: incrementalGraph(2, edges),
+    families: familyList,
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  await backend.proofStarted;
+  await new Promise<void>((resolve) => setTimeout(resolve, 40));
+  assert.equal(
+    backend.readBatchCalls,
+    bootstrapReadCalls,
+    "family timeout must not release waiters while shared proof transport is active",
+  );
+
+  backend.finishProof();
+  const result = await next;
+  assert.equal(result.status, "degraded");
+  assert.equal(
+    backend.readBatchCalls,
+    bootstrapReadCalls + 1,
+    "healthy direct-only sibling reads after physical proof settlement",
+  );
+  assert.deepEqual(result.snapshot.resolvedFamilyIds, ["protocol:fixture"]);
 }
 
 async function completeAndDeterministic(): Promise<void> {
@@ -2981,6 +3207,8 @@ async function protocolAddressTouchEnabledIsOptInAndFailClosed(): Promise<void> 
   );
 }
 
+await mutationProofsPrecedeAllDynamicReads();
+await familyTimeoutDoesNotReleasePhysicalProofBarrier();
 await completeAndDeterministic();
 await simulationSemanticsParticipateInDedupIdentity();
 await replayResetDropsOnlyDynamicPublication();

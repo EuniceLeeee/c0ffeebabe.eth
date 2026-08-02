@@ -453,6 +453,8 @@ export interface RegisteredBlockScanStateFamilyCompileInput
 export interface RegisteredBlockScanStateFamily {
   readonly familyId: string;
   readonly lane: BlockScanPricingLane;
+  /** Scheduling metadata derived from the capability, never a family allowlist. */
+  readonly hasIncrementalState: boolean;
   readonly addressTouchCarryPolicy: "always-current" | "dependency-touch";
   stateKey(edge: TokenEdge): string;
   ownsEdge(edge: TokenEdge): boolean;
@@ -628,6 +630,7 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
   return Object.freeze({
     familyId,
     lane,
+    hasIncrementalState: capability.incremental !== undefined,
     addressTouchCarryPolicy:
       capability.addressTouchCarryPolicy ?? "always-current",
     stateKey: (edge: TokenEdge) => capability.stateKey(edge),

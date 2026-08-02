@@ -445,6 +445,20 @@ interface ActiveGeneration {
   readonly controller: AbortController;
 }
 
+interface StatePreparationPhaseBarriers {
+  readonly incrementalCompiled: GenerationPhaseBarrier;
+  readonly incrementalProofs: GenerationPhaseBarrier;
+}
+
+interface FamilyPhaseControl {
+  readonly signal: AbortSignal;
+  readonly deadlineAtMs: number;
+  waitAt(
+    barrier: GenerationPhaseBarrier | undefined,
+    participation: "producer" | "waiter",
+  ): Promise<void>;
+}
+
 const MAX_INCREMENTAL_RANGE_BLOCKS = 32;
 // Keep recovery inside the ordinary hot budget; rotate so repeated failures
 // cannot permanently starve later state keys in the same family.
@@ -478,6 +492,42 @@ class FamilyDeadlineAbort extends Error {
       `block-scan state family ${familyId} did not settle within ${timeoutMs}ms`,
     );
     this.name = "FamilyDeadlineAbort";
+  }
+}
+
+/**
+ * One-shot generation-local rendezvous. Every family arrives exactly once;
+ * the generation signal is the only cancellation authority so a local family
+ * timeout cannot strand healthy siblings behind the phase boundary.
+ */
+class GenerationPhaseBarrier {
+  private arrivals = 0;
+  private readonly released: Promise<void>;
+  private readonly release: () => void;
+
+  constructor(private readonly participants: number) {
+    if (!Number.isSafeInteger(participants) || participants < 0) {
+      throw new Error(`invalid state phase participant count ${participants}`);
+    }
+    let release!: () => void;
+    this.released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.release = release;
+    if (participants === 0) this.release();
+  }
+
+  async arriveAndWait(signal: AbortSignal): Promise<void> {
+    this.arrivals++;
+    if (this.arrivals > this.participants) {
+      throw new Error("state phase barrier received duplicate family arrival");
+    }
+    if (this.arrivals === this.participants) this.release();
+    await this.wait(signal);
+  }
+
+  async wait(signal: AbortSignal): Promise<void> {
+    await awaitWithAbort(this.released, signal);
   }
 }
 
@@ -711,14 +761,37 @@ export class BlockScanStateCoordinator {
             : input.deadlineAtMs,
           controller.signal,
         );
+      /*
+       * Incremental schema hydration and canonical mutation proofs are
+       * generation prerequisites, not ordinary current-state reads. Their
+       * producers synchronize across both lanes; direct-only families wait
+       * outside the phase so they neither become global blockers nor saturate
+       * local reth while carry-forward safety is still being proved. The
+       * barriers are capability-driven and contain no family IDs.
+       */
+      const incrementalParticipants = uniqueFamilies([
+        ...laneGroups.swap,
+        ...laneGroups.protocol,
+      ]).filter((family) => family.hasIncrementalState).length;
+      const phaseBarriers: StatePreparationPhaseBarriers = Object.freeze({
+        incrementalCompiled: new GenerationPhaseBarrier(
+          incrementalParticipants,
+        ),
+        incrementalProofs: new GenerationPhaseBarrier(
+          incrementalParticipants,
+        ),
+      });
       const swapRun = this.runLane(
         "swap",
         laneGroups.swap,
         graph,
         familySettleDeadlineAtMs,
+        input.deadlineAtMs,
         controller.signal,
         proofScopedFamilyIds,
         previousCanonicalGraphStateKeys,
+        new Map(),
+        phaseBarriers,
       );
       const protocolAddressTouchPlans =
         this.protocolAddressTouchMode === "enabled"
@@ -734,10 +807,12 @@ export class BlockScanStateCoordinator {
           laneGroups.protocol,
           graph,
           familySettleDeadlineAtMs,
+          input.deadlineAtMs,
           controller.signal,
           proofScopedFamilyIds,
           previousCanonicalGraphStateKeys,
           protocolAddressTouchPlans,
+          phaseBarriers,
         ),
       ]);
       const lanes = [swap, protocol] as const;
@@ -1432,12 +1507,20 @@ export class BlockScanStateCoordinator {
                   through,
                   {
                     deadlineAtMs,
-                    signal,
+                    // The generation owns the shared transport. A family
+                    // timeout may classify that family as incomplete, but it
+                    // must not release the proof phase while reth is still
+                    // executing the underlying canonical range request.
+                    signal: generationSignal,
                     sharedSignal: generationSignal,
                   },
                 ),
-                signal,
+                generationSignal,
               );
+              if (signal.aborted) {
+                throw signal.reason ??
+                  new Error(`family ${family.familyId} proof deadline reached`);
+              }
               const rangeMs = Math.max(
                 0,
                 this.now() - rangeStartedAtMs,
@@ -1554,10 +1637,12 @@ export class BlockScanStateCoordinator {
     groups: readonly StateGroup[],
     graph: VerifiedGraphView,
     deadlineAtMs: number,
+    generationDeadlineAtMs: number,
     signal: AbortSignal,
     proofScopedFamilyIds: ReadonlySet<string>,
     previousCanonicalGraphStateKeys: ReadonlySet<string> | null,
     addressTouchPlans: ReadonlyMap<string, FamilyIncrementalPlan> = new Map(),
+    phaseBarriers?: StatePreparationPhaseBarriers,
   ): Promise<LaneResult> {
     const startedAtMs = this.now();
     if (groups.length === 0) {
@@ -1574,7 +1659,7 @@ export class BlockScanStateCoordinator {
         this.familyTimeoutMs,
         Math.max(0, deadlineAtMs - familyStartedAtMs),
       );
-      const familyDeadlineAtMs = Math.min(
+      let familyDeadlineAtMs = Math.min(
         deadlineAtMs,
         familyStartedAtMs + localBudgetMs,
       );
@@ -1582,17 +1667,56 @@ export class BlockScanStateCoordinator {
         family.familyId,
         localBudgetMs,
       );
-      const deadlineTimer = setTimeout(
-        () => familyController.abort(familyDeadline),
-        Math.max(0, familyDeadlineAtMs - this.now()),
-      );
-      if (familyDeadlineAtMs <= familyStartedAtMs) {
-        familyController.abort(
-          signal.aborted
-            ? signal.reason
-            : familyDeadline,
+      let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+      const armFamilyDeadline = (): void => {
+        if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+        deadlineTimer = undefined;
+        if (familyController.signal.aborted) return;
+        if (familyDeadlineAtMs >= generationDeadlineAtMs) {
+          // The already-armed generation timer owns an equal terminal fence;
+          // avoid turning a generation-wide abort into a family-local result
+          // through timer insertion/rounding order.
+          return;
+        }
+        const remainingMs = familyDeadlineAtMs - this.now();
+        if (remainingMs <= 0) {
+          familyController.abort(
+            signal.aborted ? signal.reason : familyDeadline,
+          );
+          return;
+        }
+        deadlineTimer = setTimeout(
+          () => familyController.abort(familyDeadline),
+          remainingMs,
         );
-      }
+      };
+      armFamilyDeadline();
+      const phaseControl: FamilyPhaseControl = {
+        signal: familyController.signal,
+        get deadlineAtMs() {
+          return familyDeadlineAtMs;
+        },
+        waitAt: async (barrier, participation) => {
+          if (!barrier) return;
+          if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+          deadlineTimer = undefined;
+          const pausedAtMs = this.now();
+          try {
+            if (participation === "producer") {
+              await barrier.arriveAndWait(signal);
+            } else {
+              await barrier.wait(signal);
+            }
+          } finally {
+            const resumedAtMs = this.now();
+            familyDeadlineAtMs = Math.min(
+              deadlineAtMs,
+              familyDeadlineAtMs + Math.max(0, resumedAtMs - pausedAtMs),
+            );
+            armFamilyDeadline();
+          }
+        },
+      };
 
       /*
        * A family owns this staging map until its complete lane result wins the
@@ -1614,13 +1738,13 @@ export class BlockScanStateCoordinator {
         lane,
         familyGroups,
         graph,
-        familyDeadlineAtMs,
-        familyController.signal,
+        phaseControl,
         signal,
         staging,
         proofScopedFamilyIds.has(family.familyId),
         previousCanonicalGraphStateKeys,
         addressTouchPlans.get(family.familyId),
+        phaseBarriers,
       );
       try {
         /*
@@ -1648,7 +1772,7 @@ export class BlockScanStateCoordinator {
           error,
         );
       } finally {
-        clearTimeout(deadlineTimer);
+        if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
         detachParent();
         familyRun.catch(() => undefined);
       }
@@ -1668,21 +1792,35 @@ export class BlockScanStateCoordinator {
     lane: BlockScanPricingLane,
     groups: readonly StateGroup[],
     graph: VerifiedGraphView,
-    deadlineAtMs: number,
-    signal: AbortSignal,
+    phaseControl: FamilyPhaseControl,
     generationSignal: AbortSignal,
     staging: FamilyLaneStaging,
     proofScoped: boolean,
     previousCanonicalGraphStateKeys: ReadonlySet<string> | null,
     addressTouchPlan?: FamilyIncrementalPlan,
+    phaseBarriers?: StatePreparationPhaseBarriers,
   ): Promise<LaneResult> {
     const startedAtMs = this.now();
+    const signal = phaseControl.signal;
     if (groups.length === 0) {
       return emptyLane(lane, startedAtMs, this.now());
     }
     const familyId = groups[0]?.familyId;
     if (!familyId) {
       throw new Error("non-empty family lane has no familyId");
+    }
+    const family = groups[0]!.family;
+    if (!family.hasIncrementalState) {
+      /*
+       * Direct-only families are waiters, not proof-phase participants. Delay
+       * even their cache-miss static reads until every incremental producer
+       * has settled, so a newly discovered protocol instance cannot block or
+       * compete with the swap mutation proof.
+       */
+      await phaseControl.waitAt(
+        phaseBarriers?.incrementalProofs,
+        "waiter",
+      );
     }
     let recoveryCandidateStateKeys = new Set<string>();
     const issues: BlockScanStateIssue[] = [];
@@ -1705,7 +1843,7 @@ export class BlockScanStateCoordinator {
           const compiled = await awaitWithAbort(
             (cached?.recompile ?? family.compile)({
               edges: Object.freeze(familyEdges),
-              deadlineAtMs,
+              deadlineAtMs: phaseControl.deadlineAtMs,
               signal,
               sourceBlock: graph.sourceBlock,
               sourceBlockHash: graph.sourceBlockHash,
@@ -1730,7 +1868,7 @@ export class BlockScanStateCoordinator {
                       sourceBlock: graph.sourceBlock,
                       sourceBlockHash: graph.sourceBlockHash,
                       sourceGeneration: graph.generation,
-                      deadlineAtMs,
+                      deadlineAtMs: phaseControl.deadlineAtMs,
                       signal,
                     },
                   ),
@@ -1786,45 +1924,67 @@ export class BlockScanStateCoordinator {
         message: formatError(error),
       });
     }
-    if (compiledFamilies.get(familyId)?.incremental) {
-      recoveryCandidateStateKeys = new Set(
-        groups.flatMap((group) => {
-          const base = this.recoveryBaseForGroup(group);
-          const previouslyEstablished =
-            previousCanonicalGraphStateKeys?.has(group.stateKey) ?? false;
-          const newlyAdmitted =
-            previousCanonicalGraphStateKeys !== null &&
-            !previouslyEstablished;
-          return (
-              base &&
-                graph.sourceBlock - base.state.source.number >
-                  MAX_INCREMENTAL_RANGE_BLOCKS
-            ) || (previouslyEstablished && !base) || newlyAdmitted
-            ? [group.stateKey]
-            : [];
-        }),
+    if (family.hasIncrementalState) {
+      await phaseControl.waitAt(
+        phaseBarriers?.incrementalCompiled,
+        "producer",
       );
-      staging.recoveryRequiredStateKeys =
-        recoveryCandidateStateKeys.size > 0
-          ? recoveryCandidateStateKeys.size
-          : undefined;
     }
-    const hotRecoveryStateKeys = this.selectHotRecoveryStateKeys(
-      familyId,
-      recoveryCandidateStateKeys,
-    );
-    const incrementalPreparation = await this.prepareIncrementalPlans(
-      proofScoped
-        ? groups.filter((group) =>
-            previousCanonicalGraphStateKeys?.has(group.stateKey) ?? false
-          )
-        : groups,
-      compiledFamilies,
-      graph,
-      deadlineAtMs,
-      signal,
-      generationSignal,
-    );
+    let hotRecoveryStateKeys: ReadonlySet<string> = new Set<string>();
+    let incrementalPreparation: IncrementalPreparation;
+    try {
+      if (compiledFamilies.get(familyId)?.incremental) {
+        recoveryCandidateStateKeys = new Set(
+          groups.flatMap((group) => {
+            const base = this.recoveryBaseForGroup(group);
+            const previouslyEstablished =
+              previousCanonicalGraphStateKeys?.has(group.stateKey) ?? false;
+            const newlyAdmitted =
+              previousCanonicalGraphStateKeys !== null &&
+              !previouslyEstablished;
+            return (
+                base &&
+                  graph.sourceBlock - base.state.source.number >
+                    MAX_INCREMENTAL_RANGE_BLOCKS
+              ) || (previouslyEstablished && !base) || newlyAdmitted
+              ? [group.stateKey]
+              : [];
+          }),
+        );
+        staging.recoveryRequiredStateKeys =
+          recoveryCandidateStateKeys.size > 0
+            ? recoveryCandidateStateKeys.size
+            : undefined;
+      }
+      hotRecoveryStateKeys = this.selectHotRecoveryStateKeys(
+        familyId,
+        recoveryCandidateStateKeys,
+      );
+      incrementalPreparation = await this.prepareIncrementalPlans(
+        proofScoped
+          ? groups.filter((group) =>
+              previousCanonicalGraphStateKeys?.has(group.stateKey) ?? false
+            )
+          : groups,
+        compiledFamilies,
+        graph,
+        phaseControl.deadlineAtMs,
+        signal,
+        generationSignal,
+      );
+    } finally {
+      /*
+       * Arrival belongs in finally: a family-local proof failure must release
+       * healthy siblings into the dynamic-read phase, while a generation
+       * abort still rejects every waiter and prevents late publication.
+       */
+      if (family.hasIncrementalState) {
+        await phaseControl.waitAt(
+          phaseBarriers?.incrementalProofs,
+          "producer",
+        );
+      }
+    }
     const incrementalPlans = incrementalPreparation.plans;
     if (addressTouchPlan && !incrementalPlans.has(familyId)) {
       incrementalPlans.set(familyId, addressTouchPlan);
@@ -2138,7 +2298,7 @@ export class BlockScanStateCoordinator {
               sourceBlock: graph.sourceBlock,
               sourceBlockHash: graph.sourceBlockHash,
               sourceGeneration: graph.generation,
-              deadlineAtMs,
+              deadlineAtMs: phaseControl.deadlineAtMs,
               signal,
             },
           ),
