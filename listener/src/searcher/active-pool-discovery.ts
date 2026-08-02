@@ -62,6 +62,12 @@ interface FactoryDef {
   parsePool: (log: { data: string; topics: string[] }) => string;
 }
 
+interface FactoryDiscoveryLog {
+  readonly address: string;
+  readonly data: string;
+  readonly topics: string[];
+}
+
 const FACTORIES: FactoryDef[] = factoryDiscoverySourcesForPoolAdapters(
   PRODUCTION_ADAPTER_FAMILIES.matureDexUniversePoolAdapters(),
 ).flatMap((identity) => {
@@ -105,42 +111,57 @@ export async function indexFactoryPools(
   );
   const fromBlock = Math.max(0, latest - blocksBack);
   const pools: PoolEntry[] = [];
+  const logsByFactory = new Map<string, FactoryDiscoveryLog[]>();
+  const factoryByAddress = new Map(
+    FACTORIES.map((factory) => [factory.address.toLowerCase(), factory] as const),
+  );
+
+  /*
+   * Every registered factory is scanned over the same canonical range. One
+   * address/topic union preserves that exact source coverage while avoiding a
+   * serial eth_getLogs round trip per factory. Bucket by emitting address and
+   * replay FACTORIES order below so the returned registry remains stable.
+   */
+  for (let start = fromBlock; start <= latest; start += FACTORY_LOG_BATCH) {
+    throwIfDexDiscoveryCancelled(options.control);
+    const end = Math.min(start + FACTORY_LOG_BATCH - 1, latest);
+    const logs = options.strict
+      ? await sendDexDiscoveryRpc<FactoryDiscoveryLog[]>(
+          provider,
+          "eth_getLogs",
+          [factoryUnionLogFilter(start, end)],
+          options.control,
+        )
+      : await getFactoryLogs(provider, start, end, options.control);
+    for (const log of logs) {
+      const factory = factoryByAddress.get(log.address.toLowerCase());
+      if (
+        !factory ||
+        log.topics[0]?.toLowerCase() !== factory.topic.toLowerCase()
+      ) continue;
+      const key = factory.address.toLowerCase();
+      const bucket = logsByFactory.get(key) ?? [];
+      bucket.push(log);
+      logsByFactory.set(key, bucket);
+    }
+  }
 
   for (const factory of FACTORIES) {
-    throwIfDexDiscoveryCancelled(options.control);
     let count = 0;
-    for (let start = fromBlock; start <= latest; start += FACTORY_LOG_BATCH) {
-      throwIfDexDiscoveryCancelled(options.control);
-      const end = Math.min(start + FACTORY_LOG_BATCH - 1, latest);
-      const logs = options.strict
-        ? await sendDexDiscoveryRpc<Array<{ data: string; topics: string[] }>>(
-            provider,
-            "eth_getLogs",
-            [factoryLogFilter(factory, start, end)],
-            options.control,
-          )
-        : await getFactoryLogs(
-            provider,
-            factory,
-            start,
-            end,
-            options.control,
-          );
-      for (const log of logs) {
-        try {
-          // score 0: factory pools are prunable (not curated backbone), ranked
-          // below swap-active pools but still above nothing.
-          pools.push({
-            address: factory.parsePool(log),
-            adapter: factory.adapter,
-            venueId: factory.venueId,
-            factory: ethers.getAddress(factory.address),
-            identitySource: "factory-event",
-            score: 0,
-          });
-          count++;
-        } catch { /* skip malformed */ }
-      }
+    for (const log of logsByFactory.get(factory.address.toLowerCase()) ?? []) {
+      try {
+        // score 0: factory pools are prunable (not curated backbone), ranked
+        // below swap-active pools but still above nothing.
+        pools.push({
+          address: factory.parsePool(log),
+          adapter: factory.adapter,
+          venueId: factory.venueId,
+          factory: ethers.getAddress(factory.address),
+          identitySource: "factory-event",
+          score: 0,
+        });
+        count++;
+      } catch { /* skip malformed */ }
     }
     console.log(`[discovery] ${factory.adapter} factory (${factory.address.slice(0, 10)}): ${count} new pools in last ${blocksBack} blocks`);
   }
@@ -150,39 +171,57 @@ export async function indexFactoryPools(
 
 async function getFactoryLogs(
   provider: ethers.JsonRpcProvider,
-  factory: FactoryDef,
   from: number,
   to: number,
   control?: DexDiscoveryReadControl,
-): Promise<Array<{ data: string; topics: string[] }>> {
+): Promise<FactoryDiscoveryLog[]> {
   try {
     return await sendDexDiscoveryRpc(
       provider,
       "eth_getLogs",
-      [factoryLogFilter(factory, from, to)],
+      [factoryUnionLogFilter(from, to)],
       control,
     );
   } catch (error) {
     if (isDexDiscoveryCancellationError(error)) throw error;
     throwIfDexDiscoveryCancelled(control, error);
     // Range too large — split into smaller chunks
-    const results: Array<{ data: string; topics: string[] }> = [];
+    const results: FactoryDiscoveryLog[] = [];
     for (let s = from; s <= to; s += 1000) {
       throwIfDexDiscoveryCancelled(control);
       const e = Math.min(s + 999, to);
       try {
-        results.push(...await sendDexDiscoveryRpc<
-          Array<{ data: string; topics: string[] }>
-        >(
+        results.push(...await sendDexDiscoveryRpc<FactoryDiscoveryLog[]>(
           provider,
           "eth_getLogs",
-          [factoryLogFilter(factory, s, e)],
+          [factoryUnionLogFilter(s, e)],
           control,
         ));
       } catch (chunkError) {
         if (isDexDiscoveryCancellationError(chunkError)) throw chunkError;
         throwIfDexDiscoveryCancelled(control, chunkError);
-        // Non-strict discovery retains the legacy best-effort behavior.
+        /*
+         * Some providers reject a large address/topic OR even over a short
+         * range. Preserve the old per-factory best-effort coverage as the
+         * final fallback instead of dropping every factory in this chunk.
+         */
+        for (const factory of FACTORIES) {
+          throwIfDexDiscoveryCancelled(control);
+          try {
+            results.push(...await sendDexDiscoveryRpc<FactoryDiscoveryLog[]>(
+              provider,
+              "eth_getLogs",
+              [factoryLogFilter(factory, s, e)],
+              control,
+            ));
+          } catch (factoryError) {
+            if (isDexDiscoveryCancellationError(factoryError)) {
+              throw factoryError;
+            }
+            throwIfDexDiscoveryCancelled(control, factoryError);
+            // Non-strict discovery retains the legacy best-effort behavior.
+          }
+        }
       }
     }
     return results;
@@ -199,6 +238,18 @@ function factoryLogFilter(
     fromBlock: ethers.toQuantity(fromBlock),
     toBlock: ethers.toQuantity(toBlock),
     topics: [factory.topic],
+  };
+}
+
+function factoryUnionLogFilter(
+  fromBlock: number,
+  toBlock: number,
+): Record<string, unknown> {
+  return {
+    address: FACTORIES.map((factory) => factory.address),
+    fromBlock: ethers.toQuantity(fromBlock),
+    toBlock: ethers.toQuantity(toBlock),
+    topics: [[...new Set(FACTORIES.map((factory) => factory.topic))]],
   };
 }
 

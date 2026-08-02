@@ -105,10 +105,15 @@ const BALANCER_V3_SWAP_TOPIC = ethers.id(
   "Swap(address,address,address,uint256,uint256,uint256,uint256)",
 );
 const V2_PAIR_CREATED_TOPIC = ethers.id("PairCreated(address,address,address,uint256)");
+const V3_POOL_CREATED_TOPIC = ethers.id(
+  "PoolCreated(address,address,uint24,int24,address)",
+);
+const UNRELATED_FACTORY_TOPIC = ethers.id("UnrelatedFactoryEvent(address)");
 
 class FakeProvider {
   readonly factoryCalls: string[] = [];
   readonly factoryIndexCalls: string[] = [];
+  factoryIndexRequestCount = 0;
   readonly curveCalls: string[] = [];
   readonly factories = new Map<string, string>([
     [UNI_PAIR.toLowerCase(), UNIV2_FACTORY],
@@ -129,13 +134,18 @@ class FakeProvider {
     [UNKNOWN_FACTORY.toLowerCase(), UNKNOWN_PAIR],
   ]);
 
+  constructor(private readonly rejectFactoryUnion = false) {}
+
   async getBlockNumber(): Promise<number> {
     throw new Error("pinned test must not query the head");
   }
 
   async send(
     method: string,
-    args: Array<{ address?: string; topics?: string[] }>,
+    args: Array<{
+      address?: string | string[];
+      topics?: Array<string | string[]>;
+    }>,
   ): Promise<Array<{
     address: string;
     data?: string;
@@ -143,21 +153,68 @@ class FakeProvider {
     blockNumber?: string;
   }>> {
     assert(method === "eth_getLogs", `unexpected RPC method ${method}`);
-    const requestAddress = args[0]?.address?.toLowerCase();
-    const topic = args[0]?.topics?.[0]?.toLowerCase();
-    if (topic === V2_PAIR_CREATED_TOPIC.toLowerCase() && requestAddress) {
-      this.factoryIndexCalls.push(requestAddress);
-      if (requestAddress !== PANCAKE_V2_FACTORY.toLowerCase()) return [];
-      return [{
-        address: PANCAKE_V2_FACTORY,
-        data: ethers.AbiCoder.defaultAbiCoder().encode(
-          ["address", "uint256"],
-          [PANCAKE_V2_PAIR, 1n],
-        ),
-        topics: [V2_PAIR_CREATED_TOPIC],
-      }];
+    const requestedAddresses = (Array.isArray(args[0]?.address)
+      ? args[0].address
+      : args[0]?.address === undefined
+        ? []
+        : [args[0].address]
+    ).map((address) => address.toLowerCase());
+    const topic0 = args[0]?.topics?.[0];
+    const requestedTopics = (Array.isArray(topic0)
+      ? topic0
+      : topic0 === undefined
+        ? []
+        : [topic0]
+    ).map((topic) => topic.toLowerCase());
+    const factoryDiscoveryRequest = requestedTopics.some((topic) =>
+      topic === V2_PAIR_CREATED_TOPIC.toLowerCase() ||
+      topic === V3_POOL_CREATED_TOPIC.toLowerCase()
+    );
+    if (factoryDiscoveryRequest) {
+      this.factoryIndexRequestCount++;
+      this.factoryIndexCalls.push(...requestedAddresses);
+      if (this.rejectFactoryUnion && requestedAddresses.length > 1) {
+        throw new Error("provider rejects multi-address log filters");
+      }
+      const logs: Array<{ address: string; data: string; topics: string[] }> = [];
+      const encodedPair = ethers.AbiCoder.defaultAbiCoder().encode(
+        ["address", "uint256"],
+        [PANCAKE_V2_PAIR, 1n],
+      );
+      if (
+        requestedAddresses.includes(PANCAKE_V2_FACTORY.toLowerCase()) &&
+        requestedTopics.includes(V2_PAIR_CREATED_TOPIC.toLowerCase())
+      ) {
+        logs.push({
+          address: PANCAKE_V2_FACTORY,
+          data: encodedPair,
+          topics: [V2_PAIR_CREATED_TOPIC],
+        }, {
+          address: UNKNOWN_FACTORY,
+          data: encodedPair,
+          topics: [V2_PAIR_CREATED_TOPIC],
+        }, {
+          address: PANCAKE_V2_FACTORY,
+          data: encodedPair,
+          topics: [UNRELATED_FACTORY_TOPIC],
+        });
+      }
+      if (
+        requestedAddresses.includes(REPLAYED_V3_FORK_FACTORY.toLowerCase()) &&
+        requestedTopics.includes(V3_POOL_CREATED_TOPIC.toLowerCase())
+      ) {
+        logs.push({
+          address: REPLAYED_V3_FORK_FACTORY,
+          data: ethers.AbiCoder.defaultAbiCoder().encode(
+            ["int24", "address"],
+            [60, V3_FORK_POOL],
+          ),
+          topics: [V3_POOL_CREATED_TOPIC],
+        });
+      }
+      return logs;
     }
-    if (topic === V2_SWAP_TOPIC.toLowerCase()) {
+    if (requestedTopics.includes(V2_SWAP_TOPIC.toLowerCase())) {
       return [UNI_PAIR, UNI_PAIR, SUSHI_PAIR, PANORAMA_POOL, UNKNOWN_PAIR]
         .map((address) => ({
           address,
@@ -166,7 +223,7 @@ class FakeProvider {
           blockNumber: "0x3e8",
         }));
     }
-    if (topic === V3_SWAP_TOPIC.toLowerCase()) {
+    if (requestedTopics.includes(V3_SWAP_TOPIC.toLowerCase())) {
       return [{
         address: V3_FORK_POOL,
         topics: [V3_SWAP_TOPIC],
@@ -174,7 +231,7 @@ class FakeProvider {
         blockNumber: "0x3e8",
       }];
     }
-    if (topic === CURVE_SWAP_TOPIC.toLowerCase()) {
+    if (requestedTopics.includes(CURVE_SWAP_TOPIC.toLowerCase())) {
       return [CURVE_POOL, UNREGISTERED_CURVE_POOL].map((address) => ({
         address,
         topics: [CURVE_SWAP_TOPIC],
@@ -182,7 +239,7 @@ class FakeProvider {
         blockNumber: "0x3e8",
       }));
     }
-    if (topic === BALANCER_V3_SWAP_TOPIC.toLowerCase()) {
+    if (requestedTopics.includes(BALANCER_V3_SWAP_TOPIC.toLowerCase())) {
       return [{
         address: ADDR.BALANCER_V3_VAULT,
         topics: [
@@ -428,6 +485,10 @@ async function testV2LineageDescriptor(): Promise<void> {
   const indexed = await indexFactoryPools(provider as never, 1, 1_000);
   const pancakePool = indexed.find((pool) => pool.address === PANCAKE_V2_PAIR);
   assert(pancakePool?.adapter === "univ2", "Pancake V2 factory pool execution adapter");
+  assert(
+    indexed.filter((pool) => pool.address === PANCAKE_V2_PAIR).length === 1,
+    "unknown factories and wrong topics must fail closed",
+  );
   assert(pancakePool.venueId === "pancake-v2", "Pancake V2 factory pool venue identity");
   assert(
     pancakePool.factory?.toLowerCase() === PANCAKE_V2_FACTORY.toLowerCase(),
@@ -436,6 +497,32 @@ async function testV2LineageDescriptor(): Promise<void> {
   assert(
     provider.factoryIndexCalls.includes(PANCAKE_V2_FACTORY.toLowerCase()),
     "Pancake V2 factory must enter factory indexing",
+  );
+  assert(
+    provider.factoryIndexRequestCount === 1,
+    "all registered factories must share one log query per source batch",
+  );
+  const indexedV3 = indexed.find((pool) => pool.address === V3_FORK_POOL);
+  assert(indexedV3?.adapter === "univ3", "union factory query must retain V3 pools");
+  assert(
+    indexed.indexOf(pancakePool) < indexed.indexOf(indexedV3),
+    "union factory results must retain deterministic family order",
+  );
+
+  const fallbackProvider = new FakeProvider(true);
+  const fallbackIndexed = await indexFactoryPools(
+    fallbackProvider as never,
+    1,
+    1_000,
+  );
+  assert(
+    fallbackIndexed.some((pool) => pool.address === PANCAKE_V2_PAIR) &&
+      fallbackIndexed.some((pool) => pool.address === V3_FORK_POOL),
+    "rejected union filters must fall back without losing V2 or V3 pools",
+  );
+  assert(
+    fallbackProvider.factoryIndexRequestCount > 2,
+    "union fallback must retry individual factories",
   );
   const unmeasured = await resolvePoolIdentity(
     provider,
