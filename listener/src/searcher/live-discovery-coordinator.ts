@@ -1008,7 +1008,7 @@ export async function createLiveDiscoveryCoordinator(
     readonly baseProtocolFingerprint: string | null;
     readonly dex: DexDiscoveryStage | null;
     readonly protocol: ActiveProtocolDiscoveryStage;
-    readonly stagedProtocolCache: ProtocolDiscoveryEvidenceCache;
+    readonly stagedProtocolCache: ProtocolDiscoveryEvidenceCache | null;
   };
   const prepareCombinedDiscoveryTransition = async (
     base: LiveDiscoveryPublicationState,
@@ -1092,71 +1092,90 @@ export async function createLiveDiscoveryCoordinator(
             input.mode === "hot" ? "bounded" : "complete",
         });
 
-    const stagedStrategyViews =
-      dex?.projection?.strategyViews ?? base.strategyViews;
-    const stagedBackrunGraph =
-      dex?.projection?.backrunGraph ?? base.backrunGraph;
-    const stagedBlockscanGraph =
-      dex?.projection?.blockscanGraph ?? base.blockscanGraph;
-    const stagedKnownPoolKeys =
-      dex?.projection?.knownPoolKeys ?? base.knownPoolKeys;
-    const stagedProtocolCache = cloneProtocolDiscoveryEvidenceCache(
-      base.protocolEvidenceCache,
-    );
-    const publicationProtocolBase = protocolDiscoveryBaseFromPublication(
-      base,
-      {
-        strategyViews: stagedStrategyViews,
-        backrunGraph: stagedBackrunGraph,
-        blockscanGraph: stagedBlockscanGraph,
-        knownPoolKeys: stagedKnownPoolKeys,
-      },
-      stagedProtocolCache,
-    );
-    const protocolBase = publicationProtocolBase;
-    const observedRange =
-      protocolDiscoveryCoverage.hasObservedSource()
-        ? planContiguousDiscoveryChunk(
-            protocolBase.lastObservedBlock,
-            input.through,
-            protocolDiscoveryMaxCatchupBlocks,
-          )
-        : null;
-    const protocolSourceBehind = [
-      ...base.protocolFamilySourceCoverage.values(),
-    ].some((anchor) =>
-      anchor.completeThroughBlock < input.source.number
-    );
-    const addressOnlyRetryRange =
-      observedRange === null && protocolSourceBehind
-        ? {
-            fromBlock: Math.max(0, protocolBase.lastObservedBlock),
-            toBlock: Math.max(0, protocolBase.lastObservedBlock),
-          }
-        : null;
-    // Current-head DEX discovery is the block-scan hot gate. Protocol
-    // receipt/trace/address probing belongs to the independent background and
-    // observed-receipt lanes; awaiting it here lets one slow protocol family
-    // consume the entire DEX pass deadline.
-    const protocol = await prepareActiveProtocolDiscoveryStage(
-      input.source.number,
-      protocolBase,
-      input.mode === "dex-backfill"
-        ? { scanRange: null }
-        : {
-            scanRange: protocolDiscoveryRangeForLane({
-              mode: input.mode === "hot" ? "hot" : "backfill",
-              observedRange,
-              addressOnlyRetryRange,
-            }),
-            ...(input.mode === "hot"
-              ? {}
-              : {
-                  control: rpcControl,
-                  traceMemo: createProtocolTraceMemo(),
-                }),
-          },
-    );
+    let stagedProtocolCache: ProtocolDiscoveryEvidenceCache | null = null;
+    let protocol: ActiveProtocolDiscoveryStage;
+    if (input.mode !== "protocol-backfill") {
+      const familyWatermarks = new Map(
+        [...base.protocolFamilySourceCoverage].map(([key, anchor]) => [
+          key,
+          anchor.completeThroughBlock,
+        ]),
+      );
+      const graphCompleteThrough = protocolDiscoveryCoverage
+        .graphCompleteThrough(familyWatermarks);
+      protocol = {
+        pass: null,
+        scanRange: null,
+        scanRangeHash: null,
+        latestProtocolBlock: input.source.number,
+        nextLastProtocolDiscoveryBlock:
+          base.protocolObservedCursor.completeThroughBlock,
+        nextLastProtocolDiscoveryBlockHash:
+          base.protocolObservedCursor.completeThroughHash,
+        nextProtocolGraphCompleteThrough: graphCompleteThrough,
+        nextProtocolFamilyGraphCompleteThrough: familyWatermarks,
+        completedProtocolFamilySourceKeys: new Set<string>(),
+        complete: graphCompleteThrough >= input.source.number,
+      };
+    } else {
+      const stagedStrategyViews =
+        dex?.projection?.strategyViews ?? base.strategyViews;
+      const stagedBackrunGraph =
+        dex?.projection?.backrunGraph ?? base.backrunGraph;
+      const stagedBlockscanGraph =
+        dex?.projection?.blockscanGraph ?? base.blockscanGraph;
+      const stagedKnownPoolKeys =
+        dex?.projection?.knownPoolKeys ?? base.knownPoolKeys;
+      stagedProtocolCache = cloneProtocolDiscoveryEvidenceCache(
+        base.protocolEvidenceCache,
+      );
+      const protocolBase = protocolDiscoveryBaseFromPublication(
+        base,
+        {
+          strategyViews: stagedStrategyViews,
+          backrunGraph: stagedBackrunGraph,
+          blockscanGraph: stagedBlockscanGraph,
+          knownPoolKeys: stagedKnownPoolKeys,
+        },
+        stagedProtocolCache,
+      );
+      const observedRange =
+        protocolDiscoveryCoverage.hasObservedSource()
+          ? planContiguousDiscoveryChunk(
+              protocolBase.lastObservedBlock,
+              input.through,
+              protocolDiscoveryMaxCatchupBlocks,
+            )
+          : null;
+      const protocolSourceBehind = [
+        ...base.protocolFamilySourceCoverage.values(),
+      ].some((anchor) =>
+        anchor.completeThroughBlock < input.source.number
+      );
+      const addressOnlyRetryRange =
+        observedRange === null && protocolSourceBehind
+          ? {
+              fromBlock: Math.max(0, protocolBase.lastObservedBlock),
+              toBlock: Math.max(0, protocolBase.lastObservedBlock),
+            }
+          : null;
+      // Protocol receipt/trace/address probing belongs only to this background
+      // lane. Hot and DEX-backfill transitions inherit the last published
+      // protocol state without rebuilding its cache or graph projections.
+      protocol = await prepareActiveProtocolDiscoveryStage(
+        input.source.number,
+        protocolBase,
+        {
+          scanRange: protocolDiscoveryRangeForLane({
+            mode: "backfill",
+            observedRange,
+            addressOnlyRetryRange,
+          }),
+          control: rpcControl,
+          traceMemo: createProtocolTraceMemo(),
+        },
+      );
+    }
     const canonicalAfter = await readDexDiscoveryBlockHash(
       provider,
       input.source.number,
@@ -1203,6 +1222,11 @@ export async function createLiveDiscoveryCoordinator(
     if (prepared.mode !== "protocol-backfill") {
       throw new Error(
         "combined discovery validator requires a protocol-backfill transition",
+      );
+    }
+    if (prepared.stagedProtocolCache === null) {
+      throw new Error(
+        "protocol transition is missing its staged evidence cache",
       );
     }
     const dex = prepared.dex;
