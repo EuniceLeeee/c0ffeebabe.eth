@@ -457,6 +457,7 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly blockScanConfig: BlockScanCoreConfig | undefined;
   readonly executionWorkers: readonly BlockScanExecutionWorker[];
   readonly runtimeAbort: AbortController;
+  runRethForeground<T>(work: () => Promise<T>): Promise<T>;
   readonly sharedPlanner: Pick<TemplatePlanner, "setFlashLiquidity">;
   readonly backrunStatePublisher: Pick<
     BufferedBlockScanBackrunStatePublisher,
@@ -888,18 +889,20 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       ),
     );
     let result: BlockScanStatePrepareResult | null = null;
-    const task = input.coordinator.prepareCoarsePricing({
-      graph: input.graph,
-      deadlineAtMs,
-      /*
-       * Family-local deadlines must settle before the generation deadline.
-       * Otherwise the outer abort wins the same instant as a slow family,
-       * erases healthy sibling results and leaves no time for canonical CAS.
-       */
-      familySettleDeadlineAtMs,
-      laggingTopologyRefreshMode: "proof-scoped",
-      signal: this.deps.runtimeAbort.signal,
-    }).then((prepared) => {
+    const task = this.deps.runRethForeground(() =>
+      input.coordinator.prepareCoarsePricing({
+        graph: input.graph,
+        deadlineAtMs,
+        /*
+         * Family-local deadlines must settle before the generation deadline.
+         * Otherwise the outer abort wins the same instant as a slow family,
+         * erases healthy sibling results and leaves no time for canonical CAS.
+         */
+        familySettleDeadlineAtMs,
+        laggingTopologyRefreshMode: "proof-scoped",
+        signal: this.deps.runtimeAbort.signal,
+      })
+    ).then((prepared) => {
       result = prepared;
       const recoveryPending = blockScanStateHasRecoveryBacklog(
         prepared,

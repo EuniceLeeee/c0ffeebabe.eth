@@ -2438,6 +2438,8 @@ async function main(): Promise<void> {
     blockScanConfig: blockScanCfg,
     executionWorkers: blockScanExecutionWorkers,
     runtimeAbort: blockScanRuntimeAbort,
+    runRethForeground: (work) =>
+      liveRethReadPriority.runForeground(work),
     sharedPlanner: planner,
     backrunStatePublisher,
     routeTelemetry: blockScanRouteTelemetry,

@@ -1,4 +1,5 @@
 type CriticalWork<T> = () => Promise<T>;
+type ForegroundWork<T> = () => Promise<T>;
 type BackgroundWork<T> = (signal: AbortSignal) => Promise<T>;
 
 interface ActiveBackgroundAttempt {
@@ -16,16 +17,32 @@ type BackgroundOutcome<T> =
  * Gives current-block reth reads priority over retry-safe background RPCs.
  *
  * Background work must be one idempotent RPC attempt and must pass the
- * supplied signal to its transport. A critical request aborts and drains all
- * active background attempts before it starts. Internally preempted attempts
- * retry after the complete critical queue drains; caller cancellation never
+ * supplied signal to its transport. Foreground leases may overlap each other;
+ * critical work remains serial. Either kind aborts and drains active
+ * background attempts before it starts. Internally preempted attempts retry
+ * after every foreground/critical lease drains; caller cancellation never
  * retries.
  */
 export class LiveRethReadPriority {
   private readonly activeBackground = new Set<ActiveBackgroundAttempt>();
   private readonly backgroundWaiters = new Set<() => void>();
+  private foregroundCount = 0;
   private criticalCount = 0;
   private criticalTail: Promise<void> = Promise.resolve();
+
+  async runForeground<T>(work: ForegroundWork<T>): Promise<T> {
+    this.foregroundCount++;
+
+    try {
+      await this.preemptBackground();
+      return await work();
+    } finally {
+      this.foregroundCount--;
+      if (this.foregroundCount === 0 && this.criticalCount === 0) {
+        this.releaseBackgroundWaiters();
+      }
+    }
+  }
 
   async runCritical<T>(work: CriticalWork<T>): Promise<T> {
     this.criticalCount++;
@@ -37,20 +54,16 @@ export class LiveRethReadPriority {
     });
     this.criticalTail = previous.then(() => turn);
 
-    const active = [...this.activeBackground];
-    for (const attempt of active) {
-      attempt.preempted = true;
-      attempt.controller.abort(new LiveRethBackgroundPreempted());
-    }
-
     try {
-      await Promise.allSettled(active.map((attempt) => attempt.settled));
+      await this.preemptBackground();
       await previous;
       return await work();
     } finally {
       release();
       this.criticalCount--;
-      if (this.criticalCount === 0) this.releaseBackgroundWaiters();
+      if (this.foregroundCount === 0 && this.criticalCount === 0) {
+        this.releaseBackgroundWaiters();
+      }
     }
   }
 
@@ -59,13 +72,13 @@ export class LiveRethReadPriority {
     parentSignal?: AbortSignal,
   ): Promise<T> {
     for (;;) {
-      await this.waitForCriticalQueue(parentSignal);
+      await this.waitForForegroundQueue(parentSignal);
       throwIfAborted(parentSignal);
       // `await` always yields, even when no critical work existed when the
       // wait began. A critical request may announce itself in that gap before
       // this attempt is registered and therefore cannot abort it. Recheck in
       // the same synchronous turn that registers the attempt.
-      if (this.criticalCount > 0) continue;
+      if (this.foregroundCount > 0 || this.criticalCount > 0) continue;
 
       const controller = new AbortController();
       const attempt: ActiveBackgroundAttempt = {
@@ -108,9 +121,11 @@ export class LiveRethReadPriority {
     }
   }
 
-  private waitForCriticalQueue(parentSignal?: AbortSignal): Promise<void> {
+  private waitForForegroundQueue(parentSignal?: AbortSignal): Promise<void> {
     throwIfAborted(parentSignal);
-    if (this.criticalCount === 0) return Promise.resolve();
+    if (this.foregroundCount === 0 && this.criticalCount === 0) {
+      return Promise.resolve();
+    }
 
     return new Promise<void>((resolve, reject) => {
       let done = false;
@@ -130,12 +145,23 @@ export class LiveRethReadPriority {
       // Close the registration race if the last critical turn completed while
       // this waiter was being installed.
       if (parentSignal?.aborted) onAborted();
-      else if (this.criticalCount === 0) onReleased();
+      else if (this.foregroundCount === 0 && this.criticalCount === 0) {
+        onReleased();
+      }
     });
   }
 
   private releaseBackgroundWaiters(): void {
     for (const release of [...this.backgroundWaiters]) release();
+  }
+
+  private async preemptBackground(): Promise<void> {
+    const active = [...this.activeBackground];
+    for (const attempt of active) {
+      attempt.preempted = true;
+      attempt.controller.abort(new LiveRethBackgroundPreempted());
+    }
+    await Promise.allSettled(active.map((attempt) => attempt.settled));
   }
 }
 

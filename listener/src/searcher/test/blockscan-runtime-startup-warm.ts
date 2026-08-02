@@ -1704,6 +1704,7 @@ function createHarness(
   const coarsePricingLaggingTopologyModes:
     BlockScanLaggingTopologyRefreshMode[] = [];
   let coarsePricingCalls = 0;
+  let rethForegroundDepth = 0;
   const exactContextBlocks: number[] = [];
   const pipelineEdges = options.routePipeline
     ? routePipelineEdges(options.routeEdgeAdapterId)
@@ -1837,6 +1838,11 @@ function createHarness(
       readonly laggingTopologyRefreshMode?:
         BlockScanLaggingTopologyRefreshMode;
     }): Promise<BlockScanStatePrepareResult> {
+      assert.equal(
+        rethForegroundDepth,
+        1,
+        "coarse state preparation must start inside foreground reth priority",
+      );
       const coarsePricingCall = coarsePricingCalls++;
       coarsePricingBlocks.push(input.graph.sourceBlock);
       coarsePricingLaggingTopologyModes.push(
@@ -1847,6 +1853,11 @@ function createHarness(
         (input.familySettleDeadlineAtMs ?? input.deadlineAtMs) - Date.now(),
       );
       await options.beforeCoarsePricingResult?.(input.graph.sourceBlock);
+      assert.equal(
+        rethForegroundDepth,
+        1,
+        "foreground reth priority must remain held until coarse state settles",
+      );
       const prepared = runtimeResult(
         "complete",
         input.graph,
@@ -2019,6 +2030,16 @@ function createHarness(
       PreparedDiscovery
     >["executionWorkers"],
     runtimeAbort,
+    runRethForeground: async <T>(
+      work: () => Promise<T>,
+    ): Promise<T> => {
+      rethForegroundDepth++;
+      try {
+        return await work();
+      } finally {
+        rethForegroundDepth--;
+      }
+    },
     executorAddress: "0x0000000000000000000000000000000000000001",
     sharedPlanner: { setFlashLiquidity() {} },
     backrunStatePublisher: {

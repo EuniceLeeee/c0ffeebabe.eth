@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import { LiveRethReadPriority } from "../live-reth-read-priority.js";
 
 await criticalPreemptsDrainsAndRetriesBackground();
+await foregroundPreemptsDrainsAndRetriesBackground();
 await announcedCriticalClosesBackgroundAdmissionRace();
+await announcedForegroundClosesBackgroundAdmissionRace();
 await backgroundWaitsForQueuedCriticalWork();
+await backgroundWaitsForAllForegroundWork();
+await foregroundMayNestCriticalWork();
 await externalAbortWhileWaitingDoesNotStartOrRetry();
 await externalAbortDuringAttemptTerminatesWithoutRetry();
 
-console.log("[live-reth-read-priority] preemption/abort: PASS (5/5)");
+console.log("[live-reth-read-priority] preemption/abort: PASS (9/9)");
 
 async function criticalPreemptsDrainsAndRetriesBackground(): Promise<void> {
   const priority = new LiveRethReadPriority();
@@ -65,6 +69,61 @@ async function criticalPreemptsDrainsAndRetriesBackground(): Promise<void> {
   ]);
 }
 
+async function foregroundPreemptsDrainsAndRetriesBackground(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const firstStarted = deferred();
+  const firstAbortObserved = deferred();
+  const allowFirstCleanup = deferred();
+  const foregroundStarted = deferred();
+  const allowForeground = deferred();
+  const events: string[] = [];
+  let attempts = 0;
+
+  const background = priority.runBackground(async (signal) => {
+    attempts++;
+    events.push(`background-${attempts}-start`);
+    if (attempts === 1) {
+      firstStarted.resolve();
+      await aborted(signal);
+      firstAbortObserved.resolve();
+      await allowFirstCleanup.promise;
+      events.push("background-1-cleaned");
+      throw signal.reason;
+    }
+    events.push("background-2-complete");
+    return "retried";
+  });
+  await firstStarted.promise;
+
+  const foreground = priority.runForeground(async () => {
+    events.push("foreground-start");
+    foregroundStarted.resolve();
+    await allowForeground.promise;
+    events.push("foreground-complete");
+  });
+  await firstAbortObserved.promise;
+  assert.equal(
+    foregroundStarted.isResolved(),
+    false,
+    "foreground work must drain the cancelled transport attempt first",
+  );
+
+  allowFirstCleanup.resolve();
+  await foregroundStarted.promise;
+  assert.equal(attempts, 1, "background must wait for foreground work");
+  allowForeground.resolve();
+  await foreground;
+  assert.equal(await background, "retried");
+  assert.deepEqual(events, [
+    "background-1-start",
+    "background-1-cleaned",
+    "foreground-start",
+    "foreground-complete",
+    "background-2-start",
+    "background-2-complete",
+  ]);
+}
+
 async function announcedCriticalClosesBackgroundAdmissionRace(): Promise<void> {
   const priority = new LiveRethReadPriority();
   const releaseCritical = deferred();
@@ -84,6 +143,31 @@ async function announcedCriticalClosesBackgroundAdmissionRace(): Promise<void> {
   releaseCritical.resolve();
   await Promise.all([critical, background]);
   assert.deepEqual(events, ["critical-start", "critical-end", "background"]);
+}
+
+async function announcedForegroundClosesBackgroundAdmissionRace(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const releaseForeground = deferred();
+  const events: string[] = [];
+
+  const background = priority.runBackground(async () => {
+    events.push("background");
+  });
+  const foreground = priority.runForeground(async () => {
+    events.push("foreground-start");
+    await releaseForeground.promise;
+    events.push("foreground-end");
+  });
+
+  await nextTurn();
+  assert.deepEqual(events, ["foreground-start"]);
+  releaseForeground.resolve();
+  await Promise.all([foreground, background]);
+  assert.deepEqual(events, [
+    "foreground-start",
+    "foreground-end",
+    "background",
+  ]);
 }
 
 async function backgroundWaitsForQueuedCriticalWork(): Promise<void> {
@@ -123,6 +207,57 @@ async function backgroundWaitsForQueuedCriticalWork(): Promise<void> {
     "critical-1-end",
     "critical-2",
     "background",
+  ]);
+}
+
+async function backgroundWaitsForAllForegroundWork(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const firstStarted = deferred();
+  const secondStarted = deferred();
+  const releaseFirst = deferred();
+  const releaseSecond = deferred();
+  let backgroundStarted = false;
+
+  const first = priority.runForeground(async () => {
+    firstStarted.resolve();
+    await releaseFirst.promise;
+  });
+  const second = priority.runForeground(async () => {
+    secondStarted.resolve();
+    await releaseSecond.promise;
+  });
+  await Promise.all([firstStarted.promise, secondStarted.promise]);
+  const background = priority.runBackground(async () => {
+    backgroundStarted = true;
+  });
+
+  releaseFirst.resolve();
+  await first;
+  await nextTurn();
+  assert.equal(
+    backgroundStarted,
+    false,
+    "one remaining foreground lease must keep background work paused",
+  );
+  releaseSecond.resolve();
+  await Promise.all([second, background]);
+  assert.equal(backgroundStarted, true);
+}
+
+async function foregroundMayNestCriticalWork(): Promise<void> {
+  const priority = new LiveRethReadPriority();
+  const events: string[] = [];
+  await priority.runForeground(async () => {
+    events.push("foreground-start");
+    await priority.runCritical(async () => {
+      events.push("critical");
+    });
+    events.push("foreground-end");
+  });
+  assert.deepEqual(events, [
+    "foreground-start",
+    "critical",
+    "foreground-end",
   ]);
 }
 
