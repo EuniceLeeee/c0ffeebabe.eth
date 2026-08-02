@@ -733,6 +733,7 @@ PROCESS_EAGER_STATE=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -
 PROCESS_RUNTIME_COMMIT=$(process_env_value SEARCHER_RUNTIME_COMMIT "$NEWPID")
 PROCESS_N_MINUS_ONE=$(process_env_value SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK "$NEWPID")
 PROCESS_BLOCKSCAN_STATE_MULTICALL=$(process_env_value SEARCHER_BLOCKSCAN_STATE_MULTICALL "$NEWPID")
+PROCESS_PROTOCOL_TOUCH_MODE=$(process_env_value SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE "$NEWPID")
 PROCESS_REVM_SIM_BIN=$(process_env_value SEARCHER_REVM_SIM_BIN "$NEWPID")
 PROCESS_ROUTER_SNAPSHOT=$(process_env_value SEARCHER_FORCE_INCLUDE_ROUTERS_PATH "$NEWPID")
 say "restarted: active=$ACTIVE pid=$NEWPID mode=$MODE dry_run_env=$(tr '\0' '\n' < /proc/$NEWPID/environ 2>/dev/null | grep '^SEARCHER_DRY_RUN=' | cut -d= -f2)"
@@ -763,6 +764,10 @@ fi
 if [ "$(process_env_count SEARCHER_BLOCKSCAN_STATE_MULTICALL "$NEWPID")" != "1" ] \
    || [ "$PROCESS_BLOCKSCAN_STATE_MULTICALL" != "$BLOCKSCAN_STATE_MULTICALL" ]; then
   abort_runtime "restarted process SEARCHER_BLOCKSCAN_STATE_MULTICALL != $BLOCKSCAN_STATE_MULTICALL"
+fi
+if [ "$(process_env_count SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE "$NEWPID")" != "1" ] \
+   || [ "$PROCESS_PROTOCOL_TOUCH_MODE" != "$PROTOCOL_TOUCH_MODE" ]; then
+  abort_runtime "restarted process SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE != $PROTOCOL_TOUCH_MODE"
 fi
 if [ -f "$N_MINUS_ONE_MARKER" ]; then
   [ "$(process_env_count SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK "$NEWPID")" = "1" ] \

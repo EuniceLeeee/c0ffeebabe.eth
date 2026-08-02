@@ -78,6 +78,31 @@ for (const source of [searcherMain, blockscanHunt]) {
 }
 console.log("[runtime-defaults] live/hunt block-scan RPC defaults match: PASS");
 
+const protocolTouchWrites =
+  deployNode.match(
+    /echo "SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE=\$PROTOCOL_TOUCH_MODE"/g,
+  )?.length ?? 0;
+assert(
+  protocolTouchWrites === 2 &&
+    deployNode.includes(
+      "PROTOCOL_TOUCH_MODE=${SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE:-${RUNNING_PROTOCOL_TOUCH_MODE:-off}}",
+    ) &&
+    deployNode.includes(
+      "PROTOCOL_TOUCH_MODE=${SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE:-${EXISTING_PROTOCOL_TOUCH_MODE:-off}}",
+    ) &&
+    deployNode.includes(
+      "SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE must be off, shadow or enabled",
+    ) &&
+    deployNode.includes(
+      'process_env_count SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE "$NEWPID"',
+    ) &&
+    deployNode.includes(
+      "restarted process SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE != $PROTOCOL_TOUCH_MODE",
+    ),
+  "deploy must persist and verify protocol touch mode on both restart paths",
+);
+console.log("[runtime-defaults] deploy preserves protocol touch mode: PASS");
+
 assert(
   deployNode.includes('POOL_UNIVERSE_TO_BLOCK="$DISCOVERY_TO_BLOCK"'),
   "deploy must build the universe at the same frozen source as the searcher",
