@@ -50,6 +50,7 @@ await testRawHeaderUnavailableFallsBack();
 await testCanonicalMutationRange();
 await testMutationProofTelemetry();
 await testSharedMutationProofSessions();
+await testSharedGenerationBatchesMutationTransport();
 await testCompletedHeaderProofIsReusedByStaggeredDescriptors();
 await testCanonicalHeaderBypassesSaturatedDescriptorSlot();
 await testFinalCanonicalCasBypassesDescriptorQueue();
@@ -1471,6 +1472,131 @@ async function testSharedMutationProofSessions(): Promise<void> {
   );
   assert.equal(identicalA, identicalB);
   console.log("[state-read-backend] shared path + exact descriptor dedupe: PASS");
+}
+
+async function testSharedGenerationBatchesMutationTransport(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const topicA = `0x${"aa".repeat(32)}`;
+  const topicB = `0x${"bb".repeat(32)}`;
+  const descriptorA = createMutationQueryDescriptor({
+    addresses: [targetAddress],
+    topics: [[topicA]],
+  });
+  const descriptorB = createMutationQueryDescriptor({
+    addresses: [callerAddress],
+    topics: [[topicB]],
+  });
+  let headerCalls = 0;
+  let logCalls = 0;
+  let finalCasCalls = 0;
+  const telemetry: import("../blockscan-state-read-backend.js")
+    .MutationProofTransportTelemetry[] = [];
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    onMutationProofTelemetry: (event) => telemetry.push(event),
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      if (body[0]?.method === "eth_getLogs") {
+        logCalls++;
+        assert.deepEqual(body[0].params[0], {
+          fromBlock: "0x64",
+          toBlock: "0x64",
+          address: [targetAddress, callerAddress].sort(),
+          topics: [[topicA, topicB].sort()],
+        });
+        return fakeResponse([success(body[0].id, [
+          {
+            blockNumber: "0x64",
+            blockHash: sourceBlockHash,
+            transactionIndex: "0x0",
+            logIndex: "0x0",
+            address: targetAddress,
+            topics: [topicA],
+            data: "0x",
+            removed: false,
+          },
+          {
+            blockNumber: "0x64",
+            blockHash: sourceBlockHash,
+            transactionIndex: "0x1",
+            logIndex: "0x0",
+            address: callerAddress,
+            topics: [topicB],
+            data: "0x",
+            removed: false,
+          },
+          {
+            // The merged transport admits this address/topic cross-product,
+            // but neither exact family descriptor does.
+            blockNumber: "0x64",
+            blockHash: sourceBlockHash,
+            transactionIndex: "0x2",
+            logIndex: "0x0",
+            address: targetAddress,
+            topics: [topicB],
+            data: "0x",
+            removed: false,
+          },
+        ])]);
+      }
+      if (body.length === 1) {
+        finalCasCalls++;
+        return fakeResponse([success(body[0].id, { hash: sourceBlockHash })]);
+      }
+      headerCalls++;
+      return fakeResponse(body.map((request) => {
+        const number = Number(BigInt(request.params[0]));
+        return success(request.id, {
+          number: request.params[0],
+          hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+          parentHash: number === sourceBlock
+            ? previousHash
+            : `0x${"09".repeat(32)}`,
+        });
+      }));
+    }) as typeof fetch,
+  });
+  const previous: BlockSource = {
+    number: sourceBlock - 1,
+    hash: previousHash,
+    generation: sourceGeneration - 1,
+  };
+  const through: BlockSource = {
+    number: sourceBlock,
+    hash: sourceBlockHash,
+    generation: sourceGeneration,
+  };
+  const generation = new AbortController();
+  const deadlineAtMs = Date.now() + 10_000;
+  const [rangeA, rangeB] = await Promise.all([
+    backend.readCanonicalMutationRange(descriptorA, previous, through, {
+      deadlineAtMs,
+      signal: new AbortController().signal,
+      sharedSignal: generation.signal,
+    }),
+    backend.readCanonicalMutationRange(descriptorB, previous, through, {
+      deadlineAtMs,
+      signal: new AbortController().signal,
+      sharedSignal: generation.signal,
+    }),
+  ]);
+  assert.equal(headerCalls, 1);
+  assert.equal(logCalls, 1);
+  assert.equal(finalCasCalls, 1);
+  assert.deepEqual(rangeA.events.map((event) => event.address), [targetAddress]);
+  assert.deepEqual(rangeB.events.map((event) => event.address), [callerAddress]);
+  assert.equal(telemetry.length, 2);
+  assert.equal(
+    telemetry.reduce((sum, event) => sum + event.phases.logs.rpcRequests, 0),
+    1,
+  );
+  assert.equal(
+    telemetry.reduce(
+      (sum, event) => sum + event.phases.finalCas.rpcRequests,
+      0,
+    ),
+    1,
+  );
+  console.log("[state-read-backend] shared generation mutation batch: PASS");
 }
 
 async function testCompletedHeaderProofIsReusedByStaggeredDescriptors(): Promise<void> {

@@ -147,6 +147,21 @@ interface CanonicalHeaderProof {
   readonly validationMs: number;
 }
 
+interface PendingMutationTransportBatch {
+  readonly key: string;
+  readonly fromExclusive: BlockSource;
+  readonly through: BlockSource;
+  readonly deadlineAtMs: number;
+  readonly sharedSignal: AbortSignal;
+  readonly descriptors: Map<string, MutationQueryDescriptor>;
+  readonly completion: Promise<ReadonlyMap<string, CanonicalMutationRange>>;
+  readonly resolve: (
+    ranges: ReadonlyMap<string, CanonicalMutationRange>,
+  ) => void;
+  readonly reject: (reason?: unknown) => void;
+  started: boolean;
+}
+
 /**
  * Current-block read backend for the family state coordinator.
  *
@@ -172,11 +187,11 @@ export class JsonRpcBlockScanStateReadBackend
    * current generation. Keep bounded transport slots outside the bulk
    * current/static/funding FIFO so a full state-read queue cannot force every
    * incremental family back to a full current-N refresh. Header proofs use
-   * their own slot and remain reusable for the exact content-addressed range;
-   * one slow descriptor log therefore cannot force sibling families to repeat
-   * or time out before reading the same canonical path. Final canonical CAS
-   * likewise has an independent slot so completed logs do not wait behind
-   * later descriptor queries.
+   * their own slot and remain reusable for the exact content-addressed range.
+   * Descriptors sharing one generation/range are widened into one log read,
+   * then filtered back to their exact family predicates in memory, with one
+   * final canonical CAS for the whole transport batch. Different ranges keep
+   * bounded independent slots.
    */
   private readonly mutationHeaderSlots: AbortableSemaphore;
   private readonly mutationDescriptorSlots: AbortableSemaphore;
@@ -190,6 +205,10 @@ export class JsonRpcBlockScanStateReadBackend
   private readonly mutationRangeSessions = new Map<
     string,
     Promise<CanonicalMutationRange>
+  >();
+  private readonly pendingMutationTransportBatches = new Map<
+    string,
+    PendingMutationTransportBatch
   >();
   private readonly canonicalHeaderSessions = new Map<
     string,
@@ -606,15 +625,25 @@ export class JsonRpcBlockScanStateReadBackend
     let session = this.mutationRangeSessions.get(sessionKey);
     if (!session) {
       const ownerSignal = control.sharedSignal ?? control.signal;
-      const created = this.computeCanonicalMutationRange(
-        descriptor,
-        fromExclusive,
-        through,
-        {
-          deadlineAtMs: control.deadlineAtMs,
-          signal: ownerSignal,
-        },
-      );
+      const created = control.sharedSignal
+        ? this.enqueueSharedMutationTransport(
+            descriptor,
+            fromExclusive,
+            through,
+            {
+              deadlineAtMs: control.deadlineAtMs,
+              signal: ownerSignal,
+            },
+          )
+        : this.computeCanonicalMutationRange(
+            descriptor,
+            fromExclusive,
+            through,
+            {
+              deadlineAtMs: control.deadlineAtMs,
+              signal: ownerSignal,
+            },
+          );
       session = created.finally(() => {
         if (this.mutationRangeSessions.get(sessionKey) === session) {
           this.mutationRangeSessions.delete(sessionKey);
@@ -623,6 +652,83 @@ export class JsonRpcBlockScanStateReadBackend
       this.mutationRangeSessions.set(sessionKey, session);
     }
     return await awaitWithSignal(session, control.signal);
+  }
+
+  private enqueueSharedMutationTransport(
+    descriptor: MutationQueryDescriptor,
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<CanonicalMutationRange> {
+    const key = canonicalHeaderSessionKey(fromExclusive, through);
+    let batch = this.pendingMutationTransportBatches.get(key);
+    if (
+      !batch ||
+      batch.started ||
+      batch.deadlineAtMs !== control.deadlineAtMs ||
+      batch.sharedSignal !== control.signal
+    ) {
+      let resolve!: PendingMutationTransportBatch["resolve"];
+      let reject!: PendingMutationTransportBatch["reject"];
+      const completion = new Promise<
+        ReadonlyMap<string, CanonicalMutationRange>
+      >((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+      });
+      batch = {
+        key,
+        fromExclusive,
+        through,
+        deadlineAtMs: control.deadlineAtMs,
+        sharedSignal: control.signal,
+        descriptors: new Map(),
+        completion,
+        resolve,
+        reject,
+        started: false,
+      };
+      this.pendingMutationTransportBatches.set(key, batch);
+      queueMicrotask(() => {
+        void this.flushSharedMutationTransport(batch!);
+      });
+    }
+    batch.descriptors.set(descriptor.fingerprint, descriptor);
+    return batch.completion.then((ranges) => {
+      const range = ranges.get(descriptor.fingerprint);
+      if (!range) {
+        throw new Error(
+          `shared mutation transport omitted ${descriptor.fingerprint}`,
+        );
+      }
+      return range;
+    });
+  }
+
+  private async flushSharedMutationTransport(
+    batch: PendingMutationTransportBatch,
+  ): Promise<void> {
+    batch.started = true;
+    try {
+      batch.resolve(await this.computeCanonicalMutationRanges(
+        [...batch.descriptors.values()],
+        batch.fromExclusive,
+        batch.through,
+        {
+          deadlineAtMs: batch.deadlineAtMs,
+          signal: batch.sharedSignal,
+        },
+      ));
+    } catch (error) {
+      batch.reject(error);
+    } finally {
+      if (this.pendingMutationTransportBatches.get(batch.key) === batch) {
+        this.pendingMutationTransportBatches.delete(batch.key);
+      }
+    }
   }
 
   private async computeCanonicalMutationRange(
@@ -634,6 +740,31 @@ export class JsonRpcBlockScanStateReadBackend
       readonly signal: AbortSignal;
     },
   ): Promise<CanonicalMutationRange> {
+    const ranges = await this.computeCanonicalMutationRanges(
+      [descriptor],
+      fromExclusive,
+      through,
+      control,
+    );
+    const range = ranges.get(descriptor.fingerprint);
+    if (!range) {
+      throw new Error(`mutation range omitted ${descriptor.fingerprint}`);
+    }
+    return range;
+  }
+
+  private async computeCanonicalMutationRanges(
+    descriptors: readonly MutationQueryDescriptor[],
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<ReadonlyMap<string, CanonicalMutationRange>> {
+    if (descriptors.length === 0) {
+      throw new Error("mutation transport batch is empty");
+    }
     const startedAtMs = this.now();
     let phase: MutationProofTransportPhase = "descriptor-validation";
     let validationMs = 0;
@@ -649,12 +780,15 @@ export class JsonRpcBlockScanStateReadBackend
           ` -> ${through.number}/${through.generation}`,
       );
     }
-    if (
-      descriptor.fingerprint !==
-      mutationQueryDescriptorFingerprint(descriptor)
-    ) {
-      throw new Error("mutation descriptor fingerprint mismatch");
+    for (const descriptor of descriptors) {
+      if (
+        descriptor.fingerprint !==
+        mutationQueryDescriptorFingerprint(descriptor)
+      ) {
+        throw new Error("mutation descriptor fingerprint mismatch");
+      }
     }
+    const transportDescriptor = mergeMutationQueryDescriptors(descriptors);
     const controller = new AbortController();
     const detach = linkAbort(control.signal, controller);
     const remainingMs = control.deadlineAtMs - Date.now();
@@ -691,14 +825,14 @@ export class JsonRpcBlockScanStateReadBackend
       const logFilter = {
         fromBlock: toBlockTag(fromExclusive.number + 1),
         toBlock: toBlockTag(through.number),
-        ...(descriptor.addresses.length === 0
+        ...(transportDescriptor.addresses.length === 0
           ? {}
           : {
-              address: descriptor.addresses.length === 1
-                ? descriptor.addresses[0]
-                : descriptor.addresses,
+              address: transportDescriptor.addresses.length === 1
+                ? transportDescriptor.addresses[0]
+                : transportDescriptor.addresses,
             }),
-        topics: descriptor.topics,
+        topics: transportDescriptor.topics,
       };
       const logRead = await this.postWithSlotsMeasured(
         this.mutationDescriptorSlots,
@@ -758,24 +892,30 @@ export class JsonRpcBlockScanStateReadBackend
         this.mutationFinalCasSlots,
       );
       const canonicalPathFingerprint = headerProof.canonicalPathFingerprint;
-      const rangeFingerprint = deterministicHash({
-        fromExclusive,
-        through,
-        queryDescriptorFingerprint: descriptor.fingerprint,
-        canonicalPathFingerprint,
-        events,
-      });
-      const range = Object.freeze({
-        fromExclusive,
-        through,
-        events: Object.freeze(events),
-        complete: true as const,
-        queryDescriptorFingerprint: descriptor.fingerprint,
-        canonicalPathFingerprint,
-        rangeFingerprint,
-      });
+      const ranges = new Map<string, CanonicalMutationRange>();
+      for (const descriptor of descriptors) {
+        const matchingEvents = Object.freeze(events.filter((event) =>
+          mutationLogMatchesDescriptor(event, descriptor)
+        ));
+        const rangeFingerprint = deterministicHash({
+          fromExclusive,
+          through,
+          queryDescriptorFingerprint: descriptor.fingerprint,
+          canonicalPathFingerprint,
+          events: matchingEvents,
+        });
+        ranges.set(descriptor.fingerprint, Object.freeze({
+          fromExclusive,
+          through,
+          events: matchingEvents,
+          complete: true as const,
+          queryDescriptorFingerprint: descriptor.fingerprint,
+          canonicalPathFingerprint,
+          rangeFingerprint,
+        }));
+      }
       completed = true;
-      return range;
+      return ranges;
     } catch (error) {
       if (error instanceof MutationRangeReadError) {
         failure = { phase: error.phase, kind: error.kind };
@@ -796,29 +936,34 @@ export class JsonRpcBlockScanStateReadBackend
     } finally {
       clearTimeout(timer);
       detach();
-      const telemetry = Object.freeze({
-        descriptorFingerprint: descriptor.fingerprint,
-        fromBlock: fromExclusive.number,
-        throughBlock: through.number,
-        status: completed ? "complete" as const : "failed" as const,
-        ...(failure === undefined
-          ? {}
-          : {
-              failurePhase: failure.phase,
-              failureKind: failure.kind,
-            }),
-        wallMs: Math.max(0, this.now() - startedAtMs),
-        validationMs,
-        phases: Object.freeze({
-          headers: headerTelemetry,
-          logs: logTelemetry,
-          finalCas: finalCasTelemetry,
-        }),
-      });
-      try {
-        this.onMutationProofTelemetry?.(telemetry);
-      } catch {
-        // Observability must never change proof transport behavior.
+      const wallMs = Math.max(0, this.now() - startedAtMs);
+      for (let index = 0; index < descriptors.length; index++) {
+        const descriptor = descriptors[index];
+        const shared = index > 0;
+        const telemetry = Object.freeze({
+          descriptorFingerprint: descriptor.fingerprint,
+          fromBlock: fromExclusive.number,
+          throughBlock: through.number,
+          status: completed ? "complete" as const : "failed" as const,
+          ...(failure === undefined
+            ? {}
+            : {
+                failurePhase: failure.phase,
+                failureKind: failure.kind,
+              }),
+          wallMs,
+          validationMs: shared ? 0 : validationMs,
+          phases: Object.freeze({
+            headers: sharedMutationPhase(headerTelemetry, shared),
+            logs: sharedMutationPhase(logTelemetry, shared),
+            finalCas: sharedMutationPhase(finalCasTelemetry, shared),
+          }),
+        });
+        try {
+          this.onMutationProofTelemetry?.(telemetry);
+        } catch {
+          // Observability must never change proof transport behavior.
+        }
       }
     }
   }
@@ -1394,6 +1539,82 @@ function mutationRangeSessionKey(
   return `${canonicalHeaderSessionKey(fromExclusive, through)}\u001f${
     descriptor.fingerprint
   }`;
+}
+
+function mergeMutationQueryDescriptors(
+  descriptors: readonly MutationQueryDescriptor[],
+): Pick<MutationQueryDescriptor, "addresses" | "topics"> {
+  if (descriptors.length === 1) {
+    return Object.freeze({
+      addresses: descriptors[0].addresses,
+      topics: descriptors[0].topics,
+    });
+  }
+  const addresses = descriptors.some((descriptor) =>
+    descriptor.addresses.length === 0
+  )
+    ? []
+    : [...new Set(descriptors.flatMap((descriptor) =>
+        descriptor.addresses.map((address) => address.toLowerCase())
+      ))].sort();
+  const topicCount = Math.min(
+    ...descriptors.map((descriptor) => descriptor.topics.length),
+  );
+  const topics: Array<string | readonly string[] | null> = [];
+  for (let index = 0; index < topicCount; index++) {
+    const constraints = descriptors.map((descriptor) =>
+      descriptor.topics[index]
+    );
+    // A wildcard ends the safely shareable prefix. Omitting the remaining
+    // positions broadens the transport query; exact predicates are restored
+    // by mutationLogMatchesDescriptor below.
+    if (constraints.some((constraint) => constraint === null)) break;
+    const values = [...new Set(constraints.flatMap((constraint) =>
+      typeof constraint === "string" ? [constraint] : constraint ?? []
+    ))].sort();
+    topics.push(values.length === 1 ? values[0] : Object.freeze(values));
+  }
+  return Object.freeze({
+    addresses: Object.freeze(addresses),
+    topics: Object.freeze(topics),
+  });
+}
+
+function mutationLogMatchesDescriptor(
+  event: ChainLog,
+  descriptor: MutationQueryDescriptor,
+): boolean {
+  if (
+    descriptor.addresses.length > 0 &&
+    !descriptor.addresses.includes(event.address.toLowerCase())
+  ) {
+    return false;
+  }
+  return descriptor.topics.every((constraint, index) => {
+    if (constraint === null) return true;
+    const topic = event.topics[index]?.toLowerCase();
+    if (!topic) return false;
+    return typeof constraint === "string"
+      ? topic === constraint.toLowerCase()
+      : constraint.some((candidate) =>
+          topic === candidate.toLowerCase()
+        );
+  });
+}
+
+function sharedMutationPhase(
+  phase: MutationProofPhaseTelemetry,
+  shared: boolean,
+): MutationProofPhaseTelemetry {
+  if (!shared) return phase;
+  return Object.freeze({
+    ...phase,
+    queueWaitMs: 0,
+    rpcRequests: 0,
+    rpcItems: 0,
+    responseBytes: 0,
+    shared: true,
+  });
 }
 
 function canonicalHeaderSessionKey(
