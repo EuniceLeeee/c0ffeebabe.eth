@@ -18,6 +18,12 @@ export interface ProtocolQuoteRead {
   readonly suffix: string;
   readonly to: string;
   readonly data: string;
+  /**
+   * Opt in only when the view result is independent of msg.sender. The local
+   * backend may then collapse many current-block reads into one aggregate3
+   * call; the default preserves direct eth_call semantics.
+   */
+  readonly transport?: StateRead["transport"];
 }
 
 export interface ProtocolQuoteSnapshot {
@@ -224,6 +230,7 @@ export function stateRead(
   id: string,
   to: string,
   data: string,
+  transport: StateRead["transport"] = "rpc-batch",
 ): StateRead {
   if (!id || !ethers.isAddress(to) || !ethers.isHexString(data)) {
     throw new Error(`invalid current-block read ${id} to=${to}`);
@@ -234,7 +241,7 @@ export function stateRead(
     sourceBlockHash: input.sourceBlockHash,
     to: ethers.getAddress(to),
     data,
-    transport: "rpc-batch" as const,
+    transport,
   });
 }
 
@@ -317,6 +324,7 @@ function pushQuoteReads(
       quoteReadId(edge, read.suffix),
       read.to,
       read.data,
+      read.transport,
     ));
   }
 }
