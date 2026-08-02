@@ -1172,26 +1172,30 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
     throw new Error("expected proof-scoped degradation");
   }
   assert.deepEqual(
-    backend.readTargets,
-    [PROTOCOL_POOL.toLowerCase()],
-    "failed mutation proof must not trigger a whole-family swap read",
+    [...backend.readTargets].sort(),
+    [SWAP_POOL_B, PROTOCOL_POOL]
+      .map((value) => value.toLowerCase())
+      .sort(),
+    "failed mutation proof may recover only the missing-base key, not the whole swap family",
   );
-  assert.equal(steady.snapshot.mids.size, 1);
+  assert.equal(steady.snapshot.mids.size, 3);
   assert(
-    [...steady.snapshot.mids.values()].every(
-      (value) => value.pool.toLowerCase() === PROTOCOL_POOL.toLowerCase(),
+    [...steady.snapshot.mids.values()].every((value) =>
+      [SWAP_POOL_B, PROTOCOL_POOL]
+        .map((pool) => pool.toLowerCase())
+        .includes(value.pool.toLowerCase())
     ),
-    "healthy protocol sibling must still publish",
+    "the recovered state key and healthy protocol sibling must publish",
   );
   const swapTelemetry = steady.familyTelemetry?.find(
     (entry) => entry.familyId === "univ2-standard",
   );
-  assert.equal(swapTelemetry?.directStateKeys, 0);
+  assert.equal(swapTelemetry?.directStateKeys, 1);
   assert.equal(swapTelemetry?.fullFallbackReason, "mutation-range-failed");
   assert.equal(
-    swapTelemetry?.recoveryRequiredStateKeys,
-    1,
-    "an established key with no successful base must request recovery",
+    swapTelemetry?.recoveryRequiredStateKeys ?? 0,
+    0,
+    "a successful current-block read must clear the missing-base backlog",
   );
   assert(
     steady.coverage.unresolvedStateKeys.some((stateKey) =>
@@ -1202,34 +1206,8 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
 
   backend.rangeFailure = false;
   backend.readTargets.length = 0;
-  const missingBaseRecovery = await coordinator.prepare({
-    graph: laggingGraph(3),
-    families: [swapFamily, protocolFamily],
-    deadlineAtMs: Date.now() + 2_000,
-    laggingTopologyRefreshMode: "startup-bootstrap",
-  });
-  assert.equal(missingBaseRecovery.status, "degraded");
-  if (missingBaseRecovery.status !== "degraded") {
-    throw new Error("expected missing-base recovery degradation");
-  }
-  assert.equal(
-    missingBaseRecovery.familyTelemetry?.find(
-      (entry) => entry.familyId === "univ2-standard",
-    )?.recoveryRequiredStateKeys ?? 0,
-    0,
-  );
-  assert.deepEqual(
-    [...backend.readTargets].sort(),
-    [SWAP_POOL_B, PROTOCOL_POOL]
-      .map((value) => value.toLowerCase())
-      .sort(),
-    "recovery must direct-read the established key that never had a base",
-  );
-
-  backend.readTargets.length = 0;
-  backend.rangeSources.length = 0;
   const missingBaseResumed = await coordinator.prepare({
-    graph: laggingGraph(4),
+    graph: laggingGraph(3),
     families: [swapFamily, protocolFamily],
     deadlineAtMs: Date.now() + 2_000,
     laggingTopologyRefreshMode: "proof-scoped",
@@ -1246,9 +1224,16 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
     [PROTOCOL_POOL.toLowerCase()],
     "the pass after missing-base recovery must resume proof-based carry",
   );
+  const recoveredBaseState = missingBaseResumed.snapshot.stateByStateKey.get(
+    `univ2-standard\u001f${SWAP_POOL_B.toLowerCase()}`,
+  );
   assert(
-    backend.rangeSources.some((source) => source.number === SOURCE_BLOCK + 3),
-    "the resumed proof must start at the missing-base recovery source",
+    [...(recoveredBaseState?.freshnessByReadKey.values() ?? [])].some(
+      (proof) =>
+        proof.kind === "carry-forward" &&
+        proof.previousSource.number === SOURCE_BLOCK + 2,
+    ),
+    "the resumed proof must carry from the family-local recovery source",
   );
 
   backend.rangeFailure = true;
@@ -1315,7 +1300,8 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   backend.mutationTargets.clear();
   backend.readTargets.length = 0;
   backend.rangeSources.length = 0;
-  const outsideMutationWindow = await coordinator.prepare({
+  backend.failTargets.add(SWAP_POOL_C.toLowerCase());
+  const partialRecovery = await coordinator.prepare({
     graph: laggingGraph(40, [
       swapForward,
       swapReverse,
@@ -1327,39 +1313,6 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
     deadlineAtMs: Date.now() + 2_000,
     laggingTopologyRefreshMode: "proof-scoped",
   });
-  assert.equal(outsideMutationWindow.status, "degraded");
-  if (outsideMutationWindow.status !== "degraded") {
-    throw new Error("expected out-of-range proof-scoped degradation");
-  }
-  const outsideWindowSwap = outsideMutationWindow.familyTelemetry?.find(
-    (entry) => entry.familyId === "univ2-standard",
-  );
-  assert.equal(outsideWindowSwap?.recoveryRequiredStateKeys, 2);
-  assert.deepEqual(
-    backend.readTargets,
-    [PROTOCOL_POOL.toLowerCase()],
-    "out-of-range established swap keys must not direct-read in the hot pass",
-  );
-  assert.equal(
-    backend.rangeSources.length,
-    0,
-    "a range beyond the bounded proof window must not be queried",
-  );
-
-  backend.failTargets.add(SWAP_POOL_C.toLowerCase());
-  backend.readTargets.length = 0;
-  const partialRecovery = await coordinator.prepare({
-    graph: laggingGraph(41, [
-      swapForward,
-      swapReverse,
-      swapCForward,
-      swapCReverse,
-      protocol,
-    ]),
-    families: [swapFamily, protocolFamily],
-    deadlineAtMs: Date.now() + 2_000,
-    laggingTopologyRefreshMode: "startup-bootstrap",
-  });
   assert.equal(partialRecovery.status, "degraded");
   if (partialRecovery.status !== "degraded") {
     throw new Error("expected partial recovery bootstrap");
@@ -1369,7 +1322,7 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
       (entry) => entry.familyId === "univ2-standard",
     )?.recoveryRequiredStateKeys,
     1,
-    "a failed current-block read must keep recovery pending",
+    "a failed family-local recovery read must keep only that key pending",
   );
   assert(
     partialRecovery.coverage.unresolvedStateKeys.some((stateKey) =>
@@ -1381,7 +1334,7 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   backend.failTargets.clear();
   backend.readTargets.length = 0;
   const recovery = await coordinator.prepare({
-    graph: laggingGraph(42, [
+    graph: laggingGraph(41, [
       swapForward,
       swapReverse,
       swapCForward,
@@ -1390,7 +1343,7 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
     ]),
     families: [swapFamily, protocolFamily],
     deadlineAtMs: Date.now() + 2_000,
-    laggingTopologyRefreshMode: "startup-bootstrap",
+    laggingTopologyRefreshMode: "proof-scoped",
   });
   assert.equal(recovery.status, "degraded");
   if (recovery.status !== "degraded") {
@@ -1410,8 +1363,8 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   for (const pool of [SWAP_POOL, SWAP_POOL_C]) {
     const stateKey = `univ2-standard\u001f${pool.toLowerCase()}`;
     const state = recovery.snapshot.stateByStateKey.get(stateKey);
-    assert.equal(state?.source.number, SOURCE_BLOCK + 42);
-    assert.equal(state?.source.hash, `0x${"2a".padStart(64, "0")}`);
+    assert.equal(state?.source.number, SOURCE_BLOCK + 41);
+    assert.equal(state?.source.hash, `0x${"29".padStart(64, "0")}`);
     const directRecovery = pool === SWAP_POOL_C;
     assert.equal(
       state?.refreshMode,
@@ -1430,7 +1383,7 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   backend.readTargets.length = 0;
   backend.rangeSources.length = 0;
   const resumed = await coordinator.prepare({
-    graph: laggingGraph(43, [
+    graph: laggingGraph(42, [
       swapForward,
       swapReverse,
       swapCForward,
@@ -1454,8 +1407,183 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
     "the pass after recovery must resume mutation-proof carry",
   );
   assert(
-    backend.rangeSources.some((source) => source.number === SOURCE_BLOCK + 42),
+    backend.rangeSources.some((source) => source.number === SOURCE_BLOCK + 41),
     "the next proof must start from the recovered canonical source",
+  );
+}
+
+async function hotRecoveryIsBoundedPerFamily(): Promise<void> {
+  const backend = new StateKeyIncrementalBackend();
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: incrementalFakeCapability(),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+  const pools = Array.from({ length: 18 }, (_, index) =>
+    `0x${(0x100 + index).toString(16).padStart(40, "0")}`
+  );
+  const laggingGraph = (
+    generation: number,
+    selectedPools: readonly string[] = pools,
+  ) => {
+    const sourceBlock = SOURCE_BLOCK + generation;
+    const sourceBlockHash =
+      `0x${generation.toString(16).padStart(64, "0")}`;
+    return createVerifiedGraphView({
+      id: `bounded-recovery-${generation}`,
+      generation,
+      sourceBlock,
+      sourceBlockHash,
+      completenessWatermark: sourceBlock - 1,
+      perSourceCoverage: [{
+        familyId: "univ2-standard",
+        sourceId: "landed-event:fixture",
+        sourceFingerprint: "fixture-bounded-recovery-v1",
+        completeThroughBlock: sourceBlock - 1,
+        completeThroughHash: sourceBlockHash,
+      }],
+      edges: selectedPools.map((pool) =>
+        edge("swap-action", pool, TOKEN_A, TOKEN_B)
+      ),
+    });
+  };
+
+  const bootstrap = await coordinator.prepare({
+    graph: laggingGraph(1),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "startup-bootstrap",
+  });
+  assert.equal(bootstrap.snapshot.stateByStateKey.size, pools.length);
+
+  backend.readTargets.length = 0;
+  backend.rangeSources.length = 0;
+  const recovery = await coordinator.prepare({
+    graph: laggingGraph(40),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "proof-scoped",
+  });
+  const telemetry = recovery.familyTelemetry?.find(
+    (entry) => entry.familyId === "univ2-standard",
+  );
+  assert.equal(telemetry?.directStateKeys, 16);
+  assert.equal(telemetry?.recoveryRequiredStateKeys, 2);
+  assert.equal(backend.readTargets.length, 16);
+  assert.equal(backend.rangeSources.length, 0);
+  assert.equal(recovery.coverage.unresolvedStateKeys.length, 2);
+
+  backend.readTargets.length = 0;
+  const drained = await coordinator.prepare({
+    graph: laggingGraph(41),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "proof-scoped",
+  });
+  const drainedTelemetry = drained.familyTelemetry?.find(
+    (entry) => entry.familyId === "univ2-standard",
+  );
+  assert.equal(drainedTelemetry?.directStateKeys, 2);
+  assert.equal(drainedTelemetry?.recoveryRequiredStateKeys ?? 0, 0);
+  assert.equal(drained.coverage.unresolvedStateKeys.length, 0);
+
+  const newKeyBackend = new StateKeyIncrementalBackend();
+  const newKeyCoordinator = new BlockScanStateCoordinator(newKeyBackend);
+  const expandedPools = [
+    pools[0],
+    ...Array.from({ length: 18 }, (_, index) =>
+      `0x${(0x200 + index).toString(16).padStart(40, "0")}`
+    ),
+  ];
+  const graphWithPools = (
+    generation: number,
+    selectedPools: readonly string[],
+  ) => {
+    const sourceBlock = SOURCE_BLOCK + generation;
+    const sourceBlockHash =
+      `0x${generation.toString(16).padStart(64, "0")}`;
+    return createVerifiedGraphView({
+      id: `bounded-new-key-recovery-${generation}`,
+      generation,
+      sourceBlock,
+      sourceBlockHash,
+      completenessWatermark: sourceBlock - 1,
+      perSourceCoverage: [{
+        familyId: "univ2-standard",
+        sourceId: "landed-event:fixture",
+        sourceFingerprint: "fixture-bounded-new-key-recovery-v1",
+        completeThroughBlock: sourceBlock - 1,
+        completeThroughHash: sourceBlockHash,
+      }],
+      edges: selectedPools.map((pool) =>
+        edge("swap-action", pool, TOKEN_A, TOKEN_B)
+      ),
+    });
+  };
+  await newKeyCoordinator.prepare({
+    graph: graphWithPools(1, [expandedPools[0]]),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "startup-bootstrap",
+  });
+  newKeyBackend.readTargets.length = 0;
+  const expanded = await newKeyCoordinator.prepare({
+    graph: graphWithPools(2, expandedPools),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "proof-scoped",
+  });
+  const expandedTelemetry = expanded.familyTelemetry?.find(
+    (entry) => entry.familyId === "univ2-standard",
+  );
+  assert.equal(
+    expandedTelemetry?.directStateKeys,
+    16,
+    "newly admitted keys must share the bounded recovery quota",
+  );
+  assert.equal(expandedTelemetry?.recoveryRequiredStateKeys, 2);
+  assert.equal(newKeyBackend.readTargets.length, 16);
+  assert.equal(expanded.coverage.unresolvedStateKeys.length, 2);
+
+  const failingBackend = new StateKeyIncrementalBackend();
+  const failingCoordinator = new BlockScanStateCoordinator(failingBackend);
+  await failingCoordinator.prepare({
+    graph: laggingGraph(1),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "startup-bootstrap",
+  });
+  for (const pool of pools) {
+    failingBackend.failTargets.add(pool.toLowerCase());
+  }
+  failingBackend.readTargets.length = 0;
+  await failingCoordinator.prepare({
+    graph: laggingGraph(40),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "proof-scoped",
+  });
+  const firstFailedAttempt = new Set(failingBackend.readTargets);
+  assert.equal(firstFailedAttempt.size, 16);
+
+  const replacementPool = `0x${"1".padStart(40, "0")}`;
+  failingBackend.failTargets.add(replacementPool);
+  failingBackend.readTargets.length = 0;
+  await failingCoordinator.prepare({
+    graph: laggingGraph(1_040, [...pools.slice(1), replacementPool]),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "proof-scoped",
+  });
+  const attemptedAcrossTwoPasses = new Set([
+    ...firstFailedAttempt,
+    ...failingBackend.readTargets,
+  ]);
+  assert(
+    pools.every((pool) => attemptedAcrossTwoPasses.has(pool.toLowerCase())),
+    "a family-local cursor must reach every continuously failing key when generations and candidates change",
   );
 }
 
@@ -2856,6 +2984,7 @@ await failedFamilyPublishesHealthyFamiliesAsDegraded();
 await graphIncompleteSwapFamilyPreservesHealthySibling();
 await graphSourceHashMismatchBlocksOwningFamily();
 await laggingSwapProofFailureDoesNotFallbackWholeFamily();
+await hotRecoveryIsBoundedPerFamily();
 await oneFailedStateKeyPreservesHealthySiblingInstance();
 await incrementalRefreshIsStateKeyLocal();
 await emptyPublishedSnapshotDoesNotEraseRecoveryBase();

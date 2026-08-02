@@ -120,7 +120,7 @@ await observedPublicationDoesNotInvalidateHotDexCommit();
 await shutdownDoesNotWaitForHistoricalBackfill();
 await shutdownDrainsActivePassAndDropsPendingHead();
 await nMinusOneTrackerStaysOutsideNormalRuntimePublication();
-await nMinusOneRecoveryBootstrapRebasesStaleMutationState();
+await nMinusOneRecoveryBacklogStaysOnHotBudget();
 await nMinusOneWaitsForItsOnlyAdjacentProducer();
 await nMinusOneExactJoinPrecedesNextProducer();
 nMinusOneExactJoinRejectsMixedAnchor();
@@ -1443,7 +1443,7 @@ async function nMinusOneTrackerStaysOutsideNormalRuntimePublication(): Promise<v
   );
 }
 
-async function nMinusOneRecoveryBootstrapRebasesStaleMutationState(): Promise<void> {
+async function nMinusOneRecoveryBacklogStaysOnHotBudget(): Promise<void> {
   const harness = createHarness(699, ["complete"], {
     nMinusOneFallbackEnabled: true,
     startupWarmBudgetMs: 40_000,
@@ -1463,16 +1463,22 @@ async function nMinusOneRecoveryBootstrapRebasesStaleMutationState(): Promise<vo
   assert.deepEqual(harness.coarsePricingBlocks, [701, 702, 703]);
   assert.deepEqual(
     harness.coarsePricingLaggingTopologyModes,
-    ["proof-scoped", "startup-bootstrap", "proof-scoped"],
-    "an out-of-range proof must schedule exactly one protected direct recovery",
+    ["proof-scoped", "proof-scoped", "proof-scoped"],
+    "a recovery backlog must stay family-local instead of upgrading the next generation",
   );
   assert(
-    harness.coarsePricingDeadlineRemainingMs[1]! > 39_000,
-    "the recovery bootstrap must receive the long startup-warm budget",
+    harness.coarsePricingDeadlineRemainingMs.every(
+      (remainingMs) => remainingMs > 19_000 && remainingMs <= 20_000,
+    ),
+    "periodic recovery must retain the ordinary N-1 state budget",
   );
   assert(
-    harness.coarsePricingFamilyDeadlineRemainingMs[1]! > 38_000,
-    "the recovery family must retain time for direct reads and canonical CAS",
+    harness.coarsePricingFamilyDeadlineRemainingMs.every(
+      (remainingMs) =>
+        remainingMs > 0 &&
+        remainingMs <= N_MINUS_ONE_FAMILY_SETTLE_BUDGET_MS,
+    ),
+    "periodic recovery must retain the ordinary family settle budget",
   );
 }
 

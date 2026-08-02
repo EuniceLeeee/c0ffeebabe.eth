@@ -200,10 +200,11 @@ export interface BlockScanFamilyTelemetry {
   readonly directStateKeys?: number;
   readonly missingPreviousStateKeys?: number;
   /**
-   * Established state keys that cannot enter the bounded mutation proof
-   * because their safe base is missing or outside the proof window, and that
-   * still lack a current-generation replacement. A successful recovery
-   * bootstrap clears this count even when topology remains degraded.
+   * State keys that cannot enter the bounded mutation proof because they are
+   * newly admitted, their safe base is missing, or it is outside the proof
+   * window, and that still lack a current-generation replacement. Bounded
+   * family-local direct recovery clears this count without expanding the whole
+   * generation.
    */
   readonly recoveryRequiredStateKeys?: number;
   /**
@@ -445,6 +446,9 @@ interface ActiveGeneration {
 }
 
 const MAX_INCREMENTAL_RANGE_BLOCKS = 32;
+// Keep recovery inside the ordinary hot budget; rotate so repeated failures
+// cannot permanently starve later state keys in the same family.
+const MAX_HOT_RECOVERY_STATE_KEYS_PER_FAMILY = 16;
 const DEFAULT_FAMILY_TIMEOUT_MS = 5_000;
 const ENABLED_PROTOCOL_ADDRESS_TOUCH_BUDGET_MS = 4_000;
 
@@ -500,6 +504,12 @@ export class BlockScanStateCoordinator {
    * established key whose state read failed and has no recovery base.
    */
   private previousCanonicalGraphStateKeys: ReadonlySet<string> | null = null;
+  /**
+   * Family-local cursor for bounded current-N recovery. It advances by one
+   * whole quota after every oversized pass so continuously failing keys cannot
+   * be starved by successful or coalesced graph generations.
+   */
+  private readonly hotRecoveryCursorByFamily = new Map<string, string>();
   private readonly familyTimeoutMs: number;
   private readonly protocolAddressTouchMode: "off" | "shadow" | "enabled";
   private readonly onProtocolAddressTouchShadowTelemetry:
@@ -565,6 +575,7 @@ export class BlockScanStateCoordinator {
     this.published = null;
     this.lastGoodByStateKey.clear();
     this.previousCanonicalGraphStateKeys = null;
+    this.hotRecoveryCursorByFamily.clear();
   }
 
   async prepare(input: PrepareBlockScanStateInput): Promise<BlockScanStatePrepareResult> {
@@ -1781,11 +1792,14 @@ export class BlockScanStateCoordinator {
           const base = this.recoveryBaseForGroup(group);
           const previouslyEstablished =
             previousCanonicalGraphStateKeys?.has(group.stateKey) ?? false;
+          const newlyAdmitted =
+            previousCanonicalGraphStateKeys !== null &&
+            !previouslyEstablished;
           return (
               base &&
                 graph.sourceBlock - base.state.source.number >
                   MAX_INCREMENTAL_RANGE_BLOCKS
-            ) || (previouslyEstablished && !base)
+            ) || (previouslyEstablished && !base) || newlyAdmitted
             ? [group.stateKey]
             : [];
         }),
@@ -1795,6 +1809,10 @@ export class BlockScanStateCoordinator {
           ? recoveryCandidateStateKeys.size
           : undefined;
     }
+    const hotRecoveryStateKeys = this.selectHotRecoveryStateKeys(
+      familyId,
+      recoveryCandidateStateKeys,
+    );
     const incrementalPreparation = await this.prepareIncrementalPlans(
       proofScoped
         ? groups.filter((group) =>
@@ -1942,24 +1960,18 @@ export class BlockScanStateCoordinator {
     let proofScopedUnresolvedStateKeys = 0;
     if (proofScoped) {
       for (const group of groups) {
-        const previouslyEstablished =
-          previousCanonicalGraphStateKeys?.has(group.stateKey) ?? false;
-        const genuinelyNew =
-          previousCanonicalGraphStateKeys !== null &&
-          !previouslyEstablished;
         if (
-          genuinelyNew ||
+          hotRecoveryStateKeys.has(group.stateKey) ||
           carryForwardStateKeys.has(group.stateKey) ||
           classifiedDirectStateKeys.has(group.stateKey)
         ) {
           continue;
         }
         /*
-         * The previous canonical graph already contained this key, but no
-         * complete canonical mutation proof advanced it to source N. It stays
-         * established even if its earlier state read failed and therefore
-         * produced no recovery base. Reading every such key would turn one
-         * lagging topology source into a whole-family hot-path scan.
+         * This key has no complete canonical mutation proof at source N. It
+         * may be newly admitted, missing a recovery base, or outside the safe
+         * proof window. Reading every such key would turn one lagging topology
+         * source into a whole-family hot-path scan.
          */
         badStateKeys.add(group.stateKey);
         proofScopedUnresolvedStateKeys++;
@@ -1974,14 +1986,14 @@ export class BlockScanStateCoordinator {
       }
       if (proofScopedUnresolvedStateKeys > 0) {
         fullFallbackReason ??= "mutation-proof-incomplete";
-        fullFallbackDetail ??= "proof-scoped:established-state-unresolved";
+        fullFallbackDetail ??= "proof-scoped:state-recovery-unresolved";
         issues.push({
           kind: "graph-incomplete",
           lane,
           familyId,
           message:
-            `${proofScopedUnresolvedStateKeys} established state keys lack ` +
-            "a complete canonical mutation proof",
+            `${proofScopedUnresolvedStateKeys} state keys await bounded ` +
+            "current-block recovery",
         });
       }
     }
@@ -2560,6 +2572,39 @@ export class BlockScanStateCoordinator {
       }),
       familyTelemetry: Object.freeze([familyExecution]),
     });
+  }
+
+  private selectHotRecoveryStateKeys(
+    familyId: string,
+    candidates: ReadonlySet<string>,
+  ): ReadonlySet<string> {
+    const sorted = [...candidates].sort();
+    if (sorted.length === 0) {
+      this.hotRecoveryCursorByFamily.delete(familyId);
+      return new Set();
+    }
+    if (sorted.length <= MAX_HOT_RECOVERY_STATE_KEYS_PER_FAMILY) {
+      this.hotRecoveryCursorByFamily.delete(familyId);
+      return new Set(sorted);
+    }
+    const priorCursor = this.hotRecoveryCursorByFamily.get(familyId);
+    const start = priorCursor === undefined
+      ? 0
+      : Math.max(
+          0,
+          sorted.findIndex((stateKey) => stateKey.localeCompare(priorCursor) > 0),
+        );
+    const selected = new Set(
+      Array.from(
+        { length: MAX_HOT_RECOVERY_STATE_KEYS_PER_FAMILY },
+        (_, index) => sorted[(start + index) % sorted.length],
+      ),
+    );
+    const lastSelected = [...selected].at(-1);
+    if (lastSelected !== undefined) {
+      this.hotRecoveryCursorByFamily.set(familyId, lastSelected);
+    }
+    return selected;
   }
 }
 
