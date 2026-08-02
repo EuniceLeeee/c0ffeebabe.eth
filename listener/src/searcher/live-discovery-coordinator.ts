@@ -17,6 +17,7 @@ import {
 } from "./canonical-header-journal.js";
 import {
   DiscoveryBackfillLane,
+  resolveDiscoveryBackfillChunkBlocks,
   type DiscoveryBackfillControl,
   type DiscoveryBackfillPlan,
 } from "./discovery-backfill-lane.js";
@@ -1651,12 +1652,9 @@ export async function createLiveDiscoveryCoordinator(
     }
     finishPublishedDiscoveryState();
   };
-  const discoveryBackfillMaxBlocks = Math.max(
-    1,
-    Number(
-      process.env.SEARCHER_DISCOVERY_BACKFILL_MAX_BLOCKS ??
-        String(protocolDiscoveryMaxCatchupBlocks),
-    ),
+  const discoveryBackfillMaxBlocks = resolveDiscoveryBackfillChunkBlocks(
+    protocolDiscoveryMaxCatchupBlocks,
+    process.env.SEARCHER_DISCOVERY_BACKFILL_MAX_BLOCKS,
   );
   const discoveryBackfillBudgetMs = Math.max(
     1_000,
@@ -1843,6 +1841,15 @@ export async function createLiveDiscoveryCoordinator(
     );
     if (taken.status !== "degraded") {
       finishPublishedDiscoveryState();
+      // A bounded chunk is only the work unit, not the catch-up target.
+      // Chain the next contiguous chunk immediately so a 20k-block retained
+      // history does not take one five-minute timer interval per 512 blocks.
+      void scheduleDiscoveryBackfill(latest).catch((error) => {
+        console.warn(
+          `[searcher/live] protocol backfill continuation failed: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
     }
   };
   const scheduleProtocolBackfill = (

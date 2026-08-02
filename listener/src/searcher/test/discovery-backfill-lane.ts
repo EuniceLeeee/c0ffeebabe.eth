@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
+  DEFAULT_DISCOVERY_BACKFILL_CHUNK_BLOCKS,
   DiscoveryBackfillLane,
+  resolveDiscoveryBackfillChunkBlocks,
   type DiscoveryBackfillCanonicalProof,
   type DiscoveryBackfillPlan,
   type DiscoveryBackfillRequest,
@@ -32,14 +34,53 @@ interface RawBackfill {
   readonly edge: string;
 }
 
+chunkSizingSeparatesRetentionFromWorkUnits();
 await preparationDoesNotHoldMutationQueue();
+await boundedChunksAdvanceContiguously();
 await exactCoverageTransitionCannotJumpHoles();
 await baseAndReadyMutationFailClosed();
 await laneAwareRebasePreservesIndependentState();
 await deadlineCancelsEveryBudgetedRead();
 await futureReadyWaitsForNewestHead();
 
-console.log("[discovery-backfill-lane] bounded background publication: PASS (6/6)");
+console.log("[discovery-backfill-lane] bounded background publication: PASS (8/8)");
+
+function chunkSizingSeparatesRetentionFromWorkUnits(): void {
+  assert.equal(
+    resolveDiscoveryBackfillChunkBlocks(20_000, undefined),
+    DEFAULT_DISCOVERY_BACKFILL_CHUNK_BLOCKS,
+  );
+  assert.equal(resolveDiscoveryBackfillChunkBlocks(128, undefined), 128);
+  assert.equal(
+    resolveDiscoveryBackfillChunkBlocks(20_000, "1024"),
+    1_024,
+  );
+}
+
+async function boundedChunksAdvanceContiguously(): Promise<void> {
+  let liveState = stateAt(100, 1);
+  for (const request of [
+    requestFor(101, 105, 110),
+    requestFor(106, 110, 110),
+  ]) {
+    const lane = createLane(async () => rawFor(request));
+    lane.schedule(request, liveState);
+    await lane.settled();
+    const taken = lane.takeForHotHead({
+      targetSource: source(110),
+      currentState: liveState,
+      canonicalPreparedSource: proof(110, 1),
+      currentCanonicalRevision: 1,
+    });
+    assert.notEqual(taken.status, "degraded");
+    if (taken.status === "degraded") throw new Error("chunk was not published");
+    liveState = taken.state;
+  }
+  assert.equal(liveState.dex.sourceCompleteThrough, 110);
+  assert.equal(liveState.dex.graphCompleteThrough, 110);
+  assert.equal(liveState.protocol[OBSERVED], 110);
+  assert.equal(liveState.protocol[ADDRESS], 110);
+}
 
 async function preparationDoesNotHoldMutationQueue(): Promise<void> {
   const gate = deferred<RawBackfill>();

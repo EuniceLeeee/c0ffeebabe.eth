@@ -1,5 +1,28 @@
 import type { DiscoveryRange } from "./discovery-source-watermark.js";
 
+export const DEFAULT_DISCOVERY_BACKFILL_CHUNK_BLOCKS = 512;
+
+/**
+ * Historical retention and one worker's CPU/RPC unit are different limits.
+ * Keep the full catch-up target, but bound one preparation so a timeout can
+ * publish progress instead of restarting the same large range forever.
+ */
+export function resolveDiscoveryBackfillChunkBlocks(
+  maxCatchupBlocks: number,
+  configured: string | undefined,
+): number {
+  positiveSafeInteger(maxCatchupBlocks, "maxCatchupBlocks");
+  if (configured === undefined) {
+    return Math.min(
+      maxCatchupBlocks,
+      DEFAULT_DISCOVERY_BACKFILL_CHUNK_BLOCKS,
+    );
+  }
+  const parsed = Number(configured);
+  positiveSafeInteger(parsed, "SEARCHER_DISCOVERY_BACKFILL_MAX_BLOCKS");
+  return parsed;
+}
+
 export interface DiscoveryBackfillSource {
   readonly number: number;
   readonly hash: string;
