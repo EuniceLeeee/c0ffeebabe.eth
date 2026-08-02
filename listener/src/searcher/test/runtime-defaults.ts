@@ -71,9 +71,9 @@ for (const source of [searcherMain, blockscanHunt]) {
   assert(
     source.includes("SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_SIZE") &&
       source.includes("SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY") &&
-      /STATE_RPC_BATCH_SIZE[\s\S]{0,120}(?:\?\? \"100\"|,\s*100,)/.test(source) &&
+      /STATE_RPC_BATCH_SIZE[\s\S]{0,120}(?:\?\? \"500\"|,\s*500,)/.test(source) &&
       /STATE_RPC_BATCH_CONCURRENCY[\s\S]{0,120}(?:\?\? \"4\"|,\s*4,)/.test(source),
-    "live and trusted hunt must share the 100x4 block-scan RPC defaults",
+    "live and trusted hunt must share the 500x4 block-scan RPC defaults",
   );
 }
 console.log("[runtime-defaults] live/hunt block-scan RPC defaults match: PASS");
