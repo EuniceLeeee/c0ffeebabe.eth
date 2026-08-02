@@ -273,18 +273,21 @@ export function summarizeBlockScanIssueCauses(
 export class NMinusOneProducerGate {
   private deferred: (() => void) | null = null;
 
-  afterEnumeration(
-    candidateCount: number,
-    startNextProducer: () => void,
-  ): boolean {
-    if (candidateCount <= 0) {
-      startNextProducer();
-      return false;
-    }
+  arm(startNextProducer: () => void): void {
     if (this.deferred) {
-      throw new Error("N-1 producer gate already owns a deferred producer");
+      throw new Error("N-1 producer gate is already armed");
     }
     this.deferred = startNextProducer;
+  }
+
+  afterEnumeration(candidateCount: number): boolean {
+    if (!this.deferred) {
+      throw new Error("N-1 producer gate was not armed before enumeration");
+    }
+    if (candidateCount <= 0) {
+      this.release();
+      return false;
+    }
     return true;
   }
 
@@ -293,6 +296,14 @@ export class NMinusOneProducerGate {
     this.deferred = null;
     deferred?.();
   }
+}
+
+export function nMinusOneProducerCanServeLatestHead(
+  sourceBlock: number,
+  latestScheduledHead: number | null,
+): boolean {
+  return latestScheduledHead === null ||
+    latestScheduledHead <= sourceBlock + 1;
 }
 
 export function blockScanCandidateFundingTokens(
@@ -1681,6 +1692,32 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         edges: graphEdges,
         landedCoverage: discoveryPass.landedCoverage,
       });
+      if (useNMinusOneFallback) {
+        // Register current-N production before any predecessor wait or
+        // enumeration. A newer head may cancel this pass at either boundary;
+        // the outer finally still releases exactly one producer for N.
+        nMinusOneProducerGate.arm(() => {
+          if (
+            !nMinusOneProducerCanServeLatestHead(
+              graphView.sourceBlock,
+              this.latestScheduledHead,
+            )
+          ) {
+            console.log(
+              `[searcher/blockscan-nminus1-producer] ${JSON.stringify({
+                sourceBlock: graphView.sourceBlock,
+                latestScheduledHead: this.latestScheduledHead,
+                status: "skipped_obsolete",
+              })}`,
+            );
+            return;
+          }
+          this.enqueueCoarsePricing({
+            coordinator: adapterRuntimeCoordinator,
+            graph: graphView,
+          });
+        });
+      }
       if (this.deps.blind.enabled) {
         auditGraphView = graphView;
         auditPricingCoverage = EMPTY_BLIND_PRICING_COVERAGE;
@@ -1985,12 +2022,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           !predecessorPricing ||
           predecessorPricing.sourceBlock + 1 !== blockNumber
         ) {
-          // Make progress for N+1 even when N has no usable predecessor.
-          // This pricing-only producer cannot publish funding or worker state.
-          this.enqueueCoarsePricing({
-            coordinator: adapterRuntimeCoordinator,
-            graph: graphView,
-          });
           finishStage("state", "failed");
           timing.stateMs = stageBoundaries.state.stage_ms;
           outcome = "degraded";
@@ -2094,10 +2125,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           Date.now() >=
             passDeadlineAtMs - Math.max(1, this.deps.solveReserveMs)
         ) {
-          this.enqueueCoarsePricing({
-            coordinator: adapterRuntimeCoordinator,
-            graph: graphView,
-          });
           outcome = "budget_exceeded";
           skippedReason = "nminus1_exact_reserve_exhausted";
           console.log(
@@ -2114,12 +2141,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         }
         const requiresExact = nMinusOneProducerGate.afterEnumeration(
           coarse.opportunities.length,
-          () => {
-            this.enqueueCoarsePricing({
-              coordinator: adapterRuntimeCoordinator,
-              graph: graphView,
-            });
-          },
         );
         if (!requiresExact) {
           // Zero candidates cannot consume funding or execution state.

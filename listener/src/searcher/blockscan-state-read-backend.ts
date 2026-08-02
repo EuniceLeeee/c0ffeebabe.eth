@@ -22,6 +22,7 @@ import {
   BLOCKSCAN_MULTICALL3,
   blockScanMulticallIface,
 } from "./blockscan-multicall.js";
+import type { LiveRethReadPriority } from "./live-reth-read-priority.js";
 import { decodeRlp, keccak256 } from "ethers";
 
 interface JsonRpcSuccess {
@@ -64,6 +65,11 @@ export interface JsonRpcBlockScanStateReadBackendOptions {
   readonly onMutationProofTelemetry?: (
     telemetry: MutationProofTransportTelemetry,
   ) => void;
+  /**
+   * Protect only canonical mutation transport. Bulk family state reads must
+   * not exclude discovery from the local node for a complete generation.
+   */
+  readonly mutationReadPriority?: Pick<LiveRethReadPriority, "runCritical">;
   readonly now?: () => number;
 }
 
@@ -201,6 +207,9 @@ export class JsonRpcBlockScanStateReadBackend
   private readonly onMutationProofTelemetry:
     | ((telemetry: MutationProofTransportTelemetry) => void)
     | undefined;
+  private readonly mutationReadPriority:
+    | Pick<LiveRethReadPriority, "runCritical">
+    | undefined;
   private readonly now: () => number;
   private readonly mutationRangeSessions = new Map<
     string,
@@ -257,6 +266,7 @@ export class JsonRpcBlockScanStateReadBackend
     this.addressTouchSlots = new AbortableSemaphore(1);
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.onMutationProofTelemetry = options.onMutationProofTelemetry;
+    this.mutationReadPriority = options.mutationReadPriority;
     this.now = options.now ?? (() => performance.now());
   }
 
@@ -635,14 +645,16 @@ export class JsonRpcBlockScanStateReadBackend
               signal: ownerSignal,
             },
           )
-        : this.computeCanonicalMutationRange(
-            descriptor,
-            fromExclusive,
-            through,
-            {
-              deadlineAtMs: control.deadlineAtMs,
-              signal: ownerSignal,
-            },
+        : this.runMutationCritical(() =>
+            this.computeCanonicalMutationRange(
+              descriptor,
+              fromExclusive,
+              through,
+              {
+                deadlineAtMs: control.deadlineAtMs,
+                signal: ownerSignal,
+              },
+            )
           );
       session = created.finally(() => {
         if (this.mutationRangeSessions.get(sessionKey) === session) {
@@ -713,14 +725,16 @@ export class JsonRpcBlockScanStateReadBackend
   ): Promise<void> {
     batch.started = true;
     try {
-      batch.resolve(await this.computeCanonicalMutationRanges(
-        [...batch.descriptors.values()],
-        batch.fromExclusive,
-        batch.through,
-        {
-          deadlineAtMs: batch.deadlineAtMs,
-          signal: batch.sharedSignal,
-        },
+      batch.resolve(await this.runMutationCritical(() =>
+        this.computeCanonicalMutationRanges(
+          [...batch.descriptors.values()],
+          batch.fromExclusive,
+          batch.through,
+          {
+            deadlineAtMs: batch.deadlineAtMs,
+            signal: batch.sharedSignal,
+          },
+        )
       ));
     } catch (error) {
       batch.reject(error);
@@ -729,6 +743,10 @@ export class JsonRpcBlockScanStateReadBackend
         this.pendingMutationTransportBatches.delete(batch.key);
       }
     }
+  }
+
+  private runMutationCritical<T>(work: () => Promise<T>): Promise<T> {
+    return this.mutationReadPriority?.runCritical(work) ?? work();
   }
 
   private async computeCanonicalMutationRange(

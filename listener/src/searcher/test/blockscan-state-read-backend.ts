@@ -49,6 +49,7 @@ await testRawHeaderCanonicalMutationRange();
 await testRawHeaderRejectsParentDiscontinuity();
 await testRawHeaderUnavailableFallsBack();
 await testCanonicalMutationRange();
+await testMutationPriorityIsScopedToCanonicalProof();
 await testMutationProofTelemetry();
 await testMutationProofReadsHeadersAndLogsConcurrently();
 await testMutationProofPreservesPrimaryTransportFailure();
@@ -1259,6 +1260,88 @@ async function testCanonicalMutationRange(): Promise<void> {
     ],
   );
   console.log("[state-read-backend] canonical mutation range proof: PASS");
+}
+
+async function testMutationPriorityIsScopedToCanonicalProof(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  let criticalCalls = 0;
+  let insideCritical = false;
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    mutationReadPriority: {
+      async runCritical<T>(work: () => Promise<T>): Promise<T> {
+        criticalCalls++;
+        insideCritical = true;
+        try {
+          return await work();
+        } finally {
+          insideCritical = false;
+        }
+      },
+    },
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      return fakeResponse(body.map((request) => {
+        if (request.method === "eth_call") {
+          assert.equal(
+            insideCritical,
+            false,
+            "ordinary family state reads must not hold mutation priority",
+          );
+          return success(request.id, "0x1234");
+        }
+        assert.equal(
+          insideCritical,
+          true,
+          "canonical mutation transport must own mutation priority",
+        );
+        if (request.method === "eth_getLogs") {
+          return success(request.id, []);
+        }
+        const number = Number(BigInt(request.params[0]));
+        return success(request.id, {
+          number: request.params[0],
+          hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+          parentHash: number === sourceBlock
+            ? previousHash
+            : `0x${"09".repeat(32)}`,
+        });
+      }));
+    }) as typeof fetch,
+  });
+  const previous: BlockSource = {
+    number: sourceBlock - 1,
+    hash: previousHash,
+    generation: sourceGeneration - 1,
+  };
+  const through: BlockSource = {
+    number: sourceBlock,
+    hash: sourceBlockHash,
+    generation: sourceGeneration,
+  };
+  const control = {
+    sourceBlock,
+    sourceBlockHash,
+    sourceGeneration,
+    deadlineAtMs: Date.now() + 10_000,
+    signal: new AbortController().signal,
+  };
+  await backend.readCanonicalMutationRange(
+    descriptor,
+    previous,
+    through,
+    control,
+  );
+  const ordinary = await backend.readBatch(
+    "swap",
+    [read("ordinary", "0x12345678")],
+    control,
+  );
+  assert.equal(ordinary[0]?.ok, true);
+  assert.equal(criticalCalls, 1);
+  console.log("[state-read-backend] mutation priority scope: PASS");
 }
 
 async function testMutationProofTelemetry(): Promise<void> {

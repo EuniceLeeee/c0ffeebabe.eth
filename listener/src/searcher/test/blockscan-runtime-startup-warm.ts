@@ -19,6 +19,7 @@ import {
   dexRuntimeAdmissionCompleteThrough,
   incompleteBlockScanFamilies,
   NMinusOneProducerGate,
+  nMinusOneProducerCanServeLatestHead,
   summarizeBlockScanIssueCauses,
   type BlockScanAtomicExecutionInput,
   type BlockScanAtomicResult,
@@ -1511,11 +1512,9 @@ async function nMinusOneWaitsForItsOnlyAdjacentProducer(): Promise<void> {
 async function nMinusOneExactJoinPrecedesNextProducer(): Promise<void> {
   const activity: string[] = [];
   const candidateGate = new NMinusOneProducerGate();
+  candidateGate.arm(() => activity.push("producer:start"));
   assert.equal(
-    candidateGate.afterEnumeration(
-      1,
-      () => activity.push("producer:start"),
-    ),
+    candidateGate.afterEnumeration(1),
     true,
   );
   activity.push("exact:start");
@@ -1537,10 +1536,8 @@ async function nMinusOneExactJoinPrecedesNextProducer(): Promise<void> {
 
   activity.length = 0;
   const emptyGate = new NMinusOneProducerGate();
-  const skipped = emptyGate.afterEnumeration(
-    0,
-    () => activity.push("producer:start"),
-  );
+  emptyGate.arm(() => activity.push("producer:start"));
+  const skipped = emptyGate.afterEnumeration(0);
   assert.equal(skipped, false);
   assert.deepEqual(
     activity,
@@ -1550,11 +1547,9 @@ async function nMinusOneExactJoinPrecedesNextProducer(): Promise<void> {
 
   activity.length = 0;
   const failedGate = new NMinusOneProducerGate();
+  failedGate.arm(() => activity.push("producer:start"));
   assert.equal(
-    failedGate.afterEnumeration(
-      1,
-      () => activity.push("producer:start"),
-    ),
+    failedGate.afterEnumeration(1),
     true,
   );
   activity.push("pipeline:error");
@@ -1563,6 +1558,34 @@ async function nMinusOneExactJoinPrecedesNextProducer(): Promise<void> {
     activity,
     ["pipeline:error", "producer:start"],
     "failed exact join must not permanently stop predecessor production",
+  );
+
+  activity.length = 0;
+  const preEnumerationAbortGate = new NMinusOneProducerGate();
+  preEnumerationAbortGate.arm(() => activity.push("producer:start"));
+  activity.push("pass:superseded-before-enumeration");
+  preEnumerationAbortGate.release();
+  preEnumerationAbortGate.release();
+  assert.deepEqual(
+    activity,
+    ["pass:superseded-before-enumeration", "producer:start"],
+    "a pass cancelled before enumeration must still start its armed producer exactly once",
+  );
+
+  assert.equal(
+    nMinusOneProducerCanServeLatestHead(700, 700),
+    true,
+    "the current source producer remains useful before a newer head arrives",
+  );
+  assert.equal(
+    nMinusOneProducerCanServeLatestHead(700, 701),
+    true,
+    "source N must remain available to serve head N+1",
+  );
+  assert.equal(
+    nMinusOneProducerCanServeLatestHead(700, 702),
+    false,
+    "source N is obsolete once the latest scheduled head has advanced to N+2",
   );
 }
 

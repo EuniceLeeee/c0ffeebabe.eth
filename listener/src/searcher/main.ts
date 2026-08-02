@@ -1161,6 +1161,7 @@ async function main(): Promise<void> {
           `[searcher/blockscan-mutation-proof] ${JSON.stringify(telemetry)}`,
         );
       },
+      mutationReadPriority: liveRethReadPriority,
     });
     /*
      * Funding is intentionally isolated from pricing/proof transport. The two
@@ -1224,7 +1225,6 @@ async function main(): Promise<void> {
         },
       }),
       fundingStateReads,
-      liveRethReadPriority,
     );
   }
   const solver = new AnvilSolver();
