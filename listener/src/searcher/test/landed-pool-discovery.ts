@@ -34,6 +34,21 @@ import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { retainVerifiedSwapFamilyInstances } from "../venues/swap-family-inventory.js";
 import { curveUnderlyingAdapter } from "../venues/swaps/curve-underlying.js";
 import { CURVE_METAREGISTRY } from "../venues/curve-underlying.js";
+import {
+  EKUBO_CORE,
+  EKUBO_CORE_SWAP_DATA_BYTES,
+  EKUBO_ROUTER,
+} from "../venues/swaps/ekubo/abi.js";
+import {
+  EKUBO_IDENTITY_SOURCE,
+  EKUBO_POOL_ADAPTER_ID,
+  EKUBO_VENUE_ID,
+} from "../venues/swaps/ekubo/ids.js";
+import {
+  createEkuboPoolKeyBinding,
+  ekuboPoolId,
+  normalizeEkuboPoolKey,
+} from "../venues/swaps/ekubo/pool-key.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -126,6 +141,227 @@ function log(
   };
 }
 
+async function testBoundedProductionUnionBatching(): Promise<void> {
+  const fromBlock = 100;
+  const toBlock = fromBlock + 511;
+  const emptyFilters: Array<{
+    readonly fromBlock: number;
+    readonly toBlock: number;
+  }> = [];
+  const empty = await discoverLandedPools({
+    registry: PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery(),
+    backend: {
+      async getLogs(filter) {
+        emptyFilters.push(filter);
+        return [];
+      },
+      async call() {
+        throw new Error("an empty bounded source must not require identity reads");
+      },
+    },
+    fromBlock,
+    toBlock,
+    batchSize: 50,
+    minSwaps: 1,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    topicScanMode: "union",
+    historicalResolution: "complete",
+    strict: true,
+  });
+  assert(
+    empty.coverage.every((item) => item.complete) &&
+      emptyFilters.length === 3 &&
+      emptyFilters.every((filter) =>
+        filter.fromBlock === fromBlock && filter.toBlock === toBlock
+      ),
+    "a 512-block production union must use one topic scan, one anonymous scan, and one V4 Initialize scan",
+  );
+
+  const poolKey = normalizeEkuboPoolKey({
+    token0: ethers.getAddress(
+      "0x0000000000000000000000000000000000000001",
+    ),
+    token1: ethers.getAddress(
+      "0x0000000000000000000000000000000000000002",
+    ),
+    config: ethers.ZeroHash,
+  });
+  const retainedPoolId = ekuboPoolId(poolKey);
+  const retainedEkubo: PoolEntry = Object.freeze({
+    address: ethers.getAddress(EKUBO_ROUTER),
+    receiptEmitters: [ethers.getAddress(EKUBO_CORE)],
+    adapter: EKUBO_POOL_ADAPTER_ID,
+    venueId: EKUBO_VENUE_ID,
+    identitySource: EKUBO_IDENTITY_SOURCE,
+    token0: poolKey.token0,
+    token1: poolKey.token1,
+    poolId: retainedPoolId,
+    routeBinding: createEkuboPoolKeyBinding(poolKey),
+  });
+  const anonymousSwapData = ethers.concat([
+    singleton,
+    retainedPoolId,
+    ethers.ZeroHash,
+    ethers.ZeroHash,
+  ]);
+  assert(
+    (anonymousSwapData.length - 2) / 2 === EKUBO_CORE_SWAP_DATA_BYTES,
+    "Ekubo batching fixture must have the canonical anonymous log width",
+  );
+  const activeFilters: Array<{
+    readonly fromBlock: number;
+    readonly toBlock: number;
+  }> = [];
+  const active = await discoverLandedPools({
+    registry: PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery(),
+    backend: {
+      async getLogs(filter) {
+        activeFilters.push(filter);
+        if (
+          filter.address?.toLowerCase() === EKUBO_CORE.toLowerCase() &&
+          filter.topics.length === 0
+        ) {
+          return [{
+            address: EKUBO_CORE,
+            topics: [],
+            data: anonymousSwapData,
+            blockNumber: fromBlock,
+          }];
+        }
+        return [];
+      },
+      async call() {
+        throw new Error("retained Ekubo identity must not require RPC calls");
+      },
+    },
+    fromBlock,
+    toBlock,
+    batchSize: 50,
+    minSwaps: 1,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    retainedPools: [retainedEkubo],
+    topicScanMode: "union",
+    historicalResolution: "complete",
+    strict: true,
+  });
+  assert(
+    active.coverage.every((item) => item.complete) &&
+      active.materializedPools.some((item) =>
+        item.adapter === EKUBO_POOL_ADAPTER_ID &&
+        item.poolId === retainedPoolId
+      ) &&
+      activeFilters.length === 4 &&
+      activeFilters.every((filter) =>
+        filter.fromBlock === fromBlock && filter.toBlock === toBlock
+      ),
+    "an active Ekubo chunk must add only one bounded Initialize request",
+  );
+}
+
+async function testBoundedUnionSplitFallback(): Promise<void> {
+  const fromBlock = 100;
+  const toBlock = fromBlock + 511;
+  const ranges: string[] = [];
+  let rejectedWideRange = false;
+  const result = await discoverLandedPools({
+    registry: addressRegistry.landedPoolDiscovery(),
+    backend: {
+      async getLogs(filter) {
+        ranges.push(`${filter.fromBlock}-${filter.toBlock}`);
+        if (
+          !rejectedWideRange &&
+          filter.fromBlock === fromBlock &&
+          filter.toBlock === toBlock
+        ) {
+          rejectedWideRange = true;
+          throw new Error("fixture provider range limit");
+        }
+        return [{
+          ...log(addressTopic, ethers.zeroPadValue(pool, 32)),
+          blockNumber: filter.fromBlock,
+        }];
+      },
+      async call() {
+        throw new Error("split fallback fixture must not call");
+      },
+    },
+    fromBlock,
+    toBlock,
+    batchSize: 50,
+    minSwaps: 1,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    topicScanMode: "union",
+    strict: true,
+  });
+  assert(
+    result.coverage.every((item) => item.complete) &&
+      result.activity.get(pool.toLowerCase())?.count === 2 &&
+      ranges.length === 3 &&
+      ranges.includes(`${fromBlock}-${toBlock}`) &&
+      ranges.includes(`${fromBlock}-${fromBlock + 255}`) &&
+      ranges.includes(`${fromBlock + 256}-${toBlock}`),
+    "a provider range failure must bisect the complete 512-block source without dropping either half",
+  );
+}
+
+async function testBoundedUnionCancellation(): Promise<void> {
+  const fromBlock = 100;
+  const toBlock = fromBlock + 511;
+  const controller = new AbortController();
+  const reason = new Error("fixture bounded union cancelled");
+  let requestCount = 0;
+  let observedSignal: AbortSignal | undefined;
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const pending = discoverLandedPools({
+    registry: addressRegistry.landedPoolDiscovery(),
+    backend: {
+      async getLogs(_filter, control) {
+        requestCount++;
+        observedSignal = control?.signal;
+        markStarted();
+        return await new Promise<never>((_resolve, reject) => {
+          const signal = control?.signal;
+          if (!signal) {
+            reject(new Error("bounded union request omitted AbortSignal"));
+            return;
+          }
+          const onAbort = () => reject(signal.reason);
+          signal.addEventListener("abort", onAbort, { once: true });
+          if (signal.aborted) onAbort();
+        });
+      },
+      async call() {
+        throw new Error("cancelled bounded union must not call");
+      },
+    },
+    fromBlock,
+    toBlock,
+    batchSize: 50,
+    minSwaps: 1,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    topicScanMode: "union",
+    signal: controller.signal,
+    strict: true,
+  });
+  await started;
+  controller.abort(reason);
+  let observed: unknown = null;
+  try {
+    await pending;
+  } catch (error) {
+    observed = error;
+  }
+  assert(
+    observed === reason &&
+      observedSignal === controller.signal &&
+      requestCount === 1,
+    "cancelling a coalesced request must abort its transport and must not start split retries",
+  );
+}
+
 const addressFamily = family({
   id: "custom-swap:singleton-address-discovery",
   poolAdapter: addressAdapter,
@@ -163,6 +399,10 @@ assert(
     addressResult.coverage[0].complete,
   "singleton-address coverage requires the registered descriptor to be consumed",
 );
+
+await testBoundedProductionUnionBatching();
+await testBoundedUnionSplitFallback();
+await testBoundedUnionCancellation();
 
 const syntheticToken0 = ethers.getAddress(
   "0x000000000000000000000000000000000000D301",
@@ -1006,7 +1246,7 @@ const parallelUnion = await discoverLandedPools({
       );
       try {
         await new Promise((resolveDelay) =>
-          setTimeout(resolveDelay, (103 - filter.fromBlock) * 5)
+          setTimeout(resolveDelay, filter.fromBlock === 100 ? 15 : 1)
         );
         return [{
           ...log(addressTopic, ethers.zeroPadValue(pool, 32)),
@@ -1021,8 +1261,8 @@ const parallelUnion = await discoverLandedPools({
     },
   },
   fromBlock: 100,
-  toBlock: 103,
-  batchSize: 1,
+  toBlock: 612,
+  batchSize: 128,
   minSwaps: 1,
   admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   topicScanMode: "union",
@@ -1030,9 +1270,9 @@ const parallelUnion = await discoverLandedPools({
 });
 assert(
   maxActiveUnionSlices === 4 &&
-    parallelUnion.activity.get(pool.toLowerCase())?.count === 4 &&
-    parallelUnion.activity.get(pool.toLowerCase())?.lastSwapBlock === 103,
-  "union slices must read concurrently but fold deterministically in block order",
+    parallelUnion.activity.get(pool.toLowerCase())?.count === 5 &&
+    parallelUnion.activity.get(pool.toLowerCase())?.lastSwapBlock === 612,
+  "union ranges above the bounded catch-up unit must still read slices concurrently and fold deterministically",
 );
 
 const mixedActivity = new Map<string, LandedPoolActivity>([
@@ -1256,7 +1496,7 @@ assert(
   "address and opaque materializers should own only their typed retry routing",
 );
 
-console.log("landed-pool-discovery PASS (20/20)");
+console.log("landed-pool-discovery PASS (23/23)");
 
 function discoverySummary(result: Awaited<ReturnType<typeof discoverLandedPools>>) {
   return {

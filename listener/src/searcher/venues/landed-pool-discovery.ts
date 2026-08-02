@@ -914,6 +914,11 @@ async function discoverLandedPoolsByTopicUnion(input: {
   readonly strict?: boolean;
   readonly signal?: AbortSignal;
 }): Promise<LandedPoolDiscoveryResult> {
+  const batchSize = boundedUnionScanBatchSize(
+    input.fromBlock,
+    input.toBlock,
+    input.batchSize,
+  );
   const descriptors = input.registry.list();
   const descriptorsByTopic = new Map<string, LandedPoolDiscoveryDescriptor[]>();
   const materializerLogs = new Map<string, LandedPoolDiscoveryLog[]>();
@@ -948,17 +953,17 @@ async function discoverLandedPoolsByTopicUnion(input: {
   for (
     let start = input.fromBlock;
     start <= input.toBlock;
-    start += input.batchSize
+    start += batchSize
   ) {
     ranges.push({
       fromBlock: start,
-      toBlock: Math.min(start + input.batchSize - 1, input.toBlock),
+      toBlock: Math.min(start + batchSize - 1, input.toBlock),
     });
   }
-  // Local reth traverses the same receipts/index range for every slice. Four
-  // independent range reads keep that work parallel without retaining the
-  // whole historical result in memory. Results are still folded in block
-  // order, preserving the previous deterministic insertion/tie behavior.
+  // A bounded live catch-up is one range. Longer offline/startup scans retain
+  // four-way slice parallelism without retaining the whole historical result
+  // in memory. Results are still folded in block order, preserving the
+  // previous deterministic insertion/tie behavior.
   for (
     let groupStart = 0;
     topics.length > 0 && groupStart < ranges.length;
@@ -1022,7 +1027,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
           descriptor.event,
           input.fromBlock,
           input.toBlock,
-          input.batchSize,
+          batchSize,
           input.signal,
         );
         logCountsByEventId.set(descriptor.event.id, result.logs.length);
@@ -1074,7 +1079,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
     });
   }
   const outcomes = await materializeRegisteredDescriptors(
-    input,
+    { ...input, batchSize },
     descriptors,
     sourceScans,
     true,
@@ -1160,6 +1165,25 @@ async function discoverLandedPoolsByTopicUnion(input: {
     coverage: Object.freeze(coverage),
     logCountsByEventId,
   };
+}
+
+/**
+ * A live DEX catch-up job is already bounded to at most 512 blocks. Splitting
+ * that small canonical range into 50-block requests makes reth traverse the
+ * same receipt index once per slice and once again for each family-owned
+ * follow-up scan. Read the bounded unit in one request instead; scanFilterSlice
+ * retains the provider-limit fallback by recursively bisecting failed ranges.
+ *
+ * Larger offline/startup ranges keep their caller-selected batch size. A
+ * steady-state one-block scan remains a one-block scan.
+ */
+function boundedUnionScanBatchSize(
+  fromBlock: number,
+  toBlock: number,
+  configuredBatchSize: number,
+): number {
+  const rangeBlocks = toBlock - fromBlock + 1;
+  return rangeBlocks <= 512 ? rangeBlocks : configuredBatchSize;
 }
 
 type LandedMaterializationOutcome =
