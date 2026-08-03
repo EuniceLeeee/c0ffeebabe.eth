@@ -148,22 +148,30 @@ export function describeLiveDiscoveryPublicationState(
   const coverage = coveragePayload(state);
   return Object.freeze({
     revision: state.revision,
-    baseFingerprint: canonicalSha256({
-      strategyViews: state.strategyViews,
-      backrunGraph: state.backrunGraph,
-      blockscanGraph: state.blockscanGraph,
-      tokenIndex: state.tokenIndex,
-      poolAddressMap: state.poolAddressMap,
-      flashTokens: state.flashTokens,
-      knownPoolKeys: state.knownPoolKeys,
-      knownPoolAddresses: state.knownPoolAddresses,
-      suppressedDexPoolKeys: state.suppressedDexPoolKeys ?? new Set<string>(),
-      protocolOwnership: state.protocolOwnership,
-      protocolEvidenceCache: state.protocolEvidenceCache,
-      retryableDexGraphPools: state.retryableDexGraphPools,
-      retryableDexIdentityPools: state.retryableDexIdentityPools,
+    /*
+     * Fingerprint the publication in per-component digests instead of
+     * serializing the whole state into one string: with a production-sized
+     * graph the single encoded string exceeded V8's maximum string length
+     * and every pass died with RangeError: Invalid string length. Digests are
+     * fixed-length hex, so concatenating them is unambiguous and
+     * order-preserving.
+     */
+    baseFingerprint: canonicalSha256Combined([
+      state.strategyViews,
+      state.backrunGraph,
+      state.blockscanGraph,
+      state.tokenIndex,
+      state.poolAddressMap,
+      state.flashTokens,
+      state.knownPoolKeys,
+      state.knownPoolAddresses,
+      state.suppressedDexPoolKeys ?? new Set<string>(),
+      state.protocolOwnership,
+      state.protocolEvidenceCache,
+      state.retryableDexGraphPools,
+      state.retryableDexIdentityPools,
       coverage,
-    }),
+    ]),
     coverageFingerprint: canonicalSha256(coverage),
     graphCompleteThrough:
       deriveLiveDiscoveryGraphCompleteThroughUnchecked(state),
@@ -681,6 +689,20 @@ function assertPoolMap(
 function canonicalSha256(value: unknown): string {
   const encoded = canonicalEncode(value, new Set());
   return `sha256:${createHash("sha256").update(encoded).digest("hex")}`;
+}
+
+/**
+ * Hash each part separately and combine the digests so no single string
+ * exceeds V8's maximum length on a production-sized publication. Digest
+ * boundaries are unambiguous (fixed-length hex), so the composition stays
+ * order-preserving and content-addressed.
+ */
+function canonicalSha256Combined(parts: readonly unknown[]): string {
+  const hash = createHash("sha256");
+  for (const part of parts) {
+    hash.update(canonicalSha256(part));
+  }
+  return `sha256:${hash.digest("hex")}`;
 }
 
 /**
