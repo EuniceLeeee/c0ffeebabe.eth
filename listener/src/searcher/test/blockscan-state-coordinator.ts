@@ -1156,11 +1156,18 @@ async function graphIncompleteSwapFamilyPreservesHealthySibling(): Promise<void>
   if (withoutBootstrap.status !== "degraded") {
     throw new Error("expected first steady generation to fail closed");
   }
-  assert.equal(withoutBootstrap.snapshot.mids.size, 1);
+  assert.equal(
+    withoutBootstrap.snapshot.mids.size,
+    3,
+    "steady generations price the lagging swap family through the same " +
+      "event-driven incremental path (carry unchanged pools, read only the " +
+      "pools the previous block traded); topology completeness is labeling, " +
+      "not a pricing gate",
+  );
   assert.deepEqual(
     readTargets,
-    [PROTOCOL_POOL.toLowerCase()],
-    "only explicit startup bootstrap may establish an initial lagging swap family",
+    [SWAP_POOL.toLowerCase(), PROTOCOL_POOL.toLowerCase()].sort(),
+    "lagging topology must not prevent pricing pools the graph owns",
   );
 }
 
@@ -1298,24 +1305,33 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   }
   assert.deepEqual(
     [...backend.readTargets].sort(),
-    [SWAP_POOL_B, PROTOCOL_POOL]
+    [SWAP_POOL, SWAP_POOL_B, PROTOCOL_POOL]
       .map((value) => value.toLowerCase())
       .sort(),
-    "failed mutation proof may recover only the missing-base key, not the whole swap family",
+    "a failed mutation range must not drop the family: every pool the graph " +
+      "owns is priced by a source-pinned direct read at current N (backrun- " +
+      "style whole-graph update pipe); the mutation proof only makes the " +
+      "carry path cheaper when it succeeds",
   );
-  assert.equal(steady.snapshot.mids.size, 3);
+  assert.equal(steady.snapshot.mids.size, 5);
   assert(
     [...steady.snapshot.mids.values()].every((value) =>
-      [SWAP_POOL_B, PROTOCOL_POOL]
+      [SWAP_POOL, SWAP_POOL_B, PROTOCOL_POOL]
         .map((pool) => pool.toLowerCase())
         .includes(value.pool.toLowerCase())
     ),
-    "the recovered state key and healthy protocol sibling must publish",
+    "every admitted graph pool must publish a mid after a whole-family " +
+      "direct-read fallback",
   );
   const swapTelemetry = steady.familyTelemetry?.find(
     (entry) => entry.familyId === "univ2-standard",
   );
-  assert.equal(swapTelemetry?.directStateKeys, 1);
+  assert.equal(
+    swapTelemetry?.directStateKeys,
+    2,
+    "a failed mutation range direct-reads every owned pool instead of " +
+      "dropping the unproven sibling",
+  );
   assert.equal(swapTelemetry?.fullFallbackReason, "mutation-range-failed");
   assert.equal(
     swapTelemetry?.recoveryRequiredStateKeys ?? 0,
@@ -1323,10 +1339,11 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
     "a successful current-block read must clear the missing-base backlog",
   );
   assert(
-    steady.coverage.unresolvedStateKeys.some((stateKey) =>
+    !steady.coverage.unresolvedStateKeys.some((stateKey) =>
       stateKey.includes(SWAP_POOL.toLowerCase())
     ),
-    "unproven swap state must remain explicit unresolved coverage",
+    "a successful source-pinned direct read resolves the pool; only the " +
+      "topology coverage gap stays degraded",
   );
 
   backend.rangeFailure = false;
@@ -1381,14 +1398,17 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   }
   assert.deepEqual(
     [...backend.readTargets].sort(),
-    [SWAP_POOL_C, PROTOCOL_POOL].map((value) => value.toLowerCase()).sort(),
-    "a genuinely new key may read current N while established unproven keys stay unresolved",
+    [SWAP_POOL, SWAP_POOL_C, PROTOCOL_POOL]
+      .map((value) => value.toLowerCase())
+      .sort(),
+    "a failed mutation range direct-reads every owned pool including the " +
+      "newly admitted key; nothing stays unresolved behind a topology gap",
   );
   assert.equal(
     withNewKey.familyTelemetry?.find(
       (entry) => entry.familyId === "univ2-standard",
     )?.directStateKeys,
-    1,
+    2,
   );
 
   backend.rangeFailure = false;
@@ -1598,11 +1618,16 @@ async function hotRecoveryIsBoundedPerFamily(): Promise<void> {
   const telemetry = recovery.familyTelemetry?.find(
     (entry) => entry.familyId === "univ2-standard",
   );
-  assert.equal(telemetry?.directStateKeys, 16);
-  assert.equal(telemetry?.recoveryRequiredStateKeys, 2);
-  assert.equal(backend.readTargets.length, 16);
+  assert.equal(
+    telemetry?.directStateKeys,
+    pools.length,
+    "a stale base (gap > 32) triggers a whole-family direct read, not a " +
+      "16-key recovery quota: every pool the graph owns is priced",
+  );
+  assert.equal(telemetry?.recoveryRequiredStateKeys ?? 0, 0);
+  assert.equal(backend.readTargets.length, pools.length);
   assert.equal(backend.rangeSources.length, 0);
-  assert.equal(recovery.coverage.unresolvedStateKeys.length, 2);
+  assert.equal(recovery.coverage.unresolvedStateKeys.length, 0);
 
   backend.readTargets.length = 0;
   const drained = await coordinator.prepare({
@@ -1614,7 +1639,11 @@ async function hotRecoveryIsBoundedPerFamily(): Promise<void> {
   const drainedTelemetry = drained.familyTelemetry?.find(
     (entry) => entry.familyId === "univ2-standard",
   );
-  assert.equal(drainedTelemetry?.directStateKeys, 2);
+  assert.equal(
+    drainedTelemetry?.directStateKeys,
+    0,
+    "once the base is current the family carries every unchanged pool",
+  );
   assert.equal(drainedTelemetry?.recoveryRequiredStateKeys ?? 0, 0);
   assert.equal(drained.coverage.unresolvedStateKeys.length, 0);
 
@@ -1669,12 +1698,13 @@ async function hotRecoveryIsBoundedPerFamily(): Promise<void> {
   );
   assert.equal(
     expandedTelemetry?.directStateKeys,
-    16,
-    "newly admitted keys must share the bounded recovery quota",
+    expandedPools.length - 1,
+    "newly admitted keys are read in full: the bounded recovery quota is " +
+      "obsolete once topology completeness no longer gates pricing",
   );
-  assert.equal(expandedTelemetry?.recoveryRequiredStateKeys, 2);
-  assert.equal(newKeyBackend.readTargets.length, 16);
-  assert.equal(expanded.coverage.unresolvedStateKeys.length, 2);
+  assert.equal(expandedTelemetry?.recoveryRequiredStateKeys ?? 0, 0);
+  assert.equal(newKeyBackend.readTargets.length, expandedPools.length - 1);
+  assert.equal(expanded.coverage.unresolvedStateKeys.length, 0);
 
   const failingBackend = new StateKeyIncrementalBackend();
   const failingCoordinator = new BlockScanStateCoordinator(failingBackend);
@@ -1695,7 +1725,12 @@ async function hotRecoveryIsBoundedPerFamily(): Promise<void> {
     laggingTopologyRefreshMode: "proof-scoped",
   });
   const firstFailedAttempt = new Set(failingBackend.readTargets);
-  assert.equal(firstFailedAttempt.size, 16);
+  assert.equal(
+    firstFailedAttempt.size,
+    pools.length,
+    "a stale base attempts every owned pool in one pass; the family-local " +
+      "read quota no longer caps whole-family direct pricing",
+  );
 
   const replacementPool = `0x${"1".padStart(40, "0")}`;
   failingBackend.failTargets.add(replacementPool);

@@ -658,13 +658,14 @@ export class BlockScanStateCoordinator {
         .map((group) => group.familyId),
     );
     /*
-     * Discovery topology completeness is negative evidence: it proves that no
-     * additional family instance was omitted. Protocol edges already in this
-     * GraphView were identity/probe re-attested at source N, so the historical
-     * protocol behavior remains unchanged. A lagging Swap source may refresh
-     * admitted keys only through the proof-scoped incremental path below. A
-     * same-height hash mismatch belongs to another canonical state and always
-     * remains fully blocked.
+     * Discovery completeness is labeling only: a lagging Swap source means the
+     * graph may be missing newly landed venues, so the publication is honest
+     * degraded recall. It never gates pricing — every family prices the pools
+     * it owns through the unconditional incremental/direct path below, so a
+     * backrun-style update pipe (read only the pools the previous block
+     * traded, carry the rest from the last good state) works regardless of
+     * how far the discovery watermark trails the head. A same-height hash
+     * mismatch belongs to another canonical state and always stays blocked.
      */
     const graphIncompleteFamilyIds = new Set(
       graphIssueDetails.flatMap((issue) =>
@@ -682,15 +683,6 @@ export class BlockScanStateCoordinator {
           : []
       ),
     );
-    const proofScopedFamilyIds =
-      (input.laggingTopologyRefreshMode ?? "proof-scoped") ===
-        "proof-scoped"
-        ? new Set(
-            [...graphIncompleteFamilyIds].filter(
-              (familyId) => !stateBlockedFamilyIds.has(familyId),
-            ),
-          )
-        : new Set<string>();
     const previousCanonicalGraphStateKeys =
       this.previousCanonicalGraphStateKeys;
     try {
@@ -726,7 +718,6 @@ export class BlockScanStateCoordinator {
         graph,
         familySettleDeadlineAtMs,
         controller.signal,
-        proofScopedFamilyIds,
         previousCanonicalGraphStateKeys,
       );
       const protocolAddressTouchPlans =
@@ -744,7 +735,6 @@ export class BlockScanStateCoordinator {
           graph,
           familySettleDeadlineAtMs,
           controller.signal,
-          proofScopedFamilyIds,
           previousCanonicalGraphStateKeys,
           protocolAddressTouchPlans,
         ),
@@ -1600,7 +1590,6 @@ export class BlockScanStateCoordinator {
     graph: VerifiedGraphView,
     deadlineAtMs: number,
     signal: AbortSignal,
-    proofScopedFamilyIds: ReadonlySet<string>,
     previousCanonicalGraphStateKeys: ReadonlySet<string> | null,
     addressTouchPlans: ReadonlyMap<string, FamilyIncrementalPlan> = new Map(),
   ): Promise<LaneResult> {
@@ -1663,7 +1652,6 @@ export class BlockScanStateCoordinator {
         familyController.signal,
         signal,
         staging,
-        proofScopedFamilyIds.has(family.familyId),
         previousCanonicalGraphStateKeys,
         addressTouchPlans.get(family.familyId),
       );
@@ -1717,7 +1705,6 @@ export class BlockScanStateCoordinator {
     signal: AbortSignal,
     generationSignal: AbortSignal,
     staging: FamilyLaneStaging,
-    proofScoped: boolean,
     previousCanonicalGraphStateKeys: ReadonlySet<string> | null,
     addressTouchPlan?: FamilyIncrementalPlan,
   ): Promise<LaneResult> {
@@ -1859,11 +1846,7 @@ export class BlockScanStateCoordinator {
       recoveryCandidateStateKeys,
     );
     const incrementalPreparation = await this.prepareIncrementalPlans(
-      proofScoped
-        ? groups.filter((group) =>
-            previousCanonicalGraphStateKeys?.has(group.stateKey) ?? false
-          )
-        : groups,
+      groups,
       compiledFamilies,
       graph,
       deadlineAtMs,
@@ -2000,46 +1983,6 @@ export class BlockScanStateCoordinator {
       }
       for (const stateKey of provisionalDirect) {
         classifiedDirectStateKeys.add(stateKey);
-      }
-    }
-    let proofScopedUnresolvedStateKeys = 0;
-    if (proofScoped) {
-      for (const group of groups) {
-        if (
-          hotRecoveryStateKeys.has(group.stateKey) ||
-          carryForwardStateKeys.has(group.stateKey) ||
-          classifiedDirectStateKeys.has(group.stateKey)
-        ) {
-          continue;
-        }
-        /*
-         * This key has no complete canonical mutation proof at source N. It
-         * may be newly admitted, missing a recovery base, or outside the safe
-         * proof window. Reading every such key would turn one lagging topology
-         * source into a whole-family hot-path scan.
-         */
-        badStateKeys.add(group.stateKey);
-        proofScopedUnresolvedStateKeys++;
-        const recovery = this.recoveryBaseForGroup(group);
-        if (recovery) {
-          for (const readKey of recovery.state.requiredReadKeys) {
-            staging.expectedReadKeys.add(
-              globalReadId(group.stateKey, readKey),
-            );
-          }
-        }
-      }
-      if (proofScopedUnresolvedStateKeys > 0) {
-        fullFallbackReason ??= "mutation-proof-incomplete";
-        fullFallbackDetail ??= "proof-scoped:state-recovery-unresolved";
-        issues.push({
-          kind: "graph-incomplete",
-          lane,
-          familyId,
-          message:
-            `${proofScopedUnresolvedStateKeys} state keys await bounded ` +
-            "current-block recovery",
-        });
       }
     }
     carryStateKeys = carryForwardStateKeys.size;
