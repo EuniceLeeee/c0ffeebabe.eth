@@ -90,10 +90,10 @@ interface PreparedDiscovery {
   readonly delta: RuntimePoolRefreshDelta;
 }
 
-await distantStartupYieldsStateUntilBackfillCatchesUp();
-await stalePreparedSourceKeepsStartupBehindBackfill();
-await activeBackfillDefersStartupState();
-await failedBackfillRetriesBeforeStartupState();
+await distantStartupPricesPublishedGraphWhileBackfillContinues();
+await stalePreparedSourcePricesPublishedGraph();
+await activeBackfillDoesNotBlockStartupState();
+await failedBackfillStillPricesStartupState();
 await steadyStateBehindRunsDegradedCurrentState();
 await steadyStateReadyBackfillRunsPublishedGraph();
 await productionRuntimeRecordsNonzeroEnumerationAndSolver();
@@ -217,7 +217,7 @@ function failureCauseSummaryIsBoundedAndRedacted(): void {
   );
 }
 
-async function distantStartupYieldsStateUntilBackfillCatchesUp():
+async function distantStartupPricesPublishedGraphWhileBackfillContinues():
   Promise<void> {
   const harness = createHarness(
     100,
@@ -227,8 +227,8 @@ async function distantStartupYieldsStateUntilBackfillCatchesUp():
   await harness.run(140);
   assert.deepEqual(
     harness.runtimeBlocks,
-    [],
-    "startup must not contend with a distant canonical backfill",
+    [140],
+    "startup must price the verified published graph at current N",
   );
   assert.deepEqual(harness.backfillBlocks, [140]);
   assert.equal(
@@ -237,11 +237,11 @@ async function distantStartupYieldsStateUntilBackfillCatchesUp():
     "current-state progress must not fabricate the discovery watermark",
   );
   assert.equal(harness.laneSettledCalls, 0);
-  assert.equal(harness.loop.isStartupWarmPending(), true);
-  assert.equal(harness.publishedPricing, 0);
+  assert.equal(harness.loop.isStartupWarmPending(), false);
+  assert.equal(harness.publishedPricing, 1);
 }
 
-async function stalePreparedSourceKeepsStartupBehindBackfill(): Promise<void> {
+async function stalePreparedSourcePricesPublishedGraph(): Promise<void> {
   const harness = createHarness(
     100,
     ["complete"],
@@ -262,7 +262,11 @@ async function stalePreparedSourceKeepsStartupBehindBackfill(): Promise<void> {
     [],
     "an invalid prepared source must not be published",
   );
-  assert.deepEqual(harness.runtimeBlocks, []);
+  assert.deepEqual(
+    harness.runtimeBlocks,
+    [140],
+    "startup must fall back to the verified published graph",
+  );
   assert.deepEqual(harness.backfillBlocks, [140]);
   assert.equal(
     harness.publication.dexGraphCoverage.sourceCompleteThrough,
@@ -270,7 +274,7 @@ async function stalePreparedSourceKeepsStartupBehindBackfill(): Promise<void> {
   );
 }
 
-async function activeBackfillDefersStartupState(): Promise<void> {
+async function activeBackfillDoesNotBlockStartupState(): Promise<void> {
   const harness = createHarness(
     100,
     ["complete"],
@@ -284,28 +288,32 @@ async function activeBackfillDefersStartupState(): Promise<void> {
   await harness.run(150);
   assert.deepEqual(
     harness.runtimeBlocks,
-    [],
-    "startup state must yield while historical discovery is incomplete",
+    [150],
+    "startup state must price the published graph while backfill runs",
   );
   assert.equal(harness.laneSettledCalls, 0);
   assert.deepEqual(harness.laneTakeBlocks, []);
   assert.deepEqual(harness.discoveryPrepareBases, []);
   assert.deepEqual(harness.backfillBlocks, [150]);
-  assert.equal(harness.loop.isStartupWarmPending(), true);
+  assert.equal(harness.loop.isStartupWarmPending(), false);
 }
 
-async function failedBackfillRetriesBeforeStartupState(): Promise<void> {
+async function failedBackfillStillPricesStartupState(): Promise<void> {
   const harness = createHarness(100, ["complete"]);
   await harness.run(180);
-  assert.deepEqual(harness.runtimeBlocks, []);
+  assert.deepEqual(
+    harness.runtimeBlocks,
+    [180],
+    "a failed historical lane must not prevent the published-graph warm",
+  );
   assert.deepEqual(
     harness.discoveryPrepareBases,
     [],
     "a failed historical lane must not move the entire gap to hot RPC",
   );
   assert.deepEqual(harness.backfillBlocks, [180]);
-  assert.equal(harness.loop.isStartupWarmPending(), true);
-  assert.equal(harness.publishedPricing, 0);
+  assert.equal(harness.loop.isStartupWarmPending(), false);
+  assert.equal(harness.publishedPricing, 1);
   assert.equal(
     harness.publication.dexGraphCoverage.sourceCompleteThrough,
     100,
@@ -1351,10 +1359,14 @@ async function shutdownDoesNotWaitForHistoricalBackfill(): Promise<void> {
   );
   await harness.run(520);
   await harness.loop.shutdown();
-  assert.deepEqual(harness.runtimeBlocks, []);
+  assert.deepEqual(
+    harness.runtimeBlocks,
+    [520],
+    "startup must price the published graph without awaiting backfill settlement",
+  );
   assert.deepEqual(harness.backfillBlocks, [520]);
   assert.equal(harness.laneSettledCalls, 0);
-  assert.equal(harness.loop.isStartupWarmPending(), true);
+  assert.equal(harness.loop.isStartupWarmPending(), false);
   assert.equal(harness.runtimeAborted, true);
 }
 

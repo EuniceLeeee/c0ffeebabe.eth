@@ -1583,51 +1583,70 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           dexAdmissionCompleteThrough(base) >= consumedPreparedSource;
         if (!this.deps.blind.enabled && predecessorStillBehind) {
           if (startupWarmAttempt) {
-            /*
-             * Cold state preparation saturates the same local reth that owns
-             * the bounded discovery backfill. Starting both during boot can
-             * repeatedly preempt the same retry-safe discovery RPC until its
-             * 120s job expires, while the state generation also misses its
-             * deadline. Keep startupWarmPending set and let the latest-head
-             * scheduler retry after the canonical backfill publishes. This is
-             * a one-time fail-closed bootstrap barrier; ordinary live retains
-             * the degraded published-graph path below.
-             */
-            outcome = "degraded";
-            fullCoverage = false;
-            skippedReason =
-              `startup_discovery_backfill_behind:` +
-              `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`;
-            degradedRecallReasons = Object.freeze([
-              `discovery_source_coverage_behind:` +
-              `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`,
-            ]);
             if (executionContext) {
-              // Current-head authorization cannot survive an unbounded cold
-              // discovery catch-up. Record the fail-closed rejection instead
-              // of silently consuming it or immediately requeueing a tight
-              // same-head loop that would starve the backfill itself.
+              /*
+               * Pending-execution evidence cannot survive an unbounded cold
+               * discovery catch-up: current-head authorization must stay
+               * fail-closed. Record the rejection instead of requeueing a
+               * tight same-head loop that would starve the backfill itself.
+               */
+              outcome = "degraded";
+              fullCoverage = false;
+              skippedReason =
+                `startup_discovery_backfill_behind:` +
+                `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`;
+              degradedRecallReasons = Object.freeze([
+                `discovery_source_coverage_behind:` +
+                `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`,
+              ]);
               this.recordPendingEvidenceNotStarted(
                 executionContext,
                 "pending_evidence_startup_discovery_behind",
               );
+              finishStage("state", "failed");
+              void discovery.scheduleBackfill(blockNumber);
+              return;
             }
-            finishStage("state", "failed");
-            void discovery.scheduleBackfill(blockNumber);
-            return;
+            /*
+             * Plain startup warm: the cold-state foreground lease that made
+             * the old fail-closed barrier necessary was removed (coarse
+             * production no longer holds the shared reth foreground lease),
+             * so a one-time bootstrap barrier now only deadlocks: the
+             * discovery backfill's per-block scan rate is at the head
+             * cadence, the watermark can stay behind indefinitely, the warm
+             * never publishes, no state base ever exists, and the N-1
+             * incremental path can never carry.
+             *
+             * Proceed on the verified published graph instead, exactly like
+             * steady-state degraded recall: the graph may miss newly landed
+             * venues, but it cannot invent an edge, and pricing known pools
+             * at current N is source-pinned. The warm's source-N bootstrap
+             * read seeds lastGoodByStateKey, after which every periodic N-1
+             * generation carries unchanged pools from that base and only
+             * reads pools the previous block actually traded. The historical
+             * scan keeps healing in its bounded background lane.
+             */
+            useLaggingPublishedDiscovery = true;
+            outcome = "degraded";
+            fullCoverage = false;
+            degradedRecallReasons = Object.freeze([
+              `discovery_source_coverage_behind:` +
+              `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`,
+            ]);
+          } else {
+            // A verified published graph is safe to price at current N even when
+            // its source-coverage watermark is catching up: it may miss newly
+            // landed venues, but it cannot invent an edge. Keep the historical
+            // scan in its bounded background lane and publish honest degraded
+            // recall instead of starving every current-state pass behind it.
+            useLaggingPublishedDiscovery = true;
+            outcome = "degraded";
+            fullCoverage = false;
+            degradedRecallReasons = Object.freeze([
+              `discovery_source_coverage_behind:` +
+              `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`,
+            ]);
           }
-          // A verified published graph is safe to price at current N even when
-          // its source-coverage watermark is catching up: it may miss newly
-          // landed venues, but it cannot invent an edge. Keep the historical
-          // scan in its bounded background lane and publish honest degraded
-          // recall instead of starving every current-state pass behind it.
-          useLaggingPublishedDiscovery = true;
-          outcome = "degraded";
-          fullCoverage = false;
-          degradedRecallReasons = Object.freeze([
-            `discovery_source_coverage_behind:` +
-            `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`,
-          ]);
         }
         // A complete prepared generation can only be behind because heads
         // advanced while it was running. The existing hot transition may
