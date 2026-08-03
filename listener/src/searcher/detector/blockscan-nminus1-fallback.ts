@@ -86,10 +86,10 @@ export function enumerateNMinusOneCoarseCandidates(input: {
     atomicValidationTimingMs = timing;
   });
   const atomicValidationFinishedAtMs = Date.now();
-  if (coarse.sourceBlock + 1 !== exact.sourceBlock) {
+  if (coarse.sourceBlock >= exact.sourceBlock) {
     throw new Error(
-      `N-1 coarse source must be adjacent: ${coarse.sourceBlock} -> ` +
-        `${exact.sourceBlock}`,
+      `N-1 coarse source must precede the exact source: ` +
+        `${coarse.sourceBlock} -> ${exact.sourceBlock}`,
     );
   }
   if (
