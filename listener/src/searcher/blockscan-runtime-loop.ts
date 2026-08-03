@@ -265,10 +265,16 @@ export function summarizeBlockScanIssueCauses(
 }
 
 /**
- * Candidate-bearing heads own the local node until their entire exact
- * pipeline exits. Zero-candidate heads resume predecessor production
- * immediately; success, rejection, deadline and exception paths release a
- * deferred producer through the run-head finally boundary.
+ * The coarse state producer for head N is registered the moment the graph
+ * view is ready and starts immediately, so the N-1 state for the next head is
+ * published as early as possible instead of waiting for this pass's
+ * enumeration or exact pipeline. Exact work keeps transport priority through
+ * the read-priority system (foreground reads preempt the producer's
+ * background bulk reads; the producer's mutation proofs and the pass's exact
+ * reads use separate transports), so starting production early does not delay
+ * candidate processing. afterEnumeration is now only the exact-resource
+ * admission decision; release() stays idempotent for the run-head finally
+ * boundary so exception paths cannot leave an armed producer stranded.
  */
 export class NMinusOneProducerGate {
   private deferred: (() => void) | null = null;
@@ -280,15 +286,13 @@ export class NMinusOneProducerGate {
     this.deferred = startNextProducer;
   }
 
+  /** Start predecessor production immediately once the graph is ready. */
+  start(): void {
+    this.release();
+  }
+
   afterEnumeration(candidateCount: number): boolean {
-    if (!this.deferred) {
-      throw new Error("N-1 producer gate was not armed before enumeration");
-    }
-    if (candidateCount <= 0) {
-      this.release();
-      return false;
-    }
-    return true;
+    return candidateCount > 0;
   }
 
   release(): void {
@@ -1719,8 +1723,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       });
       if (useNMinusOneFallback) {
         // Register current-N production before any predecessor wait or
-        // enumeration. A newer head may cancel this pass at either boundary;
-        // the outer finally still releases exactly one producer for N.
+        // enumeration and start it immediately: the N-1 state for the next
+        // head is ready sooner, and a candidate-bearing or exact-deferred
+        // pass no longer delays predecessor production. A newer head may
+        // cancel this pass at either boundary; the outer finally release
+        // stays idempotent.
         nMinusOneProducerGate.arm(() => {
           if (
             !nMinusOneProducerCanServeLatestHead(
@@ -1742,6 +1749,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             graph: graphView,
           });
         });
+        nMinusOneProducerGate.start();
       }
       if (this.deps.blind.enabled) {
         auditGraphView = graphView;

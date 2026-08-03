@@ -123,7 +123,7 @@ await shutdownDrainsActivePassAndDropsPendingHead();
 await nMinusOneTrackerStaysOutsideNormalRuntimePublication();
 await nMinusOneRecoveryBacklogStaysOnHotBudget();
 await nMinusOneWaitsForItsOnlyAdjacentProducer();
-await nMinusOneExactJoinPrecedesNextProducer();
+await nMinusOneProducerStartsAtArmTime();
 nMinusOneExactJoinRejectsMixedAnchor();
 nMinusOneFundingIsCandidateLocal();
 blindModeDoesNotEnterOrdinaryStartupWarm();
@@ -1552,66 +1552,71 @@ async function nMinusOneWaitsForItsOnlyAdjacentProducer(): Promise<void> {
   );
 }
 
-async function nMinusOneExactJoinPrecedesNextProducer(): Promise<void> {
+async function nMinusOneProducerStartsAtArmTime(): Promise<void> {
   const activity: string[] = [];
   const candidateGate = new NMinusOneProducerGate();
   candidateGate.arm(() => activity.push("producer:start"));
+  candidateGate.start();
   assert.equal(
     candidateGate.afterEnumeration(1),
     true,
+    "candidate heads must still enter the exact join",
+  );
+  assert.deepEqual(
+    activity.slice(0, 1),
+    ["producer:start"],
+    "the producer must start as soon as the graph is armed, not after exact work",
   );
   activity.push("exact:start");
-  await Promise.resolve();
   activity.push("pipeline:settled");
-  assert.deepEqual(activity, ["exact:start", "pipeline:settled"]);
-  candidateGate.release();
-  assert.deepEqual(activity, [
-    "exact:start",
-    "pipeline:settled",
-    "producer:start",
-  ]);
   candidateGate.release();
   assert.equal(
     activity.filter((entry) => entry === "producer:start").length,
     1,
-    "producer release must be idempotent",
+    "a finally-bound release after start must not double-start the producer",
   );
 
   activity.length = 0;
   const emptyGate = new NMinusOneProducerGate();
   emptyGate.arm(() => activity.push("producer:start"));
-  const skipped = emptyGate.afterEnumeration(0);
-  assert.equal(skipped, false);
+  emptyGate.start();
   assert.deepEqual(
     activity,
     ["producer:start"],
-    "zero-candidate head must skip exact resources and resume producer",
+    "zero-candidate heads start the producer at arm time too",
+  );
+  assert.equal(
+    emptyGate.afterEnumeration(0),
+    false,
+    "zero-candidate heads must skip exact resources",
   );
 
   activity.length = 0;
   const failedGate = new NMinusOneProducerGate();
   failedGate.arm(() => activity.push("producer:start"));
+  failedGate.start();
+  activity.push("pipeline:error");
   assert.equal(
     failedGate.afterEnumeration(1),
     true,
   );
-  activity.push("pipeline:error");
   failedGate.release();
   assert.deepEqual(
     activity,
-    ["pipeline:error", "producer:start"],
-    "failed exact join must not permanently stop predecessor production",
+    ["producer:start", "pipeline:error"],
+    "an exception in the exact pipeline must not strand an already-started producer",
   );
 
   activity.length = 0;
   const preEnumerationAbortGate = new NMinusOneProducerGate();
   preEnumerationAbortGate.arm(() => activity.push("producer:start"));
+  preEnumerationAbortGate.start();
   activity.push("pass:superseded-before-enumeration");
   preEnumerationAbortGate.release();
   preEnumerationAbortGate.release();
   assert.deepEqual(
     activity,
-    ["pass:superseded-before-enumeration", "producer:start"],
+    ["producer:start", "pass:superseded-before-enumeration"],
     "a pass cancelled before enumeration must still start its armed producer exactly once",
   );
 
