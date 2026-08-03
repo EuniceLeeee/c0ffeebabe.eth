@@ -602,7 +602,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           `[searcher/blockscan-family] block=${blockNumber} error=` +
             `${error instanceof Error ? error.message : String(error)} ` +
             `stage=${this.passStageLabel} ` +
-            `stack=${error instanceof Error ? error.stack : "n/a"}`,
+            `stack=${error instanceof Error ? error.stack : "n/a"} ` +
+            `cause=${error instanceof Error && error.cause instanceof Error
+              ? `${error.cause.message}@${error.cause.stack ?? "n/a"}`
+              : "none"}`,
         );
       },
       (head) => {
@@ -1561,8 +1564,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         return null;
       };
       const consumedPreparedSource = await consumePreparedBackfill();
+      this.passStageLabel = "state:discovery-consumed";
 
       let base = discovery.capture();
+      this.passStageLabel = "state:discovery-base";
       const dexAdmissionCompleteThrough = (
         state: LiveDiscoveryPublicationState,
       ): number =>
@@ -1677,6 +1682,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           return;
         }
       }
+      this.passStageLabel = "state:discovery-gate";
 
       let nextDiscovery: LiveDiscoveryPublicationState;
       if (useNMinusOneFallback || useLaggingPublishedDiscovery) {
