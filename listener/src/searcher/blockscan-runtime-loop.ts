@@ -581,6 +581,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   private readonly pendingEvidenceKeys = new Set<string>();
   private readonly evidenceDispatchScheduledHeads = new Set<number>();
   private readonly completedOrdinaryHeads = new Map<number, string>();
+  /** Last pass stage for scheduler error diagnosis. */
+  private passStageLabel = "start";
   private activePass: {
     readonly blockNumber: number;
     readonly mode: BlockScanExecutionPassMode;
@@ -599,6 +601,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         console.log(
           `[searcher/blockscan-family] block=${blockNumber} error=` +
             `${error instanceof Error ? error.message : String(error)} ` +
+            `stage=${this.passStageLabel} ` +
             `stack=${error instanceof Error ? error.stack : "n/a"}`,
         );
       },
@@ -1488,6 +1491,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         blockNumber,
         "source canonical header",
       );
+      this.passStageLabel = "state:header";
       observedSourceBlockHash = sourceHeader.hash;
       if (
         executionContext &&
@@ -1946,6 +1950,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       let fallbackEnvelopes: readonly NMinusOneCoarseCandidate[] | null = null;
       let exactRefineStarted = false;
       if (!useNMinusOneFallback) {
+        this.passStageLabel = "state:prepare";
         const runtime = await adapterRuntimeCoordinator.prepare({
           graph: graphView,
           fundingTokens: [...new Set([
@@ -2083,6 +2088,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           return;
         }
 
+        this.passStageLabel = "enumeration";
         beginStage("enumeration");
         const productionCoarse = detectProductionBlockScanOpportunities({
           runtime: snapshot,
@@ -2100,6 +2106,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         auditSelectionMode = productionCoarse.selectionMode;
         auditForcedSelectionCount = productionCoarse.forcedSelectionCount;
       } else {
+        this.passStageLabel = "state:wait-adjacent";
         const predecessorPricing = await this.waitForAdjacentCoarsePricing(
           adapterRuntimeCoordinator,
           blockNumber - 1,
@@ -2250,6 +2257,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         const exactFundingTokens = blockScanCandidateFundingTokens(
           coarse.opportunities,
         );
+        this.passStageLabel = "exact_refine";
         beginStage("exact_refine");
         exactRefineStarted = true;
         const exactContext: CurrentNExactExecutionContextResult =
