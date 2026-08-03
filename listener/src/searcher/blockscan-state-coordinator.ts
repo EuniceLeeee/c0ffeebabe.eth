@@ -1390,16 +1390,14 @@ export class BlockScanStateCoordinator {
        * ones that hand-wrote an incremental capability. The mutation topics
        * are scanned from the adapter's landed-event declaration at
        * registration; the derived classifier re-reads exactly the pools that
-       * emitted one of those topics in the range and carries everything else
-       * from its last good state. This keeps univ2/3/4 and curve/balancer/
-       * dodo/ekubo/fluid/angstrom on the same whole-graph delta model without
-       * per-family configuration or a hardcoded registry.
+       * emitted one of those topics in the range (whole-pool refresh through
+       * the pool -> edges -> stateKeys reverse index) and carries everything
+       * else from its last good state. Coarse mids may be a block stale for
+       * off-event changes by design; candidate exact join at current N and
+       * the periodic full rewarm bound the staleness.
        */
       let incremental = compiledFamilies.get(family.familyId)?.incremental;
-      if (
-        !incremental &&
-        family.mutationCoverage === "complete"
-      ) {
+      if (!incremental) {
         incremental = createDerivedSwapMutationIncremental({
           familyId: family.familyId,
           mutationEvents: family.mutationEvents,
