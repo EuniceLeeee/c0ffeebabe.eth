@@ -309,14 +309,6 @@ export async function prepareRuntimePoolRefresh(
       "runtime family isolation/replacement requires pool and edge ownership resolvers",
     );
   }
-  if (
-    isolatedFamilyIds.size > 0 &&
-    input.isolationPoolInventory === undefined
-  ) {
-    throw new Error(
-      "runtime family isolation requires the complete pool inventory",
-    );
-  }
   if (replacedPoolKeys.size > 0 && input.instanceKeyForPool === undefined) {
     throw new Error(
       "runtime pool replacement requires an instance-key resolver",
@@ -326,18 +318,17 @@ export async function prepareRuntimePoolRefresh(
     ...input.currentBackrunPools,
     ...(input.currentBlockscanPools ?? []),
   ];
-  const isolationPoolRows = [
-    ...currentPoolRows,
-    ...(input.isolationPoolInventory ?? []),
-  ];
-  const isolatedPoolKeys = new Set(
-    isolationPoolRows.flatMap((pool) =>
-      input.familyIdForPool !== undefined &&
-        isolatedFamilyIds.has(input.familyIdForPool(pool) ?? "")
-        ? [poolProjectionRowKey(pool)]
-      : []
-    ),
-  );
+  /*
+   * An incomplete family's freshly discovered pools stay out of the graph
+   * (attemptedPools filter below), but EXISTING incumbent pools/edges are
+   * deliberately kept: they were proven by an earlier complete scan, the
+   * file-backed universe is trusted inventory, and the state coordinator
+   * prices every owned family unconditionally while labeling lagging
+   * coverage as degraded recall. Removing incumbents on a flaky scan
+   * silently deletes ~40% of the graph (33k+ -> ~22k edges).
+   */
+  const isolatedPoolKeys = new Set<string>();
+  const isolatedEdgeKeys = new Set<string>();
   const replacedInstances = new Set<string>();
   for (const pool of currentPoolRows) {
     if (!replacedPoolKeys.has(poolProjectionRowKey(pool))) continue;
@@ -351,17 +342,6 @@ export async function prepareRuntimePoolRefresh(
       familyInstanceKey(familyId, input.instanceKeyForPool!(pool)),
     );
   }
-  const isolatedEdgeKeys = new Set(
-    [
-      ...input.currentBackrunGraph,
-      ...(input.currentBlockscanGraph ?? []),
-    ].flatMap((edge) =>
-      input.familyIdForEdge !== undefined &&
-        isolatedFamilyIds.has(input.familyIdForEdge(edge))
-        ? [edgeKey(edge)]
-      : []
-    ),
-  );
   const replacedEdgeKeys = new Set(
     [
       ...input.currentBackrunGraph,
