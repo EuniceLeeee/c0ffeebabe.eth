@@ -687,8 +687,9 @@ function assertPoolMap(
 }
 
 function canonicalSha256(value: unknown): string {
-  const encoded = canonicalEncode(value, new Set());
-  return `sha256:${createHash("sha256").update(encoded).digest("hex")}`;
+  const hash = createHash("sha256");
+  writeCanonical(hash, value, new Set());
+  return `sha256:${hash.digest("hex")}`;
 }
 
 /**
@@ -706,29 +707,59 @@ function canonicalSha256Combined(parts: readonly unknown[]): string {
 }
 
 /**
- * JSON cannot represent bigint/Map/Set and silently discards undefined. This
- * encoder is deliberately typed and self-delimiting so those values all enter
- * the fingerprint without depending on insertion order.
+ * Streaming canonical encoder: writes each piece straight into the hash so no
+ * intermediate string is ever proportional to the whole publication. Arrays
+ * (the production-sized graphs) stream element by element; maps/sets encode
+ * each entry separately only to sort it, then stream the entries; objects
+ * stream field by field. This replaced a recursive string concatenation that
+ * exceeded V8's maximum string length on a production-sized graph.
  */
-function canonicalEncode(
+function writeCanonical(
+  hash: ReturnType<typeof createHash>,
   value: unknown,
   ancestors: Set<object>,
-): string {
-  if (value === null) return "null;";
-  if (value === undefined) return "undefined;";
+): void {
+  if (value === null) {
+    hash.update("null;");
+    return;
+  }
+  if (value === undefined) {
+    hash.update("undefined;");
+    return;
+  }
   switch (typeof value) {
     case "boolean":
-      return value ? "bool:1;" : "bool:0;";
+      hash.update(value ? "bool:1;" : "bool:0;");
+      return;
     case "string":
-      return `string:${JSON.stringify(value)};`;
+      hash.update("string:");
+      hash.update(JSON.stringify(value));
+      hash.update(";");
+      return;
     case "bigint":
-      return `bigint:${value.toString(10)};`;
+      hash.update("bigint:");
+      hash.update(value.toString(10));
+      hash.update(";");
+      return;
     case "number":
-      if (Number.isNaN(value)) return "number:nan;";
-      if (value === Number.POSITIVE_INFINITY) return "number:+inf;";
-      if (value === Number.NEGATIVE_INFINITY) return "number:-inf;";
-      if (Object.is(value, -0)) return "number:-0;";
-      return `number:${value};`;
+      if (Number.isNaN(value)) {
+        hash.update("number:nan;");
+        return;
+      }
+      if (value === Number.POSITIVE_INFINITY) {
+        hash.update("number:+inf;");
+        return;
+      }
+      if (value === Number.NEGATIVE_INFINITY) {
+        hash.update("number:-inf;");
+        return;
+      }
+      if (Object.is(value, -0)) {
+        hash.update("number:-0;");
+        return;
+      }
+      hash.update(`number:${value};`);
+      return;
     case "symbol":
     case "function":
       throw new Error(
@@ -745,38 +776,60 @@ function canonicalEncode(
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {
-      const entries: string[] = [];
+      hash.update(`array:${value.length}:[`);
       for (let index = 0; index < value.length; index++) {
-        entries.push(
-          index in value
-            ? canonicalEncode(value[index], ancestors)
-            : "array-hole;",
-        );
+        if (index in value) writeCanonical(hash, value[index], ancestors);
+        else hash.update("array-hole;");
       }
-      return `array:${value.length}:[${entries.join("")}]`;
+      hash.update("]");
+      return;
     }
     if (value instanceof Map) {
-      const entries = [...value].map(([key, item]) => {
-        const encodedKey = canonicalEncode(key, ancestors);
-        const encodedValue = canonicalEncode(item, ancestors);
-        return `${encodedKey}=>${encodedValue}`;
-      }).sort();
-      return `map:${entries.length}:{${entries.join("")}}`;
+      const entries = [...value]
+        .map(([key, item]) => ({
+          encoded:
+            `${canonicalEntryKey(key)}=>` +
+            canonicalEntryKey(item),
+          key,
+          item,
+        }))
+        .sort((left, right) => left.encoded.localeCompare(right.encoded));
+      hash.update(`map:${entries.length}:{`);
+      for (const entry of entries) {
+        writeCanonical(hash, entry.key, ancestors);
+        hash.update("=>");
+        writeCanonical(hash, entry.item, ancestors);
+      }
+      hash.update("}");
+      return;
     }
     if (value instanceof Set) {
       const entries = [...value]
-        .map((item) => canonicalEncode(item, ancestors))
-        .sort();
-      return `set:${entries.length}:{${entries.join("")}}`;
+        .map((item) => ({
+          encoded: canonicalEntryKey(item),
+          item,
+        }))
+        .sort((left, right) => left.encoded.localeCompare(right.encoded));
+      hash.update(`set:${entries.length}:{`);
+      for (const entry of entries) {
+        writeCanonical(hash, entry.item, ancestors);
+      }
+      hash.update("}");
+      return;
     }
     if (value instanceof Date) {
-      return `date:${value.toISOString()};`;
+      hash.update(`date:${value.toISOString()};`);
+      return;
     }
     if (value instanceof Uint8Array) {
-      return `bytes:${Buffer.from(value).toString("hex")};`;
+      hash.update("bytes:");
+      hash.update(Buffer.from(value).toString("hex"));
+      hash.update(";");
+      return;
     }
     if (value instanceof RegExp) {
-      return `regexp:${JSON.stringify(value.source)}:${value.flags};`;
+      hash.update(`regexp:${JSON.stringify(value.source)}:${value.flags};`);
+      return;
     }
 
     const enumerableSymbols = Object.getOwnPropertySymbols(value).filter(
@@ -791,19 +844,32 @@ function canonicalEncode(
       constructor?: { name?: string };
     } | null;
     const constructorName = prototype?.constructor?.name ?? "null";
+    const keys = Object.keys(value).sort();
     const object = value as Record<string, unknown>;
-    const entries = Object.keys(object)
-      .sort()
-      .map((key) =>
-        `${JSON.stringify(key)}=>${canonicalEncode(object[key], ancestors)}`
-      );
-    return (
-      `object:${JSON.stringify(constructorName)}:${entries.length}:` +
-      `{${entries.join("")}}`
+    hash.update(
+      `object:${JSON.stringify(constructorName)}:${keys.length}:{`,
     );
+    for (const key of keys) {
+      hash.update(`${JSON.stringify(key)}=>`);
+      writeCanonical(hash, object[key], ancestors);
+    }
+    hash.update("}");
   } finally {
     ancestors.delete(value);
   }
+}
+
+/**
+ * Per-entry sort key: a digest of the entry's canonical encoding. Sorting by
+ * this deterministic key keeps map/set fingerprints insertion-order
+ * independent without ever materializing a full-collection string.
+ */
+function canonicalEntryKey(
+  value: unknown,
+): string {
+  const hash = createHash("sha256");
+  writeCanonical(hash, value, new Set());
+  return hash.digest("hex");
 }
 
 function deepClone<T>(value: T, seen = new WeakMap<object, unknown>()): T {
