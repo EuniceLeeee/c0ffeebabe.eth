@@ -598,7 +598,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       (blockNumber, error) => {
         console.log(
           `[searcher/blockscan-family] block=${blockNumber} error=` +
-            `${error instanceof Error ? error.message : String(error)}`,
+            `${error instanceof Error ? error.message : String(error)} ` +
+            `stack=${error instanceof Error ? error.stack : "n/a"}`,
         );
       },
       (head) => {
