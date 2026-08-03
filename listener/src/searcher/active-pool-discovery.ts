@@ -554,9 +554,15 @@ export function incompleteLandedFamilyIds(
 
 /**
  * Startup has no detached publication pass in front of its first graph.
- * Remove stale cache claims and every incumbent row owned by an incomplete
- * landed family before that graph becomes visible. The same generic filter is
- * used for the base registry, block-scan universe, and explicit overrides.
+ * Remove stale cache claims from the trusted inventory before that graph
+ * becomes visible. Incumbent rows owned by an incomplete landed family are
+ * intentionally KEPT: the file-backed universe/pinned/override inventory is
+ * trusted (rebuilt by the periodic indexer), and the state coordinator prices
+ * every owned family unconditionally while labeling lagging coverage as
+ * degraded recall. Whole-family exclusion on a flaky startup scan silently
+ * deletes ~40% of the graph (33k+ -> ~22k edges), which fails the full-graph
+ * requirement. Only newly discovered swap-active pools of an incomplete
+ * family stay isolated (see mergeStartupActivePoolDiscovery).
  */
 export function filterStartupActivePoolIncumbents(
   pools: readonly PoolEntry[],
@@ -569,10 +575,8 @@ export function filterStartupActivePoolIncumbents(
   const stalePoolKeys = new Set(
     discovery.cacheRevalidation.stalePoolKeys,
   );
-  const isolatedFamilyIds = incompleteLandedFamilyIds(discovery.coverage);
   return pools.filter((pool) =>
-    !stalePoolKeys.has(poolProjectionRowKey(pool)) &&
-    !isolatedFamilyIds.has(familyIdForPool(pool) ?? "")
+    !stalePoolKeys.has(poolProjectionRowKey(pool))
   );
 }
 
