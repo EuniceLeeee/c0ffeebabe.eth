@@ -457,6 +457,15 @@ export interface RegisteredBlockScanStateFamily {
   readonly familyId: string;
   readonly lane: BlockScanPricingLane;
   readonly addressTouchCarryPolicy: "always-current" | "dependency-touch";
+  /**
+   * Event topics that mutate this family's pool state, scanned from the
+   * adapter family's landed-event declaration at registration (never
+   * hardcoded per family). Families without an explicit incremental
+   * capability use these to derive an event-driven carry/direct update: a
+   * pool that emitted one of these topics in the previous block is re-read at
+   * current N, every other pool carries from its last good state.
+   */
+  readonly swapMutationTopics: readonly string[];
   stateKey(edge: TokenEdge): string;
   ownsEdge(edge: TokenEdge): boolean;
   dependencies(edges: readonly TokenEdge[]): readonly string[];
@@ -474,9 +483,15 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
   readonly familyId: string;
   readonly lane: BlockScanPricingLane;
   readonly capability: BlockScanStateCapability<Schema, Snapshot>;
+  readonly swapMutationTopics?: readonly string[];
   ownsEdge(edge: TokenEdge): boolean;
 }): RegisteredBlockScanStateFamily {
   const { familyId, lane, capability } = input;
+  const swapMutationTopics = Object.freeze([
+    ...new Set(
+      (input.swapMutationTopics ?? []).map((topic) => topic.toLowerCase()),
+    ),
+  ].sort());
   const compile = async (
     compileInput: RegisteredBlockScanStateFamilyCompileInput,
     previousSchema?: Schema,
@@ -633,6 +648,7 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     lane,
     addressTouchCarryPolicy:
       capability.addressTouchCarryPolicy ?? "always-current",
+    swapMutationTopics,
     stateKey: (edge: TokenEdge) => capability.stateKey(edge),
     ownsEdge: (edge: TokenEdge) => input.ownsEdge(edge),
     dependencies: (edges: readonly TokenEdge[]) =>

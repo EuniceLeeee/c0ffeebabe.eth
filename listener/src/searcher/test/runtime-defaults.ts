@@ -285,15 +285,15 @@ assert(
 );
 assert(
   mainSource.includes(
-    'process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_STATE_BUDGET_MS ?? "20000"',
+    'process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_STATE_BUDGET_MS ?? "40000"',
   ),
-  "N-1 background pricing must retain its declared 20s default",
+  "N-1 background pricing must retain its declared 40s default",
 );
 assert(
   mainSource.includes(
-    'process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FAMILY_SETTLE_MS ?? "12000"',
+    'process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FAMILY_SETTLE_MS ?? "24000"',
   ),
-  "N-1 family settlement must retain the live-validated 12s allocation",
+  "N-1 family settlement must retain the declared 24s allocation",
 );
 assert(
   mainSource.includes(

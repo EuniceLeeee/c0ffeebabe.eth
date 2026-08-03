@@ -1751,6 +1751,79 @@ async function hotRecoveryIsBoundedPerFamily(): Promise<void> {
   );
 }
 
+async function derivedSwapIncrementalCarriesUntouchedPools(): Promise<void> {
+  const backend = new StateKeyIncrementalBackend();
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const family = registerBlockScanStateFamily({
+    familyId: "derived-swap",
+    lane: "swap",
+    // No hand-written incremental capability: the family only declares its
+    // mutation topics through the landed-event registration, and the
+    // coordinator derives the event-driven update pipe from them.
+    capability: fakeCapability("swap", { schema: 0, reads: 0, derives: 0 }),
+    swapMutationTopics: [FIXTURE_MUTATION_TOPIC],
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+  const graphGen = (
+    generation: number,
+    edges: readonly TokenEdge[],
+  ) => {
+    const sourceBlock = SOURCE_BLOCK + generation;
+    const sourceBlockHash =
+      `0x${generation.toString(16).padStart(64, "0")}`;
+    return createVerifiedGraphView({
+      id: `derived-swap-${generation}`,
+      generation,
+      sourceBlock,
+      sourceBlockHash,
+      completenessWatermark: sourceBlock - 1,
+      perSourceCoverage: [{
+        familyId: "derived-swap",
+        sourceId: "fixture-derived-source",
+        sourceFingerprint: "fixture-derived-v1",
+        completeThroughBlock: sourceBlock - 1,
+        completeThroughHash: sourceBlockHash,
+      }],
+      edges,
+    });
+  };
+
+  await coordinator.prepare({
+    graph: graphGen(1, [swapForward, swapReverse]),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "startup-bootstrap",
+  });
+  backend.mutationTargets.add(SWAP_POOL_B.toLowerCase());
+  backend.readTargets.length = 0;
+  const next = await coordinator.prepare({
+    graph: graphGen(2, [
+      swapForward,
+      swapReverse,
+      swapBForward,
+      swapBReverse,
+    ]),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "proof-scoped",
+  });
+  assert.deepEqual(
+    [...backend.readTargets].sort(),
+    [SWAP_POOL_B.toLowerCase()],
+    "the derived incremental must re-read only the pool that emitted a " +
+      "declared mutation topic and carry the untouched pool",
+  );
+  assert.notEqual(next.status, "incomplete");
+  if (next.status !== "incomplete") {
+    assert.equal(next.snapshot.mids.size, 4);
+  }
+  const telemetry = next.familyTelemetry?.find(
+    (entry) => entry.familyId === "derived-swap",
+  );
+  assert.equal(telemetry?.carryStateKeys, 1);
+  assert.equal(telemetry?.directStateKeys, 1);
+}
+
 async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
   const backend = new StateKeyIncrementalBackend();
   const coordinator = new BlockScanStateCoordinator(backend);
@@ -3158,6 +3231,7 @@ await graphIncompleteSwapFamilyPreservesHealthySibling();
 await graphSourceHashMismatchBlocksOwningFamily();
 await laggingSwapProofFailureDoesNotFallbackWholeFamily();
 await hotRecoveryIsBoundedPerFamily();
+await derivedSwapIncrementalCarriesUntouchedPools();
 await oneFailedStateKeyPreservesHealthySiblingInstance();
 await incrementalRefreshIsStateKeyLocal();
 await emptyPublishedSnapshotDoesNotEraseRecoveryBase();

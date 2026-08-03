@@ -1,6 +1,7 @@
 import {
   blockScanEdgeKey,
   blockScanStateKey,
+  createMutationQueryDescriptor,
   deterministicHash,
   exactSetHash,
   mutationQueryDescriptorFingerprint,
@@ -10,6 +11,7 @@ import {
   type BlockScanPricingLane,
   type CanonicalMutationRange,
   type CompiledBlockScanStateFamily,
+  type CompiledIncrementalStateFamily,
   type FamilyMutationClassification,
   type MutationQueryDescriptor,
   type PublishedStateKey,
@@ -1334,8 +1336,6 @@ export class BlockScanStateCoordinator {
       generation: graph.generation,
     });
     await Promise.all(families.map(async (family) => {
-      const incremental = compiledFamilies.get(family.familyId)?.incremental;
-      if (!incremental) return;
       if (signal.aborted) {
         fullFallbackReasonByFamily.set(
           family.familyId,
@@ -1381,6 +1381,26 @@ export class BlockScanStateCoordinator {
         );
         return;
       }
+      /*
+       * Every adapter family gets the event-driven update pipe, not just the
+       * ones that hand-wrote an incremental capability. The mutation topics
+       * are scanned from the adapter's landed-event declaration at
+       * registration; the derived classifier re-reads exactly the pools that
+       * emitted one of those topics in the range and carries everything else
+       * from its last good state. This keeps univ2/3/4 and curve/balancer/
+       * dodo/ekubo/fluid/angstrom on the same whole-graph delta model without
+       * per-family configuration or a hardcoded registry.
+       */
+      let incremental = compiledFamilies.get(family.familyId)?.incremental;
+      if (!incremental && family.swapMutationTopics.length > 0) {
+        incremental = createDerivedSwapMutationIncremental({
+          familyId: family.familyId,
+          topics: family.swapMutationTopics,
+          familyGroups,
+          eligibleByStateKey,
+        });
+      }
+      if (!incremental) return;
       const previousByStateKey = new Map<string, PublishedStateKey>();
       const schemaCompatibleStateKeys = new Set<string>();
       for (const [stateKey, base] of eligibleByStateKey) {
@@ -2718,6 +2738,63 @@ function validateMutationClassification(
       }
     }
   }
+}
+
+/**
+ * Derive an event-driven incremental capability for adapter families that
+ * declared mutation topics in their landed-event registration but did not
+ * hand-write one. The classifier re-reads exactly the pools that emitted a
+ * declared topic in the range and carries everything else from its last good
+ * state, using the previous required read keys so the changed set always
+ * matches the carry/direct partition contract.
+ */
+function createDerivedSwapMutationIncremental(input: {
+  readonly familyId: string;
+  readonly topics: readonly string[];
+  readonly familyGroups: readonly StateGroup[];
+  readonly eligibleByStateKey: ReadonlyMap<string, RecoveryStateBase>;
+}): CompiledIncrementalStateFamily {
+  const topicSet = new Set(
+    input.topics.map((topic) => topic.toLowerCase()),
+  );
+  const compositeByRawKey = new Map(
+    input.familyGroups.map((group) => [
+      group.rawStateKey.toLowerCase(),
+      group.stateKey,
+    ] as const),
+  );
+  const classifierFingerprint = deterministicHash({
+    familyId: input.familyId,
+    topics: input.topics,
+  });
+  return Object.freeze({
+    mutationQueryDescriptor: () =>
+      createMutationQueryDescriptor({ topics: [...input.topics] }),
+    classifyMutations(classifyInput: {
+      readonly edges: readonly TokenEdge[];
+      readonly range: CanonicalMutationRange;
+    }): FamilyMutationClassification {
+      const changed = new Map<string, ReadonlySet<string>>();
+      for (const event of classifyInput.range.events) {
+        const topic = event.topics[0]?.toLowerCase();
+        if (topic === undefined || !topicSet.has(topic)) continue;
+        const pool = event.address.toLowerCase();
+        const composite = compositeByRawKey.get(pool);
+        if (composite === undefined) continue;
+        const base = input.eligibleByStateKey.get(composite);
+        if (!base) continue;
+        changed.set(
+          pool,
+          new Set([...base.state.requiredReadKeys]),
+        );
+      }
+      return Object.freeze({
+        mutationRangeFingerprint: classifyInput.range.rangeFingerprint,
+        classifierFingerprint,
+        changedReadKeysByStateKey: changed,
+      });
+    },
+  });
 }
 
 function sameBlockSource(a: BlockSource, b: BlockSource): boolean {

@@ -299,12 +299,28 @@ export class AdapterFamilyRegistry {
   }
 
   blockScanStateFamilies(): readonly RegisteredBlockScanStateFamily[] {
+    const familyMutationTopics = (
+      family: SwapAdapter | ProtocolConversionAdapter,
+    ): readonly string[] => {
+      const landed = (
+        family as Partial<SwapAdapter>
+      ).landedEvents;
+      return Object.freeze([
+        ...(landed?.swaps ?? []).flatMap((event) =>
+          event.topic === null ? [] : [event.topic]
+        ),
+        ...(landed?.mutations ?? []).flatMap((event) =>
+          event.topic === null ? [] : [event.topic]
+        ),
+      ]);
+    };
     return Object.freeze([
       ...this.swapFamilies.map((family): RegisteredBlockScanStateFamily => Object.freeze({
         ...registerBlockScanStateFamily({
           familyId: family.id,
           lane: "swap",
           capability: family.pricingState,
+          swapMutationTopics: familyMutationTopics(family),
           ownsEdge: (edge: TokenEdge) =>
             family.edgeAdapterIds.includes(edge.adapterId),
         }),
@@ -315,6 +331,7 @@ export class AdapterFamilyRegistry {
             familyId: family.id,
             lane: "protocol",
             capability: family.pricingState,
+            swapMutationTopics: familyMutationTopics(family),
             ownsEdge: (edge: TokenEdge) =>
               family.edgeAdapterIds.includes(edge.adapterId),
           }),

@@ -1006,20 +1006,20 @@ async function main(): Promise<void> {
     ? Math.max(1, Math.floor(blockScanPassBudgetRaw))
     : 11_000;
   const blockScanNMinusOneStateBudgetRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_STATE_BUDGET_MS ?? "20000",
+    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_STATE_BUDGET_MS ?? "40000",
   );
   const blockScanNMinusOneStateBudgetMs =
     Number.isFinite(blockScanNMinusOneStateBudgetRaw)
       ? Math.max(1, Math.floor(blockScanNMinusOneStateBudgetRaw))
-      : 20_000;
+      : 40_000;
   const blockScanNMinusOneFamilySettleRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FAMILY_SETTLE_MS ?? "12000",
+    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FAMILY_SETTLE_MS ?? "24000",
   );
   const blockScanNMinusOneFamilySettleMs =
     Number.isFinite(blockScanNMinusOneFamilySettleRaw) &&
       blockScanNMinusOneFamilySettleRaw > 0
       ? Math.floor(blockScanNMinusOneFamilySettleRaw)
-      : 12_000;
+      : 24_000;
   const blockScanNMinusOneMaxGraphLagRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_MAX_GRAPH_LAG_BLOCKS ?? "10",
   );
