@@ -710,7 +710,10 @@ export class BlockScanStateCoordinator {
       familyId: group.familyId,
       stateKey: group.stateKey,
       source: Object.freeze({ ...state.source }),
-      requiredReadKeys: Object.freeze([...state.requiredReadKeys]),
+      // Planning order, not the sorted snapshot order: decodeState consumes
+      // localResults in the round order (round-0 reads first, then dependent
+      // rounds), so the cache must replay the same sequence on hydration.
+      requiredReadKeys: Object.freeze(groupReads.map((item) => item.localId)),
       reads: Object.freeze(reads),
       savedAtMs: this.now(),
     });
