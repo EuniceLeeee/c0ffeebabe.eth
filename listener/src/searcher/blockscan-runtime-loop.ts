@@ -2118,6 +2118,25 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           this.startupWarmPending = false;
           outcome = "startup_warm";
           skippedReason = `startup_warm_${runtime.status}`;
+          /*
+           * Emit the same state record as the N-1 producer so the KPI join
+           * can bind subsequent passes to the warm's coarse snapshot (the
+           * relaxed N-delta join uses the latest preceding published state,
+           * which is often this warm publication).
+           */
+          console.log(
+            `[searcher/blockscan-nminus1-state] ${JSON.stringify({
+              sourceBlock: snapshot.sourceBlock,
+              sourceBlockHash: snapshot.sourceBlockHash,
+              generation: snapshot.generation,
+              status: runtime.status,
+              priced: runtime.pricing.coverage.resolvedEdgeKeys.length,
+              expected: runtime.pricing.coverage.expectedEdgeKeys.length,
+              issueCount: runtime.issues.length,
+              wallMs: Math.max(0, Date.now() - passWorkerStartedAtMs),
+              warm: true,
+            })}`,
+          );
           console.log(
             `[searcher/blockscan-startup-warm] ${JSON.stringify({
               sourceBlock: snapshot.sourceBlock,
