@@ -396,15 +396,6 @@ export interface BlockScanStateCapability<Schema = unknown, Snapshot = unknown> 
    * every pricing-state mutation. Absence always means direct current-N reads.
    */
   readonly incremental?: IncrementalStateCapability<Schema>;
-  /**
-   * Whether the family's declared mutation events cover every on-chain change
-   * that can move its coarse quote state. "complete" is the only value that
-   * lets the registry derive an automatic event-driven carry/direct update
-   * pipe; "incomplete" (default) keeps the family on current-N direct reads
-   * so an unobserved off-event change can never be silently carried as
-   * unchanged. The family, not the registry, owns this factual claim.
-   */
-  readonly mutationCoverage?: "complete" | "incomplete";
 }
 
 export interface PublishedFamilyState {
@@ -481,7 +472,6 @@ export interface RegisteredBlockScanStateFamily {
     readonly topic: string | null;
     readonly emitter: LandedEventEmitter;
   }[];
-  readonly mutationCoverage: "complete" | "incomplete";
   stateKey(edge: TokenEdge): string;
   ownsEdge(edge: TokenEdge): boolean;
   dependencies(edges: readonly TokenEdge[]): readonly string[];
@@ -514,8 +504,6 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
       })
     ),
   );
-  const mutationCoverage =
-    capability.mutationCoverage ?? "incomplete";
   const compile = async (
     compileInput: RegisteredBlockScanStateFamilyCompileInput,
     previousSchema?: Schema,
@@ -673,7 +661,6 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     addressTouchCarryPolicy:
       capability.addressTouchCarryPolicy ?? "always-current",
     mutationEvents,
-    mutationCoverage,
     stateKey: (edge: TokenEdge) => capability.stateKey(edge),
     ownsEdge: (edge: TokenEdge) => input.ownsEdge(edge),
     dependencies: (edges: readonly TokenEdge[]) =>

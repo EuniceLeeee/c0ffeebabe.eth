@@ -191,7 +191,6 @@ const curvePlainPoolDiscovery = createAddressLandedPoolMaterializer({
 
 export const curvePlainBlockScanState = Object.freeze({
   stateKey: canonicalPoolStateKey,
-  mutationCoverage: "complete" as const,
 
   compileStaticSchema({ edges }) {
     const indexedCoins = new Map<string, Map<number, string>>();

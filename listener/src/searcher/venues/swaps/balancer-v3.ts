@@ -222,7 +222,6 @@ export const balancerV3BlockScanState = Object.freeze({
       ]);
     },
   }),
-  mutationCoverage: "complete" as const,
 });
 
 function balancerQuoteCandidates(

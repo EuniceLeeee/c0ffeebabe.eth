@@ -166,7 +166,6 @@ export const curveUnderlyingBlockScanState = Object.freeze({
       return Object.freeze([CURVE_METAREGISTRY]);
     },
   }),
-  mutationCoverage: "complete" as const,
 });
 
 function curveUnderlyingQuoteCandidates(

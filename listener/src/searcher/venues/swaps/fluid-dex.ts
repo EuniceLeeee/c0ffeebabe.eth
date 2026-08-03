@@ -316,7 +316,6 @@ export const fluidDexBlockScanState = Object.freeze({
       ]);
     },
   }),
-  mutationCoverage: "complete" as const,
 });
 
 export const fluidDexAdapter = Object.freeze({

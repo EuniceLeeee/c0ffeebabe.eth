@@ -187,7 +187,6 @@ type AngstromSpotSnapshot = ReturnType<
  * exact quote and execution remain fail-closed on per-hint Angstrom evidence.
  */
 const angstromSpotBlockScanState = Object.freeze({
-  mutationCoverage: "complete" as const,
   stateKey(edge: TokenEdge): string {
     return univ4BlockScanState.stateKey(asStandardV4Edge(edge));
   },

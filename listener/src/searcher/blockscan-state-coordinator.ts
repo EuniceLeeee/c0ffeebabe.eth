@@ -1397,10 +1397,7 @@ export class BlockScanStateCoordinator {
        * the periodic full rewarm bound the staleness.
        */
       let incremental = compiledFamilies.get(family.familyId)?.incremental;
-      if (
-        !incremental &&
-        family.mutationCoverage === "complete"
-      ) {
+      if (!incremental) {
         incremental = createDerivedSwapMutationIncremental({
           familyId: family.familyId,
           mutationEvents: family.mutationEvents,

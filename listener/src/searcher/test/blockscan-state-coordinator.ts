@@ -1760,10 +1760,7 @@ async function derivedSwapIncrementalCarriesUntouchedPools(): Promise<void> {
     // No hand-written incremental capability: the family only declares its
     // events through the landed-event registration, and the coordinator
     // derives the update pipe from them.
-    capability: Object.freeze({
-      ...fakeCapability("swap", { schema: 0, reads: 0, derives: 0 }),
-      mutationCoverage: "complete" as const,
-    }),
+    capability: fakeCapability("swap", { schema: 0, reads: 0, derives: 0 }),
     mutationEvents: [{
       topic: FIXTURE_MUTATION_TOPIC,
       emitter: { mode: "address" as const },
