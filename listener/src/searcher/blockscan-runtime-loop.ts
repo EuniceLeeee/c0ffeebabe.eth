@@ -461,7 +461,6 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly blockScanConfig: BlockScanCoreConfig | undefined;
   readonly executionWorkers: readonly BlockScanExecutionWorker[];
   readonly runtimeAbort: AbortController;
-  runRethForeground<T>(work: () => Promise<T>): Promise<T>;
   readonly sharedPlanner: Pick<TemplatePlanner, "setFlashLiquidity">;
   readonly backrunStatePublisher: Pick<
     BufferedBlockScanBackrunStatePublisher,
@@ -893,20 +892,35 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       ),
     );
     let result: BlockScanStatePrepareResult | null = null;
-    const task = this.deps.runRethForeground(() =>
-      input.coordinator.prepareCoarsePricing({
-        graph: input.graph,
-        deadlineAtMs,
-        /*
-         * Family-local deadlines must settle before the generation deadline.
-         * Otherwise the outer abort wins the same instant as a slow family,
-         * erases healthy sibling results and leaves no time for canonical CAS.
-         */
-        familySettleDeadlineAtMs,
-        laggingTopologyRefreshMode: "proof-scoped",
-        signal: this.deps.runtimeAbort.signal,
-      })
-    ).then((prepared) => {
+    /*
+     * The coarse producer must NOT hold the shared reth foreground lease for
+     * its whole generation. Live evidence (generations 506-523, b406d13)
+     * showed the producer running back-to-back for ~12s each, so the
+     * exclusive lease starved the DEX discovery backfill: every 8-block chunk
+     * exceeded its 120s budget and failed, the per-source coverage watermark
+     * fell ~500 blocks behind, the graph became incomplete, mutation ranges
+     * became ineligible, proof-scoped recovery was capped at 16 keys per
+     * family, and every coarse state published priced=0/35682.
+     *
+     * The producer's critical work keeps priority through the backend's own
+     * transport: mutation proofs run stateTransportPriority foreground plus
+     * the shared critical tail, and bulk family reads are background on a
+     * dedicated transport. Only the outer exclusive lease is dropped, so the
+     * retry-safe discovery backfill can finally make progress and the graph
+     * can complete, which is what makes mutation proofs eligible again.
+     */
+    const task = input.coordinator.prepareCoarsePricing({
+      graph: input.graph,
+      deadlineAtMs,
+      /*
+       * Family-local deadlines must settle before the generation deadline.
+       * Otherwise the outer abort wins the same instant as a slow family,
+       * erases healthy sibling results and leaves no time for canonical CAS.
+       */
+      familySettleDeadlineAtMs,
+      laggingTopologyRefreshMode: "proof-scoped",
+      signal: this.deps.runtimeAbort.signal,
+    }).then((prepared) => {
       result = prepared;
       const recoveryPending = blockScanStateHasRecoveryBacklog(
         prepared,
