@@ -1041,13 +1041,13 @@ async function main(): Promise<void> {
     ? Math.max(1, Math.floor(blockScanLargeGraphEdgeThresholdRaw))
     : 20_000;
   const blockScanStartupWarmBudgetRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_STARTUP_PREWARM_BUDGET_MS ?? "120000",
+    process.env.SEARCHER_BLOCKSCAN_STARTUP_PREWARM_BUDGET_MS ?? "300000",
   );
   const blockScanStartupWarmBudgetMs =
     Number.isSafeInteger(blockScanStartupWarmBudgetRaw) &&
       blockScanStartupWarmBudgetRaw > 0
       ? blockScanStartupWarmBudgetRaw
-      : 120_000;
+      : 300_000;
   const blockScanHotPricingFamilyBudgetRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_STATE_HOT_FAMILY_BUDGET_MS ?? "5000",
   );
