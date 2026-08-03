@@ -139,8 +139,8 @@ interface BalancerV3StateSchema {
   readonly pool: string;
 }
 
-export const balancerV3BlockScanState =
-  createAdaptiveCurrentBlockViewQuoteCapability<BalancerV3StateSchema>({
+export const balancerV3BlockScanState = Object.freeze({
+  ...createAdaptiveCurrentBlockViewQuoteCapability<BalancerV3StateSchema>({
     kind: "external-swap",
     edgeAdapterIds: new Set(["balancer-v3-unlock"]),
     compileDirection(edge) {
@@ -221,7 +221,9 @@ export const balancerV3BlockScanState =
         ADDR.BALANCER_V3_VAULT,
       ]);
     },
-  });
+  }),
+  mutationCoverage: "complete" as const,
+});
 
 function balancerQuoteCandidates(
   ctx: AdaptiveViewQuoteContext<BalancerV3StateSchema>,

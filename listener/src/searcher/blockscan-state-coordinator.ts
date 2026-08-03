@@ -1397,7 +1397,10 @@ export class BlockScanStateCoordinator {
        * the periodic full rewarm bound the staleness.
        */
       let incremental = compiledFamilies.get(family.familyId)?.incremental;
-      if (!incremental) {
+      if (
+        !incremental &&
+        family.mutationCoverage === "complete"
+      ) {
         incremental = createDerivedSwapMutationIncremental({
           familyId: family.familyId,
           mutationEvents: family.mutationEvents,
@@ -2776,15 +2779,21 @@ function createDerivedSwapMutationIncremental(input: {
   );
   if (resolvable.length === 0) return null;
   const topics = resolvable.map((event) => event.topic as string);
-  const compositeByRawKey = new Map(
+  /*
+   * eligibleByStateKey is keyed by the coordinator composite stateKey
+   * (familyId\u001frawKey); map composite -> raw so each base can be looked
+   * up by the raw key the classifier emits. A reversed map silently emptied
+   * baseByRawKey and made the derived classifier carry every pool.
+   */
+  const rawKeyByComposite = new Map(
     input.familyGroups.map((group) => [
-      group.rawStateKey.toLowerCase(),
       group.stateKey,
+      group.rawStateKey.toLowerCase(),
     ] as const),
   );
   const baseByRawKey = new Map<string, RecoveryStateBase>();
   for (const [composite, base] of input.eligibleByStateKey) {
-    const raw = compositeByRawKey.get(composite);
+    const raw = rawKeyByComposite.get(composite);
     if (raw !== undefined) baseByRawKey.set(raw, base);
   }
   const eventByTopic = new Map<string, typeof resolvable[number]>();
@@ -2814,7 +2823,10 @@ function createDerivedSwapMutationIncremental(input: {
       const identityToStateKeys = new Map<string, Set<string>>();
       for (const edge of classifyInput.edges) {
         const rawKey = stateKeyOfEdge(edge).toLowerCase();
-        const identity = edge.target.toLowerCase();
+        // The pool identity the logs resolve to is the poolId for v4-style
+        // families and the pool address otherwise; edge.target is the shared
+        // manager/router for those families and must not be used directly.
+        const identity = (edge.poolId ?? edge.target).toLowerCase();
         const set = identityToStateKeys.get(identity) ?? new Set<string>();
         set.add(rawKey);
         identityToStateKeys.set(identity, set);

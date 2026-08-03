@@ -1760,7 +1760,10 @@ async function derivedSwapIncrementalCarriesUntouchedPools(): Promise<void> {
     // No hand-written incremental capability: the family only declares its
     // events through the landed-event registration, and the coordinator
     // derives the update pipe from them.
-    capability: fakeCapability("swap", { schema: 0, reads: 0, derives: 0 }),
+    capability: Object.freeze({
+      ...fakeCapability("swap", { schema: 0, reads: 0, derives: 0 }),
+      mutationCoverage: "complete" as const,
+    }),
     mutationEvents: [{
       topic: FIXTURE_MUTATION_TOPIC,
       emitter: { mode: "address" as const },
@@ -1792,7 +1795,12 @@ async function derivedSwapIncrementalCarriesUntouchedPools(): Promise<void> {
   };
 
   await coordinator.prepare({
-    graph: graphGen(1, [swapForward, swapReverse]),
+    graph: graphGen(1, [
+      swapForward,
+      swapReverse,
+      swapBForward,
+      swapBReverse,
+    ]),
     families: [family],
     deadlineAtMs: Date.now() + 2_000,
     laggingTopologyRefreshMode: "startup-bootstrap",
@@ -1800,12 +1808,7 @@ async function derivedSwapIncrementalCarriesUntouchedPools(): Promise<void> {
   backend.mutationTargets.add(SWAP_POOL_B.toLowerCase());
   backend.readTargets.length = 0;
   const next = await coordinator.prepare({
-    graph: graphGen(2, [
-      swapForward,
-      swapReverse,
-      swapBForward,
-      swapBReverse,
-    ]),
+    graph: graphGen(2, [swapForward, swapReverse, swapBForward, swapBReverse]),
     families: [family],
     deadlineAtMs: Date.now() + 2_000,
     laggingTopologyRefreshMode: "proof-scoped",

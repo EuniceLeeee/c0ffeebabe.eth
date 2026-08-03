@@ -241,8 +241,8 @@ interface FluidDexStateSchema {
   readonly token1: string;
 }
 
-export const fluidDexBlockScanState =
-  createCurrentBlockViewQuoteCapability<FluidDexStateSchema>({
+export const fluidDexBlockScanState = Object.freeze({
+  ...createCurrentBlockViewQuoteCapability<FluidDexStateSchema>({
     kind: "external-swap",
     edgeAdapterIds: new Set(["fluid-dex-swap"]),
     compileGroup(edges) {
@@ -315,7 +315,9 @@ export const fluidDexBlockScanState =
         ...(resolver ? [resolver.toLowerCase()] : []),
       ]);
     },
-  });
+  }),
+  mutationCoverage: "complete" as const,
+});
 
 export const fluidDexAdapter = Object.freeze({
   id: "fluid-dex",

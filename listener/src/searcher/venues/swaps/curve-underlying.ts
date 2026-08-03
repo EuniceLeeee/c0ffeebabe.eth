@@ -98,8 +98,8 @@ const curveUnderlyingPoolDiscovery = createAddressLandedPoolMaterializer({
   },
 });
 
-export const curveUnderlyingBlockScanState =
-  createAdaptiveCurrentBlockViewQuoteCapability<CurveUnderlyingStateSchema>({
+export const curveUnderlyingBlockScanState = Object.freeze({
+  ...createAdaptiveCurrentBlockViewQuoteCapability<CurveUnderlyingStateSchema>({
     kind: "curve-underlying",
     edgeAdapterIds: new Set(["curve-exchange-underlying"]),
     compileDirection(edge) {
@@ -165,7 +165,9 @@ export const curveUnderlyingBlockScanState =
     dependencies() {
       return Object.freeze([CURVE_METAREGISTRY]);
     },
-  });
+  }),
+  mutationCoverage: "complete" as const,
+});
 
 function curveUnderlyingQuoteCandidates(
   ctx: AdaptiveViewQuoteContext<CurveUnderlyingStateSchema>,

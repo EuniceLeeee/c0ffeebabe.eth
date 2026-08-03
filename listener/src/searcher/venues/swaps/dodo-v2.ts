@@ -196,6 +196,7 @@ export interface DodoProbeQuote {
 
 export const dodoV2BlockScanState = Object.freeze({
   stateKey: canonicalPoolStateKey,
+  mutationCoverage: "complete" as const,
 
   compileStaticSchema({ edges }: CompileStaticSchemaInput): DodoV2StateSchema {
     const grouped = new Map<string, TokenEdge[]>();
