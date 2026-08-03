@@ -1004,23 +1004,45 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     deadlineAtMs: number,
     signal: AbortSignal,
   ): Promise<BlockScanStateSnapshot | null> {
-    const completed = this.completedCoarsePricing(coordinator, sourceBlock);
-    if (completed) return completed;
-    const active = this.coarsePricingActive;
-    if (
-      !active ||
-      this.coarsePricingActiveSourceBlock !== sourceBlock
-    ) {
-      return null;
+    /*
+     * The needed predecessor may be actively preparing, or it may be queued
+     * behind the single-flight producer that is still working on an older
+     * block. Walk the queue: wait for whatever is active, then re-check
+     * completion and wait for the next active producer, all bounded by the
+     * same deadline. Without this, a pending predecessor is reported as
+     * missing and the pass fails with no_adjacent_precompleted_coarse even
+     * though its state would have been ready moments later.
+     */
+    for (;;) {
+      if (this.deps.runtimeAbort.signal.aborted || signal.aborted) {
+        throw signal.reason ??
+          this.deps.runtimeAbort.signal.reason ??
+          new Error("searcher shutdown");
+      }
+      const completed = this.completedCoarsePricing(coordinator, sourceBlock);
+      if (completed) return completed;
+      const active = this.coarsePricingActive;
+      if (!active) {
+        // The needed producer was never armed (obsolete/superseded) or the
+        // queue drained without publishing the requested source block.
+        return null;
+      }
+      const finished = await waitForTaskUntil(
+        active,
+        deadlineAtMs,
+        signal,
+      );
+      if (this.coarsePricingActiveSourceBlock === sourceBlock) {
+        return finished
+          ? this.completedCoarsePricing(coordinator, sourceBlock)
+          : null;
+      }
+      // The settled producer was for another block; its finally starts the
+      // pending producer synchronously. Loop once more to wait on it.
+      if (!finished || this.deps.runtimeAbort.signal.aborted) {
+        return null;
+      }
     }
-    const finished = await waitForTaskUntil(
-      active,
-      deadlineAtMs,
-      signal,
-    );
-    return finished
-      ? this.completedCoarsePricing(coordinator, sourceBlock)
-      : null;
   }
 
   stopExecutionWorkers(): void {
@@ -1737,11 +1759,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       });
       if (useNMinusOneFallback) {
         // Register current-N production before any predecessor wait or
-        // enumeration and start it immediately: the N-1 state for the next
-        // head is ready sooner, and a candidate-bearing or exact-deferred
-        // pass no longer delays predecessor production. A newer head may
-        // cancel this pass at either boundary; the outer finally release
-        // stays idempotent.
+        // enumeration. The producer starts only after this pass's N-1 wait
+        // resolves (below), so arming this head can never evict the pending
+        // predecessor producer this pass is about to wait on. A newer head
+        // may cancel this pass at either boundary; the outer finally release
+        // stays idempotent and starts the producer on failure paths too.
         nMinusOneProducerGate.arm(() => {
           if (
             !nMinusOneProducerCanServeLatestHead(
@@ -1763,7 +1785,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             graph: graphView,
           });
         });
-        nMinusOneProducerGate.start();
       }
       if (this.deps.blind.enabled) {
         auditGraphView = graphView;
@@ -2093,6 +2114,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           blockNumber - 1,
           "predecessor canonical header",
         );
+        /*
+         * The N-1 state this pass needs is guaranteed (or abandoned). Start
+         * current-N production now so the N+1 head finds it ready, and a
+         * candidate-bearing exact pipeline no longer delays predecessor
+         * production (the exact join started below keeps transport priority
+         * through the read-priority system).
+         */
+        nMinusOneProducerGate.start();
         finishStage("state", "ran");
         timing.stateMs = stageBoundaries.state.stage_ms;
         pricingMode = "n_minus_one_coarse_current_n_exact";
