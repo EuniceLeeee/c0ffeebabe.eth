@@ -1158,6 +1158,13 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     const blockScanPlanner = this.deps.blockScanPlanner();
     const adapterRuntimeCoordinator = this.deps.adapterRuntimeCoordinator();
     const blockScanExecutionWorkers = this.deps.executionWorkers;
+    console.log(
+      `[searcher/blockscan-debug] runHead enter block=${blockNumber} ` +
+        `enabled=${this.deps.enabled} graph=${blockScanGraph?.length ?? "none"} ` +
+        `cfg=${blockScanCfg ? "yes" : "no"} planner=${blockScanPlanner ? "yes" : "no"} ` +
+        `coord=${adapterRuntimeCoordinator ? "yes" : "no"} workers=${blockScanExecutionWorkers.length} ` +
+        `shutdown=${this.deps.isShuttingDown()}`,
+    );
     if (
       this.deps.isShuttingDown() ||
       !this.deps.enabled ||
