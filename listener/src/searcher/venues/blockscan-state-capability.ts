@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { TokenEdge } from "../planner/token-graph.js";
+import type { LandedEventEmitter } from "./landed-event-registry.js";
 import type {
   BlockScanBackrunStateInvalidation,
   BlockScanBackrunStateSeed,
@@ -395,6 +396,15 @@ export interface BlockScanStateCapability<Schema = unknown, Snapshot = unknown> 
    * every pricing-state mutation. Absence always means direct current-N reads.
    */
   readonly incremental?: IncrementalStateCapability<Schema>;
+  /**
+   * Whether the family's declared mutation events cover every on-chain change
+   * that can move its coarse quote state. "complete" is the only value that
+   * lets the registry derive an automatic event-driven carry/direct update
+   * pipe; "incomplete" (default) keeps the family on current-N direct reads
+   * so an unobserved off-event change can never be silently carried as
+   * unchanged. The family, not the registry, owns this factual claim.
+   */
+  readonly mutationCoverage?: "complete" | "incomplete";
 }
 
 export interface PublishedFamilyState {
@@ -458,14 +468,20 @@ export interface RegisteredBlockScanStateFamily {
   readonly lane: BlockScanPricingLane;
   readonly addressTouchCarryPolicy: "always-current" | "dependency-touch";
   /**
-   * Event topics that mutate this family's pool state, scanned from the
-   * adapter family's landed-event declaration at registration (never
-   * hardcoded per family). Families without an explicit incremental
-   * capability use these to derive an event-driven carry/direct update: a
-   * pool that emitted one of these topics in the previous block is re-read at
-   * current N, every other pool carries from its last good state.
+   * Mutation events scanned from the adapter family's landed-event
+   * declaration at registration (never hardcoded per family). Families
+   * without an explicit incremental capability use these to derive an
+   * event-driven carry/direct update: an event whose pool identity is
+   * resolved through the declaration's emitter mode marks that family's
+   * state keys dirty for a current-N read; every other state key carries.
+   * Anonymous-data emitters (topic === null) are never auto-derived and keep
+   * the family on direct reads.
    */
-  readonly swapMutationTopics: readonly string[];
+  readonly mutationEvents: readonly {
+    readonly topic: string | null;
+    readonly emitter: LandedEventEmitter;
+  }[];
+  readonly mutationCoverage: "complete" | "incomplete";
   stateKey(edge: TokenEdge): string;
   ownsEdge(edge: TokenEdge): boolean;
   dependencies(edges: readonly TokenEdge[]): readonly string[];
@@ -483,15 +499,23 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
   readonly familyId: string;
   readonly lane: BlockScanPricingLane;
   readonly capability: BlockScanStateCapability<Schema, Snapshot>;
-  readonly swapMutationTopics?: readonly string[];
+  readonly mutationEvents?: readonly {
+    readonly topic: string | null;
+    readonly emitter: LandedEventEmitter;
+  }[];
   ownsEdge(edge: TokenEdge): boolean;
 }): RegisteredBlockScanStateFamily {
   const { familyId, lane, capability } = input;
-  const swapMutationTopics = Object.freeze([
-    ...new Set(
-      (input.swapMutationTopics ?? []).map((topic) => topic.toLowerCase()),
+  const mutationEvents = Object.freeze(
+    (input.mutationEvents ?? []).map((event) =>
+      Object.freeze({
+        topic: event.topic === null ? null : event.topic.toLowerCase(),
+        emitter: event.emitter,
+      })
     ),
-  ].sort());
+  );
+  const mutationCoverage =
+    capability.mutationCoverage ?? "incomplete";
   const compile = async (
     compileInput: RegisteredBlockScanStateFamilyCompileInput,
     previousSchema?: Schema,
@@ -648,7 +672,8 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     lane,
     addressTouchCarryPolicy:
       capability.addressTouchCarryPolicy ?? "always-current",
-    swapMutationTopics,
+    mutationEvents,
+    mutationCoverage,
     stateKey: (edge: TokenEdge) => capability.stateKey(edge),
     ownsEdge: (edge: TokenEdge) => input.ownsEdge(edge),
     dependencies: (edges: readonly TokenEdge[]) =>

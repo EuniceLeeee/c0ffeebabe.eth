@@ -28,7 +28,10 @@ import {
   isKnownVenueId,
   isNonemptyRegistryId,
 } from "./registry-ids.js";
-import { LandedEventRegistry } from "./landed-event-registry.js";
+import {
+  LandedEventRegistry,
+  type LandedEventEmitter,
+} from "./landed-event-registry.js";
 import { VictimModelRegistry } from "./victim-model-registry.js";
 import { LandedPoolDiscoveryRegistry } from "./landed-pool-discovery.js";
 import { routeInstanceKey } from "./route-instance-identity.js";
@@ -301,16 +304,19 @@ export class AdapterFamilyRegistry {
   blockScanStateFamilies(): readonly RegisteredBlockScanStateFamily[] {
     const familyMutationTopics = (
       family: SwapAdapter | ProtocolConversionAdapter,
-    ): readonly string[] => {
+    ): readonly {
+      readonly topic: string | null;
+      readonly emitter: LandedEventEmitter;
+    }[] => {
       const landed = (
         family as Partial<SwapAdapter>
       ).landedEvents;
       return Object.freeze([
-        ...(landed?.swaps ?? []).flatMap((event) =>
-          event.topic === null ? [] : [event.topic]
+        ...(landed?.swaps ?? []).map((event) =>
+          Object.freeze({ topic: event.topic, emitter: event.emitter }),
         ),
-        ...(landed?.mutations ?? []).flatMap((event) =>
-          event.topic === null ? [] : [event.topic]
+        ...(landed?.mutations ?? []).map((event) =>
+          Object.freeze({ topic: event.topic, emitter: event.emitter }),
         ),
       ]);
     };
@@ -320,7 +326,7 @@ export class AdapterFamilyRegistry {
           familyId: family.id,
           lane: "swap",
           capability: family.pricingState,
-          swapMutationTopics: familyMutationTopics(family),
+          mutationEvents: familyMutationTopics(family),
           ownsEdge: (edge: TokenEdge) =>
             family.edgeAdapterIds.includes(edge.adapterId),
         }),
@@ -331,7 +337,7 @@ export class AdapterFamilyRegistry {
             familyId: family.id,
             lane: "protocol",
             capability: family.pricingState,
-            swapMutationTopics: familyMutationTopics(family),
+            mutationEvents: familyMutationTopics(family),
             ownsEdge: (edge: TokenEdge) =>
               family.edgeAdapterIds.includes(edge.adapterId),
           }),

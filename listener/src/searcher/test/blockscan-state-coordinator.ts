@@ -1758,10 +1758,16 @@ async function derivedSwapIncrementalCarriesUntouchedPools(): Promise<void> {
     familyId: "derived-swap",
     lane: "swap",
     // No hand-written incremental capability: the family only declares its
-    // mutation topics through the landed-event registration, and the
-    // coordinator derives the event-driven update pipe from them.
-    capability: fakeCapability("swap", { schema: 0, reads: 0, derives: 0 }),
-    swapMutationTopics: [FIXTURE_MUTATION_TOPIC],
+    // complete mutation coverage and events through the landed-event
+    // registration, and the coordinator derives the update pipe from them.
+    capability: Object.freeze({
+      ...fakeCapability("swap", { schema: 0, reads: 0, derives: 0 }),
+      mutationCoverage: "complete" as const,
+    }),
+    mutationEvents: [{
+      topic: FIXTURE_MUTATION_TOPIC,
+      emitter: { mode: "address" as const },
+    }],
     ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
   });
   const graphGen = (

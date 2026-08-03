@@ -24,6 +24,10 @@ import {
   type StateReadResult,
   type VerifiedGraphView,
 } from "./venues/blockscan-state-capability.js";
+import {
+  observedLandedPoolIdentity,
+  type LandedEventEmitter,
+} from "./venues/landed-event-registry.js";
 import type { TokenEdge } from "./planner/token-graph.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
 
@@ -1392,13 +1396,17 @@ export class BlockScanStateCoordinator {
        * per-family configuration or a hardcoded registry.
        */
       let incremental = compiledFamilies.get(family.familyId)?.incremental;
-      if (!incremental && family.swapMutationTopics.length > 0) {
+      if (
+        !incremental &&
+        family.mutationCoverage === "complete"
+      ) {
         incremental = createDerivedSwapMutationIncremental({
           familyId: family.familyId,
-          topics: family.swapMutationTopics,
+          mutationEvents: family.mutationEvents,
+          family,
           familyGroups,
           eligibleByStateKey,
-        });
+        }) ?? undefined;
       }
       if (!incremental) return;
       const previousByStateKey = new Map<string, PublishedStateKey>();
@@ -2750,43 +2758,90 @@ function validateMutationClassification(
  */
 function createDerivedSwapMutationIncremental(input: {
   readonly familyId: string;
-  readonly topics: readonly string[];
+  readonly mutationEvents: readonly {
+    readonly topic: string | null;
+    readonly emitter: LandedEventEmitter;
+  }[];
+  readonly family: RegisteredBlockScanStateFamily;
   readonly familyGroups: readonly StateGroup[];
   readonly eligibleByStateKey: ReadonlyMap<string, RecoveryStateBase>;
-}): CompiledIncrementalStateFamily {
-  const topicSet = new Set(
-    input.topics.map((topic) => topic.toLowerCase()),
+}): CompiledIncrementalStateFamily | null {
+  /*
+   * Anonymous-data emitters (topic === null, e.g. Ekubo's Core) are not
+   * auto-derived by design: their identity lives at a fixed data offset and
+   * the family stays on current-N direct reads. Only declarations whose
+   * emitter mode can be resolved generically (address, singleton-indexed
+   * address, singleton-indexed bytes32) enter the automatic update pipe.
+   */
+  const resolvable = input.mutationEvents.filter(
+    (event) => event.topic !== null,
   );
+  if (resolvable.length === 0) return null;
+  const topics = resolvable.map((event) => event.topic as string);
   const compositeByRawKey = new Map(
     input.familyGroups.map((group) => [
       group.rawStateKey.toLowerCase(),
       group.stateKey,
     ] as const),
   );
+  const baseByRawKey = new Map<string, RecoveryStateBase>();
+  for (const [composite, base] of input.eligibleByStateKey) {
+    const raw = compositeByRawKey.get(composite);
+    if (raw !== undefined) baseByRawKey.set(raw, base);
+  }
+  const eventByTopic = new Map<string, typeof resolvable[number]>();
+  for (const event of resolvable) {
+    eventByTopic.set(event.topic as string, event);
+  }
   const classifierFingerprint = deterministicHash({
     familyId: input.familyId,
-    topics: input.topics,
+    topics,
+    emitters: resolvable.map((event) => event.emitter),
   });
+  const stateKeyOfEdge = input.family.stateKey;
   return Object.freeze({
     mutationQueryDescriptor: () =>
-      createMutationQueryDescriptor({ topics: [...input.topics] }),
+      createMutationQueryDescriptor({ topics }),
     classifyMutations(classifyInput: {
       readonly edges: readonly TokenEdge[];
       readonly range: CanonicalMutationRange;
     }): FamilyMutationClassification {
+      /*
+       * Generic identity -> stateKey index built from the family's own
+       * edges: the event identity resolves through the declaration's emitter
+       * mode and must hit one of this family's state keys. This supports
+       * directional/composite state keys (one pool identity mapping to
+       * several state keys) without per-protocol branches.
+       */
+      const identityToStateKeys = new Map<string, Set<string>>();
+      for (const edge of classifyInput.edges) {
+        const rawKey = stateKeyOfEdge(edge).toLowerCase();
+        const identity = edge.target.toLowerCase();
+        const set = identityToStateKeys.get(identity) ?? new Set<string>();
+        set.add(rawKey);
+        identityToStateKeys.set(identity, set);
+      }
       const changed = new Map<string, ReadonlySet<string>>();
       for (const event of classifyInput.range.events) {
         const topic = event.topics[0]?.toLowerCase();
-        if (topic === undefined || !topicSet.has(topic)) continue;
-        const pool = event.address.toLowerCase();
-        const composite = compositeByRawKey.get(pool);
-        if (composite === undefined) continue;
-        const base = input.eligibleByStateKey.get(composite);
-        if (!base) continue;
-        changed.set(
-          pool,
-          new Set([...base.state.requiredReadKeys]),
+        if (topic === undefined) continue;
+        const declaration = eventByTopic.get(topic);
+        if (!declaration) continue;
+        const identity = observedLandedPoolIdentity(
+          declaration,
+          event,
         );
+        if (identity === null) continue;
+        const stateKeys = identityToStateKeys.get(identity);
+        if (!stateKeys) continue;
+        for (const rawKey of stateKeys) {
+          const base = baseByRawKey.get(rawKey);
+          if (!base) continue;
+          changed.set(
+            rawKey,
+            new Set([...base.state.requiredReadKeys]),
+          );
+        }
       }
       return Object.freeze({
         mutationRangeFingerprint: classifyInput.range.rangeFingerprint,
