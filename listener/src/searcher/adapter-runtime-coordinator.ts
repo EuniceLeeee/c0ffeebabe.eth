@@ -185,6 +185,11 @@ export interface PrepareAdapterRuntimeInput {
    */
   readonly pricingLaggingTopologyRefreshMode?:
     BlockScanLaggingTopologyRefreshMode;
+  /**
+   * Warm generations persist each resolved state key's raw reads for the
+   * resumable-warm cache; hot generations only read from it.
+   */
+  readonly cacheMode?: "warm" | "hot";
   readonly signal?: AbortSignal;
   /**
    * Current-N exact/final-sim workers (for example isolated Anvil forks).
@@ -346,6 +351,7 @@ export class AdapterRuntimeCoordinator {
           ),
           laggingTopologyRefreshMode:
             input.pricingLaggingTopologyRefreshMode ?? "proof-scoped",
+          cacheMode: input.cacheMode ?? "hot",
           // Pricing owns family-local settlement and still needs the outer
           // generation signal for its canonical CAS. Aborting it at the
           // preparation boundary would erase healthy sibling results.

@@ -28,6 +28,14 @@ import {
   observedLandedPoolIdentity,
   type LandedEventEmitter,
 } from "./venues/landed-event-registry.js";
+import {
+  BLOCKSCAN_STATE_CACHE_SCHEMA_VERSION,
+  appendBlockScanStateCache,
+  compactBlockScanStateCache,
+  loadBlockScanStateCache,
+  type CachedBlockScanStateKey,
+  type CachedBlockScanStateRead,
+} from "./blockscan-state-cache.js";
 import type { TokenEdge } from "./planner/token-graph.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
 
@@ -312,6 +320,11 @@ export interface PrepareBlockScanStateInput {
    * graph). The one-time startup warm may bootstrap the initial recovery base.
    */
   readonly laggingTopologyRefreshMode?: BlockScanLaggingTopologyRefreshMode;
+  /**
+   * Warm generations persist each resolved state key's raw reads for the
+   * resumable-warm cache; hot generations only read from it. Default "hot".
+   */
+  readonly cacheMode?: "warm" | "hot";
   readonly signal?: AbortSignal;
 }
 
@@ -333,6 +346,22 @@ export interface BlockScanStateCoordinatorOptions {
   readonly onProtocolAddressTouchShadowTelemetry?: (
     telemetry: ProtocolAddressTouchShadowTelemetry,
   ) => void;
+  /**
+   * Max blocks between a recovery base's source and the new graph source for
+   * incremental carry and cached-warm reuse. Default 32; production sets
+   * SEARCHER_BLOCKSCAN_INCREMENTAL_RANGE_BLOCKS=128 so a deploy-lagging warm
+   * can resume from a ~25-minute-old cache source instead of re-reading every
+   * key.
+   */
+  readonly incrementalRangeBlocks?: number;
+  /**
+   * Optional JSONL cache of raw source-pinned reads. Each resolved state key
+   * is appended as it completes during warm generations, and a restart
+   * re-decodes cached keys instead of re-reading them from RPC (resumable
+   * warm). Protocol-agnostic: only raw results are stored; the family's
+   * registered decode path rebuilds the published state.
+   */
+  readonly cachePath?: string;
   readonly now?: () => number;
 }
 
@@ -460,7 +489,10 @@ interface ActiveGeneration {
   readonly controller: AbortController;
 }
 
-const MAX_INCREMENTAL_RANGE_BLOCKS = 32;
+// Production raises this through SEARCHER_BLOCKSCAN_INCREMENTAL_RANGE_BLOCKS
+// so a deploy-lagging warm resume can reuse a ~25-minute-old cache source
+// (carries re-prove the range; exact joins correct stale coarse mids at N).
+const DEFAULT_INCREMENTAL_RANGE_BLOCKS = 32;
 // Keep recovery inside the ordinary hot budget; rotate so repeated failures
 // cannot permanently starve later state keys in the same family.
 const MAX_HOT_RECOVERY_STATE_KEYS_PER_FAMILY = 16;
@@ -526,10 +558,19 @@ export class BlockScanStateCoordinator {
    */
   private readonly hotRecoveryCursorByFamily = new Map<string, string>();
   private readonly familyTimeoutMs: number;
+  private readonly incrementalRangeBlocks: number;
   private readonly protocolAddressTouchMode: "off" | "shadow" | "enabled";
   private readonly onProtocolAddressTouchShadowTelemetry:
     | ((telemetry: ProtocolAddressTouchShadowTelemetry) => void)
     | undefined;
+  private readonly cachePath: string | undefined;
+  private readonly cachedByStateKey = new Map<
+    string,
+    CachedBlockScanStateKey
+  >();
+  private cacheAppendChain: Promise<void> = Promise.resolve();
+  /** Warm generations persist each resolved key; hot generations do not. */
+  private cacheModeActive = false;
   private readonly now: () => number;
 
   constructor(
@@ -544,10 +585,24 @@ export class BlockScanStateCoordinator {
       );
     }
     this.familyTimeoutMs = Math.max(1, Math.floor(familyTimeoutMs));
+    this.incrementalRangeBlocks = Math.max(
+      1,
+      Math.floor(options.incrementalRangeBlocks ?? DEFAULT_INCREMENTAL_RANGE_BLOCKS),
+    );
     this.protocolAddressTouchMode = options.protocolAddressTouchMode ??
       (options.protocolAddressTouchShadow ? "shadow" : "off");
     this.onProtocolAddressTouchShadowTelemetry =
       options.onProtocolAddressTouchShadowTelemetry;
+    this.cachePath = options.cachePath;
+    if (this.cachePath) {
+      const loaded = loadBlockScanStateCache(this.cachePath);
+      for (const [stateKey, entry] of loaded.entries) {
+        this.cachedByStateKey.set(stateKey, entry);
+      }
+      if (loaded.lineCount > loaded.entries.size * 1.5 + 1024) {
+        this.scheduleCacheCompact();
+      }
+    }
     this.now = options.now ?? Date.now;
   }
 
@@ -579,6 +634,89 @@ export class BlockScanStateCoordinator {
   }
 
   /**
+   * Resumable-warm lookup. A cached key is usable when its family matches,
+   * its raw reads are internally consistent (validated at load) and its
+   * source is recent enough to re-decode for this generation. Generation is
+   * intentionally not compared: the cache resumes a warm across process
+   * restarts, not an incremental carry.
+   */
+  private cacheEntryForGroup(
+    group: StateGroup,
+    graph: VerifiedGraphView,
+  ): CachedBlockScanStateKey | undefined {
+    const entry = this.cachedByStateKey.get(group.stateKey);
+    if (!entry || entry.familyId !== group.familyId) return undefined;
+    const distance = graph.sourceBlock - entry.source.number;
+    if (distance < 0 || distance > this.incrementalRangeBlocks) {
+      return undefined;
+    }
+    const readIds = new Set(entry.reads.map((read) => read.localId));
+    if (
+      entry.requiredReadKeys.length === 0 ||
+      !entry.requiredReadKeys.every((id) => readIds.has(id))
+    ) {
+      return undefined;
+    }
+    return entry;
+  }
+
+  /**
+   * Persist one resolved state key's raw reads for the next warm. Only fresh
+   * direct/classified reads are cached (carried keys and re-hydrated keys
+   * already have an entry or belong to an older source). Appends are
+   * serialized so concurrent family lanes never interleave lines.
+   */
+  private scheduleCacheAppend(entry: CachedBlockScanStateKey): void {
+    if (!this.cachePath) return;
+    this.cachedByStateKey.set(entry.stateKey, entry);
+    const path = this.cachePath;
+    this.cacheAppendChain = this.cacheAppendChain
+      .catch(() => {})
+      .then(() => appendBlockScanStateCache(path, entry));
+  }
+
+  private scheduleCacheCompact(): void {
+    if (!this.cachePath) return;
+    const path = this.cachePath;
+    const entries = this.cachedByStateKey;
+    this.cacheAppendChain = this.cacheAppendChain
+      .catch(() => {})
+      .then(() => compactBlockScanStateCache(path, entries));
+  }
+
+  private buildCacheEntry(
+    group: StateGroup,
+    state: PublishedStateKey,
+    resultsByGlobalId: ReadonlyMap<string, StateReadResult>,
+    groupReads: readonly {
+      readonly globalId: string;
+      readonly localId: string;
+    }[],
+  ): CachedBlockScanStateKey | null {
+    if (groupReads.length === 0) return null;
+    const reads: CachedBlockScanStateRead[] = [];
+    for (const item of groupReads) {
+      const result = resultsByGlobalId.get(item.globalId);
+      if (!result?.ok) return null;
+      reads.push(Object.freeze({
+        localId: item.localId,
+        data: result.data,
+        provenance: result.provenance,
+      }));
+    }
+    if (reads.length === 0) return null;
+    return Object.freeze({
+      schemaVersion: BLOCKSCAN_STATE_CACHE_SCHEMA_VERSION,
+      familyId: group.familyId,
+      stateKey: group.stateKey,
+      source: Object.freeze({ ...state.source }),
+      requiredReadKeys: Object.freeze([...state.requiredReadKeys]),
+      reads: Object.freeze(reads),
+      savedAtMs: this.now(),
+    });
+  }
+
+  /**
    * Trusted historical blind-run hook. Dynamic source-N state is discarded
    * between attempts while graph-fingerprint static schemas remain reusable.
    * Production never calls this method.
@@ -595,6 +733,7 @@ export class BlockScanStateCoordinator {
 
   async prepare(input: PrepareBlockScanStateInput): Promise<BlockScanStatePrepareResult> {
     const { graph } = input;
+    this.cacheModeActive = input.cacheMode === "warm";
     const previousPublished = this.published;
     const familySettleDeadlineAtMs = Math.min(
       input.deadlineAtMs,
@@ -986,6 +1125,7 @@ export class BlockScanStateCoordinator {
     } finally {
       clearTimeout(deadlineTimer);
       detachExternal();
+      this.cacheModeActive = false;
       if (this.active?.token === token) this.active = null;
     }
   }
@@ -1371,7 +1511,7 @@ export class BlockScanStateCoordinator {
             group !== undefined &&
             base.schemaFingerprint === stateSchemaFingerprint(group.edges) &&
             distance > 0 &&
-            distance <= MAX_INCREMENTAL_RANGE_BLOCKS &&
+            distance <= this.incrementalRangeBlocks &&
             through.generation > base.state.source.generation
           );
         }),
@@ -1856,7 +1996,7 @@ export class BlockScanStateCoordinator {
           return (
               base &&
                 graph.sourceBlock - base.state.source.number >
-                  MAX_INCREMENTAL_RANGE_BLOCKS
+                  this.incrementalRangeBlocks
             ) || (previouslyEstablished && !base) || newlyAdmitted
             ? [group.stateKey]
             : [];
@@ -1917,6 +2057,7 @@ export class BlockScanStateCoordinator {
     const carryForwardStateKeys = new Set<string>();
     const carryReadKeysByStateKey = new Map<string, readonly string[]>();
     const classifiedDirectStateKeys = new Set<string>();
+    const cacheSourcedStateKeys = new Set<string>();
     const badStateKeys = new Set<string>(
       groups
         .filter((group) => !compiledFamilies.has(group.familyId))
@@ -2040,6 +2181,23 @@ export class BlockScanStateCoordinator {
         ) {
           continue;
         }
+        if (
+          round === 0 &&
+          this.cacheModeActive &&
+          !this.recoveryBaseForGroup(group)
+        ) {
+          const cacheEntry = this.cacheEntryForGroup(group, graph);
+          if (cacheEntry) {
+            cacheSourcedStateKeys.add(group.stateKey);
+            for (const localId of cacheEntry.requiredReadKeys) {
+              staging.expectedReadKeys.add(
+                globalReadId(group.stateKey, localId),
+              );
+            }
+            closedStateKeys.add(group.stateKey);
+            continue;
+          }
+        }
         try {
           const compiled = compiledFamilies.get(group.familyId);
           if (!compiled) throw new Error("family static schema is unavailable");
@@ -2121,8 +2279,15 @@ export class BlockScanStateCoordinator {
 
       const runnableByFamily = new Map<string, typeof runnable>();
       for (const item of runnable) {
-        const current = runnableByFamily.get(item.group.familyId) ?? [];
-        runnableByFamily.set(item.group.familyId, [...current, item]);
+        // O(R) append: each read must be pushed once, not copied into a fresh
+        // array every time (the old spread made one family's 13k reads copy
+        // ~93M array slots per round).
+        const bucket = runnableByFamily.get(item.group.familyId);
+        if (bucket === undefined) {
+          runnableByFamily.set(item.group.familyId, [item]);
+        } else {
+          bucket.push(item);
+        }
       }
       const familyBatches = [...runnableByFamily.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
@@ -2288,15 +2453,50 @@ export class BlockScanStateCoordinator {
     const states: [string, PublishedStateKey][] = [];
     for (const group of groups) {
       if (badStateKeys.has(group.stateKey)) continue;
-      const groupReads = plannedByStateKey.get(group.stateKey) ?? [];
+      const cacheEntry = cacheSourcedStateKeys.has(group.stateKey)
+        ? this.cacheEntryForGroup(group, graph)
+        : undefined;
+      const groupReads = cacheEntry
+        ? []
+        : (plannedByStateKey.get(group.stateKey) ?? []);
       const carryForward = carryForwardStateKeys.has(group.stateKey);
-      const requiredLocalIds = carryForward
+      const requiredLocalIds = cacheEntry
+        ? cacheEntry.requiredReadKeys
+        : carryForward
         ? carryReadKeysByStateKey.get(group.stateKey) ?? []
         : groupReads.map((item) => item.localId);
       const incrementalPlan = incrementalPlans.get(group.familyId);
       const localResults: StateReadResult[] = [];
       let resultFailure: StateReadResult | null = null;
-      for (const item of carryForward ? [] : groupReads) {
+      const cachedReadByLocalId = cacheEntry
+        ? new Map(
+            cacheEntry.reads.map((read) => [read.localId, read] as const),
+          )
+        : null;
+      if (cacheEntry) {
+        for (const localId of requiredLocalIds) {
+          const cached = cachedReadByLocalId!.get(localId);
+          if (!cached) {
+            resultFailure = {
+              id: localId,
+              ok: false,
+              sourceBlock: cacheEntry.source.number,
+              sourceBlockHash: cacheEntry.source.hash,
+              kind: "rpc",
+              error: "missing cached read",
+            };
+            break;
+          }
+          localResults.push(Object.freeze({
+            id: localId,
+            ok: true,
+            sourceBlock: cacheEntry.source.number,
+            sourceBlockHash: cacheEntry.source.hash,
+            provenance: cached.provenance,
+            data: cached.data,
+          }));
+        }
+      } else for (const item of carryForward ? [] : groupReads) {
         const result = resultsByGlobalId.get(item.globalId);
         if (!result) {
           resultFailure = {
@@ -2436,6 +2636,16 @@ export class BlockScanStateCoordinator {
               completeThroughBlock: range.through.number,
               completeThroughHash: range.through.hash,
             });
+          } else if (cacheEntry) {
+            const cached = cachedReadByLocalId?.get(localId);
+            if (!cached) {
+              throw new Error(`resolved state key lacks cached read ${localId}`);
+            }
+            proof = Object.freeze({
+              kind: "direct-read" as const,
+              source: Object.freeze({ ...cacheEntry.source }),
+              provenance: cached.provenance,
+            });
           } else {
             const result = resultsByGlobalId.get(globalId);
             if (!result?.ok) {
@@ -2470,45 +2680,74 @@ export class BlockScanStateCoordinator {
           resolvedEdgeKeys.push(edgeKey);
           mids.push([edgeKey, mid]);
         }
-        states.push([
-          group.stateKey,
-          Object.freeze({
-            familyId: group.familyId,
-            stateKey: group.rawStateKey,
-            source: Object.freeze({
-              number: graph.sourceBlock,
-              hash: graph.sourceBlockHash,
-              generation: graph.generation,
-            }),
-            snapshot,
-            requiredReadKeys: Object.freeze(
-              [...requiredLocalIds].sort(),
+        const publishedState: PublishedStateKey = Object.freeze({
+          familyId: group.familyId,
+          stateKey: group.rawStateKey,
+          source: cacheEntry
+            ? Object.freeze({ ...cacheEntry.source })
+            : Object.freeze({
+                number: graph.sourceBlock,
+                hash: graph.sourceBlockHash,
+                generation: graph.generation,
+              }),
+          snapshot,
+          requiredReadKeys: Object.freeze([...requiredLocalIds].sort()),
+          freshnessByReadKey: new FrozenReadonlyMap(
+            [...localFreshness.entries()].sort(([a], [b]) =>
+              a.localeCompare(b)
             ),
-            freshnessByReadKey: new FrozenReadonlyMap(
-              [...localFreshness.entries()].sort(([a], [b]) =>
-                a.localeCompare(b)
-              ),
-            ),
-            refreshMode: carryForward
-              ? "carry-forward"
-              : classifiedDirectStateKeys.has(group.stateKey)
-              ? "classified-direct"
-              : "unproven-direct",
-            backrunInvalidations: Object.freeze(
-              carryForward || !classifiedDirectStateKeys.has(group.stateKey)
-                ? []
-                : [
-                    ...(
-                      incrementalPlan?.classificationByStateKey.get(
-                        group.stateKey,
-                      )?.backrunInvalidationsByStateKey?.get(
-                          group.rawStateKey,
-                        ) ?? []
-                    ),
-                  ].map((invalidation) => Object.freeze({ ...invalidation })),
-            ),
-          }),
-        ]);
+          ),
+          refreshMode: cacheEntry
+            ? "unproven-direct"
+            : carryForward
+            ? "carry-forward"
+            : classifiedDirectStateKeys.has(group.stateKey)
+            ? "classified-direct"
+            : "unproven-direct",
+          backrunInvalidations: Object.freeze(
+            cacheEntry ||
+              carryForward ||
+              !classifiedDirectStateKeys.has(group.stateKey)
+              ? []
+              : [
+                  ...(
+                    incrementalPlan?.classificationByStateKey.get(
+                      group.stateKey,
+                    )?.backrunInvalidationsByStateKey?.get(
+                        group.rawStateKey,
+                      ) ?? []
+                  ),
+                ].map((invalidation) => Object.freeze({ ...invalidation })),
+          ),
+        });
+        states.push([group.stateKey, publishedState]);
+        /*
+         * Per-key recovery bases are committed as each key resolves, so an
+         * aborted/superseded generation still leaves every resolved key
+         * resumable by the next generation instead of re-reading the whole
+         * family. Warm generations additionally append the raw reads so a
+         * process restart can re-decode them without RPC.
+         */
+        this.lastGoodByStateKey.set(group.stateKey, Object.freeze({
+          state: publishedState,
+          schemaFingerprint: stateSchemaFingerprint(group.edges),
+          requiredReadKeyHash: exactSetHash(publishedState.requiredReadKeys),
+        }));
+        if (
+          this.cacheModeActive &&
+          !carryForward &&
+          cacheEntry === undefined
+        ) {
+          const cacheEntryToWrite = this.buildCacheEntry(
+            group,
+            publishedState,
+            resultsByGlobalId,
+            groupReads,
+          );
+          if (cacheEntryToWrite) {
+            this.scheduleCacheAppend(cacheEntryToWrite);
+          }
+        }
       } catch (error) {
         issues.push({
           kind: "derive",

@@ -1976,6 +1976,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           pricingLaggingTopologyRefreshMode: startupWarmAttempt
             ? "startup-bootstrap"
             : "proof-scoped",
+          cacheMode: startupWarmAttempt ? "warm" : "hot",
           signal: passSignal,
           prepareExecution,
         });

@@ -1215,6 +1215,16 @@ async function main(): Promise<void> {
             process.env.SEARCHER_BLOCKSCAN_STATE_FAMILY_TIMEOUT_MS ?? "120000",
           ),
         ),
+        incrementalRangeBlocks: Math.max(
+          1,
+          Number(
+            process.env.SEARCHER_BLOCKSCAN_INCREMENTAL_RANGE_BLOCKS ??
+              "128",
+          ),
+        ),
+        cachePath:
+          process.env.SEARCHER_BLOCKSCAN_STATE_CACHE_PATH ??
+          "/opt/MEV-runtime/blockscan-state-cache.jsonl",
         protocolAddressTouchMode: protocolTouchMode,
         onProtocolAddressTouchShadowTelemetry: (telemetry) => {
           console.log(
