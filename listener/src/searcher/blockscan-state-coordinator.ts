@@ -395,6 +395,12 @@ interface StateGroup {
   readonly stateKey: string;
   readonly edges: readonly TokenEdge[];
   readonly edgeKeys: readonly string[];
+  /**
+   * Topology-scoped schema fingerprint, computed once in buildOwnershipPlan
+   * instead of re-hashing every group's edges on every generation (16k+
+   * sha256 calls per block were a top CPU/GC hotspot).
+   */
+  readonly schemaFingerprint: string;
 }
 
 interface OwnershipPlan {
@@ -909,7 +915,7 @@ export class BlockScanStateCoordinator {
       if (
         !base ||
         !sameBlockSource(base.state.source, fromExclusive) ||
-        base.schemaFingerprint !== stateSchemaFingerprint(group.edges)
+        base.schemaFingerprint !== group.schemaFingerprint
       ) {
         directStateKeys.add(group.stateKey);
         continue;
@@ -1296,27 +1302,76 @@ export class BlockScanStateCoordinator {
       const unavailableReasonByEdgeKey = new Map(
         unavailableEdges.map((entry) => [entry.edgeKey, entry.reason] as const),
       );
-      const mids = new FrozenReadonlyMap(
-        lanes
-          .flatMap((lane) => lane.mids)
-          .filter(([edgeKey]) => resolvedEdgeKeySet.has(edgeKey))
-          .map(([key, mid]) => [key, freezeMid(mid)] as const)
-          .sort(([a], [b]) => a.localeCompare(b)),
+      const laneMids = lanes.flatMap((lane) => lane.mids);
+      const laneFreshness = lanes.flatMap((lane) => lane.freshness);
+      const laneStates = lanes.flatMap((lane) => lane.states);
+      /*
+       * Delta publication: when the expected key sets are unchanged (same
+       * topology), copy the previous frozen maps (O(n) pointer moves, order
+       * preserved -> no re-sort) and update only this generation's entries.
+       * The old assembly flatMap+filter+map+sort rebuilt and re-allocated
+       * ~80k entries per generation, the measured CPU/GC hotspot.
+       */
+      const previousSnapshot = this.published;
+      const previousCoverage = previousSnapshot?.coverage;
+      const keySetsUnchanged =
+        previousSnapshot !== undefined &&
+        previousCoverage !== undefined &&
+        previousCoverage.expectedStateKeyHash ===
+          coverage.expectedStateKeyHash &&
+        previousCoverage.expectedReadKeyHash ===
+          coverage.expectedReadKeyHash &&
+        previousCoverage.expectedEdgeKeyHash ===
+          coverage.expectedEdgeKeyHash;
+      const previousResolvedStateKeys = new Set(
+        previousSnapshot?.coverage.resolvedStateKeys ?? [],
       );
-      const freshnessByReadKey = new FrozenReadonlyMap(
-        lanes
-          .flatMap((lane) => lane.freshness)
-          .filter(([readKey]) => resolvedReadKeySet.has(readKey))
-          .sort(([a], [b]) => a.localeCompare(b)),
+      const previousResolvedReadKeys = new Set(
+        previousSnapshot?.coverage.resolvedReadKeys ?? [],
       );
+      const previousResolvedEdgeKeys = new Set(
+        previousSnapshot?.coverage.resolvedEdgeKeys ?? [],
+      );
+      const removedStateKeys = keySetsUnchanged
+        ? [...previousResolvedStateKeys].filter(
+            (key) => !resolvedStateKeySet.has(key),
+          )
+        : [];
+      const removedReadKeys = keySetsUnchanged
+        ? [...previousResolvedReadKeys].filter(
+            (key) => !resolvedReadKeySet.has(key),
+          )
+        : [];
+      const removedEdgeKeys = keySetsUnchanged
+        ? [...previousResolvedEdgeKeys].filter(
+            (key) => !resolvedEdgeKeySet.has(key),
+          )
+        : [];
+      const mids = keySetsUnchanged
+        ? deltaFrozenMap(previousSnapshot!.mids, laneMids, removedEdgeKeys)
+        : new FrozenReadonlyMap(
+            laneMids
+              .filter(([edgeKey]) => resolvedEdgeKeySet.has(edgeKey))
+              .map(([key, mid]) => [key, freezeMid(mid)] as const)
+              .sort(([a], [b]) => a.localeCompare(b)),
+          );
+      const freshnessByReadKey = keySetsUnchanged
+        ? deltaFrozenMap(
+            previousSnapshot!.freshnessByReadKey,
+            laneFreshness,
+            removedReadKeys,
+          )
+        : new FrozenReadonlyMap(
+            laneFreshness
+              .filter(([readKey]) => resolvedReadKeySet.has(readKey))
+              .sort(([a], [b]) => a.localeCompare(b)),
+          );
       /*
        * Delta publication: the coverage maps are a pure function of the
        * expected/resolved/unavailable key sets. When every hash is unchanged
        * from the previous published snapshot, share the frozen maps instead
        * of rebuilding ~70k frozen entries per generation.
        */
-      const previousCoverage = this.published?.coverage;
-      const previousSnapshot = this.published;
       const coverageMapsUnchanged =
         previousSnapshot !== undefined &&
         previousCoverage !== undefined &&
@@ -1366,12 +1421,17 @@ export class BlockScanStateCoordinator {
               ] as const;
             }),
           );
-      const stateByStateKey = new FrozenReadonlyMap(
-        lanes
-          .flatMap((lane) => lane.states)
-          .filter(([stateKey]) => resolvedStateKeySet.has(stateKey))
-          .sort(([a], [b]) => a.localeCompare(b)),
-      );
+      const stateByStateKey = keySetsUnchanged
+        ? deltaFrozenMap(
+            previousSnapshot!.stateByStateKey,
+            laneStates,
+            removedStateKeys,
+          )
+        : new FrozenReadonlyMap(
+            laneStates
+              .filter(([stateKey]) => resolvedStateKeySet.has(stateKey))
+              .sort(([a], [b]) => a.localeCompare(b)),
+          );
       const familyIds = uniqueSorted([
         ...ownership.groups.map((group) => group.familyId),
         ...graphIncompleteFamilyIds,
@@ -1440,7 +1500,7 @@ export class BlockScanStateCoordinator {
         const existingBase = this.lastGoodByStateKey.get(stateKey);
         this.lastGoodByStateKey.set(stateKey, Object.freeze({
           state,
-          schemaFingerprint: stateSchemaFingerprint(group.edges),
+          schemaFingerprint: group.schemaFingerprint,
           requiredReadKeyHash: exactSetHash(state.requiredReadKeys),
           midsByEdgeKey: existingBase?.midsByEdgeKey ?? new Map(),
           unavailableByEdgeKey:
@@ -2706,7 +2766,9 @@ export class BlockScanStateCoordinator {
                 generation: graph.generation,
               }),
           snapshot,
-          requiredReadKeys: Object.freeze([...requiredLocalIds].sort()),
+          requiredReadKeys: carryForward && previousBase
+            ? previousBase.state.requiredReadKeys
+            : Object.freeze([...requiredLocalIds].sort()),
           freshnessByReadKey: new FrozenReadonlyMap(
             [...localFreshness.entries()].sort(([a], [b]) =>
               a.localeCompare(b)
@@ -2731,17 +2793,22 @@ export class BlockScanStateCoordinator {
          */
         this.lastGoodByStateKey.set(group.stateKey, Object.freeze({
           state: publishedState,
-          schemaFingerprint: stateSchemaFingerprint(group.edges),
+          schemaFingerprint: group.schemaFingerprint,
           requiredReadKeyHash: exactSetHash(publishedState.requiredReadKeys),
-          midsByEdgeKey: Object.freeze(
-            new Map(
-              [...derived].map(([edgeKey, mid]) => [
-                edgeKey,
-                freezeMid(mid),
-              ] as const),
-            ),
-          ),
-          unavailableByEdgeKey: Object.freeze(new Map(unavailable)),
+          midsByEdgeKey: derived === previousBase?.midsByEdgeKey
+            ? derived
+            : Object.freeze(
+                new Map(
+                  [...derived].map(([edgeKey, mid]) => [
+                    edgeKey,
+                    freezeMid(mid),
+                  ] as const),
+                ),
+              ),
+          unavailableByEdgeKey:
+            unavailable === previousBase?.unavailableByEdgeKey
+              ? unavailable
+              : Object.freeze(new Map(unavailable)),
         }));
         if (
           this.cacheModeActive &&
@@ -3082,6 +3149,7 @@ function buildOwnershipPlan(
       stateKey,
       edges: Object.freeze(group.edges),
       edgeKeys: Object.freeze(group.edgeKeys),
+      schemaFingerprint: stateSchemaFingerprint(group.edges),
     }));
   return Object.freeze({
     groups: Object.freeze(groups),
@@ -3594,6 +3662,24 @@ function freezeMid(mid: RouteVenueMid): RouteVenueMid {
     ...mid,
     edges: Object.freeze([...mid.edges]) as unknown as TokenEdge[],
   });
+}
+
+/**
+ * Delta map assembly: copy the previous frozen map (preserving its sorted
+ * insertion order), apply this generation's entry updates and drop keys that
+ * became unresolved. The old flatMap+filter+map+sort rebuilt and
+ * re-allocated the full map every generation.
+ */
+function deltaFrozenMap<K, V>(
+  previous: ReadonlyMap<K, V>,
+  updates: readonly (readonly [K, V])[],
+  removed: readonly K[],
+): FrozenReadonlyMap<K, V> {
+  const merged = new Map<K, V>();
+  for (const [key, value] of previous.entries()) merged.set(key, value);
+  for (const [key, value] of updates) merged.set(key, value);
+  for (const key of removed) merged.delete(key);
+  return new FrozenReadonlyMap([...merged.entries()]);
 }
 
 function freezeIssues(
