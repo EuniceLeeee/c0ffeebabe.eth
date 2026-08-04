@@ -42,6 +42,7 @@ import {
 import {
   type DiscoveryBackfillControl,
   DiscoveryBackfillLane,
+  type DiscoveryBackfillStateDescriptor,
 } from "./discovery-backfill-lane.js";
 import {
   CanonicalHeaderJournal,
@@ -401,6 +402,10 @@ interface BlockScanDiscoveryDependencies<PreparedDiscovery> {
   readonly queue: ProtocolDiscoveryMutationQueue;
   observeHeader(blockNumber: number): Promise<CanonicalHeader>;
   capture(): LiveDiscoveryPublicationState;
+  /** O(1) descriptor of the currently published state (computed once per publish). */
+  describeCaptured(): DiscoveryBackfillStateDescriptor;
+  /** O(1) content key of the published graph topology. */
+  topologyKey(): string;
   publish(state: LiveDiscoveryPublicationState): void;
   finishPublished(): void;
   scheduleBackfill(blockNumber: number): void | Promise<void>;
@@ -538,6 +543,7 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
     readonly sourceBlockHash: string;
     readonly edges: readonly TokenEdge[];
     readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
+    readonly topologyKey: string;
   }): VerifiedGraphView;
   readBlockHash(
     provider: AnvilStateBackend["provider"],
@@ -1815,8 +1821,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         discovery.finish(preparedDiscovery);
         nextDiscovery = publishedDiscovery;
       }
-      const nextDescriptor =
-        describeLiveDiscoveryPublicationState(nextDiscovery);
+      const nextDescriptor = this.deps.discovery.describeCaptured();
       const nextAdmissionThrough = dexAdmissionCompleteThrough(nextDiscovery);
       const requiredAdmissionThrough = useNMinusOneFallback
         ? requiredPredecessor
@@ -1858,12 +1863,13 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       const graphEdges = Object.freeze([...currentGraph]);
       const generation = this.nextGeneration();
       const graphView = this.deps.buildGraphView({
-        id: `blockscan:${hashTokenGraph([...graphEdges])}`,
+        id: `blockscan:${this.deps.discovery.topologyKey()}`,
         generation,
         sourceBlock: blockNumber,
         sourceBlockHash,
         edges: graphEdges,
         landedCoverage: discoveryPass.landedCoverage,
+        topologyKey: this.deps.discovery.topologyKey(),
       });
       if (useNMinusOneFallback) {
         // Register current-N production before any predecessor wait or

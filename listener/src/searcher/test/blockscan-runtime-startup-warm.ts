@@ -33,7 +33,9 @@ import {
 } from "../canonical-header-journal.js";
 import {
   cloneLiveDiscoveryPublicationState,
+  computeDiscoveryGraphTopologyKey,
   describeDexPublicationSlice,
+  describeLiveDiscoveryPublicationState,
   rebaseHotDexPublication,
   type DiscoveryCoverageAnchor,
   type LiveDiscoveryPublicationState,
@@ -2126,6 +2128,10 @@ function createHarness(
       },
       journal,
       queue,
+      describeCaptured: () =>
+        describeLiveDiscoveryPublicationState(publication),
+      topologyKey: () =>
+        computeDiscoveryGraphTopologyKey(publication),
       observeHeader: async (blockNumber: number) => {
         if (blockNumber === options.outsideRetainedReadyBlock) {
           throw new CanonicalHeaderOutsideRetentionError(

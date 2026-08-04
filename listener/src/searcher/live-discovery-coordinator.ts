@@ -20,6 +20,7 @@ import {
   resolveDiscoveryBackfillChunkBlocks,
   type DiscoveryBackfillControl,
   type DiscoveryBackfillPlan,
+  type DiscoveryBackfillStateDescriptor,
 } from "./discovery-backfill-lane.js";
 import {
   planContiguousDiscoveryChunk,
@@ -29,6 +30,7 @@ import {
 import { emitEvent } from "./events.js";
 import {
   cloneLiveDiscoveryPublicationState,
+  computeDiscoveryGraphTopologyKey,
   describeDexPublicationSlice,
   describeDexRoutingSlice,
   describeLiveDiscoveryPublicationState,
@@ -352,11 +354,21 @@ export async function createLiveDiscoveryCoordinator(
           }),
     );
   }
-  const captureLiveDiscoveryPublication = (
-    revision = discoveryPublicationRevision,
-  ): LiveDiscoveryPublicationState =>
-    cloneLiveDiscoveryPublicationState({
-      revision,
+  /*
+   * Published-discovery envelope: the immutable state is cloned once per
+   * publish and capture() returns it O(1); the descriptor (full-publication
+   * fingerprint) and the graph topology key are computed once per publish too,
+   * so a pass never deep-clones or re-hashes the whole 35k-edge publication.
+   */
+  let publishedEnvelope: {
+    readonly state: LiveDiscoveryPublicationState;
+    readonly descriptor: DiscoveryBackfillStateDescriptor;
+    readonly graphTopologyKey: string;
+  } | null = null;
+  const captureLiveDiscoveryPublication = (): LiveDiscoveryPublicationState => {
+    if (publishedEnvelope !== null) return publishedEnvelope.state;
+    const initial = cloneLiveDiscoveryPublicationState({
+      revision: discoveryPublicationRevision,
       strategyViews,
       backrunGraph: graph,
       ...(blockScanGraph === undefined
@@ -382,6 +394,20 @@ export async function createLiveDiscoveryCoordinator(
         completeThroughHash: lastProtocolDiscoveryBlockHash,
       }),
     });
+    publishedEnvelope = Object.freeze({
+      state: initial,
+      descriptor: describeLiveDiscoveryPublicationState(initial),
+      graphTopologyKey: computeDiscoveryGraphTopologyKey(initial),
+    });
+    return initial;
+  };
+  const describeCapturedDiscoveryPublication = ():
+    DiscoveryBackfillStateDescriptor =>
+    publishedEnvelope?.descriptor ??
+      describeLiveDiscoveryPublicationState(captureLiveDiscoveryPublication());
+  const capturedGraphTopologyKey = (): string =>
+    publishedEnvelope?.graphTopologyKey ??
+      computeDiscoveryGraphTopologyKey(captureLiveDiscoveryPublication());
   type DexDiscoveryBase = {
     readonly coverage: DexGraphCoverageState;
     readonly retryablePools: ReadonlyMap<string, PoolEntry>;
@@ -1601,6 +1627,11 @@ export async function createLiveDiscoveryCoordinator(
     protocolGraphCompleteThrough =
       protocolDiscoveryCoverage.graphCompleteThrough();
     discoveryPublicationRevision = next.revision;
+    publishedEnvelope = Object.freeze({
+      state: next,
+      descriptor: describeLiveDiscoveryPublicationState(next),
+      graphTopologyKey: computeDiscoveryGraphTopologyKey(next),
+    });
     detector.setGraph(graph);
     detector.setPoolAddressMap(allPoolMap);
     planner.setGraph(graph);
@@ -2297,6 +2328,8 @@ export async function createLiveDiscoveryCoordinator(
     queue: protocolDiscoveryQueue,
     observeHeader: observeLiveCanonicalHeader,
     capture: captureLiveDiscoveryPublication,
+    describeCaptured: describeCapturedDiscoveryPublication,
+    topologyKey: capturedGraphTopologyKey,
     publish: publishLiveDiscoveryState,
     finishPublished: finishPublishedDiscoveryState,
     scheduleBackfill: scheduleDiscoveryBackfill,

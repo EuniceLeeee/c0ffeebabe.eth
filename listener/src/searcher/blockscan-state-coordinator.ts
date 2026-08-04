@@ -395,6 +395,7 @@ interface StateGroup {
   readonly stateKey: string;
   readonly edges: readonly TokenEdge[];
   readonly edgeKeys: readonly string[];
+  readonly edgeKeySet: ReadonlySet<string>;
   /**
    * Topology-scoped schema fingerprint, computed once in buildOwnershipPlan
    * instead of re-hashing every group's edges on every generation (16k+
@@ -406,7 +407,11 @@ interface StateGroup {
 interface OwnershipPlan {
   readonly groups: readonly StateGroup[];
   readonly expectedStateKeys: readonly string[];
+  readonly expectedStateKeySet: ReadonlySet<string>;
+  readonly expectedStateKeyHash: string;
   readonly expectedEdgeKeys: readonly string[];
+  readonly expectedEdgeKeySet: ReadonlySet<string>;
+  readonly expectedEdgeKeyHash: string;
   readonly ownerIssues: readonly BlockScanStateIssue[];
 }
 
@@ -1271,6 +1276,12 @@ export class BlockScanStateCoordinator {
         ownership.expectedEdgeKeys,
         resolvedEdgeKeys,
         unavailableEdges.map((entry) => entry.edgeKey),
+        {
+          expectedStateKeySet: ownership.expectedStateKeySet,
+          expectedStateKeyHash: ownership.expectedStateKeyHash,
+          expectedEdgeKeySet: ownership.expectedEdgeKeySet,
+          expectedEdgeKeyHash: ownership.expectedEdgeKeyHash,
+        },
       );
       const laneTelemetry = freezeLaneTelemetry(lanes.map((lane) => lane.telemetry));
       const familyTelemetry = createFamilyTelemetry({
@@ -2653,50 +2664,59 @@ export class BlockScanStateCoordinator {
           unavailable = computed.unavailable;
           derived = computed.derived;
         }
-        const expectedEdges = new Set(group.edgeKeys);
-        for (const [edgeKey, reason] of unavailable) {
-          if (!expectedEdges.has(edgeKey)) {
-            throw new Error(
-              `behavior-proven unavailable classification returned unknown edge ${edgeKey}`,
-            );
+        const reusedValidatedBase =
+          carryForward &&
+          previousBase !== undefined &&
+          derived === previousBase.midsByEdgeKey &&
+          unavailable === previousBase.unavailableByEdgeKey;
+        if (!reusedValidatedBase) {
+          const expectedEdges = group.edgeKeySet;
+          for (const [edgeKey, reason] of unavailable) {
+            if (!expectedEdges.has(edgeKey)) {
+              throw new Error(
+                `behavior-proven unavailable classification returned unknown edge ${edgeKey}`,
+              );
+            }
+            if (typeof reason !== "string" || reason.trim().length === 0) {
+              throw new Error(
+                `behavior-proven unavailable edge ${edgeKey} has no reason`,
+              );
+            }
           }
-          if (typeof reason !== "string" || reason.trim().length === 0) {
-            throw new Error(
-              `behavior-proven unavailable edge ${edgeKey} has no reason`,
-            );
-          }
-        }
-        const expectedPricedEdges = new Set(
-          group.edgeKeys.filter((edgeKey) => !unavailable.has(edgeKey)),
-        );
-        const derivedEdges = new Set(derived.keys());
-        if (
-          expectedPricedEdges.size !== derivedEdges.size ||
-          [...expectedPricedEdges].some((key) => !derivedEdges.has(key))
-        ) {
-          if (!carryForward) {
-            throw new Error(
-              "deriveMids did not return the exact behavior-available edge-key set",
-            );
-          }
-          // Topology drifted on a carried key (rare): recompute from the
-          // carried snapshot instead of failing the key.
-          const computed = deriveFromSnapshot();
-          unavailable = computed.unavailable;
-          derived = computed.derived;
-          const recomputedPricedEdges = new Set(
+          const expectedPricedEdges = new Set(
             group.edgeKeys.filter((edgeKey) => !unavailable.has(edgeKey)),
           );
-          const recomputedEdges = new Set(derived.keys());
+          const derivedEdges = new Set(derived.keys());
           if (
-            recomputedPricedEdges.size !== recomputedEdges.size ||
-            [...recomputedPricedEdges].some(
-              (key) => !recomputedEdges.has(key),
-            )
+            expectedPricedEdges.size !== derivedEdges.size ||
+            [...expectedPricedEdges].some((key) => !derivedEdges.has(key))
           ) {
-            throw new Error(
-              "deriveMids did not return the exact behavior-available edge-key set",
+            if (!carryForward) {
+              throw new Error(
+                "deriveMids did not return the exact behavior-available edge-key set",
+              );
+            }
+            // Topology drifted on a carried key (rare): recompute from the
+            // carried snapshot instead of failing the key.
+            const computed = deriveFromSnapshot();
+            unavailable = computed.unavailable;
+            derived = computed.derived;
+            const recomputedPricedEdges = new Set(
+              group.edgeKeys.filter(
+                (edgeKey) => !unavailable.has(edgeKey),
+              ),
             );
+            const recomputedEdges = new Set(derived.keys());
+            if (
+              recomputedPricedEdges.size !== recomputedEdges.size ||
+              [...recomputedPricedEdges].some(
+                (key) => !recomputedEdges.has(key),
+              )
+            ) {
+              throw new Error(
+                "deriveMids did not return the exact behavior-available edge-key set",
+              );
+            }
           }
         }
         resolvedStateKeys.push(group.stateKey);
@@ -3149,12 +3169,17 @@ function buildOwnershipPlan(
       stateKey,
       edges: Object.freeze(group.edges),
       edgeKeys: Object.freeze(group.edgeKeys),
+      edgeKeySet: new Set(group.edgeKeys),
       schemaFingerprint: stateSchemaFingerprint(group.edges),
     }));
   return Object.freeze({
     groups: Object.freeze(groups),
     expectedStateKeys: Object.freeze(groups.map((group) => group.stateKey).sort()),
+    expectedStateKeySet: new Set(groups.map((group) => group.stateKey)),
+    expectedStateKeyHash: exactSetHash(groups.map((group) => group.stateKey).sort()),
     expectedEdgeKeys: Object.freeze([...new Set(expectedEdgeKeys)].sort()),
+    expectedEdgeKeySet: new Set(expectedEdgeKeys),
+    expectedEdgeKeyHash: exactSetHash([...new Set(expectedEdgeKeys)].sort()),
     ownerIssues: freezeIssues(ownerIssues),
   });
 }
@@ -3167,13 +3192,25 @@ function createCoverage(
   expectedEdgeKeysInput: readonly string[],
   resolvedEdgeKeysInput: readonly string[],
   unavailableEdgeKeysInput: readonly string[],
+  precomputed?: {
+    readonly expectedStateKeySet?: ReadonlySet<string>;
+    readonly expectedStateKeyHash?: string;
+    readonly expectedEdgeKeySet?: ReadonlySet<string>;
+    readonly expectedEdgeKeyHash?: string;
+  },
 ): BlockScanStateCoverage {
-  const expectedStateKeys = uniqueSorted(expectedStateKeysInput);
+  const expectedStateKeys = precomputed?.expectedStateKeyHash !== undefined
+    ? expectedStateKeysInput
+    : uniqueSorted(expectedStateKeysInput);
   const expectedReadKeys = uniqueSorted(expectedReadKeysInput);
-  const expectedEdgeKeys = uniqueSorted(expectedEdgeKeysInput);
-  const expectedStateSet = new Set(expectedStateKeys);
+  const expectedEdgeKeys = precomputed?.expectedEdgeKeyHash !== undefined
+    ? expectedEdgeKeysInput
+    : uniqueSorted(expectedEdgeKeysInput);
+  const expectedStateSet =
+    precomputed?.expectedStateKeySet ?? new Set(expectedStateKeys);
   const expectedReadSet = new Set(expectedReadKeys);
-  const expectedEdgeSet = new Set(expectedEdgeKeys);
+  const expectedEdgeSet =
+    precomputed?.expectedEdgeKeySet ?? new Set(expectedEdgeKeys);
   const resolvedStateKeys = uniqueSorted(
     resolvedStateKeysInput.filter((key) => expectedStateSet.has(key)),
   );
@@ -3214,13 +3251,15 @@ function createCoverage(
     resolvedEdgeKeys,
     unavailableEdgeKeys,
     unresolvedEdgeKeys,
-    expectedStateKeyHash: exactSetHash(expectedStateKeys),
+    expectedStateKeyHash:
+      precomputed?.expectedStateKeyHash ?? exactSetHash(expectedStateKeys),
     resolvedStateKeyHash: exactSetHash(resolvedStateKeys),
     unresolvedStateKeyHash: exactSetHash(unresolvedStateKeys),
     expectedReadKeyHash: exactSetHash(expectedReadKeys),
     resolvedReadKeyHash: exactSetHash(resolvedReadKeys),
     unresolvedReadKeyHash: exactSetHash(unresolvedReadKeys),
-    expectedEdgeKeyHash: exactSetHash(expectedEdgeKeys),
+    expectedEdgeKeyHash:
+      precomputed?.expectedEdgeKeyHash ?? exactSetHash(expectedEdgeKeys),
     resolvedEdgeKeyHash: exactSetHash(resolvedEdgeKeys),
     unavailableEdgeKeyHash: exactSetHash(unavailableEdgeKeys),
     unresolvedEdgeKeyHash: exactSetHash(unresolvedEdgeKeys),

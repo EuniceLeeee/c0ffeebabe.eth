@@ -21,6 +21,10 @@ import {
   type RuntimePoolRefreshDelta,
   type RuntimeStrategyViewBuilder,
 } from "./runtime-pool-refresh.js";
+import {
+  blockScanEdgeKey,
+  deterministicHash,
+} from "./venues/blockscan-state-capability.js";
 import type { StrategyViews } from "./strategy-views.js";
 import type { DiscoveryBackfillStateDescriptor } from "./discovery-backfill-lane.js";
 import type { LandedPoolDiscoveryCoverage } from "./venues/landed-pool-discovery.js";
@@ -176,6 +180,19 @@ export function describeLiveDiscoveryPublicationState(
     graphCompleteThrough:
       deriveLiveDiscoveryGraphCompleteThroughUnchecked(state),
   });
+}
+
+/**
+ * Content key of the executable graph topology (block-scan edges). Computed
+ * once per discovery publish; the per-pass graph-view builder caches the
+ * edge freeze + ordered/metadata/ownership/scanner hashes by this key.
+ */
+export function computeDiscoveryGraphTopologyKey(
+  state: LiveDiscoveryPublicationState,
+): string {
+  return deterministicHash(
+    (state.blockscanGraph ?? []).map((edge) => blockScanEdgeKey(edge)),
+  );
 }
 
 /**

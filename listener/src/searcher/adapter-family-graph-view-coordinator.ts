@@ -22,6 +22,20 @@ export interface BuildAdapterFamilyGraphViewInput {
   readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
   readonly protocolSourceFingerprints: ReadonlyMap<string, string>;
   readonly protocolEdgesEnabled: boolean;
+  /**
+   * Content key of the published graph topology (computed once per discovery
+   * publish). The immutable topology (edges + hashes) is cached by this key.
+   */
+  readonly topologyKey: string;
+}
+
+interface CachedGraphTopology {
+  readonly edges: readonly TokenEdge[];
+  readonly orderedEdgeHash: string;
+  readonly metadataHash: string;
+  readonly ownershipHash: string;
+  readonly scannerEdgeCount: number;
+  readonly scannerEdgeKeyHash: string;
 }
 
 /**
@@ -30,6 +44,8 @@ export interface BuildAdapterFamilyGraphViewInput {
  * supplies the current source, graph and discovery results.
  */
 export class AdapterFamilyGraphViewCoordinator {
+  private readonly topologyCache = new Map<string, CachedGraphTopology>();
+
   constructor(
     private readonly registry: AdapterFamilyRegistry,
     private readonly protocol: ProtocolDiscoveryCoverageCoordinator,
@@ -126,7 +142,21 @@ export class AdapterFamilyGraphViewCoordinator {
     const completenessWatermark = Math.min(
       ...perSourceCoverage.map((coverage) => coverage.completeThroughBlock),
     );
-    return createVerifiedGraphView({
+    const cachedTopology = this.topologyCache.get(input.topologyKey);
+    if (cachedTopology !== undefined) {
+      // Topology unchanged: reuse the frozen edges and the four content
+      // hashes; only the source shell differs per block.
+      return Object.freeze({
+        id: input.id,
+        generation: input.generation,
+        sourceBlock: input.sourceBlock,
+        sourceBlockHash: input.sourceBlockHash,
+        completenessWatermark,
+        perSourceCoverage,
+        ...cachedTopology,
+      });
+    }
+    const view = createVerifiedGraphView({
       id: input.id,
       generation: input.generation,
       sourceBlock: input.sourceBlock,
@@ -137,5 +167,18 @@ export class AdapterFamilyGraphViewCoordinator {
       familyIdForEdge: (edge) =>
         this.registry.routes().forEdge(edge.adapterId).id,
     });
+    this.topologyCache.set(input.topologyKey, {
+      edges: view.edges,
+      orderedEdgeHash: view.orderedEdgeHash,
+      metadataHash: view.metadataHash,
+      ownershipHash: view.ownershipHash,
+      scannerEdgeCount: view.scannerEdgeCount,
+      scannerEdgeKeyHash: view.scannerEdgeKeyHash,
+    });
+    if (this.topologyCache.size > 16) {
+      const oldest = this.topologyCache.keys().next().value;
+      if (oldest !== undefined) this.topologyCache.delete(oldest);
+    }
+    return view;
   }
 }

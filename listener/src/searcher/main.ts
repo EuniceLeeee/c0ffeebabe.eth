@@ -2735,6 +2735,7 @@ async function main(): Promise<void> {
       sourceBlock: control.base.number,
       sourceBlockHash: control.base.hash,
       edges: Object.freeze([...blockScanGraph]),
+      topologyKey: `blind:${hashTokenGraph([...blockScanGraph])}`,
       dexSourceCompleteThrough: dexGraphCoverage.sourceCompleteThrough,
       retryablePools: [
         ...retryableDexGraphPools.values(),
