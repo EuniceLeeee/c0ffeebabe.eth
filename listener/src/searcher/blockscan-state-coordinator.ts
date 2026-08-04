@@ -469,6 +469,25 @@ interface FamilyLaneStaging {
   incrementalClassifierMs?: number;
 }
 
+/**
+ * Compile + mutation-proof phase output for one family, prepared for every
+ * family of both lanes BEFORE any direct state reads start. This removes the
+ * foreground-proof / background-read preemption inside a generation (a
+ * family's bulk reads used to be aborted and retried whenever a sibling
+ * family's canonical mutation proof grabbed the foreground lease).
+ */
+interface PreparedFamilyPhase {
+  readonly familyId: string;
+  readonly lane: BlockScanPricingLane;
+  readonly compiledFamilies: ReadonlyMap<string, CompiledBlockScanStateFamily>;
+  readonly incrementalPreparation: IncrementalPreparation;
+  readonly recoveryCandidateStateKeys: ReadonlySet<string>;
+  readonly hotRecoveryStateKeys: ReadonlySet<string>;
+  readonly staging: FamilyLaneStaging;
+  readonly issues: readonly BlockScanStateIssue[];
+  readonly addressTouchPlan?: FamilyIncrementalPlan;
+}
+
 interface FamilyIncrementalPlan {
   readonly familyId: string;
   readonly rangeByStateKey: ReadonlyMap<string, CanonicalMutationRange>;
@@ -935,14 +954,6 @@ export class BlockScanStateCoordinator {
             : input.deadlineAtMs,
           controller.signal,
         );
-      const swapRun = this.runLane(
-        "swap",
-        laneGroups.swap,
-        graph,
-        familySettleDeadlineAtMs,
-        controller.signal,
-        previousCanonicalGraphStateKeys,
-      );
       const protocolAddressTouchPlans =
         this.protocolAddressTouchMode === "enabled"
           ? await this.resolveProtocolAddressTouchPlans(
@@ -950,16 +961,57 @@ export class BlockScanStateCoordinator {
               controller.signal,
             )
           : new Map<string, FamilyIncrementalPlan>();
+      /*
+       * Phase 1: compile every family's static schema and settle every
+       * canonical mutation-range proof for BOTH lanes before any direct state
+       * read begins. Foreground proofs therefore never preempt background
+       * bulk reads mid-generation (the old interleaving aborted and retried
+       * sibling reads whenever another family grabbed the foreground lease).
+       */
+      const allGroups = [...laneGroups.swap, ...laneGroups.protocol];
+      const preparedPhases = await Promise.all(
+        uniqueFamilies(allGroups).map(async (family) => {
+          const familyGroups = allGroups.filter(
+            (group) => group.familyId === family.familyId,
+          );
+          const lane = familyGroups[0]!.lane;
+          const addressTouchPlan = protocolAddressTouchPlans.get(
+            family.familyId,
+          );
+          return this.prepareFamilyPhase({
+            lane,
+            groups: familyGroups,
+            graph,
+            deadlineAtMs: familySettleDeadlineAtMs,
+            signal: controller.signal,
+            generationSignal: controller.signal,
+            previousCanonicalGraphStateKeys,
+            ...(addressTouchPlan === undefined
+              ? {}
+              : { addressTouchPlan }),
+          });
+        }),
+      );
+      const preparedPhaseByFamily = new Map(
+        preparedPhases.map((phase) => [phase.familyId, phase] as const),
+      );
+      // Phase 2: direct reads + decode for both lanes.
       const [swap, protocol] = await Promise.all([
-        swapRun,
+        this.runLane(
+          "swap",
+          laneGroups.swap,
+          graph,
+          familySettleDeadlineAtMs,
+          controller.signal,
+          preparedPhaseByFamily,
+        ),
         this.runLane(
           "protocol",
           laneGroups.protocol,
           graph,
           familySettleDeadlineAtMs,
           controller.signal,
-          previousCanonicalGraphStateKeys,
-          protocolAddressTouchPlans,
+          preparedPhaseByFamily,
         ),
       ]);
       const lanes = [swap, protocol] as const;
@@ -1833,14 +1885,257 @@ export class BlockScanStateCoordinator {
     };
   }
 
+  /**
+   * Phase 1 of a generation: compile every family's static schema and
+   * resolve every canonical mutation-range proof (per family, bounded by the
+   * family timeout), returning the prepared context the read phase consumes.
+   * All families' proofs settle before any direct state read begins, so
+   * foreground proofs never preempt background bulk reads mid-generation.
+   */
+  private async prepareFamilyPhase(input: {
+    readonly lane: BlockScanPricingLane;
+    readonly groups: readonly StateGroup[];
+    readonly graph: VerifiedGraphView;
+    readonly deadlineAtMs: number;
+    readonly signal: AbortSignal;
+    readonly generationSignal: AbortSignal;
+    readonly previousCanonicalGraphStateKeys: ReadonlySet<string> | null;
+    readonly addressTouchPlan?: FamilyIncrementalPlan;
+  }): Promise<PreparedFamilyPhase> {
+    const { lane, groups, graph } = input;
+    const familyId = groups[0]?.familyId;
+    if (!familyId) {
+      throw new Error("empty family phase has no familyId");
+    }
+    const startedAtMs = this.now();
+    const localBudgetMs = Math.min(
+      this.familyTimeoutMs,
+      Math.max(0, input.deadlineAtMs - startedAtMs),
+    );
+    const familyDeadlineAtMs = Math.min(
+      input.deadlineAtMs,
+      startedAtMs + localBudgetMs,
+    );
+    const familyController = new AbortController();
+    const detachParent = linkAbortSignal(input.signal, familyController);
+    const deadlineTimer = setTimeout(
+      () =>
+        familyController.abort(
+          new FamilyDeadlineAbort(familyId, localBudgetMs),
+        ),
+      Math.max(0, familyDeadlineAtMs - this.now()),
+    );
+    if (familyDeadlineAtMs <= startedAtMs) {
+      familyController.abort(
+        input.signal.aborted
+          ? input.signal.reason
+          : new FamilyDeadlineAbort(familyId, localBudgetMs),
+      );
+    }
+    try {
+      let recoveryCandidateStateKeys = new Set<string>();
+      const issues: BlockScanStateIssue[] = [];
+      const compiledFamilies = new Map<
+        string,
+        CompiledBlockScanStateFamily
+      >();
+      let schemaPhysicalReads = 0;
+      let schemaBatches = 0;
+      const staging: FamilyLaneStaging = {
+        staticSchemas: new Map(),
+        expectedReadKeys: new Set(),
+        reads: 0,
+        batches: 0,
+        carryStateKeys: 0,
+        directStateKeys: groups.length,
+        missingPreviousStateKeys: groups.filter(
+          (group) => !this.recoveryBaseForGroup(group),
+        ).length,
+      };
+      const families = uniqueFamilies(groups);
+      try {
+        await Promise.all(families.map(async (family) => {
+          const familyEdges = groups
+            .filter((group) => group.familyId === family.familyId)
+            .flatMap((group) => group.edges);
+          const edgeFingerprint = stateSchemaFingerprint(familyEdges);
+          const cached = this.staticSchemas.get(family.familyId);
+          if (cached?.edgeFingerprint === edgeFingerprint) {
+            compiledFamilies.set(family.familyId, cached);
+            return;
+          }
+          try {
+            const compiled = await awaitWithAbort(
+              (cached?.recompile ?? family.compile)({
+                edges: Object.freeze(familyEdges),
+                deadlineAtMs: familyDeadlineAtMs,
+                signal: familyController.signal,
+                sourceBlock: graph.sourceBlock,
+                sourceBlockHash: graph.sourceBlockHash,
+                readStatic: async (reads) => {
+                  const seen = new Set<string>();
+                  for (const read of reads) {
+                    validateRead(read, graph);
+                    if (!read.id || seen.has(read.id)) {
+                      throw new Error(
+                        `duplicate or empty static read id ${read.id}`,
+                      );
+                    }
+                    seen.add(read.id);
+                  }
+                  schemaPhysicalReads += reads.length;
+                  schemaBatches++;
+                  staging.reads += reads.length;
+                  staging.batches++;
+                  const results = await awaitWithAbort(
+                    this.backend.readBatch(
+                      lane,
+                      reads,
+                      {
+                        sourceBlock: graph.sourceBlock,
+                        sourceBlockHash: graph.sourceBlockHash,
+                        sourceGeneration: graph.generation,
+                        deadlineAtMs: familyDeadlineAtMs,
+                        signal: familyController.signal,
+                      },
+                    ),
+                    familyController.signal,
+                  );
+                  const byId = new Map<string, StateReadResult>();
+                  for (const result of results) {
+                    if (!seen.has(result.id) || byId.has(result.id)) {
+                      throw new Error(
+                        "static backend result IDs did not exactly match reads",
+                      );
+                    }
+                    if (
+                      !stateReadResultMatchesSource(
+                        this.backend,
+                        result,
+                        graph,
+                      )
+                    ) {
+                      throw new Error(
+                        "static read result lacks current source provenance",
+                      );
+                    }
+                    if (!result.ok) {
+                      throw new Error(
+                        `static read ${result.id} failed: ${result.error}`,
+                      );
+                    }
+                    byId.set(result.id, result);
+                  }
+                  if (byId.size !== seen.size) {
+                    throw new Error("static backend omitted one or more reads");
+                  }
+                  return Object.freeze([...byId.values()]);
+                },
+              }),
+              familyController.signal,
+            );
+            if (compiled.edgeFingerprint !== edgeFingerprint) {
+              throw new Error("compiled family schema fingerprint mismatch");
+            }
+            compiledFamilies.set(family.familyId, compiled);
+            staging.staticSchemas.set(family.familyId, compiled);
+          } catch (error) {
+            issues.push({
+              kind: issueKindFromError(error),
+              lane,
+              familyId: family.familyId,
+              message: formatError(error),
+            });
+          }
+        }));
+      } catch (error) {
+        issues.push({
+          kind: issueKindFromError(error),
+          lane,
+          message: formatError(error),
+        });
+      }
+      if (compiledFamilies.get(familyId)?.incremental) {
+        recoveryCandidateStateKeys = new Set(
+          groups.flatMap((group) => {
+            const base = this.recoveryBaseForGroup(group);
+            const previouslyEstablished =
+              input.previousCanonicalGraphStateKeys?.has(group.stateKey) ??
+              false;
+            const newlyAdmitted =
+              input.previousCanonicalGraphStateKeys !== null &&
+              !previouslyEstablished;
+            return (
+                base &&
+                  graph.sourceBlock - base.state.source.number >
+                    this.incrementalRangeBlocks
+              ) || (previouslyEstablished && !base) || newlyAdmitted
+              ? [group.stateKey]
+              : [];
+          }),
+        );
+        staging.recoveryRequiredStateKeys =
+          recoveryCandidateStateKeys.size > 0
+            ? recoveryCandidateStateKeys.size
+            : undefined;
+      }
+      const hotRecoveryStateKeys = this.selectHotRecoveryStateKeys(
+        familyId,
+        recoveryCandidateStateKeys,
+      );
+      const incrementalPreparation = await this.prepareIncrementalPlans(
+        groups,
+        compiledFamilies,
+        graph,
+        familyDeadlineAtMs,
+        familyController.signal,
+        input.generationSignal,
+      );
+      const incrementalPlans = incrementalPreparation.plans;
+      if (input.addressTouchPlan && !incrementalPlans.has(familyId)) {
+        incrementalPlans.set(familyId, input.addressTouchPlan);
+      }
+      let fullFallbackReason =
+        incrementalPreparation.fullFallbackReasonByFamily.get(familyId);
+      let fullFallbackDetail =
+        incrementalPreparation.fullFallbackDetailByFamily.get(familyId);
+      const incrementalTiming =
+        incrementalPreparation.phaseTimingByFamily.get(familyId);
+      const missingPreviousStateKeys = groups.filter(
+        (group) => !this.recoveryBaseForGroup(group),
+      ).length;
+      staging.missingPreviousStateKeys = missingPreviousStateKeys;
+      staging.fullFallbackReason = fullFallbackReason;
+      staging.fullFallbackDetail = fullFallbackDetail;
+      staging.incrementalDescriptorMs = incrementalTiming?.descriptorMs;
+      staging.incrementalRangeMs = incrementalTiming?.rangeMs;
+      staging.incrementalClassifierMs = incrementalTiming?.classifierMs;
+      return Object.freeze({
+        familyId,
+        lane,
+        compiledFamilies,
+        incrementalPreparation,
+        recoveryCandidateStateKeys,
+        hotRecoveryStateKeys,
+        staging,
+        issues: Object.freeze(issues),
+        ...(input.addressTouchPlan === undefined
+          ? {}
+          : { addressTouchPlan: input.addressTouchPlan }),
+      });
+    } finally {
+      clearTimeout(deadlineTimer);
+      detachParent();
+    }
+  }
+
   private async runLane(
     lane: BlockScanPricingLane,
     groups: readonly StateGroup[],
     graph: VerifiedGraphView,
     deadlineAtMs: number,
     signal: AbortSignal,
-    previousCanonicalGraphStateKeys: ReadonlySet<string> | null,
-    addressTouchPlans: ReadonlyMap<string, FamilyIncrementalPlan> = new Map(),
+    preparedPhaseByFamily: ReadonlyMap<string, PreparedFamilyPhase>,
   ): Promise<LaneResult> {
     const startedAtMs = this.now();
     if (groups.length === 0) {
@@ -1882,17 +2177,29 @@ export class BlockScanStateCoordinator {
        * local deadline race. A late compile/read may finish in user/backend
        * code, but it has no reference to sibling staging or publication.
        */
-      const staging: FamilyLaneStaging = {
-        staticSchemas: new Map(),
-        expectedReadKeys: new Set(),
-        reads: 0,
-        batches: 0,
-        carryStateKeys: 0,
-        directStateKeys: familyGroups.length,
-        missingPreviousStateKeys: familyGroups.filter((group) =>
-          !this.recoveryBaseForGroup(group)
-        ).length,
-      };
+      const prepared = preparedPhaseByFamily.get(family.familyId);
+      if (!prepared) {
+        return failedFamilyLane(
+          lane,
+          family.familyId,
+          familyGroups.length,
+          familyStartedAtMs,
+          this.now(),
+          {
+            staticSchemas: new Map(),
+            expectedReadKeys: new Set(),
+            reads: 0,
+            batches: 0,
+            carryStateKeys: 0,
+            directStateKeys: familyGroups.length,
+            missingPreviousStateKeys: familyGroups.length,
+          },
+          new Error(
+            `family ${family.familyId} missing prepared incremental phase`,
+          ),
+        );
+      }
+      const staging = prepared.staging;
       const familyRun = this.runFamilyLane(
         lane,
         familyGroups,
@@ -1900,9 +2207,7 @@ export class BlockScanStateCoordinator {
         familyDeadlineAtMs,
         familyController.signal,
         signal,
-        staging,
-        previousCanonicalGraphStateKeys,
-        addressTouchPlans.get(family.familyId),
+        prepared,
       );
       try {
         /*
@@ -1953,9 +2258,7 @@ export class BlockScanStateCoordinator {
     deadlineAtMs: number,
     signal: AbortSignal,
     generationSignal: AbortSignal,
-    staging: FamilyLaneStaging,
-    previousCanonicalGraphStateKeys: ReadonlySet<string> | null,
-    addressTouchPlan?: FamilyIncrementalPlan,
+    prepared: PreparedFamilyPhase,
   ): Promise<LaneResult> {
     const startedAtMs = this.now();
     if (groups.length === 0) {
@@ -1965,146 +2268,12 @@ export class BlockScanStateCoordinator {
     if (!familyId) {
       throw new Error("non-empty family lane has no familyId");
     }
-    let recoveryCandidateStateKeys = new Set<string>();
-    const issues: BlockScanStateIssue[] = [];
-    const compiledFamilies = new Map<string, CompiledBlockScanStateFamily>();
-    let schemaPhysicalReads = 0;
-    let schemaBatches = 0;
-    const families = uniqueFamilies(groups);
-    try {
-      await Promise.all(families.map(async (family) => {
-        const familyEdges = groups
-          .filter((group) => group.familyId === family.familyId)
-          .flatMap((group) => group.edges);
-        const edgeFingerprint = stateSchemaFingerprint(familyEdges);
-        const cached = this.staticSchemas.get(family.familyId);
-        if (cached?.edgeFingerprint === edgeFingerprint) {
-          compiledFamilies.set(family.familyId, cached);
-          return;
-        }
-        try {
-          const compiled = await awaitWithAbort(
-            (cached?.recompile ?? family.compile)({
-              edges: Object.freeze(familyEdges),
-              deadlineAtMs,
-              signal,
-              sourceBlock: graph.sourceBlock,
-              sourceBlockHash: graph.sourceBlockHash,
-              readStatic: async (reads) => {
-                const seen = new Set<string>();
-                for (const read of reads) {
-                  validateRead(read, graph);
-                  if (!read.id || seen.has(read.id)) {
-                    throw new Error(`duplicate or empty static read id ${read.id}`);
-                  }
-                  seen.add(read.id);
-                }
-                schemaPhysicalReads += reads.length;
-                schemaBatches++;
-                staging.reads += reads.length;
-                staging.batches++;
-                const results = await awaitWithAbort(
-                  this.backend.readBatch(
-                    lane,
-                    reads,
-                    {
-                      sourceBlock: graph.sourceBlock,
-                      sourceBlockHash: graph.sourceBlockHash,
-                      sourceGeneration: graph.generation,
-                      deadlineAtMs,
-                      signal,
-                    },
-                  ),
-                  signal,
-                );
-                const byId = new Map<string, StateReadResult>();
-                for (const result of results) {
-                  if (!seen.has(result.id) || byId.has(result.id)) {
-                    throw new Error(
-                      "static backend result IDs did not exactly match reads",
-                    );
-                  }
-                  if (
-                    !stateReadResultMatchesSource(
-                      this.backend,
-                      result,
-                      graph,
-                    )
-                  ) {
-                    throw new Error("static read result lacks current source provenance");
-                  }
-                  if (!result.ok) {
-                    throw new Error(`static read ${result.id} failed: ${result.error}`);
-                  }
-                  byId.set(result.id, result);
-                }
-                if (byId.size !== seen.size) {
-                  throw new Error("static backend omitted one or more reads");
-                }
-                return Object.freeze([...byId.values()]);
-              },
-            }),
-            signal,
-          );
-          if (compiled.edgeFingerprint !== edgeFingerprint) {
-            throw new Error("compiled family schema fingerprint mismatch");
-          }
-          compiledFamilies.set(family.familyId, compiled);
-          staging.staticSchemas.set(family.familyId, compiled);
-        } catch (error) {
-          issues.push({
-            kind: issueKindFromError(error),
-            lane,
-            familyId: family.familyId,
-            message: formatError(error),
-          });
-        }
-      }));
-    } catch (error) {
-      issues.push({
-        kind: issueKindFromError(error),
-        lane,
-        message: formatError(error),
-      });
-    }
-    if (compiledFamilies.get(familyId)?.incremental) {
-      recoveryCandidateStateKeys = new Set(
-        groups.flatMap((group) => {
-          const base = this.recoveryBaseForGroup(group);
-          const previouslyEstablished =
-            previousCanonicalGraphStateKeys?.has(group.stateKey) ?? false;
-          const newlyAdmitted =
-            previousCanonicalGraphStateKeys !== null &&
-            !previouslyEstablished;
-          return (
-              base &&
-                graph.sourceBlock - base.state.source.number >
-                  this.incrementalRangeBlocks
-            ) || (previouslyEstablished && !base) || newlyAdmitted
-            ? [group.stateKey]
-            : [];
-        }),
-      );
-      staging.recoveryRequiredStateKeys =
-        recoveryCandidateStateKeys.size > 0
-          ? recoveryCandidateStateKeys.size
-          : undefined;
-    }
-    const hotRecoveryStateKeys = this.selectHotRecoveryStateKeys(
-      familyId,
-      recoveryCandidateStateKeys,
-    );
-    const incrementalPreparation = await this.prepareIncrementalPlans(
-      groups,
-      compiledFamilies,
-      graph,
-      deadlineAtMs,
-      signal,
-      generationSignal,
-    );
-    const incrementalPlans = incrementalPreparation.plans;
-    if (addressTouchPlan && !incrementalPlans.has(familyId)) {
-      incrementalPlans.set(familyId, addressTouchPlan);
+    const issues: BlockScanStateIssue[] = [...prepared.issues];
+    const compiledFamilies = prepared.compiledFamilies;
+    const incrementalPreparation = prepared.incrementalPreparation;
+    const incrementalPlans = new Map(incrementalPreparation.plans);
+    if (prepared.addressTouchPlan && !incrementalPlans.has(familyId)) {
+      incrementalPlans.set(familyId, prepared.addressTouchPlan);
     }
     let fullFallbackReason =
       incrementalPreparation.fullFallbackReasonByFamily.get(familyId);
@@ -2115,6 +2284,9 @@ export class BlockScanStateCoordinator {
     const missingPreviousStateKeys = groups.filter(
       (group) => !this.recoveryBaseForGroup(group),
     ).length;
+    const recoveryCandidateStateKeys = prepared.recoveryCandidateStateKeys;
+    const hotRecoveryStateKeys = prepared.hotRecoveryStateKeys;
+    const staging = prepared.staging;
     let carryStateKeys = 0;
     let directStateKeys = groups.length;
     staging.carryStateKeys = carryStateKeys;
@@ -2246,8 +2418,9 @@ export class BlockScanStateCoordinator {
     staging.fullFallbackReason = fullFallbackReason;
     staging.fullFallbackDetail = fullFallbackDetail;
 
-    let physicalReads = schemaPhysicalReads;
-    let batches = schemaBatches;
+    // Schema/static reads already counted by the prepared phase.
+    let physicalReads = staging.reads;
+    let batches = staging.batches;
     // One initial batch plus at most four dependent batches. The fifth slot is
     // required by the strict adaptive quote ladder:
     // prerequisites -> preferred quote -> remaining quotes -> proof -> exact-out.

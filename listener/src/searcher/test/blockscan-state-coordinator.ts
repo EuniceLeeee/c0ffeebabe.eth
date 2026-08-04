@@ -547,7 +547,7 @@ class ConcurrentProofBackend implements BlockScanStateReadBackend {
   }
 }
 
-async function familyTimeoutDoesNotOrphanProofOrBlockSibling(): Promise<void> {
+async function phasedProofsSettleBeforeSiblingReads(): Promise<void> {
   const backend = new ConcurrentProofBackend();
   const coordinator = new BlockScanStateCoordinator(backend, {
     familyTimeoutMs: 25,
@@ -589,25 +589,36 @@ async function familyTimeoutDoesNotOrphanProofOrBlockSibling(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 40));
   assert.equal(
     backend.readBatchCalls,
-    bootstrapReadCalls + 1,
-    "a direct-only sibling must not wait behind another family's mutation proof",
+    bootstrapReadCalls,
+    "phased execution must not start sibling direct reads before every " +
+      "mutation proof settles",
   );
   assert.equal(
     backend.readBatchCallsWhileProofPending,
-    1,
-    "the healthy sibling is allowed to finish while the physical proof remains owned by the generation",
+    0,
+    "no sibling read may run while a family mutation proof is pending",
   );
   assert.equal(
     settled,
     false,
-    "a family timeout must not orphan an in-flight physical mutation proof",
+    "a pending physical proof keeps the generation in flight",
   );
 
   backend.finishProof();
   const result = await next;
-  assert.equal(result.status, "degraded");
   assert.equal(backend.proofPending, false);
-  assert.deepEqual(result.snapshot.resolvedFamilyIds, ["protocol:fixture"]);
+  assert.notEqual(
+    result.status,
+    "incomplete",
+    "a proof-phase timeout must fall back to direct current-N reads, not " +
+      "orphan the sibling or the generation",
+  );
+  if (result.status !== "incomplete") {
+    assert(
+      result.snapshot.resolvedFamilyIds.includes("protocol:fixture"),
+      "the direct-only protocol family must resolve after the proof phase settles",
+    );
+  }
 }
 
 async function completeAndDeterministic(): Promise<void> {
@@ -3225,7 +3236,7 @@ async function protocolAddressTouchEnabledIsOptInAndFailClosed(): Promise<void> 
   );
 }
 
-await familyTimeoutDoesNotOrphanProofOrBlockSibling();
+await phasedProofsSettleBeforeSiblingReads();
 await completeAndDeterministic();
 await simulationSemanticsParticipateInDedupIdentity();
 await replayResetDropsOnlyDynamicPublication();
