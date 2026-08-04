@@ -632,6 +632,15 @@ const ZERO_BLOCK_HASH = `0x${"00".repeat(32)}`;
 // mutation otherwise refreshes every pool behind the singleton.
 const ERC6909_TRANSFER_TOPIC =
   "0x1b3d7edb2e9c0b0e7c525b20aaaef0f5940d2ed71663c7d39266ecafac728859";
+// UniV4 PoolManager events that never mutate an existing pool's pricing
+// state: Donate only sends protocol fees, Initialize creates a brand-new pool
+// (discovery owns it). A decoded-but-untracked poolId is likewise a new pool;
+// refreshing the whole singleton family on these is the observed 5.5k-key
+// full-direct cascade.
+const UNIV4_DONATE_TOPIC =
+  "0x29ef05caaff9404b7cb6d1c0e9bbae9eaa7ab2541feba1a9c4248594c08156cb";
+const UNIV4_INITIALIZE_TOPIC =
+  "0xdd466e674ea557f56295e2d0218a125ea4b4f0f6f3307b95f85e6110838d6438";
 
 class DeadlineAbort extends Error {
   constructor() {
@@ -962,6 +971,13 @@ export class BlockScanStateCoordinator {
     for (const log of activity.events) {
       let singletonResolved = false;
       const topic = log.topics[0]?.toLowerCase();
+      if (
+        topic === ERC6909_TRANSFER_TOPIC ||
+        topic === UNIV4_DONATE_TOPIC ||
+        topic === UNIV4_INITIALIZE_TOPIC
+      ) {
+        continue;
+      }
       const declarations = topic === undefined
         ? undefined
         : topology.eventResolvers.get(topic);
@@ -986,15 +1002,25 @@ export class BlockScanStateCoordinator {
         !singletonResolved &&
         topology.singletonStateKeysByEmitter.has(emitter)
       ) {
-        for (const identity of knownPoolIdIdentitiesFromLog(topology, log)) {
-          observed.add(identity);
+        const identities = poolIdIdentitiesFromLog(log);
+        if (identities.length > 0) {
+          /*
+           * identityDecoded=true: the log carries a 32-byte pool identity.
+           * Refresh only pools that exist in the current graph; an untracked
+           * poolId belongs to a new/unknown pool and must not fail closed to
+           * a whole-family direct read.
+           */
           singletonResolved = true;
+          for (const identity of identities) {
+            if (topology.stateKeysByActivityIdentity.has(identity)) {
+              observed.add(identity);
+            }
+          }
         }
       }
       if (
         emitter !== undefined &&
         !singletonResolved &&
-        topic !== ERC6909_TRANSFER_TOPIC &&
         topology.singletonStateKeysByEmitter.has(emitter)
       ) {
         for (const stateKey of
@@ -3303,10 +3329,7 @@ function blockSourceKey(source: BlockSource): string {
   ].join("\u001f");
 }
 
-function knownPoolIdIdentitiesFromLog(
-  topology: StateTopologyIndex,
-  log: ChainLog,
-): readonly string[] {
+function poolIdIdentitiesFromLog(log: ChainLog): readonly string[] {
   const words = new Set<string>();
   for (const topic of log.topics.slice(1)) {
     if (/^0x[0-9a-fA-F]{64}$/.test(topic)) {
@@ -3322,9 +3345,6 @@ function knownPoolIdIdentitiesFromLog(
   return Object.freeze(
     [...words]
       .map((word) => `pool-id:${word}`)
-      .filter((identity) =>
-        topology.stateKeysByActivityIdentity.has(identity)
-      ),
   );
 }
 

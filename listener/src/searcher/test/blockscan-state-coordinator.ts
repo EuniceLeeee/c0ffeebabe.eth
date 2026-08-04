@@ -42,6 +42,11 @@ const SINGLETON_POOL_ID_A = `0x${"aa".repeat(32)}`;
 const SINGLETON_POOL_ID_B = `0x${"bb".repeat(32)}`;
 const ERC6909_TRANSFER_TOPIC =
   "0x1b3d7edb2e9c0b0e7c525b20aaaef0f5940d2ed71663c7d39266ecafac728859";
+const UNIV4_DONATE_TOPIC =
+  "0x29ef05caaff9404b7cb6d1c0e9bbae9eaa7ab2541feba1a9c4248594c08156cb";
+const UNIV4_INITIALIZE_TOPIC =
+  "0xdd466e674ea557f56295e2d0218a125ea4b4f0f6f3307b95f85e6110838d6438";
+const UNKNOWN_POOL_ID = `0x${"cc".repeat(32)}`;
 
 interface FakeSnapshot {
   readonly numerator: bigint;
@@ -2158,10 +2163,47 @@ async function singletonActivityIsResolvedCentrallyByPoolId(): Promise<void> {
 
   backend.readTargets.length = 0;
   backend.event = Object.freeze({
+    topics: Object.freeze([UNIV4_DONATE_TOPIC]),
+    data: SINGLETON_POOL_ID_B,
+  });
+  assert.equal((await prepare(4)).status, "complete");
+  assert.equal(
+    backend.readTargets.length,
+    0,
+    "Donate sends protocol fees only and must not refresh even a known pool",
+  );
+
+  backend.readTargets.length = 0;
+  backend.event = Object.freeze({
+    topics: Object.freeze([UNIV4_INITIALIZE_TOPIC]),
+    data: SINGLETON_POOL_ID_B,
+  });
+  assert.equal((await prepare(5)).status, "complete");
+  assert.equal(
+    backend.readTargets.length,
+    0,
+    "Initialize creates a new pool and must not refresh existing pools",
+  );
+
+  backend.readTargets.length = 0;
+  backend.event = Object.freeze({
+    topics: Object.freeze([`0x${"ee".repeat(32)}`]),
+    data: UNKNOWN_POOL_ID,
+  });
+  assert.equal((await prepare(6)).status, "complete");
+  assert.equal(
+    backend.readTargets.length,
+    0,
+    "a decoded-but-untracked poolId must be ignored instead of refreshing " +
+      "the whole singleton family",
+  );
+
+  backend.readTargets.length = 0;
+  backend.event = Object.freeze({
     topics: Object.freeze([`0x${"ee".repeat(32)}`]),
     data: "0x",
   });
-  assert.equal((await prepare(4)).status, "complete");
+  assert.equal((await prepare(7)).status, "complete");
   assert.equal(
     backend.readTargets.length,
     2,
