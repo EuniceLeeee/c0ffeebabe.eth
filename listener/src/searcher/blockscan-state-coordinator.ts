@@ -382,6 +382,24 @@ interface OwnershipPlan {
   readonly ownerIssues: readonly BlockScanStateIssue[];
 }
 
+/**
+ * Graph-topology-scoped index, rebuilt only when the edge topology/metadata/
+ * ownership hashes change (never on a plain block advance). Per-block work
+ * then resolves dirty state keys through stateKeysByPoolIdentity instead of
+ * rescanning all 35k edges and rebuilding the identity index every
+ * generation.
+ */
+interface StateTopologyIndex {
+  readonly key: string;
+  readonly ownership: OwnershipPlan;
+  /** familyId\u001fpoolIdentity -> composite state keys. */
+  readonly stateKeysByPoolIdentity: ReadonlyMap<
+    string,
+    ReadonlySet<string>
+  >;
+  readonly groupByStateKey: ReadonlyMap<string, StateGroup>;
+}
+
 interface LaneResult {
   readonly lane: BlockScanPricingLane;
   readonly stagedStaticSchemas: readonly (readonly [
@@ -466,6 +484,13 @@ interface RecoveryStateBase {
   readonly state: PublishedStateKey;
   readonly schemaFingerprint: string;
   readonly requiredReadKeyHash: string;
+  /**
+   * Last direct-derived mids and behavior-proven unavailable edges, reused
+   * verbatim for carry-forward keys so an unchanged state key never
+   * re-derives 35k-edge quotes.
+   */
+  readonly midsByEdgeKey: ReadonlyMap<string, RouteVenueMid>;
+  readonly unavailableByEdgeKey: ReadonlyMap<string, string>;
 }
 
 interface IncrementalPreparation {
@@ -568,6 +593,7 @@ export class BlockScanStateCoordinator {
     string,
     CachedBlockScanStateKey
   >();
+  private topologyIndex: StateTopologyIndex | null = null;
   private cacheAppendChain: Promise<void> = Promise.resolve();
   /** Warm generations persist each resolved key; hot generations do not. */
   private cacheModeActive = false;
@@ -631,6 +657,53 @@ export class BlockScanStateCoordinator {
       return undefined;
     }
     return base;
+  }
+
+  private topologyFor(
+    graph: VerifiedGraphView,
+    families: readonly RegisteredBlockScanStateFamily[],
+    requiresPricing: (edge: TokenEdge) => boolean,
+  ): StateTopologyIndex {
+    const key = [
+      graph.orderedEdgeHash,
+      graph.metadataHash,
+      graph.ownershipHash,
+      families.map((family) => family.familyId).sort().join(","),
+      typeof requiresPricing === "function" ? "custom" : "default",
+    ].join("\u001f");
+    if (this.topologyIndex?.key === key) {
+      return this.topologyIndex;
+    }
+    const ownership = buildOwnershipPlan(graph, families, requiresPricing);
+    const stateKeysByPoolIdentity = new Map<string, Set<string>>();
+    const groupByStateKey = new Map<string, StateGroup>();
+    for (const group of ownership.groups) {
+      groupByStateKey.set(group.stateKey, group);
+      for (const edge of group.edges) {
+        // The pool identity is poolId for v4-style families and the pool
+        // address otherwise; edge.target is the shared manager/router and
+        // must not be used directly.
+        const poolIdentity = (edge.poolId ?? edge.target).toLowerCase();
+        const identityKey = `${group.familyId}\u001f${poolIdentity}`;
+        const stateKeys = stateKeysByPoolIdentity.get(identityKey) ??
+          new Set<string>();
+        stateKeys.add(group.stateKey);
+        stateKeysByPoolIdentity.set(identityKey, stateKeys);
+      }
+    }
+    const frozen = Object.freeze({
+      key,
+      ownership,
+      stateKeysByPoolIdentity: new FrozenReadonlyMap(
+        [...stateKeysByPoolIdentity].map(([identityKey, stateKeys]) => [
+          identityKey,
+          Object.freeze(new Set(stateKeys)),
+        ] as const),
+      ),
+      groupByStateKey,
+    });
+    this.topologyIndex = frozen;
+    return frozen;
   }
 
   /**
@@ -748,11 +821,13 @@ export class BlockScanStateCoordinator {
           `${String(input.familySettleDeadlineAtMs)}`,
       );
     }
-    const ownership = buildOwnershipPlan(
+    // Topology-scoped: rebuilds ownership + the pool-identity reverse index
+    // only when the graph's edge topology/metadata/ownership actually change.
+    const ownership = this.topologyFor(
       graph,
       input.families,
       input.requiresPricing ?? (() => true),
-    );
+    ).ownership;
     const earlierPublished = this.published?.generation ?? -1;
     if (graph.generation <= earlierPublished) {
       return incompleteResult({
@@ -1095,10 +1170,14 @@ export class BlockScanStateCoordinator {
             `published state ${stateKey} has no ownership group`,
           );
         }
+        const existingBase = this.lastGoodByStateKey.get(stateKey);
         this.lastGoodByStateKey.set(stateKey, Object.freeze({
           state,
           schemaFingerprint: stateSchemaFingerprint(group.edges),
           requiredReadKeyHash: exactSetHash(state.requiredReadKeys),
+          midsByEdgeKey: existingBase?.midsByEdgeKey ?? new Map(),
+          unavailableByEdgeKey:
+            existingBase?.unavailableByEdgeKey ?? new Map(),
         }));
       }
       this.published = snapshot;
@@ -1547,6 +1626,7 @@ export class BlockScanStateCoordinator {
           family,
           familyGroups,
           eligibleByStateKey,
+          topologyIndex: this.topologyIndex!,
         }) ?? undefined;
       }
       if (!incremental) return;
@@ -2575,13 +2655,41 @@ export class BlockScanStateCoordinator {
         continue;
       }
       try {
-        const unavailable = snapshot.behaviorProvenUnavailableEdges?.(
-          group.edges,
-        ) ?? new Map<string, string>();
-        if (isThenable(unavailable)) {
-          throw new Error(
-            "behaviorProvenUnavailableEdges must return synchronously",
-          );
+        const previousBase = this.recoveryBaseForGroup(group);
+        const deriveFromSnapshot = (): {
+          readonly unavailable: ReadonlyMap<string, string>;
+          readonly derived: ReadonlyMap<string, RouteVenueMid>;
+        } => {
+          const unavailable = snapshot.behaviorProvenUnavailableEdges?.(
+            group.edges,
+          ) ?? new Map<string, string>();
+          if (isThenable(unavailable)) {
+            throw new Error(
+              "behaviorProvenUnavailableEdges must return synchronously",
+            );
+          }
+          const derived = snapshot.deriveMids(group.edges);
+          if (isThenable(derived)) {
+            throw new Error("deriveMids must return synchronously");
+          }
+          return { unavailable, derived };
+        };
+        let unavailable: ReadonlyMap<string, string>;
+        let derived: ReadonlyMap<string, RouteVenueMid>;
+        if (
+          carryForward &&
+          previousBase &&
+          previousBase.midsByEdgeKey.size > 0
+        ) {
+          // Unchanged state key: reuse the last direct-derived mids verbatim.
+          // A schema-identical carried key cannot change its quotes without a
+          // mutation event (the mutation range is the authoritative proof).
+          unavailable = previousBase.unavailableByEdgeKey;
+          derived = previousBase.midsByEdgeKey;
+        } else {
+          const computed = deriveFromSnapshot();
+          unavailable = computed.unavailable;
+          derived = computed.derived;
         }
         const expectedEdges = new Set(group.edgeKeys);
         for (const [edgeKey, reason] of unavailable) {
@@ -2596,8 +2704,6 @@ export class BlockScanStateCoordinator {
             );
           }
         }
-        const derived = snapshot.deriveMids(group.edges);
-        if (isThenable(derived)) throw new Error("deriveMids must return synchronously");
         const expectedPricedEdges = new Set(
           group.edgeKeys.filter((edgeKey) => !unavailable.has(edgeKey)),
         );
@@ -2606,9 +2712,30 @@ export class BlockScanStateCoordinator {
           expectedPricedEdges.size !== derivedEdges.size ||
           [...expectedPricedEdges].some((key) => !derivedEdges.has(key))
         ) {
-          throw new Error(
-            "deriveMids did not return the exact behavior-available edge-key set",
+          if (!carryForward) {
+            throw new Error(
+              "deriveMids did not return the exact behavior-available edge-key set",
+            );
+          }
+          // Topology drifted on a carried key (rare): recompute from the
+          // carried snapshot instead of failing the key.
+          const computed = deriveFromSnapshot();
+          unavailable = computed.unavailable;
+          derived = computed.derived;
+          const recomputedPricedEdges = new Set(
+            group.edgeKeys.filter((edgeKey) => !unavailable.has(edgeKey)),
           );
+          const recomputedEdges = new Set(derived.keys());
+          if (
+            recomputedPricedEdges.size !== recomputedEdges.size ||
+            [...recomputedPricedEdges].some(
+              (key) => !recomputedEdges.has(key),
+            )
+          ) {
+            throw new Error(
+              "deriveMids did not return the exact behavior-available edge-key set",
+            );
+          }
         }
         resolvedStateKeys.push(group.stateKey);
         const localFreshness = new Map<string, StateFreshnessProof>();
@@ -2735,6 +2862,8 @@ export class BlockScanStateCoordinator {
           state: publishedState,
           schemaFingerprint: stateSchemaFingerprint(group.edges),
           requiredReadKeyHash: exactSetHash(publishedState.requiredReadKeys),
+          midsByEdgeKey: Object.freeze(new Map(derived)),
+          unavailableByEdgeKey: Object.freeze(new Map(unavailable)),
         }));
         if (
           this.cacheModeActive &&
@@ -3005,6 +3134,7 @@ function createDerivedSwapMutationIncremental(input: {
   readonly family: RegisteredBlockScanStateFamily;
   readonly familyGroups: readonly StateGroup[];
   readonly eligibleByStateKey: ReadonlyMap<string, RecoveryStateBase>;
+  readonly topologyIndex: StateTopologyIndex;
 }): CompiledIncrementalStateFamily | null {
   /*
    * Anonymous-data emitters (topic === null, e.g. Ekubo's Core) are not
@@ -3044,7 +3174,6 @@ function createDerivedSwapMutationIncremental(input: {
     topics,
     emitters: resolvable.map((event) => event.emitter),
   });
-  const stateKeyOfEdge = input.family.stateKey;
   return Object.freeze({
     mutationQueryDescriptor: () =>
       createMutationQueryDescriptor({ topics }),
@@ -3053,23 +3182,11 @@ function createDerivedSwapMutationIncremental(input: {
       readonly range: CanonicalMutationRange;
     }): FamilyMutationClassification {
       /*
-       * Generic identity -> stateKey index built from the family's own
-       * edges: the event identity resolves through the declaration's emitter
-       * mode and must hit one of this family's state keys. This supports
-       * directional/composite state keys (one pool identity mapping to
-       * several state keys) without per-protocol branches.
+       * Resolve range events against the graph-topology-scoped pool-identity
+       * reverse index (rebuilt only when the topology hash changes, never
+       * per generation). The index supports directional/composite state keys
+       * without per-protocol branches.
        */
-      const identityToStateKeys = new Map<string, Set<string>>();
-      for (const edge of classifyInput.edges) {
-        const rawKey = stateKeyOfEdge(edge).toLowerCase();
-        // The pool identity the logs resolve to is the poolId for v4-style
-        // families and the pool address otherwise; edge.target is the shared
-        // manager/router for those families and must not be used directly.
-        const identity = (edge.poolId ?? edge.target).toLowerCase();
-        const set = identityToStateKeys.get(identity) ?? new Set<string>();
-        set.add(rawKey);
-        identityToStateKeys.set(identity, set);
-      }
       const changed = new Map<string, ReadonlySet<string>>();
       for (const event of classifyInput.range.events) {
         const topic = event.topics[0]?.toLowerCase();
@@ -3081,9 +3198,14 @@ function createDerivedSwapMutationIncremental(input: {
           event,
         );
         if (identity === null) continue;
-        const stateKeys = identityToStateKeys.get(identity);
-        if (!stateKeys) continue;
-        for (const rawKey of stateKeys) {
+        const identityKey =
+          `${input.familyId}\u001f${identity.toLowerCase()}`;
+        const compositeKeys =
+          input.topologyIndex.stateKeysByPoolIdentity.get(identityKey);
+        if (!compositeKeys) continue;
+        for (const composite of compositeKeys) {
+          const rawKey = rawKeyByComposite.get(composite);
+          if (rawKey === undefined) continue;
           const base = baseByRawKey.get(rawKey);
           if (!base) continue;
           changed.set(

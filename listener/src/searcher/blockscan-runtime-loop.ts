@@ -1005,80 +1005,37 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       : null;
   }
 
-  /**
-   * Latest published coarse state strictly before `sourceBlock`. The N-1
-   * producer is single-flight and slower than the 12s block cadence on a
-   * full 35k-edge graph, so coalesced heads leave exact predecessor gaps;
-   * requiring N-1 starves every pass. Coarse staleness is bounded by the
-   * producer's generation distance and corrected by the exact join at N
-   * (stale-positive-only recall), matching the backrun pricing model.
-   */
-  private latestPrecedingCoarsePricing(
-    coordinator: AdapterRuntimeCoordinator,
-    sourceBlock: number,
-  ): BlockScanStateSnapshot | null {
-    let best: BlockScanStateSnapshot | null = null;
-    for (const snapshot of this.completedCoarsePricingByBlock.values()) {
-      if (
-        snapshot.sourceBlock < sourceBlock &&
-        (best === null || snapshot.sourceBlock > best.sourceBlock)
-      ) {
-        best = snapshot;
-      }
-    }
-    const coordinatorLatest = coordinator.latestPricingSnapshot();
-    if (
-      coordinatorLatest !== null &&
-      coordinatorLatest.sourceBlock < sourceBlock &&
-      (best === null ||
-        coordinatorLatest.sourceBlock > best.sourceBlock)
-    ) {
-      best = coordinatorLatest;
-    }
-    return best;
-  }
-
   private async waitForAdjacentCoarsePricing(
     coordinator: AdapterRuntimeCoordinator,
-    sourceBlock: number,
+    expectedSourceBlock: number,
     deadlineAtMs: number,
     signal: AbortSignal,
   ): Promise<BlockScanStateSnapshot | null> {
-    for (;;) {
-      if (this.deps.runtimeAbort.signal.aborted || signal.aborted) {
-        throw signal.reason ??
-          this.deps.runtimeAbort.signal.reason ??
-          new Error("searcher shutdown");
-      }
-      const completed = this.completedCoarsePricing(coordinator, sourceBlock);
-      if (completed) return completed;
-      const active = this.coarsePricingActive;
-      if (active && this.coarsePricingActiveSourceBlock === sourceBlock) {
-        // The exact predecessor is actively being produced: wait for it.
-        const finished = await waitForTaskUntil(
-          active,
-          deadlineAtMs,
-          signal,
-        );
-        return finished
-          ? this.completedCoarsePricing(coordinator, sourceBlock)
-          : null;
-      }
-      // The producer is busy with another block (or drained). Do not wait
-      // for a queue that cannot publish the requested predecessor in time;
-      // fall back to the latest preceding published state. The exact join
-      // at current N corrects the coarse staleness.
-      const fallback = this.latestPrecedingCoarsePricing(
-        coordinator,
-        sourceBlock,
-      );
-      if (fallback) return fallback;
-      if (!active) {
-        // No state at all before the requested predecessor.
-        return null;
-      }
-      await waitForTaskUntil(active, deadlineAtMs, signal);
+    /*
+     * Strict N-1: a pass may only join the exactly adjacent coarse state.
+     * Any older published state would silently drop routes that never got
+     * enumerated (exact current-N refinement cannot resurrect them), so the
+     * fallback to arbitrary preceding states is intentionally removed.
+     */
+    const completed = this.completedCoarsePricing(
+      coordinator,
+      expectedSourceBlock,
+    );
+    if (completed) return completed;
+    if (
+      !this.coarsePricingActive ||
+      this.coarsePricingActiveSourceBlock !== expectedSourceBlock
+    ) {
+      return null;
     }
+    const finished = await waitForTaskUntil(
+      this.coarsePricingActive,
+      deadlineAtMs,
+      signal,
+    );
+    return finished
+      ? this.completedCoarsePricing(coordinator, expectedSourceBlock)
+      : null;
   }
 
   stopExecutionWorkers(): void {
@@ -2169,15 +2126,16 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         auditForcedSelectionCount = productionCoarse.forcedSelectionCount;
       } else {
         this.passStageLabel = "state:wait-adjacent";
+        const expectedCoarseBlock = blockNumber - 1;
         const predecessorPricing = await this.waitForAdjacentCoarsePricing(
           adapterRuntimeCoordinator,
-          blockNumber - 1,
+          expectedCoarseBlock,
           passDeadlineAtMs - Math.max(1, this.deps.solveReserveMs),
           passSignal,
         );
         if (
           !predecessorPricing ||
-          predecessorPricing.sourceBlock >= blockNumber
+          predecessorPricing.sourceBlock !== expectedCoarseBlock
         ) {
           finishStage("state", "failed");
           timing.stateMs = stageBoundaries.state.stage_ms;
@@ -2200,7 +2158,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           return;
         }
         const predecessorHeader = await observeCanonicalHeader(
-          predecessorPricing.sourceBlock,
+          expectedCoarseBlock,
           "predecessor canonical header",
         );
         /*

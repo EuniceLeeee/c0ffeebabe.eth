@@ -86,9 +86,9 @@ export function enumerateNMinusOneCoarseCandidates(input: {
     atomicValidationTimingMs = timing;
   });
   const atomicValidationFinishedAtMs = Date.now();
-  if (coarse.sourceBlock >= exact.sourceBlock) {
+  if (coarse.sourceBlock !== exact.sourceBlock - 1) {
     throw new Error(
-      `N-1 coarse source must precede the exact source: ` +
+      `coarse source must be exactly N-1: ` +
         `${coarse.sourceBlock} -> ${exact.sourceBlock}`,
     );
   }

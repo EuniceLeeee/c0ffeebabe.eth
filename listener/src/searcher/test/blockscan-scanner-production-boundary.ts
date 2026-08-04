@@ -483,10 +483,7 @@ console.log("[blockscan-production-boundary] atomic funding coverage: PASS");
       completeThroughHash: `0x${"55".repeat(32)}`,
     }],
   });
-  // A non-adjacent (N-2) coarse source is accepted: coarse staleness is
-  // bounded by the producer distance and corrected by the exact join at N
-  // (stale-positive-only recall), matching the backrun pricing model.
-  assert.doesNotThrow(
+  assert.throws(
     () =>
       enumerateNMinusOneCoarseCandidates({
         coarsePricing: runtime.pricing,
@@ -494,7 +491,8 @@ console.log("[blockscan-production-boundary] atomic funding coverage: PASS");
         exactGraph: nPlusTwoGraph,
         cfg,
       }),
-    "a preceding coarse source must be accepted for the N-exact join",
+    /exactly N-1/,
+    "a non-adjacent coarse source must be rejected",
   );
   const sameBlockGraph = createVerifiedGraphView({
     ...exactGraph,
@@ -519,7 +517,7 @@ console.log("[blockscan-production-boundary] atomic funding coverage: PASS");
         exactGraph: sameBlockGraph,
         cfg,
       }),
-    /must precede the exact source/,
+    /exactly N-1/,
   );
   const changedEdges = exactGraph.edges.map((edgeValue) => ({
     ...edgeValue,
