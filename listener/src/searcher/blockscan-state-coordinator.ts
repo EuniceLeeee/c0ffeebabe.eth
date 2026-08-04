@@ -10,6 +10,7 @@ import {
   type BlockSource,
   type BlockScanPricingLane,
   type CanonicalMutationRange,
+  type ChainLog,
   type CompiledBlockScanStateFamily,
   type CompiledIncrementalStateFamily,
   type FamilyMutationClassification,
@@ -466,7 +467,11 @@ interface BlockActivityRefreshPlan {
   readonly rangeFingerprint: string;
   readonly directStateKeys: ReadonlySet<string>;
   readonly carryStateKeys: ReadonlySet<string>;
-  readonly carryProof: StateFreshnessProof;
+  /** Proofs are shared by keys with the same last-good source. */
+  readonly carryProofByPreviousSource: ReadonlyMap<
+    string,
+    StateFreshnessProof
+  >;
 }
 
 interface LaneResult {
@@ -596,6 +601,14 @@ interface ActiveGeneration {
   readonly generation: number;
   readonly token: symbol;
   readonly controller: AbortController;
+  readonly committedBases: Map<
+    string,
+    {
+      readonly previous: RecoveryStateBase | undefined;
+      readonly current: RecoveryStateBase;
+    }
+  >;
+  published: boolean;
 }
 
 // Production raises this through SEARCHER_BLOCKSCAN_INCREMENTAL_RANGE_BLOCKS
@@ -607,6 +620,12 @@ const DEFAULT_INCREMENTAL_RANGE_BLOCKS = 32;
 const MAX_HOT_RECOVERY_STATE_KEYS_PER_FAMILY = 16;
 const DEFAULT_FAMILY_TIMEOUT_MS = 5_000;
 const ENABLED_PROTOCOL_ADDRESS_TOUCH_BUDGET_MS = 4_000;
+const ZERO_BLOCK_HASH = `0x${"00".repeat(32)}`;
+// ERC-6909 claim transfers change a user's settlement claims, not a V4
+// pool's slot0/liquidity pricing state. Treating them as an unknown manager
+// mutation otherwise refreshes every pool behind the singleton.
+const ERC6909_TRANSFER_TOPIC =
+  "0x1b3d7edb2e9c0b0e7c525b20aaaef0f5940d2ed71663c7d39266ecafac728859";
 
 class DeadlineAbort extends Error {
   constructor() {
@@ -681,21 +700,6 @@ export class BlockScanStateCoordinator {
   private cacheAppendChain: Promise<void> = Promise.resolve();
   /** Warm generations persist each resolved key; hot generations do not. */
   private cacheModeActive = false;
-  /**
-   * Per-key recovery bases committed by the ACTIVE generation, with the
-   * previous value, so a generation that fails to publish can roll them back.
-   * Without this, an aborted generation advanced lastGoodByStateKey past the
-   * published source and the exact sameBlockSource carry check then degraded
-   * every key of the affected families to full-graph direct reads.
-   */
-  private generationCommittedBases = new Map<
-    string,
-    {
-      readonly previous: RecoveryStateBase | undefined;
-      readonly current: RecoveryStateBase;
-    }
-  >();
-  private generationPublished = false;
   private readonly now: () => number;
 
   constructor(
@@ -847,9 +851,9 @@ export class BlockScanStateCoordinator {
    * resolves every touched activity identity (swap pool addresses and
    * protocol contract addresses via address:*, V4-style poolIds via
    * pool-id:*) and partitions every state key into direct/carry for both
-   * lanes. Returns null when no published base exists or the range is outside
-   * the activity reader's bound; the generation then direct-reads everything
-   * (cold start / lagging base).
+   * lanes. Returns null when no stateKey has an eligible last-good base or the
+   * activity proof fails; the generation then direct-reads everything (cold
+   * start / lagging base).
    */
   private async prepareBlockActivityRefreshPlan(
     graph: VerifiedGraphView,
@@ -857,17 +861,45 @@ export class BlockScanStateCoordinator {
     signal: AbortSignal,
   ): Promise<BlockActivityRefreshPlan | null> {
     const readActivity = this.backend.readCanonicalBlockActivity;
-    if (!readActivity || this.published === null) return null;
-    const fromExclusive: BlockSource = Object.freeze({
-      number: this.published.sourceBlock,
-      hash: this.published.sourceBlockHash,
-      generation: this.published.generation,
-    });
+    const topology = this.topologyIndex;
+    if (!readActivity || !topology) return null;
     const through: BlockSource = Object.freeze({
       number: graph.sourceBlock,
       hash: graph.sourceBlockHash,
       generation: graph.generation,
     });
+    /*
+     * A degraded publication may omit an entire family while healthy siblings
+     * advance. The omitted keys still have valid, older last-good bases. Use
+     * the oldest eligible per-key base as one canonical activity superset;
+     * anchoring only at this.published.sourceBlock turns every older key into
+     * an unnecessary current-N direct read and creates the observed fallback
+     * cascade after one missed generation.
+     */
+    const eligibleBaseByStateKey = new Map<string, RecoveryStateBase>();
+    let fromExclusive: BlockSource | undefined;
+    for (const group of topology.ownership.groups) {
+      const base = this.lastGoodByStateKey.get(group.stateKey);
+      if (!base || base.schemaFingerprint !== group.schemaFingerprint) {
+        continue;
+      }
+      const distance = through.number - base.state.source.number;
+      if (
+        distance <= 0 ||
+        distance > this.incrementalRangeBlocks ||
+        through.generation <= base.state.source.generation
+      ) {
+        continue;
+      }
+      eligibleBaseByStateKey.set(group.stateKey, base);
+      if (
+        fromExclusive === undefined ||
+        compareBlockSource(base.state.source, fromExclusive) < 0
+      ) {
+        fromExclusive = base.state.source;
+      }
+    }
+    if (fromExclusive === undefined) return null;
     let activity: CanonicalBlockActivity;
     try {
       activity = await awaitWithAbort(
@@ -895,8 +927,19 @@ export class BlockScanStateCoordinator {
         return null;
       }
     }
-    const topology = this.topologyIndex;
-    if (!topology) return null;
+    if (
+      !sameBlockSource(activity.fromExclusive, fromExclusive) ||
+      !sameBlockSource(activity.through, through)
+    ) {
+      return null;
+    }
+    const canonicalHashByBlock = new Map<number, string>([
+      [fromExclusive.number, fromExclusive.hash.toLowerCase()],
+      [through.number, through.hash.toLowerCase()],
+      ...(activity.canonicalBlocks ?? []).map((block) =>
+        [block.number, block.hash.toLowerCase()] as const
+      ),
+    ]);
     const observed = new Set<string>();
     const fallbackDirty = new Set<string>();
     for (const address of activity.touchedAddresses) {
@@ -929,6 +972,17 @@ export class BlockScanStateCoordinator {
         !singletonResolved &&
         topology.singletonStateKeysByEmitter.has(emitter)
       ) {
+        for (const identity of knownPoolIdIdentitiesFromLog(topology, log)) {
+          observed.add(identity);
+          singletonResolved = true;
+        }
+      }
+      if (
+        emitter !== undefined &&
+        !singletonResolved &&
+        topic !== ERC6909_TRANSFER_TOPIC &&
+        topology.singletonStateKeysByEmitter.has(emitter)
+      ) {
         for (const stateKey of
           topology.singletonStateKeysByEmitter.get(emitter)!) {
           fallbackDirty.add(stateKey);
@@ -943,31 +997,65 @@ export class BlockScanStateCoordinator {
       }
     }
     const carryStateKeys = new Set<string>();
+    const carryProofByPreviousSource = new Map<
+      string,
+      StateFreshnessProof
+    >();
     const carryDiagnostics = new Map<
       string,
-      { missing: number; sourceMismatch: number; fingerprintMismatch: number; carry: number }
+      {
+        dirty: number;
+        missing: number;
+        sourceMismatch: number;
+        fingerprintMismatch: number;
+        carry: number;
+      }
     >();
     for (const group of topology.ownership.groups) {
-      if (directStateKeys.has(group.stateKey)) continue;
-      const base = this.lastGoodByStateKey.get(group.stateKey);
       const diagnostic = carryDiagnostics.get(group.familyId) ??
-        { missing: 0, sourceMismatch: 0, fingerprintMismatch: 0, carry: 0 };
-      if (
-        !base ||
-        !sameBlockSource(base.state.source, fromExclusive) ||
-        base.schemaFingerprint !== group.schemaFingerprint
-      ) {
-        if (!base) {
-          diagnostic.missing++;
-        } else if (!sameBlockSource(base.state.source, fromExclusive)) {
-          diagnostic.sourceMismatch++;
-        } else {
-          diagnostic.fingerprintMismatch++;
-        }
-        directStateKeys.add(group.stateKey);
+        {
+          dirty: 0,
+          missing: 0,
+          sourceMismatch: 0,
+          fingerprintMismatch: 0,
+          carry: 0,
+        };
+      if (directStateKeys.has(group.stateKey)) {
+        diagnostic.dirty++;
       } else {
-        diagnostic.carry++;
-        carryStateKeys.add(group.stateKey);
+        const rawBase = this.lastGoodByStateKey.get(group.stateKey);
+        const base = eligibleBaseByStateKey.get(group.stateKey);
+        const canonicalHash = base === undefined
+          ? undefined
+          : canonicalHashByBlock.get(base.state.source.number);
+        if (
+          !base ||
+          canonicalHash === undefined ||
+          canonicalHash !== base.state.source.hash.toLowerCase()
+        ) {
+          if (!rawBase) {
+            diagnostic.missing++;
+          } else if (rawBase.schemaFingerprint !== group.schemaFingerprint) {
+            diagnostic.fingerprintMismatch++;
+          } else {
+            diagnostic.sourceMismatch++;
+          }
+          directStateKeys.add(group.stateKey);
+        } else {
+          diagnostic.carry++;
+          carryStateKeys.add(group.stateKey);
+          const sourceKey = blockSourceKey(base.state.source);
+          if (!carryProofByPreviousSource.has(sourceKey)) {
+            carryProofByPreviousSource.set(sourceKey, Object.freeze({
+              kind: "carry-forward" as const,
+              source: Object.freeze({ ...through }),
+              previousSource: Object.freeze({ ...base.state.source }),
+              mutationRangeFingerprint: activity.rangeFingerprint,
+              completeThroughBlock: activity.through.number,
+              completeThroughHash: activity.through.hash,
+            }));
+          }
+        }
       }
       carryDiagnostics.set(group.familyId, diagnostic);
     }
@@ -983,21 +1071,15 @@ export class BlockScanStateCoordinator {
         ),
       })}`,
     );
-    const carryProof: StateFreshnessProof = Object.freeze({
-      kind: "carry-forward" as const,
-      source: Object.freeze({ ...through }),
-      previousSource: Object.freeze({ ...fromExclusive }),
-      mutationRangeFingerprint: activity.rangeFingerprint,
-      completeThroughBlock: activity.through.number,
-      completeThroughHash: activity.through.hash,
-    });
     return Object.freeze({
-      fromExclusive,
+      fromExclusive: Object.freeze({ ...fromExclusive }),
       through,
       rangeFingerprint: activity.rangeFingerprint,
       directStateKeys: Object.freeze(directStateKeys),
       carryStateKeys: Object.freeze(carryStateKeys),
-      carryProof,
+      carryProofByPreviousSource: new FrozenReadonlyMap(
+        [...carryProofByPreviousSource],
+      ),
     });
   }
 
@@ -1098,8 +1180,6 @@ export class BlockScanStateCoordinator {
     }
     this.published = null;
     this.lastGoodByStateKey.clear();
-    this.generationCommittedBases.clear();
-    this.generationPublished = false;
     this.previousCanonicalGraphStateKeys = null;
     this.hotRecoveryCursorByFamily.clear();
   }
@@ -1107,8 +1187,6 @@ export class BlockScanStateCoordinator {
   async prepare(input: PrepareBlockScanStateInput): Promise<BlockScanStatePrepareResult> {
     const { graph } = input;
     this.cacheModeActive = input.cacheMode === "warm";
-    this.generationPublished = false;
-    this.generationCommittedBases.clear();
     const previousPublished = this.published;
     const familySettleDeadlineAtMs = Math.min(
       input.deadlineAtMs,
@@ -1156,7 +1234,13 @@ export class BlockScanStateCoordinator {
 
     const controller = new AbortController();
     const token = Symbol(`blockscan-state-${graph.generation}`);
-    const active = { generation: graph.generation, token, controller };
+    const active: ActiveGeneration = {
+      generation: graph.generation,
+      token,
+      controller,
+      committedBases: new Map(),
+      published: false,
+    };
     this.active = active;
     const detachExternal = linkAbortSignal(input.signal, controller);
     const delay = input.deadlineAtMs - this.now();
@@ -1200,7 +1284,9 @@ export class BlockScanStateCoordinator {
     const stateBlockedFamilyIds = new Set(
       graph.perSourceCoverage.flatMap((coverage) =>
         coverage.completeThroughBlock === graph.sourceBlock &&
-          coverage.completeThroughHash !== graph.sourceBlockHash
+          coverage.completeThroughHash.toLowerCase() !== ZERO_BLOCK_HASH &&
+          coverage.completeThroughHash.toLowerCase() !==
+            graph.sourceBlockHash.toLowerCase()
           ? [coverage.familyId]
           : []
       ),
@@ -1558,28 +1644,12 @@ export class BlockScanStateCoordinator {
       this.previousCanonicalGraphStateKeys = new Set(
         ownership.groups.map((group) => group.stateKey),
       );
-      const groupByStateKey = new Map(
-        ownership.groups.map((group) => [group.stateKey, group] as const),
-      );
-      for (const [stateKey, state] of stateByStateKey) {
-        const group = groupByStateKey.get(stateKey);
-        if (!group) {
-          throw new Error(
-            `published state ${stateKey} has no ownership group`,
-          );
-        }
-        const existingBase = this.lastGoodByStateKey.get(stateKey);
-        this.lastGoodByStateKey.set(stateKey, Object.freeze({
-          state,
-          schemaFingerprint: group.schemaFingerprint,
-          requiredReadKeyHash: exactSetHash(state.requiredReadKeys),
-          midsByEdgeKey: existingBase?.midsByEdgeKey ?? new Map(),
-          unavailableByEdgeKey:
-            existingBase?.unavailableByEdgeKey ?? new Map(),
-        }));
-      }
+      // runFamilyLane already committed each resolved key together with its
+      // validated mids. Do not walk/hash the full published map again here;
+      // that duplicated all-key work and also made rollback ambiguous if a
+      // generation failed between base mutation and snapshot publication.
       this.published = snapshot;
-      this.generationPublished = true;
+      active.published = true;
       const degraded =
         incompleteFamilyIds.length > 0 ||
         coverage.unresolvedStateKeys.length > 0 ||
@@ -1600,8 +1670,8 @@ export class BlockScanStateCoordinator {
     } finally {
       clearTimeout(deadlineTimer);
       detachExternal();
-      if (!this.generationPublished) {
-        for (const [stateKey, committed] of this.generationCommittedBases) {
+      if (!active.published) {
+        for (const [stateKey, committed] of active.committedBases) {
           if (this.lastGoodByStateKey.get(stateKey) !== committed.current) {
             continue;
           }
@@ -1612,7 +1682,7 @@ export class BlockScanStateCoordinator {
           }
         }
       }
-      this.generationCommittedBases.clear();
+      active.committedBases.clear();
       this.cacheModeActive = false;
       if (this.active?.token === token) this.active = null;
     }
@@ -2804,7 +2874,20 @@ export class BlockScanStateCoordinator {
                 "carry-forward state lacks a canonical activity plan",
               );
             }
-            proof = refreshPlan.carryProof;
+            if (!previousBase) {
+              throw new Error(
+                "carry-forward state lacks its last-good recovery base",
+              );
+            }
+            const carryProof = refreshPlan.carryProofByPreviousSource.get(
+              blockSourceKey(previousBase.state.source),
+            );
+            if (!carryProof) {
+              throw new Error(
+                "carry-forward state lacks its stateKey-local activity proof",
+              );
+            }
+            proof = carryProof;
           } else if (cacheEntry) {
             const cached = cachedReadByLocalId?.get(localId);
             if (!cached) {
@@ -2904,8 +2987,15 @@ export class BlockScanStateCoordinator {
               ? unavailable
               : Object.freeze(new Map(unavailable)),
         });
-        if (!this.generationCommittedBases.has(group.stateKey)) {
-          this.generationCommittedBases.set(group.stateKey, {
+        const activeGeneration = this.active;
+        if (
+          activeGeneration?.generation !== graph.generation ||
+          activeGeneration.controller.signal.aborted
+        ) {
+          continue;
+        }
+        if (!activeGeneration.committedBases.has(group.stateKey)) {
+          activeGeneration.committedBases.set(group.stateKey, {
             previous: this.lastGoodByStateKey.get(group.stateKey),
             current: committedBase,
           });
@@ -3138,6 +3228,45 @@ function validateMutationClassification(
       }
     }
   }
+}
+
+function compareBlockSource(a: BlockSource, b: BlockSource): number {
+  return a.number - b.number ||
+    a.hash.toLowerCase().localeCompare(b.hash.toLowerCase()) ||
+    a.generation - b.generation;
+}
+
+function blockSourceKey(source: BlockSource): string {
+  return [
+    source.number,
+    source.hash.toLowerCase(),
+    source.generation,
+  ].join("\u001f");
+}
+
+function knownPoolIdIdentitiesFromLog(
+  topology: StateTopologyIndex,
+  log: ChainLog,
+): readonly string[] {
+  const words = new Set<string>();
+  for (const topic of log.topics.slice(1)) {
+    if (/^0x[0-9a-fA-F]{64}$/.test(topic)) {
+      words.add(topic.toLowerCase());
+    }
+  }
+  if (/^0x(?:[0-9a-fA-F]{64})*$/.test(log.data)) {
+    const data = log.data.slice(2);
+    for (let offset = 0; offset < data.length; offset += 64) {
+      words.add(`0x${data.slice(offset, offset + 64)}`.toLowerCase());
+    }
+  }
+  return Object.freeze(
+    [...words]
+      .map((word) => `pool-id:${word}`)
+      .filter((identity) =>
+        topology.stateKeysByActivityIdentity.has(identity)
+      ),
+  );
 }
 
 function sameBlockSource(a: BlockSource, b: BlockSource): boolean {

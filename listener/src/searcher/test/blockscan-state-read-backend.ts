@@ -3318,6 +3318,20 @@ async function testCanonicalAddressTouchesIncludeDirectTargetsAndLogEmitters(): 
   ].sort());
   assert.equal(proof.transactionCount, 2);
   assert.equal(proof.complete, true);
+  const activity = await backend.readCanonicalBlockActivity(
+    previous,
+    through,
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+      maxRangeBlocks: 2,
+    },
+  );
+  assert.deepEqual(activity.canonicalBlocks, [
+    { number: sourceBlock - 2, hash: previousHash },
+    { number: sourceBlock - 1, hash: intermediateHash },
+    { number: sourceBlock, hash: sourceBlockHash },
+  ]);
   console.log("[state-read-backend] direct/log address-touch proof: PASS");
 }
 

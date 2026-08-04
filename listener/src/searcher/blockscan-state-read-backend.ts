@@ -172,6 +172,11 @@ interface PendingMutationTransportBatch {
 export interface CanonicalBlockActivity {
   readonly fromExclusive: BlockSource;
   readonly through: BlockSource;
+  /** Canonical number/hash path, including both range endpoints. */
+  readonly canonicalBlocks?: readonly {
+    readonly number: number;
+    readonly hash: string;
+  }[];
   readonly events: readonly ChainLog[];
   readonly touchedAddresses: readonly string[];
   readonly transactionCount: number;
@@ -419,6 +424,7 @@ export class JsonRpcBlockScanStateReadBackend
     control: {
       readonly deadlineAtMs: number;
       readonly signal: AbortSignal;
+      readonly maxRangeBlocks?: number;
     },
   ): Promise<CanonicalBlockActivity> {
     const scope = canonicalActivitySessionScope(through);
@@ -434,6 +440,7 @@ export class JsonRpcBlockScanStateReadBackend
           this.computeCanonicalBlockActivity(fromExclusive, through, {
             deadlineAtMs: control.deadlineAtMs,
             signal,
+            maxRangeBlocks: control.maxRangeBlocks,
           }),
         control,
       );
@@ -605,6 +612,12 @@ export class JsonRpcBlockScanStateReadBackend
       return Object.freeze({
         fromExclusive,
         through,
+        canonicalBlocks: Object.freeze(
+          headerProof.headers.map((header) => Object.freeze({
+            number: header.number,
+            hash: header.hash,
+          })),
+        ),
         events: Object.freeze(logs),
         touchedAddresses,
         transactionCount,

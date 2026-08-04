@@ -37,6 +37,11 @@ const SWAP_POOL = "0x0000000000000000000000000000000000000011";
 const SWAP_POOL_B = "0x0000000000000000000000000000000000000033";
 const SWAP_POOL_C = "0x0000000000000000000000000000000000000044";
 const PROTOCOL_POOL = "0x0000000000000000000000000000000000000022";
+const SINGLETON_MANAGER = "0x0000000000000000000000000000000000000055";
+const SINGLETON_POOL_ID_A = `0x${"aa".repeat(32)}`;
+const SINGLETON_POOL_ID_B = `0x${"bb".repeat(32)}`;
+const ERC6909_TRANSFER_TOPIC =
+  "0x1b3d7edb2e9c0b0e7c525b20aaaef0f5940d2ed71663c7d39266ecafac728859";
 
 interface FakeSnapshot {
   readonly numerator: bigint;
@@ -439,9 +444,23 @@ class StateKeyIncrementalBackend implements BlockScanStateReadBackend {
           removed: false,
         })),
     );
+    const canonicalBlocks = Object.freeze(
+      Array.from({ length: distance + 1 }, (_, index) => {
+        const number = fromExclusive.number + index;
+        return Object.freeze({
+          number,
+          hash: number === fromExclusive.number
+            ? fromExclusive.hash
+            : number === through.number
+            ? through.hash
+            : `0x${(number - SOURCE_BLOCK).toString(16).padStart(64, "0")}`,
+        });
+      }),
+    );
     return Object.freeze({
       fromExclusive,
       through,
+      canonicalBlocks,
       events,
       touchedAddresses: Object.freeze([...this.mutationTargets]),
       transactionCount: this.mutationTargets.size,
@@ -449,6 +468,50 @@ class StateKeyIncrementalBackend implements BlockScanStateReadBackend {
         fromExclusive,
         through,
       }),
+      rangeFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+        events,
+      }),
+    });
+  }
+}
+
+class SingletonActivityBackend extends StateKeyIncrementalBackend {
+  event: Readonly<{
+    readonly topics: readonly string[];
+    readonly data: string;
+  }> | null = null;
+
+  override async readCanonicalBlockActivity(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control?: { readonly maxRangeBlocks?: number },
+  ): Promise<CanonicalBlockActivity> {
+    const base = await super.readCanonicalBlockActivity(
+      fromExclusive,
+      through,
+      control,
+    );
+    const events: readonly ChainLog[] = this.event === null
+      ? Object.freeze([])
+      : Object.freeze([Object.freeze({
+          blockNumber: through.number,
+          blockHash: through.hash,
+          transactionIndex: 0,
+          logIndex: 0,
+          address: SINGLETON_MANAGER,
+          topics: Object.freeze([...this.event.topics]),
+          data: this.event.data,
+          removed: false,
+        })]);
+    return Object.freeze({
+      ...base,
+      events,
+      touchedAddresses: this.event === null
+        ? Object.freeze([])
+        : Object.freeze([SINGLETON_MANAGER]),
+      transactionCount: this.event === null ? 0 : 1,
       rangeFingerprint: deterministicHash({
         fromExclusive,
         through,
@@ -1338,6 +1401,35 @@ async function graphSourceHashMismatchBlocksOwningFamily(): Promise<void> {
     readTargets.every((target) => target === PROTOCOL_POOL.toLowerCase()),
     "same-height source hash mismatch must remain blocked during bootstrap",
   );
+
+  readTargets.length = 0;
+  const unknownHashGraph = createVerifiedGraphView({
+    id: "graph-source-hash-unknown",
+    generation: 1,
+    sourceBlock: SOURCE_BLOCK,
+    sourceBlockHash: SOURCE_HASH,
+    completenessWatermark: SOURCE_BLOCK,
+    perSourceCoverage: [{
+      familyId: "univ2-standard",
+      sourceId: "landed-event:fixture",
+      sourceFingerprint: "fixture-swap-unproven-hash-v1",
+      completeThroughBlock: SOURCE_BLOCK,
+      completeThroughHash: `0x${"00".repeat(32)}`,
+    }],
+    edges: [swapForward, swapReverse, protocol],
+  });
+  const unknownHash = await new BlockScanStateCoordinator(backend).prepare({
+    graph: unknownHashGraph,
+    families: families().list,
+    deadlineAtMs: Date.now() + 2_000,
+    laggingTopologyRefreshMode: "startup-bootstrap",
+  });
+  assert.notEqual(unknownHash.status, "incomplete");
+  assert(
+    readTargets.includes(SWAP_POOL.toLowerCase()),
+    "zeroHash means no hash proof; it must not masquerade as a proven " +
+      "same-height fork mismatch and block the owning family",
+  );
 }
 
 async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void> {
@@ -1745,9 +1837,9 @@ async function hotRecoveryIsBoundedPerFamily(): Promise<void> {
   assert.equal(backend.readTargets.length, pools.length);
   assert.equal(
     backend.rangeSources.length,
-    2,
-    "the unified activity proof is attempted (with one transient retry) and " +
-      "rejected by the range bound",
+    0,
+    "when every base is already outside the configured range, the " +
+      "coordinator skips a doomed activity RPC and direct-reads current N",
   );
   assert.equal(recovery.coverage.unresolvedStateKeys.length, 0);
 
@@ -1947,6 +2039,135 @@ async function derivedSwapIncrementalCarriesUntouchedPools(): Promise<void> {
   );
   assert.equal(telemetry?.carryStateKeys, 1);
   assert.equal(telemetry?.directStateKeys, 1);
+}
+
+async function singletonActivityIsResolvedCentrallyByPoolId(): Promise<void> {
+  const backend = new SingletonActivityBackend();
+  const calls = { schema: 0, reads: 0, derives: 0 };
+  const baseCapability = fakeCapability("swap", calls);
+  const family = registerBlockScanStateFamily({
+    familyId: "singleton-swap",
+    lane: "swap",
+    capability: {
+      ...baseCapability,
+      stateKey: (edgeValue) => {
+        if (!edgeValue.poolId) throw new Error("fixture edge lacks poolId");
+        return edgeValue.poolId.toLowerCase();
+      },
+      buildCurrentBlockReads: ({
+        sourceBlock,
+        sourceBlockHash,
+        edges: stateEdges,
+      }) => [{
+        id: "state",
+        sourceBlock,
+        sourceBlockHash,
+        to: SINGLETON_MANAGER,
+        data: stateEdges[0]?.poolId ?? "0x",
+        transport: "multicall-safe" as const,
+      }],
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "singleton-action",
+  });
+  const singletonEdge = (
+    poolId: string,
+    tokenIn: string,
+    tokenOut: string,
+  ): TokenEdge => Object.freeze({
+    ...edge(
+      "singleton-action",
+      SINGLETON_MANAGER,
+      tokenIn,
+      tokenOut,
+    ),
+    poolId,
+  });
+  const edges = Object.freeze([
+    singletonEdge(SINGLETON_POOL_ID_A, TOKEN_A, TOKEN_B),
+    singletonEdge(SINGLETON_POOL_ID_A, TOKEN_B, TOKEN_A),
+    singletonEdge(SINGLETON_POOL_ID_B, TOKEN_A, TOKEN_C),
+    singletonEdge(SINGLETON_POOL_ID_B, TOKEN_C, TOKEN_A),
+  ]);
+  const singletonGraph = (generation: number) => {
+    const sourceBlock = SOURCE_BLOCK + generation;
+    const sourceBlockHash =
+      `0x${generation.toString(16).padStart(64, "0")}`;
+    return createVerifiedGraphView({
+      id: `singleton-activity-${generation}`,
+      generation,
+      sourceBlock,
+      sourceBlockHash,
+      completenessWatermark: sourceBlock,
+      perSourceCoverage: [{
+        familyId: "singleton-swap",
+        sourceId: "singleton-fixture",
+        sourceFingerprint: "singleton-fixture-v1",
+        completeThroughBlock: sourceBlock,
+        completeThroughHash: sourceBlockHash,
+      }],
+      edges,
+    });
+  };
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const prepare = (generation: number) => coordinator.prepare({
+    graph: singletonGraph(generation),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+
+  assert.equal((await prepare(1)).status, "complete");
+
+  backend.readTargets.length = 0;
+  backend.event = Object.freeze({
+    topics: Object.freeze([`0x${"ef".repeat(32)}`]),
+    data: SINGLETON_POOL_ID_B,
+  });
+  const poolScoped = await prepare(2);
+  assert.equal(poolScoped.status, "complete");
+  assert.equal(
+    backend.readTargets.length,
+    1,
+    "an undeclared singleton event containing a known poolId refreshes only " +
+      "that pool",
+  );
+  assert.equal(
+    poolScoped.snapshot.stateByStateKey.get(
+      `singleton-swap\u001f${SINGLETON_POOL_ID_A}`,
+    )?.refreshMode,
+    "carry-forward",
+  );
+  assert.equal(
+    poolScoped.snapshot.stateByStateKey.get(
+      `singleton-swap\u001f${SINGLETON_POOL_ID_B}`,
+    )?.refreshMode,
+    "unproven-direct",
+  );
+
+  backend.readTargets.length = 0;
+  backend.event = Object.freeze({
+    topics: Object.freeze([ERC6909_TRANSFER_TOPIC]),
+    data: "0x",
+  });
+  assert.equal((await prepare(3)).status, "complete");
+  assert.equal(
+    backend.readTargets.length,
+    0,
+    "ERC-6909 claim transfers are state-neutral for pool pricing and must " +
+      "not direct-read every pool behind the manager",
+  );
+
+  backend.readTargets.length = 0;
+  backend.event = Object.freeze({
+    topics: Object.freeze([`0x${"ee".repeat(32)}`]),
+    data: "0x",
+  });
+  assert.equal((await prepare(4)).status, "complete");
+  assert.equal(
+    backend.readTargets.length,
+    2,
+    "a truly unresolved singleton mutation still fails closed to a family " +
+      "refresh",
+  );
 }
 
 async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
@@ -2155,7 +2376,7 @@ async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
   );
 }
 
-async function emptyPublishedSnapshotDoesNotEraseRecoveryBase(): Promise<void> {
+async function partialPublishedSnapshotDoesNotEraseRecoveryBases(): Promise<void> {
   const backend = new StateKeyIncrementalBackend();
   const coordinator = new BlockScanStateCoordinator(backend);
   const family = registerBlockScanStateFamily({
@@ -2166,7 +2387,12 @@ async function emptyPublishedSnapshotDoesNotEraseRecoveryBase(): Promise<void> {
   });
   const prepare = (generation: number) =>
     coordinator.prepare({
-      graph: incrementalGraph(generation, [swapForward, swapReverse]),
+      graph: incrementalGraph(generation, [
+        swapForward,
+        swapReverse,
+        swapBForward,
+        swapBReverse,
+      ]),
       families: [family],
       deadlineAtMs: Date.now() + 2_000,
     });
@@ -2174,21 +2400,25 @@ async function emptyPublishedSnapshotDoesNotEraseRecoveryBase(): Promise<void> {
   const base = await prepare(1);
   assert.equal(base.status, "complete");
   if (base.status !== "complete") throw new Error("expected recovery base");
-  assert.equal(base.snapshot.stateByStateKey.size, 1);
+  assert.equal(base.snapshot.stateByStateKey.size, 2);
 
-  backend.mutationTargets.add(SWAP_POOL.toLowerCase());
-  backend.failTargets.add(SWAP_POOL.toLowerCase());
-  const empty = await prepare(2);
-  assert.equal(empty.status, "degraded");
-  if (empty.status !== "degraded") throw new Error("expected empty degradation");
+  // Generation 2 cannot prove activity; pool A refreshes, pool B fails, so
+  // the published shell advances while B's per-key last-good remains at 1.
+  backend.rangeFailure = true;
+  backend.failTargets.add(SWAP_POOL_B.toLowerCase());
+  const partial = await prepare(2);
+  assert.equal(partial.status, "degraded");
+  if (partial.status !== "degraded") {
+    throw new Error("expected partial degradation");
+  }
   assert.equal(
-    empty.snapshot.stateByStateKey.size,
-    0,
-    "the current PricingView must not publish the stale base",
+    partial.snapshot.stateByStateKey.size,
+    1,
+    "the current PricingView publishes the healthy key but not the failed key",
   );
-  assert.equal(coordinator.latestSnapshot(), empty.snapshot);
+  assert.equal(coordinator.latestSnapshot(), partial.snapshot);
 
-  backend.mutationTargets.clear();
+  backend.rangeFailure = false;
   backend.failTargets.clear();
   backend.readTargets.length = 0;
   backend.rangeSources.length = 0;
@@ -2199,26 +2429,40 @@ async function emptyPublishedSnapshotDoesNotEraseRecoveryBase(): Promise<void> {
   }
   assert.equal(
     backend.readTargets.length,
-    1,
-    "the unified activity plan anchors from the published source; a base " +
-      "behind the empty shell re-reads current N instead of carrying",
+    0,
+    "an unchanged key must carry from its own last-good source instead of " +
+      "full-directing because the published shell is newer",
   );
   assert.deepEqual(
     backend.rangeSources,
     [{
-      number: SOURCE_BLOCK + 2,
-      hash: `0x${"2".padStart(64, "0")}`,
-      generation: 2,
+      number: SOURCE_BLOCK + 1,
+      hash: `0x${"1".padStart(64, "0")}`,
+      generation: 1,
     }],
-    "the unified activity proof anchors from the published source",
+    "the unified activity proof anchors from the stateKey-local base",
   );
   const state = recovered.snapshot.stateByStateKey.get(
-    `univ2-standard\u001f${SWAP_POOL.toLowerCase()}`,
+    `univ2-standard\u001f${SWAP_POOL_B.toLowerCase()}`,
   );
   assert.equal(state?.source.number, SOURCE_BLOCK + 3);
-  assert.equal(state?.refreshMode, "unproven-direct");
+  assert.equal(state?.refreshMode, "carry-forward");
   const freshness = state?.freshnessByReadKey.get("state");
-  assert.equal(freshness?.kind, "direct-read");
+  assert.equal(freshness?.kind, "carry-forward");
+  if (freshness?.kind === "carry-forward") {
+    assert.equal(freshness.previousSource.number, SOURCE_BLOCK + 1);
+  }
+  const healthyFreshness = recovered.snapshot.stateByStateKey.get(
+    `univ2-standard\u001f${SWAP_POOL.toLowerCase()}`,
+  )?.freshnessByReadKey.get("state");
+  assert.equal(healthyFreshness?.kind, "carry-forward");
+  if (healthyFreshness?.kind === "carry-forward") {
+    assert.equal(
+      healthyFreshness.previousSource.number,
+      SOURCE_BLOCK + 2,
+      "each key keeps its own previousSource inside the shared activity range",
+    );
+  }
 }
 
 async function familyDeadlinePreservesProvenSiblingStateKey(): Promise<void> {
@@ -3304,9 +3548,10 @@ await graphSourceHashMismatchBlocksOwningFamily();
 await laggingSwapProofFailureDoesNotFallbackWholeFamily();
 await hotRecoveryIsBoundedPerFamily();
 await derivedSwapIncrementalCarriesUntouchedPools();
+await singletonActivityIsResolvedCentrallyByPoolId();
 await oneFailedStateKeyPreservesHealthySiblingInstance();
 await incrementalRefreshIsStateKeyLocal();
-await emptyPublishedSnapshotDoesNotEraseRecoveryBase();
+await partialPublishedSnapshotDoesNotEraseRecoveryBases();
 await familyDeadlinePreservesProvenSiblingStateKey();
 await generationAbortStillErasesFamilyPartial();
 await familyLocalCompileDeadlineDoesNotCacheLateSchema();
