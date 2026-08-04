@@ -397,6 +397,14 @@ export class JsonRpcBlockScanStateReadBackend
     control: {
       readonly deadlineAtMs: number;
       readonly signal: AbortSignal;
+      /**
+       * Max forward distance for one activity read. Defaults to 8 (the
+       * address-touch bound); the unified refresh plan passes the
+       * coordinator's incremental range window so a lagging producer can
+       * still prove a multi-block gap and carry instead of degrading to a
+       * full-graph direct read (which could never catch up).
+       */
+      readonly maxRangeBlocks?: number;
     },
   ): Promise<CanonicalBlockActivity> {
     return await awaitWithSignal(
@@ -461,16 +469,18 @@ export class JsonRpcBlockScanStateReadBackend
     control: {
       readonly deadlineAtMs: number;
       readonly signal: AbortSignal;
+      readonly maxRangeBlocks?: number;
     },
   ): Promise<CanonicalBlockActivity> {
     const distance = through.number - fromExclusive.number;
+    const maxRangeBlocks = Math.max(1, control.maxRangeBlocks ?? 8);
     if (
       distance <= 0 ||
-      distance > 8 ||
+      distance > maxRangeBlocks ||
       through.generation <= fromExclusive.generation
     ) {
       throw new Error(
-        "address-touch proof requires 1..8 forward canonical blocks",
+        `address-touch proof requires 1..${maxRangeBlocks} forward canonical blocks`,
       );
     }
     const controller = new AbortController();

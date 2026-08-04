@@ -111,6 +111,13 @@ export interface BlockScanStateReadBackend {
     control: {
       readonly deadlineAtMs: number;
       readonly signal: AbortSignal;
+      /**
+       * Max forward distance for one activity read. The unified refresh plan
+       * passes the incremental-range window so a producer lagging more than
+       * 8 blocks can still carry through a proven multi-block gap instead of
+       * degrading to a full-graph direct read.
+       */
+      readonly maxRangeBlocks?: number;
     },
   ): Promise<CanonicalBlockActivity>;
 }
@@ -841,6 +848,7 @@ export class BlockScanStateCoordinator {
         readActivity.call(this.backend, fromExclusive, through, {
           deadlineAtMs,
           signal,
+          maxRangeBlocks: this.incrementalRangeBlocks,
         }),
         signal,
       );

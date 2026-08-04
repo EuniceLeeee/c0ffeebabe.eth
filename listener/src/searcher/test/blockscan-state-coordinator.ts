@@ -412,10 +412,14 @@ class StateKeyIncrementalBackend implements BlockScanStateReadBackend {
   async readCanonicalBlockActivity(
     fromExclusive: BlockSource,
     through: BlockSource,
+    control?: {
+      readonly maxRangeBlocks?: number;
+    },
   ): Promise<CanonicalBlockActivity> {
     this.rangeSources.push(Object.freeze({ ...fromExclusive }));
     const distance = through.number - fromExclusive.number;
-    if (distance <= 0 || distance > 8) {
+    const maxRangeBlocks = Math.max(1, control?.maxRangeBlocks ?? 8);
+    if (distance <= 0 || distance > maxRangeBlocks) {
       throw new Error("injected activity range out of bounds");
     }
     if (this.rangeFailure) {
