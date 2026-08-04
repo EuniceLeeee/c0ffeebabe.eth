@@ -1120,37 +1120,63 @@ export class BlockScanStateCoordinator {
           .filter(([readKey]) => resolvedReadKeySet.has(readKey))
           .sort(([a], [b]) => a.localeCompare(b)),
       );
-      const coverageByReadKey = new FrozenReadonlyMap(
-        coverage.expectedReadKeys.map((readKey) => [
-          readKey,
-          resolvedReadKeySet.has(readKey)
-            ? Object.freeze({ status: "resolved" as const })
-            : Object.freeze({
-                status: "unresolved" as const,
-                reason: "required current-block read did not resolve for its stateKey",
-              }),
-        ] as const),
-      );
-      const coverageByEdgeKey = new FrozenReadonlyMap(
-        coverage.expectedEdgeKeys.map((edgeKey) => {
-          const unavailableReason = unavailableReasonByEdgeKey.get(edgeKey);
-          return [
-            edgeKey,
-            resolvedEdgeKeySet.has(edgeKey)
-              ? Object.freeze({ status: "resolved" as const })
-              : unavailableReason
-              ? Object.freeze({
-                  status: "rejected" as const,
-                  reason: unavailableReason,
-                })
-              : Object.freeze({
-                  status: "unresolved" as const,
-                  reason:
-                    "required current-block edge did not resolve for its stateKey",
-                }),
-          ] as const;
-        }),
-      );
+      /*
+       * Delta publication: the coverage maps are a pure function of the
+       * expected/resolved/unavailable key sets. When every hash is unchanged
+       * from the previous published snapshot, share the frozen maps instead
+       * of rebuilding ~70k frozen entries per generation.
+       */
+      const previousCoverage = this.published?.coverage;
+      const previousSnapshot = this.published;
+      const coverageMapsUnchanged =
+        previousSnapshot !== undefined &&
+        previousCoverage !== undefined &&
+        previousCoverage.expectedReadKeyHash ===
+          coverage.expectedReadKeyHash &&
+        previousCoverage.resolvedReadKeyHash ===
+          coverage.resolvedReadKeyHash &&
+        previousCoverage.expectedEdgeKeyHash ===
+          coverage.expectedEdgeKeyHash &&
+        previousCoverage.resolvedEdgeKeyHash ===
+          coverage.resolvedEdgeKeyHash &&
+        previousCoverage.unavailableEdgeKeyHash ===
+          coverage.unavailableEdgeKeyHash;
+      const coverageByReadKey = coverageMapsUnchanged
+        ? previousSnapshot!.coverageByReadKey
+        : new FrozenReadonlyMap(
+            coverage.expectedReadKeys.map((readKey) => [
+              readKey,
+              resolvedReadKeySet.has(readKey)
+                ? Object.freeze({ status: "resolved" as const })
+                : Object.freeze({
+                    status: "unresolved" as const,
+                    reason:
+                      "required current-block read did not resolve for its stateKey",
+                  }),
+            ] as const),
+          );
+      const coverageByEdgeKey = coverageMapsUnchanged
+        ? previousSnapshot!.coverageByEdgeKey
+        : new FrozenReadonlyMap(
+            coverage.expectedEdgeKeys.map((edgeKey) => {
+              const unavailableReason = unavailableReasonByEdgeKey.get(edgeKey);
+              return [
+                edgeKey,
+                resolvedEdgeKeySet.has(edgeKey)
+                  ? Object.freeze({ status: "resolved" as const })
+                  : unavailableReason
+                  ? Object.freeze({
+                      status: "rejected" as const,
+                      reason: unavailableReason,
+                    })
+                  : Object.freeze({
+                      status: "unresolved" as const,
+                      reason:
+                        "required current-block edge did not resolve for its stateKey",
+                    }),
+              ] as const;
+            }),
+          );
       const stateByStateKey = new FrozenReadonlyMap(
         lanes
           .flatMap((lane) => lane.states)
@@ -3035,7 +3061,14 @@ export class BlockScanStateCoordinator {
           state: publishedState,
           schemaFingerprint: stateSchemaFingerprint(group.edges),
           requiredReadKeyHash: exactSetHash(publishedState.requiredReadKeys),
-          midsByEdgeKey: Object.freeze(new Map(derived)),
+          midsByEdgeKey: Object.freeze(
+            new Map(
+              [...derived].map(([edgeKey, mid]) => [
+                edgeKey,
+                freezeMid(mid),
+              ] as const),
+            ),
+          ),
           unavailableByEdgeKey: Object.freeze(new Map(unavailable)),
         }));
         if (
@@ -4010,6 +4043,10 @@ function uniqueSorted(values: readonly string[]): readonly string[] {
 }
 
 function freezeMid(mid: RouteVenueMid): RouteVenueMid {
+  // Delta publication: carried keys share the already-frozen mid object from
+  // the recovery base, so the per-generation snapshot assembly stops copying
+  // every mid (+ edge array) on an unchanged 35k-edge graph.
+  if (Object.isFrozen(mid)) return mid;
   return Object.freeze({
     ...mid,
     edges: Object.freeze([...mid.edges]) as unknown as TokenEdge[],
