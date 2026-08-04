@@ -1374,10 +1374,8 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   );
   assert.deepEqual(
     backend.readTargets,
-    [],
-    "the pass after missing-base recovery must resume proof-based carry " +
-      "(protocol families now use the same dependency-log incremental pipe, " +
-      "so an untouched protocol dependency carries instead of direct-reading)",
+    [PROTOCOL_POOL.toLowerCase()],
+    "the pass after missing-base recovery must resume proof-based carry",
   );
   const recoveredBaseState = missingBaseResumed.snapshot.stateByStateKey.get(
     `univ2-standard\u001f${SWAP_POOL_B.toLowerCase()}`,
@@ -1445,9 +1443,8 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   }
   assert.deepEqual(
     [...backend.readTargets].sort(),
-    [SWAP_POOL].map((value) => value.toLowerCase()).sort(),
-    "a canonically classified changed key reads current N without rereading " +
-      "an unchanged sibling (protocol carries through the dependency-log pipe)",
+    [SWAP_POOL, PROTOCOL_POOL].map((value) => value.toLowerCase()).sort(),
+    "a canonically classified changed key reads current N without rereading an unchanged sibling",
   );
   assert.equal(
     withChangedKey.familyTelemetry?.find(
@@ -1514,9 +1511,10 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   assert.equal(recoveredSwap?.recoveryRequiredStateKeys ?? 0, 0);
   assert.deepEqual(
     [...backend.readTargets].sort(),
-    [SWAP_POOL_C].map((value) => value.toLowerCase()).sort(),
-    "recovery must direct-read only the key that remains outside the proof " +
-      "window (protocol carries through the dependency-log pipe)",
+    [SWAP_POOL_C, PROTOCOL_POOL]
+      .map((value) => value.toLowerCase())
+      .sort(),
+    "recovery must direct-read only the key that remains outside the proof window",
   );
   for (const pool of [SWAP_POOL, SWAP_POOL_C]) {
     const stateKey = `univ2-standard\u001f${pool.toLowerCase()}`;
@@ -1561,9 +1559,8 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   );
   assert.deepEqual(
     backend.readTargets,
-    [],
-    "the pass after recovery must resume mutation-proof carry (protocol " +
-      "also carries when its dependency logs no mutation)",
+    [PROTOCOL_POOL.toLowerCase()],
+    "the pass after recovery must resume mutation-proof carry",
   );
   assert(
     backend.rangeSources.some((source) => source.number === SOURCE_BLOCK + 41),

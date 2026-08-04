@@ -397,16 +397,6 @@ interface StateTopologyIndex {
     string,
     ReadonlySet<string>
   >;
-  /**
-   * familyId\u001fdependencyAddress -> composite state keys whose family
-   * dependencies() set includes the address. Protocol families drive their
-   * dirty set from the SAME canonical mutation-range logs (emitter ->
-   * dependency -> stateKey) instead of a separate whole-block trace.
-   */
-  readonly stateKeysByDependencyAddress: ReadonlyMap<
-    string,
-    ReadonlySet<string>
-  >;
   readonly groupByStateKey: ReadonlyMap<string, StateGroup>;
 }
 
@@ -705,7 +695,6 @@ export class BlockScanStateCoordinator {
     }
     const ownership = buildOwnershipPlan(graph, families, requiresPricing);
     const stateKeysByPoolIdentity = new Map<string, Set<string>>();
-    const stateKeysByDependencyAddress = new Map<string, Set<string>>();
     const groupByStateKey = new Map<string, StateGroup>();
     for (const group of ownership.groups) {
       groupByStateKey.set(group.stateKey, group);
@@ -720,20 +709,6 @@ export class BlockScanStateCoordinator {
         stateKeys.add(group.stateKey);
         stateKeysByPoolIdentity.set(identityKey, stateKeys);
       }
-      let dependencyAddresses: readonly string[];
-      try {
-        dependencyAddresses = group.family.dependencies(group.edges);
-      } catch {
-        dependencyAddresses = [];
-      }
-      for (const address of dependencyAddresses) {
-        const dependencyKey =
-          `${group.familyId}\u001f${address.toLowerCase()}`;
-        const stateKeys = stateKeysByDependencyAddress.get(dependencyKey) ??
-          new Set<string>();
-        stateKeys.add(group.stateKey);
-        stateKeysByDependencyAddress.set(dependencyKey, stateKeys);
-      }
     }
     const frozen = Object.freeze({
       key,
@@ -743,14 +718,6 @@ export class BlockScanStateCoordinator {
           identityKey,
           Object.freeze(new Set(stateKeys)),
         ] as const),
-      ),
-      stateKeysByDependencyAddress: new FrozenReadonlyMap(
-        [...stateKeysByDependencyAddress].map(
-          ([dependencyKey, stateKeys]) => [
-            dependencyKey,
-            Object.freeze(new Set(stateKeys)),
-          ] as const,
-        ),
       ),
       groupByStateKey,
     });
@@ -1734,21 +1701,6 @@ export class BlockScanStateCoordinator {
         incremental = createDerivedSwapMutationIncremental({
           familyId: family.familyId,
           mutationEvents: family.mutationEvents,
-          family,
-          familyGroups,
-          eligibleByStateKey,
-          topologyIndex: this.topologyIndex!,
-        }) ?? undefined;
-      }
-      if (!incremental) {
-        /*
-         * Protocol families without a hand-written incremental declare their
-         * dependency addresses instead of mutation topics; derive the same
-         * update pipe from the canonical mutation range queried by those
-         * addresses (one identity pipeline, no separate whole-block trace).
-         */
-        incremental = createDerivedProtocolMutationIncremental({
-          familyId: family.familyId,
           family,
           familyGroups,
           eligibleByStateKey,
@@ -3456,80 +3408,6 @@ function createDerivedSwapMutationIncremental(input: {
           `${input.familyId}\u001f${identity.toLowerCase()}`;
         const compositeKeys =
           input.topologyIndex.stateKeysByPoolIdentity.get(identityKey);
-        if (!compositeKeys) continue;
-        for (const composite of compositeKeys) {
-          const rawKey = rawKeyByComposite.get(composite);
-          if (rawKey === undefined) continue;
-          const base = baseByRawKey.get(rawKey);
-          if (!base) continue;
-          changed.set(
-            rawKey,
-            new Set([...base.state.requiredReadKeys]),
-          );
-        }
-      }
-      return Object.freeze({
-        mutationRangeFingerprint: classifyInput.range.rangeFingerprint,
-        classifierFingerprint,
-        changedReadKeysByStateKey: changed,
-      });
-    },
-  });
-}
-
-/**
- * Derive the event-driven update pipe for protocol families from their
- * declared dependencies(): the canonical mutation range is queried by the
- * dependency ADDRESSES (same receipts/logs lane as the swap topics, no
- * separate whole-block trace), and any log emitted from a dependency marks
- * the state keys that include that address dirty for a current-N read. All
- * other state keys carry from their last good state.
- */
-function createDerivedProtocolMutationIncremental(input: {
-  readonly familyId: string;
-  readonly family: RegisteredBlockScanStateFamily;
-  readonly familyGroups: readonly StateGroup[];
-  readonly eligibleByStateKey: ReadonlyMap<string, RecoveryStateBase>;
-  readonly topologyIndex: StateTopologyIndex;
-}): CompiledIncrementalStateFamily | null {
-  const dependencyAddresses = uniqueSorted(
-    input.familyGroups.flatMap((group) =>
-      input.family.dependencies(group.edges),
-    ),
-  );
-  if (dependencyAddresses.length === 0) return null;
-  const rawKeyByComposite = new Map(
-    input.familyGroups.map((group) => [
-      group.stateKey,
-      group.rawStateKey.toLowerCase(),
-    ] as const),
-  );
-  const baseByRawKey = new Map<string, RecoveryStateBase>();
-  for (const [composite, base] of input.eligibleByStateKey) {
-    const raw = rawKeyByComposite.get(composite);
-    if (raw !== undefined) baseByRawKey.set(raw, base);
-  }
-  const classifierFingerprint = deterministicHash({
-    familyId: input.familyId,
-    kind: "derived-protocol-dependency",
-    dependencyAddresses,
-  });
-  return Object.freeze({
-    mutationQueryDescriptor: () =>
-      createMutationQueryDescriptor({
-        addresses: dependencyAddresses,
-        topics: [],
-      }),
-    classifyMutations(classifyInput: {
-      readonly range: CanonicalMutationRange;
-    }): FamilyMutationClassification {
-      const changed = new Map<string, ReadonlySet<string>>();
-      for (const event of classifyInput.range.events) {
-        const emitter = event.address?.toLowerCase();
-        if (!emitter) continue;
-        const identityKey = `${input.familyId}\u001f${emitter}`;
-        const compositeKeys =
-          input.topologyIndex.stateKeysByDependencyAddress.get(identityKey);
         if (!compositeKeys) continue;
         for (const composite of compositeKeys) {
           const rawKey = rawKeyByComposite.get(composite);
