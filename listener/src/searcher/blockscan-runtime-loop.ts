@@ -936,7 +936,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       let nextBlock = input.coordinator.latestPricingSnapshot() === null
         ? targetBlock
         : input.coordinator.latestPricingSnapshot()!.sourceBlock + 1;
-      let chainGenerations = 0;
       let catchupIndex = 0;
       for (;;) {
         if (this.deps.runtimeAbort.signal.aborted) break;
@@ -954,12 +953,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             generationDeadlineAtMs - publicationReserveMs,
           ),
         );
-        if (chainGenerations >= 8) {
-          // Bound one arm's catch-up so a large gap cannot monopolize the
-          // single-flight producer; the next pending arm continues from the
-          // same chain point with the newest head.
-          break;
-        }
+        /*
+         * No per-arm generation cap: the producer must keep filling the chain
+         * to the newest armed head. Breaking early left the single-flight
+         * producer idle while every strict N-1 pass waited on it, and the
+         * pass-gate restart only fired after a pass deadline expired -> a
+         * self-sustaining 10-22s stale cascade. finally() still hands off to
+         * the newest pending head without an idle gap.
+         */
         let header;
         try {
           header = await this.deps.discovery.observeHeader(nextBlock);
@@ -987,7 +988,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           signal: this.deps.runtimeAbort.signal,
         });
         result = prepared;
-        chainGenerations++;
         const recoveryPending = blockScanStateHasRecoveryBacklog(
           prepared,
         );
