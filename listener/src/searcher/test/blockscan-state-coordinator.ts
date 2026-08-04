@@ -2465,6 +2465,83 @@ async function partialPublishedSnapshotDoesNotEraseRecoveryBases(): Promise<void
   }
 }
 
+async function persistentDecodeFailuresAreDeferredAndRetried(): Promise<void> {
+  const backend = new StateKeyIncrementalBackend();
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const failingPool = SWAP_POOL_B.toLowerCase();
+  const calls = { schema: 0, reads: 0, derives: 0 };
+  const capability: BlockScanStateCapability<{ name: string }, FakeSnapshot> = {
+    ...fakeCapability("swap", calls),
+    buildCurrentBlockReads: ({ sourceBlock, sourceBlockHash, edges }) => {
+      calls.reads++;
+      const target = edges[0]?.target.toLowerCase() ?? SWAP_POOL;
+      return [{
+        id: `state:${target}`,
+        sourceBlock,
+        sourceBlockHash,
+        to: target,
+        data: "0x01",
+        transport: "multicall-safe",
+      }];
+    },
+    decodeState: (_schema, results) => {
+      if (results[0]?.id === `state:${failingPool}`) {
+        throw new Error("deterministic decode failure");
+      }
+      return { numerator: 2n, denominator: 1n };
+    },
+  };
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability,
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+  const edges = Object.freeze([
+    swapForward,
+    swapReverse,
+    swapBForward,
+    swapBReverse,
+  ]);
+  const prepare = (generation: number) => coordinator.prepare({
+    graph: incrementalGraph(generation, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+
+  // Three consecutive deterministic failures are required before deferral.
+  for (let generation = 1; generation <= 3; generation++) {
+    const result = await prepare(generation);
+    assert.equal(result.status, "degraded");
+    assert(
+      backend.readTargets.includes(failingPool),
+      `generation ${generation} must still retry the failing key`,
+    );
+  }
+
+  // Generation 4 defers the key: no read for it, healthy sibling still carries.
+  backend.readTargets.length = 0;
+  const deferred = await prepare(4);
+  assert.equal(deferred.status, "degraded");
+  assert(
+    !backend.readTargets.includes(failingPool),
+    "persistent decode failures must stop re-running the quote ladder",
+  );
+  const healthy = deferred.snapshot?.stateByStateKey.get(
+    `univ2-standard\u001f${SWAP_POOL.toLowerCase()}`,
+  );
+  assert.equal(healthy?.refreshMode, "carry-forward");
+
+  // After the 256-block cooldown the key is retried once more.
+  backend.readTargets.length = 0;
+  const retried = await prepare(4 + 255);
+  assert(
+    backend.readTargets.includes(failingPool),
+    "deferred key must be retried after the cooldown window",
+  );
+  assert.equal(retried.status, "degraded");
+}
+
 async function familyDeadlinePreservesProvenSiblingStateKey(): Promise<void> {
   const backend = new StateKeyIncrementalBackend();
   const registered = registerBlockScanStateFamily({
@@ -3552,6 +3629,7 @@ await singletonActivityIsResolvedCentrallyByPoolId();
 await oneFailedStateKeyPreservesHealthySiblingInstance();
 await incrementalRefreshIsStateKeyLocal();
 await partialPublishedSnapshotDoesNotEraseRecoveryBases();
+await persistentDecodeFailuresAreDeferredAndRetried();
 await familyDeadlinePreservesProvenSiblingStateKey();
 await generationAbortStillErasesFamilyPartial();
 await familyLocalCompileDeadlineDoesNotCacheLateSchema();

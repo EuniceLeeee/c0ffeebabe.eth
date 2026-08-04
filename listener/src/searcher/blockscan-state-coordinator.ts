@@ -620,6 +620,12 @@ const DEFAULT_INCREMENTAL_RANGE_BLOCKS = 32;
 const MAX_HOT_RECOVERY_STATE_KEYS_PER_FAMILY = 16;
 const DEFAULT_FAMILY_TIMEOUT_MS = 5_000;
 const ENABLED_PROTOCOL_ADDRESS_TOUCH_BUDGET_MS = 4_000;
+// Deterministic per-key decode/derive failures (not transport errors) are
+// deferred for a bounded window so a few permanently broken pools cannot
+// re-run their full quote ladder on every generation.
+const DEFERRED_STATE_KEY_FAIL_THRESHOLD = 3;
+const DEFERRED_STATE_KEY_SKIP_BLOCKS = 256;
+const DEFERRED_STATE_KEY_MAX = 64;
 const ZERO_BLOCK_HASH = `0x${"00".repeat(32)}`;
 // ERC-6909 claim transfers change a user's settlement claims, not a V4
 // pool's slot0/liquidity pricing state. Treating them as an unknown manager
@@ -700,6 +706,14 @@ export class BlockScanStateCoordinator {
   private cacheAppendChain: Promise<void> = Promise.resolve();
   /** Warm generations persist each resolved key; hot generations do not. */
   private cacheModeActive = false;
+  /**
+   * stateKey -> sourceBlock until which (exclusive) the key is skipped. A key
+   * reaches this only after DEFERRED_STATE_KEY_FAIL_THRESHOLD consecutive
+   * decode/derive failures; a successful resolve clears it immediately.
+   */
+  private readonly deferredFailedStateKeys = new Map<string, number>();
+  /** Consecutive deterministic per-key failures since the last success. */
+  private readonly failedStateKeyAttempts = new Map<string, number>();
   private readonly now: () => number;
 
   constructor(
@@ -1180,6 +1194,8 @@ export class BlockScanStateCoordinator {
     }
     this.published = null;
     this.lastGoodByStateKey.clear();
+    this.deferredFailedStateKeys.clear();
+    this.failedStateKeyAttempts.clear();
     this.previousCanonicalGraphStateKeys = null;
     this.hotRecoveryCursorByFamily.clear();
   }
@@ -2333,6 +2349,12 @@ export class BlockScanStateCoordinator {
         .filter((group) => !compiledFamilies.has(group.familyId))
         .map((group) => group.stateKey),
     );
+    for (const group of groups) {
+      const deferredUntil = this.deferredFailedStateKeys.get(group.stateKey);
+      if (deferredUntil !== undefined && graph.sourceBlock < deferredUntil) {
+        badStateKeys.add(group.stateKey);
+      }
+    }
 
     /*
      * Partition from the unified block-activity refresh plan: a key carries
@@ -2769,6 +2791,7 @@ export class BlockScanStateCoordinator {
           stateKey: group.stateKey,
           message: formatError(error),
         });
+        this.recordHardStateKeyFailure(group, graph);
         continue;
       }
       try {
@@ -3001,6 +3024,7 @@ export class BlockScanStateCoordinator {
           });
         }
         this.lastGoodByStateKey.set(group.stateKey, committedBase);
+        this.clearStateKeyFailure(group);
         if (
           this.cacheModeActive &&
           !carryForward &&
@@ -3024,6 +3048,7 @@ export class BlockScanStateCoordinator {
           stateKey: group.stateKey,
           message: formatError(error),
         });
+        this.recordHardStateKeyFailure(group, graph);
       }
     }
 
@@ -3070,6 +3095,40 @@ export class BlockScanStateCoordinator {
       }),
       familyTelemetry: Object.freeze([familyExecution]),
     });
+  }
+
+  private recordHardStateKeyFailure(
+    group: StateGroup,
+    graph: VerifiedGraphView,
+  ): void {
+    const next = (this.failedStateKeyAttempts.get(group.stateKey) ?? 0) + 1;
+    this.failedStateKeyAttempts.set(group.stateKey, next);
+    if (next < DEFERRED_STATE_KEY_FAIL_THRESHOLD) return;
+    if (this.deferredFailedStateKeys.size >= DEFERRED_STATE_KEY_MAX) return;
+    const skipUntilBlock = graph.sourceBlock + DEFERRED_STATE_KEY_SKIP_BLOCKS;
+    this.deferredFailedStateKeys.set(group.stateKey, skipUntilBlock);
+    console.log(
+      `[searcher/blockscan-deferred-key] ${JSON.stringify({
+        familyId: group.familyId,
+        stateKey: group.stateKey,
+        failures: next,
+        skipUntilBlock,
+      })}`,
+    );
+  }
+
+  private clearStateKeyFailure(group: StateGroup): void {
+    const wasDeferred = this.deferredFailedStateKeys.delete(group.stateKey);
+    this.failedStateKeyAttempts.delete(group.stateKey);
+    if (wasDeferred) {
+      console.log(
+        `[searcher/blockscan-deferred-key] ${JSON.stringify({
+          familyId: group.familyId,
+          stateKey: group.stateKey,
+          recovered: true,
+        })}`,
+      );
+    }
   }
 
   private selectHotRecoveryStateKeys(
