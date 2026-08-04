@@ -169,7 +169,7 @@ interface PendingMutationTransportBatch {
   started: boolean;
 }
 
-interface CanonicalBlockActivity {
+export interface CanonicalBlockActivity {
   readonly fromExclusive: BlockSource;
   readonly through: BlockSource;
   readonly events: readonly ChainLog[];
@@ -383,6 +383,26 @@ export class JsonRpcBlockScanStateReadBackend
       complete: true as const,
       rangeFingerprint: activity.rangeFingerprint,
     });
+  }
+
+  /**
+   * Unified canonical block activity for one forward range: receipts, all
+   * logs, touched addresses and the canonical range fingerprint. One call
+   * feeds the global dirty/carry partition for both lanes (the same sessioned
+   * reader the address-touch proof uses); no per-family topic scan is needed.
+   */
+  async readCanonicalBlockActivity(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<CanonicalBlockActivity> {
+    return await awaitWithSignal(
+      this.readSharedCanonicalActivity(fromExclusive, through, control),
+      control.signal,
+    );
   }
 
   private readSharedCanonicalActivity(

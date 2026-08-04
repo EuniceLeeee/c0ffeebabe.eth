@@ -24,6 +24,7 @@ import {
   type StateReadResult,
   type VerifiedGraphView,
 } from "./venues/blockscan-state-capability.js";
+import type { CanonicalBlockActivity } from "./blockscan-state-read-backend.js";
 import {
   observedLandedPoolIdentity,
   type LandedEventEmitter,
@@ -98,6 +99,20 @@ export interface BlockScanStateReadBackend {
       readonly signal: AbortSignal;
     },
   ): Promise<CanonicalAddressTouchRange>;
+
+  /**
+   * Unified canonical block activity (receipts + logs + touched addresses)
+   * for one forward range. Feeds the single global dirty/carry partition for
+   * both lanes; carries share this proof instead of per-family topic ranges.
+   */
+  readCanonicalBlockActivity?(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<CanonicalBlockActivity>;
 }
 
 export interface CanonicalAddressTouchRange {
@@ -384,20 +399,56 @@ interface OwnershipPlan {
 
 /**
  * Graph-topology-scoped index, rebuilt only when the edge topology/metadata/
- * ownership hashes change (never on a plain block advance). Per-block work
- * then resolves dirty state keys through stateKeysByPoolIdentity instead of
- * rescanning all 35k edges and rebuilding the identity index every
- * generation.
+ * ownership hashes change (never on a plain block advance). One canonical
+ * block-activity read (receipts + logs) resolves dirty state keys for BOTH
+ * lanes through the same activity-identity reverse index.
  */
 interface StateTopologyIndex {
   readonly key: string;
   readonly ownership: OwnershipPlan;
-  /** familyId\u001fpoolIdentity -> composite state keys. */
-  readonly stateKeysByPoolIdentity: ReadonlyMap<
+  /**
+   * activity identity ("address:<lower>" | "pool-id:<lower>") -> composite
+   * state keys. Swap pool addresses and protocol contract addresses both land
+   * in address:*; V4-style poolIds land in pool-id:*.
+   */
+  readonly stateKeysByActivityIdentity: ReadonlyMap<
     string,
     ReadonlySet<string>
   >;
+  /**
+   * shared-manager emitter address -> composite state keys owned by poolId
+   * edges under that manager. When a manager log's poolId cannot be resolved
+   * generically, these keys fall back to current-N direct reads.
+   */
+  readonly singletonStateKeysByEmitter: ReadonlyMap<
+    string,
+    ReadonlySet<string>
+  >;
+  /** topic -> landed-event declarations, for resolving singleton poolIds. */
+  readonly eventResolvers: ReadonlyMap<
+    string,
+    readonly {
+      readonly topic: string;
+      readonly emitter: LandedEventEmitter;
+    }[]
+  >;
   readonly groupByStateKey: ReadonlyMap<string, StateGroup>;
+}
+
+/**
+ * One global dirty/carry partition per generation, derived from a single
+ * canonical block-activity read. Both lanes consume the same plan: a state
+ * key is direct when it lacks a source-matching base, its schema drifted, or
+ * the block activity touched one of its identities; otherwise it carries with
+ * the shared canonical activity proof.
+ */
+interface BlockActivityRefreshPlan {
+  readonly fromExclusive: BlockSource;
+  readonly through: BlockSource;
+  readonly rangeFingerprint: string;
+  readonly directStateKeys: ReadonlySet<string>;
+  readonly carryStateKeys: ReadonlySet<string>;
+  readonly carryProof: StateFreshnessProof;
 }
 
 interface LaneResult {
@@ -480,12 +531,8 @@ interface PreparedFamilyPhase {
   readonly familyId: string;
   readonly lane: BlockScanPricingLane;
   readonly compiledFamilies: ReadonlyMap<string, CompiledBlockScanStateFamily>;
-  readonly incrementalPreparation: IncrementalPreparation;
-  readonly recoveryCandidateStateKeys: ReadonlySet<string>;
-  readonly hotRecoveryStateKeys: ReadonlySet<string>;
   readonly staging: FamilyLaneStaging;
   readonly issues: readonly BlockScanStateIssue[];
-  readonly addressTouchPlan?: FamilyIncrementalPlan;
 }
 
 interface FamilyIncrementalPlan {
@@ -694,35 +741,189 @@ export class BlockScanStateCoordinator {
       return this.topologyIndex;
     }
     const ownership = buildOwnershipPlan(graph, families, requiresPricing);
-    const stateKeysByPoolIdentity = new Map<string, Set<string>>();
+    const stateKeysByActivityIdentity = new Map<string, Set<string>>();
+    const singletonStateKeysByEmitter = new Map<string, Set<string>>();
+    const eventResolvers = new Map<
+      string,
+      {
+        readonly topic: string;
+        readonly emitter: LandedEventEmitter;
+      }[]
+    >();
     const groupByStateKey = new Map<string, StateGroup>();
     for (const group of ownership.groups) {
       groupByStateKey.set(group.stateKey, group);
       for (const edge of group.edges) {
-        // The pool identity is poolId for v4-style families and the pool
-        // address otherwise; edge.target is the shared manager/router and
-        // must not be used directly.
-        const poolIdentity = (edge.poolId ?? edge.target).toLowerCase();
-        const identityKey = `${group.familyId}\u001f${poolIdentity}`;
-        const stateKeys = stateKeysByPoolIdentity.get(identityKey) ??
+        // Activity identity: poolId for v4-style families, the pool/contract
+        // address otherwise. edge.target is the shared manager/router for
+        // v4-style families and must not be used as the primary identity.
+        const identity = edge.poolId !== undefined
+          ? `pool-id:${edge.poolId.toLowerCase()}`
+          : `address:${edge.target.toLowerCase()}`;
+        const stateKeys = stateKeysByActivityIdentity.get(identity) ??
           new Set<string>();
         stateKeys.add(group.stateKey);
-        stateKeysByPoolIdentity.set(identityKey, stateKeys);
+        stateKeysByActivityIdentity.set(identity, stateKeys);
+        if (edge.poolId !== undefined) {
+          const emitter = edge.target.toLowerCase();
+          const fallback = singletonStateKeysByEmitter.get(emitter) ??
+            new Set<string>();
+          fallback.add(group.stateKey);
+          singletonStateKeysByEmitter.set(emitter, fallback);
+        }
+      }
+    }
+    for (const family of families) {
+      for (const event of family.mutationEvents) {
+        if (event.topic === null) continue;
+        const topic = event.topic.toLowerCase();
+        const list = eventResolvers.get(topic) ?? [];
+        list.push({ topic, emitter: event.emitter });
+        eventResolvers.set(topic, list);
       }
     }
     const frozen = Object.freeze({
       key,
       ownership,
-      stateKeysByPoolIdentity: new FrozenReadonlyMap(
-        [...stateKeysByPoolIdentity].map(([identityKey, stateKeys]) => [
-          identityKey,
+      stateKeysByActivityIdentity: new FrozenReadonlyMap(
+        [...stateKeysByActivityIdentity].map(([identity, stateKeys]) => [
+          identity,
           Object.freeze(new Set(stateKeys)),
+        ] as const),
+      ),
+      singletonStateKeysByEmitter: new FrozenReadonlyMap(
+        [...singletonStateKeysByEmitter].map(([emitter, stateKeys]) => [
+          emitter,
+          Object.freeze(new Set(stateKeys)),
+        ] as const),
+      ),
+      eventResolvers: new FrozenReadonlyMap(
+        [...eventResolvers].map(([topic, declarations]) => [
+          topic,
+          Object.freeze(declarations),
         ] as const),
       ),
       groupByStateKey,
     });
     this.topologyIndex = frozen;
     return frozen;
+  }
+
+  /**
+   * Unified block-activity refresh plan: one canonical receipts+logs read
+   * resolves every touched activity identity (swap pool addresses and
+   * protocol contract addresses via address:*, V4-style poolIds via
+   * pool-id:*) and partitions every state key into direct/carry for both
+   * lanes. Returns null when no published base exists or the range is outside
+   * the activity reader's bound; the generation then direct-reads everything
+   * (cold start / lagging base).
+   */
+  private async prepareBlockActivityRefreshPlan(
+    graph: VerifiedGraphView,
+    deadlineAtMs: number,
+    signal: AbortSignal,
+  ): Promise<BlockActivityRefreshPlan | null> {
+    const readActivity = this.backend.readCanonicalBlockActivity;
+    if (!readActivity || this.published === null) return null;
+    const fromExclusive: BlockSource = Object.freeze({
+      number: this.published.sourceBlock,
+      hash: this.published.sourceBlockHash,
+      generation: this.published.generation,
+    });
+    const through: BlockSource = Object.freeze({
+      number: graph.sourceBlock,
+      hash: graph.sourceBlockHash,
+      generation: graph.generation,
+    });
+    let activity: CanonicalBlockActivity;
+    try {
+      activity = await awaitWithAbort(
+        readActivity.call(this.backend, fromExclusive, through, {
+          deadlineAtMs,
+          signal,
+        }),
+        signal,
+      );
+    } catch {
+      return null;
+    }
+    const topology = this.topologyIndex;
+    if (!topology) return null;
+    const observed = new Set<string>();
+    const fallbackDirty = new Set<string>();
+    for (const address of activity.touchedAddresses) {
+      observed.add(`address:${address.toLowerCase()}`);
+    }
+    for (const log of activity.events) {
+      let singletonResolved = false;
+      const topic = log.topics[0]?.toLowerCase();
+      const declarations = topic === undefined
+        ? undefined
+        : topology.eventResolvers.get(topic);
+      if (declarations) {
+        for (const declaration of declarations) {
+          const raw = observedLandedPoolIdentity(declaration, log);
+          if (raw === null) continue;
+          if (
+            declaration.emitter.mode === "singleton-indexed-bytes32" ||
+            declaration.emitter.mode === "singleton-anonymous-data-bytes32"
+          ) {
+            observed.add(`pool-id:${raw.toLowerCase()}`);
+            singletonResolved = true;
+          } else {
+            observed.add(`address:${raw.toLowerCase()}`);
+          }
+        }
+      }
+      const emitter = log.address?.toLowerCase();
+      if (
+        emitter !== undefined &&
+        !singletonResolved &&
+        topology.singletonStateKeysByEmitter.has(emitter)
+      ) {
+        for (const stateKey of
+          topology.singletonStateKeysByEmitter.get(emitter)!) {
+          fallbackDirty.add(stateKey);
+        }
+      }
+    }
+    const directStateKeys = new Set<string>(fallbackDirty);
+    for (const identity of observed) {
+      for (const stateKey of
+        topology.stateKeysByActivityIdentity.get(identity) ?? []) {
+        directStateKeys.add(stateKey);
+      }
+    }
+    const carryStateKeys = new Set<string>();
+    for (const group of topology.ownership.groups) {
+      if (directStateKeys.has(group.stateKey)) continue;
+      const base = this.lastGoodByStateKey.get(group.stateKey);
+      if (
+        !base ||
+        !sameBlockSource(base.state.source, fromExclusive) ||
+        base.schemaFingerprint !== stateSchemaFingerprint(group.edges)
+      ) {
+        directStateKeys.add(group.stateKey);
+        continue;
+      }
+      carryStateKeys.add(group.stateKey);
+    }
+    const carryProof: StateFreshnessProof = Object.freeze({
+      kind: "carry-forward" as const,
+      source: Object.freeze({ ...through }),
+      previousSource: Object.freeze({ ...fromExclusive }),
+      mutationRangeFingerprint: activity.rangeFingerprint,
+      completeThroughBlock: activity.through.number,
+      completeThroughHash: activity.through.hash,
+    });
+    return Object.freeze({
+      fromExclusive,
+      through,
+      rangeFingerprint: activity.rangeFingerprint,
+      directStateKeys: Object.freeze(directStateKeys),
+      carryStateKeys: Object.freeze(carryStateKeys),
+      carryProof,
+    });
   }
 
   /**
@@ -941,32 +1142,12 @@ export class BlockScanStateCoordinator {
             !stateBlockedFamilyIds.has(group.familyId),
         ),
       } as const;
-      const protocolAddressTouchShadow =
-        this.beginProtocolAddressTouchShadow(
-          previousPublished,
-          laneGroups.protocol,
-          graph,
-          this.protocolAddressTouchMode === "enabled"
-            ? Math.min(
-                familySettleDeadlineAtMs,
-                this.now() + ENABLED_PROTOCOL_ADDRESS_TOUCH_BUDGET_MS,
-              )
-            : input.deadlineAtMs,
-          controller.signal,
-        );
-      const protocolAddressTouchPlans =
-        this.protocolAddressTouchMode === "enabled"
-          ? await this.resolveProtocolAddressTouchPlans(
-              protocolAddressTouchShadow,
-              controller.signal,
-            )
-          : new Map<string, FamilyIncrementalPlan>();
       /*
-       * Phase 1: compile every family's static schema and settle every
-       * canonical mutation-range proof for BOTH lanes before any direct state
-       * read begins. Foreground proofs therefore never preempt background
-       * bulk reads mid-generation (the old interleaving aborted and retried
-       * sibling reads whenever another family grabbed the foreground lease).
+       * Phase 1: compile every family's static schema (cached per topology).
+       * The unified block-activity refresh plan is a single canonical
+       * receipts+logs read that partitions every state key into
+       * direct/carry for both lanes; no per-family mutation-range proof is
+       * left to preempt background reads.
        */
       const allGroups = [...laneGroups.swap, ...laneGroups.protocol];
       const preparedPhases = await Promise.all(
@@ -975,27 +1156,25 @@ export class BlockScanStateCoordinator {
             (group) => group.familyId === family.familyId,
           );
           const lane = familyGroups[0]!.lane;
-          const addressTouchPlan = protocolAddressTouchPlans.get(
-            family.familyId,
-          );
           return this.prepareFamilyPhase({
             lane,
             groups: familyGroups,
             graph,
             deadlineAtMs: familySettleDeadlineAtMs,
             signal: controller.signal,
-            generationSignal: controller.signal,
-            previousCanonicalGraphStateKeys,
-            ...(addressTouchPlan === undefined
-              ? {}
-              : { addressTouchPlan }),
           });
         }),
       );
       const preparedPhaseByFamily = new Map(
         preparedPhases.map((phase) => [phase.familyId, phase] as const),
       );
-      // Phase 2: direct reads + decode for both lanes.
+      const refreshPlan = await this.prepareBlockActivityRefreshPlan(
+        graph,
+        familySettleDeadlineAtMs,
+        controller.signal,
+      );
+      // Phase 2: direct reads + decode for both lanes, driven by the shared
+      // refresh plan (dirty direct / untouched carry with one canonical proof).
       const [swap, protocol] = await Promise.all([
         this.runLane(
           "swap",
@@ -1004,6 +1183,7 @@ export class BlockScanStateCoordinator {
           familySettleDeadlineAtMs,
           controller.signal,
           preparedPhaseByFamily,
+          refreshPlan,
         ),
         this.runLane(
           "protocol",
@@ -1012,6 +1192,7 @@ export class BlockScanStateCoordinator {
           familySettleDeadlineAtMs,
           controller.signal,
           preparedPhaseByFamily,
+          refreshPlan,
         ),
       ]);
       const lanes = [swap, protocol] as const;
@@ -1259,12 +1440,6 @@ export class BlockScanStateCoordinator {
         }));
       }
       this.published = snapshot;
-      if (this.protocolAddressTouchMode === "shadow") {
-        this.finishProtocolAddressTouchShadow(
-          protocolAddressTouchShadow,
-          snapshot,
-        );
-      }
       const degraded =
         incompleteFamilyIds.length > 0 ||
         coverage.unresolvedStateKeys.length > 0 ||
@@ -1579,10 +1754,9 @@ export class BlockScanStateCoordinator {
   }
 
   /**
-   * A complete-topology family may treat incremental refresh as an
-   * optimization and fall back to direct current-N reads. For a family whose
-   * topology proof is lagging, the caller consumes the absence of a plan as
-   * unresolved established state instead; this method never decides admission.
+   * @deprecated Replaced by the unified block-activity refresh plan
+   * (prepareBlockActivityRefreshPlan); kept only until the dead per-family
+   * planner is fully removed.
    */
   private async prepareIncrementalPlans(
     groups: readonly StateGroup[],
@@ -1592,341 +1766,15 @@ export class BlockScanStateCoordinator {
     signal: AbortSignal,
     generationSignal: AbortSignal,
   ): Promise<IncrementalPreparation> {
-    const plans = new Map<string, FamilyIncrementalPlan>();
-    const missingPreviousStateKeysByFamily = new Map<string, number>();
-    const fullFallbackReasonByFamily = new Map<string, string>();
-    const fullFallbackDetailByFamily = new Map<string, string>();
-    const phaseTimingByFamily = new Map<
-      string,
-      {
-        descriptorMs: number;
-        rangeMs: number;
-        classifierMs: number;
-      }
-    >();
-    const readRange = this.backend.readCanonicalMutationRange;
-    const families = uniqueFamilies(groups);
-    for (const family of families) {
-      const familyGroups = groups.filter(
-        (group) => group.familyId === family.familyId,
-      );
-      missingPreviousStateKeysByFamily.set(
-        family.familyId,
-        familyGroups.filter((group) =>
-          !this.recoveryBaseForGroup(group)
-        ).length,
-      );
-    }
-    if (!readRange) {
-      for (const family of families) {
-        if (compiledFamilies.get(family.familyId)?.incremental) {
-          fullFallbackReasonByFamily.set(
-            family.familyId,
-            "mutation-range-reader-unavailable",
-          );
-        }
-      }
-      return {
-        plans,
-        missingPreviousStateKeysByFamily,
-        fullFallbackReasonByFamily,
-        fullFallbackDetailByFamily,
-        phaseTimingByFamily,
-      };
-    }
-    const through: BlockSource = Object.freeze({
-      number: graph.sourceBlock,
-      hash: graph.sourceBlockHash,
-      generation: graph.generation,
-    });
-    await Promise.all(families.map(async (family) => {
-      if (signal.aborted) {
-        fullFallbackReasonByFamily.set(
-          family.familyId,
-          "mutation-range-pre-aborted",
-        );
-        fullFallbackDetailByFamily.set(
-          family.familyId,
-          "preflight:aborted",
-        );
-        return;
-      }
-      const familyGroups = groups.filter(
-        (group) => group.familyId === family.familyId,
-      );
-      const recoveryByStateKey = new Map(
-        familyGroups.flatMap((group) => {
-          const base = this.recoveryBaseForGroup(group);
-          return base ? [[group.stateKey, base] as const] : [];
-        }),
-      );
-      const familyGroupByStateKey = new Map(
-        familyGroups.map((group) => [group.stateKey, group] as const),
-      );
-      const eligibleByStateKey = new Map(
-        [...recoveryByStateKey].filter(([stateKey, base]) => {
-          const group = familyGroupByStateKey.get(stateKey);
-          const distance = through.number - base.state.source.number;
-          return (
-            group !== undefined &&
-            base.schemaFingerprint === stateSchemaFingerprint(group.edges) &&
-            distance > 0 &&
-            distance <= this.incrementalRangeBlocks &&
-            through.generation > base.state.source.generation
-          );
-        }),
-      );
-      if (eligibleByStateKey.size === 0) {
-        fullFallbackReasonByFamily.set(
-          family.familyId,
-          recoveryByStateKey.size === 0
-            ? "previous-snapshot-unavailable"
-            : "mutation-range-ineligible",
-        );
-        return;
-      }
-      /*
-       * Every adapter family gets the event-driven update pipe, not just the
-       * ones that hand-wrote an incremental capability. The mutation topics
-       * are scanned from the adapter's landed-event declaration at
-       * registration; the derived classifier re-reads exactly the pools that
-       * emitted one of those topics in the range (whole-pool refresh through
-       * the pool -> edges -> stateKeys reverse index) and carries everything
-       * else from its last good state. Coarse mids may be a block stale for
-       * off-event changes by design; candidate exact join at current N and
-       * the periodic full rewarm bound the staleness.
-       */
-      let incremental = compiledFamilies.get(family.familyId)?.incremental;
-      if (!incremental) {
-        incremental = createDerivedSwapMutationIncremental({
-          familyId: family.familyId,
-          mutationEvents: family.mutationEvents,
-          family,
-          familyGroups,
-          eligibleByStateKey,
-          topologyIndex: this.topologyIndex!,
-        }) ?? undefined;
-      }
-      if (!incremental) return;
-      const previousByStateKey = new Map<string, PublishedStateKey>();
-      const schemaCompatibleStateKeys = new Set<string>();
-      for (const [stateKey, base] of eligibleByStateKey) {
-        previousByStateKey.set(stateKey, base.state);
-        schemaCompatibleStateKeys.add(stateKey);
-      }
-      let phase:
-        | "mutation-descriptor-failed"
-        | "mutation-range-failed"
-        | "mutation-classifier-failed" = "mutation-descriptor-failed";
-      const timing = {
-        descriptorMs: 0,
-        rangeMs: 0,
-        classifierMs: 0,
-      };
-      phaseTimingByFamily.set(family.familyId, timing);
-      try {
-        const edges = Object.freeze(
-          familyGroups.flatMap((group) => group.edges),
-        );
-        const descriptorStartedAtMs = this.now();
-        let descriptor: MutationQueryDescriptor;
-        try {
-          descriptor = incremental.mutationQueryDescriptor(edges);
-        } finally {
-          timing.descriptorMs = Math.max(
-            0,
-            this.now() - descriptorStartedAtMs,
-          );
-        }
-        if (isThenable(descriptor)) {
-          throw new Error("mutationQueryDescriptor must return synchronously");
-        }
-        if (
-          descriptor.fingerprint !==
-          mutationQueryDescriptorFingerprint(descriptor)
-        ) {
-          throw new Error("mutation query descriptor fingerprint mismatch");
-        }
-        const stateKeysBySource = new Map<
-          string,
-          {
-            readonly source: BlockSource;
-            readonly stateKeys: string[];
-          }
-        >();
-        for (const [stateKey, base] of eligibleByStateKey) {
-          const source = base.state.source;
-          const sourceKey = [
-            source.number,
-            source.hash.toLowerCase(),
-            source.generation,
-          ].join("\u001f");
-          const current = stateKeysBySource.get(sourceKey);
-          if (current) current.stateKeys.push(stateKey);
-          else {
-            stateKeysBySource.set(sourceKey, {
-              source,
-              stateKeys: [stateKey],
-            });
-          }
-        }
-        const settledRanges = await Promise.all(
-          [...stateKeysBySource.values()].map(async (sourceGroup) => {
-            let localPhase:
-              | "mutation-range-failed"
-              | "mutation-classifier-failed" =
-                "mutation-range-failed";
-            const rangeStartedAtMs = this.now();
-            try {
-              const range = await awaitWithAbort(
-                readRange.call(
-                  this.backend,
-                  descriptor,
-                  sourceGroup.source,
-                  through,
-                  {
-                    deadlineAtMs,
-                    // The generation owns the shared transport. A family
-                    // timeout may classify that family as incomplete only
-                    // after the physical canonical request settles, so an
-                    // orphaned proof cannot contend with the next generation.
-                    signal: generationSignal,
-                    sharedSignal: generationSignal,
-                  },
-                ),
-                generationSignal,
-              );
-              if (signal.aborted) {
-                throw signal.reason ??
-                  new Error(`family ${family.familyId} proof deadline reached`);
-              }
-              const rangeMs = Math.max(
-                0,
-                this.now() - rangeStartedAtMs,
-              );
-              validateCanonicalMutationRange(
-                range,
-                descriptor,
-                sourceGroup.source,
-                through,
-              );
-              localPhase = "mutation-classifier-failed";
-              const classifierStartedAtMs = this.now();
-              let classification: FamilyMutationClassification;
-              try {
-                classification = incremental.classifyMutations({
-                  edges,
-                  range,
-                });
-              } finally {
-                timing.classifierMs += Math.max(
-                  0,
-                  this.now() - classifierStartedAtMs,
-                );
-              }
-              if (isThenable(classification)) {
-                throw new Error(
-                  "classifyMutations must return synchronously",
-                );
-              }
-              validateMutationClassification(
-                classification,
-                range,
-                familyGroups,
-              );
-              return Object.freeze({
-                status: "fulfilled" as const,
-                sourceGroup,
-                range,
-                classification,
-                rangeMs,
-              });
-            } catch (error) {
-              return Object.freeze({
-                status: "rejected" as const,
-                sourceGroup,
-                phase: localPhase,
-                error,
-                rangeMs: Math.max(0, this.now() - rangeStartedAtMs),
-              });
-            }
-          }),
-        );
-        timing.rangeMs = settledRanges.reduce(
-          (maximum, result) => Math.max(maximum, result.rangeMs),
-          0,
-        );
-        const rangeByStateKey = new Map<string, CanonicalMutationRange>();
-        const classificationByStateKey = new Map<
-          string,
-          FamilyMutationClassification
-        >();
-        for (const result of settledRanges) {
-          if (result.status !== "fulfilled") continue;
-          for (const stateKey of result.sourceGroup.stateKeys) {
-            rangeByStateKey.set(stateKey, result.range);
-            classificationByStateKey.set(
-              stateKey,
-              result.classification,
-            );
-          }
-        }
-        if (rangeByStateKey.size === 0) {
-          const firstFailure = settledRanges.find(
-            (result) => result.status === "rejected",
-          );
-          phase = firstFailure?.phase ?? "mutation-range-failed";
-          const error = firstFailure?.error ??
-            new Error("no recovery range settled");
-          fullFallbackReasonByFamily.set(family.familyId, phase);
-          fullFallbackDetailByFamily.set(
-            family.familyId,
-            sanitizedIncrementalFailureDetail(phase, error, signal),
-          );
-          return;
-        }
-        plans.set(family.familyId, Object.freeze({
-          familyId: family.familyId,
-          rangeByStateKey,
-          classificationByStateKey,
-          previousByStateKey,
-          schemaCompatibleStateKeys,
-        }));
-      } catch (error) {
-        // The caller decides whether absence of a proof permits direct reads
-        // (complete topology/bootstrap) or must remain unresolved.
-        fullFallbackReasonByFamily.set(family.familyId, phase);
-        fullFallbackDetailByFamily.set(
-          family.familyId,
-          sanitizedIncrementalFailureDetail(phase, error, signal),
-        );
-      }
-    }));
-    return {
-      plans,
-      missingPreviousStateKeysByFamily,
-      fullFallbackReasonByFamily,
-      fullFallbackDetailByFamily,
-      phaseTimingByFamily,
-    };
+    throw new Error("unified activity plan replaced per-family planning");
   }
 
-  /**
-   * Phase 1 of a generation: compile every family's static schema and
-   * resolve every canonical mutation-range proof (per family, bounded by the
-   * family timeout), returning the prepared context the read phase consumes.
-   * All families' proofs settle before any direct state read begins, so
-   * foreground proofs never preempt background bulk reads mid-generation.
-   */
   private async prepareFamilyPhase(input: {
     readonly lane: BlockScanPricingLane;
     readonly groups: readonly StateGroup[];
     readonly graph: VerifiedGraphView;
     readonly deadlineAtMs: number;
     readonly signal: AbortSignal;
-    readonly generationSignal: AbortSignal;
-    readonly previousCanonicalGraphStateKeys: ReadonlySet<string> | null;
-    readonly addressTouchPlan?: FamilyIncrementalPlan;
   }): Promise<PreparedFamilyPhase> {
     const { lane, groups, graph } = input;
     const familyId = groups[0]?.familyId;
@@ -1959,14 +1807,11 @@ export class BlockScanStateCoordinator {
       );
     }
     try {
-      let recoveryCandidateStateKeys = new Set<string>();
       const issues: BlockScanStateIssue[] = [];
       const compiledFamilies = new Map<
         string,
         CompiledBlockScanStateFamily
       >();
-      let schemaPhysicalReads = 0;
-      let schemaBatches = 0;
       const staging: FamilyLaneStaging = {
         staticSchemas: new Map(),
         expectedReadKeys: new Set(),
@@ -2009,8 +1854,6 @@ export class BlockScanStateCoordinator {
                     }
                     seen.add(read.id);
                   }
-                  schemaPhysicalReads += reads.length;
-                  schemaBatches++;
                   staging.reads += reads.length;
                   staging.batches++;
                   const results = await awaitWithAbort(
@@ -2081,73 +1924,12 @@ export class BlockScanStateCoordinator {
           message: formatError(error),
         });
       }
-      if (compiledFamilies.get(familyId)?.incremental) {
-        recoveryCandidateStateKeys = new Set(
-          groups.flatMap((group) => {
-            const base = this.recoveryBaseForGroup(group);
-            const previouslyEstablished =
-              input.previousCanonicalGraphStateKeys?.has(group.stateKey) ??
-              false;
-            const newlyAdmitted =
-              input.previousCanonicalGraphStateKeys !== null &&
-              !previouslyEstablished;
-            return (
-                base &&
-                  graph.sourceBlock - base.state.source.number >
-                    this.incrementalRangeBlocks
-              ) || (previouslyEstablished && !base) || newlyAdmitted
-              ? [group.stateKey]
-              : [];
-          }),
-        );
-        staging.recoveryRequiredStateKeys =
-          recoveryCandidateStateKeys.size > 0
-            ? recoveryCandidateStateKeys.size
-            : undefined;
-      }
-      const hotRecoveryStateKeys = this.selectHotRecoveryStateKeys(
-        familyId,
-        recoveryCandidateStateKeys,
-      );
-      const incrementalPreparation = await this.prepareIncrementalPlans(
-        groups,
-        compiledFamilies,
-        graph,
-        familyDeadlineAtMs,
-        familyController.signal,
-        input.generationSignal,
-      );
-      const incrementalPlans = incrementalPreparation.plans;
-      if (input.addressTouchPlan && !incrementalPlans.has(familyId)) {
-        incrementalPlans.set(familyId, input.addressTouchPlan);
-      }
-      let fullFallbackReason =
-        incrementalPreparation.fullFallbackReasonByFamily.get(familyId);
-      let fullFallbackDetail =
-        incrementalPreparation.fullFallbackDetailByFamily.get(familyId);
-      const incrementalTiming =
-        incrementalPreparation.phaseTimingByFamily.get(familyId);
-      const missingPreviousStateKeys = groups.filter(
-        (group) => !this.recoveryBaseForGroup(group),
-      ).length;
-      staging.missingPreviousStateKeys = missingPreviousStateKeys;
-      staging.fullFallbackReason = fullFallbackReason;
-      staging.fullFallbackDetail = fullFallbackDetail;
-      staging.incrementalDescriptorMs = incrementalTiming?.descriptorMs;
-      staging.incrementalRangeMs = incrementalTiming?.rangeMs;
-      staging.incrementalClassifierMs = incrementalTiming?.classifierMs;
       return Object.freeze({
         familyId,
         lane,
         compiledFamilies,
-        incrementalPreparation,
-        recoveryCandidateStateKeys,
-        hotRecoveryStateKeys,
         staging,
         issues: Object.freeze(issues),
-        ...(input.addressTouchPlan === undefined
-          ? {}
-          : { addressTouchPlan: input.addressTouchPlan }),
       });
     } finally {
       clearTimeout(deadlineTimer);
@@ -2162,6 +1944,7 @@ export class BlockScanStateCoordinator {
     deadlineAtMs: number,
     signal: AbortSignal,
     preparedPhaseByFamily: ReadonlyMap<string, PreparedFamilyPhase>,
+    refreshPlan: BlockActivityRefreshPlan | null,
   ): Promise<LaneResult> {
     const startedAtMs = this.now();
     if (groups.length === 0) {
@@ -2234,6 +2017,7 @@ export class BlockScanStateCoordinator {
         familyController.signal,
         signal,
         prepared,
+        refreshPlan,
       );
       try {
         /*
@@ -2285,6 +2069,7 @@ export class BlockScanStateCoordinator {
     signal: AbortSignal,
     generationSignal: AbortSignal,
     prepared: PreparedFamilyPhase,
+    refreshPlan: BlockActivityRefreshPlan | null,
   ): Promise<LaneResult> {
     const startedAtMs = this.now();
     if (groups.length === 0) {
@@ -2296,33 +2081,15 @@ export class BlockScanStateCoordinator {
     }
     const issues: BlockScanStateIssue[] = [...prepared.issues];
     const compiledFamilies = prepared.compiledFamilies;
-    const incrementalPreparation = prepared.incrementalPreparation;
-    const incrementalPlans = new Map(incrementalPreparation.plans);
-    if (prepared.addressTouchPlan && !incrementalPlans.has(familyId)) {
-      incrementalPlans.set(familyId, prepared.addressTouchPlan);
-    }
-    let fullFallbackReason =
-      incrementalPreparation.fullFallbackReasonByFamily.get(familyId);
-    let fullFallbackDetail =
-      incrementalPreparation.fullFallbackDetailByFamily.get(familyId);
-    const incrementalTiming =
-      incrementalPreparation.phaseTimingByFamily.get(familyId);
     const missingPreviousStateKeys = groups.filter(
       (group) => !this.recoveryBaseForGroup(group),
     ).length;
-    const recoveryCandidateStateKeys = prepared.recoveryCandidateStateKeys;
-    const hotRecoveryStateKeys = prepared.hotRecoveryStateKeys;
     const staging = prepared.staging;
     let carryStateKeys = 0;
     let directStateKeys = groups.length;
     staging.carryStateKeys = carryStateKeys;
     staging.directStateKeys = directStateKeys;
     staging.missingPreviousStateKeys = missingPreviousStateKeys;
-    staging.fullFallbackReason = fullFallbackReason;
-    staging.fullFallbackDetail = fullFallbackDetail;
-    staging.incrementalDescriptorMs = incrementalTiming?.descriptorMs;
-    staging.incrementalRangeMs = incrementalTiming?.rangeMs;
-    staging.incrementalClassifierMs = incrementalTiming?.classifierMs;
 
     interface PlannedRead {
       readonly group: StateGroup;
@@ -2337,7 +2104,6 @@ export class BlockScanStateCoordinator {
     const closedStateKeys = new Set<string>();
     const carryForwardStateKeys = new Set<string>();
     const carryReadKeysByStateKey = new Map<string, readonly string[]>();
-    const classifiedDirectStateKeys = new Set<string>();
     const cacheSourcedStateKeys = new Set<string>();
     const badStateKeys = new Set<string>(
       groups
@@ -2346,91 +2112,25 @@ export class BlockScanStateCoordinator {
     );
 
     /*
-     * Partition before building descriptors. Incremental families promise
-     * stable local read IDs for a schema-compatible state key; the previous
-     * requiredReadKeys therefore are the exact read set being proven through
-     * the canonical mutation range. If the classifier names an unknown key,
-     * discard its plan. Complete topology/bootstrap may then read current N;
-     * proof-scoped lagging topology leaves established keys unresolved.
+     * Partition from the unified block-activity refresh plan: a key carries
+     * when the single canonical activity proof covers it (base source matches
+     * the range and no touched identity marks it dirty); everything else
+     * direct-reads current N. Swap and protocol share the same plan.
      */
-    for (const [plannedFamilyId, plan] of incrementalPlans) {
-      const familyGroups = groups.filter(
-        (group) => group.familyId === plannedFamilyId,
-      );
-      const provisionalCarry = new Map<string, readonly string[]>();
-      const provisionalDirect = new Set<string>();
-      let classificationReadSetMismatch = false;
-      for (const group of familyGroups) {
-        if (
-          badStateKeys.has(group.stateKey) ||
-          !plan.schemaCompatibleStateKeys.has(group.stateKey)
-        ) {
-          continue;
-        }
-        const previousState = plan.previousByStateKey.get(group.stateKey);
-        const previousReadKeys = previousState?.requiredReadKeys ?? [];
-        const uniquePreviousReadKeys = new Set(previousReadKeys);
-        if (
-          !previousState ||
-          previousReadKeys.length === 0 ||
-          uniquePreviousReadKeys.size !== previousReadKeys.length ||
-          previousReadKeys.some((readKey) => {
-            const proof = previousState.freshnessByReadKey.get(readKey);
-            return !proof ||
-              !sameBlockSource(proof.source, previousState.source);
-          })
-        ) {
-          continue;
-        }
-        const classification = plan.classificationByStateKey.get(
-          group.stateKey,
-        );
-        if (!classification || !plan.rangeByStateKey.has(group.stateKey)) {
-          continue;
-        }
-        const changed = classification.changedReadKeysByStateKey.get(
-          group.rawStateKey,
-        );
-        if (!changed) {
-          provisionalCarry.set(
-            group.stateKey,
-            Object.freeze([...previousReadKeys].sort()),
-          );
-          continue;
-        }
-        if (
-          changed.size === 0 ||
-          [...changed].some((readKey) => !uniquePreviousReadKeys.has(readKey))
-        ) {
-          classificationReadSetMismatch = true;
-          break;
-        }
-        provisionalDirect.add(group.stateKey);
-      }
-      if (classificationReadSetMismatch) {
-        incrementalPlans.delete(plannedFamilyId);
-        fullFallbackReason = "mutation-classifier-read-set-mismatch";
-        fullFallbackDetail = "classifier:read-set-mismatch";
-        incrementalPreparation.fullFallbackReasonByFamily.set(
-          plannedFamilyId,
-          fullFallbackReason,
-        );
-        incrementalPreparation.fullFallbackDetailByFamily.set(
-          plannedFamilyId,
-          fullFallbackDetail,
-        );
-        continue;
-      }
-      for (const [stateKey, readKeys] of provisionalCarry) {
-        carryForwardStateKeys.add(stateKey);
-        carryReadKeysByStateKey.set(stateKey, readKeys);
-        closedStateKeys.add(stateKey);
+    for (const group of groups) {
+      if (badStateKeys.has(group.stateKey)) continue;
+      if (refreshPlan?.carryStateKeys.has(group.stateKey)) {
+        const base = this.recoveryBaseForGroup(group);
+        if (!base) continue;
+        const readKeys = base.state.requiredReadKeys;
+        carryForwardStateKeys.add(group.stateKey);
+        carryReadKeysByStateKey.set(group.stateKey, readKeys);
+        closedStateKeys.add(group.stateKey);
         for (const readKey of readKeys) {
-          staging.expectedReadKeys.add(globalReadId(stateKey, readKey));
+          staging.expectedReadKeys.add(
+            globalReadId(group.stateKey, readKey),
+          );
         }
-      }
-      for (const stateKey of provisionalDirect) {
-        classifiedDirectStateKeys.add(stateKey);
       }
     }
     carryStateKeys = carryForwardStateKeys.size;
@@ -2441,8 +2141,6 @@ export class BlockScanStateCoordinator {
     ).length;
     staging.carryStateKeys = carryStateKeys;
     staging.directStateKeys = directStateKeys;
-    staging.fullFallbackReason = fullFallbackReason;
-    staging.fullFallbackDetail = fullFallbackDetail;
 
     // Schema/static reads already counted by the prepared phase.
     let physicalReads = staging.reads;
@@ -2747,7 +2445,6 @@ export class BlockScanStateCoordinator {
         : carryForward
         ? carryReadKeysByStateKey.get(group.stateKey) ?? []
         : groupReads.map((item) => item.localId);
-      const incrementalPlan = incrementalPlans.get(group.familyId);
       const localResults: StateReadResult[] = [];
       let resultFailure: StateReadResult | null = null;
       const cachedReadByLocalId = cacheEntry
@@ -2829,9 +2526,7 @@ export class BlockScanStateCoordinator {
       let snapshot;
       try {
         if (carryForward) {
-          snapshot = incrementalPlan?.previousByStateKey.get(
-            group.stateKey,
-          )?.snapshot;
+          snapshot = this.recoveryBaseForGroup(group)?.state.snapshot;
           if (snapshot === undefined) {
             throw new Error("incremental state is missing the previous snapshot");
           }
@@ -2942,29 +2637,12 @@ export class BlockScanStateCoordinator {
           const globalId = globalReadId(group.stateKey, localId);
           let proof: StateFreshnessProof;
           if (carryForward) {
-            if (!incrementalPlan) {
-              throw new Error("carry-forward state lacks an incremental plan");
-            }
-            const range = incrementalPlan.rangeByStateKey.get(
-              group.stateKey,
-            );
-            if (!range) {
+            if (!refreshPlan) {
               throw new Error(
-                "carry-forward state lacks a canonical mutation range",
+                "carry-forward state lacks a canonical activity plan",
               );
             }
-            proof = Object.freeze({
-              kind: "carry-forward" as const,
-              source: Object.freeze({
-                number: graph.sourceBlock,
-                hash: graph.sourceBlockHash,
-                generation: graph.generation,
-              }),
-              previousSource: range.fromExclusive,
-              mutationRangeFingerprint: range.rangeFingerprint,
-              completeThroughBlock: range.through.number,
-              completeThroughHash: range.through.hash,
-            });
+            proof = refreshPlan.carryProof;
           } else if (cacheEntry) {
             const cached = cachedReadByLocalId?.get(localId);
             if (!cached) {
@@ -3030,23 +2708,9 @@ export class BlockScanStateCoordinator {
             ? "unproven-direct"
             : carryForward
             ? "carry-forward"
-            : classifiedDirectStateKeys.has(group.stateKey)
-            ? "classified-direct"
             : "unproven-direct",
           backrunInvalidations: Object.freeze(
-            cacheEntry ||
-              carryForward ||
-              !classifiedDirectStateKeys.has(group.stateKey)
-              ? []
-              : [
-                  ...(
-                    incrementalPlan?.classificationByStateKey.get(
-                      group.stateKey,
-                    )?.backrunInvalidationsByStateKey?.get(
-                        group.rawStateKey,
-                      ) ?? []
-                  ),
-                ].map((invalidation) => Object.freeze({ ...invalidation })),
+            [],
           ),
         });
         states.push([group.stateKey, publishedState]);
@@ -3098,13 +2762,6 @@ export class BlockScanStateCoordinator {
     }
 
     const finishedAtMs = this.now();
-    const resolvedStateKeySet = new Set(resolvedStateKeys);
-    const recoveryRequiredStateKeys = [...recoveryCandidateStateKeys].filter(
-      (stateKey) => !resolvedStateKeySet.has(stateKey),
-    ).length;
-    staging.recoveryRequiredStateKeys = recoveryRequiredStateKeys > 0
-      ? recoveryRequiredStateKeys
-      : undefined;
     const familyExecution = Object.freeze({
       familyId,
       lane,
@@ -3115,22 +2772,6 @@ export class BlockScanStateCoordinator {
       carryStateKeys,
       directStateKeys,
       missingPreviousStateKeys,
-      ...(recoveryRequiredStateKeys === 0
-        ? {}
-        : { recoveryRequiredStateKeys }),
-      ...(fullFallbackReason === undefined
-        ? {}
-        : { fullFallbackReason }),
-      ...(fullFallbackDetail === undefined
-        ? {}
-        : { fullFallbackDetail }),
-      ...(incrementalTiming === undefined
-        ? {}
-        : {
-            incrementalDescriptorMs: incrementalTiming.descriptorMs,
-            incrementalRangeMs: incrementalTiming.rangeMs,
-            incrementalClassifierMs: incrementalTiming.classifierMs,
-          }),
     });
     return Object.freeze({
       lane,
@@ -3321,112 +2962,6 @@ function validateMutationClassification(
       }
     }
   }
-}
-
-/**
- * Derive an event-driven incremental capability for adapter families that
- * declared mutation topics in their landed-event registration but did not
- * hand-write one. The classifier re-reads exactly the pools that emitted a
- * declared topic in the range and carries everything else from its last good
- * state, using the previous required read keys so the changed set always
- * matches the carry/direct partition contract.
- */
-function createDerivedSwapMutationIncremental(input: {
-  readonly familyId: string;
-  readonly mutationEvents: readonly {
-    readonly topic: string | null;
-    readonly emitter: LandedEventEmitter;
-  }[];
-  readonly family: RegisteredBlockScanStateFamily;
-  readonly familyGroups: readonly StateGroup[];
-  readonly eligibleByStateKey: ReadonlyMap<string, RecoveryStateBase>;
-  readonly topologyIndex: StateTopologyIndex;
-}): CompiledIncrementalStateFamily | null {
-  /*
-   * Anonymous-data emitters (topic === null, e.g. Ekubo's Core) are not
-   * auto-derived by design: their identity lives at a fixed data offset and
-   * the family stays on current-N direct reads. Only declarations whose
-   * emitter mode can be resolved generically (address, singleton-indexed
-   * address, singleton-indexed bytes32) enter the automatic update pipe.
-   */
-  const resolvable = input.mutationEvents.filter(
-    (event) => event.topic !== null,
-  );
-  if (resolvable.length === 0) return null;
-  const topics = resolvable.map((event) => event.topic as string);
-  /*
-   * eligibleByStateKey is keyed by the coordinator composite stateKey
-   * (familyId\u001frawKey); map composite -> raw so each base can be looked
-   * up by the raw key the classifier emits. A reversed map silently emptied
-   * baseByRawKey and made the derived classifier carry every pool.
-   */
-  const rawKeyByComposite = new Map(
-    input.familyGroups.map((group) => [
-      group.stateKey,
-      group.rawStateKey.toLowerCase(),
-    ] as const),
-  );
-  const baseByRawKey = new Map<string, RecoveryStateBase>();
-  for (const [composite, base] of input.eligibleByStateKey) {
-    const raw = rawKeyByComposite.get(composite);
-    if (raw !== undefined) baseByRawKey.set(raw, base);
-  }
-  const eventByTopic = new Map<string, typeof resolvable[number]>();
-  for (const event of resolvable) {
-    eventByTopic.set(event.topic as string, event);
-  }
-  const classifierFingerprint = deterministicHash({
-    familyId: input.familyId,
-    topics,
-    emitters: resolvable.map((event) => event.emitter),
-  });
-  return Object.freeze({
-    mutationQueryDescriptor: () =>
-      createMutationQueryDescriptor({ topics }),
-    classifyMutations(classifyInput: {
-      readonly edges: readonly TokenEdge[];
-      readonly range: CanonicalMutationRange;
-    }): FamilyMutationClassification {
-      /*
-       * Resolve range events against the graph-topology-scoped pool-identity
-       * reverse index (rebuilt only when the topology hash changes, never
-       * per generation). The index supports directional/composite state keys
-       * without per-protocol branches.
-       */
-      const changed = new Map<string, ReadonlySet<string>>();
-      for (const event of classifyInput.range.events) {
-        const topic = event.topics[0]?.toLowerCase();
-        if (topic === undefined) continue;
-        const declaration = eventByTopic.get(topic);
-        if (!declaration) continue;
-        const identity = observedLandedPoolIdentity(
-          declaration,
-          event,
-        );
-        if (identity === null) continue;
-        const identityKey =
-          `${input.familyId}\u001f${identity.toLowerCase()}`;
-        const compositeKeys =
-          input.topologyIndex.stateKeysByPoolIdentity.get(identityKey);
-        if (!compositeKeys) continue;
-        for (const composite of compositeKeys) {
-          const rawKey = rawKeyByComposite.get(composite);
-          if (rawKey === undefined) continue;
-          const base = baseByRawKey.get(rawKey);
-          if (!base) continue;
-          changed.set(
-            rawKey,
-            new Set([...base.state.requiredReadKeys]),
-          );
-        }
-      }
-      return Object.freeze({
-        mutationRangeFingerprint: classifyInput.range.rangeFingerprint,
-        classifierFingerprint,
-        changedReadKeysByStateKey: changed,
-      });
-    },
-  });
 }
 
 function sameBlockSource(a: BlockSource, b: BlockSource): boolean {

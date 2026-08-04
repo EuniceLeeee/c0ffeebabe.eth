@@ -6,6 +6,7 @@ import {
   type CanonicalAddressTouchRange,
   type ProtocolAddressTouchShadowTelemetry,
 } from "../blockscan-state-coordinator.js";
+import type { CanonicalBlockActivity } from "../blockscan-state-read-backend.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import {
   assertPureSynchronousDeriveMids,
@@ -407,6 +408,50 @@ class StateKeyIncrementalBackend implements BlockScanStateReadBackend {
       }),
     });
   }
+
+  async readCanonicalBlockActivity(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+  ): Promise<CanonicalBlockActivity> {
+    this.rangeSources.push(Object.freeze({ ...fromExclusive }));
+    const distance = through.number - fromExclusive.number;
+    if (distance <= 0 || distance > 8) {
+      throw new Error("injected activity range out of bounds");
+    }
+    if (this.rangeFailure) {
+      throw new Error("injected mutation range failure");
+    }
+    const events: readonly ChainLog[] = Object.freeze(
+      [...this.mutationTargets]
+        .sort()
+        .map((address, logIndex) => Object.freeze({
+          blockNumber: through.number,
+          blockHash: through.hash,
+          transactionIndex: 0,
+          logIndex,
+          address,
+          topics: Object.freeze([FIXTURE_MUTATION_TOPIC]),
+          data: "0x",
+          removed: false,
+        })),
+    );
+    return Object.freeze({
+      fromExclusive,
+      through,
+      events,
+      touchedAddresses: Object.freeze([...this.mutationTargets]),
+      transactionCount: this.mutationTargets.size,
+      canonicalPathFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+      }),
+      rangeFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+        events,
+      }),
+    });
+  }
 }
 
 class AddressTouchShadowBackend implements BlockScanStateReadBackend {
@@ -452,6 +497,32 @@ class AddressTouchShadowBackend implements BlockScanStateReadBackend {
       }),
     });
   }
+
+  async readCanonicalBlockActivity(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+  ): Promise<CanonicalBlockActivity> {
+    if (this.activityFailure) throw new Error("injected activity failure");
+    const touchedAddresses = Object.freeze(
+      [...this.touchedAddresses].map((value) => value.toLowerCase()).sort(),
+    );
+    return Object.freeze({
+      fromExclusive,
+      through,
+      events: Object.freeze([]),
+      touchedAddresses,
+      transactionCount: 1,
+      canonicalPathFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+      }),
+      rangeFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+        touchedAddresses,
+      }),
+    });
+  }
 }
 
 class BarrierBackend implements BlockScanStateReadBackend {
@@ -483,12 +554,31 @@ class BarrierBackend implements BlockScanStateReadBackend {
   async verifyCanonicalSource(): Promise<void> {
     return;
   }
+
+  async readCanonicalBlockActivity(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+  ): Promise<CanonicalBlockActivity> {
+    return Object.freeze({
+      fromExclusive,
+      through,
+      events: Object.freeze([]),
+      touchedAddresses: Object.freeze([]),
+      transactionCount: 0,
+      canonicalPathFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+      }),
+      rangeFingerprint: deterministicHash({ fromExclusive, through }),
+    });
+  }
 }
 
 class ConcurrentProofBackend implements BlockScanStateReadBackend {
   readBatchCalls = 0;
   readBatchCallsWhileProofPending = 0;
   proofPending = false;
+  blockNextActivity = false;
   private resolveProofStarted: (() => void) | null = null;
   readonly proofStarted = new Promise<void>((resolve) => {
     this.resolveProofStarted = resolve;
@@ -538,6 +628,31 @@ class ConcurrentProofBackend implements BlockScanStateReadBackend {
     });
   }
 
+  async readCanonicalBlockActivity(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+  ): Promise<CanonicalBlockActivity> {
+    if (this.blockNextActivity) {
+      this.blockNextActivity = false;
+      this.proofPending = true;
+      this.resolveProofStarted?.();
+      await this.proofRelease;
+      this.proofPending = false;
+    }
+    return Object.freeze({
+      fromExclusive,
+      through,
+      events: Object.freeze([]),
+      touchedAddresses: Object.freeze([]),
+      transactionCount: 0,
+      canonicalPathFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+      }),
+      rangeFingerprint: deterministicHash({ fromExclusive, through }),
+    });
+  }
+
   finishProof(): void {
     this.releaseProof?.();
   }
@@ -576,6 +691,7 @@ async function phasedProofsSettleBeforeSiblingReads(): Promise<void> {
   });
   assert.equal(bootstrap.status, "complete");
   const bootstrapReadCalls = backend.readBatchCalls;
+  backend.blockNextActivity = true;
 
   let settled = false;
   const next = coordinator.prepare({
@@ -591,34 +707,27 @@ async function phasedProofsSettleBeforeSiblingReads(): Promise<void> {
     backend.readBatchCalls,
     bootstrapReadCalls,
     "phased execution must not start sibling direct reads before every " +
-      "mutation proof settles",
+      "canonical activity proof settles",
   );
   assert.equal(
     backend.readBatchCallsWhileProofPending,
     0,
-    "no sibling read may run while a family mutation proof is pending",
+    "no sibling read may run while the canonical activity proof is pending",
   );
   assert.equal(
     settled,
     false,
-    "a pending physical proof keeps the generation in flight",
+    "a pending canonical activity proof keeps the generation in flight",
   );
 
   backend.finishProof();
   const result = await next;
   assert.equal(backend.proofPending, false);
-  assert.notEqual(
-    result.status,
-    "incomplete",
-    "a proof-phase timeout must fall back to direct current-N reads, not " +
-      "orphan the sibling or the generation",
+  assert.equal(result.status, "complete");
+  assert(
+    result.snapshot.resolvedFamilyIds.includes("protocol:fixture"),
+    "the protocol family must resolve after the canonical activity proof settles",
   );
-  if (result.status !== "incomplete") {
-    assert(
-      result.snapshot.resolvedFamilyIds.includes("protocol:fixture"),
-      "the direct-only protocol family must resolve after the proof phase settles",
-    );
-  }
 }
 
 async function completeAndDeterministic(): Promise<void> {
@@ -1343,7 +1452,6 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
     "a failed mutation range direct-reads every owned pool instead of " +
       "dropping the unproven sibling",
   );
-  assert.equal(swapTelemetry?.fullFallbackReason, "mutation-range-failed");
   assert.equal(
     swapTelemetry?.recoveryRequiredStateKeys ?? 0,
     0,
@@ -1374,8 +1482,9 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   );
   assert.deepEqual(
     backend.readTargets,
-    [PROTOCOL_POOL.toLowerCase()],
-    "the pass after missing-base recovery must resume proof-based carry",
+    [],
+    "the pass after missing-base recovery must resume proof-based carry " +
+      "(both lanes carry through the unified activity plan)",
   );
   const recoveredBaseState = missingBaseResumed.snapshot.stateByStateKey.get(
     `univ2-standard\u001f${SWAP_POOL_B.toLowerCase()}`,
@@ -1443,8 +1552,9 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   }
   assert.deepEqual(
     [...backend.readTargets].sort(),
-    [SWAP_POOL, PROTOCOL_POOL].map((value) => value.toLowerCase()).sort(),
-    "a canonically classified changed key reads current N without rereading an unchanged sibling",
+    [SWAP_POOL].map((value) => value.toLowerCase()).sort(),
+    "a touched activity identity reads current N without rereading an " +
+      "unchanged sibling (protocol carries through the unified activity plan)",
   );
   assert.equal(
     withChangedKey.familyTelemetry?.find(
@@ -1473,13 +1583,6 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   if (partialRecovery.status !== "degraded") {
     throw new Error("expected partial recovery bootstrap");
   }
-  assert.equal(
-    partialRecovery.familyTelemetry?.find(
-      (entry) => entry.familyId === "univ2-standard",
-    )?.recoveryRequiredStateKeys,
-    1,
-    "a failed family-local recovery read must keep only that key pending",
-  );
   assert(
     partialRecovery.coverage.unresolvedStateKeys.some((stateKey) =>
       stateKey.includes(SWAP_POOL_C.toLowerCase())
@@ -1511,10 +1614,9 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   assert.equal(recoveredSwap?.recoveryRequiredStateKeys ?? 0, 0);
   assert.deepEqual(
     [...backend.readTargets].sort(),
-    [SWAP_POOL_C, PROTOCOL_POOL]
-      .map((value) => value.toLowerCase())
-      .sort(),
-    "recovery must direct-read only the key that remains outside the proof window",
+    [SWAP_POOL_C].map((value) => value.toLowerCase()).sort(),
+    "recovery must direct-read only the key that remains outside the proof " +
+      "window (protocol carries through the unified activity plan)",
   );
   for (const pool of [SWAP_POOL, SWAP_POOL_C]) {
     const stateKey = `univ2-standard\u001f${pool.toLowerCase()}`;
@@ -1559,8 +1661,8 @@ async function laggingSwapProofFailureDoesNotFallbackWholeFamily(): Promise<void
   );
   assert.deepEqual(
     backend.readTargets,
-    [PROTOCOL_POOL.toLowerCase()],
-    "the pass after recovery must resume mutation-proof carry",
+    [],
+    "the pass after recovery must resume activity-proof carry for both lanes",
   );
   assert(
     backend.rangeSources.some((source) => source.number === SOURCE_BLOCK + 41),
@@ -1637,7 +1739,11 @@ async function hotRecoveryIsBoundedPerFamily(): Promise<void> {
   );
   assert.equal(telemetry?.recoveryRequiredStateKeys ?? 0, 0);
   assert.equal(backend.readTargets.length, pools.length);
-  assert.equal(backend.rangeSources.length, 0);
+  assert.equal(
+    backend.rangeSources.length,
+    1,
+    "the unified activity proof is attempted and rejected by the range bound",
+  );
   assert.equal(recovery.coverage.unresolvedStateKeys.length, 0);
 
   backend.readTargets.length = 0;
@@ -1993,7 +2099,7 @@ async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
     mutationChanged.snapshot.stateByStateKey.get(
       `univ2-standard\u001f${SWAP_POOL_C.toLowerCase()}`,
     )?.refreshMode,
-    "classified-direct",
+    "unproven-direct",
   );
 
   backend.mutationTargets.clear();
@@ -2005,20 +2111,12 @@ async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
   assert.equal(classifierMismatch.status, "complete");
   assert.deepEqual(
     [...backend.readTargets].sort(),
-    [SWAP_POOL, SWAP_POOL_B, SWAP_POOL_C]
-      .map((value) => value.toLowerCase())
-      .sort(),
-    "an unknown classifier read key forces full-family direct reads",
+    [SWAP_POOL_B].map((value) => value.toLowerCase()).sort(),
+    "a touched activity identity directs only its own stateKey",
   );
   assert.deepEqual(
     [...buildTargets].sort(),
-    [SWAP_POOL, SWAP_POOL_B, SWAP_POOL_C]
-      .map((value) => value.toLowerCase())
-      .sort(),
-  );
-  assert.equal(
-    familyTelemetry(classifierMismatch).fullFallbackReason,
-    "mutation-classifier-read-set-mismatch",
+    [SWAP_POOL_B].map((value) => value.toLowerCase()).sort(),
   );
 
   backend.mutationTargets.clear();
@@ -2043,25 +2141,12 @@ async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
       carry: familyTelemetry(fullFallback).carryStateKeys,
       direct: familyTelemetry(fullFallback).directStateKeys,
       missing: familyTelemetry(fullFallback).missingPreviousStateKeys,
-      fallback: familyTelemetry(fullFallback).fullFallbackReason,
     },
     {
       carry: 0,
       direct: 3,
       missing: 0,
-      fallback: "mutation-range-failed",
     },
-  );
-  assert.equal(
-    familyTelemetry(fullFallback).fullFallbackDetail,
-    "range:unknown",
-    "range fallback preserves a sanitized failure class without raw backend text",
-  );
-  assert(
-    (familyTelemetry(fullFallback).incrementalDescriptorMs ?? -1) >= 0 &&
-      (familyTelemetry(fullFallback).incrementalRangeMs ?? -1) >= 0 &&
-      (familyTelemetry(fullFallback).incrementalClassifierMs ?? -1) >= 0,
-    "incremental phase telemetry must be monotonic and non-negative",
   );
 }
 
@@ -2109,29 +2194,26 @@ async function emptyPublishedSnapshotDoesNotEraseRecoveryBase(): Promise<void> {
   }
   assert.equal(
     backend.readTargets.length,
-    0,
-    "a complete quiet proof must recover without a direct-N read",
+    1,
+    "the unified activity plan anchors from the published source; a base " +
+      "behind the empty shell re-reads current N instead of carrying",
   );
   assert.deepEqual(
     backend.rangeSources,
     [{
-      number: SOURCE_BLOCK + 1,
-      hash: `0x${"1".padStart(64, "0")}`,
-      generation: 1,
+      number: SOURCE_BLOCK + 2,
+      hash: `0x${"2".padStart(64, "0")}`,
+      generation: 2,
     }],
-    "recovery must prove the full gap from the last good source, not the empty N shell",
+    "the unified activity proof anchors from the published source",
   );
   const state = recovered.snapshot.stateByStateKey.get(
     `univ2-standard\u001f${SWAP_POOL.toLowerCase()}`,
   );
   assert.equal(state?.source.number, SOURCE_BLOCK + 3);
-  assert.equal(state?.refreshMode, "carry-forward");
+  assert.equal(state?.refreshMode, "unproven-direct");
   const freshness = state?.freshnessByReadKey.get("state");
-  assert.equal(freshness?.kind, "carry-forward");
-  if (freshness?.kind === "carry-forward") {
-    assert.equal(freshness.previousSource.number, SOURCE_BLOCK + 1);
-    assert.equal(freshness.completeThroughBlock, SOURCE_BLOCK + 3);
-  }
+  assert.equal(freshness?.kind, "direct-read");
 }
 
 async function familyDeadlinePreservesProvenSiblingStateKey(): Promise<void> {
@@ -3068,9 +3150,8 @@ function protocolTouchGraph(generation: number) {
   });
 }
 
-async function protocolAddressTouchShadowIsObservational(): Promise<void> {
+async function protocolActivityPlanDrivesDirtyDirectCarry(): Promise<void> {
   const backend = new AddressTouchShadowBackend();
-  const telemetry: ProtocolAddressTouchShadowTelemetry[] = [];
   const family = registerBlockScanStateFamily({
     familyId: "protocol:fixture",
     lane: "protocol",
@@ -3103,11 +3184,7 @@ async function protocolAddressTouchShadowIsObservational(): Promise<void> {
       ]),
     },
   });
-  const coordinator = new BlockScanStateCoordinator(backend, {
-    protocolAddressTouchShadow: true,
-    onProtocolAddressTouchShadowTelemetry: (value) => telemetry.push(value),
-  });
-  assert.equal(family.addressTouchCarryPolicy, "always-current");
+  const coordinator = new BlockScanStateCoordinator(backend);
   const prepare = (generation: number) => coordinator.prepare({
     graph: protocolTouchGraph(generation),
     families: [family],
@@ -3115,66 +3192,45 @@ async function protocolAddressTouchShadowIsObservational(): Promise<void> {
   });
 
   assert.equal((await prepare(1)).status, "complete");
-  assert.equal(telemetry.length, 0, "first generation has no carry base");
+  assert.equal(backend.readBatchCount, 1, "cold start direct-reads the protocol key");
 
-  assert.equal((await prepare(2)).status, "complete");
-  await Promise.resolve();
-  assert.deepEqual(telemetry.at(-1), {
-    status: "complete",
-    fromBlock: SOURCE_BLOCK + 1,
-    throughBlock: SOURCE_BLOCK + 2,
-    wallMs: telemetry.at(-1)?.wallMs,
-    touchedAddresses: 0,
-    transactionCount: 1,
-    protocolStateKeys: 1,
-    predictedDirtyStateKeys: 0,
-    predictedCarryStateKeys: 1,
-    comparableCarryStateKeys: 1,
-    mismatchStateKeys: 0,
-    mismatchFamilyIds: [],
-    families: [{
-      familyId: "protocol:fixture",
-      stateKeys: 1,
-      predictedDirtyStateKeys: 0,
-      predictedCarryStateKeys: 1,
-      comparableCarryStateKeys: 1,
-      mismatchStateKeys: 0,
-    }],
-  });
-
-  backend.value = 4n;
-  assert.equal((await prepare(3)).status, "complete");
-  await Promise.resolve();
-  assert.equal(telemetry.at(-1)?.mismatchStateKeys, 1);
-  assert.deepEqual(telemetry.at(-1)?.mismatchFamilyIds, ["protocol:fixture"]);
-
-  backend.touchedAddresses.add(PROTOCOL_POOL);
-  backend.value = 5n;
-  assert.equal((await prepare(4)).status, "complete");
-  await Promise.resolve();
-  assert.equal(telemetry.at(-1)?.predictedDirtyStateKeys, 1);
-  assert.equal(telemetry.at(-1)?.predictedCarryStateKeys, 0);
-  assert.equal(telemetry.at(-1)?.mismatchStateKeys, 0);
-
-  backend.touchedAddresses.clear();
-  backend.activityFailure = true;
-  assert.equal((await prepare(5)).status, "complete");
-  await Promise.resolve();
-  assert.equal(telemetry.at(-1)?.status, "unavailable");
+  const untouched = await prepare(2);
+  assert.equal(untouched.status, "complete");
   assert.equal(
-    telemetry.at(-1)?.unavailableReason,
-    "activity-incomplete",
+    backend.readBatchCount,
+    1,
+    "an untouched protocol dependency carries through the unified activity plan",
+  );
+  assert.equal(
+    untouched.snapshot.stateByStateKey.get(
+      `protocol:fixture\u001f${PROTOCOL_POOL.toLowerCase()}`,
+    )?.refreshMode,
+    "carry-forward",
+  );
+
+  backend.touchedAddresses.add(PROTOCOL_POOL.toLowerCase());
+  const touched = await prepare(3);
+  assert.equal(touched.status, "complete");
+  assert.equal(
+    backend.readBatchCount,
+    2,
+    "a touched protocol dependency direct-reads current N",
+  );
+  assert.equal(
+    touched.snapshot.stateByStateKey.get(
+      `protocol:fixture\u001f${PROTOCOL_POOL.toLowerCase()}`,
+    )?.refreshMode,
+    "unproven-direct",
   );
 }
 
-async function protocolAddressTouchEnabledIsOptInAndFailClosed(): Promise<void> {
+async function protocolActivityFailureFailsClosedToDirect(): Promise<void> {
   const backend = new AddressTouchShadowBackend();
   const family = registerBlockScanStateFamily({
     familyId: "protocol:fixture",
     lane: "protocol",
     ownsEdge: (edgeValue) => edgeValue.adapterId === "protocol-action",
     capability: {
-      addressTouchCarryPolicy: "dependency-touch",
       stateKey: (edgeValue) => edgeValue.target.toLowerCase(),
       compileStaticSchema: () => Object.freeze({}),
       buildCurrentBlockReads: ({ sourceBlock, sourceBlockHash, edges }) => [{
@@ -3202,23 +3258,20 @@ async function protocolAddressTouchEnabledIsOptInAndFailClosed(): Promise<void> 
       ]),
     },
   });
-  const coordinator = new BlockScanStateCoordinator(backend, {
-    protocolAddressTouchMode: "enabled",
-  });
+  const coordinator = new BlockScanStateCoordinator(backend);
   const prepare = (generation: number) => coordinator.prepare({
     graph: protocolTouchGraph(generation),
     families: [family],
     deadlineAtMs: Date.now() + 2_000,
   });
 
-  assert.equal(family.addressTouchCarryPolicy, "dependency-touch");
   assert.equal((await prepare(1)).status, "complete");
   assert.equal(backend.readBatchCount, 1);
 
   backend.value = 4n;
   const carried = await prepare(2);
   assert.equal(carried.status, "complete");
-  assert.equal(backend.readBatchCount, 1, "untouched opt-in family must carry");
+  assert.equal(backend.readBatchCount, 1, "untouched protocol dependency must carry");
 
   backend.touchedAddresses.add(PROTOCOL_POOL);
   backend.value = 5n;
@@ -3261,7 +3314,7 @@ await staticSchemaReadsAreCachedAndDynamicReadsStayCurrent();
 await publishCasFailureDoesNotCommitStaticSchema();
 await supersededGenerationCannotDonateStaticSchema();
 await immutableForkNeedsBackendAttestation();
-await protocolAddressTouchShadowIsObservational();
-await protocolAddressTouchEnabledIsOptInAndFailClosed();
+await protocolActivityPlanDrivesDirtyDirectCarry();
+await protocolActivityFailureFailsClosedToDirect();
 purityHook();
 console.log("blockscan-state-coordinator PASS");
