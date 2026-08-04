@@ -69,7 +69,7 @@ export const ekuboBlockScanState =
           isToken1,
           ctx.amountIn,
         ),
-        transport: "rpc-batch",
+        transport: "multicall-safe",
       });
     },
     decodeQuote(edge, data, amountIn) {

@@ -127,7 +127,7 @@ export const curveUnderlyingBlockScanState = Object.freeze({
           data: encodeMulticall(curveUnderlyingRegistryScaleItems(
             ctx.static.pool,
           )),
-          transport: "rpc-batch",
+          transport: "multicall-safe",
         }),
         currentBlockRead({
           id: curveUnderlyingTokenDecimalsReadId(ctx.edge.tokenIn),
@@ -137,7 +137,7 @@ export const curveUnderlyingBlockScanState = Object.freeze({
           data: encodeMulticall(curveUnderlyingTokenDecimalsItems(
             ctx.edge.tokenIn,
           )),
-          transport: "rpc-batch",
+          transport: "multicall-safe",
         }),
       ]);
     },

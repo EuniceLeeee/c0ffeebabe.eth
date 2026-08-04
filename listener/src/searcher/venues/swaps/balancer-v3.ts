@@ -166,7 +166,7 @@ export const balancerV3BlockScanState = Object.freeze({
           data: encodeMulticall(
             balancerTokenDecimalsItems(ctx.edge.tokenIn),
           ),
-          transport: "rpc-batch",
+          transport: "multicall-safe",
         }),
       ]);
     },
@@ -336,7 +336,7 @@ function buildBalancerFallbackReads(
         sourceBlockHash: ctx.sourceBlockHash,
         to: BLOCKSCAN_MULTICALL3,
         data: encodeMulticall(balancerProofItems(ctx.edge)),
-        transport: "rpc-batch",
+        transport: "multicall-safe",
       }),
       currentBlockRead({
         id: balancerMinimumTradeReadId(),
@@ -344,7 +344,7 @@ function buildBalancerFallbackReads(
         sourceBlockHash: ctx.sourceBlockHash,
         to: ADDR.BALANCER_V3_VAULT,
         data: vaultIface.encodeFunctionData("getMinimumTradeAmount"),
-        transport: "rpc-batch",
+        transport: "multicall-safe",
       }),
     ]);
   }
@@ -358,7 +358,7 @@ function buildBalancerFallbackReads(
         sourceBlockHash: ctx.sourceBlockHash,
         to: BLOCKSCAN_MULTICALL3,
         data: encodeMulticall(balancerExactOutItems(ctx, proof)),
-        transport: "rpc-batch",
+        transport: "multicall-safe",
       }),
     ]);
   }

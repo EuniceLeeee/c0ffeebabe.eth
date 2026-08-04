@@ -277,7 +277,7 @@ export const curvePlainBlockScanState = Object.freeze({
         sourceBlockHash,
         to: BLOCKSCAN_MULTICALL3,
         data: encodeMulticall(curveBalanceAbiProbeItems(pool)),
-        transport: "rpc-batch",
+        transport: "multicall-safe",
       })
     );
     return Object.freeze([...decimalsReads, ...balanceAbiReads]);
@@ -339,7 +339,7 @@ export const curvePlainBlockScanState = Object.freeze({
         sourceBlockHash,
         to: BLOCKSCAN_MULTICALL3,
         data: encodeMulticall(descriptor.items),
-        transport: "rpc-batch",
+        transport: "multicall-safe",
       }),
     ]);
   },
@@ -381,7 +381,7 @@ export const curvePlainBlockScanState = Object.freeze({
         data: encodeMulticall(
           curveFallbackWitnessItems(pool, witnesses),
         ),
-        transport: "rpc-batch",
+        transport: "multicall-safe",
       }),
     ]);
   },
