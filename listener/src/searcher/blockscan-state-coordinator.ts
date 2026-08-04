@@ -1228,6 +1228,8 @@ export class BlockScanStateCoordinator {
 
   async prepare(input: PrepareBlockScanStateInput): Promise<BlockScanStatePrepareResult> {
     const { graph } = input;
+    const prepareStartedAtMs = this.now();
+    const prepareHeapAtStart = process.memoryUsage().heapUsed;
     this.cacheModeActive = input.cacheMode === "warm";
     const previousPublished = this.published;
     const familySettleDeadlineAtMs = Math.min(
@@ -1357,6 +1359,7 @@ export class BlockScanStateCoordinator {
        * left to preempt background reads.
        */
       const allGroups = [...laneGroups.swap, ...laneGroups.protocol];
+      const preparedStartedAtMs = this.now();
       const preparedPhases = await Promise.all(
         uniqueFamilies(allGroups).map(async (family) => {
           const familyGroups = allGroups.filter(
@@ -1372,16 +1375,20 @@ export class BlockScanStateCoordinator {
           });
         }),
       );
+      const preparedPhasesMs = Math.max(0, this.now() - preparedStartedAtMs);
       const preparedPhaseByFamily = new Map(
         preparedPhases.map((phase) => [phase.familyId, phase] as const),
       );
+      const activityStartedAtMs = this.now();
       const refreshPlan = await this.prepareBlockActivityRefreshPlan(
         graph,
         familySettleDeadlineAtMs,
         controller.signal,
       );
+      const activityPlanMs = Math.max(0, this.now() - activityStartedAtMs);
       // Phase 2: direct reads + decode for both lanes, driven by the shared
       // refresh plan (dirty direct / untouched carry with one canonical proof).
+      const lanesStartedAtMs = this.now();
       const [swap, protocol] = await Promise.all([
         this.runLane(
           "swap",
@@ -1402,6 +1409,8 @@ export class BlockScanStateCoordinator {
           refreshPlan,
         ),
       ]);
+      const lanesFinishedAtMs = this.now();
+      const lanesMs = Math.max(0, lanesFinishedAtMs - lanesStartedAtMs);
       const lanes = [swap, protocol] as const;
       let issues = [
         ...ownership.ownerIssues,
@@ -1692,12 +1701,31 @@ export class BlockScanStateCoordinator {
       // generation failed between base mutation and snapshot publication.
       this.published = snapshot;
       active.published = true;
+      const assemblyFinishedAtMs = this.now();
       const degraded =
         incompleteFamilyIds.length > 0 ||
         coverage.unresolvedStateKeys.length > 0 ||
         coverage.unresolvedReadKeys.length > 0 ||
         coverage.unresolvedEdgeKeys.length > 0 ||
         issues.length > 0;
+      console.log(
+        `[searcher/blockscan-state-stages] ${JSON.stringify({
+          sourceBlock: graph.sourceBlock,
+          generation: graph.generation,
+          status: degraded ? "degraded" : "complete",
+          prepareMs: Math.max(0, assemblyFinishedAtMs - prepareStartedAtMs),
+          preparedPhasesMs,
+          activityPlanMs,
+          lanesMs,
+          assemblyMs: Math.max(
+            0,
+            assemblyFinishedAtMs - lanesFinishedAtMs,
+          ),
+          heapDeltaMB: Math.round(
+            (process.memoryUsage().heapUsed - prepareHeapAtStart) / 1048576,
+          ),
+        })}`,
+      );
       return Object.freeze({
         status: degraded ? "degraded" as const : "complete" as const,
         generation: graph.generation,
