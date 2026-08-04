@@ -931,6 +931,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         ? targetBlock
         : input.coordinator.latestPricingSnapshot()!.sourceBlock + 1;
       let chainGenerations = 0;
+      let catchupIndex = 0;
       for (;;) {
         if (this.deps.runtimeAbort.signal.aborted) break;
         if (nextBlock > targetBlock) break;
@@ -984,6 +985,38 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         const recoveryPending = blockScanStateHasRecoveryBacklog(
           prepared,
         );
+        console.log(
+          `[searcher/blockscan-nminus1-state] ${JSON.stringify({
+            sourceBlock: prepared.sourceBlock,
+            generation: prepared.generation,
+            status: prepared.status,
+            priced: prepared.coverage.resolvedEdgeKeys.length,
+            expected: prepared.coverage.expectedEdgeKeys.length,
+            issueCount: prepared.issues.length,
+            // Both per-generation and arm-cumulative walls are reported:
+            // generationWallMs measures one producer generation end to end
+            // (observeHeader -> prepareCoarsePricing -> publication), while
+            // armWallMs is the whole catch-up arm and only for scheduling
+            // diagnosis. Incomplete generations are logged too so a slow
+            // failed generation cannot hide from performance analysis.
+            generationWallMs: Math.max(
+              0,
+              Date.now() - generationStartedAtMs,
+            ),
+            armWallMs: Math.max(0, Date.now() - startedAtMs),
+            catchupIndex,
+            targetBlock,
+            budgetMs: stateBudgetMs,
+            familySettleBudgetMs,
+            publicationReserveMs,
+            recoveryBootstrap: false,
+            recoveryPending,
+            families: prepared.familyTelemetry ?? [],
+            lanes: prepared.laneTelemetry,
+            causes: summarizeBlockScanIssueCauses(prepared.issues),
+          })}`,
+        );
+        catchupIndex++;
         if (prepared.status !== "incomplete") {
           this.completedCoarsePricingByBlock.set(
             prepared.snapshot.sourceBlock,
@@ -1000,27 +1033,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           // retries from the same point.
           break;
         }
-        console.log(
-          `[searcher/blockscan-nminus1-state] ${JSON.stringify({
-            sourceBlock: prepared.sourceBlock,
-            generation: prepared.generation,
-            status: prepared.status,
-            priced: prepared.coverage.resolvedEdgeKeys.length,
-            expected: prepared.coverage.expectedEdgeKeys.length,
-            issueCount: prepared.issues.length,
-            // Per-generation wall, not the catch-up arm's cumulative time:
-            // consecutive chain generations each report their own duration.
-            wallMs: Math.max(0, Date.now() - generationStartedAtMs),
-            budgetMs: stateBudgetMs,
-            familySettleBudgetMs,
-            publicationReserveMs,
-            recoveryBootstrap: false,
-            recoveryPending,
-            families: prepared.familyTelemetry ?? [],
-            lanes: prepared.laneTelemetry,
-            causes: summarizeBlockScanIssueCauses(prepared.issues),
-          })}`,
-        );
         const published = input.coordinator.latestPricingSnapshot();
         nextBlock = published === null
           ? nextBlock + 1
