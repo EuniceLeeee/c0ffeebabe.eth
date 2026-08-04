@@ -930,11 +930,29 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       let nextBlock = input.coordinator.latestPricingSnapshot() === null
         ? targetBlock
         : input.coordinator.latestPricingSnapshot()!.sourceBlock + 1;
+      let chainGenerations = 0;
       for (;;) {
         if (this.deps.runtimeAbort.signal.aborted) break;
         if (nextBlock > targetBlock) break;
-        const remainingMs = deadlineAtMs - Date.now();
-        if (remainingMs <= 0) break;
+        // Each chain generation receives a fresh independent budget; the
+        // absolute per-arm deadline above would shrink to zero for later
+        // blocks in a catch-up gap and abort every family instantly.
+        const generationStartedAtMs = Date.now();
+        const generationDeadlineAtMs =
+          generationStartedAtMs + stateBudgetMs;
+        const generationFamilySettleDeadlineAtMs = Math.min(
+          generationStartedAtMs + familySettleBudgetMs,
+          Math.max(
+            generationStartedAtMs,
+            generationDeadlineAtMs - publicationReserveMs,
+          ),
+        );
+        if (chainGenerations >= 8) {
+          // Bound one arm's catch-up so a large gap cannot monopolize the
+          // single-flight producer; the next pending arm continues from the
+          // same chain point with the newest head.
+          break;
+        }
         let header;
         try {
           header = await this.deps.discovery.observeHeader(nextBlock);
@@ -952,16 +970,17 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         });
         const prepared = await input.coordinator.prepareCoarsePricing({
           graph: anchoredGraph,
-          deadlineAtMs,
+          deadlineAtMs: generationDeadlineAtMs,
           /*
            * Family-local deadlines must settle before the generation
            * deadline; the outer abort wins the same instant as a slow family.
            */
-          familySettleDeadlineAtMs,
+          familySettleDeadlineAtMs: generationFamilySettleDeadlineAtMs,
           laggingTopologyRefreshMode: "proof-scoped",
           signal: this.deps.runtimeAbort.signal,
         });
         result = prepared;
+        chainGenerations++;
         const recoveryPending = blockScanStateHasRecoveryBacklog(
           prepared,
         );
