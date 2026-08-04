@@ -1745,8 +1745,9 @@ async function hotRecoveryIsBoundedPerFamily(): Promise<void> {
   assert.equal(backend.readTargets.length, pools.length);
   assert.equal(
     backend.rangeSources.length,
-    1,
-    "the unified activity proof is attempted and rejected by the range bound",
+    2,
+    "the unified activity proof is attempted (with one transient retry) and " +
+      "rejected by the range bound",
   );
   assert.equal(recovery.coverage.unresolvedStateKeys.length, 0);
 

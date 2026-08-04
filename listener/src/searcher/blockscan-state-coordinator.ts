@@ -864,7 +864,21 @@ export class BlockScanStateCoordinator {
         signal,
       );
     } catch {
-      return null;
+      // Transient reth hiccups (header/coalesce errors) are common; retry once
+      // before degrading the whole generation to a full-graph direct read,
+      // which is slow enough to let the catch-up gap grow.
+      try {
+        activity = await awaitWithAbort(
+          readActivity.call(this.backend, fromExclusive, through, {
+            deadlineAtMs,
+            signal,
+            maxRangeBlocks: this.incrementalRangeBlocks,
+          }),
+          signal,
+        );
+      } catch {
+        return null;
+      }
     }
     const topology = this.topologyIndex;
     if (!topology) return null;
