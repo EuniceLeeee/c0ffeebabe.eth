@@ -681,6 +681,21 @@ export class BlockScanStateCoordinator {
   private cacheAppendChain: Promise<void> = Promise.resolve();
   /** Warm generations persist each resolved key; hot generations do not. */
   private cacheModeActive = false;
+  /**
+   * Per-key recovery bases committed by the ACTIVE generation, with the
+   * previous value, so a generation that fails to publish can roll them back.
+   * Without this, an aborted generation advanced lastGoodByStateKey past the
+   * published source and the exact sameBlockSource carry check then degraded
+   * every key of the affected families to full-graph direct reads.
+   */
+  private generationCommittedBases = new Map<
+    string,
+    {
+      readonly previous: RecoveryStateBase | undefined;
+      readonly current: RecoveryStateBase;
+    }
+  >();
+  private generationPublished = false;
   private readonly now: () => number;
 
   constructor(
@@ -1083,6 +1098,8 @@ export class BlockScanStateCoordinator {
     }
     this.published = null;
     this.lastGoodByStateKey.clear();
+    this.generationCommittedBases.clear();
+    this.generationPublished = false;
     this.previousCanonicalGraphStateKeys = null;
     this.hotRecoveryCursorByFamily.clear();
   }
@@ -1090,6 +1107,8 @@ export class BlockScanStateCoordinator {
   async prepare(input: PrepareBlockScanStateInput): Promise<BlockScanStatePrepareResult> {
     const { graph } = input;
     this.cacheModeActive = input.cacheMode === "warm";
+    this.generationPublished = false;
+    this.generationCommittedBases.clear();
     const previousPublished = this.published;
     const familySettleDeadlineAtMs = Math.min(
       input.deadlineAtMs,
@@ -1560,6 +1579,7 @@ export class BlockScanStateCoordinator {
         }));
       }
       this.published = snapshot;
+      this.generationPublished = true;
       const degraded =
         incompleteFamilyIds.length > 0 ||
         coverage.unresolvedStateKeys.length > 0 ||
@@ -1580,6 +1600,19 @@ export class BlockScanStateCoordinator {
     } finally {
       clearTimeout(deadlineTimer);
       detachExternal();
+      if (!this.generationPublished) {
+        for (const [stateKey, committed] of this.generationCommittedBases) {
+          if (this.lastGoodByStateKey.get(stateKey) !== committed.current) {
+            continue;
+          }
+          if (committed.previous === undefined) {
+            this.lastGoodByStateKey.delete(stateKey);
+          } else {
+            this.lastGoodByStateKey.set(stateKey, committed.previous);
+          }
+        }
+      }
+      this.generationCommittedBases.clear();
       this.cacheModeActive = false;
       if (this.active?.token === token) this.active = null;
     }
@@ -2852,7 +2885,7 @@ export class BlockScanStateCoordinator {
          * family. Warm generations additionally append the raw reads so a
          * process restart can re-decode them without RPC.
          */
-        this.lastGoodByStateKey.set(group.stateKey, Object.freeze({
+        const committedBase: RecoveryStateBase = Object.freeze({
           state: publishedState,
           schemaFingerprint: group.schemaFingerprint,
           requiredReadKeyHash: exactSetHash(publishedState.requiredReadKeys),
@@ -2870,7 +2903,14 @@ export class BlockScanStateCoordinator {
             unavailable === previousBase?.unavailableByEdgeKey
               ? unavailable
               : Object.freeze(new Map(unavailable)),
-        }));
+        });
+        if (!this.generationCommittedBases.has(group.stateKey)) {
+          this.generationCommittedBases.set(group.stateKey, {
+            previous: this.lastGoodByStateKey.get(group.stateKey),
+            current: committedBase,
+          });
+        }
+        this.lastGoodByStateKey.set(group.stateKey, committedBase);
         if (
           this.cacheModeActive &&
           !carryForward &&
