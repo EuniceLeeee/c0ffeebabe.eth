@@ -1008,7 +1008,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             priced: prepared.coverage.resolvedEdgeKeys.length,
             expected: prepared.coverage.expectedEdgeKeys.length,
             issueCount: prepared.issues.length,
-            wallMs: Math.max(0, Date.now() - startedAtMs),
+            // Per-generation wall, not the catch-up arm's cumulative time:
+            // consecutive chain generations each report their own duration.
+            wallMs: Math.max(0, Date.now() - generationStartedAtMs),
             budgetMs: stateBudgetMs,
             familySettleBudgetMs,
             publicationReserveMs,
