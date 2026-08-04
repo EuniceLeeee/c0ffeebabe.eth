@@ -928,19 +928,46 @@ export class BlockScanStateCoordinator {
       }
     }
     const carryStateKeys = new Set<string>();
+    const carryDiagnostics = new Map<
+      string,
+      { missing: number; sourceMismatch: number; fingerprintMismatch: number; carry: number }
+    >();
     for (const group of topology.ownership.groups) {
       if (directStateKeys.has(group.stateKey)) continue;
       const base = this.lastGoodByStateKey.get(group.stateKey);
+      const diagnostic = carryDiagnostics.get(group.familyId) ??
+        { missing: 0, sourceMismatch: 0, fingerprintMismatch: 0, carry: 0 };
       if (
         !base ||
         !sameBlockSource(base.state.source, fromExclusive) ||
         base.schemaFingerprint !== group.schemaFingerprint
       ) {
+        if (!base) {
+          diagnostic.missing++;
+        } else if (!sameBlockSource(base.state.source, fromExclusive)) {
+          diagnostic.sourceMismatch++;
+        } else {
+          diagnostic.fingerprintMismatch++;
+        }
         directStateKeys.add(group.stateKey);
-        continue;
+      } else {
+        diagnostic.carry++;
+        carryStateKeys.add(group.stateKey);
       }
-      carryStateKeys.add(group.stateKey);
+      carryDiagnostics.set(group.familyId, diagnostic);
     }
+    console.log(
+      `[searcher/blockscan-activity-carry] ${JSON.stringify({
+        sourceBlock: graph.sourceBlock,
+        direct: directStateKeys.size,
+        carry: carryStateKeys.size,
+        byFamily: Object.fromEntries(
+          [...carryDiagnostics.entries()].sort(([a], [b]) =>
+            a.localeCompare(b)
+          ),
+        ),
+      })}`,
+    );
     const carryProof: StateFreshnessProof = Object.freeze({
       kind: "carry-forward" as const,
       source: Object.freeze({ ...through }),
