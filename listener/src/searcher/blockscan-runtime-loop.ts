@@ -916,53 +916,97 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
      * retry-safe discovery backfill can finally make progress and the graph
      * can complete, which is what makes mutation proofs eligible again.
      */
-    const task = input.coordinator.prepareCoarsePricing({
-      graph: input.graph,
-      deadlineAtMs,
-      /*
-       * Family-local deadlines must settle before the generation deadline.
-       * Otherwise the outer abort wins the same instant as a slow family,
-       * erases healthy sibling results and leaves no time for canonical CAS.
-       */
-      familySettleDeadlineAtMs,
-      laggingTopologyRefreshMode: "proof-scoped",
-      signal: this.deps.runtimeAbort.signal,
-    }).then((prepared) => {
-      result = prepared;
-      const recoveryPending = blockScanStateHasRecoveryBacklog(
-        prepared,
-      );
-      if (prepared.status !== "incomplete") {
-        this.completedCoarsePricingByBlock.set(
-          prepared.snapshot.sourceBlock,
-          prepared.snapshot,
-        );
-        for (const sourceBlock of this.completedCoarsePricingByBlock.keys()) {
-          if (sourceBlock < prepared.snapshot.sourceBlock - 2) {
-            this.completedCoarsePricingByBlock.delete(sourceBlock);
-          }
+    /*
+     * Sequential catch-up chain: the producer fills every missing predecessor
+     * from the last published coarse source up to the armed head, one
+     * canonical block at a time. Each generation is a 1-block activity range,
+     * so it stays fast, and a strict N-1 consumer always finds the exactly
+     * adjacent state once the chain reaches it (the old producer jumped
+     * straight to the newest head and skipped the intermediate blocks, so
+     * coalesced heads permanently lacked their predecessor state).
+     */
+    const task = (async () => {
+      const targetBlock = input.graph.sourceBlock;
+      let nextBlock = input.coordinator.latestPricingSnapshot() === null
+        ? targetBlock
+        : input.coordinator.latestPricingSnapshot()!.sourceBlock + 1;
+      for (;;) {
+        if (this.deps.runtimeAbort.signal.aborted) break;
+        if (nextBlock > targetBlock) break;
+        const remainingMs = deadlineAtMs - Date.now();
+        if (remainingMs <= 0) break;
+        let header;
+        try {
+          header = await this.deps.discovery.observeHeader(nextBlock);
+        } catch {
+          break;
         }
+        if (this.deps.runtimeAbort.signal.aborted) break;
+        const generation = this.nextGeneration();
+        const anchoredGraph: VerifiedGraphView = Object.freeze({
+          ...input.graph,
+          id: `blockscan-coarse-${nextBlock}-${generation}`,
+          generation,
+          sourceBlock: nextBlock,
+          sourceBlockHash: header.hash,
+        });
+        const prepared = await input.coordinator.prepareCoarsePricing({
+          graph: anchoredGraph,
+          deadlineAtMs,
+          /*
+           * Family-local deadlines must settle before the generation
+           * deadline; the outer abort wins the same instant as a slow family.
+           */
+          familySettleDeadlineAtMs,
+          laggingTopologyRefreshMode: "proof-scoped",
+          signal: this.deps.runtimeAbort.signal,
+        });
+        result = prepared;
+        const recoveryPending = blockScanStateHasRecoveryBacklog(
+          prepared,
+        );
+        if (prepared.status !== "incomplete") {
+          this.completedCoarsePricingByBlock.set(
+            prepared.snapshot.sourceBlock,
+            prepared.snapshot,
+          );
+          for (const sourceBlock of
+            this.completedCoarsePricingByBlock.keys()) {
+            if (sourceBlock < prepared.snapshot.sourceBlock - 2) {
+              this.completedCoarsePricingByBlock.delete(sourceBlock);
+            }
+          }
+        } else {
+          // The chain cannot advance past an unpublished block; the next arm
+          // retries from the same point.
+          break;
+        }
+        console.log(
+          `[searcher/blockscan-nminus1-state] ${JSON.stringify({
+            sourceBlock: prepared.sourceBlock,
+            generation: prepared.generation,
+            status: prepared.status,
+            priced: prepared.coverage.resolvedEdgeKeys.length,
+            expected: prepared.coverage.expectedEdgeKeys.length,
+            issueCount: prepared.issues.length,
+            wallMs: Math.max(0, Date.now() - startedAtMs),
+            budgetMs: stateBudgetMs,
+            familySettleBudgetMs,
+            publicationReserveMs,
+            recoveryBootstrap: false,
+            recoveryPending,
+            families: prepared.familyTelemetry ?? [],
+            lanes: prepared.laneTelemetry,
+            causes: summarizeBlockScanIssueCauses(prepared.issues),
+          })}`,
+        );
+        const published = input.coordinator.latestPricingSnapshot();
+        nextBlock = published === null
+          ? nextBlock + 1
+          : published.sourceBlock + 1;
       }
-      console.log(
-        `[searcher/blockscan-nminus1-state] ${JSON.stringify({
-          sourceBlock: prepared.sourceBlock,
-          generation: prepared.generation,
-          status: prepared.status,
-          priced: prepared.coverage.resolvedEdgeKeys.length,
-          expected: prepared.coverage.expectedEdgeKeys.length,
-          issueCount: prepared.issues.length,
-          wallMs: Math.max(0, Date.now() - startedAtMs),
-          budgetMs: stateBudgetMs,
-          familySettleBudgetMs,
-          publicationReserveMs,
-          recoveryBootstrap: false,
-          recoveryPending,
-          families: prepared.familyTelemetry ?? [],
-          lanes: prepared.laneTelemetry,
-          causes: summarizeBlockScanIssueCauses(prepared.issues),
-        })}`,
-      );
-    }).catch((error) => {
+    })();
+    task.catch((error) => {
       console.log(
         `[searcher/blockscan-nminus1-state] ${JSON.stringify({
           sourceBlock: input.graph.sourceBlock,
@@ -1015,27 +1059,35 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
      * Strict N-1: a pass may only join the exactly adjacent coarse state.
      * Any older published state would silently drop routes that never got
      * enumerated (exact current-N refinement cannot resurrect them), so the
-     * fallback to arbitrary preceding states is intentionally removed.
+     * fallback to arbitrary preceding states is intentionally removed. The
+     * producer fills the chain sequentially (published+1 -> armed head), so
+     * walk the producer queue: wait for whatever is active, re-check, and
+     * continue with the next pending producer until the exactly adjacent
+     * state is published or the deadline expires.
      */
-    const completed = this.completedCoarsePricing(
-      coordinator,
-      expectedSourceBlock,
-    );
-    if (completed) return completed;
-    if (
-      !this.coarsePricingActive ||
-      this.coarsePricingActiveSourceBlock !== expectedSourceBlock
-    ) {
-      return null;
+    for (;;) {
+      if (this.deps.runtimeAbort.signal.aborted || signal.aborted) {
+        throw signal.reason ??
+          this.deps.runtimeAbort.signal.reason ??
+          new Error("searcher shutdown");
+      }
+      const completed = this.completedCoarsePricing(
+        coordinator,
+        expectedSourceBlock,
+      );
+      if (completed) return completed;
+      const active = this.coarsePricingActive;
+      if (!active) return null;
+      const finished = await waitForTaskUntil(
+        active,
+        deadlineAtMs,
+        signal,
+      );
+      if (!finished || this.deps.runtimeAbort.signal.aborted) return null;
+      // The settled producer's finally starts the next pending producer,
+      // which continues the chain from published+1; loop until the needed
+      // predecessor is published or the deadline expires.
     }
-    const finished = await waitForTaskUntil(
-      this.coarsePricingActive,
-      deadlineAtMs,
-      signal,
-    );
-    return finished
-      ? this.completedCoarsePricing(coordinator, expectedSourceBlock)
-      : null;
   }
 
   stopExecutionWorkers(): void {
