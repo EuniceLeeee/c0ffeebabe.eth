@@ -1020,12 +1020,6 @@ async function main(): Promise<void> {
   const blockScanPassBudgetMs = Number.isFinite(blockScanPassBudgetRaw)
     ? Math.max(1, Math.floor(blockScanPassBudgetRaw))
     : 11_000;
-  const blockScanPassHardCapRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_PASS_HARD_CAP_MS ?? "10000",
-  );
-  const blockScanPassHardCapMs = Number.isFinite(blockScanPassHardCapRaw)
-    ? Math.max(1, Math.floor(blockScanPassHardCapRaw))
-    : 10_000;
   const blockScanNMinusOneStateBudgetRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_STATE_BUDGET_MS ?? "40000",
   );
@@ -2495,7 +2489,6 @@ async function main(): Promise<void> {
     largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
     largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
     passBudgetMs: blockScanPassBudgetMs,
-    passHardCapMs: blockScanPassHardCapMs,
     startupWarmEnabled: enableBlockScan && !blindProductionAudit,
     startupWarmBudgetMs: blockScanStartupWarmBudgetMs,
     nMinusOneFallbackEnabled: blockScanNMinusOneFallback,
