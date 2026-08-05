@@ -1483,6 +1483,12 @@ async function admissionFloorSkipsLowSpreadProbes(): Promise<void> {
   assert.equal(result.shadow?.admitted.total, 1);
   assert.equal(result.shadow?.admitted.positive, 1);
   assert.equal(result.shadow?.notAdmitted.total, 1);
+  assert.equal(result.shadow?.admittedSpreadBuckets["floor-2x"].total, 1);
+  assert.equal(
+    result.shadow?.admittedSpreadBuckets["floor-2x"].positive,
+    1,
+  );
+  assert.equal(result.shadow?.admittedSpreadBuckets["2x-5x"].total, 0);
   assert.deepEqual(
     result.opportunities.map(({ cycleId }) => cycleId),
     ["wide"],

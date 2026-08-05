@@ -46,10 +46,10 @@ export interface BlockScanRefinementShadow {
   readonly admitted: BlockScanShadowBand;
   readonly notAdmitted: BlockScanShadowBand;
   readonly admittedSpreadBuckets: {
-    readonly "floor-2x": number;
-    readonly "2x-5x": number;
-    readonly "5x-10x": number;
-    readonly "10x+": number;
+    readonly "floor-2x": BlockScanShadowBand;
+    readonly "2x-5x": BlockScanShadowBand;
+    readonly "5x-10x": BlockScanShadowBand;
+    readonly "10x+": BlockScanShadowBand;
   };
 }
 
@@ -163,10 +163,10 @@ export async function refineBlockScanCandidates(
           admitted: emptyShadowBand(),
           notAdmitted: emptyShadowBand(),
           admittedSpreadBuckets: {
-            "floor-2x": 0,
-            "2x-5x": 0,
-            "5x-10x": 0,
-            "10x+": 0,
+            "floor-2x": emptyShadowBand(),
+            "2x-5x": emptyShadowBand(),
+            "5x-10x": emptyShadowBand(),
+            "10x+": emptyShadowBand(),
           },
         };
   if (shadow) {
@@ -178,24 +178,46 @@ export async function refineBlockScanCandidates(
         shadow.notAdmitted.total++;
       } else {
         admitted.push(item);
-        if (typeof spread === "number") {
-          const floor = shadow.admissionSpreadBps;
-          if (spread >= 10 * floor) shadow.admittedSpreadBuckets["10x+"]++;
-          else if (spread >= 5 * floor) shadow.admittedSpreadBuckets["5x-10x"]++;
-          else if (spread >= 2 * floor) shadow.admittedSpreadBuckets["2x-5x"]++;
-          else shadow.admittedSpreadBuckets["floor-2x"]++;
-        }
       }
     }
     work = admitted;
   }
   const recordShadow = (
+    opportunity: BlockScanOpportunity,
     status: "positive" | "negative" | "failed" | "unprobed",
   ): void => {
-    if (shadow) shadow.admitted[status]++;
+    if (!shadow) return;
+    shadow.admitted[status]++;
+    const spread = opportunity.coarseSpreadBps;
+    if (typeof spread === "number") {
+      const floor = shadow.admissionSpreadBps;
+      const bucket =
+        spread >= 10 * floor
+          ? "10x+"
+          : spread >= 5 * floor
+            ? "5x-10x"
+            : spread >= 2 * floor
+              ? "2x-5x"
+              : "floor-2x";
+      shadow.admittedSpreadBuckets[bucket][status]++;
+    }
   };
-  const recordShadowTotal = (): void => {
-    if (shadow) shadow.admitted.total++;
+  const recordShadowTotal = (opportunity: BlockScanOpportunity): void => {
+    if (!shadow) return;
+    shadow.admitted.total++;
+    const spread = opportunity.coarseSpreadBps;
+    if (typeof spread === "number") {
+      const floor = shadow.admissionSpreadBps;
+      const bucket =
+        spread >= 10 * floor
+          ? "10x+"
+          : spread >= 5 * floor
+            ? "5x-10x"
+            : spread >= 2 * floor
+              ? "2x-5x"
+              : "floor-2x";
+      shadow.admittedSpreadBuckets[bucket].total++;
+    }
   };
   const workerCount = Math.max(1, Math.min(concurrency, work.length));
   const familyTimeoutMs = positiveInteger(
@@ -281,8 +303,8 @@ export async function refineBlockScanCandidates(
       pending.splice(index, 1);
       failed++;
       dropped++;
-      recordShadowTotal();
-      recordShadow("failed");
+      recordShadowTotal(item.opportunity);
+      recordShadow(item.opportunity, "failed");
       const blocking = stageBudget.blockingCircuit(
         item.opportunity.seedEdges,
       );
@@ -335,7 +357,7 @@ export async function refineBlockScanCandidates(
       signal: familyController.signal,
     });
     attempted++;
-    recordShadowTotal();
+    recordShadowTotal(opportunity);
     try {
       const probe = exactProbeMarginBps(
         controlledState,
@@ -367,7 +389,7 @@ export async function refineBlockScanCandidates(
           priority: exactProbePriority(opportunity, marginBps, pricedTokens),
           index,
         });
-        recordShadow("positive");
+        recordShadow(opportunity, "positive");
         onProbe?.({
           index,
           status: "positive",
@@ -377,7 +399,7 @@ export async function refineBlockScanCandidates(
         });
       } else {
         negative++;
-        recordShadow("negative");
+        recordShadow(opportunity, "negative");
         onProbe?.({
           index,
           status: "negative",
@@ -412,7 +434,7 @@ export async function refineBlockScanCandidates(
       ) {
         deadlineHit = true;
         fallback.push({ opportunity, index });
-        recordShadow("unprobed");
+        recordShadow(opportunity, "unprobed");
         onProbe?.({
           index,
           status: "unprobed",
@@ -426,7 +448,7 @@ export async function refineBlockScanCandidates(
         });
       } else {
         failed++;
-        recordShadow("failed");
+        recordShadow(opportunity, "failed");
         const budgetError =
           localTimedOut &&
             familyIds.length === 1 &&
@@ -465,8 +487,8 @@ export async function refineBlockScanCandidates(
         deadlineHit = true;
         for (const item of pending.splice(0)) {
           fallback.push(item);
-          recordShadowTotal();
-          recordShadow("unprobed");
+          recordShadowTotal(item.opportunity);
+          recordShadow(item.opportunity, "unprobed");
           onProbe?.({
             index: item.index,
             status: "unprobed",
@@ -556,7 +578,18 @@ export async function refineBlockScanCandidates(
             admitted: Object.freeze({ ...shadow.admitted }),
             notAdmitted: Object.freeze({ ...shadow.notAdmitted }),
             admittedSpreadBuckets: Object.freeze({
-              ...shadow.admittedSpreadBuckets,
+              "floor-2x": Object.freeze({
+                ...shadow.admittedSpreadBuckets["floor-2x"],
+              }),
+              "2x-5x": Object.freeze({
+                ...shadow.admittedSpreadBuckets["2x-5x"],
+              }),
+              "5x-10x": Object.freeze({
+                ...shadow.admittedSpreadBuckets["5x-10x"],
+              }),
+              "10x+": Object.freeze({
+                ...shadow.admittedSpreadBuckets["10x+"],
+              }),
             }),
           }),
         }),
