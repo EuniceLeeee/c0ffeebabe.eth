@@ -72,6 +72,7 @@ await testCanonicalActivityIsSharedWithExactMutationDescriptors();
 await testCanonicalActivityFailureFallsBackToMutationTransport();
 await testCanonicalAddressTouchesIncludeDirectTargetsAndLogEmitters();
 await testCanonicalAddressTouchesFailClosed();
+await testHardRequestTimeoutReleasesTransport();
 
 console.log("blockscan-state-read-backend PASS");
 
@@ -3480,6 +3481,39 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
     /canonical path discontinuity/,
   );
   console.log("[state-read-backend] address-touch proof fails closed: PASS");
+}
+
+async function testHardRequestTimeoutReleasesTransport(): Promise<void> {
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxBatchSize: 2,
+    maxConcurrentBatches: 1,
+    hardRequestTimeoutMs: 200,
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      if (body[0]?.method === "eth_getBlockByNumber") {
+        return fakeResponse(body.map((request) =>
+          success(request.id, { hash: sourceBlockHash })
+        ));
+      }
+      // Simulate an uncooperative response body that never settles. The hard
+      // timeout must stop waiting and release the shared semaphore slot.
+      await new Promise<void>(() => {});
+      throw new Error("unreachable");
+    }) as typeof fetch,
+  });
+  const startedAt = Date.now();
+  const results = await backend.readPinned([
+    read("hang-a", "0x01"),
+    read("hang-b", "0x02"),
+  ], control({ deadlineAtMs: Date.now() + 10_000 }));
+  assert(
+    Date.now() - startedAt < 3_000,
+    "hard request timeout must settle the read well before the pass deadline",
+  );
+  assert.equal(results.length, 2);
+  assertFailure(results[0], "rpc", /hard request timeout/);
+  assertFailure(results[1], "rpc", /hard request timeout/);
+  console.log("[state-read-backend] hard request timeout releases transport: PASS");
 }
 
 function backendWith(

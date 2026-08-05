@@ -66,6 +66,15 @@ export interface JsonRpcBlockScanStateReadBackendOptions {
     | "eth-block"
     | "debug-raw-header-with-fallback";
   readonly fetchImpl?: typeof fetch;
+  /**
+   * Hard wall-clock bound for one HTTP request including body parsing. A
+   * stuck response body must not hold the shared address-touch/critical
+   * semaphore for a whole generation: one hung activity read currently
+   * stalls every producer lane until the 20-minute bootstrap deadline, and
+   * the retry makes it worse. The timeout only stops waiting on the
+   * request; the permit/slot is released in the caller's finally.
+   */
+  readonly hardRequestTimeoutMs?: number;
   readonly onMutationProofTelemetry?: (
     telemetry: MutationProofTransportTelemetry,
   ) => void;
@@ -246,6 +255,7 @@ export class JsonRpcBlockScanStateReadBackend
   private readonly mutationReadPriority:
     | Pick<LiveRethReadPriority, "runCritical">
     | undefined;
+  private readonly hardRequestTimeoutMs: number;
   private readonly now: () => number;
   private readonly transportScheduler:
     | Pick<RethTransportScheduler, "run">
@@ -310,6 +320,10 @@ export class JsonRpcBlockScanStateReadBackend
     this.mutationFinalCasSlots = new AbortableSemaphore(1);
     this.addressTouchSlots = new AbortableSemaphore(1);
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.hardRequestTimeoutMs = Math.max(
+      1_000,
+      options.hardRequestTimeoutMs ?? 45_000,
+    );
     this.onMutationProofTelemetry = options.onMutationProofTelemetry;
     this.mutationReadPriority = options.mutationReadPriority;
     this.now = options.now ?? (() => performance.now());
@@ -1823,6 +1837,37 @@ export class JsonRpcBlockScanStateReadBackend
     return this.postWithSlots(this.rpcSlots, body, signal);
   }
 
+  /**
+   * Bound one HTTP request (fetch + body parse) with a hard wall-clock
+   * timeout. Abort signals cancel cooperative fetches, but an uncooperative
+   * response body can otherwise hold the shared semaphore and the serial
+   * critical tail for a full generation. This never aborts the underlying
+   * request; it only stops waiting so the caller's finally can release the
+   * slot and the rest of the pipeline can proceed.
+   */
+  private withHardRequestTimeout<T>(promise: Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          new Error(
+            `reth RPC hard request timeout after ` +
+              `${this.hardRequestTimeoutMs}ms`,
+          ),
+        );
+      }, this.hardRequestTimeoutMs);
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
+  }
+
   private async postWithSlots(
     slots: AbortableSemaphore,
     body: readonly object[],
@@ -1834,18 +1879,22 @@ export class JsonRpcBlockScanStateReadBackend
         throw signal.reason ?? new DOMException("Aborted", "AbortError");
       }
       const send = async (): Promise<readonly JsonRpcResponse[]> => {
-        const response = await this.fetchImpl(this.rpcUrl, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-          signal,
-        });
+        const response = await this.withHardRequestTimeout(
+          this.fetchImpl(this.rpcUrl, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+            signal,
+          }),
+        );
         if (!response.ok) {
           throw new Error(
             `JSON-RPC HTTP ${response.status} ${response.statusText}`,
           );
         }
-        const value: unknown = await response.json();
+        const value: unknown = await this.withHardRequestTimeout(
+          response.json(),
+        );
         if (!Array.isArray(value)) {
           throw new Error("JSON-RPC batch returned non-array");
         }
@@ -1875,18 +1924,22 @@ export class JsonRpcBlockScanStateReadBackend
         if (signal.aborted) {
           throw signal.reason ?? new DOMException("Aborted", "AbortError");
         }
-        const response = await this.fetchImpl(this.rpcUrl, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-          signal,
-        });
+        const response = await this.withHardRequestTimeout(
+          this.fetchImpl(this.rpcUrl, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+            signal,
+          }),
+        );
         if (!response.ok) {
           throw new Error(
             `JSON-RPC HTTP ${response.status} ${response.statusText}`,
           );
         }
-        const value: unknown = await response.json();
+        const value: unknown = await this.withHardRequestTimeout(
+          response.json(),
+        );
         if (!Array.isArray(value)) {
           throw new Error("JSON-RPC batch returned non-array");
         }

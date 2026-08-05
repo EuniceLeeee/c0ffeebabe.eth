@@ -1176,6 +1176,13 @@ async function main(): Promise<void> {
         process.env.SEARCHER_BLOCKSCAN_STATE_MULTICALL === "1"
           ? "aggregate3"
           : "rpc-batch",
+      hardRequestTimeoutMs: Math.max(
+        1_000,
+        Number(
+          process.env.SEARCHER_BLOCKSCAN_STATE_HARD_RPC_TIMEOUT_MS ??
+            "45000",
+        ),
+      ),
       mutationHeaderMode: "debug-raw-header-with-fallback",
       onMutationProofTelemetry: (telemetry) => {
         console.log(
