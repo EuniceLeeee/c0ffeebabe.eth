@@ -85,7 +85,7 @@ export function blockScanSelectionProvenance(
     kind: "natural_coarse_ranked",
     selectionMode: "production",
     forcedSelectionCount: outcome.selection.forcedSelectionCount,
-    eligibleCandidateCount: outcome.selection.admittedCount,
+    eligibleCandidateCount: outcome.selection.enumeratedCount,
     selectedCandidateCount: outcome.selection.selectedCount,
     maxCandidates,
   });
@@ -231,7 +231,7 @@ export function scanBlockStateFromResolvedMids(input: {
       (entry) => entry.estSpreadBps > admissionSpreadBps,
     );
     const selected = selectByBlockScanFamily(
-      admitted,
+      deduped,
       input.cfg.maxCandidates,
       (entry) => blockScanRouteFamilyIds(entry.opportunity.seedEdges),
     );
@@ -343,6 +343,7 @@ export function scanBlockStateFromResolvedMids(input: {
       cycleFingerprint: cycleFingerprint(input.sourceBlock, ring),
       seedEdges,
       flashToken,
+      coarseSpreadBps: routeScore.estSpreadBps,
       searchSeed: {
         startToken: flashToken,
         searchCenter: sizing.searchCenter,
@@ -419,6 +420,7 @@ export function scanBlockStateFromResolvedMids(input: {
       cycleFingerprint: cycleFingerprint(input.sourceBlock, rotatedRingTokens),
       seedEdges,
       flashToken,
+      coarseSpreadBps: rotatedScore.estSpreadBps,
       searchSeed: {
         startToken: flashToken,
         searchCenter: sizing.searchCenter,

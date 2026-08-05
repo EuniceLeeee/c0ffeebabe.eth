@@ -615,11 +615,12 @@ const tests: TestCase[] = [
     },
   },
   {
-    name: "exact admission spread funnel",
+    name: "exact admission spread shadow funnel",
     run: () => {
       // P1 mid = 1000 USDC/WETH; P2 is +90bps raw (≈30bps net after 2x30bps
       // fees); P3 is +160bps raw (≈100bps net). Both rings pass the 10bps
-      // enumeration floor; only the P1-P3 ring clears a 50bps admission floor.
+      // enumeration floor; the 50bps admission floor is shadow-only and must
+      // NOT remove either ring from the opportunity set.
       const cache = new PoolStateCache();
       seedV2Pair(cache, P1, USDC, WETH, 1_000_000n * UNIT, 1_000n * UNIT);
       seedV2Pair(cache, P2, USDC, WETH, 1_000_000n * UNIT, 1_009n * UNIT);
@@ -635,7 +636,7 @@ const tests: TestCase[] = [
         baseline.selection.enumeratedCount === 2 &&
           baseline.selection.admittedCount === 2 &&
           baseline.opportunities.length === 2,
-        `default admission should admit all enumerated rings ` +
+        `default shadow admission should admit all enumerated rings ` +
           `(enumerated=${baseline.selection.enumeratedCount}, ` +
           `admitted=${baseline.selection.admittedCount}, ` +
           `selected=${baseline.opportunities.length})`,
@@ -647,23 +648,23 @@ const tests: TestCase[] = [
         `10-50bps rings must stay in the enumerated funnel, got ${gated.selection.enumeratedCount}`,
       );
       assert(
-        gated.selection.admittedCount === 1 &&
-          gated.opportunities.length === 1,
-        `50bps admission must keep only the wide ring ` +
-          `(admitted=${gated.selection.admittedCount}, ` +
-          `selected=${gated.opportunities.length})`,
-      );
-      const pools = new Set(
-        gated.opportunities[0].seedEdges.map((edge) =>
-          edge.target.toLowerCase(),
-        ),
+        gated.selection.admittedCount === 1,
+        `50bps shadow admission must count only the wide ring, got ` +
+          `${gated.selection.admittedCount}`,
       );
       assert(
-        pools.has(P1.toLowerCase()) && pools.has(P3.toLowerCase()) &&
-          !pools.has(P2.toLowerCase()),
-        `wide ring should be P1/P3, got ${[...pools].join(",")}`,
+        gated.opportunities.length === 2,
+        `50bps shadow must not remove rings from the opportunity set, got ` +
+          `${gated.opportunities.length}`,
       );
-      console.log("[blockscan-scanner] exact admission spread funnel: PASS");
+      for (const opp of gated.opportunities) {
+        assert(
+          typeof opp.coarseSpreadBps === "number" &&
+            opp.coarseSpreadBps > 0,
+          "shadow opportunities must carry coarseSpreadBps",
+        );
+      }
+      console.log("[blockscan-scanner] exact admission spread shadow funnel: PASS");
     },
   },
   {

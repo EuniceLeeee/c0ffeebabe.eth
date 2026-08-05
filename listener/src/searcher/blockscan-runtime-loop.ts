@@ -1,4 +1,8 @@
-import { AnvilStateBackend } from "../shared/state/state-backend.js";
+import {
+  AnvilStateBackend,
+  type StateBackend,
+} from "../shared/state/state-backend.js";
+import { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 import type { BlockScanOpportunity } from "./detector/detector.js";
 import { detectProductionBlockScanOpportunities } from "./detector/blockscan-scanner-production.js";
 import type {
@@ -465,6 +469,14 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly enabled: boolean;
   readonly blockScanConfig: BlockScanCoreConfig | undefined;
   readonly executionWorkers: readonly BlockScanExecutionWorker[];
+  readonly rpcUrl: string;
+  /**
+   * Override the exact-probe quote backend. Production uses the source-hash
+   * pinned reth micro-batch backend; harnesses inject a deterministic fake.
+   */
+  readonly exactQuoteStateFactory?: (
+    sourceBlockHash: string,
+  ) => StateBackend;
   readonly runtimeAbort: AbortController;
   readonly sharedPlanner: Pick<TemplatePlanner, "setFlashLiquidity">;
   readonly backrunStatePublisher: Pick<
@@ -2514,8 +2526,19 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         passDeadlineAtMs - refinementReserveMs,
       );
       if (!exactRefineStarted) beginStage("exact_refine");
+      /*
+       * Exact probes read current-N view state only. Batch them directly to
+       * local reth (source-hash pinned) instead of serializing every quote
+       * through one Anvil fork; Anvil stays reserved for solver/final-sim.
+       */
+      const exactQuoteState = this.deps.exactQuoteStateFactory
+        ? this.deps.exactQuoteStateFactory(exactSourceBlockHash)
+        : new PinnedRethQuoteBackend(
+            this.deps.rpcUrl,
+            exactSourceBlockHash,
+          );
       const refinement = await refineBlockScanCandidates(
-        blockScanExecutionWorkers[0].state,
+        exactQuoteState,
         coarse.opportunities,
         blockScanCfg.maxCandidates,
         refineDeadline,
@@ -2545,8 +2568,19 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           executor: this.deps.executorAddress,
           executionEvidence,
           signal: passSignal,
+          admissionSpreadBps:
+            blockScanCfg.exactAdmissionSpreadBps ??
+            blockScanCfg.minSpreadBps,
         },
       );
+      if (refinement.shadow) {
+        console.log(
+          `[searcher/blockscan-refine-shadow] ${JSON.stringify({
+            block: blockNumber,
+            ...refinement.shadow,
+          })}`,
+        );
+      }
       finishStage(
         "exact_refine",
         refinement.deadlineHit ? "failed" : "ran",

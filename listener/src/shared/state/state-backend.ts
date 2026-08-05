@@ -1204,7 +1204,7 @@ function waitForChildExit(proc: ChildProcess): Promise<void> {
   });
 }
 
-interface JsonRpcHttpResponse {
+export interface JsonRpcHttpResponse {
   statusCode: number;
   statusMessage: string;
   body: unknown;
@@ -1216,7 +1216,7 @@ interface JsonRpcHttpResponse {
  * keep-alive request. Refinement deadlines require the RPC itself to stop, so
  * explicitly destroy both request and response when the signal fires.
  */
-function postJsonRpc(
+export function postJsonRpc(
   endpoint: string,
   payload: JsonRpcPayload,
   signal: AbortSignal,
@@ -1513,7 +1513,7 @@ interface SimulatedCallEvidence {
   }[];
 }
 
-function simulationCalls(value: unknown): readonly SimulatedCallEvidence[] {
+export function simulationCalls(value: unknown): readonly SimulatedCallEvidence[] {
   const block = Array.isArray(value) ? value[0] as { calls?: unknown } : null;
   const calls = block && Array.isArray(block.calls) ? block.calls : [];
   return calls.map((entry): SimulatedCallEvidence => {
@@ -1558,14 +1558,14 @@ function simulationCalls(value: unknown): readonly SimulatedCallEvidence[] {
   });
 }
 
-function decodeUintCall(data: string, label: string): bigint {
+export function decodeUintCall(data: string, label: string): bigint {
   if (!ethers.isHexString(data) || ethers.dataLength(data) < 32) {
     throw new Error(`token-to-native ${label} returned invalid data`);
   }
   return BigInt(data);
 }
 
-function nativeTransfersToCaller(
+export function nativeTransfersToCaller(
   logs: readonly SimulatedCallEvidence["logs"][number][],
   token: string,
   caller: string,

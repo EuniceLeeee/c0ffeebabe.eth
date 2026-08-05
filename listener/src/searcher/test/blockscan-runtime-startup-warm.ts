@@ -2074,6 +2074,8 @@ function createHarness(
     }] as unknown) as BlockScanRuntimeLoopDependencies<
       PreparedDiscovery
     >["executionWorkers"],
+    rpcUrl: "http://127.0.0.1:8545",
+    exactQuoteStateFactory: () => workerState as never,
     runtimeAbort,
     executorAddress: "0x0000000000000000000000000000000000000001",
     sharedPlanner: { setFlashLiquidity() {} },

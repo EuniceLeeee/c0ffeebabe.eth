@@ -42,6 +42,8 @@ export interface BlockScanOpportunity {
   seedEdges: TokenEdge[];          // the pinned cycle edges the scanner found
   flashToken: string;              // pinned by the scanner; planner MUST NOT rotate
   searchSeed: { startToken: string; searchCenter: bigint; maxInput: bigint }; // sizing seed for solver search
+  /** Coarse ring spread (bps) used to admit this candidate for exact probes. */
+  coarseSpreadBps?: number;
   leavesStandingPosition: boolean; // DERIVED from seedEdges at construction; re-derived at submit
   affectedPools?: string[];
   affectedTokens?: string[];

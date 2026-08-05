@@ -2450,6 +2450,7 @@ async function main(): Promise<void> {
     enabled: enableBlockScan,
     blockScanConfig: blockScanCfg,
     executionWorkers: blockScanExecutionWorkers,
+    rpcUrl: config.rpcUrl,
     runtimeAbort: blockScanRuntimeAbort,
     sharedPlanner: planner,
     backrunStatePublisher,
