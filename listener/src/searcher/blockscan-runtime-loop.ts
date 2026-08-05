@@ -303,6 +303,7 @@ export class NMinusOneProducerGate {
     this.deferred = startNextProducer;
   }
 
+
   /** Start predecessor production immediately once the graph is ready. */
   start(): void {
     this.release();
@@ -744,6 +745,47 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   ): void {
     this.advanceLatestHead(blockNumber);
     this.scheduler.schedule(blockNumber, observation);
+    this.maybeStartProducerAtObservation(blockNumber);
+  }
+
+  /**
+   * Start the background N-1 producer as soon as a new head is observed,
+   * before the pass runs its discovery gate. Under sustained exact-storm
+   * load the pass for head N can start 20-60s late; arming the producer
+   * only inside the pass delayed N-1 publication past the next head and
+   * produced stale_state/ineligible passes even when every producer
+   * generation itself was fast. The producer re-observes canonical headers
+   * per generation, so the provisional hash here is only a placeholder.
+   */
+  private maybeStartProducerAtObservation(blockNumber: number): void {
+    if (this.startupWarmPending || this.deps.blind.enabled) return;
+    if (this.deps.nMinusOneFallbackEnabled !== true) return;
+    const coordinator = this.deps.adapterRuntimeCoordinator();
+    const graph = this.deps.blockScanGraph();
+    if (!coordinator || !graph) return;
+    const captured = this.deps.discovery.capture();
+    const producerView = this.producerGraphView({
+      edges: Object.freeze([...graph]),
+      topologyKey: this.deps.discovery.topologyKey(),
+      landedCoverage: captured.landedCoverage,
+      generation: this.nextGeneration(),
+      sourceBlock: blockNumber,
+      sourceBlockHash: "",
+    });
+    if (this.coarsePricingActiveSourceBlock === blockNumber) return;
+    if (this.pendingCoarsePricing?.graph.sourceBlock === blockNumber) return;
+    if (
+      !nMinusOneProducerCanServeLatestHead(
+        blockNumber,
+        this.latestScheduledHead,
+      )
+    ) {
+      return;
+    }
+    this.enqueueCoarsePricing({
+      coordinator,
+      graph: producerView,
+    });
   }
 
   /**
@@ -2114,6 +2156,15 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                 status: "skipped_obsolete",
               })}`,
             );
+            return;
+          }
+          if (
+            this.coarsePricingActiveSourceBlock === graphView.sourceBlock ||
+            this.pendingCoarsePricing?.graph.sourceBlock ===
+              graphView.sourceBlock
+          ) {
+            // Observation-time scheduling already started (or queued) this
+            // head's producer; do not enqueue a redundant duplicate.
             return;
           }
           this.enqueueCoarsePricing({
