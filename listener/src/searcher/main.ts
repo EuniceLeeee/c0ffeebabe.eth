@@ -2493,6 +2493,13 @@ async function main(): Promise<void> {
           "30000",
       ),
     ),
+    exactProducerLagYieldMs: Math.max(
+      0,
+      Number(
+        process.env.SEARCHER_BLOCKSCAN_EXACT_PRODUCER_LAG_YIELD_MS ??
+          "1000",
+      ),
+    ),
     largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
     largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
     passBudgetMs: blockScanPassBudgetMs,

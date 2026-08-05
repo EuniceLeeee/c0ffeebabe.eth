@@ -9,6 +9,8 @@ import {
 } from "./pinned-reth-quote-backend.js";
 import type {
   RethTransportScheduler,
+  RethTransportLane,
+  RethTransportLease,
 } from "./reth-transport-scheduler.js";
 import type { BlockScanOpportunity } from "./detector/detector.js";
 import { detectProductionBlockScanOpportunities } from "./detector/blockscan-scanner-production.js";
@@ -515,6 +517,15 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
    * hot chain.
    */
   readonly discoveryBackfillMinIntervalMs?: number;
+  /**
+   * When the background N-1 producer is behind the newest scheduled head,
+   * exact probes yield the shared reth transport for up to this many
+   * milliseconds per batch. Heavy candidate blocks (900+ probes) can occupy
+   * reth for 15-20s and push the producer's N-1 publication past the next
+   * head cadence; this gate gives the producer the transport it needs to
+   * close the gap while keeping exact work bounded.
+   */
+  readonly exactProducerLagYieldMs?: number;
   readonly routeTelemetry?: BlockScanEnumerationSolverTelemetrySink;
   readonly largeGraphEdgeThreshold: number;
   readonly largeGraphPassBudgetMs: number;
@@ -2567,11 +2578,52 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       if (exactSourceBlockHash === null) {
         throw new Error("exact quote source hash is unavailable");
       }
+      /*
+       * Producer-lag gate for the exact probe transport. Heavy candidate
+       * blocks issue 900+ probes in 15-20s; while the background N-1 producer
+       * is behind the newest scheduled head, each exact batch yields the
+       * shared reth transport for a bounded window so the producer can
+       * publish the missing predecessor instead of waiting behind exact.
+       */
+      const exactTransportScheduler: Pick<
+        RethTransportScheduler,
+        "run"
+      > | undefined = this.deps.rethTransportScheduler
+        ? Object.freeze({
+            run: async <T>(
+              lane: RethTransportLane,
+              signal: AbortSignal,
+              work: (lease: RethTransportLease) => Promise<T>,
+            ): Promise<T> => {
+              const scheduler = this.deps.rethTransportScheduler!;
+              if (lane !== "exact") {
+                return scheduler.run(lane, signal, work);
+              }
+              const yieldMs = Math.max(
+                0,
+                this.deps.exactProducerLagYieldMs ?? 1_000,
+              );
+              const gateUntilAtMs = Date.now() + yieldMs;
+              while (Date.now() < gateUntilAtMs) {
+                if (signal.aborted || passSignal.aborted) break;
+                const snapshot =
+                  adapterRuntimeCoordinator.latestPricingSnapshot();
+                const producerSource = snapshot?.sourceBlock ?? -1;
+                const newestHead = this.latestScheduledHead ?? blockNumber;
+                if (newestHead - producerSource < 2) break;
+                await new Promise<void>((resolve) =>
+                  setTimeout(resolve, 50)
+                );
+              }
+              return scheduler.run(lane, signal, work);
+            },
+          })
+        : undefined;
       const exactFactoryInput: ExactQuoteStateFactoryInput = {
         sourceBlockHash: exactSourceBlockHash,
         signal: passSignal,
         deadlineAtMs: passDeadlineAtMs,
-        transportScheduler: this.deps.rethTransportScheduler,
+        transportScheduler: exactTransportScheduler,
       };
       exactQuoteState = this.deps.exactQuoteStateFactory
         ? this.deps.exactQuoteStateFactory(exactFactoryInput)
@@ -2583,7 +2635,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               deadlineAtMs: passDeadlineAtMs,
               maxBatchSize: 32,
               maxConcurrentBatches: 8,
-              transportScheduler: this.deps.rethTransportScheduler,
+              transportScheduler: exactTransportScheduler,
             },
           );
       if (exactQuoteState === null) {
