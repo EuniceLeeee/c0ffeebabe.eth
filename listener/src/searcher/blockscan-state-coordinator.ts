@@ -601,6 +601,15 @@ interface ActiveGeneration {
   readonly generation: number;
   readonly token: symbol;
   readonly controller: AbortController;
+  /**
+   * A bootstrap/warm generation is building the initial recovery base from a
+   * full current-N direct read. It must not be aborted by ordinary head
+   * passes: superseding it every block-time restarts the full read forever.
+   * Non-bootstrap callers wait (bounded by their own deadline) instead.
+   */
+  readonly bootstrap: boolean;
+  /** Resolves when this generation's prepare() finally settles. */
+  readonly settled: Promise<void>;
   readonly committedBases: Map<
     string,
     {
@@ -671,6 +680,16 @@ class FamilyDeadlineAbort extends Error {
   }
 }
 
+/*
+ * One canonical block-activity read is a single batched receipts read. A
+ * multi-block gap is safe to prove, but an unbounded range turns into one
+ * giant eth_getBlockReceipts batch that can stall reth for minutes and hold
+ * the shared critical transport. Cap the proven range at the same 8-block
+ * bound as the address-touch proof; state keys whose last-good base is older
+ * simply direct-read at current N instead of forcing a huge activity proof.
+ */
+const MAX_CANONICAL_ACTIVITY_READ_BLOCKS = 8;
+
 /**
  * Shadow current-N state kernel. It owns scheduling/publication only and has
  * no protocol switch or production side effect.
@@ -682,6 +701,7 @@ export class BlockScanStateCoordinator {
     string,
     CompiledBlockScanStateFamily
   >();
+  private bootstrapModeActive = false;
   /**
    * Recovery-only dynamic bases. These values never enter PricingView directly:
    * they are usable only after a complete adapter-owned mutation proof advances
@@ -976,6 +996,10 @@ export class BlockScanStateCoordinator {
     const readActivity = this.backend.readCanonicalBlockActivity;
     const topology = this.topologyIndex;
     if (!readActivity || !topology) return null;
+    const activityReadRangeBlocks = Math.max(
+      1,
+      Math.min(this.incrementalRangeBlocks, MAX_CANONICAL_ACTIVITY_READ_BLOCKS),
+    );
     const through: BlockSource = Object.freeze({
       number: graph.sourceBlock,
       hash: graph.sourceBlockHash,
@@ -999,7 +1023,7 @@ export class BlockScanStateCoordinator {
       const distance = through.number - base.state.source.number;
       if (
         distance <= 0 ||
-        distance > this.incrementalRangeBlocks ||
+        distance > activityReadRangeBlocks ||
         through.generation <= base.state.source.generation
       ) {
         continue;
@@ -1019,7 +1043,7 @@ export class BlockScanStateCoordinator {
         readActivity.call(this.backend, fromExclusive, through, {
           deadlineAtMs,
           signal,
-          maxRangeBlocks: this.incrementalRangeBlocks,
+          maxRangeBlocks: activityReadRangeBlocks,
         }),
         signal,
       );
@@ -1032,7 +1056,7 @@ export class BlockScanStateCoordinator {
           readActivity.call(this.backend, fromExclusive, through, {
             deadlineAtMs,
             signal,
-            maxRangeBlocks: this.incrementalRangeBlocks,
+            maxRangeBlocks: activityReadRangeBlocks,
           }),
           signal,
         );
@@ -1350,6 +1374,9 @@ export class BlockScanStateCoordinator {
         }],
       });
     }
+    const bootstrapMode =
+      input.cacheMode === "warm" ||
+      input.laggingTopologyRefreshMode === "startup-bootstrap";
     if (this.active) {
       if (graph.generation <= this.active.generation) {
         return incompleteResult({
@@ -1361,21 +1388,73 @@ export class BlockScanStateCoordinator {
           }],
         });
       }
-      this.active.controller.abort(
-        new SupersededAbort(this.active.generation, graph.generation),
-      );
+      if (this.active.bootstrap && !bootstrapMode) {
+        /*
+         * Never abort a bootstrap/warm generation from an ordinary head pass:
+         * the full current-N direct read is the only path that builds the
+         * recovery base every later incremental generation carries from.
+         * Superseding it at head cadence restarts the read forever and the
+         * chain never publishes. Wait (bounded by this caller's own deadline)
+         * for it to settle; if the wait times out or this caller is aborted,
+         * fail this pass without touching the bootstrap.
+         */
+        const activeBootstrap = this.active;
+        const waitError = await waitForSettledOrDeadline(
+          activeBootstrap.settled,
+          input.deadlineAtMs,
+          input.signal ?? new AbortController().signal,
+        );
+        if (waitError !== null) {
+          return incompleteResult({
+            graph,
+            ownership,
+            issues: [{
+              kind: "aborted",
+              message:
+                `waiting for active bootstrap generation ` +
+                `${activeBootstrap.generation}: ${waitError.message}`,
+            }],
+          });
+        }
+        if (this.active && this.active !== activeBootstrap) {
+          if (graph.generation <= this.active.generation) {
+            return incompleteResult({
+              graph,
+              ownership,
+              issues: [{
+                kind: "stale-generation",
+                message: `generation ${graph.generation} is not newer than active ${this.active.generation}`,
+              }],
+            });
+          }
+          this.active.controller.abort(
+            new SupersededAbort(this.active.generation, graph.generation),
+          );
+        }
+      } else {
+        this.active.controller.abort(
+          new SupersededAbort(this.active.generation, graph.generation),
+        );
+      }
     }
 
     const controller = new AbortController();
     const token = Symbol(`blockscan-state-${graph.generation}`);
+    let resolveSettled!: () => void;
+    const settled = new Promise<void>((resolve) => {
+      resolveSettled = resolve;
+    });
     const active: ActiveGeneration = {
       generation: graph.generation,
       token,
       controller,
+      bootstrap: bootstrapMode,
+      settled,
       committedBases: new Map(),
       published: false,
     };
     this.active = active;
+    this.bootstrapModeActive = bootstrapMode;
     const detachExternal = linkAbortSignal(input.signal, controller);
     const delay = input.deadlineAtMs - this.now();
     const deadlineTimer = setTimeout(
@@ -1859,6 +1938,8 @@ export class BlockScanStateCoordinator {
       }
       active.committedBases.clear();
       this.cacheModeActive = false;
+      this.bootstrapModeActive = false;
+      resolveSettled();
       if (this.active?.token === token) this.active = null;
     }
   }
@@ -2180,10 +2261,12 @@ export class BlockScanStateCoordinator {
       throw new Error("empty family phase has no familyId");
     }
     const startedAtMs = this.now();
-    const localBudgetMs = Math.min(
-      this.familyTimeoutMs,
-      Math.max(0, input.deadlineAtMs - startedAtMs),
-    );
+    const localBudgetMs = this.bootstrapModeActive
+      ? Math.max(0, input.deadlineAtMs - startedAtMs)
+      : Math.min(
+          this.familyTimeoutMs,
+          Math.max(0, input.deadlineAtMs - startedAtMs),
+        );
     const familyDeadlineAtMs = Math.min(
       input.deadlineAtMs,
       startedAtMs + localBudgetMs,
@@ -2355,10 +2438,12 @@ export class BlockScanStateCoordinator {
       const familyStartedAtMs = this.now();
       const familyController = new AbortController();
       const detachParent = linkAbortSignal(signal, familyController);
-      const localBudgetMs = Math.min(
-        this.familyTimeoutMs,
-        Math.max(0, deadlineAtMs - familyStartedAtMs),
-      );
+      const localBudgetMs = this.bootstrapModeActive
+        ? Math.max(0, deadlineAtMs - familyStartedAtMs)
+        : Math.min(
+            this.familyTimeoutMs,
+            Math.max(0, deadlineAtMs - familyStartedAtMs),
+          );
       const familyDeadlineAtMs = Math.min(
         deadlineAtMs,
         familyStartedAtMs + localBudgetMs,
@@ -4187,6 +4272,45 @@ function freezeFamilyTelemetry(
       .sort((a, b) => a.familyId.localeCompare(b.familyId))
       .map((family) => Object.freeze({ ...family })),
   );
+}
+
+/**
+ * Wait for a generation's settled promise, bounded by an absolute deadline and
+ * the caller's abort signal. Returns null on settlement, otherwise the reason
+ * the wait ended (deadline or caller abort). The waited generation is never
+ * aborted by this helper.
+ */
+function waitForSettledOrDeadline(
+  settled: Promise<void>,
+  deadlineAtMs: number,
+  signal: AbortSignal,
+): Promise<Error | null> {
+  return new Promise((resolve) => {
+    let done = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (error: Error | null): void => {
+      if (done) return;
+      done = true;
+      if (timer !== undefined) clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve(error);
+    };
+    const onAbort = (): void =>
+      finish(
+        signal.reason instanceof Error
+          ? signal.reason
+          : new Error("block-scan state caller aborted while waiting for bootstrap"),
+      );
+    const onTimeout = (): void =>
+      finish(new Error("caller deadline reached while waiting for bootstrap"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    timer = setTimeout(onTimeout, Math.max(0, deadlineAtMs - Date.now()));
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    void settled.then(() => finish(null), () => finish(null));
+  });
 }
 
 function issueFromAbort(

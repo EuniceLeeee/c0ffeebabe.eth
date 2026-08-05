@@ -3040,6 +3040,222 @@ async function generationFence(): Promise<void> {
   assert.equal(coordinator.latestSnapshot()?.generation, 2);
 }
 
+class ActivityRangeRecordingBackend implements BlockScanStateReadBackend {
+  readonly activityRanges: Array<{ readonly from: number; readonly to: number }> = [];
+  readonly directTargets: string[] = [];
+
+  async readBatch(
+    _lane: BlockScanPricingLane,
+    reads: readonly StateRead[],
+    control: { readonly sourceGeneration: number },
+  ): Promise<readonly StateReadResult[]> {
+    this.directTargets.push(...reads.map((read) => read.to.toLowerCase()));
+    return reads.map((read) => successfulRead(read, control.sourceGeneration));
+  }
+
+  async readCanonicalBlockActivity(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+  ): Promise<CanonicalBlockActivity> {
+    this.activityRanges.push({
+      from: fromExclusive.number,
+      to: through.number,
+    });
+    return Object.freeze({
+      fromExclusive,
+      through,
+      events: Object.freeze([]),
+      touchedAddresses: Object.freeze([]),
+      transactionCount: 0,
+      canonicalPathFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+      }),
+      rangeFingerprint: deterministicHash({ fromExclusive, through }),
+    });
+  }
+
+  async verifyCanonicalSource(): Promise<void> {
+    return;
+  }
+}
+
+class GateReadsBackend implements BlockScanStateReadBackend {
+  private resolveStarted!: () => void;
+  private resolveRelease!: () => void;
+  readonly readsStarted = new Promise<void>((resolve) => {
+    this.resolveStarted = resolve;
+  });
+  private readonly release = new Promise<void>((resolve) => {
+    this.resolveRelease = resolve;
+  });
+  private released = false;
+
+  async readBatch(
+    _lane: BlockScanPricingLane,
+    reads: readonly StateRead[],
+    control: {
+      readonly sourceGeneration: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<readonly StateReadResult[]> {
+    this.resolveStarted();
+    if (!this.released) {
+      await new Promise<void>((resolve) => {
+        if (control.signal.aborted) resolve();
+        else control.signal.addEventListener("abort", () => resolve(), {
+          once: true,
+        });
+        void this.release.then(() => resolve());
+      });
+    }
+    return reads.map((read) => successfulRead(read, control.sourceGeneration));
+  }
+
+  finishReads(): void {
+    this.released = true;
+    this.resolveRelease();
+  }
+
+  async readCanonicalBlockActivity(
+    fromExclusive: BlockSource,
+    through: BlockSource,
+  ): Promise<CanonicalBlockActivity> {
+    return Object.freeze({
+      fromExclusive,
+      through,
+      events: Object.freeze([]),
+      touchedAddresses: Object.freeze([]),
+      transactionCount: 0,
+      canonicalPathFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+      }),
+      rangeFingerprint: deterministicHash({ fromExclusive, through }),
+    });
+  }
+
+  async verifyCanonicalSource(): Promise<void> {
+    return;
+  }
+}
+
+async function activityRangeIsCappedToEightBlocks(): Promise<void> {
+  const backend = new ActivityRangeRecordingBackend();
+  const coordinator = new BlockScanStateCoordinator(backend, {
+    incrementalRangeBlocks: 128,
+  });
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: incrementalFakeCapability(),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+  const edges = [swapForward, swapReverse];
+
+  const bootstrap = await coordinator.prepare({
+    graph: incrementalGraph(1, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+    laggingTopologyRefreshMode: "startup-bootstrap",
+  });
+  assert.equal(bootstrap.status, "complete");
+  assert.equal(
+    backend.activityRanges.length,
+    0,
+    "bootstrap with no recovery base must skip the canonical activity read",
+  );
+
+  const adjacent = await coordinator.prepare({
+    graph: incrementalGraph(2, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(adjacent.status, "complete");
+  assert.equal(
+    backend.activityRanges.length,
+    1,
+    "a one-block gap must use the canonical activity proof",
+  );
+  assert.equal(
+    backend.activityRanges[0]!.to - backend.activityRanges[0]!.from,
+    1,
+  );
+
+  const distant = await coordinator.prepare({
+    graph: incrementalGraph(11, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(distant.status, "complete");
+  assert.equal(
+    backend.activityRanges.length,
+    1,
+    "a 9-block gap must not attempt one giant canonical activity read",
+  );
+  assert(
+    backend.directTargets.some(
+      (target) => target === SWAP_POOL.toLowerCase(),
+    ),
+    "the stale-base keys must direct-read at current N instead of carrying",
+  );
+}
+
+async function headPassDoesNotSupersedeActiveBootstrap(): Promise<void> {
+  const backend = new GateReadsBackend();
+  const coordinator = new BlockScanStateCoordinator(backend, {
+    familyTimeoutMs: 25,
+  });
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: incrementalFakeCapability(),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+  const edges = [swapForward, swapReverse];
+
+  const bootstrap = coordinator.prepare({
+    graph: incrementalGraph(1, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+    laggingTopologyRefreshMode: "startup-bootstrap",
+  });
+  await backend.readsStarted;
+
+  const headPass = await coordinator.prepare({
+    graph: incrementalGraph(2, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 300,
+  });
+  assert.equal(
+    headPass.status,
+    "incomplete",
+    "a head pass must fail closed instead of aborting an active bootstrap",
+  );
+
+  let bootstrapSettled = false;
+  void bootstrap.then(() => {
+    bootstrapSettled = true;
+  });
+  await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  assert.equal(
+    bootstrapSettled,
+    false,
+    "the bootstrap generation must still be running after the head pass wait",
+  );
+
+  backend.finishReads();
+  const result = await bootstrap;
+  assert.equal(result.status, "complete");
+
+  const afterBootstrap = await coordinator.prepare({
+    graph: incrementalGraph(2, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(afterBootstrap.status, "complete");
+}
+
 async function dependentReadClosureIsExplicit(): Promise<void> {
   const backendCalls: string[][] = [];
   const backend: BlockScanStateReadBackend = {
@@ -3658,6 +3874,8 @@ async function protocolActivityFailureFailsClosedToDirect(): Promise<void> {
 }
 
 await phasedProofsSettleBeforeSiblingReads();
+await activityRangeIsCappedToEightBlocks();
+await headPassDoesNotSupersedeActiveBootstrap();
 await completeAndDeterministic();
 await simulationSemanticsParticipateInDedupIdentity();
 await replayResetDropsOnlyDynamicPublication();
