@@ -444,6 +444,33 @@ interface BlockScanDiscoveryDependencies<PreparedDiscovery> {
   finish(prepared: PreparedDiscovery): void;
 }
 
+export interface ProducerTopologyCache {
+  readonly topologyKey: string;
+  readonly edges: readonly TokenEdge[];
+  readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
+  readonly adoptedAtMs: number;
+}
+
+/**
+ * Decide whether the background N-1 producer adopts a new discovery
+ * topology now or keeps producing on the previous one. Adoption is forced
+ * on the first arm and on an unchanged topology (cache hit); otherwise the
+ * delta is deferred until the minimum interval elapses, so small frequent
+ * publications do not force an 8-14s ownership/schema rebuild per block.
+ */
+export function resolveProducerTopologyAdoption(
+  cache: ProducerTopologyCache | null,
+  topologyKey: string,
+  now: number,
+  adoptIntervalMs: number,
+): boolean {
+  if (cache !== null && cache.topologyKey === topologyKey) {
+    return false;
+  }
+  return cache === null ||
+    now - cache.adoptedAtMs >= Math.max(0, adoptIntervalMs);
+}
+
 interface BlockScanBlindDependencies {
   readonly enabled: boolean;
   activeSource(): BlindProductionSourceHeadControl | null;
@@ -526,6 +553,17 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
    * close the gap while keeping exact work bounded.
    */
   readonly exactProducerLagYieldMs?: number;
+  /**
+   * Minimum wall-clock interval between producer topology adoptions. The
+   * background N-1 producer pays a full ownership/schema rebuild
+   * (topologyFor + preparedPhases, measured 8-14s) whenever discovery
+   * publishes a graph delta, and discovery publishes small deltas (+2-18
+   * edges) every ~2 minutes. Each rebuild pushes the N-1 publication past
+   * the head cadence and produces a stale_state pass. Deferring adoption to
+   * this interval coalesces the deltas into one rebuild while the consumer
+   * still enumerates/exacts against the fresh graph.
+   */
+  readonly producerTopologyAdoptIntervalMs?: number;
   readonly routeTelemetry?: BlockScanEnumerationSolverTelemetrySink;
   readonly largeGraphEdgeThreshold: number;
   readonly largeGraphPassBudgetMs: number;
@@ -619,6 +657,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   private generation = 0;
   private startupWarmPending: boolean;
   private lastDiscoveryBackfillScheduledAtMs = 0;
+  private producerTopologyCache: ProducerTopologyCache | null = null;
   private readonly scheduler: LatestHeadScheduler;
   private coarsePricingActive: Promise<void> | null = null;
   private coarsePricingActiveSourceBlock: number | null = null;
@@ -717,6 +756,62 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     }
     this.lastDiscoveryBackfillScheduledAtMs = now;
     void this.deps.discovery.scheduleBackfill(blockNumber);
+  }
+
+  /**
+   * Build the producer's graph view with topology adoption coalescing. The
+   * consumer's exact/enumeration view always uses the fresh graph; only the
+   * background N-1 producer defers adoption, so small discovery deltas do
+   * not force an 8-14s ownership/schema rebuild on every publication. Once
+   * the adoption interval elapses, the accumulated delta is absorbed in one
+   * rebuild. New pools are simply absent from coarse carry for at most one
+   * interval; pricing remains source-pinned and correctness is unchanged.
+   */
+  private producerGraphView(input: {
+    readonly edges: readonly TokenEdge[];
+    readonly topologyKey: string;
+    readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
+    readonly generation: number;
+    readonly sourceBlock: number;
+    readonly sourceBlockHash: string;
+  }): VerifiedGraphView {
+    const adoptIntervalMs = Math.max(
+      0,
+      this.deps.producerTopologyAdoptIntervalMs ?? 240_000,
+    );
+    const cache = this.producerTopologyCache;
+    const now = Date.now();
+    const adopt = resolveProducerTopologyAdoption(
+      cache,
+      input.topologyKey,
+      now,
+      adoptIntervalMs,
+    );
+    const build = (
+      topologyKey: string,
+      edges: readonly TokenEdge[],
+      landedCoverage: readonly LandedPoolDiscoveryCoverage[],
+    ): VerifiedGraphView =>
+      this.deps.buildGraphView({
+        id: `blockscan:${topologyKey}`,
+        generation: input.generation,
+        sourceBlock: input.sourceBlock,
+        sourceBlockHash: input.sourceBlockHash,
+        edges,
+        landedCoverage,
+        topologyKey,
+      });
+    if (adopt) {
+      this.producerTopologyCache = Object.freeze({
+        topologyKey: input.topologyKey,
+        edges: input.edges,
+        landedCoverage: input.landedCoverage,
+        adoptedAtMs: now,
+      });
+      return build(input.topologyKey, input.edges, input.landedCoverage);
+    }
+    // Defer the delta: keep the previous topology until the interval elapses.
+    return build(cache!.topologyKey, cache!.edges, cache!.landedCoverage);
   }
 
   private advanceLatestHead(blockNumber: number): void {
@@ -2016,7 +2111,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           }
           this.enqueueCoarsePricing({
             coordinator: adapterRuntimeCoordinator,
-            graph: graphView,
+            graph: this.producerGraphView({
+              edges: graphEdges,
+              topologyKey: this.deps.discovery.topologyKey(),
+              landedCoverage: discoveryPass.landedCoverage,
+              generation,
+              sourceBlock: blockNumber,
+              sourceBlockHash,
+            }),
           });
         });
       }

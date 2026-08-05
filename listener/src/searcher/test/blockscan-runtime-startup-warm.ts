@@ -20,6 +20,8 @@ import {
   incompleteBlockScanFamilies,
   NMinusOneProducerGate,
   nMinusOneProducerCanServeLatestHead,
+  resolveProducerTopologyAdoption,
+  type ProducerTopologyCache,
   summarizeBlockScanIssueCauses,
   type BlockScanAtomicExecutionInput,
   type BlockScanAtomicResult,
@@ -126,6 +128,7 @@ await nMinusOneTrackerStaysOutsideNormalRuntimePublication();
 await nMinusOneRecoveryBacklogStaysOnHotBudget();
 await nMinusOneWaitsForItsOnlyAdjacentProducer();
 await nMinusOneProducerStartsAtArmTime();
+await producerTopologyAdoptionCoalescesDeltas();
 nMinusOneExactJoinRejectsMixedAnchor();
 nMinusOneFundingIsCandidateLocal();
 blindModeDoesNotEnterOrdinaryStartupWarm();
@@ -136,6 +139,45 @@ console.log(
     "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
     "PASS (39/39)",
 );
+
+async function producerTopologyAdoptionCoalescesDeltas(): Promise<void> {
+  const cacheBase: ProducerTopologyCache = {
+    topologyKey: "topology-a",
+    edges: [],
+    landedCoverage: [],
+    adoptedAtMs: 1_000,
+  };
+  // First arm always adopts.
+  assert.equal(
+    resolveProducerTopologyAdoption(null, "topology-a", 1_000, 240_000),
+    true,
+  );
+  // Same topology: no re-adoption.
+  assert.equal(
+    resolveProducerTopologyAdoption(cacheBase, "topology-a", 2_000, 240_000),
+    false,
+  );
+  // New topology within the interval: defer.
+  assert.equal(
+    resolveProducerTopologyAdoption(cacheBase, "topology-b", 2_000, 240_000),
+    false,
+  );
+  // New topology after the interval: adopt (coalesces accumulated deltas).
+  assert.equal(
+    resolveProducerTopologyAdoption(
+      cacheBase,
+      "topology-b",
+      1_000 + 240_001,
+      240_000,
+    ),
+    true,
+  );
+  // Zero interval: every new topology is adopted immediately.
+  assert.equal(
+    resolveProducerTopologyAdoption(cacheBase, "topology-b", 2_000, 0),
+    true,
+  );
+}
 
 function nMinusOneFundingIsCandidateLocal(): void {
   assert.deepEqual(

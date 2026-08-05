@@ -2507,6 +2507,13 @@ async function main(): Promise<void> {
           "1000",
       ),
     ),
+    producerTopologyAdoptIntervalMs: Math.max(
+      0,
+      Number(
+        process.env.SEARCHER_BLOCKSCAN_PRODUCER_TOPOLOGY_ADOPT_MS ??
+          "240000",
+      ),
+    ),
     largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
     largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
     passBudgetMs: blockScanPassBudgetMs,
