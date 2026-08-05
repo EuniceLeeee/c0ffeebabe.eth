@@ -224,6 +224,7 @@ import { RevmSimClient } from "./revm-sim-client.js";
 import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
 import { HybridLiveBackend } from "./live-backends/hybrid-live-backend.js";
+import { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import { replayVictimSwapOnAnvil } from "./live-backends/rpc-victim-replay.js";
 import {
   eventPostImpactSeedForSettled,
@@ -975,12 +976,20 @@ async function main(): Promise<void> {
       "blind production audit requires SEARCHER_BLOCKSCAN_SUBMIT=1",
     );
   }
+  const blockScanMinSpreadBps = Number(
+    process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "10",
+  );
   const blockScanCfg: BlockScanCoreConfig | undefined = enableBlockScan
     ? {
         maxHops: Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "4"),
-        minSpreadBps: Number(process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "10"),
+        minSpreadBps: blockScanMinSpreadBps,
+        /*
+         * No hard performance gate at 50/100bps: enumeration floor and exact
+         * admission are the same. Shadow telemetry still buckets by spread.
+         */
         exactAdmissionSpreadBps: Number(
-          process.env.SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS ?? "100",
+          process.env.SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS ??
+            String(blockScanMinSpreadBps),
         ),
         minCapitalFraction: Number(
           process.env.SEARCHER_BLOCKSCAN_MIN_CAPITAL_FRACTION ?? "0.001",
@@ -1092,6 +1101,7 @@ async function main(): Promise<void> {
   const blockScanMidConcurrency = Number.isFinite(blockScanMidConcurrencyRaw)
     ? Math.max(1, Math.floor(blockScanMidConcurrencyRaw))
     : 24;
+  let blockScanRethTransportScheduler: RethTransportScheduler | undefined;
   if (enableBlockScan) {
     const blockScanAnvilPort = Number(process.env.SEARCHER_BLOCKSCAN_ANVIL_PORT ?? "8556");
     const isolatedState = new AnvilStateBackend(
@@ -1140,17 +1150,22 @@ async function main(): Promise<void> {
         ),
       });
     }
+    const blockScanStateRpcConcurrency = Math.max(
+      1,
+      Number(
+        process.env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4",
+      ),
+    );
+    blockScanRethTransportScheduler = new RethTransportScheduler({
+      capacity: blockScanStateRpcConcurrency * 2,
+      producerReserved: blockScanStateRpcConcurrency,
+    });
     const familyStateReads = new JsonRpcBlockScanStateReadBackend(config.rpcUrl, {
       maxBatchSize: Math.max(
         1,
         Number(process.env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_SIZE ?? "500"),
       ),
-      maxConcurrentBatches: Math.max(
-        1,
-        Number(
-          process.env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4",
-        ),
-      ),
+      maxConcurrentBatches: blockScanStateRpcConcurrency,
       maxConcurrentMutationProofs: Math.max(
         1,
         Number(
@@ -1168,6 +1183,8 @@ async function main(): Promise<void> {
         );
       },
       mutationReadPriority: liveRethReadPriority,
+      transportScheduler: blockScanRethTransportScheduler,
+      transportLane: "producer-bulk",
     });
     /*
      * Funding is intentionally isolated from pricing/proof transport. The two
@@ -1195,6 +1212,8 @@ async function main(): Promise<void> {
           ),
         ),
         multicallMode: "aggregate3",
+        transportScheduler: blockScanRethTransportScheduler,
+        transportLane: "exact",
       },
     );
     blockScanStateReadBackend = familyStateReads;
@@ -2454,6 +2473,7 @@ async function main(): Promise<void> {
     blockScanConfig: blockScanCfg,
     executionWorkers: blockScanExecutionWorkers,
     rpcUrl: config.rpcUrl,
+    rethTransportScheduler: blockScanRethTransportScheduler,
     runtimeAbort: blockScanRuntimeAbort,
     sharedPlanner: planner,
     backrunStatePublisher,

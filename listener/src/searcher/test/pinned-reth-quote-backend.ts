@@ -27,18 +27,35 @@ interface StubState {
   batches: Array<Array<Record<string, unknown>>>;
   singles: Array<Record<string, unknown>>;
   failNextBatch: boolean;
+  holdResponses: boolean;
 }
 
 function startStub(): Promise<{ server: Server; state: StubState; port: number }> {
-  const state: StubState = { batches: [], singles: [], failNextBatch: false };
+  const state: StubState = {
+    batches: [],
+    singles: [],
+    failNextBatch: false,
+    holdResponses: false,
+  };
   const server = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
     req.on("end", () => {
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
       const reply = (payload: unknown): void => {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify(payload));
+        try {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify(payload));
+        } catch {
+          // Client may abort the request mid-flight; ignore the write error.
+        }
+      };
+      const maybeHold = (send: () => void): void => {
+        if (state.holdResponses) {
+          setTimeout(send, 250);
+        } else {
+          send();
+        }
       };
       if (Array.isArray(body)) {
         if (state.failNextBatch) {
@@ -48,25 +65,33 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
           return;
         }
         state.batches.push(body);
-        reply(body.map((entry) => {
-          const item = entry as { id?: unknown; params?: unknown[] };
-          const tx = Array.isArray(item.params)
-            ? item.params[0] as { to?: unknown }
-            : null;
-          if (tx?.to === REVERT) {
-            return {
-              jsonrpc: "2.0",
-              id: item.id,
-              error: { code: 3, message: "execution reverted", data: REVERT_DATA },
-            };
-          }
-          return { jsonrpc: "2.0", id: item.id, result: RESULT };
-        }));
+        maybeHold(() =>
+          reply(body.map((entry) => {
+            const item = entry as { id?: unknown; params?: unknown[] };
+            const tx = Array.isArray(item.params)
+              ? item.params[0] as { to?: unknown }
+              : null;
+            if (tx?.to === REVERT) {
+              return {
+                jsonrpc: "2.0",
+                id: item.id,
+                error: {
+                  code: 3,
+                  message: "execution reverted",
+                  data: REVERT_DATA,
+                },
+              };
+            }
+            return { jsonrpc: "2.0", id: item.id, result: RESULT };
+          })),
+        );
         return;
       }
       const single = body as { id?: unknown };
       state.singles.push(single);
-      reply({ jsonrpc: "2.0", id: single.id, result: RESULT });
+      maybeHold(() =>
+        reply({ jsonrpc: "2.0", id: single.id, result: RESULT }),
+      );
     });
   });
   return new Promise((resolve) => {
@@ -174,6 +199,42 @@ async function run(): Promise<void> {
         "expired item must not reach the transport",
       );
       console.log("[pinned-reth-quote-backend] deadline rejection: PASS");
+    }
+
+    {
+      const controller = new AbortController();
+      const backend = new PinnedRethQuoteBackend(rpcUrl, HASH, {
+        signal: controller.signal,
+      });
+      state.holdResponses = true;
+      const singlesBefore = state.singles.length;
+      const pending = backend
+        .call({ to: OK_A, data: "0x01" })
+        .catch((error) => error);
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      controller.abort(new Error("pass closed"));
+      const error = await pending;
+      assert(
+        error !== null &&
+          isStateCallAbortedError(error),
+        "pass abort must reject the in-flight item",
+      );
+      await backend.closeAndDrain();
+      const stats = backend.stats();
+      assert(
+        stats.liveItems === 0 &&
+          stats.pendingItems === 0 &&
+          stats.inFlightBatches === 0 &&
+          stats.activeTransports === 0,
+        "closeAndDrain must clear pending/live/in-flight transports",
+      );
+      assert(
+        state.singles.length === singlesBefore,
+        "pass abort must never trigger single-call fallback",
+      );
+      assert(stats.abortedBatches >= 1, "aborted batch must be counted");
+      state.holdResponses = false;
+      console.log("[pinned-reth-quote-backend] pass abort + drain: PASS");
     }
   } finally {
     server.close();

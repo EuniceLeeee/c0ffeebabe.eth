@@ -3,6 +3,10 @@ import type {
   CanonicalAddressTouchRange,
 } from "./blockscan-state-coordinator.js";
 import type {
+  RethTransportLane,
+  RethTransportScheduler,
+} from "./reth-transport-scheduler.js";
+import type {
   BlockSource,
   BlockScanPricingLane,
   CanonicalMutationRange,
@@ -71,6 +75,14 @@ export interface JsonRpcBlockScanStateReadBackendOptions {
    */
   readonly mutationReadPriority?: Pick<LiveRethReadPriority, "runCritical">;
   readonly now?: () => number;
+  /**
+   * Shared reth transport permit scheduler. One permit covers one HTTP
+   * batch; producer lanes may use full capacity while exact/discovery share
+   * the residual after the producer reserve.
+   */
+  readonly transportScheduler?: Pick<RethTransportScheduler, "run">;
+  /** Lane for ordinary readPinned/readBatch traffic. */
+  readonly transportLane?: RethTransportLane;
 }
 
 export type MutationProofTransportPhase =
@@ -235,6 +247,10 @@ export class JsonRpcBlockScanStateReadBackend
     | Pick<LiveRethReadPriority, "runCritical">
     | undefined;
   private readonly now: () => number;
+  private readonly transportScheduler:
+    | Pick<RethTransportScheduler, "run">
+    | undefined;
+  private readonly transportLane: RethTransportLane;
   private readonly mutationRangeSessions = new Map<
     string,
     Promise<CanonicalMutationRange>
@@ -297,6 +313,8 @@ export class JsonRpcBlockScanStateReadBackend
     this.onMutationProofTelemetry = options.onMutationProofTelemetry;
     this.mutationReadPriority = options.mutationReadPriority;
     this.now = options.now ?? (() => performance.now());
+    this.transportScheduler = options.transportScheduler;
+    this.transportLane = options.transportLane ?? "producer-bulk";
   }
 
   async readBatch(
@@ -523,6 +541,7 @@ export class JsonRpcBlockScanStateReadBackend
           params: [receiptHeaders[index].hash],
         })),
         controller.signal,
+        "producer-critical",
       );
       const receipts = parseCanonicalBlockReceipts(
         receiptResponses,
@@ -653,7 +672,11 @@ export class JsonRpcBlockScanStateReadBackend
       if (remainingMs <= 0) controller.abort(new Error("deadline reached"));
       assertPinnedReadSet(reads, control);
       if (selfFenceCanonicality) {
-        await this.verifyCanonicalSource(sourceFrom(control), controller.signal);
+        await this.verifyCanonicalSource(
+          sourceFrom(control),
+          controller.signal,
+          this.transportLane,
+        );
       }
       const results: Array<StateReadResult | undefined> =
         Array.from({ length: reads.length });
@@ -716,7 +739,11 @@ export class JsonRpcBlockScanStateReadBackend
         },
       );
       if (selfFenceCanonicality) {
-        await this.verifyCanonicalSource(sourceFrom(control), controller.signal);
+        await this.verifyCanonicalSource(
+          sourceFrom(control),
+          controller.signal,
+          this.transportLane,
+        );
       }
       if (results.some((result) => result === undefined)) {
         throw new Error("block-scan state backend omitted a read result");
@@ -747,14 +774,21 @@ export class JsonRpcBlockScanStateReadBackend
   async verifyCanonicalSource(
     source: BlockSource,
     signal: AbortSignal,
+    lane: RethTransportLane = "producer-critical",
   ): Promise<void> {
-    return this.verifyCanonicalSourceWithSlots(source, signal, this.rpcSlots);
+    return this.verifyCanonicalSourceWithSlots(
+      source,
+      signal,
+      this.rpcSlots,
+      lane,
+    );
   }
 
   private async verifyCanonicalSourceWithSlots(
     source: BlockSource,
     signal: AbortSignal,
     slots: AbortableSemaphore,
+    lane: RethTransportLane = "producer-critical",
   ): Promise<void> {
     const id = this.nextId++;
     const response = await this.postWithSlots(slots, [{
@@ -762,7 +796,7 @@ export class JsonRpcBlockScanStateReadBackend
       id,
       method: "eth_getBlockByNumber",
       params: [toBlockTag(source.number), false],
-    }], signal);
+    }], signal, lane);
     const item = response[0];
     if (!item || "error" in item) {
       throw new Error(
@@ -1488,6 +1522,7 @@ export class JsonRpcBlockScanStateReadBackend
     throughBlock: number,
     signal: AbortSignal,
     slots: AbortableSemaphore = this.mutationHeaderSlots,
+    lane: RethTransportLane = "producer-critical",
   ): Promise<{
     readonly items: readonly CanonicalMutationHeader[];
     readonly telemetry: MutationProofPhaseTelemetry;
@@ -1507,6 +1542,7 @@ export class JsonRpcBlockScanStateReadBackend
           params: [toBlockTag(blockNumbers[index])],
         })),
         signal,
+        lane,
       );
       const rawUnavailable =
         rawRead.responses.length === rawIds.length &&
@@ -1531,6 +1567,7 @@ export class JsonRpcBlockScanStateReadBackend
         blockNumbers,
         signal,
         slots,
+        lane,
       );
       return Object.freeze({
         items: fallback.items,
@@ -1541,13 +1578,14 @@ export class JsonRpcBlockScanStateReadBackend
         ),
       });
     }
-    return this.readEthBlockHeaderBatch(blockNumbers, signal, slots);
+    return this.readEthBlockHeaderBatch(blockNumbers, signal, slots, lane);
   }
 
   private async readEthBlockHeaderBatch(
     blockNumbers: readonly number[],
     signal: AbortSignal,
     slots: AbortableSemaphore,
+    lane: RethTransportLane = "producer-critical",
   ): Promise<{
     readonly items: readonly CanonicalMutationHeader[];
     readonly telemetry: MutationProofPhaseTelemetry;
@@ -1562,6 +1600,7 @@ export class JsonRpcBlockScanStateReadBackend
         params: [toBlockTag(blockNumbers[index]), false],
       })),
       signal,
+      lane,
     );
     return Object.freeze({
       items: parseEthBlockHeaderResponses(
@@ -1580,6 +1619,7 @@ export class JsonRpcBlockScanStateReadBackend
     source: BlockSource,
     signal: AbortSignal,
     slots: AbortableSemaphore,
+    lane: RethTransportLane = "producer-critical",
   ): Promise<MutationProofPhaseTelemetry> {
     if (this.mutationHeaderMode === "debug-raw-header-with-fallback") {
       const measured = await this.readCanonicalHeaderBatch(
@@ -1587,6 +1627,7 @@ export class JsonRpcBlockScanStateReadBackend
         source.number,
         signal,
         slots,
+        lane,
       );
       const item = measured.items[0];
       if (
@@ -1607,7 +1648,7 @@ export class JsonRpcBlockScanStateReadBackend
       id,
       method: "eth_getBlockByNumber",
       params: [toBlockTag(source.number), false],
-    }], signal);
+    }], signal, lane);
     const response = measured.responses[0];
     if (!response || "error" in response) {
       throw new Error(
@@ -1786,23 +1827,33 @@ export class JsonRpcBlockScanStateReadBackend
     slots: AbortableSemaphore,
     body: readonly object[],
     signal: AbortSignal,
+    lane: RethTransportLane = this.transportLane,
   ): Promise<readonly JsonRpcResponse[]> {
     return slots.run(signal, async () => {
       if (signal.aborted) {
         throw signal.reason ?? new DOMException("Aborted", "AbortError");
       }
-      const response = await this.fetchImpl(this.rpcUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-        signal,
-      });
-      if (!response.ok) {
-        throw new Error(`JSON-RPC HTTP ${response.status} ${response.statusText}`);
-      }
-      const value: unknown = await response.json();
-      if (!Array.isArray(value)) throw new Error("JSON-RPC batch returned non-array");
-      return value as readonly JsonRpcResponse[];
+      const send = async (): Promise<readonly JsonRpcResponse[]> => {
+        const response = await this.fetchImpl(this.rpcUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+          signal,
+        });
+        if (!response.ok) {
+          throw new Error(
+            `JSON-RPC HTTP ${response.status} ${response.statusText}`,
+          );
+        }
+        const value: unknown = await response.json();
+        if (!Array.isArray(value)) {
+          throw new Error("JSON-RPC batch returned non-array");
+        }
+        return value as readonly JsonRpcResponse[];
+      };
+      return this.transportScheduler
+        ? this.transportScheduler.run(lane, signal, () => send())
+        : send();
     });
   }
 
@@ -1810,34 +1861,52 @@ export class JsonRpcBlockScanStateReadBackend
     slots: AbortableSemaphore,
     body: readonly object[],
     signal: AbortSignal,
+    lane: RethTransportLane = "producer-critical",
   ): Promise<{
     readonly responses: readonly JsonRpcResponse[];
     readonly telemetry: MutationProofPhaseTelemetry;
   }> {
     const startedAtMs = this.now();
-    let queueWaitMs = 0;
+    let localQueueWaitMs = 0;
+    let sharedQueueWaitMs = 0;
     const responses = await slots.run(signal, async (waitMs) => {
-      queueWaitMs = waitMs;
-      if (signal.aborted) {
-        throw signal.reason ?? new DOMException("Aborted", "AbortError");
-      }
-      const response = await this.fetchImpl(this.rpcUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-        signal,
-      });
-      if (!response.ok) {
-        throw new Error(`JSON-RPC HTTP ${response.status} ${response.statusText}`);
-      }
-      const value: unknown = await response.json();
-      if (!Array.isArray(value)) throw new Error("JSON-RPC batch returned non-array");
-      return value as readonly JsonRpcResponse[];
+      localQueueWaitMs = waitMs;
+      const send = async (): Promise<readonly JsonRpcResponse[]> => {
+        if (signal.aborted) {
+          throw signal.reason ?? new DOMException("Aborted", "AbortError");
+        }
+        const response = await this.fetchImpl(this.rpcUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+          signal,
+        });
+        if (!response.ok) {
+          throw new Error(
+            `JSON-RPC HTTP ${response.status} ${response.statusText}`,
+          );
+        }
+        const value: unknown = await response.json();
+        if (!Array.isArray(value)) {
+          throw new Error("JSON-RPC batch returned non-array");
+        }
+        return value as readonly JsonRpcResponse[];
+      };
+      return this.transportScheduler
+        ? this.transportScheduler.run(
+            lane,
+            signal,
+            async ({ queueWaitMs }) => {
+              sharedQueueWaitMs = queueWaitMs;
+              return send();
+            },
+          )
+        : send();
     }, this.now);
     return Object.freeze({
       responses,
       telemetry: Object.freeze({
-        queueWaitMs,
+        queueWaitMs: localQueueWaitMs + sharedQueueWaitMs,
         wallMs: Math.max(0, this.now() - startedAtMs),
         rpcRequests: 1,
         rpcItems: body.length,

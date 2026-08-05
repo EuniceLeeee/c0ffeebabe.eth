@@ -3,6 +3,13 @@ import {
   type StateBackend,
 } from "../shared/state/state-backend.js";
 import { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
+import {
+  isPassScopedExactStateBackend,
+  type PassScopedExactStateBackend,
+} from "./pinned-reth-quote-backend.js";
+import type {
+  RethTransportScheduler,
+} from "./reth-transport-scheduler.js";
 import type { BlockScanOpportunity } from "./detector/detector.js";
 import { detectProductionBlockScanOpportunities } from "./detector/blockscan-scanner-production.js";
 import type {
@@ -468,6 +475,13 @@ export interface BlockScanEnumerationSolverTelemetrySink {
   }): void;
 }
 
+export interface ExactQuoteStateFactoryInput {
+  readonly sourceBlockHash: string;
+  readonly signal: AbortSignal;
+  readonly deadlineAtMs: number;
+  readonly transportScheduler?: Pick<RethTransportScheduler, "run">;
+}
+
 export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly enabled: boolean;
   readonly blockScanConfig: BlockScanCoreConfig | undefined;
@@ -478,8 +492,12 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
    * pinned reth micro-batch backend; harnesses inject a deterministic fake.
    */
   readonly exactQuoteStateFactory?: (
-    sourceBlockHash: string,
+    input: ExactQuoteStateFactoryInput,
   ) => StateBackend;
+  readonly rethTransportScheduler?: Pick<
+    RethTransportScheduler,
+    "run"
+  >;
   readonly runtimeAbort: AbortController;
   readonly sharedPlanner: Pick<TemplatePlanner, "setFlashLiquidity">;
   readonly backrunStatePublisher: Pick<
@@ -1542,6 +1560,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           decision: result.decision,
           submitted: result.submitted,
         })),
+        exact_transport_drain_ms: exactTransportDrainMs,
         total_ms: totalMs,
       };
       emitEvent({
@@ -1627,6 +1646,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       atMs: passStartedAtMs,
       atPerf: passStarted,
     });
+    let exactQuoteState: StateBackend | null = null;
+    let exactTransportDrainMs = 0;
     try {
       const discovery = this.deps.discovery;
       // Historical discovery is prepared in a dedicated cancellable lane.
@@ -2514,14 +2535,34 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
        * local reth (source-hash pinned) instead of serializing every quote
        * through one Anvil fork; Anvil stays reserved for solver/final-sim.
        */
-      const exactQuoteState = this.deps.exactQuoteStateFactory
-        ? this.deps.exactQuoteStateFactory(exactSourceBlockHash)
+      if (exactSourceBlockHash === null) {
+        throw new Error("exact quote source hash is unavailable");
+      }
+      const exactFactoryInput: ExactQuoteStateFactoryInput = {
+        sourceBlockHash: exactSourceBlockHash,
+        signal: passSignal,
+        deadlineAtMs: passDeadlineAtMs,
+        transportScheduler: this.deps.rethTransportScheduler,
+      };
+      exactQuoteState = this.deps.exactQuoteStateFactory
+        ? this.deps.exactQuoteStateFactory(exactFactoryInput)
         : new PinnedRethQuoteBackend(
             this.deps.rpcUrl,
             exactSourceBlockHash,
+            {
+              signal: passSignal,
+              deadlineAtMs: passDeadlineAtMs,
+              maxBatchSize: 32,
+              maxConcurrentBatches: 8,
+              transportScheduler: this.deps.rethTransportScheduler,
+            },
           );
+      if (exactQuoteState === null) {
+        throw new Error("exact quote state not initialized");
+      }
+      const exactQuoteStateRef: StateBackend = exactQuoteState;
       const refinement = await refineBlockScanCandidates(
-        exactQuoteState,
+        exactQuoteStateRef,
         coarse.opportunities,
         blockScanCfg.maxCandidates,
         refineDeadline,
@@ -2824,7 +2865,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               // Phase-1 quotes are current-N view reads; run them through the
               // same pinned reth batch backend as refinement so Anvil is only
               // forked right before final simulation.
-              exactQuoteState,
+              exactQuoteStateRef,
               worker.simulator,
               {
                 deadlineMs: Math.max(1, passDeadlineAtMs - Date.now()),
@@ -3000,14 +3041,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         outcome = "budget_exceeded";
         skippedReason ??= "solve_deadline";
       }
-      if (exactQuoteState instanceof PinnedRethQuoteBackend) {
-        console.log(
-          `[searcher/blockscan-exact-quote-stats-final] ${JSON.stringify({
-            block: blockNumber,
-            ...exactQuoteState.stats(),
-          })}`,
-        );
-      }
     } catch (error) {
       if (
         passSignal.aborted &&
@@ -3032,6 +3065,24 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       throw error;
     } finally {
       try {
+        if (isPassScopedExactStateBackend(exactQuoteState)) {
+          exactTransportDrainMs = await exactQuoteState.closeAndDrain(
+            passSignal.reason ??
+              new Error(`block-scan pass ${blockNumber} completed`),
+          );
+        }
+        if (exactQuoteState instanceof PinnedRethQuoteBackend) {
+          console.log(
+            `[searcher/blockscan-exact-quote-stats-final] ${JSON.stringify({
+              block: blockNumber,
+              ...exactQuoteState.stats(),
+            })}`,
+          );
+        }
+        /*
+         * Active stage ends only after drain, so stage/total_ms never show
+         * "Promise returned but old RPC still running" fake speed.
+         */
         const activeStage = passTimeline.activeStage();
         if (activeStage) finishStage(activeStage, "failed");
         completeAuditStages();
