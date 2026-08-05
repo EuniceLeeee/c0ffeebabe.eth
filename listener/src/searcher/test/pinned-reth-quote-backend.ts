@@ -137,6 +137,21 @@ async function run(): Promise<void> {
 
     {
       const backend = new PinnedRethQuoteBackend(rpcUrl, HASH);
+      const batchesBefore = state.batches.length;
+      const m1 = await backend.call({ to: OK_A, data: "0x01" });
+      const m2 = await backend.call({ to: OK_A, data: "0x01" });
+      assert(m1 === RESULT && m2 === RESULT, "memoized call results");
+      assert(
+        state.batches.length === batchesBefore + 1,
+        "sequential duplicate calls must not issue a second request",
+      );
+      const stats = backend.stats();
+      assert(stats.totalCalls === 1 && stats.memoHits === 1, "memo stats");
+      console.log("[pinned-reth-quote-backend] call memoization: PASS");
+    }
+
+    {
+      const backend = new PinnedRethQuoteBackend(rpcUrl, HASH);
       let error: unknown = null;
       await backend.call(
         { to: OK_A, data: "0x01" },

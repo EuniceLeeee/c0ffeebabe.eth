@@ -2582,6 +2582,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           })}`,
         );
       }
+      if (exactQuoteState instanceof PinnedRethQuoteBackend) {
+        console.log(
+          `[searcher/blockscan-exact-quote-stats] ${JSON.stringify({
+            block: blockNumber,
+            ...exactQuoteState.stats(),
+          })}`,
+        );
+      }
       finishStage(
         "exact_refine",
         refinement.deadlineHit ? "failed" : "ran",

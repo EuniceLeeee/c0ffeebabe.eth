@@ -45,6 +45,12 @@ export interface BlockScanRefinementShadow {
   readonly admissionSpreadBps: number;
   readonly admitted: BlockScanShadowBand;
   readonly notAdmitted: BlockScanShadowBand;
+  readonly admittedSpreadBuckets: {
+    readonly "floor-2x": number;
+    readonly "2x-5x": number;
+    readonly "5x-10x": number;
+    readonly "10x+": number;
+  };
 }
 
 export interface BlockScanShadowBand {
@@ -156,6 +162,12 @@ export async function refineBlockScanCandidates(
           admissionSpreadBps: options.admissionSpreadBps,
           admitted: emptyShadowBand(),
           notAdmitted: emptyShadowBand(),
+          admittedSpreadBuckets: {
+            "floor-2x": 0,
+            "2x-5x": 0,
+            "5x-10x": 0,
+            "10x+": 0,
+          },
         };
   if (shadow) {
     const admitted: typeof work = [];
@@ -166,6 +178,13 @@ export async function refineBlockScanCandidates(
         shadow.notAdmitted.total++;
       } else {
         admitted.push(item);
+        if (typeof spread === "number") {
+          const floor = shadow.admissionSpreadBps;
+          if (spread >= 10 * floor) shadow.admittedSpreadBuckets["10x+"]++;
+          else if (spread >= 5 * floor) shadow.admittedSpreadBuckets["5x-10x"]++;
+          else if (spread >= 2 * floor) shadow.admittedSpreadBuckets["2x-5x"]++;
+          else shadow.admittedSpreadBuckets["floor-2x"]++;
+        }
       }
     }
     work = admitted;
@@ -393,7 +412,6 @@ export async function refineBlockScanCandidates(
       ) {
         deadlineHit = true;
         fallback.push({ opportunity, index });
-        recordShadowTotal();
         recordShadow("unprobed");
         onProbe?.({
           index,
@@ -537,6 +555,9 @@ export async function refineBlockScanCandidates(
             admissionSpreadBps: shadow.admissionSpreadBps,
             admitted: Object.freeze({ ...shadow.admitted }),
             notAdmitted: Object.freeze({ ...shadow.notAdmitted }),
+            admittedSpreadBuckets: Object.freeze({
+              ...shadow.admittedSpreadBuckets,
+            }),
           }),
         }),
     openFamilyIds,

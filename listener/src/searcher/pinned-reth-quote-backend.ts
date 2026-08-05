@@ -35,6 +35,12 @@ export class PinnedRethQuoteBackend implements StateBackend {
   private inFlightBatches = 0;
   private nextId = 1;
   private readonly balanceSlotMemo = new Map<string, string>();
+  private readonly callMemo = new Map<string, Promise<string>>();
+  private totalCalls = 0;
+  private memoHits = 0;
+  private batchesSent = 0;
+  private batchedItems = 0;
+  private batchLatencyMs = 0;
 
   constructor(
     private readonly rpcUrl: string,
@@ -45,7 +51,7 @@ export class PinnedRethQuoteBackend implements StateBackend {
     } = {},
   ) {
     this.maxBatchSize = opts.maxBatchSize ?? 500;
-    this.maxConcurrentBatches = opts.maxConcurrentBatches ?? 4;
+    this.maxConcurrentBatches = opts.maxConcurrentBatches ?? 8;
     const block = eip1898BlockSpecifier(sourceBlockHash);
     this.blockSpecifier = block;
   }
@@ -87,6 +93,15 @@ export class PinnedRethQuoteBackend implements StateBackend {
     req: { to: string; data: string; from?: string },
     control: StateCallControl = {},
   ): Promise<string> {
+    const memoKey =
+      `${req.to.toLowerCase()}|${req.data}|` +
+      `${(req.from ?? "").toLowerCase()}`;
+    const memoized = this.callMemo.get(memoKey);
+    if (memoized !== undefined) {
+      this.memoHits++;
+      return memoized;
+    }
+    this.totalCalls++;
     return new Promise<string>((resolve, reject) => {
       const item: PendingQuoteItem = {
         kind: "eth_call",
@@ -97,7 +112,33 @@ export class PinnedRethQuoteBackend implements StateBackend {
         reject,
       };
       this.enqueue(item);
-    });
+    }).then(
+      (result) => {
+        const promise = Promise.resolve(result);
+        this.callMemo.set(memoKey, promise);
+        return result;
+      },
+      (error) => {
+        this.callMemo.delete(memoKey);
+        throw error;
+      },
+    );
+  }
+
+  stats(): {
+    readonly totalCalls: number;
+    readonly memoHits: number;
+    readonly batchesSent: number;
+    readonly batchedItems: number;
+    readonly batchLatencyMs: number;
+  } {
+    return {
+      totalCalls: this.totalCalls,
+      memoHits: this.memoHits,
+      batchesSent: this.batchesSent,
+      batchedItems: this.batchedItems,
+      batchLatencyMs: this.batchLatencyMs,
+    };
   }
 
   async simulateTokenToNativeDelta(
@@ -317,6 +358,7 @@ export class PinnedRethQuoteBackend implements StateBackend {
     const byId = new Map(items.map((item) => [item.id, item]));
     let response: JsonRpcHttpResponse;
     const controller = new AbortController();
+    const batchStartedAtMs = Date.now();
     const timeout = setTimeout(
       () => controller.abort(
         new Error(`JSON-RPC batch ${method} transport timeout`),
@@ -339,6 +381,9 @@ export class PinnedRethQuoteBackend implements StateBackend {
       return;
     }
     clearTimeout(timeout);
+    this.batchesSent++;
+    this.batchedItems += items.length;
+    this.batchLatencyMs += Date.now() - batchStartedAtMs;
     const body = Array.isArray(response.body) ? response.body : null;
     if (response.statusCode < 200 || response.statusCode >= 300 || body === null) {
       await Promise.allSettled(
