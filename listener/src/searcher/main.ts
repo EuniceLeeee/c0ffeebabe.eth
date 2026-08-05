@@ -2486,6 +2486,13 @@ async function main(): Promise<void> {
       preparedArtifacts: () => preparedBlindArtifacts,
       dynamicResetNonce: () => preparedBlindDynamicResetNonce,
     },
+    discoveryBackfillMinIntervalMs: Math.max(
+      0,
+      Number(
+        process.env.SEARCHER_DISCOVERY_BACKFILL_MIN_INTERVAL_MS ??
+          "30000",
+      ),
+    ),
     largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
     largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
     passBudgetMs: blockScanPassBudgetMs,

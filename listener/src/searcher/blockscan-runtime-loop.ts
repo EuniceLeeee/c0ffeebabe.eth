@@ -506,6 +506,15 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   >;
   readonly discovery: BlockScanDiscoveryDependencies<PreparedDiscovery>;
   readonly blind: BlockScanBlindDependencies;
+  /**
+   * Minimum wall-clock interval between background discovery backfill
+   * schedules. Discovery scans are cheap to defer but expensive to run: one
+   * 1-8 block scan can occupy reth for 10-20s and delay the producer's small
+   * direct reads, which pushes N-1 publication past the head cadence. A
+   * bounded cadence keeps the background healer alive without starving the
+   * hot chain.
+   */
+  readonly discoveryBackfillMinIntervalMs?: number;
   readonly routeTelemetry?: BlockScanEnumerationSolverTelemetrySink;
   readonly largeGraphEdgeThreshold: number;
   readonly largeGraphPassBudgetMs: number;
@@ -598,6 +607,7 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
 export class BlockScanRuntimeLoop<PreparedDiscovery> {
   private generation = 0;
   private startupWarmPending: boolean;
+  private lastDiscoveryBackfillScheduledAtMs = 0;
   private readonly scheduler: LatestHeadScheduler;
   private coarsePricingActive: Promise<void> | null = null;
   private coarsePricingActiveSourceBlock: number | null = null;
@@ -677,6 +687,25 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   ): void {
     this.advanceLatestHead(blockNumber);
     this.scheduler.schedule(blockNumber, observation);
+  }
+
+  /**
+   * Bound the background discovery healer's cadence. The runtime loop asks
+   * for a backfill on every degraded/stale pass; a completed scan immediately
+   * frees the lane, so those requests currently start scans back-to-back and
+   * occupy reth for 10-20s each while the producer waits on small reads.
+   */
+  private maybeScheduleDiscoveryBackfill(blockNumber: number): void {
+    const minIntervalMs = Math.max(
+      0,
+      this.deps.discoveryBackfillMinIntervalMs ?? 30_000,
+    );
+    const now = Date.now();
+    if (now - this.lastDiscoveryBackfillScheduledAtMs < minIntervalMs) {
+      return;
+    }
+    this.lastDiscoveryBackfillScheduledAtMs = now;
+    void this.deps.discovery.scheduleBackfill(blockNumber);
   }
 
   private advanceLatestHead(blockNumber: number): void {
@@ -1778,7 +1807,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                 "pending_evidence_startup_discovery_behind",
               );
               finishStage("state", "failed");
-              void discovery.scheduleBackfill(blockNumber);
+              this.maybeScheduleDiscoveryBackfill(blockNumber);
               return;
             }
             /*
@@ -1842,7 +1871,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                 `${requiredPredecessor}`
               : "startup_discovery_deadline";
           finishStage("state", "failed");
-          void discovery.scheduleBackfill(blockNumber);
+          this.maybeScheduleDiscoveryBackfill(blockNumber);
           return;
         }
       }
@@ -1895,7 +1924,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           outcome = "degraded";
           skippedReason = "discovery_hot_rebase_conflict";
           finishStage("state", "failed");
-          void discovery.scheduleBackfill(blockNumber);
+          this.maybeScheduleDiscoveryBackfill(blockNumber);
           return;
         }
         discovery.finish(preparedDiscovery);
@@ -1915,7 +1944,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           `discovery_current_incomplete:` +
           `${nextAdmissionThrough}<${requiredAdmissionThrough}`;
         finishStage("state", "failed");
-        void discovery.scheduleBackfill(blockNumber);
+        this.maybeScheduleDiscoveryBackfill(blockNumber);
         return;
       }
       if (
@@ -1926,7 +1955,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         // The source range is canonical and complete, but one or more family
         // projections remain retryable. Keep healing in the background while
         // GraphView excludes only those owning families from this live pass.
-        void discovery.scheduleBackfill(blockNumber);
+        this.maybeScheduleDiscoveryBackfill(blockNumber);
       }
       const discoveryPass = {
         dexComplete: nextAdmissionThrough >= requiredAdmissionThrough,
