@@ -979,6 +979,9 @@ async function main(): Promise<void> {
     ? {
         maxHops: Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "4"),
         minSpreadBps: Number(process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "10"),
+        exactAdmissionSpreadBps: Number(
+          process.env.SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS ?? "50",
+        ),
         maxCandidates: Number(process.env.SEARCHER_BLOCKSCAN_MAX_CANDIDATES ?? "100"),
         budgetMs: Number(process.env.SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS ?? "1500"),
         pricedTokens: buildBlockScanPricedTokens(),

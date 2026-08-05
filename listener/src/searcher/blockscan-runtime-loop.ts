@@ -2259,6 +2259,20 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         recordEnumeration(coarse.opportunities);
         auditSelectionMode = productionCoarse.selectionMode;
         auditForcedSelectionCount = productionCoarse.forcedSelectionCount;
+        console.log(
+          `[searcher/blockscan-enumeration] ${JSON.stringify({
+            block: blockNumber,
+            outcome: productionCoarse.outcome,
+            enumeratedCount:
+              productionCoarse.selection.enumeratedCount,
+            admittedCount: productionCoarse.selection.admittedCount,
+            selectedCount: productionCoarse.selection.selectedCount,
+            admissionSpreadBps:
+              blockScanCfg.exactAdmissionSpreadBps ??
+              blockScanCfg.minSpreadBps,
+            scannedPairs: productionCoarse.scannedPairs,
+          })}`,
+        );
       } else {
         this.passStageLabel = "state:wait-adjacent";
         const expectedCoarseBlock = blockNumber - 1;
@@ -2350,8 +2364,13 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             candidates: fallbackCoarse.candidates.length,
             rejectedRouteCount: fallbackCoarse.rejectedRouteCount,
             scanOutcome: fallbackCoarse.scan.outcome,
+            admissionSpreadBps:
+              blockScanCfg.exactAdmissionSpreadBps ??
+              blockScanCfg.minSpreadBps,
             naturallyEnumeratedRoutes:
               fallbackCoarse.scan.selection.enumeratedCount,
+            admittedRoutes:
+              fallbackCoarse.scan.selection.admittedCount,
             selectedRoutes: fallbackCoarse.scan.selection.selectedCount,
             scanBudgetMs: blockScanCfg.budgetMs,
             scanTimingMs: fallbackCoarse.scanTimingMs,

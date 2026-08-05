@@ -615,6 +615,58 @@ const tests: TestCase[] = [
     },
   },
   {
+    name: "exact admission spread funnel",
+    run: () => {
+      // P1 mid = 1000 USDC/WETH; P2 is +90bps raw (≈30bps net after 2x30bps
+      // fees); P3 is +160bps raw (≈100bps net). Both rings pass the 10bps
+      // enumeration floor; only the P1-P3 ring clears a 50bps admission floor.
+      const cache = new PoolStateCache();
+      seedV2Pair(cache, P1, USDC, WETH, 1_000_000n * UNIT, 1_000n * UNIT);
+      seedV2Pair(cache, P2, USDC, WETH, 1_000_000n * UNIT, 1_009n * UNIT);
+      seedV2Pair(cache, P3, USDC, WETH, 1_000_000n * UNIT, 1_016n * UNIT);
+      const edges = [
+        ...venueEdges(USDC, P1),
+        ...venueEdges(USDC, P2),
+        ...venueEdges(USDC, P3),
+      ];
+
+      const baseline = run(edges, cache);
+      assert(
+        baseline.selection.enumeratedCount === 2 &&
+          baseline.selection.admittedCount === 2 &&
+          baseline.opportunities.length === 2,
+        `default admission should admit all enumerated rings ` +
+          `(enumerated=${baseline.selection.enumeratedCount}, ` +
+          `admitted=${baseline.selection.admittedCount}, ` +
+          `selected=${baseline.opportunities.length})`,
+      );
+
+      const gated = run(edges, cache, { exactAdmissionSpreadBps: 50 });
+      assert(
+        gated.selection.enumeratedCount === 2,
+        `10-50bps rings must stay in the enumerated funnel, got ${gated.selection.enumeratedCount}`,
+      );
+      assert(
+        gated.selection.admittedCount === 1 &&
+          gated.opportunities.length === 1,
+        `50bps admission must keep only the wide ring ` +
+          `(admitted=${gated.selection.admittedCount}, ` +
+          `selected=${gated.opportunities.length})`,
+      );
+      const pools = new Set(
+        gated.opportunities[0].seedEdges.map((edge) =>
+          edge.target.toLowerCase(),
+        ),
+      );
+      assert(
+        pools.has(P1.toLowerCase()) && pools.has(P3.toLowerCase()) &&
+          !pools.has(P2.toLowerCase()),
+        `wide ring should be P1/P3, got ${[...pools].join(",")}`,
+      );
+      console.log("[blockscan-scanner] exact admission spread funnel: PASS");
+    },
+  },
+  {
     name: "T-nav-dislocation",
     run: () => {
       const { cache, edges, protocolMids } = navFixture(1.05);

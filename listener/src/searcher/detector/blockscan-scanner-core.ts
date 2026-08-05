@@ -24,6 +24,13 @@ import {
 export interface BlockScanCoreConfig {
   maxHops: number;
   minSpreadBps: number;
+  /**
+   * Coarse spread floor for exact-refine admission. Rings above minSpreadBps
+   * are still enumerated (and counted in the funnel), but only rings above
+   * this floor are returned as opportunities for the exact probe stage.
+   * Defaults to minSpreadBps when omitted.
+   */
+  exactAdmissionSpreadBps?: number;
   maxCandidates: number;
   budgetMs: number;
   pricedTokens: Map<string, { maxBorrow: bigint }>;
@@ -45,6 +52,7 @@ export interface BlockScanOutcome {
   selection: {
     readonly mode: "natural_ranked";
     readonly enumeratedCount: number;
+    readonly admittedCount: number;
     readonly selectedCount: number;
     readonly forcedSelectionCount: number;
   };
@@ -77,7 +85,7 @@ export function blockScanSelectionProvenance(
     kind: "natural_coarse_ranked",
     selectionMode: "production",
     forcedSelectionCount: outcome.selection.forcedSelectionCount,
-    eligibleCandidateCount: outcome.selection.enumeratedCount,
+    eligibleCandidateCount: outcome.selection.admittedCount,
     selectedCandidateCount: outcome.selection.selectedCount,
     maxCandidates,
   });
@@ -154,6 +162,7 @@ type VenueMid = ResolvedBlockScanMid;
 interface RankedOpportunity {
   opportunity: BlockScanOpportunity;
   rank: number;
+  estSpreadBps: number;
 }
 
 const Q96 = 1n << 96n;
@@ -207,6 +216,8 @@ export function scanBlockStateFromResolvedMids(input: {
   const finish = (outcome: BlockScanOutcome["outcome"]): BlockScanOutcome => {
     const finalizeStartedAtMs = Date.now();
     phaseMs[activePhase] += Math.max(0, finalizeStartedAtMs - phaseStartedAtMs);
+    const admissionSpreadBps =
+      input.cfg.exactAdmissionSpreadBps ?? input.cfg.minSpreadBps;
     ranked.sort((a, b) => b.rank - a.rank);
     const deduped: RankedOpportunity[] = [];
     const seenRoutes = new Set<string>();
@@ -216,8 +227,11 @@ export function scanBlockStateFromResolvedMids(input: {
       seenRoutes.add(route);
       deduped.push(entry);
     }
+    const admitted = deduped.filter(
+      (entry) => entry.estSpreadBps > admissionSpreadBps,
+    );
     const selected = selectByBlockScanFamily(
-      deduped,
+      admitted,
       input.cfg.maxCandidates,
       (entry) => blockScanRouteFamilyIds(entry.opportunity.seedEdges),
     );
@@ -230,6 +244,7 @@ export function scanBlockStateFromResolvedMids(input: {
       selection: Object.freeze({
         mode: "natural_ranked" as const,
         enumeratedCount: deduped.length,
+        admittedCount: admitted.length,
         selectedCount: selected.length,
         forcedSelectionCount: 0,
       }),
@@ -340,6 +355,7 @@ export function scanBlockStateFromResolvedMids(input: {
     ranked.push({
       opportunity,
       rank: expectedReturnRank(routeScore.estSpreadBps, sizing.searchCenter, maxBorrow),
+      estSpreadBps: routeScore.estSpreadBps,
     });
   }
 
@@ -415,6 +431,7 @@ export function scanBlockStateFromResolvedMids(input: {
     ranked.push({
       opportunity,
       rank: expectedReturnRank(rotatedScore.estSpreadBps, sizing.searchCenter, maxBorrow),
+      estSpreadBps: rotatedScore.estSpreadBps,
     });
   };
 
