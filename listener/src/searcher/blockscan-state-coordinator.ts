@@ -1513,6 +1513,7 @@ export class BlockScanStateCoordinator {
       let resolvedEdgeKeys = lanes.flatMap((lane) => lane.resolvedEdgeKeys);
       let unavailableEdges = lanes.flatMap((lane) => lane.unavailableEdges);
       const expectedReadKeys = lanes.flatMap((lane) => lane.expectedReadKeys);
+      const canonicalCasStartedAtMs = this.now();
       try {
         await awaitWithAbort(
           this.backend.verifyCanonicalSource(
@@ -1544,6 +1545,10 @@ export class BlockScanStateCoordinator {
         resolvedEdgeKeys = [];
         unavailableEdges = [];
       }
+      const canonicalCasMs = Math.max(
+        0,
+        this.now() - canonicalCasStartedAtMs,
+      );
       const terminalFamilyIds = completePricingFamilyIds(
         ownership.groups,
         graphIncompleteFamilyIds,
@@ -1555,6 +1560,7 @@ export class BlockScanStateCoordinator {
           unavailableEdgeKeys: unavailableEdges.map((entry) => entry.edgeKey),
         },
       );
+      const coverageStartedAtMs = this.now();
       const coverage = createCoverage(
         ownership.expectedStateKeys,
         resolvedStateKeys,
@@ -1570,6 +1576,7 @@ export class BlockScanStateCoordinator {
           expectedEdgeKeyHash: ownership.expectedEdgeKeyHash,
         },
       );
+      const coverageMs = Math.max(0, this.now() - coverageStartedAtMs);
       const laneTelemetry = freezeLaneTelemetry(lanes.map((lane) => lane.telemetry));
       const familyTelemetry = createFamilyTelemetry({
         groups: ownership.groups,
@@ -1792,6 +1799,14 @@ export class BlockScanStateCoordinator {
       this.published = snapshot;
       active.published = true;
       const assemblyFinishedAtMs = this.now();
+      const assemblyMs = Math.max(
+        0,
+        assemblyFinishedAtMs - lanesFinishedAtMs,
+      );
+      const publicationMs = Math.max(
+        0,
+        assemblyMs - canonicalCasMs - coverageMs,
+      );
       const degraded =
         incompleteFamilyIds.length > 0 ||
         coverage.unresolvedStateKeys.length > 0 ||
@@ -1807,10 +1822,10 @@ export class BlockScanStateCoordinator {
           preparedPhasesMs,
           activityPlanMs,
           lanesMs,
-          assemblyMs: Math.max(
-            0,
-            assemblyFinishedAtMs - lanesFinishedAtMs,
-          ),
+          assemblyMs,
+          canonicalCasMs,
+          coverageMs,
+          publicationMs,
           heapDeltaMB: Math.round(
             (process.memoryUsage().heapUsed - prepareHeapAtStart) / 1048576,
           ),

@@ -510,6 +510,13 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly largeGraphEdgeThreshold: number;
   readonly largeGraphPassBudgetMs: number;
   readonly passBudgetMs: number;
+  /**
+   * Hard wall-clock cap for one periodic pass, measured from worker start.
+   * Bounds the time the single-head scheduler is held (and the producer is
+   * starved) even when large-graph budgets are generous. Startup warm keeps
+   * its own long budget and is excluded.
+   */
+  readonly passHardCapMs?: number;
   /** Explicitly enabled only by the ordinary live runtime. */
   readonly startupWarmEnabled: boolean;
   /** One-time ordinary-live budget for the first current-head runtime snapshot. */
@@ -1392,12 +1399,22 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         ? this.deps.largeGraphPassBudgetMs
         : this.deps.passBudgetMs
     );
-    const passDeadlineAtMs = startupWarmAttempt
+    let passDeadlineAtMs = startupWarmAttempt
       ? Math.max(
           hotPassDeadlineAtMs,
           passWorkerStartedAtMs + Math.max(1, this.deps.startupWarmBudgetMs),
         )
       : hotPassDeadlineAtMs;
+    if (!startupWarmAttempt) {
+      const hardCapMs = Math.max(
+        1,
+        this.deps.passHardCapMs ?? 10_000,
+      );
+      passDeadlineAtMs = Math.min(
+        passDeadlineAtMs,
+        passWorkerStartedAtMs + hardCapMs,
+      );
+    }
     const useNMinusOneFallback =
       this.deps.nMinusOneFallbackEnabled === true &&
       !startupWarmAttempt &&
