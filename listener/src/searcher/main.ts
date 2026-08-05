@@ -2504,7 +2504,14 @@ async function main(): Promise<void> {
       0,
       Number(
         process.env.SEARCHER_BLOCKSCAN_EXACT_PRODUCER_LAG_YIELD_MS ??
-          "1000",
+          "5000",
+      ),
+    ),
+    exactProducerLagYieldBudgetMs: Math.max(
+      0,
+      Number(
+        process.env.SEARCHER_BLOCKSCAN_EXACT_PRODUCER_LAG_YIELD_BUDGET_MS ??
+          "10000",
       ),
     ),
     producerTopologyAdoptIntervalMs: Math.max(

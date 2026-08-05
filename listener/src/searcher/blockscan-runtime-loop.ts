@@ -554,6 +554,13 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
    */
   readonly exactProducerLagYieldMs?: number;
   /**
+   * Total wall-clock budget for exact probe yielding to the producer within
+   * one pass. The per-batch yield gives the producer a short reth window;
+   * this bounds how much of the pass budget exact may donate overall so a
+   * persistently lagging producer cannot starve exact forever.
+   */
+  readonly exactProducerLagYieldBudgetMs?: number;
+  /**
    * Minimum wall-clock interval between producer topology adoptions. The
    * background N-1 producer pays a full ownership/schema rebuild
    * (topologyFor + preparedPhases, measured 8-14s) whenever discovery
@@ -2680,6 +2687,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       if (exactSourceBlockHash === null) {
         throw new Error("exact quote source hash is unavailable");
       }
+      let exactYieldedMs = 0;
       /*
        * Producer-lag gate for the exact probe transport. Heavy candidate
        * blocks issue 900+ probes in 15-20s; while the background N-1 producer
@@ -2701,21 +2709,27 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               if (lane !== "exact") {
                 return scheduler.run(lane, signal, work);
               }
-              const yieldMs = Math.max(
+              const maxBatchYieldMs = Math.max(
                 0,
-                this.deps.exactProducerLagYieldMs ?? 1_000,
+                this.deps.exactProducerLagYieldMs ?? 5_000,
               );
-              const gateUntilAtMs = Date.now() + yieldMs;
-              while (Date.now() < gateUntilAtMs) {
+              const maxPassYieldMs = Math.max(
+                0,
+                this.deps.exactProducerLagYieldBudgetMs ?? 10_000,
+              );
+              const batchYieldUntilAtMs = Date.now() + maxBatchYieldMs;
+              while (Date.now() < batchYieldUntilAtMs) {
                 if (signal.aborted || passSignal.aborted) break;
                 const snapshot =
                   adapterRuntimeCoordinator.latestPricingSnapshot();
                 const producerSource = snapshot?.sourceBlock ?? -1;
                 const newestHead = this.latestScheduledHead ?? blockNumber;
                 if (newestHead - producerSource < 2) break;
+                if (exactYieldedMs >= maxPassYieldMs) break;
                 await new Promise<void>((resolve) =>
-                  setTimeout(resolve, 50)
+                  setTimeout(resolve, 100)
                 );
+                exactYieldedMs += 100;
               }
               return scheduler.run(lane, signal, work);
             },
