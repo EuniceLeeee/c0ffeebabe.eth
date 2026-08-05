@@ -87,10 +87,10 @@ export interface BlockScanRefinementOptions {
   readonly familyTimeoutMs?: number;
   readonly maxConcurrentPerFamily?: number;
   /**
-   * Shadow admission floor in bps. Every candidate is still probed, but the
-   * result splits positive/negative/failed by whether the candidate's coarse
-   * spread clears this floor. No opportunity is removed; the split only feeds
-   * admission-threshold calibration.
+   * Hard exact admission floor in bps. Candidates whose coarse spread clears
+   * the floor are probed; the rest are skipped and counted in
+   * shadow.notAdmitted (exact_not_admitted) without executing any quote.
+   * When omitted every candidate is probed (legacy behavior).
    */
   readonly admissionSpreadBps?: number;
   /**
@@ -138,7 +138,7 @@ export async function refineBlockScanCandidates(
   concurrency = DEFAULT_CONCURRENCY,
   options: BlockScanRefinementOptions = {},
 ): Promise<BlockScanRefinementResult> {
-  const work = orderByBlockScanFamily(
+  let work = orderByBlockScanFamily(
     opportunities.map((opportunity, index) => ({ opportunity, index })),
     ({ opportunity }) => blockScanRouteFamilyIds(opportunity.seedEdges),
   );
@@ -157,23 +157,26 @@ export async function refineBlockScanCandidates(
           admitted: emptyShadowBand(),
           notAdmitted: emptyShadowBand(),
         };
-  const shadowBand = (opportunity: BlockScanOpportunity) => {
-    if (!shadow) return null;
-    const spread = opportunity.coarseSpreadBps;
-    return typeof spread === "number" && spread > shadow.admissionSpreadBps
-      ? shadow.admitted
-      : shadow.notAdmitted;
-  };
+  if (shadow) {
+    const admitted: typeof work = [];
+    for (const item of work) {
+      const spread = item.opportunity.coarseSpreadBps;
+      if (typeof spread === "number" && spread < shadow.admissionSpreadBps) {
+        // exact_not_admitted: keep the funnel count, never execute a quote.
+        shadow.notAdmitted.total++;
+      } else {
+        admitted.push(item);
+      }
+    }
+    work = admitted;
+  }
   const recordShadow = (
-    opportunity: BlockScanOpportunity,
     status: "positive" | "negative" | "failed" | "unprobed",
   ): void => {
-    const band = shadowBand(opportunity);
-    if (band) band[status]++;
+    if (shadow) shadow.admitted[status]++;
   };
-  const recordShadowTotal = (opportunity: BlockScanOpportunity): void => {
-    const band = shadowBand(opportunity);
-    if (band) band.total++;
+  const recordShadowTotal = (): void => {
+    if (shadow) shadow.admitted.total++;
   };
   const workerCount = Math.max(1, Math.min(concurrency, work.length));
   const familyTimeoutMs = positiveInteger(
@@ -259,8 +262,8 @@ export async function refineBlockScanCandidates(
       pending.splice(index, 1);
       failed++;
       dropped++;
-      recordShadowTotal(item.opportunity);
-      recordShadow(item.opportunity, "failed");
+      recordShadowTotal();
+      recordShadow("failed");
       const blocking = stageBudget.blockingCircuit(
         item.opportunity.seedEdges,
       );
@@ -313,7 +316,7 @@ export async function refineBlockScanCandidates(
       signal: familyController.signal,
     });
     attempted++;
-    recordShadowTotal(opportunity);
+    recordShadowTotal();
     try {
       const probe = exactProbeMarginBps(
         controlledState,
@@ -345,7 +348,7 @@ export async function refineBlockScanCandidates(
           priority: exactProbePriority(opportunity, marginBps, pricedTokens),
           index,
         });
-        recordShadow(opportunity, "positive");
+        recordShadow("positive");
         onProbe?.({
           index,
           status: "positive",
@@ -355,7 +358,7 @@ export async function refineBlockScanCandidates(
         });
       } else {
         negative++;
-        recordShadow(opportunity, "negative");
+        recordShadow("negative");
         onProbe?.({
           index,
           status: "negative",
@@ -390,8 +393,8 @@ export async function refineBlockScanCandidates(
       ) {
         deadlineHit = true;
         fallback.push({ opportunity, index });
-        recordShadowTotal(opportunity);
-        recordShadow(opportunity, "unprobed");
+        recordShadowTotal();
+        recordShadow("unprobed");
         onProbe?.({
           index,
           status: "unprobed",
@@ -405,7 +408,7 @@ export async function refineBlockScanCandidates(
         });
       } else {
         failed++;
-        recordShadow(opportunity, "failed");
+        recordShadow("failed");
         const budgetError =
           localTimedOut &&
             familyIds.length === 1 &&
@@ -444,8 +447,8 @@ export async function refineBlockScanCandidates(
         deadlineHit = true;
         for (const item of pending.splice(0)) {
           fallback.push(item);
-          recordShadowTotal(item.opportunity);
-          recordShadow(item.opportunity, "unprobed");
+          recordShadowTotal();
+          recordShadow("unprobed");
           onProbe?.({
             index: item.index,
             status: "unprobed",

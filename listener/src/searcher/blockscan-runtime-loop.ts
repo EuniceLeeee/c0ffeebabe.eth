@@ -2577,6 +2577,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         console.log(
           `[searcher/blockscan-refine-shadow] ${JSON.stringify({
             block: blockNumber,
+            exactNotAdmitted: refinement.shadow.notAdmitted.total,
             ...refinement.shadow,
           })}`,
         );

@@ -179,6 +179,7 @@ await earlyZeroDoesNotClearUnvisitedInstanceCircuit();
 await transientCircuitWaitsForInflightRecovery();
 await confirmedPositiveSurvivesLaterInstanceCircuit();
 await executorQuoteContextReachesFamily();
+await admissionFloorSkipsLowSpreadProbes();
 
 console.log("blockscan-candidate-refinement PASS");
 
@@ -1404,6 +1405,90 @@ async function waitUntil(
     if (Date.now() >= deadlineAtMs) throw new Error(message);
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
+}
+
+async function admissionFloorSkipsLowSpreadProbes(): Promise<void> {
+  const widePool = "0x00000000000000000000000000000000000001b0";
+  const thinPool = "0x00000000000000000000000000000000000001b1";
+  const factory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+  let thinCalls = 0;
+  const state = {
+    async call(req: { to: string; data: string }): Promise<string> {
+      if (req.to.toLowerCase() === thinPool) thinCalls++;
+      assert(
+        req.to.toLowerCase() === widePool ||
+          req.to.toLowerCase() === thinPool,
+        `unexpected admission pool ${req.to}`,
+      );
+      const selector = req.data.slice(0, 10);
+      if (selector === pair.getFunction("token0")!.selector) {
+        return pair.encodeFunctionResult("token0", [TOKEN_6]);
+      }
+      if (selector === pair.getFunction("getReserves")!.selector) {
+        return pair.encodeFunctionResult(
+          "getReserves",
+          [1_000_000n, 2_000_000n, 0],
+        );
+      }
+      if (selector === pair.getFunction("factory")!.selector) {
+        return pair.encodeFunctionResult("factory", [factory]);
+      }
+      throw new Error(`unexpected admission selector ${selector}`);
+    },
+  } as StateBackend;
+  const wideEdge: TokenEdge = familyEdge("admission-family", 500, {
+    adapterId: "univ2-swap",
+    target: widePool,
+    tokenIn: TOKEN_6,
+    tokenOut: TOKEN_18,
+  });
+  const thinEdge: TokenEdge = familyEdge("admission-family", 501, {
+    adapterId: "univ2-swap",
+    target: thinPool,
+    tokenIn: TOKEN_6,
+    tokenOut: TOKEN_18,
+  });
+  const opportunities: BlockScanOpportunity[] = [
+    {
+      ...opportunity(TOKEN_6, 1_024n),
+      cycleId: "wide",
+      cycleFingerprint: "wide",
+      coarseSpreadBps: 80,
+      seedEdges: [wideEdge],
+    },
+    {
+      ...opportunity(TOKEN_6, 1_024n),
+      cycleId: "thin",
+      cycleFingerprint: "thin",
+      coarseSpreadBps: 30,
+      seedEdges: [thinEdge],
+    },
+  ];
+  const result = await refineBlockScanCandidates(
+    state,
+    opportunities,
+    opportunities.length,
+    Date.now() + 2_000,
+    pricedTokens,
+    undefined,
+    1,
+    {
+      familyTimeoutMs: 500,
+      maxConcurrentPerFamily: 1,
+      admissionSpreadBps: 50,
+    },
+  );
+  assert.equal(result.attempted, 1, "only the admitted candidate is probed");
+  assert.equal(result.positive, 1);
+  assert.equal(result.shadow?.admitted.total, 1);
+  assert.equal(result.shadow?.admitted.positive, 1);
+  assert.equal(result.shadow?.notAdmitted.total, 1);
+  assert.deepEqual(
+    result.opportunities.map(({ cycleId }) => cycleId),
+    ["wide"],
+    "the admitted candidate alone is retained",
+  );
+  assert.equal(thinCalls, 0, "the thin candidate must never execute a quote");
 }
 
 function familyEdge(
