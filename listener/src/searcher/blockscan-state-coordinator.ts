@@ -712,6 +712,8 @@ export class BlockScanStateCoordinator {
     CachedBlockScanStateKey
   >();
   private topologyIndex: StateTopologyIndex | null = null;
+  private edgeKeyToStateKeyIndexKey: string | null = null;
+  private readonly edgeKeyToStateKey = new Map<string, string>();
   private cacheAppendChain: Promise<void> = Promise.resolve();
   /** Warm generations persist each resolved key; hot generations do not. */
   private cacheModeActive = false;
@@ -760,6 +762,94 @@ export class BlockScanStateCoordinator {
 
   latestSnapshot(): BlockScanStateSnapshot | null {
     return this.published;
+  }
+
+  /**
+   * Adopt current-N exact-probe mids as a coarse carry refresh. This is a
+   * scheduler-aware, synchronous mutation: it only applies when the producer
+   * has not yet published a state newer than the exact source block, and it
+   * never touches graph topology, only the recovery base mid for one edge.
+   * Callers must have already canonical-CAS'd the exact source block/hash.
+   */
+  adoptExactProbeMids(input: {
+    readonly sourceBlock: number;
+    readonly sourceBlockHash: string;
+    readonly refreshes: ReadonlyArray<{
+      readonly edgeKey: string;
+      readonly familyId: string;
+      readonly mid: number;
+    }>;
+  }): {
+    adopted: number;
+    skippedObsolete: number;
+    skippedMissingBase: number;
+    skippedEdgeMismatch: number;
+    skippedNonFinite: number;
+  } {
+    const result = {
+      adopted: 0,
+      skippedObsolete: 0,
+      skippedMissingBase: 0,
+      skippedEdgeMismatch: 0,
+      skippedNonFinite: 0,
+    };
+    const published = this.published;
+    if (published && published.sourceBlock > input.sourceBlock) {
+      // The producer already moved past the exact source: an older estimate
+      // must never overwrite a newer carry base.
+      result.skippedObsolete = input.refreshes.length;
+      return result;
+    }
+    const byEdgeKey = this.edgeKeyToStateKeyForTopology();
+    for (const refresh of input.refreshes) {
+      if (!Number.isFinite(refresh.mid) || refresh.mid <= 0) {
+        result.skippedNonFinite++;
+        continue;
+      }
+      const stateKey = byEdgeKey.get(refresh.edgeKey);
+      if (stateKey === undefined) {
+        result.skippedEdgeMismatch++;
+        continue;
+      }
+      const base = this.lastGoodByStateKey.get(stateKey);
+      if (!base || base.state.familyId !== refresh.familyId) {
+        result.skippedMissingBase++;
+        continue;
+      }
+      const existing = base.midsByEdgeKey.get(refresh.edgeKey);
+      if (!existing) {
+        result.skippedEdgeMismatch++;
+        continue;
+      }
+      const mids = new Map(base.midsByEdgeKey);
+      mids.set(refresh.edgeKey, Object.freeze({
+        ...existing,
+        mid: refresh.mid,
+      }));
+      this.lastGoodByStateKey.set(stateKey, {
+        ...base,
+        midsByEdgeKey: mids,
+      });
+      result.adopted++;
+    }
+    return result;
+  }
+
+  private edgeKeyToStateKeyForTopology(): ReadonlyMap<string, string> {
+    const index = this.topologyIndex;
+    if (!index) return this.edgeKeyToStateKey;
+    if (this.edgeKeyToStateKeyIndexKey !== index.key) {
+      this.edgeKeyToStateKey.clear();
+      for (const group of index.groupByStateKey.values()) {
+        for (const edgeKey of group.edgeKeys) {
+          if (!this.edgeKeyToStateKey.has(edgeKey)) {
+            this.edgeKeyToStateKey.set(edgeKey, group.stateKey);
+          }
+        }
+      }
+      this.edgeKeyToStateKeyIndexKey = index.key;
+    }
+    return this.edgeKeyToStateKey;
   }
 
   private recoveryBaseForGroup(

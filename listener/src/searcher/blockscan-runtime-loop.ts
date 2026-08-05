@@ -15,7 +15,10 @@ import {
   promoteNMinusOneExactCandidates,
   type NMinusOneCoarseCandidate,
 } from "./detector/blockscan-nminus1-fallback.js";
-import { BlockScanFamilyStageBudget } from "./detector/blockscan-family-budget.js";
+import {
+  BlockScanFamilyStageBudget,
+  blockScanEdgeFamilyId,
+} from "./detector/blockscan-family-budget.js";
 import { BlockScanPassTimeline } from "./blockscan-pass-timeline.js";
 import { emitEvent } from "./events.js";
 import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
@@ -2646,6 +2649,34 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             funding: exactContext.fundingCoverage,
           })}`,
         );
+        if (refinement.edgeQuoteMids && refinement.edgeQuoteMids.length > 0) {
+          /*
+           * Scheduler-aware exact feedback: the source is canonical (CAS
+           * passed above) and the coordinator only adopts while the producer
+           * has not published anything newer than the exact source block.
+           * This replaces the stale carried mid for probed edges so a phantom
+           * ring does not reappear on the next generation.
+           */
+          const feedback = adapterRuntimeCoordinator.adoptExactProbeMids({
+            sourceBlock: exactContext.context.sourceBlock,
+            sourceBlockHash: exactContext.context.sourceBlockHash,
+            refreshes: refinement.edgeQuoteMids.map((entry) => ({
+              edgeKey: entry.edgeKey,
+              familyId: blockScanEdgeFamilyId(entry.edge),
+              mid: entry.amountIn > 0n
+                ? Number(entry.amountOut) / Number(entry.amountIn)
+                : 0,
+            })),
+          });
+          console.log(
+            `[searcher/blockscan-exact-feedback] ${JSON.stringify({
+              block: blockNumber,
+              sourceBlock: exactContext.context.sourceBlock,
+              quotes: refinement.edgeQuoteMids.length,
+              ...feedback,
+            })}`,
+          );
+        }
       }
       const planned: PlannedBlockScanSolve[] = [];
       const plannerFamilyBudget = new BlockScanFamilyStageBudget();

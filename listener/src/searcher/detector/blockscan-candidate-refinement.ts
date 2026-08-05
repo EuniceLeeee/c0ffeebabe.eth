@@ -10,6 +10,7 @@ import {
 } from "../solver/quoter.js";
 import type { BlockScanOpportunity } from "./detector.js";
 import { BLOCKSCAN_MIN_EXECUTABLE_INPUT } from "./blockscan-sizing-constants.js";
+import type { TokenEdge } from "../planner/token-graph.js";
 import {
   BlockScanFamilyAttributedError,
   BlockScanFamilyStageBudget,
@@ -23,6 +24,7 @@ import {
 import type {
   PendingExecutionEvidence,
 } from "../venues/route-leg-adapter.js";
+import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 
 const DEFAULT_CONCURRENCY = 24;
 const DEFAULT_FAMILY_PROBE_TIMEOUT_MS = 1_000;
@@ -36,9 +38,22 @@ export interface BlockScanRefinementResult {
   failed: number;
   deadlineHit: boolean;
   shadow?: BlockScanRefinementShadow;
+  /**
+   * Per-edge current-N quotes from completed probes (positive and negative),
+   * keyed by edgeKey. Consumers may feed these back as a coarse mid refresh
+   * for the next carry generation.
+   */
+  edgeQuoteMids?: readonly BlockScanEdgeQuoteMid[];
   openFamilyIds: readonly string[];
   openInstanceCircuitKeys: readonly string[];
   openCompositeKeys: readonly string[];
+}
+
+export interface BlockScanEdgeQuoteMid {
+  readonly edgeKey: string;
+  readonly edge: TokenEdge;
+  readonly amountIn: bigint;
+  readonly amountOut: bigint;
 }
 
 export interface BlockScanRefinementShadow {
@@ -163,6 +178,7 @@ export async function refineBlockScanCandidates(
   );
   const ranked: RankedProbe[] = [];
   const fallback: Array<{ opportunity: BlockScanOpportunity; index: number }> = [];
+  const edgeQuoteByKey = new Map<string, BlockScanEdgeQuoteMid>();
   const stageBudget = new BlockScanFamilyStageBudget();
   let attempted = 0;
   let negative = 0;
@@ -463,7 +479,7 @@ export async function refineBlockScanCandidates(
         (edge) => stageBudget.recordEdgeSuccess(edge),
         () => stageBudget.recordRouteSuccess(opportunity.seedEdges),
       );
-      const marginBps = await probe;
+      const { marginBps, edgeQuotes } = await probe;
       if (deadlineController.signal.aborted || Date.now() >= deadlineAtMs) {
         throw new ProbeDeadlineError("exact probe deadline reached");
       }
@@ -471,6 +487,9 @@ export async function refineBlockScanCandidates(
         localTimedOut = true;
         throw familyController.signal.reason ??
           new FamilyProbeDeadlineError(familyIds, localBudgetMs);
+      }
+      for (const edgeQuote of edgeQuotes) {
+        edgeQuoteByKey.set(edgeQuote.edgeKey, edgeQuote);
       }
       if (marginBps > 0) {
         ranked.push({
@@ -660,6 +679,7 @@ export async function refineBlockScanCandidates(
     negative,
     failed,
     deadlineHit: deadlineHit || Date.now() >= deadlineAtMs,
+    edgeQuoteMids: Object.freeze([...edgeQuoteByKey.values()]),
     ...(shadow === null
       ? {}
       : {
@@ -739,11 +759,17 @@ async function exactProbeMarginBps(
     edge: BlockScanOpportunity["seedEdges"][number],
   ) => void = () => {},
   onRouteSuccess: () => void = () => {},
-): Promise<number> {
+): Promise<{
+  marginBps: number;
+  edgeQuotes: BlockScanEdgeQuoteMid[];
+}> {
   const ceiling = minBigint(opportunity.searchSeed.searchCenter, opportunity.searchSeed.maxInput);
   const amountIn = maxBigint(BLOCKSCAN_MIN_EXECUTABLE_INPUT, ceiling / 1024n);
-  if (amountIn > ceiling || amountIn <= 0n) return 0;
+  if (amountIn > ceiling || amountIn <= 0n) {
+    return { marginBps: 0, edgeQuotes: [] };
+  }
   let amount = amountIn;
+  const edgeQuotes: BlockScanEdgeQuoteMid[] = [];
   for (const edge of opportunity.seedEdges) {
     if (Date.now() >= deadlineAtMs) {
       throw new BlockScanFamilyAttributedError(
@@ -753,6 +779,7 @@ async function exactProbeMarginBps(
         edge.canonicalEdgeId ?? null,
       );
     }
+    let legAmountIn = amount;
     try {
       amount = await awaitWithAbort(
         quote(
@@ -783,13 +810,22 @@ async function exactProbeMarginBps(
       );
     }
     onEdgeSuccess(edge);
-    if (amount <= 0n) return 0;
+    edgeQuotes.push({
+      edgeKey: blockScanEdgeKey(edge),
+      edge,
+      amountIn: legAmountIn,
+      amountOut: amount,
+    });
+    if (amount <= 0n) return { marginBps: 0, edgeQuotes };
   }
   onRouteSuccess();
   const profit = amount - amountIn;
-  if (profit <= 0n) return 0;
+  if (profit <= 0n) return { marginBps: 0, edgeQuotes };
   const marginBps = Number(profit) * 10_000 / Number(amountIn);
-  return Number.isFinite(marginBps) && marginBps > 0 ? marginBps : 0;
+  return {
+    marginBps: Number.isFinite(marginBps) && marginBps > 0 ? marginBps : 0,
+    edgeQuotes,
+  };
 }
 
 function minBigint(a: bigint, b: bigint): bigint {

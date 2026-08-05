@@ -247,6 +247,24 @@ export class AdapterRuntimeCoordinator {
     return this.pricing.latestSnapshot();
   }
 
+  adoptExactProbeMids(input: {
+    readonly sourceBlock: number;
+    readonly sourceBlockHash: string;
+    readonly refreshes: ReadonlyArray<{
+      readonly edgeKey: string;
+      readonly familyId: string;
+      readonly mid: number;
+    }>;
+  }): {
+    adopted: number;
+    skippedObsolete: number;
+    skippedMissingBase: number;
+    skippedEdgeMismatch: number;
+    skippedNonFinite: number;
+  } {
+    return this.pricing.adoptExactProbeMids(input);
+  }
+
   /**
    * Background coarse producer. It updates only the pricing coordinator's
    * independently proven snapshot; it never publishes a normal atomic runtime
