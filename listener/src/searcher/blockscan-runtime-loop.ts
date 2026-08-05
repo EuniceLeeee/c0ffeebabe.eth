@@ -2019,6 +2019,56 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             Date.now() +
               Math.max(1, this.deps.hotPricingFamilyBudgetMs ?? 5_000),
           );
+      const forkExecutionWorker = async (
+        worker: BlockScanExecutionWorker,
+        workerIndex: number,
+        input: {
+          readonly sourceBlock: number;
+          readonly sourceBlockHash: string;
+          readonly deadlineAtMs: number;
+          readonly signal: AbortSignal;
+        },
+      ): Promise<void> => {
+        const resetStartedAtMs = Date.now();
+        let status: "complete" | "failed" = "failed";
+        try {
+          if (this.deps.isShuttingDown() || input.signal.aborted) {
+            throw input.signal.reason;
+          }
+          await worker.state.forkAt(input.sourceBlock, {
+            deadlineAtMs: input.deadlineAtMs,
+            signal: input.signal,
+          });
+          if (this.deps.isShuttingDown() || input.signal.aborted) {
+            throw input.signal.reason;
+          }
+          const forkHash = await awaitBlockScanDeadline(
+            this.deps.readBlockHash(
+              worker.state.provider,
+              input.sourceBlock,
+            ),
+            input.deadlineAtMs,
+            "execution worker fork hash",
+            () => worker.state.stop(),
+            input.signal,
+          );
+          if (this.deps.isShuttingDown() || input.signal.aborted) {
+            throw input.signal.reason;
+          }
+          if (forkHash !== input.sourceBlockHash) {
+            throw new Error(
+              `worker fork hash mismatch ${forkHash} != ${input.sourceBlockHash}`,
+            );
+          }
+          status = "complete";
+        } finally {
+          workerResetTimings.push(Object.freeze({
+            worker: workerIndex,
+            wallMs: Math.max(0, Date.now() - resetStartedAtMs),
+            status,
+          }));
+        }
+      };
       const prepareExecution = async (
         input: {
           readonly sourceBlock: number;
@@ -2026,50 +2076,17 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           readonly signal: AbortSignal;
         },
       ): Promise<void> => {
-        const { sourceBlock, sourceBlockHash, signal } = input;
         const settled = await Promise.allSettled(
-          blockScanExecutionWorkers.map(async (worker, workerIndex) => {
-            const resetStartedAtMs = Date.now();
-            let status: "complete" | "failed" = "failed";
-            try {
-              if (this.deps.isShuttingDown() || signal.aborted) {
-                throw signal.reason;
-              }
-              await worker.state.forkAt(sourceBlock, {
-                deadlineAtMs: preparationSettleDeadlineAtMs,
-                signal,
-              });
-              if (this.deps.isShuttingDown() || signal.aborted) {
-                throw signal.reason;
-              }
-              const forkHash = await awaitBlockScanDeadline(
-                this.deps.readBlockHash(
-                  worker.state.provider,
-                  sourceBlock,
-                ),
-                preparationSettleDeadlineAtMs,
-                "execution worker fork hash",
-                () => worker.state.stop(),
-                signal,
-              );
-              if (this.deps.isShuttingDown() || signal.aborted) {
-                throw signal.reason;
-              }
-              if (forkHash !== sourceBlockHash) {
-                throw new Error(
-                  `worker fork hash mismatch ${forkHash} != ${sourceBlockHash}`,
-                );
-              }
-              status = "complete";
-            } finally {
-              workerResetTimings.push(Object.freeze({
-                worker: workerIndex,
-                wallMs: Math.max(0, Date.now() - resetStartedAtMs),
-                status,
-              }));
-            }
-          }),
+          blockScanExecutionWorkers.map((worker, workerIndex) =>
+            forkExecutionWorker(worker, workerIndex, {
+              sourceBlock: input.sourceBlock,
+              sourceBlockHash: input.sourceBlockHash,
+              deadlineAtMs: preparationSettleDeadlineAtMs,
+              signal: input.signal,
+            }),
+          ),
         );
+        const { signal } = input;
         const failure = settled.find(
           (result): result is PromiseRejectedResult =>
             result.status === "rejected",
@@ -2095,6 +2112,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       let coarse: BlockScanOutcome;
       let fallbackEnvelopes: readonly NMinusOneCoarseCandidate[] | null = null;
       let exactRefineStarted = false;
+      let exactFundingTokens: readonly string[] = [];
       if (!useNMinusOneFallback) {
         this.passStageLabel = "state:prepare";
         const runtime = await adapterRuntimeCoordinator.prepare({
@@ -2435,64 +2453,18 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           // Zero candidates cannot consume funding or execution state.
           return;
         }
-        /*
-         * Exact current-N resources are an on-demand content-addressed join.
-         * A candidate-bearing head keeps exclusive priority through final
-         * simulation; the outer finally releases the next coarse producer.
-         */
-        const exactFundingTokens = blockScanCandidateFundingTokens(
+        exactFundingTokens = blockScanCandidateFundingTokens(
           coarse.opportunities,
         );
-        this.passStageLabel = "exact_refine";
-        beginStage("exact_refine");
-        exactRefineStarted = true;
-        const exactContext: CurrentNExactExecutionContextResult =
-          await adapterRuntimeCoordinator
-            .prepareCurrentNExactExecutionContext({
-              graph: graphView,
-              fundingTokens: exactFundingTokens,
-              deadlineAtMs: runtimeDeadlineAtMs,
-              preparationSettleDeadlineAtMs,
-              signal: passSignal,
-              prepareExecution,
-            });
-        if (exactContext.status === "incomplete") {
-          finishStage("exact_refine", "failed");
-          timing.exactRefineMs = stageBoundaries.exact_refine.stage_ms;
-          outcome = Date.now() >= passDeadlineAtMs
-            ? "budget_exceeded"
-            : "stale_state";
-          skippedReason = exactContext.issues[0]?.message ??
-            "current-N exact execution context incomplete";
-          console.log(
-            `[searcher/blockscan-nminus1] ${JSON.stringify({
-              block: blockNumber,
-              status: "exact-context-incomplete",
-              reason: skippedReason,
-              timing: exactContext.timing,
-              requestedFundingTokens: exactFundingTokens.length,
-              funding: exactContext.fundingCoverage,
-              causes: summarizeBlockScanIssueCauses(exactContext.issues),
-            })}`,
-          );
-          return;
-        }
-        assertExactContextMatchesGraph(exactContext.context, graphView);
-        runtimeSourceBlock = exactContext.context.sourceBlock;
-        exactSourceBlockHash = exactContext.context.sourceBlockHash;
-        blockScanPlanner.setFlashLiquidity(exactContext.context.funding);
-        console.log(
-          `[searcher/blockscan-nminus1-exact-join] ${JSON.stringify({
-            block: blockNumber,
-            sourceBlock: exactContext.context.sourceBlock,
-            sourceBlockHash: exactContext.context.sourceBlockHash,
-            graphId: exactContext.context.graph.id,
-            status: exactContext.status,
-            timing: exactContext.timing,
-            requestedFundingTokens: exactFundingTokens.length,
-            funding: exactContext.fundingCoverage,
-          })}`,
-        );
+        /*
+         * Exact probes are current-N view reads against reth; they do not
+         * need the Anvil execution context. Keep the Anvil re-fork (the
+         * dominant 10-13s fixed cost) out of the pre-probe critical path and
+         * prepare funding/CAS only after refinement, right before the solver
+         * actually admits a route.
+         */
+        runtimeSourceBlock = graphView.sourceBlock;
+        exactSourceBlockHash = graphView.sourceBlockHash;
       }
       if (auditOpportunities) {
         for (let index = 0; index < coarse.opportunities.length; index++) {
@@ -2612,6 +2584,59 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         : refinement.opportunities;
 
       beginStage("planner_solver");
+      if (useNMinusOneFallback && exactOpportunities.length > 0) {
+        if (passSignal.aborted) throw passSignal.reason;
+        /*
+         * Deferred exact context: probes have already finished. Now prepare
+         * funding + canonical CAS for the surviving routes only; Anvil worker
+         * forks remain lazy until the solver actually starts on a worker.
+         */
+        const exactContext: CurrentNExactExecutionContextResult =
+          await adapterRuntimeCoordinator
+            .prepareCurrentNExactExecutionContext({
+              graph: graphView,
+              fundingTokens: exactFundingTokens,
+              deadlineAtMs: runtimeDeadlineAtMs,
+              preparationSettleDeadlineAtMs,
+              signal: passSignal,
+            });
+        if (exactContext.status === "incomplete") {
+          finishStage("planner_solver", "failed");
+          outcome = Date.now() >= passDeadlineAtMs
+            ? "budget_exceeded"
+            : "stale_state";
+          skippedReason = exactContext.issues[0]?.message ??
+            "current-N exact execution context incomplete";
+          console.log(
+            `[searcher/blockscan-nminus1] ${JSON.stringify({
+              block: blockNumber,
+              status: "exact-context-incomplete",
+              reason: skippedReason,
+              timing: exactContext.timing,
+              requestedFundingTokens: exactFundingTokens.length,
+              funding: exactContext.fundingCoverage,
+              causes: summarizeBlockScanIssueCauses(exactContext.issues),
+            })}`,
+          );
+          return;
+        }
+        assertExactContextMatchesGraph(exactContext.context, graphView);
+        runtimeSourceBlock = exactContext.context.sourceBlock;
+        exactSourceBlockHash = exactContext.context.sourceBlockHash;
+        blockScanPlanner.setFlashLiquidity(exactContext.context.funding);
+        console.log(
+          `[searcher/blockscan-nminus1-exact-join] ${JSON.stringify({
+            block: blockNumber,
+            sourceBlock: exactContext.context.sourceBlock,
+            sourceBlockHash: exactContext.context.sourceBlockHash,
+            graphId: exactContext.context.graph.id,
+            status: exactContext.status,
+            timing: exactContext.timing,
+            requestedFundingTokens: exactFundingTokens.length,
+            funding: exactContext.fundingCoverage,
+          })}`,
+        );
+      }
       const planned: PlannedBlockScanSolve[] = [];
       const plannerFamilyBudget = new BlockScanFamilyStageBudget();
       const plannerQueue = plannerFamilyBudget.order(
@@ -2709,6 +2734,28 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         simulator: BotVMSimulator;
         state: AnvilStateBackend;
       }> = [];
+      const forkedWorkers = new Set<BlockScanExecutionWorker>();
+      const ensureExecutionWorkerForked = async (
+        worker: BlockScanExecutionWorker,
+      ): Promise<void> => {
+        if (forkedWorkers.has(worker)) return;
+        if (runtimeSourceBlock === null || exactSourceBlockHash === null) {
+          throw new Error(
+            "execution worker fork missing exact source pin",
+          );
+        }
+        forkedWorkers.add(worker);
+        await forkExecutionWorker(
+          worker,
+          blockScanExecutionWorkers.indexOf(worker),
+          {
+            sourceBlock: runtimeSourceBlock,
+            sourceBlockHash: exactSourceBlockHash,
+            deadlineAtMs: passDeadlineAtMs,
+            signal: passSignal,
+          },
+        );
+      };
       const workerLoop = async (
         worker: BlockScanExecutionWorker,
       ): Promise<void> => {
@@ -2723,6 +2770,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           const { item, index } = queued;
           if (solverFamilyBudget.blocks(item.opp.seedEdges)) continue;
           try {
+            if (useNMinusOneFallback) {
+              await ensureExecutionWorkerForked(worker);
+            }
             let deferredCandidates: readonly ResolvedPlan[] = [];
             recordSolver(item.opp);
             const solved = await worker.solver.solve(
