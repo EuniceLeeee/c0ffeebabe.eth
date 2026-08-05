@@ -668,6 +668,52 @@ const tests: TestCase[] = [
     },
   },
   {
+    name: "minimum capital fraction filters dust rings",
+    run: () => {
+      const liquid = mainAnchor();
+      const kept = run(liquid.edges, liquid.cache, {
+        minCapitalFraction: 0.001,
+      });
+      assert(
+        kept.opportunities.length === 1,
+        "liquid ring must be kept at a 0.1% capital floor",
+      );
+      const dropped = run(liquid.edges, liquid.cache, {
+        minCapitalFraction: 1,
+      });
+      assert(
+        dropped.opportunities.length === 0,
+        "liquid ring must be dropped at a 100% capital floor",
+      );
+
+      // P1 is a liquid venue; P2 has the same mid but only ~5 WETH of
+      // depth, so the ring's deployable capital is dust relative to a
+      // 10k WETH borrow cap.
+      const dustCache = new PoolStateCache();
+      seedV2Pair(dustCache, P1, USDC, WETH, 2_000_000n * UNIT, 1_000n * UNIT);
+      seedV2Pair(dustCache, P2, USDC, WETH, 9_615n * UNIT, 5n * UNIT);
+      const dustEdges = [
+        ...venueEdges(USDC, P1),
+        ...venueEdges(USDC, P2),
+      ];
+      const noFloor = run(dustEdges, dustCache, {
+        minCapitalFraction: 0,
+      });
+      assert(
+        noFloor.opportunities.length >= 1,
+        "dust ring must enumerate without a capital floor",
+      );
+      const withFloor = run(dustEdges, dustCache, {
+        minCapitalFraction: 0.001,
+      });
+      assert(
+        withFloor.opportunities.length === 0,
+        "dust ring must be filtered at a 0.1% capital floor",
+      );
+      console.log("[blockscan-scanner] minimum capital fraction filter: PASS");
+    },
+  },
+  {
     name: "T-nav-dislocation",
     run: () => {
       const { cache, edges, protocolMids } = navFixture(1.05);

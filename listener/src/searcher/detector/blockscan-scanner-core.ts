@@ -31,6 +31,13 @@ export interface BlockScanCoreConfig {
    * Defaults to minSpreadBps when omitted.
    */
   exactAdmissionSpreadBps?: number;
+  /**
+   * Minimum executable capital fraction (maxInput / maxBorrow) for a ring to
+   * be enumerated. Filters dust rings whose spread is huge on paper but whose
+   * deployable capital is negligible, before they consume exact probes.
+   * Defaults to 0 (no filter) when omitted.
+   */
+  minCapitalFraction?: number;
   maxCandidates: number;
   budgetMs: number;
   pricedTokens: Map<string, { maxBorrow: bigint }>;
@@ -332,6 +339,11 @@ export function scanBlockStateFromResolvedMids(input: {
       routeMaxInput,
     );
     if (!sizing || sizing.searchCenter <= 8n) continue;
+    if (!passesMinimumCapitalFraction(
+      sizing.maxInput,
+      maxBorrow,
+      input.cfg.minCapitalFraction,
+    )) continue;
 
     const ring = [flashToken, otherToken];
     const canonicalRing = canonicalTokenRing(ring);
@@ -409,6 +421,11 @@ export function scanBlockStateFromResolvedMids(input: {
       routeMaxInput,
     );
     if (!sizing || sizing.searchCenter <= 8n) return;
+    if (!passesMinimumCapitalFraction(
+      sizing.maxInput,
+      maxBorrow,
+      input.cfg.minCapitalFraction,
+    )) return;
 
     const rotatedRingTokens = ringTokensWithoutRepeat(seedEdges);
     const canonicalRing = canonicalTokenRing(rotatedRingTokens);
@@ -980,6 +997,16 @@ function expectedReturnRank(estSpreadBps: number, searchCenter: bigint, maxBorro
   const capitalFraction = Number(searchCenter) / Number(maxBorrow);
   if (!Number.isFinite(capitalFraction) || capitalFraction <= 0) return 0;
   return estSpreadBps * Math.min(1, capitalFraction);
+}
+
+function passesMinimumCapitalFraction(
+  maxInput: bigint,
+  maxBorrow: bigint,
+  minCapitalFraction: number | undefined,
+): boolean {
+  if (minCapitalFraction === undefined || minCapitalFraction <= 0) return true;
+  if (maxBorrow <= 0n || maxInput <= 0n) return false;
+  return Number(maxInput) / Number(maxBorrow) >= minCapitalFraction;
 }
 
 function bigintFloor(value: number): bigint {

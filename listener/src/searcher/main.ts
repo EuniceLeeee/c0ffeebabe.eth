@@ -982,6 +982,9 @@ async function main(): Promise<void> {
         exactAdmissionSpreadBps: Number(
           process.env.SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS ?? "100",
         ),
+        minCapitalFraction: Number(
+          process.env.SEARCHER_BLOCKSCAN_MIN_CAPITAL_FRACTION ?? "0.001",
+        ),
         maxCandidates: Number(process.env.SEARCHER_BLOCKSCAN_MAX_CANDIDATES ?? "100"),
         budgetMs: Number(process.env.SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS ?? "1500"),
         pricedTokens: buildBlockScanPricedTokens(),

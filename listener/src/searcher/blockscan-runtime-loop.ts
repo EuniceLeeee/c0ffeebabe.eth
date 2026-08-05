@@ -2300,6 +2300,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             admissionSpreadBps:
               blockScanCfg.exactAdmissionSpreadBps ??
               blockScanCfg.minSpreadBps,
+            minCapitalFraction:
+              blockScanCfg.minCapitalFraction ?? 0,
             scannedPairs: productionCoarse.scannedPairs,
           })}`,
         );
@@ -2397,6 +2399,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             admissionSpreadBps:
               blockScanCfg.exactAdmissionSpreadBps ??
               blockScanCfg.minSpreadBps,
+            minCapitalFraction:
+              blockScanCfg.minCapitalFraction ?? 0,
             naturallyEnumeratedRoutes:
               fallbackCoarse.scan.selection.enumeratedCount,
             admittedRoutes:
@@ -2734,17 +2738,23 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         simulator: BotVMSimulator;
         state: AnvilStateBackend;
       }> = [];
-      const forkedWorkers = new Set<BlockScanExecutionWorker>();
+      const forkedStates = new Set<AnvilStateBackend>();
       const ensureExecutionWorkerForked = async (
-        worker: BlockScanExecutionWorker,
+        state: AnvilStateBackend,
       ): Promise<void> => {
-        if (forkedWorkers.has(worker)) return;
+        if (forkedStates.has(state)) return;
         if (runtimeSourceBlock === null || exactSourceBlockHash === null) {
           throw new Error(
             "execution worker fork missing exact source pin",
           );
         }
-        forkedWorkers.add(worker);
+        forkedStates.add(state);
+        const worker = blockScanExecutionWorkers.find(
+          (entry) => entry.state === state,
+        );
+        if (!worker) {
+          throw new Error("execution worker state not found");
+        }
         await forkExecutionWorker(
           worker,
           blockScanExecutionWorkers.indexOf(worker),
@@ -2770,14 +2780,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           const { item, index } = queued;
           if (solverFamilyBudget.blocks(item.opp.seedEdges)) continue;
           try {
-            if (useNMinusOneFallback) {
-              await ensureExecutionWorkerForked(worker);
-            }
             let deferredCandidates: readonly ResolvedPlan[] = [];
             recordSolver(item.opp);
             const solved = await worker.solver.solve(
               item.plan,
-              worker.state,
+              // Phase-1 quotes are current-N view reads; run them through the
+              // same pinned reth batch backend as refinement so Anvil is only
+              // forked right before final simulation.
+              exactQuoteState,
               worker.simulator,
               {
                 deadlineMs: Math.max(1, passDeadlineAtMs - Date.now()),
@@ -2893,6 +2903,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             ? "shutdown"
             : "final_sim_deadline";
           break;
+        }
+        if (useNMinusOneFallback) {
+          // Final simulation is the only remaining Anvil consumer; fork the
+          // owning worker lazily here instead of before refinement/solver.
+          await ensureExecutionWorkerForked(quoted.state);
         }
         const atomic = await this.deps.submitAtomic({
           simulator: quoted.simulator,
