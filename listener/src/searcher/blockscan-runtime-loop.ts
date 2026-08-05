@@ -2302,6 +2302,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               blockScanCfg.minSpreadBps,
             minCapitalFraction:
               blockScanCfg.minCapitalFraction ?? 0,
+            capitalRejected:
+              productionCoarse.debug?.capitalRejected ?? 0,
             scannedPairs: productionCoarse.scannedPairs,
           })}`,
         );
@@ -2401,6 +2403,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               blockScanCfg.minSpreadBps,
             minCapitalFraction:
               blockScanCfg.minCapitalFraction ?? 0,
+            capitalRejected:
+              fallbackCoarse.scan.debug?.capitalRejected ?? 0,
             naturallyEnumeratedRoutes:
               fallbackCoarse.scan.selection.enumeratedCount,
             admittedRoutes:
@@ -2547,6 +2551,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           admissionSpreadBps:
             blockScanCfg.exactAdmissionSpreadBps ??
             blockScanCfg.minSpreadBps,
+          minCapitalFraction:
+            blockScanCfg.minCapitalFraction ?? 0,
         },
       );
       if (refinement.shadow) {
@@ -2962,6 +2968,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       if (Date.now() >= passDeadlineAtMs && atomicResults.length === 0) {
         outcome = "budget_exceeded";
         skippedReason ??= "solve_deadline";
+      }
+      if (exactQuoteState instanceof PinnedRethQuoteBackend) {
+        console.log(
+          `[searcher/blockscan-exact-quote-stats-final] ${JSON.stringify({
+            block: blockNumber,
+            ...exactQuoteState.stats(),
+          })}`,
+        );
       }
     } catch (error) {
       if (

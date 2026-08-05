@@ -63,7 +63,7 @@ export interface BlockScanOutcome {
     readonly selectedCount: number;
     readonly forcedSelectionCount: number;
   };
-  debug?: { skippedVenues: number };
+  debug?: { skippedVenues: number; capitalRejected: number };
 }
 
 export interface BlockScanScanTiming {
@@ -209,6 +209,7 @@ export function scanBlockStateFromResolvedMids(input: {
   );
   let scannedPairs = 0;
   let skippedVenues = 0;
+  let capitalRejected = 0;
   const preprocessingFinishedAtMs = Date.now();
   let activePhase: "pairs" | "protocol" | "general" = "pairs";
   let phaseStartedAtMs = preprocessingFinishedAtMs;
@@ -255,7 +256,7 @@ export function scanBlockStateFromResolvedMids(input: {
         selectedCount: selected.length,
         forcedSelectionCount: 0,
       }),
-      debug: { skippedVenues },
+      debug: { skippedVenues, capitalRejected },
     };
     const finishedAtMs = Date.now();
     input.onTiming?.(Object.freeze({
@@ -343,7 +344,11 @@ export function scanBlockStateFromResolvedMids(input: {
       sizing.maxInput,
       maxBorrow,
       input.cfg.minCapitalFraction,
-    )) continue;
+    )) {
+      // Shadow-only: record the would-reject count for calibration but keep
+      // the ring so its exact outcome can be measured.
+      capitalRejected++;
+    }
 
     const ring = [flashToken, otherToken];
     const canonicalRing = canonicalTokenRing(ring);
@@ -356,6 +361,7 @@ export function scanBlockStateFromResolvedMids(input: {
       seedEdges,
       flashToken,
       coarseSpreadBps: routeScore.estSpreadBps,
+      coarseMaxInput: sizing.maxInput,
       searchSeed: {
         startToken: flashToken,
         searchCenter: sizing.searchCenter,
@@ -425,7 +431,9 @@ export function scanBlockStateFromResolvedMids(input: {
       sizing.maxInput,
       maxBorrow,
       input.cfg.minCapitalFraction,
-    )) return;
+    )) {
+      capitalRejected++;
+    }
 
     const rotatedRingTokens = ringTokensWithoutRepeat(seedEdges);
     const canonicalRing = canonicalTokenRing(rotatedRingTokens);
@@ -438,6 +446,7 @@ export function scanBlockStateFromResolvedMids(input: {
       seedEdges,
       flashToken,
       coarseSpreadBps: rotatedScore.estSpreadBps,
+      coarseMaxInput: sizing.maxInput,
       searchSeed: {
         startToken: flashToken,
         searchCenter: sizing.searchCenter,

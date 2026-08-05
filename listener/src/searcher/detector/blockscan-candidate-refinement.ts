@@ -45,6 +45,10 @@ export interface BlockScanRefinementShadow {
   readonly admissionSpreadBps: number;
   readonly admitted: BlockScanShadowBand;
   readonly notAdmitted: BlockScanShadowBand;
+  readonly wouldRejectCapital: BlockScanShadowBand;
+  readonly familyOutcomes: Readonly<
+    Record<string, BlockScanShadowBand>
+  >;
   readonly admittedSpreadBuckets: {
     readonly "floor-2x": BlockScanShadowBand;
     readonly "2x-5x": BlockScanShadowBand;
@@ -54,11 +58,13 @@ export interface BlockScanRefinementShadow {
 }
 
 export interface BlockScanShadowBand {
-  readonly total: number;
-  readonly positive: number;
-  readonly negative: number;
-  readonly failed: number;
-  readonly unprobed: number;
+  total: number;
+  positive: number;
+  negative: number;
+  failed: number;
+  unprobed: number;
+  positiveMaxInputMin?: string | null;
+  positiveMaxInputMax?: string | null;
 }
 
 export interface BlockScanProbeDiagnostic {
@@ -99,6 +105,13 @@ export interface BlockScanRefinementOptions {
    * When omitted every candidate is probed (legacy behavior).
    */
   readonly admissionSpreadBps?: number;
+  /**
+   * Shadow capital floor (maxInput / maxBorrow). When set, refinement splits
+   * probe outcomes by whether the candidate would be rejected by the floor,
+   * without removing any candidate. Calibrates the floor from real exact
+   * outcomes instead of guessing.
+   */
+  readonly minCapitalFraction?: number;
   /**
    * Production execution contract used by route families whose quote depends
    * on caller-observable balance deltas. Other families ignore it through the
@@ -162,6 +175,8 @@ export async function refineBlockScanCandidates(
           admissionSpreadBps: options.admissionSpreadBps,
           admitted: emptyShadowBand(),
           notAdmitted: emptyShadowBand(),
+          wouldRejectCapital: emptyShadowBand(),
+          familyOutcomes: {} as Record<string, BlockScanShadowBand>,
           admittedSpreadBuckets: {
             "floor-2x": emptyShadowBand(),
             "2x-5x": emptyShadowBand(),
@@ -182,12 +197,77 @@ export async function refineBlockScanCandidates(
     }
     work = admitted;
   }
+  const routeFamilyIds = (
+    opportunity: BlockScanOpportunity,
+  ): readonly string[] => {
+    const ids = blockScanRouteFamilyIds(opportunity.seedEdges);
+    return ids.length > 0 ? ids : ["<unowned-family>"];
+  };
+  const familyBand = (familyId: string): BlockScanShadowBand => {
+    let band = shadow!.familyOutcomes[familyId];
+    if (!band) {
+      band = emptyShadowBand();
+      shadow!.familyOutcomes[familyId] = band;
+    }
+    return band;
+  };
+  const wouldRejectCapital = (
+    opportunity: BlockScanOpportunity,
+  ): boolean => {
+    if (
+      !shadow ||
+      options.minCapitalFraction === undefined ||
+      options.minCapitalFraction <= 0
+    ) return false;
+    const maxBorrow =
+      pricedTokens.get(opportunity.flashToken.toLowerCase())?.maxBorrow ?? 0n;
+    const maxInput = opportunity.coarseMaxInput;
+    if (typeof maxInput !== "bigint" || maxBorrow <= 0n) return false;
+    return Number(maxInput) / Number(maxBorrow) <
+      options.minCapitalFraction;
+  };
+  const recordPositiveMaxInput = (
+    band: BlockScanShadowBand,
+    opportunity: BlockScanOpportunity,
+  ): void => {
+    if (typeof opportunity.coarseMaxInput !== "bigint") return;
+    const value = opportunity.coarseMaxInput;
+    const currentMin =
+      band.positiveMaxInputMin === undefined ||
+      band.positiveMaxInputMin === null
+        ? value
+        : value < BigInt(band.positiveMaxInputMin)
+          ? value
+          : BigInt(band.positiveMaxInputMin);
+    const currentMax =
+      band.positiveMaxInputMax === undefined ||
+      band.positiveMaxInputMax === null
+        ? value
+        : value > BigInt(band.positiveMaxInputMax)
+          ? value
+          : BigInt(band.positiveMaxInputMax);
+    band.positiveMaxInputMin = currentMin.toString();
+    band.positiveMaxInputMax = currentMax.toString();
+  };
   const recordShadow = (
     opportunity: BlockScanOpportunity,
     status: "positive" | "negative" | "failed" | "unprobed",
   ): void => {
     if (!shadow) return;
     shadow.admitted[status]++;
+    if (wouldRejectCapital(opportunity)) {
+      shadow.wouldRejectCapital[status]++;
+    }
+    for (const familyId of routeFamilyIds(opportunity)) {
+      const band = familyBand(familyId);
+      band[status]++;
+      if (status === "positive") {
+        recordPositiveMaxInput(band, opportunity);
+      }
+    }
+    if (status === "positive") {
+      recordPositiveMaxInput(shadow.admitted, opportunity);
+    }
     const spread = opportunity.coarseSpreadBps;
     if (typeof spread === "number") {
       const floor = shadow.admissionSpreadBps;
@@ -199,12 +279,22 @@ export async function refineBlockScanCandidates(
             : spread >= 2 * floor
               ? "2x-5x"
               : "floor-2x";
-      shadow.admittedSpreadBuckets[bucket][status]++;
+      const bucketBand = shadow.admittedSpreadBuckets[bucket];
+      bucketBand[status]++;
+      if (status === "positive") {
+        recordPositiveMaxInput(bucketBand, opportunity);
+      }
     }
   };
   const recordShadowTotal = (opportunity: BlockScanOpportunity): void => {
     if (!shadow) return;
     shadow.admitted.total++;
+    if (wouldRejectCapital(opportunity)) {
+      shadow.wouldRejectCapital.total++;
+    }
+    for (const familyId of routeFamilyIds(opportunity)) {
+      familyBand(familyId).total++;
+    }
     const spread = opportunity.coarseSpreadBps;
     if (typeof spread === "number") {
       const floor = shadow.admissionSpreadBps;
@@ -577,6 +667,19 @@ export async function refineBlockScanCandidates(
             admissionSpreadBps: shadow.admissionSpreadBps,
             admitted: Object.freeze({ ...shadow.admitted }),
             notAdmitted: Object.freeze({ ...shadow.notAdmitted }),
+            wouldRejectCapital: Object.freeze({
+              ...shadow.wouldRejectCapital,
+            }),
+            familyOutcomes: Object.freeze(
+              Object.fromEntries(
+                Object.entries(shadow.familyOutcomes).map(
+                  ([familyId, band]) => [
+                    familyId,
+                    Object.freeze({ ...band }),
+                  ],
+                ),
+              ),
+            ),
             admittedSpreadBuckets: Object.freeze({
               "floor-2x": Object.freeze({
                 ...shadow.admittedSpreadBuckets["floor-2x"],

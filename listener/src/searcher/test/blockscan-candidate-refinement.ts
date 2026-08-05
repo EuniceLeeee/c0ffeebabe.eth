@@ -1483,6 +1483,12 @@ async function admissionFloorSkipsLowSpreadProbes(): Promise<void> {
   assert.equal(result.shadow?.admitted.total, 1);
   assert.equal(result.shadow?.admitted.positive, 1);
   assert.equal(result.shadow?.notAdmitted.total, 1);
+  assert.equal(result.shadow?.wouldRejectCapital.total, 0);
+  assert.equal(
+    result.shadow?.familyOutcomes["admission-family"]?.positive,
+    1,
+    "family outcomes must record the positive probe",
+  );
   assert.equal(result.shadow?.admittedSpreadBuckets["floor-2x"].total, 1);
   assert.equal(
     result.shadow?.admittedSpreadBuckets["floor-2x"].positive,

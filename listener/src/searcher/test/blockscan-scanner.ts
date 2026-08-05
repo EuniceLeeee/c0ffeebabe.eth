@@ -668,7 +668,7 @@ const tests: TestCase[] = [
     },
   },
   {
-    name: "minimum capital fraction filters dust rings",
+    name: "minimum capital fraction shadow counts dust rings",
     run: () => {
       const liquid = mainAnchor();
       const kept = run(liquid.edges, liquid.cache, {
@@ -678,12 +678,19 @@ const tests: TestCase[] = [
         kept.opportunities.length === 1,
         "liquid ring must be kept at a 0.1% capital floor",
       );
+      assert(
+        kept.debug?.capitalRejected === 0,
+        "liquid ring must not be capital-rejected at 0.1%",
+      );
       const dropped = run(liquid.edges, liquid.cache, {
         minCapitalFraction: 1,
       });
       assert(
-        dropped.opportunities.length === 0,
-        "liquid ring must be dropped at a 100% capital floor",
+        dropped.opportunities.length === 1 &&
+          (dropped.debug?.capitalRejected ?? 0) >= 1,
+        "shadow capital floor must count without dropping the ring: " +
+          `opps=${dropped.opportunities.length} ` +
+          `capitalRejected=${dropped.debug?.capitalRejected}`,
       );
 
       // P1 is a liquid venue; P2 has the same mid but only ~5 WETH of
@@ -707,10 +714,11 @@ const tests: TestCase[] = [
         minCapitalFraction: 0.001,
       });
       assert(
-        withFloor.opportunities.length === 0,
-        "dust ring must be filtered at a 0.1% capital floor",
+        withFloor.opportunities.length >= 1 &&
+          (withFloor.debug?.capitalRejected ?? 0) >= 1,
+        "dust ring must be counted as capital-rejected without being dropped",
       );
-      console.log("[blockscan-scanner] minimum capital fraction filter: PASS");
+      console.log("[blockscan-scanner] minimum capital fraction shadow: PASS");
     },
   },
   {
