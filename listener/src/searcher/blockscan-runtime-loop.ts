@@ -976,7 +976,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           sourceBlock: nextBlock,
           sourceBlockHash: header.hash,
         });
-        const prepared = await input.coordinator.prepareCoarsePricing({
+        let prepared = await input.coordinator.prepareCoarsePricing({
           graph: anchoredGraph,
           deadlineAtMs: generationDeadlineAtMs,
           /*
@@ -987,6 +987,47 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           laggingTopologyRefreshMode: "proof-scoped",
           signal: this.deps.runtimeAbort.signal,
         });
+        let bootstrapEscalated = false;
+        if (prepared.status === "incomplete") {
+          /*
+           * A topology change (e.g. the overnight universe reindex) invalidates
+           * every family's compiled static schema. The hot 80s budget cannot
+           * finish the full recompile + bootstrap direct read, so the chain
+           * retries the same block forever with 0 resolved keys. Escalate once
+           * to the startup-warm budget and bootstrap mode, which commits the
+           * rebuilt schema and lets the hot chain resume from this block.
+           */
+          const bootstrapBudgetMs = Math.max(
+            stateBudgetMs,
+            this.deps.startupWarmBudgetMs ?? 300_000,
+          );
+          const bootstrapDeadlineAtMs = Date.now() + bootstrapBudgetMs;
+          const bootstrapFamilySettleDeadlineAtMs = Math.min(
+            bootstrapDeadlineAtMs,
+            Math.max(
+              Date.now(),
+              bootstrapDeadlineAtMs - publicationReserveMs,
+            ),
+          );
+          console.log(
+            `[searcher/blockscan-nminus1-state] ${JSON.stringify({
+              sourceBlock: nextBlock,
+              generation,
+              status: "bootstrap-escalated",
+              budgetMs: bootstrapBudgetMs,
+              wallMs: Math.max(0, Date.now() - generationStartedAtMs),
+              armWallMs: Math.max(0, Date.now() - startedAtMs),
+            })}`,
+          );
+          prepared = await input.coordinator.prepareCoarsePricing({
+            graph: anchoredGraph,
+            deadlineAtMs: bootstrapDeadlineAtMs,
+            familySettleDeadlineAtMs: bootstrapFamilySettleDeadlineAtMs,
+            laggingTopologyRefreshMode: "startup-bootstrap",
+            signal: this.deps.runtimeAbort.signal,
+          });
+          bootstrapEscalated = true;
+        }
         result = prepared;
         const recoveryPending = blockScanStateHasRecoveryBacklog(
           prepared,
@@ -1016,6 +1057,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             familySettleBudgetMs,
             publicationReserveMs,
             recoveryBootstrap: false,
+            ...(bootstrapEscalated
+              ? { bootstrapEscalated: true as const }
+              : {}),
             recoveryPending,
             families: prepared.familyTelemetry ?? [],
             lanes: prepared.laneTelemetry,
