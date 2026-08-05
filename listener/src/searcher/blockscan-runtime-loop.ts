@@ -2688,6 +2688,12 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         throw new Error("exact quote source hash is unavailable");
       }
       let exactYieldedMs = 0;
+      const producerLagBlocks = (): number => {
+        const snapshot = adapterRuntimeCoordinator.latestPricingSnapshot();
+        const producerSource = snapshot?.sourceBlock ?? -1;
+        const newestHead = this.latestScheduledHead ?? blockNumber;
+        return Math.max(0, newestHead - producerSource);
+      };
       /*
        * Producer-lag gate for the exact probe transport. Heavy candidate
        * blocks issue 900+ probes in 15-20s; while the background N-1 producer
@@ -2720,11 +2726,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               const batchYieldUntilAtMs = Date.now() + maxBatchYieldMs;
               while (Date.now() < batchYieldUntilAtMs) {
                 if (signal.aborted || passSignal.aborted) break;
-                const snapshot =
-                  adapterRuntimeCoordinator.latestPricingSnapshot();
-                const producerSource = snapshot?.sourceBlock ?? -1;
-                const newestHead = this.latestScheduledHead ?? blockNumber;
-                if (newestHead - producerSource < 2) break;
+                if (producerLagBlocks() < 2) break;
                 if (exactYieldedMs >= maxPassYieldMs) break;
                 await new Promise<void>((resolve) =>
                   setTimeout(resolve, 100)
@@ -2751,6 +2753,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               deadlineAtMs: passDeadlineAtMs,
               maxBatchSize: 32,
               maxConcurrentBatches: 8,
+              maxConcurrentBatchesProvider: () =>
+                producerLagBlocks() >= 2 ? 2 : 8,
               transportScheduler: exactTransportScheduler,
             },
           );

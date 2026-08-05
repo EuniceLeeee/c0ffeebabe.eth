@@ -53,6 +53,13 @@ export function isPassScopedExactStateBackend(
 export interface PinnedRethQuoteBackendOptions {
   readonly maxBatchSize?: number;
   readonly maxConcurrentBatches?: number;
+  /**
+   * Dynamic concurrency limit consulted on every flush. While the N-1
+   * producer lags the head, the runtime supplies a low limit (1-2) so exact
+   * batches cannot saturate reth; once the producer catches up it returns
+   * the normal limit. When absent the static maxConcurrentBatches applies.
+   */
+  readonly maxConcurrentBatchesProvider?: () => number;
   readonly signal?: AbortSignal;
   readonly deadlineAtMs?: number;
   readonly transportScheduler?: Pick<RethTransportScheduler, "run">;
@@ -63,6 +70,9 @@ export class PinnedRethQuoteBackend
 {
   private readonly maxBatchSize: number;
   private readonly maxConcurrentBatches: number;
+  private readonly maxConcurrentBatchesProvider:
+    | (() => number)
+    | undefined;
   private readonly pending: PendingQuoteItem[] = [];
   private readonly liveItems = new Set<PendingQuoteItem>();
   private readonly activeFlushes = new Set<Promise<void>>();
@@ -106,6 +116,8 @@ export class PinnedRethQuoteBackend
      */
     this.maxBatchSize = options.maxBatchSize ?? 32;
     this.maxConcurrentBatches = options.maxConcurrentBatches ?? 8;
+    this.maxConcurrentBatchesProvider =
+      options.maxConcurrentBatchesProvider;
     this.blockSpecifier = eip1898BlockSpecifier(sourceBlockHash);
 
     if (options.signal) {
@@ -507,7 +519,14 @@ export class PinnedRethQuoteBackend
   }
 
   private async flush(): Promise<void> {
-    if (this.inFlightBatches >= this.maxConcurrentBatches) return;
+    const concurrencyLimit = Math.max(
+      1,
+      Math.floor(
+        this.maxConcurrentBatchesProvider?.() ??
+          this.maxConcurrentBatches,
+      ),
+    );
+    if (this.inFlightBatches >= concurrencyLimit) return;
     if (this.pending.length === 0) return;
     const now = Date.now();
     const batch = this.pending.splice(0, this.maxBatchSize);
