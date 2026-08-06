@@ -3458,7 +3458,7 @@ async function staticSchemaReadsAreCachedAndDynamicReadsStayCurrent(): Promise<v
   assert.equal(dynamicReads, 2, "dynamic state is still current-N every generation");
 }
 
-async function publishCasFailureDoesNotCommitStaticSchema(): Promise<void> {
+async function casRejectedGenerationStillWarmsCompileCache(): Promise<void> {
   const calls = { compiles: 0, staticReads: 0, dynamicReads: 0, verifies: 0 };
   const backend: BlockScanStateReadBackend = {
     async readBatch(_lane, reads, control) {
@@ -3502,10 +3502,10 @@ async function publishCasFailureDoesNotCommitStaticSchema(): Promise<void> {
   assert.equal(second.status, "complete");
   assert.equal(
     calls.compiles,
-    2,
-    "a generation rejected by canonical CAS may not populate schema cache",
+    1,
+    "a compile that finished before the generation's CAS failure is content-addressable and reused by the same-graph successor",
   );
-  assert.equal(calls.staticReads, 2, "orphan-fork static metadata must be reread");
+  assert.equal(calls.staticReads, 1, "reused static metadata is not reread");
 
   const third = await coordinator.prepare({
     graph: graph(3, true, [swapForward, swapReverse]),
@@ -3513,8 +3513,8 @@ async function publishCasFailureDoesNotCommitStaticSchema(): Promise<void> {
     deadlineAtMs: Date.now() + 2_000,
   });
   assert.equal(third.status, "complete");
-  assert.equal(calls.compiles, 2, "a published canonical schema remains reusable");
-  assert.equal(calls.staticReads, 2, "published static metadata remains cached");
+  assert.equal(calls.compiles, 1, "the content-addressed schema remains reusable");
+  assert.equal(calls.staticReads, 1, "warmed static metadata remains cached");
   assert.equal(calls.dynamicReads, 3, "dynamic state remains current each generation");
   assert.equal(
     calls.verifies,
@@ -3523,7 +3523,7 @@ async function publishCasFailureDoesNotCommitStaticSchema(): Promise<void> {
   );
 }
 
-async function supersededGenerationCannotDonateStaticSchema(): Promise<void> {
+async function supersededGenerationKeepsLiveSnapshotButWarmsCompileCache(): Promise<void> {
   const calls = { compiles: 0, staticReads: 0 };
   let firstCasStarted: (() => void) | undefined;
   const firstCasReady = new Promise<void>((resolve) => {
@@ -3569,10 +3569,91 @@ async function supersededGenerationCannotDonateStaticSchema(): Promise<void> {
   assert.equal(coordinator.latestSnapshot()?.generation, 2);
   assert.equal(
     calls.compiles,
-    2,
-    "a superseded generation may not donate its staged schema",
+    1,
+    "a superseded generation may warm the content-addressed compile cache for an identical successor",
   );
-  assert.equal(calls.staticReads, 2, "successor rereads its own static metadata");
+  assert.equal(calls.staticReads, 1, "successor reuses the warmed static metadata");
+}
+
+async function successfulCompileWarmsCacheDespiteUnpublishedGeneration(): Promise<void> {
+  const swapCalls = { schema: 0, reads: 0, derives: 0 };
+  const protocolCalls = { schema: 0, reads: 0, derives: 0 };
+  const registered: readonly RegisteredBlockScanStateFamily[] = [
+    registerBlockScanStateFamily({
+      familyId: "univ2-standard",
+      lane: "swap",
+      capability: fakeCapability("swap", swapCalls),
+      ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+    }),
+    registerBlockScanStateFamily({
+      familyId: "protocol:fixture",
+      lane: "protocol",
+      capability: fakeCapability("protocol", protocolCalls),
+      ownsEdge: (edgeValue) => edgeValue.adapterId === "protocol-action",
+    }),
+  ];
+  let releaseProtocol: (() => void) | undefined;
+  let firstProtocolRead = true;
+  const backend: BlockScanStateReadBackend = {
+    async readBatch(lane, reads, control) {
+      if (lane === "swap") {
+        return reads.map((read) =>
+          successfulRead(read, control.sourceGeneration)
+        );
+      }
+      if (!firstProtocolRead) {
+        return reads.map((read) =>
+          successfulRead(read, control.sourceGeneration)
+        );
+      }
+      firstProtocolRead = false;
+      return await new Promise<readonly StateReadResult[]>((resolve) => {
+        releaseProtocol = () => resolve(
+          reads.map((read) =>
+            successfulRead(read, control.sourceGeneration)
+          ),
+        );
+      });
+    },
+    async verifyCanonicalSource() {
+      return;
+    },
+  };
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const outer = new AbortController();
+  const timer = setTimeout(
+    () => outer.abort(new Error("fixture head supersede")),
+    20,
+  );
+  const first = await coordinator.prepare({
+    graph: graph(1),
+    families: registered,
+    deadlineAtMs: Date.now() + 2_000,
+    signal: outer.signal,
+  });
+  clearTimeout(timer);
+  assert.equal(first.status, "incomplete");
+  assert.equal(coordinator.latestSnapshot(), null);
+  assert.equal(
+    swapCalls.schema + protocolCalls.schema,
+    2,
+    "both families compiled before the generation was superseded",
+  );
+  releaseProtocol?.();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  const second = await coordinator.prepare({
+    graph: graph(2),
+    families: registered,
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  assert.notEqual(second.status, "incomplete");
+  assert.equal(
+    swapCalls.schema + protocolCalls.schema,
+    2,
+    "a superseded generation's successful compiles are reused by the identical successor instead of recompiling forever",
+  );
+  assert.ok(second.coverage.resolvedStateKeys.length > 0);
 }
 
 async function immutableForkNeedsBackendAttestation(): Promise<void> {
@@ -4825,8 +4906,9 @@ await deadlineAndExternalAbort();
 await generationFence();
 await dependentReadClosureIsExplicit();
 await staticSchemaReadsAreCachedAndDynamicReadsStayCurrent();
-await publishCasFailureDoesNotCommitStaticSchema();
-await supersededGenerationCannotDonateStaticSchema();
+await casRejectedGenerationStillWarmsCompileCache();
+await supersededGenerationKeepsLiveSnapshotButWarmsCompileCache();
+await successfulCompileWarmsCacheDespiteUnpublishedGeneration();
 await immutableForkNeedsBackendAttestation();
 await protocolActivityPlanDrivesDirtyDirectCarry();
 await protocolActivityFailureFailsClosedToDirect();

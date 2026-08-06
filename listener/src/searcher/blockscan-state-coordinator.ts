@@ -2451,6 +2451,19 @@ export class BlockScanStateCoordinator {
         });
       }
     }
+    /*
+     * Cache successful compiles at compile time (guarded by the family
+     * controller not having aborted), not only at publication CAS. A graph
+     * change that forces a 40-50s full recompile otherwise re-runs on every
+     * superseded generation: the generation never reaches a lane budget, never
+     * publishes, and the compiled schemas are never committed, so the hot
+     * chain recompiles the same graph content forever with priced=0.
+     * Late resolves after the family fence stay uncached (signal aborted),
+     * preserving the existing orphan-fork/superseded-generation guard.
+     */
+    if (!signal.aborted && staged.size > 0) {
+      this.instanceSchemas.set(family.familyId, staged);
+    }
     if (familyGroups.length === 0) {
       return { compiled: null, issues: Object.freeze(issues) };
     }
@@ -2640,6 +2653,16 @@ export class BlockScanStateCoordinator {
             }
             compiledFamilies.set(family.familyId, compiled);
             staging.staticSchemas.set(family.familyId, compiled);
+            /*
+             * Same compile-time cache commit as the instance path: a full
+             * legacy-family recompile that completes inside its family fence
+             * must be reusable by the next generation even if this generation
+             * later fails lanes/CAS and never publishes. Late/aborted
+             * compiles still never enter the cache.
+             */
+            if (!familyController.signal.aborted) {
+              this.staticSchemas.set(family.familyId, compiled);
+            }
           } catch (error) {
             issues.push({
               kind: issueKindFromError(error),
