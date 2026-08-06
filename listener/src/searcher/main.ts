@@ -2184,6 +2184,13 @@ async function main(): Promise<void> {
       initialProtocolObservedCoverageAuthoritative ||
       (protocolDiscoveryStartup.mode === "positive-only" &&
         observedScanClean);
+    console.log(
+      `[searcher/live] protocol observed seed: mode=${protocolDiscoveryStartup.mode} ` +
+        `families=${observedFamilies.length} scanClean=${observedScanClean} ` +
+        `authoritative=${initialProtocolObservedCoverageAuthoritative} ` +
+        `eventSourceComplete=${initialProtocolDiscovery.scanner.eventSourceComplete} ` +
+        `observedComplete=${JSON.stringify([...observedCoverage])}`,
+    );
     if (observedAuthoritySeeded && observedFamilies.length > 0) {
       const authority = advanceProtocolObservedContiguousAuthority({
         cache: protocolDiscoveryCache,

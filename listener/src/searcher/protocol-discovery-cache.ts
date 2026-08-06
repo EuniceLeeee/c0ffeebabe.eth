@@ -1176,7 +1176,16 @@ export function advanceProtocolObservedContiguousAuthority(input: {
       input.toBlockHash,
     );
   }
-  if (completeThrough !== input.toBlock) return null;
+  if (completeThrough !== input.toBlock) {
+    console.log(
+      `[searcher/live] protocol observed authority NOT advanced: ` +
+        `completeThrough=${completeThrough} toBlock=${input.toBlock} ` +
+        `fromBlock=${input.fromBlock} ` +
+        `families=${JSON.stringify(input.families)} ` +
+        `coverage=${JSON.stringify(input.familySourceCoverage)}`,
+    );
+    return null;
+  }
   const authority: ProtocolObservedContiguousAuthority = {
     profile: CONTIGUOUS_AUTHORITY_PROFILE,
     fromBlock: 0,
