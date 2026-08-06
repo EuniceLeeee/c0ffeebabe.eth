@@ -752,6 +752,13 @@ export class BlockScanStateCoordinator {
     CachedBlockScanStateKey
   >();
   private topologyIndex: StateTopologyIndex | null = null;
+  /**
+   * Content-addressed topology cache. topologyFor() fills this but never
+   * mutates the published pointer: the staged topology of a generation only
+   * becomes this.topologyIndex together with the canonical CAS + generation
+   * fence, so a failed/superseded generation cannot leak its index globally.
+   */
+  private readonly topologyCache = new Map<string, StateTopologyIndex>();
   private edgeKeyToStateKeyIndexKey: string | null = null;
   private readonly edgeKeyToStateKey = new Map<string, string>();
   private cacheAppendChain: Promise<void> = Promise.resolve();
@@ -934,9 +941,8 @@ export class BlockScanStateCoordinator {
         ? requiresPricing.toString()
         : "default",
     ].join("\u001f");
-    if (this.topologyIndex?.key === key) {
-      return this.topologyIndex;
-    }
+    const cached = this.topologyCache.get(key);
+    if (cached !== undefined) return cached;
     const ownership = buildOwnershipPlan(graph, families, requiresPricing);
     const stateKeysByActivityIdentity = new Map<string, Set<string>>();
     const singletonStateKeysByEmitter = new Map<string, Set<string>>();
@@ -1002,7 +1008,7 @@ export class BlockScanStateCoordinator {
       ),
       groupByStateKey,
     });
-    this.topologyIndex = frozen;
+    this.topologyCache.set(key, frozen);
     return frozen;
   }
 
@@ -1017,11 +1023,11 @@ export class BlockScanStateCoordinator {
    */
   private async prepareBlockActivityRefreshPlan(
     graph: VerifiedGraphView,
+    topology: StateTopologyIndex,
     deadlineAtMs: number,
     signal: AbortSignal,
   ): Promise<BlockActivityRefreshPlan | null> {
     const readActivity = this.backend.readCanonicalBlockActivity;
-    const topology = this.topologyIndex;
     if (!readActivity || !topology) return null;
     const activityReadRangeBlocks = Math.max(
       1,
@@ -1386,11 +1392,12 @@ export class BlockScanStateCoordinator {
     // Topology-scoped: rebuilds ownership + the pool-identity reverse index
     // only when the graph's edge topology/metadata/ownership actually change.
     const topologyStartedAtMs = this.now();
-    const ownership = this.topologyFor(
+    const topology = this.topologyFor(
       graph,
       input.families,
       input.requiresPricing ?? (() => true),
-    ).ownership;
+    );
+    const ownership = topology.ownership;
     const topologyForMs = Math.max(0, this.now() - topologyStartedAtMs);
     const earlierPublished = this.published?.generation ?? -1;
     if (graph.generation <= earlierPublished) {
@@ -1580,6 +1587,7 @@ export class BlockScanStateCoordinator {
       const activityStartedAtMs = this.now();
       const refreshPlan = await this.prepareBlockActivityRefreshPlan(
         graph,
+        topology,
         familySettleDeadlineAtMs,
         controller.signal,
       );
@@ -1902,6 +1910,10 @@ export class BlockScanStateCoordinator {
       )) {
         this.instanceSchemas.set(familyId, instances);
       }
+      // Commit the staged topology only at the same canonical CAS + generation
+      // fence as schema/state; a failed or superseded generation must not
+      // publish its index globally (B1 generation-local topology).
+      this.topologyIndex = topology;
       this.previousCanonicalGraphStateKeys = new Set(
         ownership.groups.map((group) => group.stateKey),
       );
