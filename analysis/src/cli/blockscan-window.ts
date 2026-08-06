@@ -12,13 +12,17 @@ const startLine = readPositiveInteger(args["start-line"]) ?? 1;
 const endLine = readPositiveInteger(args["end-line"]);
 const minRun = readPositiveInteger(args["min-run"]) ?? 30;
 
-const text = await readFile(logPath, "utf8");
-const report: WindowReport = analyzeWindow(text, {
-  startLine,
-  endLine,
-  minRun,
-});
-process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+async function main(): Promise<void> {
+  const text = await readFile(logPath, "utf8");
+  const report: WindowReport = analyzeWindow(text, {
+    startLine,
+    endLine,
+    minRun,
+  });
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+}
+
+void main();
 
 function readString(value: string | boolean | undefined): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
