@@ -13,15 +13,11 @@
 > 不在范围：某一笔 Ekubo 交易的 ABI、地址、路径或盈利结论；具体实现必须另立 feature branch。
 
 > **状态更新（2026-08-06）：blockscan coarse state adapter 新增 state-instance-v1 合同。**
-> 本文 §3.5（状态 Kernel）、§4（修改边界）与 §12（Hermes/systemic）在 blockscan `pricingState`
-> adapter 范围内，被
+> blockscan `pricingState` adapter 的编写要求、边界与验收见本文
+> **§20（Blockscan state adapter：state-instance-v1 编写要求）**；
+> 该设计的架构记录见
 > [`blockscan-incremental-schema-architecture.md`](design/blockscan-incremental-schema-architecture.md)
-> §5（目标契约）与 §9（Adapter 编写范围与边界）取代：
-> adapter 只实现 `compileStateInstance` / `assembleSchema` / read / decode / derive / dependencies；
-> diff、merge、指纹、缓存、CAS、失败隔离、legacy 回退全部在中央，中央零协议名分支。
-> 迁移按批次进行：达成 adapter 验收（full==instance parity、+1 pool 只重编新实例、方向/元数据变更
-> 语义测试）后继续；未达成且需改中央文件的批次先 park，不阻塞其他 adapter。
-> 未迁移 family 保持本文 legacy 全量路径不变。
+> （§5 目标契约、§9 说明、§10 批次状态）。未迁移 family 保持本文 legacy 全量路径不变。
 
 规范层级：[`CLAUDE.md`](../../CLAUDE.md) 和 [`gates.md`](gates.md) 仍是上位规则。本文件把本次架构裁决具体化，并诚实记录当前实现与上位规则之间尚未修复的缺口；不得用本文件的目标状态冒充当前代码已经具备的能力。
 
@@ -1508,3 +1504,74 @@ npm run --silent six-step-validation-gate -- \
 6. 开发期 Adapter Replay 可 route-pinned；稳定 flip + `family_local` 足以证明 adapter merge-ready。
 7. 自然枚举失败不否定 adapter verdict；只有关闭 production gap 时才要求 target-blind 完整六步。
 8. 当前只证明 explicit-input target-late 回归；即使 SHA 后再选 held-out，也不能单独证明泛化，强结论还需 hidden reference + source/RPC isolation。
+
+## 20. Blockscan state adapter：state-instance-v1 编写要求（2026-08-06）
+
+> 适用范围：blockscan coarse state 的 `pricingState` capability。
+> Swap/Protocol 的 quote/plan/action/ownership 仍按本文其余章节执行。
+> 在本节范围内，本文 §3.5（状态 Kernel）与 §4（修改边界）中与 blockscan state adapter
+> 相关的部分被本节取代；未迁移 family 继续使用 §3.5/§4 的 legacy 全量路径。
+
+### 20.1 adapter 必须实现
+
+```ts
+stateKey(edge: TokenEdge): string;
+compileStateInstance(input: {
+  spec: StateInstanceSpec;          // familyId + stateKey + 该 key 全部 edges
+  previous?: CompiledStateInstance;
+  control: StateOperationControl;
+}): CompiledStateInstance;          // opaque 不序列化；specFingerprint 由 adapter 计算
+assembleSchema(entries: ReadonlyMap<string, unknown>): Schema;  // opaque entries -> Schema 容器
+buildCurrentBlockReads(input): readonly StateRead[];            // 协议 calldata
+decodeState(input): Snapshot;                                   // 协议解码
+deriveMids(snapshot, edges): ReadonlyMap<string, RouteVenueMid>;
+dependencies(edges): readonly string[];
+// 元数据
+schemaMode: "state-instance-v1";
+adapterSchemaRevision: string;      // 语义变化时自增
+```
+
+可选（协议需要才实现）：
+
+```ts
+buildDependentBlockReads?(...);
+buildStaticSchemaReads?({ changedStateKeys, ... });  // 只读变化 instance
+hydrateStaticSchema?(...);
+behaviorProvenUnavailableEdges?(...);
+projectBackrunState?(...);
+```
+
+### 20.2 adapter 不得实现（中央职责）
+
+- diff（TopologyDiff / SchemaInstanceDiff / GraphChangeSet）与按 `(familyId, rawStateKey)` 归组；
+- schema merge、三类指纹（schemaInput / staticEvidence / instance / aggregate）；
+- 缓存（instanceSchemas / legacy staticSchemas）与 CAS 原子提交；
+- 调度、deadline、batching、重试；
+- 失败隔离与 legacy 全量回退；
+- 任何协议名分支进入中央文件。
+
+### 20.3 迁移批次与验收
+
+每个迁移批次必须达成 adapter 验收：
+
+1. `compileStaticSchema`（full）结果 == `compileStateInstance` + `assembleSchema`（instance）结果
+   （parity，同一 adapter core）；
+2. +1 pool 只重编新实例（compile 计数验证）；
+3. 方向新增/删除/元数据（fee/token/factory/PoolKey）变更语义测试；
+4. 线上稳态窗口（可选，最终以 KPI 为准）。
+
+规则：
+
+- 达成验收 → 继续下一批；
+- 未达成但属 adapter 内问题 → 修 adapter 继续，不阻塞其他批次；
+- 未达成原因是需要修改中央文件 → **先 park**，不阻塞其他 adapter 批次；
+- 未迁移 family 保持 legacy 全量路径，禁止“伪迁移”（逐 group 调旧 full compiler 冒充增量）。
+
+### 20.4 当前批次状态
+
+| 批次 | 状态 |
+|---|---|
+| UniV2 | ✅ 验收通过并部署（`c970aab0`） |
+| UniV4 | ✅ 验收通过并部署（`05d0c03b`）；dynamic-fee 不做 always-direct（fee 不影响 mid price，见架构文档 §10.3） |
+| UniV3 | ⏸️ parked：需要中央 per-instance static reads/hydrate 通道 |
+| curve/dodo/protocol 等 | ⏸️ 未启动，保持 legacy |
