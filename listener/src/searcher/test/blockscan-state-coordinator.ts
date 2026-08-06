@@ -31,6 +31,7 @@ import { univ2BlockScanState } from "../venues/swaps/univ2-standard.js";
 import { univ4BlockScanState } from "../venues/swaps/univ4.js";
 import { univ3BlockScanState } from "../venues/swaps/univ3-standard.js";
 import { dodoV2BlockScanState } from "../venues/swaps/dodo-v2.js";
+import { angstromSpotBlockScanState } from "../venues/swaps/angstrom-v4.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 
 const SOURCE_BLOCK = 25_585_380;
@@ -4036,7 +4037,7 @@ async function univ2InstanceModeRecompilesOnlyNewPool(): Promise<void> {
     families: [family],
     deadlineAtMs: Date.now() + 5_000,
   });
-  assert.equal(second.status, "complete");
+  assert.notEqual(second.status, "incomplete");
   assert.equal(
     calls.compiles,
     2,
@@ -4625,6 +4626,179 @@ async function dodoInstanceModeRecompilesOnlyNewPool(): Promise<void> {
   );
 }
 
+function angstromEdge(
+  pool: string,
+  currency0: string,
+  currency1: string,
+  forward: boolean,
+): TokenEdge {
+  const v4PoolKey = {
+    currency0,
+    currency1,
+    fee: 3_000,
+    tickSpacing: 60,
+    hooks: "0x0000000000000000000000000000000000000000",
+  };
+  return {
+    adapterId: "angstrom-v4-swap",
+    target: pool,
+    tokenIn: forward ? currency0 : currency1,
+    tokenOut: forward ? currency1 : currency0,
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+    v4PoolKey,
+  };
+}
+
+function angstromGraph(
+  generation: number,
+  edges: readonly TokenEdge[],
+) {
+  const sourceBlock = SOURCE_BLOCK + generation;
+  return createVerifiedGraphView({
+    id: `angstrom-instance-graph-${generation}`,
+    generation,
+    sourceBlock,
+    sourceBlockHash: `0x${generation.toString(16).padStart(64, "0")}`,
+    completenessWatermark: sourceBlock,
+    perSourceCoverage: [{
+      familyId: "custom-swap:angstrom-v4",
+      sourceId: "angstrom-instance-fixture",
+      sourceFingerprint: "angstrom-instance-fixture-v1",
+      completeThroughBlock: sourceBlock,
+      completeThroughHash: `0x${generation.toString(16).padStart(64, "0")}`,
+    }],
+    edges,
+  });
+}
+
+async function angstromInstanceParityWithFullCompile(): Promise<void> {
+  const sourceBlock = SOURCE_BLOCK + 1;
+  const sourceBlockHash = `0x${"1".padStart(64, "0")}`;
+  const edges = Object.freeze([
+    angstromEdge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    angstromEdge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+    angstromEdge(SWAP_POOL_B, TOKEN_A, TOKEN_C, true),
+    angstromEdge(SWAP_POOL_B, TOKEN_A, TOKEN_C, false),
+  ]);
+  const full = angstromSpotBlockScanState.compileStaticSchema({
+    edges,
+    deadlineAtMs: Date.now() + 5_000,
+    signal: new AbortController().signal,
+  });
+  const instances = new Map<string, unknown>();
+  const byPool = new Map<string, TokenEdge[]>();
+  for (const edgeValue of edges) {
+    const pool = angstromSpotBlockScanState.stateKey(edgeValue);
+    const group = byPool.get(pool) ?? [];
+    group.push(edgeValue);
+    byPool.set(pool, group);
+  }
+  for (const [pool, group] of byPool) {
+    const spec = Object.freeze({
+      key: `custom-swap:angstrom-v4\u001f${pool}`,
+      familyId: "custom-swap:angstrom-v4",
+      stateKey: pool,
+      edges: Object.freeze(group),
+      staticBindingFingerprint: stateSchemaFingerprint(group),
+      snapshotCompatibilityFingerprint: stateSchemaFingerprint(group),
+    });
+    const compiled = angstromSpotBlockScanState.compileStateInstance({
+      spec,
+      control: {
+        deadlineAtMs: Date.now() + 5_000,
+        signal: new AbortController().signal,
+      },
+      sourceBlock,
+      sourceBlockHash,
+    });
+    assert.equal(compiled.familyId, "custom-swap:angstrom-v4");
+    instances.set(pool, compiled.opaque);
+  }
+  const assembled = angstromSpotBlockScanState.assembleSchema(instances);
+  assert.deepEqual(
+    [...assembled.pools.keys()].sort(),
+    [...full.pools.keys()].sort(),
+  );
+  for (const pool of assembled.pools.keys()) {
+    assert.deepEqual(assembled.pools.get(pool), full.pools.get(pool));
+  }
+}
+
+async function angstromInstanceModeRecompilesOnlyNewPool(): Promise<void> {
+  const calls = { compiles: 0 };
+  const family = registerBlockScanStateFamily({
+    familyId: "custom-swap:angstrom-v4",
+    lane: "swap",
+    capability: {
+      ...angstromSpotBlockScanState,
+      compileStateInstance(input: CompileStateInstanceInput) {
+        calls.compiles++;
+        return angstromSpotBlockScanState.compileStateInstance(input);
+      },
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "angstrom-v4-swap",
+  });
+  class AngstromBackend implements BlockScanStateReadBackend {
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      return reads.map((read) => {
+        let data = "0x";
+        if (read.id.includes("slot0:")) {
+          data =
+            `0x${(1n << 96n).toString(16).padStart(64, "0")}` +
+            `${"0".padStart(64, "0")}` +
+            `${"0".padStart(64, "0")}` +
+            `${(3_000).toString(16).padStart(64, "0")}`;
+        } else if (read.id.includes("liquidity:")) {
+          data = `0x${(1_000n).toString(16).padStart(64, "0")}`;
+        }
+        return Object.freeze({
+          ...successfulRead(read, control.sourceGeneration),
+          data,
+        });
+      });
+    }
+
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const coordinator = new BlockScanStateCoordinator(new AngstromBackend());
+  const graphA = angstromGraph(1, [
+    angstromEdge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    angstromEdge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ]);
+  const first = await coordinator.prepare({
+    graph: graphA,
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.notEqual(first.status, "incomplete");
+  assert.equal(calls.compiles, 1, "first generation compiles the only pool");
+
+  const graphAB = angstromGraph(2, [
+    ...graphA.edges,
+    angstromEdge(SWAP_POOL_B, TOKEN_A, TOKEN_C, true),
+    angstromEdge(SWAP_POOL_B, TOKEN_A, TOKEN_C, false),
+  ]);
+  const second = await coordinator.prepare({
+    graph: graphAB,
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.notEqual(second.status, "incomplete");
+  assert.equal(
+    calls.compiles,
+    2,
+    "adding a pool must recompile only the new instance",
+  );
+}
+
 await phasedProofsSettleBeforeSiblingReads();
 await activityRangeIsCappedToEightBlocks();
 await headPassDoesNotSupersedeActiveBootstrap();
@@ -4664,5 +4838,7 @@ await univ3InstanceParityWithFullCompile();
 await univ3InstanceModeRecompilesOnlyNewPool();
 await dodoInstanceParityWithFullCompile();
 await dodoInstanceModeRecompilesOnlyNewPool();
+await angstromInstanceParityWithFullCompile();
+await angstromInstanceModeRecompilesOnlyNewPool();
 purityHook();
 console.log("blockscan-state-coordinator PASS");

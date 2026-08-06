@@ -11,7 +11,12 @@ import type {
 import type { V4PostImpactSeed } from "../../solver/pool-state-cache.js";
 import {
   blockScanEdgeKey,
+  instanceFingerprint,
+  schemaInputFingerprint,
+  stateSchemaFingerprint,
   type BlockScanStateCapability,
+  type CompiledStateInstance,
+  type CompileStateInstanceInput,
 } from "../blockscan-state-capability.js";
 import {
   poolAdapterId,
@@ -186,7 +191,9 @@ type AngstromSpotSnapshot = ReturnType<
  * the standard V4 slot0/liquidity reads and derive a conservative spot mid;
  * exact quote and execution remain fail-closed on per-hint Angstrom evidence.
  */
-const angstromSpotBlockScanState = Object.freeze({
+export const angstromSpotBlockScanState = Object.freeze({
+  schemaMode: "state-instance-v1",
+  adapterSchemaRevision: "angstrom-v4-v1",
   stateKey(edge: TokenEdge): string {
     return univ4BlockScanState.stateKey(asStandardV4Edge(edge));
   },
@@ -195,6 +202,42 @@ const angstromSpotBlockScanState = Object.freeze({
       ...input,
       edges: input.edges.map(asStandardV4Edge),
     });
+  },
+
+  compileStateInstance(
+    input: CompileStateInstanceInput,
+  ): CompiledStateInstance {
+    const mappedSpec = Object.freeze({
+      ...input.spec,
+      edges: Object.freeze(input.spec.edges.map(asStandardV4Edge)),
+    });
+    const compiled = univ4BlockScanState.compileStateInstance!({
+      ...input,
+      spec: mappedSpec,
+    });
+    // The coordinator compares specFingerprint against the ORIGINAL angstrom
+    // edges; recompute fingerprints with the family-local binding so an
+    // unchanged instance is reused instead of recompiled every generation.
+    const schemaInput = schemaInputFingerprint({
+      key: input.spec.key,
+      adapterSchemaRevision: "angstrom-v4-v1",
+      staticBindingFingerprint: stateSchemaFingerprint(input.spec.edges),
+      sharedFingerprint: "",
+    });
+    return Object.freeze({
+      ...compiled,
+      familyId: "custom-swap:angstrom-v4",
+      specFingerprint: schemaInput,
+      instanceFingerprint: instanceFingerprint({
+        key: input.spec.key,
+        schemaInput,
+        staticEvidence: compiled.staticEvidenceFingerprint,
+      }),
+    });
+  },
+
+  assembleSchema(entries: ReadonlyMap<string, unknown>) {
+    return univ4BlockScanState.assembleSchema(entries);
   },
   buildCurrentBlockReads(input) {
     return univ4BlockScanState.buildCurrentBlockReads({
