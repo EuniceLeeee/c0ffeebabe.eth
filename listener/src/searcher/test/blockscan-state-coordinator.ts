@@ -28,6 +28,7 @@ import {
   type StateReadResult,
 } from "../venues/blockscan-state-capability.js";
 import { univ2BlockScanState } from "../venues/swaps/univ2-standard.js";
+import { univ4BlockScanState } from "../venues/swaps/univ4.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 
 const SOURCE_BLOCK = 25_585_380;
@@ -4038,6 +4039,173 @@ async function univ2InstanceModeRecompilesOnlyNewPool(): Promise<void> {
   );
 }
 
+function univ4Edge(
+  currency0: string,
+  currency1: string,
+  forward: boolean,
+): TokenEdge {
+  const v4PoolKey = {
+    currency0,
+    currency1,
+    fee: 3_000,
+    tickSpacing: 60,
+    hooks: "0x0000000000000000000000000000000000000000",
+  };
+  return {
+    adapterId: "univ4-unlock",
+    target: SINGLETON_MANAGER,
+    tokenIn: forward ? currency0 : currency1,
+    tokenOut: forward ? currency1 : currency0,
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+    v4PoolKey,
+  };
+}
+
+function univ4Graph(
+  generation: number,
+  edges: readonly TokenEdge[],
+) {
+  const sourceBlock = SOURCE_BLOCK + generation;
+  return createVerifiedGraphView({
+    id: `univ4-instance-graph-${generation}`,
+    generation,
+    sourceBlock,
+    sourceBlockHash: `0x${generation.toString(16).padStart(64, "0")}`,
+    completenessWatermark: sourceBlock,
+    perSourceCoverage: [{
+      familyId: "univ4",
+      sourceId: "univ4-instance-fixture",
+      sourceFingerprint: "univ4-instance-fixture-v1",
+      completeThroughBlock: sourceBlock,
+      completeThroughHash: `0x${generation.toString(16).padStart(64, "0")}`,
+    }],
+    edges,
+  });
+}
+
+async function univ4InstanceParityWithFullCompile(): Promise<void> {
+  const edges = Object.freeze([
+    univ4Edge(TOKEN_A, TOKEN_B, true),
+    univ4Edge(TOKEN_A, TOKEN_B, false),
+    univ4Edge(TOKEN_A, TOKEN_C, true),
+    univ4Edge(TOKEN_A, TOKEN_C, false),
+  ]);
+  const full = univ4BlockScanState.compileStaticSchema({
+    edges,
+    deadlineAtMs: Date.now() + 5_000,
+    signal: new AbortController().signal,
+  });
+  const instances = new Map<string, unknown>();
+  const byPool = new Map<string, TokenEdge[]>();
+  for (const edgeValue of edges) {
+    const poolId = univ4BlockScanState.stateKey(edgeValue);
+    const group = byPool.get(poolId) ?? [];
+    group.push(edgeValue);
+    byPool.set(poolId, group);
+  }
+  for (const [poolId, group] of byPool) {
+    const spec = Object.freeze({
+      key: `univ4\u001f${poolId}`,
+      familyId: "univ4",
+      stateKey: poolId,
+      edges: Object.freeze(group),
+      staticBindingFingerprint: stateSchemaFingerprint(group),
+      snapshotCompatibilityFingerprint: stateSchemaFingerprint(group),
+    });
+    const compiled = univ4BlockScanState.compileStateInstance({
+      spec,
+      control: {
+        deadlineAtMs: Date.now() + 5_000,
+        signal: new AbortController().signal,
+      },
+    });
+    instances.set(poolId, compiled.opaque);
+  }
+  const assembled = univ4BlockScanState.assembleSchema(instances);
+  assert.deepEqual(
+    [...assembled.pools.keys()].sort(),
+    [...full.pools.keys()].sort(),
+  );
+  for (const poolId of assembled.pools.keys()) {
+    assert.deepEqual(assembled.pools.get(poolId), full.pools.get(poolId));
+  }
+}
+
+async function univ4InstanceModeRecompilesOnlyNewPool(): Promise<void> {
+  const calls = { compiles: 0 };
+  const family = registerBlockScanStateFamily({
+    familyId: "univ4",
+    lane: "swap",
+    capability: {
+      ...univ4BlockScanState,
+      compileStateInstance(input: CompileStateInstanceInput) {
+        calls.compiles++;
+        return univ4BlockScanState.compileStateInstance!(input);
+      },
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ4-unlock",
+  });
+  class UniV4Backend implements BlockScanStateReadBackend {
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      return reads.map((read) => {
+        let data = "0x";
+        if (read.id.includes("slot0:")) {
+          data =
+            `0x${(1n << 96n).toString(16).padStart(64, "0")}` +
+            `${"0".padStart(64, "0")}` +
+            `${"0".padStart(64, "0")}` +
+            `${(3_000).toString(16).padStart(64, "0")}`;
+        } else if (read.id.includes("liquidity:")) {
+          data = `0x${(1_000n).toString(16).padStart(64, "0")}`;
+        }
+        return Object.freeze({
+          ...successfulRead(read, control.sourceGeneration),
+          data,
+        });
+      });
+    }
+
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const coordinator = new BlockScanStateCoordinator(new UniV4Backend());
+  const graphA = univ4Graph(1, [
+    univ4Edge(TOKEN_A, TOKEN_B, true),
+    univ4Edge(TOKEN_A, TOKEN_B, false),
+  ]);
+  const first = await coordinator.prepare({
+    graph: graphA,
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(first.status, "complete");
+  assert.equal(calls.compiles, 1, "first generation compiles the only pool");
+
+  const graphAB = univ4Graph(2, [
+    ...graphA.edges,
+    univ4Edge(TOKEN_A, TOKEN_C, true),
+    univ4Edge(TOKEN_A, TOKEN_C, false),
+  ]);
+  const second = await coordinator.prepare({
+    graph: graphAB,
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(second.status, "complete");
+  assert.equal(
+    calls.compiles,
+    2,
+    "adding a pool must recompile only the new instance",
+  );
+}
+
 await phasedProofsSettleBeforeSiblingReads();
 await activityRangeIsCappedToEightBlocks();
 await headPassDoesNotSupersedeActiveBootstrap();
@@ -4071,5 +4239,7 @@ await protocolActivityPlanDrivesDirtyDirectCarry();
 await protocolActivityFailureFailsClosedToDirect();
 await univ2InstanceParityWithFullCompile();
 await univ2InstanceModeRecompilesOnlyNewPool();
+await univ4InstanceParityWithFullCompile();
+await univ4InstanceModeRecompilesOnlyNewPool();
 purityHook();
 console.log("blockscan-state-coordinator PASS");

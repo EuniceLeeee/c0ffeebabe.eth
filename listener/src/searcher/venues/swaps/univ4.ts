@@ -15,6 +15,11 @@ import {
   blockScanEdgeKey,
   createMutationQueryDescriptor,
   deterministicHash,
+  instanceFingerprint,
+  schemaInputFingerprint,
+  stateSchemaFingerprint,
+  type CompiledStateInstance,
+  type CompileStateInstanceInput,
 } from "../blockscan-state-capability.js";
 import type {
   ExactQuoteContext,
@@ -140,41 +145,101 @@ interface UniV4CurrentState {
   readonly precisionFailures: ReadonlyMap<string, string>;
 }
 
+export interface UniV4PoolSchemaEntry {
+  readonly currency0: string;
+  readonly currency1: string;
+  readonly fee: number;
+}
+
+/**
+ * Shared per-pool compiler core: both the legacy full compile path and the
+ * state-instance path call this, so full-vs-instance parity is structural.
+ * All edges of one stateKey must agree on the PoolKey-derived metadata.
+ */
+function compileUniV4PoolEntry(
+  edges: readonly TokenEdge[],
+): UniV4PoolSchemaEntry {
+  const poolId = statePoolId(edges[0]);
+  if (edges[0].adapterId !== "univ4-unlock" || !edges[0].v4PoolKey) {
+    throw new Error("univ4 block-scan edge is missing PoolKey");
+  }
+  const currency0 = graphV4Currency(edges[0].v4PoolKey.currency0);
+  const currency1 = graphV4Currency(edges[0].v4PoolKey.currency1);
+  const fee = uint24(
+    edges[0].v4PoolKey.fee,
+    "fee",
+    "univ4 block-scan PoolKey",
+  );
+  for (const edge of edges.slice(1)) {
+    if (statePoolId(edge) !== poolId) {
+      throw new Error(`univ4 state group mixes pools for ${poolId}`);
+    }
+    if (
+      edge.adapterId !== "univ4-unlock" ||
+      !edge.v4PoolKey ||
+      graphV4Currency(edge.v4PoolKey.currency0) !== currency0 ||
+      graphV4Currency(edge.v4PoolKey.currency1) !== currency1 ||
+      uint24(edge.v4PoolKey.fee, "fee", "univ4 block-scan PoolKey") !== fee
+    ) {
+      throw new Error(`univ4 block-scan pool ${poolId} has inconsistent PoolKey`);
+    }
+  }
+  return Object.freeze({ currency0, currency1, fee });
+}
+
 export const univ4BlockScanState = Object.freeze({
+  schemaMode: "state-instance-v1",
+  adapterSchemaRevision: "univ4-v1",
   stateKey(edge) {
     return statePoolId(edge);
   },
 
   compileStaticSchema({ edges }) {
-    const pools = new Map<string, {
-      currency0: string;
-      currency1: string;
-      fee: number;
-    }>();
+    const pools = new Map<string, UniV4PoolSchemaEntry>();
+    const byPool = new Map<string, TokenEdge[]>();
     for (const edge of edges) {
-      if (edge.adapterId !== "univ4-unlock" || !edge.v4PoolKey) {
-        throw new Error("univ4 block-scan edge is missing PoolKey");
-      }
       const poolId = statePoolId(edge);
-      const currency0 = graphV4Currency(edge.v4PoolKey.currency0);
-      const currency1 = graphV4Currency(edge.v4PoolKey.currency1);
-      const fee = uint24(
-        edge.v4PoolKey.fee,
-        "fee",
-        "univ4 block-scan PoolKey",
-      );
-      const existing = pools.get(poolId);
-      if (
-        existing &&
-        (
-          existing.currency0 !== currency0 ||
-          existing.currency1 !== currency1 ||
-          existing.fee !== fee
-        )
-      ) {
-        throw new Error(`univ4 block-scan pool ${poolId} has inconsistent PoolKey`);
-      }
-      pools.set(poolId, Object.freeze({ currency0, currency1, fee }));
+      const group = byPool.get(poolId) ?? [];
+      group.push(edge);
+      byPool.set(poolId, group);
+    }
+    for (const [poolId, groupEdges] of byPool) {
+      pools.set(poolId, compileUniV4PoolEntry(groupEdges));
+    }
+    return Object.freeze({ pools });
+  },
+
+  compileStateInstance(input: CompileStateInstanceInput): CompiledStateInstance {
+    const spec = input.spec;
+    if (spec.edges.length === 0) {
+      throw new Error(`univ4 instance ${spec.key} has no edges`);
+    }
+    const staticBindingFingerprint = stateSchemaFingerprint(spec.edges);
+    const sharedFingerprint = "";
+    const schemaInput = schemaInputFingerprint({
+      key: spec.key,
+      adapterSchemaRevision: "univ4-v1",
+      staticBindingFingerprint,
+      sharedFingerprint,
+    });
+    return Object.freeze({
+      familyId: "univ4",
+      stateKey: spec.stateKey,
+      specFingerprint: schemaInput,
+      instanceFingerprint: instanceFingerprint({
+        key: spec.key,
+        schemaInput,
+        staticEvidence: "",
+      }),
+      carryPolicy: "activity-proof",
+      opaque: compileUniV4PoolEntry(spec.edges),
+    });
+  },
+
+  assembleSchema(entries: ReadonlyMap<string, unknown>) {
+    const pools = new Map<string, UniV4PoolSchemaEntry>();
+    for (const [stateKey, opaque] of entries) {
+      pools.set(stateKey, opaque as UniV4PoolSchemaEntry);
     }
     return Object.freeze({ pools });
   },
