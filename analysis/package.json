@@ -59,7 +59,8 @@
     "build": "tsc --noEmit",
     "graph-in": "node --import tsx src/cli/graph-in.ts",
     "block-activity": "node --import tsx src/cli/block-activity.ts",
-    "blockscan-kpi": "node --import tsx src/cli/blockscan-kpi.ts"
+    "blockscan-kpi": "node --import tsx src/cli/blockscan-kpi.ts",
+    "discovery-lag": "node --import tsx src/cli/discovery-lag.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"
