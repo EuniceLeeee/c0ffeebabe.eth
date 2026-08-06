@@ -7,7 +7,10 @@ import {
   scanProtocolDiscoveryRange,
   shouldTraceForProtocolDiscovery,
 } from "../observed-protocol-discovery.js";
-import { createProtocolDiscoveryEvidenceCache } from "../protocol-discovery-cache.js";
+import {
+  advanceProtocolObservedContiguousAuthority,
+  createProtocolDiscoveryEvidenceCache,
+} from "../protocol-discovery-cache.js";
 import {
   discoverStartupObservedFallbackCandidates,
   protocolFamiliesNeedingStartupObservedFallback,
@@ -970,5 +973,37 @@ assert(
   shouldTraceForProtocolDiscovery([mintLog, burnLog, mixedLp], [erc4626Adapter]),
   "a separate protocol-like burn+mint must survive unrelated LP activity",
 );
+
+// C1 regression: a clean range must seed the observed contiguous authority even
+// when there is no prior authority (positive-only startup currently never
+// advances observed-only families, keeping complete-through at 0 forever).
+{
+  const cache = createProtocolDiscoveryEvidenceCache();
+  const authority = advanceProtocolObservedContiguousAuthority({
+    cache,
+    families: [{
+      familyId: "protocol:erc4626",
+      sourceIds: ["observed-interaction"],
+    }],
+    familySourceCoverage: [{
+      familyId: "protocol:erc4626",
+      sourceId: "observed-interaction",
+      complete: true,
+    }],
+    fromBlock: 100,
+    toBlock: 200,
+    toBlockHash: `0x${"ab".repeat(32)}`,
+    contiguousSourceIds: new Set(["observed-interaction"]),
+  });
+  assert(authority !== null, "clean observed range must seed authority");
+  assert(
+    authority!.completeThroughBlock === 200,
+    "seeded authority must cover the scanned window",
+  );
+  assert(
+    cache.runtime.observedContiguousAuthority?.completeThroughBlock === 200,
+    "cache must retain the seeded observed authority",
+  );
+}
 
 console.log("observed-protocol-discovery PASS");

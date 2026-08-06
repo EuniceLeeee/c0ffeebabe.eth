@@ -2152,36 +2152,63 @@ async function main(): Promise<void> {
         ? lastProtocolDiscoveryBlockHash
         : null,
     );
-    if (initialProtocolObservedCoverageAuthoritative) {
-      const observedFamilies = protocolDiscoveryCoverage.families
-        .filter((family) =>
-          family.sourceIds.includes("observed-interaction")
+    const observedFamilies = protocolDiscoveryCoverage.families
+      .filter((family) =>
+        family.sourceIds.includes("observed-interaction")
+      )
+      .map((family) => ({
+        familyId: family.familyId,
+        sourceIds: ["observed-interaction"],
+      }));
+    const observedCoverage = new Map<string, boolean>(
+      initialProtocolDiscovery.result.familySourceCoverage
+        .filter((coverage) =>
+          coverage.sourceId === "observed-interaction"
         )
-        .map((family) => ({
+        .map((coverage) => [coverage.familyId, coverage.complete]),
+    );
+    /*
+     * A clean positive-only startup scan is the intended "operational cursor"
+     * seed (planDiscoveryStartup): it fully scans a recent window with no
+     * retryable errors, so observed-only families must not stay at
+     * complete-through 0 forever. Seed the contiguous authority and persist
+     * the cursor so the next startup resumes in contiguous mode.
+     */
+    const observedScanClean =
+      observedFamilies.length > 0 &&
+      observedFamilies.every(
+        (family) => observedCoverage.get(family.familyId) === true,
+      ) &&
+      initialProtocolDiscovery.result.sourceComplete;
+    const observedAuthoritySeeded =
+      initialProtocolObservedCoverageAuthoritative ||
+      (protocolDiscoveryStartup.mode === "positive-only" &&
+        observedScanClean);
+    if (observedAuthoritySeeded && observedFamilies.length > 0) {
+      const authority = advanceProtocolObservedContiguousAuthority({
+        cache: protocolDiscoveryCache,
+        families: observedFamilies,
+        familySourceCoverage: observedFamilies.map((family) => ({
           familyId: family.familyId,
-          sourceIds: ["observed-interaction"],
-        }));
-      const observedCoverage = new Map<string, boolean>(
-        initialProtocolDiscovery.result.familySourceCoverage
-          .filter((coverage) =>
-            coverage.sourceId === "observed-interaction"
-          )
-          .map((coverage) => [coverage.familyId, coverage.complete]),
-      );
-      if (observedFamilies.length > 0) {
-        advanceProtocolObservedContiguousAuthority({
-          cache: protocolDiscoveryCache,
-          families: observedFamilies,
-          familySourceCoverage: observedFamilies.map((family) => ({
-            familyId: family.familyId,
-            sourceId: "observed-interaction",
-            complete: observedCoverage.get(family.familyId) === true,
-          })),
-          fromBlock: initialProtocolDiscoveryRange.fromBlock,
-          toBlock: initialProtocolDiscoveryRange.toBlock,
-          toBlockHash: initialProtocolRangeHashAfter!,
-          contiguousSourceIds: new Set(["observed-interaction"]),
-        });
+          sourceId: "observed-interaction",
+          complete: observedCoverage.get(family.familyId) === true,
+        })),
+        fromBlock: initialProtocolDiscoveryRange.fromBlock,
+        toBlock: initialProtocolDiscoveryRange.toBlock,
+        toBlockHash: initialProtocolRangeHashAfter!,
+        contiguousSourceIds: new Set(["observed-interaction"]),
+      });
+      if (
+        authority !== null &&
+        protocolDiscoveryStartup.mode === "positive-only"
+      ) {
+        // Persist the seeded cursor so a restart resumes contiguous mode
+        // instead of re-scanning the recent window as positive-only forever.
+        setProtocolObservedCursor(
+          protocolDiscoveryCache,
+          initialProtocolDiscoveryRange.toBlock,
+          initialProtocolRangeHashAfter!,
+        );
       }
     }
     protocolGraphCompleteThrough =

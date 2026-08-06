@@ -1082,6 +1082,17 @@ export function advanceProtocolObservedContiguousAuthority(input: {
     for (const key of watermarks.keys()) {
       watermarks.set(key, prior.completeThroughBlock);
     }
+  } else {
+    /*
+     * No prior authority: a clean scanned window becomes the first authority.
+     * Seed each family×source watermark to fromBlock-1 so the contiguous
+     * advance over the scanned range succeeds. Without this, positive-only
+     * startup (or the first live block) can never advance observed-only
+     * families past watermark -1/0 and their source stays incomplete forever.
+     */
+    for (const key of watermarks.keys()) {
+      watermarks.set(key, Math.max(-1, input.fromBlock - 1));
+    }
   }
   const expectedCoverageKeys = new Set(
     input.families.flatMap((family) =>
