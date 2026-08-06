@@ -2179,7 +2179,7 @@ async function main(): Promise<void> {
       observedFamilies.every(
         (family) => observedCoverage.get(family.familyId) === true,
       ) &&
-      initialProtocolDiscovery.result.sourceComplete;
+      initialProtocolDiscovery.scanner.eventSourceComplete === true;
     const observedAuthoritySeeded =
       initialProtocolObservedCoverageAuthoritative ||
       (protocolDiscoveryStartup.mode === "positive-only" &&
