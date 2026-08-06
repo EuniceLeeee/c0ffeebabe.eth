@@ -205,6 +205,22 @@ export async function prepareActiveProtocolDiscoveryPass(
         overlapAddresses: 0,
       },
     };
+  if (
+    scanned.eventSourceComplete === false ||
+    scanned.sourceErrors.length > 0
+  ) {
+    console.log(
+      `[searcher/live] protocol observed range scan: ` +
+        `eventSourceComplete=${scanned.eventSourceComplete} ` +
+        `errors=${JSON.stringify(
+          scanned.sourceErrors.slice(0, 3).map((issue) => ({
+            sourceKind: issue.sourceKind,
+            reason: issue.reason,
+            retryable: issue.retryable,
+          })),
+        )}`,
+    );
+  }
   const initialCandidates = mergeCandidateMaps(
     scanned.candidatesByAdapter,
     input.bootstrapCandidates,

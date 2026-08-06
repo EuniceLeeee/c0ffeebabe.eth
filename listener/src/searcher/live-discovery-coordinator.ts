@@ -2199,6 +2199,20 @@ export async function createLiveDiscoveryCoordinator(
           graphTokens,
           control,
         });
+        const observedCoverage = pass.result.familySourceCoverage.filter(
+          (coverage) => coverage.sourceId === "observed-interaction",
+        );
+        if (observedCoverage.some((coverage) => !coverage.complete)) {
+          console.log(
+            `[searcher/live] protocol observed pass incomplete: ` +
+              `block=${input.blockNumber} ` +
+              JSON.stringify(observedCoverage.map((coverage) => ({
+                familyId: coverage.familyId,
+                complete: coverage.complete,
+                issues: coverage.issues.slice(0, 2),
+              }))),
+          );
+        }
         const sourceAfter = await observeLiveCanonicalHeader(
           input.blockNumber,
         );
