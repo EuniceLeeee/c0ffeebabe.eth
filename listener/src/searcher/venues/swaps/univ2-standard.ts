@@ -201,6 +201,7 @@ export const univ2BlockScanState = Object.freeze({
         schemaInput,
         staticEvidence: "",
       }),
+      staticEvidenceFingerprint: "",
       carryPolicy: "activity-proof",
       opaque: compileUniV2PoolEntry(spec.edges),
     });

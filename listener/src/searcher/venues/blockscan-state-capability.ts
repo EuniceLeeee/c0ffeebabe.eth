@@ -1082,6 +1082,8 @@ export interface CompiledStateInstance {
    * decide whether the instance can be reused without recompilation.
    */
   readonly specFingerprint: string;
+  /** Source-pinned successful static evidence fingerprint ("" when none). */
+  readonly staticEvidenceFingerprint: string;
   readonly carryPolicy: StateInstanceCarryPolicy;
   /** Adapter-private; the coordinator never serializes or hashes this. */
   readonly opaque: unknown;
@@ -1091,6 +1093,17 @@ export interface CompileStateInstanceInput {
   readonly spec: StateInstanceSpec;
   readonly previous?: CompiledStateInstance;
   readonly control: StateOperationControl;
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+  /**
+   * Coordinator-owned static read runner for instance hydration. The adapter
+   * may call it inside compileStateInstance; reads must be source-pinned and
+   * use instance-local ids. Absent when the coordinator does not support
+   * instance static reads (families requiring hydration stay legacy).
+   */
+  readonly readStatic?: (
+    reads: readonly StateRead[],
+  ) => Promise<readonly StateReadResult[]>;
 }
 
 export interface AssembleCompiledFamilyInput {

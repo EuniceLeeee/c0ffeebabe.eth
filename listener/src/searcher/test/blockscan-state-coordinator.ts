@@ -29,6 +29,7 @@ import {
 } from "../venues/blockscan-state-capability.js";
 import { univ2BlockScanState } from "../venues/swaps/univ2-standard.js";
 import { univ4BlockScanState } from "../venues/swaps/univ4.js";
+import { univ3BlockScanState } from "../venues/swaps/univ3-standard.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 
 const SOURCE_BLOCK = 25_585_380;
@@ -44,6 +45,7 @@ const PROTOCOL_POOL = "0x0000000000000000000000000000000000000022";
 const SINGLETON_MANAGER = "0x0000000000000000000000000000000000000055";
 const SINGLETON_POOL_ID_A = `0x${"aa".repeat(32)}`;
 const SINGLETON_POOL_ID_B = `0x${"bb".repeat(32)}`;
+const UNIV3_FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
 const ERC6909_TRANSFER_TOPIC =
   "0x1b3d7edb2e9c0b0e7c525b20aaaef0f5940d2ed71663c7d39266ecafac728859";
 const UNIV4_DONATE_TOPIC =
@@ -3962,6 +3964,8 @@ async function univ2InstanceParityWithFullCompile(): Promise<void> {
         deadlineAtMs: Date.now() + 5_000,
         signal: new AbortController().signal,
       },
+      sourceBlock: SOURCE_BLOCK,
+      sourceBlockHash: SOURCE_HASH,
     });
     instances.set(pool.toLowerCase(), compiled.opaque);
   }
@@ -4120,6 +4124,8 @@ async function univ4InstanceParityWithFullCompile(): Promise<void> {
         deadlineAtMs: Date.now() + 5_000,
         signal: new AbortController().signal,
       },
+      sourceBlock: SOURCE_BLOCK,
+      sourceBlockHash: SOURCE_HASH,
     });
     instances.set(poolId, compiled.opaque);
   }
@@ -4206,6 +4212,237 @@ async function univ4InstanceModeRecompilesOnlyNewPool(): Promise<void> {
   );
 }
 
+function univ3Edge(
+  pool: string,
+  token0: string,
+  token1: string,
+  forward: boolean,
+): TokenEdge {
+  return {
+    adapterId: "univ3-swap",
+    target: pool,
+    tokenIn: forward ? token0 : token1,
+    tokenOut: forward ? token1 : token0,
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+    poolToken0: token0,
+    poolToken1: token1,
+    v3Fee: 3_000,
+    v3TickSpacing: 60,
+    factory: UNIV3_FACTORY,
+  };
+}
+
+function univ3Graph(
+  generation: number,
+  edges: readonly TokenEdge[],
+) {
+  const sourceBlock = SOURCE_BLOCK + generation;
+  return createVerifiedGraphView({
+    id: `univ3-instance-graph-${generation}`,
+    generation,
+    sourceBlock,
+    sourceBlockHash: `0x${generation.toString(16).padStart(64, "0")}`,
+    completenessWatermark: sourceBlock,
+    perSourceCoverage: [{
+      familyId: "univ3-standard",
+      sourceId: "univ3-instance-fixture",
+      sourceFingerprint: "univ3-instance-fixture-v1",
+      completeThroughBlock: sourceBlock,
+      completeThroughHash: `0x${generation.toString(16).padStart(64, "0")}`,
+    }],
+    edges,
+  });
+}
+
+function v3Slot0Data(): string {
+  const word = (value: bigint | number | boolean): string =>
+    BigInt(value).toString(16).padStart(64, "0");
+  return `0x${word(1n << 96n)}${word(0)}${word(0)}${word(0)}${word(0)}` +
+    `${word(0)}${word(1)}`;
+}
+
+function v3BindingData(pool: string): string {
+  return `0x${pool.toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
+}
+
+function univ3BindingResultFor(
+  pool: string,
+  generation: number,
+  sourceBlock: number,
+  sourceBlockHash: string,
+): StateReadResult {
+  return Object.freeze({
+    id: `v3-factory-binding:${pool.toLowerCase()}`,
+    ok: true as const,
+    sourceBlock,
+    sourceBlockHash,
+    provenance: Object.freeze({
+      kind: "eip1898" as const,
+      source: Object.freeze({
+        number: sourceBlock,
+        hash: sourceBlockHash,
+        generation,
+      }),
+      requireCanonical: true as const,
+    }),
+    data: v3BindingData(pool),
+  });
+}
+
+async function univ3InstanceParityWithFullCompile(): Promise<void> {
+  const sourceBlock = SOURCE_BLOCK + 1;
+  const sourceBlockHash = `0x${"1".padStart(64, "0")}`;
+  const edges = Object.freeze([
+    univ3Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ3Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+    univ3Edge(SWAP_POOL_B, TOKEN_A, TOKEN_C, true),
+    univ3Edge(SWAP_POOL_B, TOKEN_A, TOKEN_C, false),
+  ]);
+  const full = univ3BlockScanState.compileStaticSchema({
+    edges,
+    deadlineAtMs: Date.now() + 5_000,
+    signal: new AbortController().signal,
+  });
+  const staticReads = univ3BlockScanState.buildStaticSchemaReads!({
+    sourceBlock,
+    sourceBlockHash,
+    schema: full,
+    edges,
+  });
+  const staticResults = staticReads.map((read) => {
+    const pool = read.id.replace("v3-factory-binding:", "");
+    return univ3BindingResultFor(
+      pool,
+      1,
+      sourceBlock,
+      sourceBlockHash,
+    );
+  });
+  const hydrated = univ3BlockScanState.hydrateStaticSchema!(
+    full,
+    staticResults,
+  );
+
+  const instances = new Map<string, unknown>();
+  const byPool = new Map<string, TokenEdge[]>();
+  for (const edgeValue of edges) {
+    const pool = univ3BlockScanState.stateKey(edgeValue);
+    const group = byPool.get(pool) ?? [];
+    group.push(edgeValue);
+    byPool.set(pool, group);
+  }
+  for (const [pool, group] of byPool) {
+    const spec = Object.freeze({
+      key: `univ3-standard\u001f${pool}`,
+      familyId: "univ3-standard",
+      stateKey: pool,
+      edges: Object.freeze(group),
+      staticBindingFingerprint: stateSchemaFingerprint(group),
+      snapshotCompatibilityFingerprint: stateSchemaFingerprint(group),
+    });
+    const compiled = await univ3BlockScanState.compileStateInstance({
+      spec,
+      control: {
+        deadlineAtMs: Date.now() + 5_000,
+        signal: new AbortController().signal,
+      },
+      sourceBlock,
+      sourceBlockHash,
+      readStatic: async (reads) => {
+        assert.equal(reads.length, 1);
+        const read = reads[0];
+        const pool = read.id.replace("v3-factory-binding:", "");
+        return Object.freeze([
+          univ3BindingResultFor(pool, 1, sourceBlock, sourceBlockHash),
+        ]);
+      },
+    });
+    instances.set(pool, compiled.opaque);
+  }
+  const assembled = univ3BlockScanState.assembleSchema(instances);
+  assert.deepEqual(
+    [...assembled.pools.keys()].sort(),
+    [...hydrated.pools.keys()].sort(),
+  );
+  for (const pool of assembled.pools.keys()) {
+    assert.deepEqual(assembled.pools.get(pool), hydrated.pools.get(pool));
+  }
+}
+
+async function univ3InstanceModeRecompilesOnlyNewPool(): Promise<void> {
+  const calls = { compiles: 0 };
+  const family = registerBlockScanStateFamily({
+    familyId: "univ3-standard",
+    lane: "swap",
+    capability: {
+      ...univ3BlockScanState,
+      compileStateInstance: async (input: CompileStateInstanceInput) => {
+        calls.compiles++;
+        return univ3BlockScanState.compileStateInstance!(input);
+      },
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ3-swap",
+  });
+  class UniV3Backend implements BlockScanStateReadBackend {
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      return reads.map((read) => {
+        let data = "0x";
+        if (read.id.includes("slot0:")) {
+          data = v3Slot0Data();
+        } else if (read.id.includes("liquidity:")) {
+          data = `0x${(1_000n).toString(16).padStart(64, "0")}`;
+        } else if (read.id.includes("v3-factory-binding:")) {
+          const pool = read.id.split("v3-factory-binding:")[1] ?? "";
+          data = v3BindingData(pool);
+        }
+        return Object.freeze({
+          ...successfulRead(read, control.sourceGeneration),
+          data,
+        });
+      });
+    }
+
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const coordinator = new BlockScanStateCoordinator(new UniV3Backend());
+  const graphA = univ3Graph(1, [
+    univ3Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ3Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ]);
+  const first = await coordinator.prepare({
+    graph: graphA,
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(first.status, "complete");
+  assert.equal(calls.compiles, 1, "first generation compiles the only pool");
+
+  const graphAB = univ3Graph(2, [
+    ...graphA.edges,
+    univ3Edge(SWAP_POOL_B, TOKEN_A, TOKEN_C, true),
+    univ3Edge(SWAP_POOL_B, TOKEN_A, TOKEN_C, false),
+  ]);
+  const second = await coordinator.prepare({
+    graph: graphAB,
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(second.status, "complete");
+  assert.equal(
+    calls.compiles,
+    2,
+    "adding a pool must recompile only the new instance",
+  );
+}
+
 await phasedProofsSettleBeforeSiblingReads();
 await activityRangeIsCappedToEightBlocks();
 await headPassDoesNotSupersedeActiveBootstrap();
@@ -4241,5 +4478,7 @@ await univ2InstanceParityWithFullCompile();
 await univ2InstanceModeRecompilesOnlyNewPool();
 await univ4InstanceParityWithFullCompile();
 await univ4InstanceModeRecompilesOnlyNewPool();
+await univ3InstanceParityWithFullCompile();
+await univ3InstanceModeRecompilesOnlyNewPool();
 purityHook();
 console.log("blockscan-state-coordinator PASS");

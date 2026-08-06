@@ -2305,6 +2305,89 @@ export class BlockScanStateCoordinator {
     const previous = this.instanceSchemas.get(family.familyId) ?? new Map();
     const staged = new Map<StateInstanceKey, CompiledStateInstance>();
     const issues: BlockScanStateIssue[] = [];
+    /*
+     * Instance-scoped static read runner: source-pinned, local-id validated,
+     * physically deduplicated across instances of the same family phase
+     * (identical to+data resolves once, results fan out by local id).
+     */
+    const staticReadCache = new Map<string, StateReadResult>();
+    const readStatic = async (
+      reads: readonly StateRead[],
+    ): Promise<readonly StateReadResult[]> => {
+      const seen = new Set<string>();
+      const byLocalId = new Map<string, StateReadResult>();
+      const missing: StateRead[] = [];
+      const missingByLocalId = new Map<string, StateRead>();
+      for (const read of reads) {
+        validateRead(read, graph);
+        if (!read.id || seen.has(read.id)) {
+          throw new Error(
+            `duplicate instance static read id ${read.id}`,
+          );
+        }
+        seen.add(read.id);
+        const physicalKey =
+          `${read.to.toLowerCase()}\u001f${read.data}`;
+        const cached = staticReadCache.get(physicalKey);
+        if (cached !== undefined) {
+          byLocalId.set(read.id, cached);
+        } else {
+          missing.push(read);
+          missingByLocalId.set(read.id, read);
+        }
+      }
+      if (missing.length > 0) {
+        const results = await awaitWithAbort(
+          this.backend.readBatch(
+            family.lane,
+            missing,
+            {
+              sourceBlock: graph.sourceBlock,
+              sourceBlockHash: graph.sourceBlockHash,
+              sourceGeneration: graph.generation,
+              deadlineAtMs,
+              signal,
+            },
+          ),
+          signal,
+        );
+        if (results.length !== missing.length) {
+          throw new Error(
+            "instance static backend omitted one or more reads",
+          );
+        }
+        for (const result of results) {
+          if (!seen.has(result.id) || byLocalId.has(result.id)) {
+            throw new Error(
+              "instance static backend result IDs did not exactly match reads",
+            );
+          }
+          if (
+            !stateReadResultMatchesSource(
+              this.backend,
+              result,
+              graph,
+            )
+          ) {
+            throw new Error(
+              "instance static read result lacks current source provenance",
+            );
+          }
+          byLocalId.set(result.id, result);
+          const request = missingByLocalId.get(result.id);
+          if (!request) {
+            throw new Error(
+              `instance static result ${result.id} has no matching request`,
+            );
+          }
+          staticReadCache.set(
+            `${request.to.toLowerCase()}\u001f${request.data}`,
+            result,
+          );
+        }
+      }
+      return Object.freeze([...byLocalId.values()]);
+    };
     for (const group of familyGroups) {
       const staticBindingFingerprint = stateSchemaFingerprint(group.edges);
       const spec: StateInstanceSpec = Object.freeze({
@@ -2335,6 +2418,9 @@ export class BlockScanStateCoordinator {
             spec,
             previous: prev,
             control: { deadlineAtMs, signal },
+            sourceBlock: graph.sourceBlock,
+            sourceBlockHash: graph.sourceBlockHash,
+            readStatic,
           }),
           signal,
         );

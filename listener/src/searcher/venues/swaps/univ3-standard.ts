@@ -17,6 +17,12 @@ import {
   blockScanEdgeKey,
   createMutationQueryDescriptor,
   deterministicHash,
+  instanceFingerprint,
+  schemaInputFingerprint,
+  stateSchemaFingerprint,
+  staticEvidenceFingerprint,
+  type CompiledStateInstance,
+  type CompileStateInstanceInput,
 } from "../blockscan-state-capability.js";
 import { findVenueByFactory } from "../capability.js";
 import type {
@@ -192,6 +198,8 @@ const univ3LandedEvents = defineSwapLandedEvents({
 });
 
 export const univ3BlockScanState = Object.freeze({
+  schemaMode: "state-instance-v1",
+  adapterSchemaRevision: "univ3-v1",
   stateKey: canonicalPoolStateKey,
 
   compileStaticSchema({ edges }) {
@@ -245,6 +253,80 @@ export const univ3BlockScanState = Object.freeze({
           : "rejected",
         reverseBindingFailure: failure,
       }));
+    }
+    return Object.freeze({ pools });
+  },
+
+  async compileStateInstance(
+    input: CompileStateInstanceInput,
+  ): Promise<CompiledStateInstance> {
+    const spec = input.spec;
+    if (spec.edges.length === 0) {
+      throw new Error(`univ3 instance ${spec.key} has no edges`);
+    }
+    let entry = compileUniV3InstanceCore(
+      spec.stateKey,
+      spec.edges,
+      input.previous?.opaque as UniV3PoolSchema | undefined,
+    );
+    let staticEvidence = "";
+    if (
+      entry.reverseBindingStatus === "pending" &&
+      entry.factory !== null &&
+      input.readStatic
+    ) {
+      const results = await input.readStatic(Object.freeze([
+        v3FactoryBindingRead({
+          pool: spec.stateKey,
+          metadata: entry,
+          sourceBlock: input.sourceBlock,
+          sourceBlockHash: input.sourceBlockHash,
+        }),
+      ]));
+      if (results.length === 1) {
+        const result = results[0];
+        if (result.ok) {
+          const failure = decodeV3FactoryBinding(
+            entry,
+            spec.stateKey,
+            result.data,
+          );
+          entry = Object.freeze({
+            ...entry,
+            reverseBindingStatus: failure === null
+              ? "verified"
+              : "rejected",
+            reverseBindingFailure: failure,
+          });
+        }
+        staticEvidence = staticEvidenceFingerprint(results);
+      }
+    }
+    const schemaInput = schemaInputFingerprint({
+      key: spec.key,
+      adapterSchemaRevision: "univ3-v1",
+      staticBindingFingerprint: stateSchemaFingerprint(spec.edges),
+      sharedFingerprint: "",
+    });
+    return Object.freeze({
+      familyId: "univ3-standard",
+      stateKey: spec.stateKey,
+      specFingerprint: schemaInput,
+      staticEvidenceFingerprint: staticEvidence,
+      instanceFingerprint: instanceFingerprint({
+        key: spec.key,
+        schemaInput,
+        staticEvidence,
+      }),
+      carryPolicy: "activity-proof",
+      opaque: entry,
+    });
+  },
+
+  assembleSchema(entries: ReadonlyMap<string, unknown>) {
+    const pools = new Map<string, UniV3PoolSchema>();
+    for (const [stateKey, opaque] of entries) {
+      pools.set(stateKey, opaque as UniV3PoolSchema);
     }
     return Object.freeze({ pools });
   },
@@ -653,84 +735,120 @@ function compileUniV3StateSchema(
   previousSchema?: UniV3StateSchema,
 ): UniV3StateSchema {
   const pools = new Map<string, UniV3PoolSchema>();
+  const byPool = new Map<string, TokenEdge[]>();
   for (const edge of edges) {
     const pool = canonicalPoolStateKey(edge);
-    if (!edge.poolToken0 || !edge.poolToken1) {
-      throw new Error(`univ3 block-scan edge ${pool} is missing token order`);
+    const group = byPool.get(pool) ?? [];
+    group.push(edge);
+    byPool.set(pool, group);
+  }
+  for (const [pool, group] of byPool) {
+    pools.set(
+      pool,
+      compileUniV3InstanceCore(
+        pool,
+        group,
+        previousSchema?.pools.get(pool),
+      ),
+    );
+  }
+  return Object.freeze({ pools });
+}
+
+/**
+ * Shared per-instance compiler core: both the legacy full compile path and the
+ * state-instance path call this, so full-vs-instance parity is structural.
+ * All edges of one stateKey must agree on token order, fee, tick spacing and
+ * factory.
+ */
+function compileUniV3InstanceCore(
+  pool: string,
+  edges: readonly TokenEdge[],
+  previous?: UniV3PoolSchema,
+): UniV3PoolSchema {
+  const first = edges[0];
+  if (!first) {
+    throw new Error(`univ3 instance ${pool} has no edges`);
+  }
+  if (canonicalPoolStateKey(first) !== pool) {
+    throw new Error(`univ3 state group mixes pools for ${pool}`);
+  }
+  if (!first.poolToken0 || !first.poolToken1) {
+    throw new Error(`univ3 block-scan edge ${pool} is missing token order`);
+  }
+  const token0 = ethers.getAddress(first.poolToken0);
+  const token1 = ethers.getAddress(first.poolToken1);
+  if (
+    first.v3Fee === undefined ||
+    !Number.isSafeInteger(first.v3Fee) ||
+    first.v3Fee < 0
+  ) {
+    throw new Error(`univ3 block-scan edge ${pool} is missing attested fee`);
+  }
+  const fee = BigInt(first.v3Fee);
+  if (
+    first.v3TickSpacing === undefined ||
+    !Number.isSafeInteger(first.v3TickSpacing) ||
+    first.v3TickSpacing <= 0
+  ) {
+    throw new Error(
+      `univ3 block-scan edge ${pool} is missing attested tick spacing`,
+    );
+  }
+  const tickSpacing = first.v3TickSpacing;
+  const factory = first.factory === undefined
+    ? null
+    : ethers.getAddress(first.factory);
+  const reverseBindingRequired = isRegisteredStandardUniV3Factory(factory);
+  const publishedBindingMatches =
+    reverseBindingRequired &&
+    previous?.reverseBindingStatus === "verified" &&
+    previous.token0 === token0 &&
+    previous.token1 === token1 &&
+    previous.fee === fee &&
+    previous.tickSpacing === tickSpacing &&
+    previous.factory === factory;
+  const reverseBindingStatus = reverseBindingRequired
+    ? publishedBindingMatches
+      ? "verified"
+      : "pending"
+    : "unsupported";
+  const reverseBindingFailure = reverseBindingRequired
+    ? null
+    : factory === null
+      ? `univ3 pool ${pool} has no reverse-attested factory`
+      : `univ3 pool ${pool} factory ${factory} is not a registered ` +
+        "standard V3 reverse-binding factory";
+  const precisionQuoterCandidate = uniV3QuoterForFactory(factory);
+  for (const edge of edges.slice(1)) {
+    if (canonicalPoolStateKey(edge) !== pool) {
+      throw new Error(`univ3 state group mixes pools for ${pool}`);
     }
-    const token0 = ethers.getAddress(edge.poolToken0);
-    const token1 = ethers.getAddress(edge.poolToken1);
     if (
+      !edge.poolToken0 ||
+      !edge.poolToken1 ||
+      ethers.getAddress(edge.poolToken0) !== token0 ||
+      ethers.getAddress(edge.poolToken1) !== token1 ||
       edge.v3Fee === undefined ||
-      !Number.isSafeInteger(edge.v3Fee) ||
-      edge.v3Fee < 0
-    ) {
-      throw new Error(`univ3 block-scan edge ${pool} is missing attested fee`);
-    }
-    const fee = BigInt(edge.v3Fee);
-    if (
+      BigInt(edge.v3Fee) !== fee ||
       edge.v3TickSpacing === undefined ||
-      !Number.isSafeInteger(edge.v3TickSpacing) ||
-      edge.v3TickSpacing <= 0
-    ) {
-      throw new Error(
-        `univ3 block-scan edge ${pool} is missing attested tick spacing`,
-      );
-    }
-    const tickSpacing = edge.v3TickSpacing;
-    const factory = edge.factory === undefined
-      ? null
-      : ethers.getAddress(edge.factory);
-    const reverseBindingRequired = isRegisteredStandardUniV3Factory(factory);
-    const previous = previousSchema?.pools.get(pool);
-    const publishedBindingMatches =
-      reverseBindingRequired &&
-      previous?.reverseBindingStatus === "verified" &&
-      previous.token0 === token0 &&
-      previous.token1 === token1 &&
-      previous.fee === fee &&
-      previous.tickSpacing === tickSpacing &&
-      previous.factory === factory;
-    const reverseBindingStatus = reverseBindingRequired
-      ? publishedBindingMatches
-        ? "verified"
-        : "pending"
-      : "unsupported";
-    const reverseBindingFailure = reverseBindingRequired
-      ? null
-      : factory === null
-        ? `univ3 pool ${pool} has no reverse-attested factory`
-        : `univ3 pool ${pool} factory ${factory} is not a registered ` +
-          "standard V3 reverse-binding factory";
-    const precisionQuoterCandidate = uniV3QuoterForFactory(factory);
-    const existing = pools.get(pool);
-    if (
-      existing &&
-      (
-        existing.token0 !== token0 ||
-        existing.token1 !== token1 ||
-        existing.fee !== fee ||
-        existing.tickSpacing !== tickSpacing ||
-        existing.factory !== factory ||
-        existing.reverseBindingStatus !== reverseBindingStatus ||
-        existing.reverseBindingFailure !== reverseBindingFailure ||
-        existing.precisionQuoterCandidate !== precisionQuoterCandidate
-      )
+      edge.v3TickSpacing !== tickSpacing ||
+      (edge.factory === undefined ? null : ethers.getAddress(edge.factory)) !==
+        factory
     ) {
       throw new Error(`univ3 block-scan pool ${pool} has inconsistent metadata`);
     }
-    pools.set(pool, Object.freeze({
-      token0,
-      token1,
-      fee,
-      tickSpacing,
-      factory,
-      reverseBindingStatus,
-      reverseBindingFailure,
-      precisionQuoterCandidate,
-    }));
   }
-  return Object.freeze({ pools });
+  return Object.freeze({
+    token0,
+    token1,
+    fee,
+    tickSpacing,
+    factory,
+    reverseBindingStatus,
+    reverseBindingFailure,
+    precisionQuoterCandidate,
+  });
 }
 
 function v3FactoryBindingRead(input: {
