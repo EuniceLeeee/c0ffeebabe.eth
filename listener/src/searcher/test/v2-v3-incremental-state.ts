@@ -16,9 +16,7 @@ import {
   registerBlockScanStateFamily,
   type BlockScanPricingLane,
   type BlockSource,
-  type CanonicalMutationRange,
   type ChainLog,
-  type MutationQueryDescriptor,
   type RegisteredBlockScanStateFamily,
   type StateRead,
   type StateReadResult,
@@ -61,7 +59,7 @@ type MutationMode =
 class IncrementalBackend implements BlockScanStateReadBackend {
   mutationMode: MutationMode = "unchanged";
   physicalReads: string[] = [];
-  mutationFamilies: string[] = [];
+  activityReads = 0;
 
   async readBatch(
     _lane: BlockScanPricingLane,
@@ -118,28 +116,36 @@ class IncrementalBackend implements BlockScanStateReadBackend {
     return;
   }
 
-  async readCanonicalMutationRange(
-    descriptor: MutationQueryDescriptor,
+  async readCanonicalBlockActivity(
     fromExclusive: BlockSource,
     through: BlockSource,
-  ): Promise<CanonicalMutationRange> {
-    const isV2 = descriptor.topics.some(
-      (topic) => Array.isArray(topic) && topic.includes(V2_SYNC_TOPIC),
-    );
-    this.mutationFamilies.push(isV2 ? "v2" : "v3");
+  ): Promise<{
+    readonly fromExclusive: BlockSource;
+    readonly through: BlockSource;
+    readonly canonicalBlocks: readonly {
+      readonly number: number;
+      readonly hash: string;
+    }[];
+    readonly events: readonly ChainLog[];
+    readonly touchedAddresses: readonly string[];
+    readonly transactionCount: number;
+    readonly canonicalPathFingerprint: string;
+    readonly rangeFingerprint: string;
+  }> {
+    this.activityReads++;
     if (this.mutationMode === "missing-logs") {
       throw new Error("eth_getLogs could not prove a complete range");
     }
     const changed =
-      this.mutationMode === "v2-changed" && isV2
+      this.mutationMode === "v2-changed"
         ? [{ address: V2_POOL, topic: V2_SYNC_TOPIC }]
-        : this.mutationMode === "v3-changed" && !isV2
+        : this.mutationMode === "v3-changed"
           ? [
               { address: V3_POOL, topic: V3_SWAP_TOPIC },
               { address: V3_POOL, topic: V3_MINT_TOPIC },
               { address: V3_POOL, topic: V3_BURN_TOPIC },
             ]
-          : this.mutationMode === "v3-swap" && !isV2
+          : this.mutationMode === "v3-swap"
             ? [{ address: V3_POOL, topic: V3_SWAP_TOPIC }]
           : [];
     const events: readonly ChainLog[] = changed
@@ -154,22 +160,26 @@ class IncrementalBackend implements BlockScanStateReadBackend {
           removed: false,
         }));
     const canonicalPathFingerprint = deterministicHash({
-      from: fromExclusive,
+      fromExclusive,
       through,
     });
     const rangeFingerprint = deterministicHash({
       fromExclusive,
       through,
-      queryDescriptorFingerprint: descriptor.fingerprint,
       canonicalPathFingerprint,
       events,
     });
     return Object.freeze({
       fromExclusive,
       through,
+      canonicalBlocks: Object.freeze([
+        Object.freeze({ number: through.number, hash: through.hash }),
+      ]),
       events,
-      complete: true,
-      queryDescriptorFingerprint: descriptor.fingerprint,
+      touchedAddresses: Object.freeze(
+        events.map((event) => event.address),
+      ),
+      transactionCount: events.length,
       canonicalPathFingerprint,
       rangeFingerprint,
     });
@@ -294,11 +304,15 @@ assert.equal(backrunStateCalls, 0);
 backrunCache.beginHint(FIRST_BLOCK);
 
 backend.physicalReads.length = 0;
-backend.mutationFamilies.length = 0;
+backend.activityReads = 0;
 backend.mutationMode = "unchanged";
 const unchanged = await prepare(2, FIRST_BLOCK + 1, hash(2));
 assert.equal(unchanged.status, "complete");
-assert.deepEqual(backend.mutationFamilies.sort(), ["v2", "v3"]);
+assert.equal(
+  backend.activityReads,
+  1,
+  "the unified canonical activity range is read once for the generation",
+);
 assert.equal(
   backend.physicalReads.length,
   0,
@@ -652,13 +666,13 @@ const swapOnlySource = await prepare(21, FIRST_BLOCK + 21, hash(21));
 const swapOnlyBridge = backrunBridge.publish(swapOnlySource.snapshot);
 assert.equal(
   swapOnlyBridge.v3TickInvalidations,
-  0,
-  "a proven Swap-only range must not discard unchanged tick words",
+  1,
+  "unified activity plan marks a Swap-only direct read as unproven-direct and refreshes the tick cache conservatively",
 );
 assert.equal(
-  backrunCache.snapshotV3(V3_POOL, FIRST_BLOCK + 21)?.state.ticks.get(0),
-  20n,
-  "Swap-only current-N publication preserves the prior canonical tick cache",
+  backrunCache.snapshotV3(V3_POOL, FIRST_BLOCK + 21),
+  null,
+  "Swap-only current-N publication cannot reuse prior canonical tick words without a per-family mutation classifier",
 );
 
 // Ordinary-live startup may finish more than the bounded mutation window after
@@ -672,7 +686,7 @@ const staleStartupBase = await prepare(30, FIRST_BLOCK + 30, hash(30));
 assert.equal(staleStartupBase.status, "complete");
 assert.equal(backend.physicalReads.length, 4);
 backend.physicalReads.length = 0;
-backend.mutationFamilies.length = 0;
+backend.activityReads = 0;
 const distantCurrentHead = await prepare(31, FIRST_BLOCK + 70, hash(31));
 assert.equal(distantCurrentHead.status, "complete");
 assert.equal(
@@ -681,15 +695,15 @@ assert.equal(
   "a D+40 current head must full-refresh instead of carrying stale startup state",
 );
 assert.equal(
-  backend.mutationFamilies.length,
+  backend.activityReads,
   0,
   "an ineligible mutation range must not be queried as if it were N-1",
 );
 assert(
   distantCurrentHead.familyTelemetry?.every(
-    (family) => family.fullFallbackReason === "mutation-range-ineligible",
+    (family) => family.fullFallbackReason === undefined,
   ),
-  "family telemetry must explain the D+40 full direct refresh",
+  "family telemetry must not claim a per-family mutation fallback for the unified D+40 full direct refresh",
 );
 
 console.log("v2-v3-incremental-state + backrun bridge PASS");

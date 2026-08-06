@@ -17,15 +17,11 @@ import {
   registerBlockScanStateFamily,
   type BlockScanPricingLane,
   type BlockSource,
-  type CanonicalMutationRange,
   type ChainLog,
-  type MutationQueryDescriptor,
   type StateRead,
   type StateReadResult,
 } from "../venues/blockscan-state-capability.js";
 import {
-  UNIV4_INITIALIZE_TOPIC,
-  UNIV4_MODIFY_LIQUIDITY_TOPIC,
   UNIV4_SWAP_TOPIC,
 } from "../venues/landed-event-registry.js";
 import { univ4BlockScanState } from "../venues/swaps/univ4.js";
@@ -51,10 +47,6 @@ const stateViewIface = new ethers.Interface([
   "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
   "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",
 ]);
-const DONATE_TOPIC = ethers.id(
-  "Donate(bytes32,address,uint256,uint256)",
-).toLowerCase();
-
 type MutationMode =
   | "unchanged"
   | "static-swap"
@@ -65,6 +57,7 @@ type MutationMode =
 class V4IncrementalBackend implements BlockScanStateReadBackend {
   mutationMode: MutationMode = "unchanged";
   physicalReads: string[] = [];
+  activityReads = 0;
 
   async readBatch(
     _lane: BlockScanPricingLane,
@@ -109,26 +102,23 @@ class V4IncrementalBackend implements BlockScanStateReadBackend {
     return;
   }
 
-  async readCanonicalMutationRange(
-    descriptor: MutationQueryDescriptor,
+  async readCanonicalBlockActivity(
     fromExclusive: BlockSource,
     through: BlockSource,
-  ): Promise<CanonicalMutationRange> {
-    assert.deepEqual(
-      descriptor.addresses,
-      [ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase()],
-    );
-    const declaredTopics = descriptor.topics.flatMap((topic) =>
-      topic === null
-        ? []
-        : typeof topic === "string"
-          ? [topic]
-          : [...topic]
-    );
-    assert(declaredTopics.includes(UNIV4_INITIALIZE_TOPIC));
-    assert(declaredTopics.includes(UNIV4_MODIFY_LIQUIDITY_TOPIC));
-    assert(declaredTopics.includes(UNIV4_SWAP_TOPIC));
-    assert(!declaredTopics.includes(DONATE_TOPIC));
+  ): Promise<{
+    readonly fromExclusive: BlockSource;
+    readonly through: BlockSource;
+    readonly canonicalBlocks: readonly {
+      readonly number: number;
+      readonly hash: string;
+    }[];
+    readonly events: readonly ChainLog[];
+    readonly touchedAddresses: readonly string[];
+    readonly transactionCount: number;
+    readonly canonicalPathFingerprint: string;
+    readonly rangeFingerprint: string;
+  }> {
+    this.activityReads++;
     if (this.mutationMode === "missing-range") {
       throw new Error("canonical V4 log range unavailable");
     }
@@ -158,16 +148,20 @@ class V4IncrementalBackend implements BlockScanStateReadBackend {
     const rangeFingerprint = deterministicHash({
       fromExclusive,
       through,
-      queryDescriptorFingerprint: descriptor.fingerprint,
       canonicalPathFingerprint,
       events,
     });
     return Object.freeze({
       fromExclusive,
       through,
+      canonicalBlocks: Object.freeze([
+        Object.freeze({ number: through.number, hash: through.hash }),
+      ]),
       events,
-      complete: true,
-      queryDescriptorFingerprint: descriptor.fingerprint,
+      touchedAddresses: Object.freeze([
+        ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
+      ]),
+      transactionCount: events.length,
       canonicalPathFingerprint,
       rangeFingerprint,
     });
@@ -198,10 +192,9 @@ const unchanged = await prepare(2);
 assert.equal(unchanged.status, "complete");
 assert.equal(
   backend.physicalReads.length,
-  2,
-  "static V4 carries while dynamic-fee V4 rereads without an event",
+  0,
+  "static and dynamic-fee V4 carry without an event (dynamic fee does not affect mid price)",
 );
-assert(backend.physicalReads.every((id) => id.includes(DYNAMIC_POOL_ID)));
 
 backend.physicalReads.length = 0;
 backend.mutationMode = "static-swap";
@@ -209,16 +202,19 @@ const changed = await prepare(3);
 assert.equal(changed.status, "complete");
 assert.equal(
   backend.physicalReads.length,
-  4,
-  "a static-pool Swap refreshes that pool while dynamic fee remains direct",
+  2,
+  "a static-pool Swap refreshes only that pool",
 );
 
 backend.physicalReads.length = 0;
 backend.mutationMode = "outside-swap";
 const unrelated = await prepare(4);
 assert.equal(unrelated.status, "complete");
-assert.equal(backend.physicalReads.length, 2);
-assert(backend.physicalReads.every((id) => id.includes(DYNAMIC_POOL_ID)));
+assert.equal(
+  backend.physicalReads.length,
+  0,
+  "an untracked singleton poolId must not dirty any existing V4 pool",
+);
 
 backend.physicalReads.length = 0;
 backend.mutationMode = "donate";
@@ -226,8 +222,8 @@ const donated = await prepare(5);
 assert.equal(donated.status, "complete");
 assert.equal(
   backend.physicalReads.length,
-  2,
-  "Donate does not invalidate pricing state for a static-fee pool",
+  0,
+  "Donate does not dirty any V4 pool",
 );
 
 backend.physicalReads.length = 0;
