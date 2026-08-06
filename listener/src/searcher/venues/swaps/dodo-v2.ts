@@ -12,9 +12,15 @@ import type {
 } from "../route-leg-adapter.js";
 import {
   blockScanEdgeKey,
+  instanceFingerprint,
+  schemaInputFingerprint,
+  stateSchemaFingerprint,
+  staticEvidenceFingerprint,
   type BlockScanStateCapability,
   type BuildCurrentBlockReadsInput,
   type BuildDependentBlockReadsInput,
+  type CompiledStateInstance,
+  type CompileStateInstanceInput,
   type CompileStaticSchemaInput,
   type StateRead,
   type StateReadResult,
@@ -194,7 +200,91 @@ export interface DodoProbeQuote {
   readonly amountOut: bigint;
 }
 
+/**
+ * Shared per-stateKey compiler core: both the legacy full compile path and the
+ * state-instance path call this, so full-vs-instance parity is structural.
+ * All edges of one stateKey must agree on base/quote token order.
+ */
+function compileDodoV2InstanceCore(
+  stateKey: string,
+  unorderedEdges: readonly TokenEdge[],
+): DodoV2StateGroup {
+  const orderedEdges = Object.freeze(
+    [...unorderedEdges].sort((a, b) =>
+      dodoRouteKey(a).localeCompare(dodoRouteKey(b))
+    ),
+  );
+  const first = orderedEdges[0];
+  if (!first) {
+    throw new Error(`dodo-v2 instance ${stateKey} has no edges`);
+  }
+  if (canonicalPoolStateKey(first) !== stateKey) {
+    throw new Error(`dodo-v2 state group mixes pools for ${stateKey}`);
+  }
+  if (!first.poolToken0 || !first.poolToken1) {
+    throw new Error(
+      `dodo-v2 block-scan pool ${stateKey} is missing token order`,
+    );
+  }
+  const baseToken = ethers.getAddress(first.poolToken0);
+  const quoteToken = ethers.getAddress(first.poolToken1);
+  for (const edge of orderedEdges) {
+    if (
+      canonicalPoolStateKey(edge) !== stateKey ||
+      !edge.poolToken0 ||
+      !edge.poolToken1 ||
+      ethers.getAddress(edge.poolToken0) !== baseToken ||
+      ethers.getAddress(edge.poolToken1) !== quoteToken
+    ) {
+      throw new Error(
+        `dodo-v2 block-scan pool ${stateKey} has inconsistent metadata`,
+      );
+    }
+    assertEdgeTokens(edge.tokenIn, edge.tokenOut, baseToken, quoteToken);
+  }
+  return Object.freeze({
+    stateKey,
+    pool: ethers.getAddress(first.target),
+    baseToken,
+    quoteToken,
+    edges: orderedEdges,
+    amountInByToken: new Map<string, bigint>(),
+  });
+}
+
+function hydrateDodoV2Group(
+  group: DodoV2StateGroup,
+  results: readonly StateReadResult[],
+): DodoV2StateGroup {
+  const oneTokenByAddress = new Map<string, bigint>();
+  for (const result of results) {
+    if (!result.ok || !result.id.startsWith("dodo-static-decimals:")) {
+      throw new Error(`unresolved dodo-v2 static decimals read ${result.id}`);
+    }
+    const token = result.id.slice("dodo-static-decimals:".length);
+    const decimals = Number(
+      blockScanErc20Iface.decodeFunctionResult("decimals", result.data)[0],
+    );
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36) {
+      throw new Error(`dodo-v2 token ${token} returned invalid decimals ${decimals}`);
+    }
+    oneTokenByAddress.set(token, 10n ** BigInt(decimals));
+  }
+  const amountInByToken = new Map<string, bigint>();
+  for (const edge of group.edges) {
+    const token = ethers.getAddress(edge.tokenIn).toLowerCase();
+    const oneToken = oneTokenByAddress.get(token);
+    if (!oneToken) {
+      throw new Error(`dodo-v2 static decimals missing ${edge.tokenIn}`);
+    }
+    amountInByToken.set(token, oneToken);
+  }
+  return Object.freeze({ ...group, amountInByToken });
+}
+
 export const dodoV2BlockScanState = Object.freeze({
+  schemaMode: "state-instance-v1",
+  adapterSchemaRevision: "dodo-v2-v1",
   stateKey: canonicalPoolStateKey,
 
   compileStaticSchema({ edges }: CompileStaticSchemaInput): DodoV2StateSchema {
@@ -208,44 +298,66 @@ export const dodoV2BlockScanState = Object.freeze({
       group.push(edge);
       grouped.set(key, group);
     }
-
     const groups = new Map<string, DodoV2StateGroup>();
-    for (const [stateKey, unorderedEdges] of grouped) {
-      const orderedEdges = Object.freeze(
-        [...unorderedEdges].sort((a, b) =>
-          dodoRouteKey(a).localeCompare(dodoRouteKey(b))
-        ),
-      );
-      const first = orderedEdges[0];
-      if (!first.poolToken0 || !first.poolToken1) {
-        throw new Error(
-          `dodo-v2 block-scan pool ${stateKey} is missing token order`,
-        );
-      }
-      const baseToken = ethers.getAddress(first.poolToken0);
-      const quoteToken = ethers.getAddress(first.poolToken1);
-      for (const edge of orderedEdges) {
-        if (
-          canonicalPoolStateKey(edge) !== stateKey ||
-          !edge.poolToken0 ||
-          !edge.poolToken1 ||
-          ethers.getAddress(edge.poolToken0) !== baseToken ||
-          ethers.getAddress(edge.poolToken1) !== quoteToken
-        ) {
-          throw new Error(
-            `dodo-v2 block-scan pool ${stateKey} has inconsistent metadata`,
-          );
-        }
-        assertEdgeTokens(edge.tokenIn, edge.tokenOut, baseToken, quoteToken);
-      }
-      groups.set(stateKey, Object.freeze({
+    for (const [stateKey, groupEdges] of grouped) {
+      groups.set(
         stateKey,
-        pool: ethers.getAddress(first.target),
-        baseToken,
-        quoteToken,
-        edges: orderedEdges,
-        amountInByToken: new Map<string, bigint>(),
-      }));
+        compileDodoV2InstanceCore(stateKey, groupEdges),
+      );
+    }
+    return Object.freeze({ groups });
+  },
+
+  async compileStateInstance(
+    input: CompileStateInstanceInput,
+  ): Promise<CompiledStateInstance> {
+    const spec = input.spec;
+    if (spec.edges.length === 0) {
+      throw new Error(`dodo-v2 instance ${spec.key} has no edges`);
+    }
+    let group = compileDodoV2InstanceCore(spec.stateKey, spec.edges);
+    let staticEvidence = "";
+    if (input.readStatic) {
+      const reads = uniqueDodoInputTokens(spec.edges).map((token) =>
+        currentBlockRead({
+          id: dodoStaticDecimalsReadId(token),
+          sourceBlock: input.sourceBlock,
+          sourceBlockHash: input.sourceBlockHash,
+          to: token,
+          data: blockScanErc20Iface.encodeFunctionData("decimals"),
+        })
+      );
+      if (reads.length > 0) {
+        const results = await input.readStatic(Object.freeze(reads));
+        group = hydrateDodoV2Group(group, results);
+        staticEvidence = staticEvidenceFingerprint(results);
+      }
+    }
+    const schemaInput = schemaInputFingerprint({
+      key: spec.key,
+      adapterSchemaRevision: "dodo-v2-v1",
+      staticBindingFingerprint: stateSchemaFingerprint(spec.edges),
+      sharedFingerprint: "",
+    });
+    return Object.freeze({
+      familyId: "custom-swap:dodo-v2",
+      stateKey: spec.stateKey,
+      specFingerprint: schemaInput,
+      staticEvidenceFingerprint: staticEvidence,
+      instanceFingerprint: instanceFingerprint({
+        key: spec.key,
+        schemaInput,
+        staticEvidence,
+      }),
+      carryPolicy: "activity-proof",
+      opaque: group,
+    });
+  },
+
+  assembleSchema(entries: ReadonlyMap<string, unknown>) {
+    const groups = new Map<string, DodoV2StateGroup>();
+    for (const [stateKey, opaque] of entries) {
+      groups.set(stateKey, opaque as DodoV2StateGroup);
     }
     return Object.freeze({ groups });
   },
@@ -269,33 +381,9 @@ export const dodoV2BlockScanState = Object.freeze({
     schema: DodoV2StateSchema,
     results: readonly StateReadResult[],
   ): DodoV2StateSchema {
-    const oneTokenByAddress = new Map<string, bigint>();
-    for (const result of results) {
-      if (!result.ok || !result.id.startsWith("dodo-static-decimals:")) {
-        throw new Error(`unresolved dodo-v2 static decimals read ${result.id}`);
-      }
-      const token = result.id.slice("dodo-static-decimals:".length);
-      const decimals = Number(
-        blockScanErc20Iface.decodeFunctionResult("decimals", result.data)[0],
-      );
-      if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36) {
-        throw new Error(`dodo-v2 token ${token} returned invalid decimals ${decimals}`);
-      }
-      oneTokenByAddress.set(token, 10n ** BigInt(decimals));
-    }
-
     const groups = new Map<string, DodoV2StateGroup>();
     for (const [stateKey, group] of schema.groups) {
-      const amountInByToken = new Map<string, bigint>();
-      for (const edge of group.edges) {
-        const token = ethers.getAddress(edge.tokenIn).toLowerCase();
-        const oneToken = oneTokenByAddress.get(token);
-        if (!oneToken) {
-          throw new Error(`dodo-v2 static decimals missing ${edge.tokenIn}`);
-        }
-        amountInByToken.set(token, oneToken);
-      }
-      groups.set(stateKey, Object.freeze({ ...group, amountInByToken }));
+      groups.set(stateKey, hydrateDodoV2Group(group, results));
     }
     return Object.freeze({ groups });
   },

@@ -30,6 +30,7 @@ import {
 import { univ2BlockScanState } from "../venues/swaps/univ2-standard.js";
 import { univ4BlockScanState } from "../venues/swaps/univ4.js";
 import { univ3BlockScanState } from "../venues/swaps/univ3-standard.js";
+import { dodoV2BlockScanState } from "../venues/swaps/dodo-v2.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 
 const SOURCE_BLOCK = 25_585_380;
@@ -4443,6 +4444,187 @@ async function univ3InstanceModeRecompilesOnlyNewPool(): Promise<void> {
   );
 }
 
+function dodoEdge(
+  pool: string,
+  baseToken: string,
+  quoteToken: string,
+  forward: boolean,
+): TokenEdge {
+  return {
+    adapterId: "dodo-v2-swap",
+    target: pool,
+    tokenIn: forward ? baseToken : quoteToken,
+    tokenOut: forward ? quoteToken : baseToken,
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+    poolToken0: baseToken,
+    poolToken1: quoteToken,
+  };
+}
+
+function dodoGraph(
+  generation: number,
+  edges: readonly TokenEdge[],
+) {
+  const sourceBlock = SOURCE_BLOCK + generation;
+  return createVerifiedGraphView({
+    id: `dodo-instance-graph-${generation}`,
+    generation,
+    sourceBlock,
+    sourceBlockHash: `0x${generation.toString(16).padStart(64, "0")}`,
+    completenessWatermark: sourceBlock,
+    perSourceCoverage: [{
+      familyId: "custom-swap:dodo-v2",
+      sourceId: "dodo-instance-fixture",
+      sourceFingerprint: "dodo-instance-fixture-v1",
+      completeThroughBlock: sourceBlock,
+      completeThroughHash: `0x${generation.toString(16).padStart(64, "0")}`,
+    }],
+    edges,
+  });
+}
+
+async function dodoInstanceParityWithFullCompile(): Promise<void> {
+  const sourceBlock = SOURCE_BLOCK + 1;
+  const sourceBlockHash = `0x${"1".padStart(64, "0")}`;
+  const edges = Object.freeze([
+    dodoEdge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    dodoEdge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+    dodoEdge(SWAP_POOL_B, TOKEN_A, TOKEN_C, true),
+    dodoEdge(SWAP_POOL_B, TOKEN_A, TOKEN_C, false),
+  ]);
+  const full = dodoV2BlockScanState.compileStaticSchema({
+    edges,
+    deadlineAtMs: Date.now() + 5_000,
+    signal: new AbortController().signal,
+  });
+  const staticReads = dodoV2BlockScanState.buildStaticSchemaReads!({
+    sourceBlock,
+    sourceBlockHash,
+    schema: full,
+    edges,
+  });
+  const staticResults = staticReads.map((read) =>
+    Object.freeze({
+      ...successfulRead(read, 1),
+      data: `0x${(18).toString(16).padStart(64, "0")}`,
+    })
+  );
+  const hydrated = dodoV2BlockScanState.hydrateStaticSchema!(
+    full,
+    staticResults,
+  );
+
+  const instances = new Map<string, unknown>();
+  const byPool = new Map<string, TokenEdge[]>();
+  for (const edgeValue of edges) {
+    const pool = dodoV2BlockScanState.stateKey(edgeValue);
+    const group = byPool.get(pool) ?? [];
+    group.push(edgeValue);
+    byPool.set(pool, group);
+  }
+  for (const [pool, group] of byPool) {
+    const spec = Object.freeze({
+      key: `custom-swap:dodo-v2\u001f${pool}`,
+      familyId: "custom-swap:dodo-v2",
+      stateKey: pool,
+      edges: Object.freeze(group),
+      staticBindingFingerprint: stateSchemaFingerprint(group),
+      snapshotCompatibilityFingerprint: stateSchemaFingerprint(group),
+    });
+    const compiled = await dodoV2BlockScanState.compileStateInstance({
+      spec,
+      control: {
+        deadlineAtMs: Date.now() + 5_000,
+        signal: new AbortController().signal,
+      },
+      sourceBlock,
+      sourceBlockHash,
+      readStatic: async (reads) =>
+        Object.freeze(reads.map((read) =>
+          Object.freeze({
+            ...successfulRead(read, 1),
+            data: `0x${(18).toString(16).padStart(64, "0")}`,
+          })
+        )),
+    });
+    instances.set(pool, compiled.opaque);
+  }
+  const assembled = dodoV2BlockScanState.assembleSchema(instances);
+  assert.deepEqual(
+    [...assembled.groups.keys()].sort(),
+    [...hydrated.groups.keys()].sort(),
+  );
+  for (const pool of assembled.groups.keys()) {
+    assert.deepEqual(assembled.groups.get(pool), hydrated.groups.get(pool));
+  }
+}
+
+async function dodoInstanceModeRecompilesOnlyNewPool(): Promise<void> {
+  const calls = { compiles: 0 };
+  const family = registerBlockScanStateFamily({
+    familyId: "custom-swap:dodo-v2",
+    lane: "swap",
+    capability: {
+      ...dodoV2BlockScanState,
+      compileStateInstance: async (input: CompileStateInstanceInput) => {
+        calls.compiles++;
+        return dodoV2BlockScanState.compileStateInstance!(input);
+      },
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "dodo-v2-swap",
+  });
+  class DodoBackend implements BlockScanStateReadBackend {
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      return reads.map((read) => {
+        const data = read.id.includes("dodo-static-decimals:")
+          ? `0x${(18).toString(16).padStart(64, "0")}`
+          : "0x";
+        return Object.freeze({
+          ...successfulRead(read, control.sourceGeneration),
+          data,
+        });
+      });
+    }
+
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const coordinator = new BlockScanStateCoordinator(new DodoBackend());
+  const graphA = dodoGraph(1, [
+    dodoEdge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    dodoEdge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ]);
+  await coordinator.prepare({
+    graph: graphA,
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(calls.compiles, 1, "first generation compiles the only pool");
+
+  const graphAB = dodoGraph(2, [
+    ...graphA.edges,
+    dodoEdge(SWAP_POOL_B, TOKEN_A, TOKEN_C, true),
+    dodoEdge(SWAP_POOL_B, TOKEN_A, TOKEN_C, false),
+  ]);
+  await coordinator.prepare({
+    graph: graphAB,
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(
+    calls.compiles,
+    2,
+    "adding a pool must recompile only the new instance",
+  );
+}
+
 await phasedProofsSettleBeforeSiblingReads();
 await activityRangeIsCappedToEightBlocks();
 await headPassDoesNotSupersedeActiveBootstrap();
@@ -4480,5 +4662,7 @@ await univ4InstanceParityWithFullCompile();
 await univ4InstanceModeRecompilesOnlyNewPool();
 await univ3InstanceParityWithFullCompile();
 await univ3InstanceModeRecompilesOnlyNewPool();
+await dodoInstanceParityWithFullCompile();
+await dodoInstanceModeRecompilesOnlyNewPool();
 purityHook();
 console.log("blockscan-state-coordinator PASS");
