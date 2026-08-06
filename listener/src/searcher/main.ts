@@ -2182,8 +2182,7 @@ async function main(): Promise<void> {
       initialProtocolDiscovery.scanner.eventSourceComplete === true;
     const observedAuthoritySeeded =
       initialProtocolObservedCoverageAuthoritative ||
-      (protocolDiscoveryStartup.mode === "positive-only" &&
-        observedScanClean);
+      observedScanClean;
     console.log(
       `[searcher/live] protocol observed seed: mode=${protocolDiscoveryStartup.mode} ` +
         `families=${observedFamilies.length} scanClean=${observedScanClean} ` +
@@ -2207,7 +2206,7 @@ async function main(): Promise<void> {
       });
       if (
         authority !== null &&
-        protocolDiscoveryStartup.mode === "positive-only"
+        !initialProtocolObservedCoverageAuthoritative
       ) {
         // Persist the seeded cursor so a restart resumes contiguous mode
         // instead of re-scanning the recent window as positive-only forever.
