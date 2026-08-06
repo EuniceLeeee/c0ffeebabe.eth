@@ -1385,11 +1385,13 @@ export class BlockScanStateCoordinator {
     }
     // Topology-scoped: rebuilds ownership + the pool-identity reverse index
     // only when the graph's edge topology/metadata/ownership actually change.
+    const topologyStartedAtMs = this.now();
     const ownership = this.topologyFor(
       graph,
       input.families,
       input.requiresPricing ?? (() => true),
     ).ownership;
+    const topologyForMs = Math.max(0, this.now() - topologyStartedAtMs);
     const earlierPublished = this.published?.generation ?? -1;
     if (graph.generation <= earlierPublished) {
       return incompleteResult({
@@ -1930,6 +1932,7 @@ export class BlockScanStateCoordinator {
           generation: graph.generation,
           status: degraded ? "degraded" : "complete",
           prepareMs: Math.max(0, assemblyFinishedAtMs - prepareStartedAtMs),
+          topologyForMs,
           preparedPhasesMs,
           activityPlanMs,
           lanesMs,
