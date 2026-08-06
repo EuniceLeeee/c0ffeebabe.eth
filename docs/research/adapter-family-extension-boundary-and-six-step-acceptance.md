@@ -12,6 +12,17 @@
 > adapter merge 判断。
 > 不在范围：某一笔 Ekubo 交易的 ABI、地址、路径或盈利结论；具体实现必须另立 feature branch。
 
+> **状态更新（2026-08-06）：blockscan coarse state adapter 新增 state-instance-v1 合同。**
+> 本文 §3.5（状态 Kernel）、§4（修改边界）与 §12（Hermes/systemic）在 blockscan `pricingState`
+> adapter 范围内，被
+> [`blockscan-incremental-schema-architecture.md`](design/blockscan-incremental-schema-architecture.md)
+> §5（目标契约）与 §9（Adapter 编写范围与边界）取代：
+> adapter 只实现 `compileStateInstance` / `assembleSchema` / read / decode / derive / dependencies；
+> diff、merge、指纹、缓存、CAS、失败隔离、legacy 回退全部在中央，中央零协议名分支。
+> 迁移按批次进行：达成 adapter 验收（full==instance parity、+1 pool 只重编新实例、方向/元数据变更
+> 语义测试）后继续；未达成且需改中央文件的批次先 park，不阻塞其他 adapter。
+> 未迁移 family 保持本文 legacy 全量路径不变。
+
 规范层级：[`CLAUDE.md`](../../CLAUDE.md) 和 [`gates.md`](gates.md) 仍是上位规则。本文件把本次架构裁决具体化，并诚实记录当前实现与上位规则之间尚未修复的缺口；不得用本文件的目标状态冒充当前代码已经具备的能力。
 
 ## 1. 目标
