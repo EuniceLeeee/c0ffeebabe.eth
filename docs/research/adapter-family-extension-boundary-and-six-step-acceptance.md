@@ -1552,19 +1552,23 @@ projectBackrunState?(...);
 
 ### 20.3 迁移批次与验收
 
-每个迁移批次必须达成 adapter 验收：
+**验收以“批”为单位（一个或多个 adapter family 一起迁移、一起验收），不逐个 adapter 单独验收。**
+批量验收 = 同时满足：
 
-1. `compileStaticSchema`（full）结果 == `compileStateInstance` + `assembleSchema`（instance）结果
-   （parity，同一 adapter core）；
-2. +1 pool 只重编新实例（compile 计数验证）；
-3. 方向新增/删除/元数据（fee/token/factory/PoolKey）变更语义测试；
-4. 线上稳态窗口（可选，最终以 KPI 为准）。
+1. 批内每个 family 的 `compileStaticSchema`（full）结果 == `compileStateInstance` +
+   `assembleSchema`（instance）结果（parity，同一 adapter core）；
+2. 批内每个 family 的 +1 pool 只重编新实例（compile 计数验证）；
+3. 批内每个 family 的方向新增/删除/元数据（fee/token/factory/PoolKey）变更语义测试；
+4. 批内全部 family 的 state-instance 路径本地 harness 全绿，且 legacy family 无回归；
+5. 该批整体在线上稳态窗口满足 KPI（strict N-1、enumeration ran、priced/expected>0.8、
+   edge>34.5K；新增 pool 触发单实例重编，producer 不再出现整族重编尖峰）；
+6. 按 `gates.md` systemic_live 口径记录 cohort + paired A/B。
 
-规则：
+决策：
 
-- 达成验收 → 继续下一批；
-- 未达成但属 adapter 内问题 → 修 adapter 继续，不阻塞其他批次；
-- 未达成原因是需要修改中央文件 → **先 park**，不阻塞其他 adapter 批次；
+- 批量达成 → 整批放行并部署，继续下一批；
+- 批内属 adapter 自身问题 → 修 adapter 后**整批重测**；
+- 批内因需修改中央文件而未达成 → **整批 park**（或拆出受影响 family 单独 park），不阻塞其他批；
 - 未迁移 family 保持 legacy 全量路径，禁止“伪迁移”（逐 group 调旧 full compiler 冒充增量）。
 
 ### 20.4 当前批次状态
