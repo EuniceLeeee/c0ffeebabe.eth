@@ -2216,6 +2216,15 @@ async function main(): Promise<void> {
           initialProtocolRangeHashAfter!,
         );
       }
+      console.log(
+        `[searcher/live] protocol observed seed done: ` +
+          `authority=${authority?.completeThroughBlock ?? null} ` +
+          `cursor=${protocolDiscoveryCache.runtime.observedCursor} ` +
+          `memAuthority=${
+            protocolDiscoveryCache.runtime.observedContiguousAuthority
+              ?.completeThroughBlock ?? null
+          }`,
+      );
     }
     protocolGraphCompleteThrough =
       protocolDiscoveryCoverage.graphCompleteThrough(advanced.watermarks);

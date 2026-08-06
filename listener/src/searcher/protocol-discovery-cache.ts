@@ -542,6 +542,12 @@ export function saveProtocolDiscoveryEvidenceCache(
   path: string,
   cache: ProtocolDiscoveryEvidenceCache,
 ): void {
+  console.log(
+    `[searcher/live] protocol cache save: ` +
+      `cursor=${cache.runtime.observedCursor} ` +
+      `authority=${cache.runtime.observedContiguousAuthority
+        ?.completeThroughBlock ?? null}`,
+  );
   const serialized = serializeProtocolDiscoveryEvidenceCache(cache);
   mkdirSync(dirname(path), { recursive: true });
   const temporary = `${path}.${process.pid}.tmp`;

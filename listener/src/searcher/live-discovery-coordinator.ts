@@ -1664,6 +1664,12 @@ export async function createLiveDiscoveryCoordinator(
       const cacheSnapshot = cloneProtocolDiscoveryEvidenceCache(
         protocolDiscoveryCache,
       );
+      console.log(
+        `[searcher/live] protocol cache async save: ` +
+          `cursor=${cacheSnapshot.runtime.observedCursor} ` +
+          `authority=${cacheSnapshot.runtime.observedContiguousAuthority
+            ?.completeThroughBlock ?? null}`,
+      );
       await Promise.all([
         graphChanged
           ? deps.persistRuntimeGraphs(views)
