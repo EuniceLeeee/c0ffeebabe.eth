@@ -188,6 +188,20 @@ export interface DiscoveryBackfillLaneOptions<State, Prepared> {
     plan: DiscoveryBackfillPlan<State>,
     error: unknown,
   ) => void;
+  /**
+   * Cooperative producer yield: before a historical preparation starts, wait
+   * while `active()` is true (the blockscan producer's critical state phase),
+   * up to `maxWaitMs` total, then proceed anyway to avoid starvation. The
+   * producer's canonical receipts read stalls 10-14s when a backfill scan
+   * saturates reth at the same time, which pushes N-1 publication past the
+   * head cadence; this gate gives the producer a clean transport window.
+   */
+  readonly producerYield?: DiscoveryBackfillProducerYield;
+}
+
+export interface DiscoveryBackfillProducerYield {
+  readonly active: () => boolean;
+  readonly maxWaitMs: number;
 }
 
 interface ActiveJob<State> {
@@ -237,6 +251,7 @@ export class DiscoveryBackfillLane<State, Prepared> {
   private failure: Failure | null = null;
   private nextJobId = 1;
   private peakReads = 0;
+  private producerYield: DiscoveryBackfillProducerYield | null = null;
   private counts = {
     scheduled: 0,
     prepared: 0,
@@ -264,6 +279,12 @@ export class DiscoveryBackfillLane<State, Prepared> {
       );
     }
     positiveSafeInteger(options.maxConcurrency, "maxConcurrency");
+    this.producerYield = options.producerYield ?? null;
+  }
+
+  /** Runtime-loop hook: set after construction so the producer can gate scans. */
+  setProducerYield(hook: DiscoveryBackfillProducerYield | null): void {
+    this.producerYield = hook;
   }
 
   schedule(
@@ -339,6 +360,7 @@ export class DiscoveryBackfillLane<State, Prepared> {
     this.failure = null;
     this.counts.scheduled++;
     void Promise.resolve()
+      .then(() => this.yieldForProducer(controller.signal))
       .then(() => this.options.prepare(plan, {
         signal: controller.signal,
         deadlineAtMs,
@@ -348,6 +370,19 @@ export class DiscoveryBackfillLane<State, Prepared> {
       .catch((error) => this.settleFailure(active, error))
       .finally(() => active.resolveSettlement());
     return { scheduled: true, jobId: id };
+  }
+
+  private async yieldForProducer(signal: AbortSignal): Promise<void> {
+    const hook = this.producerYield;
+    if (!hook) return;
+    const startedAtMs = Date.now();
+    while (hook.active()) {
+      if (signal.aborted) {
+        throw signal.reason ?? new Error("discovery backfill aborted");
+      }
+      if (Date.now() - startedAtMs >= Math.max(0, hook.maxWaitMs)) return;
+      await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    }
   }
 
   readyDescriptor(): {

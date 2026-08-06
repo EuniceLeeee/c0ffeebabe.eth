@@ -546,6 +546,11 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
    */
   readonly discoveryBackfillMinIntervalMs?: number;
   /**
+   * Max wall-clock a scheduled discovery backfill scan waits for the
+   * producer's critical state phase to finish before it starts anyway.
+   */
+  readonly discoveryProducerYieldMaxWaitMs?: number;
+  /**
    * When the background N-1 producer is behind the newest scheduled head,
    * exact probes yield the shared reth transport for up to this many
    * milliseconds per batch. Heavy candidate blocks (900+ probes) can occupy
@@ -663,6 +668,7 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
  */
 export class BlockScanRuntimeLoop<PreparedDiscovery> {
   private generation = 0;
+  private producerCriticalActive = false;
   private startupWarmPending: boolean;
   private lastDiscoveryBackfillScheduledAtMs = 0;
   private producerTopologyCache: ProducerTopologyCache | null = null;
@@ -737,6 +743,19 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         });
       },
     );
+    const discoveryLane = deps.discovery.lane as {
+      setProducerYield?: (hook: {
+        readonly active: () => boolean;
+        readonly maxWaitMs: number;
+      }) => void;
+    };
+    discoveryLane.setProducerYield?.({
+      active: () => this.producerCriticalActive,
+      maxWaitMs: Math.max(
+        0,
+        deps.discoveryProducerYieldMaxWaitMs ?? 10_000,
+      ),
+    });
   }
 
   schedule(
@@ -1193,7 +1212,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           sourceBlock: nextBlock,
           sourceBlockHash: header.hash,
         });
-        let prepared = await input.coordinator.prepareCoarsePricing({
+        let prepared: BlockScanStatePrepareResult;
+        let bootstrapEscalated = false;
+        this.producerCriticalActive = true;
+        try {
+        prepared = await input.coordinator.prepareCoarsePricing({
           graph: anchoredGraph,
           deadlineAtMs: generationDeadlineAtMs,
           /*
@@ -1204,7 +1227,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           laggingTopologyRefreshMode: "proof-scoped",
           signal: this.deps.runtimeAbort.signal,
         });
-        let bootstrapEscalated = false;
         if (prepared.status === "incomplete") {
           /*
            * A topology change (e.g. the overnight universe reindex) invalidates
@@ -1246,6 +1268,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           bootstrapEscalated = true;
         }
         result = prepared;
+        } finally {
+          this.producerCriticalActive = false;
+        }
         const recoveryPending = blockScanStateHasRecoveryBacklog(
           prepared,
         );

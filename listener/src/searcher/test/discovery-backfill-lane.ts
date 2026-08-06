@@ -42,8 +42,9 @@ await baseAndReadyMutationFailClosed();
 await laneAwareRebasePreservesIndependentState();
 await deadlineCancelsEveryBudgetedRead();
 await futureReadyWaitsForNewestHead();
+await producerYieldDelaysScanUntilProducerIdle();
 
-console.log("[discovery-backfill-lane] bounded background publication: PASS (8/8)");
+console.log("[discovery-backfill-lane] bounded background publication: PASS (9/9)");
 
 function chunkSizingSeparatesRetentionFromWorkUnits(): void {
   assert.equal(
@@ -398,6 +399,54 @@ async function laneAwareRebasePreservesIndependentState(): Promise<void> {
     })),
     "stale_base",
   );
+}
+
+async function producerYieldDelaysScanUntilProducerIdle(): Promise<void> {
+  const request = requestFor(101, 101, 101);
+  const base = stateAt(100, 4);
+  let started = false;
+  let producerActive = true;
+  const lane = new DiscoveryBackfillLane<LiveDiscoveryState, RawBackfill>({
+    maxBlocksPerJob: 25,
+    maxPreparationMs: 5_000,
+    maxConcurrency: 2,
+    describeState: describe,
+    prepare: async () => {
+      started = true;
+      return rawFor(request);
+    },
+    validateTransition,
+    producerYield: { active: () => producerActive, maxWaitMs: 2_000 },
+  });
+  lane.schedule(request, base);
+  await new Promise<void>((resolve) => setTimeout(resolve, 60));
+  assert.equal(
+    started,
+    false,
+    "a scheduled backfill scan must not start while the producer is critical",
+  );
+  producerActive = false;
+  await waitFor(() => started === true);
+  await waitFor(() => lane.readyDescriptor() !== null);
+  assert.equal(lane.telemetry().scheduled, 1);
+
+  // The runtime-loop setter can attach the hook after construction.
+  let startedSecond = false;
+  let producerActiveSecond = true;
+  const secondLane = createLane(async () => {
+    startedSecond = true;
+    return rawFor(request);
+  });
+  secondLane.setProducerYield({
+    active: () => producerActiveSecond,
+    maxWaitMs: 2_000,
+  });
+  secondLane.schedule(request, base);
+  await new Promise<void>((resolve) => setTimeout(resolve, 60));
+  assert.equal(startedSecond, false);
+  secondLane.setProducerYield(null);
+  producerActiveSecond = false;
+  await waitFor(() => secondLane.readyDescriptor() !== null);
 }
 
 async function deadlineCancelsEveryBudgetedRead(): Promise<void> {
