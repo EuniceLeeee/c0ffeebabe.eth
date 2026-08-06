@@ -11,6 +11,7 @@ import type { TokenEdge } from "../planner/token-graph.js";
 import {
   assertPureSynchronousDeriveMids,
   blockScanEdgeKey,
+  stateSchemaFingerprint,
   createMutationQueryDescriptor,
   createVerifiedGraphView,
   deterministicHash,
@@ -20,11 +21,13 @@ import {
   type BlockScanStateCapability,
   type CanonicalMutationRange,
   type ChainLog,
+  type CompileStateInstanceInput,
   type MutationQueryDescriptor,
   type RegisteredBlockScanStateFamily,
   type StateRead,
   type StateReadResult,
 } from "../venues/blockscan-state-capability.js";
+import { univ2BlockScanState } from "../venues/swaps/univ2-standard.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 
 const SOURCE_BLOCK = 25_585_380;
@@ -3873,6 +3876,168 @@ async function protocolActivityFailureFailsClosedToDirect(): Promise<void> {
   );
 }
 
+function univ2Edge(
+  pool: string,
+  poolToken0: string,
+  poolToken1: string,
+  forward: boolean,
+): TokenEdge {
+  return {
+    adapterId: "univ2-swap",
+    target: pool,
+    tokenIn: forward ? poolToken0 : poolToken1,
+    tokenOut: forward ? poolToken1 : poolToken0,
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+    poolToken0,
+    poolToken1,
+    v2FeeBps: 30n,
+  };
+}
+
+function univ2Graph(
+  generation: number,
+  edges: readonly TokenEdge[],
+) {
+  const sourceBlock = SOURCE_BLOCK + generation;
+  return createVerifiedGraphView({
+    id: `univ2-instance-graph-${generation}`,
+    generation,
+    sourceBlock,
+    sourceBlockHash: `0x${generation.toString(16).padStart(64, "0")}`,
+    completenessWatermark: sourceBlock,
+    perSourceCoverage: [{
+      familyId: "univ2-standard",
+      sourceId: "univ2-instance-fixture",
+      sourceFingerprint: "univ2-instance-fixture-v1",
+      completeThroughBlock: sourceBlock,
+      completeThroughHash: `0x${generation.toString(16).padStart(64, "0")}`,
+    }],
+    edges,
+  });
+}
+
+function reservesData(
+  reserve0: bigint,
+  reserve1: bigint,
+  blockTimestampLast: number,
+): string {
+  return `0x${reserve0.toString(16).padStart(64, "0")}` +
+    `${reserve1.toString(16).padStart(64, "0")}` +
+    `${blockTimestampLast.toString(16).padStart(64, "0")}`;
+}
+
+async function univ2InstanceParityWithFullCompile(): Promise<void> {
+  const edges = Object.freeze([
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+    univ2Edge(SWAP_POOL_B, TOKEN_A, TOKEN_C, true),
+    univ2Edge(SWAP_POOL_B, TOKEN_A, TOKEN_C, false),
+  ]);
+  const full = univ2BlockScanState.compileStaticSchema({
+    edges,
+    deadlineAtMs: Date.now() + 5_000,
+    signal: new AbortController().signal,
+  });
+  const instances = new Map<string, unknown>();
+  for (const pool of [SWAP_POOL, SWAP_POOL_B]) {
+    const group = Object.freeze(
+      edges.filter(
+        (edgeValue) => edgeValue.target.toLowerCase() === pool.toLowerCase(),
+      ),
+    );
+    const spec = Object.freeze({
+      key: `univ2-standard\u001f${pool.toLowerCase()}`,
+      familyId: "univ2-standard",
+      stateKey: pool.toLowerCase(),
+      edges: group,
+      staticBindingFingerprint: stateSchemaFingerprint(group),
+      snapshotCompatibilityFingerprint: stateSchemaFingerprint(group),
+    });
+    const compiled = univ2BlockScanState.compileStateInstance({
+      spec,
+      control: {
+        deadlineAtMs: Date.now() + 5_000,
+        signal: new AbortController().signal,
+      },
+    });
+    instances.set(pool.toLowerCase(), compiled.opaque);
+  }
+  const assembled = univ2BlockScanState.assembleSchema(instances);
+  assert.deepEqual(
+    [...assembled.pools.keys()].sort(),
+    [...full.pools.keys()].sort(),
+  );
+  for (const pool of assembled.pools.keys()) {
+    assert.deepEqual(assembled.pools.get(pool), full.pools.get(pool));
+  }
+}
+
+async function univ2InstanceModeRecompilesOnlyNewPool(): Promise<void> {
+  const calls = { compiles: 0 };
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: {
+      ...univ2BlockScanState,
+      compileStateInstance(input: CompileStateInstanceInput) {
+        calls.compiles++;
+        return univ2BlockScanState.compileStateInstance!(input);
+      },
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
+  });
+  class ReservesBackend implements BlockScanStateReadBackend {
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      const data = reservesData(1000n, 2000n, 0);
+      return reads.map((read) =>
+        Object.freeze({
+          ...successfulRead(read, control.sourceGeneration),
+          data,
+        })
+      );
+    }
+
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const coordinator = new BlockScanStateCoordinator(new ReservesBackend());
+  const graphA = univ2Graph(1, [
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ]);
+  const first = await coordinator.prepare({
+    graph: graphA,
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(first.status, "complete");
+  assert.equal(calls.compiles, 1, "first generation compiles the only pool");
+
+  const graphAB = univ2Graph(2, [
+    ...graphA.edges,
+    univ2Edge(SWAP_POOL_B, TOKEN_A, TOKEN_C, true),
+    univ2Edge(SWAP_POOL_B, TOKEN_A, TOKEN_C, false),
+  ]);
+  const second = await coordinator.prepare({
+    graph: graphAB,
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(second.status, "complete");
+  assert.equal(
+    calls.compiles,
+    2,
+    "adding a pool must recompile only the new instance",
+  );
+}
+
 await phasedProofsSettleBeforeSiblingReads();
 await activityRangeIsCappedToEightBlocks();
 await headPassDoesNotSupersedeActiveBootstrap();
@@ -3904,5 +4069,7 @@ await supersededGenerationCannotDonateStaticSchema();
 await immutableForkNeedsBackendAttestation();
 await protocolActivityPlanDrivesDirtyDirectCarry();
 await protocolActivityFailureFailsClosedToDirect();
+await univ2InstanceParityWithFullCompile();
+await univ2InstanceModeRecompilesOnlyNewPool();
 purityHook();
 console.log("blockscan-state-coordinator PASS");

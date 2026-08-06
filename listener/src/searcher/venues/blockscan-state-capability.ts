@@ -332,6 +332,27 @@ export interface BlockScanStateCapability<Schema = unknown, Snapshot = unknown> 
    */
   readonly schemaMode?: SchemaMode;
   /**
+   * Adapter schema/decoder revision for instance fingerprints. Defaults to the
+   * familyId when absent; bump it whenever compile/hydrate/decode/read-plan
+   * semantics change so cached instance descriptors cannot be reused.
+   */
+  readonly adapterSchemaRevision?: string;
+  /**
+   * Instance-mode compile hook. Required together with assembleSchema when
+   * schemaMode is "state-instance-v1".
+   */
+  compileStateInstance?(
+    input: CompileStateInstanceInput,
+  ): CompiledStateInstance | Promise<CompiledStateInstance>;
+  /**
+   * Build the runtime Schema container from instance opaque entries
+   * (rawStateKey -> descriptor). Required together with compileStateInstance
+   * when schemaMode is "state-instance-v1".
+   */
+  assembleSchema?(
+    entries: ReadonlyMap<string, unknown>,
+  ): Schema | Promise<Schema>;
+  /**
    * Opt-in only when every value used by deriveMids is invariant across block
    * source changes unless this family-owned dependency set appears either as
    * a direct transaction destination or as a canonical receipt-log emitter.
@@ -484,6 +505,22 @@ export interface RegisteredBlockScanStateFamily {
   stateKey(edge: TokenEdge): string;
   ownsEdge(edge: TokenEdge): boolean;
   dependencies(edges: readonly TokenEdge[]): readonly string[];
+  /** Adapter schema/decoder revision; bump on any semantic code change. */
+  readonly schemaRevision: string;
+  /**
+   * Instance-mode compiler. Only present when schemaMode is
+   * "state-instance-v1"; legacy families never expose it.
+   */
+  compileStateInstance(
+    input: CompileStateInstanceInput,
+  ): Promise<CompiledStateInstance>;
+  /**
+   * Build a runtime CompiledBlockScanStateFamily facade from a set of
+   * compiled instances (schema assembled centrally from opaque entries).
+   */
+  assembleCompiledFamily(
+    input: AssembleCompiledFamilyInput,
+  ): Promise<CompiledBlockScanStateFamily>;
   compile(
     input: RegisteredBlockScanStateFamilyCompileInput,
   ): Promise<CompiledBlockScanStateFamily>;
@@ -553,8 +590,13 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
         throw new Error("hydrateStaticSchema must return synchronously");
       }
     }
-    const edgeFingerprint = stateSchemaFingerprint(compileInput.edges);
-    const compiled: CompiledBlockScanStateFamily = {
+    return makeCompiled(schema, stateSchemaFingerprint(compileInput.edges));
+  };
+  const makeCompiled = (
+    schema: Schema,
+    edgeFingerprint: string,
+  ): CompiledBlockScanStateFamily => {
+    return {
       familyId,
       lane,
       edgeFingerprint,
@@ -662,12 +704,70 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
           }
         : {}),
     };
-    return Object.freeze(compiled);
+  };
+  const schemaRevision = capability.adapterSchemaRevision ?? familyId;
+  const compileStateInstance = async (
+    input: CompileStateInstanceInput,
+  ): Promise<CompiledStateInstance> => {
+    if (
+      capability.schemaMode !== "state-instance-v1" ||
+      !capability.compileStateInstance
+    ) {
+      throw new Error(`family ${familyId} is not in state-instance-v1 mode`);
+    }
+    if (Date.now() >= input.control.deadlineAtMs) {
+      throw new Error(`family ${familyId} instance schema deadline expired`);
+    }
+    if (input.control.signal.aborted) {
+      throw input.control.signal.reason;
+    }
+    const instance = await resolveCapabilityValue(
+      capability.compileStateInstance(input),
+    );
+    if (
+      instance.familyId !== familyId ||
+      instance.stateKey !== input.spec.stateKey
+    ) {
+      throw new Error(
+        `family ${familyId} instance compiler returned a mismatched instance`,
+      );
+    }
+    return Object.freeze(instance);
+  };
+  const assembleCompiledFamily = async (
+    input: AssembleCompiledFamilyInput,
+  ): Promise<CompiledBlockScanStateFamily> => {
+    if (
+      capability.schemaMode !== "state-instance-v1" ||
+      !capability.assembleSchema
+    ) {
+      throw new Error(`family ${familyId} is not in state-instance-v1 mode`);
+    }
+    if (Date.now() >= input.control.deadlineAtMs) {
+      throw new Error(`family ${familyId} instance schema deadline expired`);
+    }
+    if (input.control.signal.aborted) {
+      throw input.control.signal.reason;
+    }
+    const entries = new Map<string, unknown>();
+    for (const [key, instance] of input.instances) {
+      if (instance.familyId !== input.familyId) {
+        throw new Error(
+          `family ${input.familyId} instance map contains foreign instance ${key}`,
+        );
+      }
+      entries.set(instance.stateKey, instance.opaque);
+    }
+    const schema = await resolveCapabilityValue(
+      capability.assembleSchema(entries),
+    );
+    return makeCompiled(schema, input.edgeFingerprint);
   };
   return Object.freeze({
     familyId,
     lane,
     schemaMode: capability.schemaMode ?? "legacy-family",
+    schemaRevision,
     addressTouchCarryPolicy:
       capability.addressTouchCarryPolicy ?? "always-current",
     mutationEvents,
@@ -675,6 +775,8 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     ownsEdge: (edge: TokenEdge) => input.ownsEdge(edge),
     dependencies: (edges: readonly TokenEdge[]) =>
       capability.dependencies(edges),
+    compileStateInstance,
+    assembleCompiledFamily,
     compile,
   });
 }
@@ -974,9 +1076,29 @@ export interface CompiledStateInstance {
   readonly familyId: string;
   readonly stateKey: string;
   readonly instanceFingerprint: string;
+  /**
+   * schemaInputFingerprint (adapter revision + static binding + shared
+   * binding). The coordinator compares this to the spec-derived value to
+   * decide whether the instance can be reused without recompilation.
+   */
+  readonly specFingerprint: string;
   readonly carryPolicy: StateInstanceCarryPolicy;
   /** Adapter-private; the coordinator never serializes or hashes this. */
   readonly opaque: unknown;
+}
+
+export interface CompileStateInstanceInput {
+  readonly spec: StateInstanceSpec;
+  readonly previous?: CompiledStateInstance;
+  readonly control: StateOperationControl;
+}
+
+export interface AssembleCompiledFamilyInput {
+  readonly familyId: string;
+  readonly lane: BlockScanPricingLane;
+  readonly instances: ReadonlyMap<StateInstanceKey, CompiledStateInstance>;
+  readonly edgeFingerprint: string;
+  readonly control: StateOperationControl;
 }
 
 /** Optional versioned family-level shared static binding (e.g. token decimals). */

@@ -17,6 +17,12 @@ import {
   blockScanEdgeKey,
   createMutationQueryDescriptor,
   deterministicHash,
+  instanceFingerprint,
+  schemaInputFingerprint,
+  stateSchemaFingerprint,
+  type CompiledStateInstance,
+  type CompileStateInstanceInput,
+  type StateInstanceSpec,
 } from "../blockscan-state-capability.js";
 import type {
   ExactQuoteContext,
@@ -58,6 +64,48 @@ const pairIface = new ethers.Interface([
   "function token1() view returns (address)",
 ]);
 const feeBpsCache = new Map<string, bigint>();
+
+interface UniV2PoolSchemaEntry {
+  readonly token0: string;
+  readonly token1: string;
+  readonly feeBps: bigint;
+}
+
+/**
+ * Shared per-pool compiler core: both the legacy full compile path and the
+ * state-instance path call this, so full-vs-instance parity is structural.
+ * All edges of one stateKey must agree on token order and fee.
+ */
+function compileUniV2PoolEntry(
+  edges: readonly TokenEdge[],
+): UniV2PoolSchemaEntry {
+  const pool = canonicalPoolStateKey(edges[0]);
+  const first = edges[0];
+  if (!first.poolToken0 || !first.poolToken1) {
+    throw new Error(`univ2 block-scan edge ${pool} is missing token order`);
+  }
+  const token0 = ethers.getAddress(first.poolToken0);
+  const token1 = ethers.getAddress(first.poolToken1);
+  if (first.v2FeeBps === undefined || first.v2FeeBps < 0n) {
+    throw new Error(`univ2 block-scan edge ${pool} is missing quote fee`);
+  }
+  const feeBps = first.v2FeeBps;
+  for (const edge of edges.slice(1)) {
+    if (canonicalPoolStateKey(edge) !== pool) {
+      throw new Error(`univ2 state group mixes pools for ${pool}`);
+    }
+    if (
+      !edge.poolToken0 ||
+      !edge.poolToken1 ||
+      ethers.getAddress(edge.poolToken0) !== token0 ||
+      ethers.getAddress(edge.poolToken1) !== token1 ||
+      edge.v2FeeBps !== feeBps
+    ) {
+      throw new Error(`univ2 block-scan pool ${pool} has inconsistent metadata`);
+    }
+  }
+  return Object.freeze({ token0, token1, feeBps });
+}
 const UNIV2_ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 const univ2RouterIface = new ethers.Interface([
   "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) returns (uint[] amounts)",
@@ -112,37 +160,56 @@ const univ2LandedEvents = defineSwapLandedEvents({
 });
 
 export const univ2BlockScanState = Object.freeze({
+  schemaMode: "state-instance-v1",
+  adapterSchemaRevision: "univ2-v1",
   stateKey: canonicalPoolStateKey,
 
   compileStaticSchema({ edges }) {
-    const pools = new Map<string, {
-      token0: string;
-      token1: string;
-      feeBps: bigint;
-    }>();
+    const pools = new Map<string, UniV2PoolSchemaEntry>();
+    const byPool = new Map<string, TokenEdge[]>();
     for (const edge of edges) {
       const pool = canonicalPoolStateKey(edge);
-      if (!edge.poolToken0 || !edge.poolToken1) {
-        throw new Error(`univ2 block-scan edge ${pool} is missing token order`);
-      }
-      const token0 = ethers.getAddress(edge.poolToken0);
-      const token1 = ethers.getAddress(edge.poolToken1);
-      if (edge.v2FeeBps === undefined || edge.v2FeeBps < 0n) {
-        throw new Error(`univ2 block-scan edge ${pool} is missing quote fee`);
-      }
-      const feeBps = edge.v2FeeBps;
-      const existing = pools.get(pool);
-      if (
-        existing &&
-        (
-          existing.token0 !== token0 ||
-          existing.token1 !== token1 ||
-          existing.feeBps !== feeBps
-        )
-      ) {
-        throw new Error(`univ2 block-scan pool ${pool} has inconsistent metadata`);
-      }
-      pools.set(pool, Object.freeze({ token0, token1, feeBps }));
+      const group = byPool.get(pool) ?? [];
+      group.push(edge);
+      byPool.set(pool, group);
+    }
+    for (const [pool, groupEdges] of byPool) {
+      pools.set(pool, compileUniV2PoolEntry(groupEdges));
+    }
+    return Object.freeze({ pools });
+  },
+
+  compileStateInstance(input: CompileStateInstanceInput): CompiledStateInstance {
+    const spec = input.spec as StateInstanceSpec;
+    if (spec.edges.length === 0) {
+      throw new Error(`univ2 instance ${spec.key} has no edges`);
+    }
+    const staticBindingFingerprint = stateSchemaFingerprint(spec.edges);
+    const sharedFingerprint = "";
+    const schemaInput = schemaInputFingerprint({
+      key: spec.key,
+      adapterSchemaRevision: "univ2-v1",
+      staticBindingFingerprint,
+      sharedFingerprint,
+    });
+    return Object.freeze({
+      familyId: "univ2-standard",
+      stateKey: spec.stateKey,
+      specFingerprint: schemaInput,
+      instanceFingerprint: instanceFingerprint({
+        key: spec.key,
+        schemaInput,
+        staticEvidence: "",
+      }),
+      carryPolicy: "activity-proof",
+      opaque: compileUniV2PoolEntry(spec.edges),
+    });
+  },
+
+  assembleSchema(entries: ReadonlyMap<string, unknown>) {
+    const pools = new Map<string, UniV2PoolSchemaEntry>();
+    for (const [stateKey, opaque] of entries) {
+      pools.set(stateKey, opaque as UniV2PoolSchemaEntry);
     }
     return Object.freeze({ pools });
   },

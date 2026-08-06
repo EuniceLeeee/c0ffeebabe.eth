@@ -4,13 +4,17 @@ import {
   createMutationQueryDescriptor,
   deterministicHash,
   exactSetHash,
+  familyAggregateFingerprint,
+  instanceFingerprint,
   mutationQueryDescriptorFingerprint,
+  schemaInputFingerprint,
   stateSchemaFingerprint,
   verifiedGraphCompletenessIssueDetails,
   type BlockSource,
   type BlockScanPricingLane,
   type CanonicalMutationRange,
   type ChainLog,
+  type CompiledStateInstance,
   type CompiledBlockScanStateFamily,
   type CompiledIncrementalStateFamily,
   type FamilyMutationClassification,
@@ -23,6 +27,8 @@ import {
   type StateReadFailureKind,
   type StateReadProvenance,
   type StateReadResult,
+  type StateInstanceKey,
+  type StateInstanceSpec,
   type VerifiedGraphView,
 } from "./venues/blockscan-state-capability.js";
 import type { CanonicalBlockActivity } from "./blockscan-state-read-backend.js";
@@ -480,6 +486,10 @@ interface LaneResult {
     string,
     CompiledBlockScanStateFamily,
   ])[];
+  readonly stagedInstanceSchemas: readonly (readonly [
+    string,
+    Map<StateInstanceKey, CompiledStateInstance>,
+  ])[];
   readonly resolvedStateKeys: readonly string[];
   readonly expectedReadKeys: readonly string[];
   readonly resolvedReadKeys: readonly string[];
@@ -529,6 +539,7 @@ interface ProtocolAddressTouchShadowAttempt {
 
 interface FamilyLaneStaging {
   readonly staticSchemas: Map<string, CompiledBlockScanStateFamily>;
+  instanceSchemas?: Map<StateInstanceKey, CompiledStateInstance>;
   readonly expectedReadKeys: Set<string>;
   reads: number;
   batches: number;
@@ -700,6 +711,15 @@ export class BlockScanStateCoordinator {
   private readonly staticSchemas = new Map<
     string,
     CompiledBlockScanStateFamily
+  >();
+  /**
+   * Published per-instance compiled descriptors for state-instance-v1
+   * families. Only committed together with the canonical CAS (same fence as
+   * staticSchemas).
+   */
+  private readonly instanceSchemas = new Map<
+    string,
+    Map<StateInstanceKey, CompiledStateInstance>
   >();
   private bootstrapModeActive = false;
   /**
@@ -1875,6 +1895,11 @@ export class BlockScanStateCoordinator {
       )) {
         this.staticSchemas.set(familyId, schema);
       }
+      for (const [familyId, instances] of lanes.flatMap(
+        (lane) => lane.stagedInstanceSchemas,
+      )) {
+        this.instanceSchemas.set(familyId, instances);
+      }
       this.previousCanonicalGraphStateKeys = new Set(
         ownership.groups.map((group) => group.stateKey),
       );
@@ -2255,6 +2280,108 @@ export class BlockScanStateCoordinator {
     throw new Error("unified activity plan replaced per-family planning");
   }
 
+  /**
+   * State-instance-v1 family preparation: compile only the instances whose
+   * schema input fingerprint changed, reuse published instances otherwise,
+   * then assemble a runtime family facade. A single instance failure drops
+   * only that instance (the stateKey is left unresolved) and never falls back
+   * to the full family compile path.
+   */
+  private async prepareInstanceFamily(input: {
+    readonly family: RegisteredBlockScanStateFamily;
+    readonly groups: readonly StateGroup[];
+    readonly graph: VerifiedGraphView;
+    readonly deadlineAtMs: number;
+    readonly signal: AbortSignal;
+    readonly staging: FamilyLaneStaging;
+  }): Promise<{
+    readonly compiled: CompiledBlockScanStateFamily | null;
+    readonly issues: readonly BlockScanStateIssue[];
+  }> {
+    const { family, groups, graph, deadlineAtMs, signal, staging } = input;
+    const familyGroups = groups.filter(
+      (group) => group.familyId === family.familyId,
+    );
+    const previous = this.instanceSchemas.get(family.familyId) ?? new Map();
+    const staged = new Map<StateInstanceKey, CompiledStateInstance>();
+    const issues: BlockScanStateIssue[] = [];
+    for (const group of familyGroups) {
+      const staticBindingFingerprint = stateSchemaFingerprint(group.edges);
+      const spec: StateInstanceSpec = Object.freeze({
+        key: group.stateKey,
+        familyId: family.familyId,
+        stateKey: group.rawStateKey,
+        edges: group.edges,
+        staticBindingFingerprint,
+        snapshotCompatibilityFingerprint: staticBindingFingerprint,
+      });
+      const expectedSpecFingerprint = schemaInputFingerprint({
+        key: spec.key,
+        adapterSchemaRevision: family.schemaRevision,
+        staticBindingFingerprint,
+        sharedFingerprint: "",
+      });
+      const prev = previous.get(spec.key);
+      if (
+        prev !== undefined &&
+        prev.specFingerprint === expectedSpecFingerprint
+      ) {
+        staged.set(spec.key, prev);
+        continue;
+      }
+      try {
+        const compiled = await awaitWithAbort(
+          family.compileStateInstance({
+            spec,
+            previous: prev,
+            control: { deadlineAtMs, signal },
+          }),
+          signal,
+        );
+        staged.set(spec.key, compiled);
+      } catch (error) {
+        staged.delete(spec.key);
+        issues.push({
+          kind: issueKindFromError(error),
+          lane: family.lane,
+          familyId: family.familyId,
+          stateKey: spec.key,
+          message: formatError(error),
+        });
+      }
+    }
+    if (familyGroups.length === 0) {
+      return { compiled: null, issues: Object.freeze(issues) };
+    }
+    const edgeFingerprint = familyAggregateFingerprint({
+      familyId: family.familyId,
+      sharedFingerprint: "",
+      instances: staged,
+    });
+    try {
+      const compiled = await awaitWithAbort(
+        family.assembleCompiledFamily({
+          familyId: family.familyId,
+          lane: family.lane,
+          instances: staged,
+          edgeFingerprint,
+          control: { deadlineAtMs, signal },
+        }),
+        signal,
+      );
+      staging.instanceSchemas = staged;
+      return { compiled, issues: Object.freeze(issues) };
+    } catch (error) {
+      issues.push({
+        kind: issueKindFromError(error),
+        lane: family.lane,
+        familyId: family.familyId,
+        message: formatError(error),
+      });
+      return { compiled: null, issues: Object.freeze(issues) };
+    }
+  }
+
   private async prepareFamilyPhase(input: {
     readonly lane: BlockScanPricingLane;
     readonly groups: readonly StateGroup[];
@@ -2314,6 +2441,22 @@ export class BlockScanStateCoordinator {
       const families = uniqueFamilies(groups);
       try {
         await Promise.all(families.map(async (family) => {
+          if (family.schemaMode === "state-instance-v1") {
+            const prepared = await this.prepareInstanceFamily({
+              family,
+              groups,
+              graph,
+              deadlineAtMs: familyDeadlineAtMs,
+              signal: familyController.signal,
+              staging,
+            });
+            issues.push(...prepared.issues);
+            if (prepared.compiled !== null) {
+              compiledFamilies.set(family.familyId, prepared.compiled);
+              staging.staticSchemas.set(family.familyId, prepared.compiled);
+            }
+            return;
+          }
           const familyEdges = groups
             .filter((group) => group.familyId === family.familyId)
             .flatMap((group) => group.edges);
@@ -3324,6 +3467,11 @@ export class BlockScanStateCoordinator {
             Object.freeze([familyId, schema] as const)
           ),
       ),
+      stagedInstanceSchemas: Object.freeze(
+        staging.instanceSchemas === undefined
+          ? []
+          : [[familyId, staging.instanceSchemas] as const],
+      ),
       resolvedStateKeys: Object.freeze(resolvedStateKeys.sort()),
       expectedReadKeys: Object.freeze([...staging.expectedReadKeys].sort()),
       resolvedReadKeys: Object.freeze(resolvedReadKeys.sort()),
@@ -3970,6 +4118,7 @@ function emptyLane(
   return Object.freeze({
     lane,
     stagedStaticSchemas: Object.freeze([]),
+    stagedInstanceSchemas: Object.freeze([]),
     resolvedStateKeys: Object.freeze([]),
     expectedReadKeys: Object.freeze([]),
     resolvedReadKeys: Object.freeze([]),
@@ -4004,6 +4153,7 @@ function failedFamilyLane(
   return Object.freeze({
     lane,
     stagedStaticSchemas: Object.freeze([]),
+    stagedInstanceSchemas: Object.freeze([]),
     resolvedStateKeys: Object.freeze([]),
     expectedReadKeys: uniqueSorted([...staging.expectedReadKeys]),
     resolvedReadKeys: Object.freeze([]),
@@ -4084,6 +4234,11 @@ function mergeFamilyLaneResults(
         .map(([familyId, schema]) =>
           Object.freeze([familyId, schema] as const)
         ),
+    ),
+    stagedInstanceSchemas: Object.freeze(
+      results
+        .flatMap((result) => result.stagedInstanceSchemas)
+        .sort(([a], [b]) => a.localeCompare(b)),
     ),
     resolvedStateKeys: uniqueSorted(
       results.flatMap((result) => result.resolvedStateKeys),
