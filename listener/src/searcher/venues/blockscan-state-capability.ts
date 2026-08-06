@@ -324,6 +324,14 @@ export interface BuildDependentBlockReadsInput<Schema>
  */
 export interface BlockScanStateCapability<Schema = unknown, Snapshot = unknown> {
   /**
+   * Production schema mode. Defaults to "legacy-family" (the existing full
+   * family compile path). Migrated families opt into "state-instance-v1":
+   * production only calls the instance compiler; the full compile path is kept
+   * as oracle/rollback. A single production generation never mixes modes and
+   * never falls back from instance to legacy on a per-instance failure.
+   */
+  readonly schemaMode?: SchemaMode;
+  /**
    * Opt-in only when every value used by deriveMids is invariant across block
    * source changes unless this family-owned dependency set appears either as
    * a direct transaction destination or as a canonical receipt-log emitter.
@@ -457,6 +465,7 @@ export interface RegisteredBlockScanStateFamilyCompileInput
 export interface RegisteredBlockScanStateFamily {
   readonly familyId: string;
   readonly lane: BlockScanPricingLane;
+  readonly schemaMode: SchemaMode;
   readonly addressTouchCarryPolicy: "always-current" | "dependency-touch";
   /**
    * Mutation events scanned from the adapter family's landed-event
@@ -658,6 +667,7 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
   return Object.freeze({
     familyId,
     lane,
+    schemaMode: capability.schemaMode ?? "legacy-family",
     addressTouchCarryPolicy:
       capability.addressTouchCarryPolicy ?? "always-current",
     mutationEvents,
@@ -918,6 +928,176 @@ export function stateSchemaFingerprint(edges: readonly TokenEdge[]): string {
 /** Exact immutable graph-edge identity, ownership and execution metadata. */
 export function blockScanEdgeMetadataFingerprint(edge: TokenEdge): string {
   return deterministicHash(canonicalEdgeRecord(edge));
+}
+
+/**
+ * State-instance contract (dual-mode incremental schema). Type-level scaffold:
+ * production still runs the legacy family path until a family opts in with
+ * schemaMode "state-instance-v1".
+ */
+export type SchemaMode = "legacy-family" | "state-instance-v1";
+
+/** Composite identity: blockScanStateKey(familyId, rawStateKey). */
+export type StateInstanceKey = string;
+
+/**
+ * One compile/update unit. Derived from the existing ownership group
+ * (familyId + rawStateKey + all edges that share that key), never from a
+ * single edge: a pool's reverse edges must be compiled together so
+ * cross-direction metadata consistency keeps its fail-closed semantics.
+ */
+export interface StateInstanceSpec {
+  readonly key: StateInstanceKey;
+  readonly familyId: string;
+  /** Family-local raw state key (pool address, poolId, or direction-level key). */
+  readonly stateKey: string;
+  readonly edges: readonly TokenEdge[];
+  /**
+   * Adapter-owned static binding fingerprint (token/fee/tickSpacing/poolKey/
+   * routeBinding/FamilySharedBinding reference). Central code never interprets
+   * protocol fields; the adapter computes it.
+   */
+  readonly staticBindingFingerprint: string;
+  /**
+   * Whether an old snapshot/read-key/mid coverage can still derive mids for
+   * this edge group. Default is stateSchemaFingerprint(group.edges); a family
+   * may narrow it (e.g. UniV2 ignores direction set, UniV3/UniV4 keep it
+   * direction-sensitive because precision witnesses are direction-level).
+   */
+  readonly snapshotCompatibilityFingerprint: string;
+}
+
+export type StateInstanceCarryPolicy = "activity-proof" | "always-direct";
+
+/** Compiled result of one state instance; opaque body stays adapter-owned. */
+export interface CompiledStateInstance {
+  readonly familyId: string;
+  readonly stateKey: string;
+  readonly instanceFingerprint: string;
+  readonly carryPolicy: StateInstanceCarryPolicy;
+  /** Adapter-private; the coordinator never serializes or hashes this. */
+  readonly opaque: unknown;
+}
+
+/** Optional versioned family-level shared static binding (e.g. token decimals). */
+export interface FamilySharedBinding<T = unknown> {
+  readonly familyId: string;
+  readonly revision: string;
+  readonly fingerprint: string;
+  readonly value: T;
+}
+
+/** Edge/topology-level changes: never alone triggers schema recompilation. */
+export interface TopologyDiff {
+  readonly addedEdges: readonly TokenEdge[];
+  readonly removedEdgeKeys: readonly string[];
+  readonly metadataChangedEdges: readonly {
+    readonly edgeKey: string;
+    readonly before: TokenEdge;
+    readonly after: TokenEdge;
+  }[];
+  readonly scoreChangedEdges: readonly {
+    readonly edgeKey: string;
+    readonly before: number | undefined;
+    readonly after: number | undefined;
+  }[];
+  readonly membershipChangedInstances: readonly StateInstanceKey[];
+  readonly snapshotCompatibilityChangedInstances: readonly StateInstanceKey[];
+}
+
+/** State-instance-level changes: the only trigger for recompilation. */
+export interface SchemaInstanceDiff {
+  readonly added: readonly StateInstanceSpec[];
+  readonly removed: readonly StateInstanceKey[];
+  readonly changed: readonly {
+    readonly before: StateInstanceSpec;
+    readonly after: StateInstanceSpec;
+    readonly reason:
+      | "static-binding"
+      | "family-shared-binding"
+      | "schema-revision";
+  }[];
+  readonly unchanged: readonly StateInstanceSpec[];
+}
+
+/**
+ * One canonical change set derived from a single before/after diff. The
+ * coordinator never accepts a second publisher-declared schema diff.
+ */
+export interface GraphChangeSet {
+  readonly topology: TopologyDiff;
+  readonly schema: SchemaInstanceDiff;
+  readonly nextByInstance: ReadonlyMap<StateInstanceKey, StateInstanceSpec>;
+}
+
+/**
+ * Deterministic fingerprint of the *known* inputs that decide whether a
+ * descriptor must be recompiled. Never includes the opaque descriptor body.
+ */
+export function schemaInputFingerprint(input: {
+  readonly key: StateInstanceKey;
+  readonly adapterSchemaRevision: string;
+  readonly staticBindingFingerprint: string;
+  readonly sharedFingerprint: string;
+}): string {
+  return deterministicHash({
+    key: input.key,
+    adapterSchemaRevision: input.adapterSchemaRevision,
+    staticBindingFingerprint: input.staticBindingFingerprint,
+    sharedFingerprint: input.sharedFingerprint,
+  });
+}
+
+/**
+ * Fingerprint of source-pinned *successful* static evidence. Failed reads are
+ * not negative binding proof and are deliberately excluded.
+ */
+export function staticEvidenceFingerprint(
+  results: readonly StateReadResult[],
+): string {
+  return deterministicHash(
+    results
+      .filter((result): result is StateReadSuccess => result.ok)
+      .map((result) => ({
+        id: result.id,
+        sourceBlock: result.sourceBlock,
+        sourceBlockHash: result.sourceBlockHash.toLowerCase(),
+        provenance: result.provenance,
+        data: result.data.toLowerCase(),
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  );
+}
+
+/** Instance-level fingerprint used for integrity, caching and CAS. */
+export function instanceFingerprint(input: {
+  readonly key: StateInstanceKey;
+  readonly schemaInput: string;
+  readonly staticEvidence: string;
+}): string {
+  return deterministicHash(input);
+}
+
+/**
+ * Family aggregate for integrity/CAS/diagnostics. Hashes sorted
+ * [StateInstanceKey, instanceFingerprint] pairs (not a bare fingerprint set:
+ * exactSetHash dedupes, so deleting an instance could leave the aggregate
+ * unchanged) plus the family shared binding fingerprint.
+ */
+export function familyAggregateFingerprint(input: {
+  readonly familyId: string;
+  readonly sharedFingerprint: string;
+  readonly instances: ReadonlyMap<StateInstanceKey, CompiledStateInstance>;
+}): string {
+  const entries = [...input.instances]
+    .filter(([, value]) => value.familyId === input.familyId)
+    .map(([key, value]) => [key, value.instanceFingerprint] as const)
+    .sort(([a], [b]) => a.localeCompare(b));
+  return deterministicHash({
+    familyId: input.familyId,
+    sharedFingerprint: input.sharedFingerprint,
+    entries,
+  });
 }
 
 export function canonicalEdgeId(

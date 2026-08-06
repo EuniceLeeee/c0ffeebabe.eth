@@ -22,7 +22,7 @@ import {
   type RuntimeStrategyViewBuilder,
 } from "./runtime-pool-refresh.js";
 import {
-  blockScanEdgeKey,
+  blockScanEdgeMetadataFingerprint,
   deterministicHash,
 } from "./venues/blockscan-state-capability.js";
 import type { StrategyViews } from "./strategy-views.js";
@@ -190,8 +190,16 @@ export function describeLiveDiscoveryPublicationState(
 export function computeDiscoveryGraphTopologyKey(
   state: LiveDiscoveryPublicationState,
 ): string {
+  /*
+   * Content-key the full executable edge metadata, not just the identity key:
+   * a same-identity fee/factory/token change would otherwise hit the cached
+   * GraphView (and later the topology index) with stale schema inputs. Score
+   * stays out on purpose (score-only updates must not rebuild topology).
+   */
   return deterministicHash(
-    (state.blockscanGraph ?? []).map((edge) => blockScanEdgeKey(edge)),
+    (state.blockscanGraph ?? []).map((edge) =>
+      blockScanEdgeMetadataFingerprint(edge)
+    ),
   );
 }
 

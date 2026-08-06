@@ -904,8 +904,15 @@ export class BlockScanStateCoordinator {
       graph.orderedEdgeHash,
       graph.metadataHash,
       graph.ownershipHash,
-      families.map((family) => family.familyId).sort().join(","),
-      typeof requiresPricing === "function" ? "custom" : "default",
+      families
+        .map((family) => `${family.familyId}:${family.schemaMode}`)
+        .sort()
+        .join(","),
+      // A predicate/ownership-rule or family-definition change must not reuse
+      // a topology index built for a different rule set.
+      typeof requiresPricing === "function"
+        ? requiresPricing.toString()
+        : "default",
     ].join("\u001f");
     if (this.topologyIndex?.key === key) {
       return this.topologyIndex;
