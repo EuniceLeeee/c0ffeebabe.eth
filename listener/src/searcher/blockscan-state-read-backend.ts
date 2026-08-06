@@ -511,6 +511,7 @@ export class JsonRpcBlockScanStateReadBackend
       readonly maxRangeBlocks?: number;
     },
   ): Promise<CanonicalBlockActivity> {
+    const startedAtMs = Date.now();
     const distance = through.number - fromExclusive.number;
     const maxRangeBlocks = Math.max(1, control.maxRangeBlocks ?? 8);
     if (
@@ -533,6 +534,7 @@ export class JsonRpcBlockScanStateReadBackend
       if (remainingMs <= 0) {
         controller.abort(new Error("address-touch proof deadline reached"));
       }
+      const headerStartedAtMs = Date.now();
       const headerProof = await this.readSharedCanonicalHeaders(
         fromExclusive,
         through,
@@ -541,8 +543,10 @@ export class JsonRpcBlockScanStateReadBackend
           signal: controller.signal,
         },
       );
+      const headerMs = Math.max(0, Date.now() - headerStartedAtMs);
       const receiptHeaders = headerProof.headers.slice(1);
       const receiptIds = receiptHeaders.map(() => this.nextId++);
+      const receiptsRpcStartedAtMs = Date.now();
       const receiptResponses = await this.postWithSlots(
         this.addressTouchSlots,
         receiptIds.map((id, index) => ({
@@ -557,6 +561,11 @@ export class JsonRpcBlockScanStateReadBackend
         controller.signal,
         "producer-critical",
       );
+      const receiptsRpcMs = Math.max(
+        0,
+        Date.now() - receiptsRpcStartedAtMs,
+      );
+      const parseStartedAtMs = Date.now();
       const receipts = parseCanonicalBlockReceipts(
         receiptResponses,
         receiptIds,
@@ -630,11 +639,15 @@ export class JsonRpcBlockScanStateReadBackend
         (sum, block) => sum + block.receipts.length,
         0,
       );
+      const parseMs = Math.max(0, Date.now() - parseStartedAtMs);
+      const verifyStartedAtMs = Date.now();
       await this.verifyCanonicalSourceWithSlotsMeasured(
         through,
         controller.signal,
         this.addressTouchSlots,
       );
+      const verifyMs = Math.max(0, Date.now() - verifyStartedAtMs);
+      const fingerprintStartedAtMs = Date.now();
       const rangeFingerprint = deterministicHash({
         fromExclusive,
         through,
@@ -642,6 +655,32 @@ export class JsonRpcBlockScanStateReadBackend
         logs,
         touchedAddresses,
       });
+      const fingerprintMs = Math.max(
+        0,
+        Date.now() - fingerprintStartedAtMs,
+      );
+      const totalMs = Math.max(0, Date.now() - startedAtMs);
+      console.log(
+        `[searcher/blockscan-activity] ${JSON.stringify({
+          throughBlock: through.number,
+          generation: through.generation,
+          rangeBlocks: distance,
+          maxRangeBlocks,
+          headerMs: Math.round(headerMs),
+          receiptsRpcMs: Math.round(receiptsRpcMs),
+          parseMs: Math.round(parseMs),
+          verifyMs: Math.round(verifyMs),
+          fingerprintMs: Math.round(fingerprintMs),
+          totalMs: Math.round(totalMs),
+          receiptCount: receipts.reduce(
+            (sum, block) => sum + block.receipts.length,
+            0,
+          ),
+          logCount: logs.length,
+          touchedCount: touchedAddresses.length,
+          transactionCount,
+        })}`,
+      );
       return Object.freeze({
         fromExclusive,
         through,
