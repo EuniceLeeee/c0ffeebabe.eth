@@ -5,7 +5,6 @@
   "preparedQuoteFamilyIds": [
     "univ2-standard",
     "univ3-standard",
-    "curve-plain",
     "curve-underlying",
     "univ4",
     "custom-swap:angstrom-v4",
@@ -31,8 +30,12 @@
     "protocol:self-burn-native"
   ],
   "declaredDiscoveryMigrations": {
-    "fluid-dex": ["dex-token-domain"],
-    "credit:fluid": ["dex-token-domain"]
+    "fluid-dex": [
+      "dex-token-domain"
+    ],
+    "credit:fluid": [
+      "dex-token-domain"
+    ]
   },
   "baselineActive": [
     {
@@ -40,10 +43,18 @@
       "baselineSurface": "route-registry",
       "familyId": "univ2-standard",
       "kind": "swap",
-      "ownedActionAdapterIds": ["univ2-swap"],
-      "requiredInfraActionAdapterIds": ["erc20-transfer"],
-      "poolAdapters": ["univ2"],
-      "edgeAdapterIds": ["univ2-swap"],
+      "ownedActionAdapterIds": [
+        "univ2-swap"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-transfer"
+      ],
+      "poolAdapters": [
+        "univ2"
+      ],
+      "edgeAdapterIds": [
+        "univ2-swap"
+      ],
       "staticDeclaredVenueCount": 0,
       "discoveryCandidateSources": [],
       "pricingRequired": true,
@@ -54,28 +65,17 @@
       "baselineSurface": "route-registry",
       "familyId": "univ3-standard",
       "kind": "swap",
-      "ownedActionAdapterIds": ["univ3-swap"],
-      "requiredInfraActionAdapterIds": ["erc20-transfer"],
-      "poolAdapters": ["univ3"],
-      "edgeAdapterIds": ["univ3-swap"],
-      "staticDeclaredVenueCount": 0,
-      "discoveryCandidateSources": [],
-      "pricingRequired": true,
-      "funding": null
-    },
-    {
-      "baselineSemanticId": "curve-plain",
-      "baselineSurface": "route-registry",
-      "familyId": "curve-plain",
-      "kind": "swap",
-      "ownedActionAdapterIds": ["curve-exchange-plain"],
-      "requiredInfraActionAdapterIds": ["erc20-approve"],
-      "poolAdapters": ["curve", "curve-nr"],
+      "ownedActionAdapterIds": [
+        "univ3-swap"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-transfer"
+      ],
+      "poolAdapters": [
+        "univ3"
+      ],
       "edgeAdapterIds": [
-        "curve-exchange",
-        "curve-exchange-nr",
-        "curve-exchange-plain",
-        "curve-exchange-received-uint"
+        "univ3-swap"
       ],
       "staticDeclaredVenueCount": 0,
       "discoveryCandidateSources": [],
@@ -87,29 +87,18 @@
       "baselineSurface": "route-registry",
       "familyId": "curve-underlying",
       "kind": "swap",
-      "ownedActionAdapterIds": ["curve-exchange-underlying"],
-      "requiredInfraActionAdapterIds": ["erc20-approve"],
-      "poolAdapters": ["curve-underlying"],
-      "edgeAdapterIds": ["curve-exchange-underlying"],
-      "staticDeclaredVenueCount": 0,
-      "discoveryCandidateSources": [],
-      "pricingRequired": true,
-      "funding": null
-    },
-    {
-      "baselineSemanticId": "balancer-v3",
-      "baselineSurface": "route-registry",
-      "familyId": "balancer-v3",
-      "kind": "swap",
       "ownedActionAdapterIds": [
-        "balancer-v3-unlock",
-        "balancer-v3-settle",
-        "balancer-v3-swap",
-        "balancer-v3-send-to"
+        "curve-exchange-underlying"
       ],
-      "requiredInfraActionAdapterIds": ["erc20-transfer"],
-      "poolAdapters": ["balancer-v3"],
-      "edgeAdapterIds": ["balancer-v3-unlock"],
+      "requiredInfraActionAdapterIds": [
+        "erc20-approve"
+      ],
+      "poolAdapters": [
+        "curve-underlying"
+      ],
+      "edgeAdapterIds": [
+        "curve-exchange-underlying"
+      ],
       "staticDeclaredVenueCount": 0,
       "discoveryCandidateSources": [],
       "pricingRequired": true,
@@ -133,8 +122,12 @@
         "weth-deposit-value",
         "weth-withdraw-amount"
       ],
-      "poolAdapters": ["univ4"],
-      "edgeAdapterIds": ["univ4-unlock"],
+      "poolAdapters": [
+        "univ4"
+      ],
+      "edgeAdapterIds": [
+        "univ4-unlock"
+      ],
       "staticDeclaredVenueCount": 0,
       "discoveryCandidateSources": [],
       "pricingRequired": true,
@@ -145,10 +138,18 @@
       "baselineSurface": "route-registry",
       "familyId": "custom-swap:dodo-v2",
       "kind": "swap",
-      "ownedActionAdapterIds": ["dodo-v2-swap"],
-      "requiredInfraActionAdapterIds": ["erc20-transfer"],
-      "poolAdapters": ["dodo-v2"],
-      "edgeAdapterIds": ["dodo-v2-swap"],
+      "ownedActionAdapterIds": [
+        "dodo-v2-swap"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-transfer"
+      ],
+      "poolAdapters": [
+        "dodo-v2"
+      ],
+      "edgeAdapterIds": [
+        "dodo-v2-swap"
+      ],
       "staticDeclaredVenueCount": 0,
       "discoveryCandidateSources": [],
       "pricingRequired": true,
@@ -159,10 +160,18 @@
       "baselineSurface": "legacy-route-edge",
       "familyId": "fluid-dex",
       "kind": "swap",
-      "ownedActionAdapterIds": ["fluid-dex-swap"],
-      "requiredInfraActionAdapterIds": ["erc20-approve"],
-      "poolAdapters": ["fluid-dex"],
-      "edgeAdapterIds": ["fluid-dex-swap"],
+      "ownedActionAdapterIds": [
+        "fluid-dex-swap"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-approve"
+      ],
+      "poolAdapters": [
+        "fluid-dex"
+      ],
+      "edgeAdapterIds": [
+        "fluid-dex-swap"
+      ],
       "staticDeclaredVenueCount": 0,
       "discoveryCandidateSources": [],
       "pricingRequired": true,
@@ -177,8 +186,12 @@
         "erc4626-deposit",
         "erc4626-redeem"
       ],
-      "requiredInfraActionAdapterIds": ["erc20-approve"],
-      "poolAdapters": ["erc4626"],
+      "requiredInfraActionAdapterIds": [
+        "erc20-approve"
+      ],
+      "poolAdapters": [
+        "erc4626"
+      ],
       "edgeAdapterIds": [
         "erc4626-deposit",
         "erc4626-redeem"
@@ -219,10 +232,18 @@
       "baselineSurface": "route-registry",
       "familyId": "protocol:goldx",
       "kind": "protocol-conversion",
-      "ownedActionAdapterIds": ["goldx-mint"],
-      "requiredInfraActionAdapterIds": ["erc20-approve"],
-      "poolAdapters": ["goldx"],
-      "edgeAdapterIds": ["goldx-mint"],
+      "ownedActionAdapterIds": [
+        "goldx-mint"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-approve"
+      ],
+      "poolAdapters": [
+        "goldx"
+      ],
+      "edgeAdapterIds": [
+        "goldx-mint"
+      ],
       "staticDeclaredVenueCount": 1,
       "discoveryCandidateSources": [],
       "pricingRequired": true,
@@ -233,10 +254,18 @@
       "baselineSurface": "route-registry",
       "familyId": "protocol:metronome-synth",
       "kind": "protocol-conversion",
-      "ownedActionAdapterIds": ["metronome-synth-swap"],
-      "requiredInfraActionAdapterIds": ["erc20-approve"],
-      "poolAdapters": ["metronome-synth"],
-      "edgeAdapterIds": ["metronome-synth-swap"],
+      "ownedActionAdapterIds": [
+        "metronome-synth-swap"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-approve"
+      ],
+      "poolAdapters": [
+        "metronome-synth"
+      ],
+      "edgeAdapterIds": [
+        "metronome-synth-swap"
+      ],
       "staticDeclaredVenueCount": 1,
       "discoveryCandidateSources": [],
       "pricingRequired": true,
@@ -247,10 +276,18 @@
       "baselineSurface": "route-registry",
       "familyId": "protocol:metronome-hgusdc",
       "kind": "protocol-conversion",
-      "ownedActionAdapterIds": ["metronome-hgusdc-exit"],
-      "requiredInfraActionAdapterIds": ["erc20-transfer"],
-      "poolAdapters": ["metronome-hgusdc"],
-      "edgeAdapterIds": ["metronome-hgusdc-exit"],
+      "ownedActionAdapterIds": [
+        "metronome-hgusdc-exit"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-transfer"
+      ],
+      "poolAdapters": [
+        "metronome-hgusdc"
+      ],
+      "edgeAdapterIds": [
+        "metronome-hgusdc-exit"
+      ],
       "staticDeclaredVenueCount": 1,
       "discoveryCandidateSources": [],
       "pricingRequired": true,
@@ -261,10 +298,18 @@
       "baselineSurface": "route-registry",
       "familyId": "protocol:psm",
       "kind": "protocol-conversion",
-      "ownedActionAdapterIds": ["psm"],
-      "requiredInfraActionAdapterIds": ["erc20-approve"],
-      "poolAdapters": ["psm"],
-      "edgeAdapterIds": ["psm"],
+      "ownedActionAdapterIds": [
+        "psm"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-approve"
+      ],
+      "poolAdapters": [
+        "psm"
+      ],
+      "edgeAdapterIds": [
+        "psm"
+      ],
       "staticDeclaredVenueCount": 1,
       "discoveryCandidateSources": [],
       "pricingRequired": true,
@@ -275,12 +320,22 @@
       "baselineSurface": "route-registry",
       "familyId": "protocol:eigenpie",
       "kind": "protocol-conversion",
-      "ownedActionAdapterIds": ["eigenpie-deposit-asset"],
-      "requiredInfraActionAdapterIds": ["erc20-approve"],
-      "poolAdapters": ["eigenpie-deposit-router"],
-      "edgeAdapterIds": ["eigenpie-deposit-asset"],
+      "ownedActionAdapterIds": [
+        "eigenpie-deposit-asset"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-approve"
+      ],
+      "poolAdapters": [
+        "eigenpie-deposit-router"
+      ],
+      "edgeAdapterIds": [
+        "eigenpie-deposit-asset"
+      ],
       "staticDeclaredVenueCount": 0,
-      "discoveryCandidateSources": ["observed-interaction"],
+      "discoveryCandidateSources": [
+        "observed-interaction"
+      ],
       "pricingRequired": true,
       "funding": null
     },
@@ -289,10 +344,18 @@
       "baselineSurface": "route-registry",
       "familyId": "protocol:rocksolid",
       "kind": "protocol-conversion",
-      "ownedActionAdapterIds": ["rocksolid-sync-deposit"],
-      "requiredInfraActionAdapterIds": ["erc20-approve"],
-      "poolAdapters": ["rocksolid"],
-      "edgeAdapterIds": ["rocksolid-sync-deposit"],
+      "ownedActionAdapterIds": [
+        "rocksolid-sync-deposit"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-approve"
+      ],
+      "poolAdapters": [
+        "rocksolid"
+      ],
+      "edgeAdapterIds": [
+        "rocksolid-sync-deposit"
+      ],
       "staticDeclaredVenueCount": 1,
       "discoveryCandidateSources": [],
       "pricingRequired": true,
@@ -303,10 +366,20 @@
       "baselineSurface": "route-registry",
       "familyId": "protocol:wsteth",
       "kind": "protocol-conversion",
-      "ownedActionAdapterIds": ["wsteth-wrap", "wsteth-unwrap"],
-      "requiredInfraActionAdapterIds": ["erc20-approve"],
-      "poolAdapters": ["wsteth"],
-      "edgeAdapterIds": ["wsteth-wrap", "wsteth-unwrap"],
+      "ownedActionAdapterIds": [
+        "wsteth-wrap",
+        "wsteth-unwrap"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-approve"
+      ],
+      "poolAdapters": [
+        "wsteth"
+      ],
+      "edgeAdapterIds": [
+        "wsteth-wrap",
+        "wsteth-unwrap"
+      ],
       "staticDeclaredVenueCount": 1,
       "discoveryCandidateSources": [],
       "pricingRequired": true,
@@ -317,10 +390,19 @@
       "baselineSurface": "compat-route",
       "familyId": "credit:fluid",
       "kind": "credit",
-      "ownedActionAdapterIds": ["fluid-vault", "fluid-dex-liquidate"],
-      "requiredInfraActionAdapterIds": ["erc20-approve"],
-      "poolAdapters": ["fluid-vault"],
-      "edgeAdapterIds": ["fluid-vault"],
+      "ownedActionAdapterIds": [
+        "fluid-vault",
+        "fluid-dex-liquidate"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-approve"
+      ],
+      "poolAdapters": [
+        "fluid-vault"
+      ],
+      "edgeAdapterIds": [
+        "fluid-vault"
+      ],
       "staticDeclaredVenueCount": 0,
       "discoveryCandidateSources": [],
       "pricingRequired": false,
@@ -331,7 +413,9 @@
       "baselineSurface": "flash-provider-descriptor",
       "familyId": "flash-loan:balancer-v2",
       "kind": "flash-loan",
-      "ownedActionAdapterIds": ["balancer-flash"],
+      "ownedActionAdapterIds": [
+        "balancer-flash"
+      ],
       "requiredInfraActionAdapterIds": [
         "assert-balance",
         "erc20-transfer"
@@ -357,7 +441,9 @@
       "baselineSurface": "flash-provider-descriptor",
       "familyId": "flash-loan:morpho",
       "kind": "flash-loan",
-      "ownedActionAdapterIds": ["morpho-flash"],
+      "ownedActionAdapterIds": [
+        "morpho-flash"
+      ],
       "requiredInfraActionAdapterIds": [
         "assert-balance",
         "erc20-approve"

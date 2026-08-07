@@ -16,8 +16,6 @@ import { eigenpieAdapter } from "./protocols/eigenpie.js";
 import { rocksolidAdapter } from "./protocols/rocksolid.js";
 import { wstethAdapter } from "./protocols/wsteth.js";
 import { selfBurnNativeAdapter } from "./protocols/self-burn-native.js";
-import { balancerV3Adapter } from "./swaps/balancer-v3.js";
-import { curvePlainAdapter } from "./swaps/curve-plain.js";
 import { curveUnderlyingAdapter } from "./swaps/curve-underlying.js";
 import { univ2StandardAdapter } from "./swaps/univ2-standard.js";
 import { univ3StandardAdapter } from "./swaps/univ3-standard.js";
@@ -46,9 +44,7 @@ import {
 const LEGACY_PRODUCTION_ADAPTER_FAMILIES = Object.freeze([
   univ2StandardAdapter,
   univ3StandardAdapter,
-  curvePlainAdapter,
   curveUnderlyingAdapter,
-  balancerV3Adapter,
   univ4Adapter,
   angstromV4Adapter,
   dodoV2Adapter,

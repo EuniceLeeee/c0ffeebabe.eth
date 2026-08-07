@@ -29,7 +29,6 @@ import {
 import { angstromV4SwapActionAdapter } from "./angstrom-v4.js";
 import {
   curveExchangeUnderlyingAdapter,
-  curvePlainExchangeAdapter,
 } from "./curve.js";
 import { assertBalanceAdapter } from "./assert-balance.js";
 import {
@@ -37,12 +36,6 @@ import {
   wethWithdrawAmountAdapter,
 } from "./wrap.js";
 import { metronomeHgUsdcExitAdapter } from "./metronome-hgusdc.js";
-import {
-  balancerV3SendToAdapter,
-  balancerV3SettleAdapter,
-  balancerV3SwapAdapter,
-  balancerV3UnlockAdapter,
-} from "./balancer-v3.js";
 import { dodoV2ActionAdapter } from "./dodo-v2.js";
 import { eigenpieDepositActionAdapter } from "./eigenpie-deposit.js";
 import { selfBurnNativeRedeemActionAdapter } from "./self-burn-native.js";
@@ -70,11 +63,6 @@ const PRODUCTION_ACTION_CATALOG = new Map<string, ActionAdapter>(
     univ4SettleAdapter,
     univ4SettleValueAdapter,
     angstromV4SwapActionAdapter,
-    balancerV3UnlockAdapter,
-    balancerV3SettleAdapter,
-    balancerV3SwapAdapter,
-    balancerV3SendToAdapter,
-    curvePlainExchangeAdapter,
     curveExchangeUnderlyingAdapter,
     metronomeHgUsdcExitAdapter,
     wethDepositValueAdapter,
