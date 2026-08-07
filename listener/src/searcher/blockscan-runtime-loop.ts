@@ -2829,6 +2829,27 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                 );
                 exactYieldedMs += 100;
               }
+              /*
+               * The producer is still in its critical state phase after the
+               * full yield budget. Sending the batch anyway lets a 5-15s
+               * exact probe tail overlap the next producer generation and
+               * delay its tiny direct/activity reads (the same overlap
+               * discovery backfill caused before the defer gate). Skip this
+               * batch instead: the probe is recorded failed/unprobed (S2
+               * optional work) and the producer keeps a clean reth window.
+               */
+              if (
+                !signal.aborted &&
+                !passSignal.aborted &&
+                exactProducerYieldShouldWait({
+                  producerCriticalActive: this.producerCriticalActive,
+                  producerLagBlocks: producerLagBlocks(),
+                })
+              ) {
+                throw new Error(
+                  "exact probe skipped: blockscan producer critical",
+                );
+              }
               return scheduler.run(lane, signal, work);
             },
           })
