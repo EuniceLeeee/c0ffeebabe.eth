@@ -106,11 +106,12 @@ type StateInstanceKey = string & { readonly __stateInstanceKey: unique symbol };
 
 ## 4. 顶层插件合同
 
-下面的接口是目标 TypeScript 形态。具体 Family 在泛型闭包内保持强类型；中央注册后只持有受控的 opaque
-引用，不把协议字段降级成任意 `Record<string, unknown>`。
+目标不是复制两套会漂移的七阶段接口，而是建立一个公共 `AdapterFamilyCore`，再通过互斥的
+`SwapFamilyPlugin` / `ProtocolFamilyPlugin` 两个大模板收紧 Domain。具体 Family 在泛型闭包内保持强类型；
+中央加载后只持有受控的 opaque 引用，不把协议字段降级成任意 `Record<string, unknown>`。
 
 ```ts
-export interface AdapterFamilyPlugin<
+export interface AdapterFamilyCore<
   Candidate extends FamilyCandidate,
   Identity extends VerifiedIdentity,
   Descriptor extends CompiledInstanceDescriptor,
@@ -119,8 +120,6 @@ export interface AdapterFamilyPlugin<
   PricingSnapshot,
   ExactEvidence,
 > {
-  readonly manifest: FamilyManifest;
-
   readonly discovery: DiscoverySemantics<Candidate>;
   readonly identity: IdentitySemantics<Candidate, Identity>;
   readonly instance: InstanceSemantics<Identity, Descriptor>;
@@ -135,17 +134,87 @@ export interface AdapterFamilyPlugin<
   readonly execution: ExecutionSemantics<Descriptor, Route, ExactEvidence>;
 
   readonly sharedBindings?: SharedBindingSemantics<Descriptor>;
-  readonly swap?: SwapDomainSemantics;
-  readonly protocol?: ProtocolDomainSemantics;
   readonly optional?: OptionalFamilySemantics<Descriptor, Route>;
 
   /** 与 Family 一起加载并由 ownership gate 校验。 */
   readonly actionAdapters: readonly FamilyOwnedActionAdapter[];
 }
 
-export interface FamilyManifest {
+export interface SwapFamilyPlugin<
+  Candidate extends FamilyCandidate,
+  Identity extends VerifiedIdentity,
+  Descriptor extends CompiledInstanceDescriptor,
+  Route extends FamilyRouteDescriptor,
+  PricingDescriptor,
+  PricingSnapshot,
+  ExactEvidence,
+> extends AdapterFamilyCore<
+  Candidate,
+  Identity,
+  Descriptor,
+  Route,
+  PricingDescriptor,
+  PricingSnapshot,
+  ExactEvidence
+> {
+  readonly manifest: FamilyManifest<"swap">;
+  readonly swap: SwapDomainSemantics;
+  readonly protocol?: never;
+}
+
+export interface ProtocolFamilyPlugin<
+  Candidate extends FamilyCandidate,
+  Identity extends VerifiedIdentity,
+  Descriptor extends CompiledInstanceDescriptor,
+  Route extends FamilyRouteDescriptor,
+  PricingDescriptor,
+  PricingSnapshot,
+  ExactEvidence,
+> extends AdapterFamilyCore<
+  Candidate,
+  Identity,
+  Descriptor,
+  Route,
+  PricingDescriptor,
+  PricingSnapshot,
+  ExactEvidence
+> {
+  readonly manifest: FamilyManifest<"protocol">;
+  readonly protocol: ProtocolDomainSemantics;
+  readonly swap?: never;
+}
+
+export type AdapterFamilyPlugin<
+  Candidate extends FamilyCandidate,
+  Identity extends VerifiedIdentity,
+  Descriptor extends CompiledInstanceDescriptor,
+  Route extends FamilyRouteDescriptor,
+  PricingDescriptor,
+  PricingSnapshot,
+  ExactEvidence,
+> =
+  | SwapFamilyPlugin<
+      Candidate,
+      Identity,
+      Descriptor,
+      Route,
+      PricingDescriptor,
+      PricingSnapshot,
+      ExactEvidence
+    >
+  | ProtocolFamilyPlugin<
+      Candidate,
+      Identity,
+      Descriptor,
+      Route,
+      PricingDescriptor,
+      PricingSnapshot,
+      ExactEvidence
+    >;
+
+export interface FamilyManifest<Domain extends "swap" | "protocol"> {
   readonly familyId: FamilyId;
-  readonly domain: "swap" | "protocol";
+  readonly domain: Domain;
   readonly ownedActionAdapterIds: readonly string[];
   readonly requiredInfraActionAdapterIds: readonly string[];
   readonly allowedTaxonomy: readonly AllowedTaxonomy[];
@@ -153,6 +222,53 @@ export interface FamilyManifest {
   readonly supportedLineages: readonly LineageId[];
 }
 ```
+
+因此 `domain: "swap"` 时 `swap` 必填而 `protocol` 的类型为 `never`；Protocol 反之。不能再用一个
+`swap? / protocol?` 宽松对象让作者同时填写两个 Domain、两个都不填，或让 manifest 与语义不一致。
+
+生产定义还必须经过两个唯一构造入口。构造器返回不可由普通对象伪造的 branded value；自动 catalog 只接收
+这个 branded value，而不是任意满足部分结构的对象：
+
+```ts
+declare const definedFamilyPluginBrand: unique symbol;
+
+type DefinedFamilyPlugin<Plugin> = Readonly<Plugin> & {
+  readonly [definedFamilyPluginBrand]: "defined-family-plugin";
+};
+
+export declare function defineSwapFamily<
+  C extends FamilyCandidate,
+  I extends VerifiedIdentity,
+  D extends CompiledInstanceDescriptor,
+  R extends FamilyRouteDescriptor,
+  PD,
+  PS,
+  E,
+>(plugin: SwapFamilyPlugin<C, I, D, R, PD, PS, E>):
+  DefinedFamilyPlugin<SwapFamilyPlugin<C, I, D, R, PD, PS, E>>;
+
+export declare function defineProtocolFamily<
+  C extends FamilyCandidate,
+  I extends VerifiedIdentity,
+  D extends CompiledInstanceDescriptor,
+  R extends FamilyRouteDescriptor,
+  PD,
+  PS,
+  E,
+>(plugin: ProtocolFamilyPlugin<C, I, D, R, PD, PS, E>):
+  DefinedFamilyPlugin<ProtocolFamilyPlugin<C, I, D, R, PD, PS, E>>;
+```
+
+两个构造器共享同一个内部 `defineFamily()` validator；它必须在构建/启动时校验 manifest Domain、未知顶层
+capability、Action ownership、lineage、taxonomy 和可选能力的一致性，再 freeze 定义。Family 作者可以在插件
+内部拥有任意强类型 helper，但唯一生产 export 必须是上述构造器结果，不能直接 export raw object 绕过检查。
+
+严格性由四层共同成立：
+
+1. 判别联合在编译期保证 Swap/Protocol 互斥、各自 Domain 必填；
+2. `defineSwapFamily()` / `defineProtocolFamily()` 做构建期结构、ownership 和 coherence 校验并附加 brand；
+3. 自动 catalog 只加载 branded production export，拒绝 raw object、旧 registry entry 和中央手写 Family 分支；
+4. boundary gate 禁止 Adapter 拥有 RPC、scheduler、cache、solver、final sim，并按已声明 capability 执行正负 fixture。
 
 插件作者**不填写** `revision: "univ3-v1"` 或 `adapterSchemaRevision`。语义缓存失效由构建阶段生成的
 capability content hash 负责，见 §6。
@@ -494,13 +610,21 @@ export async function loadFamilyCapabilityCatalog(): Promise<FamilyCapabilityCat
   const modules = await loadTrackedFamilyModules("**/*.production.ts");
   const generated = await loadGeneratedCapabilityManifest();
 
-  const loaded = modules.map((module) =>
-    attachGeneratedCapabilityHashes(module.plugin, generated)
+  const defined = modules.map((module) => {
+    assertDefinedFamilyPlugin(module.plugin);
+    return module.plugin;
+  });
+  const loaded = defined.map((plugin) =>
+    attachGeneratedCapabilityHashes(plugin, generated)
   );
 
   return buildFamilyCapabilityCatalog(loaded);
 }
 ```
+
+`assertDefinedFamilyPlugin()` 必须验证构造器 brand 和冻结后的合同摘要；文件名、export 名或结构相似不能替代
+brand。这样扫描仍然自动发现 Family 代码，但不能把未经 `defineSwapFamily()` / `defineProtocolFamily()` 校验的
+raw object 偷渡成生产插件。
 
 中央不再维护：
 
@@ -1303,9 +1427,11 @@ function buildCandidatePlan(input: BuildCandidatePlanInput): CandidatePlan {
 
 之后的 fork final simulation、flash repayment、token conservation 和 EV 判定完全由中央执行。
 
-## 15. Domain Policy：一套模板，Swap/Protocol 两种约束
+## 15. Domain Policy：公共 Core，Swap/Protocol 两个严格模板
 
-两类 Family 共用 Discovery、Identity、Instance、Route、Pricing、Exact 和 Execution 引擎。差异只在 domain policy：
+两类 Family 共用 Discovery、Identity、Instance、Route、Pricing、Exact 和 Execution Core；作者实际填写的生产
+入口则只能是 `SwapFamilyPlugin` 或 `ProtocolFamilyPlugin`。差异由下面的 Domain Policy 表达，不能通过空实现、
+类型断言或同时填写两个 Domain 绕过：
 
 ```ts
 interface SwapDomainSemantics {
@@ -1338,7 +1464,7 @@ catalog、request executor、evidence、ownership 和 final safety primitives，
 下面示例展示插件关键上下文，省略 ABI helper 的具体编码实现，但不省略调用链。
 
 ```ts
-export const uniV3Family = defineAdapterFamily({
+export const uniV3Family = defineSwapFamily({
   manifest: {
     familyId: familyId("swap:univ3-standard"),
     domain: "swap",
@@ -1645,6 +1771,47 @@ const erc4626Routes: RouteProjectionSemantics<Erc4626Descriptor, Erc4626Route> =
 };
 ```
 
+完整生产 export 通过 Protocol 唯一入口把上述强类型部件组装起来；没有 Factory 的实例不需要另一套模板，只需
+由 `identity.variants` 声明不同 provenance：
+
+```ts
+export const erc4626Family = defineProtocolFamily({
+  manifest: {
+    familyId: familyId("protocol:erc4626-standard"),
+    domain: "protocol",
+    supportedLineages: [
+      lineageId("erc4626:factory-child"),
+      lineageId("erc4626:registry-member"),
+      lineageId("erc4626:standalone-contract"),
+    ],
+    ownedActionAdapterIds: ["erc4626-deposit", "erc4626-redeem"],
+    requiredInfraActionAdapterIds: ["erc20-approve"],
+    allowedTaxonomy: [{ slotKind: "protocol-conversion" }],
+  },
+
+  discovery: erc4626Discovery,
+  identity: {
+    variants: erc4626IdentityVariants,
+    identityKey: (identity) => canonicalAddress(identity.vault),
+  },
+  instance: erc4626Instance,
+  routes: erc4626Routes,
+  pricing: erc4626Pricing,
+  exact: erc4626Exact,
+  execution: erc4626Execution,
+
+  protocol: {
+    candidateKinds: [
+      "factory-child",
+      "registry-member",
+      "standalone-contract",
+    ],
+    activeBehaviorProof: "required",
+  },
+  actionAdapters: [erc4626DepositAction, erc4626RedeemAction],
+});
+```
+
 Pricing/Exact 对 deposit 调 `previewDeposit(amountIn)`，对 redeem 调 `previewRedeem(amountIn)`；Execution 分别
 生成标准 `deposit(assets, receiver)` 和 `redeem(shares, receiver, owner)` ActionAdapter 节点。
 
@@ -1729,6 +1896,7 @@ Family 的 outcome 合并成单一 `family_failed`。
 
 |验收轨道|能证明什么|决定性证据|明确不能证明|
 |---|---|---|---|
+|`architecture_migration_parity`|同一 Adapter 语义从旧机制迁入新模板后，在单 Family 或批量 Family 范围内没有语义回退|冻结同一输入的旧/新 production closure 双跑；逐 Family canonical instance/edge/state/priced/price/failure parity；共同 Graph 的 enumeration/exact/execution 代表性证明；批量 aggregate 与逐 Family receipt|不单独证明 live p95、资源公平性、默认生产切换、某个历史盈利机会或未声明的新 coverage 正确|
 |`family_execution`|Family-owned capability 在 fixture 下正确，尤其是 quote/plan/encoding，且 family-owned diff 可合并|identity/probe conformance fixture；同一 route fixture 的稳定 baseline 未注册或 typed family failure → challenger Adapter Replay pass；Steps 3–6、ownership、conformance、`family_local` 全通过|Adapter Replay 本身不证明自然 discovery、自然排名、生产时效性、部署或 branch cleanup|
 |`production_route_stage`|某个历史生产 route gap 已被生产 funnel 自然关闭|target-blind producer 不接收预期 route/amount；同一 causal chain 的 Steps 1–6 全通过|全系统 latency、资源公平性、长期 coverage|
 |`systemic_live`|scheduler、queue、cache、rank、candidate distribution、共享热路径或资源策略改善|预先声明的正/负 cohort、相同输入前后对照与 Hermes paired A/B|不能靠单笔六步或单次 Adapter Replay 得出|
@@ -1737,7 +1905,217 @@ Family 的 outcome 合并成单一 `family_failed`。
 final sim，也没有执行自然 discovery/enumeration；反过来，route 没进入自然 top-K 也不能推翻已经证明的
 Adapter 语义，只说明另有 S2/ranking/runtime gap。
 
-### 20.2 当前六步语义
+### 20.2 Architecture migration parity：单个与批量 Adapter
+
+这条轨道专门验收“Adapter 语义不变，承载它的架构改变”。它既允许一次只迁移一个 Family，也允许一次批量
+迁移多个 Swap/Protocol Family；两种范围使用同一 comparator，不建立两套真相：
+
+这里的“单个 Adapter”指一个生产 `AdapterFamilyPlugin`，不是一个 pool/instance，也不是低层 ActionAdapter；
+一个物理协议若被拆成多个 behavior Family，就在 batch scope 中分别列出。
+
+```ts
+type ArchitectureMigrationScope =
+  | {
+      readonly kind: "single-family";
+      readonly familyIds: readonly [FamilyId];
+    }
+  | {
+      readonly kind: "batch";
+      readonly familyIds: readonly FamilyId[];
+    };
+
+type ArchitectureMigrationMode =
+  | "pure-refactor"
+  | "declared-improvement";
+```
+
+`familyIds`、mode、fixture corpus 和允许的 semantic delta 必须在运行前冻结。批量模式可以只执行一次统一
+harness，但必须保留逐 Family、逐 instance、逐 stage 结果；一个全局 count/hash 不能替代这些子结论。
+
+#### 20.2.1 同输入双跑
+
+每个 parity case 必须让旧、新 production closure 使用相同的：
+
+- block number/hash/state root 组成的 `StateAnchor`；
+- observation、universe、normalized config、active Family manifest 和 production policy；
+- Adapter 支持范围、lineage/variant 声明、Action ownership 和 source policy（例如都绑定同一个 N-1）；
+- 外部 request 事实；优先记录 pinned results 后 replay，或在不可 replay 时绑定完全相同的 archive/fork source；
+- target-blind 输入边界；expected instance/edge/route 只能在两侧输出冻结后交给 trusted comparator。
+
+单个静态区块不足以覆盖批量重构。冻结的 corpus 应按实际 Family 能力包含：cold/bootstrap、无 topology 变化的
+增量块、新实例/topology delta、已有实例 mutation/update，以及单实例读取/解析失败隔离；每个已声明
+identity variant 和 execution behavior 至少由一个正向与必要负向 fixture 覆盖。没有相关能力的 Family 不机械要求
+无意义场景。
+
+#### 20.2.2 比较 canonical semantic set，不比较裸数量
+
+`edgeCount`、`pricedCount` 仍记录用于诊断，但绝不能单独决定 verdict。数量相同可能是一条旧 edge 丢失、另一条
+错误 edge 混入；数量增加也可能是假阳性。两侧必须先归一化为下面的语义集合再比较：
+
+旧路径不一定原生输出 `lineageId`、`StateInstanceKey` 等新字段；trusted comparator 必须使用在 challenger freeze
+前固定的 baseline normalizer，从旧 family/pool/direction/state facts 推导同一 canonical identity。不能因为旧字段
+缺失就跳过比较，也不能让 challenger 自己定义有利的映射。
+
+|比较层|比较内容|`pure-refactor` 通过条件|
+|---|---|---|
+|Instance|`familyId + lineageId + instanceKey`、provenance/behavior class|canonical 集合及关键 metadata 相同|
+|Graph edge|canonical route/edge identity、方向、token、ownership、taxonomy、ActionAdapter|有序身份与 metadata 相同|
+|State coverage|`StateInstanceKey`、required state keys、source、availability/completeness|集合与 source-bound 状态相同|
+|Priced edge|具体哪些 canonical edge 被 priced/unpriced 及 reason|集合相同，不只是总数相同|
+|Price|每条 edge 的 protocol-native integer/rational mid、fee、availability、source proof|规范化值相同；任何容差须由既有独立 oracle 合同预先声明|
+|Failure|逐 candidate/instance 的 rejected、unsupported、unresolved、failed stage/reason|不得新增回退或把失败改名隐藏|
+|Enumeration|共同 Graph 上的 canonical route identity、顺序、top-K refine set|相同 production policy 下相同|
+|Exact|固定测试 amount 的 amount-out、fee、rounding、evidence/source|按 Family 既有 parity 合同相同|
+|Execution|`PlanFragment`、Action ownership、resolved calldata/effect intent|相同|
+|Final sim|代表性 route corpus 的 effects、repayment、conservation、EV input|相同；无需穷举每条组合 route|
+
+核心 receipt 必须同时保存 delta 明细和汇总 hash：
+
+```ts
+interface FamilyArchitectureParityResult {
+  readonly familyId: FamilyId;
+  readonly missingInstances: readonly FamilyInstanceKey[];
+  readonly addedInstances: readonly FamilyInstanceKey[];
+  readonly missingEdges: readonly RouteKey[];
+  readonly addedEdges: readonly RouteKey[];
+  readonly changedEdgeMetadata: readonly RouteKey[];
+  readonly lostStateKeys: readonly StateInstanceKey[];
+  readonly newlyUnresolvedStateKeys: readonly StateInstanceKey[];
+  readonly missingPricedEdges: readonly RouteKey[];
+  readonly changedPrices: readonly PriceParityMismatch[];
+  readonly changedRoutes: readonly RouteParityMismatch[];
+  readonly changedExactQuotes: readonly ExactParityMismatch[];
+  readonly verdict: "pass" | "fail";
+}
+
+interface ArchitectureMigrationParityReceipt {
+  readonly scope: ArchitectureMigrationScope;
+  readonly mode: ArchitectureMigrationMode;
+  readonly inputManifestHash: string;
+  readonly stateAnchors: readonly StateAnchor[];
+  readonly familyResults: readonly FamilyArchitectureParityResult[];
+  readonly nonMigratedFamilySemanticHashParity: boolean;
+  readonly assembledCommonGraphParity: boolean;
+  readonly aggregateVerdict: "pass" | "partial" | "fail";
+  readonly performanceDiagnostics: {
+    readonly wallMs: number;
+    readonly requestCount: number;
+    readonly batchCount: number;
+    readonly peakConcurrency: number;
+  };
+}
+```
+
+Comparator 的核心顺序必须是“先逐 Family，后 aggregate”，不能先看总数决定通过：
+
+```ts
+function judgeArchitectureMigration(input: FrozenMigrationRun):
+  ArchitectureMigrationParityReceipt {
+  assertValidFrozenScope(input.scope);
+  assertSameFrozenInputs(input.baseline, input.challenger);
+
+  const familyResults = input.scope.familyIds.map((familyId) =>
+    compareCanonicalFamilySemantics({
+      familyId,
+      baseline: normalizeFamilyOutput(input.baseline, familyId),
+      challenger: normalizeFamilyOutput(input.challenger, familyId),
+      declaredDeltas: input.declaredDeltas.forFamily(familyId),
+    })
+  );
+
+  const nonMigratedFamilySemanticHashParity = compareNonMigratedFamilies(input);
+  const assembledCommonGraphParity = compareAssembledCommonGraph(input);
+  const allFamiliesPass = familyResults.every((item) => item.verdict === "pass");
+
+  return sealMigrationReceipt({
+    ...input,
+    familyResults,
+    nonMigratedFamilySemanticHashParity,
+    assembledCommonGraphParity,
+    aggregateVerdict:
+      allFamiliesPass &&
+      nonMigratedFamilySemanticHashParity &&
+      assembledCommonGraphParity
+        ? "pass"
+        : familyResults.some((item) => item.verdict === "pass")
+          ? "partial"
+          : "fail",
+  });
+}
+```
+
+#### 20.2.3 Pure refactor 与 declared improvement
+
+`pure-refactor` 表示 Adapter 能力和激活范围相同，要求共同 baseline-active manifest 上语义等价：
+
+```text
+missing baseline-valid instance       = 0
+missing baseline-valid edge           = 0
+changed edge ownership/metadata       = 0
+lost required StateInstanceKey        = 0
+missing baseline-priced edge          = 0
+unexpected price/exact quote mismatch = 0
+new unresolved/failed instance        = 0
+```
+
+旧输出也不是链上真相本身。若迁移同时修复旧漏收、加入新 pool/方向，或删除已证明的重复/错误 edge，必须改用
+`declared-improvement`，并在运行前提交逐 Family `DeclaredSemanticDelta`：
+
+```ts
+interface DeclaredSemanticDelta {
+  readonly familyId: FamilyId;
+  readonly kind:
+    | "verified-addition"
+    | "canonical-deduplication"
+    | "semantic-correction"
+    | "approved-deactivation";
+  readonly affectedCanonicalIds: readonly string[];
+  readonly independentEvidenceRefs: readonly string[];
+}
+```
+
+共同 baseline 集合仍须严格 parity；新增集合必须单独通过 identity、state、quote 和 execution 证明。新增 30 条不能
+抵消丢失 20 条。canonicalization 允许 raw edge 数下降，但必须提供旧重复 edge → 新 canonical edge 的完整映射和
+行为等价证明。approved deactivation 是独立 coverage/product 变更，不能伪装成重构提速。
+
+新增语义可能合法改变全图 rank/top-K，因此 comparator 应先在共同 baseline-active manifest 上关闭 additions 做
+parity，再单独启用 addition manifest 验证新增输出及其完整资源成本；不能在一个混合总数中判定“更好”。
+
+#### 20.2.4 单个 Adapter 与批量 Adapter 的通过边界
+
+|范围|必须输出|通过条件|失败后如何处理|
+|---|---|---|---|
+|`single-family`|目标 Family 完整 semantic receipt、共同 assembled Graph、所有非目标 Family canonical semantic hash|目标 Family pass；非目标输出和共同 Graph 无未声明变化|精确定位到该 Family/instance/stage；不把中央 transport failure 写成 Adapter failure|
+|`batch`|冻结范围内每个 Family 的同结构 receipt、跨 Family ownership/selector/stateKey 冲突检查、共同 assembled Graph、非迁移 Family canonical semantic hash|每个范围内 Family 都 pass，且跨 Family 与共同 Graph gate 全 pass；不能平均、投票或用总增量抵消单 Family 回退|aggregate 可为 `partial` 并保留已通过子结论；共享 framework diff 未独立通过时不得据此拆出伪 family-local merge|
+
+因此批量重构不需要为每个 Adapter 重复启动一套 live A/B；一次 sealed batch harness 可以同时提供所有 Family 的
+语义验收。但它必须执行各 Family 所需 fixture，并生成逐 Family 子 receipt。`batch=pass` 等价于“所有子 receipt
+pass + cross-family gate pass”，不是“总体 edge/priced 数量相近”。
+
+如果批量运行只有部分 Family 通过，已通过结果可用于继续调试或在依赖闭包可切割时重新组成后续单 Family/batch
+验收；原批次本身仍是 `partial`，不能把未通过 Family 静默移出运行后 denominator。
+
+#### 20.2.5 语义验收与时效性/生产切换分离
+
+`architecture_migration_parity` 不设置 production p95 硬阈值。它只使用运行前冻结的宽松 outer safety timeout
+防止死锁，并要求：所有 case 最终有 terminal outcome、request 数有硬上界、无整 Family 连坐、无无限 retry；
+wall time、request/batch 数和峰值并发必须记录，但只是诊断字段，不能把 semantic fail 改成 pass。
+
+目标状态允许诚实地输出：
+
+```text
+semantic_parity   = pass
+timing_status     = not_yet_validated
+production_cutover = blocked
+```
+
+该状态可支持默认关闭、shadow 或 dual-mode 路径继续合并/迁移，但不授权替换线上默认路径。默认生产切换仍需
+独立 `systemic_live` shadow/paired A/B，检查 queue、RPC/resource、p95、head freshness 和完整 denominator；
+现有 [`gates.md`](../gates.md) 若仍对 universal refactor 规定更严格的 merge/timing sentinel，则上位规则继续生效，
+本 receipt 只能提供 semantic verdict，不能自行放宽 promotion 权限。若项目决定允许 semantic-only shadow merge，
+必须在上位 gate 明文采用该边界，不能靠本文暗中覆盖。
+
+### 20.3 当前六步语义
 
 六步是生产因果链，不是六个 Adapter 函数。每一步都必须有 canonical input/state anchor、stage-owned output、
 内容 hash 和明确失败归属。
@@ -1780,7 +2158,7 @@ Adapter Replay 轨道必须诚实地把 Steps 1–2 标为 `bypassed`，而不�
 RPC、timeout、abort、资源不足或错误字符串本身都不是稳定 family baseline。`adapter_merge_ready` 只允许合并
 family-owned diff，不授权部署、发布或清理分支。
 
-### 20.3 横向架构验收
+### 20.4 横向架构验收
 
 六步证明一条 route 的因果正确性；下面的场景证明统一插件和调度边界没有被绕过。
 
@@ -1807,7 +2185,7 @@ family-owned diff，不授权部署、发布或清理分支。
 |中央 shared surface 扫描|加载任意新 Family|scanner/planner/solver 无新增 Family ID branch|framework boundary|
 |计划 exact 与编码都通过|运行完整 fork final sim|只有还款、守恒、效果和 EV 全部通过才可进入提交判断|中央 S5/S6|
 
-### 20.4 每个 Family fixture 的最小语义面
+### 20.5 每个 Family fixture 的最小语义面
 
 fixture 数量按行为变体决定，不按机械文件数决定；但每个已声称支持的行为至少覆盖：
 
@@ -1827,7 +2205,8 @@ request budget、topology diff、solver 或 final-sim runner，结果应为 `fra
 
 ## 21. 最终裁决
 
-1. 一套统一 Adapter Framework，同时服务 Swap 与 Protocol；差异由 Domain Policy 和固定 capability slots 表达。
+1. 一套统一 `AdapterFamilyCore` 同时服务 Swap 与 Protocol；生产插件只能通过互斥的
+   `defineSwapFamily()` / `defineProtocolFamily()` 两个严格模板进入 catalog。
 2. 自动扫描加载 Family **代码能力**；链上实例、pair、route、StateInstance 全由动态扫描和证明产生。
 3. Family 插件完整覆盖 Discovery、Identity、Instance、Route、Pricing、Exact、Execution；可选能力省略而非空实现。
 4. Identity 支持 factory-child、registry-member、standalone、singleton-subinstance 和 custom variant，并统一经过行为证明。
@@ -1841,3 +2220,9 @@ request budget、topology diff、solver 或 final-sim runner，结果应为 `fra
 11. Route Projection 属于 S1；全局 route/ring enumeration 属于 S2；Exact 属于 S3；Plan Fragment 属于 S4；Final Simulation 与 EV 始终中央所有。
 12. Adapter Replay 只证明 route-pinned Steps 3–6 与 family-local merge；自然 Steps 1–6 才能证明
     `production_gap_fixed`，scheduler/latency/resource 改动另走 `systemic_live` cohort A/B。
+13. 架构迁移可按单 Family 或批量 Family 验收；批量 harness 必须保留逐 Family receipt，只有所有子结论与
+    cross-family/common-Graph gate 都通过时 aggregate 才通过。
+14. Graph edge/priced 的裸数量只作诊断；pure refactor 比较 canonical semantic set，declared improvement 将共同
+    baseline parity 与 independently-proven additions/corrections 分开，新增不能抵消回退。
+15. `architecture_migration_parity` 的 semantic verdict 与 live timing/cutover verdict 分离；semantic pass 可支持
+    上位 gate 明确允许的 shadow/disabled-path 迁移，但不能自行授权默认生产切换。
