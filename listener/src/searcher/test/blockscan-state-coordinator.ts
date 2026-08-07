@@ -4409,6 +4409,68 @@ async function alwaysDirectCarryPolicyNeverCarries(): Promise<void> {
   );
 }
 
+async function scoreOnlyChangeDoesNotRecompileButRefreshesEdges(): Promise<void> {
+  const calls = { compiles: 0 };
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: {
+      ...univ2BlockScanState,
+      compileStateInstance(input: CompileStateInstanceInput) {
+        calls.compiles++;
+        return univ2BlockScanState.compileStateInstance!(input);
+      },
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
+  });
+  class NoopBackend implements BlockScanStateReadBackend {
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      const data = reservesData(1000n, 2000n, 0);
+      return reads.map((read) =>
+        Object.freeze({ ...successfulRead(read, control.sourceGeneration), data })
+      );
+    }
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const coordinator = new BlockScanStateCoordinator(new NoopBackend());
+  const edges = [
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ];
+  const first = await coordinator.prepare({
+    graph: univ2Graph(1, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(first.status, "complete");
+  assert.equal(calls.compiles, 1);
+
+  const scoredEdges = edges.map((edge) =>
+    Object.freeze({ ...edge, score: 12345 }),
+  );
+  const second = await coordinator.prepare({
+    graph: univ2Graph(2, scoredEdges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(second.status, "complete");
+  assert.equal(
+    calls.compiles,
+    1,
+    "score-only changes must not recompile static instance descriptors",
+  );
+  assert(
+    second.snapshot.graph.edges.every((edgeValue) => edgeValue.score === 12345),
+    "score-only changes must still refresh the producer's edge content",
+  );
+}
+
 function univ4Edge(
   currency0: string,
   currency1: string,
@@ -5200,6 +5262,7 @@ await univ2InstanceModeRecompilesOnlyNewPool();
 await sharedBindingParticipatesInInstanceFingerprint();
 await snapshotCompatibilityChangeForcesDirectRead();
 await alwaysDirectCarryPolicyNeverCarries();
+await scoreOnlyChangeDoesNotRecompileButRefreshesEdges();
 await univ4InstanceParityWithFullCompile();
 await univ4InstanceModeRecompilesOnlyNewPool();
 await univ3InstanceParityWithFullCompile();

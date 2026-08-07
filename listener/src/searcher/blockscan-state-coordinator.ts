@@ -1,5 +1,6 @@
 import {
   blockScanEdgeKey,
+  blockScanEdgeMetadataFingerprint,
   blockScanStateKey,
   createMutationQueryDescriptor,
   deterministicHash,
@@ -19,6 +20,7 @@ import {
   type CompiledIncrementalStateFamily,
   type FamilySharedBinding,
   type FamilyMutationClassification,
+  type GraphChangeSet,
   type MutationQueryDescriptor,
   type PublishedStateKey,
   type RegisteredBlockScanStateFamily,
@@ -737,6 +739,15 @@ export class BlockScanStateCoordinator {
     string,
     Map<StateInstanceKey, string>
   >();
+  /**
+   * Coordinator-owned previous StateInstanceSpec per instance, the single
+   * before-state for GraphChangeSet schema diffs.
+   */
+  private readonly instanceSpecs = new Map<
+    string,
+    Map<StateInstanceKey, StateInstanceSpec>
+  >();
+  private readonly familySharedFingerprints = new Map<string, string>();
   private bootstrapModeActive = false;
   /**
    * Recovery-only dynamic bases. These values never enter PricingView directly:
@@ -2370,6 +2381,192 @@ export class BlockScanStateCoordinator {
   }
 
   /**
+   * Single diff source for one instance family: derives the GraphChangeSet
+   * (topology + schema) from the previous committed ownership/specs and the
+   * current specs. The coordinator never accepts a second publisher-declared
+   * schema diff; instance compilation and reuse are driven only by
+   * changeSet.schema here.
+   */
+  private buildGraphChangeSet(input: {
+    readonly familyId: string;
+    readonly previousTopology: StateTopologyIndex | null;
+    readonly currentGroups: readonly StateGroup[];
+    readonly previousInstances:
+      | ReadonlyMap<StateInstanceKey, CompiledStateInstance>
+      | undefined;
+    readonly previousSpecs:
+      | ReadonlyMap<StateInstanceKey, StateInstanceSpec>
+      | undefined;
+    readonly previousSpecFingerprints:
+      | ReadonlyMap<StateInstanceKey, string>
+      | undefined;
+    readonly previousSharedFingerprint: string;
+    readonly specs: ReadonlyMap<StateInstanceKey, StateInstanceSpec>;
+    readonly schemaRevision: string;
+    readonly sharedFingerprint: string;
+  }): GraphChangeSet {
+    const previousGroups =
+      input.previousTopology?.ownership.groups ?? [];
+    const previousFamilyGroups = previousGroups.filter(
+      (group) => group.familyId === input.familyId,
+    );
+    const previousEdges = new Map<string, TokenEdge>();
+    for (const group of previousFamilyGroups) {
+      for (const edge of group.edges) {
+        previousEdges.set(blockScanEdgeKey(edge), edge);
+      }
+    }
+    const currentEdges = new Map<string, TokenEdge>();
+    for (const group of input.currentGroups) {
+      for (const edge of group.edges) {
+        currentEdges.set(blockScanEdgeKey(edge), edge);
+      }
+    }
+    const addedEdges: TokenEdge[] = [];
+    const removedEdgeKeys: string[] = [];
+    const metadataChangedEdges: {
+      readonly edgeKey: string;
+      readonly before: TokenEdge;
+      readonly after: TokenEdge;
+    }[] = [];
+    const scoreChangedEdges: {
+      readonly edgeKey: string;
+      readonly before: number | undefined;
+      readonly after: number | undefined;
+    }[] = [];
+    for (const [key, edge] of currentEdges) {
+      const previous = previousEdges.get(key);
+      if (previous === undefined) {
+        addedEdges.push(edge);
+        continue;
+      }
+      if (
+        blockScanEdgeMetadataFingerprint(edge) !==
+        blockScanEdgeMetadataFingerprint(previous)
+      ) {
+        metadataChangedEdges.push({
+          edgeKey: key,
+          before: previous,
+          after: edge,
+        });
+      }
+      if (previous.score !== edge.score) {
+        scoreChangedEdges.push({
+          edgeKey: key,
+          before: previous.score,
+          after: edge.score,
+        });
+      }
+    }
+    for (const key of previousEdges.keys()) {
+      if (!currentEdges.has(key)) removedEdgeKeys.push(key);
+    }
+    const previousStateKeys = new Set(
+      previousFamilyGroups.map((group) => group.stateKey),
+    );
+    const currentStateKeys = new Set(
+      input.currentGroups.map((group) => group.stateKey),
+    );
+    const membershipChangedInstances: StateInstanceKey[] = [
+      ...[...previousStateKeys].filter((key) => !currentStateKeys.has(key)),
+      ...[...currentStateKeys].filter((key) => !previousStateKeys.has(key)),
+    ].sort();
+    const previousCompatByKey = new Map(
+      previousFamilyGroups.map((group) => [
+        group.stateKey,
+        group.snapshotCompatibilityFingerprint,
+      ] as const),
+    );
+    const snapshotCompatibilityChangedInstances: StateInstanceKey[] = [];
+    for (const group of input.currentGroups) {
+      const previous = previousCompatByKey.get(group.stateKey);
+      if (
+        previous !== undefined &&
+        previous !== group.snapshotCompatibilityFingerprint
+      ) {
+        snapshotCompatibilityChangedInstances.push(group.stateKey);
+      }
+    }
+
+    const previousInstances = input.previousInstances ?? new Map();
+    const previousSpecs = input.previousSpecs ?? new Map();
+    const previousSpecFingerprints =
+      input.previousSpecFingerprints ?? new Map();
+    const added: StateInstanceSpec[] = [];
+    const removed: StateInstanceKey[] = [];
+    const changed: {
+      readonly before: StateInstanceSpec;
+      readonly after: StateInstanceSpec;
+      readonly reason:
+        | "static-binding"
+        | "family-shared-binding"
+        | "schema-revision";
+    }[] = [];
+    const unchanged: StateInstanceSpec[] = [];
+    for (const [key, spec] of [...input.specs.entries()].sort(([a], [b]) =>
+      a.localeCompare(b)
+    )) {
+      if (!previousInstances.has(key)) {
+        added.push(spec);
+        continue;
+      }
+      const currentFingerprint = schemaInputFingerprint({
+        key,
+        adapterSchemaRevision: input.schemaRevision,
+        staticBindingFingerprint: spec.staticBindingFingerprint,
+        sharedFingerprint: input.sharedFingerprint,
+      });
+      const previousFingerprint = previousSpecFingerprints.get(key);
+      if (
+        previousFingerprint !== undefined &&
+        previousFingerprint === currentFingerprint
+      ) {
+        unchanged.push(spec);
+        continue;
+      }
+      const before = previousSpecs.get(key);
+      const reason =
+        before === undefined
+          ? "schema-revision"
+          : before.staticBindingFingerprint !==
+              spec.staticBindingFingerprint
+            ? "static-binding"
+            : input.previousSharedFingerprint !== input.sharedFingerprint
+              ? "family-shared-binding"
+              : "schema-revision";
+      changed.push({
+        before: before ?? spec,
+        after: spec,
+        reason,
+      });
+    }
+    for (const key of previousInstances.keys()) {
+      if (!input.specs.has(key)) removed.push(key);
+    }
+    return Object.freeze({
+      topology: Object.freeze({
+        addedEdges: Object.freeze(addedEdges),
+        removedEdgeKeys: Object.freeze(removedEdgeKeys.sort()),
+        metadataChangedEdges: Object.freeze(metadataChangedEdges),
+        scoreChangedEdges: Object.freeze(scoreChangedEdges),
+        membershipChangedInstances: Object.freeze(
+          membershipChangedInstances,
+        ),
+        snapshotCompatibilityChangedInstances: Object.freeze(
+          snapshotCompatibilityChangedInstances,
+        ),
+      }),
+      schema: Object.freeze({
+        added: Object.freeze(added),
+        removed: Object.freeze(removed.sort()),
+        changed: Object.freeze(changed),
+        unchanged: Object.freeze(unchanged),
+      }),
+      nextByInstance: input.specs,
+    });
+  }
+
+  /**
    * State-instance-v1 family preparation: compile only the instances whose
    * schema input fingerprint changed, reuse published instances otherwise,
    * then assemble a runtime family facade. A single instance failure drops
@@ -2409,6 +2606,7 @@ export class BlockScanStateCoordinator {
       this.instanceSpecFingerprints.get(family.familyId) ?? new Map();
     const staged = new Map<StateInstanceKey, CompiledStateInstance>();
     const stagedSpecFingerprints = new Map<StateInstanceKey, string>();
+    const stagedSpecs = new Map<StateInstanceKey, StateInstanceSpec>();
     const issues: BlockScanStateIssue[] = [];
     /*
      * Instance-scoped static read runner: source-pinned, local-id validated,
@@ -2493,6 +2691,8 @@ export class BlockScanStateCoordinator {
       }
       return Object.freeze([...byLocalId.values()]);
     };
+    const specs = new Map<StateInstanceKey, StateInstanceSpec>();
+    const expectedSpecFingerprints = new Map<StateInstanceKey, string>();
     for (const group of familyGroups) {
       const staticBindingFingerprint = stateSchemaFingerprint(group.edges);
       const spec: StateInstanceSpec = Object.freeze({
@@ -2504,26 +2704,49 @@ export class BlockScanStateCoordinator {
         snapshotCompatibilityFingerprint:
           group.snapshotCompatibilityFingerprint,
       });
-      const expectedSpecFingerprint = schemaInputFingerprint({
-        key: spec.key,
-        adapterSchemaRevision: family.schemaRevision,
-        staticBindingFingerprint,
-        sharedFingerprint,
-      });
+      specs.set(spec.key, spec);
+      stagedSpecs.set(spec.key, spec);
+      expectedSpecFingerprints.set(
+        spec.key,
+        schemaInputFingerprint({
+          key: spec.key,
+          adapterSchemaRevision: family.schemaRevision,
+          staticBindingFingerprint,
+          sharedFingerprint,
+        }),
+      );
+    }
+    const changeSet = this.buildGraphChangeSet({
+      familyId: family.familyId,
+      previousTopology: this.topologyIndex,
+      currentGroups: familyGroups,
+      previousInstances: previous,
+      previousSpecs: this.instanceSpecs.get(family.familyId),
+      previousSpecFingerprints,
+      previousSharedFingerprint:
+        this.familySharedFingerprints.get(family.familyId) ?? "",
+      specs,
+      schemaRevision: family.schemaRevision,
+      sharedFingerprint,
+    });
+    for (const spec of changeSet.schema.unchanged) {
       const prev = previous.get(spec.key);
-      if (
-        prev !== undefined &&
-        previousSpecFingerprints.get(spec.key) === expectedSpecFingerprint
-      ) {
-        staged.set(spec.key, prev);
-        stagedSpecFingerprints.set(spec.key, expectedSpecFingerprint);
-        continue;
-      }
+      if (prev === undefined) continue;
+      staged.set(spec.key, prev);
+      stagedSpecFingerprints.set(
+        spec.key,
+        expectedSpecFingerprints.get(spec.key) ?? "",
+      );
+    }
+    for (const spec of [
+      ...changeSet.schema.changed.map((entry) => entry.after),
+      ...changeSet.schema.added,
+    ]) {
       try {
         const compiled = await awaitWithAbort(
           family.compileStateInstance({
             spec,
-            previous: prev,
+            previous: previous.get(spec.key),
             control: { deadlineAtMs, signal },
             sourceBlock: graph.sourceBlock,
             sourceBlockHash: graph.sourceBlockHash,
@@ -2533,7 +2756,10 @@ export class BlockScanStateCoordinator {
           signal,
         );
         staged.set(spec.key, compiled);
-        stagedSpecFingerprints.set(spec.key, expectedSpecFingerprint);
+        stagedSpecFingerprints.set(
+          spec.key,
+          expectedSpecFingerprints.get(spec.key) ?? "",
+        );
       } catch (error) {
         staged.delete(spec.key);
         issues.push({
@@ -2561,6 +2787,8 @@ export class BlockScanStateCoordinator {
         family.familyId,
         stagedSpecFingerprints,
       );
+      this.instanceSpecs.set(family.familyId, stagedSpecs);
+      this.familySharedFingerprints.set(family.familyId, sharedFingerprint);
     }
     if (familyGroups.length === 0) {
       return {
