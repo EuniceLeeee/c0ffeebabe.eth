@@ -2809,7 +2809,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               const batchYieldUntilAtMs = Date.now() + maxBatchYieldMs;
               while (Date.now() < batchYieldUntilAtMs) {
                 if (signal.aborted || passSignal.aborted) break;
-                if (producerLagBlocks() < 2) break;
+                if (
+                  !exactProducerYieldShouldWait({
+                    producerCriticalActive: this.producerCriticalActive,
+                    producerLagBlocks: producerLagBlocks(),
+                  })
+                ) {
+                  break;
+                }
                 if (exactYieldedMs >= maxPassYieldMs) break;
                 await new Promise<void>((resolve) =>
                   setTimeout(resolve, 100)
@@ -2837,7 +2844,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               maxBatchSize: 32,
               maxConcurrentBatches: 8,
               maxConcurrentBatchesProvider: () =>
-                producerLagBlocks() >= 2 ? 2 : 8,
+                this.producerCriticalActive || producerLagBlocks() >= 2
+                  ? 2
+                  : 8,
               transportScheduler: exactTransportScheduler,
             },
           );
@@ -3599,4 +3608,20 @@ async function waitForTaskUntil(
       (error) => finish(undefined, error),
     );
   });
+}
+
+/**
+ * Exact-probe producer-yield predicate. The N pass's exact_refine batches and
+ * the background N-1 producer's canonical-activity read both hit reth; when
+ * they overlap, the producer generation stretches to 12-18s, its sequential
+ * publication chain delays the next passes' state stage past the head cadence,
+ * and enumeration_not_ran follows. Exact yields while the producer generation
+ * is in progress (event-driven, not only when the producer is >=2 blocks
+ * behind) so the coarse chain keeps its 2-5s cadence.
+ */
+export function exactProducerYieldShouldWait(input: {
+  readonly producerCriticalActive: boolean;
+  readonly producerLagBlocks: number;
+}): boolean {
+  return input.producerCriticalActive || input.producerLagBlocks >= 2;
 }

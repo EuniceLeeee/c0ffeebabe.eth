@@ -59,6 +59,7 @@
     "searcher:self-burn-native-family": "node --import tsx src/searcher/test/self-burn-native-family.ts",
     "searcher:protocol-discovery-rpc-cancellation": "node --import tsx src/searcher/test/protocol-discovery-rpc-cancellation.ts",
     "searcher:discovery-source-watermark": "node --import tsx src/searcher/test/discovery-source-watermark.ts",
+    "searcher:exact-producer-yield": "node --import tsx src/searcher/test/exact-producer-yield.ts",
     "searcher:discovery-backfill-lane": "node --import tsx src/searcher/test/discovery-backfill-lane.ts",
     "searcher:protocol-discovery-cache-pruning": "node --import tsx src/searcher/test/protocol-discovery-cache-pruning.ts",
     "searcher:coalescing-async-writer": "node --import tsx src/searcher/test/coalescing-async-writer.ts",
