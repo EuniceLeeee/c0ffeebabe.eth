@@ -21,7 +21,7 @@ import type {
  * snapshots — so the cache stays protocol-agnostic and reuses the family's
  * registered decode path on hydration.
  */
-export const BLOCKSCAN_STATE_CACHE_SCHEMA_VERSION = 1;
+export const BLOCKSCAN_STATE_CACHE_SCHEMA_VERSION = 2;
 
 export interface CachedBlockScanStateRead {
   readonly localId: string;
@@ -37,6 +37,12 @@ export interface CachedBlockScanStateKey {
   /** Sorted adapter-local read ids; every id has exactly one entry in reads. */
   readonly requiredReadKeys: readonly string[];
   readonly reads: readonly CachedBlockScanStateRead[];
+  /** Coordinator-computed schemaInputFingerprint at save time ("" for legacy). */
+  readonly specFingerprint: string;
+  /** CompiledStateInstance.instanceFingerprint at save time ("" for legacy). */
+  readonly instanceFingerprint: string;
+  /** Adapter-owned snapshot compatibility fingerprint at save time. */
+  readonly snapshotCompatibilityFingerprint: string;
   readonly savedAtMs: number;
 }
 
@@ -112,6 +118,13 @@ export function isValidCachedBlockScanStateKey(
     return false;
   }
   if (!Array.isArray(entry.reads) || entry.reads.length === 0) {
+    return false;
+  }
+  if (
+    typeof entry.specFingerprint !== "string" ||
+    typeof entry.instanceFingerprint !== "string" ||
+    typeof entry.snapshotCompatibilityFingerprint !== "string"
+  ) {
     return false;
   }
   const readByLocalId = new Map<string, CachedBlockScanStateRead>();

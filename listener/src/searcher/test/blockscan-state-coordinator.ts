@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import {
   BlockScanStateCoordinator,
   type BlockScanFamilyTelemetry,
@@ -4471,6 +4472,194 @@ async function scoreOnlyChangeDoesNotRecompileButRefreshesEdges(): Promise<void>
   );
 }
 
+async function removedPoolReaddNeverReusesOldBase(): Promise<void> {
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: univ2BlockScanState,
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
+  });
+  class CountingBackend implements BlockScanStateReadBackend {
+    physicalReads = 0;
+    readPoolKeys: string[] = [];
+    async readCanonicalBlockActivity(
+      fromExclusive: BlockSource,
+      through: BlockSource,
+    ): Promise<{
+      readonly fromExclusive: BlockSource;
+      readonly through: BlockSource;
+      readonly canonicalBlocks: readonly { readonly number: number; readonly hash: string }[];
+      readonly events: readonly ChainLog[];
+      readonly touchedAddresses: readonly string[];
+      readonly transactionCount: number;
+      readonly canonicalPathFingerprint: string;
+      readonly rangeFingerprint: string;
+    }> {
+      return Object.freeze({
+        fromExclusive,
+        through,
+        canonicalBlocks: Object.freeze([
+          Object.freeze({ number: through.number, hash: through.hash }),
+        ]),
+        events: Object.freeze([]),
+        touchedAddresses: Object.freeze([]),
+        transactionCount: 0,
+        canonicalPathFingerprint: deterministicHash({
+          fromExclusive,
+          through,
+        }),
+        rangeFingerprint: deterministicHash({
+          fromExclusive,
+          through,
+          events: Object.freeze([]),
+        }),
+      });
+    }
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      this.physicalReads += reads.length;
+      this.readPoolKeys.push(...reads.map((read) => read.to.toLowerCase()));
+      const data = reservesData(1000n, 2000n, 0);
+      return reads.map((read) =>
+        Object.freeze({ ...successfulRead(read, control.sourceGeneration), data })
+      );
+    }
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const backend = new CountingBackend();
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const poolA = [
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ];
+  const poolB = [
+    univ2Edge(SWAP_POOL_B, TOKEN_A, TOKEN_C, true),
+    univ2Edge(SWAP_POOL_B, TOKEN_A, TOKEN_C, false),
+  ];
+  const first = await coordinator.prepare({
+    graph: univ2Graph(1, [...poolA, ...poolB]),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(first.status, "complete");
+  backend.physicalReads = 0;
+  const removed = await coordinator.prepare({
+    graph: univ2Graph(2, poolA),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(removed.status, "complete");
+  const reAdded = await coordinator.prepare({
+    graph: univ2Graph(3, [...poolA, ...poolB]),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(reAdded.status, "complete");
+  assert(
+    backend.readPoolKeys.includes(SWAP_POOL_B.toLowerCase()),
+    "a removed-then-re-added pool must direct-read current N instead of resurrecting its old base",
+  );
+}
+
+async function warmCacheRejectsFingerprintMismatchedEntries(): Promise<void> {
+  const cachePath =
+    `/tmp/blockscan-cache-fp-test-${Date.now()}-${Math.random()}.jsonl`;
+  const familyR1 = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: {
+      ...univ2BlockScanState,
+      adapterSchemaRevision: "test-r1",
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
+  });
+  const familyR2 = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: {
+      ...univ2BlockScanState,
+      adapterSchemaRevision: "test-r2",
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
+  });
+  class CountingBackend implements BlockScanStateReadBackend {
+    physicalReads = 0;
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      this.physicalReads += reads.length;
+      const data = reservesData(1000n, 2000n, 0);
+      return reads.map((read) =>
+        Object.freeze({ ...successfulRead(read, control.sourceGeneration), data })
+      );
+    }
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const edges = [
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ];
+  const warmBackend = new CountingBackend();
+  const warmer = new BlockScanStateCoordinator(warmBackend, { cachePath });
+  const warm = await warmer.prepare({
+    graph: univ2Graph(1, edges),
+    families: [familyR1],
+    deadlineAtMs: Date.now() + 5_000,
+    cacheMode: "warm",
+  });
+  assert.equal(warm.status, "complete");
+  for (let attempt = 0; attempt < 1_000; attempt++) {
+    if (
+      existsSync(cachePath) &&
+      readFileSync(cachePath, "utf8").trim().length > 0
+    ) {
+      break;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  }
+  assert(existsSync(cachePath), "warm cache file must be written");
+
+  const reuseBackend = new CountingBackend();
+  const reuser = new BlockScanStateCoordinator(reuseBackend, { cachePath });
+  const reused = await reuser.prepare({
+    graph: univ2Graph(1, edges),
+    families: [familyR1],
+    deadlineAtMs: Date.now() + 5_000,
+    cacheMode: "warm",
+  });
+  assert.equal(reused.status, "complete");
+  assert.equal(
+    reuseBackend.physicalReads,
+    0,
+    "an identical spec fingerprint must reuse the warm cache",
+  );
+
+  const mismatchBackend = new CountingBackend();
+  const mismatch = new BlockScanStateCoordinator(mismatchBackend, { cachePath });
+  const recompiled = await mismatch.prepare({
+    graph: univ2Graph(1, edges),
+    families: [familyR2],
+    deadlineAtMs: Date.now() + 5_000,
+    cacheMode: "warm",
+  });
+  assert.equal(recompiled.status, "complete");
+  assert.equal(
+    mismatchBackend.physicalReads,
+    1,
+    "a spec-fingerprint mismatch must reject the warm cache entry and re-read",
+  );
+  unlinkSync(cachePath);
+}
+
 function univ4Edge(
   currency0: string,
   currency1: string,
@@ -5263,6 +5452,8 @@ await sharedBindingParticipatesInInstanceFingerprint();
 await snapshotCompatibilityChangeForcesDirectRead();
 await alwaysDirectCarryPolicyNeverCarries();
 await scoreOnlyChangeDoesNotRecompileButRefreshesEdges();
+await removedPoolReaddNeverReusesOldBase();
+await warmCacheRejectsFingerprintMismatchedEntries();
 await univ4InstanceParityWithFullCompile();
 await univ4InstanceModeRecompilesOnlyNewPool();
 await univ3InstanceParityWithFullCompile();

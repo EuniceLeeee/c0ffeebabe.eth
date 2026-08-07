@@ -1325,9 +1325,26 @@ export class BlockScanStateCoordinator {
   private cacheEntryForGroup(
     group: StateGroup,
     graph: VerifiedGraphView,
+    instance?: CompiledStateInstance,
+    expectedSpecFingerprint?: string,
   ): CachedBlockScanStateKey | undefined {
     const entry = this.cachedByStateKey.get(group.stateKey);
     if (!entry || entry.familyId !== group.familyId) return undefined;
+    if (
+      entry.snapshotCompatibilityFingerprint !==
+      group.snapshotCompatibilityFingerprint
+    ) {
+      return undefined;
+    }
+    if (instance !== undefined) {
+      if (
+        expectedSpecFingerprint === undefined ||
+        entry.specFingerprint !== expectedSpecFingerprint ||
+        entry.instanceFingerprint !== instance.instanceFingerprint
+      ) {
+        return undefined;
+      }
+    }
     const distance = graph.sourceBlock - entry.source.number;
     if (distance < 0 || distance > this.incrementalRangeBlocks) {
       return undefined;
@@ -1374,6 +1391,8 @@ export class BlockScanStateCoordinator {
       readonly globalId: string;
       readonly localId: string;
     }[],
+    instance?: CompiledStateInstance,
+    expectedSpecFingerprint?: string,
   ): CachedBlockScanStateKey | null {
     if (groupReads.length === 0) return null;
     const reads: CachedBlockScanStateRead[] = [];
@@ -1397,8 +1416,29 @@ export class BlockScanStateCoordinator {
       // rounds), so the cache must replay the same sequence on hydration.
       requiredReadKeys: Object.freeze(groupReads.map((item) => item.localId)),
       reads: Object.freeze(reads),
+      specFingerprint: expectedSpecFingerprint ?? "",
+      instanceFingerprint: instance?.instanceFingerprint ?? "",
+      snapshotCompatibilityFingerprint:
+        group.snapshotCompatibilityFingerprint,
       savedAtMs: this.now(),
     });
+  }
+
+  private expectedSpecFingerprintForGroup(group: StateGroup): string {
+    return schemaInputFingerprint({
+      key: group.stateKey,
+      adapterSchemaRevision: group.family.schemaRevision,
+      staticBindingFingerprint: group.schemaFingerprint,
+      sharedFingerprint:
+        this.familySharedFingerprints.get(group.familyId) ?? "",
+    });
+  }
+
+  private tombstoneStateKey(stateKey: string): void {
+    this.lastGoodByStateKey.delete(stateKey);
+    this.cachedByStateKey.delete(stateKey);
+    this.deferredFailedStateKeys.delete(stateKey);
+    this.failedStateKeyAttempts.delete(stateKey);
   }
 
   /**
@@ -1610,6 +1650,7 @@ export class BlockScanStateCoordinator {
        */
       const allGroups = [...laneGroups.swap, ...laneGroups.protocol];
       const preparedStartedAtMs = this.now();
+      const sharedStaticReadCache = new Map<string, StateReadResult>();
       const preparedPhases = await Promise.all(
         uniqueFamilies(allGroups).map(async (family) => {
           const familyGroups = allGroups.filter(
@@ -1622,6 +1663,7 @@ export class BlockScanStateCoordinator {
             graph,
             deadlineAtMs: familySettleDeadlineAtMs,
             signal: controller.signal,
+            staticReadCache: sharedStaticReadCache,
           });
         }),
       );
@@ -2580,12 +2622,21 @@ export class BlockScanStateCoordinator {
     readonly deadlineAtMs: number;
     readonly signal: AbortSignal;
     readonly staging: FamilyLaneStaging;
+    readonly staticReadCache: Map<string, StateReadResult>;
   }): Promise<{
     readonly compiled: CompiledBlockScanStateFamily | null;
     readonly instances: ReadonlyMap<StateInstanceKey, CompiledStateInstance>;
     readonly issues: readonly BlockScanStateIssue[];
   }> {
-    const { family, groups, graph, deadlineAtMs, signal, staging } = input;
+    const {
+      family,
+      groups,
+      graph,
+      deadlineAtMs,
+      signal,
+      staging,
+      staticReadCache,
+    } = input;
     const familyGroups = groups.filter(
       (group) => group.familyId === family.familyId,
     );
@@ -2613,7 +2664,6 @@ export class BlockScanStateCoordinator {
      * physically deduplicated across instances of the same family phase
      * (identical to+data resolves once, results fan out by local id).
      */
-    const staticReadCache = new Map<string, StateReadResult>();
     const readStatic = async (
       reads: readonly StateRead[],
     ): Promise<readonly StateReadResult[]> => {
@@ -2729,6 +2779,12 @@ export class BlockScanStateCoordinator {
       schemaRevision: family.schemaRevision,
       sharedFingerprint,
     });
+    for (const removedKey of changeSet.schema.removed) {
+      // Removed-then-re-added instances must never resurrect the old
+      // lastGood/cache/deferred state: the re-added key direct-reads current N
+      // and rebuilds its own base.
+      this.tombstoneStateKey(removedKey);
+    }
     for (const spec of changeSet.schema.unchanged) {
       const prev = previous.get(spec.key);
       if (prev === undefined) continue;
@@ -2836,6 +2892,7 @@ export class BlockScanStateCoordinator {
     readonly graph: VerifiedGraphView;
     readonly deadlineAtMs: number;
     readonly signal: AbortSignal;
+    readonly staticReadCache: Map<string, StateReadResult>;
   }): Promise<PreparedFamilyPhase> {
     const { lane, groups, graph } = input;
     const familyId = groups[0]?.familyId;
@@ -2902,6 +2959,7 @@ export class BlockScanStateCoordinator {
               deadlineAtMs: familyDeadlineAtMs,
               signal: familyController.signal,
               staging,
+              staticReadCache: input.staticReadCache,
             });
             issues.push(...prepared.issues);
             if (prepared.compiled !== null) {
@@ -2930,6 +2988,9 @@ export class BlockScanStateCoordinator {
                 sourceBlockHash: graph.sourceBlockHash,
                 readStatic: async (reads) => {
                   const seen = new Set<string>();
+                  const byId = new Map<string, StateReadResult>();
+                  const missing: StateRead[] = [];
+                  const missingByLocalId = new Map<string, StateRead>();
                   for (const read of reads) {
                     validateRead(read, graph);
                     if (!read.id || seen.has(read.id)) {
@@ -2938,50 +2999,67 @@ export class BlockScanStateCoordinator {
                       );
                     }
                     seen.add(read.id);
+                    const physicalKey =
+                      `${read.to.toLowerCase()}\u001f${read.data}`;
+                    const cached = input.staticReadCache.get(physicalKey);
+                    if (cached !== undefined) {
+                      byId.set(read.id, cached);
+                    } else {
+                      missing.push(read);
+                      missingByLocalId.set(read.id, read);
+                    }
                   }
-                  staging.reads += reads.length;
-                  staging.batches++;
-                  const results = await awaitWithAbort(
-                    this.backend.readBatch(
-                      lane,
-                      reads,
-                      {
-                        sourceBlock: graph.sourceBlock,
-                        sourceBlockHash: graph.sourceBlockHash,
-                        sourceGeneration: graph.generation,
-                        deadlineAtMs: familyDeadlineAtMs,
-                        signal: familyController.signal,
-                      },
-                    ),
-                    familyController.signal,
-                  );
-                  const byId = new Map<string, StateReadResult>();
-                  for (const result of results) {
-                    if (!seen.has(result.id) || byId.has(result.id)) {
-                      throw new Error(
-                        "static backend result IDs did not exactly match reads",
-                      );
+                  if (missing.length > 0) {
+                    staging.reads += missing.length;
+                    staging.batches++;
+                    const results = await awaitWithAbort(
+                      this.backend.readBatch(
+                        lane,
+                        missing,
+                        {
+                          sourceBlock: graph.sourceBlock,
+                          sourceBlockHash: graph.sourceBlockHash,
+                          sourceGeneration: graph.generation,
+                          deadlineAtMs: familyDeadlineAtMs,
+                          signal: familyController.signal,
+                        },
+                      ),
+                      familyController.signal,
+                    );
+                    for (const result of results) {
+                      if (!seen.has(result.id) || byId.has(result.id)) {
+                        throw new Error(
+                          "static backend result IDs did not exactly match reads",
+                        );
+                      }
+                      if (
+                        !stateReadResultMatchesSource(
+                          this.backend,
+                          result,
+                          graph,
+                        )
+                      ) {
+                        throw new Error(
+                          "static read result lacks current source provenance",
+                        );
+                      }
+                      if (!result.ok) {
+                        throw new Error(
+                          `static read ${result.id} failed: ${result.error}`,
+                        );
+                      }
+                      byId.set(result.id, result);
+                      const request = missingByLocalId.get(result.id);
+                      if (request) {
+                        input.staticReadCache.set(
+                          `${request.to.toLowerCase()}\u001f${request.data}`,
+                          result,
+                        );
+                      }
                     }
-                    if (
-                      !stateReadResultMatchesSource(
-                        this.backend,
-                        result,
-                        graph,
-                      )
-                    ) {
-                      throw new Error(
-                        "static read result lacks current source provenance",
-                      );
+                    if (byId.size !== seen.size) {
+                      throw new Error("static backend omitted one or more reads");
                     }
-                    if (!result.ok) {
-                      throw new Error(
-                        `static read ${result.id} failed: ${result.error}`,
-                      );
-                    }
-                    byId.set(result.id, result);
-                  }
-                  if (byId.size !== seen.size) {
-                    throw new Error("static backend omitted one or more reads");
                   }
                   return Object.freeze([...byId.values()]);
                 },
@@ -3275,7 +3353,12 @@ export class BlockScanStateCoordinator {
           this.cacheModeActive &&
           !this.recoveryBaseForGroup(group)
         ) {
-          const cacheEntry = this.cacheEntryForGroup(group, graph);
+          const cacheEntry = this.cacheEntryForGroup(
+            group,
+            graph,
+            prepared.instances?.get(group.stateKey),
+            this.expectedSpecFingerprintForGroup(group),
+          );
           if (cacheEntry) {
             cacheSourcedStateKeys.add(group.stateKey);
             for (const localId of cacheEntry.requiredReadKeys) {
@@ -3543,7 +3626,12 @@ export class BlockScanStateCoordinator {
     for (const group of groups) {
       if (badStateKeys.has(group.stateKey)) continue;
       const cacheEntry = cacheSourcedStateKeys.has(group.stateKey)
-        ? this.cacheEntryForGroup(group, graph)
+        ? this.cacheEntryForGroup(
+            group,
+            graph,
+            prepared.instances?.get(group.stateKey),
+            this.expectedSpecFingerprintForGroup(group),
+          )
         : undefined;
       const groupReads = cacheEntry
         ? []
@@ -3901,6 +3989,8 @@ export class BlockScanStateCoordinator {
             publishedState,
             resultsByGlobalId,
             groupReads,
+            prepared.instances?.get(group.stateKey),
+            this.expectedSpecFingerprintForGroup(group),
           );
           if (cacheEntryToWrite) {
             this.scheduleCacheAppend(cacheEntryToWrite);
