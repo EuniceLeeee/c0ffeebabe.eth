@@ -564,6 +564,14 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   /** Per background discovery read wait while the producer is critical. */
   readonly discoveryProducerYieldPerReadMaxWaitMs?: number;
   /**
+   * Hard wall-clock budget for one exact_refine stage. Exact probes are S2
+   * optional work; a 6-15s probe tail in pass N delays pass N+1 start past
+   * the head cadence and produces stale_state / enumeration not-run (the
+   * measured miss pattern after discovery throttling). Capping the stage
+   * keeps pass N inside the head cadence while enumeration stays ran.
+   */
+  readonly exactRefineHardBudgetMs?: number;
+  /**
    * When the background N-1 producer is behind the newest scheduled head,
    * exact probes yield the shared reth transport for up to this many
    * milliseconds per batch. Heavy candidate blocks (900+ probes) can occupy
@@ -2763,9 +2771,16 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         Math.max(0, this.deps.solveReserveMs),
         Math.max(1, Math.floor((passDeadlineAtMs - Date.now()) / 3)),
       );
-      const refineDeadline = Math.max(
-        Date.now(),
-        passDeadlineAtMs - refinementReserveMs,
+      const exactHardBudgetMs = Math.max(
+        1_000,
+        this.deps.exactRefineHardBudgetMs ?? 4_000,
+      );
+      const refineDeadline = Math.min(
+        Math.max(
+          Date.now(),
+          passDeadlineAtMs - refinementReserveMs,
+        ),
+        Date.now() + exactHardBudgetMs,
       );
       if (!exactRefineStarted) beginStage("exact_refine");
       /*
