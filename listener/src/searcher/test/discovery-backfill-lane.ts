@@ -44,8 +44,9 @@ await deadlineCancelsEveryBudgetedRead();
 await futureReadyWaitsForNewestHead();
 await producerYieldDelaysScanUntilProducerIdle();
 await producerYieldPerReadDelaysWorkWhileProducerCritical();
+await producerYieldDefersScanWhenProducerStaysCritical();
 
-console.log("[discovery-backfill-lane] bounded background publication: PASS (10/10)");
+console.log("[discovery-backfill-lane] bounded background publication: PASS (11/11)");
 
 function chunkSizingSeparatesRetentionFromWorkUnits(): void {
   assert.equal(
@@ -142,6 +143,7 @@ async function preparationDoesNotHoldMutationQueue(): Promise<void> {
     scheduled: 1,
     prepared: 1,
     taken: 1,
+    deferred: 0,
     rejectedBusy: 0,
     rejectedReady: 0,
     failed: 0,
@@ -484,6 +486,42 @@ async function producerYieldPerReadDelaysWorkWhileProducerCritical(): Promise<vo
   producerActive = false;
   await waitFor(() => workRan === true);
   await waitFor(() => lane.readyDescriptor() !== null);
+}
+
+async function producerYieldDefersScanWhenProducerStaysCritical(): Promise<void> {
+  const request = requestFor(101, 101, 101);
+  const base = stateAt(100, 4);
+  let started = false;
+  let producerActive = true;
+  const lane = new DiscoveryBackfillLane<LiveDiscoveryState, RawBackfill>({
+    maxBlocksPerJob: 25,
+    maxPreparationMs: 5_000,
+    maxConcurrency: 2,
+    describeState: describe,
+    prepare: async () => {
+      started = true;
+      return rawFor(request);
+    },
+    validateTransition,
+    producerYield: { active: () => producerActive, maxWaitMs: 150 },
+  });
+  lane.schedule(request, base);
+  await waitFor(() => lane.telemetry().deferred === 1);
+  assert.equal(
+    started,
+    false,
+    "a backfill scan must not start after the producer-yield cap; it is deferred",
+  );
+  assert.equal(lane.telemetry().failed, 0, "deferral is not a failure");
+  assert.equal(lane.telemetry().activeJobId, null, "deferred job releases the worker");
+
+  producerActive = false;
+  lane.schedule(request, base);
+  await waitFor(() => started === true);
+  await waitFor(() => lane.readyDescriptor() !== null);
+  assert.equal(lane.telemetry().deferred, 1);
+  assert.equal(lane.telemetry().prepared, 1);
+  assert.equal(lane.telemetry().failed, 0);
 }
 
 async function deadlineCancelsEveryBudgetedRead(): Promise<void> {

@@ -2344,6 +2344,7 @@ export async function createLiveDiscoveryCoordinator(
 
   const blockScanHooks = {
     lane: dexBackfillLane,
+    protocolLane: protocolBackfillLane,
     journal: canonicalHeaderJournal,
     queue: protocolDiscoveryQueue,
     observeHeader: observeLiveCanonicalHeader,

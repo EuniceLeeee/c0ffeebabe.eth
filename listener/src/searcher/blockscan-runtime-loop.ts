@@ -415,6 +415,15 @@ interface BlockScanDiscoveryDependencies<PreparedDiscovery> {
     LiveDiscoveryPublicationState,
     PreparedDiscovery
   >;
+  /**
+   * Independent protocol-history backfill lane. It shares the same producer
+   * yield gate as the DEX lane so deep trace/probe history cannot saturate
+   * reth while the blockscan producer is critical.
+   */
+  readonly protocolLane?: DiscoveryBackfillLane<
+    LiveDiscoveryPublicationState,
+    PreparedDiscovery
+  >;
   readonly journal: CanonicalHeaderJournal;
   readonly queue: ProtocolDiscoveryMutationQueue;
   observeHeader(blockNumber: number): Promise<CanonicalHeader>;
@@ -547,7 +556,9 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly discoveryBackfillMinIntervalMs?: number;
   /**
    * Max wall-clock a scheduled discovery backfill scan waits for the
-   * producer's critical state phase to finish before it starts anyway.
+   * producer's critical state phase to finish; if the producer is still
+   * critical when the cap is reached, the scan is deferred and rescheduled
+   * on the next tick instead of starting and overlapping the producer.
    */
   readonly discoveryProducerYieldMaxWaitMs?: number;
   /** Per background discovery read wait while the producer is critical. */
@@ -745,14 +756,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         });
       },
     );
-    const discoveryLane = deps.discovery.lane as {
-      setProducerYield?: (hook: {
-        readonly active: () => boolean;
-        readonly maxWaitMs: number;
-        readonly perReadMaxWaitMs?: number;
-      }) => void;
-    };
-    discoveryLane.setProducerYield?.({
+    const producerYieldHook = {
       active: () => this.producerCriticalActive,
       maxWaitMs: Math.max(
         0,
@@ -762,7 +766,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         0,
         deps.discoveryProducerYieldPerReadMaxWaitMs ?? 250,
       ),
-    });
+    } as const;
+    deps.discovery.lane.setProducerYield(producerYieldHook);
+    deps.discovery.protocolLane?.setProducerYield(producerYieldHook);
   }
 
   schedule(
