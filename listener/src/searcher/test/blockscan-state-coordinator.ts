@@ -22,6 +22,7 @@ import {
   type CanonicalMutationRange,
   type ChainLog,
   type CompileStateInstanceInput,
+  type FamilySharedBinding,
   type MutationQueryDescriptor,
   type RegisteredBlockScanStateFamily,
   type StateRead,
@@ -4126,6 +4127,288 @@ async function univ2InstanceModeRecompilesOnlyNewPool(): Promise<void> {
   );
 }
 
+async function sharedBindingParticipatesInInstanceFingerprint(): Promise<void> {
+  const calls = { compiles: 0 };
+  const recorded: {
+    binding?: FamilySharedBinding<unknown> | undefined;
+  } = {};
+  let bindingRevision = "v1";
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: {
+      ...univ2BlockScanState,
+      compileStateInstance(input: CompileStateInstanceInput) {
+        calls.compiles++;
+        recorded.binding = input.sharedBinding;
+        return univ2BlockScanState.compileStateInstance!(input);
+      },
+      sharedBinding: () => Object.freeze({
+        familyId: "univ2-standard",
+        revision: bindingRevision,
+        fingerprint: `fp-${bindingRevision}`,
+        value: Object.freeze({ decimals: 6 }),
+      }),
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
+  });
+  class NoopBackend implements BlockScanStateReadBackend {
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      const data = reservesData(1000n, 2000n, 0);
+      return reads.map((read) =>
+        Object.freeze({ ...successfulRead(read, control.sourceGeneration), data })
+      );
+    }
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const coordinator = new BlockScanStateCoordinator(new NoopBackend());
+  const edges = [
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ];
+  const first = await coordinator.prepare({
+    graph: univ2Graph(1, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(first.status, "complete");
+  assert.equal(calls.compiles, 1);
+  assert.equal(recorded.binding?.fingerprint, "fp-v1");
+
+  const second = await coordinator.prepare({
+    graph: univ2Graph(2, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(second.status, "complete");
+  assert.equal(
+    calls.compiles,
+    1,
+    "an unchanged shared binding must not recompile the instance",
+  );
+
+  bindingRevision = "v2";
+  const third = await coordinator.prepare({
+    graph: univ2Graph(3, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(third.status, "complete");
+  assert.equal(
+    calls.compiles,
+    2,
+    "a changed shared binding fingerprint must recompile the instance",
+  );
+  assert.equal(recorded.binding?.fingerprint, "fp-v2");
+}
+
+async function snapshotCompatibilityChangeForcesDirectRead(): Promise<void> {
+  const calls = { compiles: 0 };
+  let compatibility = "compat-a";
+  let compatibilityRevision = "r1";
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: {
+      ...univ2BlockScanState,
+      compileStateInstance(input: CompileStateInstanceInput) {
+        calls.compiles++;
+        return univ2BlockScanState.compileStateInstance!(input);
+      },
+      snapshotCompatibilityFingerprint: () => compatibility,
+      get snapshotCompatibilityRevision() {
+        return compatibilityRevision;
+      },
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
+  });
+  class CountingBackend implements BlockScanStateReadBackend {
+    physicalReads = 0;
+    async readCanonicalBlockActivity(
+      fromExclusive: BlockSource,
+      through: BlockSource,
+    ): Promise<{
+      readonly fromExclusive: BlockSource;
+      readonly through: BlockSource;
+      readonly canonicalBlocks: readonly { readonly number: number; readonly hash: string }[];
+      readonly events: readonly ChainLog[];
+      readonly touchedAddresses: readonly string[];
+      readonly transactionCount: number;
+      readonly canonicalPathFingerprint: string;
+      readonly rangeFingerprint: string;
+    }> {
+      return Object.freeze({
+        fromExclusive,
+        through,
+        canonicalBlocks: Object.freeze([
+          Object.freeze({ number: through.number, hash: through.hash }),
+        ]),
+        events: Object.freeze([]),
+        touchedAddresses: Object.freeze([]),
+        transactionCount: 0,
+        canonicalPathFingerprint: deterministicHash({
+          fromExclusive,
+          through,
+        }),
+        rangeFingerprint: deterministicHash({
+          fromExclusive,
+          through,
+          events: Object.freeze([]),
+        }),
+      });
+    }
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      this.physicalReads += reads.length;
+      const data = reservesData(1000n, 2000n, 0);
+      return reads.map((read) =>
+        Object.freeze({ ...successfulRead(read, control.sourceGeneration), data })
+      );
+    }
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const backend = new CountingBackend();
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const edges = [
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ];
+  const first = await coordinator.prepare({
+    graph: univ2Graph(1, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(first.status, "complete");
+  backend.physicalReads = 0;
+
+  const unchanged = await coordinator.prepare({
+    graph: univ2Graph(2, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(unchanged.status, "complete");
+  assert.equal(
+    backend.physicalReads,
+    0,
+    "unchanged snapshot compatibility must carry",
+  );
+
+  compatibility = "compat-b";
+  compatibilityRevision = "r2";
+  backend.physicalReads = 0;
+  const changed = await coordinator.prepare({
+    graph: univ2Graph(3, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(changed.status, "complete");
+  assert.equal(
+    backend.physicalReads,
+    1,
+    "a changed snapshot compatibility fingerprint must direct-read",
+  );
+}
+
+async function alwaysDirectCarryPolicyNeverCarries(): Promise<void> {
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: {
+      ...univ2BlockScanState,
+      compileStateInstance(input: CompileStateInstanceInput) {
+        const instance = univ2BlockScanState.compileStateInstance!(input);
+        return Object.freeze({ ...instance, carryPolicy: "always-direct" });
+      },
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
+  });
+  class CountingBackend implements BlockScanStateReadBackend {
+    physicalReads = 0;
+    async readCanonicalBlockActivity(
+      fromExclusive: BlockSource,
+      through: BlockSource,
+    ): Promise<{
+      readonly fromExclusive: BlockSource;
+      readonly through: BlockSource;
+      readonly canonicalBlocks: readonly { readonly number: number; readonly hash: string }[];
+      readonly events: readonly ChainLog[];
+      readonly touchedAddresses: readonly string[];
+      readonly transactionCount: number;
+      readonly canonicalPathFingerprint: string;
+      readonly rangeFingerprint: string;
+    }> {
+      return Object.freeze({
+        fromExclusive,
+        through,
+        canonicalBlocks: Object.freeze([
+          Object.freeze({ number: through.number, hash: through.hash }),
+        ]),
+        events: Object.freeze([]),
+        touchedAddresses: Object.freeze([]),
+        transactionCount: 0,
+        canonicalPathFingerprint: deterministicHash({
+          fromExclusive,
+          through,
+        }),
+        rangeFingerprint: deterministicHash({
+          fromExclusive,
+          through,
+          events: Object.freeze([]),
+        }),
+      });
+    }
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      this.physicalReads += reads.length;
+      const data = reservesData(1000n, 2000n, 0);
+      return reads.map((read) =>
+        Object.freeze({ ...successfulRead(read, control.sourceGeneration), data })
+      );
+    }
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const backend = new CountingBackend();
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const edges = [
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ];
+  const first = await coordinator.prepare({
+    graph: univ2Graph(1, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(first.status, "complete");
+  backend.physicalReads = 0;
+  const second = await coordinator.prepare({
+    graph: univ2Graph(2, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(second.status, "complete");
+  assert.equal(
+    backend.physicalReads,
+    1,
+    "an always-direct carry policy must read current-N state every generation",
+  );
+}
+
 function univ4Edge(
   currency0: string,
   currency1: string,
@@ -4914,6 +5197,9 @@ await protocolActivityPlanDrivesDirtyDirectCarry();
 await protocolActivityFailureFailsClosedToDirect();
 await univ2InstanceParityWithFullCompile();
 await univ2InstanceModeRecompilesOnlyNewPool();
+await sharedBindingParticipatesInInstanceFingerprint();
+await snapshotCompatibilityChangeForcesDirectRead();
+await alwaysDirectCarryPolicyNeverCarries();
 await univ4InstanceParityWithFullCompile();
 await univ4InstanceModeRecompilesOnlyNewPool();
 await univ3InstanceParityWithFullCompile();

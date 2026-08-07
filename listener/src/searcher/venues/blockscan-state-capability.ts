@@ -361,6 +361,32 @@ export interface BlockScanStateCapability<Schema = unknown, Snapshot = unknown> 
    * Absence is the safe always-current default.
    */
   readonly addressTouchCarryPolicy?: "dependency-touch";
+  /**
+   * Optional family-level versioned immutable shared binding (e.g. token
+   * decimals, shared factory metadata). The adapter only projects the value
+   * and its deterministic fingerprint; the coordinator owns lifecycle, cache
+   * and canonical CAS. Return null when the family has no shared binding.
+   */
+  sharedBinding?(input: {
+    readonly edges: readonly TokenEdge[];
+    readonly sourceBlock: number;
+    readonly sourceBlockHash: string;
+  }): FamilySharedBinding | null;
+  /**
+   * Adapter-owned projection of whether an old snapshot/read-key/mid coverage
+   * can still derive mids for an edge group. Defaults to
+   * stateSchemaFingerprint(edges); UniV3/UniV4 may keep it
+   * direction-sensitive because their precision witnesses are
+   * direction-level. The coordinator forces a direct current-N read when the
+   * projection changes.
+   */
+  snapshotCompatibilityFingerprint?(edges: readonly TokenEdge[]): string;
+  /**
+   * Bump whenever the snapshotCompatibilityFingerprint projection semantics
+   * change. Included in the topology cache key so a projection change cannot
+   * reuse an ownership plan built with old compatibility values.
+   */
+  readonly snapshotCompatibilityRevision?: string;
   stateKey(edge: TokenEdge): string;
   compileStaticSchema(input: CompileStaticSchemaInput): Schema | Promise<Schema>;
   /**
@@ -507,6 +533,16 @@ export interface RegisteredBlockScanStateFamily {
   dependencies(edges: readonly TokenEdge[]): readonly string[];
   /** Adapter schema/decoder revision; bump on any semantic code change. */
   readonly schemaRevision: string;
+  /** Coordinator-owned projection of the family's immutable shared binding. */
+  sharedBinding(input: {
+    readonly edges: readonly TokenEdge[];
+    readonly sourceBlock: number;
+    readonly sourceBlockHash: string;
+  }): FamilySharedBinding | null;
+  /** Adapter-owned snapshot compatibility projection (defaults to schema fp). */
+  snapshotCompatibilityFingerprint(edges: readonly TokenEdge[]): string;
+  /** Topology-key revision for the snapshot compatibility projection. */
+  readonly snapshotCompatibilityRevision: string;
   /**
    * Instance-mode compiler. Only present when schemaMode is
    * "state-instance-v1"; legacy families never expose it.
@@ -778,6 +814,20 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     compileStateInstance,
     assembleCompiledFamily,
     compile,
+    sharedBinding: (input: {
+      readonly edges: readonly TokenEdge[];
+      readonly sourceBlock: number;
+      readonly sourceBlockHash: string;
+    }) => (capability.sharedBinding
+      ? capability.sharedBinding(input) ?? null
+      : null),
+    snapshotCompatibilityFingerprint: (edges: readonly TokenEdge[]) =>
+      capability.snapshotCompatibilityFingerprint
+        ? capability.snapshotCompatibilityFingerprint(edges)
+        : stateSchemaFingerprint(edges),
+    get snapshotCompatibilityRevision() {
+      return capability.snapshotCompatibilityRevision ?? familyId;
+    },
   });
 }
 
@@ -1095,6 +1145,12 @@ export interface CompileStateInstanceInput {
   readonly control: StateOperationControl;
   readonly sourceBlock: number;
   readonly sourceBlockHash: string;
+  /**
+   * Coordinator-owned versioned immutable family shared binding (e.g. token
+   * decimals), resolved from the family's sharedBinding projection for this
+   * generation. Absent when the family declares none.
+   */
+  readonly sharedBinding?: FamilySharedBinding<unknown>;
   /**
    * Coordinator-owned static read runner for instance hydration. The adapter
    * may call it inside compileStateInstance; reads must be source-pinned and
