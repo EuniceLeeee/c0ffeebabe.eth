@@ -578,7 +578,7 @@ if [ "$REINDEX_CUR_TOBLOCK" -gt 0 ] \
    && [ -s "$REINDEX_MANIFEST" ]; then
   say "pool universe already fresh (toBlock=$REINDEX_CUR_TOBLOCK, source=$DISCOVERY_TO_BLOCK, $((DISCOVERY_TO_BLOCK - REINDEX_CUR_TOBLOCK)) < $REINDEX_MAX_STALE_BLOCKS blocks) — skipping re-index."
 elif say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, V4 from deployment)…"; \
-   timeout 600 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
+   timeout 1500 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
        SEARCHER_V2_LINEAGES_PATH="$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")" \
        POOL_UNIVERSE_TO_BLOCK="$DISCOVERY_TO_BLOCK" \
        POOL_UNIVERSE_LOOKBACK_DAYS="$REINDEX_DAYS" \

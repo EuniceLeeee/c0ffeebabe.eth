@@ -87,6 +87,14 @@ export interface PoolUniverseLoadOptions {
   forceInclude?: string[];
   highSpreadPairQuota?: number;
   highSpreadMinFee?: number;
+  /**
+   * When true, entries whose adapter is no longer a production pool adapter
+   * (family removed from the registry) are skipped instead of failing the
+   * whole load. Used only by the universe BUILDER while reading the previous
+   * retained universe; the deploy-time trust validator keeps the strict
+   * fail-closed behavior.
+   */
+  dropUnsupportedAdapters?: boolean;
 }
 
 export function poolUniverseCanonicalAnchorMatches(
@@ -141,8 +149,22 @@ export function parsePoolUniverseJson(
   const maxPools = opts.maxPools && opts.maxPools > 0 ? opts.maxPools : Infinity;
   const highSpreadPairQuota = Math.max(0, Math.floor(opts.highSpreadPairQuota ?? 0));
   const highSpreadMinFee = Math.max(0, Math.floor(opts.highSpreadMinFee ?? 10_000));
-  const parsedPools = rawPools
-    .map((entry, i) => parsePoolUniverseEntry(entry, `${label}.pools[${i}]`));
+  const parsedPools: PoolUniverseEntry[] = [];
+  rawPools.forEach((entry, i) => {
+    const field = `${label}.pools[${i}]`;
+    if (
+      opts.dropUnsupportedAdapters === true &&
+      isRecord(entry) &&
+      !isProductionPoolAdapter(entry.adapter)
+    ) {
+      console.warn(
+        `[pool-universe] dropping unsupported retained pool ${field}.adapter=` +
+          `${String(entry.adapter)}`,
+      );
+      return;
+    }
+    parsedPools.push(parsePoolUniverseEntry(entry, field));
+  });
   const activePools = parsedPools
     .filter((pool) => pool.topologyRetained !== true)
     .filter((pool) => (pool.score ?? 0) >= minScore)

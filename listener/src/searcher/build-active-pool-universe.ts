@@ -233,7 +233,7 @@ async function main(): Promise<void> {
     ? parsePoolUniverseJson(
         retainedUniverseSnapshot,
         retainedUniversePath,
-        { minScore: 0 },
+        { minScore: 0, dropUnsupportedAdapters: true },
       )
     : [];
 
