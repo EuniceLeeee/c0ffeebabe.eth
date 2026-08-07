@@ -550,6 +550,8 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
    * producer's critical state phase to finish before it starts anyway.
    */
   readonly discoveryProducerYieldMaxWaitMs?: number;
+  /** Per background discovery read wait while the producer is critical. */
+  readonly discoveryProducerYieldPerReadMaxWaitMs?: number;
   /**
    * When the background N-1 producer is behind the newest scheduled head,
    * exact probes yield the shared reth transport for up to this many
@@ -747,6 +749,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       setProducerYield?: (hook: {
         readonly active: () => boolean;
         readonly maxWaitMs: number;
+        readonly perReadMaxWaitMs?: number;
       }) => void;
     };
     discoveryLane.setProducerYield?.({
@@ -754,6 +757,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       maxWaitMs: Math.max(
         0,
         deps.discoveryProducerYieldMaxWaitMs ?? 10_000,
+      ),
+      perReadMaxWaitMs: Math.max(
+        0,
+        deps.discoveryProducerYieldPerReadMaxWaitMs ?? 250,
       ),
     });
   }

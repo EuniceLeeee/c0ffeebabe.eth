@@ -2549,6 +2549,13 @@ async function main(): Promise<void> {
           "10000",
       ),
     ),
+    discoveryProducerYieldPerReadMaxWaitMs: Math.max(
+      0,
+      Number(
+        process.env.SEARCHER_DISCOVERY_PRODUCER_YIELD_PER_READ_MAX_WAIT_MS ??
+          "250",
+      ),
+    ),
     exactProducerLagYieldMs: Math.max(
       0,
       Number(

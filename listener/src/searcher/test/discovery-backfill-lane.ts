@@ -43,8 +43,9 @@ await laneAwareRebasePreservesIndependentState();
 await deadlineCancelsEveryBudgetedRead();
 await futureReadyWaitsForNewestHead();
 await producerYieldDelaysScanUntilProducerIdle();
+await producerYieldPerReadDelaysWorkWhileProducerCritical();
 
-console.log("[discovery-backfill-lane] bounded background publication: PASS (9/9)");
+console.log("[discovery-backfill-lane] bounded background publication: PASS (10/10)");
 
 function chunkSizingSeparatesRetentionFromWorkUnits(): void {
   assert.equal(
@@ -447,6 +448,42 @@ async function producerYieldDelaysScanUntilProducerIdle(): Promise<void> {
   secondLane.setProducerYield(null);
   producerActiveSecond = false;
   await waitFor(() => secondLane.readyDescriptor() !== null);
+}
+
+async function producerYieldPerReadDelaysWorkWhileProducerCritical(): Promise<void> {
+  const request = requestFor(101, 101, 101);
+  const base = stateAt(100, 4);
+  let workRan = false;
+  let producerActive = true;
+  const lane = new DiscoveryBackfillLane<LiveDiscoveryState, RawBackfill>({
+    maxBlocksPerJob: 25,
+    maxPreparationMs: 5_000,
+    maxConcurrency: 2,
+    describeState: describe,
+    prepare: async (_plan, control) => {
+      await control.run(async () => {
+        workRan = true;
+        return "ok";
+      });
+      return rawFor(request);
+    },
+    validateTransition,
+    producerYield: {
+      active: () => producerActive,
+      maxWaitMs: 0,
+      perReadMaxWaitMs: 2_000,
+    },
+  });
+  lane.schedule(request, base);
+  await new Promise<void>((resolve) => setTimeout(resolve, 60));
+  assert.equal(
+    workRan,
+    false,
+    "per-read yield must hold background reads while the producer is critical",
+  );
+  producerActive = false;
+  await waitFor(() => workRan === true);
+  await waitFor(() => lane.readyDescriptor() !== null);
 }
 
 async function deadlineCancelsEveryBudgetedRead(): Promise<void> {

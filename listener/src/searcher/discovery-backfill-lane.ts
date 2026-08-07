@@ -1,6 +1,6 @@
 import type { DiscoveryRange } from "./discovery-source-watermark.js";
 
-export const DEFAULT_DISCOVERY_BACKFILL_CHUNK_BLOCKS = 8;
+export const DEFAULT_DISCOVERY_BACKFILL_CHUNK_BLOCKS = 4;
 
 /**
  * Historical retention and one worker's CPU/RPC unit are different limits.
@@ -202,6 +202,14 @@ export interface DiscoveryBackfillLaneOptions<State, Prepared> {
 export interface DiscoveryBackfillProducerYield {
   readonly active: () => boolean;
   readonly maxWaitMs: number;
+  /**
+   * Per background read: while the producer is critical, wait up to this many
+   * milliseconds before issuing the read. A job-start yield alone only shifts
+   * the overlap: scans run 10-21s and the next producer generation collides
+   * with the scan tail. Spacing individual reads gives the producer's short
+   * receipts/state bursts a clean reth window without starving discovery.
+   */
+  readonly perReadMaxWaitMs?: number;
 }
 
 interface ActiveJob<State> {
@@ -360,11 +368,16 @@ export class DiscoveryBackfillLane<State, Prepared> {
     this.failure = null;
     this.counts.scheduled++;
     void Promise.resolve()
-      .then(() => this.yieldForProducer(controller.signal))
+      .then(() =>
+        this.yieldForProducer(
+          controller.signal,
+          this.producerYield?.maxWaitMs ?? 0,
+        )
+      )
       .then(() => this.options.prepare(plan, {
         signal: controller.signal,
         deadlineAtMs,
-        run: (work) => reads.run(work),
+        run: (work) => this.runWithProducerYield(controller.signal, reads, work),
       }))
       .then((prepared) => this.settleSuccess(active, prepared))
       .catch((error) => this.settleFailure(active, error))
@@ -372,17 +385,32 @@ export class DiscoveryBackfillLane<State, Prepared> {
     return { scheduled: true, jobId: id };
   }
 
-  private async yieldForProducer(signal: AbortSignal): Promise<void> {
+  private async yieldForProducer(
+    signal: AbortSignal,
+    maxWaitMs: number,
+  ): Promise<void> {
     const hook = this.producerYield;
-    if (!hook) return;
+    if (!hook || maxWaitMs <= 0) return;
     const startedAtMs = Date.now();
     while (hook.active()) {
       if (signal.aborted) {
         throw signal.reason ?? new Error("discovery backfill aborted");
       }
-      if (Date.now() - startedAtMs >= Math.max(0, hook.maxWaitMs)) return;
+      if (Date.now() - startedAtMs >= maxWaitMs) return;
       await new Promise<void>((resolve) => setTimeout(resolve, 25));
     }
+  }
+
+  private async runWithProducerYield<T>(
+    signal: AbortSignal,
+    reads: BackgroundReadBudget,
+    work: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    await this.yieldForProducer(
+      signal,
+      this.producerYield?.perReadMaxWaitMs ?? 0,
+    );
+    return reads.run(work);
   }
 
   readyDescriptor(): {
