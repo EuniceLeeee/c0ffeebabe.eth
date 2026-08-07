@@ -229,6 +229,10 @@ export interface BlockScanLaneTelemetry {
   readonly uniqueStateKeys: number;
   readonly reads: number;
   readonly batches: number;
+  readonly partitionMs?: number;
+  readonly readMs?: number;
+  readonly finalizeMs?: number;
+  readonly sortMs?: number;
 }
 
 export type BlockScanFamilyTelemetryStatus =
@@ -272,6 +276,11 @@ export interface BlockScanFamilyTelemetry {
   readonly incrementalDescriptorMs?: number;
   readonly incrementalRangeMs?: number;
   readonly incrementalClassifierMs?: number;
+  /** Producer CPU phase timings (ms) inside one family lane. */
+  readonly partitionMs?: number;
+  readonly readMs?: number;
+  readonly finalizeMs?: number;
+  readonly sortMs?: number;
 }
 
 export interface BlockScanStateSnapshot {
@@ -524,6 +533,11 @@ interface FamilyExecutionTelemetry {
   readonly incrementalDescriptorMs?: number;
   readonly incrementalRangeMs?: number;
   readonly incrementalClassifierMs?: number;
+  /** Producer CPU phase timings (ms) inside one family lane. */
+  readonly partitionMs?: number;
+  readonly readMs?: number;
+  readonly finalizeMs?: number;
+  readonly sortMs?: number;
 }
 
 interface BehaviorProvenUnavailableEdge {
@@ -1723,6 +1737,7 @@ export class BlockScanStateCoordinator {
       const lanesFinishedAtMs = this.now();
       const lanesMs = Math.max(0, lanesFinishedAtMs - lanesStartedAtMs);
       const lanes = [swap, protocol] as const;
+      const assemblyDeltaStartedAtMs = this.now();
       let issues = [
         ...ownership.ownerIssues,
         ...graphIssues,
@@ -1958,6 +1973,7 @@ export class BlockScanStateCoordinator {
               .filter(([stateKey]) => resolvedStateKeySet.has(stateKey))
               .sort(([a], [b]) => a.localeCompare(b)),
           );
+      const assemblyDeltaFinishedAtMs = this.now();
       const familyIds = uniqueSorted([
         ...ownership.groups.map((group) => group.familyId),
         ...graphIncompleteFamilyIds,
@@ -2048,6 +2064,11 @@ export class BlockScanStateCoordinator {
         coverage.unresolvedReadKeys.length > 0 ||
         coverage.unresolvedEdgeKeys.length > 0 ||
         issues.length > 0;
+      const lanePhaseTotals = (field: "partitionMs" | "readMs" | "finalizeMs" | "sortMs") =>
+        lanes.flatMap((lane) => lane.familyTelemetry).reduce(
+          (sum, entry) => sum + (entry[field] ?? 0),
+          0,
+        );
       console.log(
         `[searcher/blockscan-state-stages] ${JSON.stringify({
           sourceBlock: graph.sourceBlock,
@@ -2059,6 +2080,21 @@ export class BlockScanStateCoordinator {
           activityPlanMs,
           lanesMs,
           assemblyMs,
+          assemblyDeltaMs: Math.max(
+            0,
+            assemblyDeltaFinishedAtMs -
+              assemblyDeltaStartedAtMs -
+              canonicalCasMs -
+              coverageMs,
+          ),
+          assemblyTelemetryMs: Math.max(
+            0,
+            assemblyFinishedAtMs - assemblyDeltaFinishedAtMs,
+          ),
+          lanesPartitionMs: lanePhaseTotals("partitionMs"),
+          lanesReadMs: lanePhaseTotals("readMs"),
+          lanesFinalizeMs: lanePhaseTotals("finalizeMs"),
+          lanesSortMs: lanePhaseTotals("sortMs"),
           canonicalCasMs,
           coverageMs,
           publicationMs,
@@ -3346,6 +3382,7 @@ export class BlockScanStateCoordinator {
     ).length;
     staging.carryStateKeys = carryStateKeys;
     staging.directStateKeys = directStateKeys;
+    const partitionFinishedAtMs = this.now();
 
     // Schema/static reads already counted by the prepared phase.
     let physicalReads = staging.reads;
@@ -3580,6 +3617,7 @@ export class BlockScanStateCoordinator {
       }
       completedReadRounds = round + 1;
     }
+    const readsFinishedAtMs = this.now();
 
     if (completedReadRounds === MAX_READ_ROUNDS) {
       for (const group of groups) {
@@ -4030,17 +4068,37 @@ export class BlockScanStateCoordinator {
       }
     }
 
-    const finishedAtMs = this.now();
+    const finalizeFinishedAtMs = this.now();
+    const sortedResolvedStateKeys = resolvedStateKeys.sort();
+    const sortedExpectedReadKeys = [...staging.expectedReadKeys].sort();
+    const sortedResolvedReadKeys = resolvedReadKeys.sort();
+    const sortedResolvedEdgeKeys = resolvedEdgeKeys.sort();
+    const sortedUnavailableEdges = unavailableEdges.sort((a, b) =>
+      a.edgeKey.localeCompare(b.edgeKey)
+    );
+    const sortedMids = mids.sort(([a], [b]) => a.localeCompare(b));
+    const sortedFreshness = freshness.sort(([a], [b]) =>
+      a.localeCompare(b)
+    );
+    const sortedStates = states.sort(([a], [b]) => a.localeCompare(b));
+    const sortFinishedAtMs = this.now();
     const familyExecution = Object.freeze({
       familyId,
       lane,
-      wallMs: Math.max(0, finishedAtMs - startedAtMs),
+      wallMs: Math.max(0, sortFinishedAtMs - startedAtMs),
       uniqueStateKeys: groups.length,
       reads: physicalReads,
       batches,
       carryStateKeys,
       directStateKeys,
       missingPreviousStateKeys,
+      partitionMs: Math.max(0, partitionFinishedAtMs - startedAtMs),
+      readMs: Math.max(0, readsFinishedAtMs - partitionFinishedAtMs),
+      finalizeMs: Math.max(
+        0,
+        finalizeFinishedAtMs - readsFinishedAtMs,
+      ),
+      sortMs: Math.max(0, sortFinishedAtMs - finalizeFinishedAtMs),
     });
     return Object.freeze({
       lane,
@@ -4056,25 +4114,30 @@ export class BlockScanStateCoordinator {
           ? []
           : [[familyId, staging.instanceSchemas] as const],
       ),
-      resolvedStateKeys: Object.freeze(resolvedStateKeys.sort()),
-      expectedReadKeys: Object.freeze([...staging.expectedReadKeys].sort()),
-      resolvedReadKeys: Object.freeze(resolvedReadKeys.sort()),
-      resolvedEdgeKeys: Object.freeze(resolvedEdgeKeys.sort()),
-      unavailableEdges: Object.freeze(
-        unavailableEdges.sort((a, b) => a.edgeKey.localeCompare(b.edgeKey)),
-      ),
-      mids: Object.freeze(mids.sort(([a], [b]) => a.localeCompare(b))),
-      freshness: Object.freeze(freshness.sort(([a], [b]) => a.localeCompare(b))),
-      states: Object.freeze(states.sort(([a], [b]) => a.localeCompare(b))),
+      resolvedStateKeys: Object.freeze(sortedResolvedStateKeys),
+      expectedReadKeys: Object.freeze(sortedExpectedReadKeys),
+      resolvedReadKeys: Object.freeze(sortedResolvedReadKeys),
+      resolvedEdgeKeys: Object.freeze(sortedResolvedEdgeKeys),
+      unavailableEdges: Object.freeze(sortedUnavailableEdges),
+      mids: Object.freeze(sortedMids),
+      freshness: Object.freeze(sortedFreshness),
+      states: Object.freeze(sortedStates),
       issues: freezeIssues(issues),
       telemetry: Object.freeze({
         lane,
         startedAtMs,
-        finishedAtMs,
-        wallMs: Math.max(0, finishedAtMs - startedAtMs),
+        finishedAtMs: sortFinishedAtMs,
+        wallMs: Math.max(0, sortFinishedAtMs - startedAtMs),
         uniqueStateKeys: groups.length,
         reads: physicalReads,
         batches,
+        partitionMs: Math.max(0, partitionFinishedAtMs - startedAtMs),
+        readMs: Math.max(0, readsFinishedAtMs - partitionFinishedAtMs),
+        finalizeMs: Math.max(
+          0,
+          finalizeFinishedAtMs - readsFinishedAtMs,
+        ),
+        sortMs: Math.max(0, sortFinishedAtMs - finalizeFinishedAtMs),
       }),
       familyTelemetry: Object.freeze([familyExecution]),
     });
