@@ -4660,6 +4660,115 @@ async function warmCacheRejectsFingerprintMismatchedEntries(): Promise<void> {
   unlinkSync(cachePath);
 }
 
+async function schemaRevisionChangeForcesDirectRead(): Promise<void> {
+  const compiles = { r1: 0, r2: 0 };
+  const familyR1 = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: {
+      ...univ2BlockScanState,
+      adapterSchemaRevision: "revision-v1",
+      compileStateInstance(input: CompileStateInstanceInput) {
+        compiles.r1++;
+        return univ2BlockScanState.compileStateInstance!(input);
+      },
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
+  });
+  const familyR2 = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: {
+      ...univ2BlockScanState,
+      adapterSchemaRevision: "revision-v2",
+      compileStateInstance(input: CompileStateInstanceInput) {
+        compiles.r2++;
+        return univ2BlockScanState.compileStateInstance!(input);
+      },
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
+  });
+  class CountingBackend implements BlockScanStateReadBackend {
+    physicalReads = 0;
+    async readCanonicalBlockActivity(
+      fromExclusive: BlockSource,
+      through: BlockSource,
+    ): Promise<{
+      readonly fromExclusive: BlockSource;
+      readonly through: BlockSource;
+      readonly canonicalBlocks: readonly { readonly number: number; readonly hash: string }[];
+      readonly events: readonly ChainLog[];
+      readonly touchedAddresses: readonly string[];
+      readonly transactionCount: number;
+      readonly canonicalPathFingerprint: string;
+      readonly rangeFingerprint: string;
+    }> {
+      return Object.freeze({
+        fromExclusive,
+        through,
+        canonicalBlocks: Object.freeze([
+          Object.freeze({ number: through.number, hash: through.hash }),
+        ]),
+        events: Object.freeze([]),
+        touchedAddresses: Object.freeze([]),
+        transactionCount: 0,
+        canonicalPathFingerprint: deterministicHash({
+          fromExclusive,
+          through,
+        }),
+        rangeFingerprint: deterministicHash({
+          fromExclusive,
+          through,
+          events: Object.freeze([]),
+        }),
+      });
+    }
+    async readBatch(
+      _lane: BlockScanPricingLane,
+      reads: readonly StateRead[],
+      control: { readonly sourceGeneration: number },
+    ): Promise<readonly StateReadResult[]> {
+      this.physicalReads += reads.length;
+      const data = reservesData(1000n, 2000n, 0);
+      return reads.map((read) =>
+        Object.freeze({ ...successfulRead(read, control.sourceGeneration), data })
+      );
+    }
+    async verifyCanonicalSource(): Promise<void> {
+      return;
+    }
+  }
+  const backend = new CountingBackend();
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const edges = [
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ];
+  const first = await coordinator.prepare({
+    graph: univ2Graph(1, edges),
+    families: [familyR1],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(first.status, "complete");
+  backend.physicalReads = 0;
+  const second = await coordinator.prepare({
+    graph: univ2Graph(2, edges),
+    families: [familyR2],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(second.status, "complete");
+  assert.equal(
+    compiles.r2,
+    1,
+    "a schema-revision change must recompile the instance descriptor",
+  );
+  assert.equal(
+    backend.physicalReads,
+    1,
+    "a schema-revision change must not carry the old decoded snapshot",
+  );
+}
+
 function univ4Edge(
   currency0: string,
   currency1: string,
@@ -5454,6 +5563,7 @@ await alwaysDirectCarryPolicyNeverCarries();
 await scoreOnlyChangeDoesNotRecompileButRefreshesEdges();
 await removedPoolReaddNeverReusesOldBase();
 await warmCacheRejectsFingerprintMismatchedEntries();
+await schemaRevisionChangeForcesDirectRead();
 await univ4InstanceParityWithFullCompile();
 await univ4InstanceModeRecompilesOnlyNewPool();
 await univ3InstanceParityWithFullCompile();

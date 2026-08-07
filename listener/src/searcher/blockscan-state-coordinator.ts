@@ -591,6 +591,14 @@ interface RecoveryStateBase {
   readonly state: PublishedStateKey;
   readonly schemaFingerprint: string;
   readonly snapshotCompatibilityFingerprint: string;
+  /**
+   * Coordinator-computed specFingerprint of the descriptor that decoded this
+   * base ("" for legacy families). Carry is only allowed when it still
+   * matches the current instance, so a schema-revision / shared-binding
+   * change forces a fresh current-N read instead of deriving from an old
+   * decoded snapshot.
+   */
+  readonly instanceSpecFingerprint: string;
   readonly requiredReadKeyHash: string;
   /**
    * Last direct-derived mids and behavior-proven unavailable edges, reused
@@ -970,7 +978,8 @@ export class BlockScanStateCoordinator {
         .map(
           (family) =>
             `${family.familyId}:${family.schemaMode}:` +
-            `${family.snapshotCompatibilityRevision}`,
+            `${family.snapshotCompatibilityRevision}:` +
+            `${family.schemaRevision}`,
         )
         .sort()
         .join(","),
@@ -1095,6 +1104,15 @@ export class BlockScanStateCoordinator {
       if (
         base.snapshotCompatibilityFingerprint !==
         group.snapshotCompatibilityFingerprint
+      ) {
+        continue;
+      }
+      const currentInstanceSpecFingerprint =
+        this.instanceSpecFingerprints.get(group.familyId)?.get(
+          group.stateKey,
+        ) ?? "";
+      if (
+        base.instanceSpecFingerprint !== currentInstanceSpecFingerprint
       ) {
         continue;
       }
@@ -3948,6 +3966,10 @@ export class BlockScanStateCoordinator {
           schemaFingerprint: group.schemaFingerprint,
           snapshotCompatibilityFingerprint:
             group.snapshotCompatibilityFingerprint,
+          instanceSpecFingerprint:
+            this.instanceSpecFingerprints.get(group.familyId)?.get(
+              group.stateKey,
+            ) ?? "",
           requiredReadKeyHash: exactSetHash(publishedState.requiredReadKeys),
           midsByEdgeKey: derived === previousBase?.midsByEdgeKey
             ? derived
