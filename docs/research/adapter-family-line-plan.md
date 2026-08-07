@@ -1,5 +1,9 @@
 # Codex — 轻量 Adapter Family 自动实例接入与 Block-Scan 状态统一计划
 
+> **目标架构已更新（2026-08-07）：** 本文保留当时的实现与验证历史；后续 Family 开发不得把这里的
+> 显式静态 production registry、family-wide state schema 或直接异步 Adapter API 当作目标合同。当前权威
+> 目标见 [`S1 统一扫描驱动的 Adapter Family 插件架构与实现合同`](design/s1-unified-adapter-family-plugin-architecture.md)。
+
 > 状态：`implemented_not_validated`。架构实现、tx02 自然选择语义诊断，以及 discovery/state 热路径
 > 解耦已落地；严格 sealed-blind tx02、20 轮性能、真实 conversion freshness 与 paired-live A/B
 > 证据尚未取得。

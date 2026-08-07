@@ -1,5 +1,11 @@
 # Codex — Route Adapter Family 自动实例发现统一管道计划
 
+> **目标架构已更新（2026-08-07）：** 本文保留第一版兼容管道的实施历史。统一插件函数、动态 module
+> capability catalog、多 identity variant、per-instance state、生成式 capability hash 与特殊语义调度槽，
+> 以后续权威文档
+> [`S1 统一扫描驱动的 Adapter Family 插件架构与实现合同`](design/s1-unified-adapter-family-plugin-architecture.md)
+> 为准。
+
 > 状态：第一版兼容切片已实现；当前为 **implemented_not_validated**，没有把 tx43、tx4cca 或整个自动发现计划标成 fixed。
 >
 > 分支：`codex/adapter-family-auto-discovery`

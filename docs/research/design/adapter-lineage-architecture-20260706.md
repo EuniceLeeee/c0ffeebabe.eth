@@ -1,5 +1,10 @@
 # Adapter LINEAGE architecture — classification separated from implementation (2026-07-06)
 
+> **目标架构更新（2026-08-07）：** 本文的 lineage/classification 历史与真实交易验证原则继续有效；
+> Family 插件函数、Identity variant、Instance/Route binding、生成式 capability hash 和中央边界，以
+> [`S1 统一扫描驱动的 Adapter Family 插件架构与实现合同`](s1-unified-adapter-family-plugin-architecture.md)
+> 为权威。冲突的旧注册、descriptor 或手工 revision 设计不再用于新实现。
+
 > Operator-directed design, validated against **Se7en-Seas/boring-vault**
 > (https://github.com/Se7en-Seas/boring-vault — Veda's vault framework; its `DecoderAndSanitizer` pattern
 > is the on-chain analog of our adapter/classification layer). Companion review:

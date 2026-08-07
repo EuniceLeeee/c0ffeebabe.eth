@@ -1,26 +1,25 @@
 # Adapter Family 扩展边界、实现合同与六步验收
 
-> 状态：**family 架构边界继续有效；旧 checkpoint/final lifecycle 已退役。** 本文中仍保留的
-> `checkpoint_pass`、`final_validated`、`--phase`、`--freeze-inputs`、`--finalize-cleanup` 内容只用于记录
-> 历史设计，不能执行，也没有合并/部署/删分支权限。当前权威判决见
-> [`gates.md`](gates.md) 与 [`templates/six-step-validation.md`](templates/six-step-validation.md)：
-> Adapter Replay baseline flip + `family_local` → `adapter_merge_ready`；target-blind natural six-step →
-> `production_gap_fixed`。
+> **状态：历史文档；整体架构和验收入口已退役（2026-08-07）。** 新的
+> Discovery/Identity/Instance/Route/Pricing/Exact/Execution 插件合同、中央统一调度、per-StateInstance 编译、
+> 自动 capability catalog、生成式 capability hash、特殊语义插槽，以及仍有效的 Adapter Replay / 六步验收，
+> 已统一迁入
+> [`S1 统一扫描驱动的 Adapter Family 插件架构与实现合同`](design/s1-unified-adapter-family-plugin-architecture.md)，
+> 尤其见其 §4.3 与 §20。新增或迁移 Family 不得再从本文选择旧接口、边界或命令。
+>
+> 本文保留是为了说明历史决策和旧 receipt，不再继续约束 `family_local`、ActionAdapter ownership 或六步
+> 实现。正式 verdict 只见 [`gates.md`](gates.md)、[`HISTORICAL-GAP.md`](HISTORICAL-GAP.md) 与
+> [`templates/six-step-validation.md`](templates/six-step-validation.md)。本文中的中央手写注册、全 Family
+> schema、手工 revision、Adapter 内 I/O、`checkpoint_pass`、`final_validated`、`--phase`、
+> `--freeze-inputs`、`--finalize-cleanup` 均只作历史记录，没有合并、部署或删分支权限。
 > 实现基线：`origin/main@3c8a04b9c31960d39992d139a310f868edbe5631`。
 > 日期：2026-07-29。
 > 范围：新增 Swap / Protocol Adapter Family、V4/Ekubo 一类 hook/extension 例外，以及 family-local
 > adapter merge 判断。
 > 不在范围：某一笔 Ekubo 交易的 ABI、地址、路径或盈利结论；具体实现必须另立 feature branch。
 
-> **状态更新（2026-08-06）：blockscan pricing-state schema 已迁移到 state-instance-v1 双模式合同。**
-> 本文件中关于 family-wide static schema 的描述（§3.5、§4 相关部分）仅适用于 legacy-family；
-> 实例编译、指纹、CAS、失败隔离与迁移验收见
-> [`blockscan-incremental-schema-architecture.md`](design/blockscan-incremental-schema-architecture.md)
-> （§5 契约、§9 adapter 迁移边界与职责、§10 逐 family 六步验收与结果分类）。
-> 本文其余内容（discovery/identity/ownership/exact quote/plan/ActionAdapter/source closure/通用验收）
-> 继续有效，作为通用 family 参考。未迁移 family 保持本文 legacy 全量路径不变。
-
-规范层级：[`CLAUDE.md`](../../CLAUDE.md) 和 [`gates.md`](gates.md) 仍是上位规则。本文件把本次架构裁决具体化，并诚实记录当前实现与上位规则之间尚未修复的缺口；不得用本文件的目标状态冒充当前代码已经具备的能力。
+历史说明：本文记录 2026-07-29 当时的架构裁决与缺口；任何仍有价值的原则只有在已迁入新统一文档或当前
+[`gates.md`](gates.md) 后才继续有效，不得从下文单独恢复为新实现规则。
 
 ## 1. 目标
 
