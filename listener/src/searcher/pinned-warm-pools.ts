@@ -38,7 +38,18 @@ export function loadPinnedWarmPools(
   if (!Array.isArray(entries)) {
     throw new Error(`pinned warm pool file ${path} must be an array or { pools: [...] }`);
   }
-  return entries.map((entry, i) => parsePinnedWarmPool(entry, i, path));
+  const pools: PinnedWarmPoolEntry[] = [];
+  entries.forEach((entry, i) => {
+    if (isRecord(entry) && !isProductionPoolAdapter(entry.adapter)) {
+      console.warn(
+        `[searcher/live] pinned warm skip ${path}[${i}] unsupported adapter ` +
+          `${String(entry.adapter)} (family removed)`,
+      );
+      return;
+    }
+    pools.push(parsePinnedWarmPool(entry, i, path));
+  });
+  return pools;
 }
 
 export function pinnedWarmHopsFromGraph(
