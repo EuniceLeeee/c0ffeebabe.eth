@@ -78,9 +78,36 @@ if (sourceScanFailure) {
   );
 }
 
-export const PRODUCTION_FAMILY_MODULES = productionFamilyLoad.modules;
 export const PRODUCTION_FAMILY_LOAD_ISSUES = productionFamilyLoad.issues;
 export const PRODUCTION_FAMILY_SCAN_SHA256 = productionFamilyLoad.scanSha256;
+
+/**
+ * Experiment gate (default off): keep only families whose pricing state is
+ * compiled per state instance (compileStateInstance). Non-migrated swap and
+ * protocol-conversion families fall back to whole-family compileStaticSchema,
+ * so they are excluded from production activation. Credit/funding/liquidity
+ * families are infra, not pool-state compilers, and stay active.
+ */
+const EXCLUDE_NON_STATE_INSTANCE_FAMILIES =
+  process.env.SEARCHER_EXCLUDE_NON_STATE_INSTANCE_FAMILIES === "1";
+
+function isStateInstanceCapable(family: AdapterFamily): boolean {
+  if (family.kind !== "swap" && family.kind !== "protocol-conversion") {
+    return true;
+  }
+  const capability = (family as {
+    readonly pricingState?: { readonly compileStateInstance?: unknown };
+  }).pricingState;
+  return typeof capability?.compileStateInstance === "function";
+}
+
+const productionModules = EXCLUDE_NON_STATE_INSTANCE_FAMILIES
+  ? productionFamilyLoad.modules.filter((module) =>
+      isStateInstanceCapable(module.family)
+    )
+  : productionFamilyLoad.modules;
+
+export const PRODUCTION_FAMILY_MODULES = productionModules;
 
 for (const issue of PRODUCTION_FAMILY_LOAD_ISSUES) {
   console.error(
@@ -89,9 +116,18 @@ for (const issue of PRODUCTION_FAMILY_LOAD_ISSUES) {
   );
 }
 
+if (EXCLUDE_NON_STATE_INSTANCE_FAMILIES) {
+  console.error(
+    "[adapter-family/load] SEARCHER_EXCLUDE_NON_STATE_INSTANCE_FAMILIES=1 " +
+      "active: non state-instance swap/protocol families removed from production",
+  );
+}
+
 export const PRODUCTION_ADAPTER_FAMILIES = new AdapterFamilyRegistry([
-  ...LEGACY_PRODUCTION_ADAPTER_FAMILIES,
-  ...PRODUCTION_FAMILY_MODULES.map((module) => module.family),
+  ...(EXCLUDE_NON_STATE_INSTANCE_FAMILIES
+    ? LEGACY_PRODUCTION_ADAPTER_FAMILIES.filter(isStateInstanceCapable)
+    : LEGACY_PRODUCTION_ADAPTER_FAMILIES),
+  ...productionModules.map((module) => module.family),
 ]);
 
 const CODE_OWNED_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] =

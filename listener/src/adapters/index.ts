@@ -87,13 +87,15 @@ const requiredActionIds = new Set([
   ...productionActions.owned,
   ...productionActions.requiredInfra,
 ]);
+const EXCLUDE_NON_STATE_INSTANCE_FAMILIES =
+  process.env.SEARCHER_EXCLUDE_NON_STATE_INSTANCE_FAMILIES === "1";
 for (const id of [...requiredActionIds].sort()) {
   const action = PRODUCTION_ACTION_CATALOG.get(id);
   if (!action) throw new Error(`production family closure missing ActionAdapter ${id}`);
   register(action);
 }
 for (const id of PRODUCTION_ACTION_CATALOG.keys()) {
-  if (!requiredActionIds.has(id)) {
+  if (!requiredActionIds.has(id) && !EXCLUDE_NON_STATE_INSTANCE_FAMILIES) {
     throw new Error(`unclaimed ActionAdapter imported by production bootstrap: ${id}`);
   }
 }
