@@ -90,6 +90,13 @@ export interface DiscoveryBackfillControl {
    * transport; an uncancellable transport belongs in a terminable worker.
    */
   run<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T>;
+  /**
+   * Optional cooperative producer gate for the preparation itself. Backfill
+   * stages check this between heavy reads and defer the whole job when the
+   * blockscan producer is critical, instead of letting a 10-20s scan tail
+   * overlap the next producer generation.
+   */
+  readonly producerYield?: DiscoveryBackfillProducerYield;
 }
 
 export type DiscoveryBackfillScheduleResult =
@@ -206,10 +213,12 @@ export interface DiscoveryBackfillProducerYield {
   readonly maxWaitMs: number;
   /**
    * Per background read: while the producer is critical, wait up to this many
-   * milliseconds before issuing the read. A job-start yield alone only shifts
-   * the overlap: scans run 10-21s and the next producer generation collides
-   * with the scan tail. Spacing individual reads gives the producer's short
-   * receipts/state bursts a clean reth window without starving discovery.
+   * milliseconds before issuing the read; if the producer is still critical
+   * when the cap is reached, the whole job is DEFERRED (not started anyway).
+   * A job-start yield alone only shifts the overlap: scans run 10-21s and the
+   * next producer generation collides with the scan tail. Deferring at the
+   * next read boundary bounds the tail to one in-flight read and keeps the
+   * producer's short receipts/state bursts on a clean reth window.
    */
   readonly perReadMaxWaitMs?: number;
 }
@@ -224,6 +233,31 @@ export class DiscoveryBackfillProducerBusyError extends Error {
   constructor() {
     super("discovery backfill deferred: blockscan producer critical");
     this.name = "DiscoveryBackfillProducerBusyError";
+  }
+}
+
+/**
+ * Wait while the blockscan producer is critical (bounded by `maxWaitMs`), then
+ * defer the whole backfill job with {@link DiscoveryBackfillProducerBusyError}
+ * instead of issuing the next heavy stage read. A job-start yield alone only
+ * shifts the overlap: scans run 10-21s and the next producer generation
+ * collides with the scan tail.
+ */
+export async function yieldForProducerOrDefer(
+  hook: DiscoveryBackfillProducerYield | undefined,
+  signal: AbortSignal | undefined,
+  maxWaitMs: number,
+): Promise<void> {
+  if (!hook || maxWaitMs <= 0) return;
+  const startedAtMs = Date.now();
+  while (hook.active()) {
+    if (signal?.aborted) {
+      throw signal.reason ?? new Error("discovery backfill aborted");
+    }
+    if (Date.now() - startedAtMs >= maxWaitMs) {
+      throw new DiscoveryBackfillProducerBusyError();
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
   }
 }
 
@@ -395,6 +429,7 @@ export class DiscoveryBackfillLane<State, Prepared> {
         signal: controller.signal,
         deadlineAtMs,
         run: (work) => this.runWithProducerYield(controller.signal, reads, work),
+        producerYield: this.producerYield ?? undefined,
       }))
       .then((prepared) => this.settleSuccess(active, prepared))
       .catch((error) => {
@@ -438,7 +473,7 @@ export class DiscoveryBackfillLane<State, Prepared> {
     await this.yieldForProducer(
       signal,
       this.producerYield?.perReadMaxWaitMs ?? 0,
-      false,
+      true,
     );
     return reads.run(work);
   }

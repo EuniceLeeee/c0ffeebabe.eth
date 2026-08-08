@@ -473,19 +473,22 @@ async function producerYieldPerReadDelaysWorkWhileProducerCritical(): Promise<vo
     producerYield: {
       active: () => producerActive,
       maxWaitMs: 0,
-      perReadMaxWaitMs: 2_000,
+      perReadMaxWaitMs: 150,
     },
   });
   lane.schedule(request, base);
-  await new Promise<void>((resolve) => setTimeout(resolve, 60));
+  await waitFor(() => lane.telemetry().deferred === 1);
   assert.equal(
     workRan,
     false,
-    "per-read yield must hold background reads while the producer is critical",
+    "per-read yield must defer the whole job while the producer is critical",
   );
+  assert.equal(lane.telemetry().failed, 0, "per-read deferral is not a failure");
   producerActive = false;
+  lane.schedule(request, base);
   await waitFor(() => workRan === true);
   await waitFor(() => lane.readyDescriptor() !== null);
+  assert.equal(lane.telemetry().deferred, 1);
 }
 
 async function producerYieldDefersScanWhenProducerStaysCritical(): Promise<void> {
