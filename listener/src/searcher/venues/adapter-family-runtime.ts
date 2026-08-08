@@ -301,6 +301,11 @@ interface PreparedFamilyInstanceIssue {
   readonly generation: number;
 }
 
+interface PreparedPricingStateInstanceIssue extends PreparedFamilyInstanceIssue {
+  readonly instance: PreparedFamilyInstance;
+  readonly integrityFingerprint: string;
+}
+
 interface SealedFamilyExactQuoteHandleRecord {
   readonly family: LoadedFamilyPlugin;
   readonly routeHandle: FamilyRouteRuntimeHandle;
@@ -322,6 +327,10 @@ const issuedFamilyRouteRuntimeHandles = new WeakMap<
 const issuedPreparedFamilyInstances = new WeakMap<
   object,
   PreparedFamilyInstanceIssue
+>();
+const issuedPreparedPricingStateInstances = new WeakMap<
+  object,
+  PreparedPricingStateInstanceIssue
 >();
 const issuedSealedFamilyExactQuoteHandles = new WeakMap<
   object,
@@ -941,11 +950,12 @@ export async function executeCreditFamilyInstanceLifecycle(input: {
       staticEvidenceFingerprint,
       evidenceRefs: Object.freeze(uniqueSorted(evidenceRefs)),
     }) satisfies PreparedFamilyInstance;
-    issuedPreparedFamilyInstances.set(instance, Object.freeze({
+    registerIssuedPreparedFamilyInstance({
       family,
+      instance,
       source,
       generation: input.generation,
-    }));
+    });
     outcomes.push(makeOutcome({
       familyId: plugin.manifest.familyId,
       lineageId: identity.lineageId,
@@ -1023,6 +1033,37 @@ export function assertIssuedPreparedFamilyInstance(input: {
     input.source.generation !== issue.source.generation
   ) {
     throw new Error("Prepared Family instance source/generation mismatch");
+  }
+}
+
+/** Issuer-private membership/source check for one prepared pricing shard. */
+export function assertIssuedPreparedFamilyPricingStateInstance(input: {
+  readonly family: LoadedFamilyBox;
+  readonly instance: PreparedFamilyInstance;
+  readonly pricing: PreparedPricingStateInstance;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+}): void {
+  assertIssuedPreparedFamilyInstance({
+    family: input.family,
+    instance: input.instance,
+    source: input.source,
+    generation: input.generation,
+  });
+  const issue = issuedPreparedPricingStateInstances.get(input.pricing);
+  if (
+    issue === undefined ||
+    issue.family !== input.family ||
+    issue.instance !== input.instance ||
+    issue.generation !== input.generation ||
+    !sameCanonicalSource(issue.source, input.source) ||
+    !Object.isFrozen(input.pricing) ||
+    issue.integrityFingerprint !==
+      preparedPricingStateIntegrityFingerprint(input.pricing)
+  ) {
+    throw new Error(
+      "Prepared Family pricing state must be issuer-bound to its instance/source",
+    );
   }
 }
 
@@ -2795,11 +2836,12 @@ async function prepareCandidate(input: {
     })
   )) as unknown as FamilyRouteRuntimeHandle[];
   Object.freeze(prepared);
-  issuedPreparedFamilyInstances.set(prepared, Object.freeze({
+  registerIssuedPreparedFamilyInstance({
     family: input.family,
+    instance: prepared,
     source: snapshotCanonicalSource(input.source),
     generation: input.generation,
-  }));
+  });
   return Object.freeze({ instance: prepared, outcomes: Object.freeze(outcomes) });
 }
 
@@ -3153,6 +3195,7 @@ async function preparePricingState(input: {
       }),
       "pricing descriptor",
     );
+    deepFreezeOpaqueRuntimeValue(pricingDescriptor, "pricing descriptor");
     dependencies = validateDependencies(
       input.family.plugin.pricing.dependencies({
         descriptor: pricingDescriptor,
@@ -3299,6 +3342,7 @@ async function preparePricingState(input: {
       }),
       "pricing snapshot",
     );
+    deepFreezeOpaqueRuntimeValue(snapshot, "pricing snapshot");
     mids = validateRouteMap(
       input.family.plugin.pricing.current.deriveMids({
         descriptor: pricingDescriptor,
@@ -3310,7 +3354,7 @@ async function preparePricingState(input: {
     ) as ReadonlyMap<RouteKey, RouteVenueMid>;
     unavailable = input.family.plugin.pricing.current.classifyUnavailable ===
         undefined
-      ? new Map<RouteKey, string>()
+      ? new SealedReadonlyMap<RouteKey, string>(new Map())
       : validateRouteMap(
           input.family.plugin.pricing.current.classifyUnavailable({
             descriptor: pricingDescriptor,
@@ -3582,6 +3626,23 @@ export function assertIssuedFamilyRouteRuntimeHandle(
   }
   if (issuedFamilyRouteRuntimeHandles.get(value)!.family !== family) {
     throw new Error("Family route runtime handle escaped its catalog Family box");
+  }
+}
+
+/** Publication-facing exact source check without exposing issuer records. */
+export function assertIssuedFamilyRouteRuntimeHandleAtSource(input: {
+  readonly family: LoadedFamilyPlugin;
+  readonly handle: FamilyRouteRuntimeHandle;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+}): void {
+  const record = resolveFamilyRouteRuntimeHandle(input.family, input.handle);
+  assertSource(input.source, input.generation);
+  if (
+    record.generation !== input.generation ||
+    !sameCanonicalSource(record.source, input.source)
+  ) {
+    throw new Error("Family route runtime handle source/generation mismatch");
   }
 }
 
@@ -4381,9 +4442,10 @@ function validateRouteMap(
       throw new Error(`${label} projection returned a foreign route`);
     }
     if (label === "unavailable") canonicalKey(item, "unavailable reason");
+    else deepFreezeOpaqueRuntimeValue(item, `mid projection ${key}`);
     result.set(key as RouteKey, item);
   }
-  return result;
+  return new SealedReadonlyMap(result);
 }
 
 function validateRouteClassifications(
@@ -4774,6 +4836,189 @@ function sameCanonicalSource(
     left.generation === right.generation &&
     left.hash.toLowerCase() === right.hash.toLowerCase();
 }
+
+function registerIssuedPreparedFamilyInstance(input: {
+  readonly family: LoadedFamilyBox;
+  readonly instance: PreparedFamilyInstance;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+}): void {
+  assertIssuedLoadedFamilyBox(input.family);
+  assertSource(input.source, input.generation);
+  if (!Object.isFrozen(input.instance)) {
+    throw new Error("Prepared Family instance must be frozen before issue");
+  }
+  const source = snapshotCanonicalSource(input.source);
+  issuedPreparedFamilyInstances.set(input.instance, Object.freeze({
+    family: input.family,
+    source,
+    generation: input.generation,
+  }));
+  for (const pricing of input.instance.pricingInstances) {
+    if (!Object.isFrozen(pricing)) {
+      throw new Error("Prepared Family pricing state must be frozen before issue");
+    }
+    issuedPreparedPricingStateInstances.set(pricing, Object.freeze({
+      family: input.family,
+      instance: input.instance,
+      source,
+      generation: input.generation,
+      integrityFingerprint: preparedPricingStateIntegrityFingerprint(pricing),
+    }));
+  }
+}
+
+function preparedPricingStateIntegrityFingerprint(
+  pricing: PreparedPricingStateInstance,
+): string {
+  return hashCanonical({
+    format: "prepared-pricing-state-integrity-v1",
+    familyId: pricing.familyId,
+    lineageId: pricing.lineageId,
+    instanceKey: pricing.instanceKey,
+    stateKey: pricing.stateKey,
+    stateInstanceKey: pricing.stateInstanceKey,
+    routes: opaqueRuntimeIntegrityProjection(pricing.routes),
+    pricingDescriptor: opaqueRuntimeIntegrityProjection(
+      pricing.pricingDescriptor,
+    ),
+    snapshot: opaqueRuntimeIntegrityProjection(pricing.snapshot),
+    mids: [...pricing.mids]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([routeKey, mid]) => ({
+        routeKey,
+        mid: opaqueRuntimeIntegrityProjection(mid),
+      })),
+    unavailable: [...pricing.unavailable]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([routeKey, reason]) => ({ routeKey, reason })),
+    dependencies: pricing.dependencies,
+    groupBindingFingerprint: pricing.groupBindingFingerprint,
+    staticBindingFingerprint: pricing.staticBindingFingerprint,
+    snapshotCompatibilityFingerprint:
+      pricing.snapshotCompatibilityFingerprint,
+    staticEvidenceFingerprint: pricing.staticEvidenceFingerprint,
+    currentEvidenceFingerprint: pricing.currentEvidenceFingerprint,
+    evidenceRefs: pricing.evidenceRefs,
+  });
+}
+
+function opaqueRuntimeIntegrityProjection(
+  value: unknown,
+  active: Set<object> = new Set<object>(),
+): CanonicalValue {
+  if (value === undefined) return { runtimeType: "undefined" };
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return value;
+  }
+  if (typeof value !== "object") {
+    throw new Error(
+      `pricing integrity value contains unsupported ${typeof value}`,
+    );
+  }
+  if (active.has(value)) {
+    throw new Error("pricing integrity value must not contain a cycle");
+  }
+  active.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return {
+        runtimeType: "array",
+        entries: value.map((item) =>
+          opaqueRuntimeIntegrityProjection(item, active)
+        ),
+      };
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error(
+        "pricing integrity value must contain only plain records and arrays",
+      );
+    }
+    const keys = Reflect.ownKeys(value);
+    if (keys.some((key) => typeof key !== "string")) {
+      throw new Error("pricing integrity value must not contain symbol keys");
+    }
+    return {
+      runtimeType: "record",
+      entries: (keys as string[]).sort().map((key) => {
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (
+          descriptor === undefined ||
+          descriptor.get !== undefined ||
+          descriptor.set !== undefined ||
+          !("value" in descriptor)
+        ) {
+          throw new Error("pricing integrity value must contain data fields");
+        }
+        return {
+          key,
+          value: opaqueRuntimeIntegrityProjection(descriptor.value, active),
+        };
+      }),
+    };
+  } finally {
+    active.delete(value);
+  }
+}
+
+class SealedReadonlyMap<Key, Value> implements ReadonlyMap<Key, Value> {
+  readonly #entries: Map<Key, Value>;
+
+  constructor(entries: ReadonlyMap<Key, Value>) {
+    this.#entries = new Map(entries);
+    Object.freeze(this);
+  }
+
+  get size(): number {
+    return this.#entries.size;
+  }
+
+  get(key: Key): Value | undefined {
+    return this.#entries.get(key);
+  }
+
+  has(key: Key): boolean {
+    return this.#entries.has(key);
+  }
+
+  entries(): MapIterator<[Key, Value]> {
+    return this.#entries.entries();
+  }
+
+  keys(): MapIterator<Key> {
+    return this.#entries.keys();
+  }
+
+  values(): MapIterator<Value> {
+    return this.#entries.values();
+  }
+
+  forEach(
+    callbackfn: (value: Value, key: Key, map: ReadonlyMap<Key, Value>) => void,
+    thisArg?: unknown,
+  ): void {
+    for (const [key, value] of this.#entries) {
+      callbackfn.call(thisArg, value, key, this);
+    }
+  }
+
+  [Symbol.iterator](): MapIterator<[Key, Value]> {
+    return this.entries();
+  }
+
+  get [Symbol.toStringTag](): string {
+    return "SealedReadonlyMap";
+  }
+}
+
+Object.freeze(SealedReadonlyMap.prototype);
 
 /**
  * Retain a Family-owned value by identity while removing every mutable or

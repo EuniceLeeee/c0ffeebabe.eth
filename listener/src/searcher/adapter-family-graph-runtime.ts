@@ -3,6 +3,7 @@ import type { TokenEdge } from "./planner/token-graph.js";
 import {
   assertFamilyRouteRuntimeHandleBinding,
   assertIssuedFamilyRouteRuntimeHandle,
+  assertIssuedFamilyRouteRuntimeHandleAtSource,
   type FamilyRouteRuntimeHandle,
 } from "./venues/adapter-family-runtime.js";
 import type {
@@ -21,7 +22,7 @@ import {
 } from "./venues/canonical-value.js";
 import {
   assertIssuedLoadedFamilyBox,
-  type LoadedFamilyBox,
+  type LoadedFamilyPlugin,
 } from "./venues/family-capability-catalog.js";
 import {
   assertIssuedProjectedCreditRoute,
@@ -30,7 +31,7 @@ import {
 } from "./adapter-credit-runtime.js";
 
 export interface FamilyRouteGraphInput {
-  readonly family: LoadedFamilyBox;
+  readonly family: LoadedFamilyPlugin;
   readonly descriptor: CompiledInstanceDescriptor;
   readonly route: FamilyRouteDescriptor;
   readonly handle: FamilyRouteRuntimeHandle;
@@ -42,6 +43,16 @@ export interface ProjectedFamilyRouteGraph {
   readonly venueIdentityHash: string;
   readonly handle: FamilyRouteRuntimeHandle;
 }
+
+interface ProjectedFamilyRouteGraphIssue {
+  readonly family: LoadedFamilyPlugin;
+  readonly handle: FamilyRouteRuntimeHandle;
+}
+
+const issuedProjectedFamilyRouteGraphs = new WeakMap<
+  object,
+  ProjectedFamilyRouteGraphIssue
+>();
 
 export type CommonProjectedFamilyRouteGraph =
   | ProjectedFamilyRouteGraph
@@ -117,9 +128,6 @@ export function projectFamilyRouteGraph(
 ): ProjectedFamilyRouteGraph {
   assertIssuedLoadedFamilyBox(input.family);
   const manifest = input.family.plugin.manifest;
-  if (manifest.domain === "funding") {
-    throw new Error("funding Families do not project graph routes");
-  }
   assertIssuedFamilyRouteRuntimeHandle(input.family, input.handle);
   assertFamilyRouteRuntimeHandleBinding(
     input.family,
@@ -201,11 +209,44 @@ export function projectFamilyRouteGraph(
       graph: first,
     }),
   });
-  return Object.freeze({
+  const projected = Object.freeze({
     edge,
     graph: first,
     venueIdentityHash,
     handle: input.handle,
+  });
+  issuedProjectedFamilyRouteGraphs.set(projected, Object.freeze({
+    family: input.family,
+    handle: input.handle,
+  }));
+  return projected;
+}
+
+/** Runtime authenticity/source check for all-catalog publication. */
+export function assertIssuedProjectedFamilyRouteGraph(input: {
+  readonly family: LoadedFamilyPlugin;
+  readonly projected: ProjectedFamilyRouteGraph;
+  readonly source: import("./venues/adapter-request-program.js").CanonicalSource;
+}): void {
+  assertIssuedLoadedFamilyBox(input.family);
+  const issue = issuedProjectedFamilyRouteGraphs.get(input.projected);
+  if (
+    issue === undefined ||
+    issue.family !== input.family ||
+    issue.handle !== input.projected.handle ||
+    !Object.isFrozen(input.projected) ||
+    !Object.isFrozen(input.projected.edge) ||
+    !Object.isFrozen(input.projected.graph)
+  ) {
+    throw new Error(
+      "Family Graph route must be issued by the central Graph runtime",
+    );
+  }
+  assertIssuedFamilyRouteRuntimeHandleAtSource({
+    family: input.family,
+    handle: input.projected.handle,
+    source: input.source,
+    generation: input.source.generation,
   });
 }
 
@@ -463,3 +504,5 @@ class SealedReadonlyMap<Key, Value> implements ReadonlyMap<Key, Value> {
     return "SealedReadonlyMap";
   }
 }
+
+Object.freeze(SealedReadonlyMap.prototype);

@@ -2505,3 +2505,5 @@ class SealedReadonlyMap<Key, Value> implements ReadonlyMap<Key, Value> {
     return "SealedReadonlyMap";
   }
 }
+
+Object.freeze(SealedReadonlyMap.prototype);

@@ -1,0 +1,705 @@
+import assert from "node:assert/strict";
+import {
+  catalogDiscoverySourceFingerprint,
+  createCatalogSourceTransitionIssuer,
+  createCatalogTerminalRemovalIssuer,
+  type CatalogSourceTransitionIssuer,
+} from "../adapter-family-catalog-publication.js";
+import {
+  StrictAdapterFamilyShadowCatalogPublicationRoot,
+  type CommittedStrictShadowCatalogPublication,
+  type StrictShadowCatalogFamilyStage,
+} from "../adapter-family-shadow-catalog-publication.js";
+import {
+  type AdapterGenerationFence,
+  type CentralAdapterRuntime,
+  type CentralAdapterScheduler,
+} from "../adapter-work-intent.js";
+import {
+  executeAdapterFamilyLifecycleBatch,
+  type AdapterFamilyPublication,
+} from "../venues/adapter-family-runtime.js";
+import {
+  createBoundedRequestExecutor,
+  type AdapterRequest,
+  type AdapterRequestResult,
+  type CanonicalSource,
+} from "../venues/adapter-request-program.js";
+import type { FamilyId } from
+  "../venues/adapter-family-identifiers.js";
+import {
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+} from "../venues/production-family-composition.js";
+import {
+  UNIV2_FACTORY_INTERFACE,
+  UNIV2_PAIR_INTERFACE,
+  UNIV2_SWAP_CALL_PATTERN_ID,
+  UNIV2_SWAP_SELECTOR,
+} from "../venues/swaps/univ2-family/codec.js";
+import { UNIV2_FAMILY_ID } from
+  "../venues/swaps/univ2-family/manifest.js";
+
+const CATALOG = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+const FAMILY = CATALOG.forFamily(UNIV2_FAMILY_ID);
+const POOL = `0x${"41".repeat(20)}`;
+const FACTORY = `0x${"42".repeat(20)}`;
+const TOKEN0 = `0x${"43".repeat(20)}`;
+const TOKEN1 = `0x${"44".repeat(20)}`;
+
+function publicationRoot() {
+  const terminalIssuer = createCatalogTerminalRemovalIssuer();
+  const transitionIssuer = createCatalogSourceTransitionIssuer();
+  return Object.freeze({
+    terminalIssuer,
+    transitionIssuer,
+    root: new StrictAdapterFamilyShadowCatalogPublicationRoot({
+      catalog: CATALOG,
+      chainId: "1",
+      terminalRemovalAuthority: terminalIssuer.authority,
+      sourceTransitionAuthority: transitionIssuer.authority,
+    }),
+  });
+}
+
+function source(number: number): CanonicalSource {
+  return Object.freeze({
+    number,
+    hash: `0x${number.toString(16).padStart(64, "0")}`,
+    generation: number,
+  });
+}
+
+class TestFence implements AdapterGenerationFence {
+  assertCurrent(): void {}
+}
+
+class TestScheduler implements CentralAdapterScheduler {
+  issueExecutor(
+    input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
+  ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
+    const executor = createBoundedRequestExecutor({
+      assertSupported: (requirements) => assert.deepEqual(
+        requirements,
+        input.requirements,
+      ),
+      assertCallerBinding() {},
+      assertWithinBudget: (_familyId, requests) => {
+        assert.deepEqual(requests, input.requests);
+      },
+      execute: async (execution) => Promise.all(execution.requests.map(
+        (request) => successResult(request, execution.source),
+      )),
+      sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
+    });
+    return Object.freeze({
+      executor,
+      timing: () => ({ queueWaitMs: 0, transportWallMs: 1, attempts: 1 }),
+    });
+  }
+}
+
+function runtime(): CentralAdapterRuntime {
+  let now = 1_000;
+  return {
+    clock: { nowMs: () => now++ },
+    generationFence: new TestFence(),
+    callerAuthority: { bind: () => ({}) },
+    policy: {
+      bind: (input) => ({
+        lane: input.stage === "identity" ? "critical-proof" : "background",
+        deadlineAtMs: 100_000,
+        maxAttempts: 1,
+        transportPool: "state-read",
+        fairnessKey: input.subjectKey,
+      }),
+    },
+    budgets: { assertAdmitted() {} },
+    scheduler: new TestScheduler(),
+  };
+}
+
+function successResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+): AdapterRequestResult {
+  const data = request.id === "pair-factory"
+    ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("factory", [FACTORY])
+    : request.id === "pair-token0"
+    ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("token0", [TOKEN0])
+    : request.id === "pair-token1"
+    ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("token1", [TOKEN1])
+    : request.id === "factory-get-pair"
+    ? UNIV2_FACTORY_INTERFACE.encodeFunctionResult("getPair", [POOL])
+    : request.id === "current-reserves"
+    ? UNIV2_PAIR_INTERFACE.encodeFunctionResult(
+        "getReserves",
+        [1_000_000n, 2_000_000n, 1_234],
+      )
+    : (() => { throw new Error(`unexpected fixture request ${request.id}`); })();
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "strict-shadow-catalog-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data,
+  });
+}
+
+async function lifecycle(canonical: CanonicalSource): Promise<
+  AdapterFamilyPublication
+> {
+  let publication: AdapterFamilyPublication | null = null;
+  const result = await executeAdapterFamilyLifecycleBatch({
+    family: FAMILY,
+    matches: [Object.freeze({
+      matchedPatternId: UNIV2_SWAP_CALL_PATTERN_ID,
+      observation: Object.freeze({
+        kind: "call" as const,
+        source: canonical,
+        target: POOL,
+        data: UNIV2_SWAP_SELECTOR,
+      }),
+    })],
+    source: canonical,
+    generation: canonical.generation,
+    runtime: runtime(),
+    publisher: { publish: (value) => { publication = value; } },
+  });
+  assert(result.publication);
+  assert(publication);
+  return publication;
+}
+
+function scoreMap(
+  publication: AdapterFamilyPublication,
+  score: number,
+): ReadonlyMap<string, number> {
+  return new Map(publication.instances.flatMap((instance) =>
+    instance.routes.map((route) => [route.routeKey, score] as const)
+  ));
+}
+
+function stages(input: {
+  readonly root: StrictAdapterFamilyShadowCatalogPublicationRoot;
+  readonly canonical: CanonicalSource;
+  readonly route?: StrictShadowCatalogFamilyStage;
+}): readonly StrictShadowCatalogFamilyStage[] {
+  return CATALOG.listAll().map((family) =>
+    family.plugin.manifest.familyId === input.route?.familyId
+      ? input.route
+      : input.root.stageUnsupported({
+          familyId: family.plugin.manifest.familyId,
+          source: input.canonical,
+          outcomeRefs: ["shadow:not-wired"],
+        })
+  );
+}
+
+function anchors(input: {
+  readonly canonical: CanonicalSource;
+  readonly completeFamilyId?: FamilyId;
+}) {
+  return CATALOG.listAll().flatMap((family) => {
+    const familyId = family.plugin.manifest.familyId;
+    const sourceIds = "discovery" in family.plugin
+      ? family.plugin.discovery.sources
+      : [];
+    const complete = familyId === input.completeFamilyId;
+    return sourceIds.map((sourceId) => Object.freeze({
+      familyId,
+      sourceId,
+      sourceFingerprint: catalogDiscoverySourceFingerprint({
+        familyId,
+        sourceId,
+        source: input.canonical,
+      }),
+      authority: "append-only-nomination" as const,
+      status: complete ? "complete" as const : "partial" as const,
+      completeThroughBlock: complete ? input.canonical.number : -1,
+      completeThroughHash: complete ? input.canonical.hash : null,
+    }));
+  });
+}
+
+async function publish(
+  root: StrictAdapterFamilyShadowCatalogPublicationRoot,
+  expected: CommittedStrictShadowCatalogPublication | null,
+  staged: ReturnType<StrictAdapterFamilyShadowCatalogPublicationRoot["prepare"]>,
+): Promise<void> {
+  assert.equal(await root.compareAndPublish({
+    expected,
+    staged,
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {},
+  }), true);
+}
+
+function transitionProof(
+  issuer: CatalogSourceTransitionIssuer,
+  previous: CanonicalSource,
+  current: CanonicalSource,
+): ReturnType<CatalogSourceTransitionIssuer["issue"]> {
+  return issuer.issue({
+    previous,
+    current,
+    status: "canonical-descendant",
+    evidenceRef: `canonical:${current.number}`,
+  });
+}
+
+function captureIdentities(
+  committed: CommittedStrictShadowCatalogPublication,
+) {
+  return Object.freeze({
+    committed,
+    envelope: committed.envelope,
+    views: committed.views,
+    graphRoutes: committed.views.graphRoutes,
+    edges: committed.views.edges,
+    handles: committed.views.handleByCanonicalEdgeId,
+    pricing: committed.views.pricingByPublicationKey,
+    instances: committed.envelope.privateState.instances,
+    tombstones: committed.envelope.privateState.tombstones,
+    routeHandles: committed.envelope.privateState.routeHandles,
+    graphEntries: committed.envelope.privateState.graphEntries,
+    pricingEntries: committed.envelope.privateState.pricingEntries,
+  });
+}
+
+function assertIdentitiesUnchanged(
+  root: StrictAdapterFamilyShadowCatalogPublicationRoot,
+  identities: ReturnType<typeof captureIdentities>,
+): void {
+  assert.equal(root.capture(), identities.committed);
+  assert.equal(root.capture()!.envelope, identities.envelope);
+  assert.equal(root.capture()!.views, identities.views);
+  assert.equal(root.capture()!.views.graphRoutes, identities.graphRoutes);
+  assert.equal(root.capture()!.views.edges, identities.edges);
+  assert.equal(root.capture()!.views.handleByCanonicalEdgeId, identities.handles);
+  assert.equal(root.capture()!.views.pricingByPublicationKey, identities.pricing);
+  assert.equal(root.capture()!.envelope.privateState.instances, identities.instances);
+  assert.equal(root.capture()!.envelope.privateState.tombstones, identities.tombstones);
+  assert.equal(
+    root.capture()!.envelope.privateState.routeHandles,
+    identities.routeHandles,
+  );
+  assert.equal(
+    root.capture()!.envelope.privateState.graphEntries,
+    identities.graphEntries,
+  );
+  assert.equal(
+    root.capture()!.envelope.privateState.pricingEntries,
+    identities.pricingEntries,
+  );
+}
+
+function assertReadonlyMapPrototypeSealed(
+  value: ReadonlyMap<unknown, unknown>,
+): void {
+  const prototype = Object.getPrototypeOf(value) as Record<
+    PropertyKey,
+    unknown
+  >;
+  const originalGet = prototype.get;
+  const originalIterator = prototype[Symbol.iterator];
+  assert(Object.isFrozen(prototype));
+  assert.throws(() => Object.defineProperty(prototype, "get", {
+    value: () => undefined,
+  }), TypeError);
+  assert.throws(() => Object.defineProperty(prototype, Symbol.iterator, {
+    value: () => [][Symbol.iterator](),
+  }), TypeError);
+  assert.equal(prototype.get, originalGet);
+  assert.equal(prototype[Symbol.iterator], originalIterator);
+}
+
+async function main(): Promise<void> {
+  const harness = publicationRoot();
+  const { root, transitionIssuer } = harness;
+  assert.equal("issueSourceTransition" in root, false);
+  assert.equal("issueTerminalRemoval" in root, false);
+
+  const source1 = source(101);
+  const publication1 = await lifecycle(source1);
+  const stageScore1 = root.stageRouteFamily({
+    publication: publication1,
+    centralScores: scoreMap(publication1, 1),
+  });
+  const stageScore2SameInstance = root.stageRouteFamily({
+    publication: publication1,
+    centralScores: scoreMap(publication1, 2),
+  });
+  assert.notEqual(
+    stageScore1.instances[0]?.instance.fingerprint,
+    stageScore2SameInstance.instances[0]?.instance.fingerprint,
+    "score-only Graph changes must change the atomic bundle fingerprint",
+  );
+
+  const initial = root.prepare({
+    source: source1,
+    previous: null,
+    stages: stages({ root, canonical: source1, route: stageScore1 }),
+    sourceAnchors: anchors({
+      canonical: source1,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+  });
+  assert.deepEqual(Object.keys(initial), []);
+  assert.equal("envelope" in initial, false);
+  await publish(root, null, initial);
+  const committed1 = root.capture()!;
+  await assert.rejects(() => root.compareAndPublish({
+    expected: committed1,
+    staged: initial,
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {},
+  }), /not prepared by this root/);
+  assert.equal(committed1.views.edges.length, 2);
+  assert(committed1.views.edges.every((edge) => edge.score === 1));
+  assert.equal(committed1.views.handleByCanonicalEdgeId.size, 2);
+  assert.equal(committed1.views.pricingByPublicationKey.size, 1);
+  assertReadonlyMapPrototypeSealed(committed1.views.handleByCanonicalEdgeId);
+  assertReadonlyMapPrototypeSealed(committed1.views.pricingByPublicationKey);
+  assertReadonlyMapPrototypeSealed(committed1.envelope.privateState.instances);
+  const committedPricing = [...committed1.views.pricingByPublicationKey.values()][0]!;
+  const committedMid = [...committedPricing.mids.values()][0]!;
+  assert(Object.isFrozen(committedPricing));
+  assert(Object.isFrozen(committedPricing.pricingDescriptor));
+  assert(Object.isFrozen(committedPricing.snapshot));
+  assert(Object.isFrozen(committedMid));
+  assert(Object.isFrozen(committedMid.edges));
+  assert.equal(committedPricing.mids instanceof Map, false);
+  assert.equal(committedPricing.unavailable instanceof Map, false);
+  assert.throws(() => {
+    (committedPricing.pricingDescriptor as { pool: string }).pool = FACTORY;
+  }, TypeError);
+  assert.throws(() => {
+    (committedMid as { mid: number }).mid = 2;
+  }, TypeError);
+  assert.throws(() => {
+    (committedPricing.mids as unknown as Map<string, unknown>).set(
+      "forged",
+      {},
+    );
+  }, TypeError);
+
+  const source2 = source(102);
+  const publication2 = await lifecycle(source2);
+  const stage2 = root.stageRouteFamily({
+    publication: publication2,
+    centralScores: scoreMap(publication2, 2),
+  });
+  const changed = root.prepare({
+    source: source2,
+    previous: committed1,
+    stages: stages({ root, canonical: source2, route: stage2 }),
+    sourceAnchors: anchors({
+      canonical: source2,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+    sourceTransitionProof: transitionProof(transitionIssuer, source1, source2),
+  });
+  await publish(root, committed1, changed);
+  const committed2 = root.capture()!;
+  assert(committed2.views.edges.every((edge) => edge.score === 2));
+
+  const source3 = source(103);
+  assert.throws(() => root.stageRouteFamily({
+    publication: publication2,
+    inventoryMode: "complete-snapshot",
+  }), /requires append-only-delta/);
+  const completeSnapshotStage = Object.freeze({
+    ...stage2,
+    inventoryMode: "complete-snapshot" as const,
+  });
+  assert.throws(() => root.prepare({
+    source: source3,
+    previous: committed2,
+    stages: stages({ root, canonical: source3, route: completeSnapshotStage }),
+    sourceAnchors: anchors({
+      canonical: source3,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+    sourceTransitionProof: transitionProof(transitionIssuer, source2, source3),
+  }), /requires append-only-delta/);
+
+  const omissionIdentities = captureIdentities(committed2);
+  assert.throws(() => root.prepare({
+    source: source3,
+    previous: committed2,
+    stages: stages({ root, canonical: source3 }),
+    sourceAnchors: anchors({ canonical: source3 }),
+    sourceTransitionProof: transitionProof(transitionIssuer, source2, source3),
+  }), /requires an issuer-bound StateInstance mutation proof/);
+  assertIdentitiesUnchanged(root, omissionIdentities);
+
+  assert.throws(() => root.stageRouteFamily({
+    publication: Object.freeze({
+      ...publication2,
+      instances: Object.freeze([
+        Object.freeze({ ...publication2.instances[0]! }),
+      ]),
+    }),
+  }), /lifecycle-issued/);
+
+  const source4 = source(104);
+  const source5 = source(105);
+  const publication4 = await lifecycle(source4);
+  const publication5 = await lifecycle(source5);
+  const winner = root.prepare({
+    source: source4,
+    previous: committed2,
+    stages: stages({
+      root,
+      canonical: source4,
+      route: root.stageRouteFamily({
+        publication: publication4,
+        centralScores: scoreMap(publication4, 4),
+      }),
+    }),
+    sourceAnchors: anchors({
+      canonical: source4,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+    sourceTransitionProof: transitionProof(transitionIssuer, source2, source4),
+  });
+  const loser = root.prepare({
+    source: source5,
+    previous: committed2,
+    stages: stages({
+      root,
+      canonical: source5,
+      route: root.stageRouteFamily({
+        publication: publication5,
+        centralScores: scoreMap(publication5, 5),
+      }),
+    }),
+    sourceAnchors: anchors({
+      canonical: source5,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+    sourceTransitionProof: transitionProof(transitionIssuer, source2, source5),
+  });
+  assert.deepEqual(Object.keys(winner), []);
+  assert.deepEqual(Object.keys(loser), []);
+  await publish(root, committed2, winner);
+  const committed4 = root.capture()!;
+  const identities = captureIdentities(committed4);
+  assert.equal(await root.compareAndPublish({
+    expected: committed2,
+    staged: loser,
+    verifyCanonicalSource: () => { throw new Error("must not run"); },
+    assertGenerationCurrent: () => { throw new Error("must not run"); },
+  }), false);
+  assertIdentitiesUnchanged(root, identities);
+  await assert.rejects(() => root.compareAndPublish({
+    expected: committed4,
+    staged: loser,
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {},
+  }), /not prepared by this root/);
+
+  const source6 = source(106);
+  const publication6 = await lifecycle(source6);
+  const rejectedByVerifier = root.prepare({
+    source: source6,
+    previous: committed4,
+    stages: stages({
+      root,
+      canonical: source6,
+      route: root.stageRouteFamily({ publication: publication6 }),
+    }),
+    sourceAnchors: anchors({
+      canonical: source6,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+    sourceTransitionProof: transitionProof(transitionIssuer, source4, source6),
+  });
+  await assert.rejects(() => root.compareAndPublish({
+    expected: committed4,
+    staged: rejectedByVerifier,
+    verifyCanonicalSource: () => { throw new Error("canonical verifier failed"); },
+    assertGenerationCurrent: () => {},
+  }), /canonical verifier failed/);
+  assertIdentitiesUnchanged(root, identities);
+  await assert.rejects(() => root.compareAndPublish({
+    expected: committed4,
+    staged: rejectedByVerifier,
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {},
+  }), /not prepared by this root/);
+
+  const source7 = source(107);
+  const publication7 = await lifecycle(source7);
+  const stage7 = root.stageRouteFamily({ publication: publication7 });
+  const source7Stages = stages({
+    root,
+    canonical: source7,
+    route: stage7,
+  });
+  const source7Anchors = anchors({
+    canonical: source7,
+    completeFamilyId: UNIV2_FAMILY_ID,
+  });
+  const wrongTransition = transitionIssuer.issue({
+    previous: source3,
+    current: source7,
+    status: "canonical-descendant",
+    evidenceRef: "wrong-predecessor:107",
+  });
+  assert.throws(() => root.prepare({
+    source: source7,
+    previous: committed4,
+    stages: source7Stages,
+    sourceAnchors: source7Anchors,
+    sourceTransitionProof: wrongTransition,
+  }), /source transition predecessor canonical source mismatch/);
+  assertIdentitiesUnchanged(root, identities);
+
+  const unresolvedTransition = transitionIssuer.issue({
+    previous: source4,
+    current: source7,
+    status: "unresolved",
+    evidenceRef: "unresolved:107",
+  });
+  assert.throws(() => root.prepare({
+    source: source7,
+    previous: committed4,
+    stages: source7Stages,
+    sourceAnchors: source7Anchors,
+    sourceTransitionProof: unresolvedTransition,
+  }), /requires a resolved canonical source transition proof/);
+  assertIdentitiesUnchanged(root, identities);
+
+  const foreignTransitionIssuer = createCatalogSourceTransitionIssuer();
+  assert.throws(() => root.prepare({
+    source: source7,
+    previous: committed4,
+    stages: source7Stages,
+    sourceAnchors: source7Anchors,
+    sourceTransitionProof: foreignTransitionIssuer.issue({
+      previous: source4,
+      current: source7,
+      status: "canonical-descendant",
+      evidenceRef: "foreign:107",
+    }),
+  }), /source transition proof is forged or foreign/);
+  assertIdentitiesUnchanged(root, identities);
+
+  const incumbent = [...committed4.envelope.privateState.instances.values()][0]!;
+  const terminalEvidenceRef = "terminal:incumbent:107";
+  const terminalInput = {
+    familyId: UNIV2_FAMILY_ID,
+    lineageId: incumbent.lineageId,
+    instanceKey: incumbent.instanceKey,
+    reason: "terminal-fixture",
+    evidenceRef: terminalEvidenceRef,
+  } as const;
+  const foreignTerminalIssuer = createCatalogTerminalRemovalIssuer();
+  const terminalCases = [
+    {
+      proof: foreignTerminalIssuer.issue({
+        ...terminalInput,
+        source: source7,
+        status: "terminal",
+      }),
+      expected: /terminal removal proof is forged or foreign/,
+    },
+    {
+      proof: harness.terminalIssuer.issue({
+        ...terminalInput,
+        source: source6,
+        status: "terminal",
+      }),
+      expected: /terminal removal proof canonical source mismatch/,
+    },
+    {
+      proof: harness.terminalIssuer.issue({
+        ...terminalInput,
+        source: source7,
+        status: "unresolved",
+      }),
+      expected: /terminal removal proof is unresolved/,
+    },
+  ] as const;
+  for (const terminalCase of terminalCases) {
+    const terminalStage: StrictShadowCatalogFamilyStage = Object.freeze({
+      familyId: UNIV2_FAMILY_ID,
+      domain: "swap",
+      source: source7,
+      status: "partial",
+      inventoryMode: "append-only-delta",
+      instances: Object.freeze([]),
+      terminalRemovals: Object.freeze([terminalCase.proof]),
+      outcomeRefs: Object.freeze([terminalEvidenceRef]),
+    });
+    assert.throws(() => root.prepare({
+      source: source7,
+      previous: committed4,
+      stages: stages({
+        root,
+        canonical: source7,
+        route: terminalStage,
+      }),
+      sourceAnchors: anchors({ canonical: source7 }),
+      sourceTransitionProof: transitionProof(
+        transitionIssuer,
+        source4,
+        source7,
+      ),
+    }), terminalCase.expected);
+    assertIdentitiesUnchanged(root, identities);
+  }
+
+  const rejectedByGenerationFence = root.prepare({
+    source: source7,
+    previous: committed4,
+    stages: source7Stages,
+    sourceAnchors: source7Anchors,
+    sourceTransitionProof: transitionProof(transitionIssuer, source4, source7),
+  });
+  await assert.rejects(() => root.compareAndPublish({
+    expected: committed4,
+    staged: rejectedByGenerationFence,
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {
+      throw new Error("generation fence rejected publication");
+    },
+  }), /generation fence rejected publication/);
+  assertIdentitiesUnchanged(root, identities);
+  await assert.rejects(() => root.compareAndPublish({
+    expected: committed4,
+    staged: rejectedByGenerationFence,
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {},
+  }), /not prepared by this root/);
+
+  const foreign = publicationRoot().root;
+  const foreignStage = foreign.stageRouteFamily({ publication: publication1 });
+  const foreignPrepared = foreign.prepare({
+    source: source1,
+    previous: null,
+    stages: stages({ root: foreign, canonical: source1, route: foreignStage }),
+    sourceAnchors: anchors({
+      canonical: source1,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+  });
+  await assert.rejects(() => root.compareAndPublish({
+    expected: committed4,
+    staged: foreignPrepared,
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {},
+  }), /not prepared by this root/);
+
+  console.log("adapter-family strict shadow catalog publication tests passed");
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

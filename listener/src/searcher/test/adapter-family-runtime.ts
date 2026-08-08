@@ -45,6 +45,7 @@ import {
   type FamilyId,
   type InstanceKey,
   type LineageId,
+  type RouteKey,
 } from "../venues/adapter-family-identifiers.js";
 import {
   createBoundedRequestExecutor,
@@ -62,6 +63,7 @@ import {
   type LoadedFamilyPlugin,
 } from "../venues/family-capability-catalog.js";
 import { bindFamilyOwnedAction } from "../venues/family-owned-action.js";
+import type { RouteVenueMid } from "../venues/mid-readers.js";
 
 const SELECTOR = "0x12345678" as const;
 const TOKEN0 = `0x${"31".repeat(20)}`;
@@ -141,6 +143,7 @@ interface FixtureControls {
   readonly exactDecodeThrow?: boolean;
   readonly executionAdapterId?: string;
   readonly executionThenable?: boolean;
+  readonly omitClassifyUnavailable?: boolean;
   readonly sharedBindingKey?: "pool" | "token0";
   readonly sharedProjectionThenable?: boolean;
   readonly sharedReferenceDrift?: boolean;
@@ -159,6 +162,11 @@ interface FixtureControls {
   lastProducedExactEvidence?: FixtureExactEvidence;
   lastExecutionExactEvidence?: FixtureExactEvidence;
   lastExecutionRuntimeEvidence?: readonly RuntimeEvidence[];
+  lastPricingDescriptor?: PricingDescriptor;
+  lastPricingSnapshot?: Snapshot;
+  lastPricingMid?: RouteVenueMid;
+  lastMids?: Map<RouteKey, RouteVenueMid>;
+  lastUnavailable?: Map<RouteKey, string>;
   localExactCalls?: number;
   executionCalls?: number;
   unavailableCalls: number;
@@ -378,10 +386,14 @@ function defineFixture(name: string, controls: FixtureControls) {
         }],
         decode: ({ results }) => ({ word: successful(results[0]).data }),
       },
-      finalizePricingDescriptor: ({ draft, staticEvidence }) => ({
-        ...draft,
-        pricingWord: staticEvidence!.word,
-      }),
+      finalizePricingDescriptor: ({ draft, staticEvidence }) => {
+        const descriptor = {
+          ...draft,
+          pricingWord: staticEvidence!.word,
+        };
+        controls.lastPricingDescriptor = descriptor;
+        return descriptor;
+      },
       current: {
         requirements: ({ descriptor, routes }) => {
           assertDescriptorOnly(descriptor, routes);
@@ -415,7 +427,7 @@ function defineFixture(name: string, controls: FixtureControls) {
         },
         decodeSnapshot: ({ descriptor, initialResults, dependentEvidence }) => {
           assert.equal("pools" in descriptor, false);
-          return {
+          const snapshot = {
             pool: descriptor.pool,
             core: successful(initialResults.find((item) =>
               item.id === `current:${descriptor.pool}`
@@ -423,22 +435,37 @@ function defineFixture(name: string, controls: FixtureControls) {
             dependent: (dependentEvidence[0] as { readonly dependent: string })
               .dependent,
           };
+          controls.lastPricingSnapshot = snapshot;
+          return snapshot;
         },
         deriveMids: ({ descriptor, snapshot, routes }) => {
           assert.equal(snapshot.pool, descriptor.pool);
-          return new Map(routes.map((route) => [route.routeKey, {
-            kind: "protocol" as const,
-            pool: descriptor.pool,
-            edges: [],
-            mid: 1,
-            feeBps: 0,
-            depthProxy: 1,
-          }]));
+          const mids = new Map<RouteKey, RouteVenueMid>();
+          for (const route of routes) {
+            const mid: RouteVenueMid = {
+              kind: "protocol",
+              pool: descriptor.pool,
+              edges: [],
+              mid: 1,
+              feeBps: 0,
+              depthProxy: 1,
+            };
+            controls.lastPricingMid = mid;
+            mids.set(route.routeKey, mid);
+          }
+          controls.lastMids = mids;
+          return mids;
         },
-        classifyUnavailable: () => {
-          controls.unavailableCalls++;
-          return new Map();
-        },
+        ...(controls.omitClassifyUnavailable
+          ? {}
+          : {
+              classifyUnavailable: () => {
+                controls.unavailableCalls++;
+                const unavailable = new Map<RouteKey, string>();
+                controls.lastUnavailable = unavailable;
+                return unavailable;
+              },
+            }),
       },
       dependencies: ({ descriptor, routes }) => {
         assertDescriptorOnly(descriptor, routes);
@@ -871,6 +898,26 @@ function publisher() {
       publications.push(publication);
     } },
   };
+}
+
+function assertReadonlyMapPrototypeSealed(
+  value: ReadonlyMap<unknown, unknown>,
+): void {
+  const prototype = Object.getPrototypeOf(value) as Record<
+    PropertyKey,
+    unknown
+  >;
+  const originalGet = prototype.get;
+  const originalIterator = prototype[Symbol.iterator];
+  assert(Object.isFrozen(prototype));
+  assert.throws(() => Object.defineProperty(prototype, "get", {
+    value: () => undefined,
+  }), TypeError);
+  assert.throws(() => Object.defineProperty(prototype, Symbol.iterator, {
+    value: () => [][Symbol.iterator](),
+  }), TypeError);
+  assert.equal(prototype.get, originalGet);
+  assert.equal(prototype[Symbol.iterator], originalIterator);
 }
 
 async function run(input: {
@@ -1539,14 +1586,49 @@ async function testOpaquePublicationAndEvidenceAreSealed(): Promise<void> {
   const instance = publications[0].instances[0];
   const rawRoute = instance.routes[0] as Route;
   const route = issuedRoute(instance, rawRoute);
+  const pricing = instance.pricingInstances[0];
+  const retainedDescriptor = controls.lastPricingDescriptor!;
+  const retainedSnapshot = controls.lastPricingSnapshot!;
+  const retainedMid = controls.lastPricingMid!;
 
   assert(Object.isFrozen(instance.descriptor));
   assert(Object.isFrozen(rawRoute));
+  assert.strictEqual(pricing.pricingDescriptor, retainedDescriptor);
+  assert.strictEqual(pricing.snapshot, retainedSnapshot);
+  assert.strictEqual(pricing.mids.get(rawRoute.routeKey), retainedMid);
+  assert(Object.isFrozen(retainedDescriptor));
+  assert(Object.isFrozen(retainedSnapshot));
+  assert(Object.isFrozen(retainedMid));
+  assert(Object.isFrozen(retainedMid.edges));
+  assert.equal(pricing.mids instanceof Map, false);
+  assert.equal(pricing.unavailable instanceof Map, false);
+  assertReadonlyMapPrototypeSealed(pricing.mids);
+  assertReadonlyMapPrototypeSealed(pricing.unavailable);
   assert.throws(() => {
     (instance.descriptor as unknown as { pool: string }).pool = OTHER;
   }, TypeError);
   assert.throws(() => {
     (rawRoute as unknown as { direction: string }).direction = "mutated";
+  }, TypeError);
+  assert.throws(() => {
+    (retainedDescriptor as { pool: string }).pool = OTHER;
+  }, TypeError);
+  assert.throws(() => {
+    (retainedSnapshot as { pool: string }).pool = OTHER;
+  }, TypeError);
+  assert.throws(() => {
+    retainedMid.mid = 2;
+  }, TypeError);
+  assert.throws(() => {
+    retainedMid.edges.push({} as never);
+  }, TypeError);
+  controls.lastMids!.clear();
+  controls.lastUnavailable!.set(rawRoute.routeKey, "retained-map-mutated");
+  assert.equal(pricing.mids.size, 1);
+  assert.strictEqual(pricing.mids.get(rawRoute.routeKey), retainedMid);
+  assert.equal(pricing.unavailable.size, 0);
+  assert.throws(() => {
+    (pricing.mids as unknown as Map<RouteKey, RouteVenueMid>).clear();
   }, TypeError);
   assert.equal((instance.descriptor as Descriptor).pool, GOOD);
   assert.equal(rawRoute.direction, "zero-to-one");
@@ -1611,6 +1693,27 @@ async function testOpaquePublicationAndEvidenceAreSealed(): Promise<void> {
   assert.equal(sealedRuntimeEvidence[0].source.hash, SOURCE.hash);
 }
 
+async function testMissingUnavailableClassifierUsesSealedEmptyMap(): Promise<void> {
+  const controls: FixtureControls = {
+    omitClassifyUnavailable: true,
+    descriptorPools: [],
+    unavailableCalls: 0,
+  };
+  const family = defineFixture("no-unavailable-classifier", controls);
+  const { publications } = await run({
+    family,
+    pools: [GOOD],
+    scheduler: new TestScheduler(),
+  });
+  const unavailable = publications[0].instances[0]
+    .pricingInstances[0].unavailable;
+  assert.equal(unavailable.size, 0);
+  assert.equal(unavailable instanceof Map, false);
+  assert.equal("set" in unavailable, false);
+  assert.equal(controls.unavailableCalls, 0);
+  assertReadonlyMapPrototypeSealed(unavailable);
+}
+
 async function testIssuedRouteGraphProjectionBoundary(): Promise<void> {
   const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0 };
   const family = defineFixture("issued-graph", controls);
@@ -1660,6 +1763,7 @@ async function testIssuedRouteGraphProjectionBoundary(): Promise<void> {
     firstHandle,
   );
   assert.equal("set" in view.handleByCanonicalEdgeId, false);
+  assertReadonlyMapPrototypeSealed(view.handleByCanonicalEdgeId);
   assert.equal("direction" in view.edges[0], false);
 
   const clonedRoute = Object.freeze({
@@ -2578,6 +2682,7 @@ await testSharedBindingProjectionThenableIsUnresolved();
 await testCallerCannotInjectSharedBindingRefs();
 await testRequestExactAndOwnedExecution();
 await testOpaquePublicationAndEvidenceAreSealed();
+await testMissingUnavailableClassifierUsesSealedEmptyMap();
 await testIssuedRouteGraphProjectionBoundary();
 await testOpaqueRouteAndExactHandleBoundary();
 await testExactCacheBindsAmountAndPhysicalSource();

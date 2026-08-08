@@ -71,7 +71,7 @@ authority 混在一起：
 |Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
 |Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
 |Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
-|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary 等 runtime slice 已有 unit/shadow gate|observation bootstrap/watermark、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、Credit 独立 execution handle、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
+|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary，以及 observation ingress / append-only 全 catalog CAS 等 runtime slice 已有 unit/shadow gate|durable discovery checkpoint/CAS、verifier-issued snapshot inventory closure、StateInstance mutation/carry proof、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、Credit 独立 execution handle、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
 |Phase E cleanup|尚未开始|legacy registry/API/schema/revision/cache/flag authority 仍在；只有 §18.3 与 §20.2.6 全部门通过后才能删除|
 
 该表是实施 checkpoint，不是目标合同的降级，也不预判并行实现工作最终是否通过；任一状态更新都必须引用新的
@@ -1102,6 +1102,15 @@ proof；旧 `PoolEntry`、旧 route 或地址表不能直接铸成 verified desc
 discovery source 的 completeness/watermark；任一必需 source 未覆盖时只能发布明确的 partial/shadow outcome，不能把
 当前候选集合当成 complete Graph，也不能用 `publication=null` 隐式 carry 上一代。
 
+**2026-08-08 shadow ingress checkpoint：** 当前 change set 已新增 process-local sealed scan/bootstrap/ancestry
+receipt、逐 Family incumbent inventory count/hash 与 re-attestation、event-source `0..N`/连续 history watermark，以及
+generation fence 前不写状态的 shadow ingress。它只输出与 `CatalogDiscoverySourceAnchor` 不兼容的
+`sourceCoverage` 诊断投影；普通 restart seed 永远只有 `append-only` 权限，point-in-time snapshot 在没有
+verifier-issued inventory closure 时永远保持 partial。因此这一步不会铸造 omission/deletion authority，也不能替代
+production bootstrap。跨进程 continuity 仍须由绑定 chain/catalog/source-registry/revision/source/full watermark matrix
+的 durable checkpoint store 在 canonical verify + generation fence + CAS 后签发；该 issuer/store 未落地前不得把
+shadow coverage 晋升成 catalog completeness proof。
+
 ## 8. Identity：多来源 variant，统一行为证明
 
 冻结 ds 已有 `identityPolicies`、`discoveryIdentityResolver`、typed `IdentityAuthority`、retained-instance re-probe
@@ -1746,6 +1755,14 @@ canonical source 与 generation fence 后，一次提交：
 任何 shard unresolved/failed 都必须按 source completeness 和 changed-key 规则生成明确 delta；不能把
 `publication=null` 解释为“沿用旧 Family publication”。CAS 失败时上述权威对象的 identity 和 content 必须全部不变，
 也不能出现 Graph 已更新但 route-handle/pricing 仍属于上一代的撕裂状态。
+
+**2026-08-08 append-only publication checkpoint：** 当前 change set 已提供 shadow-only 全 catalog root：route、Graph、
+pricing 与 compatibility views 由一个 opaque one-shot candidate 经 canonical verify、generation fence 和单 pointer CAS
+原子切换；CAS loser、verifier/fence failure 保持旧 envelope/views/Maps 的 identity 与 content 不变。terminal/source
+transition proof authority 由 composition 外部注入，root 不公开 issuer；pricing descriptor、snapshot、mid 与 readonly
+Map 均深封闭。该 root 目前故意拒绝 `complete-snapshot`，也拒绝任何缺少 issuer-bound StateInstance mutation proof 的
+跨 generation carry，所以每代 active route 必须由 fresh lifecycle publication 重新 staging。它仍是 shadow contract，
+不构成 strict pricing production consumer、current-publication exact/execution membership 或默认 authority cutover。
 
 中央拥有 Map、diff、read execution、batch、deadline、retry、cache、carry、CAS 和 publication。Adapter 不得
 通过 `compileDraft()` 保存全族 Map，或在 `finalizePricingDescriptor()` 中扫描 sibling。

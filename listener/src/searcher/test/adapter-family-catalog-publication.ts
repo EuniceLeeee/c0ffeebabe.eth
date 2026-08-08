@@ -328,6 +328,26 @@ async function publish(
   }), true);
 }
 
+function assertReadonlyMapPrototypeSealed(
+  value: ReadonlyMap<unknown, unknown>,
+): void {
+  const prototype = Object.getPrototypeOf(value) as Record<
+    PropertyKey,
+    unknown
+  >;
+  const originalGet = prototype.get;
+  const originalIterator = prototype[Symbol.iterator];
+  assert(Object.isFrozen(prototype));
+  assert.throws(() => Object.defineProperty(prototype, "get", {
+    value: () => undefined,
+  }), TypeError);
+  assert.throws(() => Object.defineProperty(prototype, Symbol.iterator, {
+    value: () => [][Symbol.iterator](),
+  }), TypeError);
+  assert.equal(prototype.get, originalGet);
+  assert.equal(prototype[Symbol.iterator], originalIterator);
+}
+
 function publicationStore(
   valueAuthority: ValueAuthority = VALUE_AUTHORITY,
 ): AdapterFamilyCatalogPublicationStore<
@@ -552,6 +572,7 @@ async function testResolvedFamiliesPublishByOnePointerSwap(): Promise<void> {
 function testOpaqueBundlesAreInstanceAndSourceBound(): void {
   const canonical = source();
   const publication = initialWithInstance(canonical);
+  assertReadonlyMapPrototypeSealed(publication.privateState.instances);
   const key = catalogInstancePublicationKey(descriptor("incumbent"));
   const route = publication.privateState.routeHandles.get("edge:incumbent")!;
   const graph = publication.privateState.graphEntries.get("edge:incumbent")!;

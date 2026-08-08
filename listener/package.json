@@ -164,6 +164,8 @@
     "searcher:adapter-family-runtime": "node --import tsx src/searcher/test/adapter-family-runtime.ts",
     "searcher:adapter-family-graph-runtime": "node --import tsx src/searcher/test/adapter-family-runtime.ts",
     "searcher:adapter-family-catalog-publication": "node --import tsx src/searcher/test/adapter-family-catalog-publication.ts",
+    "searcher:adapter-family-shadow-catalog-publication": "node --import tsx src/searcher/test/adapter-family-shadow-catalog-publication.ts",
+    "searcher:adapter-family-observation-shadow-ingress": "node --import tsx src/searcher/test/adapter-family-observation-shadow-ingress.ts",
     "searcher:adapter-credit-runtime": "node --import tsx src/searcher/test/adapter-credit-runtime.ts",
     "searcher:family-capability-catalog": "node --import tsx src/searcher/test/family-capability-catalog.ts",
     "searcher:capability-content-hash": "node --import tsx src/searcher/test/capability-content-hash.ts",
