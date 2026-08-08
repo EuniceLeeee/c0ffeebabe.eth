@@ -1,4 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  AdapterFamilyDiscoveryCheckpointStore,
+  FileAdapterFamilyDiscoveryCheckpointBackend,
+  type AdapterFamilyDiscoveryCheckpointReceipt,
+} from "../adapter-family-discovery-checkpoint.js";
 import {
   AdapterFamilyObservationShadowIngress,
   adapterFamilyShadowInventoryHash,
@@ -161,6 +169,13 @@ function harness(input: {
   readonly reattestor?: AdapterFamilyShadowReattestor;
   readonly staleFence?: boolean;
   readonly registry?: string;
+  readonly discoveryCheckpoint?: {
+    readonly store: AdapterFamilyDiscoveryCheckpointStore;
+    readonly candidateIssuer: ReturnType<
+      AdapterFamilyDiscoveryCheckpointStore["takeCandidateIssuer"]
+    >;
+    readonly restartReceipt: AdapterFamilyDiscoveryCheckpointReceipt;
+  };
 } = {}): Harness {
   const strictCatalog = catalog();
   const inputIssuer = createAdapterFamilyShadowInputIssuer({
@@ -187,6 +202,9 @@ function harness(input: {
     initialWatermarks: (input.seeds ?? []).map((seed) =>
       inputIssuer.sealWatermarkSeed(seed)
     ),
+    ...(input.discoveryCheckpoint === undefined
+      ? {}
+      : { discoveryCheckpoint: input.discoveryCheckpoint }),
   });
   return { catalog: strictCatalog, inputIssuer, ancestryIssuer, ingress, fenceCalls };
 }
@@ -301,6 +319,11 @@ const complete = await completeHarness.ingress.run({
   ancestryProofs: [],
 });
 assert.equal(complete.authority, "shadow-only");
+assert.equal(
+  complete.checkpointCandidate,
+  null,
+  "an ingress without a durable store cannot mint a checkpoint candidate",
+);
 assert.equal(
   complete.status,
   "shadow-partial",
@@ -782,5 +805,153 @@ assert.throws(
   /not issued by this ingress authority/,
   "seed receipts bind catalog, chain and source registry authority",
 );
+
+const checkpointDirectory = await mkdtemp(
+  join(tmpdir(), "adapter-family-shadow-ingress-checkpoint-"),
+);
+try {
+  const checkpointPath = join(checkpointDirectory, "discovery.json");
+  const checkpointCatalog = catalog();
+  const checkpointStore = new AdapterFamilyDiscoveryCheckpointStore({
+    catalog: checkpointCatalog,
+    chainId: CHAIN_ID,
+    sourceRegistryFingerprint: REGISTRY,
+    backend: new FileAdapterFamilyDiscoveryCheckpointBackend({
+      path: checkpointPath,
+      lockRetryMs: 1,
+      lockAttempts: 100,
+    }),
+    verifyCanonicalCheckpoint: (checkpoint) => {
+      assert.equal(checkpoint.chainId, CHAIN_ID);
+    },
+    assertGenerationCurrent: (checkpointSource) => {
+      assert.equal(checkpointSource.generation, SOURCE.generation);
+    },
+  });
+  const checkpointIssuer = checkpointStore.takeCandidateIssuer();
+  const coldStart = await checkpointStore.loadForRestart();
+  assert.equal(coldStart.status, "empty");
+  const durableHarness = harness({
+    discoveryCheckpoint: {
+      store: checkpointStore,
+      candidateIssuer: checkpointIssuer,
+      restartReceipt: coldStart.receipt,
+    },
+  });
+  const durableRound = await durableHarness.ingress.run({
+    sourceScans: sealedScans(durableHarness.inputIssuer, { observedFrom: 0 }),
+    bootstrap: sealedBootstrap(durableHarness.inputIssuer, []),
+    ancestryProofs: [],
+  });
+  assert(durableRound.checkpointCandidate);
+  assert.equal(await checkpointStore.compareAndCommit({
+    expected: null,
+    staged: durableRound.checkpointCandidate,
+  }), true);
+  assert.equal(
+    checkpointStore.checkpointSnapshot(checkpointStore.capture()!)?.revision,
+    1,
+  );
+
+  const restartedStore = new AdapterFamilyDiscoveryCheckpointStore({
+    catalog: catalog(),
+    chainId: CHAIN_ID,
+    sourceRegistryFingerprint: REGISTRY,
+    backend: new FileAdapterFamilyDiscoveryCheckpointBackend({
+      path: checkpointPath,
+      lockRetryMs: 1,
+      lockAttempts: 100,
+    }),
+    verifyCanonicalCheckpoint: (checkpoint) => {
+      assert([SOURCE.number, 11].includes(checkpoint.source.number));
+    },
+    assertGenerationCurrent: (checkpointSource) => {
+      assert.equal(checkpointSource.generation, 1);
+    },
+  });
+  const restartedIssuer = restartedStore.takeCandidateIssuer();
+  const restored = await restartedStore.loadForRestart();
+  assert.equal(restored.status, "trusted");
+  const restartHarness = harness({
+    discoveryCheckpoint: {
+      store: restartedStore,
+      candidateIssuer: restartedIssuer,
+      restartReceipt: restored.receipt,
+    },
+  });
+  assert.equal(
+    restartHarness.ingress.watermarkSnapshot().find((watermark) =>
+      watermark.sourceId === "observed-call"
+    )?.coverageAuthority,
+    "contiguous-history",
+    "a verified durable receipt restores event continuity across processes",
+  );
+  assert.equal(
+    restartHarness.ingress.watermarkSnapshot().find((watermark) =>
+      watermark.sourceId === "address-surface"
+    )?.coverageAuthority,
+    "append-only",
+    "durable continuity cannot mint point-in-time inventory closure",
+  );
+
+  const restartedSource = Object.freeze({
+    number: 11,
+    hash: `0x${"c".repeat(64)}`,
+    // Runtime generations restart with the process; durable ordering is the
+    // checkpoint revision plus canonical block ancestry, not this counter.
+    generation: 1,
+  });
+  const restartedRound = await restartHarness.ingress.run({
+    sourceScans: sealedScans(restartHarness.inputIssuer, {
+      source: restartedSource,
+      observedFrom: 11,
+    }),
+    bootstrap: sealedBootstrap(restartHarness.inputIssuer, [], restartedSource),
+    ancestryProofs: [ancestryProof(
+      restartHarness,
+      { number: SOURCE.number, hash: SOURCE.hash },
+      restartedSource,
+    )],
+  });
+  assert(restartedRound.checkpointCandidate);
+  assert.equal(await restartedStore.compareAndCommit({
+    expected: restored.receipt,
+    staged: restartedRound.checkpointCandidate,
+  }), true);
+  assert.equal(
+    restartedStore.checkpointSnapshot(restartedStore.capture()!)?.revision,
+    2,
+    "the first post-restart generation advances the durable CAS revision",
+  );
+
+  assert.throws(
+    () => harness({
+      discoveryCheckpoint: {
+        store: restartedStore,
+        candidateIssuer: restartedIssuer,
+        restartReceipt: checkpointStore.capture()!,
+      },
+    }),
+    /forged or foreign/,
+    "a receipt from another store cannot cross the checkpoint authority",
+  );
+  assert.throws(
+    () => harness({
+      seeds: [watermarkSeed({
+        sourceId: "observed-call",
+        block: SOURCE.number,
+        hash: SOURCE.hash,
+      })],
+      discoveryCheckpoint: {
+        store: restartedStore,
+        candidateIssuer: restartedIssuer,
+        restartReceipt: restartedStore.capture()!,
+      },
+    }),
+    /cannot combine durable and process-local/,
+  );
+} finally {
+  await rm(checkpointDirectory, { recursive: true, force: true });
+}
 
 console.log("adapter-family-observation-shadow-ingress PASS");

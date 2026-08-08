@@ -2,6 +2,13 @@ import type {
   AdapterGenerationFence,
   CentralAdapterRuntime,
 } from "./adapter-work-intent.js";
+import type {
+  AdapterFamilyDiscoveryCheckpointCandidateIssuer,
+  AdapterFamilyDiscoveryCheckpointReceipt,
+  AdapterFamilyDiscoveryCheckpointStore,
+  AdapterFamilyDiscoveryCheckpointWatermark,
+  PreparedAdapterFamilyDiscoveryCheckpoint,
+} from "./adapter-family-discovery-checkpoint.js";
 import {
   advanceDiscoveryFamilySourceWatermarks,
   createDiscoveryFamilySourceWatermarks,
@@ -271,6 +278,8 @@ export interface AdapterFamilyObservationShadowRound {
     readonly families: readonly AdapterFamilyShadowBootstrapFamilyResult[];
     readonly incumbents: readonly AdapterFamilyShadowBootstrapResult[];
   };
+  /** Opaque durable candidate; it has no authority until checkpoint CAS. */
+  readonly checkpointCandidate: PreparedAdapterFamilyDiscoveryCheckpoint | null;
   readonly issues: readonly AdapterFamilyObservationShadowIssue[];
 }
 
@@ -548,6 +557,8 @@ export class AdapterFamilyObservationShadowIngress {
   readonly #generationFence: AdapterGenerationFence;
   readonly #inputAuthority: AdapterFamilyShadowInputAuthority;
   readonly #ancestryAuthority: AdapterFamilyShadowAncestryAuthority;
+  readonly #checkpointCandidateIssuer:
+    AdapterFamilyDiscoveryCheckpointCandidateIssuer | null;
   readonly #binding: InputBinding;
   readonly #families: readonly DiscoveryFamilySources[];
   #watermarks: Map<string, number>;
@@ -562,6 +573,12 @@ export class AdapterFamilyObservationShadowIngress {
     readonly inputAuthority: AdapterFamilyShadowInputAuthority;
     readonly ancestryAuthority: AdapterFamilyShadowAncestryAuthority;
     readonly initialWatermarks?: readonly AdapterFamilyShadowWatermarkSeed[];
+    readonly discoveryCheckpoint?: {
+      readonly store: AdapterFamilyDiscoveryCheckpointStore;
+      readonly candidateIssuer:
+        AdapterFamilyDiscoveryCheckpointCandidateIssuer;
+      readonly restartReceipt: AdapterFamilyDiscoveryCheckpointReceipt;
+    };
   }) {
     const binding = inputAuthorityRecords.get(input.inputAuthority);
     if (binding === undefined || binding.catalogHash !== input.catalog.catalogHash) {
@@ -598,6 +615,59 @@ export class AdapterFamilyObservationShadowIngress {
         coverageAuthority: "append-only" as const,
       }),
     ]));
+    if (
+      input.discoveryCheckpoint !== undefined &&
+      (input.initialWatermarks?.length ?? 0) > 0
+    ) {
+      throw new Error(
+        "shadow ingress cannot combine durable and process-local watermark seeds",
+      );
+    }
+    this.#checkpointCandidateIssuer =
+      input.discoveryCheckpoint?.candidateIssuer ?? null;
+    if (input.discoveryCheckpoint !== undefined) {
+      if (
+        input.discoveryCheckpoint.candidateIssuer.authority !==
+          input.discoveryCheckpoint.store.authority
+      ) {
+        throw new Error(
+          "discovery checkpoint candidate issuer is foreign to its store",
+        );
+      }
+      const checkpointBinding = input.discoveryCheckpoint.store.binding();
+      if (
+        checkpointBinding.chainId !== binding.chainId ||
+        checkpointBinding.catalogHash !== binding.catalogHash ||
+        checkpointBinding.sourceRegistryFingerprint !==
+          binding.sourceRegistryFingerprint
+      ) {
+        throw new Error("discovery checkpoint store is foreign to this ingress");
+      }
+      const restart = input.discoveryCheckpoint.store.restartState(
+        input.discoveryCheckpoint.restartReceipt,
+      );
+      if (
+        restart.chainId !== binding.chainId ||
+        restart.catalogHash !== binding.catalogHash ||
+        restart.sourceRegistryFingerprint !== binding.sourceRegistryFingerprint
+      ) {
+        throw new Error("discovery checkpoint restart state escaped its binding");
+      }
+      for (const watermark of restart.watermarks) {
+        this.#restoreCheckpointWatermark(watermark);
+      }
+      if (restart.authority === "trusted") {
+        if (restart.source === null) {
+          throw new Error("trusted discovery checkpoint has no source anchor");
+        }
+        // Persisted generation is audit-only, but its canonical block/hash is
+        // the first post-restart ancestry anchor even when every row is -1 or
+        // lags behind the checkpoint source.
+        this.#lastSource = snapshotSource(restart.source);
+      } else if (restart.source !== null) {
+        throw new Error("append-only discovery checkpoint retained a source");
+      }
+    }
     const seen = new Set<string>();
     for (const seed of input.initialWatermarks ?? []) {
       const record = watermarkSeedRecords.get(seed);
@@ -629,11 +699,18 @@ export class AdapterFamilyObservationShadowIngress {
   }
 
   watermarkSnapshot(): readonly AdapterFamilyShadowWatermarkSnapshot[] {
+    return this.#watermarkSnapshot(this.#watermarks, this.#watermarkMetadata);
+  }
+
+  #watermarkSnapshot(
+    watermarks: ReadonlyMap<string, number>,
+    metadataByKey: ReadonlyMap<string, StoredWatermark>,
+  ): readonly AdapterFamilyShadowWatermarkSnapshot[] {
     return Object.freeze(this.#families.flatMap((family) =>
       family.sourceIds.map((sourceId) => {
         const key = discoveryFamilySourceKey(family.familyId, sourceId);
-        const block = this.#watermarks.get(key) ?? -1;
-        const metadata = this.#watermarkMetadata.get(key)!;
+        const block = watermarks.get(key) ?? -1;
+        const metadata = metadataByKey.get(key)!;
         return Object.freeze({
           familyId: family.familyId as FamilyId,
           sourceId: sourceId as DiscoverySourceKind,
@@ -643,6 +720,28 @@ export class AdapterFamilyObservationShadowIngress {
         });
       })
     ).sort(compareWatermark));
+  }
+
+  #checkpointWatermarks(
+    watermarks: ReadonlyMap<string, number>,
+    metadataByKey: ReadonlyMap<string, StoredWatermark>,
+  ): readonly AdapterFamilyDiscoveryCheckpointWatermark[] {
+    return Object.freeze(
+      this.#watermarkSnapshot(watermarks, metadataByKey).map((watermark) =>
+        Object.freeze({
+          familyId: watermark.familyId,
+          sourceId: watermark.sourceId,
+          // Point-in-time coverage remains append-only until an independent
+          // verifier-issued inventory closure exists.
+          coverageAuthority:
+            watermark.coverageAuthority === "contiguous-history"
+              ? "contiguous-history" as const
+              : "append-only" as const,
+          completeThroughBlock: watermark.completeThroughBlock,
+          completeThroughHash: watermark.completeThroughHash,
+        })
+      ),
+    );
   }
 
   async #run(input: {
@@ -748,6 +847,11 @@ export class AdapterFamilyObservationShadowIngress {
       }));
     }
 
+    const checkpointCandidate = this.#checkpointCandidateIssuer?.prepare({
+      source,
+      watermarks: this.#checkpointWatermarks(nextWatermarks, nextMetadata),
+    }) ?? null;
+
     // The shadow watermark is still state: a stale generation must not write it.
     this.#generationFence.assertCurrent(source.generation, source);
     this.#watermarks = nextWatermarks;
@@ -794,6 +898,7 @@ export class AdapterFamilyObservationShadowIngress {
         families: bootstrapFamilies,
         incumbents: Object.freeze(bootstrapIncumbents),
       }),
+      checkpointCandidate,
       issues: Object.freeze(issues),
     });
   }
@@ -1268,6 +1373,20 @@ export class AdapterFamilyObservationShadowIngress {
     this.#watermarkMetadata.set(key, Object.freeze({
       hash: seed.completeThroughHash,
       coverageAuthority: "append-only",
+    }));
+  }
+
+  #restoreCheckpointWatermark(
+    watermark: AdapterFamilyDiscoveryCheckpointWatermark,
+  ): void {
+    const key = familySourceKey(watermark.familyId, watermark.sourceId);
+    if (!this.#watermarks.has(key)) {
+      throw new Error(`discovery checkpoint references unknown ${key}`);
+    }
+    this.#watermarks.set(key, watermark.completeThroughBlock);
+    this.#watermarkMetadata.set(key, Object.freeze({
+      hash: watermark.completeThroughHash,
+      coverageAuthority: watermark.coverageAuthority,
     }));
   }
 }

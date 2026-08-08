@@ -54,8 +54,8 @@
   [`live-reth-read-priority.ts`](../../../listener/src/searcher/live-reth-read-priority.ts)、
   [`blockscan-runtime-loop.ts`](../../../listener/src/searcher/blockscan-runtime-loop.ts)。
 
-**2026-08-08 实施审计 checkpoint（不是部署或完成声明）：** 本实施 change set 基于
-`codex/s1-unified-adapter-architecture@94ccb573e0eb20a459786b9ebcbadc8f3ff926b0`；严格
+**2026-08-08 实施审计 checkpoint（不是部署或完成声明）：** 本轮实施基线为
+`codex/s1-unified-adapter-architecture@750028ea0e6afcda57f0b13ec68b239649cde729`；严格
 catalog 已能装载 22 个 Family、生成 220 个 capability entry，但 production route/discovery/pricing/planner
 authority 仍由旧 registry 派生，严格 lifecycle/exact/execution 入口还没有真实 production route consumer。
 所以“catalog/插件文件齐全”只表示合同骨架已建立，不能据此宣称 Graph cutover、pool 尖峰关闭或 §18 Phase E
@@ -71,7 +71,7 @@ authority 混在一起：
 |Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
 |Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
 |Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
-|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary，以及 observation ingress / append-only 全 catalog CAS 等 runtime slice 已有 unit/shadow gate|durable discovery checkpoint/CAS、verifier-issued snapshot inventory closure、StateInstance mutation/carry proof、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、Credit 独立 execution handle、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
+|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS，以及 file-backed durable discovery checkpoint/CAS 等 runtime slice 已有 unit/shadow gate|durable checkpoint 的 production composition 与 strict catalog receipt coupling、verifier-issued snapshot inventory closure、StateInstance mutation/carry proof、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、Credit 独立 execution handle、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
 |Phase E cleanup|尚未开始|legacy registry/API/schema/revision/cache/flag authority 仍在；只有 §18.3 与 §20.2.6 全部门通过后才能删除|
 
 该表是实施 checkpoint，不是目标合同的降级，也不预判并行实现工作最终是否通过；任一状态更新都必须引用新的
@@ -1107,9 +1107,25 @@ receipt、逐 Family incumbent inventory count/hash 与 re-attestation、event-s
 generation fence 前不写状态的 shadow ingress。它只输出与 `CatalogDiscoverySourceAnchor` 不兼容的
 `sourceCoverage` 诊断投影；普通 restart seed 永远只有 `append-only` 权限，point-in-time snapshot 在没有
 verifier-issued inventory closure 时永远保持 partial。因此这一步不会铸造 omission/deletion authority，也不能替代
-production bootstrap。跨进程 continuity 仍须由绑定 chain/catalog/source-registry/revision/source/full watermark matrix
-的 durable checkpoint store 在 canonical verify + generation fence + CAS 后签发；该 issuer/store 未落地前不得把
-shadow coverage 晋升成 catalog completeness proof。
+production bootstrap。
+
+**2026-08-08 durable continuity checkpoint：** 当前 change set 又新增绑定
+`chainId/catalogHash/sourceRegistryFingerprint/revision/source/full Family×source watermark matrix` 的 opaque
+checkpoint candidate/receipt 与 file-backed CAS store。文件后端使用独占 sidecar lock、精确 serialized-byte CAS、`0600`
+临时文件、file sync、atomic rename 与 directory sync；只有 canonical checkpoint verify、当前进程 generation fence 和
+durable CAS 全部通过后才签发 trusted receipt。新 store instance 的 restart load 会重验 canonical serialization、内容
+fingerprint、完整矩阵、binding 和旧 canonical anchor；任一 tamper、schema/catalog/source-registry mismatch、reorg 或
+并发存储变化都清空为完整矩阵的 `append-only/-1/null`，不复用不可信 offset。若 canonical verify 期间另一 writer
+提交，失稳 loader 只保留已验证的首读 bytes 作为失败 CAS token，不得重绑定到未经验证的新 bytes；因此它不能用
+`expected:null` 把 winner 覆盖成 revision 1，必须重新 load 后才能从新 revision 继续。跨进程 ordering 使用 checkpoint
+revision 与 canonical block ancestry，旧进程 generation 只作审计，不能与新进程 counter 比大小。
+
+shadow ingress 现在可以消费同一 store 签发的 opaque restart receipt，并在异步 re-attestation 后、写入内存 watermark
+之前产出 one-shot checkpoint candidate；普通 process-local seed 仍只能是 `append-only`，且两种 seed 不得混用。
+point-in-time source 在独立 verifier-issued inventory closure 落地前会被持久化为 `append-only`，不会从 durable
+continuity 获得 snapshot omission/deletion authority。该 store/ingress 接线目前仍是 shadow contract；strict catalog
+root 尚未改为只消费 checkpoint receipt，production startup 也尚未采用该 store，所以不能据此宣称 bootstrap、Graph
+completeness、production cutover 或 pool 尖峰验收完成。
 
 ## 8. Identity：多来源 variant，统一行为证明
 
