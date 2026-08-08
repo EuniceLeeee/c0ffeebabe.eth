@@ -65,13 +65,13 @@ authority 仍由旧 registry 派生，严格 lifecycle/exact/execution 入口还
 当前阶段状态必须按证据等级拆开记录，不能用一个“完成百分比”把 unit contract、shadow 接线和 production
 authority 混在一起：
 
-|阶段|2026-08-08 worktree 可确认状态|仍未满足的晋升条件|
+|阶段|截至 2026-08-09 committed slice 可确认状态|仍未满足的晋升条件|
 |---|---|---|
 |Phase 0 共享 substrate|physical-settlement ownership 与 published/memo store separation 已有 change-set 实现和定向 unit contract|仍需绑定最终 committed HEAD 和完整回归结果；即使通过也不能据此宣称 deployed/live|
 |Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
 |Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
 |Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
-|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS，以及 file-backed durable discovery checkpoint/CAS 等 runtime slice 已有 unit/shadow gate|durable checkpoint 的 production composition 与 strict catalog receipt coupling、verifier-issued snapshot inventory closure、StateInstance mutation/carry proof、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、Credit 独立 execution handle、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
+|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS，以及 `c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract 等 runtime slice 已有 unit/shadow gate|durable checkpoint 的 production composition 与 strict catalog receipt coupling、production point-in-time enumerator、closure receipt 在 strict catalog 内的一次性消费与 staged exact-set coupling、StateInstance mutation/carry proof、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、Credit 独立 execution handle、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
 |Phase E cleanup|尚未开始|legacy registry/API/schema/revision/cache/flag authority 仍在；只有 §18.3 与 §20.2.6 全部门通过后才能删除|
 
 该表是实施 checkpoint，不是目标合同的降级，也不预判并行实现工作最终是否通过；任一状态更新都必须引用新的
@@ -1126,6 +1126,53 @@ point-in-time source 在独立 verifier-issued inventory closure 落地前会被
 continuity 获得 snapshot omission/deletion authority。该 store/ingress 接线目前仍是 shadow contract；strict catalog
 root 尚未改为只消费 checkpoint receipt，production startup 也尚未采用该 store，所以不能据此宣称 bootstrap、Graph
 completeness、production cutover 或 pool 尖峰验收完成。
+
+**2026-08-09 snapshot inventory closure shadow contract（实现 commit
+`c7d9fa548802a9d6371f46559b8cb99216a513b3`）：** 该 slice 新增独立的 process-local closure
+verifier，并把其 one-shot candidate issuer 注入 observation ingress。ingress 只有在 `complete-snapshot` bootstrap 提供
+完整 discovery-Family matrix、每个 Family 都声明可反向验证的 `address-surface` source/pattern、每个 incumbent 都有
+当前 surface、对应 candidate 都得到 terminal re-attestation，且所有 event source 本轮连续覆盖时，才会准备 opaque
+candidate。普通 `sourceCoverage`、bootstrap DTO、checkpoint candidate、旧 restart receipt 和结构相同的 clone 都不能
+替代该 candidate。
+
+verifier 不接受调用方自报的“空库存”为 closure。它固定绑定一个独立 point-in-time inventory enumerator，并在签发
+前重新枚举同一 canonical source；candidate 与 authoritative enumeration 必须在完整 matrix、显式 zero row、排序去重
+后的 inventory keys/count、地址、current surface 和 source-bound inventory hash 上精确相等。签发还必须同时绑定并
+复核：
+
+- `chainId/catalogHash/sourceRegistryFingerprint` 与精确
+  `CanonicalSource { number, hash, generation }`；
+- 当前同一 store 的 trusted checkpoint receipt/fingerprint，以及每个 declared event source 到该 source 的
+  `contiguous-history`；
+- 固定 canonical verifier 和异步返回后的 current-generation fence；
+- 从固定 catalog publication root 捕获的 current `revision/publicationFingerprint`，验证期间发生 pointer 变化即拒绝；
+- 每个 incumbent 的 terminal candidate key、canonical outcome fingerprint、evidence refs、lifecycle-derived
+  `catalogInstancePublicationKey` 与 publication fingerprint；
+- inventory matrix fingerprint、逐 Family terminal evidence fingerprint 的组合 matrix，以及最终 closure
+  fingerprint。
+
+candidate/receipt 都只存在于 issuer-private `WeakMap`，首次验证/成功消费后即失效；receipt 的可读 snapshot 只是诊断
+evidence，不是 omission、deletion、source-transition 或 terminal-removal authority。checkpoint 中的 point-in-time row
+仍强制降为 `append-only`，strict shadow catalog 的 stage 与 prepare 两层也继续拒绝 `complete-snapshot`；把 opaque
+closure receipt 强转或夹带进结构 DTO 不能越过这两层 gate。
+
+当前 production catalog 的 20 个 discovery Family 中仍有 11 个缺少完整 `address-surface` bootstrap coverage；因此
+全 catalog candidate 必须 fail closed，不能借 19 个显式 zero row 或累计 terminal 结果绕过。该 contract 目前只在
+synthetic WSTETH catalog 上证明 same-process `ingress candidate → durable checkpoint CAS → verifier receipt`，restart
+必须重新签发。production 晋升仍需真实 point-in-time enumerator/journal composition、scan 与 bootstrap admitted key 的
+exact union、closure receipt 在 generic catalog prepare 内的一次性消费、与 staged publication keys 的逐 Family 精确
+相等，以及最终 CAS 前的再次 canonical/generation fence；这些完成前不得打开 omission/tombstone，也不得宣称
+bootstrap closure、Graph completeness 或 production cutover。
+
+该 commit 的合同证据为
+`searcher:adapter-family-snapshot-inventory-closure`、
+`searcher:adapter-family-observation-shadow-ingress`、
+`searcher:adapter-family-discovery-checkpoint`、
+`searcher:adapter-family-shadow-catalog-publication`、
+`searcher:adapter-family-catalog-publication`、
+`searcher:family-capability-catalog`、
+`searcher:production-family-composition` 与完整 `npm run build` 全部通过；这些是 unit/shadow receipt，仍不是
+`sealed-production`、deployment 或 live evidence。
 
 ## 8. Identity：多来源 variant，统一行为证明
 
