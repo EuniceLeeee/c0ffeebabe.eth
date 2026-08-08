@@ -1188,12 +1188,14 @@ bootstrap/recovery，也不能获得连续 300 个 valid pass。
 projection 固定为 registry 进程生命周期内的同一不可变 registration 集合；这不改变 Family membership、Graph、
 pricing 数学、budget 或 fallback，只恢复 published instance 与其 runtime descriptor 的共同生命周期。
 
-回归要求连续两次 registry projection 返回同一数组及逐 Family 同一 registration identity；它在修复前会直接失败，
-并与 `5,000+1` topology-spike 合同共同覆盖 topology rebuild。定向证据
+回归先要求连续两次 registry projection 返回同一数组及逐 Family 同一 registration identity；另一个
+production-shaped 用例通过真实 `AdapterFamilyRegistry` 执行 `gen1: 1 pool compile/publish → gen2: 1 old pool carry +
+1 new pool compile → compose`，并断言第二代 `complete`、只编译/静态读取新增 pool 且没有 runtime-descriptor issue。
+它与 `5,000+1` topology-spike 合同共同覆盖 topology rebuild。定向证据
 `searcher:production-family-composition`、`searcher:blockscan-state-coordinator`、
 `searcher:blockscan-state-pool-topology-spike`、`searcher:adapter-runtime-coordinator` 与完整 `npm run build` 已通过。
 该 checkpoint 仍只表示代码与本地合同通过；节点 guarded deployment 以及从新 process anchor 开始的连续 300 个
-periodic non-warm pass（`enumeration=ran` 且 `priced/expected >= 80%`）尚待单独机器证据，不能在取得该证据前
+periodic non-warm pass（`enumeration=ran` 且 `priced/expected > 80%`）尚待单独机器证据，不能在取得该证据前
 宣称 live acceptance 或 production cutover。
 
 ## 8. Identity：多来源 variant，统一行为证明

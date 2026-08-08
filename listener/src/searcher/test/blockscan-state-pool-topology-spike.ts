@@ -16,7 +16,11 @@ import {
   type StateRead,
   type StateReadResult,
 } from "../venues/blockscan-state-capability.js";
-import { univ3BlockScanState } from "../venues/swaps/univ3-standard.js";
+import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
+import {
+  univ3BlockScanState,
+  univ3StandardAdapter,
+} from "../venues/swaps/univ3-standard.js";
 
 const FAMILY_ID = "univ3-standard";
 const ADAPTER_ID = "univ3-swap";
@@ -447,6 +451,77 @@ async function equivalentDescriptorReusesContentAddressedRuntime(): Promise<void
   assert.equal(instance.counters.instanceAssemblyInvocations, 1);
 }
 
+async function registryProjectionCarriesRuntimeAcrossTopologyAdoption(): Promise<void> {
+  const counters: Counters = {
+    compiledKeys: [],
+    staticReadIds: [],
+    currentReadTargets: [],
+    familyWideCompilerInvocations: 0,
+    familyWideAssemblyInvocations: 0,
+    instanceAssemblyInvocations: 0,
+  };
+  const backend = new SpikeBackend(counters);
+  const coordinator = new BlockScanStateCoordinator(backend, {
+    familyTimeoutMs: 60_000,
+  });
+  const registry = new AdapterFamilyRegistry([univ3StandardAdapter]);
+  const baselineEdges = edgesForPoolCount(1);
+  const baseline = await coordinator.prepare({
+    graph: graph({
+      generation: 1,
+      sourceBlock: SOURCE_BLOCK,
+      sourceBlockHash: `0x${"f6".repeat(32)}`,
+      edges: baselineEdges,
+    }),
+    families: registry.blockScanStateFamilies(),
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(
+    baseline.status,
+    "complete",
+    JSON.stringify(baseline.issues.slice(0, 5)),
+  );
+
+  counters.staticReadIds.length = 0;
+  counters.currentReadTargets.length = 0;
+  const addedPool = address(1);
+  const adopted = await coordinator.prepare({
+    graph: graph({
+      generation: 2,
+      sourceBlock: SOURCE_BLOCK + 1,
+      sourceBlockHash: `0x${"07".repeat(32)}`,
+      edges: Object.freeze([
+        ...baselineEdges,
+        edge(addedPool, 1, true),
+        edge(addedPool, 1, false),
+      ]),
+    }),
+    families: registry.blockScanStateFamilies(),
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(
+    adopted.status,
+    "complete",
+    JSON.stringify(adopted.issues.slice(0, 5)),
+  );
+  const receipt = receiptFor(adopted);
+  assert.equal(receipt.beforeStateInstanceCount, 1);
+  assert.equal(receipt.afterStateInstanceCount, 2);
+  assert.equal(receipt.addedCompilerInvocations, 1);
+  assert.equal(receipt.changedCompilerInvocations, 0);
+  assert.equal(receipt.siblingCompilerInvocations, 0);
+  assert.deepEqual(counters.staticReadIds, [
+    `v3-factory-binding:${addedPool}`,
+  ]);
+  assert.equal(
+    adopted.issues.some((issue) =>
+      issue.message.includes("lacks its runtime descriptor")
+    ),
+    false,
+    "topology adoption must retain carried instance runtime descriptors",
+  );
+}
+
 async function oneCompilerFailureDoesNotFallbackOrDropSibling(): Promise<void> {
   const failedPool = address(1);
   const instance = fixture(failedPool);
@@ -479,6 +554,7 @@ async function oneCompilerFailureDoesNotFallbackOrDropSibling(): Promise<void> {
 }
 
 await equivalentDescriptorReusesContentAddressedRuntime();
+await registryProjectionCarriesRuntimeAcrossTopologyAdoption();
 await oneCompilerFailureDoesNotFallbackOrDropSibling();
 await coldMemoCompilesOnlyAddedPool();
 await contentAddressedMemoHitSkipsAddedCompiler();
