@@ -10,6 +10,8 @@
 const TIMING_MARKER = "[searcher/blockscan-family] ";
 const STATE_MARKER = "[searcher/blockscan-nminus1-state] ";
 const GRAPH_MARKER = "[searcher/blockscan] graph built: ";
+const PROCESS_START_MARKER = "[searcher/live] starting V5 searcher";
+const RUNTIME_COMMIT_MARKER = "[searcher/live] runtime_commit=";
 
 type JsonObject = Record<string, unknown>;
 
@@ -32,6 +34,8 @@ interface GraphSnapshot {
 
 interface PassRecord {
   readonly line: number;
+  readonly processSegment: number;
+  readonly runtimeCommit: string;
   readonly sourceBlock: number;
   readonly outcome: string | null;
   readonly coarseSourceBlock: number | null;
@@ -53,6 +57,8 @@ export interface RunStats {
   readonly endLine: number;
   readonly startBlock: number | null;
   readonly endBlock: number | null;
+  readonly blockSpan: number | null;
+  readonly consecutiveSourceBlocks: boolean;
   readonly pricedExpectedMin: number | null;
   readonly pricedExpectedAvg: number | null;
   readonly generationWallMsP50: number | null;
@@ -65,13 +71,21 @@ export interface RunStats {
 }
 
 export interface WindowReport {
-  readonly schema_version: 1;
+  readonly schema_version: 2;
   readonly kind: "blockscan_contiguous_window";
   readonly scope: {
     readonly startLine: number;
     readonly endLine: number;
     readonly minRun: number;
     readonly runtimeCommit: string | null;
+    readonly processStartLine: number | null;
+    readonly processStartCount: number;
+    readonly runtimeCommitLines: number;
+    readonly recordsBeforeRuntimeCommit: number;
+    readonly processIdentityBinding: "log-anchor-only";
+    readonly externalPidBindingRequired: true;
+    readonly eligibleForQualification: boolean;
+    readonly ineligibleReason: string | null;
   };
   readonly totals: {
     readonly passes: number;
@@ -81,6 +95,7 @@ export interface WindowReport {
     readonly ranLowCoverage: number;
   };
   readonly invalidByReason: Record<string, number>;
+  readonly continuityBreaks: Record<string, number>;
   readonly longestRun: RunStats | null;
   readonly qualifyingRuns: readonly RunStats[];
 }
@@ -96,7 +111,12 @@ export function analyzeWindow(
     lines.length,
   );
   const firstInclusive = Math.max(1, options.startLine);
-  let runtimeCommit: string | null = null;
+  let currentRuntimeCommit: string | null = null;
+  const runtimeCommits = new Set<string>();
+  let runtimeCommitLines = 0;
+  const processStartLines: number[] = [];
+  let processSegment = -1;
+  let recordsBeforeRuntimeCommit = 0;
   let latestGraph: GraphSnapshot | null = null;
   const publishedStatesByBlock = new Map<number, PublishedState>();
   const passes: PassRecord[] = [];
@@ -109,11 +129,40 @@ export function analyzeWindow(
   for (let index = firstInclusive - 1; index < lastInclusive; index++) {
     const line = lines[index] ?? "";
     const oneBasedLine = index + 1;
-    const commitAt = line.indexOf("[searcher/live] runtime_commit=");
+    if (line.includes(PROCESS_START_MARKER)) {
+      processStartLines.push(oneBasedLine);
+      processSegment++;
+      currentRuntimeCommit = null;
+      latestGraph = null;
+      publishedStatesByBlock.clear();
+      continue;
+    }
+    if (processSegment < 0) continue;
+    const commitAt = line.indexOf(RUNTIME_COMMIT_MARKER);
     if (commitAt >= 0) {
-      runtimeCommit =
-        line.slice(commitAt + "[searcher/live] runtime_commit=".length).trim() ||
-        null;
+      const nextRuntimeCommit =
+        line.slice(commitAt + RUNTIME_COMMIT_MARKER.length).trim() || null;
+      runtimeCommitLines++;
+      if (nextRuntimeCommit !== null) runtimeCommits.add(nextRuntimeCommit);
+      if (
+        currentRuntimeCommit !== null &&
+        nextRuntimeCommit !== currentRuntimeCommit
+      ) {
+        processSegment++;
+        latestGraph = null;
+        publishedStatesByBlock.clear();
+      }
+      currentRuntimeCommit = nextRuntimeCommit;
+      continue;
+    }
+    if (currentRuntimeCommit === null) {
+      if (
+        line.includes(GRAPH_MARKER) ||
+        line.includes(STATE_MARKER) ||
+        line.includes(TIMING_MARKER)
+      ) {
+        recordsBeforeRuntimeCommit++;
+      }
       continue;
     }
     const graphAt = line.indexOf(GRAPH_MARKER);
@@ -166,8 +215,17 @@ export function analyzeWindow(
     if (enumeration !== "ran") {
       invalidReason = "enumeration_not_ran";
       enumerationNotRan++;
+    } else if (sourceBlock === null) {
+      invalidReason = "missing_source_block";
+      ranMissingState++;
     } else if (coarseSourceBlock === null) {
       invalidReason = "missing_coarse_source_block";
+      ranMissingState++;
+    } else if (
+      sourceBlock === 0 ||
+      coarseSourceBlock !== sourceBlock - 1
+    ) {
+      invalidReason = "coarse_source_not_predecessor";
       ranMissingState++;
     } else {
       const state = publishedStatesByBlock.get(coarseSourceBlock) ?? null;
@@ -205,6 +263,8 @@ export function analyzeWindow(
     }
     passes.push({
       line: oneBasedLine,
+      processSegment,
+      runtimeCommit: currentRuntimeCommit,
       sourceBlock: sourceBlock ?? -1,
       outcome: typeof timing.outcome === "string" ? timing.outcome : null,
       coarseSourceBlock,
@@ -220,7 +280,26 @@ export function analyzeWindow(
     });
   }
 
-  const longestRun = longestContiguousValidRun(passes, options.minRun);
+  const runAnalysis = longestContiguousValidRun(passes, options.minRun);
+  const processStartLine = processStartLines.length === 1
+    ? processStartLines[0] as number
+    : null;
+  const runtimeCommit = runtimeCommits.size === 1
+    ? [...runtimeCommits][0] as string
+    : null;
+  const ineligibleReason =
+    processStartLines.length !== 1
+      ? `expected_one_process_start:${processStartLines.length}`
+      : processStartLine !== firstInclusive
+        ? `process_start_not_scope_start:${processStartLine}`
+        : runtimeCommitLines !== 1 || runtimeCommits.size !== 1
+          ? `expected_one_nonempty_runtime_commit_line:` +
+            `${runtimeCommitLines}/${runtimeCommits.size}`
+          : recordsBeforeRuntimeCommit !== 0
+            ? `records_before_runtime_commit:${recordsBeforeRuntimeCommit}`
+            : null;
+  const eligibleForQualification = ineligibleReason === null;
+  const longestRun = eligibleForQualification ? runAnalysis.longestRun : null;
   const qualifyingRuns: RunStats[] = [];
   if (longestRun !== null) {
     const split =
@@ -242,13 +321,21 @@ export function analyzeWindow(
   }
 
   return {
-    schema_version: 1,
+    schema_version: 2,
     kind: "blockscan_contiguous_window",
     scope: {
       startLine: firstInclusive,
       endLine: lastInclusive,
       minRun: options.minRun,
       runtimeCommit,
+      processStartLine,
+      processStartCount: processStartLines.length,
+      runtimeCommitLines,
+      recordsBeforeRuntimeCommit,
+      processIdentityBinding: "log-anchor-only",
+      externalPidBindingRequired: true,
+      eligibleForQualification,
+      ineligibleReason,
     },
     totals: {
       passes: passes.length,
@@ -258,6 +345,7 @@ export function analyzeWindow(
       ranLowCoverage,
     },
     invalidByReason: Object.fromEntries(invalidByReason),
+    continuityBreaks: runAnalysis.continuityBreaks,
     longestRun:
       longestRun === null
         ? null
@@ -272,33 +360,65 @@ function longestContiguousValidRun(
   passes: readonly PassRecord[],
   minRun: number,
 ): {
-  readonly startIndex: number;
-  readonly endIndex: number;
-  readonly count: number;
-} | null {
+  readonly longestRun: {
+    readonly startIndex: number;
+    readonly endIndex: number;
+    readonly count: number;
+  } | null;
+  readonly continuityBreaks: Record<string, number>;
+} {
   let bestStart = -1;
   let bestEnd = -1;
   let bestCount = 0;
   let runStart = -1;
+  const continuityBreaks = new Map<string, number>();
+  const finishRun = (endIndex: number): void => {
+    if (runStart < 0) return;
+    const count = endIndex - runStart + 1;
+    if (count > bestCount) {
+      bestStart = runStart;
+      bestEnd = endIndex;
+      bestCount = count;
+    }
+    runStart = -1;
+  };
+  const recordBreak = (reason: string): void => {
+    continuityBreaks.set(reason, (continuityBreaks.get(reason) ?? 0) + 1);
+  };
   for (let index = 0; index <= passes.length; index++) {
-    const validPass = index < passes.length && passes[index]?.valid === true;
-    if (validPass) {
-      if (runStart < 0) runStart = index;
+    const pass = passes[index];
+    if (pass?.valid === true) {
+      if (runStart < 0) {
+        runStart = index;
+        continue;
+      }
+      const previous = passes[index - 1] as PassRecord;
+      if (
+        pass.processSegment === previous.processSegment &&
+        pass.runtimeCommit === previous.runtimeCommit &&
+        pass.sourceBlock === previous.sourceBlock + 1
+      ) {
+        continue;
+      }
+      finishRun(index - 1);
+      if (pass.processSegment !== previous.processSegment) {
+        recordBreak("process_or_runtime_boundary");
+      } else if (pass.sourceBlock > previous.sourceBlock + 1) {
+        recordBreak("source_block_gap");
+      } else {
+        recordBreak("source_block_duplicate_or_regression");
+      }
+      runStart = index;
       continue;
     }
-    if (runStart >= 0) {
-      const count = index - runStart;
-      if (count > bestCount) {
-        bestStart = runStart;
-        bestEnd = index - 1;
-        bestCount = count;
-      }
-      runStart = -1;
-    }
+    finishRun(index - 1);
   }
-  return bestCount >= minRun
-    ? { startIndex: bestStart, endIndex: bestEnd, count: bestCount }
-    : null;
+  return {
+    longestRun: bestCount >= minRun
+      ? { startIndex: bestStart, endIndex: bestEnd, count: bestCount }
+      : null,
+    continuityBreaks: Object.fromEntries(continuityBreaks),
+  };
 }
 
 function runStats(passes: readonly PassRecord[]): RunStats {
@@ -323,13 +443,20 @@ function runStats(passes: readonly PassRecord[]): RunStats {
     .map((pass) => pass.sourceHeadSeenAtMs)
     .filter((value): value is number => value !== null)
     .sort((a, b) => a - b);
+  const startBlock = passes[0]?.sourceBlock ?? null;
+  const endBlock = passes.at(-1)?.sourceBlock ?? null;
+  const blockSpan = startBlock === null || endBlock === null
+    ? null
+    : endBlock - startBlock + 1;
   return {
     count: passes.length,
     valid: passes.filter((pass) => pass.valid).length,
     startLine: passes[0]?.line ?? -1,
     endLine: passes.at(-1)?.line ?? -1,
-    startBlock: passes[0]?.sourceBlock ?? null,
-    endBlock: passes.at(-1)?.sourceBlock ?? null,
+    startBlock,
+    endBlock,
+    blockSpan,
+    consecutiveSourceBlocks: blockSpan === passes.length,
     pricedExpectedMin: ratios.length === 0 ? null : Math.min(...ratios),
     pricedExpectedAvg:
       ratios.length === 0

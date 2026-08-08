@@ -475,6 +475,33 @@
       },
       "created_at": "2026-08-08T22:48:30.000Z",
       "updated_at": "2026-08-08T22:49:26.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260809-s1-blockscan-consecutive-source-blocks",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "blockscan_acceptance_streak_ignored_source_block_gaps",
+      "evidence": {
+        "user_contract": "acceptance requires 300 consecutive valid source blocks on one exact PID and runtime commit",
+        "canonical_before": "analysis:blockscan-window reported 48 contiguous valid records from source blocks 25713468 through 25713516 even though that inclusive span is 49 blocks",
+        "manual": "a missing source block, duplicate block, process restart, runtime change, missing source_block, or non-N-1 join could be merged into or inflate a streak",
+        "reviewer": "fresh non-author adversarial review confirmed that the analyzer used adjacency in the filtered pass array rather than consecutive source-block identity"
+      },
+      "tooling_defect": {
+        "tool": "analysis:blockscan-window",
+        "issue": "the canonical acceptance window could report a false consecutive streak across missing/duplicate source blocks and process/runtime boundaries",
+        "evidence": "frozen ddfbdf20 live snapshot produced count=48 but endBlock-startBlock+1=49",
+        "codify_target": "require one process/runtime scope, exact N-1 joins, present source_block, and unique sourceBlock+1 continuity; add gap/duplicate/restart/runtime/missing-source/non-predecessor regressions",
+        "status": "open"
+      },
+      "created_at": "2026-08-08T23:36:00.000Z",
+      "updated_at": "2026-08-08T23:36:00.000Z"
     }
   ]
 }
