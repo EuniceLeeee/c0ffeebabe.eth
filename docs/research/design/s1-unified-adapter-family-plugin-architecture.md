@@ -1174,6 +1174,28 @@ bootstrap closure、Graph completeness 或 production cutover。
 `searcher:production-family-composition` 与完整 `npm run build` 全部通过；这些是 unit/shadow receipt，仍不是
 `sealed-production`、deployment 或 live evidence。
 
+**2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
+`90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
+发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
+`486/32184`（`1.51%`）。五个 `state-instance-v1` swap Family 同时报
+`lacks its runtime descriptor`，而 generation 仍为 `degraded`、`recoveryPending=false`，所以继续等待不会触发
+bootstrap/recovery，也不能获得连续 300 个 valid pass。
+
+根因是 production registry 的 `blockScanStateFamilies()` 每次 projection 都新建 registration 闭包；闭包拥有
+`compileStateInstance()` 生成的 process-local runtime-descriptor store。拓扑不变时 coordinator 继续消费旧 topology
+中的 registration，故启动后可正常运行；拓扑重建/adoption 后，新 topology 换成空 store 的新 registration，却复用
+已经 canonical CAS 发布的 `CompiledStateInstance`，导致全量 carry 的实例失去 runtime descriptor。修复把该
+projection 固定为 registry 进程生命周期内的同一不可变 registration 集合；这不改变 Family membership、Graph、
+pricing 数学、budget 或 fallback，只恢复 published instance 与其 runtime descriptor 的共同生命周期。
+
+回归要求连续两次 registry projection 返回同一数组及逐 Family 同一 registration identity；它在修复前会直接失败，
+并与 `5,000+1` topology-spike 合同共同覆盖 topology rebuild。定向证据
+`searcher:production-family-composition`、`searcher:blockscan-state-coordinator`、
+`searcher:blockscan-state-pool-topology-spike`、`searcher:adapter-runtime-coordinator` 与完整 `npm run build` 已通过。
+该 checkpoint 仍只表示代码与本地合同通过；节点 guarded deployment 以及从新 process anchor 开始的连续 300 个
+periodic non-warm pass（`enumeration=ran` 且 `priced/expected >= 80%`）尚待单独机器证据，不能在取得该证据前
+宣称 live acceptance 或 production cutover。
+
 ## 8. Identity：多来源 variant，统一行为证明
 
 冻结 ds 已有 `identityPolicies`、`discoveryIdentityResolver`、typed `IdentityAuthority`、retained-instance re-probe
