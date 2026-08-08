@@ -498,10 +498,11 @@
         "issue": "the canonical acceptance window could report a false consecutive streak across missing/duplicate source blocks and process/runtime boundaries",
         "evidence": "frozen ddfbdf20 live snapshot produced count=48 but endBlock-startBlock+1=49",
         "codify_target": "require one process/runtime scope, exact N-1 joins, present source_block, and unique sourceBlock+1 continuity; add gap/duplicate/restart/runtime/missing-source/non-predecessor regressions",
-        "status": "open"
+        "codify_commit": "728fa5cb33bec18b122da4198e44bd083c8d4972",
+        "status": "codified"
       },
       "created_at": "2026-08-08T23:36:00.000Z",
-      "updated_at": "2026-08-08T23:36:00.000Z"
+      "updated_at": "2026-08-08T23:52:00.000Z"
     }
   ]
 }
