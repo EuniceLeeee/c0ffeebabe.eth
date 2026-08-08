@@ -470,10 +470,11 @@
         "issue": "the exact 80% boundary was counted as a valid pass even though acceptance requires strictly more than 80%",
         "evidence": "80/100 followed the valid path in both analyzers; the KPI regression fixture explicitly encoded that behavior",
         "codify_target": "reject priced*5 <= expected*4 with exact integer arithmetic, pin 80/100 invalid and 81/100 valid in both analyzers, and correct emitted/indexed threshold metadata",
-        "status": "open"
+        "codify_commit": "e13c96cb400473f168d2db49bc7e6976c3bb7a19",
+        "status": "codified"
       },
       "created_at": "2026-08-08T22:48:30.000Z",
-      "updated_at": "2026-08-08T22:48:30.000Z"
+      "updated_at": "2026-08-08T22:49:26.000Z"
     }
   ]
 }
