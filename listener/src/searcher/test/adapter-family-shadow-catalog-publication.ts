@@ -10,6 +10,9 @@ import {
   type CommittedStrictShadowCatalogPublication,
   type StrictShadowCatalogFamilyStage,
 } from "../adapter-family-shadow-catalog-publication.js";
+import type {
+  AdapterFamilySnapshotInventoryClosureReceipt,
+} from "../adapter-family-snapshot-inventory-closure.js";
 import {
   type AdapterGenerationFence,
   type CentralAdapterRuntime,
@@ -267,7 +270,35 @@ function captureIdentities(
     routeHandles: committed.envelope.privateState.routeHandles,
     graphEntries: committed.envelope.privateState.graphEntries,
     pricingEntries: committed.envelope.privateState.pricingEntries,
+    content: committedContent(committed),
   });
+}
+
+function committedContent(
+  committed: CommittedStrictShadowCatalogPublication,
+) {
+  return {
+    revision: committed.envelope.snapshot.revision,
+    publicationFingerprint:
+      committed.envelope.snapshot.publicationFingerprint,
+    source: { ...committed.envelope.snapshot.source },
+    edges: committed.views.edges.map((edge) => ({
+      canonicalEdgeId: edge.canonicalEdgeId,
+      target: edge.target,
+      tokenIn: edge.tokenIn,
+      tokenOut: edge.tokenOut,
+      score: edge.score,
+    })),
+    handleKeys: [...committed.views.handleByCanonicalEdgeId.keys()],
+    pricingKeys: [...committed.views.pricingByPublicationKey.keys()],
+    instances: [...committed.envelope.privateState.instances]
+      .map(([key, instance]) => ({
+        key,
+        fingerprint: instance.fingerprint,
+        publishedRevision: instance.publishedRevision,
+      })),
+    tombstones: [...committed.envelope.privateState.tombstones.keys()],
+  };
 }
 
 function assertIdentitiesUnchanged(
@@ -295,6 +326,7 @@ function assertIdentitiesUnchanged(
     root.capture()!.envelope.privateState.pricingEntries,
     identities.pricingEntries,
   );
+  assert.deepEqual(committedContent(root.capture()!), identities.content);
 }
 
 function assertReadonlyMapPrototypeSealed(
@@ -408,14 +440,23 @@ async function main(): Promise<void> {
   assert(committed2.views.edges.every((edge) => edge.score === 2));
 
   const source3 = source(103);
+  const closureCastIdentities = captureIdentities(committed2);
+  const forgedClosureReceipt = Object.freeze({}) as
+    AdapterFamilySnapshotInventoryClosureReceipt;
+  assert.deepEqual(Object.keys(forgedClosureReceipt), []);
   assert.throws(() => root.stageRouteFamily({
     publication: publication2,
     inventoryMode: "complete-snapshot",
-  }), /requires append-only-delta/);
+    snapshotInventoryClosureReceipt: forgedClosureReceipt,
+  } as Parameters<
+    StrictAdapterFamilyShadowCatalogPublicationRoot["stageRouteFamily"]
+  >[0]), /requires append-only-delta/);
+  assertIdentitiesUnchanged(root, closureCastIdentities);
   const completeSnapshotStage = Object.freeze({
     ...stage2,
     inventoryMode: "complete-snapshot" as const,
-  });
+    snapshotInventoryClosureReceipt: forgedClosureReceipt,
+  }) as StrictShadowCatalogFamilyStage;
   assert.throws(() => root.prepare({
     source: source3,
     previous: committed2,
@@ -425,7 +466,11 @@ async function main(): Promise<void> {
       completeFamilyId: UNIV2_FAMILY_ID,
     }),
     sourceTransitionProof: transitionProof(transitionIssuer, source2, source3),
-  }), /requires append-only-delta/);
+    snapshotInventoryClosureReceipt: forgedClosureReceipt,
+  } as Parameters<
+    StrictAdapterFamilyShadowCatalogPublicationRoot["prepare"]
+  >[0]), /requires append-only-delta/);
+  assertIdentitiesUnchanged(root, closureCastIdentities);
 
   const omissionIdentities = captureIdentities(committed2);
   assert.throws(() => root.prepare({

@@ -8,6 +8,12 @@ import {
   type AdapterFamilyDiscoveryCheckpointReceipt,
 } from "../adapter-family-discovery-checkpoint.js";
 import {
+  AdapterFamilySnapshotInventoryClosureVerifier,
+  adapterFamilySnapshotInventoryHash,
+  type AdapterFamilySnapshotInventoryClosureCandidateIssuer,
+  type AdapterFamilySnapshotInventoryClosureReceipt,
+} from "../adapter-family-snapshot-inventory-closure.js";
+import {
   AdapterFamilyObservationShadowIngress,
   adapterFamilyShadowInventoryHash,
   createAdapterFamilyShadowAncestryIssuer,
@@ -148,9 +154,12 @@ function fakeReattestor(options: FakeOptions = {}): AdapterFamilyShadowReattesto
         admittedInstanceKeys: partial
           ? Object.freeze([])
           : Object.freeze([`${input.subjectKey}:instance`]),
+        admittedInstancePublicationKeys: partial
+          ? Object.freeze([])
+          : Object.freeze([`${input.subjectKey}:publication-key`]),
         publicationFingerprints: partial
           ? Object.freeze([])
-          : Object.freeze([`${input.subjectKey}:publication`]),
+          : Object.freeze(["f".repeat(64)]),
       });
     },
   });
@@ -176,6 +185,8 @@ function harness(input: {
     >;
     readonly restartReceipt: AdapterFamilyDiscoveryCheckpointReceipt;
   };
+  readonly snapshotInventoryClosureCandidateIssuer?:
+    AdapterFamilySnapshotInventoryClosureCandidateIssuer;
 } = {}): Harness {
   const strictCatalog = catalog();
   const inputIssuer = createAdapterFamilyShadowInputIssuer({
@@ -205,6 +216,12 @@ function harness(input: {
     ...(input.discoveryCheckpoint === undefined
       ? {}
       : { discoveryCheckpoint: input.discoveryCheckpoint }),
+    ...(input.snapshotInventoryClosureCandidateIssuer === undefined
+      ? {}
+      : {
+        snapshotInventoryClosureCandidateIssuer:
+          input.snapshotInventoryClosureCandidateIssuer,
+      }),
   });
   return { catalog: strictCatalog, inputIssuer, ancestryIssuer, ingress, fenceCalls };
 }
@@ -285,6 +302,23 @@ function sealedBootstrap(
   });
 }
 
+function emptyClosureEnumeration(source: CanonicalSource) {
+  return Object.freeze({
+    source,
+    families: Object.freeze([Object.freeze({
+      familyId: WSTETH_FAMILY_ID,
+      inventoryKeys: Object.freeze([]),
+      inventoryCount: 0,
+      inventoryHash: adapterFamilySnapshotInventoryHash({
+        familyId: WSTETH_FAMILY_ID,
+        source,
+        incumbents: Object.freeze([]),
+      }),
+      incumbents: Object.freeze([]),
+    })]),
+  });
+}
+
 function ancestryProof(
   h: Harness,
   previous: { readonly number: number; readonly hash: string },
@@ -323,6 +357,11 @@ assert.equal(
   complete.checkpointCandidate,
   null,
   "an ingress without a durable store cannot mint a checkpoint candidate",
+);
+assert.equal(
+  complete.inventoryClosureCandidate,
+  null,
+  "an ingress without a fixed inventory verifier cannot mint closure evidence",
 );
 assert.equal(
   complete.status,
@@ -828,7 +867,25 @@ try {
       assert.equal(checkpointSource.generation, SOURCE.generation);
     },
   });
+  const closureVerifier = new AdapterFamilySnapshotInventoryClosureVerifier({
+    catalog: checkpointCatalog,
+    chainId: CHAIN_ID,
+    sourceRegistryFingerprint: REGISTRY,
+    checkpointStore,
+    enumerateSnapshotInventory: emptyClosureEnumeration,
+    captureCatalogPublication: () => Object.freeze({
+      revision: 0,
+      publicationFingerprint: null,
+    }),
+    verifyCanonicalSource: (closureSource) => {
+      assert.equal(closureSource.hash, SOURCE.hash);
+    },
+    assertGenerationCurrent: (closureSource) => {
+      assert.equal(closureSource.generation, SOURCE.generation);
+    },
+  });
   const checkpointIssuer = checkpointStore.takeCandidateIssuer();
+  const closureIssuer = closureVerifier.takeCandidateIssuer();
   const coldStart = await checkpointStore.loadForRestart();
   assert.equal(coldStart.status, "empty");
   const durableHarness = harness({
@@ -837,6 +894,7 @@ try {
       candidateIssuer: checkpointIssuer,
       restartReceipt: coldStart.receipt,
     },
+    snapshotInventoryClosureCandidateIssuer: closureIssuer,
   });
   const durableRound = await durableHarness.ingress.run({
     sourceScans: sealedScans(durableHarness.inputIssuer, { observedFrom: 0 }),
@@ -844,6 +902,10 @@ try {
     ancestryProofs: [],
   });
   assert(durableRound.checkpointCandidate);
+  assert(
+    durableRound.inventoryClosureCandidate,
+    "a full same-process bootstrap may prepare an opaque closure candidate",
+  );
   assert.equal(await checkpointStore.compareAndCommit({
     expected: null,
     staged: durableRound.checkpointCandidate,
@@ -851,6 +913,18 @@ try {
   assert.equal(
     checkpointStore.checkpointSnapshot(checkpointStore.capture()!)?.revision,
     1,
+  );
+  const closureReceipt: AdapterFamilySnapshotInventoryClosureReceipt =
+    await closureVerifier.verifyAndIssue({
+      candidate: durableRound.inventoryClosureCandidate,
+      checkpointReceipt: checkpointStore.capture()!,
+    });
+  assert.deepEqual(Object.keys(closureReceipt), []);
+  assert.equal(
+    closureVerifier.closureSnapshot(closureReceipt).families[0]
+      ?.inventoryCount,
+    0,
+    "explicit zero inventory is independently re-enumerated after checkpoint CAS",
   );
 
   const restartedStore = new AdapterFamilyDiscoveryCheckpointStore({
@@ -870,6 +944,26 @@ try {
     },
   });
   const restartedIssuer = restartedStore.takeCandidateIssuer();
+  const restartedClosureVerifier =
+    new AdapterFamilySnapshotInventoryClosureVerifier({
+      catalog: catalog(),
+      chainId: CHAIN_ID,
+      sourceRegistryFingerprint: REGISTRY,
+      checkpointStore: restartedStore,
+      enumerateSnapshotInventory: emptyClosureEnumeration,
+      captureCatalogPublication: () => Object.freeze({
+        revision: 0,
+        publicationFingerprint: null,
+      }),
+      verifyCanonicalSource: (closureSource) => {
+        assert([SOURCE.number, 11].includes(closureSource.number));
+      },
+      assertGenerationCurrent: (closureSource) => {
+        assert.equal(closureSource.generation, 1);
+      },
+    });
+  const restartedClosureIssuer =
+    restartedClosureVerifier.takeCandidateIssuer();
   const restored = await restartedStore.loadForRestart();
   assert.equal(restored.status, "trusted");
   const restartHarness = harness({
@@ -878,7 +972,13 @@ try {
       candidateIssuer: restartedIssuer,
       restartReceipt: restored.receipt,
     },
+    snapshotInventoryClosureCandidateIssuer: restartedClosureIssuer,
   });
+  assert.throws(
+    () => restartedClosureVerifier.closureSnapshot(closureReceipt),
+    /forged or foreign/,
+    "a restart must obtain a fresh process-local closure receipt",
+  );
   assert.equal(
     restartHarness.ingress.watermarkSnapshot().find((watermark) =>
       watermark.sourceId === "observed-call"
@@ -914,6 +1014,7 @@ try {
     )],
   });
   assert(restartedRound.checkpointCandidate);
+  assert(restartedRound.inventoryClosureCandidate);
   assert.equal(await restartedStore.compareAndCommit({
     expected: restored.receipt,
     staged: restartedRound.checkpointCandidate,
@@ -922,6 +1023,16 @@ try {
     restartedStore.checkpointSnapshot(restartedStore.capture()!)?.revision,
     2,
     "the first post-restart generation advances the durable CAS revision",
+  );
+  const restartedClosureReceipt =
+    await restartedClosureVerifier.verifyAndIssue({
+      candidate: restartedRound.inventoryClosureCandidate,
+      checkpointReceipt: restartedStore.capture()!,
+    });
+  assert.equal(
+    restartedClosureVerifier.closureSnapshot(restartedClosureReceipt)
+      .source.number,
+    11,
   );
 
   assert.throws(

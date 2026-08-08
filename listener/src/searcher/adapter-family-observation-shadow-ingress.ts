@@ -10,6 +10,15 @@ import type {
   PreparedAdapterFamilyDiscoveryCheckpoint,
 } from "./adapter-family-discovery-checkpoint.js";
 import {
+  adapterFamilySnapshotInventoryHash,
+  type AdapterFamilySnapshotInventoryClosureCandidateIssuer,
+  type AdapterFamilySnapshotInventoryFamilyInput,
+  type AdapterFamilySnapshotInventoryIncumbentInput,
+  type PreparedAdapterFamilySnapshotInventoryClosure,
+} from "./adapter-family-snapshot-inventory-closure.js";
+import { catalogInstancePublicationKey } from
+  "./adapter-family-catalog-publication.js";
+import {
   advanceDiscoveryFamilySourceWatermarks,
   createDiscoveryFamilySourceWatermarks,
   discoveryFamilySourceKey,
@@ -180,6 +189,7 @@ export interface AdapterFamilyShadowReattestationResult {
   readonly candidateTerminalKeys: readonly string[];
   readonly outcomes: readonly AdapterInstanceOutcome[];
   readonly admittedInstanceKeys: readonly string[];
+  readonly admittedInstancePublicationKeys: readonly string[];
   readonly publicationFingerprints: readonly string[];
 }
 
@@ -199,6 +209,7 @@ export interface AdapterFamilyShadowCandidateResult {
   readonly status: "terminal" | "partial";
   readonly outcomes: readonly AdapterInstanceOutcome[];
   readonly admittedInstanceKeys: readonly string[];
+  readonly admittedInstancePublicationKeys: readonly string[];
   readonly publicationFingerprints: readonly string[];
 }
 
@@ -280,6 +291,12 @@ export interface AdapterFamilyObservationShadowRound {
   };
   /** Opaque durable candidate; it has no authority until checkpoint CAS. */
   readonly checkpointCandidate: PreparedAdapterFamilyDiscoveryCheckpoint | null;
+  /**
+   * Opaque same-process inventory candidate. It remains non-authoritative
+   * until a fixed inventory verifier consumes it after checkpoint CAS.
+   */
+  readonly inventoryClosureCandidate:
+    PreparedAdapterFamilySnapshotInventoryClosure | null;
   readonly issues: readonly AdapterFamilyObservationShadowIssue[];
 }
 
@@ -559,6 +576,8 @@ export class AdapterFamilyObservationShadowIngress {
   readonly #ancestryAuthority: AdapterFamilyShadowAncestryAuthority;
   readonly #checkpointCandidateIssuer:
     AdapterFamilyDiscoveryCheckpointCandidateIssuer | null;
+  readonly #snapshotInventoryClosureCandidateIssuer:
+    AdapterFamilySnapshotInventoryClosureCandidateIssuer | null;
   readonly #binding: InputBinding;
   readonly #families: readonly DiscoveryFamilySources[];
   #watermarks: Map<string, number>;
@@ -579,6 +598,8 @@ export class AdapterFamilyObservationShadowIngress {
         AdapterFamilyDiscoveryCheckpointCandidateIssuer;
       readonly restartReceipt: AdapterFamilyDiscoveryCheckpointReceipt;
     };
+    readonly snapshotInventoryClosureCandidateIssuer?:
+      AdapterFamilySnapshotInventoryClosureCandidateIssuer;
   }) {
     const binding = inputAuthorityRecords.get(input.inputAuthority);
     if (binding === undefined || binding.catalogHash !== input.catalog.catalogHash) {
@@ -625,6 +646,28 @@ export class AdapterFamilyObservationShadowIngress {
     }
     this.#checkpointCandidateIssuer =
       input.discoveryCheckpoint?.candidateIssuer ?? null;
+    this.#snapshotInventoryClosureCandidateIssuer =
+      input.snapshotInventoryClosureCandidateIssuer ?? null;
+    if (
+      input.snapshotInventoryClosureCandidateIssuer !== undefined &&
+      input.discoveryCheckpoint === undefined
+    ) {
+      throw new Error(
+        "snapshot inventory closure requires a durable discovery checkpoint",
+      );
+    }
+    if (input.snapshotInventoryClosureCandidateIssuer !== undefined) {
+      const closureBinding =
+        input.snapshotInventoryClosureCandidateIssuer.binding;
+      if (
+        closureBinding.chainId !== binding.chainId ||
+        closureBinding.catalogHash !== binding.catalogHash ||
+        closureBinding.sourceRegistryFingerprint !==
+          binding.sourceRegistryFingerprint
+      ) {
+        throw new Error("snapshot inventory closure issuer is foreign to this ingress");
+      }
+    }
     if (input.discoveryCheckpoint !== undefined) {
       if (
         input.discoveryCheckpoint.candidateIssuer.authority !==
@@ -812,6 +855,14 @@ export class AdapterFamilyObservationShadowIngress {
       bootstrap,
       bootstrapFamilies,
     });
+    const inventoryClosureCandidate = this.#inventoryClosureCandidate({
+      source,
+      bootstrap,
+      pendingIncumbents,
+      bootstrapFamilies,
+      candidateResultByWork,
+      currentComplete,
+    });
     let nextWatermarks = new Map(this.#watermarks);
     for (const scan of scans.values()) {
       const advanced = advanceDiscoveryFamilySourceWatermarks({
@@ -899,6 +950,7 @@ export class AdapterFamilyObservationShadowIngress {
         incumbents: Object.freeze(bootstrapIncumbents),
       }),
       checkpointCandidate,
+      inventoryClosureCandidate,
       issues: Object.freeze(issues),
     });
   }
@@ -1181,11 +1233,132 @@ export class AdapterFamilyObservationShadowIngress {
         result.admittedInstanceKeys,
         "admitted instance keys",
       )),
+      admittedInstancePublicationKeys: Object.freeze(sortedUnique(
+        result.admittedInstancePublicationKeys,
+        "admitted instance publication keys",
+      )),
       publicationFingerprints: Object.freeze(sortedUnique(
         result.publicationFingerprints,
         "publication fingerprints",
       )),
     });
+  }
+
+  #inventoryClosureCandidate(input: {
+    readonly source: CanonicalSource;
+    readonly bootstrap: BootstrapRecord | null;
+    readonly pendingIncumbents: readonly PendingIncumbent[];
+    readonly bootstrapFamilies:
+      readonly AdapterFamilyShadowBootstrapFamilyResult[];
+    readonly candidateResultByWork:
+      ReadonlyMap<string, AdapterFamilyShadowCandidateResult>;
+    readonly currentComplete: ReadonlyMap<string, boolean>;
+  }): PreparedAdapterFamilySnapshotInventoryClosure | null {
+    const issuer = this.#snapshotInventoryClosureCandidateIssuer;
+    if (
+      issuer === null ||
+      input.bootstrap === null ||
+      input.bootstrap.inventoryMode !== "complete-snapshot" ||
+      !this.#bootstrapMatrixComplete(input.bootstrap) ||
+      input.bootstrapFamilies.some((family) => family.status !== "resolved")
+    ) {
+      return null;
+    }
+    for (const familySources of this.#families) {
+      const family = this.#catalog.forStrictFamily(
+        familySources.familyId as FamilyId,
+      );
+      if (
+        !("discovery" in family.plugin) ||
+        !family.plugin.discovery.sources.includes("address-surface") ||
+        (family.plugin.discovery.addressSurfaces?.length ?? 0) === 0
+      ) {
+        return null;
+      }
+      for (const sourceId of family.plugin.discovery.sources) {
+        if (
+          EVENT_SOURCE_IDS.includes(sourceId) &&
+          input.currentComplete.get(familySourceKey(
+            family.plugin.manifest.familyId,
+            sourceId,
+          )) !== true
+        ) {
+          return null;
+        }
+        if (
+          !EVENT_SOURCE_IDS.includes(sourceId) &&
+          sourceId !== "address-surface"
+        ) {
+          return null;
+        }
+      }
+    }
+
+    const pendingByKey = new Map(input.pendingIncumbents.map((pending) => [
+      JSON.stringify([pending.familyId, pending.nomination.incumbentKey]),
+      pending,
+    ]));
+    const families: AdapterFamilySnapshotInventoryFamilyInput[] = [];
+    for (const inventory of input.bootstrap.families) {
+      const incumbents: AdapterFamilySnapshotInventoryIncumbentInput[] = [];
+      for (const nomination of inventory.incumbents) {
+        const pending = pendingByKey.get(JSON.stringify([
+          inventory.familyId,
+          nomination.incumbentKey,
+        ]));
+        if (
+          pending === undefined ||
+          pending.fixedStatus !== null ||
+          nomination.currentSurface === null ||
+          pending.candidateWorkKeys.length === 0
+        ) {
+          return null;
+        }
+        const candidateResults = pending.candidateWorkKeys.map((key) =>
+          input.candidateResultByWork.get(key)
+        );
+        if (candidateResults.some((result) =>
+          result === undefined || result.status !== "terminal"
+        )) {
+          return null;
+        }
+        incumbents.push(Object.freeze({
+          inventoryKey: nomination.incumbentKey,
+          address: nomination.address,
+          currentSurface: nomination.currentSurface,
+          terminalCandidates: Object.freeze(candidateResults.map((result) => {
+            const terminal = result!;
+            return Object.freeze({
+              candidateKey: terminal.candidateKey,
+              status: terminal.status,
+              outcomeFingerprint: terminalOutcomeFingerprint(terminal),
+              evidenceRefs: Object.freeze(sortedUnique(
+                terminal.outcomes.flatMap((outcome) => outcome.evidenceRefs),
+                "terminal outcome evidence refs",
+              )),
+              admittedInstancePublicationKeys:
+                terminal.admittedInstancePublicationKeys,
+              publicationFingerprints: terminal.publicationFingerprints,
+            });
+          })),
+        }));
+      }
+      families.push(Object.freeze({
+        familyId: inventory.familyId,
+        inventoryKeys: inventory.inventoryKeys,
+        inventoryCount: inventory.inventoryCount,
+        inventoryHash: adapterFamilySnapshotInventoryHash({
+          familyId: inventory.familyId,
+          source: input.source,
+          incumbents,
+        }),
+        incumbents: Object.freeze(incumbents),
+      }));
+    }
+    return issuer.prepare(Object.freeze({
+      source: input.source,
+      families: Object.freeze(families),
+    }));
   }
 
   #currentFamilySourceCompleteness(input: {
@@ -1426,6 +1599,14 @@ export function createRuntimeAdapterFamilyShadowReattestor(
               ? []
               : [result.instance.instanceKey],
           ), "Credit instance keys")),
+          admittedInstancePublicationKeys: Object.freeze(sortedUnique(
+            results.flatMap((result) =>
+              result.instance === null
+                ? []
+                : [catalogInstancePublicationKey(result.instance)]
+            ),
+            "Credit instance publication keys",
+          )),
           publicationFingerprints: Object.freeze([]),
         });
       }
@@ -1467,6 +1648,10 @@ export function createRuntimeAdapterFamilyShadowReattestor(
             ?? [],
           "published instance keys",
         )),
+        admittedInstancePublicationKeys: Object.freeze(sortedUnique(
+          result.publication?.instances.map(catalogInstancePublicationKey) ?? [],
+          "published instance publication keys",
+        )),
         publicationFingerprints: capturedFingerprint === null
           ? Object.freeze([])
           : Object.freeze([capturedFingerprint]),
@@ -1490,6 +1675,47 @@ function terminalCandidateKeys(
   }).sort());
 }
 
+function terminalOutcomeFingerprint(
+  result: AdapterFamilyShadowCandidateResult,
+): string {
+  const outcomes = result.outcomes.map((outcome) => {
+    const projection = {
+      familyId: outcome.familyId,
+      ...(outcome.lineageId === undefined
+        ? {}
+        : { lineageId: outcome.lineageId }),
+      candidateKey: outcome.candidateKey,
+      ...(outcome.instanceKey === undefined
+        ? {}
+        : { instanceKey: outcome.instanceKey }),
+      ...(outcome.stateKey === undefined ? {} : { stateKey: outcome.stateKey }),
+      ...(outcome.routeKey === undefined ? {} : { routeKey: outcome.routeKey }),
+      stage: outcome.stage,
+      status: outcome.status,
+      reasonCode: outcome.reasonCode,
+      source: outcome.source,
+      evidenceRefs: sortedUnique(
+        outcome.evidenceRefs,
+        "terminal outcome evidence refs",
+      ),
+    } as unknown as CanonicalValue;
+    return Object.freeze({
+      projection,
+      fingerprint: hashCanonical(projection),
+    });
+  }).sort((left, right) =>
+    left.fingerprint.localeCompare(right.fingerprint)
+  );
+  return hashCanonical({
+    format: "adapter-family-shadow-terminal-outcomes-v1",
+    familyId: result.familyId,
+    sourceId: result.sourceId,
+    subjectKey: result.subjectKey,
+    candidateKey: result.candidateKey,
+    outcomes: outcomes.map((item) => item.projection),
+  });
+}
+
 function validateReattestationResult(
   result: AdapterFamilyShadowReattestationResult,
   work: CandidateWork,
@@ -1507,6 +1733,7 @@ function validateReattestationResult(
     !Array.isArray(result.outcomes) ||
     !Array.isArray(result.candidateTerminalKeys) ||
     !Array.isArray(result.admittedInstanceKeys) ||
+    !Array.isArray(result.admittedInstancePublicationKeys) ||
     !Array.isArray(result.publicationFingerprints)
   ) {
     throw new Error("shadow re-attestation returned malformed evidence arrays");
@@ -1536,6 +1763,7 @@ function partialCandidateResult(
     status: "partial",
     outcomes: Object.freeze([]),
     admittedInstanceKeys: Object.freeze([]),
+    admittedInstancePublicationKeys: Object.freeze([]),
     publicationFingerprints: Object.freeze([]),
   });
 }
