@@ -67,12 +67,11 @@ export interface JsonRpcBlockScanStateReadBackendOptions {
     | "debug-raw-header-with-fallback";
   readonly fetchImpl?: typeof fetch;
   /**
-   * Hard wall-clock bound for one HTTP request including body parsing. A
-   * stuck response body must not hold the shared address-touch/critical
-   * semaphore for a whole generation: one hung activity read currently
-   * stalls every producer lane until the 20-minute bootstrap deadline, and
-   * the retry makes it worse. The timeout only stops waiting on the
-   * request; the permit/slot is released in the caller's finally.
+   * Logical wall-clock bound for one HTTP request including body parsing.
+   * Timing out stops the consumer from waiting, but local/shared transport
+   * permits remain owned until fetch and the response body physically settle.
+   * Releasing capacity while an uncooperative request is still running would
+   * silently exceed the configured physical concurrency.
    */
   readonly hardRequestTimeoutMs?: number;
   readonly onMutationProofTelemetry?: (
@@ -1877,16 +1876,26 @@ export class JsonRpcBlockScanStateReadBackend
   }
 
   /**
-   * Bound one HTTP request (fetch + body parse) with a hard wall-clock
-   * timeout. Abort signals cancel cooperative fetches, but an uncooperative
-   * response body can otherwise hold the shared semaphore and the serial
-   * critical tail for a full generation. This never aborts the underlying
-   * request; it only stops waiting so the caller's finally can release the
-   * slot and the rest of the pipeline can proceed.
+   * Bound the consumer wait for one HTTP request (fetch + body parse). This
+   * never aborts or settles the underlying physical lifetime. Callers must
+   * therefore run the physical promise inside the transport leases and race
+   * only the separately returned logical promise.
    */
-  private withHardRequestTimeout<T>(promise: Promise<T>): Promise<T> {
+  private withHardRequestTimeout<T>(
+    promise: Promise<T>,
+    signal: AbortSignal,
+  ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
+      const cleanup = (): void => {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", onAbort);
+      };
+      const onAbort = (): void => {
+        cleanup();
+        reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+      };
       const timer = setTimeout(() => {
+        signal.removeEventListener("abort", onAbort);
         reject(
           new Error(
             `reth RPC hard request timeout after ` +
@@ -1896,14 +1905,16 @@ export class JsonRpcBlockScanStateReadBackend
       }, this.hardRequestTimeoutMs);
       promise.then(
         (value) => {
-          clearTimeout(timer);
+          cleanup();
           resolve(value);
         },
         (error) => {
-          clearTimeout(timer);
+          cleanup();
           reject(error);
         },
       );
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) onAbort();
     });
   }
 
@@ -1913,36 +1924,51 @@ export class JsonRpcBlockScanStateReadBackend
     signal: AbortSignal,
     lane: RethTransportLane = this.transportLane,
   ): Promise<readonly JsonRpcResponse[]> {
-    return slots.run(signal, async () => {
+    let physicalStarted = false;
+    let settleLogical!: (value: readonly JsonRpcResponse[]) => void;
+    let rejectLogical!: (reason?: unknown) => void;
+    const logical = new Promise<readonly JsonRpcResponse[]>((resolve, reject) => {
+      settleLogical = resolve;
+      rejectLogical = reject;
+    });
+    const physicalLifetime = slots.run(signal, async () => {
       if (signal.aborted) {
         throw signal.reason ?? new DOMException("Aborted", "AbortError");
       }
       const send = async (): Promise<readonly JsonRpcResponse[]> => {
-        const response = await this.withHardRequestTimeout(
-          this.fetchImpl(this.rpcUrl, {
+        physicalStarted = true;
+        const physical = (async (): Promise<readonly JsonRpcResponse[]> => {
+          const response = await this.fetchImpl(this.rpcUrl, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
             signal,
-          }),
+          });
+          if (!response.ok) {
+            throw new Error(
+              `JSON-RPC HTTP ${response.status} ${response.statusText}`,
+            );
+          }
+          const value: unknown = await response.json();
+          if (!Array.isArray(value)) {
+            throw new Error("JSON-RPC batch returned non-array");
+          }
+          return value as readonly JsonRpcResponse[];
+        })();
+        this.withHardRequestTimeout(physical, signal).then(
+          settleLogical,
+          rejectLogical,
         );
-        if (!response.ok) {
-          throw new Error(
-            `JSON-RPC HTTP ${response.status} ${response.statusText}`,
-          );
-        }
-        const value: unknown = await this.withHardRequestTimeout(
-          response.json(),
-        );
-        if (!Array.isArray(value)) {
-          throw new Error("JSON-RPC batch returned non-array");
-        }
-        return value as readonly JsonRpcResponse[];
+        return physical;
       };
       return this.transportScheduler
         ? this.transportScheduler.run(lane, signal, () => send())
         : send();
     });
+    void physicalLifetime.catch((error) => {
+      if (!physicalStarted) rejectLogical(error);
+    });
+    return logical;
   }
 
   private async postWithSlotsMeasured(
@@ -1957,32 +1983,43 @@ export class JsonRpcBlockScanStateReadBackend
     const startedAtMs = this.now();
     let localQueueWaitMs = 0;
     let sharedQueueWaitMs = 0;
-    const responses = await slots.run(signal, async (waitMs) => {
+    let physicalStarted = false;
+    let settleLogical!: (value: readonly JsonRpcResponse[]) => void;
+    let rejectLogical!: (reason?: unknown) => void;
+    const logical = new Promise<readonly JsonRpcResponse[]>((resolve, reject) => {
+      settleLogical = resolve;
+      rejectLogical = reject;
+    });
+    const physicalLifetime = slots.run(signal, async (waitMs) => {
       localQueueWaitMs = waitMs;
       const send = async (): Promise<readonly JsonRpcResponse[]> => {
         if (signal.aborted) {
           throw signal.reason ?? new DOMException("Aborted", "AbortError");
         }
-        const response = await this.withHardRequestTimeout(
-          this.fetchImpl(this.rpcUrl, {
+        physicalStarted = true;
+        const physical = (async (): Promise<readonly JsonRpcResponse[]> => {
+          const response = await this.fetchImpl(this.rpcUrl, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
             signal,
-          }),
+          });
+          if (!response.ok) {
+            throw new Error(
+              `JSON-RPC HTTP ${response.status} ${response.statusText}`,
+            );
+          }
+          const value: unknown = await response.json();
+          if (!Array.isArray(value)) {
+            throw new Error("JSON-RPC batch returned non-array");
+          }
+          return value as readonly JsonRpcResponse[];
+        })();
+        this.withHardRequestTimeout(physical, signal).then(
+          settleLogical,
+          rejectLogical,
         );
-        if (!response.ok) {
-          throw new Error(
-            `JSON-RPC HTTP ${response.status} ${response.statusText}`,
-          );
-        }
-        const value: unknown = await this.withHardRequestTimeout(
-          response.json(),
-        );
-        if (!Array.isArray(value)) {
-          throw new Error("JSON-RPC batch returned non-array");
-        }
-        return value as readonly JsonRpcResponse[];
+        return physical;
       };
       return this.transportScheduler
         ? this.transportScheduler.run(
@@ -1995,6 +2032,10 @@ export class JsonRpcBlockScanStateReadBackend
           )
         : send();
     }, this.now);
+    void physicalLifetime.catch((error) => {
+      if (!physicalStarted) rejectLogical(error);
+    });
+    const responses = await logical;
     return Object.freeze({
       responses,
       telemetry: Object.freeze({

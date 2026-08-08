@@ -24,17 +24,24 @@ import {
   promoteNMinusOneExactCandidates,
   type NMinusOneCoarseCandidate,
 } from "./detector/blockscan-nminus1-fallback.js";
-import {
-  BlockScanFamilyStageBudget,
-  blockScanEdgeFamilyId,
-} from "./detector/blockscan-family-budget.js";
+import { BlockScanFamilyStageBudget } from "./detector/blockscan-family-budget.js";
 import { BlockScanPassTimeline } from "./blockscan-pass-timeline.js";
 import { emitEvent } from "./events.js";
 import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
 import type { TokenEdge } from "./planner/token-graph.js";
 import type { ResolvedPlan } from "./solver/solver.js";
 import type { AnvilSolver } from "./solver/solver.js";
-import { BotVMSimulator } from "./simulator/botvm-simulator.js";
+import {
+  BotVMSimulator,
+  type SimulationResult,
+} from "./simulator/botvm-simulator.js";
+import {
+  createBlockScanWorkerFinalSimulationRunner,
+  createBotVmFinalSimulationPlanIdentity,
+  createFinalSimulationWorkRuntime,
+  type FinalSimulationRunnerInput,
+  type FinalSimulationWorkRuntime,
+} from "./final-simulation-work-runtime.js";
 import { FLASH_SWAP_REPAY } from "./templates/path-template.js";
 import {
   AdapterRuntimeCoordinator,
@@ -369,8 +376,6 @@ export interface BlockScanAtomicResult {
   /** False only when another quote-ranked amount should still be tried. */
   terminalForQuoteSet: boolean;
   finalSimStatus: "not-run" | "succeeded" | "failed";
-  /** False when a timed-out final sim forced this Anvil worker to be reaped. */
-  workerReusable: boolean;
   audit: Pick<BlindProductionOpportunityEvidence, "simulation" | "ev"> | null;
   timing: {
     finalSimMs: number;
@@ -389,8 +394,11 @@ export interface BlockScanExecutionWorker {
 }
 
 export interface BlockScanAtomicExecutionInput {
-  readonly simulator: BotVMSimulator;
-  readonly state: AnvilStateBackend;
+  readonly finalSimulationRuntime: FinalSimulationWorkRuntime<
+    ResolvedPlan,
+    SimulationResult
+  >;
+  readonly sourceGeneration: number;
   readonly opp: BlockScanOpportunity;
   readonly resolved: ResolvedPlan;
   readonly sourceBlock: number;
@@ -516,6 +524,8 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly enabled: boolean;
   readonly blockScanConfig: BlockScanCoreConfig | undefined;
   readonly executionWorkers: readonly BlockScanExecutionWorker[];
+  /** Dedicated S5 resources; never used by exact refinement or solver work. */
+  readonly finalSimulationWorkers: readonly BlockScanExecutionWorker[];
   readonly rpcUrl: string;
   /**
    * Override the exact-probe quote backend. Production uses the source-hash
@@ -1431,7 +1441,12 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     this.pendingEvidenceKeys.clear();
     this.scheduledExecutionRefreshes.clear();
     this.evidenceDispatchScheduledHeads.clear();
-    for (const worker of this.deps.executionWorkers) worker.state.stop();
+    for (const worker of [
+      ...this.deps.executionWorkers,
+      ...this.deps.finalSimulationWorkers,
+    ]) {
+      worker.state.stop();
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -1528,11 +1543,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     const blockScanPlanner = this.deps.blockScanPlanner();
     const adapterRuntimeCoordinator = this.deps.adapterRuntimeCoordinator();
     const blockScanExecutionWorkers = this.deps.executionWorkers;
+    const blockScanFinalSimulationWorkers = this.deps.finalSimulationWorkers;
     console.log(
       `[searcher/blockscan-debug] runHead enter block=${blockNumber} ` +
         `enabled=${this.deps.enabled} graph=${blockScanGraph?.length ?? "none"} ` +
         `cfg=${blockScanCfg ? "yes" : "no"} planner=${blockScanPlanner ? "yes" : "no"} ` +
-        `coord=${adapterRuntimeCoordinator ? "yes" : "no"} workers=${blockScanExecutionWorkers.length} ` +
+        `coord=${adapterRuntimeCoordinator ? "yes" : "no"} ` +
+        `workers=${blockScanExecutionWorkers.length} ` +
+        `finalSimWorkers=${blockScanFinalSimulationWorkers.length} ` +
         `shutdown=${this.deps.isShuttingDown()}`,
     );
     if (
@@ -1542,7 +1560,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       !blockScanCfg ||
       !blockScanPlanner ||
       !adapterRuntimeCoordinator ||
-      blockScanExecutionWorkers.length === 0
+      blockScanExecutionWorkers.length === 0 ||
+      blockScanFinalSimulationWorkers.length === 0
     ) {
       try {
         routeTelemetryPass?.finish({
@@ -2275,6 +2294,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             Date.now() +
               Math.max(1, this.deps.hotPricingFamilyBudgetMs ?? 5_000),
           );
+      const allExecutionWorkers = Object.freeze([
+        ...blockScanExecutionWorkers,
+        ...blockScanFinalSimulationWorkers,
+      ]);
       const forkExecutionWorker = async (
         worker: BlockScanExecutionWorker,
         workerIndex: number,
@@ -2333,7 +2356,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         },
       ): Promise<void> => {
         const settled = await Promise.allSettled(
-          blockScanExecutionWorkers.map((worker, workerIndex) =>
+          allExecutionWorkers.map((worker, workerIndex) =>
             forkExecutionWorker(worker, workerIndex, {
               sourceBlock: input.sourceBlock,
               sourceBlockHash: input.sourceBlockHash,
@@ -2356,7 +2379,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           // Settle every worker first, then reap every process before this
           // generation releases the coordinator's reuse barrier.
           await Promise.all(
-            blockScanExecutionWorkers.map((worker) =>
+            allExecutionWorkers.map((worker) =>
               worker.state.stopAndWait()
             ),
           );
@@ -2983,34 +3006,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             funding: exactContext.fundingCoverage,
           })}`,
         );
-        if (refinement.edgeQuoteMids && refinement.edgeQuoteMids.length > 0) {
-          /*
-           * Scheduler-aware exact feedback: the source is canonical (CAS
-           * passed above) and the coordinator only adopts while the producer
-           * has not published anything newer than the exact source block.
-           * This replaces the stale carried mid for probed edges so a phantom
-           * ring does not reappear on the next generation.
-           */
-          const feedback = adapterRuntimeCoordinator.adoptExactProbeMids({
-            sourceBlock: exactContext.context.sourceBlock,
-            sourceBlockHash: exactContext.context.sourceBlockHash,
-            refreshes: refinement.edgeQuoteMids.map((entry) => ({
-              edgeKey: entry.edgeKey,
-              familyId: blockScanEdgeFamilyId(entry.edge),
-              mid: entry.amountIn > 0n
-                ? Number(entry.amountOut) / Number(entry.amountIn)
-                : 0,
-            })),
-          });
-          console.log(
-            `[searcher/blockscan-exact-feedback] ${JSON.stringify({
-              block: blockNumber,
-              sourceBlock: exactContext.context.sourceBlock,
-              quotes: refinement.edgeQuoteMids.length,
-              ...feedback,
-            })}`,
-          );
-        }
       }
       const planned: PlannedBlockScanSolve[] = [];
       const plannerFamilyBudget = new BlockScanFamilyStageBudget();
@@ -3101,18 +3096,28 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         ({ item }) => item.opp.seedEdges,
       );
       let cursor = 0;
+      const finalSimulationPlanCommitments = new WeakMap<ResolvedPlan, string>();
+      const finalSimulationPlanIdentity = createBotVmFinalSimulationPlanIdentity({
+        executor: this.deps.executorAddress,
+        expectedSha256: (plan) => {
+          const commitment = finalSimulationPlanCommitments.get(plan);
+          if (commitment === undefined) {
+            throw new Error("resolved plan has no sealed Step 4 execution commitment");
+          }
+          return commitment;
+        },
+      });
       const exactQuoted: Array<{
         index: number;
         candidateIndex: number;
         item: PlannedBlockScanSolve;
         resolved: ResolvedPlan;
-        simulator: BotVMSimulator;
-        state: AnvilStateBackend;
       }> = [];
       const forkedStates = new Set<AnvilStateBackend>();
       const ensureExecutionWorkerForked = async (
-        state: AnvilStateBackend,
+        worker: BlockScanExecutionWorker,
       ): Promise<void> => {
+        const state = worker.state;
         if (forkedStates.has(state)) return;
         if (runtimeSourceBlock === null || exactSourceBlockHash === null) {
           throw new Error(
@@ -3120,15 +3125,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           );
         }
         forkedStates.add(state);
-        const worker = blockScanExecutionWorkers.find(
-          (entry) => entry.state === state,
-        );
-        if (!worker) {
-          throw new Error("execution worker state not found");
-        }
         await forkExecutionWorker(
           worker,
-          blockScanExecutionWorkers.indexOf(worker),
+          allExecutionWorkers.indexOf(worker),
           {
             sourceBlock: runtimeSourceBlock,
             sourceBlockHash: exactSourceBlockHash,
@@ -3192,13 +3191,16 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               if (candidate.netProfit <= 0n) continue;
               positiveCandidate = true;
               quotePositive++;
+              const planBytes = finalSimulationPlanIdentity.bytesHex(candidate);
+              finalSimulationPlanCommitments.set(
+                candidate,
+                blindProductionCalldataSha256(planBytes),
+              );
               exactQuoted.push({
                 index,
                 candidateIndex,
                 item,
                 resolved: candidate,
-                simulator: worker.simulator,
-                state: worker.state,
               });
             }
             if (!positiveCandidate) {
@@ -3250,84 +3252,134 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       exactQuoted.sort((a, b) =>
         a.index - b.index || a.candidateIndex - b.candidateIndex
       );
+      if (
+        runtimeSourceBlock !== blockNumber ||
+        exactSourceBlockHash !== sourceBlockHash
+      ) {
+        throw new Error(
+          "final simulation source differs from the exact current-N anchor",
+        );
+      }
+      const blockScanWorkerRunner =
+        createBlockScanWorkerFinalSimulationRunner<BlockScanExecutionWorker>();
+      const finalSimulationRuntime = createFinalSimulationWorkRuntime({
+        reservedResources: blockScanFinalSimulationWorkers.map(
+          (worker, index) => Object.freeze({
+            id: `blockscan-final-sim-${index}`,
+            value: worker,
+          }),
+        ),
+        runner: Object.freeze({
+          async simulate(input: FinalSimulationRunnerInput<
+            BlockScanExecutionWorker,
+            ResolvedPlan
+          >) {
+            if (useNMinusOneFallback) {
+              await ensureExecutionWorkerForked(input.resource);
+            }
+            return blockScanWorkerRunner.simulate(input);
+          },
+          terminate(input: Parameters<NonNullable<
+            typeof blockScanWorkerRunner.terminate
+          >>[0]) {
+            blockScanWorkerRunner.terminate?.(input);
+          },
+        }),
+        generationFence: {
+          assertCurrent: (candidateGeneration, candidateSource) => {
+            if (
+              candidateGeneration !== generation ||
+              candidateSource.generation !== generation ||
+              candidateSource.number !== blockNumber ||
+              candidateSource.hash.toLowerCase() !== sourceBlockHash ||
+              passSignal.aborted ||
+              this.deps.isShuttingDown()
+            ) {
+              throw passSignal.reason ??
+                new Error("block-scan final simulation generation is stale");
+            }
+          },
+        },
+        planIdentity: finalSimulationPlanIdentity,
+        timeoutMs: Math.max(1, passDeadlineAtMs - Date.now()),
+        deadlineAtMsForIntent: () => passDeadlineAtMs,
+        maxQueued: 0,
+        signalForIntent: () => passSignal,
+      });
       const finalSimFamilyBudget = new BlockScanFamilyStageBudget();
       const finalSimQueue = finalSimFamilyBudget.order(
         exactQuoted,
         (quoted) => quoted.item.opp.seedEdges,
       );
       const terminalQuoteSets = new Set<number>();
-      const unavailableFinalSimStates = new Set<AnvilStateBackend>();
-      for (const quoted of finalSimQueue) {
-        if (terminalQuoteSets.has(quoted.index)) continue;
-        if (finalSimFamilyBudget.blocks(quoted.item.opp.seedEdges)) continue;
-        if (unavailableFinalSimStates.has(quoted.state)) continue;
-        if (
-          Date.now() >= passDeadlineAtMs ||
-          passSignal.aborted ||
-          this.deps.isShuttingDown()
-        ) {
-          if (passSignal.aborted) throw passSignal.reason;
-          outcome = this.deps.isShuttingDown()
-            ? "disabled"
-            : "budget_exceeded";
-          skippedReason = this.deps.isShuttingDown()
-            ? "shutdown"
-            : "final_sim_deadline";
-          break;
-        }
-        if (useNMinusOneFallback) {
-          // Final simulation is the only remaining Anvil consumer; fork the
-          // owning worker lazily here instead of before refinement/solver.
-          await ensureExecutionWorkerForked(quoted.state);
-        }
-        const atomic = await this.deps.submitAtomic({
-          simulator: quoted.simulator,
-          state: quoted.state,
-          opp: quoted.item.opp,
-          resolved: quoted.resolved,
-          sourceBlock: blockNumber,
-          ring: quoted.item.ring,
-          protoRing: quoted.item.protoRing,
-          plans: quoted.item.planCount,
-          passDeadlineAtMs,
-          sourceBlockHash,
-          signal: passSignal,
-        });
-        atomicResults.push(atomic);
-        if (!atomic.workerReusable) {
-          unavailableFinalSimStates.add(quoted.state);
-        }
-        const auditEvidence = auditOpportunities?.get(
-          blindOpportunityEvidenceKey(quoted.item.opp),
-        );
-        if (auditEvidence && atomic.audit) {
-          auditOpportunities!.set(
+      try {
+        for (const quoted of finalSimQueue) {
+          if (terminalQuoteSets.has(quoted.index)) continue;
+          if (finalSimFamilyBudget.blocks(quoted.item.opp.seedEdges)) continue;
+          if (
+            Date.now() >= passDeadlineAtMs ||
+            passSignal.aborted ||
+            this.deps.isShuttingDown()
+          ) {
+            if (passSignal.aborted) throw passSignal.reason;
+            outcome = this.deps.isShuttingDown()
+              ? "disabled"
+              : "budget_exceeded";
+            skippedReason = this.deps.isShuttingDown()
+              ? "shutdown"
+              : "final_sim_deadline";
+            break;
+          }
+          const atomic = await this.deps.submitAtomic({
+            finalSimulationRuntime,
+            sourceGeneration: generation,
+            opp: quoted.item.opp,
+            resolved: quoted.resolved,
+            sourceBlock: blockNumber,
+            ring: quoted.item.ring,
+            protoRing: quoted.item.protoRing,
+            plans: quoted.item.planCount,
+            passDeadlineAtMs,
+            sourceBlockHash,
+            signal: passSignal,
+          });
+          atomicResults.push(atomic);
+          const auditEvidence = auditOpportunities?.get(
             blindOpportunityEvidenceKey(quoted.item.opp),
-            {
-              ...auditEvidence,
-              simulation: atomic.audit.simulation,
-              ev: atomic.audit.ev,
-            },
+          );
+          if (auditEvidence && atomic.audit) {
+            auditOpportunities!.set(
+              blindOpportunityEvidenceKey(quoted.item.opp),
+              {
+                ...auditEvidence,
+                simulation: atomic.audit.simulation,
+                ev: atomic.audit.ev,
+              },
+            );
+          }
+          if (atomic.finalSimStatus === "succeeded") {
+            finalSimFamilyBudget.recordSuccess(quoted.item.opp.seedEdges);
+          } else if (atomic.finalSimStatus === "failed") {
+            // A whole-route simulator rejection has no typed leg owner.
+            finalSimFamilyBudget.recordFailure(quoted.item.opp.seedEdges);
+          }
+          if (atomic.terminalForQuoteSet) terminalQuoteSets.add(quoted.index);
+          mergeAtomicStage(
+            "final_sim",
+            atomic.timing.finalSimStartedAtMs,
+            atomic.timing.finalSimFinishedAtMs,
+            atomic.timing.finalSimMs,
+          );
+          mergeAtomicStage(
+            "ev",
+            atomic.timing.evStartedAtMs,
+            atomic.timing.evFinishedAtMs,
+            atomic.timing.evMs,
           );
         }
-        if (atomic.finalSimStatus === "succeeded") {
-          finalSimFamilyBudget.recordSuccess(quoted.item.opp.seedEdges);
-        } else if (atomic.finalSimStatus === "failed") {
-          // A whole-route simulator rejection has no typed leg owner.
-          finalSimFamilyBudget.recordFailure(quoted.item.opp.seedEdges);
-        }
-        if (atomic.terminalForQuoteSet) terminalQuoteSets.add(quoted.index);
-        mergeAtomicStage(
-          "final_sim",
-          atomic.timing.finalSimStartedAtMs,
-          atomic.timing.finalSimFinishedAtMs,
-          atomic.timing.finalSimMs,
-        );
-        mergeAtomicStage(
-          "ev",
-          atomic.timing.evStartedAtMs,
-          atomic.timing.evFinishedAtMs,
-          atomic.timing.evMs,
+      } finally {
+        finalSimulationRuntime.close(
+          new Error(`block-scan final simulation generation ${generation} ended`),
         );
       }
       if (Date.now() >= passDeadlineAtMs && atomicResults.length === 0) {

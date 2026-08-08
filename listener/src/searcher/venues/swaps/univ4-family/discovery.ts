@@ -1,0 +1,116 @@
+import type {
+  DiscoverySemantics,
+  UnifiedObservation,
+} from "../../adapter-family-plugin.js";
+import {
+  UNIV4_INITIALIZE_TOPIC,
+  UNIV4_MODIFY_LIQUIDITY_SIGNATURE,
+  UNIV4_MODIFY_LIQUIDITY_TOPIC,
+  UNIV4_POOL_MANAGER_INTERFACE,
+  UNIV4_SWAP_SELECTOR,
+  UNIV4_SWAP_SIGNATURE,
+  UNIV4_SWAP_TOPIC,
+} from "../univ4-abi.js";
+import { v4PoolId } from "../univ4-common.js";
+import {
+  canonicalAddress,
+  canonicalPoolId,
+  canonicalPoolKey,
+  UNIV4_INITIALIZE_PATTERN_ID,
+  UNIV4_MODIFY_LIQUIDITY_PATTERN_ID,
+  UNIV4_SWAP_CALL_PATTERN_ID,
+  UNIV4_SWAP_LOG_PATTERN_ID,
+} from "./codec.js";
+import type { UniV4Candidate } from "./types.js";
+
+export const univ4Discovery = {
+  sources: ["factory-log", "landed-log", "observed-call"],
+  callPatterns: [{
+    id: UNIV4_SWAP_CALL_PATTERN_ID,
+    selector: UNIV4_SWAP_SELECTOR,
+    signature:
+      "swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)",
+    candidateAddress: { from: "call-target" },
+  }],
+  logPatterns: [{
+    id: UNIV4_INITIALIZE_PATTERN_ID,
+    topic: UNIV4_INITIALIZE_TOPIC as `0x${string}`,
+    signature:
+      "Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)",
+  }, {
+    id: UNIV4_SWAP_LOG_PATTERN_ID,
+    topic: UNIV4_SWAP_TOPIC as `0x${string}`,
+    signature: UNIV4_SWAP_SIGNATURE,
+  }, {
+    id: UNIV4_MODIFY_LIQUIDITY_PATTERN_ID,
+    topic: UNIV4_MODIFY_LIQUIDITY_TOPIC as `0x${string}`,
+    signature: UNIV4_MODIFY_LIQUIDITY_SIGNATURE,
+  }],
+  decodeCandidate({ observation, matchedPatternId }) {
+    try {
+      return decodeCandidate(observation, matchedPatternId);
+    } catch {
+      return null;
+    }
+  },
+  candidateKey: (candidate) =>
+    `${candidate.manager.toLowerCase()}\u001f${candidate.poolId}`,
+} satisfies DiscoverySemantics<UniV4Candidate>;
+
+function decodeCandidate(
+  observation: UnifiedObservation,
+  matchedPatternId: string,
+): UniV4Candidate | null {
+  if (
+    observation.kind === "log" &&
+    matchedPatternId === UNIV4_INITIALIZE_PATTERN_ID
+  ) {
+    const decoded = UNIV4_POOL_MANAGER_INTERFACE.decodeEventLog(
+      "Initialize",
+      observation.data,
+      observation.topics,
+    );
+    const poolKey = canonicalPoolKey({
+      currency0: String(decoded.currency0),
+      currency1: String(decoded.currency1),
+      fee: Number(decoded.fee),
+      tickSpacing: Number(decoded.tickSpacing),
+      hooks: String(decoded.hooks),
+    });
+    return Object.freeze({
+      candidateKind: "univ4-pool-key" as const,
+      sourceKind: "initialize-log" as const,
+      manager: canonicalAddress(observation.address),
+      poolId: canonicalPoolId(String(decoded.id)),
+      poolKey,
+    });
+  }
+  if (
+    observation.kind === "call" &&
+    matchedPatternId === UNIV4_SWAP_CALL_PATTERN_ID
+  ) {
+    const decoded = UNIV4_POOL_MANAGER_INTERFACE.decodeFunctionData(
+      "swap",
+      observation.data,
+    );
+    const key = decoded.key;
+    const poolKey = canonicalPoolKey({
+      currency0: String(key.currency0),
+      currency1: String(key.currency1),
+      fee: Number(key.fee),
+      tickSpacing: Number(key.tickSpacing),
+      hooks: String(key.hooks),
+    });
+    return Object.freeze({
+      candidateKind: "univ4-pool-key" as const,
+      sourceKind: "manager-swap-call" as const,
+      manager: canonicalAddress(observation.target),
+      poolId: v4PoolId(poolKey),
+      poolKey,
+    });
+  }
+  // Swap/ModifyLiquidity logs carry only poolId. They remain mutation signals;
+  // admitting them without a previously proven complete PoolKey would turn a
+  // one-way hash into guessed identity.
+  return null;
+}

@@ -39,9 +39,9 @@ import {
 import type {
   LocalVictimApplyContext,
   LocalVictimApplyResult,
+  VictimOverlay,
   VictimOverlayBuildContext,
 } from "../victim-runtime-capability.js";
-import { buildApprovedSwapVictimOverlay } from "../victim-runtime-shared.js";
 import {
   ADDRESS_LANDED_EVENT_EMITTER,
   defineSwapLandedEvents,
@@ -56,13 +56,13 @@ import {
   midsForDirectedEdges,
   requireRead,
 } from "./blockscan-state-shared.js";
-
-const pairIface = new ethers.Interface([
-  "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
-  "function factory() view returns (address)",
-  "function token0() view returns (address)",
-  "function token1() view returns (address)",
-]);
+import { UNIV2_PAIR_INTERFACE as pairIface } from "./univ2-abi.js";
+import {
+  applyUniV2VictimState,
+  buildUniV2VictimOverlayIntent,
+  uniV2ExactPostImpact as buildUniV2ExactPostImpact,
+  UNIV2_ROUTER,
+} from "./univ2-family/victim.js";
 const feeBpsCache = new Map<string, bigint>();
 
 interface UniV2PoolSchemaEntry {
@@ -106,10 +106,6 @@ function compileUniV2PoolEntry(
   }
   return Object.freeze({ token0, token1, feeBps });
 }
-const UNIV2_ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
-const univ2RouterIface = new ethers.Interface([
-  "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) returns (uint[] amounts)",
-]);
 const UNIV2_MUTATION_QUERY = createMutationQueryDescriptor({
   // Address filtering a production-sized pool universe exceeds common RPC
   // filter limits. Sync is pair-emitted and the pure classifier intersects it
@@ -409,40 +405,7 @@ function applyUniV2Victim(
   const { cache, impact, blockNumber } = ctx;
   const pre = cache.snapshotV2(impact.pool, blockNumber);
   if (!pre) return null;
-
-  const tokenIn = impact.tokenIn.toLowerCase();
-  const tokenOut = impact.tokenOut.toLowerCase();
-  const zeroForOne = tokenIn === pre.token0 && tokenOut === pre.token1;
-  const oneForZero = tokenIn === pre.token1 && tokenOut === pre.token0;
-  if (!zeroForOne && !oneForZero) return null;
-
-  const [reserveIn, reserveOut] = zeroForOne
-    ? [pre.reserve0, pre.reserve1]
-    : [pre.reserve1, pre.reserve0];
-  const amountOut = quoteV2ExactInput(
-    reserveIn,
-    reserveOut,
-    impact.amountIn,
-    pre.feeBps,
-  );
-  if (amountOut <= 0n || amountOut >= reserveOut) return null;
-
-  const postImpact: V2PostImpactSeed = {
-    kind: "v2",
-    pool: impact.pool,
-    token0: pre.token0,
-    token1: pre.token1,
-    reserve0: zeroForOne
-      ? pre.reserve0 + impact.amountIn
-      : pre.reserve0 - amountOut,
-    reserve1: zeroForOne
-      ? pre.reserve1 - amountOut
-      : pre.reserve1 + impact.amountIn,
-    feeBps: pre.feeBps,
-    blockTimestampLast: pre.blockTimestampLast,
-    blockNumber,
-  };
-  return { postImpact, amountOut };
+  return applyUniV2VictimState({ preState: pre, impact, blockNumber });
 }
 
 function uniV2ExactPostImpact(
@@ -454,41 +417,34 @@ function uniV2ExactPostImpact(
   const token1 = impact.poolToken1 ?? impact.v2PostState.token1;
   const feeBps = impact.v2PostState.feeBps;
   if (!token0 || !token1 || feeBps === undefined) return null;
-  return {
-    kind: "v2",
+  return buildUniV2ExactPostImpact({
     pool: impact.pool,
     token0,
     token1,
-    reserve0: impact.v2PostState.reserve0,
-    reserve1: impact.v2PostState.reserve1,
-    feeBps,
-    blockTimestampLast: impact.v2PostState.blockTimestampLast,
+    exactPostState: {
+      reserve0: impact.v2PostState.reserve0,
+      reserve1: impact.v2PostState.reserve1,
+      feeBps,
+      ...(impact.v2PostState.blockTimestampLast === undefined
+        ? {}
+        : { blockTimestampLast: impact.v2PostState.blockTimestampLast }),
+    },
     blockNumber,
-  };
+  });
 }
 
 async function buildUniV2VictimOverlay(
   ctx: VictimOverlayBuildContext,
-) {
-  const tokenIn = ethers.getAddress(ctx.impact.tokenIn);
-  const whale = "0x000000000000000000000000000000000000dEaD";
-  const deadline = Math.floor(Date.now() / 1000) + 3600;
-  return buildApprovedSwapVictimOverlay({
+): Promise<VictimOverlay> {
+  const overlay = buildUniV2VictimOverlayIntent({
     impact: ctx.impact,
-    approveTarget: UNIV2_ROUTER,
-    swapTarget: UNIV2_ROUTER,
-    swapCalldata: univ2RouterIface.encodeFunctionData(
-      "swapExactTokensForTokens",
-      [
-        ctx.impact.amountIn,
-        0,
-        [tokenIn, ethers.getAddress(ctx.impact.tokenOut)],
-        whale,
-        deadline,
-      ],
-    ),
-    gasLimit: 0x1000000,
+    validUntil: BigInt(Math.floor(Date.now() / 1000) + 3600),
   });
+  return {
+    whale: overlay.whale,
+    tokenDeals: overlay.tokenDeals.map((deal) => ({ ...deal })),
+    preCalls: overlay.preCalls.map((call) => ({ ...call })),
+  };
 }
 
 async function buildUniV2Edges(

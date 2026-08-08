@@ -22,6 +22,7 @@ import {
   type FamilyMutationClassification,
   type GraphChangeSet,
   type MutationQueryDescriptor,
+  type PoolTopologySpikeReceipt,
   type PublishedStateKey,
   type RegisteredBlockScanStateFamily,
   type StateFreshnessProof,
@@ -299,6 +300,8 @@ export interface BlockScanStateSnapshot {
   readonly laneTelemetry: readonly BlockScanLaneTelemetry[];
   /** Optional for compatibility with persisted snapshots created before this field. */
   readonly familyTelemetry?: readonly BlockScanFamilyTelemetry[];
+  /** Instance-local topology/static amplification evidence for this generation. */
+  readonly poolTopologySpikeReceipts?: readonly PoolTopologySpikeReceipt[];
 }
 
 interface PrepareResultBase {
@@ -559,6 +562,10 @@ interface ProtocolAddressTouchShadowAttempt {
 interface FamilyLaneStaging {
   readonly staticSchemas: Map<string, CompiledBlockScanStateFamily>;
   instanceSchemas?: Map<StateInstanceKey, CompiledStateInstance>;
+  instanceSpecFingerprints?: Map<StateInstanceKey, string>;
+  instanceSpecs?: Map<StateInstanceKey, StateInstanceSpec>;
+  familySharedFingerprint?: string;
+  readonly removedStateKeys: Set<string>;
   readonly sharedBindings: Map<string, FamilySharedBinding>;
   readonly expectedReadKeys: Set<string>;
   reads: number;
@@ -588,6 +595,7 @@ interface PreparedFamilyPhase {
   readonly instances?: ReadonlyMap<StateInstanceKey, CompiledStateInstance>;
   readonly staging: FamilyLaneStaging;
   readonly issues: readonly BlockScanStateIssue[];
+  readonly topologySpikeReceipts: readonly PoolTopologySpikeReceipt[];
 }
 
 interface FamilyIncrementalPlan {
@@ -743,6 +751,31 @@ export class BlockScanStateCoordinator {
     CompiledBlockScanStateFamily
   >();
   /**
+   * Non-authoritative compile memo. Unlike staticSchemas/instanceSchemas,
+   * entries here are never a published previous or carry input. They only
+   * avoid repeating an identical compile for the same source hash and exact
+   * schema input; a later generation still has to pass its own final CAS.
+   */
+  private readonly staticCompileMemo = new Map<
+    string,
+    Readonly<{
+      sourceBlockHash: string;
+      edgeFingerprint: string;
+      compiled: CompiledBlockScanStateFamily;
+    }>
+  >();
+  private readonly instanceCompileMemo = new Map<
+    string,
+    Map<
+      StateInstanceKey,
+      Readonly<{
+        sourceBlockHash: string;
+        specFingerprint: string;
+        compiled: CompiledStateInstance;
+      }>
+    >
+  >();
+  /**
    * Published per-instance compiled descriptors for state-instance-v1
    * families. Only committed together with the canonical CAS (same fence as
    * staticSchemas).
@@ -816,8 +849,6 @@ export class BlockScanStateCoordinator {
    */
   private readonly sharedBindingCache = new Map<string, FamilySharedBinding>();
   private sharedBindings = new Map<string, FamilySharedBinding>();
-  private edgeKeyToStateKeyIndexKey: string | null = null;
-  private readonly edgeKeyToStateKey = new Map<string, string>();
   private cacheAppendChain: Promise<void> = Promise.resolve();
   /** Warm generations persist each resolved key; hot generations do not. */
   private cacheModeActive = false;
@@ -866,94 +897,6 @@ export class BlockScanStateCoordinator {
 
   latestSnapshot(): BlockScanStateSnapshot | null {
     return this.published;
-  }
-
-  /**
-   * Adopt current-N exact-probe mids as a coarse carry refresh. This is a
-   * scheduler-aware, synchronous mutation: it only applies when the producer
-   * has not yet published a state newer than the exact source block, and it
-   * never touches graph topology, only the recovery base mid for one edge.
-   * Callers must have already canonical-CAS'd the exact source block/hash.
-   */
-  adoptExactProbeMids(input: {
-    readonly sourceBlock: number;
-    readonly sourceBlockHash: string;
-    readonly refreshes: ReadonlyArray<{
-      readonly edgeKey: string;
-      readonly familyId: string;
-      readonly mid: number;
-    }>;
-  }): {
-    adopted: number;
-    skippedObsolete: number;
-    skippedMissingBase: number;
-    skippedEdgeMismatch: number;
-    skippedNonFinite: number;
-  } {
-    const result = {
-      adopted: 0,
-      skippedObsolete: 0,
-      skippedMissingBase: 0,
-      skippedEdgeMismatch: 0,
-      skippedNonFinite: 0,
-    };
-    const published = this.published;
-    if (published && published.sourceBlock > input.sourceBlock) {
-      // The producer already moved past the exact source: an older estimate
-      // must never overwrite a newer carry base.
-      result.skippedObsolete = input.refreshes.length;
-      return result;
-    }
-    const byEdgeKey = this.edgeKeyToStateKeyForTopology();
-    for (const refresh of input.refreshes) {
-      if (!Number.isFinite(refresh.mid) || refresh.mid <= 0) {
-        result.skippedNonFinite++;
-        continue;
-      }
-      const stateKey = byEdgeKey.get(refresh.edgeKey);
-      if (stateKey === undefined) {
-        result.skippedEdgeMismatch++;
-        continue;
-      }
-      const base = this.lastGoodByStateKey.get(stateKey);
-      if (!base || base.state.familyId !== refresh.familyId) {
-        result.skippedMissingBase++;
-        continue;
-      }
-      const existing = base.midsByEdgeKey.get(refresh.edgeKey);
-      if (!existing) {
-        result.skippedEdgeMismatch++;
-        continue;
-      }
-      const mids = new Map(base.midsByEdgeKey);
-      mids.set(refresh.edgeKey, Object.freeze({
-        ...existing,
-        mid: refresh.mid,
-      }));
-      this.lastGoodByStateKey.set(stateKey, {
-        ...base,
-        midsByEdgeKey: mids,
-      });
-      result.adopted++;
-    }
-    return result;
-  }
-
-  private edgeKeyToStateKeyForTopology(): ReadonlyMap<string, string> {
-    const index = this.topologyIndex;
-    if (!index) return this.edgeKeyToStateKey;
-    if (this.edgeKeyToStateKeyIndexKey !== index.key) {
-      this.edgeKeyToStateKey.clear();
-      for (const group of index.groupByStateKey.values()) {
-        for (const edgeKey of group.edgeKeys) {
-          if (!this.edgeKeyToStateKey.has(edgeKey)) {
-            this.edgeKeyToStateKey.set(edgeKey, group.stateKey);
-          }
-        }
-      }
-      this.edgeKeyToStateKeyIndexKey = index.key;
-    }
-    return this.edgeKeyToStateKey;
   }
 
   private recoveryBaseForGroup(
@@ -1086,6 +1029,7 @@ export class BlockScanStateCoordinator {
   private async prepareBlockActivityRefreshPlan(
     graph: VerifiedGraphView,
     topology: StateTopologyIndex,
+    preparedPhaseByFamily: ReadonlyMap<string, PreparedFamilyPhase>,
     deadlineAtMs: number,
     signal: AbortSignal,
   ): Promise<BlockActivityRefreshPlan | null> {
@@ -1122,6 +1066,8 @@ export class BlockScanStateCoordinator {
         continue;
       }
       const currentInstanceSpecFingerprint =
+        preparedPhaseByFamily.get(group.familyId)?.staging
+          .instanceSpecFingerprints?.get(group.stateKey) ??
         this.instanceSpecFingerprints.get(group.familyId)?.get(
           group.stateKey,
         ) ?? "";
@@ -1456,12 +1402,16 @@ export class BlockScanStateCoordinator {
     });
   }
 
-  private expectedSpecFingerprintForGroup(group: StateGroup): string {
+  private expectedSpecFingerprintForGroup(
+    group: StateGroup,
+    stagedSharedFingerprint?: string,
+  ): string {
     return schemaInputFingerprint({
       key: group.stateKey,
       adapterSchemaRevision: group.family.schemaRevision,
       staticBindingFingerprint: group.schemaFingerprint,
       sharedFingerprint:
+        stagedSharedFingerprint ??
         this.familySharedFingerprints.get(group.familyId) ?? "",
     });
   }
@@ -1707,6 +1657,7 @@ export class BlockScanStateCoordinator {
       const refreshPlan = await this.prepareBlockActivityRefreshPlan(
         graph,
         topology,
+        preparedPhaseByFamily,
         familySettleDeadlineAtMs,
         controller.signal,
       );
@@ -2005,6 +1956,9 @@ export class BlockScanStateCoordinator {
         coverage,
         laneTelemetry,
         familyTelemetry,
+        poolTopologySpikeReceipts: Object.freeze(
+          preparedPhases.flatMap((phase) => phase.topologySpikeReceipts),
+        ),
       });
       if (this.active?.token !== token || controller.signal.aborted) {
         return incompleteResult({
@@ -2030,8 +1984,27 @@ export class BlockScanStateCoordinator {
         (lane) => lane.stagedInstanceSchemas,
       )) {
         this.instanceSchemas.set(familyId, instances);
+        const staging = preparedPhaseByFamily.get(familyId)?.staging;
+        if (
+          staging?.instanceSpecFingerprints !== undefined &&
+          staging.instanceSpecs !== undefined
+        ) {
+          this.instanceSpecFingerprints.set(
+            familyId,
+            staging.instanceSpecFingerprints,
+          );
+          this.instanceSpecs.set(familyId, staging.instanceSpecs);
+          this.familySharedFingerprints.set(
+            familyId,
+            staging.familySharedFingerprint ?? "",
+          );
+        }
       }
       for (const phase of preparedPhases) {
+        const staging = phase.staging;
+        for (const stateKey of staging.removedStateKeys) {
+          this.tombstoneStateKey(stateKey);
+        }
         for (const [familyId, binding] of phase.staging.sharedBindings) {
           this.sharedBindings.set(familyId, binding);
         }
@@ -2665,9 +2638,9 @@ export class BlockScanStateCoordinator {
   /**
    * State-instance-v1 family preparation: compile only the instances whose
    * schema input fingerprint changed, reuse published instances otherwise,
-   * then assemble a runtime family facade. A single instance failure drops
-   * only that instance (the stateKey is left unresolved) and never falls back
-   * to the full family compile path.
+   * then centrally compose their already-materialized runtime descriptors.
+   * A single instance failure drops only that instance (the stateKey is left
+   * unresolved) and never falls back to full-family compile or assembly.
    */
   private async prepareInstanceFamily(input: {
     readonly family: RegisteredBlockScanStateFamily;
@@ -2681,6 +2654,7 @@ export class BlockScanStateCoordinator {
     readonly compiled: CompiledBlockScanStateFamily | null;
     readonly instances: ReadonlyMap<StateInstanceKey, CompiledStateInstance>;
     readonly issues: readonly BlockScanStateIssue[];
+    readonly receipt: PoolTopologySpikeReceipt;
   }> {
     const {
       family,
@@ -2691,6 +2665,7 @@ export class BlockScanStateCoordinator {
       staging,
       staticReadCache,
     } = input;
+    const groupingStartedAtMs = this.now();
     const familyGroups = groups.filter(
       (group) => group.familyId === family.familyId,
     );
@@ -2713,6 +2688,8 @@ export class BlockScanStateCoordinator {
     const stagedSpecFingerprints = new Map<StateInstanceKey, string>();
     const stagedSpecs = new Map<StateInstanceKey, StateInstanceSpec>();
     const issues: BlockScanStateIssue[] = [];
+    const staticRequestCountByStateKey = new Map<StateInstanceKey, number>();
+    let activeCompileStateKey: StateInstanceKey | null = null;
     /*
      * Instance-scoped static read runner: source-pinned, local-id validated,
      * physically deduplicated across instances of the same family phase
@@ -2721,6 +2698,14 @@ export class BlockScanStateCoordinator {
     const readStatic = async (
       reads: readonly StateRead[],
     ): Promise<readonly StateReadResult[]> => {
+      if (activeCompileStateKey === null) {
+        throw new Error("instance static reads require an active compiler");
+      }
+      staticRequestCountByStateKey.set(
+        activeCompileStateKey,
+        (staticRequestCountByStateKey.get(activeCompileStateKey) ?? 0) +
+          reads.length,
+      );
       const seen = new Set<string>();
       const byLocalId = new Map<string, StateReadResult>();
       const missing: StateRead[] = [];
@@ -2744,6 +2729,8 @@ export class BlockScanStateCoordinator {
         }
       }
       if (missing.length > 0) {
+        staging.reads += missing.length;
+        staging.batches++;
         const results = await awaitWithAbort(
           this.backend.readBatch(
             family.lane,
@@ -2820,6 +2807,8 @@ export class BlockScanStateCoordinator {
         }),
       );
     }
+    const groupingWallMs = Math.max(0, this.now() - groupingStartedAtMs);
+    const diffStartedAtMs = this.now();
     const changeSet = this.buildGraphChangeSet({
       familyId: family.familyId,
       previousTopology: this.topologyIndex,
@@ -2833,11 +2822,25 @@ export class BlockScanStateCoordinator {
       schemaRevision: family.schemaRevision,
       sharedFingerprint,
     });
+    const diffWallMs = Math.max(0, this.now() - diffStartedAtMs);
+    const addedStateInstanceKeySet = new Set(
+      changeSet.schema.added.map((spec) => spec.key),
+    );
+    const changedStateInstanceKeySet = new Set(
+      changeSet.schema.changed.map((entry) => entry.after.key),
+    );
+    const unchangedStateInstanceKeySet = new Set(
+      changeSet.schema.unchanged.map((spec) => spec.key),
+    );
+    let addedCompilerInvocations = 0;
+    let changedCompilerInvocations = 0;
+    let siblingCompilerInvocations = 0;
     for (const removedKey of changeSet.schema.removed) {
       // Removed-then-re-added instances must never resurrect the old
       // lastGood/cache/deferred state: the re-added key direct-reads current N
-      // and rebuilds its own base.
-      this.tombstoneStateKey(removedKey);
+      // and rebuilds its own base. Tombstone only at the publication CAS: a
+      // superseded topology must not erase the published generation's base.
+      staging.removedStateKeys.add(removedKey);
     }
     for (const spec of changeSet.schema.unchanged) {
       const prev = previous.get(spec.key);
@@ -2852,7 +2855,28 @@ export class BlockScanStateCoordinator {
       ...changeSet.schema.changed.map((entry) => entry.after),
       ...changeSet.schema.added,
     ]) {
+      const expectedSpecFingerprint =
+        expectedSpecFingerprints.get(spec.key) ?? "";
+      const memo = this.instanceCompileMemo.get(family.familyId)?.get(
+        spec.key,
+      );
+      if (
+        memo?.sourceBlockHash === graph.sourceBlockHash &&
+        memo.specFingerprint === expectedSpecFingerprint
+      ) {
+        staged.set(spec.key, memo.compiled);
+        stagedSpecFingerprints.set(spec.key, expectedSpecFingerprint);
+        continue;
+      }
       try {
+        if (addedStateInstanceKeySet.has(spec.key)) {
+          addedCompilerInvocations++;
+        } else if (changedStateInstanceKeySet.has(spec.key)) {
+          changedCompilerInvocations++;
+        } else {
+          siblingCompilerInvocations++;
+        }
+        activeCompileStateKey = spec.key;
         const compiled = await awaitWithAbort(
           family.compileStateInstance({
             spec,
@@ -2865,12 +2889,26 @@ export class BlockScanStateCoordinator {
           }),
           signal,
         );
+        activeCompileStateKey = null;
         staged.set(spec.key, compiled);
         stagedSpecFingerprints.set(
           spec.key,
-          expectedSpecFingerprints.get(spec.key) ?? "",
+          expectedSpecFingerprint,
         );
+        if (!signal.aborted) {
+          let familyMemo = this.instanceCompileMemo.get(family.familyId);
+          if (!familyMemo) {
+            familyMemo = new Map();
+            this.instanceCompileMemo.set(family.familyId, familyMemo);
+          }
+          familyMemo.set(spec.key, Object.freeze({
+            sourceBlockHash: graph.sourceBlockHash,
+            specFingerprint: expectedSpecFingerprint,
+            compiled,
+          }));
+        }
       } catch (error) {
+        activeCompileStateKey = null;
         staged.delete(spec.key);
         issues.push({
           kind: issueKindFromError(error),
@@ -2881,30 +2919,39 @@ export class BlockScanStateCoordinator {
         });
       }
     }
-    /*
-     * Cache successful compiles at compile time (guarded by the family
-     * controller not having aborted), not only at publication CAS. A graph
-     * change that forces a 40-50s full recompile otherwise re-runs on every
-     * superseded generation: the generation never reaches a lane budget, never
-     * publishes, and the compiled schemas are never committed, so the hot
-     * chain recompiles the same graph content forever with priced=0.
-     * Late resolves after the family fence stay uncached (signal aborted),
-     * preserving the existing orphan-fork/superseded-generation guard.
-     */
-    if (!signal.aborted && staged.size > 0) {
-      this.instanceSchemas.set(family.familyId, staged);
-      this.instanceSpecFingerprints.set(
-        family.familyId,
-        stagedSpecFingerprints,
-      );
-      this.instanceSpecs.set(family.familyId, stagedSpecs);
-      this.familySharedFingerprints.set(family.familyId, sharedFingerprint);
-    }
+    const receiptSortStartedAtMs = this.now();
+    const addedStateInstanceKeys = Object.freeze(
+      [...addedStateInstanceKeySet].sort(),
+    );
+    const changedStateInstanceKeys = Object.freeze(
+      [...changedStateInstanceKeySet].sort(),
+    );
+    const sortWallMs = Math.max(0, this.now() - receiptSortStartedAtMs);
+    const receipt: PoolTopologySpikeReceipt = Object.freeze({
+      familyId: family.familyId,
+      beforeStateInstanceCount: previous.size,
+      afterStateInstanceCount: specs.size,
+      addedStateInstanceKeys,
+      changedStateInstanceKeys,
+      addedCompilerInvocations,
+      changedCompilerInvocations,
+      siblingCompilerInvocations,
+      siblingStaticRequestCount: [...unchangedStateInstanceKeySet].reduce(
+        (count, key) => count + (staticRequestCountByStateKey.get(key) ?? 0),
+        0,
+      ),
+      familyWideCompilerInvocations: 0,
+      familyWideAssemblyInvocations: 0,
+      groupingWallMs,
+      diffWallMs,
+      sortWallMs,
+    });
     if (familyGroups.length === 0) {
       return {
         compiled: null,
         instances: Object.freeze(staged),
         issues: Object.freeze(issues),
+        receipt,
       };
     }
     const edgeFingerprint = familyAggregateFingerprint({
@@ -2913,18 +2960,23 @@ export class BlockScanStateCoordinator {
       instances: staged,
     });
     try {
-      const compiled = await awaitWithAbort(
-        family.assembleCompiledFamily({
-          familyId: family.familyId,
-          lane: family.lane,
-          instances: staged,
-          edgeFingerprint,
-          control: { deadlineAtMs, signal },
-        }),
-        signal,
-      );
+      const compiled = family.composeCompiledFamily({
+        familyId: family.familyId,
+        lane: family.lane,
+        instances: staged,
+        edgeFingerprint,
+        control: { deadlineAtMs, signal },
+      });
       staging.instanceSchemas = staged;
-      return { compiled, instances: Object.freeze(staged), issues: Object.freeze(issues) };
+      staging.instanceSpecFingerprints = stagedSpecFingerprints;
+      staging.instanceSpecs = stagedSpecs;
+      staging.familySharedFingerprint = sharedFingerprint;
+      return {
+        compiled,
+        instances: Object.freeze(staged),
+        issues: Object.freeze(issues),
+        receipt,
+      };
     } catch (error) {
       issues.push({
         kind: issueKindFromError(error),
@@ -2936,6 +2988,7 @@ export class BlockScanStateCoordinator {
         compiled: null,
         instances: Object.freeze(staged),
         issues: Object.freeze(issues),
+        receipt,
       };
     }
   }
@@ -2990,9 +3043,11 @@ export class BlockScanStateCoordinator {
         string,
         ReadonlyMap<StateInstanceKey, CompiledStateInstance>
       >();
+      const topologySpikeReceipts: PoolTopologySpikeReceipt[] = [];
       const staging: FamilyLaneStaging = {
         staticSchemas: new Map(),
         sharedBindings: new Map(),
+        removedStateKeys: new Set(),
         expectedReadKeys: new Set(),
         reads: 0,
         batches: 0,
@@ -3016,6 +3071,7 @@ export class BlockScanStateCoordinator {
               staticReadCache: input.staticReadCache,
             });
             issues.push(...prepared.issues);
+            topologySpikeReceipts.push(prepared.receipt);
             if (prepared.compiled !== null) {
               compiledFamilies.set(family.familyId, prepared.compiled);
               staging.staticSchemas.set(family.familyId, prepared.compiled);
@@ -3030,6 +3086,15 @@ export class BlockScanStateCoordinator {
           const cached = this.staticSchemas.get(family.familyId);
           if (cached?.edgeFingerprint === edgeFingerprint) {
             compiledFamilies.set(family.familyId, cached);
+            return;
+          }
+          const memo = this.staticCompileMemo.get(family.familyId);
+          if (
+            memo?.sourceBlockHash === graph.sourceBlockHash &&
+            memo.edgeFingerprint === edgeFingerprint
+          ) {
+            compiledFamilies.set(family.familyId, memo.compiled);
+            staging.staticSchemas.set(family.familyId, memo.compiled);
             return;
           }
           try {
@@ -3125,15 +3190,12 @@ export class BlockScanStateCoordinator {
             }
             compiledFamilies.set(family.familyId, compiled);
             staging.staticSchemas.set(family.familyId, compiled);
-            /*
-             * Same compile-time cache commit as the instance path: a full
-             * legacy-family recompile that completes inside its family fence
-             * must be reusable by the next generation even if this generation
-             * later fails lanes/CAS and never publishes. Late/aborted
-             * compiles still never enter the cache.
-             */
             if (!familyController.signal.aborted) {
-              this.staticSchemas.set(family.familyId, compiled);
+              this.staticCompileMemo.set(family.familyId, Object.freeze({
+                sourceBlockHash: graph.sourceBlockHash,
+                edgeFingerprint,
+                compiled,
+              }));
             }
           } catch (error) {
             issues.push({
@@ -3158,6 +3220,7 @@ export class BlockScanStateCoordinator {
         instances: stagedInstancesByFamily.get(familyId),
         staging,
         issues: Object.freeze(issues),
+        topologySpikeReceipts: Object.freeze(topologySpikeReceipts),
       });
     } finally {
       clearTimeout(deadlineTimer);
@@ -3227,6 +3290,7 @@ export class BlockScanStateCoordinator {
           {
             staticSchemas: new Map(),
             sharedBindings: new Map(),
+            removedStateKeys: new Set(),
             expectedReadKeys: new Set(),
             reads: 0,
             batches: 0,
@@ -3412,7 +3476,10 @@ export class BlockScanStateCoordinator {
             group,
             graph,
             prepared.instances?.get(group.stateKey),
-            this.expectedSpecFingerprintForGroup(group),
+            this.expectedSpecFingerprintForGroup(
+              group,
+              staging.familySharedFingerprint,
+            ),
           );
           if (cacheEntry) {
             cacheSourcedStateKeys.add(group.stateKey);
@@ -3686,7 +3753,10 @@ export class BlockScanStateCoordinator {
             group,
             graph,
             prepared.instances?.get(group.stateKey),
-            this.expectedSpecFingerprintForGroup(group),
+            this.expectedSpecFingerprintForGroup(
+              group,
+              staging.familySharedFingerprint,
+            ),
           )
         : undefined;
       const groupReads = cacheEntry
@@ -3786,7 +3856,10 @@ export class BlockScanStateCoordinator {
         } else {
           const compiled = compiledFamilies.get(group.familyId);
           if (!compiled) throw new Error("family static schema is unavailable");
-          snapshot = compiled.decodeState(Object.freeze(localResults));
+          snapshot = compiled.decodeState(
+            Object.freeze(localResults),
+            group.edges,
+          );
           if (isThenable(snapshot)) {
             throw new Error("decodeState must return synchronously");
           }
@@ -4005,6 +4078,7 @@ export class BlockScanStateCoordinator {
           snapshotCompatibilityFingerprint:
             group.snapshotCompatibilityFingerprint,
           instanceSpecFingerprint:
+            staging.instanceSpecFingerprints?.get(group.stateKey) ??
             this.instanceSpecFingerprints.get(group.familyId)?.get(
               group.stateKey,
             ) ?? "",
@@ -4050,7 +4124,10 @@ export class BlockScanStateCoordinator {
             resultsByGlobalId,
             groupReads,
             prepared.instances?.get(group.stateKey),
-            this.expectedSpecFingerprintForGroup(group),
+            this.expectedSpecFingerprintForGroup(
+              group,
+              staging.familySharedFingerprint,
+            ),
           );
           if (cacheEntryToWrite) {
             this.scheduleCacheAppend(cacheEntryToWrite);

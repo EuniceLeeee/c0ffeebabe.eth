@@ -1,14 +1,12 @@
 /**
- * Register exactly the low-level encoders reachable from active production
- * families. Historical encoders remain directly importable by their fixtures,
- * but importing the live bootstrap cannot activate them.
+ * Register exactly the low-level encoders reachable from the current
+ * production route authority. Strict Family actions remain shadow-only until
+ * every route/Graph/exact/planner consumer cuts over in one gated generation.
  */
 import { register } from "./registry.js";
 import type { ActionAdapter } from "../types.js";
-import {
-  PRODUCTION_ADAPTER_FAMILIES,
-  PRODUCTION_FAMILY_MODULES,
-} from "../searcher/venues/production-registry.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from
+  "../searcher/venues/production-registry.js";
 import { balancerFlashAdapter } from "./balancer-flash.js";
 import { morphoFlashAdapter } from "./morpho-flash.js";
 import { fluidVaultAdapter } from "./fluid-vault.js";
@@ -27,9 +25,7 @@ import {
   univ4SettleValueAdapter,
 } from "./univ4.js";
 import { angstromV4SwapActionAdapter } from "./angstrom-v4.js";
-import {
-  curveExchangeUnderlyingAdapter,
-} from "./curve.js";
+import { curveExchangeUnderlyingAdapter } from "./curve.js";
 import { assertBalanceAdapter } from "./assert-balance.js";
 import {
   wethDepositValueAdapter,
@@ -39,6 +35,10 @@ import { metronomeHgUsdcExitAdapter } from "./metronome-hgusdc.js";
 import { dodoV2ActionAdapter } from "./dodo-v2.js";
 import { eigenpieDepositActionAdapter } from "./eigenpie-deposit.js";
 import { selfBurnNativeRedeemActionAdapter } from "./self-burn-native.js";
+import { astraMultiTokenChangeActionAdapter } from "./astra-multitoken.js";
+import {
+  etherTokenNativeRedeemActionAdapter,
+} from "./ethertoken-native-redeem.js";
 
 const PRODUCTION_ACTION_CATALOG = new Map<string, ActionAdapter>(
   [
@@ -52,6 +52,8 @@ const PRODUCTION_ACTION_CATALOG = new Map<string, ActionAdapter>(
     ...PROTOCOL_LEG_DESCRIPTORS.map(makeProtocolAdapter),
     eigenpieDepositActionAdapter,
     selfBurnNativeRedeemActionAdapter,
+    astraMultiTokenChangeActionAdapter,
+    etherTokenNativeRedeemActionAdapter,
     psmAdapter,
     univ3Adapter,
     univ2Adapter,
@@ -70,17 +72,6 @@ const PRODUCTION_ACTION_CATALOG = new Map<string, ActionAdapter>(
     assertBalanceAdapter,
   ].map((adapter) => [adapter.id, adapter]),
 );
-
-for (const module of PRODUCTION_FAMILY_MODULES) {
-  for (const adapter of module.actionAdapters) {
-    if (PRODUCTION_ACTION_CATALOG.has(adapter.id)) {
-      throw new Error(
-        `production family loader admitted duplicate ActionAdapter ${adapter.id}`,
-      );
-    }
-    PRODUCTION_ACTION_CATALOG.set(adapter.id, adapter);
-  }
-}
 
 const productionActions = PRODUCTION_ADAPTER_FAMILIES.actionIds();
 const requiredActionIds = new Set([

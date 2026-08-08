@@ -17,6 +17,10 @@ import {
   blockScanMulticallIface,
 } from "../blockscan-multicall.js";
 import { LiveRethReadPriority } from "../live-reth-read-priority.js";
+import type {
+  RethTransportLane,
+  RethTransportLease,
+} from "../reth-transport-scheduler.js";
 
 const sourceBlock = 100;
 const sourceGeneration = 7;
@@ -72,7 +76,7 @@ await testCanonicalActivityIsSharedWithExactMutationDescriptors();
 await testCanonicalActivityFailureFallsBackToMutationTransport();
 await testCanonicalAddressTouchesIncludeDirectTargetsAndLogEmitters();
 await testCanonicalAddressTouchesFailClosed();
-await testHardRequestTimeoutReleasesTransport();
+await testHardRequestTimeoutRetainsPhysicalPermits();
 
 console.log("blockscan-state-read-backend PASS");
 
@@ -3483,37 +3487,143 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
   console.log("[state-read-backend] address-touch proof fails closed: PASS");
 }
 
-async function testHardRequestTimeoutReleasesTransport(): Promise<void> {
-  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
-    maxBatchSize: 2,
+async function testHardRequestTimeoutRetainsPhysicalPermits(): Promise<void> {
+  const releases: (() => void)[] = [];
+  let physicalStarts = 0;
+  const makeBackend = (
+    transportScheduler?: ReturnType<typeof singlePermitTransportScheduler>,
+  ) => new JsonRpcBlockScanStateReadBackend("http://unit.test", {
     maxConcurrentBatches: 1,
-    hardRequestTimeoutMs: 200,
+    hardRequestTimeoutMs: 40,
+    ...(transportScheduler ? { transportScheduler } : {}),
     fetchImpl: (async (_url, init) => {
+      physicalStarts++;
       const body = JSON.parse(String(init?.body)) as RpcRequest[];
-      if (body[0]?.method === "eth_getBlockByNumber") {
-        return fakeResponse(body.map((request) =>
-          success(request.id, { hash: sourceBlockHash })
-        ));
-      }
-      // Simulate an uncooperative response body that never settles. The hard
-      // timeout must stop waiting and release the shared semaphore slot.
-      await new Promise<void>(() => {});
-      throw new Error("unreachable");
+      await new Promise<void>((resolve) => releases.push(resolve));
+      return fakeResponse(body.map((request) => success(request.id, "0x01")));
     }) as typeof fetch,
   });
-  const startedAt = Date.now();
-  const results = await backend.readPinned([
-    read("hang-a", "0x01"),
-    read("hang-b", "0x02"),
-  ], control({ deadlineAtMs: Date.now() + 10_000 }));
-  assert(
-    Date.now() - startedAt < 3_000,
-    "hard request timeout must settle the read well before the pass deadline",
+
+  const local = makeBackend();
+  const firstLocal = await local.readBatch(
+    "swap",
+    [read("local-first", "0x01")],
+    control(),
   );
-  assert.equal(results.length, 2);
-  assertFailure(results[0], "rpc", /hard request timeout/);
-  assertFailure(results[1], "rpc", /hard request timeout/);
-  console.log("[state-read-backend] hard request timeout releases transport: PASS");
+  assertFailure(firstLocal[0], "rpc", /hard request timeout/);
+  const secondLocalPending = local.readBatch(
+    "swap",
+    [read("local-second", "0x02")],
+    control(),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(
+    physicalStarts,
+    1,
+    "capacity=1 local slot must remain held after logical timeout",
+  );
+  releases.shift()?.();
+  await waitFor(() => physicalStarts === 2);
+  releases.shift()?.();
+  assert.equal((await secondLocalPending)[0]?.ok, true);
+
+  const abortedLocal = makeBackend();
+  const abortController = new AbortController();
+  const abortedPending = abortedLocal.readBatch(
+    "swap",
+    [read("local-aborted", "0x03")],
+    control({ signal: abortController.signal }),
+  );
+  await waitFor(() => physicalStarts === 3);
+  abortController.abort(new Error("fixture consumer abort"));
+  assertFailure((await abortedPending)[0], "aborted", /consumer abort/);
+  const afterAbortPending = abortedLocal.readBatch(
+    "swap",
+    [read("local-after-abort", "0x04")],
+    control(),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(
+    physicalStarts,
+    3,
+    "capacity=1 local slot must remain held after logical abort",
+  );
+  releases.shift()?.();
+  await waitFor(() => physicalStarts === 4);
+  releases.shift()?.();
+  assert.equal((await afterAbortPending)[0]?.ok, true);
+
+  const scheduler = singlePermitTransportScheduler();
+  const firstSharedBackend = makeBackend(scheduler);
+  const secondSharedBackend = makeBackend(scheduler);
+  const firstShared = await firstSharedBackend.readBatch(
+    "swap",
+    [read("shared-first", "0x03")],
+    control(),
+  );
+  assertFailure(firstShared[0], "rpc", /hard request timeout/);
+  const secondSharedPending = secondSharedBackend.readBatch(
+    "swap",
+    [read("shared-second", "0x04")],
+    control(),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(
+    physicalStarts,
+    5,
+    "shared physical permit must remain held after logical timeout",
+  );
+  releases.shift()?.();
+  await waitFor(() => physicalStarts === 6);
+  releases.shift()?.();
+  assert.equal((await secondSharedPending)[0]?.ok, true);
+  console.log("[state-read-backend] logical timeout retains physical permits: PASS");
+}
+
+function singlePermitTransportScheduler(): {
+  run<T>(
+    lane: RethTransportLane,
+    signal: AbortSignal,
+    work: (lease: RethTransportLease) => Promise<T>,
+  ): Promise<T>;
+} {
+  let tail: Promise<void> = Promise.resolve();
+  return {
+    async run<T>(
+      _lane: RethTransportLane,
+      _signal: AbortSignal,
+      work: (lease: RethTransportLease) => Promise<T>,
+    ): Promise<T> {
+      const previous = tail;
+      let release!: () => void;
+      tail = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await previous;
+      try {
+        return await work(Object.freeze({
+          queueWaitMs: 0,
+          activeTotal: 1,
+          activeByLane: Object.freeze({
+            "producer-critical": 0,
+            "producer-bulk": 1,
+            exact: 0,
+            discovery: 0,
+          }),
+        }));
+      } finally {
+        release();
+      }
+    },
+  };
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("fixture wait timed out");
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
 }
 
 function backendWith(

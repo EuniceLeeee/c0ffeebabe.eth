@@ -16,6 +16,10 @@ import { eigenpieAdapter } from "./protocols/eigenpie.js";
 import { rocksolidAdapter } from "./protocols/rocksolid.js";
 import { wstethAdapter } from "./protocols/wsteth.js";
 import { selfBurnNativeAdapter } from "./protocols/self-burn-native.js";
+import { astraMultiTokenAdapter } from "./protocols/astra-multitoken.js";
+import {
+  etherTokenNativeRedeemAdapter,
+} from "./protocols/ethertoken-native-redeem.js";
 import { curveUnderlyingAdapter } from "./swaps/curve-underlying.js";
 import { univ2StandardAdapter } from "./swaps/univ2-standard.js";
 import { univ3StandardAdapter } from "./swaps/univ3-standard.js";
@@ -37,8 +41,9 @@ import {
   type VenueIdentityCatalogEntry,
 } from "./capability.js";
 import type { AdapterFamily } from "./route-leg-adapter.js";
-import {
-  loadProductionFamilyModules,
+import type {
+  LoadedProductionFamilyModule,
+  ProductionFamilyLoadIssue,
 } from "./production-families/loader.js";
 
 const LEGACY_PRODUCTION_ADAPTER_FAMILIES = Object.freeze([
@@ -59,40 +64,40 @@ const LEGACY_PRODUCTION_ADAPTER_FAMILIES = Object.freeze([
   rocksolidAdapter,
   wstethAdapter,
   selfBurnNativeAdapter,
+  astraMultiTokenAdapter,
+  etherTokenNativeRedeemAdapter,
   fluidCreditAdapter,
   balancerFlashFamily,
   morphoFlashFamily,
 ] satisfies readonly AdapterFamily[]);
 
-const productionFamilyLoad = await loadProductionFamilyModules(
-  LEGACY_PRODUCTION_ADAPTER_FAMILIES,
-);
+/**
+ * Strict definitions remain shadow-only until the catalog, common Graph,
+ * pricing, exact, planner and action consumers cut over atomically. Production
+ * authority therefore stays on one complete legacy closure during migration.
+ */
+export const PRODUCTION_FAMILY_MODULES: readonly LoadedProductionFamilyModule[] =
+  Object.freeze([]);
+export const PRODUCTION_FAMILY_LOAD_ISSUES: readonly ProductionFamilyLoadIssue[] =
+  Object.freeze([]);
+export const PRODUCTION_FAMILY_SCAN_SHA256 = createHash("sha256")
+  .update(JSON.stringify({
+    kind: "frozen-legacy-route-authority-v1",
+    familyIds: LEGACY_PRODUCTION_ADAPTER_FAMILIES.map((family) => family.id),
+  }))
+  .digest("hex");
 
-const sourceScanFailure = productionFamilyLoad.issues.find(
-  (issue) => issue.code === "source_scan_failed",
-);
-if (sourceScanFailure) {
-  throw new Error(
-    `production family activation source is unavailable: ` +
-      sourceScanFailure.message,
-  );
-}
+/**
+ * Read-only compatibility projection for route consumers not yet ported to
+ * strict lifecycle/catalog APIs. It is frozen at the pre-S1 behavior and is
+ * forbidden as a strict lifecycle, descriptor-cache or capability authority.
+ */
+export const PRODUCTION_FROZEN_LEGACY_ROUTE_BASELINE =
+  new AdapterFamilyRegistry(LEGACY_PRODUCTION_ADAPTER_FAMILIES);
 
-export const PRODUCTION_FAMILY_MODULES = productionFamilyLoad.modules;
-export const PRODUCTION_FAMILY_LOAD_ISSUES = productionFamilyLoad.issues;
-export const PRODUCTION_FAMILY_SCAN_SHA256 = productionFamilyLoad.scanSha256;
-
-for (const issue of PRODUCTION_FAMILY_LOAD_ISSUES) {
-  console.error(
-    `[adapter-family/load] source=${issue.sourceFile} ` +
-      `code=${issue.code} message=${JSON.stringify(issue.message)}`,
-  );
-}
-
-export const PRODUCTION_ADAPTER_FAMILIES = new AdapterFamilyRegistry([
-  ...LEGACY_PRODUCTION_ADAPTER_FAMILIES,
-  ...PRODUCTION_FAMILY_MODULES.map((module) => module.family),
-]);
+/** Current production authority until the strict cutover gate closes. */
+export const PRODUCTION_ADAPTER_FAMILIES =
+  PRODUCTION_FROZEN_LEGACY_ROUTE_BASELINE;
 
 const CODE_OWNED_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] =
   Object.freeze(

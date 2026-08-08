@@ -32,14 +32,15 @@
 
 |范围|冻结 ds 基线|本文终态|
 |---|---|---|
-|生产激活|`LEGACY_PRODUCTION_ADAPTER_FAMILIES` 手工列出 20 个 Family；tracked-source loader 自动扫描 Astra、EtherToken 两个 `*.production.ts`，合计 22 个|所有生产 Family 都由严格构造器产出的自动扫描模块加载，legacy 数组删除|
+|生产激活|`LEGACY_PRODUCTION_ADAPTER_FAMILIES` 手工列出 20 个 Family；tracked-source loader 自动扫描 Astra、EtherToken 两个 `*.production.ts`，合计 22 个|所有生产 Family 都由严格构造器产出，并通过 build-time generated static-import catalog 加载；legacy 数组与生产 runtime source scan 删除|
 |高层 ownership|`AdapterFamilyRegistry` 已是唯一高层 registry，并派生 route、swap、protocol、funding、landed event、victim、discovery、pricing 与 action ownership 视图|保留唯一 registry/派生视图思想，输入收紧为 branded Swap/Protocol 插件及独立的其他 Domain 插件|
 |Adapter API|`RouteLegAdapter` 仍提供异步 `buildEdges(pool, backend, control)`、`quoteExact(ctx.state)`、`buildPlanFragment(ctx)`；`ProtocolDiscoveryContext` 直接暴露 `backend`|Adapter 只声明 request program 并同步 decode/derive/build；transport、deadline、retry、cache 和并发完全归中央|
 |Blockscan pricing|中央 per-StateInstance diff/cache/GraphChangeSet/CAS/warm-cache/tombstone/失败隔离已落地，并已有 lane/family 的 partition/read/finalize/sort 与 assembly 分段 telemetry；UniV2、UniV3、UniV4、DODO V2、Angstrom V4 已进入 `state-instance-v1`|所有 active pricing Family 迁移；descriptor-only current/decode 路径替代 family-shaped facade|
+|descriptor publication|最终 snapshot/topology 有 canonical CAS；但 `prepareInstanceFamily()` 为避免 supersede 重编，会在最终 CAS 前写 `instanceSchemas`、spec fingerprint/spec/shared-fingerprint Maps，而这些 Maps 又会成为下一代 published-previous 基线|拆成 `CompileMemoStore` 与 `PublishedDescriptorStore`；memo 可内容寻址预热但不授权 previous/carry，published store 只在 source verify + generation fence 后原子切换|
 |迁移 facade|已迁 Family 仍用 `assembleSchema(entries)` 包装出 `{pools/groups: Map}`；未迁 Family 仍走 `legacy-family`|`assembleSchema`、`legacy-family`、full-family runtime compiler 全部删除|
 |缓存版本|`adapterSchemaRevision: "...-v1"` 仍由作者手工维护|构建生成 capability 内容哈希；手工 revision 与 fallback 删除|
-|reth 调度|`LiveRethReadPriority` + `RethTransportScheduler` 已有 producer-critical/producer-bulk/exact/discovery lane、producer reserve，permit 只包物理 request/batch；coarse 外层整代 foreground lease 已删除|所有 Adapter I/O 进入统一 work-intent policy；补齐 Family/instance fairness、跨阶段 dedupe、统一 outcome 与 final-sim 保留池|
-|Exact feedback|`adoptExactProbeMids()` 已把 canonical current-N exact probe 的 scalar mid 安全回写 coarse recovery base|保留中央 ownership，并把 full exact cache 与 coarse-mid feedback 明确分成两种兼容合同|
+|reth 调度|`LiveRethReadPriority` + `RethTransportScheduler` 已有 producer-critical/producer-bulk/exact/discovery lane、producer reserve，且 coarse 外层整代 foreground lease 已删除；但 `withHardRequestTimeout()` 的逻辑超时仍可在底层 fetch/body 未 settle 时让外层释放 slot/permit|所有 Adapter I/O 进入统一 work-intent policy；物理 transport settle 前不得释放容量，并补齐 Family/instance fairness、跨阶段 dedupe、统一 outcome 与 final-sim 保留池|
+|Exact feedback|`adoptExactProbeMids()` 会把 amount-dependent exact quote 的 `amountOut/amountIn` 写入 coarse recovery base；即使 source 已 CAS，这个值仍未绑定完整 exact capability、route binding、executor 与 runtime evidence|exact cache 与 coarse state 严格分权；删除 exact→coarse 写旁路。若将来需要 quote-derived coarse observation，必须定义独立 capability、兼容投影和 publication proof，不能复用任意 exact 结果|
 
 对应代码入口：
 
@@ -52,6 +53,29 @@
 - [`reth-transport-scheduler.ts`](../../../listener/src/searcher/reth-transport-scheduler.ts)、
   [`live-reth-read-priority.ts`](../../../listener/src/searcher/live-reth-read-priority.ts)、
   [`blockscan-runtime-loop.ts`](../../../listener/src/searcher/blockscan-runtime-loop.ts)。
+
+**2026-08-08 实施审计 checkpoint（不是部署或完成声明）：** 本实施 change set 基于
+`codex/s1-unified-adapter-architecture@94ccb573e0eb20a459786b9ebcbadc8f3ff926b0`；严格
+catalog 已能装载 22 个 Family、生成 220 个 capability entry，但 production route/discovery/pricing/planner
+authority 仍由旧 registry 派生，严格 lifecycle/exact/execution 入口还没有真实 production route consumer。
+所以“catalog/插件文件齐全”只表示合同骨架已建立，不能据此宣称 Graph cutover、pool 尖峰关闭或 §18 Phase E
+完成。后续 checkpoint 必须分别记录 committed HEAD、production source closure、runtime authority 和验收 receipt，
+不能把本 change set 的观察倒填成上述基线 HEAD 已具备的能力。
+
+当前阶段状态必须按证据等级拆开记录，不能用一个“完成百分比”把 unit contract、shadow 接线和 production
+authority 混在一起：
+
+|阶段|2026-08-08 worktree 可确认状态|仍未满足的晋升条件|
+|---|---|---|
+|Phase 0 共享 substrate|physical-settlement ownership 与 published/memo store separation 已有 change-set 实现和定向 unit contract|仍需绑定最终 committed HEAD 和完整回归结果；即使通过也不能据此宣称 deployed/live|
+|Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
+|Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
+|Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
+|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary 等 runtime slice 已有 unit/shadow gate|observation bootstrap/watermark、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、Credit 独立 execution handle、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
+|Phase E cleanup|尚未开始|legacy registry/API/schema/revision/cache/flag authority 仍在；只有 §18.3 与 §20.2.6 全部门通过后才能删除|
+
+该表是实施 checkpoint，不是目标合同的降级，也不预判并行实现工作最终是否通过；任一状态更新都必须引用新的
+commit、测试/receipt 和实际 production consumer closure。
 
 ## 1. 一句话定义与完整流水线
 
@@ -118,6 +142,70 @@ coarse producer、S2 enumeration、exact、planner/final sim 等生产阶段，�
 11. **统一调度的最小占用单位是物理 request/batch/simulation。** Family、实例、coarse generation 或一整个
     producer arm 都不能持有共享 transport lease；CPU 组装、等待依赖和 decode 必须在 lease 之外。lane、
     deadline、并发、重试与公平性全部由中央从 stage/source 推导，Adapter 不能自行申报“高优先级”。
+12. **逻辑完成不等于物理释放。** consumer deadline/abort 可以结束该 consumer 的等待，但 physical fetch、body
+    parse、worker 或 simulation 未确认 settle 前，scheduler permit 不能释放；否则配置并发与保留容量都是假象。
+13. **权威状态只在全局 canonical CAS 后原子发布。** generation-local memo 可以预热，但不能成为 published
+    previous、授权 carry 或进入跨 generation cache；descriptor/snapshot/exact 的晋升必须经过 source verify 与 generation fence。
+14. **route 与 exact 必须是 issuer-bound runtime handle。** 结构相似的 caller object 不是 authority；Graph、exact、
+    execution 和 victim replay 只能消费当前 catalog/FamilyBox 签发并保存原始 descriptor/route/evidence 的 handle。
+15. **Family shard 只 staging，全 catalog 只发布一次。** Graph、canonical-edge→route-handle index、pricing
+    descriptor/snapshot 与 publication metadata 必须在同一个 source/generation fence 下原子切换，不能逐 Family
+    先后成为 production truth。
+
+### 2.1 “pool 尖峰”的关闭范围
+
+本文把“pool 尖峰”拆成两类问题，不能用一句“统一 Adapter 后会更快”混在一起。
+
+本合同必须关闭的是 topology/static compilation 的 **Family-wide 放大**：已有大量健康实例时，只新增或修改一个
+pool，增量工作单位仍是 `StateInstanceKey = hash(familyId, stateKey)`；不能重新编译、重新 hydration、重新组装或
+重新读取全部 sibling。
+
+```text
+已有 5,000 个 UniV3 StateInstance
+        + 新发现 1 个健康 pool
+        ↓
+只产生 1 个 added StateInstance
+        ↓
+只编译并静态证明该新增 key
+        ↓
+原有 5,000 个 sibling compiler invocation = 0
+原有 5,000 个 sibling static request = 0
+family-wide compiler / assemble invocation = 0
+```
+
+`stateKey` 是共享同一价格状态的最小正确单位，不机械等于一个地址：UniV2/UniV3 通常是一座 pool；UniV4 是
+`Manager + PoolKey`；Angstrom 等 singleton/sub-instance Family 使用完整 immutable binding；多资产实例可以让多个
+方向共享一个 stateKey，但不能扩大回整 Family。
+
+新增、删除或静态 binding 变化只触碰 added/changed/removed key。score/order 变化不得重编 descriptor；changed key
+失败必须 tombstone 旧 descriptor，健康 sibling 继续发布，且不得退回 family-wide compiler。机器 receipt 至少记录：
+
+```ts
+interface PoolTopologySpikeReceipt {
+  readonly familyId: FamilyId;
+  readonly beforeStateInstanceCount: number;
+  readonly afterStateInstanceCount: number;
+  readonly addedStateInstanceKeys: readonly StateInstanceKey[];
+  readonly changedStateInstanceKeys: readonly StateInstanceKey[];
+  readonly addedCompilerInvocations: number;
+  readonly siblingCompilerInvocations: number;
+  readonly siblingStaticRequestCount: number;
+  readonly familyWideCompilerInvocations: number;
+  readonly familyWideAssemblyInvocations: number;
+  readonly siblingCurrentRequestCount?: number;
+  readonly carryProofRef?: string;
+}
+```
+
+“只新增一个健康 pool”的冷 memo miss 硬门是 `added=1`、`changed=0`、`addedCompilerInvocations=1`、
+`siblingCompilerInvocations=0`、`siblingStaticRequestCount=0`、`familyWideCompilerInvocations=0`、
+`familyWideAssemblyInvocations=0`；已有合法
+content-addressed memo 时新增 key 可以 `addedCompilerInvocations=0`，但不得超过 1。若 fixture 同时提供完整 carry proof，
+unchanged sibling 的 current read 也必须为 0。该 receipt 还应记录 grouping/diff/sort wall time，但不承诺整代 O(1)。
+
+这不承诺所有 active pool 每块零读取。没有安全 mutation/carry proof 的 reserves、slot0、liquidity、oracle 或 precision
+witness 仍可能需要 current read；全图 diff/sort、receipts/activity、exact、CAS、solver 与 final sim 的剩余长尾属于
+独立 `systemic_live` 轨道。S1 可以消除结构性全族放大，但不能把所有 live 时延自动归零。
 
 ## 3. 三层身份：Family、Lineage、Instance
 
@@ -336,7 +424,7 @@ parity 后，兼容转换及旧公开类型从生产 source closure 删除。
 |必需|`instance.instanceKey()`、`compileDraft()`、`finalizeDescriptor()`|归一化一个链上实例|
 |必需|`routes.project()`|只投影行为证明通过的方向|
 |必需|`pricing.stateKey()`、descriptor compiler、current reads、`decodeSnapshot()`、`deriveMids()`|coarse state 语义|
-|必需|`exact.requirements/buildRequests/decode` 或纯 `quoteLocal()`|精确报价语义|
+|必需|有序 `exact.methods`（local / request-program 判别联合）|精确报价语义；只有显式 `not-applicable` 可进入下一 method|
 |必需|`execution.buildFragment()`、owned ActionAdapters|本 route 的执行编码|
 |可选|static evidence、dependent reads、mutation classifier|有该协议需求才声明|
 |可选|`classifyUnavailable()`、live-state projection|有可证明终态或 backrun 投影时声明|
@@ -359,7 +447,7 @@ Graph merge、global route enumeration、ranking、solver、final sim、EV、sub
 |`buildEdges(pool, backend, control)`|identity/metadata read 与 edge materialization 混合|descriptor 已证明后只做纯 route projection|
 |`pricingState.compileStateInstance(input.readStatic)`|实例粒度已正确，但 Adapter 在 compiler 内主动调用中央 runner|`compileDraft()` → static program → 中央执行 → `finalizePricingDescriptor()`|
 |`pricingState.buildCurrentBlockReads/decodeState(schema, ...)`|I/O 已由中央执行，但函数仍接收 family-shaped `Schema` facade|每次只接收一个 `PricingDescriptor + stateKey + routes`|
-|`quoteExact(ctx.state)`|任意异步 StateBackend 访问隐藏 request cost/source|`requirements/buildRequests/decode` 或纯 `quoteLocal()`|
+|`quoteExact(ctx.state)`|任意异步 StateBackend 访问隐藏 request cost/source|有序 local/request-program exact methods；每个远程 method 是完整 Request Program|
 |`buildPlanFragment(ctx)`|接口允许异步并持有 `state`|纯 `execution.buildFragment()`，只消费 sealed descriptor/evidence|
 
 这里不是要求一次提交同时改完所有 Family。中央 Request Program 与兼容 executor 先独立落地，随后按 Family
@@ -397,25 +485,35 @@ interface RequestRequirements {
   )[];
 }
 
+type CallerRef =
+  | { readonly kind: "none" }
+  | { readonly kind: "executor" }
+  | { readonly kind: "observed-sender" }
+  | { readonly kind: "verified-actor"; readonly evidenceId: string };
+
 type AdapterRequest =
   | {
       readonly id: string;
+      /** 省略时为 true；只有显式 false 才允许失败后继续 decode。 */
+      readonly required?: boolean;
       readonly kind: "eth-call";
       readonly to: string;
       readonly data: string;
-      readonly from?: string;
+      readonly caller?: CallerRef;
       readonly completion: "return-data" | "return-or-revert-data";
     }
   | {
       readonly id: string;
+      readonly required?: boolean;
       readonly kind: "get-code" | "get-storage";
       readonly address: string;
       readonly slot?: string;
     }
   | {
       readonly id: string;
+      readonly required?: boolean;
       readonly kind: "state-override-simulation" | "effect-delta-simulation";
-      readonly call: { readonly from: string; readonly to: string; readonly data: string };
+      readonly call: { readonly caller: CallerRef; readonly to: string; readonly data: string };
       readonly overrideIntent: FundedCallerOverrideIntent;
       readonly observe: readonly EffectObservationKind[];
     };
@@ -448,7 +546,7 @@ interface RequestProgram<Input, Evidence> {
 
 interface StaticEvidenceProgram<Input, Evidence>
   extends RequestProgram<Input, Evidence> {
-  readonly reusePolicy:
+  reusePolicy(input: Input):
     | { readonly kind: "source-local" }
     | {
         readonly kind: "immutable-code";
@@ -456,7 +554,7 @@ interface StaticEvidenceProgram<Input, Evidence>
       }
     | {
         readonly kind: "dependency-proof";
-        dependencyKeys(input: Input): readonly string[];
+        readonly dependencyKeys: readonly string[];
       };
 }
 
@@ -484,12 +582,14 @@ async function runRequestProgram<Input, Evidence>(input: {
   const requirements = input.program.requirements(input.programInput);
   input.executor.assertSupported(requirements);
   const requests = input.program.buildRequests(input.programInput);
+  input.executor.assertRequirementsMatchRequests(requirements, requests);
   input.executor.assertWithinBudget(input.familyId, requests);
   const results = await input.executor.execute({
     familyId: input.familyId,
     source: input.source,
     requests,
   });
+  input.executor.assertRequiredResultsSucceeded(requests, results);
   const evidence = input.program.decode({
     programInput: input.programInput,
     results,
@@ -500,6 +600,7 @@ async function runRequestProgram<Input, Evidence>(input: {
     reuseProof: isStaticEvidenceProgram(input.program)
       ? input.executor.sealStaticEvidenceReuseProof({
           program: input.program,
+          programInput: input.programInput,
           source: input.source,
           results,
         })
@@ -511,10 +612,20 @@ async function runRequestProgram<Input, Evidence>(input: {
 约束：
 
 - request ID 在一个 instance/route program 内稳定且唯一，中央负责全局 namespace 和物理 calldata 去重。
+- request 默认 `required=true`；required 的 RPC/deadline/abort/resource failure 必须在调用 decoder 前变成
+  `unresolved`，不能由 Family 解码成负身份、unavailable 或零报价。optional failure 只有显式声明后才可进入 decoder。
+- `RequestRequirements` 与实际 requests 必须严格一致：transport、caller role、completion mode、simulation intent
+  和 observed effects 逐项校验；Family 不能先宽泛声明、再在 builder 中偷偷增加 trace/caller/effect。
 - source number/hash/generation 由中央注入；Adapter 不能自行选择 `latest`。
+- caller 使用 symbolic `CallerRef`，真实地址由中央 executor/observed sender/verified evidence 绑定；Family 不能提交
+  任意 `from`。示例中的 `from` 若出现，只能理解为中央绑定后的 transport 投影，而不是 Adapter 输入能力。
 - `return-or-revert-data` 只对 request 显式声明且 Family conformance 证明的合约语义有效。
 - state override 只能表达“给真实 executor 准备本次 probe 所需余额”等受控意图，Adapter 不能直接提交任意 storage diff。
 - deadline、retry 次数、并发和最大 request/round 数完全由中央 policy 决定。
+- 同步纯度必须在运行时守卫，不能只依赖 TypeScript：中央对 `requirements`、`buildRequests`、`decode`、identity
+  `decide`、instance/route/pricing projection、local exact 和 execution fragment 等所有 Family callback 使用
+  `assertSynchronous()`（或等价 thenable rejection）。任何 callback 返回 Promise/thenable 都必须在 transport 或
+  publication 前 fail closed；不能因为 `await` 恰好能接收普通值而静默允许异步 Family 代码。
 
 ### 4.3 中央调度平面：统一的不只是函数签名
 
@@ -526,7 +637,7 @@ program；中央再决定 lane、deadline、并发、transport pool、batch、de
 
 |能力|冻结 ds 状态|剩余收敛|
 |---|---|---|
-|物理 permit 范围|`RethTransportScheduler.run()` 的 permit 只覆盖一次 HTTP request/batch；coarse producer 不再整代持有 foreground lease|保持该不变量，并让所有新 request program 必经同一入口|
+|物理 permit 范围|coarse producer 已不再整代持有 foreground lease，`RethTransportScheduler.run()` 也以 request/batch 为调度单位；但 `withHardRequestTimeout()` 可在底层 fetch/body 未 settle 时先 reject，外层随后释放 slot/permit，因此当前容量计数尚未真正覆盖 physical settlement|修复 scheduler/timeout ownership：logical consumer 可先结束，但 physical work settle 前容量仍由 scheduler 持有；所有新 request program 必经同一入口|
 |lane/reserve|已有 `producer-critical`、`producer-bulk`、`exact`、`discovery`；non-producer 不能占用 producer reserve|由 stage/source 推导 lane，禁止 Family 自报优先级|
 |mutation proof|backend 用 `LiveRethReadPriority.runForeground()` + `runCritical()` 串行关键证明并抢占 retry-safe background|保留 critical proof 语义，收敛到统一 schedule decision/telemetry|
 |exact/discovery|pinned exact backend 使用 `exact` lane；discovery 通过 background control 让步|补齐 bounded ingress、过期 generation 合并/取消、Family/instance fairness|
@@ -549,6 +660,8 @@ type CentralWorkStage =
 
 interface AdapterWorkIntent<Input, Evidence> {
   readonly stage: Exclude<CentralWorkStage, "fork-final-sim">;
+  /** 由 scanner/coordinator call site 填写；Family program 无权申报。 */
+  readonly workClass: "head-critical" | "foreground" | "background";
   readonly familyId: FamilyId;
   readonly instanceKey?: InstanceKey;
   readonly routeKey?: RouteKey;
@@ -586,7 +699,7 @@ interface CentralScheduleDecision {
 }
 ```
 
-`CentralScheduleDecision` 只能由 framework policy 从 call site、stage、source freshness 和全局资源状态推导。
+`CentralScheduleDecision` 只能由 framework policy 从 framework-owned `workClass`、stage、source freshness 和全局资源状态推导。
 Adapter 可以声明“需要 revert data / verified actor / tx-bound evidence”，但不能声明“我的 Family 是 foreground”
 或把 deadline 拉长。
 
@@ -603,7 +716,12 @@ async function executeAdapterWork<Input, Evidence>(input: {
   // 纯 CPU：此时没有 transport lease。
   const requirements = intent.program.requirements(intent.programInput);
   const requests = intent.program.buildRequests(intent.programInput);
+  runtime.requestContracts.assertRequirementsMatchRequests(
+    requirements,
+    requests,
+  );
   const schedule = runtime.policy.bind({
+    workClass: intent.workClass,
     stage: intent.stage,
     familyId: intent.familyId,
     source: intent.source,
@@ -612,7 +730,8 @@ async function executeAdapterWork<Input, Evidence>(input: {
   });
   runtime.budgets.assertAdmitted(schedule, requests);
 
-  // Scheduler 在内部按物理 request/batch 获取并释放 permit；返回时 lease 已释放。
+  // Scheduler 按物理 request/batch 取得 permit。consumer 可先得到 timeout/abort outcome，
+  // 但 permit 仍由 scheduler 持有，直到 fetch/body/worker/simulation 真正 settle 才释放。
   const results = await runtime.scheduler.executeRequests({
     schedule,
     source: intent.source,
@@ -627,6 +746,7 @@ async function executeAdapterWork<Input, Evidence>(input: {
   });
 
   runtime.generationFence.assertCurrent(intent.generation);
+  runtime.requestContracts.assertRequiredResultsSucceeded(requests, results);
 
   // 纯 CPU decode 也不占 transport lease。
   const evidence = intent.program.decode({
@@ -640,12 +760,22 @@ async function executeAdapterWork<Input, Evidence>(input: {
 调度器至少必须保证：
 
 - ingress queue 有界；相同 subject/source 的重复工作可合并，过期 generation 可取消，不能无限堆积；
-- 物理 calldata/object read 在 source 与 caller 等绑定一致时由中央 dedupe/batch；
+- 物理 dedupe key 至少绑定 chain、source block hash、generation、transport kind、target/address/slot/calldata、
+  centrally-bound caller、completion、override intent 和 observed effects；共享 physical result 必须重新映射到每个
+  local request ID，不能泄漏首个 consumer 的 ID；
+- consumer deadline 参与复用裁决：一个短 deadline consumer 已启动的 physical work，不能成为更长 deadline consumer
+  的唯一执行。中央可以给近同时 work 签发一个有界 shared-session window，但必须让每个 consumer 保留独立逻辑
+  deadline，且只有 session 的 physical deadline 覆盖该 consumer 时才可复用；超出 window 的更长 consumer 必须启动
+  独立 physical work。逻辑 consumer 可以先超时，但 physical permit 与 dedupe entry 直到 fetch/body/worker/simulation
+  真正 settle 才释放；
 - 并发既受 transport pool 限制，也受 Family/instance fairness 限制；一个 Family 的 exact probe 风暴不能耗尽全局槽位；
 - background discovery 能持续获得 transport；foreground 只能在真实 critical read 期间占槽，不能让 coarse producer
   在等待、组装、decode 或整代 catch-up 期间持有 lease；
 - final simulation 使用独立或保留容量的 pool/lane，不能被 discovery backfill 或 exact fan-out 长期排队；
 - retry 每次重新排队并重新取得物理 permit；Adapter 不能在一次 callback 内偷偷循环 RPC；
+- 所有 work intent 都必须复用 §4.2 的 request contract：实际 requests 与 requirements 严格匹配，且 required
+  failure 在 decoder 前变成 `unresolved`。`executeAdapterWork()`、identity loop、static/current/exact helper 不得各自
+  复制一份缺少这些 guard 的“近似执行器”；
 - completion 在 generation fence 后才能进入 instance Map、snapshot、exact cache 或 publication CAS；
 - queue wait、transport wall time、decode wall time和 failure stage 分开记录，避免把“排队慢”误判为“协议解析慢”。
 
@@ -709,33 +839,36 @@ export const PRODUCTION_ADAPTER_FAMILIES = new AdapterFamilyRegistry([
 ]);
 ```
 
-tracked-source loader 通过 `git ls-files` 扫描同目录 `*.production.ts`，当前实际发现
+当前 tracked-source loader 通过 `git ls-files` 扫描同目录 `*.production.ts`，当前实际发现
 `astra-multitoken.production.ts` 与 `ethertoken-native-redeem.production.ts`。它已经负责：source scan/import
 timeout、模块合同、Family 注册冲突、owned ActionAdapter 精确集合、descriptor edge kind、shared infra 依赖，
-并用完整前缀构造 `AdapterFamilyRegistry` 检查 ownership/identity/typed capability。这个 loader 和唯一 registry
-应保留并演进，不应重写为协议清单。
+并用完整前缀构造 `AdapterFamilyRegistry` 检查 ownership/identity/typed capability。这些 inventory、closure 与唯一
+registry 检查应保留并演进，但 runtime source scan 本身只是迁移期实现，不能成为终态生产加载机制，也不应退化为
+人工协议清单。
 
-当前 production root 只把 `source_scan_failed` 升为启动错误；单个 module 的 import/timeout/contract/conflict issue
+当前迁移期 production root 只把 `source_scan_failed` 升为启动错误；单个 module 的 import/timeout/contract/conflict issue
 会被记录后省略该 module。终态不能让一个 tracked production Family 因加载错误而静默退场：loader 可以继续
-返回逐 module issue 供诊断，但 production catalog 只有在**全部 tracked active modules 成功**，或存在独立批准并
-绑定 catalog hash 的 deactivation manifest 时才可发布。迁移期若新 module 加载失败，也不得暗中退回同 ID 的
-legacy Family；该启动/切换应 fail closed。
+在开发/CI inventory 阶段返回逐 module issue 供诊断，但 generated production catalog 只有在**全部 tracked active
+modules 成功生成并通过 closure 校验**，或存在独立批准并绑定 catalog hash 的 deactivation manifest 时才可发布。
+迁移期若新 module 加载失败，也不得暗中退回同 ID 的 legacy Family；该启动/切换应 fail closed。
 
 当前 `defineProductionFamilyModule()` 只 freeze `{ family, actionAdapters }`，还不是 §4 的不可伪造 brand；而
-`baseFamilies` 参数与 `LEGACY_PRODUCTION_ADAPTER_FAMILIES` 正是迁移桥。目标 composition root 只自动收集严格
-插件模块：
+`baseFamilies` 参数与 `LEGACY_PRODUCTION_ADAPTER_FAMILIES` 正是迁移桥。runtime `git ls-files`/glob 可以保留为
+开发期 source inventory 与 CI stale-artifact 检查，但**不能成为生产 composition root**：生产构建必须生成带静态
+imports 的 catalog artifact，clean process 启动只加载该 artifact 并校验 module/manifest/capability closure hash。
 
 ```ts
 export async function loadFamilyCapabilityCatalog(): Promise<FamilyCapabilityCatalog> {
-  const modules = await loadTrackedFamilyModules("**/*.production.ts");
-  const generated = await loadGeneratedCapabilityManifest();
+  // 该模块由 build 生成，内部是显式 static imports，不在 runtime 扫文件或执行 git。
+  const generated = await import("./generated/production-family-catalog.js");
+  generated.assertArtifactCurrent();
 
-  const defined = modules.map((module) => {
+  const defined = generated.productionFamilyModules.map((module) => {
     assertDefinedFamilyPlugin(module.plugin);
     return module.plugin;
   });
   const loaded = defined.map((plugin) =>
-    attachGeneratedCapabilityHashes(plugin, generated)
+    attachGeneratedCapabilityHashes(plugin, generated.capabilityManifest)
   );
 
   return buildFamilyCapabilityCatalog(loaded);
@@ -745,6 +878,11 @@ export async function loadFamilyCapabilityCatalog(): Promise<FamilyCapabilityCat
 `assertDefinedFamilyPlugin()` 必须验证构造器 brand 和冻结后的合同摘要；文件名、export 名或结构相似不能替代
 brand。这样扫描仍然自动发现 Family 代码，但不能把未经 `defineSwapFamily()` / `defineProtocolFamily()` 校验的
 raw object 偷渡成生产插件。
+
+生成 artifact 至少绑定：每个 production module 的静态 import、每个 capability 的 normalized entry bundle hash、
+semantic dependency closure、中央 contract version 和仅作 provenance 的 commit。构建发现 source inventory 与 artifact
+不一致、依赖图缺失或内容过期时必须失败；启动也必须 fail closed，不能回退到 `Function#toString()`、手工 revision、
+runtime glob 或 legacy Family。
 
 迁移终态中央不再维护：
 
@@ -767,6 +905,12 @@ interface FamilyCapabilityCatalog {
   readonly actionOwnerById: ReadonlyMap<string, FamilyId>;
 }
 ```
+
+这里的 `LoadedFamilyPlugin` 必须是 existential `LoadedFamilyBox`，不是中央可展开的泛型对象或
+`Record<string, unknown>`。FamilyBox 签发不可伪造、绑定当前 runtime box identity 的 descriptor/pricing/evidence
+handles，或向中央暴露关闭泛型后的 typed closures；中央只能传递 handle、调用 closure 和比较中央签发的 fingerprint，
+不能读取协议私有字段。foreign/forged handle 必须 fail closed，catalog hot replacement 后旧 box 的 process-local opaque
+evidence 也不能交给新 box 解包。这样中央才不会重新长出 `v4Hooks`、`curveI/J`、`dodoActor` 分支。
 
 Pool、vault、Factory child、PoolKey、token pair、route 和 StateInstance 都由扫描和链上证明动态产生，
 不能被写进这个 catalog。代码中允许固定 Registry、Manager、Router、Oracle 等基础设施 singleton，因为它们是
@@ -937,6 +1081,27 @@ function ingestObservation(
 迁移后，`ProtocolDiscoveryContext.backend`、family-local `runCacheScope` I/O memo 和旧 callback 签名一并删除；
 scanner 只向 Adapter 传 observation、sealed results 与 opaque descriptor。
 
+### 7.1 Bootstrap completeness 与 discovery watermark
+
+严格 ingress 不能只消费“进程启动后刚好再次出现”的 live call/log。冻结 ds 的 startup universe、declared venue 和
+持久化 incumbent 目前主要是 `PoolEntry`，其中很多实例没有可重放的原始 observation；如果直接切换，未在当前窗口
+重新活动的健康 incumbent 会从 Graph 静默消失。
+
+production cutover 前必须选择并验收至少一种中央 bootstrap authority：
+
+1. 保存 canonical observation journal，并按 source/watermark 重放产生 incumbent 的原始 call/log/address surface；或
+2. 对每个 persisted incumbent 生成中央 `address-surface` nomination，同时保证对应 Family 声明完整的 surface pattern。
+
+**2026-08-08 实施审计：** 当前 22 个严格 Family 中只有 9 个声明 `addressSurfaces`；现有 factory/active/landed
+startup 路径还会把原始发现事实压成 `PoolEntry`。因此第二条目前不能覆盖全 catalog，不能用它独立授权 cutover。
+在 observation journal/replay 落地，或其余需要 bootstrap 的 Family 补齐可反向验证的 surface declaration 之前，严格
+publication 只能是 shadow/partial，production Graph authority 必须继续留在已冻结的旧路径。
+
+bootstrap 只负责重新提名，不是 admission 旁路。每个 incumbent 仍须在当前 capability 下重做链上 reverse/behavior
+proof；旧 `PoolEntry`、旧 route 或地址表不能直接铸成 verified descriptor。中央 publication metadata 必须记录每个
+discovery source 的 completeness/watermark；任一必需 source 未覆盖时只能发布明确的 partial/shadow outcome，不能把
+当前候选集合当成 complete Graph，也不能用 `publication=null` 隐式 carry 上一代。
+
 ## 8. Identity：多来源 variant，统一行为证明
 
 冻结 ds 已有 `identityPolicies`、`discoveryIdentityResolver`、typed `IdentityAuthority`、retained-instance re-probe
@@ -1009,6 +1174,7 @@ async function runIdentityVariant<C, I, E>(input: {
     const requirements = input.variant.requirements(context);
     input.policy.assertSupportedAndBudgeted(requirements);
     const requests = input.variant.buildRequests(context);
+    input.policy.assertRequirementsMatchRequests(requirements, requests);
     const results = await input.policy.executeRequests({
       stage: "identity",
       familyId: input.family.manifest.familyId,
@@ -1018,6 +1184,7 @@ async function runIdentityVariant<C, I, E>(input: {
       requirements,
       requests,
     });
+    input.policy.assertRequiredResultsSucceeded(requests, results);
     evidence = input.variant.decode({ step: context, results });
     executedSteps++;
   }
@@ -1026,6 +1193,22 @@ async function runIdentityVariant<C, I, E>(input: {
 
 Family 不能控制无限 retry、deadline 或并发，也不能通过 request builder 直接调用 backend。`rejected` 只能来自
 成功取得并解码的负面行为证据；RPC/deadline/resource failure 是 `unresolved`，不能缓存成永久负身份。
+这里的 `policy` 必须委托给 §4.2/§4.3 的同一中央 Request Program executor；上面的显式断言只是把不可省略的
+顺序写清楚，不授权实现一套 identity-only transport 旁路。
+
+`runIdentityVariant()` 只是一个 variant 的执行器；candidate 的最终身份必须聚合**全部 applicable variants**：
+
+1. 任一 variant `verified` 时，收集全部 verified 结果，要求 `identityKey` 一致后合并 provenance；互相冲突则 fail closed。
+2. 无 verified、但至少一个 variant `unresolved` 时，candidate 总结果为 `unresolved`，不能被另一个 variant 的 reject 覆盖。
+3. 无 verified/unresolved、但有 framework/decoder failure 时，总结果为 `failed`。
+4. 只有全部 applicable variants 都取得可信负证据并 terminal reject 时，才是 `rejected`。
+5. 没有 applicable variant 时是 `unsupported-variant`。
+
+反向证明成功不等于执行语义已经完整。例如新 Factory 的 pool 即使通过 `getPool(...) === candidate`，若当前
+Lineage 没有可验证的 router/quoter/actor 或其他执行 binding，最终必须是 `unsupported-variant`，不能借用另一
+Factory/Lineage 的固定基础设施继续准入。
+
+因此 Factory variant 的负证据不能误杀同一 candidate 的 Registry/standalone 正证据；first-match/first-reject 都是违规。
 
 ## 9. Instance 与真正的 FamilySharedBinding
 
@@ -1109,6 +1292,10 @@ export interface RouteProjectionSemantics<Descriptor, Route> {
   project(input: {
     readonly descriptor: Descriptor;
   }): readonly Route[];
+  projectGraph(input: {
+    readonly descriptor: Descriptor;
+    readonly route: Route;
+  }): FamilyGraphProjection;
 }
 
 interface FamilyRouteDescriptor {
@@ -1122,7 +1309,36 @@ interface FamilyRouteDescriptor {
   readonly bindingRef: RouteBindingRef;
   readonly runtimeRequirements: readonly RuntimeRequirement[];
 }
+
+interface FamilyGraphProjection {
+  /** 本 route 的 Family-owned root ActionAdapter；不是中央 Family 分支。 */
+  readonly routeActionAdapterId: string;
+  /** 实际 call/settlement target；可与 identity subject 不同。 */
+  readonly executionTarget: string;
+  /** pool/address/Manager+PoolKey 等稳定 venue 身份的 canonical projection。 */
+  readonly venueIdentity: CanonicalValue;
+  /** 只标识中央 score/ranking 行；score 值和策略仍由中央拥有。 */
+  readonly centralScoreKey?: string;
+}
+
+declare const familyRouteRuntimeHandleBrand: unique symbol;
+
+interface FamilyRouteRuntimeHandle {
+  readonly [familyRouteRuntimeHandleBrand]: void;
+  readonly familyRuntimeIdentity: object;
+  readonly familyId: FamilyId;
+  readonly instanceKey: InstanceKey;
+  readonly routeKey: RouteKey;
+  readonly canonicalEdgeId: CanonicalEdgeId;
+  readonly graph: FamilyGraphProjection;
+}
 ```
+
+`RouteProjectionSemantics` 必须同时提供无协议分支的 Graph projection（或等价的 Family-owned closure），让中央能
+构造现有 compatibility `TokenEdge`。中央 catalog/publication coordinator 验证 action ownership、地址、taxonomy、
+venue identity 和 canonical edge identity 后，签发 `FamilyRouteRuntimeHandle`，并在 issuer-private store 中保存原始
+`Descriptor + Route + 完整 Family 私有 binding`。公开 handle 只暴露中央真正需要的投影；它不是可由对象字面量构造的
+DTO。
 
 标准投影策略可以复用：
 
@@ -1142,8 +1358,11 @@ type RouteProjectionStrategy =
 - UniV4：Manager 不是实例本身；`Manager + PoolKey` 是 instance，再投影两个方向。
 - ERC4626：只投影 `verifiedDirections`。Deposit 通过但 Redeem 未证明时，不能由通用 builder 重新长出 Redeem edge。
 
-中央 Graph 只保存通用 route 字段和 `bindingRef`；协议字段留在 family-owned descriptor closure。不要把
-`v4Hooks`、`curveI/J`、`dodoActor` 等字段逐个塞进中央 `TokenEdge`。
+中央 Graph 只保存通用 route 字段、Graph projection 和 opaque handle ref；协议字段留在 family-owned descriptor
+closure。不要把 `v4Hooks`、`curveI/J`、`dodoActor` 等字段逐个塞进中央 `TokenEdge`。route binding fingerprint
+必须覆盖 Family 私有 immutable binding（例如 pool、fee/direction、V4 `PoolKey`、actor policy），不能只 hash
+`FamilyRouteDescriptor` 的公共字段。exact、execution 与 victim replay 必须由 issuer 解包 stored route；caller 重新提交
+一个 `routeKey` 相同、公共字段相同但私有字段被替换的对象时必须 fail closed。
 
 ## 11. StateInstance pricing：从已部署实例机制收紧到 descriptor-only
 
@@ -1199,6 +1418,12 @@ discriminant、`assembleSchema` facade、旧 schema container 类型及 legacy-o
 mutation、carry 与 unavailable semantics，但 Adapter 每次只处理一个实例，不再拿 family container。
 
 ```ts
+interface BoundRequestProgram<Evidence> {
+  readonly requirements: RequestRequirements;
+  readonly requests: readonly AdapterRequest[];
+  decode(results: readonly AdapterRequestResult[]): Evidence;
+}
+
 export interface PricingSemantics<
   Descriptor,
   Route,
@@ -1234,14 +1459,16 @@ export interface PricingSemantics<
     buildRequests(
       input: CurrentPricingInput<PricingDescriptor, Route>,
     ): readonly AdapterRequest[];
-    buildDependentRequests?(input: {
+    buildDependentProgram?(input: {
       readonly current: CurrentPricingInput<PricingDescriptor, Route>;
       readonly completedRound: number;
-      readonly priorResults: readonly AdapterRequestResult[];
-    }): readonly AdapterRequest[];
+      readonly initialResults: readonly AdapterRequestResult[];
+      readonly priorEvidence: readonly unknown[];
+    }): BoundRequestProgram<unknown> | null;
     decodeSnapshot(input: {
       readonly descriptor: PricingDescriptor;
-      readonly results: readonly AdapterRequestResult[];
+      readonly initialResults: readonly AdapterRequestResult[];
+      readonly dependentEvidence: readonly unknown[];
     }): Snapshot;
     deriveMids(input: {
       readonly descriptor: PricingDescriptor;
@@ -1264,8 +1491,9 @@ export interface PricingSemantics<
 }
 ```
 
-所有 Adapter 函数必须同步、确定性、无 I/O。`buildDependentRequests` 是可选的 bounded protocol step，
-不是 Adapter 自己循环到满意为止。
+所有 Adapter 函数必须同步、确定性、无 I/O。dependent round 必须返回完整的 per-round program，而不是只返回裸
+requests 并借用 initial round 的 requirements；每轮可以有不同 caller/transport/effects/decoder。中央拥有最大轮数、
+budget 与循环，`null` 表示协议语义已经 terminal，不能由 Adapter 自己循环到满意为止。
 
 ### 11.2 中央 descriptor 编译核心
 
@@ -1280,11 +1508,23 @@ async function compilePricingInstance(input: {
   family: LoadedFamilyPlugin;
   group: StateInstanceGroup;
   previous?: CompiledStateInstance;
+  /** 只作 candidate lookup；永远不等价于 `previous`。 */
+  compileMemoStore: CompileMemoStore;
   sharedBindings: readonly FamilySharedBindingRef[];
   source: CanonicalSource;
   executor: BoundedRequestExecutor;
 }): Promise<CompiledStateInstance> {
   const pricing = input.family.pricing;
+  const groupBindingFingerprint = validateAndFingerprintStateInstanceGroup({
+    familyId: input.family.manifest.familyId,
+    instanceKey: input.group.instanceDescriptor.instanceKey,
+    stateKey: input.group.rawStateKey,
+    routes: input.group.routes.map((route) => ({
+      routeKey: route.routeKey,
+      instanceKey: route.instanceKey,
+      bindingFingerprint: route.bindingRef.fingerprint,
+    })),
+  });
   const staticProjection = pricing.staticBindingProjection({
     descriptor: input.group.instanceDescriptor,
     routes: input.group.routes,
@@ -1292,10 +1532,23 @@ async function compilePricingInstance(input: {
   const schemaInputFingerprint = hashCanonical({
     key: input.group.key,
     pricingCapabilityHash: input.family.hashes.pricing.contentHash,
+    instanceFingerprint: input.group.instanceFingerprint,
     staticProjection,
     sharedBindings: input.sharedBindings
       .map((item) => [item.bindingKey, item.fingerprint])
       .sort(([a], [b]) => a.localeCompare(b)),
+  });
+  const snapshotCompatibilityFingerprint = hashCanonical({
+    pricingCapabilityHash: input.family.hashes.pricing.contentHash,
+    projection: pricing.snapshotCompatibilityProjection({
+      descriptor: input.group.instanceDescriptor,
+      routes: input.group.routes,
+    }),
+  });
+  const draft = pricing.compileDraft({
+    descriptor: input.group.instanceDescriptor,
+    stateKey: input.group.rawStateKey,
+    routes: input.group.routes,
   });
 
   if (input.previous?.schemaInputFingerprint === schemaInputFingerprint) {
@@ -1303,17 +1556,49 @@ async function compilePricingInstance(input: {
       .proveStaticEvidenceReusable({
         familyId: input.family.manifest.familyId,
         program: pricing.staticEvidence,
+        programInput: draft,
         previous: input.previous.staticEvidenceProof,
         source: input.source,
       });
-    if (staticEvidenceReusable) return input.previous;
+    if (staticEvidenceReusable) {
+      // 只复用 descriptor/evidence；当前 group/route coverage 与 carry
+      // compatibility 必须按本代输入重新验证并重封，不能原样返回旧 wrapper。
+      return resealCompiledStateInstance({
+        previous: input.previous,
+        key: input.group.key,
+        groupBindingFingerprint,
+        schemaInputFingerprint,
+        snapshotCompatibilityFingerprint,
+        source: input.source,
+      });
+    }
   }
 
-  const draft = pricing.compileDraft({
-    descriptor: input.group.instanceDescriptor,
-    stateKey: input.group.rawStateKey,
-    routes: input.group.routes,
+  const memoCandidate = input.compileMemoStore.lookup({
+    familyRuntimeIdentity: input.family.runtimeIdentity,
+    stateInstanceKey: input.group.key,
+    pricingCapabilityHash: input.family.hashes.pricing.contentHash,
+    schemaInputFingerprint,
   });
+  if (
+    memoCandidate !== undefined &&
+    await input.executor.proveCompileMemoReusable({
+      candidate: memoCandidate,
+      program: pricing.staticEvidence,
+      programInput: draft,
+      source: input.source,
+    })
+  ) {
+    return sealCompiledStateInstanceFromMemo({
+      candidate: memoCandidate,
+      key: input.group.key,
+      groupBindingFingerprint,
+      schemaInputFingerprint,
+      snapshotCompatibilityFingerprint,
+      source: input.source,
+    });
+  }
+
   const executedStaticEvidence = pricing.staticEvidence
     ? await runRequestProgram({
         familyId: input.family.manifest.familyId,
@@ -1331,32 +1616,43 @@ async function compilePricingInstance(input: {
   const staticEvidenceFingerprint = executedStaticEvidence
     ?.trustedResultsFingerprint ?? hashCanonical([]);
 
-  return sealCompiledStateInstance({
+  const compiled = sealCompiledStateInstance({
     key: input.group.key,
+    groupBindingFingerprint,
     schemaInputFingerprint,
     instanceFingerprint: hashCanonical({
       key: input.group.key,
       schemaInputFingerprint,
       staticEvidenceFingerprint,
     }),
-    snapshotCompatibilityFingerprint: hashCanonical({
-      pricingCapabilityHash: input.family.hashes.pricing.contentHash,
-      projection: pricing.snapshotCompatibilityProjection({
-        descriptor: input.group.instanceDescriptor,
-        routes: input.group.routes,
-      }),
-    }),
+    snapshotCompatibilityFingerprint,
     staticEvidenceProof: executedStaticEvidence?.reuseProof ??
       noStaticEvidenceReuseProof(input.source),
     descriptor,
   });
+  input.compileMemoStore.putCandidate({
+    familyRuntimeIdentity: input.family.runtimeIdentity,
+    pricingCapabilityHash: input.family.hashes.pricing.contentHash,
+    schemaInputFingerprint,
+    compiled,
+  });
+  return compiled;
 }
 ```
+
+这里故意分三层：`groupBindingFingerprint` 由中央直接检查同一 Family/instance/stateKey、routeKey 唯一与 binding
+coverage 完整；`schemaInputFingerprint` 决定 descriptor/static evidence 是否重编；
+`snapshotCompatibilityFingerprint` 决定 route membership 变化后旧 snapshot 能否 carry。不能把全部 route binding
+机械塞进 schema fingerprint，否则会破坏 UniV2 新增反向方向可复用 reserves 的安全优化；也不能只信任 Family
+projection，否则遗漏 route ownership/binding 时中央无法发现。
 
 中央只 hash 自己知道的 canonical projection 和可信 transport evidence，不序列化 Adapter 的 opaque descriptor。
 复用 previous descriptor 还必须满足 static evidence 的 `reusePolicy`：`source-local` 每次重跑；
 `immutable-code` 只有 code hash/proxy implementation 和 capability hash 均未变化时复用；`dependency-proof`
 由中央在当前 source 检查依赖 fingerprint。Family 不能把可变链上值命名成 static 后永久缓存。
+由于 reuse policy 可以依赖当前 draft，复用检查必须接收本代 `programInput`；命中后也只复用 descriptor 与可信
+evidence，不复用旧的 group wrapper。当前 `groupBindingFingerprint` 与 `snapshotCompatibilityFingerprint` 必须重封，
+否则 route membership/binding 变化可能被旧 coverage 或 carry proof 掩盖。
 
 ### 11.3 generation 调度与失败隔离
 
@@ -1367,8 +1663,10 @@ async function compilePricingInstance(input: {
 ```ts
 async function preparePricingGeneration(input: PricingGenerationInput) {
   const groups = groupRoutesByFamilyAndStateKey(input.graph, input.catalog);
-  const changeSet = diffStateInstances(this.publishedGroups, groups);
-  const staged = new Map(this.compiledInstances);
+  // `previous` 只能来自最后一次成功 publication，不能来自 compile memo。
+  const published = this.publishedDescriptorStore.snapshot();
+  const changeSet = diffStateInstances(published.groups, groups);
+  const staged = new Map(published.compiledInstances);
 
   for (const removed of changeSet.removed) staged.delete(removed.key);
 
@@ -1377,7 +1675,10 @@ async function preparePricingGeneration(input: PricingGenerationInput) {
     async (group) => compilePricingInstance({
       family: input.catalog.forFamily(group.familyId),
       group,
-      previous: this.compiledInstances.get(group.key),
+      previous: published.compiledInstances.get(group.key),
+      // memo 只提供待重新验证的 candidate；compilePricingInstance 不得把它
+      // 当成 published previous，也不得据此授权 carry。
+      compileMemoStore: this.compileMemoStore,
       sharedBindings: input.sharedBindings.forGroup(group),
       source: input.source,
       executor: input.staticReadExecutor,
@@ -1403,24 +1704,48 @@ async function preparePricingGeneration(input: PricingGenerationInput) {
 
   await input.canonical.verifySource(input.source);
   input.generationFence.assertCurrent(input.generation);
-  this.commitAtomically({
+  await this.publicationCoordinator.commitAtomically({
+    expectedPublishedRevision: published.revision,
     graph: input.graph,
     groups,
     compiledInstances: staged,
     snapshots: stagedSnapshots,
+    publishedDescriptorStore: this.publishedDescriptorStore,
   });
 }
 ```
 
-实现时要保留 ds 已验证的两层状态：
+上面把两个 store 直接写进伪代码是有意的：`publishedDescriptorStore.snapshot()` 是 diff、`previous` 和 carry 的
+唯一历史来源；`compileMemoStore` 即使命中，也只能返回一个由 `compilePricingInstance()` 在当前 capability、输入、
+source/reuse proof 下重新验证的候选。memo miss、memo 验证失败或 orphan generation 都不能改变 published snapshot。
+最终 coordinator 的 CAS 同时校验 `expectedPublishedRevision`、canonical source 与 generation fence，成功后才推进
+`PublishedDescriptorStore`；失败时 Graph、descriptor、snapshot 和 memo 之外的权威对象全部保持原 identity/content。
 
-- **content cache** 可在 family controller 未 abort 且 compile 成功后提前保存，以免一个 40–50 秒 compile 被连续
-  supersede 后每代重做；它只按内容/指纹复用，不代表该 generation 已发布。
-- **authoritative pointer**（topology、active specs/descriptors、state/mids/coverage）只能在 source canonical CAS 与
-  generation fence 后一起切换；late/foreign fingerprint 结果不能进入 publication。
+冻结 ds 的意图是保留两层状态，但当前 `prepareInstanceFamily()` 在最终 CAS 前写入 `instanceSchemas`、
+`instanceSpecFingerprints`、`instanceSpecs` 与 `familySharedFingerprints`，而这些 Map 又会成为下一代的 published
+previous；“controller 尚未 abort”不能证明 source 已发布。终态必须明确拆成：
 
-所以“原子发布”不等于禁止一切预热缓存，而是禁止未通过 fence 的 generation 改变权威可见状态。终态 compiler
-也必须维持这一差别。
+- **`CompileMemoStore`** 可在 compile 成功后按 capability hash、schema input、可信 evidence/reuse proof 内容寻址预热，
+  以免 40–50 秒纯编译在连续 supersede 中每代重做；memo 不能充当 published previous、授权 snapshot carry 或直接
+  进入跨 generation exact/snapshot cache，每次消费仍要重新验证 reuse policy。
+- **`PublishedDescriptorStore`** 保存 topology、active specs/descriptors、state/mids/coverage；只有 source canonical verify、
+  generation fence 与全局 atomic CAS 全部通过后才能切换。late/foreign fingerprint 结果不能进入 publication。
+
+所以“原子发布”不等于禁止一切预热 memo，而是禁止 memo 被伪装成权威历史。当前 pre-CAS Map 写入是必须修复的
+substrate violation，不是终态可接受的优化。
+
+这里的 publication transaction 是 **全 catalog**，不是 `for (family) family.publish()`。每个 Family shard 只能返回
+staged instances/routes/pricing/outcomes；唯一中央 coordinator 在确认所有必需 discovery source 的 coverage/watermark、
+canonical source 与 generation fence 后，一次提交：
+
+- canonical Graph compatibility view；
+- `CanonicalEdgeId → FamilyRouteRuntimeHandle` issuer index；
+- pricing descriptors、snapshots、mids 与 coverage；
+- 显式 `added/changed/removed/tombstone` delta 和 publication metadata。
+
+任何 shard unresolved/failed 都必须按 source completeness 和 changed-key 规则生成明确 delta；不能把
+`publication=null` 解释为“沿用旧 Family publication”。CAS 失败时上述权威对象的 identity 和 content 必须全部不变，
+也不能出现 Graph 已更新但 route-handle/pricing 仍属于上一代的撕裂状态。
 
 中央拥有 Map、diff、read execution、batch、deadline、retry、cache、carry、CAS 和 publication。Adapter 不得
 通过 `compileDraft()` 保存全族 Map，或在 `finalizePricingDescriptor()` 中扫描 sibling。
@@ -1457,31 +1782,55 @@ backend 已把物理 call/simulation batch 放入共享 scheduler 的 `exact` la
 caller/source dependency 和内部 retry。终态删除任意 `async quoteExact(ctx)`，统一合同是：
 
 ```ts
-export interface ExactQuoteSemantics<Descriptor, Route, Evidence> {
-  requirements(input: ExactQuoteInput<Descriptor, Route>): RequestRequirements;
-  buildRequests(
-    input: ExactQuoteInput<Descriptor, Route>,
-  ): readonly AdapterRequest[];
-  decode(input: {
-    readonly programInput: ExactQuoteInput<Descriptor, Route>;
-    readonly results: readonly AdapterRequestResult[];
-  }): ExactQuoteResult<Evidence>;
+type LocalExactAttempt<Evidence> =
+  | { readonly status: "quoted"; readonly result: ExactQuoteResult<Evidence> }
+  | { readonly status: "not-applicable"; readonly reason: string };
 
-  /** 纯本地数学 Family 可提供，并让 buildRequests 返回空。 */
-  quoteLocal?(input: ExactQuoteInput<Descriptor, Route>): ExactQuoteResult<Evidence>;
+type ExactMethod<Descriptor, Route, Evidence> =
+  | {
+      readonly id: string;
+      readonly kind: "local";
+      quote(
+        input: ExactQuoteInput<Descriptor, Route>,
+      ): LocalExactAttempt<Evidence>;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "request-program";
+      readonly program: RequestProgram<
+        ExactQuoteInput<Descriptor, Route>,
+        ExactQuoteResult<Evidence>
+      >;
+    };
+
+export interface ExactQuoteSemantics<Descriptor, Route, Evidence> {
+  methods(
+    input: ExactQuoteInput<Descriptor, Route>,
+  ): readonly ExactMethod<Descriptor, Route, Evidence>[];
   cacheCompatibilityProjection(input: ExactQuoteInput<Descriptor, Route>): CanonicalValue;
 }
 ```
 
+Exact 不是含糊的“可选 local callback 与 remote callback 二选一”。Family 必须声明有序 methods，例如 UniV3 warm local math 后接
+pinned QuoterV2；只有 local method 明确返回 `not-applicable` 才能进入下一 method。local bug、decode error、RPC
+failure、deadline 或 resource limit 都必须终止为对应 failure/unresolved，不能 fallback 掩盖。method id/order 进入
+receipt，并由 exact capability dependency closure 覆盖。
+
+上述 `ExactQuoteInput<Descriptor, Route>` 只存在于当前 `FamilyBox` 的 issuer-private closure 内。中央公开入口只接收
+`FamilyRouteRuntimeHandle`；它不能接收 caller 重新提交的 descriptor、route 或 binding fingerprint。issuer 验证 handle
+属于当前 catalog/runtime box 后，才把保存的原始 descriptor/route 与中央 source/executor/runtime evidence 绑定成
+Family-private quote input。
+
 中央调用：
 
 ```ts
-async function refineCandidate(input: RefineCandidateInput): Promise<RefinedLeg> {
-  const family = input.catalog.ownerOfRoute(input.route);
+async function refineCandidate(
+  input: RefineCandidateInput,
+): Promise<SealedExactQuoteHandle> {
+  const issuedRoute = input.catalog.resolveIssuedRouteHandle(input.routeHandle);
+  const family = issuedRoute.family;
   const exact = family.exact;
-  const quoteInput = bindExactInput({
-    route: input.route,
-    descriptor: input.instanceDescriptor,
+  const quoteInput = issuedRoute.bindExactInput({
     amountIn: input.amountIn,
     source: input.source,
     executor: input.executor,
@@ -1489,52 +1838,122 @@ async function refineCandidate(input: RefineCandidateInput): Promise<RefinedLeg>
   });
 
   const cacheKey = exactCacheKey({
+    familyRuntimeIdentity: family.runtimeIdentity,
     exactCapabilityHash: family.hashes.exact.contentHash,
-    instanceFingerprint: input.instanceFingerprint,
-    routeBindingFingerprint: input.route.bindingRef.fingerprint,
+    instanceFingerprint: issuedRoute.instanceFingerprint,
+    routeBindingFingerprint: issuedRoute.bindingFingerprint,
     amountIn: input.amountIn,
     sourceOrCarryProof: input.sourceOrCarryProof,
     executor: input.executor,
     runtimeEvidenceHashes: input.runtimeEvidence.map((item) => item.evidenceHash),
     compatibility: exact.cacheCompatibilityProjection(quoteInput),
   });
-  const carried = input.exactCache.getCompatible(cacheKey);
-  if (carried) return carried;
+  await input.canonical.verifySourceOrCarryProof({
+    source: input.source,
+    sourceOrCarryProof: input.sourceOrCarryProof,
+  });
+  input.generationFence.assertCurrent(input.generation);
+  const cached = input.exactCache.getCompatible(cacheKey);
+  if (cached) {
+    const replayed = family.replayAndVerifyCachedExactEvidence(cached, {
+      routeHandle: input.routeHandle,
+      sourceOrCarryProof: input.sourceOrCarryProof,
+      executor: input.executor,
+      runtimeEvidence: input.runtimeEvidence,
+    });
+    input.generationFence.assertCurrent(input.generation);
+    // Cache 只保存可重新验证的可信结果/transport evidence；命中也必须
+    // 由当前 FamilyBox 为当前 route/source/generation 重新签发 handle。
+    return family.issueExactQuoteHandle({
+      routeHandle: input.routeHandle,
+      result: replayed,
+      amountIn: input.amountIn,
+      sourceOrCarryProof: input.sourceOrCarryProof,
+      executor: input.executor,
+      runtimeEvidence: input.runtimeEvidence,
+    });
+  }
 
-  const result = exact.quoteLocal
-    ? exact.quoteLocal(quoteInput)
-    : (await executeAdapterWork({
-        intent: {
-          stage: "exact-refine",
-          familyId: family.manifest.familyId,
-          instanceKey: input.route.instanceKey,
-          routeKey: input.route.routeKey,
-          source: input.source,
-          generation: input.generation,
-          program: exact,
-          programInput: quoteInput,
-        },
-        runtime: input.adapterRuntime,
-      })).evidence;
+  let result: ExactQuoteResult<unknown> | null = null;
+  for (const method of exact.methods(quoteInput)) {
+    if (method.kind === "local") {
+      const attempt = method.quote(quoteInput);
+      if (attempt.status === "not-applicable") continue;
+      result = attempt.result;
+      break;
+    }
+    result = (await executeAdapterWork({
+      intent: {
+        stage: "exact-refine",
+        workClass: "foreground",
+        familyId: family.manifest.familyId,
+        instanceKey: issuedRoute.instanceKey,
+        routeKey: issuedRoute.routeKey,
+        source: input.source,
+        generation: input.generation,
+        program: method.program,
+        programInput: quoteInput,
+      },
+      runtime: input.adapterRuntime,
+    })).evidence;
+    break;
+  }
+  if (result === null) throw new Error("no exact method applies");
 
-  input.exactCache.publish(cacheKey, sealExactResult(result));
-  return result;
+  await input.canonical.verifySourceOrCarryProof({
+    source: input.source,
+    sourceOrCarryProof: input.sourceOrCarryProof,
+  });
+  input.generationFence.assertCurrent(input.generation);
+  const exactHandle = family.issueExactQuoteHandle({
+    routeHandle: input.routeHandle,
+    result,
+    amountIn: input.amountIn,
+    sourceOrCarryProof: input.sourceOrCarryProof,
+    executor: input.executor,
+    runtimeEvidence: input.runtimeEvidence,
+  });
+  input.exactCache.publishAtomically(
+    cacheKey,
+    family.sealReplayableExactCacheRecord({
+      routeHandle: input.routeHandle,
+      result,
+      sourceOrCarryProof: input.sourceOrCarryProof,
+      executor: input.executor,
+      runtimeEvidence: input.runtimeEvidence,
+    }),
+  );
+  return exactHandle;
 }
 ```
 
-“把 exact refine 结果更新到 carry”需要区分两种数据，冻结 ds 已经实现了其中一种：
+`verifySourceOrCarryProof()`、generation fence 与 `publishAtomically()` 是 cache 合同的一部分，不是示例中的可选
+日志。request-program path 内部的 fence 不能替代这里的发布 gate：local method 和 cache hit 同样必须受当前 canonical
+source/carry proof 约束，late/foreign result 不能进入 exact cache 或作为 refined leg 返回。
 
-|数据|兼容边界|中央目的地|
-|---|---|---|
-|完整 exact quote|绑定 amount、route binding、instance fingerprint、exact capability hash、source/mutation proof、executor 与 runtime evidence|exact cache；只能为兼容 exact request 复用|
-|由 exact probe 推出的 scalar mid|只用于同一 canonical source 的对应 edge，且 producer 尚未发布更新 source；不携带完整 amount/caller-sensitive quote 语义|coarse recovery-base mid feedback|
+内存 exact cache 必须按当前 `FamilyBox.runtimeIdentity` 分片；capability hash 相同也不能把旧 runtime box 签发的
+process-local opaque evidence 交给热替换后的新 box 解包。cache hit 也必须重放当前 request-program declaration、重新
+验证可信结果与 source/generation，再由当前 issuer 签发一个新 handle；cache 本身不能把旧 handle 当作值返回。
+persistent cache 只能保存能在新 box 下重新验证或重建的 sealed representation，不能持久化裸 opaque handle。
 
-ds 的 `BlockScanStateCoordinator.adoptExactProbeMids()` 已实现第二条：调用方先通过 source canonical CAS，coordinator
-再检查 newer publication、edge→stateKey、Family/base、已有 edge 和有限正 mid 后，才替换 `lastGood` 中该 edge 的
-mid。它是中央 scheduler/coordinator 所有的安全反馈，不是 Adapter 私改 snapshot。
+成功结果必须由同一个 issuer 签发不可伪造的 `SealedExactQuoteHandle`，至少绑定
+`FamilyBox.runtimeIdentity + FamilyRouteRuntimeHandle + amountIn + source/carry proof + executor + runtime evidence +
+exact capability/method`。issuer-private payload 保存原始 exact evidence 与 raw `quotedAmountOut`；公开 projection 只提供
+中央 amount propagation/telemetry 所需的 amount 和 identity。结构相似的 `ResolvedFamilyExactQuote`、旧 FamilyBox
+签发的 handle、或绑定另一个 route/source/executor 的 handle都不能进入 execution。
 
-终态应保留这条能力并为它生成独立 receipt；不能把完整 exact amount-out 对象直接塞进 coarse carry，也不能让
-Adapter 自行写 exact cache/global recovery base，否则 caller-sensitive、hook-sensitive 或 tx-bound quote 会被错误复用。
+amount propagation 必须逐 leg 保留该 handle，而不是只留下 `bigint[]`。下一 leg 的 `amountIn` 来自前一 leg handle 的
+raw `quotedAmountOut`；中央 safety policy 另算 `minAmountOut`。S4 execution 由 issuer 解包同一个 handle 内的 stored
+descriptor/route/evidence，因此 exact→execution 不存在调用者重新拼装证据的缝隙。
+
+完整 exact quote 只进入 exact cache；它绑定 amount、route/instance binding、exact capability、source/carry proof、
+executor 与 runtime evidence，不能直接或通过 `amountOut / amountIn` 的 scalar 降格写入 coarse snapshot/recovery base。
+
+冻结 ds 的 `adoptExactProbeMids()` 虽然检查 newer publication、edge/stateKey/Family 和有限正值，但写入值仍来自特定
+amount 的 exact quote，且 recovery base 没有完整绑定 caller/hook/tx evidence 与 capability closure，因此不是终态
+安全边界，必须删除。若将来确需 quote-derived coarse feedback，应新增独立 `CoarseMidFeedback` capability/overlay：
+显式绑定 source hash、instance/route binding、pricing 与 exact capability、兼容策略和 receipt；actor/hook/tx-bound
+evidence 禁止反馈；overlay 不得伪造原 coarse snapshot freshness，并在 mutation/topology/capability 变化时失效。
 
 ## 13. 承载和调度特殊语义的通用插槽
 
@@ -1640,7 +2059,9 @@ export interface ExecutionSemantics<Descriptor, Route, ExactEvidence> {
     readonly descriptor: Descriptor;
     readonly route: Route;
     readonly amountIn: bigint;
-    readonly amountOut: bigint;
+    readonly quotedAmountOut: bigint;
+    /** slippage/protection policy 由中央 planner/solver 冻结，Family 只能编码。 */
+    readonly minAmountOut: bigint;
     readonly exactEvidence: ExactEvidence;
     readonly executor: string;
     readonly runtimeEvidence: readonly RuntimeEvidence[];
@@ -1652,12 +2073,19 @@ export interface ExecutionSemantics<Descriptor, Route, ExactEvidence> {
 }
 ```
 
+这个泛型接口是 FamilyBox 内部 closure 的类型，不是中央可直接调用的公共 DTO API。中央不得自己填充
+`descriptor/route/exactEvidence`；只有 exact issuer 能从 `SealedExactQuoteHandle` 的 private record 取回这些原始值，
+再调用该 closure。
+
 `buildFragment()` 必须同步、纯函数，只生成：
 
 - approve/transfer 等通用 requirements；
 - family-owned route-root ActionAdapter 节点；
 - family-specific calldata 参数和 evidence ref；
 - 可供中央守恒检查的 expected effects。
+
+`quotedAmountOut` 是 exact 事实，`minAmountOut` 是中央 planner/policy 的保护值，二者不能复用一个模糊
+`amountOut` 字段。Family 不拥有 slippage policy，也不能在 calldata builder 内偷偷放宽保护值。
 
 ActionAdapter 只负责低层编码/解码，不负责 discovery、identity、quote、solver 或 final sim。Route-root action
 必须由唯一 Family own；approve/transfer/assert-balance 一类经过中央声明的基础动作才可作为 shared infra。
@@ -1667,17 +2095,19 @@ ActionAdapter 只负责低层编码/解码，不负责 discovery、identity、qu
 ```ts
 function buildCandidatePlan(input: BuildCandidatePlanInput): CandidatePlan {
   const fragments = input.refinedRoute.legs.map((leg) => {
-    const family = input.catalog.ownerOfRoute(leg.route);
-    const fragment = family.execution.buildFragment({
-      descriptor: leg.descriptor,
-      route: leg.route,
-      amountIn: leg.amountIn,
-      amountOut: leg.amountOut,
-      exactEvidence: leg.exactEvidence,
+    const issuedExact = input.catalog.resolveIssuedExactQuoteHandle(
+      leg.exactHandle,
+    );
+    // resolveIssuedExactQuoteHandle() 返回关闭泛型后的 issuer facade，
+    // 不向中央暴露原始 descriptor/route/evidence。
+    const fragment = issuedExact.buildFragment({
+      minAmountOut: leg.minAmountOut,
       executor: input.executor,
-      runtimeEvidence: leg.runtimeEvidence,
     });
-    input.actionOwnership.assertFragmentOwned(family, fragment);
+    input.actionOwnership.assertFragmentOwned(
+      issuedExact.familyRuntimeIdentity,
+      fragment,
+    );
     return fragment;
   });
 
@@ -1728,6 +2158,62 @@ catalog、request executor、evidence、ownership 和 final safety primitives，
 liquidity 必须在同一 catalog 中使用各自判别类型，不能为了清空 legacy 数组被强转为 Swap/Protocol。终态 catalog
 可以是 `DefinedSwapFamily | DefinedProtocolFamily | DefinedFundingFamily | ...`，但本文件要求的两个“大模板”仍只
 指 Swap 与 Protocol，不代表所有 Domain 共用同一 optional object。
+
+### 15.1 Funding：offer 必须是 issuer-bound authority
+
+Funding 不进入普通 swap/protocol Graph，但它的 liquidity evidence、borrow fragment 和 repayment fragment 仍必须
+遵守同一 opaque issuer 边界。publication 可以暴露供中央 sizing 使用的只读投影，例如 funding ID、asset、
+`maxBorrow`、fee 和 priority；**可执行 authority 只能是 `PreparedFundingOfferHandle`**：
+
+```ts
+declare const preparedFundingOfferHandleBrand: unique symbol;
+
+interface PreparedFundingOfferHandle {
+  readonly [preparedFundingOfferHandleBrand]: void;
+  readonly familyRuntimeIdentity: object;
+  readonly familyId: FamilyId;
+  readonly fundingId: string;
+  readonly asset: string;
+  readonly maxBorrow: bigint;
+  readonly fee: bigint;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+  readonly fundingCapabilityHash: string;
+}
+```
+
+issuer-private WeakMap 必须保存当前 catalog 签发的 loaded `FamilyBox`、原始 `FundingOfferDescriptor`、transport/static
+evidence、source/generation 和 capability identity。`buildBorrowFragment()` / `buildRepaymentFragment()` 只接受该
+handle，并在进入 Family callback 前同时执行 loaded-box authority 与 offer issuer authority 校验。冻结对象、对象字段
+相同或 capability hash 相同都不是 authority：spread/clone、same-field/same-hash forge、foreign catalog box、
+hot-reload-old box、wrong source/generation/capability 或已失效 publication 的 handle 必须 fail closed。
+
+Funding publication 只有在 canonical source 与 generation fence 通过后才能原子替换；失败/无 offer 必须有显式
+outcome，不能用 `publication=null` 隐式沿用旧 offer。当前实施 checkpoint 已有 Funding Request Program、opaque
+offer issuer、fragment ownership/TOCTOU 负向门，以及“成功但无 offer 发布空 tombstone、读取/解码失败不覆盖
+current”的 unit contract；它们仍是 shadow runtime。全 catalog publication receipt 与真实 production consumer 尚未
+接线，因此不能把它记成 production cutover。
+
+### 15.2 Credit：route、risk 与 execution 使用同一 issuer closure
+
+Credit 不能只在 catalog 中拥有一个 plugin 定义，然后继续让 solver 查询 legacy registry。终态需要独立中央
+Credit runtime，并签发同一 runtime box 约束下的：
+
+- `CreditRouteRuntimeHandle`：绑定 credit instance、asset/direction、source/generation 与 capability；
+- `CreditRiskEvidenceHandle`：绑定 borrow limit、repayment/position 约束及其可信 evidence；
+- `CreditExecutionHandle`：绑定选中的 route、risk evidence、amount 与 owned ActionAdapter closure。
+
+会产生 lend/credit route 的 Family 必须通过公共 `projectGraph()` 形成 canonical edge，并与其 route-handle index、
+pricing/risk evidence 一起进入全 catalog publication CAS；不能在 common Graph 发布后再由 solver 临时查询另一份
+Credit registry 补边。不会产生 Graph route 的 Credit capability 也必须通过同一 catalog/runtime box 和 final safety
+primitive，不能获得 raw RPC、planner 或 final-sim authority。
+
+当前实施 checkpoint 已有 shadow central Credit identity/instance lifecycle、lifecycle-issued exact instance authority、
+route/risk issuer handle、common-Graph projection 与同步 execution closure；raw descriptor、spread/clone、同字段伪造、
+foreign/hot-reload FamilyBox、wrong source/generation/executor/evidence 均有 callback-before-rejection unit gate。但独立
+`CreditExecutionHandle`、全 catalog route/Graph/risk 同 CAS、production solver consumer、repayment/position final sim 与
+sealed parity 仍未落地，production solver 也仍有 legacy Credit authority。因此这些实现只能算 contract/shadow
+evidence，不能据此切换 authority。
 
 ## 16. UniV3 完整实现示例
 
@@ -1879,15 +2365,19 @@ export const uniV3Family = defineSwapFamily({
           pinnedCall(source, descriptor.pool, "liquidity()"),
         ];
       },
-      buildDependentRequests({ current, completedRound, priorResults }) {
-        if (completedRound > 0) return [];
-        const state = decodeUniV3CoreState(priorResults);
-        return current.routes.flatMap((route) =>
-          buildUniV3PrecisionRequest(current.descriptor, route, state)
-        );
+      buildDependentProgram({ current, completedRound, initialResults }) {
+        if (completedRound > 0) return null;
+        const state = decodeUniV3CoreState(initialResults);
+        return {
+          requirements: { transports: ["eth-call"], caller: "executor" },
+          requests: current.routes.flatMap((route) =>
+            buildUniV3PrecisionRequest(current.descriptor, route, state)
+          ),
+          decode: decodeUniV3PrecisionEvidence,
+        };
       },
-      decodeSnapshot: ({ descriptor, results }) =>
-        decodeUniV3Snapshot(descriptor, results),
+      decodeSnapshot: ({ descriptor, initialResults, dependentEvidence }) =>
+        decodeUniV3Snapshot(descriptor, initialResults, dependentEvidence),
       deriveMids: ({ descriptor, snapshot, routes }) =>
         deriveUniV3Mids(descriptor, snapshot, routes),
       classifyUnavailable: ({ snapshot, routes }) =>
@@ -1902,19 +2392,34 @@ export const uniV3Family = defineSwapFamily({
   },
 
   exact: {
-    requirements: () => ({ transports: ["eth-call"], caller: "executor" }),
-    buildRequests(input) {
-      return [buildUniV3QuoterRequest({
-        quoter: input.descriptor.precisionQuoterBinding.quoter,
-        tokenIn: input.route.tokenIn,
-        tokenOut: input.route.tokenOut,
-        fee: input.descriptor.fee,
-        amountIn: input.amountIn,
-        from: input.executor,
-      })];
+    methods(input) {
+      return [
+        {
+          id: "warm-local-math",
+          kind: "local",
+          quote: (quoteInput) => quoteUniV3WarmLocal(quoteInput),
+        },
+        {
+          id: "pinned-quoter-v2",
+          kind: "request-program",
+          program: {
+            requirements: () => ({ transports: ["eth-call"], caller: "executor" }),
+            buildRequests(quoteInput) {
+              return [buildUniV3QuoterRequest({
+                quoter: quoteInput.descriptor.precisionQuoterBinding.quoter,
+                tokenIn: quoteInput.route.tokenIn,
+                tokenOut: quoteInput.route.tokenOut,
+                fee: quoteInput.descriptor.fee,
+                amountIn: quoteInput.amountIn,
+                caller: { kind: "executor" },
+              })];
+            },
+            decode: ({ programInput, results }) =>
+              decodeUniV3ExactQuote(programInput, results),
+          },
+        },
+      ];
     },
-    decode: ({ programInput, results }) =>
-      decodeUniV3ExactQuote(programInput, results),
     cacheCompatibilityProjection: ({ descriptor, route }) => ({
       pool: descriptor.pool,
       direction: [route.tokenIn, route.tokenOut],
@@ -1932,7 +2437,7 @@ export const uniV3Family = defineSwapFamily({
         tokenOut: input.route.tokenOut,
         fee: input.descriptor.fee,
         amountIn: input.amountIn,
-        minAmountOut: input.amountOut,
+        minAmountOut: input.minAmountOut,
         recipient: input.executor,
       });
     },
@@ -2100,7 +2605,7 @@ Pricing/Exact 对 deposit 调 `previewDeposit(amountIn)`，对 redeem 调 `previ
 
 |冻结 ds 接口/实现|基线判定|目标位置|迁移动作与终态删除|
 |---|---|---|---|
-|`LEGACY_PRODUCTION_ADAPTER_FAMILIES`（20）+ scanned modules（2）|双入口迁移态|自动 branded module catalog|逐 Family 移入 tracked module；最后删除 legacy 数组、`baseFamilies` loader 参数和 raw module contract|
+|`LEGACY_PRODUCTION_ADAPTER_FAMILIES`（20）+ scanned modules（2）|双入口迁移态|build-time generated static-import branded module catalog|逐 Family 移入 tracked module；生成并校验静态 catalog；最后删除 legacy 数组、`baseFamilies` loader 参数、raw module contract 和生产 runtime source scan|
 |`AdapterFamilyRegistry` 唯一高层 registry|已实现基础|`FamilyCapabilityCatalog` / 唯一 typed registry|保留派生视图和 ownership checks；输入收紧，不建立第二个并行 registry|
 |`poolAdapters` / `edgeAdapterIds` / Action ID declarations|显式 ownership 已工作，但有重复声明|route/action ownership projection|从插件 route/action 定义派生；parity 后删除可漂移的重复字段|
 |`ProtocolDiscoveryContext.backend` + async candidate callbacks|扫描中央、I/O 边界未收紧|Discovery decode + Identity/behavior Request Program|先由兼容 executor 记录 requests，再纯化 callback；最后删除 backend-bearing context|
@@ -2113,9 +2618,10 @@ Pricing/Exact 对 deposit 调 `previewDeposit(amountIn)`，对 redeem 调 `previ
 |`assembleSchema(entries) -> pools/groups Map`|已迁 Family 的机械兼容 facade|descriptor 直接进入 current/decode|先证明 current/decode parity，再删除 facade、family container 和 assembly failure point|
 |手工 `adapterSchemaRevision`/compat revision|当前 cache 正确性前提|generated capability hashes|shadow → 新 namespace → 删除手工字段/fallback|
 |family-level `FamilySharedBinding`|生命周期/CAS 已实现|按真实依赖可分片 shared bindings|保留机制，补 binding key/ref；删除用 value 承载全族 descriptor 的可能性|
-|`RethTransportScheduler` + `LiveRethReadPriority`|物理 permit/lane/reserve 已实现|统一 work-intent scheduler|在现有 scheduler 上补 stage policy、fairness、dedupe/fence/final-sim pool；不另建 Family scheduler|
+|`RethTransportScheduler` + `LiveRethReadPriority`|lane/reserve 与 request/batch 调度单位已实现，但 hard timeout 可早于底层 fetch/body settlement 释放外层 slot/permit|统一 work-intent scheduler|先修 physical-settlement ownership，再补 stage policy、fairness、dedupe/fence/final-sim pool；不另建 Family scheduler|
+|`prepareInstanceFamily()` 的 `instanceSchemas`/spec/shared fingerprint Maps|最终 CAS 前即可写入，且会被下一 generation 当作 published previous|`CompileMemoStore` + `PublishedDescriptorStore`|先拆 store；memo 只内容寻址预热，published previous/carry 只能读取 source verify + generation fence + atomic CAS 后的 store|
 |`quoteExact(ctx.state)` + pinned exact lane|transport 部分中央、语义 API 仍胖|Exact requirements/buildRequests/decode|逐 Family 拆 request shape；删除 StateBackend-bearing exact callback|
-|`adoptExactProbeMids()`|ds 已实现的安全 coarse feedback|中央 exact cache + coarse-mid feedback 两类合同|保留并补 receipt/hash；不让 Adapter 直接写 cache/base|
+|`adoptExactProbeMids()`|当前 exact→coarse 写旁路；值未完整绑定 route/caller/hook/runtime evidence，不是安全 publication 边界|中央 exact cache；未来可选、独立的 `CoarseMidFeedback` overlay|删除当前旁路。若以后确需反馈，必须新建完整绑定且独立失效的 capability/overlay，不复用任意 exact scalar|
 |`buildPlanFragment(ctx.state): Promise`|ownership 已中央、plan API 仍可读链|纯 `execution.buildFragment()`|前移所有 evidence reads；删除 state 与 Promise 签名|
 |`PendingExecutionEvidence`、V4/Angstrom 等 typed fields|正确语义分散在不同 context|`RuntimeEvidence` / `RuntimeRequirement` + opaque payload|无损映射、双写 parity 后删除旧平行字段；中央不增加协议名分支|
 |runtime final sim/deadline/fork worker|S5 已中央执行，但未纳入统一资源平面|reserved/independent final-sim pool|接入统一 intent/outcome；保持 mandatory final sim，删除临时旁路调度|
@@ -2125,6 +2631,10 @@ Pricing/Exact 对 deposit 调 `previewDeposit(amountIn)`，对 redeem 调 `previ
 大重构可以批量实施，但 production truth 在任一时刻仍只有一个。推荐阶段如下：
 
 ```text
+Phase 0  修复共享 substrate
+         ├─ logical timeout 与 physical settlement 分离，未 settle work 不释放容量
+         └─ pre-CAS Maps 拆为 CompileMemoStore / PublishedDescriptorStore
+        ↓
 Phase A  冻结 ds baseline + comparator/oracle receipts
         ↓
 Phase B  中央严格类型、Request Program、兼容 executor、generated-hash shadow
@@ -2138,6 +2648,29 @@ Phase D  只补验矩阵中的非 pass Family + common-Graph/batch cutover gate
         ↓
 Phase E  删除所有迁移桥，重新运行终态 catalog/semantic/live gate
 ```
+
+Phase 0 是后续 parity 的前置条件，不是可以与 Family 迁移混在一起“顺手验证”的优化。否则 hard timeout 下的并发
+上限仍可能失真，superseded generation 的 pre-CAS compile 结果也可能污染下一代 previous/carry，使 comparator 把
+substrate 泄漏误判为 Family parity。Phase 0 必须先用 §20.4 的定向回归证明，再冻结 Phase A 输入。
+
+Phase D 内部的 production authority cutover 也有固定依赖顺序，不能因为 22 个插件已经能被 catalog 装载就直接
+替换旧 registry consumer：
+
+1. 先落地统一 `projectGraph()`、issuer-private route store、`FamilyRouteRuntimeHandle` 和
+   `SealedExactQuoteHandle`；
+2. 接入 observation shadow ingress，并完成 incumbent bootstrap/re-attestation 与 source watermark；
+3. 所有 Family 只产出 staged shard，由唯一全 catalog publication coordinator 形成一次 atomic CAS；
+4. 从同一 publication 同时导出当前 `TokenEdge` compatibility view 与
+   `CanonicalEdgeId → FamilyRouteRuntimeHandle` index；
+5. 复用现有 BlockScan per-StateInstance diff/carry/CAS，把 strict descriptor/snapshot/mid 接到该共同 Graph；
+6. 逐 leg 保留 sealed exact handle，完成 amount propagation，再接纯 execution fragment 与 mandatory final sim；
+7. 迁移 victim/pending/backrun evidence，随后分别完成不进 Graph 的 Funding 与会产生 lend route 的 Credit；
+8. 独立 baseline/challenger capture、batch parity、common-Graph 与 systemic-live gate 通过后，才切默认 authority 并
+   删除 legacy registry/API/cache/flag bridge。
+
+任一步只能 shadow/disabled-path 验证时，下一步不得把它描述成 production truth。尤其不能用当前 observation window
+重建出的局部 Graph 替换持久化 incumbent，也不能先发布 Graph、后补 route handle/pricing；两者都会制造静默覆盖率
+回退或跨代撕裂。
 
 Phase B 可以引入 adapter shim、dual-read cache namespace、legacy oracle 和双写 telemetry；这些代码必须：
 
@@ -2163,7 +2696,8 @@ descriptor-only；legacy pricing Family 可以直接迁到终态合同，不要�
 Phase E 不是可选清理。只有同时满足以下条件，才可宣称本架构重构完成：
 
 1. production catalog 的全部 active Family 都来自严格构造器；启动输出能列出每个 source module/family/hash，
-   且不存在 legacy base input。
+   且不存在 legacy base input。production composition root 只能加载 build-time generated static imports；runtime
+   `git ls-files`/glob/source scan 仅可作为 dev/CI stale-artifact 检查，不能参与生产模块发现或回退。
 2. `LEGACY_PRODUCTION_ADAPTER_FAMILIES`、`legacy-family` runtime branch、`compileStaticSchema`、
    `extendStaticSchema`、`assembleSchema/assembleCompiledFamily` 和 per-family full schema cache 已从生产 source
    closure 删除。
@@ -2172,12 +2706,14 @@ Phase E 不是可选清理。只有同时满足以下条件，才可宣称本架
    Family 无 raw RPC/scheduler/cache/final-sim import。
 4. 手工 `adapterSchemaRevision`、旧 cache namespace、dual-write/dual-read 与 revision fallback 已删除；只有
    generated capability identities 能创建生产 cache key。
-5. batch migration receipt 的结果矩阵覆盖全部 active Family，且不存在非 `pass` 或缺失结果行；cross-family/
+5. `adoptExactProbeMids()` 及任何等价 exact→coarse scalar 写旁路已删除。未来若实现 `CoarseMidFeedback`，它必须
+   作为独立 capability/overlay 通过完整 binding、publication 与失效验收，不能作为 cleanup 兼容桥保留。
+6. batch migration receipt 的结果矩阵覆盖全部 active Family，且不存在非 `pass` 或缺失结果行；cross-family/
    common-Graph gate、held-out negative fixtures 和默认路径 cutover gate 均通过。不能因为旧代码“暂时没被调用”
    就删除证据，也不能因为保留旧代码“方便回滚”而跳过清理。
-6. 删除后重新从 clean process 执行 catalog load、cold/warm semantic parity、单实例失败隔离、六步代表性 corpus
+7. 删除后重新从 clean process 执行 catalog load、cold/warm semantic parity、单实例失败隔离、六步代表性 corpus
    与所需 live gate；结果不能依赖旧 module、旧 cache 文件或旧 runtime flag。
-7. rollback runbook 指向上一已验收 commit/build artifact，并证明能重新部署；源码内不保留双实现作为回滚手段。
+8. rollback runbook 指向上一已验收 commit/build artifact，并证明能重新部署；源码内不保留双实现作为回滚手段。
 
 历史 baseline 输出、sealed receipts 和 canonical fixtures 可以保留；可执行旧 compiler/Adapter 路径不保留。若某段
 兼容代码在 Phase E 仍有调用者，应把重构状态记为 `migration_incomplete`，而不是把它重新命名为长期 abstraction。
@@ -2301,11 +2837,22 @@ type ArchitectureMigrationScope =
 type ArchitectureMigrationMode =
   | "pure-refactor"
   | "declared-improvement";
+
+type ArchitectureMigrationEvidenceClass =
+  | "unit-contract"
+  | "sealed-production";
 ```
 
 `familyIds`、mode、fixture corpus 和允许的 semantic delta 必须在运行前冻结。迁移默认冻结一个 batch cohort；
 统一 harness 必须保留逐 Family、逐 instance、逐 stage 结果。一个全局 count/hash 不能替代这些子结论，但也
 不能把“有逐 Family 结果”误写成“人工运行 N 次验收”。
+
+`unit-contract` 只证明 comparator/schema/conformance 自身按预期工作；即使其 synthetic semantic rows 全部相同，
+也必须输出 `acceptance.eligible=false` / `verdict="ineligible"`。只有绑定两侧真实 production closure、activation
+manifest、config/policy、frozen corpus 和 evidence refs 的 `sealed-production` capture 才能申请 Phase A/C/D parity
+或 production cutover。evidence class 必须由可信 production capture issuer 在 sealed input 中签发，不能由调用者在
+结果生成前后自行填写或改写；在该 issuer 尚未落地时，公开 unit runner 必须拒绝 `sealed-production` 输入，而不是
+预留一个可由普通调用者开启的字符串开关。
 
 #### 20.2.1 同输入双跑
 
@@ -2370,8 +2917,15 @@ interface FamilyArchitectureParityResult {
   readonly newlyUnresolvedStateKeys: readonly StateInstanceKey[];
   readonly missingPricedEdges: readonly RouteKey[];
   readonly changedPrices: readonly PriceParityMismatch[];
+  readonly changedFailures: readonly FailureParityMismatch[];
   readonly changedRoutes: readonly RouteParityMismatch[];
   readonly changedExactQuotes: readonly ExactParityMismatch[];
+  readonly changedExecutionFragments: readonly ExecutionParityMismatch[];
+  readonly changedFinalSimulations: readonly FinalSimulationParityMismatch[];
+  /** additions/corrections lacking a frozen declaration + independent proof */
+  readonly unprovenAddedArtifacts: readonly string[];
+  /** all semantic deltas outside the frozen declared-improvement envelope */
+  readonly undeclaredDeltaIds: readonly string[];
   readonly evidenceRefs: readonly string[];
   readonly outcome: FamilyArchitectureParityOutcome;
 }
@@ -2394,7 +2948,32 @@ interface ArchitectureMigrationParityReceipt {
     readonly peakConcurrency: number;
   };
 }
+
+interface ArchitectureMigrationBatchParityReceipt {
+  readonly evidenceClass: ArchitectureMigrationEvidenceClass;
+  readonly baselineCaptureId: string;
+  readonly challengerCaptureId: string;
+  readonly baselineCommit: string;
+  readonly challengerCommit: string;
+  readonly baselineProductionClosureHash: string;
+  readonly challengerProductionClosureHash: string;
+  readonly baselineActivationManifestHash: string;
+  readonly challengerActivationManifestHash: string;
+  readonly comparatorClosureHash: string;
+  readonly parityReceipt: ArchitectureMigrationParityReceipt;
+  readonly acceptance: {
+    readonly eligible: boolean;
+    readonly verdict: "pass" | "partial" | "fail" | "ineligible";
+    readonly reasons: readonly string[];
+  };
+}
 ```
+
+`ArchitectureMigrationParityReceipt.aggregateVerdict` 是纯语义 comparator 结论；它不能脱离外层 evidence/capture
+receipt 直接授权晋升。`ArchitectureMigrationBatchParityReceipt.acceptance` 必须重新检查：两侧 capture 独立、commit/
+production closure/activation manifest/corpus 全部冻结且相互匹配、evidence class 为 `sealed-production`、逐 Family
+coverage 与 common-Graph/non-migrated gates 完整。任何 unit fixture、手工拼接 capture、共享对象引用或缺少一侧
+production closure 的输入，即使内部 `aggregateVerdict="pass"`，外层也只能 `ineligible` 或 fail。
 
 Comparator 的核心顺序必须是“先逐 Family，后 aggregate”，不能先看总数决定通过：
 
@@ -2542,13 +3121,25 @@ interface MigrationCleanupReceipt {
   readonly nonPassFamilyIds: readonly [];
   readonly cutoverEvidenceRef: string;
   readonly activeCatalogHash: string;
+  readonly productionCatalogKind: "generated-static-imports";
+  readonly productionRuntimeSourceScan: false;
   readonly legacyActivationInputs: readonly [];
   readonly legacyRuntimeBranches: readonly [];
+  readonly exactToCoarseBypassPresent: false;
+  readonly ambientFamilyIoApisPresent: false;
+  readonly familyWideSchemaApisPresent: false;
+  readonly manualSchemaRevisionsPresent: false;
   readonly oldCacheAccepted: false;
   readonly oldFlagsAccepted: false;
+  readonly unifiedSchedulerCoverageHash: string;
+  readonly finalSimulationReservedCapacityReceiptHash: string;
+  readonly staleGenerationFenceReceiptHash: string;
+  readonly perInstanceFailureIsolationReceiptHash: string;
+  readonly poolTopologySpikeReceiptHashes: readonly string[];
   readonly cleanColdSemanticHash: string;
   readonly cleanWarmSemanticHash: string;
   readonly representativeSixStepReceiptHashes: readonly string[];
+  readonly systemicLiveCutoverReceiptHashes: readonly string[];
   readonly rollbackArtifactRef: string;
   readonly verdict: "pass" | "fail";
 }
@@ -2556,6 +3147,9 @@ interface MigrationCleanupReceipt {
 
 结构扫描/TypeScript compile 用来证明旧 public symbol、imports 和 runtime flag 已删除；clean-process cold/warm replay、
 旧 cache/旧 flag negative test、catalog hash 与 representative six-step 用来证明删除后仍能工作。两类证据缺一不可。
+机器 receipt 还必须直接绑定统一 scheduler、final-sim 保留容量、stale-generation fence、单实例失败隔离、真实
+`5,000+1` executable receipt 与默认切换所需的 systemic-live A/B；一个不透明 `cutoverEvidenceRef` 只能作索引，
+不能替代这些逐项字段。
 若某 Family 只能靠旧 compiler/resolver 才能通过，cleanup 必须 fail 并回到该 Family 或 framework migration，不能把
 旧路径重新放回 optional fallback。通过后，迁移期 baseline executable code 可以删除，只保留 sealed evidence。
 
@@ -2611,7 +3205,8 @@ family-owned diff，不授权部署、发布或清理分支。
 |两个 Family 共享 selector|扫描同一 successful call|两个候选都可被提名；只有 proof 通过者准入|Discovery 索引或 Family identity|
 |伪造 Factory child|读取 pool facts 后做 reverse call|`getPool(...) != candidate` 时拒绝，不产生实例/route|Family identity semantics|
 |同一标准 ERC4626 分别来自 Factory、Registry、standalone|运行各 identity variant + common behavior proof|归一化为同一 Family 的标准 descriptor；provenance/lineage 保留差异|Family identity/instance|
-|新增一个健康 pool|比较前后 instance set|只编译新增 StateInstance；旧 sibling compiler invocation 为零|中央 diff/cache，或 Family projection 不稳定|
+|5,000 个 unchanged StateInstance + 1 个新增健康 pool（cold memo）|比较前后 instance set 与 `PoolTopologySpikeReceipt`|`added=1`、`changed=0`、新增 compiler=1；5,000 sibling compiler/static request=0，family-wide compiler/assemble=0|中央 diff/cache，或 Family projection 不稳定|
+|同一 5,000+1 fixture 命中合法 content-addressed memo|重跑新增 key 并验证 reuse proof|新增 compiler=0（最多不得超过 1）；sibling compiler/static request 与 family-wide compiler/assemble 仍为 0；memo 不被当作 published previous/carry|中央 memo/store separation 或 reuse policy|
 |一个新增实例 static hydration 失败|并行编译多个 sibling|只该 key unresolved；健康 sibling 继续发布|中央 failure isolation 或 Family decoder|
 |exact-only 代码变化|重新生成 capability manifest 并启动|只 exact hash/cache 失效；pricing descriptor fingerprint 不变|build hash dependency closure|
 |pricing decoder 变化|重新生成 manifest|对应 pricing hash 和实例 descriptor/snapshot 失效|build hash dependency closure|
@@ -2623,11 +3218,24 @@ family-owned diff，不授权部署、发布或清理分支。
 |Fluid quote 约定 revert bytes|执行 exact request|transport 成功交付 declared revert data 给 decoder；普通 revert 仍失败|中央 transport classification/Family decoder|
 |DODO quote 依赖 actor|用不同 caller 尝试 cache reuse|caller/evidence 不匹配时 exact cache miss/fail closed|Family requirements/中央 cache key|
 |Adapter 请求超预算|构造过多 reads/steps|中央在 transport 前拒绝为 unresolved；Adapter 无法绕过|中央 scheduler/budget|
+|required request 失败，或声明的 transport/caller/completion/effects 与实际 request 不一致|执行任一 initial/dependent executor path|transport 与 decoder 调用次数均为 0；返回 typed declaration/authority failure|中央 Request Program executor|
+|transport capacity=1，首个 request 已 logical timeout/abort，但底层 fetch/body 未 settle|在首个 physical work settle 前提交第二个 request|第二个 request 仍排队，observed physical concurrency 始终为 1；首个 settle 后才释放 permit。consumer timeout 不能提前释放容量|中央 timeout/physical-settlement ownership|
+|短 deadline consumer 与长 deadline consumer 命中同一物理 request|短 consumer 先超时|短 consumer 可终止，但它不能成为长 consumer 的唯一物理 work owner；底层 settle 前 permit/dedupe entry 不释放|中央 dedupe/deadline ownership|
 |coarse 连续 catch-up，同时 discovery backfill 排队|运行多个 generation|coarse 只在物理 reads 占 foreground permit；background watermark 持续推进|中央 lease scope/fair queue|
 |一个 Family 产生 exact probe 风暴|并发提交大量 exact work|按 Family/instance 限流、相同 request dedupe；其他 Family 和 final sim 仍有进展|中央 scheduler/resource pool|
 |新 head 使旧 generation 过期|旧 work 尚在 queue/in-flight|queued work 取消；迟到结果被 generation fence 拒绝，不能污染 publication/cache|中央 cancellation/CAS|
-|一个 tracked production module import/contract 校验失败|clean-process 加载完整 active source set|production catalog 不发布；逐 module issue 可见，且不回退同 ID legacy Family|loader/composition root|
+|generation A 编译成功但在 canonical CAS 前 supersede；generation B 随后开始|检查 B 的 previous/carry 输入与 memo reuse|A 的结果可留在 `CompileMemoStore` 并重新验证 reuse proof，但绝不能出现在 `PublishedDescriptorStore`、previous/carry 或跨代 snapshot/exact cache|中央 store separation/CAS|
+|一个 tracked production module 使 generated artifact 生成/contract closure 校验失败|构建 catalog 后由 clean process 加载 static-import artifact|artifact 构建或 production 启动 fail closed；逐 module issue 可见，不执行 runtime source scan，也不回退同 ID legacy Family|build catalog/composition root|
+|多个 identity variant 对同一 candidate 给出 verified/unresolved/conflict|运行完整 variant aggregate|只有可归一化到同一 instance 的 verified 证据能准入；冲突 fail closed，不能取“第一个成功”|Family identity aggregate/中央裁决|
+|ordered exact methods 同时存在 local 与 request-program|依次运行 quoted、`not-applicable`、throw/fail case|只有 local 明确返回 `not-applicable` 才能尝试下一 method；已选 request method 或任意失败不得 fallback|Family exact semantics/中央 method runner|
+|伪造、spread/clone、foreign/hot-reload-old route 或 exact handle|尝试 exact、victim replay 或 execution|issuer WeakMap 查验失败；wrong route/source/generation/executor/runtime evidence 同样 fail closed；Family callback 收到 issuer 保存的原始 descriptor/route/evidence|中央 handle authority|
+|spread/clone、same-field/same-hash forge、foreign/hot-reload-old Funding offer|尝试 borrow 或 repayment fragment|loaded FamilyBox 与 offer issuer 双重查验在 Family callback 前失败；wrong source/generation/capability/publication 同样拒绝，公开 offer projection 不能充当执行 authority|Funding issuer/runtime boundary|
+|raw/clone/same-field Credit descriptor 或非当前 lifecycle instance|尝试签发 Credit route handle|在 route projection 等任一 Family callback 前拒绝；route issuer 只接受当前 loaded FamilyBox + source/generation 下 lifecycle 签发的 exact instance object|Credit instance issuer root|
+|Credit Family 产生 lend route、risk evidence 与 execution|发布 common Graph 后交给 solver/plan/final sim|route/risk/execution handle 来自同一当前 FamilyBox；Graph edge 与 handle/risk publication 同 CAS，solver 不查询 legacy Credit registry；repayment/position final sim fail closed|Credit runtime 或全 catalog publication|
+|全 catalog canonical CAS 被拒绝|比较 CAS 前后 publication object 与所有权威 Maps|Graph、route-handle index、descriptor、snapshot、mid、coverage、delta metadata 的 identity/content 全部不变；不得只更新其中一部分|中央 publication coordinator|
+|`unit-contract` comparator 输入产生零 semantic delta|生成 batch receipt 并尝试作为 Phase A/C/D 或 cutover evidence|内部 semantic verdict 可用于测试，但外层 `acceptance.eligible=false`、`verdict=ineligible`；只有独立 `sealed-production` captures 可晋升|migration evidence authority|
 |中央 shared surface 扫描|加载任意新 Family|scanner/planner/solver 无新增 Family ID branch|framework boundary|
+|声明默认 strict authority 已切换|扫描 production source closure 与启动后的实际 consumers|scanner/discovery/pricing/quoter/plan-builder/solver 全部只消费 strict catalog/publication；`PRODUCTION_ADAPTER_FAMILIES`、legacy Credit/Funding view 或同义 facade 的生产 consumer 为零|composition root / authority cutover|
 |计划 exact 与编码都通过|运行完整 fork final sim|只有还款、守恒、效果和 EV 全部通过才可进入提交判断|中央 S5/S6|
 
 ### 20.5 每个 Family fixture 的最小语义面
@@ -2654,15 +3262,22 @@ request budget、topology diff、solver 或 final-sim runner，结果应为 `fra
 
 ## 21. 最终裁决
 
-冻结 ds 不是从零开始：唯一 registry/派生 projections、tracked production module loader、StateInstance B1–B6、
-五个 migrated pricing Family、物理 request/batch scheduler、coarse lease 修复与 exact-mid feedback 都应直接作为
-新架构地基。它也不是终态：20 个 legacy 激活、raw backend/state-bearing Adapter API、14 个 legacy pricing Family、
-family facade 和手工 revision 仍需迁移（冻结基线的 22 个 Family 中，19 个属于 swap/protocol pricing，5 个已进入
-`state-instance-v1`，其余 14 个仍在 legacy pricing path）。
+冻结 ds 不是从零开始：唯一 registry/派生 projections、tracked production source inventory/closure checks、StateInstance
+B1–B6、五个 migrated pricing Family、request/batch lane/reserve 和 coarse 外层整代 lease 修复都应作为新架构地基。
+它也不是终态：hard timeout 尚未保证 physical settlement 前不释放容量，pre-CAS descriptor Maps 仍会污染下一代
+published previous，`adoptExactProbeMids()` 也仍是必须删除的 exact→coarse 旁路；此外 20 个 legacy 激活、raw
+backend/state-bearing Adapter API、14 个 legacy pricing Family、family facade 和手工 revision 仍需迁移（冻结基线的
+22 个 Family 中，19 个属于 swap/protocol pricing，5 个已进入 `state-instance-v1`，其余 14 个仍在 legacy pricing path）。
+
+对“pool 尖峰”的精确裁决是：本文完成后应消除 topology/static compilation 的 Family-wide 放大；在 5,000 unchanged
+StateInstance + 1 新 pool 的 fixture 中，cold memo 只允许新增 key 编译一次，合法 memo hit 可为零，所有 sibling
+compiler/static request 与 family-wide compiler/assemble 都必须为零。它不承诺 current-state reads、receipts/activity、
+全图 diff/sort、exact、solver、CAS 或 final sim 的 live 长尾自动消失；这些仍需独立 `systemic_live` 证据。
 
 1. 一套统一 `AdapterFamilyCore` 同时服务 Swap 与 Protocol；生产插件只能通过互斥的
    `defineSwapFamily()` / `defineProtocolFamily()` 两个严格模板进入 catalog。
-2. 自动扫描加载 Family **代码能力**；链上实例、pair、route、StateInstance 全由动态扫描和证明产生。
+2. build-time 自动发现并生成 static-import catalog 来加载 Family **代码能力**；生产 runtime 不扫源码。链上实例、
+   pair、route、StateInstance 仍全由动态链上扫描和证明产生。
 3. Family 插件完整覆盖 Discovery、Identity、Instance、Route、Pricing、Exact、Execution；可选能力省略而非空实现。
 4. Identity 支持 factory-child、registry-member、standalone、singleton-subinstance 和 custom variant，并统一经过行为证明。
 5. `familyId`、`lineageId`、`instanceKey` 分离；Factory 只作 provenance/lineage，不是准入 allowlist。
@@ -2670,7 +3285,8 @@ family facade 和手工 revision 仍需迁移（冻结基线的 22 个 Family �
 7. 作者不手工维护 revision；构建生成 capability 级内容 hash，commit SHA 仅作 provenance。
 8. Exact custom 能力拆成 requirements/buildRequests/decode；所有 RPC、retry、budget 和 cache 归中央。
 9. 所有 Family work 进入同一中央 scheduler；lane、fairness、deadline、batch、dedupe、transport/simulator pool、
-   cancellation 与 generation fence 由 framework 决定，permit 只覆盖物理 I/O/simulation。
+   cancellation 与 generation fence 由 framework 决定。logical timeout/abort 可先结束 consumer，但 permit 必须覆盖
+   物理 I/O/simulation 直到真实 settlement，不能随外层 Promise 提前 reject 而释放。
 10. V4 hook、Angstrom evidence、Ekubo config、Balancer context、Fluid revert quote、self-burn delta、Oracle、Curve、DODO、Astra、ERC4626 Silo 通过通用调度插槽承载，不增加中央协议名分支。
 11. Route Projection 属于 S1；全局 route/ring enumeration 属于 S2；Exact 属于 S3；Plan Fragment 属于 S4；Final Simulation 与 EV 始终中央所有。
 12. Adapter Replay 只证明 route-pinned Steps 3–6 与 family-local merge；自然 Steps 1–6 才能证明

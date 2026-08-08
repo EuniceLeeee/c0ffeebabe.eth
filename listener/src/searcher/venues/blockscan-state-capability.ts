@@ -491,7 +491,15 @@ export interface CompiledBlockScanStateFamily {
     readonly completedRound: number;
     readonly priorResults: readonly StateReadResult[];
   }): readonly StateRead[];
-  decodeState(results: readonly StateReadResult[]): PublishedFamilyStateValue;
+  decodeState(
+    results: readonly StateReadResult[],
+    /**
+     * Present on the state-instance path so the central composite can route
+     * decoding to the one descriptor that owns this edge group. Legacy
+     * family facades ignore it.
+     */
+    edges?: readonly TokenEdge[],
+  ): PublishedFamilyStateValue;
   readonly incremental?: CompiledIncrementalStateFamily;
   /**
    * Recompile a changed graph from this already-published schema. The
@@ -551,12 +559,14 @@ export interface RegisteredBlockScanStateFamily {
     input: CompileStateInstanceInput,
   ): Promise<CompiledStateInstance>;
   /**
-   * Build a runtime CompiledBlockScanStateFamily facade from a set of
-   * compiled instances (schema assembled centrally from opaque entries).
+   * Compose already-materialized per-instance runtime descriptors without
+   * invoking the adapter's family-wide assembleSchema hook. This is the only
+   * registered production state-instance composition path; parity tests may
+   * still call the raw capability's assembleSchema oracle directly.
    */
-  assembleCompiledFamily(
+  composeCompiledFamily(
     input: AssembleCompiledFamilyInput,
-  ): Promise<CompiledBlockScanStateFamily>;
+  ): CompiledBlockScanStateFamily;
   compile(
     input: RegisteredBlockScanStateFamilyCompileInput,
   ): Promise<CompiledBlockScanStateFamily>;
@@ -636,7 +646,11 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
       familyId,
       lane,
       edgeFingerprint,
-      buildCurrentBlockReads(readInput) {
+      buildCurrentBlockReads(readInput: {
+        readonly sourceBlock: number;
+        readonly sourceBlockHash: string;
+        readonly edges: readonly TokenEdge[];
+      }) {
         return capability.buildCurrentBlockReads({
           ...readInput,
           schema,
@@ -742,39 +756,34 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     };
   };
   const schemaRevision = capability.adapterSchemaRevision ?? familyId;
+  /*
+   * Process-local content-addressed runtime materialization store. Persisted
+   * warm state contains raw reads, not CompiledStateInstance objects, so a
+   * clean restart recompiles and repopulates this store. Within one process,
+   * structurally reconstructed descriptors reuse their validated runtime by
+   * content identity rather than depending on JavaScript object identity.
+   */
+  const instanceRuntimeByContent = new Map<
+    string,
+    CompiledBlockScanStateFamily
+  >();
+  const instanceRuntimeContentKey = (
+    instance: CompiledStateInstance,
+  ): string => deterministicHash({
+    familyId,
+    schemaRevision,
+    stateKey: instance.stateKey,
+    instanceFingerprint: instance.instanceFingerprint,
+    specFingerprint: instance.specFingerprint,
+    staticEvidenceFingerprint: instance.staticEvidenceFingerprint,
+    carryPolicy: instance.carryPolicy,
+  });
   const compileStateInstance = async (
     input: CompileStateInstanceInput,
   ): Promise<CompiledStateInstance> => {
     if (
       capability.schemaMode !== "state-instance-v1" ||
-      !capability.compileStateInstance
-    ) {
-      throw new Error(`family ${familyId} is not in state-instance-v1 mode`);
-    }
-    if (Date.now() >= input.control.deadlineAtMs) {
-      throw new Error(`family ${familyId} instance schema deadline expired`);
-    }
-    if (input.control.signal.aborted) {
-      throw input.control.signal.reason;
-    }
-    const instance = await resolveCapabilityValue(
-      capability.compileStateInstance(input),
-    );
-    if (
-      instance.familyId !== familyId ||
-      instance.stateKey !== input.spec.stateKey
-    ) {
-      throw new Error(
-        `family ${familyId} instance compiler returned a mismatched instance`,
-      );
-    }
-    return Object.freeze(instance);
-  };
-  const assembleCompiledFamily = async (
-    input: AssembleCompiledFamilyInput,
-  ): Promise<CompiledBlockScanStateFamily> => {
-    if (
-      capability.schemaMode !== "state-instance-v1" ||
+      !capability.compileStateInstance ||
       !capability.assembleSchema
     ) {
       throw new Error(`family ${familyId} is not in state-instance-v1 mode`);
@@ -785,19 +794,133 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     if (input.control.signal.aborted) {
       throw input.control.signal.reason;
     }
-    const entries = new Map<string, unknown>();
+    const rawInstance = await resolveCapabilityValue(
+      capability.compileStateInstance(input),
+    );
+    if (
+      rawInstance.familyId !== familyId ||
+      rawInstance.stateKey !== input.spec.stateKey
+    ) {
+      throw new Error(
+        `family ${familyId} instance compiler returned a mismatched instance`,
+      );
+    }
+    const instance = Object.freeze(rawInstance);
+    const schema = await resolveCapabilityValue(
+      capability.assembleSchema!(new Map([[instance.stateKey, instance.opaque]])),
+    );
+    instanceRuntimeByContent.set(
+      instanceRuntimeContentKey(instance),
+      makeCompiled(schema, stateSchemaFingerprint(input.spec.edges)),
+    );
+    return instance;
+  };
+  const composeCompiledFamily = (
+    input: AssembleCompiledFamilyInput,
+  ): CompiledBlockScanStateFamily => {
+    if (capability.schemaMode !== "state-instance-v1") {
+      throw new Error(`family ${familyId} is not in state-instance-v1 mode`);
+    }
+    if (Date.now() >= input.control.deadlineAtMs) {
+      throw new Error(`family ${familyId} instance schema deadline expired`);
+    }
+    if (input.control.signal.aborted) {
+      throw input.control.signal.reason;
+    }
+    const runtimes = new Map<StateInstanceKey, CompiledBlockScanStateFamily>();
     for (const [key, instance] of input.instances) {
-      if (instance.familyId !== input.familyId) {
+      if (
+        instance.familyId !== input.familyId ||
+        key !== blockScanStateKey(input.familyId, instance.stateKey)
+      ) {
         throw new Error(
-          `family ${input.familyId} instance map contains foreign instance ${key}`,
+          `family ${input.familyId} instance map contains mismatched instance ${key}`,
         );
       }
-      entries.set(instance.stateKey, instance.opaque);
+      const runtime = instanceRuntimeByContent.get(
+        instanceRuntimeContentKey(instance),
+      );
+      if (runtime === undefined) {
+        throw new Error(
+          `family ${input.familyId} instance ${key} lacks its runtime descriptor`,
+        );
+      }
+      runtimes.set(key, runtime);
     }
-    const schema = await resolveCapabilityValue(
-      capability.assembleSchema(entries),
-    );
-    return makeCompiled(schema, input.edgeFingerprint);
+    const runtimeForEdges = (
+      edges: readonly TokenEdge[] | undefined,
+    ): CompiledBlockScanStateFamily => {
+      if (edges === undefined || edges.length === 0) {
+        if (runtimes.size === 1) return runtimes.values().next().value!;
+        throw new Error(
+          `family ${familyId} composite runtime requires one non-empty state group`,
+        );
+      }
+      const rawStateKey = capability.stateKey(edges[0]!);
+      for (const edge of edges) {
+        if (capability.stateKey(edge) !== rawStateKey) {
+          throw new Error(
+            `family ${familyId} composite runtime received multiple state instances`,
+          );
+        }
+      }
+      const key = blockScanStateKey(familyId, rawStateKey);
+      const runtime = runtimes.get(key);
+      if (runtime === undefined) {
+        throw new Error(`family ${familyId} state instance ${key} is unavailable`);
+      }
+      return runtime;
+    };
+    return Object.freeze({
+      familyId,
+      lane,
+      edgeFingerprint: input.edgeFingerprint,
+      buildCurrentBlockReads(readInput: {
+        readonly sourceBlock: number;
+        readonly sourceBlockHash: string;
+        readonly edges: readonly TokenEdge[];
+      }) {
+        return runtimeForEdges(readInput.edges).buildCurrentBlockReads(readInput);
+      },
+      ...(capability.buildDependentBlockReads
+        ? {
+            buildDependentBlockReads(readInput: {
+              readonly sourceBlock: number;
+              readonly sourceBlockHash: string;
+              readonly edges: readonly TokenEdge[];
+              readonly completedRound: number;
+              readonly priorResults: readonly StateReadResult[];
+            }) {
+              return runtimeForEdges(readInput.edges).buildDependentBlockReads!(
+                readInput,
+              );
+            },
+          }
+        : {}),
+      decodeState(
+        results: readonly StateReadResult[],
+        edges?: readonly TokenEdge[],
+      ) {
+        return runtimeForEdges(edges).decodeState(results, edges);
+      },
+      ...(capability.incremental
+        ? {
+            incremental: Object.freeze({
+              mutationQueryDescriptor(edges: readonly TokenEdge[]) {
+                return runtimeForEdges(edges).incremental!
+                  .mutationQueryDescriptor(edges);
+              },
+              classifyMutations(classifyInput: {
+                readonly edges: readonly TokenEdge[];
+                readonly range: CanonicalMutationRange;
+              }) {
+                return runtimeForEdges(classifyInput.edges).incremental!
+                  .classifyMutations(classifyInput);
+              },
+            }),
+          }
+        : {}),
+    });
   };
   return Object.freeze({
     familyId,
@@ -812,7 +935,7 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     dependencies: (edges: readonly TokenEdge[]) =>
       capability.dependencies(edges),
     compileStateInstance,
-    assembleCompiledFamily,
+    composeCompiledFamily,
     compile,
     sharedBinding: (input: {
       readonly edges: readonly TokenEdge[];
@@ -1091,6 +1214,33 @@ export type SchemaMode = "legacy-family" | "state-instance-v1";
 
 /** Composite identity: blockScanStateKey(familyId, rawStateKey). */
 export type StateInstanceKey = string;
+
+/**
+ * Machine-readable evidence that one topology delta stayed instance-local.
+ * Compiler/static counters describe actual invocations during this
+ * preparation, not inferred asymptotics or renamed work.
+ */
+export interface PoolTopologySpikeReceipt {
+  readonly familyId: string;
+  readonly beforeStateInstanceCount: number;
+  readonly afterStateInstanceCount: number;
+  readonly addedStateInstanceKeys: readonly StateInstanceKey[];
+  readonly changedStateInstanceKeys: readonly StateInstanceKey[];
+  readonly addedCompilerInvocations: number;
+  readonly changedCompilerInvocations: number;
+  readonly siblingCompilerInvocations: number;
+  readonly siblingStaticRequestCount: number;
+  readonly familyWideCompilerInvocations: number;
+  readonly familyWideAssemblyInvocations: number;
+  /** Wall time includes canonical grouping/spec projection for this family. */
+  readonly groupingWallMs: number;
+  /** Wall time for the coordinator-owned GraphChangeSet diff. */
+  readonly diffWallMs: number;
+  /** Sorting is currently performed inside the canonical diff. */
+  readonly sortWallMs: number;
+  readonly siblingCurrentRequestCount?: number;
+  readonly carryProofRef?: string;
+}
 
 /**
  * One compile/update unit. Derived from the existing ownership group

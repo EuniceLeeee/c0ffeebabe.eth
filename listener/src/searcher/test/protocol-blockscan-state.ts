@@ -19,7 +19,22 @@ import {
 } from "../venues/protocols/metronome.js";
 import { psmAdapter } from "../venues/protocols/psm.js";
 import { rocksolidAdapter } from "../venues/protocols/rocksolid.js";
+import {
+  SELF_BURN_NATIVE_EDGE_ADAPTER,
+  SYNTHETIC_NATIVE_TRANSFER_EMITTER,
+} from "../venues/protocols/self-burn-native-discovery.js";
+import { selfBurnNativeAdapter } from "../venues/protocols/self-burn-native.js";
 import { wstethAdapter } from "../venues/protocols/wsteth.js";
+import { astraMultiTokenAdapter } from
+  "../venues/protocols/astra-multitoken.js";
+import {
+  ASTRA_MULTITOKEN_EDGE_ADAPTER,
+  astraMultiTokenIface,
+} from "../venues/protocols/astra-multitoken-discovery.js";
+import { etherTokenNativeRedeemAdapter } from
+  "../venues/protocols/ethertoken-native-redeem.js";
+import { ETHERTOKEN_NATIVE_REDEEM_EDGE_ADAPTER } from
+  "../venues/protocols/ethertoken-native-redeem-discovery.js";
 import { eigenpieIface } from "../venues/protocols/eigenpie-discovery.js";
 import { metronomeSynthPoolIface } from "../venues/protocols/protocol-quote.js";
 import { ADDR } from "../../shared/constants/addresses.js";
@@ -57,7 +72,19 @@ const curveIface = new ethers.Interface([
 const vaultIface = new ethers.Interface([
   "function previewRedeem(uint256) view returns (uint256)",
 ]);
+const selfBurnNativeIface = new ethers.Interface([
+  "function balanceOf(address owner) view returns (uint256)",
+  "function totalSupply() view returns (uint256)",
+  "function transfer(address to,uint256 amount) returns (bool)",
+]);
+const etherTokenNativeRedeemIface = new ethers.Interface([
+  "function totalSupply() view returns (uint256)",
+]);
 const decimalsIface = new ethers.Interface(["function decimals() view returns (uint8)"]);
+const selfBurnNativeBalanceSlot = ethers.keccak256("0x1234");
+const selfBurnNativeBalanceProbeValue = 0x51f_ba11n;
+const selfBurnNativeTotalSupply = 10n ** 30n;
+const transferTopic = ethers.id("Transfer(address,address,uint256)");
 
 interface Case {
   readonly name: string;
@@ -141,6 +168,61 @@ const cases: readonly Case[] = [
         return wstethIface.encodeFunctionResult("getStETHByWstETH", [1_176_470_588_235_294_117n]);
       }
       throw new Error(`unexpected wstETH read ${read.id}`);
+    },
+  },
+  {
+    name: "Astra current directed getReturn",
+    familyId: astraMultiTokenAdapter.id,
+    capability: astraMultiTokenAdapter.pricingState,
+    edges: [
+      edge(
+        ASTRA_MULTITOKEN_EDGE_ADAPTER,
+        vault,
+        tokenA,
+        tokenB,
+        "convert",
+      ),
+    ],
+    response(read) {
+      if (selector(read) === selectorOf(decimalsIface, "decimals")) {
+        return uint8(18);
+      }
+      if (selector(read) === selectorOf(astraMultiTokenIface, "getReturn")) {
+        return astraMultiTokenIface.encodeFunctionResult(
+          "getReturn",
+          [1_007_000_000_000_000_000n],
+        );
+      }
+      throw new Error(`unexpected Astra read ${read.id}`);
+    },
+  },
+  {
+    name: "EtherToken current supply-bound native redeem",
+    familyId: etherTokenNativeRedeemAdapter.id,
+    capability: etherTokenNativeRedeemAdapter.pricingState,
+    edges: [
+      edge(
+        ETHERTOKEN_NATIVE_REDEEM_EDGE_ADAPTER,
+        tokenC,
+        tokenC,
+        ADDR.WETH,
+        "redeem",
+      ),
+    ],
+    response(read) {
+      if (selector(read) === selectorOf(decimalsIface, "decimals")) {
+        return uint8(18);
+      }
+      if (
+        selector(read) ===
+          selectorOf(etherTokenNativeRedeemIface, "totalSupply")
+      ) {
+        return etherTokenNativeRedeemIface.encodeFunctionResult(
+          "totalSupply",
+          [10n ** 30n],
+        );
+      }
+      throw new Error(`unexpected EtherToken read ${read.id}`);
     },
   },
   {
@@ -252,6 +334,102 @@ const cases: readonly Case[] = [
         return vaultIface.encodeFunctionResult("previewRedeem", [1_001_000n]);
       }
       throw new Error(`unexpected Metronome hgUSDC read ${read.id}`);
+    },
+  },
+  {
+    name: "self-burn native current effect delta",
+    familyId: selfBurnNativeAdapter.id,
+    capability: selfBurnNativeAdapter.pricingState,
+    edges: [
+      edge(
+        SELF_BURN_NATIVE_EDGE_ADAPTER,
+        tokenC,
+        tokenC,
+        ADDR.WETH,
+        "redeem",
+      ),
+    ],
+    response(read) {
+      if (selector(read) === selectorOf(decimalsIface, "decimals")) {
+        return uint8(18);
+      }
+      if (read.id.startsWith("balance-access-list:")) {
+        return jsonResult({
+          accessList: [{
+            address: tokenC,
+            storageKeys: [selfBurnNativeBalanceSlot],
+          }],
+        });
+      }
+      if (read.id.startsWith("balance-slot:")) {
+        return jsonResult([{
+          calls: [{
+            status: "0x1",
+            returnData: ethers.toBeHex(selfBurnNativeBalanceProbeValue, 32),
+            logs: [],
+          }],
+        }]);
+      }
+      if (read.id.startsWith("self-burn-native-quote:")) {
+        const amountIn = BigInt(
+          selfBurnNativeIface.decodeFunctionData("transfer", read.data)[1],
+        );
+        const amountOut = (amountIn * 95n) / 100n;
+        assert(read.from, "self-burn native simulation requires its pricing caller");
+        return jsonResult([{
+          calls: [
+            {
+              status: "0x1",
+              returnData: selfBurnNativeIface.encodeFunctionResult(
+                "balanceOf",
+                [amountIn],
+              ),
+              logs: [],
+            },
+            {
+              status: "0x1",
+              returnData: selfBurnNativeIface.encodeFunctionResult(
+                "totalSupply",
+                [selfBurnNativeTotalSupply],
+              ),
+              logs: [],
+            },
+            {
+              status: "0x1",
+              returnData: selfBurnNativeIface.encodeFunctionResult(
+                "transfer",
+                [true],
+              ),
+              logs: [{
+                address: SYNTHETIC_NATIVE_TRANSFER_EMITTER,
+                topics: [
+                  transferTopic,
+                  ethers.zeroPadValue(tokenC, 32),
+                  ethers.zeroPadValue(read.from, 32),
+                ],
+                data: ethers.toBeHex(amountOut, 32),
+              }],
+            },
+            {
+              status: "0x1",
+              returnData: selfBurnNativeIface.encodeFunctionResult(
+                "balanceOf",
+                [0n],
+              ),
+              logs: [],
+            },
+            {
+              status: "0x1",
+              returnData: selfBurnNativeIface.encodeFunctionResult(
+                "totalSupply",
+                [selfBurnNativeTotalSupply - amountIn],
+              ),
+              logs: [],
+            },
+          ],
+        }]);
+      }
+      throw new Error(`unexpected self-burn native read ${read.id}`);
     },
   },
 ];
@@ -689,4 +867,8 @@ function selectorOf(iface: ethers.Interface, fn: string): string {
 
 function uint8(value: number): string {
   return decimalsIface.encodeFunctionResult("decimals", [value]);
+}
+
+function jsonResult(value: unknown): string {
+  return ethers.hexlify(ethers.toUtf8Bytes(JSON.stringify(value)));
 }

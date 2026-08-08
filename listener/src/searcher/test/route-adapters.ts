@@ -35,6 +35,7 @@ import {
   venueId,
   venueIdentitySource,
 } from "../venues/registry-ids.js";
+import { curvePlainAdapter } from "../venues/swaps/curve-plain.js";
 
 function assert(cond: boolean, message: string): asserts cond {
   if (!cond) throw new Error(`FAIL: ${message}`);
@@ -1037,8 +1038,13 @@ async function main(): Promise<void> {
   assert(fragment.nodes[0].children[0]?.adapterId === "erc20-transfer", "univ2 callback transfer");
   console.log("[route-adapters] univ2 plan fragment equivalence: PASS");
 
-  const curveAdapter = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily("curve-plain");
-  const curveEdges = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(
+  const retiredCurveRegistry = new RouteLegRegistry([curvePlainAdapter]);
+  assert(
+    PRODUCTION_ADAPTER_FAMILIES.routes().findForPool("curve") === null,
+    "retired Curve plain Family must not re-enter production through migration",
+  );
+  const curveAdapter = retiredCurveRegistry.forFamily("curve-plain");
+  const curveEdges = await retiredCurveRegistry.buildEdges(
     { address: curvePool, adapter: "curve", score: 5 },
     curveBackend,
   );

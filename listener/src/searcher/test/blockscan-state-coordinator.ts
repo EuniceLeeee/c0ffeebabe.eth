@@ -3460,7 +3460,7 @@ async function staticSchemaReadsAreCachedAndDynamicReadsStayCurrent(): Promise<v
   assert.equal(dynamicReads, 2, "dynamic state is still current-N every generation");
 }
 
-async function casRejectedGenerationStillWarmsCompileCache(): Promise<void> {
+async function casRejectedGenerationDoesNotPublishCompileCache(): Promise<void> {
   const calls = { compiles: 0, staticReads: 0, dynamicReads: 0, verifies: 0 };
   const backend: BlockScanStateReadBackend = {
     async readBatch(_lane, reads, control) {
@@ -3505,9 +3505,9 @@ async function casRejectedGenerationStillWarmsCompileCache(): Promise<void> {
   assert.equal(
     calls.compiles,
     1,
-    "a compile that finished before the generation's CAS failure is content-addressable and reused by the same-graph successor",
+    "same-source retry may reuse the non-authoritative compile memo",
   );
-  assert.equal(calls.staticReads, 1, "reused static metadata is not reread");
+  assert.equal(calls.staticReads, 1, "same-source static evidence is memoized");
 
   const third = await coordinator.prepare({
     graph: graph(3, true, [swapForward, swapReverse]),
@@ -3515,8 +3515,8 @@ async function casRejectedGenerationStillWarmsCompileCache(): Promise<void> {
     deadlineAtMs: Date.now() + 2_000,
   });
   assert.equal(third.status, "complete");
-  assert.equal(calls.compiles, 1, "the content-addressed schema remains reusable");
-  assert.equal(calls.staticReads, 1, "warmed static metadata remains cached");
+  assert.equal(calls.compiles, 1, "the CAS-published schema is now reusable");
+  assert.equal(calls.staticReads, 1, "published static metadata remains cached");
   assert.equal(calls.dynamicReads, 3, "dynamic state remains current each generation");
   assert.equal(
     calls.verifies,
@@ -3525,7 +3525,7 @@ async function casRejectedGenerationStillWarmsCompileCache(): Promise<void> {
   );
 }
 
-async function supersededGenerationKeepsLiveSnapshotButWarmsCompileCache(): Promise<void> {
+async function supersededGenerationDoesNotPublishCompileCache(): Promise<void> {
   const calls = { compiles: 0, staticReads: 0 };
   let firstCasStarted: (() => void) | undefined;
   const firstCasReady = new Promise<void>((resolve) => {
@@ -3572,12 +3572,12 @@ async function supersededGenerationKeepsLiveSnapshotButWarmsCompileCache(): Prom
   assert.equal(
     calls.compiles,
     1,
-    "a superseded generation may warm the content-addressed compile cache for an identical successor",
+    "an identical same-source successor may reuse the non-authoritative compile memo",
   );
-  assert.equal(calls.staticReads, 1, "successor reuses the warmed static metadata");
+  assert.equal(calls.staticReads, 1, "same-source static evidence remains memoized");
 }
 
-async function successfulCompileWarmsCacheDespiteUnpublishedGeneration(): Promise<void> {
+async function successfulCompileStaysUnpublishedWithGeneration(): Promise<void> {
   const swapCalls = { schema: 0, reads: 0, derives: 0 };
   const protocolCalls = { schema: 0, reads: 0, derives: 0 };
   const registered: readonly RegisteredBlockScanStateFamily[] = [
@@ -3653,7 +3653,7 @@ async function successfulCompileWarmsCacheDespiteUnpublishedGeneration(): Promis
   assert.equal(
     swapCalls.schema + protocolCalls.schema,
     2,
-    "a superseded generation's successful compiles are reused by the identical successor instead of recompiling forever",
+    "same-source compiles are memoized without becoming published previous",
   );
   assert.ok(second.coverage.resolvedStateKeys.length > 0);
 }
@@ -4125,6 +4125,71 @@ async function univ2InstanceModeRecompilesOnlyNewPool(): Promise<void> {
     calls.compiles,
     2,
     "adding a pool must recompile only the new instance",
+  );
+}
+
+async function rejectedInstanceGenerationDoesNotBecomePrevious(): Promise<void> {
+  const previousSeen: boolean[] = [];
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: {
+      ...univ2BlockScanState,
+      compileStateInstance(input: CompileStateInstanceInput) {
+        previousSeen.push(input.previous !== undefined);
+        return univ2BlockScanState.compileStateInstance!(input);
+      },
+    },
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
+  });
+  let verifies = 0;
+  const backend: BlockScanStateReadBackend = {
+    async readBatch(_lane, reads, control) {
+      const data = reservesData(1000n, 2000n, 0);
+      return reads.map((read) => Object.freeze({
+        ...successfulRead(read, control.sourceGeneration),
+        data,
+      }));
+    },
+    async verifyCanonicalSource() {
+      verifies++;
+      if (verifies === 1) throw new Error("fixture rejected source");
+    },
+  };
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const edges = [
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, true),
+    univ2Edge(SWAP_POOL, TOKEN_A, TOKEN_B, false),
+  ];
+  const first = await coordinator.prepare({
+    graph: univ2Graph(1, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(first.status, "incomplete");
+
+  const second = await coordinator.prepare({
+    graph: univ2Graph(2, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(second.status, "complete");
+  assert.deepEqual(
+    previousSeen,
+    [false, false],
+    "a pre-CAS instance must neither populate the published store nor be passed as previous",
+  );
+
+  const third = await coordinator.prepare({
+    graph: univ2Graph(3, edges),
+    families: [family],
+    deadlineAtMs: Date.now() + 5_000,
+  });
+  assert.equal(third.status, "complete");
+  assert.deepEqual(
+    previousSeen,
+    [false, false],
+    "the descriptor published by generation 2 is reusable without recompilation",
   );
 }
 
@@ -5549,14 +5614,15 @@ await deadlineAndExternalAbort();
 await generationFence();
 await dependentReadClosureIsExplicit();
 await staticSchemaReadsAreCachedAndDynamicReadsStayCurrent();
-await casRejectedGenerationStillWarmsCompileCache();
-await supersededGenerationKeepsLiveSnapshotButWarmsCompileCache();
-await successfulCompileWarmsCacheDespiteUnpublishedGeneration();
+await casRejectedGenerationDoesNotPublishCompileCache();
+await supersededGenerationDoesNotPublishCompileCache();
+await successfulCompileStaysUnpublishedWithGeneration();
 await immutableForkNeedsBackendAttestation();
 await protocolActivityPlanDrivesDirtyDirectCarry();
 await protocolActivityFailureFailsClosedToDirect();
 await univ2InstanceParityWithFullCompile();
 await univ2InstanceModeRecompilesOnlyNewPool();
+await rejectedInstanceGenerationDoesNotBecomePrevious();
 await sharedBindingParticipatesInInstanceFingerprint();
 await snapshotCompatibilityChangeForcesDirectRead();
 await alwaysDirectCarryPolicyNeverCarries();

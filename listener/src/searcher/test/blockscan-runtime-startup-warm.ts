@@ -46,6 +46,7 @@ import type {
   PoolEntry,
   TokenEdge,
 } from "../planner/token-graph.js";
+import type { ResolvedPlan } from "../solver/solver.js";
 import { createProtocolDiscoveryEvidenceCache } from
   "../protocol-discovery-cache.js";
 import { ProtocolDiscoveryMutationQueue } from
@@ -87,6 +88,24 @@ const routePairInterface = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
   "function factory() view returns (address)",
 ]);
+
+function resolvedPlan(netProfit: bigint): ResolvedPlan {
+  return {
+    root: {
+      adapterId: "skip",
+      target: ethers.ZeroAddress,
+      tokenIn: ethers.ZeroAddress,
+      tokenOut: ethers.ZeroAddress,
+      amount: 0n,
+      params: {},
+      children: [],
+    },
+    netProfit,
+    profitToken: ethers.ZeroAddress,
+    flashAmount: 0n,
+    templateName: "blockscan-runtime-startup-warm-fixture",
+  };
+}
 
 interface PreparedDiscovery {
   readonly block: number;
@@ -2093,7 +2112,7 @@ function createHarness(
       solverExecutionEvidence.push(Object.freeze([
         ...(solveOptions?.executionEvidence ?? []),
       ]));
-      return { netProfit: options.solverNetProfit ?? 0n };
+      return resolvedPlan(options.solverNetProfit ?? 0n);
     },
   };
   const deps: BlockScanRuntimeLoopDependencies<PreparedDiscovery> = {
@@ -2116,6 +2135,18 @@ function createHarness(
     }] as unknown) as BlockScanRuntimeLoopDependencies<
       PreparedDiscovery
     >["executionWorkers"],
+    finalSimulationWorkers: ([{
+      state: {
+        provider: {},
+        async forkAt() {},
+        stop() {},
+        async stopAndWait() {},
+      },
+      solver: workerSolver,
+      simulator: {},
+    }] as unknown) as BlockScanRuntimeLoopDependencies<
+      PreparedDiscovery
+    >["finalSimulationWorkers"],
     rpcUrl: "http://127.0.0.1:8545",
     exactQuoteStateFactory: () => workerState as never,
     runtimeAbort,
@@ -2748,7 +2779,6 @@ function successfulAtomicResult(): BlockScanAtomicResult {
     submitted: false,
     terminalForQuoteSet: true,
     finalSimStatus: "succeeded",
-    workerReusable: true,
     audit: null,
     timing: {
       finalSimMs: 0,

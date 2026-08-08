@@ -19,7 +19,6 @@ import { scanObservedProtocolTrace } from "../observed-protocol-discovery.js";
 import {
   PRODUCTION_ADAPTER_FAMILIES,
   PRODUCTION_FAMILY_LOAD_ISSUES,
-  PRODUCTION_FAMILY_MODULES,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
 import {
@@ -64,14 +63,6 @@ assert.equal(
   astraMultiTokenAdapter,
   "Astra must be active through the production registry",
 );
-assert(
-  PRODUCTION_FAMILY_MODULES.some((module) =>
-    module.sourceFile === "astra-multitoken.production.ts" &&
-    module.family.id === astraMultiTokenAdapter.id
-  ),
-  "Astra must be discovered from its family-owned production entry",
-);
-
 const erc20Iface = new ethers.Interface([
   "function approve(address spender,uint256 amount) returns (bool)",
   "function balanceOf(address owner) view returns (uint256)",

@@ -207,6 +207,12 @@ import {
   type LocalVictimApplyResult,
 } from "./solver/victim-apply.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
+import { executeFinalSimulationWork } from "./adapter-work-intent.js";
+import {
+  FinalSimulationWorkRuntimeError,
+  type FinalSimulationWorkRuntime,
+} from "./final-simulation-work-runtime.js";
+import type { SimulationResult } from "./simulator/botvm-simulator.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "./templates/path-template.js";
 import {
   LiveFixtureRecorder,
@@ -1012,6 +1018,11 @@ async function main(): Promise<void> {
     readonly solver: AnvilSolver;
     readonly simulator: BotVMSimulator;
   }> = [];
+  const blockScanFinalSimulationWorkers: Array<{
+    readonly state: AnvilStateBackend;
+    readonly solver: AnvilSolver;
+    readonly simulator: BotVMSimulator;
+  }> = [];
   const blockScanRuntimeAbort = new AbortController();
   let shuttingDown = false;
   const blockScanPassBudgetRaw = Number(
@@ -1089,6 +1100,14 @@ async function main(): Promise<void> {
   const blockScanSolveConcurrency = Number.isFinite(blockScanSolveConcurrencyRaw)
     ? Math.max(1, Math.floor(blockScanSolveConcurrencyRaw))
     : 4;
+  const blockScanFinalSimulationConcurrencyRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_FINAL_SIM_CONCURRENCY ?? "1",
+  );
+  const blockScanFinalSimulationConcurrency = Number.isFinite(
+    blockScanFinalSimulationConcurrencyRaw,
+  )
+    ? Math.max(1, Math.floor(blockScanFinalSimulationConcurrencyRaw))
+    : 1;
   const blockScanRefineCandidatesRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_REFINE_CANDIDATES ?? "512",
   );
@@ -1141,6 +1160,27 @@ async function main(): Promise<void> {
         port,
       );
       blockScanExecutionWorkers.push({
+        state: workerState,
+        solver: new AnvilSolver(),
+        simulator: new BotVMSimulator(
+          workerState,
+          config.botvmAddress,
+          config.wallet.address,
+        ),
+      });
+    }
+    for (
+      let worker = 0;
+      worker < blockScanFinalSimulationConcurrency;
+      worker++
+    ) {
+      const port = blockScanAnvilPort + blockScanSolveConcurrency + worker;
+      const workerState = new AnvilStateBackend(
+        config.rpcUrl,
+        `http://127.0.0.1:${port}`,
+        port,
+      );
+      blockScanFinalSimulationWorkers.push({
         state: workerState,
         solver: new AnvilSolver(),
         simulator: new BotVMSimulator(
@@ -2521,6 +2561,7 @@ async function main(): Promise<void> {
     enabled: enableBlockScan,
     blockScanConfig: blockScanCfg,
     executionWorkers: blockScanExecutionWorkers,
+    finalSimulationWorkers: blockScanFinalSimulationWorkers,
     rpcUrl: config.rpcUrl,
     rethTransportScheduler: blockScanRethTransportScheduler,
     runtimeAbort: blockScanRuntimeAbort,
@@ -2829,7 +2870,10 @@ async function main(): Promise<void> {
     // the backrun bridge must not retain prior source-N live/tick cache state.
     blockScanBackrunState.resetDynamicStateForReplay();
     await adapterRuntimeCoordinator!.resetDynamicStateForReplay();
-    await Promise.all(blockScanExecutionWorkers.map(async (worker) => {
+    await Promise.all([
+      ...blockScanExecutionWorkers,
+      ...blockScanFinalSimulationWorkers,
+    ].map(async (worker) => {
       await worker.state.forkAt(control.base.number);
       const forkHash = await readBlockHash(worker.state.provider, control.base.number);
       if (forkHash.toLowerCase() !== control.base.hash.toLowerCase()) {
@@ -4808,8 +4852,11 @@ async function readLatestBlockAnchor(
 async function maybeSubmitBlockScanAtomic(params: {
   config: LiveConfig;
   provider: ethers.JsonRpcProvider;
-  simulator: BotVMSimulator;
-  state: AnvilStateBackend;
+  finalSimulationRuntime: FinalSimulationWorkRuntime<
+    ResolvedPlan,
+    SimulationResult
+  >;
+  sourceGeneration: number;
   bundleRouter: BundleRouter;
   submissionCoordinator: SubmissionCoordinator;
   opp: BlockScanOpportunity;
@@ -4838,7 +4885,6 @@ async function maybeSubmitBlockScanAtomic(params: {
     evFinishedAtMs: null as number | null,
   };
   let evStartedAt: number | null = null;
-  let workerReusable = true;
   let finalSimStatus: BlockScanAtomicResult["finalSimStatus"] = "not-run";
   let auditSimulation: BlindProductionOpportunityEvidence["simulation"] | null =
     params.collectBlindAudit
@@ -4884,7 +4930,6 @@ async function maybeSubmitBlockScanAtomic(params: {
       submitted,
       terminalForQuoteSet,
       finalSimStatus,
-      workerReusable,
       audit: auditSimulation && terminalAuditEv
         ? {
             simulation: auditSimulation,
@@ -4897,8 +4942,8 @@ async function maybeSubmitBlockScanAtomic(params: {
   const {
     config,
     provider,
-    simulator,
-    state,
+    finalSimulationRuntime,
+    sourceGeneration,
     bundleRouter,
     submissionCoordinator,
     opp,
@@ -5008,18 +5053,19 @@ async function maybeSubmitBlockScanAtomic(params: {
     timing.finalSimStartedAtMs = Date.now();
     finalSimStatus = "failed";
     const finalSimStarted = performance.now();
-    const sim = await awaitBlockScanDeadline(
-      simulator.simulate(resolved),
-      passDeadlineAtMs,
-      "final simulation",
-      () => {
-        workerReusable = false;
-        // Killing the fork terminates in-flight RPC. The next generation's
-        // forkAt waits stopBarrier before this worker can be reused.
-        state.stop();
-      },
-      signal,
-    ).finally(() => {
+    const sim = await executeFinalSimulationWork({
+      intent: Object.freeze({
+        stage: "fork-final-sim" as const,
+        source: Object.freeze({
+          number: sourceBlock,
+          hash: sourceBlockHash,
+          generation: sourceGeneration,
+        }),
+        generation: sourceGeneration,
+        resolvedPlan: resolved,
+      }),
+      runtime: finalSimulationRuntime,
+    }).finally(() => {
         timing.finalSimMs += Math.max(0, performance.now() - finalSimStarted);
         timing.finalSimFinishedAtMs = Date.now();
       });
@@ -5407,6 +5453,18 @@ async function maybeSubmitBlockScanAtomic(params: {
         reason,
       });
       drop(targetBlock, "deadline", reason, err.message);
+      return finish(reason);
+    }
+    if (err instanceof FinalSimulationWorkRuntimeError) {
+      const reason = err.failureCode === "timeout"
+        ? "final_sim_deadline"
+        : "final_sim_unresolved";
+      recordAuditEv({
+        executionStatus: "not_run",
+        decision: "reject",
+        reason,
+      });
+      drop(targetBlock, "final_verify", reason, err.message);
       return finish(reason);
     }
     const error = err instanceof Error ? err.message : String(err);
