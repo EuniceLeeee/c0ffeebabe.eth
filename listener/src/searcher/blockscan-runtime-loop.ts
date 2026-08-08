@@ -1217,13 +1217,18 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
          * pass-gate restart only fired after a pass deadline expired -> a
          * self-sustaining 10-22s stale cascade. finally() still hands off to
          * the newest pending head without an idle gap.
-         */
+        */
         let header;
+        const observeHeaderStartedAtMs = Date.now();
         try {
           header = await this.deps.discovery.observeHeader(nextBlock);
         } catch {
           break;
         }
+        const observeHeaderMs = Math.max(
+          0,
+          Date.now() - observeHeaderStartedAtMs,
+        );
         if (this.deps.runtimeAbort.signal.aborted) break;
         const generation = this.nextGeneration();
         const anchoredGraph: VerifiedGraphView = Object.freeze({
@@ -1313,6 +1318,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               0,
               Date.now() - generationStartedAtMs,
             ),
+            observeHeaderMs,
             armWallMs: Math.max(0, Date.now() - startedAtMs),
             catchupIndex,
             targetBlock,

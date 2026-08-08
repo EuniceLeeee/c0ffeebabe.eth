@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import {
   DEFAULT_DISCOVERY_BACKFILL_CHUNK_BLOCKS,
   DiscoveryBackfillLane,
+  DiscoveryBackfillProducerBusyError,
+  yieldForProducerOrDefer,
   resolveDiscoveryBackfillChunkBlocks,
   type DiscoveryBackfillCanonicalProof,
   type DiscoveryBackfillPlan,
@@ -45,8 +47,9 @@ await futureReadyWaitsForNewestHead();
 await producerYieldDelaysScanUntilProducerIdle();
 await producerYieldPerReadDelaysWorkWhileProducerCritical();
 await producerYieldDefersScanWhenProducerStaysCritical();
+await stageYieldDefersWhenProducerStaysCritical();
 
-console.log("[discovery-backfill-lane] bounded background publication: PASS (11/11)");
+console.log("[discovery-backfill-lane] bounded background publication: PASS (12/12)");
 
 function chunkSizingSeparatesRetentionFromWorkUnits(): void {
   assert.equal(
@@ -525,6 +528,25 @@ async function producerYieldDefersScanWhenProducerStaysCritical(): Promise<void>
   assert.equal(lane.telemetry().deferred, 1);
   assert.equal(lane.telemetry().prepared, 1);
   assert.equal(lane.telemetry().failed, 0);
+}
+
+async function stageYieldDefersWhenProducerStaysCritical(): Promise<void> {
+  let active = true;
+  await assert.rejects(
+    yieldForProducerOrDefer(
+      { active: () => active, maxWaitMs: 1_000 },
+      undefined,
+      80,
+    ),
+    DiscoveryBackfillProducerBusyError,
+    "stage yield must defer the whole job when the producer stays critical",
+  );
+  active = false;
+  await yieldForProducerOrDefer(
+    { active: () => active, maxWaitMs: 1_000 },
+    undefined,
+    80,
+  );
 }
 
 async function deadlineCancelsEveryBudgetedRead(): Promise<void> {

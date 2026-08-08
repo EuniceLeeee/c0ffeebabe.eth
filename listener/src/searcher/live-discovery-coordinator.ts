@@ -17,6 +17,7 @@ import {
 } from "./canonical-header-journal.js";
 import {
   DiscoveryBackfillLane,
+  yieldForProducerOrDefer,
   resolveDiscoveryBackfillChunkBlocks,
   type DiscoveryBackfillControl,
   type DiscoveryBackfillPlan,
@@ -1029,6 +1030,7 @@ export async function createLiveDiscoveryCoordinator(
     | "hot"
     | "dex-backfill"
     | "protocol-backfill";
+const DISCOVERY_STAGE_PRODUCER_YIELD_MAX_WAIT_MS = 250;
   type CombinedDiscoveryPrepared = {
     readonly source: { readonly number: number; readonly hash: string };
     readonly through: number;
@@ -1140,6 +1142,18 @@ export async function createLiveDiscoveryCoordinator(
           historicalResolution:
             input.mode === "hot" ? "bounded" : "complete",
         });
+    /*
+     * Mid-pass producer gate: a backfill job may start in a producer gap, then
+     * the next producer generation begins while the DEX pass is still
+     * running. Defer at the next stage boundary so the projection/protocol
+     * CPU and RPC work cannot stall the producer's event loop or reth reads;
+     * the lane reschedules the same range on the next tick.
+     */
+    await yieldForProducerOrDefer(
+      input.control?.producerYield,
+      input.control?.signal,
+      DISCOVERY_STAGE_PRODUCER_YIELD_MAX_WAIT_MS,
+    );
 
     let stagedProtocolCache: ProtocolDiscoveryEvidenceCache | null = null;
     let protocol: ActiveProtocolDiscoveryStage;
