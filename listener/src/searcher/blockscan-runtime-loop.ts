@@ -1218,18 +1218,30 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
          * self-sustaining 10-22s stale cascade. finally() still hands off to
          * the newest pending head without an idle gap.
         */
+        /*
+         * The critical flag must cover the WHOLE generation, including the
+         * canonical header read. Measured slow generations showed
+         * observeHeaderMs 8-17s while the very next activity read was ~0ms:
+         * exact/discovery/backrun gates keyed on producerCriticalActive were
+         * still open during the header RPC and queued behind it.
+         */
+        this.producerCriticalActive = true;
         let header;
         const observeHeaderStartedAtMs = Date.now();
         try {
           header = await this.deps.discovery.observeHeader(nextBlock);
         } catch {
+          this.producerCriticalActive = false;
           break;
         }
         const observeHeaderMs = Math.max(
           0,
           Date.now() - observeHeaderStartedAtMs,
         );
-        if (this.deps.runtimeAbort.signal.aborted) break;
+        if (this.deps.runtimeAbort.signal.aborted) {
+          this.producerCriticalActive = false;
+          break;
+        }
         const generation = this.nextGeneration();
         const anchoredGraph: VerifiedGraphView = Object.freeze({
           ...input.graph,
@@ -1240,7 +1252,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         });
         let prepared: BlockScanStatePrepareResult;
         let bootstrapEscalated = false;
-        this.producerCriticalActive = true;
         try {
         prepared = await input.coordinator.prepareCoarsePricing({
           graph: anchoredGraph,
