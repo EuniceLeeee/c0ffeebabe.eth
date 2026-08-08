@@ -74,6 +74,24 @@ assert.deepEqual(
   "strict shadow and legacy production must cover the same complete Family cohort",
 );
 
+const firstBlockScanFamilies =
+  PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies();
+const nextBlockScanFamilies =
+  PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies();
+assert.equal(
+  nextBlockScanFamilies,
+  firstBlockScanFamilies,
+  "block-scan registrations must remain stable across graph generations",
+);
+for (let index = 0; index < firstBlockScanFamilies.length; index++) {
+  assert.equal(
+    nextBlockScanFamilies[index],
+    firstBlockScanFamilies[index],
+    `block-scan Family registration ${firstBlockScanFamilies[index]?.familyId} ` +
+      "must retain its process-local runtime descriptors",
+  );
+}
+
 const legacyActionClosure = PRODUCTION_ADAPTER_FAMILIES.actionIds();
 assert.deepEqual(
   listAll().map((action) => action.id).sort(),

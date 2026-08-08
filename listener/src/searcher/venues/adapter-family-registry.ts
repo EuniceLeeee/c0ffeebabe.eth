@@ -126,6 +126,15 @@ export class AdapterFamilyRegistry {
   private readonly oracleVictimDescriptors: readonly OracleVictimDescriptor[];
   private readonly landedPoolDiscoveryRegistry: LandedPoolDiscoveryRegistry;
   private readonly pendingEvidenceProjection: PendingTransactionEvidenceProjection;
+  /**
+   * Process-lifetime pricing registrations. A registration owns the
+   * content-addressed runtime descriptors produced by compileStateInstance,
+   * so rebuilding this projection between graph generations would orphan the
+   * published instances that the coordinator legitimately carries forward.
+   */
+  private blockScanStateFamilyProjection:
+    | readonly RegisteredBlockScanStateFamily[]
+    | null = null;
   private readonly ownedActionOwners = new Map<string, ExecutionFamilyId>();
   private readonly registeredVenueOwners = new Map<string, ExecutionFamilyId>();
   private readonly registeredIdentitySourceOwners = new Map<string, ExecutionFamilyId>();
@@ -302,6 +311,9 @@ export class AdapterFamilyRegistry {
   }
 
   blockScanStateFamilies(): readonly RegisteredBlockScanStateFamily[] {
+    if (this.blockScanStateFamilyProjection !== null) {
+      return this.blockScanStateFamilyProjection;
+    }
     const familyMutationTopics = (
       family: SwapAdapter | ProtocolConversionAdapter,
     ): readonly {
@@ -320,7 +332,7 @@ export class AdapterFamilyRegistry {
         ),
       ]);
     };
-    return Object.freeze([
+    this.blockScanStateFamilyProjection = Object.freeze([
       ...this.swapFamilies.map((family): RegisteredBlockScanStateFamily => Object.freeze({
         ...registerBlockScanStateFamily({
           familyId: family.id,
@@ -343,6 +355,7 @@ export class AdapterFamilyRegistry {
           }),
       ),
     ]);
+    return this.blockScanStateFamilyProjection;
   }
 
   isBlockScanPricedEdge(edge: TokenEdge): boolean {
