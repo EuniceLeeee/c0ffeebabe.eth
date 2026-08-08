@@ -49,7 +49,7 @@ test("KPI uses only the latest process window and partitions its periodic non-wa
     "[searcher/live] starting V5 searcher",
     "[searcher/live] runtime_commit=new",
     "[searcher/blockscan-family] block=100 degraded reason=state",
-    state({ sourceBlock: 100, generation: 1, priced: 80, expected: 100 }),
+    state({ sourceBlock: 100, generation: 1, priced: 81, expected: 100 }),
     timing({ coarseSourceBlock: 100 }),
     state({ sourceBlock: 101, generation: 2, priced: 79, expected: 100 }),
     timing({ coarseSourceBlock: 101 }),
@@ -76,6 +76,26 @@ test("KPI uses only the latest process window and partitions its periodic non-wa
   assert.equal(report.exclusions.malformed_timing_json, 0);
   assert.equal(report.join.block_number_only, 2);
   assert.match(report.join.caveats[0] ?? "", /source block number only/);
+});
+
+test("KPI rejects the exact 80% boundary and accepts the first ratio above it", () => {
+  const log = [
+    "[searcher/live] starting V5 searcher",
+    state({ sourceBlock: 110, generation: 1, priced: 80, expected: 100 }),
+    timing({ coarseSourceBlock: 110 }),
+    state({ sourceBlock: 111, generation: 2, priced: 81, expected: 100 }),
+    timing({ coarseSourceBlock: 111 }),
+  ].join("\n");
+
+  const report = analyzeBlockScanKpiLog(log);
+  assert.equal(
+    report.cohort_definition.threshold,
+    "expected > 0 and priced / expected > 0.80",
+  );
+  assert.equal(report.counts.cohort, 2);
+  assert.equal(report.counts.valid, 1);
+  assert.equal(report.counts.ran_low_coverage, 1);
+  assert.equal(report.ran_low_coverage_reasons.below_eighty_percent, 1);
 });
 
 test("KPI selects the latest preceding published generation and never a future state", () => {

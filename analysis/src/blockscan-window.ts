@@ -4,7 +4,7 @@
  * Mirrors the per-pass validity rules of blockscan-kpi.ts:
  * periodic, non-warm pass + enumeration ran + latest preceding published
  * N-1 state for the coarse source block (hash matched when both sides expose
- * it) + expected > 0 + priced/expected >= 0.80.
+ * it) + expected > 0 + priced/expected > 0.80.
  */
 
 const TIMING_MARKER = "[searcher/blockscan-family] ";
@@ -184,7 +184,11 @@ export function analyzeWindow(
       } else if (state.expected <= 0) {
         invalidReason = "expected_non_positive";
         ranLowCoverage++;
-      } else if (state.priced * 5 < state.expected * 4) {
+      } else if (
+        BigInt(state.priced) * 5n <= BigInt(state.expected) * 4n
+      ) {
+        // Keep the legacy reason spelling for report compatibility; it also
+        // includes the exact 80% boundary under the strict >80% contract.
         invalidReason = "below_eighty_percent";
         ranLowCoverage++;
       } else {

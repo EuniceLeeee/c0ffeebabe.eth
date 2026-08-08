@@ -448,6 +448,32 @@
       },
       "created_at": "2026-07-15T18:30:00.000Z",
       "updated_at": "2026-07-15T18:30:00.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260809-s1-blockscan-strict-eighty-percent",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "blockscan_acceptance_threshold_was_inclusive",
+      "evidence": {
+        "user_contract": "a valid pass requires priced/expected strictly greater than 80%",
+        "canonical_before": "analysis:blockscan-window and analysis:blockscan-kpi accepted priced=80 expected=100 because their rejection predicate used < instead of <=",
+        "reviewer": "fresh non-author review confirmed that both canonical tools and the KPI metadata contradicted the strict acceptance contract"
+      },
+      "tooling_defect": {
+        "tool": "analysis:blockscan-window + analysis:blockscan-kpi + analysis:tool-index",
+        "issue": "the exact 80% boundary was counted as a valid pass even though acceptance requires strictly more than 80%",
+        "evidence": "80/100 followed the valid path in both analyzers; the KPI regression fixture explicitly encoded that behavior",
+        "codify_target": "reject priced*5 <= expected*4 with exact integer arithmetic, pin 80/100 invalid and 81/100 valid in both analyzers, and correct emitted/indexed threshold metadata",
+        "status": "open"
+      },
+      "created_at": "2026-08-08T22:48:30.000Z",
+      "updated_at": "2026-08-08T22:48:30.000Z"
     }
   ]
 }

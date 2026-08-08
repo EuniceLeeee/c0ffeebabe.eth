@@ -149,6 +149,43 @@ test("window tool splits a run of 2x min-run into two non-overlapping windows", 
   assert.equal(report.qualifyingRuns[1]?.startBlock, 210);
 });
 
+test("window tool rejects the exact 80% boundary and accepts 81%", () => {
+  const lines = [
+    state({
+      sourceBlock: 249,
+      generation: 1,
+      priced: 80,
+      expected: 100,
+    }),
+    timing({
+      sourceBlock: 250,
+      coarseSourceBlock: 249,
+    }),
+    state({
+      sourceBlock: 250,
+      generation: 2,
+      priced: 81,
+      expected: 100,
+    }),
+    timing({
+      sourceBlock: 251,
+      coarseSourceBlock: 250,
+    }),
+  ];
+  const report = analyzeWindow(lines.join("\n"), {
+    startLine: 1,
+    minRun: 1,
+  });
+  assert.equal(report.totals.passes, 2);
+  assert.equal(report.totals.valid, 1);
+  assert.equal(report.totals.ranLowCoverage, 1);
+  assert.deepEqual(report.invalidByReason, {
+    below_eighty_percent: 1,
+  });
+  assert.equal(report.longestRun?.count, 1);
+  assert.equal(report.longestRun?.startBlock, 251);
+});
+
 test("window tool classifies hash mismatch and low coverage as invalid", () => {
   const lines = [
     "[searcher/live] starting V5 searcher",

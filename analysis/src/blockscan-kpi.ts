@@ -30,7 +30,7 @@ export interface BlockScanKpiReport {
     readonly pass_mode: "periodic";
     readonly startup_warm: false;
     readonly join: "latest preceding published state with matching sourceBlock in the same process window";
-    readonly threshold: "expected > 0 and priced / expected >= 0.80";
+    readonly threshold: "expected > 0 and priced / expected > 0.80";
   };
   readonly counts: {
     readonly cohort: number;
@@ -197,8 +197,10 @@ export function analyzeBlockScanKpiLog(
       expectedNonPositive++;
       continue;
     }
-    if (BigInt(state.priced) * 5n < BigInt(state.expected) * 4n) {
+    if (BigInt(state.priced) * 5n <= BigInt(state.expected) * 4n) {
       ranLowCoverage++;
+      // Legacy field name retained for schema-v1 consumers; this counter also
+      // includes the exact 80% boundary under the strict >80% contract.
       belowEightyPercent++;
       continue;
     }
@@ -237,7 +239,7 @@ export function analyzeBlockScanKpiLog(
       pass_mode: "periodic",
       startup_warm: false,
       join: "latest preceding published state with matching sourceBlock in the same process window",
-      threshold: "expected > 0 and priced / expected >= 0.80",
+      threshold: "expected > 0 and priced / expected > 0.80",
     },
     counts: {
       cohort,
