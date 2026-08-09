@@ -147,6 +147,9 @@ await nMinusOneTrackerStaysOutsideNormalRuntimePublication();
 await nMinusOneRecoveryBacklogStaysOnHotBudget();
 await nMinusOneWaitsForItsOnlyAdjacentProducer();
 await nMinusOneProducerStartsAtArmTime();
+await nMinusOneProducerCriticalGateCoversHeaderRead();
+await nMinusOneProducerCriticalGateClearsOnHeaderThrow();
+await nMinusOneProducerCriticalGateClearsOnRuntimeAbort();
 await producerTopologyAdoptionCoalescesDeltas();
 nMinusOneExactJoinRejectsMixedAnchor();
 nMinusOneFundingIsCandidateLocal();
@@ -156,7 +159,7 @@ failureCauseSummaryIsBoundedAndRedacted();
 
 console.log(
     "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (39/39)",
+    "PASS (42/42)",
 );
 
 async function producerTopologyAdoptionCoalescesDeltas(): Promise<void> {
@@ -1712,6 +1715,105 @@ async function nMinusOneProducerStartsAtArmTime(): Promise<void> {
   );
 }
 
+async function nMinusOneProducerCriticalGateCoversHeaderRead(): Promise<void> {
+  const producerHeaderEntered = deferred<void>();
+  const releaseProducerHeader = deferred<void>();
+  let sourceHeaderCalls = 0;
+  const harness = createHarness(699, ["complete"], {
+    nMinusOneFallbackEnabled: true,
+    observeHeader: async (blockNumber) => {
+      if (blockNumber === 701 && ++sourceHeaderCalls === 2) {
+        producerHeaderEntered.resolve();
+        await releaseProducerHeader.promise;
+      }
+      return header(blockNumber);
+    },
+  });
+
+  await harness.run(700);
+  await harness.run(701);
+  await producerHeaderEntered.promise;
+  assert.equal(
+    harness.producerYieldActive(),
+    true,
+    "exact/discovery work must yield while the producer header RPC is pending",
+  );
+
+  releaseProducerHeader.resolve();
+  await waitFor(() => !harness.producerYieldActive());
+  assert(
+    harness.coarsePricingBlocks.includes(701),
+    "the gated producer must continue into coarse state preparation",
+  );
+  await harness.loop.shutdown();
+}
+
+async function nMinusOneProducerCriticalGateClearsOnHeaderThrow(): Promise<void> {
+  const producerHeaderAttempted = deferred<void>();
+  let sourceHeaderCalls = 0;
+  const harness = createHarness(709, ["complete"], {
+    nMinusOneFallbackEnabled: true,
+    observeHeader: async (blockNumber) => {
+      if (blockNumber === 711 && ++sourceHeaderCalls === 2) {
+        producerHeaderAttempted.resolve();
+        throw new Error("fixture producer header failure");
+      }
+      return header(blockNumber);
+    },
+  });
+
+  await harness.run(710);
+  await harness.run(711);
+  await producerHeaderAttempted.promise;
+  await waitFor(() => !harness.producerYieldActive());
+  assert.equal(
+    harness.producerYieldActive(),
+    false,
+    "a failed producer header read must release the yield gate",
+  );
+  assert.equal(
+    harness.coarsePricingBlocks.includes(711),
+    false,
+    "a failed canonical header must not enter coarse preparation",
+  );
+  await harness.loop.shutdown();
+}
+
+async function nMinusOneProducerCriticalGateClearsOnRuntimeAbort(): Promise<void> {
+  const producerHeaderEntered = deferred<void>();
+  const releaseProducerHeader = deferred<void>();
+  let sourceHeaderCalls = 0;
+  const harness = createHarness(719, ["complete"], {
+    nMinusOneFallbackEnabled: true,
+    observeHeader: async (blockNumber) => {
+      if (blockNumber === 721 && ++sourceHeaderCalls === 2) {
+        producerHeaderEntered.resolve();
+        await releaseProducerHeader.promise;
+      }
+      return header(blockNumber);
+    },
+  });
+
+  await harness.run(720);
+  await harness.run(721);
+  await producerHeaderEntered.promise;
+  assert.equal(harness.producerYieldActive(), true);
+  const shutdown = harness.loop.shutdown();
+  await waitFor(() => harness.runtimeAborted);
+  assert.equal(
+    harness.producerYieldActive(),
+    false,
+    "runtime abort must release the yield gate before a pending header settles",
+  );
+  releaseProducerHeader.resolve();
+  await shutdown;
+  assert.equal(
+    harness.coarsePricingBlocks.includes(721),
+    false,
+    "an aborted producer header must not enter coarse preparation",
+  );
+}
+
 function nMinusOneExactJoinRejectsMixedAnchor(): void {
   const graph = graphAt(7, 900, hash(900));
   const runtime = runtimeResult("complete", graph);
@@ -1781,7 +1883,9 @@ function createHarness(
     readonly runtimeDependenciesAvailable?: boolean;
     readonly observeHeader?: (
       blockNumber: number,
-    ) => { readonly number: number; readonly hash: string };
+    ) =>
+      | { readonly number: number; readonly hash: string }
+      | Promise<{ readonly number: number; readonly hash: string }>;
     readonly readBlockHash?: (blockNumber: number) => string;
   } = {},
 ) {
@@ -1850,6 +1954,7 @@ function createHarness(
     passReason: string | null;
   }> = [];
   let latestPricing: BlockScanStateSnapshot | null = null;
+  let producerYieldActive: (() => boolean) | null = null;
   let runtimeDependenciesAvailable =
     options.runtimeDependenciesAvailable ?? true;
   const forkAtControls: Array<{
@@ -2160,6 +2265,9 @@ function createHarness(
     },
     discovery: {
       lane: {
+        setProducerYield: (hook: { readonly active: () => boolean }) => {
+          producerYieldActive = hook.active;
+        },
         readyDescriptor: () =>
           laneReadyBlock === null
             ? null
@@ -2384,6 +2492,9 @@ function createHarness(
     backfillBlocks,
     get publishedPricing() {
       return publishedPricing;
+    },
+    producerYieldActive() {
+      return producerYieldActive?.() ?? false;
     },
     get plannerGraphCalls() {
       return plannerGraphCalls;

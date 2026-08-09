@@ -1214,13 +1214,42 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
          * self-sustaining 10-22s stale cascade. finally() still hands off to
          * the newest pending head without an idle gap.
          */
+        /*
+         * The producer-critical gate must cover the canonical header read as
+         * well as state preparation. Otherwise exact/discovery traffic can
+         * enter while observeHeader is queued and make the N-1 publication
+         * miss the next head even though the state work itself is healthy.
+         */
+        this.producerCriticalActive = true;
+        const clearProducerCriticalOnAbort = (): void => {
+          this.producerCriticalActive = false;
+        };
+        this.deps.runtimeAbort.signal.addEventListener(
+          "abort",
+          clearProducerCriticalOnAbort,
+          { once: true },
+        );
         let header;
+        const observeHeaderStartedAtMs = Date.now();
         try {
           header = await this.deps.discovery.observeHeader(nextBlock);
         } catch {
+          this.producerCriticalActive = false;
+          break;
+        } finally {
+          this.deps.runtimeAbort.signal.removeEventListener(
+            "abort",
+            clearProducerCriticalOnAbort,
+          );
+        }
+        const observeHeaderMs = Math.max(
+          0,
+          Date.now() - observeHeaderStartedAtMs,
+        );
+        if (this.deps.runtimeAbort.signal.aborted) {
+          this.producerCriticalActive = false;
           break;
         }
-        if (this.deps.runtimeAbort.signal.aborted) break;
         const generation = this.nextGeneration();
         const anchoredGraph: VerifiedGraphView = Object.freeze({
           ...input.graph,
@@ -1231,7 +1260,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         });
         let prepared: BlockScanStatePrepareResult;
         let bootstrapEscalated = false;
-        this.producerCriticalActive = true;
         try {
         prepared = await input.coordinator.prepareCoarsePricing({
           graph: anchoredGraph,
@@ -1309,6 +1337,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
               0,
               Date.now() - generationStartedAtMs,
             ),
+            observeHeaderMs,
             armWallMs: Math.max(0, Date.now() - startedAtMs),
             catchupIndex,
             targetBlock,
