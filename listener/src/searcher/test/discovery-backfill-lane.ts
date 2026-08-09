@@ -4,6 +4,7 @@ import {
   DEFAULT_DISCOVERY_BACKFILL_CHUNK_BLOCKS,
   DiscoveryBackfillLane,
   resolveDiscoveryBackfillChunkBlocks,
+  yieldForProducerOrDefer,
   type DiscoveryBackfillCanonicalProof,
   type DiscoveryBackfillPlan,
   type DiscoveryBackfillRequest,
@@ -43,9 +44,11 @@ await laneAwareRebasePreservesIndependentState();
 await deadlineCancelsEveryBudgetedRead();
 await futureReadyWaitsForNewestHead();
 await producerYieldDelaysScanUntilProducerIdle();
+await producerYieldDefersScanWhenProducerStaysCritical();
 await producerYieldPerReadDelaysWorkWhileProducerCritical();
+await producerBecomesCriticalDuringDexStageDefersProjectionTail();
 
-console.log("[discovery-backfill-lane] bounded background publication: PASS (10/10)");
+console.log("[discovery-backfill-lane] bounded background publication: PASS (12/12)");
 
 function chunkSizingSeparatesRetentionFromWorkUnits(): void {
   assert.equal(
@@ -142,6 +145,7 @@ async function preparationDoesNotHoldMutationQueue(): Promise<void> {
     scheduled: 1,
     prepared: 1,
     taken: 1,
+    deferred: 0,
     rejectedBusy: 0,
     rejectedReady: 0,
     failed: 0,
@@ -471,19 +475,123 @@ async function producerYieldPerReadDelaysWorkWhileProducerCritical(): Promise<vo
     producerYield: {
       active: () => producerActive,
       maxWaitMs: 0,
-      perReadMaxWaitMs: 2_000,
+      perReadMaxWaitMs: 75,
     },
   });
   lane.schedule(request, base);
-  await new Promise<void>((resolve) => setTimeout(resolve, 60));
+  await waitFor(() => lane.telemetry().deferred === 1);
   assert.equal(
     workRan,
     false,
-    "per-read yield must hold background reads while the producer is critical",
+    "per-read yield must defer instead of starting work while the producer stays critical",
   );
+  assert.equal(lane.telemetry().failed, 0, "per-read deferral is not a failure");
+  assert.equal(lane.telemetry().activeJobId, null);
   producerActive = false;
+  lane.schedule(request, base);
   await waitFor(() => workRan === true);
   await waitFor(() => lane.readyDescriptor() !== null);
+  assert.equal(lane.telemetry().deferred, 1);
+  assert.equal(lane.telemetry().prepared, 1);
+}
+
+async function producerYieldDefersScanWhenProducerStaysCritical(): Promise<void> {
+  const request = requestFor(101, 101, 101);
+  const base = stateAt(100, 4);
+  let started = false;
+  let producerActive = true;
+  const lane = new DiscoveryBackfillLane<LiveDiscoveryState, RawBackfill>({
+    maxBlocksPerJob: 25,
+    maxPreparationMs: 5_000,
+    maxConcurrency: 2,
+    describeState: describe,
+    prepare: async () => {
+      started = true;
+      return rawFor(request);
+    },
+    validateTransition,
+    producerYield: { active: () => producerActive, maxWaitMs: 75 },
+  });
+
+  lane.schedule(request, base);
+  await waitFor(() => lane.telemetry().deferred === 1);
+  assert.equal(
+    started,
+    false,
+    "job-start yield must defer instead of starting after its wait cap",
+  );
+  assert.equal(lane.telemetry().failed, 0, "job-start deferral is not a failure");
+  assert.equal(lane.telemetry().activeJobId, null);
+
+  producerActive = false;
+  lane.schedule(request, base);
+  await waitFor(() => lane.readyDescriptor() !== null);
+  assert.equal(started, true);
+  assert.equal(lane.telemetry().deferred, 1);
+  assert.equal(lane.telemetry().prepared, 1);
+}
+
+async function producerBecomesCriticalDuringDexStageDefersProjectionTail(): Promise<void> {
+  const request = requestFor(101, 101, 101);
+  const base = stateAt(100, 4);
+  const dexReadEntered = deferred<void>();
+  const releaseDexRead = deferred<void>();
+  let producerActive = false;
+  let attempts = 0;
+  let projectionTailStarted = 0;
+  const lane = new DiscoveryBackfillLane<LiveDiscoveryState, RawBackfill>({
+    maxBlocksPerJob: 25,
+    maxPreparationMs: 5_000,
+    maxConcurrency: 2,
+    describeState: describe,
+    prepare: async (_plan, control) => {
+      attempts++;
+      await control.run(async () => {
+        if (attempts === 1) {
+          dexReadEntered.resolve();
+          await releaseDexRead.promise;
+        }
+        return "dex-complete";
+      });
+      await yieldForProducerOrDefer(
+        control.producerYield,
+        control.signal,
+        75,
+      );
+      projectionTailStarted++;
+      return rawFor(request);
+    },
+    validateTransition,
+    producerYield: {
+      active: () => producerActive,
+      maxWaitMs: 0,
+      perReadMaxWaitMs: 75,
+    },
+  });
+
+  lane.schedule(request, base);
+  await dexReadEntered.promise;
+  producerActive = true;
+  releaseDexRead.resolve();
+  await lane.settled();
+
+  assert.equal(
+    projectionTailStarted,
+    0,
+    "a producer that becomes critical during DEX work must gate the projection/protocol tail",
+  );
+  assert.equal(lane.readyDescriptor(), null, "a deferred tail cannot publish");
+  assert.equal(lane.telemetry().deferred, 1);
+  assert.equal(lane.telemetry().failed, 0);
+  assert.equal(lane.telemetry().activeReads, 0);
+  assert.equal(lane.telemetry().activeJobId, null);
+
+  producerActive = false;
+  lane.schedule(request, base);
+  await waitFor(() => lane.readyDescriptor() !== null);
+  assert.equal(projectionTailStarted, 1);
+  assert.equal(lane.telemetry().prepared, 1);
+  assert.equal(lane.telemetry().failed, 0);
 }
 
 async function deadlineCancelsEveryBudgetedRead(): Promise<void> {

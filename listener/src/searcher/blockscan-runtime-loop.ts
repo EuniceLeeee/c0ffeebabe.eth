@@ -423,6 +423,11 @@ interface BlockScanDiscoveryDependencies<PreparedDiscovery> {
     LiveDiscoveryPublicationState,
     PreparedDiscovery
   >;
+  /** Protocol-history backfill shares the same producer-yield gate. */
+  readonly protocolLane?: DiscoveryBackfillLane<
+    LiveDiscoveryPublicationState,
+    PreparedDiscovery
+  >;
   readonly journal: CanonicalHeaderJournal;
   readonly queue: ProtocolDiscoveryMutationQueue;
   observeHeader(blockNumber: number): Promise<CanonicalHeader>;
@@ -755,14 +760,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         });
       },
     );
-    const discoveryLane = deps.discovery.lane as {
-      setProducerYield?: (hook: {
-        readonly active: () => boolean;
-        readonly maxWaitMs: number;
-        readonly perReadMaxWaitMs?: number;
-      }) => void;
-    };
-    discoveryLane.setProducerYield?.({
+    const producerYieldHook = {
       active: () => this.producerCriticalActive,
       maxWaitMs: Math.max(
         0,
@@ -772,7 +770,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         0,
         deps.discoveryProducerYieldPerReadMaxWaitMs ?? 250,
       ),
-    });
+    } as const;
+    deps.discovery.lane.setProducerYield(producerYieldHook);
+    deps.discovery.protocolLane?.setProducerYield(producerYieldHook);
   }
 
   schedule(

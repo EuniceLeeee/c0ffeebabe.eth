@@ -18,6 +18,7 @@ import {
 import {
   DiscoveryBackfillLane,
   resolveDiscoveryBackfillChunkBlocks,
+  yieldForProducerOrDefer,
   type DiscoveryBackfillControl,
   type DiscoveryBackfillPlan,
   type DiscoveryBackfillStateDescriptor,
@@ -1029,6 +1030,7 @@ export async function createLiveDiscoveryCoordinator(
     | "hot"
     | "dex-backfill"
     | "protocol-backfill";
+  const DISCOVERY_STAGE_PRODUCER_YIELD_MAX_WAIT_MS = 250;
   type CombinedDiscoveryPrepared = {
     readonly source: { readonly number: number; readonly hash: string };
     readonly through: number;
@@ -1140,6 +1142,18 @@ export async function createLiveDiscoveryCoordinator(
           historicalResolution:
             input.mode === "hot" ? "bounded" : "complete",
         });
+
+    /*
+     * A backfill can start between producer generations and still be inside
+     * its DEX pass when the next producer becomes critical. Once the in-flight
+     * DEX work settles, defer before projection/protocol CPU and RPC work so
+     * that tail cannot push N-1 publication past the next head.
+     */
+    await yieldForProducerOrDefer(
+      input.control?.producerYield,
+      input.control?.signal,
+      DISCOVERY_STAGE_PRODUCER_YIELD_MAX_WAIT_MS,
+    );
 
     let stagedProtocolCache: ProtocolDiscoveryEvidenceCache | null = null;
     let protocol: ActiveProtocolDiscoveryStage;
@@ -2344,6 +2358,7 @@ export async function createLiveDiscoveryCoordinator(
 
   const blockScanHooks = {
     lane: dexBackfillLane,
+    protocolLane: protocolBackfillLane,
     journal: canonicalHeaderJournal,
     queue: protocolDiscoveryQueue,
     observeHeader: observeLiveCanonicalHeader,

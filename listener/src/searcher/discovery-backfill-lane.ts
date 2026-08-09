@@ -90,6 +90,13 @@ export interface DiscoveryBackfillControl {
    * transport; an uncancellable transport belongs in a terminable worker.
    */
   run<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T>;
+  /**
+   * Optional cooperative producer gate for the preparation itself. Backfill
+   * stages check this between heavy reads and defer the whole job when the
+   * blockscan producer is critical, instead of letting a long scan tail
+   * overlap the next producer generation.
+   */
+  readonly producerYield?: DiscoveryBackfillProducerYield;
 }
 
 export type DiscoveryBackfillScheduleResult =
@@ -137,6 +144,7 @@ export interface DiscoveryBackfillTelemetry {
   readonly scheduled: number;
   readonly prepared: number;
   readonly taken: number;
+  readonly deferred: number;
   readonly rejectedBusy: number;
   readonly rejectedReady: number;
   readonly failed: number;
@@ -191,10 +199,9 @@ export interface DiscoveryBackfillLaneOptions<State, Prepared> {
   /**
    * Cooperative producer yield: before a historical preparation starts, wait
    * while `active()` is true (the blockscan producer's critical state phase),
-   * up to `maxWaitMs` total, then proceed anyway to avoid starvation. The
-   * producer's canonical receipts read stalls 10-14s when a backfill scan
-   * saturates reth at the same time, which pushes N-1 publication past the
-   * head cadence; this gate gives the producer a clean transport window.
+   * up to `maxWaitMs` total. If the producer is still critical at the cap,
+   * defer the job for the next scheduling tick instead of starting a long
+   * scan tail that overlaps the next N-1 generation.
    */
   readonly producerYield?: DiscoveryBackfillProducerYield;
 }
@@ -204,12 +211,47 @@ export interface DiscoveryBackfillProducerYield {
   readonly maxWaitMs: number;
   /**
    * Per background read: while the producer is critical, wait up to this many
-   * milliseconds before issuing the read. A job-start yield alone only shifts
-   * the overlap: scans run 10-21s and the next producer generation collides
-   * with the scan tail. Spacing individual reads gives the producer's short
-   * receipts/state bursts a clean reth window without starving discovery.
+   * milliseconds before issuing the read; if the producer is still critical
+   * when the cap is reached, the whole job is deferred (not started anyway).
+   * A job-start yield alone only shifts the overlap: scans run 10-21s and the
+   * next producer generation collides with the scan tail. Deferring at the
+   * next read boundary bounds the tail to one in-flight read and keeps the
+   * producer's short receipts/state bursts on a clean reth window.
    */
   readonly perReadMaxWaitMs?: number;
+}
+
+export class DiscoveryBackfillProducerBusyError extends Error {
+  readonly code = "discovery_backfill_producer_busy" as const;
+
+  constructor() {
+    super("discovery backfill deferred: blockscan producer critical");
+    this.name = "DiscoveryBackfillProducerBusyError";
+  }
+}
+
+/**
+ * Wait while the blockscan producer is critical (bounded by `maxWaitMs`), then
+ * defer the whole backfill job with {@link DiscoveryBackfillProducerBusyError}
+ * instead of issuing the next heavy stage. A job-start yield alone only
+ * shifts the overlap: scans can run into the next producer generation.
+ */
+export async function yieldForProducerOrDefer(
+  hook: DiscoveryBackfillProducerYield | undefined,
+  signal: AbortSignal | undefined,
+  maxWaitMs: number,
+): Promise<void> {
+  if (!hook || maxWaitMs <= 0) return;
+  const startedAtMs = Date.now();
+  while (hook.active()) {
+    if (signal?.aborted) {
+      throw signal.reason ?? new Error("discovery backfill aborted");
+    }
+    if (Date.now() - startedAtMs >= maxWaitMs) {
+      throw new DiscoveryBackfillProducerBusyError();
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+  }
 }
 
 interface ActiveJob<State> {
@@ -264,6 +306,7 @@ export class DiscoveryBackfillLane<State, Prepared> {
     scheduled: 0,
     prepared: 0,
     taken: 0,
+    deferred: 0,
     rejectedBusy: 0,
     rejectedReady: 0,
     failed: 0,
@@ -372,15 +415,23 @@ export class DiscoveryBackfillLane<State, Prepared> {
         this.yieldForProducer(
           controller.signal,
           this.producerYield?.maxWaitMs ?? 0,
+          true,
         )
       )
       .then(() => this.options.prepare(plan, {
         signal: controller.signal,
         deadlineAtMs,
         run: (work) => this.runWithProducerYield(controller.signal, reads, work),
+        producerYield: this.producerYield ?? undefined,
       }))
       .then((prepared) => this.settleSuccess(active, prepared))
-      .catch((error) => this.settleFailure(active, error))
+      .catch((error) => {
+        if (error instanceof DiscoveryBackfillProducerBusyError) {
+          this.settleDeferred(active);
+          return;
+        }
+        this.settleFailure(active, error);
+      })
       .finally(() => active.resolveSettlement());
     return { scheduled: true, jobId: id };
   }
@@ -388,6 +439,7 @@ export class DiscoveryBackfillLane<State, Prepared> {
   private async yieldForProducer(
     signal: AbortSignal,
     maxWaitMs: number,
+    deferWhenBusy: boolean,
   ): Promise<void> {
     const hook = this.producerYield;
     if (!hook || maxWaitMs <= 0) return;
@@ -396,7 +448,12 @@ export class DiscoveryBackfillLane<State, Prepared> {
       if (signal.aborted) {
         throw signal.reason ?? new Error("discovery backfill aborted");
       }
-      if (Date.now() - startedAtMs >= maxWaitMs) return;
+      if (Date.now() - startedAtMs >= maxWaitMs) {
+        if (deferWhenBusy) {
+          throw new DiscoveryBackfillProducerBusyError();
+        }
+        return;
+      }
       await new Promise<void>((resolve) => setTimeout(resolve, 25));
     }
   }
@@ -409,8 +466,21 @@ export class DiscoveryBackfillLane<State, Prepared> {
     await this.yieldForProducer(
       signal,
       this.producerYield?.perReadMaxWaitMs ?? 0,
+      true,
     );
     return reads.run(work);
+  }
+
+  private settleDeferred(active: ActiveJob<State>): void {
+    if (this.active !== active) return;
+    clearTimeout(active.timer);
+    this.active = null;
+    if (active.invalidated) return;
+    this.counts.deferred++;
+    console.log(
+      `[searcher/discovery-backfill] deferred ${active.plan.id}: ` +
+        `blockscan producer critical (deferred=${this.counts.deferred})`,
+    );
   }
 
   readyDescriptor(): {
