@@ -1198,6 +1198,26 @@ production-shaped 用例通过真实 `AdapterFamilyRegistry` 执行 `gen1: 1 poo
 periodic non-warm pass（`enumeration=ran` 且 `priced/expected > 80%`）尚待单独机器证据，不能在取得该证据前
 宣称 live acceptance 或 production cutover。
 
+**2026-08-09 N−1 hot-path continuity 失败与修复 checkpoint（不是 live pass 或 production cutover）：**
+`f6ff7a43be72f4d378ba126d9b05ea4be1765b32` 的 guarded bounded-live 部署在同一
+PID/runtime/log inode 且 `NRestarts=0` 下取得 `25713999..25714117` 的 119 个严格连续 valid pass，随后
+`25714118` 以 `stale_state/source_head_superseded` 中断；canonical schema-v2 receipt 由 SSM
+`4710c7cf-5c90-4b5f-8968-a4cb41c83bce` 产生，manifest SHA-256 为
+`6b4eb6f60b33007b9c60283523e5fe13b6f1bd92c9437dc5a296fe30ed1a5488`。因此该精确部署明确未通过连续
+300 门，119 个样本不得在后续 commit 上续算。
+
+块级 telemetry 把前一 pass 的 `17,792ms` 拆为 state `1,444ms`、enumeration `1,704ms`、exact refine
+`6,256ms` 和 planner/funding `8,387ms`；同期 strict discovery backfill 运行 `9,496ms`，随后两个 head 只隔
+`1ms` 进入本地 scheduler。修复分成两个已提交 slice：
+`3fdcdd1e5c6b2fd69067643d7a1ee9f1f689bd46` 在 DEX/protocol backfill 的 job、read 与 DEX→projection/protocol
+stage 边界把 producer-busy 变成可重试 defer；`5d23ce848a4e9cf29ebc25ccb2fafe264bf97ef8` 在完整 yield 后仍
+producer-busy 时拒绝新 exact batch，并把 exact-refine 硬限制为默认 `4,000ms`（仍受更短 outer pass/reserve
+deadline 约束）。`searcher:discovery-backfill-lane` 12/12、`searcher:exact-producer-yield` 12/12、
+`searcher:blockscan-runtime-startup-warm` 42/42、candidate-refinement、pass-deadline 与完整 listener build 已通过；
+这些仍只是实现/本地合同证据。必须从 `5d23ce84...` 的新 guarded deployment、process anchor 和日志边界重新取得
+连续 300 个 valid pass，才可关闭该精确 runtime 的 live-continuity 子门；strict catalog production authority、
+sealed parity、Funding/Credit production consumers、完整 systemic-live gate 与 Phase E 仍全部未关闭。
+
 ## 8. Identity：多来源 variant，统一行为证明
 
 冻结 ds 已有 `identityPolicies`、`discoveryIdentityResolver`、typed `IdentityAuthority`、retained-instance re-probe
