@@ -562,11 +562,18 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly discoveryBackfillMinIntervalMs?: number;
   /**
    * Max wall-clock a scheduled discovery backfill scan waits for the
-   * producer's critical state phase to finish before it starts anyway.
+   * producer's critical state phase to finish before it defers to the next
+   * scheduling tick.
    */
   readonly discoveryProducerYieldMaxWaitMs?: number;
   /** Per background discovery read wait while the producer is critical. */
   readonly discoveryProducerYieldPerReadMaxWaitMs?: number;
+  /**
+   * Hard wall-clock budget for one exact-refine stage. Exact probes are
+   * optional work; a long probe tail in pass N can delay pass N+1 beyond the
+   * head cadence even after enumeration has completed successfully.
+   */
+  readonly exactRefineHardBudgetMs?: number;
   /**
    * When the background N-1 producer is behind the newest scheduled head,
    * exact probes yield the shared reth transport for up to this many
@@ -2809,10 +2816,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         Math.max(0, this.deps.solveReserveMs),
         Math.max(1, Math.floor((passDeadlineAtMs - Date.now()) / 3)),
       );
-      const refineDeadline = Math.max(
-        Date.now(),
-        passDeadlineAtMs - refinementReserveMs,
-      );
+      const refineDeadline = resolveExactRefineDeadline({
+        nowMs: Date.now(),
+        passDeadlineAtMs,
+        refinementReserveMs,
+        ...(this.deps.exactRefineHardBudgetMs === undefined
+          ? {}
+          : { hardBudgetMs: this.deps.exactRefineHardBudgetMs }),
+      });
       if (!exactRefineStarted) beginStage("exact_refine");
       /*
        * Exact probes read current-N view state only. Batch them directly to
@@ -2874,6 +2885,12 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                   setTimeout(resolve, 100)
                 );
                 exactYieldedMs += 100;
+              }
+              if (!signal.aborted && !passSignal.aborted) {
+                assertExactProbeProducerAvailable({
+                  producerCriticalActive: this.producerCriticalActive,
+                  producerLagBlocks: producerLagBlocks(),
+                });
               }
               return scheduler.run(lane, signal, work);
             },
@@ -3705,4 +3722,40 @@ export function exactProducerYieldShouldWait(input: {
   readonly producerLagBlocks: number;
 }): boolean {
   return input.producerCriticalActive || input.producerLagBlocks >= 2;
+}
+
+export class ExactProbeProducerBusyError extends Error {
+  readonly code = "exact_probe_producer_busy" as const;
+
+  constructor() {
+    super("exact probe skipped: blockscan producer critical");
+    this.name = "ExactProbeProducerBusyError";
+  }
+}
+
+/** Fail closed instead of issuing another exact batch after its yield cap. */
+export function assertExactProbeProducerAvailable(input: {
+  readonly producerCriticalActive: boolean;
+  readonly producerLagBlocks: number;
+}): void {
+  if (exactProducerYieldShouldWait(input)) {
+    throw new ExactProbeProducerBusyError();
+  }
+}
+
+/** Resolve the exact-stage deadline without extending the outer pass budget. */
+export function resolveExactRefineDeadline(input: {
+  readonly nowMs: number;
+  readonly passDeadlineAtMs: number;
+  readonly refinementReserveMs: number;
+  readonly hardBudgetMs?: number;
+}): number {
+  const hardBudgetMs = Math.max(1_000, input.hardBudgetMs ?? 4_000);
+  return Math.min(
+    Math.max(
+      input.nowMs,
+      input.passDeadlineAtMs - input.refinementReserveMs,
+    ),
+    input.nowMs + hardBudgetMs,
+  );
 }
