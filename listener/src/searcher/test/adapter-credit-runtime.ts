@@ -17,6 +17,7 @@ import {
 } from "../adapter-family-graph-runtime.js";
 import {
   StrictAdapterFamilyShadowCatalogPublicationRoot,
+  createStrictCatalogConsumer,
   readStrictCreditRoute,
 } from "../adapter-family-shadow-catalog-publication.js";
 import {
@@ -827,6 +828,17 @@ async function creditStrictCatalogCasJoinsSamePublication(): Promise<void> {
     }),
     null,
   );
+  const consumer = createStrictCatalogConsumer(committed.views);
+  assert(Object.isFrozen(consumer));
+  assert.equal(
+    consumer.resolveCreditRoute({
+      canonicalEdgeId: committedEdge.canonicalEdgeId,
+    }),
+    routeA,
+  );
+  assert.deepEqual(consumer.resolveFundingOffers({
+    fundingPublicationKey: "missing-funding-key",
+  }), { kind: "missing" });
 
   const nextSource: CanonicalSource = Object.freeze({
     ...SOURCE,

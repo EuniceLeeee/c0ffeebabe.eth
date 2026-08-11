@@ -194,6 +194,52 @@ export function readStrictCreditRoute(input: {
   ) ?? null;
 }
 
+export interface StrictCatalogConsumer {
+  readonly views: StrictShadowCatalogViews;
+  readonly resolvePricingMid: (input: {
+    readonly pricingPublicationKey: string;
+    readonly routeKey: RouteKey;
+  }) => StrictPricingReadOutcome;
+  readonly resolveFundingOffers: (input: {
+    readonly fundingPublicationKey: string;
+  }) => StrictFundingReadOutcome;
+  readonly resolveCreditRoute: (input: {
+    readonly canonicalEdgeId: CanonicalEdgeId;
+  }) => StrictShadowCatalogRouteHandle | null;
+}
+
+/**
+ * Single production-facing entry point over one committed strict catalog
+ * publication. Solver/planner wiring must consume pricing/funding/credit
+ * exclusively through this object (or the issuer-bound handles); a missing
+ * strict value is an explicit outcome and never a legacy-registry fallback.
+ */
+export function createStrictCatalogConsumer(
+  views: StrictShadowCatalogViews,
+): StrictCatalogConsumer {
+  const resolvePricingMid: StrictCatalogConsumer["resolvePricingMid"] =
+    (input) => readStrictPricingMid({
+      views,
+      ...input,
+    });
+  const resolveFundingOffers: StrictCatalogConsumer["resolveFundingOffers"] =
+    (input) => readStrictFundingOffers({
+      views,
+      ...input,
+    });
+  const resolveCreditRoute: StrictCatalogConsumer["resolveCreditRoute"] =
+    (input) => readStrictCreditRoute({
+      views,
+      ...input,
+    });
+  return Object.freeze({
+    views,
+    resolvePricingMid,
+    resolveFundingOffers,
+    resolveCreditRoute,
+  });
+}
+
 /** One pointer is the only observable shadow publication state. */
 export interface CommittedStrictShadowCatalogPublication {
   readonly envelope: StrictShadowCatalogEnvelope;

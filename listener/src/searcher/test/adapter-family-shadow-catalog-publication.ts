@@ -7,6 +7,7 @@ import {
 } from "../adapter-family-catalog-publication.js";
 import {
   StrictAdapterFamilyShadowCatalogPublicationRoot,
+  createStrictCatalogConsumer,
   readStrictFundingOffers,
   readStrictPricingMid,
   type CommittedStrictShadowCatalogPublication,
@@ -890,6 +891,15 @@ async function main(): Promise<void> {
     views: fundingCommitted.views,
     fundingPublicationKey: "missing-funding-key",
   }), { kind: "missing" });
+  const fundingConsumer = createStrictCatalogConsumer(fundingCommitted.views);
+  assert.deepEqual(fundingConsumer.resolveFundingOffers({
+    fundingPublicationKey:
+      [...fundingCommitted.views.fundingByPublicationKey.keys()][0]!,
+  }), { kind: "tombstone" });
+  assert.deepEqual(fundingConsumer.resolvePricingMid({
+    pricingPublicationKey: pricingKey,
+    routeKey: readRouteKey,
+  }).kind, "mid");
   assert.equal(fundingCommitted.envelope.snapshot.revision, 1);
   assert.equal(fundingCommitted.envelope.snapshot.familyStatuses.get(
     fundingFamilyId,
