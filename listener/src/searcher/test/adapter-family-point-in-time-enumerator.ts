@@ -166,11 +166,42 @@ function testRejectsForeignSurfaceSourceOrAddressMismatch(): void {
   }), /snapshot inventory/);
 }
 
+function testCrossFamilyKeysMayRepeatAndForeignSurfaceKindFails(): void {
+  const address = ethers.getAddress(`0x${"11".repeat(20)}`);
+  const output = enumeratePointInTimeInventory({
+    source: SOURCE,
+    families: [
+      { familyId: FAMILY_A, incumbents: [incumbent("pool:dup", address)] },
+      { familyId: FAMILY_B, incumbents: [incumbent("pool:dup", address)] },
+    ],
+  });
+  assert.equal(output.families.length, 2);
+  assert.throws(() => enumeratePointInTimeInventory({
+    source: SOURCE,
+    families: [
+      {
+        familyId: FAMILY_A,
+        incumbents: [{
+          inventoryKey: "pool:a",
+          address,
+          currentSurface: Object.freeze({
+            kind: "call",
+            source: SOURCE,
+            target: address,
+            data: "0x",
+          }) as unknown as ReturnType<typeof surface>,
+        }],
+      },
+    ],
+  }), /snapshot inventory requires a current address surface/);
+}
+
 async function main(): Promise<void> {
   testEnumeratesSortedUniqueFamiliesAndIncumbents();
   testRejectsDuplicateInventoryKeysWithinFamily();
   testRejectsDuplicateFamilies();
   testRejectsForeignSurfaceSourceOrAddressMismatch();
+  testCrossFamilyKeysMayRepeatAndForeignSurfaceKindFails();
   console.log("adapter-family point-in-time enumerator PASS");
 }
 
