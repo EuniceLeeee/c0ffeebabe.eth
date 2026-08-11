@@ -11,6 +11,8 @@ import { UNIV3_FAMILY_ID } from
   "./venues/swaps/univ3-family/manifest.js";
 import { UNIV4_FAMILY_ID } from
   "./venues/swaps/univ4-family/manifest.js";
+import { PSM_FAMILY_ID } from
+  "./venues/protocols/psm-family/manifest.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -75,6 +77,16 @@ export interface BaselineUniv4EdgeFacts {
   readonly hookPolicy: "no-hook";
 }
 
+export interface BaselinePsmFacts {
+  readonly familyId: "protocol:psm";
+  readonly target: string;
+  readonly gem: string;
+  readonly dai: string;
+  readonly decimalScale: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -90,6 +102,7 @@ export function normalizeBaselineMigrationItems(
       normalizeByFamily(item, {
         "univ3-standard": normalizeBaselineUniv3InstanceItem,
         univ4: normalizeBaselineUniv4InstanceItem,
+        "protocol:psm": normalizeBaselinePsmInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -99,6 +112,7 @@ export function normalizeBaselineMigrationItems(
       normalizeByFamily(item, {
         "univ3-standard": normalizeBaselineUniv3PriceItem,
         univ4: normalizeBaselineUniv4PriceItem,
+        "protocol:psm": normalizeBaselinePsmPriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -108,6 +122,7 @@ export function normalizeBaselineMigrationItems(
       normalizeByFamily(item, {
         "univ3-standard": normalizeBaselineUniv3EdgeItem,
         univ4: normalizeBaselineUniv4EdgeItem,
+        "protocol:psm": normalizeBaselinePsmEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -117,6 +132,7 @@ export function normalizeBaselineMigrationItems(
       normalizeByFamily(item, {
         "univ3-standard": normalizeBaselineUniv3EnumeratedRouteItem,
         univ4: normalizeBaselineUniv4EnumeratedRouteItem,
+        "protocol:psm": normalizeBaselinePsmEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -126,6 +142,7 @@ export function normalizeBaselineMigrationItems(
       normalizeByFamily(item, {
         "univ3-standard": normalizeBaselineUniv3ExactQuoteItem,
         univ4: normalizeBaselineUniv4ExactQuoteItem,
+        "protocol:psm": normalizeBaselinePsmExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -140,6 +157,7 @@ export function normalizeBaselineMigrationItems(
       return normalizeByFamily(item, {
         "univ3-standard": normalizeBaselineUniv3ExecutionFragmentItem,
         univ4: normalizeBaselineUniv4ExecutionFragmentItem,
+        "protocol:psm": normalizeBaselinePsmExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -154,6 +172,7 @@ export function normalizeBaselineMigrationItems(
       return normalizeByFamily(item, {
         "univ3-standard": normalizeBaselineUniv3FinalSimulationItem,
         univ4: normalizeBaselineUniv4FinalSimulationItem,
+        "protocol:psm": normalizeBaselinePsmFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -176,6 +195,8 @@ function normalizeByFamily(
       RawMigrationSemanticItem;
     readonly univ4: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
+    readonly "protocol:psm": (item: RawMigrationSemanticItem) =>
+      RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -183,6 +204,7 @@ function normalizeByFamily(
   const familyId = baselineFamilyId(item);
   if (familyId === "univ3-standard") return handlers["univ3-standard"](item);
   if (familyId === "univ4") return handlers.univ4(item);
+  if (familyId === "protocol:psm") return handlers["protocol:psm"](item);
   return handlers.default(item);
 }
 
@@ -1757,6 +1779,329 @@ export function normalizeBaselineFundingFinalSimulationItem(
   });
 }
 
+function psmFactsGuard(
+  facts: Partial<BaselinePsmFacts> | undefined,
+): facts is Required<BaselinePsmFacts> {
+  return facts !== undefined &&
+    facts.familyId === "protocol:psm" &&
+    typeof facts.target === "string" &&
+    typeof facts.gem === "string" &&
+    typeof facts.dai === "string" &&
+    typeof facts.decimalScale === "string" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function psmFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselinePsmFacts>;
+  })?.baselineFacts;
+  if (!psmFactsGuard(facts)) return null;
+  return facts;
+}
+
+function derivePsmCanonicalFacts(facts: Required<BaselinePsmFacts>): {
+  readonly target: string;
+  readonly gem: string;
+  readonly dai: string;
+  readonly decimalScale: bigint;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly lowerTarget: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const target = canonicalAddress(facts.target);
+  const gem = canonicalAddress(facts.gem);
+  const dai = canonicalAddress(facts.dai);
+  const decimalScale = BigInt(facts.decimalScale);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const lowerTarget = lowerAddress(target);
+  const bindingFingerprint = hashCanonical({
+    target: lowerTarget,
+    gem: lowerAddress(gem),
+    dai: lowerAddress(dai),
+    decimalScale,
+    feeSemantics: "lite-psm-tin-tout-wad-v1",
+  });
+  const venueIdentityHash = hashCanonical({
+    kind: "address-protocol",
+    target: lowerTarget,
+  });
+  const routeKeyValue = `protocol:psm\u001f${lowerTarget}\u001fsell-gem`;
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "protocol:psm",
+    lowerTarget,
+    lowerTarget,
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    target,
+    gem,
+    dai,
+    decimalScale,
+    tokenIn,
+    tokenOut,
+    lowerTarget,
+    lowerTokenIn,
+    lowerTokenOut,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselinePsmEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = psmFactsOf(item);
+  if (facts === null) return item;
+  const derived = derivePsmCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselinePsmEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselinePsmEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "psm baseline enumerated route item must carry a non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselinePsmInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = psmFactsOf(item);
+  if (facts === null) return item;
+  const derived = derivePsmCanonicalFacts(facts);
+  const staticBindingFingerprint = hashCanonical({
+    capability: PSM_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: Object.freeze({
+      target: derived.lowerTarget,
+      gem: lowerAddress(derived.gem),
+      dai: lowerAddress(derived.dai),
+      decimalScale: derived.decimalScale,
+      feeSemantics: "lite-psm-tin-tout-wad-v1",
+    }),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerTarget,
+    value: Object.freeze({
+      familyId: "protocol:psm",
+      instanceKey: derived.lowerTarget,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselinePsmPriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = psmFactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = derivePsmCanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "psm",
+    instanceKey: derived.lowerTarget,
+    target: derived.target,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "protocol" as const,
+    protocolAction: "convert" as const,
+    edgeKind: "protocol" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.lowerTarget,
+      mid: Object.freeze({
+        kind: "protocol",
+        pool: derived.target,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselinePsmExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = psmFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = derivePsmCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselinePsmExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = psmFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = derivePsmCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "psm",
+      executionTarget: derived.target,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselinePsmFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = psmFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = derivePsmCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -1770,4 +2115,9 @@ const UNIV3_CATALOG_FAMILY =
 const UNIV4_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV4_FAMILY_ID,
+  );
+
+const PSM_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    PSM_FAMILY_ID,
   );

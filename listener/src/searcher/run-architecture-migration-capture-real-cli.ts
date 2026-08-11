@@ -11,6 +11,7 @@ import {
   captureUniv3RealCase,
   captureUniv4RealCase,
   captureFundingFixtureCase,
+  capturePsmFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -120,6 +121,11 @@ async function main(): Promise<void> {
             "flash-loan:balancer-v2" | "flash-loan:morpho",
           source,
           caseId: `${item.family}:${source.number}`,
+        }));
+      } else if (item.family === "protocol:psm") {
+        familyCases.push(await capturePsmFixtureCase({
+          source,
+          caseId: `psm:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

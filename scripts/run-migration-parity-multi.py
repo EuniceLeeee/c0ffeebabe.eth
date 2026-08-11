@@ -79,6 +79,10 @@ def main() -> None:
             for key in ("asset", "maxBorrow", "amount", "minProfit"):
                 if key in case:
                     descriptor[key] = case[key]
+        elif case["family"] == "protocol:psm":
+            for key in ("target", "gem", "dai", "tin", "tout"):
+                if key in case:
+                    descriptor[key] = case[key]
         else:
             for key in ("pool", "tokenA", "tokenB", "reserves", "fee",
                         "tickSpacing", "liquidity", "sqrtPriceX96"):
