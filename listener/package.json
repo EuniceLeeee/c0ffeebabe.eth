@@ -167,6 +167,7 @@
     "searcher:adapter-family-catalog-publication": "node --import tsx src/searcher/test/adapter-family-catalog-publication.ts",
     "searcher:adapter-family-state-carry-proof": "node --import tsx src/searcher/test/adapter-family-state-carry-proof.ts",
     "searcher:adapter-family-exact-quote-cache": "node --import tsx src/searcher/test/adapter-family-exact-quote-cache.ts",
+    "searcher:adapter-family-shadow-suite": "npm run --silent searcher:adapter-family-lifecycle-content-cache && npm run --silent searcher:adapter-family-catalog-publication && npm run --silent searcher:adapter-family-state-carry-proof && npm run --silent searcher:adapter-family-discovery-checkpoint && npm run --silent searcher:adapter-family-point-in-time-enumerator && npm run --silent searcher:adapter-family-closure-exact-set-coupling && npm run --silent searcher:adapter-family-snapshot-inventory-closure && npm run --silent searcher:adapter-family-discovery-continuity-composition && npm run --silent searcher:adapter-family-shadow-catalog-publication && npm run --silent searcher:adapter-family-exact-quote-cache",
     "searcher:adapter-family-discovery-checkpoint": "node --import tsx src/searcher/test/adapter-family-discovery-checkpoint.ts",
     "searcher:adapter-family-discovery-continuity-composition": "node --import tsx src/searcher/test/adapter-family-discovery-continuity-composition.ts",
     "searcher:adapter-family-closure-exact-set-coupling": "node --import tsx src/searcher/test/adapter-family-closure-exact-set-coupling.ts",
