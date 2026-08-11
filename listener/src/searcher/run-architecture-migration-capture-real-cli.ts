@@ -24,6 +24,7 @@ import {
   captureAstraMultiTokenFixtureCase,
   captureEigenpieFixtureCase,
   captureCurveUnderlyingFixtureCase,
+  captureFluidDexFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -198,6 +199,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureCurveUnderlyingFixtureCase({
           source,
           caseId: `curve-underlying:${source.number}`,
+        }));
+      } else if (item.family === "fluid-dex") {
+        familyCases.push(await captureFluidDexFixtureCase({
+          source,
+          caseId: `fluid-dex:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

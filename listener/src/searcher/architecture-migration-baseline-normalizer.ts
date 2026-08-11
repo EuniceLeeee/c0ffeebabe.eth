@@ -55,6 +55,10 @@ import { CURVE_UNDERLYING_FAMILY_ID } from
   "./venues/swaps/curve-underlying-family/manifest.js";
 import { curveUnderlyingStaticBindingProjection } from
   "./venues/swaps/curve-underlying-family/instance.js";
+import { FLUID_DEX_FAMILY_ID } from
+  "./venues/swaps/fluid-dex-family/manifest.js";
+import { fluidDexStaticBindingProjection } from
+  "./venues/swaps/fluid-dex-family/instance.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -276,6 +280,25 @@ export interface BaselineCurveUnderlyingFacts {
   readonly tokenOut: string;
 }
 
+export interface BaselineFluidDexFacts {
+  readonly familyId: "fluid-dex";
+  readonly pool: string;
+  readonly token0: string;
+  readonly token1: string;
+  readonly token0Decimals: number;
+  readonly token1Decimals: number;
+  readonly factory: string;
+  readonly dexId: string;
+  readonly reverseDex: string;
+  readonly quoteTarget: string;
+  readonly quoteRecipient: string;
+  readonly quoteCompletion: "return-or-revert-data";
+  readonly quoteSuccessEncoding: "FluidDexSwapResult(uint256)-revert";
+  readonly swap0To1: boolean;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -310,6 +333,7 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineAstraMultiTokenInstanceItem,
         "protocol:eigenpie": normalizeBaselineEigenpieInstanceItem,
         "curve-underlying": normalizeBaselineCurveUnderlyingInstanceItem,
+        "fluid-dex": normalizeBaselineFluidDexInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -338,6 +362,7 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineAstraMultiTokenPriceItem,
         "protocol:eigenpie": normalizeBaselineEigenpiePriceItem,
         "curve-underlying": normalizeBaselineCurveUnderlyingPriceItem,
+        "fluid-dex": normalizeBaselineFluidDexPriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -366,6 +391,7 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineAstraMultiTokenEdgeItem,
         "protocol:eigenpie": normalizeBaselineEigenpieEdgeItem,
         "curve-underlying": normalizeBaselineCurveUnderlyingEdgeItem,
+        "fluid-dex": normalizeBaselineFluidDexEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -397,6 +423,7 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineEigenpieEnumeratedRouteItem,
         "curve-underlying":
           normalizeBaselineCurveUnderlyingEnumeratedRouteItem,
+        "fluid-dex": normalizeBaselineFluidDexEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -425,6 +452,7 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineAstraMultiTokenExactQuoteItem,
         "protocol:eigenpie": normalizeBaselineEigenpieExactQuoteItem,
         "curve-underlying": normalizeBaselineCurveUnderlyingExactQuoteItem,
+        "fluid-dex": normalizeBaselineFluidDexExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -461,6 +489,7 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineEigenpieExecutionFragmentItem,
         "curve-underlying":
           normalizeBaselineCurveUnderlyingExecutionFragmentItem,
+        "fluid-dex": normalizeBaselineFluidDexExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -497,6 +526,7 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineEigenpieFinalSimulationItem,
         "curve-underlying":
           normalizeBaselineCurveUnderlyingFinalSimulationItem,
+        "fluid-dex": normalizeBaselineFluidDexFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -554,6 +584,9 @@ function normalizeByFamily(
     readonly "curve-underlying": (
       item: RawMigrationSemanticItem,
     ) => RawMigrationSemanticItem;
+    readonly "fluid-dex": (
+      item: RawMigrationSemanticItem,
+    ) => RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -597,6 +630,9 @@ function normalizeByFamily(
   }
   if (familyId === "curve-underlying") {
     return handlers["curve-underlying"](item);
+  }
+  if (familyId === "fluid-dex") {
+    return handlers["fluid-dex"](item);
   }
   return handlers.default(item);
 }
@@ -6460,6 +6496,357 @@ export function normalizeBaselineCurveUnderlyingFinalSimulationItem(
   });
 }
 
+function fluidDexFactsGuard(
+  facts: Partial<BaselineFluidDexFacts> | undefined,
+): facts is Required<BaselineFluidDexFacts> {
+  return facts !== undefined &&
+    facts.familyId === "fluid-dex" &&
+    typeof facts.pool === "string" &&
+    typeof facts.token0 === "string" &&
+    typeof facts.token1 === "string" &&
+    Number.isSafeInteger(facts.token0Decimals) &&
+    Number.isSafeInteger(facts.token1Decimals) &&
+    typeof facts.factory === "string" &&
+    typeof facts.dexId === "string" &&
+    typeof facts.reverseDex === "string" &&
+    typeof facts.quoteTarget === "string" &&
+    typeof facts.quoteRecipient === "string" &&
+    facts.quoteCompletion === "return-or-revert-data" &&
+    facts.quoteSuccessEncoding === "FluidDexSwapResult(uint256)-revert" &&
+    typeof facts.swap0To1 === "boolean" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function fluidDexFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineFluidDexFacts>;
+  })?.baselineFacts;
+  if (!fluidDexFactsGuard(facts)) return null;
+  return facts;
+}
+
+function fluidDexDescriptorFor(
+  facts: Required<BaselineFluidDexFacts>,
+) {
+  const pool = canonicalAddress(facts.pool);
+  const token0 = canonicalAddress(facts.token0);
+  const token1 = canonicalAddress(facts.token1);
+  return Object.freeze({
+    pool,
+    token0,
+    token1,
+    token0Decimals: facts.token0Decimals,
+    token1Decimals: facts.token1Decimals,
+    factoryBinding: Object.freeze({
+      factory: canonicalAddress(facts.factory),
+      dexId: BigInt(facts.dexId),
+      reverseDex: canonicalAddress(facts.reverseDex),
+    }),
+    quoteBinding: Object.freeze({
+      target: canonicalAddress(facts.quoteTarget),
+      recipient: canonicalAddress(facts.quoteRecipient),
+      completion: facts.quoteCompletion,
+      successEncoding: facts.quoteSuccessEncoding,
+    }),
+  }) as unknown as import("./venues/swaps/fluid-dex-family/types.js")
+    .FluidDexDescriptor;
+}
+
+function deriveFluidDexCanonicalFacts(
+  facts: Required<BaselineFluidDexFacts>,
+): {
+  readonly pool: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly lowerPool: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const pool = canonicalAddress(facts.pool);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const lowerPool = lowerAddress(pool);
+  const descriptor = fluidDexDescriptorFor(facts);
+  const bindingFingerprint = hashCanonical(
+    fluidDexStaticBindingProjection(descriptor),
+  );
+  const venueIdentityHash = hashCanonical(Object.freeze({
+    kind: "address-pool",
+    pool: lowerPool,
+  }));
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const routeKeyValue = [
+    "fluid-dex",
+    lowerPool,
+    lowerTokenIn,
+    lowerTokenOut,
+    facts.swap0To1 ? "0-1" : "1-0",
+  ].join("\u001f");
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "fluid-dex",
+    lowerPool,
+    lowerPool,
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    pool,
+    tokenIn,
+    tokenOut,
+    lowerPool,
+    lowerTokenIn,
+    lowerTokenOut,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineFluidDexEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = fluidDexFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveFluidDexCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineFluidDexEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineFluidDexEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "fluid-dex baseline enumerated route item must carry a non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineFluidDexInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = fluidDexFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveFluidDexCanonicalFacts(facts);
+  const descriptor = fluidDexDescriptorFor(facts);
+  const staticBindingFingerprint = hashCanonical({
+    capability: FLUID_DEX_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: fluidDexStaticBindingProjection(descriptor),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerPool,
+    value: Object.freeze({
+      familyId: "fluid-dex",
+      instanceKey: derived.lowerPool,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineFluidDexPriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = fluidDexFactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveFluidDexCanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "fluid-dex-swap",
+    instanceKey: derived.lowerPool,
+    target: derived.pool,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "swap" as const,
+    poolToken0: canonicalAddress(facts.token0),
+    poolToken1: canonicalAddress(facts.token1),
+    edgeKind: "swap" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.routeKeyValue,
+      mid: Object.freeze({
+        kind: "external-swap",
+        pool: derived.pool,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineFluidDexExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = fluidDexFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveFluidDexCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineFluidDexExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = fluidDexFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveFluidDexCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "fluid-dex-swap",
+      executionTarget: derived.pool,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineFluidDexFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = fluidDexFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveFluidDexCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -6538,4 +6925,9 @@ const EIGENPIE_CATALOG_FAMILY =
 const CURVE_UNDERLYING_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     CURVE_UNDERLYING_FAMILY_ID,
+  );
+
+const FLUID_DEX_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    FLUID_DEX_FAMILY_ID,
   );

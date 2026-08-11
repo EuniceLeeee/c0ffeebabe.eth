@@ -243,6 +243,23 @@ import type {
   CurveUnderlyingDescriptor,
   CurveUnderlyingRoute,
 } from "./venues/swaps/curve-underlying-family/types.js";
+import { FLUID_DEX_FAMILY_ID } from
+  "./venues/swaps/fluid-dex-family/manifest.js";
+import {
+  FLUID_DEX_ADDRESS_DEAD,
+  FLUID_DEX_CONSTANTS_INTERFACE,
+  FLUID_DEX_ERC20_INTERFACE,
+  FLUID_DEX_FACTORY_INTERFACE,
+  FLUID_DEX_INTERFACE,
+} from "./venues/swaps/fluid-dex-family/codec.js";
+import { fluidDexExact } from
+  "./venues/swaps/fluid-dex-family/exact.js";
+import { fluidDexExecution } from
+  "./venues/swaps/fluid-dex-family/execution.js";
+import type {
+  FluidDexDescriptor,
+  FluidDexRoute,
+} from "./venues/swaps/fluid-dex-family/types.js";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -7555,6 +7572,428 @@ export async function captureCurveUnderlyingFixtureCase(input: {
   return Object.freeze({
     familyId: CURVE_UNDERLYING_FAMILY_ID,
     caseId: input.caseId ?? `curve-underlying:${input.source.number}`,
+    inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
+    stateAnchorNumber: input.source.number,
+    implementationClosureHash: summary.definitionBoundaryHash,
+    stages: Object.freeze({
+      instances: instanceStage(instances, evidenceRefs),
+      edges: exercisedStage(edges, evidenceRefs),
+      stateCoverage: exercisedStage([], evidenceRefs),
+      pricedEdges: exercisedStage([], evidenceRefs),
+      prices: exercisedStage(prices, evidenceRefs),
+      failures: exercisedStage([], evidenceRefs),
+      enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
+      exactQuotes: exercisedStage(exactQuotes, evidenceRefs),
+      executionFragments: exercisedStage(executionFragments, evidenceRefs),
+      finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
+    }),
+  });
+}
+
+export const FLUID_DEX_FIXTURE_POOL = `0x${"da".repeat(20)}`;
+export const FLUID_DEX_FIXTURE_TOKEN0 = `0x${"db".repeat(20)}`;
+export const FLUID_DEX_FIXTURE_TOKEN1 = `0x${"dc".repeat(20)}`;
+export const FLUID_DEX_FIXTURE_FACTORY = `0x${"dd".repeat(20)}`;
+
+function fluidDexDeclaredRevert(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+): AdapterRequestResult {
+  const amountIn = BigInt(
+    FLUID_DEX_INTERFACE.decodeFunctionData(
+      "swapIn",
+      (request as { readonly data: string }).data,
+    )[1],
+  );
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "reverted-as-declared" as const,
+    data: FLUID_DEX_INTERFACE.encodeErrorResult(
+      "FluidDexSwapResult",
+      [amountIn],
+    ),
+  });
+}
+
+function fluidDexSuccessResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+): AdapterRequestResult {
+  if (
+    request.id === "active-quote-zero-to-one" ||
+    request.id === "active-quote-one-to-zero" ||
+    request.id === "current-fluid-dex-quote" ||
+    request.id === "exact-fluid-dex-declared-revert"
+  ) {
+    return fluidDexDeclaredRevert(request, canonical);
+  }
+  const zero = `0x${"00".repeat(20)}`;
+  const slot = "0x" + "11".repeat(32);
+  const data =
+    request.id === "pool-constants"
+      ? FLUID_DEX_CONSTANTS_INTERFACE.encodeFunctionResult("constantsView", [[
+          1n,
+          zero,
+          FLUID_DEX_FIXTURE_FACTORY,
+          [zero, zero, zero, zero, zero],
+          zero,
+          FLUID_DEX_FIXTURE_TOKEN0,
+          FLUID_DEX_FIXTURE_TOKEN1,
+          slot,
+          slot,
+          slot,
+          slot,
+          slot,
+          slot,
+          0n,
+        ]])
+      : request.kind === "get-code"
+        ? "0x00"
+        : request.id === "factory-reverse-dex"
+          ? FLUID_DEX_FACTORY_INTERFACE.encodeFunctionResult(
+              "getDexAddress",
+              [FLUID_DEX_FIXTURE_POOL],
+            )
+          : request.id === "token0-decimals" ||
+              request.id === "token1-decimals"
+            ? FLUID_DEX_ERC20_INTERFACE.encodeFunctionResult(
+                "decimals",
+                [18],
+              )
+            : (() => {
+                throw new Error(
+                  "unexpected fluid-dex fixture request " + request.id,
+                );
+              })();
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data,
+  });
+}
+
+class FluidDexFixtureScheduler implements CentralAdapterScheduler {
+  issueExecutor(
+    input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
+  ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
+    const executor = createBoundedRequestExecutor({
+      assertSupported: (requirements) => assert.deepEqual(
+        requirements,
+        input.requirements,
+      ),
+      assertCallerBinding() {},
+      assertWithinBudget: (_familyId, requests) => {
+        assert.deepEqual(requests, input.requests);
+      },
+      execute: async (execution) => Promise.all(execution.requests.map(
+        (request) => fluidDexSuccessResult(request, execution.source),
+      )),
+      sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
+    });
+    return Object.freeze({
+      executor,
+      timing: () => ({ queueWaitMs: 0, transportWallMs: 1, attempts: 1 }),
+    });
+  }
+}
+
+function fluidDexFixtureRuntime(): CentralAdapterRuntime {
+  let now = 1_000;
+  return {
+    clock: { nowMs: () => now++ },
+    generationFence: new FixtureFence(),
+    callerAuthority: { bind: () => ({}) },
+    policy: {
+      bind: (input) => ({
+        lane: input.stage === "identity" ? "critical-proof" : "background",
+        deadlineAtMs: 100_000,
+        maxAttempts: 1,
+        transportPool: "state-read",
+        fairnessKey: input.subjectKey,
+      }),
+    },
+    budgets: { assertAdmitted() {} },
+    scheduler: new FluidDexFixtureScheduler(),
+  };
+}
+
+async function runFluidDexLifecycle(
+  canonical: CanonicalSource,
+): Promise<AdapterFamilyPublication> {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    FLUID_DEX_FAMILY_ID,
+  );
+  let publication: AdapterFamilyPublication | null = null;
+  const swapCalldata = FLUID_DEX_INTERFACE.encodeFunctionData("swapIn", [
+    true,
+    1_000_000n,
+    0n,
+    FLUID_DEX_ADDRESS_DEAD,
+  ]);
+  const result = await executeAdapterFamilyLifecycleBatch({
+    family,
+    matches: [Object.freeze({
+      matchedPatternId: "fluid-dex-swap-call",
+      observation: Object.freeze({
+        kind: "call" as const,
+        source: canonical,
+        target: FLUID_DEX_FIXTURE_POOL,
+        data: swapCalldata,
+      }),
+    })],
+    source: canonical,
+    generation: canonical.generation,
+    runtime: fluidDexFixtureRuntime(),
+    publisher: { publish: (value) => { publication = value; } },
+  });
+  assert(result.publication);
+  assert(publication);
+  return publication;
+}
+
+/**
+ * Runs the fluid-dex factory-child lifecycle over the observed swapIn
+ * fixture: constants -> factory reverse binding -> bidirectional declared
+ * revert quotes; both directions are exercised through pricing, exact and
+ * execution.
+ */
+export async function captureFluidDexFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runFluidDexLifecycle(input.source);
+  const evidenceRefs = Object.freeze([
+    `fixture:fluid-dex:${input.source.number}:${input.source.hash}`,
+  ]);
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    FLUID_DEX_FAMILY_ID,
+  );
+  const edges: RawMigrationStageCapture["items"][number][] = [];
+  const prices: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of instance.routes) {
+      const handle = instance.routeHandles.find((candidate) =>
+        candidate.routeKey === route.routeKey
+      );
+      if (handle === undefined) {
+        throw new Error(
+          `prepared route ${route.routeKey} has no issued handle`,
+        );
+      }
+      const projected = projectFamilyRouteGraph({
+        family,
+        descriptor: instance.descriptor,
+        route,
+        handle,
+      });
+      edges.push(Object.freeze({
+        id: projected.edge.canonicalEdgeId,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: projected.edge.canonicalEdgeId,
+        }),
+      }));
+    }
+    const routeByKey = new Map(
+      instance.routes.map((route) => [route.routeKey, route]),
+    );
+    for (const pricing of instance.pricingInstances) {
+      for (const [routeKey, mid] of pricing.mids) {
+        const route = routeByKey.get(routeKey);
+        if (route === undefined) {
+          throw new Error(`fluid-dex pricing route ${routeKey} is missing`);
+        }
+        prices.push(Object.freeze({
+          id: `${pricing.stateKey}:${route.tokenIn.toLowerCase()}>` +
+            `${route.tokenOut.toLowerCase()}`,
+          value: Object.freeze({
+            stateKey: pricing.stateKey,
+            mid: Object.freeze({ ...mid }),
+          }) as unknown as RawMigrationStageCapture["items"][number]["value"],
+        }));
+      }
+    }
+  }
+  const enumeratedRoutes: RawMigrationStageCapture["items"][number][] = edges
+    .map((edge) => edge.value as {
+      readonly routeKey: string;
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly canonicalEdgeId: string;
+    })
+    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
+    .map((value, order) => Object.freeze({
+      id: value.canonicalEdgeId,
+      value: Object.freeze({
+        routeKey: value.routeKey,
+        tokenIn: value.tokenIn,
+        tokenOut: value.tokenOut,
+        canonicalEdgeId: value.canonicalEdgeId,
+        order,
+      }),
+    }));
+  const exactMethod = fluidDexExact.methods().find(
+    (method) => method.kind === "request-program" &&
+      method.id === "declared-revert-quote",
+  );
+  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+    throw new Error("fluid-dex exact request program is missing");
+  }
+  const program = exactMethod.program;
+  const exactByRouteKey = new Map<
+    string,
+    {
+      readonly amountOut: bigint;
+      readonly evidence: import("./venues/swaps/fluid-dex-family/types.js")
+        .FluidDexExactEvidence;
+    }
+  >();
+  const exactQuotes: RawMigrationStageCapture["items"][number][] = [];
+  const edgeByRouteKey = new Map(
+    edges.map((edge) => {
+      const value = edge.value as { readonly routeKey: string };
+      return [value.routeKey, edge] as const;
+    }),
+  );
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const exactInput = Object.freeze({
+        descriptor: instance.descriptor as unknown as FluidDexDescriptor,
+        route: route as unknown as FluidDexRoute,
+        amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
+        source: input.source,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      const requests = program.buildRequests(exactInput);
+      const results = requests.map((request) =>
+        fluidDexSuccessResult(request, input.source)
+      );
+      const decoded = program.decode({
+        programInput: exactInput,
+        initialResults: results,
+        dependentEvidence: Object.freeze([]),
+      });
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (edge === undefined) {
+        throw new Error(`fluid-dex exact route ${route.routeKey} has no edge`);
+      }
+      exactByRouteKey.set(route.routeKey, {
+        amountOut: decoded.amountOut,
+        evidence: decoded.evidence,
+      });
+      exactQuotes.push(Object.freeze({
+        id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
+          amountOut: decoded.amountOut.toString(),
+          feeBps: "0",
+        }),
+      }));
+    }
+  }
+  const executionFragments: RawMigrationStageCapture["items"][number][] = [];
+  const finalSimulations: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const quote = exactByRouteKey.get(route.routeKey);
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (quote === undefined || edge === undefined) {
+        throw new Error(
+          `fluid-dex execution route ${route.routeKey} has no quote`,
+        );
+      }
+      const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
+      const fragment = fluidDexExecution.buildFragment({
+        descriptor: instance.descriptor as unknown as FluidDexDescriptor,
+        route: route as unknown as FluidDexRoute,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+        minAmountOut: quote.amountOut,
+        exactEvidence: quote.evidence,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      executionFragments.push(Object.freeze({
+        id: `${edge.id}\u001fexec:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          actionAdapterId: "fluid-dex-swap",
+          executionTarget: (
+            instance.descriptor as unknown as FluidDexDescriptor
+          ).pool,
+          nodeFingerprint: hashCanonical(
+            fragment.nodes as unknown as CanonicalValue,
+          ),
+        }),
+      }));
+      const effects = fluidDexExecution.expectedEffects({
+        descriptor: instance.descriptor as unknown as FluidDexDescriptor,
+        route: route as unknown as FluidDexRoute,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+      });
+      if (quote.amountOut <= 0n) {
+        throw new Error(
+          "fluid-dex capture final simulation repayment failed",
+        );
+      }
+      finalSimulations.push(Object.freeze({
+        id: `${edge.id}\u001fsim:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          effectsFingerprint: hashCanonical(
+            effects as unknown as CanonicalValue,
+          ),
+          conservation: "conserved",
+          repayment: "satisfied",
+          evInput: Object.freeze({
+            amountIn: amountIn.toString(),
+            amountOut: quote.amountOut.toString(),
+          }),
+        }),
+      }));
+    }
+  }
+  const instances = publication.instances;
+  const summary = definedFamilyPluginContractSummary(family.plugin);
+  return Object.freeze({
+    familyId: FLUID_DEX_FAMILY_ID,
+    caseId: input.caseId ?? `fluid-dex:${input.source.number}`,
     inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
     stateAnchorNumber: input.source.number,
     implementationClosureHash: summary.definitionBoundaryHash,

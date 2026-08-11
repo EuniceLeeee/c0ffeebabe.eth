@@ -5,6 +5,7 @@ import { quotedPoolMid } from "../blockscan-state-shared.js";
 import {
   decodeDeclaredFluidDexQuote,
   FLUID_DEX_INTERFACE,
+  lowerAddress,
   requireSuccessfulResult,
   sameAddress,
 } from "./codec.js";
@@ -128,12 +129,14 @@ export const fluidDexPricing = {
       })]]);
     },
   },
-  dependencies: ({ descriptor }) => Object.freeze([
-    descriptor.pool,
-    descriptor.token0,
-    descriptor.token1,
-    descriptor.quoteBinding.target,
-  ]),
+  dependencies: ({ descriptor }) => Object.freeze(
+    [...new Set([
+      lowerAddress(descriptor.pool),
+      lowerAddress(descriptor.token0),
+      lowerAddress(descriptor.token1),
+      lowerAddress(descriptor.quoteBinding.target),
+    ])].sort(),
+  ),
   mutation: {
     affectedStateKeys({ descriptor, routes, observation }) {
       if (

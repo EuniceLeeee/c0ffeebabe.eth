@@ -1798,7 +1798,7 @@
         "familyId": "fluid-dex",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "2ed98ed8512f1c5dd424ec6dd7b6e187b67e65a4af02738f2f79f346f7673fb2",
+        "contentHash": "630fabce975c063ca627ef78c2abddfc79748df9bfaadc577b49c623edd0698b",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -6261,5 +6261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "24b8b43927d45dd3d14bc01b937f4ddcc2b463757592bdbca95cbd46b8e55741"
+  "artifactHash": "cdf859e3e429a5af33e2e2980006e658a8aceeb19c9fa7d2bf21570e1e290480"
 }
