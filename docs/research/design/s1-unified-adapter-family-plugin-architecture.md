@@ -2295,6 +2295,21 @@ commit 见下，fail-closed 合同，不切换 authority）：**
   经该 gate 如实判为 not-eligible，不虚报 cutover；
 - 证据：该合同 + 完整 listener build 通过；默认 authority 仍未切换。
 
+**2026-08-12 production startup family manifest contract checkpoint（实现
+commit 见下，§18.3.1/§18.3.7 前置合同）：**
+
+- 新增 `productionFamilyStartupManifest()`：从 strict catalog 派生静态
+  source/family/capability closure（22 Family、220 capability identities、
+  per-Family applicable/declared-absent 清单），输出确定性 manifestHash，
+  全量冻结；任何缺 capability hash、Family 数/能力数不符、重复 Family
+  均 fail closed；
+- 新增合同测试 `searcher:production-family-startup-manifest`：覆盖
+  22/220 计数、排序、无重复、冻结、manifestHash 确定性、funding 单能力
+  与 credit 6 能力 + declared-absent 清单、缺 hash/错数量 fail closed；
+- 该 manifest 是 §18.3.1 启动输出与 §18.3.7 clean-process catalog load
+  的 evidence 前置；当前仅合同级，尚未在 live startup 打印（后续
+  main-env 接线时消费）。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

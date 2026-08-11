@@ -176,6 +176,7 @@
     "searcher:adapter-family-shadow-catalog-publication": "node --import tsx src/searcher/test/adapter-family-shadow-catalog-publication.ts",
     "searcher:strict-catalog-consumer-diagnostic": "node --import tsx src/searcher/test/strict-catalog-consumer-diagnostic.ts",
     "searcher:default-authority-cutover-gate": "node --import tsx src/searcher/test/default-authority-cutover-gate.ts",
+    "searcher:production-family-startup-manifest": "node --import tsx src/searcher/test/production-family-startup-manifest.ts",
     "searcher:adapter-family-observation-shadow-ingress": "node --import tsx src/searcher/test/adapter-family-observation-shadow-ingress.ts",
     "searcher:adapter-credit-runtime": "node --import tsx src/searcher/test/adapter-credit-runtime.ts",
     "searcher:family-capability-catalog": "node --import tsx src/searcher/test/family-capability-catalog.ts",
