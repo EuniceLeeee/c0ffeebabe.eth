@@ -117,6 +117,23 @@ commit 见本日各 checkpoint）：**
   相同）；节点双跑未触碰 live searcher（`/opt/MEV` 独立运行），未做
   任何 live/签名/广播。
 
+**2026-08-12 repeatable node SSM double-run tool checkpoint（commit
+见下，ops 工具 + 二次机器证据）：**
+
+- 新增 `scripts/run-s1-node-double-run.sh`：一条命令完成节点 preflight
+  （worktree/status/HEAD/procs/locks）→ fetch+checkout 精确 SHA →
+  22-family 双跑 → sha256sum → 与已提交证据逐字节比对 → 写出
+  `docs/research/design/evidence/s1-node-run-<ssmRunId>.json`
+  （format/runId/instance/SHAs/artifact hashes）；hash 不一致即失败，
+  不写回任何部署；
+- 二次验证：SSM run `89c2728e-2f29-4956-9024-cbe417544a7a`（实例
+  `i-0ff908dedeec9ebc6`，baseline `4265971d…`、impl `6778fbee…`）再次
+  `aggregate=pass`、三工件 hash 与 committed 证据完全一致
+  （`8df51cad…`/`540cc347…`/`43d5f467…`）；runbook 与 tool 双通道均可
+  复现；
+- 纯 dry-run 证据工具：无 live/签名/广播，不触碰 `/opt/MEV` live
+  searcher。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - strict catalog prepare 内 complete-snapshot 一次性消费（受限于

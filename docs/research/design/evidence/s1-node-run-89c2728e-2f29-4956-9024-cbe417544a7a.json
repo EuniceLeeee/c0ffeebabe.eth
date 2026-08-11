@@ -1,0 +1,11 @@
+{
+  "format": "s1-node-ssm-double-run-v1",
+  "ssmRunId": "89c2728e-2f29-4956-9024-cbe417544a7a",
+  "instanceId": "i-0ff908dedeec9ebc6",
+  "baselineSha": "4265971d123c2d6afc5194aa2b324104558327c7",
+  "implSha": "6778fbee34b699bad4a1acca43c03102f99cd980",
+  "outDir": "/opt/MEV-s1-parity-22family-node-1786490813",
+  "receiptSha256": "8df51cad706ee73f6c1556cc08e91a4f510d2fde0bdc569e394d10ad66a41d35",
+  "baselineSideSha256": "540cc3475d865e60a4a6dbd8cd007a9828560a6d745e21952c75b10a241e8d58",
+  "challengerSideSha256": "43d5f46788e5a997d806f394115bfd15223ea6726b9ac001476fb06703edb667"
+}
