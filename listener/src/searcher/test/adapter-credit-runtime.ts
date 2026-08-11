@@ -865,6 +865,30 @@ async function creditStrictCatalogCasJoinsSamePublication(): Promise<void> {
     sourceAnchors: anchorsFor(nextSource),
     sourceTransitionProof: transitionProof,
   }), /issuer-bound StateInstance mutation proof/);
+
+  // A Credit route bound to a different staged instance must be rejected
+  // before any graph projection.
+  assert.throws(() => root.stageCreditFamily({
+    family,
+    publication: Object.freeze({
+      ...publicationB,
+      routes: Object.freeze([routeB]),
+    }),
+    instance: instanceA,
+  }), /escaped its staged instance/);
+  assert.throws(() => root.stageCreditFamily({
+    family,
+    publication: Object.freeze({
+      ...publicationB,
+      source: Object.freeze({
+        ...SOURCE,
+        number: SOURCE.number + 2,
+        generation: SOURCE.generation + 2,
+      }),
+      generation: SOURCE.generation + 2,
+    }),
+    instance: instanceB,
+  }), /source\/generation mismatch/);
 }
 
 function observedFluidCreditPlugin(
