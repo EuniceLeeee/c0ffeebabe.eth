@@ -63,7 +63,9 @@ async function main(): Promise<void> {
     hash: manifest.sourceBlockHash,
     generation: manifest.sourceBlock,
   });
-  const buildSide = async () => {
+  const buildSide = async (): Promise<ReturnType<
+    typeof generateArchitectureMigrationSideCapture
+  >> => {
     const familyCases: RawFamilyMigrationCaseCapture[] = [];
     for (const item of manifest.cases) {
       if (item.family === "univ2") {
@@ -133,12 +135,9 @@ async function main(): Promise<void> {
     return generateArchitectureMigrationSideCapture(corpus);
   };
   if (checkOnly) {
-    const first = await buildSide();
-    const second = await buildSide();
-    if (
-      architectureMigrationSideJson(first) !==
-      architectureMigrationSideJson(second)
-    ) {
+    const first = architectureMigrationSideJson(await buildSide());
+    const second = architectureMigrationSideJson(await buildSide());
+    if (first !== second) {
       throw new Error("real capture generation is not reproducible");
     }
     process.stdout.write("real capture reproducible\n");
