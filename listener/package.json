@@ -178,6 +178,7 @@
     "searcher:default-authority-cutover-gate": "node --import tsx src/searcher/test/default-authority-cutover-gate.ts",
     "searcher:production-family-startup-manifest": "node --import tsx src/searcher/test/production-family-startup-manifest.ts",
     "searcher:systemic-live-gate": "node --import tsx src/searcher/test/systemic-live-gate.ts",
+    "searcher:s1-cutover-readiness": "node --import tsx src/searcher/test/s1-cutover-readiness.ts",
     "searcher:adapter-family-observation-shadow-ingress": "node --import tsx src/searcher/test/adapter-family-observation-shadow-ingress.ts",
     "searcher:adapter-credit-runtime": "node --import tsx src/searcher/test/adapter-credit-runtime.ts",
     "searcher:family-capability-catalog": "node --import tsx src/searcher/test/family-capability-catalog.ts",

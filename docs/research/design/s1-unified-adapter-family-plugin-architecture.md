@@ -2338,6 +2338,19 @@ Phase D/§13-§14 合同，不运行 live）：**
 - 该 gate 不自己跑 live window；paired-live harness 产出 evidence、
   gate 做 authority 决策；当前无 live 证据，gate 状态如实保持未消费。
 
+**2026-08-12 S1 cutover-readiness receipt contract checkpoint（实现
+commit 见下，Phase D/E 前置合成合同，不切换 authority）：**
+
+- 新增 `evaluateS1CutoverReadiness`：把 batch parity、held-out
+  negatives、systemic-live gate、startup manifest（重新校验 + hash
+  对比）与 source-bound strict consumer 五个前置合成单一 fail-closed
+  判定；任一不满足返回 `not-ready` + reasons；
+- 新增合同测试 `searcher:s1-cutover-readiness`：all-pass → ready（冻结）；
+  每项前置单独 not-ready，全失败态 4 条 reasons；startup manifest
+  篡改 hash 被拒绝；
+- 该 receipt 是授权 cutover 步骤的单一入口；当前各前置状态如实为
+  not-ready（无 live 证据、strict consumer 仅 diagnostic），不会虚报。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
