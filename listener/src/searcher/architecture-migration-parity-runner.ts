@@ -907,6 +907,16 @@ function compareStandaloneCapture(
   readonly parity: boolean;
   readonly delta: ArchitectureMigrationSemanticSetDelta;
 } {
+  if (baseline === null && challenger === null) {
+    return Object.freeze({
+      parity: true,
+      delta: deepFreeze({
+        missingIds: [],
+        addedIds: [],
+        changedIds: [],
+      }),
+    });
+  }
   const delta = compareSemanticItems(
     exercisedItems(baseline?.stage),
     exercisedItems(challenger?.stage),

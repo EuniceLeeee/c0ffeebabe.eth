@@ -10,9 +10,11 @@ import {
   UNIV2_FIXTURE_TOKEN1,
 } from "../architecture-migration-fixture-replay.js";
 import {
+  normalizeBaselineUniv2InstanceItem,
   normalizeBaselineUniv2ExecutionFragmentItem,
   normalizeBaselineUniv2ExactQuoteItem,
   normalizeBaselineUniv2FinalSimulationItem,
+  normalizeBaselineUniv2PriceItem,
   normalizeBaselineUniv2EnumeratedRouteItem,
   normalizeBaselineUniv2EdgeItem,
 } from "../architecture-migration-baseline-normalizer.js";
@@ -252,6 +254,104 @@ async function main(): Promise<void> {
       legacySim,
     );
     assert.deepEqual(normalizedSim, sim);
+  }
+
+  const instances = real.stages.instances!.items;
+  assert.equal(instances.length, 1);
+  const pool = UNIV2_FIXTURE_POOL.toLowerCase();
+  const legacyInstance = Object.freeze({
+    id: `univ2-standard\u001f${pool}`,
+    value: Object.freeze({
+      familyId: "univ2-standard",
+      stateKey: pool,
+      instanceFingerprint: "11".repeat(32),
+      specFingerprint: "22".repeat(32),
+      baselineFacts: Object.freeze({
+        familyId: "univ2-standard",
+        pool,
+        token0: UNIV2_FIXTURE_TOKEN0.toLowerCase(),
+        token1: UNIV2_FIXTURE_TOKEN1.toLowerCase(),
+        tokenIn: UNIV2_FIXTURE_TOKEN0.toLowerCase(),
+        tokenOut: UNIV2_FIXTURE_TOKEN1.toLowerCase(),
+        feeBps: "30",
+        factory: UNIV2_FIXTURE_FACTORY.toLowerCase(),
+        reversePool: pool,
+      }),
+    }),
+  });
+  assert.deepEqual(
+    normalizeBaselineUniv2InstanceItem(legacyInstance),
+    instances[0],
+  );
+
+  const prices = real.stages.prices!.items;
+  assert.equal(prices.length, 2);
+  for (const price of prices) {
+    const priceValue = price.value as {
+      readonly stateKey: string;
+      readonly mid: {
+        readonly kind: string;
+        readonly pool: string;
+        readonly mid: number;
+        readonly feeBps: number;
+        readonly reserveA: bigint | string;
+        readonly reserveB: bigint | string;
+        readonly depthProxy: number;
+        readonly edges: readonly {
+          readonly tokenIn: string;
+          readonly tokenOut: string;
+        }[];
+      };
+    };
+    const tokenIn = priceValue.mid.edges[0]!.tokenIn.toLowerCase();
+    const tokenOut = priceValue.mid.edges[0]!.tokenOut.toLowerCase();
+    const legacyPrice = Object.freeze({
+      id: price.id,
+      value: Object.freeze({
+        stateKey: priceValue.stateKey,
+        mid: Object.freeze({
+          ...priceValue.mid,
+          edges: Object.freeze([Object.freeze({
+            adapterId: "univ2-swap",
+            instanceKey: pool,
+            target: pool,
+            tokenIn,
+            tokenOut,
+            poolToken0: UNIV2_FIXTURE_TOKEN0.toLowerCase(),
+            poolToken1: UNIV2_FIXTURE_TOKEN1.toLowerCase(),
+            v2FeeBps: 30n,
+            slotKind: "swap",
+            edgeKind: "swap",
+            leavesStandingPosition: false,
+          })]),
+        }),
+        baselineFacts: Object.freeze({
+          familyId: "univ2-standard",
+          pool,
+          token0: UNIV2_FIXTURE_TOKEN0.toLowerCase(),
+          token1: UNIV2_FIXTURE_TOKEN1.toLowerCase(),
+          tokenIn,
+          tokenOut,
+          feeBps: "30",
+          factory: UNIV2_FIXTURE_FACTORY.toLowerCase(),
+          reversePool: pool,
+        }),
+      }),
+    });
+    assert.deepEqual(
+      JSON.parse(
+        JSON.stringify(
+          normalizeBaselineUniv2PriceItem(legacyPrice),
+          (_key, value) =>
+            typeof value === "bigint" ? value.toString() : value,
+        ),
+      ),
+      JSON.parse(
+        JSON.stringify(price, (_key, value) =>
+          typeof value === "bigint" ? value.toString() : value),
+      ),
+      "price normalizer must match the JSON-side capture shape",
+    );
   }
 
   const passthrough = Object.freeze({

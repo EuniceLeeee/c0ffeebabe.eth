@@ -5,6 +5,10 @@ import {
 } from "./venues/swaps/univ2-family/codec.js";
 import { uniV2FeeRuleForFactory } from
   "./venues/swaps/univ2-family/fee-rule.js";
+import { UNIV2_FAMILY_ID } from
+  "./venues/swaps/univ2-family/manifest.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
+  "./venues/production-family-composition.js";
 import type {
   ArchitectureMigrationStage,
   CommonGraphMigrationStage,
@@ -41,6 +45,16 @@ export function normalizeBaselineMigrationItems(
   stage: ArchitectureMigrationStage | CommonGraphMigrationStage,
   items: readonly RawMigrationSemanticItem[],
 ): readonly RawMigrationSemanticItem[] {
+  if (stage === "instances") {
+    return Object.freeze(items.map((item) =>
+      normalizeBaselineUniv2InstanceItem(item)
+    ));
+  }
+  if (stage === "prices") {
+    return Object.freeze(items.map((item) =>
+      normalizeBaselineUniv2PriceItem(item)
+    ));
+  }
   if (stage === "edges") {
     return Object.freeze(items.map((item) =>
       normalizeBaselineUniv2EdgeItem(item)
@@ -431,16 +445,162 @@ export function normalizeBaselineUniv2EdgeItem(
   });
 }
 
-function deriveUniv2CanonicalEdge(
+export function normalizeBaselineUniv2InstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const value = item.value as {
+    readonly baselineFacts?: Partial<BaselineUniv2EdgeFacts>;
+  };
+  const facts = value?.baselineFacts;
+  if (
+    facts === undefined ||
+    facts.familyId !== "univ2-standard" ||
+    typeof facts.pool !== "string" ||
+    typeof facts.token0 !== "string" ||
+    typeof facts.token1 !== "string" ||
+    typeof facts.tokenIn !== "string" ||
+    typeof facts.tokenOut !== "string" ||
+    typeof facts.feeBps !== "string" ||
+    typeof facts.factory !== "string" ||
+    typeof facts.reversePool !== "string"
+  ) {
+    return item;
+  }
+  const completeFacts: Required<BaselineUniv2EdgeFacts> = {
+    familyId: "univ2-standard",
+    pool: facts.pool,
+    token0: facts.token0,
+    token1: facts.token1,
+    tokenIn: facts.tokenIn,
+    tokenOut: facts.tokenOut,
+    feeBps: facts.feeBps,
+    factory: facts.factory,
+    reversePool: facts.reversePool,
+  };
+  const derived = deriveUniv2CanonicalFacts(completeFacts);
+  const staticBindingFingerprint = hashCanonical({
+    capability:
+      UNIV2_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: Object.freeze({
+      pool: derived.pool,
+      token0: derived.token0,
+      token1: derived.token1,
+      feeRule: Object.freeze({ ...derived.feeRule }),
+      factoryBinding: Object.freeze({
+        factory: derived.factory,
+        reversePool: derived.reversePool,
+      }),
+    }),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerPool,
+    value: Object.freeze({
+      familyId: "univ2-standard",
+      instanceKey: derived.lowerPool,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineUniv2PriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const value = item.value as {
+    readonly baselineFacts?: Partial<BaselineUniv2EdgeFacts>;
+    readonly mid?: {
+      readonly kind?: unknown;
+      readonly pool?: unknown;
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  };
+  const facts = value?.baselineFacts;
+  const mid = value?.mid;
+  if (
+    facts === undefined ||
+    facts.familyId !== "univ2-standard" ||
+    typeof facts.pool !== "string" ||
+    typeof facts.token0 !== "string" ||
+    typeof facts.token1 !== "string" ||
+    typeof facts.tokenIn !== "string" ||
+    typeof facts.tokenOut !== "string" ||
+    typeof facts.feeBps !== "string" ||
+    typeof facts.factory !== "string" ||
+    typeof facts.reversePool !== "string" ||
+    mid === undefined ||
+    mid.kind !== "v2" ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const completeFacts: Required<BaselineUniv2EdgeFacts> = {
+    familyId: "univ2-standard",
+    pool: facts.pool,
+    token0: facts.token0,
+    token1: facts.token1,
+    tokenIn: facts.tokenIn,
+    tokenOut: facts.tokenOut,
+    feeBps: facts.feeBps,
+    factory: facts.factory,
+    reversePool: facts.reversePool,
+  };
+  const derived = deriveUniv2CanonicalFacts(completeFacts);
+  const routeEdge = Object.freeze({
+    adapterId: "univ2-swap",
+    instanceKey: derived.lowerPool,
+    target: derived.pool,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "swap" as const,
+    poolToken0: derived.token0,
+    poolToken1: derived.token1,
+    v2FeeBps: derived.feeRule.feeBps.toString(),
+    factory: derived.factory,
+    edgeKind: "swap" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.lowerPool,
+      mid: Object.freeze({
+        kind: "v2",
+        pool: derived.pool,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+function deriveUniv2CanonicalFacts(
   facts: Required<BaselineUniv2EdgeFacts>,
 ): {
-  readonly id: string;
-  readonly value: {
-    readonly routeKey: string;
-    readonly tokenIn: string;
-    readonly tokenOut: string;
-    readonly canonicalEdgeId: string;
-  };
+  readonly pool: string;
+  readonly token0: string;
+  readonly token1: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly factory: string;
+  readonly reversePool: string;
+  readonly feeRule: ReturnType<typeof uniV2FeeRuleForFactory>;
+  readonly lowerPool: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
 } {
   const pool = canonicalAddress(facts.pool);
   const token0 = canonicalAddress(facts.token0);
@@ -490,12 +650,46 @@ function deriveUniv2CanonicalEdge(
     executionVariantKey,
   ].join("\u001f");
   return Object.freeze({
-    id: canonicalId,
+    pool,
+    token0,
+    token1,
+    tokenIn,
+    tokenOut,
+    factory,
+    reversePool,
+    feeRule,
+    lowerPool,
+    lowerTokenIn,
+    lowerTokenOut,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+function deriveUniv2CanonicalEdge(
+  facts: Required<BaselineUniv2EdgeFacts>,
+): {
+  readonly id: string;
+  readonly value: {
+    readonly routeKey: string;
+    readonly tokenIn: string;
+    readonly tokenOut: string;
+    readonly canonicalEdgeId: string;
+  };
+} {
+  const derived = deriveUniv2CanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
     value: Object.freeze({
-      routeKey: routeKeyValue,
-      tokenIn,
-      tokenOut,
-      canonicalEdgeId: canonicalId,
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
     }),
   });
 }
+
+const UNIV2_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    UNIV2_FAMILY_ID,
+  );

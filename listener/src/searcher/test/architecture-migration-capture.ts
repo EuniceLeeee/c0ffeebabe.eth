@@ -196,6 +196,70 @@ async function testRealReservesBilateralExactAndEnumerationParity(): Promise<voi
         stateKey: value.instanceKey.toLowerCase(),
         instanceFingerprint: "11".repeat(32),
         specFingerprint: "22".repeat(32),
+        baselineFacts: Object.freeze({
+          familyId: "univ2-standard",
+          pool,
+          token0: `0x${"43".repeat(20)}`,
+          token1: `0x${"44".repeat(20)}`,
+          tokenIn: `0x${"43".repeat(20)}`,
+          tokenOut: `0x${"44".repeat(20)}`,
+          feeBps: "30",
+          factory: `0x${"42".repeat(20)}`,
+          reversePool: pool,
+        }),
+      }),
+    });
+  });
+  const legacyPrices = familyCase.stages.prices!.items.map((price) => {
+    const priceValue = price.value as {
+      readonly stateKey: string;
+      readonly mid: {
+        readonly kind: string;
+        readonly pool: string;
+        readonly mid: number;
+        readonly feeBps: number;
+        readonly reserveA: bigint | string;
+        readonly reserveB: bigint | string;
+        readonly depthProxy: number;
+        readonly edges: readonly {
+          readonly tokenIn: string;
+          readonly tokenOut: string;
+        }[];
+      };
+    };
+    const tokenIn = priceValue.mid.edges[0]!.tokenIn.toLowerCase();
+    const tokenOut = priceValue.mid.edges[0]!.tokenOut.toLowerCase();
+    return Object.freeze({
+      id: price.id,
+      value: Object.freeze({
+        stateKey: priceValue.stateKey,
+        mid: Object.freeze({
+          ...priceValue.mid,
+          edges: Object.freeze([Object.freeze({
+            adapterId: "univ2-swap",
+            instanceKey: pool,
+            target: pool,
+            tokenIn,
+            tokenOut,
+            poolToken0: `0x${"43".repeat(20)}`,
+            poolToken1: `0x${"44".repeat(20)}`,
+            v2FeeBps: 30n,
+            slotKind: "swap",
+            edgeKind: "swap",
+            leavesStandingPosition: false,
+          })]),
+        }),
+        baselineFacts: Object.freeze({
+          familyId: "univ2-standard",
+          pool,
+          token0: `0x${"43".repeat(20)}`,
+          token1: `0x${"44".repeat(20)}`,
+          tokenIn,
+          tokenOut,
+          feeBps: "30",
+          factory: `0x${"42".repeat(20)}`,
+          reversePool: pool,
+        }),
       }),
     });
   });
@@ -379,6 +443,7 @@ async function testRealReservesBilateralExactAndEnumerationParity(): Promise<voi
         ...familyCase.stages,
         instances: stage("exercised", legacyInstances),
         edges: stage("exercised", legacyEdges),
+        prices: stage("exercised", legacyPrices),
         enumeratedRoutes: stage("exercised", legacyEnumerated),
         exactQuotes: stage("exercised", legacyExact),
         executionFragments: stage("exercised", legacyExecution),
@@ -464,7 +529,9 @@ async function testRealReservesBilateralExactAndEnumerationParity(): Promise<voi
     const row = receipt.familyCoverage.find(
       (candidate) => candidate.familyId === "univ2-standard",
     )!;
-    assert.equal(row.outcome, "semantic-mismatch");
+    assert.equal(row.outcome, "pass");
+    assert.equal(receipt.parityReceipt.aggregateVerdict, "partial");
+    assert.equal(receipt.parityReceipt.nonPassFamilyIds.length, 21);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
