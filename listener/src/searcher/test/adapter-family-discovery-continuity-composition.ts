@@ -230,6 +230,12 @@ async function main(): Promise<void> {
     verifyCanonicalSource: () => {},
     assertGenerationCurrent: () => {},
   });
+  assert.deepEqual(composition.store.binding(), {
+    chainId: CHAIN_ID,
+    catalogHash: catalog.catalogHash,
+    sourceRegistryFingerprint: SOURCE_REGISTRY_FINGERPRINT,
+  });
+  assert(Object.isFrozen(composition.store.binding()));
 
   const empty = await composition.loadForRestart();
   assert.equal(empty.status, "empty");
