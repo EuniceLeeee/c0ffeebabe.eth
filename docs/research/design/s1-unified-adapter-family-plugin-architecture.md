@@ -1917,6 +1917,35 @@ commits impl `1f7066ff`+`e32299a5`、baseline `f1b278c9`，本地机器证据）
 （astra/eigenpie/erc4626/erc4626-silo/ethertoken/metronome-synth/
 self-burn）。
 
+**2026-08-12 metronome-synth bilateral parity phase checkpoint（实现
+commits impl `68e6becb`、baseline `d329164d`，本地机器证据）：**
+
+- 修复两个 framework blocker：metronome-synth 多阶段 identity 的静态
+  `get-code+eth-call` requirements 在 membership 阶段后声明了未使用的
+  get-code（`declared request transport get-code is not used`），现改为
+  按 evidence phase 返回（无 evidence = get-code+eth-call，membership 后
+  = eth-call）；pricing `staticEvidence.dependencyKeys` 对 6 条 directed
+  route 的 tokenIn 去重前产生重复依赖键，改用
+  `metronomeSynthUniqueAddresses` 去重；
+- impl `captureMetronomeSynthFixtureCase`（observed swap fixture 证明
+  msETH/msBTC/msUSD 三个 synthetic membership，6 条 directed 1:1 quote
+  全部 active）全部 10 stage `exercised`；metronome-synth normalizer
+  六类 stage（`address-protocol` venue、pool instance、`convert` 行为、
+  oracle binding 投影）落地；
+- baseline exporter `captureMetronomeSynthBaselineCase`（三 token
+  membership、6 directions、pricing mid 按 1e18 样本、execution/effects
+  canonicalHash 镜像）；
+- 本地跨分支 parity（block `25729060`，十一族 manifest）：univ2/univ3/
+  univ4/balancer/morpho/psm/wsteth/goldx/rocksolid/metronome-hgusdc/
+  **metronome-synth** 十一族全部 **pass**、commonGraph 五 stage delta 全空；
+  `searcher:architecture-migration-capture` 合同测试与完整
+  `npm run build` 全部通过；仍是 sealed-capture/shadow receipt，不是
+  production cutover 或 live evidence。
+
+剩余 11 族：`credit:fluid`、`curve-underlying`、`custom-swap:angstrom-v4`、
+`custom-swap:dodo-v2`、`fluid-dex` + 6 个 protocol 族
+（astra/eigenpie/erc4626/erc4626-silo/ethertoken/self-burn）。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
