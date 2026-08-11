@@ -72,6 +72,14 @@ async function main(): Promise<void> {
           exactQuoteItems: familyCase.stages.exactQuotes?.status === "exercised"
             ? familyCase.stages.exactQuotes.items
             : undefined,
+          executionFragmentItems:
+            familyCase.stages.executionFragments?.status === "exercised"
+              ? familyCase.stages.executionFragments.items
+              : undefined,
+          finalSimulationItems:
+            familyCase.stages.finalSimulations?.status === "exercised"
+              ? familyCase.stages.finalSimulations.items
+              : undefined,
           evidenceRefs: familyCase.stages.instances!.evidenceRefs,
         }),
       }),

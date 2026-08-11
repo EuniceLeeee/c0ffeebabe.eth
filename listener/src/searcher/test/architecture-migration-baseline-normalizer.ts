@@ -2,13 +2,17 @@ import assert from "node:assert/strict";
 import {
   captureUniv2FixtureCase,
   captureUniv2RealCase,
+  MIGRATION_CAPTURE_EXECUTOR,
+  UNIV2_CAPTURE_EXACT_AMOUNT_IN,
   UNIV2_FIXTURE_FACTORY,
   UNIV2_FIXTURE_POOL,
   UNIV2_FIXTURE_TOKEN0,
   UNIV2_FIXTURE_TOKEN1,
 } from "../architecture-migration-fixture-replay.js";
 import {
+  normalizeBaselineUniv2ExecutionFragmentItem,
   normalizeBaselineUniv2ExactQuoteItem,
+  normalizeBaselineUniv2FinalSimulationItem,
   normalizeBaselineUniv2EnumeratedRouteItem,
   normalizeBaselineUniv2EdgeItem,
 } from "../architecture-migration-baseline-normalizer.js";
@@ -17,6 +21,8 @@ import type {
 } from "../architecture-migration-parity-runner.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
+import { quoteV2ExactInput } from
+  "../solver/v2-constant-product-math.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_700_500,
@@ -125,6 +131,127 @@ async function main(): Promise<void> {
     };
     const normalized = normalizeBaselineUniv2ExactQuoteItem(legacyQuote);
     assert.deepEqual(normalized, quote);
+  }
+
+  const executions = real.stages.executionFragments!.items;
+  const finalSims = real.stages.finalSimulations!.items;
+  assert.equal(executions.length, 2);
+  assert.equal(finalSims.length, 2);
+  for (const exec of executions) {
+    const value = exec.value as {
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly amountIn: string;
+      readonly amountOut: string;
+      readonly minAmountOut: string;
+    };
+    const tokenIn = value.tokenIn.toLowerCase();
+    const tokenOut = value.tokenOut.toLowerCase();
+    const zeroForOne =
+      tokenIn === UNIV2_FIXTURE_TOKEN0.toLowerCase();
+    const amountOut = quoteV2ExactInput(
+      zeroForOne ? 1_000_000n : 2_000_000n,
+      zeroForOne ? 2_000_000n : 1_000_000n,
+      UNIV2_CAPTURE_EXACT_AMOUNT_IN,
+      30n,
+    );
+    const legacyBase = legacyFixtureEdgeItem(exec);
+    const legacyExec = {
+      ...legacyBase,
+      id: `${legacyBase.id}\u001fexec:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
+      value: {
+        ...(legacyBase.value as Record<string, unknown>),
+        amountIn: value.amountIn,
+        amountOut: value.amountOut,
+        minAmountOut: value.minAmountOut,
+        node: {
+          adapterId: "univ2-swap",
+          target: UNIV2_FIXTURE_POOL.toLowerCase(),
+          tokenIn,
+          tokenOut,
+          amount: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
+          params: {
+            amount0Out: (zeroForOne ? 0n : amountOut).toString(),
+            amount1Out: (zeroForOne ? amountOut : 0n).toString(),
+            to: MIGRATION_CAPTURE_EXECUTOR,
+          },
+          children: [{
+            adapterId: "erc20-transfer",
+            target: tokenIn,
+            tokenIn,
+            tokenOut: tokenIn,
+            amount: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
+            params: {
+              to: UNIV2_FIXTURE_POOL.toLowerCase(),
+              amount: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
+            },
+            children: [],
+          }],
+        },
+      },
+    };
+    const normalizedExec = normalizeBaselineUniv2ExecutionFragmentItem(
+      legacyExec,
+    );
+    assert.deepEqual(normalizedExec, exec);
+  }
+  for (const sim of finalSims) {
+    const value = sim.value as {
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly amountIn: string;
+      readonly amountOut: string;
+      readonly minAmountOut: string;
+    };
+    const tokenIn = value.tokenIn.toLowerCase();
+    const tokenOut = value.tokenOut.toLowerCase();
+    const legacyBase = legacyFixtureEdgeItem(sim);
+    const legacySim = {
+      ...legacyBase,
+      id: `${legacyBase.id}\u001fsim:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
+      value: {
+        ...(legacyBase.value as Record<string, unknown>),
+        amountIn: value.amountIn,
+        amountOut: value.amountOut,
+        minAmountOut: value.minAmountOut,
+        effects: [
+          {
+            kind: "token-delta",
+            token: tokenIn,
+            account: "executor",
+            direction: "decrease",
+          },
+          {
+            kind: "token-delta",
+            token: tokenIn,
+            account: "route-target",
+            direction: "increase",
+          },
+          {
+            kind: "token-delta",
+            token: tokenOut,
+            account: "route-target",
+            direction: "decrease",
+          },
+          {
+            kind: "token-delta",
+            token: tokenOut,
+            account: "executor",
+            direction: "increase",
+          },
+        ],
+        conservation: "conserved",
+        repayment: "satisfied",
+        evInput: {
+          amountIn: value.amountIn,
+          amountOut: value.amountOut,
+        },
+      },
+    };
+    const normalizedSim = normalizeBaselineUniv2FinalSimulationItem(
+      legacySim,
+    );
+    assert.deepEqual(normalizedSim, sim);
   }
 
   const passthrough = Object.freeze({

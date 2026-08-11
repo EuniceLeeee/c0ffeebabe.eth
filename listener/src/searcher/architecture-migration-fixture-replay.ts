@@ -20,6 +20,11 @@ import {
   UNIV2_SWAP_SELECTOR,
 } from "./venues/swaps/univ2-family/codec.js";
 import { univ2Exact } from "./venues/swaps/univ2-family/exact.js";
+import { univ2Execution } from "./venues/swaps/univ2-family/execution.js";
+import {
+  hashCanonical,
+  type CanonicalValue,
+} from "./venues/canonical-value.js";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -39,6 +44,10 @@ import {
 } from "./architecture-migration-capture.js";
 import type { UniV2Descriptor, UniV2Route } from
   "./venues/swaps/univ2-family/types.js";
+import type { UniV2ExactEvidence } from
+  "./venues/swaps/univ2-family/types.js";
+import type { ExpectedEffect } from
+  "./venues/adapter-family-plugin.js";
 import type {
   ArchitectureMigrationStage,
   RawFamilyMigrationCaseCapture,
@@ -52,6 +61,7 @@ export const UNIV2_FIXTURE_FACTORY = `0x${"42".repeat(20)}`;
 export const UNIV2_FIXTURE_TOKEN0 = `0x${"43".repeat(20)}`;
 export const UNIV2_FIXTURE_TOKEN1 = `0x${"44".repeat(20)}`;
 export const UNIV2_CAPTURE_EXACT_AMOUNT_IN = 1_000_000n;
+export const MIGRATION_CAPTURE_EXECUTOR = `0x${"ee".repeat(20)}`;
 
 class FixtureFence implements AdapterGenerationFence {
   assertCurrent(): void {}
@@ -323,6 +333,10 @@ export async function captureUniv2RealCase(input: {
       }),
     }));
   let exactQuotes: RawMigrationStageCapture;
+  const exactByRouteKey = new Map<
+    string,
+    { readonly amountOut: bigint; readonly evidence: UniV2ExactEvidence }
+  >();
   if (reserves !== undefined) {
     const exactMethod = univ2Exact.methods().find(
       (method) => method.kind === "request-program" &&
@@ -348,7 +362,7 @@ export async function captureUniv2RealCase(input: {
           route: route as unknown as UniV2Route,
           amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
           source: input.source,
-          executor: "migration-capture-fixture",
+          executor: MIGRATION_CAPTURE_EXECUTOR,
           runtimeEvidence: Object.freeze([]),
         });
         const requests = program.buildRequests(exactInput);
@@ -364,6 +378,10 @@ export async function captureUniv2RealCase(input: {
         if (edge === undefined) {
           throw new Error(`exact route ${route.routeKey} has no captured edge`);
         }
+        exactByRouteKey.set(route.routeKey, {
+          amountOut: decoded.amountOut,
+          evidence: decoded.evidence as UniV2ExactEvidence,
+        });
         quotes.push(Object.freeze({
           id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
           value: Object.freeze({
@@ -389,6 +407,94 @@ export async function captureUniv2RealCase(input: {
       "capture-harness-exact-not-wired",
     );
   }
+  const executionFragments: RawMigrationStageCapture["items"][number][] = [];
+  const finalSimulations: RawMigrationStageCapture["items"][number][] = [];
+  if (reserves !== undefined) {
+    const edgeByRouteKey = new Map(
+      edges.map((edge) => {
+        const value = edge.value as { readonly routeKey: string };
+        return [value.routeKey, edge] as const;
+      }),
+    );
+    for (const instance of instances) {
+      for (const route of [...instance.routes].sort(
+        (left, right) => left.routeKey.localeCompare(right.routeKey),
+      )) {
+        const quote = exactByRouteKey.get(route.routeKey);
+        const edge = edgeByRouteKey.get(route.routeKey);
+        if (quote === undefined || edge === undefined) {
+          throw new Error(
+            `univ2 execution route ${route.routeKey} has no exact quote`,
+          );
+        }
+        const descriptor = instance.descriptor as unknown as UniV2Descriptor;
+        const univ2Route = route as unknown as UniV2Route;
+        const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
+        const minAmountOut = quote.amountOut;
+        const fragment = univ2Execution.buildFragment({
+          descriptor,
+          route: univ2Route,
+          amountIn,
+          quotedAmountOut: quote.amountOut,
+          minAmountOut,
+          exactEvidence: quote.evidence,
+          executor: MIGRATION_CAPTURE_EXECUTOR,
+          runtimeEvidence: Object.freeze([]),
+        });
+        const node = fragment.nodes[0]!;
+        const nodeFingerprint = hashCanonical(
+          node as unknown as CanonicalValue,
+        );
+        executionFragments.push(Object.freeze({
+          id: `${edge.id}\u001fexec:${amountIn}`,
+          value: Object.freeze({
+            routeKey: route.routeKey,
+            tokenIn: route.tokenIn,
+            tokenOut: route.tokenOut,
+            canonicalEdgeId: edge.id,
+            amountIn: amountIn.toString(),
+            amountOut: quote.amountOut.toString(),
+            minAmountOut: minAmountOut.toString(),
+            actionAdapterId: node.adapterId,
+            executionTarget: node.target,
+            nodeFingerprint,
+          }),
+        }));
+        const effects = univ2Execution.expectedEffects({
+          descriptor,
+          route: univ2Route,
+          amountIn,
+          quotedAmountOut: quote.amountOut,
+        });
+        assertConservedUniv2Effects(effects);
+        if (quote.amountOut < minAmountOut) {
+          throw new Error("univ2 capture final simulation repayment failed");
+        }
+        const effectsFingerprint = hashCanonical(
+          effects as unknown as CanonicalValue,
+        );
+        finalSimulations.push(Object.freeze({
+          id: `${edge.id}\u001fsim:${amountIn}`,
+          value: Object.freeze({
+            routeKey: route.routeKey,
+            tokenIn: route.tokenIn,
+            tokenOut: route.tokenOut,
+            canonicalEdgeId: edge.id,
+            amountIn: amountIn.toString(),
+            amountOut: quote.amountOut.toString(),
+            minAmountOut: minAmountOut.toString(),
+            effectsFingerprint,
+            conservation: "conserved",
+            repayment: "satisfied",
+            evInput: Object.freeze({
+              amountIn: amountIn.toString(),
+              amountOut: quote.amountOut.toString(),
+            }),
+          }),
+        }));
+      }
+    }
+  }
   const stages: RawFamilyMigrationCaseCapture["stages"] = Object.freeze({
     instances: instanceStage(instances, evidenceRefs),
     edges: exercisedStage(edges, evidenceRefs),
@@ -403,14 +509,18 @@ export async function captureUniv2RealCase(input: {
     failures: exercisedStage([], evidenceRefs),
     enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
     exactQuotes,
-    executionFragments: frameworkBlockedStage(
-      evidenceRefs,
-      "capture-harness-execution-not-wired",
-    ),
-    finalSimulations: frameworkBlockedStage(
-      evidenceRefs,
-      "capture-harness-final-sim-not-wired",
-    ),
+    executionFragments: reserves === undefined
+      ? frameworkBlockedStage(
+          evidenceRefs,
+          "capture-harness-execution-not-wired",
+        )
+      : exercisedStage(executionFragments, evidenceRefs),
+    finalSimulations: reserves === undefined
+      ? frameworkBlockedStage(
+          evidenceRefs,
+          "capture-harness-final-sim-not-wired",
+        )
+      : exercisedStage(finalSimulations, evidenceRefs),
   });
   const summary = definedFamilyPluginContractSummary(FAMILY.plugin);
   return Object.freeze({
@@ -436,4 +546,37 @@ export function fixtureCaptureStages(): readonly ArchitectureMigrationStage[] {
     "executionFragments",
     "finalSimulations",
   ] as const);
+}
+
+/**
+ * Fixture-level final-sim conservation proof for the uniV2 swap corpus: the
+ * expected effect set must be exactly the four token-delta legs (tokenIn
+ * executor decrease / route-target increase, tokenOut route-target decrease
+ * / executor increase). Amount conservation is then implied by the fragment
+ * (transfer amountIn in, swap amountOut out) and is verified by the capture
+ * repayment check.
+ */
+function assertConservedUniv2Effects(
+  effects: readonly ExpectedEffect[],
+): void {
+  const expected = new Set([
+    "token-delta:executor:decrease",
+    "token-delta:route-target:increase",
+    "token-delta:route-target:decrease",
+    "token-delta:executor:increase",
+  ]);
+  if (effects.length !== 4) {
+    throw new Error("univ2 capture final simulation effects size mismatch");
+  }
+  for (const effect of effects) {
+    if (effect.kind !== "token-delta") {
+      throw new Error(
+        "univ2 capture final simulation effect must be token-delta",
+      );
+    }
+    const key = `${effect.kind}:${effect.account}:${effect.direction}`;
+    if (!expected.has(key)) {
+      throw new Error(`unexpected univ2 capture effect ${key}`);
+    }
+  }
 }

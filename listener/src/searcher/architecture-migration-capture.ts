@@ -198,6 +198,8 @@ export function buildUniv2CommonGraph(input: {
   readonly edgeItems: readonly RawMigrationStageCapture["items"][number][];
   readonly enumeratedRouteItems?: readonly RawMigrationStageCapture["items"][number][];
   readonly exactQuoteItems?: readonly RawMigrationStageCapture["items"][number][];
+  readonly executionFragmentItems?: readonly RawMigrationStageCapture["items"][number][];
+  readonly finalSimulationItems?: readonly RawMigrationStageCapture["items"][number][];
   readonly evidenceRefs: readonly string[];
 }): NonNullable<RawArchitectureMigrationSideCapture["commonGraph"]> {
   return Object.freeze({
@@ -216,14 +218,18 @@ export function buildUniv2CommonGraph(input: {
             "capture-harness-exact-not-wired",
           )
         : exercisedStage(input.exactQuoteItems, input.evidenceRefs),
-      executionFragments: frameworkBlockedStage(
-        input.evidenceRefs,
-        "capture-harness-execution-not-wired",
-      ),
-      finalSimulations: frameworkBlockedStage(
-        input.evidenceRefs,
-        "capture-harness-final-sim-not-wired",
-      ),
+      executionFragments: input.executionFragmentItems === undefined
+        ? frameworkBlockedStage(
+            input.evidenceRefs,
+            "capture-harness-execution-not-wired",
+          )
+        : exercisedStage(input.executionFragmentItems, input.evidenceRefs),
+      finalSimulations: input.finalSimulationItems === undefined
+        ? frameworkBlockedStage(
+            input.evidenceRefs,
+            "capture-harness-final-sim-not-wired",
+          )
+        : exercisedStage(input.finalSimulationItems, input.evidenceRefs),
     }),
     crossFamilyBindings: Object.freeze([]),
   });

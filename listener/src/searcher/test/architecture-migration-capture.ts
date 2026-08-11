@@ -16,6 +16,7 @@ import {
 import {
   captureUniv2FixtureCase,
   captureUniv2RealCase,
+  MIGRATION_CAPTURE_EXECUTOR,
 } from "../architecture-migration-fixture-replay.js";
 import {
   createArchitectureMigrationProductionCaptureIssuer,
@@ -127,6 +128,10 @@ async function testRealCaseUsesDescriptorPoolAndBlocksPrices(): Promise<void> {
   assert.equal(pricesOn.stages.enumeratedRoutes?.status, "exercised");
   assert.equal(pricesOn.stages.exactQuotes?.status, "exercised");
   assert.equal(pricesOn.stages.exactQuotes?.items.length, 2);
+  assert.equal(pricesOn.stages.executionFragments?.status, "exercised");
+  assert.equal(pricesOn.stages.executionFragments?.items.length, 2);
+  assert.equal(pricesOn.stages.finalSimulations?.status, "exercised");
+  assert.equal(pricesOn.stages.finalSimulations?.items.length, 2);
   assert(pricesOn.stages.prices!.items[0]!.id.includes(
     `${realPool.toLowerCase()}:${realTokenA.toLowerCase()}>` +
       `${realTokenB.toLowerCase()}`,
@@ -182,6 +187,18 @@ async function testRealReservesBilateralExactAndEnumerationParity(): Promise<voi
     });
   };
   const legacyEdges = edges.map(legacyEdgeItem);
+  const legacyInstances = familyCase.stages.instances!.items.map((item) => {
+    const value = item.value as { readonly instanceKey: string };
+    return Object.freeze({
+      id: `univ2-standard\u001f${pool}`,
+      value: Object.freeze({
+        familyId: "univ2-standard",
+        stateKey: value.instanceKey.toLowerCase(),
+        instanceFingerprint: "11".repeat(32),
+        specFingerprint: "22".repeat(32),
+      }),
+    });
+  });
   const legacyEnumerated = [...legacyEdges]
     .map((edge) => edge.value as {
       readonly tokenIn: string;
@@ -233,6 +250,110 @@ async function testRealReservesBilateralExactAndEnumerationParity(): Promise<voi
       }),
     });
   });
+  const legacyExecution = familyCase.stages.executionFragments!.items.map(
+    (exec) => {
+      const execValue = exec.value as {
+        readonly tokenIn: string;
+        readonly tokenOut: string;
+        readonly amountIn: string;
+        readonly amountOut: string;
+        readonly minAmountOut: string;
+      };
+      const tokenIn = execValue.tokenIn.toLowerCase();
+      const tokenOut = execValue.tokenOut.toLowerCase();
+      const zeroForOne = tokenIn === `0x${"43".repeat(20)}`;
+      const legacyEdge = legacyEdgeItem(exec);
+      const amountOut = BigInt(execValue.amountOut);
+      return Object.freeze({
+        id: `${legacyEdge.id}\u001fexec:${execValue.amountIn}`,
+        value: Object.freeze({
+          ...(legacyEdge.value as Record<string, unknown>),
+          amountIn: execValue.amountIn,
+          amountOut: execValue.amountOut,
+          minAmountOut: execValue.minAmountOut,
+          node: Object.freeze({
+            adapterId: "univ2-swap",
+            target: pool,
+            tokenIn,
+            tokenOut,
+            amount: execValue.amountIn,
+            params: Object.freeze({
+              amount0Out: (zeroForOne ? 0n : amountOut).toString(),
+              amount1Out: (zeroForOne ? amountOut : 0n).toString(),
+              to: MIGRATION_CAPTURE_EXECUTOR,
+            }),
+            children: Object.freeze([Object.freeze({
+              adapterId: "erc20-transfer",
+              target: tokenIn,
+              tokenIn,
+              tokenOut: tokenIn,
+              amount: execValue.amountIn,
+              params: Object.freeze({
+                to: pool,
+                amount: execValue.amountIn,
+              }),
+              children: Object.freeze([]),
+            })]),
+          }),
+        }),
+      });
+    },
+  );
+  const legacyFinalSims = familyCase.stages.finalSimulations!.items.map(
+    (sim) => {
+      const simValue = sim.value as {
+        readonly tokenIn: string;
+        readonly tokenOut: string;
+        readonly amountIn: string;
+        readonly amountOut: string;
+        readonly minAmountOut: string;
+      };
+      const tokenIn = simValue.tokenIn.toLowerCase();
+      const tokenOut = simValue.tokenOut.toLowerCase();
+      const legacyEdge = legacyEdgeItem(sim);
+      return Object.freeze({
+        id: `${legacyEdge.id}\u001fsim:${simValue.amountIn}`,
+        value: Object.freeze({
+          ...(legacyEdge.value as Record<string, unknown>),
+          amountIn: simValue.amountIn,
+          amountOut: simValue.amountOut,
+          minAmountOut: simValue.minAmountOut,
+          effects: Object.freeze([
+            Object.freeze({
+              kind: "token-delta",
+              token: tokenIn,
+              account: "executor",
+              direction: "decrease",
+            }),
+            Object.freeze({
+              kind: "token-delta",
+              token: tokenIn,
+              account: "route-target",
+              direction: "increase",
+            }),
+            Object.freeze({
+              kind: "token-delta",
+              token: tokenOut,
+              account: "route-target",
+              direction: "decrease",
+            }),
+            Object.freeze({
+              kind: "token-delta",
+              token: tokenOut,
+              account: "executor",
+              direction: "increase",
+            }),
+          ]),
+          conservation: "conserved",
+          repayment: "satisfied",
+          evInput: Object.freeze({
+            amountIn: simValue.amountIn,
+            amountOut: simValue.amountOut,
+          }),
+        }),
+      });
+    },
+  );
   const stage = (
     status: "exercised" | "framework-blocked",
     items: readonly RawMigrationStageCapture["items"][number][],
@@ -256,9 +377,12 @@ async function testRealReservesBilateralExactAndEnumerationParity(): Promise<voi
       ...familyCase,
       stages: Object.freeze({
         ...familyCase.stages,
+        instances: stage("exercised", legacyInstances),
         edges: stage("exercised", legacyEdges),
         enumeratedRoutes: stage("exercised", legacyEnumerated),
         exactQuotes: stage("exercised", legacyExact),
+        executionFragments: stage("exercised", legacyExecution),
+        finalSimulations: stage("exercised", legacyFinalSims),
       }),
     }],
     commonGraph: Object.freeze({
@@ -267,14 +391,8 @@ async function testRealReservesBilateralExactAndEnumerationParity(): Promise<voi
         edges: stage("exercised", legacyEdges),
         enumeratedRoutes: stage("exercised", legacyEnumerated),
         exactQuotes: stage("exercised", legacyExact),
-        executionFragments: frameworkBlockedStage(
-          evidenceRefs,
-          "capture-harness-execution-not-wired",
-        ),
-        finalSimulations: frameworkBlockedStage(
-          evidenceRefs,
-          "capture-harness-final-sim-not-wired",
-        ),
+        executionFragments: stage("exercised", legacyExecution),
+        finalSimulations: stage("exercised", legacyFinalSims),
       }),
       crossFamilyBindings: Object.freeze([]),
     }),
@@ -294,6 +412,8 @@ async function testRealReservesBilateralExactAndEnumerationParity(): Promise<voi
       edgeItems: edges,
       enumeratedRouteItems: enumerated,
       exactQuoteItems: exact,
+      executionFragmentItems: familyCase.stages.executionFragments!.items,
+      finalSimulationItems: familyCase.stages.finalSimulations!.items,
       evidenceRefs,
     }),
   });
@@ -329,6 +449,8 @@ async function testRealReservesBilateralExactAndEnumerationParity(): Promise<voi
       "edges",
       "enumeratedRoutes",
       "exactQuotes",
+      "executionFragments",
+      "finalSimulations",
     ] as const) {
       assert.deepEqual(delta[stageName], {
         missingIds: [],
@@ -336,15 +458,13 @@ async function testRealReservesBilateralExactAndEnumerationParity(): Promise<voi
         changedIds: [],
       });
     }
-    assert.deepEqual(delta.baselineBlockedStages, [
-      "executionFragments",
-      "finalSimulations",
-    ]);
-    assert.equal(receipt.parityReceipt.assembledCommonGraphParity, false);
+    assert.deepEqual(delta.baselineBlockedStages, []);
+    assert.deepEqual(delta.challengerBlockedStages, []);
+    assert.equal(receipt.parityReceipt.assembledCommonGraphParity, true);
     const row = receipt.familyCoverage.find(
       (candidate) => candidate.familyId === "univ2-standard",
     )!;
-    assert.equal(row.outcome, "framework-blocked");
+    assert.equal(row.outcome, "semantic-mismatch");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
