@@ -1755,6 +1755,29 @@ venue 与 `manager+poolId` instance 身份）+ 节点真实 corpus 双跑。
 本 phase 关闭 univ2/univ3/univ4 三族双侧语义 parity；剩余：19 个 Family
 （funding-only ×2、curve/dodo/angstrom/fluid、protocol 族 ×14）。
 
+**2026-08-11 funding-only Family bilateral parity phase checkpoint（实现
+commits impl `2c36f87b`、baseline `4a43b261`，节点机器证据）：**
+
+- impl 新增 `captureFundingFixtureCase`：走中央
+  `executeFundingFamilyLiquidity`（fixture ERC20 balance read）→
+  `buildFundingBorrowFragment`/`buildFundingRepaymentFragment`
+  （authority-bound 指纹），产出 failures/executionFragments/
+  finalSimulations 三 stage（其余 stage 按合同 `declared-absent`）；
+- baseline exporter 新增 `captureFundingBaselineCase`（balancer-v2
+  transfer/tokens-and-amounts、morpho approve-pull/none，`canonicalHash`
+  镜像计算 borrow/repay node 指纹）；normalizer 覆盖 funding
+  execution/final-sim（asset canonicalize + 指纹透传）；
+- 本地跨分支 parity：univ2/univ3/univ4/balancer/morpho 五族全 pass、
+  commonGraph 五 stage delta 全空、aggregate `partial`；
+- 节点 SSM `6e55d559`（block `25729060`）五族真实 corpus 双跑：
+  `flash-loan:balancer-v2 pass`、`flash-loan:morpho pass`（连同 univ2/3/4），
+  `assembledCommonGraphParity=true`、aggregate `partial`（17 个未覆盖）。
+
+剩余 17 个 Family：`credit:fluid`、`curve-underlying`、
+`custom-swap:angstrom-v4`、`custom-swap:dodo-v2`、`fluid-dex` + 12 个
+protocol 族（astra/eigenpie/erc4626/erc4626-silo/ethertoken/goldx/
+metronome×2/psm/rocksolid/self-burn/wsteth）。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
