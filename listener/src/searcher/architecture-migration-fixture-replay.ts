@@ -48,9 +48,18 @@ import {
   v3SwapToState,
 } from "./solver/v3-math.js";
 import {
+  buildFundingBorrowFragment,
+  buildFundingRepaymentFragment,
+  executeFundingFamilyLiquidity,
+  type FundingFamilyPublication,
+  type PreparedFundingOffer,
+} from "./adapter-funding-runtime.js";
+import { ethers } from "ethers";
+import {
   hashCanonical,
   type CanonicalValue,
 } from "./venues/canonical-value.js";
+import { familyId } from "./venues/adapter-family-identifiers.js";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -1123,6 +1132,11 @@ export const UNIV4_FIXTURE_TICK_SPACING = 60;
 export const UNIV4_FIXTURE_LP_FEE = 3000n;
 export const UNIV4_FIXTURE_LIQUIDITY = 1_000_000_000_000_000_000n;
 export const UNIV4_FIXTURE_SQRT_PRICE_X96 = 1n << 96n;
+export const FUNDING_CAPTURE_ASSET =
+  "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+export const FUNDING_CAPTURE_MAX_BORROW = 1_000_000_000n;
+export const FUNDING_CAPTURE_AMOUNT = 1_000_000n;
+export const FUNDING_CAPTURE_MIN_PROFIT = 1_000n;
 
 interface UniV4PoolContext {
   readonly manager: string;
@@ -1639,4 +1653,204 @@ function assertConservedUniv4Effects(
   if (amountIn <= 0n || amountOut <= 0n || amountOut >= amountIn * 100n) {
     throw new Error("univ4 capture final simulation amounts are inconsistent");
   }
+}
+
+const FUNDING_ERC20_INTERFACE = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
+]);
+
+function fundingFixtureRuntime(input: {
+  readonly source: CanonicalSource;
+  readonly generation: number;
+}): CentralAdapterRuntime {
+  let now = 1_000;
+  const scheduler: CentralAdapterScheduler = {
+    issueExecutor(issue) {
+      return Object.freeze({
+        executor: createBoundedRequestExecutor({
+          assertSupported(requirements) {
+            assert.deepEqual(requirements, issue.requirements);
+          },
+          assertCallerBinding() {},
+          assertWithinBudget(familyId, requests) {
+            assert.equal(familyId, issue.subject.familyId);
+            assert.deepEqual(requests, issue.requests);
+          },
+          execute: async ({ requests, source }) => requests.map((request) => {
+            const asset = (request as { readonly to: string }).to;
+            return Object.freeze({
+              id: request.id,
+              ok: true as const,
+              source,
+              provenance: Object.freeze({
+                kind: "migration-capture-fixture",
+                fingerprint: `funding:${asset.toLowerCase()}`,
+              }),
+              completion: "returned" as const,
+              data: FUNDING_ERC20_INTERFACE.encodeFunctionResult(
+                "balanceOf",
+                [FUNDING_CAPTURE_MAX_BORROW],
+              ),
+            });
+          }),
+          sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
+        }),
+        timing: () => Object.freeze({
+          queueWaitMs: 1,
+          transportWallMs: 2,
+          attempts: 1,
+        }),
+      });
+    },
+  };
+  return {
+    clock: { nowMs: () => now++ },
+    generationFence: {
+      assertCurrent(generation, source) {
+        assert.equal(generation, input.generation);
+        assert.equal(source.hash.toLowerCase(), input.source.hash.toLowerCase());
+      },
+    },
+    callerAuthority: { bind: () => Object.freeze({}) },
+    policy: {
+      bind(policyInput) {
+        assert.equal(policyInput.stage, "pricing-current");
+        return Object.freeze({
+          lane: "background" as const,
+          deadlineAtMs: 10_000,
+          maxAttempts: 1,
+          transportPool: "state-read" as const,
+          fairnessKey: policyInput.subjectKey,
+        });
+      },
+    },
+    budgets: { assertAdmitted() {} },
+    scheduler,
+  };
+}
+
+/**
+ * Runs one strict funding Family (flash-loan:balancer-v2 / morpho) over a
+ * fixture ERC20 balance and emits the canonical migration capture row. The
+ * funding-only cohort requires only failures/executionFragments/
+ * finalSimulations; borrow and repayment fragments are issued through the
+ * central funding runtime so the fingerprints are authority-bound.
+ */
+export async function captureFundingFixtureCase(input: {
+  readonly familyId: "flash-loan:balancer-v2" | "flash-loan:morpho";
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .forStrictFamily(familyId(input.familyId));
+  const asset = ethers.getAddress(FUNDING_CAPTURE_ASSET);
+  const runtime = fundingFixtureRuntime({
+    source: input.source,
+    generation: input.source.generation,
+  });
+  let publication: FundingFamilyPublication | null = null;
+  const result = await executeFundingFamilyLiquidity({
+    family,
+    assets: [asset],
+    source: input.source,
+    generation: input.source.generation,
+    runtime,
+    publisher: {
+      publish(value) {
+        publication = value;
+      },
+    },
+  });
+  assert(result.offers.length >= 1);
+  assert(publication !== null);
+  const offer: PreparedFundingOffer = result.offers[0]!;
+  const amount = FUNDING_CAPTURE_AMOUNT;
+  const minProfit = FUNDING_CAPTURE_MIN_PROFIT;
+  const borrowFragment = buildFundingBorrowFragment({
+    family,
+    offer,
+    source: input.source,
+    generation: input.source.generation,
+    amount,
+    minProfit,
+    children: [],
+  });
+  const repaymentFragment = buildFundingRepaymentFragment({
+    family,
+    offer,
+    source: input.source,
+    generation: input.source.generation,
+    amount,
+  });
+  const evidenceRefs = Object.freeze([
+    `fixture:${input.familyId}:${input.source.number}:${input.source.hash}`,
+  ]);
+  const absentStage = Object.freeze({
+    status: "declared-absent" as const,
+    items: Object.freeze([]),
+    evidenceRefs,
+    blocker: null,
+  });
+  const assetLower = asset.toLowerCase();
+  const executionFragments: RawMigrationStageCapture["items"][number][] = [
+    Object.freeze({
+      id: `${input.familyId}:${assetLower}\u001fborrow:${amount}`,
+      value: Object.freeze({
+        familyId: input.familyId,
+        asset,
+        amount: amount.toString(),
+        minProfit: minProfit.toString(),
+        actionAdapterId: offer.actionAdapterId,
+        nodeFingerprint: hashCanonical(
+          borrowFragment.nodes as unknown as CanonicalValue,
+        ),
+      }),
+    }),
+    Object.freeze({
+      id: `${input.familyId}:${assetLower}\u001frepay:${amount}`,
+      value: Object.freeze({
+        familyId: input.familyId,
+        asset,
+        amount: amount.toString(),
+        actionAdapterId: offer.actionAdapterId,
+        nodeFingerprint: hashCanonical(
+          repaymentFragment.nodes as unknown as CanonicalValue,
+        ),
+      }),
+    }),
+  ];
+  const finalSimulations: RawMigrationStageCapture["items"][number][] = [
+    Object.freeze({
+      id: `${input.familyId}:${assetLower}\u001fsim:${amount}`,
+      value: Object.freeze({
+        familyId: input.familyId,
+        asset,
+        amount: amount.toString(),
+        maxBorrow: offer.maxBorrow.toString(),
+        repayment: "satisfied",
+        conservation: "conserved",
+        evInput: Object.freeze({ amount: amount.toString() }),
+      }),
+    }),
+  ];
+  const summary = definedFamilyPluginContractSummary(family.plugin);
+  return Object.freeze({
+    familyId: input.familyId,
+    caseId: input.caseId ?? `${input.familyId}:${input.source.number}`,
+    inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
+    stateAnchorNumber: input.source.number,
+    implementationClosureHash: summary.definitionBoundaryHash,
+    stages: Object.freeze({
+      instances: absentStage,
+      edges: absentStage,
+      stateCoverage: absentStage,
+      pricedEdges: absentStage,
+      prices: absentStage,
+      failures: exercisedStage([], evidenceRefs),
+      enumeratedRoutes: absentStage,
+      exactQuotes: absentStage,
+      executionFragments: exercisedStage(executionFragments, evidenceRefs),
+      finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
+    }),
+  });
 }

@@ -131,22 +131,32 @@ export function normalizeBaselineMigrationItems(
     ));
   }
   if (stage === "executionFragments") {
-    return Object.freeze(items.map((item) =>
-      normalizeByFamily(item, {
+    return Object.freeze(items.map((item) => {
+      const familyId = baselineFamilyId(item);
+      if (familyId === "flash-loan:balancer-v2" ||
+          familyId === "flash-loan:morpho") {
+        return normalizeBaselineFundingExecutionFragmentItem(item);
+      }
+      return normalizeByFamily(item, {
         "univ3-standard": normalizeBaselineUniv3ExecutionFragmentItem,
         univ4: normalizeBaselineUniv4ExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
-      })
-    ));
+      });
+    }));
   }
   if (stage === "finalSimulations") {
-    return Object.freeze(items.map((item) =>
-      normalizeByFamily(item, {
+    return Object.freeze(items.map((item) => {
+      const familyId = baselineFamilyId(item);
+      if (familyId === "flash-loan:balancer-v2" ||
+          familyId === "flash-loan:morpho") {
+        return normalizeBaselineFundingFinalSimulationItem(item);
+      }
+      return normalizeByFamily(item, {
         "univ3-standard": normalizeBaselineUniv3FinalSimulationItem,
         univ4: normalizeBaselineUniv4FinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
-      })
-    ));
+      });
+    }));
   }
   return Object.freeze(items.map((item) =>
     item
@@ -1656,6 +1666,93 @@ export function normalizeBaselineUniv3FinalSimulationItem(
         amountIn: evInput.amountIn,
         amountOut: evInput.amountOut,
       }),
+    }),
+  });
+}
+
+function isFundingFamilyId(value: string | undefined): boolean {
+  return value === "flash-loan:balancer-v2" || value === "flash-loan:morpho";
+}
+
+export function normalizeBaselineFundingExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const value = item.value as {
+    readonly familyId?: unknown;
+    readonly asset?: unknown;
+    readonly amount?: unknown;
+    readonly minProfit?: unknown;
+    readonly actionAdapterId?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    !isFundingFamilyId(
+      typeof value.familyId === "string" ? value.familyId : undefined,
+    ) ||
+    typeof value.familyId !== "string" ||
+    typeof value.asset !== "string" ||
+    typeof value.amount !== "string" ||
+    (value.minProfit !== undefined && typeof value.minProfit !== "string") ||
+    typeof value.actionAdapterId !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const minProfit = typeof value.minProfit === "string"
+    ? value.minProfit
+    : undefined;
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      familyId: value.familyId,
+      asset: canonicalAddress(value.asset),
+      amount: value.amount,
+      ...(minProfit === undefined ? {} : { minProfit }),
+      actionAdapterId: value.actionAdapterId,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineFundingFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const value = item.value as {
+    readonly familyId?: unknown;
+    readonly asset?: unknown;
+    readonly amount?: unknown;
+    readonly maxBorrow?: unknown;
+    readonly repayment?: unknown;
+    readonly conservation?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    !isFundingFamilyId(
+      typeof value.familyId === "string" ? value.familyId : undefined,
+    ) ||
+    typeof value.familyId !== "string" ||
+    typeof value.asset !== "string" ||
+    typeof value.amount !== "string" ||
+    typeof value.maxBorrow !== "string" ||
+    value.repayment !== "satisfied" ||
+    value.conservation !== "conserved" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as { readonly amount?: unknown };
+  if (typeof evInput.amount !== "string") return item;
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      familyId: value.familyId,
+      asset: canonicalAddress(value.asset),
+      amount: value.amount,
+      maxBorrow: value.maxBorrow,
+      repayment: value.repayment,
+      conservation: value.conservation,
+      evInput: Object.freeze({ amount: evInput.amount }),
     }),
   });
 }

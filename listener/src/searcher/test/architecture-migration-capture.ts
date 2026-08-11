@@ -20,6 +20,7 @@ import {
   captureUniv3RealCase,
   captureUniv4FixtureCase,
   captureUniv4RealCase,
+  captureFundingFixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -621,6 +622,24 @@ async function testUniv4RealCaseAllStages(): Promise<void> {
   }
 }
 
+async function testFundingFixtureCases(): Promise<void> {
+  for (const familyId of [
+    "flash-loan:balancer-v2",
+    "flash-loan:morpho",
+  ] as const) {
+    const familyCase = await captureFundingFixtureCase({
+      familyId,
+      source: SOURCE,
+    });
+    assert.equal(familyCase.familyId, familyId);
+    assert.equal(familyCase.stages.failures?.status, "exercised");
+    assert.equal(familyCase.stages.executionFragments?.status, "exercised");
+    assert.equal(familyCase.stages.executionFragments?.items.length, 2);
+    assert.equal(familyCase.stages.finalSimulations?.status, "exercised");
+    assert.equal(familyCase.stages.finalSimulations?.items.length, 1);
+  }
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -958,6 +977,7 @@ async function main(): Promise<void> {
   await testUniv3RealCaseAllStages();
   await testUniv4FixtureReplayProducesAllStages();
   await testUniv4RealCaseAllStages();
+  await testFundingFixtureCases();
   console.log("architecture-migration capture harness PASS");
 }
 

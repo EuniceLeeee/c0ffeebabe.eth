@@ -10,6 +10,7 @@ import {
   captureUniv2RealCase,
   captureUniv3RealCase,
   captureUniv4RealCase,
+  captureFundingFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -109,6 +110,16 @@ async function main(): Promise<void> {
           liquidity: item.liquidity,
           sqrtPriceX96: item.sqrtPriceX96,
           lpFee: item.lpFee,
+        }));
+      } else if (
+        item.family === "flash-loan:balancer-v2" ||
+        item.family === "flash-loan:morpho"
+      ) {
+        familyCases.push(await captureFundingFixtureCase({
+          familyId: item.family as
+            "flash-loan:balancer-v2" | "flash-loan:morpho",
+          source,
+          caseId: `${item.family}:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);
