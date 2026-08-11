@@ -71,7 +71,7 @@ authority 混在一起：
 |Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
 |Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
 |Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
-|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS，以及 `c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract 等 runtime slice 已有 unit/shadow gate|durable checkpoint 的 production composition 与 strict catalog receipt coupling、production point-in-time enumerator、closure receipt 在 strict catalog 内的一次性消费与 staged exact-set coupling、StateInstance mutation/carry proof、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、Credit 独立 execution handle、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
+|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS、`c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract，以及 `642373c1` 的中央 value 深冻结 + StateInstance mutation/carry shadow proof 等 runtime slice 已有 unit/shadow gate|durable checkpoint 的 production composition 与 strict catalog receipt coupling、production point-in-time enumerator、closure receipt 在 strict catalog 内的一次性消费与 staged exact-set coupling、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、Credit 独立 execution handle、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
 |Phase E cleanup|尚未开始|legacy registry/API/schema/revision/cache/flag authority 仍在；只有 §18.3 与 §20.2.6 全部门通过后才能删除|
 
 该表是实施 checkpoint，不是目标合同的降级，也不预判并行实现工作最终是否通过；任一状态更新都必须引用新的
@@ -1944,6 +1944,26 @@ family-wide failure surface。
 方向复用是终态可安全收紧的 Family 语义，不应误记为当前已经启用；迁移时必须先用方向新增 fixture 证明再放宽。
 
 Adapter 只表达兼容语义；中央验证 mutation completeness、source hash、generation 和 cache fingerprint 后才允许 carry。
+
+**2026-08-11 StateInstance mutation/carry proof checkpoint（实现 commit
+`642373c1959b41efa7e77659043fac9d71f1e1b5`，shadow contract，不是 production cutover）：**
+中央 `prepareAdapterFamilyCatalogPublication` 的 value seal 校验从顶层 `Object.isFrozen`
+强化为递归深冻结：
+
+- 每个可达对象（含不可枚举属性）都必须已冻结；`Map`/`Set`/`Date`/`ArrayBuffer`/
+  `TypedArray`/`DataView` 等内部槽不受 `Object.freeze` 保护的容器一律 fail-closed；
+- 环状冻结对象经 `WeakSet` 防循环后合法接受；
+- seal 与 carry 两条路径共用同一深冻结 gate，contract 不能靠返回“顶层冻结、嵌套可变”
+  的快照绕过 mutation/carry proof。
+
+新增合同 `searcher:adapter-family-state-carry-proof`：seal 拒绝嵌套可变值；carry 拒绝
+浅冻结 clone，且失败后 previous envelope 结构不变；合法 carry 把 StateInstance 重新绑定到
+新 source/generation、previous 保持不可变、staged 输入事后修改不影响已发布值。
+证据：`searcher:adapter-family-state-carry-proof` PASS、
+`searcher:adapter-family-catalog-publication` PASS、完整 listener build 通过。
+该 contract 仍是 shadow 合同：cache fingerprint 绑定、strict pricing production consumer、
+Funding/Credit production consumers、默认 authority、sealed parity 与 Phase E
+均未因此关闭。
 
 ## 12. Exact：拆成 requirements / requests / decode
 
