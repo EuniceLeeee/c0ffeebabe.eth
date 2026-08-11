@@ -574,6 +574,11 @@ export function assertClosureStagedExactSetCoupling(input: {
 }): void {
   const staged = new Map<string, readonly string[]>();
   for (const [familyId, keys] of input.stagedByFamily) {
+    if (new Set(keys).size !== keys.length) {
+      throw new Error(
+        `closure staged exact-set mismatch: duplicate staged key in ${familyId}`,
+      );
+    }
     staged.set(
       familyId,
       Object.freeze(
@@ -583,6 +588,11 @@ export function assertClosureStagedExactSetCoupling(input: {
   }
   const expectedFamilies = new Set<string>();
   for (const family of input.closure.families) {
+    if (expectedFamilies.has(family.familyId)) {
+      throw new Error(
+        `closure staged exact-set mismatch: duplicate Family ${family.familyId}`,
+      );
+    }
     expectedFamilies.add(family.familyId);
     const expected = [...family.admittedInstancePublicationKeys]
       .map((key) => nonempty(key, "admitted publication key"))

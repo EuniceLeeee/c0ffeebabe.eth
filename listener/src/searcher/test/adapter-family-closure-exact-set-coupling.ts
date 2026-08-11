@@ -132,12 +132,33 @@ function testEmptyAdmittedSetWithEmptyStagingPassesAndExtraFails(): void {
   }), /exact-set mismatch/);
 }
 
+function testDuplicateClosureFamilyFails(): void {
+  const resolved = closure([
+    { familyId: FAMILY_A, admitted: ["pool:a"] },
+    { familyId: FAMILY_A, admitted: ["pool:b"] },
+  ]);
+  assert.throws(() => assertClosureStagedExactSetCoupling({
+    closure: resolved,
+    stagedByFamily: staged([[FAMILY_A, ["pool:a"]]]),
+  }), /duplicate Family/);
+}
+
+function testDuplicateStagedKeyFails(): void {
+  const resolved = closure([{ familyId: FAMILY_A, admitted: ["pool:a"] }]);
+  assert.throws(() => assertClosureStagedExactSetCoupling({
+    closure: resolved,
+    stagedByFamily: staged([[FAMILY_A, ["pool:a", "pool:a"]]]),
+  }), /duplicate staged key/);
+}
+
 async function main(): Promise<void> {
   testExactMatchPassesOrderInsensitively();
   testMissingOrExtraKeyFails();
   testMissingOrUnexpectedFamilyFails();
   testEmptyClosureAndEmptyStagingPasses();
   testEmptyAdmittedSetWithEmptyStagingPassesAndExtraFails();
+  testDuplicateClosureFamilyFails();
+  testDuplicateStagedKeyFails();
   console.log("adapter-family closure exact-set coupling PASS");
 }
 
