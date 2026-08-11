@@ -1798,6 +1798,27 @@ checkpoint（实现 commit impl `71e6bdc7`，fixture 级合同证据）：**
 该 fix 一次性解除全部 12 个 protocol 族的 strict lifecycle 阻塞；各族
 fixture capture（+ baseline/normalizer/节点双跑）是后续逐族 phase。
 
+**2026-08-12 PSM bilateral parity phase checkpoint（实现 commits impl
+`91a707ef`、baseline `7f4591a5`，节点机器证据）：**
+
+- impl PSM normalizer 覆盖六类 stage：`address-protocol` venue、
+  `target` instance 身份、`psmStaticBindingProjection`（tin/tout wad
+  feeSemantics）binding fingerprint、prices 重建 `protocol` mid/edge
+  （protocolAction=convert）、exact/execution/final-sim 归一；
+- baseline exporter 新增 `capturePsmBaselineCase`（singleton PSM：
+  gem=USDC/dai=DAI/tin/tout、`psmSellQuote` 同款数学、`canonicalHash`
+  镜像指纹）；
+- 本地跨分支 parity：univ2/3/4/balancer/morpho/**psm** 六族全 pass、
+  commonGraph 五 stage delta 全空、aggregate `partial`；
+- 节点 SSM `9e3a5884`（block `25729060`）：六族全部 **pass**、
+  `assembledCommonGraphParity=true`、aggregate `partial`
+  （16 个未覆盖 Family）。
+
+剩余 16 族：`credit:fluid`、`curve-underlying`、`custom-swap:angstrom-v4`、
+`custom-swap:dodo-v2`、`fluid-dex` + 11 个 protocol 族
+（astra/eigenpie/erc4626/erc4626-silo/ethertoken/goldx/metronome×2/
+rocksolid/self-burn/wsteth）。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
