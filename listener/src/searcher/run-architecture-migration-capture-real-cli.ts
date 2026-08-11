@@ -65,6 +65,7 @@ async function main(): Promise<void> {
         commonGraph: buildUniv2CommonGraph({
           source,
           edgeItems: familyCase.stages.edges!.items,
+          enumeratedRouteItems: familyCase.stages.enumeratedRoutes!.items,
           evidenceRefs: familyCase.stages.instances!.evidenceRefs,
         }),
       }),

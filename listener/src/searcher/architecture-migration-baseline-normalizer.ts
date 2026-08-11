@@ -41,10 +41,39 @@ export function normalizeBaselineMigrationItems(
   stage: ArchitectureMigrationStage | CommonGraphMigrationStage,
   items: readonly RawMigrationSemanticItem[],
 ): readonly RawMigrationSemanticItem[] {
-  if (stage !== "edges") return items;
+  if (stage === "edges") {
+    return Object.freeze(items.map((item) =>
+      normalizeBaselineUniv2EdgeItem(item)
+    ));
+  }
+  if (stage === "enumeratedRoutes") {
+    return Object.freeze(items.map((item) =>
+      normalizeBaselineUniv2EnumeratedRouteItem(item)
+    ));
+  }
   return Object.freeze(items.map((item) =>
-    normalizeBaselineUniv2EdgeItem(item)
+    item
   ));
+}
+
+export function normalizeBaselineUniv2EnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineUniv2EdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "univ2 baseline enumerated route item must carry a non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
 }
 
 /**
@@ -82,6 +111,35 @@ export function normalizeBaselineUniv2EdgeItem(
   ) {
     return item;
   }
+  const completeFacts: Required<BaselineUniv2EdgeFacts> = {
+    familyId: "univ2-standard",
+    pool: facts.pool,
+    token0: facts.token0,
+    token1: facts.token1,
+    tokenIn: facts.tokenIn,
+    tokenOut: facts.tokenOut,
+    feeBps: facts.feeBps,
+    factory: facts.factory,
+    reversePool: facts.reversePool,
+  };
+  const derived = deriveUniv2CanonicalEdge(completeFacts);
+  return Object.freeze({
+    id: derived.id,
+    value: derived.value,
+  });
+}
+
+function deriveUniv2CanonicalEdge(
+  facts: Required<BaselineUniv2EdgeFacts>,
+): {
+  readonly id: string;
+  readonly value: {
+    readonly routeKey: string;
+    readonly tokenIn: string;
+    readonly tokenOut: string;
+    readonly canonicalEdgeId: string;
+  };
+} {
   const pool = canonicalAddress(facts.pool);
   const token0 = canonicalAddress(facts.token0);
   const token1 = canonicalAddress(facts.token1);

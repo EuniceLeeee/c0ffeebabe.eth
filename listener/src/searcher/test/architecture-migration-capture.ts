@@ -79,6 +79,8 @@ async function testFixtureReplayProducesCanonicalCase(): Promise<void> {
   assert.equal(familyCase.stateAnchorNumber, SOURCE.number);
   assert.equal(familyCase.stages.instances?.status, "exercised");
   assert.equal(familyCase.stages.edges?.status, "exercised");
+  assert.equal(familyCase.stages.enumeratedRoutes?.status, "exercised");
+  assert.equal(familyCase.stages.enumeratedRoutes?.items.length, 2);
   assert.equal(familyCase.stages.prices?.status, "framework-blocked");
   assert.equal(familyCase.stages.finalSimulations?.status, "framework-blocked");
   assert((familyCase.stages.instances?.items.length ?? 0) >= 1);
@@ -86,10 +88,12 @@ async function testFixtureReplayProducesCanonicalCase(): Promise<void> {
   const commonGraph = buildUniv2CommonGraph({
     source: SOURCE,
     edgeItems: familyCase.stages.edges!.items,
+    enumeratedRouteItems: familyCase.stages.enumeratedRoutes!.items,
     evidenceRefs: familyCase.stages.instances!.evidenceRefs,
   });
   assert.equal(commonGraph.stages.edges?.status, "exercised");
   assert.equal(commonGraph.stages.edges?.items.length, 2);
+  assert.equal(commonGraph.stages.enumeratedRoutes?.status, "exercised");
   assert.equal(commonGraph.stages.finalSimulations?.status, "framework-blocked");
 }
 
@@ -283,6 +287,46 @@ async function testLegacyBaselineCommonGraphEdgesParity(): Promise<void> {
     evidenceRefs,
     blocker: null,
   });
+  const legacyEnumeratedRoutes = [...legacyEdges]
+    .map((edge) => edge.value as {
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+    })
+    .map((value) => Object.freeze({
+      routeKey: [
+        "univ2-standard",
+        pool,
+        value.tokenIn.toLowerCase(),
+        value.tokenOut.toLowerCase(),
+      ].join("\u001f"),
+      value,
+    }))
+    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
+    .map(({ value }, order) => {
+      const edge = legacyEdges.find((candidate) =>
+        (candidate.value as {
+          readonly tokenIn: string;
+          readonly tokenOut: string;
+        }).tokenIn === (value as { readonly tokenIn: string }).tokenIn &&
+        (candidate.value as {
+          readonly tokenIn: string;
+          readonly tokenOut: string;
+        }).tokenOut === (value as { readonly tokenOut: string }).tokenOut
+      )!;
+      return Object.freeze({
+        id: edge.id,
+        value: Object.freeze({
+          ...(edge.value as Record<string, unknown>),
+          order,
+        }),
+      });
+    });
+  const commonEnumeratedStage = Object.freeze({
+    status: "exercised" as const,
+    items: Object.freeze(legacyEnumeratedRoutes),
+    evidenceRefs,
+    blocker: null,
+  });
   const baselineSide = buildArchitectureMigrationSideCapture({
     captureId: "baseline",
     commit: "a".repeat(40),
@@ -297,16 +341,14 @@ async function testLegacyBaselineCommonGraphEdgesParity(): Promise<void> {
       stages: Object.freeze({
         ...familyCase.stages,
         edges: commonEdgeStage,
+        enumeratedRoutes: commonEnumeratedStage,
       }),
     }],
     commonGraph: Object.freeze({
       inputFingerprint: familyCase.inputFingerprint,
       stages: Object.freeze({
         edges: commonEdgeStage,
-        enumeratedRoutes: frameworkBlockedStage(
-          evidenceRefs,
-          "capture-harness-enumeration-not-wired",
-        ),
+        enumeratedRoutes: commonEnumeratedStage,
         exactQuotes: frameworkBlockedStage(
           evidenceRefs,
           "capture-harness-exact-not-wired",
@@ -336,6 +378,7 @@ async function testLegacyBaselineCommonGraphEdgesParity(): Promise<void> {
     commonGraph: buildUniv2CommonGraph({
       source: SOURCE,
       edgeItems: edges,
+      enumeratedRouteItems: familyCase.stages.enumeratedRoutes!.items,
       evidenceRefs,
     }),
   });
@@ -379,6 +422,11 @@ async function testLegacyBaselineCommonGraphEdgesParity(): Promise<void> {
       addedIds: [],
       changedIds: [],
     });
+    assert.deepEqual(delta.baselineBlockedStages, [
+      "exactQuotes",
+      "executionFragments",
+      "finalSimulations",
+    ]);
     assert.deepEqual(delta.exactQuotes, {
       missingIds: [],
       addedIds: [],

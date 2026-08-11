@@ -196,16 +196,19 @@ export function buildFixtureCaptureCorpus(input: {
 export function buildUniv2CommonGraph(input: {
   readonly source: CanonicalSource;
   readonly edgeItems: readonly RawMigrationStageCapture["items"][number][];
+  readonly enumeratedRouteItems?: readonly RawMigrationStageCapture["items"][number][];
   readonly evidenceRefs: readonly string[];
 }): NonNullable<RawArchitectureMigrationSideCapture["commonGraph"]> {
   return Object.freeze({
     inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
     stages: Object.freeze({
       edges: exercisedStage(input.edgeItems, input.evidenceRefs),
-      enumeratedRoutes: frameworkBlockedStage(
-        input.evidenceRefs,
-        "capture-harness-enumeration-not-wired",
-      ),
+      enumeratedRoutes: input.enumeratedRouteItems === undefined
+        ? frameworkBlockedStage(
+            input.evidenceRefs,
+            "capture-harness-enumeration-not-wired",
+          )
+        : exercisedStage(input.enumeratedRouteItems, input.evidenceRefs),
       exactQuotes: frameworkBlockedStage(
         input.evidenceRefs,
         "capture-harness-exact-not-wired",

@@ -289,6 +289,24 @@ export async function captureUniv2RealCase(input: {
       }
     }
   }
+  const enumeratedRoutes: RawMigrationStageCapture["items"][number][] = edges
+    .map((edge) => edge.value as {
+      readonly routeKey: string;
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly canonicalEdgeId: string;
+    })
+    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
+    .map((value, order) => Object.freeze({
+      id: value.canonicalEdgeId,
+      value: Object.freeze({
+        routeKey: value.routeKey,
+        tokenIn: value.tokenIn,
+        tokenOut: value.tokenOut,
+        canonicalEdgeId: value.canonicalEdgeId,
+        order,
+      }),
+    }));
   const stages: RawFamilyMigrationCaseCapture["stages"] = Object.freeze({
     instances: instanceStage(instances, evidenceRefs),
     edges: exercisedStage(edges, evidenceRefs),
@@ -301,10 +319,7 @@ export async function captureUniv2RealCase(input: {
         )
       : exercisedStage(prices, evidenceRefs),
     failures: exercisedStage([], evidenceRefs),
-    enumeratedRoutes: frameworkBlockedStage(
-      evidenceRefs,
-      "capture-harness-enumeration-not-wired",
-    ),
+    enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
     exactQuotes: frameworkBlockedStage(
       evidenceRefs,
       "capture-harness-exact-not-wired",

@@ -7,6 +7,7 @@ import {
   UNIV2_FIXTURE_TOKEN1,
 } from "../architecture-migration-fixture-replay.js";
 import {
+  normalizeBaselineUniv2EnumeratedRouteItem,
   normalizeBaselineUniv2EdgeItem,
 } from "../architecture-migration-baseline-normalizer.js";
 import type {
@@ -75,6 +76,26 @@ async function main(): Promise<void> {
     );
     assert.deepEqual(normalized, edge);
   }
+
+  const enumerated = familyCase.stages.enumeratedRoutes!.items;
+  assert.equal(enumerated.length, 2);
+  for (const route of enumerated) {
+    const legacyRoute = {
+      ...legacyFixtureEdgeItem(route),
+      value: {
+        ...(legacyFixtureEdgeItem(route).value as Record<string, unknown>),
+        order: (route.value as { readonly order: number }).order,
+      },
+    };
+    const normalized = normalizeBaselineUniv2EnumeratedRouteItem(legacyRoute);
+    assert.deepEqual(normalized, route);
+  }
+  assert.throws(
+    () => normalizeBaselineUniv2EnumeratedRouteItem(
+      legacyFixtureEdgeItem(enumerated[0]!),
+    ),
+    /must carry a non-negative order/,
+  );
 
   const passthrough = Object.freeze({
     id: "legacy-unknown-family",
