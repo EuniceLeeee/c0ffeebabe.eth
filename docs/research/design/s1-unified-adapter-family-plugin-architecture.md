@@ -1234,6 +1234,14 @@ point-in-time-enumerator、closure-exact-set-coupling、snapshot-inventory-closu
 discovery-continuity-composition、shadow-catalog-publication、exact-quote-cache），
 作为 Phase B/C shadow 合同的统一回归入口；仍不代表 production cutover。
 
+**2026-08-11 strict pricing consumer read checkpoint（实现 commit
+`5f2492bd929f19e6ad061dfd0a7e77d58e74245c`，shadow building block）：** 新增
+`readStrictPricingMid`：从 committed strict pricing view 解析 RouteKey →
+`mid` / `unavailable` / `missing` 三态，缺 publication 与显式 unavailable 区分；
+production pricing consumer 必须以该 view 或 issuer-bound handle 路径读取。
+该 helper 是 strict pricing production consumer 的构建块；blockscan pricing
+consumer 接线仍未落地，gate 保持 open。证据：shadow publication 测试 + 完整 build。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
