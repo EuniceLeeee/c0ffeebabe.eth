@@ -1636,6 +1636,27 @@ impl `ab4c06bd`，本地合同证据）：**
 univ3 baseline exporter（冻结 ds `univ3-standard` 侧）与节点真实 corpus
 双侧 capture 仍未落地，是下一 phase。
 
+**2026-08-11 univ3 bilateral fixture parity phase checkpoint（实现 commits
+impl `ab4c06bd`、baseline `877e95b7`，本地跨分支机器证据）：**
+
+- baseline exporter 新增 `captureUniv3BaselineCase`/`buildBaselineUniv3Side`/
+  CLI `family:"univ3"`：冻结 ds `univ3BlockScanState.compileStateInstance`
+  （readStatic 回放 factory getPool reverse binding）+ `deriveMids`
+  （slot0/liquidity + 本地 v3 precision quote）+ 同一 `v3SwapExactInput`
+  exact/execution/final-sim，与 challenger fixture 使用同一组
+  pool/tokens/fee/tickSpacing/liquidity/sqrtPriceX96；
+- 本地跨分支 fixture parity（baseline CLI ×2 + impl fixture corpus +
+  trusted parity runner）：`univ2-standard` **pass**、`univ3-standard`
+  **pass**、`assembledCommonGraphParity=true`（五 stage delta 全空）、
+  `nonMigratedFamilySemanticHashParity=true`、aggregate `partial`（剩余
+  20 个未覆盖 Family）；
+- 合同证据：baseline `searcher:architecture-migration-baseline-capture`
+  PASS（univ3 全 stage exercised + commonGraph 断言）、impl normalizer
+  PASS、双侧 tsc/build 通过。
+
+univ3 节点真实 corpus 双侧 capture 是下一 phase（需在节点写入 univ3
+descriptor 并跑合并 corpus）；此前不得把 univ3 当作 production cutover。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
