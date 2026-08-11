@@ -71,7 +71,7 @@ authority 混在一起：
 |Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
 |Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
 |Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
-|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS、`c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract，以及 `642373c1` 的中央 value 深冻结 + StateInstance mutation/carry shadow proof 等 runtime slice 已有 unit/shadow gate|durable checkpoint 的 production composition 与 strict catalog receipt coupling、production point-in-time enumerator、closure receipt 在 strict catalog 内的一次性消费与 staged exact-set coupling、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、Credit 独立 execution handle、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
+|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS、`c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract、`642373c1` 的中央 value 深冻结 + StateInstance mutation/carry shadow proof，以及 `9d954df4` 的 Credit 独立 execution handle shadow issuer 等 runtime slice 已有 unit/shadow gate|durable checkpoint 的 production composition 与 strict catalog receipt coupling、production point-in-time enumerator、closure receipt 在 strict catalog 内的一次性消费与 staged exact-set coupling、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
 |Phase E cleanup|尚未开始|legacy registry/API/schema/revision/cache/flag authority 仍在；只有 §18.3 与 §20.2.6 全部门通过后才能删除|
 
 该表是实施 checkpoint，不是目标合同的降级，也不预判并行实现工作最终是否通过；任一状态更新都必须引用新的
@@ -2404,6 +2404,22 @@ foreign/hot-reload FamilyBox、wrong source/generation/executor/evidence 均有 
 `CreditExecutionHandle`、全 catalog route/Graph/risk 同 CAS、production solver consumer、repayment/position final sim 与
 sealed parity 仍未落地，production solver 也仍有 legacy Credit authority。因此这些实现只能算 contract/shadow
 evidence，不能据此切换 authority。
+
+**2026-08-11 Credit 独立 execution handle checkpoint（实现 commit
+`9d954df4eed440994384630c8f23f37c6f9aa5df`，shadow contract，不是 production cutover）：**
+新增 issuer-private `SealedCreditExecutionHandle`（`issueCreditExecutionHandle`），一次签发即绑定
+选中 route、sealed risk quote、`minAmountOut`、executor、sealed runtime evidence 与
+source/generation；`buildCreditExecutionFragment` 现在只接受该 handle，不再接收 raw
+route/risk/evidence/descriptor。合同覆盖：
+
+- handle 冻结且不暴露 raw evidence/descriptor/runtime evidence；
+- forged、foreign/hot-reload FamilyBox、same-field clone 全部在进入 Family callback 前
+  fail closed；
+- 签发期拒绝 executor/evidence/`minAmountOut`/source/generation 错绑。
+
+证据：`searcher:adapter-credit-runtime` PASS、完整 listener build 通过。全 catalog
+route/Graph/risk 同 CAS、production solver consumer、repayment/position final sim 与
+sealed parity 仍未落地。
 
 ## 16. UniV3 完整实现示例
 
