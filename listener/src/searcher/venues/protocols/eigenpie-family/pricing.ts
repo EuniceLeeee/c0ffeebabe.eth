@@ -114,7 +114,7 @@ export const eigenpiePricing = {
           "Eigenpie current route differs from its pricing descriptor",
         );
       }
-      const quote = snapshot.quotes.get(descriptor.route.routeKey);
+      const quote = snapshot.quotes[descriptor.route.routeKey];
       if (quote === undefined) throw new Error("Eigenpie current quote missing");
       return new Map([[descriptor.route.routeKey, protocolMid({
         route: descriptor.route,

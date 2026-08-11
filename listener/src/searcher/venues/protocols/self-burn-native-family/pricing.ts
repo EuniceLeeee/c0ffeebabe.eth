@@ -138,10 +138,12 @@ export const selfBurnNativePricing = {
             source,
             amountIn,
             amountOut,
-            quotes: new Map([[descriptor.route.routeKey, Object.freeze({
+            quotes: Object.freeze({
+              [descriptor.route.routeKey]: Object.freeze({
               amountIn,
               amountOut,
-            })]]),
+              }),
+            }),
           });
         } catch {
           // Another successful probe may establish the current conversion.
@@ -156,7 +158,7 @@ export const selfBurnNativePricing = {
         source,
         amountIn: 0n,
         amountOut: 0n,
-        quotes: new Map(),
+        quotes: {},
       });
     },
     deriveMids({ descriptor, snapshot, routes }) {

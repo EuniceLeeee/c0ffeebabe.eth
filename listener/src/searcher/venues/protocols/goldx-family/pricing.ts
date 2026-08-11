@@ -73,7 +73,7 @@ export const goldxPricing = {
           "GOLDx current route differs from its pricing descriptor",
         );
       }
-      const point = snapshot.quotes.get(descriptor.route.routeKey);
+      const point = snapshot.quotes[descriptor.route.routeKey];
       if (point === undefined) throw new Error("GOLDx current quote missing");
       return new Map([[descriptor.route.routeKey, protocolMid({
         route: descriptor.route,

@@ -71,7 +71,7 @@ export const rocksolidPricing = {
           "RockSolid current route differs from its pricing descriptor",
         );
       }
-      const quote = snapshot.quotes.get(descriptor.route.routeKey);
+      const quote = snapshot.quotes[descriptor.route.routeKey];
       if (quote === undefined) {
         throw new Error("RockSolid current quote missing");
       }

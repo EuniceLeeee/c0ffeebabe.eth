@@ -149,7 +149,7 @@ export const erc4626Pricing: PricingSemantics<
         ReturnType<typeof protocolMid>
       >();
       for (const route of routes) {
-        const quote = snapshot.quotes.get(route.routeKey);
+        const quote = snapshot.quotes[route.routeKey];
         if (quote === undefined) throw new Error("ERC4626 current quote missing");
         mids.set(route.routeKey, protocolMid({
           route,

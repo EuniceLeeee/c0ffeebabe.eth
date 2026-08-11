@@ -74,7 +74,7 @@ export const psmPricing = {
           "PSM current route differs from its pricing descriptor",
         );
       }
-      const quote = snapshot.quotes.get(descriptor.route.routeKey);
+      const quote = snapshot.quotes[descriptor.route.routeKey];
       if (quote === undefined) throw new Error("PSM current quote missing");
       return new Map([[descriptor.route.routeKey, protocolMid({
         route: descriptor.route,

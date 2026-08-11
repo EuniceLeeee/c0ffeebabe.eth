@@ -152,10 +152,12 @@ export const erc4626SiloRedeemPricing = {
       return Object.freeze({
         source,
         previewAssets,
-        quotes: new Map([[descriptor.route.routeKey, Object.freeze({
+        quotes: Object.freeze({
+          [descriptor.route.routeKey]: Object.freeze({
           amountIn: descriptor.oneShare,
           amountOut,
-        })]]),
+          }),
+        }),
       });
     },
     deriveMids({ descriptor, snapshot, routes }) {
@@ -165,7 +167,7 @@ export const erc4626SiloRedeemPricing = {
       >();
       if (snapshot.previewAssets <= 0n) return mids;
       for (const route of routes) {
-        const quote = snapshot.quotes.get(route.routeKey);
+        const quote = snapshot.quotes[route.routeKey];
         if (quote === undefined || quote.amountOut <= 0n) continue;
         mids.set(route.routeKey, protocolMid({
           route,
@@ -179,7 +181,7 @@ export const erc4626SiloRedeemPricing = {
     classifyUnavailable({ snapshot, routes }) {
       const unavailable = new Map<Erc4626SiloRedeemRoute["routeKey"], string>();
       for (const route of routes) {
-        const quote = snapshot.quotes.get(route.routeKey);
+        const quote = snapshot.quotes[route.routeKey];
         if (snapshot.previewAssets === 0n || quote?.amountOut === 0n) {
           unavailable.set(route.routeKey, "silo_preview_chain_zero");
         }

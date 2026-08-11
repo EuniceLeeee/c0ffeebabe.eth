@@ -98,12 +98,15 @@ export const etherTokenNativeRedeemPricing = {
       const amountIn = totalSupply < descriptor.oneToken
         ? totalSupply
         : descriptor.oneToken;
-      const quotes = new Map();
+      const quotes: Record<
+        string,
+        { readonly amountIn: bigint; readonly amountOut: bigint }
+      > = {};
       if (amountIn > 0n) {
-        quotes.set(descriptor.route.routeKey, Object.freeze({
+        quotes[descriptor.route.routeKey] = Object.freeze({
           amountIn,
           amountOut: amountIn,
-        }));
+        });
       }
       return Object.freeze({ source, totalSupply, quotes });
     },
@@ -113,7 +116,7 @@ export const etherTokenNativeRedeemPricing = {
         ReturnType<typeof protocolMid>
       >();
       for (const route of routes) {
-        const quote = snapshot.quotes.get(route.routeKey);
+        const quote = snapshot.quotes[route.routeKey];
         if (quote === undefined || quote.amountOut <= 0n) continue;
         mids.set(route.routeKey, protocolMid({
           route,

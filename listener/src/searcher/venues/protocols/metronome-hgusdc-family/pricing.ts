@@ -156,10 +156,12 @@ export const metronomeHgUsdcPricing = {
       return Object.freeze({
         source,
         curveOut,
-        quotes: new Map([[descriptor.route.routeKey, Object.freeze({
+        quotes: Object.freeze({
+          [descriptor.route.routeKey]: Object.freeze({
           amountIn: descriptor.oneTokenIn,
           amountOut,
-        })]]),
+          }),
+        }),
       });
     },
     deriveMids({ descriptor, snapshot, routes }) {
@@ -168,7 +170,7 @@ export const metronomeHgUsdcPricing = {
         ReturnType<typeof protocolMid>
       >();
       for (const route of routes) {
-        const quote = snapshot.quotes.get(route.routeKey);
+        const quote = snapshot.quotes[route.routeKey];
         if (
           snapshot.curveOut <= 0n ||
           quote === undefined ||
@@ -184,7 +186,7 @@ export const metronomeHgUsdcPricing = {
       return mids;
     },
     classifyUnavailable({ snapshot, routes }) {
-      const quote = [...snapshot.quotes.values()][0];
+      const quote = Object.values(snapshot.quotes)[0];
       return snapshot.curveOut === 0n || quote?.amountOut === 0n
         ? new Map(routes.map((route) => [
             route.routeKey,

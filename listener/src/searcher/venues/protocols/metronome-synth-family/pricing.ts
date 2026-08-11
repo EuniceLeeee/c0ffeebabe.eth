@@ -117,10 +117,10 @@ export const metronomeSynthPricing = {
         return result;
       });
       const source = assertSameSource(successful);
-      const quotes = new Map<
+      const quotes: Record<
         string,
         { readonly amountIn: bigint; readonly amountOut: bigint }
-      >();
+      > = {};
       for (const route of descriptor.routes) {
         const result = returnedResult(
           results,
@@ -130,10 +130,10 @@ export const metronomeSynthPricing = {
           "quoteSwapOut",
           result.data,
         );
-        quotes.set(route.routeKey, Object.freeze({
+        quotes[route.routeKey] = Object.freeze({
           amountIn: oneToken(descriptor, route.tokenIn),
           amountOut: BigInt(decoded[0]),
-        }));
+        });
       }
       return Object.freeze({ source, quotes });
     },
@@ -143,7 +143,7 @@ export const metronomeSynthPricing = {
         ReturnType<typeof protocolMid>
       >();
       for (const route of routes) {
-        const quote = snapshot.quotes.get(route.routeKey);
+        const quote = snapshot.quotes[route.routeKey];
         if (quote === undefined || quote.amountOut <= 0n) continue;
         mids.set(route.routeKey, protocolMid({
           route,
@@ -156,7 +156,7 @@ export const metronomeSynthPricing = {
     },
     classifyUnavailable({ snapshot, routes }) {
       return new Map(routes.flatMap((route) =>
-        snapshot.quotes.get(route.routeKey)?.amountOut === 0n
+        snapshot.quotes[route.routeKey]?.amountOut === 0n
           ? [[route.routeKey, "metronome_quote_zero"] as const]
           : []
       ));

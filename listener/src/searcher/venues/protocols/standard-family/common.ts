@@ -41,7 +41,7 @@ export interface ProtocolQuotePoint {
 
 export interface ProtocolPricingSnapshot {
   readonly source: CanonicalSource;
-  readonly quotes: ReadonlyMap<string, ProtocolQuotePoint>;
+  readonly quotes: Readonly<Record<string, ProtocolQuotePoint>>;
 }
 
 export function effectsProjection(
@@ -297,7 +297,7 @@ export function quoteResultMap(
 ): ProtocolPricingSnapshot {
   const successful = points.map((point) => returnedResult(results, point.requestId));
   const source = assertSameSource(successful);
-  const quotes = new Map<string, ProtocolQuotePoint>();
+  const quotes: Record<string, ProtocolQuotePoint> = {};
   for (const point of points) {
     const amountOut = point.decodeAmountOut(
       returnedResult(results, point.requestId).data,
@@ -305,10 +305,10 @@ export function quoteResultMap(
     if (amountOut <= 0n) {
       throw new Error(`protocol current quote ${point.routeKey} returned ${amountOut}`);
     }
-    quotes.set(point.routeKey, Object.freeze({
+    quotes[point.routeKey] = Object.freeze({
       amountIn: point.amountIn,
       amountOut,
-    }));
+    });
   }
   return Object.freeze({ source, quotes });
 }
