@@ -7,6 +7,8 @@ import {
   architectureMigrationSideJson,
   buildFixtureCaptureCorpus,
   buildUniv2CommonGraph,
+  fixtureStateAnchor,
+  frameworkBlockedStage,
   generateArchitectureMigrationSideCapture,
   validateArchitectureMigrationCaptureCorpus,
   writeArchitectureMigrationSideCapture,
@@ -18,6 +20,7 @@ import {
 import {
   createArchitectureMigrationProductionCaptureIssuer,
   runArchitectureMigrationParityFiles,
+  buildArchitectureMigrationSideCapture,
 } from "../architecture-migration-parity-runner.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
@@ -228,6 +231,179 @@ async function testCaptureReproducibility(): Promise<void> {
   assert.deepEqual(first, second, "real capture must be reproducible");
 }
 
+/**
+ * Legacy-vs-challenger fixture parity: the baseline exporter emits old
+ * canonicalEdgeIds plus baselineFacts; the trusted comparator's normalizer
+ * must map them to the challenger canonical ids so commonGraph edges have a
+ * zero delta while the deep stages honestly remain framework-blocked.
+ */
+async function testLegacyBaselineCommonGraphEdgesParity(): Promise<void> {
+  const familyCase = await captureUniv2FixtureCase({ source: SOURCE });
+  const evidenceRefs = familyCase.stages.instances!.evidenceRefs;
+  const edges = familyCase.stages.edges!.items;
+  const pool = `0x${"41".repeat(20)}`;
+  const legacyEdges = edges.map((edge) => {
+    const value = edge.value as {
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+    };
+    const tokenIn = value.tokenIn.toLowerCase();
+    const tokenOut = value.tokenOut.toLowerCase();
+    const oldId = [
+      "univ2-standard",
+      pool,
+      pool,
+      `${tokenIn}>${tokenOut}`,
+      JSON.stringify(["univ2-swap", null, null, null, null]),
+    ].join("\u001f");
+    return Object.freeze({
+      id: oldId,
+      value: Object.freeze({
+        canonicalEdgeId: oldId,
+        tokenIn,
+        tokenOut,
+        adapterId: "univ2-swap",
+        baselineFacts: Object.freeze({
+          familyId: "univ2-standard",
+          pool,
+          token0: `0x${"43".repeat(20)}`,
+          token1: `0x${"44".repeat(20)}`,
+          tokenIn,
+          tokenOut,
+          feeBps: "30",
+          factory: `0x${"42".repeat(20)}`,
+          reversePool: pool,
+        }),
+      }),
+    });
+  });
+  const commonEdgeStage = Object.freeze({
+    status: "exercised" as const,
+    items: Object.freeze(legacyEdges),
+    evidenceRefs,
+    blocker: null,
+  });
+  const baselineSide = buildArchitectureMigrationSideCapture({
+    captureId: "baseline",
+    commit: "a".repeat(40),
+    productionClosureHash: "11".repeat(32),
+    activationManifestHash: "22".repeat(32),
+    normalizedConfigHash: "33".repeat(32),
+    productionPolicyHash: "44".repeat(32),
+    corpusHash: "55".repeat(32),
+    evidenceRefs,
+    familyCases: [{
+      ...familyCase,
+      stages: Object.freeze({
+        ...familyCase.stages,
+        edges: commonEdgeStage,
+      }),
+    }],
+    commonGraph: Object.freeze({
+      inputFingerprint: familyCase.inputFingerprint,
+      stages: Object.freeze({
+        edges: commonEdgeStage,
+        enumeratedRoutes: frameworkBlockedStage(
+          evidenceRefs,
+          "capture-harness-enumeration-not-wired",
+        ),
+        exactQuotes: frameworkBlockedStage(
+          evidenceRefs,
+          "capture-harness-exact-not-wired",
+        ),
+        executionFragments: frameworkBlockedStage(
+          evidenceRefs,
+          "capture-harness-execution-not-wired",
+        ),
+        finalSimulations: frameworkBlockedStage(
+          evidenceRefs,
+          "capture-harness-final-sim-not-wired",
+        ),
+      }),
+      crossFamilyBindings: Object.freeze([]),
+    }),
+  });
+  const challengerSide = buildArchitectureMigrationSideCapture({
+    captureId: "challenger",
+    commit: "b".repeat(40),
+    productionClosureHash: "aa".repeat(32),
+    activationManifestHash: "22".repeat(32),
+    normalizedConfigHash: "33".repeat(32),
+    productionPolicyHash: "44".repeat(32),
+    corpusHash: "55".repeat(32),
+    evidenceRefs,
+    familyCases: [familyCase],
+    commonGraph: buildUniv2CommonGraph({
+      source: SOURCE,
+      edgeItems: edges,
+      evidenceRefs,
+    }),
+  });
+  const directory = await mkdtemp(
+    join(tmpdir(), "architecture-migration-legacy-edges-"),
+  );
+  try {
+    const baselinePath = join(directory, "baseline.json");
+    const challengerPath = join(directory, "challenger.json");
+    await writeFile(
+      baselinePath,
+      architectureMigrationSideJson(baselineSide),
+    );
+    await writeFile(
+      challengerPath,
+      architectureMigrationSideJson(challengerSide),
+    );
+    const receipt = await runArchitectureMigrationParityFiles({
+      baselinePath,
+      challengerPath,
+      evidenceClass: "unit-contract",
+      mode: "pure-refactor",
+      stateAnchors: [fixtureStateAnchor(SOURCE)],
+      performanceDiagnostics: {
+        wallMs: 100,
+        requestCount: 10,
+        batchCount: 1,
+        peakConcurrency: 1,
+      },
+    });
+    const delta = receipt.commonGraphDelta;
+    assert.equal(delta.baselineCaptureMissing, false);
+    assert.equal(delta.challengerCaptureMissing, false);
+    assert.deepEqual(delta.edges, {
+      missingIds: [],
+      addedIds: [],
+      changedIds: [],
+    });
+    assert.deepEqual(delta.enumeratedRoutes, {
+      missingIds: [],
+      addedIds: [],
+      changedIds: [],
+    });
+    assert.deepEqual(delta.exactQuotes, {
+      missingIds: [],
+      addedIds: [],
+      changedIds: [],
+    });
+    assert.deepEqual(delta.executionFragments, {
+      missingIds: [],
+      addedIds: [],
+      changedIds: [],
+    });
+    assert.deepEqual(delta.finalSimulations, {
+      missingIds: [],
+      addedIds: [],
+      changedIds: [],
+    });
+    assert.equal(receipt.parityReceipt.assembledCommonGraphParity, false);
+    const row = receipt.familyCoverage.find(
+      (candidate) => candidate.familyId === "univ2-standard",
+    )!;
+    assert.equal(row.outcome, "framework-blocked");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   await testCorpusValidation();
   await testFixtureReplayProducesCanonicalCase();
@@ -235,6 +411,7 @@ async function main(): Promise<void> {
   await testCaptureReproducibility();
   await testWriteAndGenerateRoundTrip();
   await testEndToEndSealedParity();
+  await testLegacyBaselineCommonGraphEdgesParity();
   console.log("architecture-migration capture harness PASS");
 }
 

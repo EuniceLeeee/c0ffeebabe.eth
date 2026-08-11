@@ -19,6 +19,8 @@ import {
   hashCanonical,
   type CanonicalValue,
 } from "./venues/canonical-value.js";
+import { normalizeBaselineMigrationItems } from
+  "./architecture-migration-baseline-normalizer.js";
 
 export const ARCHITECTURE_MIGRATION_STAGES = Object.freeze([
   "instances",
@@ -430,8 +432,8 @@ export function runArchitectureMigrationBatchParity(
     );
   }
 
-  const baseline = normalizeSide(input.baseline);
-  const challenger = normalizeSide(input.challenger);
+  const baseline = normalizeSide(input.baseline, "baseline");
+  const challenger = normalizeSide(input.challenger, "challenger");
   const commonGraph = compareCommonGraph(
     input.baseline.commonGraph,
     input.challenger.commonGraph,
@@ -695,7 +697,10 @@ interface SideFamilyCoverage {
   readonly blockers: readonly string[];
 }
 
-function normalizeSide(capture: RawArchitectureMigrationSideCapture): {
+function normalizeSide(
+  capture: RawArchitectureMigrationSideCapture,
+  side: "baseline" | "challenger",
+): {
   readonly outputs: readonly CanonicalFamilySemanticOutput[];
   readonly coverage: ReadonlyMap<string, SideFamilyCoverage>;
 } {
@@ -753,16 +758,40 @@ function normalizeSide(capture: RawArchitectureMigrationSideCapture): {
       frameworkBlocker: blockers.length === 0
         ? null
         : [...new Set(blockers)].sort().join(";"),
-      instances: normalizeFamilyStage(cases, "instances"),
-      edges: normalizeFamilyStage(cases, "edges"),
-      stateCoverage: normalizeFamilyStage(cases, "stateCoverage"),
-      pricedEdges: normalizeFamilyStage(cases, "pricedEdges"),
-      prices: normalizeFamilyStage(cases, "prices"),
-      failures: normalizeFamilyStage(cases, "failures"),
-      enumeratedRoutes: normalizeFamilyStage(cases, "enumeratedRoutes"),
-      exactQuotes: normalizeFamilyStage(cases, "exactQuotes"),
-      executionFragments: normalizeFamilyStage(cases, "executionFragments"),
-      finalSimulations: normalizeFamilyStage(cases, "finalSimulations"),
+      instances: normalizeFamilyStage(cases, "instances", side === "baseline"),
+      edges: normalizeFamilyStage(cases, "edges", side === "baseline"),
+      stateCoverage: normalizeFamilyStage(
+        cases,
+        "stateCoverage",
+        side === "baseline",
+      ),
+      pricedEdges: normalizeFamilyStage(
+        cases,
+        "pricedEdges",
+        side === "baseline",
+      ),
+      prices: normalizeFamilyStage(cases, "prices", side === "baseline"),
+      failures: normalizeFamilyStage(cases, "failures", side === "baseline"),
+      enumeratedRoutes: normalizeFamilyStage(
+        cases,
+        "enumeratedRoutes",
+        side === "baseline",
+      ),
+      exactQuotes: normalizeFamilyStage(
+        cases,
+        "exactQuotes",
+        side === "baseline",
+      ),
+      executionFragments: normalizeFamilyStage(
+        cases,
+        "executionFragments",
+        side === "baseline",
+      ),
+      finalSimulations: normalizeFamilyStage(
+        cases,
+        "finalSimulations",
+        side === "baseline",
+      ),
       evidenceRefs: Object.freeze([...evidenceRefs].sort()),
     });
     outputs.push(normalized);
@@ -781,6 +810,7 @@ function normalizeSide(capture: RawArchitectureMigrationSideCapture): {
 function normalizeFamilyStage(
   cases: readonly RawFamilyMigrationCaseCapture[],
   stage: ArchitectureMigrationStage,
+  normalizeBaseline: boolean,
 ): readonly CanonicalSemanticItem[] {
   const observations = new Map<
     string,
@@ -789,7 +819,10 @@ function normalizeFamilyStage(
   for (const item of cases) {
     const stageCapture = item.stages[stage];
     if (stageCapture?.status !== "exercised") continue;
-    for (const raw of stageCapture.items) {
+    const rawItems = normalizeBaseline
+      ? normalizeBaselineMigrationItems(stage, stageCapture.items)
+      : stageCapture.items;
+    for (const raw of rawItems) {
       const values = observations.get(raw.id) ?? [];
       values.push({ caseId: item.caseId, value: raw.value });
       observations.set(raw.id, values);
@@ -818,7 +851,10 @@ function compareCommonGraph(
   const deltas = Object.fromEntries(COMMON_GRAPH_MIGRATION_STAGES.map((stage) => [
     stage,
     compareSemanticItems(
-      exercisedItems(baseline?.stages[stage]),
+      normalizeBaselineMigrationItems(
+        stage,
+        exercisedItems(baseline?.stages[stage]),
+      ),
       exercisedItems(challenger?.stages[stage]),
     ),
   ])) as Record<CommonGraphMigrationStage, ArchitectureMigrationSemanticSetDelta>;
