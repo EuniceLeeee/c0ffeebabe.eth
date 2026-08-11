@@ -424,6 +424,11 @@ async function main(): Promise<void> {
     routeKey: routeKey("missing-route"),
   });
   assert.deepEqual(readMissing, { kind: "missing" });
+  assert.deepEqual(readStrictPricingMid({
+    views: committed1.views,
+    pricingPublicationKey: "missing-pricing-key",
+    routeKey: readRouteKey,
+  }), { kind: "missing" });
   const readUnavailable = readStrictPricingMid({
     views: {
       ...committed1.views,
@@ -830,6 +835,29 @@ async function main(): Promise<void> {
   const fundingHarness = publicationRoot();
   const fundingRoot = fundingHarness.root;
   const fundingSource = source(501);
+  const univ2Box = CATALOG.forStrictFamily(UNIV2_FAMILY_ID);
+  assert.throws(() => fundingRoot.stageFundingFamily({
+    publication: Object.freeze({
+      familyId: UNIV2_FAMILY_ID,
+      source: fundingSource,
+      generation: fundingSource.generation,
+      offers: Object.freeze([]),
+      outcomes: Object.freeze([]),
+    }) as never,
+  }), /requires a Funding FamilyBox/);
+  const fundingBox = CATALOG.forStrictFamily(fundingFamilyId);
+  assert.throws(() => fundingRoot.stageCreditFamily({
+    family: fundingBox,
+    publication: Object.freeze({
+      familyId: fundingFamilyId,
+      candidateKey: "candidate",
+      instanceKey: "state:funding",
+      source: fundingSource,
+      generation: fundingSource.generation,
+      routes: Object.freeze([]),
+    }) as never,
+    instance: Object.freeze({}) as never,
+  }), /requires a Credit FamilyBox/);
   const fundingRoutePublication = await lifecycle(fundingSource);
   const fundingRouteStage = fundingRoot.stageRouteFamily({
     publication: fundingRoutePublication,
