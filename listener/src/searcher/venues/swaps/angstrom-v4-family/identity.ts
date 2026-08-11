@@ -52,7 +52,11 @@ export const angstromV4Identity = {
     kind: "singleton-subinstance",
     lineageId: ANGSTROM_V4_LINEAGE_ID,
     applies: () => true,
-    requirements: () => ({ transports: ["get-code", "eth-call"] }),
+    requirements(input) {
+      return identityEvidence(input.evidence) === undefined
+        ? { transports: ["get-code", "eth-call"] }
+        : { transports: ["eth-call"] };
+    },
     buildRequests(input) {
       const evidence = identityEvidence(input.evidence);
       if (evidence === undefined) return buildStaticProofRequests(input.candidate);

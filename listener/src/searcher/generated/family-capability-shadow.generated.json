@@ -683,7 +683,7 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "d412014b692e1ee02ad79f922fb5c04acf44e2c81798d4e76330e3f15cd610cd",
+        "contentHash": "569613e3b52d224c5f0239df83ce625c740094c12a334e2eae846b922098e94b",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -6261,5 +6261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "cdf859e3e429a5af33e2e2980006e658a8aceeb19c9fa7d2bf21570e1e290480"
+  "artifactHash": "64515efcd0709206edf00738f935b108ce0e85a009381f3be1e509eb0156d893"
 }

@@ -25,6 +25,7 @@ import {
   captureEigenpieFixtureCase,
   captureCurveUnderlyingFixtureCase,
   captureFluidDexFixtureCase,
+  captureAngstromV4FixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -204,6 +205,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureFluidDexFixtureCase({
           source,
           caseId: `fluid-dex:${source.number}`,
+        }));
+      } else if (item.family === "custom-swap:angstrom-v4") {
+        familyCases.push(await captureAngstromV4FixtureCase({
+          source,
+          caseId: `angstrom-v4:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

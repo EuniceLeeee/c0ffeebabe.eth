@@ -1,4 +1,7 @@
-import { hashCanonical } from "./venues/canonical-value.js";
+import {
+  hashCanonical,
+  type CanonicalValue,
+} from "./venues/canonical-value.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -59,6 +62,14 @@ import { FLUID_DEX_FAMILY_ID } from
   "./venues/swaps/fluid-dex-family/manifest.js";
 import { fluidDexStaticBindingProjection } from
   "./venues/swaps/fluid-dex-family/instance.js";
+import { ANGSTROM_V4_FAMILY_ID } from
+  "./venues/swaps/angstrom-v4-family/manifest.js";
+import {
+  canonicalPoolKey,
+  poolKeyProjection,
+} from "./venues/swaps/angstrom-v4-family/codec.js";
+import { angstromV4StaticBindingProjection } from
+  "./venues/swaps/angstrom-v4-family/binding.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -299,6 +310,28 @@ export interface BaselineFluidDexFacts {
   readonly tokenOut: string;
 }
 
+export interface BaselineAngstromV4Facts {
+  readonly familyId: "custom-swap:angstrom-v4";
+  readonly poolId: string;
+  readonly currency0: string;
+  readonly currency1: string;
+  readonly fee: number;
+  readonly tickSpacing: number;
+  readonly hooks: string;
+  readonly manager: string;
+  readonly stateView: string;
+  readonly quoter: string;
+  readonly hook: string;
+  readonly adapter: string;
+  readonly controller: string;
+  readonly managerCodeHash: string;
+  readonly hookCodeHash: string;
+  readonly adapterCodeHash: string;
+  readonly direction: "zero-for-one" | "one-for-zero";
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -334,6 +367,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:eigenpie": normalizeBaselineEigenpieInstanceItem,
         "curve-underlying": normalizeBaselineCurveUnderlyingInstanceItem,
         "fluid-dex": normalizeBaselineFluidDexInstanceItem,
+        "custom-swap:angstrom-v4":
+          normalizeBaselineAngstromV4InstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -363,6 +398,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:eigenpie": normalizeBaselineEigenpiePriceItem,
         "curve-underlying": normalizeBaselineCurveUnderlyingPriceItem,
         "fluid-dex": normalizeBaselineFluidDexPriceItem,
+        "custom-swap:angstrom-v4":
+          normalizeBaselineAngstromV4PriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -392,6 +429,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:eigenpie": normalizeBaselineEigenpieEdgeItem,
         "curve-underlying": normalizeBaselineCurveUnderlyingEdgeItem,
         "fluid-dex": normalizeBaselineFluidDexEdgeItem,
+        "custom-swap:angstrom-v4":
+          normalizeBaselineAngstromV4EdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -424,6 +463,8 @@ export function normalizeBaselineMigrationItems(
         "curve-underlying":
           normalizeBaselineCurveUnderlyingEnumeratedRouteItem,
         "fluid-dex": normalizeBaselineFluidDexEnumeratedRouteItem,
+        "custom-swap:angstrom-v4":
+          normalizeBaselineAngstromV4EnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -453,6 +494,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:eigenpie": normalizeBaselineEigenpieExactQuoteItem,
         "curve-underlying": normalizeBaselineCurveUnderlyingExactQuoteItem,
         "fluid-dex": normalizeBaselineFluidDexExactQuoteItem,
+        "custom-swap:angstrom-v4":
+          normalizeBaselineAngstromV4ExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -490,6 +533,8 @@ export function normalizeBaselineMigrationItems(
         "curve-underlying":
           normalizeBaselineCurveUnderlyingExecutionFragmentItem,
         "fluid-dex": normalizeBaselineFluidDexExecutionFragmentItem,
+        "custom-swap:angstrom-v4":
+          normalizeBaselineAngstromV4ExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -527,6 +572,8 @@ export function normalizeBaselineMigrationItems(
         "curve-underlying":
           normalizeBaselineCurveUnderlyingFinalSimulationItem,
         "fluid-dex": normalizeBaselineFluidDexFinalSimulationItem,
+        "custom-swap:angstrom-v4":
+          normalizeBaselineAngstromV4FinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -587,6 +634,9 @@ function normalizeByFamily(
     readonly "fluid-dex": (
       item: RawMigrationSemanticItem,
     ) => RawMigrationSemanticItem;
+    readonly "custom-swap:angstrom-v4": (
+      item: RawMigrationSemanticItem,
+    ) => RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -633,6 +683,9 @@ function normalizeByFamily(
   }
   if (familyId === "fluid-dex") {
     return handlers["fluid-dex"](item);
+  }
+  if (familyId === "custom-swap:angstrom-v4") {
+    return handlers["custom-swap:angstrom-v4"](item);
   }
   return handlers.default(item);
 }
@@ -1625,7 +1678,7 @@ export function normalizeBaselineUniv4PriceItem(
       mid: Object.freeze({
         kind: "v4",
         pool: derived.manager,
-        edges: Object.freeze([routeEdge]),
+        edges: Object.freeze([routeEdge]) as unknown as CanonicalValue,
         mid: mid.mid,
         feeBps: mid.feeBps,
         reserveA: BigInt(mid.reserveA).toString(),
@@ -1633,7 +1686,7 @@ export function normalizeBaselineUniv4PriceItem(
         sqrtABX96: BigInt(mid.sqrtABX96).toString(),
         liquidity: BigInt(mid.liquidity).toString(),
         depthProxy: mid.depthProxy,
-      }),
+      }) as unknown as CanonicalValue,
     }),
   });
 }
@@ -6847,6 +6900,386 @@ export function normalizeBaselineFluidDexFinalSimulationItem(
   });
 }
 
+function angstromV4FactsGuard(
+  facts: Partial<BaselineAngstromV4Facts> | undefined,
+): facts is Required<BaselineAngstromV4Facts> {
+  return facts !== undefined &&
+    facts.familyId === "custom-swap:angstrom-v4" &&
+    typeof facts.poolId === "string" &&
+    typeof facts.currency0 === "string" &&
+    typeof facts.currency1 === "string" &&
+    Number.isSafeInteger(facts.fee) &&
+    Number.isSafeInteger(facts.tickSpacing) &&
+    typeof facts.hooks === "string" &&
+    typeof facts.manager === "string" &&
+    typeof facts.stateView === "string" &&
+    typeof facts.quoter === "string" &&
+    typeof facts.hook === "string" &&
+    typeof facts.adapter === "string" &&
+    typeof facts.controller === "string" &&
+    typeof facts.managerCodeHash === "string" &&
+    typeof facts.hookCodeHash === "string" &&
+    typeof facts.adapterCodeHash === "string" &&
+    (facts.direction === "zero-for-one" ||
+      facts.direction === "one-for-zero") &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function angstromV4FactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineAngstromV4Facts>;
+  })?.baselineFacts;
+  if (!angstromV4FactsGuard(facts)) return null;
+  return facts;
+}
+
+function angstromV4DescriptorFor(
+  facts: Required<BaselineAngstromV4Facts>,
+) {
+  const poolKey = canonicalPoolKey({
+    currency0: facts.currency0,
+    currency1: facts.currency1,
+    fee: facts.fee,
+    tickSpacing: facts.tickSpacing,
+    hooks: facts.hooks,
+  });
+  const manager = canonicalAddress(facts.manager);
+  return Object.freeze({
+    poolId: facts.poolId,
+    poolKey,
+    immutableBinding: Object.freeze({
+      manager,
+      stateView: canonicalAddress(facts.stateView),
+      quoter: canonicalAddress(facts.quoter),
+      hook: canonicalAddress(facts.hook),
+      adapter: canonicalAddress(facts.adapter),
+      controller: canonicalAddress(facts.controller),
+      managerCodeHash: facts.managerCodeHash,
+      hookCodeHash: facts.hookCodeHash,
+      adapterCodeHash: facts.adapterCodeHash,
+    }),
+  }) as unknown as import("./venues/swaps/angstrom-v4-family/types.js")
+    .AngstromV4Descriptor;
+}
+
+function deriveAngstromV4CanonicalFacts(
+  facts: Required<BaselineAngstromV4Facts>,
+): {
+  readonly manager: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly lowerManager: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly instanceKeyValue: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const manager = canonicalAddress(facts.manager);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const lowerManager = lowerAddress(manager);
+  const poolId = facts.poolId.toLowerCase();
+  const descriptor = angstromV4DescriptorFor(facts);
+  const bindingFingerprint = hashCanonical(
+    angstromV4StaticBindingProjection(descriptor),
+  );
+  const venueIdentityHash = hashCanonical(Object.freeze({
+    kind: "manager-pool-id",
+    manager: lowerManager,
+    poolId,
+  }));
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const instanceKeyValue = `${lowerManager}\u001f${poolId}`;
+  const routeKeyValue = [
+    "custom-swap:angstrom-v4",
+    lowerManager,
+    poolId,
+    lowerTokenIn,
+    lowerTokenOut,
+  ].join("\u001f");
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "custom-swap:angstrom-v4",
+    instanceKeyValue,
+    canonicalAddress(facts.adapter).toLowerCase(),
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    manager,
+    tokenIn,
+    tokenOut,
+    lowerManager,
+    lowerTokenIn,
+    lowerTokenOut,
+    instanceKeyValue,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineAngstromV4EdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = angstromV4FactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveAngstromV4CanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineAngstromV4EnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineAngstromV4EdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "angstrom-v4 baseline enumerated route item must carry a " +
+        "non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineAngstromV4InstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = angstromV4FactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveAngstromV4CanonicalFacts(facts);
+  const descriptor = angstromV4DescriptorFor(facts);
+  const staticBindingFingerprint = hashCanonical({
+    capability: ANGSTROM_V4_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: angstromV4StaticBindingProjection(descriptor),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.instanceKeyValue,
+    value: Object.freeze({
+      familyId: "custom-swap:angstrom-v4",
+      instanceKey: derived.instanceKeyValue,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineAngstromV4PriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = angstromV4FactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly sqrtABX96?: unknown;
+      readonly liquidity?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    (typeof mid.sqrtABX96 !== "string" &&
+      typeof mid.sqrtABX96 !== "bigint") ||
+    (typeof mid.liquidity !== "string" &&
+      typeof mid.liquidity !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveAngstromV4CanonicalFacts(facts);
+  const poolKey = canonicalPoolKey({
+    currency0: facts.currency0,
+    currency1: facts.currency1,
+    fee: facts.fee,
+    tickSpacing: facts.tickSpacing,
+    hooks: facts.hooks,
+  });
+  const routeEdge = Object.freeze({
+    adapterId: "angstrom-v4-swap",
+    instanceKey: derived.instanceKeyValue,
+    target: derived.manager,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "swap" as const,
+    poolId: facts.poolId.toLowerCase(),
+    poolToken0: canonicalAddress(facts.currency0),
+    poolToken1: canonicalAddress(facts.currency1),
+    v4PoolKey: poolKey,
+    edgeKind: "swap" as const,
+    leavesStandingPosition: false,
+  }) as unknown as CanonicalValue;
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: facts.poolId.toLowerCase(),
+      mid: Object.freeze({
+        kind: "v4",
+        pool: derived.manager,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        sqrtABX96: BigInt(mid.sqrtABX96).toString(),
+        liquidity: BigInt(mid.liquidity).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineAngstromV4ExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = angstromV4FactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveAngstromV4CanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineAngstromV4ExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = angstromV4FactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveAngstromV4CanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "angstrom-v4-swap",
+      executionTarget: canonicalAddress(facts.adapter),
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineAngstromV4FinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = angstromV4FactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveAngstromV4CanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -6930,4 +7363,9 @@ const CURVE_UNDERLYING_CATALOG_FAMILY =
 const FLUID_DEX_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     FLUID_DEX_FAMILY_ID,
+  );
+
+const ANGSTROM_V4_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    ANGSTROM_V4_FAMILY_ID,
   );

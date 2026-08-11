@@ -260,6 +260,38 @@ import type {
   FluidDexDescriptor,
   FluidDexRoute,
 } from "./venues/swaps/fluid-dex-family/types.js";
+import { ANGSTROM_V4_FAMILY_ID } from
+  "./venues/swaps/angstrom-v4-family/manifest.js";
+import {
+  canonicalPoolId,
+  canonicalPoolKey,
+} from "./venues/swaps/angstrom-v4-family/codec.js";
+import {
+  ANGSTROM_CONTROLLER_INTERFACE,
+  ANGSTROM_HOOK_STATE_INTERFACE,
+} from "./venues/swaps/univ4-abi.js";
+import {
+  ANGSTROM_MAINNET_ADAPTER,
+  ANGSTROM_MAINNET_HOOK,
+  encodeAngstromExecutionEvidence,
+  parseAngstromAttestation,
+} from "./venues/swaps/angstrom-attestation.js";
+import { angstromRuntimeEvidenceHash } from
+  "./venues/swaps/angstrom-v4-family/evidence.js";
+import {
+  BLOCKSCAN_MULTICALL3,
+  blockScanMulticallIface,
+} from "./venues/swaps/blockscan-state-shared.js";
+import { angstromV4Exact } from
+  "./venues/swaps/angstrom-v4-family/exact.js";
+import { angstromV4Execution } from
+  "./venues/swaps/angstrom-v4-family/execution.js";
+import type {
+  AngstromV4Descriptor,
+  AngstromV4Route,
+} from "./venues/swaps/angstrom-v4-family/types.js";
+import type { RuntimeEvidence } from
+  "./venues/adapter-family-plugin.js";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -7994,6 +8026,471 @@ export async function captureFluidDexFixtureCase(input: {
   return Object.freeze({
     familyId: FLUID_DEX_FAMILY_ID,
     caseId: input.caseId ?? `fluid-dex:${input.source.number}`,
+    inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
+    stateAnchorNumber: input.source.number,
+    implementationClosureHash: summary.definitionBoundaryHash,
+    stages: Object.freeze({
+      instances: instanceStage(instances, evidenceRefs),
+      edges: exercisedStage(edges, evidenceRefs),
+      stateCoverage: exercisedStage([], evidenceRefs),
+      pricedEdges: exercisedStage([], evidenceRefs),
+      prices: exercisedStage(prices, evidenceRefs),
+      failures: exercisedStage([], evidenceRefs),
+      enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
+      exactQuotes: exercisedStage(exactQuotes, evidenceRefs),
+      executionFragments: exercisedStage(executionFragments, evidenceRefs),
+      finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
+    }),
+  });
+}
+
+export const ANGSTROM_FIXTURE_CURRENCY0 =
+  "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+export const ANGSTROM_FIXTURE_CURRENCY1 =
+  "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+export const ANGSTROM_FIXTURE_FEE = 0;
+export const ANGSTROM_FIXTURE_TICK_SPACING = 60;
+
+function angstromFixturePoolKey() {
+  return canonicalPoolKey({
+    currency0: ANGSTROM_FIXTURE_CURRENCY0,
+    currency1: ANGSTROM_FIXTURE_CURRENCY1,
+    fee: ANGSTROM_FIXTURE_FEE,
+    tickSpacing: ANGSTROM_FIXTURE_TICK_SPACING,
+    hooks: ANGSTROM_MAINNET_HOOK,
+  });
+}
+
+function angstromSuccessResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+): AdapterRequestResult {
+  const data =
+    request.kind === "get-code"
+      ? "0x00"
+      : request.id === "identity-slot0" ||
+          request.id === "current-slot0"
+        ? UNIV4_STATE_VIEW_INTERFACE.encodeFunctionResult(
+            "getSlot0",
+            [1n << 96n, 0n, 0n, 3_000n],
+          )
+        : request.id === "identity-liquidity" ||
+            request.id === "current-liquidity"
+          ? UNIV4_STATE_VIEW_INTERFACE.encodeFunctionResult(
+              "getLiquidity",
+              [10n ** 18n],
+            )
+          : request.id === "hook-controller-slot"
+            ? ANGSTROM_HOOK_STATE_INTERFACE.encodeFunctionResult(
+                "extsload",
+                [BigInt(ANGSTROM_FIXTURE_CONTROLLER)],
+              )
+            : request.id === "controller-canonical-hook"
+              ? ANGSTROM_CONTROLLER_INTERFACE.encodeFunctionResult(
+                  "ANGSTROM",
+                  [ANGSTROM_MAINNET_HOOK],
+                )
+              : request.id === "exact-angstrom-v4-quotes"
+                ? (() => {
+                    const quote = UNIV4_QUOTER_INTERFACE.encodeFunctionResult(
+                      "quoteExactInputSingle",
+                      [1_000_000n, 0n],
+                    );
+                    return blockScanMulticallIface.encodeFunctionResult(
+                      "aggregate3",
+                      [[Object.freeze({
+                        success: true,
+                        returnData: quote,
+                      })]],
+                    );
+                  })()
+                : (() => {
+                    throw new Error(
+                      "unexpected angstrom-v4 fixture request " + request.id,
+                    );
+                  })();
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data,
+  });
+}
+
+export const ANGSTROM_FIXTURE_CONTROLLER = `0x${"de".repeat(20)}`;
+
+class AngstromFixtureScheduler implements CentralAdapterScheduler {
+  issueExecutor(
+    input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
+  ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
+    const executor = createBoundedRequestExecutor({
+      assertSupported: (requirements) => assert.deepEqual(
+        requirements,
+        input.requirements,
+      ),
+      assertCallerBinding() {},
+      assertWithinBudget: (_familyId, requests) => {
+        assert.deepEqual(requests, input.requests);
+      },
+      execute: async (execution) => Promise.all(execution.requests.map(
+        (request) => angstromSuccessResult(request, execution.source),
+      )),
+      sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
+    });
+    return Object.freeze({
+      executor,
+      timing: () => ({ queueWaitMs: 0, transportWallMs: 1, attempts: 1 }),
+    });
+  }
+}
+
+function angstromFixtureRuntime(): CentralAdapterRuntime {
+  let now = 1_000;
+  return {
+    clock: { nowMs: () => now++ },
+    generationFence: new FixtureFence(),
+    callerAuthority: { bind: () => ({}) },
+    policy: {
+      bind: (input) => ({
+        lane: input.stage === "identity" ? "critical-proof" : "background",
+        deadlineAtMs: 100_000,
+        maxAttempts: 1,
+        transportPool: "state-read",
+        fairnessKey: input.subjectKey,
+      }),
+    },
+    budgets: { assertAdmitted() {} },
+    scheduler: new AngstromFixtureScheduler(),
+  };
+}
+
+async function runAngstromLifecycle(
+  canonical: CanonicalSource,
+  poolKey: ReturnType<typeof angstromFixturePoolKey>,
+): Promise<AdapterFamilyPublication> {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    ANGSTROM_V4_FAMILY_ID,
+  );
+  const poolId = canonicalPoolId(
+    v4PoolId(poolKey),
+  );
+  let publication: AdapterFamilyPublication | null = null;
+  const initializeLog = UNIV4_POOL_MANAGER_INTERFACE.encodeEventLog(
+    "Initialize",
+    [
+      poolId,
+      poolKey.currency0,
+      poolKey.currency1,
+      BigInt(poolKey.fee),
+      BigInt(poolKey.tickSpacing),
+      poolKey.hooks,
+      1n << 96n,
+      0n,
+    ],
+  );
+  const result = await executeAdapterFamilyLifecycleBatch({
+    family,
+    matches: [Object.freeze({
+      matchedPatternId: "angstrom-v4-pool-initialize",
+      observation: Object.freeze({
+        kind: "log" as const,
+        source: canonical,
+        address: ADDR.UNISWAP_V4_POOL_MANAGER,
+        topics: Object.freeze([...initializeLog.topics]),
+        data: initializeLog.data,
+      }),
+    })],
+    source: canonical,
+    generation: canonical.generation,
+    runtime: angstromFixtureRuntime(),
+    publisher: { publish: (value) => { publication = value; } },
+  });
+  assert(result.publication);
+  assert(publication);
+  return publication;
+}
+
+function angstromRuntimeEvidenceFor(
+  source: CanonicalSource,
+  instanceKey: string,
+): RuntimeEvidence {
+  const node = `0x${"11".repeat(20)}`;
+  const signature = `0x${"22".repeat(65)}`;
+  const unlockData = `${node}${signature.slice(2)}`;
+  const attestation = Object.freeze({
+    ...parseAngstromAttestation({
+      blockNumber: BigInt(source.number),
+      unlockData,
+    }),
+    verification: "evidence-bound" as const,
+  });
+  const payload = encodeAngstromExecutionEvidence([attestation]);
+  const payloadHash = ethers.keccak256(payload);
+  const txHash = `0x${"ab".repeat(32)}`;
+  return Object.freeze({
+    evidenceId: "fixture:angstrom-empty-block",
+    familyId: ANGSTROM_V4_FAMILY_ID,
+    instanceKey: instanceKey as RuntimeEvidence["instanceKey"],
+    kind: "angstrom-empty-block-attestation",
+    scope: "transaction" as const,
+    source,
+    txHash,
+    evidenceHash: angstromRuntimeEvidenceHash({
+      txHash,
+      source,
+      payloadHash,
+    }),
+    sealedPayloadRef: payload,
+  });
+}
+
+/**
+ * Runs the angstrom-v4 official-hook lifecycle over the initialize log
+ * fixture: static pool-key/hook/controller proof, tx-bound attestation
+ * exact quotes and v4-style current pricing.
+ */
+export async function captureAngstromV4FixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const poolKey = angstromFixturePoolKey();
+  const poolId = canonicalPoolId(
+    v4PoolId(poolKey),
+  );
+  const publication = await runAngstromLifecycle(input.source, poolKey);
+  const evidenceRefs = Object.freeze([
+    `fixture:angstrom-v4:${input.source.number}:${input.source.hash}`,
+  ]);
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    ANGSTROM_V4_FAMILY_ID,
+  );
+  const edges: RawMigrationStageCapture["items"][number][] = [];
+  const prices: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of instance.routes) {
+      const handle = instance.routeHandles.find((candidate) =>
+        candidate.routeKey === route.routeKey
+      );
+      if (handle === undefined) {
+        throw new Error(
+          `prepared route ${route.routeKey} has no issued handle`,
+        );
+      }
+      const projected = projectFamilyRouteGraph({
+        family,
+        descriptor: instance.descriptor,
+        route,
+        handle,
+      });
+      edges.push(Object.freeze({
+        id: projected.edge.canonicalEdgeId,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: projected.edge.canonicalEdgeId,
+        }),
+      }));
+    }
+    const routeByKey = new Map(
+      instance.routes.map((route) => [route.routeKey, route]),
+    );
+    for (const pricing of instance.pricingInstances) {
+      for (const [routeKey, mid] of pricing.mids) {
+        const route = routeByKey.get(routeKey);
+        if (route === undefined) {
+          throw new Error(
+            `angstrom-v4 pricing route ${routeKey} is missing`,
+          );
+        }
+        prices.push(Object.freeze({
+          id: `${pricing.stateKey}:${route.tokenIn.toLowerCase()}>` +
+            `${route.tokenOut.toLowerCase()}`,
+          value: Object.freeze({
+            stateKey: pricing.stateKey,
+            mid: Object.freeze({ ...mid }),
+          }) as unknown as RawMigrationStageCapture["items"][number]["value"],
+        }));
+      }
+    }
+  }
+  const enumeratedRoutes: RawMigrationStageCapture["items"][number][] = edges
+    .map((edge) => edge.value as {
+      readonly routeKey: string;
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly canonicalEdgeId: string;
+    })
+    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
+    .map((value, order) => Object.freeze({
+      id: value.canonicalEdgeId,
+      value: Object.freeze({
+        routeKey: value.routeKey,
+        tokenIn: value.tokenIn,
+        tokenOut: value.tokenOut,
+        canonicalEdgeId: value.canonicalEdgeId,
+        order,
+      }),
+    }));
+  const exactMethod = angstromV4Exact.methods().find(
+    (method) => method.kind === "request-program" &&
+      method.id === "tx-bound-quoter",
+  );
+  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+    throw new Error("angstrom-v4 exact request program is missing");
+  }
+  const program = exactMethod.program;
+  const exactByRouteKey = new Map<
+    string,
+    {
+      readonly amountOut: bigint;
+      readonly evidence: import("./venues/swaps/angstrom-v4-family/types.js")
+        .AngstromV4ExactEvidence;
+    }
+  >();
+  const exactQuotes: RawMigrationStageCapture["items"][number][] = [];
+  const edgeByRouteKey = new Map(
+    edges.map((edge) => {
+      const value = edge.value as { readonly routeKey: string };
+      return [value.routeKey, edge] as const;
+    }),
+  );
+  for (const instance of publication.instances) {
+    const runtimeEvidence = Object.freeze([
+      angstromRuntimeEvidenceFor(input.source, instance.instanceKey),
+    ]);
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const exactInput = Object.freeze({
+        descriptor: instance.descriptor as unknown as AngstromV4Descriptor,
+        route: route as unknown as AngstromV4Route,
+        amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
+        source: input.source,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence,
+      });
+      const requests = program.buildRequests(exactInput);
+      const results = requests.map((request) =>
+        angstromSuccessResult(request, input.source)
+      );
+      const decoded = program.decode({
+        programInput: exactInput,
+        initialResults: results,
+        dependentEvidence: Object.freeze([]),
+      });
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (edge === undefined) {
+        throw new Error(
+          `angstrom-v4 exact route ${route.routeKey} has no edge`,
+        );
+      }
+      exactByRouteKey.set(route.routeKey, {
+        amountOut: decoded.amountOut,
+        evidence: decoded.evidence,
+      });
+      exactQuotes.push(Object.freeze({
+        id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
+          amountOut: decoded.amountOut.toString(),
+          feeBps: "0",
+        }),
+      }));
+    }
+  }
+  const executionFragments: RawMigrationStageCapture["items"][number][] = [];
+  const finalSimulations: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    const runtimeEvidence = Object.freeze([
+      angstromRuntimeEvidenceFor(input.source, instance.instanceKey),
+    ]);
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const quote = exactByRouteKey.get(route.routeKey);
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (quote === undefined || edge === undefined) {
+        throw new Error(
+          `angstrom-v4 execution route ${route.routeKey} has no quote`,
+        );
+      }
+      const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
+      const fragment = angstromV4Execution.buildFragment({
+        descriptor: instance.descriptor as unknown as AngstromV4Descriptor,
+        route: route as unknown as AngstromV4Route,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+        minAmountOut: quote.amountOut,
+        exactEvidence: quote.evidence,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence,
+      });
+      executionFragments.push(Object.freeze({
+        id: `${edge.id}\u001fexec:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          actionAdapterId: "angstrom-v4-swap",
+          executionTarget: ANGSTROM_MAINNET_ADAPTER,
+          nodeFingerprint: hashCanonical(
+            fragment.nodes as unknown as CanonicalValue,
+          ),
+        }),
+      }));
+      const effects = angstromV4Execution.expectedEffects({
+        descriptor: instance.descriptor as unknown as AngstromV4Descriptor,
+        route: route as unknown as AngstromV4Route,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+      });
+      if (quote.amountOut <= 0n) {
+        throw new Error(
+          "angstrom-v4 capture final simulation repayment failed",
+        );
+      }
+      finalSimulations.push(Object.freeze({
+        id: `${edge.id}\u001fsim:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          effectsFingerprint: hashCanonical(
+            effects as unknown as CanonicalValue,
+          ),
+          conservation: "conserved",
+          repayment: "satisfied",
+          evInput: Object.freeze({
+            amountIn: amountIn.toString(),
+            amountOut: quote.amountOut.toString(),
+          }),
+        }),
+      }));
+    }
+  }
+  const instances = publication.instances;
+  const summary = definedFamilyPluginContractSummary(family.plugin);
+  return Object.freeze({
+    familyId: ANGSTROM_V4_FAMILY_ID,
+    caseId: input.caseId ?? `angstrom-v4:${input.source.number}`,
     inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
     stateAnchorNumber: input.source.number,
     implementationClosureHash: summary.definitionBoundaryHash,
