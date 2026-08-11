@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  assertCaptureReproducible,
   architectureMigrationSideJson,
   buildFixtureCaptureCorpus,
   generateArchitectureMigrationSideCapture,
@@ -198,10 +199,31 @@ async function testEndToEndSealedParity(): Promise<void> {
   }
 }
 
+async function testCaptureReproducibility(): Promise<void> {
+  const corpus = corpusFor("repro", "a".repeat(40), "11".repeat(32));
+  await assertCaptureReproducible(corpus);
+  const first = await captureUniv2RealCase({
+    source: SOURCE,
+    pool: `0x${"61".repeat(20)}`,
+    tokenA: `0x${"71".repeat(20)}`,
+    tokenB: `0x${"72".repeat(20)}`,
+    reserves: { reserve0: "1", reserve1: "2" },
+  });
+  const second = await captureUniv2RealCase({
+    source: SOURCE,
+    pool: `0x${"61".repeat(20)}`,
+    tokenA: `0x${"71".repeat(20)}`,
+    tokenB: `0x${"72".repeat(20)}`,
+    reserves: { reserve0: "1", reserve1: "2" },
+  });
+  assert.deepEqual(first, second, "real capture must be reproducible");
+}
+
 async function main(): Promise<void> {
   await testCorpusValidation();
   await testFixtureReplayProducesCanonicalCase();
   await testRealCaseUsesDescriptorPoolAndBlocksPrices();
+  await testCaptureReproducibility();
   await testWriteAndGenerateRoundTrip();
   await testEndToEndSealedParity();
   console.log("architecture-migration capture harness PASS");

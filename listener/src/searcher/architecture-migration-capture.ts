@@ -88,6 +88,17 @@ export function generateArchitectureMigrationSideCapture(
   });
 }
 
+export async function assertCaptureReproducible(
+  corpus: ArchitectureMigrationCaptureCorpus,
+): Promise<string> {
+  const first = generateArchitectureMigrationSideCapture(corpus);
+  const second = generateArchitectureMigrationSideCapture(corpus);
+  if (JSON.stringify(first) !== JSON.stringify(second)) {
+    throw new Error("capture generation is not reproducible");
+  }
+  return architectureMigrationSideJson(first);
+}
+
 export function architectureMigrationSideJson(
   side: RawArchitectureMigrationSideCapture,
 ): string {
