@@ -1,0 +1,1533 @@
+{
+  "evidenceClass": "sealed-production",
+  "baselineCaptureId": "baseline",
+  "challengerCaptureId": "challenger",
+  "parityReceipt": {
+    "scope": {
+      "kind": "batch",
+      "familyIds": [
+        "credit:fluid",
+        "curve-underlying",
+        "custom-swap:angstrom-v4",
+        "custom-swap:dodo-v2",
+        "flash-loan:balancer-v2",
+        "flash-loan:morpho",
+        "fluid-dex",
+        "protocol:astra-multitoken",
+        "protocol:eigenpie",
+        "protocol:erc4626",
+        "protocol:erc4626-silo-redeem",
+        "protocol:ethertoken-native-redeem",
+        "protocol:goldx",
+        "protocol:metronome-hgusdc",
+        "protocol:metronome-synth",
+        "protocol:psm",
+        "protocol:rocksolid",
+        "protocol:self-burn-native",
+        "protocol:wsteth",
+        "univ2-standard",
+        "univ3-standard",
+        "univ4"
+      ]
+    },
+    "mode": "pure-refactor",
+    "inputManifestHash": "90d5b0cb70d7faf5500d0d763f307f3a636c6f4485e5f7d4f1eaab6b13489c2c",
+    "stateAnchors": [
+      {
+        "number": 25729060,
+        "hash": "0x5151515151515151515151515151515151515151515151515151515151515151",
+        "stateRoot": "0xabababababababababababababababababababababababababababababababab"
+      }
+    ],
+    "familyResults": [
+      {
+        "familyId": "credit:fluid",
+        "implementationClosureHash": "3a4211aa5227805c1e3f17460c711ade4d50b25d6f53a2e067b23c037e183aac",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:credit:fluid:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:credit:fluid:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "curve-underlying",
+        "implementationClosureHash": "4a9d40a7073750ca247c4bde2d0dfc4e012f6baf9665c7e168320cde18a34bc7",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:curve-underlying:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:curve-underlying:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "custom-swap:angstrom-v4",
+        "implementationClosureHash": "74863d3c971d990e4fa30c2ca0b9c1c2950e7a401e08f2af2d56d8f950564df6",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:angstrom-v4:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:custom-swap:angstrom-v4:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "custom-swap:dodo-v2",
+        "implementationClosureHash": "0effa0c414c66f9d90986feb2d0c335ca89a768bdd0da485fc88876e4b77d86c",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:custom-swap:dodo-v2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:dodo-v2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "flash-loan:balancer-v2",
+        "implementationClosureHash": "46ac33127f31e6c292c5bdf95b4b32a9bc2b79cd21bb2c6ac9c4fc5596e9cd61",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:flash-loan:balancer-v2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:flash-loan:balancer-v2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "flash-loan:morpho",
+        "implementationClosureHash": "8ee4565adba24e046f773726e977ed761c2956cf48047750b1ab052356702905",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:flash-loan:morpho:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:flash-loan:morpho:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "fluid-dex",
+        "implementationClosureHash": "06645d43fcefef372c7fe360f8986523df54fc339e47efc1f6f0e0fbbd21220d",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:fluid-dex:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:fluid-dex:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:astra-multitoken",
+        "implementationClosureHash": "5493cc783f93ae1fbc9e26229183c5c926714b5c3a6d09346df7b96ccd8a954e",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:astra-multitoken:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:protocol:astra-multitoken:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:eigenpie",
+        "implementationClosureHash": "6d7d1722567971788ac355ed21d46732c9f6006d7bb2c216094008a217c6017b",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:protocol:eigenpie:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:eigenpie:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:erc4626",
+        "implementationClosureHash": "951549e6a6735e022e953a988bb8070cfc323e81d78b042e62e3daacc98486b5",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:protocol:erc4626:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:erc4626:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:erc4626-silo-redeem",
+        "implementationClosureHash": "9da0c0f062c4d2a1adf8cd6ae882eb4b05414e3326841a075c5d397376c1d6fb",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:protocol:erc4626-silo-redeem:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:erc4626-silo-redeem:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:ethertoken-native-redeem",
+        "implementationClosureHash": "133bfb7bf3924f2af8b85fff7d16694329e11b7746012b744eb880c7984ac288",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:protocol:ethertoken-native-redeem:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:ethertoken-native-redeem:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:goldx",
+        "implementationClosureHash": "0911aca1a62c0dcdb3af05fc36f4dabbc7131d72cc110fb15461005bfe53dbb6",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:protocol:goldx:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:goldx:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:metronome-hgusdc",
+        "implementationClosureHash": "ab19381d268f61564aedbd6c5669815c984576f27e8a582a449adf85665f87d5",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:protocol:metronome-hgusdc:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:metronome-hgusdc:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:metronome-synth",
+        "implementationClosureHash": "faa6672e6d1e2f2b950cbbedce92f52e4e73ee6794296380cccc9eb4d2096956",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:protocol:metronome-synth:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:metronome-synth:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:psm",
+        "implementationClosureHash": "867b8fe7322c0127b7b9bbc2bbd963558d9a43ec3a29cac267ee8ba5d1b097cc",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:protocol:psm:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:psm:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:rocksolid",
+        "implementationClosureHash": "bde0078b730ff4afbe43ec60e938d250305efe199ed9b12b3b4bb54e8c0d4c26",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:protocol:rocksolid:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:rocksolid:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:self-burn-native",
+        "implementationClosureHash": "836645509464fc7c8603270268e8a23bd5f0131f67dcc6218fb64a1114104eaa",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:protocol:self-burn-native:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:self-burn-native:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "protocol:wsteth",
+        "implementationClosureHash": "5a9d4b9f666b91f7335f4a9fdd758bacd4ab9228ef00545433df0f3c1ae3b28f",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:protocol:wsteth:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:wsteth:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "univ2-standard",
+        "implementationClosureHash": "e1470a62f3be851154f6c92ed89ffb3e467d2a47fdc3ddce5f8f8ba48d0e597f",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "univ3-standard",
+        "implementationClosureHash": "34752623f4bc4d0bd49bf36a2ecbc9484726ef73cb954aadc5c6b1d0aa92be8e",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ3:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:univ3:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      },
+      {
+        "familyId": "univ4",
+        "implementationClosureHash": "1a1e81c81c8a178f91506ef5d5d6314d565b47a0445147ecb2a5b564f97be26f",
+        "missingInstances": [],
+        "addedInstances": [],
+        "changedInstances": [],
+        "missingEdges": [],
+        "addedEdges": [],
+        "changedEdgeMetadata": [],
+        "lostStateKeys": [],
+        "addedStateKeys": [],
+        "changedStateCoverage": [],
+        "newlyUnresolvedStateKeys": [],
+        "missingPricedEdges": [],
+        "addedPricedEdges": [],
+        "changedPrices": [],
+        "changedFailures": [],
+        "changedRoutes": [],
+        "changedExactQuotes": [],
+        "changedExecutionFragments": [],
+        "changedFinalSimulations": [],
+        "unprovenAddedArtifacts": [],
+        "undeclaredDeltaIds": [],
+        "evidenceRefs": [
+          "fixture:baseline:univ2:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:baseline:univ4:25729060:0x5151515151515151515151515151515151515151515151515151515151515151",
+          "fixture:capture-corpus",
+          "fixture:univ4:25729060:0x5151515151515151515151515151515151515151515151515151515151515151"
+        ],
+        "outcome": "pass"
+      }
+    ],
+    "familyResultMatrixHash": "a3a53a0555d70f1775bad756ab9edcf0c8eab1ffcb4d61712f2268e853f3ffde",
+    "nonPassFamilyIds": [],
+    "nonMigratedFamilySemanticHashParity": true,
+    "assembledCommonGraphParity": true,
+    "aggregateVerdict": "pass",
+    "performanceDiagnostics": {
+      "wallMs": 100,
+      "requestCount": 10,
+      "batchCount": 1,
+      "peakConcurrency": 1
+    }
+  },
+  "familyCoverage": [
+    {
+      "familyId": "credit:fluid",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "execution",
+        "credit"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "failures",
+        "enumeratedRoutes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "credit:fluid:25729060"
+      ],
+      "challengerCaseIds": [
+        "credit:fluid:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "curve-underlying",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution",
+        "victim"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "curve-underlying:25729060"
+      ],
+      "challengerCaseIds": [
+        "curve-underlying:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "custom-swap:angstrom-v4",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution",
+        "victim"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "angstrom-v4:25729060"
+      ],
+      "challengerCaseIds": [
+        "angstrom-v4:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "custom-swap:dodo-v2",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution",
+        "victim"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "dodo-v2:25729060"
+      ],
+      "challengerCaseIds": [
+        "dodo-v2:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "flash-loan:balancer-v2",
+      "activeCapabilities": [
+        "funding"
+      ],
+      "requiredStages": [
+        "failures",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "flash-loan:balancer-v2:25729060"
+      ],
+      "challengerCaseIds": [
+        "flash-loan:balancer-v2:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "flash-loan:morpho",
+      "activeCapabilities": [
+        "funding"
+      ],
+      "requiredStages": [
+        "failures",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "flash-loan:morpho:25729060"
+      ],
+      "challengerCaseIds": [
+        "flash-loan:morpho:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "fluid-dex",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution",
+        "victim"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "fluid-dex:25729060"
+      ],
+      "challengerCaseIds": [
+        "fluid-dex:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:astra-multitoken",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "astra-multitoken:25729060"
+      ],
+      "challengerCaseIds": [
+        "astra-multitoken:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:eigenpie",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "eigenpie:25729060"
+      ],
+      "challengerCaseIds": [
+        "eigenpie:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:erc4626",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "erc4626:25729060"
+      ],
+      "challengerCaseIds": [
+        "erc4626:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:erc4626-silo-redeem",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "erc4626-silo-redeem:25729060"
+      ],
+      "challengerCaseIds": [
+        "erc4626-silo-redeem:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:ethertoken-native-redeem",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "ethertoken-native-redeem:25729060"
+      ],
+      "challengerCaseIds": [
+        "ethertoken-native-redeem:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:goldx",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "goldx:25729060"
+      ],
+      "challengerCaseIds": [
+        "goldx:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:metronome-hgusdc",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "metronome-hgusdc:25729060"
+      ],
+      "challengerCaseIds": [
+        "metronome-hgusdc:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:metronome-synth",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution",
+        "victim"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "metronome-synth:25729060"
+      ],
+      "challengerCaseIds": [
+        "metronome-synth:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:psm",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "psm:25729060"
+      ],
+      "challengerCaseIds": [
+        "psm:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:rocksolid",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "rocksolid:25729060"
+      ],
+      "challengerCaseIds": [
+        "rocksolid:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:self-burn-native",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "self-burn-native:25729060"
+      ],
+      "challengerCaseIds": [
+        "self-burn-native:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "protocol:wsteth",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "wsteth:25729060"
+      ],
+      "challengerCaseIds": [
+        "wsteth:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "univ2-standard",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution",
+        "victim"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "univ2:25729060"
+      ],
+      "challengerCaseIds": [
+        "univ2:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "univ3-standard",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution",
+        "victim"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "univ3:25729060"
+      ],
+      "challengerCaseIds": [
+        "univ3:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    },
+    {
+      "familyId": "univ4",
+      "activeCapabilities": [
+        "discovery",
+        "identity",
+        "instance",
+        "routes",
+        "pricing",
+        "exact",
+        "execution",
+        "victim"
+      ],
+      "requiredStages": [
+        "instances",
+        "edges",
+        "stateCoverage",
+        "pricedEdges",
+        "prices",
+        "failures",
+        "enumeratedRoutes",
+        "exactQuotes",
+        "executionFragments",
+        "finalSimulations"
+      ],
+      "baselineCaseIds": [
+        "univ4:25729060"
+      ],
+      "challengerCaseIds": [
+        "univ4:25729060"
+      ],
+      "baselineMissingStages": [],
+      "challengerMissingStages": [],
+      "baselineFrameworkBlockers": [],
+      "challengerFrameworkBlockers": [],
+      "outcome": "pass"
+    }
+  ],
+  "commonGraphDelta": {
+    "baselineCaptureMissing": false,
+    "challengerCaptureMissing": false,
+    "baselineBlockedStages": [],
+    "challengerBlockedStages": [],
+    "edges": {
+      "missingIds": [],
+      "addedIds": [],
+      "changedIds": []
+    },
+    "enumeratedRoutes": {
+      "missingIds": [],
+      "addedIds": [],
+      "changedIds": []
+    },
+    "exactQuotes": {
+      "missingIds": [],
+      "addedIds": [],
+      "changedIds": []
+    },
+    "executionFragments": {
+      "missingIds": [],
+      "addedIds": [],
+      "changedIds": []
+    },
+    "finalSimulations": {
+      "missingIds": [],
+      "addedIds": [],
+      "changedIds": []
+    },
+    "crossFamilyBindings": {
+      "missingIds": [],
+      "addedIds": [],
+      "changedIds": []
+    }
+  },
+  "nonMigratedFamilyDelta": {
+    "missingIds": [],
+    "addedIds": [],
+    "changedIds": []
+  },
+  "crossFamilyConflicts": [],
+  "acceptance": {
+    "eligible": true,
+    "verdict": "pass",
+    "reasons": []
+  }
+}

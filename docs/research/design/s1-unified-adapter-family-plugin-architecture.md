@@ -2204,6 +2204,23 @@ parity 全 pass，`aggregate=pass`，无剩余 non-pass Family。后续仍需：
 cutover 与 §18.3/§20.2.6 legacy cleanup；这些都不在本 checkpoint 的
 sealed-capture 范围内。
 
+**2026-08-12 S1 22-family sealed-capture evidence bundle checkpoint（实现
+commit 见下，本地机器证据）：**
+
+- 提交确定性证据工件：
+  `docs/research/design/evidence/s1-parity-22family-manifest.json` 与
+  `docs/research/design/evidence/s1-parity-22family-receipt.json`
+  （block `25729060`，22 族全 pass、aggregate=pass、commonGraph=true、
+  nonPassFamilyIds=[]）；同一 manifest 重跑两次 receipt 字节级一致；
+- 新增 `scripts/verify-s1-parity-receipt.sh`：重跑本地 batch、diff
+  重新生成的 receipt 与已提交工件，并断言 22 行全 pass、
+  aggregate=pass、commonGraph=true；验证通过输出
+  `S1 22-family sealed-capture parity receipt verified`；
+- 该 phase 只固定 sealed-capture 证据，不改变 Phase D 未关闭项（strict
+  pricing production consumer、Funding/Credit production consumer、
+  默认 authority、sealed parity 的节点版本、systemic-live gate）与
+  Phase E 状态。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
