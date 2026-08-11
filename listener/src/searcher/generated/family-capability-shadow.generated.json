@@ -4054,7 +4054,7 @@
         "familyId": "protocol:metronome-synth",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "80978f8ddd8d6f99bb8d83e05cba32523bcb2b9a3b5eebdc0d949da1e3cfebf8",
+        "contentHash": "bdbd40cb7000d17e145ed7679e20c9fc0ebfefc573b288b355ae5f9e4fe83c07",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -4120,7 +4120,7 @@
         "familyId": "protocol:metronome-synth",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "6aaae01a4b2702ccb918c1c9ee0ef15103c22d2c1279c3a8371a2a8c53a4bfe4",
+        "contentHash": "f30b0f4289eb04eae953811a1b3701be9c477cc272b7e01b354c9ee4ba1adf9b",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -6261,5 +6261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "9a8d91ce299433211ab4920b1600ffaa5df89dee8975fea896d1bd1af82b51e7"
+  "artifactHash": "34cfcac1400acb4066d20be3028058acf55f53d5e25becfab5ae9dc31c2a48c6"
 }

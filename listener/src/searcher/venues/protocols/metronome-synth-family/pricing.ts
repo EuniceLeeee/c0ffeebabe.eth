@@ -53,8 +53,10 @@ export const metronomeSynthPricing = {
     reusePolicy: {
       kind: "dependency-proof" as const,
       dependencyKeys: (draft: MetronomeSynthPricingDraft) => Object.freeze([
-        draft.pool,
-        ...draft.routes.map((route) => route.tokenIn),
+        ...metronomeSynthUniqueAddresses([
+          draft.pool,
+          ...draft.routes.map((route) => route.tokenIn),
+        ]),
       ]),
     },
     requirements: () => ({ transports: ["eth-call" as const] }),

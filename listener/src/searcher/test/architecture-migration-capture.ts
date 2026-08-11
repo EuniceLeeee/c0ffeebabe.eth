@@ -26,6 +26,7 @@ import {
   captureGoldxFixtureCase,
   captureRocksolidFixtureCase,
   captureMetronomeHgUsdcFixtureCase,
+  captureMetronomeSynthFixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -724,6 +725,23 @@ async function testMetronomeHgUsdcFixtureCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.items.length, 1);
 }
 
+async function testMetronomeSynthFixtureCase(): Promise<void> {
+  const familyCase = await captureMetronomeSynthFixtureCase({ source: SOURCE });
+  assert.equal(familyCase.familyId, "protocol:metronome-synth");
+  for (const stage of ARCHITECTURE_MIGRATION_STAGES) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `metronome-synth fixture ${stage} must be exercised`,
+    );
+  }
+  assert.equal(familyCase.stages.edges?.items.length, 6);
+  assert.equal(familyCase.stages.prices?.items.length, 6);
+  assert.equal(familyCase.stages.exactQuotes?.items.length, 6);
+  assert.equal(familyCase.stages.executionFragments?.items.length, 6);
+  assert.equal(familyCase.stages.finalSimulations?.items.length, 6);
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -1067,6 +1085,7 @@ async function main(): Promise<void> {
   await testGoldxFixtureCase();
   await testRocksolidFixtureCase();
   await testMetronomeHgUsdcFixtureCase();
+  await testMetronomeSynthFixtureCase();
   console.log("architecture-migration capture harness PASS");
 }
 

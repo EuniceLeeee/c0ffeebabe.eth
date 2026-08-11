@@ -100,6 +100,10 @@ def main() -> None:
                         "curveIntermediate", "tokenOut", "amountIn"):
                 if key in case:
                     descriptor[key] = case[key]
+        elif case["family"] == "protocol:metronome-synth":
+            for key in ("target", "tokens", "amountIn"):
+                if key in case:
+                    descriptor[key] = case[key]
         else:
             for key in ("pool", "tokenA", "tokenB", "reserves", "fee",
                         "tickSpacing", "liquidity", "sqrtPriceX96"):

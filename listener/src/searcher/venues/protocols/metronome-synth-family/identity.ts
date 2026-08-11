@@ -41,9 +41,17 @@ export const metronomeSynthIdentity = {
     kind: "standalone-contract" as const,
     lineageId: METRONOME_SYNTH_LINEAGE_ID,
     applies: () => true,
-    requirements: () => ({
-      transports: ["get-code" as const, "eth-call" as const],
-    }),
+    requirements(
+      input: IdentityStepInput<MetronomeSynthCandidate, unknown>,
+    ) {
+      const evidence = identityEvidence(input.evidence);
+      if (evidence === undefined) {
+        return {
+          transports: ["get-code" as const, "eth-call" as const],
+        };
+      }
+      return { transports: ["eth-call" as const] };
+    },
     buildRequests(input: IdentityStepInput<MetronomeSynthCandidate, unknown>) {
       const evidence = identityEvidence(input.evidence);
       if (evidence === undefined) return membershipRequests(input.candidate);

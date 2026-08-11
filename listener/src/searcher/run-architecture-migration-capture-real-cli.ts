@@ -16,6 +16,7 @@ import {
   captureGoldxFixtureCase,
   captureRocksolidFixtureCase,
   captureMetronomeHgUsdcFixtureCase,
+  captureMetronomeSynthFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -150,6 +151,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureMetronomeHgUsdcFixtureCase({
           source,
           caseId: `metronome-hgusdc:${source.number}`,
+        }));
+      } else if (item.family === "protocol:metronome-synth") {
+        familyCases.push(await captureMetronomeSynthFixtureCase({
+          source,
+          caseId: `metronome-synth:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);
