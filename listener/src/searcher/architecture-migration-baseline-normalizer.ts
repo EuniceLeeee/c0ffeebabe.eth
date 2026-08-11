@@ -70,6 +70,10 @@ import {
 } from "./venues/swaps/angstrom-v4-family/codec.js";
 import { angstromV4StaticBindingProjection } from
   "./venues/swaps/angstrom-v4-family/binding.js";
+import { DODO_V2_FAMILY_ID } from
+  "./venues/swaps/dodo-v2-family/manifest.js";
+import { staticBindingProjection as dodoV2StaticBindingProjection } from
+  "./venues/swaps/dodo-v2-family/instance.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -332,6 +336,23 @@ export interface BaselineAngstromV4Facts {
   readonly tokenOut: string;
 }
 
+export interface BaselineDodoV2Facts {
+  readonly familyId: "custom-swap:dodo-v2";
+  readonly pool: string;
+  readonly baseToken: string;
+  readonly quoteToken: string;
+  readonly registry: string;
+  readonly quoteActor: string;
+  readonly role: "verified-actor";
+  readonly feeSemantics: "getUserFeeRate(actor)";
+  readonly querySemantics:
+    "querySellBase/querySellQuote(actor,effectiveInput)";
+  readonly inputSemantics: "balance-reserve-mt-fee-v1";
+  readonly direction: "sell-base" | "sell-quote";
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -369,6 +390,7 @@ export function normalizeBaselineMigrationItems(
         "fluid-dex": normalizeBaselineFluidDexInstanceItem,
         "custom-swap:angstrom-v4":
           normalizeBaselineAngstromV4InstanceItem,
+        "custom-swap:dodo-v2": normalizeBaselineDodoV2InstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -400,6 +422,7 @@ export function normalizeBaselineMigrationItems(
         "fluid-dex": normalizeBaselineFluidDexPriceItem,
         "custom-swap:angstrom-v4":
           normalizeBaselineAngstromV4PriceItem,
+        "custom-swap:dodo-v2": normalizeBaselineDodoV2PriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -431,6 +454,7 @@ export function normalizeBaselineMigrationItems(
         "fluid-dex": normalizeBaselineFluidDexEdgeItem,
         "custom-swap:angstrom-v4":
           normalizeBaselineAngstromV4EdgeItem,
+        "custom-swap:dodo-v2": normalizeBaselineDodoV2EdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -465,6 +489,8 @@ export function normalizeBaselineMigrationItems(
         "fluid-dex": normalizeBaselineFluidDexEnumeratedRouteItem,
         "custom-swap:angstrom-v4":
           normalizeBaselineAngstromV4EnumeratedRouteItem,
+        "custom-swap:dodo-v2":
+          normalizeBaselineDodoV2EnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -496,6 +522,7 @@ export function normalizeBaselineMigrationItems(
         "fluid-dex": normalizeBaselineFluidDexExactQuoteItem,
         "custom-swap:angstrom-v4":
           normalizeBaselineAngstromV4ExactQuoteItem,
+        "custom-swap:dodo-v2": normalizeBaselineDodoV2ExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -535,6 +562,8 @@ export function normalizeBaselineMigrationItems(
         "fluid-dex": normalizeBaselineFluidDexExecutionFragmentItem,
         "custom-swap:angstrom-v4":
           normalizeBaselineAngstromV4ExecutionFragmentItem,
+        "custom-swap:dodo-v2":
+          normalizeBaselineDodoV2ExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -574,6 +603,8 @@ export function normalizeBaselineMigrationItems(
         "fluid-dex": normalizeBaselineFluidDexFinalSimulationItem,
         "custom-swap:angstrom-v4":
           normalizeBaselineAngstromV4FinalSimulationItem,
+        "custom-swap:dodo-v2":
+          normalizeBaselineDodoV2FinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -637,6 +668,9 @@ function normalizeByFamily(
     readonly "custom-swap:angstrom-v4": (
       item: RawMigrationSemanticItem,
     ) => RawMigrationSemanticItem;
+    readonly "custom-swap:dodo-v2": (
+      item: RawMigrationSemanticItem,
+    ) => RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -686,6 +720,9 @@ function normalizeByFamily(
   }
   if (familyId === "custom-swap:angstrom-v4") {
     return handlers["custom-swap:angstrom-v4"](item);
+  }
+  if (familyId === "custom-swap:dodo-v2") {
+    return handlers["custom-swap:dodo-v2"](item);
   }
   return handlers.default(item);
 }
@@ -7280,6 +7317,366 @@ export function normalizeBaselineAngstromV4FinalSimulationItem(
   });
 }
 
+function dodoV2FactsGuard(
+  facts: Partial<BaselineDodoV2Facts> | undefined,
+): facts is Required<BaselineDodoV2Facts> {
+  return facts !== undefined &&
+    facts.familyId === "custom-swap:dodo-v2" &&
+    typeof facts.pool === "string" &&
+    typeof facts.baseToken === "string" &&
+    typeof facts.quoteToken === "string" &&
+    typeof facts.registry === "string" &&
+    typeof facts.quoteActor === "string" &&
+    facts.role === "verified-actor" &&
+    facts.feeSemantics === "getUserFeeRate(actor)" &&
+    facts.querySemantics ===
+      "querySellBase/querySellQuote(actor,effectiveInput)" &&
+    facts.inputSemantics === "balance-reserve-mt-fee-v1" &&
+    (facts.direction === "sell-base" || facts.direction === "sell-quote") &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function dodoV2FactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineDodoV2Facts>;
+  })?.baselineFacts;
+  if (!dodoV2FactsGuard(facts)) return null;
+  return facts;
+}
+
+function deriveDodoV2CanonicalFacts(
+  facts: Required<BaselineDodoV2Facts>,
+): {
+  readonly pool: string;
+  readonly baseToken: string;
+  readonly quoteToken: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly lowerPool: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const pool = canonicalAddress(facts.pool);
+  const baseToken = canonicalAddress(facts.baseToken);
+  const quoteToken = canonicalAddress(facts.quoteToken);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const lowerPool = lowerAddress(pool);
+  const descriptor = Object.freeze({
+    pool,
+    baseToken,
+    quoteToken,
+    registryBinding: Object.freeze({
+      registry: canonicalAddress(facts.registry),
+      listedPool: pool,
+    }),
+    quoteActorBinding: Object.freeze({
+      actor: canonicalAddress(facts.quoteActor),
+      role: facts.role,
+      feeSemantics: facts.feeSemantics,
+      querySemantics: facts.querySemantics,
+      inputSemantics: facts.inputSemantics,
+    }),
+  }) as unknown as import("./venues/swaps/dodo-v2-family/types.js")
+    .DodoV2Descriptor;
+  const bindingFingerprint = hashCanonical(
+    dodoV2StaticBindingProjection(descriptor),
+  );
+  const venueIdentityHash = hashCanonical(Object.freeze({
+    kind: "address-pool",
+    pool: lowerPool,
+  }));
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const routeKeyValue = [
+    "custom-swap:dodo-v2",
+    lowerPool,
+    lowerTokenIn,
+    lowerTokenOut,
+  ].join("\u001f");
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "custom-swap:dodo-v2",
+    lowerPool,
+    lowerPool,
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    pool,
+    baseToken,
+    quoteToken,
+    tokenIn,
+    tokenOut,
+    lowerPool,
+    lowerTokenIn,
+    lowerTokenOut,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineDodoV2EdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = dodoV2FactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveDodoV2CanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineDodoV2EnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineDodoV2EdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "dodo-v2 baseline enumerated route item must carry a non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineDodoV2InstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = dodoV2FactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveDodoV2CanonicalFacts(facts);
+  const pool = canonicalAddress(facts.pool);
+  const descriptor = Object.freeze({
+    pool,
+    baseToken: canonicalAddress(facts.baseToken),
+    quoteToken: canonicalAddress(facts.quoteToken),
+    registryBinding: Object.freeze({
+      registry: canonicalAddress(facts.registry),
+      listedPool: pool,
+    }),
+    quoteActorBinding: Object.freeze({
+      actor: canonicalAddress(facts.quoteActor),
+      role: facts.role,
+      feeSemantics: facts.feeSemantics,
+      querySemantics: facts.querySemantics,
+      inputSemantics: facts.inputSemantics,
+    }),
+  }) as unknown as import("./venues/swaps/dodo-v2-family/types.js")
+    .DodoV2Descriptor;
+  const staticBindingFingerprint = hashCanonical({
+    capability: DODO_V2_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: dodoV2StaticBindingProjection(descriptor),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerPool,
+    value: Object.freeze({
+      familyId: "custom-swap:dodo-v2",
+      instanceKey: derived.lowerPool,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineDodoV2PriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = dodoV2FactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveDodoV2CanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "dodo-v2-swap",
+    instanceKey: derived.lowerPool,
+    target: derived.pool,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "swap" as const,
+    poolToken0: derived.baseToken,
+    poolToken1: derived.quoteToken,
+    edgeKind: "swap" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.lowerPool,
+      mid: Object.freeze({
+        kind: "external-swap",
+        pool: derived.pool,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineDodoV2ExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = dodoV2FactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveDodoV2CanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineDodoV2ExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = dodoV2FactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveDodoV2CanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "dodo-v2-swap",
+      executionTarget: derived.pool,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineDodoV2FinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = dodoV2FactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveDodoV2CanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -7368,4 +7765,9 @@ const FLUID_DEX_CATALOG_FAMILY =
 const ANGSTROM_V4_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ANGSTROM_V4_FAMILY_ID,
+  );
+
+const DODO_V2_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    DODO_V2_FAMILY_ID,
   );

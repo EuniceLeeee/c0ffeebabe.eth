@@ -1077,7 +1077,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "e351da9ba487ae88b0ddf819216330b16b55a9867f3a8e1157ab5b1a5fa947e9",
+        "contentHash": "2d65979a297d959f74a889c36d69fce94844f91ed22d4738e328f65eeba711ad",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -6261,5 +6261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "64515efcd0709206edf00738f935b108ce0e85a009381f3be1e509eb0156d893"
+  "artifactHash": "e810437a989e7080cc9def10cc6652dd4e6e584d60205ae245be898d8802f9d7"
 }

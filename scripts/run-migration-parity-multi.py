@@ -140,6 +140,10 @@ def main() -> None:
             for key in ("amountIn",):
                 if key in case:
                     descriptor[key] = case[key]
+        elif case["family"] == "custom-swap:dodo-v2":
+            for key in ("target", "baseToken", "quoteToken", "amountIn"):
+                if key in case:
+                    descriptor[key] = case[key]
         else:
             for key in ("pool", "tokenA", "tokenB", "reserves", "fee",
                         "tickSpacing", "liquidity", "sqrtPriceX96"):

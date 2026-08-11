@@ -36,6 +36,7 @@ import {
   captureCurveUnderlyingFixtureCase,
   captureFluidDexFixtureCase,
   captureAngstromV4FixtureCase,
+  captureDodoV2FixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -910,6 +911,23 @@ async function testAngstromV4FixtureCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.items.length, 2);
 }
 
+async function testDodoV2FixtureCase(): Promise<void> {
+  const familyCase = await captureDodoV2FixtureCase({ source: SOURCE });
+  assert.equal(familyCase.familyId, "custom-swap:dodo-v2");
+  for (const stage of ARCHITECTURE_MIGRATION_STAGES) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `dodo-v2 fixture ${stage} must be exercised`,
+    );
+  }
+  assert.equal(familyCase.stages.edges?.items.length, 2);
+  assert.equal(familyCase.stages.prices?.items.length, 2);
+  assert.equal(familyCase.stages.exactQuotes?.items.length, 2);
+  assert.equal(familyCase.stages.executionFragments?.items.length, 2);
+  assert.equal(familyCase.stages.finalSimulations?.items.length, 2);
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -1263,6 +1281,7 @@ async function main(): Promise<void> {
   await testCurveUnderlyingFixtureCase();
   await testFluidDexFixtureCase();
   await testAngstromV4FixtureCase();
+  await testDodoV2FixtureCase();
   console.log("architecture-migration capture harness PASS");
 }
 

@@ -142,11 +142,11 @@ export interface DodoV2PricingSnapshot {
   readonly mtFeeRate: bigint;
   readonly baseInput: DodoInputPosition;
   readonly quoteInput: DodoInputPosition;
-  readonly quotes: ReadonlyMap<string, {
+  readonly quotes: Readonly<Record<string, {
     readonly amountIn: bigint;
     readonly amountOut: bigint;
-  }>;
-  readonly unavailable: ReadonlyMap<string, string>;
+  }>>;
+  readonly unavailable: Readonly<Record<string, string>>;
 }
 
 export interface DodoV2ExactEvidence {

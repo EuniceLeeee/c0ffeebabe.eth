@@ -189,8 +189,8 @@ export const dodoV2Pricing = {
       assertRoutesMatchPricingDescriptor(descriptor, routes);
       const mids = new Map<DodoV2Route["routeKey"], RouteVenueMid>();
       for (const route of routes) {
-        if (snapshot.unavailable.has(route.routeKey)) continue;
-        const quote = snapshot.quotes.get(route.routeKey);
+        if (Object.hasOwn(snapshot.unavailable, route.routeKey)) continue;
+        const quote = snapshot.quotes[route.routeKey];
         if (quote === undefined) {
           throw new Error(`missing dodo-v2 current quote for ${route.routeKey}`);
         }
@@ -209,7 +209,7 @@ export const dodoV2Pricing = {
       assertRoutesMatchPricingDescriptor(descriptor, routes);
       const unavailable = new Map<DodoV2Route["routeKey"], string>();
       for (const route of routes) {
-        const reason = snapshot.unavailable.get(route.routeKey);
+        const reason = snapshot.unavailable[route.routeKey];
         if (reason !== undefined) unavailable.set(route.routeKey, reason);
       }
       return unavailable;
@@ -374,13 +374,16 @@ function decodeSnapshot(
   results: readonly AdapterRequestResult[],
 ): DodoV2PricingSnapshot {
   const core = decodeCurrentCore(descriptor, results);
-  const quotes = new Map<string, { readonly amountIn: bigint; readonly amountOut: bigint }>();
-  const unavailable = new Map<string, string>();
+  const quotes: Record<string, {
+    readonly amountIn: bigint;
+    readonly amountOut: bigint;
+  }> = {};
+  const unavailable: Record<string, string> = {};
   for (const route of descriptor.routes) {
     const selection = currentSelection(descriptor, core, route);
     if (typeof selection !== "bigint") {
       if (selection.kind === "provably-unavailable") {
-        unavailable.set(route.routeKey, selection.reason);
+        unavailable[route.routeKey] = selection.reason;
         continue;
       }
       const result = requireSuccessfulResult(
@@ -400,10 +403,10 @@ function decodeSnapshot(
             `${route.tokenIn}->${route.tokenOut}: ${selection.reason}`,
         );
       }
-      quotes.set(route.routeKey, Object.freeze({
+      quotes[route.routeKey] = Object.freeze({
         amountIn: quote.transferAmount,
         amountOut: quote.amountOut,
-      }));
+      });
       continue;
     }
     const sellBase = route.direction === "sell-base";
@@ -426,12 +429,16 @@ function decodeSnapshot(
           `${route.tokenIn}->${route.tokenOut}`,
       );
     }
-    quotes.set(route.routeKey, Object.freeze({
+    quotes[route.routeKey] = Object.freeze({
       amountIn: selection,
       amountOut: local.amountOut,
-    }));
+    });
   }
-  return Object.freeze({ ...core, quotes, unavailable });
+  return Object.freeze({
+    ...core,
+    quotes: Object.freeze(quotes),
+    unavailable: Object.freeze(unavailable),
+  });
 }
 
 function currentSelection(

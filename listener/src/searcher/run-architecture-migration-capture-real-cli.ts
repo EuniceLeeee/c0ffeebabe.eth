@@ -26,6 +26,7 @@ import {
   captureCurveUnderlyingFixtureCase,
   captureFluidDexFixtureCase,
   captureAngstromV4FixtureCase,
+  captureDodoV2FixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -210,6 +211,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureAngstromV4FixtureCase({
           source,
           caseId: `angstrom-v4:${source.number}`,
+        }));
+      } else if (item.family === "custom-swap:dodo-v2") {
+        familyCases.push(await captureDodoV2FixtureCase({
+          source,
+          caseId: `dodo-v2:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);
