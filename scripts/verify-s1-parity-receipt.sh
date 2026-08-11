@@ -15,6 +15,8 @@ impl_dir="${2:-${repo_root}}"
 out_dir="${3:-$(mktemp -d)}"
 manifest="${repo_root}/docs/research/design/evidence/s1-parity-22family-manifest.json"
 expected_receipt="${repo_root}/docs/research/design/evidence/s1-parity-22family-receipt.json"
+expected_baseline="${repo_root}/docs/research/design/evidence/s1-parity-22family-baseline-side.json"
+expected_challenger="${repo_root}/docs/research/design/evidence/s1-parity-22family-challenger-side.json"
 
 if [[ ! -f "${manifest}" ]]; then
   echo "missing committed manifest: ${manifest}" >&2
@@ -38,6 +40,23 @@ if ! diff -u "${expected_receipt}" "${generated}"; then
   exit 1
 fi
 
+generated_baseline="${out_dir}/baseline-side.json"
+generated_challenger="${out_dir}/challenger-side.json"
+if [[ ! -f "${generated_baseline}" || ! -f "${generated_challenger}" ]]; then
+  echo "parity run produced no side captures" >&2
+  exit 2
+fi
+
+if ! diff -u "${expected_baseline}" "${generated_baseline}"; then
+  echo "S1 22-family baseline side diverged from committed evidence" >&2
+  exit 1
+fi
+
+if ! diff -u "${expected_challenger}" "${generated_challenger}"; then
+  echo "S1 22-family challenger side diverged from committed evidence" >&2
+  exit 1
+fi
+
 python3 - "${expected_receipt}" <<'PY'
 import json, sys
 with open(sys.argv[1]) as handle:
@@ -53,6 +72,6 @@ assert receipt["parityReceipt"]["assembledCommonGraphParity"] is True
 print(
     "S1 22-family sealed-capture parity receipt verified: "
     f"aggregate={verdict}, families={len(matrix)}, "
-    "nonPassFamilyIds=[]"
+    "nonPassFamilyIds=[], baseline/challenger side captures identical"
 )
 PY

@@ -2212,8 +2212,11 @@ commit 见下，本地机器证据）：**
   `docs/research/design/evidence/s1-parity-22family-receipt.json`
   （block `25729060`，22 族全 pass、aggregate=pass、commonGraph=true、
   nonPassFamilyIds=[]）；同一 manifest 重跑两次 receipt 字节级一致；
+- 同一批再固定双侧 capture 工件：
+  `s1-parity-22family-baseline-side.json` 与
+  `s1-parity-22family-challenger-side.json`（路径无关、字节级可复现）；
 - 新增 `scripts/verify-s1-parity-receipt.sh`：重跑本地 batch、diff
-  重新生成的 receipt 与已提交工件，并断言 22 行全 pass、
+  重新生成的 receipt 与双侧 capture 三个工件，并断言 22 行全 pass、
   aggregate=pass、commonGraph=true；验证通过输出
   `S1 22-family sealed-capture parity receipt verified`；
 - 该 phase 只固定 sealed-capture 证据，不改变 Phase D 未关闭项（strict
