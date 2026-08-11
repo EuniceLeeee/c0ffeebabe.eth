@@ -1218,6 +1218,27 @@ deadline 约束）。`searcher:discovery-backfill-lane` 12/12、`searcher:exact-
 连续 300 个 valid pass，才可关闭该精确 runtime 的 live-continuity 子门；strict catalog production authority、
 sealed parity、Funding/Credit production consumers、完整 systemic-live gate 与 Phase E 仍全部未关闭。
 
+**2026-08-11 S1 分支 discovery 优化接入 checkpoint（实现 commit
+`269ade3c610b9b79368d566fb2ee0e88e500d0f0`，cherry-pick 自 ds `3c4e2014`，不是 live pass）：**
+把 DEX coverage 游标持久化与冻结开关移植进 S1 分支：
+
+- 新增 `discovery-dex-cursor.ts`，按 `SEARCHER_DISCOVERY_DEX_CURSOR_PATH`
+  （默认 `listener/searcher/pools/runtime-dex-graph-coverage.json`）持久化
+  `sourceCompleteThrough/graphCompleteThrough + canonical source hash`；启动时先校验 hash，
+  再以 `max(universe.toBlock, persisted cursor)` 作为初始 DEX source completeness，
+  不再退化为 `universe.fromBlock-1` 的 2 天窗口深扫；
+- `SEARCHER_DISCOVERY_BACKFILL_ENABLED=0` 停掉 deep backfill lanes（保留 startup seed + hot path）；
+- `SEARCHER_DISCOVERY_HOT_DEX_ENABLED=0` 额外冻结 per-block hot DEX scan，图停在启动截断点。
+
+**验收口径更新（用户 2026-08-11 指示）：** live-continuity 子门从连续 300/300 放宽为
+连续 100/100，其余口径不变——同一精确部署 commit、稳态锚点后、每个合格 pass 均为
+`enumeration=ran` 且 `priced/expected > 80%`，每 commit 最多观察 500 个合格 pass。
+旧的 300/300 不再作为完成条件；`f6ff7a43` 的 119 连记录因此已满足 100/100，但该 commit
+已被后续修复取代，不能跨 commit 续算，仍需从新部署的精确 commit 重新取机器证据。
+
+证据：`searcher:discovery-dex-cursor` PASS、`searcher:discovery-backfill-lane` 12/12、
+完整 listener build 通过；这些仍是实现/本地合同证据，不是 `sealed-production` 或 live 验收。
+
 ## 8. Identity：多来源 variant，统一行为证明
 
 冻结 ds 已有 `identityPolicies`、`discoveryIdentityResolver`、typed `IdentityAuthority`、retained-instance re-probe
