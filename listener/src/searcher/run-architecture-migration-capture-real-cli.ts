@@ -19,6 +19,7 @@ import {
   captureMetronomeSynthFixtureCase,
   captureErc4626SiloRedeemFixtureCase,
   captureErc4626FixtureCase,
+  captureEtherTokenNativeRedeemFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -168,6 +169,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureErc4626FixtureCase({
           source,
           caseId: `erc4626:${source.number}`,
+        }));
+      } else if (item.family === "protocol:ethertoken-native-redeem") {
+        familyCases.push(await captureEtherTokenNativeRedeemFixtureCase({
+          source,
+          caseId: `ethertoken-native-redeem:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

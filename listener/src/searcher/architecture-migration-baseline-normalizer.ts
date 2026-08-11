@@ -35,6 +35,10 @@ import { ERC4626_FAMILY_ID } from
   "./venues/protocols/erc4626-family/manifest.js";
 import { erc4626StaticProjection } from
   "./venues/protocols/erc4626-family/binding.js";
+import { ETHERTOKEN_NATIVE_FAMILY_ID } from
+  "./venues/protocols/ethertoken-native-redeem-family/manifest.js";
+import { etherTokenNativeStaticProjection } from
+  "./venues/protocols/ethertoken-native-redeem-family/shared.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -186,6 +190,14 @@ export interface BaselineErc4626Facts {
   readonly tokenOut: string;
 }
 
+export interface BaselineEtherTokenNativeRedeemFacts {
+  readonly familyId: "protocol:ethertoken-native-redeem";
+  readonly token: string;
+  readonly nativeAnchor: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -212,6 +224,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:erc4626-silo-redeem":
           normalizeBaselineErc4626SiloRedeemInstanceItem,
         "protocol:erc4626": normalizeBaselineErc4626InstanceItem,
+        "protocol:ethertoken-native-redeem":
+          normalizeBaselineEtherTokenNativeRedeemInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -232,6 +246,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:erc4626-silo-redeem":
           normalizeBaselineErc4626SiloRedeemPriceItem,
         "protocol:erc4626": normalizeBaselineErc4626PriceItem,
+        "protocol:ethertoken-native-redeem":
+          normalizeBaselineEtherTokenNativeRedeemPriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -252,6 +268,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:erc4626-silo-redeem":
           normalizeBaselineErc4626SiloRedeemEdgeItem,
         "protocol:erc4626": normalizeBaselineErc4626EdgeItem,
+        "protocol:ethertoken-native-redeem":
+          normalizeBaselineEtherTokenNativeRedeemEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -273,6 +291,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineErc4626SiloRedeemEnumeratedRouteItem,
         "protocol:erc4626":
           normalizeBaselineErc4626EnumeratedRouteItem,
+        "protocol:ethertoken-native-redeem":
+          normalizeBaselineEtherTokenNativeRedeemEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -293,6 +313,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:erc4626-silo-redeem":
           normalizeBaselineErc4626SiloRedeemExactQuoteItem,
         "protocol:erc4626": normalizeBaselineErc4626ExactQuoteItem,
+        "protocol:ethertoken-native-redeem":
+          normalizeBaselineEtherTokenNativeRedeemExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -319,6 +341,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineErc4626SiloRedeemExecutionFragmentItem,
         "protocol:erc4626":
           normalizeBaselineErc4626ExecutionFragmentItem,
+        "protocol:ethertoken-native-redeem":
+          normalizeBaselineEtherTokenNativeRedeemExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -345,6 +369,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineErc4626SiloRedeemFinalSimulationItem,
         "protocol:erc4626":
           normalizeBaselineErc4626FinalSimulationItem,
+        "protocol:ethertoken-native-redeem":
+          normalizeBaselineEtherTokenNativeRedeemFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -387,6 +413,9 @@ function normalizeByFamily(
     readonly "protocol:erc4626": (
       item: RawMigrationSemanticItem,
     ) => RawMigrationSemanticItem;
+    readonly "protocol:ethertoken-native-redeem": (
+      item: RawMigrationSemanticItem,
+    ) => RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -415,6 +444,9 @@ function normalizeByFamily(
   }
   if (familyId === "protocol:erc4626") {
     return handlers["protocol:erc4626"](item);
+  }
+  if (familyId === "protocol:ethertoken-native-redeem") {
+    return handlers["protocol:ethertoken-native-redeem"](item);
   }
   return handlers.default(item);
 }
@@ -4618,6 +4650,314 @@ export function normalizeBaselineErc4626FinalSimulationItem(
   });
 }
 
+function etherTokenNativeRedeemFactsGuard(
+  facts: Partial<BaselineEtherTokenNativeRedeemFacts> | undefined,
+): facts is Required<BaselineEtherTokenNativeRedeemFacts> {
+  return facts !== undefined &&
+    facts.familyId === "protocol:ethertoken-native-redeem" &&
+    typeof facts.token === "string" &&
+    typeof facts.nativeAnchor === "string" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function etherTokenNativeRedeemFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineEtherTokenNativeRedeemFacts>;
+  })?.baselineFacts;
+  if (!etherTokenNativeRedeemFactsGuard(facts)) return null;
+  return facts;
+}
+
+function deriveEtherTokenNativeRedeemCanonicalFacts(
+  facts: Required<BaselineEtherTokenNativeRedeemFacts>,
+): {
+  readonly token: string;
+  readonly nativeAnchor: string;
+  readonly lowerToken: string;
+  readonly lowerNative: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const token = canonicalAddress(facts.token);
+  const nativeAnchor = canonicalAddress(facts.nativeAnchor);
+  const lowerToken = lowerAddress(token);
+  const lowerNative = lowerAddress(nativeAnchor);
+  const descriptor = Object.freeze({
+    token,
+    nativeAnchor,
+  }) as unknown as Parameters<typeof etherTokenNativeStaticProjection>[0];
+  const bindingFingerprint = hashCanonical(
+    etherTokenNativeStaticProjection(descriptor),
+  );
+  const venueIdentityHash = hashCanonical(Object.freeze({
+    kind: "address-protocol",
+    target: lowerToken,
+  }));
+  const routeKeyValue =
+    `protocol:ethertoken-native-redeem\u001f${lowerToken}`;
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "protocol:ethertoken-native-redeem",
+    lowerToken,
+    lowerToken,
+    `${lowerToken}>${lowerNative}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    token,
+    nativeAnchor,
+    lowerToken,
+    lowerNative,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineEtherTokenNativeRedeemEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = etherTokenNativeRedeemFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveEtherTokenNativeRedeemCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.token,
+      tokenOut: derived.nativeAnchor,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineEtherTokenNativeRedeemEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineEtherTokenNativeRedeemEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "ethertoken-native-redeem baseline enumerated route item must carry " +
+        "a non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineEtherTokenNativeRedeemInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = etherTokenNativeRedeemFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveEtherTokenNativeRedeemCanonicalFacts(facts);
+  const descriptor = Object.freeze({
+    token: derived.token,
+    nativeAnchor: derived.nativeAnchor,
+  }) as unknown as Parameters<typeof etherTokenNativeStaticProjection>[0];
+  const staticBindingFingerprint = hashCanonical({
+    capability: ETHERTOKEN_NATIVE_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: etherTokenNativeStaticProjection(descriptor),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerToken,
+    value: Object.freeze({
+      familyId: "protocol:ethertoken-native-redeem",
+      instanceKey: derived.lowerToken,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineEtherTokenNativeRedeemPriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = etherTokenNativeRedeemFactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveEtherTokenNativeRedeemCanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "ethertoken-native-redeem",
+    instanceKey: derived.lowerToken,
+    target: derived.token,
+    tokenIn: derived.token,
+    tokenOut: derived.nativeAnchor,
+    slotKind: "protocol" as const,
+    protocolAction: "redeem" as const,
+    edgeKind: "protocol" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.lowerToken,
+      mid: Object.freeze({
+        kind: "protocol",
+        pool: derived.token,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineEtherTokenNativeRedeemExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = etherTokenNativeRedeemFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveEtherTokenNativeRedeemCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.token,
+      tokenOut: derived.nativeAnchor,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineEtherTokenNativeRedeemExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = etherTokenNativeRedeemFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveEtherTokenNativeRedeemCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.token,
+      tokenOut: derived.nativeAnchor,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "ethertoken-native-redeem",
+      executionTarget: derived.token,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineEtherTokenNativeRedeemFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = etherTokenNativeRedeemFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveEtherTokenNativeRedeemCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.token,
+      tokenOut: derived.nativeAnchor,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -4671,4 +5011,9 @@ const ERC4626_SILO_CATALOG_FAMILY =
 const ERC4626_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ERC4626_FAMILY_ID,
+  );
+
+const ETHERTOKEN_NATIVE_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    ETHERTOKEN_NATIVE_FAMILY_ID,
   );
