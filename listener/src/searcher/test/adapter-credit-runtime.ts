@@ -889,6 +889,29 @@ async function creditStrictCatalogCasJoinsSamePublication(): Promise<void> {
     }),
     instance: instanceB,
   }), /source\/generation mismatch/);
+
+  // A zero-route Credit publication stages an explicit zero-row in the same
+  // atomic CAS (no fabricated edge/handle index).
+  const zeroRoot = new StrictAdapterFamilyShadowCatalogPublicationRoot({
+    catalog: primary.catalog,
+    chainId: "1",
+    terminalRemovalAuthority: terminalIssuer.authority,
+    sourceTransitionAuthority: transitionIssuer.authority,
+  });
+  const zeroCreditStage = zeroRoot.stageCreditFamily({
+    family,
+    publication: Object.freeze({
+      ...publicationA,
+      routes: Object.freeze([]),
+    }),
+    instance: instanceA,
+  });
+  assert.throws(() => zeroRoot.prepare({
+    source: SOURCE,
+    previous: null,
+    stages: [zeroCreditStage],
+    sourceAnchors: anchorsFor(SOURCE),
+  }), /has no route handles/);
 }
 
 function observedFluidCreditPlugin(

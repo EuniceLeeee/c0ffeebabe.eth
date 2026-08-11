@@ -215,6 +215,64 @@ function testEmptyFamilyYieldsCanonicalZeroInventory(): void {
   );
 }
 
+function testDuplicateAddressAcrossKeysAndEmptyFamilies(): void {
+  const address = ethers.getAddress(`0x${"11".repeat(20)}`);
+  const output = enumeratePointInTimeInventory({
+    source: SOURCE,
+    families: [
+      {
+        familyId: FAMILY_A,
+        incumbents: [
+          incumbent("pool:a", address),
+          incumbent("pool:b", address),
+        ],
+      },
+      { familyId: FAMILY_B, incumbents: [] },
+    ],
+  });
+  assert.equal(output.families.length, 2);
+  assert.equal(output.families[0]!.familyId, FAMILY_B);
+  assert.equal(output.families[0]!.inventoryCount, 0);
+  assert.deepEqual(
+    output.families[1]!.incumbents.map((item) => item.inventoryKey),
+    ["pool:a", "pool:b"],
+  );
+  assert.deepEqual(
+    enumeratePointInTimeInventory({
+      source: SOURCE,
+      families: [],
+    }).families,
+    [],
+  );
+}
+
+function testInventoryHashIsOrderIndependent(): void {
+  const address = ethers.getAddress(`0x${"11".repeat(20)}`);
+  const addressSurface = surface(address);
+  const unsorted = [
+    { inventoryKey: "pool:b", address, currentSurface: addressSurface },
+    { inventoryKey: "pool:a", address, currentSurface: addressSurface },
+  ];
+  const sorted = [unsorted[1]!, unsorted[0]!];
+  assert.equal(
+    adapterFamilySnapshotInventoryHash({
+      familyId: FAMILY_A,
+      source: SOURCE,
+      incumbents: unsorted,
+    }),
+    adapterFamilySnapshotInventoryHash({
+      familyId: FAMILY_A,
+      source: SOURCE,
+      incumbents: sorted,
+    }),
+  );
+  assert.throws(() => adapterFamilySnapshotInventoryHash({
+    familyId: familyId(""),
+    source: SOURCE,
+    incumbents: [],
+  }), /familyId must be non-empty/);
+}
+
 async function main(): Promise<void> {
   testEnumeratesSortedUniqueFamiliesAndIncumbents();
   testRejectsDuplicateInventoryKeysWithinFamily();
@@ -222,6 +280,8 @@ async function main(): Promise<void> {
   testRejectsForeignSurfaceSourceOrAddressMismatch();
   testCrossFamilyKeysMayRepeatAndForeignSurfaceKindFails();
   testEmptyFamilyYieldsCanonicalZeroInventory();
+  testDuplicateAddressAcrossKeysAndEmptyFamilies();
+  testInventoryHashIsOrderIndependent();
   console.log("adapter-family point-in-time enumerator PASS");
 }
 

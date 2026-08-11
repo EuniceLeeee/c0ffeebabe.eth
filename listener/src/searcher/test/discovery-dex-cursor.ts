@@ -26,11 +26,37 @@ async function seedRoundtrip(): Promise<void> {
     const loaded = await loadDexDiscoveryCursor(path);
     assert.deepEqual(loaded, cursor);
     assert.equal(isDexDiscoveryCursor(loaded), true);
+    const nestedPath = join(dir, "nested", "deeper", "cursor.json");
+    await saveDexDiscoveryCursorAsync(nestedPath, cursor);
+    assert.deepEqual(await loadDexDiscoveryCursor(nestedPath), cursor);
+    const replaced: DexDiscoveryCursor = {
+      schemaVersion: 1,
+      sourceCompleteThrough: 200,
+      graphCompleteThrough: 190,
+      sourceHash: "0xdef",
+    };
+    await saveDexDiscoveryCursorAsync(path, replaced);
+    assert.deepEqual(await loadDexDiscoveryCursor(path), replaced);
 
     assert.equal(await loadDexDiscoveryCursor(join(dir, "missing.json")), null);
     const { writeFileSync } = await import("node:fs");
     writeFileSync(join(dir, "bad.json"), "{not json");
     assert.equal(await loadDexDiscoveryCursor(join(dir, "bad.json")), null);
+    writeFileSync(join(dir, "empty.json"), "");
+    assert.equal(await loadDexDiscoveryCursor(join(dir, "empty.json")), null);
+    writeFileSync(join(dir, "wrong-schema.json"), "{}");
+    assert.equal(
+      await loadDexDiscoveryCursor(join(dir, "wrong-schema.json")),
+      null,
+    );
+    writeFileSync(
+      join(dir, "wrong-version.json"),
+      JSON.stringify({ schemaVersion: 99 }),
+    );
+    assert.equal(
+      await loadDexDiscoveryCursor(join(dir, "wrong-version.json")),
+      null,
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -87,6 +113,15 @@ function seedPolicy(): void {
     }),
     -1,
     "no anchors falls back to bootstrap (-1), never a deep fromBlock-1 re-scan",
+  );
+  assert.equal(
+    resolveInitialDexSourceCompleteThrough({
+      ...base,
+      universeToBlock: null,
+      trustedThrough: 5,
+    }),
+    5,
+    "persisted cursor is preferred over fromBlock-1 when universe is missing",
   );
 }
 

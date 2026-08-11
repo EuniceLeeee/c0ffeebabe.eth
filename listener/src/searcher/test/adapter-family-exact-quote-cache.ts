@@ -323,6 +323,26 @@ function testStoreOverwriteAndExplicitEviction(): void {
   });
 }
 
+function testZeroAmountKeyAndEvidenceRefNormalization(): void {
+  const zeroKey = exactQuoteCacheKey(address({ amountIn: 0n }));
+  assert.equal(
+    exactQuoteCacheKey(address({ amountIn: 0n })),
+    zeroKey,
+    "zero amount must produce a stable key",
+  );
+  const cache = createAdapterFamilyExactQuoteCache({ capacity: 1 });
+  cache.store(address(), value({
+    evidenceRefs: ["z", "a", "b", "a"],
+  }));
+  const hit = cache.lookup(address());
+  assert(hit);
+  assert.deepEqual(hit.evidenceRefs, ["a", "b", "z"]);
+  assert(Object.isFrozen(hit.trustedResults));
+  assert(Object.isFrozen(hit.roundFingerprints));
+  assert(Object.isFrozen(hit.evidenceRefs));
+  assert.equal(createAdapterFamilyExactQuoteCache().snapshot().capacity, 8192);
+}
+
 async function main(): Promise<void> {
   testCacheKeyBindsEveryAddressField();
   testStoreLookupLruAndEviction();
@@ -330,6 +350,7 @@ async function main(): Promise<void> {
   testCacheIdentityIsCentrallyIssued();
   testCacheAndAddressBoundaries();
   testStoreOverwriteAndExplicitEviction();
+  testZeroAmountKeyAndEvidenceRefNormalization();
   console.log("adapter-family exact quote cache PASS");
 }
 
