@@ -7,7 +7,9 @@ import {
 } from "../adapter-family-catalog-publication.js";
 import {
   StrictAdapterFamilyShadowCatalogPublicationRoot,
+  readStrictPricingMid,
   type CommittedStrictShadowCatalogPublication,
+  type StrictShadowCatalogViews,
   type StrictShadowCatalogFamilyStage,
 } from "../adapter-family-shadow-catalog-publication.js";
 import type {
@@ -28,7 +30,7 @@ import {
   type AdapterRequestResult,
   type CanonicalSource,
 } from "../venues/adapter-request-program.js";
-import type { FamilyId } from
+import { routeKey, type FamilyId } from
   "../venues/adapter-family-identifiers.js";
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
@@ -406,6 +408,36 @@ async function main(): Promise<void> {
   assert(Object.isFrozen(committedMid.edges));
   assert.equal(committedPricing.mids instanceof Map, false);
   assert.equal(committedPricing.unavailable instanceof Map, false);
+  const pricingKey = [...committed1.views.pricingByPublicationKey.keys()][0]!;
+  const readRouteKey = [...committedPricing.mids.keys()][0]!;
+  const readMid = readStrictPricingMid({
+    views: committed1.views,
+    pricingPublicationKey: pricingKey,
+    routeKey: readRouteKey,
+  });
+  assert.equal(readMid.kind, "mid");
+  const readMissing = readStrictPricingMid({
+    views: committed1.views,
+    pricingPublicationKey: pricingKey,
+    routeKey: routeKey("missing-route"),
+  });
+  assert.deepEqual(readMissing, { kind: "missing" });
+  const readUnavailable = readStrictPricingMid({
+    views: {
+      ...committed1.views,
+      pricingByPublicationKey: new Map([[pricingKey, {
+        ...committedPricing,
+        mids: new Map(),
+        unavailable: new Map([[readRouteKey, "fixture-unavailable"]]),
+      }]]),
+    } as unknown as StrictShadowCatalogViews,
+    pricingPublicationKey: pricingKey,
+    routeKey: readRouteKey,
+  });
+  assert.deepEqual(readUnavailable, {
+    kind: "unavailable",
+    reason: "fixture-unavailable",
+  });
   assert.throws(() => {
     (committedPricing.pricingDescriptor as { pool: string }).pool = FACTORY;
   }, TypeError);

@@ -30,8 +30,10 @@ import {
   type PreparedFamilyInstance,
   type PreparedPricingStateInstance,
 } from "./venues/adapter-family-runtime.js";
-import type { FamilyId } from
+import type { FamilyId, RouteKey } from
   "./venues/adapter-family-identifiers.js";
+import type { RouteVenueMid } from
+  "./venues/mid-readers.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import type { CanonicalEdgeId } from
@@ -73,6 +75,35 @@ export interface StrictShadowCatalogViews {
     string,
     PreparedPricingStateInstance
   >;
+}
+
+export type StrictPricingReadOutcome =
+  | { readonly kind: "mid"; readonly mid: RouteVenueMid }
+  | { readonly kind: "unavailable"; readonly reason: string }
+  | { readonly kind: "missing" };
+
+/**
+ * Strict pricing consumer read: resolves a RouteKey against one committed
+ * pricing publication. Production consumers must go through this view (or
+ * the issuer-bound handle path) instead of querying a legacy registry; a
+ * missing pricing publication and an explicit unavailable row are distinct
+ * outcomes.
+ */
+export function readStrictPricingMid(input: {
+  readonly views: StrictShadowCatalogViews;
+  readonly pricingPublicationKey: string;
+  readonly routeKey: RouteKey;
+}): StrictPricingReadOutcome {
+  const pricing = input.views.pricingByPublicationKey.get(
+    input.pricingPublicationKey,
+  );
+  if (pricing === undefined) return { kind: "missing" };
+  const unavailable = pricing.unavailable.get(input.routeKey);
+  if (unavailable !== undefined) {
+    return { kind: "unavailable", reason: unavailable };
+  }
+  const mid = pricing.mids.get(input.routeKey);
+  return mid === undefined ? { kind: "missing" } : { kind: "mid", mid };
 }
 
 /** One pointer is the only observable shadow publication state. */
