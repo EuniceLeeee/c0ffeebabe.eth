@@ -197,6 +197,7 @@ export function buildUniv2CommonGraph(input: {
   readonly source: CanonicalSource;
   readonly edgeItems: readonly RawMigrationStageCapture["items"][number][];
   readonly enumeratedRouteItems?: readonly RawMigrationStageCapture["items"][number][];
+  readonly exactQuoteItems?: readonly RawMigrationStageCapture["items"][number][];
   readonly evidenceRefs: readonly string[];
 }): NonNullable<RawArchitectureMigrationSideCapture["commonGraph"]> {
   return Object.freeze({
@@ -209,10 +210,12 @@ export function buildUniv2CommonGraph(input: {
             "capture-harness-enumeration-not-wired",
           )
         : exercisedStage(input.enumeratedRouteItems, input.evidenceRefs),
-      exactQuotes: frameworkBlockedStage(
-        input.evidenceRefs,
-        "capture-harness-exact-not-wired",
-      ),
+      exactQuotes: input.exactQuoteItems === undefined
+        ? frameworkBlockedStage(
+            input.evidenceRefs,
+            "capture-harness-exact-not-wired",
+          )
+        : exercisedStage(input.exactQuoteItems, input.evidenceRefs),
       executionFragments: frameworkBlockedStage(
         input.evidenceRefs,
         "capture-harness-execution-not-wired",

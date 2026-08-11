@@ -22,6 +22,8 @@ import {
   runArchitectureMigrationParityFiles,
   buildArchitectureMigrationSideCapture,
 } from "../architecture-migration-parity-runner.js";
+import type { RawMigrationStageCapture } from
+  "../architecture-migration-parity-runner.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
 
@@ -122,10 +124,230 @@ async function testRealCaseUsesDescriptorPoolAndBlocksPrices(): Promise<void> {
   });
   assert.equal(pricesOn.stages.prices?.status, "exercised");
   assert.equal(pricesOn.stages.prices?.items.length, 2);
+  assert.equal(pricesOn.stages.enumeratedRoutes?.status, "exercised");
+  assert.equal(pricesOn.stages.exactQuotes?.status, "exercised");
+  assert.equal(pricesOn.stages.exactQuotes?.items.length, 2);
   assert(pricesOn.stages.prices!.items[0]!.id.includes(
     `${realPool.toLowerCase()}:${realTokenA.toLowerCase()}>` +
       `${realTokenB.toLowerCase()}`,
   ));
+}
+
+async function testRealReservesBilateralExactAndEnumerationParity(): Promise<void> {
+  const familyCase = await captureUniv2RealCase({
+    source: SOURCE,
+    pool: `0x${"41".repeat(20)}`,
+    tokenA: `0x${"43".repeat(20)}`,
+    tokenB: `0x${"44".repeat(20)}`,
+    reserves: { reserve0: "1000000", reserve1: "2000000" },
+  });
+  const evidenceRefs = familyCase.stages.instances!.evidenceRefs;
+  const edges = familyCase.stages.edges!.items;
+  const enumerated = familyCase.stages.enumeratedRoutes!.items;
+  const exact = familyCase.stages.exactQuotes!.items;
+  const pool = `0x${"41".repeat(20)}`;
+  const legacyEdgeItem = (edge: (typeof edges)[number]) => {
+    const value = edge.value as {
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+    };
+    const tokenIn = value.tokenIn.toLowerCase();
+    const tokenOut = value.tokenOut.toLowerCase();
+    const oldId = [
+      "univ2-standard",
+      pool,
+      pool,
+      `${tokenIn}>${tokenOut}`,
+      JSON.stringify(["univ2-swap", null, null, null, null]),
+    ].join("\u001f");
+    return Object.freeze({
+      id: oldId,
+      value: Object.freeze({
+        canonicalEdgeId: oldId,
+        tokenIn,
+        tokenOut,
+        adapterId: "univ2-swap",
+        baselineFacts: Object.freeze({
+          familyId: "univ2-standard",
+          pool,
+          token0: `0x${"43".repeat(20)}`,
+          token1: `0x${"44".repeat(20)}`,
+          tokenIn,
+          tokenOut,
+          feeBps: "30",
+          factory: `0x${"42".repeat(20)}`,
+          reversePool: pool,
+        }),
+      }),
+    });
+  };
+  const legacyEdges = edges.map(legacyEdgeItem);
+  const legacyEnumerated = [...legacyEdges]
+    .map((edge) => edge.value as {
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+    })
+    .map((value) => Object.freeze({
+      routeKey: [
+        "univ2-standard",
+        pool,
+        value.tokenIn.toLowerCase(),
+        value.tokenOut.toLowerCase(),
+      ].join("\u001f"),
+      value,
+    }))
+    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
+    .map(({ value }, order) => {
+      const edge = legacyEdges.find((candidate) =>
+        (candidate.value as {
+          readonly tokenIn: string;
+          readonly tokenOut: string;
+        }).tokenIn === (value as { readonly tokenIn: string }).tokenIn &&
+        (candidate.value as {
+          readonly tokenIn: string;
+          readonly tokenOut: string;
+        }).tokenOut === (value as { readonly tokenOut: string }).tokenOut
+      )!;
+      return Object.freeze({
+        id: edge.id,
+        value: Object.freeze({
+          ...(edge.value as Record<string, unknown>),
+          order,
+        }),
+      });
+    });
+  const legacyExact = exact.map((quote) => {
+    const quoteValue = quote.value as {
+      readonly amountIn: string;
+      readonly amountOut: string;
+      readonly feeBps: string;
+    };
+    const legacyEdge = legacyEdgeItem(quote);
+    return Object.freeze({
+      id: `${legacyEdge.id}\u001fexact:${quoteValue.amountIn}`,
+      value: Object.freeze({
+        ...(legacyEdge.value as Record<string, unknown>),
+        amountIn: quoteValue.amountIn,
+        amountOut: quoteValue.amountOut,
+        feeBps: quoteValue.feeBps,
+      }),
+    });
+  });
+  const stage = (
+    status: "exercised" | "framework-blocked",
+    items: readonly RawMigrationStageCapture["items"][number][],
+  ) =>
+    Object.freeze({
+      status,
+      items: Object.freeze(items),
+      evidenceRefs,
+      blocker: status === "exercised" ? null : "fixture-test-stage",
+    });
+  const baselineSide = buildArchitectureMigrationSideCapture({
+    captureId: "baseline",
+    commit: "a".repeat(40),
+    productionClosureHash: "11".repeat(32),
+    activationManifestHash: "22".repeat(32),
+    normalizedConfigHash: "33".repeat(32),
+    productionPolicyHash: "44".repeat(32),
+    corpusHash: "55".repeat(32),
+    evidenceRefs,
+    familyCases: [{
+      ...familyCase,
+      stages: Object.freeze({
+        ...familyCase.stages,
+        edges: stage("exercised", legacyEdges),
+        enumeratedRoutes: stage("exercised", legacyEnumerated),
+        exactQuotes: stage("exercised", legacyExact),
+      }),
+    }],
+    commonGraph: Object.freeze({
+      inputFingerprint: familyCase.inputFingerprint,
+      stages: Object.freeze({
+        edges: stage("exercised", legacyEdges),
+        enumeratedRoutes: stage("exercised", legacyEnumerated),
+        exactQuotes: stage("exercised", legacyExact),
+        executionFragments: frameworkBlockedStage(
+          evidenceRefs,
+          "capture-harness-execution-not-wired",
+        ),
+        finalSimulations: frameworkBlockedStage(
+          evidenceRefs,
+          "capture-harness-final-sim-not-wired",
+        ),
+      }),
+      crossFamilyBindings: Object.freeze([]),
+    }),
+  });
+  const challengerSide = buildArchitectureMigrationSideCapture({
+    captureId: "challenger",
+    commit: "b".repeat(40),
+    productionClosureHash: "aa".repeat(32),
+    activationManifestHash: "22".repeat(32),
+    normalizedConfigHash: "33".repeat(32),
+    productionPolicyHash: "44".repeat(32),
+    corpusHash: "55".repeat(32),
+    evidenceRefs,
+    familyCases: [familyCase],
+    commonGraph: buildUniv2CommonGraph({
+      source: SOURCE,
+      edgeItems: edges,
+      enumeratedRouteItems: enumerated,
+      exactQuoteItems: exact,
+      evidenceRefs,
+    }),
+  });
+  const directory = await mkdtemp(
+    join(tmpdir(), "architecture-migration-real-exact-"),
+  );
+  try {
+    const baselinePath = join(directory, "baseline.json");
+    const challengerPath = join(directory, "challenger.json");
+    await writeFile(
+      baselinePath,
+      architectureMigrationSideJson(baselineSide),
+    );
+    await writeFile(
+      challengerPath,
+      architectureMigrationSideJson(challengerSide),
+    );
+    const receipt = await runArchitectureMigrationParityFiles({
+      baselinePath,
+      challengerPath,
+      evidenceClass: "unit-contract",
+      mode: "pure-refactor",
+      stateAnchors: [fixtureStateAnchor(SOURCE)],
+      performanceDiagnostics: {
+        wallMs: 100,
+        requestCount: 10,
+        batchCount: 1,
+        peakConcurrency: 1,
+      },
+    });
+    const delta = receipt.commonGraphDelta;
+    for (const stageName of [
+      "edges",
+      "enumeratedRoutes",
+      "exactQuotes",
+    ] as const) {
+      assert.deepEqual(delta[stageName], {
+        missingIds: [],
+        addedIds: [],
+        changedIds: [],
+      });
+    }
+    assert.deepEqual(delta.baselineBlockedStages, [
+      "executionFragments",
+      "finalSimulations",
+    ]);
+    assert.equal(receipt.parityReceipt.assembledCommonGraphParity, false);
+    const row = receipt.familyCoverage.find(
+      (candidate) => candidate.familyId === "univ2-standard",
+    )!;
+    assert.equal(row.outcome, "framework-blocked");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
@@ -460,6 +682,7 @@ async function main(): Promise<void> {
   await testWriteAndGenerateRoundTrip();
   await testEndToEndSealedParity();
   await testLegacyBaselineCommonGraphEdgesParity();
+  await testRealReservesBilateralExactAndEnumerationParity();
   console.log("architecture-migration capture harness PASS");
 }
 

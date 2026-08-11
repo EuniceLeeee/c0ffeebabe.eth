@@ -19,6 +19,7 @@ import {
   UNIV2_SWAP_CALL_PATTERN_ID,
   UNIV2_SWAP_SELECTOR,
 } from "./venues/swaps/univ2-family/codec.js";
+import { univ2Exact } from "./venues/swaps/univ2-family/exact.js";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -36,6 +37,8 @@ import {
   exercisedStage,
   frameworkBlockedStage,
 } from "./architecture-migration-capture.js";
+import type { UniV2Descriptor, UniV2Route } from
+  "./venues/swaps/univ2-family/types.js";
 import type {
   ArchitectureMigrationStage,
   RawFamilyMigrationCaseCapture,
@@ -48,6 +51,7 @@ export const UNIV2_FIXTURE_POOL = `0x${"41".repeat(20)}`;
 export const UNIV2_FIXTURE_FACTORY = `0x${"42".repeat(20)}`;
 export const UNIV2_FIXTURE_TOKEN0 = `0x${"43".repeat(20)}`;
 export const UNIV2_FIXTURE_TOKEN1 = `0x${"44".repeat(20)}`;
+export const UNIV2_CAPTURE_EXACT_AMOUNT_IN = 1_000_000n;
 
 class FixtureFence implements AdapterGenerationFence {
   assertCurrent(): void {}
@@ -130,6 +134,17 @@ function successResult(
     : request.id === "factory-get-pair"
     ? UNIV2_FACTORY_INTERFACE.encodeFunctionResult("getPair", [pool.pool])
     : request.id === "current-reserves"
+    ? UNIV2_PAIR_INTERFACE.encodeFunctionResult(
+        "getReserves",
+        pool.reserves === undefined
+          ? [1_000_000n, 2_000_000n, 1_234]
+          : [
+              pool.reserves.reserve0,
+              pool.reserves.reserve1,
+              pool.reserves.blockTimestampLast,
+            ],
+      )
+    : request.id === "exact-reserves"
     ? UNIV2_PAIR_INTERFACE.encodeFunctionResult(
         "getReserves",
         pool.reserves === undefined
@@ -307,6 +322,73 @@ export async function captureUniv2RealCase(input: {
         order,
       }),
     }));
+  let exactQuotes: RawMigrationStageCapture;
+  if (reserves !== undefined) {
+    const exactMethod = univ2Exact.methods().find(
+      (method) => method.kind === "request-program" &&
+        method.id === "pair-reserves",
+    );
+    if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+      throw new Error("univ2 exact request program is missing");
+    }
+    const program = exactMethod.program;
+    const edgeByRouteKey = new Map(
+      edges.map((edge) => {
+        const value = edge.value as { readonly routeKey: string };
+        return [value.routeKey, edge] as const;
+      }),
+    );
+    const quotes: RawMigrationStageCapture["items"][number][] = [];
+    for (const instance of instances) {
+      for (const route of [...instance.routes].sort(
+        (left, right) => left.routeKey.localeCompare(right.routeKey),
+      )) {
+        const exactInput = Object.freeze({
+          descriptor: instance.descriptor as unknown as UniV2Descriptor,
+          route: route as unknown as UniV2Route,
+          amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
+          source: input.source,
+          executor: "migration-capture-fixture",
+          runtimeEvidence: Object.freeze([]),
+        });
+        const requests = program.buildRequests(exactInput);
+        const results = requests.map((request) =>
+          successResult(request, input.source, pool)
+        );
+        const decoded = program.decode({
+          programInput: exactInput,
+          initialResults: results,
+          dependentEvidence: Object.freeze([]),
+        });
+        const edge = edgeByRouteKey.get(route.routeKey);
+        if (edge === undefined) {
+          throw new Error(`exact route ${route.routeKey} has no captured edge`);
+        }
+        quotes.push(Object.freeze({
+          id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
+          value: Object.freeze({
+            routeKey: route.routeKey,
+            tokenIn: route.tokenIn,
+            tokenOut: route.tokenOut,
+            canonicalEdgeId: edge.id,
+            amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
+            amountOut: decoded.amountOut.toString(),
+            feeBps: (
+              instance.descriptor as unknown as {
+                readonly feeRule: { readonly feeBps: bigint };
+              }
+            ).feeRule.feeBps.toString(),
+          }),
+        }));
+      }
+    }
+    exactQuotes = exercisedStage(quotes, evidenceRefs);
+  } else {
+    exactQuotes = frameworkBlockedStage(
+      evidenceRefs,
+      "capture-harness-exact-not-wired",
+    );
+  }
   const stages: RawFamilyMigrationCaseCapture["stages"] = Object.freeze({
     instances: instanceStage(instances, evidenceRefs),
     edges: exercisedStage(edges, evidenceRefs),
@@ -320,10 +402,7 @@ export async function captureUniv2RealCase(input: {
       : exercisedStage(prices, evidenceRefs),
     failures: exercisedStage([], evidenceRefs),
     enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
-    exactQuotes: frameworkBlockedStage(
-      evidenceRefs,
-      "capture-harness-exact-not-wired",
-    ),
+    exactQuotes,
     executionFragments: frameworkBlockedStage(
       evidenceRefs,
       "capture-harness-execution-not-wired",

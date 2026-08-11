@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import {
   captureUniv2FixtureCase,
+  captureUniv2RealCase,
   UNIV2_FIXTURE_FACTORY,
   UNIV2_FIXTURE_POOL,
   UNIV2_FIXTURE_TOKEN0,
   UNIV2_FIXTURE_TOKEN1,
 } from "../architecture-migration-fixture-replay.js";
 import {
+  normalizeBaselineUniv2ExactQuoteItem,
   normalizeBaselineUniv2EnumeratedRouteItem,
   normalizeBaselineUniv2EdgeItem,
 } from "../architecture-migration-baseline-normalizer.js";
@@ -96,6 +98,34 @@ async function main(): Promise<void> {
     ),
     /must carry a non-negative order/,
   );
+
+  const real = await captureUniv2RealCase({
+    source: SOURCE,
+    pool: UNIV2_FIXTURE_POOL,
+    tokenA: UNIV2_FIXTURE_TOKEN0,
+    tokenB: UNIV2_FIXTURE_TOKEN1,
+    reserves: { reserve0: "1000000", reserve1: "2000000" },
+  });
+  const exactQuotes = real.stages.exactQuotes!.items;
+  assert.equal(exactQuotes.length, 2);
+  for (const quote of exactQuotes) {
+    const value = quote.value as {
+      readonly amountIn: string;
+      readonly amountOut: string;
+      readonly feeBps: string;
+    };
+    const legacyQuote = {
+      ...legacyFixtureEdgeItem(quote),
+      value: {
+        ...(legacyFixtureEdgeItem(quote).value as Record<string, unknown>),
+        amountIn: value.amountIn,
+        amountOut: value.amountOut,
+        feeBps: value.feeBps,
+      },
+    };
+    const normalized = normalizeBaselineUniv2ExactQuoteItem(legacyQuote);
+    assert.deepEqual(normalized, quote);
+  }
 
   const passthrough = Object.freeze({
     id: "legacy-unknown-family",

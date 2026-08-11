@@ -51,9 +51,67 @@ export function normalizeBaselineMigrationItems(
       normalizeBaselineUniv2EnumeratedRouteItem(item)
     ));
   }
+  if (stage === "exactQuotes") {
+    return Object.freeze(items.map((item) =>
+      normalizeBaselineUniv2ExactQuoteItem(item)
+    ));
+  }
   return Object.freeze(items.map((item) =>
     item
   ));
+}
+
+export function normalizeBaselineUniv2ExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const value = item.value as {
+    readonly baselineFacts?: Partial<BaselineUniv2EdgeFacts>;
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly feeBps?: unknown;
+  };
+  const facts = value?.baselineFacts;
+  if (
+    facts === undefined ||
+    facts.familyId !== "univ2-standard" ||
+    typeof facts.pool !== "string" ||
+    typeof facts.token0 !== "string" ||
+    typeof facts.token1 !== "string" ||
+    typeof facts.tokenIn !== "string" ||
+    typeof facts.tokenOut !== "string" ||
+    typeof facts.feeBps !== "string" ||
+    typeof facts.factory !== "string" ||
+    typeof facts.reversePool !== "string" ||
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.feeBps !== "string"
+  ) {
+    return item;
+  }
+  const completeFacts: Required<BaselineUniv2EdgeFacts> = {
+    familyId: "univ2-standard",
+    pool: facts.pool,
+    token0: facts.token0,
+    token1: facts.token1,
+    tokenIn: facts.tokenIn,
+    tokenOut: facts.tokenOut,
+    feeBps: facts.feeBps,
+    factory: facts.factory,
+    reversePool: facts.reversePool,
+  };
+  const derived = deriveUniv2CanonicalEdge(completeFacts);
+  return Object.freeze({
+    id: `${derived.id}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.value.routeKey,
+      tokenIn: derived.value.tokenIn,
+      tokenOut: derived.value.tokenOut,
+      canonicalEdgeId: derived.id,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: value.feeBps,
+    }),
+  });
 }
 
 export function normalizeBaselineUniv2EnumeratedRouteItem(
