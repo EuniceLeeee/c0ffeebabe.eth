@@ -69,7 +69,10 @@ async function main(): Promise<void> {
   if (checkOnly) {
     const first = await buildSide();
     const second = await buildSide();
-    if (JSON.stringify(first) !== JSON.stringify(second)) {
+    if (
+      architectureMigrationSideJson(first) !==
+      architectureMigrationSideJson(second)
+    ) {
       throw new Error("real capture generation is not reproducible");
     }
     process.stdout.write("real capture reproducible\n");

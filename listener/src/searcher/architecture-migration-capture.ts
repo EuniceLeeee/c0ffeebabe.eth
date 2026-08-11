@@ -93,7 +93,7 @@ export async function assertCaptureReproducible(
 ): Promise<string> {
   const first = generateArchitectureMigrationSideCapture(corpus);
   const second = generateArchitectureMigrationSideCapture(corpus);
-  if (JSON.stringify(first) !== JSON.stringify(second)) {
+  if (architectureMigrationSideJson(first) !== architectureMigrationSideJson(second)) {
     throw new Error("capture generation is not reproducible");
   }
   return architectureMigrationSideJson(first);
