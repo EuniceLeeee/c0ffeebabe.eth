@@ -182,6 +182,7 @@
     "family-capability-manifest:check": "node --import tsx src/searcher/build-family-capability-manifest.ts --check",
     "searcher:architecture-migration-parity": "node --import tsx src/searcher/test/architecture-migration-parity.ts",
     "searcher:architecture-migration-parity-runner": "node --import tsx src/searcher/test/architecture-migration-parity-runner.ts",
+    "architecture-migration-parity:run": "node --import tsx src/searcher/run-architecture-migration-parity-cli.ts",
     "searcher:family-owned-action": "node --import tsx src/searcher/test/family-owned-action.ts",
     "searcher:blockscan-state-pool-topology-spike": "node --import tsx src/searcher/test/blockscan-state-pool-topology-spike.ts",
     "searcher:univ2-family-plugin": "node --import tsx src/searcher/test/univ2-family-plugin.ts",

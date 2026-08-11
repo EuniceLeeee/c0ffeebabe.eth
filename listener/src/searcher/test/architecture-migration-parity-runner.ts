@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   ARCHITECTURE_MIGRATION_STAGES,
   COMMON_GRAPH_MIGRATION_STAGES,
@@ -8,6 +11,7 @@ import {
   createArchitectureMigrationProductionCaptureIssuer,
   issueArchitectureMigrationSideCapture,
   runArchitectureMigrationBatchParity,
+  runArchitectureMigrationParityFiles,
   sealArchitectureMigrationBatchInput,
   type ArchitectureMigrationBatchInput,
   type ArchitectureMigrationStage,
@@ -316,10 +320,73 @@ assert(Object.isFrozen(completeReceipt));
 assert(Object.isFrozen(completeReceipt.familyCoverage[0]));
 assert(Object.isFrozen(completeReceipt.commonGraphDelta.edges.changedIds));
 
+await testFileEntryRunsUnitAndSealedBatches();
+
 console.log(
   "architecture-migration-parity-runner PASS " +
     "(22 real Families + sealed independent captures + shared gates)",
 );
+
+async function testFileEntryRunsUnitAndSealedBatches(): Promise<void> {
+  const directory = await mkdtemp(
+    join(tmpdir(), "architecture-migration-parity-files-"),
+  );
+  const raw = fixtureInput({});
+  const baselinePath = join(directory, "baseline.json");
+  const challengerPath = join(directory, "challenger.json");
+  await writeFile(baselinePath, JSON.stringify(raw.baseline));
+  await writeFile(challengerPath, JSON.stringify(raw.challenger));
+
+  const unitReceipt = await runArchitectureMigrationParityFiles({
+    baselinePath,
+    challengerPath,
+    evidenceClass: "unit-contract",
+    mode: "pure-refactor",
+    stateAnchors: raw.stateAnchors,
+    performanceDiagnostics: raw.performanceDiagnostics,
+  });
+  assert.equal(unitReceipt.parityReceipt.aggregateVerdict, "pass");
+  assert.equal(unitReceipt.acceptance.eligible, false);
+
+  const sealedReceipt = await runArchitectureMigrationParityFiles({
+    baselinePath,
+    challengerPath,
+    evidenceClass: "sealed-production",
+    mode: "pure-refactor",
+    stateAnchors: raw.stateAnchors,
+    performanceDiagnostics: raw.performanceDiagnostics,
+    productionCaptureIssuer: productionIssuer,
+  });
+  assert.equal(sealedReceipt.evidenceClass, "sealed-production");
+  assert.equal(sealedReceipt.acceptance.eligible, true);
+  assert.equal(sealedReceipt.parityReceipt.aggregateVerdict, "pass");
+
+  await assert.rejects(
+    runArchitectureMigrationParityFiles({
+      baselinePath,
+      challengerPath,
+      evidenceClass: "sealed-production",
+      mode: "pure-refactor",
+      stateAnchors: raw.stateAnchors,
+      performanceDiagnostics: raw.performanceDiagnostics,
+    }),
+    /requires the trusted production capture issuer/,
+  );
+
+  const malformedPath = join(directory, "malformed.json");
+  await writeFile(malformedPath, JSON.stringify({ not: "a capture" }));
+  await assert.rejects(
+    runArchitectureMigrationParityFiles({
+      baselinePath: malformedPath,
+      challengerPath,
+      evidenceClass: "unit-contract",
+      mode: "pure-refactor",
+      stateAnchors: raw.stateAnchors,
+      performanceDiagnostics: raw.performanceDiagnostics,
+    }),
+    /not a raw architecture migration side capture/,
+  );
+}
 
 function fixtureInput(options: FixtureOptions): ArchitectureMigrationBatchInput {
   return {

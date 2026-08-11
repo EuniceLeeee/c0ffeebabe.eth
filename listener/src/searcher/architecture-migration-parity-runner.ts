@@ -1,5 +1,6 @@
 import capabilityShadowArtifact from
   "./generated/family-capability-shadow.generated.json";
+import { readFile } from "node:fs/promises";
 import {
   judgeArchitectureMigration,
   type ArchitectureMigrationMode,
@@ -491,6 +492,72 @@ export function runArchitectureMigrationBatchParity(
       reasons: Object.freeze(acceptanceReasons),
     },
   });
+}
+
+/**
+ * Production-shaped file entry for the migration parity harness. Reads one
+ * raw side capture JSON per side, then issues/seals through the same trusted
+ * batch path: `sealed-production` requires the caller-supplied production
+ * capture issuer (evidence refs are re-validated at issue time), while
+ * `unit-contract` passes the raw captures through the normal sealing path.
+ */
+export async function runArchitectureMigrationParityFiles(
+  input: {
+    readonly baselinePath: string;
+    readonly challengerPath: string;
+    readonly evidenceClass: ArchitectureMigrationEvidenceClass;
+    readonly mode: ArchitectureMigrationMode;
+    readonly stateAnchors: readonly ArchitectureStateAnchor[];
+    readonly performanceDiagnostics: ArchitectureMigrationBatchInput["performanceDiagnostics"];
+    readonly declaredDeltas?: readonly DeclaredSemanticDelta[];
+    readonly productionCaptureIssuer?: ArchitectureMigrationProductionCaptureIssuer;
+  },
+): Promise<ArchitectureMigrationBatchParityReceipt> {
+  const readSide = async (
+    path: string,
+  ): Promise<RawArchitectureMigrationSideCapture> => {
+    const parsed = JSON.parse(await readFile(path, "utf8")) as unknown;
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      !("closure" in parsed)
+    ) {
+      throw new Error(
+        `${path} is not a raw architecture migration side capture`,
+      );
+    }
+    return parsed as RawArchitectureMigrationSideCapture;
+  };
+  const baseline = await readSide(input.baselinePath);
+  const challenger = await readSide(input.challengerPath);
+  const issuer = input.productionCaptureIssuer;
+  let batch: ArchitectureMigrationBatchInput |
+    SealedProductionArchitectureMigrationBatchInput;
+  if (input.evidenceClass === "sealed-production") {
+    if (issuer === undefined) {
+      throw new Error(
+        "sealed-production evidence requires the trusted production capture issuer",
+      );
+    }
+    batch = {
+      ...input,
+      evidenceClass: "sealed-production",
+      productionCaptureIssuer: issuer,
+      baseline: issueArchitectureMigrationSideCapture(issuer, baseline),
+      challenger: issueArchitectureMigrationSideCapture(issuer, challenger),
+    };
+  } else {
+    const { productionCaptureIssuer: _ignored, ...unitInput } = input;
+    batch = {
+      ...unitInput,
+      evidenceClass: "unit-contract",
+      baseline,
+      challenger,
+    };
+  }
+  return runArchitectureMigrationBatchParity(
+    sealArchitectureMigrationBatchInput(batch),
+  );
 }
 
 interface SideFamilyCoverage {
