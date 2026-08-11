@@ -1419,6 +1419,21 @@ baseline `2bc1c9cb`、impl `14347dd3`，机器证据）：**
 
 可复现性是 sealed parity receipt 的前置条件；本 phase 关闭该子项。
 
+**2026-08-11 parity evidence bundle phase checkpoint（实现 commit
+`1bfc5aa3`，机器证据）：** 新增 `writeParityEvidenceBundle` /
+`assertParityEvidenceBundle` + CLI `architecture-migration-parity:evidence`
+（含 `--check`）：把 baseline/challenger sides + receipt + sha256 manifest
+固化到目录，任一侧篡改即 fail。节点真实制品固化到
+`/opt/MEV-runtime/parity-evidence/univ2-25729060/`：
+
+- baseline `94cdf1d4e0eb...` sha256 `9334fef4e187...`
+- challenger `341cc66642aa...` sha256 `977be165226c...`
+- receipt sha256 `58920624b71d...`，acceptance `eligible=true` / `fail`
+- `--check` 输出 `evidence bundle valid fail 94cdf1d4..341cc666`
+
+这是 Phase A/C 验收的机器可验证证据制品前置；真实 batch pass 仍需 deep
+stages 与其余 Family 覆盖。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
