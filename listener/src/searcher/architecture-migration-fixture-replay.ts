@@ -100,6 +100,24 @@ import { rocksolidExecution } from
   "./venues/protocols/rocksolid-family/execution.js";
 import type { RocksolidDescriptor, RocksolidRoute } from
   "./venues/protocols/rocksolid-family/types.js";
+import { METRONOME_HGUSDC_FAMILY_ID } from
+  "./venues/protocols/metronome-hgusdc-family/manifest.js";
+import {
+  METRONOME_HGUSDC_BINDINGS,
+  METRONOME_HGUSDC_CURVE_INTERFACE,
+  METRONOME_HGUSDC_ERC20_INTERFACE,
+  METRONOME_HGUSDC_ROUTER_INTERFACE,
+  METRONOME_HGUSDC_VAULT_INTERFACE,
+} from "./venues/protocols/metronome-hgusdc-family/shared.js";
+import { METRONOME_HGUSDC_PATH } from "../adapters/metronome-hgusdc.js";
+import { metronomeHgUsdcExact } from
+  "./venues/protocols/metronome-hgusdc-family/exact.js";
+import { metronomeHgUsdcExecution } from
+  "./venues/protocols/metronome-hgusdc-family/execution.js";
+import type {
+  MetronomeHgUsdcDescriptor,
+  MetronomeHgUsdcRoute,
+} from "./venues/protocols/metronome-hgusdc-family/types.js";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -3308,6 +3326,419 @@ export async function captureRocksolidFixtureCase(input: {
   return Object.freeze({
     familyId: ROCKSOLID_FAMILY_ID,
     caseId: input.caseId ?? `rocksolid:${input.source.number}`,
+    inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
+    stateAnchorNumber: input.source.number,
+    implementationClosureHash: summary.definitionBoundaryHash,
+    stages: Object.freeze({
+      instances: instanceStage(instances, evidenceRefs),
+      edges: exercisedStage(edges, evidenceRefs),
+      stateCoverage: exercisedStage([], evidenceRefs),
+      pricedEdges: exercisedStage([], evidenceRefs),
+      prices: exercisedStage(prices, evidenceRefs),
+      failures: exercisedStage([], evidenceRefs),
+      enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
+      exactQuotes: exercisedStage(exactQuotes, evidenceRefs),
+      executionFragments: exercisedStage(executionFragments, evidenceRefs),
+      finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
+    }),
+  });
+}
+
+export const METRONOME_HGUSDC_FIXTURE_TARGET = `0x${"99".repeat(20)}`;
+
+function metronomeHgUsdcSuccessResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+): AdapterRequestResult {
+  const data =
+    request.id.endsWith("-code")
+      ? "0x00"
+      : request.id === "identity-curve-coin-0"
+        ? METRONOME_HGUSDC_CURVE_INTERFACE.encodeFunctionResult("coins", [
+            METRONOME_HGUSDC_BINDINGS.curveIntermediate,
+          ])
+        : request.id === "identity-curve-coin-1"
+          ? METRONOME_HGUSDC_CURVE_INTERFACE.encodeFunctionResult("coins", [
+              METRONOME_HGUSDC_BINDINGS.tokenIn,
+            ])
+          : request.id === "identity-vault-asset"
+            ? METRONOME_HGUSDC_VAULT_INTERFACE.encodeFunctionResult("asset", [
+                METRONOME_HGUSDC_BINDINGS.tokenOut,
+              ])
+            : request.id === "identity-token-in-decimals" ||
+                request.id === "static-token-in-decimals"
+              ? METRONOME_HGUSDC_ERC20_INTERFACE.encodeFunctionResult(
+                  "decimals",
+                  [6],
+                )
+              : request.id.endsWith("curve-quote")
+                ? (() => {
+                    const dx = BigInt(
+                      METRONOME_HGUSDC_CURVE_INTERFACE.decodeFunctionData(
+                        "get_dy",
+                        (request as { readonly data: string }).data,
+                      )[2],
+                    );
+                    return METRONOME_HGUSDC_CURVE_INTERFACE
+                      .encodeFunctionResult("get_dy", [dx]);
+                  })()
+                : request.id.endsWith("vault-preview")
+                  ? (() => {
+                      const shares = BigInt(
+                        METRONOME_HGUSDC_VAULT_INTERFACE.decodeFunctionData(
+                          "previewRedeem",
+                          (request as { readonly data: string }).data,
+                        )[0],
+                      );
+                      return METRONOME_HGUSDC_VAULT_INTERFACE
+                        .encodeFunctionResult("previewRedeem", [shares]);
+                    })()
+                  : (() => {
+                      throw new Error(
+                        "unexpected metronome-hgusdc fixture request " +
+                          request.id,
+                      );
+                    })();
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data,
+  });
+}
+
+class MetronomeHgUsdcFixtureScheduler implements CentralAdapterScheduler {
+  issueExecutor(
+    input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
+  ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
+    const executor = createBoundedRequestExecutor({
+      assertSupported: (requirements) => assert.deepEqual(
+        requirements,
+        input.requirements,
+      ),
+      assertCallerBinding() {},
+      assertWithinBudget: (_familyId, requests) => {
+        assert.deepEqual(requests, input.requests);
+      },
+      execute: async (execution) => Promise.all(execution.requests.map(
+        (request) => metronomeHgUsdcSuccessResult(request, execution.source),
+      )),
+      sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
+    });
+    return Object.freeze({
+      executor,
+      timing: () => ({ queueWaitMs: 0, transportWallMs: 1, attempts: 1 }),
+    });
+  }
+}
+
+function metronomeHgUsdcFixtureRuntime(): CentralAdapterRuntime {
+  let now = 1_000;
+  return {
+    clock: { nowMs: () => now++ },
+    generationFence: new FixtureFence(),
+    callerAuthority: { bind: () => ({}) },
+    policy: {
+      bind: (input) => ({
+        lane: input.stage === "identity" ? "critical-proof" : "background",
+        deadlineAtMs: 100_000,
+        maxAttempts: 1,
+        transportPool: "state-read",
+        fairnessKey: input.subjectKey,
+      }),
+    },
+    budgets: { assertAdmitted() {} },
+    scheduler: new MetronomeHgUsdcFixtureScheduler(),
+  };
+}
+
+async function runMetronomeHgUsdcLifecycle(
+  canonical: CanonicalSource,
+): Promise<AdapterFamilyPublication> {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    METRONOME_HGUSDC_FAMILY_ID,
+  );
+  let publication: AdapterFamilyPublication | null = null;
+  const executePathCalldata = METRONOME_HGUSDC_ROUTER_INTERFACE
+    .encodeFunctionData(
+      "executePath",
+      [METRONOME_HGUSDC_PATH, [1_000_000n], MIGRATION_CAPTURE_EXECUTOR],
+    );
+  const result = await executeAdapterFamilyLifecycleBatch({
+    family,
+    matches: [Object.freeze({
+      matchedPatternId: "metronome-hgusdc-execute-path",
+      observation: Object.freeze({
+        kind: "call" as const,
+        source: canonical,
+        target: METRONOME_HGUSDC_FIXTURE_TARGET,
+        data: executePathCalldata,
+      }),
+    })],
+    source: canonical,
+    generation: canonical.generation,
+    runtime: metronomeHgUsdcFixtureRuntime(),
+    publisher: { publish: (value) => { publication = value; } },
+  });
+  assert(result.publication);
+  assert(publication);
+  return publication;
+}
+
+/**
+ * Runs the metronome-hgusdc router lifecycle over the observed
+ * executePath fixture (msUSD -> frxUSD -> hgUSDC) and emits the canonical
+ * migration capture row. The dependent exact program is driven through both
+ * rounds: curve get_dy then vault previewRedeem.
+ */
+export async function captureMetronomeHgUsdcFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runMetronomeHgUsdcLifecycle(input.source);
+  const evidenceRefs = Object.freeze([
+    `fixture:metronome-hgusdc:${input.source.number}:${input.source.hash}`,
+  ]);
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    METRONOME_HGUSDC_FAMILY_ID,
+  );
+  const edges: RawMigrationStageCapture["items"][number][] = [];
+  const prices: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of instance.routes) {
+      const handle = instance.routeHandles.find((candidate) =>
+        candidate.routeKey === route.routeKey
+      );
+      if (handle === undefined) {
+        throw new Error(
+          `prepared route ${route.routeKey} has no issued handle`,
+        );
+      }
+      const projected = projectFamilyRouteGraph({
+        family,
+        descriptor: instance.descriptor,
+        route,
+        handle,
+      });
+      edges.push(Object.freeze({
+        id: projected.edge.canonicalEdgeId,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: projected.edge.canonicalEdgeId,
+        }),
+      }));
+    }
+    const routeByKey = new Map(
+      instance.routes.map((route) => [route.routeKey, route]),
+    );
+    for (const pricing of instance.pricingInstances) {
+      for (const [routeKey, mid] of pricing.mids) {
+        const route = routeByKey.get(routeKey);
+        if (route === undefined) {
+          throw new Error(
+            `metronome-hgusdc pricing route ${routeKey} is missing`,
+          );
+        }
+        prices.push(Object.freeze({
+          id: `${pricing.stateKey}:${route.tokenIn.toLowerCase()}>` +
+            `${route.tokenOut.toLowerCase()}`,
+          value: Object.freeze({
+            stateKey: pricing.stateKey,
+            mid: Object.freeze({ ...mid }),
+          }) as unknown as RawMigrationStageCapture["items"][number]["value"],
+        }));
+      }
+    }
+  }
+  const enumeratedRoutes: RawMigrationStageCapture["items"][number][] = edges
+    .map((edge) => edge.value as {
+      readonly routeKey: string;
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly canonicalEdgeId: string;
+    })
+    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
+    .map((value, order) => Object.freeze({
+      id: value.canonicalEdgeId,
+      value: Object.freeze({
+        routeKey: value.routeKey,
+        tokenIn: value.tokenIn,
+        tokenOut: value.tokenOut,
+        canonicalEdgeId: value.canonicalEdgeId,
+        order,
+      }),
+    }));
+  const exactMethod = metronomeHgUsdcExact.methods().find(
+    (method) => method.kind === "request-program" &&
+      method.id === "curve-then-vault",
+  );
+  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+    throw new Error("metronome-hgusdc exact request program is missing");
+  }
+  const program = exactMethod.program;
+  const exactByRouteKey = new Map<
+    string,
+    {
+      readonly amountOut: bigint;
+      readonly evidence: import("./venues/protocols/metronome-hgusdc-family/types.js")
+        .MetronomeHgUsdcExactEvidence;
+    }
+  >();
+  const exactQuotes: RawMigrationStageCapture["items"][number][] = [];
+  const edgeByRouteKey = new Map(
+    edges.map((edge) => {
+      const value = edge.value as { readonly routeKey: string };
+      return [value.routeKey, edge] as const;
+    }),
+  );
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const exactInput = Object.freeze({
+        descriptor: instance.descriptor as unknown as MetronomeHgUsdcDescriptor,
+        route: route as unknown as MetronomeHgUsdcRoute,
+        amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
+        source: input.source,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      const initialRequests = program.buildRequests(exactInput);
+      const initialResults = initialRequests.map((request) =>
+        metronomeHgUsdcSuccessResult(request, input.source)
+      );
+      const dependentProgram = program.buildDependentProgram?.({
+        programInput: exactInput,
+        completedRound: 0,
+        initialResults,
+        priorEvidence: Object.freeze([]),
+      });
+      if (dependentProgram === null || dependentProgram === undefined) {
+        throw new Error(
+          `metronome-hgusdc exact route ${route.routeKey} has no dependent round`,
+        );
+      }
+      const dependentResults = dependentProgram.requests.map((request) =>
+        metronomeHgUsdcSuccessResult(request, input.source)
+      );
+      const decoded = program.decode({
+        programInput: exactInput,
+        initialResults,
+        dependentEvidence: Object.freeze([
+          dependentProgram.decode(dependentResults),
+        ]),
+      });
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (edge === undefined) {
+        throw new Error(
+          `metronome-hgusdc exact route ${route.routeKey} has no edge`,
+        );
+      }
+      exactByRouteKey.set(route.routeKey, {
+        amountOut: decoded.amountOut,
+        evidence: decoded.evidence,
+      });
+      exactQuotes.push(Object.freeze({
+        id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
+          amountOut: decoded.amountOut.toString(),
+          feeBps: "0",
+        }),
+      }));
+    }
+  }
+  const executionFragments: RawMigrationStageCapture["items"][number][] = [];
+  const finalSimulations: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const quote = exactByRouteKey.get(route.routeKey);
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (quote === undefined || edge === undefined) {
+        throw new Error(
+          `metronome-hgusdc execution route ${route.routeKey} has no quote`,
+        );
+      }
+      const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
+      const fragment = metronomeHgUsdcExecution.buildFragment({
+        descriptor: instance.descriptor as unknown as MetronomeHgUsdcDescriptor,
+        route: route as unknown as MetronomeHgUsdcRoute,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+        minAmountOut: quote.amountOut,
+        exactEvidence: quote.evidence,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      executionFragments.push(Object.freeze({
+        id: `${edge.id}\u001fexec:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          actionAdapterId: "metronome-hgusdc-exit",
+          executionTarget: METRONOME_HGUSDC_FIXTURE_TARGET,
+          nodeFingerprint: hashCanonical(
+            fragment.nodes as unknown as CanonicalValue,
+          ),
+        }),
+      }));
+      const effects = metronomeHgUsdcExecution.expectedEffects({
+        descriptor: instance.descriptor as unknown as MetronomeHgUsdcDescriptor,
+        route: route as unknown as MetronomeHgUsdcRoute,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+      });
+      if (quote.amountOut <= 0n) {
+        throw new Error(
+          "metronome-hgusdc capture final simulation repayment failed",
+        );
+      }
+      finalSimulations.push(Object.freeze({
+        id: `${edge.id}\u001fsim:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          effectsFingerprint: hashCanonical(
+            effects as unknown as CanonicalValue,
+          ),
+          conservation: "conserved",
+          repayment: "satisfied",
+          evInput: Object.freeze({
+            amountIn: amountIn.toString(),
+            amountOut: quote.amountOut.toString(),
+          }),
+        }),
+      }));
+    }
+  }
+  const instances = publication.instances;
+  const summary = definedFamilyPluginContractSummary(family.plugin);
+  return Object.freeze({
+    familyId: METRONOME_HGUSDC_FAMILY_ID,
+    caseId: input.caseId ?? `metronome-hgusdc:${input.source.number}`,
     inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
     stateAnchorNumber: input.source.number,
     implementationClosureHash: summary.definitionBoundaryHash,

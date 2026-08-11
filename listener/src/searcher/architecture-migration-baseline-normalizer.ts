@@ -19,6 +19,10 @@ import { GOLDX_FAMILY_ID } from
   "./venues/protocols/goldx-family/manifest.js";
 import { ROCKSOLID_FAMILY_ID } from
   "./venues/protocols/rocksolid-family/manifest.js";
+import { METRONOME_HGUSDC_FAMILY_ID } from
+  "./venues/protocols/metronome-hgusdc-family/manifest.js";
+import { metronomeHgUsdcStaticProjection } from
+  "./venues/protocols/metronome-hgusdc-family/shared.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -120,6 +124,18 @@ export interface BaselineRocksolidFacts {
   readonly tokenOut: string;
 }
 
+export interface BaselineMetronomeHgUsdcFacts {
+  readonly familyId: "protocol:metronome-hgusdc";
+  readonly router: string;
+  readonly curve: string;
+  readonly vault: string;
+  readonly tokenIn: string;
+  readonly curveIntermediate: string;
+  readonly tokenOut: string;
+  readonly curveDirection: readonly number[];
+  readonly pathHash: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -139,6 +155,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:wsteth": normalizeBaselineWstethInstanceItem,
         "protocol:goldx": normalizeBaselineGoldxInstanceItem,
         "protocol:rocksolid": normalizeBaselineRocksolidInstanceItem,
+        "protocol:metronome-hgusdc":
+          normalizeBaselineMetronomeHgUsdcInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -152,6 +170,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:wsteth": normalizeBaselineWstethPriceItem,
         "protocol:goldx": normalizeBaselineGoldxPriceItem,
         "protocol:rocksolid": normalizeBaselineRocksolidPriceItem,
+        "protocol:metronome-hgusdc":
+          normalizeBaselineMetronomeHgUsdcPriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -165,6 +185,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:wsteth": normalizeBaselineWstethEdgeItem,
         "protocol:goldx": normalizeBaselineGoldxEdgeItem,
         "protocol:rocksolid": normalizeBaselineRocksolidEdgeItem,
+        "protocol:metronome-hgusdc":
+          normalizeBaselineMetronomeHgUsdcEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -178,6 +200,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:wsteth": normalizeBaselineWstethEnumeratedRouteItem,
         "protocol:goldx": normalizeBaselineGoldxEnumeratedRouteItem,
         "protocol:rocksolid": normalizeBaselineRocksolidEnumeratedRouteItem,
+        "protocol:metronome-hgusdc":
+          normalizeBaselineMetronomeHgUsdcEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -191,6 +215,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:wsteth": normalizeBaselineWstethExactQuoteItem,
         "protocol:goldx": normalizeBaselineGoldxExactQuoteItem,
         "protocol:rocksolid": normalizeBaselineRocksolidExactQuoteItem,
+        "protocol:metronome-hgusdc":
+          normalizeBaselineMetronomeHgUsdcExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -209,6 +235,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:wsteth": normalizeBaselineWstethExecutionFragmentItem,
         "protocol:goldx": normalizeBaselineGoldxExecutionFragmentItem,
         "protocol:rocksolid": normalizeBaselineRocksolidExecutionFragmentItem,
+        "protocol:metronome-hgusdc":
+          normalizeBaselineMetronomeHgUsdcExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -227,6 +255,8 @@ export function normalizeBaselineMigrationItems(
         "protocol:wsteth": normalizeBaselineWstethFinalSimulationItem,
         "protocol:goldx": normalizeBaselineGoldxFinalSimulationItem,
         "protocol:rocksolid": normalizeBaselineRocksolidFinalSimulationItem,
+        "protocol:metronome-hgusdc":
+          normalizeBaselineMetronomeHgUsdcFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -257,6 +287,9 @@ function normalizeByFamily(
       RawMigrationSemanticItem;
     readonly "protocol:rocksolid": (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
+    readonly "protocol:metronome-hgusdc": (
+      item: RawMigrationSemanticItem,
+    ) => RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -273,6 +306,9 @@ function normalizeByFamily(
   }
   if (familyId === "protocol:rocksolid") {
     return handlers["protocol:rocksolid"](item);
+  }
+  if (familyId === "protocol:metronome-hgusdc") {
+    return handlers["protocol:metronome-hgusdc"](item);
   }
   return handlers.default(item);
 }
@@ -3137,6 +3173,347 @@ export function normalizeBaselineRocksolidFinalSimulationItem(
   });
 }
 
+function metronomeHgUsdcFactsGuard(
+  facts: Partial<BaselineMetronomeHgUsdcFacts> | undefined,
+): facts is Required<BaselineMetronomeHgUsdcFacts> {
+  return facts !== undefined &&
+    facts.familyId === "protocol:metronome-hgusdc" &&
+    typeof facts.router === "string" &&
+    typeof facts.curve === "string" &&
+    typeof facts.vault === "string" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.curveIntermediate === "string" &&
+    typeof facts.tokenOut === "string" &&
+    Array.isArray(facts.curveDirection) &&
+    facts.curveDirection.length === 2 &&
+    facts.curveDirection.every((value) => typeof value === "number") &&
+    typeof facts.pathHash === "string";
+}
+
+function metronomeHgUsdcFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineMetronomeHgUsdcFacts>;
+  })?.baselineFacts;
+  if (!metronomeHgUsdcFactsGuard(facts)) return null;
+  return facts;
+}
+
+function deriveMetronomeHgUsdcCanonicalFacts(
+  facts: Required<BaselineMetronomeHgUsdcFacts>,
+): {
+  readonly router: string;
+  readonly curve: string;
+  readonly vault: string;
+  readonly tokenIn: string;
+  readonly curveIntermediate: string;
+  readonly tokenOut: string;
+  readonly lowerRouter: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const router = canonicalAddress(facts.router);
+  const curve = canonicalAddress(facts.curve);
+  const vault = canonicalAddress(facts.vault);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const curveIntermediate = canonicalAddress(facts.curveIntermediate);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const lowerRouter = lowerAddress(router);
+  const pathHash = facts.pathHash.toLowerCase();
+  const descriptor = Object.freeze({
+    router,
+    curve,
+    vault,
+    tokenIn,
+    curveIntermediate,
+    tokenOut,
+    pathHash,
+  }) as unknown as Parameters<typeof metronomeHgUsdcStaticProjection>[0];
+  const bindingFingerprint = hashCanonical(
+    metronomeHgUsdcStaticProjection(descriptor),
+  );
+  const venueIdentityHash = hashCanonical(Object.freeze({
+    kind: "address-path-protocol",
+    target: lowerRouter,
+    pathHash,
+  }));
+  const routeKeyValue =
+    `protocol:metronome-hgusdc\u001f${lowerRouter}`;
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "protocol:metronome-hgusdc",
+    lowerRouter,
+    lowerRouter,
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    router,
+    curve,
+    vault,
+    tokenIn,
+    curveIntermediate,
+    tokenOut,
+    lowerRouter,
+    lowerTokenIn,
+    lowerTokenOut,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineMetronomeHgUsdcEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = metronomeHgUsdcFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveMetronomeHgUsdcCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineMetronomeHgUsdcEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineMetronomeHgUsdcEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "metronome-hgusdc baseline enumerated route item must carry a " +
+        "non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineMetronomeHgUsdcInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = metronomeHgUsdcFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveMetronomeHgUsdcCanonicalFacts(facts);
+  const descriptor = Object.freeze({
+    router: derived.router,
+    curve: derived.curve,
+    vault: derived.vault,
+    tokenIn: derived.tokenIn,
+    curveIntermediate: derived.curveIntermediate,
+    tokenOut: derived.tokenOut,
+    pathHash: facts.pathHash.toLowerCase(),
+  }) as unknown as Parameters<typeof metronomeHgUsdcStaticProjection>[0];
+  const staticBindingFingerprint = hashCanonical({
+    capability: METRONOME_HGUSDC_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: metronomeHgUsdcStaticProjection(descriptor),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerRouter,
+    value: Object.freeze({
+      familyId: "protocol:metronome-hgusdc",
+      instanceKey: derived.lowerRouter,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineMetronomeHgUsdcPriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = metronomeHgUsdcFactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveMetronomeHgUsdcCanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "metronome-hgusdc-exit",
+    instanceKey: derived.lowerRouter,
+    target: derived.router,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "protocol" as const,
+    protocolAction: "redeem" as const,
+    edgeKind: "protocol" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.lowerRouter,
+      mid: Object.freeze({
+        kind: "protocol",
+        pool: derived.router,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineMetronomeHgUsdcExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = metronomeHgUsdcFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveMetronomeHgUsdcCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineMetronomeHgUsdcExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = metronomeHgUsdcFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveMetronomeHgUsdcCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "metronome-hgusdc-exit",
+      executionTarget: derived.router,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineMetronomeHgUsdcFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = metronomeHgUsdcFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveMetronomeHgUsdcCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -3170,4 +3547,9 @@ const GOLDX_CATALOG_FAMILY =
 const ROCKSOLID_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ROCKSOLID_FAMILY_ID,
+  );
+
+const METRONOME_HGUSDC_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    METRONOME_HGUSDC_FAMILY_ID,
   );

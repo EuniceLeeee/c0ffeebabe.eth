@@ -95,6 +95,11 @@ def main() -> None:
             for key in ("target", "asset", "receipt", "sampleShares"):
                 if key in case:
                     descriptor[key] = case[key]
+        elif case["family"] == "protocol:metronome-hgusdc":
+            for key in ("target", "curve", "vault", "tokenIn",
+                        "curveIntermediate", "tokenOut", "amountIn"):
+                if key in case:
+                    descriptor[key] = case[key]
         else:
             for key in ("pool", "tokenA", "tokenB", "reserves", "fee",
                         "tickSpacing", "liquidity", "sqrtPriceX96"):

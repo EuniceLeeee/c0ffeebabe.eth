@@ -15,6 +15,7 @@ import {
   captureWstethFixtureCase,
   captureGoldxFixtureCase,
   captureRocksolidFixtureCase,
+  captureMetronomeHgUsdcFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -144,6 +145,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureRocksolidFixtureCase({
           source,
           caseId: `rocksolid:${source.number}`,
+        }));
+      } else if (item.family === "protocol:metronome-hgusdc") {
+        familyCases.push(await captureMetronomeHgUsdcFixtureCase({
+          source,
+          caseId: `metronome-hgusdc:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);
