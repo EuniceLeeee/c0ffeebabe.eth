@@ -2280,6 +2280,21 @@ commit 见下，shadow/disabled-path 硬化，非 cutover）：**
   完整 listener build 全过；该 gate 是 §18.3 Phase E 验收前置之一，不
   改变 Phase D cutover 状态。
 
+**2026-08-12 default-authority cutover gate contract checkpoint（实现
+commit 见下，fail-closed 合同，不切换 authority）：**
+
+- 新增 `evaluateDefaultAuthorityCutoverGate`（§18.3.6/§16）：只有 strict
+  consumer 为 active 生产路径、legacy registry 不再 co-active（禁止双
+  权威）、batch parity pass、held-out negatives 全 mismatch、
+  systemic-live gate pass 时才返回 `ready`；任一前置缺失返回
+  `not-eligible` + 具体 reasons，全部 fail closed；
+- 新增合同测试 `searcher:default-authority-cutover-gate`：覆盖 ready、
+  strict-inactive、dual-authority、batch-parity fail、held-out fail、
+  systemic-live fail 六态，并断言输出冻结；
+- 当前 wiring 状态（strict consumer 仅 diagnostic、legacy 仍是权威）
+  经该 gate 如实判为 not-eligible，不虚报 cutover；
+- 证据：该合同 + 完整 listener build 通过；默认 authority 仍未切换。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
