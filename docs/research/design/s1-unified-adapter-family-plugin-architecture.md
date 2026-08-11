@@ -1567,6 +1567,30 @@ common-Graph 全阶段关闭）：**
 子项，common-Graph gate 已全绿；剩余：univ2 family 行 instance 身份归一
 （令该行转 pass）、其余 21 个 Family 的 capture 覆盖。
 
+**2026-08-11 univ2 family-level pass + common-Graph gate checkpoint（实现
+commits impl `e25bc542`、baseline `af676bbe`，机器证据）：**
+
+- baseline exporter 的 instance/price item 增加 `baselineFacts`；impl
+  normalizer 新增 `instances`（用冻结 catalog 的
+  `instance.contentHash` + `staticBindingProjection` 重算
+  `staticBindingFingerprint`）与 `prices`（重建 univ2 routeEdge/mid，
+  bigint 以 string 形态与 JSON 侧一致）两路归一；
+- trusted comparator 的 `nonMigratedFamilies` 双侧均为 null 时按 vacuous
+  pass 处理（没有声明非迁移 Family 不是 gate 失败）；
+- 合同证据：`architecture-migration-baseline-normalizer` PASS、
+  `searcher:architecture-migration-capture` PASS（local real-reserves 双侧
+  univ2 family 行 pass + aggregate `partial`）、parity-runner/parity/
+  evidence PASS、完整 listener build 通过；
+- 节点 SSM `467bb405` 在 impl `e25bc542` / baseline `af676bbe` 重跑真实
+  corpus：`univ2-standard` family 行 **pass**；commonGraph 五 stage 全空 +
+  `assembledCommonGraphParity=true`；`nonMigratedFamilySemanticHashParity
+  =true`；`aggregateVerdict=partial`（21 个未覆盖 Family）、acceptance
+  `eligible=true`/`verdict=partial`。
+
+本 phase 关闭 univ2-standard 的 family 行语义 parity 与 common-Graph gate；
+剩余：其余 21 个 Family 的 capture 覆盖，令 batch matrix 全部 pass 后
+aggregate 转 pass。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
