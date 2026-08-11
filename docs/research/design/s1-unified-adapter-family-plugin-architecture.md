@@ -1506,6 +1506,34 @@ commits impl `b1f3f817`、baseline `c90e1eb4`，机器证据）：**
 本 phase 关闭"双侧 enumeration parity"子项；剩余：exact/execution/
 final-sim 双侧真实接线与其余 21 个 Family 的 capture 覆盖。
 
+**2026-08-11 univ2 exactQuotes bilateral phase checkpoint（实现 commits
+impl `b521a204`、baseline `1fec46cd`，机器证据）：**
+
+- 固定测试 amount `1_000_000`（`UNIV2_CAPTURE_EXACT_AMOUNT_IN`）双侧
+  exact quote：challenger 走 univ2 exact request program
+  （`exact-reserves` → `quoteV2ExactInput`），baseline 用冻结 ds 同一
+  `quoteV2ExactInput` 与同一 reserves/fee；item id 统一为
+  `canonicalEdgeId + "\u001fexact:" + amountIn`，value 统一为
+  `{routeKey, tokenIn, tokenOut, canonicalEdgeId, amountIn, amountOut,
+  feeBps}`；
+- baseline exporter 双侧 exactQuotes 仅在 reserves 提供时 `exercised`，
+  否则诚实 `framework-blocked`；normalizer 扩展覆盖 `exactQuotes` stage
+  （facts 缺失透传、amount 字段缺失透传、fee 与 factory rule 矛盾时
+  fail closed）；
+- 合同证据：`architecture-migration-baseline-normalizer` PASS、
+  `searcher:architecture-migration-capture` PASS（含 real-reserves 双侧
+  local parity：edges/enumeratedRoutes/exactQuotes delta 全空）、
+  parity-runner/parity/evidence PASS、完整 listener build 通过；
+- 节点 SSM `4b6e53a3` 在 impl `b521a204` / baseline `1fec46cd` 重跑真实
+  corpus：`commonGraphDelta.exactQuotes={missingIds:[], addedIds:[],
+  changedIds:[]}`，`edges`/`enumeratedRoutes` 仍全空；blocked stages
+  仅剩 `executionFragments`/`finalSimulations`，`eligible=true`、
+  verdict `fail`、univ2 `framework-blocked`（仅上述两个 deep stage 未
+  接线）。
+
+本 phase 关闭"双侧 exact parity"子项；剩余：execution/final-sim 双侧真实
+接线与其余 21 个 Family 的 capture 覆盖。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
