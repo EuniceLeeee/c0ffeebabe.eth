@@ -741,6 +741,42 @@ async function main(): Promise<void> {
     assertGenerationCurrent: () => {},
   }), /not prepared by this root/);
 
+  // Explicit zero row: a resolved route Family with zero staged instances
+  // must publish zero edges/handles and advance the revision without
+  // fabricating an inventory or route-handle index.
+  const zeroHarness = publicationRoot();
+  const zeroRoot = zeroHarness.root;
+  const zeroSource = source(401);
+  const zeroPublication = Object.freeze({
+    familyId: UNIV2_FAMILY_ID,
+    source: zeroSource,
+    generation: zeroSource.generation,
+    instances: Object.freeze([]),
+  }) as unknown as Awaited<ReturnType<typeof lifecycle>>;
+  const zeroStage = zeroRoot.stageRouteFamily({
+    publication: zeroPublication,
+  });
+  assert.equal(zeroStage.instances.length, 0);
+  const zeroPrepared = zeroRoot.prepare({
+    source: zeroSource,
+    previous: null,
+    stages: stages({
+      root: zeroRoot,
+      canonical: zeroSource,
+      route: zeroStage,
+    }),
+    sourceAnchors: anchors({
+      canonical: zeroSource,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+  });
+  await publish(zeroRoot, null, zeroPrepared);
+  const zeroCommitted = zeroRoot.capture()!;
+  assert.equal(zeroCommitted.views.edges.length, 0);
+  assert.equal(zeroCommitted.views.handleByCanonicalEdgeId.size, 0);
+  assert.equal(zeroCommitted.views.graphRoutes.length, 0);
+  assert.equal(zeroCommitted.envelope.snapshot.revision, 1);
+
   console.log("adapter-family strict shadow catalog publication tests passed");
 }
 
