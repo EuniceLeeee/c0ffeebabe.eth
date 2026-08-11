@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import {
   architectureMigrationSideJson,
   buildFixtureCaptureCorpus,
@@ -6,6 +7,16 @@ import {
 } from "./architecture-migration-capture.js";
 import { captureUniv2RealCase } from
   "./architecture-migration-fixture-replay.js";
+
+function currentCommit(): string {
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return "unknown";
+  }
+}
 
 async function main(): Promise<void> {
   const descriptorPath = process.argv[2];
@@ -40,7 +51,7 @@ async function main(): Promise<void> {
   const corpus = {
     ...buildFixtureCaptureCorpus({
       captureId: descriptor.captureId ?? "challenger",
-      commit: descriptor.commit ?? "6368e2778fb0a945d828dc1ef36a3100a10e9122",
+      commit: descriptor.commit ?? currentCommit(),
       source,
       familyCases: [familyCase],
     }),
