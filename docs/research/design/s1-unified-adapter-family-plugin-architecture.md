@@ -69,7 +69,7 @@ authority 混在一起：
 |---|---|---|
 |Phase 0 共享 substrate|physical-settlement ownership 与 published/memo store separation 已有 change-set 实现和定向 unit contract；已绑定 committed HEAD `934eed7a`，Phase 0 回归集（lifecycle-content-cache、catalog-publication、state-carry-proof、discovery-checkpoint、完整 build）全过|即使通过也不能据此宣称 deployed/live；Phase 0 是后续 parity 的前置，不与 Family 迁移混同|
 |Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在，`7ba6f9d3` 已落地 trusted sealed-production capture issuer（unit runner 继续拒绝自封 `sealed-production`）|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
-|Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
+|Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立；`1527c116` 为 exact quote cache 补独立 issuer/key 绑定/LRU/eviction 合同测试|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
 |Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
 |Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS、`c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract、`642373c1` 的中央 value 深冻结 + StateInstance mutation/carry shadow proof，以及 `9d954df4` 的 Credit 独立 execution handle shadow issuer 等 runtime slice 已有 unit/shadow gate|durable checkpoint 的 production composition 与 strict catalog receipt coupling、production point-in-time enumerator、closure receipt 在 strict catalog 内的一次性消费与 staged exact-set coupling、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
 |Phase E cleanup|尚未开始|legacy registry/API/schema/revision/cache/flag authority 仍在；只有 §18.3 与 §20.2.6 全部门通过后才能删除|
@@ -82,6 +82,14 @@ commit、测试/receipt 和实际 production consumer closure。
 `searcher:adapter-family-state-carry-proof`、`searcher:adapter-family-discovery-checkpoint`
 与完整 listener build 全部通过。该绑定只证明 Phase 0 substrate 在当前 HEAD 的合同回归；
 不宣称 deployed/live，也不改变 Phase D/E 未完成状态。
+
+**2026-08-11 Phase B exact cache contract checkpoint（实现 commit
+`1527c116b6b096693f6b2b0315fb063dcfd69b0f`）：** 新增
+`searcher:adapter-family-exact-quote-cache` 合同：cache key 绑定全部地址字段
+（familyRuntimeIdentity/capability/compatibility/method/request/amount/executor/source hash），
+generation 刻意不进 key；store/lookup/LRU/eviction、只接受 source-bound 成功结果与非空
+SHA-256 roundFingerprints、中央签发身份与冻结输出。证据：该测试 PASS + 完整 listener build。
+仍是 shadow 合同，不改变 Phase D 未完成状态。
 
 ## 1. 一句话定义与完整流水线
 
