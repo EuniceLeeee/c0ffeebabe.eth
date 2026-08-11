@@ -1997,6 +1997,29 @@ impl `7b5a1a84`、baseline `426eddf8`，本地机器证据）：**
 `custom-swap:dodo-v2`、`fluid-dex` + 4 个 protocol 族
 （astra/eigenpie/ethertoken/self-burn）。
 
+**2026-08-12 ethertoken-native-redeem bilateral parity phase checkpoint
+（实现 commits impl `4afd4d2f`、baseline `242edbed`，本地机器证据）：**
+
+- fixture runtime 扩展 verified-actor/executor caller authority 支持
+  native-delta 效果集；`identity-active-withdraw` 与 `exact-withdraw` 的
+  effect-delta 结果带 token/native/total-supply delta（1:1 精确 burn）；
+- impl `captureEtherTokenNativeRedeemFixtureCase`（observed withdraw、
+  custom identity base→active、total-supply pricing、两节点
+  redeem+WETH deposit execution fragment）全部 10 stage `exercised`；
+  normalizer 六类 stage（`address-protocol` venue、token instance、
+  withdraw selector 静态投影、native anchor）落地；
+- baseline exporter `captureEtherTokenNativeRedeemBaselineCase`
+  （1:1 native out、total-supply pricing 1e18、双节点 canonicalHash）；
+- 本地跨分支 parity（block `25729060`，十四族 manifest）：十四族全部
+  **pass**、commonGraph 五 stage delta 全空；
+  `searcher:architecture-migration-capture` 合同测试与完整
+  `npm run build` 全部通过；仍是 sealed-capture/shadow receipt，不是
+  production cutover 或 live evidence。
+
+剩余 8 族：`credit:fluid`、`curve-underlying`、`custom-swap:angstrom-v4`、
+`custom-swap:dodo-v2`、`fluid-dex` + 3 个 protocol 族
+（astra/eigenpie/self-burn）。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
