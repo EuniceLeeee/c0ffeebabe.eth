@@ -1,5 +1,8 @@
 import { hashCanonical } from "./venues/canonical-value.js";
-import { lowerAddress } from "./venues/swaps/univ2-family/codec.js";
+import {
+  canonicalAddress,
+  lowerAddress,
+} from "./venues/swaps/univ2-family/codec.js";
 import { uniV2FeeRuleForFactory } from
   "./venues/swaps/univ2-family/fee-rule.js";
 import type {
@@ -79,13 +82,13 @@ export function normalizeBaselineUniv2EdgeItem(
   ) {
     return item;
   }
-  const pool = facts.pool.toLowerCase();
-  const token0 = facts.token0.toLowerCase();
-  const token1 = facts.token1.toLowerCase();
-  const tokenIn = facts.tokenIn.toLowerCase();
-  const tokenOut = facts.tokenOut.toLowerCase();
-  const factory = facts.factory.toLowerCase();
-  const reversePool = facts.reversePool.toLowerCase();
+  const pool = canonicalAddress(facts.pool);
+  const token0 = canonicalAddress(facts.token0);
+  const token1 = canonicalAddress(facts.token1);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const factory = canonicalAddress(facts.factory);
+  const reversePool = canonicalAddress(facts.reversePool);
   const feeRule = uniV2FeeRuleForFactory(factory);
   if (BigInt(facts.feeBps) !== feeRule.feeBps) {
     throw new Error(
@@ -100,15 +103,18 @@ export function normalizeBaselineUniv2EdgeItem(
     feeRule: Object.freeze({ ...feeRule }),
     factoryBinding: Object.freeze({ factory, reversePool }),
   });
+  const lowerPool = lowerAddress(pool);
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
   const venueIdentityHash = hashCanonical({
     kind: "address-pool",
-    pool: lowerAddress(pool),
+    pool: lowerPool,
   });
   const routeKeyValue = [
     "univ2-standard",
-    pool,
-    tokenIn,
-    tokenOut,
+    lowerPool,
+    lowerTokenIn,
+    lowerTokenOut,
   ].join("\u001f");
   const executionVariantKey = hashCanonical({
     namespace: "adapter-family-graph-route-v1",
@@ -118,9 +124,9 @@ export function normalizeBaselineUniv2EdgeItem(
   });
   const canonicalId = [
     "univ2-standard",
-    pool,
-    pool,
-    `${tokenIn}>${tokenOut}`,
+    lowerPool,
+    lowerPool,
+    `${lowerTokenIn}>${lowerTokenOut}`,
     executionVariantKey,
   ].join("\u001f");
   return Object.freeze({
