@@ -254,7 +254,8 @@
     "searcher:v2-lineage-refresh": "node --import tsx src/searcher/test/v2-lineage-refresh.ts",
     "searcher:standing-guard": "node --import tsx src/searcher/test/standing-guard.ts",
     "searcher:live": "tsx src/searcher/main.ts",
-    "searcher:protocol-loop": "tsx src/searcher/test/protocol-loop-execute.ts"
+    "searcher:protocol-loop": "tsx src/searcher/test/protocol-loop-execute.ts",
+    "searcher:metronome-hgusdc-lifecycle": "node --import tsx src/searcher/test/metronome-hgusdc-lifecycle-smoke.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

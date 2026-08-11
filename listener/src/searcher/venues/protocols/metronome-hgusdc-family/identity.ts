@@ -41,9 +41,32 @@ export const metronomeHgUsdcIdentity = {
     kind: "custom" as const,
     lineageId: METRONOME_HGUSDC_LINEAGE_ID,
     applies: () => true,
-    requirements: () => ({
-      transports: ["get-code" as const, "eth-call" as const],
-    }),
+    requirements(
+      input: IdentityStepInput<MetronomeHgUsdcCandidate, unknown>,
+    ) {
+      const evidence = identityEvidence(input.evidence);
+      if (evidence === undefined) {
+        return {
+          transports: ["get-code" as const, "eth-call" as const],
+        };
+      }
+      if (evidence.phase === "base" || evidence.phase === "curve") {
+        // The observed-path proof reads the Curve get_dy and vault
+        // previewRedeem over eth-call before the final active step.
+        return { transports: ["eth-call" as const] };
+      }
+      return {
+        transports: ["effect-delta-simulation" as const],
+        caller: "verified-actor" as const,
+        effects: [
+          "return-data" as const,
+          "token-delta" as const,
+          "native-delta" as const,
+          "total-supply-delta" as const,
+          "logs" as const,
+        ],
+      };
+    },
     buildRequests(input: IdentityStepInput<MetronomeHgUsdcCandidate, unknown>) {
       const evidence = identityEvidence(input.evidence);
       if (evidence === undefined) return baseRequests(input.candidate);

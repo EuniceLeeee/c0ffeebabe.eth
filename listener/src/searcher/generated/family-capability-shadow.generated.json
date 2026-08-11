@@ -3754,7 +3754,7 @@
         "familyId": "protocol:metronome-hgusdc",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "6df4c748c8d574f03c7d5f0f4e2f7c1cf8f652578138ec87ee1c961d9af14c0b",
+        "contentHash": "60866293e82607b078b5bfef09ded91a8fc68915f3fd64d473352034faac6696",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -6261,5 +6261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "d0a3675c1f73a920d0e7fd93b0a5d7dcf6dbd9c662e0f6c55299b6b30dbaf19b"
+  "artifactHash": "9a8d91ce299433211ab4920b1600ffaa5df89dee8975fea896d1bd1af82b51e7"
 }
