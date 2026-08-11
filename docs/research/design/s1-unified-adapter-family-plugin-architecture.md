@@ -1482,6 +1482,30 @@ commits impl `70f0cf0b`/`8df6797b`、baseline `9d198bcc`，机器证据）：**
 （enumeration/exact/execution/final-sim）双侧真实接线与其余 21 个 Family
 的 capture 覆盖。
 
+**2026-08-11 univ2 enumeratedRoutes bilateral phase checkpoint（实现
+commits impl `b1f3f817`、baseline `c90e1eb4`，机器证据）：**
+
+- fixture replay 与 baseline exporter 双侧 `enumeratedRoutes` 均从
+  exercised edges 派生（按 routeKey 排序后带 `order`），normalizer 扩展
+  覆盖 `enumeratedRoutes` stage（缺失 `order` 时 fail closed）；
+- common-Graph 双侧 enumeratedRoutes 为 `exercised`，`buildUniv2CommonGraph`
+  与 baseline `buildBaselineUniv2Side` 同步接线；
+- 合同证据：`architecture-migration-baseline-normalizer` PASS、
+  `searcher:architecture-migration-capture` PASS、
+  `searcher:architecture-migration-parity-runner` PASS、
+  `searcher:architecture-migration-parity` PASS、
+  `searcher:architecture-migration-evidence` PASS、完整 listener build
+  通过；
+- 节点 SSM `a5d56b91` 在 impl `b1f3f817` / baseline `c90e1eb4` 重跑真实
+  corpus：`commonGraphDelta.enumeratedRoutes={missingIds:[], addedIds:[],
+  changedIds:[]}`，`edges` 仍全空；blocked stages 仅剩
+  `exactQuotes`/`executionFragments`/`finalSimulations`，
+  `eligible=true`、verdict `fail`、univ2 `framework-blocked`（仅上述三个
+  deep stage 未接线）。
+
+本 phase 关闭"双侧 enumeration parity"子项；剩余：exact/execution/
+final-sim 双侧真实接线与其余 21 个 Family 的 capture 覆盖。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
