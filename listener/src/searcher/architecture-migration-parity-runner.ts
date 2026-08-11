@@ -589,6 +589,9 @@ export function validateArchitectureMigrationRequestFile(
       throw new Error(`${key} must be a non-empty path`);
     }
   }
+  if (candidate.baselinePath === candidate.challengerPath) {
+    throw new Error("baseline and challenger paths must be distinct");
+  }
   if (
     candidate.evidenceClass !== "unit-contract" &&
     candidate.evidenceClass !== "sealed-production"
@@ -603,6 +606,25 @@ export function validateArchitectureMigrationRequestFile(
   }
   if (!Array.isArray(candidate.stateAnchors) || candidate.stateAnchors.length === 0) {
     throw new Error("stateAnchors must be a non-empty array");
+  }
+  for (const anchor of candidate.stateAnchors) {
+    if (anchor === null || typeof anchor !== "object") {
+      throw new Error("stateAnchors entries must be objects");
+    }
+    const value = anchor as Partial<ArchitectureStateAnchor>;
+    if (
+      typeof value.number !== "number" ||
+      !Number.isSafeInteger(value.number) ||
+      value.number < 0 ||
+      typeof value.hash !== "string" ||
+      value.hash.trim() === "" ||
+      typeof value.stateRoot !== "string" ||
+      value.stateRoot.trim() === ""
+    ) {
+      throw new Error(
+        `invalid stateAnchor ${String(value.number ?? "?")}`,
+      );
+    }
   }
   const diagnostics = candidate.performanceDiagnostics;
   if (diagnostics === null || typeof diagnostics !== "object") {
@@ -655,7 +677,9 @@ export function buildArchitectureMigrationSideCapture(input: {
       "productionPolicyHash",
     ),
     corpusHash: nonempty(input.corpusHash, "corpusHash"),
-    evidenceRefs: Object.freeze([...input.evidenceRefs]),
+    evidenceRefs: Object.freeze(
+      [...new Set(input.evidenceRefs)].sort(),
+    ),
   });
   return Object.freeze({
     closure,
