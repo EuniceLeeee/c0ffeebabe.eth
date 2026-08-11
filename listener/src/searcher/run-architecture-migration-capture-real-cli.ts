@@ -21,6 +21,7 @@ import {
   captureErc4626FixtureCase,
   captureEtherTokenNativeRedeemFixtureCase,
   captureSelfBurnNativeFixtureCase,
+  captureAstraMultiTokenFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -180,6 +181,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureSelfBurnNativeFixtureCase({
           source,
           caseId: `self-burn-native:${source.number}`,
+        }));
+      } else if (item.family === "protocol:astra-multitoken") {
+        familyCases.push(await captureAstraMultiTokenFixtureCase({
+          source,
+          caseId: `astra-multitoken:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

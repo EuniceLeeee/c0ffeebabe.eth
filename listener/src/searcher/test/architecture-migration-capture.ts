@@ -31,6 +31,7 @@ import {
   captureErc4626FixtureCase,
   captureEtherTokenNativeRedeemFixtureCase,
   captureSelfBurnNativeFixtureCase,
+  captureAstraMultiTokenFixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -818,6 +819,23 @@ async function testSelfBurnNativeFixtureCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.items.length, 1);
 }
 
+async function testAstraMultiTokenFixtureCase(): Promise<void> {
+  const familyCase = await captureAstraMultiTokenFixtureCase({ source: SOURCE });
+  assert.equal(familyCase.familyId, "protocol:astra-multitoken");
+  for (const stage of ARCHITECTURE_MIGRATION_STAGES) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `astra-multitoken fixture ${stage} must be exercised`,
+    );
+  }
+  assert.equal(familyCase.stages.edges?.items.length, 2);
+  assert.equal(familyCase.stages.prices?.items.length, 2);
+  assert.equal(familyCase.stages.exactQuotes?.items.length, 2);
+  assert.equal(familyCase.stages.executionFragments?.items.length, 2);
+  assert.equal(familyCase.stages.finalSimulations?.items.length, 2);
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -1166,6 +1184,7 @@ async function main(): Promise<void> {
   await testErc4626FixtureCase();
   await testEtherTokenNativeRedeemFixtureCase();
   await testSelfBurnNativeFixtureCase();
+  await testAstraMultiTokenFixtureCase();
   console.log("architecture-migration capture harness PASS");
 }
 

@@ -43,6 +43,10 @@ import { SELF_BURN_NATIVE_FAMILY_ID } from
   "./venues/protocols/self-burn-native-family/manifest.js";
 import { selfBurnNativeStaticProjection } from
   "./venues/protocols/self-burn-native-family/shared.js";
+import { ASTRA_MULTITOKEN_FAMILY_ID } from
+  "./venues/protocols/astra-multitoken-family/manifest.js";
+import { astraStaticBindingProjection } from
+  "./venues/protocols/astra-multitoken-family/binding.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -210,6 +214,31 @@ export interface BaselineSelfBurnNativeFacts {
   readonly tokenOut: string;
 }
 
+export interface BaselineAstraTokenWeightFacts {
+  readonly token: string;
+  readonly weight: string;
+  readonly codeHash: string;
+}
+
+export interface BaselineAstraBehaviorBindingFacts {
+  readonly interfaceMode: "erc165" | "legacy-abi";
+  readonly changesEnabled: true;
+  readonly totalPercents: string;
+  readonly changeFee: string;
+  readonly inLendingMode: string | null;
+  readonly activeProof: "registry-bound-effect-delta";
+}
+
+export interface BaselineAstraMultiTokenFacts {
+  readonly familyId: "protocol:astra-multitoken";
+  readonly target: string;
+  readonly tokens: readonly string[];
+  readonly tokenWeights: readonly BaselineAstraTokenWeightFacts[];
+  readonly behaviorBinding: BaselineAstraBehaviorBindingFacts;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -240,6 +269,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineEtherTokenNativeRedeemInstanceItem,
         "protocol:self-burn-native":
           normalizeBaselineSelfBurnNativeInstanceItem,
+        "protocol:astra-multitoken":
+          normalizeBaselineAstraMultiTokenInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -264,6 +295,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineEtherTokenNativeRedeemPriceItem,
         "protocol:self-burn-native":
           normalizeBaselineSelfBurnNativePriceItem,
+        "protocol:astra-multitoken":
+          normalizeBaselineAstraMultiTokenPriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -288,6 +321,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineEtherTokenNativeRedeemEdgeItem,
         "protocol:self-burn-native":
           normalizeBaselineSelfBurnNativeEdgeItem,
+        "protocol:astra-multitoken":
+          normalizeBaselineAstraMultiTokenEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -313,6 +348,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineEtherTokenNativeRedeemEnumeratedRouteItem,
         "protocol:self-burn-native":
           normalizeBaselineSelfBurnNativeEnumeratedRouteItem,
+        "protocol:astra-multitoken":
+          normalizeBaselineAstraMultiTokenEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -337,6 +374,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineEtherTokenNativeRedeemExactQuoteItem,
         "protocol:self-burn-native":
           normalizeBaselineSelfBurnNativeExactQuoteItem,
+        "protocol:astra-multitoken":
+          normalizeBaselineAstraMultiTokenExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -367,6 +406,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineEtherTokenNativeRedeemExecutionFragmentItem,
         "protocol:self-burn-native":
           normalizeBaselineSelfBurnNativeExecutionFragmentItem,
+        "protocol:astra-multitoken":
+          normalizeBaselineAstraMultiTokenExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -397,6 +438,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineEtherTokenNativeRedeemFinalSimulationItem,
         "protocol:self-burn-native":
           normalizeBaselineSelfBurnNativeFinalSimulationItem,
+        "protocol:astra-multitoken":
+          normalizeBaselineAstraMultiTokenFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -445,6 +488,9 @@ function normalizeByFamily(
     readonly "protocol:self-burn-native": (
       item: RawMigrationSemanticItem,
     ) => RawMigrationSemanticItem;
+    readonly "protocol:astra-multitoken": (
+      item: RawMigrationSemanticItem,
+    ) => RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -479,6 +525,9 @@ function normalizeByFamily(
   }
   if (familyId === "protocol:self-burn-native") {
     return handlers["protocol:self-burn-native"](item);
+  }
+  if (familyId === "protocol:astra-multitoken") {
+    return handlers["protocol:astra-multitoken"](item);
   }
   return handlers.default(item);
 }
@@ -5298,6 +5347,370 @@ export function normalizeBaselineSelfBurnNativeFinalSimulationItem(
   });
 }
 
+function astraMultiTokenFactsGuard(
+  facts: Partial<BaselineAstraMultiTokenFacts> | undefined,
+): facts is Required<BaselineAstraMultiTokenFacts> {
+  return facts !== undefined &&
+    facts.familyId === "protocol:astra-multitoken" &&
+    typeof facts.target === "string" &&
+    Array.isArray(facts.tokens) &&
+    facts.tokens.every((token) => typeof token === "string") &&
+    Array.isArray(facts.tokenWeights) &&
+    facts.tokenWeights.every((binding) =>
+      typeof binding?.token === "string" &&
+      typeof binding?.weight === "string" &&
+      typeof binding?.codeHash === "string"
+    ) &&
+    typeof facts.behaviorBinding === "object" &&
+    facts.behaviorBinding !== null &&
+    (facts.behaviorBinding.interfaceMode === "erc165" ||
+      facts.behaviorBinding.interfaceMode === "legacy-abi") &&
+    facts.behaviorBinding.changesEnabled === true &&
+    typeof facts.behaviorBinding.totalPercents === "string" &&
+    typeof facts.behaviorBinding.changeFee === "string" &&
+    (facts.behaviorBinding.inLendingMode === null ||
+      typeof facts.behaviorBinding.inLendingMode === "string") &&
+    facts.behaviorBinding.activeProof === "registry-bound-effect-delta" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function astraMultiTokenFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineAstraMultiTokenFacts>;
+  })?.baselineFacts;
+  if (!astraMultiTokenFactsGuard(facts)) return null;
+  return facts;
+}
+
+function astraDescriptorFor(
+  facts: Required<BaselineAstraMultiTokenFacts>,
+) {
+  const target = canonicalAddress(facts.target);
+  return Object.freeze({
+    familyId: "protocol:astra-multitoken",
+    lineageId: "astra-multitoken:observed-active-registry",
+    instanceKey: lowerAddress(target),
+    target,
+    registryBinding: Object.freeze({
+      registryContract: target,
+      tokens: Object.freeze(facts.tokens.map(canonicalAddress)),
+      tokenWeights: Object.freeze(facts.tokenWeights.map((binding) =>
+        Object.freeze({
+          token: canonicalAddress(binding.token),
+          weight: BigInt(binding.weight),
+          codeHash: binding.codeHash,
+        })
+      )),
+    }),
+    behaviorBinding: Object.freeze({
+      interfaceMode: facts.behaviorBinding.interfaceMode,
+      changesEnabled: facts.behaviorBinding.changesEnabled,
+      totalPercents: BigInt(facts.behaviorBinding.totalPercents),
+      changeFee: BigInt(facts.behaviorBinding.changeFee),
+      inLendingMode: facts.behaviorBinding.inLendingMode === null
+        ? null
+        : BigInt(facts.behaviorBinding.inLendingMode),
+      activeProof: facts.behaviorBinding.activeProof,
+    }),
+    runtimeRequirements: Object.freeze([]),
+  }) as unknown as import("./venues/protocols/astra-multitoken-family/types.js")
+    .AstraMultiTokenDescriptor;
+}
+
+function deriveAstraMultiTokenCanonicalFacts(
+  facts: Required<BaselineAstraMultiTokenFacts>,
+): {
+  readonly target: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly lowerTarget: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const target = canonicalAddress(facts.target);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const lowerTarget = lowerAddress(target);
+  const descriptor = astraDescriptorFor(facts);
+  const bindingFingerprint = hashCanonical(
+    astraStaticBindingProjection(descriptor),
+  );
+  const venueIdentityHash = hashCanonical(Object.freeze({
+    kind: "address-protocol",
+    target: lowerTarget,
+  }));
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const routeKeyValue = [
+    "protocol:astra-multitoken",
+    lowerTarget,
+    lowerTokenIn,
+    lowerTokenOut,
+  ].join("\u001f");
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "protocol:astra-multitoken",
+    lowerTarget,
+    lowerTarget,
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    target,
+    tokenIn,
+    tokenOut,
+    lowerTarget,
+    lowerTokenIn,
+    lowerTokenOut,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineAstraMultiTokenEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = astraMultiTokenFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveAstraMultiTokenCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineAstraMultiTokenEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineAstraMultiTokenEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "astra-multitoken baseline enumerated route item must carry a " +
+        "non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineAstraMultiTokenInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = astraMultiTokenFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveAstraMultiTokenCanonicalFacts(facts);
+  const descriptor = astraDescriptorFor(facts);
+  const staticBindingFingerprint = hashCanonical({
+    capability: ASTRA_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: astraStaticBindingProjection(descriptor),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerTarget,
+    value: Object.freeze({
+      familyId: "protocol:astra-multitoken",
+      instanceKey: derived.lowerTarget,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineAstraMultiTokenPriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = astraMultiTokenFactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveAstraMultiTokenCanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "astra-multitoken-change",
+    instanceKey: derived.lowerTarget,
+    target: derived.target,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "protocol" as const,
+    protocolAction: "convert" as const,
+    edgeKind: "protocol" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.routeKeyValue,
+      mid: Object.freeze({
+        kind: "protocol",
+        pool: derived.target,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineAstraMultiTokenExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = astraMultiTokenFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveAstraMultiTokenCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineAstraMultiTokenExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = astraMultiTokenFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveAstraMultiTokenCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "astra-multitoken-change",
+      executionTarget: derived.target,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineAstraMultiTokenFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = astraMultiTokenFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveAstraMultiTokenCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -5361,4 +5774,9 @@ const ETHERTOKEN_NATIVE_CATALOG_FAMILY =
 const SELF_BURN_NATIVE_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     SELF_BURN_NATIVE_FAMILY_ID,
+  );
+
+const ASTRA_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    ASTRA_MULTITOKEN_FAMILY_ID,
   );
