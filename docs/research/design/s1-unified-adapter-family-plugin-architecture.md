@@ -1266,6 +1266,13 @@ views.handleByCanonicalEdgeId 现为两类 handle 的 union 索引；Credit shar
 PASS + 全套件 + 完整 build。Funding/Credit production consumer、默认 authority、
 sealed parity 与 systemic-live 仍 open。
 
+**2026-08-11 strict funding/credit consumer read checkpoint（实现 commit
+`574e15ff2ae3921daa945b2a0fba986e48d4b5f8`，shadow building block）：** 新增
+`readStrictFundingOffers`（offers/tombstone/missing 三态，空 verified 即显式
+tombstone，绝不含糊沿用旧 offer）与 `readStrictCreditRoute`
+（canonicalEdgeId → issuer-bound route handle union，null 表示 strict catalog
+未发布，绝不回落 legacy registry）。production solver 接线仍 open。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
