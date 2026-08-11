@@ -777,6 +777,11 @@ async function main(): Promise<void> {
   assert.equal(zeroCommitted.views.graphRoutes.length, 0);
   assert.equal(zeroCommitted.envelope.snapshot.revision, 1);
 
+  assert.throws(() => zeroRoot.stageUnsupported({
+    familyId: UNIV2_FAMILY_ID,
+    source: zeroSource,
+  }), /requires explicit non-empty outcome refs/);
+
   console.log("adapter-family strict shadow catalog publication tests passed");
 }
 

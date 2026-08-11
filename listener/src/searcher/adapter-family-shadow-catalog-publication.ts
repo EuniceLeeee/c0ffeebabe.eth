@@ -210,6 +210,15 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     readonly source: CanonicalSource;
     readonly outcomeRefs?: readonly string[];
   }): StrictShadowCatalogFamilyStage {
+    if (
+      !Array.isArray(input.outcomeRefs) ||
+      input.outcomeRefs.length === 0 ||
+      input.outcomeRefs.some((ref) => ref.trim().length === 0)
+    ) {
+      throw new Error(
+        "unsupported stage requires explicit non-empty outcome refs",
+      );
+    }
     const family = this.#catalog.forStrictFamily(input.familyId);
     return Object.freeze({
       familyId: input.familyId,

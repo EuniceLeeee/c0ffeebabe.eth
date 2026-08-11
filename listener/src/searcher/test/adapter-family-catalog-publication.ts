@@ -474,6 +474,14 @@ function testPartialAndUnsupportedAreExplicit(): void {
   assert.equal(publication.snapshot.status, "shadow-partial");
   assert.equal(publication.snapshot.familyStatuses.get(SWAP)?.status, "partial");
   assert.equal(publication.snapshot.familyStatuses.get(FUNDING)?.status, "unsupported");
+  assert.throws(() => prepare({
+    canonical,
+    funding: fundingStage(canonical, {
+      status: "unsupported",
+      inventoryMode: "append-only-delta",
+      instances: [fundingBundle(canonical)],
+    }),
+  }), /unsupported Family .* cannot stage changes/);
 }
 
 function testFundingUsesAtomicInstanceStateWithoutRouteProjection(): void {
