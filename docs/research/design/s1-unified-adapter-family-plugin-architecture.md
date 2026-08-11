@@ -1273,6 +1273,14 @@ tombstone，绝不含糊沿用旧 offer）与 `readStrictCreditRoute`
 （canonicalEdgeId → issuer-bound route handle union，null 表示 strict catalog
 未发布，绝不回落 legacy registry）。production solver 接线仍 open。
 
+**2026-08-11 parity batch request validation checkpoint（实现 commit
+`52ad56d7e1e3ef93c08bad1c342b2999a90d7fcd`，#2 sealed parity 前置）：** 新增
+`validateArchitectureMigrationRequestFile`（双侧 capture 路径、evidenceClass/mode、
+stateAnchors、performanceDiagnostics 四项）与
+`architecture-migration-parity:run --check <batch-request.json>`。节点工作流可先
+生成双侧 raw capture，校验 batch request 后再跑 sealed/unit parity。真实
+`sealed-production` 双侧 capture 仍未产生。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
