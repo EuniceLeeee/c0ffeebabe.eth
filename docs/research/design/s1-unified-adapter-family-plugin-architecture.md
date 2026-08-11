@@ -134,6 +134,17 @@ commit 见本日各 checkpoint）：**
 - 纯 dry-run 证据工具：无 live/签名/广播，不触碰 `/opt/MEV` live
   searcher。
 
+**2026-08-12 node evidence verifier checkpoint（commit 见下，证据链
+自校验）：**
+
+- 新增 `scripts/verify-s1-node-evidence.sh`：读取 committed node-run
+  JSON，校验 format/ssmRunId/instance/SHAs，并把 receipt/baseline/
+  challenger 三个 SHA-256 与 pinned 证据工件逐项比对，再断言 committed
+  receipt 仍为 aggregate=pass、nonPass=[]、commonGraph=true、
+  heldOut=[]；无需节点访问即可复验；
+- 实测：对 `s1-node-run-89c2728e-…json` 验证通过
+  （receipt `8df51cad…`）；SSM run 记录与 pinned 证据链完整可审计。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - strict catalog prepare 内 complete-snapshot 一次性消费（受限于
