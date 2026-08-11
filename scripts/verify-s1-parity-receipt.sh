@@ -69,9 +69,12 @@ assert all(row["outcome"] == "pass" for row in matrix), [
     row["familyId"] for row in matrix if row["outcome"] != "pass"
 ]
 assert receipt["parityReceipt"]["assembledCommonGraphParity"] is True
+assert "heldOutNegativeVerdicts" in receipt, "missing held-out negative gate"
+assert receipt["heldOutNegativeVerdicts"] == [], receipt["heldOutNegativeVerdicts"]
 print(
     "S1 22-family sealed-capture parity receipt verified: "
     f"aggregate={verdict}, families={len(matrix)}, "
-    "nonPassFamilyIds=[], baseline/challenger side captures identical"
+    "nonPassFamilyIds=[], heldOutNegativeVerdicts=[], "
+    "baseline/challenger side captures identical"
 )
 PY

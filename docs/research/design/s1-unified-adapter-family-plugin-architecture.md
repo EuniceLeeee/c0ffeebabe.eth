@@ -2260,6 +2260,26 @@ commit 见下，shadow/disabled-path 硬化，非 cutover）：**
   listener build 全过；production solver 接线与默认 authority cutover
   仍未落地。
 
+**2026-08-12 held-out negative fixture gate checkpoint（实现 commit
+见下，Phase E §18.3.6 前置合同）：**
+
+- `ArchitectureMigrationBatchInput` 新增 `heldOutNegatives`（familyId +
+  reason + baseline/challenger 双侧 raw capture）；batch runner 对每个
+  held-out 对用 single-family scope 独立判定，结果必须是
+  `semantic-mismatch`，否则整批 fail closed（identical pair、缺失 Family、
+  非 mismatch 一律拒绝）；receipt 新增
+  `heldOutNegativeVerdicts`（含 reason/outcome）；
+- sealed-production acceptance 现在同时要求 held-out 全部 mismatch；
+- 合同测试覆盖：univ2 tokenOut 变异对 → `semantic-mismatch` 且主批仍
+  pass；identical pair → 抛
+  `held-out negative univ2-standard must produce semantic-mismatch`；
+  主批 receipt `heldOutNegativeVerdicts=[]`；
+- 证据工件 `s1-parity-22family-receipt.json` 已按新 schema 重新生成并
+  提交（`heldOutNegativeVerdicts=[]`），verifier 同时断言该字段；
+  `searcher:architecture-migration-parity-runner` + capture harness +
+  完整 listener build 全过；该 gate 是 §18.3 Phase E 验收前置之一，不
+  改变 Phase D cutover 状态。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

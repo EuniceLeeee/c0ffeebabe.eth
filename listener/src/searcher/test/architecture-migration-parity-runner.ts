@@ -129,6 +129,63 @@ assert(completeReceipt.familyCoverage.every((row) => row.outcome === "pass"));
 assert.equal(completeReceipt.parityReceipt.assembledCommonGraphParity, true);
 assert.equal(completeReceipt.acceptance.eligible, false);
 assert.equal(completeReceipt.acceptance.verdict, "ineligible");
+assert.deepEqual(completeReceipt.heldOutNegativeVerdicts, []);
+
+const heldRaw = fixtureInput({});
+const heldChallenger: RawArchitectureMigrationSideCapture = {
+  ...heldRaw.challenger,
+  familyCases: heldRaw.challenger.familyCases.map((familyCase) =>
+    familyCase.familyId === "univ2-standard"
+      ? {
+          ...familyCase,
+          stages: {
+            ...familyCase.stages,
+            edges: familyCase.stages.edges === undefined ? undefined : {
+              ...familyCase.stages.edges,
+              items: familyCase.stages.edges.items.map((item, index) =>
+                index === 0
+                  ? {
+                      ...item,
+                      value: {
+                        ...(item.value as Record<string, unknown>),
+                        tokenOut: `0x${"99".repeat(20)}`,
+                      },
+                    }
+                  : item,
+              ),
+            },
+          },
+        }
+      : familyCase,
+  ),
+};
+const heldOutInput = sealArchitectureMigrationBatchInput({
+  ...heldRaw,
+  heldOutNegatives: [{
+    familyId: "univ2-standard",
+    reason: "fixture-held-out-token-mutation",
+    baseline: heldRaw.baseline,
+    challenger: heldChallenger,
+  }],
+});
+const heldOutReceipt = runArchitectureMigrationBatchParity(heldOutInput);
+assert.equal(heldOutReceipt.parityReceipt.aggregateVerdict, "pass");
+assert.equal(heldOutReceipt.heldOutNegativeVerdicts.length, 1);
+assert.equal(
+  heldOutReceipt.heldOutNegativeVerdicts[0]!.outcome,
+  "semantic-mismatch",
+);
+assert.throws(() => runArchitectureMigrationBatchParity(
+  sealArchitectureMigrationBatchInput({
+    ...heldRaw,
+    heldOutNegatives: [{
+      familyId: "univ2-standard",
+      reason: "identical-pair-must-fail",
+      baseline: heldRaw.baseline,
+      challenger: heldRaw.challenger,
+    }],
+  }),
+), /held-out negative univ2-standard must produce semantic-mismatch/);
 
 assert.throws(
   () => sealArchitectureMigrationBatchInput({

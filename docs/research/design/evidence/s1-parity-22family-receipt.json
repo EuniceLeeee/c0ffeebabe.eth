@@ -1525,6 +1525,7 @@
     "changedIds": []
   },
   "crossFamilyConflicts": [],
+  "heldOutNegativeVerdicts": [],
   "acceptance": {
     "eligible": true,
     "verdict": "pass",

@@ -142,6 +142,7 @@ export interface ArchitectureMigrationBatchInput {
   readonly stateAnchors: readonly ArchitectureStateAnchor[];
   readonly baseline: RawArchitectureMigrationSideCapture;
   readonly challenger: RawArchitectureMigrationSideCapture;
+  readonly heldOutNegatives?: readonly ArchitectureMigrationHeldOutNegativeInput[];
   readonly declaredDeltas?: readonly DeclaredSemanticDelta[];
   readonly performanceDiagnostics: {
     readonly wallMs: number;
@@ -149,6 +150,19 @@ export interface ArchitectureMigrationBatchInput {
     readonly batchCount: number;
     readonly peakConcurrency: number;
   };
+}
+
+/**
+ * Deliberately mismatched baseline/challenger pair for the held-out
+ * negative gate (§18.3.6). The comparator must report the family as
+ * `semantic-mismatch`; an identical pair, a missing family, or any
+ * non-mismatch verdict fails the batch closed.
+ */
+export interface ArchitectureMigrationHeldOutNegativeInput {
+  readonly familyId: string;
+  readonly reason: string;
+  readonly baseline: RawArchitectureMigrationSideCapture;
+  readonly challenger: RawArchitectureMigrationSideCapture;
 }
 
 export interface ArchitectureMigrationCorpusManifest {
@@ -237,6 +251,11 @@ export interface ArchitectureMigrationBatchParityReceipt {
   readonly nonMigratedFamilyDelta: ArchitectureMigrationSemanticSetDelta;
   readonly crossFamilyConflicts:
     readonly ArchitectureMigrationCrossFamilyConflict[];
+  readonly heldOutNegativeVerdicts: readonly {
+    readonly familyId: string;
+    readonly reason: string;
+    readonly outcome: FamilyArchitectureParityOutcome;
+  }[];
   readonly acceptance: {
     readonly eligible: boolean;
     readonly verdict: "pass" | "partial" | "fail" | "ineligible";
@@ -303,10 +322,32 @@ export function sealArchitectureMigrationBatchInput(
     evidenceClass,
   );
   assertNoSharedObjectReferences(baseline, challenger);
+  const heldOutNegatives = (input.heldOutNegatives ?? []).map((item) => {
+    const heldBaseline = resolveBatchSideCapture(
+      productionCaptureIssuer,
+      item.baseline,
+      evidenceClass,
+    );
+    const heldChallenger = resolveBatchSideCapture(
+      productionCaptureIssuer,
+      item.challenger,
+      evidenceClass,
+    );
+    assertNoSharedObjectReferences(heldBaseline, heldChallenger);
+    return Object.freeze({
+      familyId: item.familyId,
+      reason: item.reason,
+      baseline: heldBaseline,
+      challenger: heldChallenger,
+    });
+  });
   const clone = structuredClone({
     ...input,
     baseline,
     challenger,
+    ...(heldOutNegatives.length === 0
+      ? {}
+      : { heldOutNegatives }),
   }) as ArchitectureMigrationBatchInput;
   validateBatchInput(clone);
   const frozen = deepFreeze(clone) as SealedArchitectureMigrationBatchInput;
@@ -480,9 +521,57 @@ export function runArchitectureMigrationBatchParity(
       });
     }),
   );
+  const heldOutNegativeVerdicts = Object.freeze(
+    (input.heldOutNegatives ?? []).map((item) => {
+      if (!PRODUCTION_ARCHITECTURE_MIGRATION_FAMILY_IDS.includes(item.familyId)) {
+        throw new Error(
+          `held-out negative Family ${item.familyId} is not in the cohort`,
+        );
+      }
+      const baselineSide = normalizeSide(item.baseline, "baseline");
+      const challengerSide = normalizeSide(item.challenger, "challenger");
+      const heldBaseline = baselineSide.outputs.filter((output) =>
+        output.familyId === item.familyId
+      );
+      const heldChallenger = challengerSide.outputs.filter((output) =>
+        output.familyId === item.familyId
+      );
+      const heldReceipt = judgeArchitectureMigration({
+        scope: Object.freeze({
+          kind: "single-family" as const,
+          familyIds: Object.freeze([item.familyId]) as readonly [string],
+          reason: "targeted-follow-up" as const,
+        }),
+        mode: input.mode,
+        inputManifestHash,
+        stateAnchors: input.stateAnchors,
+        baseline: heldBaseline,
+        challenger: heldChallenger,
+        declaredDeltas: Object.freeze([]),
+        nonMigratedFamilySemanticHashParity: false,
+        assembledCommonGraphParity: false,
+        performanceDiagnostics: input.performanceDiagnostics,
+      });
+      const outcome = heldReceipt.familyResults[0]?.outcome ?? "not-exercised";
+      if (outcome !== "semantic-mismatch") {
+        throw new Error(
+          `held-out negative ${item.familyId} must produce ` +
+            `semantic-mismatch, received ${outcome}`,
+        );
+      }
+      return Object.freeze({
+        familyId: item.familyId,
+        reason: item.reason,
+        outcome,
+      });
+    }),
+  );
   const acceptanceEligible = input.evidenceClass === "sealed-production";
   const acceptanceReasons = acceptanceEligible
-    ? parityReceipt.aggregateVerdict === "pass"
+    ? parityReceipt.aggregateVerdict === "pass" &&
+        heldOutNegativeVerdicts.every(
+          (verdict) => verdict.outcome === "semantic-mismatch",
+        )
       ? []
       : ["semantic parity receipt is not pass"]
     : ["unit-contract evidence is not production acceptance evidence"];
@@ -496,6 +585,7 @@ export function runArchitectureMigrationBatchParity(
     commonGraphDelta: commonGraph.delta,
     nonMigratedFamilyDelta: nonMigrated.delta,
     crossFamilyConflicts: commonGraph.conflicts,
+    heldOutNegativeVerdicts,
     acceptance: {
       eligible: acceptanceEligible,
       verdict: acceptanceEligible
