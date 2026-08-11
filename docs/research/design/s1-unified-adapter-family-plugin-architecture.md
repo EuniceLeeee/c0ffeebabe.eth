@@ -77,6 +77,43 @@ authority 混在一起：
 该表是实施 checkpoint，不是目标合同的降级，也不预判并行实现工作最终是否通过；任一状态更新都必须引用新的
 commit、测试/receipt 和实际 production consumer closure。
 
+**2026-08-12 Phase D/E gate closure status（合同级 vs production 级，
+commit 见本日各 checkpoint）：**
+
+以下项已在**合同级**关闭（有 committed 合同测试、receipt 或 verifier，
+但不构成 production authority 或 live 证据）：
+
+- 22/22 Family 本地 sealed-capture parity：`aggregate=pass`、
+  commonGraph=true、`heldOutNegativeVerdicts=[]`，证据工件
+  `docs/research/design/evidence/s1-parity-22family-*` 已提交，verifier
+  可复现 diff；
+- held-out negative fixture gate（§18.3.6）：batch runner 强制
+  semantic-mismatch、identical pair fail closed；
+- systemic-live gate 合同（§13-§14）：paired-live 蒸馏 verdict +
+  11 项 fail-closed 判定；
+- default-authority cutover gate 合同（§18.3.6/§16）：双权威/前置缺失
+  全 fail closed；
+- production startup family manifest 合同 + main 启动消费
+  （§18.3.1/§18.3.7，legacy-free 清单）；
+- source-bound strict catalog consumer + production-entry diagnostic
+  （env-gated、默认 OFF）；
+- S1 cutover-readiness receipt 合同（五前置合成）；
+- S1 regression sweep harness（10 组合同 + parity verifier 一键复跑）。
+
+以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
+
+- strict catalog prepare 内 complete-snapshot 一次性消费（受限于
+  22 族中仅 9 族具备 address-surface bootstrap 覆盖；其余 factory-log
+  族需要 inventory incumbent 语义扩展，另行设计）；
+- production point-in-time enumerator 真实数据源接线（live discovery
+  输出）；
+- production solver 的 strict pricing/Funding/Credit consumer 真实
+  接线（目前仅 diagnostic）；
+- 节点 SSM 双跑机器证据（runbook 已就绪，未执行）；
+- systemic-live gate 的真实 paired-live 运行；
+- 默认 authority 切换（需 cutover-readiness ready + 人工授权）；
+- Phase E legacy cleanup（§18.3 全部门通过后）。
+
 **2026-08-11 Phase 0 绑定 checkpoint：** 以 committed HEAD `934eed7a` 为绑定点，
 `searcher:adapter-family-lifecycle-content-cache`、`searcher:adapter-family-catalog-publication`、
 `searcher:adapter-family-state-carry-proof`、`searcher:adapter-family-discovery-checkpoint`
