@@ -147,6 +147,32 @@ interface SealedCreditRiskQuoteHandleRecord {
   readonly generation: number;
 }
 
+declare const sealedCreditExecutionHandleBrand: unique symbol;
+
+export interface SealedCreditExecutionHandle {
+  readonly [sealedCreditExecutionHandleBrand]: "sealed-credit-execution-handle";
+  readonly status: "resolved";
+  readonly familyId: FamilyId;
+  readonly candidateKey: string;
+  readonly instanceKey: InstanceKey;
+  readonly routeKey: RouteKey;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+  readonly minAmountOut: bigint;
+}
+
+interface SealedCreditExecutionHandleRecord {
+  readonly family: LoadedFamilyBox;
+  readonly routeHandle: CreditRouteRuntimeHandle;
+  readonly routeRecord: CreditRouteRuntimeHandleRecord;
+  readonly riskRecord: SealedCreditRiskQuoteHandleRecord;
+  readonly minAmountOut: bigint;
+  readonly executor: string;
+  readonly runtimeEvidence: readonly RuntimeEvidence[];
+  readonly source: CanonicalSource;
+  readonly generation: number;
+}
+
 const issuedCreditRouteRuntimeHandles = new WeakMap<
   object,
   CreditRouteRuntimeHandleRecord
@@ -154,6 +180,10 @@ const issuedCreditRouteRuntimeHandles = new WeakMap<
 const issuedCreditRiskQuoteHandles = new WeakMap<
   object,
   SealedCreditRiskQuoteHandleRecord
+>();
+const issuedCreditExecutionHandles = new WeakMap<
+  object,
+  SealedCreditExecutionHandleRecord
 >();
 const issuedProjectedCreditRoutes = new WeakSet<object>();
 
@@ -470,10 +500,14 @@ export async function executeCreditRiskQuote(input: {
   }
 }
 
-/** Synchronous Credit execution; no raw evidence or descriptor is accepted. */
-export function buildCreditExecutionFragment(input: {
+/**
+ * Issuer-private Credit execution handle. Binds the selected route, the
+ * sealed risk quote, the chosen amount and the owned ActionAdapter closure
+ * (through the catalog FamilyBox); no raw evidence, descriptor or
+ * runtime evidence escapes the handle object.
+ */
+export function issueCreditExecutionHandle(input: {
   readonly family: LoadedFamilyBox;
-  readonly actionOwnership: Pick<FamilyCapabilityCatalog, "ownerOfAction">;
   readonly route: CreditRouteRuntimeHandle;
   readonly risk: SealedCreditRiskQuoteHandle;
   readonly minAmountOut: bigint;
@@ -481,21 +515,61 @@ export function buildCreditExecutionFragment(input: {
   readonly runtimeEvidence: readonly RuntimeEvidence[];
   readonly source: CanonicalSource;
   readonly generation: number;
+}): SealedCreditExecutionHandle {
+  const routeRecord = resolveCreditRouteHandle(input.family, input.route);
+  const riskRecord = resolveCreditRiskHandle(input.family, input.risk);
+  assertExecutionInvocation(input, routeRecord, riskRecord);
+  const evidence = sealRuntimeEvidence(
+    input.runtimeEvidence,
+    input.family.plugin.manifest.familyId,
+    routeRecord.route.instanceKey,
+    input.source,
+  );
+  const source = freezeSource(input.source);
+  const handle = Object.freeze({
+    status: "resolved" as const,
+    familyId: input.family.plugin.manifest.familyId,
+    candidateKey: input.route.candidateKey,
+    instanceKey: input.route.instanceKey,
+    routeKey: input.route.routeKey,
+    source,
+    generation: input.generation,
+    minAmountOut: input.minAmountOut,
+  }) as SealedCreditExecutionHandle;
+  issuedCreditExecutionHandles.set(handle, Object.freeze({
+    family: input.family,
+    routeHandle: input.route,
+    routeRecord,
+    riskRecord,
+    minAmountOut: input.minAmountOut,
+    executor: riskRecord.executor,
+    runtimeEvidence: evidence,
+    source,
+    generation: input.generation,
+  }));
+  return handle;
+}
+
+/** Synchronous Credit execution; only the issuer-bound execution handle is accepted. */
+export function buildCreditExecutionFragment(input: {
+  readonly family: LoadedFamilyBox;
+  readonly actionOwnership: Pick<FamilyCapabilityCatalog, "ownerOfAction">;
+  readonly handle: SealedCreditExecutionHandle;
 }): CreditExecutionOutcome {
   try {
     const plugin = resolveCreditPlugin(input.family);
-    const routeRecord = resolveCreditRouteHandle(input.family, input.route);
-    const riskRecord = resolveCreditRiskHandle(input.family, input.risk);
-    assertExecutionInvocation(input, routeRecord, riskRecord);
+    const record = resolveCreditExecutionHandle(input.family, input.handle);
+    const routeRecord = record.routeRecord;
+    const riskRecord = record.riskRecord;
     const fragment = plugin.execution.buildFragment({
       descriptor: routeRecord.descriptor,
       route: routeRecord.route,
       amountIn: riskRecord.collateralAmount,
       quotedAmountOut: riskRecord.amountOut,
-      minAmountOut: input.minAmountOut,
+      minAmountOut: record.minAmountOut,
       exactEvidence: riskRecord.evidence,
-      executor: riskRecord.executor,
-      runtimeEvidence: riskRecord.runtimeEvidence,
+      executor: record.executor,
+      runtimeEvidence: record.runtimeEvidence,
     });
     assertFamilyOwnedPlanFragment({
       family: input.family,
@@ -524,6 +598,43 @@ export function buildCreditExecutionFragment(input: {
       reasonCode: `execution:${errorMessage(error)}`,
     });
   }
+}
+
+function resolveCreditExecutionHandle(
+  family: LoadedFamilyBox,
+  handle: SealedCreditExecutionHandle,
+): SealedCreditExecutionHandleRecord {
+  if (
+    handle === null ||
+    typeof handle !== "object" ||
+    !Object.isFrozen(handle)
+  ) {
+    throw new Error(
+      "Credit execution handle must be issued by the central runtime",
+    );
+  }
+  const record = issuedCreditExecutionHandles.get(handle);
+  if (record === undefined) {
+    throw new Error(
+      "Credit execution handle must be issued by the central runtime",
+    );
+  }
+  if (record.family !== family) {
+    throw new Error("Credit execution handle escaped its catalog FamilyBox");
+  }
+  if (
+    handle.status !== "resolved" ||
+    handle.familyId !== family.plugin.manifest.familyId ||
+    handle.candidateKey !== record.routeHandle.candidateKey ||
+    handle.instanceKey !== record.routeHandle.instanceKey ||
+    handle.routeKey !== record.routeHandle.routeKey ||
+    handle.generation !== record.generation ||
+    handle.minAmountOut !== record.minAmountOut ||
+    !sameSource(handle.source, record.source)
+  ) {
+    throw new Error("Credit execution handle metadata changed after issue");
+  }
+  return record;
 }
 
 function resolveCreditPlugin(family: LoadedFamilyBox): RuntimeCreditPlugin {

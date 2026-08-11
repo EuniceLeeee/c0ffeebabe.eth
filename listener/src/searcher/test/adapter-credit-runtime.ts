@@ -4,10 +4,12 @@ import { ethers } from "ethers";
 import {
   buildCreditExecutionFragment,
   executeCreditRiskQuote,
+  issueCreditExecutionHandle,
   prepareCreditFamilyRoutes,
   projectCreditRouteGraph,
   type CreditRouteRuntimeHandle,
   type ProjectedCreditRouteGraph,
+  type SealedCreditExecutionHandle,
   type SealedCreditRiskQuoteHandle,
 } from "../adapter-credit-runtime.js";
 import {
@@ -172,6 +174,9 @@ await routeAndRiskAuthorityRejectStructuralFakes();
 await familyBoxAuthorityRejectsForeignAndHotReloadBoxes();
 await sourceGenerationExecutorAndEvidenceStayBound();
 await routeRiskPairingAndGenerationFenceFailClosed();
+await creditExecutionHandleIsOpaqueAndExecutesSealedInput();
+await creditExecutionHandleRejectsForgedForeignAndTamperedHandles();
+await creditExecutionHandleIssueRejectsWrongBinding();
 projectedGraphAuthorityRejectsClones();
 
 console.log(
@@ -296,9 +301,8 @@ async function happyPathPublishesOneCommonCreditGraphAndExecutes(): Promise<void
   assert.equal(risk.amountOut, debtAmount(descriptorA));
   assert(Object.isFrozen(risk));
 
-  const execution = buildCreditExecutionFragment({
+  const executionHandle = issueCreditExecutionHandle({
     family,
-    actionOwnership: primary.catalog,
     route: routeA,
     risk,
     minAmountOut: risk.amountOut,
@@ -306,6 +310,11 @@ async function happyPathPublishesOneCommonCreditGraphAndExecutes(): Promise<void
     runtimeEvidence: runtimeEvidenceA,
     source: SOURCE,
     generation: SOURCE.generation,
+  });
+  const execution = buildCreditExecutionFragment({
+    family,
+    actionOwnership: primary.catalog,
+    handle: executionHandle,
   });
   if (execution.status !== "resolved") throw new Error(execution.reasonCode);
   assert.equal(execution.status, "resolved");
@@ -396,9 +405,8 @@ async function routeAndRiskAuthorityRejectStructuralFakes(): Promise<void> {
   ] as unknown as readonly SealedCreditRiskQuoteHandle[];
   for (const fake of riskFakes) {
     const before = snapshotCallbacks();
-    const execution = buildCreditExecutionFragment({
+    assert.throws(() => issueCreditExecutionHandle({
       family,
-      actionOwnership: primary.catalog,
       route: routeA,
       risk: fake,
       minAmountOut: risk.amountOut,
@@ -406,9 +414,7 @@ async function routeAndRiskAuthorityRejectStructuralFakes(): Promise<void> {
       runtimeEvidence: runtimeEvidenceA,
       source: SOURCE,
       generation: SOURCE.generation,
-    });
-    assert.equal(execution.status, "failed");
-    assert.match(execution.reasonCode, /must be issued by the central runtime/);
+    }), /must be issued by the central runtime/);
     assert.deepEqual(snapshotCallbacks(), before);
   }
 }
@@ -504,9 +510,8 @@ async function sourceGenerationExecutorAndEvidenceStayBound(): Promise<void> {
     },
   ]) {
     const before = snapshotCallbacks();
-    const execution = buildCreditExecutionFragment({
+    assert.throws(() => issueCreditExecutionHandle({
       family,
-      actionOwnership: primary.catalog,
       route: routeA,
       risk,
       minAmountOut: risk.amountOut,
@@ -514,8 +519,7 @@ async function sourceGenerationExecutorAndEvidenceStayBound(): Promise<void> {
       runtimeEvidence: invocation.evidence,
       source: SOURCE,
       generation: SOURCE.generation,
-    });
-    assert.equal(execution.status, "failed");
+    }), /executor differs from risk quote|runtime evidence differs from risk quote/);
     assert.deepEqual(snapshotCallbacks(), before);
   }
 }
@@ -533,9 +537,8 @@ async function routeRiskPairingAndGenerationFenceFailClosed(): Promise<void> {
     harness: harnessB,
   });
   const beforePairing = snapshotCallbacks();
-  const mixed = buildCreditExecutionFragment({
+  assert.throws(() => issueCreditExecutionHandle({
     family,
-    actionOwnership: primary.catalog,
     route: routeA,
     risk: riskB,
     minAmountOut: riskB.amountOut,
@@ -543,9 +546,7 @@ async function routeRiskPairingAndGenerationFenceFailClosed(): Promise<void> {
     runtimeEvidence: runtimeEvidenceB,
     source: SOURCE,
     generation: SOURCE.generation,
-  });
-  assert.equal(mixed.status, "failed");
-  assert.match(mixed.reasonCode, /exact route handle/);
+  }), /exact route handle/);
   assert.deepEqual(snapshotCallbacks(), beforePairing);
 
   const staleHarness = runtimeHarness({
@@ -568,6 +569,164 @@ async function routeRiskPairingAndGenerationFenceFailClosed(): Promise<void> {
   assert.equal(stale.status, "unresolved");
   assert.equal(staleHarness.issues.length, 0);
   assert.deepEqual(snapshotCallbacks(), beforeStale);
+}
+
+async function creditExecutionHandleIsOpaqueAndExecutesSealedInput(): Promise<void> {
+  const harness = runtimeHarness({
+    descriptor: descriptorA,
+    currentSource: SOURCE,
+    executor: EXECUTOR,
+  });
+  const risk = await resolvedRisk({
+    route: routeA,
+    descriptor: descriptorA,
+    evidence: runtimeEvidenceA,
+    harness,
+  });
+  const handle = issueCreditExecutionHandle({
+    family,
+    route: routeA,
+    risk,
+    minAmountOut: risk.amountOut,
+    executor: EXECUTOR,
+    runtimeEvidence: runtimeEvidenceA,
+    source: SOURCE,
+    generation: SOURCE.generation,
+  });
+  assert(Object.isFrozen(handle));
+  assert.equal(handle.minAmountOut, risk.amountOut);
+  assert.equal(handle.generation, SOURCE.generation);
+  assert.equal("evidence" in handle, false);
+  assert.equal("runtimeEvidence" in handle, false);
+  assert.equal("descriptor" in handle, false);
+  assert.equal("risk" in handle, false);
+
+  const execution = buildCreditExecutionFragment({
+    family,
+    actionOwnership: primary.catalog,
+    handle,
+  });
+  if (execution.status !== "resolved") throw new Error(execution.reasonCode);
+  assert.equal(execution.status, "resolved");
+  assert.equal(execution.fragment.nodes[0]?.adapterId, "fluid-vault");
+  assert.equal(execution.fragment.nodes[0]?.amount, COLLATERAL_AMOUNT);
+  assert.equal(execution.fragment.nodes[0]?.params.debtDelta, risk.amountOut);
+  assert(Object.isFrozen(execution.fragment));
+  assert(Object.isFrozen(execution.fragment.nodes[0]!));
+  assert.equal(execution.expectedEffects.length, 4);
+}
+
+async function creditExecutionHandleRejectsForgedForeignAndTamperedHandles(): Promise<void> {
+  const harness = runtimeHarness({
+    descriptor: descriptorA,
+    currentSource: SOURCE,
+    executor: EXECUTOR,
+  });
+  const risk = await resolvedRisk({
+    route: routeA,
+    descriptor: descriptorA,
+    evidence: runtimeEvidenceA,
+    harness,
+  });
+  const handle = issueCreditExecutionHandle({
+    family,
+    route: routeA,
+    risk,
+    minAmountOut: risk.amountOut,
+    executor: EXECUTOR,
+    runtimeEvidence: runtimeEvidenceA,
+    source: SOURCE,
+    generation: SOURCE.generation,
+  });
+
+  const forged = Object.freeze({}) as SealedCreditExecutionHandle;
+  const beforeForged = snapshotCallbacks();
+  const forgedOutcome = buildCreditExecutionFragment({
+    family,
+    actionOwnership: primary.catalog,
+    handle: forged,
+  });
+  assert.equal(forgedOutcome.status, "failed");
+  assert.match(forgedOutcome.reasonCode, /must be issued by the central runtime/);
+  assert.deepEqual(snapshotCallbacks(), beforeForged);
+
+  const hotReload = loadedFamily(plugin);
+  const beforeForeign = snapshotCallbacks();
+  const foreignOutcome = buildCreditExecutionFragment({
+    family: hotReload.family,
+    actionOwnership: primary.catalog,
+    handle,
+  });
+  assert.equal(foreignOutcome.status, "failed");
+  assert.match(foreignOutcome.reasonCode, /escaped its catalog FamilyBox/);
+  assert.deepEqual(snapshotCallbacks(), beforeForeign);
+
+  const sameFieldClone = Object.freeze({
+    ...handle,
+  }) as SealedCreditExecutionHandle;
+  const beforeClone = snapshotCallbacks();
+  const cloneOutcome = buildCreditExecutionFragment({
+    family,
+    actionOwnership: primary.catalog,
+    handle: sameFieldClone,
+  });
+  assert.equal(cloneOutcome.status, "failed");
+  assert.match(cloneOutcome.reasonCode, /must be issued by the central runtime/);
+  assert.deepEqual(snapshotCallbacks(), beforeClone);
+}
+
+async function creditExecutionHandleIssueRejectsWrongBinding(): Promise<void> {
+  const harness = runtimeHarness({
+    descriptor: descriptorA,
+    currentSource: SOURCE,
+    executor: EXECUTOR,
+  });
+  const risk = await resolvedRisk({
+    route: routeA,
+    descriptor: descriptorA,
+    evidence: runtimeEvidenceA,
+    harness,
+  });
+  assert.throws(() => issueCreditExecutionHandle({
+    family,
+    route: routeA,
+    risk,
+    minAmountOut: risk.amountOut,
+    executor: OTHER_EXECUTOR,
+    runtimeEvidence: runtimeEvidenceA,
+    source: SOURCE,
+    generation: SOURCE.generation,
+  }), /executor differs from risk quote/);
+  assert.throws(() => issueCreditExecutionHandle({
+    family,
+    route: routeA,
+    risk,
+    minAmountOut: risk.amountOut,
+    executor: EXECUTOR,
+    runtimeEvidence: runtimeEvidence(descriptorA, SOURCE, "changed"),
+    source: SOURCE,
+    generation: SOURCE.generation,
+  }), /runtime evidence differs from risk quote/);
+  assert.throws(() => issueCreditExecutionHandle({
+    family,
+    route: routeA,
+    risk,
+    minAmountOut: risk.amountOut + 1n,
+    executor: EXECUTOR,
+    runtimeEvidence: runtimeEvidenceA,
+    source: SOURCE,
+    generation: SOURCE.generation,
+  }), /outside the sealed risk quote/);
+  assert.throws(() => issueCreditExecutionHandle({
+    family,
+    route: routeA,
+    risk,
+    minAmountOut: risk.amountOut,
+    executor: EXECUTOR,
+    runtimeEvidence: runtimeEvidenceA,
+    source: NEXT_SOURCE,
+    generation: NEXT_SOURCE.generation,
+  }), /source\/generation mismatch/);
 }
 
 function projectedGraphAuthorityRejectsClones(): void {
