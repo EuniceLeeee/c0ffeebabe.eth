@@ -68,7 +68,7 @@ authority 混在一起：
 |阶段|截至 2026-08-09 committed slice 可确认状态|仍未满足的晋升条件|
 |---|---|---|
 |Phase 0 共享 substrate|physical-settlement ownership 与 published/memo store separation 已有 change-set 实现和定向 unit contract|仍需绑定最终 committed HEAD 和完整回归结果；即使通过也不能据此宣称 deployed/live|
-|Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
+|Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在，`7ba6f9d3` 已落地 trusted sealed-production capture issuer（unit runner 继续拒绝自封 `sealed-production`）|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
 |Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
 |Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
 |Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS、`c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract、`642373c1` 的中央 value 深冻结 + StateInstance mutation/carry shadow proof，以及 `9d954df4` 的 Credit 独立 execution handle shadow issuer 等 runtime slice 已有 unit/shadow gate|durable checkpoint 的 production composition 与 strict catalog receipt coupling、production point-in-time enumerator、closure receipt 在 strict catalog 内的一次性消费与 staged exact-set coupling、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
@@ -3059,6 +3059,23 @@ manifest、config/policy、frozen corpus 和 evidence refs 的 `sealed-productio
 或 production cutover。evidence class 必须由可信 production capture issuer 在 sealed input 中签发，不能由调用者在
 结果生成前后自行填写或改写；在该 issuer 尚未落地时，公开 unit runner 必须拒绝 `sealed-production` 输入，而不是
 预留一个可由普通调用者开启的字符串开关。
+
+**2026-08-11 sealed-production capture issuer checkpoint（实现 commit
+`7ba6f9d37a716e2484f68b19e12f2113dbcd0ded`，Phase A 前置，不是 capture 本身）：**
+已落地 trusted production capture issuer：
+
+- `createArchitectureMigrationProductionCaptureIssuer()` 只接受模块内签发的 issuer 身份；
+- `issueArchitectureMigrationSideCapture(issuer, capture)` 签发时强制 closure 身份字段与
+  每个 exercised stage 的独立 evidence refs，深冻结后存入 issuer-private WeakMap，返回
+  opaque handle；调用方拿不到 raw capture 改写路径；
+- `sealArchitectureMigrationBatchInput` 对 `sealed-production` 只接受该 issuer 签发的双侧
+  handle：forged handle、foreign issuer、raw capture 自封全部
+  `requires the trusted production capture issuer`；`unit-contract` 拒绝 sealed handle。
+
+证据：`searcher:architecture-migration-parity-runner` PASS、
+`searcher:architecture-migration-parity` PASS、完整 listener build 通过。
+该 issuer 只是 Phase A 前置；真实旧 ds 与 challenger 的 `sealed-production` 双侧
+capture/receipt 仍未产生，不能据此宣称 Phase A/C/D parity 或 cutover。
 
 #### 20.2.1 同输入双跑
 
