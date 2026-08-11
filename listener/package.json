@@ -174,6 +174,7 @@
     "searcher:adapter-family-snapshot-inventory-closure": "node --import tsx src/searcher/test/adapter-family-snapshot-inventory-closure.ts",
     "searcher:adapter-family-point-in-time-enumerator": "node --import tsx src/searcher/test/adapter-family-point-in-time-enumerator.ts",
     "searcher:adapter-family-shadow-catalog-publication": "node --import tsx src/searcher/test/adapter-family-shadow-catalog-publication.ts",
+    "searcher:strict-catalog-consumer-diagnostic": "node --import tsx src/searcher/test/strict-catalog-consumer-diagnostic.ts",
     "searcher:adapter-family-observation-shadow-ingress": "node --import tsx src/searcher/test/adapter-family-observation-shadow-ingress.ts",
     "searcher:adapter-credit-runtime": "node --import tsx src/searcher/test/adapter-credit-runtime.ts",
     "searcher:family-capability-catalog": "node --import tsx src/searcher/test/family-capability-catalog.ts",

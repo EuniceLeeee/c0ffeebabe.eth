@@ -74,7 +74,11 @@ import {
 } from "./live-discovery-coordinator.js";
 import {
   createDurableDiscoveryContinuityComposition,
+  type DurableDiscoveryContinuityComposition,
 } from "./adapter-family-discovery-continuity-composition.js";
+import {
+  resolveStrictCatalogConsumerDiagnostic,
+} from "./strict-catalog-consumer-diagnostic.js";
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "./venues/production-family-composition.js";
@@ -1662,12 +1666,15 @@ async function main(): Promise<void> {
   const continuityCompositionPath =
     process.env.SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH;
   let discoveryContinuityStatus = "disabled";
+  let discoveryContinuityComposition: DurableDiscoveryContinuityComposition |
+    null = null;
   if (
     continuityCompositionPath !== undefined &&
     continuityCompositionPath.trim() !== ""
   ) {
     try {
-      const continuityComposition = createDurableDiscoveryContinuityComposition({
+      discoveryContinuityComposition =
+        createDurableDiscoveryContinuityComposition({
         catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
         chainId: String((await provider.getNetwork()).chainId),
         sourceRegistryFingerprint: "strict-source-registry-v1",
@@ -1688,7 +1695,7 @@ async function main(): Promise<void> {
         },
         assertGenerationCurrent: () => {},
       });
-      const loaded = await continuityComposition.loadForRestart();
+      const loaded = await discoveryContinuityComposition.loadForRestart();
       discoveryContinuityStatus = loaded.status;
       console.log(
         `[searcher/live] discovery continuity composition ` +
@@ -1702,6 +1709,32 @@ async function main(): Promise<void> {
           `${discoveryContinuityStatus}`,
       );
     }
+  }
+  // Strict catalog consumer diagnostic (shadow/diagnostic; OFF by default).
+  // SEARCHER_STRICT_CATALOG_CONSUMER=1 resolves the currently committed
+  // strict views through the source-bound consumer and logs a redacted
+  // summary. It never feeds the solver and never falls back to the legacy
+  // registry; this grants no default-authority cutover.
+  if (process.env.SEARCHER_STRICT_CATALOG_CONSUMER === "1") {
+    let strictConsumerStatus: string;
+    try {
+      const committed =
+        discoveryContinuityComposition?.catalogRoot.capture() ?? null;
+      strictConsumerStatus = committed === null
+        ? "no-committed-publication"
+        : resolveStrictCatalogConsumerDiagnostic({
+            composition: discoveryContinuityComposition,
+            source: committed.views.source,
+            generation: committed.views.source.generation,
+          });
+    } catch (error) {
+      strictConsumerStatus =
+        `failed:${error instanceof Error ? error.message : String(error)}`;
+    }
+    console.log(
+      `[searcher/live] strict catalog consumer diagnostic ` +
+        strictConsumerStatus,
+    );
   }
   let protocolGraphCompleteThrough = -1;
   const rawBlockScanOverrides = loadBlockScanViewOverrides();

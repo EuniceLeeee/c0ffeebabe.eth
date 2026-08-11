@@ -2238,6 +2238,25 @@ commit 见下，shadow/disabled-path 硬化，非 cutover）：**
   仍是 shadow/disabled-path consumer 入口，production solver 接线与
   默认 authority cutover 未落地。
 
+**2026-08-12 strict catalog consumer production-entry diagnostic checkpoint
+（实现 commit 见下，env-gated shadow 接线，非 cutover）：**
+
+- 新增 `resolveStrictCatalogConsumerDiagnostic`：production startup 在
+  `SEARCHER_STRICT_CATALOG_CONSUMER=1` 时对当前 committed strict views
+  创建 source-bound consumer，解析 pricing/funding 各一条并输出 redacted
+  摘要（revision/edges/pricing/funding 计数）；无 composition /
+  无 committed publication / source mismatch / generation fence 拒绝均
+  显式日志，绝不回落 legacy registry；
+- `main.ts` 接入该 diagnostic 门（默认 OFF，不参与 solver、不改变
+  authority），复用既有 discovery continuity composition root 的
+  `catalogRoot.capture()`；
+- 新增合同测试 `searcher:strict-catalog-consumer-diagnostic`：覆盖
+  no-composition、no-committed-publication、正常 resolved 摘要、stale
+  source `source mismatch`、generation fence 拒绝；
+- 证据：该合同 + `searcher:architecture-migration-capture` + 完整
+  listener build 全过；production solver 接线与默认 authority cutover
+  仍未落地。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
