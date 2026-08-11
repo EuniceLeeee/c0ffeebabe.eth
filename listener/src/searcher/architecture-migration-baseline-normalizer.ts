@@ -47,6 +47,10 @@ import { ASTRA_MULTITOKEN_FAMILY_ID } from
   "./venues/protocols/astra-multitoken-family/manifest.js";
 import { astraStaticBindingProjection } from
   "./venues/protocols/astra-multitoken-family/binding.js";
+import { EIGENPIE_FAMILY_ID } from
+  "./venues/protocols/eigenpie-family/manifest.js";
+import { eigenpieStaticBindingProjection } from
+  "./venues/protocols/eigenpie-family/binding.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -239,6 +243,15 @@ export interface BaselineAstraMultiTokenFacts {
   readonly tokenOut: string;
 }
 
+export interface BaselineEigenpieFacts {
+  readonly familyId: "protocol:eigenpie";
+  readonly target: string;
+  readonly asset: string;
+  readonly receipt: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -271,6 +284,7 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineSelfBurnNativeInstanceItem,
         "protocol:astra-multitoken":
           normalizeBaselineAstraMultiTokenInstanceItem,
+        "protocol:eigenpie": normalizeBaselineEigenpieInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -297,6 +311,7 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineSelfBurnNativePriceItem,
         "protocol:astra-multitoken":
           normalizeBaselineAstraMultiTokenPriceItem,
+        "protocol:eigenpie": normalizeBaselineEigenpiePriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -323,6 +338,7 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineSelfBurnNativeEdgeItem,
         "protocol:astra-multitoken":
           normalizeBaselineAstraMultiTokenEdgeItem,
+        "protocol:eigenpie": normalizeBaselineEigenpieEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -350,6 +366,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineSelfBurnNativeEnumeratedRouteItem,
         "protocol:astra-multitoken":
           normalizeBaselineAstraMultiTokenEnumeratedRouteItem,
+        "protocol:eigenpie":
+          normalizeBaselineEigenpieEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -376,6 +394,7 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineSelfBurnNativeExactQuoteItem,
         "protocol:astra-multitoken":
           normalizeBaselineAstraMultiTokenExactQuoteItem,
+        "protocol:eigenpie": normalizeBaselineEigenpieExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -408,6 +427,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineSelfBurnNativeExecutionFragmentItem,
         "protocol:astra-multitoken":
           normalizeBaselineAstraMultiTokenExecutionFragmentItem,
+        "protocol:eigenpie":
+          normalizeBaselineEigenpieExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -440,6 +461,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineSelfBurnNativeFinalSimulationItem,
         "protocol:astra-multitoken":
           normalizeBaselineAstraMultiTokenFinalSimulationItem,
+        "protocol:eigenpie":
+          normalizeBaselineEigenpieFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -491,6 +514,9 @@ function normalizeByFamily(
     readonly "protocol:astra-multitoken": (
       item: RawMigrationSemanticItem,
     ) => RawMigrationSemanticItem;
+    readonly "protocol:eigenpie": (
+      item: RawMigrationSemanticItem,
+    ) => RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -528,6 +554,9 @@ function normalizeByFamily(
   }
   if (familyId === "protocol:astra-multitoken") {
     return handlers["protocol:astra-multitoken"](item);
+  }
+  if (familyId === "protocol:eigenpie") {
+    return handlers["protocol:eigenpie"](item);
   }
   return handlers.default(item);
 }
@@ -5711,6 +5740,329 @@ export function normalizeBaselineAstraMultiTokenFinalSimulationItem(
   });
 }
 
+function eigenpieFactsGuard(
+  facts: Partial<BaselineEigenpieFacts> | undefined,
+): facts is Required<BaselineEigenpieFacts> {
+  return facts !== undefined &&
+    facts.familyId === "protocol:eigenpie" &&
+    typeof facts.target === "string" &&
+    typeof facts.asset === "string" &&
+    typeof facts.receipt === "string" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function eigenpieFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineEigenpieFacts>;
+  })?.baselineFacts;
+  if (!eigenpieFactsGuard(facts)) return null;
+  return facts;
+}
+
+function deriveEigenpieCanonicalFacts(
+  facts: Required<BaselineEigenpieFacts>,
+): {
+  readonly target: string;
+  readonly asset: string;
+  readonly receipt: string;
+  readonly lowerTarget: string;
+  readonly lowerAsset: string;
+  readonly lowerReceipt: string;
+  readonly instanceKeyValue: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const target = canonicalAddress(facts.target);
+  const asset = canonicalAddress(facts.asset);
+  const receipt = canonicalAddress(facts.receipt);
+  const lowerTarget = lowerAddress(target);
+  const lowerAsset = lowerAddress(asset);
+  const lowerReceipt = lowerAddress(receipt);
+  const descriptor = Object.freeze({
+    target,
+    asset,
+    receipt,
+  }) as unknown as Parameters<typeof eigenpieStaticBindingProjection>[0];
+  const bindingFingerprint = hashCanonical(
+    eigenpieStaticBindingProjection(descriptor),
+  );
+  const venueIdentityHash = hashCanonical(Object.freeze({
+    kind: "address-protocol",
+    target: lowerTarget,
+  }));
+  const instanceKeyValue =
+    `${lowerTarget}:${lowerAsset}:${lowerReceipt}`;
+  const routeKeyValue = [
+    "protocol:eigenpie",
+    instanceKeyValue,
+    "deposit-asset",
+  ].join("\u001f");
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "protocol:eigenpie",
+    instanceKeyValue,
+    lowerTarget,
+    `${lowerAsset}>${lowerReceipt}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    target,
+    asset,
+    receipt,
+    lowerTarget,
+    lowerAsset,
+    lowerReceipt,
+    instanceKeyValue,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineEigenpieEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = eigenpieFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveEigenpieCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.asset,
+      tokenOut: derived.receipt,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineEigenpieEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineEigenpieEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "eigenpie baseline enumerated route item must carry a non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineEigenpieInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = eigenpieFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveEigenpieCanonicalFacts(facts);
+  const descriptor = Object.freeze({
+    target: derived.target,
+    asset: derived.asset,
+    receipt: derived.receipt,
+  }) as unknown as Parameters<typeof eigenpieStaticBindingProjection>[0];
+  const staticBindingFingerprint = hashCanonical({
+    capability: EIGENPIE_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: eigenpieStaticBindingProjection(descriptor),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.instanceKeyValue,
+    value: Object.freeze({
+      familyId: "protocol:eigenpie",
+      instanceKey: derived.instanceKeyValue,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineEigenpiePriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = eigenpieFactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveEigenpieCanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "eigenpie-deposit-asset",
+    instanceKey: derived.instanceKeyValue,
+    target: derived.target,
+    tokenIn: derived.asset,
+    tokenOut: derived.receipt,
+    slotKind: "protocol" as const,
+    protocolAction: "wrap" as const,
+    edgeKind: "protocol" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.instanceKeyValue,
+      mid: Object.freeze({
+        kind: "protocol",
+        pool: derived.target,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineEigenpieExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = eigenpieFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveEigenpieCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.asset,
+      tokenOut: derived.receipt,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineEigenpieExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = eigenpieFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveEigenpieCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.asset,
+      tokenOut: derived.receipt,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "eigenpie-deposit-asset",
+      executionTarget: derived.target,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineEigenpieFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = eigenpieFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveEigenpieCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.asset,
+      tokenOut: derived.receipt,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -5779,4 +6131,9 @@ const SELF_BURN_NATIVE_CATALOG_FAMILY =
 const ASTRA_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ASTRA_MULTITOKEN_FAMILY_ID,
+  );
+
+const EIGENPIE_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    EIGENPIE_FAMILY_ID,
   );
