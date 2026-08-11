@@ -68,7 +68,7 @@ authority 混在一起：
 |阶段|截至 2026-08-09 committed slice 可确认状态|仍未满足的晋升条件|
 |---|---|---|
 |Phase 0 共享 substrate|physical-settlement ownership 与 published/memo store separation 已有 change-set 实现和定向 unit contract；已绑定 committed HEAD `934eed7a`，Phase 0 回归集（lifecycle-content-cache、catalog-publication、state-carry-proof、discovery-checkpoint、完整 build）全过|即使通过也不能据此宣称 deployed/live；Phase 0 是后续 parity 的前置，不与 Family 迁移混同|
-|Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在，`7ba6f9d3` 已落地 trusted sealed-production capture issuer（unit runner 继续拒绝自封 `sealed-production`）|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
+|Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在，`7ba6f9d3` 已落地 trusted sealed-production capture issuer（unit runner 继续拒绝自封 `sealed-production`），`a879665a` 已落地双侧 capture 文件入口 `runArchitectureMigrationParityFiles` + `architecture-migration-parity:run` CLI|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
 |Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立；`1527c116` 为 exact quote cache 补独立 issuer/key 绑定/LRU/eviction 合同测试|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
 |Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
 |Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS、`c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract、`642373c1` 的中央 value 深冻结 + StateInstance mutation/carry shadow proof、`9d954df4` 的 Credit 独立 execution handle shadow issuer、`8d4ed796` 的 point-in-time enumerator core 纯函数合同，以及 `4275be6f` 的 durable discovery continuity composition root（file CAS → closure verifier → strict catalog root + exact-set coupling 的 shadow 组合）等 runtime slice 已有 unit/shadow gate|durable checkpoint 的 main 接线（production startup 采用该 composition）与 strict catalog prepare 内的一次性消费、production point-in-time enumerator 的真实数据源接线、strict pricing production consumer、Funding/Credit 全 catalog CAS 与 production consumer、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
@@ -3123,6 +3123,16 @@ manifest、config/policy、frozen corpus 和 evidence refs 的 `sealed-productio
 `searcher:architecture-migration-parity` PASS、完整 listener build 通过。
 该 issuer 只是 Phase A 前置；真实旧 ds 与 challenger 的 `sealed-production` 双侧
 capture/receipt 仍未产生，不能据此宣称 Phase A/C/D parity 或 cutover。
+
+**2026-08-11 migration parity production-shaped 文件入口 checkpoint（实现 commit
+`a879665a5cff68e8d386d6155f83e0f517c92c3a`）：** 新增
+`runArchitectureMigrationParityFiles`：读双侧 raw capture JSON，`sealed-production`
+经 trusted issuer 重新校验/签发，`unit-contract` 走原 raw 路径，统一 seal + run 后输出
+receipt；并新增 `architecture-migration-parity:run <batch-request.json>` CLI。
+合同覆盖：unit/sealed 双侧文件跑通、缺 issuer fail closed、畸形 capture 文件 fail closed。
+证据：`searcher:architecture-migration-parity-runner` PASS、
+`searcher:architecture-migration-parity` PASS、完整 listener build 通过。真实双侧
+`sealed-production` capture 仍未产生，Phase A/C/D parity 与 cutover 不因此成立。
 
 #### 20.2.1 同输入双跑
 
