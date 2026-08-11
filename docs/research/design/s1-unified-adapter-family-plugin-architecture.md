@@ -1681,6 +1681,22 @@ commits impl `c91a9a43`、baseline `877e95b7`/`0d518421`，节点机器证据）
 本 phase 关闭 univ3 真实 corpus 双侧 parity；剩余：其余 20 个 Family 的
 capture 覆盖（含 funding-only 与各 protocol 族）。
 
+**2026-08-11 multi-family real capture reproducibility checkpoint（实现
+commit impl `dc952658`，本地跨分支证据）：**
+
+- `architecture-migration-capture:real` 支持 `--check`：同一 manifest 连续
+  两次生成 side JSON 必须字节一致（`real capture reproducible`）；
+- 新增 `scripts/run-migration-parity-multi.py` 编排器：读取 frozen
+  manifest（sourceBlock/hash + cases），逐 Family 跑 baseline exporter、
+  合并 baseline sides、跑 impl challenger real capture、写 batch request、
+  跑 trusted parity runner 并落盘 receipt；本地跨分支复跑
+  univ2+univ3 fixture corpus 得到与节点一致的
+  `aggregate=partial`、`commonGraphParity=true`、
+  `univ2-standard pass`、`univ3-standard pass`。
+
+该编排器使后续 Family（univ4、funding-only、protocol 族）的节点双跑可以
+用同一 frozen manifest 机械复现，不再依赖手写 SSM 命令。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
