@@ -1697,6 +1697,27 @@ commit impl `dc952658`，本地跨分支证据）：**
 该编排器使后续 Family（univ4、funding-only、protocol 族）的节点双跑可以
 用同一 frozen manifest 机械复现，不再依赖手写 SSM 命令。
 
+**2026-08-11 univ4 fixture capture checkpoint（实现 commit impl
+`9caaa83a`，fixture 级合同证据，不是节点机器证据）：**
+
+- 新增 `captureUniv4FixtureCase`：manager swap-call observation（pool key
+  USDC/WETH 0.3%/60/no-hook）走完整 strict lifecycle——identity
+  `manager-active-proof`（manager code + state view getSlot0/getLiquidity）、
+  instance、routes、pricing current（slot0/liquidity + univ4 precision
+  quote）、`univ4-quoter` exact、`univ4Execution` multi-node fragment
+  （unlock/swap/take/sync/transfer）、final-sim 两腿 conservation +
+  repayment；
+- 全部 10 个 stage 均为 `exercised`（edges/prices/exact/execution/
+  final-sim 各 2 条）；canonical edge id 使用
+  `manager+poolId` 结构（`manager-pool-id` venue）；
+- 合同证据：`searcher:architecture-migration-capture` PASS（univ4 fixture
+  全 stage 断言）、parity-runner/parity/evidence PASS、完整 listener
+  build。
+
+univ4 baseline exporter（冻结 ds `univ4-standard`）+ univ4 normalizer +
+节点真实 corpus 双跑是下一 phase；此前不得把 univ4 当作 batch pass 或
+production cutover。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
