@@ -484,6 +484,62 @@ export function adapterFamilySnapshotInventoryHash(input: {
   } as unknown as CanonicalValue);
 }
 
+/**
+ * Fail-closed coupling between a resolved snapshot inventory closure and the
+ * staged publication keys of the strict catalog. Every closure Family must
+ * stage exactly its admitted instance publication keys (sorted comparison,
+ * no extras, no missing), and no extra staged Family may appear. This is the
+ * `staged exact-set` half of the closure-receipt consumption gate; the strict
+ * shadow catalog keeps refusing `complete-snapshot` until the production
+ * point-in-time enumerator and the scan/bootstrap admitted-key exact union
+ * land, so this contract is exercised as a standalone shadow gate.
+ */
+export function assertClosureStagedExactSetCoupling(input: {
+  readonly closure: ResolvedAdapterFamilySnapshotInventoryClosure;
+  readonly stagedByFamily: ReadonlyMap<FamilyId, readonly string[]>;
+}): void {
+  const staged = new Map<string, readonly string[]>();
+  for (const [familyId, keys] of input.stagedByFamily) {
+    staged.set(
+      familyId,
+      Object.freeze(
+        [...keys].map((key) => nonempty(key, "staged publication key")).sort(),
+      ),
+    );
+  }
+  const expectedFamilies = new Set<string>();
+  for (const family of input.closure.families) {
+    expectedFamilies.add(family.familyId);
+    const expected = [...family.admittedInstancePublicationKeys]
+      .map((key) => nonempty(key, "admitted publication key"))
+      .sort();
+    const actual = staged.get(family.familyId) ?? [];
+    if (actual.length !== expected.length) {
+      throw new Error(
+        `closure staged exact-set mismatch for ${family.familyId}: ` +
+          `expected ${expected.length} keys, staged ${actual.length}`,
+      );
+    }
+    for (let index = 0; index < expected.length; index++) {
+      if (actual[index] !== expected[index]) {
+        const missing = expected.filter((key) => !actual.includes(key));
+        const extra = actual.filter((key) => !expected.includes(key));
+        throw new Error(
+          `closure staged exact-set mismatch for ${family.familyId}: ` +
+            `missing=${missing.join(",")} extra=${extra.join(",")}`,
+        );
+      }
+    }
+  }
+  for (const familyId of staged.keys()) {
+    if (!expectedFamilies.has(familyId)) {
+      throw new Error(
+        `closure staged exact-set mismatch: unexpected Family ${familyId}`,
+      );
+    }
+  }
+}
+
 function expectedFamilies(
   catalog: FamilyCapabilityCatalog,
 ): readonly ExpectedFamily[] {
