@@ -2068,6 +2068,27 @@ commits impl `e737d9dd`、baseline `2b84f1bb`，本地机器证据）：**
 剩余 6 族：`credit:fluid`、`curve-underlying`、`custom-swap:angstrom-v4`、
 `custom-swap:dodo-v2`、`fluid-dex` + `protocol:eigenpie`。
 
+**2026-08-12 eigenpie bilateral parity phase checkpoint（实现 commits
+impl `4cdd1f10`、baseline `a6edaad5`，本地机器证据）：**
+
+- fixture runtime 扩展 `observed-sender` caller authority 到 eigenpie；
+  `identity-active-deposit` effect-delta 结果带 asset/receipt token delta、
+  receipt total-supply delta 与 AssetDeposit log；
+- impl `captureEigenpieFixtureCase`（observed depositAsset、quote→active
+  两阶段 identity、1:1 getMLRTAmountToMint、execution/final-sim）全部 10
+  stage `exercised`；normalizer 六类 stage（composite pair instance key、
+  `address-protocol` venue、depositAsset 静态投影、wrap 行为）落地；
+- baseline exporter `captureEigenpieBaselineCase`（pair instance、
+  quote chain 1e18、canonicalHash 镜像）；
+- 本地跨分支 parity（block `25729060`，十七族 manifest）：十七族全部
+  **pass**、commonGraph 五 stage delta 全空；
+  `searcher:architecture-migration-capture` 合同测试与完整
+  `npm run build` 全部通过；仍是 sealed-capture/shadow receipt，不是
+  production cutover 或 live evidence。
+
+剩余 5 族：`credit:fluid`、`curve-underlying`、`custom-swap:angstrom-v4`、
+`custom-swap:dodo-v2`、`fluid-dex`。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
