@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   const corpus = {
     ...buildFixtureCaptureCorpus({
       captureId: descriptor.captureId ?? "challenger",
-      commit: descriptor.commit ?? "27c44ffa4bf845fd105018df8c78e9df50194c35",
+      commit: descriptor.commit ?? "4f6761f1435a65ef77e5df2f8edd8eff7b91cf95",
       source,
       familyCases: [familyCase],
     }),
