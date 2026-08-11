@@ -1334,6 +1334,24 @@ capture 未落地。
 证据：全套件（10 合同）+ credit + parity + discovery-dex-cursor + 完整 listener
 build 全部通过；Phase B/C shadow 套件在本批 commit 上重跑全过。
 
+**2026-08-11 sealed-parity capture harness checkpoint（实现 commit
+`27c44ffa`，#2 前置完成，fixture 级）：**
+
+- `ArchitectureMigrationCaptureCorpus` 清单 + 校验（captureId/commit/五类
+  fingerprint/evidenceRefs/stateAnchors/familyCases）；
+- `architecture-migration-capture:run <corpus.json> <out.json>` CLI +
+  `writeArchitectureMigrationSideCapture`（bigint-safe JSON）；
+- univ2 fixture 回放器：真实执行当前 strict lifecycle，
+  instances/edges/prices 为 `exercised`，enumeratedRoutes/exactQuotes/
+  executionFragments/finalSimulations 诚实标为 `framework-blocked`；
+- 端到端 sealed parity：`eligible=true`、全 cohort 语义正确
+  （univ2 framework-blocked ×1、其余 21 not-exercised）；
+- 编排脚本 `scripts/capture-migration-parity.sh`（challenger 侧）。
+
+证据：`searcher:architecture-migration-capture` PASS + 全套件 + parity +
+完整 build。剩余节点步骤：ds-baseline 冻结 SHA 的 capture exporter、真实
+corpus 双跑、batch receipt；`sealed-production` 双侧 capture 仍未产生。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
