@@ -1316,6 +1316,24 @@ capture 未落地。
 证据：`searcher:adapter-family-shadow-suite`（10 合同）+ credit + parity +
 完整 listener build 全部通过；Phase B/C shadow 套件在本批 commit 上重跑全过。
 
+**2026-08-11 30-slice 硬化批量 checkpoint（实现 commits `15c993c5`、
+`3b059a64`、`966179b2`、`0b7324a5`）：**
+
+- consumer 拒绝非冻结/非 committed views；`strictPricingPublicationKeysByFamily`；
+- Funding offer 投影校验（asset/amounts/source/evidenceRefs/冻结）与 verified
+  outcome 强制 evidence refs；
+- closure 拒绝重复 closure Family 与重复 staged key；
+- parity request 逐 stateAnchor 校验、baseline/challenger 路径去重、assembler
+  evidenceRefs 去重排序并冻结；
+- stage route/unsupported 未知 Family 拒绝；Credit 零 route 显式拒绝
+  （graph-required family 无 route handles fail closed）；
+- dex cursor 空文件/错 schema/错版本/嵌套目录/覆盖写、seed 退化回退；
+- enumerator 空 Family 零库存、跨 key 同地址、hash 顺序无关、空 familyId 拒绝；
+- exact cache 0 金额稳定 key、evidenceRefs 归一、命中输出全冻结、默认容量。
+
+证据：全套件（10 合同）+ credit + parity + discovery-dex-cursor + 完整 listener
+build 全部通过；Phase B/C shadow 套件在本批 commit 上重跑全过。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
