@@ -2221,6 +2221,23 @@ commit 见下，本地机器证据）：**
   默认 authority、sealed parity 的节点版本、systemic-live gate）与
   Phase E 状态。
 
+**2026-08-12 source-bound strict catalog consumer checkpoint（实现
+commit 见下，shadow/disabled-path 硬化，非 cutover）：**
+
+- 新增 `createSourceBoundStrictCatalogConsumer`：每个 committed strict
+  catalog publication 绑定唯一 canonical source/generation；每次
+  pricing/funding/credit resolve 前先断言 views.source 与绑定 source
+  一致并穿过 runtime generation fence，stale committed view 永远不能
+  服务更新 source，缺失即显式 outcome、绝不回落 legacy registry；
+- 合同测试覆盖：正确 source+current generation 正常解析
+  pricing/funding/credit；stale source resolve 抛 `source mismatch`；
+  generation fence 拒绝时 resolve 抛错；`boundSource` 与提交 source
+  一致；
+- 证据：`searcher:adapter-family-shadow-suite`（10 合同套件，含
+  shadow-catalog-publication 更新）全过 + 完整 listener build 通过；
+  仍是 shadow/disabled-path consumer 入口，production solver 接线与
+  默认 authority cutover 未落地。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

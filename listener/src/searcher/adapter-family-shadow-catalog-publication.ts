@@ -259,6 +259,13 @@ export interface StrictCatalogConsumer {
   }) => StrictShadowCatalogRouteHandle | null;
 }
 
+export interface SourceBoundStrictCatalogConsumer {
+  readonly boundSource: CanonicalSource;
+  readonly resolvePricingMid: StrictCatalogConsumer["resolvePricingMid"];
+  readonly resolveFundingOffers: StrictCatalogConsumer["resolveFundingOffers"];
+  readonly resolveCreditRoute: StrictCatalogConsumer["resolveCreditRoute"];
+}
+
 /**
  * Single production-facing entry point over one committed strict catalog
  * publication. Solver/planner wiring must consume pricing/funding/credit
@@ -300,6 +307,71 @@ export function createStrictCatalogConsumer(
     resolvePricingMid,
     resolveFundingOffers,
     resolveCreditRoute,
+  });
+}
+
+/**
+ * Source-bound production consumer. The solver/planner must create one
+ * consumer per committed publication and never let a stale committed view
+ * serve a newer canonical source: every resolve first asserts the view
+ * source/generation and the runtime generation fence. This is still a
+ * shadow/disabled-path consumer, not a default authority cutover.
+ */
+export function createSourceBoundStrictCatalogConsumer(input: {
+  readonly views: StrictShadowCatalogViews;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+  readonly assertGenerationCurrent: (
+    generation: number,
+    source: CanonicalSource,
+  ) => void;
+}): SourceBoundStrictCatalogConsumer {
+  const { views, source, generation, assertGenerationCurrent } = input;
+  const assertBound = (): void => {
+    if (
+      views.source.number !== source.number ||
+      views.source.hash.toLowerCase() !== source.hash.toLowerCase() ||
+      views.source.generation !== source.generation
+    ) {
+      throw new Error(
+        "strict catalog consumer source mismatch: committed view " +
+          `${views.source.number}/${views.source.hash} cannot serve ` +
+          `${source.number}/${source.hash}`,
+      );
+    }
+    if (typeof assertGenerationCurrent !== "function") {
+      throw new Error(
+        "strict catalog consumer requires a generation fence",
+      );
+    }
+    assertGenerationCurrent(generation, source);
+  };
+  const base = createStrictCatalogConsumer(views);
+  return Object.freeze({
+    boundSource: Object.freeze({
+      number: source.number,
+      hash: source.hash.toLowerCase(),
+      generation: source.generation,
+    }),
+    resolvePricingMid: (input: {
+      readonly pricingPublicationKey: string;
+      readonly routeKey: RouteKey;
+    }) => {
+      assertBound();
+      return base.resolvePricingMid(input);
+    },
+    resolveFundingOffers: (input: {
+      readonly fundingPublicationKey: string;
+    }) => {
+      assertBound();
+      return base.resolveFundingOffers(input);
+    },
+    resolveCreditRoute: (input: {
+      readonly canonicalEdgeId: CanonicalEdgeId;
+    }) => {
+      assertBound();
+      return base.resolveCreditRoute(input);
+    },
   });
 }
 

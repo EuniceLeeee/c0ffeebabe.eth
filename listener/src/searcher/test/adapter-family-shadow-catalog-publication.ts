@@ -7,6 +7,7 @@ import {
 } from "../adapter-family-catalog-publication.js";
 import {
   StrictAdapterFamilyShadowCatalogPublicationRoot,
+  createSourceBoundStrictCatalogConsumer,
   createStrictCatalogConsumer,
   readStrictFundingOffers,
   readStrictPricingMid,
@@ -966,6 +967,41 @@ async function main(): Promise<void> {
     pricingPublicationKey: "missing-pricing-key",
     routeKey: readRouteKey,
   }), { kind: "missing" });
+  const boundConsumer = createSourceBoundStrictCatalogConsumer({
+    views: fundingCommitted.views,
+    source: fundingSource,
+    generation: fundingSource.generation,
+    assertGenerationCurrent: () => {},
+  });
+  assert.equal(boundConsumer.boundSource.number, fundingSource.number);
+  assert.deepEqual(boundConsumer.resolveFundingOffers({
+    fundingPublicationKey:
+      [...fundingCommitted.views.fundingByPublicationKey.keys()][0]!,
+  }), { kind: "tombstone" });
+  assert.deepEqual(boundConsumer.resolvePricingMid({
+    pricingPublicationKey: pricingKey,
+    routeKey: readRouteKey,
+  }).kind, "mid");
+  assert.throws(() => createSourceBoundStrictCatalogConsumer({
+    views: fundingCommitted.views,
+    source: source(999),
+    generation: 999,
+    assertGenerationCurrent: () => {},
+  }).resolveFundingOffers({
+    fundingPublicationKey:
+      [...fundingCommitted.views.fundingByPublicationKey.keys()][0]!,
+  }), /source mismatch/);
+  assert.throws(() => createSourceBoundStrictCatalogConsumer({
+    views: fundingCommitted.views,
+    source: fundingSource,
+    generation: fundingSource.generation,
+    assertGenerationCurrent: () => {
+      throw new Error("generation fence rejected");
+    },
+  }).resolvePricingMid({
+    pricingPublicationKey: pricingKey,
+    routeKey: readRouteKey,
+  }), /generation fence/);
   const fundingKeys = strictFundingPublicationKeysByFamily({
     views: fundingCommitted.views,
     familyId: fundingFamilyId,
