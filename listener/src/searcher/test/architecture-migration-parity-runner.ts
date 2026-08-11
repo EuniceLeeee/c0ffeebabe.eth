@@ -390,6 +390,19 @@ async function testFileEntryRunsUnitAndSealedBatches(): Promise<void> {
     }),
     /not a raw architecture migration side capture/,
   );
+  const badJsonPath = join(directory, "bad.json");
+  await writeFile(badJsonPath, "not json");
+  await assert.rejects(
+    runArchitectureMigrationParityFiles({
+      baselinePath: badJsonPath,
+      challengerPath,
+      evidenceClass: "unit-contract",
+      mode: "pure-refactor",
+      stateAnchors: raw.stateAnchors,
+      performanceDiagnostics: raw.performanceDiagnostics,
+    }),
+    /JSON|Unexpected/,
+  );
 }
 
 function testRequestFileValidation(): void {
@@ -435,6 +448,10 @@ function testRequestFileValidation(): void {
     () => validateArchitectureMigrationRequestFile(null),
     /batch request must be an object/,
   );
+  assert.doesNotThrow(() => validateArchitectureMigrationRequestFile({
+    ...request,
+    evidenceClass: "sealed-production",
+  }));
 }
 
 function testSideCaptureAssemblerRoundTripsFixtureShape(): void {
@@ -453,6 +470,19 @@ function testSideCaptureAssemblerRoundTripsFixtureShape(): void {
     nonMigratedFamilies: side.nonMigratedFamilies,
   });
   assert.deepEqual(rebuilt, side);
+  assert.throws(() => buildArchitectureMigrationSideCapture({
+    captureId: "",
+    commit: rebuilt.closure.commit,
+    productionClosureHash: rebuilt.closure.productionClosureHash,
+    activationManifestHash: rebuilt.closure.activationManifestHash,
+    normalizedConfigHash: rebuilt.closure.normalizedConfigHash,
+    productionPolicyHash: rebuilt.closure.productionPolicyHash,
+    corpusHash: rebuilt.closure.corpusHash,
+    evidenceRefs: rebuilt.closure.evidenceRefs,
+    familyCases: rebuilt.familyCases,
+    commonGraph: rebuilt.commonGraph,
+    nonMigratedFamilies: rebuilt.nonMigratedFamilies,
+  }), /captureId/);
 }
 
 function fixtureInput(options: FixtureOptions): ArchitectureMigrationBatchInput {
