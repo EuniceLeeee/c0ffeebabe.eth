@@ -157,6 +157,43 @@ export function readStrictPricingMid(input: {
   return mid === undefined ? { kind: "missing" } : { kind: "mid", mid };
 }
 
+export type StrictFundingReadOutcome =
+  | { readonly kind: "offers"; readonly offers: readonly PreparedFundingOffer[] }
+  | { readonly kind: "tombstone" }
+  | { readonly kind: "missing" };
+
+/**
+ * Strict Funding consumer read: an explicit empty verified publication is a
+ * tombstone, never an implicit carry of the previous offer set. Production
+ * consumers must go through this view (or the issuer-bound offer handles).
+ */
+export function readStrictFundingOffers(input: {
+  readonly views: StrictShadowCatalogViews;
+  readonly fundingPublicationKey: string;
+}): StrictFundingReadOutcome {
+  const state = input.views.fundingByPublicationKey.get(
+    input.fundingPublicationKey,
+  );
+  if (state === undefined) return { kind: "missing" };
+  if (state.tombstone) return { kind: "tombstone" };
+  return { kind: "offers", offers: state.offers };
+}
+
+/**
+ * Strict Credit consumer read: resolves a canonical edge to the exact
+ * issuer-bound route handle published in the same CAS. A null result means
+ * the edge was not published by the strict catalog, never a legacy registry
+ * lookup.
+ */
+export function readStrictCreditRoute(input: {
+  readonly views: StrictShadowCatalogViews;
+  readonly canonicalEdgeId: CanonicalEdgeId;
+}): StrictShadowCatalogRouteHandle | null {
+  return input.views.handleByCanonicalEdgeId.get(
+    input.canonicalEdgeId,
+  ) ?? null;
+}
+
 /** One pointer is the only observable shadow publication state. */
 export interface CommittedStrictShadowCatalogPublication {
   readonly envelope: StrictShadowCatalogEnvelope;

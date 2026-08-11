@@ -17,12 +17,15 @@ import {
 } from "../adapter-family-graph-runtime.js";
 import {
   StrictAdapterFamilyShadowCatalogPublicationRoot,
+  readStrictCreditRoute,
 } from "../adapter-family-shadow-catalog-publication.js";
 import {
   catalogDiscoverySourceFingerprint,
   createCatalogSourceTransitionIssuer,
   createCatalogTerminalRemovalIssuer,
 } from "../adapter-family-catalog-publication.js";
+import type { CanonicalEdgeId } from
+  "../venues/blockscan-state-capability.js";
 import {
   executeCreditFamilyInstanceLifecycle,
   type FamilyLifecycleMatch,
@@ -808,6 +811,21 @@ async function creditStrictCatalogCasJoinsSamePublication(): Promise<void> {
       family.plugin.manifest.familyId,
     )?.status,
     "resolved",
+  );
+  const committedEdge = committed.views.edges[0]!;
+  assert.equal(
+    readStrictCreditRoute({
+      views: committed.views,
+      canonicalEdgeId: committedEdge.canonicalEdgeId,
+    }),
+    routeA,
+  );
+  assert.equal(
+    readStrictCreditRoute({
+      views: committed.views,
+      canonicalEdgeId: "0x" + "9".repeat(64) as CanonicalEdgeId,
+    }),
+    null,
   );
 
   const nextSource: CanonicalSource = Object.freeze({
