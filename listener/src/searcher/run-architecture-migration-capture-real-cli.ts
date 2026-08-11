@@ -23,6 +23,7 @@ import {
   captureSelfBurnNativeFixtureCase,
   captureAstraMultiTokenFixtureCase,
   captureEigenpieFixtureCase,
+  captureCurveUnderlyingFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -192,6 +193,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureEigenpieFixtureCase({
           source,
           caseId: `eigenpie:${source.number}`,
+        }));
+      } else if (item.family === "curve-underlying") {
+        familyCases.push(await captureCurveUnderlyingFixtureCase({
+          source,
+          caseId: `curve-underlying:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

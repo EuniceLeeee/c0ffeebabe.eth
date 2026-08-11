@@ -41,7 +41,13 @@ export const curveUnderlyingIdentity = {
     kind: "registry-member" as const,
     lineageId: CURVE_UNDERLYING_REGISTRY_LINEAGE_ID,
     applies: () => true,
-    requirements: () => ({ transports: ["eth-call" as const, "get-code" as const] }),
+    requirements(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>) {
+      return identityEvidence(input.evidence) === undefined
+        ? {
+            transports: ["eth-call" as const, "get-code" as const],
+          }
+        : { transports: ["eth-call" as const] };
+    },
     buildRequests(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>) {
       const evidence = identityEvidence(input.evidence);
       if (evidence === undefined) return registryRequests(input.candidate);

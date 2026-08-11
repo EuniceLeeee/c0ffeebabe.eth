@@ -33,6 +33,7 @@ import {
   captureSelfBurnNativeFixtureCase,
   captureAstraMultiTokenFixtureCase,
   captureEigenpieFixtureCase,
+  captureCurveUnderlyingFixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -854,6 +855,25 @@ async function testEigenpieFixtureCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.items.length, 1);
 }
 
+async function testCurveUnderlyingFixtureCase(): Promise<void> {
+  const familyCase = await captureCurveUnderlyingFixtureCase({
+    source: SOURCE,
+  });
+  assert.equal(familyCase.familyId, "curve-underlying");
+  for (const stage of ARCHITECTURE_MIGRATION_STAGES) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `curve-underlying fixture ${stage} must be exercised`,
+    );
+  }
+  assert.equal(familyCase.stages.edges?.items.length, 2);
+  assert.equal(familyCase.stages.prices?.items.length, 2);
+  assert.equal(familyCase.stages.exactQuotes?.items.length, 2);
+  assert.equal(familyCase.stages.executionFragments?.items.length, 2);
+  assert.equal(familyCase.stages.finalSimulations?.items.length, 2);
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -1204,6 +1224,7 @@ async function main(): Promise<void> {
   await testSelfBurnNativeFixtureCase();
   await testAstraMultiTokenFixtureCase();
   await testEigenpieFixtureCase();
+  await testCurveUnderlyingFixtureCase();
   console.log("architecture-migration capture harness PASS");
 }
 

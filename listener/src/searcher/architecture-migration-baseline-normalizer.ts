@@ -51,6 +51,10 @@ import { EIGENPIE_FAMILY_ID } from
   "./venues/protocols/eigenpie-family/manifest.js";
 import { eigenpieStaticBindingProjection } from
   "./venues/protocols/eigenpie-family/binding.js";
+import { CURVE_UNDERLYING_FAMILY_ID } from
+  "./venues/swaps/curve-underlying-family/manifest.js";
+import { curveUnderlyingStaticBindingProjection } from
+  "./venues/swaps/curve-underlying-family/instance.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -252,6 +256,26 @@ export interface BaselineEigenpieFacts {
   readonly tokenOut: string;
 }
 
+export interface BaselineCurveUnderlyingFacts {
+  readonly familyId: "curve-underlying";
+  readonly pool: string;
+  readonly coins: readonly string[];
+  readonly registry: string;
+  readonly handlers: readonly string[];
+  readonly lookupSemantics:
+    "get_registry_handlers_from_pool+get_underlying_coins";
+  readonly verifiedDirections: readonly {
+    readonly i: number;
+    readonly j: number;
+    readonly tokenIn: string;
+    readonly tokenOut: string;
+  }[];
+  readonly i: number;
+  readonly j: number;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -285,6 +309,7 @@ export function normalizeBaselineMigrationItems(
         "protocol:astra-multitoken":
           normalizeBaselineAstraMultiTokenInstanceItem,
         "protocol:eigenpie": normalizeBaselineEigenpieInstanceItem,
+        "curve-underlying": normalizeBaselineCurveUnderlyingInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -312,6 +337,7 @@ export function normalizeBaselineMigrationItems(
         "protocol:astra-multitoken":
           normalizeBaselineAstraMultiTokenPriceItem,
         "protocol:eigenpie": normalizeBaselineEigenpiePriceItem,
+        "curve-underlying": normalizeBaselineCurveUnderlyingPriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -339,6 +365,7 @@ export function normalizeBaselineMigrationItems(
         "protocol:astra-multitoken":
           normalizeBaselineAstraMultiTokenEdgeItem,
         "protocol:eigenpie": normalizeBaselineEigenpieEdgeItem,
+        "curve-underlying": normalizeBaselineCurveUnderlyingEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -368,6 +395,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineAstraMultiTokenEnumeratedRouteItem,
         "protocol:eigenpie":
           normalizeBaselineEigenpieEnumeratedRouteItem,
+        "curve-underlying":
+          normalizeBaselineCurveUnderlyingEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -395,6 +424,7 @@ export function normalizeBaselineMigrationItems(
         "protocol:astra-multitoken":
           normalizeBaselineAstraMultiTokenExactQuoteItem,
         "protocol:eigenpie": normalizeBaselineEigenpieExactQuoteItem,
+        "curve-underlying": normalizeBaselineCurveUnderlyingExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -429,6 +459,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineAstraMultiTokenExecutionFragmentItem,
         "protocol:eigenpie":
           normalizeBaselineEigenpieExecutionFragmentItem,
+        "curve-underlying":
+          normalizeBaselineCurveUnderlyingExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -463,6 +495,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineAstraMultiTokenFinalSimulationItem,
         "protocol:eigenpie":
           normalizeBaselineEigenpieFinalSimulationItem,
+        "curve-underlying":
+          normalizeBaselineCurveUnderlyingFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -517,6 +551,9 @@ function normalizeByFamily(
     readonly "protocol:eigenpie": (
       item: RawMigrationSemanticItem,
     ) => RawMigrationSemanticItem;
+    readonly "curve-underlying": (
+      item: RawMigrationSemanticItem,
+    ) => RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -557,6 +594,9 @@ function normalizeByFamily(
   }
   if (familyId === "protocol:eigenpie") {
     return handlers["protocol:eigenpie"](item);
+  }
+  if (familyId === "curve-underlying") {
+    return handlers["curve-underlying"](item);
   }
   return handlers.default(item);
 }
@@ -6063,6 +6103,363 @@ export function normalizeBaselineEigenpieFinalSimulationItem(
   });
 }
 
+function curveUnderlyingFactsGuard(
+  facts: Partial<BaselineCurveUnderlyingFacts> | undefined,
+): facts is Required<BaselineCurveUnderlyingFacts> {
+  return facts !== undefined &&
+    facts.familyId === "curve-underlying" &&
+    typeof facts.pool === "string" &&
+    Array.isArray(facts.coins) &&
+    facts.coins.every((coin) => typeof coin === "string") &&
+    typeof facts.registry === "string" &&
+    Array.isArray(facts.handlers) &&
+    facts.handlers.every((handler) => typeof handler === "string") &&
+    facts.lookupSemantics ===
+      "get_registry_handlers_from_pool+get_underlying_coins" &&
+    Array.isArray(facts.verifiedDirections) &&
+    facts.verifiedDirections.every((direction) =>
+      Number.isSafeInteger(direction?.i) &&
+      Number.isSafeInteger(direction?.j) &&
+      typeof direction?.tokenIn === "string" &&
+      typeof direction?.tokenOut === "string"
+    ) &&
+    Number.isSafeInteger(facts.i) &&
+    Number.isSafeInteger(facts.j) &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function curveUnderlyingFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineCurveUnderlyingFacts>;
+  })?.baselineFacts;
+  if (!curveUnderlyingFactsGuard(facts)) return null;
+  return facts;
+}
+
+function curveUnderlyingDescriptorFor(
+  facts: Required<BaselineCurveUnderlyingFacts>,
+) {
+  const pool = canonicalAddress(facts.pool);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  return Object.freeze({
+    pool,
+    coins: Object.freeze(facts.coins.map(canonicalAddress)),
+    registryBinding: Object.freeze({
+      registry: canonicalAddress(facts.registry),
+      handlers: Object.freeze(facts.handlers.map(canonicalAddress)),
+      lookupSemantics: facts.lookupSemantics,
+    }),
+    verifiedDirections: Object.freeze(facts.verifiedDirections.map((direction) =>
+      Object.freeze({
+        i: direction.i,
+        j: direction.j,
+        tokenIn: canonicalAddress(direction.tokenIn),
+        tokenOut: canonicalAddress(direction.tokenOut),
+      })
+    )),
+  }) as unknown as import("./venues/swaps/curve-underlying-family/types.js")
+    .CurveUnderlyingDescriptor;
+}
+
+function deriveCurveUnderlyingCanonicalFacts(
+  facts: Required<BaselineCurveUnderlyingFacts>,
+): {
+  readonly pool: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly lowerPool: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const pool = canonicalAddress(facts.pool);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const lowerPool = lowerAddress(pool);
+  const descriptor = curveUnderlyingDescriptorFor(facts);
+  const bindingFingerprint = hashCanonical(
+    curveUnderlyingStaticBindingProjection(descriptor),
+  );
+  const venueIdentityHash = hashCanonical(Object.freeze({
+    kind: "address-pool",
+    pool: lowerPool,
+  }));
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const routeKeyValue = [
+    "curve-underlying",
+    lowerPool,
+    facts.i,
+    facts.j,
+    lowerTokenIn,
+    lowerTokenOut,
+    "underlying",
+  ].join("\u001f");
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "curve-underlying",
+    lowerPool,
+    lowerPool,
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    pool,
+    tokenIn,
+    tokenOut,
+    lowerPool,
+    lowerTokenIn,
+    lowerTokenOut,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineCurveUnderlyingEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = curveUnderlyingFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveCurveUnderlyingCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineCurveUnderlyingEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineCurveUnderlyingEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "curve-underlying baseline enumerated route item must carry a " +
+        "non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineCurveUnderlyingInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = curveUnderlyingFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveCurveUnderlyingCanonicalFacts(facts);
+  const descriptor = curveUnderlyingDescriptorFor(facts);
+  const staticBindingFingerprint = hashCanonical({
+    capability: CURVE_UNDERLYING_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: curveUnderlyingStaticBindingProjection(descriptor),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerPool,
+    value: Object.freeze({
+      familyId: "curve-underlying",
+      instanceKey: derived.lowerPool,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineCurveUnderlyingPriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = curveUnderlyingFactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveCurveUnderlyingCanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "curve-exchange-underlying",
+    instanceKey: derived.lowerPool,
+    target: derived.pool,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "swap" as const,
+    curveI: facts.i,
+    curveJ: facts.j,
+    edgeKind: "swap" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.routeKeyValue,
+      mid: Object.freeze({
+        kind: "curve-underlying",
+        pool: derived.pool,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineCurveUnderlyingExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = curveUnderlyingFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveCurveUnderlyingCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineCurveUnderlyingExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = curveUnderlyingFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveCurveUnderlyingCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "curve-exchange-underlying",
+      executionTarget: derived.pool,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineCurveUnderlyingFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = curveUnderlyingFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveCurveUnderlyingCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -6136,4 +6533,9 @@ const ASTRA_CATALOG_FAMILY =
 const EIGENPIE_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     EIGENPIE_FAMILY_ID,
+  );
+
+const CURVE_UNDERLYING_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    CURVE_UNDERLYING_FAMILY_ID,
   );

@@ -385,7 +385,7 @@
         "familyId": "curve-underlying",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "a67f73360e3ea0d60cc40223ed3f6da96352dd3abfe21f3d55f1cc6922590dcd",
+        "contentHash": "5d85de737a724f80669453c26f70fc742f392eb8eaa3dccedd90cd1181edb124",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -6261,5 +6261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "7b9d38210a2c1116dc54d58febd201300745f2bd9fd690249a1929efdb5885d5"
+  "artifactHash": "24b8b43927d45dd3d14bc01b937f4ddcc2b463757592bdbca95cbd46b8e55741"
 }
