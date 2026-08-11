@@ -1731,6 +1731,30 @@ impl `408c348b`，fixture 级合同证据）：**
 下一步：univ4 baseline exporter + univ4 normalizer（`manager-pool-id`
 venue 与 `manager+poolId` instance 身份）+ 节点真实 corpus 双跑。
 
+**2026-08-11 univ4 bilateral parity phase checkpoint（实现 commits impl
+`8b3b894b`、baseline `3c50d4fb`/`01f0940c`，节点机器证据）：**
+
+- impl univ4 normalizer 覆盖六类 stage（edges/instances/prices/
+  enumeratedRoutes/exactQuotes/executionFragments/finalSimulations）：
+  `manager-pool-id` venue、`manager+poolId` instance 身份、
+  `uniV4StaticBindingProjection`（含 managerCodeHash）binding fingerprint；
+- baseline exporter 新增 `captureUniv4BaselineCase`（冻结 ds
+  `univ4BlockScanState` + 本地 v3 exact/precision + `canonicalHash` 镜像
+  计算 node/effects fingerprint）；修复 univ4 execution fragment 的
+  `univ4-settle` 子节点与 `fragment.nodes`（数组）指纹口径；
+- 本地跨分支 parity（univ2+univ3+univ4 fixture manifest）：
+  `univ4 pass`、commonGraph 五 stage delta 全空、aggregate `partial`；
+- 节点 SSM `e95323f4`（impl `8b3b894b` / baseline `01f0940c`，block
+  `25729060`）：univ2（真实 reserves）、univ3（真实 slot0/liquidity）、
+  univ4（真实 anchor + no-hook pool key，pool 状态为 fixture 值——扫描
+  到的近期 no-hook univ4 pool 均未初始化，真实非零 on-chain univ4 状态
+  待后续补验）全部 **pass**；`assembledCommonGraphParity=true`、
+  `nonMigratedFamilySemanticHashParity=true`、aggregate `partial`
+  （19 个未覆盖 Family）。
+
+本 phase 关闭 univ2/univ3/univ4 三族双侧语义 parity；剩余：19 个 Family
+（funding-only ×2、curve/dodo/angstrom/fluid、protocol 族 ×14）。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
