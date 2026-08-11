@@ -54,10 +54,15 @@ export const erc4626Pricing: PricingSemantics<
   staticEvidence: {
     reusePolicy: {
       kind: "dependency-proof" as const,
-      dependencyKeys: (draft) => Object.freeze([
-        draft.vault,
-        ...draft.routes.flatMap((route) => [route.tokenIn, route.tokenOut]),
-      ]),
+      dependencyKeys: (draft) => Object.freeze(
+        [...new Set([
+          lowerAddress(draft.vault),
+          ...draft.routes.flatMap((route) => [
+            lowerAddress(route.tokenIn),
+            lowerAddress(route.tokenOut),
+          ]),
+        ])].sort(),
+      ),
     },
     requirements: () => ({ transports: ["eth-call" as const] }),
     buildRequests: (draft) => {
@@ -161,10 +166,15 @@ export const erc4626Pricing: PricingSemantics<
       return mids;
     },
   },
-  dependencies: ({ descriptor }) => Object.freeze([
-    descriptor.vault,
-    ...descriptor.routes.flatMap((route) => [route.tokenIn, route.tokenOut]),
-  ]),
+  dependencies: ({ descriptor }) => Object.freeze(
+    [...new Set([
+      lowerAddress(descriptor.vault),
+      ...descriptor.routes.flatMap((route) => [
+        lowerAddress(route.tokenIn),
+        lowerAddress(route.tokenOut),
+      ]),
+    ])].sort(),
+  ),
   mutation: {
     affectedStateKeys: ({ descriptor, observation }) =>
       observation.kind === "log" &&

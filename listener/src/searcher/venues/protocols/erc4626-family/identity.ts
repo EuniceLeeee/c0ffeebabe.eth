@@ -55,7 +55,11 @@ export const erc4626Identity: IdentitySemantics<
         return { transports: ["get-code" as const, "eth-call" as const] };
       }
       return {
-        transports: ["eth-call" as const, "effect-delta-simulation" as const],
+        transports: [
+          "get-code" as const,
+          "eth-call" as const,
+          "effect-delta-simulation" as const,
+        ],
         caller: "verified-actor" as const,
         effects: [
           "return-data" as const,

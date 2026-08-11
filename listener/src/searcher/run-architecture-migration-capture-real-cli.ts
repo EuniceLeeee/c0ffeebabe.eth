@@ -18,6 +18,7 @@ import {
   captureMetronomeHgUsdcFixtureCase,
   captureMetronomeSynthFixtureCase,
   captureErc4626SiloRedeemFixtureCase,
+  captureErc4626FixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -162,6 +163,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureErc4626SiloRedeemFixtureCase({
           source,
           caseId: `erc4626-silo-redeem:${source.number}`,
+        }));
+      } else if (item.family === "protocol:erc4626") {
+        familyCases.push(await captureErc4626FixtureCase({
+          source,
+          caseId: `erc4626:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

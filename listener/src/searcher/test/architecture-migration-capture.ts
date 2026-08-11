@@ -28,6 +28,7 @@ import {
   captureMetronomeHgUsdcFixtureCase,
   captureMetronomeSynthFixtureCase,
   captureErc4626SiloRedeemFixtureCase,
+  captureErc4626FixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -762,6 +763,23 @@ async function testErc4626SiloRedeemFixtureCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.items.length, 1);
 }
 
+async function testErc4626FixtureCase(): Promise<void> {
+  const familyCase = await captureErc4626FixtureCase({ source: SOURCE });
+  assert.equal(familyCase.familyId, "protocol:erc4626");
+  for (const stage of ARCHITECTURE_MIGRATION_STAGES) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `erc4626 fixture ${stage} must be exercised`,
+    );
+  }
+  assert.equal(familyCase.stages.edges?.items.length, 2);
+  assert.equal(familyCase.stages.prices?.items.length, 2);
+  assert.equal(familyCase.stages.exactQuotes?.items.length, 2);
+  assert.equal(familyCase.stages.executionFragments?.items.length, 2);
+  assert.equal(familyCase.stages.finalSimulations?.items.length, 2);
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -1107,6 +1125,7 @@ async function main(): Promise<void> {
   await testMetronomeHgUsdcFixtureCase();
   await testMetronomeSynthFixtureCase();
   await testErc4626SiloRedeemFixtureCase();
+  await testErc4626FixtureCase();
   console.log("architecture-migration capture harness PASS");
 }
 

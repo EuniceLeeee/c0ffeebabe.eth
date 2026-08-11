@@ -70,11 +70,7 @@ const erc4626RequestProgram: ExactRequestProgram<
   },
 };
 
-export const erc4626Exact: ExactQuoteSemantics<
-  Erc4626Descriptor,
-  Erc4626Route,
-  Erc4626ExactEvidence
-> = {
+export const erc4626Exact = {
   methods: () => Object.freeze([
     localZeroExactMethod<Erc4626Descriptor, Erc4626Route, Erc4626ExactEvidence>(
       "local-zero",
@@ -96,7 +92,11 @@ export const erc4626Exact: ExactQuoteSemantics<
     direction: route.direction,
     bindingFingerprint: route.bindingRef.fingerprint,
   }),
-};
+} satisfies ExactQuoteSemantics<
+  Erc4626Descriptor,
+  Erc4626Route,
+  Erc4626ExactEvidence
+>;
 
 function exactEvidence(
   input: {

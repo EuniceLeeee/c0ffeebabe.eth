@@ -150,6 +150,23 @@ import type {
   Erc4626SiloRedeemDescriptor,
   Erc4626SiloRedeemRoute,
 } from "./venues/protocols/erc4626-silo-redeem-family/types.js";
+import { ERC4626_FAMILY_ID } from
+  "./venues/protocols/erc4626-family/manifest.js";
+import {
+  ERC4626_ERC20_INTERFACE,
+  ERC4626_INTERFACE,
+  ERC4626_PROBE_ACTOR,
+} from "./venues/protocols/erc4626-family/abi.js";
+import { ERC4626_PROBE_ACTOR_EVIDENCE_ID } from
+  "./venues/protocols/erc4626-family/identity.js";
+import { erc4626Exact } from
+  "./venues/protocols/erc4626-family/exact.js";
+import { erc4626Execution } from
+  "./venues/protocols/erc4626-family/execution.js";
+import type {
+  Erc4626Descriptor,
+  Erc4626Route,
+} from "./venues/protocols/erc4626-family/types.js";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -4641,6 +4658,534 @@ export async function captureErc4626SiloRedeemFixtureCase(input: {
   return Object.freeze({
     familyId: ERC4626_SILO_REDEEM_FAMILY_ID,
     caseId: input.caseId ?? `erc4626-silo-redeem:${input.source.number}`,
+    inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
+    stateAnchorNumber: input.source.number,
+    implementationClosureHash: summary.definitionBoundaryHash,
+    stages: Object.freeze({
+      instances: instanceStage(instances, evidenceRefs),
+      edges: exercisedStage(edges, evidenceRefs),
+      stateCoverage: exercisedStage([], evidenceRefs),
+      pricedEdges: exercisedStage([], evidenceRefs),
+      prices: exercisedStage(prices, evidenceRefs),
+      failures: exercisedStage([], evidenceRefs),
+      enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
+      exactQuotes: exercisedStage(exactQuotes, evidenceRefs),
+      executionFragments: exercisedStage(executionFragments, evidenceRefs),
+      finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
+    }),
+  });
+}
+
+export const ERC4626_FIXTURE_VAULT = `0x${"ab".repeat(20)}`;
+export const ERC4626_FIXTURE_ASSET = `0x${"ac".repeat(20)}`;
+
+function erc4626EventLog(
+  eventName: "Deposit" | "Withdraw",
+  assets: bigint,
+  shares: bigint,
+) {
+  const log = ERC4626_INTERFACE.encodeEventLog(
+    eventName,
+    eventName === "Deposit"
+      ? [ERC4626_PROBE_ACTOR, ERC4626_PROBE_ACTOR, assets, shares]
+      : [
+          ERC4626_PROBE_ACTOR,
+          ERC4626_PROBE_ACTOR,
+          ERC4626_PROBE_ACTOR,
+          assets,
+          shares,
+        ],
+  );
+  return Object.freeze({
+    address: ERC4626_FIXTURE_VAULT.toLowerCase(),
+    topics: Object.freeze([...log.topics]),
+    data: log.data,
+  });
+}
+
+function erc4626SimulationResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+): AdapterRequestResult {
+  if (request.kind !== "effect-delta-simulation") {
+    throw new Error(`unexpected erc4626 fixture transport ${request.kind}`);
+  }
+  const callData = (request as {
+    readonly call: { readonly data: string };
+  }).call.data;
+  const deposit = request.id === "active-deposit";
+  const amountIn = BigInt(
+    ERC4626_INTERFACE.decodeFunctionData(
+      deposit ? "deposit" : "redeem",
+      callData,
+    )[0],
+  );
+  const amountOut = amountIn;
+  const actor = ERC4626_PROBE_ACTOR;
+  const asset = ERC4626_FIXTURE_ASSET.toLowerCase();
+  const vault = ERC4626_FIXTURE_VAULT.toLowerCase();
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data: ERC4626_INTERFACE.encodeFunctionResult(
+      deposit ? "deposit" : "redeem",
+      [amountOut],
+    ),
+    effects: Object.freeze({
+      tokenDeltas: Object.freeze([
+        Object.freeze({
+          token: deposit ? asset : vault,
+          account: actor.toLowerCase(),
+          delta: -amountIn,
+        }),
+        Object.freeze({
+          token: deposit ? vault : asset,
+          account: actor.toLowerCase(),
+          delta: amountOut,
+        }),
+      ]),
+      totalSupplyDeltas: Object.freeze([
+        Object.freeze({
+          token: vault,
+          delta: deposit ? amountOut : -amountOut,
+        }),
+      ]),
+      logs: Object.freeze([
+        erc4626EventLog(
+          deposit ? "Deposit" : "Withdraw",
+          amountIn,
+          amountOut,
+        ),
+      ]),
+    }),
+  });
+}
+
+function erc4626SuccessResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+): AdapterRequestResult {
+  if (request.kind === "effect-delta-simulation") {
+    return erc4626SimulationResult(request, canonical);
+  }
+  const data =
+    request.id === "base-vault-code" || request.id === "active-asset-code"
+      ? "0x00"
+      : request.id === "base-asset"
+        ? ERC4626_INTERFACE.encodeFunctionResult("asset", [
+            ERC4626_FIXTURE_ASSET,
+          ])
+        : request.id === "base-total-assets" ||
+            request.id === "base-total-supply"
+          ? ERC4626_INTERFACE.encodeFunctionResult(
+              request.id === "base-total-assets"
+                ? "totalAssets"
+                : "totalSupply",
+              [10n ** 30n],
+            )
+          : request.id === "exact-preview"
+            ? (() => {
+                const selector = (
+                  request as { readonly data: string }
+                ).data.slice(0, 10).toLowerCase();
+                const functionName = selector ===
+                    ERC4626_INTERFACE.getFunction("previewDeposit")!.selector
+                  ? "previewDeposit"
+                  : selector ===
+                      ERC4626_INTERFACE.getFunction("previewRedeem")!.selector
+                    ? "previewRedeem"
+                    : (() => {
+                        throw new Error(
+                          `unexpected erc4626 exact-preview selector ` +
+                            selector,
+                        );
+                      })();
+                const amount = BigInt(
+                  ERC4626_INTERFACE.decodeFunctionData(
+                    functionName,
+                    (request as { readonly data: string }).data,
+                  )[0],
+                );
+                return ERC4626_INTERFACE.encodeFunctionResult(
+                  functionName,
+                  [amount],
+                );
+              })()
+            : request.id.startsWith("base-convert-shares:") ||
+              request.id.startsWith("base-preview-deposit:") ||
+              request.id.startsWith("base-convert-assets:") ||
+              request.id.startsWith("base-preview-redeem:") ||
+              request.id === "active-roundtrip" ||
+              request.id === "active-preview-redeem" ||
+              request.id === "current:deposit" ||
+              request.id === "current:redeem"
+            ? (() => {
+                const functionName =
+                  request.id === "current:deposit" ||
+                  request.id.startsWith("base-preview-deposit:")
+                    ? "previewDeposit"
+                    : request.id === "current:redeem" ||
+                        request.id.startsWith("base-preview-redeem:") ||
+                        request.id === "active-roundtrip" ||
+                        request.id === "active-preview-redeem"
+                      ? "previewRedeem"
+                      : request.id.startsWith("base-convert-shares:")
+                        ? "convertToShares"
+                        : "convertToAssets";
+                const amount = BigInt(
+                  ERC4626_INTERFACE.decodeFunctionData(
+                    functionName,
+                    (request as { readonly data: string }).data,
+                  )[0],
+                );
+                return ERC4626_INTERFACE.encodeFunctionResult(
+                  functionName,
+                  [amount],
+                );
+              })()
+            : request.id === "static-asset-decimals" ||
+                request.id === "static-share-decimals"
+              ? ERC4626_ERC20_INTERFACE.encodeFunctionResult("decimals", [18])
+              : (() => {
+                  throw new Error(
+                    "unexpected erc4626 fixture request " + request.id,
+                  );
+                })();
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data,
+  });
+}
+
+class Erc4626FixtureScheduler implements CentralAdapterScheduler {
+  issueExecutor(
+    input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
+  ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
+    const executor = createBoundedRequestExecutor({
+      assertSupported: (requirements) => assert.deepEqual(
+        requirements,
+        input.requirements,
+      ),
+      assertCallerBinding() {},
+      assertWithinBudget: (_familyId, requests) => {
+        assert.deepEqual(requests, input.requests);
+      },
+      execute: async (execution) => Promise.all(execution.requests.map(
+        (request) => erc4626SuccessResult(request, execution.source),
+      )),
+      sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
+    });
+    return Object.freeze({
+      executor,
+      timing: () => ({ queueWaitMs: 0, transportWallMs: 1, attempts: 1 }),
+    });
+  }
+}
+
+function erc4626FixtureRuntime(): CentralAdapterRuntime {
+  let now = 1_000;
+  return {
+    clock: { nowMs: () => now++ },
+    generationFence: new FixtureFence(),
+    callerAuthority: {
+      bind: (input) => input.callerRole === "verified-actor"
+        ? Object.freeze({
+            verifiedActors: Object.freeze({
+              [ERC4626_PROBE_ACTOR_EVIDENCE_ID]: ERC4626_PROBE_ACTOR,
+            }),
+          })
+        : Object.freeze({}),
+    },
+    policy: {
+      bind: (input) => ({
+        lane: input.stage === "identity" ? "critical-proof" : "background",
+        deadlineAtMs: 100_000,
+        maxAttempts: 1,
+        transportPool: "state-read",
+        fairnessKey: input.subjectKey,
+      }),
+    },
+    budgets: { assertAdmitted() {} },
+    scheduler: new Erc4626FixtureScheduler(),
+  };
+}
+
+async function runErc4626Lifecycle(
+  canonical: CanonicalSource,
+): Promise<AdapterFamilyPublication> {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    ERC4626_FAMILY_ID,
+  );
+  let publication: AdapterFamilyPublication | null = null;
+  const depositCalldata = ERC4626_INTERFACE.encodeFunctionData("deposit", [
+    1_000_000n,
+    MIGRATION_CAPTURE_EXECUTOR,
+  ]);
+  const result = await executeAdapterFamilyLifecycleBatch({
+    family,
+    matches: [Object.freeze({
+      matchedPatternId: "erc4626-deposit-call",
+      observation: Object.freeze({
+        kind: "call" as const,
+        source: canonical,
+        target: ERC4626_FIXTURE_VAULT,
+        data: depositCalldata,
+      }),
+    })],
+    source: canonical,
+    generation: canonical.generation,
+    runtime: erc4626FixtureRuntime(),
+    publisher: { publish: (value) => { publication = value; } },
+  });
+  assert(result.publication);
+  assert(publication);
+  return publication;
+}
+
+/**
+ * Runs the ERC4626 vault lifecycle over the observed deposit fixture.
+ * Identity proves both deposit and redeem execution surfaces via
+ * effect-delta simulations with verified-actor caller authority; both
+ * directions are exercised through pricing, exact, execution and final-sim.
+ */
+export async function captureErc4626FixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runErc4626Lifecycle(input.source);
+  const evidenceRefs = Object.freeze([
+    `fixture:erc4626:${input.source.number}:${input.source.hash}`,
+  ]);
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    ERC4626_FAMILY_ID,
+  );
+  const edges: RawMigrationStageCapture["items"][number][] = [];
+  const prices: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of instance.routes) {
+      const handle = instance.routeHandles.find((candidate) =>
+        candidate.routeKey === route.routeKey
+      );
+      if (handle === undefined) {
+        throw new Error(
+          `prepared route ${route.routeKey} has no issued handle`,
+        );
+      }
+      const projected = projectFamilyRouteGraph({
+        family,
+        descriptor: instance.descriptor,
+        route,
+        handle,
+      });
+      edges.push(Object.freeze({
+        id: projected.edge.canonicalEdgeId,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: projected.edge.canonicalEdgeId,
+        }),
+      }));
+    }
+    const routeByKey = new Map(
+      instance.routes.map((route) => [route.routeKey, route]),
+    );
+    for (const pricing of instance.pricingInstances) {
+      for (const [routeKey, mid] of pricing.mids) {
+        const route = routeByKey.get(routeKey);
+        if (route === undefined) {
+          throw new Error(`erc4626 pricing route ${routeKey} is missing`);
+        }
+        prices.push(Object.freeze({
+          id: `${pricing.stateKey}:${route.tokenIn.toLowerCase()}>` +
+            `${route.tokenOut.toLowerCase()}`,
+          value: Object.freeze({
+            stateKey: pricing.stateKey,
+            mid: Object.freeze({ ...mid }),
+          }) as unknown as RawMigrationStageCapture["items"][number]["value"],
+        }));
+      }
+    }
+  }
+  const enumeratedRoutes: RawMigrationStageCapture["items"][number][] = edges
+    .map((edge) => edge.value as {
+      readonly routeKey: string;
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly canonicalEdgeId: string;
+    })
+    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
+    .map((value, order) => Object.freeze({
+      id: value.canonicalEdgeId,
+      value: Object.freeze({
+        routeKey: value.routeKey,
+        tokenIn: value.tokenIn,
+        tokenOut: value.tokenOut,
+        canonicalEdgeId: value.canonicalEdgeId,
+        order,
+      }),
+    }));
+  const exactMethod = erc4626Exact.methods().find(
+    (method) => method.kind === "request-program" &&
+      method.id === "erc4626-preview",
+  );
+  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+    throw new Error("erc4626 exact request program is missing");
+  }
+  const program = exactMethod.program;
+  const exactByRouteKey = new Map<
+    string,
+    {
+      readonly amountOut: bigint;
+      readonly evidence: import("./venues/protocols/erc4626-family/types.js")
+        .Erc4626ExactEvidence;
+    }
+  >();
+  const exactQuotes: RawMigrationStageCapture["items"][number][] = [];
+  const edgeByRouteKey = new Map(
+    edges.map((edge) => {
+      const value = edge.value as { readonly routeKey: string };
+      return [value.routeKey, edge] as const;
+    }),
+  );
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const exactInput = Object.freeze({
+        descriptor: instance.descriptor as unknown as Erc4626Descriptor,
+        route: route as unknown as Erc4626Route,
+        amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
+        source: input.source,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      const requests = program.buildRequests(exactInput);
+      const results = requests.map((request) =>
+        erc4626SuccessResult(request, input.source)
+      );
+      const decoded = program.decode({
+        programInput: exactInput,
+        initialResults: results,
+        dependentEvidence: Object.freeze([]),
+      });
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (edge === undefined) {
+        throw new Error(`erc4626 exact route ${route.routeKey} has no edge`);
+      }
+      exactByRouteKey.set(route.routeKey, {
+        amountOut: decoded.amountOut,
+        evidence: decoded.evidence,
+      });
+      exactQuotes.push(Object.freeze({
+        id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
+          amountOut: decoded.amountOut.toString(),
+          feeBps: "0",
+        }),
+      }));
+    }
+  }
+  const executionFragments: RawMigrationStageCapture["items"][number][] = [];
+  const finalSimulations: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const quote = exactByRouteKey.get(route.routeKey);
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (quote === undefined || edge === undefined) {
+        throw new Error(
+          `erc4626 execution route ${route.routeKey} has no quote`,
+        );
+      }
+      const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
+      const fragment = erc4626Execution.buildFragment({
+        descriptor: instance.descriptor as unknown as Erc4626Descriptor,
+        route: route as unknown as Erc4626Route,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+        minAmountOut: quote.amountOut,
+        exactEvidence: quote.evidence,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      executionFragments.push(Object.freeze({
+        id: `${edge.id}\u001fexec:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          actionAdapterId: (route as unknown as Erc4626Route).adapterId,
+          executionTarget: (
+            instance.descriptor as unknown as Erc4626Descriptor
+          ).vault,
+          nodeFingerprint: hashCanonical(
+            fragment.nodes as unknown as CanonicalValue,
+          ),
+        }),
+      }));
+      const effects = erc4626Execution.expectedEffects({
+        descriptor: instance.descriptor as unknown as Erc4626Descriptor,
+        route: route as unknown as Erc4626Route,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+      });
+      if (quote.amountOut <= 0n) {
+        throw new Error(
+          "erc4626 capture final simulation repayment failed",
+        );
+      }
+      finalSimulations.push(Object.freeze({
+        id: `${edge.id}\u001fsim:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          effectsFingerprint: hashCanonical(
+            effects as unknown as CanonicalValue,
+          ),
+          conservation: "conserved",
+          repayment: "satisfied",
+          evInput: Object.freeze({
+            amountIn: amountIn.toString(),
+            amountOut: quote.amountOut.toString(),
+          }),
+        }),
+      }));
+    }
+  }
+  const instances = publication.instances;
+  const summary = definedFamilyPluginContractSummary(family.plugin);
+  return Object.freeze({
+    familyId: ERC4626_FAMILY_ID,
+    caseId: input.caseId ?? `erc4626:${input.source.number}`,
     inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
     stateAnchorNumber: input.source.number,
     implementationClosureHash: summary.definitionBoundaryHash,

@@ -2585,7 +2585,7 @@
         "familyId": "protocol:erc4626",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "ab1148192c865437242ab34c2b54ccaac5eb098400bf116a8939052754e4a611",
+        "contentHash": "617a1a153a3aa1799ad56d232b78fa908b658c0d0dfadb5c859846f95052987a",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -2649,7 +2649,7 @@
         "familyId": "protocol:erc4626",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "75c5d894c57a83379d7b8ae88b40223bc82da20853d54500bd854843b207cde6",
+        "contentHash": "ee8cfb589a1261d574d73fc46da3ecc29b7b38f18d4ecb2b7d67d2c239eebcd6",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -6261,5 +6261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "34cfcac1400acb4066d20be3028058acf55f53d5e25becfab5ae9dc31c2a48c6"
+  "artifactHash": "7b9d38210a2c1116dc54d58febd201300745f2bd9fd690249a1929efdb5885d5"
 }
