@@ -1220,6 +1220,12 @@ closure 枚举尝试因 enumerator 数据源未接线而 fail-closed。该接线
 不打开 complete-snapshot/omission/tombstone；strict catalog prepare 内的一次性消费
 仍未接线，因此该 Phase D gate 整体仍 open。
 
+**2026-08-11 shadow catalog explicit zero-row checkpoint（实现 commit
+`2e8b82b86818abc034595297baa2ec4a68a5880c`）：** 新增合同：resolved route Family 的
+零实例 stage 必须以零 edges/handles 发布并正常前进 revision，不伪造 inventory 或
+route-handle index（对应 §20.4 的显式 zero row 语义）。证据：
+`searcher:adapter-family-shadow-catalog-publication` PASS + 完整 listener build。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
