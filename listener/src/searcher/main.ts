@@ -73,6 +73,12 @@ import {
   readBlockHash,
 } from "./live-discovery-coordinator.js";
 import {
+  createDurableDiscoveryContinuityComposition,
+} from "./adapter-family-discovery-continuity-composition.js";
+import {
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+} from "./venues/production-family-composition.js";
+import {
   emitProtocolDiscoveryEvents,
   emitStaticSuppressedProtocolEvents,
   ProtocolDiscoveryCandidateDomain,
@@ -1645,6 +1651,57 @@ async function main(): Promise<void> {
         `(universe=${poolUniverseCoverage.toBlock ?? -1}, ` +
         `cursor=${dexCursorSourceCompleteThrough ?? -1})`,
     );
+  }
+  // Durable discovery continuity composition (shadow/diagnostic; OFF by
+  // default). When SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH is set,
+  // production startup adopts the file-backed checkpoint store to load and
+  // re-verify the persisted restart state, then logs its status. The
+  // point-in-time enumerator source is not wired yet, so any closure
+  // enumeration attempt fails closed; this block grants no authority and
+  // does not open complete-snapshot/omission/tombstone.
+  const continuityCompositionPath =
+    process.env.SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH;
+  let discoveryContinuityStatus = "disabled";
+  if (
+    continuityCompositionPath !== undefined &&
+    continuityCompositionPath.trim() !== ""
+  ) {
+    try {
+      const continuityComposition = createDurableDiscoveryContinuityComposition({
+        catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+        chainId: String((await provider.getNetwork()).chainId),
+        sourceRegistryFingerprint: "strict-source-registry-v1",
+        checkpointPath: continuityCompositionPath,
+        enumerateSnapshotInventory: () => {
+          throw new Error(
+            "production point-in-time enumerator source is not wired",
+          );
+        },
+        verifyCanonicalSource: async (source) => {
+          const hash = await readBlockHash(provider, source.number);
+          if (hash.toLowerCase() !== source.hash.toLowerCase()) {
+            throw new Error(
+              `discovery continuity checkpoint source hash mismatch at ` +
+                `${source.number}`,
+            );
+          }
+        },
+        assertGenerationCurrent: () => {},
+      });
+      const loaded = await continuityComposition.loadForRestart();
+      discoveryContinuityStatus = loaded.status;
+      console.log(
+        `[searcher/live] discovery continuity composition ` +
+          `${discoveryContinuityStatus}`,
+      );
+    } catch (error) {
+      discoveryContinuityStatus =
+        `failed:${error instanceof Error ? error.message : String(error)}`;
+      console.warn(
+        `[searcher/live] discovery continuity composition ` +
+          `${discoveryContinuityStatus}`,
+      );
+    }
   }
   let protocolGraphCompleteThrough = -1;
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
