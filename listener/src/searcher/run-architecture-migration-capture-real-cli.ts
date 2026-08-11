@@ -3,11 +3,19 @@ import { execFileSync } from "node:child_process";
 import {
   architectureMigrationSideJson,
   buildFixtureCaptureCorpus,
-  buildUniv2CommonGraph,
+  exercisedStage,
   generateArchitectureMigrationSideCapture,
 } from "./architecture-migration-capture.js";
-import { captureUniv2RealCase } from
+import {
+  captureUniv2RealCase,
+  captureUniv3RealCase,
+} from
   "./architecture-migration-fixture-replay.js";
+import type {
+  ArchitectureMigrationStage,
+  RawFamilyMigrationCaseCapture,
+  RawMigrationStageCapture,
+} from "./architecture-migration-parity-runner.js";
 
 function currentCommit(): string {
   try {
@@ -29,59 +37,96 @@ async function main(): Promise<void> {
         "[--check] <pool-descriptor.json> [out-side.json]",
     );
   }
-  const descriptor = JSON.parse(await readFile(descriptorPath, "utf8")) as {
-    readonly pool: string;
-    readonly tokenA: string;
-    readonly tokenB: string;
+  const manifest = JSON.parse(await readFile(descriptorPath, "utf8")) as {
     readonly sourceBlock: number;
     readonly sourceBlockHash: string;
-    readonly reserves?: {
-      readonly reserve0: string;
-      readonly reserve1: string;
-      readonly blockTimestampLast?: number;
-    };
     readonly captureId?: string;
     readonly commit?: string;
+    readonly cases: readonly {
+      readonly family: string;
+      readonly pool: string;
+      readonly tokenA: string;
+      readonly tokenB: string;
+      readonly reserves?: {
+        readonly reserve0: string;
+        readonly reserve1: string;
+        readonly blockTimestampLast?: number;
+      };
+      readonly fee?: bigint | string;
+      readonly tickSpacing?: number;
+      readonly liquidity?: bigint | string;
+      readonly sqrtPriceX96?: bigint | string;
+    }[];
   };
+  const source = Object.freeze({
+    number: manifest.sourceBlock,
+    hash: manifest.sourceBlockHash,
+    generation: manifest.sourceBlock,
+  });
   const buildSide = async () => {
-    const source = Object.freeze({
-      number: descriptor.sourceBlock,
-      hash: descriptor.sourceBlockHash,
-      generation: descriptor.sourceBlock,
-    });
-    const familyCase = await captureUniv2RealCase({
-      source,
-      pool: descriptor.pool,
-      tokenA: descriptor.tokenA,
-      tokenB: descriptor.tokenB,
-      reserves: descriptor.reserves,
-    });
+    const familyCases: RawFamilyMigrationCaseCapture[] = [];
+    for (const item of manifest.cases) {
+      if (item.family === "univ2") {
+        familyCases.push(await captureUniv2RealCase({
+          source,
+          pool: item.pool,
+          tokenA: item.tokenA,
+          tokenB: item.tokenB,
+          reserves: item.reserves,
+        }));
+      } else if (item.family === "univ3") {
+        familyCases.push(await captureUniv3RealCase({
+          source,
+          pool: item.pool,
+          tokenA: item.tokenA,
+          tokenB: item.tokenB,
+          fee: item.fee,
+          tickSpacing: item.tickSpacing,
+          liquidity: item.liquidity,
+          sqrtPriceX96: item.sqrtPriceX96,
+        }));
+      } else {
+        throw new Error(`unknown capture family ${item.family}`);
+      }
+    }
+    const evidenceRefs = [...new Set(familyCases.flatMap((familyCase) =>
+      familyCase.stages.instances!.evidenceRefs
+    ))].sort();
+    const mergeStage = (
+      stage: ArchitectureMigrationStage,
+    ): RawMigrationStageCapture | undefined => {
+      const items = familyCases.flatMap((familyCase) => {
+        const captured = familyCase.stages[stage];
+        return captured?.status === "exercised" ? captured.items : [];
+      });
+      if (items.length === 0) return undefined;
+      return exercisedStage(items, evidenceRefs);
+    };
+    const commonGraphStages: Partial<
+      Record<ArchitectureMigrationStage, RawMigrationStageCapture>
+    > = {};
+    for (const stage of [
+      "edges",
+      "enumeratedRoutes",
+      "exactQuotes",
+      "executionFragments",
+      "finalSimulations",
+    ] as const) {
+      const merged = mergeStage(stage);
+      if (merged !== undefined) commonGraphStages[stage] = merged;
+    }
+    const commonGraph = {
+      inputFingerprint: source.hash.slice(2).padStart(64, "0"),
+      stages: Object.freeze(commonGraphStages),
+      crossFamilyBindings: Object.freeze([]),
+    };
     const corpus = {
       ...buildFixtureCaptureCorpus({
-        captureId: descriptor.captureId ?? "challenger",
-        commit: descriptor.commit ?? currentCommit(),
+        captureId: manifest.captureId ?? "challenger",
+        commit: manifest.commit ?? currentCommit(),
         source,
-        familyCases: [familyCase],
-        commonGraph: buildUniv2CommonGraph({
-          source,
-          edgeItems: familyCase.stages.edges!.items,
-          enumeratedRouteItems:
-            familyCase.stages.enumeratedRoutes?.status === "exercised"
-              ? familyCase.stages.enumeratedRoutes.items
-              : undefined,
-          exactQuoteItems: familyCase.stages.exactQuotes?.status === "exercised"
-            ? familyCase.stages.exactQuotes.items
-            : undefined,
-          executionFragmentItems:
-            familyCase.stages.executionFragments?.status === "exercised"
-              ? familyCase.stages.executionFragments.items
-              : undefined,
-          finalSimulationItems:
-            familyCase.stages.finalSimulations?.status === "exercised"
-              ? familyCase.stages.finalSimulations.items
-              : undefined,
-          evidenceRefs: familyCase.stages.instances!.evidenceRefs,
-        }),
+        familyCases,
+        commonGraph,
       }),
       productionClosureHash: "aa".repeat(32),
     };

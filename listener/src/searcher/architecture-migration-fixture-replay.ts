@@ -810,16 +810,57 @@ export async function captureUniv3FixtureCase(input: {
   readonly source: CanonicalSource;
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const ctx: UniV3PoolContext = Object.freeze({
-    pool: UNIV3_FIXTURE_POOL,
-    factory: UNIV3_FIXTURE_FACTORY,
-    token0: UNIV3_FIXTURE_TOKEN0,
-    token1: UNIV3_FIXTURE_TOKEN1,
-    fee: UNIV3_FIXTURE_FEE,
-    tickSpacing: UNIV3_FIXTURE_TICK_SPACING,
-    liquidity: UNIV3_FIXTURE_LIQUIDITY,
-    sqrtPriceX96: UNIV3_FIXTURE_SQRT_PRICE_X96,
+  return captureUniv3PoolCase({
+    source: input.source,
+    caseId: input.caseId,
+    ctx: Object.freeze({
+      pool: UNIV3_FIXTURE_POOL,
+      factory: UNIV3_FIXTURE_FACTORY,
+      token0: UNIV3_FIXTURE_TOKEN0,
+      token1: UNIV3_FIXTURE_TOKEN1,
+      fee: UNIV3_FIXTURE_FEE,
+      tickSpacing: UNIV3_FIXTURE_TICK_SPACING,
+      liquidity: UNIV3_FIXTURE_LIQUIDITY,
+      sqrtPriceX96: UNIV3_FIXTURE_SQRT_PRICE_X96,
+    }),
   });
+}
+
+export async function captureUniv3RealCase(input: {
+  readonly source: CanonicalSource;
+  readonly pool: string;
+  readonly tokenA: string;
+  readonly tokenB: string;
+  readonly fee?: bigint | string;
+  readonly tickSpacing?: number;
+  readonly liquidity?: bigint | string;
+  readonly sqrtPriceX96?: bigint | string;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  return captureUniv3PoolCase({
+    source: input.source,
+    caseId: input.caseId ?? `univ3:${input.source.number}`,
+    ctx: Object.freeze({
+      pool: input.pool.toLowerCase(),
+      factory: UNIV3_FIXTURE_FACTORY,
+      token0: input.tokenA.toLowerCase(),
+      token1: input.tokenB.toLowerCase(),
+      fee: BigInt(input.fee ?? UNIV3_FIXTURE_FEE),
+      tickSpacing: input.tickSpacing ?? UNIV3_FIXTURE_TICK_SPACING,
+      liquidity: BigInt(input.liquidity ?? UNIV3_FIXTURE_LIQUIDITY),
+      sqrtPriceX96: BigInt(
+        input.sqrtPriceX96 ?? UNIV3_FIXTURE_SQRT_PRICE_X96,
+      ),
+    }),
+  });
+}
+
+async function captureUniv3PoolCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+  readonly ctx: UniV3PoolContext;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const ctx = input.ctx;
   const publication = await runUniv3Lifecycle(input.source, ctx);
   const evidenceRefs = Object.freeze([
     `fixture:univ3:${input.source.number}:${input.source.hash}`,
