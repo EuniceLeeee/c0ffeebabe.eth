@@ -1591,6 +1591,30 @@ commits impl `e25bc542`、baseline `af676bbe`，机器证据）：**
 剩余：其余 21 个 Family 的 capture 覆盖，令 batch matrix 全部 pass 后
 aggregate 转 pass。
 
+**2026-08-11 univ3 fixture capture + pricing precision plain-record
+framework fix checkpoint（实现 commit impl `61c77305`，fixture 级合同证据，
+不是节点机器证据）：**
+
+- 发现并修复 strict lifecycle blocker：UniV3/UniV4 pricing snapshot 的
+  `precision` 是 `ReadonlyMap`，中央 runtime 的 plain-record 校验拒绝
+  （`decode:pricing snapshot.precision must contain only plain records
+  and arrays`）→ 两族 pricing `decodeSnapshot` 改为 plain `Record`，
+  `deriveMids`/`classifyUnavailable` 改用索引访问；capability 内容哈希随
+  源码变化重生成（`family-capability-shadow.generated.json` 已更新，
+  build `--check` 通过）；
+- 新增 `captureUniv3FixtureCase`：swap-call observation 走完整 strict
+  lifecycle（identity pool-static + reverse binding、instance、routes、
+  pricing current slot0/liquidity + precision quote、quoter-v2 exact、
+  execution fragment、final-sim conservation/repayment）→ 全部 10 个
+  stage 为 `exercised`（edges/prices/exact/execution/final-sim 各 2 条）；
+- 合同证据：`searcher:architecture-migration-capture` PASS（含 univ3
+  fixture 全 stage 断言）、`univ3-family-plugin` PASS、parity-runner/
+  parity/evidence PASS、完整 listener build 通过。
+
+这是 fixture 级（本地合同）证据；baseline 侧 univ3 exporter + univ3
+normalizer + 节点真实 corpus 双侧 capture 是下一 phase，未完成前不得把
+univ3 当作 batch pass 或 production cutover。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
