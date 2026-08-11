@@ -23,6 +23,7 @@ import {
   captureFundingFixtureCase,
   capturePsmFixtureCase,
   captureWstethFixtureCase,
+  captureGoldxFixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -676,6 +677,20 @@ async function testWstethFixtureCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.items.length, 2);
 }
 
+async function testGoldxFixtureCase(): Promise<void> {
+  const familyCase = await captureGoldxFixtureCase({ source: SOURCE });
+  assert.equal(familyCase.familyId, "protocol:goldx");
+  for (const stage of ARCHITECTURE_MIGRATION_STAGES) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `goldx fixture ${stage} must be exercised`,
+    );
+  }
+  assert.equal(familyCase.stages.edges?.items.length, 1);
+  assert.equal(familyCase.stages.finalSimulations?.items.length, 1);
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -1016,6 +1031,7 @@ async function main(): Promise<void> {
   await testFundingFixtureCases();
   await testPsmFixtureCase();
   await testWstethFixtureCase();
+  await testGoldxFixtureCase();
   console.log("architecture-migration capture harness PASS");
 }
 

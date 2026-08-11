@@ -80,6 +80,16 @@ import { wstethExecution } from
   "./venues/protocols/wsteth-family/execution.js";
 import type { WstethDescriptor, WstethRoute } from
   "./venues/protocols/wsteth-family/types.js";
+import { GOLDX_FAMILY_ID } from
+  "./venues/protocols/goldx-family/manifest.js";
+import {
+  GOLDX_INTERFACE,
+  goldxQuote,
+} from "./venues/protocols/goldx-family/codec.js";
+import { goldxExact } from "./venues/protocols/goldx-family/exact.js";
+import { goldxExecution } from "./venues/protocols/goldx-family/execution.js";
+import type { GoldxDescriptor, GoldxRoute } from
+  "./venues/protocols/goldx-family/types.js";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -2582,6 +2592,349 @@ export async function captureWstethFixtureCase(input: {
   return Object.freeze({
     familyId: WSTETH_FAMILY_ID,
     caseId: input.caseId ?? `wsteth:${input.source.number}`,
+    inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
+    stateAnchorNumber: input.source.number,
+    implementationClosureHash: summary.definitionBoundaryHash,
+    stages: Object.freeze({
+      instances: instanceStage(instances, evidenceRefs),
+      edges: exercisedStage(edges, evidenceRefs),
+      stateCoverage: exercisedStage([], evidenceRefs),
+      pricedEdges: exercisedStage([], evidenceRefs),
+      prices: exercisedStage(prices, evidenceRefs),
+      failures: exercisedStage([], evidenceRefs),
+      enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
+      exactQuotes: exercisedStage(exactQuotes, evidenceRefs),
+      executionFragments: exercisedStage(executionFragments, evidenceRefs),
+      finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
+    }),
+  });
+}
+
+export const GOLDX_FIXTURE_TARGET = `0x${"77".repeat(20)}`;
+export const GOLDX_FIXTURE_COLLATERAL =
+  "0x45804880de22913dafe09f4980848ece6ecbaf78";
+export const GOLDX_FIXTURE_RECEIPT =
+  "0x0000000000000000000000000000000000000001";
+export const GOLDX_FIXTURE_UNIT = 10n ** 18n;
+
+function goldxSuccessResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+): AdapterRequestResult {
+  const data = request.id === "identity-code"
+    ? "0x00"
+    : request.id === "identity-unit" || request.id === "current-unit" ||
+        request.id === "exact-unit"
+    ? GOLDX_INTERFACE.encodeFunctionResult("unit", [GOLDX_FIXTURE_UNIT])
+    : (() => {
+        throw new Error(`unexpected goldx fixture request ${request.id}`);
+      })();
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data,
+  });
+}
+
+class GoldxFixtureScheduler implements CentralAdapterScheduler {
+  issueExecutor(
+    input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
+  ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
+    const executor = createBoundedRequestExecutor({
+      assertSupported: (requirements) => assert.deepEqual(
+        requirements,
+        input.requirements,
+      ),
+      assertCallerBinding() {},
+      assertWithinBudget: (_familyId, requests) => {
+        assert.deepEqual(requests, input.requests);
+      },
+      execute: async (execution) => Promise.all(execution.requests.map(
+        (request) => goldxSuccessResult(request, execution.source),
+      )),
+      sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
+    });
+    return Object.freeze({
+      executor,
+      timing: () => ({ queueWaitMs: 0, transportWallMs: 1, attempts: 1 }),
+    });
+  }
+}
+
+function goldxFixtureRuntime(): CentralAdapterRuntime {
+  let now = 1_000;
+  return {
+    clock: { nowMs: () => now++ },
+    generationFence: new FixtureFence(),
+    callerAuthority: { bind: () => ({}) },
+    policy: {
+      bind: (input) => ({
+        lane: input.stage === "identity" ? "critical-proof" : "background",
+        deadlineAtMs: 100_000,
+        maxAttempts: 1,
+        transportPool: "state-read",
+        fairnessKey: input.subjectKey,
+      }),
+    },
+    budgets: { assertAdmitted() {} },
+    scheduler: new GoldxFixtureScheduler(),
+  };
+}
+
+async function runGoldxLifecycle(
+  canonical: CanonicalSource,
+): Promise<AdapterFamilyPublication> {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    GOLDX_FAMILY_ID,
+  );
+  let publication: AdapterFamilyPublication | null = null;
+  const mintCalldata = GOLDX_INTERFACE.encodeFunctionData("mint", [
+    MIGRATION_CAPTURE_EXECUTOR,
+    1_000_000n,
+  ]);
+  const result = await executeAdapterFamilyLifecycleBatch({
+    family,
+    matches: [Object.freeze({
+      matchedPatternId: "goldx-mint-call",
+      observation: Object.freeze({
+        kind: "call" as const,
+        source: canonical,
+        target: GOLDX_FIXTURE_TARGET,
+        data: mintCalldata,
+      }),
+    })],
+    source: canonical,
+    generation: canonical.generation,
+    runtime: goldxFixtureRuntime(),
+    publisher: { publish: (value) => { publication = value; } },
+  });
+  assert(result.publication);
+  assert(publication);
+  return publication;
+}
+
+export async function captureGoldxFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runGoldxLifecycle(input.source);
+  const evidenceRefs = Object.freeze([
+    `fixture:goldx:${input.source.number}:${input.source.hash}`,
+  ]);
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    GOLDX_FAMILY_ID,
+  );
+  const edges: RawMigrationStageCapture["items"][number][] = [];
+  const prices: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of instance.routes) {
+      const handle = instance.routeHandles.find((candidate) =>
+        candidate.routeKey === route.routeKey
+      );
+      if (handle === undefined) {
+        throw new Error(`prepared route ${route.routeKey} has no issued handle`);
+      }
+      const projected = projectFamilyRouteGraph({
+        family,
+        descriptor: instance.descriptor,
+        route,
+        handle,
+      });
+      edges.push(Object.freeze({
+        id: projected.edge.canonicalEdgeId,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: projected.edge.canonicalEdgeId,
+        }),
+      }));
+    }
+    const routeByKey = new Map(
+      instance.routes.map((route) => [route.routeKey, route]),
+    );
+    for (const pricing of instance.pricingInstances) {
+      for (const [routeKey, mid] of pricing.mids) {
+        const route = routeByKey.get(routeKey);
+        if (route === undefined) {
+          throw new Error(`goldx pricing route ${routeKey} is missing`);
+        }
+        prices.push(Object.freeze({
+          id: `${pricing.stateKey}:${route.tokenIn.toLowerCase()}>` +
+            `${route.tokenOut.toLowerCase()}`,
+          value: Object.freeze({
+            stateKey: pricing.stateKey,
+            mid: Object.freeze({ ...mid }),
+          }) as unknown as RawMigrationStageCapture["items"][number]["value"],
+        }));
+      }
+    }
+  }
+  const enumeratedRoutes: RawMigrationStageCapture["items"][number][] = edges
+    .map((edge) => edge.value as {
+      readonly routeKey: string;
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly canonicalEdgeId: string;
+    })
+    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
+    .map((value, order) => Object.freeze({
+      id: value.canonicalEdgeId,
+      value: Object.freeze({
+        routeKey: value.routeKey,
+        tokenIn: value.tokenIn,
+        tokenOut: value.tokenOut,
+        canonicalEdgeId: value.canonicalEdgeId,
+        order,
+      }),
+    }));
+  const exactMethod = goldxExact.methods().find(
+    (method) => method.kind === "request-program" && method.id === "goldx-unit",
+  );
+  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+    throw new Error("goldx exact request program is missing");
+  }
+  const program = exactMethod.program;
+  const exactByRouteKey = new Map<
+    string,
+    {
+      readonly amountOut: bigint;
+      readonly evidence: import("./venues/protocols/goldx-family/types.js")
+        .GoldxExactEvidence;
+    }
+  >();
+  const exactQuotes: RawMigrationStageCapture["items"][number][] = [];
+  const edgeByRouteKey = new Map(
+    edges.map((edge) => {
+      const value = edge.value as { readonly routeKey: string };
+      return [value.routeKey, edge] as const;
+    }),
+  );
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const exactInput = Object.freeze({
+        descriptor: instance.descriptor as unknown as GoldxDescriptor,
+        route: route as unknown as GoldxRoute,
+        amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
+        source: input.source,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      const requests = program.buildRequests(exactInput);
+      const results = requests.map((request) =>
+        goldxSuccessResult(request, input.source)
+      );
+      const decoded = program.decode({
+        programInput: exactInput,
+        initialResults: results,
+        dependentEvidence: Object.freeze([]),
+      });
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (edge === undefined) {
+        throw new Error(`goldx exact route ${route.routeKey} has no edge`);
+      }
+      exactByRouteKey.set(route.routeKey, {
+        amountOut: decoded.amountOut,
+        evidence: decoded.evidence,
+      });
+      exactQuotes.push(Object.freeze({
+        id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
+          amountOut: decoded.amountOut.toString(),
+          feeBps: "0",
+        }),
+      }));
+    }
+  }
+  const executionFragments: RawMigrationStageCapture["items"][number][] = [];
+  const finalSimulations: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const quote = exactByRouteKey.get(route.routeKey);
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (quote === undefined || edge === undefined) {
+        throw new Error(`goldx execution route ${route.routeKey} has no quote`);
+      }
+      const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
+      const fragment = goldxExecution.buildFragment({
+        descriptor: instance.descriptor as unknown as GoldxDescriptor,
+        route: route as unknown as GoldxRoute,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+        minAmountOut: quote.amountOut,
+        exactEvidence: quote.evidence,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      executionFragments.push(Object.freeze({
+        id: `${edge.id}\u001fexec:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          actionAdapterId: "goldx-mint",
+          executionTarget: GOLDX_FIXTURE_TARGET,
+          nodeFingerprint: hashCanonical(
+            fragment.nodes as unknown as CanonicalValue,
+          ),
+        }),
+      }));
+      const effects = goldxExecution.expectedEffects({
+        descriptor: instance.descriptor as unknown as GoldxDescriptor,
+        route: route as unknown as GoldxRoute,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+      });
+      if (quote.amountOut <= 0n) {
+        throw new Error("goldx capture final simulation repayment failed");
+      }
+      finalSimulations.push(Object.freeze({
+        id: `${edge.id}\u001fsim:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          effectsFingerprint: hashCanonical(
+            effects as unknown as CanonicalValue,
+          ),
+          conservation: "conserved",
+          repayment: "satisfied",
+          evInput: Object.freeze({
+            amountIn: amountIn.toString(),
+            amountOut: quote.amountOut.toString(),
+          }),
+        }),
+      }));
+    }
+  }
+  const instances = publication.instances;
+  const summary = definedFamilyPluginContractSummary(family.plugin);
+  return Object.freeze({
+    familyId: GOLDX_FAMILY_ID,
+    caseId: input.caseId ?? `goldx:${input.source.number}`,
     inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
     stateAnchorNumber: input.source.number,
     implementationClosureHash: summary.definitionBoundaryHash,

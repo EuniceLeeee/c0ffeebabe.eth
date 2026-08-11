@@ -15,6 +15,8 @@ import { PSM_FAMILY_ID } from
   "./venues/protocols/psm-family/manifest.js";
 import { WSTETH_FAMILY_ID } from
   "./venues/protocols/wsteth-family/manifest.js";
+import { GOLDX_FAMILY_ID } from
+  "./venues/protocols/goldx-family/manifest.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -98,6 +100,15 @@ export interface BaselineWstethFacts {
   readonly tokenOut: string;
 }
 
+export interface BaselineGoldxFacts {
+  readonly familyId: "protocol:goldx";
+  readonly target: string;
+  readonly collateral: string;
+  readonly receipt: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -115,6 +126,7 @@ export function normalizeBaselineMigrationItems(
         univ4: normalizeBaselineUniv4InstanceItem,
         "protocol:psm": normalizeBaselinePsmInstanceItem,
         "protocol:wsteth": normalizeBaselineWstethInstanceItem,
+        "protocol:goldx": normalizeBaselineGoldxInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -126,6 +138,7 @@ export function normalizeBaselineMigrationItems(
         univ4: normalizeBaselineUniv4PriceItem,
         "protocol:psm": normalizeBaselinePsmPriceItem,
         "protocol:wsteth": normalizeBaselineWstethPriceItem,
+        "protocol:goldx": normalizeBaselineGoldxPriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -137,6 +150,7 @@ export function normalizeBaselineMigrationItems(
         univ4: normalizeBaselineUniv4EdgeItem,
         "protocol:psm": normalizeBaselinePsmEdgeItem,
         "protocol:wsteth": normalizeBaselineWstethEdgeItem,
+        "protocol:goldx": normalizeBaselineGoldxEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -148,6 +162,7 @@ export function normalizeBaselineMigrationItems(
         univ4: normalizeBaselineUniv4EnumeratedRouteItem,
         "protocol:psm": normalizeBaselinePsmEnumeratedRouteItem,
         "protocol:wsteth": normalizeBaselineWstethEnumeratedRouteItem,
+        "protocol:goldx": normalizeBaselineGoldxEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -159,6 +174,7 @@ export function normalizeBaselineMigrationItems(
         univ4: normalizeBaselineUniv4ExactQuoteItem,
         "protocol:psm": normalizeBaselinePsmExactQuoteItem,
         "protocol:wsteth": normalizeBaselineWstethExactQuoteItem,
+        "protocol:goldx": normalizeBaselineGoldxExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -175,6 +191,7 @@ export function normalizeBaselineMigrationItems(
         univ4: normalizeBaselineUniv4ExecutionFragmentItem,
         "protocol:psm": normalizeBaselinePsmExecutionFragmentItem,
         "protocol:wsteth": normalizeBaselineWstethExecutionFragmentItem,
+        "protocol:goldx": normalizeBaselineGoldxExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -191,6 +208,7 @@ export function normalizeBaselineMigrationItems(
         univ4: normalizeBaselineUniv4FinalSimulationItem,
         "protocol:psm": normalizeBaselinePsmFinalSimulationItem,
         "protocol:wsteth": normalizeBaselineWstethFinalSimulationItem,
+        "protocol:goldx": normalizeBaselineGoldxFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -217,6 +235,8 @@ function normalizeByFamily(
       RawMigrationSemanticItem;
     readonly "protocol:wsteth": (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
+    readonly "protocol:goldx": (item: RawMigrationSemanticItem) =>
+      RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -227,6 +247,9 @@ function normalizeByFamily(
   if (familyId === "protocol:psm") return handlers["protocol:psm"](item);
   if (familyId === "protocol:wsteth") {
     return handlers["protocol:wsteth"](item);
+  }
+  if (familyId === "protocol:goldx") {
+    return handlers["protocol:goldx"](item);
   }
   return handlers.default(item);
 }
@@ -2453,6 +2476,325 @@ export function normalizeBaselineWstethFinalSimulationItem(
   });
 }
 
+function goldxFactsGuard(
+  facts: Partial<BaselineGoldxFacts> | undefined,
+): facts is Required<BaselineGoldxFacts> {
+  return facts !== undefined &&
+    facts.familyId === "protocol:goldx" &&
+    typeof facts.target === "string" &&
+    typeof facts.collateral === "string" &&
+    typeof facts.receipt === "string" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function goldxFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineGoldxFacts>;
+  })?.baselineFacts;
+  if (!goldxFactsGuard(facts)) return null;
+  return facts;
+}
+
+function deriveGoldxCanonicalFacts(
+  facts: Required<BaselineGoldxFacts>,
+): {
+  readonly target: string;
+  readonly collateral: string;
+  readonly receipt: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly lowerTarget: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const target = canonicalAddress(facts.target);
+  const collateral = canonicalAddress(facts.collateral);
+  const receipt = canonicalAddress(facts.receipt);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const lowerTarget = lowerAddress(target);
+  const bindingFingerprint = hashCanonical({
+    target: lowerTarget,
+    collateral: lowerAddress(collateral),
+    receipt: lowerAddress(receipt),
+    quoteSemantics: "floor(amount*unit/1e18)",
+  });
+  const venueIdentityHash = hashCanonical({
+    kind: "address-protocol",
+    target: lowerTarget,
+  });
+  const routeKeyValue = `protocol:goldx\u001f${lowerTarget}\u001fmint`;
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "protocol:goldx",
+    lowerTarget,
+    lowerTarget,
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    target,
+    collateral,
+    receipt,
+    tokenIn,
+    tokenOut,
+    lowerTarget,
+    lowerTokenIn,
+    lowerTokenOut,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineGoldxEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = goldxFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveGoldxCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineGoldxEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineGoldxEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "goldx baseline enumerated route item must carry a non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineGoldxInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = goldxFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveGoldxCanonicalFacts(facts);
+  const staticBindingFingerprint = hashCanonical({
+    capability: GOLDX_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: Object.freeze({
+      target: derived.lowerTarget,
+      collateral: lowerAddress(derived.collateral),
+      receipt: lowerAddress(derived.receipt),
+      quoteSemantics: "floor(amount*unit/1e18)",
+    }),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerTarget,
+    value: Object.freeze({
+      familyId: "protocol:goldx",
+      instanceKey: derived.lowerTarget,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineGoldxPriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = goldxFactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveGoldxCanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "goldx-mint",
+    instanceKey: derived.lowerTarget,
+    target: derived.target,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "protocol" as const,
+    protocolAction: "convert" as const,
+    edgeKind: "protocol" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.lowerTarget,
+      mid: Object.freeze({
+        kind: "protocol",
+        pool: derived.target,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineGoldxExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = goldxFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveGoldxCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineGoldxExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = goldxFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveGoldxCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "goldx-mint",
+      executionTarget: derived.target,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineGoldxFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = goldxFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveGoldxCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -2476,4 +2818,9 @@ const PSM_CATALOG_FAMILY =
 const WSTETH_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     WSTETH_FAMILY_ID,
+  );
+
+const GOLDX_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    GOLDX_FAMILY_ID,
   );

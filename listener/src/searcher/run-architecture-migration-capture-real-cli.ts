@@ -13,6 +13,7 @@ import {
   captureFundingFixtureCase,
   capturePsmFixtureCase,
   captureWstethFixtureCase,
+  captureGoldxFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -132,6 +133,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureWstethFixtureCase({
           source,
           caseId: `wsteth:${source.number}`,
+        }));
+      } else if (item.family === "protocol:goldx") {
+        familyCases.push(await captureGoldxFixtureCase({
+          source,
+          caseId: `goldx:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);
