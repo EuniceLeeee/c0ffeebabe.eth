@@ -2045,6 +2045,29 @@ commits impl `8fbe205d`、baseline `9a511ec9`，本地机器证据）：**
 `custom-swap:dodo-v2`、`fluid-dex` + 2 个 protocol 族
 （astra/eigenpie）。
 
+**2026-08-12 astra-multitoken bilateral parity phase checkpoint（实现
+commits impl `e737d9dd`、baseline `2b84f1bb`，本地机器证据）：**
+
+- fixture runtime 首次为 `observed-sender` caller 绑定 central caller
+  authority；`behavior-active-change` effect-delta 结果带 actor/target
+  四段 token delta 与 Change log；
+- impl `captureAstraMultiTokenFixtureCase`（observed change、三阶段
+  surface→registry→active-behavior identity、两 token registry、两条
+  directed convert route）全部 10 stage `exercised`；normalizer 六类
+  stage（registry/behavior 完整静态绑定投影、`address-protocol` venue、
+  per-route stateKey）落地；
+- baseline exporter `captureAstraMultiTokenBaselineCase`（registry 两
+  token、weight/codeHash、behavior 绑定、per-route 1:1 quote、四段
+  token-delta canonicalHash）；
+- 本地跨分支 parity（block `25729060`，十六族 manifest）：十六族全部
+  **pass**、commonGraph 五 stage delta 全空；
+  `searcher:architecture-migration-capture` 合同测试与完整
+  `npm run build` 全部通过；仍是 sealed-capture/shadow receipt，不是
+  production cutover 或 live evidence。
+
+剩余 6 族：`credit:fluid`、`curve-underlying`、`custom-swap:angstrom-v4`、
+`custom-swap:dodo-v2`、`fluid-dex` + `protocol:eigenpie`。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
