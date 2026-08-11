@@ -8,6 +8,7 @@ import {
   type CatalogDiscoverySourceAnchor,
   type CatalogFamilyStage,
   type CatalogInventoryMode,
+  type CatalogStagedInstance,
   type CatalogSourceTransitionAuthority,
   type CatalogSourceTransitionProof,
   type CatalogStagedInstanceBundle,
@@ -15,6 +16,11 @@ import {
   type CatalogTerminalRemovalProof,
   type CatalogValueBinding,
 } from "./adapter-family-catalog-publication.js";
+import type {
+  FundingFamilyPublication,
+  FundingInstanceOutcome,
+  PreparedFundingOffer,
+} from "./adapter-funding-runtime.js";
 import {
   assertIssuedProjectedFamilyRouteGraph,
   projectFamilyRouteGraph,
@@ -30,7 +36,7 @@ import {
   type PreparedFamilyInstance,
   type PreparedPricingStateInstance,
 } from "./venues/adapter-family-runtime.js";
-import type { FamilyId, RouteKey } from
+import { instanceKey, lineageId, type FamilyId, type RouteKey } from
   "./venues/adapter-family-identifiers.js";
 import type { RouteVenueMid } from
   "./venues/mid-readers.js";
@@ -44,8 +50,32 @@ import {
   type LoadedFamilyPlugin,
 } from "./venues/family-capability-catalog.js";
 
+export interface StrictFundingPublicationState {
+  readonly kind: "funding";
+  readonly familyId: FamilyId;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+  readonly tombstone: boolean;
+  readonly offers: readonly PreparedFundingOffer[];
+  readonly outcomes: readonly FundingInstanceOutcome[];
+}
+
+export type StrictShadowCatalogInstance =
+  | PreparedFamilyInstance
+  | StrictFundingPublicationState;
+
+function isFundingState(
+  value: StrictShadowCatalogInstance,
+): value is StrictFundingPublicationState {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    (value as { readonly kind?: string }).kind === "funding"
+  );
+}
+
 export type StrictShadowCatalogFamilyStage = CatalogFamilyStage<
-  PreparedFamilyInstance,
+  StrictShadowCatalogInstance,
   FamilyRouteRuntimeHandle,
   ProjectedFamilyRouteGraph,
   PreparedPricingStateInstance
@@ -53,7 +83,7 @@ export type StrictShadowCatalogFamilyStage = CatalogFamilyStage<
 
 export type StrictShadowCatalogEnvelope =
   AdapterFamilyCatalogPublicationEnvelope<
-    PreparedFamilyInstance,
+    StrictShadowCatalogInstance,
     FamilyRouteRuntimeHandle,
     ProjectedFamilyRouteGraph,
     PreparedPricingStateInstance
@@ -74,6 +104,10 @@ export interface StrictShadowCatalogViews {
   readonly pricingByPublicationKey: ReadonlyMap<
     string,
     PreparedPricingStateInstance
+  >;
+  readonly fundingByPublicationKey: ReadonlyMap<
+    string,
+    StrictFundingPublicationState
   >;
 }
 
@@ -148,14 +182,14 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
   readonly #prepared = new WeakMap<object, StrictShadowCatalogEnvelope>();
   readonly #valueAuthority: ReturnType<
     typeof createCatalogPublicationValueAuthority<
-      PreparedFamilyInstance,
+      StrictShadowCatalogInstance,
       FamilyRouteRuntimeHandle,
       ProjectedFamilyRouteGraph,
       PreparedPricingStateInstance
     >
   >;
   readonly #store: AdapterFamilyCatalogPublicationStore<
-    PreparedFamilyInstance,
+    StrictShadowCatalogInstance,
     FamilyRouteRuntimeHandle,
     ProjectedFamilyRouteGraph,
     PreparedPricingStateInstance
@@ -260,6 +294,77 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
       instances: Object.freeze([]),
       terminalRemovals: Object.freeze([]),
       outcomeRefs: Object.freeze([...(input.outcomeRefs ?? [])]),
+    });
+  }
+
+  /** Converts one real Funding lifecycle publication into a strict staged shard. */
+  stageFundingFamily(input: {
+    readonly publication: FundingFamilyPublication;
+  }): StrictShadowCatalogFamilyStage {
+    const family = this.#catalog.forStrictFamily(input.publication.familyId);
+    const manifest = family.plugin.manifest as unknown as {
+      readonly familyId: FamilyId;
+      readonly domain: string;
+    };
+    if (manifest.domain !== "funding") {
+      throw new Error("stageFundingFamily requires a Funding FamilyBox");
+    }
+    assertSameSource(
+      input.publication.source,
+      input.publication.generation,
+      "Funding publication",
+    );
+    const source = freezeSource(input.publication.source);
+    const state: StrictFundingPublicationState = Object.freeze({
+      kind: "funding",
+      familyId: manifest.familyId,
+      source,
+      generation: input.publication.generation,
+      tombstone: input.publication.offers.length === 0,
+      offers: Object.freeze([...input.publication.offers]),
+      outcomes: Object.freeze([...input.publication.outcomes]),
+    });
+    const instance: CatalogStagedInstance<StrictFundingPublicationState> = {
+      familyId: manifest.familyId,
+      lineageId: lineageId("funding-publication"),
+      instanceKey: instanceKey("state:funding"),
+      fingerprint: hashCanonical({
+        format: "strict-shadow-funding-state-v1",
+        familyId: state.familyId,
+        source: {
+          number: source.number,
+          hash: source.hash,
+          generation: source.generation,
+        },
+        generation: state.generation,
+        tombstone: state.tombstone,
+        offers: state.offers.map((offer) => ({
+          fundingId: offer.fundingId,
+          asset: offer.asset.toLowerCase(),
+          maxBorrow: offer.maxBorrow,
+          fee: offer.fee,
+        })),
+      }),
+      value: state,
+    };
+    return Object.freeze({
+      familyId: manifest.familyId,
+      domain: "funding",
+      source,
+      status: "resolved",
+      inventoryMode: "append-only-delta",
+      instances: Object.freeze([{
+        instancePublicationKey: catalogInstancePublicationKey(instance),
+        source,
+        instance,
+        routeHandles: new Map(),
+        graphEntries: new Map(),
+        pricingEntries: new Map(),
+      }]),
+      terminalRemovals: Object.freeze([]),
+      outcomeRefs: Object.freeze(
+        input.publication.outcomes.flatMap((outcome) => outcome.evidenceRefs),
+      ),
     });
   }
 
@@ -458,13 +563,16 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
 
   #instanceValueContract() {
     return Object.freeze({
-      seal: (value: PreparedFamilyInstance, binding: CatalogValueBinding) => {
-        this.#assertInstance(value, binding);
+      seal: (value: StrictShadowCatalogInstance, binding: CatalogValueBinding) => {
+        this.#assertShadowInstance(value, binding);
         return value;
       },
       carry: () => rejectCrossGenerationCarry(),
-      assertValid: (value: PreparedFamilyInstance, binding: CatalogValueBinding) => {
-        this.#assertInstance(value, binding);
+      assertValid: (
+        value: StrictShadowCatalogInstance,
+        binding: CatalogValueBinding,
+      ) => {
+        this.#assertShadowInstance(value, binding);
       },
     });
   }
@@ -529,6 +637,45 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
       source: binding.source,
       generation: binding.source.generation,
     });
+  }
+
+  #assertShadowInstance(
+    value: StrictShadowCatalogInstance,
+    binding: CatalogValueBinding,
+  ): void {
+    if (isFundingState(value)) {
+      this.#assertFunding(value, binding);
+      return;
+    }
+    this.#assertInstance(value as PreparedFamilyInstance, binding);
+  }
+
+  #assertFunding(
+    value: StrictFundingPublicationState,
+    binding: CatalogValueBinding,
+  ): void {
+    if (
+      binding.kind !== "instance" ||
+      binding.key !== binding.instancePublicationKey
+    ) {
+      throw new Error("funding state escaped its catalog instance binding");
+    }
+    if (
+      value.familyId !== binding.familyId ||
+      value.generation !== binding.source.generation ||
+      value.source.number !== binding.source.number ||
+      value.source.hash.toLowerCase() !== binding.source.hash.toLowerCase() ||
+      value.source.generation !== binding.source.generation
+    ) {
+      throw new Error("funding state escaped its catalog source binding");
+    }
+    if (
+      !Object.isFrozen(value) ||
+      !Object.isFrozen(value.offers) ||
+      !Object.isFrozen(value.outcomes)
+    ) {
+      throw new Error("funding state must be deep-frozen");
+    }
   }
 
   #assertRoute(
@@ -631,6 +778,12 @@ function deriveStrictShadowCatalogViews(
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => [key, entry.value]),
   );
+  const funding = new Map<string, StrictFundingPublicationState>();
+  for (const [key, entry] of envelope.privateState.instances) {
+    if (isFundingState(entry.value)) {
+      funding.set(key, entry.value);
+    }
+  }
   return Object.freeze({
     revision: envelope.snapshot.revision,
     source: envelope.snapshot.source,
@@ -639,6 +792,7 @@ function deriveStrictShadowCatalogViews(
     edges: Object.freeze(edges),
     handleByCanonicalEdgeId: new SealedReadonlyMap(handles),
     pricingByPublicationKey: new SealedReadonlyMap(pricing),
+    fundingByPublicationKey: new SealedReadonlyMap(funding),
   });
 }
 

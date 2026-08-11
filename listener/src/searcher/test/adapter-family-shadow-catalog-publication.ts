@@ -814,6 +814,99 @@ async function main(): Promise<void> {
     source: zeroSource,
   }), /requires explicit non-empty outcome refs/);
 
+  // Funding joins the same strict catalog CAS as an instance-slot shard.
+  const fundingFamily = CATALOG.listAll().find((family) =>
+    (family.plugin.manifest as { domain?: string }).domain === "funding",
+  );
+  assert(fundingFamily);
+  const fundingFamilyId = fundingFamily.plugin.manifest.familyId;
+  const fundingHarness = publicationRoot();
+  const fundingRoot = fundingHarness.root;
+  const fundingSource = source(501);
+  const fundingRoutePublication = await lifecycle(fundingSource);
+  const fundingRouteStage = fundingRoot.stageRouteFamily({
+    publication: fundingRoutePublication,
+  });
+  const tombstonePublication = Object.freeze({
+    familyId: fundingFamilyId,
+    source: fundingSource,
+    generation: fundingSource.generation,
+    offers: Object.freeze([]),
+    outcomes: Object.freeze([Object.freeze({
+      familyId: fundingFamilyId,
+      fundingId: "morpho",
+      instanceKey: "state:funding",
+      stateKey: "funding:morpho",
+      asset: `0x${"77".repeat(20)}`,
+      status: "verified" as const,
+      reasonCode: "",
+      source: fundingSource,
+      workReceipt: null,
+      evidenceRefs: Object.freeze(["funding:verified"]),
+    })]),
+  }) as unknown as Parameters<
+    typeof fundingRoot.stageFundingFamily
+  >[0]["publication"];
+  const fundingStage = fundingRoot.stageFundingFamily({
+    publication: tombstonePublication,
+  });
+  assert.equal(fundingStage.instances.length, 1);
+  const fundingStages = CATALOG.listAll().map((family) => {
+    const familyId = family.plugin.manifest.familyId;
+    if (familyId === fundingFamilyId) return fundingStage;
+    if (familyId === UNIV2_FAMILY_ID) return fundingRouteStage;
+    return fundingRoot.stageUnsupported({
+      familyId,
+      source: fundingSource,
+      outcomeRefs: ["shadow:not-wired"],
+    });
+  });
+  const fundingPrepared = fundingRoot.prepare({
+    source: fundingSource,
+    previous: null,
+    stages: fundingStages,
+    sourceAnchors: anchors({
+      canonical: fundingSource,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+  });
+  await publish(fundingRoot, null, fundingPrepared);
+  const fundingCommitted = fundingRoot.capture()!;
+  assert.equal(fundingCommitted.views.fundingByPublicationKey.size, 1);
+  const fundingState = [
+    ...fundingCommitted.views.fundingByPublicationKey.values(),
+  ][0]!;
+  assert.equal(fundingState.kind, "funding");
+  assert.equal(fundingState.familyId, fundingFamilyId);
+  assert.equal(fundingState.tombstone, true);
+  assert.equal(fundingState.offers.length, 0);
+  assert.equal(fundingCommitted.envelope.snapshot.revision, 1);
+  assert.equal(fundingCommitted.envelope.snapshot.familyStatuses.get(
+    fundingFamilyId,
+  )?.status, "resolved");
+
+  // A funding shard omitted in the next generation cannot be silently
+  // carried: the central instance carry gate must reject it.
+  const nextFundingSource = source(502);
+  const omitFundingStages = CATALOG.listAll().map((family) =>
+    fundingRoot.stageUnsupported({
+      familyId: family.plugin.manifest.familyId,
+      source: nextFundingSource,
+      outcomeRefs: ["shadow:not-wired"],
+    })
+  );
+  assert.throws(() => fundingRoot.prepare({
+    source: nextFundingSource,
+    previous: fundingCommitted,
+    stages: omitFundingStages,
+    sourceAnchors: anchors({ canonical: nextFundingSource }),
+    sourceTransitionProof: transitionProof(
+      fundingHarness.transitionIssuer,
+      fundingSource,
+      nextFundingSource,
+    ),
+  }), /issuer-bound StateInstance mutation proof/);
+
   console.log("adapter-family strict shadow catalog publication tests passed");
 }
 
