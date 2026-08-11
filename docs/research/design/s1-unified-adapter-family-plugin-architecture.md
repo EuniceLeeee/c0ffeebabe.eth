@@ -67,7 +67,7 @@ authority 混在一起：
 
 |阶段|截至 2026-08-09 committed slice 可确认状态|仍未满足的晋升条件|
 |---|---|---|
-|Phase 0 共享 substrate|physical-settlement ownership 与 published/memo store separation 已有 change-set 实现和定向 unit contract|仍需绑定最终 committed HEAD 和完整回归结果；即使通过也不能据此宣称 deployed/live|
+|Phase 0 共享 substrate|physical-settlement ownership 与 published/memo store separation 已有 change-set 实现和定向 unit contract；已绑定 committed HEAD `934eed7a`，Phase 0 回归集（lifecycle-content-cache、catalog-publication、state-carry-proof、discovery-checkpoint、完整 build）全过|即使通过也不能据此宣称 deployed/live；Phase 0 是后续 parity 的前置，不与 Family 迁移混同|
 |Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在，`7ba6f9d3` 已落地 trusted sealed-production capture issuer（unit runner 继续拒绝自封 `sealed-production`）|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
 |Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
 |Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
@@ -76,6 +76,12 @@ authority 混在一起：
 
 该表是实施 checkpoint，不是目标合同的降级，也不预判并行实现工作最终是否通过；任一状态更新都必须引用新的
 commit、测试/receipt 和实际 production consumer closure。
+
+**2026-08-11 Phase 0 绑定 checkpoint：** 以 committed HEAD `934eed7a` 为绑定点，
+`searcher:adapter-family-lifecycle-content-cache`、`searcher:adapter-family-catalog-publication`、
+`searcher:adapter-family-state-carry-proof`、`searcher:adapter-family-discovery-checkpoint`
+与完整 listener build 全部通过。该绑定只证明 Phase 0 substrate 在当前 HEAD 的合同回归；
+不宣称 deployed/live，也不改变 Phase D/E 未完成状态。
 
 ## 1. 一句话定义与完整流水线
 
