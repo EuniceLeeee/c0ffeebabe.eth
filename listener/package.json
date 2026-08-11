@@ -165,6 +165,7 @@
     "searcher:adapter-family-runtime": "node --import tsx src/searcher/test/adapter-family-runtime.ts",
     "searcher:adapter-family-graph-runtime": "node --import tsx src/searcher/test/adapter-family-runtime.ts",
     "searcher:adapter-family-catalog-publication": "node --import tsx src/searcher/test/adapter-family-catalog-publication.ts",
+    "searcher:adapter-family-state-carry-proof": "node --import tsx src/searcher/test/adapter-family-state-carry-proof.ts",
     "searcher:adapter-family-discovery-checkpoint": "node --import tsx src/searcher/test/adapter-family-discovery-checkpoint.ts",
     "searcher:adapter-family-snapshot-inventory-closure": "node --import tsx src/searcher/test/adapter-family-snapshot-inventory-closure.ts",
     "searcher:adapter-family-shadow-catalog-publication": "node --import tsx src/searcher/test/adapter-family-shadow-catalog-publication.ts",

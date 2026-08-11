@@ -1589,7 +1589,7 @@ function sealValue<Value>(
 ): Value {
   const sealed = contract.seal(value, binding);
   contract.assertValid(sealed, binding);
-  assertValueShallowSealed(sealed, label);
+  assertValueDeepSealed(sealed, label);
   return sealed;
 }
 
@@ -1603,7 +1603,7 @@ function carryValue<Value>(
   contract.assertValid(value, previous);
   const carried = contract.carry(value, Object.freeze({ previous, current }));
   contract.assertValid(carried, current);
-  assertValueShallowSealed(carried, label);
+  assertValueDeepSealed(carried, label);
   return carried;
 }
 
@@ -1614,17 +1614,54 @@ function assertValueValid<Value>(
   binding: CatalogValueBinding,
 ): void {
   contract.assertValid(value, binding);
-  assertValueShallowSealed(value, label);
+  assertValueDeepSealed(value, label);
 }
 
-function assertValueShallowSealed(value: unknown, label: string): void {
-  if (
-    value !== null &&
-    (typeof value === "object" || typeof value === "function") &&
-    !Object.isFrozen(value)
-  ) {
-    throw new Error(`${label} authority returned an unsealed value`);
-  }
+/**
+ * Fail-closed deep immutability check for published/carried catalog values.
+ *
+ * A shallow freeze is not a mutation/carry proof: a contract could return
+ * `Object.freeze({ nested: { count: 1 } })` and later mutate `nested` in
+ * place, silently corrupting the published previous that the next generation
+ * will carry. Every reachable object (including non-enumerable properties)
+ * must be frozen, and mutable containers whose internal slots are not sealed
+ * by `Object.freeze` (Map/Set/Date/typed arrays/ArrayBuffer) are rejected.
+ * Cycles are tolerated: a frozen graph is safe, only the traversal must not
+ * loop.
+ */
+function assertValueDeepSealed(value: unknown, label: string): void {
+  const seen = new WeakSet<object>();
+  const visit = (item: unknown, path: string): void => {
+    if (item === null || (typeof item !== "object" && typeof item !== "function")) {
+      return;
+    }
+    const node = item as object;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (!Object.isFrozen(node)) {
+      throw new Error(
+        `${label} authority returned an unsealed value at ${path}`,
+      );
+    }
+    if (
+      node instanceof Map ||
+      node instanceof Set ||
+      node instanceof Date ||
+      node instanceof ArrayBuffer ||
+      ArrayBuffer.isView(node) ||
+      node instanceof DataView
+    ) {
+      throw new Error(
+        `${label} authority returned an unsupported mutable container at ${path}`,
+      );
+    }
+    for (const key of Reflect.ownKeys(node)) {
+      const descriptor = Object.getOwnPropertyDescriptor(node, key);
+      if (descriptor === undefined || !("value" in descriptor)) continue;
+      visit(descriptor.value, `${path}.${String(key)}`);
+    }
+  };
+  visit(value, "<root>");
 }
 
 function instanceValueBinding(
