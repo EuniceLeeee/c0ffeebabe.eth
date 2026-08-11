@@ -104,7 +104,7 @@ export interface UniV3PricingSnapshot {
   readonly feeProtocol: number;
   readonly unlocked: boolean;
   readonly inactiveReason: string | null;
-  readonly precision: ReadonlyMap<string, UniV3PrecisionOutcome>;
+  readonly precision: Readonly<Record<string, UniV3PrecisionOutcome>>;
 }
 
 export interface UniV3ExactEvidence {

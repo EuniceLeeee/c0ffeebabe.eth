@@ -16,12 +16,14 @@ import {
 import {
   captureUniv2FixtureCase,
   captureUniv2RealCase,
+  captureUniv3FixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
 } from "../architecture-migration-fixture-replay.js";
 import {
   createArchitectureMigrationProductionCaptureIssuer,
   runArchitectureMigrationParityFiles,
   buildArchitectureMigrationSideCapture,
+  ARCHITECTURE_MIGRATION_STAGES,
 } from "../architecture-migration-parity-runner.js";
 import type { RawMigrationStageCapture } from
   "../architecture-migration-parity-runner.js";
@@ -537,6 +539,23 @@ async function testRealReservesBilateralExactAndEnumerationParity(): Promise<voi
   }
 }
 
+async function testUniv3FixtureReplayProducesAllStages(): Promise<void> {
+  const familyCase = await captureUniv3FixtureCase({ source: SOURCE });
+  assert.equal(familyCase.familyId, "univ3-standard");
+  for (const stage of ARCHITECTURE_MIGRATION_STAGES) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `univ3 fixture ${stage} must be exercised`,
+    );
+  }
+  assert.equal(familyCase.stages.edges?.items.length, 2);
+  assert.equal(familyCase.stages.prices?.items.length, 2);
+  assert.equal(familyCase.stages.exactQuotes?.items.length, 2);
+  assert.equal(familyCase.stages.executionFragments?.items.length, 2);
+  assert.equal(familyCase.stages.finalSimulations?.items.length, 2);
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -870,6 +889,7 @@ async function main(): Promise<void> {
   await testEndToEndSealedParity();
   await testLegacyBaselineCommonGraphEdgesParity();
   await testRealReservesBilateralExactAndEnumerationParity();
+  await testUniv3FixtureReplayProducesAllStages();
   console.log("architecture-migration capture harness PASS");
 }
 

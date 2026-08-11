@@ -155,7 +155,7 @@ export const univ3Pricing = {
         const amountIn = precisionAmount(descriptor, snapshot, route);
         const outcome = amountIn === null
           ? undefined
-          : snapshot.precision.get(precisionRequestId(route, amountIn));
+          : snapshot.precision[precisionRequestId(route, amountIn)];
         if (
           amountIn !== null &&
           descriptor.quoterBinding.quoter !== null &&
@@ -218,9 +218,9 @@ export const univ3Pricing = {
           );
           continue;
         }
-        const outcome = snapshot.precision.get(
-          precisionRequestId(route, amountIn),
-        );
+        const outcome = snapshot.precision[
+          precisionRequestId(route, amountIn)
+        ];
         if (outcome === undefined) {
           throw new Error(`univ3 precision result missing for ${route.routeKey}`);
         }
@@ -293,7 +293,7 @@ function decodeSnapshot(
   results: readonly AdapterRequestResult[],
 ): UniV3PricingSnapshot {
   const core = decodeCoreSnapshot(results);
-  const precision = new Map<string, UniV3PrecisionOutcome>();
+  const precision: Record<string, UniV3PrecisionOutcome> = {};
   for (const result of results) {
     if (!result.id.startsWith(PRECISION_REQUEST_PREFIX)) continue;
     const amountIn = precisionAmountFromRequestId(result.id);
@@ -303,20 +303,20 @@ function decodeSnapshot(
       );
     }
     if (result.completion === "reverted-as-declared") {
-      precision.set(result.id, Object.freeze({
+      precision[result.id] = Object.freeze({
         amountIn,
         failure: "quote call reverted",
-      }));
+      });
       continue;
     }
     const decoded = UNIV3_QUOTER_V2_INTERFACE.decodeFunctionResult(
       "quoteExactInputSingle",
       result.data,
     );
-    precision.set(result.id, Object.freeze({
+    precision[result.id] = Object.freeze({
       amountIn,
       amountOut: BigInt(decoded[0]),
-    }));
+    });
   }
   return Object.freeze({ ...core, precision });
 }

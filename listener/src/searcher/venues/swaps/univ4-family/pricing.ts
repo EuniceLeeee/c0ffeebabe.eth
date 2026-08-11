@@ -141,7 +141,7 @@ export const univ4Pricing = {
         const amountIn = precisionAmount(descriptor, snapshot, route);
         const outcome = amountIn === null
           ? undefined
-          : snapshot.precision.get(precisionRequestId(route, amountIn));
+          : snapshot.precision[precisionRequestId(route, amountIn)];
         if (amountIn !== null && outcome === undefined) {
           throw new Error(`univ4 precision result missing for ${route.routeKey}`);
         }
@@ -190,9 +190,9 @@ export const univ4Pricing = {
       for (const route of routes) {
         const amountIn = precisionAmount(descriptor, snapshot, route);
         if (amountIn === null) continue;
-        const outcome = snapshot.precision.get(
-          precisionRequestId(route, amountIn),
-        );
+        const outcome = snapshot.precision[
+          precisionRequestId(route, amountIn)
+        ];
         if (outcome === undefined) {
           throw new Error(`univ4 precision result missing for ${route.routeKey}`);
         }
@@ -258,7 +258,7 @@ function decodeSnapshot(
   results: readonly AdapterRequestResult[],
 ): UniV4PricingSnapshot {
   const core = decodeCoreSnapshot(results);
-  const precision = new Map<string, UniV4PrecisionOutcome>();
+  const precision: Record<string, UniV4PrecisionOutcome> = {};
   for (const result of results) {
     if (!result.id.startsWith(PRECISION_REQUEST_PREFIX)) continue;
     const amountIn = precisionAmountFromRequestId(result.id);
@@ -269,20 +269,20 @@ function decodeSnapshot(
     }
     assertSameSource(core.source, result.source);
     if (result.completion === "reverted-as-declared") {
-      precision.set(result.id, Object.freeze({
+      precision[result.id] = Object.freeze({
         amountIn,
         failure: "quote call reverted",
-      }));
+      });
       continue;
     }
     const decoded = UNIV4_QUOTER_INTERFACE.decodeFunctionResult(
       "quoteExactInputSingle",
       result.data,
     );
-    precision.set(result.id, Object.freeze({
+    precision[result.id] = Object.freeze({
       amountIn,
       amountOut: BigInt(decoded[0]),
-    }));
+    });
   }
   return Object.freeze({ ...core, precision });
 }

@@ -5855,7 +5855,7 @@
         "familyId": "univ3-standard",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "16bd996be12034e6b6c4f73d761611cd44da37c4ee19b5b9dea046ad06c94fab",
+        "contentHash": "7929d06a8c71139174722c9546d8eaa98f4a3d6e3f99c6eb0300e7a13ae4d768",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -6158,7 +6158,7 @@
         "familyId": "univ4",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "83cdcdad7c4a0c90c6fb561f9e297378763a3c9a686090ca4f164b62a067dda8",
+        "contentHash": "9b0af8fc1831244535686d3aa8fa2e6aac1a72cad7daf8ccb6458b329e910b0a",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -6261,5 +6261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "f212dfdcf83c3dec7583fb99f24c5280f088d1d0d0c6b5ceed72b953aa0bd82c"
+  "artifactHash": "61cb12604e22911db3e08b579db6e4e86e995f7ee744d4cc87ec416873d0da07"
 }

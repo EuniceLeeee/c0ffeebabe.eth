@@ -21,6 +21,20 @@ import {
 } from "./venues/swaps/univ2-family/codec.js";
 import { univ2Exact } from "./venues/swaps/univ2-family/exact.js";
 import { univ2Execution } from "./venues/swaps/univ2-family/execution.js";
+import { UNIV3_FAMILY_ID } from "./venues/swaps/univ3-family/manifest.js";
+import {
+  UNIV3_FACTORY_INTERFACE,
+  UNIV3_POOL_INTERFACE,
+  UNIV3_QUOTER_V2_INTERFACE,
+} from "./venues/swaps/univ3-abi.js";
+import { UNIV3_SWAP_CALL_PATTERN_ID } from
+  "./venues/swaps/univ3-family/codec.js";
+import { univ3Exact } from "./venues/swaps/univ3-family/exact.js";
+import { univ3Execution } from "./venues/swaps/univ3-family/execution.js";
+import {
+  v3SwapExactInput,
+  v3SwapToState,
+} from "./solver/v3-math.js";
 import {
   hashCanonical,
   type CanonicalValue,
@@ -46,6 +60,10 @@ import type { UniV2Descriptor, UniV2Route } from
   "./venues/swaps/univ2-family/types.js";
 import type { UniV2ExactEvidence } from
   "./venues/swaps/univ2-family/types.js";
+import type { UniV3Descriptor, UniV3Route } from
+  "./venues/swaps/univ3-family/types.js";
+import type { UniV3ExactEvidence } from
+  "./venues/swaps/univ3-family/types.js";
 import type { ExpectedEffect } from
   "./venues/adapter-family-plugin.js";
 import type {
@@ -579,4 +597,459 @@ function assertConservedUniv2Effects(
       throw new Error(`unexpected univ2 capture effect ${key}`);
     }
   }
+}
+
+export const UNIV3_FIXTURE_FACTORY =
+  "0x1F98431c8aD98523631AE4a59f267346ea31F984";
+export const UNIV3_FIXTURE_POOL = `0x${"33".repeat(20)}`;
+export const UNIV3_FIXTURE_TOKEN0 = `0x${"11".repeat(20)}`;
+export const UNIV3_FIXTURE_TOKEN1 = `0x${"22".repeat(20)}`;
+export const UNIV3_FIXTURE_FEE = 500n;
+export const UNIV3_FIXTURE_TICK_SPACING = 1;
+export const UNIV3_FIXTURE_LIQUIDITY = 1_000_000_000_000_000_000n;
+export const UNIV3_FIXTURE_SQRT_PRICE_X96 = 1n << 96n;
+
+interface UniV3PoolContext {
+  readonly pool: string;
+  readonly factory: string;
+  readonly token0: string;
+  readonly token1: string;
+  readonly fee: bigint;
+  readonly tickSpacing: number;
+  readonly liquidity: bigint;
+  readonly sqrtPriceX96: bigint;
+}
+
+function univ3QuoteResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+  ctx: UniV3PoolContext,
+): Extract<AdapterRequestResult, { readonly ok: true }> {
+  const callRequest = request as { readonly data: string };
+  const decoded = UNIV3_QUOTER_V2_INTERFACE.decodeFunctionData(
+    "quoteExactInputSingle",
+    callRequest.data,
+  );
+  const params = decoded[0] as {
+    readonly tokenIn: string;
+    readonly tokenOut: string;
+    readonly amountIn: bigint;
+    readonly fee: bigint;
+    readonly sqrtPriceLimitX96: bigint;
+  };
+  const zeroForOne = params.tokenIn.toLowerCase() === ctx.token0.toLowerCase();
+  const state: import("./solver/v3-math.js").V3PoolState = {
+    sqrtPriceX96: ctx.sqrtPriceX96,
+    liquidity: ctx.liquidity,
+    tick: 0,
+    fee: ctx.fee,
+    tickSpacing: ctx.tickSpacing,
+    tickBitmap: new Map([[0, 0n], [-1, 0n]]),
+    ticks: new Map(),
+  };
+  const amountOut = v3SwapExactInput(state, zeroForOne, params.amountIn);
+  const post = v3SwapToState(state, zeroForOne, params.amountIn);
+  const data = UNIV3_QUOTER_V2_INTERFACE.encodeFunctionResult(
+    "quoteExactInputSingle",
+    [amountOut, post.state.sqrtPriceX96, 0, 0],
+  );
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data,
+  });
+}
+
+function univ3SuccessResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+  ctx: UniV3PoolContext,
+): AdapterRequestResult {
+  const data = request.id === "pool-factory"
+    ? UNIV3_POOL_INTERFACE.encodeFunctionResult("factory", [ctx.factory])
+    : request.id === "pool-token0"
+    ? UNIV3_POOL_INTERFACE.encodeFunctionResult("token0", [ctx.token0])
+    : request.id === "pool-token1"
+    ? UNIV3_POOL_INTERFACE.encodeFunctionResult("token1", [ctx.token1])
+    : request.id === "pool-fee"
+    ? UNIV3_POOL_INTERFACE.encodeFunctionResult("fee", [ctx.fee])
+    : request.id === "pool-tick-spacing"
+    ? UNIV3_POOL_INTERFACE.encodeFunctionResult(
+        "tickSpacing",
+        [ctx.tickSpacing],
+      )
+    : request.id === "factory-get-pool"
+    ? UNIV3_FACTORY_INTERFACE.encodeFunctionResult("getPool", [ctx.pool])
+    : request.id === "current-slot0"
+    ? UNIV3_POOL_INTERFACE.encodeFunctionResult(
+        "slot0",
+        [ctx.sqrtPriceX96, 0, 0, 1, 1, 0, true],
+      )
+    : request.id === "current-liquidity"
+    ? UNIV3_POOL_INTERFACE.encodeFunctionResult("liquidity", [ctx.liquidity])
+    : request.id.startsWith("univ3-precision:")
+    ? univ3QuoteResult(request, canonical, ctx).data
+    : request.id === "exact-factory-bound-quote"
+    ? univ3QuoteResult(request, canonical, ctx).data
+    : (() => {
+        throw new Error(`unexpected univ3 fixture request ${request.id}`);
+      })();
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data,
+  });
+}
+
+class UniV3FixtureScheduler implements CentralAdapterScheduler {
+  readonly #ctx: UniV3PoolContext;
+
+  constructor(ctx: UniV3PoolContext) {
+    this.#ctx = ctx;
+  }
+
+  issueExecutor(
+    input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
+  ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
+    const executor = createBoundedRequestExecutor({
+      assertSupported: (requirements) => assert.deepEqual(
+        requirements,
+        input.requirements,
+      ),
+      assertCallerBinding() {},
+      assertWithinBudget: (_familyId, requests) => {
+        assert.deepEqual(requests, input.requests);
+      },
+      execute: async (execution) => Promise.all(execution.requests.map(
+        (request) => univ3SuccessResult(request, execution.source, this.#ctx),
+      )),
+      sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
+    });
+    return Object.freeze({
+      executor,
+      timing: () => ({ queueWaitMs: 0, transportWallMs: 1, attempts: 1 }),
+    });
+  }
+}
+
+function univ3FixtureRuntime(ctx: UniV3PoolContext): CentralAdapterRuntime {
+  let now = 1_000;
+  return {
+    clock: { nowMs: () => now++ },
+    generationFence: new FixtureFence(),
+    callerAuthority: { bind: () => ({}) },
+    policy: {
+      bind: (input) => ({
+        lane: input.stage === "identity" ? "critical-proof" : "background",
+        deadlineAtMs: 100_000,
+        maxAttempts: 1,
+        transportPool: "state-read",
+        fairnessKey: input.subjectKey,
+      }),
+    },
+    budgets: { assertAdmitted() {} },
+    scheduler: new UniV3FixtureScheduler(ctx),
+  };
+}
+
+async function runUniv3Lifecycle(
+  canonical: CanonicalSource,
+  ctx: UniV3PoolContext,
+): Promise<AdapterFamilyPublication> {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    UNIV3_FAMILY_ID,
+  );
+  let publication: AdapterFamilyPublication | null = null;
+  const swapCalldata = UNIV3_POOL_INTERFACE.encodeFunctionData("swap", [
+    MIGRATION_CAPTURE_EXECUTOR,
+    true,
+    1_000_000n,
+    0n,
+    "0x",
+  ]);
+  const result = await executeAdapterFamilyLifecycleBatch({
+    family,
+    matches: [Object.freeze({
+      matchedPatternId: UNIV3_SWAP_CALL_PATTERN_ID,
+      observation: Object.freeze({
+        kind: "call" as const,
+        source: canonical,
+        target: ctx.pool,
+        data: swapCalldata,
+      }),
+    })],
+    source: canonical,
+    generation: canonical.generation,
+    runtime: univ3FixtureRuntime(ctx),
+    publisher: { publish: (value) => { publication = value; } },
+  });
+  assert(result.publication);
+  assert(publication);
+  return publication;
+}
+
+/**
+ * Runs the strict UniV3 lifecycle over one fixture pool observation and emits
+ * the canonical migration capture row for `univ3-standard`. All deep stages
+ * are exercised at fixture level (deterministic local v3 exact-input math),
+ * mirroring the univ2 bilateral capture contract.
+ */
+export async function captureUniv3FixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const ctx: UniV3PoolContext = Object.freeze({
+    pool: UNIV3_FIXTURE_POOL,
+    factory: UNIV3_FIXTURE_FACTORY,
+    token0: UNIV3_FIXTURE_TOKEN0,
+    token1: UNIV3_FIXTURE_TOKEN1,
+    fee: UNIV3_FIXTURE_FEE,
+    tickSpacing: UNIV3_FIXTURE_TICK_SPACING,
+    liquidity: UNIV3_FIXTURE_LIQUIDITY,
+    sqrtPriceX96: UNIV3_FIXTURE_SQRT_PRICE_X96,
+  });
+  const publication = await runUniv3Lifecycle(input.source, ctx);
+  const evidenceRefs = Object.freeze([
+    `fixture:univ3:${input.source.number}:${input.source.hash}`,
+  ]);
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    UNIV3_FAMILY_ID,
+  );
+  const edges: RawMigrationStageCapture["items"][number][] = [];
+  const prices: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of instance.routes) {
+      const handle = instance.routeHandles.find((candidate) =>
+        candidate.routeKey === route.routeKey
+      );
+      if (handle === undefined) {
+        throw new Error(`prepared route ${route.routeKey} has no issued handle`);
+      }
+      const projected = projectFamilyRouteGraph({
+        family,
+        descriptor: instance.descriptor,
+        route,
+        handle,
+      });
+      edges.push(Object.freeze({
+        id: projected.edge.canonicalEdgeId,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: projected.edge.canonicalEdgeId,
+        }),
+      }));
+    }
+    const routeByKey = new Map(
+      instance.routes.map((route) => [route.routeKey, route]),
+    );
+    for (const pricing of instance.pricingInstances) {
+      for (const [routeKey, mid] of pricing.mids) {
+        const route = routeByKey.get(routeKey);
+        if (route === undefined) {
+          throw new Error(`univ3 pricing route ${routeKey} is missing`);
+        }
+        prices.push(Object.freeze({
+          id: `${pricing.stateKey}:${route.tokenIn.toLowerCase()}>` +
+            `${route.tokenOut.toLowerCase()}`,
+          value: Object.freeze({
+            stateKey: pricing.stateKey,
+            mid: Object.freeze({ ...mid }),
+          }) as unknown as RawMigrationStageCapture["items"][number]["value"],
+        }));
+      }
+    }
+  }
+  const enumeratedRoutes: RawMigrationStageCapture["items"][number][] = edges
+    .map((edge) => edge.value as {
+      readonly routeKey: string;
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly canonicalEdgeId: string;
+    })
+    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
+    .map((value, order) => Object.freeze({
+      id: value.canonicalEdgeId,
+      value: Object.freeze({
+        routeKey: value.routeKey,
+        tokenIn: value.tokenIn,
+        tokenOut: value.tokenOut,
+        canonicalEdgeId: value.canonicalEdgeId,
+        order,
+      }),
+    }));
+  const exactMethod = univ3Exact.methods().find(
+    (method) => method.kind === "request-program" &&
+      method.id === "quoter-v2",
+  );
+  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+    throw new Error("univ3 exact request program is missing");
+  }
+  const program = exactMethod.program;
+  const exactByRouteKey = new Map<
+    string,
+    { readonly amountOut: bigint; readonly evidence: UniV3ExactEvidence }
+  >();
+  const exactQuotes: RawMigrationStageCapture["items"][number][] = [];
+  const edgeByRouteKey = new Map(
+    edges.map((edge) => {
+      const value = edge.value as { readonly routeKey: string };
+      return [value.routeKey, edge] as const;
+    }),
+  );
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const exactInput = Object.freeze({
+        descriptor: instance.descriptor as unknown as UniV3Descriptor,
+        route: route as unknown as UniV3Route,
+        amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
+        source: input.source,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      const requests = program.buildRequests(exactInput);
+      const results = requests.map((request) =>
+        univ3SuccessResult(request, input.source, ctx)
+      );
+      const decoded = program.decode({
+        programInput: exactInput,
+        initialResults: results,
+        dependentEvidence: Object.freeze([]),
+      });
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (edge === undefined) {
+        throw new Error(`univ3 exact route ${route.routeKey} has no edge`);
+      }
+      exactByRouteKey.set(route.routeKey, {
+        amountOut: decoded.amountOut,
+        evidence: decoded.evidence as UniV3ExactEvidence,
+      });
+      exactQuotes.push(Object.freeze({
+        id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
+          amountOut: decoded.amountOut.toString(),
+          feeBps: (Number((instance.descriptor as unknown as {
+            readonly fee: bigint;
+          }).fee) / 100).toString(),
+        }),
+      }));
+    }
+  }
+  const executionFragments: RawMigrationStageCapture["items"][number][] = [];
+  const finalSimulations: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const quote = exactByRouteKey.get(route.routeKey);
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (quote === undefined || edge === undefined) {
+        throw new Error(`univ3 execution route ${route.routeKey} has no quote`);
+      }
+      const descriptor = instance.descriptor as unknown as UniV3Descriptor;
+      const univ3Route = route as unknown as UniV3Route;
+      const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
+      const minAmountOut = quote.amountOut;
+      const fragment = univ3Execution.buildFragment({
+        descriptor,
+        route: univ3Route,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+        minAmountOut,
+        exactEvidence: quote.evidence,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      const node = fragment.nodes[0]!;
+      executionFragments.push(Object.freeze({
+        id: `${edge.id}\u001fexec:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: minAmountOut.toString(),
+          actionAdapterId: node.adapterId,
+          executionTarget: node.target,
+          nodeFingerprint: hashCanonical(
+            node as unknown as CanonicalValue,
+          ),
+        }),
+      }));
+      const effects = univ3Execution.expectedEffects({
+        descriptor,
+        route: univ3Route,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+      });
+      assertConservedUniv2Effects(effects);
+      if (quote.amountOut < minAmountOut) {
+        throw new Error("univ3 capture final simulation repayment failed");
+      }
+      finalSimulations.push(Object.freeze({
+        id: `${edge.id}\u001fsim:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: minAmountOut.toString(),
+          effectsFingerprint: hashCanonical(
+            effects as unknown as CanonicalValue,
+          ),
+          conservation: "conserved",
+          repayment: "satisfied",
+          evInput: Object.freeze({
+            amountIn: amountIn.toString(),
+            amountOut: quote.amountOut.toString(),
+          }),
+        }),
+      }));
+    }
+  }
+  const instances = publication.instances;
+  const summary = definedFamilyPluginContractSummary(family.plugin);
+  return Object.freeze({
+    familyId: UNIV3_FAMILY_ID,
+    caseId: input.caseId ?? `univ3:${input.source.number}`,
+    inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
+    stateAnchorNumber: input.source.number,
+    implementationClosureHash: summary.definitionBoundaryHash,
+    stages: Object.freeze({
+      instances: instanceStage(instances, evidenceRefs),
+      edges: exercisedStage(edges, evidenceRefs),
+      stateCoverage: exercisedStage([], evidenceRefs),
+      pricedEdges: exercisedStage([], evidenceRefs),
+      prices: exercisedStage(prices, evidenceRefs),
+      failures: exercisedStage([], evidenceRefs),
+      enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
+      exactQuotes: exercisedStage(exactQuotes, evidenceRefs),
+      executionFragments: exercisedStage(executionFragments, evidenceRefs),
+      finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
+    }),
+  });
 }

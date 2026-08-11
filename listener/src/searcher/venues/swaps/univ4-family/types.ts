@@ -87,7 +87,7 @@ export interface UniV4PricingSnapshot {
   readonly protocolFee: bigint;
   readonly lpFee: bigint;
   readonly inactiveReason: string | null;
-  readonly precision: ReadonlyMap<string, UniV4PrecisionOutcome>;
+  readonly precision: Readonly<Record<string, UniV4PrecisionOutcome>>;
 }
 
 export interface UniV4ExactEvidence {
