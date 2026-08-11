@@ -53,6 +53,10 @@ import {
   updateProtocolObservedSourceFingerprint,
 } from "./protocol-discovery-cache.js";
 import {
+  loadDexDiscoveryCursor,
+  resolveInitialDexSourceCompleteThrough,
+} from "./discovery-dex-cursor.js";
+import {
   createProtocolTraceMemo,
   protocolDiscoverySourceFingerprints,
   protocolObservedSourceFingerprint,
@@ -290,6 +294,11 @@ const DEFAULT_PROTOCOL_DISCOVERY_CACHE_PATH = resolve(
   "searcher",
   "pools",
   "runtime-protocol-discovery-cache.json",
+);
+const DEFAULT_DEX_DISCOVERY_CURSOR_PATH = resolve(
+  "searcher",
+  "pools",
+  "runtime-dex-graph-coverage.json",
 );
 const PROTOCOL_CURSOR_SEMANTICS_VERSION =
   "family-source-contiguous-v3-hash-anchored";
@@ -1579,21 +1588,62 @@ async function main(): Promise<void> {
     0,
     discoveryToBlock - discoveryBlocks,
   );
+  const dexDiscoveryCursorPath =
+    process.env.SEARCHER_DISCOVERY_DEX_CURSOR_PATH ??
+    DEFAULT_DEX_DISCOVERY_CURSOR_PATH;
+  const loadedDexCursor = blindProductionAudit
+    ? null
+    : await loadDexDiscoveryCursor(dexDiscoveryCursorPath);
+  let dexCursorSourceCompleteThrough: number | null = null;
+  if (
+    loadedDexCursor !== null &&
+    loadedDexCursor.sourceCompleteThrough >= 0 &&
+    loadedDexCursor.sourceHash !== null
+  ) {
+    try {
+      const cursorHash = await readBlockHash(
+        provider,
+        loadedDexCursor.sourceCompleteThrough,
+      );
+      if (cursorHash.toLowerCase() === loadedDexCursor.sourceHash.toLowerCase()) {
+        dexCursorSourceCompleteThrough =
+          loadedDexCursor.sourceCompleteThrough;
+        console.log(
+          `[searcher/live] DEX coverage cursor resumed at block ` +
+            `${loadedDexCursor.sourceCompleteThrough}`,
+        );
+      } else {
+        console.warn(
+          `[searcher/live] persisted DEX coverage cursor is not canonical ` +
+            `at ${loadedDexCursor.sourceCompleteThrough}; ignoring`,
+        );
+      }
+    } catch {
+      console.warn(
+        `[searcher/live] could not validate persisted DEX coverage cursor ` +
+          `at ${loadedDexCursor.sourceCompleteThrough}; ignoring`,
+      );
+    }
+  }
+  const trustedThrough = Math.max(
+    poolUniverseCoverage.toBlock ?? -1,
+    dexCursorSourceCompleteThrough ?? -1,
+  );
   const initialDexSourceCompleteThrough =
-    universeRegistryMatches &&
-      poolUniverseCoverage.toBlock !== null &&
-      poolUniverseCoverage.toBlock >= startupLandedDiscoveryFloor - 1
-      ? discoveryToBlock
-      : universeRegistryMatches
-        ? poolUniverseCoverage.toBlock ?? -1
-        : poolUniverseCoverage.fromBlock === null
-          ? -1
-          : Math.max(-1, poolUniverseCoverage.fromBlock - 1);
+    resolveInitialDexSourceCompleteThrough({
+      universeRegistryMatches,
+      universeToBlock: poolUniverseCoverage.toBlock,
+      startupLandedDiscoveryFloor,
+      discoveryToBlock,
+      trustedThrough,
+    });
   if (!universeRegistryMatches) {
     console.warn(
       "[searcher/live] pool universe provenance/registry/canonical anchor " +
-        "changed or is unverifiable; source completeness will be rebuilt " +
-        `from its fromBlock manifest=${config.poolUniverseManifestPath}`,
+        "changed or is unverifiable; source completeness will resume from " +
+        `max(universe.toBlock, persisted cursor) ` +
+        `(universe=${poolUniverseCoverage.toBlock ?? -1}, ` +
+        `cursor=${dexCursorSourceCompleteThrough ?? -1})`,
     );
   }
   let protocolGraphCompleteThrough = -1;
@@ -2375,6 +2425,7 @@ async function main(): Promise<void> {
     protocolDiscoveryChainId,
     protocolDiscoveryCachePath,
     protocolDiscoveryCache,
+    dexDiscoveryCursorPath,
     protocolDiscoveryCoverage,
     startupActivePoolDiscovery,
     startupDexSourceBlockHash,
