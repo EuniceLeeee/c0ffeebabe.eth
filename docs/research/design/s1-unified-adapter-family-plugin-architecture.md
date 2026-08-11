@@ -1434,6 +1434,54 @@ baseline `2bc1c9cb`、impl `14347dd3`，机器证据）：**
 这是 Phase A/C 验收的机器可验证证据制品前置；真实 batch pass 仍需 deep
 stages 与其余 Family 覆盖。
 
+**2026-08-11 common-Graph 双侧导出 + 首次节点重跑 checkpoint（实现 commits
+impl `14d89dcd`、baseline `7aec76c1`，机器证据）：** 双侧 capture 均新增
+`commonGraph` 导出（edges 为 `exercised`，deep stages 诚实
+`framework-blocked`）；节点 SSM `5b818694`（12:45:53Z）在 impl
+`14d89dcd` / baseline `7aec76c1` 上重跑真实 corpus
+（WETH/USDC `0xB4e16d...`，block `25729060`）：
+
+- `baselineCaptureMissing=false`、`challengerCaptureMissing=false`；
+- `commonGraphDelta.edges` 出现语义差异：baseline 旧
+  `canonicalEdgeId` 用 tuple 型 execution-variant key
+  （`["univ2-swap",null,null,null,null]`），challenger 用新
+  `adapter-family-graph-route-v1` 内容哈希，同一 pool/方向被报为
+  `missingIds` + `addedIds`；enumeratedRoutes/exactQuotes/
+  executionFragments/finalSimulations 仍为 blocked、无 delta；
+- `eligible=true`、verdict `fail`、univ2 `framework-blocked`。
+
+这证明双侧 common-Graph 均已导出，但旧/新 edge 身份必须先经 fixed
+baseline normalizer 归一才能比较；common-Graph edges parity 子项尚未关闭。
+
+**2026-08-11 baseline edge identity normalizer phase checkpoint（实现
+commits impl `70f0cf0b`/`8df6797b`、baseline `9d198bcc`，机器证据）：**
+
+- baseline exporter：univ2 默认 feeBps 修正为 `30n`（与 challenger
+  `uniV2FeeRuleForFactory` 标准 factory 规则一致），每个 legacy edge item
+  携带 `baselineFacts`
+  （`familyId/pool/token0/token1/tokenIn/tokenOut/feeBps/factory/reversePool`）；
+- impl 新增 `architecture-migration-baseline-normalizer.ts`：在 trusted
+  comparator 内用 legacy facts 重放 challenger
+  `familyRouteCanonicalEdgeId`（binding fingerprint 用 EIP-55 canonical
+  address，routeKey/id 用 lowercase，value 保留 checksummed token），
+  分别接入 family `edges` stage 与 common-Graph `edges` stage；facts 缺失
+  时原样透传，feeBps 与 factory rule 矛盾时 fail closed；
+- 合同证据：`architecture-migration-baseline-normalizer` PASS、
+  `searcher:architecture-migration-capture` PASS、
+  `searcher:architecture-migration-parity-runner` PASS、
+  `searcher:architecture-migration-parity` PASS、
+  `searcher:architecture-migration-evidence` PASS、完整 listener build
+  通过（fixture 双侧 legacy→challenger edges 归一后 delta 为空）；
+- 节点 SSM `dfb12b00` 在 impl `8df6797b` / baseline `9d198bcc` 重跑真实
+  corpus：`commonGraphDelta.edges = {missingIds:[], addedIds:[],
+  changedIds:[]}`，四个 deep stage 均为 blocked 且 delta 空，
+  `eligible=true`、verdict `fail`、univ2 `framework-blocked`（仅 deep
+  stages 未接线）。
+
+本 phase 关闭"common-Graph 双侧 edges parity"子项；剩余：deep stages
+（enumeration/exact/execution/final-sim）双侧真实接线与其余 21 个 Family
+的 capture 覆盖。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
