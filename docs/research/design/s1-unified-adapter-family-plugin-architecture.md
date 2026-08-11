@@ -1615,6 +1615,27 @@ framework fix checkpoint（实现 commit impl `61c77305`，fixture 级合同证�
 normalizer + 节点真实 corpus 双侧 capture 是下一 phase，未完成前不得把
 univ3 当作 batch pass 或 production cutover。
 
+**2026-08-11 univ3 baseline normalizer contract checkpoint（实现 commit
+impl `ab4c06bd`，本地合同证据）：**
+
+- `architecture-migration-baseline-normalizer.ts` 按 `baselineFacts.familyId`
+  分流 univ2/univ3：univ3 facts 携带
+  `pool/token0/token1/tokenIn/tokenOut/fee/tickSpacing/factory/reversePool/
+  quoter/router/quoterProvenance`；
+- univ3 canonical edge 用同一 `adapter-family-graph-route-v1` 派生
+  （binding fingerprint = `uniV3StaticBindingProjection` 形状，venue =
+  `address-pool`），instances 用 univ3 `instance.contentHash` 重算
+  `staticBindingFingerprint`，prices 重建 univ3 routeEdge/mid
+  （`v3Fee`/`v3TickSpacing`/`sqrtABX96`/`liquidity`），exact/execution/
+  final-sim 与 univ2 同构（execution node 参数
+  `zeroForOne/amountSpecified/sqrtPriceLimit`）；
+- 合同证据：`architecture-migration-baseline-normalizer` PASS（univ3
+  fixture 双侧 legacy→challenger 逐 stage deepEqual）、
+  capture/parity-runner/parity/evidence PASS、完整 listener build。
+
+univ3 baseline exporter（冻结 ds `univ3-standard` 侧）与节点真实 corpus
+双侧 capture 仍未落地，是下一 phase。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
