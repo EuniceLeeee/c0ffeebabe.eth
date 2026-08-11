@@ -2132,6 +2132,28 @@ impl `c9bc313a`、baseline `830c6f5a`，本地机器证据）：**
 剩余 3 族：`credit:fluid`、`custom-swap:angstrom-v4`、
 `custom-swap:dodo-v2`。
 
+**2026-08-12 angstrom-v4 bilateral parity phase checkpoint（实现 commits
+impl `3e59a630`、baseline `7ac41580`，本地机器证据）：**
+
+- 修复 angstrom-v4 identity requirements（controller-reverse 阶段去掉
+  未使用的 get-code）；
+- impl `captureAngstromV4FixtureCase`（initialize log → static
+  pool-key/hook/controller proof → tx-bound empty-block attestation exact
+  quote（canonical sealed payload + evidence hash）→ v4-style current
+  pricing）全部 10 stage `exercised`；normalizer 六类 stage
+  （`manager-pool-id` venue、`v4` quoted mid、adapter executionTarget、
+  poolKey/immutable binding 投影）落地；
+- baseline exporter `captureAngstromV4BaselineCase`（manager/adapter/
+  controller 绑定、code hash、attestation 执行参数、canonicalHash
+  镜像；node/effects 地址全部 checksum 化）；
+- 本地跨分支 parity（block `25729060`，二十族 manifest）：二十族全部
+  **pass**、commonGraph 五 stage delta 全空；
+  `searcher:architecture-migration-capture` 合同测试与完整
+  `npm run build` 全部通过；仍是 sealed-capture/shadow receipt，不是
+  production cutover 或 live evidence。
+
+剩余 2 族：`credit:fluid`、`custom-swap:dodo-v2`。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
