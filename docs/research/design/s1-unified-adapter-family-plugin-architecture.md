@@ -1392,6 +1392,20 @@ checkpoint（baseline commit `96e0cc4f`，branch `codex/parity-capture-baseline`
 剩余工作：真实 reserves/mids 读入（baseline+challenger 两侧 prices）、其余
 21 个 Family 的 capture 覆盖、common-Graph 双侧导出。
 
+**2026-08-11 univ2 真实价格 bilateral parity phase checkpoint（实现 commits
+baseline `2bc1c9cb`、impl `14347dd3`，机器证据）：**
+
+- baseline exporter 与 challenger `captureUniv2RealCase` 均支持真实
+  reserves → 两侧 `prices` stage 为 `exercised`（price id 统一为
+  `pool:tokenIn>tokenOut`）；
+- 节点 block `25729060` 真实 reserves
+  （USDC `8779048929520` / WETH `4684677056208081765678`）双跑 receipt：
+  `missingPricedEdges=[]`、`changedPrices=[]`（双侧价格语义一致）、
+  `eligible=true`、aggregate `fail`、univ2 `framework-blocked`
+  （仅因 deep stages 未接线，诚实 fail）；
+- 本 phase 关闭"真实价格双侧 capture"子项；剩余：deep stages
+  （enumeration/exact/execution/final-sim）与其余 21 个 Family 覆盖。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
