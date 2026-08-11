@@ -133,6 +133,23 @@ import type {
   MetronomeSynthDescriptor,
   MetronomeSynthRoute,
 } from "./venues/protocols/metronome-synth-family/types.js";
+import { ERC4626_SILO_REDEEM_FAMILY_ID } from
+  "./venues/protocols/erc4626-silo-redeem-family/manifest.js";
+import {
+  ERC4626_SILO_ERC20_INTERFACE,
+  ERC4626_SILO_INTERFACE,
+  ERC4626_SILO_PAYOUT_INTERFACE,
+  ERC4626_SILO_PROBE_ACTOR,
+  ERC4626_SILO_PROBE_ACTOR_EVIDENCE_ID,
+} from "./venues/protocols/erc4626-silo-redeem-family/shared.js";
+import { erc4626SiloRedeemExact } from
+  "./venues/protocols/erc4626-silo-redeem-family/exact.js";
+import { erc4626SiloRedeemExecution } from
+  "./venues/protocols/erc4626-silo-redeem-family/execution.js";
+import type {
+  Erc4626SiloRedeemDescriptor,
+  Erc4626SiloRedeemRoute,
+} from "./venues/protocols/erc4626-silo-redeem-family/types.js";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -4140,6 +4157,490 @@ export async function captureMetronomeSynthFixtureCase(input: {
   return Object.freeze({
     familyId: METRONOME_SYNTH_FAMILY_ID,
     caseId: input.caseId ?? `metronome-synth:${input.source.number}`,
+    inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
+    stateAnchorNumber: input.source.number,
+    implementationClosureHash: summary.definitionBoundaryHash,
+    stages: Object.freeze({
+      instances: instanceStage(instances, evidenceRefs),
+      edges: exercisedStage(edges, evidenceRefs),
+      stateCoverage: exercisedStage([], evidenceRefs),
+      pricedEdges: exercisedStage([], evidenceRefs),
+      prices: exercisedStage(prices, evidenceRefs),
+      failures: exercisedStage([], evidenceRefs),
+      enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
+      exactQuotes: exercisedStage(exactQuotes, evidenceRefs),
+      executionFragments: exercisedStage(executionFragments, evidenceRefs),
+      finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
+    }),
+  });
+}
+
+export const ERC4626_SILO_FIXTURE_VAULT = `0x${"bb".repeat(20)}`;
+export const ERC4626_SILO_FIXTURE_PAYOUT = `0x${"cc".repeat(20)}`;
+export const ERC4626_SILO_FIXTURE_UNDERLYING = `0x${"dd".repeat(20)}`;
+
+function erc4626SiloSimulationResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+): AdapterRequestResult {
+  if (request.kind !== "effect-delta-simulation") {
+    throw new Error(
+      `unexpected erc4626-silo fixture transport ${request.kind}`,
+    );
+  }
+  const callerRef = (request as {
+    readonly call: { readonly caller: { readonly kind: string } };
+  }).call.caller;
+  const actor = callerRef.kind === "verified-actor"
+    ? ERC4626_SILO_PROBE_ACTOR
+    : callerRef.kind === "executor"
+      ? MIGRATION_CAPTURE_EXECUTOR
+      : (() => {
+          throw new Error(
+            `erc4626-silo fixture caller ${callerRef.kind} is unsupported`,
+          );
+        })();
+  const callData = (request as {
+    readonly call: { readonly data: string };
+  }).call.data;
+  const amountIn = BigInt(
+    ERC4626_SILO_INTERFACE.decodeFunctionData("redeem", callData)[1],
+  );
+  const amountOut = amountIn;
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data: ERC4626_SILO_INTERFACE.encodeFunctionResult("redeem", [amountOut]),
+    effects: Object.freeze({
+      tokenDeltas: Object.freeze([
+        Object.freeze({
+          token: ERC4626_SILO_FIXTURE_VAULT.toLowerCase(),
+          account: actor.toLowerCase(),
+          delta: -amountIn,
+        }),
+        Object.freeze({
+          token: ERC4626_SILO_FIXTURE_PAYOUT.toLowerCase(),
+          account: actor.toLowerCase(),
+          delta: amountOut,
+        }),
+      ]),
+      totalSupplyDeltas: Object.freeze([
+        Object.freeze({
+          token: ERC4626_SILO_FIXTURE_VAULT.toLowerCase(),
+          delta: -amountIn,
+        }),
+      ]),
+      logs: Object.freeze([]),
+    }),
+  });
+}
+
+function erc4626SiloSuccessResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+): AdapterRequestResult {
+  if (request.kind === "effect-delta-simulation") {
+    return erc4626SiloSimulationResult(request, canonical);
+  }
+  const data =
+    request.id === "identity-vault-code" ||
+        request.id === "identity-payout-code"
+      ? "0x00"
+      : request.id === "identity-vault-asset" ||
+          request.id === "identity-payout-asset"
+        ? ERC4626_SILO_INTERFACE.encodeFunctionResult("asset", [
+            ERC4626_SILO_FIXTURE_UNDERLYING,
+          ])
+        : request.id === "identity-total-supply"
+          ? ERC4626_SILO_INTERFACE.encodeFunctionResult(
+              "totalSupply",
+              [10n ** 30n],
+            )
+          : request.id === "identity-preview-redeem" ||
+              request.id === "current-preview-redeem"
+            ? (() => {
+                const shares = BigInt(
+                  ERC4626_SILO_INTERFACE.decodeFunctionData(
+                    "previewRedeem",
+                    (request as { readonly data: string }).data,
+                  )[0],
+                );
+                return ERC4626_SILO_INTERFACE.encodeFunctionResult(
+                  "previewRedeem",
+                  [shares],
+                );
+              })()
+            : request.id === "identity-preview-withdraw" ||
+                request.id === "current-preview-withdraw"
+              ? (() => {
+                  const assets = BigInt(
+                    ERC4626_SILO_PAYOUT_INTERFACE.decodeFunctionData(
+                      "previewWithdraw",
+                      (request as { readonly data: string }).data,
+                    )[0],
+                  );
+                  return ERC4626_SILO_PAYOUT_INTERFACE.encodeFunctionResult(
+                    "previewWithdraw",
+                    [assets],
+                  );
+                })()
+              : request.id === "static-share-decimals"
+                ? ERC4626_SILO_ERC20_INTERFACE.encodeFunctionResult(
+                    "decimals",
+                    [18],
+                  )
+                : (() => {
+                    throw new Error(
+                      "unexpected erc4626-silo fixture request " + request.id,
+                    );
+                  })();
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data,
+  });
+}
+
+class Erc4626SiloFixtureScheduler implements CentralAdapterScheduler {
+  issueExecutor(
+    input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
+  ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
+    const executor = createBoundedRequestExecutor({
+      assertSupported: (requirements) => assert.deepEqual(
+        requirements,
+        input.requirements,
+      ),
+      assertCallerBinding() {},
+      assertWithinBudget: (_familyId, requests) => {
+        assert.deepEqual(requests, input.requests);
+      },
+      execute: async (execution) => Promise.all(execution.requests.map(
+        (request) => erc4626SiloSuccessResult(request, execution.source),
+      )),
+      sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
+    });
+    return Object.freeze({
+      executor,
+      timing: () => ({ queueWaitMs: 0, transportWallMs: 1, attempts: 1 }),
+    });
+  }
+}
+
+function erc4626SiloFixtureRuntime(): CentralAdapterRuntime {
+  let now = 1_000;
+  return {
+    clock: { nowMs: () => now++ },
+    generationFence: new FixtureFence(),
+    callerAuthority: {
+      bind: (input) => input.callerRole === "verified-actor"
+        ? Object.freeze({
+            verifiedActors: Object.freeze({
+              [ERC4626_SILO_PROBE_ACTOR_EVIDENCE_ID]:
+                ERC4626_SILO_PROBE_ACTOR,
+            }),
+          })
+        : input.callerRole === "executor"
+          ? Object.freeze({ executor: MIGRATION_CAPTURE_EXECUTOR })
+          : Object.freeze({}),
+    },
+    policy: {
+      bind: (input) => ({
+        lane: input.stage === "identity" ? "critical-proof" : "background",
+        deadlineAtMs: 100_000,
+        maxAttempts: 1,
+        transportPool: "state-read",
+        fairnessKey: input.subjectKey,
+      }),
+    },
+    budgets: { assertAdmitted() {} },
+    scheduler: new Erc4626SiloFixtureScheduler(),
+  };
+}
+
+async function runErc4626SiloLifecycle(
+  canonical: CanonicalSource,
+): Promise<AdapterFamilyPublication> {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    ERC4626_SILO_REDEEM_FAMILY_ID,
+  );
+  let publication: AdapterFamilyPublication | null = null;
+  const redeemCalldata = ERC4626_SILO_INTERFACE.encodeFunctionData("redeem", [
+    ERC4626_SILO_FIXTURE_PAYOUT,
+    1_000_000n,
+    MIGRATION_CAPTURE_EXECUTOR,
+    MIGRATION_CAPTURE_EXECUTOR,
+  ]);
+  const result = await executeAdapterFamilyLifecycleBatch({
+    family,
+    matches: [Object.freeze({
+      matchedPatternId: "silo-redeem-call",
+      observation: Object.freeze({
+        kind: "call" as const,
+        source: canonical,
+        target: ERC4626_SILO_FIXTURE_VAULT,
+        data: redeemCalldata,
+      }),
+    })],
+    source: canonical,
+    generation: canonical.generation,
+    runtime: erc4626SiloFixtureRuntime(),
+    publisher: { publish: (value) => { publication = value; } },
+  });
+  assert(result.publication);
+  assert(publication);
+  return publication;
+}
+
+/**
+ * Runs the ERC4626 Silo payout lifecycle over the observed redeem fixture.
+ * Identity proves the vault/payout asset relation, preview chain and the
+ * active redeem effect-delta simulation; exact re-runs the simulation with
+ * the executor as actor.
+ */
+export async function captureErc4626SiloRedeemFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runErc4626SiloLifecycle(input.source);
+  const evidenceRefs = Object.freeze([
+    `fixture:erc4626-silo-redeem:${input.source.number}:${input.source.hash}`,
+  ]);
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    ERC4626_SILO_REDEEM_FAMILY_ID,
+  );
+  const edges: RawMigrationStageCapture["items"][number][] = [];
+  const prices: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of instance.routes) {
+      const handle = instance.routeHandles.find((candidate) =>
+        candidate.routeKey === route.routeKey
+      );
+      if (handle === undefined) {
+        throw new Error(
+          `prepared route ${route.routeKey} has no issued handle`,
+        );
+      }
+      const projected = projectFamilyRouteGraph({
+        family,
+        descriptor: instance.descriptor,
+        route,
+        handle,
+      });
+      edges.push(Object.freeze({
+        id: projected.edge.canonicalEdgeId,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: projected.edge.canonicalEdgeId,
+        }),
+      }));
+    }
+    const routeByKey = new Map(
+      instance.routes.map((route) => [route.routeKey, route]),
+    );
+    for (const pricing of instance.pricingInstances) {
+      for (const [routeKey, mid] of pricing.mids) {
+        const route = routeByKey.get(routeKey);
+        if (route === undefined) {
+          throw new Error(
+            `erc4626-silo pricing route ${routeKey} is missing`,
+          );
+        }
+        prices.push(Object.freeze({
+          id: `${pricing.stateKey}:${route.tokenIn.toLowerCase()}>` +
+            `${route.tokenOut.toLowerCase()}`,
+          value: Object.freeze({
+            stateKey: pricing.stateKey,
+            mid: Object.freeze({ ...mid }),
+          }) as unknown as RawMigrationStageCapture["items"][number]["value"],
+        }));
+      }
+    }
+  }
+  const enumeratedRoutes: RawMigrationStageCapture["items"][number][] = edges
+    .map((edge) => edge.value as {
+      readonly routeKey: string;
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly canonicalEdgeId: string;
+    })
+    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
+    .map((value, order) => Object.freeze({
+      id: value.canonicalEdgeId,
+      value: Object.freeze({
+        routeKey: value.routeKey,
+        tokenIn: value.tokenIn,
+        tokenOut: value.tokenOut,
+        canonicalEdgeId: value.canonicalEdgeId,
+        order,
+      }),
+    }));
+  const exactMethod = erc4626SiloRedeemExact.methods().find(
+    (method) => method.kind === "request-program" &&
+      method.id === "active-redeem-simulation",
+  );
+  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+    throw new Error("erc4626-silo exact request program is missing");
+  }
+  const program = exactMethod.program;
+  const exactByRouteKey = new Map<
+    string,
+    {
+      readonly amountOut: bigint;
+      readonly evidence: import("./venues/protocols/erc4626-silo-redeem-family/types.js")
+        .Erc4626SiloRedeemExactEvidence;
+    }
+  >();
+  const exactQuotes: RawMigrationStageCapture["items"][number][] = [];
+  const edgeByRouteKey = new Map(
+    edges.map((edge) => {
+      const value = edge.value as { readonly routeKey: string };
+      return [value.routeKey, edge] as const;
+    }),
+  );
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const exactInput = Object.freeze({
+        descriptor: instance.descriptor as unknown as
+          Erc4626SiloRedeemDescriptor,
+        route: route as unknown as Erc4626SiloRedeemRoute,
+        amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
+        source: input.source,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      const requests = program.buildRequests(exactInput);
+      const results = requests.map((request) =>
+        erc4626SiloSuccessResult(request, input.source)
+      );
+      const decoded = program.decode({
+        programInput: exactInput,
+        initialResults: results,
+        dependentEvidence: Object.freeze([]),
+      });
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (edge === undefined) {
+        throw new Error(
+          `erc4626-silo exact route ${route.routeKey} has no edge`,
+        );
+      }
+      exactByRouteKey.set(route.routeKey, {
+        amountOut: decoded.amountOut,
+        evidence: decoded.evidence,
+      });
+      exactQuotes.push(Object.freeze({
+        id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
+          amountOut: decoded.amountOut.toString(),
+          feeBps: "0",
+        }),
+      }));
+    }
+  }
+  const executionFragments: RawMigrationStageCapture["items"][number][] = [];
+  const finalSimulations: RawMigrationStageCapture["items"][number][] = [];
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routes].sort(
+      (left, right) => left.routeKey.localeCompare(right.routeKey),
+    )) {
+      const quote = exactByRouteKey.get(route.routeKey);
+      const edge = edgeByRouteKey.get(route.routeKey);
+      if (quote === undefined || edge === undefined) {
+        throw new Error(
+          `erc4626-silo execution route ${route.routeKey} has no quote`,
+        );
+      }
+      const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
+      const fragment = erc4626SiloRedeemExecution.buildFragment({
+        descriptor: instance.descriptor as unknown as
+          Erc4626SiloRedeemDescriptor,
+        route: route as unknown as Erc4626SiloRedeemRoute,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+        minAmountOut: quote.amountOut,
+        exactEvidence: quote.evidence,
+        executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: Object.freeze([]),
+      });
+      executionFragments.push(Object.freeze({
+        id: `${edge.id}\u001fexec:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          actionAdapterId: "erc4626-redeem-silo",
+          executionTarget: (
+            instance.descriptor as unknown as Erc4626SiloRedeemDescriptor
+          ).vault,
+          nodeFingerprint: hashCanonical(
+            fragment.nodes as unknown as CanonicalValue,
+          ),
+        }),
+      }));
+      const effects = erc4626SiloRedeemExecution.expectedEffects({
+        descriptor: instance.descriptor as unknown as
+          Erc4626SiloRedeemDescriptor,
+        route: route as unknown as Erc4626SiloRedeemRoute,
+        amountIn,
+        quotedAmountOut: quote.amountOut,
+      });
+      if (quote.amountOut <= 0n) {
+        throw new Error(
+          "erc4626-silo capture final simulation repayment failed",
+        );
+      }
+      finalSimulations.push(Object.freeze({
+        id: `${edge.id}\u001fsim:${amountIn}`,
+        value: Object.freeze({
+          routeKey: route.routeKey,
+          tokenIn: route.tokenIn,
+          tokenOut: route.tokenOut,
+          canonicalEdgeId: edge.id,
+          amountIn: amountIn.toString(),
+          amountOut: quote.amountOut.toString(),
+          minAmountOut: quote.amountOut.toString(),
+          effectsFingerprint: hashCanonical(
+            effects as unknown as CanonicalValue,
+          ),
+          conservation: "conserved",
+          repayment: "satisfied",
+          evInput: Object.freeze({
+            amountIn: amountIn.toString(),
+            amountOut: quote.amountOut.toString(),
+          }),
+        }),
+      }));
+    }
+  }
+  const instances = publication.instances;
+  const summary = definedFamilyPluginContractSummary(family.plugin);
+  return Object.freeze({
+    familyId: ERC4626_SILO_REDEEM_FAMILY_ID,
+    caseId: input.caseId ?? `erc4626-silo-redeem:${input.source.number}`,
     inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
     stateAnchorNumber: input.source.number,
     implementationClosureHash: summary.definitionBoundaryHash,

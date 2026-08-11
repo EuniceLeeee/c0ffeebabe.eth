@@ -27,6 +27,7 @@ import {
   captureRocksolidFixtureCase,
   captureMetronomeHgUsdcFixtureCase,
   captureMetronomeSynthFixtureCase,
+  captureErc4626SiloRedeemFixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -742,6 +743,25 @@ async function testMetronomeSynthFixtureCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.items.length, 6);
 }
 
+async function testErc4626SiloRedeemFixtureCase(): Promise<void> {
+  const familyCase = await captureErc4626SiloRedeemFixtureCase({
+    source: SOURCE,
+  });
+  assert.equal(familyCase.familyId, "protocol:erc4626-silo-redeem");
+  for (const stage of ARCHITECTURE_MIGRATION_STAGES) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `erc4626-silo-redeem fixture ${stage} must be exercised`,
+    );
+  }
+  assert.equal(familyCase.stages.edges?.items.length, 1);
+  assert.equal(familyCase.stages.prices?.items.length, 1);
+  assert.equal(familyCase.stages.exactQuotes?.items.length, 1);
+  assert.equal(familyCase.stages.executionFragments?.items.length, 1);
+  assert.equal(familyCase.stages.finalSimulations?.items.length, 1);
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -1086,6 +1106,7 @@ async function main(): Promise<void> {
   await testRocksolidFixtureCase();
   await testMetronomeHgUsdcFixtureCase();
   await testMetronomeSynthFixtureCase();
+  await testErc4626SiloRedeemFixtureCase();
   console.log("architecture-migration capture harness PASS");
 }
 

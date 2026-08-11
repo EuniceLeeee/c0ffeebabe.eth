@@ -27,6 +27,10 @@ import { METRONOME_SYNTH_FAMILY_ID } from
   "./venues/protocols/metronome-synth-family/manifest.js";
 import { metronomeSynthStaticProjection } from
   "./venues/protocols/metronome-synth-family/shared.js";
+import { ERC4626_SILO_REDEEM_FAMILY_ID } from
+  "./venues/protocols/erc4626-silo-redeem-family/manifest.js";
+import { erc4626SiloStaticProjection } from
+  "./venues/protocols/erc4626-silo-redeem-family/shared.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -155,6 +159,15 @@ export interface BaselineMetronomeSynthFacts {
   readonly tokenOut: string;
 }
 
+export interface BaselineErc4626SiloRedeemFacts {
+  readonly familyId: "protocol:erc4626-silo-redeem";
+  readonly vault: string;
+  readonly payoutToken: string;
+  readonly underlyingAsset: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -178,6 +191,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineMetronomeHgUsdcInstanceItem,
         "protocol:metronome-synth":
           normalizeBaselineMetronomeSynthInstanceItem,
+        "protocol:erc4626-silo-redeem":
+          normalizeBaselineErc4626SiloRedeemInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -195,6 +210,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineMetronomeHgUsdcPriceItem,
         "protocol:metronome-synth":
           normalizeBaselineMetronomeSynthPriceItem,
+        "protocol:erc4626-silo-redeem":
+          normalizeBaselineErc4626SiloRedeemPriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -212,6 +229,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineMetronomeHgUsdcEdgeItem,
         "protocol:metronome-synth":
           normalizeBaselineMetronomeSynthEdgeItem,
+        "protocol:erc4626-silo-redeem":
+          normalizeBaselineErc4626SiloRedeemEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -229,6 +248,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineMetronomeHgUsdcEnumeratedRouteItem,
         "protocol:metronome-synth":
           normalizeBaselineMetronomeSynthEnumeratedRouteItem,
+        "protocol:erc4626-silo-redeem":
+          normalizeBaselineErc4626SiloRedeemEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -246,6 +267,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineMetronomeHgUsdcExactQuoteItem,
         "protocol:metronome-synth":
           normalizeBaselineMetronomeSynthExactQuoteItem,
+        "protocol:erc4626-silo-redeem":
+          normalizeBaselineErc4626SiloRedeemExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -268,6 +291,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineMetronomeHgUsdcExecutionFragmentItem,
         "protocol:metronome-synth":
           normalizeBaselineMetronomeSynthExecutionFragmentItem,
+        "protocol:erc4626-silo-redeem":
+          normalizeBaselineErc4626SiloRedeemExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -290,6 +315,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineMetronomeHgUsdcFinalSimulationItem,
         "protocol:metronome-synth":
           normalizeBaselineMetronomeSynthFinalSimulationItem,
+        "protocol:erc4626-silo-redeem":
+          normalizeBaselineErc4626SiloRedeemFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -326,6 +353,9 @@ function normalizeByFamily(
     readonly "protocol:metronome-synth": (
       item: RawMigrationSemanticItem,
     ) => RawMigrationSemanticItem;
+    readonly "protocol:erc4626-silo-redeem": (
+      item: RawMigrationSemanticItem,
+    ) => RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -348,6 +378,9 @@ function normalizeByFamily(
   }
   if (familyId === "protocol:metronome-synth") {
     return handlers["protocol:metronome-synth"](item);
+  }
+  if (familyId === "protocol:erc4626-silo-redeem") {
+    return handlers["protocol:erc4626-silo-redeem"](item);
   }
   return handlers.default(item);
 }
@@ -3888,6 +3921,327 @@ export function normalizeBaselineMetronomeSynthFinalSimulationItem(
   });
 }
 
+function erc4626SiloRedeemFactsGuard(
+  facts: Partial<BaselineErc4626SiloRedeemFacts> | undefined,
+): facts is Required<BaselineErc4626SiloRedeemFacts> {
+  return facts !== undefined &&
+    facts.familyId === "protocol:erc4626-silo-redeem" &&
+    typeof facts.vault === "string" &&
+    typeof facts.payoutToken === "string" &&
+    typeof facts.underlyingAsset === "string" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function erc4626SiloRedeemFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineErc4626SiloRedeemFacts>;
+  })?.baselineFacts;
+  if (!erc4626SiloRedeemFactsGuard(facts)) return null;
+  return facts;
+}
+
+function deriveErc4626SiloRedeemCanonicalFacts(
+  facts: Required<BaselineErc4626SiloRedeemFacts>,
+): {
+  readonly vault: string;
+  readonly payoutToken: string;
+  readonly underlyingAsset: string;
+  readonly lowerVault: string;
+  readonly lowerPayout: string;
+  readonly instanceKeyValue: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const vault = canonicalAddress(facts.vault);
+  const payoutToken = canonicalAddress(facts.payoutToken);
+  const underlyingAsset = canonicalAddress(facts.underlyingAsset);
+  const lowerVault = lowerAddress(vault);
+  const lowerPayout = lowerAddress(payoutToken);
+  const descriptor = Object.freeze({
+    vault,
+    payoutToken,
+    underlyingAsset,
+  }) as unknown as Parameters<typeof erc4626SiloStaticProjection>[0];
+  const bindingFingerprint = hashCanonical(
+    erc4626SiloStaticProjection(descriptor),
+  );
+  const venueIdentityHash = hashCanonical(Object.freeze({
+    kind: "address-subinstance",
+    target: lowerVault,
+    payoutToken: lowerPayout,
+  }));
+  const instanceKeyValue = `${lowerVault}:${lowerPayout}`;
+  const routeKeyValue = [
+    "protocol:erc4626-silo-redeem",
+    lowerVault,
+    lowerPayout,
+  ].join("\u001f");
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "protocol:erc4626-silo-redeem",
+    instanceKeyValue,
+    lowerVault,
+    `${lowerVault}>${lowerPayout}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    vault,
+    payoutToken,
+    underlyingAsset,
+    lowerVault,
+    lowerPayout,
+    instanceKeyValue,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineErc4626SiloRedeemEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = erc4626SiloRedeemFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveErc4626SiloRedeemCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.vault,
+      tokenOut: derived.payoutToken,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineErc4626SiloRedeemEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineErc4626SiloRedeemEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "erc4626-silo-redeem baseline enumerated route item must carry a " +
+        "non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineErc4626SiloRedeemInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = erc4626SiloRedeemFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveErc4626SiloRedeemCanonicalFacts(facts);
+  const descriptor = Object.freeze({
+    vault: derived.vault,
+    payoutToken: derived.payoutToken,
+    underlyingAsset: derived.underlyingAsset,
+  }) as unknown as Parameters<typeof erc4626SiloStaticProjection>[0];
+  const staticBindingFingerprint = hashCanonical({
+    capability: ERC4626_SILO_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: erc4626SiloStaticProjection(descriptor),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.instanceKeyValue,
+    value: Object.freeze({
+      familyId: "protocol:erc4626-silo-redeem",
+      instanceKey: derived.instanceKeyValue,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineErc4626SiloRedeemPriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = erc4626SiloRedeemFactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveErc4626SiloRedeemCanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "erc4626-redeem-silo",
+    instanceKey: derived.instanceKeyValue,
+    target: derived.vault,
+    tokenIn: derived.vault,
+    tokenOut: derived.payoutToken,
+    slotKind: "protocol" as const,
+    protocolAction: "redeem" as const,
+    edgeKind: "protocol" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.instanceKeyValue,
+      mid: Object.freeze({
+        kind: "protocol",
+        pool: derived.vault,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineErc4626SiloRedeemExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = erc4626SiloRedeemFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveErc4626SiloRedeemCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.vault,
+      tokenOut: derived.payoutToken,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineErc4626SiloRedeemExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = erc4626SiloRedeemFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveErc4626SiloRedeemCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.vault,
+      tokenOut: derived.payoutToken,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "erc4626-redeem-silo",
+      executionTarget: derived.vault,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineErc4626SiloRedeemFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = erc4626SiloRedeemFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveErc4626SiloRedeemCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.vault,
+      tokenOut: derived.payoutToken,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -3931,4 +4285,9 @@ const METRONOME_HGUSDC_CATALOG_FAMILY =
 const METRONOME_SYNTH_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     METRONOME_SYNTH_FAMILY_ID,
+  );
+
+const ERC4626_SILO_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    ERC4626_SILO_REDEEM_FAMILY_ID,
   );

@@ -104,6 +104,10 @@ def main() -> None:
             for key in ("target", "tokens", "amountIn"):
                 if key in case:
                     descriptor[key] = case[key]
+        elif case["family"] == "protocol:erc4626-silo-redeem":
+            for key in ("target", "payoutToken", "underlyingAsset", "amountIn"):
+                if key in case:
+                    descriptor[key] = case[key]
         else:
             for key in ("pool", "tokenA", "tokenB", "reserves", "fee",
                         "tickSpacing", "liquidity", "sqrtPriceX96"):
