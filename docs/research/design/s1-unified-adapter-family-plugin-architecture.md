@@ -2323,6 +2323,21 @@ commit 见下，§18.3.1/§18.3.7 前置合同）：**
   listener build 通过；live startup 现在具备 legacy-free composition
   的可见清单（§18.3.1/§18.3.7 前置）。
 
+**2026-08-12 systemic-live gate contract checkpoint（实现 commit 见下，
+Phase D/§13-§14 合同，不运行 live）：**
+
+- 新增 `evaluateSystemicLiveGate`：消费 paired-live 蒸馏 verdict 与
+  独立 coverage/timing 门，fail closed 除非 challenger 在 exact
+  semantics、candidate overlap、head coverage、completed-heads、
+  throughput、terminal-latency timing 上匹配或超过 baseline；任一失败
+  返回 `not-pass` + reasons；
+- 新增合同测试 `searcher:systemic-live-gate`：all-pass → pass（冻结）；
+  paired-live verdict、exact semantics、challenger-only repeated
+  failures、八项 coverage/timing 门逐项 not-pass；全失败态 11 条
+  reasons；
+- 该 gate 不自己跑 live window；paired-live harness 产出 evidence、
+  gate 做 authority 决策；当前无 live 证据，gate 状态如实保持未消费。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
