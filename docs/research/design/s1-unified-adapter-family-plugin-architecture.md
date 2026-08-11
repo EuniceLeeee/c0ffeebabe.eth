@@ -1884,31 +1884,38 @@ self-burn）。
 `custom-swap:dodo-v2`、`fluid-dex` + 8 个 protocol 族
 （astra/eigenpie/erc4626/erc4626-silo/ethertoken/metronome×2/self-burn）。
 
-**2026-08-12 metronome-hgusdc fixture framework-blocker checkpoint（未
-完成 phase，诚实记录）：** 尝试实现 `protocol:metronome-hgusdc` fixture
-capture（`executePath` observation、multi-phase identity
-base→curve→vault、dependent pricing/exact program），identity 的 9 个
-base request 在独立 `executeAdapterWork` 最小 harness 下 resolve，但在
-`executeAdapterFamilyLifecycleBatch` 内首轮 identity work 报
-`identity-work-unresolved:...:invalid-program`（requirements/request-build
-阶段失败，且自定义 identity variant 的 multi-phase program 包装未被
-lifecycle 接受）。这是继 univ3/univ4 precision、protocol quotes、
-wsteth/rocksolid dependencies 之后的第五类 framework blocker，需要先修
-lifecycle 对 `kind:"custom"` 多阶段 identity program 的包装/校验，再继续该
-Family 的 capture。
+**2026-08-12 metronome-hgusdc bilateral parity phase checkpoint（实现
+commits impl `1f7066ff`+`e32299a5`、baseline `f1b278c9`，本地机器证据）：**
 
-该 blocker 已回滚为干净 worktree（无未提交代码）；不把未验证的 fixture
-当作进度。
+- 修复第五类 framework blocker：`kind:"custom"` 多阶段 identity 的
+  `requirements` 之前只声明 `get-code+eth-call`，首轮 base requests 实际含
+  eth-call completion，中央 `assertRequestsMatchRequirements` 报
+  `invalid-program`。`metronomeHgUsdcIdentity.requirements` 现按 evidence
+  phase 返回：无 evidence = `get-code+eth-call`；base/curve =
+  `eth-call`；active = `effect-delta-simulation` + verified-actor +
+  effects。新增 `searcher:metronome-hgusdc-lifecycle` smoke
+  （`metronome-hgusdc-lifecycle-smoke.ts`，fixture scheduler 下 identity
+  五步走通、publication OK、pricing-current verified）；
+- impl `captureMetronomeHgUsdcFixtureCase`（observed `executePath`
+  msUSD→frxUSD→hgUSDC，multi-phase identity base→curve→active，dependent
+  exact program 双轮 curve-get-dy→vault-previewRedeem 显式驱动，
+  execution/final-sim 1:1 fixture）全部 10 stage `exercised`；
+  metronome-hgusdc normalizer 六类 stage（`address-path-protocol` venue、
+  router instance、`curve-then-vault` binding、`redeem` protocol action）
+  落地；
+- baseline exporter `captureMetronomeHgUsdcBaselineCase`（同款 1:1
+  quote/execution/effects 数学 + `canonicalHash` 镜像指纹）；
+- 本地跨分支 parity（block `25729060`，十族 manifest）：univ2/univ3/
+  univ4/balancer/morpho/psm/wsteth/goldx/rocksolid/**metronome-hgusdc**
+  十族全部 **pass**、commonGraph 五 stage delta 全空；
+  `searcher:architecture-migration-capture` 合同测试与完整
+  `npm run build` 全部通过；仍是 sealed-capture/shadow receipt，不是
+  production cutover 或 live evidence。
 
-该 commit 的合同证据为
-`searcher:adapter-family-snapshot-inventory-closure`、
-`searcher:adapter-family-observation-shadow-ingress`、
-`searcher:adapter-family-discovery-checkpoint`、
-`searcher:adapter-family-shadow-catalog-publication`、
-`searcher:adapter-family-catalog-publication`、
-`searcher:family-capability-catalog`、
-`searcher:production-family-composition` 与完整 `npm run build` 全部通过；这些是 unit/shadow receipt，仍不是
-`sealed-production`、deployment 或 live evidence。
+剩余 12 族：`credit:fluid`、`curve-underlying`、`custom-swap:angstrom-v4`、
+`custom-swap:dodo-v2`、`fluid-dex` + 7 个 protocol 族
+（astra/eigenpie/erc4626/erc4626-silo/ethertoken/metronome-synth/
+self-burn）。
 
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
