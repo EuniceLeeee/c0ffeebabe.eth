@@ -1819,6 +1819,29 @@ fixture capture（+ baseline/normalizer/节点双跑）是后续逐族 phase。
 （astra/eigenpie/erc4626/erc4626-silo/ethertoken/goldx/metronome×2/
 rocksolid/self-burn/wsteth）。
 
+**2026-08-12 wstETH bilateral parity phase checkpoint（实现 commits impl
+`608edef2`、baseline `fba5505a`，节点机器证据）：**
+
+- 修复 wsteth pricing `dependencies` 重复项（wrap/unwrap 双向 token 去重，
+  `finalize:pricing dependencies must be unique` blocker）；capability
+  内容哈希重生成；
+- impl `captureWstethFixtureCase`（wrap/unwrap 双 route：stETH=ADDR.STETH、
+  getWstETHByStETH/getStETHByWstETH 1:1 fixture）全部 10 stage
+  `exercised`；wsteth normalizer 六类 stage（`address-protocol` venue、
+  `target` instance、`lido-wrap-unwrap-v1` binding、direction 路由）落地；
+- baseline exporter `captureWstethBaselineCase`（同款转换语义 +
+  `canonicalHash` 镜像指纹；enumerated 顺序按 routeKey（unwrap<wrap）、
+  price reserve 用 WSTETH_SAMPLE 对齐）；
+- 本地跨分支 parity：七族全 pass、commonGraph 五 stage delta 全空；
+- 节点 SSM `b8502e58`（block `25729060`）：univ2/univ3/univ4/balancer/
+  morpho/psm/**wsteth** 七族全部 **pass**、`assembledCommonGraphParity
+  =true`、aggregate `partial`（15 个未覆盖 Family）。
+
+剩余 15 族：`credit:fluid`、`curve-underlying`、`custom-swap:angstrom-v4`、
+`custom-swap:dodo-v2`、`fluid-dex` + 10 个 protocol 族
+（astra/eigenpie/erc4626/erc4626-silo/ethertoken/goldx/metronome×2/
+rocksolid/self-burn）。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
