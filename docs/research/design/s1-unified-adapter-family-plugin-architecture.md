@@ -1657,6 +1657,30 @@ impl `ab4c06bd`、baseline `877e95b7`，本地跨分支机器证据）：**
 univ3 节点真实 corpus 双侧 capture 是下一 phase（需在节点写入 univ3
 descriptor 并跑合并 corpus）；此前不得把 univ3 当作 production cutover。
 
+**2026-08-11 univ3 real-corpus bilateral parity phase checkpoint（实现
+commits impl `c91a9a43`、baseline `877e95b7`/`0d518421`，节点机器证据）：**
+
+- impl 新增 `captureUniv3RealCase`（真实 pool/token/fee/tickSpacing/
+  liquidity/sqrtPriceX96 参数化）与 multi-family real manifest CLI
+  （`{sourceBlock, cases:[univ2, univ3]}` 合并 familyCases + commonGraph）；
+- baseline exporter 修正 univ3 fee 强转 bigint（`0d518421`），真实
+  descriptor 走同一 `compileStateInstance` + `deriveMids` + 本地 v3
+  exact/execution/final-sim；
+- 节点 SSM `8579d3fa`（impl `c91a9a43` / baseline `0d518421`）在 block
+  `25729060` 双跑真实 corpus：
+  - univ2 WETH/USDC `0xB4e16d...`（reserves 同前）；
+  - univ3 WETH/USDC 0.3% `0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8`
+    （fee `3000`、tickSpacing `60`、slot0 sqrtPriceX96
+    `7496226128926009721885528998955294720`、liquidity
+    `623616275992676280`，取自节点 local reth eth_call）；
+  - receipt：`univ2-standard` **pass**、`univ3-standard` **pass**、
+    `assembledCommonGraphParity=true`、
+    `nonMigratedFamilySemanticHashParity=true`、aggregate `partial`
+    （20 个未覆盖 Family）、acceptance `eligible=true`/`verdict=partial`。
+
+本 phase 关闭 univ3 真实 corpus 双侧 parity；剩余：其余 20 个 Family 的
+capture 覆盖（含 funding-only 与各 protocol 族）。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
