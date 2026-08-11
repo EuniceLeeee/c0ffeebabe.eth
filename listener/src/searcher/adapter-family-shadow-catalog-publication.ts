@@ -22,6 +22,14 @@ import type {
   PreparedFundingOffer,
 } from "./adapter-funding-runtime.js";
 import {
+  assertIssuedCreditRouteRuntimeHandle,
+  assertIssuedProjectedCreditRoute,
+  projectCreditRouteGraph,
+  type CreditRouteRuntimeHandle,
+  type PreparedCreditRoutePublication,
+  type ProjectedCreditRouteGraph,
+} from "./adapter-credit-runtime.js";
+import {
   assertIssuedProjectedFamilyRouteGraph,
   projectFamilyRouteGraph,
   type ProjectedFamilyRouteGraph,
@@ -48,6 +56,7 @@ import { hashCanonical } from "./venues/canonical-value.js";
 import {
   type FamilyCapabilityCatalog,
   type LoadedFamilyPlugin,
+  type LoadedFamilyBox,
 } from "./venues/family-capability-catalog.js";
 
 export interface StrictFundingPublicationState {
@@ -64,6 +73,14 @@ export type StrictShadowCatalogInstance =
   | PreparedFamilyInstance
   | StrictFundingPublicationState;
 
+export type StrictShadowCatalogRouteHandle =
+  | FamilyRouteRuntimeHandle
+  | CreditRouteRuntimeHandle;
+
+export type StrictShadowCatalogGraphEntry =
+  | ProjectedFamilyRouteGraph
+  | ProjectedCreditRouteGraph;
+
 function isFundingState(
   value: StrictShadowCatalogInstance,
 ): value is StrictFundingPublicationState {
@@ -76,16 +93,16 @@ function isFundingState(
 
 export type StrictShadowCatalogFamilyStage = CatalogFamilyStage<
   StrictShadowCatalogInstance,
-  FamilyRouteRuntimeHandle,
-  ProjectedFamilyRouteGraph,
+  StrictShadowCatalogRouteHandle,
+  StrictShadowCatalogGraphEntry,
   PreparedPricingStateInstance
 >;
 
 export type StrictShadowCatalogEnvelope =
   AdapterFamilyCatalogPublicationEnvelope<
     StrictShadowCatalogInstance,
-    FamilyRouteRuntimeHandle,
-    ProjectedFamilyRouteGraph,
+    StrictShadowCatalogRouteHandle,
+    StrictShadowCatalogGraphEntry,
     PreparedPricingStateInstance
   >;
 
@@ -93,13 +110,13 @@ export interface StrictShadowCatalogViews {
   readonly revision: number;
   readonly source: CanonicalSource;
   readonly publicationFingerprint: string;
-  readonly graphRoutes: readonly ProjectedFamilyRouteGraph[];
+  readonly graphRoutes: readonly StrictShadowCatalogGraphEntry[];
   readonly edges: readonly (TokenEdge & {
     readonly canonicalEdgeId: CanonicalEdgeId;
   })[];
   readonly handleByCanonicalEdgeId: ReadonlyMap<
     CanonicalEdgeId,
-    FamilyRouteRuntimeHandle
+    StrictShadowCatalogRouteHandle
   >;
   readonly pricingByPublicationKey: ReadonlyMap<
     string,
@@ -167,6 +184,17 @@ interface PricingValueOwner extends RouteValueOwner {
   readonly pricingKey: string;
 }
 
+interface CreditRouteValueOwner {
+  readonly family: LoadedFamilyBox;
+  readonly instance: PreparedFamilyInstance;
+  readonly publicationKey: string;
+  readonly source: CanonicalSource;
+}
+
+interface CreditGraphValueOwner extends CreditRouteValueOwner {
+  readonly route: CreditRouteRuntimeHandle;
+}
+
 /**
  * Shadow-only Phase-D composition root. It does not import main/planner or
  * mutate any production registry. Every route/pricing value must first pass
@@ -179,19 +207,21 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
   readonly #routeOwners = new WeakMap<object, RouteValueOwner>();
   readonly #graphOwners = new WeakMap<object, GraphValueOwner>();
   readonly #pricingOwners = new WeakMap<object, PricingValueOwner>();
+  readonly #creditRouteOwners = new WeakMap<object, CreditRouteValueOwner>();
+  readonly #creditGraphOwners = new WeakMap<object, CreditGraphValueOwner>();
   readonly #prepared = new WeakMap<object, StrictShadowCatalogEnvelope>();
   readonly #valueAuthority: ReturnType<
     typeof createCatalogPublicationValueAuthority<
       StrictShadowCatalogInstance,
-      FamilyRouteRuntimeHandle,
-      ProjectedFamilyRouteGraph,
+      StrictShadowCatalogRouteHandle,
+      StrictShadowCatalogGraphEntry,
       PreparedPricingStateInstance
     >
   >;
   readonly #store: AdapterFamilyCatalogPublicationStore<
     StrictShadowCatalogInstance,
-    FamilyRouteRuntimeHandle,
-    ProjectedFamilyRouteGraph,
+    StrictShadowCatalogRouteHandle,
+    StrictShadowCatalogGraphEntry,
     PreparedPricingStateInstance
   >;
   #committed: CommittedStrictShadowCatalogPublication | null = null;
@@ -365,6 +395,109 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
       outcomeRefs: Object.freeze(
         input.publication.outcomes.flatMap((outcome) => outcome.evidenceRefs),
       ),
+    });
+  }
+
+  /** Converts one Credit lifecycle publication into a strict staged shard. */
+  stageCreditFamily(input: {
+    readonly family: LoadedFamilyBox;
+    readonly publication: PreparedCreditRoutePublication;
+    readonly instance: PreparedFamilyInstance;
+    readonly centralScores?: ReadonlyMap<string, number>;
+  }): StrictShadowCatalogFamilyStage {
+    const manifest = input.family.plugin.manifest as unknown as {
+      readonly familyId: FamilyId;
+      readonly domain: string;
+    };
+    if (manifest.domain !== "credit") {
+      throw new Error("stageCreditFamily requires a Credit FamilyBox");
+    }
+    if (input.publication.familyId !== manifest.familyId) {
+      throw new Error("Credit publication escaped its FamilyBox");
+    }
+    assertSameSource(
+      input.publication.source,
+      input.publication.generation,
+      "Credit publication",
+    );
+    assertIssuedPreparedFamilyInstance({
+      family: input.family,
+      instance: input.instance,
+      source: input.publication.source,
+      generation: input.publication.generation,
+    });
+    const source = freezeSource(input.publication.source);
+    const publicationKey = catalogInstancePublicationKey({
+      familyId: manifest.familyId,
+      lineageId: input.instance.lineageId,
+      instanceKey: input.instance.instanceKey,
+    });
+    const routeHandles = new Map<
+      string,
+      { readonly fingerprint: string; readonly value: CreditRouteRuntimeHandle }
+    >();
+    const graphEntries = new Map<
+      string,
+      { readonly fingerprint: string; readonly value: ProjectedCreditRouteGraph }
+    >();
+    for (const route of input.publication.routes) {
+      assertIssuedCreditRouteRuntimeHandle(input.family, route);
+      const projected = projectCreditRouteGraph({
+        family: input.family,
+        route,
+        centralScores: input.centralScores,
+      });
+      assertIssuedProjectedCreditRoute(projected);
+      this.#creditRouteOwners.set(route, {
+        family: input.family,
+        instance: input.instance,
+        publicationKey,
+        source,
+      });
+      this.#creditGraphOwners.set(projected, {
+        family: input.family,
+        route,
+        instance: input.instance,
+        publicationKey,
+        source,
+      });
+      routeHandles.set(projected.edge.canonicalEdgeId, {
+        fingerprint: projected.edge.canonicalEdgeId,
+        value: route,
+      });
+      graphEntries.set(projected.edge.canonicalEdgeId, {
+        fingerprint: projected.edge.canonicalEdgeId,
+        value: projected,
+      });
+    }
+    return Object.freeze({
+      familyId: manifest.familyId,
+      domain: "credit",
+      source,
+      status: "resolved",
+      inventoryMode: "append-only-delta",
+      instances: Object.freeze([{
+        instancePublicationKey: publicationKey,
+        source,
+        instance: Object.freeze({
+          familyId: manifest.familyId,
+          lineageId: input.instance.lineageId,
+          instanceKey: input.instance.instanceKey,
+          fingerprint: hashCanonical({
+            format: "strict-shadow-credit-instance-v1",
+            familyId: manifest.familyId,
+            lineageId: input.instance.lineageId,
+            instanceKey: input.instance.instanceKey,
+            routes: input.publication.routes.map((route) => route.routeKey),
+          }),
+          value: input.instance,
+        }),
+        routeHandles,
+        graphEntries,
+        pricingEntries: new Map(),
+      }]),
+      terminalRemovals: Object.freeze([]),
+      outcomeRefs: Object.freeze([]),
     });
   }
 
@@ -579,13 +712,16 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
 
   #routeValueContract() {
     return Object.freeze({
-      seal: (value: FamilyRouteRuntimeHandle, binding: CatalogValueBinding) => {
+      seal: (
+        value: StrictShadowCatalogRouteHandle,
+        binding: CatalogValueBinding,
+      ) => {
         this.#assertRoute(value, binding);
         return value;
       },
       carry: () => rejectCrossGenerationCarry(),
       assertValid: (
-        value: FamilyRouteRuntimeHandle,
+        value: StrictShadowCatalogRouteHandle,
         binding: CatalogValueBinding,
       ) => {
         this.#assertRoute(value, binding);
@@ -595,13 +731,16 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
 
   #graphValueContract() {
     return Object.freeze({
-      seal: (value: ProjectedFamilyRouteGraph, binding: CatalogValueBinding) => {
+      seal: (
+        value: StrictShadowCatalogGraphEntry,
+        binding: CatalogValueBinding,
+      ) => {
         this.#assertGraph(value, binding);
         return value;
       },
       carry: () => rejectCrossGenerationCarry(),
       assertValid: (
-        value: ProjectedFamilyRouteGraph,
+        value: StrictShadowCatalogGraphEntry,
         binding: CatalogValueBinding,
       ) => {
         this.#assertGraph(value, binding);
@@ -629,7 +768,7 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     value: PreparedFamilyInstance,
     binding: CatalogValueBinding,
   ): void {
-    const family = this.#routeFamily(binding);
+    const family = this.#catalog.forStrictFamily(binding.familyId);
     assertBindingIdentity(value, binding);
     assertIssuedPreparedFamilyInstance({
       family,
@@ -679,9 +818,18 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
   }
 
   #assertRoute(
-    value: FamilyRouteRuntimeHandle,
+    value: StrictShadowCatalogRouteHandle,
     binding: CatalogValueBinding,
   ): RouteValueOwner {
+    const creditOwner = this.#creditRouteOwners.get(value);
+    if (creditOwner !== undefined) {
+      this.#assertCreditOwner(creditOwner, binding);
+      assertIssuedCreditRouteRuntimeHandle(
+        creditOwner.family,
+        value as CreditRouteRuntimeHandle,
+      );
+      return creditOwner as unknown as RouteValueOwner;
+    }
     const owner = this.#routeOwners.get(value);
     if (owner === undefined) {
       throw new Error("route handle was not staged by this shadow catalog root");
@@ -689,7 +837,7 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     assertOwnerBinding(owner, binding);
     assertIssuedFamilyRouteRuntimeHandleAtSource({
       family: owner.family,
-      handle: value,
+      handle: value as FamilyRouteRuntimeHandle,
       source: binding.source,
       generation: binding.source.generation,
     });
@@ -697,9 +845,18 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
   }
 
   #assertGraph(
-    value: ProjectedFamilyRouteGraph,
+    value: StrictShadowCatalogGraphEntry,
     binding: CatalogValueBinding,
   ): GraphValueOwner {
+    const creditOwner = this.#creditGraphOwners.get(value);
+    if (creditOwner !== undefined) {
+      this.#assertCreditOwner(creditOwner, binding);
+      assertIssuedProjectedCreditRoute(value as ProjectedCreditRouteGraph);
+      if ((value as ProjectedCreditRouteGraph).handle !== creditOwner.route) {
+        throw new Error("Credit Graph route changed after issue");
+      }
+      return creditOwner as unknown as GraphValueOwner;
+    }
     const owner = this.#graphOwners.get(value);
     if (owner === undefined || owner.handle !== value.handle) {
       throw new Error("Graph route was not staged by this shadow catalog root");
@@ -710,10 +867,27 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     }
     assertIssuedProjectedFamilyRouteGraph({
       family: owner.family,
-      projected: value,
+      projected: value as ProjectedFamilyRouteGraph,
       source: binding.source,
     });
     return owner;
+  }
+
+  #assertCreditOwner(
+    owner: CreditRouteValueOwner | CreditGraphValueOwner,
+    binding: CatalogValueBinding,
+  ): void {
+    if (
+      binding.instancePublicationKey !== owner.publicationKey ||
+      binding.familyId !== owner.family.plugin.manifest.familyId ||
+      binding.lineageId !== owner.instance.lineageId ||
+      binding.instanceKey !== owner.instance.instanceKey ||
+      binding.source.number !== owner.source.number ||
+      binding.source.hash.toLowerCase() !== owner.source.hash.toLowerCase() ||
+      binding.source.generation !== owner.source.generation
+    ) {
+      throw new Error("Credit value escaped its catalog binding");
+    }
   }
 
   #assertPricing(
@@ -735,22 +909,14 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     return owner;
   }
 
-  #routeFamily(binding: CatalogValueBinding): LoadedFamilyPlugin {
-    const family = this.#catalog.forFamily(binding.familyId);
-    const domain = family.plugin.manifest.domain;
-    if (domain !== "swap" && domain !== "protocol") {
-      throw new Error(`${binding.familyId} has no ordinary route publication`);
-    }
-    return family;
-  }
 }
 
 function deriveStrictShadowCatalogViews(
   envelope: StrictShadowCatalogEnvelope,
 ): StrictShadowCatalogViews {
-  const routes: ProjectedFamilyRouteGraph[] = [];
+  const routes: StrictShadowCatalogGraphEntry[] = [];
   const edges: (TokenEdge & { readonly canonicalEdgeId: CanonicalEdgeId })[] = [];
-  const handles = new Map<CanonicalEdgeId, FamilyRouteRuntimeHandle>();
+  const handles = new Map<CanonicalEdgeId, StrictShadowCatalogRouteHandle>();
   for (const [key, graphEntry] of [...envelope.privateState.graphEntries].sort(
     ([left], [right]) => left.localeCompare(right),
   )) {

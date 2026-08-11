@@ -16,6 +16,14 @@ import {
   buildFamilyRouteGraphView,
 } from "../adapter-family-graph-runtime.js";
 import {
+  StrictAdapterFamilyShadowCatalogPublicationRoot,
+} from "../adapter-family-shadow-catalog-publication.js";
+import {
+  catalogDiscoverySourceFingerprint,
+  createCatalogSourceTransitionIssuer,
+  createCatalogTerminalRemovalIssuer,
+} from "../adapter-family-catalog-publication.js";
+import {
   executeCreditFamilyInstanceLifecycle,
   type FamilyLifecycleMatch,
   type PreparedFamilyInstance,
@@ -178,6 +186,7 @@ await creditExecutionHandleIsOpaqueAndExecutesSealedInput();
 await creditExecutionHandleRejectsForgedForeignAndTamperedHandles();
 await creditExecutionHandleIssueRejectsWrongBinding();
 projectedGraphAuthorityRejectsClones();
+await creditStrictCatalogCasJoinsSamePublication();
 
 console.log(
   "adapter Credit runtime PASS " +
@@ -740,6 +749,92 @@ function projectedGraphAuthorityRejectsClones(): void {
       /must be issued by the Credit runtime/,
     );
   }
+}
+
+async function creditStrictCatalogCasJoinsSamePublication(): Promise<void> {
+  const terminalIssuer = createCatalogTerminalRemovalIssuer();
+  const transitionIssuer = createCatalogSourceTransitionIssuer();
+  const root = new StrictAdapterFamilyShadowCatalogPublicationRoot({
+    catalog: primary.catalog,
+    chainId: "1",
+    terminalRemovalAuthority: terminalIssuer.authority,
+    sourceTransitionAuthority: transitionIssuer.authority,
+  });
+  const creditStage = root.stageCreditFamily({
+    family,
+    publication: publicationA,
+    instance: instanceA,
+  });
+  assert.equal(creditStage.instances.length, 1);
+  const anchorsFor = (canonical: CanonicalSource) =>
+    primary.catalog.listAll().flatMap((catalogFamily) => {
+    const sourceIds = "discovery" in catalogFamily.plugin
+      ? catalogFamily.plugin.discovery.sources
+      : [];
+    return sourceIds.map((sourceId) => Object.freeze({
+      familyId: catalogFamily.plugin.manifest.familyId,
+      sourceId,
+      sourceFingerprint: catalogDiscoverySourceFingerprint({
+        familyId: catalogFamily.plugin.manifest.familyId,
+        sourceId,
+        source: canonical,
+      }),
+      authority: "append-only-nomination" as const,
+      status: "complete" as const,
+      completeThroughBlock: canonical.number,
+      completeThroughHash: canonical.hash,
+    }));
+  });
+  const sourceAnchors = anchorsFor(SOURCE);
+  const prepared = root.prepare({
+    source: SOURCE,
+    previous: null,
+    stages: [creditStage],
+    sourceAnchors,
+  });
+  assert.equal(await root.compareAndPublish({
+    expected: null,
+    staged: prepared,
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {},
+  }), true);
+  const committed = root.capture()!;
+  assert.equal(committed.views.edges.length, 1);
+  assert.equal(committed.views.handleByCanonicalEdgeId.size, 1);
+  assert.equal(committed.views.fundingByPublicationKey.size, 0);
+  assert.equal(committed.envelope.snapshot.revision, 1);
+  assert.equal(
+    committed.envelope.snapshot.familyStatuses.get(
+      family.plugin.manifest.familyId,
+    )?.status,
+    "resolved",
+  );
+
+  const nextSource: CanonicalSource = Object.freeze({
+    ...SOURCE,
+    number: SOURCE.number + 1,
+    generation: SOURCE.generation + 1,
+  });
+  const omitStages = primary.catalog.listAll().map((catalogFamily) =>
+    root.stageUnsupported({
+      familyId: catalogFamily.plugin.manifest.familyId,
+      source: nextSource,
+      outcomeRefs: ["shadow:not-wired"],
+    })
+  );
+  const transitionProof = transitionIssuer.issue({
+    previous: SOURCE,
+    current: nextSource,
+    status: "canonical-descendant",
+    evidenceRef: `ancestry:${SOURCE.number}:${nextSource.number}`,
+  });
+  assert.throws(() => root.prepare({
+    source: nextSource,
+    previous: committed,
+    stages: omitStages,
+    sourceAnchors: anchorsFor(nextSource),
+    sourceTransitionProof: transitionProof,
+  }), /issuer-bound StateInstance mutation proof/);
 }
 
 function observedFluidCreditPlugin(
