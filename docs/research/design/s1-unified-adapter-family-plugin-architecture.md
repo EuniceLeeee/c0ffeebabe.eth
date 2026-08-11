@@ -2175,6 +2175,35 @@ impl `700af878`、baseline `0ab85d2c`，本地机器证据）：**
 
 剩余 1 族：`credit:fluid`。
 
+**2026-08-12 credit:fluid bilateral parity phase checkpoint（实现 commits
+impl `106c01be`、baseline `4265971d`，本地机器证据）：**
+
+- 首个 credit-domain capture：`executeCreditFamilyInstanceLifecycle` →
+  `prepareCreditFamilyRoutes` → `projectCreditRouteGraph` →
+  `executeCreditRiskQuote`（effect-delta risk proof，executor caller）→
+  `issueCreditExecutionHandle` → `buildCreditExecutionFragment`；
+  stateCoverage/pricedEdges/prices/exactQuotes 按 credit domain 如实
+  declared-absent；standing-position repayment 语义显式标注；
+- fixture 的 effect-delta actor 按 callerRef 解析（identity 用
+  verified-actor probe、risk 用 executor），修正后 lifecycle/risk 双跑
+  通过；
+- normalizer 六类 stage（`address-credit-vault` venue、standing-position
+  route、factory binding 投影、`fluid-vault` executionTarget）；
+- baseline exporter `captureFluidCreditBaselineCase`（constants/reverse
+  绑定、fluid-vault 执行节点、risk final-sim 指纹）；
+- 本地跨分支 parity（block `25729060`，二十二族 manifest）：**全部 22 族
+  pass、aggregate=pass、commonGraph 五 stage delta 全空、
+  nonMigratedFamilySemanticHashParity=true**；
+  `searcher:architecture-migration-capture` 合同测试与完整
+  `npm run build` 全部通过；仍是 sealed-capture/shadow receipt，不是
+  production cutover 或 live evidence。
+
+**S1 Family 矩阵完成里程碑（本地 sealed-capture）：** 22/22 族 bilateral
+parity 全 pass，`aggregate=pass`，无剩余 non-pass Family。后续仍需：
+节点 SSM 双跑同一 manifest 的机器证据、默认 authority 接线、Phase E
+cutover 与 §18.3/§20.2.6 legacy cleanup；这些都不在本 checkpoint 的
+sealed-capture 范围内。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
