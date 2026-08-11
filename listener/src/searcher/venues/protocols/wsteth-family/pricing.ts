@@ -84,10 +84,15 @@ export const wstethPricing = {
       return mids;
     },
   },
-  dependencies: ({ descriptor }) => Object.freeze([
-    descriptor.target,
-    ...descriptor.routes.flatMap((route) => [route.tokenIn, route.tokenOut]),
-  ]),
+  dependencies: ({ descriptor }) => Object.freeze(
+    [...new Set([
+      lowerAddress(descriptor.target),
+      ...descriptor.routes.flatMap((route) => [
+        lowerAddress(route.tokenIn),
+        lowerAddress(route.tokenOut),
+      ]),
+    ])].sort(),
+  ),
   mutation: {
     affectedStateKeys: ({ descriptor, observation }) =>
       observation.kind === "log" &&

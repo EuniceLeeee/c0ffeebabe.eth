@@ -5297,7 +5297,7 @@
         "familyId": "protocol:wsteth",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "81009cd166a898b0087ce58edf694e7a8b999560837b7f28921bbb9e76027892",
+        "contentHash": "2ca1cc76f111719c229c401ee6be38067bab9b3479b0406851aa161c9349ef78",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -6261,5 +6261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "d4297127cd3f481b1835cd03a85edfc8e67f92d11952807c51c28a3f00200e8f"
+  "artifactHash": "3c289e339513c5d11230f9907905769e5f3436ac3509d929da50b73fbba97519"
 }

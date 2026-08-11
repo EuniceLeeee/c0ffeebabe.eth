@@ -12,6 +12,7 @@ import {
   captureUniv4RealCase,
   captureFundingFixtureCase,
   capturePsmFixtureCase,
+  captureWstethFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -126,6 +127,11 @@ async function main(): Promise<void> {
         familyCases.push(await capturePsmFixtureCase({
           source,
           caseId: `psm:${source.number}`,
+        }));
+      } else if (item.family === "protocol:wsteth") {
+        familyCases.push(await captureWstethFixtureCase({
+          source,
+          caseId: `wsteth:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

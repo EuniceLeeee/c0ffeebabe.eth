@@ -13,6 +13,8 @@ import { UNIV4_FAMILY_ID } from
   "./venues/swaps/univ4-family/manifest.js";
 import { PSM_FAMILY_ID } from
   "./venues/protocols/psm-family/manifest.js";
+import { WSTETH_FAMILY_ID } from
+  "./venues/protocols/wsteth-family/manifest.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -87,6 +89,15 @@ export interface BaselinePsmFacts {
   readonly tokenOut: string;
 }
 
+export interface BaselineWstethFacts {
+  readonly familyId: "protocol:wsteth";
+  readonly target: string;
+  readonly steth: string;
+  readonly wsteth: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -103,6 +114,7 @@ export function normalizeBaselineMigrationItems(
         "univ3-standard": normalizeBaselineUniv3InstanceItem,
         univ4: normalizeBaselineUniv4InstanceItem,
         "protocol:psm": normalizeBaselinePsmInstanceItem,
+        "protocol:wsteth": normalizeBaselineWstethInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -113,6 +125,7 @@ export function normalizeBaselineMigrationItems(
         "univ3-standard": normalizeBaselineUniv3PriceItem,
         univ4: normalizeBaselineUniv4PriceItem,
         "protocol:psm": normalizeBaselinePsmPriceItem,
+        "protocol:wsteth": normalizeBaselineWstethPriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -123,6 +136,7 @@ export function normalizeBaselineMigrationItems(
         "univ3-standard": normalizeBaselineUniv3EdgeItem,
         univ4: normalizeBaselineUniv4EdgeItem,
         "protocol:psm": normalizeBaselinePsmEdgeItem,
+        "protocol:wsteth": normalizeBaselineWstethEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -133,6 +147,7 @@ export function normalizeBaselineMigrationItems(
         "univ3-standard": normalizeBaselineUniv3EnumeratedRouteItem,
         univ4: normalizeBaselineUniv4EnumeratedRouteItem,
         "protocol:psm": normalizeBaselinePsmEnumeratedRouteItem,
+        "protocol:wsteth": normalizeBaselineWstethEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -143,6 +158,7 @@ export function normalizeBaselineMigrationItems(
         "univ3-standard": normalizeBaselineUniv3ExactQuoteItem,
         univ4: normalizeBaselineUniv4ExactQuoteItem,
         "protocol:psm": normalizeBaselinePsmExactQuoteItem,
+        "protocol:wsteth": normalizeBaselineWstethExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -158,6 +174,7 @@ export function normalizeBaselineMigrationItems(
         "univ3-standard": normalizeBaselineUniv3ExecutionFragmentItem,
         univ4: normalizeBaselineUniv4ExecutionFragmentItem,
         "protocol:psm": normalizeBaselinePsmExecutionFragmentItem,
+        "protocol:wsteth": normalizeBaselineWstethExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -173,6 +190,7 @@ export function normalizeBaselineMigrationItems(
         "univ3-standard": normalizeBaselineUniv3FinalSimulationItem,
         univ4: normalizeBaselineUniv4FinalSimulationItem,
         "protocol:psm": normalizeBaselinePsmFinalSimulationItem,
+        "protocol:wsteth": normalizeBaselineWstethFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -197,6 +215,8 @@ function normalizeByFamily(
       RawMigrationSemanticItem;
     readonly "protocol:psm": (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
+    readonly "protocol:wsteth": (item: RawMigrationSemanticItem) =>
+      RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -205,6 +225,9 @@ function normalizeByFamily(
   if (familyId === "univ3-standard") return handlers["univ3-standard"](item);
   if (familyId === "univ4") return handlers.univ4(item);
   if (familyId === "protocol:psm") return handlers["protocol:psm"](item);
+  if (familyId === "protocol:wsteth") {
+    return handlers["protocol:wsteth"](item);
+  }
   return handlers.default(item);
 }
 
@@ -2102,6 +2125,334 @@ export function normalizeBaselinePsmFinalSimulationItem(
   });
 }
 
+function wstethFactsGuard(
+  facts: Partial<BaselineWstethFacts> | undefined,
+): facts is Required<BaselineWstethFacts> {
+  return facts !== undefined &&
+    facts.familyId === "protocol:wsteth" &&
+    typeof facts.target === "string" &&
+    typeof facts.steth === "string" &&
+    typeof facts.wsteth === "string" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function wstethFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineWstethFacts>;
+  })?.baselineFacts;
+  if (!wstethFactsGuard(facts)) return null;
+  return facts;
+}
+
+function deriveWstethCanonicalFacts(
+  facts: Required<BaselineWstethFacts>,
+): {
+  readonly target: string;
+  readonly steth: string;
+  readonly wsteth: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly lowerTarget: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const target = canonicalAddress(facts.target);
+  const steth = canonicalAddress(facts.steth);
+  const wsteth = canonicalAddress(facts.wsteth);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const lowerTarget = lowerAddress(target);
+  const direction = lowerAddress(tokenIn) === lowerAddress(steth)
+    ? "wrap"
+    : "unwrap";
+  const bindingFingerprint = hashCanonical({
+    target: lowerTarget,
+    steth: lowerAddress(steth),
+    wsteth: lowerAddress(wsteth),
+    conversionSemantics: "lido-wrap-unwrap-v1",
+  });
+  const venueIdentityHash = hashCanonical({
+    kind: "address-protocol",
+    target: lowerTarget,
+  });
+  const routeKeyValue = `protocol:wsteth\u001f${lowerTarget}\u001f${direction}`;
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "protocol:wsteth",
+    lowerTarget,
+    lowerTarget,
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    target,
+    steth,
+    wsteth,
+    tokenIn,
+    tokenOut,
+    lowerTarget,
+    lowerTokenIn,
+    lowerTokenOut,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineWstethEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = wstethFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveWstethCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineWstethEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineWstethEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "wsteth baseline enumerated route item must carry a non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineWstethInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = wstethFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveWstethCanonicalFacts(facts);
+  const staticBindingFingerprint = hashCanonical({
+    capability: WSTETH_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: Object.freeze({
+      target: derived.lowerTarget,
+      steth: lowerAddress(derived.steth),
+      wsteth: lowerAddress(derived.wsteth),
+      conversionSemantics: "lido-wrap-unwrap-v1",
+    }),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerTarget,
+    value: Object.freeze({
+      familyId: "protocol:wsteth",
+      instanceKey: derived.lowerTarget,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineWstethPriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = wstethFactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveWstethCanonicalFacts(facts);
+  const adapterId = derived.lowerTokenIn === lowerAddress(derived.steth)
+    ? "wsteth-wrap"
+    : "wsteth-unwrap";
+  const routeEdge = Object.freeze({
+    adapterId,
+    instanceKey: derived.lowerTarget,
+    target: derived.target,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "protocol" as const,
+    protocolAction: adapterId === "wsteth-wrap" ? "wrap" : "unwrap",
+    edgeKind: "protocol" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.lowerTarget,
+      mid: Object.freeze({
+        kind: "protocol",
+        pool: derived.target,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineWstethExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = wstethFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveWstethCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineWstethExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = wstethFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveWstethCanonicalFacts(facts);
+  const adapterId = derived.lowerTokenIn === lowerAddress(derived.steth)
+    ? "wsteth-wrap"
+    : "wsteth-unwrap";
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: adapterId,
+      executionTarget: derived.target,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineWstethFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = wstethFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveWstethCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -2120,4 +2471,9 @@ const UNIV4_CATALOG_FAMILY =
 const PSM_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     PSM_FAMILY_ID,
+  );
+
+const WSTETH_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    WSTETH_FAMILY_ID,
   );

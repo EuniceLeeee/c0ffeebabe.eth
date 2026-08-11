@@ -22,6 +22,7 @@ import {
   captureUniv4RealCase,
   captureFundingFixtureCase,
   capturePsmFixtureCase,
+  captureWstethFixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -658,6 +659,23 @@ async function testPsmFixtureCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.items.length, 1);
 }
 
+async function testWstethFixtureCase(): Promise<void> {
+  const familyCase = await captureWstethFixtureCase({ source: SOURCE });
+  assert.equal(familyCase.familyId, "protocol:wsteth");
+  for (const stage of ARCHITECTURE_MIGRATION_STAGES) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `wsteth fixture ${stage} must be exercised`,
+    );
+  }
+  assert.equal(familyCase.stages.edges?.items.length, 2);
+  assert.equal(familyCase.stages.prices?.items.length, 2);
+  assert.equal(familyCase.stages.exactQuotes?.items.length, 2);
+  assert.equal(familyCase.stages.executionFragments?.items.length, 2);
+  assert.equal(familyCase.stages.finalSimulations?.items.length, 2);
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -997,6 +1015,7 @@ async function main(): Promise<void> {
   await testUniv4RealCaseAllStages();
   await testFundingFixtureCases();
   await testPsmFixtureCase();
+  await testWstethFixtureCase();
   console.log("architecture-migration capture harness PASS");
 }
 
