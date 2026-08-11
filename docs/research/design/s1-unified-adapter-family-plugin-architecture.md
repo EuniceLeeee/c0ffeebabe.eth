@@ -1299,6 +1299,23 @@ stateAnchors、performanceDiagnostics 四项）与
 仍为 shadow/consumer 入口，production solver 接线与 `sealed-production` 双侧
 capture 未落地。
 
+**2026-08-11 consumer 定位/冻结与硬化批量 checkpoint（实现 commits `2f1b0e67`、
+`0dbe4d4c`、`9c9e6569`、`066d33ad`、`f60cb32c`）：**
+
+- `strictPricingPublicationKey` 公开为 consumer 定位 pricing publication 的同一
+  format；`strictFundingPublicationKeysByFamily` 按 Family 列出 funding keys；
+- pricing/funding read 结果全部冻结（fail-closed 输出），consumer 冻结合同；
+- Credit staging 增加 route↔staged instance、route↔publication source 绑定门；
+- Funding tombstone→offers→tombstone 三代往返、unknown Family keys 空集；
+- deep-seal 覆盖不可枚举属性（hidden mutable prop 拒绝）；
+- exact cache 同 key 覆盖 + LRU 逐出、closure 空 admitted 集合、enumerator 空
+  Family 零库存 canonical hash、continuity composition binding 身份/冻结；
+- parity request sealed-production 校验、assembler 空 captureId、malformed JSON
+  全部 fail closed。
+
+证据：`searcher:adapter-family-shadow-suite`（10 合同）+ credit + parity +
+完整 listener build 全部通过；Phase B/C shadow 套件在本批 commit 上重跑全过。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
