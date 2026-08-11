@@ -1534,6 +1534,39 @@ impl `b521a204`、baseline `1fec46cd`，机器证据）：**
 本 phase 关闭"双侧 exact parity"子项；剩余：execution/final-sim 双侧真实
 接线与其余 21 个 Family 的 capture 覆盖。
 
+**2026-08-11 univ2 executionFragments + finalSimulations bilateral phase
+checkpoint（实现 commits impl `61abd3c2`、baseline `0bbd8a4a`，机器证据，
+common-Graph 全阶段关闭）：**
+
+- challenger 走 `univ2Execution.buildFragment`（exact evidence 绑定、
+  `minAmountOut=quotedAmountOut`、`MIGRATION_CAPTURE_EXECUTOR`），final-sim
+  用 `expectedEffects` + 四腿 token-delta conservation 检查 + repayment
+  检查；baseline exporter 用冻结 ds 同一 `quoteV2ExactInput` 与同一
+  fragment/effects 语义（canonical EIP-55 address、`sortedPair`
+  amount0/1Out 放置）导出 raw node/effects 字段；
+- impl normalizer 扩展覆盖 `executionFragments` 与 `finalSimulations`：
+  从 baseline facts 重放 canonical edge id，重建 node（bigint 安全）计算
+  `nodeFingerprint`，重建 effects 计算 `effectsFingerprint`；facts 缺失
+  透传、node/effect 畸形或 conservation/repayment 不符 fail closed；
+- 合同证据：`architecture-migration-baseline-normalizer` PASS、
+  `searcher:architecture-migration-capture` PASS（local real-reserves
+  双侧断言五个 commonGraph stage delta 全空 + `assembledCommonGraphParity`
+  为 true + family 行仍 non-pass）、parity-runner/parity/evidence PASS、
+  完整 listener build 通过；
+- 节点 SSM `50b1ba20` 在 impl `61abd3c2` / baseline `0bbd8a4a` 重跑真实
+  corpus：`commonGraphDelta` 五个 stage 全部
+  `{missingIds:[], addedIds:[], changedIds:[]}`，
+  `baselineBlockedStages=[]`、`challengerBlockedStages=[]`（
+  `assembledCommonGraphParity=true`）；univ2-standard 全部 required
+  stages 双侧 `exercised`、无 framework blocker，但 family 行仍为
+  `semantic-mismatch`（family-level instance 身份尚未归一）；
+  `eligible=true`、verdict `fail`（21 个未覆盖 Family + univ2 family 行
+  non-pass）。
+
+本 phase 关闭"common-Graph 双侧 deep stages（execution/final-sim）parity"
+子项，common-Graph gate 已全绿；剩余：univ2 family 行 instance 身份归一
+（令该行转 pass）、其余 21 个 Family 的 capture 覆盖。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
