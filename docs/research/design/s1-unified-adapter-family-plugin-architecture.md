@@ -2154,6 +2154,27 @@ impl `3e59a630`、baseline `7ac41580`，本地机器证据）：**
 
 剩余 2 族：`credit:fluid`、`custom-swap:dodo-v2`。
 
+**2026-08-12 dodo-v2 bilateral parity phase checkpoint（实现 commits
+impl `700af878`、baseline `0ab85d2c`，本地机器证据）：**
+
+- 修复 dodo-v2 pricing snapshot 的 quotes/unavailable 从 Map 改为 plain
+  record（中央 deep-freeze 拒绝 Map）；fixture PMM K=0、deficit/surplus
+  均为 0，使 local selection 保持标量、不触发 bounded probe；
+- impl `captureDodoV2FixtureCase`（observed sellBase、pool behavior +
+  registry 反向绑定 identity、balance-reserve-mt-fee multicall input
+  semantics、actor-bound exact query）全部 10 stage `exercised`；
+  normalizer 六类 stage（`address-pool` venue、`external-swap` quoted
+  mid、registry/quote-actor 绑定）落地；
+- baseline exporter `captureDodoV2BaselineCase`（PMM 1:1、multicall input
+  语义、双 direction canonicalHash）；
+- 本地跨分支 parity（block `25729060`，二十一族 manifest）：二十一族全部
+  **pass**、commonGraph 五 stage delta 全空；
+  `searcher:architecture-migration-capture` 合同测试与完整
+  `npm run build` 全部通过；仍是 sealed-capture/shadow receipt，不是
+  production cutover 或 live evidence。
+
+剩余 1 族：`credit:fluid`。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
