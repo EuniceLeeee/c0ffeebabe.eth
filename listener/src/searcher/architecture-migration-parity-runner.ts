@@ -149,6 +149,16 @@ export interface ArchitectureMigrationBatchInput {
   };
 }
 
+export interface ArchitectureMigrationCorpusManifest {
+  readonly baselinePath: string;
+  readonly challengerPath: string;
+  readonly evidenceClass: ArchitectureMigrationEvidenceClass;
+  readonly mode: ArchitectureMigrationMode;
+  readonly stateAnchors: readonly ArchitectureStateAnchor[];
+  readonly performanceDiagnostics: ArchitectureMigrationBatchInput["performanceDiagnostics"];
+  readonly declaredDeltas?: ArchitectureMigrationBatchInput["declaredDeltas"];
+}
+
 export interface SealedProductionArchitectureMigrationBatchInput
   extends Omit<
     ArchitectureMigrationBatchInput,
@@ -558,6 +568,53 @@ export async function runArchitectureMigrationParityFiles(
   return runArchitectureMigrationBatchParity(
     sealArchitectureMigrationBatchInput(batch),
   );
+}
+
+/**
+ * Validates the on-disk batch request that the node workflow feeds to
+ * `architecture-migration-parity:run`: both side-capture paths, the evidence
+ * class/mode, state anchors and performance diagnostics must be well-formed
+ * before any capture file is read or any issuer is minted.
+ */
+export function validateArchitectureMigrationRequestFile(
+  request: unknown,
+): ArchitectureMigrationCorpusManifest {
+  if (request === null || typeof request !== "object") {
+    throw new Error("batch request must be an object");
+  }
+  const candidate = request as Partial<ArchitectureMigrationCorpusManifest>;
+  for (const key of ["baselinePath", "challengerPath"] as const) {
+    const value = candidate[key];
+    if (typeof value !== "string" || value.trim() === "") {
+      throw new Error(`${key} must be a non-empty path`);
+    }
+  }
+  if (
+    candidate.evidenceClass !== "unit-contract" &&
+    candidate.evidenceClass !== "sealed-production"
+  ) {
+    throw new Error("evidenceClass must be unit-contract or sealed-production");
+  }
+  if (
+    candidate.mode !== "pure-refactor" &&
+    candidate.mode !== "declared-improvement"
+  ) {
+    throw new Error("mode must be pure-refactor or declared-improvement");
+  }
+  if (!Array.isArray(candidate.stateAnchors) || candidate.stateAnchors.length === 0) {
+    throw new Error("stateAnchors must be a non-empty array");
+  }
+  const diagnostics = candidate.performanceDiagnostics;
+  if (diagnostics === null || typeof diagnostics !== "object") {
+    throw new Error("performanceDiagnostics must be an object");
+  }
+  for (const key of ["wallMs", "requestCount", "batchCount", "peakConcurrency"] as const) {
+    const value = diagnostics[key];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      throw new Error(`performanceDiagnostics.${key} must be non-negative`);
+    }
+  }
+  return request as ArchitectureMigrationCorpusManifest;
 }
 
 interface SideFamilyCoverage {

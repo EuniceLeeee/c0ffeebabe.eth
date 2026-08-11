@@ -13,6 +13,7 @@ import {
   runArchitectureMigrationBatchParity,
   runArchitectureMigrationParityFiles,
   sealArchitectureMigrationBatchInput,
+  validateArchitectureMigrationRequestFile,
   type ArchitectureMigrationBatchInput,
   type ArchitectureMigrationStage,
   type CommonGraphMigrationStage,
@@ -321,6 +322,7 @@ assert(Object.isFrozen(completeReceipt.familyCoverage[0]));
 assert(Object.isFrozen(completeReceipt.commonGraphDelta.edges.changedIds));
 
 await testFileEntryRunsUnitAndSealedBatches();
+testRequestFileValidation();
 
 console.log(
   "architecture-migration-parity-runner PASS " +
@@ -385,6 +387,51 @@ async function testFileEntryRunsUnitAndSealedBatches(): Promise<void> {
       performanceDiagnostics: raw.performanceDiagnostics,
     }),
     /not a raw architecture migration side capture/,
+  );
+}
+
+function testRequestFileValidation(): void {
+  const valid = fixtureInput({});
+  const request = {
+    baselinePath: "/tmp/baseline.json",
+    challengerPath: "/tmp/challenger.json",
+    evidenceClass: "unit-contract",
+    mode: "pure-refactor",
+    stateAnchors: valid.stateAnchors,
+    performanceDiagnostics: valid.performanceDiagnostics,
+  };
+  assert.doesNotThrow(() => validateArchitectureMigrationRequestFile(request));
+  assert.throws(
+    () => validateArchitectureMigrationRequestFile({
+      ...request,
+      baselinePath: "",
+    }),
+    /baselinePath must be a non-empty path/,
+  );
+  assert.throws(
+    () => validateArchitectureMigrationRequestFile({
+      ...request,
+      evidenceClass: "self-declared",
+    }),
+    /evidenceClass must be unit-contract or sealed-production/,
+  );
+  assert.throws(
+    () => validateArchitectureMigrationRequestFile({
+      ...request,
+      stateAnchors: [],
+    }),
+    /stateAnchors must be a non-empty array/,
+  );
+  assert.throws(
+    () => validateArchitectureMigrationRequestFile({
+      ...request,
+      performanceDiagnostics: { ...valid.performanceDiagnostics, wallMs: -1 },
+    }),
+    /performanceDiagnostics.wallMs must be non-negative/,
+  );
+  assert.throws(
+    () => validateArchitectureMigrationRequestFile(null),
+    /batch request must be an object/,
   );
 }
 

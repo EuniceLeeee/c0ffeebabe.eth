@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import {
   createArchitectureMigrationProductionCaptureIssuer,
   runArchitectureMigrationParityFiles,
+  validateArchitectureMigrationRequestFile,
   type ArchitectureMigrationBatchInput,
   type ArchitectureMigrationEvidenceClass,
 } from "./architecture-migration-parity-runner.js";
@@ -19,14 +20,21 @@ interface BatchRequestFile {
 }
 
 async function main(): Promise<void> {
-  const requestPath = process.argv[2];
+  const checkOnly = process.argv[2] === "--check";
+  const requestPath = checkOnly ? process.argv[3] : process.argv[2];
   if (requestPath === undefined) {
     throw new Error(
-      "usage: tsx src/searcher/run-architecture-migration-parity-cli.ts <batch-request.json>",
+      "usage: tsx src/searcher/run-architecture-migration-parity-cli.ts " +
+        "[--check] <batch-request.json>",
     );
   }
-  const request = JSON.parse(await readFile(requestPath, "utf8")) as
-    BatchRequestFile;
+  const request = validateArchitectureMigrationRequestFile(
+    JSON.parse(await readFile(requestPath, "utf8")),
+  ) as BatchRequestFile;
+  if (checkOnly) {
+    process.stdout.write("batch request valid\n");
+    return;
+  }
   const productionCaptureIssuer =
     request.evidenceClass === "sealed-production"
       ? createArchitectureMigrationProductionCaptureIssuer()
