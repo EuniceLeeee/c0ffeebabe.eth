@@ -254,11 +254,48 @@ function testCacheIdentityIsCentrallyIssued(): void {
   );
 }
 
+function testCacheAndAddressBoundaries(): void {
+  assert.throws(
+    () => createAdapterFamilyExactQuoteCache({ capacity: 0 }),
+    /capacity must be positive/,
+  );
+  assert.throws(
+    () => createAdapterFamilyExactQuoteCache({ capacity: -1 }),
+    /capacity must be positive/,
+  );
+  assert.throws(
+    () => createAdapterFamilyExactQuoteCache({ capacity: 1.5 }),
+    /capacity must be positive/,
+  );
+  assert.throws(
+    () => exactQuoteCacheKey({
+      ...address(),
+      familyId: "",
+    } as unknown as AdapterExactQuoteCacheAddress),
+    /familyId must be canonical/,
+  );
+  assert.throws(
+    () => exactQuoteCacheKey({
+      ...address(),
+      capabilityHash: "not-sha",
+    } as unknown as AdapterExactQuoteCacheAddress),
+    /capabilityHash must be SHA-256/,
+  );
+  assert.throws(
+    () => exactQuoteCacheKey({
+      ...address(),
+      executor: "0x1234",
+    } as unknown as AdapterExactQuoteCacheAddress),
+    /executor must be an address/,
+  );
+}
+
 async function main(): Promise<void> {
   testCacheKeyBindsEveryAddressField();
   testStoreLookupLruAndEviction();
   testStoreRejectsUnboundOrInvalidValues();
   testCacheIdentityIsCentrallyIssued();
+  testCacheAndAddressBoundaries();
   console.log("adapter-family exact quote cache PASS");
 }
 
