@@ -100,6 +100,23 @@ commit 见本日各 checkpoint）：**
 - S1 cutover-readiness receipt 合同（五前置合成）；
 - S1 regression sweep harness（10 组合同 + parity verifier 一键复跑）。
 
+**节点机器证据（2026-08-12，SSM 双跑成功）：**
+
+- SSM run id `0384f55b-c87f-4605-8e6a-ebc0174425f5`，实例
+  `i-0ff908dedeec9ebc6`（Ubuntu 24.04，SSM Online）；
+- 节点 worktree 已 fetch + checkout 精确 SHA：baseline
+  `4265971d123c2d6afc5194aa2b324104558327c7`、impl
+  `63484e60dbec3892708d38a55e5849915612bd46`；
+- 双跑输出
+  `/opt/MEV-s1-parity-22family-node-1786490232/`：
+  `aggregate=pass`、`nonPassFamilyIds=[]`、
+  `assembledCommonGraphParity=true`、`heldOutNegativeVerdicts=[]`；
+- 与已提交证据逐字节一致（SHA-256）：
+  receipt `8df51cad…`、baseline-side `540cc347…`、
+  challenger-side `43d5f467…`（三个 hash 与本地 committed 工件完全
+  相同）；节点双跑未触碰 live searcher（`/opt/MEV` 独立运行），未做
+  任何 live/签名/广播。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - strict catalog prepare 内 complete-snapshot 一次性消费（受限于
@@ -109,7 +126,8 @@ commit 见本日各 checkpoint）：**
   输出）；
 - production solver 的 strict pricing/Funding/Credit consumer 真实
   接线（目前仅 diagnostic）；
-- 节点 SSM 双跑机器证据（runbook 已就绪，未执行）；
+- ~~节点 SSM 双跑机器证据~~（已关闭：SSM run
+  `0384f55b…`，见上；runbook 已执行成功）；
 - systemic-live gate 的真实 paired-live 运行；
 - 默认 authority 切换（需 cutover-readiness ready + 人工授权）；
 - Phase E legacy cleanup（§18.3 全部门通过后）。
