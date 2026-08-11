@@ -144,6 +144,11 @@ def main() -> None:
             for key in ("target", "baseToken", "quoteToken", "amountIn"):
                 if key in case:
                     descriptor[key] = case[key]
+        elif case["family"] == "credit:fluid":
+            for key in ("target", "supplyToken", "borrowToken", "factory",
+                        "amountIn"):
+                if key in case:
+                    descriptor[key] = case[key]
         else:
             for key in ("pool", "tokenA", "tokenB", "reserves", "fee",
                         "tickSpacing", "liquidity", "sqrtPriceX96"):

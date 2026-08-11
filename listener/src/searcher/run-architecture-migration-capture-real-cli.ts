@@ -27,6 +27,7 @@ import {
   captureFluidDexFixtureCase,
   captureAngstromV4FixtureCase,
   captureDodoV2FixtureCase,
+  captureFluidCreditFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -216,6 +217,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureDodoV2FixtureCase({
           source,
           caseId: `dodo-v2:${source.number}`,
+        }));
+      } else if (item.family === "credit:fluid") {
+        familyCases.push(await captureFluidCreditFixtureCase({
+          source,
+          caseId: `credit:fluid:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

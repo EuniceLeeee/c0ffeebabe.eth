@@ -37,6 +37,7 @@ import {
   captureFluidDexFixtureCase,
   captureAngstromV4FixtureCase,
   captureDodoV2FixtureCase,
+  captureFluidCreditFixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -928,6 +929,30 @@ async function testDodoV2FixtureCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.items.length, 2);
 }
 
+async function testFluidCreditFixtureCase(): Promise<void> {
+  const familyCase = await captureFluidCreditFixtureCase({ source: SOURCE });
+  assert.equal(familyCase.familyId, "credit:fluid");
+  for (const stage of ["instances", "edges", "failures", "enumeratedRoutes",
+    "executionFragments", "finalSimulations"] as const) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `credit:fluid ${stage} must be exercised`,
+    );
+  }
+  for (const stage of ["stateCoverage", "pricedEdges", "prices",
+    "exactQuotes"] as const) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "declared-absent",
+      `credit:fluid ${stage} must be declared-absent`,
+    );
+  }
+  assert.equal(familyCase.stages.edges?.items.length, 1);
+  assert.equal(familyCase.stages.executionFragments?.items.length, 1);
+  assert.equal(familyCase.stages.finalSimulations?.items.length, 1);
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -1282,6 +1307,7 @@ async function main(): Promise<void> {
   await testFluidDexFixtureCase();
   await testAngstromV4FixtureCase();
   await testDodoV2FixtureCase();
+  await testFluidCreditFixtureCase();
   console.log("architecture-migration capture harness PASS");
 }
 

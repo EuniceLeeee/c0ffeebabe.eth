@@ -312,6 +312,33 @@ import type {
   DodoV2Descriptor,
   DodoV2Route,
 } from "./venues/swaps/dodo-v2-family/types.js";
+import { FLUID_CREDIT_FAMILY_ID } from
+  "./venues/credit/fluid-family/manifest.js";
+import {
+  FLUID_CREDIT_PROBE_ACTOR,
+  FLUID_ERC20_INTERFACE,
+  FLUID_VAULT_FACTORY_INTERFACE,
+  FLUID_VAULT_INTERFACE,
+} from "./venues/credit/fluid-family/codec.js";
+import { FLUID_CREDIT_PROBE_ACTOR_EVIDENCE_ID } from
+  "./venues/credit/fluid-family/identity.js";
+import { fluidCreditExecution } from
+  "./venues/credit/fluid-family/execution.js";
+import type {
+  FluidCreditDescriptor,
+  FluidCreditRiskEvidence,
+  FluidCreditRoute,
+} from "./venues/credit/fluid-family/types.js";
+import {
+  executeCreditFamilyInstanceLifecycle,
+} from "./venues/adapter-family-runtime.js";
+import {
+  buildCreditExecutionFragment,
+  executeCreditRiskQuote,
+  issueCreditExecutionHandle,
+  prepareCreditFamilyRoutes,
+  projectCreditRouteGraph,
+} from "./adapter-credit-runtime.js";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -8992,6 +9019,375 @@ export async function captureDodoV2FixtureCase(input: {
       failures: exercisedStage([], evidenceRefs),
       enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
       exactQuotes: exercisedStage(exactQuotes, evidenceRefs),
+      executionFragments: exercisedStage(executionFragments, evidenceRefs),
+      finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
+    }),
+  });
+}
+
+export const FLUID_CREDIT_FIXTURE_VAULT = `0x${"f1".repeat(20)}`;
+export const FLUID_CREDIT_FIXTURE_FACTORY = `0x${"f2".repeat(20)}`;
+export const FLUID_CREDIT_FIXTURE_SUPPLY = `0x${"f3".repeat(20)}`;
+export const FLUID_CREDIT_FIXTURE_BORROW = `0x${"f4".repeat(20)}`;
+export const FLUID_CREDIT_FIXTURE_COLLATERAL = 1_000n * 10n ** 18n;
+export const FLUID_CREDIT_FIXTURE_DEBT = 10n ** 18n;
+
+function fluidCreditConstantsResult(): string {
+  const zero = `0x${"00".repeat(20)}`;
+  const slot = "0x" + "11".repeat(32);
+  return FLUID_VAULT_INTERFACE.encodeFunctionResult("constantsView", [[
+    zero,
+    FLUID_CREDIT_FIXTURE_FACTORY,
+    zero,
+    zero,
+    FLUID_CREDIT_FIXTURE_SUPPLY,
+    FLUID_CREDIT_FIXTURE_BORROW,
+    18,
+    18,
+    1n,
+    slot,
+    slot,
+    slot,
+    slot,
+  ]]);
+}
+
+function fluidCreditSuccessResult(
+  request: AdapterRequest,
+  canonical: CanonicalSource,
+): AdapterRequestResult {
+  if (request.kind === "effect-delta-simulation") {
+    const decoded = FLUID_VAULT_INTERFACE.decodeFunctionData(
+      "operate",
+      (request as { readonly call: { readonly data: string } }).call.data,
+    );
+    const collateralAmount = BigInt(decoded[1]);
+    const debtAmount = BigInt(decoded[2]);
+    const callerRef = (request as {
+      readonly call: { readonly caller: { readonly kind: string } };
+    }).call.caller;
+    const actor = callerRef.kind === "verified-actor"
+      ? FLUID_CREDIT_PROBE_ACTOR.toLowerCase()
+      : callerRef.kind === "executor"
+        ? MIGRATION_CAPTURE_EXECUTOR.toLowerCase()
+        : (() => {
+            throw new Error(
+              `fluid-credit fixture caller ${callerRef.kind} is unsupported`,
+            );
+          })();
+    return Object.freeze({
+      id: request.id,
+      ok: true as const,
+      source: canonical,
+      provenance: Object.freeze({
+        kind: "migration-capture-fixture",
+        fingerprint: `fixture:${request.id}`,
+      }),
+      completion: "returned" as const,
+      data: FLUID_VAULT_INTERFACE.encodeFunctionResult("operate", [
+        1n,
+        collateralAmount,
+        debtAmount,
+      ]),
+      effects: Object.freeze({
+        tokenDeltas: Object.freeze([
+          Object.freeze({
+            token: FLUID_CREDIT_FIXTURE_SUPPLY.toLowerCase(),
+            account: actor,
+            delta: -collateralAmount,
+          }),
+          Object.freeze({
+            token: FLUID_CREDIT_FIXTURE_BORROW.toLowerCase(),
+            account: actor,
+            delta: debtAmount,
+          }),
+        ]),
+      }),
+    });
+  }
+  const data =
+    request.id === "vault-constants"
+      ? fluidCreditConstantsResult()
+      : request.kind === "get-code"
+        ? "0x00"
+        : request.id === "factory-reverse-vault"
+          ? FLUID_VAULT_FACTORY_INTERFACE.encodeFunctionResult(
+              "getVaultAddress",
+              [FLUID_CREDIT_FIXTURE_VAULT],
+            )
+          : (() => {
+              throw new Error(
+                "unexpected fluid-credit fixture request " + request.id,
+              );
+            })();
+  return Object.freeze({
+    id: request.id,
+    ok: true as const,
+    source: canonical,
+    provenance: Object.freeze({
+      kind: "migration-capture-fixture",
+      fingerprint: `fixture:${request.id}`,
+    }),
+    completion: "returned" as const,
+    data,
+  });
+}
+
+class FluidCreditFixtureScheduler implements CentralAdapterScheduler {
+  issueExecutor(
+    input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
+  ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
+    const executor = createBoundedRequestExecutor({
+      assertSupported: (requirements) => assert.deepEqual(
+        requirements,
+        input.requirements,
+      ),
+      assertCallerBinding() {},
+      assertWithinBudget: (_familyId, requests) => {
+        assert.deepEqual(requests, input.requests);
+      },
+      execute: async (execution) => Promise.all(execution.requests.map(
+        (request) => fluidCreditSuccessResult(request, execution.source),
+      )),
+      sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
+    });
+    return Object.freeze({
+      executor,
+      timing: () => ({ queueWaitMs: 0, transportWallMs: 1, attempts: 1 }),
+    });
+  }
+}
+
+function fluidCreditFixtureRuntime(): CentralAdapterRuntime {
+  let now = 1_000;
+  return {
+    clock: { nowMs: () => now++ },
+    generationFence: new FixtureFence(),
+    callerAuthority: {
+      bind: (input) => input.callerRole === "verified-actor"
+        ? Object.freeze({
+            verifiedActors: Object.freeze({
+              [FLUID_CREDIT_PROBE_ACTOR_EVIDENCE_ID]:
+                FLUID_CREDIT_PROBE_ACTOR,
+            }),
+          })
+        : input.callerRole === "executor"
+          ? Object.freeze({ executor: MIGRATION_CAPTURE_EXECUTOR })
+          : Object.freeze({}),
+    },
+    policy: {
+      bind: (input) => ({
+        lane: input.stage === "identity" ? "critical-proof" : "background",
+        deadlineAtMs: 100_000,
+        maxAttempts: 1,
+        transportPool: "state-read",
+        fairnessKey: input.subjectKey,
+      }),
+    },
+    budgets: { assertAdmitted() {} },
+    scheduler: new FluidCreditFixtureScheduler(),
+  };
+}
+
+async function runFluidCreditLifecycle(
+  canonical: CanonicalSource,
+): Promise<PreparedFamilyInstance> {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forStrictFamily(
+    FLUID_CREDIT_FAMILY_ID,
+  );
+  const operateCalldata = FLUID_VAULT_INTERFACE.encodeFunctionData("operate", [
+    0n,
+    FLUID_CREDIT_FIXTURE_COLLATERAL,
+    FLUID_CREDIT_FIXTURE_DEBT,
+    MIGRATION_CAPTURE_EXECUTOR,
+  ]);
+  const result = await executeCreditFamilyInstanceLifecycle({
+    family,
+    match: Object.freeze({
+      matchedPatternId: "fluid-credit-operate-call",
+      observation: Object.freeze({
+        kind: "call" as const,
+        source: canonical,
+        target: FLUID_CREDIT_FIXTURE_VAULT,
+        data: operateCalldata,
+      }),
+    }),
+    source: canonical,
+    generation: canonical.generation,
+    runtime: fluidCreditFixtureRuntime(),
+  });
+  assert(result.instance !== null);
+  return result.instance;
+}
+
+/**
+ * Runs the fluid-credit vault lifecycle over the observed operate fixture:
+ * factory-child constants/reverse-binding/active-operate identity proof,
+ * standing-position execution fragment and credit risk final simulation.
+ * Pricing and exact stages are honestly declared absent for the credit
+ * domain.
+ */
+export async function captureFluidCreditFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const instance = await runFluidCreditLifecycle(input.source);
+  const evidenceRefs = Object.freeze([
+    `fixture:credit:fluid:${input.source.number}:${input.source.hash}`,
+  ]);
+  const absentStage: RawMigrationStageCapture = Object.freeze({
+    status: "declared-absent" as const,
+    items: Object.freeze([]),
+    evidenceRefs,
+    blocker: null,
+  });
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forStrictFamily(
+    FLUID_CREDIT_FAMILY_ID,
+  );
+  const routePublication = prepareCreditFamilyRoutes({
+    family,
+    instance,
+    source: input.source,
+    generation: input.source.generation,
+  });
+  const edges: RawMigrationStageCapture["items"][number][] = [];
+  const projectedRoutes = routePublication.routes.map((handle) => {
+    const projected = projectCreditRouteGraph({
+      family,
+      route: handle,
+    });
+    const value = projected.edge;
+    edges.push(Object.freeze({
+      id: value.canonicalEdgeId,
+      value: Object.freeze({
+        routeKey: handle.routeKey,
+        tokenIn: value.tokenIn,
+        tokenOut: value.tokenOut,
+        canonicalEdgeId: value.canonicalEdgeId,
+      }),
+    }));
+    return Object.freeze({ handle, edge: value });
+  });
+  const enumeratedRoutes: RawMigrationStageCapture["items"][number][] = edges
+    .map((edge) => edge.value as {
+      readonly routeKey: string;
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly canonicalEdgeId: string;
+    })
+    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
+    .map((value, order) => Object.freeze({
+      id: value.canonicalEdgeId,
+      value: Object.freeze({
+        routeKey: value.routeKey,
+        tokenIn: value.tokenIn,
+        tokenOut: value.tokenOut,
+        canonicalEdgeId: value.canonicalEdgeId,
+        order,
+      }),
+    }));
+  const edgeByRouteKey = new Map(
+    edges.map((edge) => {
+      const value = edge.value as { readonly routeKey: string };
+      return [value.routeKey, edge] as const;
+    }),
+  );
+  const executionFragments: RawMigrationStageCapture["items"][number][] = [];
+  const finalSimulations: RawMigrationStageCapture["items"][number][] = [];
+  for (const projected of [...projectedRoutes].sort(
+    (left, right) => left.handle.routeKey.localeCompare(right.handle.routeKey),
+  )) {
+    const routeKey = projected.handle.routeKey;
+    const edge = edgeByRouteKey.get(routeKey);
+    if (edge === undefined) {
+      throw new Error(`fluid-credit route ${routeKey} has no edge`);
+    }
+    const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
+    const amountOut = amountIn;
+    const risk = await executeCreditRiskQuote({
+      family,
+      route: projected.handle,
+      collateralAmount: amountIn,
+      debtBps: 10_000n,
+      executor: MIGRATION_CAPTURE_EXECUTOR,
+      runtimeEvidence: Object.freeze([]),
+      source: input.source,
+      generation: input.source.generation,
+      runtime: fluidCreditFixtureRuntime(),
+    });
+    assert(risk.status === "resolved");
+    const executionHandle = issueCreditExecutionHandle({
+      family,
+      route: projected.handle,
+      risk,
+      minAmountOut: amountOut,
+      executor: MIGRATION_CAPTURE_EXECUTOR,
+      runtimeEvidence: Object.freeze([]),
+      source: input.source,
+      generation: input.source.generation,
+    });
+    const outcome = buildCreditExecutionFragment({
+      family,
+      actionOwnership: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+      handle: executionHandle,
+    });
+    assert(outcome.status === "resolved");
+    executionFragments.push(Object.freeze({
+      id: `${edge.id}\u001fexec:${amountIn}`,
+      value: Object.freeze({
+        routeKey,
+        tokenIn: projected.edge.tokenIn,
+        tokenOut: projected.edge.tokenOut,
+        canonicalEdgeId: edge.id,
+        amountIn: amountIn.toString(),
+        amountOut: amountOut.toString(),
+        minAmountOut: amountOut.toString(),
+        actionAdapterId: "fluid-vault",
+        executionTarget: projected.edge.target,
+        nodeFingerprint: hashCanonical(
+          outcome.fragment.nodes as unknown as CanonicalValue,
+        ),
+      }),
+    }));
+    finalSimulations.push(Object.freeze({
+      id: `${edge.id}\u001fsim:${amountIn}`,
+      value: Object.freeze({
+        routeKey,
+        tokenIn: projected.edge.tokenIn,
+        tokenOut: projected.edge.tokenOut,
+        canonicalEdgeId: edge.id,
+        amountIn: amountIn.toString(),
+        amountOut: amountOut.toString(),
+        minAmountOut: amountOut.toString(),
+        effectsFingerprint: hashCanonical(
+          outcome.expectedEffects as unknown as CanonicalValue,
+        ),
+        conservation: "conserved",
+        repayment: "standing-position",
+        evInput: Object.freeze({
+          amountIn: amountIn.toString(),
+          amountOut: amountOut.toString(),
+        }),
+      }),
+    }));
+  }
+  const instances = Object.freeze([instance]);
+  const summary = definedFamilyPluginContractSummary(family.plugin);
+  return Object.freeze({
+    familyId: FLUID_CREDIT_FAMILY_ID,
+    caseId: input.caseId ?? `credit:fluid:${input.source.number}`,
+    inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
+    stateAnchorNumber: input.source.number,
+    implementationClosureHash: summary.definitionBoundaryHash,
+    stages: Object.freeze({
+      instances: instanceStage(instances, evidenceRefs),
+      edges: exercisedStage(edges, evidenceRefs),
+      stateCoverage: absentStage,
+      pricedEdges: absentStage,
+      prices: absentStage,
+      failures: exercisedStage([], evidenceRefs),
+      enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
+      exactQuotes: absentStage,
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),

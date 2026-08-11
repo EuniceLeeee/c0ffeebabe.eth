@@ -74,6 +74,10 @@ import { DODO_V2_FAMILY_ID } from
   "./venues/swaps/dodo-v2-family/manifest.js";
 import { staticBindingProjection as dodoV2StaticBindingProjection } from
   "./venues/swaps/dodo-v2-family/instance.js";
+import { FLUID_CREDIT_FAMILY_ID } from
+  "./venues/credit/fluid-family/manifest.js";
+import { fluidCreditStaticBindingProjection } from
+  "./venues/credit/fluid-family/instance.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -353,6 +357,20 @@ export interface BaselineDodoV2Facts {
   readonly tokenOut: string;
 }
 
+export interface BaselineFluidCreditFacts {
+  readonly familyId: "credit:fluid";
+  readonly vault: string;
+  readonly supplyToken: string;
+  readonly borrowToken: string;
+  readonly supplyDecimals: number;
+  readonly borrowDecimals: number;
+  readonly factory: string;
+  readonly vaultId: string;
+  readonly reverseVault: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -391,6 +409,7 @@ export function normalizeBaselineMigrationItems(
         "custom-swap:angstrom-v4":
           normalizeBaselineAngstromV4InstanceItem,
         "custom-swap:dodo-v2": normalizeBaselineDodoV2InstanceItem,
+        "credit:fluid": normalizeBaselineFluidCreditInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -423,6 +442,7 @@ export function normalizeBaselineMigrationItems(
         "custom-swap:angstrom-v4":
           normalizeBaselineAngstromV4PriceItem,
         "custom-swap:dodo-v2": normalizeBaselineDodoV2PriceItem,
+        "credit:fluid": normalizeBaselineFluidCreditPriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -455,6 +475,7 @@ export function normalizeBaselineMigrationItems(
         "custom-swap:angstrom-v4":
           normalizeBaselineAngstromV4EdgeItem,
         "custom-swap:dodo-v2": normalizeBaselineDodoV2EdgeItem,
+        "credit:fluid": normalizeBaselineFluidCreditEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -491,6 +512,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineAngstromV4EnumeratedRouteItem,
         "custom-swap:dodo-v2":
           normalizeBaselineDodoV2EnumeratedRouteItem,
+        "credit:fluid":
+          normalizeBaselineFluidCreditEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -523,6 +546,7 @@ export function normalizeBaselineMigrationItems(
         "custom-swap:angstrom-v4":
           normalizeBaselineAngstromV4ExactQuoteItem,
         "custom-swap:dodo-v2": normalizeBaselineDodoV2ExactQuoteItem,
+        "credit:fluid": normalizeBaselineFluidCreditExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -564,6 +588,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineAngstromV4ExecutionFragmentItem,
         "custom-swap:dodo-v2":
           normalizeBaselineDodoV2ExecutionFragmentItem,
+        "credit:fluid":
+          normalizeBaselineFluidCreditExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -605,6 +631,8 @@ export function normalizeBaselineMigrationItems(
           normalizeBaselineAngstromV4FinalSimulationItem,
         "custom-swap:dodo-v2":
           normalizeBaselineDodoV2FinalSimulationItem,
+        "credit:fluid":
+          normalizeBaselineFluidCreditFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -671,6 +699,9 @@ function normalizeByFamily(
     readonly "custom-swap:dodo-v2": (
       item: RawMigrationSemanticItem,
     ) => RawMigrationSemanticItem;
+    readonly "credit:fluid": (
+      item: RawMigrationSemanticItem,
+    ) => RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -723,6 +754,9 @@ function normalizeByFamily(
   }
   if (familyId === "custom-swap:dodo-v2") {
     return handlers["custom-swap:dodo-v2"](item);
+  }
+  if (familyId === "credit:fluid") {
+    return handlers["credit:fluid"](item);
   }
   return handlers.default(item);
 }
@@ -7677,6 +7711,286 @@ export function normalizeBaselineDodoV2FinalSimulationItem(
   });
 }
 
+function fluidCreditFactsGuard(
+  facts: Partial<BaselineFluidCreditFacts> | undefined,
+): facts is Required<BaselineFluidCreditFacts> {
+  return facts !== undefined &&
+    facts.familyId === "credit:fluid" &&
+    typeof facts.vault === "string" &&
+    typeof facts.supplyToken === "string" &&
+    typeof facts.borrowToken === "string" &&
+    Number.isSafeInteger(facts.supplyDecimals) &&
+    Number.isSafeInteger(facts.borrowDecimals) &&
+    typeof facts.factory === "string" &&
+    typeof facts.vaultId === "string" &&
+    typeof facts.reverseVault === "string" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function fluidCreditFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineFluidCreditFacts>;
+  })?.baselineFacts;
+  if (!fluidCreditFactsGuard(facts)) return null;
+  return facts;
+}
+
+function deriveFluidCreditCanonicalFacts(
+  facts: Required<BaselineFluidCreditFacts>,
+): {
+  readonly vault: string;
+  readonly supplyToken: string;
+  readonly borrowToken: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly lowerVault: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const vault = canonicalAddress(facts.vault);
+  const supplyToken = canonicalAddress(facts.supplyToken);
+  const borrowToken = canonicalAddress(facts.borrowToken);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const lowerVault = lowerAddress(vault);
+  const descriptor = Object.freeze({
+    vault,
+    supplyToken,
+    borrowToken,
+    supplyDecimals: facts.supplyDecimals,
+    borrowDecimals: facts.borrowDecimals,
+    factoryBinding: Object.freeze({
+      factory: canonicalAddress(facts.factory),
+      vaultId: BigInt(facts.vaultId),
+      reverseVault: canonicalAddress(facts.reverseVault),
+    }),
+  }) as unknown as import("./venues/credit/fluid-family/types.js")
+    .FluidCreditDescriptor;
+  const bindingFingerprint = hashCanonical(
+    fluidCreditStaticBindingProjection(descriptor),
+  );
+  const venueIdentityHash = hashCanonical(Object.freeze({
+    kind: "address-credit-vault",
+    target: lowerVault,
+  }));
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const routeKeyValue = [
+    "credit:fluid",
+    lowerVault,
+    lowerTokenIn,
+    lowerTokenOut,
+    "standing-position",
+  ].join("\u001f");
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "credit:fluid",
+    lowerVault,
+    lowerVault,
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    vault,
+    supplyToken,
+    borrowToken,
+    tokenIn,
+    tokenOut,
+    lowerVault,
+    lowerTokenIn,
+    lowerTokenOut,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineFluidCreditEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = fluidCreditFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveFluidCreditCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineFluidCreditPriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  return item;
+}
+
+export function normalizeBaselineFluidCreditExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  return item;
+}
+
+export function normalizeBaselineFluidCreditEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineFluidCreditEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "credit:fluid baseline enumerated route item must carry a " +
+        "non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineFluidCreditInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = fluidCreditFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveFluidCreditCanonicalFacts(facts);
+  const descriptor = Object.freeze({
+    vault: derived.vault,
+    supplyToken: derived.supplyToken,
+    borrowToken: derived.borrowToken,
+    supplyDecimals: facts.supplyDecimals,
+    borrowDecimals: facts.borrowDecimals,
+    factoryBinding: Object.freeze({
+      factory: canonicalAddress(facts.factory),
+      vaultId: BigInt(facts.vaultId),
+      reverseVault: canonicalAddress(facts.reverseVault),
+    }),
+  }) as unknown as import("./venues/credit/fluid-family/types.js")
+    .FluidCreditDescriptor;
+  const staticBindingFingerprint = hashCanonical({
+    capability: FLUID_CREDIT_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: fluidCreditStaticBindingProjection(descriptor),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerVault,
+    value: Object.freeze({
+      familyId: "credit:fluid",
+      instanceKey: derived.lowerVault,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineFluidCreditExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = fluidCreditFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveFluidCreditCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "fluid-vault",
+      executionTarget: derived.vault,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineFluidCreditFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = fluidCreditFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "standing-position" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveFluidCreditCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -7770,4 +8084,9 @@ const ANGSTROM_V4_CATALOG_FAMILY =
 const DODO_V2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     DODO_V2_FAMILY_ID,
+  );
+
+const FLUID_CREDIT_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forStrictFamily(
+    FLUID_CREDIT_FAMILY_ID,
   );
