@@ -5,6 +5,8 @@ import {
   COMMON_GRAPH_MIGRATION_STAGES,
   PRODUCTION_ARCHITECTURE_MIGRATION_COHORT,
   PRODUCTION_ARCHITECTURE_MIGRATION_FAMILY_IDS,
+  createArchitectureMigrationProductionCaptureIssuer,
+  issueArchitectureMigrationSideCapture,
   runArchitectureMigrationBatchParity,
   sealArchitectureMigrationBatchInput,
   type ArchitectureMigrationBatchInput,
@@ -15,6 +17,7 @@ import {
   type RawFamilyMigrationCaseCapture,
   type RawMigrationStageCapture,
   type SealedArchitectureMigrationBatchInput,
+  type SealedArchitectureMigrationSideCapture,
 } from "../architecture-migration-parity-runner.js";
 
 const SHA = (value: string) =>
@@ -128,6 +131,89 @@ assert.throws(
   }),
   /requires the trusted production capture issuer/,
   "a caller cannot promote unit fixtures by self-declaring sealed production",
+);
+
+const productionIssuer = createArchitectureMigrationProductionCaptureIssuer();
+const rawSealedFixture = fixtureInput({});
+const sealedSide = (side: Side) =>
+  issueArchitectureMigrationSideCapture(
+    productionIssuer,
+    rawSealedFixture[side],
+  );
+const sealedProduction = sealArchitectureMigrationBatchInput({
+  ...rawSealedFixture,
+  evidenceClass: "sealed-production",
+  productionCaptureIssuer: productionIssuer,
+  baseline: sealedSide("baseline"),
+  challenger: sealedSide("challenger"),
+});
+const sealedProductionReceipt = runArchitectureMigrationBatchParity(
+  sealedProduction,
+);
+assert.equal(sealedProductionReceipt.evidenceClass, "sealed-production");
+assert.equal(sealedProductionReceipt.acceptance.eligible, true);
+assert.equal(sealedProductionReceipt.parityReceipt.aggregateVerdict, "pass");
+assert.equal(sealedProductionReceipt.baselineCaptureId,
+  rawSealedFixture.baseline.closure.captureId);
+
+const forgedSealed = Object.freeze({}) as SealedArchitectureMigrationSideCapture;
+assert.throws(
+  () => sealArchitectureMigrationBatchInput({
+    ...rawSealedFixture,
+    evidenceClass: "sealed-production",
+    productionCaptureIssuer: productionIssuer,
+    baseline: forgedSealed,
+    challenger: sealedSide("challenger"),
+  }),
+  /requires the trusted production capture issuer/,
+);
+
+const foreignIssuer = createArchitectureMigrationProductionCaptureIssuer();
+assert.throws(
+  () => sealArchitectureMigrationBatchInput({
+    ...rawSealedFixture,
+    evidenceClass: "sealed-production",
+    productionCaptureIssuer: foreignIssuer,
+    baseline: sealedSide("baseline"),
+    challenger: sealedSide("challenger"),
+  }),
+  /requires the trusted production capture issuer/,
+);
+
+assert.throws(
+  () => sealArchitectureMigrationBatchInput({
+    ...rawSealedFixture,
+    baseline: sealedSide("baseline"),
+    challenger: sealedSide("challenger"),
+  } as unknown as ArchitectureMigrationBatchInput),
+  /unit-contract evidence cannot use sealed production captures/,
+);
+
+const evidenceStripped = {
+  ...rawSealedFixture.baseline,
+  familyCases: rawSealedFixture.baseline.familyCases.map((familyCase) => ({
+    ...familyCase,
+    stages: Object.fromEntries(
+      Object.entries(familyCase.stages).map(([stage, stageCapture]) => [
+        stage,
+        stageCapture === undefined
+          ? undefined
+          : {
+              ...stageCapture,
+              evidenceRefs: stageCapture.status === "exercised"
+                ? []
+                : stageCapture.evidenceRefs,
+            },
+      ]),
+    ),
+  })),
+} as RawArchitectureMigrationSideCapture;
+assert.throws(
+  () => issueArchitectureMigrationSideCapture(
+    productionIssuer,
+    evidenceStripped,
+  ),
+  /lacks evidenceRefs/,
 );
 
 const changed = sealArchitectureMigrationBatchInput(fixtureInput({

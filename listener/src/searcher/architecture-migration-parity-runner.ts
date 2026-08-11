@@ -116,6 +116,23 @@ export type ArchitectureMigrationEvidenceClass =
   | "unit-contract"
   | "sealed-production";
 
+declare const architectureMigrationProductionCaptureIssuerBrand: unique symbol;
+
+export interface ArchitectureMigrationProductionCaptureIssuer {
+  readonly [architectureMigrationProductionCaptureIssuerBrand]: true;
+}
+
+declare const sealedProductionSideCaptureBrand: unique symbol;
+
+/**
+ * Opaque issuer-bound side capture. Only the trusted production capture
+ * issuer can mint it; a caller cannot promote unit fixtures by self-declaring
+ * `sealed-production`.
+ */
+export interface SealedArchitectureMigrationSideCapture {
+  readonly [sealedProductionSideCaptureBrand]: true;
+}
+
 export interface ArchitectureMigrationBatchInput {
   readonly evidenceClass: ArchitectureMigrationEvidenceClass;
   readonly mode: ArchitectureMigrationMode;
@@ -129,6 +146,17 @@ export interface ArchitectureMigrationBatchInput {
     readonly batchCount: number;
     readonly peakConcurrency: number;
   };
+}
+
+export interface SealedProductionArchitectureMigrationBatchInput
+  extends Omit<
+    ArchitectureMigrationBatchInput,
+    "evidenceClass" | "baseline" | "challenger"
+  > {
+  readonly evidenceClass: "sealed-production";
+  readonly baseline: SealedArchitectureMigrationSideCapture;
+  readonly challenger: SealedArchitectureMigrationSideCapture;
+  readonly productionCaptureIssuer: ArchitectureMigrationProductionCaptureIssuer;
 }
 
 declare const SEALED_MIGRATION_BATCH_INPUT: unique symbol;
@@ -233,21 +261,153 @@ const FAMILY_CONTRACTS = new Map(
   PRODUCTION_ARCHITECTURE_MIGRATION_COHORT.map((item) => [item.familyId, item]),
 );
 const SEALED_INPUTS = new WeakSet<object>();
+const productionCaptureIssuers = new WeakSet<object>();
+const issuedProductionSideCaptures = new WeakMap<
+  object,
+  {
+    readonly issuer: ArchitectureMigrationProductionCaptureIssuer;
+    readonly capture: RawArchitectureMigrationSideCapture;
+  }
+>();
 
 export function sealArchitectureMigrationBatchInput(
-  input: ArchitectureMigrationBatchInput,
+  input:
+    | ArchitectureMigrationBatchInput
+    | SealedProductionArchitectureMigrationBatchInput,
 ): SealedArchitectureMigrationBatchInput {
-  if (input.evidenceClass !== "unit-contract") {
-    throw new Error(
-      "sealed-production evidence requires the trusted production capture issuer",
-    );
-  }
-  assertNoSharedObjectReferences(input.baseline, input.challenger);
-  const clone = structuredClone(input) as ArchitectureMigrationBatchInput;
+  const evidenceClass = input.evidenceClass;
+  const productionCaptureIssuer = "productionCaptureIssuer" in input
+    ? input.productionCaptureIssuer
+    : undefined;
+  const baseline = resolveBatchSideCapture(
+    productionCaptureIssuer,
+    input.baseline,
+    evidenceClass,
+  );
+  const challenger = resolveBatchSideCapture(
+    productionCaptureIssuer,
+    input.challenger,
+    evidenceClass,
+  );
+  assertNoSharedObjectReferences(baseline, challenger);
+  const clone = structuredClone({
+    ...input,
+    baseline,
+    challenger,
+  }) as ArchitectureMigrationBatchInput;
   validateBatchInput(clone);
   const frozen = deepFreeze(clone) as SealedArchitectureMigrationBatchInput;
   SEALED_INPUTS.add(frozen);
   return frozen;
+}
+
+export function createArchitectureMigrationProductionCaptureIssuer(): ArchitectureMigrationProductionCaptureIssuer {
+  const issuer = Object.freeze({}) as
+    ArchitectureMigrationProductionCaptureIssuer;
+  productionCaptureIssuers.add(issuer);
+  return issuer;
+}
+
+export function issueArchitectureMigrationSideCapture(
+  issuer: ArchitectureMigrationProductionCaptureIssuer,
+  capture: RawArchitectureMigrationSideCapture,
+): SealedArchitectureMigrationSideCapture {
+  if (!productionCaptureIssuers.has(issuer)) {
+    throw new Error("production capture issuer was not centrally issued");
+  }
+  validateProductionSideCaptureEvidence(capture);
+  const handle = Object.freeze({}) as SealedArchitectureMigrationSideCapture;
+  issuedProductionSideCaptures.set(handle, Object.freeze({
+    issuer,
+    capture: deepFreeze(structuredClone(capture)),
+  }));
+  return handle;
+}
+
+function resolveBatchSideCapture(
+  issuer: ArchitectureMigrationProductionCaptureIssuer | undefined,
+  capture: RawArchitectureMigrationSideCapture |
+    SealedArchitectureMigrationSideCapture,
+  evidenceClass: ArchitectureMigrationEvidenceClass,
+): RawArchitectureMigrationSideCapture {
+  if (evidenceClass === "sealed-production") {
+    if (
+      issuer === undefined ||
+      capture === null ||
+      typeof capture !== "object" ||
+      !Object.isFrozen(capture) ||
+      !issuedProductionSideCaptures.has(capture)
+    ) {
+      throw new Error(
+        "sealed-production evidence requires the trusted production capture issuer",
+      );
+    }
+    const record = issuedProductionSideCaptures.get(capture)!;
+    if (record.issuer !== issuer) {
+      throw new Error(
+        "sealed-production evidence requires the trusted production capture issuer",
+      );
+    }
+    return record.capture;
+  }
+  if (
+    capture === null ||
+    typeof capture !== "object" ||
+    !("closure" in capture)
+  ) {
+    throw new Error(
+      "unit-contract evidence cannot use sealed production captures",
+    );
+  }
+  return capture as RawArchitectureMigrationSideCapture;
+}
+
+function validateProductionSideCaptureEvidence(
+  capture: RawArchitectureMigrationSideCapture,
+): void {
+  validateClosure(capture.closure, "production capture");
+  for (const familyCase of capture.familyCases) {
+    nonempty(familyCase.familyId, "family case familyId");
+    nonempty(familyCase.caseId, "family case caseId");
+    nonempty(familyCase.inputFingerprint, "family case inputFingerprint");
+    nonempty(
+      familyCase.implementationClosureHash,
+      "family case implementationClosureHash",
+    );
+    for (const [stage, stageCapture] of Object.entries(familyCase.stages)) {
+      if (stageCapture?.status === "exercised") {
+        validateEvidenceRefs(
+          stageCapture.evidenceRefs,
+          `${familyCase.familyId}:${stage}`,
+          true,
+        );
+      }
+    }
+  }
+  const commonGraph = capture.commonGraph;
+  if (commonGraph !== null) {
+    nonempty(commonGraph.inputFingerprint, "common Graph inputFingerprint");
+    for (const [stage, stageCapture] of Object.entries(commonGraph.stages)) {
+      if (stageCapture?.status === "exercised") {
+        validateEvidenceRefs(
+          stageCapture.evidenceRefs,
+          `common:${stage}`,
+          true,
+        );
+      }
+    }
+  }
+  const standalone = capture.nonMigratedFamilies;
+  if (standalone !== null) {
+    nonempty(standalone.inputFingerprint, "standalone inputFingerprint");
+    if (standalone.stage.status === "exercised") {
+      validateEvidenceRefs(
+        standalone.stage.evidenceRefs,
+        "standalone",
+        true,
+      );
+    }
+  }
 }
 
 export function runArchitectureMigrationBatchParity(
