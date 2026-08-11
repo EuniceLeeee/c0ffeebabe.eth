@@ -9,6 +9,8 @@ import { UNIV2_FAMILY_ID } from
   "./venues/swaps/univ2-family/manifest.js";
 import { UNIV3_FAMILY_ID } from
   "./venues/swaps/univ3-family/manifest.js";
+import { UNIV4_FAMILY_ID } from
+  "./venues/swaps/univ4-family/manifest.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -53,6 +55,26 @@ export interface BaselineUniv3EdgeFacts {
   readonly quoterProvenance: string;
 }
 
+export interface BaselineUniv4EdgeFacts {
+  readonly familyId: "univ4";
+  readonly manager: string;
+  readonly poolId: string;
+  readonly currency0: string;
+  readonly currency1: string;
+  readonly fee: number;
+  readonly tickSpacing: number;
+  readonly hooks: string;
+  readonly graphToken0: string;
+  readonly graphToken1: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly stateView: string;
+  readonly quoter: string;
+  readonly managerCodeHash: string;
+  readonly lpFee: string;
+  readonly hookPolicy: "no-hook";
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -65,51 +87,65 @@ export function normalizeBaselineMigrationItems(
 ): readonly RawMigrationSemanticItem[] {
   if (stage === "instances") {
     return Object.freeze(items.map((item) =>
-      baselineFamilyId(item) === "univ3-standard"
-        ? normalizeBaselineUniv3InstanceItem(item)
-        : normalizeBaselineUniv2InstanceItem(item)
+      normalizeByFamily(item, {
+        "univ3-standard": normalizeBaselineUniv3InstanceItem,
+        univ4: normalizeBaselineUniv4InstanceItem,
+        default: normalizeBaselineUniv2InstanceItem,
+      })
     ));
   }
   if (stage === "prices") {
     return Object.freeze(items.map((item) =>
-      baselineFamilyId(item) === "univ3-standard"
-        ? normalizeBaselineUniv3PriceItem(item)
-        : normalizeBaselineUniv2PriceItem(item)
+      normalizeByFamily(item, {
+        "univ3-standard": normalizeBaselineUniv3PriceItem,
+        univ4: normalizeBaselineUniv4PriceItem,
+        default: normalizeBaselineUniv2PriceItem,
+      })
     ));
   }
   if (stage === "edges") {
     return Object.freeze(items.map((item) =>
-      baselineFamilyId(item) === "univ3-standard"
-        ? normalizeBaselineUniv3EdgeItem(item)
-        : normalizeBaselineUniv2EdgeItem(item)
+      normalizeByFamily(item, {
+        "univ3-standard": normalizeBaselineUniv3EdgeItem,
+        univ4: normalizeBaselineUniv4EdgeItem,
+        default: normalizeBaselineUniv2EdgeItem,
+      })
     ));
   }
   if (stage === "enumeratedRoutes") {
     return Object.freeze(items.map((item) =>
-      baselineFamilyId(item) === "univ3-standard"
-        ? normalizeBaselineUniv3EnumeratedRouteItem(item)
-        : normalizeBaselineUniv2EnumeratedRouteItem(item)
+      normalizeByFamily(item, {
+        "univ3-standard": normalizeBaselineUniv3EnumeratedRouteItem,
+        univ4: normalizeBaselineUniv4EnumeratedRouteItem,
+        default: normalizeBaselineUniv2EnumeratedRouteItem,
+      })
     ));
   }
   if (stage === "exactQuotes") {
     return Object.freeze(items.map((item) =>
-      baselineFamilyId(item) === "univ3-standard"
-        ? normalizeBaselineUniv3ExactQuoteItem(item)
-        : normalizeBaselineUniv2ExactQuoteItem(item)
+      normalizeByFamily(item, {
+        "univ3-standard": normalizeBaselineUniv3ExactQuoteItem,
+        univ4: normalizeBaselineUniv4ExactQuoteItem,
+        default: normalizeBaselineUniv2ExactQuoteItem,
+      })
     ));
   }
   if (stage === "executionFragments") {
     return Object.freeze(items.map((item) =>
-      baselineFamilyId(item) === "univ3-standard"
-        ? normalizeBaselineUniv3ExecutionFragmentItem(item)
-        : normalizeBaselineUniv2ExecutionFragmentItem(item)
+      normalizeByFamily(item, {
+        "univ3-standard": normalizeBaselineUniv3ExecutionFragmentItem,
+        univ4: normalizeBaselineUniv4ExecutionFragmentItem,
+        default: normalizeBaselineUniv2ExecutionFragmentItem,
+      })
     ));
   }
   if (stage === "finalSimulations") {
     return Object.freeze(items.map((item) =>
-      baselineFamilyId(item) === "univ3-standard"
-        ? normalizeBaselineUniv3FinalSimulationItem(item)
-        : normalizeBaselineUniv2FinalSimulationItem(item)
+      normalizeByFamily(item, {
+        "univ3-standard": normalizeBaselineUniv3FinalSimulationItem,
+        univ4: normalizeBaselineUniv4FinalSimulationItem,
+        default: normalizeBaselineUniv2FinalSimulationItem,
+      })
     ));
   }
   return Object.freeze(items.map((item) =>
@@ -121,6 +157,23 @@ function baselineFamilyId(item: RawMigrationSemanticItem): string | undefined {
   return (item.value as {
     readonly baselineFacts?: { readonly familyId?: string };
   })?.baselineFacts?.familyId;
+}
+
+function normalizeByFamily(
+  item: RawMigrationSemanticItem,
+  handlers: {
+    readonly "univ3-standard": (item: RawMigrationSemanticItem) =>
+      RawMigrationSemanticItem;
+    readonly univ4: (item: RawMigrationSemanticItem) =>
+      RawMigrationSemanticItem;
+    readonly default: (item: RawMigrationSemanticItem) =>
+      RawMigrationSemanticItem;
+  },
+): RawMigrationSemanticItem {
+  const familyId = baselineFamilyId(item);
+  if (familyId === "univ3-standard") return handlers["univ3-standard"](item);
+  if (familyId === "univ4") return handlers.univ4(item);
+  return handlers.default(item);
 }
 
 interface BaselineUniv2ExecutionNode {
@@ -835,6 +888,417 @@ function deriveUniv3CanonicalFacts(
   });
 }
 
+function univ4FactsGuard(
+  facts: Partial<BaselineUniv4EdgeFacts> | undefined,
+): facts is Required<BaselineUniv4EdgeFacts> {
+  return facts !== undefined &&
+    facts.familyId === "univ4" &&
+    typeof facts.manager === "string" &&
+    typeof facts.poolId === "string" &&
+    typeof facts.currency0 === "string" &&
+    typeof facts.currency1 === "string" &&
+    typeof facts.fee === "number" &&
+    typeof facts.tickSpacing === "number" &&
+    typeof facts.hooks === "string" &&
+    typeof facts.graphToken0 === "string" &&
+    typeof facts.graphToken1 === "string" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string" &&
+    typeof facts.stateView === "string" &&
+    typeof facts.quoter === "string" &&
+    typeof facts.managerCodeHash === "string" &&
+    typeof facts.lpFee === "string" &&
+    facts.hookPolicy === "no-hook";
+}
+
+function univ4FactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineUniv4EdgeFacts>;
+  })?.baselineFacts;
+  if (!univ4FactsGuard(facts)) return null;
+  return facts;
+}
+
+function deriveUniv4CanonicalFacts(
+  facts: Required<BaselineUniv4EdgeFacts>,
+): {
+  readonly manager: string;
+  readonly poolId: string;
+  readonly currency0: string;
+  readonly currency1: string;
+  readonly fee: number;
+  readonly tickSpacing: number;
+  readonly hooks: string;
+  readonly graphToken0: string;
+  readonly graphToken1: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly stateView: string;
+  readonly quoter: string;
+  readonly managerCodeHash: string;
+  readonly lpFee: bigint;
+  readonly lowerManager: string;
+  readonly lowerPoolId: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly instanceKeyValue: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const manager = canonicalAddress(facts.manager);
+  const poolId = facts.poolId.toLowerCase();
+  const currency0 = canonicalAddress(facts.currency0);
+  const currency1 = canonicalAddress(facts.currency1);
+  const hooks = canonicalAddress(facts.hooks);
+  const graphToken0 = canonicalAddress(facts.graphToken0);
+  const graphToken1 = canonicalAddress(facts.graphToken1);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const stateView = canonicalAddress(facts.stateView);
+  const quoter = canonicalAddress(facts.quoter);
+  const managerCodeHash = facts.managerCodeHash.toLowerCase();
+  const lpFee = BigInt(facts.lpFee);
+  const poolKey = Object.freeze({
+    currency0,
+    currency1,
+    fee: facts.fee,
+    tickSpacing: facts.tickSpacing,
+    hooks,
+  });
+  const bindingFingerprint = hashCanonical({
+    poolId,
+    poolKey,
+    managerBinding: Object.freeze({
+      manager,
+      stateView,
+      quoter,
+      managerCodeHash,
+    }),
+    hookPolicy: facts.hookPolicy,
+  });
+  const lowerManager = lowerAddress(manager);
+  const lowerPoolId = poolId;
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const venueIdentityHash = hashCanonical({
+    kind: "manager-pool-id",
+    manager: lowerManager,
+    poolId: lowerPoolId,
+  });
+  const routeKeyValue = [
+    "univ4",
+    lowerManager,
+    lowerPoolId,
+    lowerTokenIn,
+    lowerTokenOut,
+  ].join("\u001f");
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const instanceKeyValue = `${lowerManager}\u001f${lowerPoolId}`;
+  const canonicalId = [
+    "univ4",
+    lowerManager,
+    lowerPoolId,
+    lowerManager,
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    manager,
+    poolId,
+    currency0,
+    currency1,
+    fee: facts.fee,
+    tickSpacing: facts.tickSpacing,
+    hooks,
+    graphToken0,
+    graphToken1,
+    tokenIn,
+    tokenOut,
+    stateView,
+    quoter,
+    managerCodeHash,
+    lpFee,
+    lowerManager,
+    lowerPoolId,
+    lowerTokenIn,
+    lowerTokenOut,
+    instanceKeyValue,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineUniv4EdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = univ4FactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveUniv4CanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineUniv4EnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineUniv4EdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "univ4 baseline enumerated route item must carry a non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineUniv4InstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = univ4FactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveUniv4CanonicalFacts(facts);
+  const poolKey = Object.freeze({
+    currency0: derived.currency0,
+    currency1: derived.currency1,
+    fee: derived.fee,
+    tickSpacing: derived.tickSpacing,
+    hooks: derived.hooks,
+  });
+  const staticBindingFingerprint = hashCanonical({
+    capability: UNIV4_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: Object.freeze({
+      poolId: derived.poolId,
+      poolKey,
+      managerBinding: Object.freeze({
+        manager: derived.manager,
+        stateView: derived.stateView,
+        quoter: derived.quoter,
+        managerCodeHash: derived.managerCodeHash,
+      }),
+      hookPolicy: facts.hookPolicy,
+    }),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.instanceKeyValue,
+    value: Object.freeze({
+      familyId: "univ4",
+      instanceKey: derived.instanceKeyValue,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineUniv4PriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = univ4FactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly sqrtABX96?: unknown;
+      readonly liquidity?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    (typeof mid.sqrtABX96 !== "string" && typeof mid.sqrtABX96 !== "bigint") ||
+    (typeof mid.liquidity !== "string" && typeof mid.liquidity !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveUniv4CanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "univ4-unlock",
+    instanceKey: derived.instanceKeyValue,
+    target: derived.manager,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "swap" as const,
+    poolId: derived.poolId,
+    poolToken0: derived.graphToken0,
+    poolToken1: derived.graphToken1,
+    v4PoolKey: Object.freeze({
+      currency0: derived.currency0,
+      currency1: derived.currency1,
+      fee: derived.fee,
+      tickSpacing: derived.tickSpacing,
+      hooks: derived.hooks,
+    }),
+    edgeKind: "swap" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.poolId,
+      mid: Object.freeze({
+        kind: "v4",
+        pool: derived.manager,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        sqrtABX96: BigInt(mid.sqrtABX96).toString(),
+        liquidity: BigInt(mid.liquidity).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineUniv4ExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = univ4FactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveUniv4CanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: (Number(derived.lpFee) / 100).toString(),
+    }),
+  });
+}
+
+export function normalizeBaselineUniv4ExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = univ4FactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveUniv4CanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "univ4-unlock",
+      executionTarget: derived.manager,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineUniv4FinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = univ4FactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveUniv4CanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 function univ3FactsOf(item: RawMigrationSemanticItem) {
   const facts = (item.value as {
     readonly baselineFacts?: Partial<BaselineUniv3EdgeFacts>;
@@ -1204,4 +1668,9 @@ const UNIV2_CATALOG_FAMILY =
 const UNIV3_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV3_FAMILY_ID,
+  );
+
+const UNIV4_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    UNIV4_FAMILY_ID,
   );

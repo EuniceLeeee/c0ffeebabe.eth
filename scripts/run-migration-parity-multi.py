@@ -59,21 +59,27 @@ def main() -> None:
     for index, case in enumerate(manifest["cases"]):
         descriptor = {
             "family": case["family"],
-            "pool": case["pool"],
-            "tokenA": case["tokenA"],
-            "tokenB": case["tokenB"],
             "sourceBlock": manifest["sourceBlock"],
             "sourceBlockHash": manifest["sourceBlockHash"],
         }
-        for key in (
-            "reserves",
-            "fee",
-            "tickSpacing",
-            "liquidity",
-            "sqrtPriceX96",
-        ):
-            if key in case:
-                descriptor[key] = case[key]
+        if case["family"] == "univ4":
+            for key in (
+                "currency0",
+                "currency1",
+                "fee",
+                "tickSpacing",
+                "hooks",
+                "liquidity",
+                "sqrtPriceX96",
+                "lpFee",
+            ):
+                if key in case:
+                    descriptor[key] = case[key]
+        else:
+            for key in ("pool", "tokenA", "tokenB", "reserves", "fee",
+                        "tickSpacing", "liquidity", "sqrtPriceX96"):
+                if key in case:
+                    descriptor[key] = case[key]
         descriptor_path = os.path.join(args.out, f"baseline-case-{index}.json")
         side_path = os.path.join(args.out, f"baseline-side-{index}.json")
         with open(descriptor_path, "w") as handle:
