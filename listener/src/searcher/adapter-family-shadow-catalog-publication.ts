@@ -44,7 +44,14 @@ import {
   type PreparedFamilyInstance,
   type PreparedPricingStateInstance,
 } from "./venues/adapter-family-runtime.js";
-import { instanceKey, lineageId, type FamilyId, type RouteKey } from
+import {
+  instanceKey,
+  lineageId,
+  type FamilyId,
+  type InstanceKey,
+  type LineageId,
+  type RouteKey,
+} from
   "./venues/adapter-family-identifiers.js";
 import type { RouteVenueMid } from
   "./venues/mid-readers.js";
@@ -148,13 +155,15 @@ export function readStrictPricingMid(input: {
   const pricing = input.views.pricingByPublicationKey.get(
     input.pricingPublicationKey,
   );
-  if (pricing === undefined) return { kind: "missing" };
+  if (pricing === undefined) return Object.freeze({ kind: "missing" });
   const unavailable = pricing.unavailable.get(input.routeKey);
   if (unavailable !== undefined) {
-    return { kind: "unavailable", reason: unavailable };
+    return Object.freeze({ kind: "unavailable", reason: unavailable });
   }
   const mid = pricing.mids.get(input.routeKey);
-  return mid === undefined ? { kind: "missing" } : { kind: "mid", mid };
+  return mid === undefined
+    ? Object.freeze({ kind: "missing" })
+    : Object.freeze({ kind: "mid", mid });
 }
 
 export type StrictFundingReadOutcome =
@@ -174,9 +183,9 @@ export function readStrictFundingOffers(input: {
   const state = input.views.fundingByPublicationKey.get(
     input.fundingPublicationKey,
   );
-  if (state === undefined) return { kind: "missing" };
-  if (state.tombstone) return { kind: "tombstone" };
-  return { kind: "offers", offers: state.offers };
+  if (state === undefined) return Object.freeze({ kind: "missing" });
+  if (state.tombstone) return Object.freeze({ kind: "tombstone" });
+  return Object.freeze({ kind: "offers", offers: state.offers });
 }
 
 /**
@@ -192,6 +201,37 @@ export function readStrictCreditRoute(input: {
   return input.views.handleByCanonicalEdgeId.get(
     input.canonicalEdgeId,
   ) ?? null;
+}
+
+/**
+ * Public pricing publication key derivation, identical to the internal
+ * strict-shadow-pricing-key-v1 format so consumers can locate the exact
+ * publication without reverse-engineering the envelope.
+ */
+export function strictPricingPublicationKey(input: {
+  readonly familyId: FamilyId;
+  readonly lineageId: LineageId;
+  readonly instanceKey: InstanceKey;
+  readonly stateInstanceKey: string;
+}): string {
+  return hashCanonical({
+    format: "strict-shadow-pricing-key-v1",
+    familyId: input.familyId,
+    lineageId: input.lineageId,
+    instanceKey: input.instanceKey,
+    stateInstanceKey: input.stateInstanceKey,
+  });
+}
+
+/** Funding publication keys published for one Family in a committed view. */
+export function strictFundingPublicationKeysByFamily(input: {
+  readonly views: StrictShadowCatalogViews;
+  readonly familyId: FamilyId;
+}): readonly string[] {
+  return [...input.views.fundingByPublicationKey.entries()]
+    .filter(([, state]) => state.familyId === input.familyId)
+    .map(([key]) => key)
+    .sort();
 }
 
 export interface StrictCatalogConsumer {
@@ -525,6 +565,17 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     >();
     for (const route of input.publication.routes) {
       assertIssuedCreditRouteRuntimeHandle(input.family, route);
+      if (route.instanceKey !== input.instance.instanceKey) {
+        throw new Error("Credit route escaped its staged instance");
+      }
+      if (
+        route.source.number !== input.publication.source.number ||
+        route.source.hash.toLowerCase() !==
+          input.publication.source.hash.toLowerCase() ||
+        route.source.generation !== input.publication.source.generation
+      ) {
+        throw new Error("Credit route source escaped its publication");
+      }
       const projected = projectCreditRouteGraph({
         family: input.family,
         route,
@@ -1100,8 +1151,7 @@ function pricingPublicationKey(
   instance: PreparedFamilyInstance,
   pricing: PreparedPricingStateInstance,
 ): string {
-  return hashCanonical({
-    format: "strict-shadow-pricing-key-v1",
+  return strictPricingPublicationKey({
     familyId: instance.familyId,
     lineageId: instance.lineageId,
     instanceKey: instance.instanceKey,
