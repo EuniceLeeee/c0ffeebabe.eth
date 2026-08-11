@@ -10,6 +10,8 @@ import {
   createStrictCatalogConsumer,
   readStrictFundingOffers,
   readStrictPricingMid,
+  strictFundingPublicationKeysByFamily,
+  strictPricingPublicationKey,
   type CommittedStrictShadowCatalogPublication,
   type StrictShadowCatalogViews,
   type StrictShadowCatalogFamilyStage,
@@ -32,7 +34,13 @@ import {
   type AdapterRequestResult,
   type CanonicalSource,
 } from "../venues/adapter-request-program.js";
-import { routeKey, type FamilyId } from
+import {
+  familyId,
+  instanceKey,
+  lineageId,
+  routeKey,
+  type FamilyId,
+} from
   "../venues/adapter-family-identifiers.js";
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
@@ -418,6 +426,7 @@ async function main(): Promise<void> {
     routeKey: readRouteKey,
   });
   assert.equal(readMid.kind, "mid");
+  assert(Object.isFrozen(readMid));
   const readMissing = readStrictPricingMid({
     views: committed1.views,
     pricingPublicationKey: pricingKey,
@@ -925,14 +934,36 @@ async function main(): Promise<void> {
     fundingPublicationKey: "missing-funding-key",
   }), { kind: "missing" });
   const fundingConsumer = createStrictCatalogConsumer(fundingCommitted.views);
+  assert(Object.isFrozen(fundingConsumer.views));
   assert.deepEqual(fundingConsumer.resolveFundingOffers({
     fundingPublicationKey:
       [...fundingCommitted.views.fundingByPublicationKey.keys()][0]!,
   }), { kind: "tombstone" });
+  assert(Object.isFrozen(fundingConsumer.resolveFundingOffers({
+    fundingPublicationKey: "missing-funding-key",
+  })));
   assert.deepEqual(fundingConsumer.resolvePricingMid({
     pricingPublicationKey: pricingKey,
     routeKey: readRouteKey,
   }).kind, "mid");
+  assert.deepEqual(fundingConsumer.resolvePricingMid({
+    pricingPublicationKey: "missing-pricing-key",
+    routeKey: readRouteKey,
+  }), { kind: "missing" });
+  const fundingKeys = strictFundingPublicationKeysByFamily({
+    views: fundingCommitted.views,
+    familyId: fundingFamilyId,
+  });
+  assert.deepEqual(fundingKeys, [
+    [...fundingCommitted.views.fundingByPublicationKey.keys()][0]!,
+  ]);
+  const stagedInstance = stageScore1.instances[0]!.instance;
+  assert.equal(strictPricingPublicationKey({
+    familyId: stagedInstance.familyId,
+    lineageId: lineageId(stagedInstance.lineageId),
+    instanceKey: instanceKey(stagedInstance.instanceKey),
+    stateInstanceKey: committedPricing.stateInstanceKey,
+  }), pricingKey);
   assert.equal(fundingCommitted.envelope.snapshot.revision, 1);
   assert.equal(fundingCommitted.envelope.snapshot.familyStatuses.get(
     fundingFamilyId,
@@ -1026,11 +1057,77 @@ async function main(): Promise<void> {
   ][0]!;
   assert.equal(offersState.tombstone, false);
   assert.equal(offersState.offers.length, 1);
+  assert(Object.isFrozen(offersState.offers));
   assert.deepEqual(readStrictFundingOffers({
     views: offersCommitted.views,
     fundingPublicationKey:
       [...offersCommitted.views.fundingByPublicationKey.keys()][0]!,
   }), { kind: "offers", offers: offersState.offers });
+
+  // Tombstone -> offers -> tombstone round trip across three generations.
+  const tombstoneAgainSource = source(503);
+  const tombstoneAgainRoute = await lifecycle(tombstoneAgainSource);
+  const tombstoneAgainRouteStage = fundingRoot.stageRouteFamily({
+    publication: tombstoneAgainRoute,
+  });
+  const tombstoneAgainPublication = Object.freeze({
+    familyId: fundingFamilyId,
+    source: tombstoneAgainSource,
+    generation: tombstoneAgainSource.generation,
+    offers: Object.freeze([]),
+    outcomes: Object.freeze([Object.freeze({
+      familyId: fundingFamilyId,
+      fundingId: "morpho",
+      instanceKey: "state:funding",
+      stateKey: "funding:morpho",
+      asset: `0x${"77".repeat(20)}`,
+      status: "verified" as const,
+      reasonCode: "",
+      source: tombstoneAgainSource,
+      workReceipt: null,
+      evidenceRefs: Object.freeze(["funding:verified-again"]),
+    })]),
+  }) as unknown as Parameters<
+    typeof fundingRoot.stageFundingFamily
+  >[0]["publication"];
+  const tombstoneAgainStage = fundingRoot.stageFundingFamily({
+    publication: tombstoneAgainPublication,
+  });
+  const tombstoneAgainStages = CATALOG.listAll().map((family) => {
+    const familyId = family.plugin.manifest.familyId;
+    if (familyId === fundingFamilyId) return tombstoneAgainStage;
+    if (familyId === UNIV2_FAMILY_ID) return tombstoneAgainRouteStage;
+    return fundingRoot.stageUnsupported({
+      familyId,
+      source: tombstoneAgainSource,
+      outcomeRefs: ["shadow:not-wired"],
+    });
+  });
+  const tombstoneAgainPrepared = fundingRoot.prepare({
+    source: tombstoneAgainSource,
+    previous: offersCommitted,
+    stages: tombstoneAgainStages,
+    sourceAnchors: anchors({
+      canonical: tombstoneAgainSource,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+    sourceTransitionProof: transitionProof(
+      fundingHarness.transitionIssuer,
+      offersSource,
+      tombstoneAgainSource,
+    ),
+  });
+  await publish(fundingRoot, offersCommitted, tombstoneAgainPrepared);
+  const tombstoneAgainCommitted = fundingRoot.capture()!;
+  const tombstoneAgainState = [
+    ...tombstoneAgainCommitted.views.fundingByPublicationKey.values(),
+  ][0]!;
+  assert.equal(tombstoneAgainState.tombstone, true);
+  assert.equal(tombstoneAgainCommitted.envelope.snapshot.revision, 3);
+  assert.deepEqual(strictFundingPublicationKeysByFamily({
+    views: tombstoneAgainCommitted.views,
+    familyId: familyId("swap:not-in-catalog"),
+  }), []);
 
   console.log("adapter-family strict shadow catalog publication tests passed");
 }

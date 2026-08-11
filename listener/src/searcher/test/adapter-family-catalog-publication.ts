@@ -868,6 +868,31 @@ function testContentIsSealedBeforePublication(): void {
   }), /authority returned an unsealed value/);
 }
 
+function testDeepSealRejectsNonEnumerableMutableProperty(): void {
+  const canonical = source();
+  const hiddenValue = { label: "hidden" };
+  Object.defineProperty(hiddenValue, "hidden", {
+    value: { count: 1 },
+    enumerable: false,
+  });
+  Object.freeze(hiddenValue);
+  const authority = createCatalogPublicationValueAuthority({
+    instance: {
+      seal: (): InstanceValue => hiddenValue as unknown as InstanceValue,
+      carry: (value: InstanceValue): InstanceValue => value,
+      assertValid: (): void => {},
+    },
+    routeHandle: plainValueContract<OpaqueValue>(),
+    graphEntry: plainValueContract<OpaqueValue>(),
+    pricingEntry: plainValueContract<OpaqueValue>(),
+  });
+  assert.throws(() => prepare({
+    canonical,
+    valueAuthority: authority,
+    swap: swapStage(canonical, { instances: [bundle(canonical, "hidden")] }),
+  }), /authority returned an unsealed value/);
+}
+
 async function testCasFailureCannotChangeSealedContent(): Promise<void> {
   const first = initialWithInstance(source());
   const nextSource = source(25_700_101);
@@ -1184,6 +1209,7 @@ async function main(): Promise<void> {
   testOpaqueKeysCannotCollideAcrossInstances();
   testTerminalRemovalRequiresIssuerBoundResolvedProof();
   testContentIsSealedBeforePublication();
+  testDeepSealRejectsNonEnumerableMutableProperty();
   await testCasFailureCannotChangeSealedContent();
   await testCasRejectsCloneAndForeignPredecessorBeforeCallback();
   await testFailuresAndRacePreservePublishedIdentity();

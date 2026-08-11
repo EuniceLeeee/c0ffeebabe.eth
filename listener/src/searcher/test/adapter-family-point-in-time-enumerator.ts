@@ -196,12 +196,32 @@ function testCrossFamilyKeysMayRepeatAndForeignSurfaceKindFails(): void {
   }), /snapshot inventory requires a current address surface/);
 }
 
+function testEmptyFamilyYieldsCanonicalZeroInventory(): void {
+  const output = enumeratePointInTimeInventory({
+    source: SOURCE,
+    families: [{ familyId: FAMILY_A, incumbents: [] }],
+  });
+  assert.deepEqual(output.source, SOURCE);
+  const family = output.families[0]!;
+  assert.equal(family.inventoryCount, 0);
+  assert.deepEqual(family.inventoryKeys, []);
+  assert.equal(
+    family.inventoryHash,
+    adapterFamilySnapshotInventoryHash({
+      familyId: FAMILY_A,
+      source: SOURCE,
+      incumbents: [],
+    }),
+  );
+}
+
 async function main(): Promise<void> {
   testEnumeratesSortedUniqueFamiliesAndIncumbents();
   testRejectsDuplicateInventoryKeysWithinFamily();
   testRejectsDuplicateFamilies();
   testRejectsForeignSurfaceSourceOrAddressMismatch();
   testCrossFamilyKeysMayRepeatAndForeignSurfaceKindFails();
+  testEmptyFamilyYieldsCanonicalZeroInventory();
   console.log("adapter-family point-in-time enumerator PASS");
 }
 

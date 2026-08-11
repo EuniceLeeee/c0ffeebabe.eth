@@ -120,11 +120,24 @@ function testEmptyClosureAndEmptyStagingPasses(): void {
   }));
 }
 
+function testEmptyAdmittedSetWithEmptyStagingPassesAndExtraFails(): void {
+  const resolved = closure([{ familyId: FAMILY_A, admitted: [] }]);
+  assert.doesNotThrow(() => assertClosureStagedExactSetCoupling({
+    closure: resolved,
+    stagedByFamily: staged([[FAMILY_A, []]]),
+  }));
+  assert.throws(() => assertClosureStagedExactSetCoupling({
+    closure: resolved,
+    stagedByFamily: staged([[FAMILY_A, ["pool:x"]]]),
+  }), /exact-set mismatch/);
+}
+
 async function main(): Promise<void> {
   testExactMatchPassesOrderInsensitively();
   testMissingOrExtraKeyFails();
   testMissingOrUnexpectedFamilyFails();
   testEmptyClosureAndEmptyStagingPasses();
+  testEmptyAdmittedSetWithEmptyStagingPassesAndExtraFails();
   console.log("adapter-family closure exact-set coupling PASS");
 }
 

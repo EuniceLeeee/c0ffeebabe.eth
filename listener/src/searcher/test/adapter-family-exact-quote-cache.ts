@@ -290,12 +290,46 @@ function testCacheAndAddressBoundaries(): void {
   );
 }
 
+function testStoreOverwriteAndExplicitEviction(): void {
+  const overwrite = createAdapterFamilyExactQuoteCache({ capacity: 1 });
+  overwrite.store(address(), value());
+  const replacedKey = overwrite.store(
+    address(),
+    value({ roundFingerprints: ["89".repeat(32)] }),
+  );
+  assert.deepEqual(overwrite.snapshot(), {
+    size: 1,
+    capacity: 1,
+    hits: 0,
+    misses: 0,
+    stores: 2,
+    evictions: 0,
+  });
+  const replaced = overwrite.lookup(address());
+  assert(replaced);
+  assert.equal(replaced.cacheKey, replacedKey);
+  assert.deepEqual(replaced.roundFingerprints, ["89".repeat(32)]);
+
+  const single = createAdapterFamilyExactQuoteCache({ capacity: 1 });
+  single.store(address(), value());
+  assert.equal(single.lookup(address({ amountIn: 2_000_000n })), undefined);
+  assert.deepEqual(single.snapshot(), {
+    size: 1,
+    capacity: 1,
+    hits: 0,
+    misses: 1,
+    stores: 1,
+    evictions: 0,
+  });
+}
+
 async function main(): Promise<void> {
   testCacheKeyBindsEveryAddressField();
   testStoreLookupLruAndEviction();
   testStoreRejectsUnboundOrInvalidValues();
   testCacheIdentityIsCentrallyIssued();
   testCacheAndAddressBoundaries();
+  testStoreOverwriteAndExplicitEviction();
   console.log("adapter-family exact quote cache PASS");
 }
 
