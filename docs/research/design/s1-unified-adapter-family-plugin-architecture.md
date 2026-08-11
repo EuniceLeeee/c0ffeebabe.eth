@@ -1178,6 +1178,16 @@ exact union、closure receipt 在 generic catalog prepare 内的一次性消费�
 相等，以及最终 CAS 前的再次 canonical/generation fence；这些完成前不得打开 omission/tombstone，也不得宣称
 bootstrap closure、Graph completeness 或 production cutover。
 
+**2026-08-11 closure staged exact-set coupling checkpoint（实现 commit
+`02fd66d867462fad18c99e79bf6ab2ec61e19e28`，shadow gate，不打开 complete-snapshot）：**
+新增 `assertClosureStagedExactSetCoupling`：closure 的每个 Family 必须与 staged publication
+keys 逐 Family 精确相等（排序比较、无缺失、无额外、无未声明 Family）。该合同覆盖上段
+"与 staged publication keys 的逐 Family 精确相等"这一子项；strict shadow catalog 的
+stage/prepare 两层仍继续拒绝 `complete-snapshot`，closure receipt 在 generic catalog
+prepare 内的一次性消费仍未接线，因此该 Phase D gate 整体仍 open。
+证据：`searcher:adapter-family-closure-exact-set-coupling` PASS、
+`searcher:adapter-family-snapshot-inventory-closure` PASS、完整 listener build 通过。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
