@@ -1406,6 +1406,19 @@ baseline `2bc1c9cb`、impl `14347dd3`，机器证据）：**
 - 本 phase 关闭"真实价格双侧 capture"子项；剩余：deep stages
   （enumeration/exact/execution/final-sim）与其余 21 个 Family 覆盖。
 
+**2026-08-11 sealed-capture 可复现性 phase checkpoint（实现 commits baseline
+`741479e9`、impl `341cc666`/`8f4bfcab`，机器证据）：**
+
+- baseline exporter 固定 deadline 常量、evidenceRefs 去重排序；challenger 侧新增
+  `assertCaptureReproducible` 与两个 CLI `--check`（bigint-safe 编码比较）；
+- 节点验证：baseline 连续两次运行 sha256 均为 `9334fef4e187...`；
+  challenger real 连续两次 sha256 均为 `977be165226c...`，`--check` 输出
+  `real capture reproducible`；
+- receipt 语义不变：`eligible=true`、aggregate `fail`、`changedPrices=[]`、
+  univ2 `framework-blocked`（deep stages 未接线）。
+
+可复现性是 sealed parity receipt 的前置条件；本 phase 关闭该子项。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
