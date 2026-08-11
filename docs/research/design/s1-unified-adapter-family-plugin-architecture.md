@@ -1862,6 +1862,28 @@ rocksolid/self-burn）。
 （astra/eigenpie/erc4626/erc4626-silo/ethertoken/metronome×2/rocksolid/
 self-burn）。
 
+**2026-08-12 rocksolid bilateral parity phase checkpoint（实现 commits impl
+`a15cc350`、baseline `9fe59e70`，节点机器证据）：**
+
+- 修复 rocksolid pricing `dependencies` 重复项（receipt=subject 使
+  `[target, tokenIn, tokenOut]` 出现 target 重复，`dependencies must be
+  unique` blocker）；capability 内容哈希重生成；
+- impl `captureRocksolidFixtureCase`（syncDeposit convertToShares 1:1
+  fixture：asset=rETH、receipt=subject）全部 10 stage `exercised`；
+  rocksolid normalizer 六类 stage（`address-protocol` venue、`target`
+  instance、`syncDeposit(...)` binding）落地；
+- baseline exporter `captureRocksolidBaselineCase`（同款 convertToShares
+  数学 + `canonicalHash` 镜像指纹）；
+- 本地跨分支 parity：九族全 pass、commonGraph 五 stage delta 全空；
+- 节点 SSM `961d0278`（block `25729060`）：univ2/univ3/univ4/balancer/
+  morpho/psm/wsteth/goldx/**rocksolid** 九族全部 **pass**、
+  `assembledCommonGraphParity=true`、aggregate `partial`
+  （13 个未覆盖 Family）。
+
+剩余 13 族：`credit:fluid`、`curve-underlying`、`custom-swap:angstrom-v4`、
+`custom-swap:dodo-v2`、`fluid-dex` + 8 个 protocol 族
+（astra/eigenpie/erc4626/erc4626-silo/ethertoken/metronome×2/self-burn）。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
