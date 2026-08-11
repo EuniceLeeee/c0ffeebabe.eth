@@ -20,6 +20,7 @@ import {
   captureErc4626SiloRedeemFixtureCase,
   captureErc4626FixtureCase,
   captureEtherTokenNativeRedeemFixtureCase,
+  captureSelfBurnNativeFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -174,6 +175,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureEtherTokenNativeRedeemFixtureCase({
           source,
           caseId: `ethertoken-native-redeem:${source.number}`,
+        }));
+      } else if (item.family === "protocol:self-burn-native") {
+        familyCases.push(await captureSelfBurnNativeFixtureCase({
+          source,
+          caseId: `self-burn-native:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

@@ -30,6 +30,7 @@ import {
   captureErc4626SiloRedeemFixtureCase,
   captureErc4626FixtureCase,
   captureEtherTokenNativeRedeemFixtureCase,
+  captureSelfBurnNativeFixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -800,6 +801,23 @@ async function testEtherTokenNativeRedeemFixtureCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.items.length, 1);
 }
 
+async function testSelfBurnNativeFixtureCase(): Promise<void> {
+  const familyCase = await captureSelfBurnNativeFixtureCase({ source: SOURCE });
+  assert.equal(familyCase.familyId, "protocol:self-burn-native");
+  for (const stage of ARCHITECTURE_MIGRATION_STAGES) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `self-burn-native fixture ${stage} must be exercised`,
+    );
+  }
+  assert.equal(familyCase.stages.edges?.items.length, 1);
+  assert.equal(familyCase.stages.prices?.items.length, 1);
+  assert.equal(familyCase.stages.exactQuotes?.items.length, 1);
+  assert.equal(familyCase.stages.executionFragments?.items.length, 1);
+  assert.equal(familyCase.stages.finalSimulations?.items.length, 1);
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -1147,6 +1165,7 @@ async function main(): Promise<void> {
   await testErc4626SiloRedeemFixtureCase();
   await testErc4626FixtureCase();
   await testEtherTokenNativeRedeemFixtureCase();
+  await testSelfBurnNativeFixtureCase();
   console.log("architecture-migration capture harness PASS");
 }
 
