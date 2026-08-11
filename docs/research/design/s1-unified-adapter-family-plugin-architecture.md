@@ -1226,6 +1226,14 @@ closure 枚举尝试因 enumerator 数据源未接线而 fail-closed。该接线
 route-handle index（对应 §20.4 的显式 zero row 语义）。证据：
 `searcher:adapter-family-shadow-catalog-publication` PASS + 完整 listener build。
 
+**2026-08-11 Phase B/C shadow 合同套件聚合 checkpoint（实现 commit
+`be37f5ed63a595ff20179c6927b9c97c8485dcba`）：** 新增
+`searcher:adapter-family-shadow-suite` 聚合命令，一次跑通 10 个核心 shadow 合同套件
+（lifecycle-content-cache、catalog-publication、state-carry-proof、discovery-checkpoint、
+point-in-time-enumerator、closure-exact-set-coupling、snapshot-inventory-closure、
+discovery-continuity-composition、shadow-catalog-publication、exact-quote-cache），
+作为 Phase B/C shadow 合同的统一回归入口；仍不代表 production cutover。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
