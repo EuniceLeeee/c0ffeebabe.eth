@@ -2,14 +2,26 @@ import assert from "node:assert/strict";
 import {
   captureUniv2FixtureCase,
   captureUniv2RealCase,
+  captureUniv3FixtureCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV2_CAPTURE_EXACT_AMOUNT_IN,
   UNIV2_FIXTURE_FACTORY,
   UNIV2_FIXTURE_POOL,
   UNIV2_FIXTURE_TOKEN0,
   UNIV2_FIXTURE_TOKEN1,
+  UNIV3_FIXTURE_FACTORY,
+  UNIV3_FIXTURE_POOL,
+  UNIV3_FIXTURE_TOKEN0,
+  UNIV3_FIXTURE_TOKEN1,
 } from "../architecture-migration-fixture-replay.js";
 import {
+  normalizeBaselineUniv3EdgeItem,
+  normalizeBaselineUniv3EnumeratedRouteItem,
+  normalizeBaselineUniv3ExactQuoteItem,
+  normalizeBaselineUniv3ExecutionFragmentItem,
+  normalizeBaselineUniv3FinalSimulationItem,
+  normalizeBaselineUniv3InstanceItem,
+  normalizeBaselineUniv3PriceItem,
   normalizeBaselineUniv2InstanceItem,
   normalizeBaselineUniv2ExecutionFragmentItem,
   normalizeBaselineUniv2ExactQuoteItem,
@@ -25,6 +37,10 @@ import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
 import { quoteV2ExactInput } from
   "../solver/v2-constant-product-math.js";
+import { MAX_SQRT_RATIO, MIN_SQRT_RATIO } from
+  "../solver/v3-math.js";
+import { UNIV3_QUOTER_V2, UNIV3_SWAP_ROUTER } from
+  "../venues/swaps/univ3-abi.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_700_500,
@@ -351,6 +367,280 @@ async function main(): Promise<void> {
           typeof value === "bigint" ? value.toString() : value),
       ),
       "price normalizer must match the JSON-side capture shape",
+    );
+  }
+
+  const univ3 = await captureUniv3FixtureCase({ source: SOURCE });
+  const univ3Facts = (tokenIn: string, tokenOut: string) => Object.freeze({
+    familyId: "univ3-standard",
+    pool: UNIV3_FIXTURE_POOL.toLowerCase(),
+    token0: UNIV3_FIXTURE_TOKEN0.toLowerCase(),
+    token1: UNIV3_FIXTURE_TOKEN1.toLowerCase(),
+    tokenIn: tokenIn.toLowerCase(),
+    tokenOut: tokenOut.toLowerCase(),
+    fee: "500",
+    tickSpacing: 1,
+    factory: UNIV3_FIXTURE_FACTORY.toLowerCase(),
+    reversePool: UNIV3_FIXTURE_POOL.toLowerCase(),
+    quoter: UNIV3_QUOTER_V2.toLowerCase(),
+    router: UNIV3_SWAP_ROUTER.toLowerCase(),
+    quoterProvenance: "factory-bound-infrastructure",
+  });
+  const legacyUniv3EdgeItem = (
+    edge: RawMigrationSemanticItem,
+  ): RawMigrationSemanticItem => {
+    const value = edge.value as {
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+    };
+    const tokenIn = value.tokenIn.toLowerCase();
+    const tokenOut = value.tokenOut.toLowerCase();
+    const pool = UNIV3_FIXTURE_POOL.toLowerCase();
+    const oldId = [
+      "univ3-standard",
+      pool,
+      pool,
+      `${tokenIn}>${tokenOut}`,
+      JSON.stringify(["univ3-swap", null, null, null, null]),
+    ].join("\u001f");
+    return Object.freeze({
+      id: oldId,
+      value: Object.freeze({
+        canonicalEdgeId: oldId,
+        tokenIn,
+        tokenOut,
+        adapterId: "univ3-swap",
+        baselineFacts: univ3Facts(tokenIn, tokenOut),
+      }),
+    });
+  };
+  for (const edge of univ3.stages.edges!.items) {
+    assert.deepEqual(
+      normalizeBaselineUniv3EdgeItem(legacyUniv3EdgeItem(edge)),
+      edge,
+    );
+  }
+  const univ3Instances = univ3.stages.instances!.items;
+  assert.equal(univ3Instances.length, 1);
+  const legacyUniv3Instance = Object.freeze({
+    id: `univ3-standard\u001f${UNIV3_FIXTURE_POOL.toLowerCase()}`,
+    value: Object.freeze({
+      familyId: "univ3-standard",
+      stateKey: UNIV3_FIXTURE_POOL.toLowerCase(),
+      instanceFingerprint: "11".repeat(32),
+      specFingerprint: "22".repeat(32),
+      baselineFacts: univ3Facts(
+        UNIV3_FIXTURE_TOKEN0,
+        UNIV3_FIXTURE_TOKEN1,
+      ),
+    }),
+  });
+  assert.deepEqual(
+    normalizeBaselineUniv3InstanceItem(legacyUniv3Instance),
+    univ3Instances[0],
+  );
+  for (const route of univ3.stages.enumeratedRoutes!.items) {
+    const legacyRoute = {
+      ...legacyUniv3EdgeItem(route),
+      value: {
+        ...(legacyUniv3EdgeItem(route).value as Record<string, unknown>),
+        order: (route.value as { readonly order: number }).order,
+      },
+    };
+    assert.deepEqual(
+      normalizeBaselineUniv3EnumeratedRouteItem(legacyRoute),
+      route,
+    );
+  }
+  for (const quote of univ3.stages.exactQuotes!.items) {
+    const value = quote.value as {
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly amountIn: string;
+      readonly amountOut: string;
+    };
+    const legacyQuote = {
+      ...legacyUniv3EdgeItem(quote),
+      id: `${legacyUniv3EdgeItem(quote).id}\u001fexact:${value.amountIn}`,
+      value: {
+        ...(legacyUniv3EdgeItem(quote).value as Record<string, unknown>),
+        amountIn: value.amountIn,
+        amountOut: value.amountOut,
+      },
+    };
+    assert.deepEqual(
+      normalizeBaselineUniv3ExactQuoteItem(legacyQuote),
+      quote,
+    );
+  }
+  for (const exec of univ3.stages.executionFragments!.items) {
+    const value = exec.value as {
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly amountIn: string;
+      readonly amountOut: string;
+      readonly minAmountOut: string;
+    };
+    const tokenIn = value.tokenIn.toLowerCase();
+    const tokenOut = value.tokenOut.toLowerCase();
+    const zeroForOne = tokenIn === UNIV3_FIXTURE_TOKEN0.toLowerCase();
+    const legacyBase = legacyUniv3EdgeItem(exec);
+    const legacyExec = {
+      ...legacyBase,
+      id: `${legacyBase.id}\u001fexec:${value.amountIn}`,
+      value: {
+        ...(legacyBase.value as Record<string, unknown>),
+        amountIn: value.amountIn,
+        amountOut: value.amountOut,
+        minAmountOut: value.minAmountOut,
+        node: {
+          adapterId: "univ3-swap",
+          target: UNIV3_FIXTURE_POOL.toLowerCase(),
+          tokenIn,
+          tokenOut,
+          amount: value.amountIn,
+          params: {
+            zeroForOne,
+            amountSpecified: value.amountIn,
+            sqrtPriceLimit: (zeroForOne
+              ? MIN_SQRT_RATIO + 1n
+              : MAX_SQRT_RATIO - 1n).toString(),
+          },
+          children: [{
+            adapterId: "erc20-transfer",
+            target: tokenIn,
+            tokenIn,
+            tokenOut: tokenIn,
+            amount: value.amountIn,
+            params: {
+              to: UNIV3_FIXTURE_POOL.toLowerCase(),
+              amount: value.amountIn,
+            },
+            children: [],
+          }],
+        },
+      },
+    };
+    assert.deepEqual(
+      normalizeBaselineUniv3ExecutionFragmentItem(legacyExec),
+      exec,
+    );
+  }
+  for (const sim of univ3.stages.finalSimulations!.items) {
+    const value = sim.value as {
+      readonly tokenIn: string;
+      readonly tokenOut: string;
+      readonly amountIn: string;
+      readonly amountOut: string;
+      readonly minAmountOut: string;
+    };
+    const tokenIn = value.tokenIn.toLowerCase();
+    const tokenOut = value.tokenOut.toLowerCase();
+    const legacyBase = legacyUniv3EdgeItem(sim);
+    const legacySim = {
+      ...legacyBase,
+      id: `${legacyBase.id}\u001fsim:${value.amountIn}`,
+      value: {
+        ...(legacyBase.value as Record<string, unknown>),
+        amountIn: value.amountIn,
+        amountOut: value.amountOut,
+        minAmountOut: value.minAmountOut,
+        effects: [
+          {
+            kind: "token-delta",
+            token: tokenIn,
+            account: "executor",
+            direction: "decrease",
+          },
+          {
+            kind: "token-delta",
+            token: tokenIn,
+            account: "route-target",
+            direction: "increase",
+          },
+          {
+            kind: "token-delta",
+            token: tokenOut,
+            account: "route-target",
+            direction: "decrease",
+          },
+          {
+            kind: "token-delta",
+            token: tokenOut,
+            account: "executor",
+            direction: "increase",
+          },
+        ],
+        conservation: "conserved",
+        repayment: "satisfied",
+        evInput: {
+          amountIn: value.amountIn,
+          amountOut: value.amountOut,
+        },
+      },
+    };
+    assert.deepEqual(
+      normalizeBaselineUniv3FinalSimulationItem(legacySim),
+      sim,
+    );
+  }
+  for (const price of univ3.stages.prices!.items) {
+    const priceValue = price.value as {
+      readonly stateKey: string;
+      readonly mid: {
+        readonly kind: string;
+        readonly pool: string;
+        readonly mid: number;
+        readonly feeBps: number;
+        readonly reserveA: bigint | string;
+        readonly reserveB: bigint | string;
+        readonly sqrtABX96: bigint | string;
+        readonly liquidity: bigint | string;
+        readonly depthProxy: number;
+        readonly edges: readonly {
+          readonly tokenIn: string;
+          readonly tokenOut: string;
+        }[];
+      };
+    };
+    const tokenIn = priceValue.mid.edges[0]!.tokenIn.toLowerCase();
+    const tokenOut = priceValue.mid.edges[0]!.tokenOut.toLowerCase();
+    const legacyPrice = Object.freeze({
+      id: price.id,
+      value: Object.freeze({
+        stateKey: priceValue.stateKey,
+        mid: Object.freeze({
+          ...priceValue.mid,
+          edges: Object.freeze([Object.freeze({
+            adapterId: "univ3-swap",
+            instanceKey: UNIV3_FIXTURE_POOL.toLowerCase(),
+            target: UNIV3_FIXTURE_POOL.toLowerCase(),
+            tokenIn,
+            tokenOut,
+            poolToken0: UNIV3_FIXTURE_TOKEN0.toLowerCase(),
+            poolToken1: UNIV3_FIXTURE_TOKEN1.toLowerCase(),
+            v3Fee: 500,
+            v3TickSpacing: 1,
+            factory: UNIV3_FIXTURE_FACTORY.toLowerCase(),
+            edgeKind: "swap",
+            leavesStandingPosition: false,
+          })]),
+        }),
+        baselineFacts: univ3Facts(tokenIn, tokenOut),
+      }),
+    });
+    assert.deepEqual(
+      JSON.parse(
+        JSON.stringify(
+          normalizeBaselineUniv3PriceItem(legacyPrice),
+          (_key, value) =>
+            typeof value === "bigint" ? value.toString() : value,
+        ),
+      ),
+      JSON.parse(
+        JSON.stringify(price, (_key, value) =>
+          typeof value === "bigint" ? value.toString() : value),
+      ),
     );
   }
 
