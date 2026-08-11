@@ -1778,6 +1778,26 @@ commits impl `2c36f87b`、baseline `4a43b261`，节点机器证据）：**
 protocol 族（astra/eigenpie/erc4626/erc4626-silo/ethertoken/goldx/
 metronome×2/psm/rocksolid/self-burn/wsteth）。
 
+**2026-08-12 protocol snapshot plain-record fix + PSM fixture phase
+checkpoint（实现 commit impl `71e6bdc7`，fixture 级合同证据）：**
+
+- 发现并修复第二个严格生命周期 blocker：`ProtocolPricingSnapshot.quotes`
+  是 `ReadonlyMap`，中央 runtime 的 plain-record 校验拒绝
+  （`decode:pricing snapshot.quotes must contain only plain records and
+  arrays`）→ 改为 `Readonly<Record<string, ProtocolQuotePoint>>`，
+  `quoteResultMap` 与 psm/metronome×2/ethertoken/self-burn/erc4626-silo/
+  hgusdc 等族同步改 plain Record/索引访问；capability 内容哈希重生成
+  （build `--check` 通过）；
+- 新增 `capturePsmFixtureCase`：singleton PSM（gem=USDC/dai=DAI/tin/tout/
+  sellGem call）走完整 strict lifecycle，全部 10 stage `exercised`
+  （单 sell-gem route，edges/prices/exact/execution/final-sim 各 1 条）；
+- 合同证据：`searcher:architecture-migration-capture` PASS（PSM fixture
+  全 stage 断言）、parity-runner/parity/evidence/normalizer PASS、
+  完整 listener build。
+
+该 fix 一次性解除全部 12 个 protocol 族的 strict lifecycle 阻塞；各族
+fixture capture（+ baseline/normalizer/节点双跑）是后续逐族 phase。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
