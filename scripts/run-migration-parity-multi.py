@@ -91,6 +91,10 @@ def main() -> None:
             for key in ("target", "collateral", "receipt", "unit"):
                 if key in case:
                     descriptor[key] = case[key]
+        elif case["family"] == "protocol:rocksolid":
+            for key in ("target", "asset", "receipt", "sampleShares"):
+                if key in case:
+                    descriptor[key] = case[key]
         else:
             for key in ("pool", "tokenA", "tokenB", "reserves", "fee",
                         "tickSpacing", "liquidity", "sqrtPriceX96"):

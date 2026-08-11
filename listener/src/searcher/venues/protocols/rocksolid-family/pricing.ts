@@ -83,11 +83,13 @@ export const rocksolidPricing = {
       })]]);
     },
   },
-  dependencies: ({ descriptor }) => Object.freeze([
-    descriptor.target,
-    descriptor.route.tokenIn,
-    descriptor.route.tokenOut,
-  ]),
+  dependencies: ({ descriptor }) => Object.freeze(
+    [...new Set([
+      lowerAddress(descriptor.target),
+      lowerAddress(descriptor.route.tokenIn),
+      lowerAddress(descriptor.route.tokenOut),
+    ])].sort(),
+  ),
   mutation: {
     affectedStateKeys: ({ descriptor, observation }) =>
       observation.kind === "call" &&

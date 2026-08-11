@@ -17,6 +17,8 @@ import { WSTETH_FAMILY_ID } from
   "./venues/protocols/wsteth-family/manifest.js";
 import { GOLDX_FAMILY_ID } from
   "./venues/protocols/goldx-family/manifest.js";
+import { ROCKSOLID_FAMILY_ID } from
+  "./venues/protocols/rocksolid-family/manifest.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
@@ -109,6 +111,15 @@ export interface BaselineGoldxFacts {
   readonly tokenOut: string;
 }
 
+export interface BaselineRocksolidFacts {
+  readonly familyId: "protocol:rocksolid";
+  readonly target: string;
+  readonly asset: string;
+  readonly receipt: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
 /**
  * Maps legacy raw semantic items to the challenger canonical identity for
  * stages that carry route identities. Only `edges` currently has a wired
@@ -127,6 +138,7 @@ export function normalizeBaselineMigrationItems(
         "protocol:psm": normalizeBaselinePsmInstanceItem,
         "protocol:wsteth": normalizeBaselineWstethInstanceItem,
         "protocol:goldx": normalizeBaselineGoldxInstanceItem,
+        "protocol:rocksolid": normalizeBaselineRocksolidInstanceItem,
         default: normalizeBaselineUniv2InstanceItem,
       })
     ));
@@ -139,6 +151,7 @@ export function normalizeBaselineMigrationItems(
         "protocol:psm": normalizeBaselinePsmPriceItem,
         "protocol:wsteth": normalizeBaselineWstethPriceItem,
         "protocol:goldx": normalizeBaselineGoldxPriceItem,
+        "protocol:rocksolid": normalizeBaselineRocksolidPriceItem,
         default: normalizeBaselineUniv2PriceItem,
       })
     ));
@@ -151,6 +164,7 @@ export function normalizeBaselineMigrationItems(
         "protocol:psm": normalizeBaselinePsmEdgeItem,
         "protocol:wsteth": normalizeBaselineWstethEdgeItem,
         "protocol:goldx": normalizeBaselineGoldxEdgeItem,
+        "protocol:rocksolid": normalizeBaselineRocksolidEdgeItem,
         default: normalizeBaselineUniv2EdgeItem,
       })
     ));
@@ -163,6 +177,7 @@ export function normalizeBaselineMigrationItems(
         "protocol:psm": normalizeBaselinePsmEnumeratedRouteItem,
         "protocol:wsteth": normalizeBaselineWstethEnumeratedRouteItem,
         "protocol:goldx": normalizeBaselineGoldxEnumeratedRouteItem,
+        "protocol:rocksolid": normalizeBaselineRocksolidEnumeratedRouteItem,
         default: normalizeBaselineUniv2EnumeratedRouteItem,
       })
     ));
@@ -175,6 +190,7 @@ export function normalizeBaselineMigrationItems(
         "protocol:psm": normalizeBaselinePsmExactQuoteItem,
         "protocol:wsteth": normalizeBaselineWstethExactQuoteItem,
         "protocol:goldx": normalizeBaselineGoldxExactQuoteItem,
+        "protocol:rocksolid": normalizeBaselineRocksolidExactQuoteItem,
         default: normalizeBaselineUniv2ExactQuoteItem,
       })
     ));
@@ -192,6 +208,7 @@ export function normalizeBaselineMigrationItems(
         "protocol:psm": normalizeBaselinePsmExecutionFragmentItem,
         "protocol:wsteth": normalizeBaselineWstethExecutionFragmentItem,
         "protocol:goldx": normalizeBaselineGoldxExecutionFragmentItem,
+        "protocol:rocksolid": normalizeBaselineRocksolidExecutionFragmentItem,
         default: normalizeBaselineUniv2ExecutionFragmentItem,
       });
     }));
@@ -209,6 +226,7 @@ export function normalizeBaselineMigrationItems(
         "protocol:psm": normalizeBaselinePsmFinalSimulationItem,
         "protocol:wsteth": normalizeBaselineWstethFinalSimulationItem,
         "protocol:goldx": normalizeBaselineGoldxFinalSimulationItem,
+        "protocol:rocksolid": normalizeBaselineRocksolidFinalSimulationItem,
         default: normalizeBaselineUniv2FinalSimulationItem,
       });
     }));
@@ -237,6 +255,8 @@ function normalizeByFamily(
       RawMigrationSemanticItem;
     readonly "protocol:goldx": (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
+    readonly "protocol:rocksolid": (item: RawMigrationSemanticItem) =>
+      RawMigrationSemanticItem;
     readonly default: (item: RawMigrationSemanticItem) =>
       RawMigrationSemanticItem;
   },
@@ -250,6 +270,9 @@ function normalizeByFamily(
   }
   if (familyId === "protocol:goldx") {
     return handlers["protocol:goldx"](item);
+  }
+  if (familyId === "protocol:rocksolid") {
+    return handlers["protocol:rocksolid"](item);
   }
   return handlers.default(item);
 }
@@ -2795,6 +2818,325 @@ export function normalizeBaselineGoldxFinalSimulationItem(
   });
 }
 
+function rocksolidFactsGuard(
+  facts: Partial<BaselineRocksolidFacts> | undefined,
+): facts is Required<BaselineRocksolidFacts> {
+  return facts !== undefined &&
+    facts.familyId === "protocol:rocksolid" &&
+    typeof facts.target === "string" &&
+    typeof facts.asset === "string" &&
+    typeof facts.receipt === "string" &&
+    typeof facts.tokenIn === "string" &&
+    typeof facts.tokenOut === "string";
+}
+
+function rocksolidFactsOf(item: RawMigrationSemanticItem) {
+  const facts = (item.value as {
+    readonly baselineFacts?: Partial<BaselineRocksolidFacts>;
+  })?.baselineFacts;
+  if (!rocksolidFactsGuard(facts)) return null;
+  return facts;
+}
+
+function deriveRocksolidCanonicalFacts(
+  facts: Required<BaselineRocksolidFacts>,
+): {
+  readonly target: string;
+  readonly asset: string;
+  readonly receipt: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly lowerTarget: string;
+  readonly lowerTokenIn: string;
+  readonly lowerTokenOut: string;
+  readonly routeKeyValue: string;
+  readonly canonicalId: string;
+} {
+  const target = canonicalAddress(facts.target);
+  const asset = canonicalAddress(facts.asset);
+  const receipt = canonicalAddress(facts.receipt);
+  const tokenIn = canonicalAddress(facts.tokenIn);
+  const tokenOut = canonicalAddress(facts.tokenOut);
+  const lowerTarget = lowerAddress(target);
+  const bindingFingerprint = hashCanonical({
+    target: lowerTarget,
+    asset: lowerAddress(asset),
+    receipt: lowerAddress(receipt),
+    execution: "syncDeposit(assets,receiver,zero-referral)",
+  });
+  const venueIdentityHash = hashCanonical({
+    kind: "address-protocol",
+    target: lowerTarget,
+  });
+  const routeKeyValue = `protocol:rocksolid\u001f${lowerTarget}\u001fsync-deposit`;
+  const lowerTokenIn = lowerAddress(tokenIn);
+  const lowerTokenOut = lowerAddress(tokenOut);
+  const executionVariantKey = hashCanonical({
+    namespace: "adapter-family-graph-route-v1",
+    routeKey: routeKeyValue,
+    routeBindingFingerprint: bindingFingerprint,
+    venueIdentityHash,
+  });
+  const canonicalId = [
+    "protocol:rocksolid",
+    lowerTarget,
+    lowerTarget,
+    `${lowerTokenIn}>${lowerTokenOut}`,
+    executionVariantKey,
+  ].join("\u001f");
+  return Object.freeze({
+    target,
+    asset,
+    receipt,
+    tokenIn,
+    tokenOut,
+    lowerTarget,
+    lowerTokenIn,
+    lowerTokenOut,
+    routeKeyValue,
+    canonicalId,
+  });
+}
+
+export function normalizeBaselineRocksolidEdgeItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = rocksolidFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveRocksolidCanonicalFacts(facts);
+  return Object.freeze({
+    id: derived.canonicalId,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+    }),
+  });
+}
+
+export function normalizeBaselineRocksolidEnumeratedRouteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const edge = normalizeBaselineRocksolidEdgeItem(item);
+  if (edge === item) return item;
+  const order = (item.value as { readonly order?: unknown }).order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0) {
+    throw new Error(
+      "rocksolid baseline enumerated route item must carry a non-negative order",
+    );
+  }
+  return Object.freeze({
+    id: edge.id,
+    value: Object.freeze({
+      ...(edge.value as Record<string, unknown>),
+      order,
+    }),
+  });
+}
+
+export function normalizeBaselineRocksolidInstanceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = rocksolidFactsOf(item);
+  if (facts === null) return item;
+  const derived = deriveRocksolidCanonicalFacts(facts);
+  const staticBindingFingerprint = hashCanonical({
+    capability: ROCKSOLID_CATALOG_FAMILY.hashes.instance.contentHash,
+    projection: Object.freeze({
+      target: derived.lowerTarget,
+      asset: lowerAddress(derived.asset),
+      receipt: lowerAddress(derived.receipt),
+      execution: "syncDeposit(assets,receiver,zero-referral)",
+    }),
+    sharedBindings: Object.freeze([]),
+  });
+  return Object.freeze({
+    id: derived.lowerTarget,
+    value: Object.freeze({
+      familyId: "protocol:rocksolid",
+      instanceKey: derived.lowerTarget,
+      staticBindingFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineRocksolidPriceItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = rocksolidFactsOf(item);
+  if (facts === null) return item;
+  const mid = (item.value as {
+    readonly mid?: {
+      readonly mid?: unknown;
+      readonly feeBps?: unknown;
+      readonly reserveA?: unknown;
+      readonly reserveB?: unknown;
+      readonly depthProxy?: unknown;
+    };
+  })?.mid;
+  if (
+    mid === undefined ||
+    typeof mid.mid !== "number" ||
+    typeof mid.feeBps !== "number" ||
+    (typeof mid.reserveA !== "string" && typeof mid.reserveA !== "bigint") ||
+    (typeof mid.reserveB !== "string" && typeof mid.reserveB !== "bigint") ||
+    typeof mid.depthProxy !== "number"
+  ) {
+    return item;
+  }
+  const derived = deriveRocksolidCanonicalFacts(facts);
+  const routeEdge = Object.freeze({
+    adapterId: "rocksolid-sync-deposit",
+    instanceKey: derived.lowerTarget,
+    target: derived.target,
+    tokenIn: derived.tokenIn,
+    tokenOut: derived.tokenOut,
+    slotKind: "protocol" as const,
+    protocolAction: "wrap" as const,
+    edgeKind: "protocol" as const,
+    leavesStandingPosition: false,
+  });
+  return Object.freeze({
+    id: item.id,
+    value: Object.freeze({
+      stateKey: derived.lowerTarget,
+      mid: Object.freeze({
+        kind: "protocol",
+        pool: derived.target,
+        edges: Object.freeze([routeEdge]),
+        mid: mid.mid,
+        feeBps: mid.feeBps,
+        reserveA: BigInt(mid.reserveA).toString(),
+        reserveB: BigInt(mid.reserveB).toString(),
+        depthProxy: mid.depthProxy,
+      }),
+    }),
+  });
+}
+
+export function normalizeBaselineRocksolidExactQuoteItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = rocksolidFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (typeof value.amountIn !== "string" || typeof value.amountOut !== "string") {
+    return item;
+  }
+  const derived = deriveRocksolidCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexact:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      feeBps: "0",
+    }),
+  });
+}
+
+export function normalizeBaselineRocksolidExecutionFragmentItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = rocksolidFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly nodeFingerprint?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.nodeFingerprint !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveRocksolidCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fexec:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      actionAdapterId: "rocksolid-sync-deposit",
+      executionTarget: derived.target,
+      nodeFingerprint: value.nodeFingerprint,
+    }),
+  });
+}
+
+export function normalizeBaselineRocksolidFinalSimulationItem(
+  item: RawMigrationSemanticItem,
+): RawMigrationSemanticItem {
+  const facts = rocksolidFactsOf(item);
+  if (facts === null) return item;
+  const value = item.value as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+    readonly minAmountOut?: unknown;
+    readonly effectsFingerprint?: unknown;
+    readonly conservation?: unknown;
+    readonly repayment?: unknown;
+    readonly evInput?: unknown;
+  };
+  if (
+    typeof value.amountIn !== "string" ||
+    typeof value.amountOut !== "string" ||
+    typeof value.minAmountOut !== "string" ||
+    typeof value.effectsFingerprint !== "string" ||
+    value.conservation !== "conserved" ||
+    value.repayment !== "satisfied" ||
+    value.evInput === null ||
+    typeof value.evInput !== "object"
+  ) {
+    return item;
+  }
+  const evInput = value.evInput as {
+    readonly amountIn?: unknown;
+    readonly amountOut?: unknown;
+  };
+  if (
+    typeof evInput.amountIn !== "string" ||
+    typeof evInput.amountOut !== "string"
+  ) {
+    return item;
+  }
+  const derived = deriveRocksolidCanonicalFacts(facts);
+  return Object.freeze({
+    id: `${derived.canonicalId}\u001fsim:${value.amountIn}`,
+    value: Object.freeze({
+      routeKey: derived.routeKeyValue,
+      tokenIn: derived.tokenIn,
+      tokenOut: derived.tokenOut,
+      canonicalEdgeId: derived.canonicalId,
+      amountIn: value.amountIn,
+      amountOut: value.amountOut,
+      minAmountOut: value.minAmountOut,
+      effectsFingerprint: value.effectsFingerprint,
+      conservation: value.conservation,
+      repayment: value.repayment,
+      evInput: Object.freeze({
+        amountIn: evInput.amountIn,
+        amountOut: evInput.amountOut,
+      }),
+    }),
+  });
+}
+
 const UNIV2_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV2_FAMILY_ID,
@@ -2823,4 +3165,9 @@ const WSTETH_CATALOG_FAMILY =
 const GOLDX_CATALOG_FAMILY =
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     GOLDX_FAMILY_ID,
+  );
+
+const ROCKSOLID_CATALOG_FAMILY =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+    ROCKSOLID_FAMILY_ID,
   );

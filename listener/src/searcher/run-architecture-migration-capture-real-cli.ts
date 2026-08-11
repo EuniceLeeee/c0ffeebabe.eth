@@ -14,6 +14,7 @@ import {
   capturePsmFixtureCase,
   captureWstethFixtureCase,
   captureGoldxFixtureCase,
+  captureRocksolidFixtureCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -138,6 +139,11 @@ async function main(): Promise<void> {
         familyCases.push(await captureGoldxFixtureCase({
           source,
           caseId: `goldx:${source.number}`,
+        }));
+      } else if (item.family === "protocol:rocksolid") {
+        familyCases.push(await captureRocksolidFixtureCase({
+          source,
+          caseId: `rocksolid:${source.number}`,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

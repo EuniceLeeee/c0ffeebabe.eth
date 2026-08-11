@@ -4717,7 +4717,7 @@
         "familyId": "protocol:rocksolid",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "13aa3b80c866f4f68993d919bc8788101118a6c56a3f602933acd72fc80ea0e3",
+        "contentHash": "e550133975857d20bf54f0886ac4625652821d30f14ba61e59bb44ab42e5f5bd",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -6261,5 +6261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "3c289e339513c5d11230f9907905769e5f3436ac3509d929da50b73fbba97519"
+  "artifactHash": "d0a3675c1f73a920d0e7fd93b0a5d7dcf6dbd9c662e0f6c55299b6b30dbaf19b"
 }
