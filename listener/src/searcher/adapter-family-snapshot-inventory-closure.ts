@@ -485,6 +485,80 @@ export function adapterFamilySnapshotInventoryHash(input: {
 }
 
 /**
+ * Pure point-in-time inventory enumerator core. Re-enumerates a frozen
+ * per-Family incumbent inventory against one canonical source: normalizes
+ * addresses and address-surface observations, sorts/dedupes inventory keys,
+ * rejects duplicate keys/unknown surfaces, and derives the same
+ * source-bound inventory hash used by the snapshot inventory verifier.
+ *
+ * This is the reusable core the production bootstrap will feed with real
+ * discovery outputs; it deliberately takes plain incumbent records instead
+ * of a live backend so the verification-side re-enumeration can be re-run
+ * against the exact same canonical source.
+ */
+export function enumeratePointInTimeInventory(input: {
+  readonly source: CanonicalSource;
+  readonly families: readonly {
+    readonly familyId: FamilyId;
+    readonly incumbents: readonly {
+      readonly inventoryKey: string;
+      readonly address: string;
+      readonly currentSurface: AddressSurfaceObservation;
+    }[];
+  }[];
+}): AdapterFamilySnapshotInventoryEnumerationInput {
+  const source = freezeSource(input.source);
+  const families = input.families.map((family) => {
+    const familyId = nonempty(
+      family.familyId,
+      "enumeration Family id",
+    ) as FamilyId;
+    const incumbents = family.incumbents.map((incumbent) => {
+      const inventoryKey = nonempty(
+        incumbent.inventoryKey,
+        "enumeration inventory key",
+      );
+      const address = canonicalAddress(incumbent.address);
+      const currentSurface = freezeSurface(
+        incumbent.currentSurface,
+        source,
+        address,
+      );
+      return Object.freeze({
+        inventoryKey,
+        address,
+        currentSurface,
+      });
+    }).sort((left, right) => compareText(left.inventoryKey, right.inventoryKey));
+    assertUnique(
+      incumbents.map((incumbent) => incumbent.inventoryKey),
+      "enumeration inventory key",
+    );
+    return Object.freeze({
+      familyId,
+      inventoryKeys: Object.freeze(
+        incumbents.map((incumbent) => incumbent.inventoryKey),
+      ),
+      inventoryCount: incumbents.length,
+      inventoryHash: adapterFamilySnapshotInventoryHash({
+        familyId,
+        source,
+        incumbents,
+      }),
+      incumbents: Object.freeze(incumbents),
+    });
+  }).sort((left, right) => compareText(left.familyId, right.familyId));
+  assertUnique(
+    families.map((family) => family.familyId),
+    "enumeration Family id",
+  );
+  return Object.freeze({
+    source,
+    families: Object.freeze(families),
+  });
+}
+
+/**
  * Fail-closed coupling between a resolved snapshot inventory closure and the
  * staged publication keys of the strict catalog. Every closure Family must
  * stage exactly its admitted instance publication keys (sorted comparison,
