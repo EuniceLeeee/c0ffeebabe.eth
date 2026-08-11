@@ -8,6 +8,7 @@ import {
   COMMON_GRAPH_MIGRATION_STAGES,
   PRODUCTION_ARCHITECTURE_MIGRATION_COHORT,
   PRODUCTION_ARCHITECTURE_MIGRATION_FAMILY_IDS,
+  buildArchitectureMigrationSideCapture,
   createArchitectureMigrationProductionCaptureIssuer,
   issueArchitectureMigrationSideCapture,
   runArchitectureMigrationBatchParity,
@@ -323,6 +324,7 @@ assert(Object.isFrozen(completeReceipt.commonGraphDelta.edges.changedIds));
 
 await testFileEntryRunsUnitAndSealedBatches();
 testRequestFileValidation();
+testSideCaptureAssemblerRoundTripsFixtureShape();
 
 console.log(
   "architecture-migration-parity-runner PASS " +
@@ -433,6 +435,24 @@ function testRequestFileValidation(): void {
     () => validateArchitectureMigrationRequestFile(null),
     /batch request must be an object/,
   );
+}
+
+function testSideCaptureAssemblerRoundTripsFixtureShape(): void {
+  const side = rawSealedFixture.baseline;
+  const rebuilt = buildArchitectureMigrationSideCapture({
+    captureId: side.closure.captureId,
+    commit: side.closure.commit,
+    productionClosureHash: side.closure.productionClosureHash,
+    activationManifestHash: side.closure.activationManifestHash,
+    normalizedConfigHash: side.closure.normalizedConfigHash,
+    productionPolicyHash: side.closure.productionPolicyHash,
+    corpusHash: side.closure.corpusHash,
+    evidenceRefs: side.closure.evidenceRefs,
+    familyCases: side.familyCases,
+    commonGraph: side.commonGraph,
+    nonMigratedFamilies: side.nonMigratedFamilies,
+  });
+  assert.deepEqual(rebuilt, side);
 }
 
 function fixtureInput(options: FixtureOptions): ArchitectureMigrationBatchInput {

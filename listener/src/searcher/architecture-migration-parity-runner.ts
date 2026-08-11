@@ -617,6 +617,54 @@ export function validateArchitectureMigrationRequestFile(
   return request as ArchitectureMigrationCorpusManifest;
 }
 
+/**
+ * Assembles one raw side capture from replay outputs. The node capture
+ * harness calls this after executing a frozen corpus on a pinned commit;
+ * the batch validation and trusted issuer still run afterwards.
+ */
+export function buildArchitectureMigrationSideCapture(input: {
+  readonly captureId: string;
+  readonly commit: string;
+  readonly productionClosureHash: string;
+  readonly activationManifestHash: string;
+  readonly normalizedConfigHash: string;
+  readonly productionPolicyHash: string;
+  readonly corpusHash: string;
+  readonly evidenceRefs: readonly string[];
+  readonly familyCases: readonly RawFamilyMigrationCaseCapture[];
+  readonly commonGraph?: RawCommonGraphMigrationCapture | null;
+  readonly nonMigratedFamilies?: RawStandaloneSemanticCapture | null;
+}): RawArchitectureMigrationSideCapture {
+  const closure: MigrationClosureDescriptor = Object.freeze({
+    captureId: nonempty(input.captureId, "captureId"),
+    commit: nonempty(input.commit, "commit"),
+    productionClosureHash: nonempty(
+      input.productionClosureHash,
+      "productionClosureHash",
+    ),
+    activationManifestHash: nonempty(
+      input.activationManifestHash,
+      "activationManifestHash",
+    ),
+    normalizedConfigHash: nonempty(
+      input.normalizedConfigHash,
+      "normalizedConfigHash",
+    ),
+    productionPolicyHash: nonempty(
+      input.productionPolicyHash,
+      "productionPolicyHash",
+    ),
+    corpusHash: nonempty(input.corpusHash, "corpusHash"),
+    evidenceRefs: Object.freeze([...input.evidenceRefs]),
+  });
+  return Object.freeze({
+    closure,
+    familyCases: Object.freeze([...input.familyCases]),
+    commonGraph: input.commonGraph ?? null,
+    nonMigratedFamilies: input.nonMigratedFamilies ?? null,
+  });
+}
+
 interface SideFamilyCoverage {
   readonly caseIds: readonly string[];
   readonly missingStages: readonly ArchitectureMigrationStage[];
