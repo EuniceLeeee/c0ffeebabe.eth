@@ -9,6 +9,7 @@ import {
 import {
   captureUniv2RealCase,
   captureUniv3RealCase,
+  captureUniv4RealCase,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -56,6 +57,10 @@ async function main(): Promise<void> {
       readonly tickSpacing?: number;
       readonly liquidity?: bigint | string;
       readonly sqrtPriceX96?: bigint | string;
+      readonly currency0?: string;
+      readonly currency1?: string;
+      readonly hooks?: string;
+      readonly lpFee?: bigint | string;
     }[];
   };
   const source = Object.freeze({
@@ -86,6 +91,24 @@ async function main(): Promise<void> {
           tickSpacing: item.tickSpacing,
           liquidity: item.liquidity,
           sqrtPriceX96: item.sqrtPriceX96,
+        }));
+      } else if (item.family === "univ4") {
+        if (
+          typeof item.currency0 !== "string" ||
+          typeof item.currency1 !== "string"
+        ) {
+          throw new Error("univ4 capture case requires currency0/currency1");
+        }
+        familyCases.push(await captureUniv4RealCase({
+          source,
+          currency0: item.currency0,
+          currency1: item.currency1,
+          fee: item.fee === undefined ? undefined : Number(item.fee),
+          tickSpacing: item.tickSpacing,
+          hooks: item.hooks,
+          liquidity: item.liquidity,
+          sqrtPriceX96: item.sqrtPriceX96,
+          lpFee: item.lpFee,
         }));
       } else {
         throw new Error(`unknown capture family ${item.family}`);

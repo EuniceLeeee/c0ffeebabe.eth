@@ -19,6 +19,7 @@ import {
   captureUniv3FixtureCase,
   captureUniv3RealCase,
   captureUniv4FixtureCase,
+  captureUniv4RealCase,
   MIGRATION_CAPTURE_EXECUTOR,
   UNIV3_FIXTURE_POOL,
   UNIV3_FIXTURE_TOKEN0,
@@ -599,6 +600,27 @@ async function testUniv4FixtureReplayProducesAllStages(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.items.length, 2);
 }
 
+async function testUniv4RealCaseAllStages(): Promise<void> {
+  const familyCase = await captureUniv4RealCase({
+    source: SOURCE,
+    currency0: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    currency1: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    fee: 3000,
+    tickSpacing: 60,
+    liquidity: "1000000000000000000",
+    sqrtPriceX96: (1n << 96n).toString(),
+    lpFee: "3000",
+  });
+  assert.equal(familyCase.familyId, "univ4");
+  for (const stage of ARCHITECTURE_MIGRATION_STAGES) {
+    assert.equal(
+      familyCase.stages[stage]?.status,
+      "exercised",
+      `univ4 real ${stage} must be exercised`,
+    );
+  }
+}
+
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "architecture-migration-capture-"),
@@ -935,6 +957,7 @@ async function main(): Promise<void> {
   await testUniv3FixtureReplayProducesAllStages();
   await testUniv3RealCaseAllStages();
   await testUniv4FixtureReplayProducesAllStages();
+  await testUniv4RealCaseAllStages();
   console.log("architecture-migration capture harness PASS");
 }
 

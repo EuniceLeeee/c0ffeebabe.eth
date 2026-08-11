@@ -1346,6 +1346,44 @@ export async function captureUniv4FixtureCase(input: {
   });
 }
 
+export async function captureUniv4RealCase(input: {
+  readonly source: CanonicalSource;
+  readonly currency0: string;
+  readonly currency1: string;
+  readonly fee?: number;
+  readonly tickSpacing?: number;
+  readonly hooks?: string;
+  readonly liquidity?: bigint | string;
+  readonly sqrtPriceX96?: bigint | string;
+  readonly lpFee?: bigint | string;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const poolKey = Object.freeze({
+    currency0: input.currency0.toLowerCase(),
+    currency1: input.currency1.toLowerCase(),
+    fee: input.fee ?? Number(UNIV4_FIXTURE_FEE),
+    tickSpacing: input.tickSpacing ?? UNIV4_FIXTURE_TICK_SPACING,
+    hooks: (input.hooks ?? "0x0000000000000000000000000000000000000000")
+      .toLowerCase(),
+  });
+  return captureUniv4PoolCase({
+    source: input.source,
+    caseId: input.caseId ?? `univ4:${input.source.number}`,
+    ctx: Object.freeze({
+      manager: UNIV4_FIXTURE_MANAGER,
+      stateView: UNIV4_FIXTURE_STATE_VIEW,
+      quoter: UNIV4_FIXTURE_QUOTER,
+      poolKey,
+      poolId: v4PoolId(poolKey),
+      liquidity: BigInt(input.liquidity ?? UNIV4_FIXTURE_LIQUIDITY),
+      sqrtPriceX96: BigInt(
+        input.sqrtPriceX96 ?? UNIV4_FIXTURE_SQRT_PRICE_X96,
+      ),
+      lpFee: BigInt(input.lpFee ?? UNIV4_FIXTURE_LP_FEE),
+    }),
+  });
+}
+
 async function captureUniv4PoolCase(input: {
   readonly source: CanonicalSource;
   readonly caseId?: string;
