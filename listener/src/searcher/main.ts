@@ -55,6 +55,7 @@ import {
 import {
   loadDexDiscoveryCursor,
   resolveInitialDexSourceCompleteThrough,
+  resolveStartupDexDiscoveryScan,
 } from "./discovery-dex-cursor.js";
 import {
   createProtocolTraceMemo,
@@ -1597,6 +1598,28 @@ async function main(): Promise<void> {
       discoveryToBlock,
       trustedThrough,
     });
+  /*
+   * Startup catch-up is one batch over the whole persisted gap, not a recent
+   * 300-block window followed by chunked background backfill. The producer
+   * only starts after this batch has built the full graph, so runtime
+   * topology stays frozen until the next restart.
+   */
+  const startupDexScan = resolveStartupDexDiscoveryScan({
+    sourceCompleteThrough: initialDexSourceCompleteThrough,
+    discoveryToBlock,
+    fallbackBlocksBack: discoveryBlocks,
+    fallbackFactoryBlocksBack: factoryBlocks,
+  });
+  const startupDexScanFromBlock = startupDexScan.fromBlock;
+  const startupDexScanBlocksBack = startupDexScan.scanBlocksBack;
+  const startupFactoryBlocksBack = startupDexScan.factoryBlocksBack;
+  console.log(
+    `[searcher/live] DEX startup gap scan: cutoff=` +
+      `${initialDexSourceCompleteThrough} from=${startupDexScanFromBlock} ` +
+      `to=${discoveryToBlock} blocksBack=${startupDexScanBlocksBack} ` +
+      `factoryBlocksBack=${startupFactoryBlocksBack} ` +
+      `fullGap=${startupDexScan.fullGap}`,
+  );
   if (!universeRegistryMatches) {
     console.warn(
       "[searcher/live] pool universe provenance/registry/canonical anchor " +
@@ -1668,17 +1691,17 @@ async function main(): Promise<void> {
     landedPoolDiscoveryRegistry.consumesMaterializationRetries(pool.adapter)
   );
 
-  // Phase 1: Factory event indexing — discover ALL pools created in recent N blocks
+  // Phase 1: Factory event indexing — discover ALL pools created in the gap
   const factoryPools = await indexFactoryPools(
     provider,
-    factoryBlocks,
+    startupFactoryBlocksBack,
     discoveryToBlock,
     { strict: true },
   );
-  // Phase 2: Swap event discovery — find most active pools (may include Curve etc.)
+  // Phase 2: Swap/landed event discovery — one aggregate scan over the whole gap
   const startupActivePoolDiscovery = await scanActivePoolsDetailed(
     provider,
-    discoveryBlocks,
+    startupDexScanBlocksBack,
     Number.POSITIVE_INFINITY,
     discoveryToBlock,
     {
@@ -1868,15 +1891,36 @@ async function main(): Promise<void> {
     startupDexSourceBlockHash,
     startupDexCanonicalHash,
   );
+  /*
+   * Only advance the persisted cutoff when the whole gap was scanned AND every
+   * discovered candidate materialized into graph edges. Otherwise the cursor
+   * would claim pools were applied while the runtime graph silently missed
+   * them; the next restart re-runs the same gap instead of losing them.
+   */
+  const startupDexSourceCompleteThrough =
+    initialDexSourceCompleteThrough >= 0 &&
+      retryableDexGraphPools.size === 0 &&
+      retryableDexIdentityPools.size === 0
+      ? discoveryToBlock
+      : initialDexSourceCompleteThrough;
+  const startupDexGraphCompleteThrough =
+    startupDexSourceCompleteThrough === discoveryToBlock &&
+      retryableDexGraphPools.size === 0 &&
+      retryableDexIdentityPools.size === 0
+      ? discoveryToBlock
+      : -1;
+  console.log(
+    `[searcher/live] DEX startup coverage: source=` +
+      `${startupDexSourceCompleteThrough} graph=` +
+      `${startupDexGraphCompleteThrough} retryableGraph=` +
+      `${retryableDexGraphPools.size} retryableIdentity=` +
+      `${retryableDexIdentityPools.size}`,
+  );
   let dexGraphCoverage = createDexGraphCoverageState({
-    sourceCompleteThrough: initialDexSourceCompleteThrough,
+    sourceCompleteThrough: startupDexSourceCompleteThrough,
     // A source-complete scan and executable projection are separate proofs.
     // Failed pool projections stay retryable without erasing the source cursor.
-    graphCompleteThrough:
-      retryableDexGraphPools.size === 0 &&
-        retryableDexIdentityPools.size === 0
-      ? initialDexSourceCompleteThrough
-      : -1,
+    graphCompleteThrough: startupDexGraphCompleteThrough,
   });
   const protocolCandidateDomain = new ProtocolDiscoveryCandidateDomain({
     registry: PRODUCTION_ADAPTER_FAMILIES,

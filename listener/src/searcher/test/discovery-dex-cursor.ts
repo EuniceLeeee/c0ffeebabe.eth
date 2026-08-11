@@ -8,6 +8,7 @@ import {
   isDexDiscoveryCursor,
   loadDexDiscoveryCursor,
   resolveInitialDexSourceCompleteThrough,
+  resolveStartupDexDiscoveryScan,
   saveDexDiscoveryCursorAsync,
   type DexDiscoveryCursor,
 } from "../discovery-dex-cursor.js";
@@ -21,6 +22,7 @@ async function seedRoundtrip(): Promise<void> {
       sourceCompleteThrough: 100,
       graphCompleteThrough: 95,
       sourceHash: "0xabc",
+      appliedHash: "0xdef",
     };
     await saveDexDiscoveryCursorAsync(path, cursor);
     const loaded = await loadDexDiscoveryCursor(path);
@@ -48,10 +50,10 @@ function seedPolicy(): void {
       ...base,
       universeRegistryMatches: true,
       universeToBlock: 150,
-      trustedThrough: 100,
+      trustedThrough: 150,
     }),
     150,
-    "fresh matching universe seeds to discoveryToBlock",
+    "matching universe cutoff is trusted only through trustedThrough",
   );
   assert.equal(
     resolveInitialDexSourceCompleteThrough({
@@ -96,7 +98,15 @@ function schemaValidation(): void {
     sourceCompleteThrough: 100,
     graphCompleteThrough: 100,
     sourceHash: "0xabc",
+    appliedHash: "0xdef",
   }), true);
+  assert.equal(isDexDiscoveryCursor({
+    schemaVersion: 1,
+    sourceCompleteThrough: 100,
+    graphCompleteThrough: -1,
+    sourceHash: "0xabc",
+    appliedHash: 123,
+  }), false);
   assert.equal(isDexDiscoveryCursor({
     schemaVersion: 2,
     sourceCompleteThrough: 100,
@@ -112,11 +122,53 @@ function schemaValidation(): void {
   assert.equal(isDexDiscoveryCursor(null), false);
 }
 
+function startupScanRange(): void {
+  const fullGap = resolveStartupDexDiscoveryScan({
+    sourceCompleteThrough: 100,
+    discoveryToBlock: 150,
+    fallbackBlocksBack: 300,
+    fallbackFactoryBlocksBack: 50000,
+  });
+  assert.deepEqual(fullGap, {
+    fromBlock: 100,
+    toBlock: 150,
+    scanBlocksBack: 50,
+    factoryBlocksBack: 50,
+    fullGap: true,
+  });
+  const fallback = resolveStartupDexDiscoveryScan({
+    sourceCompleteThrough: -1,
+    discoveryToBlock: 150,
+    fallbackBlocksBack: 300,
+    fallbackFactoryBlocksBack: 50000,
+  });
+  assert.deepEqual(fallback, {
+    fromBlock: 0,
+    toBlock: 150,
+    scanBlocksBack: 150,
+    factoryBlocksBack: 50000,
+    fullGap: false,
+  });
+  const alreadyCaughtUp = resolveStartupDexDiscoveryScan({
+    sourceCompleteThrough: 150,
+    discoveryToBlock: 150,
+    fallbackBlocksBack: 300,
+    fallbackFactoryBlocksBack: 50000,
+  });
+  assert.deepEqual(alreadyCaughtUp, {
+    fromBlock: 150,
+    toBlock: 150,
+    scanBlocksBack: 0,
+    factoryBlocksBack: 0,
+    fullGap: true,
+  });
+}
+
 function freezeSwitches(): void {
-  assert.equal(discoveryBackfillEnabledFromEnv({}), true);
+  assert.equal(discoveryBackfillEnabledFromEnv({}), false);
   assert.equal(discoveryBackfillEnabledFromEnv({ SEARCHER_DISCOVERY_BACKFILL_ENABLED: "0" }), false);
   assert.equal(discoveryBackfillEnabledFromEnv({ SEARCHER_DISCOVERY_BACKFILL_ENABLED: "1" }), true);
-  assert.equal(discoveryHotDexEnabledFromEnv({}), true);
+  assert.equal(discoveryHotDexEnabledFromEnv({}), false);
   assert.equal(discoveryHotDexEnabledFromEnv({ SEARCHER_DISCOVERY_HOT_DEX_ENABLED: "0" }), false);
   assert.equal(discoveryHotDexEnabledFromEnv({ SEARCHER_DISCOVERY_HOT_DEX_ENABLED: "1" }), true);
 }
@@ -124,5 +176,6 @@ function freezeSwitches(): void {
 await seedRoundtrip();
 seedPolicy();
 schemaValidation();
+startupScanRange();
 freezeSwitches();
 console.log("[discovery-dex-cursor] persistence + seed policy + freeze switches PASS");

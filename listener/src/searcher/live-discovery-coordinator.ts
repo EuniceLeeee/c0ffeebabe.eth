@@ -1677,33 +1677,44 @@ const DISCOVERY_STAGE_PRODUCER_YIELD_MAX_WAIT_MS = 250;
   let lastPersistedGraphFingerprint =
     `${strategyViews.versions.backrun_view_hash}:` +
     strategyViews.versions.blockscan_view_hash;
-  const persistenceWriter = new CoalescingAsyncWriter<number>(
+  const discoverySnapshotWriter = new CoalescingAsyncWriter<number>(
     persistenceDelayMs,
     async () => {
+      const state = captureLiveDiscoveryPublication();
       const graphFingerprint =
-        `${strategyViews.versions.backrun_view_hash}:` +
-        strategyViews.versions.blockscan_view_hash;
+        `${state.strategyViews.versions.backrun_view_hash}:` +
+        state.strategyViews.versions.blockscan_view_hash;
       const graphChanged =
         graphFingerprint !== lastPersistedGraphFingerprint;
-      const views = strategyViews;
       const cacheSnapshot = cloneProtocolDiscoveryEvidenceCache(
-        protocolDiscoveryCache,
+        state.protocolEvidenceCache,
       );
       console.log(
-        `[searcher/live] protocol cache async save: ` +
+        `[searcher/live] discovery snapshot async save: ` +
+          `dexSource=${state.dexGraphCoverage.sourceCompleteThrough} ` +
+          `dexGraph=${state.dexGraphCoverage.graphCompleteThrough} ` +
           `cursor=${cacheSnapshot.runtime.observedCursor} ` +
           `authority=${cacheSnapshot.runtime.observedContiguousAuthority
             ?.completeThroughBlock ?? null}`,
       );
-      await Promise.all([
-        graphChanged
-          ? deps.persistRuntimeGraphs(views)
-          : Promise.resolve(),
-        saveProtocolDiscoveryEvidenceCacheAsync(
-          protocolDiscoveryCachePath,
-          cacheSnapshot,
-        ),
-      ]);
+      if (graphChanged) {
+        await deps.persistRuntimeGraphs(state.strategyViews);
+      }
+      await saveProtocolDiscoveryEvidenceCacheAsync(
+        protocolDiscoveryCachePath,
+        cacheSnapshot,
+      );
+      const cursor: DexDiscoveryCursor = {
+        schemaVersion: DEX_DISCOVERY_CURSOR_SCHEMA_VERSION,
+        sourceCompleteThrough: state.dexGraphCoverage.sourceCompleteThrough,
+        graphCompleteThrough: state.dexGraphCoverage.graphCompleteThrough,
+        sourceHash: state.dexSourceAnchor.completeThroughHash,
+        appliedHash: state.dexGraphAnchor.completeThroughHash,
+      };
+      await saveDexDiscoveryCursorAsync(
+        deps.dexDiscoveryCursorPath,
+        cursor,
+      );
       if (graphChanged) {
         lastPersistedGraphFingerprint = graphFingerprint;
       }
@@ -1715,33 +1726,11 @@ const DISCOVERY_STAGE_PRODUCER_YIELD_MAX_WAIT_MS = 250;
       );
     },
   );
-  const dexCursorWriter = new CoalescingAsyncWriter<number>(
-    persistenceDelayMs,
-    async () => {
-      const cursor: DexDiscoveryCursor = {
-        schemaVersion: DEX_DISCOVERY_CURSOR_SCHEMA_VERSION,
-        sourceCompleteThrough: dexGraphCoverage.sourceCompleteThrough,
-        graphCompleteThrough: dexGraphCoverage.graphCompleteThrough,
-        sourceHash: dexSourceAnchor.completeThroughHash,
-      };
-      await saveDexDiscoveryCursorAsync(
-        deps.dexDiscoveryCursorPath,
-        cursor,
-      );
-    },
-    (error) => {
-      console.warn(
-        `[searcher/live] DEX coverage cursor persistence failed: ` +
-          `${error instanceof Error ? error.message : String(error)}`,
-      );
-    },
-  );
   const finishPublishedDiscoveryState = (): void => {
     if (discoveryUnsafeReason !== null) return;
     if (blindProductionAudit) return;
     mempoolIntakeRefresh.notify();
-    persistenceWriter.schedule(discoveryPublicationRevision);
-    dexCursorWriter.schedule(discoveryPublicationRevision);
+    discoverySnapshotWriter.schedule(discoveryPublicationRevision);
   };
   const finishCombinedDiscoveryTransition = (
     prepared: CombinedDiscoveryPrepared,
@@ -1788,14 +1777,24 @@ const DISCOVERY_STAGE_PRODUCER_YIELD_MAX_WAIT_MS = 250;
     process.env.SEARCHER_DISCOVERY_BACKFILL_MAX_BLOCKS,
   );
   /*
-   * Freeze policy switches (user-directed):
-   * - SEARCHER_DISCOVERY_BACKFILL_ENABLED=0 stops the deep backfill lanes
-   *   entirely (startup seed + hot path only).
-   * - SEARCHER_DISCOVERY_HOT_DEX_ENABLED=0 additionally freezes the per-block
-   *   hot DEX scan, so the graph stays exactly at the startup cutoff and no
-   *   new pools enter until the next universe rebuild.
+   * Freeze policy switches (default frozen):
+   * - SEARCHER_DISCOVERY_BACKFILL_ENABLED=1 re-enables the deep backfill
+   *   lanes; without it, no new pools are absorbed during the run.
+   * - SEARCHER_DISCOVERY_HOT_DEX_ENABLED=1 re-enables the per-block hot DEX
+   *   scan; without it, the graph stays exactly at the startup cutoff and no
+   *   new pools enter until the next restart.
    */
-  const discoveryBackfillEnabled = discoveryBackfillEnabledFromEnv();
+  /*
+   * Default is frozen topology once a trusted cutoff exists. If no universe or
+   * persisted cursor anchor is available, the startup batch cannot claim
+   * source completeness; keep the bounded background lanes as the correctness
+   * fallback so the graph can still catch up instead of silently running
+   * incomplete forever.
+   */
+  const runtimeBackfillRequired =
+    deps.initial.dexGraphCoverage.sourceCompleteThrough < 0;
+  const discoveryBackfillEnabled =
+    discoveryBackfillEnabledFromEnv() || runtimeBackfillRequired;
   const discoveryHotDexEnabled = discoveryHotDexEnabledFromEnv();
   const discoveryBackfillBudgetMs = Math.max(
     1_000,
@@ -2130,11 +2129,9 @@ const DISCOVERY_STAGE_PRODUCER_YIELD_MAX_WAIT_MS = 250;
     await observedProtocolPreparationTail;
     await protocolDiscoveryQueue.settled();
     if (!blindProductionAudit && discoveryUnsafeReason === null) {
-      persistenceWriter.schedule(discoveryPublicationRevision);
-      dexCursorWriter.schedule(discoveryPublicationRevision);
+      discoverySnapshotWriter.schedule(discoveryPublicationRevision);
     }
-    await persistenceWriter.flush();
-    await dexCursorWriter.flush();
+    await discoverySnapshotWriter.flush();
   };
   const unknownProtocolSelectorLastBlock = new Map<string, number>();
   // Receipt/trace/probe preparation is serialized independently of the live
