@@ -1352,6 +1352,24 @@ build 全部通过；Phase B/C shadow 套件在本批 commit 上重跑全过。
 完整 build。剩余节点步骤：ds-baseline 冻结 SHA 的 capture exporter、真实
 corpus 双跑、batch receipt；`sealed-production` 双侧 capture 仍未产生。
 
+**2026-08-11 ds-baseline capture exporter + 跨分支 sealed parity smoke
+checkpoint（baseline commit `96e0cc4f`，branch `codex/parity-capture-baseline`）：**
+
+- 在冻结 ds SHA `94cdf1d4` 的独立分支上新增 baseline univ2 capture exporter：
+  用旧 API `univ2BlockScanState.compileStateInstance` 与旧 canonicalEdgeId
+  身份导出 `instances/edges`（exercised）、`prices` 及 deep stages
+  （framework-blocked）；CLI `architecture-migration-baseline-capture:run` +
+  合同测试；
+- 同一 fixture 在 baseline（旧代码）与 challenger（新代码）两侧生成 raw side
+  capture，经 trusted issuer 跑 sealed parity 成功产出 receipt：
+  `eligible=true`、aggregate `fail`（诚实：univ2 `framework-blocked`，
+  baseline missing `prices/enumeratedRoutes/exactQuotes/executionFragments/
+  finalSimulations` 5 个 stage，覆盖率尚不足），commonGraph 无 delta。
+
+这证明跨分支 capture → sealed receipt 全链路已通；节点真实 corpus 双跑
+（真实状态读取 + 全 Family 覆盖）是下一步。真实 `sealed-production`
+双侧 capture 仍未产生。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
