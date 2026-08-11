@@ -1281,6 +1281,24 @@ stateAnchors、performanceDiagnostics 四项）与
 生成双侧 raw capture，校验 batch request 后再跑 sealed/unit parity。真实
 `sealed-production` 双侧 capture 仍未产生。
 
+**2026-08-11 生产消费入口与边界批量 checkpoint（实现 commits `02096c67`、
+`978fe256`、`86bed808`、`27638b37`、`33d3da6e`、`73327e42`）：**
+
+- `StrictCatalogConsumer`：production solver 的唯一 strict views 消费入口
+  （pricing/funding/credit 三态解析，缺失即显式 outcome，绝不回落 legacy registry）；
+- Funding 非空 offer 同 CAS 代际提交、tombstone↔offers read 三态；unsupported stage
+  空白 outcomeRef 拒绝；
+- exact quote cache capacity/address 边界全部 fail closed；
+- side capture assembler：节点回放输出 → `RawArchitectureMigrationSideCapture` JSON；
+- point-in-time enumerator：跨 Family 重复 key 允许、非 address-surface 拒绝；
+- Funding/Credit staging domain 门：swap↔funding↔credit 错配 box 即拒绝；
+- strict pricing read 的 missing-publication 分支。
+
+证据：`searcher:adapter-family-shadow-suite`（10 合同套件）+ credit + parity +
+完整 listener build 全部通过；Phase B/C shadow 合同套件在本批 commit 上重跑全过。
+仍为 shadow/consumer 入口，production solver 接线与 `sealed-production` 双侧
+capture 未落地。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
