@@ -2363,6 +2363,19 @@ commit 见下，Phase D/E 前置合成合同，不切换 authority）：**
 - 该 runbook 把本窗口的节点部署主导职责固化为可执行检查单；当前未
   执行任何节点操作，节点机器证据仍为未落地状态。
 
+**2026-08-12 S1 regression sweep harness checkpoint（commit 见下，
+ops/CI gate，非部署）：**
+
+- 新增 `scripts/s1-regression-sweep.sh`：一条命令跑完整 listener
+  build、architecture-migration-capture、shadow suite、parity runner、
+  default-authority/systemic-live/cutover-readiness/startup-manifest/
+  consumer-diagnostic 全部合同，再跑 committed 22-family parity
+  verifier；输出逐测试日志与
+  `s1-regression-receipt.json`（implCommit/passedTests/时间窗）；
+- 本轮实测：10 组全过（含 parity verifier，commit
+  `972ac0cc`），receipt 写入 /tmp；该 harness 供节点 SSM 前与 CI 复跑；
+- 纯证据/CI gate，不涉及 live、签名、广播或 authority。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
