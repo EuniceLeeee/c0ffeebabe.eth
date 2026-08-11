@@ -1842,6 +1842,26 @@ rocksolid/self-burn/wsteth）。
 （astra/eigenpie/erc4626/erc4626-silo/ethertoken/goldx/metronome×2/
 rocksolid/self-burn）。
 
+**2026-08-12 goldx bilateral parity phase checkpoint（实现 commits impl
+`3d18a450`、baseline `f9729a95`，节点机器证据）：**
+
+- impl `captureGoldxFixtureCase`（singleton mint：unit quote 1:1 fixture）
+  全部 10 stage `exercised`；goldx normalizer 六类 stage
+  （`address-protocol` venue、`target` instance、
+  `floor(amount*unit/1e18)` binding）落地；
+- baseline exporter `captureGoldxBaselineCase`（PAXG→GOLDX mint、同款
+  goldxQuote 数学、`canonicalHash` 镜像指纹）；
+- 本地跨分支 parity：八族全 pass、commonGraph 五 stage delta 全空；
+- 节点 SSM `f954f9ba`（block `25729060`）：univ2/univ3/univ4/balancer/
+  morpho/psm/wsteth/**goldx** 八族全部 **pass**、
+  `assembledCommonGraphParity=true`、aggregate `partial`
+  （14 个未覆盖 Family）。
+
+剩余 14 族：`credit:fluid`、`curve-underlying`、`custom-swap:angstrom-v4`、
+`custom-swap:dodo-v2`、`fluid-dex` + 9 个 protocol 族
+（astra/eigenpie/erc4626/erc4626-silo/ethertoken/metronome×2/rocksolid/
+self-burn）。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
