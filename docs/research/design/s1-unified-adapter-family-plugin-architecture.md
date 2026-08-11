@@ -155,6 +155,20 @@ commit 见本日各 checkpoint）：**
   verifier，commit `93fc75b2…`），receipt 写入 /tmp；一条命令即可
   覆盖本地合同 + 本地 parity + 节点 SSM 证据链。
 
+**2026-08-12 remaining-gate design spec checkpoint（commit 见下，
+blocker 可执行化）：**
+
+- 新增 `docs/research/design/s1-remaining-gate-designs.md`：把两个
+  沙箱内被 blocker 卡住的实现 gate 写成可执行设计：
+  1) complete-snapshot 的 factory-log incumbent 扩展（incumbent kind、
+     fingerprint、expectedFamilies 放宽、连续性校验、验收条件）；
+  2) production point-in-time enumerator 真实源合同
+     （`DiscoveryInventoryEnumerator`、fail-closed、节点 dry-run
+     验收）；
+  3) 依赖关系与授权边界（§2 依赖 §1，cutover 仍须人工授权）；
+- 该设计不替代实现或授权；后续实现 slice 必须逐项满足其验收条件并
+  附合同测试。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - strict catalog prepare 内 complete-snapshot 一次性消费（受限于
