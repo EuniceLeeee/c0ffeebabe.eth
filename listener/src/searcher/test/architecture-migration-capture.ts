@@ -6,6 +6,7 @@ import {
   assertCaptureReproducible,
   architectureMigrationSideJson,
   buildFixtureCaptureCorpus,
+  buildUniv2CommonGraph,
   generateArchitectureMigrationSideCapture,
   validateArchitectureMigrationCaptureCorpus,
   writeArchitectureMigrationSideCapture,
@@ -79,6 +80,14 @@ async function testFixtureReplayProducesCanonicalCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.status, "framework-blocked");
   assert((familyCase.stages.instances?.items.length ?? 0) >= 1);
   assert((familyCase.stages.edges?.items.length ?? 0) >= 1);
+  const commonGraph = buildUniv2CommonGraph({
+    source: SOURCE,
+    edgeItems: familyCase.stages.edges!.items,
+    evidenceRefs: familyCase.stages.instances!.evidenceRefs,
+  });
+  assert.equal(commonGraph.stages.edges?.status, "exercised");
+  assert.equal(commonGraph.stages.edges?.items.length, 2);
+  assert.equal(commonGraph.stages.finalSimulations?.status, "framework-blocked");
 }
 
 async function testRealCaseUsesDescriptorPoolAndBlocksPrices(): Promise<void> {

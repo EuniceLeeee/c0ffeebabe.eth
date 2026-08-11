@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import {
   architectureMigrationSideJson,
   buildFixtureCaptureCorpus,
+  buildUniv2CommonGraph,
   generateArchitectureMigrationSideCapture,
 } from "./architecture-migration-capture.js";
 import { captureUniv2RealCase } from
@@ -61,6 +62,11 @@ async function main(): Promise<void> {
         commit: descriptor.commit ?? currentCommit(),
         source,
         familyCases: [familyCase],
+        commonGraph: buildUniv2CommonGraph({
+          source,
+          edgeItems: familyCase.stages.edges!.items,
+          evidenceRefs: familyCase.stages.instances!.evidenceRefs,
+        }),
       }),
       productionClosureHash: "aa".repeat(32),
     };

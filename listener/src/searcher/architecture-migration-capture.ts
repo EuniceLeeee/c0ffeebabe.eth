@@ -174,6 +174,9 @@ export function buildFixtureCaptureCorpus(input: {
   readonly source: CanonicalSource;
   readonly familyCases: readonly RawFamilyMigrationCaseCapture[];
   readonly evidenceRefs?: readonly string[];
+  readonly commonGraph?: NonNullable<
+    RawArchitectureMigrationSideCapture["commonGraph"]
+  >;
 }): ArchitectureMigrationCaptureCorpus {
   return Object.freeze({
     captureId: input.captureId,
@@ -184,5 +187,38 @@ export function buildFixtureCaptureCorpus(input: {
     ]),
     stateAnchors: Object.freeze([fixtureStateAnchor(input.source)]),
     familyCases: Object.freeze([...input.familyCases]),
+    ...(input.commonGraph === undefined
+      ? {}
+      : { commonGraph: input.commonGraph }),
+  });
+}
+
+export function buildUniv2CommonGraph(input: {
+  readonly source: CanonicalSource;
+  readonly edgeItems: readonly RawMigrationStageCapture["items"][number][];
+  readonly evidenceRefs: readonly string[];
+}): NonNullable<RawArchitectureMigrationSideCapture["commonGraph"]> {
+  return Object.freeze({
+    inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
+    stages: Object.freeze({
+      edges: exercisedStage(input.edgeItems, input.evidenceRefs),
+      enumeratedRoutes: frameworkBlockedStage(
+        input.evidenceRefs,
+        "capture-harness-enumeration-not-wired",
+      ),
+      exactQuotes: frameworkBlockedStage(
+        input.evidenceRefs,
+        "capture-harness-exact-not-wired",
+      ),
+      executionFragments: frameworkBlockedStage(
+        input.evidenceRefs,
+        "capture-harness-execution-not-wired",
+      ),
+      finalSimulations: frameworkBlockedStage(
+        input.evidenceRefs,
+        "capture-harness-final-sim-not-wired",
+      ),
+    }),
+    crossFamilyBindings: Object.freeze([]),
   });
 }
