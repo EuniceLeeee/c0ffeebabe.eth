@@ -1239,6 +1239,31 @@ sealed parity、Funding/Credit production consumers、完整 systemic-live gate 
 证据：`searcher:discovery-dex-cursor` PASS、`searcher:discovery-backfill-lane` 12/12、
 完整 listener build 通过；这些仍是实现/本地合同证据，不是 `sealed-production` 或 live 验收。
 
+**2026-08-11 S1 100/100 live-continuity 验收 checkpoint（机器证据，不是 Phase D cutover）：**
+精确部署 commit `269ade3c610b9b79368d566fb2ee0e88e500d0f0`
+（`codex/s1-unified-adapter-architecture-impl`，节点 `/opt/MEV` detached HEAD），进程锚点为
+systemd `mev-searcher` PID `2882014`、`NRestarts=0`、进程 env `SEARCHER_RUNTIME_COMMIT` 与
+部署 commit 一致；沿用既有 bounded-live envelope（`.deploy-live` 未改动、`SEARCHER_DRY_RUN=0`、
+`SEARCHER_EV_GATE=1`）。本次部署同时启用 discovery 冻结
+（`SEARCHER_DISCOVERY_BACKFILL_ENABLED=0`、`SEARCHER_DISCOVERY_HOT_DEX_ENABLED=0`），消除
+discovery 追赶与 N-1 producer 的 CPU/RPC 争抢。
+
+验收工具 `analysis blockscan-window`（schema-v2），`startLine=105905`
+（`[searcher/live] starting V5 searcher` + 唯一 `runtime_commit` 锚点，`recordsBeforeRuntimeCommit=0`，
+`eligibleForQualification=true`），`minRun=100`：
+
+- 113 passes、105 valid、8 `enumeration_not_ran`（全部在启动 catch-up 期）、
+  `ranMissingState=0`、`ranLowCoverage=0`、`continuityBreaks` 为空；
+- `longestRun=105`：block `25729708..25729812`（blockSpan 105，`consecutiveSourceBlocks=true`），
+  `priced/expected` min `0.9092` / avg `0.9093`（>80%），`generationWallMs` P50 `5.86s` /
+  P95 `6.17s` / max `6.36s`，graphEdges 恒为 `35120`；
+- 外部 PID 绑定：systemd PID `2882014`、`NRestarts=0`、进程 env runtime commit 一致。
+
+按用户 2026-08-11 放宽后的口径（同一精确部署 commit、稳态锚点后连续 100/100 合格 pass，
+每个 pass 均为 `enumeration=ran` 且 `priced/expected>80%`），该精确 runtime 的 live-continuity
+子门关闭。此证据不关闭 strict catalog production authority、sealed parity、
+Funding/Credit production consumers、systemic-live gate 或 Phase E。
+
 ## 8. Identity：多来源 variant，统一行为证明
 
 冻结 ds 已有 `identityPolicies`、`discoveryIdentityResolver`、typed `IdentityAuthority`、retained-instance re-probe
