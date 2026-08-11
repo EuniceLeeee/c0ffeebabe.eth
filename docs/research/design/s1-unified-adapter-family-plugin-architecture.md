@@ -1884,6 +1884,22 @@ self-burn）。
 `custom-swap:dodo-v2`、`fluid-dex` + 8 个 protocol 族
 （astra/eigenpie/erc4626/erc4626-silo/ethertoken/metronome×2/self-burn）。
 
+**2026-08-12 metronome-hgusdc fixture framework-blocker checkpoint（未
+完成 phase，诚实记录）：** 尝试实现 `protocol:metronome-hgusdc` fixture
+capture（`executePath` observation、multi-phase identity
+base→curve→vault、dependent pricing/exact program），identity 的 9 个
+base request 在独立 `executeAdapterWork` 最小 harness 下 resolve，但在
+`executeAdapterFamilyLifecycleBatch` 内首轮 identity work 报
+`identity-work-unresolved:...:invalid-program`（requirements/request-build
+阶段失败，且自定义 identity variant 的 multi-phase program 包装未被
+lifecycle 接受）。这是继 univ3/univ4 precision、protocol quotes、
+wsteth/rocksolid dependencies 之后的第五类 framework blocker，需要先修
+lifecycle 对 `kind:"custom"` 多阶段 identity program 的包装/校验，再继续该
+Family 的 capture。
+
+该 blocker 已回滚为干净 worktree（无未提交代码）；不把未验证的 fixture
+当作进度。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
