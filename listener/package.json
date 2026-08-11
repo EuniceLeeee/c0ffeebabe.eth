@@ -185,6 +185,7 @@
     "searcher:architecture-migration-parity-runner": "node --import tsx src/searcher/test/architecture-migration-parity-runner.ts",
     "architecture-migration-parity:run": "node --import tsx src/searcher/run-architecture-migration-parity-cli.ts",
     "architecture-migration-capture:run": "node --import tsx src/searcher/run-architecture-migration-capture-cli.ts",
+    "architecture-migration-capture:real": "node --import tsx src/searcher/run-architecture-migration-capture-real-cli.ts",
     "searcher:architecture-migration-capture": "node --import tsx src/searcher/test/architecture-migration-capture.ts",
     "searcher:family-owned-action": "node --import tsx src/searcher/test/family-owned-action.ts",
     "searcher:blockscan-state-pool-topology-spike": "node --import tsx src/searcher/test/blockscan-state-pool-topology-spike.ts",

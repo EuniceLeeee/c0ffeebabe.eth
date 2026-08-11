@@ -11,6 +11,7 @@ import {
 } from "../architecture-migration-capture.js";
 import {
   captureUniv2FixtureCase,
+  captureUniv2RealCase,
 } from "../architecture-migration-fixture-replay.js";
 import {
   createArchitectureMigrationProductionCaptureIssuer,
@@ -77,6 +78,29 @@ async function testFixtureReplayProducesCanonicalCase(): Promise<void> {
   assert.equal(familyCase.stages.finalSimulations?.status, "framework-blocked");
   assert((familyCase.stages.instances?.items.length ?? 0) >= 1);
   assert((familyCase.stages.edges?.items.length ?? 0) >= 1);
+}
+
+async function testRealCaseUsesDescriptorPoolAndBlocksPrices(): Promise<void> {
+  const realPool = `0x${"61".repeat(20)}`;
+  const realTokenA = `0x${"71".repeat(20)}`;
+  const realTokenB = `0x${"72".repeat(20)}`;
+  const familyCase = await captureUniv2RealCase({
+    source: SOURCE,
+    pool: realPool,
+    tokenA: realTokenA,
+    tokenB: realTokenB,
+    pricesBlocked: true,
+  });
+  assert.equal(familyCase.stages.prices?.status, "framework-blocked");
+  assert(familyCase.stages.edges!.items[0]!.id.includes(realPool.toLowerCase()));
+  assert.equal(familyCase.stages.instances?.items.length, 1);
+  const pricesOff = await captureUniv2RealCase({
+    source: SOURCE,
+    pool: realPool,
+    tokenA: realTokenA,
+    tokenB: realTokenB,
+  });
+  assert.equal(pricesOff.stages.prices?.status, "exercised");
 }
 
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
@@ -169,6 +193,7 @@ async function testEndToEndSealedParity(): Promise<void> {
 async function main(): Promise<void> {
   await testCorpusValidation();
   await testFixtureReplayProducesCanonicalCase();
+  await testRealCaseUsesDescriptorPoolAndBlocksPrices();
   await testWriteAndGenerateRoundTrip();
   await testEndToEndSealedParity();
   console.log("architecture-migration capture harness PASS");

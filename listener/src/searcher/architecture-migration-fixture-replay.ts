@@ -44,16 +44,29 @@ import type {
 
 const CATALOG = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
 const FAMILY = CATALOG.forFamily(UNIV2_FAMILY_ID);
-const POOL = `0x${"41".repeat(20)}`;
-const FACTORY = `0x${"42".repeat(20)}`;
-const TOKEN0 = `0x${"43".repeat(20)}`;
-const TOKEN1 = `0x${"44".repeat(20)}`;
+export const UNIV2_FIXTURE_POOL = `0x${"41".repeat(20)}`;
+export const UNIV2_FIXTURE_FACTORY = `0x${"42".repeat(20)}`;
+export const UNIV2_FIXTURE_TOKEN0 = `0x${"43".repeat(20)}`;
+export const UNIV2_FIXTURE_TOKEN1 = `0x${"44".repeat(20)}`;
 
 class FixtureFence implements AdapterGenerationFence {
   assertCurrent(): void {}
 }
 
+interface PoolContext {
+  readonly pool: string;
+  readonly factory: string;
+  readonly token0: string;
+  readonly token1: string;
+}
+
 class FixtureScheduler implements CentralAdapterScheduler {
+  readonly #pool: PoolContext;
+
+  constructor(pool: PoolContext) {
+    this.#pool = pool;
+  }
+
   issueExecutor(
     input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
   ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
@@ -67,7 +80,7 @@ class FixtureScheduler implements CentralAdapterScheduler {
         assert.deepEqual(requests, input.requests);
       },
       execute: async (execution) => Promise.all(execution.requests.map(
-        (request) => successResult(request, execution.source),
+        (request) => successResult(request, execution.source, this.#pool),
       )),
       sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
     });
@@ -78,7 +91,7 @@ class FixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function fixtureRuntime(): CentralAdapterRuntime {
+function fixtureRuntime(pool: PoolContext): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -94,22 +107,23 @@ function fixtureRuntime(): CentralAdapterRuntime {
       }),
     },
     budgets: { assertAdmitted() {} },
-    scheduler: new FixtureScheduler(),
+    scheduler: new FixtureScheduler(pool),
   };
 }
 
 function successResult(
   request: AdapterRequest,
   canonical: CanonicalSource,
+  pool: PoolContext,
 ): AdapterRequestResult {
   const data = request.id === "pair-factory"
-    ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("factory", [FACTORY])
+    ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("factory", [pool.factory])
     : request.id === "pair-token0"
-    ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("token0", [TOKEN0])
+    ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("token0", [pool.token0])
     : request.id === "pair-token1"
-    ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("token1", [TOKEN1])
+    ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("token1", [pool.token1])
     : request.id === "factory-get-pair"
-    ? UNIV2_FACTORY_INTERFACE.encodeFunctionResult("getPair", [POOL])
+    ? UNIV2_FACTORY_INTERFACE.encodeFunctionResult("getPair", [pool.pool])
     : request.id === "current-reserves"
     ? UNIV2_PAIR_INTERFACE.encodeFunctionResult(
         "getReserves",
@@ -131,6 +145,7 @@ function successResult(
 
 async function runUniv2Lifecycle(
   canonical: CanonicalSource,
+  pool: PoolContext,
 ): Promise<AdapterFamilyPublication> {
   let publication: AdapterFamilyPublication | null = null;
   const result = await executeAdapterFamilyLifecycleBatch({
@@ -140,13 +155,13 @@ async function runUniv2Lifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: POOL,
+        target: pool.pool,
         data: UNIV2_SWAP_SELECTOR,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: fixtureRuntime(),
+    runtime: fixtureRuntime(pool),
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -178,7 +193,30 @@ export async function captureUniv2FixtureCase(input: {
   readonly source: CanonicalSource;
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runUniv2Lifecycle(input.source);
+  return captureUniv2RealCase({
+    ...input,
+    pool: UNIV2_FIXTURE_POOL,
+    tokenA: UNIV2_FIXTURE_TOKEN0,
+    tokenB: UNIV2_FIXTURE_TOKEN1,
+    pricesBlocked: false,
+  });
+}
+
+export async function captureUniv2RealCase(input: {
+  readonly source: CanonicalSource;
+  readonly pool: string;
+  readonly tokenA: string;
+  readonly tokenB: string;
+  readonly caseId?: string;
+  readonly pricesBlocked?: boolean;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const pool: PoolContext = {
+    pool: input.pool.toLowerCase(),
+    factory: `0x${"42".repeat(20)}`,
+    token0: input.tokenA.toLowerCase(),
+    token1: input.tokenB.toLowerCase(),
+  };
+  const publication = await runUniv2Lifecycle(input.source, pool);
   const evidenceRefs = Object.freeze([
     `fixture:univ2:${input.source.number}:${input.source.hash}`,
   ]);
@@ -226,7 +264,12 @@ export async function captureUniv2FixtureCase(input: {
     edges: exercisedStage(edges, evidenceRefs),
     stateCoverage: exercisedStage([], evidenceRefs),
     pricedEdges: exercisedStage([], evidenceRefs),
-    prices: exercisedStage(prices, evidenceRefs),
+    prices: input.pricesBlocked === true
+      ? frameworkBlockedStage(
+          evidenceRefs,
+          "capture-harness-real-prices-not-wired",
+        )
+      : exercisedStage(prices, evidenceRefs),
     failures: exercisedStage([], evidenceRefs),
     enumeratedRoutes: frameworkBlockedStage(
       evidenceRefs,
