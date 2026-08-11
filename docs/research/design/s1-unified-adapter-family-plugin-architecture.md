@@ -145,6 +145,16 @@ commit 见本日各 checkpoint）：**
 - 实测：对 `s1-node-run-89c2728e-…json` 验证通过
   （receipt `8df51cad…`）；SSM run 记录与 pinned 证据链完整可审计。
 
+**2026-08-12 regression sweep evidence-chain coverage checkpoint（commit
+见下，ops 覆盖扩展）：**
+
+- `s1-regression-sweep.sh` 新增 node-evidence verifier 组：对每个
+  committed `s1-node-run-*.json` 跑
+  `verify-s1-node-evidence.sh`，缺记录即失败；
+- 实测：sweep 11 组全过（含 parity verifier 与 node evidence
+  verifier，commit `93fc75b2…`），receipt 写入 /tmp；一条命令即可
+  覆盖本地合同 + 本地 parity + 节点 SSM 证据链。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - strict catalog prepare 内 complete-snapshot 一次性消费（受限于

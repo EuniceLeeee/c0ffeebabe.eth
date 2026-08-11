@@ -42,6 +42,19 @@ echo "[s1-regression] parity verifier"
   >"${out_dir}/parity-verify.log" 2>&1
 echo "parity-verifier" >>"${out_dir}/tests-passed.txt"
 
+echo "[s1-regression] node evidence verifier"
+node_records=("${repo_root}"/docs/research/design/evidence/s1-node-run-*.json)
+if [[ ${#node_records[@]} -gt 0 ]]; then
+  for record in "${node_records[@]}"; do
+    "${repo_root}/scripts/verify-s1-node-evidence.sh" "${record}" \
+      >"${out_dir}/node-evidence-$(basename "${record}" .json).log" 2>&1
+  done
+  echo "node-evidence-verifier" >>"${out_dir}/tests-passed.txt"
+else
+  echo "[s1-regression] no committed node evidence records" >&2
+  exit 2
+fi
+
 finished=$(date -u +%s)
 sha="$("${repo_root}/scripts/verify-s1-parity-receipt.sh" \
   "${baseline_dir}" "${impl_dir}" "${out_dir}/parity-verify" \
