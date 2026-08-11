@@ -71,7 +71,7 @@ authority 混在一起：
 |Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在，`7ba6f9d3` 已落地 trusted sealed-production capture issuer（unit runner 继续拒绝自封 `sealed-production`），`a879665a` 已落地双侧 capture 文件入口 `runArchitectureMigrationParityFiles` + `architecture-migration-parity:run` CLI|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
 |Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立；`1527c116` 为 exact quote cache 补独立 issuer/key 绑定/LRU/eviction 合同测试|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
 |Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
-|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS、`c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract、`642373c1` 的中央 value 深冻结 + StateInstance mutation/carry shadow proof、`9d954df4` 的 Credit 独立 execution handle shadow issuer、`8d4ed796` 的 point-in-time enumerator core 纯函数合同、`4275be6f` 的 durable discovery continuity composition root、`c383e58f` 的 main env 门控接线，以及 `dd0df3d8` 的 Funding 进 strict catalog atomic CAS（instance 槽扩为 union、显式 tombstone、禁止跨代 carry、views 只读 funding 投影）等 runtime slice 已有 unit/shadow gate|strict catalog prepare 内的一次性消费（complete-snapshot 仍拒绝）、production point-in-time enumerator 的真实数据源接线、strict pricing production consumer、Credit 全 catalog CAS 与 Funding/Credit production consumer、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
+|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS、`c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract、`642373c1` 的中央 value 深冻结 + StateInstance mutation/carry shadow proof、`9d954df4` 的 Credit 独立 execution handle shadow issuer、`8d4ed796` 的 point-in-time enumerator core 纯函数合同、`4275be6f` 的 durable discovery continuity composition root、`c383e58f` 的 main env 门控接线、`dd0df3d8` 的 Funding 进 strict catalog atomic CAS，以及 `4b8b79d4` 的 Credit 进 strict catalog atomic CAS（route/graph 槽扩为 union、CreditRouteRuntimeHandle/ProjectedCreditRouteGraph 同 CAS、省略即拒绝 carry）等 runtime slice 已有 unit/shadow gate|strict catalog prepare 内的一次性消费（complete-snapshot 仍拒绝）、production point-in-time enumerator 的真实数据源接线、strict pricing production consumer、Funding/Credit production consumer、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
 |Phase E cleanup|尚未开始|legacy registry/API/schema/revision/cache/flag authority 仍在；只有 §18.3 与 §20.2.6 全部门通过后才能删除|
 
 该表是实施 checkpoint，不是目标合同的降级，也不预判并行实现工作最终是否通过；任一状态更新都必须引用新的
@@ -1251,6 +1251,20 @@ views 新增 `fundingByPublicationKey` 只读投影；Funding 实例禁止跨代
 （省略即 `issuer-bound StateInstance mutation proof` 拒绝）。合同覆盖：tombstone 提交、
 同 CAS revision、省略拒绝。证据：shadow publication 测试 + 全套件 + 完整 build。
 Credit 全 catalog CAS 与 Funding/Credit production consumer 仍 open。
+
+**2026-08-11 Credit 进 strict catalog atomic CAS checkpoint（实现 commit
+`4b8b79d4397185b337806b54a7fb5e9198c63dcc`，shadow CAS，不是 production consumer）：**
+shadow root 的 route/graph 槽扩为
+`FamilyRouteRuntimeHandle | CreditRouteRuntimeHandle` 与
+`ProjectedFamilyRouteGraph | ProjectedCreditRouteGraph`；新增 `stageCreditFamily`
+（Credit lifecycle box + `PreparedCreditRoutePublication` + `PreparedFamilyInstance` →
+strict shard，逐 route 断言 issuer、投影 common-Graph、按 canonicalEdgeId 对齐
+route/graph key）；Credit 与 route/Funding shards 进入同一次 atomic CAS；
+views.handleByCanonicalEdgeId 现为两类 handle 的 union 索引；Credit shard 省略即
+`issuer-bound StateInstance mutation proof` 拒绝（禁止静默 carry）。合同覆盖：Credit
+同 CAS 提交（1 edge / 1 handle / revision 1）、省略拒绝。证据：`searcher:adapter-credit-runtime`
+PASS + 全套件 + 完整 build。Funding/Credit production consumer、默认 authority、
+sealed parity 与 systemic-live 仍 open。
 
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
