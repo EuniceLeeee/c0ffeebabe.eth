@@ -2089,6 +2089,29 @@ impl `4cdd1f10`、baseline `a6edaad5`，本地机器证据）：**
 剩余 5 族：`credit:fluid`、`curve-underlying`、`custom-swap:angstrom-v4`、
 `custom-swap:dodo-v2`、`fluid-dex`。
 
+**2026-08-12 curve-underlying bilateral parity phase checkpoint（实现
+commits impl `68cc5fcb`、baseline `38e3da6c`，本地机器证据）：**
+
+- 修复 curve-underlying identity requirements（registry-surface 之后
+  behavior 阶段只声明 eth-call，去掉未使用的 get-code）；
+- impl `captureCurveUnderlyingFixtureCase`（observed
+  exchange_underlying、metaregistry 反向绑定、两 underlying coins、
+  behavior-proven 两条 directed quote、registry-scale dependent
+  pricing）全部 10 stage `exercised`；normalizer 六类 stage
+  （`address-pool` venue、`curve-underlying` quoted mid、i/j 行为方向）
+  落地；baseline facts 携带完整 verifiedDirections 集合以对齐静态投影
+  hash；
+- baseline exporter `captureCurveUnderlyingBaselineCase`（registry
+  handlers/coins、1:1 quote、curve-i/j 执行参数、四段 token-delta）；
+- 本地跨分支 parity（block `25729060`，十八族 manifest）：十八族全部
+  **pass**、commonGraph 五 stage delta 全空；
+  `searcher:architecture-migration-capture` 合同测试与完整
+  `npm run build` 全部通过；仍是 sealed-capture/shadow receipt，不是
+  production cutover 或 live evidence。
+
+剩余 4 族：`credit:fluid`、`custom-swap:angstrom-v4`、
+`custom-swap:dodo-v2`、`fluid-dex`。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
