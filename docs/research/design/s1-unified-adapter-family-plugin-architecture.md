@@ -1718,6 +1718,19 @@ univ4 baseline exporter（冻结 ds `univ4-standard`）+ univ4 normalizer +
 节点真实 corpus 双跑是下一 phase；此前不得把 univ4 当作 batch pass 或
 production cutover。
 
+**2026-08-11 univ4 real capture + manifest 支持 checkpoint（实现 commit
+impl `408c348b`，fixture 级合同证据）：**
+
+- 新增 `captureUniv4RealCase`（currency0/1、fee、tickSpacing、hooks、
+  liquidity、sqrtPriceX96、lpFee 参数化，poolId 由 `v4PoolId` 推导）；
+- `architecture-migration-capture:real` 的 multi-family manifest 支持
+  `family:"univ4"` case，与 univ2/univ3 合并进同一 corpus/commonGraph；
+- 合同证据：`searcher:architecture-migration-capture` PASS（univ4 real
+  全 stage exercised 断言）、完整 listener build。
+
+下一步：univ4 baseline exporter + univ4 normalizer（`manager-pool-id`
+venue 与 `manager+poolId` instance 身份）+ 节点真实 corpus 双跑。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
