@@ -12,6 +12,7 @@ import {
   readStrictPricingMid,
   strictFundingPublicationKeysByFamily,
   strictPricingPublicationKey,
+  strictPricingPublicationKeysByFamily,
   type CommittedStrictShadowCatalogPublication,
   type StrictShadowCatalogViews,
   type StrictShadowCatalogFamilyStage,
@@ -454,6 +455,7 @@ async function main(): Promise<void> {
     kind: "unavailable",
     reason: "fixture-unavailable",
   });
+  assert(Object.isFrozen(readUnavailable));
   assert.throws(() => {
     (committedPricing.pricingDescriptor as { pool: string }).pool = FACTORY;
   }, TypeError);
@@ -867,6 +869,19 @@ async function main(): Promise<void> {
     }) as never,
     instance: Object.freeze({}) as never,
   }), /requires a Credit FamilyBox/);
+  assert.throws(() => fundingRoot.stageRouteFamily({
+    publication: Object.freeze({
+      familyId: familyId("swap:not-in-catalog"),
+      source: fundingSource,
+      generation: fundingSource.generation,
+      instances: Object.freeze([]),
+    }) as never,
+  }), /has no |not a route Family|Domain/);
+  assert.throws(() => fundingRoot.stageUnsupported({
+    familyId: familyId("swap:not-in-catalog"),
+    source: fundingSource,
+    outcomeRefs: ["shadow:not-wired"],
+  }), /has no /);
   const fundingRoutePublication = await lifecycle(fundingSource);
   const fundingRouteStage = fundingRoot.stageRouteFamily({
     publication: fundingRoutePublication,
@@ -935,6 +950,7 @@ async function main(): Promise<void> {
   }), { kind: "missing" });
   const fundingConsumer = createStrictCatalogConsumer(fundingCommitted.views);
   assert(Object.isFrozen(fundingConsumer.views));
+  assert.equal(fundingConsumer.views, fundingCommitted.views);
   assert.deepEqual(fundingConsumer.resolveFundingOffers({
     fundingPublicationKey:
       [...fundingCommitted.views.fundingByPublicationKey.keys()][0]!,
@@ -964,6 +980,14 @@ async function main(): Promise<void> {
     instanceKey: instanceKey(stagedInstance.instanceKey),
     stateInstanceKey: committedPricing.stateInstanceKey,
   }), pricingKey);
+  assert.deepEqual(strictPricingPublicationKeysByFamily({
+    views: committed1.views,
+    familyId: stagedInstance.familyId,
+  }), [pricingKey]);
+  assert.deepEqual(strictPricingPublicationKeysByFamily({
+    views: committed1.views,
+    familyId: familyId("swap:not-in-catalog"),
+  }), []);
   assert.equal(fundingCommitted.envelope.snapshot.revision, 1);
   assert.equal(fundingCommitted.envelope.snapshot.familyStatuses.get(
     fundingFamilyId,
@@ -1063,6 +1087,65 @@ async function main(): Promise<void> {
     fundingPublicationKey:
       [...offersCommitted.views.fundingByPublicationKey.keys()][0]!,
   }), { kind: "offers", offers: offersState.offers });
+  assert.throws(() => createStrictCatalogConsumer(
+    Object.freeze({}) as StrictShadowCatalogViews,
+  ), /committed frozen view/);
+  assert.throws(() => createStrictCatalogConsumer({
+    ...offersCommitted.views,
+  } as StrictShadowCatalogViews), /committed frozen view/);
+  const badAssetOfferPublication = Object.freeze({
+    familyId: fundingFamilyId,
+    source: offersSource,
+    generation: offersSource.generation,
+    offers: Object.freeze([Object.freeze({
+      ...offer,
+      asset: "0x1234",
+    })]),
+    outcomes: Object.freeze([]),
+  }) as unknown as Parameters<
+    typeof fundingRoot.stageFundingFamily
+  >[0]["publication"];
+  assert.throws(() => fundingRoot.stageFundingFamily({
+    publication: badAssetOfferPublication,
+  }), /asset must be an address/);
+  const mismatchedSourceOfferPublication = Object.freeze({
+    familyId: fundingFamilyId,
+    source: offersSource,
+    generation: offersSource.generation,
+    offers: Object.freeze([Object.freeze({
+      ...offer,
+      source: fundingSource,
+    })]),
+    outcomes: Object.freeze([]),
+  }) as unknown as Parameters<
+    typeof fundingRoot.stageFundingFamily
+  >[0]["publication"];
+  assert.throws(() => fundingRoot.stageFundingFamily({
+    publication: mismatchedSourceOfferPublication,
+  }), /source escaped its publication/);
+  const noEvidenceVerifiedPublication = Object.freeze({
+    familyId: fundingFamilyId,
+    source: offersSource,
+    generation: offersSource.generation,
+    offers: Object.freeze([]),
+    outcomes: Object.freeze([Object.freeze({
+      familyId: fundingFamilyId,
+      fundingId: "morpho",
+      instanceKey: "state:funding",
+      stateKey: "funding:morpho",
+      asset: `0x${"77".repeat(20)}`,
+      status: "verified" as const,
+      reasonCode: "",
+      source: offersSource,
+      workReceipt: null,
+      evidenceRefs: Object.freeze([]),
+    })]),
+  }) as unknown as Parameters<
+    typeof fundingRoot.stageFundingFamily
+  >[0]["publication"];
+  assert.throws(() => fundingRoot.stageFundingFamily({
+    publication: noEvidenceVerifiedPublication,
+  }), /non-empty evidence refs/);
 
   // Tombstone -> offers -> tombstone round trip across three generations.
   const tombstoneAgainSource = source(503);

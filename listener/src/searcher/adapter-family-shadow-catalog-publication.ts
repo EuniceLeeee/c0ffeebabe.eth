@@ -234,6 +234,17 @@ export function strictFundingPublicationKeysByFamily(input: {
     .sort();
 }
 
+/** Pricing publication keys published for one Family in a committed view. */
+export function strictPricingPublicationKeysByFamily(input: {
+  readonly views: StrictShadowCatalogViews;
+  readonly familyId: FamilyId;
+}): readonly string[] {
+  return [...input.views.pricingByPublicationKey.entries()]
+    .filter(([, state]) => state.familyId === input.familyId)
+    .map(([key]) => key)
+    .sort();
+}
+
 export interface StrictCatalogConsumer {
   readonly views: StrictShadowCatalogViews;
   readonly resolvePricingMid: (input: {
@@ -257,6 +268,18 @@ export interface StrictCatalogConsumer {
 export function createStrictCatalogConsumer(
   views: StrictShadowCatalogViews,
 ): StrictCatalogConsumer {
+  if (
+    views === null ||
+    typeof views !== "object" ||
+    !Object.isFrozen(views) ||
+    !("pricingByPublicationKey" in views) ||
+    !("fundingByPublicationKey" in views) ||
+    !("handleByCanonicalEdgeId" in views)
+  ) {
+    throw new Error(
+      "strict catalog consumer requires a committed frozen view",
+    );
+  }
   const resolvePricingMid: StrictCatalogConsumer["resolvePricingMid"] =
     (input) => readStrictPricingMid({
       views,
@@ -477,6 +500,20 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
       offers: Object.freeze([...input.publication.offers]),
       outcomes: Object.freeze([...input.publication.outcomes]),
     });
+    for (const offer of input.publication.offers) {
+      this.#assertFundingOfferProjection(offer, source);
+    }
+    for (const outcome of input.publication.outcomes) {
+      if (
+        outcome.status === "verified" &&
+        (!Array.isArray(outcome.evidenceRefs) ||
+          outcome.evidenceRefs.length === 0)
+      ) {
+        throw new Error(
+          "verified funding outcome requires non-empty evidence refs",
+        );
+      }
+    }
     const instance: CatalogStagedInstance<StrictFundingPublicationState> = {
       familyId: manifest.familyId,
       lineageId: lineageId("funding-publication"),
@@ -519,6 +556,45 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
         input.publication.outcomes.flatMap((outcome) => outcome.evidenceRefs),
       ),
     });
+  }
+
+  #assertFundingOfferProjection(
+    offer: PreparedFundingOffer,
+    source: CanonicalSource,
+  ): void {
+    if (!Object.isFrozen(offer)) {
+      throw new Error("funding offer projection must be frozen");
+    }
+    if (offer.fundingId.trim().length === 0) {
+      throw new Error("funding offer fundingId must be non-empty");
+    }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(offer.asset)) {
+      throw new Error("funding offer asset must be an address");
+    }
+    if (
+      typeof offer.maxBorrow !== "bigint" ||
+      offer.maxBorrow < 0n ||
+      typeof offer.fee !== "bigint" ||
+      offer.fee < 0n
+    ) {
+      throw new Error("funding offer amounts must be non-negative bigints");
+    }
+    if (offer.actionAdapterId.trim().length === 0) {
+      throw new Error("funding offer actionAdapterId must be non-empty");
+    }
+    if (
+      offer.source.number !== source.number ||
+      offer.source.hash.toLowerCase() !== source.hash.toLowerCase() ||
+      offer.source.generation !== source.generation
+    ) {
+      throw new Error("funding offer source escaped its publication");
+    }
+    if (
+      !Array.isArray(offer.evidenceRefs) ||
+      offer.evidenceRefs.length === 0
+    ) {
+      throw new Error("funding offer requires non-empty evidence refs");
+    }
   }
 
   /** Converts one Credit lifecycle publication into a strict staged shard. */
