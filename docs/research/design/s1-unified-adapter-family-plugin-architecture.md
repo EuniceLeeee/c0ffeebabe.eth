@@ -2310,6 +2310,19 @@ commit 见下，§18.3.1/§18.3.7 前置合同）：**
   的 evidence 前置；当前仅合同级，尚未在 live startup 打印（后续
   main-env 接线时消费）。
 
+**2026-08-12 live startup manifest consumption checkpoint（实现 commit
+见下，启动诊断接线，非 cutover）：**
+
+- `main.ts` 在 V5 searcher 启动横幅后消费
+  `productionFamilyStartupManifest()`：输出 manifestHash、
+  families/capabilities 计数；任何 fail-closed（legacy/缺能力/数量不符）
+  以 warning 显式记录，不静默继续；
+- 该接线只做启动 evidence 日志，不改变 authority、不参与 solver；
+  合同级行为仍由 `searcher:production-family-startup-manifest` 覆盖；
+- 证据：该合同 + `searcher:strict-catalog-consumer-diagnostic` + 完整
+  listener build 通过；live startup 现在具备 legacy-free composition
+  的可见清单（§18.3.1/§18.3.7 前置）。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

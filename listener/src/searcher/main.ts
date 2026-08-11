@@ -80,6 +80,9 @@ import {
   resolveStrictCatalogConsumerDiagnostic,
 } from "./strict-catalog-consumer-diagnostic.js";
 import {
+  productionFamilyStartupManifest,
+} from "./production-family-startup-manifest.js";
+import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "./venues/production-family-composition.js";
 import {
@@ -1356,6 +1359,20 @@ async function main(): Promise<void> {
   });
 
   console.log("[searcher/live] starting V5 searcher");
+  try {
+    const startupManifest = productionFamilyStartupManifest();
+    console.log(
+      `[searcher/live] production family startup manifest ` +
+        `${startupManifest.manifestHash} ` +
+        `families=${startupManifest.familyCount} ` +
+        `capabilities=${startupManifest.capabilityCount}`,
+    );
+  } catch (error) {
+    console.warn(
+      `[searcher/live] production family startup manifest failed: ` +
+        `${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   const eventContext = initEvents();
   const blockScanRouteTelemetry =
     await initBlockScanEnumerationSolverTelemetry({
