@@ -33,6 +33,11 @@ async function main(): Promise<void> {
     readonly tokenB: string;
     readonly sourceBlock: number;
     readonly sourceBlockHash: string;
+    readonly reserves?: {
+      readonly reserve0: string;
+      readonly reserve1: string;
+      readonly blockTimestampLast?: number;
+    };
     readonly captureId?: string;
     readonly commit?: string;
   };
@@ -46,7 +51,7 @@ async function main(): Promise<void> {
     pool: descriptor.pool,
     tokenA: descriptor.tokenA,
     tokenB: descriptor.tokenB,
-    pricesBlocked: true,
+    reserves: descriptor.reserves,
   });
   const corpus = {
     ...buildFixtureCaptureCorpus({

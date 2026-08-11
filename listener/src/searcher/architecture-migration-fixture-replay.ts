@@ -58,6 +58,11 @@ interface PoolContext {
   readonly factory: string;
   readonly token0: string;
   readonly token1: string;
+  readonly reserves?: {
+    readonly reserve0: bigint;
+    readonly reserve1: bigint;
+    readonly blockTimestampLast: number;
+  };
 }
 
 class FixtureScheduler implements CentralAdapterScheduler {
@@ -127,7 +132,13 @@ function successResult(
     : request.id === "current-reserves"
     ? UNIV2_PAIR_INTERFACE.encodeFunctionResult(
         "getReserves",
-        [1_000_000n, 2_000_000n, 1_234],
+        pool.reserves === undefined
+          ? [1_000_000n, 2_000_000n, 1_234]
+          : [
+              pool.reserves.reserve0,
+              pool.reserves.reserve1,
+              pool.reserves.blockTimestampLast,
+            ],
       )
     : (() => { throw new Error(`unexpected fixture request ${request.id}`); })();
   return Object.freeze({
@@ -198,7 +209,6 @@ export async function captureUniv2FixtureCase(input: {
     pool: UNIV2_FIXTURE_POOL,
     tokenA: UNIV2_FIXTURE_TOKEN0,
     tokenB: UNIV2_FIXTURE_TOKEN1,
-    pricesBlocked: false,
   });
 }
 
@@ -208,13 +218,25 @@ export async function captureUniv2RealCase(input: {
   readonly tokenA: string;
   readonly tokenB: string;
   readonly caseId?: string;
-  readonly pricesBlocked?: boolean;
+  readonly reserves?: {
+    readonly reserve0: bigint | string;
+    readonly reserve1: bigint | string;
+    readonly blockTimestampLast?: number;
+  };
 }): Promise<RawFamilyMigrationCaseCapture> {
+  const reserves = input.reserves === undefined
+    ? undefined
+    : Object.freeze({
+        reserve0: BigInt(input.reserves.reserve0),
+        reserve1: BigInt(input.reserves.reserve1),
+        blockTimestampLast: input.reserves.blockTimestampLast ?? 0,
+      });
   const pool: PoolContext = {
     pool: input.pool.toLowerCase(),
     factory: `0x${"42".repeat(20)}`,
     token0: input.tokenA.toLowerCase(),
     token1: input.tokenB.toLowerCase(),
+    reserves,
   };
   const publication = await runUniv2Lifecycle(input.source, pool);
   const evidenceRefs = Object.freeze([
@@ -247,10 +269,18 @@ export async function captureUniv2RealCase(input: {
         }),
       }));
     }
+    const routeByKey = new Map(
+      instance.routes.map((route) => [route.routeKey, route]),
+    );
     for (const pricing of instance.pricingInstances) {
       for (const [routeKey, mid] of pricing.mids) {
+        const route = routeByKey.get(routeKey);
+        if (route === undefined) {
+          throw new Error(`univ2 pricing route ${routeKey} is missing`);
+        }
         prices.push(Object.freeze({
-          id: `${pricing.stateInstanceKey}:${routeKey}`,
+          id: `${pricing.stateKey}:${route.tokenIn.toLowerCase()}>` +
+            `${route.tokenOut.toLowerCase()}`,
           value: Object.freeze({
             stateKey: pricing.stateKey,
             mid: Object.freeze({ ...mid }),
@@ -264,10 +294,10 @@ export async function captureUniv2RealCase(input: {
     edges: exercisedStage(edges, evidenceRefs),
     stateCoverage: exercisedStage([], evidenceRefs),
     pricedEdges: exercisedStage([], evidenceRefs),
-    prices: input.pricesBlocked === true
+    prices: input.reserves === undefined
       ? frameworkBlockedStage(
           evidenceRefs,
-          "capture-harness-real-prices-not-wired",
+          "capture-harness-prices-not-wired",
         )
       : exercisedStage(prices, evidenceRefs),
     failures: exercisedStage([], evidenceRefs),

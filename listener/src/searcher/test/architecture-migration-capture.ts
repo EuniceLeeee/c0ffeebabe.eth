@@ -74,7 +74,7 @@ async function testFixtureReplayProducesCanonicalCase(): Promise<void> {
   assert.equal(familyCase.stateAnchorNumber, SOURCE.number);
   assert.equal(familyCase.stages.instances?.status, "exercised");
   assert.equal(familyCase.stages.edges?.status, "exercised");
-  assert.equal(familyCase.stages.prices?.status, "exercised");
+  assert.equal(familyCase.stages.prices?.status, "framework-blocked");
   assert.equal(familyCase.stages.finalSimulations?.status, "framework-blocked");
   assert((familyCase.stages.instances?.items.length ?? 0) >= 1);
   assert((familyCase.stages.edges?.items.length ?? 0) >= 1);
@@ -89,18 +89,26 @@ async function testRealCaseUsesDescriptorPoolAndBlocksPrices(): Promise<void> {
     pool: realPool,
     tokenA: realTokenA,
     tokenB: realTokenB,
-    pricesBlocked: true,
   });
   assert.equal(familyCase.stages.prices?.status, "framework-blocked");
   assert(familyCase.stages.edges!.items[0]!.id.includes(realPool.toLowerCase()));
   assert.equal(familyCase.stages.instances?.items.length, 1);
-  const pricesOff = await captureUniv2RealCase({
+  const pricesOn = await captureUniv2RealCase({
     source: SOURCE,
     pool: realPool,
     tokenA: realTokenA,
     tokenB: realTokenB,
+    reserves: {
+      reserve0: "1000000000000000000",
+      reserve1: "2000000000000000000",
+    },
   });
-  assert.equal(pricesOff.stages.prices?.status, "exercised");
+  assert.equal(pricesOn.stages.prices?.status, "exercised");
+  assert.equal(pricesOn.stages.prices?.items.length, 2);
+  assert(pricesOn.stages.prices!.items[0]!.id.includes(
+    `${realPool.toLowerCase()}:${realTokenA.toLowerCase()}>` +
+      `${realTokenB.toLowerCase()}`,
+  ));
 }
 
 async function testWriteAndGenerateRoundTrip(): Promise<void> {
