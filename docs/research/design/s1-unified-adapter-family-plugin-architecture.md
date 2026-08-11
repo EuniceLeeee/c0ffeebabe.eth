@@ -1370,6 +1370,28 @@ checkpoint（baseline commit `96e0cc4f`，branch `codex/parity-capture-baseline`
 （真实状态读取 + 全 Family 覆盖）是下一步。真实 `sealed-production`
 双侧 capture 仍未产生。
 
+**2026-08-11 节点真实 corpus 双侧 sealed-production capture checkpoint
+（机器证据，覆盖率受限，不是 pass）：**
+
+- 真实 pool：UniV2 WETH/USDC `0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc`
+  （token0 USDC `0xa0b8...`、token1 WETH `0xc02a...`），source block
+  `25729060`（hash `0x2b9631...`，取自节点 local reth）；
+- baseline 侧由冻结 ds SHA `94cdf1d4e0eb20a459786b9ebcbadc8f3ff926b0` 的
+  `codex/parity-capture-baseline` 分支导出（旧 API），challenger 侧由
+  `codex/s1-unified-adapter-architecture-impl` 当前 HEAD
+  `b8c2f05879c5dbd8cab0bffc1783759f3f39df59` 导出（capture commit 由
+  `git rev-parse HEAD` 精确绑定）；
+- 节点临时 worktree：`/opt/MEV-baseline-capture`、`/opt/MEV-impl-capture`
+  （未触碰线上 searcher，PID/DRY_RUN/runtime commit 前后一致）；
+- `architecture-migration-parity:run` 产出 receipt `/tmp/parity-receipt.json`：
+  `eligible=true`、aggregate `fail`、univ2-standard outcome
+  `framework-blocked`（双侧实例/边集合无 delta；prices 与 deep stages
+  未接线，诚实 fail）。
+
+这是第一份真实双侧 `sealed-production` capture/receipt；要让 batch 转 pass，
+剩余工作：真实 reserves/mids 读入（baseline+challenger 两侧 prices）、其余
+21 个 Family 的 capture 覆盖、common-Graph 双侧导出。
+
 该 commit 的合同证据为
 `searcher:adapter-family-snapshot-inventory-closure`、
 `searcher:adapter-family-observation-shadow-ingress`、
