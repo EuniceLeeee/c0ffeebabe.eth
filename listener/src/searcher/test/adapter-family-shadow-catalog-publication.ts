@@ -815,6 +815,11 @@ async function main(): Promise<void> {
     familyId: UNIV2_FAMILY_ID,
     source: zeroSource,
   }), /requires explicit non-empty outcome refs/);
+  assert.throws(() => zeroRoot.stageUnsupported({
+    familyId: UNIV2_FAMILY_ID,
+    source: zeroSource,
+    outcomeRefs: ["   "],
+  }), /requires explicit non-empty outcome refs/);
 
   // Funding joins the same strict catalog CAS as an instance-slot shard.
   const fundingFamily = CATALOG.listAll().find((family) =>
@@ -926,6 +931,78 @@ async function main(): Promise<void> {
       nextFundingSource,
     ),
   }), /issuer-bound StateInstance mutation proof/);
+
+  // A non-empty offer generation publishes offers (not a tombstone) in the
+  // same CAS and rebinds the funding publication source.
+  const offersSource = source(502);
+  const offersRoutePublication = await lifecycle(offersSource);
+  const offersRouteStage = fundingRoot.stageRouteFamily({
+    publication: offersRoutePublication,
+  });
+  const offer = Object.freeze({
+    familyId: fundingFamilyId,
+    fundingId: "morpho",
+    asset: `0x${"77".repeat(20)}`,
+    maxBorrow: 1_000_000n,
+    fee: 50n,
+    actionAdapterId: "morpho-flash",
+    planningPriority: 1,
+    liquidityPriority: 1,
+    source: offersSource,
+    generation: offersSource.generation,
+    capabilityHash: "ab".repeat(32),
+    evidenceRefs: Object.freeze(["funding:offer"]),
+  }) as unknown as Parameters<
+    typeof fundingRoot.stageFundingFamily
+  >[0]["publication"]["offers"][number];
+  const offersPublication = Object.freeze({
+    familyId: fundingFamilyId,
+    source: offersSource,
+    generation: offersSource.generation,
+    offers: Object.freeze([offer]),
+    outcomes: Object.freeze([]),
+  }) as unknown as Parameters<
+    typeof fundingRoot.stageFundingFamily
+  >[0]["publication"];
+  const offersStage = fundingRoot.stageFundingFamily({
+    publication: offersPublication,
+  });
+  const offersStages = CATALOG.listAll().map((family) => {
+    const familyId = family.plugin.manifest.familyId;
+    if (familyId === fundingFamilyId) return offersStage;
+    if (familyId === UNIV2_FAMILY_ID) return offersRouteStage;
+    return fundingRoot.stageUnsupported({
+      familyId,
+      source: offersSource,
+      outcomeRefs: ["shadow:not-wired"],
+    });
+  });
+  const offersPrepared = fundingRoot.prepare({
+    source: offersSource,
+    previous: fundingCommitted,
+    stages: offersStages,
+    sourceAnchors: anchors({
+      canonical: offersSource,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+    sourceTransitionProof: transitionProof(
+      fundingHarness.transitionIssuer,
+      fundingSource,
+      offersSource,
+    ),
+  });
+  await publish(fundingRoot, fundingCommitted, offersPrepared);
+  const offersCommitted = fundingRoot.capture()!;
+  const offersState = [
+    ...offersCommitted.views.fundingByPublicationKey.values(),
+  ][0]!;
+  assert.equal(offersState.tombstone, false);
+  assert.equal(offersState.offers.length, 1);
+  assert.deepEqual(readStrictFundingOffers({
+    views: offersCommitted.views,
+    fundingPublicationKey:
+      [...offersCommitted.views.fundingByPublicationKey.keys()][0]!,
+  }), { kind: "offers", offers: offersState.offers });
 
   console.log("adapter-family strict shadow catalog publication tests passed");
 }
