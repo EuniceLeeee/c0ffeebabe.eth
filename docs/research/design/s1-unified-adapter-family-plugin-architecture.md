@@ -461,6 +461,25 @@ solver-shaped 生产入口；planner call-site 属于默认 authority 切换）�
 - 证据：shadow suite（15 合同）全过 + regression sweep 12 组全过 +
   完整 build。
 
+**2026-08-12 paired-live distiller checkpoint（commit 见下，
+systemic-live 权威决策的蒸馏链；真实 paired-live 运行仍待节点）：**
+
+- paired-live trusted primitive 从 `test/` 提升为 production 模块
+  `adapter-family-paired-live.ts`（唯一依赖 blind-production-audit，
+  无 test-only 引用）；
+- `systemic-live-gate.ts` 新增 `distillSystemicLiveGateInput` 与
+  `evaluateSystemicLiveFromReport`：把 trusted `PairedLiveReport`
+  （verdict、exact semantics、failure categories、coverage/timing
+  floors）映射为 fail-closed `SystemicLiveGateInput` 并直接裁决；
+  gate 不重新推导 live 证据；
+- 合同测试：all-pass report → pass；verdict=fail + challenger absolute
+  coverage fail → not-pass（两条 reasons 齐）；
+- 意义：节点 paired-live runner 产出 report 后，权威决策一步到位；
+  真实 baseline+challenger 并跑（复用 live searcher env，不动 live
+  进程）仍待节点执行；
+- 证据：shadow suite（15 合同）全过 + regression sweep 12 组全过 +
+  完整 build。
+
 **2026-08-12 活动型 Family append-only 决定 checkpoint（D-008，
 验收目标修正，非代码变更）：**
 

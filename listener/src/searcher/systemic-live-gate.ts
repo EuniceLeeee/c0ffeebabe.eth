@@ -81,3 +81,40 @@ export function evaluateSystemicLiveGate(
         reasons: Object.freeze(reasons),
       });
 }
+
+/**
+ * Distills a trusted paired-live report into the systemic-live gate input.
+ * The gate never re-derives live evidence; it only maps the report's
+ * verdict, exact semantics, failure categories and coverage/timing floors
+ * onto the fail-closed authority decision.
+ */
+export function distillSystemicLiveGateInput(
+  report: PairedLiveReport,
+): SystemicLiveGateInput {
+  return Object.freeze({
+    pairedLiveVerdict: report.verdict,
+    exactSemanticsStatus: report.exactSemantics.status,
+    challengerOnlyRepeatedFailureCategories:
+      report.challengerOnlyRepeatedFailureCategories,
+    baselineAbsoluteHeadCoveragePass:
+      report.floors.baselineAbsolutePass,
+    challengerAbsoluteHeadCoveragePass:
+      report.floors.challengerAbsolutePass,
+    challengerRelativeHeadCoveragePass:
+      report.floors.challengerRelativeHeadCoveragePass,
+    completedHeadsPass: report.floors.completedHeads95Pass,
+    candidateOverlapPass: report.floors.candidateCoverage95Pass,
+    throughputPass: report.floors.throughput95Pass,
+    baselineTimingPass: report.floors.baselineTimingPass,
+    challengerTimingPass: report.floors.challengerTimingPass,
+  });
+}
+
+export function evaluateSystemicLiveFromReport(
+  report: PairedLiveReport,
+): SystemicLiveGateVerdict {
+  return evaluateSystemicLiveGate(distillSystemicLiveGateInput(report));
+}
+import type {
+  PairedLiveReport,
+} from "./adapter-family-paired-live.js";

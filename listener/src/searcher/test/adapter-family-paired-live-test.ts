@@ -24,7 +24,7 @@ import {
   type PairedLiveSourceHeader,
   type PairedLiveTerminalInput,
   type PairedLiveTrustedClock,
-} from "./adapter-family-paired-live.js";
+} from "../adapter-family-paired-live.js";
 
 function testFrozenRuleAndReorgJournal(): void {
   const context = makeContext(100, 102, 1_000, ["approved-family"]);
