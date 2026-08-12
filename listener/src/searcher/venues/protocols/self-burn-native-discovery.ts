@@ -73,7 +73,14 @@ export const selfBurnNativeDiscovery = Object.freeze({
       "matcher-output-immutable-while-code-implementation-and-dependencies-match",
     version: "self-burn-native-address-dependencies-v1",
     async currentDependencyFingerprint(candidate) {
-      return `${candidate.codeHash.toLowerCase()}:${candidate.implementationWord.toLowerCase()}`;
+      // Deterministic 32-byte dependency fingerprint. The previous
+      // colon-joined string was not hex, so the protocol discovery cache
+      // rejected every address entry ("dependency fingerprint must be
+      // 32-byte hex") and address-surface inventory never materialized.
+      return ethers.solidityPackedKeccak256(
+        ["bytes32", "bytes32"],
+        [candidate.codeHash, candidate.implementationWord],
+      );
     },
   },
 
