@@ -85,6 +85,9 @@ import {
   type DiscoveryCheckpointInventoryWriter,
 } from "./adapter-family-discovery-inventory-writer.js";
 import {
+  deriveLiveDiscoveryCheckpointInventory,
+} from "./live-discovery-checkpoint-inventory.js";
+import {
   resolveStrictCatalogConsumerDiagnostic,
 } from "./strict-catalog-consumer-diagnostic.js";
 import {
@@ -1697,6 +1700,8 @@ async function main(): Promise<void> {
     null = null;
   let discoveryInventoryEnumerator: DiscoveryInventoryEnumerator | null = null;
   let discoveryInventoryWriter: DiscoveryCheckpointInventoryWriter | null = null;
+  let syncLiveDiscoveryCheckpointInventory:
+    (() => Promise<void>) | null = null;
   if (
     continuityCompositionPath !== undefined &&
     continuityCompositionPath.trim() !== ""
@@ -1736,6 +1741,40 @@ async function main(): Promise<void> {
           checkpointStore: discoveryContinuityComposition.store,
           checkpointIssuer: discoveryContinuityComposition.checkpointIssuer,
         });
+      syncLiveDiscoveryCheckpointInventory = async (): Promise<void> => {
+          if (discoveryInventoryWriter === null) return;
+          const envelope = liveDiscovery.capture();
+          if (envelope === null) return;
+          const cursor = envelope.protocolObservedCursor;
+          if (cursor.completeThroughHash === null) return;
+          const source = Object.freeze({
+            number: cursor.completeThroughBlock,
+            hash: cursor.completeThroughHash,
+            generation: 0,
+          });
+          const derived = deriveLiveDiscoveryCheckpointInventory({
+            publication: envelope,
+            source,
+            catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+            familyIdForAdapter: (adapterId) => {
+              try {
+                return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+                  .ownerOfAction(adapterId);
+              } catch {
+                return null;
+              }
+            },
+          });
+          const result = await discoveryInventoryWriter.write({
+            source,
+            watermarks: derived.watermarks,
+            inventoryFamilies: derived.inventoryFamilies,
+          });
+          console.log(
+            `[searcher/live] discovery checkpoint inventory ` +
+              `${result.status}`,
+          );
+        };
       const loaded = await discoveryContinuityComposition.loadForRestart();
       discoveryContinuityStatus = loaded.status;
       console.log(
@@ -2594,6 +2633,14 @@ async function main(): Promise<void> {
     onPublicationApplied(next) {
       strategyViews = next.strategyViews;
       dexGraphCoverage = { ...next.dexGraphCoverage };
+      if (syncLiveDiscoveryCheckpointInventory !== null) {
+        void syncLiveDiscoveryCheckpointInventory().catch((error) => {
+          console.warn(
+            "[searcher/live] discovery checkpoint inventory sync failed: " +
+              `${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+      }
     },
     async persistRuntimeGraphs(next) {
       await Promise.all([

@@ -420,6 +420,29 @@ cutover）：**
 - 证据：shadow suite（13 合同）全过 + regression sweep 12 组全过 +
   完整 build。
 
+**2026-08-12 live discovery → checkpoint inventory adapter checkpoint
+（commit 见下，production 侧接线合同；address-surface 族先接入）：**
+
+- 新增 `deriveLiveDiscoveryCheckpointInventory`：从 live publication 的
+  `protocolEvidenceCache.addressEntries`（codeHash/implementationWord/
+  checkedAtBlock）为 address-surface eligible 族构造真实 address-surface
+  incumbent；factory-log 与活动族因 publication 只保留投影、无原始
+  创建日志/call-log 证据，如实输出空行；
+- watermarks 只在对齐当前 source 的 coverage anchor（protocolFamily
+  SourceCoverage / dexSourceAnchor / observedCursor）存在时才声明 event
+  源 contiguous-history，否则 append-only；address-surface 源始终
+  append-only（durable checkpoint 不铸造 snapshot authority）；
+- main.ts 接线：composition env gate 开启时构造
+  `syncLiveDiscoveryCheckpointInventory`，在 coordinator
+  `onPublicationApplied` 回调中经 writer 落 checkpoint；失败/无 cursor
+  时静默保留 append-only（fail-closed），不影响 live 主路径；
+- 合同测试：wsteth address-surface incumbent 推导、astra 空行、覆盖
+  anchor 对齐/过期两种 watermark 判定、null candidate 跳过；
+- 诚实范围：adapterId→family 解析暂用 `ownerOfAction`（未知 id 返回
+  null，安全）；factory-log/活动族证据保留与 DEX 侧映射是后续 slice；
+- 证据：shadow suite（14 合同）全过 + regression sweep 12 组全过 +
+  完整 build。
+
 **2026-08-12 活动型 Family append-only 决定 checkpoint（D-008，
 验收目标修正，非代码变更）：**
 
