@@ -304,9 +304,15 @@ async function executeRequest(
             ? {}
             : { effects: Object.freeze(simulated.effects) }),
         });
-      } catch {
+      } catch (error) {
         // An unsupported simulation capability (observe, funded override,
         // verified actor) is a capability gap, never a chain RPC failure.
+        // Keep the failure code honest and surface the underlying reason for
+        // observability instead of discarding it.
+        console.warn(
+          `[strict-runtime] strict simulation fail-closed: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        );
         return Object.freeze({
           id: request.id,
           ok: false as const,
