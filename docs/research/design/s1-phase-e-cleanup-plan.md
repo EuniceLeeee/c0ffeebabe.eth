@@ -176,6 +176,15 @@
 > `strict-live-source-transition`（相邻/跨块/非祖先/倒退/深度上限
 > 五例）已并入 shadow suite；build/suite 全绿。剩余：节点验收确认
 > 第二个 source 能提交 revision 2。
+>
+> **catalogRoot generation 单调修复（2026-08-12）：** 节点复跑发现
+> 祖先门通过后第二 pass 仍 unresolved：
+> `staged publication generation is not newer`——main.ts 的 live
+> source 硬编码 generation=0，而 catalogRoot 要求新 source 的
+> generation 严格大于上一 revision。修复：inventory sync 与 live
+> publisher 的 source generation 均由上一 catalogRoot
+> `(generation ?? -1) + 1` 派生（首次仍为 0），与祖先验证共用同一
+> source。build/suite 全绿；剩余：节点验收确认 revision 2 提交。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

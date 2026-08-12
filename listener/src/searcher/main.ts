@@ -1765,15 +1765,24 @@ async function main(): Promise<void> {
           checkpointIssuer: discoveryContinuityComposition.checkpointIssuer,
         });
       syncLiveDiscoveryCheckpointInventory = async (): Promise<void> => {
-          if (discoveryInventoryWriter === null) return;
+          if (
+            discoveryInventoryWriter === null ||
+            discoveryContinuityComposition === null
+          ) {
+            return;
+          }
           const envelope = liveDiscovery.capture();
           if (envelope === null) return;
           const cursor = envelope.protocolObservedCursor;
           if (cursor.completeThroughHash === null) return;
+          const previousCatalogRoot =
+            discoveryContinuityComposition.catalogRoot.capture();
           const source = Object.freeze({
             number: cursor.completeThroughBlock,
             hash: cursor.completeThroughHash,
-            generation: 0,
+            generation:
+              (previousCatalogRoot?.envelope.snapshot.source.generation ?? -1) +
+              1,
           });
           const derived = deriveLiveDiscoveryCheckpointInventory({
             publication: envelope,
@@ -1806,10 +1815,14 @@ async function main(): Promise<void> {
           if (envelope === null) return;
           const cursor = envelope.protocolObservedCursor;
           if (cursor.completeThroughHash === null) return;
+          const previousCatalogRoot =
+            discoveryContinuityComposition.catalogRoot.capture();
           const source = Object.freeze({
             number: cursor.completeThroughBlock,
             hash: cursor.completeThroughHash,
-            generation: 0,
+            generation:
+              (previousCatalogRoot?.envelope.snapshot.source.generation ?? -1) +
+              1,
           });
           const observations =
             deriveLiveDiscoveryAddressSurfaceObservations({
@@ -1823,8 +1836,6 @@ async function main(): Promise<void> {
                 ),
             });
           if (observations.size === 0) return;
-          const previousCatalogRoot =
-            discoveryContinuityComposition.catalogRoot.capture();
           if (previousCatalogRoot !== null) {
             const previousSource =
               previousCatalogRoot.envelope.snapshot.source;
