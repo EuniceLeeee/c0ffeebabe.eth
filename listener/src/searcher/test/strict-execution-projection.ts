@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import {
   resolveFundingPrewarmAddresses,
+  strictExecutionProjectionFor,
   strictRoutePrewarmAddresses,
   strictFundingPrewarmAddresses,
 } from "../strict-execution-projection.js";
+import {
+  UNIV2_PAIR_INTERFACE,
+} from "../venues/swaps/univ2-family/codec.js";
+import {
+  UNIV2_ROUTER,
+} from "../venues/swaps/univ2-family/victim.js";
 import type {
   StrictShadowCatalogViews,
 } from "../adapter-family-shadow-catalog-publication.js";
@@ -112,6 +119,24 @@ function main(): void {
       })]),
     }),
     Object.freeze([]),
+  );
+  const univ2Projection = strictExecutionProjectionFor({
+    catalog,
+    adapterId: "univ2-swap",
+  });
+  assert(univ2Projection);
+  assert.equal(univ2Projection.allowanceSpender, UNIV2_ROUTER);
+  assert.equal(univ2Projection.prewarmQuoteCalls.length, 1);
+  assert.equal(
+    univ2Projection.prewarmQuoteCalls[0]!.calldata,
+    UNIV2_PAIR_INTERFACE.encodeFunctionData("getReserves", []),
+  );
+  assert.equal(
+    strictExecutionProjectionFor({
+      catalog,
+      adapterId: "unknown-adapter",
+    }),
+    null,
   );
   console.log("strict-execution-projection PASS");
 }

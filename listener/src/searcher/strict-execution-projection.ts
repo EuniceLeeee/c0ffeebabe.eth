@@ -3,6 +3,62 @@ import type {
 } from "./adapter-family-shadow-catalog-publication.js";
 import type { FamilyCapabilityCatalog } from
   "./venues/family-capability-catalog.js";
+import { ethers } from "ethers";
+import {
+  UNIV2_PAIR_INTERFACE,
+} from "./venues/swaps/univ2-family/codec.js";
+import { UNIV2_ROUTER } from
+  "./venues/swaps/univ2-family/victim.js";
+import { UNIV2_FAMILY_ID } from
+  "./venues/swaps/univ2-family/manifest.js";
+
+export interface StrictExecutionAdapterProjection {
+  readonly allowanceSpender: string | null;
+  readonly prewarmQuoteCalls: readonly {
+    readonly from: string;
+    readonly to: string;
+    readonly calldata: string;
+    readonly gasLimit: number;
+  }[];
+}
+
+/**
+ * Execution-adapter projection layer (Pair A step 3 pilot). Declares the
+ * execution-facing facts the live backend needs per strict Family, derived
+ * from the same protocol constants the families already use. This is an
+ * infrastructure-singleton projection (router/pool constants), NOT an
+ * instance allowlist, and it deliberately avoids changing the plugin
+ * contract so the definition boundary / sealed parity evidence stays
+ * stable. Families without a projection keep the legacy adapter path until
+ * their pilot lands.
+ */
+const strictExecutionAdapters: ReadonlyMap<
+  string,
+  StrictExecutionAdapterProjection
+> = new Map([
+  [UNIV2_FAMILY_ID, Object.freeze({
+    allowanceSpender: UNIV2_ROUTER,
+    prewarmQuoteCalls: Object.freeze([Object.freeze({
+      from: ethers.ZeroAddress,
+      to: "", // filled from the hop target by the backend
+      calldata: UNIV2_PAIR_INTERFACE.encodeFunctionData("getReserves", []),
+      gasLimit: 300_000,
+    })]),
+  })],
+]);
+
+export function strictExecutionProjectionFor(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly adapterId: string;
+}): StrictExecutionAdapterProjection | null {
+  let familyId: string;
+  try {
+    familyId = input.catalog.ownerOfAction(input.adapterId);
+  } catch {
+    return null;
+  }
+  return strictExecutionAdapters.get(familyId) ?? null;
+}
 
 /**
  * Execution-facing projections from a committed strict publication.

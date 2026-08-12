@@ -28,6 +28,7 @@ import type { ResolvedPlan } from "../solver/solver.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
   resolveFundingPrewarmAddresses,
+  strictExecutionProjectionFor,
   strictRoutePrewarmAddresses,
 } from "../strict-execution-projection.js";
 import type {
@@ -328,7 +329,7 @@ export class RevmLiveBackend implements LiveStateBackend {
       const targetKey = hop.target.toLowerCase();
       hotTokens.set(hop.tokenIn.toLowerCase(), hop.tokenIn);
       hotTokens.set(hop.tokenOut.toLowerCase(), hop.tokenOut);
-      const spender = overlayApproveSpender(hop);
+      const spender = this.overlayApproveSpender(hop);
       if (spender) {
         for (const token of [hop.tokenIn, hop.tokenOut]) {
           allowanceHints.set(
@@ -436,6 +437,19 @@ export class RevmLiveBackend implements LiveStateBackend {
     amountIn: bigint,
   ): Promise<OverlayPreCall[]> {
     try {
+      if (this.strictExecution !== undefined &&
+          this.strictExecution.views() !== null) {
+        const projection = strictExecutionProjectionFor({
+          catalog: this.strictExecution.catalog,
+          adapterId: hop.adapterId,
+        });
+        if (projection !== null) {
+          return projection.prewarmQuoteCalls.map((call) => Object.freeze({
+            ...call,
+            to: hop.target,
+          }));
+        }
+      }
       const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(hop.adapterId);
       const encode = adapter?.prepared?.encodeQuotePrewarm;
       if (!encode) return [];
@@ -577,19 +591,28 @@ export class RevmLiveBackend implements LiveStateBackend {
       readChain: ({ to, data }) => this.provider.call({ to, data }),
     };
   }
+
+  private overlayApproveSpender(hop: QuoteHop | QuoteRequest): string | null {
+    if (this.strictExecution !== undefined &&
+        this.strictExecution.views() !== null) {
+      const projection = strictExecutionProjectionFor({
+        catalog: this.strictExecution.catalog,
+        adapterId: hop.adapterId,
+      });
+      if (projection !== null) return projection.allowanceSpender;
+    }
+    const adapter = PRODUCTION_ADAPTER_FAMILIES.routes()
+      .findForEdge(hop.adapterId);
+    const request: PreparedRouteRequest = {
+      ...hop,
+      amountIn: "amountIn" in hop ? hop.amountIn : 0n,
+    };
+    return adapter?.prepared?.allowanceSpender?.(request) ?? null;
+  }
 }
 
 function remainingPrepareMs(input: PrepareInput): number | undefined {
   return input.deadlineAtMs === undefined
     ? undefined
     : Math.max(1, input.deadlineAtMs - Date.now());
-}
-
-function overlayApproveSpender(hop: QuoteHop | QuoteRequest): string | null {
-  const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(hop.adapterId);
-  const request: PreparedRouteRequest = {
-    ...hop,
-    amountIn: "amountIn" in hop ? hop.amountIn : 0n,
-  };
-  return adapter?.prepared?.allowanceSpender?.(request) ?? null;
 }
