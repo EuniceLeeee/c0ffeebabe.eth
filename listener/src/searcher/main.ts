@@ -87,6 +87,7 @@ import {
 import {
   deriveLiveDiscoveryCheckpointInventory,
   deriveLiveDiscoveryAddressSurfaceObservations,
+  resolveStrictFamilyIdForAdapter,
 } from "./live-discovery-checkpoint-inventory.js";
 import {
   resolveStrictCatalogConsumerDiagnostic,
@@ -1777,14 +1778,11 @@ async function main(): Promise<void> {
             publication: envelope,
             source,
             catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-            familyIdForAdapter: (adapterId) => {
-              try {
-                return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-                  .ownerOfAction(adapterId);
-              } catch {
-                return null;
-              }
-            },
+            familyIdForAdapter: (adapterId) =>
+              resolveStrictFamilyIdForAdapter(
+                PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+                adapterId,
+              ),
           });
           const result = await discoveryInventoryWriter.write({
             source,
@@ -1817,16 +1815,38 @@ async function main(): Promise<void> {
               publication: envelope,
               source,
               catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-              familyIdForAdapter: (adapterId) => {
-                try {
-                  return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-                    .ownerOfAction(adapterId);
-                } catch {
-                  return null;
-                }
-              },
+              familyIdForAdapter: (adapterId) =>
+                resolveStrictFamilyIdForAdapter(
+                  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+                  adapterId,
+                ),
             });
           if (observations.size === 0) return;
+          const previousCatalogRoot =
+            discoveryContinuityComposition.catalogRoot.capture();
+          if (previousCatalogRoot !== null) {
+            const previousSource =
+              previousCatalogRoot.envelope.snapshot.source;
+            const previousBlock = await provider.getBlock(
+              previousSource.number,
+            );
+            const currentBlock = await provider.getBlock(source.number);
+            if (
+              previousBlock === null ||
+              previousBlock.hash === null ||
+              currentBlock === null ||
+              currentBlock.number !== previousBlock.number + 1 ||
+              currentBlock.parentHash?.toLowerCase() !==
+                previousBlock.hash.toLowerCase()
+            ) {
+              console.warn(
+                `[searcher/live] strict catalog publish skipped: ` +
+                  `source transition is not canonical-adjacent ` +
+                  `${previousSource.number}->${source.number}`,
+              );
+              return;
+            }
+          }
           const publications = [];
           for (const [familyId, familyObservations] of observations) {
             try {

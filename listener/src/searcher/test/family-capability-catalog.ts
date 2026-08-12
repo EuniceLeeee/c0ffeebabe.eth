@@ -27,7 +27,15 @@ const TOKEN1 = `0x${"33".repeat(20)}`;
 const SOURCE_HASH = `0x${"44".repeat(32)}` as `0x${string}`;
 const SELECTOR = "0x12345678" as const;
 
-function defineFixture(familyName: string, actionId: string) {
+function defineFixture(
+  familyName: string,
+  actionId: string,
+  addressSurface?: {
+    readonly id: string;
+    readonly kind: "proxy-implementation";
+    readonly fingerprint: string;
+  },
+) {
   const family = familyId(familyName);
   const lineage = lineageId(`${familyName}:standalone`);
   const action = fixtureAction(actionId);
@@ -77,15 +85,22 @@ function defineFixture(familyName: string, actionId: string) {
       supportedLineages: [lineage],
     },
     discovery: {
-      sources: ["observed-call"],
+      sources: addressSurface === undefined
+        ? ["observed-call"]
+        : ["observed-call", "address-surface"],
       callPatterns: [{
         id: "convert-call",
         selector: SELECTOR,
         signature: "convert(uint256)",
         candidateAddress: { from: "call-target" },
       }],
+      ...(addressSurface === undefined
+        ? {}
+        : { addressSurfaces: [addressSurface] }),
       decodeCandidate: ({ observation }) => observation.kind === "call"
         ? { candidateKind: "fixture", address: observation.target }
+        : observation.kind === "address-surface"
+        ? { candidateKind: "fixture", address: observation.address }
         : null,
       candidateKey: (candidate) => candidate.address,
     },
@@ -346,7 +361,47 @@ assert.throws(
   /contains inactive Family protocol:beta/,
 );
 
+const proxy = defineFixture(
+  "protocol:proxy-family",
+  "proxy-convert",
+  Object.freeze({
+    id: "proxy-surface",
+    kind: "proxy-implementation" as const,
+    fingerprint: "proxy-label-v1",
+  }),
+);
+const proxyCatalog = new FamilyCapabilityCatalog({
+  modules: [
+    moduleFor(alpha, "alpha.production.ts"),
+    moduleFor(proxy, "proxy.production.ts"),
+  ],
+  generatedManifest: manifestFor([alpha, proxy]),
+});
+const NON_ZERO_IMPL = `0x${"00".repeat(12)}${"11".repeat(20)}`;
+assert.deepEqual(
+  proxyCatalog.matches({
+    kind: "address-surface",
+    source: { number: 1, hash: SOURCE_HASH, generation: 1 },
+    address: ADDRESS,
+    codeHash: `0x${"1".repeat(64)}`,
+    implementationWord: NON_ZERO_IMPL,
+  }),
+  [{ familyId: "protocol:proxy-family", patternId: "proxy-surface" }],
+  "a non-zero implementation word must match proxy-implementation surfaces",
+);
+assert.deepEqual(
+  proxyCatalog.matches({
+    kind: "address-surface",
+    source: { number: 1, hash: SOURCE_HASH, generation: 1 },
+    address: ADDRESS,
+    codeHash: `0x${"1".repeat(64)}`,
+    implementationWord: `0x${"0".repeat(64)}`,
+  }),
+  [],
+  "a zero implementation word must not match a proxy-implementation surface",
+);
+
 console.log(
   "family-capability-catalog PASS " +
-    "(generated hashes + multi-value indexes + ownership + fail-closed drift)",
+    "(generated hashes + multi-value indexes + ownership + proxy address surfaces + fail-closed drift)",
 );

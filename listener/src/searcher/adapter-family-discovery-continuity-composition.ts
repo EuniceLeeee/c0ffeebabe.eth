@@ -8,6 +8,7 @@ import {
 import {
   createCatalogSourceTransitionIssuer,
   createCatalogTerminalRemovalIssuer,
+  type CatalogSourceTransitionProof,
 } from "./adapter-family-catalog-publication.js";
 import {
   StrictAdapterFamilyShadowCatalogPublicationRoot,
@@ -49,6 +50,16 @@ export interface DurableDiscoveryContinuityComposition {
   readonly closureIssuer: AdapterFamilySnapshotInventoryClosureCandidateIssuer;
   readonly catalogRoot: StrictAdapterFamilyShadowCatalogPublicationRoot;
   loadForRestart(): Promise<AdapterFamilyDiscoveryCheckpointLoadResult>;
+  /**
+   * Issue the canonical source ancestry proof required by every catalogRoot
+   * publication after the first. The caller is responsible for verifying the
+   * ancestry claim (for example `current.parentHash === previous.hash`); the
+   * proof is runtime-opaque and authority-bound to this composition.
+   */
+  issueSourceTransition(
+    previous: CanonicalSource,
+    current: CanonicalSource,
+  ): CatalogSourceTransitionProof;
   consumeClosureForCatalog(input: {
     readonly receipt: AdapterFamilySnapshotInventoryClosureReceipt;
     readonly source: CanonicalSource;
@@ -114,6 +125,16 @@ export function createDurableDiscoveryContinuityComposition(
     closureIssuer: closureVerifier.takeCandidateIssuer(),
     catalogRoot,
     loadForRestart: () => store.loadForRestart(),
+    issueSourceTransition: (
+      previous: CanonicalSource,
+      current: CanonicalSource,
+    ) =>
+      transitionIssuer.issue({
+        previous,
+        current,
+        status: "canonical-descendant",
+        evidenceRef: "live-chain-canonical-ancestry",
+      }),
     consumeClosureForCatalog: (consumption: {
       readonly receipt: AdapterFamilySnapshotInventoryClosureReceipt;
       readonly source: CanonicalSource;

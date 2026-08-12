@@ -109,6 +109,35 @@
 > strict feed 继续 fail-closed no-op。剩余杠杆：更长的预热窗口让
 > current-N matcher 完成验证（observed-interaction / 20-min prewarm），
 > 或排查 self-burn shortlist 验证为何在窗口内全部 null。
+>
+> **null 根因定位 + strict feed 修复（2026-08-12，本提交）：**
+> 排查完成（按用户选 2）：抽样 12 个 address_entries 地址在链上
+> EIP-1967 slot（`0x3608…`）全部为 0（节点 RPC 复验），
+> self-burn `candidateFromAddress` 的 proxy 门
+> （`implementationWord !== ZeroHash`）按合同拒绝全部——是语义负例，
+> 不是读取 bug；更长的预热窗口不会改变结果。真正生产候选在
+> verified_candidates（458 条：erc4626×450、erc4626-silo×2、
+> astra×2、ethertoken×2、fluid-dex×1、eigenpie×1），但 strict feed
+> 只消费 address_entries → 观测仍为空。
+> 修复三块：
+> 1) `deriveLiveDiscoveryAddressSurfaceObservations` /
+>    `deriveLiveDiscoveryCheckpointInventory` 同时消费
+>    verified_candidates（保留提名按当前 source 重新进入 strict
+>    lifecycle；adapterId 与 strict familyId 相同或经 ownerOfAction
+>    双解析）；inventory 的 address-surface 补
+>    `interfaceFingerprints`（snapshot closure 校验要求）。
+> 2) `FamilyCapabilityCatalog` proxy-implementation 匹配修正：按
+>    wildcard 索引、`implementationWord` 非零即匹配（原来用 label
+>    指纹当 key 按 implementationWord 查询，结构上永不匹配）。
+> 3) `publishStrictCatalogFromLifecycle` 第二次发布起补
+>    `sourceTransitionProof`（composition 暴露
+>    `issueSourceTransition`；main.ts 在非 canonical-adjacent 时
+>    fail-closed 跳过发布，不伪造祖先证明）。
+> 合同测试：family-capability-catalog（proxy 匹配正/反例）、
+> strict-live-observation-feed（verified candidate → inventory
+> sync → lifecycle → rev2 publish）；shadow suite / build /
+> regression sweep 全绿。剩余：节点验收重跑（challenger 600s）
+> 验证生产路径第一次 catalogRoot 提交。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

@@ -125,11 +125,20 @@ export async function publishStrictCatalogFromLifecycle(input: {
         });
       });
     });
+    const previous = composition.catalogRoot.capture();
     const prepared = composition.catalogRoot.prepare({
       source,
-      previous: composition.catalogRoot.capture(),
+      previous,
       stages: Object.freeze(stages),
       sourceAnchors: Object.freeze(anchors),
+      ...(previous === null
+        ? {}
+        : {
+            sourceTransitionProof: composition.issueSourceTransition(
+              previous.envelope.snapshot.source,
+              source,
+            ),
+          }),
     });
     const published = await composition.catalogRoot.compareAndPublish({
       expected: composition.catalogRoot.capture(),

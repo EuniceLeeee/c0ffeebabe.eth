@@ -59,6 +59,15 @@ export const FAMILY_CAPABILITIES_BY_DOMAIN: Readonly<
   ] as const),
 } as const);
 
+/**
+ * Proxy-implementation address surfaces match any EIP-1967 proxy
+ * (implementation word non-zero), so the pattern fingerprint is a family
+ * label, not an implementation address. The catalog indexes these patterns
+ * under a single wildcard key and matches the observation's
+ * implementationWord against it.
+ */
+const PROXY_ADDRESS_SURFACE_WILDCARD = "*" as const;
+
 export interface GeneratedCapabilityIdentity {
   readonly familyId: FamilyId;
   readonly capability: FamilyCapabilityName;
@@ -224,7 +233,12 @@ export class FamilyCapabilityCatalog {
       for (const pattern of discovery?.addressSurfaces ?? []) {
         appendPattern(
           addressMatches,
-          addressSurfaceKey(pattern.kind, pattern.fingerprint),
+          addressSurfaceKey(
+            pattern.kind,
+            pattern.kind === "proxy-implementation"
+              ? PROXY_ADDRESS_SURFACE_WILDCARD
+              : pattern.fingerprint,
+          ),
           { familyId: summary.familyId, patternId: pattern.id },
         );
       }
@@ -312,13 +326,15 @@ export class FamilyCapabilityCatalog {
           matches,
           this.addressMatches.get(addressSurfaceKey("code-hash", observation.codeHash)),
         );
-        appendUniqueMatches(
-          matches,
-          this.addressMatches.get(addressSurfaceKey(
-            "proxy-implementation",
-            observation.implementationWord,
-          )),
-        );
+        if (isNonZeroWord(observation.implementationWord)) {
+          appendUniqueMatches(
+            matches,
+            this.addressMatches.get(addressSurfaceKey(
+              "proxy-implementation",
+              PROXY_ADDRESS_SURFACE_WILDCARD,
+            )),
+          );
+        }
         for (const fingerprint of observation.interfaceFingerprints ?? []) {
           appendUniqueMatches(
             matches,
@@ -542,6 +558,11 @@ function appendUniqueMatches(
 function addressSurfaceKey(kind: string, fingerprint: string): string {
   nonempty(fingerprint, "address surface fingerprint");
   return `${kind}\0${fingerprint.toLowerCase()}`;
+}
+
+function isNonZeroWord(value: string): boolean {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(value)) return false;
+  return !/^0x0{64}$/.test(value.toLowerCase());
 }
 
 function normalizeHex(value: string, bytes: number, label: string): string {

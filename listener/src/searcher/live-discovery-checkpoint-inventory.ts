@@ -22,6 +22,58 @@ const EVENT_SOURCE_IDS: ReadonlySet<string> = new Set([
   "landed-log",
   "observed-call",
 ]);
+const ZERO_WORD = `0x${"0".repeat(64)}`;
+
+/**
+ * Resolve a legacy discovery adapter id (or an already-strict family id) to
+ * the strict Family that owns it. Verified protocol candidates and address
+ * cache entries are keyed by legacy adapter ids such as
+ * `protocol:erc4626`, which equal the strict family ids; family-owned
+ * action adapters (for example `fluid-dex`) resolve through the catalog.
+ * Returns null when neither path owns the id.
+ */
+export function resolveStrictFamilyIdForAdapter(
+  catalog: FamilyCapabilityCatalog,
+  adapterId: string,
+): FamilyId | null {
+  try {
+    return catalog.forStrictFamily(adapterId as FamilyId)
+      .plugin.manifest.familyId;
+  } catch {
+    try {
+      return catalog.ownerOfAction(adapterId);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function addressSurfaceFromVerifiedEvidence(
+  evidence: readonly unknown[] | undefined,
+): {
+  readonly codeHash: string;
+  readonly implementationWord: string;
+} {
+  let codeHash = ZERO_WORD;
+  let implementationWord = ZERO_WORD;
+  for (const raw of evidence ?? []) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const item = raw as Record<string, unknown>;
+    if (
+      typeof item.codeHash === "string" &&
+      /^0x[0-9a-fA-F]{64}$/.test(item.codeHash)
+    ) {
+      codeHash = item.codeHash.toLowerCase();
+    }
+    if (
+      typeof item.implementationWord === "string" &&
+      /^0x[0-9a-fA-F]{64}$/.test(item.implementationWord)
+    ) {
+      implementationWord = item.implementationWord.toLowerCase();
+    }
+  }
+  return Object.freeze({ codeHash, implementationWord });
+}
 
 /**
  * Derives a durable checkpoint inventory revision from the current live
@@ -84,15 +136,19 @@ export function deriveLiveDiscoveryCheckpointInventory(input: {
     readonly incumbents: {
       readonly inventoryKey: string;
       readonly address: string;
-      readonly currentSurface: {
-        readonly kind: "address-surface";
-        readonly source: CanonicalSource;
-        readonly address: string;
-        readonly codeHash: string;
-        readonly implementationWord: string;
-      };
+      readonly currentSurface: UnifiedObservation &
+        { readonly kind: "address-surface" };
     }[];
   }>();
+  const interfaceFingerprintsFor = (
+    familyId: FamilyId,
+  ): readonly string[] | undefined => {
+    const family = input.catalog.forStrictFamily(familyId);
+    if (!("discovery" in family.plugin)) return undefined;
+    return family.plugin.discovery.addressSurfaces?.filter(
+      (pattern) => pattern.kind === "interface",
+    ).map((pattern) => pattern.fingerprint);
+  };
   for (const family of discoveryFamilies) {
     byFamily.set(family.familyId, {
       familyId: family.familyId,
@@ -107,6 +163,7 @@ export function deriveLiveDiscoveryCheckpointInventory(input: {
     if (familyId === null) continue;
     const family = byFamily.get(familyId);
     if (family === undefined || !family.surfaceEligible) continue;
+    const interfaceFingerprints = interfaceFingerprintsFor(familyId);
     family.incumbents.push(Object.freeze({
       inventoryKey: address.toLowerCase(),
       address: address.toLowerCase(),
@@ -116,6 +173,44 @@ export function deriveLiveDiscoveryCheckpointInventory(input: {
         address: address.toLowerCase(),
         codeHash: entry.codeHash.toLowerCase(),
         implementationWord: entry.implementationWord.toLowerCase(),
+        ...(interfaceFingerprints === undefined ||
+            interfaceFingerprints.length === 0
+          ? {}
+          : { interfaceFingerprints: Object.freeze(interfaceFingerprints) }),
+      }),
+    }));
+  }
+  const seenVerifiedInventoryAddresses = new Set<string>();
+  for (const { adapterId, candidate } of input.publication.protocolEvidenceCache
+    .verifiedCandidates.values()) {
+    let address: string;
+    try {
+      address = candidate.pool.address.toLowerCase();
+    } catch {
+      continue;
+    }
+    const familyId = input.familyIdForAdapter(adapterId);
+    if (familyId === null) continue;
+    const family = byFamily.get(familyId);
+    if (family === undefined || !family.surfaceEligible) continue;
+    const dedupeKey = `${familyId}\0${address}`;
+    if (seenVerifiedInventoryAddresses.has(dedupeKey)) continue;
+    seenVerifiedInventoryAddresses.add(dedupeKey);
+    const surface = addressSurfaceFromVerifiedEvidence(candidate.evidence);
+    const interfaceFingerprints = interfaceFingerprintsFor(familyId);
+    family.incumbents.push(Object.freeze({
+      inventoryKey: address,
+      address,
+      currentSurface: Object.freeze({
+        kind: "address-surface" as const,
+        source: input.source,
+        address,
+        codeHash: surface.codeHash,
+        implementationWord: surface.implementationWord,
+        ...(interfaceFingerprints === undefined ||
+            interfaceFingerprints.length === 0
+          ? {}
+          : { interfaceFingerprints: Object.freeze(interfaceFingerprints) }),
       }),
     }));
   }
@@ -193,6 +288,49 @@ export function deriveLiveDiscoveryAddressSurfaceObservations(input: {
       address: address.toLowerCase(),
       codeHash: entry.codeHash.toLowerCase(),
       implementationWord: entry.implementationWord.toLowerCase(),
+      ...(interfaceFingerprints === undefined ||
+          interfaceFingerprints.length === 0
+        ? {}
+        : { interfaceFingerprints: Object.freeze(interfaceFingerprints) }),
+    });
+    const existing = byFamily.get(familyId);
+    if (existing === undefined) {
+      byFamily.set(familyId, [observation]);
+    } else {
+      existing.push(observation);
+    }
+  }
+  // Verified protocol candidates are retained nominations from the legacy
+  // discovery pipeline. Re-enter them as current-source address-surface
+  // observations so the strict lifecycle re-verifies and publishes the same
+  // instances instead of silently dropping production-known protocols.
+  const seenVerifiedAddresses = new Set<string>();
+  for (const { adapterId, candidate } of input.publication.protocolEvidenceCache
+    .verifiedCandidates.values()) {
+    let address: string;
+    try {
+      address = candidate.pool.address.toLowerCase();
+    } catch {
+      continue;
+    }
+    const familyId = input.familyIdForAdapter(adapterId);
+    if (familyId === null || !eligible.has(familyId)) continue;
+    const dedupeKey = `${familyId}\0${address}`;
+    if (seenVerifiedAddresses.has(dedupeKey)) continue;
+    seenVerifiedAddresses.add(dedupeKey);
+    const family = input.catalog.forStrictFamily(familyId);
+    const interfaceFingerprints = "discovery" in family.plugin
+      ? family.plugin.discovery.addressSurfaces?.filter(
+          (pattern) => pattern.kind === "interface",
+        ).map((pattern) => pattern.fingerprint)
+      : undefined;
+    const surface = addressSurfaceFromVerifiedEvidence(candidate.evidence);
+    const observation: UnifiedObservation = Object.freeze({
+      kind: "address-surface",
+      source: input.source,
+      address,
+      codeHash: surface.codeHash,
+      implementationWord: surface.implementationWord,
       ...(interfaceFingerprints === undefined ||
           interfaceFingerprints.length === 0
         ? {}
