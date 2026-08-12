@@ -375,6 +375,24 @@
 > build/shadow suite（26 项）/sweep 全绿。剩余：节点编译新 revm
 > 二进制（独立路径，不覆盖 live 进程二进制）→ 节点验收验证
 > erc4626 identity 完成 effect-delta 阶段并进入 catalogRoot。
+>
+> **revm effect-delta 缺口补上（2026-08-13，`e2e57f0c` 机器证据）：**
+> 修复链：strictSimulate 原生 gas 注资（LackOfFunds）、
+> BigInt-safe simulation provenance（此前 JSON.stringify 崩溃导致
+> 所有仿真统一 resource-limited）、ERC20 balance slot 候选扩充 +
+> prestateTracer 精确 slot 发现（覆盖 exotic 份额映射）、slot key
+> 双 0x 前缀解析修复、runtime 仿真失败原因日志。节点 600s
+> dry-run：`strict catalog root committed: revision=1
+> instances=14 pricing=15`（fluid-dex 1 + erc4626 13），
+> lifecycleFailures 为空；searcher priced 87.6% 无回退。单 vault
+> 复现确认 erc4626 完整 identity（base → active deposit/redeem
+> effect-delta，含 funded override + observe deltas/logs）发布成功。
+> 证据：
+> `docs/research/design/evidence/s1-node-acceptance-pipeline-e2e57f0c.json`。
+> 部署说明：新 revm-sim 二进制构建于节点 impl worktree
+> （`/opt/MEV-impl-capture/listener/revm-sim/target/release/revm-sim`），
+> challenger 通过 `S1_REVM_SIM_BIN_PATH` 覆盖使用，live 进程二进制
+> 未被替换；后续部署到 live 需显式授权。
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

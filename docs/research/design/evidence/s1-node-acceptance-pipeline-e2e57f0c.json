@@ -19,7 +19,19 @@
         "compositionStatus": "[searcher/live] discovery continuity composition trusted",
         "writerReady": true,
         "publisherPublished": true,
-        "checkpointCommitted": true
+        "checkpointCommitted": true,
+        "catalogRoot": {
+          "logLine": "[searcher/live] strict catalog root committed: revision=1 instances=14 pricing=15",
+          "revision": 1,
+          "instances": 14,
+          "pricingEntries": 15
+        },
+        "checkpointRevision": 31,
+        "inventoryFamilies": {
+          "fluid-dex": 1,
+          "protocol:erc4626": 465
+        },
+        "lifecycleFailures": []
       }
     }
   },
