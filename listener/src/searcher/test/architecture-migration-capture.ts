@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -987,20 +988,24 @@ async function testEndToEndSealedParity(): Promise<void> {
     join(tmpdir(), "architecture-migration-capture-e2e-"),
   );
   try {
-    const baselinePath = join(directory, "baseline.json");
-    const challengerPath = join(directory, "challenger.json");
-    await writeFile(
-      baselinePath,
-      architectureMigrationSideJson(
+  const baselinePath = join(directory, "baseline.json");
+  const challengerPath = join(directory, "challenger.json");
+  await writeFile(
+    baselinePath,
+    architectureMigrationSideJson(
+      productionizeEvidence(
         generateArchitectureMigrationSideCapture(baselineCorpus),
       ),
-    );
-    await writeFile(
-      challengerPath,
-      architectureMigrationSideJson(
+    ),
+  );
+  await writeFile(
+    challengerPath,
+    architectureMigrationSideJson(
+      productionizeEvidence(
         generateArchitectureMigrationSideCapture(challengerCorpus),
       ),
-    );
+    ),
+  );
     const issuer = createArchitectureMigrationProductionCaptureIssuer();
     const receipt = await runArchitectureMigrationParityFiles({
       baselinePath,
@@ -1017,7 +1022,15 @@ async function testEndToEndSealedParity(): Promise<void> {
       productionCaptureIssuer: issuer,
     });
     assert.equal(receipt.evidenceClass, "sealed-production");
-    assert.equal(receipt.acceptance.eligible, true);
+    assert.equal(
+      receipt.acceptance.eligible,
+      false,
+      "sealed production without held-out negatives must not be eligible",
+    );
+    assert.match(
+      receipt.acceptance.reasons.join(" "),
+      /non-empty held-out negatives/,
+    );
     assert.equal(receipt.parityReceipt.aggregateVerdict, "fail");
     assert.equal(receipt.parityReceipt.nonPassFamilyIds.length, 22);
     assert(receipt.parityReceipt.nonPassFamilyIds.includes("univ2-standard"));
@@ -1315,3 +1328,28 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+
+function productionizeEvidence<T>(value: T): T {
+  if (typeof value === "string") {
+    if (value.startsWith("fixture:")) {
+      return `real:${value.slice("fixture:".length)}` as T;
+    }
+    if (/^0x([0-9a-fA-F])\1{63}$/.test(value)) {
+      return `0x${createHash("sha256").update(value).digest("hex")}` as T;
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => productionizeEvidence(item)) as T;
+  }
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      out[key] = productionizeEvidence(item);
+    }
+    return out as T;
+  }
+  return value;
+}

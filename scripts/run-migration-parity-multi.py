@@ -182,7 +182,13 @@ def main() -> None:
     request = {
         "baselinePath": baseline_side_path,
         "challengerPath": challenger_side_path,
-        "evidenceClass": "sealed-production",
+        # The committed 22-family corpus is fixture/comparator evidence:
+        # 19 of 22 families replay sealed fixture cases, and the sealed
+        # acceptance gate rejects fixture placeholders and vacuous
+        # held-out arrays. Honest classification is unit-contract until a
+        # real on-chain production corpus with non-empty held-out
+        # negatives is captured.
+        "evidenceClass": "unit-contract",
         "mode": "pure-refactor",
         "stateAnchors": [{
             "number": manifest["sourceBlock"],

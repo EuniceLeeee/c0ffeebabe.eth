@@ -197,36 +197,115 @@ assert.throws(
 );
 
 const productionIssuer = createArchitectureMigrationProductionCaptureIssuer();
-const rawSealedFixture = fixtureInput({});
-const sealedSide = (side: Side) =>
-  issueArchitectureMigrationSideCapture(
+const rawFixture = fixtureInput({});
+assert.throws(
+  () => issueArchitectureMigrationSideCapture(
     productionIssuer,
-    rawSealedFixture[side],
-  );
+    rawFixture.baseline,
+  ),
+  /fixture\/placeholder marker/,
+  "fixture evidence refs must never seal as production captures",
+);
+const placeholderCapture: RawArchitectureMigrationSideCapture = {
+  ...(productionizeCapture(
+    rawFixture.baseline,
+  ) as RawArchitectureMigrationSideCapture),
+  familyCases: [
+    {
+      ...(productionizeCapture(rawFixture.baseline) as
+        RawArchitectureMigrationSideCapture).familyCases[0]!,
+      inputFingerprint: `0x${"a".repeat(64)}`,
+    },
+    ...(productionizeCapture(rawFixture.baseline) as
+      RawArchitectureMigrationSideCapture).familyCases.slice(1),
+  ],
+};
+assert.throws(
+  () => issueArchitectureMigrationSideCapture(
+    productionIssuer,
+    placeholderCapture,
+  ),
+  /fixture\/placeholder marker/,
+  "all-same-byte hashes must never seal as production captures",
+);
+const productionBaseline = productionizeCapture(rawFixture.baseline);
+const productionChallenger = productionizeCapture(rawFixture.challenger);
 const sealedProduction = sealArchitectureMigrationBatchInput({
-  ...rawSealedFixture,
+  ...rawFixture,
   evidenceClass: "sealed-production",
   productionCaptureIssuer: productionIssuer,
-  baseline: sealedSide("baseline"),
-  challenger: sealedSide("challenger"),
+  baseline: issueArchitectureMigrationSideCapture(
+    productionIssuer,
+    productionBaseline,
+  ),
+  challenger: issueArchitectureMigrationSideCapture(
+    productionIssuer,
+    productionChallenger,
+  ),
 });
 const sealedProductionReceipt = runArchitectureMigrationBatchParity(
   sealedProduction,
 );
 assert.equal(sealedProductionReceipt.evidenceClass, "sealed-production");
-assert.equal(sealedProductionReceipt.acceptance.eligible, true);
+assert.equal(
+  sealedProductionReceipt.acceptance.eligible,
+  false,
+  "sealed production without held-out negatives must not self-pass",
+);
+assert.match(
+  sealedProductionReceipt.acceptance.reasons.join(" "),
+  /non-empty held-out negatives/,
+);
 assert.equal(sealedProductionReceipt.parityReceipt.aggregateVerdict, "pass");
-assert.equal(sealedProductionReceipt.baselineCaptureId,
-  rawSealedFixture.baseline.closure.captureId);
+assert.equal(
+  sealedProductionReceipt.baselineCaptureId,
+  productionBaseline.closure.captureId,
+);
+
+const productionHeldChallenger = productionizeCapture(heldChallenger);
+const sealedHeldOut = sealArchitectureMigrationBatchInput({
+  ...rawFixture,
+  evidenceClass: "sealed-production",
+  productionCaptureIssuer: productionIssuer,
+  baseline: issueArchitectureMigrationSideCapture(
+    productionIssuer,
+    productionBaseline,
+  ),
+  challenger: issueArchitectureMigrationSideCapture(
+    productionIssuer,
+    productionChallenger,
+  ),
+  heldOutNegatives: [{
+    familyId: "univ2-standard",
+    reason: "production-held-out-token-mutation",
+    baseline: issueArchitectureMigrationSideCapture(
+      productionIssuer,
+      productionBaseline,
+    ) as unknown as RawArchitectureMigrationSideCapture,
+    challenger: issueArchitectureMigrationSideCapture(
+      productionIssuer,
+      productionHeldChallenger,
+    ) as unknown as RawArchitectureMigrationSideCapture,
+  }],
+});
+const sealedHeldOutReceipt = runArchitectureMigrationBatchParity(
+  sealedHeldOut,
+);
+assert.equal(sealedHeldOutReceipt.acceptance.eligible, true);
+assert.equal(sealedHeldOutReceipt.acceptance.verdict, "pass");
+assert.deepEqual(sealedHeldOutReceipt.acceptance.reasons, []);
 
 const forgedSealed = Object.freeze({}) as SealedArchitectureMigrationSideCapture;
 assert.throws(
   () => sealArchitectureMigrationBatchInput({
-    ...rawSealedFixture,
+    ...rawFixture,
     evidenceClass: "sealed-production",
     productionCaptureIssuer: productionIssuer,
     baseline: forgedSealed,
-    challenger: sealedSide("challenger"),
+    challenger: issueArchitectureMigrationSideCapture(
+      productionIssuer,
+      productionChallenger,
+    ),
   }),
   /requires the trusted production capture issuer/,
 );
@@ -234,27 +313,39 @@ assert.throws(
 const foreignIssuer = createArchitectureMigrationProductionCaptureIssuer();
 assert.throws(
   () => sealArchitectureMigrationBatchInput({
-    ...rawSealedFixture,
+    ...rawFixture,
     evidenceClass: "sealed-production",
     productionCaptureIssuer: foreignIssuer,
-    baseline: sealedSide("baseline"),
-    challenger: sealedSide("challenger"),
+    baseline: issueArchitectureMigrationSideCapture(
+      productionIssuer,
+      productionBaseline,
+    ),
+    challenger: issueArchitectureMigrationSideCapture(
+      productionIssuer,
+      productionChallenger,
+    ),
   }),
   /requires the trusted production capture issuer/,
 );
 
 assert.throws(
   () => sealArchitectureMigrationBatchInput({
-    ...rawSealedFixture,
-    baseline: sealedSide("baseline"),
-    challenger: sealedSide("challenger"),
+    ...rawFixture,
+    baseline: issueArchitectureMigrationSideCapture(
+      productionIssuer,
+      productionBaseline,
+    ),
+    challenger: issueArchitectureMigrationSideCapture(
+      productionIssuer,
+      productionChallenger,
+    ),
   } as unknown as ArchitectureMigrationBatchInput),
   /unit-contract evidence cannot use sealed production captures/,
 );
 
-const evidenceStripped = {
-  ...rawSealedFixture.baseline,
-  familyCases: rawSealedFixture.baseline.familyCases.map((familyCase) => ({
+const evidenceStripped = productionizeCapture({
+  ...rawFixture.baseline,
+  familyCases: rawFixture.baseline.familyCases.map((familyCase) => ({
     ...familyCase,
     stages: Object.fromEntries(
       Object.entries(familyCase.stages).map(([stage, stageCapture]) => [
@@ -270,7 +361,7 @@ const evidenceStripped = {
       ]),
     ),
   })),
-} as RawArchitectureMigrationSideCapture;
+}) as RawArchitectureMigrationSideCapture;
 assert.throws(
   () => issueArchitectureMigrationSideCapture(
     productionIssuer,
@@ -395,8 +486,14 @@ async function testFileEntryRunsUnitAndSealedBatches(): Promise<void> {
   const raw = fixtureInput({});
   const baselinePath = join(directory, "baseline.json");
   const challengerPath = join(directory, "challenger.json");
-  await writeFile(baselinePath, JSON.stringify(raw.baseline));
-  await writeFile(challengerPath, JSON.stringify(raw.challenger));
+  await writeFile(
+    baselinePath,
+    JSON.stringify(productionizeCapture(raw.baseline)),
+  );
+  await writeFile(
+    challengerPath,
+    JSON.stringify(productionizeCapture(raw.challenger)),
+  );
 
   const unitReceipt = await runArchitectureMigrationParityFiles({
     baselinePath,
@@ -419,7 +516,15 @@ async function testFileEntryRunsUnitAndSealedBatches(): Promise<void> {
     productionCaptureIssuer: productionIssuer,
   });
   assert.equal(sealedReceipt.evidenceClass, "sealed-production");
-  assert.equal(sealedReceipt.acceptance.eligible, true);
+  assert.equal(
+    sealedReceipt.acceptance.eligible,
+    false,
+    "file-entry sealed production without held-out negatives must not pass",
+  );
+  assert.match(
+    sealedReceipt.acceptance.reasons.join(" "),
+    /non-empty held-out negatives/,
+  );
   assert.equal(sealedReceipt.parityReceipt.aggregateVerdict, "pass");
 
   await assert.rejects(
@@ -527,7 +632,7 @@ function testRequestFileValidation(): void {
 }
 
 function testSideCaptureAssemblerRoundTripsFixtureShape(): void {
-  const side = rawSealedFixture.baseline;
+  const side = rawFixture.baseline;
   const rebuilt = buildArchitectureMigrationSideCapture({
     captureId: side.closure.captureId,
     commit: side.closure.commit,
@@ -570,6 +675,29 @@ function testSideCaptureAssemblerRoundTripsFixtureShape(): void {
     commonGraph: rebuilt.commonGraph,
     nonMigratedFamilies: rebuilt.nonMigratedFamilies,
   }), /captureId/);
+}
+
+function productionizeCapture<T>(value: T): T {
+  if (typeof value === "string") {
+    return (
+      value.startsWith("fixture:")
+        ? `real:${value.slice("fixture:".length)}`
+        : value
+    ) as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => productionizeCapture(item)) as T;
+  }
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      out[key] = productionizeCapture(item);
+    }
+    return out as T;
+  }
+  return value;
 }
 
 function fixtureInput(options: FixtureOptions): ArchitectureMigrationBatchInput {

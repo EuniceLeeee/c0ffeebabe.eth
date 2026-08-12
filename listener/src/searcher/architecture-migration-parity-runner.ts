@@ -420,11 +420,22 @@ function validateProductionSideCaptureEvidence(
   capture: RawArchitectureMigrationSideCapture,
 ): void {
   validateClosure(capture.closure, "production capture");
+  for (const ref of capture.closure.evidenceRefs ?? []) {
+    assertProductionEvidenceValue(ref, "production capture closure evidenceRef");
+  }
   for (const familyCase of capture.familyCases) {
     nonempty(familyCase.familyId, "family case familyId");
     nonempty(familyCase.caseId, "family case caseId");
     nonempty(familyCase.inputFingerprint, "family case inputFingerprint");
+    assertProductionEvidenceValue(
+      familyCase.inputFingerprint,
+      "family case inputFingerprint",
+    );
     nonempty(
+      familyCase.implementationClosureHash,
+      "family case implementationClosureHash",
+    );
+    assertProductionEvidenceValue(
       familyCase.implementationClosureHash,
       "family case implementationClosureHash",
     );
@@ -435,12 +446,22 @@ function validateProductionSideCaptureEvidence(
           `${familyCase.familyId}:${stage}`,
           true,
         );
+        for (const ref of stageCapture.evidenceRefs) {
+          assertProductionEvidenceValue(
+            ref,
+            `${familyCase.familyId}:${stage} evidenceRef`,
+          );
+        }
       }
     }
   }
   const commonGraph = capture.commonGraph;
   if (commonGraph !== null) {
     nonempty(commonGraph.inputFingerprint, "common Graph inputFingerprint");
+    assertProductionEvidenceValue(
+      commonGraph.inputFingerprint,
+      "common Graph inputFingerprint",
+    );
     for (const [stage, stageCapture] of Object.entries(commonGraph.stages)) {
       if (stageCapture?.status === "exercised") {
         validateEvidenceRefs(
@@ -448,19 +469,37 @@ function validateProductionSideCaptureEvidence(
           `common:${stage}`,
           true,
         );
+        for (const ref of stageCapture.evidenceRefs) {
+          assertProductionEvidenceValue(ref, `common:${stage} evidenceRef`);
+        }
       }
     }
   }
   const standalone = capture.nonMigratedFamilies;
   if (standalone !== null) {
     nonempty(standalone.inputFingerprint, "standalone inputFingerprint");
+    assertProductionEvidenceValue(
+      standalone.inputFingerprint,
+      "standalone inputFingerprint",
+    );
     if (standalone.stage.status === "exercised") {
       validateEvidenceRefs(
         standalone.stage.evidenceRefs,
         "standalone",
         true,
       );
+      for (const ref of standalone.stage.evidenceRefs) {
+        assertProductionEvidenceValue(ref, "standalone evidenceRef");
+      }
     }
+  }
+}
+
+const ALL_SAME_HEX = /^0x([0-9a-fA-F])\1{63}$/;
+
+function assertProductionEvidenceValue(value: string, label: string): void {
+  if (value.startsWith("fixture:") || ALL_SAME_HEX.test(value)) {
+    throw new Error(`${label} carries a fixture/placeholder marker`);
   }
 }
 
@@ -566,7 +605,10 @@ export function runArchitectureMigrationBatchParity(
       });
     }),
   );
-  const acceptanceEligible = input.evidenceClass === "sealed-production";
+  const heldOutNegatives = input.heldOutNegatives ?? [];
+  const acceptanceEligible =
+    input.evidenceClass === "sealed-production" &&
+    heldOutNegatives.length > 0;
   const acceptanceReasons = acceptanceEligible
     ? parityReceipt.aggregateVerdict === "pass" &&
         heldOutNegativeVerdicts.every(
@@ -574,6 +616,8 @@ export function runArchitectureMigrationBatchParity(
         )
       ? []
       : ["semantic parity receipt is not pass"]
+    : input.evidenceClass === "sealed-production"
+    ? ["sealed-production acceptance requires non-empty held-out negatives"]
     : ["unit-contract evidence is not production acceptance evidence"];
 
   return deepFreeze({

@@ -71,10 +71,16 @@ assert all(row["outcome"] == "pass" for row in matrix), [
 assert receipt["parityReceipt"]["assembledCommonGraphParity"] is True
 assert "heldOutNegativeVerdicts" in receipt, "missing held-out negative gate"
 assert receipt["heldOutNegativeVerdicts"] == [], receipt["heldOutNegativeVerdicts"]
+assert receipt["acceptance"]["eligible"] is False, (
+    "fixture/comparator corpus must not claim production acceptance eligibility"
+)
+assert receipt["acceptance"]["verdict"] == "ineligible", (
+    receipt["acceptance"]["verdict"]
+)
 print(
     "S1 22-family sealed-capture parity receipt verified: "
     f"aggregate={verdict}, families={len(matrix)}, "
     "nonPassFamilyIds=[], heldOutNegativeVerdicts=[], "
-    "baseline/challenger side captures identical"
+    "acceptance=ineligible(unit-contract), baseline/challenger side captures identical"
 )
 PY

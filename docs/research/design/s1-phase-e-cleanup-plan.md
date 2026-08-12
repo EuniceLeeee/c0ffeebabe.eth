@@ -260,6 +260,22 @@
 > append-only；erc4626 稳定 `resource-limited`；searcher priced
 > 87.83% 无回退。证据：
 > `docs/research/design/evidence/s1-node-acceptance-pipeline-43a678d9.json`。
+>
+> **P0-6 验收门诚实化（2026-08-12）：**
+> 1) sealed-production acceptance 现在要求非空 held-out negatives
+>    （空数组不再 vacuous pass），否则 ineligible 并给出明确 reason；
+> 2) production capture 校验拒绝 `fixture:*` evidenceRefs 与全同字节
+>    占位 hash（`issueArchitectureMigrationSideCapture` fail-closed）；
+> 3) parity CLI 对 sealed-production 强制
+>    `productionProvenance{commit,sourceBlock,sourceBlockHash,evidencePath}`，
+>    禁止 CLI 自封 production；
+> 4) 22-family 证据重新分类为 `unit-contract`（19/22 为 fixture
+>    case），receipt 的 `acceptance={eligible:false,verdict:ineligible}`；
+>    verify 脚本断言 aggregate pass 且 acceptance 不得 eligible。
+> 合同测试：fixture-ref/placeholder-hash 拒绝、空 held-out 拒绝、
+> 非空 held-out 通过、文件入口 sealed 无 held-out 拒绝。剩余：
+> 真实 on-chain production corpus + 非空 held-out 的
+> sealed-production 验收需真实案例采集（另行立项）。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

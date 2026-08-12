@@ -1,5 +1,5 @@
 {
-  "evidenceClass": "sealed-production",
+  "evidenceClass": "unit-contract",
   "baselineCaptureId": "baseline",
   "challengerCaptureId": "challenger",
   "parityReceipt": {
@@ -1527,8 +1527,10 @@
   "crossFamilyConflicts": [],
   "heldOutNegativeVerdicts": [],
   "acceptance": {
-    "eligible": true,
-    "verdict": "pass",
-    "reasons": []
+    "eligible": false,
+    "verdict": "ineligible",
+    "reasons": [
+      "unit-contract evidence is not production acceptance evidence"
+    ]
   }
 }

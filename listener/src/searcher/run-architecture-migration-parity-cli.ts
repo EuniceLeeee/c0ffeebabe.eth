@@ -13,6 +13,16 @@ interface BatchRequestFile {
   readonly baselinePath: string;
   readonly challengerPath: string;
   readonly evidenceClass: ArchitectureMigrationEvidenceClass;
+  /**
+   * Required for sealed-production: the gate refuses to self-attest
+   * production captures without a committed provenance record.
+   */
+  readonly productionProvenance?: {
+    readonly commit: string;
+    readonly sourceBlock: number;
+    readonly sourceBlockHash: string;
+    readonly evidencePath: string;
+  };
   readonly mode: ArchitectureMigrationMode;
   readonly stateAnchors: ArchitectureMigrationBatchInput["stateAnchors"];
   readonly performanceDiagnostics: ArchitectureMigrationBatchInput["performanceDiagnostics"];
@@ -34,6 +44,22 @@ async function main(): Promise<void> {
   if (checkOnly) {
     process.stdout.write("batch request valid\n");
     return;
+  }
+  if (request.evidenceClass === "sealed-production") {
+    const provenance = request.productionProvenance;
+    if (
+      provenance === undefined ||
+      provenance.commit.trim().length === 0 ||
+      !Number.isSafeInteger(provenance.sourceBlock) ||
+      provenance.sourceBlock < 0 ||
+      !/^0x[0-9a-fA-F]{64}$/.test(provenance.sourceBlockHash) ||
+      provenance.evidencePath.trim().length === 0
+    ) {
+      throw new Error(
+        "sealed-production requires productionProvenance " +
+          "(commit, sourceBlock, sourceBlockHash, evidencePath)",
+      );
+    }
   }
   const productionCaptureIssuer =
     request.evidenceClass === "sealed-production"
