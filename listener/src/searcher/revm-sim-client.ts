@@ -103,6 +103,36 @@ export interface DaemonResponse {
     traceMs: number;
     roundTrips: number;
   };
+  strict?: {
+    tokenDeltas: {
+      token: string;
+      account: string;
+      delta: string;
+    }[];
+    totalSupplyDeltas: {
+      token: string;
+      delta: string;
+    }[];
+    logs: {
+      address: string;
+      topics: string[];
+      data: string;
+    }[];
+  };
+}
+
+export interface StrictSimulateRequest {
+  blockNumber: number;
+  rpcUrl?: string;
+  from: string;
+  to: string;
+  data: string;
+  gasLimit?: number;
+  preCalls?: OverlayPreCall[];
+  tokenDeals?: OverlayTokenDeal[];
+  observeTokens?: string[];
+  observeTotalSupply?: string[];
+  observeLogs?: boolean;
 }
 
 /** Back-compat one-shot request: a fully self-described victim+arb simulation. */
@@ -247,6 +277,13 @@ export class RevmSimClient {
 
   async simulatePrepared(req: SimulatePreparedRequest): Promise<DaemonResponse> {
     return this.expectOk(await this.request({ op: "simulate", ...req }));
+  }
+
+  async strictSimulate(req: StrictSimulateRequest): Promise<DaemonResponse> {
+    return this.expectOk(await this.request({
+      op: "strictSimulate",
+      ...req,
+    }));
   }
 
   async reset(): Promise<void> {

@@ -2722,6 +2722,7 @@ async function main(): Promise<void> {
         simulator: createRevmStrictSimulationTransport({
           client: revmSimClient,
           executor: config.botvmAddress,
+          verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
         }),
       });
     }

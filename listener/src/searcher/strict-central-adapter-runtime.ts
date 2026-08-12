@@ -46,6 +46,15 @@ export interface StrictSimulationTransport {
         readonly account: string;
         readonly delta: bigint;
       }[];
+      readonly totalSupplyDeltas?: readonly {
+        readonly token: string;
+        readonly delta: bigint;
+      }[];
+      readonly logs?: readonly {
+        readonly address: string;
+        readonly topics: readonly string[];
+        readonly data: string;
+      }[];
     };
   }>;
 }

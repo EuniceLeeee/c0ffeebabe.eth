@@ -4,6 +4,7 @@ import {
 } from "../revm-strict-simulation-transport.js";
 import type {
   RevmSimClient,
+  StrictSimulateRequest,
 } from "../revm-sim-client.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
@@ -14,6 +15,7 @@ const SOURCE: CanonicalSource = Object.freeze({
   generation: 44,
 });
 const EXECUTOR = `0x${"11".repeat(20)}`;
+const ACTOR = `0x${"12".repeat(20)}`;
 const TARGET = `0x${"22".repeat(20)}`;
 const TOKEN = `0x${"33".repeat(20)}`;
 
@@ -26,26 +28,23 @@ function request(overrides: Record<string, unknown> = {}) {
       to: TARGET,
       data: "0xdead",
     }),
-    overrideIntent: Object.freeze({ caller: Object.freeze({
-      kind: "executor" as const,
-    }) }),
+    overrideIntent: Object.freeze({
+      caller: Object.freeze({ kind: "executor" as const }),
+    }),
     observe: Object.freeze([] as const),
     ...overrides,
   });
 }
 
-function mockClient(calls: { from: string; to: string; data: string }[]) {
+function mockClient(calls: StrictSimulateRequest[]) {
   return Object.freeze({
-    quote: async (req: { from?: string; to: string; data: string }) => {
-      calls.push(Object.freeze({
-        from: req.from ?? "",
-        to: req.to,
-        data: req.data,
-      }));
+    strictSimulate: async (req: StrictSimulateRequest) => {
+      calls.push(Object.freeze({ ...req }));
       if (req.data === "0xrevert") {
         return Object.freeze({
-          ok: false,
+          ok: true,
           success: false,
+          output: "0x",
           revertReason: "fixture-revert",
           latencyMs: 1,
         });
@@ -54,89 +53,126 @@ function mockClient(calls: { from: string; to: string; data: string }[]) {
         ok: true,
         success: true,
         output: "0xbeef",
+        gasUsed: "21000",
         latencyMs: 1,
+        strict: Object.freeze({
+          tokenDeltas: Object.freeze([Object.freeze({
+            token: TOKEN,
+            account: ACTOR,
+            delta: "-1000",
+          })]),
+          totalSupplyDeltas: Object.freeze([Object.freeze({
+            token: TARGET,
+            delta: "950",
+          })]),
+          logs: Object.freeze([Object.freeze({
+            address: TARGET,
+            topics: Object.freeze([`0x${"aa".repeat(32)}`]),
+            data: "0x00",
+          })]),
+        }),
       });
     },
-  }) as Pick<RevmSimClient, "quote">;
+  }) as Pick<RevmSimClient, "strictSimulate">;
 }
 
 async function main(): Promise<void> {
-  const calls: { from: string; to: string; data: string }[] = [];
+  const calls: StrictSimulateRequest[] = [];
   const transport = createRevmStrictSimulationTransport({
     client: mockClient(calls),
     executor: EXECUTOR,
+    verifiedActors: Object.freeze({ "erc4626-probe-actor": ACTOR }),
   });
   const result = await transport.simulate({
-    request: request() as never,
-    source: SOURCE,
-  });
-  assert.equal(result.data, "0xbeef");
-  assert.deepEqual(calls, [Object.freeze({
-    from: EXECUTOR,
-    to: TARGET,
-    data: "0xdead",
-  })]);
-
-  const preCalls: { from: string; to: string; data: string }[] = [];
-  const preTransport = createRevmStrictSimulationTransport({
-    client: mockClient(preCalls),
-    executor: EXECUTOR,
-  });
-  await preTransport.simulate({
     request: request({
+      call: Object.freeze({
+        caller: Object.freeze({
+          kind: "verified-actor" as const,
+          evidenceId: "erc4626-probe-actor",
+        }),
+        to: TARGET,
+        data: "0xdead",
+      }),
       preCalls: Object.freeze([Object.freeze({
-        caller: Object.freeze({ kind: "none" as const }),
+        caller: Object.freeze({
+          kind: "verified-actor" as const,
+          evidenceId: "erc4626-probe-actor",
+        }),
         to: TOKEN,
         data: "0xpre",
       })]),
+      overrideIntent: Object.freeze({
+        caller: Object.freeze({
+          kind: "verified-actor" as const,
+          evidenceId: "erc4626-probe-actor",
+        }),
+        tokenBalances: Object.freeze([Object.freeze({
+          token: TOKEN,
+          amount: 1_000n,
+        })]),
+      }),
+      observe: Object.freeze([
+        "return-data" as const,
+        "token-delta" as const,
+        "total-supply-delta" as const,
+        "logs" as const,
+      ]),
     }) as never,
     source: SOURCE,
   });
-  assert.equal(preCalls.length, 2);
-  assert.equal(preCalls[0]!.data, "0xpre");
-  assert.equal(preCalls[0]!.from, `0x${"0".repeat(40)}`);
+  assert.equal(result.data, "0xbeef");
+  assert.equal(calls.length, 1);
+  const sent = calls[0]!;
+  assert.equal(sent.from, ACTOR);
+  assert.equal(sent.blockNumber, SOURCE.number);
+  assert.equal(sent.preCalls?.[0]?.from, ACTOR);
+  assert.equal(sent.tokenDeals?.[0]?.amount, "1000");
+  assert.deepEqual(sent.observeTokens, [TOKEN.toLowerCase(), TARGET.toLowerCase()]);
+  assert.deepEqual(sent.observeTotalSupply, [TARGET.toLowerCase()]);
+  assert.equal(sent.observeLogs, true);
+  assert.equal(result.effects?.tokenDeltas?.[0]?.delta, -1_000n);
+  assert.equal(result.effects?.totalSupplyDeltas?.[0]?.delta, 950n);
+  assert.equal(result.effects?.logs?.[0]?.address, TARGET);
 
-  await assert.rejects(
-    () => transport.simulate({
-      request: request({ observe: Object.freeze(["token-delta" as const]) }) as never,
-      source: SOURCE,
-    }),
-    /cannot observe effects/,
-  );
-  await assert.rejects(
-    () => transport.simulate({
-      request: request({
-        overrideIntent: Object.freeze({
-          caller: Object.freeze({ kind: "executor" as const }),
-          tokenBalances: Object.freeze([{
-            token: TOKEN,
-            amount: 1n,
-          }]),
-        }),
-      }) as never,
-      source: SOURCE,
-    }),
-    /cannot fund callers/,
-  );
-  const noSender = createRevmStrictSimulationTransport({
+  const bare = createRevmStrictSimulationTransport({
     client: mockClient([]),
     executor: EXECUTOR,
   });
   await assert.rejects(
-    () => noSender.simulate({
+    () => bare.simulate({
       request: request({
         call: Object.freeze({
-          caller: Object.freeze({ kind: "observed-sender" as const }),
+          caller: Object.freeze({
+            kind: "verified-actor" as const,
+            evidenceId: "erc4626-probe-actor",
+          }),
           to: TARGET,
           data: "0xdead",
         }),
       }) as never,
       source: SOURCE,
     }),
-    /no observed sender binding/,
+    /verified actor evidence erc4626-probe-actor is absent/,
   );
   await assert.rejects(
-    () => transport.simulate({
+    () => bare.simulate({
+      request: request({
+        overrideIntent: Object.freeze({
+          caller: Object.freeze({ kind: "executor" as const }),
+          nativeBalanceWei: 1n,
+        }),
+      }) as never,
+      source: SOURCE,
+    }),
+    /cannot fund native balances/,
+  );
+  const revertCalls: StrictSimulateRequest[] = [];
+  const revertTransport = createRevmStrictSimulationTransport({
+    client: mockClient(revertCalls),
+    executor: EXECUTOR,
+  });
+  await assert.rejects(
+    () => revertTransport.simulate({
       request: request({
         call: Object.freeze({
           caller: Object.freeze({ kind: "executor" as const }),

@@ -1,4 +1,6 @@
 import type {
+  OverlayPreCall,
+  OverlayTokenDeal,
   RevmSimClient,
 } from "./revm-sim-client.js";
 import type {
@@ -10,17 +12,18 @@ import type {
 } from "./venues/adapter-request-program.js";
 
 /**
- * Revm-backed strict simulation transport. Quote-driven: resolves the
- * caller reference to an address, executes pre-calls sequentially, then
- * quotes the main call. Effect observation and funded-caller state
- * overrides are not expressible in the quote request, so requests that
- * need them fail closed with resource-limited instead of fabricating
- * results.
+ * Revm-backed strict simulation transport. Runs the request as one isolated
+ * effect-delta simulation against the canonical source block: resolves every
+ * caller (including verified actors), funds token balances, executes
+ * pre-calls then the main call, and returns return-data plus observed
+ * token/totalSupply deltas and logs. Unsupported caller/override bindings
+ * fail closed instead of fabricating results.
  */
 export function createRevmStrictSimulationTransport(input: {
-  readonly client: Pick<RevmSimClient, "quote">;
+  readonly client: Pick<RevmSimClient, "strictSimulate">;
   readonly executor: string;
   readonly observedSender?: string;
+  readonly verifiedActors?: Readonly<Record<string, string>>;
 }): StrictSimulationTransport {
   return Object.freeze({
     async simulate(simInput: {
@@ -33,54 +36,111 @@ export function createRevmStrictSimulationTransport(input: {
         }
       >;
       readonly source: { readonly number: number };
-    }): Promise<{ readonly data: string }> {
+    }): Promise<{
+      readonly data: string;
+      readonly effects?: {
+        readonly tokenDeltas?: readonly {
+          readonly token: string;
+          readonly account: string;
+          readonly delta: bigint;
+        }[];
+        readonly totalSupplyDeltas?: readonly {
+          readonly token: string;
+          readonly delta: bigint;
+        }[];
+        readonly logs?: readonly {
+          readonly address: string;
+          readonly topics: readonly string[];
+          readonly data: string;
+        }[];
+      };
+    }> {
       const { request } = simInput;
-      if (request.observe.length > 0) {
+      if (request.overrideIntent.nativeBalanceWei !== undefined) {
         throw new Error(
-          "revm strict transport cannot observe effects via quote",
-        );
-      }
-      if (
-        request.overrideIntent.nativeBalanceWei !== undefined ||
-        (request.overrideIntent.tokenBalances?.length ?? 0) > 0
-      ) {
-        throw new Error(
-          "revm strict transport cannot fund callers via quote",
+          "revm strict transport cannot fund native balances",
         );
       }
       const from = resolveCaller(
         request.call.caller,
         input.executor,
         input.observedSender,
+        input.verifiedActors,
       );
-      for (const preCall of request.preCalls ?? []) {
-        const preFrom = resolveCaller(
-          preCall.caller,
-          input.executor,
-          input.observedSender,
-        );
-        const preResp = await input.client.quote({
-          from: preFrom,
-          to: preCall.to,
-          data: preCall.data,
-        });
-        if (!preResp.ok || !preResp.success) {
-          throw new Error(
-            preResp.revertReason ?? preResp.error ?? "revm pre-call failed",
-          );
-        }
-      }
-      const resp = await input.client.quote({
+      const preCalls: OverlayPreCall[] = (request.preCalls ?? []).map(
+        (call) => Object.freeze({
+          from: resolveCaller(
+            call.caller,
+            input.executor,
+            input.observedSender,
+            input.verifiedActors,
+          ),
+          to: call.to,
+          calldata: call.data,
+        }),
+      );
+      const tokenDeals: OverlayTokenDeal[] = (
+        request.overrideIntent.tokenBalances ?? []
+      ).map((deal) => Object.freeze({
+        token: deal.token,
+        to: from,
+        amount: deal.amount.toString(),
+      }));
+      // The family verifies deltas for the funded asset AND the call target
+      // (e.g. ERC4626 asset out + vault shares in), so observe both.
+      const observeTokens = unique([
+        ...(request.overrideIntent.tokenBalances ?? []).map(
+          (deal) => deal.token,
+        ),
+        request.call.to,
+      ]);
+      const observeTotalSupply = request.observe.includes("total-supply-delta")
+        ? [request.call.to]
+        : [];
+      const observeLogs = request.observe.includes("logs");
+      const resp = await input.client.strictSimulate({
+        blockNumber: simInput.source.number,
         from,
         to: request.call.to,
         data: request.call.data,
+        preCalls,
+        tokenDeals,
+        observeTokens,
+        observeTotalSupply,
+        observeLogs,
       });
-      if (!resp.ok || !resp.success) {
+      if (resp.success !== true) {
         throw new Error(
-          resp.revertReason ?? resp.error ?? "revm simulation failed",
+          resp.revertReason ?? "revm strict simulation reverted",
         );
       }
-      return Object.freeze({ data: resp.output ?? "0x" });
+      const effects = resp.strict;
+      if (effects === undefined) {
+        throw new Error("revm strict simulation returned no effects");
+      }
+      return Object.freeze({
+        data: resp.output ?? "0x",
+        effects: Object.freeze({
+          tokenDeltas: Object.freeze(effects.tokenDeltas.map((delta) =>
+            Object.freeze({
+              token: delta.token,
+              account: delta.account,
+              delta: BigInt(delta.delta),
+            })
+          )),
+          totalSupplyDeltas: Object.freeze(
+            effects.totalSupplyDeltas.map((delta) => Object.freeze({
+              token: delta.token,
+              delta: BigInt(delta.delta),
+            })),
+          ),
+          logs: Object.freeze(effects.logs.map((log) => Object.freeze({
+            address: log.address,
+            topics: Object.freeze([...log.topics]),
+            data: log.data,
+          }))),
+        }),
+      });
     },
   });
 }
@@ -89,6 +149,7 @@ function resolveCaller(
   caller: CallerRef,
   executor: string,
   observedSender: string | undefined,
+  verifiedActors: Readonly<Record<string, string>> | undefined,
 ): string {
   if (caller.kind === "executor") return executor;
   if (caller.kind === "none") return `0x${"0".repeat(40)}`;
@@ -100,7 +161,19 @@ function resolveCaller(
     }
     return observedSender;
   }
-  throw new Error(
-    "revm strict transport cannot resolve verified-actor caller",
-  );
+  if (caller.kind === "verified-actor") {
+    const actor = verifiedActors?.[caller.evidenceId];
+    if (actor === undefined) {
+      throw new Error(
+        `verified actor evidence ${caller.evidenceId} is absent from ` +
+          "the strict transport",
+      );
+    }
+    return actor;
+  }
+  throw new Error("revm strict transport cannot resolve unknown caller");
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values.map((value) => value.toLowerCase()))];
 }

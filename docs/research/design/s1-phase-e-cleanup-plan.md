@@ -361,6 +361,20 @@
 > `docs/research/design/evidence/s1-node-acceptance-pipeline-c88aef4d.json`。
 > 下一步：Pair A 剩余 quote/approve legacy 删除（待 strict
 > publication 集齐全或默认 authority 收口时执行）。
+>
+> **revm effect-delta 能力（2026-08-12）：** 补齐 erc4626 能力缺口：
+> revm-sim daemon 新增 `strictSimulate` op（canonical block fork →
+> token 余额注资 → preCalls → 主调用 → 返回 return-data +
+> token/totalSupply 增量 + logs，signed decimal delta）；TS client
+> 新增 `strictSimulate`；`createRevmStrictSimulationTransport` 重写为
+> effect-delta 执行（verified-actor 解析、funded tokenBalances、
+> observe token/call-target 与 totalSupply/logs），native 注资仍
+> fail-closed；strict runtime effects 契约补
+> `totalSupplyDeltas`/`logs`；main.ts 注入
+> `PRODUCTION_STRICT_VERIFIED_ACTORS`。合同测试重写五例；
+> build/shadow suite（26 项）/sweep 全绿。剩余：节点编译新 revm
+> 二进制（独立路径，不覆盖 live 进程二进制）→ 节点验收验证
+> erc4626 identity 完成 effect-delta 阶段并进入 catalogRoot。
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 const BALANCE_OF_SELECTOR: [u8; 4] = [0x70, 0xa0, 0x82, 0x31];
+const TOTAL_SUPPLY_SELECTOR: [u8; 4] = [0x18, 0x16, 0x0d, 0xdd];
 const APPROVE_SELECTOR: [u8; 4] = [0x09, 0x5e, 0xa7, 0xb3];
 const DEFAULT_GAS_LIMIT: u64 = 0x1000000;
 
@@ -902,6 +903,27 @@ enum DaemonRequest {
         gas_limit: Option<u64>,
     },
     #[serde(rename_all = "camelCase")]
+    StrictSimulate {
+        block_number: u64,
+        #[serde(default)]
+        rpc_url: Option<String>,
+        from: String,
+        to: String,
+        data: String,
+        #[serde(default)]
+        gas_limit: Option<u64>,
+        #[serde(default)]
+        pre_calls: Vec<PreCall>,
+        #[serde(default)]
+        token_deals: Vec<TokenDeal>,
+        #[serde(default)]
+        observe_tokens: Vec<String>,
+        #[serde(default)]
+        observe_total_supply: Vec<String>,
+        #[serde(default)]
+        observe_logs: bool,
+    },
+    #[serde(rename_all = "camelCase")]
     Simulate {
         owner: String,
         executor: String,
@@ -935,6 +957,39 @@ struct DaemonResponse {
     cache_stats: Option<CacheStats>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed_stats: Option<SeedStats>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    strict: Option<StrictSimulateEffects>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StrictSimulateEffects {
+    token_deltas: Vec<SimTokenDelta>,
+    total_supply_deltas: Vec<SimTotalSupplyDelta>,
+    logs: Vec<SimLog>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SimTokenDelta {
+    token: String,
+    account: String,
+    delta: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SimTotalSupplyDelta {
+    token: String,
+    delta: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SimLog {
+    address: String,
+    topics: Vec<String>,
+    data: String,
 }
 
 impl DaemonResponse {
@@ -951,6 +1006,7 @@ impl DaemonResponse {
             missing_state_keys: Vec::new(),
             cache_stats: None,
             seed_stats: None,
+            strict: None,
         }
     }
 }
@@ -1037,6 +1093,7 @@ impl Daemon {
                 missing_state_keys: Vec::new(),
                 cache_stats: None,
                 seed_stats: None,
+                strict: None,
             }),
             DaemonRequest::Reset => {
                 self.prepared = None;
@@ -1085,6 +1142,32 @@ impl Daemon {
                 data,
                 gas_limit,
             } => self.quote(from, to, data, gas_limit, started),
+            DaemonRequest::StrictSimulate {
+                block_number,
+                rpc_url,
+                from,
+                to,
+                data,
+                gas_limit,
+                pre_calls,
+                token_deals,
+                observe_tokens,
+                observe_total_supply,
+                observe_logs,
+            } => self.strict_simulate(
+                block_number,
+                rpc_url,
+                from,
+                to,
+                data,
+                gas_limit,
+                pre_calls,
+                token_deals,
+                observe_tokens,
+                observe_total_supply,
+                observe_logs,
+                started,
+            ),
             DaemonRequest::Simulate {
                 owner,
                 executor,
@@ -1208,6 +1291,7 @@ impl Daemon {
             missing_state_keys: Vec::new(),
             cache_stats: None,
             seed_stats: Some(seed_stats),
+            strict: None,
         })
     }
 
@@ -1485,6 +1569,7 @@ impl Daemon {
             missing_state_keys: missing,
             cache_stats: Some(stats),
             seed_stats,
+            strict: None,
         })
     }
 
@@ -1544,6 +1629,7 @@ impl Daemon {
             missing_state_keys: missing,
             cache_stats: Some(stats),
             seed_stats: None,
+            strict: None,
         })
     }
 
@@ -1608,6 +1694,166 @@ impl Daemon {
             missing_state_keys: missing,
             cache_stats: Some(stats),
             seed_stats: None,
+            strict: None,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn strict_simulate(
+        &mut self,
+        block_number: u64,
+        rpc_url: Option<String>,
+        from: String,
+        to: String,
+        data: String,
+        gas_limit: Option<u64>,
+        pre_calls: Vec<PreCall>,
+        token_deals: Vec<TokenDeal>,
+        observe_tokens: Vec<String>,
+        observe_total_supply: Vec<String>,
+        observe_logs: bool,
+        started: Instant,
+    ) -> Result<DaemonResponse> {
+        self.ensure_warm(block_number, rpc_url)?;
+        let remote_rc = Rc::clone(
+            &self.warm.as_ref().expect("warm set above").remote,
+        );
+        let mut db = CacheDB::new(SharedRemote(remote_rc));
+        let block_env = load_block_env(
+            &self.warm.as_ref().expect("warm set").remote.rpc,
+            block_number,
+        )?;
+        let caller = parse_address(&from)?;
+        let target = parse_address(&to)?;
+        let calldata = Bytes::from(parse_hex_bytes(&data)?);
+        let parsed_pre_calls = parse_pre_calls(&pre_calls)?;
+        let gas_limit = gas_limit.unwrap_or(DEFAULT_GAS_LIMIT);
+
+        apply_token_deals(
+            &mut db,
+            &block_env,
+            &token_deals,
+            &mut self.balance_slots,
+        )?;
+
+        let mut observed_tokens: Vec<Address> = Vec::new();
+        let mut balances_before: Vec<(Address, U256)> = Vec::new();
+        for raw in &observe_tokens {
+            let token = parse_address(raw)?;
+            observed_tokens.push(token);
+            balances_before.push((
+                token,
+                erc20_balance_of(&mut db, &block_env, token, caller)?,
+            ));
+        }
+        let mut supply_tokens: Vec<Address> = Vec::new();
+        let mut supply_before: Vec<(Address, U256)> = Vec::new();
+        for raw in &observe_total_supply {
+            let token = parse_address(raw)?;
+            supply_tokens.push(token);
+            supply_before.push((
+                token,
+                erc20_total_supply(&mut db, &block_env, token)?,
+            ));
+        }
+
+        for call in parsed_pre_calls {
+            let pre = execute_call(
+                &mut db,
+                &block_env,
+                call.from,
+                call.to,
+                Bytes::from(call.calldata),
+                call.gas_limit,
+                true,
+            )?;
+            if !pre.result.is_success() {
+                bail!(
+                    "strict preCall failed: {}",
+                    format_execution_result(&pre.result)
+                );
+            }
+            db.commit(pre.state);
+        }
+
+        let main = execute_call(
+            &mut db,
+            &block_env,
+            caller,
+            target,
+            calldata,
+            gas_limit,
+            true,
+        )?;
+        let success = main.result.is_success();
+        let output = main
+            .result
+            .output()
+            .map(|bytes| format!("0x{}", hex::encode(bytes.as_ref())));
+        let logs: Vec<SimLog> = if observe_logs {
+            main.result
+                .logs()
+                .iter()
+                .map(|log| SimLog {
+                    address: format!("{:#x}", log.address),
+                    topics: log
+                        .data
+                        .topics()
+                        .iter()
+                        .map(|topic| format!("{topic:#x}"))
+                        .collect(),
+                    data: format!("0x{}", hex::encode(log.data.data.as_ref())),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let revert_reason = if success {
+            None
+        } else {
+            Some(format_execution_result(&main.result))
+        };
+        if success {
+            db.commit(main.state);
+        }
+
+        let mut token_deltas: Vec<SimTokenDelta> = Vec::new();
+        for (index, (token, before)) in balances_before.iter().enumerate() {
+            let _ = &observed_tokens[index];
+            let after = erc20_balance_of(&mut db, &block_env, *token, caller)?;
+            token_deltas.push(SimTokenDelta {
+                token: format!("{token:#x}"),
+                account: format!("{caller:#x}"),
+                delta: signed_delta(after, *before),
+            });
+        }
+        let mut total_supply_deltas: Vec<SimTotalSupplyDelta> = Vec::new();
+        for (index, (token, before)) in supply_before.iter().enumerate() {
+            let _ = &supply_tokens[index];
+            let after = erc20_total_supply(&mut db, &block_env, *token)?;
+            total_supply_deltas.push(SimTotalSupplyDelta {
+                token: format!("{token:#x}"),
+                delta: signed_delta(after, *before),
+            });
+        }
+
+        Ok(DaemonResponse {
+            ok: true,
+            error: None,
+            success: Some(success),
+            output,
+            profit: None,
+            gas_used: Some(main.result.tx_gas_used().to_string()),
+            revert_reason,
+            latency_ms: started.elapsed().as_millis(),
+            missing_state_keys: db.db.missing_state_keys(),
+            cache_stats: None,
+            seed_stats: None,
+            strict: Some(StrictSimulateEffects {
+                token_deltas,
+                total_supply_deltas,
+                logs,
+            }),
         })
     }
 }
@@ -1767,6 +2013,7 @@ fn ok_response(started: Instant) -> DaemonResponse {
         missing_state_keys: Vec::new(),
         cache_stats: None,
         seed_stats: None,
+        strict: None,
     }
 }
 
@@ -1803,6 +2050,44 @@ where
         .output()
         .ok_or_else(|| anyhow!("balanceOf returned no output"))?;
     Ok(parse_u256_from_evm_output(bytes.as_ref()))
+}
+
+fn erc20_total_supply<D>(
+    db: &mut CacheDB<D>,
+    block_env: &BlockEnv,
+    token: Address,
+) -> Result<U256>
+where
+    D: DatabaseRef<Error = RpcError>,
+{
+    let output = execute_call(
+        db,
+        block_env,
+        Address::ZERO,
+        token,
+        Bytes::from_static(&TOTAL_SUPPLY_SELECTOR),
+        300_000,
+        false,
+    )?;
+    if !output.result.is_success() {
+        bail!(
+            "totalSupply({token:#x}) failed: {}",
+            format_execution_result(&output.result)
+        );
+    }
+    let bytes = output
+        .result
+        .output()
+        .ok_or_else(|| anyhow!("totalSupply returned no output"))?;
+    Ok(parse_u256_from_evm_output(bytes.as_ref()))
+}
+
+fn signed_delta(post: U256, pre: U256) -> String {
+    if post >= pre {
+        (post - pre).to_string()
+    } else {
+        format!("-{}", pre - post)
+    }
 }
 
 fn parse_pre_calls(calls: &[PreCall]) -> Result<Vec<ParsedPreCall>> {
