@@ -109,7 +109,8 @@ commit 见本日各 checkpoint）：**
 - mixed-mode subset closure（§1 验收 4）：receipt 精确覆盖
   bootstrap-eligible 子集，非 eligible 族保持 append-only；真实生产
   catalog 13 eligible 族全行与 univ2-standard 单族 closure 均签发成功；
-- S1 regression sweep harness（11 组合同 + parity verifier 一键复跑）。
+- S1 regression sweep harness（12 组合同 + parity verifier 一键复跑，
+  含 node enumerator evidence 自校验）。
 
 **节点机器证据（2026-08-12，SSM 双跑成功）：**
 
@@ -326,6 +327,19 @@ SSM run `5f6aba8c-512f-4d5a-8e0a-cac84021e163`，非 live cutover）：**
 - 范围如实限定为 fixture-backed（真实 store/catalog/enumerator 实现 +
   合成 incumbent inventory）；live discovery 写入真实 inventory 的
   节点 dry-run 仍待接线。
+
+**2026-08-12 node enumerator evidence verifier checkpoint（commit 见下，
+证据链自校验，非部署）：**
+
+- 新增 `scripts/verify-s1-node-enumerator-evidence.sh`：重跑本地确定性
+  `searcher:node-enumerator-dry-run`，校验 committed 记录的 format/
+  ssmRunId/instanceId/implSha/catalogHash/familyCount/逐 Family
+  inventoryHash 与本地输出逐字节一致；不一致即失败；
+- `s1-regression-sweep.sh` 新增
+  node-enumerator-evidence-verifier 步骤：对全部
+  `s1-node-enumerator-dry-run-*.json` 记录自校验（当前记录 SSM
+  `5f6aba8c…` 验证通过），sweep 组数 11 → 12；
+- 纯证据/CI gate：不涉及 live、签名、广播或 authority。
 
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
