@@ -631,6 +631,17 @@ D-008 落实为第三种 publication 模式，合同级；production 接线仍�
 > 所有缺口均 fail-closed 而非静默降级。因此本轮完成 md 收口，
 > P1 实现推迟到 cutover 规划，作为 production authority 前置条件
 > 逐项立项（详见 decision-log D-012 与 Phase E plan checkpoint）。
+>
+> **2026-08-13 revm effect-delta 缺口补上（D-012 内该项转完成）：**
+> revm-sim daemon 新增 `strictSimulate`（funded native/token
+> override + preCalls + 主调用 + return-data/token/totalSupply
+> delta/logs；exotic ERC20 份额槽经 prestateTracer 精确发现）；
+> strict transport 支持 verified-actor + funded override + observe；
+> 修复 BigInt provenance 崩溃（此前所有仿真统一 resource-limited
+> 的真凶）。节点 600s dry-run：`catalogRoot revision=1
+> instances=14 pricing=15`（erc4626 完整 identity 发布 13 实例），
+> lifecycleFailures 为空。该 P1 项从 cutover 前置清单移除；剩余
+> ingress/continuous 调度/mutation-proof 仍按 D-012 推迟。
 
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
