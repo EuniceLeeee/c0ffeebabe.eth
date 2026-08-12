@@ -219,6 +219,19 @@
 > complete-snapshot stage 必失败；精确/缺失 coverage 水位正反例。
 > build/suite 全绿。complete-snapshot closure 仍保留在 composition
 > 供未来精确 bootstrap 路径使用，live 循环不触碰。
+>
+> **correctness kernel 节点验收（2026-08-12，`20354d76` 机器证据）：**
+> 600s dry-run 仍连续提交 `revision=1` 与 `revision=2`
+> （instances=1/pricing=2），但发布已全部走 observed-complete；
+> checkpoint revision 21 的 43 行水位全部 append-only、
+> contiguous-history 为 0——全局 cursor 不再铸造完整性，精确
+> Family×source receipt 缺失时保持诚实；erc4626 稳定停在
+> `resource-limited`（verified-actor authority 已绑定，剩余为
+> revm effect-delta transport 能力缺口）。证据：
+> `docs/research/design/evidence/s1-node-acceptance-pipeline-20354d76.json`。
+> 剩余 P0：跨重启提交协议/最终 fence（P0-5）、验收门 sealed
+> parity 诚实化（P0-6）；P1：完整 event ingress、真实预算/
+> timing/provenance、continuous 调度、22-Family 崩溃恢复合同。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
