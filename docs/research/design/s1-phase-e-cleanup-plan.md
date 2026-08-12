@@ -15,7 +15,7 @@
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
-| A | `production-registry.routes()/funding()` 在 `revm-live-backend` 的执行消费 | strict family runtime handle / strict funding consumer 接入 live execution | step 1-4 完成：funding/route prewarm + execution adapter 投影（univ2/univ3/fluid-dex/eigenpie/dodo/goldx/psm/univ4 pilots：spender 静态或 hop.target，prewarm 保守留空）env gate 接线（默认 OFF）；删除待做 |
+| A | `production-registry.routes()/funding()` 在 `revm-live-backend` 的执行消费 | strict family runtime handle / strict funding consumer 接入 live execution | step 1-5 完成：22 族 execution projection 全覆盖（spender 静态/hop.target/angstrom 常量/null；prewarm 保守留空）env gate 接线（默认 OFF）；**删除步骤阻塞**：strict 路径激活依赖 composition env + committed publication（即默认 authority 接线），用户选择跳过；在 composition 成为默认前删除 legacy 会让无 composition 的生产路径失去 execution 数据 |
 
 > **Pair A 节点验证（2026-08-12，SSM 串行 strict-live run）：**
 > challenger `45908c6c` + `SEARCHER_STRICT_LIVE_EXECUTION=1`（composition

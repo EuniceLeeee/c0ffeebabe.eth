@@ -171,6 +171,38 @@ function main(): void {
     assert(projection);
     assert.equal(projection.allowanceSpender, null);
   }
+  const curveProjection = strictExecutionProjectionFor({
+    catalog,
+    adapterId: "curve-exchange-underlying",
+  });
+  assert(curveProjection);
+  assert.equal(typeof curveProjection.allowanceSpender, "function");
+  assert.equal(
+    (curveProjection.allowanceSpender as (hop: {
+      readonly target: string;
+    }) => string | null)({ target: `0x${"41".repeat(20)}` }),
+    `0x${"41".repeat(20)}`,
+  );
+  const angstromProjection = strictExecutionProjectionFor({
+    catalog,
+    adapterId: "angstrom-v4-swap",
+  });
+  assert(angstromProjection);
+  assert.equal(
+    angstromProjection.allowanceSpender,
+    "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8",
+  );
+  for (const adapterId of [
+    "wsteth-wrap",
+    "erc4626-deposit",
+    "fluid-vault",
+    "self-burn-native-redeem",
+    "astra-multitoken-change",
+  ]) {
+    const projection = strictExecutionProjectionFor({ catalog, adapterId });
+    assert(projection, adapterId);
+    assert.equal(projection.allowanceSpender, null, adapterId);
+  }
   console.log("strict-execution-projection PASS");
 }
 

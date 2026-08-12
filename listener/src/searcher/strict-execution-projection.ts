@@ -27,6 +27,30 @@ import { GOLDX_FAMILY_ID } from
   "./venues/protocols/goldx-family/manifest.js";
 import { PSM_FAMILY_ID } from
   "./venues/protocols/psm-family/manifest.js";
+import { CURVE_UNDERLYING_FAMILY_ID } from
+  "./venues/swaps/curve-underlying-family/manifest.js";
+import { ANGSTROM_V4_FAMILY_ID } from
+  "./venues/swaps/angstrom-v4-family/manifest.js";
+import { FLUID_CREDIT_FAMILY_ID } from
+  "./venues/credit/fluid-family/manifest.js";
+import { WSTETH_FAMILY_ID } from
+  "./venues/protocols/wsteth-family/manifest.js";
+import { ERC4626_FAMILY_ID } from
+  "./venues/protocols/erc4626-family/manifest.js";
+import { ERC4626_SILO_REDEEM_FAMILY_ID } from
+  "./venues/protocols/erc4626-silo-redeem-family/manifest.js";
+import { METRONOME_HGUSDC_FAMILY_ID } from
+  "./venues/protocols/metronome-hgusdc-family/manifest.js";
+import { METRONOME_SYNTH_FAMILY_ID } from
+  "./venues/protocols/metronome-synth-family/manifest.js";
+import { ROCKSOLID_FAMILY_ID } from
+  "./venues/protocols/rocksolid-family/manifest.js";
+import { SELF_BURN_NATIVE_FAMILY_ID } from
+  "./venues/protocols/self-burn-native-family/manifest.js";
+import { ETHERTOKEN_NATIVE_FAMILY_ID } from
+  "./venues/protocols/ethertoken-native-redeem-family/manifest.js";
+import { ASTRA_MULTITOKEN_FAMILY_ID } from
+  "./venues/protocols/astra-multitoken-family/manifest.js";
 
 export interface StrictExecutionHop {
   readonly adapterId: string;
@@ -99,7 +123,37 @@ const strictExecutionAdapters: ReadonlyMap<
     allowanceSpender: null,
     prewarmQuoteCalls: Object.freeze([]),
   })],
+  [CURVE_UNDERLYING_FAMILY_ID, Object.freeze({
+    allowanceSpender: (hop: StrictExecutionHop) => hop.target,
+    prewarmQuoteCalls: Object.freeze([]),
+  })],
+  [ANGSTROM_V4_FAMILY_ID, Object.freeze({
+    // Legacy angstrom allowanceSpender resolved at runtime (protocol
+    // infrastructure singleton, not an instance allowlist).
+    allowanceSpender: "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8",
+    prewarmQuoteCalls: Object.freeze([]),
+  })],
+  [FLUID_CREDIT_FAMILY_ID, Object.freeze({
+    allowanceSpender: null,
+    prewarmQuoteCalls: Object.freeze([]),
+  })],
+  [WSTETH_FAMILY_ID, nullSpender()],
+  [ERC4626_FAMILY_ID, nullSpender()],
+  [ERC4626_SILO_REDEEM_FAMILY_ID, nullSpender()],
+  [METRONOME_HGUSDC_FAMILY_ID, nullSpender()],
+  [METRONOME_SYNTH_FAMILY_ID, nullSpender()],
+  [ROCKSOLID_FAMILY_ID, nullSpender()],
+  [SELF_BURN_NATIVE_FAMILY_ID, nullSpender()],
+  [ETHERTOKEN_NATIVE_FAMILY_ID, nullSpender()],
+  [ASTRA_MULTITOKEN_FAMILY_ID, nullSpender()],
 ]);
+
+function nullSpender(): StrictExecutionAdapterProjection {
+  return Object.freeze({
+    allowanceSpender: null,
+    prewarmQuoteCalls: Object.freeze([]),
+  });
+}
 
 export function strictExecutionProjectionFor(input: {
   readonly catalog: FamilyCapabilityCatalog;
