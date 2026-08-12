@@ -295,9 +295,22 @@ async function executeRequest(
                 kind: request.kind,
                 to: request.call.to,
                 data: request.call.data,
-                preCalls: request.preCalls ?? [],
-                overrideIntent: request.overrideIntent,
-                observe: request.observe,
+                preCalls: (request.preCalls ?? []).map((call) => ({
+                  from: callerIdentity(call.caller),
+                  to: call.to,
+                  data: call.data,
+                })),
+                tokenBalances: (
+                  request.overrideIntent.tokenBalances ?? []
+                ).map((balance) => ({
+                  token: balance.token,
+                  amount: balance.amount.toString(),
+                })),
+                nativeBalanceWei: request.overrideIntent.nativeBalanceWei ===
+                    undefined
+                  ? null
+                  : request.overrideIntent.nativeBalanceWei.toString(),
+                observe: [...request.observe],
                 source: source.number,
               }))
               .digest("hex"),
@@ -379,6 +392,15 @@ function extractStrictRevertData(error: unknown): string | null {
     }
   }
   return null;
+}
+
+function callerIdentity(caller: {
+  readonly kind: string;
+  readonly evidenceId?: string;
+}): string {
+  return caller.evidenceId === undefined
+    ? caller.kind
+    : `${caller.kind}:${caller.evidenceId}`;
 }
 
 function issueResult(input: {
