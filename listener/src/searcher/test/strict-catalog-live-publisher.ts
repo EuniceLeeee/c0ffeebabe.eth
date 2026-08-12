@@ -9,6 +9,12 @@ import {
   CheckpointDiscoveryInventoryEnumerator,
 } from "../adapter-family-discovery-inventory-enumerator.js";
 import {
+  CheckpointDiscoveryInventoryWriter,
+} from "../adapter-family-discovery-inventory-writer.js";
+import {
+  deriveLiveDiscoveryCheckpointInventory,
+} from "../live-discovery-checkpoint-inventory.js";
+import {
   publishStrictCatalogFromLifecycle,
 } from "../strict-catalog-live-publisher.js";
 import {
@@ -27,6 +33,11 @@ import {
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
+import {
+  createProtocolDiscoveryEvidenceCache,
+} from "../protocol-discovery-cache.js";
+import type { LiveDiscoveryPublicationState } from
+  "../live-discovery-publication.js";
 import { WSTETH_FAMILY_ID } from
   "../venues/protocols/wsteth-family/manifest.js";
 import type { CanonicalSource } from
@@ -153,6 +164,90 @@ async function main(): Promise<void> {
     assert(committed);
     assert(committed.views.pricingByPublicationKey.size >= 1);
     assert(committed.envelope.privateState.instances.size >= 1);
+
+    // Production catalog: a single-family publication must still stage every
+    // other catalog Family as unsupported, or the catalogRoot CAS rejects the
+    // whole publication ("missing Family ..."). Regression for the node
+    // acceptance unresolved after fluid-dex identity passed.
+    const prodDirectory = await mkdtemp(
+      join(tmpdir(), "strict-catalog-live-publisher-prod-"),
+    );
+    try {
+      const prodPath = join(prodDirectory, "checkpoint.json");
+      const prodCat = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+      const prodComposition = createDurableDiscoveryContinuityComposition({
+        catalog: prodCat,
+        chainId: CHAIN_ID,
+        sourceRegistryFingerprint: REGISTRY,
+        checkpointPath: prodPath,
+        enumerateSnapshotInventory: async (source) => {
+          const enumerator = new CheckpointDiscoveryInventoryEnumerator({
+            checkpointStore: prodComposition.store,
+          });
+          return await enumerator.enumerate(source);
+        },
+        verifyCanonicalSource: () => {},
+        assertGenerationCurrent: () => {},
+      });
+      assert.equal((await prodComposition.loadForRestart()).status, "empty");
+      const prodCache = createProtocolDiscoveryEvidenceCache(1n);
+      prodCache.verifiedCandidates.set("wsteth-adapter", {
+        adapterId: "wsteth-adapter",
+        candidate: Object.freeze({
+          pool: Object.freeze({ address: WSTETH.toLowerCase() }) as never,
+          source: "persisted-verified-evidence",
+          evidence: Object.freeze([Object.freeze({
+            codeHash: `0x${"1".repeat(64)}`,
+            implementationWord: `0x${"0".repeat(64)}`,
+          })]),
+        }),
+      });
+      const prodPublicationState = Object.freeze({
+        protocolEvidenceCache: prodCache,
+        protocolFamilySourceCoverage: new Map(),
+        dexSourceAnchor: Object.freeze({
+          completeThroughBlock: SOURCE.number,
+          completeThroughHash: SOURCE.hash,
+        }),
+        protocolObservedCursor: Object.freeze({
+          completeThroughBlock: SOURCE.number,
+          completeThroughHash: SOURCE.hash,
+        }),
+      }) as unknown as LiveDiscoveryPublicationState;
+      const prodDerived = deriveLiveDiscoveryCheckpointInventory({
+        publication: prodPublicationState,
+        source: SOURCE,
+        catalog: prodCat,
+        familyIdForAdapter: (adapterId) =>
+          adapterId === "wsteth-adapter" ? WSTETH_FAMILY_ID : null,
+      });
+      const prodWriter = new CheckpointDiscoveryInventoryWriter({
+        checkpointStore: prodComposition.store,
+        checkpointIssuer: prodComposition.checkpointIssuer,
+      });
+      const prodWrite = await prodWriter.write({
+        source: SOURCE,
+        watermarks: prodDerived.watermarks,
+        inventoryFamilies: prodDerived.inventoryFamilies,
+      });
+      assert.equal(prodWrite.status, "committed");
+      const prodPublication = await runWstethLifecycle(SOURCE, prodCat);
+      const prodResult = await publishStrictCatalogFromLifecycle({
+        composition: prodComposition,
+        catalog: prodCat,
+        source: SOURCE,
+        publications: Object.freeze([{
+          familyId: WSTETH_FAMILY_ID,
+          publication: prodPublication,
+        }]),
+      });
+      if (prodResult.status !== "published") {
+        throw new Error("production catalog unresolved: " + prodResult.reason);
+      }
+      assert.equal(prodResult.revision, 1);
+    } finally {
+      await rm(prodDirectory, { recursive: true, force: true });
+    }
     console.log("strict-catalog-live-publisher PASS");
   } finally {
     await rm(directory, { recursive: true, force: true });

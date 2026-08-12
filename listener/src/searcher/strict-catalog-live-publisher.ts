@@ -89,17 +89,32 @@ export async function publishStrictCatalogFromLifecycle(input: {
       candidate: composition.closureIssuer.prepare(closureCandidate),
       checkpointReceipt: composition.store.capture()!,
     });
-    const stages = input.publications.map((entry) =>
-      composition.catalogRoot.stageRouteFamily({
-        publication: entry.publication,
-        inventoryMode: admittedByFamily.has(entry.familyId)
-          ? "complete-snapshot"
-          : "observed-complete",
-        snapshotInventoryClosureReceipt: admittedByFamily.has(entry.familyId)
-          ? receipt
-          : undefined,
-      })
+    const publishedByFamily = new Map(
+      input.publications.map((entry) => [entry.familyId, entry]),
     );
+    const stages = catalog.listAll().map((family) => {
+      const familyId = family.plugin.manifest.familyId;
+      const entry = publishedByFamily.get(familyId);
+      if (entry !== undefined) {
+        return composition.catalogRoot.stageRouteFamily({
+          publication: entry.publication,
+          inventoryMode: admittedByFamily.has(familyId)
+            ? "complete-snapshot"
+            : "observed-complete",
+          snapshotInventoryClosureReceipt: admittedByFamily.has(familyId)
+            ? receipt
+            : undefined,
+        });
+      }
+      // Every catalog Family must appear in the staged publication; families
+      // without a lifecycle result this pass are staged unsupported with an
+      // explicit outcome ref (the shadow-catalog publication contract).
+      return composition.catalogRoot.stageUnsupported({
+        familyId,
+        source,
+        outcomeRefs: Object.freeze(["strict-live:no-publication"]),
+      });
+    });
     const completeFamilies = new Set<FamilyId>(
       [...admittedByFamily.keys()] as FamilyId[],
     );
