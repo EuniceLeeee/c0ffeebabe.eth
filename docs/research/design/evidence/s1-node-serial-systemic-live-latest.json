@@ -1,0 +1,30 @@
+{
+  "format": "s1-node-serial-systemic-live-v1",
+  "status": "pass",
+  "windowSeconds": 600,
+  "baseline": {
+    "sha": "4265971d123c2d6afc5194aa2b324104558327c7",
+    "eligibleHeads": 15,
+    "fullCoverageHeads": 0,
+    "completedHeads": 15,
+    "p95TotalMs": 134742.49879500002
+  },
+  "challenger": {
+    "sha": "552c220efa263e769c127d3f2c3b46d5614e2b8d",
+    "eligibleHeads": 19,
+    "fullCoverageHeads": 1,
+    "completedHeads": 15,
+    "p95TotalMs": 114469.96274999998
+  },
+  "gateVerdict": "not-pass",
+  "gateReasons": [
+    "paired-live verdict is relative_diagnostic_only",
+    "exact semantics status is n/a",
+    "baseline absolute head coverage did not pass",
+    "challenger absolute head coverage did not pass",
+    "challenger relative head coverage did not pass",
+    "challenger completed-heads 95% pass did not pass",
+    "baseline terminal-latency timing did not pass",
+    "challenger terminal-latency timing did not pass"
+  ]
+}

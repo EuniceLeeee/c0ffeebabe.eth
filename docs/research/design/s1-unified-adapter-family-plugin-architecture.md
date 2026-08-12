@@ -516,6 +516,26 @@ dry-run harness checkpoint（commit 见下）：**
   不会因此虚报 ready；默认 authority 切换仍需 head-level 证据或用户
   对验收基准的显式重新定义（D-010 待用户确认）。
 
+**2026-08-12 serial systemic-live gate verdict checkpoint（commit 见下，
+真实 head-level 串行证据，verdict=not-pass，fail-closed 保持）：**
+
+- `serial-systemic-live-evidence` + `node-serial-systemic-live` CLI：
+  解析两侧 events.jsonl 的 `block_scan_result`，推导 head 覆盖/完成/
+  timing，映射到 `SystemicLiveGateInput`（pairedLiveVerdict 如实
+  `relative_diagnostic_only`，串行证据永不单独 pass）；
+- 真实 600s 串行数据 verdict（`s1-node-serial-systemic-live-latest.json`）：
+  baseline eligibleHeads=15、fullCoverage=0、completed=15、p95=134.7s；
+  challenger eligibleHeads=19、fullCoverage=1、completed=15、
+  p95=114.5s；gate `not-pass`（8 条 reasons：串行 verdict、exact n/a、
+  双侧 absolute coverage、challenger relative/completed、双侧 timing）；
+- 诊断价值：challenger 冷启动 head 吞吐与 timing 均优于 baseline（19 vs
+  15 heads、p95 114.5s vs 134.7s），但双侧都未达 §13-14 95% 覆盖与
+  8s timing floors（`discovery_source_coverage_behind` + exact-refinement
+  budget 超时），默认 authority 切换**诚实保持 blocked**；
+- 下一步（节点）：加长预热窗口（startup prewarm 20min + discovery
+  backfill 开）后重跑串行对比，使 full_coverage/completed/timing 达到
+  floors，再评估 cutover-readiness。
+
 **2026-08-12 paired-live distiller checkpoint（commit 见下，
 systemic-live 权威决策的蒸馏链；真实 paired-live 运行仍待节点）：**
 
