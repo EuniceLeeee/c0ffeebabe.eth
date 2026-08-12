@@ -27,6 +27,14 @@
 > 4. solver/revm 消费 committed views（execution 投影已就绪）。
 > 在此之前任何 legacy 删除都会留下无数据路径；"直接删除+回退"只会在
 > 回退循环里打转，不构成推进。
+>
+> **管线进展（2026-08-12）：** `strict-catalog-live-publisher` 已落地：
+> 给定 lifecycle-issued publication，恢复 checkpoint inventory →
+> closure verifyAndIssue → 逐族 stage（complete-snapshot /
+> observed-complete）→ prepare + compareAndPublish，返回 revision 或
+> unresolved；wsteth 合同测试通过（rev1 + committed views）。剩余：
+> 生产循环里为每个 admission 的 pool 跑 strict Family lifecycle（管线
+> 步骤 1）并把 publisher 接到 live 发布路径（步骤 4 消费端已就绪）。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
