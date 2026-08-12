@@ -67,6 +67,16 @@
 > state-override/effect-delta simulation 返回 data + effects，缺省
 > 仍 fail-closed resource-limited；合同测试覆盖两分支。剩余：revm
 > backend 实现该 transport、main.ts 构造 runtime 并接线 live-loop。
+>
+> **生产 runtime 第三块 + main 接线骨架（2026-08-12）：**
+> `createRevmStrictSimulationTransport`（quote-backed：CallerRef 解析、
+> preCalls 顺序执行；observe/funded-override 不支持时 fail-closed）
+> 已落地并测试；main.ts 在 composition 存在时构造 strict runtime
+> （provider + revm transport + fence），`onPublicationApplied` 挂
+> `publishStrictCatalogFromLiveDiscovery`（当前 observation feed 未
+> 接，显式 fail-closed no-op，不伪造 publication）。剩余：把
+> mempool/discovery 观测转成 UnifiedObservation 喂给 runner 并接到
+> publisher（live observation feed 接线）。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

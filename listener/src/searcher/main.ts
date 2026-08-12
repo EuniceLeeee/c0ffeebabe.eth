@@ -94,6 +94,14 @@ import {
   resolveStrictSolverConsumer,
 } from "./strict-solver-consumer.js";
 import {
+  createStrictCentralAdapterRuntime,
+} from "./strict-central-adapter-runtime.js";
+import {
+  createRevmStrictSimulationTransport,
+} from "./revm-strict-simulation-transport.js";
+import type { CentralAdapterRuntime } from
+  "./adapter-work-intent.js";
+import {
   productionFamilyStartupManifest,
 } from "./production-family-startup-manifest.js";
 import {
@@ -1703,7 +1711,10 @@ async function main(): Promise<void> {
     null = null;
   let discoveryInventoryEnumerator: DiscoveryInventoryEnumerator | null = null;
   let discoveryInventoryWriter: DiscoveryCheckpointInventoryWriter | null = null;
+  let strictCentralRuntime: CentralAdapterRuntime | null = null;
   let syncLiveDiscoveryCheckpointInventory:
+    (() => Promise<void>) | null = null;
+  let publishStrictCatalogFromLiveDiscovery:
     (() => Promise<void>) | null = null;
   if (
     continuityCompositionPath !== undefined &&
@@ -1776,6 +1787,21 @@ async function main(): Promise<void> {
           console.log(
             `[searcher/live] discovery checkpoint inventory ` +
               `${result.status}`,
+          );
+        };
+      publishStrictCatalogFromLiveDiscovery = async (): Promise<void> => {
+          if (
+            discoveryContinuityComposition === null ||
+            strictCentralRuntime === null
+          ) {
+            return;
+          }
+          // Live observation feed (mempool/discovery -> UnifiedObservation
+          // per family) is the next wiring point; until it lands this stays
+          // an explicit fail-closed no-op and never fabricates publications.
+          console.log(
+            "[searcher/live] strict catalog live publisher: " +
+              "observation feed pending",
           );
         };
       const loaded = await discoveryContinuityComposition.loadForRestart();
@@ -2569,11 +2595,22 @@ async function main(): Promise<void> {
 
   // Now that the graph exists, wire the configured revm/hybrid backend.
   if (config.liveBackend !== "rpc") {
+    const revmSimClient = new RevmSimClient({
+      executablePath: process.env.SEARCHER_REVM_SIM_BIN,
+      timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
+    });
+    if (discoveryContinuityComposition !== null) {
+      strictCentralRuntime = createStrictCentralAdapterRuntime({
+        provider,
+        generationFence: Object.freeze({ assertCurrent() {} }),
+        simulator: createRevmStrictSimulationTransport({
+          client: revmSimClient,
+          executor: config.botvmAddress,
+        }),
+      });
+    }
     const revmLiveBackend = new RevmLiveBackend(
-      new RevmSimClient({
-        executablePath: process.env.SEARCHER_REVM_SIM_BIN,
-        timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
-      }),
+      revmSimClient,
       config.botvmAddress,
       config.wallet.address,
       provider,
@@ -2674,6 +2711,14 @@ async function main(): Promise<void> {
         void syncLiveDiscoveryCheckpointInventory().catch((error) => {
           console.warn(
             "[searcher/live] discovery checkpoint inventory sync failed: " +
+              `${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+      }
+      if (publishStrictCatalogFromLiveDiscovery !== null) {
+        void publishStrictCatalogFromLiveDiscovery().catch((error) => {
+          console.warn(
+            "[searcher/live] strict catalog publish failed: " +
               `${error instanceof Error ? error.message : String(error)}`,
           );
         });
