@@ -35,6 +35,8 @@ import {
   planLiveBackfillTargets,
   type DiscoveryRange,
 } from "./discovery-source-watermark.js";
+import type { CanonicalSource } from
+  "./venues/adapter-request-program.js";
 import { emitEvent } from "./events.js";
 import {
   cloneLiveDiscoveryPublicationState,
@@ -2520,6 +2522,48 @@ export async function readBlockHash(
     throw new Error(`missing canonical hash for block ${blockNumber}`);
   }
   return block.hash.toLowerCase();
+}
+
+export type CanonicalSourceTransitionResolution =
+  | "canonical-descendant"
+  | "unresolved";
+
+/**
+ * Bounded canonical ancestry check for catalogRoot source transitions. The
+ * live observed cursor advances in discovery chunks, so adjacent-parent
+ * equality is too strict: this walks parent hashes from the current source
+ * block back to the previous publication's source and returns
+ * canonical-descendant only when the previous hash is actually on the
+ * current block's canonical ancestor chain.
+ */
+export async function resolveCanonicalSourceTransition(
+  provider: ethers.JsonRpcProvider,
+  previous: CanonicalSource,
+  current: CanonicalSource,
+  maxDepth = 256,
+): Promise<CanonicalSourceTransitionResolution> {
+  if (
+    !Number.isSafeInteger(maxDepth) ||
+    maxDepth < 1 ||
+    !Number.isSafeInteger(current.number) ||
+    current.number < previous.number
+  ) {
+    return "unresolved";
+  }
+  const target = previous.hash.toLowerCase();
+  let block: ethers.Block | null = await provider.getBlock(current.number);
+  let depth = 0;
+  while (block !== null && depth < maxDepth) {
+    if (block.hash?.toLowerCase() === target) {
+      return "canonical-descendant";
+    }
+    if (block.number <= previous.number) break;
+    const parent = block.parentHash;
+    if (parent === null || parent === `0x${"0".repeat(64)}`) break;
+    block = await provider.getBlock(parent);
+    depth++;
+  }
+  return "unresolved";
 }
 
 async function readDexDiscoveryBlockHash(

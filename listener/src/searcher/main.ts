@@ -71,6 +71,7 @@ import {
 import {
   createLiveDiscoveryCoordinator,
   readBlockHash,
+  resolveCanonicalSourceTransition,
 } from "./live-discovery-coordinator.js";
 import {
   createDurableDiscoveryContinuityComposition,
@@ -1827,21 +1828,15 @@ async function main(): Promise<void> {
           if (previousCatalogRoot !== null) {
             const previousSource =
               previousCatalogRoot.envelope.snapshot.source;
-            const previousBlock = await provider.getBlock(
-              previousSource.number,
+            const transition = await resolveCanonicalSourceTransition(
+              provider,
+              previousSource,
+              source,
             );
-            const currentBlock = await provider.getBlock(source.number);
-            if (
-              previousBlock === null ||
-              previousBlock.hash === null ||
-              currentBlock === null ||
-              currentBlock.number !== previousBlock.number + 1 ||
-              currentBlock.parentHash?.toLowerCase() !==
-                previousBlock.hash.toLowerCase()
-            ) {
+            if (transition !== "canonical-descendant") {
               console.warn(
                 `[searcher/live] strict catalog publish skipped: ` +
-                  `source transition is not canonical-adjacent ` +
+                  `source transition is not canonical-descendant ` +
                   `${previousSource.number}->${source.number}`,
               );
               return;

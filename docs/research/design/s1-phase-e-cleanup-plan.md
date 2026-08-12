@@ -164,6 +164,18 @@
 > 2 条 pricing 条目；checkpoint revision 13（source
 > 25738323）；searcher priced 90.10%（无回退）；下一 pass 在
 > 同一 source 被 canonical-adjacent 门正确跳过。
+>
+> **catalogRoot 重复发布修复（2026-08-12）：** 上一版
+> canonical-adjacent 门只允许相邻块，但节点 observed cursor 按
+> discovery chunk 跳进，导致 revision 2+ 的发布会被永久跳过。
+> 改为有界祖先链验证
+> （`resolveCanonicalSourceTransition`：从当前 source 沿 parent
+> hash 回走至 previous source，maxDepth=256，非祖先 fail-closed）；
+> main.ts 在发布前用同一函数校验后才允许
+> `issueSourceTransition`。合同测试
+> `strict-live-source-transition`（相邻/跨块/非祖先/倒退/深度上限
+> 五例）已并入 shadow suite；build/suite 全绿。剩余：节点验收确认
+> 第二个 source 能提交 revision 2。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
