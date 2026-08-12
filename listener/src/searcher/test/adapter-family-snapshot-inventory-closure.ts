@@ -442,7 +442,8 @@ async function trustedCheckpoint(input: {
       input.eventContinuity ?? true,
     ),
     inventoryFamilies: emptyCheckpointInventoryFamilies(
-      catalog.listAll().map((family) => family.plugin.manifest.familyId),
+      catalog.listAll().filter((family) => "discovery" in family.plugin)
+        .map((family) => family.plugin.manifest.familyId),
     ),
   });
   assert.equal(await store.compareAndCommit({ expected: null, staged }), true);
@@ -738,7 +739,10 @@ async function candidateAndEnumerationValidation(): Promise<void> {
         familyId: familyId("protocol:extra-enumeration"),
       }],
     },
-    /unknown snapshot inventory Family/,
+    /missing discovery Family rows/,
+    // Mixed-mode closures cover only the candidate Family subset, so a
+    // foreign enumeration row is outside the receipt and cannot supply the
+    // covered Family's authoritative inventory.
   );
   await rejectEnumeration(
     enumerationInput(SOURCE, []),
@@ -947,12 +951,12 @@ async function checkpointPublicationAndAsyncFences(): Promise<void> {
   );
 }
 
-function productionCatalogFailsClosed(): void {
+async function productionCatalogMixedModeClosure(): Promise<void> {
   const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
   const discoveryFamilies = catalog.listAll().filter((family) =>
     "discovery" in family.plugin
   );
-  const lackingSnapshotBootstrap = discoveryFamilies.filter((family) => {
+  const snapshotEligible = discoveryFamilies.filter((family) => {
     if (!("discovery" in family.plugin)) return false;
     const { discovery } = family.plugin;
     const scopedSources = discovery.sources.every((sourceId) =>
@@ -964,20 +968,28 @@ function productionCatalogFailsClosed(): void {
     const factoryLogBootstrap =
       discovery.sources.includes("factory-log") &&
       (discovery.logPatterns?.length ?? 0) > 0;
-    return !scopedSources ||
-      (!addressSurfaceBootstrap && !factoryLogBootstrap);
+    return scopedSources &&
+      (addressSurfaceBootstrap || factoryLogBootstrap);
   });
   assert.equal(catalog.listAll().length, 22);
   assert.equal(discoveryFamilies.length, 20);
-  assert.equal(lackingSnapshotBootstrap.length, 7);
+  assert.equal(snapshotEligible.length, 13);
+  assert.equal(discoveryFamilies.length - snapshotEligible.length, 7);
 
-  const store = checkpointStore(catalog);
+  const checkpoint = await trustedCheckpoint({ catalog });
+  const store = checkpoint.store;
   const verifier = new AdapterFamilySnapshotInventoryClosureVerifier({
     catalog,
     chainId: CHAIN_ID,
     sourceRegistryFingerprint: SOURCE_REGISTRY_FINGERPRINT,
     checkpointStore: store,
-    enumerateSnapshotInventory: () => ({ source: SOURCE, families: [] }),
+    enumerateSnapshotInventory: () => enumeratePointInTimeInventory({
+      source: SOURCE,
+      families: snapshotEligible.map((family) => Object.freeze({
+        familyId: family.plugin.manifest.familyId,
+        incumbents: Object.freeze([]),
+      })),
+    }),
     captureCatalogPublication: () => ({
       revision: 0,
       publicationFingerprint: null,
@@ -986,7 +998,11 @@ function productionCatalogFailsClosed(): void {
     assertGenerationCurrent() {},
   });
   const issuer = verifier.takeCandidateIssuer();
-  const zeroRows = discoveryFamilies.map((family) =>
+  assert.throws(
+    () => issuer.prepare({ source: SOURCE, families: [] }),
+    /missing discovery Family rows/,
+  );
+  const mixedRows = discoveryFamilies.map((family) =>
     candidateFamily(
       SOURCE,
       [],
@@ -994,9 +1010,44 @@ function productionCatalogFailsClosed(): void {
     )
   );
   assert.throws(
-    () => issuer.prepare({ source: SOURCE, families: zeroRows }),
+    () => issuer.prepare({ source: SOURCE, families: mixedRows }),
     /lacks snapshot bootstrap coverage/,
-    "the current 7-Family snapshot bootstrap gap must prevent catalog-wide closure",
+    "non-eligible Families cannot enter a snapshot closure receipt",
+  );
+
+  const eligibleRows = snapshotEligible.map((family) =>
+    candidateFamily(SOURCE, [], family.plugin.manifest.familyId)
+  );
+  const allEligible = issuer.prepare({
+    source: SOURCE,
+    families: eligibleRows,
+  });
+  const allEligibleReceipt = await verifier.verifyAndIssue({
+    candidate: allEligible,
+    checkpointReceipt: checkpoint.receipt,
+  });
+  const allEligibleSnapshot = verifier.closureSnapshot(allEligibleReceipt);
+  assert.equal(allEligibleSnapshot.families.length, 13);
+
+  // Acceptance §1.4: univ2-standard closes first while the remaining
+  // Families stay append-only (subset closure).
+  const univ2Row = candidateFamily(SOURCE, [], UNIV2_FAMILY_ID);
+  const univ2Closure = issuer.prepare({
+    source: SOURCE,
+    families: [univ2Row],
+  });
+  const univ2Receipt = await verifier.verifyAndIssue({
+    candidate: univ2Closure,
+    checkpointReceipt: checkpoint.receipt,
+  });
+  const univ2Snapshot = verifier.closureSnapshot(univ2Receipt);
+  assert.equal(univ2Snapshot.families.length, 1);
+  assert.equal(univ2Snapshot.families[0]?.familyId, UNIV2_FAMILY_ID);
+  verifier.consumeForCatalog(univ2Receipt, { source: SOURCE });
+  assert.throws(
+    () => verifier.consumeForCatalog(univ2Receipt, { source: SOURCE }),
+    /forged or foreign/,
+    "a subset closure receipt is one-shot",
   );
 }
 
@@ -1141,7 +1192,7 @@ async function main(): Promise<void> {
   await candidateAndEnumerationValidation();
   await opaqueAuthorityAndReplay();
   await checkpointPublicationAndAsyncFences();
-  productionCatalogFailsClosed();
+  await productionCatalogMixedModeClosure();
   await factoryLogClosurePositive();
   await factoryLogValidation();
   console.log("adapter-family-snapshot-inventory-closure PASS");

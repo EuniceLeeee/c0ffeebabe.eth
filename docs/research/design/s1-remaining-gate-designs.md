@@ -28,11 +28,13 @@
   expectedFamilies 放宽（address-surface **或** factory-log+logPatterns）、
   strict shadow catalog 真实 receipt prepare/publish 正向路径均已有
   合同测试并通过；
-- 验收 4 部分落地：univ2-standard（真实 plugin + 真实 PairCreated log
-  fixture）在 univ2-only catalog 下完整关闭；full-catalog 仍被 7 个
-  observed-call/landed-log-only 族阻止（astra、eigenpie、erc4626-silo、
-  ethertoken、hgusdc、curve-underlying、dodo-v2），这些族需要超出本节
-  的新 incumbent 语义，不能通过放宽 factory-log 规则解决。
+- 验收 4 已合同级关闭：snapshot inventory closure 采用 subset 语义后，
+  真实生产 catalog 中 univ2-standard（以及全部 13 个 bootstrap-eligible
+  族）可签发 closure receipt，其余 7 个 observed-call/landed-log-only
+  族（astra、eigenpie、erc4626-silo、ethertoken、hgusdc、
+  curve-underlying、dodo-v2）保持 append-only，mixed-mode 同批
+  prepare/commit 已过合同；这些族仍需要超出本节的新 incumbent 语义，
+  不能通过放宽 factory-log 规则解决。
 
 ### 目标模型
 

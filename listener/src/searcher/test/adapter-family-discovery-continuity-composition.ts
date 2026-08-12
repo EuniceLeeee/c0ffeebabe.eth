@@ -59,6 +59,8 @@ import { WSTETH_FAMILY_ID } from
   "../venues/protocols/wsteth-family/manifest.js";
 import { UNIV2_FAMILY_ID } from
   "../venues/swaps/univ2-family/manifest.js";
+import { ASTRA_MULTITOKEN_FAMILY_ID } from
+  "../venues/protocols/astra-multitoken-family/manifest.js";
 import {
   UNIV2_FACTORY_INTERFACE,
   UNIV2_PAIR_CREATED_TOPIC,
@@ -92,33 +94,44 @@ const SOURCE: CanonicalSource = Object.freeze({
   generation: 44,
 });
 
-function singleFamilyCatalog(input: {
+function familyCatalog(modules: readonly {
   readonly plugin: AnyDefinedStrictFamilyPlugin;
   readonly sourceFile: string;
-}): FamilyCapabilityCatalog {
-  const summary = definedFamilyPluginContractSummary(input.plugin);
-  const entries = FAMILY_CAPABILITY_NAMES.map((capability, index) =>
-    Object.freeze({
-      familyId: summary.familyId,
-      capability,
-      contractVersion: "adapter-family-contract-v1",
-      contentHash: index.toString(16).padStart(64, "0"),
-      semanticDependencies: Object.freeze([]),
-      provenanceCommit: null,
-    }) satisfies GeneratedCapabilityIdentity
-  );
+}[]): FamilyCapabilityCatalog {
+  const entries = modules.flatMap((module, moduleIndex) => {
+    const summary = definedFamilyPluginContractSummary(module.plugin);
+    return FAMILY_CAPABILITY_NAMES.map((capability, index) =>
+      Object.freeze({
+        familyId: summary.familyId,
+        capability,
+        contractVersion: "adapter-family-contract-v1",
+        contentHash: `${moduleIndex.toString(16)}${index.toString(16)
+          .padStart(63, "0")}`,
+        semanticDependencies: Object.freeze([]),
+        provenanceCommit: null,
+      }) satisfies GeneratedCapabilityIdentity
+    );
+  });
   return new FamilyCapabilityCatalog({
-    modules: [Object.freeze({
-      sourceFile: input.sourceFile,
-      definitionBoundaryHash: summary.definitionBoundaryHash,
-      plugin: input.plugin,
-    })],
+    modules: Object.freeze(modules.map((module) => Object.freeze({
+      sourceFile: module.sourceFile,
+      definitionBoundaryHash:
+        definedFamilyPluginContractSummary(module.plugin).definitionBoundaryHash,
+      plugin: module.plugin,
+    }))),
     generatedManifest: Object.freeze({
       format: "adapter-family-capabilities-v1",
       entries: Object.freeze(entries),
       manifestHash: capabilityManifestHash(entries),
     }),
   });
+}
+
+function singleFamilyCatalog(input: {
+  readonly plugin: AnyDefinedStrictFamilyPlugin;
+  readonly sourceFile: string;
+}): FamilyCapabilityCatalog {
+  return familyCatalog([input]);
 }
 
 function syntheticCatalog(): FamilyCapabilityCatalog {
@@ -135,6 +148,21 @@ function univ2Catalog(): FamilyCapabilityCatalog {
       .forStrictFamily(UNIV2_FAMILY_ID).plugin,
     sourceFile: "univ2-family-plugin.ts",
   });
+}
+
+function mixedCatalog(): FamilyCapabilityCatalog {
+  return familyCatalog([
+    {
+      plugin: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .forStrictFamily(WSTETH_FAMILY_ID).plugin,
+      sourceFile: "wsteth-family-plugin.ts",
+    },
+    {
+      plugin: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .forStrictFamily(ASTRA_MULTITOKEN_FAMILY_ID).plugin,
+      sourceFile: "astra-multitoken-family-plugin.ts",
+    },
+  ]);
 }
 
 function surface(canonical: CanonicalSource): AddressSurfaceObservation {
@@ -506,6 +534,123 @@ async function factoryLogCompleteSnapshotPositivePath(): Promise<void> {
   }), /staged set mismatch|exact-set/);
 }
 
+async function mixedModeCompleteSnapshotPositivePath(): Promise<void> {
+  const directory = await mkdtemp(
+    join(tmpdir(), "adapter-family-mixed-composition-"),
+  );
+  const path = join(directory, "checkpoint.json");
+  const catalog = mixedCatalog();
+  let enumerator: DiscoveryInventoryEnumerator | null = null;
+  const composition = createDurableDiscoveryContinuityComposition({
+    catalog,
+    chainId: CHAIN_ID,
+    sourceRegistryFingerprint: SOURCE_REGISTRY_FINGERPRINT,
+    checkpointPath: path,
+    enumerateSnapshotInventory: async (canonical) => {
+      if (enumerator === null) {
+        throw new Error("mixed checkpoint enumerator is not wired");
+      }
+      return await enumerator.enumerate(canonical);
+    },
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {},
+  });
+  enumerator = new CheckpointDiscoveryInventoryEnumerator({
+    checkpointStore: composition.store,
+  });
+  const empty = await composition.loadForRestart();
+  assert.equal(empty.status, "empty");
+  const checkpointStaged = composition.checkpointIssuer.prepare({
+    source: SOURCE,
+    watermarks: checkpointWatermarks(catalog, SOURCE),
+    inventoryFamilies: Object.freeze([
+      ...wstethCheckpointInventory(SOURCE),
+      Object.freeze({
+        familyId: ASTRA_MULTITOKEN_FAMILY_ID,
+        incumbents: Object.freeze([]),
+      }),
+    ]),
+  });
+  assert.equal(await composition.store.compareAndCommit({
+    expected: null,
+    staged: checkpointStaged,
+  }), true);
+  const checkpointReceipt = composition.store.capture()!;
+  assert(checkpointReceipt);
+
+  const wstethPublication = await runWstethLifecycle(SOURCE, catalog);
+  const admittedKey = catalogInstancePublicationKey({
+    familyId: wstethPublication.instances[0]!.familyId,
+    lineageId: wstethPublication.instances[0]!.lineageId,
+    instanceKey: wstethPublication.instances[0]!.instanceKey,
+  });
+  const closureCandidate = composition.closureIssuer.prepare(
+    candidateInput(SOURCE, [admittedKey]),
+  );
+  const closureReceipt = await composition.closureVerifier.verifyAndIssue({
+    candidate: closureCandidate,
+    checkpointReceipt,
+  });
+  const wstethStage = composition.catalogRoot.stageRouteFamily({
+    publication: wstethPublication,
+    inventoryMode: "complete-snapshot",
+    snapshotInventoryClosureReceipt: closureReceipt,
+  });
+  const astraStage = Object.freeze({
+    familyId: ASTRA_MULTITOKEN_FAMILY_ID,
+    domain: "protocol",
+    source: SOURCE,
+    status: "resolved",
+    inventoryMode: "append-only-delta",
+    instances: Object.freeze([]),
+    terminalRemovals: Object.freeze([]),
+    outcomeRefs: Object.freeze([]),
+  }) as StrictShadowCatalogFamilyStage;
+  const anchors = Object.freeze([
+    ...completeSnapshotAnchors(catalog, SOURCE).filter(
+      (anchor) => anchor.familyId === WSTETH_FAMILY_ID,
+    ),
+    ...completeSnapshotAnchors(catalog, SOURCE).filter(
+      (anchor) => anchor.familyId === ASTRA_MULTITOKEN_FAMILY_ID,
+    ).map((anchor) => Object.freeze({
+      ...anchor,
+      authority: "append-only-nomination",
+    }) as CatalogDiscoverySourceAnchor),
+  ]);
+  const prepared = composition.catalogRoot.prepare({
+    source: SOURCE,
+    previous: null,
+    stages: Object.freeze([wstethStage, astraStage]),
+    sourceAnchors: anchors,
+  });
+  assert(prepared !== null);
+  const published = await composition.catalogRoot.compareAndPublish({
+    expected: null,
+    staged: prepared,
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {},
+  });
+  assert.equal(published, true);
+  const committed = composition.catalogRoot.capture()!;
+  assert(committed.envelope.privateState.instances.has(admittedKey));
+  assert.equal(
+    committed.envelope.snapshot.familyStatuses.get(WSTETH_FAMILY_ID)
+      ?.inventoryMode,
+    "complete-snapshot",
+  );
+  assert.equal(
+    committed.envelope.snapshot.familyStatuses.get(ASTRA_MULTITOKEN_FAMILY_ID)
+      ?.inventoryMode,
+    "append-only-delta",
+  );
+  assert.equal(
+    committed.envelope.snapshot.status,
+    "shadow-partial",
+    "append-only Families keep the publication partial until their own " +
+      "bootstrap semantics exist",
+  );
+}
+
 function checkpointWatermarks(
   catalog: FamilyCapabilityCatalog,
   canonical: CanonicalSource,
@@ -702,6 +847,7 @@ async function main(): Promise<void> {
   }
 
   await factoryLogCompleteSnapshotPositivePath();
+  await mixedModeCompleteSnapshotPositivePath();
 
   const restarted = createDurableDiscoveryContinuityComposition({
     catalog,

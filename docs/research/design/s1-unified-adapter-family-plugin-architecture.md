@@ -71,7 +71,7 @@ authority 混在一起：
 |Phase A baseline/comparator|production-shaped runner、capture schema 与 comparator contract 已存在，`7ba6f9d3` 已落地 trusted sealed-production capture issuer（unit runner 继续拒绝自封 `sealed-production`），`a879665a` 已落地双侧 capture 文件入口 `runArchitectureMigrationParityFiles` + `architecture-migration-parity:run` CLI|当前只有 `unit-contract`/`ineligible` 证据；尚无旧 ds 与 challenger 的 `sealed-production` 双侧 capture/receipt|
 |Phase B 中央骨架|严格 catalog 可装载 22 个 Family、生成 220 个 capability entry；Request Program、hash、route/exact/publication 等骨架已建立；`1527c116` 为 exact quote cache 补独立 issuer/key 绑定/LRU/eviction 合同测试|多数入口仍是 shadow/disabled path；generated hash 尚未成为全部旧 blockscan cache 的唯一 production key|
 |Phase C Family 迁移|22 个严格 Family 定义和 shared conformance/unit fixtures 已存在|尚无绑定真实 baseline/challenger production closure 的 batch parity receipt，不能把 synthetic rows 当成迁移通过|
-|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS、`c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract、`642373c1` 的中央 value 深冻结 + StateInstance mutation/carry shadow proof、`9d954df4` 的 Credit 独立 execution handle shadow issuer、`8d4ed796` 的 point-in-time enumerator core 纯函数合同、`4275be6f` 的 durable discovery continuity composition root、`c383e58f` 的 main env 门控接线、`dd0df3d8` 的 Funding 进 strict catalog atomic CAS、`4b8b79d4` 的 Credit 进 strict catalog atomic CAS，以及后续的 complete-snapshot verifier-gated 一次性消费（address-surface + factory-log 正向路径合同级关闭）、durable checkpoint v2 incumbent inventory + `CheckpointDiscoveryInventoryEnumerator` 接线（合同级）等 runtime slice 已有 unit/shadow gate|observed-call/landed-log-only 7 族的 snapshot bootstrap 语义（超出 §1 设计）、production point-in-time enumerator 的 node dry-run 机器证据、strict pricing production consumer、Funding/Credit production consumer、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
+|Phase D production cutover|Graph/publication、exact、Funding opaque issuer + empty tombstone、Credit lifecycle-issued instance + route/risk/execution boundary、observation ingress / append-only 全 catalog CAS、file-backed durable discovery checkpoint/CAS、`c7d9fa54` 的 snapshot inventory closure same-process verifier shadow contract、`642373c1` 的中央 value 深冻结 + StateInstance mutation/carry shadow proof、`9d954df4` 的 Credit 独立 execution handle shadow issuer、`8d4ed796` 的 point-in-time enumerator core 纯函数合同、`4275be6f` 的 durable discovery continuity composition root、`c383e58f` 的 main env 门控接线、`dd0df3d8` 的 Funding 进 strict catalog atomic CAS、`4b8b79d4` 的 Credit 进 strict catalog atomic CAS，以及后续的 complete-snapshot verifier-gated 一次性消费（address-surface + factory-log 正向路径合同级关闭）、durable checkpoint v2 incumbent inventory + `CheckpointDiscoveryInventoryEnumerator` 接线（合同级）、mixed-mode subset closure（§1 验收 4，13 eligible 族可在真实生产 catalog 关闭）等 runtime slice 已有 unit/shadow gate|observed-call/landed-log-only 7 族的 snapshot bootstrap 语义（超出 §1 设计）、production point-in-time enumerator 的 node dry-run 机器证据、strict pricing production consumer、Funding/Credit production consumer、默认 authority、sealed parity 和 systemic-live gate 均未关闭|
 |Phase E cleanup|尚未开始|legacy registry/API/schema/revision/cache/flag authority 仍在；只有 §18.3 与 §20.2.6 全部门通过后才能删除|
 
 该表是实施 checkpoint，不是目标合同的降级，也不预判并行实现工作最终是否通过；任一状态更新都必须引用新的
@@ -106,6 +106,9 @@ commit 见本日各 checkpoint）：**
 - durable checkpoint v2 incumbent inventory +
   `CheckpointDiscoveryInventoryEnumerator` 接线（main env gate 下替代
   throw 占位，枚举失败保持 append-only）；
+- mixed-mode subset closure（§1 验收 4）：receipt 精确覆盖
+  bootstrap-eligible 子集，非 eligible 族保持 append-only；真实生产
+  catalog 13 eligible 族全行与 univ2-standard 单族 closure 均签发成功；
 - S1 regression sweep harness（11 组合同 + parity verifier 一键复跑）。
 
 **节点机器证据（2026-08-12，SSM 双跑成功）：**
@@ -264,13 +267,37 @@ checkpoint（commit 见下，§2 设计的数据基座与接线；node dry-run �
   node dry-run（真实 checkpoint store + live discovery 输出）仍是 §2
   验收 1 的待办，不在本 checkpoint 内虚报。
 
+**2026-08-12 mixed-mode subset closure checkpoint（commit 见下，
+§1 验收 4 合同级落地；真实生产 catalog 的 13 个 bootstrap-eligible 族可
+关闭，其余 7 族保持 append-only）：**
+
+- snapshot inventory closure 改为 subset 语义：一个 receipt 精确覆盖
+  candidate 中的 bootstrap-eligible Family 子集（非空），非 eligible
+  族不能入 receipt；权威枚举对 receipt 覆盖子集生效，receipt 外的
+  Family 按构造保持 append-only；
+- 真实生产 catalog 合同：22 族中 20 个 discovery 族，13 个
+  bootstrap-eligible（9 address-surface + 4 factory-log），7 个
+  observed-call/landed-log-only 族仍无 bootstrap 语义；全 eligible
+  13 行 closure 签发成功，univ2-standard 单族 subset closure 签发并
+  一次性消费成功，混入非 eligible 族 / 空 candidate 均 fail closed；
+- composition 混合模式端到端：wsteth（complete-snapshot + closure
+  receipt）与 astra-multitoken（append-only-delta 空 stage，
+  append-only-nomination anchor）同批 prepare/commit 成功；envelope
+  中 wsteth 为 complete-snapshot、astra 为 append-only-delta，
+  snapshot.status 如实为 shadow-partial（astra 无 bootstrap 语义前
+  不得声称 complete）；
+- 证据：shadow suite（11 合同）全过 + regression sweep 11 组全过
+  （含 parity verifier 与 node SSM evidence verifier）+ 完整 build；
+  本地 sealed-capture/shadow receipt 范围，不代表 production cutover。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - complete-snapshot 正向路径的剩余 bootstrap 缺口（factory-log
   incumbent 已对 univ2-standard 风格族合同级关闭；astra/eigenpie/
   erc4626-silo/ethertoken/hgusdc/curve-underlying/dodo-v2 等
   observed-call/landed-log-only 族仍需新的 incumbent 语义，超出 §1
-  设计范围）；
+  设计范围；mixed-mode subset closure 已让真实生产 catalog 中 13 个
+  eligible 族可先关闭，其余 7 族保持 append-only）；
 - production point-in-time enumerator 的 node dry-run 机器证据（durable
   checkpoint + enumerator 接线已合同级关闭；live discovery 写入真实
   incumbent inventory 并做节点 dry-run 验收仍待节点）；

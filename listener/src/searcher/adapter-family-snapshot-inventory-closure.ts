@@ -829,7 +829,7 @@ function validateAndFreezeFamilies(input: {
       terminalEvidenceFingerprint,
     });
   }).sort((left, right) => compareText(left.familyId, right.familyId));
-  if (seen.size !== input.expected.length) {
+  if (seen.size === 0) {
     throw new Error("snapshot inventory is missing discovery Family rows");
   }
   return Object.freeze(families);
@@ -880,7 +880,12 @@ function validateAuthoritativeInventory(input: {
     family.familyId,
     family,
   ]));
-  const combined = input.enumeration.families.map((family) => {
+  // Mixed-mode (per-Family) closures cover exactly the candidate Families;
+  // the authoritative enumeration is authoritative for that covered subset.
+  // Families outside the receipt stay append-only by construction.
+  const combined = input.enumeration.families.filter((family) =>
+    candidatesByFamily.has(family.familyId)
+  ).map((family) => {
     const candidateFamily = candidatesByFamily.get(family.familyId);
     const candidatesByInventoryKey = new Map(
       candidateFamily?.incumbents.map((incumbent) => [
