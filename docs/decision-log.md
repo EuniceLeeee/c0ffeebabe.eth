@@ -139,6 +139,27 @@
   此条覆盖 D-009 的"Phase E 前确认删除范围"（范围 = canonical §18.3/§20.2.6 列出的
   legacy 项，逐 slice 提交可见、可 revert）。
 
+### D-012 | 2026-08-12 | ✅ | 剩余 P1 均不影响当前生产 → 先做 md，P1 实现推迟到 cutover 规划
+- **Decision:** 按用户规则逐项评估剩余 P1：当前生产 authority 仍是 legacy 路径
+  （live strict 只以 observed-complete 旁路运行、无 omission/删除权），因此以下 P1
+  均不改变当前生产行为：
+  - StateInstance mutation/terminal proof 接线：live 收缩发布目前 fail-closed
+    （只增不减），不会悄悄丢实例；strict 尚未成为生产 authority，故无生产影响；
+  - factory-log/landed-log/observed-call ingress：7 个活动型族 strict 侧暂无观测，
+    legacy 仍完整覆盖，无生产影响；
+  - continuous 调度 lane（producer reserve/deadline/去重/backlog）：strict 链在
+    后台串行运行、错误隔离，不阻塞 searcher 主循环，无生产影响；
+  - revm effect-delta/observe/funded-override/verified-actor：erc4626 等在 strict
+    catalogRoot 缺位，legacy 仍负责这些族，无生产影响；
+  - legacy fallback 收口：属于 cutover 动作，需默认 authority 切换时另行授权。
+  结论：本轮直接做 canonical/plan md 收口（D-012 前已完成 P0-5/P0-6/P1-a/P1-f/P1-d
+  合同与机器证据）；上述 P1 实现推迟到 cutover 规划，届时作为 production authority
+  前置条件逐项立项。
+- **Cutover 前置（P1 实现清单，未来立项时按此核对）：** mutation/terminal proof
+  issuer；严格观测 ingress；continuous 调度与崩溃恢复；revm effect-delta 能力；
+  真实 sealed-production corpus；legacy 删除逐项确认。
+- **Meta:** 用户原话："p1不影响生产就直接做md 如果影响生产不用管顺序做就完了"。
+
 ### D-006 | 2026-07-23 | ✅ | Family 解耦不需要跨 family victim 传播（"P0" 撤销，四刀盖棺）
 - **Question:** family 架构下（每 family 独立 `deriveMids`），backrun lane 的 victim swap 是否需要向
   依赖同一底层状态的其他 family（如读 Curve 状态的 vault）做"跨 family 二阶传播"，否则粗扫漏枚举？

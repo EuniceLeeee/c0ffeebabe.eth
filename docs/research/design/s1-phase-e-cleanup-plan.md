@@ -308,6 +308,15 @@
 > mutation/terminal proof，缺失时整体拒绝而非悄悄丢实例。
 > 剩余 P1：为 live 路径接线 StateInstance mutation/terminal
 > proof issuer，使合法收缩（显式 terminal settlement）可提交。
+>
+> **P1 处置决策 + md 收口（2026-08-12，D-012）：** 按用户规则逐项
+> 评估，剩余 P1 全部不影响当前生产（legacy 仍是生产 authority，
+> live strict 仅 observed-complete 旁路、无删除权）：
+> mutation/terminal proof（收缩发布 fail-closed 只增不减）、
+> 活动族 ingress（legacy 仍全覆盖）、continuous 调度（后台链
+> 错误隔离）、revm effect-delta（legacy 负责这些族）、legacy 收口
+> （cutover 动作）。因此本轮直接完成 md 收口；P1 实现推迟到
+> cutover 规划，作为 production authority 前置条件逐项立项。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

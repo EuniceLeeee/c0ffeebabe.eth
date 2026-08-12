@@ -623,6 +623,15 @@ D-008 落实为第三种 publication 模式，合同级；production 接线仍�
 > 校验为 block-hash + 有界祖先链，generation 单调由 catalogRoot
 > 自身 fence，reorg/stale generation 一律 fail-closed。
 
+> **2026-08-12 P1 处置决策（D-012，md 收口）：** 剩余 P1
+> （StateInstance mutation/terminal proof、活动族 call/log ingress、
+> continuous 调度 lane、revm effect-delta、legacy 收口）经逐项评估
+> 均不影响当前生产：production authority 仍是 legacy 路径，live
+> strict 仅以 observed-complete 旁路运行且无 omission/删除权，
+> 所有缺口均 fail-closed 而非静默降级。因此本轮完成 md 收口，
+> P1 实现推迟到 cutover 规划，作为 production authority 前置条件
+> 逐项立项（详见 decision-log D-012 与 Phase E plan checkpoint）。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - 7 个活动型族（astra/eigenpie/erc4626-silo/ethertoken/hgusdc/
