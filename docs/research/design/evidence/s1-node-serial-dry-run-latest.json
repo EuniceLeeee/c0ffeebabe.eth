@@ -4,15 +4,15 @@
   "sides": {
     "challenger": {
       "side": "challenger",
-      "sha": "c88aef4d54408bd7a0c5065935959cf032e6cc78",
+      "sha": "3f883ebe6472948dded6bb0b4957fb6c48c2df7c",
       "priced": {
-        "resolved": 34089,
-        "expected": 37896
+        "resolved": 33210,
+        "expected": 37898
       },
-      "pricedRatio": 0.8995408486383787,
-      "graphBuiltEdges": 37154,
+      "pricedRatio": 0.8762995408728693,
+      "graphBuiltEdges": 37160,
       "artifactPoolCount": 3,
-      "eventLineCount": 18274,
+      "eventLineCount": 19434,
       "routeEventLineCount": 18,
       "exitCode": 124,
       "pipeline": {
