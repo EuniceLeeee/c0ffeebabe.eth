@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   AdapterFamilyDiscoveryCheckpointStore,
+  emptyCheckpointInventoryFamilies,
   type AdapterFamilyDiscoveryCheckpointCandidateWatermark,
   type AdapterFamilyDiscoveryCheckpointDurableBackend,
   type AdapterFamilyDiscoveryCheckpointReceipt,
@@ -439,6 +440,9 @@ async function trustedCheckpoint(input: {
       catalog,
       canonical,
       input.eventContinuity ?? true,
+    ),
+    inventoryFamilies: emptyCheckpointInventoryFamilies(
+      catalog.listAll().map((family) => family.plugin.manifest.familyId),
     ),
   });
   assert.equal(await store.compareAndCommit({ expected: null, staged }), true);

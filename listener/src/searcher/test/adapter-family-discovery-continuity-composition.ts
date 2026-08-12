@@ -6,11 +6,18 @@ import {
   createDurableDiscoveryContinuityComposition,
 } from "../adapter-family-discovery-continuity-composition.js";
 import {
+  CheckpointDiscoveryInventoryEnumerator,
+  type DiscoveryInventoryEnumerator,
+} from "../adapter-family-discovery-inventory-enumerator.js";
+import {
   type CatalogDiscoverySourceAnchor,
   catalogDiscoverySourceFingerprint,
   catalogFamilySourceAnchorKey,
   catalogInstancePublicationKey,
 } from "../adapter-family-catalog-publication.js";
+import {
+  type AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily,
+} from "../adapter-family-discovery-checkpoint.js";
 import type {
   StrictShadowCatalogFamilyStage,
 } from "../adapter-family-shadow-catalog-publication.js";
@@ -329,26 +336,62 @@ function completeSnapshotAnchors(
   }));
 }
 
+function wstethCheckpointInventory(
+  canonical: CanonicalSource,
+): readonly AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily[] {
+  return Object.freeze([Object.freeze({
+    familyId: WSTETH_FAMILY_ID,
+    incumbents: Object.freeze([Object.freeze({
+      inventoryKey: "legacy:wsteth",
+      address: WSTETH,
+      currentSurface: surface(canonical),
+    })]),
+  })]);
+}
+
+function univ2CheckpointInventory(
+  canonical: CanonicalSource,
+): readonly AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily[] {
+  return Object.freeze([Object.freeze({
+    familyId: UNIV2_FAMILY_ID,
+    incumbents: Object.freeze([Object.freeze({
+      inventoryKey: UNIV2_CANDIDATE_KEY,
+      address: UNIV2_FIXTURE_POOL,
+      currentSurface: factoryLogSurface(canonical),
+    })]),
+  })]);
+}
+
 async function factoryLogCompleteSnapshotPositivePath(): Promise<void> {
   const directory = await mkdtemp(
     join(tmpdir(), "adapter-family-univ2-composition-"),
   );
   const path = join(directory, "checkpoint.json");
   const catalog = univ2Catalog();
+  let univ2Enumerator: DiscoveryInventoryEnumerator | null = null;
   const composition = createDurableDiscoveryContinuityComposition({
     catalog,
     chainId: CHAIN_ID,
     sourceRegistryFingerprint: SOURCE_REGISTRY_FINGERPRINT,
     checkpointPath: path,
-    enumerateSnapshotInventory: (canonical) => univ2EnumerationInput(canonical),
+    enumerateSnapshotInventory: async (canonical) => {
+      if (univ2Enumerator === null) {
+        throw new Error("univ2 checkpoint enumerator is not wired");
+      }
+      return await univ2Enumerator.enumerate(canonical);
+    },
     verifyCanonicalSource: () => {},
     assertGenerationCurrent: () => {},
+  });
+  univ2Enumerator = new CheckpointDiscoveryInventoryEnumerator({
+    checkpointStore: composition.store,
   });
   const empty = await composition.loadForRestart();
   assert.equal(empty.status, "empty");
   const checkpointStaged = composition.checkpointIssuer.prepare({
     source: SOURCE,
     watermarks: checkpointWatermarks(catalog, SOURCE),
+    inventoryFamilies: univ2CheckpointInventory(SOURCE),
   });
   assert.equal(await composition.store.compareAndCommit({
     expected: null,
@@ -414,20 +457,30 @@ async function factoryLogCompleteSnapshotPositivePath(): Promise<void> {
   const freshDirectory = await mkdtemp(
     join(tmpdir(), "adapter-family-univ2-fresh-composition-"),
   );
+  let freshUniv2Enumerator: DiscoveryInventoryEnumerator | null = null;
   const fresh = createDurableDiscoveryContinuityComposition({
     catalog,
     chainId: CHAIN_ID,
     sourceRegistryFingerprint: SOURCE_REGISTRY_FINGERPRINT,
     checkpointPath: join(freshDirectory, "checkpoint.json"),
-    enumerateSnapshotInventory: (canonical) => univ2EnumerationInput(canonical),
+    enumerateSnapshotInventory: async (canonical) => {
+      if (freshUniv2Enumerator === null) {
+        throw new Error("fresh univ2 checkpoint enumerator is not wired");
+      }
+      return await freshUniv2Enumerator.enumerate(canonical);
+    },
     verifyCanonicalSource: () => {},
     assertGenerationCurrent: () => {},
+  });
+  freshUniv2Enumerator = new CheckpointDiscoveryInventoryEnumerator({
+    checkpointStore: fresh.store,
   });
   const freshEmpty = await fresh.loadForRestart();
   assert.equal(freshEmpty.status, "empty");
   const freshCheckpointStaged = fresh.checkpointIssuer.prepare({
     source: SOURCE,
     watermarks: checkpointWatermarks(catalog, SOURCE),
+    inventoryFamilies: univ2CheckpointInventory(SOURCE),
   });
   assert.equal(await fresh.store.compareAndCommit({
     expected: null,
@@ -480,14 +533,23 @@ async function main(): Promise<void> {
   );
   const path = join(directory, "checkpoint.json");
   const catalog = syntheticCatalog();
+  let wstethEnumerator: DiscoveryInventoryEnumerator | null = null;
   const composition = createDurableDiscoveryContinuityComposition({
     catalog,
     chainId: CHAIN_ID,
     sourceRegistryFingerprint: SOURCE_REGISTRY_FINGERPRINT,
     checkpointPath: path,
-    enumerateSnapshotInventory: (canonical) => enumerationInput(canonical),
+    enumerateSnapshotInventory: async (canonical) => {
+      if (wstethEnumerator === null) {
+        throw new Error("wsteth checkpoint enumerator is not wired");
+      }
+      return await wstethEnumerator.enumerate(canonical);
+    },
     verifyCanonicalSource: () => {},
     assertGenerationCurrent: () => {},
+  });
+  wstethEnumerator = new CheckpointDiscoveryInventoryEnumerator({
+    checkpointStore: composition.store,
   });
   assert.deepEqual(composition.store.binding(), {
     chainId: CHAIN_ID,
@@ -501,6 +563,7 @@ async function main(): Promise<void> {
   const checkpointStaged = composition.checkpointIssuer.prepare({
     source: SOURCE,
     watermarks: checkpointWatermarks(catalog, SOURCE),
+    inventoryFamilies: wstethCheckpointInventory(SOURCE),
   });
   assert.equal(await composition.store.compareAndCommit({
     expected: null,

@@ -77,6 +77,10 @@ import {
   type DurableDiscoveryContinuityComposition,
 } from "./adapter-family-discovery-continuity-composition.js";
 import {
+  CheckpointDiscoveryInventoryEnumerator,
+  type DiscoveryInventoryEnumerator,
+} from "./adapter-family-discovery-inventory-enumerator.js";
+import {
   resolveStrictCatalogConsumerDiagnostic,
 } from "./strict-catalog-consumer-diagnostic.js";
 import {
@@ -1677,14 +1681,15 @@ async function main(): Promise<void> {
   // default). When SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH is set,
   // production startup adopts the file-backed checkpoint store to load and
   // re-verify the persisted restart state, then logs its status. The
-  // point-in-time enumerator source is not wired yet, so any closure
-  // enumeration attempt fails closed; this block grants no authority and
-  // does not open complete-snapshot/omission/tombstone.
+  // point-in-time enumerator restores the checkpoint's durable incumbent
+  // inventory and fails closed when it cannot; this block grants no
+  // authority and does not open complete-snapshot/omission/tombstone.
   const continuityCompositionPath =
     process.env.SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH;
   let discoveryContinuityStatus = "disabled";
   let discoveryContinuityComposition: DurableDiscoveryContinuityComposition |
     null = null;
+  let discoveryInventoryEnumerator: DiscoveryInventoryEnumerator | null = null;
   if (
     continuityCompositionPath !== undefined &&
     continuityCompositionPath.trim() !== ""
@@ -1696,10 +1701,13 @@ async function main(): Promise<void> {
         chainId: String((await provider.getNetwork()).chainId),
         sourceRegistryFingerprint: "strict-source-registry-v1",
         checkpointPath: continuityCompositionPath,
-        enumerateSnapshotInventory: () => {
-          throw new Error(
-            "production point-in-time enumerator source is not wired",
-          );
+        enumerateSnapshotInventory: async (source) => {
+          if (discoveryInventoryEnumerator === null) {
+            throw new Error(
+              "production point-in-time enumerator source is not wired",
+            );
+          }
+          return await discoveryInventoryEnumerator.enumerate(source);
         },
         verifyCanonicalSource: async (source) => {
           const hash = await readBlockHash(provider, source.number);
@@ -1712,6 +1720,10 @@ async function main(): Promise<void> {
         },
         assertGenerationCurrent: () => {},
       });
+      discoveryInventoryEnumerator =
+        new CheckpointDiscoveryInventoryEnumerator({
+          checkpointStore: discoveryContinuityComposition.store,
+        });
       const loaded = await discoveryContinuityComposition.loadForRestart();
       discoveryContinuityStatus = loaded.status;
       console.log(

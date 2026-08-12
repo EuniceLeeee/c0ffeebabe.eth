@@ -229,6 +229,33 @@ checkpoint（commit 见下，§1 设计落地；univ2-standard 风格 factory-lo
   （含 parity verifier 与 node SSM evidence verifier）+ 完整 build；
   本地 sealed-capture/shadow receipt 范围，不代表 production cutover。
 
+**2026-08-12 durable incumbent inventory + checkpoint enumerator
+checkpoint（commit 见下，§2 设计的数据基座与接线；node dry-run 验收
+仍待节点）：**
+
+- discovery checkpoint 升级 v2：每个 checkpoint 快照现在持久化逐 Family
+  incumbent inventory（address-surface 与 factory-log 两种 surface，
+  由 `enumeratePointInTimeInventory` 统一 canonical 化并重算
+  inventory hash），fingerprint 覆盖 inventory projection；缺失/多余
+  Family 行、非 canonical 序列化、篡改 inventoryHash 全部 fail closed
+  并降级 append-only；
+- 新增 `DiscoveryInventoryEnumerator` 合同与
+  `CheckpointDiscoveryInventoryEnumerator`：从当前 trusted checkpoint
+  还原 inventory；无 trusted receipt / append-only 重启 / source 不一致
+  时显式 unresolved，不允许部分快照冒充 complete；
+- main.ts 接线：`SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH` 开启时
+  composition 的 `enumerateSnapshotInventory` 由 checkpoint enumerator
+  提供（替代 throw 占位），枚举失败时 closure candidate 不可签发，
+  系统保持 append-only；
+- 端到端合同：wsteth（address-surface）与 univ2（factory-log）两个
+  composition 路径都把 incumbent 先写入 durable checkpoint，再经
+  enumerator → closure verifier → strict catalog `complete-snapshot`
+  prepare/commit 全链路通过；
+- 证据：shadow suite（11 合同）全过 + regression sweep 11 组全过
+  （含 parity verifier 与 node SSM evidence verifier）+ 完整 build；
+  node dry-run（真实 checkpoint store + live discovery 输出）仍是 §2
+  验收 1 的待办，不在本 checkpoint 内虚报。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - complete-snapshot 正向路径的剩余 bootstrap 缺口（factory-log
@@ -236,8 +263,9 @@ checkpoint（commit 见下，§1 设计落地；univ2-standard 风格 factory-lo
   erc4626-silo/ethertoken/hgusdc/curve-underlying/dodo-v2 等
   observed-call/landed-log-only 族仍需新的 incumbent 语义，超出 §1
   设计范围）；
-- production point-in-time enumerator 真实数据源接线（live discovery
-  输出）；
+- production point-in-time enumerator 的 node dry-run 机器证据（durable
+  checkpoint + enumerator 接线已合同级关闭；live discovery 写入真实
+  incumbent inventory 并做节点 dry-run 验收仍待节点）；
 - production solver 的 strict pricing/Funding/Credit consumer 真实
   接线（目前仅 diagnostic）；
 - ~~节点 SSM 双跑机器证据~~（已关闭：SSM run

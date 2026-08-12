@@ -21,8 +21,12 @@ import {
 } from "./venues/canonical-value.js";
 import type { FamilyCapabilityCatalog } from
   "./venues/family-capability-catalog.js";
+import {
+  enumeratePointInTimeInventory,
+  type AdapterFamilySnapshotInventoryObservation,
+} from "./adapter-family-snapshot-inventory-closure.js";
 
-const CHECKPOINT_FORMAT = "adapter-family-discovery-checkpoint-v1";
+const CHECKPOINT_FORMAT = "adapter-family-discovery-checkpoint-v2";
 const EVENT_SOURCE_IDS: ReadonlySet<DiscoverySourceKind> = new Set([
   "factory-log",
   "landed-log",
@@ -57,6 +61,30 @@ export interface AdapterFamilyDiscoveryCheckpointWatermark
     AdapterFamilyDiscoveryCheckpointCoverageAuthority;
 }
 
+export interface AdapterFamilyDiscoveryCheckpointInventoryIncumbent {
+  readonly inventoryKey: string;
+  readonly address: string;
+  readonly currentSurface: AdapterFamilySnapshotInventoryObservation;
+}
+
+export interface AdapterFamilyDiscoveryCheckpointInventoryFamily {
+  readonly familyId: FamilyId;
+  readonly inventoryKeys: readonly string[];
+  readonly inventoryCount: number;
+  readonly inventoryHash: string;
+  readonly incumbents:
+    readonly AdapterFamilyDiscoveryCheckpointInventoryIncumbent[];
+}
+
+export interface AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily {
+  readonly familyId: FamilyId;
+  readonly incumbents: readonly {
+    readonly inventoryKey: string;
+    readonly address: string;
+    readonly currentSurface: AdapterFamilySnapshotInventoryObservation;
+  }[];
+}
+
 /** Canonical, serializable durable state. Runtime authority stays opaque. */
 export interface AdapterFamilyDiscoveryCheckpointSnapshot
   extends AdapterFamilyDiscoveryCheckpointBinding {
@@ -64,6 +92,8 @@ export interface AdapterFamilyDiscoveryCheckpointSnapshot
   readonly revision: number;
   readonly source: CanonicalSource;
   readonly watermarks: readonly AdapterFamilyDiscoveryCheckpointWatermark[];
+  readonly inventoryFamilies:
+    readonly AdapterFamilyDiscoveryCheckpointInventoryFamily[];
   readonly checkpointFingerprint: string;
 }
 
@@ -88,6 +118,8 @@ export interface AdapterFamilyDiscoveryCheckpointCandidateIssuer {
     readonly source: CanonicalSource;
     readonly watermarks:
       readonly AdapterFamilyDiscoveryCheckpointCandidateWatermark[];
+    readonly inventoryFamilies:
+      readonly AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily[];
   }): PreparedAdapterFamilyDiscoveryCheckpoint;
 }
 
@@ -132,6 +164,8 @@ interface PreparedCheckpointRecord {
   readonly authority: AdapterFamilyDiscoveryCheckpointAuthority;
   readonly source: CanonicalSource;
   readonly watermarks: readonly AdapterFamilyDiscoveryCheckpointWatermark[];
+  readonly inventoryFamilies:
+    readonly AdapterFamilyDiscoveryCheckpointInventoryFamily[];
 }
 
 interface ReceiptRecord {
@@ -212,10 +246,17 @@ export class AdapterFamilyDiscoveryCheckpointStore {
         readonly source: CanonicalSource;
         readonly watermarks:
           readonly AdapterFamilyDiscoveryCheckpointCandidateWatermark[];
+        readonly inventoryFamilies:
+          readonly AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily[];
       }): PreparedAdapterFamilyDiscoveryCheckpoint => {
         const source = freezeSource(candidate.source);
         const watermarks = validateAndFreezeMatrix(
           candidate.watermarks,
+          this.#expectedMatrix,
+          source,
+        );
+        const inventoryFamilies = validateAndFreezeInventoryFamilies(
+          candidate.inventoryFamilies,
           this.#expectedMatrix,
           source,
         );
@@ -225,6 +266,7 @@ export class AdapterFamilyDiscoveryCheckpointStore {
           authority: this.authority,
           source,
           watermarks,
+          inventoryFamilies,
         }));
         return prepared;
       },
@@ -281,7 +323,7 @@ export class AdapterFamilyDiscoveryCheckpointStore {
 
       let snapshot: AdapterFamilyDiscoveryCheckpointSnapshot;
       try {
-        snapshot = parseCheckpoint(raw);
+        snapshot = parseCheckpoint(raw, this.#expectedMatrix);
         assertSameBinding(snapshot, this.#binding);
         const normalized = validateAndFreezeMatrix(
           snapshot.watermarks,
@@ -290,6 +332,19 @@ export class AdapterFamilyDiscoveryCheckpointStore {
         );
         if (!sameWatermarkArray(snapshot.watermarks, normalized)) {
           throw new Error("discovery checkpoint matrix is not canonical");
+        }
+        const normalizedInventory = validateAndFreezeInventoryFamilies(
+          snapshot.inventoryFamilies,
+          this.#expectedMatrix,
+          snapshot.source,
+        );
+        if (
+          !sameCheckpointInventoryFamilies(
+            snapshot.inventoryFamilies,
+            normalizedInventory,
+          )
+        ) {
+          throw new Error("discovery checkpoint inventory is not canonical");
         }
         if (serializeCheckpoint(snapshot) !== raw) {
           throw new Error("discovery checkpoint is not canonically serialized");
@@ -368,6 +423,7 @@ export class AdapterFamilyDiscoveryCheckpointStore {
       revision: (previous?.revision ?? 0) + 1,
       source: prepared.source,
       watermarks: prepared.watermarks,
+      inventoryFamilies: prepared.inventoryFamilies,
     });
     const serialized = serializeCheckpoint(snapshot);
 
@@ -647,11 +703,151 @@ function validateAndFreezeMatrix(
   return Object.freeze(normalized);
 }
 
+export function emptyCheckpointInventoryFamilies(
+  familyIds: readonly FamilyId[],
+): readonly AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily[] {
+  const unique = [...new Set(familyIds.map((familyId) =>
+    canonicalId(familyId, "inventory Family id") as FamilyId
+  ))].sort((left, right) => left.localeCompare(right));
+  return Object.freeze(unique.map((familyId) => Object.freeze({
+    familyId,
+    incumbents: Object.freeze([]),
+  })));
+}
+
+function validateAndFreezeInventoryFamilies(
+  rows: readonly AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily[],
+  expectedMatrixRows: readonly ExpectedMatrixEntry[],
+  source: CanonicalSource,
+): readonly AdapterFamilyDiscoveryCheckpointInventoryFamily[] {
+  if (!Array.isArray(rows)) {
+    throw new Error("discovery checkpoint inventory families must be an array");
+  }
+  const expectedFamilyIds = new Set(
+    expectedMatrixRows.map((entry) => entry.familyId),
+  );
+  const enumeration = enumeratePointInTimeInventory({
+    source,
+    families: rows,
+  });
+  const seen = new Set<string>();
+  const families = enumeration.families.map((family) => {
+    const familyId = canonicalId(
+      family.familyId,
+      "inventory Family id",
+    ) as FamilyId;
+    if (!expectedFamilyIds.has(familyId)) {
+      throw new Error(
+        `unknown discovery checkpoint inventory Family ${familyId}`,
+      );
+    }
+    if (seen.has(familyId)) {
+      throw new Error(
+        `duplicate discovery checkpoint inventory Family ${familyId}`,
+      );
+    }
+    seen.add(familyId);
+    return Object.freeze({
+      familyId,
+      inventoryKeys: family.inventoryKeys,
+      inventoryCount: family.inventoryCount,
+      inventoryHash: family.inventoryHash,
+      incumbents: Object.freeze(family.incumbents.map((incumbent) =>
+        Object.freeze({
+          inventoryKey: incumbent.inventoryKey,
+          address: incumbent.address,
+          currentSurface: incumbent.currentSurface,
+        })
+      )),
+    });
+  });
+  if (seen.size !== expectedFamilyIds.size) {
+    throw new Error("discovery checkpoint inventory is missing Family rows");
+  }
+  return Object.freeze(families);
+}
+
+function parseInventoryFamilies(
+  raw: unknown,
+  source: CanonicalSource,
+  expectedMatrixRows: readonly ExpectedMatrixEntry[],
+): readonly AdapterFamilyDiscoveryCheckpointInventoryFamily[] {
+  if (!Array.isArray(raw)) {
+    throw new Error("discovery checkpoint inventory families must be an array");
+  }
+  const rows = raw.map((rawFamily) => {
+    assertRecord(rawFamily, "discovery checkpoint inventory Family");
+    assertExactKeys(rawFamily, [
+      "familyId",
+      "incumbents",
+      "inventoryCount",
+      "inventoryHash",
+      "inventoryKeys",
+    ], "discovery checkpoint inventory Family");
+    if (!Array.isArray(rawFamily.incumbents)) {
+      throw new Error(
+        "discovery checkpoint inventory incumbents must be an array",
+      );
+    }
+    const incumbents = rawFamily.incumbents.map((rawIncumbent) => {
+      assertRecord(
+        rawIncumbent,
+        "discovery checkpoint inventory incumbent",
+      );
+      assertExactKeys(rawIncumbent, [
+        "address",
+        "currentSurface",
+        "inventoryKey",
+      ], "discovery checkpoint inventory incumbent");
+      return Object.freeze({
+        inventoryKey: rawIncumbent.inventoryKey as string,
+        address: rawIncumbent.address as string,
+        currentSurface: rawIncumbent.currentSurface as
+          AdapterFamilySnapshotInventoryObservation,
+      });
+    });
+    return Object.freeze({
+      familyId: rawFamily.familyId as FamilyId,
+      incumbents: Object.freeze(incumbents),
+    });
+  });
+  // Re-canonicalize (freeze surfaces, sort, re-derive hashes) and enforce the
+  // exact expected Family set; the caller's canonical-serialization check
+  // then rejects any file that does not match the canonical bytes.
+  return validateAndFreezeInventoryFamilies(rows, expectedMatrixRows, source);
+}
+
+function sameCheckpointInventoryFamilies(
+  left: readonly AdapterFamilyDiscoveryCheckpointInventoryFamily[],
+  right: readonly AdapterFamilyDiscoveryCheckpointInventoryFamily[],
+): boolean {
+  return JSON.stringify(checkpointInventoryProjection(left)) ===
+    JSON.stringify(checkpointInventoryProjection(right));
+}
+
+function checkpointInventoryProjection(
+  families: readonly AdapterFamilyDiscoveryCheckpointInventoryFamily[],
+): unknown {
+  return families.map((family) => ({
+    familyId: family.familyId,
+    inventoryCount: family.inventoryCount,
+    inventoryHash: family.inventoryHash,
+    inventoryKeys: family.inventoryKeys,
+    incumbents: family.incumbents.map((incumbent) => ({
+      inventoryKey: incumbent.inventoryKey,
+      address: incumbent.address,
+      currentSurface: incumbent.currentSurface,
+    })),
+  }));
+}
+
 function createSnapshot(input: {
   readonly binding: AdapterFamilyDiscoveryCheckpointBinding;
   readonly revision: number;
   readonly source: CanonicalSource;
   readonly watermarks: readonly AdapterFamilyDiscoveryCheckpointWatermark[];
+  readonly inventoryFamilies:
+    readonly AdapterFamilyDiscoveryCheckpointInventoryFamily[];
 }): AdapterFamilyDiscoveryCheckpointSnapshot {
   if (!Number.isSafeInteger(input.revision) || input.revision < 1) {
     throw new Error("invalid discovery checkpoint revision");
@@ -662,6 +858,7 @@ function createSnapshot(input: {
     revision: input.revision,
     source: input.source,
     watermarks: input.watermarks,
+    inventoryFamilies: input.inventoryFamilies,
   });
   return Object.freeze({
     format: CHECKPOINT_FORMAT,
@@ -669,11 +866,15 @@ function createSnapshot(input: {
     ...input.binding,
     source: input.source,
     watermarks: input.watermarks,
+    inventoryFamilies: input.inventoryFamilies,
     checkpointFingerprint: hashCanonical(projection),
   });
 }
 
-function parseCheckpoint(raw: string): AdapterFamilyDiscoveryCheckpointSnapshot {
+function parseCheckpoint(
+  raw: string,
+  expectedMatrixRows: readonly ExpectedMatrixEntry[],
+): AdapterFamilyDiscoveryCheckpointSnapshot {
   const parsed: unknown = JSON.parse(raw);
   assertRecord(parsed, "discovery checkpoint");
   assertExactKeys(parsed, [
@@ -681,6 +882,7 @@ function parseCheckpoint(raw: string): AdapterFamilyDiscoveryCheckpointSnapshot 
     "chainId",
     "checkpointFingerprint",
     "format",
+    "inventoryFamilies",
     "revision",
     "source",
     "sourceRegistryFingerprint",
@@ -719,12 +921,18 @@ function parseCheckpoint(raw: string): AdapterFamilyDiscoveryCheckpointSnapshot 
       completeThroughHash: rawRow.completeThroughHash as string | null,
     });
   }));
+  const inventoryFamilies = parseInventoryFamilies(
+    parsed.inventoryFamilies,
+    source,
+    expectedMatrixRows,
+  );
   const snapshot = Object.freeze({
     format: CHECKPOINT_FORMAT,
     revision: Number(parsed.revision),
     ...binding,
     source,
     watermarks,
+    inventoryFamilies,
     checkpointFingerprint: canonicalFingerprint(
       parsed.checkpointFingerprint,
       "checkpoint fingerprint",
@@ -747,6 +955,8 @@ function checkpointProjection(input: {
   readonly sourceRegistryFingerprint: string;
   readonly source: CanonicalSource;
   readonly watermarks: readonly AdapterFamilyDiscoveryCheckpointWatermark[];
+  readonly inventoryFamilies:
+    readonly AdapterFamilyDiscoveryCheckpointInventoryFamily[];
 }): CanonicalValue {
   return {
     format: input.format,
@@ -766,7 +976,18 @@ function checkpointProjection(input: {
       completeThroughBlock: row.completeThroughBlock,
       completeThroughHash: row.completeThroughHash,
     })),
-  };
+    inventoryFamilies: input.inventoryFamilies.map((family) => ({
+      familyId: family.familyId,
+      inventoryCount: family.inventoryCount,
+      inventoryHash: family.inventoryHash,
+      inventoryKeys: family.inventoryKeys,
+      incumbents: family.incumbents.map((incumbent) => ({
+        inventoryKey: incumbent.inventoryKey,
+        address: incumbent.address,
+        currentSurface: incumbent.currentSurface,
+      })),
+    })),
+  } as unknown as CanonicalValue;
 }
 
 function serializeCheckpoint(

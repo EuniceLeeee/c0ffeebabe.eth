@@ -13,10 +13,15 @@ import { join } from "node:path";
 import {
   AdapterFamilyDiscoveryCheckpointStore,
   FileAdapterFamilyDiscoveryCheckpointBackend,
+  emptyCheckpointInventoryFamilies,
   type AdapterFamilyDiscoveryCheckpointCandidateIssuer,
+  type AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily,
   type AdapterFamilyDiscoveryCheckpointReceipt,
   type AdapterFamilyDiscoveryCheckpointWatermark,
 } from "../adapter-family-discovery-checkpoint.js";
+import type {
+  AdapterFamilySnapshotInventoryObservation,
+} from "../adapter-family-snapshot-inventory-closure.js";
 import { familyId, type FamilyId } from
   "../venues/adapter-family-identifiers.js";
 import type { CanonicalSource } from
@@ -144,6 +149,36 @@ function watermark(
   });
 }
 
+function inventory(
+  canonical: CanonicalSource,
+): readonly AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily[] {
+  return emptyCheckpointInventoryFamilies([FAMILY_A, FAMILY_B]);
+}
+
+function populatedInventory(
+  canonical: CanonicalSource,
+): readonly AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily[] {
+  const surface: AdapterFamilySnapshotInventoryObservation = Object.freeze({
+    kind: "address-surface",
+    source: canonical,
+    address: `0x${"ab".repeat(20)}`,
+    codeHash: `0x${"1".repeat(64)}`,
+    implementationWord: `0x${"0".repeat(64)}`,
+    interfaceFingerprints: Object.freeze(["fixture-surface-v1"]),
+  });
+  return Object.freeze([
+    ...inventory(canonical).filter((family) => family.familyId !== FAMILY_A),
+    Object.freeze({
+      familyId: FAMILY_A,
+      incumbents: Object.freeze([Object.freeze({
+        inventoryKey: "legacy:fixture-pool-a",
+        address: `0x${"ab".repeat(20)}`,
+        currentSurface: surface,
+      })]),
+    }),
+  ]);
+}
+
 async function commit(
   store: AdapterFamilyDiscoveryCheckpointStore,
   expected: AdapterFamilyDiscoveryCheckpointReceipt | null,
@@ -152,6 +187,7 @@ async function commit(
   const staged = candidateIssuer(store).prepare({
     source: canonical,
     watermarks: matrix(canonical),
+    inventoryFamilies: inventory(canonical),
   });
   assert.deepEqual(Object.keys(staged), []);
   return store.compareAndCommit({
@@ -205,6 +241,7 @@ try {
   const firstStaged = candidateIssuer(first).prepare({
     source: SOURCE_10,
     watermarks: matrix(SOURCE_10),
+    inventoryFamilies: inventory(SOURCE_10),
   });
   assert.equal(await first.compareAndCommit({
     expected: null,
@@ -292,6 +329,7 @@ try {
   const canonicalFailure = candidateIssuer(canonicalFailureStore).prepare({
     source: SOURCE_11,
     watermarks: matrix(SOURCE_11),
+    inventoryFamilies: inventory(SOURCE_11),
   });
   await assert.rejects(
     () => canonicalFailureStore.compareAndCommit({
@@ -316,6 +354,7 @@ try {
   const fenceFailure = candidateIssuer(fenceFailureStore).prepare({
     source: SOURCE_11,
     watermarks: matrix(SOURCE_11),
+    inventoryFamilies: inventory(SOURCE_11),
   });
   await assert.rejects(
     () => fenceFailureStore.compareAndCommit({
@@ -551,6 +590,7 @@ try {
   const foreignCandidate = candidateIssuer(foreignCandidateStore).prepare({
     source: SOURCE_10,
     watermarks: matrix(SOURCE_10),
+    inventoryFamilies: inventory(SOURCE_10),
   });
   await assert.rejects(
     () => validation.compareAndCommit({
@@ -570,6 +610,7 @@ try {
     () => candidateIssuer(validation).prepare({
       source: SOURCE_10,
       watermarks: matrix(SOURCE_10).slice(1),
+      inventoryFamilies: inventory(SOURCE_10),
     }),
     /missing matrix rows/,
   );
@@ -577,6 +618,7 @@ try {
     () => candidateIssuer(validation).prepare({
       source: SOURCE_10,
       watermarks: [...matrix(SOURCE_10), matrix(SOURCE_10)[0]!],
+      inventoryFamilies: inventory(SOURCE_10),
     }),
     /duplicate discovery checkpoint matrix row/,
   );
@@ -590,6 +632,7 @@ try {
               completeThroughHash: SOURCE_10.hash }
           : row
       ),
+      inventoryFamilies: inventory(SOURCE_10),
     }),
     /cannot restore contiguous history/,
   );
@@ -603,6 +646,7 @@ try {
               completeThroughHash: SOURCE_10.hash }
           : row
       ),
+      inventoryFamilies: inventory(SOURCE_10),
     }),
     /invalid discovery checkpoint coverage authority/,
     "durable continuity cannot mint point-in-time inventory closure",
@@ -615,8 +659,92 @@ try {
           ? { ...row, completeThroughHash: `0x${"f".repeat(64)}` }
           : row
       ),
+      inventoryFamilies: inventory(SOURCE_10),
     }),
     /does not match checkpoint source|disagree at one block height/,
+  );
+
+  // Durable incumbent inventory (checkpoint v2) round-trips and stays
+  // canonical across restart; missing/extra Family rows fail closed, and a
+  // tampered inventory fingerprint degrades to append-only.
+  const inventoryPath = join(directory, "inventory.json");
+  const inventoryStore = checkpoints(inventoryPath);
+  await inventoryStore.loadForRestart();
+  const inventoryCandidate = candidateIssuer(inventoryStore).prepare({
+    source: SOURCE_10,
+    watermarks: matrix(SOURCE_10),
+    inventoryFamilies: populatedInventory(SOURCE_10),
+  });
+  assert.equal(await inventoryStore.compareAndCommit({
+    expected: null,
+    staged: inventoryCandidate,
+  }), true);
+  const inventoryReceipt = inventoryStore.capture()!;
+  const inventorySnapshot =
+    inventoryStore.checkpointSnapshot(inventoryReceipt)!;
+  assert.equal(inventorySnapshot.inventoryFamilies.length, 2);
+  const inventoryFamilyA = inventorySnapshot.inventoryFamilies.find(
+    (family) => family.familyId === FAMILY_A,
+  )!;
+  assert.deepEqual(inventoryFamilyA.inventoryKeys, ["legacy:fixture-pool-a"]);
+  assert.equal(inventoryFamilyA.inventoryCount, 1);
+  assert.equal(inventoryFamilyA.incumbents[0]?.address, `0x${"ab".repeat(20)}`);
+  assert.equal(
+    inventoryFamilyA.incumbents[0]?.currentSurface.kind,
+    "address-surface",
+  );
+  const inventoryRestarted = checkpoints(inventoryPath);
+  const inventoryReloaded = await inventoryRestarted.loadForRestart();
+  assert.equal(inventoryReloaded.status, "trusted");
+  assert.deepEqual(
+    inventoryRestarted.checkpointSnapshot(inventoryReloaded.receipt)!
+      .inventoryFamilies,
+    inventorySnapshot.inventoryFamilies,
+  );
+
+  const missingRowInventory = inventory(SOURCE_10).filter(
+    (family) => family.familyId !== FAMILY_B,
+  );
+  assert.throws(
+    () => candidateIssuer(validation).prepare({
+      source: SOURCE_10,
+      watermarks: matrix(SOURCE_10),
+      inventoryFamilies: missingRowInventory,
+    }),
+    /missing Family rows/,
+  );
+  const extraRowInventory = Object.freeze([
+    ...inventory(SOURCE_10),
+    Object.freeze({
+      familyId: familyId("fixture-family-extra"),
+      incumbents: Object.freeze([]),
+    }),
+  ]);
+  assert.throws(
+    () => candidateIssuer(validation).prepare({
+      source: SOURCE_10,
+      watermarks: matrix(SOURCE_10),
+      inventoryFamilies: extraRowInventory,
+    }),
+    /unknown discovery checkpoint inventory Family/,
+  );
+
+  const tamperedInventory = await readFile(inventoryPath, "utf8");
+  const parsedInventory = JSON.parse(tamperedInventory) as {
+    inventoryFamilies: { inventoryHash: string }[];
+  };
+  parsedInventory.inventoryFamilies[0]!.inventoryHash = "0".repeat(64);
+  const tamperedPath = join(directory, "inventory-tampered.json");
+  await writeFile(
+    tamperedPath,
+    `${JSON.stringify(parsedInventory, null, 2)}\n`,
+  );
+  const tamperedInventoryStore = checkpoints(tamperedPath);
+  const tamperedInventoryLoad = await tamperedInventoryStore.loadForRestart();
+  assert.equal(tamperedInventoryLoad.status, "degraded-append-only");
+  assert.equal(
+    tamperedInventoryLoad.reason,
+    "invalid-or-mismatched-checkpoint",
   );
 
   console.log("adapter-family-discovery-checkpoint PASS");

@@ -10,6 +10,9 @@ import type {
   PreparedAdapterFamilyDiscoveryCheckpoint,
 } from "./adapter-family-discovery-checkpoint.js";
 import {
+  emptyCheckpointInventoryFamilies,
+} from "./adapter-family-discovery-checkpoint.js";
+import {
   adapterFamilySnapshotInventoryHash,
   type AdapterFamilySnapshotInventoryClosureCandidateIssuer,
   type AdapterFamilySnapshotInventoryFamilyInput,
@@ -901,6 +904,11 @@ export class AdapterFamilyObservationShadowIngress {
     const checkpointCandidate = this.#checkpointCandidateIssuer?.prepare({
       source,
       watermarks: this.#checkpointWatermarks(nextWatermarks, nextMetadata),
+      inventoryFamilies: emptyCheckpointInventoryFamilies(
+        this.#families.map((family) =>
+          family.familyId as unknown as FamilyId
+        ),
+      ),
     }) ?? null;
 
     // The shadow watermark is still state: a stale generation must not write it.

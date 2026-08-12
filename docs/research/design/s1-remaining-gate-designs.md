@@ -105,6 +105,21 @@ interface DiscoveryInventoryEnumerator {
    candidate.verifyAndIssue 全流程无错误；
 3. checkpoint 缺行时 fail closed，日志给出缺哪个 Family/incumbent。
 
+### 落地状态（2026-08-12）
+
+- discovery checkpoint 已升级 v2，持久化逐 Family incumbent inventory
+  （两种 surface 统一经 `enumeratePointInTimeInventory` canonical 化）；
+  `DiscoveryInventoryEnumerator` /
+  `CheckpointDiscoveryInventoryEnumerator` 已实现并在 main.ts env gate
+  下接线，替代 throw 占位；
+- 验收 2、3 已合同级关闭：wsteth 与 univ2 两个 composition 端到端路径
+  都把 incumbent 先写入 checkpoint，再经 enumerator → closure verifier
+  → strict catalog `complete-snapshot` 全链路通过；无 trusted receipt /
+  append-only 重启 / source 不一致 / 缺失或多余 Family 行 / 篡改
+  inventoryHash 全部 fail closed；
+- 验收 1（节点 dry-run：真实 checkpoint + live discovery 输出）仍待
+  节点环境，不在此虚报。
+
 ## 3. 依赖关系
 
 - §2 依赖 §1 的 factory-log incumbent 投影（同一 inventory 模型）；
