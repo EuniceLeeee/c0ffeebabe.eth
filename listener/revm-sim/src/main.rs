@@ -2227,7 +2227,7 @@ fn approve_calls_have_known_slots(
     true
 }
 
-const ERC20_MAPPING_SLOT_CANDIDATES: [u64; 8] = [0, 1, 2, 3, 4, 5, 9, 51];
+const ERC20_MAPPING_SLOT_CANDIDATES: [u64; 10] = [0, 1, 2, 3, 4, 5, 9, 10, 11, 51];
 
 fn mapping_slot_candidates(primary: Option<u64>, cached: Option<u64>) -> Vec<u64> {
     let mut out = Vec::with_capacity(ERC20_MAPPING_SLOT_CANDIDATES.len() + 2);
