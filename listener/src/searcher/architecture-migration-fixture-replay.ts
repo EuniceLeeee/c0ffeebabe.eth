@@ -2573,7 +2573,7 @@ class WstethFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function wstethFixtureRuntime(): CentralAdapterRuntime {
+export function wstethFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },

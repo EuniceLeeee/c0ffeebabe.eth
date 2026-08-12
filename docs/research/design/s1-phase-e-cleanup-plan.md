@@ -35,6 +35,13 @@
 > unresolved；wsteth 合同测试通过（rev1 + committed views）。剩余：
 > 生产循环里为每个 admission 的 pool 跑 strict Family lifecycle（管线
 > 步骤 1）并把 publisher 接到 live 发布路径（步骤 4 消费端已就绪）。
+>
+> **管线进展 2（2026-08-12）：** `runStrictFamilyLifecycle` 已落地
+> （catalog.matches → executeAdapterFamilyLifecycleBatch → publication，
+> 无 match/无 publication fail-closed 且错误带 stage/reason）；wsteth
+> fixture runtime 导出复用，合同测试通过。管线步骤 1 的调用面就绪；
+> 剩余为生产循环把 discovery observations 喂给 runner 并把 publication
+> 接到 publisher。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
