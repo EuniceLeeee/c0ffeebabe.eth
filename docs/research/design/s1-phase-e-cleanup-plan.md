@@ -15,7 +15,7 @@
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
-| A | `production-registry.routes()/funding()` 在 `revm-live-backend` 的执行消费 | strict family runtime handle / strict funding consumer 接入 live execution | step 1 完成：funding prewarm 投影 + env gate 接线；route 投影待做 |
+| A | `production-registry.routes()/funding()` 在 `revm-live-backend` 的执行消费 | strict family runtime handle / strict funding consumer 接入 live execution | step 1-2 完成：funding + route prewarm 投影 + env gate 接线（`SEARCHER_STRICT_LIVE_EXECUTION=1`，默认 OFF）；执行 handle 投影待做 |
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

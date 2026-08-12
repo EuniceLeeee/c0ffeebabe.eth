@@ -28,6 +28,7 @@ import type { ResolvedPlan } from "../solver/solver.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
   resolveFundingPrewarmAddresses,
+  strictRoutePrewarmAddresses,
 } from "../strict-execution-projection.js";
 import type {
   StrictShadowCatalogViews,
@@ -74,7 +75,7 @@ export class RevmLiveBackend implements LiveStateBackend {
     private readonly provider: ethers.JsonRpcProvider,
     private readonly graph: TokenEdge[],
     private readonly rpcUrl: string,
-    private readonly strictFunding?: {
+    private readonly strictExecution?: {
       readonly views: () => StrictShadowCatalogViews | null;
       readonly catalog: FamilyCapabilityCatalog;
     },
@@ -228,10 +229,10 @@ export class RevmLiveBackend implements LiveStateBackend {
     push(this.executor);
     push(this.owner);
     for (const address of resolveFundingPrewarmAddresses({
-      strictViews: this.strictFunding === undefined
+      strictViews: this.strictExecution === undefined
         ? null
-        : this.strictFunding.views(),
-      catalog: this.strictFunding?.catalog ??
+        : this.strictExecution.views(),
+      catalog: this.strictExecution?.catalog ??
         PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
       legacyAddresses: PRODUCTION_ADAPTER_FAMILIES.funding().flatMap(
         (family) => [family.funding.target, family.funding.liquidityHolder],
@@ -241,9 +242,21 @@ export class RevmLiveBackend implements LiveStateBackend {
     }
     for (const hop of input.routeHops ?? []) {
       push(hop.target);
-      const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(hop.adapterId);
-      const request = this.preparedRequest(hop, input.impact?.amountIn ?? 0n);
-      for (const address of adapter?.prepared?.prewarmAddresses?.(request) ?? []) push(address);
+      if (this.strictExecution !== undefined &&
+          this.strictExecution.views() !== null) {
+        for (const address of strictRoutePrewarmAddresses({
+          catalog: this.strictExecution.catalog,
+          hops: [hop],
+        })) {
+          push(address);
+        }
+      } else {
+        const adapter = PRODUCTION_ADAPTER_FAMILIES.routes()
+          .findForEdge(hop.adapterId);
+        const request = this.preparedRequest(hop, input.impact?.amountIn ?? 0n);
+        for (const address of adapter?.prepared?.prewarmAddresses?.(request) ??
+          []) push(address);
+      }
     }
 
     if (stateOverrideOnly) {
@@ -352,10 +365,10 @@ export class RevmLiveBackend implements LiveStateBackend {
       ...calls.map((call) => call.to),
     ]) pushPrewarm(address);
     for (const address of resolveFundingPrewarmAddresses({
-      strictViews: this.strictFunding === undefined
+      strictViews: this.strictExecution === undefined
         ? null
-        : this.strictFunding.views(),
-      catalog: this.strictFunding?.catalog ??
+        : this.strictExecution.views(),
+      catalog: this.strictExecution?.catalog ??
         PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
       legacyAddresses: PRODUCTION_ADAPTER_FAMILIES.funding().flatMap(
         (family) => [family.funding.target, family.funding.liquidityHolder],
@@ -365,10 +378,22 @@ export class RevmLiveBackend implements LiveStateBackend {
     }
     for (const hop of hops) {
       pushPrewarm(hop.target);
-      const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(hop.adapterId);
-      const request = this.preparedRequest(hop, hop.amountIn);
-      for (const address of adapter?.prepared?.prewarmAddresses?.(request) ?? []) {
-        pushPrewarm(address);
+      if (this.strictExecution !== undefined &&
+          this.strictExecution.views() !== null) {
+        for (const address of strictRoutePrewarmAddresses({
+          catalog: this.strictExecution.catalog,
+          hops: [hop],
+        })) {
+          pushPrewarm(address);
+        }
+      } else {
+        const adapter = PRODUCTION_ADAPTER_FAMILIES.routes()
+          .findForEdge(hop.adapterId);
+        const request = this.preparedRequest(hop, hop.amountIn);
+        for (const address of adapter?.prepared?.prewarmAddresses?.(request) ??
+          []) {
+          pushPrewarm(address);
+        }
       }
     }
     const prewarm = [...prewarmByAddress.values()];

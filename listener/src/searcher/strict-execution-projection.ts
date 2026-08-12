@@ -51,3 +51,33 @@ export function resolveFundingPrewarmAddresses(input: {
     input.legacyAddresses.map((address) => address.toLowerCase()),
   )].sort());
 }
+
+/**
+ * Route prewarm projection: for each hop whose adapter belongs to a strict
+ * Family, prewarm the hop target and both tokens. Unknown adapters yield no
+ * extra addresses (same default as the legacy optional prewarm). Only
+ * meaningful when a committed strict publication is available; the live
+ * backend gates this behind the strict-execution env flag.
+ */
+export function strictRoutePrewarmAddresses(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly hops: readonly {
+    readonly adapterId: string;
+    readonly target: string;
+    readonly tokenIn: string;
+    readonly tokenOut: string;
+  }[];
+}): readonly string[] {
+  const addresses = new Set<string>();
+  for (const hop of input.hops) {
+    try {
+      input.catalog.ownerOfAction(hop.adapterId);
+    } catch {
+      continue;
+    }
+    addresses.add(hop.target.toLowerCase());
+    addresses.add(hop.tokenIn.toLowerCase());
+    addresses.add(hop.tokenOut.toLowerCase());
+  }
+  return Object.freeze([...addresses].sort());
+}

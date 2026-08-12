@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   resolveFundingPrewarmAddresses,
+  strictRoutePrewarmAddresses,
   strictFundingPrewarmAddresses,
 } from "../strict-execution-projection.js";
 import type {
@@ -87,6 +88,30 @@ function main(): void {
       legacyAddresses: Object.freeze([`0x${"cc".repeat(20)}`]),
     }),
     addresses,
+  );
+  const hop = Object.freeze({
+    adapterId: "univ2-swap",
+    target: `0x${"41".repeat(20)}`,
+    tokenIn: `0x${"43".repeat(20)}`,
+    tokenOut: `0x${"44".repeat(20)}`,
+  });
+  assert.deepEqual(
+    strictRoutePrewarmAddresses({ catalog, hops: Object.freeze([hop]) }),
+    Object.freeze([
+      `0x${"41".repeat(20)}`,
+      `0x${"43".repeat(20)}`,
+      `0x${"44".repeat(20)}`,
+    ]),
+  );
+  assert.deepEqual(
+    strictRoutePrewarmAddresses({
+      catalog,
+      hops: Object.freeze([Object.freeze({
+        ...hop,
+        adapterId: "unknown-adapter",
+      })]),
+    }),
+    Object.freeze([]),
   );
   console.log("strict-execution-projection PASS");
 }
