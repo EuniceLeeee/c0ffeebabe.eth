@@ -290,6 +290,28 @@ checkpoint（commit 见下，§2 设计的数据基座与接线；node dry-run �
   （含 parity verifier 与 node SSM evidence verifier）+ 完整 build；
   本地 sealed-capture/shadow receipt 范围，不代表 production cutover。
 
+**2026-08-12 node enumerator dry-run harness checkpoint（commit 见下，
+§2 验收 1 的 fixture-backed 机器证据工具；live discovery 输出仍待
+节点）：**
+
+- 新增 `listener/src/searcher/node-enumerator-dry-run.ts`（npm script
+  `searcher:node-enumerator-dry-run`）：用真实生产 catalog + 真实
+  file-backed checkpoint store 写入 fixture incumbent inventory（wsteth
+  address-surface + univ2 factory-log 各 1 行，其余 discovery 族空行），
+  经 `CheckpointDiscoveryInventoryEnumerator` 还原并输出
+  `s1-node-enumerator-dry-run-v1` pass 记录（catalogHash、逐 Family
+  inventoryHash/count）；本地实测输出合法；
+- 新增 `scripts/run-s1-node-enumerator-dry-run.sh`：SSM preflight
+  （worktree/status/HEAD/PROCS/locks）→ fetch+checkout 精确 SHA →
+  运行 CLI → JSON 校验 → 写
+  `docs/research/design/evidence/s1-node-enumerator-dry-run-<ssmRunId>.json`；
+  无 live/签名/广播，不触碰 `/opt/MEV` live searcher；
+- 该 harness 是 §2 验收 1 的 fixture-backed 节点证据（真实 store/catalog/
+  enumerator 实现 + 合成 inventory）；由 live discovery 写入真实
+  incumbent inventory 的节点 dry-run 仍待后续接线；
+- 证据：shadow suite（11 合同）全过 + regression sweep 11 组全过 +
+  完整 build。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - complete-snapshot 正向路径的剩余 bootstrap 缺口（factory-log
@@ -300,7 +322,8 @@ checkpoint（commit 见下，§2 设计的数据基座与接线；node dry-run �
   eligible 族可先关闭，其余 7 族保持 append-only）；
 - production point-in-time enumerator 的 node dry-run 机器证据（durable
   checkpoint + enumerator 接线已合同级关闭；live discovery 写入真实
-  incumbent inventory 并做节点 dry-run 验收仍待节点）；
+  incumbent inventory 并做节点 dry-run 验收仍待节点；fixture-backed
+  节点 enumerator dry-run harness 已就绪）；
 - production solver 的 strict pricing/Funding/Credit consumer 真实
   接线（目前仅 diagnostic）；
 - ~~节点 SSM 双跑机器证据~~（已关闭：SSM run

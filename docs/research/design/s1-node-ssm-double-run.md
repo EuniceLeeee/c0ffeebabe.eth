@@ -84,3 +84,27 @@ scripts/verify-s1-parity-receipt.sh \
 - 默认 authority 切换必须同时满足
   `evaluateS1CutoverReadiness` 的 ready 条件，并取得新的人工授权。
 - 任何 `ab/*` 之外的 stop/清理、进程重启、锁文件处理都必须先人工确认。
+
+## 7. 节点 enumerator dry-run（fixture-backed，§2 验收 1 工具）
+
+在已确认 §5 双跑证据之后（或独立执行），可对 checkpoint-backed
+point-in-time enumerator 做同安全等级的节点 dry-run：
+
+```bash
+scripts/run-s1-node-enumerator-dry-run.sh \
+  i-0ff908dedeec9ebc6 \
+  <impl-sha> \
+  /opt/MEV-impl-capture
+```
+
+- 脚本自动执行只读 preflight（worktree/status/HEAD/PROCS/locks）→
+  fetch + checkout 精确 impl SHA → 运行
+  `searcher:node-enumerator-dry-run`（真实生产 catalog + 真实
+  file-backed checkpoint store + fixture incumbent inventory）→
+  JSON 校验 → 写
+  `docs/research/design/evidence/s1-node-enumerator-dry-run-<ssmRunId>.json`；
+- 证据含义：真实 store/catalog/enumerator 实现链在节点上的
+  fixture-backed 通过记录；**不是** live discovery 输出产生的真实
+  incumbent inventory，后者仍需后续接线与节点 dry-run；
+- 安全门同 §6：不触碰 `/opt/MEV` live searcher，不部署、不签名、
+  不广播。
