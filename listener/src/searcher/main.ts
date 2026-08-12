@@ -2569,8 +2569,6 @@ async function main(): Promise<void> {
 
   // Now that the graph exists, wire the configured revm/hybrid backend.
   if (config.liveBackend !== "rpc") {
-    const strictLiveExecution =
-      process.env.SEARCHER_STRICT_LIVE_EXECUTION === "1";
     const revmLiveBackend = new RevmLiveBackend(
       new RevmSimClient({
         executablePath: process.env.SEARCHER_REVM_SIM_BIN,
@@ -2581,14 +2579,14 @@ async function main(): Promise<void> {
       provider,
       graph,
       config.rpcUrl,
-      ...(strictLiveExecution
-        ? [{
+      discoveryContinuityComposition === null
+        ? undefined
+        : {
             views: () =>
-              discoveryContinuityComposition?.catalogRoot.capture()
+              discoveryContinuityComposition.catalogRoot.capture()
                 ?.views ?? null,
             catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-          }]
-        : []),
+          },
     );
     liveBackend = config.liveBackend === "revm"
       ? revmLiveBackend

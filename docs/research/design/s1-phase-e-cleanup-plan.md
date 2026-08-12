@@ -16,6 +16,7 @@
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
 | A | `production-registry.routes()/funding()` 在 `revm-live-backend` 的执行消费 | strict family runtime handle / strict funding consumer 接入 live execution | step 1-5 完成：22 族 execution projection 全覆盖（spender 静态/hop.target/angstrom 常量/null；prewarm 保守留空）env gate 接线（默认 OFF）；**删除步骤阻塞**：strict 路径激活依赖 composition env + committed publication（即默认 authority 接线），用户选择跳过；在 composition 成为默认前删除 legacy 会让无 composition 的生产路径失去 execution 数据 |
+| A | 同上 | 同上 | step 1-6 完成：execution 投影改为 composition 存在即默认启用（移除 env flag；无 committed views 时按 per-family/per-availability 回退 legacy），删除步骤的 authority 前置已最小化；仍保留 per-family 回退，删除 legacy 消费前需 composition 生产默认 |
 
 > **Pair A 节点验证（2026-08-12，SSM 串行 strict-live run）：**
 > challenger `45908c6c` + `SEARCHER_STRICT_LIVE_EXECUTION=1`（composition

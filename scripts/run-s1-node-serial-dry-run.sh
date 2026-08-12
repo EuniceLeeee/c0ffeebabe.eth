@@ -20,7 +20,6 @@ side="${5:-both}"
 baseline_dir="${6:-/opt/MEV-baseline-capture}"
 impl_dir="${7:-/opt/MEV-impl-capture}"
 out_base="${8:-/tmp/mev-s1-serial-dry-run}"
-strict_live="${9:-0}"
 
 if ! command -v aws >/dev/null 2>&1; then
   echo "aws CLI is required" >&2
@@ -60,7 +59,7 @@ run_side() {
   run_cmd_id="$(aws ssm send-command \
     --instance-ids "${instance_id}" \
     --document-name AWS-RunShellScript \
-    --parameters "commands=[\"STRICT_LIVE_EXECUTION=${strict_live} bash ${impl_dir}/scripts/node-side-serial-dry-run.sh ${name} ${sha} ${window_seconds} ${dir} ${outdir}\"]" \
+    --parameters "commands=[\"bash ${impl_dir}/scripts/node-side-serial-dry-run.sh ${name} ${sha} ${window_seconds} ${dir} ${outdir}\"]" \
     --query Command.CommandId --output text)"
   local status="pending"
   while [[ "${status}" == "pending" || "${status}" == "InProgress" ]]; do
