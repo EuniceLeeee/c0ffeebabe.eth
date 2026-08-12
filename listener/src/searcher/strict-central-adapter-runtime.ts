@@ -267,6 +267,10 @@ async function executeRequest(
       request.kind === "effect-delta-simulation"
     ) {
       if (simulator === undefined) {
+        console.warn(
+          `[strict-runtime] strict simulation has no simulator: ` +
+            `${request.id}`,
+        );
         return Object.freeze({
           id: request.id,
           ok: false as const,
@@ -321,6 +325,10 @@ async function executeRequest(
         });
       }
     }
+    console.warn(
+      `[strict-runtime] strict simulation unsupported request kind: ` +
+        `${request.kind} (${request.id})`,
+    );
     return Object.freeze({
       id: request.id,
       ok: false as const,
