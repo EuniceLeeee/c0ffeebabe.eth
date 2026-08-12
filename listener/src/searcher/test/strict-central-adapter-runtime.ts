@@ -3,6 +3,9 @@ import {
   createStrictCentralAdapterRuntime,
 } from "../strict-central-adapter-runtime.js";
 import {
+  executeAdapterWork,
+} from "../adapter-work-intent.js";
+import {
   runStrictFamilyLifecycle,
 } from "../strict-family-lifecycle-runner.js";
 import type { CanonicalSource } from
@@ -14,6 +17,9 @@ import { WSTETH_FAMILY_ID } from
   "../venues/protocols/wsteth-family/manifest.js";
 import { WSTETH_INTERFACE } from
   "../venues/protocols/wsteth-family/codec.js";
+import {
+  PRODUCTION_STRICT_VERIFIED_ACTORS,
+} from "../venues/production-verified-actors.js";
 
 const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
 const SOURCE: CanonicalSource = Object.freeze({
@@ -190,6 +196,70 @@ async function main(): Promise<void> {
   assert.equal(failingSimulator[0]!.ok, false);
   assert(failingSimulator[0]!.ok === false);
   assert.equal(failingSimulator[0]!.failure, "resource-limited");
+
+  // Verified-actor caller authority: without the evidence map the central
+  // runtime fails closed at caller-authority; with the production map the
+  // family-declared actor binds and the request executes.
+  const bareAuthorityRuntime = createStrictCentralAdapterRuntime({
+    provider: mockProvider() as never,
+    generationFence: Object.freeze({ assertCurrent() {} }),
+  });
+  assert.deepEqual(
+    bareAuthorityRuntime.callerAuthority.bind({} as never),
+    {},
+  );
+  const actorRuntime = createStrictCentralAdapterRuntime({
+    provider: mockProvider() as never,
+    generationFence: Object.freeze({ assertCurrent() {} }),
+    verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+  });
+  const boundAuthority = actorRuntime.callerAuthority.bind({
+    callerRole: "verified-actor",
+  } as never) as { readonly verifiedActors?: Readonly<Record<string, string>> };
+  assert.equal(
+    boundAuthority.verifiedActors?.["erc4626-probe-actor"],
+    PRODUCTION_STRICT_VERIFIED_ACTORS["erc4626-probe-actor"],
+  );
+  const verifiedProgram = Object.freeze({
+    requirements: () => Object.freeze({
+      transports: ["eth-call" as const],
+      caller: "verified-actor" as const,
+    }),
+    buildRequests: () => Object.freeze([Object.freeze({
+      id: "verified-probe",
+      kind: "eth-call" as const,
+      to: WSTETH,
+      data: "0x",
+      completion: "return-data" as const,
+      caller: Object.freeze({
+        kind: "verified-actor" as const,
+        evidenceId: "erc4626-probe-actor",
+      }),
+    })]),
+    decode: () => Object.freeze({ ok: true }),
+  });
+  const verifiedIntent = Object.freeze({
+    stage: "identity" as const,
+    familyId: "protocol:test" as never,
+    source: SOURCE,
+    generation: SOURCE.generation,
+    program: verifiedProgram,
+    programInput: Object.freeze({}),
+  });
+  const denied = await executeAdapterWork({
+    intent: verifiedIntent,
+    runtime: bareAuthorityRuntime,
+  });
+  assert.equal(denied.status, "unresolved");
+  if (denied.status === "unresolved") {
+    assert.equal(denied.failure.stage, "caller-authority");
+    assert.equal(denied.failure.code, "authority-failure");
+  }
+  const accepted = await executeAdapterWork({
+    intent: verifiedIntent,
+    runtime: actorRuntime,
+  });
+  assert.equal(accepted.status, "resolved");
   console.log("strict-central-adapter-runtime PASS");
 }
 

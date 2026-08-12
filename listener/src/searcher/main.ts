@@ -117,6 +117,9 @@ import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "./venues/production-family-composition.js";
 import {
+  PRODUCTION_STRICT_VERIFIED_ACTORS,
+} from "./venues/production-verified-actors.js";
+import {
   emitProtocolDiscoveryEvents,
   emitStaticSuppressedProtocolEvents,
   ProtocolDiscoveryCandidateDomain,
@@ -2704,6 +2707,7 @@ async function main(): Promise<void> {
       strictCentralRuntime = createStrictCentralAdapterRuntime({
         provider,
         generationFence: Object.freeze({ assertCurrent() {} }),
+        verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
         simulator: createRevmStrictSimulationTransport({
           client: revmSimClient,
           executor: config.botvmAddress,

@@ -64,8 +64,17 @@ export function createStrictCentralAdapterRuntime(input: {
   >;
   readonly simulator?: StrictSimulationTransport;
   readonly generationFence: AdapterGenerationFence;
+  /**
+   * Family-declared verified-actor evidence map (evidence id -> probe
+   * actor). Families whose identity/active proof uses
+   * `caller: "verified-actor"` bind through this authority; omitting an
+   * actor keeps that family fail-closed at caller-authority instead of
+   * pretending the capability exists.
+   */
+  readonly verifiedActors?: Readonly<Record<string, string>>;
 }): CentralAdapterRuntime {
   let now = Date.now();
+  const verifiedActors = Object.freeze({ ...(input.verifiedActors ?? {}) });
   const scheduler: CentralAdapterScheduler = Object.freeze({
     issueExecutor(
       issueInput: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
@@ -106,7 +115,11 @@ export function createStrictCentralAdapterRuntime(input: {
   return Object.freeze({
     clock: { nowMs: () => now++ },
     generationFence: input.generationFence,
-    callerAuthority: { bind: () => ({}) },
+    callerAuthority: {
+      bind: () => Object.keys(verifiedActors).length === 0
+        ? Object.freeze({})
+        : Object.freeze({ verifiedActors }),
+    },
     policy: {
       bind: (policyInput: {
         readonly stage: string;

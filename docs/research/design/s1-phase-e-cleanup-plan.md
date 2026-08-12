@@ -194,6 +194,18 @@
 > checkpoint revision 17（source 25738565, generation 1）；
 > searcher priced 90.09% 无回退。证据：
 > `docs/research/design/evidence/s1-node-acceptance-pipeline-22c965dd.json`。
+>
+> **strict caller-authority 合同补全（2026-08-12）：**
+> `createStrictCentralAdapterRuntime` 新增 `verifiedActors` 输入；
+> `PRODUCTION_STRICT_VERIFIED_ACTORS` 集中声明 7 个 evidence id →
+> probe actor（erc4626 / erc4626-silo / self-burn probe+pricing /
+> ethertoken / fluid-credit / dodo-v2），main.ts 构造 runtime 时注入。
+> 之前 erc4626 在 authority 阶段就 fail（恒定空 authority 是漏绑，
+> 不是能力结论）；现在会正确通过 caller-authority，随后在 revm
+> transport 的 effect-delta/observe/funded-override/verified-actor
+> 能力边界以 resource-limited fail-closed——错误分类被消除。
+> 合同测试：runtime 无 map 时 authority-failure、有 map 时
+> verified-actor 请求执行成功；build/suite 全绿。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
