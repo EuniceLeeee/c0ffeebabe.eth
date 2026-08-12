@@ -80,6 +80,23 @@
   自己在 local reth 上测一遍 batched vs parallel。证据：`test/batched-transport-parity.ts`，分支
   `fable/adapter-family-line`。
 
+### D-008 | 2026-08-12 | ✅ | 活动型 Family 有意保持 append-only，不追求协议解析大全式完整性
+- **Decision:** astra-multitoken、eigenpie、erc4626-silo-redeem、ethertoken-native-redeem、
+  metronome-hgusdc、curve-underlying、dodo-v2 这 7 个仅以 observed-call/landed-log 为 discovery 证据的
+  Family，**不开发 complete-snapshot bootstrap 语义**，按 MEV 范围有意保持 append-only /
+  positive-only：第一次观察到 call/log 即准入，之后永不因"不在快照清单"被 tombstone。
+- **Why:** 本窗口是 MEV searcher，不是协议解析大全。没被观察到、没交易过的池子不存在套利机会，
+  在机会空间里本来就不存在——"没列入"不是 coverage bug，是范围。graph 是对**已成功解析**的活跃池的
+  增量缓存；唯一需要 fail-closed 的失败类是协议解析失败（活跃池 decode/解析出错而漏进），该层已由
+  fail-closed 解码 + `semantic-mismatch` gate 守护。
+- **边界（不推翻宪法）：** complete-snapshot 的删除权（`complete-snapshot-omission`）仍只授予有穷尽
+  证据的 13 个 Family（address-surface / factory-log）；活动证据**不得**冒充 complete-snapshot 行使
+  删除权，否则会把"暂时安静、之后活跃"的池子误删——那是真实的 MEV 损失。mixed-mode 已实现该边界。
+- **Implication:** `s1-remaining-gate-designs.md` 与 canonical 文档中"7 族仍需 bootstrap 语义"的
+  blocker 表述撤回，改为既定设计；full-catalog complete-snapshot authority 按设计只覆盖 13 族。
+- **Meta:** 用户明确反对把 observed-call/landed-log 族纳入完整性清单（"我是 MEV 又不是协议解析大全"）；
+  此决定经对话确认后落库，任何人再提"给这 7 族补 bootstrap"先看本条。
+
 ### D-006 | 2026-07-23 | ✅ | Family 解耦不需要跨 family victim 传播（"P0" 撤销，四刀盖棺）
 - **Question:** family 架构下（每 family 独立 `deriveMids`），backrun lane 的 victim swap 是否需要向
   依赖同一底层状态的其他 family（如读 Curve 状态的 vault）做"跨 family 二阶传播"，否则粗扫漏枚举？

@@ -36,6 +36,13 @@
   prepare/commit 已过合同；这些族仍需要超出本节的新 incumbent 语义，
   不能通过放宽 factory-log 规则解决。
 
+> **2026-08-12 决定更新（D-008）：** 用户确认这 7 个活动型族**不再开发
+> bootstrap 语义**——按 MEV 范围有意保持 append-only / positive-only：
+> 第一次观察到 call/log 即准入，永不因"不在快照清单"被 tombstone；
+> 没交易过的池子不属于机会空间，不列入是范围而非 coverage bug。
+> 本节不再把"给 7 族补 bootstrap"当作待办；complete-snapshot 删除权
+> 按设计只覆盖有穷尽证据的 13 族。
+
 ### 目标模型
 
 新增 inventory incumbent kind：`factory-log-incumbent`。
