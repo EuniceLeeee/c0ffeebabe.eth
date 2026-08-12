@@ -19,10 +19,10 @@
         "compositionStatus": "[searcher/live] discovery continuity composition trusted",
         "writerReady": true,
         "checkpointCommitted": true,
+        "publisherPublished": true,
         "lifecycleFailures": [
           "[searcher/live] strict lifecycle failed for protocol:erc4626: strict Family lifecycle did not publish for protocol:erc4626: identity unresolved identity-work-unresolved:standalone-standard-behavior:authority-failure"
-        ],
-        "publisherPublished": true
+        ]
       }
     }
   },

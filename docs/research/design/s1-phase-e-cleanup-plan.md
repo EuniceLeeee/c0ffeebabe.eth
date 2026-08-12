@@ -138,6 +138,23 @@
 > sync → lifecycle → rev2 publish）；shadow suite / build /
 > regression sweep 全绿。剩余：节点验收重跑（challenger 600s）
 > 验证生产路径第一次 catalogRoot 提交。
+>
+> **第一个生产 catalogRoot（2026-08-12，`78934fdf` 节点机器证据）：**
+> challenger 600s dry-run 首次出现 `strict catalog live publisher
+> published`（evidence:
+> `docs/research/design/evidence/s1-node-acceptance-pipeline-78934fdf.json`）：
+> composition trusted、writer ready、checkpoint 提交至 revision 11；
+> fluid-dex 实例完成 strict identity（declared-revert quote 语义）
+> → instance → routes → pricing，经 complete-snapshot closure 提交；
+> searcher 无回退（priced 87.79%、edges 37172）。本轮修复链：
+> verified-candidate feed + interfaceFingerprints（`417c0d74`）、
+> proxy 匹配与 source-transition proof（`417c0d74`）、declared
+> revert/能力标注（`565b00e6`）、RPC 单次重试 + 小族优先
+> （`f47048c3`）、全 catalog family staging（`78934fdf`）。
+> 剩余唯一失败：erc4626 450 实例在 verified-actor/effect-delta
+> 能力边界 fail-closed（authority-failure），不是回归；需要 revm
+> transport 的 effect-delta + observe + funded override +
+> verified-actor 才能进入发布集（结构性能力缺口，另行立项）。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

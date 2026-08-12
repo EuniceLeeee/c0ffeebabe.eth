@@ -1883,8 +1883,21 @@ async function main(): Promise<void> {
           });
           console.log(
             `[searcher/live] strict catalog live publisher ` +
-              `${result.status}`,
+              `${result.status}` +
+              (result.status === "unresolved" ? `: ${result.reason}` : ""),
           );
+          if (result.status === "published") {
+            const committedRoot =
+              discoveryContinuityComposition.catalogRoot.capture();
+            if (committedRoot !== null) {
+              console.log(
+                `[searcher/live] strict catalog root committed: ` +
+                  `revision=${committedRoot.envelope.snapshot.revision} ` +
+                  `instances=${committedRoot.envelope.privateState.instances.size} ` +
+                  `pricing=${committedRoot.views.pricingByPublicationKey.size}`,
+              );
+            }
+          }
         };
       const loaded = await discoveryContinuityComposition.loadForRestart();
       discoveryContinuityStatus = loaded.status;
