@@ -106,6 +106,7 @@ export function createDurableDiscoveryContinuityComposition(
     verifyCanonicalSource: input.verifyCanonicalSource,
     assertGenerationCurrent: input.assertGenerationCurrent,
   });
+  catalogRoot.bindSnapshotInventoryClosureVerifier(closureVerifier);
   const composition: DurableDiscoveryContinuityComposition = Object.freeze({
     store,
     checkpointIssuer: store.takeCandidateIssuer(),

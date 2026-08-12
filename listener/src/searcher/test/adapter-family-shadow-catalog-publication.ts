@@ -498,10 +498,15 @@ async function main(): Promise<void> {
   assert.throws(() => root.stageRouteFamily({
     publication: publication2,
     inventoryMode: "complete-snapshot",
+  } as Parameters<
+    StrictAdapterFamilyShadowCatalogPublicationRoot["stageRouteFamily"]
+  >[0]), /requires a snapshot inventory closure receipt/);
+  assert.throws(() => root.stageRouteFamily({
+    publication: publication2,
     snapshotInventoryClosureReceipt: forgedClosureReceipt,
   } as Parameters<
     StrictAdapterFamilyShadowCatalogPublicationRoot["stageRouteFamily"]
-  >[0]), /requires append-only-delta/);
+  >[0]), /must not carry a closure receipt/);
   assertIdentitiesUnchanged(root, closureCastIdentities);
   const completeSnapshotStage = Object.freeze({
     ...stage2,
@@ -520,7 +525,7 @@ async function main(): Promise<void> {
     snapshotInventoryClosureReceipt: forgedClosureReceipt,
   } as Parameters<
     StrictAdapterFamilyShadowCatalogPublicationRoot["prepare"]
-  >[0]), /requires append-only-delta/);
+  >[0]), /requires a snapshot inventory closure verifier/);
   assertIdentitiesUnchanged(root, closureCastIdentities);
 
   const omissionIdentities = captureIdentities(committed2);

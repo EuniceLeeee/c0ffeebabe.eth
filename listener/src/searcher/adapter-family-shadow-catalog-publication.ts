@@ -61,6 +61,10 @@ import type { CanonicalEdgeId } from
   "./venues/blockscan-state-capability.js";
 import { hashCanonical } from "./venues/canonical-value.js";
 import {
+  AdapterFamilySnapshotInventoryClosureVerifier,
+  type AdapterFamilySnapshotInventoryClosureReceipt,
+} from "./adapter-family-snapshot-inventory-closure.js";
+import {
   type FamilyCapabilityCatalog,
   type LoadedFamilyPlugin,
   type LoadedFamilyBox,
@@ -103,7 +107,10 @@ export type StrictShadowCatalogFamilyStage = CatalogFamilyStage<
   StrictShadowCatalogRouteHandle,
   StrictShadowCatalogGraphEntry,
   PreparedPricingStateInstance
->;
+> & {
+  readonly snapshotInventoryClosureReceipt?:
+    AdapterFamilySnapshotInventoryClosureReceipt;
+};
 
 export type StrictShadowCatalogEnvelope =
   AdapterFamilyCatalogPublicationEnvelope<
@@ -436,6 +443,8 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
       PreparedPricingStateInstance
     >
   >;
+  #snapshotInventoryClosureVerifier:
+    AdapterFamilySnapshotInventoryClosureVerifier | null = null;
   readonly #store: AdapterFamilyCatalogPublicationStore<
     StrictShadowCatalogInstance,
     StrictShadowCatalogRouteHandle,
@@ -473,21 +482,51 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     return this.#committed;
   }
 
+  /**
+   * One-shot binding of the snapshot inventory closure verifier. Must be
+   * called before any complete-snapshot stage is prepared; a second binding
+   * fails closed so the authority cannot be swapped mid-lifecycle.
+   */
+  bindSnapshotInventoryClosureVerifier(
+    verifier: AdapterFamilySnapshotInventoryClosureVerifier,
+  ): void {
+    if (this.#snapshotInventoryClosureVerifier !== null) {
+      throw new Error(
+        "snapshot inventory closure verifier is already bound",
+      );
+    }
+    this.#snapshotInventoryClosureVerifier = verifier;
+  }
+
   /** Converts one real lifecycle publication into a strict staged shard. */
   stageRouteFamily(input: {
     readonly publication: AdapterFamilyPublication;
     readonly status?: "resolved" | "partial";
     readonly inventoryMode?: CatalogInventoryMode;
+    readonly snapshotInventoryClosureReceipt?:
+      AdapterFamilySnapshotInventoryClosureReceipt;
     readonly outcomeRefs?: readonly string[];
     readonly centralScores?: ReadonlyMap<string, number>;
     readonly terminalRemovals?: readonly CatalogTerminalRemovalProof[];
   }): StrictShadowCatalogFamilyStage {
-    if (
-      input.inventoryMode !== undefined &&
-      input.inventoryMode !== "append-only-delta"
-    ) {
+    const inventoryMode = input.inventoryMode ?? "append-only-delta";
+    if (inventoryMode === "complete-snapshot") {
+      if (input.snapshotInventoryClosureReceipt === undefined) {
+        throw new Error(
+          "complete-snapshot stage requires a snapshot inventory closure receipt",
+        );
+      }
+    } else if (inventoryMode !== "append-only-delta") {
       throw new Error(
         "strict shadow catalog currently requires append-only-delta inventory",
+      );
+    }
+    if (
+      inventoryMode === "append-only-delta" &&
+      input.snapshotInventoryClosureReceipt !== undefined
+    ) {
+      throw new Error(
+        "append-only stage must not carry a closure receipt",
       );
     }
     const family = this.#catalog.forFamily(input.publication.familyId);
@@ -510,7 +549,11 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
       domain,
       source: freezeSource(input.publication.source),
       status: input.status ?? "resolved",
-      inventoryMode: "append-only-delta",
+      inventoryMode,
+      ...(input.snapshotInventoryClosureReceipt === undefined
+        ? {}
+        : { snapshotInventoryClosureReceipt:
+            input.snapshotInventoryClosureReceipt }),
       instances: Object.freeze(instances),
       terminalRemovals: Object.freeze([...(input.terminalRemovals ?? [])]),
       outcomeRefs: Object.freeze([...(input.outcomeRefs ?? [])]),
@@ -794,9 +837,53 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
       throw new Error("shadow catalog prepare must use the captured publication");
     }
     for (const stage of input.stages) {
-      if (stage.inventoryMode !== "append-only-delta") {
+      if (
+        stage.inventoryMode === "complete-snapshot" &&
+        this.#snapshotInventoryClosureVerifier === null
+      ) {
+        throw new Error(
+          "complete-snapshot requires a snapshot inventory closure verifier",
+        );
+      }
+      if (
+        stage.inventoryMode !== "append-only-delta" &&
+        stage.inventoryMode !== "complete-snapshot"
+      ) {
         throw new Error(
           "strict shadow catalog currently requires append-only-delta inventory",
+        );
+      }
+    }
+    for (const stage of input.stages) {
+      if (stage.inventoryMode !== "complete-snapshot") continue;
+      if (this.#snapshotInventoryClosureVerifier === null) {
+        throw new Error(
+          "complete-snapshot requires a snapshot inventory closure verifier",
+        );
+      }
+      const resolved = this.#snapshotInventoryClosureVerifier
+        .consumeForCatalog(stage.snapshotInventoryClosureReceipt!, {
+          source: input.source,
+        });
+      const familyClosure = resolved.families.find((family) =>
+        family.familyId === stage.familyId
+      );
+      if (familyClosure === undefined) {
+        throw new Error(
+          `complete-snapshot closure lacks Family ${stage.familyId}`,
+        );
+      }
+      const stagedKeys = stage.instances.map((instance) =>
+        instance.instancePublicationKey
+      ).sort();
+      const admittedKeys = [...familyClosure.admittedInstancePublicationKeys]
+        .sort();
+      if (
+        stagedKeys.length !== admittedKeys.length ||
+        stagedKeys.some((key, index) => key !== admittedKeys[index])
+      ) {
+        throw new Error(
+          `complete-snapshot staged set mismatch for ${stage.familyId}`,
         );
       }
     }

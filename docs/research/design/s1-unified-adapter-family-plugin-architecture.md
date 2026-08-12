@@ -169,6 +169,26 @@ blocker 可执行化）：**
 - 该设计不替代实现或授权；后续实现 slice 必须逐项满足其验收条件并
   附合同测试。
 
+**2026-08-12 complete-snapshot verifier-gated consumption checkpoint
+（commit 见下，机制级实现；full-catalog 正向路径仍 blocker）：**
+
+- strict shadow catalog 现在接受 `complete-snapshot` stage：必须携带
+  snapshot inventory closure receipt，且 root 必须先一次性绑定
+  verifier（重复绑定 fail closed）；`prepare` 对每个 complete-snapshot
+  stage 消费 receipt（forge/foreign 即抛），并校验该 Family 在 resolved
+  closure 中、staged instance publication keys 与 closure admitted keys
+  精确一致，否则整批 fail closed；
+- `createDurableDiscoveryContinuityComposition` 把自身 closureVerifier
+  绑定到 catalogRoot（composition 内唯一绑定）；
+- 合同测试：shadow catalog 拒绝无 receipt 的 complete-snapshot stage、
+  拒绝 append-only 携带 receipt、未绑 verifier 时 prepare 拒绝；continuity
+  composition 用 forged receipt prepare 抛 `forged or foreign`、用真实
+  receipt + 空 staged 集 prepare 抛 `staged set mismatch`；
+- 证据：shadow suite（10 合同）全过 + regression sweep 11 组全过 +
+  完整 build；full-catalog 正向路径（真实 wsteth lifecycle publication +
+  closure receipt 成功 prepare/publish）仍缺 wsteth lifecycle fixture，
+  按 §1 设计继续。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - strict catalog prepare 内 complete-snapshot 一次性消费（受限于

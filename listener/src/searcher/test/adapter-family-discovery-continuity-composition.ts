@@ -5,6 +5,9 @@ import { join } from "node:path";
 import {
   createDurableDiscoveryContinuityComposition,
 } from "../adapter-family-discovery-continuity-composition.js";
+import type {
+  StrictShadowCatalogFamilyStage,
+} from "../adapter-family-shadow-catalog-publication.js";
 import {
   adapterFamilySnapshotInventoryHash,
   type AdapterFamilySnapshotInventoryClosureCandidateInput,
@@ -292,6 +295,44 @@ async function main(): Promise<void> {
       [WSTETH_FAMILY_ID, ["protocol:wsteth:other-instance"]],
     ]),
   }), /exact-set mismatch/);
+
+  const forgedClosureReceipt = Object.freeze({}) as
+    AdapterFamilySnapshotInventoryClosureReceipt;
+  const forgedSnapshotStage = Object.freeze({
+    familyId: WSTETH_FAMILY_ID,
+    domain: "protocol",
+    source: SOURCE,
+    status: "resolved",
+    inventoryMode: "complete-snapshot",
+    instances: Object.freeze([]),
+    terminalRemovals: Object.freeze([]),
+    outcomeRefs: Object.freeze([]),
+    snapshotInventoryClosureReceipt: forgedClosureReceipt,
+  }) as StrictShadowCatalogFamilyStage;
+  assert.throws(() => composition.catalogRoot.prepare({
+    source: SOURCE,
+    previous: null,
+    stages: Object.freeze([forgedSnapshotStage]),
+    sourceAnchors: Object.freeze([]),
+  }), /forged or foreign/);
+
+  const thirdCandidate = composition.closureIssuer.prepare(
+    candidateInput(SOURCE),
+  );
+  const thirdReceipt = await composition.closureVerifier.verifyAndIssue({
+    candidate: thirdCandidate,
+    checkpointReceipt,
+  });
+  const mismatchSnapshotStage = Object.freeze({
+    ...forgedSnapshotStage,
+    snapshotInventoryClosureReceipt: thirdReceipt,
+  }) as StrictShadowCatalogFamilyStage;
+  assert.throws(() => composition.catalogRoot.prepare({
+    source: SOURCE,
+    previous: null,
+    stages: Object.freeze([mismatchSnapshotStage]),
+    sourceAnchors: Object.freeze([]),
+  }), /staged set mismatch|exact-set/);
 
   const restarted = createDurableDiscoveryContinuityComposition({
     catalog,
