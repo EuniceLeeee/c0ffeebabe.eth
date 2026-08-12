@@ -32,6 +32,7 @@ export SEARCHER_ENABLE_MEV_SHARE=0
 export SEARCHER_SUBMIT_HASHONLY_MEVSHARE=0
 export SEARCHER_EVENTS_PATH="${outdir}/events.jsonl"
 export SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH="${outdir}/routes.jsonl"
+export SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH="${outdir}/discovery-checkpoint.json"
 for var in \
   MAINNET_RPC_URL SEARCHER_LIVE_RPC_URL SEARCHER_LIVE_WS_URL \
   SEARCHER_REVM_SIM_BIN SEARCHER_V2_LINEAGES_PATH \
@@ -121,6 +122,30 @@ record = {
     "routeEventLineCount": lines(os.path.join(outdir, "routes.jsonl")),
     "exitCode": int(open(os.path.join(outdir, "exit.txt")).read().strip()),
 }
+print(json.dumps(record))
+PY
+)"
+SERIAL_SIDE_JSON="$(python3 - "${side}" "${checked_out}" "${outdir}" "${SERIAL_SIDE_JSON}" <<'PY'
+import json, os, re, sys
+side, sha, outdir, record_json = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+record = json.loads(record_json)
+log_path = os.path.join(outdir, "run.log")
+pipeline = {}
+if os.path.exists(log_path):
+    for line in open(log_path, errors="replace"):
+        if "discovery continuity composition" in line:
+            pipeline["compositionStatus"] = line.strip()
+        if "discovery continuity inventory writer ready" in line:
+            pipeline["writerReady"] = True
+        if "discovery checkpoint inventory committed" in line:
+            pipeline["checkpointCommitted"] = True
+        if "strict catalog live publisher published" in line:
+            pipeline["publisherPublished"] = True
+        if "strict lifecycle failed for" in line:
+            pipeline.setdefault("lifecycleFailures", []).append(line.strip())
+        if "strict catalog publish failed" in line:
+            pipeline.setdefault("publishFailures", []).append(line.strip())
+record["pipeline"] = pipeline
 print(json.dumps(record))
 PY
 )"
