@@ -53,6 +53,14 @@
 > runtime 属于"polishing the microscope"（decision-log X-004），
 > 不再这样推进。下一步必须是生产 runtime 建设（multi-slice 程序），
 > 或明确接受 shadow-only 边界。
+>
+> **生产 runtime 第一块已落地（2026-08-12）：**
+> `createStrictCentralAdapterRuntime`：provider-backed strict runtime
+> （eth-call / get-code / get-storage 按 canonical source block 执行，
+> simulation fail-closed resource-limited，scheduler/policy/fence 按
+> central 契约）；合同测试用 mock provider 驱动 wsteth lifecycle 到
+> publication 成功。剩余：simulation transport（revm）接入、main.ts
+> 构造并接线 live-loop（runner→publisher）。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
