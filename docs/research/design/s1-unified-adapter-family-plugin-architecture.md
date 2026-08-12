@@ -383,6 +383,21 @@ production 侧 CAS 写入器合同；live coordinator call-site 为下一 slice�
 - 证据：shadow suite（13 合同）全过 + regression sweep 12 组全过 +
   完整 build；节点机器证据随下一次 dry-run 追加。
 
+**2026-08-12 node enumerator + writer dry-run 机器证据（SSM
+`94168aa1-ce3c-4b37-b3c2-aa2eb4a28c2c`，fixture-backed，非 live
+cutover）：**
+
+- 实例 `i-0ff908dedeec9ebc6`，impl SHA `1656583d937db65b0a3d70e0483d69dee6082ac0`；
+  enumerator 还原 rev1 → writer 推进 rev1→rev2 → enumerator 读回
+  rev2 全部 pass；catalogHash 与 wsteth/univ2 inventoryHash 与本地
+  逐字节一致，`writerStatus=committed` / `writerRevision=2`；
+- 证据记录
+  `docs/research/design/evidence/s1-node-enumerator-dry-run-94168aa1-….json`
+  已提交；早期 enumerator-only 记录（SSM `5f6aba8c…`）保留，verifier
+  向后兼容两种格式；
+- 未触碰 `/opt/MEV` live searcher，无 live/签名/广播；fixture-backed
+  范围不变，live discovery 输出仍待接线。
+
 **2026-08-12 活动型 Family append-only 决定 checkpoint（D-008，
 验收目标修正，非代码变更）：**
 
