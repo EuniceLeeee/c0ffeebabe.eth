@@ -77,6 +77,18 @@
 > 接，显式 fail-closed no-op，不伪造 publication）。剩余：把
 > mempool/discovery 观测转成 UnifiedObservation 喂给 runner 并接到
 > publisher（live observation feed 接线）。
+>
+> **管线完成（2026-08-12）：** `deriveLiveDiscoveryAddressSurfaceObservations`
+> （evidence cache → address-surface UnifiedObservation，interface
+> fingerprint 从 family 声明的 surface 投影、identity 阶段链上再验证）
+> 已落地；main.ts 的 `publishStrictCatalogFromLiveDiscovery` 现在真正
+> 执行 observations → runStrictFamilyLifecycle → publishStrictCatalog
+> FromLifecycle，`onPublicationApplied` 先 sync checkpoint 再 publish
+> （顺序保证 enumerator 看到新 inventory）。端到端合同测试：fixture
+> live publication → observations → lifecycle（provider-backed runtime）
+> → publisher → committed rev1 with pricing 通过。四步管线在合同/切片
+> 层面全部闭环；production 实跑（节点 composition env 开启后 live-loop
+> 自动执行）是下一步机器验收。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

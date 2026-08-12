@@ -86,6 +86,7 @@ import {
 } from "./adapter-family-discovery-inventory-writer.js";
 import {
   deriveLiveDiscoveryCheckpointInventory,
+  deriveLiveDiscoveryAddressSurfaceObservations,
 } from "./live-discovery-checkpoint-inventory.js";
 import {
   resolveStrictCatalogConsumerDiagnostic,
@@ -99,6 +100,12 @@ import {
 import {
   createRevmStrictSimulationTransport,
 } from "./revm-strict-simulation-transport.js";
+import {
+  runStrictFamilyLifecycle,
+} from "./strict-family-lifecycle-runner.js";
+import {
+  publishStrictCatalogFromLifecycle,
+} from "./strict-catalog-live-publisher.js";
 import type { CentralAdapterRuntime } from
   "./adapter-work-intent.js";
 import {
@@ -1796,12 +1803,61 @@ async function main(): Promise<void> {
           ) {
             return;
           }
-          // Live observation feed (mempool/discovery -> UnifiedObservation
-          // per family) is the next wiring point; until it lands this stays
-          // an explicit fail-closed no-op and never fabricates publications.
+          const envelope = liveDiscovery.capture();
+          if (envelope === null) return;
+          const cursor = envelope.protocolObservedCursor;
+          if (cursor.completeThroughHash === null) return;
+          const source = Object.freeze({
+            number: cursor.completeThroughBlock,
+            hash: cursor.completeThroughHash,
+            generation: 0,
+          });
+          const observations =
+            deriveLiveDiscoveryAddressSurfaceObservations({
+              publication: envelope,
+              source,
+              catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+              familyIdForAdapter: (adapterId) => {
+                try {
+                  return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+                    .ownerOfAction(adapterId);
+                } catch {
+                  return null;
+                }
+              },
+            });
+          if (observations.size === 0) return;
+          const publications = [];
+          for (const [familyId, familyObservations] of observations) {
+            try {
+              publications.push(Object.freeze({
+                familyId,
+                publication: await runStrictFamilyLifecycle({
+                  catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+                  familyId,
+                  source,
+                  observations: familyObservations,
+                  runtime: strictCentralRuntime,
+                }),
+              }));
+            } catch (error) {
+              console.warn(
+                "[searcher/live] strict lifecycle failed for " +
+                  `${familyId}: ` +
+                  `${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
+          }
+          if (publications.length === 0) return;
+          const result = await publishStrictCatalogFromLifecycle({
+            composition: discoveryContinuityComposition,
+            catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+            source,
+            publications: Object.freeze(publications),
+          });
           console.log(
-            "[searcher/live] strict catalog live publisher: " +
-              "observation feed pending",
+            `[searcher/live] strict catalog live publisher ` +
+              `${result.status}`,
           );
         };
       const loaded = await discoveryContinuityComposition.loadForRestart();
@@ -2707,18 +2763,18 @@ async function main(): Promise<void> {
     onPublicationApplied(next) {
       strategyViews = next.strategyViews;
       dexGraphCoverage = { ...next.dexGraphCoverage };
-      if (syncLiveDiscoveryCheckpointInventory !== null) {
-        void syncLiveDiscoveryCheckpointInventory().catch((error) => {
+      if (syncLiveDiscoveryCheckpointInventory !== null ||
+          publishStrictCatalogFromLiveDiscovery !== null) {
+        void (async () => {
+          if (syncLiveDiscoveryCheckpointInventory !== null) {
+            await syncLiveDiscoveryCheckpointInventory();
+          }
+          if (publishStrictCatalogFromLiveDiscovery !== null) {
+            await publishStrictCatalogFromLiveDiscovery();
+          }
+        })().catch((error) => {
           console.warn(
-            "[searcher/live] discovery checkpoint inventory sync failed: " +
-              `${error instanceof Error ? error.message : String(error)}`,
-          );
-        });
-      }
-      if (publishStrictCatalogFromLiveDiscovery !== null) {
-        void publishStrictCatalogFromLiveDiscovery().catch((error) => {
-          console.warn(
-            "[searcher/live] strict catalog publish failed: " +
+            "[searcher/live] strict discovery publish chain failed: " +
               `${error instanceof Error ? error.message : String(error)}`,
           );
         });

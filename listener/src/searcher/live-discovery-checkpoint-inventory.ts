@@ -10,6 +10,8 @@ import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import type { FamilyId } from
   "./venues/adapter-family-identifiers.js";
+import type { UnifiedObservation } from
+  "./venues/adapter-family-plugin.js";
 import type { FamilyCapabilityCatalog } from
   "./venues/family-capability-catalog.js";
 import type { DiscoverySourceKind } from
@@ -147,4 +149,64 @@ export function deriveLiveDiscoveryCheckpointInventory(input: {
     })),
   );
   return Object.freeze({ watermarks, inventoryFamilies });
+}
+
+/**
+ * Pipeline step 4 feed: derive address-surface UnifiedObservations per
+ * strict Family from the live protocol evidence cache (code hash /
+ * implementation word / checked-at block), for address-surface eligible
+ * families only. Families without observations yield no entries; the
+ * caller feeds these into runStrictFamilyLifecycle and then the live
+ * publisher.
+ */
+export function deriveLiveDiscoveryAddressSurfaceObservations(input: {
+  readonly publication: LiveDiscoveryPublicationState;
+  readonly source: CanonicalSource;
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly familyIdForAdapter: (adapterId: string) => FamilyId | null;
+}): ReadonlyMap<FamilyId, readonly UnifiedObservation[]> {
+  const eligible = new Set<FamilyId>();
+  for (const family of input.catalog.listAll()) {
+    if (!("discovery" in family.plugin)) continue;
+    if (
+      family.plugin.discovery.sources.includes("address-surface") &&
+      (family.plugin.discovery.addressSurfaces?.length ?? 0) > 0
+    ) {
+      eligible.add(family.plugin.manifest.familyId);
+    }
+  }
+  const byFamily = new Map<FamilyId, UnifiedObservation[]>();
+  for (const [address, entry] of input.publication.protocolEvidenceCache
+    .addressEntries) {
+    if (entry.candidate === null) continue;
+    const familyId = input.familyIdForAdapter(entry.adapterId);
+    if (familyId === null || !eligible.has(familyId)) continue;
+    const family = input.catalog.forStrictFamily(familyId);
+    const interfaceFingerprints = "discovery" in family.plugin
+      ? family.plugin.discovery.addressSurfaces?.filter(
+          (pattern) => pattern.kind === "interface",
+        ).map((pattern) => pattern.fingerprint)
+      : undefined;
+    const observation: UnifiedObservation = Object.freeze({
+      kind: "address-surface",
+      source: input.source,
+      address: address.toLowerCase(),
+      codeHash: entry.codeHash.toLowerCase(),
+      implementationWord: entry.implementationWord.toLowerCase(),
+      ...(interfaceFingerprints === undefined ||
+          interfaceFingerprints.length === 0
+        ? {}
+        : { interfaceFingerprints: Object.freeze(interfaceFingerprints) }),
+    });
+    const existing = byFamily.get(familyId);
+    if (existing === undefined) {
+      byFamily.set(familyId, [observation]);
+    } else {
+      existing.push(observation);
+    }
+  }
+  for (const observations of byFamily.values()) {
+    Object.freeze(observations);
+  }
+  return byFamily;
 }
