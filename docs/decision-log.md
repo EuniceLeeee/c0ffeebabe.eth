@@ -113,6 +113,20 @@
 - **Meta:** 2026-08-12 用户原话："我全部授权 你执行到Phase E之前都不用问我"。此条是
   Rule 1 之外的一次性范围授权；任何超出 envelope 的广播/签名仍须新的明确 OK。
 
+### D-010 | 2026-08-12 | ✅ | 串行 A/B 证据被接受为 adapter 架构不劣于 baseline 的依据
+- **Decision:** 用户接受 600s 串行 dry-run A/B 作为证据：challenger
+  `552c220e` vs baseline `4265971d` 在 priced 覆盖（87.61% vs 87.59%）、
+  graph edges（36922 vs 36918）、head 吞吐（19 vs 15）、p95 timing
+  （114.5s vs 134.7s）上均不劣于 baseline，判定"adapter 架构更优/无回退"，
+  作为继续推进（solver 真实接线 → 默认 authority 评估 → Phase E）的依据。
+- **Scope/边界:** 该接受**不豁免** systemic-live gate 的 fail-closed 语义：
+  串行证据在 gate 内仍为 `relative_diagnostic_only`，cutover-readiness 不会
+  虚报 ready；任何 production 行为变更（默认 authority、删除 legacy）仍
+  先 script-enforced dry-run 验证，Phase E 删除范围仍需逐项确认。
+- **Meta:** 用户原话："这个已经能说明我们adapter架构更优了……没有就可以进入到
+  Phase E 了"。证据文件：`docs/research/design/evidence/s1-node-serial-dry-run-latest.json`
+  与 `s1-node-serial-systemic-live-latest.json`。
+
 ### D-006 | 2026-07-23 | ✅ | Family 解耦不需要跨 family victim 传播（"P0" 撤销，四刀盖棺）
 - **Question:** family 架构下（每 family 独立 `deriveMids`），backrun lane 的 victim swap 是否需要向
   依赖同一底层状态的其他 family（如读 Curve 状态的 vault）做"跨 family 二阶传播"，否则粗扫漏枚举？
