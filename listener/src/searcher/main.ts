@@ -1848,7 +1848,13 @@ async function main(): Promise<void> {
             }
           }
           const publications = [];
-          for (const [familyId, familyObservations] of observations) {
+          // Small families first: a handful of verified nominations (for
+          // example fluid-dex) publish before the large erc4626 cohort
+          // saturates the node RPC with base identity reads.
+          const familyEntries = [...observations.entries()].sort(
+            (left, right) => left[1].length - right[1].length,
+          );
+          for (const [familyId, familyObservations] of familyEntries) {
             try {
               publications.push(Object.freeze({
                 familyId,

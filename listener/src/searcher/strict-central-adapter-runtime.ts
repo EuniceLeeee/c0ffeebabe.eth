@@ -134,42 +134,43 @@ async function executeRequest(
 ): Promise<AdapterRequestResult> {
   try {
     if (request.kind === "eth-call") {
-      try {
-        const data = await provider.call({
-          to: request.to,
-          data: request.data,
-        }, source.number);
-        return issueResult({
-          id: request.id,
-          source,
-          completion: "returned" as const,
-          data,
-          provenanceKind: "provider-eth-call",
-          request,
-        });
-      } catch (error) {
-        // A family-declared revert is evidence, not a transport failure.
-        // Surface the revert payload as reverted-as-declared exactly like the
-        // legacy work runtime so identity decode can reject or accept on
-        // family semantics (for example FluidDexSwapResult quote payloads).
-        if (request.completion === "return-or-revert-data") {
-          const revertData = extractStrictRevertData(error);
-          if (revertData !== null) {
-            return issueResult({
-              id: request.id,
-              source,
-              completion: "reverted-as-declared" as const,
-              data: revertData,
-              provenanceKind: "provider-eth-call",
-              request,
-            });
+      const outcome = await withRpcRetry(async () => {
+        try {
+          const data = await provider.call({
+            to: request.to,
+            data: request.data,
+          }, source.number);
+          return { completion: "returned" as const, data };
+        } catch (error) {
+          // A family-declared revert is evidence, not a transport failure.
+          // Surface the revert payload as reverted-as-declared exactly like
+          // the legacy work runtime so identity decode can reject or accept
+          // on family semantics (for example FluidDexSwapResult quotes).
+          if (request.completion === "return-or-revert-data") {
+            const revertData = extractStrictRevertData(error);
+            if (revertData !== null) {
+              return {
+                completion: "reverted-as-declared" as const,
+                data: revertData,
+              };
+            }
           }
+          throw error;
         }
-        throw error;
-      }
+      });
+      return issueResult({
+        id: request.id,
+        source,
+        completion: outcome.completion,
+        data: outcome.data,
+        provenanceKind: "provider-eth-call",
+        request,
+      });
     }
     if (request.kind === "get-code") {
-      const data = await provider.getCode(request.address, source.number);
+      const data = await withRpcRetry(() =>
+        provider.getCode(request.address, source.number),
+      );
       return issueResult({
         id: request.id,
         source,
@@ -180,11 +181,11 @@ async function executeRequest(
       });
     }
     if (request.kind === "get-storage") {
-      const data = await provider.getStorage(
+      const data = await withRpcRetry(() => provider.getStorage(
         request.address,
         request.slot,
         source.number,
-      );
+      ));
       return issueResult({
         id: request.id,
         source,
@@ -249,6 +250,27 @@ async function executeRequest(
       source: Object.freeze(source),
       failure: "rpc" as const,
     });
+  }
+}
+
+function isCallException(error: unknown): boolean {
+  return typeof error === "object" && error !== null &&
+    (error as { readonly code?: unknown }).code === "CALL_EXCEPTION";
+}
+
+/**
+ * One bounded retry for transport-level RPC failures (timeouts, node
+ * overload, rate limits). Declared reverts never retry: they are evidence.
+ * A CALL_EXCEPTION on a return-data request is a semantic revert and is also
+ * not retried, so a genuinely reverting read cannot double RPC load.
+ */
+async function withRpcRetry<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (isCallException(error)) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    return await work();
   }
 }
 
