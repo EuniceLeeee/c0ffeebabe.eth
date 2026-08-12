@@ -22,6 +22,10 @@ import {
 } from "../venues/production-family-composition.js";
 import { WSTETH_FAMILY_ID } from
   "../venues/protocols/wsteth-family/manifest.js";
+import { ASTRA_MULTITOKEN_FAMILY_ID } from
+  "../venues/protocols/astra-multitoken-family/manifest.js";
+import { ASTRA_MULTITOKEN_CHANGE_SELECTOR } from
+  "../venues/protocols/astra-multitoken-family/codec.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_700_444,
@@ -34,6 +38,7 @@ const SOURCE_NEXT: CanonicalSource = Object.freeze({
   generation: 45,
 });
 const WSTETH = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
+const ASTRA_POOL = `0x${"61".repeat(20)}`;
 const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
 const EVENT_SOURCE_IDS: ReadonlySet<string> = new Set([
   "factory-log",
@@ -73,7 +78,10 @@ function inventoryWith(
 ): readonly AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily[] {
   return Object.freeze([
     ...emptyCheckpointInventoryFamilies(discoveryFamilyIds())
-      .filter((family) => family.familyId !== WSTETH_FAMILY_ID),
+      .filter((family) =>
+        family.familyId !== WSTETH_FAMILY_ID &&
+        family.familyId !== ASTRA_MULTITOKEN_FAMILY_ID
+      ),
     Object.freeze({
       familyId: WSTETH_FAMILY_ID,
       incumbents: Object.freeze([Object.freeze({
@@ -88,6 +96,19 @@ function inventoryWith(
           interfaceFingerprints: Object.freeze([
             "wsteth-conversion-surface-v1",
           ]),
+        }),
+      })]),
+    }),
+    Object.freeze({
+      familyId: ASTRA_MULTITOKEN_FAMILY_ID,
+      incumbents: Object.freeze([Object.freeze({
+        inventoryKey: ASTRA_POOL.toLowerCase(),
+        address: ASTRA_POOL,
+        currentSurface: Object.freeze({
+          kind: "call" as const,
+          source: canonical,
+          target: ASTRA_POOL,
+          data: ASTRA_MULTITOKEN_CHANGE_SELECTOR,
         }),
       })]),
     }),
@@ -176,10 +197,22 @@ async function main(): Promise<void> {
       wstethRow.incumbents[0]?.currentSurface.source.number,
       SOURCE_NEXT.number,
     );
+    const astraRow = snapshot.inventoryFamilies.find(
+      (family) => family.familyId === ASTRA_MULTITOKEN_FAMILY_ID,
+    )!;
+    assert.equal(astraRow.inventoryCount, 1);
+    assert.equal(astraRow.incumbents[0]?.address, ASTRA_POOL.toLowerCase());
+    assert.equal(astraRow.incumbents[0]?.currentSurface.kind, "call");
     const restored = await h.enumerator.enumerate(SOURCE_NEXT);
     assert.equal(
       restored.families.find((family) => family.familyId === WSTETH_FAMILY_ID)
         ?.inventoryCount,
+      1,
+    );
+    assert.equal(
+      restored.families.find(
+        (family) => family.familyId === ASTRA_MULTITOKEN_FAMILY_ID,
+      )?.inventoryCount,
       1,
     );
 
@@ -206,6 +239,40 @@ async function main(): Promise<void> {
     assert.equal(badWrite.status, "unresolved");
     assert(badWrite.status === "unresolved");
     assert.match(badWrite.reason, /missing Family rows/);
+    assert.equal(h.store.capture(), before);
+
+    // Invalid observed-call surface (non-hex data) must fail closed.
+    const badSurfaceSource = Object.freeze({
+      ...SOURCE_NEXT,
+      number: SOURCE_NEXT.number + 1,
+      hash: `0x${"54".repeat(32)}`,
+      generation: 47,
+    });
+    const badSurfaceWrite = await h.writer.write({
+      source: badSurfaceSource,
+      watermarks: watermarks(badSurfaceSource),
+      inventoryFamilies: Object.freeze([
+        ...inventoryWith(badSurfaceSource).filter(
+          (family) => family.familyId !== ASTRA_MULTITOKEN_FAMILY_ID,
+        ),
+        Object.freeze({
+          familyId: ASTRA_MULTITOKEN_FAMILY_ID,
+          incumbents: Object.freeze([Object.freeze({
+            inventoryKey: ASTRA_POOL.toLowerCase(),
+            address: ASTRA_POOL,
+            currentSurface: Object.freeze({
+              kind: "call" as const,
+              source: badSurfaceSource,
+              target: ASTRA_POOL,
+              data: "0xzz",
+            }),
+          })]),
+        }),
+      ]),
+    });
+    assert.equal(badSurfaceWrite.status, "unresolved");
+    assert(badSurfaceWrite.status === "unresolved");
+    assert.match(badSurfaceWrite.reason, /data must be hex/);
     assert.equal(h.store.capture(), before);
 
     // A non-successor source must also fail closed.

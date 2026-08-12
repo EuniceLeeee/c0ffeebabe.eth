@@ -185,7 +185,7 @@ function testCrossFamilyKeysMayRepeatAndForeignSurfaceKindFails(): void {
           inventoryKey: "pool:a",
           address,
           currentSurface: Object.freeze({
-            kind: "call",
+            kind: "funding",
             source: SOURCE,
             target: address,
             data: "0x",
@@ -193,7 +193,74 @@ function testCrossFamilyKeysMayRepeatAndForeignSurfaceKindFails(): void {
         }],
       },
     ],
-  }), /snapshot inventory requires an address-surface or factory-log surface/);
+  }), /snapshot inventory requires an address-surface, factory-log, observed-call or landed-log surface/);
+
+  // observed-call and landed-log surfaces are valid incumbent evidence and
+  // canonicalize (lowercase address, hex data, frozen topics).
+  const observed = enumeratePointInTimeInventory({
+    source: SOURCE,
+    families: [
+      {
+        familyId: FAMILY_A,
+        incumbents: [{
+          inventoryKey: "pool:observed",
+          address,
+          currentSurface: Object.freeze({
+            kind: "call",
+            source: SOURCE,
+            target: address,
+            data: "0xABCD",
+          }),
+        }],
+      },
+    ],
+  });
+  const observedSurface = observed.families[0]!.incumbents[0]!.currentSurface;
+  assert.equal(observedSurface.kind, "call");
+  assert.equal(
+    observedSurface.target,
+    address.toLowerCase(),
+  );
+  assert.equal(observedSurface.data, "0xabcd");
+  const landed = enumeratePointInTimeInventory({
+    source: SOURCE,
+    families: [
+      {
+        familyId: FAMILY_A,
+        incumbents: [{
+          inventoryKey: "pool:landed",
+          address,
+          currentSurface: Object.freeze({
+            kind: "log",
+            source: SOURCE,
+            address,
+            topics: Object.freeze([`0x${"aa".repeat(32)}`]),
+            data: "0x",
+          }),
+        }],
+      },
+    ],
+  });
+  assert.equal(landed.families[0]!.incumbents[0]!.currentSurface.kind, "log");
+  assert.throws(() => enumeratePointInTimeInventory({
+    source: SOURCE,
+    families: [
+      {
+        familyId: FAMILY_A,
+        incumbents: [{
+          inventoryKey: "pool:bad-log",
+          address,
+          currentSurface: Object.freeze({
+            kind: "log",
+            source: SOURCE,
+            address,
+            topics: Object.freeze([]),
+            data: "0x",
+          }),
+        }],
+      },
+    ],
+  }), /topics must be non-empty/);
 }
 
 function testEmptyFamilyYieldsCanonicalZeroInventory(): void {

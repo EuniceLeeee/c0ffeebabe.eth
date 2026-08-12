@@ -27,7 +27,9 @@ const EVENT_SOURCE_IDS: ReadonlySet<DiscoverySourceKind> = new Set([
 
 export type AdapterFamilySnapshotInventoryObservation =
   | Extract<UnifiedObservation, { readonly kind: "address-surface" }>
-  | Extract<UnifiedObservation, { readonly kind: "factory-log" }>;
+  | Extract<UnifiedObservation, { readonly kind: "factory-log" }>
+  | Extract<UnifiedObservation, { readonly kind: "call" }>
+  | Extract<UnifiedObservation, { readonly kind: "log" }>;
 
 export interface AdapterFamilySnapshotInventoryClosureBinding {
   readonly chainId: string;
@@ -1078,9 +1080,15 @@ function freezeSurface(
   if (surface === null || typeof surface !== "object") {
     throw new Error("snapshot inventory requires a current incumbent surface");
   }
-  if (surface.kind !== "address-surface" && surface.kind !== "factory-log") {
+  if (
+    surface.kind !== "address-surface" &&
+    surface.kind !== "factory-log" &&
+    surface.kind !== "call" &&
+    surface.kind !== "log"
+  ) {
     throw new Error(
-      "snapshot inventory requires an address-surface or factory-log surface",
+      "snapshot inventory requires an address-surface, factory-log, " +
+        "observed-call or landed-log surface",
     );
   }
   assertSameSource(surface.source, source);
@@ -1123,6 +1131,49 @@ function freezeSurface(
       data: surface.data.toLowerCase(),
     });
   }
+  if (surface.kind === "call") {
+    const target = canonicalAddress(surface.target);
+    if (target !== address) {
+      throw new Error("snapshot inventory surface address mismatch");
+    }
+    if (typeof surface.data !== "string" || !/^0x[0-9a-fA-F]*$/.test(
+      surface.data,
+    )) {
+      throw new Error("snapshot call surface data must be hex");
+    }
+    return Object.freeze({
+      kind: "call" as const,
+      source,
+      target,
+      ...(surface.sender === undefined
+        ? {}
+        : { sender: canonicalAddress(surface.sender) }),
+      data: surface.data.toLowerCase(),
+    });
+  }
+  if (surface.kind === "log") {
+    if (canonicalAddress(surface.address) !== address) {
+      throw new Error("snapshot inventory surface address mismatch");
+    }
+    if (!Array.isArray(surface.topics) || surface.topics.length === 0) {
+      throw new Error("snapshot log surface topics must be non-empty");
+    }
+    const topics = surface.topics.map((value) =>
+      canonicalHash(value, "snapshot log topic")
+    );
+    if (typeof surface.data !== "string" || !/^0x[0-9a-fA-F]*$/.test(
+      surface.data,
+    )) {
+      throw new Error("snapshot log surface data must be hex");
+    }
+    return Object.freeze({
+      kind: "log" as const,
+      source,
+      address,
+      topics: Object.freeze(topics),
+      data: surface.data.toLowerCase(),
+    });
+  }
   if (canonicalAddress(surface.address) !== address) {
     throw new Error("snapshot inventory surface address mismatch");
   }
@@ -1157,6 +1208,22 @@ function currentSurfaceFingerprint(
       poolKeyProjection: surface.poolKeyProjection,
       lastFactoryLogBlock: surface.lastFactoryLogBlock,
       topic: surface.topic,
+      topics: surface.topics,
+      data: surface.data,
+    });
+  }
+  if (surface.kind === "call") {
+    return hashCanonical({
+      kind: surface.kind,
+      target: surface.target,
+      ...(surface.sender === undefined ? {} : { sender: surface.sender }),
+      data: surface.data,
+    });
+  }
+  if (surface.kind === "log") {
+    return hashCanonical({
+      kind: surface.kind,
+      address: surface.address,
       topics: surface.topics,
       data: surface.data,
     });

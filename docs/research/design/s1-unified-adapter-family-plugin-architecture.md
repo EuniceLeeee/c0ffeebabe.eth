@@ -398,6 +398,28 @@ cutover）：**
 - 未触碰 `/opt/MEV` live searcher，无 live/签名/广播；fixture-backed
   范围不变，live discovery 输出仍待接线。
 
+**2026-08-12 observed-call/landed-log incumbent surface checkpoint
+（commit 见下，活动族 durable inventory 基座；live call-site 仍为
+下一 slice）：**
+
+- `AdapterFamilySnapshotInventoryObservation` 扩展为四种 surface：
+  address-surface / factory-log / call（observed-call）/ log
+  （landed-log）；call/log 复用现有 `UnifiedObservation` 变体，无需新
+  证据字段（source 块号即最后观察块）；
+- freeze/指纹/hash 统一 canonical 化：address/target 小写、data hex
+  小写、log topics 非空 hex32、block 不得超前 source；未知 kind、
+  非 hex data、空 topics、地址不闭合全部 fail-closed；
+- closure verifier 的 bootstrap 准入不变：call/log 族仍不是
+  complete-snapshot eligible（D-008）；writer/enumerator/checkpoint
+  现在可持久化并还原活动族的 durable incumbent inventory；
+- 合同测试：writer 对 astra observed-call incumbent rev1→rev2 提交 +
+  enumerator 还原；point-in-time enumerator 接受并 canonical 化
+  call/log、拒绝空 topics/非 hex data/未知 kind；
+- 意义：live discovery 只需提供 call/log 观测（或其投影）即可经
+  writer 落 checkpoint；live coordinator call-site 是下一 slice；
+- 证据：shadow suite（13 合同）全过 + regression sweep 12 组全过 +
+  完整 build。
+
 **2026-08-12 活动型 Family append-only 决定 checkpoint（D-008，
 验收目标修正，非代码变更）：**
 
