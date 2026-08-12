@@ -61,6 +61,12 @@
 > central 契约）；合同测试用 mock provider 驱动 wsteth lifecycle 到
 > publication 成功。剩余：simulation transport（revm）接入、main.ts
 > 构造并接线 live-loop（runner→publisher）。
+>
+> **生产 runtime 第二块（2026-08-12）：** simulation transport 合同面
+> 已落地（`StrictSimulationTransport`）：注入 simulator 后
+> state-override/effect-delta simulation 返回 data + effects，缺省
+> 仍 fail-closed resource-limited；合同测试覆盖两分支。剩余：revm
+> backend 实现该 transport、main.ts 构造 runtime 并接线 live-loop。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

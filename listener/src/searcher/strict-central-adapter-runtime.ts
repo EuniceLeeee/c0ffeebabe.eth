@@ -21,6 +21,33 @@ interface StrictProvider {
   getStorage(address: string, slot: string, block?: number): Promise<string>;
 }
 
+export interface StrictSimulationTransport {
+  simulate(input: {
+    readonly request: Extract<
+      AdapterRequest,
+      {
+        readonly kind:
+          | "state-override-simulation"
+          | "effect-delta-simulation";
+      }
+    >;
+    readonly source: CanonicalSource;
+  }): Promise<{
+    readonly data: string;
+    readonly effects?: {
+      readonly tokenDeltas?: readonly {
+        readonly token: string;
+        readonly account: string;
+        readonly delta: bigint;
+      }[];
+      readonly nativeDeltas?: readonly {
+        readonly account: string;
+        readonly delta: bigint;
+      }[];
+    };
+  }>;
+}
+
 /**
  * Production-shaped strict central adapter runtime (Phase E pipeline
  * prerequisite). Identity/current-state reads (eth-call, get-code,
@@ -35,6 +62,7 @@ export function createStrictCentralAdapterRuntime(input: {
     StrictProvider,
     "call" | "getCode" | "getStorage"
   >;
+  readonly simulator?: StrictSimulationTransport;
   readonly generationFence: AdapterGenerationFence;
 }): CentralAdapterRuntime {
   let now = Date.now();
@@ -54,7 +82,12 @@ export function createStrictCentralAdapterRuntime(input: {
           }
         },
         execute: async (execution) => Promise.all(execution.requests.map(
-          (request) => executeRequest(input.provider, request, execution.source),
+          (request) => executeRequest(
+            input.provider,
+            input.simulator,
+            request,
+            execution.source,
+          ),
         )),
         sealStaticEvidenceReuseProof: () => ({
           proofHash: "ab".repeat(32),
@@ -95,6 +128,7 @@ export function createStrictCentralAdapterRuntime(input: {
 
 async function executeRequest(
   provider: Pick<StrictProvider, "call" | "getCode" | "getStorage">,
+  simulator: StrictSimulationTransport | undefined,
   request: AdapterRequest,
   source: CanonicalSource,
 ): Promise<AdapterRequestResult> {
@@ -137,6 +171,37 @@ async function executeRequest(
         data,
         provenanceKind: "provider-get-storage",
         request,
+      });
+    }
+    if (
+      request.kind === "state-override-simulation" ||
+      request.kind === "effect-delta-simulation"
+    ) {
+      if (simulator === undefined) {
+        return Object.freeze({
+          id: request.id,
+          ok: false as const,
+          source: Object.freeze(source),
+          failure: "resource-limited" as const,
+        });
+      }
+      const simulated = await simulator.simulate({
+        request,
+        source,
+      });
+      return Object.freeze({
+        id: request.id,
+        ok: true as const,
+        source: Object.freeze(source),
+        provenance: Object.freeze({
+          kind: "strict-simulation-transport",
+          fingerprint: "9".repeat(64),
+        }),
+        completion: "returned" as const,
+        data: simulated.data,
+        ...(simulated.effects === undefined
+          ? {}
+          : { effects: Object.freeze(simulated.effects) }),
       });
     }
     return Object.freeze({

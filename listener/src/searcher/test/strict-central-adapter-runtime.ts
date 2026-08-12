@@ -84,6 +84,52 @@ async function main(): Promise<void> {
   });
   assert(publication.instances.length >= 1);
   assert.equal(publication.instances[0]!.familyId, WSTETH_FAMILY_ID);
+
+  const issued = runtime.scheduler.issueExecutor({} as never);
+  const simulationRequest = Object.freeze({
+    id: "sim:effect",
+    kind: "effect-delta-simulation" as const,
+    call: Object.freeze({
+      caller: Object.freeze({ address: `0x${"11".repeat(20)}` }) as never,
+      to: WSTETH,
+      data: "0x",
+    }),
+    overrideIntent: Object.freeze({}) as never,
+    observe: Object.freeze([] as const),
+  });
+  const unresolved = await issued.executor.execute({
+    requests: Object.freeze([simulationRequest]),
+    source: SOURCE,
+  } as never);
+  assert.equal(unresolved[0]!.ok, false);
+  assert(unresolved[0]!.ok === false);
+  assert.equal(unresolved[0]!.failure, "resource-limited");
+
+  const simulatedRuntime = createStrictCentralAdapterRuntime({
+    provider: mockProvider() as never,
+    generationFence: Object.freeze({ assertCurrent() {} }),
+    simulator: Object.freeze({
+      simulate: async () => Object.freeze({
+        data: "0xdeadbeef",
+        effects: Object.freeze({
+          tokenDeltas: Object.freeze([Object.freeze({
+            token: `0x${"22".repeat(20)}`,
+            account: `0x${"33".repeat(20)}`,
+            delta: 5n,
+          })]),
+        }),
+      }),
+    }),
+  });
+  const simulatedIssued = simulatedRuntime.scheduler.issueExecutor({} as never);
+  const simulated = await simulatedIssued.executor.execute({
+    requests: Object.freeze([simulationRequest]),
+    source: SOURCE,
+  } as never);
+  assert.equal(simulated[0]!.ok, true);
+  assert(simulated[0]!.ok === true);
+  assert.equal(simulated[0]!.data, "0xdeadbeef");
+  assert.equal(simulated[0]!.effects?.tokenDeltas?.[0]?.delta, 5n);
   console.log("strict-central-adapter-runtime PASS");
 }
 
