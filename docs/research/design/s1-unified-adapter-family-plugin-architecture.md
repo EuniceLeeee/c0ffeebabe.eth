@@ -478,6 +478,26 @@ dry-run harness checkpoint（commit 见下）：**
 - 证据：shadow suite（15 合同）全过 + regression sweep 12 组全过 +
   完整 build；节点机器证据随 dry-run 追加。
 
+**2026-08-12 serial node dry-run comparison checkpoint（commit 见下，
+真实串行 A/B 数据，非 paired-live 原语；边级差异待更长窗口定位）：**
+
+- `scripts/run-s1-node-serial-dry-run.sh` + `node-side-serial-dry-run.sh`：
+  baseline 与 challenger 各 300s，同窗口（当前 head）、同 RPC（local
+  reth）、dry-run 强制（随机 dummy 密钥、anvil 端口 9555/9556、事件日志
+  /tmp、私钥永不复制、submit/MEV-Share 关闭）；live searcher 未触碰；
+- 实测数据（`docs/research/design/evidence/s1-node-serial-dry-run-latest.json`）：
+  baseline `4265971d` graph built edges=**36964**、events=790、
+  routeEvents=0；challenger `552c220e` edges=**36946**、events=792、
+  routeEvents=4；`graphBuiltEdgesDelta=-18`（≈0.05%）、
+  artifactPoolCountDelta=0；
+- 初步归因：两侧 provisional pool 集合逐字节一致（600/600，`comm -3`
+  无差异），-18 边差不是池覆盖差；可能来自逐池 directional route /
+  exact-discovery 构造差异或两次运行间 head 前进（~10 分钟）；
+  edge-level 定位需要更长窗口（≥600s）让
+  `runtime-blockscan-pools.json` 完整落盘后做边集合 diff（下一 slice）；
+- 该记录是实际运行数据，不是 gate 结论；`priced=` 行在 300s 内未出现
+  （首轮 pricing pass 未完成），后续窗口同步补。
+
 **2026-08-12 paired-live distiller checkpoint（commit 见下，
 systemic-live 权威决策的蒸馏链；真实 paired-live 运行仍待节点）：**
 

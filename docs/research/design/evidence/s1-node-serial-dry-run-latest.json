@@ -1,0 +1,33 @@
+{
+  "format": "s1-node-serial-dry-run-v1",
+  "windowSeconds": 300,
+  "sides": {
+    "baseline": {
+      "side": "baseline",
+      "sha": "4265971d123c2d6afc5194aa2b324104558327c7",
+      "priced": null,
+      "pricedRatio": null,
+      "graphBuiltEdges": 36964,
+      "artifactPoolCount": 3,
+      "eventLineCount": 790,
+      "routeEventLineCount": 0,
+      "exitCode": 124
+    },
+    "challenger": {
+      "side": "challenger",
+      "sha": "552c220efa263e769c127d3f2c3b46d5614e2b8d",
+      "priced": null,
+      "pricedRatio": null,
+      "graphBuiltEdges": 36946,
+      "artifactPoolCount": 3,
+      "eventLineCount": 792,
+      "routeEventLineCount": 4,
+      "exitCode": 124
+    }
+  },
+  "comparison": {
+    "pricedRatioDelta": null,
+    "graphBuiltEdgesDelta": -18,
+    "artifactPoolCountDelta": 0
+  }
+}
