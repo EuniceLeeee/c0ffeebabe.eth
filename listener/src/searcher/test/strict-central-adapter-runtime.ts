@@ -197,6 +197,93 @@ async function main(): Promise<void> {
   assert(failingSimulator[0]!.ok === false);
   assert.equal(failingSimulator[0]!.failure, "resource-limited");
 
+  // Real scheduler telemetry: transport wall time is measured, attempts are
+  // observable and the reuse seal binds the executed inputs.
+  const telemetryRuntime = createStrictCentralAdapterRuntime({
+    provider: mockProvider() as never,
+    generationFence: Object.freeze({ assertCurrent() {} }),
+  });
+  const telemetryExecutor = telemetryRuntime.scheduler.issueExecutor({} as never);
+  await telemetryExecutor.executor.execute({
+    requests: Object.freeze([Object.freeze({
+      id: "telemetry-call",
+      kind: "eth-call" as const,
+      to: WSTETH,
+      data: "0x",
+      completion: "return-data" as const,
+    })]),
+    source: SOURCE,
+  } as never);
+  const timing = telemetryExecutor.timing();
+  assert(timing.transportWallMs >= 0);
+  assert.equal(timing.attempts, 1);
+  const reuseA = telemetryExecutor.executor.sealStaticEvidenceReuseProof({
+    reusePolicy: Object.freeze({ kind: "source-local" }) as never,
+    source: SOURCE,
+    requests: Object.freeze([]),
+    results: Object.freeze([]),
+    trustedResultsFingerprint: "fingerprint-a",
+  } as never);
+  const reuseB = telemetryExecutor.executor.sealStaticEvidenceReuseProof({
+    reusePolicy: Object.freeze({ kind: "source-local" }) as never,
+    source: SOURCE,
+    requests: Object.freeze([]),
+    results: Object.freeze([]),
+    trustedResultsFingerprint: "fingerprint-b",
+  } as never);
+  assert.match(reuseA.proofHash, /^[0-9a-f]{64}$/);
+  assert.notEqual(reuseA.proofHash, reuseB.proofHash);
+
+  // Real budgets: positive deadline and a configured batch cap are enforced.
+  const cappedRuntime = createStrictCentralAdapterRuntime({
+    provider: mockProvider() as never,
+    generationFence: Object.freeze({ assertCurrent() {} }),
+    maxRequestsPerBatch: 2,
+  });
+  assert.throws(
+    () => cappedRuntime.budgets.assertAdmitted(
+      Object.freeze({ deadlineAtMs: 0 }) as never,
+      Object.freeze([Object.freeze({}), Object.freeze({})]) as never,
+    ),
+    /positive deadline/,
+  );
+  assert.throws(
+    () => cappedRuntime.budgets.assertAdmitted(
+      Object.freeze({ deadlineAtMs: 1000 }) as never,
+      Object.freeze([
+        Object.freeze({}),
+        Object.freeze({}),
+        Object.freeze({}),
+      ]) as never,
+    ),
+    /batch cap/,
+  );
+
+  // Simulation provenance is a real content binding, not a fixed constant.
+  const provenanceRuntime = createStrictCentralAdapterRuntime({
+    provider: mockProvider() as never,
+    generationFence: Object.freeze({ assertCurrent() {} }),
+    simulator: Object.freeze({
+      simulate: async () => Object.freeze({ data: "0xdeadbeef" }),
+    }),
+  });
+  const provenanceExecutor =
+    provenanceRuntime.scheduler.issueExecutor({} as never);
+  const provenanceResults = await provenanceExecutor.executor.execute({
+    requests: Object.freeze([simulationRequest]),
+    source: SOURCE,
+  } as never);
+  assert.equal(provenanceResults[0]!.ok, true);
+  assert(provenanceResults[0]!.ok === true);
+  assert.match(
+    provenanceResults[0]!.provenance.fingerprint,
+    /^[0-9a-f]{64}$/,
+  );
+  assert.notEqual(
+    provenanceResults[0]!.provenance.fingerprint,
+    "9".repeat(64),
+  );
+
   // Verified-actor caller authority: without the evidence map the central
   // runtime fails closed at caller-authority; with the production map the
   // family-declared actor binds and the request executes.

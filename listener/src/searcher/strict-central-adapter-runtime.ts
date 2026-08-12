@@ -1,8 +1,10 @@
 import type {
   AdapterGenerationFence,
+  CentralScheduleDecision,
   CentralAdapterRuntime,
   CentralAdapterScheduler,
 } from "./adapter-work-intent.js";
+import { createHash } from "node:crypto";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -72,13 +74,18 @@ export function createStrictCentralAdapterRuntime(input: {
    * pretending the capability exists.
    */
   readonly verifiedActors?: Readonly<Record<string, string>>;
+  /** Upper bound on requests admitted per work batch; default 512. */
+  readonly maxRequestsPerBatch?: number;
 }): CentralAdapterRuntime {
   let now = Date.now();
+  const maxRequestsPerBatch = input.maxRequestsPerBatch ?? 512;
   const verifiedActors = Object.freeze({ ...(input.verifiedActors ?? {}) });
   const scheduler: CentralAdapterScheduler = Object.freeze({
     issueExecutor(
       issueInput: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
     ) {
+      const issuedAtMs = Date.now();
+      let transportWallMs = 0;
       const executor = createBoundedRequestExecutor({
         assertSupported: (requirements) => {
           void issueInput;
@@ -90,23 +97,41 @@ export function createStrictCentralAdapterRuntime(input: {
             throw new Error("strict central runtime requires a request batch");
           }
         },
-        execute: async (execution) => Promise.all(execution.requests.map(
-          (request) => executeRequest(
-            input.provider,
-            input.simulator,
-            request,
-            execution.source,
-          ),
-        )),
-        sealStaticEvidenceReuseProof: () => ({
-          proofHash: "ab".repeat(32),
+        execute: async (execution) => {
+          const startedAtMs = Date.now();
+          const results = await Promise.all(execution.requests.map(
+            (request) => executeRequest(
+              input.provider,
+              input.simulator,
+              request,
+              execution.source,
+            ),
+          ));
+          transportWallMs = Date.now() - startedAtMs;
+          return results;
+        },
+        sealStaticEvidenceReuseProof: (proofInput) => ({
+          proofHash: createHash("sha256")
+            .update(JSON.stringify({
+              reusePolicy: proofInput.reusePolicy,
+              source: proofInput.source,
+              requests: proofInput.requests.map((request) => ({
+                id: request.id,
+                kind: request.kind,
+                to: "to" in request ? request.to : undefined,
+                address: "address" in request ? request.address : undefined,
+                data: "data" in request ? request.data : undefined,
+              })),
+              resultsFingerprint: proofInput.trustedResultsFingerprint,
+            }))
+            .digest("hex"),
         }),
       });
       return Object.freeze({
         executor,
         timing: () => ({
-          queueWaitMs: 0,
-          transportWallMs: 1,
+          queueWaitMs: Math.max(0, Date.now() - issuedAtMs),
+          transportWallMs,
           attempts: 1,
         }),
       });
@@ -134,7 +159,27 @@ export function createStrictCentralAdapterRuntime(input: {
         fairnessKey: policyInput.subjectKey,
       }),
     },
-    budgets: { assertAdmitted() {} },
+    budgets: {
+      assertAdmitted(
+        schedule: CentralScheduleDecision,
+        requests: readonly AdapterRequest[],
+      ) {
+        if (
+          !Number.isSafeInteger(schedule.deadlineAtMs) ||
+          schedule.deadlineAtMs <= 0
+        ) {
+          throw new Error(
+            "strict central budget requires a positive deadline",
+          );
+        }
+        if (requests.length > maxRequestsPerBatch) {
+          throw new Error(
+            `strict central budget exceeds batch cap: ` +
+              `${requests.length} > ${maxRequestsPerBatch}`,
+          );
+        }
+      },
+    },
     scheduler,
   });
 }
@@ -231,7 +276,18 @@ async function executeRequest(
           source: Object.freeze(source),
           provenance: Object.freeze({
             kind: "strict-simulation-transport",
-            fingerprint: "9".repeat(64),
+            fingerprint: createHash("sha256")
+              .update(JSON.stringify({
+                id: request.id,
+                kind: request.kind,
+                to: request.call.to,
+                data: request.call.data,
+                preCalls: request.preCalls ?? [],
+                overrideIntent: request.overrideIntent,
+                observe: request.observe,
+                source: source.number,
+              }))
+              .digest("hex"),
           }),
           completion: "returned" as const,
           data: simulated.data,

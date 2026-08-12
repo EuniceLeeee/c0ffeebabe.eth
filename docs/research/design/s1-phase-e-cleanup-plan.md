@@ -276,6 +276,19 @@
 > 非空 held-out 通过、文件入口 sealed 无 held-out 拒绝。剩余：
 > 真实 on-chain production corpus + 非空 held-out 的
 > sealed-production 验收需真实案例采集（另行立项）。
+>
+> **P1-a 真实 runtime 遥测/预算/provenance（2026-08-12）：**
+> `createStrictCentralAdapterRuntime` 不再返回固定值：
+> `timing()` 度量真实 queue/transport wall time；`budgets` 强制正
+> deadline 与可配置 batch 上限（默认 512）；static-evidence reuse
+> seal 改为绑定 reusePolicy/source/requests/resultsFingerprint 的
+> sha256；simulation provenance fingerprint 绑定 request
+> （id/kind/to/data/preCalls/override/observe/source）。合同测试
+> 覆盖 telemetry、reuse seal 变化、预算拒绝、仿真 provenance
+> 非固定值；build/suite（25 项）全绿。
+> 剩余 P1：完整 factory-log/landed-log/observed-call ingress、
+> continuous 调度 lane/producer reserve/deadline/去重/backlog、
+> revm effect-delta 能力、崩溃恢复契约扩展、legacy fallback 收口。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
