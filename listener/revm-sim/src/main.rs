@@ -2263,7 +2263,7 @@ fn discover_erc20_balance_slot(
         .and_then(Value::as_object);
     if let Some(storage) = storage {
         for key in storage.keys() {
-            if let Ok(slot) = parse_u256(&format!("0x{key}")) {
+            if let Ok(slot) = parse_u256(key) {
                 return Ok(Some(slot));
             }
         }
