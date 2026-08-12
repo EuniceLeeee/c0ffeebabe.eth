@@ -99,6 +99,16 @@
 > 如实 no-op。下一步：把 protocol discovery 的 address entries 持久化
 > 进 cache（或从 live 进程内存 feed），再跑一次验收即可看到
 > catalogRoot 生产提交。
+>
+> **验收推进（2026-08-12，`871c0e74`）：** self-burn dependency
+> fingerprint 修复（32-byte hex）后，protocol cache 的
+> address_entries 从 0 增至 **11,354**（fingerprint bug 确认是
+> 根因；持久化早已存在，无需改序列化）；searcher priced 从 87.7%
+> 升至 **90.15%**。但 600s 窗口内这 11,354 条 entry 的 candidate 全为
+> null——live matcher 尚未把 shortlist 地址验证为 protocol candidate，
+> strict feed 继续 fail-closed no-op。剩余杠杆：更长的预热窗口让
+> current-N matcher 完成验证（observed-interaction / 20-min prewarm），
+> 或排查 self-burn shortlist 验证为何在窗口内全部 null。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
