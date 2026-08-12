@@ -498,6 +498,24 @@ dry-run harness checkpoint（commit 见下）：**
 - 该记录是实际运行数据，不是 gate 结论；`priced=` 行在 300s 内未出现
   （首轮 pricing pass 未完成），后续窗口同步补。
 
+**2026-08-12 serial node dry-run 600s comparison checkpoint（commit
+见下，实际数据；challenger 无图覆盖回退）：**
+
+- 同一 600s 窗口、当前 head、同 RPC（local reth）串行双侧：
+  - baseline `4265971d`：priced=32547/37157（87.59%）、graph built
+    edges=36918、events=1598、routeEvents=26；
+  - challenger `552c220e`：priced=32556/37160（87.61%）、edges=36922、
+    events=1636、routeEvents=61；
+  - `pricedRatioDelta=+0.000171`（challenger 略优）、
+    `graphBuiltEdgesDelta=+4`、无 artifact 差异；
+- 结论（实际数据层面）：S1 challenger 在建图/定价覆盖上**不低于**
+  baseline；300s 时看到的 -18 边差属 run-to-run/head 漂移噪声；
+- 边界（fail-closed 保留）：串行对比不是 trusted paired-live 原语，
+  无法测量 §13-14 的 head-level coverage/timing floors；systemic-live
+  gate 对串行证据只能给出 `relative_diagnostic_only`，cutover-readiness
+  不会因此虚报 ready；默认 authority 切换仍需 head-level 证据或用户
+  对验收基准的显式重新定义（D-010 待用户确认）。
+
 **2026-08-12 paired-live distiller checkpoint（commit 见下，
 systemic-live 权威决策的蒸馏链；真实 paired-live 运行仍待节点）：**
 

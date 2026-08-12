@@ -1,33 +1,39 @@
 {
   "format": "s1-node-serial-dry-run-v1",
-  "windowSeconds": 300,
+  "windowSeconds": 600,
   "sides": {
     "baseline": {
       "side": "baseline",
       "sha": "4265971d123c2d6afc5194aa2b324104558327c7",
-      "priced": null,
-      "pricedRatio": null,
-      "graphBuiltEdges": 36964,
+      "priced": {
+        "resolved": 32547,
+        "expected": 37157
+      },
+      "pricedRatio": 0.8759318567160965,
+      "graphBuiltEdges": 36918,
       "artifactPoolCount": 3,
-      "eventLineCount": 790,
-      "routeEventLineCount": 0,
+      "eventLineCount": 1598,
+      "routeEventLineCount": 26,
       "exitCode": 124
     },
     "challenger": {
       "side": "challenger",
       "sha": "552c220efa263e769c127d3f2c3b46d5614e2b8d",
-      "priced": null,
-      "pricedRatio": null,
-      "graphBuiltEdges": 36946,
+      "priced": {
+        "resolved": 32556,
+        "expected": 37160
+      },
+      "pricedRatio": 0.8761033369214208,
+      "graphBuiltEdges": 36922,
       "artifactPoolCount": 3,
-      "eventLineCount": 792,
-      "routeEventLineCount": 4,
+      "eventLineCount": 1636,
+      "routeEventLineCount": 61,
       "exitCode": 124
     }
   },
   "comparison": {
-    "pricedRatioDelta": null,
-    "graphBuiltEdgesDelta": -18,
+    "pricedRatioDelta": 0.000171,
+    "graphBuiltEdgesDelta": 4,
     "artifactPoolCountDelta": 0
   }
 }
