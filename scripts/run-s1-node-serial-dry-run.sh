@@ -111,6 +111,7 @@ for side in ("baseline", "challenger"):
         summary["sides"][side] = json.load(fh)
 summary["comparison"] = {
     "pricedRatioDelta": None,
+    "graphBuiltEdgesDelta": None,
     "artifactPoolCountDelta": None,
 }
 if "baseline" in summary["sides"] and "challenger" in summary["sides"]:
@@ -119,6 +120,10 @@ if "baseline" in summary["sides"] and "challenger" in summary["sides"]:
     if base["pricedRatio"] is not None and chal["pricedRatio"] is not None:
         summary["comparison"]["pricedRatioDelta"] = round(
             chal["pricedRatio"] - base["pricedRatio"], 6
+        )
+    if base["graphBuiltEdges"] is not None and chal["graphBuiltEdges"] is not None:
+        summary["comparison"]["graphBuiltEdgesDelta"] = (
+            chal["graphBuiltEdges"] - base["graphBuiltEdges"]
         )
     if base["artifactPoolCount"] is not None and chal["artifactPoolCount"] is not None:
         summary["comparison"]["artifactPoolCountDelta"] = (

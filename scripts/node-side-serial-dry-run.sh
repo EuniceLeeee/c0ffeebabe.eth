@@ -88,12 +88,16 @@ SERIAL_SIDE_JSON="$(python3 - "${side}" "${checked_out}" "${outdir}" <<'PY'
 import json, os, re, sys
 side, sha, outdir = sys.argv[1], sys.argv[2], sys.argv[3]
 priced = None
+graph_built = None
 log_path = os.path.join(outdir, "run.log")
 if os.path.exists(log_path):
     for line in open(log_path, errors="replace"):
         m = re.search(r"priced=(\d+)/(\d+)", line)
         if m:
             priced = (int(m.group(1)), int(m.group(2)))
+        g = re.search(r"graph built: edges=(\d+)", line)
+        if g:
+            graph_built = int(g.group(1))
 artifact_pools = None
 artifact = os.path.join(outdir, "runtime-blockscan-pools.json")
 if os.path.exists(artifact):
@@ -111,6 +115,7 @@ record = {
     "sha": sha,
     "priced": None if priced is None else {"resolved": priced[0], "expected": priced[1]},
     "pricedRatio": None if priced is None or priced[1] == 0 else priced[0] / priced[1],
+    "graphBuiltEdges": graph_built,
     "artifactPoolCount": artifact_pools,
     "eventLineCount": lines(os.path.join(outdir, "events.jsonl")),
     "routeEventLineCount": lines(os.path.join(outdir, "routes.jsonl")),
