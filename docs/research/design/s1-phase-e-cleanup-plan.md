@@ -298,6 +298,16 @@
 > strict-catalog-live-publisher 合同新增断言：live 发布的全部
 > sourceAnchors 必须为 append-only-nomination（不得授予
 > complete-snapshot）。build/suite 全绿。
+>
+> **P1-d 错误 omission 合同（2026-08-12）：** 新增回归测试：live
+> 路径某 revision 不再发布某 Family 实例时，catalogRoot 必须
+> fail-closed——未接线 issuer-bound StateInstance mutation proof
+> 前，carry 被拒且已提交实例集保持不变（无 silent omission、
+> 无 tombstone）。这确认了 canonical 文档的
+> observed-complete 不变式：删除权与跨代 carry 都依赖显式
+> mutation/terminal proof，缺失时整体拒绝而非悄悄丢实例。
+> 剩余 P1：为 live 路径接线 StateInstance mutation/terminal
+> proof issuer，使合法收缩（显式 terminal settlement）可提交。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

@@ -59,6 +59,11 @@ const SOURCE3: CanonicalSource = Object.freeze({
   hash: `0x${"53".repeat(32)}`,
   generation: 44,
 });
+const SOURCE4: CanonicalSource = Object.freeze({
+  number: SOURCE3.number + 10,
+  hash: `0x${"54".repeat(32)}`,
+  generation: 46,
+});
 const WSTETH = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const CHAIN_ID = "1";
 const REGISTRY = "strict-source-registry-v1";
@@ -288,6 +293,37 @@ async function main(): Promise<void> {
           (anchor) => anchor.authority === "append-only-nomination",
         ),
         "live publications must never grant complete-snapshot anchors",
+      );
+
+      // observed-complete must carry omitted instances: a later revision that
+      // no longer publishes fluid-dex must not tombstone it (no omission
+      // authority without complete-snapshot). Until an issuer-bound
+      // StateInstance mutation proof is wired, the carry itself is
+      // fail-closed rather than silently dropping the instance.
+      const omissionPublication = await runWstethLifecycle(SOURCE4, prodCat);
+      const omissionResult = await publishStrictCatalogFromLifecycle({
+        composition: prodComposition,
+        catalog: prodCat,
+        source: SOURCE4,
+        publications: Object.freeze([{
+          familyId: WSTETH_FAMILY_ID,
+          publication: omissionPublication,
+        }]),
+      });
+      assert.equal(omissionResult.status, "unresolved");
+      if (omissionResult.status === "unresolved") {
+        assert.match(
+          omissionResult.reason,
+          /StateInstance mutation proof/,
+          "omission without an issuer-bound carry proof must fail closed",
+        );
+      }
+      const omissionCommitted = prodComposition.catalogRoot.capture();
+      assert(omissionCommitted);
+      assert.equal(
+        omissionCommitted.envelope.privateState.instances.size,
+        2,
+        "the failed carry must leave the committed instance set unchanged",
       );
 
       // The final catalogRoot CAS must use the composition's real fences:
