@@ -461,6 +461,23 @@ solver-shaped 生产入口；planner call-site 属于默认 authority 切换）�
 - 证据：shadow suite（15 合同）全过 + regression sweep 12 组全过 +
   完整 build。
 
+**2026-08-12 strict graph completeness assertion + paired-live distill
+dry-run harness checkpoint（commit 见下）：**
+
+- `resolveStrictSolverConsumer` 增加图完整性断言：consumer 边界要求
+  committed views 的 `edges.length === handleByCanonicalEdgeId.size`
+  （每条已发布边必须有 issued handle），不一致即 fail-closed；
+  摘要加入 `edges=/handles=` 计数——solver 不可能读到 catalog 未原子
+  发布的图；
+- 新增 `searcher:node-paired-live-distill-dry-run` CLI 与
+  `scripts/run-s1-node-paired-live-distill-dry-run.sh`：节点 SSM
+  preflight → checkout → fixture PairedLiveReport → distiller → gate
+  verdict，输出
+  `s1-node-paired-live-distill-dry-run-v1` 机器记录；不跑 live 窗口，
+  真实 baseline+challenger runner 仪器化是下一 slice；
+- 证据：shadow suite（15 合同）全过 + regression sweep 12 组全过 +
+  完整 build；节点机器证据随 dry-run 追加。
+
 **2026-08-12 paired-live distiller checkpoint（commit 见下，
 systemic-live 权威决策的蒸馏链；真实 paired-live 运行仍待节点）：**
 

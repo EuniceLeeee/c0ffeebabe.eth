@@ -173,6 +173,7 @@
     "searcher:adapter-family-discovery-inventory-writer": "node --import tsx src/searcher/test/adapter-family-discovery-inventory-writer.ts",
     "searcher:adapter-family-discovery-inventory-enumerator": "node --import tsx src/searcher/test/adapter-family-discovery-inventory-enumerator.ts",
     "searcher:node-enumerator-dry-run": "node --import tsx src/searcher/node-enumerator-dry-run.ts",
+    "searcher:node-paired-live-distill-dry-run": "node --import tsx src/searcher/node-paired-live-distill-dry-run.ts",
     "searcher:adapter-family-discovery-checkpoint": "node --import tsx src/searcher/test/adapter-family-discovery-checkpoint.ts",
     "searcher:adapter-family-discovery-continuity-composition": "node --import tsx src/searcher/test/adapter-family-discovery-continuity-composition.ts",
     "searcher:adapter-family-closure-exact-set-coupling": "node --import tsx src/searcher/test/adapter-family-closure-exact-set-coupling.ts",

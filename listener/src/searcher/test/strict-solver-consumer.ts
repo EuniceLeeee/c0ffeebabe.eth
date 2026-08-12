@@ -233,7 +233,7 @@ async function main(): Promise<void> {
     source: source1,
     generation: source1.generation,
   });
-  assert.match(summary, /^resolved\(revision=1,pricing=[1-9][0-9]*/);
+  assert.match(summary, /^resolved\(revision=1,edges=2,handles=2,pricing=[1-9][0-9]*/);
   assert.match(summary, /funding=[0-9]+/);
   assert.match(summary, /credit=[0-9]+/);
 

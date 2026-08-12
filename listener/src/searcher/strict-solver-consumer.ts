@@ -38,6 +38,17 @@ export function resolveStrictSolverConsumer(input: {
       generation: input.generation,
       assertGenerationCurrent: input.assertGenerationCurrent ?? (() => {}),
     });
+    // Graph completeness at the consumer boundary: every committed edge must
+    // have an issued handle, so the solver can never read a graph the
+    // catalog did not atomically publish.
+    const edgeCount = views.edges.length;
+    const handleCount = views.handleByCanonicalEdgeId.size;
+    if (handleCount !== edgeCount) {
+      throw new Error(
+        `strict graph completeness mismatch: edges=${edgeCount} ` +
+          `handles=${handleCount}`,
+      );
+    }
     let pricing = 0;
     let unavailable = 0;
     let missing = 0;
@@ -68,6 +79,7 @@ export function resolveStrictSolverConsumer(input: {
     }
     return "resolved(" +
       `revision=${committed.envelope.snapshot.revision},` +
+      `edges=${edgeCount},handles=${handleCount},` +
       `pricing=${pricing},unavailable=${unavailable},missing=${missing},` +
       `funding=${funding},credit=${credit},creditMissing=${creditMissing})`;
   } catch (error) {
