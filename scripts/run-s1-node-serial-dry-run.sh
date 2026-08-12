@@ -59,7 +59,7 @@ run_side() {
   run_cmd_id="$(aws ssm send-command \
     --instance-ids "${instance_id}" \
     --document-name AWS-RunShellScript \
-    --parameters "commands=[\"bash ${impl_dir}/scripts/node-side-serial-dry-run.sh ${name} ${sha} ${window_seconds} ${dir} ${outdir}\"]" \
+    --parameters "commands=[\"env S1_REVM_SIM_BIN_PATH=${S1_REVM_SIM_BIN_PATH:-} bash ${impl_dir}/scripts/node-side-serial-dry-run.sh ${name} ${sha} ${window_seconds} ${dir} ${outdir}\"]" \
     --query Command.CommandId --output text)"
   local status="pending"
   while [[ "${status}" == "pending" || "${status}" == "InProgress" ]]; do

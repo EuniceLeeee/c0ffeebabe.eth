@@ -76,6 +76,13 @@ for var in \
   fi
 done
 
+# S1 strict simulation binary override: the challenger can run the freshly
+# built impl SHA's revm-sim (effect-delta endpoint) without ever replacing
+# the live process's production binary.
+if [ -n "${S1_REVM_SIM_BIN_PATH:-}" ] && [ -x "${S1_REVM_SIM_BIN_PATH}" ]; then
+  export SEARCHER_REVM_SIM_BIN="${S1_REVM_SIM_BIN_PATH}"
+fi
+
 # Reuse the live protocol evidence cache through a read-only copy so the
 # challenger starts warm without ever mutating the live cache file.
 live_cache="${SEARCHER_PROTOCOL_DISCOVERY_CACHE_PATH:-}"
