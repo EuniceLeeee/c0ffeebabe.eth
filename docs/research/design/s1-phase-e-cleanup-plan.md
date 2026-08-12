@@ -13,6 +13,21 @@
 
 ## 删除对（按依赖排序）
 
+> **结构性前置（2026-08-12 确认）：** 所有删除对都依赖 live 循环真正提交
+> strict catalog publication。当前 production 里
+> `discoveryContinuityComposition.catalogRoot.capture()` 恒为 null：没有
+> 任何生产者执行 discovery→lifecycle→closure→stage→commit 管线，strict
+> views 从未存在，execution 投影因此永远回退 legacy。Phase E 删除的硬
+> 前置是**先建这条 strict 生产管线**（这是 canonical 一直说的"solver 真实
+> 接线"本体），不是默认 authority 开关本身：
+> 1. 每个 admission 的 pool 经 strict Family lifecycle 签发 PreparedFamilyInstance；
+> 2. checkpoint inventory（writer 已落地）→ closure verifier → receipt；
+> 3. 逐族 stage（complete-snapshot / observed-complete）→ catalogRoot
+>    prepare + compareAndPublish；
+> 4. solver/revm 消费 committed views（execution 投影已就绪）。
+> 在此之前任何 legacy 删除都会留下无数据路径；"直接删除+回退"只会在
+> 回退循环里打转，不构成推进。
+
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
 | A | `production-registry.routes()/funding()` 在 `revm-live-backend` 的执行消费 | strict family runtime handle / strict funding consumer 接入 live execution | step 1-5 完成：22 族 execution projection 全覆盖（spender 静态/hop.target/angstrom 常量/null；prewarm 保守留空）env gate 接线（默认 OFF）；**删除步骤阻塞**：strict 路径激活依赖 composition env + committed publication（即默认 authority 接线），用户选择跳过；在 composition 成为默认前删除 legacy 会让无 composition 的生产路径失去 execution 数据 |
