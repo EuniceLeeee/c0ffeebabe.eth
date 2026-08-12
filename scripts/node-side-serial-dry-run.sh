@@ -68,12 +68,24 @@ for var in \
   SEARCHER_BLOCKSCAN_EXACT_PRODUCER_LAG_YIELD_BUDGET_MS \
   SEARCHER_BLOCKSCAN_EXACT_PRODUCER_LAG_YIELD_MS \
   SEARCHER_BLOCKSCAN_STATE_MULTICALL SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE \
+  SEARCHER_PROTOCOL_DISCOVERY_CACHE_PATH \
   SEARCHER_BLOCKSCAN_ANVIL_PORT SEARCHER_ANVIL_PORT; do
   value="$(printf '%s\n' "${env_lines}" | sed -n "s/^${var}=//p" | head -1)"
   if [ -n "${value}" ]; then
     export "${var}=${value}"
   fi
 done
+
+# Reuse the live protocol evidence cache through a read-only copy so the
+# challenger starts warm without ever mutating the live cache file.
+live_cache="${SEARCHER_PROTOCOL_DISCOVERY_CACHE_PATH:-}"
+if [ -z "${live_cache}" ] || [ ! -f "${live_cache}" ]; then
+  live_cache="/opt/MEV/listener/searcher/pools/runtime-protocol-discovery-cache.json"
+fi
+if [ -f "${live_cache}" ]; then
+  cp "${live_cache}" "${outdir}/protocol-cache.json"
+  export SEARCHER_PROTOCOL_DISCOVERY_CACHE_PATH="${outdir}/protocol-cache.json"
+fi
 
 # Dry-run signing still needs a key locally; use a per-run random dummy
 # (never the production key, never committed) and pin the botvm identity to
