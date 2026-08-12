@@ -26,6 +26,17 @@ import {
 } from "../solver/post-impact-overrides.js";
 import type { ResolvedPlan } from "../solver/solver.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import {
+  resolveFundingPrewarmAddresses,
+} from "../strict-execution-projection.js";
+import type {
+  StrictShadowCatalogViews,
+} from "../adapter-family-shadow-catalog-publication.js";
+import type { FamilyCapabilityCatalog } from
+  "../venues/family-capability-catalog.js";
+import {
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+} from "../venues/production-family-composition.js";
 import type {
   PreparedRouteContext,
   PreparedRouteRequest,
@@ -63,6 +74,10 @@ export class RevmLiveBackend implements LiveStateBackend {
     private readonly provider: ethers.JsonRpcProvider,
     private readonly graph: TokenEdge[],
     private readonly rpcUrl: string,
+    private readonly strictFunding?: {
+      readonly views: () => StrictShadowCatalogViews | null;
+      readonly catalog: FamilyCapabilityCatalog;
+    },
   ) {}
 
   private async canonicalBlockHash(blockNumber: number): Promise<string> {
@@ -212,9 +227,17 @@ export class RevmLiveBackend implements LiveStateBackend {
     if (input.impact) push(input.impact.pool);
     push(this.executor);
     push(this.owner);
-    for (const family of PRODUCTION_ADAPTER_FAMILIES.funding()) {
-      push(family.funding.target);
-      push(family.funding.liquidityHolder);
+    for (const address of resolveFundingPrewarmAddresses({
+      strictViews: this.strictFunding === undefined
+        ? null
+        : this.strictFunding.views(),
+      catalog: this.strictFunding?.catalog ??
+        PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+      legacyAddresses: PRODUCTION_ADAPTER_FAMILIES.funding().flatMap(
+        (family) => [family.funding.target, family.funding.liquidityHolder],
+      ),
+    })) {
+      push(address);
     }
     for (const hop of input.routeHops ?? []) {
       push(hop.target);
@@ -328,9 +351,17 @@ export class RevmLiveBackend implements LiveStateBackend {
       WHALE,
       ...calls.map((call) => call.to),
     ]) pushPrewarm(address);
-    for (const family of PRODUCTION_ADAPTER_FAMILIES.funding()) {
-      pushPrewarm(family.funding.target);
-      pushPrewarm(family.funding.liquidityHolder);
+    for (const address of resolveFundingPrewarmAddresses({
+      strictViews: this.strictFunding === undefined
+        ? null
+        : this.strictFunding.views(),
+      catalog: this.strictFunding?.catalog ??
+        PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+      legacyAddresses: PRODUCTION_ADAPTER_FAMILIES.funding().flatMap(
+        (family) => [family.funding.target, family.funding.liquidityHolder],
+      ),
+    })) {
+      pushPrewarm(address);
     }
     for (const hop of hops) {
       pushPrewarm(hop.target);
