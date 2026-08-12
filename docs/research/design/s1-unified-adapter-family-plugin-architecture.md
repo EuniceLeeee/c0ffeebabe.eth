@@ -609,6 +609,20 @@ D-008 落实为第三种 publication 模式，合同级；production 接线仍�
 - 证据：shadow suite（12 合同）全过 + regression sweep 12 组全过 +
   完整 build。
 
+> **2026-08-12 运行模式最终决策（continuous-first，P1-f）：**
+> continuous publication 是生产主模式：每代冻结一个
+> `{number, hash, generation}` source，串行化（coalescing）链内
+> 完成显式 gap 闭合、terminal settlement 与原子 catalogRoot CAS，
+> 且 durable checkpoint 只在 catalog CAS 成功后于同一 source 推进
+> （appliedThrough 永不领先可恢复 authority）。startup-only 只是
+> 性能降级方案，不是 authority 降级：两者都不得把
+> verified-candidate 提名清单当作精确全集。live 路径一律
+> `observed-complete`（无 omission/tombstone 删除权）；
+> `complete-snapshot` 只授予有精确枚举 receipt 的 bootstrap 路径，
+> 且每 Family 独立签发/消费 receipt（不得共享）。canonical source
+> 校验为 block-hash + 有界祖先链，generation 单调由 catalogRoot
+> 自身 fence，reorg/stale generation 一律 fail-closed。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - 7 个活动型族（astra/eigenpie/erc4626-silo/ethertoken/hgusdc/

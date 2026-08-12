@@ -289,6 +289,15 @@
 > 剩余 P1：完整 factory-log/landed-log/observed-call ingress、
 > continuous 调度 lane/producer reserve/deadline/去重/backlog、
 > revm effect-delta 能力、崩溃恢复契约扩展、legacy fallback 收口。
+>
+> **P1-f 运行模式决策 + P1-d 回归断言（2026-08-12）：**
+> canonical 架构文档新增 continuous-first 最终决策（每代冻结
+> source、串行化链、checkpoint 后置、observed-complete live、
+> complete-snapshot 仅精确 bootstrap 且 receipt 每族独立、block-hash
+> + 有界祖先 + generation 单调 fence、reorg/stale fail-closed）；
+> strict-catalog-live-publisher 合同新增断言：live 发布的全部
+> sourceAnchors 必须为 append-only-nomination（不得授予
+> complete-snapshot）。build/suite 全绿。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

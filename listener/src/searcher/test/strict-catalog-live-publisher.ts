@@ -283,6 +283,12 @@ async function main(): Promise<void> {
       const multiCommitted = prodComposition.catalogRoot.capture();
       assert(multiCommitted);
       assert.equal(multiCommitted.envelope.privateState.instances.size, 2);
+      assert(
+        [...multiCommitted.envelope.snapshot.sourceAnchors.values()].every(
+          (anchor) => anchor.authority === "append-only-nomination",
+        ),
+        "live publications must never grant complete-snapshot anchors",
+      );
 
       // The final catalogRoot CAS must use the composition's real fences:
       // canonical verification is invoked, and a stale source generation is
