@@ -18,12 +18,11 @@
       "pipeline": {
         "compositionStatus": "[searcher/live] discovery continuity composition trusted",
         "writerReady": true,
-        "lifecycleFailures": [
-          "[searcher/live] strict lifecycle failed for protocol:erc4626: strict Family lifecycle did not publish for protocol:erc4626: identity unresolved identity-work-unresolved:standalone-standard-behavior:resource-limited",
-          "[searcher/live] strict lifecycle failed for protocol:erc4626: strict Family lifecycle did not publish for protocol:erc4626: identity unresolved identity-work-unresolved:standalone-standard-behavior:resource-limited"
-        ],
         "publisherPublished": true,
-        "checkpointCommitted": true
+        "checkpointCommitted": true,
+        "lifecycleFailures": [
+          "[searcher/live] strict lifecycle failed for protocol:erc4626: strict Family lifecycle did not publish for protocol:erc4626: identity unresolved identity-work-unresolved:standalone-standard-behavior:resource-limited"
+        ]
       }
     }
   },

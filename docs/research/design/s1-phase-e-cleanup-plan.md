@@ -351,6 +351,16 @@
 > publication 集尚未齐全时 searcher 覆盖不塌。revision 变更自动
 > 重建索引。合同测试五例全过；solver 全量 strict 解析（去 legacy
 > 回退）属默认 authority 收口的一部分。
+>
+> **Pair E 节点验收（2026-08-12，`c88aef4d` 机器证据）：** 600s
+> dry-run：priced 34089/37896（89.95%，无回退）、edges 37154、
+> publisherPublished + checkpointCommitted、仅 erc4626
+> resource-limited（capability 缺口）。strict quote source 接线在
+> 生产循环里实际生效（fluid-dex committed views 报价 + 其余族
+> per-family legacy 回退），覆盖不塌。证据：
+> `docs/research/design/evidence/s1-node-acceptance-pipeline-c88aef4d.json`。
+> 下一步：Pair A 剩余 quote/approve legacy 删除（待 strict
+> publication 集齐全或默认 authority 收口时执行）。
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |
