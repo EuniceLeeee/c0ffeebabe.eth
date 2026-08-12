@@ -16,6 +16,14 @@
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
 | A | `production-registry.routes()/funding()` 在 `revm-live-backend` 的执行消费 | strict family runtime handle / strict funding consumer 接入 live execution | step 1-3 完成：funding/route prewarm + execution adapter 投影（univ2 pilot：allowanceSpender=UNIV2_ROUTER、prewarmQuoteCalls=getReserves）全部 env gate 接线（默认 OFF）；其余族 pilot 与删除待做 |
+
+> **Pair A 节点验证（2026-08-12，SSM 串行 strict-live run）：**
+> challenger `45908c6c` + `SEARCHER_STRICT_LIVE_EXECUTION=1`（composition
+> env 未开）：priced=32730/37328（87.68%）、edges=37062、events=865，
+> 与无 gate challenger（87.61%/36922）相比无回退。注意该 run 无 committed
+> strict views，strict 路径按设计回退 legacy——验证的是 gate 接线 no-op
+> 安全性；univ2 pilot 真正激活需要 composition env + committed publication
+> （节点下一步）。
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |
