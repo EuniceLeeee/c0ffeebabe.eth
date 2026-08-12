@@ -185,6 +185,15 @@
 > publisher 的 source generation 均由上一 catalogRoot
 > `(generation ?? -1) + 1` 派生（首次仍为 0），与祖先验证共用同一
 > source。build/suite 全绿；剩余：节点验收确认 revision 2 提交。
+>
+> **catalogRoot 重复发布验收通过（2026-08-12，`22c965dd` 节点机器
+> 证据）：** 600s dry-run 日志连续出现
+> `strict catalog root committed: revision=1 instances=1 pricing=2`
+> 与 `revision=2 instances=1 pricing=2`——跨块 source 的第二次
+> 发布不再被跳过（祖先链验证 + generation 单调共同生效）；
+> checkpoint revision 17（source 25738565, generation 1）；
+> searcher priced 90.09% 无回退。证据：
+> `docs/research/design/evidence/s1-node-acceptance-pipeline-22c965dd.json`。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
