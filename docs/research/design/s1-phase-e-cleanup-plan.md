@@ -42,6 +42,17 @@
 > fixture runtime 导出复用，合同测试通过。管线步骤 1 的调用面就绪；
 > 剩余为生产循环把 discovery observations 喂给 runner 并把 publication
 > 接到 publisher。
+>
+> **硬边界（2026-08-12 证据确认）：** `main.ts` 只有 legacy
+> `AdapterRuntimeCoordinator`，**production 不存在 strict
+> `CentralAdapterRuntime`**（无任何 lifecycle 执行实例、无 strict
+> scheduler/budget/fence 生产接线），`catalogRoot` 在生产里从未被
+> 提交过 publication。因此管线最后一段（production strict runtime +
+> live-loop 接线）是整套 S1 production runtime 迁移，不是可继续以
+> 合同 wrapper 凑出的 slice；继续产出小 wrapper 而不建 production
+> runtime 属于"polishing the microscope"（decision-log X-004），
+> 不再这样推进。下一步必须是生产 runtime 建设（multi-slice 程序），
+> 或明确接受 shadow-only 边界。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
