@@ -89,6 +89,16 @@
 > → publisher → committed rev1 with pricing 通过。四步管线在合同/切片
 > 层面全部闭环；production 实跑（节点 composition env 开启后 live-loop
 > 自动执行）是下一步机器验收。
+>
+> **节点部署验收（2026-08-12，机器证据）：** challenger
+> `a1c282d9` + composition env 开启，600s dry-run：
+> composition empty→trusted、writer ready、checkpoint 提交至 rev4、
+> searcher 无回退（priced 87.82%、edges 37178）；**数据源缺口**：
+> live protocol cache 持久化只有 verified_candidates（404），
+> address_entries 为 0 → 观测 feed 无 address-surface 数据，publisher
+> 如实 no-op。下一步：把 protocol discovery 的 address entries 持久化
+> 进 cache（或从 live 进程内存 feed），再跑一次验收即可看到
+> catalogRoot 生产提交。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
