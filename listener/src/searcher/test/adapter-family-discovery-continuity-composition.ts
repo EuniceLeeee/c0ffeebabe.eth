@@ -5,6 +5,11 @@ import { join } from "node:path";
 import {
   createDurableDiscoveryContinuityComposition,
 } from "../adapter-family-discovery-continuity-composition.js";
+import {
+  catalogDiscoverySourceFingerprint,
+  catalogFamilySourceAnchorKey,
+  catalogInstancePublicationKey,
+} from "../adapter-family-catalog-publication.js";
 import type {
   StrictShadowCatalogFamilyStage,
 } from "../adapter-family-shadow-catalog-publication.js";
@@ -40,6 +45,9 @@ import {
 } from "../venues/production-family-composition.js";
 import { WSTETH_FAMILY_ID } from
   "../venues/protocols/wsteth-family/manifest.js";
+import {
+  runWstethLifecycle,
+} from "../architecture-migration-fixture-replay.js";
 
 type AddressSurfaceObservation = Extract<
   UnifiedObservation,
@@ -101,27 +109,28 @@ function surface(canonical: CanonicalSource): AddressSurfaceObservation {
   });
 }
 
-function terminalCandidate(): AdapterFamilySnapshotTerminalCandidateInput {
+function terminalCandidate(
+  admittedKeys: readonly string[] = ["protocol:wsteth:fixture-instance"],
+): AdapterFamilySnapshotTerminalCandidateInput {
   return Object.freeze({
     candidateKey: WSTETH.toLowerCase(),
     status: "terminal" as const,
     outcomeFingerprint: "3".repeat(64),
     evidenceRefs: Object.freeze(["fixture:terminal-evidence"]),
-    admittedInstancePublicationKeys: Object.freeze([
-      "protocol:wsteth:fixture-instance",
-    ]),
+    admittedInstancePublicationKeys: Object.freeze([...admittedKeys]),
     publicationFingerprints: Object.freeze(["4".repeat(64)]),
   });
 }
 
 function candidateIncumbent(
   canonical: CanonicalSource,
+  admittedKeys?: readonly string[],
 ): AdapterFamilySnapshotInventoryIncumbentInput {
   return Object.freeze({
     inventoryKey: "legacy:wsteth",
     address: WSTETH,
     currentSurface: surface(canonical),
-    terminalCandidates: Object.freeze([terminalCandidate()]),
+    terminalCandidates: Object.freeze([terminalCandidate(admittedKeys)]),
   });
 }
 
@@ -177,11 +186,12 @@ function enumerationFamily(
 
 function candidateInput(
   canonical: CanonicalSource,
+  admittedKeys?: readonly string[],
 ): AdapterFamilySnapshotInventoryClosureCandidateInput {
   return Object.freeze({
     source: canonical,
     families: Object.freeze([
-      candidateFamily(canonical, [candidateIncumbent(canonical)]),
+      candidateFamily(canonical, [candidateIncumbent(canonical, admittedKeys)]),
     ]),
   });
 }
@@ -333,6 +343,72 @@ async function main(): Promise<void> {
     stages: Object.freeze([mismatchSnapshotStage]),
     sourceAnchors: Object.freeze([]),
   }), /staged set mismatch|exact-set/);
+
+  const wstethPublication = await runWstethLifecycle(SOURCE, catalog);
+  const admittedKey = catalogInstancePublicationKey({
+    familyId: wstethPublication.instances[0]!.familyId,
+    lineageId: wstethPublication.instances[0]!.lineageId,
+    instanceKey: wstethPublication.instances[0]!.instanceKey,
+  });
+  const lifecycleClosureCandidate = composition.closureIssuer.prepare(
+    candidateInput(SOURCE, [admittedKey]),
+  );
+  const lifecycleClosureReceipt = await composition.closureVerifier.verifyAndIssue({
+    candidate: lifecycleClosureCandidate,
+    checkpointReceipt,
+  });
+  const completeStage = composition.catalogRoot.stageRouteFamily({
+    publication: wstethPublication,
+    inventoryMode: "complete-snapshot",
+    snapshotInventoryClosureReceipt: lifecycleClosureReceipt,
+  });
+  const snapshotAnchors = catalog.listAll().flatMap((family) => {
+    const familyId = family.plugin.manifest.familyId;
+    const sourceIds = "discovery" in family.plugin
+      ? family.plugin.discovery.sources
+      : [];
+    return sourceIds.map((sourceId) => Object.freeze({
+      familyId,
+      sourceId,
+      sourceFingerprint: catalogDiscoverySourceFingerprint({
+        familyId,
+        sourceId,
+        source: SOURCE,
+      }),
+      authority: "complete-snapshot" as const,
+      status: "complete" as const,
+      completeThroughBlock: SOURCE.number,
+      completeThroughHash: SOURCE.hash,
+    }));
+  });
+  const prepared = composition.catalogRoot.prepare({
+    source: SOURCE,
+    previous: null,
+    stages: Object.freeze([completeStage]),
+    sourceAnchors: Object.freeze(snapshotAnchors),
+  });
+  assert(prepared !== null);
+  assert.equal(composition.catalogRoot.capture(), null);
+  const published = await composition.catalogRoot.compareAndPublish({
+    expected: null,
+    staged: prepared,
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {},
+  });
+  assert.equal(published, true);
+  const committed = composition.catalogRoot.capture()!;
+  assert(committed.envelope.privateState.instances.has(admittedKey));
+  assert(committed.envelope.snapshot.delta.added.includes(admittedKey));
+  for (const sourceId of ["observed-call", "address-surface"]) {
+    const anchor = committed.envelope.snapshot.sourceAnchors.get(
+      catalogFamilySourceAnchorKey(WSTETH_FAMILY_ID, sourceId),
+    );
+    assert(anchor);
+    assert.equal(anchor.authority, "complete-snapshot");
+    assert.equal(anchor.status, "complete");
+    assert.equal(anchor.completeThroughBlock, SOURCE.number);
+    assert.equal(anchor.completeThroughHash, SOURCE.hash);
+  }
 
   const restarted = createDurableDiscoveryContinuityComposition({
     catalog,

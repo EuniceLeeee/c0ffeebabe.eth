@@ -9,6 +9,9 @@
 
 ### 现状 blocker
 
+- 状态更新：address-surface Family 的 complete-snapshot 正向路径已关闭
+  （wsteth fixture lifecycle → closure receipt → prepare/publish 成功，
+  见 canonical 文档对应 checkpoint）；本节仅针对 factory-log 族。
 - `AdapterFamilySnapshotInventoryClosureVerifier.expectedFamilies` 对每个
   discovery Family 要求 `supportsAddressSurfaceBootstrap`（sources 必须是
   event/address-surface 且含 address-surface + addressSurfaces）；

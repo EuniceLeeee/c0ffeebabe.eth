@@ -169,8 +169,9 @@ blocker 可执行化）：**
 - 该设计不替代实现或授权；后续实现 slice 必须逐项满足其验收条件并
   附合同测试。
 
-**2026-08-12 complete-snapshot verifier-gated consumption checkpoint
-（commit 见下，机制级实现；full-catalog 正向路径仍 blocker）：**
+**2026-08-12 complete-snapshot verifier-gated consumption + wsteth
+lifecycle 正向路径 checkpoint（commit 见下，机制级实现；address-surface
+正向路径已关闭，factory-log incumbent 扩展仍 blocker）：**
 
 - strict shadow catalog 现在接受 `complete-snapshot` stage：必须携带
   snapshot inventory closure receipt，且 root 必须先一次性绑定
@@ -184,16 +185,25 @@ blocker 可执行化）：**
   拒绝 append-only 携带 receipt、未绑 verifier 时 prepare 拒绝；continuity
   composition 用 forged receipt prepare 抛 `forged or foreign`、用真实
   receipt + 空 staged 集 prepare 抛 `staged set mismatch`；
-- 证据：shadow suite（10 合同）全过 + regression sweep 11 组全过 +
-  完整 build；full-catalog 正向路径（真实 wsteth lifecycle publication +
-  closure receipt 成功 prepare/publish）仍缺 wsteth lifecycle fixture，
-  按 §1 设计继续。
+- 正向路径已关闭：`runWstethLifecycle` 导出并支持注入 catalog；用真实
+  wsteth fixture lifecycle 在 composition 自己的 catalog FamilyBox 下
+  签发 publication，closure verifier 新签发 receipt 后
+  `stageRouteFamily({inventoryMode:"complete-snapshot"})` →
+  `prepare` → `compareAndPublish` 全部成功；
+- 提交后可观测断言：wsteth instance publication key 进入 envelope
+  `privateState.instances` 与 `delta.added`；`observed-call` /
+  `address-surface` 两个 source anchor 均为 `complete-snapshot` /
+  `complete`，completeThrough block/hash 与 canonical source 一致；
+- 证据：shadow suite（10 合同）全过 + regression sweep 11 组全过
+  （含 22-family parity verifier 与 node SSM evidence verifier）+
+  完整 build；本地 sealed-capture/shadow receipt 范围，不代表
+  production cutover。
 
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
-- strict catalog prepare 内 complete-snapshot 一次性消费（受限于
-  22 族中仅 9 族具备 address-surface bootstrap 覆盖；其余 factory-log
-  族需要 inventory incumbent 语义扩展，另行设计）；
+- complete-snapshot 正向路径的 factory-log incumbent 扩展（address-surface
+  Family 正向已关闭；其余 factory-log 族需要 §1 设计的 incumbent kind/
+  fingerprint/expectedFamilies 语义扩展）；
 - production point-in-time enumerator 真实数据源接线（live discovery
   输出）；
 - production solver 的 strict pricing/Funding/Credit consumer 真实

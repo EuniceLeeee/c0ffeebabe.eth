@@ -10,6 +10,9 @@ import {
 import {
   definedFamilyPluginContractSummary,
 } from "./venues/adapter-family-plugin.js";
+import type {
+  FamilyCapabilityCatalog,
+} from "./venues/family-capability-catalog.js";
 import {
   UNIV2_FAMILY_ID,
 } from "./venues/swaps/univ2-family/manifest.js";
@@ -2589,12 +2592,12 @@ function wstethFixtureRuntime(): CentralAdapterRuntime {
   };
 }
 
-async function runWstethLifecycle(
+export async function runWstethLifecycle(
   canonical: CanonicalSource,
+  catalog: FamilyCapabilityCatalog =
+    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 ): Promise<AdapterFamilyPublication> {
-  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
-    WSTETH_FAMILY_ID,
-  );
+  const family = catalog.forFamily(WSTETH_FAMILY_ID);
   let publication: AdapterFamilyPublication | null = null;
   const wrapCalldata = WSTETH_INTERFACE.encodeFunctionData("wrap", [
     1_000_000n,
