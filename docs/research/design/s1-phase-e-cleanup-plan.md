@@ -340,10 +340,21 @@
 > legacy prewarm 与 encodeQuotePrewarm legacy 回退。合同测试更新
 > （无 strict views 时 funding prewarm 为空）；build/shadow suite
 > 全绿。quote/approve legacy 保留，待 Pair E 接线后补删。
+>
+> **Pair E 接线（2026-08-12）：** 新增 `createStrictQuoteSource`：
+> solver 的 quoteSource call-site 在 composition 存在时包一层 strict
+> quote source——按 committed views 的 edges+pricing routes 建索引
+> （adapterId/target/tokens → instanceKey → pricingPublicationKey +
+> routeKey），命中 route 用 `createStrictCatalogConsumer.resolvePricingMid`
+> 的 mid 按 1e9 scale 折算 amountOut；unavailable/missing/未知 route
+> 按 per-availability/per-family 设计回退 legacy quote，保证 strict
+> publication 集尚未齐全时 searcher 覆盖不塌。revision 变更自动
+> 重建索引。合同测试五例全过；solver 全量 strict 解析（去 legacy
+> 回退）属默认 authority 收口的一部分。
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |
-| E | blockscan loop 的 legacy pricing 消费（14 legacy pricing Family） | strict pricing views + `strict-solver-consumer` 全量解析 | 合同已备，接线未接 |
+| E | blockscan loop 的 legacy pricing 消费（14 legacy pricing Family） | strict pricing views + `strict-solver-consumer` 全量解析 | **2026-08-12 接线完成（部分）**：`createStrictQuoteSource` 已接入 solver quoteSource call-site——committed views 覆盖的 route 用 strict mid 报价（unavailable/missing 按 per-availability 回退 legacy），未覆盖 route 回退 legacy；revision 变更自动重建索引。合同测试 `strict-live-quote-source`（覆盖/未知/不可用/无 views/revision 重建五例）已并入 shadow suite。solver 全量 strict 解析（无 legacy 回退）待默认 authority 收口 |
 | F | family facade / 手工 revision / legacy schema/cache bridge / 旧 flag | strict manifest + capability hash + CAS publication | 未开始 |
 
 ## 验收

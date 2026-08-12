@@ -97,6 +97,9 @@ import {
   createCoalescingPublicationChain,
 } from "./strict-live-publication-chain.js";
 import {
+  createStrictQuoteSource,
+} from "./strict-live-quote-source.js";
+import {
   resolveStrictSolverConsumer,
 } from "./strict-solver-consumer.js";
 import {
@@ -248,6 +251,8 @@ import {
   pendingEvidenceScopeKeys,
 } from "./blockscan-pending-evidence.js";
 import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
+import type { AmountQuoteSource } from
+  "./solver/amount-propagation.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import {
   PoolStateCache,
@@ -3560,6 +3565,18 @@ async function main(): Promise<void> {
             blockTracker,
             observeProtocolReceipt: liveDiscovery.observeProtocolReceipt,
             observeProtocolTxHash: liveDiscovery.observeProtocolTxHash,
+            ...(discoveryContinuityComposition === null
+              ? {}
+              : {
+                  strictQuoteSource: createStrictQuoteSource({
+                    views: () =>
+                      discoveryContinuityComposition.catalogRoot.capture()
+                        ?.views ?? null,
+                    catalog:
+                      PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+                    legacy: liveBackend,
+                  }),
+                }),
           });
         } catch (err) {
           console.log(
@@ -3618,6 +3635,12 @@ interface HandleCtx {
     receipt: ProtocolDiscoveryReceipt;
   }): Promise<void>;
   observeProtocolTxHash(txHash: string): Promise<void>;
+  /**
+   * Pair E: solver quote source backed by committed strict catalog pricing
+   * views with per-family/per-availability legacy fallback. Absent when no
+   * composition is configured.
+   */
+  readonly strictQuoteSource?: AmountQuoteSource;
 }
 
 /**
@@ -4751,7 +4774,7 @@ async function processOpportunities(
           quoteSafetyBps: ctx.config.quoteSafetyBps,
           cache: ctx.cache,
           quoteSource: useConfiguredBackend && ctx.config.liveBackend !== "rpc" && !localVictimApply
-            ? ctx.liveBackend
+            ? ctx.strictQuoteSource ?? ctx.liveBackend
             : undefined,
           deferPhase2Sim: localVictimApply !== null && useConfiguredBackend && ctx.config.liveBackend !== "rpc",
           executionEvidence,
