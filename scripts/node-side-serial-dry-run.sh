@@ -29,9 +29,6 @@ export SEARCHER_ENABLE_MEV_SHARE=0
 export SEARCHER_SUBMIT_HASHONLY_MEVSHARE=0
 export SEARCHER_EVENTS_PATH="${outdir}/events.jsonl"
 export SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH="${outdir}/routes.jsonl"
-# Dry-run signing still needs a key locally; use a per-run random dummy
-# (never the production key, never committed).
-export OWNER_PRIVATE_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 for var in \
   MAINNET_RPC_URL SEARCHER_LIVE_RPC_URL SEARCHER_LIVE_WS_URL \
   SEARCHER_REVM_SIM_BIN SEARCHER_V2_LINEAGES_PATH \
@@ -60,6 +57,13 @@ for var in \
     export "${var}=${value}"
   fi
 done
+
+# Dry-run signing still needs a key locally; use a per-run random dummy
+# (never the production key, never committed) and pin the botvm identity to
+# the dummy key's derived address.
+export OWNER_PRIVATE_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export BOTVM_OWNER="$(cd "${dir}/listener" && node -e "const {Wallet}=require('ethers'); console.log(new Wallet(process.argv[1]).address)" "${OWNER_PRIVATE_KEY}")"
+export BOTVM_ADDRESS="${BOTVM_OWNER}"
 
 cd "${dir}/listener"
 set +e
