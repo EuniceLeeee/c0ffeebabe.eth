@@ -798,7 +798,13 @@ fn simulate(req: SimRequest, started: Instant) -> Result<SimResponse> {
     let mut db = CacheDB::new(remote);
     let mut balance_slots = HashMap::new();
     apply_state_overrides(&mut db, &req.state_overrides)?;
-    apply_token_deals(&mut db, &block_env, &req.token_deals, &mut balance_slots)?;
+    apply_token_deals(
+        &mut db,
+        &block_env,
+        &req.token_deals,
+        &mut balance_slots,
+        None,
+    )?;
     for call in pre_calls {
         let pre = execute_call(
             &mut db,
@@ -1470,7 +1476,13 @@ impl Daemon {
         phase_ms("fund", &mut phase);
 
         apply_state_overrides(&mut db, &state_overrides)?;
-        apply_token_deals(&mut db, &block_env, &token_deals, &mut self.balance_slots)?;
+        apply_token_deals(
+            &mut db,
+            &block_env,
+            &token_deals,
+            &mut self.balance_slots,
+            None,
+        )?;
         phase_ms("token_deals", &mut phase);
 
         // Execute every preCall but the last one (the approve) locally first:
@@ -1718,7 +1730,7 @@ impl Daemon {
         let remote_rc = Rc::clone(
             &self.warm.as_ref().expect("warm set above").remote,
         );
-        let mut db = CacheDB::new(SharedRemote(remote_rc));
+        let mut db = CacheDB::new(SharedRemote(Rc::clone(&remote_rc)));
         let block_env = load_block_env(
             &self.warm.as_ref().expect("warm set").remote.rpc,
             block_number,
@@ -1751,6 +1763,7 @@ impl Daemon {
             &block_env,
             &token_deals,
             &mut self.balance_slots,
+            Some(remote_rc.as_ref()),
         )?;
 
         let mut observed_tokens: Vec<Address> = Vec::new();
@@ -2153,6 +2166,7 @@ fn apply_token_deals<D>(
     block_env: &BlockEnv,
     deals: &[TokenDeal],
     balance_slots: &mut HashMap<Address, u64>,
+    remote: Option<&RemoteRevmDb>,
 ) -> Result<()>
 where
     D: DatabaseRef<Error = RpcError>,
@@ -2190,10 +2204,71 @@ where
             mark_account_touched(db, token);
         }
         if !applied {
+            if let Some(remote) = remote {
+                if let Some(slot) =
+                    discover_erc20_balance_slot(remote, token, to)?
+                {
+                    db.insert_account_storage(token, slot, amount).map_err(
+                        |err| {
+                            anyhow!(
+                                "failed writing discovered slot {token:#x}:{slot:#x}: {err}"
+                            )
+                        },
+                    )?;
+                    mark_account_touched(db, token);
+                    if erc20_balance_of(db, block_env, token, to)
+                        .unwrap_or(U256::ZERO)
+                        >= amount
+                    {
+                        applied = true;
+                    }
+                }
+            }
+        }
+        if !applied {
             bail!("could not locate ERC20 balance slot for token {token:#x}");
         }
     }
     Ok(())
+}
+
+/// Exact ERC20 balance-slot discovery: trace `balanceOf(account)` with
+/// prestateTracer and return the first storage slot the token reads. Covers
+/// vaults/tokens whose mapping slot is outside the common candidate list.
+fn discover_erc20_balance_slot(
+    remote: &RemoteRevmDb,
+    token: Address,
+    account: Address,
+) -> Result<Option<U256>> {
+    let mut data = Vec::with_capacity(36);
+    data.extend_from_slice(&BALANCE_OF_SELECTOR);
+    data.extend_from_slice(&[0u8; 12]);
+    data.extend_from_slice(account.as_slice());
+    let result = remote.rpc.call(
+        "debug_traceCall",
+        json!([
+            {
+                "from": format!("{:#x}", Address::ZERO),
+                "to": format!("{:#x}", token),
+                "data": format!("0x{}", hex::encode(&data)),
+            },
+            remote.block_tag,
+            { "tracer": "prestateTracer" }
+        ]),
+    )?;
+    let token_key = format!("{token:#x}");
+    let storage = result
+        .get(&token_key)
+        .and_then(|entry| entry.get("storage"))
+        .and_then(Value::as_object);
+    if let Some(storage) = storage {
+        for key in storage.keys() {
+            if let Ok(slot) = parse_u256(&format!("0x{key}")) {
+                return Ok(Some(slot));
+            }
+        }
+    }
+    Ok(None)
 }
 
 fn token_deals_have_known_slots(
