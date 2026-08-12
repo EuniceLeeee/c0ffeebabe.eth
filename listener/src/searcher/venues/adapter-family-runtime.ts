@@ -491,7 +491,21 @@ function snapshotFamilyLifecycleMatch(
                 interfaceFingerprints: Object.freeze([
                   ...observation.interfaceFingerprints,
                 ]),
-              }),
+            }),
+        }),
+      });
+    case "factory-log":
+      return Object.freeze({
+        matchedPatternId: match.matchedPatternId,
+        observation: Object.freeze({
+          kind: observation.kind,
+          source,
+          factory: observation.factory,
+          poolKeyProjection: observation.poolKeyProjection,
+          lastFactoryLogBlock: observation.lastFactoryLogBlock,
+          topic: observation.topic,
+          topics: Object.freeze([...observation.topics]),
+          data: observation.data,
         }),
       });
   }
@@ -4806,6 +4820,17 @@ function observationKey(observation: UnifiedObservation): string {
     ? {
         kind: observation.kind,
         address: observation.address,
+        topics: observation.topics,
+        data: observation.data,
+        source: canonicalSourceProjection(observation.source),
+      }
+    : observation.kind === "factory-log"
+    ? {
+        kind: observation.kind,
+        factory: observation.factory,
+        poolKeyProjection: observation.poolKeyProjection,
+        lastFactoryLogBlock: observation.lastFactoryLogBlock,
+        topic: observation.topic,
         topics: observation.topics,
         data: observation.data,
         source: canonicalSourceProjection(observation.source),

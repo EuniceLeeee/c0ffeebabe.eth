@@ -193,7 +193,7 @@ function testCrossFamilyKeysMayRepeatAndForeignSurfaceKindFails(): void {
         }],
       },
     ],
-  }), /snapshot inventory requires a current address surface/);
+  }), /snapshot inventory requires an address-surface or factory-log surface/);
 }
 
 function testEmptyFamilyYieldsCanonicalZeroInventory(): void {

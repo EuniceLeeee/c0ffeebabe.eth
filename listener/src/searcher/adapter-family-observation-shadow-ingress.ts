@@ -1908,6 +1908,13 @@ function snapshotObservation(input: UnifiedObservation): UnifiedObservation {
   if (input.kind === "log") {
     return Object.freeze({ ...input, source, topics: Object.freeze([...input.topics]) });
   }
+  if (input.kind === "factory-log") {
+    return Object.freeze({
+      ...input,
+      source,
+      topics: Object.freeze([...input.topics]),
+    });
+  }
   if (input.kind === "address-surface") {
     return Object.freeze({
       ...input,

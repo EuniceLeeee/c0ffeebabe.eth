@@ -504,13 +504,14 @@ function successResult(
   });
 }
 
-async function runUniv2Lifecycle(
+export async function runUniv2Lifecycle(
   canonical: CanonicalSource,
   pool: PoolContext,
+  catalog: FamilyCapabilityCatalog = CATALOG,
 ): Promise<AdapterFamilyPublication> {
   let publication: AdapterFamilyPublication | null = null;
   const result = await executeAdapterFamilyLifecycleBatch({
-    family: FAMILY,
+    family: catalog.forFamily(UNIV2_FAMILY_ID),
     matches: [Object.freeze({
       matchedPatternId: UNIV2_SWAP_CALL_PATTERN_ID,
       observation: Object.freeze({

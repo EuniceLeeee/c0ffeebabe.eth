@@ -327,6 +327,12 @@ export class FamilyCapabilityCatalog {
         }
         return Object.freeze(matches.sort(comparePatternMatch));
       }
+      case "factory-log": {
+        // Reverse bootstrap matching: a factory-log incumbent surface is
+        // admitted when the Family declares the bootstrap log topic. The
+        // closure verifier re-decodes the candidate from the carried log.
+        return this.logMatches.get(observation.topic.toLowerCase()) ?? [];
+      }
     }
   }
 }

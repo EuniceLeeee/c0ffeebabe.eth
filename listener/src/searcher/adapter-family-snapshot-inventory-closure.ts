@@ -6,6 +6,7 @@ import type { FamilyId } from
   "./venues/adapter-family-identifiers.js";
 import type {
   DiscoverySourceKind,
+  Hex32,
   UnifiedObservation,
 } from "./venues/adapter-family-plugin.js";
 import type { CanonicalSource } from
@@ -24,10 +25,9 @@ const EVENT_SOURCE_IDS: ReadonlySet<DiscoverySourceKind> = new Set([
   "observed-call",
 ]);
 
-type AddressSurfaceObservation = Extract<
-  UnifiedObservation,
-  { readonly kind: "address-surface" }
->;
+export type AdapterFamilySnapshotInventoryObservation =
+  | Extract<UnifiedObservation, { readonly kind: "address-surface" }>
+  | Extract<UnifiedObservation, { readonly kind: "factory-log" }>;
 
 export interface AdapterFamilySnapshotInventoryClosureBinding {
   readonly chainId: string;
@@ -47,7 +47,7 @@ export interface AdapterFamilySnapshotTerminalCandidateInput {
 export interface AdapterFamilySnapshotInventoryIncumbentInput {
   readonly inventoryKey: string;
   readonly address: string;
-  readonly currentSurface: AddressSurfaceObservation;
+  readonly currentSurface: AdapterFamilySnapshotInventoryObservation;
   readonly terminalCandidates:
     readonly AdapterFamilySnapshotTerminalCandidateInput[];
 }
@@ -69,7 +69,7 @@ export interface AdapterFamilySnapshotInventoryClosureCandidateInput {
 export interface AdapterFamilySnapshotInventoryEnumerationIncumbentInput {
   readonly inventoryKey: string;
   readonly address: string;
-  readonly currentSurface: AddressSurfaceObservation;
+  readonly currentSurface: AdapterFamilySnapshotInventoryObservation;
 }
 
 export interface AdapterFamilySnapshotInventoryEnumerationFamilyInput {
@@ -143,7 +143,7 @@ export interface ResolvedAdapterFamilySnapshotInventoryClosure {
 interface ExpectedFamily {
   readonly familyId: FamilyId;
   readonly declaredSourceIds: readonly DiscoverySourceKind[];
-  readonly supportsAddressSurfaceBootstrap: boolean;
+  readonly supportsSnapshotBootstrap: boolean;
 }
 
 interface SnapshotTerminalCandidate
@@ -152,7 +152,7 @@ interface SnapshotTerminalCandidate
 interface SnapshotIncumbent {
   readonly inventoryKey: string;
   readonly address: string;
-  readonly currentSurface: AddressSurfaceObservation;
+  readonly currentSurface: AdapterFamilySnapshotInventoryObservation;
   readonly currentSurfaceFingerprint: string;
   readonly terminalCandidates: readonly SnapshotTerminalCandidate[];
 }
@@ -461,7 +461,7 @@ export function adapterFamilySnapshotInventoryHash(input: {
   readonly incumbents: readonly {
     readonly inventoryKey: string;
     readonly address: string;
-    readonly currentSurface: AddressSurfaceObservation;
+    readonly currentSurface: AdapterFamilySnapshotInventoryObservation;
   }[];
 }): string {
   const source = freezeSource(input.source);
@@ -472,12 +472,21 @@ export function adapterFamilySnapshotInventoryHash(input: {
     return Object.freeze({
       inventoryKey,
       address,
+      incumbentKind: surface.kind,
       currentSurfaceFingerprint: currentSurfaceFingerprint(surface),
+      ...(surface.kind === "factory-log"
+        ? {
+            factory: surface.factory,
+            poolKeyProjection: surface.poolKeyProjection,
+            lastFactoryLogBlock: surface.lastFactoryLogBlock,
+            topic: surface.topic,
+          }
+        : {}),
     });
   }).sort((left, right) => compareText(left.inventoryKey, right.inventoryKey));
   assertUnique(incumbents.map((item) => item.inventoryKey), "inventory key");
   return hashCanonical({
-    format: "adapter-family-snapshot-inventory-v2",
+    format: "adapter-family-snapshot-inventory-v3",
     familyId: nonempty(input.familyId, "inventory Family id"),
     source,
     incumbents,
@@ -503,7 +512,7 @@ export function enumeratePointInTimeInventory(input: {
     readonly incumbents: readonly {
       readonly inventoryKey: string;
       readonly address: string;
-      readonly currentSurface: AddressSurfaceObservation;
+      readonly currentSurface: AdapterFamilySnapshotInventoryObservation;
     }[];
   }[];
 }): AdapterFamilySnapshotInventoryEnumerationInput {
@@ -627,6 +636,11 @@ export function assertClosureStagedExactSetCoupling(input: {
 function expectedFamilies(
   catalog: FamilyCapabilityCatalog,
 ): readonly ExpectedFamily[] {
+  const sourcesWithinSnapshotScope =
+    (sources: readonly DiscoverySourceKind[]) =>
+      sources.every((sourceId) =>
+        EVENT_SOURCE_IDS.has(sourceId) || sourceId === "address-surface"
+      );
   const families = catalog.listAll().flatMap((family) => {
     if (!("discovery" in family.plugin)) return [];
     return [Object.freeze({
@@ -634,12 +648,17 @@ function expectedFamilies(
       declaredSourceIds: Object.freeze(
         [...family.plugin.discovery.sources].sort(compareText),
       ),
-      supportsAddressSurfaceBootstrap:
-        family.plugin.discovery.sources.includes("address-surface") &&
-        (family.plugin.discovery.addressSurfaces?.length ?? 0) > 0 &&
-        family.plugin.discovery.sources.every((sourceId) =>
-          EVENT_SOURCE_IDS.has(sourceId) || sourceId === "address-surface"
-        ),
+      supportsSnapshotBootstrap: sourcesWithinSnapshotScope(
+        family.plugin.discovery.sources,
+      ) && (
+        (
+          family.plugin.discovery.sources.includes("address-surface") &&
+          (family.plugin.discovery.addressSurfaces?.length ?? 0) > 0
+        ) || (
+          family.plugin.discovery.sources.includes("factory-log") &&
+          (family.plugin.discovery.logPatterns?.length ?? 0) > 0
+        )
+      ),
     })];
   }).sort((left, right) => compareText(left.familyId, right.familyId));
   assertUnique(families.map((family) => family.familyId), "discovery Family");
@@ -672,9 +691,9 @@ function validateAndFreezeFamilies(input: {
       throw new Error(`duplicate snapshot inventory Family ${raw.familyId}`);
     }
     seen.add(raw.familyId);
-    if (!expected.supportsAddressSurfaceBootstrap) {
+    if (!expected.supportsSnapshotBootstrap) {
       throw new Error(
-        `snapshot inventory Family ${raw.familyId} lacks address-surface bootstrap coverage`,
+        `snapshot inventory Family ${raw.familyId} lacks snapshot bootstrap coverage`,
       );
     }
     const inventoryKeys = sortedUnique(raw.inventoryKeys, "inventory keys");
@@ -698,6 +717,16 @@ function validateAndFreezeFamilies(input: {
         input.source,
         address,
       );
+      const decodeObservation: UnifiedObservation =
+        currentSurface.kind === "factory-log"
+          ? Object.freeze({
+              kind: "log" as const,
+              source: currentSurface.source,
+              address: currentSurface.factory,
+              topics: currentSurface.topics,
+              data: currentSurface.data,
+            })
+          : currentSurface;
       const expectedCandidates = input.catalog.matches(currentSurface)
         .filter((match) => match.familyId === raw.familyId)
         .map((match) => {
@@ -705,7 +734,7 @@ function validateAndFreezeFamilies(input: {
             throw new Error(`Family ${raw.familyId} has no discovery contract`);
           }
           const candidate = family.plugin.discovery.decodeCandidate({
-            observation: currentSurface,
+            observation: decodeObservation,
             matchedPatternId: match.patternId,
           });
           return candidate === null
@@ -723,6 +752,14 @@ function validateAndFreezeFamilies(input: {
       if (uniqueExpectedCandidates.length === 0) {
         throw new Error(
           `snapshot surface does not match Family ${raw.familyId}`,
+        );
+      }
+      if (
+        currentSurface.kind === "factory-log" &&
+        !uniqueExpectedCandidates.includes(inventoryKey)
+      ) {
+        throw new Error(
+          `snapshot factory-log surface does not close ${inventoryKey}`,
         );
       }
       const terminalCandidates = incumbent.terminalCandidates.map(
@@ -1029,14 +1066,58 @@ function freezeSource(source: CanonicalSource): CanonicalSource {
 }
 
 function freezeSurface(
-  surface: AddressSurfaceObservation,
+  surface: AdapterFamilySnapshotInventoryObservation,
   source: CanonicalSource,
   address: string,
-): AddressSurfaceObservation {
-  if (surface?.kind !== "address-surface") {
-    throw new Error("snapshot inventory requires a current address surface");
+): AdapterFamilySnapshotInventoryObservation {
+  if (surface === null || typeof surface !== "object") {
+    throw new Error("snapshot inventory requires a current incumbent surface");
+  }
+  if (surface.kind !== "address-surface" && surface.kind !== "factory-log") {
+    throw new Error(
+      "snapshot inventory requires an address-surface or factory-log surface",
+    );
   }
   assertSameSource(surface.source, source);
+  if (surface.kind === "factory-log") {
+    const factory = canonicalAddress(surface.factory);
+    const poolKeyProjection = nonempty(
+      surface.poolKeyProjection,
+      "factory-log pool key projection",
+    );
+    if (
+      !Number.isSafeInteger(surface.lastFactoryLogBlock) ||
+      Object.is(surface.lastFactoryLogBlock, -0) ||
+      surface.lastFactoryLogBlock < 0 ||
+      surface.lastFactoryLogBlock > source.number
+    ) {
+      throw new Error(
+        "snapshot factory-log surface block must not exceed its source",
+      );
+    }
+    const topic = canonicalHash(surface.topic, "factory-log topic") as Hex32;
+    const topics = surface.topics.map((value) =>
+      canonicalHash(value, "factory-log topic")
+    );
+    if (!topics.includes(topic)) {
+      throw new Error("snapshot factory-log surface topic not in topics");
+    }
+    if (typeof surface.data !== "string" || !/^0x[0-9a-fA-F]*$/.test(
+      surface.data,
+    )) {
+      throw new Error("snapshot factory-log surface data must be hex");
+    }
+    return Object.freeze({
+      kind: "factory-log" as const,
+      source,
+      factory,
+      poolKeyProjection,
+      lastFactoryLogBlock: surface.lastFactoryLogBlock,
+      topic,
+      topics: Object.freeze(topics),
+      data: surface.data.toLowerCase(),
+    });
+  }
   if (canonicalAddress(surface.address) !== address) {
     throw new Error("snapshot inventory surface address mismatch");
   }
@@ -1061,7 +1142,20 @@ function freezeSurface(
   });
 }
 
-function currentSurfaceFingerprint(surface: AddressSurfaceObservation): string {
+function currentSurfaceFingerprint(
+  surface: AdapterFamilySnapshotInventoryObservation,
+): string {
+  if (surface.kind === "factory-log") {
+    return hashCanonical({
+      kind: surface.kind,
+      factory: surface.factory,
+      poolKeyProjection: surface.poolKeyProjection,
+      lastFactoryLogBlock: surface.lastFactoryLogBlock,
+      topic: surface.topic,
+      topics: surface.topics,
+      data: surface.data,
+    });
+  }
   return hashCanonical({
     kind: surface.kind,
     address: surface.address,

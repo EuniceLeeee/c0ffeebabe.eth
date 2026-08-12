@@ -88,6 +88,23 @@ export type UnifiedObservation =
       readonly codeHash: string;
       readonly implementationWord: string;
       readonly interfaceFingerprints?: readonly string[];
+    }
+  | {
+      /**
+       * Projected factory-log incumbent surface: a pool admitted by a
+       * factory bootstrap event. Carries the factory address, a canonical
+       * pool-key projection, the last factory-log confirmation block, and
+       * the raw bootstrap log (topic + topics + data) so catalog matching
+       * and Family decodeCandidate can re-verify the admission.
+       */
+      readonly kind: "factory-log";
+      readonly source: CanonicalSource;
+      readonly factory: string;
+      readonly poolKeyProjection: string;
+      readonly lastFactoryLogBlock: number;
+      readonly topic: Hex32;
+      readonly topics: readonly string[];
+      readonly data: string;
     };
 
 export interface FamilyCandidate {

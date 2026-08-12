@@ -199,11 +199,43 @@ lifecycle 正向路径 checkpoint（commit 见下，机制级实现；address-su
   完整 build；本地 sealed-capture/shadow receipt 范围，不代表
   production cutover。
 
+**2026-08-12 factory-log incumbent + complete-snapshot 正向路径
+checkpoint（commit 见下，§1 设计落地；univ2-standard 风格 factory-log
+族合同级关闭，full-catalog 仍 fail-closed）：**
+
+- `UnifiedObservation` 新增 `factory-log` incumbent surface（factory、
+  poolKeyProjection、lastFactoryLogBlock + 原始 bootstrap log 的
+  topic/topics/data）；`FamilyCapabilityCatalog.matches` 增加反向
+  topic 匹配，closure 校验把 factory-log surface 还原为 synthetic log
+  后走 Family `decodeCandidate`，并强制 candidateKey === inventoryKey；
+- snapshot inventory closure 放宽为 address-surface **或**
+  factory-log+logPatterns 任一 bootstrap 即可入 `expectedFamilies`；
+  `adapterFamilySnapshotInventoryHash` 升 v3，逐 incumbent 指纹化
+  incumbentKind 与 factory-log 投影；`lastFactoryLogBlock > source`
+  / topic 缺失 / 候选 key 不闭合 / 未知 surface kind 全部 fail closed；
+- 正向路径：真实 univ2 fixture lifecycle（注入 composition 自己的
+  catalog FamilyBox）→ factory-log incumbent closure receipt →
+  `complete-snapshot` stage → prepare/compareAndPublish 成功；committed
+  envelope 含 admitted instance publication key，univ2 的
+  factory-log/landed-log/observed-call 三个 anchor 均为
+  complete-snapshot/complete；closure 空 admitted + stage 仍带实例时
+  `staged set mismatch` fail closed；
+- 真实生产 catalog 现状：20 个 discovery Family 中 13 个（9
+  address-surface + 4 factory-log：univ2/3/4、angstrom-v4）已具备
+  snapshot bootstrap；剩余 7 个 observed-call/landed-log-only 族
+  （astra、eigenpie、erc4626-silo、ethertoken、hgusdc、curve-underlying、
+  dodo-v2）仍无 bootstrap 语义，catalog-wide closure 如实保持拒绝；
+- 证据：shadow suite（10 合同）全过 + regression sweep 11 组全过
+  （含 parity verifier 与 node SSM evidence verifier）+ 完整 build；
+  本地 sealed-capture/shadow receipt 范围，不代表 production cutover。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
-- complete-snapshot 正向路径的 factory-log incumbent 扩展（address-surface
-  Family 正向已关闭；其余 factory-log 族需要 §1 设计的 incumbent kind/
-  fingerprint/expectedFamilies 语义扩展）；
+- complete-snapshot 正向路径的剩余 bootstrap 缺口（factory-log
+  incumbent 已对 univ2-standard 风格族合同级关闭；astra/eigenpie/
+  erc4626-silo/ethertoken/hgusdc/curve-underlying/dodo-v2 等
+  observed-call/landed-log-only 族仍需新的 incumbent 语义，超出 §1
+  设计范围）；
 - production point-in-time enumerator 真实数据源接线（live discovery
   输出）；
 - production solver 的 strict pricing/Funding/Credit consumer 真实

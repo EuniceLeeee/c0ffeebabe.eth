@@ -8,6 +8,7 @@ import {
 import {
   AdapterFamilySnapshotInventoryClosureVerifier,
   adapterFamilySnapshotInventoryHash,
+  enumeratePointInTimeInventory,
   type AdapterFamilySnapshotCatalogPublicationPointer,
   type AdapterFamilySnapshotInventoryClosureCandidateInput,
   type AdapterFamilySnapshotInventoryClosureCandidateIssuer,
@@ -15,6 +16,7 @@ import {
   type AdapterFamilySnapshotInventoryEnumerationInput,
   type AdapterFamilySnapshotInventoryFamilyInput,
   type AdapterFamilySnapshotInventoryIncumbentInput,
+  type AdapterFamilySnapshotInventoryObservation,
   type AdapterFamilySnapshotTerminalCandidateInput,
 } from "../adapter-family-snapshot-inventory-closure.js";
 import {
@@ -39,6 +41,12 @@ import {
 } from "../venues/production-family-composition.js";
 import { WSTETH_FAMILY_ID } from
   "../venues/protocols/wsteth-family/manifest.js";
+import { UNIV2_FAMILY_ID } from
+  "../venues/swaps/univ2-family/manifest.js";
+import {
+  UNIV2_FACTORY_INTERFACE,
+  UNIV2_PAIR_CREATED_TOPIC,
+} from "../venues/swaps/univ2-family/codec.js";
 
 type AddressSurfaceObservation = Extract<
   UnifiedObservation,
@@ -50,6 +58,15 @@ const SOURCE_REGISTRY_FINGERPRINT = "strict-source-registry-v1";
 const WSTETH = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const OTHER_ADDRESS = `0x${"22".repeat(20)}`;
 const WSTETH_CANDIDATE_KEY = WSTETH.toLowerCase();
+const UNIV2_FIXTURE_POOL = `0x${"41".repeat(20)}`;
+const UNIV2_FIXTURE_FACTORY = `0x${"42".repeat(20)}`;
+const UNIV2_FIXTURE_TOKEN0 = `0x${"43".repeat(20)}`;
+const UNIV2_FIXTURE_TOKEN1 = `0x${"44".repeat(20)}`;
+const UNIV2_CANDIDATE_KEY = UNIV2_FIXTURE_POOL.toLowerCase();
+const UNIV2_STRICT_FAMILY_PLUGIN =
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forStrictFamily(
+    UNIV2_FAMILY_ID,
+  ).plugin;
 const SOURCE = source(10, "a", 4);
 const SOURCE_NEXT = source(11, "b", 5);
 const EVENT_SOURCES: ReadonlySet<DiscoverySourceKind> = new Set([
@@ -115,13 +132,14 @@ function source(
   });
 }
 
-function syntheticCatalog(): FamilyCapabilityCatalog {
-  const summary = definedFamilyPluginContractSummary(
-    WSTETH_STRICT_FAMILY_PLUGIN,
-  );
+function singleFamilyCatalog(input: {
+  readonly plugin: typeof WSTETH_STRICT_FAMILY_PLUGIN;
+  readonly sourceFile: string;
+}): FamilyCapabilityCatalog {
+  const summary = definedFamilyPluginContractSummary(input.plugin);
   const entries = FAMILY_CAPABILITY_NAMES.map((capability, index) =>
     Object.freeze({
-      familyId: WSTETH_FAMILY_ID,
+      familyId: summary.familyId,
       capability,
       contractVersion: "adapter-family-contract-v1",
       contentHash: index.toString(16).padStart(64, "0"),
@@ -131,15 +149,29 @@ function syntheticCatalog(): FamilyCapabilityCatalog {
   );
   return new FamilyCapabilityCatalog({
     modules: [Object.freeze({
-      sourceFile: "wsteth-family-plugin.ts",
+      sourceFile: input.sourceFile,
       definitionBoundaryHash: summary.definitionBoundaryHash,
-      plugin: WSTETH_STRICT_FAMILY_PLUGIN,
+      plugin: input.plugin,
     })],
     generatedManifest: Object.freeze({
       format: "adapter-family-capabilities-v1",
       entries: Object.freeze(entries),
       manifestHash: capabilityManifestHash(entries),
     }),
+  });
+}
+
+function syntheticCatalog(): FamilyCapabilityCatalog {
+  return singleFamilyCatalog({
+    plugin: WSTETH_STRICT_FAMILY_PLUGIN,
+    sourceFile: "wsteth-family-plugin.ts",
+  });
+}
+
+function univ2Catalog(): FamilyCapabilityCatalog {
+  return singleFamilyCatalog({
+    plugin: UNIV2_STRICT_FAMILY_PLUGIN,
+    sourceFile: "univ2-family-plugin.ts",
   });
 }
 
@@ -167,6 +199,7 @@ function terminalCandidate(
   input: {
     readonly candidateKey?: string;
     readonly status?: "terminal" | "partial";
+    readonly admittedInstancePublicationKeys?: readonly string[];
   } = {},
 ): AdapterFamilySnapshotTerminalCandidateInput {
   return Object.freeze({
@@ -175,7 +208,8 @@ function terminalCandidate(
     outcomeFingerprint: "3".repeat(64),
     evidenceRefs: Object.freeze(["fixture:terminal-evidence"]),
     admittedInstancePublicationKeys: Object.freeze([
-      "protocol:wsteth:fixture-instance",
+      ...(input.admittedInstancePublicationKeys ??
+        ["protocol:wsteth:fixture-instance"]),
     ]),
     publicationFingerprints: Object.freeze(["4".repeat(64)]),
   });
@@ -186,7 +220,7 @@ function candidateIncumbent(
   input: {
     readonly inventoryKey?: string;
     readonly address?: string;
-    readonly currentSurface?: AddressSurfaceObservation;
+    readonly currentSurface?: AdapterFamilySnapshotInventoryObservation;
     readonly terminalCandidates?:
       readonly AdapterFamilySnapshotTerminalCandidateInput[];
   } = {},
@@ -206,7 +240,7 @@ function enumerationIncumbent(
   input: {
     readonly inventoryKey?: string;
     readonly address?: string;
-    readonly currentSurface?: AddressSurfaceObservation;
+    readonly currentSurface?: AdapterFamilySnapshotInventoryObservation;
   } = {},
 ) {
   return Object.freeze({
@@ -282,6 +316,74 @@ function enumerationInput(
   });
 }
 
+function factoryLogSurface(
+  canonical: CanonicalSource = SOURCE,
+  input: {
+    readonly pool?: string;
+    readonly factory?: string;
+    readonly lastFactoryLogBlock?: number;
+    readonly poolKeyProjection?: string;
+  } = {},
+): Extract<UnifiedObservation, { readonly kind: "factory-log" }> {
+  const pool = (input.pool ?? UNIV2_FIXTURE_POOL).toLowerCase();
+  const factory = (input.factory ?? UNIV2_FIXTURE_FACTORY).toLowerCase();
+  const log = UNIV2_FACTORY_INTERFACE.encodeEventLog("PairCreated", [
+    UNIV2_FIXTURE_TOKEN0,
+    UNIV2_FIXTURE_TOKEN1,
+    pool,
+    0n,
+  ]);
+  return Object.freeze({
+    kind: "factory-log" as const,
+    source: canonical,
+    factory,
+    poolKeyProjection: input.poolKeyProjection ?? pool,
+    lastFactoryLogBlock: input.lastFactoryLogBlock ?? canonical.number,
+    topic: UNIV2_PAIR_CREATED_TOPIC,
+    topics: Object.freeze(log.topics),
+    data: log.data,
+  });
+}
+
+function univ2CandidateInput(
+  canonical: CanonicalSource = SOURCE,
+  admittedKeys: readonly string[] = ["swap:univ2:fixture-pool"],
+): AdapterFamilySnapshotInventoryClosureCandidateInput {
+  const incumbent = candidateIncumbent(canonical, {
+    inventoryKey: UNIV2_CANDIDATE_KEY,
+    address: UNIV2_FIXTURE_POOL,
+    currentSurface: factoryLogSurface(canonical),
+    terminalCandidates: Object.freeze([
+      terminalCandidate({
+        candidateKey: UNIV2_CANDIDATE_KEY,
+        admittedInstancePublicationKeys: admittedKeys,
+      }),
+    ]),
+  });
+  return Object.freeze({
+    source: canonical,
+    families: Object.freeze([
+      candidateFamily(canonical, [incumbent], UNIV2_FAMILY_ID),
+    ]),
+  });
+}
+
+function univ2EnumerationInput(
+  canonical: CanonicalSource = SOURCE,
+): AdapterFamilySnapshotInventoryEnumerationInput {
+  const incumbent = enumerationIncumbent(canonical, {
+    inventoryKey: UNIV2_CANDIDATE_KEY,
+    address: UNIV2_FIXTURE_POOL,
+    currentSurface: factoryLogSurface(canonical),
+  });
+  return Object.freeze({
+    source: canonical,
+    families: Object.freeze([
+      enumerationFamily(canonical, [incumbent], UNIV2_FAMILY_ID),
+    ]),
+  });
+}
+
 function checkpointStore(
   catalog: FamilyCapabilityCatalog,
 ): AdapterFamilyDiscoveryCheckpointStore {
@@ -346,13 +448,16 @@ async function trustedCheckpoint(input: {
 }
 
 async function harness(input: {
+  readonly catalog?: FamilyCapabilityCatalog;
   readonly source?: CanonicalSource;
   readonly eventContinuity?: boolean;
   readonly enumeration?: AdapterFamilySnapshotInventoryEnumerationInput;
   readonly publication?: AdapterFamilySnapshotCatalogPublicationPointer;
 } = {}): Promise<Harness> {
+  const catalog = input.catalog ?? SYNTHETIC_CATALOG;
   const canonical = input.source ?? SOURCE;
   const checkpoint = await trustedCheckpoint({
+    catalog,
     source: canonical,
     eventContinuity: input.eventContinuity,
   });
@@ -367,7 +472,7 @@ async function harness(input: {
     calls: [],
   };
   const verifier = new AdapterFamilySnapshotInventoryClosureVerifier({
-    catalog: SYNTHETIC_CATALOG,
+    catalog,
     chainId: CHAIN_ID,
     sourceRegistryFingerprint: SOURCE_REGISTRY_FINGERPRINT,
     checkpointStore: checkpoint.store,
@@ -843,17 +948,24 @@ function productionCatalogFailsClosed(): void {
   const discoveryFamilies = catalog.listAll().filter((family) =>
     "discovery" in family.plugin
   );
-  const lackingSurfaceBootstrap = discoveryFamilies.filter((family) => {
+  const lackingSnapshotBootstrap = discoveryFamilies.filter((family) => {
     if (!("discovery" in family.plugin)) return false;
-    return !family.plugin.discovery.sources.includes("address-surface") ||
-      (family.plugin.discovery.addressSurfaces?.length ?? 0) === 0 ||
-      family.plugin.discovery.sources.some((sourceId) =>
-        !EVENT_SOURCES.has(sourceId) && sourceId !== "address-surface"
-      );
+    const { discovery } = family.plugin;
+    const scopedSources = discovery.sources.every((sourceId) =>
+      EVENT_SOURCES.has(sourceId) || sourceId === "address-surface"
+    );
+    const addressSurfaceBootstrap =
+      discovery.sources.includes("address-surface") &&
+      (discovery.addressSurfaces?.length ?? 0) > 0;
+    const factoryLogBootstrap =
+      discovery.sources.includes("factory-log") &&
+      (discovery.logPatterns?.length ?? 0) > 0;
+    return !scopedSources ||
+      (!addressSurfaceBootstrap && !factoryLogBootstrap);
   });
   assert.equal(catalog.listAll().length, 22);
   assert.equal(discoveryFamilies.length, 20);
-  assert.equal(lackingSurfaceBootstrap.length, 11);
+  assert.equal(lackingSnapshotBootstrap.length, 7);
 
   const store = checkpointStore(catalog);
   const verifier = new AdapterFamilySnapshotInventoryClosureVerifier({
@@ -879,9 +991,145 @@ function productionCatalogFailsClosed(): void {
   );
   assert.throws(
     () => issuer.prepare({ source: SOURCE, families: zeroRows }),
-    /lacks address-surface bootstrap coverage/,
-    "the current 11-Family surface gap must prevent catalog-wide closure",
+    /lacks snapshot bootstrap coverage/,
+    "the current 7-Family snapshot bootstrap gap must prevent catalog-wide closure",
   );
+}
+
+async function factoryLogClosurePositive(): Promise<void> {
+  const catalog = univ2Catalog();
+  const local = await harness({
+    catalog,
+    enumeration: univ2EnumerationInput(),
+  });
+  const candidate = local.issuer.prepare(univ2CandidateInput());
+  const receipt = await local.verifier.verifyAndIssue({
+    candidate,
+    checkpointReceipt: local.checkpointReceipt,
+  });
+  const snapshot = local.verifier.closureSnapshot(receipt);
+  assert.equal(snapshot.families.length, 1);
+  assert.equal(snapshot.families[0]?.familyId, UNIV2_FAMILY_ID);
+  assert.deepEqual(snapshot.families[0]?.inventoryKeys, [UNIV2_CANDIDATE_KEY]);
+  assert.deepEqual(
+    snapshot.families[0]?.admittedInstancePublicationKeys,
+    ["swap:univ2:fixture-pool"],
+  );
+  assert.deepEqual(snapshot.families[0]?.declaredSourceIds, [
+    "factory-log",
+    "landed-log",
+    "observed-call",
+  ]);
+  local.verifier.consumeForCatalog(receipt, { source: SOURCE });
+  assert.throws(
+    () => local.verifier.consumeForCatalog(receipt, { source: SOURCE }),
+    /forged or foreign/,
+    "a factory-log closure receipt is one-shot",
+  );
+
+  const addressSurfaceHash = adapterFamilySnapshotInventoryHash({
+    familyId: UNIV2_FAMILY_ID,
+    source: SOURCE,
+    incumbents: [{
+      inventoryKey: UNIV2_CANDIDATE_KEY,
+      address: UNIV2_FIXTURE_POOL,
+      currentSurface: surface(SOURCE, {
+        address: UNIV2_FIXTURE_POOL,
+        interfaceFingerprints: ["univ2-pair-surface-v1"],
+      }),
+    }],
+  });
+  const factoryLogHash = adapterFamilySnapshotInventoryHash({
+    familyId: UNIV2_FAMILY_ID,
+    source: SOURCE,
+    incumbents: [{
+      inventoryKey: UNIV2_CANDIDATE_KEY,
+      address: UNIV2_FIXTURE_POOL,
+      currentSurface: factoryLogSurface(),
+    }],
+  });
+  assert.notEqual(
+    addressSurfaceHash,
+    factoryLogHash,
+    "incumbent kind and factory-log projection must be fingerprinted",
+  );
+}
+
+async function factoryLogValidation(): Promise<void> {
+  const catalog = univ2Catalog();
+  const local = await harness({
+    catalog,
+    enumeration: univ2EnumerationInput(),
+  });
+  const wrongKey = `0x${"51".repeat(20)}`;
+  const wrongKeyInput = Object.freeze({
+    source: SOURCE,
+    families: Object.freeze([
+      candidateFamily(SOURCE, [candidateIncumbent(SOURCE, {
+        inventoryKey: wrongKey.toLowerCase(),
+        address: wrongKey,
+        currentSurface: factoryLogSurface(),
+        terminalCandidates: Object.freeze([
+          terminalCandidate({
+            candidateKey: wrongKey.toLowerCase(),
+            admittedInstancePublicationKeys: ["swap:univ2:wrong-pool"],
+          }),
+        ]),
+      })], UNIV2_FAMILY_ID),
+    ]),
+  });
+  assert.throws(
+    () => local.issuer.prepare(wrongKeyInput),
+    /factory-log surface does not close/,
+  );
+
+  const staleSurface = candidateIncumbent(SOURCE, {
+    inventoryKey: UNIV2_CANDIDATE_KEY,
+    address: UNIV2_FIXTURE_POOL,
+    currentSurface: factoryLogSurface(SOURCE, {
+      lastFactoryLogBlock: SOURCE.number + 1,
+    }),
+    terminalCandidates: Object.freeze([
+      terminalCandidate({
+        candidateKey: UNIV2_CANDIDATE_KEY,
+        admittedInstancePublicationKeys: ["swap:univ2:fixture-pool"],
+      }),
+    ]),
+  });
+  assert.throws(
+    () => local.issuer.prepare(Object.freeze({
+      source: SOURCE,
+      families: Object.freeze([
+        candidateFamily(SOURCE, [staleSurface], UNIV2_FAMILY_ID),
+      ]),
+    })),
+    /must not exceed its source/,
+  );
+
+  const droppedTopic = Object.freeze({
+    ...factoryLogSurface(SOURCE),
+    topics: Object.freeze(factoryLogSurface(SOURCE).topics.slice(1)),
+  });
+  assert.throws(
+    () => freezeSurfaceViaEnumeration(droppedTopic),
+    /topic not in topics/,
+  );
+}
+
+function freezeSurfaceViaEnumeration(
+  surface: AdapterFamilySnapshotInventoryObservation,
+): void {
+  enumeratePointInTimeInventory({
+    source: SOURCE,
+    families: [{
+      familyId: UNIV2_FAMILY_ID,
+      incumbents: [{
+        inventoryKey: UNIV2_CANDIDATE_KEY,
+        address: UNIV2_FIXTURE_POOL,
+        currentSurface: surface,
+      }],
+    }],
+  });
 }
 
 async function main(): Promise<void> {
@@ -890,6 +1138,8 @@ async function main(): Promise<void> {
   await opaqueAuthorityAndReplay();
   await checkpointPublicationAndAsyncFences();
   productionCatalogFailsClosed();
+  await factoryLogClosurePositive();
+  await factoryLogValidation();
   console.log("adapter-family-snapshot-inventory-closure PASS");
 }
 
