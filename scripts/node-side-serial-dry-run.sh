@@ -25,7 +25,20 @@ git fetch origin codex/parity-capture-baseline codex/s1-unified-adapter-architec
 git checkout "${sha}" 2>&1 | tail -1
 checked_out="$(git rev-parse HEAD)"
 
-env_lines="$(sudo tr '\0' '\n' < "/proc/$(pgrep -f 'src/searcher/main.ts' | head -1)/environ")"
+live_pid=""
+for _ in 1 2 3 4 5; do
+  live_pid="$(pgrep -f 'src/searcher/main.ts' | head -1 || true)"
+  if [ -z "${live_pid}" ]; then
+    live_pid="$(pgrep -f 'npm run searcher:live' | head -1 || true)"
+  fi
+  if [ -n "${live_pid}" ]; then break; fi
+  sleep 2
+done
+if [ -z "${live_pid}" ]; then
+  echo "no live searcher env source available" >&2
+  exit 2
+fi
+env_lines="$(sudo tr '\0' '\n' < "/proc/${live_pid}/environ")"
 export SEARCHER_DRY_RUN=1
 export SEARCHER_BLOCKSCAN_SUBMIT=0
 export SEARCHER_ENABLE_MEV_SHARE=0
