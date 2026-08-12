@@ -49,6 +49,17 @@ export interface DurableDiscoveryContinuityComposition {
   readonly closureVerifier: AdapterFamilySnapshotInventoryClosureVerifier;
   readonly closureIssuer: AdapterFamilySnapshotInventoryClosureCandidateIssuer;
   readonly catalogRoot: StrictAdapterFamilyShadowCatalogPublicationRoot;
+  /**
+   * Real canonical-source and generation fences bound to this composition.
+   * The final catalogRoot CAS must call these instead of no-ops; the
+   * checkpoint store keeps its own (hash-successor enforced) fence because
+   * a checkpoint write at the same source/generation as the just-committed
+   * catalog is legitimate.
+   */
+  readonly verifyCanonicalSource: (
+    source: CanonicalSource,
+  ) => void | Promise<void>;
+  readonly assertGenerationCurrent: (source: CanonicalSource) => void;
   loadForRestart(): Promise<AdapterFamilyDiscoveryCheckpointLoadResult>;
   /**
    * Issue the canonical source ancestry proof required by every catalogRoot
@@ -88,7 +99,11 @@ export function createDurableDiscoveryContinuityComposition(
     backend,
     verifyCanonicalCheckpoint: (snapshot) =>
       input.verifyCanonicalSource(snapshot.source),
-    assertGenerationCurrent: input.assertGenerationCurrent,
+    // Checkpoint source succession is hash-anchored by assertSourceSuccessor;
+    // generation is monotonic by the live chain and must not be compared to
+    // the catalogRoot (the checkpoint write follows a successful publish at
+    // the same generation).
+    assertGenerationCurrent: () => {},
   });
   const terminalIssuer = createCatalogTerminalRemovalIssuer();
   const transitionIssuer = createCatalogSourceTransitionIssuer();
@@ -124,6 +139,19 @@ export function createDurableDiscoveryContinuityComposition(
     closureVerifier,
     closureIssuer: closureVerifier.takeCandidateIssuer(),
     catalogRoot,
+    verifyCanonicalSource: input.verifyCanonicalSource,
+    assertGenerationCurrent: (source: CanonicalSource) => {
+      const committed = catalogRoot.capture();
+      if (
+        committed !== null &&
+        source.generation <=
+          committed.envelope.snapshot.source.generation
+      ) {
+        throw new Error(
+          `strict catalog source generation is stale: ${source.generation}`,
+        );
+      }
+    },
     loadForRestart: () => store.loadForRestart(),
     issueSourceTransition: (
       previous: CanonicalSource,

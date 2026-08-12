@@ -94,6 +94,9 @@ import {
   resolveStrictCatalogConsumerDiagnostic,
 } from "./strict-catalog-consumer-diagnostic.js";
 import {
+  createCoalescingPublicationChain,
+} from "./strict-live-publication-chain.js";
+import {
   resolveStrictSolverConsumer,
 } from "./strict-solver-consumer.js";
 import {
@@ -1724,10 +1727,16 @@ async function main(): Promise<void> {
   let discoveryInventoryEnumerator: DiscoveryInventoryEnumerator | null = null;
   let discoveryInventoryWriter: DiscoveryCheckpointInventoryWriter | null = null;
   let strictCentralRuntime: CentralAdapterRuntime | null = null;
-  let syncLiveDiscoveryCheckpointInventory:
+  let runStrictLivePublicationChain:
     (() => Promise<void>) | null = null;
-  let publishStrictCatalogFromLiveDiscovery:
-    (() => Promise<void>) | null = null;
+  const strictLivePublicationChain = createCoalescingPublicationChain(
+    (error) => {
+      console.warn(
+        "[searcher/live] strict live publication chain failed: " +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+    },
+  );
   if (
     continuityCompositionPath !== undefined &&
     continuityCompositionPath.trim() !== ""
@@ -1756,7 +1765,20 @@ async function main(): Promise<void> {
             );
           }
         },
-        assertGenerationCurrent: () => {},
+        assertGenerationCurrent: (source) => {
+          const committed =
+            discoveryContinuityComposition?.catalogRoot.capture() ?? null;
+          if (
+            committed !== null &&
+            source.generation <=
+              committed.envelope.snapshot.source.generation
+          ) {
+            throw new Error(
+              `strict catalog source generation is stale: ` +
+                `${source.generation}`,
+            );
+          }
+        },
       });
       discoveryInventoryEnumerator =
         new CheckpointDiscoveryInventoryEnumerator({
@@ -1767,53 +1789,16 @@ async function main(): Promise<void> {
           checkpointStore: discoveryContinuityComposition.store,
           checkpointIssuer: discoveryContinuityComposition.checkpointIssuer,
         });
-      syncLiveDiscoveryCheckpointInventory = async (): Promise<void> => {
+      runStrictLivePublicationChain = async (): Promise<void> => {
           if (
             discoveryInventoryWriter === null ||
-            discoveryContinuityComposition === null
-          ) {
-            return;
-          }
-          const envelope = liveDiscovery.capture();
-          if (envelope === null) return;
-          const cursor = envelope.protocolObservedCursor;
-          if (cursor.completeThroughHash === null) return;
-          const previousCatalogRoot =
-            discoveryContinuityComposition.catalogRoot.capture();
-          const source = Object.freeze({
-            number: cursor.completeThroughBlock,
-            hash: cursor.completeThroughHash,
-            generation:
-              (previousCatalogRoot?.envelope.snapshot.source.generation ?? -1) +
-              1,
-          });
-          const derived = deriveLiveDiscoveryCheckpointInventory({
-            publication: envelope,
-            source,
-            catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-            familyIdForAdapter: (adapterId) =>
-              resolveStrictFamilyIdForAdapter(
-                PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-                adapterId,
-              ),
-          });
-          const result = await discoveryInventoryWriter.write({
-            source,
-            watermarks: derived.watermarks,
-            inventoryFamilies: derived.inventoryFamilies,
-          });
-          console.log(
-            `[searcher/live] discovery checkpoint inventory ` +
-              `${result.status}`,
-          );
-        };
-      publishStrictCatalogFromLiveDiscovery = async (): Promise<void> => {
-          if (
             discoveryContinuityComposition === null ||
             strictCentralRuntime === null
           ) {
             return;
           }
+          // One capture per chain run: checkpoint inventory and the
+          // catalogRoot CAS must describe the same publication state.
           const envelope = liveDiscovery.capture();
           if (envelope === null) return;
           const cursor = envelope.protocolObservedCursor;
@@ -1895,18 +1880,39 @@ async function main(): Promise<void> {
               `${result.status}` +
               (result.status === "unresolved" ? `: ${result.reason}` : ""),
           );
-          if (result.status === "published") {
-            const committedRoot =
-              discoveryContinuityComposition.catalogRoot.capture();
-            if (committedRoot !== null) {
-              console.log(
-                `[searcher/live] strict catalog root committed: ` +
-                  `revision=${committedRoot.envelope.snapshot.revision} ` +
-                  `instances=${committedRoot.envelope.privateState.instances.size} ` +
-                  `pricing=${committedRoot.views.pricingByPublicationKey.size}`,
-              );
-            }
+          if (result.status !== "published") return;
+          const committedRoot =
+            discoveryContinuityComposition.catalogRoot.capture();
+          if (committedRoot !== null) {
+            console.log(
+              `[searcher/live] strict catalog root committed: ` +
+                `revision=${committedRoot.envelope.snapshot.revision} ` +
+                `instances=${committedRoot.envelope.privateState.instances.size} ` +
+                `pricing=${committedRoot.views.pricingByPublicationKey.size}`,
+            );
           }
+          // The durable checkpoint follows the committed catalogRoot CAS at
+          // the same source, so appliedThrough never leads the recoverable
+          // strict authority.
+          const derived = deriveLiveDiscoveryCheckpointInventory({
+            publication: envelope,
+            source,
+            catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+            familyIdForAdapter: (adapterId) =>
+              resolveStrictFamilyIdForAdapter(
+                PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+                adapterId,
+              ),
+          });
+          const writeResult = await discoveryInventoryWriter.write({
+            source,
+            watermarks: derived.watermarks,
+            inventoryFamilies: derived.inventoryFamilies,
+          });
+          console.log(
+            `[searcher/live] discovery checkpoint inventory ` +
+              `${writeResult.status}`,
+          );
         };
       const loaded = await discoveryContinuityComposition.loadForRestart();
       discoveryContinuityStatus = loaded.status;
@@ -2812,21 +2818,8 @@ async function main(): Promise<void> {
     onPublicationApplied(next) {
       strategyViews = next.strategyViews;
       dexGraphCoverage = { ...next.dexGraphCoverage };
-      if (syncLiveDiscoveryCheckpointInventory !== null ||
-          publishStrictCatalogFromLiveDiscovery !== null) {
-        void (async () => {
-          if (syncLiveDiscoveryCheckpointInventory !== null) {
-            await syncLiveDiscoveryCheckpointInventory();
-          }
-          if (publishStrictCatalogFromLiveDiscovery !== null) {
-            await publishStrictCatalogFromLiveDiscovery();
-          }
-        })().catch((error) => {
-          console.warn(
-            "[searcher/live] strict discovery publish chain failed: " +
-              `${error instanceof Error ? error.message : String(error)}`,
-          );
-        });
+      if (runStrictLivePublicationChain !== null) {
+        strictLivePublicationChain.enqueue(runStrictLivePublicationChain);
       }
     },
     async persistRuntimeGraphs(next) {

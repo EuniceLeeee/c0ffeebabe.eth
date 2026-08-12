@@ -96,8 +96,8 @@ export async function publishStrictCatalogFromLifecycle(input: {
     const published = await composition.catalogRoot.compareAndPublish({
       expected: composition.catalogRoot.capture(),
       staged: prepared,
-      verifyCanonicalSource: () => {},
-      assertGenerationCurrent: () => {},
+      verifyCanonicalSource: composition.verifyCanonicalSource,
+      assertGenerationCurrent: composition.assertGenerationCurrent,
     });
     if (!published) {
       return Object.freeze({

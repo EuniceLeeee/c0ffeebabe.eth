@@ -232,6 +232,25 @@
 > 剩余 P0：跨重启提交协议/最终 fence（P0-5）、验收门 sealed
 > parity 诚实化（P0-6）；P1：完整 event ingress、真实预算/
 > timing/provenance、continuous 调度、22-Family 崩溃恢复合同。
+>
+> **P0-5 核心落地（2026-08-12）：**
+> 1) `createCoalescingPublicationChain`：live 回调严格串行 +
+> 在途 coalesce（每次链运行重取最新 capture），消除 checkpoint
+> 写与 catalog CAS 交错；合同测试覆盖顺序/合并/错误隔离。
+> 2) main.ts 将原两个独立 closure（各 capture 一次）合并为单一
+> `runStrictLivePublicationChain`：一次 capture 构建 source，
+> publish 成功后才在同一个 source/envelope 写 durable checkpoint
+> ——appliedThrough 不再领先可恢复 authority。
+> 3) 最终 CAS 不再用 no-op fence：composition 暴露真实
+> `verifyCanonicalSource`（生产为 block-hash 校验）与
+> `assertGenerationCurrent`（catalog-relative 单调）；checkpoint
+> store 内部保留 hash-successor 语义（同一 generation 的
+> checkpoint 写入合法）。合同测试：final CAS 必调用 canonical
+> verifier、stale generation 被拒。build/suite（25 项）全绿。
+> 剩余 P0-5：catalogRoot 本身仍为内存态（private state 含 runtime
+> handle，不可序列化），重启后由下一次发布重建——因 live 路径
+> 只授予 observed-complete，不构成 omission authority，此限制在
+> 文档中显式记录。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

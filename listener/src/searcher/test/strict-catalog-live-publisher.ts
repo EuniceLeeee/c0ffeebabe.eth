@@ -54,6 +54,11 @@ const SOURCE2: CanonicalSource = Object.freeze({
   hash: `0x${"52".repeat(32)}`,
   generation: 45,
 });
+const SOURCE3: CanonicalSource = Object.freeze({
+  number: SOURCE2.number + 10,
+  hash: `0x${"53".repeat(32)}`,
+  generation: 44,
+});
 const WSTETH = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const CHAIN_ID = "1";
 const REGISTRY = "strict-source-registry-v1";
@@ -278,6 +283,65 @@ async function main(): Promise<void> {
       const multiCommitted = prodComposition.catalogRoot.capture();
       assert(multiCommitted);
       assert.equal(multiCommitted.envelope.privateState.instances.size, 2);
+
+      // The final catalogRoot CAS must use the composition's real fences:
+      // canonical verification is invoked, and a stale source generation is
+      // rejected instead of being committed through a no-op.
+      const fenceDirectory = await mkdtemp(
+        join(tmpdir(), "strict-catalog-live-publisher-fence-"),
+      );
+      try {
+        let canonicalVerifications = 0;
+        const fenceComposition = createDurableDiscoveryContinuityComposition({
+          catalog: prodCat,
+          chainId: CHAIN_ID,
+          sourceRegistryFingerprint: REGISTRY,
+          checkpointPath: join(fenceDirectory, "checkpoint.json"),
+          enumerateSnapshotInventory: async (source) => {
+            const enumerator = new CheckpointDiscoveryInventoryEnumerator({
+              checkpointStore: fenceComposition.store,
+            });
+            return await enumerator.enumerate(source);
+          },
+          verifyCanonicalSource: async () => { canonicalVerifications++; },
+          assertGenerationCurrent: () => {},
+        });
+        assert.equal((await fenceComposition.loadForRestart()).status, "empty");
+        const fencePublication = await runWstethLifecycle(SOURCE, prodCat);
+        const fenceResult = await publishStrictCatalogFromLifecycle({
+          composition: fenceComposition,
+          catalog: prodCat,
+          source: SOURCE,
+          publications: Object.freeze([{
+            familyId: WSTETH_FAMILY_ID,
+            publication: fencePublication,
+          }]),
+        });
+        assert.equal(fenceResult.status, "published");
+        assert(
+          canonicalVerifications >= 1,
+          "final catalog CAS must invoke the composition canonical verifier",
+        );
+        const stalePublication = await runWstethLifecycle(SOURCE3, prodCat);
+        const staleResult = await publishStrictCatalogFromLifecycle({
+          composition: fenceComposition,
+          catalog: prodCat,
+          source: SOURCE3,
+          publications: Object.freeze([{
+            familyId: WSTETH_FAMILY_ID,
+            publication: stalePublication,
+          }]),
+        });
+        assert.equal(staleResult.status, "unresolved");
+        if (staleResult.status === "unresolved") {
+          assert.match(
+            staleResult.reason,
+            /(strict catalog source generation is stale|staged publication generation is not newer)/,
+          );
+        }
+      } finally {
+        await rm(fenceDirectory, { recursive: true, force: true });
+      }
     } finally {
       await rm(prodDirectory, { recursive: true, force: true });
     }
