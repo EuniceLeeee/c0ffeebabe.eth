@@ -100,6 +100,19 @@
   7 个活动型族可对"已观察集合"声明完整（publication 可达 shadow-complete），但**无 omission 删除权**；
   删除仍只走显式 terminal evidence，complete-snapshot-omission 只属于 13 个有穷尽证据的族。
 
+### D-009 | 2026-08-12 | ✅ | S1 推进授权：Phase E 之前无需逐项确认
+- **Decision:** 用户明确授权本窗口继续推进全部剩余 S1 项（live discovery→checkpoint
+  inventory 接线、solver strict consumers 接线、systemic-live paired-live 运行、默认
+  authority 切换），**Phase E legacy cleanup 之前不需要再逐项询问**；Phase E 开始前必须
+  回来确认删除范围。
+- **Scope:** 授权的是"推进路径"，不是解除安全机制：mainnet 广播/签名仍受 live-safety
+  envelope（wallet ≤ `MEV_LIVE_MAX_WALLET_ETH`、`SEARCHER_EV_GATE=1`、script-enforced
+  dry-run）约束；默认 authority 切换仍需 `evaluateS1CutoverReadiness` 全前置 ready
+  （fail-closed 技术门不因授权豁免）；节点操作仍先 preflight（PID/runtime commit/锁/
+  未提交改动）。
+- **Meta:** 2026-08-12 用户原话："我全部授权 你执行到Phase E之前都不用问我"。此条是
+  Rule 1 之外的一次性范围授权；任何超出 envelope 的广播/签名仍须新的明确 OK。
+
 ### D-006 | 2026-07-23 | ✅ | Family 解耦不需要跨 family victim 传播（"P0" 撤销，四刀盖棺）
 - **Question:** family 架构下（每 family 独立 `deriveMids`），backrun lane 的 victim swap 是否需要向
   依赖同一底层状态的其他 family（如读 Curve 状态的 vault）做"跨 family 二阶传播"，否则粗扫漏枚举？

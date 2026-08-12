@@ -25,6 +25,10 @@ assert record["instanceId"].startswith("i-"), record["instanceId"]
 assert len(record["implSha"]) == 40, record["implSha"]
 assert len(record["catalogHash"]) == 64, record["catalogHash"]
 assert isinstance(record["familyCount"], int), record["familyCount"]
+has_writer_evidence = "writerStatus" in record or "writerRevision" in record
+if has_writer_evidence:
+    assert record["writerStatus"] == "committed", record.get("writerStatus")
+    assert record["writerRevision"] == 2, record.get("writerRevision")
 
 local = json.loads(os.environ["LOCAL_RECORD"])
 assert local["format"] == "s1-node-enumerator-dry-run-v1", local.get("format")
@@ -40,6 +44,9 @@ assert local["familyCount"] == record["familyCount"], (
 assert local["inventoryFamilies"] == record["inventoryFamilies"], (
     "inventoryFamilies mismatch"
 )
+if has_writer_evidence:
+    assert local["writerStatus"] == "committed", local.get("writerStatus")
+    assert local["writerRevision"] == 2, local.get("writerRevision")
 print(
     "S1 node enumerator evidence verified: "
     f"ssm={record['ssmRunId']} families={record['familyCount']}"

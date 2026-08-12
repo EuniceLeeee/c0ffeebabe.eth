@@ -10,6 +10,9 @@ import {
 import {
   CheckpointDiscoveryInventoryEnumerator,
 } from "./adapter-family-discovery-inventory-enumerator.js";
+import {
+  CheckpointDiscoveryInventoryWriter,
+} from "./adapter-family-discovery-inventory-writer.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import {
@@ -42,6 +45,11 @@ const SOURCE: CanonicalSource = Object.freeze({
   number: 25_700_444,
   hash: `0x${"51".repeat(32)}`,
   generation: 44,
+});
+const SOURCE_NEXT: CanonicalSource = Object.freeze({
+  number: 25_700_445,
+  hash: `0x${"52".repeat(32)}`,
+  generation: 45,
 });
 const WSTETH = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const UNIV2_POOL = `0x${"41".repeat(20)}`;
@@ -149,7 +157,8 @@ async function main(): Promise<void> {
     ),
     ...fixtureInventory(SOURCE),
   ]);
-  const staged = store.takeCandidateIssuer().prepare({
+  const checkpointIssuer = store.takeCandidateIssuer();
+  const staged = checkpointIssuer.prepare({
     source: SOURCE,
     watermarks: watermarks(SOURCE),
     inventoryFamilies,
@@ -177,6 +186,41 @@ async function main(): Promise<void> {
       );
     }
   }
+  const writer = new CheckpointDiscoveryInventoryWriter({
+    checkpointStore: store,
+    checkpointIssuer,
+  });
+  const write = await writer.write({
+    source: SOURCE_NEXT,
+    watermarks: watermarks(SOURCE_NEXT),
+    inventoryFamilies: Object.freeze([
+      ...emptyCheckpointInventoryFamilies(
+        catalog.listAll().filter((family) => "discovery" in family.plugin)
+          .map((family) => family.plugin.manifest.familyId),
+      ).filter((family) =>
+        family.familyId !== WSTETH_FAMILY_ID &&
+        family.familyId !== UNIV2_FAMILY_ID
+      ),
+      ...fixtureInventory(SOURCE_NEXT),
+    ]),
+  });
+  if (write.status !== "committed" || write.revision !== 2) {
+    throw new Error(
+      `fixture writer failed: ${write.status === "committed"
+        ? write.revision
+        : write.reason}`,
+    );
+  }
+  const restoredNext = await enumerator.enumerate(SOURCE_NEXT);
+  const coveredNext = restoredNext.families.filter((family) =>
+    family.familyId === WSTETH_FAMILY_ID ||
+    family.familyId === UNIV2_FAMILY_ID
+  );
+  if (coveredNext.length !== 2 || coveredNext.some(
+    (family) => family.inventoryCount !== 1,
+  )) {
+    throw new Error("fixture writer inventory did not restore");
+  }
   console.log(JSON.stringify({
     format: "s1-node-enumerator-dry-run-v1",
     status: "pass",
@@ -188,6 +232,8 @@ async function main(): Promise<void> {
       inventoryHash: family.inventoryHash,
     })),
     familyCount: enumeration.families.length,
+    writerStatus: write.status,
+    writerRevision: write.revision,
   }, null, 2));
 }
 

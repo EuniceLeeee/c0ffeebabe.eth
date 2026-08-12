@@ -364,6 +364,25 @@ SSM run `5f6aba8c-512f-4d5a-8e0a-cac84021e163`，非 live cutover）：**
 - 证据：shadow suite（12 合同）全过 + regression sweep 12 组全过 +
   完整 build。
 
+**2026-08-12 checkpoint inventory writer checkpoint（commit 见下，
+production 侧 CAS 写入器合同；live coordinator call-site 为下一 slice）：**
+
+- 新增 `CheckpointDiscoveryInventoryWriter` / `DiscoveryCheckpointInventoryWriter`：
+  discovery 生产者把逐 Family incumbent inventory + watermarks 交给
+  writer，经 checkpoint candidate issuer + CAS 推进一个 revision；
+  无 trusted receipt、非 canonical inventory（缺行/多余行）、非 successor
+  source、CAS 拒绝全部返回 explicit unresolved 且 store 不变；
+- main.ts 在 env gate 下构造 writer（复用 composition 的 checkpoint
+  issuer），并如实记录 live discovery coordinator 的 call-site 为下一
+  slice（当前仍未接线，不虚报 production cutover）；
+- 合同测试：writer 空 store fail-closed、rev1→rev2 提交成功且 enumerator
+  可还原、缺 Family 行 fail-closed 且 store 不变、非 successor fail-closed；
+- node enumerator dry-run CLI 扩展：先 enumerator 读 rev1，再用 writer
+  推进 rev2 并读回，输出 `writerStatus=committed/writerRevision=2`；
+  runner/verifier 同步校验；
+- 证据：shadow suite（13 合同）全过 + regression sweep 12 组全过 +
+  完整 build；节点机器证据随下一次 dry-run 追加。
+
 **2026-08-12 活动型 Family append-only 决定 checkpoint（D-008，
 验收目标修正，非代码变更）：**
 

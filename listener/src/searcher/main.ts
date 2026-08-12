@@ -81,6 +81,10 @@ import {
   type DiscoveryInventoryEnumerator,
 } from "./adapter-family-discovery-inventory-enumerator.js";
 import {
+  CheckpointDiscoveryInventoryWriter,
+  type DiscoveryCheckpointInventoryWriter,
+} from "./adapter-family-discovery-inventory-writer.js";
+import {
   resolveStrictCatalogConsumerDiagnostic,
 } from "./strict-catalog-consumer-diagnostic.js";
 import {
@@ -1682,14 +1686,17 @@ async function main(): Promise<void> {
   // production startup adopts the file-backed checkpoint store to load and
   // re-verify the persisted restart state, then logs its status. The
   // point-in-time enumerator restores the checkpoint's durable incumbent
-  // inventory and fails closed when it cannot; this block grants no
-  // authority and does not open complete-snapshot/omission/tombstone.
+  // inventory and fails closed when it cannot; the checkpoint inventory
+  // writer is the CAS entry for discovery producers (the live coordinator
+  // call-site is wired in the next slice). This block grants no authority
+  // and does not open complete-snapshot/omission/tombstone.
   const continuityCompositionPath =
     process.env.SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH;
   let discoveryContinuityStatus = "disabled";
   let discoveryContinuityComposition: DurableDiscoveryContinuityComposition |
     null = null;
   let discoveryInventoryEnumerator: DiscoveryInventoryEnumerator | null = null;
+  let discoveryInventoryWriter: DiscoveryCheckpointInventoryWriter | null = null;
   if (
     continuityCompositionPath !== undefined &&
     continuityCompositionPath.trim() !== ""
@@ -1724,11 +1731,19 @@ async function main(): Promise<void> {
         new CheckpointDiscoveryInventoryEnumerator({
           checkpointStore: discoveryContinuityComposition.store,
         });
+      discoveryInventoryWriter =
+        new CheckpointDiscoveryInventoryWriter({
+          checkpointStore: discoveryContinuityComposition.store,
+          checkpointIssuer: discoveryContinuityComposition.checkpointIssuer,
+        });
       const loaded = await discoveryContinuityComposition.loadForRestart();
       discoveryContinuityStatus = loaded.status;
       console.log(
         `[searcher/live] discovery continuity composition ` +
           `${discoveryContinuityStatus}`,
+      );
+      console.log(
+        `[searcher/live] discovery continuity inventory writer ready`,
       );
     } catch (error) {
       discoveryContinuityStatus =

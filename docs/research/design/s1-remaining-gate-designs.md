@@ -48,6 +48,11 @@
 > 但无 omission 删除权——缺失实例永不 tombstone，只能 carry 或经显式
 > terminal removal 移除；silent omission 与 append-only 同一
 > StateInstance mutation-proof 不变式。production live 接线仍待节点。
+>
+> **2026-08-12 实现跟进 2：** `CheckpointDiscoveryInventoryWriter` 已合同级
+> 关闭（production 侧 CAS 写入器：无 trusted receipt/缺行/非 successor/
+> CAS 拒绝全部 explicit unresolved 且 store 不变）；main env gate 下已
+> 构造，live discovery coordinator 的 call-site 是下一 slice。
 
 ### 目标模型
 

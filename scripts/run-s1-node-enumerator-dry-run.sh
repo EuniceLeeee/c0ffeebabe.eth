@@ -94,6 +94,8 @@ evidence = {
   'catalogHash': record['catalogHash'],
   'familyCount': record['familyCount'],
   'inventoryFamilies': record['inventoryFamilies'],
+  'writerStatus': record['writerStatus'],
+  'writerRevision': record['writerRevision'],
 }
 print(json.dumps(evidence, indent=2))
 " >"${repo_root}/docs/research/design/evidence/s1-node-enumerator-dry-run-${run_cmd_id}.json"
