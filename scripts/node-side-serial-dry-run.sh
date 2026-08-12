@@ -64,6 +64,9 @@ done
 export OWNER_PRIVATE_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 export BOTVM_OWNER="$(cd "${dir}/listener" && node -e "const {Wallet}=require('ethers'); console.log(new Wallet(process.argv[1]).address)" "${OWNER_PRIVATE_KEY}")"
 export BOTVM_ADDRESS="${BOTVM_OWNER}"
+# Move anvil forks off the live process's ports (serial run owns them here).
+export SEARCHER_ANVIL_PORT=9555
+export SEARCHER_BLOCKSCAN_ANVIL_PORT=9556
 
 cd "${dir}/listener"
 set +e
