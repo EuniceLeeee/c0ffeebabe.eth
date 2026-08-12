@@ -601,7 +601,7 @@ async function mixedModeCompleteSnapshotPositivePath(): Promise<void> {
     domain: "protocol",
     source: SOURCE,
     status: "resolved",
-    inventoryMode: "append-only-delta",
+    inventoryMode: "observed-complete",
     instances: Object.freeze([]),
     terminalRemovals: Object.freeze([]),
     outcomeRefs: Object.freeze([]),
@@ -641,13 +641,13 @@ async function mixedModeCompleteSnapshotPositivePath(): Promise<void> {
   assert.equal(
     committed.envelope.snapshot.familyStatuses.get(ASTRA_MULTITOKEN_FAMILY_ID)
       ?.inventoryMode,
-    "append-only-delta",
+    "observed-complete",
   );
   assert.equal(
     committed.envelope.snapshot.status,
-    "shadow-partial",
-    "append-only Families keep the publication partial until their own " +
-      "bootstrap semantics exist",
+    "shadow-complete",
+    "observed-complete Families complete the book over their observation " +
+      "set without any omission deletion authority",
   );
 }
 

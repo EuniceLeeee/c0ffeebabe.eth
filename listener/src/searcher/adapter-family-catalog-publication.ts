@@ -11,7 +11,8 @@ export type CatalogFamilyStageStatus =
 
 export type CatalogInventoryMode =
   | "append-only-delta"
-  | "complete-snapshot";
+  | "complete-snapshot"
+  | "observed-complete";
 
 export type CatalogDiscoveryAuthority =
   | "append-only-nomination"
@@ -1293,11 +1294,13 @@ function validateStageAuthority<Instance, RouteHandle, GraphEntry, PricingEntry>
     }
   }
   if (
-    stage.inventoryMode === "complete-snapshot" &&
+    (stage.inventoryMode === "complete-snapshot" ||
+      stage.inventoryMode === "observed-complete") &&
     stage.status !== "resolved"
   ) {
     throw new Error(
-      `${stage.status} Family ${stage.familyId} cannot claim a complete snapshot`,
+      `${stage.status} Family ${stage.familyId} cannot claim a complete ` +
+        `or observed-complete inventory`,
     );
   }
   if (
@@ -2257,7 +2260,10 @@ function hasCompleteInventoryAuthority<
   > | null;
   readonly transition: CatalogSourceTransitionRecord | null;
 }): boolean {
-  if (input.stage.inventoryMode === "complete-snapshot") return true;
+  if (
+    input.stage.inventoryMode === "complete-snapshot" ||
+    input.stage.inventoryMode === "observed-complete"
+  ) return true;
   if (input.previous?.snapshot.status !== "shadow-complete") return false;
   if (
     input.previous.snapshot.familyStatuses.get(input.expectation.familyId)
@@ -2386,7 +2392,11 @@ function assertStageStatus(status: CatalogFamilyStageStatus): void {
 }
 
 function assertInventoryMode(mode: CatalogInventoryMode): void {
-  if (mode !== "append-only-delta" && mode !== "complete-snapshot") {
+  if (
+    mode !== "append-only-delta" &&
+    mode !== "complete-snapshot" &&
+    mode !== "observed-complete"
+  ) {
     throw new Error(`invalid Family inventory mode ${String(mode)}`);
   }
 }

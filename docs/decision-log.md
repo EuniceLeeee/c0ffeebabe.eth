@@ -96,6 +96,9 @@
   blocker 表述撤回，改为既定设计；full-catalog complete-snapshot authority 按设计只覆盖 13 族。
 - **Meta:** 用户明确反对把 observed-call/landed-log 族纳入完整性清单（"我是 MEV 又不是协议解析大全"）；
   此决定经对话确认后落库，任何人再提"给这 7 族补 bootstrap"先看本条。
+- **Follow-up (2026-08-12):** 按用户提议新增 `observed-complete` publication 模式并合同级关闭：
+  7 个活动型族可对"已观察集合"声明完整（publication 可达 shadow-complete），但**无 omission 删除权**；
+  删除仍只走显式 terminal evidence，complete-snapshot-omission 只属于 13 个有穷尽证据的族。
 
 ### D-006 | 2026-07-23 | ✅ | Family 解耦不需要跨 family victim 传播（"P0" 撤销，四刀盖棺）
 - **Question:** family 架构下（每 family 独立 `deriveMids`），backrun lane 的 victim swap 是否需要向

@@ -42,6 +42,12 @@
 > 没交易过的池子不属于机会空间，不列入是范围而非 coverage bug。
 > 本节不再把"给 7 族补 bootstrap"当作待办；complete-snapshot 删除权
 > 按设计只覆盖有穷尽证据的 13 族。
+>
+> **2026-08-12 实现跟进：** 已新增 `CatalogInventoryMode.observed-complete`
+>（合同级关闭）：对"已观察集合"声明完整（resolved + anchors complete），
+> 但无 omission 删除权——缺失实例永不 tombstone，只能 carry 或经显式
+> terminal removal 移除；silent omission 与 append-only 同一
+> StateInstance mutation-proof 不变式。production live 接线仍待节点。
 
 ### 目标模型
 

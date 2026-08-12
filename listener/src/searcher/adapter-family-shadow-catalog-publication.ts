@@ -516,17 +516,22 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
           "complete-snapshot stage requires a snapshot inventory closure receipt",
         );
       }
-    } else if (inventoryMode !== "append-only-delta") {
+    } else if (
+      inventoryMode !== "append-only-delta" &&
+      inventoryMode !== "observed-complete"
+    ) {
       throw new Error(
-        "strict shadow catalog currently requires append-only-delta inventory",
+        "strict shadow catalog currently requires append-only-delta, " +
+          "observed-complete or complete-snapshot inventory",
       );
     }
     if (
-      inventoryMode === "append-only-delta" &&
+      (inventoryMode === "append-only-delta" ||
+        inventoryMode === "observed-complete") &&
       input.snapshotInventoryClosureReceipt !== undefined
     ) {
       throw new Error(
-        "append-only stage must not carry a closure receipt",
+        "append-only/observed-complete stage must not carry a closure receipt",
       );
     }
     const family = this.#catalog.forFamily(input.publication.familyId);
@@ -847,10 +852,12 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
       }
       if (
         stage.inventoryMode !== "append-only-delta" &&
-        stage.inventoryMode !== "complete-snapshot"
+        stage.inventoryMode !== "complete-snapshot" &&
+        stage.inventoryMode !== "observed-complete"
       ) {
         throw new Error(
-          "strict shadow catalog currently requires append-only-delta inventory",
+          "strict shadow catalog currently requires append-only-delta, " +
+            "observed-complete or complete-snapshot inventory",
         );
       }
     }

@@ -538,6 +538,117 @@ async function main(): Promise<void> {
   }), /requires an issuer-bound StateInstance mutation proof/);
   assertIdentitiesUnchanged(root, omissionIdentities);
 
+  // observed-complete: admission/retention over the observed set with NO
+  // omission deletion authority (D-008). Re-staging keeps the instance;
+  // silently omitting it without terminal evidence fails closed.
+  const observedHarness = publicationRoot();
+  const observedRoot = observedHarness.root;
+  const observedSource1 = source(201);
+  const observedPub1 = await lifecycle(observedSource1);
+  const observedInitial = observedRoot.prepare({
+    source: observedSource1,
+    previous: null,
+    stages: stages({
+      root: observedRoot,
+      canonical: observedSource1,
+      route: observedRoot.stageRouteFamily({
+        publication: observedPub1,
+        inventoryMode: "observed-complete",
+      }),
+    }),
+    sourceAnchors: anchors({
+      canonical: observedSource1,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+  });
+  await publish(observedRoot, null, observedInitial);
+  const observedCommitted1 = observedRoot.capture()!;
+  const observedKey = [...observedCommitted1.envelope.privateState.instances
+    .keys()][0]!;
+  assert(observedKey);
+  assert.equal(
+    observedCommitted1.envelope.snapshot.familyStatuses.get(UNIV2_FAMILY_ID)
+      ?.inventoryMode,
+    "observed-complete",
+  );
+  assert.throws(() => observedRoot.stageRouteFamily({
+    publication: observedPub1,
+    inventoryMode: "observed-complete",
+    snapshotInventoryClosureReceipt: Object.freeze({}) as
+      AdapterFamilySnapshotInventoryClosureReceipt,
+  } as Parameters<
+    StrictAdapterFamilyShadowCatalogPublicationRoot["stageRouteFamily"]
+  >[0]), /must not carry a closure receipt/);
+
+  const observedSource2 = source(202);
+  const observedPub2 = await lifecycle(observedSource2);
+  const observedStage2 = observedRoot.stageRouteFamily({
+    publication: observedPub2,
+    inventoryMode: "observed-complete",
+  });
+  const observedChanged = observedRoot.prepare({
+    source: observedSource2,
+    previous: observedCommitted1,
+    stages: stages({
+      root: observedRoot,
+      canonical: observedSource2,
+      route: observedStage2,
+    }),
+    sourceAnchors: anchors({
+      canonical: observedSource2,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+    sourceTransitionProof: transitionProof(
+      observedHarness.transitionIssuer,
+      observedSource1,
+      observedSource2,
+    ),
+  });
+  await publish(observedRoot, observedCommitted1, observedChanged);
+  const observedCommitted2 = observedRoot.capture()!;
+  assert(
+    observedCommitted2.envelope.privateState.instances.has(observedKey),
+    "observed-complete retains previously admitted instances",
+  );
+  assert(!observedCommitted2.envelope.snapshot.delta.removed.includes(
+    observedKey,
+  ));
+  assert.equal(observedCommitted2.envelope.snapshot.delta.tombstones.length, 0);
+
+  const observedSource3 = source(203);
+  assert.throws(() => observedRoot.prepare({
+    source: observedSource3,
+    previous: observedCommitted2,
+    stages: stages({
+      root: observedRoot,
+      canonical: observedSource3,
+      route: Object.freeze({
+        familyId: UNIV2_FAMILY_ID,
+        domain: "swap",
+        source: observedSource3,
+        status: "resolved",
+        inventoryMode: "observed-complete",
+        instances: Object.freeze([]),
+        terminalRemovals: Object.freeze([]),
+        outcomeRefs: Object.freeze([]),
+      }) as StrictShadowCatalogFamilyStage,
+    }),
+    sourceAnchors: anchors({
+      canonical: observedSource3,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+    sourceTransitionProof: transitionProof(
+      observedHarness.transitionIssuer,
+      observedSource2,
+      observedSource3,
+    ),
+  }), /requires an issuer-bound StateInstance mutation proof/);
+  assert.equal(
+    observedRoot.capture(),
+    observedCommitted2,
+    "a silent observed-complete omission must fail closed",
+  );
+
   assert.throws(() => root.stageRouteFamily({
     publication: Object.freeze({
       ...publication2,
