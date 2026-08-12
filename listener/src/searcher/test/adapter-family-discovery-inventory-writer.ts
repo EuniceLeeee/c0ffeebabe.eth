@@ -156,27 +156,16 @@ async function main(): Promise<void> {
     const path = join(directory, "checkpoint.json");
     const h = await harness(path);
 
-    // Empty store: writing must fail closed, not fabricate a receipt.
-    const emptyWrite = await h.writer.write({
+    // Empty (already loaded) store: the writer seeds the first revision
+    // through the store's first-CAS path (expected null), then advances.
+    const seedWrite = await h.writer.write({
       source: SOURCE,
       watermarks: watermarks(SOURCE),
       inventoryFamilies: inventoryWith(SOURCE),
     });
-    assert.equal(emptyWrite.status, "unresolved");
-    assert(emptyWrite.status === "unresolved");
-    assert.match(emptyWrite.reason, /no trusted checkpoint receipt/);
-    assert.equal(h.store.capture(), null);
-
-    // Seed revision 1 directly, then advance revision 2 through the writer.
-    const seed = h.issuer.prepare({
-      source: SOURCE,
-      watermarks: watermarks(SOURCE),
-      inventoryFamilies: inventoryWith(SOURCE),
-    });
-    assert.equal(await h.store.compareAndCommit({
-      expected: null,
-      staged: seed,
-    }), true);
+    assert.equal(seedWrite.status, "committed");
+    assert(seedWrite.status === "committed");
+    assert.equal(seedWrite.revision, 1);
     assert.equal(h.store.checkpointSnapshot(h.store.capture()!)?.revision, 1);
 
     const write = await h.writer.write({

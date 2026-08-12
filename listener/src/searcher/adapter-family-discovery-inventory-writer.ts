@@ -54,10 +54,9 @@ export class CheckpointDiscoveryInventoryWriter
   > {
     const current = this.#checkpointStore.capture();
     if (current === null) {
-      return Object.freeze({
-        status: "unresolved" as const,
-        reason: "no trusted checkpoint receipt",
-      });
+      // Initial seed: an empty (already loaded) store has no receipt yet.
+      // compareAndCommit(expected=null) is the store's first-CAS path; a
+      // not-loaded store fails there and stays unresolved.
     }
     let staged;
     try {
