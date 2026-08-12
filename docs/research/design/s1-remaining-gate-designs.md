@@ -123,7 +123,10 @@ interface DiscoveryInventoryEnumerator {
   `5f6aba8c-512f-4d5a-8e0a-cac84021e163`，真实 store/catalog/enumerator
   实现 + 合成 incumbent inventory，证据记录
   `docs/research/design/evidence/s1-node-enumerator-dry-run-….json`）；
-  live discovery 写入真实 incumbent inventory 的 dry-run 仍待接线，
+  shadow ingress 现作为 discovery→checkpoint 的 writer：同源
+  complete-snapshot bootstrap 的 incumbent 持久化为 durable inventory，
+  partial bootstrap 写空行（合同已测）；production live discovery
+  coordinator 写入真实 incumbent inventory 的 dry-run 仍待接线，
   不在此虚报。
 
 ## 3. 依赖关系

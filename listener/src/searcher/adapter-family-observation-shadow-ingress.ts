@@ -4,13 +4,11 @@ import type {
 } from "./adapter-work-intent.js";
 import type {
   AdapterFamilyDiscoveryCheckpointCandidateIssuer,
+  AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily,
   AdapterFamilyDiscoveryCheckpointReceipt,
   AdapterFamilyDiscoveryCheckpointStore,
   AdapterFamilyDiscoveryCheckpointWatermark,
   PreparedAdapterFamilyDiscoveryCheckpoint,
-} from "./adapter-family-discovery-checkpoint.js";
-import {
-  emptyCheckpointInventoryFamilies,
 } from "./adapter-family-discovery-checkpoint.js";
 import {
   adapterFamilySnapshotInventoryHash,
@@ -904,10 +902,9 @@ export class AdapterFamilyObservationShadowIngress {
     const checkpointCandidate = this.#checkpointCandidateIssuer?.prepare({
       source,
       watermarks: this.#checkpointWatermarks(nextWatermarks, nextMetadata),
-      inventoryFamilies: emptyCheckpointInventoryFamilies(
-        this.#families.map((family) =>
-          family.familyId as unknown as FamilyId
-        ),
+      inventoryFamilies: checkpointInventoryFromBootstrap(
+        this.#families,
+        bootstrap,
       ),
     }) ?? null;
 
@@ -1909,6 +1906,41 @@ function validateWatermark(input: AdapterFamilyShadowWatermarkSeedInput): void {
       "invalid adapter Family shadow watermark seed: durable checkpoint authority required",
     );
   }
+}
+
+function checkpointInventoryFromBootstrap(
+  families: readonly DiscoveryFamilySources[],
+  bootstrap: BootstrapRecord | null,
+): readonly AdapterFamilyDiscoveryCheckpointInventoryCandidateFamily[] {
+  // A bootstrap is durable incumbent inventory only when it is a complete
+  // matrix at the exact round source (enforced by #resolveBootstrap) and
+  // declares complete-snapshot mode; partial bootstraps persist as empty
+  // rows so the closure/enumerator chain cannot over-claim.
+  const persist = bootstrap !== null &&
+    bootstrap.inventoryMode === "complete-snapshot";
+  const byFamily = new Map<string, BootstrapFamilyRecord>();
+  if (persist) {
+    for (const family of bootstrap!.families) {
+      byFamily.set(family.familyId, family);
+    }
+  }
+  return Object.freeze(families.map((family) => {
+    const familyId = family.familyId as unknown as FamilyId;
+    const record = byFamily.get(familyId);
+    const incumbents = record === undefined
+      ? []
+      : record.incumbents.filter(
+          (incumbent) => incumbent.currentSurface !== null
+        ).map((incumbent) => Object.freeze({
+          inventoryKey: incumbent.incumbentKey,
+          address: incumbent.address,
+          currentSurface: incumbent.currentSurface!,
+        }));
+    return Object.freeze({
+      familyId,
+      incumbents: Object.freeze(incumbents),
+    });
+  }));
 }
 
 function snapshotObservation(input: UnifiedObservation): UnifiedObservation {

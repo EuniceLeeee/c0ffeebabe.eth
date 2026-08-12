@@ -341,6 +341,29 @@ SSM run `5f6aba8c-512f-4d5a-8e0a-cac84021e163`，非 live cutover）：**
   `5f6aba8c…` 验证通过），sweep 组数 11 → 12；
 - 纯证据/CI gate：不涉及 live、签名、广播或 authority。
 
+**2026-08-12 discovery→checkpoint incumbent inventory writer checkpoint
+（commit 见下，shadow 级接线；production live discovery 写入仍待
+节点）：**
+
+- `AdapterFamilyObservationShadowIngress` 的 checkpoint candidate 不再写
+  空 inventory：当本轮携带同源 complete-snapshot bootstrap 时，把
+  bootstrap 中 `currentSurface !== null` 的 incumbent（inventoryKey/
+  address/address-surface observation）持久化为 durable checkpoint
+  inventory；partial bootstrap 如实写空行，闭包/枚举链不能越权宣称
+  complete；
+- 旧/外源 bootstrap 由 ingress 既有 `assertSameSource` fail-closed，
+  无需在 writer 层放宽；
+- 新合同测试：同源 complete-snapshot bootstrap → committed checkpoint
+  inventory 含该 incumbent（canonical address/hash、inventoryKeys/
+  count 正确）；partial bootstrap → 空 inventory；
+- `searcher:adapter-family-observation-shadow-ingress` 补入 shadow suite
+  （shadow suite 11 → 12 合同），sweep 组数不变（12）；
+- 意义：§2 enumerator 的 checkpoint 输入现在有真实 discovery 侧
+  writer（shadow 级）；production live discovery coordinator 写入真实
+  incumbent inventory 的接线仍是节点/后续工作；
+- 证据：shadow suite（12 合同）全过 + regression sweep 12 组全过 +
+  完整 build。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - complete-snapshot 正向路径的剩余 bootstrap 缺口（factory-log
@@ -352,7 +375,8 @@ SSM run `5f6aba8c-512f-4d5a-8e0a-cac84021e163`，非 live cutover）：**
 - production point-in-time enumerator 的 live-data node dry-run（durable
   checkpoint + enumerator 接线已合同级关闭；fixture-backed 节点 dry-run
   机器证据已关闭，SSM run `5f6aba8c…`；live discovery 写入真实
-  incumbent inventory 并做节点 dry-run 验收仍待接线）；
+  incumbent inventory 并做节点 dry-run 验收仍待接线；shadow ingress
+  已作为 discovery→checkpoint 的 writer 合同级落地）；
 - production solver 的 strict pricing/Funding/Credit consumer 真实
   接线（目前仅 diagnostic）；
 - ~~节点 SSM 双跑机器证据~~（已关闭：SSM run

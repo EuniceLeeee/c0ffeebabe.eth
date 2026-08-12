@@ -293,9 +293,10 @@ function sealedBootstrap(
   issuer: AdapterFamilyShadowInputIssuer,
   incumbents: readonly AdapterFamilyShadowIncumbentNomination[],
   source: CanonicalSource = SOURCE,
+  inventoryMode: "complete-snapshot" | "partial" = "complete-snapshot",
 ): AdapterFamilyShadowBootstrapReceipt {
   return issuer.sealBootstrap({
-    inventoryMode: "complete-snapshot",
+    inventoryMode,
     source,
     range: { fromBlock: source.number, toBlock: source.number },
     families: [inventory(incumbents)],
@@ -1063,6 +1064,114 @@ try {
   );
 } finally {
   await rm(checkpointDirectory, { recursive: true, force: true });
+}
+
+const inventoryDirectory = await mkdtemp(
+  join(tmpdir(), "adapter-family-shadow-ingress-inventory-"),
+);
+try {
+  async function inventoryHarnessFor(path: string) {
+    const store = new AdapterFamilyDiscoveryCheckpointStore({
+      catalog: catalog(),
+      chainId: CHAIN_ID,
+      sourceRegistryFingerprint: REGISTRY,
+      backend: new FileAdapterFamilyDiscoveryCheckpointBackend({
+        path,
+        lockRetryMs: 1,
+        lockAttempts: 100,
+      }),
+      verifyCanonicalCheckpoint() {},
+      assertGenerationCurrent() {},
+    });
+    const empty = await store.loadForRestart();
+    assert.equal(empty.status, "empty");
+    const verifier = new AdapterFamilySnapshotInventoryClosureVerifier({
+      catalog: catalog(),
+      chainId: CHAIN_ID,
+      sourceRegistryFingerprint: REGISTRY,
+      checkpointStore: store,
+      enumerateSnapshotInventory: emptyClosureEnumeration,
+      captureCatalogPublication: () => Object.freeze({
+        revision: 0,
+        publicationFingerprint: null,
+      }),
+      verifyCanonicalSource() {},
+      assertGenerationCurrent() {},
+    });
+    const h = harness({
+      discoveryCheckpoint: {
+        store,
+        candidateIssuer: store.takeCandidateIssuer(),
+        restartReceipt: empty.receipt,
+      },
+      snapshotInventoryClosureCandidateIssuer:
+        verifier.takeCandidateIssuer(),
+    });
+    return { store, harness: h };
+  }
+
+  const incumbent = Object.freeze({
+    incumbentKey: "legacy:wsteth",
+    address: WSTETH,
+    currentSurface: surfaceObservation(SOURCE),
+  });
+
+  const currentPath = join(inventoryDirectory, "current.json");
+  const current = await inventoryHarnessFor(currentPath);
+  const currentRound = await current.harness.ingress.run({
+    sourceScans: sealedScans(current.harness.inputIssuer, { observedFrom: 0 }),
+    bootstrap: sealedBootstrap(current.harness.inputIssuer, [incumbent]),
+    ancestryProofs: [],
+  });
+  assert(currentRound.checkpointCandidate);
+  assert.equal(await current.store.compareAndCommit({
+    expected: null,
+    staged: currentRound.checkpointCandidate,
+  }), true);
+  const currentSnapshot =
+    current.store.checkpointSnapshot(current.store.capture()!)!;
+  const currentFamily = currentSnapshot.inventoryFamilies.find(
+    (family) => family.familyId === WSTETH_FAMILY_ID,
+  )!;
+  assert.equal(currentFamily.inventoryCount, 1);
+  assert.deepEqual(currentFamily.inventoryKeys, ["legacy:wsteth"]);
+  assert.equal(currentFamily.incumbents[0]?.address, WSTETH.toLowerCase());
+  assert.equal(
+    currentFamily.incumbents[0]?.currentSurface.kind,
+    "address-surface",
+    "a complete-snapshot bootstrap at the round source persists its " +
+      "incumbent inventory into the durable checkpoint",
+  );
+
+  const partialPath = join(inventoryDirectory, "partial.json");
+  const partial = await inventoryHarnessFor(partialPath);
+  const partialRound = await partial.harness.ingress.run({
+    sourceScans: sealedScans(partial.harness.inputIssuer, { observedFrom: 0 }),
+    bootstrap: sealedBootstrap(
+      partial.harness.inputIssuer,
+      [incumbent],
+      SOURCE,
+      "partial",
+    ),
+    ancestryProofs: [],
+  });
+  assert(partialRound.checkpointCandidate);
+  assert.equal(await partial.store.compareAndCommit({
+    expected: null,
+    staged: partialRound.checkpointCandidate,
+  }), true);
+  const partialSnapshot =
+    partial.store.checkpointSnapshot(partial.store.capture()!)!;
+  const partialFamily = partialSnapshot.inventoryFamilies.find(
+    (family) => family.familyId === WSTETH_FAMILY_ID,
+  )!;
+  assert.equal(
+    partialFamily.inventoryCount,
+    0,
+    "a partial or stale bootstrap cannot persist durable snapshot inventory",
+  );
+} finally {
+  await rm(inventoryDirectory, { recursive: true, force: true });
 }
 
 console.log("adapter-family-observation-shadow-ingress PASS");
