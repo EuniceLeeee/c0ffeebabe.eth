@@ -29,6 +29,9 @@ export SEARCHER_ENABLE_MEV_SHARE=0
 export SEARCHER_SUBMIT_HASHONLY_MEVSHARE=0
 export SEARCHER_EVENTS_PATH="${outdir}/events.jsonl"
 export SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH="${outdir}/routes.jsonl"
+# Dry-run signing still needs a key locally; use a per-run random dummy
+# (never the production key, never committed).
+export OWNER_PRIVATE_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 for var in \
   MAINNET_RPC_URL SEARCHER_LIVE_RPC_URL SEARCHER_LIVE_WS_URL \
   SEARCHER_REVM_SIM_BIN SEARCHER_V2_LINEAGES_PATH \
