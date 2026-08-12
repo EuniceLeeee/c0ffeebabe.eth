@@ -127,6 +127,18 @@
   Phase E 了"。证据文件：`docs/research/design/evidence/s1-node-serial-dry-run-latest.json`
   与 `s1-node-serial-systemic-live-latest.json`。
 
+### D-011 | 2026-08-12 | ✅ | 跳过默认 authority 切换验证，直接进入 Phase E（可回退）
+- **Decision:** 用户决定不再做默认 authority 切换的额外验证，直接在当前 impl 分支
+  执行 Phase E legacy cleanup；如后续部署/运行失败，回退到上一验收 commit/旧 runtime。
+- **Scope/边界:** 本决定只作用于 impl 分支的源码删除；live 节点 `/opt/MEV` 在显式部署前
+  仍运行旧 runtime（`SEARCHER_RUNTIME_COMMIT=269ade3c…`），不受分支删除影响；回退路径 =
+  git revert + 重部署旧构建物（AGENTS.md §3 Rule 17：回滚依靠上一已验收构建物）。
+  Phase E 每个删除 slice 保持合同测试 + 完整 build + sweep 全过，确保分支自身可用；
+  若某 slice 无法保持绿，则该 slice 回退并如实记录。
+- **Meta:** 用户原话："我觉得不用 dry run已经能说明问题 直接做 Phase E 不行的话可以回退"。
+  此条覆盖 D-009 的"Phase E 前确认删除范围"（范围 = canonical §18.3/§20.2.6 列出的
+  legacy 项，逐 slice 提交可见、可 revert）。
+
 ### D-006 | 2026-07-23 | ✅ | Family 解耦不需要跨 family victim 传播（"P0" 撤销，四刀盖棺）
 - **Question:** family 架构下（每 family 独立 `deriveMids`），backrun lane 的 victim swap 是否需要向
   依赖同一底层状态的其他 family（如读 Curve 状态的 vault）做"跨 family 二阶传播"，否则粗扫漏枚举？

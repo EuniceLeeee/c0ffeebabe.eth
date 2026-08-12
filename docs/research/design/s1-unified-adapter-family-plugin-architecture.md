@@ -536,6 +536,26 @@ dry-run harness checkpoint（commit 见下）：**
   backfill 开）后重跑串行对比，使 full_coverage/completed/timing 达到
   floors，再评估 cutover-readiness。
 
+**2026-08-12 Phase E slice 1 checkpoint（commit 见下，D-011 授权：
+legacy activation 与 legacy recall 移除）：**
+
+- 用户决定跳过默认 authority 切换验证，直接执行 Phase E（D-011：
+  可回退；live 节点 `/opt/MEV` 在显式部署前仍运行旧 runtime，不受
+  分支删除影响；每个 slice 保持 build/合同/sweep 绿，坏了回退该
+  slice）；
+- 移除：`adapter-family-activation-manifest.ts`（legacy activation
+  清单）+ 其合同测试 + `adapter-family-activation-baseline-040a9cc.json`
+  基线、`erc4626-legacy-recall.ts`（legacy recall hints）+ 探针测试；
+  对应 package.json scripts 删除；
+- 这些目标仅被测试引用、不参与 live 路径，删除后 shadow suite
+  （16 合同）+ 完整 build + regression sweep 12 组保持全过；
+- Phase E 剩余目标（后续 slice，按依赖排序）：live 路径中仍被
+  revm-live-backend/live-discovery-coordinator/build-active-pool-universe
+  引用的 legacy registry（production-registry/adapter-family-registry/
+  route-leg-registry/landed-event-registry）→ 需要先做 strict 接线
+  slice 才能安全删除；随后 legacy pricing/credit/funding 消费、family
+  facade、手工 revision、legacy activation/schema/cache 收尾。
+
 **2026-08-12 paired-live distiller checkpoint（commit 见下，
 systemic-live 权威决策的蒸馏链；真实 paired-live 运行仍待节点）：**
 
