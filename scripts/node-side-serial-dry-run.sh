@@ -17,6 +17,9 @@ dir="${4:?worktree required}"
 outdir="${5:?outdir required}"
 
 mkdir -p "${outdir}"
+# Scoped cleanup of leftovers from a previous dry-run side (only our ports).
+pkill -f -- '--port 9555' 2>/dev/null || true
+pkill -f -- '--port 9556' 2>/dev/null || true
 cd "${dir}"
 git fetch origin codex/parity-capture-baseline codex/s1-unified-adapter-architecture-impl 2>&1 | tail -1
 git checkout "${sha}" 2>&1 | tail -1
