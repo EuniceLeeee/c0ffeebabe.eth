@@ -4,26 +4,26 @@
   "sides": {
     "challenger": {
       "side": "challenger",
-      "sha": "20354d76559fa48e3190a793c501406a8739c199",
+      "sha": "43a678d9ef018bd855b19acb39a2866b99f21cfc",
       "priced": {
-        "resolved": 33273,
-        "expected": 37897
+        "resolved": 33391,
+        "expected": 38019
       },
-      "pricedRatio": 0.8779850647808534,
-      "graphBuiltEdges": 37166,
+      "pricedRatio": 0.8782713906204792,
+      "graphBuiltEdges": 37288,
       "artifactPoolCount": 3,
-      "eventLineCount": 15975,
-      "routeEventLineCount": 21,
+      "eventLineCount": 17115,
+      "routeEventLineCount": 17,
       "exitCode": 124,
       "pipeline": {
         "compositionStatus": "[searcher/live] discovery continuity composition trusted",
         "writerReady": true,
-        "checkpointCommitted": true,
         "lifecycleFailures": [
           "[searcher/live] strict lifecycle failed for protocol:erc4626: strict Family lifecycle did not publish for protocol:erc4626: identity unresolved identity-work-unresolved:standalone-standard-behavior:resource-limited",
           "[searcher/live] strict lifecycle failed for protocol:erc4626: strict Family lifecycle did not publish for protocol:erc4626: identity unresolved identity-work-unresolved:standalone-standard-behavior:resource-limited"
         ],
-        "publisherPublished": true
+        "publisherPublished": true,
+        "checkpointCommitted": true
       }
     }
   },

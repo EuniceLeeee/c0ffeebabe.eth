@@ -251,6 +251,15 @@
 > handle，不可序列化），重启后由下一次发布重建——因 live 路径
 > 只授予 observed-complete，不构成 omission authority，此限制在
 > 文档中显式记录。
+>
+> **P0-5 节点验收（2026-08-12，`43a678d9` 机器证据）：** 600s
+> dry-run 日志顺序为 `strict catalog root committed: revision=1`
+> → `discovery checkpoint inventory committed`（revision=2 同序）：
+> durable checkpoint 只在 catalogRoot CAS 成功后推进；
+> checkpoint revision 23、source generation 1、43 行水位全部
+> append-only；erc4626 稳定 `resource-limited`；searcher priced
+> 87.83% 无回退。证据：
+> `docs/research/design/evidence/s1-node-acceptance-pipeline-43a678d9.json`。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
