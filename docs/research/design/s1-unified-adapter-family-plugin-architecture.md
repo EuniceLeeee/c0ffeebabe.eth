@@ -312,6 +312,21 @@ checkpoint（commit 见下，§2 设计的数据基座与接线；node dry-run �
 - 证据：shadow suite（11 合同）全过 + regression sweep 11 组全过 +
   完整 build。
 
+**2026-08-12 node enumerator dry-run 机器证据（fixture-backed，
+SSM run `5f6aba8c-512f-4d5a-8e0a-cac84021e163`，非 live cutover）：**
+
+- 实例 `i-0ff908dedeec9ebc6`，impl SHA `de87614672d17c3072c53b702e7c862fbc81ed34`；
+  preflight（worktree/status/HEAD/PROCS/locks）→ checkout 精确 SHA →
+  `searcher:node-enumerator-dry-run` 输出 `status=pass`；catalogHash
+  `0f0cd003…`、wsteth inventoryHash `d72f1897…`、univ2-standard
+  `d521b093…` 与本地 CLI 输出逐字节一致；
+- 证据记录
+  `docs/research/design/evidence/s1-node-enumerator-dry-run-5f6aba8c-….json`
+  已提交；未触碰 `/opt/MEV` live searcher，无 live/签名/广播；
+- 范围如实限定为 fixture-backed（真实 store/catalog/enumerator 实现 +
+  合成 incumbent inventory）；live discovery 写入真实 inventory 的
+  节点 dry-run 仍待接线。
+
 以下项仍**未关闭**，且明确需要节点环境、真实数据源或人工授权：
 
 - complete-snapshot 正向路径的剩余 bootstrap 缺口（factory-log
@@ -320,10 +335,10 @@ checkpoint（commit 见下，§2 设计的数据基座与接线；node dry-run �
   observed-call/landed-log-only 族仍需新的 incumbent 语义，超出 §1
   设计范围；mixed-mode subset closure 已让真实生产 catalog 中 13 个
   eligible 族可先关闭，其余 7 族保持 append-only）；
-- production point-in-time enumerator 的 node dry-run 机器证据（durable
-  checkpoint + enumerator 接线已合同级关闭；live discovery 写入真实
-  incumbent inventory 并做节点 dry-run 验收仍待节点；fixture-backed
-  节点 enumerator dry-run harness 已就绪）；
+- production point-in-time enumerator 的 live-data node dry-run（durable
+  checkpoint + enumerator 接线已合同级关闭；fixture-backed 节点 dry-run
+  机器证据已关闭，SSM run `5f6aba8c…`；live discovery 写入真实
+  incumbent inventory 并做节点 dry-run 验收仍待接线）；
 - production solver 的 strict pricing/Funding/Credit consumer 真实
   接线（目前仅 diagnostic）；
 - ~~节点 SSM 双跑机器证据~~（已关闭：SSM run

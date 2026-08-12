@@ -1,0 +1,20 @@
+{
+  "format": "s1-node-enumerator-dry-run-v1",
+  "ssmRunId": "5f6aba8c-512f-4d5a-8e0a-cac84021e163",
+  "instanceId": "i-0ff908dedeec9ebc6",
+  "implSha": "de87614672d17c3072c53b702e7c862fbc81ed34",
+  "catalogHash": "0f0cd00386ae2c4d67250db931af213ca8664b7e27f5c5f5ee1fba0e7c7085e3",
+  "familyCount": 20,
+  "inventoryFamilies": [
+    {
+      "familyId": "protocol:wsteth",
+      "inventoryCount": 1,
+      "inventoryHash": "d72f1897af3c9ced8bc0f7768c9b93bd1b76b8ed9c4b30d0766d7f5e23aeaec3"
+    },
+    {
+      "familyId": "univ2-standard",
+      "inventoryCount": 1,
+      "inventoryHash": "d521b09335440012e17e0d11d6923489794e514ddbe3a39176e10b181b3b19c3"
+    }
+  ]
+}

@@ -119,8 +119,12 @@ interface DiscoveryInventoryEnumerator {
   → strict catalog `complete-snapshot` 全链路通过；无 trusted receipt /
   append-only 重启 / source 不一致 / 缺失或多余 Family 行 / 篡改
   inventoryHash 全部 fail closed；
-- 验收 1（节点 dry-run：真实 checkpoint + live discovery 输出）仍待
-  节点环境，不在此虚报。
+- 验收 1 部分关闭：fixture-backed 节点 dry-run 已执行并通过（SSM
+  `5f6aba8c-512f-4d5a-8e0a-cac84021e163`，真实 store/catalog/enumerator
+  实现 + 合成 incumbent inventory，证据记录
+  `docs/research/design/evidence/s1-node-enumerator-dry-run-….json`）；
+  live discovery 写入真实 incumbent inventory 的 dry-run 仍待接线，
+  不在此虚报。
 
 ## 3. 依赖关系
 
