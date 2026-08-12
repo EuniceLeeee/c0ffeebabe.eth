@@ -197,23 +197,20 @@ export function strictFundingPrewarmAddresses(input: {
 }
 
 /**
- * Env-gated selection for the live backend: use the committed strict
- * funding projection when available, otherwise the legacy addresses.
+ * Funding prewarm selection (Pair A partial): committed strict funding
+ * states are the only source. Without a committed publication the live
+ * path has no strict funding data (accepted Phase E risk); the legacy
+ * registry fallback has been removed.
  */
 export function resolveFundingPrewarmAddresses(input: {
   readonly strictViews: StrictShadowCatalogViews | null;
   readonly catalog: FamilyCapabilityCatalog;
-  readonly legacyAddresses: readonly string[];
 }): readonly string[] {
-  if (input.strictViews !== null) {
-    return strictFundingPrewarmAddresses({
-      views: input.strictViews,
-      catalog: input.catalog,
-    });
-  }
-  return Object.freeze([...new Set(
-    input.legacyAddresses.map((address) => address.toLowerCase()),
-  )].sort());
+  if (input.strictViews === null) return Object.freeze([]);
+  return strictFundingPrewarmAddresses({
+    views: input.strictViews,
+    catalog: input.catalog,
+  });
 }
 
 /**

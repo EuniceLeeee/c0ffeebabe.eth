@@ -321,7 +321,7 @@
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
 | A | `production-registry.routes()/funding()` 在 `revm-live-backend` 的执行消费 | strict family runtime handle / strict funding consumer 接入 live execution | step 1-5 完成：22 族 execution projection 全覆盖（spender 静态/hop.target/angstrom 常量/null；prewarm 保守留空）env gate 接线（默认 OFF）；**删除步骤阻塞**：strict 路径激活依赖 composition env + committed publication（即默认 authority 接线），用户选择跳过；在 composition 成为默认前删除 legacy 会让无 composition 的生产路径失去 execution 数据 |
-| A | 同上 | 同上 | step 1-6 完成：execution 投影改为 composition 存在即默认启用（移除 env flag；无 committed views 时按 per-family/per-availability 回退 legacy），删除步骤的 authority 前置已最小化；仍保留 per-family 回退，删除 legacy 消费前需 composition 生产默认 |
+| A | 同上 | 同上 | step 1-6 完成：execution 投影改为 composition 存在即默认启用（移除 env flag；无 committed views 时按 per-family/per-availability 回退 legacy），删除步骤的 authority 前置已最小化；仍保留 per-family 回退，删除 legacy 消费前需 composition 生产默认。**2026-08-12 部分删除**：funding/route prewarm 与 encodeQuotePrewarm 的 legacy 消费已移除（无 committed views 时返回空，接受 D-011 风险）；`quoteByAdapter`/`overlayApproveSpender` legacy 分支保留至 Pair E 接线后删除 |
 
 > **Pair A 节点验证（2026-08-12，SSM 串行 strict-live run）：**
 > challenger `45908c6c` + `SEARCHER_STRICT_LIVE_EXECUTION=1`（composition
@@ -330,6 +330,16 @@
 > strict views，strict 路径按设计回退 legacy——验证的是 gate 接线 no-op
 > 安全性；univ2 pilot 真正激活需要 composition env + committed publication
 > （节点下一步）。
+>
+> **Pair A 部分删除（2026-08-12，按 D-011）：** 代码核验发现
+> `quoteByAdapter` 只有 legacy 分支（strict 侧无 quote 实现），
+> `resolveStrictSolverConsumer` 仍为 diagnostic-only（Pair E 未接线），
+> 直接全删会让所有配置下 searcher 无法报价。按用户授权删除安全子集：
+> `resolveFundingPrewarmAddresses` 移除 legacyAddresses 参数（无
+> committed views 返回空）；revm-live-backend 移除 funding/route
+> legacy prewarm 与 encodeQuotePrewarm legacy 回退。合同测试更新
+> （无 strict views 时 funding prewarm 为空）；build/shadow suite
+> 全绿。quote/approve legacy 保留，待 Pair E 接线后补删。
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

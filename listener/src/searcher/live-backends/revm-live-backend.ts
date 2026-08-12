@@ -25,6 +25,9 @@ import {
   postImpactSupportsStateOverrides,
 } from "../solver/post-impact-overrides.js";
 import type { ResolvedPlan } from "../solver/solver.js";
+// Legacy quote/approve consumption stays until Pair E (strict pricing
+// consumer) is wired; only prewarm/funding legacy reads were removed in the
+// Pair A partial deletion.
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
   resolveFundingPrewarmAddresses,
@@ -235,9 +238,6 @@ export class RevmLiveBackend implements LiveStateBackend {
         : this.strictExecution.views(),
       catalog: this.strictExecution?.catalog ??
         PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-      legacyAddresses: PRODUCTION_ADAPTER_FAMILIES.funding().flatMap(
-        (family) => [family.funding.target, family.funding.liquidityHolder],
-      ),
     })) {
       push(address);
     }
@@ -251,12 +251,6 @@ export class RevmLiveBackend implements LiveStateBackend {
         })) {
           push(address);
         }
-      } else {
-        const adapter = PRODUCTION_ADAPTER_FAMILIES.routes()
-          .findForEdge(hop.adapterId);
-        const request = this.preparedRequest(hop, input.impact?.amountIn ?? 0n);
-        for (const address of adapter?.prepared?.prewarmAddresses?.(request) ??
-          []) push(address);
       }
     }
 
@@ -371,9 +365,6 @@ export class RevmLiveBackend implements LiveStateBackend {
         : this.strictExecution.views(),
       catalog: this.strictExecution?.catalog ??
         PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-      legacyAddresses: PRODUCTION_ADAPTER_FAMILIES.funding().flatMap(
-        (family) => [family.funding.target, family.funding.liquidityHolder],
-      ),
     })) {
       pushPrewarm(address);
     }
@@ -385,14 +376,6 @@ export class RevmLiveBackend implements LiveStateBackend {
           catalog: this.strictExecution.catalog,
           hops: [hop],
         })) {
-          pushPrewarm(address);
-        }
-      } else {
-        const adapter = PRODUCTION_ADAPTER_FAMILIES.routes()
-          .findForEdge(hop.adapterId);
-        const request = this.preparedRequest(hop, hop.amountIn);
-        for (const address of adapter?.prepared?.prewarmAddresses?.(request) ??
-          []) {
           pushPrewarm(address);
         }
       }
@@ -450,10 +433,7 @@ export class RevmLiveBackend implements LiveStateBackend {
           }));
         }
       }
-      const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(hop.adapterId);
-      const encode = adapter?.prepared?.encodeQuotePrewarm;
-      if (!encode) return [];
-      return [...await encode(this.preparedContext(hop, amountIn))];
+      return [];
     } catch {
       // best-effort prewarm; the hop just stays cold
       return [];

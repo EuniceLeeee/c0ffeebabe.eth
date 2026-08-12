@@ -79,22 +79,15 @@ function main(): void {
     resolveFundingPrewarmAddresses({
       strictViews: null,
       catalog,
-      legacyAddresses: Object.freeze([
-        `0x${"aa".repeat(20)}`,
-        `0x${"BB".repeat(20)}`,
-        `0x${"aa".repeat(20)}`,
-      ]),
     }),
     Object.freeze([
-      `0x${"aa".repeat(20)}`,
-      `0x${"bb".repeat(20)}`,
     ]),
+    "no committed strict publication means no funding prewarm (legacy fallback removed)",
   );
   assert.deepEqual(
     resolveFundingPrewarmAddresses({
       strictViews: views,
       catalog,
-      legacyAddresses: Object.freeze([`0x${"cc".repeat(20)}`]),
     }),
     addresses,
   );
