@@ -91,6 +91,9 @@ import {
   resolveStrictCatalogConsumerDiagnostic,
 } from "./strict-catalog-consumer-diagnostic.js";
 import {
+  resolveStrictSolverConsumer,
+} from "./strict-solver-consumer.js";
+import {
   productionFamilyStartupManifest,
 } from "./production-family-startup-manifest.js";
 import {
@@ -1817,6 +1820,32 @@ async function main(): Promise<void> {
     console.log(
       `[searcher/live] strict catalog consumer diagnostic ` +
         strictConsumerStatus,
+    );
+  }
+  // Strict solver consumer (solver-shaped wiring; OFF by default).
+  // SEARCHER_STRICT_SOLVER_CONSUMER=1 resolves the complete strict read
+  // surface (every pricing mid, funding offer and credit route) through the
+  // source-bound consumer and logs counts. It never feeds the legacy
+  // registry; the planner call-site remains part of the default-authority
+  // cutover and is not enabled here.
+  if (process.env.SEARCHER_STRICT_SOLVER_CONSUMER === "1") {
+    let strictSolverStatus: string;
+    try {
+      const committed =
+        discoveryContinuityComposition?.catalogRoot.capture() ?? null;
+      strictSolverStatus = committed === null
+        ? "no-committed-publication"
+        : resolveStrictSolverConsumer({
+            composition: discoveryContinuityComposition,
+            source: committed.views.source,
+            generation: committed.views.source.generation,
+          });
+    } catch (error) {
+      strictSolverStatus =
+        `failed:${error instanceof Error ? error.message : String(error)}`;
+    }
+    console.log(
+      `[searcher/live] strict solver consumer ` + strictSolverStatus,
     );
   }
   let protocolGraphCompleteThrough = -1;

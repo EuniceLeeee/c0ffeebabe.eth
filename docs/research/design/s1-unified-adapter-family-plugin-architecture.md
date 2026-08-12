@@ -443,6 +443,24 @@ cutover）：**
 - 证据：shadow suite（14 合同）全过 + regression sweep 12 组全过 +
   完整 build。
 
+**2026-08-12 strict solver consumer checkpoint（commit 见下，
+solver-shaped 生产入口；planner call-site 属于默认 authority 切换）：**
+
+- 新增 `resolveStrictSolverConsumer`：与 one-read diagnostic 不同，它对
+  committed strict views 的**完整读取面**做 source/generation-fenced
+  解析（每个 pricing mid、funding offer、credit route），返回
+  `resolved(revision,pricing,unavailable,missing,funding,credit,
+  creditMissing)` 摘要；缺失/不可用只计数，绝不 fallback legacy
+  registry；
+- main.ts 新增 `SEARCHER_STRICT_SOLVER_CONSUMER=1` env gate（默认 OFF）：
+  构造后打印摘要；该入口不启用 planner 默认路径，planner call-site
+  随默认 authority 切换（D-009 已授权，cutover-readiness ready 后
+  执行）；
+- 合同测试：committed univ2 publication 全量解析成功（pricing>0）、
+  source 不匹配 fail-closed、无 composition 返回 no-composition；
+- 证据：shadow suite（15 合同）全过 + regression sweep 12 组全过 +
+  完整 build。
+
 **2026-08-12 活动型 Family append-only 决定 checkpoint（D-008，
 验收目标修正，非代码变更）：**
 
