@@ -19,6 +19,7 @@ import {
 } from "../strict-catalog-live-publisher.js";
 import {
   runWstethLifecycle,
+  runFluidDexLifecycle,
 } from "../architecture-migration-fixture-replay.js";
 import {
   definedFamilyPluginContractSummary,
@@ -47,6 +48,11 @@ const SOURCE: CanonicalSource = Object.freeze({
   number: 25_700_444,
   hash: `0x${"51".repeat(32)}`,
   generation: 44,
+});
+const SOURCE2: CanonicalSource = Object.freeze({
+  number: SOURCE.number + 40,
+  hash: `0x${"52".repeat(32)}`,
+  generation: 45,
 });
 const WSTETH = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const CHAIN_ID = "1";
@@ -245,6 +251,33 @@ async function main(): Promise<void> {
         throw new Error("production catalog unresolved: " + prodResult.reason);
       }
       assert.equal(prodResult.revision, 1);
+
+      // Multi-family observed-complete publication: two real lifecycle
+      // publications must stage in one catalogRoot CAS. The previous
+      // implementation shared one closure receipt across complete-snapshot
+      // stages (receipt is consumed on first use), so this failed as soon as
+      // more than one family published.
+      const multiPublication = await runWstethLifecycle(SOURCE2, prodCat);
+      const fluidPublication = await runFluidDexLifecycle(SOURCE2);
+      const multiResult = await publishStrictCatalogFromLifecycle({
+        composition: prodComposition,
+        catalog: prodCat,
+        source: SOURCE2,
+        publications: Object.freeze([
+          Object.freeze({ familyId: WSTETH_FAMILY_ID, publication: multiPublication }),
+          Object.freeze({
+            familyId: fluidPublication.familyId,
+            publication: fluidPublication,
+          }),
+        ]),
+      });
+      if (multiResult.status !== "published") {
+        throw new Error("multi-family catalog unresolved: " + multiResult.reason);
+      }
+      assert.equal(multiResult.revision, 2);
+      const multiCommitted = prodComposition.catalogRoot.capture();
+      assert(multiCommitted);
+      assert.equal(multiCommitted.envelope.privateState.instances.size, 2);
     } finally {
       await rm(prodDirectory, { recursive: true, force: true });
     }

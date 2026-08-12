@@ -30,6 +30,7 @@ const ASTRA_POOL = `0x${"61".repeat(20)}`;
 
 function fixturePublication(input: {
   readonly staleEventCoverage?: boolean;
+  readonly univ2FactoryCoverage?: boolean;
 } = {}): LiveDiscoveryPublicationState {
   const cache = createProtocolDiscoveryEvidenceCache(1n);
   cache.addressEntries.set(WSTETH.toLowerCase(), Object.freeze({
@@ -60,17 +61,30 @@ function fixturePublication(input: {
   const coverageBlock = input.staleEventCoverage
     ? SOURCE.number - 1
     : SOURCE.number;
+  const coverageEntries: Array<[
+    string,
+    { readonly completeThroughBlock: number; readonly completeThroughHash: string },
+  ]> = [
+    [
+      `protocol:wsteth\u001fobserved-call`,
+      Object.freeze({
+        completeThroughBlock: coverageBlock,
+        completeThroughHash: SOURCE.hash,
+      }),
+    ],
+  ];
+  if (input.univ2FactoryCoverage) {
+    coverageEntries.push([
+      `${UNIV2_FAMILY_ID}\u001ffactory-log`,
+      Object.freeze({
+        completeThroughBlock: coverageBlock,
+        completeThroughHash: SOURCE.hash,
+      }),
+    ]);
+  }
   return Object.freeze({
     protocolEvidenceCache: cache,
-    protocolFamilySourceCoverage: new Map([
-      [
-        `protocol:wsteth\u001fobserved-call`,
-        Object.freeze({
-          completeThroughBlock: coverageBlock,
-          completeThroughHash: SOURCE.hash,
-        }),
-      ],
-    ]),
+    protocolFamilySourceCoverage: new Map(coverageEntries),
     dexSourceAnchor: Object.freeze({
       completeThroughBlock: coverageBlock,
       completeThroughHash: SOURCE.hash,
@@ -125,7 +139,26 @@ function main(): void {
   const univ2Factory = derived.watermarks.find((row) =>
     row.familyId === UNIV2_FAMILY_ID && row.sourceId === "factory-log"
   )!;
-  assert.equal(univ2Factory.coverageAuthority, "contiguous-history");
+  assert.equal(
+    univ2Factory.coverageAuthority,
+    "append-only",
+    "without an exact Family x source receipt the global cursor must not mint completeness",
+  );
+
+  const exactUniv2 = deriveLiveDiscoveryCheckpointInventory({
+    publication: fixturePublication({ univ2FactoryCoverage: true }),
+    source: SOURCE,
+    catalog,
+    familyIdForAdapter: () => null,
+  });
+  const exactUniv2Factory = exactUniv2.watermarks.find((row) =>
+    row.familyId === UNIV2_FAMILY_ID && row.sourceId === "factory-log"
+  )!;
+  assert.equal(
+    exactUniv2Factory.coverageAuthority,
+    "contiguous-history",
+    "an exact Family x source receipt at the source grants event completeness",
+  );
 
   const stale = deriveLiveDiscoveryCheckpointInventory({
     publication: fixturePublication({ staleEventCoverage: true }),

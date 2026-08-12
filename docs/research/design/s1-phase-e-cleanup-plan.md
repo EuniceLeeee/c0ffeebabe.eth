@@ -206,6 +206,19 @@
 > 能力边界以 resource-limited fail-closed——错误分类被消除。
 > 合同测试：runtime 无 map 时 authority-failure、有 map 时
 > verified-actor 请求执行成功；build/suite 全绿。
+>
+> **correctness kernel 修订（2026-08-12，按 P0 审计）：**
+> live publisher 不再从 publication 存在性伪推 complete-snapshot：
+> 所有 live stage 一律 `observed-complete`（不授予 omission/
+> tombstone authority），移除共享 closure receipt 与伪造
+> `ffff…/eeee…` terminal evidence（P0-1/P0-3/P0-4）；
+> `eventCovered()` 删除全局 DEX/protocol cursor OR fallback，只认
+> 精确 `Family × source × cutoff` receipt（P0-2）。合同回归：
+> 多 Family（wsteth + fluid-dex）同代 observed-complete 发布成功
+> （revision 2、2 instances）——旧共享 receipt 路径在第二个
+> complete-snapshot stage 必失败；精确/缺失 coverage 水位正反例。
+> build/suite 全绿。complete-snapshot closure 仍保留在 composition
+> 供未来精确 bootstrap 路径使用，live 循环不触碰。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

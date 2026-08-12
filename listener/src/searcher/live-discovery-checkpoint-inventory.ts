@@ -120,14 +120,12 @@ export function deriveLiveDiscoveryCheckpointInventory(input: {
     const protocol = input.publication.protocolFamilySourceCoverage.get(
       discoveryFamilySourceKey(familyId, sourceId),
     );
-    if (protocol !== undefined) {
-      return protocol.completeThroughBlock >= input.source.number;
-    }
+    // Exact Family x source coverage only. Legacy source ids do not map 1:1
+    // to strict factory-log/landed-log/observed-call ids, so a global DEX or
+    // protocol cursor must never mint event completeness for a strict row.
     return (
-      input.publication.dexSourceAnchor.completeThroughBlock >=
-        input.source.number ||
-      input.publication.protocolObservedCursor.completeThroughBlock >=
-        input.source.number
+      protocol !== undefined &&
+      protocol.completeThroughBlock >= input.source.number
     );
   };
   const byFamily = new Map<string, {

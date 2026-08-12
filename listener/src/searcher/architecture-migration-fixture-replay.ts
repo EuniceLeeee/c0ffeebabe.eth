@@ -7812,7 +7812,7 @@ function fluidDexFixtureRuntime(): CentralAdapterRuntime {
   };
 }
 
-async function runFluidDexLifecycle(
+export async function runFluidDexLifecycle(
   canonical: CanonicalSource,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
