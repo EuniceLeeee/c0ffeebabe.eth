@@ -130,6 +130,66 @@ async function main(): Promise<void> {
   assert(simulated[0]!.ok === true);
   assert.equal(simulated[0]!.data, "0xdeadbeef");
   assert.equal(simulated[0]!.effects?.tokenDeltas?.[0]?.delta, 5n);
+
+  const revertProvider = Object.freeze({
+    call: async () => {
+      const error = new Error("execution reverted");
+      (error as { data?: string }).data = "0xdeadbeef";
+      throw error;
+    },
+    getCode: async () => "0x00",
+    getStorage: async () => `0x${"0".repeat(64)}`,
+  });
+  const revertRuntime = createStrictCentralAdapterRuntime({
+    provider: revertProvider as never,
+    generationFence: Object.freeze({ assertCurrent() {} }),
+  });
+  const revertExecutor = revertRuntime.scheduler.issueExecutor({} as never);
+  const revertResults = await revertExecutor.executor.execute({
+    requests: Object.freeze([
+      Object.freeze({
+        id: "declared-revert",
+        kind: "eth-call" as const,
+        to: WSTETH,
+        data: "0x12345678",
+        completion: "return-or-revert-data" as const,
+      }),
+      Object.freeze({
+        id: "plain-call",
+        kind: "eth-call" as const,
+        to: WSTETH,
+        data: "0x12345678",
+        completion: "return-data" as const,
+      }),
+    ]),
+    source: SOURCE,
+  } as never);
+  assert.equal(revertResults[0]!.ok, true);
+  assert(revertResults[0]!.ok === true);
+  assert.equal(revertResults[0]!.completion, "reverted-as-declared");
+  assert.equal(revertResults[0]!.data, "0xdeadbeef");
+  assert.equal(revertResults[1]!.ok, false);
+  assert(revertResults[1]!.ok === false);
+  assert.equal(revertResults[1]!.failure, "rpc");
+
+  const failingSimulatorRuntime = createStrictCentralAdapterRuntime({
+    provider: mockProvider() as never,
+    generationFence: Object.freeze({ assertCurrent() {} }),
+    simulator: Object.freeze({
+      simulate: async () => {
+        throw new Error("cannot resolve verified-actor caller");
+      },
+    }),
+  });
+  const failingSimulatorExecutor =
+    failingSimulatorRuntime.scheduler.issueExecutor({} as never);
+  const failingSimulator = await failingSimulatorExecutor.executor.execute({
+    requests: Object.freeze([simulationRequest]),
+    source: SOURCE,
+  } as never);
+  assert.equal(failingSimulator[0]!.ok, false);
+  assert(failingSimulator[0]!.ok === false);
+  assert.equal(failingSimulator[0]!.failure, "resource-limited");
   console.log("strict-central-adapter-runtime PASS");
 }
 

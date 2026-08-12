@@ -134,18 +134,39 @@ async function executeRequest(
 ): Promise<AdapterRequestResult> {
   try {
     if (request.kind === "eth-call") {
-      const data = await provider.call({
-        to: request.to,
-        data: request.data,
-      }, source.number);
-      return issueResult({
-        id: request.id,
-        source,
-        completion: "returned" as const,
-        data,
-        provenanceKind: "provider-eth-call",
-        request,
-      });
+      try {
+        const data = await provider.call({
+          to: request.to,
+          data: request.data,
+        }, source.number);
+        return issueResult({
+          id: request.id,
+          source,
+          completion: "returned" as const,
+          data,
+          provenanceKind: "provider-eth-call",
+          request,
+        });
+      } catch (error) {
+        // A family-declared revert is evidence, not a transport failure.
+        // Surface the revert payload as reverted-as-declared exactly like the
+        // legacy work runtime so identity decode can reject or accept on
+        // family semantics (for example FluidDexSwapResult quote payloads).
+        if (request.completion === "return-or-revert-data") {
+          const revertData = extractStrictRevertData(error);
+          if (revertData !== null) {
+            return issueResult({
+              id: request.id,
+              source,
+              completion: "reverted-as-declared" as const,
+              data: revertData,
+              provenanceKind: "provider-eth-call",
+              request,
+            });
+          }
+        }
+        throw error;
+      }
     }
     if (request.kind === "get-code") {
       const data = await provider.getCode(request.address, source.number);
@@ -185,24 +206,35 @@ async function executeRequest(
           failure: "resource-limited" as const,
         });
       }
-      const simulated = await simulator.simulate({
-        request,
-        source,
-      });
-      return Object.freeze({
-        id: request.id,
-        ok: true as const,
-        source: Object.freeze(source),
-        provenance: Object.freeze({
-          kind: "strict-simulation-transport",
-          fingerprint: "9".repeat(64),
-        }),
-        completion: "returned" as const,
-        data: simulated.data,
-        ...(simulated.effects === undefined
-          ? {}
-          : { effects: Object.freeze(simulated.effects) }),
-      });
+      try {
+        const simulated = await simulator.simulate({
+          request,
+          source,
+        });
+        return Object.freeze({
+          id: request.id,
+          ok: true as const,
+          source: Object.freeze(source),
+          provenance: Object.freeze({
+            kind: "strict-simulation-transport",
+            fingerprint: "9".repeat(64),
+          }),
+          completion: "returned" as const,
+          data: simulated.data,
+          ...(simulated.effects === undefined
+            ? {}
+            : { effects: Object.freeze(simulated.effects) }),
+        });
+      } catch {
+        // An unsupported simulation capability (observe, funded override,
+        // verified actor) is a capability gap, never a chain RPC failure.
+        return Object.freeze({
+          id: request.id,
+          ok: false as const,
+          source: Object.freeze(source),
+          failure: "resource-limited" as const,
+        });
+      }
     }
     return Object.freeze({
       id: request.id,
@@ -218,6 +250,21 @@ async function executeRequest(
       failure: "rpc" as const,
     });
   }
+}
+
+function extractStrictRevertData(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) return null;
+  const record = error as Record<string, unknown>;
+  for (const key of ["data", "returnData", "revert"]) {
+    const value = record[key];
+    if (
+      typeof value === "string" &&
+      /^0x(?:[0-9a-fA-F]{2})*$/.test(value)
+    ) {
+      return value;
+    }
+  }
+  return null;
 }
 
 function issueResult(input: {
