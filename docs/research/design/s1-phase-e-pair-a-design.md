@@ -41,13 +41,32 @@ publication 投影，随后删除 legacy funding/routes 消费。
   有 committed publication 时用上述投影，否则 legacy；dry-run 验证后默认
   打开并删除 legacy funding/routes 消费。
 
+### 4. 执行路径（step 3，已确认 strict 面）
+
+实测 strict 插件已有 `execution: ExecutionSemantics`（`buildFragment` →
+`PlanFragment` + `expectedEffects`）与 `FamilyGraphProjection.executionTarget`/
+`routeActionAdapterId`；revm 后端剩余 legacy 消费为：
+- `encodeHopQuoteCalls`：legacy `prepared.encodeQuotePrewarm(context)` →
+  strict 侧由 `strictExecutionAdapters` 投影层提供 prewarm
+  `OverlayPreCall`（univ2 pilot：getReserves@hop.target）；未 pilot 族
+  回退 legacy；
+- `overlayApproveSpender`：legacy `prepared.allowanceSpender(request)` →
+  strict 侧由投影层提供（univ2 pilot：UNIV2_ROUTER）；未 pilot 族回退
+  legacy。
+- 落地顺序：投影层（基础设施常量，**不改插件契约**，definition
+  boundary / sealed parity 证据稳定）→ univ2 pilot + 合同 → 切
+  `encodeHopQuoteCalls`/`overlayApproveSpender` 到 strict（env gate）→
+  逐族补 pilot → 删除 legacy 消费。
+
 ## 验收
 
 1. funding/route 投影合同测试（committed publication → 地址集合正确；
    evidence 缺失 fail-closed）；
-2. `revm-live-backend` 在 env gate 下用 strict 投影完成 prewarm，逻辑与
+2. execution projection pilot（univ2）：`strictExecutionProjectionFor` +
+   `prewarmQuoteCalls`/`allowanceSpender` 合同测试；
+3. `revm-live-backend` 在 env gate 下用 strict 投影完成 prewarm，逻辑与
    legacy 等价（合同级模拟）；
-3. 节点 dry-run：开启 gate 跑 600s 串行对比，priced/edges/events 不劣于
+4. 节点 dry-run：开启 gate 跑 600s 串行对比，priced/edges/events 不劣于
    当前 challenger；
-4. 删除 `revm-live-backend` 内 legacy funding/routes 消费，build/suite/
+5. 删除 `revm-live-backend` 内 legacy funding/routes 消费，build/suite/
    sweep 全绿。
