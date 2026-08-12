@@ -1728,6 +1728,23 @@ impl Daemon {
         let calldata = Bytes::from(parse_hex_bytes(&data)?);
         let parsed_pre_calls = parse_pre_calls(&pre_calls)?;
         let gas_limit = gas_limit.unwrap_or(DEFAULT_GAS_LIMIT);
+        let mut fund_account = |address: Address| -> Result<()> {
+            let info = db
+                .basic(address)
+                .map_err(|err| {
+                    anyhow!("strict fund basic {address:#x}: {err}")
+                })?
+                .unwrap_or_default();
+            let mut funded = info;
+            funded.balance = U256::MAX;
+            db.insert_account_info(address, funded);
+            Ok(())
+        };
+        fund_account(caller)?;
+        fund_account(Address::ZERO)?;
+        for call in &parsed_pre_calls {
+            fund_account(call.from)?;
+        }
 
         apply_token_deals(
             &mut db,
