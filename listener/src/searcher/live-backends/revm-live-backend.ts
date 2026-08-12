@@ -599,7 +599,10 @@ export class RevmLiveBackend implements LiveStateBackend {
         catalog: this.strictExecution.catalog,
         adapterId: hop.adapterId,
       });
-      if (projection !== null) return projection.allowanceSpender;
+      if (projection !== null) {
+        const spender = projection.allowanceSpender;
+        return typeof spender === "function" ? spender(hop) : spender;
+      }
     }
     const adapter = PRODUCTION_ADAPTER_FAMILIES.routes()
       .findForEdge(hop.adapterId);

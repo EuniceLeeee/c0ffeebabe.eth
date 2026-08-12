@@ -15,7 +15,7 @@
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|
-| A | `production-registry.routes()/funding()` 在 `revm-live-backend` 的执行消费 | strict family runtime handle / strict funding consumer 接入 live execution | step 1-3 完成：funding/route prewarm + execution adapter 投影（univ2 pilot：allowanceSpender=UNIV2_ROUTER、prewarmQuoteCalls=getReserves）全部 env gate 接线（默认 OFF）；其余族 pilot 与删除待做 |
+| A | `production-registry.routes()/funding()` 在 `revm-live-backend` 的执行消费 | strict family runtime handle / strict funding consumer 接入 live execution | step 1-4 完成：funding/route prewarm + execution adapter 投影（univ2/univ3/fluid-dex/eigenpie/dodo/goldx/psm/univ4 pilots：spender 静态或 hop.target，prewarm 保守留空）env gate 接线（默认 OFF）；删除待做 |
 
 > **Pair A 节点验证（2026-08-12，SSM 串行 strict-live run）：**
 > challenger `45908c6c` + `SEARCHER_STRICT_LIVE_EXECUTION=1`（composition

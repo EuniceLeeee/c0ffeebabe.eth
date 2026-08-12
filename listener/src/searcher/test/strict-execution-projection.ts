@@ -11,6 +11,8 @@ import {
 import {
   UNIV2_ROUTER,
 } from "../venues/swaps/univ2-family/victim.js";
+import { UNIV3_SWAP_ROUTER } from
+  "../venues/swaps/univ3-abi.js";
 import type {
   StrictShadowCatalogViews,
 } from "../adapter-family-shadow-catalog-publication.js";
@@ -138,6 +140,37 @@ function main(): void {
     }),
     null,
   );
+  const univ3Projection = strictExecutionProjectionFor({
+    catalog,
+    adapterId: "univ3-swap",
+  });
+  assert(univ3Projection);
+  assert.equal(univ3Projection.allowanceSpender, UNIV3_SWAP_ROUTER);
+  for (const [adapterId, expected] of [
+    ["fluid-dex-swap", `0x${"41".repeat(20)}`],
+    ["eigenpie-deposit-asset", `0x${"41".repeat(20)}`],
+  ] as const) {
+    const projection = strictExecutionProjectionFor({
+      catalog,
+      adapterId,
+    });
+    assert(projection);
+    assert.equal(typeof projection.allowanceSpender, "function");
+    assert.equal(
+      (projection.allowanceSpender as (hop: {
+        readonly target: string;
+      }) => string | null)({ target: `0x${"41".repeat(20)}` }),
+      expected,
+    );
+  }
+  for (const adapterId of ["dodo-v2-swap", "goldx-mint", "psm", "univ4-swap"]) {
+    const projection = strictExecutionProjectionFor({
+      catalog,
+      adapterId,
+    });
+    assert(projection);
+    assert.equal(projection.allowanceSpender, null);
+  }
   console.log("strict-execution-projection PASS");
 }
 

@@ -11,9 +11,35 @@ import { UNIV2_ROUTER } from
   "./venues/swaps/univ2-family/victim.js";
 import { UNIV2_FAMILY_ID } from
   "./venues/swaps/univ2-family/manifest.js";
+import { UNIV3_SWAP_ROUTER } from
+  "./venues/swaps/univ3-abi.js";
+import { UNIV3_FAMILY_ID } from
+  "./venues/swaps/univ3-family/manifest.js";
+import { UNIV4_FAMILY_ID } from
+  "./venues/swaps/univ4-family/manifest.js";
+import { DODO_V2_FAMILY_ID } from
+  "./venues/swaps/dodo-v2-family/manifest.js";
+import { FLUID_DEX_FAMILY_ID } from
+  "./venues/swaps/fluid-dex-family/manifest.js";
+import { EIGENPIE_FAMILY_ID } from
+  "./venues/protocols/eigenpie-family/manifest.js";
+import { GOLDX_FAMILY_ID } from
+  "./venues/protocols/goldx-family/manifest.js";
+import { PSM_FAMILY_ID } from
+  "./venues/protocols/psm-family/manifest.js";
+
+export interface StrictExecutionHop {
+  readonly adapterId: string;
+  readonly target: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
 
 export interface StrictExecutionAdapterProjection {
-  readonly allowanceSpender: string | null;
+  readonly allowanceSpender:
+    | string
+    | ((hop: StrictExecutionHop) => string | null)
+    | null;
   readonly prewarmQuoteCalls: readonly {
     readonly from: string;
     readonly to: string;
@@ -35,7 +61,7 @@ export interface StrictExecutionAdapterProjection {
 const strictExecutionAdapters: ReadonlyMap<
   string,
   StrictExecutionAdapterProjection
-> = new Map([
+> = new Map<string, StrictExecutionAdapterProjection>([
   [UNIV2_FAMILY_ID, Object.freeze({
     allowanceSpender: UNIV2_ROUTER,
     prewarmQuoteCalls: Object.freeze([Object.freeze({
@@ -44,6 +70,34 @@ const strictExecutionAdapters: ReadonlyMap<
       calldata: UNIV2_PAIR_INTERFACE.encodeFunctionData("getReserves", []),
       gasLimit: 300_000,
     })]),
+  })],
+  [UNIV3_FAMILY_ID, Object.freeze({
+    allowanceSpender: UNIV3_SWAP_ROUTER,
+    prewarmQuoteCalls: Object.freeze([]),
+  })],
+  [UNIV4_FAMILY_ID, Object.freeze({
+    allowanceSpender: null,
+    prewarmQuoteCalls: Object.freeze([]),
+  })],
+  [DODO_V2_FAMILY_ID, Object.freeze({
+    allowanceSpender: null,
+    prewarmQuoteCalls: Object.freeze([]),
+  })],
+  [FLUID_DEX_FAMILY_ID, Object.freeze({
+    allowanceSpender: (hop: StrictExecutionHop) => hop.target,
+    prewarmQuoteCalls: Object.freeze([]),
+  })],
+  [EIGENPIE_FAMILY_ID, Object.freeze({
+    allowanceSpender: (hop: StrictExecutionHop) => hop.target,
+    prewarmQuoteCalls: Object.freeze([]),
+  })],
+  [GOLDX_FAMILY_ID, Object.freeze({
+    allowanceSpender: null,
+    prewarmQuoteCalls: Object.freeze([]),
+  })],
+  [PSM_FAMILY_ID, Object.freeze({
+    allowanceSpender: null,
+    prewarmQuoteCalls: Object.freeze([]),
   })],
 ]);
 
