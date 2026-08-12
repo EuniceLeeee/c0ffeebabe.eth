@@ -155,6 +155,15 @@
 > 能力边界 fail-closed（authority-failure），不是回归；需要 revm
 > transport 的 effect-delta + observe + funded override +
 > verified-actor 才能进入发布集（结构性能力缺口，另行立项）。
+>
+> **catalogRoot 内容确认（2026-08-12，`f3c1d066` 节点机器证据）：**
+> 日志 `strict catalog root committed: revision=1 instances=1
+> pricing=2`（evidence:
+> `docs/research/design/evidence/s1-node-acceptance-pipeline-f3c1d066.json`）：
+> 生产路径第一次非空 catalogRoot 提交完成——fluid-dex 单实例、
+> 2 条 pricing 条目；checkpoint revision 13（source
+> 25738323）；searcher priced 90.10%（无回退）；下一 pass 在
+> 同一 source 被 canonical-adjacent 门正确跳过。
 
 | Pair | legacy 目标 | 需要的 strict 替换 | 状态 |
 |---|---|---|---|

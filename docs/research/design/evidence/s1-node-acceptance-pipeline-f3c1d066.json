@@ -19,10 +19,21 @@
         "compositionStatus": "[searcher/live] discovery continuity composition trusted",
         "writerReady": true,
         "checkpointCommitted": true,
+        "publisherPublished": true,
+        "catalogRoot": {
+          "logLine": "[searcher/live] strict catalog root committed: revision=1 instances=1 pricing=2",
+          "revision": 1,
+          "instances": 1,
+          "pricingEntries": 2
+        },
+        "checkpointRevision": 13,
+        "checkpointSource": {
+          "number": 25738323,
+          "hash": "0x6b71f7122a480db85b02fadcab64dff31f4fb718e5de0603862d4e7d11e2f48d"
+        },
         "lifecycleFailures": [
           "[searcher/live] strict lifecycle failed for protocol:erc4626: strict Family lifecycle did not publish for protocol:erc4626: identity unresolved identity-work-unresolved:standalone-standard-behavior:authority-failure"
-        ],
-        "publisherPublished": true
+        ]
       }
     }
   },
