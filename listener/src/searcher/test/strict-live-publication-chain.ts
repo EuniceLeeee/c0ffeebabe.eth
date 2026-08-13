@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {
   createCoalescingPublicationChain,
+  PublicationChainBacklogEvictionError,
+  PublicationChainDeadlineError,
 } from "../strict-live-publication-chain.js";
 
 function deferred(): {
@@ -69,6 +71,83 @@ async function main(): Promise<void> {
     "second",
     "after-error",
   ]);
+
+  // F3: producer FIFO, per-producer dedup, deadline, and backlog bound.
+  const fifoOrder: string[] = [];
+  const fifo = createCoalescingPublicationChain();
+  fifo.enqueue(async () => { fifoOrder.push("a"); }, { producerKey: "a" });
+  fifo.enqueue(async () => { fifoOrder.push("b"); }, { producerKey: "b" });
+  await fifo.idle();
+  assert.deepEqual(fifoOrder, ["a", "b"], "producers must run in FIFO order");
+
+  const dedupeGate = deferred();
+  let dedupeRuns = 0;
+  const dedupe = createCoalescingPublicationChain();
+  dedupe.enqueue(async () => {
+    dedupeRuns++;
+    await dedupeGate.promise;
+  }, { producerKey: "producer" });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(dedupeRuns, 1);
+  dedupe.enqueue(async () => { dedupeRuns++; }, { producerKey: "producer" });
+  dedupe.enqueue(async () => { dedupeRuns++; }, { producerKey: "producer" });
+  dedupeGate.resolve();
+  await dedupe.idle();
+  assert.equal(dedupeRuns, 2, "re-enqueues for one producer coalesce to one rerun");
+
+  const deadlineErrors: unknown[] = [];
+  const deadlineChain = createCoalescingPublicationChain(
+    (error) => { deadlineErrors.push(error); },
+  );
+  const slowGate = deferred();
+  let continued = false;
+  deadlineChain.enqueue(async () => { await slowGate.promise; }, {
+    producerKey: "slow",
+    deadlineMs: 30,
+  });
+  deadlineChain.enqueue(async () => { continued = true; }, {
+    producerKey: "next",
+  });
+  await deadlineChain.idle();
+  slowGate.resolve();
+  assert.equal(deadlineErrors.length, 1);
+  assert(
+    deadlineErrors[0] instanceof PublicationChainDeadlineError,
+    "an over-deadline run must be reported, not block the chain",
+  );
+  assert.equal(
+    (deadlineErrors[0] as PublicationChainDeadlineError).producerKey,
+    "slow",
+  );
+  assert(continued, "the chain must keep running after a deadline abort");
+
+  const backlogErrors: unknown[] = [];
+  const backlog = createCoalescingPublicationChain(
+    (error) => { backlogErrors.push(error); },
+    { maxBacklog: 2 },
+  );
+  const backlogGate = deferred();
+  backlog.enqueue(async () => { await backlogGate.promise; }, {
+    producerKey: "in-flight",
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  backlog.enqueue(async () => {}, { producerKey: "y" });
+  backlog.enqueue(async () => {}, { producerKey: "z" });
+  backlog.enqueue(async () => {}, { producerKey: "w" });
+  assert.equal(backlog.backlogSize(), 3);
+  backlogGate.resolve();
+  await backlog.idle();
+  assert.equal(backlog.evictions(), 1);
+  assert.equal(backlogErrors.length, 1);
+  assert(backlogErrors[0] instanceof PublicationChainBacklogEvictionError);
+  assert.equal(
+    (backlogErrors[0] as PublicationChainBacklogEvictionError).producerKey,
+    "y",
+    "the oldest pending producer must be evicted first",
+  );
+  assert.equal(backlog.backlogSize(), 0);
 
   console.log("strict-live-publication-chain PASS");
 }

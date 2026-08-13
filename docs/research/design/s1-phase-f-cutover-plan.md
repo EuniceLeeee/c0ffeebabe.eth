@@ -58,10 +58,17 @@
 
 ### F3 continuous 调度 lane
 
-- strict publication 链的 producer reserve/deadline/去重/backlog：
-  串行 + coalesce 已落地，剩余为 central scheduler 的 producer lane
-  （reserve、per-producer deadline、dedupe、backlog 上界）接入 live 链，
-  并把崩溃/超时恢复统一到 F4 合同。
+- **F3-a publication chain producer lane（已完成）：**
+  `createCoalescingPublicationChain` 扩展为多 producer FIFO lane：
+  per-producerKey 去重（在途重入 coalesce 为一次 rerun）、backlog
+  上界（默认 64，溢出逐出最老 producer 并上报
+  `PublicationChainBacklogEvictionError`）、per-run deadline
+  （超时上报 `PublicationChainDeadlineError` 且链继续，不阻塞后续
+  producer）、`backlogSize()`/`evictions()` 遥测。旧单 producer
+  `enqueue(run)` 调用面不变。合同测试：FIFO、同 producer coalesce、
+  deadline 后继续、backlog 逐出最老；build/shadow suite（28）/
+  12 组 sweep 全绿。main.ts strict 链仍单 producer（默认 key），
+  多 producer reserve 在 F2-b ingress 完成后接入。
 
 ### F4 22-Family 崩溃恢复契约扩展
 

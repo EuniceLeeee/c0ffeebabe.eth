@@ -476,6 +476,13 @@ incumbent 重跑 strict lifecycle，任一 omission / 重验证失败 /
 启动 `loadForRestart()==trusted` 且 runtime 就绪后调用。合同三例；
 build/shadow suite（28）/12 组 sweep 全绿。
 
+**F3 publication chain producer lane（2026-08-13）：**
+`createCoalescingPublicationChain` 增加 per-producer FIFO、同 key
+coalesce、backlog 上限逐出（`PublicationChainBacklogEvictionError`）、
+per-run deadline（`PublicationChainDeadlineError`，链继续不阻塞）、
+`backlogSize()`/`evictions()`。旧调用面不变。合同五例；
+build/shadow suite（28）/12 组 sweep 全绿。
+
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |
