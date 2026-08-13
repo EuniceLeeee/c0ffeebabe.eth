@@ -500,6 +500,16 @@ productionProvenance.commit 校验 → corpus-manifest。F5-b 真实采集
 需 22 族真实 descriptor 节点执行；F6 五对（B/C/D/F/A）strict 侧仍
 未开始，删除前置不满足。
 
+**F5-b univ2 真实采集模板（2026-08-13）：**
+`captureUniv2OnchainCase`：source block 上链上实读
+`factory()/token0()/token1()/getReserves()` 派生身份；描述符 token/
+reserves 与链上不一致、零 factory、RPC 失败均 fail-closed；
+证据 ref = `onchain:1:<hash>:univ2:<pool>`，无 `fixture:`；读固定
+source block。合同测试五例（正例 + token/reserves 不匹配 + 零 factory
++ RPC 失败）；build/shadow suite（30）/12 组 sweep 全绿。模板可滚
+向 erc4626 等其余 18 族（清单
+`docs/research/design/s1-f5-corpus-rollout-plan.md`）。
+
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

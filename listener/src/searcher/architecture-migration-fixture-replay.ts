@@ -563,36 +563,41 @@ export async function captureUniv2FixtureCase(input: {
   });
 }
 
-export async function captureUniv2RealCase(input: {
+async function buildUniv2CaseCapture(input: {
   readonly source: CanonicalSource;
-  readonly pool: string;
-  readonly tokenA: string;
-  readonly tokenB: string;
+  readonly pool: PoolContext;
   readonly caseId?: string;
   readonly reserves?: {
     readonly reserve0: bigint | string;
     readonly reserve1: bigint | string;
     readonly blockTimestampLast?: number;
   };
+  readonly evidenceRefs: readonly string[];
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const reserves = input.reserves === undefined
+  const reserves = input.pool.reserves === undefined &&
+      input.reserves === undefined
     ? undefined
     : Object.freeze({
-        reserve0: BigInt(input.reserves.reserve0),
-        reserve1: BigInt(input.reserves.reserve1),
-        blockTimestampLast: input.reserves.blockTimestampLast ?? 0,
+        reserve0: BigInt(
+          input.pool.reserves?.reserve0 ?? input.reserves!.reserve0,
+        ),
+        reserve1: BigInt(
+          input.pool.reserves?.reserve1 ?? input.reserves!.reserve1,
+        ),
+        blockTimestampLast:
+          input.pool.reserves?.blockTimestampLast ??
+            input.reserves?.blockTimestampLast ?? 0,
       });
-  const pool: PoolContext = {
-    pool: input.pool.toLowerCase(),
-    factory: `0x${"42".repeat(20)}`,
-    token0: input.tokenA.toLowerCase(),
-    token1: input.tokenB.toLowerCase(),
-    reserves,
-  };
+  const pool: PoolContext = Object.freeze({
+    ...input.pool,
+    pool: input.pool.pool.toLowerCase(),
+    factory: input.pool.factory.toLowerCase(),
+    token0: input.pool.token0.toLowerCase(),
+    token1: input.pool.token1.toLowerCase(),
+    ...(reserves === undefined ? {} : { reserves }),
+  });
   const publication = await runUniv2Lifecycle(input.source, pool);
-  const evidenceRefs = Object.freeze([
-    `fixture:univ2:${input.source.number}:${input.source.hash}`,
-  ]);
+  const evidenceRefs = Object.freeze([...input.evidenceRefs]);
   const instances = publication.instances;
   const edges: RawMigrationStageCapture["items"][number][] = [];
   const prices: RawMigrationStageCapture["items"][number][] = [];
@@ -856,6 +861,140 @@ export async function captureUniv2RealCase(input: {
     stateAnchorNumber: input.source.number,
     implementationClosureHash: summary.definitionBoundaryHash,
     stages,
+  });
+}
+
+export async function captureUniv2RealCase(input: {
+  readonly source: CanonicalSource;
+  readonly pool: string;
+  readonly tokenA: string;
+  readonly tokenB: string;
+  readonly caseId?: string;
+  readonly reserves?: {
+    readonly reserve0: bigint | string;
+    readonly reserve1: bigint | string;
+    readonly blockTimestampLast?: number;
+  };
+}): Promise<RawFamilyMigrationCaseCapture> {
+  return buildUniv2CaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    reserves: input.reserves,
+    evidenceRefs: Object.freeze([
+      `fixture:univ2:${input.source.number}:${input.source.hash}`,
+    ]),
+    pool: Object.freeze({
+      pool: input.pool,
+      factory: `0x${"42".repeat(20)}`,
+      token0: input.tokenA,
+      token1: input.tokenB,
+    }),
+  });
+}
+
+export interface OnchainUniv2Provider {
+  call(
+    tx: { readonly to: string; readonly data: string },
+    blockTag?: number,
+  ): Promise<string>;
+}
+
+/**
+ * Real on-chain univ2 capture: identity (factory/token0/token1) and state
+ * (getReserves) are read from the pool at the canonical source block, the
+ * supplied descriptor must agree with the chain or the capture fails closed,
+ * and the evidence ref is an onchain ref (no fixture provenance).
+ */
+export async function captureUniv2OnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly pool: string;
+  readonly tokenA?: string;
+  readonly tokenB?: string;
+  readonly caseId?: string;
+  readonly reserves?: {
+    readonly reserve0: bigint | string;
+    readonly reserve1: bigint | string;
+    readonly blockTimestampLast?: number;
+  };
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const pool = input.pool.toLowerCase();
+  const read = async (name: string): Promise<string> => {
+    const data = UNIV2_PAIR_INTERFACE.encodeFunctionData(name, []);
+    const result = await input.provider.call(
+      { to: pool, data },
+      input.source.number,
+    );
+    if (result === "0x" || result.length < 2) {
+      throw new Error(
+        `univ2 onchain ${name} read empty at ${input.source.number}`,
+      );
+    }
+    return result;
+  };
+  const [factoryRaw, token0Raw, token1Raw, reservesRaw] = await Promise.all([
+    read("factory"),
+    read("token0"),
+    read("token1"),
+    read("getReserves"),
+  ]);
+  const factory = (
+    UNIV2_PAIR_INTERFACE.decodeFunctionResult(
+      "factory",
+      factoryRaw,
+    )[0] as string
+  ).toLowerCase();
+  const token0 = (
+    UNIV2_PAIR_INTERFACE.decodeFunctionResult(
+      "token0",
+      token0Raw,
+    )[0] as string
+  ).toLowerCase();
+  const token1 = (
+    UNIV2_PAIR_INTERFACE.decodeFunctionResult(
+      "token1",
+      token1Raw,
+    )[0] as string
+  ).toLowerCase();
+  const reserves = UNIV2_PAIR_INTERFACE.decodeFunctionResult(
+    "getReserves",
+    reservesRaw,
+  ) as unknown as [bigint, bigint, bigint];
+  if (factory === "0x0000000000000000000000000000000000000000") {
+    throw new Error(`univ2 pool ${pool} reports a zero factory`);
+  }
+  if (input.tokenA !== undefined &&
+      input.tokenA.toLowerCase() !== token0) {
+    throw new Error("univ2 onchain tokenA mismatch");
+  }
+  if (input.tokenB !== undefined &&
+      input.tokenB.toLowerCase() !== token1) {
+    throw new Error("univ2 onchain tokenB mismatch");
+  }
+  if (
+    input.reserves !== undefined &&
+    (BigInt(input.reserves.reserve0) !== reserves[0] ||
+      BigInt(input.reserves.reserve1) !== reserves[1])
+  ) {
+    throw new Error("univ2 onchain reserves mismatch");
+  }
+  return buildUniv2CaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:univ2:${pool}`,
+    ]),
+    pool: Object.freeze({
+      pool,
+      factory,
+      token0,
+      token1,
+      reserves: Object.freeze({
+        reserve0: reserves[0],
+        reserve1: reserves[1],
+        blockTimestampLast: Number(reserves[2]),
+      }),
+    }),
   });
 }
 
