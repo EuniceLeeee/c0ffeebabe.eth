@@ -5806,7 +5806,7 @@ class EtherTokenNativeFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function etherTokenNativeFixtureRuntime(): CentralAdapterRuntime {
+export function etherTokenNativeFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -5839,6 +5839,8 @@ function etherTokenNativeFixtureRuntime(): CentralAdapterRuntime {
 
 async function runEtherTokenNativeLifecycle(
   canonical: CanonicalSource,
+  token: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ETHERTOKEN_NATIVE_FAMILY_ID,
@@ -5855,13 +5857,13 @@ async function runEtherTokenNativeLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: ETHERTOKEN_NATIVE_FIXTURE_TOKEN,
+        target: token.toLowerCase(),
         data: withdrawCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: etherTokenNativeFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -5875,15 +5877,13 @@ async function runEtherTokenNativeLifecycle(
  * simulation, total-supply pricing, and a two-node redeem + WETH deposit
  * execution fragment.
  */
-export async function captureEtherTokenNativeRedeemFixtureCase(input: {
+async function buildEtherTokenCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runEtherTokenNativeLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:ethertoken-native-redeem:${input.source.number}:` +
-      input.source.hash,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ETHERTOKEN_NATIVE_FAMILY_ID,
   );
@@ -6123,6 +6123,76 @@ export async function captureEtherTokenNativeRedeemFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureEtherTokenNativeRedeemFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runEtherTokenNativeLifecycle(
+    input.source,
+    ETHERTOKEN_NATIVE_FIXTURE_TOKEN,
+    etherTokenNativeFixtureRuntime(),
+  );
+  return buildEtherTokenCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:ethertoken-native-redeem:${input.source.number}:` +
+        input.source.hash,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain ethertoken capture: the token decimals() is read at the
+ * canonical source block and must be positive; a supplied decimals
+ * descriptor must agree. Fail-closed on any divergence.
+ */
+export async function captureEtherTokenOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly token: string;
+  readonly decimals?: number;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const token = input.token.toLowerCase();
+  const decimalsRaw = await input.provider.call({
+    to: token,
+    data: ETHERTOKEN_NATIVE_INTERFACE.encodeFunctionData("decimals", []),
+  }, input.source.number);
+  if (decimalsRaw === "0x" || decimalsRaw.length < 2) {
+    throw new Error(
+      `ethertoken decimals read empty at ${input.source.number}`,
+    );
+  }
+  const decimals = Number(
+    ETHERTOKEN_NATIVE_INTERFACE.decodeFunctionResult(
+      "decimals",
+      decimalsRaw,
+    )[0],
+  );
+  if (!Number.isSafeInteger(decimals) || decimals < 1) {
+    throw new Error("ethertoken reports invalid decimals");
+  }
+  if (input.decimals !== undefined && input.decimals !== decimals) {
+    throw new Error("ethertoken onchain decimals mismatch");
+  }
+  const publication = await runEtherTokenNativeLifecycle(
+    input.source,
+    token,
+    input.runtime,
+  );
+  return buildEtherTokenCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:ethertoken:${token}`,
+    ]),
   });
 }
 
