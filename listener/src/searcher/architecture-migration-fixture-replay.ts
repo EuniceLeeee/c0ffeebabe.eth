@@ -7969,7 +7969,7 @@ class CurveUnderlyingFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function curveUnderlyingFixtureRuntime(): CentralAdapterRuntime {
+export function curveUnderlyingFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -7991,6 +7991,8 @@ function curveUnderlyingFixtureRuntime(): CentralAdapterRuntime {
 
 async function runCurveUnderlyingLifecycle(
   canonical: CanonicalSource,
+  pool: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     CURVE_UNDERLYING_FAMILY_ID,
@@ -8007,13 +8009,13 @@ async function runCurveUnderlyingLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: CURVE_UNDERLYING_FIXTURE_POOL,
+        target: pool.toLowerCase(),
         data: exchangeCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: curveUnderlyingFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -8026,14 +8028,13 @@ async function runCurveUnderlyingLifecycle(
  * exchange_underlying fixture: reverse registry binding, two underlying
  * coins, behavior-proven directed quotes and registry-scale pricing.
  */
-export async function captureCurveUnderlyingFixtureCase(input: {
+async function buildCurveUnderlyingCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runCurveUnderlyingLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:curve-underlying:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     CURVE_UNDERLYING_FAMILY_ID,
   );
@@ -8270,6 +8271,88 @@ export async function captureCurveUnderlyingFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureCurveUnderlyingFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runCurveUnderlyingLifecycle(
+    input.source,
+    CURVE_UNDERLYING_FIXTURE_POOL,
+    curveUnderlyingFixtureRuntime(),
+  );
+  return buildCurveUnderlyingCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:curve-underlying:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain curve-underlying capture: the Curve metaregistry
+ * get_underlying_coins(pool) is read at the canonical source block and its
+ * first two coins must match the supplied tokens. Fail-closed on any
+ * divergence.
+ */
+export async function captureCurveUnderlyingOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly pool: string;
+  readonly tokenIn?: string;
+  readonly tokenOut?: string;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const pool = input.pool.toLowerCase();
+  const raw = await input.provider.call({
+    to: CURVE_METAREGISTRY.toLowerCase(),
+    data: CURVE_UNDERLYING_META_INTERFACE.encodeFunctionData(
+      "get_underlying_coins",
+      [pool],
+    ),
+  }, input.source.number);
+  if (raw === "0x" || raw.length < 2) {
+    throw new Error(
+      `curve-underlying registry read empty at ${input.source.number}`,
+    );
+  }
+  const coins = CURVE_UNDERLYING_META_INTERFACE.decodeFunctionResult(
+    "get_underlying_coins",
+    raw,
+  )[0] as unknown as readonly string[];
+  const coin0 = (coins[0] ?? "").toLowerCase();
+  const coin1 = (coins[1] ?? "").toLowerCase();
+  if (
+    coin0 === "0x0000000000000000000000000000000000000000" ||
+    coin1 === "0x0000000000000000000000000000000000000000"
+  ) {
+    throw new Error("curve-underlying registry reports a zero coin");
+  }
+  if (
+    (input.tokenIn !== undefined &&
+      input.tokenIn.toLowerCase() !== coin0) ||
+    (input.tokenOut !== undefined &&
+      input.tokenOut.toLowerCase() !== coin1)
+  ) {
+    throw new Error("curve-underlying onchain coin mismatch");
+  }
+  const publication = await runCurveUnderlyingLifecycle(
+    input.source,
+    pool,
+    input.runtime,
+  );
+  return buildCurveUnderlyingCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:curve-underlying:${pool}`,
+    ]),
   });
 }
 
