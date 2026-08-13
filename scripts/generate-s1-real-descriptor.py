@@ -23,9 +23,7 @@ dex_families = {
     "univ2": ("univ2", "univ2"),
     "univ3": ("univ3", "univ3"),
     "univ4": ("univ4", "univ4"),
-    "curve-underlying": ("curve-underlying", "curve-underlying"),
     "dodo-v2": ("dodo-v2", "dodo-v2"),
-    "fluid-dex": ("fluid-dex", "fluid-dex"),
 }
 cases = []
 used_adapters = set()
@@ -55,37 +53,47 @@ verified = cache.get("verified_candidates", {})
 if isinstance(verified, dict):
     verified = verified.values()
 protocol_field = {
-    "erc4626": "vault",
-    "erc4626-silo-redeem": "vault",
-    "astra-multitoken": "target",
-    "eigenpie": "target",
-    "ethertoken-native-redeem": "token",
-    "self-burn-native": "token",
-    "fluid-credit": "vault",
+    "protocol:erc4626": "vault",
+    "protocol:erc4626-silo-redeem": "vault",
+    "protocol:astra-multitoken": "target",
+    "protocol:ethertoken-native-redeem": "token",
 }
 protocol_family = {
-    "erc4626": "protocol:erc4626",
-    "erc4626-silo-redeem": "protocol:erc4626-silo-redeem",
-    "astra-multitoken": "protocol:astra-multitoken",
-    "eigenpie": "protocol:eigenpie",
-    "ethertoken-native-redeem": "protocol:ethertoken-native-redeem",
-    "self-burn-native": "protocol:self-burn-native",
-    "fluid-credit": "credit:fluid",
+    "protocol:erc4626": "protocol:erc4626",
+    "protocol:erc4626-silo-redeem": "protocol:erc4626-silo-redeem",
+    "protocol:astra-multitoken": "protocol:astra-multitoken",
+    "protocol:ethertoken-native-redeem": "protocol:ethertoken-native-redeem",
 }
 used_protocol = set()
 for entry in verified:
     adapter = entry.get("adapterId")
-    if adapter not in protocol_family or adapter in used_protocol:
-        continue
     pool = entry.get("candidate", {}).get("pool", {})
     address = pool.get("address")
     if not address:
         continue
+    if adapter == "fluid-dex":
+        used_protocol.add(adapter)
+        case = {"family": "fluid-dex", "pool": address}
+        if pool.get("factory"):
+            case["factory"] = pool["factory"]
+        if pool.get("token0") and pool.get("token1"):
+            case["tokenA"] = pool["token0"]
+            case["tokenB"] = pool["token1"]
+        cases.append(case)
+        continue
+    if adapter not in protocol_family or adapter in used_protocol:
+        continue
     used_protocol.add(adapter)
-    cases.append({
+    case = {
         "family": protocol_family[adapter],
         protocol_field[adapter]: address,
-    })
+    }
+    if adapter == "protocol:erc4626-silo-redeem" and pool.get("token1"):
+        case["target"] = pool["token1"]
+    if adapter == "protocol:astra-multitoken" and pool.get("token0") and pool.get("token1"):
+        case["tokenIn"] = pool["token0"]
+        case["tokenOut"] = pool["token1"]
+    cases.append(case)
 
 manifest = {
     "sourceBlock": source_block,
