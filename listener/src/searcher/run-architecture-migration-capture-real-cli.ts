@@ -254,7 +254,6 @@ async function runOnchainCaptureCase(input: {
       return captureAstraOnchainCase({
         source, provider, target: item.target,
         tokenIn: item.tokenIn, tokenOut: item.tokenOut,
-        runtime: astraFixtureRuntime(),
       });
     case "protocol:eigenpie":
       if (!item.target || !item.asset) {

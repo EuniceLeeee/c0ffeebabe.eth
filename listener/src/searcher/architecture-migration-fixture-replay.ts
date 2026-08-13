@@ -5880,6 +5880,8 @@ function erc4626EventLog(
 function erc4626SimulationResult(
   request: AdapterRequest,
   canonical: CanonicalSource,
+  asset: string = ERC4626_FIXTURE_ASSET,
+  vault: string = ERC4626_FIXTURE_VAULT,
 ): AdapterRequestResult {
   if (request.kind !== "effect-delta-simulation") {
     throw new Error(`unexpected erc4626 fixture transport ${request.kind}`);
@@ -5896,8 +5898,6 @@ function erc4626SimulationResult(
   );
   const amountOut = amountIn;
   const actor = ERC4626_PROBE_ACTOR;
-  const asset = ERC4626_FIXTURE_ASSET.toLowerCase();
-  const vault = ERC4626_FIXTURE_VAULT.toLowerCase();
   return Object.freeze({
     id: request.id,
     ok: true as const,
@@ -5944,16 +5944,18 @@ function erc4626SimulationResult(
 function erc4626SuccessResult(
   request: AdapterRequest,
   canonical: CanonicalSource,
+  asset: string = ERC4626_FIXTURE_ASSET,
+  vault: string = ERC4626_FIXTURE_VAULT,
 ): AdapterRequestResult {
   if (request.kind === "effect-delta-simulation") {
-    return erc4626SimulationResult(request, canonical);
+    return erc4626SimulationResult(request, canonical, asset, vault);
   }
   const data =
     request.id === "base-vault-code" || request.id === "active-asset-code"
       ? "0x00"
       : request.id === "base-asset"
         ? ERC4626_INTERFACE.encodeFunctionResult("asset", [
-            ERC4626_FIXTURE_ASSET,
+            asset,
           ])
         : request.id === "base-total-assets" ||
             request.id === "base-total-supply"
@@ -7533,6 +7535,9 @@ function astraChangeLog(
 function astraSimulationResult(
   request: AdapterRequest,
   canonical: CanonicalSource,
+  target: string = ASTRA_MULTITOKEN_FIXTURE_TARGET,
+  tokenIn: string = ASTRA_MULTITOKEN_FIXTURE_TOKEN_IN,
+  tokenOut: string = ASTRA_MULTITOKEN_FIXTURE_TOKEN_OUT,
 ): AdapterRequestResult {
   if (request.kind !== "effect-delta-simulation") {
     throw new Error(`unexpected astra fixture transport ${request.kind}`);
@@ -7541,9 +7546,6 @@ function astraSimulationResult(
     "change",
     (request as { readonly call: { readonly data: string } }).call.data,
   );
-  const tokenIn = ASTRA_MULTITOKEN_FIXTURE_TOKEN_IN.toLowerCase();
-  const tokenOut = ASTRA_MULTITOKEN_FIXTURE_TOKEN_OUT.toLowerCase();
-  const target = ASTRA_MULTITOKEN_FIXTURE_TARGET.toLowerCase();
   const actor = MIGRATION_CAPTURE_EXECUTOR.toLowerCase();
   const amountIn = BigInt(decoded[2]);
   const amountOut = amountIn;
@@ -7569,9 +7571,9 @@ function astraSimulationResult(
       ]),
       logs: Object.freeze([
         astraChangeLog(
-          ASTRA_MULTITOKEN_FIXTURE_TARGET,
-          ASTRA_MULTITOKEN_FIXTURE_TOKEN_IN,
-          ASTRA_MULTITOKEN_FIXTURE_TOKEN_OUT,
+          target,
+          tokenIn,
+          tokenOut,
           MIGRATION_CAPTURE_EXECUTOR,
           amountIn,
           amountOut,
@@ -7584,9 +7586,12 @@ function astraSimulationResult(
 function astraSuccessResult(
   request: AdapterRequest,
   canonical: CanonicalSource,
+  target: string = ASTRA_MULTITOKEN_FIXTURE_TARGET,
+  tokenIn: string = ASTRA_MULTITOKEN_FIXTURE_TOKEN_IN,
+  tokenOut: string = ASTRA_MULTITOKEN_FIXTURE_TOKEN_OUT,
 ): AdapterRequestResult {
   if (request.kind === "effect-delta-simulation") {
-    return astraSimulationResult(request, canonical);
+    return astraSimulationResult(request, canonical, target, tokenIn, tokenOut);
   }
   if (request.kind === "get-code") {
     return Object.freeze({
@@ -7636,12 +7641,12 @@ function astraSuccessResult(
                 : request.id === "registry-token:0"
                   ? ASTRA_MULTITOKEN_INTERFACE.encodeFunctionResult(
                       "tokens",
-                      [ASTRA_MULTITOKEN_FIXTURE_TOKEN_IN],
+                      [tokenIn],
                     )
                   : request.id === "registry-token:1"
                     ? ASTRA_MULTITOKEN_INTERFACE.encodeFunctionResult(
                         "tokens",
-                        [ASTRA_MULTITOKEN_FIXTURE_TOKEN_OUT],
+                        [tokenOut],
                       )
                     : request.id === "registry-weight:0" ||
                         request.id === "registry-weight:1"
@@ -7693,6 +7698,20 @@ function astraSuccessResult(
 }
 
 class AstraFixtureScheduler implements CentralAdapterScheduler {
+  readonly #target: string;
+  readonly #tokenIn: string;
+  readonly #tokenOut: string;
+
+  constructor(input: {
+    readonly target: string;
+    readonly tokenIn: string;
+    readonly tokenOut: string;
+  }) {
+    this.#target = input.target;
+    this.#tokenIn = input.tokenIn;
+    this.#tokenOut = input.tokenOut;
+  }
+
   issueExecutor(
     input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
   ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
@@ -7706,7 +7725,13 @@ class AstraFixtureScheduler implements CentralAdapterScheduler {
         assert.deepEqual(requests, input.requests);
       },
       execute: async (execution) => Promise.all(execution.requests.map(
-        (request) => astraSuccessResult(request, execution.source),
+        (request) => astraSuccessResult(
+          request,
+          execution.source,
+          this.#target,
+          this.#tokenIn,
+          this.#tokenOut,
+        ),
       )),
       sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
     });
@@ -7717,7 +7742,14 @@ class AstraFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-export function astraFixtureRuntime(): CentralAdapterRuntime {
+export function astraFixtureRuntime(input?: {
+  readonly target?: string;
+  readonly tokenIn?: string;
+  readonly tokenOut?: string;
+}): CentralAdapterRuntime {
+  const target = input?.target ?? ASTRA_MULTITOKEN_FIXTURE_TARGET;
+  const tokenIn = input?.tokenIn ?? ASTRA_MULTITOKEN_FIXTURE_TOKEN_IN;
+  const tokenOut = input?.tokenOut ?? ASTRA_MULTITOKEN_FIXTURE_TOKEN_OUT;
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -7737,7 +7769,7 @@ export function astraFixtureRuntime(): CentralAdapterRuntime {
       }),
     },
     budgets: { assertAdmitted() {} },
-    scheduler: new AstraFixtureScheduler(),
+    scheduler: new AstraFixtureScheduler({ target, tokenIn, tokenOut }),
   };
 }
 
@@ -8067,7 +8099,7 @@ export async function captureAstraOnchainCase(input: {
   readonly tokenIn: string;
   readonly tokenOut: string;
   readonly caseId?: string;
-  readonly runtime: CentralAdapterRuntime;
+  readonly runtime?: CentralAdapterRuntime;
 }): Promise<RawFamilyMigrationCaseCapture> {
   const target = input.target.toLowerCase();
   const readToken = async (index: number): Promise<string> => {
@@ -8105,7 +8137,11 @@ export async function captureAstraOnchainCase(input: {
     target,
     token0,
     token1,
-    input.runtime,
+    input.runtime ?? astraFixtureRuntime({
+      target,
+      tokenIn: token0,
+      tokenOut: token1,
+    }),
   );
   return buildAstraCaseCapture({
     source: input.source,

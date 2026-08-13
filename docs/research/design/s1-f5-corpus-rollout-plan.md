@@ -18,6 +18,18 @@
 4. 节点 dry-run 复验（SSM 只读 + impl-capture worktree，dry-run）。
 5. 验收：build + shadow suite + 12 组 sweep 全绿，checkpoint 同轮 commit+push。
 
+## 通用采集路径（2026-08-13 用户选定，替代逐族工具链扩展）
+
+新增 `generic-family-capture.ts`：`captureFamilyGenerically` 输入
+`{catalog, familyId, source, observation, runtime}` → 通用 strict
+lifecycle → publication 派生 stages（instances/edges/prices/
+enumeratedRoutes/failures 全通用；exact/execution/finalSim 在 per-plugin
+driver 接入前诚实 `framework-blocked`，不伪造）。合同测试（wsteth
+fixture runtime：onchain 证据 ref + 无 fixture + blocked 诚实）；
+build/shadow suite（38）/12 组 sweep 全绿。剩余：由 discovery 声明
+派生 observation 的通用函数、CLI 通用模式、exact/execution per-plugin
+driver 注册表（新族 = 插件自带模块，不再改工具链逻辑）。
+
 ## 滚动清单（按序，模板先 erc4626 再其余）
 
 | # | 族 | capture 函数 | 状态 |
