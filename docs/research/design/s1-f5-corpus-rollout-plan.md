@@ -31,7 +31,7 @@
 | 7 | metronome-hgusdc | captureMetronomeHgUsdcOnchainCase | completed |
 | 8 | curve-underlying | captureCurveUnderlyingOnchainCase | completed |
 | 9 | dodo-v2 | captureDodoV2OnchainCase | completed |
-| 10 | fluid-dex | captureFluidDexOnchainCase | pending |
+| 10 | fluid-dex | captureFluidDexOnchainCase | completed |
 | 11 | fluid-credit | captureFluidCreditOnchainCase | pending |
 | 12 | psm | capturePsmOnchainCase | pending |
 | 13 | wsteth | captureWstethOnchainCase | pending |

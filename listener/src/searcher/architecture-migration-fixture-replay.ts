@@ -8475,7 +8475,7 @@ class FluidDexFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function fluidDexFixtureRuntime(): CentralAdapterRuntime {
+export function fluidDexFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -8497,6 +8497,8 @@ function fluidDexFixtureRuntime(): CentralAdapterRuntime {
 
 export async function runFluidDexLifecycle(
   canonical: CanonicalSource,
+  pool: string = FLUID_DEX_FIXTURE_POOL,
+  runtime: CentralAdapterRuntime = fluidDexFixtureRuntime(),
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     FLUID_DEX_FAMILY_ID,
@@ -8515,13 +8517,13 @@ export async function runFluidDexLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: FLUID_DEX_FIXTURE_POOL,
+        target: pool.toLowerCase(),
         data: swapCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: fluidDexFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -8535,14 +8537,13 @@ export async function runFluidDexLifecycle(
  * revert quotes; both directions are exercised through pricing, exact and
  * execution.
  */
-export async function captureFluidDexFixtureCase(input: {
+async function buildFluidDexCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runFluidDexLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:fluid-dex:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     FLUID_DEX_FAMILY_ID,
   );
@@ -8775,6 +8776,74 @@ export async function captureFluidDexFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureFluidDexFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runFluidDexLifecycle(input.source);
+  return buildFluidDexCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:fluid-dex:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain fluid-dex capture: the factory getDexAddress(pool) is read
+ * at the canonical source block and must reverse-bind to the pool itself.
+ * Fail-closed on empty/zero reads or any divergence.
+ */
+export async function captureFluidDexOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly pool: string;
+  readonly factory: string;
+  readonly caseId?: string;
+  readonly runtime?: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const pool = input.pool.toLowerCase();
+  const factory = input.factory.toLowerCase();
+  const raw = await input.provider.call({
+    to: factory,
+    data: FLUID_DEX_FACTORY_INTERFACE.encodeFunctionData("getDexAddress", [
+      pool,
+    ]),
+  }, input.source.number);
+  if (raw === "0x" || raw.length < 2) {
+    throw new Error(
+      `fluid-dex factory read empty at ${input.source.number}`,
+    );
+  }
+  const dex = (
+    FLUID_DEX_FACTORY_INTERFACE.decodeFunctionResult(
+      "getDexAddress",
+      raw,
+    )[0] as string
+  ).toLowerCase();
+  if (dex === "0x0000000000000000000000000000000000000000") {
+    throw new Error("fluid-dex factory reports a zero dex address");
+  }
+  if (dex !== pool) {
+    throw new Error("fluid-dex onchain factory reverse-binding mismatch");
+  }
+  const publication = await runFluidDexLifecycle(
+    input.source,
+    pool,
+    input.runtime ?? fluidDexFixtureRuntime(),
+  );
+  return buildFluidDexCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:fluid-dex:${pool}`,
+    ]),
   });
 }
 
