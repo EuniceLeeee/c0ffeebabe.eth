@@ -10212,6 +10212,7 @@ function dodoV2SuccessResult(
   canonical: CanonicalSource,
   baseToken: string = DODO_V2_FIXTURE_BASE_TOKEN,
   quoteToken: string = DODO_V2_FIXTURE_QUOTE_TOKEN,
+  pool: string = DODO_V2_FIXTURE_POOL,
 ): AdapterRequestResult {
   const data =
     request.id === "pool-base-token" ||
@@ -10240,7 +10241,7 @@ function dodoV2SuccessResult(
             : request.id === "registry-get-dodo-pool"
               ? DODO_V2_REGISTRY_INTERFACE.encodeFunctionResult(
                   "getDODOPool",
-                  [[DODO_V2_FIXTURE_POOL]],
+                  [[pool]],
                 )
               : request.id === "static-base-decimals" ||
                   request.id === "static-quote-decimals"
@@ -10293,13 +10294,16 @@ function dodoV2SuccessResult(
 class DodoV2FixtureScheduler implements CentralAdapterScheduler {
   readonly #baseToken: string;
   readonly #quoteToken: string;
+  readonly #pool: string;
 
   constructor(input: {
     readonly baseToken: string;
     readonly quoteToken: string;
+    readonly pool: string;
   }) {
     this.#baseToken = input.baseToken;
     this.#quoteToken = input.quoteToken;
+    this.#pool = input.pool;
   }
 
   issueExecutor(
@@ -10320,6 +10324,7 @@ class DodoV2FixtureScheduler implements CentralAdapterScheduler {
           execution.source,
           this.#baseToken,
           this.#quoteToken,
+          this.#pool,
         ),
       )),
       sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
@@ -10334,9 +10339,11 @@ class DodoV2FixtureScheduler implements CentralAdapterScheduler {
 export function dodoV2FixtureRuntime(input?: {
   readonly baseToken?: string;
   readonly quoteToken?: string;
+  readonly pool?: string;
 }): CentralAdapterRuntime {
   const baseToken = input?.baseToken ?? DODO_V2_FIXTURE_BASE_TOKEN;
   const quoteToken = input?.quoteToken ?? DODO_V2_FIXTURE_QUOTE_TOKEN;
+  const pool = input?.pool ?? DODO_V2_FIXTURE_POOL;
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -10360,7 +10367,7 @@ export function dodoV2FixtureRuntime(input?: {
       }),
     },
     budgets: { assertAdmitted() {} },
-    scheduler: new DodoV2FixtureScheduler({ baseToken, quoteToken }),
+    scheduler: new DodoV2FixtureScheduler({ baseToken, quoteToken, pool }),
   };
 }
 
@@ -10715,7 +10722,7 @@ export async function captureDodoV2OnchainCase(input: {
   const publication = await runDodoV2Lifecycle(
     input.source,
     pool,
-    input.runtime ?? dodoV2FixtureRuntime({ baseToken, quoteToken }),
+    input.runtime ?? dodoV2FixtureRuntime({ baseToken, quoteToken, pool }),
   );
   return buildDodoV2CaseCapture({
     source: input.source,
