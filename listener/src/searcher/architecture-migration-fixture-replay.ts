@@ -2375,6 +2375,7 @@ const FUNDING_ERC20_INTERFACE = new ethers.Interface([
 function fundingFixtureRuntime(input: {
   readonly source: CanonicalSource;
   readonly generation: number;
+  readonly balance?: bigint;
 }): CentralAdapterRuntime {
   let now = 1_000;
   const scheduler: CentralAdapterScheduler = {
@@ -2402,7 +2403,7 @@ function fundingFixtureRuntime(input: {
               completion: "returned" as const,
               data: FUNDING_ERC20_INTERFACE.encodeFunctionResult(
                 "balanceOf",
-                [FUNDING_CAPTURE_MAX_BORROW],
+                [input.balance ?? FUNDING_CAPTURE_MAX_BORROW],
               ),
             });
           }),
@@ -2449,18 +2450,17 @@ function fundingFixtureRuntime(input: {
  * finalSimulations; borrow and repayment fragments are issued through the
  * central funding runtime so the fingerprints are authority-bound.
  */
-export async function captureFundingFixtureCase(input: {
+async function buildFundingCaseCapture(input: {
   readonly familyId: "flash-loan:balancer-v2" | "flash-loan:morpho";
   readonly source: CanonicalSource;
+  readonly runtime: CentralAdapterRuntime;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
     .forStrictFamily(familyId(input.familyId));
   const asset = ethers.getAddress(FUNDING_CAPTURE_ASSET);
-  const runtime = fundingFixtureRuntime({
-    source: input.source,
-    generation: input.source.generation,
-  });
+  const { runtime, evidenceRefs } = input;
   let publication: FundingFamilyPublication | null = null;
   const result = await executeFundingFamilyLiquidity({
     family,
@@ -2495,9 +2495,6 @@ export async function captureFundingFixtureCase(input: {
     generation: input.source.generation,
     amount,
   });
-  const evidenceRefs = Object.freeze([
-    `fixture:${input.familyId}:${input.source.number}:${input.source.hash}`,
-  ]);
   const absentStage = Object.freeze({
     status: "declared-absent" as const,
     items: Object.freeze([]),
@@ -2565,6 +2562,74 @@ export async function captureFundingFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureFundingFixtureCase(input: {
+  readonly familyId: "flash-loan:balancer-v2" | "flash-loan:morpho";
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  return buildFundingCaseCapture({
+    familyId: input.familyId,
+    source: input.source,
+    caseId: input.caseId,
+    runtime: fundingFixtureRuntime({
+      source: input.source,
+      generation: input.source.generation,
+    }),
+    evidenceRefs: Object.freeze([
+      `fixture:${input.familyId}:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain funding capture: the funding contract's balanceOf(asset) is
+ * read from the asset at the canonical source block and must be positive.
+ * The runtime is driven by the real balance so the borrow offer is
+ * authority-bound to on-chain liquidity; evidence refs are onchain.
+ */
+export async function captureFundingOnchainCase(input: {
+  readonly familyId: "flash-loan:balancer-v2" | "flash-loan:morpho";
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly asset: string;
+  readonly fundingContract: string;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const asset = input.asset.toLowerCase();
+  const fundingContract = input.fundingContract.toLowerCase();
+  const raw = await input.provider.call({
+    to: asset,
+    data: FUNDING_ERC20_INTERFACE.encodeFunctionData("balanceOf", [
+      fundingContract,
+    ]),
+  }, input.source.number);
+  if (raw === "0x" || raw.length < 2) {
+    throw new Error(
+      `funding balance read empty at ${input.source.number}`,
+    );
+  }
+  const balance = FUNDING_ERC20_INTERFACE.decodeFunctionResult(
+    "balanceOf",
+    raw,
+  )[0] as bigint;
+  if (balance <= 0n) {
+    throw new Error("funding contract reports a zero asset balance");
+  }
+  return buildFundingCaseCapture({
+    familyId: input.familyId,
+    source: input.source,
+    caseId: input.caseId,
+    runtime: fundingFixtureRuntime({
+      source: input.source,
+      generation: input.source.generation,
+      balance,
+    }),
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:${input.familyId}:${fundingContract}`,
+    ]),
   });
 }
 

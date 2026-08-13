@@ -42,8 +42,8 @@
 | 18 | angstrom-v4 | captureAngstromV4OnchainCase | completed |
 | 19 | univ3 | captureUniv3OnchainCase | completed |
 | 20 | univ4 | captureUniv4OnchainCase | completed |
-| 21 | funding | captureFundingOnchainCase | pending |
-| 22 | curve | captureCurveOnchainCase | pending |
+| 21 | funding | captureFundingOnchainCase | completed |
+| 22 | curve | n/a — 与 curve-underlying（row 8）同一族，captureCurveUnderlyingOnchainCase 已 completed | completed |
 
 ## 每族完成判据（全部满足才把状态改为 completed 并 commit+push）
 
