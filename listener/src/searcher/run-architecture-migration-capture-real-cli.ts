@@ -296,7 +296,6 @@ async function runOnchainCaptureCase(input: {
       return captureDodoV2OnchainCase({
         source, provider, pool: item.pool,
         baseToken: item.tokenA, quoteToken: item.tokenB,
-        runtime: dodoV2FixtureRuntime(),
       });
     case "credit:fluid":
       if (!item.vault) throw new Error("fluid-credit onchain case requires vault");

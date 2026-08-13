@@ -10210,19 +10210,21 @@ function dodoV2InputSemanticsResult(): string {
 function dodoV2SuccessResult(
   request: AdapterRequest,
   canonical: CanonicalSource,
+  baseToken: string = DODO_V2_FIXTURE_BASE_TOKEN,
+  quoteToken: string = DODO_V2_FIXTURE_QUOTE_TOKEN,
 ): AdapterRequestResult {
   const data =
     request.id === "pool-base-token" ||
         request.id === "current-base-token"
       ? DODO_V2_POOL_INTERFACE.encodeFunctionResult(
           "_BASE_TOKEN_",
-          [DODO_V2_FIXTURE_BASE_TOKEN],
+          [baseToken],
         )
       : request.id === "pool-quote-token" ||
           request.id === "current-quote-token"
         ? DODO_V2_POOL_INTERFACE.encodeFunctionResult(
             "_QUOTE_TOKEN_",
-            [DODO_V2_FIXTURE_QUOTE_TOKEN],
+            [quoteToken],
           )
         : request.id === "pool-pmm-behavior" ||
             request.id === "current-pmm-state" ||
@@ -10289,6 +10291,17 @@ function dodoV2SuccessResult(
 }
 
 class DodoV2FixtureScheduler implements CentralAdapterScheduler {
+  readonly #baseToken: string;
+  readonly #quoteToken: string;
+
+  constructor(input: {
+    readonly baseToken: string;
+    readonly quoteToken: string;
+  }) {
+    this.#baseToken = input.baseToken;
+    this.#quoteToken = input.quoteToken;
+  }
+
   issueExecutor(
     input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
   ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
@@ -10302,7 +10315,12 @@ class DodoV2FixtureScheduler implements CentralAdapterScheduler {
         assert.deepEqual(requests, input.requests);
       },
       execute: async (execution) => Promise.all(execution.requests.map(
-        (request) => dodoV2SuccessResult(request, execution.source),
+        (request) => dodoV2SuccessResult(
+          request,
+          execution.source,
+          this.#baseToken,
+          this.#quoteToken,
+        ),
       )),
       sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
     });
@@ -10313,7 +10331,12 @@ class DodoV2FixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-export function dodoV2FixtureRuntime(): CentralAdapterRuntime {
+export function dodoV2FixtureRuntime(input?: {
+  readonly baseToken?: string;
+  readonly quoteToken?: string;
+}): CentralAdapterRuntime {
+  const baseToken = input?.baseToken ?? DODO_V2_FIXTURE_BASE_TOKEN;
+  const quoteToken = input?.quoteToken ?? DODO_V2_FIXTURE_QUOTE_TOKEN;
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -10337,7 +10360,7 @@ export function dodoV2FixtureRuntime(): CentralAdapterRuntime {
       }),
     },
     budgets: { assertAdmitted() {} },
-    scheduler: new DodoV2FixtureScheduler(),
+    scheduler: new DodoV2FixtureScheduler({ baseToken, quoteToken }),
   };
 }
 
@@ -10654,7 +10677,7 @@ export async function captureDodoV2OnchainCase(input: {
   readonly baseToken?: string;
   readonly quoteToken?: string;
   readonly caseId?: string;
-  readonly runtime: CentralAdapterRuntime;
+  readonly runtime?: CentralAdapterRuntime;
 }): Promise<RawFamilyMigrationCaseCapture> {
   const pool = input.pool.toLowerCase();
   const read = async (name: string): Promise<string> => {
@@ -10692,7 +10715,7 @@ export async function captureDodoV2OnchainCase(input: {
   const publication = await runDodoV2Lifecycle(
     input.source,
     pool,
-    input.runtime,
+    input.runtime ?? dodoV2FixtureRuntime({ baseToken, quoteToken }),
   );
   return buildDodoV2CaseCapture({
     source: input.source,
