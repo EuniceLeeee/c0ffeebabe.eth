@@ -493,6 +493,13 @@ UnifiedObservation，selector/topic0 经 `catalog.matches` 分族，去重 +
 append observed receipt logs；main.ts strict feed 合并 address-surface
 与 event 派生。build/shadow suite（29）/12 组 sweep 全绿。F2 关闭。
 
+**F5-a 采集 harness（2026-08-13）：**
+`scripts/collect-s1-sealed-production-corpus.sh`（节点侧）：descriptor
+source 校验 → 3:1 train/held-out → 真实 capture CLI 双侧产出 →
+productionProvenance.commit 校验 → corpus-manifest。F5-b 真实采集
+需 22 族真实 descriptor 节点执行；F6 五对（B/C/D/F/A）strict 侧仍
+未开始，删除前置不满足。
+
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

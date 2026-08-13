@@ -104,9 +104,18 @@
 
 ### F5 sealed-production corpus
 
-- 真实 on-chain production corpus + 非空 held-out negatives，使
-  sealed-production acceptance 从 `unit-contract`（19/22 fixture）升级为
-  可验证的生产验收。需真实案例采集（另行立项采集脚本/来源）。
+- **F5-a 采集 harness（已完成）：**
+  `scripts/collect-s1-sealed-production-corpus.sh`：校验 descriptor
+  携带 sourceBlock/sourceBlockHash + 非空 cases，本地 reth 重验 block
+  hash（fail-closed），3:1 切 train/held-out，经
+  `architecture-migration-capture:real` 生成两侧 sealed capture，
+  并强制校验 `productionProvenance.commit` 与当前 checkout 一致，
+  写 `corpus-manifest.json`。
+- **F5-b 真实 corpus 采集（待节点执行）：** 需要 22 族真实 on-chain
+  descriptor（真实 pool/tx/state，不得 fixture:* 占位）在节点本地 reth
+  上跑 F5-a，产出非空 held-out 并过 sealed-production acceptance
+  （`verdict: eligible`）。未采集前 sealed acceptance 保持
+  `unit-contract/ineligible`（P0-6 fail-closed，诚实不变）。
 
 ### F6 legacy 删除逐项确认
 
@@ -115,6 +124,9 @@
   schema/cache bridge/旧 flag。每 pair 顺序：strict 替换合同绿 →
   call-site 切换 → 验证 → 删除 legacy（合同绿），任一失败回退该 pair。
   终态验收 = canonical §18.3 / §20.2.6 全门。
+- 当前 strict 侧状态：B/C/D/F 均未开始；A 剩余分支等 F8 全量 strict
+  quote。删除顺序 B→C→D→F→A，每对先建 strict 侧再删（当前无一对
+  满足删除前置，不能诚实删除）。
 
 ### F7 节点 composition env + committed publication
 
