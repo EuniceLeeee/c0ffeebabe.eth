@@ -134,6 +134,25 @@ interface RealCaptureCase {
   readonly lpFee?: bigint | string;
 }
 
+/**
+ * Historical capture-name -> catalog manifest familyId aliases. New
+ * descriptors should name the catalog familyId directly; this map only
+ * bridges the fixture-era capture names.
+ */
+const CAPTURE_NAME_TO_CATALOG_FAMILY: Readonly<Record<string, string>> =
+  Object.freeze({
+    "univ2": "univ2-standard",
+    "univ3": "univ3-standard",
+    "univ4": "univ4",
+    "dodo-v2": "custom-swap:dodo-v2",
+    "fluid-dex": "fluid-dex",
+    "protocol:erc4626": "protocol:erc4626",
+    "protocol:erc4626-silo-redeem": "protocol:erc4626-silo-redeem",
+    "protocol:astra-multitoken": "protocol:astra-multitoken",
+    "protocol:ethertoken-native-redeem":
+      "protocol:ethertoken-native-redeem",
+  });
+
 function buildGenericRuntime(provider: GenericCaptureProvider): CentralAdapterRuntime {
   const executablePath = process.env.S1_REVM_SIM_BIN;
   const executor = process.env.S1_CAPTURE_EXECUTOR ??
@@ -405,7 +424,9 @@ async function main(): Promise<void> {
             "generic mode requires provider and a case address",
           );
         }
-        const fid = familyId(item.family);
+        const fid = familyId(
+          CAPTURE_NAME_TO_CATALOG_FAMILY[item.family] ?? item.family,
+        );
         const observation = await deriveFamilyObservationFromNodeData({
           catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
           familyId: fid,

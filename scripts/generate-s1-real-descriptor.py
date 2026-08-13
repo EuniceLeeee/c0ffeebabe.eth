@@ -22,7 +22,14 @@ def normalize_generic_case(case):
                or case.get("token") or case.get("fundingContract"))
     if not address:
         raise SystemExit(f"case {case.get('family')} has no address")
-    return {"family": case["family"], "address": address}
+    return {"family": CAPTURE_TO_CATALOG.get(case["family"], case["family"]),
+            "address": address}
+
+CAPTURE_TO_CATALOG = {
+    "univ2": "univ2-standard",
+    "univ3": "univ3-standard",
+    "dodo-v2": "custom-swap:dodo-v2",
+}
 
 universe = json.load(open(universe_path))
 pools = universe["pools"] if isinstance(universe, dict) and "pools" in universe else universe
