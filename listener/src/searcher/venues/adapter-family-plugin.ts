@@ -622,11 +622,56 @@ export type ExpectedEffect =
       readonly direction: "increase" | "decrease";
     };
 
+export interface ExecutionRuntimeHop {
+  readonly adapterId: string;
+  readonly target: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+}
+
+export interface ExecutionPrewarmCall {
+  readonly from: string;
+  /** Empty means the central runtime binds the current hop target. */
+  readonly to: string;
+  readonly calldata: string;
+  readonly gasLimit: number;
+}
+
+/**
+ * Plugin-owned execution facts consumed before a concrete exact result exists.
+ * The central runtime treats this as opaque projection data: it neither knows
+ * the protocol nor compares adapter/family ids. Infrastructure singleton
+ * addresses are permitted here, but instance admission remains an identity
+ * capability and can never be granted by this projection.
+ */
+export interface ExecutionRuntimeProjection {
+  readonly allowanceSpender: string | null;
+  readonly prewarmQuoteCalls: readonly ExecutionPrewarmCall[];
+}
+
+export const NO_EXECUTION_RUNTIME_PROJECTION: ExecutionRuntimeProjection =
+  Object.freeze({
+    allowanceSpender: null,
+    prewarmQuoteCalls: Object.freeze([]),
+  });
+
+export function hopTargetExecutionRuntimeProjection(input: {
+  readonly hop: ExecutionRuntimeHop;
+}): ExecutionRuntimeProjection {
+  return Object.freeze({
+    allowanceSpender: input.hop.target,
+    prewarmQuoteCalls: Object.freeze([]),
+  });
+}
+
 export interface ExecutionSemantics<
   Descriptor extends CompiledInstanceDescriptor,
   Route extends FamilyRouteDescriptor,
   ExactEvidence,
 > {
+  runtimeProjection(input: {
+    readonly hop: ExecutionRuntimeHop;
+  }): ExecutionRuntimeProjection;
   buildFragment(input: {
     readonly descriptor: Descriptor;
     readonly route: Route;
@@ -2581,11 +2626,15 @@ function validateExecution(execution: ExecutionSemantics<any, any, any>): void {
   assertPlainRecord(execution, "execution semantics");
   assertExactKeys(
     execution,
-    ["buildFragment", "expectedEffects"],
+    ["buildFragment", "expectedEffects", "runtimeProjection"],
     "execution semantics",
   );
   assertSynchronousFunction(execution.buildFragment, "execution.buildFragment");
   assertSynchronousFunction(execution.expectedEffects, "execution.expectedEffects");
+  assertSynchronousFunction(
+    execution.runtimeProjection,
+    "execution.runtimeProjection",
+  );
 }
 
 function validateSharedBindings(shared: SharedBindingSemantics<any>): void {

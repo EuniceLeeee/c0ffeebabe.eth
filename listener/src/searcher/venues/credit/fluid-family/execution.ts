@@ -1,4 +1,7 @@
-import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import {
+  NO_EXECUTION_RUNTIME_PROJECTION,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import { sameAddress } from "./codec.js";
 import type {
   FluidCreditDescriptor,
@@ -9,6 +12,7 @@ import type {
 const MAX_UINT = (1n << 256n) - 1n;
 
 export const fluidCreditExecution = {
+  runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertExecutionEvidence(input);
     return Object.freeze({

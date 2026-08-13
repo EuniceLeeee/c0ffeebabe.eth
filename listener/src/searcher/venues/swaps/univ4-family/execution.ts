@@ -1,7 +1,10 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import type { ResolvedPlanNode } from "../../../../shared/types/plan.js";
-import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import {
+  NO_EXECUTION_RUNTIME_PROJECTION,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import {
   poolKeyFingerprint,
   sameAddress,
@@ -17,6 +20,7 @@ const MAX_SQRT_PRICE =
   1461446703485210103287273052203988822378723970341n;
 
 export const univ4Execution = {
+  runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertExecutionEvidence(input);
     const key = input.descriptor.poolKey;

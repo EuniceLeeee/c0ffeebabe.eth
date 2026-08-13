@@ -1,5 +1,7 @@
-import type { ExecutionSemantics } from
-  "../../adapter-family-plugin.js";
+import {
+  hopTargetExecutionRuntimeProjection,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import { sameAddress } from "../standard-family/common.js";
 import { assertEigenpieInvocation } from "./binding.js";
 import type {
@@ -9,6 +11,7 @@ import type {
 } from "./types.js";
 
 export const eigenpieExecution = {
+  runtimeProjection: hopTargetExecutionRuntimeProjection,
   buildFragment(input) {
     assertEigenpieInvocation(input.descriptor, input.route);
     const evidence = input.exactEvidence;

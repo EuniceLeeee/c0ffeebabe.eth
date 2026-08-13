@@ -229,6 +229,10 @@ function core(input: {
       }),
     },
     execution: {
+      runtimeProjection: () => ({
+        allowanceSpender: null,
+        prewarmQuoteCalls: [],
+      }),
       buildFragment: () => ({ requirements: [], nodes: [] }),
       expectedEffects: () => [],
     },

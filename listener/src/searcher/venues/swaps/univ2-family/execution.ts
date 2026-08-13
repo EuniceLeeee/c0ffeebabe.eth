@@ -1,6 +1,7 @@
 import type { ResolvedPlanNode } from "../../../../shared/types/plan.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
-import { sameAddress } from "./codec.js";
+import { UNIV2_PAIR_INTERFACE, sameAddress } from "./codec.js";
+import { UNIV2_ROUTER } from "./victim.js";
 import type {
   UniV2Descriptor,
   UniV2ExactEvidence,
@@ -8,6 +9,15 @@ import type {
 } from "./types.js";
 
 export const univ2Execution = {
+  runtimeProjection: ({ hop }) => Object.freeze({
+    allowanceSpender: UNIV2_ROUTER,
+    prewarmQuoteCalls: Object.freeze([Object.freeze({
+      from: "0x0000000000000000000000000000000000000000",
+      to: hop.target,
+      calldata: UNIV2_PAIR_INTERFACE.encodeFunctionData("getReserves", []),
+      gasLimit: 300_000,
+    })]),
+  }),
   buildFragment(input) {
     assertExecutionEvidence(input);
     const zeroForOne = input.route.direction === "zero-for-one";

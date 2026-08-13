@@ -158,6 +158,18 @@
   这是 **production authority cutover**，live 切换需显式授权 +
   guarded deploy；本文件不授权任何 live 广播。
 
+**Pair A strict execution projection checkpoint（2026-08-13，未完成
+cutover）：** execution plugin 合同新增必选 `runtimeProjection`，20 个
+route/credit plugin 各自在自身 execution closure 内声明 allowance spender
+与 prewarm call；`strict-execution-projection.ts` 已删除原中央 20-Family
+import/map，只经 catalog `ownerOfAction()` 取得 plugin capability。框架合同
+改用 synthetic catalog，不点名生产 Family。完整 build、定向合同与 shadow
+suite 通过；generated capability/catalog hash 因 execution closure 合法变化，
+旧节点 enumerator evidence 按设计以 `catalogHash mismatch` fail closed，需在
+本 checkpoint 固定 commit 上重新执行节点 dry-run 后才算恢复全 sweep。该项
+只建立 Pair A 的一部分 strict 侧；`revm-live-backend` 的 legacy quote/
+approve fallback 与默认 authority 尚未删除，禁止标记 F6-A/F8 completed。
+
 ### F9 最终 cleanup receipt（完成定义，不可省略）
 
 - F7/F8 完成后执行 canonical §18.3 与 §20.2.6 的独立 cleanup slice；

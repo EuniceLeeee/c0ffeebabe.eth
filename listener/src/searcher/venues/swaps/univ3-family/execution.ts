@@ -4,6 +4,7 @@ import {
   MIN_SQRT_RATIO,
 } from "../../../solver/v3-math.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import { UNIV3_SWAP_ROUTER } from "../univ3-abi.js";
 import { canonicalAddress, sameAddress } from "./codec.js";
 import type {
   UniV3Descriptor,
@@ -12,6 +13,10 @@ import type {
 } from "./types.js";
 
 export const univ3Execution = {
+  runtimeProjection: () => Object.freeze({
+    allowanceSpender: UNIV3_SWAP_ROUTER,
+    prewarmQuoteCalls: Object.freeze([]),
+  }),
   buildFragment(input) {
     assertExecutionEvidence(input);
     const zeroForOne = input.route.direction === "zero-for-one";

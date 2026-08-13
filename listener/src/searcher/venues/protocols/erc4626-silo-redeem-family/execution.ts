@@ -1,4 +1,7 @@
-import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import {
+  NO_EXECUTION_RUNTIME_PROJECTION,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import { sameAddress } from "../standard-family/common.js";
 import { assertErc4626SiloInvocation } from "./shared.js";
 import type {
@@ -8,6 +11,7 @@ import type {
 } from "./types.js";
 
 export const erc4626SiloRedeemExecution = {
+  runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertErc4626SiloInvocation(input.descriptor, input.route);
     const evidence = input.exactEvidence;

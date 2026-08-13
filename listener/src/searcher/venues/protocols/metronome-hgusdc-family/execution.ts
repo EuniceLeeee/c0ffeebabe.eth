@@ -1,4 +1,7 @@
-import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import {
+  NO_EXECUTION_RUNTIME_PROJECTION,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import {
   assertMetronomeHgUsdcInvocation,
 } from "./shared.js";
@@ -10,6 +13,7 @@ import type {
 } from "./types.js";
 
 export const metronomeHgUsdcExecution = {
+  runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertMetronomeHgUsdcInvocation(input.descriptor, input.route);
     const evidence = input.exactEvidence;

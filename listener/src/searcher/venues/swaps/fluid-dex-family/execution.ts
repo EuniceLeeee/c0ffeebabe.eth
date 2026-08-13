@@ -1,4 +1,7 @@
-import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import {
+  hopTargetExecutionRuntimeProjection,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import { sameAddress } from "./codec.js";
 import type {
   FluidDexDescriptor,
@@ -9,6 +12,7 @@ import type {
 const MAX_UINT = (1n << 256n) - 1n;
 
 export const fluidDexExecution = {
+  runtimeProjection: hopTargetExecutionRuntimeProjection,
   buildFragment(input) {
     assertExecutionEvidence(input);
     return Object.freeze({

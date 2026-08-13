@@ -1,40 +1,88 @@
 import assert from "node:assert/strict";
-import {
-  resolveFundingPrewarmAddresses,
-  strictExecutionProjectionFor,
-  strictRoutePrewarmAddresses,
-  strictFundingPrewarmAddresses,
-} from "../strict-execution-projection.js";
-import {
-  UNIV2_PAIR_INTERFACE,
-} from "../venues/swaps/univ2-family/codec.js";
-import {
-  UNIV2_ROUTER,
-} from "../venues/swaps/univ2-family/victim.js";
-import { UNIV3_SWAP_ROUTER } from
-  "../venues/swaps/univ3-abi.js";
 import type {
   StrictShadowCatalogViews,
 } from "../adapter-family-shadow-catalog-publication.js";
+import {
+  resolveFundingPrewarmAddresses,
+  strictExecutionProjectionForHop,
+  strictFundingPrewarmAddresses,
+  strictRoutePrewarmAddresses,
+} from "../strict-execution-projection.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
-import {
-  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-} from "../venues/production-family-composition.js";
-import { UNIV2_FAMILY_ID } from
-  "../venues/swaps/univ2-family/manifest.js";
+import type { FamilyId } from
+  "../venues/adapter-family-identifiers.js";
+import type { ExecutionRuntimeProjection } from
+  "../venues/adapter-family-plugin.js";
+import type { FamilyCapabilityCatalog } from
+  "../venues/family-capability-catalog.js";
 
-const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+const ROUTE_FAMILY = "protocol:synthetic-route" as FamilyId;
+const FUNDING_FAMILY = "funding:synthetic-source" as FamilyId;
+const ACTION_ID = "synthetic-action";
+const TARGET = `0x${"11".repeat(20)}`;
+const TOKEN_IN = `0x${"22".repeat(20)}`;
+const TOKEN_OUT = `0x${"33".repeat(20)}`;
+const LIQUIDITY_HOLDER = `0x${"44".repeat(20)}`;
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_700_444,
   hash: `0x${"51".repeat(32)}`,
   generation: 44,
 });
 
-function fundingState(familyId: string) {
+const HOP = Object.freeze({
+  adapterId: ACTION_ID,
+  target: TARGET,
+  tokenIn: TOKEN_IN,
+  tokenOut: TOKEN_OUT,
+});
+
+function syntheticCatalog(
+  projection: (input: { readonly hop: typeof HOP }) =>
+    ExecutionRuntimeProjection = ({ hop }) => Object.freeze({
+      allowanceSpender: hop.target,
+      prewarmQuoteCalls: Object.freeze([Object.freeze({
+        from: hop.tokenIn,
+        to: "",
+        calldata: "0x1234",
+        gasLimit: 123_456,
+      })]),
+    }),
+): FamilyCapabilityCatalog {
+  return Object.freeze({
+    ownerOfAction(adapterId: string) {
+      if (adapterId !== ACTION_ID) throw new Error("unknown synthetic action");
+      return ROUTE_FAMILY;
+    },
+    forStrictFamily(familyId: FamilyId) {
+      if (familyId === ROUTE_FAMILY) {
+        return Object.freeze({
+          plugin: Object.freeze({
+            execution: Object.freeze({ runtimeProjection: projection }),
+          }),
+        });
+      }
+      if (familyId === FUNDING_FAMILY) {
+        return Object.freeze({
+          plugin: Object.freeze({
+            funding: Object.freeze({
+              repayment: Object.freeze({
+                target: TARGET,
+                liquidityHolder: LIQUIDITY_HOLDER,
+              }),
+            }),
+          }),
+        });
+      }
+      throw new Error("unknown synthetic Family");
+    },
+  }) as unknown as FamilyCapabilityCatalog;
+}
+
+function fundingState() {
   return Object.freeze({
     kind: "funding" as const,
-    familyId,
+    familyId: FUNDING_FAMILY,
     source: SOURCE,
     generation: SOURCE.generation,
     tombstone: false,
@@ -44,159 +92,84 @@ function fundingState(familyId: string) {
 }
 
 function main(): void {
-  const fundingFamily = catalog.listAll().find((family) =>
-    family.plugin.manifest.domain === "funding"
-  );
-  assert(fundingFamily, "production catalog has a funding family");
-  const family = fundingFamily!;
-  assert("funding" in family.plugin && family.plugin.funding !== undefined);
-  const repayment = family.plugin.funding.repayment;
-  const views = Object.freeze({
-    fundingByPublicationKey: new Map([
-      ["funding:fixture", fundingState(fundingFamily!.plugin.manifest.familyId)],
-    ]),
-  }) as unknown as StrictShadowCatalogViews;
-  const addresses = strictFundingPrewarmAddresses({ views, catalog });
-  assert.deepEqual(
-    addresses,
-    Object.freeze([
-      repayment.target.toLowerCase(),
-      repayment.liquidityHolder.toLowerCase(),
-    ].filter((value, index, all) => all.indexOf(value) === index).sort()),
-  );
-  assert(Object.isFrozen(addresses));
-
-  const swapViews = Object.freeze({
-    fundingByPublicationKey: new Map([
-      ["funding:wrong", fundingState(UNIV2_FAMILY_ID)],
-    ]),
-  }) as unknown as StrictShadowCatalogViews;
-  assert.throws(
-    () => strictFundingPrewarmAddresses({ views: swapViews, catalog }),
-    /has no funding plugin/,
-  );
-  assert.deepEqual(
-    resolveFundingPrewarmAddresses({
-      strictViews: null,
-      catalog,
-    }),
-    Object.freeze([
-    ]),
-    "no committed strict publication means no funding prewarm (legacy fallback removed)",
-  );
-  assert.deepEqual(
-    resolveFundingPrewarmAddresses({
-      strictViews: views,
-      catalog,
-    }),
-    addresses,
-  );
-  const hop = Object.freeze({
-    adapterId: "univ2-swap",
-    target: `0x${"41".repeat(20)}`,
-    tokenIn: `0x${"43".repeat(20)}`,
-    tokenOut: `0x${"44".repeat(20)}`,
+  const catalog = syntheticCatalog();
+  const projection = strictExecutionProjectionForHop({ catalog, hop: HOP });
+  assert.deepEqual(projection, {
+    allowanceSpender: TARGET,
+    prewarmQuoteCalls: [{
+      from: TOKEN_IN,
+      to: "",
+      calldata: "0x1234",
+      gasLimit: 123_456,
+    }],
   });
+  assert.equal(
+    strictExecutionProjectionForHop({
+      catalog,
+      hop: Object.freeze({ ...HOP, adapterId: "unknown-action" }),
+    }),
+    null,
+  );
+
+  const malformed = [
+    null,
+    { allowanceSpender: 7, prewarmQuoteCalls: [] },
+    { allowanceSpender: null, prewarmQuoteCalls: {} },
+    {
+      allowanceSpender: null,
+      prewarmQuoteCalls: [{
+        from: TARGET,
+        to: TARGET,
+        calldata: "0x",
+        gasLimit: 0,
+      }],
+    },
+  ] as const;
+  for (const value of malformed) {
+    assert.throws(() => strictExecutionProjectionForHop({
+      catalog: syntheticCatalog(() => value as never),
+      hop: HOP,
+    }));
+  }
+
   assert.deepEqual(
-    strictRoutePrewarmAddresses({ catalog, hops: Object.freeze([hop]) }),
-    Object.freeze([
-      `0x${"41".repeat(20)}`,
-      `0x${"43".repeat(20)}`,
-      `0x${"44".repeat(20)}`,
-    ]),
+    strictRoutePrewarmAddresses({ catalog, hops: Object.freeze([HOP]) }),
+    Object.freeze([TARGET, TOKEN_IN, TOKEN_OUT].sort()),
   );
   assert.deepEqual(
     strictRoutePrewarmAddresses({
       catalog,
       hops: Object.freeze([Object.freeze({
-        ...hop,
-        adapterId: "unknown-adapter",
+        ...HOP,
+        adapterId: "unknown-action",
       })]),
     }),
     Object.freeze([]),
   );
-  const univ2Projection = strictExecutionProjectionFor({
-    catalog,
-    adapterId: "univ2-swap",
-  });
-  assert(univ2Projection);
-  assert.equal(univ2Projection.allowanceSpender, UNIV2_ROUTER);
-  assert.equal(univ2Projection.prewarmQuoteCalls.length, 1);
-  assert.equal(
-    univ2Projection.prewarmQuoteCalls[0]!.calldata,
-    UNIV2_PAIR_INTERFACE.encodeFunctionData("getReserves", []),
+
+  const views = Object.freeze({
+    fundingByPublicationKey: new Map([
+      ["funding:synthetic", fundingState()],
+    ]),
+  }) as unknown as StrictShadowCatalogViews;
+  const fundingAddresses = strictFundingPrewarmAddresses({ views, catalog });
+  assert.deepEqual(
+    fundingAddresses,
+    Object.freeze([TARGET, LIQUIDITY_HOLDER].sort()),
   );
-  assert.equal(
-    strictExecutionProjectionFor({
-      catalog,
-      adapterId: "unknown-adapter",
-    }),
-    null,
+  assert.deepEqual(
+    resolveFundingPrewarmAddresses({ strictViews: null, catalog }),
+    Object.freeze([]),
   );
-  const univ3Projection = strictExecutionProjectionFor({
-    catalog,
-    adapterId: "univ3-swap",
-  });
-  assert(univ3Projection);
-  assert.equal(univ3Projection.allowanceSpender, UNIV3_SWAP_ROUTER);
-  for (const [adapterId, expected] of [
-    ["fluid-dex-swap", `0x${"41".repeat(20)}`],
-    ["eigenpie-deposit-asset", `0x${"41".repeat(20)}`],
-  ] as const) {
-    const projection = strictExecutionProjectionFor({
-      catalog,
-      adapterId,
-    });
-    assert(projection);
-    assert.equal(typeof projection.allowanceSpender, "function");
-    assert.equal(
-      (projection.allowanceSpender as (hop: {
-        readonly target: string;
-      }) => string | null)({ target: `0x${"41".repeat(20)}` }),
-      expected,
-    );
-  }
-  for (const adapterId of ["dodo-v2-swap", "goldx-mint", "psm", "univ4-swap"]) {
-    const projection = strictExecutionProjectionFor({
-      catalog,
-      adapterId,
-    });
-    assert(projection);
-    assert.equal(projection.allowanceSpender, null);
-  }
-  const curveProjection = strictExecutionProjectionFor({
-    catalog,
-    adapterId: "curve-exchange-underlying",
-  });
-  assert(curveProjection);
-  assert.equal(typeof curveProjection.allowanceSpender, "function");
-  assert.equal(
-    (curveProjection.allowanceSpender as (hop: {
-      readonly target: string;
-    }) => string | null)({ target: `0x${"41".repeat(20)}` }),
-    `0x${"41".repeat(20)}`,
+  assert.deepEqual(
+    resolveFundingPrewarmAddresses({ strictViews: views, catalog }),
+    fundingAddresses,
   );
-  const angstromProjection = strictExecutionProjectionFor({
-    catalog,
-    adapterId: "angstrom-v4-swap",
-  });
-  assert(angstromProjection);
-  assert.equal(
-    angstromProjection.allowanceSpender,
-    "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8",
+
+  console.log(
+    "strict-execution-projection PASS " +
+      "(synthetic catalog + runtime projection + fail-closed validation)",
   );
-  for (const adapterId of [
-    "wsteth-wrap",
-    "erc4626-deposit",
-    "fluid-vault",
-    "self-burn-native-redeem",
-    "astra-multitoken-change",
-  ]) {
-    const projection = strictExecutionProjectionFor({ catalog, adapterId });
-    assert(projection, adapterId);
-    assert.equal(projection.allowanceSpender, null, adapterId);
-  }
-  console.log("strict-execution-projection PASS");
 }
 
 main();

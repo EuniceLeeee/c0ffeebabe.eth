@@ -1,5 +1,8 @@
 import { ethers } from "ethers";
-import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import {
+  NO_EXECUTION_RUNTIME_PROJECTION,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import { assertAstraRouteBinding } from "./binding.js";
 import { sameAddress } from "./codec.js";
 import type {
@@ -9,6 +12,7 @@ import type {
 } from "./types.js";
 
 export const astraMultiTokenExecution = {
+  runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertExecutionEvidence(input);
     return Object.freeze({

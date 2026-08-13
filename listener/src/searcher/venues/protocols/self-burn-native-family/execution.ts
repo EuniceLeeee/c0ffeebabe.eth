@@ -1,5 +1,8 @@
 import { ADDR } from "../../../../shared/constants/addresses.js";
-import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import {
+  NO_EXECUTION_RUNTIME_PROJECTION,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import { sameAddress } from "../standard-family/common.js";
 import { assertSelfBurnNativeInvocation } from "./shared.js";
 import type {
@@ -9,6 +12,7 @@ import type {
 } from "./types.js";
 
 export const selfBurnNativeExecution = {
+  runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertSelfBurnNativeInvocation(input.descriptor, input.route);
     const evidence = input.exactEvidence;

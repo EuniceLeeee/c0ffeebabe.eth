@@ -1,4 +1,5 @@
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import { ANGSTROM_MAINNET_ADAPTER } from "../angstrom-attestation.js";
 import {
   poolKeyFingerprint,
   sameAddress,
@@ -14,6 +15,10 @@ const UINT128_MAX = (1n << 128n) - 1n;
 const UINT256_MAX = (1n << 256n) - 1n;
 
 export const angstromV4Execution = {
+  runtimeProjection: () => Object.freeze({
+    allowanceSpender: ANGSTROM_MAINNET_ADAPTER,
+    prewarmQuoteCalls: Object.freeze([]),
+  }),
   buildFragment(input) {
     const runtime = requireAngstromRuntimeEvidence({
       descriptor: input.descriptor,

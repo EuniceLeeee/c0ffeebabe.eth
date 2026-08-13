@@ -1,4 +1,7 @@
-import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import {
+  NO_EXECUTION_RUNTIME_PROJECTION,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import { sameAddress } from "./codec.js";
 import type {
   DodoV2Descriptor,
@@ -7,6 +10,7 @@ import type {
 } from "./types.js";
 
 export const dodoV2Execution = {
+  runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertExecutionEvidence(input);
     return Object.freeze({

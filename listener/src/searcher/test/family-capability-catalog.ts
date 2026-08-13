@@ -197,6 +197,10 @@ function defineFixture(
       }),
     },
     execution: {
+      runtimeProjection: () => ({
+        allowanceSpender: null,
+        prewarmQuoteCalls: [],
+      }),
       buildFragment: () => ({ requirements: [], nodes: [] }),
       expectedEffects: () => [],
     },

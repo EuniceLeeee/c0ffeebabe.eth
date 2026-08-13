@@ -957,6 +957,9 @@ function observedFluidCreditPlugin(
       },
     },
     execution: {
+      runtimeProjection(input) {
+        return execution.runtimeProjection(input);
+      },
       buildFragment(input) {
         callbacks.executionBuild++;
         return execution.buildFragment(input);

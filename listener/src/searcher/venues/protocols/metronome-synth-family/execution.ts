@@ -1,4 +1,7 @@
-import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import {
+  NO_EXECUTION_RUNTIME_PROJECTION,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import { MAX_UINT256, sameAddress } from "../standard-family/common.js";
 import { assertMetronomeSynthInvocation } from "./shared.js";
 import type {
@@ -8,6 +11,7 @@ import type {
 } from "./types.js";
 
 export const metronomeSynthExecution = {
+  runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertMetronomeSynthInvocation(input.descriptor, input.route);
     const evidence = input.exactEvidence;

@@ -1,4 +1,7 @@
-import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import {
+  NO_EXECUTION_RUNTIME_PROJECTION,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import { MAX_UINT256 } from "../standard-family/common.js";
 import { assertErc4626Invocation } from "./binding.js";
 import type {
@@ -12,6 +15,7 @@ export const erc4626Execution: ExecutionSemantics<
   Erc4626Route,
   Erc4626ExactEvidence
 > = {
+  runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertErc4626Invocation(input.descriptor, input.route);
     const evidence = input.exactEvidence;

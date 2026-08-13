@@ -1,4 +1,7 @@
-import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
+import {
+  NO_EXECUTION_RUNTIME_PROJECTION,
+  type ExecutionSemantics,
+} from "../../adapter-family-plugin.js";
 import { MAX_UINT256 } from "../standard-family/common.js";
 import { assertWstethInvocation } from "./binding.js";
 import type {
@@ -8,6 +11,7 @@ import type {
 } from "./types.js";
 
 export const wstethExecution = {
+  runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertWstethInvocation(input.descriptor, input.route);
     const evidence = input.exactEvidence;

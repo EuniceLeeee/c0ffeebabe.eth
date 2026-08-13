@@ -31,7 +31,7 @@ import type { ResolvedPlan } from "../solver/solver.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
   resolveFundingPrewarmAddresses,
-  strictExecutionProjectionFor,
+  strictExecutionProjectionForHop,
   strictRoutePrewarmAddresses,
 } from "../strict-execution-projection.js";
 import type {
@@ -422,14 +422,14 @@ export class RevmLiveBackend implements LiveStateBackend {
     try {
       if (this.strictExecution !== undefined &&
           this.strictExecution.views() !== null) {
-        const projection = strictExecutionProjectionFor({
+        const projection = strictExecutionProjectionForHop({
           catalog: this.strictExecution.catalog,
-          adapterId: hop.adapterId,
+          hop,
         });
         if (projection !== null) {
           return projection.prewarmQuoteCalls.map((call) => Object.freeze({
             ...call,
-            to: hop.target,
+            to: call.to === "" ? hop.target : call.to,
           }));
         }
       }
@@ -575,13 +575,12 @@ export class RevmLiveBackend implements LiveStateBackend {
   private overlayApproveSpender(hop: QuoteHop | QuoteRequest): string | null {
     if (this.strictExecution !== undefined &&
         this.strictExecution.views() !== null) {
-      const projection = strictExecutionProjectionFor({
+      const projection = strictExecutionProjectionForHop({
         catalog: this.strictExecution.catalog,
-        adapterId: hop.adapterId,
+        hop,
       });
       if (projection !== null) {
-        const spender = projection.allowanceSpender;
-        return typeof spender === "function" ? spender(hop) : spender;
+        return projection.allowanceSpender;
       }
     }
     const adapter = PRODUCTION_ADAPTER_FAMILIES.routes()

@@ -258,6 +258,10 @@ function creditDefinition(): CreditFamilyPlugin<
       }),
     },
     execution: {
+      runtimeProjection: () => ({
+        allowanceSpender: null,
+        prewarmQuoteCalls: [],
+      }),
       buildFragment: () => ({ requirements: [], nodes: [] }),
       expectedEffects: () => [],
     },

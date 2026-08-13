@@ -3,169 +3,60 @@ import type {
 } from "./adapter-family-shadow-catalog-publication.js";
 import type { FamilyCapabilityCatalog } from
   "./venues/family-capability-catalog.js";
-import { ethers } from "ethers";
-import {
-  UNIV2_PAIR_INTERFACE,
-} from "./venues/swaps/univ2-family/codec.js";
-import { UNIV2_ROUTER } from
-  "./venues/swaps/univ2-family/victim.js";
-import { UNIV2_FAMILY_ID } from
-  "./venues/swaps/univ2-family/manifest.js";
-import { UNIV3_SWAP_ROUTER } from
-  "./venues/swaps/univ3-abi.js";
-import { UNIV3_FAMILY_ID } from
-  "./venues/swaps/univ3-family/manifest.js";
-import { UNIV4_FAMILY_ID } from
-  "./venues/swaps/univ4-family/manifest.js";
-import { DODO_V2_FAMILY_ID } from
-  "./venues/swaps/dodo-v2-family/manifest.js";
-import { FLUID_DEX_FAMILY_ID } from
-  "./venues/swaps/fluid-dex-family/manifest.js";
-import { EIGENPIE_FAMILY_ID } from
-  "./venues/protocols/eigenpie-family/manifest.js";
-import { GOLDX_FAMILY_ID } from
-  "./venues/protocols/goldx-family/manifest.js";
-import { PSM_FAMILY_ID } from
-  "./venues/protocols/psm-family/manifest.js";
-import { CURVE_UNDERLYING_FAMILY_ID } from
-  "./venues/swaps/curve-underlying-family/manifest.js";
-import { ANGSTROM_V4_FAMILY_ID } from
-  "./venues/swaps/angstrom-v4-family/manifest.js";
-import { FLUID_CREDIT_FAMILY_ID } from
-  "./venues/credit/fluid-family/manifest.js";
-import { WSTETH_FAMILY_ID } from
-  "./venues/protocols/wsteth-family/manifest.js";
-import { ERC4626_FAMILY_ID } from
-  "./venues/protocols/erc4626-family/manifest.js";
-import { ERC4626_SILO_REDEEM_FAMILY_ID } from
-  "./venues/protocols/erc4626-silo-redeem-family/manifest.js";
-import { METRONOME_HGUSDC_FAMILY_ID } from
-  "./venues/protocols/metronome-hgusdc-family/manifest.js";
-import { METRONOME_SYNTH_FAMILY_ID } from
-  "./venues/protocols/metronome-synth-family/manifest.js";
-import { ROCKSOLID_FAMILY_ID } from
-  "./venues/protocols/rocksolid-family/manifest.js";
-import { SELF_BURN_NATIVE_FAMILY_ID } from
-  "./venues/protocols/self-burn-native-family/manifest.js";
-import { ETHERTOKEN_NATIVE_FAMILY_ID } from
-  "./venues/protocols/ethertoken-native-redeem-family/manifest.js";
-import { ASTRA_MULTITOKEN_FAMILY_ID } from
-  "./venues/protocols/astra-multitoken-family/manifest.js";
+import type {
+  ExecutionRuntimeHop,
+  ExecutionRuntimeProjection,
+} from "./venues/adapter-family-plugin.js";
 
-export interface StrictExecutionHop {
-  readonly adapterId: string;
-  readonly target: string;
-  readonly tokenIn: string;
-  readonly tokenOut: string;
-}
+export type StrictExecutionHop = ExecutionRuntimeHop;
+export type StrictExecutionAdapterProjection = ExecutionRuntimeProjection;
 
-export interface StrictExecutionAdapterProjection {
-  readonly allowanceSpender:
-    | string
-    | ((hop: StrictExecutionHop) => string | null)
-    | null;
-  readonly prewarmQuoteCalls: readonly {
-    readonly from: string;
-    readonly to: string;
-    readonly calldata: string;
-    readonly gasLimit: number;
-  }[];
-}
-
-/**
- * Execution-adapter projection layer (Pair A step 3 pilot). Declares the
- * execution-facing facts the live backend needs per strict Family, derived
- * from the same protocol constants the families already use. This is an
- * infrastructure-singleton projection (router/pool constants), NOT an
- * instance allowlist, and it deliberately avoids changing the plugin
- * contract so the definition boundary / sealed parity evidence stays
- * stable. Families without a projection keep the legacy adapter path until
- * their pilot lands.
- */
-const strictExecutionAdapters: ReadonlyMap<
-  string,
-  StrictExecutionAdapterProjection
-> = new Map<string, StrictExecutionAdapterProjection>([
-  [UNIV2_FAMILY_ID, Object.freeze({
-    allowanceSpender: UNIV2_ROUTER,
-    prewarmQuoteCalls: Object.freeze([Object.freeze({
-      from: ethers.ZeroAddress,
-      to: "", // filled from the hop target by the backend
-      calldata: UNIV2_PAIR_INTERFACE.encodeFunctionData("getReserves", []),
-      gasLimit: 300_000,
-    })]),
-  })],
-  [UNIV3_FAMILY_ID, Object.freeze({
-    allowanceSpender: UNIV3_SWAP_ROUTER,
-    prewarmQuoteCalls: Object.freeze([]),
-  })],
-  [UNIV4_FAMILY_ID, Object.freeze({
-    allowanceSpender: null,
-    prewarmQuoteCalls: Object.freeze([]),
-  })],
-  [DODO_V2_FAMILY_ID, Object.freeze({
-    allowanceSpender: null,
-    prewarmQuoteCalls: Object.freeze([]),
-  })],
-  [FLUID_DEX_FAMILY_ID, Object.freeze({
-    allowanceSpender: (hop: StrictExecutionHop) => hop.target,
-    prewarmQuoteCalls: Object.freeze([]),
-  })],
-  [EIGENPIE_FAMILY_ID, Object.freeze({
-    allowanceSpender: (hop: StrictExecutionHop) => hop.target,
-    prewarmQuoteCalls: Object.freeze([]),
-  })],
-  [GOLDX_FAMILY_ID, Object.freeze({
-    allowanceSpender: null,
-    prewarmQuoteCalls: Object.freeze([]),
-  })],
-  [PSM_FAMILY_ID, Object.freeze({
-    allowanceSpender: null,
-    prewarmQuoteCalls: Object.freeze([]),
-  })],
-  [CURVE_UNDERLYING_FAMILY_ID, Object.freeze({
-    allowanceSpender: (hop: StrictExecutionHop) => hop.target,
-    prewarmQuoteCalls: Object.freeze([]),
-  })],
-  [ANGSTROM_V4_FAMILY_ID, Object.freeze({
-    // Legacy angstrom allowanceSpender resolved at runtime (protocol
-    // infrastructure singleton, not an instance allowlist).
-    allowanceSpender: "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8",
-    prewarmQuoteCalls: Object.freeze([]),
-  })],
-  [FLUID_CREDIT_FAMILY_ID, Object.freeze({
-    allowanceSpender: null,
-    prewarmQuoteCalls: Object.freeze([]),
-  })],
-  [WSTETH_FAMILY_ID, nullSpender()],
-  [ERC4626_FAMILY_ID, nullSpender()],
-  [ERC4626_SILO_REDEEM_FAMILY_ID, nullSpender()],
-  [METRONOME_HGUSDC_FAMILY_ID, nullSpender()],
-  [METRONOME_SYNTH_FAMILY_ID, nullSpender()],
-  [ROCKSOLID_FAMILY_ID, nullSpender()],
-  [SELF_BURN_NATIVE_FAMILY_ID, nullSpender()],
-  [ETHERTOKEN_NATIVE_FAMILY_ID, nullSpender()],
-  [ASTRA_MULTITOKEN_FAMILY_ID, nullSpender()],
-]);
-
-function nullSpender(): StrictExecutionAdapterProjection {
-  return Object.freeze({
-    allowanceSpender: null,
-    prewarmQuoteCalls: Object.freeze([]),
-  });
-}
-
-export function strictExecutionProjectionFor(input: {
+export function strictExecutionProjectionForHop(input: {
   readonly catalog: FamilyCapabilityCatalog;
-  readonly adapterId: string;
+  readonly hop: StrictExecutionHop;
 }): StrictExecutionAdapterProjection | null {
-  let familyId: string;
+  let family;
   try {
-    familyId = input.catalog.ownerOfAction(input.adapterId);
+    family = input.catalog.forStrictFamily(
+      input.catalog.ownerOfAction(input.hop.adapterId),
+    );
   } catch {
     return null;
   }
-  return strictExecutionAdapters.get(familyId) ?? null;
+  if (!("execution" in family.plugin)) return null;
+  return validateExecutionRuntimeProjection(
+    family.plugin.execution.runtimeProjection({
+      hop: Object.freeze({ ...input.hop }),
+    }),
+  );
+}
+
+function validateExecutionRuntimeProjection(
+  value: ExecutionRuntimeProjection,
+): ExecutionRuntimeProjection {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("execution runtime projection must be an object");
+  }
+  if (
+    value.allowanceSpender !== null &&
+    typeof value.allowanceSpender !== "string"
+  ) {
+    throw new Error("execution allowance spender must be a string or null");
+  }
+  if (!Array.isArray(value.prewarmQuoteCalls)) {
+    throw new Error("execution prewarm quote calls must be an array");
+  }
+  for (const call of value.prewarmQuoteCalls) {
+    if (
+      call === null || typeof call !== "object" ||
+      typeof call.from !== "string" || typeof call.to !== "string" ||
+      typeof call.calldata !== "string" ||
+      !Number.isSafeInteger(call.gasLimit) || call.gasLimit <= 0
+    ) {
+      throw new Error("execution prewarm quote call is malformed");
+    }
+  }
+  return value;
 }
 
 /**

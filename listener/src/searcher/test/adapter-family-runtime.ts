@@ -627,6 +627,10 @@ function defineFixture(name: string, controls: FixtureControls) {
       cacheCompatibilityProjection: ({ route }) => ({ routeKey: route.routeKey }),
     },
     execution: {
+      runtimeProjection: () => ({
+        allowanceSpender: null,
+        prewarmQuoteCalls: [],
+      }),
       buildFragment: ({
         descriptor,
         route,
