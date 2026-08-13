@@ -194,3 +194,26 @@ PoolManager 部署块到 source 跨 `4,056,940` blocks，reth 单请求上限
 - 本 checkpoint 的 TypeScript、Rust、generic capture、parity runner 与
   完整 listener build 已通过。它将作为后续同 descriptor 独立双跑的固定
   executable closure；尚未产出节点真实 corpus，F5 仍未关闭。
+
+### 终态 descriptor/corpus harness checkpoint（2026-08-14）
+
+- 旧 `generate-s1-real-descriptor.py` 与
+  `run-migration-parity-multi.py` 的 Family/协议 switch 已删除；旧 3:1
+  `collect-s1-sealed-production-corpus.sh` 已替换为无协议语义的双闭包
+  orchestrator：同一 descriptor 分别由两个 clean、不同 HEAD 的 worktree
+  执行同一 generic CLI，再生成逐族 held-out negative 并运行 trusted
+  sealed-production judge。两侧相同 commit/closure、工作树 dirty、链上
+  source hash 不同或最终 `eligible!=true` 均 fail closed。
+- 新 descriptor generator 只遍历 generated catalog 和 durable checkpoint
+  inventory；route/credit 的 candidate + current observation 来自 catalog-owned
+  incumbent，Funding target 来自 Funding plugin 自有 repayment capability，
+  asset inventory 是独立通用地址输入。任一 generated Family 缺 capture 或
+  incumbent 时整体拒绝，不以部分成功缩小验收 denominator。
+- 新 held-out generator 只遍历 migration capture schema，稳定选择 exercised
+  semantic item 并递归变更一个 canonical leaf；没有生产 Family 列表、协议
+  字段映射或 per-Family mutation。synthetic 双 Family 合同证明每个输出只
+  改目标 Family，其他 Family 字节语义保持不变。
+- fixture-era parity/node/enumerator verifier 已从 active regression sweep
+  删除；原 JSON 仍在 evidence 目录作为不可执行历史证据。active sweep 改验
+  generic capture、descriptor、held-out、当前 parity/authority/cutover 合同。
+  新节点 sealed-production evidence 产生后才重新作为 active F5 gate 接入。

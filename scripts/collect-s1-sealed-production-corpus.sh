@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# F5: collect a real on-chain sealed-production corpus from the node's local
-# reth, split it into train/held-out, and run the real capture CLI so the
-# sealed-production acceptance has non-empty held-out negatives with real
-# productionProvenance (commit/sourceBlock/sourceBlockHash/evidencePath).
+# F5: execute one catalog-issued descriptor against two independent fixed
+# source closures, generate one schema-level canonical mutation per captured
+# Family, and run the sealed-production parity judge. This orchestrator knows
+# no Family/protocol/selector/topic/address semantics.
 #
 # Node-side usage (SSM):
 #   bash /opt/MEV-impl-capture/scripts/collect-s1-sealed-production-corpus.sh \
-#     <descriptor.json> <corpus-dir>
+#     <descriptor.json> <corpus-dir> <baseline-worktree> <challenger-worktree>
 #
 # The descriptor must be produced from real chain data. This script only
 # executes and verifies it; it never fabricates evidence refs or block hashes.
@@ -16,6 +16,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 descriptor="${1:?descriptor path required}"
 corpus_dir="${2:?corpus output dir required}"
+baseline_root="${3:?baseline worktree required}"
+challenger_root="${4:?challenger worktree required}"
 
 if ! python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d.get("sourceBlock") and d.get("sourceBlockHash") and isinstance(d.get("cases"), list) and d["cases"]' "$descriptor"; then
   echo "[corpus] descriptor must carry sourceBlock, sourceBlockHash and non-empty cases" >&2
@@ -37,62 +39,109 @@ if [[ "${local_hash,,}" != "${source_hash,,}" ]]; then
 fi
 
 mkdir -p "$corpus_dir"
-split_index="$(( (case_count * 3) / 4 ))"
-if (( split_index >= case_count )); then split_index=$((case_count - 1)); fi
-if (( split_index < 1 )); then
-  echo "[corpus] need at least 2 cases for a non-empty held-out set" >&2
+baseline_commit="$(git -C "$baseline_root" rev-parse HEAD)"
+challenger_commit="$(git -C "$challenger_root" rev-parse HEAD)"
+if [[ "$baseline_commit" == "$challenger_commit" ]]; then
+  echo "[corpus] baseline and challenger commits must be distinct" >&2
   exit 4
 fi
+if [[ -n "$(git -C "$baseline_root" status --porcelain)" ]] ||
+   [[ -n "$(git -C "$challenger_root" status --porcelain)" ]]; then
+  echo "[corpus] both capture worktrees must be clean" >&2
+  exit 5
+fi
 
-python3 - "$descriptor" "$corpus_dir" "$split_index" <<'PY'
+run_side() {
+  local root="$1"
+  local output="$2"
+  (
+    cd "$root/listener"
+    node --import tsx \
+      src/searcher/run-architecture-migration-capture-real-cli.ts \
+      "$descriptor" "$output"
+  )
+}
+
+run_side "$baseline_root" "$corpus_dir/baseline-side.json"
+run_side "$challenger_root" "$corpus_dir/challenger-side.json"
+
+held_out_manifest="$corpus_dir/held-out-negatives.json"
+(
+  cd "$challenger_root/listener"
+  node --import tsx \
+    src/searcher/generate-architecture-migration-held-out-negatives.ts \
+    "$corpus_dir/baseline-side.json" \
+    "$corpus_dir/challenger-side.json" \
+    "$corpus_dir/held-out" \
+    "$held_out_manifest"
+)
+
+state_root="$(curl -sS http://127.0.0.1:8545 \
+  -H 'content-type: application/json' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getBlockByNumber\",\"params\":[\"0x$(printf '%x' "$source_block")\",false]}" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["stateRoot"])')"
+
+python3 - "$corpus_dir" "$held_out_manifest" "$source_block" "$source_hash" \
+  "$state_root" "$challenger_commit" "$case_count" <<'PY'
 import json, os, sys
 
-descriptor_path, corpus_dir, split_index = sys.argv[1], sys.argv[2], int(sys.argv[3])
-doc = json.load(open(descriptor_path))
-cases = doc["cases"]
-train = cases[:split_index]
-heldout = cases[split_index:]
-with open(os.path.join(corpus_dir, "train-descriptor.json"), "w") as fh:
-    json.dump({**doc, "cases": train}, fh, indent=2)
-    fh.write("\n")
-with open(os.path.join(corpus_dir, "heldout-descriptor.json"), "w") as fh:
-    json.dump({**doc, "cases": heldout}, fh, indent=2)
-    fh.write("\n")
-print(f"[corpus] train={len(train)} heldout={len(heldout)}")
-PY
-
-commit="$(git -C "$repo_root" rev-parse HEAD)"
-cd "$repo_root/listener"
-for side in train heldout; do
-  npx tsx src/searcher/run-architecture-migration-capture-real-cli.ts \
-    --generic \
-    "$corpus_dir/${side}-descriptor.json" \
-    "$corpus_dir/${side}-side.json"
-  python3 - "$corpus_dir/${side}-side.json" "$commit" "$side" <<'PY'
-import json, sys
-
-path, commit, side = sys.argv[1], sys.argv[2], sys.argv[3]
-doc = json.load(open(path))
-prov = doc.get("productionProvenance")
-if prov is None:
-    raise SystemExit(f"{side} capture lacks productionProvenance")
-if prov.get("commit") != commit:
-    raise SystemExit(f"{side} capture commit mismatch")
-print(f"[corpus] {side} side capture sealed commit={commit}")
-PY
-done
-
-cat >"$corpus_dir/corpus-manifest.json" <<JSON
-{
-  "format": "s1-sealed-production-corpus-v1",
-  "commit": "${commit}",
-  "sourceBlock": ${source_block},
-  "sourceBlockHash": "${source_hash}",
-  "totalCases": ${case_count},
-  "trainCases": ${split_index},
-  "heldOutCases": $((case_count - split_index)),
-  "trainSide": "train-side.json",
-  "heldOutSide": "heldout-side.json"
+directory, negatives_path, number, block_hash, state_root, commit, count = sys.argv[1:]
+negatives = json.load(open(negatives_path))
+if not negatives:
+    raise SystemExit("held-out negative manifest is empty")
+request = {
+    "baselinePath": os.path.join(directory, "baseline-side.json"),
+    "challengerPath": os.path.join(directory, "challenger-side.json"),
+    "evidenceClass": "sealed-production",
+    "mode": "pure-refactor",
+    "stateAnchors": [{
+        "number": int(number),
+        "hash": block_hash,
+        "stateRoot": state_root,
+    }],
+    "performanceDiagnostics": {
+        "wallMs": 0,
+        "requestCount": 0,
+        "batchCount": 1,
+        "peakConcurrency": 1,
+    },
+    "heldOutNegatives": negatives,
+    "productionProvenance": {
+        "commit": commit,
+        "sourceBlock": int(number),
+        "sourceBlockHash": block_hash,
+        "evidencePath": directory,
+    },
 }
-JSON
-echo "[corpus] DONE corpus_dir=$corpus_dir commit=$commit"
+with open(os.path.join(directory, "batch-request.json"), "w") as handle:
+    json.dump(request, handle, indent=2)
+    handle.write("\n")
+manifest = {
+    "format": "s1-sealed-production-corpus-v2",
+    "baselineCommit": json.load(open(request["baselinePath"]))["closure"]["commit"],
+    "challengerCommit": json.load(open(request["challengerPath"]))["closure"]["commit"],
+    "sourceBlock": int(number),
+    "sourceBlockHash": block_hash,
+    "totalCases": int(count),
+    "heldOutNegatives": len(negatives),
+}
+with open(os.path.join(directory, "corpus-manifest.json"), "w") as handle:
+    json.dump(manifest, handle, indent=2)
+    handle.write("\n")
+PY
+
+(
+  cd "$challenger_root/listener"
+  node --import tsx src/searcher/run-architecture-migration-parity-cli.ts \
+    "$corpus_dir/batch-request.json" >"$corpus_dir/parity-receipt.json"
+)
+python3 - "$corpus_dir/parity-receipt.json" <<'PY'
+import json, sys
+receipt = json.load(open(sys.argv[1]))
+if receipt.get("acceptance", {}).get("eligible") is not True:
+    raise SystemExit("sealed-production acceptance is not eligible")
+if receipt.get("acceptance", {}).get("verdict") != "pass":
+    raise SystemExit("sealed-production acceptance verdict is not pass")
+print("[corpus] sealed-production eligible=true verdict=pass")
+PY
+echo "[corpus] DONE corpus_dir=$corpus_dir baseline=$baseline_commit challenger=$challenger_commit"

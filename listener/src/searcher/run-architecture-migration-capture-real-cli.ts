@@ -200,7 +200,8 @@ async function main(): Promise<void> {
     }
     const commit = manifest.commit ?? currentCommit();
     const corpus: ArchitectureMigrationCaptureCorpus = Object.freeze({
-      captureId: manifest.captureId ?? `catalog-capture-${source.number}`,
+      captureId: `${manifest.captureId ?? `catalog-capture-${source.number}`}:` +
+        commit.slice(0, 12),
       commit,
       productionClosureHash: hashCanonical({
         commit,
