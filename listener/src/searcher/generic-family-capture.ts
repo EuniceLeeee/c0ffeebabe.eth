@@ -97,6 +97,7 @@ export async function deriveFamilyObservationFromNodeData(input: {
   readonly familyId: FamilyId;
   readonly source: CanonicalSource;
   readonly address: string;
+  readonly emitter?: string;
   readonly provider: GenericCaptureProvider;
 }): Promise<UnifiedObservation> {
   const family = input.catalog.forFamily(input.familyId);
@@ -120,10 +121,11 @@ export async function deriveFamilyObservationFromNodeData(input: {
   }
   if ((discovery.logPatterns?.length ?? 0) > 0) {
     const pattern = discovery.logPatterns![0];
+    const logAddress = (input.emitter ?? address).toLowerCase();
     return Object.freeze({
       kind: "log" as const,
       source: input.source,
-      address,
+      address: logAddress,
       topics: Object.freeze([pattern.topic]),
       data: "0x",
     });

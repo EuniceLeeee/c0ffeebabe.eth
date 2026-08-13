@@ -99,6 +99,7 @@ import type { CentralAdapterRuntime } from
 interface RealCaptureCase {
   readonly family: string;
   readonly address?: string;
+  readonly emitter?: string;
   readonly pool: string;
   readonly tokenA: string;
   readonly tokenB: string;
@@ -427,21 +428,29 @@ async function main(): Promise<void> {
         const fid = familyId(
           CAPTURE_NAME_TO_CATALOG_FAMILY[item.family] ?? item.family,
         );
-        const observation = await deriveFamilyObservationFromNodeData({
-          catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-          familyId: fid,
-          source,
-          address: item.address,
-          provider: genericProvider,
-        });
-        familyCases.push(await captureFamilyGenerically({
-          catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-          familyId: fid,
-          source,
-          observation,
-          runtime: buildGenericRuntime(genericProvider),
-          driver: resolveGenericCaptureDriver(fid),
-        }));
+        try {
+          const observation = await deriveFamilyObservationFromNodeData({
+            catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+            familyId: fid,
+            source,
+            address: item.address,
+            ...(item.emitter === undefined ? {} : { emitter: item.emitter }),
+            provider: genericProvider,
+          });
+          familyCases.push(await captureFamilyGenerically({
+            catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+            familyId: fid,
+            source,
+            observation,
+            runtime: buildGenericRuntime(genericProvider),
+            driver: resolveGenericCaptureDriver(fid),
+          }));
+        } catch (error) {
+          console.warn(
+            `[generic-capture] skipped ${item.family}: ` +
+              `${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
         continue;
       }
       if (useOnchain) {
@@ -595,6 +604,9 @@ async function main(): Promise<void> {
       } else {
         throw new Error(`unknown capture family ${item.family}`);
       }
+    }
+    if (familyCases.length === 0) {
+      throw new Error("no family produced a capture");
     }
     const evidenceRefs = [...new Set(familyCases.flatMap((familyCase) =>
       familyCase.stages.instances!.evidenceRefs
