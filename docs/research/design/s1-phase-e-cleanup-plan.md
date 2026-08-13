@@ -488,6 +488,11 @@ build/shadow suite（28）/12 组 sweep 全绿。
 UnifiedObservation，selector/topic0 经 `catalog.matches` 分族，去重 +
 超 source 跳过。合同测试；build/shadow suite（29）/12 组 sweep 全绿。
 
+**F2-b 生产接线（2026-08-13）：** protocol cache runtime
+`observedEvents` 有界内存环（不持久化）；`projectObservedProtocolPublication`
+append observed receipt logs；main.ts strict feed 合并 address-surface
+与 event 派生。build/shadow suite（29）/12 组 sweep 全绿。F2 关闭。
+
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

@@ -2291,6 +2291,16 @@ export async function createLiveDiscoveryCoordinator(
           result: pass.result,
           txHash: input.txHash,
           blockNumber: input.blockNumber,
+          observedEvents: Object.freeze(input.receipt.logs.map((log) =>
+            Object.freeze({
+              kind: "log" as const,
+              address: log.address,
+              topics: Object.freeze([...log.topics]),
+              data: log.data,
+              transactionHash: log.transactionHash,
+              blockNumber: log.blockNumber ?? input.blockNumber,
+            })
+          )),
         });
         const expected =
           describeLiveDiscoveryPublicationState(base);

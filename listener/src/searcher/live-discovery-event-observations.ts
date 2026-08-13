@@ -76,3 +76,28 @@ export function deriveLiveDiscoveryEventObservations(input: {
   }
   return byFamily;
 }
+
+/**
+ * Merge per-Family observation maps. Later maps append to earlier ones; the
+ * same observation instance is never duplicated across producers within one
+ * map because each derivation dedupes its own event space.
+ */
+export function mergeFamilyObservations(
+  ...maps: readonly (ReadonlyMap<FamilyId, readonly UnifiedObservation[]>)[]
+): ReadonlyMap<FamilyId, readonly UnifiedObservation[]> {
+  const merged = new Map<FamilyId, UnifiedObservation[]>();
+  for (const map of maps) {
+    for (const [familyId, observations] of map) {
+      const existing = merged.get(familyId);
+      if (existing === undefined) {
+        merged.set(familyId, [...observations]);
+      } else {
+        existing.push(...observations);
+      }
+    }
+  }
+  for (const observations of merged.values()) {
+    Object.freeze(observations);
+  }
+  return merged;
+}

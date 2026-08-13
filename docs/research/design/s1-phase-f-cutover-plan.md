@@ -64,6 +64,14 @@
   suite（29）/12 组 sweep 全绿。剩余 F2-b 接线：生产 discovery
   循环保留 observed events（内存有界缓冲）+ strict feed 合并该分桶
   结果。
+- **F2-b 生产接线（已完成）：** protocol cache runtime 增加
+  `observedEvents` 有界内存环（4096，不持久化，clone 携带）；
+  `projectObservedProtocolPublication` 接收 observed receipt logs 并
+  append；live coordinator 把 `input.receipt.logs` 归一化为 log 事件
+  传入；main.ts strict feed 用 `mergeFamilyObservations` 合并
+  address-surface 与 event 派生结果后跑 lifecycle。observed-call
+  ingress（trace calls）仍走既有 hint/内存路径，receipt 只承载
+  log 面。build/shadow suite（29）/12 组 sweep 全绿。F2 关闭。
 
 ### F3 continuous 调度 lane
 

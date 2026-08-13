@@ -28,6 +28,8 @@ import {
 import type { StrategyViews } from "./strategy-views.js";
 import type { DiscoveryBackfillStateDescriptor } from "./discovery-backfill-lane.js";
 import type { LandedPoolDiscoveryCoverage } from "./venues/landed-pool-discovery.js";
+import type { StrictLiveObservedEvent } from
+  "./live-discovery-event-observations.js";
 
 const BLOCK_HASH_RE = /^0x[0-9a-f]{64}$/;
 
@@ -427,6 +429,7 @@ export function projectObservedProtocolPublication(input: {
   readonly txHash: string;
   readonly blockNumber: number;
   readonly processedTxRetentionBlocks?: number;
+  readonly observedEvents?: readonly StrictLiveObservedEvent[];
 }): LiveDiscoveryPublicationState {
   assertLiveDiscoveryPublicationState(input.base);
   if (
@@ -468,6 +471,14 @@ export function projectObservedProtocolPublication(input: {
   pruneProtocolDiscoveryAddressCache(nextCache, {
     currentBlock: input.blockNumber,
   });
+  if (input.observedEvents !== undefined &&
+      input.observedEvents.length > 0) {
+    const bounded = [
+      ...nextCache.runtime.observedEvents,
+      ...input.observedEvents,
+    ].slice(-STRICT_OBSERVED_EVENT_RING);
+    nextCache.runtime.observedEvents = bounded;
+  }
   if (input.result.evaluationComplete) {
     nextCache.runtime.recentProcessedTxs.set(
       txHash,
@@ -503,6 +514,8 @@ export function projectObservedProtocolPublication(input: {
     protocolObservedCursor: input.base.protocolObservedCursor,
   });
 }
+
+const STRICT_OBSERVED_EVENT_RING = 4096;
 
 export function assertLiveDiscoveryPublicationState(
   state: LiveDiscoveryPublicationState,

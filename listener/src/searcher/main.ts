@@ -120,6 +120,10 @@ import {
 import {
   reverifyCarriedInstanceContinuity,
 } from "./strict-carry-continuity.js";
+import {
+  deriveLiveDiscoveryEventObservations,
+  mergeFamilyObservations,
+} from "./live-discovery-event-observations.js";
 import type { CentralAdapterRuntime } from
   "./adapter-work-intent.js";
 import {
@@ -1826,7 +1830,7 @@ async function main(): Promise<void> {
               (previousCatalogRoot?.envelope.snapshot.source.generation ?? -1) +
               1,
           });
-          const observations =
+          const addressObservations =
             deriveLiveDiscoveryAddressSurfaceObservations({
               publication: envelope,
               source,
@@ -1837,6 +1841,17 @@ async function main(): Promise<void> {
                   adapterId,
                 ),
             });
+          const eventObservations =
+            deriveLiveDiscoveryEventObservations({
+              events: envelope.protocolEvidenceCache.runtime.observedEvents,
+              source,
+              catalog:
+                PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+            });
+          const observations = mergeFamilyObservations(
+            addressObservations,
+            eventObservations,
+          );
           if (observations.size === 0) return;
           if (previousCatalogRoot !== null) {
             const previousSource =

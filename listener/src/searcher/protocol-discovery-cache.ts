@@ -20,6 +20,8 @@ import type {
   AttestedProtocolInstance,
   ProtocolCandidate,
 } from "./venues/route-leg-adapter.js";
+import type { StrictLiveObservedEvent } from
+  "./live-discovery-event-observations.js";
 
 const SCHEMA_VERSION = 5;
 const RETAINED_CANDIDATE_SCHEMA_VERSION = 4;
@@ -65,6 +67,12 @@ export interface ProtocolDiscoveryRuntimeState {
   readonly discoverySourceFingerprints: Map<string, string>;
   /** Recently processed observed txs (lowercase txHash -> blockNumber). */
   readonly recentProcessedTxs: Map<string, number>;
+  /**
+   * Bounded, process-local ring of raw observed log events feeding the
+   * strict observation derivation (F2-b). Never persisted: rebuilt from live
+   * receipts and pruned by age on every observed projection.
+   */
+  observedEvents: StrictLiveObservedEvent[];
   /**
    * Negative/completeness authority is stronger than an observed positive
    * cursor. It exists only when the exact family/source registry has advanced
@@ -124,6 +132,7 @@ export function createProtocolDiscoveryEvidenceCache(
       observedSourceFingerprint: null,
       discoverySourceFingerprints: new Map(),
       recentProcessedTxs: new Map(),
+      observedEvents: [],
       observedContiguousAuthority: null,
     },
     routeOwnership: { version: 0, admissions: [] },
@@ -156,6 +165,7 @@ export function cloneProtocolDiscoveryEvidenceCache(
       observedSourceFingerprint: source.runtime.observedSourceFingerprint,
       discoverySourceFingerprints: new Map(source.runtime.discoverySourceFingerprints),
       recentProcessedTxs: new Map(source.runtime.recentProcessedTxs),
+      observedEvents: [...source.runtime.observedEvents],
       observedContiguousAuthority:
         source.runtime.observedContiguousAuthority === null
           ? null
