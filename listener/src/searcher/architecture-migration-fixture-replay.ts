@@ -2422,7 +2422,7 @@ class PsmFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function psmFixtureRuntime(): CentralAdapterRuntime {
+export function psmFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -2444,6 +2444,8 @@ function psmFixtureRuntime(): CentralAdapterRuntime {
 
 async function runPsmLifecycle(
   canonical: CanonicalSource,
+  target: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     PSM_FAMILY_ID,
@@ -2460,13 +2462,13 @@ async function runPsmLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: PSM_FIXTURE_TARGET,
+        target: target.toLowerCase(),
         data: sellGemCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: psmFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -2479,14 +2481,13 @@ async function runPsmLifecycle(
  * and emits the canonical migration capture row. PSM exposes a single
  * sell-gem route; all stages are exercised at fixture level.
  */
-export async function capturePsmFixtureCase(input: {
+async function buildPsmCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runPsmLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:psm:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     PSM_FAMILY_ID,
   );
@@ -2710,6 +2711,83 @@ export async function capturePsmFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function capturePsmFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runPsmLifecycle(
+    input.source,
+    PSM_FIXTURE_TARGET,
+    psmFixtureRuntime(),
+  );
+  return buildPsmCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:psm:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain psm capture: the singleton gem()/dai() are read at the
+ * canonical source block and must match the supplied descriptors.
+ * Fail-closed on empty/zero reads or any divergence.
+ */
+export async function capturePsmOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly target: string;
+  readonly gem?: string;
+  readonly dai?: string;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const target = input.target.toLowerCase();
+  const read = async (name: string): Promise<string> => {
+    const raw = await input.provider.call({
+      to: target,
+      data: PSM_INTERFACE.encodeFunctionData(name, []),
+    }, input.source.number);
+    if (raw === "0x" || raw.length < 2) {
+      throw new Error(`psm ${name} read empty at ${input.source.number}`);
+    }
+    return (
+      PSM_INTERFACE.decodeFunctionResult(name, raw)[0] as string
+    ).toLowerCase();
+  };
+  const [gem, dai] = await Promise.all([
+    read("gem"),
+    read("dai"),
+  ]);
+  if (
+    gem === "0x0000000000000000000000000000000000000000" ||
+    dai === "0x0000000000000000000000000000000000000000"
+  ) {
+    throw new Error("psm reports a zero token");
+  }
+  if (
+    (input.gem !== undefined && input.gem.toLowerCase() !== gem) ||
+    (input.dai !== undefined && input.dai.toLowerCase() !== dai)
+  ) {
+    throw new Error("psm onchain token mismatch");
+  }
+  const publication = await runPsmLifecycle(
+    input.source,
+    target,
+    input.runtime,
+  );
+  return buildPsmCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:psm:${target}`,
+    ]),
   });
 }
 

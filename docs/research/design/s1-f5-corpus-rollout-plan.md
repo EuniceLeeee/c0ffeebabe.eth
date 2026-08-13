@@ -33,7 +33,7 @@
 | 9 | dodo-v2 | captureDodoV2OnchainCase | completed |
 | 10 | fluid-dex | captureFluidDexOnchainCase | completed |
 | 11 | fluid-credit | captureFluidCreditOnchainCase | completed |
-| 12 | psm | capturePsmOnchainCase | pending |
+| 12 | psm | capturePsmOnchainCase | completed |
 | 13 | wsteth | captureWstethOnchainCase | pending |
 | 14 | goldx | captureGoldxOnchainCase | pending |
 | 15 | rocksolid | captureRocksolidOnchainCase | pending |
