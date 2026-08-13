@@ -504,6 +504,87 @@ function successResult(
   });
 }
 
+export async function captureFluidCreditFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const instance = await runFluidCreditLifecycle(
+    input.source,
+    FLUID_CREDIT_FIXTURE_VAULT,
+    fluidCreditFixtureRuntime(),
+  );
+  return buildFluidCreditCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    instance,
+    evidenceRefs: Object.freeze([
+      `fixture:credit:fluid:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain fluid-credit capture: the vault constantsView() is read at
+ * the canonical source block and its supply/borrow tokens must match the
+ * supplied descriptors. Fail-closed on empty reads or any divergence.
+ */
+export async function captureFluidCreditOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly vault: string;
+  readonly supply?: string;
+  readonly borrow?: string;
+  readonly caseId?: string;
+  readonly runtime?: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const vault = input.vault.toLowerCase();
+  const raw = await input.provider.call({
+    to: vault,
+    data: FLUID_VAULT_INTERFACE.encodeFunctionData("constantsView", []),
+  }, input.source.number);
+  if (raw === "0x" || raw.length < 2) {
+    throw new Error(
+      `fluid-credit constants read empty at ${input.source.number}`,
+    );
+  }
+  const constants = FLUID_VAULT_INTERFACE.decodeFunctionResult(
+    "constantsView",
+    raw,
+  ) as unknown as [
+    readonly (string | bigint)[],
+  ];
+  const inner = constants[0];
+  const supply = String(inner[4] ?? "").toLowerCase();
+  const borrow = String(inner[5] ?? "").toLowerCase();
+  if (
+    supply === "0x0000000000000000000000000000000000000000" ||
+    borrow === "0x0000000000000000000000000000000000000000"
+  ) {
+    throw new Error("fluid-credit vault reports a zero token");
+  }
+  if (
+    (input.supply !== undefined &&
+      input.supply.toLowerCase() !== supply) ||
+    (input.borrow !== undefined &&
+      input.borrow.toLowerCase() !== borrow)
+  ) {
+    throw new Error("fluid-credit onchain token mismatch");
+  }
+  const instance = await runFluidCreditLifecycle(
+    input.source,
+    vault,
+    input.runtime ?? fluidCreditFixtureRuntime(),
+  );
+  return buildFluidCreditCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    instance,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:credit:fluid:${vault}`,
+    ]),
+  });
+}
+
 export async function runUniv2Lifecycle(
   canonical: CanonicalSource,
   pool: PoolContext,
@@ -9996,7 +10077,7 @@ class FluidCreditFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function fluidCreditFixtureRuntime(): CentralAdapterRuntime {
+export function fluidCreditFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -10029,6 +10110,8 @@ function fluidCreditFixtureRuntime(): CentralAdapterRuntime {
 
 async function runFluidCreditLifecycle(
   canonical: CanonicalSource,
+  vault: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<PreparedFamilyInstance> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forStrictFamily(
     FLUID_CREDIT_FAMILY_ID,
@@ -10046,13 +10129,13 @@ async function runFluidCreditLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: FLUID_CREDIT_FIXTURE_VAULT,
+        target: vault.toLowerCase(),
         data: operateCalldata,
       }),
     }),
     source: canonical,
     generation: canonical.generation,
-    runtime: fluidCreditFixtureRuntime(),
+    runtime,
   });
   assert(result.instance !== null);
   return result.instance;
@@ -10065,14 +10148,13 @@ async function runFluidCreditLifecycle(
  * Pricing and exact stages are honestly declared absent for the credit
  * domain.
  */
-export async function captureFluidCreditFixtureCase(input: {
+async function buildFluidCreditCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly instance: PreparedFamilyInstance;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const instance = await runFluidCreditLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:credit:fluid:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { instance, evidenceRefs } = input;
   const absentStage: RawMigrationStageCapture = Object.freeze({
     status: "declared-absent" as const,
     items: Object.freeze([]),
