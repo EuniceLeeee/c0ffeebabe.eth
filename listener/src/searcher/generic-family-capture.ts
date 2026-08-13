@@ -54,6 +54,7 @@ export interface GenericCaptureProvider extends OnchainUniv2Provider {
 
 const EIP1967_IMPLEMENTATION_SLOT =
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+const GENERIC_LOG_QUERY_BLOCK_SPAN = 100_000;
 
 /**
  * Central fault-isolation boundary for one plugin work item. The caller owns
@@ -105,6 +106,32 @@ export async function runGenericCaptureBatch<T>(input: {
     }
   }
   return Object.freeze(completed);
+}
+
+async function findLatestDeclaredLog(input: {
+  readonly provider: GenericCaptureProvider;
+  readonly address: string;
+  readonly fromBlock: number;
+  readonly toBlock: number;
+  readonly topics: (string | null)[];
+}): Promise<Awaited<ReturnType<GenericCaptureProvider["getLogs"]>>[number] | null> {
+  let toBlock = input.toBlock;
+  while (toBlock >= input.fromBlock) {
+    const fromBlock = Math.max(
+      input.fromBlock,
+      toBlock - GENERIC_LOG_QUERY_BLOCK_SPAN + 1,
+    );
+    const logs = await input.provider.getLogs({
+      address: input.address,
+      fromBlock,
+      toBlock,
+      topics: input.topics,
+    });
+    const latest = logs.at(-1);
+    if (latest !== undefined) return latest;
+    toBlock = fromBlock - 1;
+  }
+  return null;
 }
 
 /**
@@ -190,14 +217,14 @@ export async function deriveFamilyObservationFromNodeData(input: {
     const topics: (string | null)[] = [singletonPattern.topic];
     while (topics.length < emitter.topicIndex) topics.push(null);
     topics.push(identityTopic.toLowerCase());
-    const logs = await input.provider.getLogs({
+    const log = await findLatestDeclaredLog({
+      provider: input.provider,
       address: emitter.address,
       fromBlock: emitter.fromBlock,
       toBlock: input.source.number,
       topics,
     });
-    const log = logs.at(-1);
-    if (log === undefined) {
+    if (log === null) {
       throw new Error(
         `family ${input.familyId} has no declared singleton log for ${address}`,
       );

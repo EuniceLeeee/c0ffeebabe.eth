@@ -82,6 +82,16 @@ familyCount 20，writer committed/revision 2；本地 verifier PASS。旧 hash
 的两份 enumerator 记录移入 `evidence/archive/` 仅作历史记录，不再被
 当前 sweep 当成可复用证据。
 
+节点真实 generic 首轮（SSM `cb289806-7ee4-459c-8710-8a71541e25d4`）
+在 block `25745269` 由 immutable universe + protocol cache 生成 8 个真实
+descriptor，无伪造地址；诚实暴露三类缺口：univ4 Initialize 回查从
+PoolManager 部署块到 source 跨 `4,056,940` blocks，reth 单请求上限
+100,000；astra/silo strict lifecycle 尚未发布；旧 corpus harness 仍错误
+把 held-out 当 cases 切分并在 side JSON 内寻找 provenance。通用 log scanner
+现倒序按 100,000-block page 查询，找到声明匹配日志即停；这是 cold/F5
+回查，continuous 生产路径使用持久 cursor 后只增量扫描。合同覆盖第一页
+为空、第二页命中，不含 univ4/familyId 分支。
+
 ## 滚动清单（按序，模板先 erc4626 再其余）
 
 | # | 族 | capture 函数 | 状态 |

@@ -42,7 +42,7 @@ import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
-  number: 20_000_000,
+  number: 25_000_000,
   hash: `0x${"c1".repeat(32)}`,
   generation: 1,
 });
@@ -171,6 +171,7 @@ async function main(): Promise<void> {
       0,
     ],
   );
+  const logRanges: { readonly fromBlock: number; readonly toBlock: number }[] = [];
   const v4Observation = await deriveFamilyObservationFromNodeData({
     catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
     familyId: UNIV4_FAMILY_ID,
@@ -185,6 +186,13 @@ async function main(): Promise<void> {
       getLogs: async (filter) => {
         assert.equal(filter.address, UNIV4_FIXTURE_MANAGER);
         assert.equal(filter.topics?.[1], poolId);
+        assert.notEqual(filter.fromBlock, undefined);
+        assert.notEqual(filter.toBlock, undefined);
+        logRanges.push({
+          fromBlock: filter.fromBlock!,
+          toBlock: filter.toBlock!,
+        });
+        if (logRanges.length === 1) return [];
         return [Object.freeze({
           address: UNIV4_FIXTURE_MANAGER,
           topics: initializeLog.topics,
@@ -199,6 +207,13 @@ async function main(): Promise<void> {
     assert.equal(v4Observation.address, UNIV4_FIXTURE_MANAGER.toLowerCase());
     assert.equal(v4Observation.topics[1], poolId);
   }
+  assert.deepEqual(logRanges, [{
+    fromBlock: SOURCE.number - 99_999,
+    toBlock: SOURCE.number,
+  }, {
+    fromBlock: SOURCE.number - 199_999,
+    toBlock: SOURCE.number - 100_000,
+  }], "generic scanner must page declared log history backward");
   console.log("generic family capture PASS");
 }
 
