@@ -39,7 +39,7 @@
 | 15 | rocksolid | captureRocksolidOnchainCase | completed |
 | 16 | metronome-synth | captureMetronomeSynthOnchainCase | completed |
 | 17 | self-burn | captureSelfBurnOnchainCase | completed |
-| 18 | angstrom-v4 | captureAngstromV4OnchainCase | pending |
+| 18 | angstrom-v4 | captureAngstromV4OnchainCase | completed |
 | 19 | univ3 | captureUniv3OnchainCase | pending |
 | 20 | univ4 | captureUniv4OnchainCase | pending |
 | 21 | funding | captureFundingOnchainCase | pending |

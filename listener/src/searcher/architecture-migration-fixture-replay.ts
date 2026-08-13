@@ -9448,7 +9448,7 @@ class AngstromFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function angstromFixtureRuntime(): CentralAdapterRuntime {
+export function angstromFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -9471,6 +9471,7 @@ function angstromFixtureRuntime(): CentralAdapterRuntime {
 async function runAngstromLifecycle(
   canonical: CanonicalSource,
   poolKey: ReturnType<typeof angstromFixturePoolKey>,
+  runtime: CentralAdapterRuntime = angstromFixtureRuntime(),
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ANGSTROM_V4_FAMILY_ID,
@@ -9506,7 +9507,7 @@ async function runAngstromLifecycle(
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: angstromFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -9553,18 +9554,13 @@ function angstromRuntimeEvidenceFor(
  * fixture: static pool-key/hook/controller proof, tx-bound attestation
  * exact quotes and v4-style current pricing.
  */
-export async function captureAngstromV4FixtureCase(input: {
+async function buildAngstromCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const poolKey = angstromFixturePoolKey();
-  const poolId = canonicalPoolId(
-    v4PoolId(poolKey),
-  );
-  const publication = await runAngstromLifecycle(input.source, poolKey);
-  const evidenceRefs = Object.freeze([
-    `fixture:angstrom-v4:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ANGSTROM_V4_FAMILY_ID,
   );
@@ -9805,6 +9801,80 @@ export async function captureAngstromV4FixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureAngstromV4FixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const poolKey = angstromFixturePoolKey();
+  const publication = await runAngstromLifecycle(input.source, poolKey);
+  return buildAngstromCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:angstrom-v4:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain angstrom-v4 capture: the controller ANGSTROM() is read at
+ * the canonical source block and must equal the official mainnet hook. The
+ * pool key is rebuilt from the supplied currencies/fee/tick-spacing and the
+ * verified hook. Fail-closed on any divergence.
+ */
+export async function captureAngstromV4OnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly controller: string;
+  readonly currency0: string;
+  readonly currency1: string;
+  readonly fee: number;
+  readonly tickSpacing: number;
+  readonly caseId?: string;
+  readonly runtime?: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const controller = input.controller.toLowerCase();
+  const raw = await input.provider.call({
+    to: controller,
+    data: ANGSTROM_CONTROLLER_INTERFACE.encodeFunctionData("ANGSTROM", []),
+  }, input.source.number);
+  if (raw === "0x" || raw.length < 2) {
+    throw new Error(
+      `angstrom controller read empty at ${input.source.number}`,
+    );
+  }
+  const hook = (
+    ANGSTROM_CONTROLLER_INTERFACE.decodeFunctionResult("ANGSTROM", raw)[0] as string
+  ).toLowerCase();
+  if (hook === "0x0000000000000000000000000000000000000000") {
+    throw new Error("angstrom controller reports a zero hook");
+  }
+  if (hook !== ANGSTROM_MAINNET_HOOK.toLowerCase()) {
+    throw new Error("angstrom onchain controller hook mismatch");
+  }
+  const poolKey = canonicalPoolKey({
+    currency0: input.currency0,
+    currency1: input.currency1,
+    fee: input.fee,
+    tickSpacing: input.tickSpacing,
+    hooks: hook,
+  });
+  const publication = await runAngstromLifecycle(
+    input.source,
+    poolKey,
+    input.runtime ?? angstromFixtureRuntime(),
+  );
+  return buildAngstromCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:angstrom-v4:${controller}`,
+    ]),
   });
 }
 
