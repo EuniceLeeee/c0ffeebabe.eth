@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
+import { ethers } from "ethers";
 import {
   architectureMigrationSideJson,
   buildFixtureCaptureCorpus,
@@ -28,6 +29,42 @@ import {
   captureAngstromV4FixtureCase,
   captureDodoV2FixtureCase,
   captureFluidCreditFixtureCase,
+  astraFixtureRuntime,
+  captureAngstromV4OnchainCase,
+  captureAstraOnchainCase,
+  captureCurveUnderlyingOnchainCase,
+  captureDodoV2OnchainCase,
+  captureEigenpieOnchainCase,
+  captureErc4626OnchainCase,
+  captureErc4626SiloOnchainCase,
+  captureEtherTokenOnchainCase,
+  captureFluidCreditOnchainCase,
+  captureFluidDexOnchainCase,
+  captureFundingOnchainCase,
+  captureGoldxOnchainCase,
+  captureMetronomeHgUsdcOnchainCase,
+  captureMetronomeSynthOnchainCase,
+  capturePsmOnchainCase,
+  captureRocksolidOnchainCase,
+  captureSelfBurnOnchainCase,
+  captureUniv2OnchainCase,
+  captureUniv3OnchainCase,
+  captureUniv4OnchainCase,
+  captureWstethOnchainCase,
+  ANGSTROM_FIXTURE_FEE,
+  ANGSTROM_FIXTURE_TICK_SPACING,
+  curveUnderlyingFixtureRuntime,
+  dodoV2FixtureRuntime,
+  eigenpieFixtureRuntime,
+  erc4626FixtureRuntime,
+  erc4626SiloFixtureRuntime,
+  etherTokenNativeFixtureRuntime,
+  goldxFixtureRuntime,
+  metronomeHgUsdcFixtureRuntime,
+  metronomeSynthFixtureRuntime,
+  psmFixtureRuntime,
+  rocksolidFixtureRuntime,
+  selfBurnNativeFixtureRuntime,
 } from
   "./architecture-migration-fixture-replay.js";
 import type {
@@ -35,6 +72,45 @@ import type {
   RawFamilyMigrationCaseCapture,
   RawMigrationStageCapture,
 } from "./architecture-migration-parity-runner.js";
+import type { CanonicalSource } from
+  "./venues/adapter-request-program.js";
+
+interface RealCaptureCase {
+  readonly family: string;
+  readonly pool: string;
+  readonly tokenA: string;
+  readonly tokenB: string;
+  readonly vault?: string;
+  readonly target?: string;
+  readonly token?: string;
+  readonly asset?: string;
+  readonly gem?: string;
+  readonly dai?: string;
+  readonly factory?: string;
+  readonly controller?: string;
+  readonly fundingContract?: string;
+  readonly supply?: string;
+  readonly borrow?: string;
+  readonly stEth?: string;
+  readonly receipt?: string;
+  readonly tokenIn?: string;
+  readonly tokenOut?: string;
+  readonly decimals?: number;
+  readonly unit?: bigint | string;
+  readonly reserves?: {
+    readonly reserve0: string;
+    readonly reserve1: string;
+    readonly blockTimestampLast?: number;
+  };
+  readonly fee?: bigint | string;
+  readonly tickSpacing?: number;
+  readonly liquidity?: bigint | string;
+  readonly sqrtPriceX96?: bigint | string;
+  readonly currency0?: string;
+  readonly currency1?: string;
+  readonly hooks?: string;
+  readonly lpFee?: bigint | string;
+}
 
 function currentCommit(): string {
   try {
@@ -46,14 +122,202 @@ function currentCommit(): string {
   }
 }
 
+async function runOnchainCaptureCase(input: {
+  readonly familyCase: RealCaptureCase;
+  readonly source: CanonicalSource;
+  readonly provider: {
+    call(
+      tx: { readonly to: string; readonly data: string },
+      blockTag?: number,
+    ): Promise<string>;
+  };
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const item = input.familyCase;
+  const { source, provider } = input;
+  switch (item.family) {
+    case "univ2":
+      return captureUniv2OnchainCase({
+        source, provider, pool: item.pool,
+        tokenA: item.tokenA, tokenB: item.tokenB, reserves: item.reserves,
+      });
+    case "univ3":
+      return captureUniv3OnchainCase({
+        source, provider, pool: item.pool,
+        tokenA: item.tokenA, tokenB: item.tokenB,
+        fee: item.fee, tickSpacing: item.tickSpacing,
+        liquidity: item.liquidity, sqrtPriceX96: item.sqrtPriceX96,
+      });
+    case "univ4":
+      if (!item.currency0 || !item.currency1) {
+        throw new Error("univ4 onchain case requires currency0/currency1");
+      }
+      return captureUniv4OnchainCase({
+        source, provider,
+        currency0: item.currency0, currency1: item.currency1,
+        fee: item.fee === undefined ? undefined : Number(item.fee),
+        tickSpacing: item.tickSpacing, hooks: item.hooks,
+        liquidity: item.liquidity, sqrtPriceX96: item.sqrtPriceX96,
+        lpFee: item.lpFee,
+      });
+    case "flash-loan:balancer-v2":
+    case "flash-loan:morpho":
+      if (!item.asset || !item.fundingContract) {
+        throw new Error(
+          `funding onchain case requires asset/fundingContract`,
+        );
+      }
+      return captureFundingOnchainCase({
+        familyId: item.family,
+        source, provider,
+        asset: item.asset, fundingContract: item.fundingContract,
+      });
+    case "protocol:psm":
+      if (!item.target) throw new Error("psm onchain case requires target");
+      return capturePsmOnchainCase({
+        source, provider, target: item.target,
+        gem: item.gem, dai: item.dai, runtime: psmFixtureRuntime(),
+      });
+    case "protocol:wsteth":
+      if (!item.target) throw new Error("wsteth onchain case requires target");
+      return captureWstethOnchainCase({
+        source, provider, target: item.target, stEth: item.stEth,
+      });
+    case "protocol:goldx":
+      if (!item.target) throw new Error("goldx onchain case requires target");
+      return captureGoldxOnchainCase({
+        source, provider, target: item.target, unit: item.unit,
+        runtime: goldxFixtureRuntime(),
+      });
+    case "protocol:rocksolid":
+      if (!item.target) throw new Error("rocksolid onchain case requires target");
+      return captureRocksolidOnchainCase({
+        source, provider, target: item.target,
+        runtime: rocksolidFixtureRuntime(),
+      });
+    case "protocol:metronome-hgusdc":
+      if (!item.target || !item.vault) {
+        throw new Error("metronome-hgusdc onchain case requires target/vault");
+      }
+      return captureMetronomeHgUsdcOnchainCase({
+        source, provider, target: item.target, vault: item.vault,
+        tokenOut: item.tokenOut,
+        runtime: metronomeHgUsdcFixtureRuntime(),
+      });
+    case "protocol:metronome-synth":
+      if (!item.pool || !item.tokenIn || !item.tokenOut) {
+        throw new Error(
+          "metronome-synth onchain case requires pool/tokenIn/tokenOut",
+        );
+      }
+      return captureMetronomeSynthOnchainCase({
+        source, provider, pool: item.pool,
+        tokenIn: item.tokenIn, tokenOut: item.tokenOut,
+        runtime: metronomeSynthFixtureRuntime(),
+      });
+    case "protocol:erc4626-silo-redeem":
+      if (!item.vault || !item.target) {
+        throw new Error("erc4626-silo onchain case requires vault/payout");
+      }
+      return captureErc4626SiloOnchainCase({
+        source, provider, vault: item.vault, payout: item.target,
+        underlying: item.tokenIn,
+        runtime: erc4626SiloFixtureRuntime(),
+      });
+    case "protocol:erc4626":
+      if (!item.vault) throw new Error("erc4626 onchain case requires vault");
+      return captureErc4626OnchainCase({
+        source, provider, vault: item.vault, asset: item.asset,
+        runtime: erc4626FixtureRuntime(),
+      });
+    case "protocol:ethertoken-native-redeem":
+      if (!item.token) {
+        throw new Error("ethertoken onchain case requires token");
+      }
+      return captureEtherTokenOnchainCase({
+        source, provider, token: item.token, decimals: item.decimals,
+        runtime: etherTokenNativeFixtureRuntime(),
+      });
+    case "protocol:self-burn-native":
+      if (!item.token) {
+        throw new Error("self-burn onchain case requires token");
+      }
+      return captureSelfBurnOnchainCase({
+        source, provider, token: item.token, decimals: item.decimals,
+        runtime: selfBurnNativeFixtureRuntime(),
+      });
+    case "protocol:astra-multitoken":
+      if (!item.target || !item.tokenIn || !item.tokenOut) {
+        throw new Error(
+          "astra onchain case requires target/tokenIn/tokenOut",
+        );
+      }
+      return captureAstraOnchainCase({
+        source, provider, target: item.target,
+        tokenIn: item.tokenIn, tokenOut: item.tokenOut,
+        runtime: astraFixtureRuntime(),
+      });
+    case "protocol:eigenpie":
+      if (!item.target || !item.asset) {
+        throw new Error("eigenpie onchain case requires target/asset");
+      }
+      return captureEigenpieOnchainCase({
+        source, provider, target: item.target, asset: item.asset,
+        receipt: item.receipt, runtime: eigenpieFixtureRuntime(),
+      });
+    case "curve-underlying":
+      if (!item.pool) throw new Error("curve-underlying onchain case requires pool");
+      return captureCurveUnderlyingOnchainCase({
+        source, provider, pool: item.pool,
+        tokenIn: item.tokenIn, tokenOut: item.tokenOut,
+        runtime: curveUnderlyingFixtureRuntime(),
+      });
+    case "fluid-dex":
+      if (!item.pool || !item.factory) {
+        throw new Error("fluid-dex onchain case requires pool/factory");
+      }
+      return captureFluidDexOnchainCase({
+        source, provider, pool: item.pool, factory: item.factory,
+      });
+    case "custom-swap:angstrom-v4":
+      if (!item.controller || !item.currency0 || !item.currency1) {
+        throw new Error(
+          "angstrom onchain case requires controller/currency0/currency1",
+        );
+      }
+      return captureAngstromV4OnchainCase({
+        source, provider, controller: item.controller,
+        currency0: item.currency0, currency1: item.currency1,
+        fee: Number(item.fee ?? ANGSTROM_FIXTURE_FEE),
+        tickSpacing: item.tickSpacing ?? ANGSTROM_FIXTURE_TICK_SPACING,
+      });
+    case "custom-swap:dodo-v2":
+      if (!item.pool) throw new Error("dodo-v2 onchain case requires pool");
+      return captureDodoV2OnchainCase({
+        source, provider, pool: item.pool,
+        baseToken: item.tokenA, quoteToken: item.tokenB,
+        runtime: dodoV2FixtureRuntime(),
+      });
+    case "credit:fluid":
+      if (!item.vault) throw new Error("fluid-credit onchain case requires vault");
+      return captureFluidCreditOnchainCase({
+        source, provider, vault: item.vault,
+        supply: item.supply, borrow: item.borrow,
+      });
+    default:
+      throw new Error(`unknown onchain capture family ${item.family}`);
+  }
+}
+
 async function main(): Promise<void> {
-  const checkOnly = process.argv[2] === "--check";
-  const descriptorPath = checkOnly ? process.argv[3] : process.argv[2];
-  const outPath = checkOnly ? undefined : process.argv[3];
+  const onchain = process.argv[2] === "--onchain";
+  const checkOnly = process.argv[2 + (onchain ? 1 : 0)] === "--check";
+  const descriptorPath = process.argv[2 + (onchain ? 1 : 0) + (checkOnly ? 1 : 0)];
+  const outPath = checkOnly ? undefined
+    : process.argv[3 + (onchain ? 1 : 0) + (checkOnly ? 1 : 0)];
   if (descriptorPath === undefined || (outPath === undefined && !checkOnly)) {
     throw new Error(
       "usage: tsx src/searcher/run-architecture-migration-capture-real-cli.ts " +
-        "[--check] <pool-descriptor.json> [out-side.json]",
+        "[--onchain] [--check] <pool-descriptor.json> [out-side.json]",
     );
   }
   const manifest = JSON.parse(await readFile(descriptorPath, "utf8")) as {
@@ -61,11 +325,29 @@ async function main(): Promise<void> {
     readonly sourceBlockHash: string;
     readonly captureId?: string;
     readonly commit?: string;
+    readonly onchain?: boolean;
     readonly cases: readonly {
       readonly family: string;
       readonly pool: string;
       readonly tokenA: string;
       readonly tokenB: string;
+      readonly vault?: string;
+      readonly target?: string;
+      readonly token?: string;
+      readonly asset?: string;
+      readonly gem?: string;
+      readonly dai?: string;
+      readonly factory?: string;
+      readonly controller?: string;
+      readonly fundingContract?: string;
+      readonly supply?: string;
+      readonly borrow?: string;
+      readonly stEth?: string;
+      readonly receipt?: string;
+      readonly tokenIn?: string;
+      readonly tokenOut?: string;
+      readonly decimals?: number;
+      readonly unit?: bigint | string;
       readonly reserves?: {
         readonly reserve0: string;
         readonly reserve1: string;
@@ -81,6 +363,12 @@ async function main(): Promise<void> {
       readonly lpFee?: bigint | string;
     }[];
   };
+  const useOnchain = onchain || manifest.onchain === true;
+  const provider = useOnchain
+    ? new ethers.JsonRpcProvider(
+        process.env.S1_CAPTURE_RPC_URL ?? "http://127.0.0.1:8545",
+      )
+    : null;
   const source = Object.freeze({
     number: manifest.sourceBlock,
     hash: manifest.sourceBlockHash,
@@ -91,6 +379,15 @@ async function main(): Promise<void> {
   >> => {
     const familyCases: RawFamilyMigrationCaseCapture[] = [];
     for (const item of manifest.cases) {
+      if (useOnchain) {
+        if (provider === null) throw new Error("onchain provider missing");
+        familyCases.push(await runOnchainCaptureCase({
+          familyCase: item,
+          source,
+          provider,
+        }));
+        continue;
+      }
       if (item.family === "univ2") {
         familyCases.push(await captureUniv2RealCase({
           source,

@@ -65,6 +65,7 @@ commit="$(git -C "$repo_root" rev-parse HEAD)"
 cd "$repo_root/listener"
 for side in train heldout; do
   npx tsx src/searcher/run-architecture-migration-capture-real-cli.ts \
+    --onchain \
     "$corpus_dir/${side}-descriptor.json" \
     "$corpus_dir/${side}-side.json"
   python3 - "$corpus_dir/${side}-side.json" "$commit" "$side" <<'PY'
