@@ -393,6 +393,34 @@
 > （`/opt/MEV-impl-capture/listener/revm-sim/target/release/revm-sim`），
 > challenger 通过 `S1_REVM_SIM_BIN_PATH` 覆盖使用，live 进程二进制
 > 未被替换；后续部署到 live 需显式授权。
+
+**Live 节点落地（2026-08-13，`10cfa554` 机器证据）：** 用户授权
+“那你先落地就好了”。经 trusted `scripts/deploy-node.sh`（从
+origin/main 取脚本）以
+`SEARCHER_DEPLOY_REF=origin/codex/s1-unified-adapter-architecture-impl`
+部署到 `/opt/MEV`，HEAD=`10cfa554fd79c63ce33afc962f9dc344d397d305`
+（旧 runtime `269ade3c` → S1 分支 tip）。
+- 模式保持 bounded-live：`.deploy-live` 标记未动，DRY_RUN=0、
+  EV_GATE=1、钱包 `0xb8578…DDA3c` 余额 0.00270409 ETH ≤ 0.2 ETH
+  上限、BotVM owner 链上核验通过；backrun/mempool=1、mevshare=0、
+  blockscan submit=1、n-1 fallback=1 姿态与标记一致（重启后逐项校验）。
+- 新 revm-sim content-addressed 产物（sha256 `3179a8ae…5a327`）在节点
+  构建并绑定 `SEARCHER_REVM_SIM_BIN`；listener build 与 analysis
+  preflight（18/18）通过；V2 lineage（2 条）与 pool universe（fresh
+  84 blocks，跳过重建）重新 pin。
+- 顺带修复节点既有事故：此前 searcher 因 `.env` 钉住
+  `SEARCHER_DISCOVERY_TO_BLOCK=25726000` 而 reth 已剪枝该块 state，
+  在 EIP-1898 启动探针崩溃循环；deploy 重钉至当前头 `25743199` 后
+  unit active、NRestarts=0、无 fatal。
+- 重启后核验：`pool registry: … = 20205 total`（universe 非零）、
+  blockscan graph edges=35534。
+- **如实边界：这是代码库落地，不是 strict default-authority
+  cutover。** legacy 仍为生产 authority；strict consumers 环境门
+  默认 OFF；strict quote source 仅在 committed views 覆盖的 route
+  生效并按 per-availability 回退 legacy（live 暂无 committed
+  publication，实际以 legacy 报价为主）。cutover 仍需 D-012 的
+  P1 前置逐项立项。证据：
+  `docs/research/design/evidence/s1-node-deploy-live-10cfa554.json`。
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

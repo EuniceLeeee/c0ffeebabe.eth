@@ -160,6 +160,28 @@
   真实 sealed-production corpus；legacy 删除逐项确认。
 - **Meta:** 用户原话："p1不影响生产就直接做md 如果影响生产不用管顺序做就完了"。
 
+### D-013 | 2026-08-13 | ✅ | S1 分支落地到 bounded-live 节点（代码库部署，非 authority cutover）
+- **Decision:** 用户“那你先落地就好了”授权后，经 trusted `deploy-node.sh`
+  （`SEARCHER_DEPLOY_REF=origin/codex/s1-unified-adapter-architecture-impl`）
+  把 `/opt/MEV` 切到 S1 分支 tip `10cfa554fd79c63ce33afc962f9dc344d397d305`，
+  bounded-live 模式保持（marker/cap/EV gate 不变）。
+- **Why:** Phase E P0-5/P0-6/P1-a/P1-f/P1-d 合同与节点机器证据绿，revm
+  effect-delta 缺口已补（`e2e57f0c`）；D-011 已接受“失败即回退上一验收
+  commit/旧 runtime”路径。
+- **边界（如实记录）：** 这是代码库落地，不是 strict default-authority
+  cutover。legacy 仍为生产 authority；strict consumers 默认 OFF；strict
+  quote source 为叠加式、有 per-availability legacy 回退（live 暂无
+  committed publication，实际以 legacy 报价为主）。cutover 仍需 D-012
+  P1 前置逐项立项。
+- **附带修复节点事故：** pinned discovery block `25726000` 的 state 被
+  reth 剪枝，searcher 在 EIP-1898 启动探针崩溃循环（unit auto-restart，
+  exit 1）；deploy 按机制重钉至当前头 `25743199` 后恢复（unit active、
+  NRestarts=0、`pool registry … 20205 total`）。
+- **机器证据：**
+  `docs/research/design/evidence/s1-node-deploy-live-10cfa554.json`；
+  新 revm-sim content-addressed 产物 `3179a8ae…`；analysis 预检 18/18；
+  重启前后模式/姿态一致。
+
 ### D-006 | 2026-07-23 | ✅ | Family 解耦不需要跨 family victim 传播（"P0" 撤销，四刀盖棺）
 - **Question:** family 架构下（每 family 独立 `deriveMids`），backrun lane 的 victim swap 是否需要向
   依赖同一底层状态的其他 family（如读 Curve 状态的 vault）做"跨 family 二阶传播"，否则粗扫漏枚举？
