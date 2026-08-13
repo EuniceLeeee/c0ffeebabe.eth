@@ -4670,7 +4670,7 @@ class Erc4626SiloFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function erc4626SiloFixtureRuntime(): CentralAdapterRuntime {
+export function erc4626SiloFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -4703,13 +4703,16 @@ function erc4626SiloFixtureRuntime(): CentralAdapterRuntime {
 
 async function runErc4626SiloLifecycle(
   canonical: CanonicalSource,
+  vault: string,
+  payout: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ERC4626_SILO_REDEEM_FAMILY_ID,
   );
   let publication: AdapterFamilyPublication | null = null;
   const redeemCalldata = ERC4626_SILO_INTERFACE.encodeFunctionData("redeem", [
-    ERC4626_SILO_FIXTURE_PAYOUT,
+    payout,
     1_000_000n,
     MIGRATION_CAPTURE_EXECUTOR,
     MIGRATION_CAPTURE_EXECUTOR,
@@ -4721,13 +4724,13 @@ async function runErc4626SiloLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: ERC4626_SILO_FIXTURE_VAULT,
+        target: vault.toLowerCase(),
         data: redeemCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: erc4626SiloFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -4741,14 +4744,13 @@ async function runErc4626SiloLifecycle(
  * active redeem effect-delta simulation; exact re-runs the simulation with
  * the executor as actor.
  */
-export async function captureErc4626SiloRedeemFixtureCase(input: {
+async function buildErc4626SiloCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runErc4626SiloLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:erc4626-silo-redeem:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ERC4626_SILO_REDEEM_FAMILY_ID,
   );
@@ -4988,6 +4990,89 @@ export async function captureErc4626SiloRedeemFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureErc4626SiloRedeemFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runErc4626SiloLifecycle(
+    input.source,
+    ERC4626_SILO_FIXTURE_VAULT,
+    ERC4626_SILO_FIXTURE_PAYOUT,
+    erc4626SiloFixtureRuntime(),
+  );
+  return buildErc4626SiloCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:erc4626-silo-redeem:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain erc4626-silo capture: the vault and payout asset() calls
+ * are read at the canonical source block, must be non-zero and equal, and
+ * must agree with the supplied underlying. Fail-closed on any divergence.
+ */
+export async function captureErc4626SiloOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly vault: string;
+  readonly payout: string;
+  readonly underlying?: string;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const vault = input.vault.toLowerCase();
+  const payout = input.payout.toLowerCase();
+  const readAsset = async (target: string): Promise<string> => {
+    const raw = await input.provider.call({
+      to: target,
+      data: ERC4626_SILO_INTERFACE.encodeFunctionData("asset", []),
+    }, input.source.number);
+    if (raw === "0x" || raw.length < 2) {
+      throw new Error(
+        `erc4626-silo asset read empty at ${input.source.number}`,
+      );
+    }
+    return (
+      ERC4626_SILO_INTERFACE.decodeFunctionResult("asset", raw)[0] as string
+    ).toLowerCase();
+  };
+  const [vaultAsset, payoutAsset] = await Promise.all([
+    readAsset(vault),
+    readAsset(payout),
+  ]);
+  if (
+    vaultAsset === "0x0000000000000000000000000000000000000000" ||
+    payoutAsset === "0x0000000000000000000000000000000000000000"
+  ) {
+    throw new Error("erc4626-silo reports a zero asset");
+  }
+  if (vaultAsset !== payoutAsset) {
+    throw new Error("erc4626-silo vault/payout asset mismatch");
+  }
+  if (input.underlying !== undefined &&
+      input.underlying.toLowerCase() !== vaultAsset) {
+    throw new Error("erc4626-silo onchain underlying mismatch");
+  }
+  const publication = await runErc4626SiloLifecycle(
+    input.source,
+    vault,
+    payout,
+    input.runtime,
+  );
+  return buildErc4626SiloCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:erc4626-silo:${vault}`,
+    ]),
   });
 }
 

@@ -24,7 +24,7 @@
 |---|---|---|---|
 | 1 | univ2 | captureUniv2OnchainCase | completed |
 | 2 | erc4626 | captureErc4626OnchainCase | completed |
-| 3 | erc4626-silo | captureErc4626SiloOnchainCase | pending |
+| 3 | erc4626-silo | captureErc4626SiloOnchainCase | completed |
 | 4 | astra | captureAstraOnchainCase | pending |
 | 5 | eigenpie | captureEigenpieOnchainCase | pending |
 | 6 | ethertoken | captureEtherTokenOnchainCase | pending |
