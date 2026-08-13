@@ -2895,6 +2895,8 @@ export async function runWstethLifecycle(
   canonical: CanonicalSource,
   catalog: FamilyCapabilityCatalog =
     PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+  target: string = WSTETH_FIXTURE_TARGET,
+  runtime: CentralAdapterRuntime = wstethFixtureRuntime(),
 ): Promise<AdapterFamilyPublication> {
   const family = catalog.forFamily(WSTETH_FAMILY_ID);
   let publication: AdapterFamilyPublication | null = null;
@@ -2908,13 +2910,13 @@ export async function runWstethLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: WSTETH_FIXTURE_TARGET,
+        target: target.toLowerCase(),
         data: wrapCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: wstethFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   if (result.publication === null) {
@@ -2926,14 +2928,13 @@ export async function runWstethLifecycle(
   return publication;
 }
 
-export async function captureWstethFixtureCase(input: {
+async function buildWstethCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runWstethLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:wsteth:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     WSTETH_FAMILY_ID,
   );
@@ -3158,6 +3159,67 @@ export async function captureWstethFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureWstethFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runWstethLifecycle(input.source);
+  return buildWstethCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:wsteth:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain wsteth capture: the token stETH() is read at the canonical
+ * source block and must match the supplied stETH descriptor. Fail-closed on
+ * empty/zero reads or any divergence.
+ */
+export async function captureWstethOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly target: string;
+  readonly stEth?: string;
+  readonly caseId?: string;
+  readonly runtime?: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const target = input.target.toLowerCase();
+  const raw = await input.provider.call({
+    to: target,
+    data: WSTETH_INTERFACE.encodeFunctionData("stETH", []),
+  }, input.source.number);
+  if (raw === "0x" || raw.length < 2) {
+    throw new Error(`wsteth stETH read empty at ${input.source.number}`);
+  }
+  const stEth = (
+    WSTETH_INTERFACE.decodeFunctionResult("stETH", raw)[0] as string
+  ).toLowerCase();
+  if (stEth === "0x0000000000000000000000000000000000000000") {
+    throw new Error("wsteth reports a zero stETH token");
+  }
+  if (input.stEth !== undefined && input.stEth.toLowerCase() !== stEth) {
+    throw new Error("wsteth onchain stETH mismatch");
+  }
+  const publication = await runWstethLifecycle(
+    input.source,
+    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+    target,
+    input.runtime ?? wstethFixtureRuntime(),
+  );
+  return buildWstethCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:wsteth:${target}`,
+    ]),
   });
 }
 
