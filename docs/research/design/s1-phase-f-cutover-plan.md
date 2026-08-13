@@ -116,6 +116,9 @@
   上跑 F5-a，产出非空 held-out 并过 sealed-production acceptance
   （`verdict: eligible`）。未采集前 sealed acceptance 保持
   `unit-contract/ineligible`（P0-6 fail-closed，诚实不变）。
+- 自动续跑契约：`docs/research/design/s1-f5-corpus-rollout-plan.md`
+  （模板 univ2 → erc4626 → 其余，逐族机器判据；守护窗口每轮从该文件
+  继续，不需用户逐轮确认）。
 
 ### F6 legacy 删除逐项确认
 
