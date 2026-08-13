@@ -6844,7 +6844,7 @@ class SelfBurnNativeFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function selfBurnNativeFixtureRuntime(): CentralAdapterRuntime {
+export function selfBurnNativeFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -6879,6 +6879,8 @@ function selfBurnNativeFixtureRuntime(): CentralAdapterRuntime {
 
 async function runSelfBurnNativeLifecycle(
   canonical: CanonicalSource,
+  token: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     SELF_BURN_NATIVE_FAMILY_ID,
@@ -6886,7 +6888,7 @@ async function runSelfBurnNativeLifecycle(
   let publication: AdapterFamilyPublication | null = null;
   const transferCalldata = SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionData(
     "transfer",
-    [SELF_BURN_NATIVE_FIXTURE_TOKEN, 1_000_000n],
+    [token, 1_000_000n],
   );
   const result = await executeAdapterFamilyLifecycleBatch({
     family,
@@ -6895,13 +6897,13 @@ async function runSelfBurnNativeLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: SELF_BURN_NATIVE_FIXTURE_TOKEN,
+        target: token.toLowerCase(),
         data: transferCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: selfBurnNativeFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -6915,14 +6917,13 @@ async function runSelfBurnNativeLifecycle(
  * pricing, exact burn simulation and a two-node redeem + WETH deposit
  * execution fragment.
  */
-export async function captureSelfBurnNativeFixtureCase(input: {
+async function buildSelfBurnCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runSelfBurnNativeLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:self-burn-native:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     SELF_BURN_NATIVE_FAMILY_ID,
   );
@@ -7159,6 +7160,75 @@ export async function captureSelfBurnNativeFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureSelfBurnNativeFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runSelfBurnNativeLifecycle(
+    input.source,
+    SELF_BURN_NATIVE_FIXTURE_TOKEN,
+    selfBurnNativeFixtureRuntime(),
+  );
+  return buildSelfBurnCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:self-burn-native:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain self-burn capture: the token decimals() is read at the
+ * canonical source block and must be positive; a supplied decimals must
+ * agree. Fail-closed on any divergence.
+ */
+export async function captureSelfBurnOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly token: string;
+  readonly decimals?: number;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const token = input.token.toLowerCase();
+  const raw = await input.provider.call({
+    to: token,
+    data: SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionData("decimals", []),
+  }, input.source.number);
+  if (raw === "0x" || raw.length < 2) {
+    throw new Error(
+      `self-burn decimals read empty at ${input.source.number}`,
+    );
+  }
+  const decimals = Number(
+    SELF_BURN_NATIVE_TOKEN_INTERFACE.decodeFunctionResult(
+      "decimals",
+      raw,
+    )[0],
+  );
+  if (!Number.isSafeInteger(decimals) || decimals < 1) {
+    throw new Error("self-burn reports invalid decimals");
+  }
+  if (input.decimals !== undefined && input.decimals !== decimals) {
+    throw new Error("self-burn onchain decimals mismatch");
+  }
+  const publication = await runSelfBurnNativeLifecycle(
+    input.source,
+    token,
+    input.runtime,
+  );
+  return buildSelfBurnCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:self-burn:${token}`,
+    ]),
   });
 }
 
