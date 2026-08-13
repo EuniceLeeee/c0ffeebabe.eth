@@ -58,7 +58,7 @@ export async function publishStrictCatalogFromLifecycle(input: {
    * silently). Absent callback, no carries are admitted.
    */
   readonly verifyCarriedInstance?: (input: {
-    readonly familyId: string;
+    readonly familyId: FamilyId;
     readonly lineageId: string;
     readonly instanceKey: string;
     readonly previous: CanonicalSource;

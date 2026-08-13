@@ -458,6 +458,16 @@ authority `/forged or foreign/`、previous/current 不匹配
 build/shadow suite/12 组 sweep 全绿。F1 两项（terminal + mutation）
 完成。
 
+**F2-a 中央 carry 重验证接线（2026-08-13）：**
+`reverifyCarriedInstanceContinuity`：committed 实例从 identity
+provenance 恢复地址，当前 source 经 provider 读 code hash + EIP-1967
+implementation word，重跑 strict lifecycle，仅同一 identity 重签发时
+返回 `central:state-continuity:<hash>` 证据；任何失败返回 null
+（fail-closed）。main.ts 把该回调接进
+`publishStrictCatalogFromLifecycle` 的 `verifyCarriedInstance`。
+合同测试四例（无地址/null surface 失败、continuity 证据 + 当前 source
+绑定、身份无法重签发失败）；build/shadow suite（28）/sweep 全绿。
+
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

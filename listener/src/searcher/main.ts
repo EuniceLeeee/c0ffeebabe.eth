@@ -114,6 +114,9 @@ import {
 import {
   publishStrictCatalogFromLifecycle,
 } from "./strict-catalog-live-publisher.js";
+import {
+  reverifyCarriedInstanceContinuity,
+} from "./strict-carry-continuity.js";
 import type { CentralAdapterRuntime } from
   "./adapter-work-intent.js";
 import {
@@ -1802,6 +1805,8 @@ async function main(): Promise<void> {
           ) {
             return;
           }
+          const composition = discoveryContinuityComposition;
+          const strictRuntime = strictCentralRuntime;
           // One capture per chain run: checkpoint inventory and the
           // catalogRoot CAS must describe the same publication state.
           const envelope = liveDiscovery.capture();
@@ -1879,6 +1884,52 @@ async function main(): Promise<void> {
             catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
             source,
             publications: Object.freeze(publications),
+            verifyCarriedInstance: async ({
+              familyId,
+              lineageId,
+              instanceKey,
+              current,
+            }) => {
+              const committedRoot =
+                composition.catalogRoot.capture();
+              if (committedRoot === null) return null;
+              const carried = [...committedRoot.envelope.privateState
+                .instances.values()].find((entry) =>
+                  entry.familyId === familyId &&
+                  entry.lineageId === lineageId &&
+                  entry.instanceKey === instanceKey
+                );
+              if (carried === undefined || !("descriptor" in carried.value)) {
+                return null;
+              }
+              return reverifyCarriedInstanceContinuity({
+                catalog:
+                  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+                familyId,
+                instance: carried.value,
+                current,
+                runtime: strictRuntime,
+                readAddressSurface: async (address, at) => {
+                  try {
+                    const [code, word] = await Promise.all([
+                      provider.getCode(address, at.number),
+                      provider.getStorage(
+                        "0x360894a13ba1a3210667c828492db98dca3e2076" +
+                          "cc3735a920a3ca505d382bbc",
+                        address,
+                        at.number,
+                      ),
+                    ]);
+                    return Object.freeze({
+                      codeHash: ethers.keccak256(code),
+                      implementationWord: word.toLowerCase(),
+                    });
+                  } catch {
+                    return null;
+                  }
+                },
+              });
+            },
           });
           console.log(
             `[searcher/live] strict catalog live publisher ` +

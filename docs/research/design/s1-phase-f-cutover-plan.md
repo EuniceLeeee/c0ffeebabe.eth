@@ -38,11 +38,23 @@
 
 ### F2 活动型族严格观测 ingress
 
-- 7 个活动型族（astra/eigenpie/erc4626-silo/ethertoken/hgusdc/
-  curve-underlying/dodo-v2）的 factory-log/landed-log/observed-call
-  ingress → UnifiedObservation → `runStrictFamilyLifecycle`。当前 live
-  feed 只消费 protocol cache 的 verified_candidates + address_entries；
-  剩余为把三类 log/call 观测源接入 feed（Phase E plan Pair C 对应面）。
+- **F2-a 中央 carry 重验证接线（已完成）：**
+  `reverifyCarriedInstanceContinuity` + `extractInstanceAddress`：
+  从 committed instance 的 identity provenance 恢复地址 → 当前 source
+  读 code hash + EIP-1967 implementation word（main.ts 经 provider
+  `getCode`/`getStorage` 实读）→ 以 address-surface observation 在
+  当前 source 重跑 strict Family lifecycle → 同一 instanceKey/
+  lineageId 重新签发才返回 `central:state-continuity:<hash>` 证据。
+  任何失败（无地址 provenance、surface 不可读、identity 变化）返回
+  null → live publisher 保持 fail-closed。main.ts 已把该回调传入
+  `publishStrictCatalogFromLifecycle`。合同测试四例 + shadow suite
+  （28 项）/build/12 组 sweep 全绿。
+- **F2-b 三类观测 ingress（未开始）：** 7 个活动型族（astra/eigenpie/
+  erc4626-silo/ethertoken/hgusdc/curve-underlying/dodo-v2）的
+  factory-log/landed-log/observed-call ingress → UnifiedObservation →
+  `runStrictFamilyLifecycle`。当前 live feed 只消费 protocol cache 的
+  verified_candidates + address_entries；剩余为把三类 log/call 观测源
+  接入 feed（Phase E plan Pair C 对应面）。
 
 ### F3 continuous 调度 lane
 
