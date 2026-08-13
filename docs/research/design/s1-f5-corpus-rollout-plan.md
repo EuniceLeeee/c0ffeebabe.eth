@@ -35,7 +35,7 @@
 | 11 | fluid-credit | captureFluidCreditOnchainCase | completed |
 | 12 | psm | capturePsmOnchainCase | completed |
 | 13 | wsteth | captureWstethOnchainCase | completed |
-| 14 | goldx | captureGoldxOnchainCase | pending |
+| 14 | goldx | captureGoldxOnchainCase | completed |
 | 15 | rocksolid | captureRocksolidOnchainCase | pending |
 | 16 | metronome-synth | captureMetronomeSynthOnchainCase | pending |
 | 17 | self-burn | captureSelfBurnOnchainCase | pending |

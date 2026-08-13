@@ -3280,7 +3280,7 @@ class GoldxFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function goldxFixtureRuntime(): CentralAdapterRuntime {
+export function goldxFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -3302,6 +3302,8 @@ function goldxFixtureRuntime(): CentralAdapterRuntime {
 
 async function runGoldxLifecycle(
   canonical: CanonicalSource,
+  target: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     GOLDX_FAMILY_ID,
@@ -3318,13 +3320,13 @@ async function runGoldxLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: GOLDX_FIXTURE_TARGET,
+        target: target.toLowerCase(),
         data: mintCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: goldxFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -3332,14 +3334,13 @@ async function runGoldxLifecycle(
   return publication;
 }
 
-export async function captureGoldxFixtureCase(input: {
+async function buildGoldxCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runGoldxLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:goldx:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     GOLDX_FAMILY_ID,
   );
@@ -3563,6 +3564,68 @@ export async function captureGoldxFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureGoldxFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runGoldxLifecycle(
+    input.source,
+    GOLDX_FIXTURE_TARGET,
+    goldxFixtureRuntime(),
+  );
+  return buildGoldxCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:goldx:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain goldx capture: the unit() is read at the canonical source
+ * block and must be positive; a supplied unit must agree. Fail-closed on any
+ * divergence.
+ */
+export async function captureGoldxOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly target: string;
+  readonly unit?: bigint | string;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const target = input.target.toLowerCase();
+  const raw = await input.provider.call({
+    to: target,
+    data: GOLDX_INTERFACE.encodeFunctionData("unit", []),
+  }, input.source.number);
+  if (raw === "0x" || raw.length < 2) {
+    throw new Error(`goldx unit read empty at ${input.source.number}`);
+  }
+  const unit = GOLDX_INTERFACE.decodeFunctionResult("unit", raw)[0] as bigint;
+  if (unit <= 0n) {
+    throw new Error("goldx reports a non-positive unit");
+  }
+  if (input.unit !== undefined && BigInt(input.unit) !== unit) {
+    throw new Error("goldx onchain unit mismatch");
+  }
+  const publication = await runGoldxLifecycle(
+    input.source,
+    target,
+    input.runtime,
+  );
+  return buildGoldxCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:goldx:${target}`,
+    ]),
   });
 }
 
