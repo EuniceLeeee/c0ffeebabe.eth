@@ -23,3 +23,6 @@ docs/distill/raw/*-evidence/
 # local searcher run logs (rule 4: raw logs never committed).
 # NOT a blanket *.log ignore — redacted review logs under docs/research/reports/ are tracked on purpose.
 logs/
+
+# S1 serial dry-run local side metadata (written by run-s1-node-serial-dry-run.sh)
+.serial-*-meta
