@@ -290,6 +290,7 @@ async function runOnchainCaptureCase(input: {
         fee: Number(item.fee ?? ANGSTROM_FIXTURE_FEE),
         tickSpacing: item.tickSpacing ?? ANGSTROM_FIXTURE_TICK_SPACING,
       });
+    case "dodo-v2":
     case "custom-swap:dodo-v2":
       if (!item.pool) throw new Error("dodo-v2 onchain case requires pool");
       return captureDodoV2OnchainCase({
