@@ -56,6 +56,22 @@
 
 ## 终态
 
-- 22 族全 completed 后：`scripts/collect-s1-sealed-production-corpus.sh`
-  产出非空 held-out 的真实 corpus，sealed-production acceptance 达到
-  `eligible`，F5 关闭，随后进入 F6（B→C→D→F→A 先建 strict 侧再删）。
+- 22 族全 completed 后（当前 21 族 + curve 同族已 completed）：
+  **held-out 契约修正（2026-08-13 代码核对）**：
+  `ArchitectureMigrationHeldOutNegativeInput` 是“故意不匹配的
+  baseline/challenger 对”，必须判 `semantic-mismatch`——不是真实 cases
+  的切分。因此采集分两步：
+  1. 真实 baseline：节点上从 universe 快照（univ2/univ3/univ4/
+     curve-underlying/dodo-v2/fluid-dex 真实 pool）+ protocol cache
+     verifiedCandidates（erc4626 等真实协议地址）生成 descriptor，
+     `run-architecture-migration-capture-real-cli.ts --onchain` 产出
+     `onchain:` 证据的 baseline side；
+  2. 逐族负例：对每个真实族生成篡改 challenger（univ2/univ3/dodo 交换
+     tokenA/tokenB、univ3/univ4 改 fee/tickSpacing、协议族改 vault/
+     asset 地址），同一 judge 必须输出 `semantic-mismatch`。
+  3. sealed-production acceptance 判定：
+     `evidenceClass=sealed-production` + 非空 heldOutNegatives +
+     aggregate pass + 负例全 mismatch → `eligible`；F5 关闭后再进 F6。
+- 节点执行步骤（待运行）：impl-capture 已到 `26888125` 且 build OK；
+  下一步生成真实 descriptor → 跑 baseline + 负例 → parity judge →
+  写 evidence JSON 到 `docs/research/design/evidence/`。
