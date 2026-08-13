@@ -1,14 +1,31 @@
 import assert from "node:assert/strict";
 import {
   captureFamilyGenerically,
+  deriveFamilyObservationFromNodeData,
   resolveGenericCaptureDriver,
   type GenericCaptureDriver,
 } from "../generic-family-capture.js";
 import { exercisedStage } from "../architecture-migration-capture.js";
 import {
+  UNIV4_FIXTURE_CURRENCY0,
+  UNIV4_FIXTURE_CURRENCY1,
+  UNIV4_FIXTURE_FEE,
+  UNIV4_FIXTURE_LIQUIDITY,
+  UNIV4_FIXTURE_LP_FEE,
+  UNIV4_FIXTURE_MANAGER,
+  UNIV4_FIXTURE_QUOTER,
+  UNIV4_FIXTURE_SQRT_PRICE_X96,
+  UNIV4_FIXTURE_STATE_VIEW,
+  UNIV4_FIXTURE_TICK_SPACING,
+  univ4FixtureRuntime,
   WSTETH_FIXTURE_TARGET,
   wstethFixtureRuntime,
 } from "../architecture-migration-fixture-replay.js";
+import { canonicalPoolKey } from
+  "../venues/swaps/angstrom-v4-family/codec.js";
+import { v4PoolId } from "../venues/swaps/univ4-common.js";
+import { UNIV4_FAMILY_ID } from
+  "../venues/swaps/univ4-family/manifest.js";
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
@@ -94,6 +111,35 @@ async function main(): Promise<void> {
   assert.equal(driven.stages.exactQuotes?.status, "exercised");
   assert.equal(driven.stages.executionFragments?.status, "exercised");
   assert.equal(driven.stages.finalSimulations?.status, "exercised");
+
+  // Generic V4 observation: until the univ4 plugin declares its emitter,
+  // the derivation falls back to the call pattern (swap selector); the
+  // emitter-driven log path is exercised when the plugin declares it.
+  const poolKey = canonicalPoolKey({
+    currency0: UNIV4_FIXTURE_CURRENCY0,
+    currency1: UNIV4_FIXTURE_CURRENCY1,
+    fee: Number(UNIV4_FIXTURE_FEE),
+    tickSpacing: UNIV4_FIXTURE_TICK_SPACING,
+    hooks: `0x${"00".repeat(20)}`,
+  });
+  const poolId = v4PoolId(poolKey);
+  const v4Observation = await deriveFamilyObservationFromNodeData({
+    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+    familyId: UNIV4_FAMILY_ID,
+    source: SOURCE,
+    address: poolId,
+    provider: {
+      call: async () => { throw new Error("log pattern must not call"); },
+      getCode: async () => { throw new Error("log pattern must not getCode"); },
+      getStorage: async () => {
+        throw new Error("log pattern must not getStorage");
+      },
+    },
+  });
+  assert.equal(v4Observation.kind, "call");
+  if (v4Observation.kind === "call") {
+    assert.equal(v4Observation.target, poolId.toLowerCase());
+  }
   console.log("generic family capture PASS");
 }
 

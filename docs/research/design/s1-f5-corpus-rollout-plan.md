@@ -40,6 +40,18 @@ finalSim，否则诚实 framework-blocked。合同测试：无 driver blocked +
 剩余：CLI `--generic` 模式（descriptor 只带 family+address，走
 derive+capture 通用路径 + strict runtime/revm）与 univ2 真实 driver。
 
+**通用路径推进 3（2026-08-13）：** CLI `--generic` 模式已接线
+（descriptor 只带 family+address，strict runtime + revm 经
+`S1_REVM_SIM_BIN`；逐族容错，失败记录并继续）；generator 输出通用
+`{family,address}`；corpus 脚本走 `--generic`。节点首次 generic 运行
+暴露 univ4：通用 log 派生需要 emitter（V4 PoolManager 单例）与
+Initialize log data（pool key 从 manager 链上读再编码）。
+**经验约束（重要）：** 插件契约变更（即使加可选字段）会改 capability
+manifest 哈希，使已提交节点证据失效（verifier 按设计 fail）——因此
+“LogPattern 加 emitter 声明 + univ4 插件声明 + 节点证据重生成”必须
+作为一个完整 slice 一起落地，不能半切。当前保持绿（emitter 未入插件，
+generic 派生用 descriptor 可选 emitter 兜底）。
+
 ## 滚动清单（按序，模板先 erc4626 再其余）
 
 | # | 族 | capture 函数 | 状态 |
