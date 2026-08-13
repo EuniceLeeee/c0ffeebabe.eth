@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createDurableDiscoveryContinuityComposition,
+  type DurableDiscoveryContinuityComposition,
 } from "../adapter-family-discovery-continuity-composition.js";
 import {
   CheckpointDiscoveryInventoryEnumerator,
@@ -16,6 +17,7 @@ import {
 } from "../live-discovery-checkpoint-inventory.js";
 import {
   publishStrictCatalogFromLifecycle,
+  restoreStrictCatalogFromCheckpoint,
 } from "../strict-catalog-live-publisher.js";
 import {
   catalogInstancePublicationKey,
@@ -23,6 +25,7 @@ import {
 import {
   runWstethLifecycle,
   runFluidDexLifecycle,
+  wstethFixtureRuntime,
 } from "../architecture-migration-fixture-replay.js";
 import {
   definedFamilyPluginContractSummary,
@@ -631,6 +634,163 @@ async function main(): Promise<void> {
       }
     } finally {
       await rm(prodDirectory, { recursive: true, force: true });
+    }
+
+    // F4 restart recovery: the in-memory catalogRoot is rebuilt from the
+    // durable checkpoint's incumbent inventory before any live publication.
+    // A restore that would drop an incumbent fails closed; a second restore
+    // on an already-committed root is refused.
+    const restoreDirectory = await mkdtemp(
+      join(tmpdir(), "strict-catalog-restore-"),
+    );
+    try {
+      const restorePath = join(restoreDirectory, "checkpoint.json");
+      const restoreCat = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+      const makeComposition = (
+        checkpointPath: string,
+      ): DurableDiscoveryContinuityComposition => {
+        let composition: DurableDiscoveryContinuityComposition;
+        composition = createDurableDiscoveryContinuityComposition({
+          catalog: restoreCat,
+          chainId: CHAIN_ID,
+          sourceRegistryFingerprint: REGISTRY,
+          checkpointPath,
+          enumerateSnapshotInventory: async (source) =>
+            new CheckpointDiscoveryInventoryEnumerator({
+              checkpointStore: composition.store,
+            }).enumerate(source),
+          verifyCanonicalSource: () => {},
+          assertGenerationCurrent: () => {},
+        });
+        return composition;
+      };
+      const compositionA = makeComposition(restorePath);
+      assert.equal((await compositionA.loadForRestart()).status, "empty");
+      const restoreCache = createProtocolDiscoveryEvidenceCache(1n);
+      restoreCache.verifiedCandidates.set("wsteth-adapter", {
+        adapterId: "wsteth-adapter",
+        candidate: Object.freeze({
+          pool: Object.freeze({ address: WSTETH.toLowerCase() }) as never,
+          source: "persisted-verified-evidence",
+          evidence: Object.freeze([Object.freeze({
+            codeHash: `0x${"1".repeat(64)}`,
+            implementationWord: `0x${"0".repeat(64)}`,
+          })]),
+        }),
+      });
+      const restorePublicationState = Object.freeze({
+        protocolEvidenceCache: restoreCache,
+        protocolFamilySourceCoverage: new Map(),
+        dexSourceAnchor: Object.freeze({
+          completeThroughBlock: SOURCE.number,
+          completeThroughHash: SOURCE.hash,
+        }),
+      }) as unknown as LiveDiscoveryPublicationState;
+      const restoreDerived = deriveLiveDiscoveryCheckpointInventory({
+        publication: restorePublicationState,
+        source: SOURCE,
+        catalog: restoreCat,
+        familyIdForAdapter: (adapterId) =>
+          adapterId === "wsteth-adapter" ? WSTETH_FAMILY_ID : null,
+      });
+      const restoreWriter = new CheckpointDiscoveryInventoryWriter({
+        checkpointStore: compositionA.store,
+        checkpointIssuer: compositionA.checkpointIssuer,
+      });
+      assert.equal((await restoreWriter.write({
+        source: SOURCE,
+        watermarks: restoreDerived.watermarks,
+        inventoryFamilies: restoreDerived.inventoryFamilies,
+      })).status, "committed");
+      const restorePublication = await runWstethLifecycle(SOURCE, restoreCat);
+      assert.equal((await publishStrictCatalogFromLifecycle({
+        composition: compositionA,
+        catalog: restoreCat,
+        source: SOURCE,
+        publications: Object.freeze([{
+          familyId: WSTETH_FAMILY_ID,
+          publication: restorePublication,
+        }]),
+      })).status, "published");
+
+      const compositionB = makeComposition(restorePath);
+      const loaded = await compositionB.loadForRestart();
+      assert.equal(loaded.status, "trusted");
+      const restored = await restoreStrictCatalogFromCheckpoint({
+        composition: compositionB,
+        catalog: restoreCat,
+        source: loaded.snapshot.source,
+        enumerate: async (source) =>
+          new CheckpointDiscoveryInventoryEnumerator({
+            checkpointStore: compositionB.store,
+          }).enumerate(source),
+        runtime: wstethFixtureRuntime(),
+      });
+      assert.equal(
+        restored.status,
+        "restored",
+        restored.status === "unresolved"
+          ? restored.reason
+          : "unexpected restore result",
+      );
+      assert.equal(
+        compositionB.catalogRoot.capture()!.envelope.privateState
+          .instances.size,
+        1,
+        "restore must rebuild the committed instance set without omission",
+      );
+      const again = await restoreStrictCatalogFromCheckpoint({
+        composition: compositionB,
+        catalog: restoreCat,
+        source: loaded.snapshot.source,
+        enumerate: async (source) =>
+          new CheckpointDiscoveryInventoryEnumerator({
+            checkpointStore: compositionB.store,
+          }).enumerate(source),
+        runtime: wstethFixtureRuntime(),
+      });
+      assert.equal(again.status, "unresolved");
+      if (again.status === "unresolved") {
+        assert.match(again.reason, /already committed/);
+      }
+
+      // A family that cannot re-verify its incumbents fails the whole
+      // restore: no smaller catalog root is ever published.
+      const compositionC = makeComposition(join(restoreDirectory, "c.json"));
+      await compositionC.loadForRestart();
+      const failedRestore = await restoreStrictCatalogFromCheckpoint({
+        composition: compositionC,
+        catalog: restoreCat,
+        source: SOURCE,
+        enumerate: async () => Object.freeze({
+          source: SOURCE,
+          families: Object.freeze([Object.freeze({
+            familyId: WSTETH_FAMILY_ID,
+            inventoryKeys: Object.freeze(["incumbent:1"]),
+            inventoryCount: 1,
+            inventoryHash: `0x${"33".repeat(32)}`,
+            incumbents: Object.freeze([Object.freeze({
+              inventoryKey: "incumbent:1",
+              address: `0x${"ee".repeat(20)}`,
+              currentSurface: Object.freeze({
+                kind: "address-surface" as const,
+                source: SOURCE,
+                address: `0x${"ee".repeat(20)}`,
+                codeHash: `0x${"44".repeat(32)}`,
+                implementationWord: `0x${"55".repeat(32)}`,
+              }),
+            })]),
+          })]),
+        }),
+        runtime: wstethFixtureRuntime(),
+      });
+      assert.equal(failedRestore.status, "unresolved");
+      if (failedRestore.status === "unresolved") {
+        assert.match(failedRestore.reason, /could not re-verify/);
+      }
+      assert.equal(compositionC.catalogRoot.capture(), null);
+    } finally {
+      await rm(restoreDirectory, { recursive: true, force: true });
     }
     console.log("strict-catalog-live-publisher PASS");
   } finally {

@@ -68,6 +68,8 @@ import {
 import {
   type LiveDiscoveryPublicationState,
 } from "./live-discovery-publication.js";
+import type { CanonicalSource } from
+  "./venues/adapter-request-program.js";
 import {
   createLiveDiscoveryCoordinator,
   readBlockHash,
@@ -113,6 +115,7 @@ import {
 } from "./strict-family-lifecycle-runner.js";
 import {
   publishStrictCatalogFromLifecycle,
+  restoreStrictCatalogFromCheckpoint,
 } from "./strict-catalog-live-publisher.js";
 import {
   reverifyCarriedInstanceContinuity,
@@ -1735,6 +1738,7 @@ async function main(): Promise<void> {
   let discoveryInventoryEnumerator: DiscoveryInventoryEnumerator | null = null;
   let discoveryInventoryWriter: DiscoveryCheckpointInventoryWriter | null = null;
   let strictCentralRuntime: CentralAdapterRuntime | null = null;
+  let restartTrustedSource: CanonicalSource | null = null;
   let runStrictLivePublicationChain:
     (() => Promise<void>) | null = null;
   const strictLivePublicationChain = createCoalescingPublicationChain(
@@ -1972,6 +1976,9 @@ async function main(): Promise<void> {
         };
       const loaded = await discoveryContinuityComposition.loadForRestart();
       discoveryContinuityStatus = loaded.status;
+      if (loaded.status === "trusted") {
+        restartTrustedSource = loaded.snapshot.source;
+      }
       console.log(
         `[searcher/live] discovery continuity composition ` +
           `${discoveryContinuityStatus}`,
@@ -2776,6 +2783,35 @@ async function main(): Promise<void> {
           verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
         }),
       });
+    }
+    if (
+      discoveryContinuityComposition !== null &&
+      strictCentralRuntime !== null &&
+      discoveryInventoryEnumerator !== null &&
+      restartTrustedSource !== null
+    ) {
+      try {
+        const restoreResult = await restoreStrictCatalogFromCheckpoint({
+          composition: discoveryContinuityComposition,
+          catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+          source: restartTrustedSource,
+          enumerate: (source) =>
+            discoveryInventoryEnumerator!.enumerate(source),
+          runtime: strictCentralRuntime,
+        });
+        console.log(
+          `[searcher/live] strict catalog restore ` +
+            `${restoreResult.status}` +
+            (restoreResult.status === "unresolved"
+              ? `: ${restoreResult.reason}`
+              : ` revision=${restoreResult.revision}`),
+        );
+      } catch (error) {
+        console.warn(
+          `[searcher/live] strict catalog restore failed: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     const revmLiveBackend = new RevmLiveBackend(
       revmSimClient,

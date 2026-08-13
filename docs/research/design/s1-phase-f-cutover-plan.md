@@ -65,11 +65,18 @@
 
 ### F4 22-Family 崩溃恢复契约扩展
 
-- 从 durable checkpoint + 上一 catalogRoot 重启恢复的合同扩展：当前
-  catalogRoot 是内存态（runtime handle 不可序列化），重启后由下一次发布
-  重建（observed-complete 无 omission authority，安全但需成文契约）。
-  扩展合同覆盖 22 族恢复语义：重启不得丢 authority、不得静默缺实例、
-  恢复窗口内不伪造 publication。
+- **F4-a restart 恢复（已完成）：**
+  `restoreStrictCatalogFromCheckpoint`：catalogRoot 为内存态，重启后
+  若只按新观测发布会静默重建更小的 catalog（omission）。恢复路径在
+  checkpoint source 上对 durable inventory 的每个 incumbent 重跑
+  strict Family lifecycle，任一族重签发实例数少于 incumbent 数、或
+  已 committed root 上再次恢复，均 fail-closed 不发布部分 root；
+  全部重验证成功才发布重建 root。main.ts 在 `loadForRestart()`
+  `trusted` 时、strict runtime 构造后调用。合同测试：restore 重建
+  实例集无省略、二次 restore 拒绝、族无法重验证整体拒绝且不发布；
+  build/shadow suite（28）/12 组 sweep 全绿。
+- 剩余 F4-b：恢复窗口的 22 族逐族失败隔离与 sealed parity 交叉验证
+  （F5 corpus 落地后补）。
 
 ### F5 sealed-production corpus
 

@@ -468,6 +468,14 @@ implementation word，重跑 strict lifecycle，仅同一 identity 重签发时
 合同测试四例（无地址/null surface 失败、continuity 证据 + 当前 source
 绑定、身份无法重签发失败）；build/shadow suite（28）/sweep 全绿。
 
+**F4 restart 恢复（2026-08-13）：**
+`restoreStrictCatalogFromCheckpoint`：catalogRoot 内存态重启后不得
+静默重建更小 catalog。在 checkpoint source 对 durable inventory 每个
+incumbent 重跑 strict lifecycle，任一 omission / 重验证失败 /
+已 committed 再恢复均 fail-closed；全过才发布重建 root。main.ts
+启动 `loadForRestart()==trusted` 且 runtime 就绪后调用。合同三例；
+build/shadow suite（28）/12 组 sweep 全绿。
+
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

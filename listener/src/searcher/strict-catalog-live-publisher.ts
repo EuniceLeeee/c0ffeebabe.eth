@@ -14,6 +14,15 @@ import type { FamilyCapabilityCatalog } from
   "./venues/family-capability-catalog.js";
 import type { FamilyId } from
   "./venues/adapter-family-identifiers.js";
+import type {
+  AdapterFamilySnapshotInventoryEnumerationInput,
+} from "./adapter-family-snapshot-inventory-closure.js";
+import type {
+  CentralAdapterRuntime,
+} from "./adapter-work-intent.js";
+import {
+  runStrictFamilyLifecycle,
+} from "./strict-family-lifecycle-runner.js";
 
 /**
  * Strict production publication pipeline step 2-3 (see Phase E plan): given
@@ -216,6 +225,96 @@ export async function publishStrictCatalogFromLifecycle(input: {
     return Object.freeze({
       status: "published" as const,
       revision: committed.envelope.snapshot.revision,
+    });
+  } catch (error) {
+    return Object.freeze({
+      status: "unresolved" as const,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * F4: restart recovery. The catalogRoot is process-memory only (its values
+ * are opaque runtime handles), so a restart starts with no in-memory
+ * previous publication. Publishing from observations alone would silently
+ * rebuild a smaller catalog than the durable checkpoint's incumbent
+ * inventory — an omission the canonical contract forbids. This restore
+ * re-runs every incumbent Family lifecycle at the checkpoint source and
+ * publishes the rebuilt root BEFORE any live publication may proceed. If
+ * any Family re-issues fewer instances than its incumbent inventory, the
+ * restore fails closed and no partial root is published.
+ */
+export async function restoreStrictCatalogFromCheckpoint(input: {
+  readonly composition: DurableDiscoveryContinuityComposition;
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly source: CanonicalSource;
+  readonly enumerate: (
+    source: CanonicalSource,
+  ) => Promise<AdapterFamilySnapshotInventoryEnumerationInput>;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<
+  | { readonly status: "restored"; readonly revision: number }
+  | { readonly status: "unresolved"; readonly reason: string }
+> {
+  if (input.composition.catalogRoot.capture() !== null) {
+    return Object.freeze({
+      status: "unresolved" as const,
+      reason: "strict catalog root is already committed; restore must run first",
+    });
+  }
+  const inventory = await input.enumerate(input.source);
+  const publications: {
+    readonly familyId: string;
+    readonly publication: Awaited<ReturnType<typeof runStrictFamilyLifecycle>>;
+  }[] = [];
+  for (const family of inventory.families) {
+    if (family.incumbents.length === 0) continue;
+    let publication: Awaited<ReturnType<typeof runStrictFamilyLifecycle>>;
+    try {
+      publication = await runStrictFamilyLifecycle({
+        catalog: input.catalog,
+        familyId: family.familyId,
+        source: input.source,
+        observations: Object.freeze(
+          family.incumbents.map((incumbent) => incumbent.currentSurface),
+        ),
+        runtime: input.runtime,
+      });
+    } catch (error) {
+      return Object.freeze({
+        status: "unresolved" as const,
+        reason:
+          `restored Family ${family.familyId} could not re-verify its ` +
+          `incumbents: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+    if (publication.instances.length < family.incumbents.length) {
+      return Object.freeze({
+        status: "unresolved" as const,
+        reason:
+          `restored Family ${family.familyId} re-issued ` +
+          `${publication.instances.length}/${family.incumbents.length} ` +
+          `incumbent instances — refusing a partial rebuild`,
+      });
+    }
+    publications.push(Object.freeze({
+      familyId: family.familyId,
+      publication,
+    }));
+  }
+  try {
+    const result = await publishStrictCatalogFromLifecycle({
+      composition: input.composition,
+      catalog: input.catalog,
+      source: input.source,
+      publications: Object.freeze(publications),
+    });
+    if (result.status === "unresolved") return result;
+    return Object.freeze({
+      status: "restored" as const,
+      revision: result.revision,
     });
   } catch (error) {
     return Object.freeze({
