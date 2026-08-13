@@ -382,11 +382,18 @@ async function main(): Promise<void> {
     for (const item of manifest.cases) {
       if (useOnchain) {
         if (provider === null) throw new Error("onchain provider missing");
-        familyCases.push(await runOnchainCaptureCase({
-          familyCase: item,
-          source,
-          provider,
-        }));
+        try {
+          familyCases.push(await runOnchainCaptureCase({
+            familyCase: item,
+            source,
+            provider,
+          }));
+        } catch (error) {
+          throw new Error(
+            `onchain capture failed for ${item.family}: ` +
+              `${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
         continue;
       }
       if (item.family === "univ2") {
