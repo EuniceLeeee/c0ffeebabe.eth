@@ -74,9 +74,31 @@ import type {
 } from "./architecture-migration-parity-runner.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
+import {
+  captureFamilyGenerically,
+  deriveFamilyObservationFromNodeData,
+  resolveGenericCaptureDriver,
+  type GenericCaptureProvider,
+} from "./generic-family-capture.js";
+import {
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+} from "./venues/production-family-composition.js";
+import {
+  PRODUCTION_STRICT_VERIFIED_ACTORS,
+} from "./venues/production-verified-actors.js";
+import { familyId } from
+  "./venues/adapter-family-identifiers.js";
+import { RevmSimClient } from "./revm-sim-client.js";
+import { createRevmStrictSimulationTransport } from
+  "./revm-strict-simulation-transport.js";
+import { createStrictCentralAdapterRuntime } from
+  "./strict-central-adapter-runtime.js";
+import type { CentralAdapterRuntime } from
+  "./adapter-work-intent.js";
 
 interface RealCaptureCase {
   readonly family: string;
+  readonly address?: string;
   readonly pool: string;
   readonly tokenA: string;
   readonly tokenB: string;
@@ -110,6 +132,32 @@ interface RealCaptureCase {
   readonly currency1?: string;
   readonly hooks?: string;
   readonly lpFee?: bigint | string;
+}
+
+function buildGenericRuntime(provider: GenericCaptureProvider): CentralAdapterRuntime {
+  const executablePath = process.env.S1_REVM_SIM_BIN;
+  const executor = process.env.S1_CAPTURE_EXECUTOR ??
+    `0x${"99".repeat(20)}`;
+  if (executablePath === undefined || executablePath.trim() === "") {
+    return createStrictCentralAdapterRuntime({
+      provider,
+      generationFence: Object.freeze({ assertCurrent() {} }),
+      verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+    });
+  }
+  return createStrictCentralAdapterRuntime({
+    provider,
+    generationFence: Object.freeze({ assertCurrent() {} }),
+    verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+    simulator: createRevmStrictSimulationTransport({
+      client: new RevmSimClient({
+        executablePath,
+        timeoutMs: Number(process.env.S1_REVM_TIMEOUT_MS ?? "60000"),
+      }),
+      executor,
+      verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+    }),
+  });
 }
 
 function currentCommit(): string {
@@ -308,15 +356,17 @@ async function runOnchainCaptureCase(input: {
 }
 
 async function main(): Promise<void> {
+  const generic = process.argv[2] === "--generic";
   const onchain = process.argv[2] === "--onchain";
-  const checkOnly = process.argv[2 + (onchain ? 1 : 0)] === "--check";
-  const descriptorPath = process.argv[2 + (onchain ? 1 : 0) + (checkOnly ? 1 : 0)];
+  const flagOffset = (onchain || generic) ? 1 : 0;
+  const checkOnly = process.argv[2 + flagOffset] === "--check";
+  const descriptorPath = process.argv[2 + flagOffset + (checkOnly ? 1 : 0)];
   const outPath = checkOnly ? undefined
-    : process.argv[3 + (onchain ? 1 : 0) + (checkOnly ? 1 : 0)];
+    : process.argv[3 + flagOffset + (checkOnly ? 1 : 0)];
   if (descriptorPath === undefined || (outPath === undefined && !checkOnly)) {
     throw new Error(
       "usage: tsx src/searcher/run-architecture-migration-capture-real-cli.ts " +
-        "[--onchain] [--check] <pool-descriptor.json> [out-side.json]",
+        "[--onchain|--generic] [--check] <pool-descriptor.json> [out-side.json]",
     );
   }
   const manifest = JSON.parse(await readFile(descriptorPath, "utf8")) as {
@@ -325,45 +375,16 @@ async function main(): Promise<void> {
     readonly captureId?: string;
     readonly commit?: string;
     readonly onchain?: boolean;
-    readonly cases: readonly {
-      readonly family: string;
-      readonly pool: string;
-      readonly tokenA: string;
-      readonly tokenB: string;
-      readonly vault?: string;
-      readonly target?: string;
-      readonly token?: string;
-      readonly asset?: string;
-      readonly gem?: string;
-      readonly dai?: string;
-      readonly factory?: string;
-      readonly controller?: string;
-      readonly fundingContract?: string;
-      readonly supply?: string;
-      readonly borrow?: string;
-      readonly stEth?: string;
-      readonly receipt?: string;
-      readonly tokenIn?: string;
-      readonly tokenOut?: string;
-      readonly decimals?: number;
-      readonly unit?: bigint | string;
-      readonly reserves?: {
-        readonly reserve0: string;
-        readonly reserve1: string;
-        readonly blockTimestampLast?: number;
-      };
-      readonly fee?: bigint | string;
-      readonly tickSpacing?: number;
-      readonly liquidity?: bigint | string;
-      readonly sqrtPriceX96?: bigint | string;
-      readonly currency0?: string;
-      readonly currency1?: string;
-      readonly hooks?: string;
-      readonly lpFee?: bigint | string;
-    }[];
+    readonly cases: readonly RealCaptureCase[];
   };
-  const useOnchain = onchain || manifest.onchain === true;
+  const useGeneric = generic || (manifest.onchain === true && !onchain);
+  const useOnchain = onchain || (manifest.onchain === true && !generic);
   const provider = useOnchain
+    ? new ethers.JsonRpcProvider(
+        process.env.S1_CAPTURE_RPC_URL ?? "http://127.0.0.1:8545",
+      )
+    : null;
+  const genericProvider = useGeneric
     ? new ethers.JsonRpcProvider(
         process.env.S1_CAPTURE_RPC_URL ?? "http://127.0.0.1:8545",
       )
@@ -378,6 +399,30 @@ async function main(): Promise<void> {
   >> => {
     const familyCases: RawFamilyMigrationCaseCapture[] = [];
     for (const item of manifest.cases) {
+      if (useGeneric) {
+        if (genericProvider === null || item.address === undefined) {
+          throw new Error(
+            "generic mode requires provider and a case address",
+          );
+        }
+        const fid = familyId(item.family);
+        const observation = await deriveFamilyObservationFromNodeData({
+          catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+          familyId: fid,
+          source,
+          address: item.address,
+          provider: genericProvider,
+        });
+        familyCases.push(await captureFamilyGenerically({
+          catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+          familyId: fid,
+          source,
+          observation,
+          runtime: buildGenericRuntime(genericProvider),
+          driver: resolveGenericCaptureDriver(fid),
+        }));
+        continue;
+      }
       if (useOnchain) {
         if (provider === null) throw new Error("onchain provider missing");
         try {

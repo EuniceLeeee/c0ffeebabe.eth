@@ -16,6 +16,14 @@ out_path = sys.argv[3]
 source_block = int(sys.argv[4])
 source_block_hash = sys.argv[5]
 
+def normalize_generic_case(case):
+    """Generic mode only needs {family, address}; drop per-family fields."""
+    address = (case.get("pool") or case.get("vault") or case.get("target")
+               or case.get("token") or case.get("fundingContract"))
+    if not address:
+        raise SystemExit(f"case {case.get('family')} has no address")
+    return {"family": case["family"], "address": address}
+
 universe = json.load(open(universe_path))
 pools = universe["pools"] if isinstance(universe, dict) and "pools" in universe else universe
 
@@ -46,7 +54,7 @@ for pool in pools:
             case["tokenIn"] = pool["tokenIn"]
         if "tokenOut" in pool:
             case["tokenOut"] = pool["tokenOut"]
-        cases.append(case)
+        cases.append(normalize_generic_case(case))
 
 cache = json.load(open(cache_path))
 verified = cache.get("verified_candidates", {})
@@ -79,7 +87,7 @@ for entry in verified:
         if pool.get("token0") and pool.get("token1"):
             case["tokenA"] = pool["token0"]
             case["tokenB"] = pool["token1"]
-        cases.append(case)
+        cases.append(normalize_generic_case(case))
         continue
     if adapter not in protocol_family or adapter in used_protocol:
         continue
@@ -93,7 +101,7 @@ for entry in verified:
     if adapter == "protocol:astra-multitoken" and pool.get("token0") and pool.get("token1"):
         case["tokenIn"] = pool["token0"]
         case["tokenOut"] = pool["token1"]
-    cases.append(case)
+    cases.append(normalize_generic_case(case))
 
 manifest = {
     "sourceBlock": source_block,
