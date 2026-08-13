@@ -173,16 +173,30 @@ export interface ArchitectureMigrationCorpusManifest {
   readonly stateAnchors: readonly ArchitectureStateAnchor[];
   readonly performanceDiagnostics: ArchitectureMigrationBatchInput["performanceDiagnostics"];
   readonly declaredDeltas?: ArchitectureMigrationBatchInput["declaredDeltas"];
+  readonly heldOutNegatives?: readonly {
+    readonly familyId: string;
+    readonly reason: string;
+    readonly baselinePath: string;
+    readonly challengerPath: string;
+  }[];
 }
 
 export interface SealedProductionArchitectureMigrationBatchInput
   extends Omit<
     ArchitectureMigrationBatchInput,
-    "evidenceClass" | "baseline" | "challenger"
+    "evidenceClass" | "baseline" | "challenger" | "heldOutNegatives"
   > {
   readonly evidenceClass: "sealed-production";
   readonly baseline: SealedArchitectureMigrationSideCapture;
   readonly challenger: SealedArchitectureMigrationSideCapture;
+  readonly heldOutNegatives?: readonly {
+    readonly familyId: string;
+    readonly reason: string;
+    readonly baseline: RawArchitectureMigrationSideCapture |
+      SealedArchitectureMigrationSideCapture;
+    readonly challenger: RawArchitectureMigrationSideCapture |
+      SealedArchitectureMigrationSideCapture;
+  }[];
   readonly productionCaptureIssuer: ArchitectureMigrationProductionCaptureIssuer;
 }
 
@@ -656,6 +670,12 @@ export async function runArchitectureMigrationParityFiles(
     readonly stateAnchors: readonly ArchitectureStateAnchor[];
     readonly performanceDiagnostics: ArchitectureMigrationBatchInput["performanceDiagnostics"];
     readonly declaredDeltas?: readonly DeclaredSemanticDelta[];
+    readonly heldOutNegatives?: readonly {
+      readonly familyId: string;
+      readonly reason: string;
+      readonly baselinePath: string;
+      readonly challengerPath: string;
+    }[];
     readonly productionCaptureIssuer?: ArchitectureMigrationProductionCaptureIssuer;
   },
 ): Promise<ArchitectureMigrationBatchParityReceipt> {
@@ -676,6 +696,14 @@ export async function runArchitectureMigrationParityFiles(
   };
   const baseline = await readSide(input.baselinePath);
   const challenger = await readSide(input.challengerPath);
+  const heldOutNegatives = await Promise.all(
+    (input.heldOutNegatives ?? []).map(async (item) => Object.freeze({
+      familyId: item.familyId,
+      reason: item.reason,
+      baseline: await readSide(item.baselinePath),
+      challenger: await readSide(item.challengerPath),
+    })),
+  );
   const issuer = input.productionCaptureIssuer;
   let batch: ArchitectureMigrationBatchInput |
     SealedProductionArchitectureMigrationBatchInput;
@@ -691,6 +719,14 @@ export async function runArchitectureMigrationParityFiles(
       productionCaptureIssuer: issuer,
       baseline: issueArchitectureMigrationSideCapture(issuer, baseline),
       challenger: issueArchitectureMigrationSideCapture(issuer, challenger),
+      heldOutNegatives: heldOutNegatives.map((item) => Object.freeze({
+        ...item,
+        baseline: issueArchitectureMigrationSideCapture(issuer, item.baseline),
+        challenger: issueArchitectureMigrationSideCapture(
+          issuer,
+          item.challenger,
+        ),
+      })),
     };
   } else {
     const { productionCaptureIssuer: _ignored, ...unitInput } = input;
@@ -699,6 +735,7 @@ export async function runArchitectureMigrationParityFiles(
       evidenceClass: "unit-contract",
       baseline,
       challenger,
+      heldOutNegatives,
     };
   }
   return runArchitectureMigrationBatchParity(
@@ -723,6 +760,25 @@ export function validateArchitectureMigrationRequestFile(
     const value = candidate[key];
     if (typeof value !== "string" || value.trim() === "") {
       throw new Error(`${key} must be a non-empty path`);
+    }
+  }
+  if (candidate.heldOutNegatives !== undefined) {
+    if (!Array.isArray(candidate.heldOutNegatives)) {
+      throw new Error("heldOutNegatives must be an array");
+    }
+    for (const item of candidate.heldOutNegatives) {
+      if (
+        item === null || typeof item !== "object" ||
+        typeof item.familyId !== "string" || item.familyId.trim() === "" ||
+        typeof item.reason !== "string" || item.reason.trim() === "" ||
+        typeof item.baselinePath !== "string" ||
+        item.baselinePath.trim() === "" ||
+        typeof item.challengerPath !== "string" ||
+        item.challengerPath.trim() === "" ||
+        item.baselinePath === item.challengerPath
+      ) {
+        throw new Error("heldOutNegatives contains a malformed entry");
+      }
     }
   }
   if (candidate.baselinePath === candidate.challengerPath) {

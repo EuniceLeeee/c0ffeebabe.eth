@@ -174,3 +174,23 @@ PoolManager 部署块到 source 跨 `4,056,940` blocks，reth 单请求上限
 - 中央零单族 AST/import-closure gate、完整 build、shadow suite、sweep 与
   节点复核均通过。此前表格的 `completed` 只表示旧逐族合同，不足以关闭
   F5。
+
+### 终态通用 capture 完整计划 checkpoint（2026-08-14）
+
+- production generated catalog 的 22 个插件均发布 plugin-local
+  `capture.materialize`；中央 observation/capture/CLI 只执行 catalog-issued
+  能力，已删除中央 exact/execution driver registry 与 per-Family capture
+  switch。框架合同只使用 synthetic Family 验证 log 分页与 batch liveness。
+- route/credit capture 不再用 `tokenDeals` 伪造执行本金。中央动态枚举
+  catalog 的 Funding domain，按通用 planning priority 选择真实 offer；
+  Funding plugin 重新签发完整根计划并把 route requirements、route root、
+  `assert-balance`、repayment 放进同一 callback closure。revm bridge 执行
+  完整 BotVM bytes，观测 executor/owner/全部计划 target 的 token delta、
+  total-supply delta 与 logs；revert 作为真实 final-sim 结果记录，不冒充
+  success。
+- parity 文件入口支持每个 held-out negative 的独立双侧 capture 文件，
+  sealed-production 仍逐侧通过 trusted issuer 验证；旧 3:1 cases 拆分尚未
+  授权，下一 slice 将由通用 canonical-value mutator 取代。
+- 本 checkpoint 的 TypeScript、Rust、generic capture、parity runner 与
+  完整 listener build 已通过。它将作为后续同 descriptor 独立双跑的固定
+  executable closure；尚未产出节点真实 corpus，F5 仍未关闭。

@@ -15,6 +15,7 @@ import type {
 } from "./architecture-migration-parity-runner.js";
 import {
   captureFamilyGenerically,
+  materializeGenericCaptureFundingPlan,
   runGenericCaptureBatch,
   type GenericCaptureProvider,
 } from "./generic-family-capture.js";
@@ -136,11 +137,19 @@ async function main(): Promise<void> {
         },
         run: async () => {
           try {
+            const runtime = buildRuntime(provider, client);
             return await captureFamilyGenerically({
               catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
               descriptor,
               provider,
-              runtime: buildRuntime(provider, client),
+              runtime,
+              fundingPlanFactory: (plan) =>
+                materializeGenericCaptureFundingPlan({
+                  catalog:
+                    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+                  ...plan,
+                  runtime,
+                }),
               finalSimulation: createGenericCaptureRevmFinalSimulation({
                 client,
                 rpcUrl: RPC_URL,

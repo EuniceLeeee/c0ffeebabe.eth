@@ -131,6 +131,7 @@ export interface StrictSimulateRequest {
   preCalls?: OverlayPreCall[];
   tokenDeals?: OverlayTokenDeal[];
   observeTokens?: string[];
+  observeAccounts?: string[];
   observeTotalSupply?: string[];
   observeLogs?: boolean;
 }

@@ -925,6 +925,8 @@ enum DaemonRequest {
         #[serde(default)]
         observe_tokens: Vec<String>,
         #[serde(default)]
+        observe_accounts: Vec<String>,
+        #[serde(default)]
         observe_total_supply: Vec<String>,
         #[serde(default)]
         observe_logs: bool,
@@ -1158,6 +1160,7 @@ impl Daemon {
                 pre_calls,
                 token_deals,
                 observe_tokens,
+                observe_accounts,
                 observe_total_supply,
                 observe_logs,
             } => self.strict_simulate(
@@ -1170,6 +1173,7 @@ impl Daemon {
                 pre_calls,
                 token_deals,
                 observe_tokens,
+                observe_accounts,
                 observe_total_supply,
                 observe_logs,
                 started,
@@ -1722,6 +1726,7 @@ impl Daemon {
         pre_calls: Vec<PreCall>,
         token_deals: Vec<TokenDeal>,
         observe_tokens: Vec<String>,
+        observe_accounts: Vec<String>,
         observe_total_supply: Vec<String>,
         observe_logs: bool,
         started: Instant,
@@ -1766,15 +1771,24 @@ impl Daemon {
             Some(remote_rc.as_ref()),
         )?;
 
-        let mut observed_tokens: Vec<Address> = Vec::new();
-        let mut balances_before: Vec<(Address, U256)> = Vec::new();
+        let observed_accounts: Vec<Address> = if observe_accounts.is_empty() {
+            vec![caller]
+        } else {
+            observe_accounts
+                .iter()
+                .map(|raw| parse_address(raw))
+                .collect::<Result<Vec<_>>>()?
+        };
+        let mut balances_before: Vec<(Address, Address, U256)> = Vec::new();
         for raw in &observe_tokens {
             let token = parse_address(raw)?;
-            observed_tokens.push(token);
-            balances_before.push((
-                token,
-                erc20_balance_of(&mut db, &block_env, token, caller)?,
-            ));
+            for account in &observed_accounts {
+                balances_before.push((
+                    token,
+                    *account,
+                    erc20_balance_of(&mut db, &block_env, token, *account)?,
+                ));
+            }
         }
         let mut supply_tokens: Vec<Address> = Vec::new();
         let mut supply_before: Vec<(Address, U256)> = Vec::new();
@@ -1848,12 +1862,11 @@ impl Daemon {
         }
 
         let mut token_deltas: Vec<SimTokenDelta> = Vec::new();
-        for (index, (token, before)) in balances_before.iter().enumerate() {
-            let _ = &observed_tokens[index];
-            let after = erc20_balance_of(&mut db, &block_env, *token, caller)?;
+        for (token, account, before) in &balances_before {
+            let after = erc20_balance_of(&mut db, &block_env, *token, *account)?;
             token_deltas.push(SimTokenDelta {
                 token: format!("{token:#x}"),
-                account: format!("{caller:#x}"),
+                account: format!("{account:#x}"),
                 delta: signed_delta(after, *before),
             });
         }

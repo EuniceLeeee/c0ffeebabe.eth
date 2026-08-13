@@ -3,22 +3,21 @@ import { compilePlan } from "../shared/compiler/compiler.js";
 import { bytesToHex } from "../shared/compiler/encoder.js";
 import { buildExecuteCalldata } from
   "../shared/executor/botvm-executor.js";
+import type { ResolvedPlanNode } from "../shared/types/plan.js";
+import { buildFundingBorrowFragment } from "./adapter-funding-runtime.js";
 import type {
   GenericCaptureFinalSimulation,
+  GenericCaptureFundingPlan,
   GenericCaptureFinalSimulationInput,
 } from "./generic-family-capture.js";
 import { RevmSimClient } from "./revm-sim-client.js";
 import type { CanonicalValue } from "./venues/canonical-value.js";
 
-const ERC20 = new ethers.Interface([
-  "function approve(address spender,uint256 amount) returns (bool)",
-  "function transfer(address to,uint256 amount) returns (bool)",
-]);
-
 /**
- * Real fork execution for capture fragments. The daemon executes the exact
- * compiled BotVM bytes against the descriptor's source block and returns
- * observed deltas/logs. Nothing is inferred from expectedEffects.
+ * Real fork execution for complete capture plans. Route and Credit fragments
+ * are nested under a catalog-issued Funding root, whose own plugin inserts
+ * the repayment/assert-balance tail. Funding captures execute that same root
+ * with no route child. Nothing is inferred from expectedEffects.
  */
 export function createGenericCaptureRevmFinalSimulation(input: {
   readonly client: RevmSimClient;
@@ -32,44 +31,24 @@ export function createGenericCaptureRevmFinalSimulation(input: {
     async simulate(
       request: GenericCaptureFinalSimulationInput,
     ): Promise<CanonicalValue> {
-      if (request.fragment.nodes.length !== 1) {
+      const routeFragment = request.kind === "funding"
+        ? null
+        : request.routeFragment;
+      if (routeFragment !== null && routeFragment.nodes.length !== 1) {
+        throw new Error("generic final simulation requires one route root node");
+      }
+      const closed = closePlan(request.funding, routeFragment);
+      if (closed.requirements.length !== 0) {
         throw new Error(
-          "generic final simulation requires one plugin-issued root node",
+          "generic final simulation cannot execute out-of-callback requirements",
         );
       }
-      const root = request.fragment.nodes[0]!;
+      if (closed.nodes.length !== 1) {
+        throw new Error("generic final simulation requires one Funding root node");
+      }
+      const root = closed.nodes[0]!;
       const scriptHex = bytesToHex(compilePlan(root, executor));
       const calldata = buildExecuteCalldata(ethers.getBytes(scriptHex));
-      const amount = request.kind === "route"
-        ? request.vector.amountIn
-        : request.kind === "credit"
-          ? request.vector.collateralAmount
-          : request.vector.amount;
-      const tokenDeals = uniqueAddresses([root.tokenIn])
-        .map((token) => Object.freeze({
-          token,
-          to: executor,
-          amount: amount.toString(),
-        }));
-      const preCalls = request.fragment.requirements.map((requirement) =>
-        requirement.kind === "approve"
-          ? Object.freeze({
-              from: executor,
-              to: ethers.getAddress(requirement.token),
-              calldata: ERC20.encodeFunctionData("approve", [
-                requirement.spender,
-                requirement.amount,
-              ]),
-            })
-          : Object.freeze({
-              from: executor,
-              to: ethers.getAddress(requirement.token),
-              calldata: ERC20.encodeFunctionData("transfer", [
-                requirement.pool,
-                requirement.amount,
-              ]),
-            })
-      );
       const response = await input.client.strictSimulate({
         blockNumber: request.source.number,
         rpcUrl: input.rpcUrl,
@@ -77,9 +56,9 @@ export function createGenericCaptureRevmFinalSimulation(input: {
         to: executor,
         data: calldata,
         gasLimit: 0x1000000,
-        preCalls,
-        tokenDeals,
         observeTokens: uniqueAddresses(collectTokens(root)),
+        observeAccounts: uniqueAddresses([owner, executor, ...collectAddresses(root)]),
+        observeTotalSupply: uniqueAddresses(collectTokens(root)),
         observeLogs: true,
       });
       if ((response.missingStateKeys?.length ?? 0) !== 0) {
@@ -88,18 +67,15 @@ export function createGenericCaptureRevmFinalSimulation(input: {
             response.missingStateKeys!.slice(0, 6).join(","),
         );
       }
-      if (response.success !== true) {
-        throw new Error(
-          `generic final simulation reverted: ` +
-            (response.revertReason ?? response.error ?? "unknown"),
-        );
-      }
       return Object.freeze({
         sourceBlock: request.source.number,
         sourceBlockHash: request.source.hash,
         semanticId: request.semanticId,
         kind: request.kind,
-        success: true,
+        success: response.success === true,
+        revertReason: response.success === true
+          ? null
+          : response.revertReason ?? response.error ?? "unknown",
         gasUsed: String(response.gasUsed ?? "0"),
         scriptHash: ethers.sha256(scriptHex),
         calldataHash: ethers.sha256(calldata),
@@ -123,8 +99,129 @@ export function createGenericCaptureRevmFinalSimulation(input: {
             response.strict?.logs ?? [],
           ))),
         }),
+        safety: finalSafety(response, request, root, executor),
       });
     },
+  });
+}
+
+function closePlan(
+  funding: GenericCaptureFundingPlan,
+  route: import("./venues/route-leg-adapter.js").PlanFragment | null,
+) {
+  const requirementNodes: readonly ResolvedPlanNode[] = route === null
+    ? []
+    : route.requirements.map((requirement): ResolvedPlanNode => {
+        if (requirement.kind === "approve") {
+          return {
+              adapterId: "erc20-approve",
+              target: requirement.token,
+              tokenIn: requirement.token,
+              tokenOut: requirement.token,
+              amount: requirement.amount,
+              params: {
+                spender: requirement.spender,
+                amount: requirement.amount,
+              },
+              children: [],
+          };
+        }
+        return {
+          adapterId: "erc20-transfer",
+          target: requirement.token,
+          tokenIn: requirement.token,
+          tokenOut: requirement.token,
+          amount: requirement.amount,
+          params: { to: requirement.pool, amount: requirement.amount },
+          children: [],
+        };
+      });
+  const routeChild = route === null
+    ? Object.freeze([])
+    : Object.freeze([Object.freeze({
+        requirements: Object.freeze([]),
+        nodes: Object.freeze([
+          ...requirementNodes,
+          ...route.nodes,
+        ]),
+      })]);
+  return buildFundingBorrowFragment({
+    family: funding.family,
+    offer: funding.offer,
+    source: funding.offer.source,
+    generation: funding.offer.generation,
+    amount: funding.amount,
+    minProfit: funding.minProfit,
+    children: routeChild,
+  });
+}
+
+function finalSafety(
+  response: Awaited<ReturnType<RevmSimClient["strictSimulate"]>>,
+  request: GenericCaptureFinalSimulationInput,
+  root: ResolvedPlanNode,
+  executor: string,
+): CanonicalValue {
+  const funding = request.funding;
+  const asset = funding.offer.asset.toLowerCase();
+  const canonicalExecutor = executor.toLowerCase();
+  const deltas = response.strict?.tokenDeltas ?? [];
+  const executorDelta = deltas
+    .filter((delta) =>
+      delta.token.toLowerCase() === asset &&
+      delta.account.toLowerCase() === canonicalExecutor
+    )
+    .reduce((total, delta) => total + BigInt(delta.delta), 0n);
+  const supplyByToken = new Map(
+    (response.strict?.totalSupplyDeltas ?? []).map((delta) => [
+      delta.token.toLowerCase(),
+      BigInt(delta.delta),
+    ]),
+  );
+  const balanceByToken = new Map<string, bigint>();
+  for (const delta of deltas) {
+    const token = delta.token.toLowerCase();
+    balanceByToken.set(
+      token,
+      (balanceByToken.get(token) ?? 0n) + BigInt(delta.delta),
+    );
+  }
+  const conservation = [...new Set(collectTokens(root).map((token) =>
+    token.toLowerCase()
+  ))].sort().map((token) => {
+    const balanceDelta = balanceByToken.get(token) ?? 0n;
+    const supplyDelta = supplyByToken.get(token) ?? 0n;
+    return Object.freeze({
+      token,
+      observedBalanceDelta: balanceDelta.toString(),
+      observedSupplyDelta: supplyDelta.toString(),
+      residual: (balanceDelta - supplyDelta).toString(),
+    });
+  });
+  const success = response.success === true;
+  const repaymentSatisfied = success && executorDelta >= funding.minProfit;
+  const conservationSatisfied = success && conservation.every((item) =>
+    item.residual === "0"
+  );
+  return Object.freeze({
+    fundingFamilyId: funding.offer.familyId,
+    fundingId: funding.offer.fundingId,
+    borrowedAsset: asset,
+    borrowedAmount: funding.amount.toString(),
+    requiredMinProfit: funding.minProfit.toString(),
+    repaymentGuardExecuted: success,
+    repaymentSatisfied,
+    tokenConservationObserved: response.strict !== undefined,
+    tokenConservationSatisfied: conservationSatisfied,
+    conservation,
+    standingPositionResult: success
+      ? request.kind === "credit"
+        ? "plugin-position-plan-executed"
+        : "closed-plan-executed"
+      : "simulation-reverted",
+    executorAssetDelta: executorDelta.toString(),
+    grossProfit: executorDelta.toString(),
+    netProfitBeforeGas: executorDelta.toString(),
   });
 }
 
@@ -143,6 +240,30 @@ function collectTokens(root: {
     }
   }
   return tokens;
+}
+
+function collectAddresses(root: {
+  readonly target: string;
+  readonly params?: Readonly<Record<string, unknown>>;
+  readonly children: readonly unknown[];
+}): string[] {
+  const addresses = [root.target];
+  for (const value of Object.values(root.params ?? {})) {
+    if (typeof value === "string" && ethers.isAddress(value)) {
+      addresses.push(value);
+    }
+  }
+  for (const child of root.children) {
+    if (
+      child !== null && typeof child === "object" &&
+      "target" in child && "children" in child
+    ) {
+      addresses.push(...collectAddresses(
+        child as Parameters<typeof collectAddresses>[0],
+      ));
+    }
+  }
+  return addresses;
 }
 
 function uniqueAddresses(values: readonly string[]): string[] {

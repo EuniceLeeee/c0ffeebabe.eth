@@ -10,7 +10,9 @@ import type {
 import { projectFamilyRouteGraph } from "./adapter-family-graph-runtime.js";
 import {
   buildFundingBorrowFragment,
+  buildFundingRepaymentFragment,
   executeFundingFamilyLiquidity,
+  type PreparedFundingOffer,
 } from "./adapter-funding-runtime.js";
 import {
   buildCreditExecutionFragment,
@@ -95,7 +97,8 @@ export type GenericCaptureFinalSimulationInput =
       readonly family: LoadedFamilyPlugin;
       readonly source: CanonicalSource;
       readonly vector: RouteCaptureVector;
-      readonly fragment: PlanFragment;
+      readonly routeFragment: PlanFragment;
+      readonly funding: GenericCaptureFundingPlan;
       readonly semanticId: string;
     }
   | {
@@ -103,7 +106,7 @@ export type GenericCaptureFinalSimulationInput =
       readonly family: LoadedFamilyBox;
       readonly source: CanonicalSource;
       readonly vector: FundingCaptureVector;
-      readonly fragment: PlanFragment;
+      readonly funding: GenericCaptureFundingPlan;
       readonly semanticId: string;
     }
   | {
@@ -111,9 +114,26 @@ export type GenericCaptureFinalSimulationInput =
       readonly family: LoadedFamilyBox;
       readonly source: CanonicalSource;
       readonly vector: CreditCaptureVector;
-      readonly fragment: PlanFragment;
+      readonly routeFragment: PlanFragment;
+      readonly funding: GenericCaptureFundingPlan;
       readonly semanticId: string;
     };
+
+export interface GenericCaptureFundingPlan {
+  readonly family: LoadedFamilyBox;
+  readonly offer: PreparedFundingOffer;
+  readonly amount: bigint;
+  readonly minProfit: bigint;
+  readonly borrowFragment: PlanFragment;
+  readonly repaymentFragment: PlanFragment;
+}
+
+export type GenericCaptureFundingPlanFactory = (input: {
+  readonly assets: readonly string[];
+  readonly amount: bigint;
+  readonly minProfit: bigint;
+  readonly source: CanonicalSource;
+}) => Promise<GenericCaptureFundingPlan>;
 
 /**
  * The capture core never infers success from expected effects. A composition
@@ -334,6 +354,8 @@ export async function captureFamilyGenerically(input: {
   readonly provider: GenericCaptureProvider;
   readonly runtime: CentralAdapterRuntime;
   readonly finalSimulation: GenericCaptureFinalSimulation;
+  readonly fundingPlan?: GenericCaptureFundingPlan;
+  readonly fundingPlanFactory?: GenericCaptureFundingPlanFactory;
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
   const family = input.catalog.forStrictFamily(input.descriptor.familyId);
@@ -345,12 +367,19 @@ export async function captureFamilyGenerically(input: {
   const stages = vector.kind === "funding"
     ? await captureFunding({ ...input, family, vector, evidenceRefs })
     : vector.kind === "credit"
-      ? await captureCredit({ ...input, family, vector, evidenceRefs })
+      ? await captureCredit({
+          ...input,
+          family,
+          vector,
+          evidenceRefs,
+          fundingPlanFactory: requireFundingPlanFactory(input),
+        })
       : await captureRoute({
           ...input,
           family: input.catalog.forFamily(input.descriptor.familyId),
           vector,
           evidenceRefs,
+          fundingPlanFactory: requireFundingPlanFactory(input),
         });
   const summary = definedFamilyPluginContractSummary(family.plugin);
   return Object.freeze({
@@ -374,6 +403,7 @@ async function captureRoute(input: {
   readonly family: LoadedFamilyPlugin;
   readonly vector: RouteCaptureVector;
   readonly evidenceRefs: readonly string[];
+  readonly fundingPlanFactory: GenericCaptureFundingPlanFactory;
 }): Promise<RawFamilyMigrationCaseCapture["stages"]> {
   const observations = await executeCaptureObservationIntents({
     family: input.family,
@@ -430,12 +460,23 @@ async function captureRoute(input: {
         throw new Error(`capture execution failed: ${execution.outcome.reasonCode}`);
       }
       executionItems.push(fragmentItem(`${semanticId}:execution`, execution.fragment));
+      const routeRoot = execution.fragment.nodes[0];
+      if (routeRoot === undefined) {
+        throw new Error("capture execution fragment has no route root");
+      }
+      const funding = await input.fundingPlanFactory({
+        assets: Object.freeze([routeRoot.tokenIn]),
+        amount: input.vector.amountIn,
+        minProfit: input.vector.minAmountOut,
+        source: input.descriptor.source,
+      });
       const simulation = await input.finalSimulation.simulate({
         kind: "route",
         family: input.family,
         source: input.descriptor.source,
         vector: input.vector,
-        fragment: execution.fragment,
+        routeFragment: execution.fragment,
+        funding,
         semanticId,
       });
       simulationItems.push(semanticItem(`${semanticId}:final-sim`, simulation));
@@ -489,6 +530,21 @@ async function captureFunding(input: {
       minProfit: input.vector.minProfit,
       children: Object.freeze([]),
     });
+    const repaymentFragment = buildFundingRepaymentFragment({
+      family: input.family,
+      offer,
+      source: input.descriptor.source,
+      generation: input.descriptor.source.generation,
+      amount: input.vector.amount,
+    });
+    const funding = Object.freeze({
+      family: input.family,
+      offer,
+      amount: input.vector.amount,
+      minProfit: input.vector.minProfit,
+      borrowFragment: fragment,
+      repaymentFragment,
+    });
     executions.push(fragmentItem(`${semanticId}:execution`, fragment));
     simulations.push(semanticItem(
       `${semanticId}:final-sim`,
@@ -497,7 +553,7 @@ async function captureFunding(input: {
         family: input.family,
         source: input.descriptor.source,
         vector: input.vector,
-        fragment,
+        funding,
         semanticId,
       }),
     ));
@@ -528,6 +584,7 @@ async function captureCredit(input: {
   readonly family: LoadedFamilyBox;
   readonly vector: CreditCaptureVector;
   readonly evidenceRefs: readonly string[];
+  readonly fundingPlanFactory: GenericCaptureFundingPlanFactory;
 }): Promise<RawFamilyMigrationCaseCapture["stages"]> {
   const observations = await executeCaptureObservationIntents({
     family: input.family,
@@ -614,6 +671,12 @@ async function captureCredit(input: {
         throw new Error(`capture Credit execution failed: ${execution.reasonCode}`);
       }
       executions.push(fragmentItem(`${semanticId}:execution`, execution.fragment));
+      const funding = await input.fundingPlanFactory({
+        assets: Object.freeze([projected.edge.tokenIn]),
+        amount: input.vector.collateralAmount,
+        minProfit: input.vector.minAmountOut,
+        source: input.descriptor.source,
+      });
       simulations.push(semanticItem(
         `${semanticId}:final-sim`,
         await input.finalSimulation.simulate({
@@ -621,7 +684,8 @@ async function captureCredit(input: {
           family: input.family,
           source: input.descriptor.source,
           vector: input.vector,
-          fragment: execution.fragment,
+          routeFragment: execution.fragment,
+          funding,
           semanticId,
         }),
       ));
@@ -782,6 +846,80 @@ function captureEvidenceRefs(
     `onchain:1:${descriptor.source.hash}:catalog-capture:` +
       `${descriptor.familyId}:${descriptor.candidateIdentity.toLowerCase()}`,
   ]);
+}
+
+function requireFundingPlanFactory(input: {
+  readonly fundingPlan?: GenericCaptureFundingPlan;
+  readonly fundingPlanFactory?: GenericCaptureFundingPlanFactory;
+}): GenericCaptureFundingPlanFactory {
+  if (input.fundingPlanFactory !== undefined) return input.fundingPlanFactory;
+  if (input.fundingPlan === undefined) {
+    throw new Error("generic route capture requires a catalog-issued Funding plan");
+  }
+  return async () => input.fundingPlan!;
+}
+
+/**
+ * Domain-generic Funding selection for a complete capture plan. The central
+ * path only enumerates catalog capabilities and policy ranks; it knows no
+ * Funding family, singleton, ABI or protocol identifier.
+ */
+export async function materializeGenericCaptureFundingPlan(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly assets: readonly string[];
+  readonly amount: bigint;
+  readonly minProfit: bigint;
+  readonly source: CanonicalSource;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<GenericCaptureFundingPlan> {
+  const candidates: GenericCaptureFundingPlan[] = [];
+  for (const family of input.catalog.listAll()) {
+    if (family.plugin.manifest.domain !== "funding") continue;
+    const result = await executeFundingFamilyLiquidity({
+      family,
+      assets: input.assets,
+      source: input.source,
+      generation: input.source.generation,
+      runtime: input.runtime,
+      publisher: { publish() {} },
+    });
+    for (const offer of result.offers) {
+      if (offer.maxBorrow < input.amount) continue;
+      const repaymentFragment = buildFundingRepaymentFragment({
+        family,
+        offer,
+        source: input.source,
+        generation: input.source.generation,
+        amount: input.amount,
+      });
+      const borrowFragment = buildFundingBorrowFragment({
+        family,
+        offer,
+        source: input.source,
+        generation: input.source.generation,
+        amount: input.amount,
+        minProfit: input.minProfit,
+        children: Object.freeze([]),
+      });
+      candidates.push(Object.freeze({
+        family,
+        offer,
+        amount: input.amount,
+        minProfit: input.minProfit,
+        borrowFragment,
+        repaymentFragment,
+      }));
+    }
+  }
+  candidates.sort((left, right) =>
+    left.offer.planningPriority - right.offer.planningPriority ||
+    left.offer.fundingId.localeCompare(right.offer.fundingId)
+  );
+  const selected = candidates[0];
+  if (selected === undefined) {
+    throw new Error("generic capture has no executable catalog Funding offer");
+  }
+  return selected;
 }
 
 function requireDiscovery(family: LoadedFamilyBox) {

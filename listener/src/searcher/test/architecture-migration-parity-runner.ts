@@ -82,7 +82,7 @@ assert.deepEqual(
 );
 assert.equal(PRODUCTION_ARCHITECTURE_MIGRATION_COHORT.length, 22);
 assert(PRODUCTION_ARCHITECTURE_MIGRATION_COHORT.every((contract) =>
-  contract.activeCapabilities.length + contract.absentCapabilities.length === 10
+  contract.activeCapabilities.length + contract.absentCapabilities.length === 11
 ));
 
 const empty = sealArchitectureMigrationBatchInput(fixtureInput({
