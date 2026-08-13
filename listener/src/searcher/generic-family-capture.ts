@@ -39,6 +39,17 @@ export interface GenericCaptureProvider extends OnchainUniv2Provider {
     slot: string,
     blockTag?: number,
   ): Promise<string>;
+  getLogs(filter: {
+    readonly address?: string;
+    readonly fromBlock?: number;
+    readonly toBlock?: number;
+    readonly topics?: (string | null)[];
+  }): Promise<readonly {
+    readonly address: string;
+    readonly topics: readonly string[];
+    readonly data: string;
+    readonly transactionHash?: string;
+  }[]>;
 }
 
 const EIP1967_IMPLEMENTATION_SLOT =
@@ -88,7 +99,8 @@ export function resolveGenericCaptureDriver(
 
 /**
  * Generic observation derivation driven by the family plugin's discovery
- * declarations: callPatterns -> call observation, logPatterns -> log
+ * declarations: singleton log emitters -> real historical log, then
+ * callPatterns -> call observation, address logPatterns -> log
  * observation, addressSurfaces -> address-surface observation with real
  * code hash + EIP-1967 implementation word read at the source block.
  */
@@ -97,7 +109,6 @@ export async function deriveFamilyObservationFromNodeData(input: {
   readonly familyId: FamilyId;
   readonly source: CanonicalSource;
   readonly address: string;
-  readonly emitter?: string;
   readonly provider: GenericCaptureProvider;
 }): Promise<UnifiedObservation> {
   const family = input.catalog.forFamily(input.familyId);
@@ -110,6 +121,46 @@ export async function deriveFamilyObservationFromNodeData(input: {
     );
   }
   const address = input.address.toLowerCase();
+  const singletonPattern = discovery.logPatterns?.find((pattern) =>
+    pattern.emitter !== undefined && pattern.emitter.mode !== "address"
+  );
+  if (singletonPattern?.emitter !== undefined &&
+      singletonPattern.emitter.mode !== "address") {
+    const emitter = singletonPattern.emitter;
+    const identityTopic = emitter.mode === "singleton-indexed-bytes32"
+      ? ethers.hexlify(ethers.getBytes(address))
+      : ethers.zeroPadValue(ethers.getAddress(address), 32).toLowerCase();
+    if (ethers.dataLength(identityTopic) !== 32) {
+      throw new Error(
+        `family ${input.familyId} singleton identity must be 32 bytes`,
+      );
+    }
+    const topics: (string | null)[] = [singletonPattern.topic];
+    while (topics.length < emitter.topicIndex) topics.push(null);
+    topics.push(identityTopic.toLowerCase());
+    const logs = await input.provider.getLogs({
+      address: emitter.address,
+      fromBlock: emitter.fromBlock,
+      toBlock: input.source.number,
+      topics,
+    });
+    const log = logs.at(-1);
+    if (log === undefined) {
+      throw new Error(
+        `family ${input.familyId} has no declared singleton log for ${address}`,
+      );
+    }
+    return Object.freeze({
+      kind: "log" as const,
+      source: input.source,
+      address: log.address.toLowerCase(),
+      topics: Object.freeze([...log.topics]),
+      data: log.data,
+      ...(log.transactionHash === undefined
+        ? {}
+        : { transactionHash: log.transactionHash }),
+    });
+  }
   if ((discovery.callPatterns?.length ?? 0) > 0) {
     const pattern = discovery.callPatterns![0];
     return Object.freeze({
@@ -121,11 +172,10 @@ export async function deriveFamilyObservationFromNodeData(input: {
   }
   if ((discovery.logPatterns?.length ?? 0) > 0) {
     const pattern = discovery.logPatterns![0];
-    const logAddress = (input.emitter ?? address).toLowerCase();
     return Object.freeze({
       kind: "log" as const,
       source: input.source,
-      address: logAddress,
+      address,
       topics: Object.freeze([pattern.topic]),
       data: "0x",
     });

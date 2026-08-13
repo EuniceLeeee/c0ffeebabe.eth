@@ -99,7 +99,6 @@ import type { CentralAdapterRuntime } from
 interface RealCaptureCase {
   readonly family: string;
   readonly address?: string;
-  readonly emitter?: string;
   readonly pool: string;
   readonly tokenA: string;
   readonly tokenB: string;
@@ -434,7 +433,6 @@ async function main(): Promise<void> {
             familyId: fid,
             source,
             address: item.address,
-            ...(item.emitter === undefined ? {} : { emitter: item.emitter }),
             provider: genericProvider,
           });
           familyCases.push(await captureFamilyGenerically({

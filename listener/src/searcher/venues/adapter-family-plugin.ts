@@ -1,4 +1,5 @@
 import type { PlanFragment } from "./route-leg-adapter.js";
+import { ethers } from "ethers";
 import type { RouteVenueMid } from "./mid-readers.js";
 import type { AllowedTaxonomy } from "./route-leg-adapter.js";
 import {
@@ -56,6 +57,22 @@ export interface LogPattern {
   readonly id: string;
   readonly topic: Hex32;
   readonly signature: string;
+  /**
+   * How a logical instance is recovered when logs are emitted by shared
+   * infrastructure instead of the instance address itself. Infrastructure
+   * singleton addresses are identity sources; they are not instance
+   * allowlists.
+   */
+  readonly emitter?:
+    | { readonly mode: "address" }
+    | {
+        readonly mode:
+          | "singleton-indexed-address"
+          | "singleton-indexed-bytes32";
+        readonly address: string;
+        readonly topicIndex: number;
+        readonly fromBlock: number;
+      };
 }
 
 export interface AddressSurfacePattern {
@@ -2246,10 +2263,45 @@ function validateCallPattern(pattern: CallPattern, label: string): void {
 
 function validateLogPattern(pattern: LogPattern, label: string): void {
   assertPlainRecord(pattern, label);
-  assertExactKeys(pattern, ["id", "signature", "topic"], label);
+  assertExactKeys(pattern, ["emitter", "id", "signature", "topic"], label,
+    true, ["id", "signature", "topic"]);
   assertIdentifier(pattern.id, `${label} id`);
   assertHex(pattern.topic, 32, `${label} ${pattern.id} topic`);
   assertIdentifier(pattern.signature, `${label} ${pattern.id} signature`);
+  if (pattern.emitter === undefined) return;
+  assertPlainRecord(pattern.emitter, `${label} ${pattern.id} emitter`);
+  if (pattern.emitter.mode === "address") {
+    assertExactKeys(
+      pattern.emitter,
+      ["mode"],
+      `${label} ${pattern.id} emitter`,
+    );
+    return;
+  }
+  assertExactKeys(
+    pattern.emitter,
+    ["address", "fromBlock", "mode", "topicIndex"],
+    `${label} ${pattern.id} emitter`,
+  );
+  if (
+    pattern.emitter.mode !== "singleton-indexed-address" &&
+    pattern.emitter.mode !== "singleton-indexed-bytes32"
+  ) {
+    throw new Error(`${label} ${pattern.id} has unsupported emitter mode`);
+  }
+  try {
+    ethers.getAddress(pattern.emitter.address);
+  } catch {
+    throw new Error(`${label} ${pattern.id} emitter address is invalid`);
+  }
+  if (!Number.isSafeInteger(pattern.emitter.topicIndex) ||
+      pattern.emitter.topicIndex < 1) {
+    throw new Error(`${label} ${pattern.id} emitter topicIndex is invalid`);
+  }
+  if (!Number.isSafeInteger(pattern.emitter.fromBlock) ||
+      pattern.emitter.fromBlock < 0) {
+    throw new Error(`${label} ${pattern.id} emitter fromBlock is invalid`);
+  }
 }
 
 function validateAddressSurfacePattern(pattern: AddressSurfacePattern): void {

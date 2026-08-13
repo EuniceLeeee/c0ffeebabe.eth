@@ -18,8 +18,9 @@ source_block_hash = sys.argv[5]
 
 def normalize_generic_case(case):
     """Generic mode only needs {family, address}; drop per-family fields."""
-    address = (case.get("pool") or case.get("vault") or case.get("target")
-               or case.get("token") or case.get("fundingContract"))
+    address = (case.get("poolId") or case.get("pool") or case.get("vault")
+               or case.get("target") or case.get("token")
+               or case.get("fundingContract"))
     if not address:
         raise SystemExit(f"case {case.get('family')} has no address")
     return {"family": CAPTURE_TO_CATALOG.get(case["family"], case["family"]),
@@ -48,6 +49,8 @@ for pool in pools:
         used_adapters.add(adapter)
         family = dex_families[adapter][0]
         case = {"family": family, "pool": pool["address"]}
+        if "poolId" in pool:
+            case["poolId"] = pool["poolId"]
         if "token0" in pool and "token1" in pool:
             case["tokenA"] = pool["token0"]
             case["tokenB"] = pool["token1"]

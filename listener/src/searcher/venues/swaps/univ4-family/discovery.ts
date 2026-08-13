@@ -12,6 +12,8 @@ import {
   UNIV4_SWAP_TOPIC,
 } from "../univ4-abi.js";
 import { v4PoolId } from "../univ4-common.js";
+import { UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK } from "../univ4-common.js";
+import { ADDR } from "../../../../shared/constants/addresses.js";
 import {
   canonicalAddress,
   canonicalPoolId,
@@ -37,6 +39,12 @@ export const univ4Discovery = {
     topic: UNIV4_INITIALIZE_TOPIC as `0x${string}`,
     signature:
       "Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)",
+    emitter: {
+      mode: "singleton-indexed-bytes32",
+      address: ADDR.UNISWAP_V4_POOL_MANAGER,
+      topicIndex: 1,
+      fromBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+    },
   }, {
     id: UNIV4_SWAP_LOG_PATTERN_ID,
     topic: UNIV4_SWAP_TOPIC as `0x${string}`,

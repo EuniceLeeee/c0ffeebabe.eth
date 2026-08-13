@@ -50,7 +50,21 @@ Initialize log data（pool key 从 manager 链上读再编码）。
 manifest 哈希，使已提交节点证据失效（verifier 按设计 fail）——因此
 “LogPattern 加 emitter 声明 + univ4 插件声明 + 节点证据重生成”必须
 作为一个完整 slice 一起落地，不能半切。当前保持绿（emitter 未入插件，
-generic 派生用 descriptor 可选 emitter 兜底）。
+generic 派生用 descriptor 可选 emitter 兜底）是推进 3 的历史停点；
+推进 4 以下用原子 slice 取代该兜底。
+
+**通用路径推进 4（2026-08-13）：** 已删除 descriptor emitter 兜底；
+`LogPattern` 新增通用 emitter 声明（address / singleton-indexed-address /
+singleton-indexed-bytes32，含 `topicIndex + fromBlock`），univ4 Family
+plugin 自有 discovery 声明 PoolManager 单例。descriptor 仍严格只有
+`{family,address}`，其中 V4 的 address 是真实 poolId；中央通用派生按
+声明构造 indexed-topic 查询，从节点回读真实 Initialize log 的完整
+topics/data，再交 strict lifecycle 解码 PoolKey。无日志、identity 非
+32-byte、外部 emitter 或链上状态不一致均 fail closed；中央无
+`if (univ4)`/协议地址分支。plugin 合同测试、generic capture、generated
+capability manifest、完整 build 与 49 项 shadow suite 已通过。由于
+capability artifact hash 变化，本 slice 必须与节点 enumerator/corpus
+证据重生成一起提交，旧证据不能沿用。
 
 ## 滚动清单（按序，模板先 erc4626 再其余）
 

@@ -24,6 +24,9 @@ import {
 import { canonicalPoolKey } from
   "../venues/swaps/angstrom-v4-family/codec.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
+import {
+  UNIV4_POOL_MANAGER_INTERFACE,
+} from "../venues/swaps/univ4-abi.js";
 import { UNIV4_FAMILY_ID } from
   "../venues/swaps/univ4-family/manifest.js";
 import {
@@ -112,9 +115,9 @@ async function main(): Promise<void> {
   assert.equal(driven.stages.executionFragments?.status, "exercised");
   assert.equal(driven.stages.finalSimulations?.status, "exercised");
 
-  // Generic V4 observation: until the univ4 plugin declares its emitter,
-  // the derivation falls back to the call pattern (swap selector); the
-  // emitter-driven log path is exercised when the plugin declares it.
+  // Generic V4 observation is driven entirely by the discovery declaration:
+  // the descriptor supplies a logical poolId and the generic layer resolves
+  // the PoolManager Initialize log through emitter/topicIndex metadata.
   const poolKey = canonicalPoolKey({
     currency0: UNIV4_FIXTURE_CURRENCY0,
     currency1: UNIV4_FIXTURE_CURRENCY1,
@@ -123,6 +126,19 @@ async function main(): Promise<void> {
     hooks: `0x${"00".repeat(20)}`,
   });
   const poolId = v4PoolId(poolKey);
+  const initializeLog = UNIV4_POOL_MANAGER_INTERFACE.encodeEventLog(
+    UNIV4_POOL_MANAGER_INTERFACE.getEvent("Initialize")!,
+    [
+      poolId,
+      poolKey.currency0,
+      poolKey.currency1,
+      poolKey.fee,
+      poolKey.tickSpacing,
+      poolKey.hooks,
+      UNIV4_FIXTURE_SQRT_PRICE_X96,
+      0,
+    ],
+  );
   const v4Observation = await deriveFamilyObservationFromNodeData({
     catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
     familyId: UNIV4_FAMILY_ID,
@@ -134,11 +150,22 @@ async function main(): Promise<void> {
       getStorage: async () => {
         throw new Error("log pattern must not getStorage");
       },
+      getLogs: async (filter) => {
+        assert.equal(filter.address, UNIV4_FIXTURE_MANAGER);
+        assert.equal(filter.topics?.[1], poolId);
+        return [Object.freeze({
+          address: UNIV4_FIXTURE_MANAGER,
+          topics: initializeLog.topics,
+          data: initializeLog.data,
+          transactionHash: `0x${"d1".repeat(32)}`,
+        })];
+      },
     },
   });
-  assert.equal(v4Observation.kind, "call");
-  if (v4Observation.kind === "call") {
-    assert.equal(v4Observation.target, poolId.toLowerCase());
+  assert.equal(v4Observation.kind, "log");
+  if (v4Observation.kind === "log") {
+    assert.equal(v4Observation.address, UNIV4_FIXTURE_MANAGER.toLowerCase());
+    assert.equal(v4Observation.topics[1], poolId);
   }
   console.log("generic family capture PASS");
 }
