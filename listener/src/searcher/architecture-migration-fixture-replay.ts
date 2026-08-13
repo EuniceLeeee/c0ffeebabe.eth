@@ -3801,7 +3801,7 @@ class MetronomeHgUsdcFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function metronomeHgUsdcFixtureRuntime(): CentralAdapterRuntime {
+export function metronomeHgUsdcFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -3823,6 +3823,8 @@ function metronomeHgUsdcFixtureRuntime(): CentralAdapterRuntime {
 
 async function runMetronomeHgUsdcLifecycle(
   canonical: CanonicalSource,
+  target: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     METRONOME_HGUSDC_FAMILY_ID,
@@ -3840,13 +3842,13 @@ async function runMetronomeHgUsdcLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: METRONOME_HGUSDC_FIXTURE_TARGET,
+        target: target.toLowerCase(),
         data: executePathCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: metronomeHgUsdcFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -3860,14 +3862,13 @@ async function runMetronomeHgUsdcLifecycle(
  * migration capture row. The dependent exact program is driven through both
  * rounds: curve get_dy then vault previewRedeem.
  */
-export async function captureMetronomeHgUsdcFixtureCase(input: {
+async function buildMetronomeHgUsdcCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runMetronomeHgUsdcLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:metronome-hgusdc:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     METRONOME_HGUSDC_FAMILY_ID,
   );
@@ -4118,6 +4119,78 @@ export async function captureMetronomeHgUsdcFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureMetronomeHgUsdcFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runMetronomeHgUsdcLifecycle(
+    input.source,
+    METRONOME_HGUSDC_FIXTURE_TARGET,
+    metronomeHgUsdcFixtureRuntime(),
+  );
+  return buildMetronomeHgUsdcCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:metronome-hgusdc:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain metronome-hgusdc capture: the vault asset() is read at the
+ * canonical source block and must equal the descriptor tokenOut.
+ * Fail-closed on empty/zero read or any divergence.
+ */
+export async function captureMetronomeHgUsdcOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly target: string;
+  readonly vault: string;
+  readonly tokenOut?: string;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const target = input.target.toLowerCase();
+  const vault = input.vault.toLowerCase();
+  const assetRaw = await input.provider.call({
+    to: vault,
+    data: METRONOME_HGUSDC_VAULT_INTERFACE.encodeFunctionData("asset", []),
+  }, input.source.number);
+  if (assetRaw === "0x" || assetRaw.length < 2) {
+    throw new Error(
+      `metronome-hgusdc vault asset read empty at ${input.source.number}`,
+    );
+  }
+  const asset = (
+    METRONOME_HGUSDC_VAULT_INTERFACE.decodeFunctionResult(
+      "asset",
+      assetRaw,
+    )[0] as string
+  ).toLowerCase();
+  if (asset === "0x0000000000000000000000000000000000000000") {
+    throw new Error("metronome-hgusdc vault reports a zero asset");
+  }
+  if (input.tokenOut !== undefined &&
+      input.tokenOut.toLowerCase() !== asset) {
+    throw new Error("metronome-hgusdc onchain tokenOut mismatch");
+  }
+  const publication = await runMetronomeHgUsdcLifecycle(
+    input.source,
+    target,
+    input.runtime,
+  );
+  return buildMetronomeHgUsdcCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:metronome-hgusdc:${target}`,
+    ]),
   });
 }
 

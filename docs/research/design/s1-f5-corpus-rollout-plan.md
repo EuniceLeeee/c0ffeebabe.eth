@@ -28,7 +28,7 @@
 | 4 | astra | captureAstraOnchainCase | completed |
 | 5 | eigenpie | captureEigenpieOnchainCase | completed |
 | 6 | ethertoken | captureEtherTokenOnchainCase | completed |
-| 7 | metronome-hgusdc | captureMetronomeHgUsdcOnchainCase | pending |
+| 7 | metronome-hgusdc | captureMetronomeHgUsdcOnchainCase | completed |
 | 8 | curve-underlying | captureCurveUnderlyingOnchainCase | pending |
 | 9 | dodo-v2 | captureDodoV2OnchainCase | pending |
 | 10 | fluid-dex | captureFluidDexOnchainCase | pending |
