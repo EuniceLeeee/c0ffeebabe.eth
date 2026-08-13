@@ -82,10 +82,9 @@ export async function materializeCaptureInventory(input: {
   readonly rawArtifacts: RawArtifacts;
   readonly provider: CaptureInventoryProvider;
 }): Promise<CaptureInventoryFile> {
-  const transactionHashes = rawTransactionHashes(input.rawArtifacts);
   const observations = [
     ...await addressObservations(input),
-    ...await transactionObservations({ ...input, transactionHashes }),
+    ...await transactionObservations(input),
   ];
   const byFamily = new Map<FamilyId, CaptureInventoryEntry>();
   admitObservations(input.catalog, observations, byFamily);
@@ -217,34 +216,62 @@ async function addressObservations(input: {
 async function transactionObservations(input: {
   readonly catalog: FamilyCapabilityCatalog;
   readonly source: CanonicalSource;
-  readonly transactionHashes: readonly string[];
+  readonly rawArtifacts: RawArtifacts;
   readonly provider: CaptureInventoryProvider;
 }): Promise<readonly UnifiedObservation[]> {
   const observations: UnifiedObservation[] = [];
-  for (const hash of input.transactionHashes) {
-    try {
-      const receipt = await input.provider.getTransactionReceipt(hash);
-      if (receipt === null || receipt.blockNumber > input.source.number) continue;
-      for (const log of receipt.logs) {
-        observations.push(Object.freeze({
-          kind: "log" as const,
-          source: input.source,
-          address: ethers.getAddress(log.address).toLowerCase(),
-          topics: Object.freeze(log.topics.map((topic) => topic.toLowerCase())),
-          data: log.data.toLowerCase(),
-          transactionHash: hash,
-        }));
-      }
-      collectTraceCalls(
-        await input.provider.traceTransaction(hash),
-        input.source,
-        hash,
-        observations,
-      );
-    } catch {
-      // The next evidence transaction may still close the same declaration.
-    }
+  const groups = new Map<FamilyId, readonly string[]>();
+  for (const nomination of rawTransactionNominations(
+    input.rawArtifacts,
+    input.catalog,
+  )) {
+    groups.set(nomination.familyId, Object.freeze([
+      ...(groups.get(nomination.familyId) ?? []),
+      nomination.transactionHash,
+    ]));
   }
+  await Promise.all([...groups.entries()].map(async ([familyId, hashes]) => {
+    const family = input.catalog.forStrictFamily(familyId);
+    if (!("discovery" in family.plugin)) return;
+    const discovery = family.plugin.discovery;
+    for (const hash of hashes) {
+      try {
+        const candidates: UnifiedObservation[] = [];
+        const receipt = await input.provider.getTransactionReceipt(hash);
+        if (receipt === null || receipt.blockNumber > input.source.number) continue;
+        for (const log of receipt.logs) {
+          candidates.push(Object.freeze({
+            kind: "log" as const,
+            source: input.source,
+            address: ethers.getAddress(log.address).toLowerCase(),
+            topics: Object.freeze(log.topics.map((topic) => topic.toLowerCase())),
+            data: log.data.toLowerCase(),
+            transactionHash: hash,
+          }));
+        }
+        collectTraceCalls(
+          await input.provider.traceTransaction(hash),
+          input.source,
+          hash,
+          candidates,
+        );
+        const accepted = candidates.find((observation) =>
+          input.catalog.matches(observation).some((match) =>
+            match.familyId === familyId &&
+            discovery.decodeCandidate({
+              observation,
+              matchedPatternId: match.patternId,
+            }) !== null
+          )
+        );
+        if (accepted === undefined) continue;
+        observations.push(accepted);
+        break;
+      } catch {
+        // The next evidence transaction may still close the same declaration.
+      }
+    }
+  }));
   return Object.freeze(observations);
 }
 
@@ -461,15 +488,50 @@ function catalogFamilyForLabel(
   }
 }
 
-function rawTransactionHashes(raw: RawArtifacts): readonly string[] {
-  const values = new Set<string>();
-  walk(raw as unknown as CanonicalValue, (key, value) => {
-    if (
-      (key === "txHash" || key === "transactionHash") &&
-      typeof value === "string" && ethers.isHexString(value, 32)
-    ) values.add(value.toLowerCase());
-  });
-  return Object.freeze([...values].sort());
+function rawTransactionNominations(
+  raw: RawArtifacts,
+  catalog: FamilyCapabilityCatalog,
+): readonly {
+  readonly familyId: FamilyId;
+  readonly transactionHash: string;
+}[] {
+  const values = new Map<string, {
+    readonly familyId: FamilyId;
+    readonly transactionHash: string;
+  }>();
+  const visit = (value: unknown, inherited: FamilyId | null): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, inherited);
+      return;
+    }
+    if (value === null || typeof value !== "object") return;
+    const record = value as Readonly<Record<string, unknown>>;
+    const resolved = Object.values(record).reduce<FamilyId | null>(
+      (current, item) => current ?? (
+        typeof item === "string" ? catalogFamilyForLabel(catalog, item) : null
+      ),
+      inherited,
+    );
+    if (resolved !== null) {
+      for (const [key, item] of Object.entries(record)) {
+        if (
+          (key !== "txHash" && key !== "transactionHash") ||
+          typeof item !== "string" || !ethers.isHexString(item, 32)
+        ) continue;
+        const transactionHash = item.toLowerCase();
+        values.set(`${resolved}\0${transactionHash}`, {
+          familyId: resolved,
+          transactionHash,
+        });
+      }
+    }
+    for (const item of Object.values(record)) visit(item, resolved);
+  };
+  visit(raw, null);
+  return Object.freeze([...values.values()].sort((left, right) =>
+    left.familyId.localeCompare(right.familyId) ||
+    left.transactionHash.localeCompare(right.transactionHash)
+  ));
 }
 
 function walk(

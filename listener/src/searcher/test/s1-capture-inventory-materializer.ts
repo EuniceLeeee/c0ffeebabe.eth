@@ -88,6 +88,7 @@ const inventory = await materializeCaptureInventory({
     }),
     protocolCache: Object.freeze({
       evidence: Object.freeze([Object.freeze({ txHash: TX_HASH })]),
+      family: ACTION,
     }),
   }),
   provider,
