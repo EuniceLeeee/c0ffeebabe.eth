@@ -9403,7 +9403,7 @@ class DodoV2FixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function dodoV2FixtureRuntime(): CentralAdapterRuntime {
+export function dodoV2FixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -9433,6 +9433,8 @@ function dodoV2FixtureRuntime(): CentralAdapterRuntime {
 
 async function runDodoV2Lifecycle(
   canonical: CanonicalSource,
+  pool: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     DODO_V2_FAMILY_ID,
@@ -9449,13 +9451,13 @@ async function runDodoV2Lifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: DODO_V2_FIXTURE_POOL,
+        target: pool.toLowerCase(),
         data: sellCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: dodoV2FixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -9469,14 +9471,13 @@ async function runDodoV2Lifecycle(
  * (zero deficit/surplus keeps selection local), actor-bound exact query and
  * execution.
  */
-export async function captureDodoV2FixtureCase(input: {
+async function buildDodoV2CaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runDodoV2Lifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:dodo-v2:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     DODO_V2_FAMILY_ID,
   );
@@ -9709,6 +9710,87 @@ export async function captureDodoV2FixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureDodoV2FixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runDodoV2Lifecycle(
+    input.source,
+    DODO_V2_FIXTURE_POOL,
+    dodoV2FixtureRuntime(),
+  );
+  return buildDodoV2CaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:dodo-v2:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain dodo-v2 capture: the pool _BASE_TOKEN_()/_QUOTE_TOKEN_() are
+ * read at the canonical source block and must match the supplied tokens.
+ * Fail-closed on empty/zero reads or any divergence.
+ */
+export async function captureDodoV2OnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly pool: string;
+  readonly baseToken?: string;
+  readonly quoteToken?: string;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const pool = input.pool.toLowerCase();
+  const read = async (name: string): Promise<string> => {
+    const raw = await input.provider.call({
+      to: pool,
+      data: DODO_V2_POOL_INTERFACE.encodeFunctionData(name, []),
+    }, input.source.number);
+    if (raw === "0x" || raw.length < 2) {
+      throw new Error(
+        `dodo-v2 ${name} read empty at ${input.source.number}`,
+      );
+    }
+    return (
+      DODO_V2_POOL_INTERFACE.decodeFunctionResult(name, raw)[0] as string
+    ).toLowerCase();
+  };
+  const [baseToken, quoteToken] = await Promise.all([
+    read("_BASE_TOKEN_"),
+    read("_QUOTE_TOKEN_"),
+  ]);
+  if (
+    baseToken === "0x0000000000000000000000000000000000000000" ||
+    quoteToken === "0x0000000000000000000000000000000000000000"
+  ) {
+    throw new Error("dodo-v2 reports a zero token");
+  }
+  if (
+    (input.baseToken !== undefined &&
+      input.baseToken.toLowerCase() !== baseToken) ||
+    (input.quoteToken !== undefined &&
+      input.quoteToken.toLowerCase() !== quoteToken)
+  ) {
+    throw new Error("dodo-v2 onchain token mismatch");
+  }
+  const publication = await runDodoV2Lifecycle(
+    input.source,
+    pool,
+    input.runtime,
+  );
+  return buildDodoV2CaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:dodo-v2:${pool}`,
+    ]),
   });
 }
 
