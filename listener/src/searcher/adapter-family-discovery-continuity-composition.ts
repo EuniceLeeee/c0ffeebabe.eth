@@ -9,6 +9,7 @@ import {
   createCatalogSourceTransitionIssuer,
   createCatalogTerminalRemovalIssuer,
   type CatalogSourceTransitionProof,
+  type CatalogTerminalRemovalProof,
 } from "./adapter-family-catalog-publication.js";
 import {
   StrictAdapterFamilyShadowCatalogPublicationRoot,
@@ -71,6 +72,22 @@ export interface DurableDiscoveryContinuityComposition {
     previous: CanonicalSource,
     current: CanonicalSource,
   ): CatalogSourceTransitionProof;
+  /**
+   * Issue an issuer-bound terminal removal proof for an explicitly settled
+   * StateInstance. This is the only way an observed-complete live publication
+   * may legally shrink the committed instance set: a missing instance is
+   * never tombstoned implicitly, it is either carried (mutation proof, not
+   * yet wired) or removed through an explicit terminal settlement the family
+   * declared for this canonical source.
+   */
+  issueTerminalRemoval(input: {
+    readonly familyId: FamilyId;
+    readonly lineageId: string;
+    readonly instanceKey: string;
+    readonly source: CanonicalSource;
+    readonly reason: string;
+    readonly evidenceRef: string;
+  }): CatalogTerminalRemovalProof;
   consumeClosureForCatalog(input: {
     readonly receipt: AdapterFamilySnapshotInventoryClosureReceipt;
     readonly source: CanonicalSource;
@@ -162,6 +179,23 @@ export function createDurableDiscoveryContinuityComposition(
         current,
         status: "canonical-descendant",
         evidenceRef: "live-chain-canonical-ancestry",
+      }),
+    issueTerminalRemoval: (input: {
+      readonly familyId: FamilyId;
+      readonly lineageId: string;
+      readonly instanceKey: string;
+      readonly source: CanonicalSource;
+      readonly reason: string;
+      readonly evidenceRef: string;
+    }) =>
+      terminalIssuer.issue({
+        familyId: input.familyId,
+        lineageId: input.lineageId,
+        instanceKey: input.instanceKey,
+        source: input.source,
+        status: "terminal",
+        reason: input.reason,
+        evidenceRef: input.evidenceRef,
       }),
     consumeClosureForCatalog: (consumption: {
       readonly receipt: AdapterFamilySnapshotInventoryClosureReceipt;

@@ -421,6 +421,23 @@ origin/main 取脚本）以
   publication，实际以 legacy 报价为主）。cutover 仍需 D-012 的
   P1 前置逐项立项。证据：
   `docs/research/design/evidence/s1-node-deploy-live-10cfa554.json`。
+**P1 mutation/terminal proof — terminal 半边落地（2026-08-13，cutover
+F1-a）：** observed-complete live 路径的合法收缩（显式 terminal
+settlement）已可提交。组合根
+`createDurableDiscoveryContinuityComposition` 暴露
+`issueTerminalRemoval(...)`（bound 到 catalog root 的
+terminal-removal authority）；live publisher 的 family 条目接受
+显式 `terminalRemovals` 声明（lineageId/instanceKey/reason/
+evidenceRef），为每条声明签发 issuer-bound proof 并传入
+`stageRouteFamily`，同时把 publication outcomes 的 evidenceRefs 作为
+stage outcomeRefs 传入。核心校验保持 fail-closed：证据不在 family
+outcomeRefs、同 stage 既 stage 又 remove、或 naming 未发布实例均整体
+拒绝。合同测试四例（合法收缩提交 + tombstone 键一致、证据缺失拒绝、
+同实例 stage+remove 拒绝、P1-d 无声明省略仍 fail-closed）；build/
+shadow suite/12 组 sweep 全绿。剩余 F1-b：跨代 carry 的 issuer-bound
+StateInstance mutation proof（需中央在新区块重验证并重签发
+source-bound runtime handle，另行立项，见 Phase F plan）。
+
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

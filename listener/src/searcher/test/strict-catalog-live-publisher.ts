@@ -18,6 +18,9 @@ import {
   publishStrictCatalogFromLifecycle,
 } from "../strict-catalog-live-publisher.js";
 import {
+  catalogInstancePublicationKey,
+} from "../adapter-family-catalog-publication.js";
+import {
   runWstethLifecycle,
   runFluidDexLifecycle,
 } from "../architecture-migration-fixture-replay.js";
@@ -63,6 +66,11 @@ const SOURCE4: CanonicalSource = Object.freeze({
   number: SOURCE3.number + 10,
   hash: `0x${"54".repeat(32)}`,
   generation: 46,
+});
+const SOURCE5: CanonicalSource = Object.freeze({
+  number: SOURCE4.number + 10,
+  hash: `0x${"55".repeat(32)}`,
+  generation: 47,
 });
 const WSTETH = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const CHAIN_ID = "1";
@@ -324,6 +332,144 @@ async function main(): Promise<void> {
         omissionCommitted.envelope.privateState.instances.size,
         2,
         "the failed carry must leave the committed instance set unchanged",
+      );
+
+      // Explicit terminal settlement is the only legal shrink for an
+      // observed-complete live publication: the family re-runs at the new
+      // source, declares the previously published instance terminally
+      // settled, and the publisher issues an issuer-bound terminal removal
+      // proof so the catalogRoot commits the removal atomically. The
+      // evidence-negative must run while the instance is still published
+      // (the prior check precedes the evidence check), so it comes first.
+      const terminalFluidPublication = Object.freeze({
+        ...(await runFluidDexLifecycle(SOURCE5)),
+        instances: Object.freeze([]),
+      });
+      const terminalEvidence = terminalFluidPublication.outcomes.flatMap(
+        (outcome) => outcome.evidenceRefs,
+      )[0];
+      assert(
+        terminalEvidence !== undefined,
+        "fluid lifecycle must provide outcome evidence refs",
+      );
+      const removedInstance = fluidPublication.instances[0];
+      assert(removedInstance, "fluid publication must stage one instance");
+
+      // A terminal declaration whose evidence is not among the staged
+      // family outcome refs must fail closed before any CAS.
+      const missingEvidenceResult = await publishStrictCatalogFromLifecycle({
+        composition: prodComposition,
+        catalog: prodCat,
+        source: SOURCE5,
+        publications: Object.freeze([
+          Object.freeze({
+            familyId: WSTETH_FAMILY_ID,
+            publication: await runWstethLifecycle(SOURCE5, prodCat),
+          }),
+          Object.freeze({
+            familyId: terminalFluidPublication.familyId,
+            publication: terminalFluidPublication,
+            terminalRemovals: Object.freeze([{
+              lineageId: removedInstance.lineageId,
+              instanceKey: removedInstance.instanceKey,
+              reason: "explicit-terminal-settlement",
+              evidenceRef: "fixture:undeclared-terminal-evidence",
+            }]),
+          }),
+        ]),
+      });
+      assert.equal(missingEvidenceResult.status, "unresolved");
+      if (missingEvidenceResult.status === "unresolved") {
+        assert.match(
+          missingEvidenceResult.reason,
+          /outcomeRefs/,
+          "terminal settlement evidence must be declared in the family outcomes",
+        );
+      }
+
+      // A terminal declaration may never name an instance staged in the same
+      // publication; the family must settle or re-admit, not both.
+      const restagedFluid = await runFluidDexLifecycle(SOURCE5);
+      const stagedInstance = restagedFluid.instances[0];
+      assert(stagedInstance, "fluid lifecycle must stage one instance");
+      const bothResult = await publishStrictCatalogFromLifecycle({
+        composition: prodComposition,
+        catalog: prodCat,
+        source: SOURCE5,
+        publications: Object.freeze([
+          Object.freeze({
+            familyId: WSTETH_FAMILY_ID,
+            publication: await runWstethLifecycle(SOURCE5, prodCat),
+          }),
+          Object.freeze({
+            familyId: restagedFluid.familyId,
+            publication: restagedFluid,
+            terminalRemovals: Object.freeze([{
+              lineageId: stagedInstance.lineageId,
+              instanceKey: stagedInstance.instanceKey,
+              reason: "explicit-terminal-settlement",
+              evidenceRef: terminalEvidence,
+            }]),
+          }),
+        ]),
+      });
+      assert.equal(bothResult.status, "unresolved");
+      if (bothResult.status === "unresolved") {
+        assert.match(
+          bothResult.reason,
+          /both stages and removes/,
+          "a family must not stage and terminally remove the same instance",
+        );
+      }
+
+      const terminalResult = await publishStrictCatalogFromLifecycle({
+        composition: prodComposition,
+        catalog: prodCat,
+        source: SOURCE5,
+        publications: Object.freeze([
+          Object.freeze({
+            familyId: WSTETH_FAMILY_ID,
+            publication: await runWstethLifecycle(SOURCE5, prodCat),
+          }),
+          Object.freeze({
+            familyId: terminalFluidPublication.familyId,
+            publication: terminalFluidPublication,
+            terminalRemovals: Object.freeze([{
+              lineageId: removedInstance.lineageId,
+              instanceKey: removedInstance.instanceKey,
+              reason: "explicit-terminal-settlement",
+              evidenceRef: terminalEvidence,
+            }]),
+          }),
+        ]),
+      });
+      assert.equal(
+        terminalResult.status,
+        "published",
+        terminalResult.status === "unresolved"
+          ? terminalResult.reason
+          : "unexpected terminal result",
+      );
+      const terminalCommitted = prodComposition.catalogRoot.capture();
+      assert(terminalCommitted);
+      assert.equal(
+        terminalCommitted.envelope.privateState.instances.size,
+        1,
+        "explicit terminal settlement must remove exactly the declared instance",
+      );
+      assert.equal(
+        terminalCommitted.envelope.privateState.tombstones.size,
+        1,
+        "explicit terminal settlement must tombstone the removed instance",
+      );
+      const removedKey = catalogInstancePublicationKey({
+        familyId: terminalFluidPublication.familyId,
+        lineageId: removedInstance.lineageId,
+        instanceKey: removedInstance.instanceKey,
+      });
+      assert(
+        terminalCommitted.envelope.privateState.tombstones.has(removedKey),
+        "the tombstone must be keyed by the removed instance identity",
       );
 
       // The final catalogRoot CAS must use the composition's real fences:

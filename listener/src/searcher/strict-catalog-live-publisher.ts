@@ -31,6 +31,20 @@ export async function publishStrictCatalogFromLifecycle(input: {
   readonly publications: readonly {
     readonly familyId: string;
     readonly publication: AdapterFamilyPublication;
+    /**
+     * Explicit terminal settlements declared by the family for this source.
+     * Each entry names a previously published instance that the family
+     * re-verified as terminally settled; the publisher issues an issuer-bound
+     * terminal removal proof so the catalogRoot may legally shrink. Omitting
+     * an instance without such a declaration stays fail-closed (observed
+     * complete grants no implicit omission/tombstone authority).
+     */
+    readonly terminalRemovals?: readonly {
+      readonly lineageId: string;
+      readonly instanceKey: string;
+      readonly reason: string;
+      readonly evidenceRef: string;
+    }[];
   }[];
 }): Promise<
   | { readonly status: "published"; readonly revision: number }
@@ -45,9 +59,29 @@ export async function publishStrictCatalogFromLifecycle(input: {
       const familyId = family.plugin.manifest.familyId;
       const entry = publishedByFamily.get(familyId);
       if (entry !== undefined) {
+        const terminalRemovals = (entry.terminalRemovals ?? []).map(
+          (removal) =>
+            composition.issueTerminalRemoval({
+              familyId,
+              lineageId: removal.lineageId,
+              instanceKey: removal.instanceKey,
+              source,
+              reason: removal.reason,
+              evidenceRef: removal.evidenceRef,
+            }),
+        );
+        const outcomeRefs = Object.freeze([
+          ...new Set(
+            entry.publication.outcomes.flatMap(
+              (outcome) => outcome.evidenceRefs,
+            ),
+          ),
+        ]);
         return composition.catalogRoot.stageRouteFamily({
           publication: entry.publication,
           inventoryMode: "observed-complete",
+          outcomeRefs,
+          terminalRemovals: Object.freeze(terminalRemovals),
         });
       }
       // Every catalog Family must appear in the staged publication; families
