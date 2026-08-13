@@ -1892,7 +1892,7 @@ class UniV4FixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function univ4FixtureRuntime(ctx: UniV4PoolContext): CentralAdapterRuntime {
+export function univ4FixtureRuntime(ctx: UniV4PoolContext): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -1915,6 +1915,7 @@ function univ4FixtureRuntime(ctx: UniV4PoolContext): CentralAdapterRuntime {
 async function runUniv4Lifecycle(
   canonical: CanonicalSource,
   ctx: UniV4PoolContext,
+  runtime: CentralAdapterRuntime = univ4FixtureRuntime(ctx),
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV4_FAMILY_ID,
@@ -1945,7 +1946,7 @@ async function runUniv4Lifecycle(
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: univ4FixtureRuntime(ctx),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -1967,9 +1968,12 @@ export async function captureUniv4FixtureCase(input: {
   readonly source: CanonicalSource;
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  return captureUniv4PoolCase({
+  return buildUniv4CaseCapture({
     source: input.source,
     caseId: input.caseId,
+    evidenceRefs: Object.freeze([
+      `fixture:univ4:${input.source.number}:${input.source.hash}`,
+    ]),
     ctx: Object.freeze({
       manager: UNIV4_FIXTURE_MANAGER,
       stateView: UNIV4_FIXTURE_STATE_VIEW,
@@ -2003,9 +2007,12 @@ export async function captureUniv4RealCase(input: {
     hooks: (input.hooks ?? "0x0000000000000000000000000000000000000000")
       .toLowerCase(),
   });
-  return captureUniv4PoolCase({
+  return buildUniv4CaseCapture({
     source: input.source,
     caseId: input.caseId ?? `univ4:${input.source.number}`,
+    evidenceRefs: Object.freeze([
+      `fixture:univ4:${input.source.number}:${input.source.hash}`,
+    ]),
     ctx: Object.freeze({
       manager: UNIV4_FIXTURE_MANAGER,
       stateView: UNIV4_FIXTURE_STATE_VIEW,
@@ -2021,16 +2028,99 @@ export async function captureUniv4RealCase(input: {
   });
 }
 
-async function captureUniv4PoolCase(input: {
+/**
+ * Real on-chain univ4 capture: the pool key is rebuilt from real
+ * currencies/fee/tick-spacing/hooks and its getSlot0/getLiquidity are read
+ * from the canonical state view at the source block. Any supplied descriptor
+ * must agree with the chain; an empty read fails closed. The lifecycle uses
+ * the real pool state with onchain evidence refs.
+ */
+export async function captureUniv4OnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly currency0: string;
+  readonly currency1: string;
+  readonly fee?: number;
+  readonly tickSpacing?: number;
+  readonly hooks?: string;
+  readonly liquidity?: bigint | string;
+  readonly sqrtPriceX96?: bigint | string;
+  readonly lpFee?: bigint | string;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const poolKey = Object.freeze({
+    currency0: input.currency0.toLowerCase(),
+    currency1: input.currency1.toLowerCase(),
+    fee: input.fee ?? Number(UNIV4_FIXTURE_FEE),
+    tickSpacing: input.tickSpacing ?? UNIV4_FIXTURE_TICK_SPACING,
+    hooks: (input.hooks ?? "0x0000000000000000000000000000000000000000")
+      .toLowerCase(),
+  });
+  const poolId = v4PoolId(poolKey);
+  const stateView = UNIV4_FIXTURE_STATE_VIEW.toLowerCase();
+  const read = async (name: string): Promise<string> => {
+    const raw = await input.provider.call({
+      to: stateView,
+      data: UNIV4_STATE_VIEW_INTERFACE.encodeFunctionData(name, [poolId]),
+    }, input.source.number);
+    if (raw === "0x" || raw.length < 2) {
+      throw new Error(`univ4 ${name} read empty at ${input.source.number}`);
+    }
+    return raw;
+  };
+  const [slot0Raw, liquidityRaw] = await Promise.all([
+    read("getSlot0"),
+    read("getLiquidity"),
+  ]);
+  const slot0 = UNIV4_STATE_VIEW_INTERFACE.decodeFunctionResult(
+    "getSlot0",
+    slot0Raw,
+  ) as unknown as [bigint, number, number, bigint];
+  const sqrtPriceX96 = slot0[0];
+  const lpFee = slot0[3];
+  const liquidity = UNIV4_STATE_VIEW_INTERFACE.decodeFunctionResult(
+    "getLiquidity",
+    liquidityRaw,
+  )[0] as bigint;
+  if (input.sqrtPriceX96 !== undefined &&
+      BigInt(input.sqrtPriceX96) !== sqrtPriceX96) {
+    throw new Error("univ4 onchain sqrtPriceX96 mismatch");
+  }
+  if (input.lpFee !== undefined && BigInt(input.lpFee) !== lpFee) {
+    throw new Error("univ4 onchain lpFee mismatch");
+  }
+  if (input.liquidity !== undefined &&
+      BigInt(input.liquidity) !== liquidity) {
+    throw new Error("univ4 onchain liquidity mismatch");
+  }
+  return buildUniv4CaseCapture({
+    source: input.source,
+    caseId: input.caseId ?? `univ4:${input.source.number}`,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:univ4:${poolId}`,
+    ]),
+    ctx: Object.freeze({
+      manager: UNIV4_FIXTURE_MANAGER,
+      stateView,
+      quoter: UNIV4_FIXTURE_QUOTER,
+      poolKey,
+      poolId,
+      liquidity,
+      sqrtPriceX96,
+      lpFee,
+    }),
+  });
+}
+
+async function buildUniv4CaseCapture(input: {
   readonly source: CanonicalSource;
   readonly caseId?: string;
   readonly ctx: UniV4PoolContext;
+  readonly evidenceRefs: readonly string[];
 }): Promise<RawFamilyMigrationCaseCapture> {
   const ctx = input.ctx;
   const publication = await runUniv4Lifecycle(input.source, ctx);
-  const evidenceRefs = Object.freeze([
-    `fixture:univ4:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV4_FAMILY_ID,
   );
