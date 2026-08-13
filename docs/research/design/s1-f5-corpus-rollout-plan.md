@@ -74,6 +74,14 @@ destroy provider，再记录该项失败并调度下一项；无 familyId/protoc
 分支。合同覆盖“第一项永久 pending → cancel/失败；第二项仍完成并进入
 batch 输出”，防止单 Family 测试误代替中央批量 liveness。
 
+节点 enumerator 已在独立 `/opt/MEV-impl-capture`（production runtime
+未改）对 `cc30bca1` 重跑：SSM
+`4b4bbed5-2fee-4286-8568-038f9bf39684`，catalogHash
+`4fc46b372088cc76bde079dc27031e24e9ca46b153e9dffdaffa5ef3cc87daa8`，
+familyCount 20，writer committed/revision 2；本地 verifier PASS。旧 hash
+的两份 enumerator 记录移入 `evidence/archive/` 仅作历史记录，不再被
+当前 sweep 当成可复用证据。
+
 ## 滚动清单（按序，模板先 erc4626 再其余）
 
 | # | 族 | capture 函数 | 状态 |
