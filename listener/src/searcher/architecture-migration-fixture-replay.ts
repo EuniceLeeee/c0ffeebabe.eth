@@ -3703,7 +3703,7 @@ class RocksolidFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function rocksolidFixtureRuntime(): CentralAdapterRuntime {
+export function rocksolidFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -3725,6 +3725,8 @@ function rocksolidFixtureRuntime(): CentralAdapterRuntime {
 
 async function runRocksolidLifecycle(
   canonical: CanonicalSource,
+  target: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ROCKSOLID_FAMILY_ID,
@@ -3741,13 +3743,13 @@ async function runRocksolidLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: ROCKSOLID_FIXTURE_TARGET,
+        target: target.toLowerCase(),
         data: depositCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: rocksolidFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -3755,14 +3757,13 @@ async function runRocksolidLifecycle(
   return publication;
 }
 
-export async function captureRocksolidFixtureCase(input: {
+async function buildRocksolidCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runRocksolidLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:rocksolid:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ROCKSOLID_FAMILY_ID,
   );
@@ -3989,6 +3990,71 @@ export async function captureRocksolidFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureRocksolidFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runRocksolidLifecycle(
+    input.source,
+    ROCKSOLID_FIXTURE_TARGET,
+    rocksolidFixtureRuntime(),
+  );
+  return buildRocksolidCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:rocksolid:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain rocksolid capture: convertToShares(1e18) is read at the
+ * canonical source block and must be positive. Fail-closed on empty reads
+ * or a zero quote.
+ */
+export async function captureRocksolidOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly target: string;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const target = input.target.toLowerCase();
+  const raw = await input.provider.call({
+    to: target,
+    data: ROCKSOLID_INTERFACE.encodeFunctionData("convertToShares", [
+      10n ** 18n,
+    ]),
+  }, input.source.number);
+  if (raw === "0x" || raw.length < 2) {
+    throw new Error(
+      `rocksolid quote read empty at ${input.source.number}`,
+    );
+  }
+  const shares = ROCKSOLID_INTERFACE.decodeFunctionResult(
+    "convertToShares",
+    raw,
+  )[0] as bigint;
+  if (shares <= 0n) {
+    throw new Error("rocksolid reports a non-positive conversion");
+  }
+  const publication = await runRocksolidLifecycle(
+    input.source,
+    target,
+    input.runtime,
+  );
+  return buildRocksolidCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:rocksolid:${target}`,
+    ]),
   });
 }
 

@@ -36,7 +36,7 @@
 | 12 | psm | capturePsmOnchainCase | completed |
 | 13 | wsteth | captureWstethOnchainCase | completed |
 | 14 | goldx | captureGoldxOnchainCase | completed |
-| 15 | rocksolid | captureRocksolidOnchainCase | pending |
+| 15 | rocksolid | captureRocksolidOnchainCase | completed |
 | 16 | metronome-synth | captureMetronomeSynthOnchainCase | pending |
 | 17 | self-burn | captureSelfBurnOnchainCase | pending |
 | 18 | angstrom-v4 | captureAngstromV4OnchainCase | pending |
