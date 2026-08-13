@@ -6803,7 +6803,7 @@ class AstraFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function astraFixtureRuntime(): CentralAdapterRuntime {
+export function astraFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -6829,6 +6829,10 @@ function astraFixtureRuntime(): CentralAdapterRuntime {
 
 async function runAstraLifecycle(
   canonical: CanonicalSource,
+  target: string,
+  tokenIn: string,
+  tokenOut: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ASTRA_MULTITOKEN_FAMILY_ID,
@@ -6837,8 +6841,8 @@ async function runAstraLifecycle(
   const changeCalldata = ASTRA_MULTITOKEN_INTERFACE.encodeFunctionData(
     "change",
     [
-      ASTRA_MULTITOKEN_FIXTURE_TOKEN_IN,
-      ASTRA_MULTITOKEN_FIXTURE_TOKEN_OUT,
+      tokenIn,
+      tokenOut,
       1_000_000n,
       0n,
     ],
@@ -6850,14 +6854,14 @@ async function runAstraLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: ASTRA_MULTITOKEN_FIXTURE_TARGET,
+        target: target.toLowerCase(),
         data: changeCalldata,
         sender: MIGRATION_CAPTURE_EXECUTOR,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: astraFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -6870,14 +6874,13 @@ async function runAstraLifecycle(
  * fixture: surface -> registry -> active-behavior identity proof with the
  * observed sender, two registry tokens and two directed convert routes.
  */
-export async function captureAstraMultiTokenFixtureCase(input: {
+async function buildAstraCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runAstraLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:astra-multitoken:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ASTRA_MULTITOKEN_FAMILY_ID,
   );
@@ -7114,6 +7117,89 @@ export async function captureAstraMultiTokenFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureAstraMultiTokenFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runAstraLifecycle(
+    input.source,
+    ASTRA_MULTITOKEN_FIXTURE_TARGET,
+    ASTRA_MULTITOKEN_FIXTURE_TOKEN_IN,
+    ASTRA_MULTITOKEN_FIXTURE_TOKEN_OUT,
+    astraFixtureRuntime(),
+  );
+  return buildAstraCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:astra-multitoken:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain astra-multitoken capture: registry tokens(0)/tokens(1) are
+ * read at the canonical source block and must match the supplied tokens.
+ * Fail-closed on empty reads or any divergence.
+ */
+export async function captureAstraOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly target: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const target = input.target.toLowerCase();
+  const readToken = async (index: number): Promise<string> => {
+    const raw = await input.provider.call({
+      to: target,
+      data: ASTRA_MULTITOKEN_INTERFACE.encodeFunctionData("tokens", [index]),
+    }, input.source.number);
+    if (raw === "0x" || raw.length < 2) {
+      throw new Error(
+        `astra tokens(${index}) read empty at ${input.source.number}`,
+      );
+    }
+    return (
+      ASTRA_MULTITOKEN_INTERFACE.decodeFunctionResult("tokens", raw)[0] as string
+    ).toLowerCase();
+  };
+  const [token0, token1] = await Promise.all([
+    readToken(0),
+    readToken(1),
+  ]);
+  if (
+    token0 === "0x0000000000000000000000000000000000000000" ||
+    token1 === "0x0000000000000000000000000000000000000000"
+  ) {
+    throw new Error("astra registry reports a zero token");
+  }
+  if (
+    token0 !== input.tokenIn.toLowerCase() ||
+    token1 !== input.tokenOut.toLowerCase()
+  ) {
+    throw new Error("astra onchain registry token mismatch");
+  }
+  const publication = await runAstraLifecycle(
+    input.source,
+    target,
+    token0,
+    token1,
+    input.runtime,
+  );
+  return buildAstraCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:astra-multitoken:${target}`,
+    ]),
   });
 }
 
