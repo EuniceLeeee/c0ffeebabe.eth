@@ -7339,7 +7339,7 @@ class EigenpieFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function eigenpieFixtureRuntime(): CentralAdapterRuntime {
+export function eigenpieFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -7365,6 +7365,9 @@ function eigenpieFixtureRuntime(): CentralAdapterRuntime {
 
 async function runEigenpieLifecycle(
   canonical: CanonicalSource,
+  target: string,
+  asset: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     EIGENPIE_FAMILY_ID,
@@ -7373,7 +7376,7 @@ async function runEigenpieLifecycle(
   const depositCalldata = EIGENPIE_INTERFACE.encodeFunctionData(
     "depositAsset",
     [
-      EIGENPIE_FIXTURE_ASSET,
+      asset,
       1_000_000n,
       0n,
       `0x${"00".repeat(20)}`,
@@ -7386,14 +7389,14 @@ async function runEigenpieLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: EIGENPIE_FIXTURE_TARGET,
+        target: target.toLowerCase(),
         data: depositCalldata,
         sender: MIGRATION_CAPTURE_EXECUTOR,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: eigenpieFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -7407,14 +7410,13 @@ async function runEigenpieLifecycle(
  * deposit effect-delta with AssetDeposit log; exact quote and execution
  * mirror the 1:1 pair.
  */
-export async function captureEigenpieFixtureCase(input: {
+async function buildEigenpieCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runEigenpieLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:eigenpie:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     EIGENPIE_FAMILY_ID,
   );
@@ -7647,6 +7649,82 @@ export async function captureEigenpieFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureEigenpieFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runEigenpieLifecycle(
+    input.source,
+    EIGENPIE_FIXTURE_TARGET,
+    EIGENPIE_FIXTURE_ASSET,
+    eigenpieFixtureRuntime(),
+  );
+  return buildEigenpieCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:eigenpie:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain eigenpie capture: getMLRTAmountToMint(asset, amount) is read
+ * at the canonical source block; the returned receipt token must be non-zero
+ * and agree with the descriptor. Fail-closed on any divergence.
+ */
+export async function captureEigenpieOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly target: string;
+  readonly asset: string;
+  readonly receipt?: string;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const target = input.target.toLowerCase();
+  const asset = input.asset.toLowerCase();
+  const quoteRaw = await input.provider.call({
+    to: target,
+    data: EIGENPIE_INTERFACE.encodeFunctionData("getMLRTAmountToMint", [
+      asset,
+      1_000_000n,
+    ]),
+  }, input.source.number);
+  if (quoteRaw === "0x" || quoteRaw.length < 2) {
+    throw new Error(
+      `eigenpie quote read empty at ${input.source.number}`,
+    );
+  }
+  const [, receiptToken] = EIGENPIE_INTERFACE.decodeFunctionResult(
+    "getMLRTAmountToMint",
+    quoteRaw,
+  ) as unknown as [bigint, string];
+  const receipt = receiptToken.toLowerCase();
+  if (receipt === "0x0000000000000000000000000000000000000000") {
+    throw new Error("eigenpie reports a zero receipt token");
+  }
+  if (input.receipt !== undefined &&
+      input.receipt.toLowerCase() !== receipt) {
+    throw new Error("eigenpie onchain receipt mismatch");
+  }
+  const publication = await runEigenpieLifecycle(
+    input.source,
+    target,
+    asset,
+    input.runtime,
+  );
+  return buildEigenpieCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:eigenpie:${target}`,
+    ]),
   });
 }
 

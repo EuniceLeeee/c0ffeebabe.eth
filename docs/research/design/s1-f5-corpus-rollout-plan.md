@@ -26,7 +26,7 @@
 | 2 | erc4626 | captureErc4626OnchainCase | completed |
 | 3 | erc4626-silo | captureErc4626SiloOnchainCase | completed |
 | 4 | astra | captureAstraOnchainCase | completed |
-| 5 | eigenpie | captureEigenpieOnchainCase | pending |
+| 5 | eigenpie | captureEigenpieOnchainCase | completed |
 | 6 | ethertoken | captureEtherTokenOnchainCase | pending |
 | 7 | metronome-hgusdc | captureMetronomeHgUsdcOnchainCase | pending |
 | 8 | curve-underlying | captureCurveUnderlyingOnchainCase | pending |
