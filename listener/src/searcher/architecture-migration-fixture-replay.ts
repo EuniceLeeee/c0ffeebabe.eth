@@ -1272,7 +1272,7 @@ class UniV3FixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function univ3FixtureRuntime(ctx: UniV3PoolContext): CentralAdapterRuntime {
+export function univ3FixtureRuntime(ctx: UniV3PoolContext): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -1295,6 +1295,7 @@ function univ3FixtureRuntime(ctx: UniV3PoolContext): CentralAdapterRuntime {
 async function runUniv3Lifecycle(
   canonical: CanonicalSource,
   ctx: UniV3PoolContext,
+  runtime: CentralAdapterRuntime = univ3FixtureRuntime(ctx),
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV3_FAMILY_ID,
@@ -1320,7 +1321,7 @@ async function runUniv3Lifecycle(
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: univ3FixtureRuntime(ctx),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -1338,9 +1339,12 @@ export async function captureUniv3FixtureCase(input: {
   readonly source: CanonicalSource;
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  return captureUniv3PoolCase({
+  return buildUniv3CaseCapture({
     source: input.source,
     caseId: input.caseId,
+    evidenceRefs: Object.freeze([
+      `fixture:univ3:${input.source.number}:${input.source.hash}`,
+    ]),
     ctx: Object.freeze({
       pool: UNIV3_FIXTURE_POOL,
       factory: UNIV3_FIXTURE_FACTORY,
@@ -1365,9 +1369,12 @@ export async function captureUniv3RealCase(input: {
   readonly sqrtPriceX96?: bigint | string;
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  return captureUniv3PoolCase({
+  return buildUniv3CaseCapture({
     source: input.source,
     caseId: input.caseId ?? `univ3:${input.source.number}`,
+    evidenceRefs: Object.freeze([
+      `fixture:univ3:${input.source.number}:${input.source.hash}`,
+    ]),
     ctx: Object.freeze({
       pool: input.pool.toLowerCase(),
       factory: UNIV3_FIXTURE_FACTORY,
@@ -1383,16 +1390,129 @@ export async function captureUniv3RealCase(input: {
   });
 }
 
-async function captureUniv3PoolCase(input: {
+/**
+ * Real on-chain univ3 capture: factory/token0/token1/fee/tickSpacing and
+ * slot0/liquidity are read from the pool at the canonical source block. Any
+ * supplied descriptor must agree with the chain; a zero factory or empty
+ * read fails closed. The lifecycle uses the real pool state via the
+ * deterministic local v3 math runtime, with onchain evidence refs.
+ */
+export async function captureUniv3OnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly pool: string;
+  readonly tokenA?: string;
+  readonly tokenB?: string;
+  readonly fee?: bigint | string;
+  readonly tickSpacing?: number;
+  readonly liquidity?: bigint | string;
+  readonly sqrtPriceX96?: bigint | string;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const pool = input.pool.toLowerCase();
+  const read = async (name: string): Promise<string> => {
+    const raw = await input.provider.call({
+      to: pool,
+      data: UNIV3_POOL_INTERFACE.encodeFunctionData(name, []),
+    }, input.source.number);
+    if (raw === "0x" || raw.length < 2) {
+      throw new Error(`univ3 ${name} read empty at ${input.source.number}`);
+    }
+    return raw;
+  };
+  const [
+    factoryRaw,
+    token0Raw,
+    token1Raw,
+    feeRaw,
+    tickSpacingRaw,
+    slot0Raw,
+    liquidityRaw,
+  ] = await Promise.all([
+    read("factory"),
+    read("token0"),
+    read("token1"),
+    read("fee"),
+    read("tickSpacing"),
+    read("slot0"),
+    read("liquidity"),
+  ]);
+  const factory = (
+    UNIV3_POOL_INTERFACE.decodeFunctionResult("factory", factoryRaw)[0] as string
+  ).toLowerCase();
+  if (factory === "0x0000000000000000000000000000000000000000") {
+    throw new Error(`univ3 pool ${pool} reports a zero factory`);
+  }
+  const token0 = (
+    UNIV3_POOL_INTERFACE.decodeFunctionResult("token0", token0Raw)[0] as string
+  ).toLowerCase();
+  const token1 = (
+    UNIV3_POOL_INTERFACE.decodeFunctionResult("token1", token1Raw)[0] as string
+  ).toLowerCase();
+  if (input.tokenA !== undefined &&
+      input.tokenA.toLowerCase() !== token0) {
+    throw new Error("univ3 onchain tokenA mismatch");
+  }
+  if (input.tokenB !== undefined &&
+      input.tokenB.toLowerCase() !== token1) {
+    throw new Error("univ3 onchain tokenB mismatch");
+  }
+  const fee = UNIV3_POOL_INTERFACE.decodeFunctionResult("fee", feeRaw)[0] as bigint;
+  const tickSpacing = Number(
+    UNIV3_POOL_INTERFACE.decodeFunctionResult("tickSpacing", tickSpacingRaw)[0],
+  );
+  if (input.fee !== undefined && BigInt(input.fee) !== fee) {
+    throw new Error("univ3 onchain fee mismatch");
+  }
+  if (input.tickSpacing !== undefined &&
+      input.tickSpacing !== tickSpacing) {
+    throw new Error("univ3 onchain tickSpacing mismatch");
+  }
+  const slot0 = UNIV3_POOL_INTERFACE.decodeFunctionResult(
+    "slot0",
+    slot0Raw,
+  ) as unknown as [bigint, number, number, number, number, number, boolean];
+  const sqrtPriceX96 = slot0[0];
+  const liquidity = UNIV3_POOL_INTERFACE.decodeFunctionResult(
+    "liquidity",
+    liquidityRaw,
+  )[0] as bigint;
+  if (input.sqrtPriceX96 !== undefined &&
+      BigInt(input.sqrtPriceX96) !== sqrtPriceX96) {
+    throw new Error("univ3 onchain sqrtPriceX96 mismatch");
+  }
+  if (input.liquidity !== undefined &&
+      BigInt(input.liquidity) !== liquidity) {
+    throw new Error("univ3 onchain liquidity mismatch");
+  }
+  return buildUniv3CaseCapture({
+    source: input.source,
+    caseId: input.caseId ?? `univ3:${input.source.number}`,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:univ3:${pool}`,
+    ]),
+    ctx: Object.freeze({
+      pool,
+      factory,
+      token0,
+      token1,
+      fee,
+      tickSpacing,
+      liquidity,
+      sqrtPriceX96,
+    }),
+  });
+}
+
+async function buildUniv3CaseCapture(input: {
   readonly source: CanonicalSource;
   readonly caseId?: string;
   readonly ctx: UniV3PoolContext;
+  readonly evidenceRefs: readonly string[];
 }): Promise<RawFamilyMigrationCaseCapture> {
   const ctx = input.ctx;
   const publication = await runUniv3Lifecycle(input.source, ctx);
-  const evidenceRefs = Object.freeze([
-    `fixture:univ3:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV3_FAMILY_ID,
   );
