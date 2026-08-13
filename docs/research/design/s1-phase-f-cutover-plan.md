@@ -55,6 +55,15 @@
   `runStrictFamilyLifecycle`。当前 live feed 只消费 protocol cache 的
   verified_candidates + address_entries；剩余为把三类 log/call 观测源
   接入 feed（Phase E plan Pair C 对应面）。
+- **F2-b 核心派生（已完成）：**
+  `deriveLiveDiscoveryEventObservations`：原始 observed call/log 事件
+  → source-bound UnifiedObservation（selector/topic0 经中央
+  `catalog.matches` 按族分桶），同事件去重、超 source 事件跳过
+  （stale buffer 不得铸超前 anchor 的观测）。合同测试（wsteth wrap
+  call 分桶、重复折叠、越界跳过、未知 selector 空桶）；build/shadow
+  suite（29）/12 组 sweep 全绿。剩余 F2-b 接线：生产 discovery
+  循环保留 observed events（内存有界缓冲）+ strict feed 合并该分桶
+  结果。
 
 ### F3 continuous 调度 lane
 

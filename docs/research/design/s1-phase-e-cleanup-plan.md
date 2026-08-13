@@ -483,6 +483,11 @@ per-run deadline（`PublicationChainDeadlineError`，链继续不阻塞）、
 `backlogSize()`/`evictions()`。旧调用面不变。合同五例；
 build/shadow suite（28）/12 组 sweep 全绿。
 
+**F2-b 核心派生（2026-08-13）：**
+`deriveLiveDiscoveryEventObservations`：raw observed call/log →
+UnifiedObservation，selector/topic0 经 `catalog.matches` 分族，去重 +
+超 source 跳过。合同测试；build/shadow suite（29）/12 组 sweep 全绿。
+
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |
