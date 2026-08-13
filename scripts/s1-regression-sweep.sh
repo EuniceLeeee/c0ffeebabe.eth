@@ -27,6 +27,8 @@ run_test() {
 
 run_test build npm run build
 run_test generic-family-capture npm run searcher:generic-family-capture
+run_test s1-capture-inventory-materializer \
+  npm run searcher:s1-capture-inventory-materializer
 run_test architecture-migration-held-out-generator \
   npm run searcher:architecture-migration-held-out-generator
 run_test s1-capture-descriptor-generator \

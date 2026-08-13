@@ -5,9 +5,10 @@ import type {
 } from "./adapter-family-discovery-checkpoint.js";
 import type {
   FamilyCaptureDescriptor,
-  UnifiedObservation,
 } from "./venues/adapter-family-plugin.js";
 import type { CanonicalValue } from "./venues/canonical-value.js";
+import type { CaptureInventoryFile } from
+  "./materialize-s1-capture-inventory.js";
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "./venues/production-family-composition.js";
@@ -20,6 +21,88 @@ interface DescriptorFile {
     FamilyCaptureDescriptor,
     "source"
   >[];
+}
+
+export function descriptorFromInventory(input: {
+  readonly inventory: CaptureInventoryFile;
+  readonly assets: readonly string[];
+  readonly executor: string;
+  readonly amount: bigint;
+  readonly minProfit: bigint;
+}): DescriptorFile {
+  const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+  if (input.inventory.catalogHash !== catalog.catalogHash) {
+    throw new Error("capture inventory catalogHash does not match generated catalog");
+  }
+  if (input.inventory.unresolved.length !== 0) {
+    throw new Error(
+      `capture inventory cannot cover generated catalog: ${input.inventory.unresolved
+        .map((item) => `${item.familyId}:incumbent`).sort().join(",")}`,
+    );
+  }
+  const executor = ethers.getAddress(input.executor).toLowerCase();
+  const assets = canonicalAddresses(input.assets, "capture asset inventory");
+  const byFamily = new Map(input.inventory.entries.map((entry) => [
+    entry.familyId,
+    entry,
+  ]));
+  const cases: Omit<FamilyCaptureDescriptor, "source">[] = [];
+  const missing: string[] = [];
+  for (const family of catalog.listAll()) {
+    if (family.plugin.capture === undefined) {
+      missing.push(`${family.plugin.manifest.familyId}:capture`);
+      continue;
+    }
+    if (family.plugin.manifest.domain === "funding") {
+      if (!("funding" in family.plugin) || family.plugin.funding === undefined) {
+        throw new Error("Funding manifest has no Funding capability");
+      }
+      cases.push(Object.freeze({
+        familyId: family.plugin.manifest.familyId,
+        candidateIdentity: family.plugin.funding.repayment.target,
+        opaqueBinding: Object.freeze({
+          amount: input.amount.toString(),
+          assets,
+          minProfit: input.minProfit.toString(),
+        }),
+      }));
+      continue;
+    }
+    const incumbent = byFamily.get(family.plugin.manifest.familyId);
+    if (incumbent === undefined) {
+      missing.push(`${family.plugin.manifest.familyId}:incumbent`);
+      continue;
+    }
+    const common = {
+      executor,
+      minAmountOut: input.minProfit.toString(),
+      observation: incumbent.observation as unknown as CanonicalValue,
+      runtimeEvidence: Object.freeze([]),
+    };
+    cases.push(Object.freeze({
+      familyId: family.plugin.manifest.familyId,
+      candidateIdentity: incumbent.candidateIdentity,
+      opaqueBinding: family.plugin.manifest.domain === "credit"
+        ? Object.freeze({
+            ...common,
+            collateralAmount: input.amount.toString(),
+            debtBps: "5000",
+          })
+        : Object.freeze({ ...common, amountIn: input.amount.toString() }),
+    }));
+  }
+  if (missing.length !== 0) {
+    throw new Error(
+      `capture inventory cannot cover generated catalog: ${missing.sort().join(",")}`,
+    );
+  }
+  cases.sort((left, right) => left.familyId.localeCompare(right.familyId));
+  return Object.freeze({
+    sourceBlock: input.inventory.source.number,
+    sourceBlockHash: input.inventory.source.hash,
+    captureId: `catalog-inventory-${input.inventory.source.number}`,
+    cases: Object.freeze(cases),
+  });
 }
 
 /**
@@ -131,8 +214,8 @@ async function main(): Promise<void> {
   }
   const executor = process.env.S1_CAPTURE_EXECUTOR;
   if (executor === undefined) throw new Error("S1_CAPTURE_EXECUTOR is required");
-  const checkpoint = JSON.parse(await readFile(checkpointPath, "utf8")) as
-    AdapterFamilyDiscoveryCheckpointSnapshot;
+  const rawInventory = JSON.parse(await readFile(checkpointPath, "utf8")) as
+    AdapterFamilyDiscoveryCheckpointSnapshot | CaptureInventoryFile;
   const assetInventory = JSON.parse(await readFile(assetsPath, "utf8")) as
     unknown;
   if (!Array.isArray(assetInventory) || assetInventory.some((item) =>
@@ -140,13 +223,15 @@ async function main(): Promise<void> {
   )) {
     throw new Error("asset inventory must be an array of addresses");
   }
-  const descriptor = descriptorFromCheckpoint({
-    checkpoint,
+  const common = {
     assets: assetInventory as string[],
     executor,
     amount: positiveBigint(process.env.S1_CAPTURE_AMOUNT, 1n),
     minProfit: nonnegativeBigint(process.env.S1_CAPTURE_MIN_PROFIT, 0n),
-  });
+  };
+  const descriptor = rawInventory.format === "s1-catalog-capture-inventory-v1"
+    ? descriptorFromInventory({ inventory: rawInventory, ...common })
+    : descriptorFromCheckpoint({ checkpoint: rawInventory, ...common });
   await writeFile(outputPath, `${JSON.stringify(descriptor, null, 2)}\n`);
   process.stdout.write(
     `catalog capture descriptor written: ${descriptor.cases.length} cases\n`,

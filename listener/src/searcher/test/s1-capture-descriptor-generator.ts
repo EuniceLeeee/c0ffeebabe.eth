@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import {
   descriptorFromCheckpoint,
+  descriptorFromInventory,
 } from "../generate-s1-capture-descriptor.js";
 import type {
   AdapterFamilyDiscoveryCheckpointSnapshot,
@@ -9,6 +10,8 @@ import type {
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
+import type { CaptureInventoryFile } from
+  "../materialize-s1-capture-inventory.js";
 
 const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
 const source = Object.freeze({
@@ -85,4 +88,37 @@ assert.throws(
   }),
   /cannot cover generated catalog/,
 );
+
+const captureInventory: CaptureInventoryFile = Object.freeze({
+  format: "s1-catalog-capture-inventory-v1",
+  catalogHash: catalog.catalogHash,
+  source,
+  entries: Object.freeze(inventoryFamilies.map((family) => Object.freeze({
+    familyId: family.familyId,
+    candidateIdentity: family.incumbents[0]!.address,
+    observation: family.incumbents[0]!.currentSurface,
+  }))),
+  unresolved: Object.freeze([]),
+});
+const inventoryDescriptor = descriptorFromInventory({
+  inventory: captureInventory,
+  assets: [ethers.getAddress(`0x${"fe".repeat(20)}`)],
+  executor: ethers.getAddress(`0x${"ef".repeat(20)}`),
+  amount: 1n,
+  minProfit: 0n,
+});
+assert.deepEqual(inventoryDescriptor.cases, descriptor.cases);
+assert.throws(() => descriptorFromInventory({
+  inventory: Object.freeze({
+    ...captureInventory,
+    unresolved: Object.freeze([Object.freeze({
+      familyId: inventoryFamilies[0]!.familyId,
+      reason: "synthetic gap",
+    })]),
+  }),
+  assets: [ethers.getAddress(`0x${"fe".repeat(20)}`)],
+  executor: ethers.getAddress(`0x${"ef".repeat(20)}`),
+  amount: 1n,
+  minProfit: 0n,
+}), /cannot cover generated catalog/);
 console.log("S1 capture descriptor generator PASS");
