@@ -1,4 +1,5 @@
 import { defineSwapFamily } from "../adapter-family-plugin.js";
+import { univ3Capture } from "../swaps/univ3-family/capture.js";
 import { univ3FamilyOwnedAction } from "../swaps/univ3-family/action.js";
 import { univ3Discovery } from "../swaps/univ3-family/discovery.js";
 import { univ3Exact } from "../swaps/univ3-family/exact.js";
@@ -12,6 +13,7 @@ import { univ3Swap } from "../swaps/univ3-family/swap.js";
 
 export const plugin = defineSwapFamily({
   manifest: univ3FamilyManifest,
+  capture: univ3Capture,
   discovery: univ3Discovery,
   identity: univ3Identity,
   instance: univ3Instance,

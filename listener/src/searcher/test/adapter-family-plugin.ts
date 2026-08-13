@@ -8,6 +8,8 @@ import {
   type AdapterFamilyCore,
   type CompiledInstanceDescriptor,
   type FamilyCandidate,
+  type FamilyCaptureDescriptor,
+  type FamilyCaptureVector,
   type FamilyManifest,
   type FamilyOwnedActionAdapter,
   type FamilyRouteDescriptor,
@@ -365,6 +367,146 @@ assert.equal(
 assert.match(
   definedFamilyPluginContractSummary(definedSwap).definitionBoundaryHash,
   /^[a-f0-9]{64}$/,
+);
+
+function captureDefinition(input?: {
+  readonly materialize?: (
+    descriptor: FamilyCaptureDescriptor,
+  ) => FamilyCaptureVector;
+}): ReturnType<typeof swapDefinition> {
+  const definition = swapDefinition();
+  (definition as unknown as {
+    capture: {
+      materialize(descriptor: FamilyCaptureDescriptor): FamilyCaptureVector;
+    };
+  }).capture = {
+    materialize: input?.materialize ?? ((descriptor) => ({
+      kind: "route" as const,
+      observations: [{
+        kind: "observed-log" as const,
+        patternId: "test-observation",
+        transactionHash: HASH,
+        logIndex: 0,
+      }],
+      amountIn: 1n,
+      minAmountOut: 0n,
+      executor: ADDRESS,
+      runtimeEvidence: [{
+        evidenceId: "synthetic-onchain-capture",
+        familyId: descriptor.familyId,
+        kind: "receipt-log",
+        scope: "source-block" as const,
+        source: descriptor.source,
+        evidenceHash: HASH,
+        sealedPayloadRef: `onchain:synthetic:${descriptor.source.hash}`,
+      }],
+    })),
+  };
+  return definition;
+}
+
+const capturePlugin = defineSwapFamily(captureDefinition());
+const captureDescriptor: FamilyCaptureDescriptor = Object.freeze({
+  familyId: capturePlugin.manifest.familyId,
+  candidateIdentity: ADDRESS,
+  source: Object.freeze({ number: 1, hash: HASH, generation: 1 }),
+  opaqueBinding: Object.freeze({ kind: "synthetic" }),
+});
+const captureVector = capturePlugin.capture!.materialize(captureDescriptor);
+assert(Object.isFrozen(captureVector));
+assert.equal(captureVector.kind, "route");
+if (captureVector.kind !== "route") throw new Error("route capture expected");
+assert(Object.isFrozen(captureVector.observations));
+assert(Object.isFrozen(captureVector.observations[0]));
+assert(Object.isFrozen(captureVector.runtimeEvidence));
+assert(Object.isFrozen(captureVector.runtimeEvidence[0]));
+
+assert.throws(
+  () => capturePlugin.capture!.materialize({
+    ...captureDescriptor,
+    familyId: familyId("synthetic:foreign"),
+  }),
+  /descriptor Family does not match its plugin/,
+);
+assert.throws(
+  () => capturePlugin.capture!.materialize({
+    ...captureDescriptor,
+    source: { number: -1, hash: HASH, generation: 1 },
+  }),
+  /source.number must be a nonnegative safe integer/,
+);
+
+const undeclaredCapture = defineSwapFamily(captureDefinition({
+  materialize: (descriptor) => ({
+    kind: "route",
+    observations: [{
+      kind: "observed-log",
+      patternId: "not-declared",
+      transactionHash: HASH,
+      logIndex: 0,
+    }],
+    amountIn: 1n,
+    minAmountOut: 0n,
+    executor: ADDRESS,
+    runtimeEvidence: [{
+      evidenceId: "synthetic-onchain-capture",
+      familyId: descriptor.familyId,
+      kind: "receipt-log",
+      scope: "source-block",
+      source: descriptor.source,
+      evidenceHash: HASH,
+      sealedPayloadRef: "onchain:synthetic",
+    }],
+  }),
+}));
+assert.throws(
+  () => undeclaredCapture.capture!.materialize({
+    ...captureDescriptor,
+    familyId: undeclaredCapture.manifest.familyId,
+  }),
+  /patternId is not declared by its plugin/,
+);
+
+const fixtureEvidenceCapture = defineSwapFamily(captureDefinition({
+  materialize: (descriptor) => ({
+    kind: "route",
+    observations: [{
+      kind: "observed-log",
+      patternId: "test-observation",
+      transactionHash: HASH,
+      logIndex: 0,
+    }],
+    amountIn: 1n,
+    minAmountOut: 0n,
+    executor: ADDRESS,
+    runtimeEvidence: [{
+      evidenceId: "synthetic-fixture-capture",
+      familyId: descriptor.familyId,
+      kind: "receipt-log",
+      scope: "source-block",
+      source: descriptor.source,
+      evidenceHash: HASH,
+      sealedPayloadRef: "fixture:forbidden",
+    }],
+  }),
+}));
+assert.throws(
+  () => fixtureEvidenceCapture.capture!.materialize({
+    ...captureDescriptor,
+    familyId: fixtureEvidenceCapture.manifest.familyId,
+  }),
+  /sealedPayloadRef must be onchain evidence/,
+);
+
+const thenableCapture = defineSwapFamily(captureDefinition({
+  materialize: (() => Promise.resolve({})) as never,
+}));
+assert.throws(
+  () => thenableCapture.capture!.materialize({
+    ...captureDescriptor,
+    familyId: thenableCapture.manifest.familyId,
+  }),
+  /returned a thenable; it must be synchronous/,
 );
 
 assert.throws(

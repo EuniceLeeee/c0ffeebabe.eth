@@ -124,6 +124,88 @@ export type UnifiedObservation =
       readonly data: string;
     };
 
+/**
+ * The only descriptor visible to central capture code. `opaqueBinding` is
+ * interpreted synchronously by the owning plugin; the framework must never
+ * branch on its fields or assign protocol meaning to it.
+ */
+export interface FamilyCaptureDescriptor {
+  readonly familyId: FamilyId;
+  readonly candidateIdentity: string;
+  readonly source: CanonicalSource;
+  readonly opaqueBinding: CanonicalValue;
+}
+
+export type CaptureObservationIntent =
+  | {
+      /**
+       * A source-bound observation restored from the catalog-owned durable
+       * inventory. The owning plugin validates that it matches one of its
+       * declarations before the central executor is allowed to use it.
+       */
+      readonly kind: "provided-observation";
+      readonly patternId: string;
+      readonly observation: UnifiedObservation;
+    }
+  | {
+      readonly kind: "address-surface";
+      readonly patternId: string;
+      readonly address: string;
+      readonly interfaceFingerprints: readonly string[];
+    }
+  | {
+      readonly kind: "declared-log";
+      readonly patternId: string;
+      readonly candidateIdentity: string;
+    }
+  | {
+      readonly kind: "observed-call";
+      readonly patternId: string;
+      readonly transactionHash: string;
+      readonly traceAddress: readonly number[];
+    }
+  | {
+      readonly kind: "observed-log";
+      readonly patternId: string;
+      readonly transactionHash: string;
+      readonly logIndex: number;
+    };
+
+export interface RouteCaptureVector {
+  readonly kind: "route";
+  readonly observations: readonly CaptureObservationIntent[];
+  readonly amountIn: bigint;
+  readonly minAmountOut: bigint;
+  readonly executor: string;
+  readonly runtimeEvidence: readonly RuntimeEvidence[];
+}
+
+export interface FundingCaptureVector {
+  readonly kind: "funding";
+  readonly assets: readonly string[];
+  readonly amount: bigint;
+  readonly minProfit: bigint;
+}
+
+export interface CreditCaptureVector {
+  readonly kind: "credit";
+  readonly observations: readonly CaptureObservationIntent[];
+  readonly collateralAmount: bigint;
+  readonly debtBps: bigint;
+  readonly minAmountOut: bigint;
+  readonly executor: string;
+  readonly runtimeEvidence: readonly RuntimeEvidence[];
+}
+
+export type FamilyCaptureVector =
+  | RouteCaptureVector
+  | FundingCaptureVector
+  | CreditCaptureVector;
+
+export interface CaptureMaterializationSemantics {
+  materialize(descriptor: FamilyCaptureDescriptor): FamilyCaptureVector;
+}
+
 export interface FamilyCandidate {
   readonly candidateKind: string;
 }
@@ -1029,6 +1111,7 @@ export interface AdapterFamilyCore<
   InstanceStaticEvidence = unknown,
   PricingStaticEvidence = unknown,
 > {
+  readonly capture?: CaptureMaterializationSemantics;
   readonly discovery: DiscoverySemantics<Candidate>;
   readonly identity: IdentitySemantics<Candidate, Identity>;
   readonly instance: InstanceSemantics<
@@ -1122,6 +1205,7 @@ export interface FundingFamilyPlugin<
   LiquidityEvidence,
 > {
   readonly manifest: FamilyManifest<"funding">;
+  readonly capture?: CaptureMaterializationSemantics;
   readonly funding: FundingDomainSemantics<Source, LiquidityEvidence>;
   readonly actionAdapters: readonly FamilyOwnedActionAdapter[];
   readonly swap?: never;
@@ -1139,6 +1223,7 @@ export interface CreditFamilyPlugin<
   InstanceStaticEvidence = unknown,
 > {
   readonly manifest: FamilyManifest<"credit">;
+  readonly capture?: CaptureMaterializationSemantics;
   readonly discovery: DiscoverySemantics<Candidate>;
   readonly identity: IdentitySemantics<Candidate, Identity>;
   readonly instance: InstanceSemantics<
@@ -1279,7 +1364,11 @@ const COMMON_REQUIRED_KEYS = Object.freeze([
   "pricing",
   "routes",
 ]);
-const COMMON_OPTIONAL_KEYS = Object.freeze(["optional", "sharedBindings"]);
+const COMMON_OPTIONAL_KEYS = Object.freeze([
+  "capture",
+  "optional",
+  "sharedBindings",
+]);
 const FUNDING_REQUIRED_KEYS = Object.freeze([
   "actionAdapters",
   "funding",
@@ -1415,6 +1504,18 @@ function installSynchronousGuards(
   plugin: AnyStrictFamilyPlugin,
   domain: FamilyDomain,
 ): void {
+  if (plugin.capture !== undefined) {
+    guardSynchronousMethod(
+      plugin.capture,
+      "materialize",
+      "capture.materialize",
+      (result, args) => validateCaptureMaterializationResult(
+        plugin,
+        result,
+        args,
+      ),
+    );
+  }
   if (domain === "funding") {
     const fundingPlugin = pluginForDomain(plugin, "funding");
     const funding = fundingPlugin.funding;
@@ -1902,6 +2003,7 @@ function validateFamilyPlugin(
   assertExactTopLevelKeys(plugin, expectedDomain);
   const manifest = plugin.manifest;
   validateManifest(manifest, expectedDomain);
+  if (plugin.capture !== undefined) validateCapture(plugin.capture);
   if (expectedDomain === "funding") {
     const fundingPlugin = pluginForDomain(plugin, "funding");
     validateFundingDomain(
@@ -1999,6 +2101,7 @@ function validateFamilyPlugin(
       }))
       .sort((left, right) => left.id.localeCompare(right.id)),
     taxonomy,
+    capture: plugin.capture === undefined ? null : "plugin-materialized-v1",
     discoveryPatternIds: routedPlugin === null
       ? []
       : [...discoveryPatternIds(routedPlugin.discovery)].sort(),
@@ -2025,6 +2128,450 @@ function validateFamilyPlugin(
     taxonomy,
     definitionBoundaryHash: hashCanonical(boundary),
   };
+}
+
+function validateCapture(capture: CaptureMaterializationSemantics): void {
+  assertPlainRecord(capture, "capture materialization");
+  assertExactKeys(capture, ["materialize"], "capture materialization");
+  assertSynchronousFunction(capture.materialize, "capture.materialize");
+}
+
+function validateCaptureMaterializationResult(
+  plugin: AnyStrictFamilyPlugin,
+  result: unknown,
+  args: readonly unknown[],
+): void {
+  if (args.length !== 1) {
+    throw new Error("capture.materialize requires exactly one descriptor");
+  }
+  const descriptor = args[0];
+  assertPlainRecord(descriptor, "capture descriptor");
+  assertExactKeys(
+    descriptor as object,
+    ["candidateIdentity", "familyId", "opaqueBinding", "source"],
+    "capture descriptor",
+  );
+  const captureDescriptor = descriptor as unknown as FamilyCaptureDescriptor;
+  if (captureDescriptor.familyId !== plugin.manifest.familyId) {
+    throw new Error("capture descriptor Family does not match its plugin");
+  }
+  nonemptyString(
+    captureDescriptor.candidateIdentity,
+    "capture descriptor candidateIdentity",
+  );
+  validateCanonicalSource(captureDescriptor.source, "capture descriptor source");
+  // This rejects functions, symbols, cycles and non-plain records before a
+  // plugin can use opaque input as an escape hatch from the canonical model.
+  hashCanonical(captureDescriptor.opaqueBinding);
+
+  assertPlainRecord(result, "capture vector");
+  const vector = result as FamilyCaptureVector;
+  if (plugin.manifest.domain === "funding") {
+    validateFundingCaptureVector(vector);
+  } else if (plugin.manifest.domain === "credit") {
+    validateCreditCaptureVector(plugin, captureDescriptor, vector);
+  } else {
+    validateRouteCaptureVector(plugin, captureDescriptor, vector);
+  }
+  deepFreezeDefinition(vector, "capture vector", new Set<object>());
+}
+
+function validateRouteCaptureVector(
+  plugin: AnyStrictFamilyPlugin,
+  descriptor: FamilyCaptureDescriptor,
+  vector: FamilyCaptureVector,
+): void {
+  if (vector.kind !== "route") {
+    throw new Error(`${plugin.manifest.domain} capture must return a route vector`);
+  }
+  assertExactKeys(
+    vector,
+    [
+      "amountIn",
+      "executor",
+      "kind",
+      "minAmountOut",
+      "observations",
+      "runtimeEvidence",
+    ],
+    "route capture vector",
+  );
+  validatePositiveBigint(vector.amountIn, "route capture amountIn");
+  validateNonnegativeBigint(
+    vector.minAmountOut,
+    "route capture minAmountOut",
+  );
+  validateAddress(vector.executor, "route capture executor");
+  validateCaptureObservations(plugin, descriptor, vector.observations);
+  validateCaptureRuntimeEvidence(
+    plugin.manifest.familyId,
+    descriptor.source,
+    vector.runtimeEvidence,
+  );
+}
+
+function validateFundingCaptureVector(vector: FamilyCaptureVector): void {
+  if (vector.kind !== "funding") {
+    throw new Error("funding capture must return a funding vector");
+  }
+  assertExactKeys(
+    vector,
+    ["amount", "assets", "kind", "minProfit"],
+    "funding capture vector",
+  );
+  if (!Array.isArray(vector.assets) || vector.assets.length === 0) {
+    throw new Error("funding capture assets must be non-empty");
+  }
+  for (const asset of vector.assets) {
+    validateAddress(asset, "funding capture asset");
+  }
+  if (new Set(vector.assets.map((asset) => asset.toLowerCase())).size !==
+      vector.assets.length) {
+    throw new Error("funding capture assets must be unique");
+  }
+  validatePositiveBigint(vector.amount, "funding capture amount");
+  validateNonnegativeBigint(vector.minProfit, "funding capture minProfit");
+}
+
+function validateCreditCaptureVector(
+  plugin: AnyStrictFamilyPlugin,
+  descriptor: FamilyCaptureDescriptor,
+  vector: FamilyCaptureVector,
+): void {
+  if (vector.kind !== "credit") {
+    throw new Error("credit capture must return a credit vector");
+  }
+  assertExactKeys(
+    vector,
+    [
+      "collateralAmount",
+      "debtBps",
+      "executor",
+      "kind",
+      "minAmountOut",
+      "observations",
+      "runtimeEvidence",
+    ],
+    "credit capture vector",
+  );
+  validatePositiveBigint(
+    vector.collateralAmount,
+    "credit capture collateralAmount",
+  );
+  validatePositiveBigint(vector.debtBps, "credit capture debtBps");
+  if (vector.debtBps > 10_000n) {
+    throw new Error("credit capture debtBps must not exceed 10000");
+  }
+  validateNonnegativeBigint(
+    vector.minAmountOut,
+    "credit capture minAmountOut",
+  );
+  validateAddress(vector.executor, "credit capture executor");
+  validateCaptureObservations(plugin, descriptor, vector.observations);
+  validateCaptureRuntimeEvidence(
+    plugin.manifest.familyId,
+    descriptor.source,
+    vector.runtimeEvidence,
+  );
+}
+
+function validateCaptureObservations(
+  plugin: AnyStrictFamilyPlugin,
+  descriptor: FamilyCaptureDescriptor,
+  observations: readonly CaptureObservationIntent[],
+): void {
+  if (!Array.isArray(observations) || observations.length === 0) {
+    throw new Error("capture observations must be non-empty");
+  }
+  if (!("discovery" in plugin)) {
+    throw new Error("capture observations require discovery semantics");
+  }
+  const callPatternIds = new Set(
+    (plugin.discovery.callPatterns ?? []).map((pattern) => pattern.id),
+  );
+  const logPatternIds = new Set(
+    (plugin.discovery.logPatterns ?? []).map((pattern) => pattern.id),
+  );
+  const addressPatternIds = new Set(
+    (plugin.discovery.addressSurfaces ?? []).map((pattern) => pattern.id),
+  );
+  for (const [index, observation] of observations.entries()) {
+    const label = `capture observation ${index}`;
+    assertPlainRecord(observation, label);
+    switch (observation.kind) {
+      case "provided-observation":
+        assertExactKeys(
+          observation,
+          ["kind", "observation", "patternId"],
+          label,
+        );
+        validateProvidedCaptureObservation(
+          plugin,
+          descriptor,
+          observation.patternId,
+          observation.observation,
+          label,
+        );
+        break;
+      case "address-surface":
+        assertExactKeys(
+          observation,
+          ["address", "interfaceFingerprints", "kind", "patternId"],
+          label,
+        );
+        assertCapturePattern(addressPatternIds, observation.patternId, label);
+        validateAddress(observation.address, `${label} address`);
+        if (!Array.isArray(observation.interfaceFingerprints)) {
+          throw new Error(`${label} interfaceFingerprints must be an array`);
+        }
+        for (const fingerprint of observation.interfaceFingerprints) {
+          nonemptyString(fingerprint, `${label} interface fingerprint`);
+        }
+        break;
+      case "declared-log":
+        assertExactKeys(
+          observation,
+          ["candidateIdentity", "kind", "patternId"],
+          label,
+        );
+        assertCapturePattern(logPatternIds, observation.patternId, label);
+        if (observation.candidateIdentity.toLowerCase() !==
+            descriptor.candidateIdentity.toLowerCase()) {
+          throw new Error(`${label} candidateIdentity is not descriptor-bound`);
+        }
+        break;
+      case "observed-call":
+        assertExactKeys(
+          observation,
+          ["kind", "patternId", "traceAddress", "transactionHash"],
+          label,
+        );
+        assertCapturePattern(callPatternIds, observation.patternId, label);
+        assertHex(observation.transactionHash, 32, `${label} transactionHash`);
+        if (!Array.isArray(observation.traceAddress) ||
+            observation.traceAddress.some((index: number) =>
+              !Number.isSafeInteger(index) || index < 0
+            )) {
+          throw new Error(`${label} traceAddress must be nonnegative integers`);
+        }
+        break;
+      case "observed-log":
+        assertExactKeys(
+          observation,
+          ["kind", "logIndex", "patternId", "transactionHash"],
+          label,
+        );
+        assertCapturePattern(logPatternIds, observation.patternId, label);
+        assertHex(observation.transactionHash, 32, `${label} transactionHash`);
+        if (!Number.isSafeInteger(observation.logIndex) ||
+            observation.logIndex < 0) {
+          throw new Error(`${label} logIndex must be a nonnegative integer`);
+        }
+        break;
+      default:
+        throw new Error(`${label} has unknown kind`);
+    }
+  }
+}
+
+function validateProvidedCaptureObservation(
+  plugin: AnyStrictFamilyPlugin,
+  descriptor: FamilyCaptureDescriptor,
+  patternId: string,
+  observation: UnifiedObservation,
+  label: string,
+): void {
+  validateUnifiedCaptureObservation(observation, descriptor.source, label);
+  if (!("discovery" in plugin)) {
+    throw new Error(`${label} requires discovery semantics`);
+  }
+  const declared = observation.kind === "call"
+    ? plugin.discovery.callPatterns?.some((pattern) =>
+        pattern.id === patternId &&
+        observation.data.slice(0, 10).toLowerCase() ===
+          pattern.selector.toLowerCase()
+      ) === true
+    : observation.kind === "log"
+      ? plugin.discovery.logPatterns?.some((pattern) =>
+          pattern.id === patternId &&
+          observation.topics[0]?.toLowerCase() === pattern.topic.toLowerCase()
+        ) === true
+      : observation.kind === "factory-log"
+        ? plugin.discovery.logPatterns?.some((pattern) =>
+            pattern.id === patternId &&
+            observation.topic.toLowerCase() === pattern.topic.toLowerCase()
+          ) === true
+        : plugin.discovery.addressSurfaces?.some((pattern) => {
+            if (pattern.id !== patternId) return false;
+            if (pattern.kind === "code-hash") {
+              return pattern.fingerprint.toLowerCase() ===
+                observation.codeHash.toLowerCase();
+            }
+            if (pattern.kind === "proxy-implementation") {
+              return !/^0x0{64}$/i.test(observation.implementationWord);
+            }
+            return observation.interfaceFingerprints?.includes(
+              pattern.fingerprint,
+            ) === true;
+          }) === true;
+  if (!declared) {
+    throw new Error(`${label} does not match its plugin declaration`);
+  }
+}
+
+function validateUnifiedCaptureObservation(
+  observation: UnifiedObservation,
+  source: CanonicalSource,
+  label: string,
+): void {
+  assertPlainRecord(observation, `${label} observation`);
+  validateCanonicalSource(observation.source, `${label} observation source`);
+  if (
+    observation.source.number !== source.number ||
+    observation.source.generation !== source.generation ||
+    observation.source.hash.toLowerCase() !== source.hash.toLowerCase()
+  ) {
+    throw new Error(`${label} observation is not descriptor-source-bound`);
+  }
+  switch (observation.kind) {
+    case "call":
+      validateAddress(observation.target, `${label} call target`);
+      assertHexData(observation.data, `${label} call data`);
+      break;
+    case "log":
+      validateAddress(observation.address, `${label} log address`);
+      if (!Array.isArray(observation.topics) || observation.topics.length === 0) {
+        throw new Error(`${label} log topics must be non-empty`);
+      }
+      for (const topic of observation.topics) {
+        assertHex(topic, 32, `${label} log topic`);
+      }
+      assertHexData(observation.data, `${label} log data`);
+      break;
+    case "address-surface":
+      validateAddress(observation.address, `${label} surface address`);
+      assertHex(observation.codeHash, 32, `${label} code hash`);
+      assertHex(observation.implementationWord, 32,
+        `${label} implementation word`);
+      break;
+    case "factory-log":
+      validateAddress(observation.factory, `${label} factory`);
+      assertHex(observation.topic, 32, `${label} factory topic`);
+      if (!Array.isArray(observation.topics) || observation.topics.length === 0) {
+        throw new Error(`${label} factory topics must be non-empty`);
+      }
+      assertHexData(observation.data, `${label} factory data`);
+      break;
+  }
+}
+
+function assertCapturePattern(
+  declared: ReadonlySet<string>,
+  patternId: string,
+  label: string,
+): void {
+  nonemptyString(patternId, `${label} patternId`);
+  if (!declared.has(patternId)) {
+    throw new Error(`${label} patternId is not declared by its plugin`);
+  }
+}
+
+function validateCaptureRuntimeEvidence(
+  family: FamilyId,
+  source: CanonicalSource,
+  evidence: readonly RuntimeEvidence[],
+): void {
+  if (!Array.isArray(evidence)) {
+    throw new Error("capture runtimeEvidence must be an array");
+  }
+  for (const [index, item] of evidence.entries()) {
+    const label = `capture runtimeEvidence ${index}`;
+    assertPlainRecord(item, label);
+    assertExactKeys(
+      item,
+      [
+        "evidenceHash",
+        "evidenceId",
+        "familyId",
+        "instanceKey",
+        "kind",
+        "scope",
+        "sealedPayloadRef",
+        "source",
+        "txHash",
+      ],
+      label,
+      true,
+      [
+        "evidenceHash",
+        "evidenceId",
+        "familyId",
+        "kind",
+        "scope",
+        "sealedPayloadRef",
+        "source",
+      ],
+    );
+    if (item.familyId !== family) {
+      throw new Error(`${label} Family is not plugin-bound`);
+    }
+    validateCanonicalSource(item.source, `${label} source`);
+    if (hashCanonical({
+      number: item.source.number,
+      hash: item.source.hash,
+      generation: item.source.generation,
+    }) !== hashCanonical({
+      number: source.number,
+      hash: source.hash,
+      generation: source.generation,
+    })) {
+      throw new Error(`${label} source is not descriptor-bound`);
+    }
+    nonemptyString(item.evidenceId, `${label} evidenceId`);
+    nonemptyString(item.kind, `${label} kind`);
+    if (!(["source-block", "head", "transaction"] as const)
+      .includes(item.scope)) {
+      throw new Error(`${label} scope is invalid`);
+    }
+    assertHex(item.evidenceHash, 32, `${label} evidenceHash`);
+    if (!item.sealedPayloadRef.startsWith("onchain:")) {
+      throw new Error(`${label} sealedPayloadRef must be onchain evidence`);
+    }
+    if (item.txHash !== undefined) {
+      assertHex(item.txHash, 32, `${label} txHash`);
+    }
+  }
+}
+
+function validateCanonicalSource(source: unknown, label: string): void {
+  assertPlainRecord(source, label);
+  assertExactKeys(source as object, ["generation", "hash", "number"], label);
+  const value = source as CanonicalSource;
+  if (!Number.isSafeInteger(value.number) || value.number < 0) {
+    throw new Error(`${label}.number must be a nonnegative safe integer`);
+  }
+  if (!Number.isSafeInteger(value.generation) || value.generation < 0) {
+    throw new Error(`${label}.generation must be a nonnegative safe integer`);
+  }
+  assertHex(value.hash, 32, `${label}.hash`);
+}
+
+function validateAddress(value: unknown, label: string): void {
+  if (typeof value !== "string" || !ethers.isAddress(value)) {
+    throw new Error(`${label} must be an EVM address`);
+  }
+}
+
+function validatePositiveBigint(value: unknown, label: string): void {
+  if (typeof value !== "bigint" || value <= 0n) {
+    throw new Error(`${label} must be a positive bigint`);
+  }
+}
+
+function validateNonnegativeBigint(value: unknown, label: string): void {
+  if (typeof value !== "bigint" || value < 0n) {
+    throw new Error(`${label} must be a nonnegative bigint`);
+  }
 }
 
 function fundingDomainBoundary(
@@ -2073,7 +2620,7 @@ function assertExactTopLevelKeys(
     : [...COMMON_REQUIRED_KEYS, domain];
   const optional = domain === "swap" || domain === "protocol"
     ? COMMON_OPTIONAL_KEYS
-    : [];
+    : ["capture"];
   const allowed = new Set([...required, ...optional]);
   for (const key of required) {
     if (!Object.prototype.hasOwnProperty.call(plugin, key)) {
@@ -3249,6 +3796,12 @@ function assertHex(value: unknown, bytes: number, label: string): void {
   if (typeof value !== "string" ||
       !new RegExp(`^0x[0-9a-fA-F]{${bytes * 2}}$`).test(value)) {
     throw new Error(`${label} must be ${bytes}-byte hex`);
+  }
+}
+
+function assertHexData(value: unknown, label: string): void {
+  if (typeof value !== "string" || !/^0x(?:[0-9a-fA-F]{2})*$/.test(value)) {
+    throw new Error(`${label} must be even-length hex data`);
   }
 }
 

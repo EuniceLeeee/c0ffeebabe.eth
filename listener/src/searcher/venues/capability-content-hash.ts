@@ -28,6 +28,7 @@ import type {
 export const FAMILY_CAPABILITY_CONTRACT_VERSIONS: Readonly<
   Record<FamilyCapabilityName, string>
 > = Object.freeze({
+  capture: "s1-capture-v1",
   discovery: "s1-discovery-v1",
   identity: "s1-identity-v1",
   instance: "s1-instance-v1",

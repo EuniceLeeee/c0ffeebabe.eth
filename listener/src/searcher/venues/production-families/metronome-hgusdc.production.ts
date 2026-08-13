@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { metronomeHgUsdcCapture } from "../protocols/metronome-hgusdc-family/capture.js";
 import { metronomeHgUsdcFamilyOwnedAction } from "../protocols/metronome-hgusdc-family/action.js";
 import { metronomeHgUsdcDiscovery } from "../protocols/metronome-hgusdc-family/discovery.js";
 import { metronomeHgUsdcExact } from "../protocols/metronome-hgusdc-family/exact.js";
@@ -12,6 +13,7 @@ import { metronomeHgUsdcRoutes } from "../protocols/metronome-hgusdc-family/rout
 
 export const plugin = defineProtocolFamily({
   manifest: metronomeHgUsdcFamilyManifest,
+  capture: metronomeHgUsdcCapture,
   discovery: metronomeHgUsdcDiscovery,
   identity: metronomeHgUsdcIdentity,
   instance: metronomeHgUsdcInstance,

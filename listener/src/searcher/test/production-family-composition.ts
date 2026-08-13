@@ -25,7 +25,7 @@ assert.equal(
 );
 assert.equal(
   PRODUCTION_STRICT_SHADOW_GENERATED_CAPABILITY_MANIFEST.entries.length,
-  220,
+  242,
 );
 assert.equal(
   new Set(
@@ -33,7 +33,7 @@ assert.equal(
       (entry) => `${entry.familyId}\0${entry.capability}`,
     ),
   ).size,
-  220,
+  242,
 );
 
 const familyActionIds = PRODUCTION_STRICT_SHADOW_FAMILY_OWNED_ACTION_ADAPTERS.map(
@@ -101,5 +101,5 @@ assert.deepEqual(
 
 console.log(
   "production-family-composition PASS " +
-    "(22 strict shadow Families / 220 exact capabilities / complete legacy production closure)",
+    "(22 strict shadow Families / 242 exact capabilities / complete legacy production closure)",
 );

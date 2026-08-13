@@ -1,19 +1,18 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
 import {
-  PRODUCTION_ADAPTER_FAMILIES,
-  PRODUCTION_FAMILY_MODULES,
-} from "../venues/production-registry.js";
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+} from "../venues/production-family-composition.js";
 
 type FindingRule =
-  | "id-equality"
-  | "id-switch"
-  | "venue-key-map"
-  | "family-direct-import"
-  | "legacy-direct-import";
+  | "concrete-family-import"
+  | "production-family-literal"
+  | "family-dispatch-branch"
+  | "family-keyed-table"
+  | "generated-boundary-bypass";
 
 interface Finding {
   readonly rule: FindingRule;
@@ -21,86 +20,92 @@ interface Finding {
   readonly line: number;
   readonly column: number;
   readonly detail: string;
+  readonly importChain?: readonly string[];
 }
 
-interface FamilySource {
-  readonly binding: string;
-  readonly familyId: string;
-  readonly path: string;
+interface ImportGraph {
+  readonly dependencies: ReadonlyMap<string, readonly string[]>;
+  readonly sourceByPath: ReadonlyMap<string, ts.SourceFile>;
+}
+
+interface ProductionVocabulary {
+  readonly familyIds: ReadonlySet<string>;
+  readonly familyAliases: ReadonlySet<string>;
+  readonly pluginDeclaredHex: ReadonlySet<string>;
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LISTENER_ROOT = resolve(HERE, "../../..");
 const TSCONFIG = resolve(LISTENER_ROOT, "tsconfig.json");
-const PRODUCTION_REGISTRY = resolve(
+const GENERATED_CATALOG_BOUNDARY = resolve(
   LISTENER_ROOT,
-  "src/searcher/venues/production-registry.ts",
+  "src/searcher/generated/production-family-entries.generated.ts",
 );
+const LEGACY_AUTHORITY_BOUNDARIES = new Set([
+  "src/searcher/venues/production-registry.ts",
+  "src/searcher/venues/adapter-family-registry.ts",
+  "src/searcher/venues/route-leg-registry.ts",
+  "src/searcher/venues/landed-event-registry.ts",
+  "src/searcher/architecture-migration-fixture-replay.ts",
+  "src/searcher/architecture-migration-baseline-normalizer.ts",
+  "src/adapters/adapter-descriptors.ts",
+  "src/adapters/flash-providers.ts",
+].map((path) => resolve(LISTENER_ROOT, path)));
 
 /**
- * Production orchestration and consumers only. Family-owned modules, victim
- * policy and low-level ActionAdapter/compiler code are deliberately outside
- * this surface: protocol semantics belong there.
+ * These are architecture roots, not a whitelist of files to inspect. Every
+ * transitive local import is scanned. New helper files therefore enter the
+ * gate automatically as soon as a central path or framework test imports
+ * them.
  */
-const SHARED_SURFACE = Object.freeze([
+const CENTRAL_ROOTS = Object.freeze([
   "src/searcher/main.ts",
-  "src/searcher/latest-head-scheduler.ts",
-  "src/searcher/mempool-intake.ts",
-  "src/searcher/live-discovery-coordinator.ts",
-  "src/searcher/protocol-discovery-runtime.ts",
-  "src/searcher/observed-protocol-discovery.ts",
-  "src/searcher/protocol-instance-discovery.ts",
-  "src/searcher/adapter-family-graph-view-coordinator.ts",
-  "src/searcher/blockscan-state-read-backend.ts",
-  "src/searcher/blockscan-state-coordinator.ts",
-  "src/searcher/detector/pool-impact.ts",
-  "src/searcher/detector/blockscan-scanner-core.ts",
-  "src/searcher/detector/blockscan-scanner-production.ts",
-  "src/searcher/adapter-runtime-coordinator.ts",
-  "src/searcher/planner/planner.ts",
-  "src/searcher/solver/quoter.ts",
-  "src/searcher/solver/amount-propagation.ts",
-  "src/searcher/solver/solver.ts",
-  "src/searcher/solver/plan-builder.ts",
-  "src/searcher/live-backends/revm-live-backend.ts",
-  "src/searcher/live-backends/victim-overlay.ts",
+  "src/searcher/generic-family-capture.ts",
+  "src/searcher/run-architecture-migration-capture-real-cli.ts",
+  "src/searcher/architecture-migration-capture.ts",
+  "src/searcher/architecture-migration-parity.ts",
+  "src/searcher/architecture-migration-parity-runner.ts",
+  "src/searcher/strict-execution-projection.ts",
+  "src/searcher/strict-family-lifecycle-runner.ts",
+  "src/searcher/adapter-work-intent.ts",
+  "src/searcher/venues/adapter-family-runtime.ts",
+  "src/searcher/venues/family-capability-catalog.ts",
+  "src/searcher/venues/production-family-composition.ts",
 ] as const);
 
-const ID_FIELD_NAMES = new Set([
+const FRAMEWORK_TEST_ROOTS = Object.freeze([
+  "src/searcher/test/generic-family-capture.ts",
+  "src/searcher/test/architecture-migration-capture.ts",
+  "src/searcher/test/architecture-migration-parity.ts",
+  "src/searcher/test/architecture-migration-parity-runner.ts",
+  "src/searcher/test/strict-execution-projection.ts",
+  "src/searcher/test/strict-family-lifecycle-runner.ts",
+  "src/searcher/test/family-capability-catalog.ts",
+  "src/searcher/test/production-family-composition.ts",
+] as const);
+
+const FAMILY_ID_FIELD_NAMES = new Set([
+  "adapterfamily",
+  "adapterfamilyid",
   "adapterid",
-  "edgeadapterid",
-  "executionfamilyid",
+  "capturefamily",
+  "capturename",
+  "family",
+  "families",
   "familyid",
-  "providerid",
-  "fundingproviderid",
-  "pooladapter",
-  "pooladapterid",
-  "matchedadapterid",
-  "flashadapterid",
+  "familyids",
+  "familykey",
+  "protocolid",
+  "venueid",
+]);
+const EQUALITY_OPERATORS = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.EqualsEqualsToken,
+  ts.SyntaxKind.EqualsEqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsEqualsToken,
 ]);
 
-const LEGACY_MODULE_PATTERNS = Object.freeze([
-  /(?:^|\/)adapters\/adapter-descriptors(?:\.[cm]?[jt]s)?$/,
-  /(?:^|\/)adapters\/flash-providers(?:\.[cm]?[jt]s)?$/,
-  /(?:^|\/)venues\/route-adapter-registry(?:\.[cm]?[jt]s)?$/,
-]);
-
-const LEGACY_BINDINGS = new Set([
-  "ADAPTER_DESCRIPTORS",
-  "FLASH_PROVIDER_DESCRIPTORS",
-  "LEGACY_PRODUCTION_ROUTE_EDGES",
-  "PRODUCTION_ROUTE_ADAPTERS",
-]);
-
-const SHARED_FAMILY_INFRA = new Set([
-  "src/searcher/venues/funding/funding-capability.ts",
-  "src/searcher/venues/funding/flash-loan-framework.ts",
-]);
-
-function loadProgram(): {
-  readonly program: ts.Program;
-  readonly checker: ts.TypeChecker;
-} {
+function loadProgram(): ts.Program {
   const config = ts.readConfigFile(TSCONFIG, ts.sys.readFile);
   if (config.error) {
     throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
@@ -113,22 +118,58 @@ function loadProgram(): {
     TSCONFIG,
   );
   if (parsed.errors.length > 0) {
-    throw new Error(
-      ts.formatDiagnosticsWithColorAndContext(parsed.errors, {
+    throw new Error(ts.formatDiagnosticsWithColorAndContext(
+      parsed.errors,
+      {
         getCanonicalFileName: (file) => file,
         getCurrentDirectory: () => LISTENER_ROOT,
         getNewLine: () => "\n",
-      }),
-    );
+      },
+    ));
   }
-  const program = ts.createProgram(parsed.fileNames, parsed.options);
-  return { program, checker: program.getTypeChecker() };
+  return ts.createProgram(parsed.fileNames, parsed.options);
 }
 
-function sourceFile(program: ts.Program, path: string): ts.SourceFile {
-  const found = program.getSourceFile(path);
-  if (!found) throw new Error(`AST conformance source missing from program: ${path}`);
-  return found;
+function buildImportGraph(program: ts.Program): ImportGraph {
+  const sourceByPath = new Map<string, ts.SourceFile>();
+  for (const source of program.getSourceFiles()) {
+    if (!source.fileName.startsWith(LISTENER_ROOT) || source.isDeclarationFile) {
+      continue;
+    }
+    sourceByPath.set(resolve(source.fileName), source);
+  }
+  const dependencies = new Map<string, readonly string[]>();
+  for (const [path, source] of sourceByPath) {
+    const imports: string[] = [];
+    for (const statement of source.statements) {
+      if (isTypeOnlyImportOrExport(statement)) continue;
+      const specifier = ts.isImportDeclaration(statement)
+        ? statement.moduleSpecifier
+        : ts.isExportDeclaration(statement)
+          ? statement.moduleSpecifier
+          : undefined;
+      if (!specifier || !ts.isStringLiteral(specifier)) continue;
+      const resolved = resolveTsImport(path, specifier.text);
+      if (resolved !== null && sourceByPath.has(resolved)) imports.push(resolved);
+    }
+    dependencies.set(path, Object.freeze([...new Set(imports)].sort()));
+  }
+  return { dependencies, sourceByPath };
+}
+
+function isTypeOnlyImportOrExport(statement: ts.Statement): boolean {
+  if (ts.isImportDeclaration(statement)) {
+    const clause = statement.importClause;
+    if (clause?.isTypeOnly === true) return true;
+    if (clause?.namedBindings !== undefined &&
+        ts.isNamedImports(clause.namedBindings) &&
+        clause.name === undefined &&
+        clause.namedBindings.elements.length > 0 &&
+        clause.namedBindings.elements.every((element) => element.isTypeOnly)) {
+      return true;
+    }
+  }
+  return ts.isExportDeclaration(statement) && statement.isTypeOnly;
 }
 
 function resolveTsImport(importer: string, specifier: string): string | null {
@@ -143,179 +184,309 @@ function resolveTsImport(importer: string, specifier: string): string | null {
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
-function importedBindings(node: ts.ImportDeclaration): readonly string[] {
-  const clause = node.importClause;
-  if (!clause) return [];
-  const bindings: string[] = [];
-  if (clause.name) bindings.push(clause.name.text);
-  if (clause.namedBindings) {
-    if (ts.isNamespaceImport(clause.namedBindings)) {
-      bindings.push(clause.namedBindings.name.text);
-    } else {
-      bindings.push(
-        ...clause.namedBindings.elements.map(
-          (element) => element.propertyName?.text ?? element.name.text,
-        ),
-      );
-    }
+function generatedProductionEntries(
+  graph: ImportGraph,
+): readonly string[] {
+  const source = graph.sourceByPath.get(GENERATED_CATALOG_BOUNDARY);
+  if (source === undefined) {
+    throw new Error("generated production Family boundary is absent from program");
   }
-  return bindings;
-}
-
-function productionFamilySources(
-  program: ts.Program,
-  checker: ts.TypeChecker,
-): readonly FamilySource[] {
-  const registry = sourceFile(program, PRODUCTION_REGISTRY);
-  const imports = new Map<
-    string,
-    { readonly imported: string; readonly path: string }
-  >();
-  for (const statement of registry.statements) {
+  const entries: string[] = [];
+  for (const statement of source.statements) {
     if (
       !ts.isImportDeclaration(statement) ||
       !ts.isStringLiteral(statement.moduleSpecifier)
     ) {
       continue;
     }
-    const path = resolveTsImport(registry.fileName, statement.moduleSpecifier.text);
-    if (!path || !statement.importClause?.namedBindings ||
-        !ts.isNamedImports(statement.importClause.namedBindings)) {
-      continue;
-    }
-    for (const element of statement.importClause.namedBindings.elements) {
-      imports.set(element.name.text, {
-        imported: element.propertyName?.text ?? element.name.text,
-        path,
-      });
-    }
-  }
-
-  let registered: readonly ts.Expression[] | null = null;
-  const visit = (node: ts.Node): void => {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === "LEGACY_PRODUCTION_ADAPTER_FAMILIES" &&
-      node.initializer
-    ) {
-      registered = firstArrayLiteral(node.initializer)?.elements ?? null;
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(registry);
-  if (!registered) {
-    throw new Error("cannot derive production family modules from registry AST");
-  }
-
-  const results: FamilySource[] = [];
-  for (const expression of registered as readonly ts.Expression[]) {
-    if (!ts.isIdentifier(expression)) {
+    const imported = resolveTsImport(source.fileName, statement.moduleSpecifier.text);
+    if (imported === null || !isProductionEntry(imported)) {
       throw new Error(
-        `production family registration must be a directly imported binding: ${expression.getText(registry)}`,
+        `generated Family catalog imports a non-entry module: ` +
+          statement.moduleSpecifier.text,
       );
     }
-    const imported = imports.get(expression.text);
-    if (!imported) {
-      throw new Error(`production family ${expression.text} is not a direct import`);
-    }
-    results.push({
-      binding: expression.text,
-      familyId: readFamilyId(
-        sourceFile(program, imported.path),
-        imported.imported,
-        checker,
-      ) ?? expression.text,
-      path: imported.path,
-    });
+    entries.push(imported);
   }
-  for (const module of PRODUCTION_FAMILY_MODULES) {
-    const entryPath = resolve(
-      LISTENER_ROOT,
-      "src/searcher/venues/production-families",
-      module.sourceFile,
-    );
-    const root = productionEntryFamilySource(
-      program,
-      sourceFile(program, entryPath),
-      module.family.id,
-      checker,
-    );
-    if (!root) {
-      throw new Error(
-        `production entry ${module.sourceFile} has no imported family root`,
-      );
-    }
-    results.push(root);
+  if (entries.length === 0) {
+    throw new Error("generated production Family boundary contains no entries");
   }
-  return results;
+  return Object.freeze([...new Set(entries)].sort());
 }
 
-function productionEntryFamilySource(
-  program: ts.Program,
-  entry: ts.SourceFile,
-  familyId: string,
-  checker: ts.TypeChecker,
-): FamilySource | null {
-  for (const statement of entry.statements) {
-    if (
-      !ts.isImportDeclaration(statement) ||
-      !ts.isStringLiteral(statement.moduleSpecifier) ||
-      !statement.importClause?.namedBindings ||
-      !ts.isNamedImports(statement.importClause.namedBindings)
-    ) {
-      continue;
+function isProductionEntry(path: string): boolean {
+  const normalized = path.replaceAll("\\", "/");
+  return normalized.includes("/src/searcher/venues/production-families/") &&
+    normalized.endsWith(".production.ts");
+}
+
+function productionVocabulary(entries: readonly string[]): ProductionVocabulary {
+  const familyIds = new Set<string>();
+  const familyAliases = new Set<string>();
+  const pluginDeclaredHex = new Set<string>();
+  for (const loaded of
+    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll()) {
+    const id = loaded.plugin.manifest.familyId;
+    familyIds.add(id);
+    addFamilyAliases(familyAliases, id);
+    for (const action of loaded.plugin.actionAdapters) {
+      familyAliases.add(action.id.toLowerCase());
     }
-    const path = resolveTsImport(entry.fileName, statement.moduleSpecifier.text);
-    if (!path) continue;
-    const importedSource = sourceFile(program, path);
-    for (const element of statement.importClause.namedBindings.elements) {
-      const imported = element.propertyName?.text ?? element.name.text;
-      if (readFamilyId(importedSource, imported, checker) === familyId) {
-        return {
-          binding: element.name.text,
-          familyId,
-          path,
-        };
+    if ("discovery" in loaded.plugin) {
+      for (const pattern of loaded.plugin.discovery.callPatterns ?? []) {
+        pluginDeclaredHex.add(pattern.selector.toLowerCase());
       }
+      for (const pattern of loaded.plugin.discovery.logPatterns ?? []) {
+        pluginDeclaredHex.add(pattern.topic.toLowerCase());
+        if (pattern.emitter !== undefined && "address" in pattern.emitter) {
+          pluginDeclaredHex.add(pattern.emitter.address.toLowerCase());
+        }
+      }
+      for (const surface of loaded.plugin.discovery.addressSurfaces ?? []) {
+        if (/^0x[0-9a-fA-F]+$/.test(surface.fingerprint)) {
+          pluginDeclaredHex.add(surface.fingerprint.toLowerCase());
+        }
+      }
+    }
+  }
+  for (const entry of entries) {
+    addFamilyAliases(
+      familyAliases,
+      entry.split("/").at(-1)!.replace(/\.production\.ts$/, ""),
+    );
+  }
+  return {
+    familyIds,
+    familyAliases,
+    pluginDeclaredHex,
+  };
+}
+
+function addFamilyAliases(target: Set<string>, value: string): void {
+  const normalized = value.toLowerCase();
+  target.add(normalized);
+  const suffix = normalized.includes(":")
+    ? normalized.slice(normalized.lastIndexOf(":") + 1)
+    : normalized;
+  target.add(suffix);
+  if (suffix.endsWith("-standard")) {
+    target.add(suffix.slice(0, -"-standard".length));
+  }
+}
+
+function reachableClosure(input: {
+  readonly graph: ImportGraph;
+  readonly roots: readonly string[];
+}): {
+  readonly paths: ReadonlySet<string>;
+  readonly parent: ReadonlyMap<string, string | null>;
+} {
+  const paths = new Set<string>();
+  const parent = new Map<string, string | null>();
+  const queue = input.roots.map((root) => resolve(LISTENER_ROOT, root));
+  for (const root of queue) {
+    if (!input.graph.sourceByPath.has(root)) {
+      throw new Error(`architecture gate root is absent: ${relative(LISTENER_ROOT, root)}`);
+    }
+    parent.set(root, null);
+  }
+  for (let index = 0; index < queue.length; index++) {
+    const path = queue[index]!;
+    if (paths.has(path)) continue;
+    paths.add(path);
+    // The generated static catalog is the sole intentional concrete-Family
+    // boundary. Its entries are validated separately and never traversed as
+    // central implementation.
+    if (path === GENERATED_CATALOG_BOUNDARY ||
+        LEGACY_AUTHORITY_BOUNDARIES.has(path)) continue;
+    for (const dependency of input.graph.dependencies.get(path) ?? []) {
+      // A concrete plugin is diagnosed at the importing central module. Do
+      // not descend into its legal plugin-local ABI/semantic closure and turn
+      // those declarations into false central findings.
+      if (isFamilyOwnedImplementation(dependency) ||
+          LEGACY_AUTHORITY_BOUNDARIES.has(dependency)) continue;
+      if (!parent.has(dependency)) parent.set(dependency, path);
+      queue.push(dependency);
+    }
+  }
+  return { paths, parent };
+}
+
+function importChain(
+  path: string,
+  parent: ReadonlyMap<string, string | null>,
+): readonly string[] {
+  const result: string[] = [];
+  let current: string | null | undefined = path;
+  while (current !== null && current !== undefined) {
+    result.push(relative(LISTENER_ROOT, current));
+    current = parent.get(current);
+  }
+  return Object.freeze(result.reverse());
+}
+
+function scanClosure(input: {
+  readonly graph: ImportGraph;
+  readonly closure: ReturnType<typeof reachableClosure>;
+  readonly vocabulary: ProductionVocabulary;
+  readonly productionEntries: ReadonlySet<string>;
+}): readonly Finding[] {
+  const findings: Finding[] = [];
+  for (const path of input.closure.paths) {
+    if (path === GENERATED_CATALOG_BOUNDARY) continue;
+    const source = input.graph.sourceByPath.get(path)!;
+    for (const dependency of input.graph.dependencies.get(path) ?? []) {
+      if (dependency === GENERATED_CATALOG_BOUNDARY) continue;
+      if (
+        input.productionEntries.has(dependency) ||
+        isFamilyOwnedImplementation(dependency)
+      ) {
+        const importNode = importNodeForDependency(source, dependency) ?? source;
+        addFinding(
+          findings,
+          source,
+          importNode,
+          "concrete-family-import",
+          `imports ${relative(LISTENER_ROOT, dependency)}`,
+          importChain(path, input.closure.parent),
+        );
+      } else if (LEGACY_AUTHORITY_BOUNDARIES.has(dependency)) {
+        const importNode = importNodeForDependency(source, dependency) ?? source;
+        addFinding(
+          findings,
+          source,
+          importNode,
+          "generated-boundary-bypass",
+          `imports executable legacy authority ${relative(LISTENER_ROOT, dependency)}`,
+          importChain(path, input.closure.parent),
+        );
+      }
+    }
+    findings.push(...scanFamilyLogic(
+      source,
+      input.vocabulary,
+      importChain(path, input.closure.parent),
+    ));
+  }
+  return Object.freeze(findings);
+}
+
+function isFamilyOwnedImplementation(path: string): boolean {
+  const normalized = path.replaceAll("\\", "/");
+  if (/\/src\/searcher\/venues\/production-families\/[^/]+\.production\.ts$/.test(
+    normalized,
+  )) return true;
+  if (/\/src\/searcher\/venues\/(?:swaps|protocols|credit|funding)\/[^/]+-family\//.test(
+    normalized,
+  )) return true;
+  return /\/src\/searcher\/venues\/(?:swaps|protocols|credit|funding)\/(?!adapter-family-plugin\.ts$)[^/]+-family-plugin\.ts$/.test(
+    normalized,
+  );
+}
+
+function importNodeForDependency(
+  source: ts.SourceFile,
+  dependency: string,
+): ts.ImportDeclaration | ts.ExportDeclaration | null {
+  for (const statement of source.statements) {
+    const specifier = ts.isImportDeclaration(statement)
+      ? statement.moduleSpecifier
+      : ts.isExportDeclaration(statement)
+        ? statement.moduleSpecifier
+        : undefined;
+    if (!specifier || !ts.isStringLiteral(specifier)) continue;
+    if (resolveTsImport(source.fileName, specifier.text) === dependency) {
+      return statement as ts.ImportDeclaration | ts.ExportDeclaration;
     }
   }
   return null;
 }
 
-function readFamilyId(
+function scanFamilyLogic(
   source: ts.SourceFile,
-  binding: string,
-  checker: ts.TypeChecker,
-): string | null {
-  let result: string | null = null;
+  vocabulary: ProductionVocabulary,
+  chain: readonly string[],
+): readonly Finding[] {
+  const findings: Finding[] = [];
   const visit = (node: ts.Node): void => {
-    if (
-      result === null &&
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === binding &&
-      node.initializer
-    ) {
-      const object = unwrapObjectLiteral(node.initializer);
-      if (!object) return;
-      for (const property of object.properties) {
-        if (
-          ts.isPropertyAssignment(property) &&
-          propertyName(property.name) === "id"
-        ) {
-          result = staticString(property.initializer, checker);
-          return;
+    if (isStaticStringNode(node) && !isModuleSpecifier(node)) {
+      const value = node.text.toLowerCase();
+      if (vocabulary.familyIds.has(value) ||
+          vocabulary.familyAliases.has(value) ||
+          vocabulary.pluginDeclaredHex.has(value)) {
+        addFinding(
+          findings,
+          source,
+          node,
+          "production-family-literal",
+          `production Family vocabulary ${JSON.stringify(node.text)}`,
+          chain,
+        );
+      }
+    }
+
+    if (ts.isBinaryExpression(node) &&
+        EQUALITY_OPERATORS.has(node.operatorToken.kind) &&
+        (expressionLooksFamilyish(node.left) ||
+          expressionLooksFamilyish(node.right))) {
+      const literal = staticString(node.left) ?? staticString(node.right);
+      if (literal !== null) {
+        addFinding(
+          findings,
+          source,
+          node,
+          "family-dispatch-branch",
+          node.getText(source),
+          chain,
+        );
+      }
+    }
+
+    if (ts.isSwitchStatement(node) && expressionLooksFamilyish(node.expression)) {
+      for (const clause of node.caseBlock.clauses) {
+        if (ts.isCaseClause(clause) && staticString(clause.expression) !== null) {
+          addFinding(
+            findings,
+            source,
+            clause,
+            "family-dispatch-branch",
+            `${node.expression.getText(source)} case ` +
+              JSON.stringify(staticString(clause.expression)),
+            chain,
+          );
         }
       }
+    }
+
+    if (isFamilyKeyedTable(node, vocabulary)) {
+      addFinding(
+        findings,
+        source,
+        node,
+        "family-keyed-table",
+        node.getText(source).slice(0, 180),
+        chain,
+      );
     }
     ts.forEachChild(node, visit);
   };
   visit(source);
-  return result;
+  return Object.freeze(findings);
 }
 
-function unwrapObjectLiteral(expression: ts.Expression): ts.ObjectLiteralExpression | null {
+function isStaticStringNode(
+  node: ts.Node,
+): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral {
+  return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
+}
+
+function isModuleSpecifier(node: ts.Node): boolean {
+  const parent = node.parent;
+  return parent !== undefined && (ts.isImportDeclaration(parent) ||
+    ts.isExportDeclaration(parent)) && parent.moduleSpecifier === node;
+}
+
+function staticString(expression: ts.Expression): string | null {
   let current = expression;
   while (
     ts.isParenthesizedExpression(current) ||
@@ -325,183 +496,94 @@ function unwrapObjectLiteral(expression: ts.Expression): ts.ObjectLiteralExpress
   ) {
     current = current.expression;
   }
-  if (
-    ts.isCallExpression(current) &&
-    current.arguments[0] &&
-    ts.isPropertyAccessExpression(current.expression) &&
-    current.expression.expression.getText() === "Object" &&
-    current.expression.name.text === "freeze"
-  ) {
-    return unwrapObjectLiteral(current.arguments[0]);
-  }
-  return ts.isObjectLiteralExpression(current) ? current : null;
+  return isStaticStringNode(current) ? current.text : null;
 }
 
-function firstArrayLiteral(
-  expression: ts.Expression,
-): ts.ArrayLiteralExpression | null {
+function expressionLooksFamilyish(expression: ts.Expression): boolean {
   let current = expression;
   while (
     ts.isParenthesizedExpression(current) ||
     ts.isAsExpression(current) ||
     ts.isSatisfiesExpression(current) ||
     ts.isTypeAssertionExpression(current)
-  ) {
-    current = current.expression;
+  ) current = current.expression;
+  if (ts.isIdentifier(current)) {
+    return FAMILY_ID_FIELD_NAMES.has(current.text.toLowerCase());
   }
-  if (ts.isArrayLiteralExpression(current)) return current;
-  if (ts.isCallExpression(current) && current.arguments[0]) {
-    return firstArrayLiteral(current.arguments[0]);
+  if (ts.isPropertyAccessExpression(current)) {
+    return FAMILY_ID_FIELD_NAMES.has(current.name.text.toLowerCase());
   }
-  return null;
-}
-
-function propertyName(name: ts.PropertyName): string | null {
-  if (
-    ts.isIdentifier(name) ||
-    ts.isStringLiteral(name) ||
-    ts.isNumericLiteral(name)
-  ) {
-    return name.text;
-  }
-  if (
-    ts.isComputedPropertyName(name) &&
-    (ts.isStringLiteral(name.expression) ||
-      ts.isNoSubstitutionTemplateLiteral(name.expression))
-  ) {
-    return name.expression.text;
-  }
-  return null;
-}
-
-function staticString(
-  expression: ts.Expression,
-  checker?: ts.TypeChecker,
-  seen = new Set<ts.Symbol>(),
-): string | null {
-  let current = expression;
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isSatisfiesExpression(current) ||
-    ts.isTypeAssertionExpression(current)
-  ) {
-    current = current.expression;
-  }
-  if (
-    ts.isStringLiteral(current) ||
-    ts.isNoSubstitutionTemplateLiteral(current)
-  ) {
-    return current.text;
-  }
-  if (!checker || (!ts.isIdentifier(current) && !ts.isPropertyAccessExpression(current))) {
-    return null;
-  }
-  let symbol = checker.getSymbolAtLocation(
-    ts.isPropertyAccessExpression(current) ? current.name : current,
-  );
-  if (!symbol) return null;
-  if (symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
-  if (seen.has(symbol)) return null;
-  seen.add(symbol);
-  for (const declaration of symbol.declarations ?? []) {
-    if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
-      const value = staticString(declaration.initializer, checker, seen);
-      if (value !== null) return value;
-    }
-    if (ts.isPropertyAssignment(declaration)) {
-      const value = staticString(declaration.initializer, checker, seen);
-      if (value !== null) return value;
-    }
-    if (ts.isEnumMember(declaration) && declaration.initializer) {
-      const value = staticString(declaration.initializer, checker, seen);
-      if (value !== null) return value;
-    }
-  }
-  return null;
-}
-
-function expressionFieldName(expression: ts.Expression): string | null {
-  let current = expression;
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isNonNullExpression(current)
-  ) {
-    current = current.expression;
-  }
-  if (ts.isIdentifier(current)) return current.text;
-  if (ts.isPropertyAccessExpression(current)) return current.name.text;
   if (ts.isElementAccessExpression(current) && current.argumentExpression) {
-    if (
-      ts.isStringLiteral(current.argumentExpression) ||
-      ts.isNoSubstitutionTemplateLiteral(current.argumentExpression)
-    ) {
-      return current.argumentExpression.text;
+    const key = staticString(current.argumentExpression);
+    return key !== null && FAMILY_ID_FIELD_NAMES.has(key.toLowerCase());
+  }
+  return false;
+}
+
+function declarationName(node: ts.Node): string {
+  let current: ts.Node | undefined = node;
+  while (current !== undefined) {
+    if (ts.isVariableDeclaration(current)) {
+      return ts.isIdentifier(current.name) ? current.name.text : "";
     }
+    if (ts.isPropertyAssignment(current) || ts.isPropertyDeclaration(current)) {
+      if (ts.isIdentifier(current.name) || isStaticStringNode(current.name)) {
+        return current.name.text;
+      }
+      return "";
+    }
+    current = current.parent;
+  }
+  return "";
+}
+
+function isFamilyKeyedTable(
+  node: ts.Node,
+  vocabulary: ProductionVocabulary,
+): boolean {
+  const owner = declarationName(node).toLowerCase();
+  if (!/(?:family|families|adapter|protocol|venue|capture|driver)/.test(owner)) {
+    return false;
+  }
+  const entries = tableEntries(node);
+  if (entries === null) return false;
+  for (const entry of entries) {
+    const value = staticString(entry);
+    if (value === null) continue;
+    const normalized = value.toLowerCase();
+    if (vocabulary.familyIds.has(normalized) ||
+        vocabulary.familyAliases.has(normalized) ||
+        vocabulary.pluginDeclaredHex.has(normalized)) return true;
+  }
+  return false;
+}
+
+function tableEntries(node: ts.Node): readonly ts.Expression[] | null {
+  if (ts.isNewExpression(node) && node.arguments?.[0] &&
+      ts.isIdentifier(node.expression) &&
+      (node.expression.text === "Map" || node.expression.text === "Set") &&
+      ts.isArrayLiteralExpression(node.arguments[0])) {
+    return Object.freeze(node.arguments[0].elements.flatMap((entry) => {
+      if (!ts.isExpression(entry)) return [];
+      if (ts.isArrayLiteralExpression(entry) && entry.elements[0] &&
+          ts.isExpression(entry.elements[0])) return [entry.elements[0]];
+      return [entry];
+    }));
+  }
+  if (ts.isObjectLiteralExpression(node)) {
+    return Object.freeze(node.properties.flatMap((property) => {
+      if (!ts.isPropertyAssignment(property) && !ts.isMethodDeclaration(property)) {
+        return [];
+      }
+      const name = property.name;
+      if (isStaticStringNode(name)) return [name];
+      if (ts.isIdentifier(name)) {
+        return [ts.factory.createStringLiteral(name.text)];
+      }
+      return [];
+    }));
   }
   return null;
-}
-
-function isPlanActionAdapterId(
-  expression: ts.Expression,
-  checker: ts.TypeChecker,
-): boolean {
-  let current = expression;
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isNonNullExpression(current)
-  ) {
-    current = current.expression;
-  }
-  const nameNode = ts.isPropertyAccessExpression(current)
-    ? current.name
-    : ts.isElementAccessExpression(current)
-      ? current.argumentExpression
-      : ts.isIdentifier(current)
-        ? current
-        : null;
-  if (!nameNode) return false;
-  let symbol = checker.getSymbolAtLocation(nameNode);
-  if (!symbol) return false;
-  if (symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
-  return (symbol.declarations ?? []).some((declaration) => {
-    const parent = declaration.parent;
-    return (
-      (ts.isInterfaceDeclaration(parent) || ts.isTypeLiteralNode(parent)) &&
-      ts.isInterfaceDeclaration(parent) &&
-      (parent.name.text === "PlanNode" || parent.name.text === "ResolvedPlanNode") &&
-      declaration.getSourceFile().fileName.endsWith("/src/types.ts")
-    );
-  });
-}
-
-function isIdExpression(
-  expression: ts.Expression,
-  checker?: ts.TypeChecker,
-): boolean {
-  const name = expressionFieldName(expression);
-  if (!name) return false;
-  const normalized = name.replaceAll("_", "").toLowerCase();
-  if (checker && isPlanActionAdapterId(expression, checker)) return false;
-  if (ID_FIELD_NAMES.has(normalized)) return true;
-  if (normalized !== "id") return false;
-
-  let current = expression;
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isNonNullExpression(current)
-  ) {
-    current = current.expression;
-  }
-  if (!ts.isPropertyAccessExpression(current)) return false;
-  const ownerText = current.expression.getText().toLowerCase();
-  if (/(?:family|provider|adapter|venue)/.test(ownerText)) return true;
-  if (!checker) return false;
-  const type = checker.typeToString(checker.getTypeAtLocation(current.expression));
-  return /(?:AdapterFamily|RouteLegAdapter|SwapAdapter|FlashLoan|Provider)/.test(type);
 }
 
 function addFinding(
@@ -510,282 +592,47 @@ function addFinding(
   node: ts.Node,
   rule: FindingRule,
   detail: string,
+  chain?: readonly string[],
 ): void {
-  const position = source.getLineAndCharacterOfPosition(node.getStart(source));
-  findings.push({
+  const start = node === source ? 0 : node.getStart(source);
+  const position = source.getLineAndCharacterOfPosition(start);
+  findings.push(Object.freeze({
     rule,
     file: relative(LISTENER_ROOT, source.fileName),
     line: position.line + 1,
     column: position.character + 1,
     detail,
-  });
+    ...(chain === undefined ? {} : { importChain: chain }),
+  }));
 }
 
-function scanIdBranches(
-  source: ts.SourceFile,
-  checker: ts.TypeChecker | undefined,
-  knownVenueIds: ReadonlySet<string>,
-): Finding[] {
-  const findings: Finding[] = [];
-  const known = new Set([...knownVenueIds].map((id) => id.toLowerCase()));
-  const equalityKinds = new Set<ts.SyntaxKind>([
-    ts.SyntaxKind.EqualsEqualsToken,
-    ts.SyntaxKind.EqualsEqualsEqualsToken,
-    ts.SyntaxKind.ExclamationEqualsToken,
-    ts.SyntaxKind.ExclamationEqualsEqualsToken,
-  ]);
-
-  const inspectStaticMapEntries = (
-    node: ts.Node,
-    entries: readonly ts.Expression[],
-  ): void => {
-    for (const entry of entries) {
-      const key = ts.isArrayLiteralExpression(entry)
-        ? entry.elements[0]
-        : entry;
-      if (!key || !ts.isExpression(key)) continue;
-      const value = staticString(key, checker);
-      if (value !== null && known.has(value.toLowerCase())) {
-        addFinding(
-          findings,
-          source,
-          key,
-          "venue-key-map",
-          `static venue key ${JSON.stringify(value)}`,
-        );
-      }
-    }
-  };
-
-  const visit = (node: ts.Node): void => {
-    if (
-      ts.isBinaryExpression(node) &&
-      equalityKinds.has(node.operatorToken.kind)
-    ) {
-      const leftIsId = isIdExpression(node.left, checker);
-      const rightIsId = isIdExpression(node.right, checker);
-      const leftValue = staticString(node.left, checker);
-      const rightValue = staticString(node.right, checker);
-      if (
-        (leftIsId && rightValue !== null) ||
-        (rightIsId && leftValue !== null)
-      ) {
-        addFinding(
-          findings,
-          source,
-          node,
-          "id-equality",
-          node.getText(source),
-        );
-      }
-    }
-
-    if (ts.isSwitchStatement(node)) {
-      const discriminantIsId = isIdExpression(node.expression, checker);
-      for (const clause of node.caseBlock.clauses) {
-        if (!ts.isCaseClause(clause)) continue;
-        const value = staticString(clause.expression, checker);
-        if (
-          value !== null &&
-          (discriminantIsId || known.has(value.toLowerCase()))
-        ) {
-          addFinding(
-            findings,
-            source,
-            clause,
-            "id-switch",
-            `${node.expression.getText(source)} case ${JSON.stringify(value)}`,
-          );
-        }
-      }
-    }
-
-    if (ts.isNewExpression(node) && node.arguments?.[0]) {
-      const constructor = node.expression.getText(source);
-      const entries = node.arguments[0];
-      if (
-        (constructor === "Map" || constructor === "Set") &&
-        ts.isArrayLiteralExpression(entries)
-      ) {
-        inspectStaticMapEntries(node, entries.elements);
-      }
-    }
-
-    if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression)
-    ) {
-      const method = node.expression.name.text;
-      if (
-        method === "fromEntries" &&
-        node.expression.expression.getText(source) === "Object" &&
-        node.arguments[0] &&
-        ts.isArrayLiteralExpression(node.arguments[0])
-      ) {
-        inspectStaticMapEntries(node, node.arguments[0].elements);
-      }
-      if (
-        (method === "set" || method === "add") &&
-        node.arguments[0]
-      ) {
-        const value = staticString(node.arguments[0], checker);
-        if (value !== null && known.has(value.toLowerCase())) {
-          addFinding(
-            findings,
-            source,
-            node.arguments[0],
-            "venue-key-map",
-            `static venue key ${JSON.stringify(value)}`,
-          );
-        }
-      }
-    }
-
-    if (ts.isObjectLiteralExpression(node)) {
-      for (const property of node.properties) {
-        if (
-          !ts.isPropertyAssignment(property) &&
-          !ts.isMethodDeclaration(property) &&
-          !ts.isShorthandPropertyAssignment(property)
-        ) {
-          continue;
-        }
-        const key = propertyName(property.name);
-        if (key !== null && known.has(key.toLowerCase())) {
-          addFinding(
-            findings,
-            source,
-            property.name,
-            "venue-key-map",
-            `static venue key ${JSON.stringify(key)}`,
-          );
-        }
-      }
-    }
-
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  return findings;
-}
-
-function scanImports(
-  source: ts.SourceFile,
-  familySources: ReadonlySet<string>,
-): Finding[] {
-  const findings: Finding[] = [];
-  for (const statement of source.statements) {
-    const moduleSpecifier = ts.isImportDeclaration(statement)
-      ? statement.moduleSpecifier
-      : ts.isExportDeclaration(statement)
-        ? statement.moduleSpecifier
-        : undefined;
-    if (!moduleSpecifier || !ts.isStringLiteral(moduleSpecifier)) continue;
-    const specifier = moduleSpecifier.text;
-    const resolved = resolveTsImport(source.fileName, specifier);
-    if (
-      resolved &&
-      (
-        familySources.has(resolved) ||
-        isFamilyOwnedImplementation(resolved)
-      )
-    ) {
-      addFinding(
-        findings,
-        source,
-        statement,
-        "family-direct-import",
-        `direct family module import/export ${JSON.stringify(specifier)}`,
-      );
-    }
-    if (
-      LEGACY_MODULE_PATTERNS.some((pattern) => pattern.test(specifier)) ||
-      (
-        ts.isImportDeclaration(statement) &&
-        importedBindings(statement).some((binding) =>
-          LEGACY_BINDINGS.has(binding)
-        )
-      )
-    ) {
-      addFinding(
-        findings,
-        source,
-        statement,
-        "legacy-direct-import",
-        `legacy registry/descriptor import ${JSON.stringify(specifier)}`,
-      );
-    }
-  }
-  return findings;
-}
-
-function isFamilyOwnedImplementation(path: string): boolean {
-  const relativePath = relative(LISTENER_ROOT, path).replaceAll("\\", "/");
-  if (SHARED_FAMILY_INFRA.has(relativePath)) return false;
-  return [
-    "src/searcher/venues/swaps/",
-    "src/searcher/venues/protocols/",
-    "src/searcher/venues/credit/",
-    "src/searcher/venues/funding/",
-  ].some((prefix) => relativePath.startsWith(prefix));
-}
-
-function productionVenueIds(): ReadonlySet<string> {
-  const ids = new Set<string>();
-  for (const family of PRODUCTION_ADAPTER_FAMILIES.list()) {
-    ids.add(family.id);
-    if ("edgeAdapterIds" in family) {
-      for (const id of family.edgeAdapterIds) ids.add(id);
-    }
-    if ("poolAdapters" in family) {
-      for (const id of family.poolAdapters) ids.add(id);
-    }
-    if (family.kind === "flash-loan") {
-      ids.add(family.funding.actionAdapterId);
-      ids.add(family.funding.lineage);
-    }
-  }
-  return ids;
-}
-
-function formatFindings(findings: readonly Finding[]): string {
-  return findings
-    .map(
-      (finding) =>
-        `${finding.file}:${finding.line}:${finding.column} ` +
-        `[${finding.rule}] ${finding.detail}`,
-    )
-    .join("\n");
-}
-
-function assertDetectorSelfTest(knownVenueIds: ReadonlySet<string>): void {
+function assertDetectorSelfTest(vocabulary: ProductionVocabulary): void {
+  const exampleFamilyId = [...vocabulary.familyIds][0]!;
   const bad = ts.createSourceFile(
     "synthetic-bad.ts",
     `
-      function bad(edge: { adapterId: string }, providerId: string) {
-        if (edge.adapterId === "new-unregistered-edge") return;
-        switch (providerId) {
-          case "new-unregistered-provider": return;
-        }
-        const venueById = new Map([["univ2-standard", () => 1]]);
-        return venueById;
+      function bad(item: { familyId: string }) {
+        if (item.familyId === ${JSON.stringify(exampleFamilyId)}) return;
+        switch (item.familyId) { case "synthetic-family": return; }
+        const familyDrivers = new Map([[${JSON.stringify(exampleFamilyId)}, 1]]);
+        return familyDrivers;
       }
     `,
     ts.ScriptTarget.ES2022,
     true,
     ts.ScriptKind.TS,
   );
-  const badRules = scanIdBranches(bad, undefined, knownVenueIds)
+  const rules = scanFamilyLogic(bad, vocabulary, ["synthetic-bad.ts"])
     .map((finding) => finding.rule);
-  assert(badRules.includes("id-equality"), "AST detector missed ID equality");
-  assert(badRules.includes("id-switch"), "AST detector missed ID switch/case");
-  assert(badRules.includes("venue-key-map"), "AST detector missed venue-key map");
+  assert(rules.includes("production-family-literal"));
+  assert(rules.includes("family-dispatch-branch"));
+  assert(rules.includes("family-keyed-table"));
 
   const good = ts.createSourceFile(
     "synthetic-good.ts",
     `
-      function good(registry: { forEdge(id: string): unknown }, edge: { adapterId: string }) {
-        return registry.forEdge(edge.adapterId);
+      function good(catalog: { forFamily(id: string): unknown }, familyId: string) {
+        return catalog.forFamily(familyId);
       }
     `,
     ts.ScriptTarget.ES2022,
@@ -793,83 +640,85 @@ function assertDetectorSelfTest(knownVenueIds: ReadonlySet<string>): void {
     ts.ScriptKind.TS,
   );
   assert.equal(
-    scanIdBranches(good, undefined, knownVenueIds).length,
+    scanFamilyLogic(good, vocabulary, ["synthetic-good.ts"]).length,
     0,
-    "AST detector rejected registry-derived lookup",
+  );
+
+  assert.equal(
+    expressionLooksFamilyish(ts.factory.createPropertyAccessExpression(
+      ts.factory.createIdentifier("url"),
+      "protocol",
+    )),
+    false,
+    "ordinary URL.protocol access must not be treated as Family dispatch",
+  );
+  assert.equal(
+    isFamilyOwnedImplementation(resolve(
+      LISTENER_ROOT,
+      "src/searcher/venues/swaps/synthetic-family/identity.ts",
+    )),
+    true,
+  );
+  assert.equal(
+    isFamilyOwnedImplementation(resolve(
+      LISTENER_ROOT,
+      "src/searcher/venues/protocols/protocol-state-framework.ts",
+    )),
+    false,
   );
 }
 
-function printFamilyLocReview(families: readonly FamilySource[]): void {
-  const grouped = new Map<
-    string,
-    { readonly ids: string[]; readonly lines: number }
-  >();
-  for (const family of families) {
-    const prior = grouped.get(family.path);
-    if (prior) {
-      prior.ids.push(family.familyId);
-      continue;
-    }
-    const source = readFileSync(family.path, "utf8");
-    grouped.set(family.path, {
-      ids: [family.familyId],
-      lines: source.length === 0 ? 0 : source.split(/\r?\n/).length,
-    });
+function formatFindings(findings: readonly Finding[]): string {
+  const unique = new Map<string, Finding>();
+  for (const finding of findings) {
+    const key = `${finding.file}:${finding.line}:${finding.column}:` +
+      `${finding.rule}:${finding.detail}`;
+    unique.set(key, finding);
   }
-  const rows = [...grouped.entries()]
-    .map(([path, report]) => ({
-      path: relative(LISTENER_ROOT, path),
-      ids: [...report.ids].sort(),
-      lines: report.lines,
-    }))
-    .sort((a, b) => b.lines - a.lines || a.path.localeCompare(b.path));
-  const overBudget = rows.filter((row) => row.lines > 200);
-
-  console.log("[adapter-family-shared-surface] family LOC review (physical LOC; advisory only)");
-  for (const row of rows) {
-    console.log(
-      `  ${String(row.lines).padStart(4)}  ${row.path}  [${row.ids.join(", ")}]` +
-      (row.lines > 200 ? "  REVIEW" : ""),
-    );
-  }
-  console.log(
-    `[adapter-family-shared-surface] advisory >200 LOC: ` +
-    `${overBudget.length}/${rows.length} modules; does not affect PASS`,
-  );
+  return [...unique.values()]
+    .sort((left, right) =>
+      left.file.localeCompare(right.file) || left.line - right.line ||
+      left.column - right.column || left.rule.localeCompare(right.rule)
+    )
+    .map((finding) =>
+      `${finding.file}:${finding.line}:${finding.column} ` +
+      `[${finding.rule}] ${finding.detail}` +
+      (finding.importChain === undefined
+        ? ""
+        : `\n  closure: ${finding.importChain.join(" -> ")}`)
+    )
+    .join("\n");
 }
 
 function main(): void {
-  const { program, checker } = loadProgram();
-  const familySources = productionFamilySources(program, checker);
+  const program = loadProgram();
+  const graph = buildImportGraph(program);
+  const entries = generatedProductionEntries(graph);
+  const vocabulary = productionVocabulary(entries);
   assert.equal(
-    familySources.length,
-    PRODUCTION_ADAPTER_FAMILIES.list().length,
-    "registry AST/runtime family cardinality mismatch",
+    entries.length,
+    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll().length,
+    "generated entry/catalog cardinality mismatch",
   );
-  const familyPaths = new Set(familySources.map((family) => family.path));
-  const knownVenueIds = productionVenueIds();
-  assertDetectorSelfTest(knownVenueIds);
-
-  const findings: Finding[] = [];
-  for (const relativePath of SHARED_SURFACE) {
-    const source = sourceFile(program, resolve(LISTENER_ROOT, relativePath));
-    findings.push(
-      ...scanIdBranches(source, checker, knownVenueIds),
-      ...scanImports(source, familyPaths),
-    );
-  }
-
+  assertDetectorSelfTest(vocabulary);
+  const roots = [...CENTRAL_ROOTS, ...FRAMEWORK_TEST_ROOTS];
+  const closure = reachableClosure({ graph, roots });
+  const findings = scanClosure({
+    graph,
+    closure,
+    vocabulary,
+    productionEntries: new Set(entries),
+  });
   if (findings.length > 0) {
     throw new Error(
-      `shared orchestration/consumer surface has adapter-family bypasses:\n` +
-      formatFindings(findings),
+      `central AST/import-closure gate found Family-specific logic:\n` +
+        formatFindings(findings),
     );
   }
-
-  printFamilyLocReview(familySources);
   console.log(
     `adapter-family-shared-surface-conformance PASS ` +
-    `(${SHARED_SURFACE.length} shared files, ${familySources.length} families)`,
+      `(roots=${roots.length} closure=${closure.paths.size} ` +
+      `families=${entries.length})`,
   );
 }
 

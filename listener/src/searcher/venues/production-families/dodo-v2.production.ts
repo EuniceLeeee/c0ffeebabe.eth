@@ -1,4 +1,5 @@
 import { defineSwapFamily } from "../adapter-family-plugin.js";
+import { dodoV2Capture } from "../swaps/dodo-v2-family/capture.js";
 import { dodoV2FamilyOwnedAction } from "../swaps/dodo-v2-family/action.js";
 import { dodoV2Discovery } from "../swaps/dodo-v2-family/discovery.js";
 import { dodoV2Exact } from "../swaps/dodo-v2-family/exact.js";
@@ -12,6 +13,7 @@ import { dodoV2Swap } from "../swaps/dodo-v2-family/swap.js";
 
 export const plugin = defineSwapFamily({
   manifest: dodoV2FamilyManifest,
+  capture: dodoV2Capture,
   discovery: dodoV2Discovery,
   identity: dodoV2Identity,
   instance: dodoV2Instance,

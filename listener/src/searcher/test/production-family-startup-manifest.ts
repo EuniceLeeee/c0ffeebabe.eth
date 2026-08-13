@@ -31,7 +31,7 @@ function main(): void {
   const funding = first.families.find((family) =>
     family.familyId === "flash-loan:morpho"
   )!;
-  assert.deepEqual(funding.applicableCapabilities, ["funding"]);
+  assert.deepEqual(funding.applicableCapabilities, ["capture", "funding"]);
   const credit = first.families.find((family) =>
     family.familyId === "credit:fluid"
   )!;

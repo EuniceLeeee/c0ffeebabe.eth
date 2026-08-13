@@ -1,4 +1,5 @@
 import { defineFundingFamily } from "../adapter-family-plugin.js";
+import { morphoFlashCapture } from "../funding/morpho-flash-family/capture.js";
 import {
   morphoFlashFamilyOwnedAction,
   morphoFlashFunding,
@@ -7,6 +8,7 @@ import {
 
 export const plugin = defineFundingFamily({
   manifest: morphoFlashManifest,
+  capture: morphoFlashCapture,
   funding: morphoFlashFunding,
   actionAdapters: [morphoFlashFamilyOwnedAction],
 });

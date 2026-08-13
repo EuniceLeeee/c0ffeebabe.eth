@@ -394,11 +394,19 @@ assert.match(
 assert.deepEqual(
   catalog.forStrictFamily(familyId("flash-loan:fixture"))
     .applicableCapabilities,
-  ["funding"],
+  ["capture", "funding"],
 );
 assert.deepEqual(
   catalog.forStrictFamily(familyId("credit:fixture")).applicableCapabilities,
-  ["discovery", "identity", "instance", "routes", "execution", "credit"],
+  [
+    "capture",
+    "discovery",
+    "identity",
+    "instance",
+    "routes",
+    "execution",
+    "credit",
+  ],
 );
 assert.throws(
   () => catalog.forFamily(familyId("flash-loan:fixture")),

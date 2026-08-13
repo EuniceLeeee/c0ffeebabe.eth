@@ -16,7 +16,7 @@ import {
 export const PRODUCTION_FAMILY_STARTUP_MANIFEST_FORMAT =
   "production-family-startup-manifest-v1" as const;
 export const EXPECTED_PRODUCTION_FAMILY_COUNT = 22;
-export const EXPECTED_PRODUCTION_CAPABILITY_COUNT = 220;
+export const EXPECTED_PRODUCTION_CAPABILITY_COUNT = 242;
 
 export interface ProductionFamilyStartupEntry {
   readonly familyId: FamilyId;

@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { etherTokenNativeRedeemCapture } from "../protocols/ethertoken-native-redeem-family/capture.js";
 import { etherTokenNativeRedeemFamilyOwnedAction } from "../protocols/ethertoken-native-redeem-family/action.js";
 import { etherTokenNativeRedeemDiscovery } from "../protocols/ethertoken-native-redeem-family/discovery.js";
 import { etherTokenNativeRedeemExact } from "../protocols/ethertoken-native-redeem-family/exact.js";
@@ -12,6 +13,7 @@ import { etherTokenNativeRedeemRoutes } from "../protocols/ethertoken-native-red
 
 export const plugin = defineProtocolFamily({
   manifest: etherTokenNativeRedeemFamilyManifest,
+  capture: etherTokenNativeRedeemCapture,
   discovery: etherTokenNativeRedeemDiscovery,
   identity: etherTokenNativeRedeemIdentity,
   instance: etherTokenNativeRedeemInstance,

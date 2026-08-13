@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { goldxCapture } from "../protocols/goldx-family/capture.js";
 import { goldxFamilyOwnedAction } from "../protocols/goldx-family/action.js";
 import { goldxDiscovery } from "../protocols/goldx-family/discovery.js";
 import { goldxExact } from "../protocols/goldx-family/exact.js";
@@ -12,6 +13,7 @@ import { goldxRoutes } from "../protocols/goldx-family/routes.js";
 
 export const plugin = defineProtocolFamily({
   manifest: goldxFamilyManifest,
+  capture: goldxCapture,
   discovery: goldxDiscovery,
   identity: goldxIdentity,
   instance: goldxInstance,

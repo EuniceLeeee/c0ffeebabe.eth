@@ -10,6 +10,7 @@ import type { FamilyId } from "./adapter-family-identifiers.js";
 import { hashCanonical, type CanonicalValue } from "./canonical-value.js";
 
 export const FAMILY_CAPABILITY_NAMES = Object.freeze([
+  "capture",
   "discovery",
   "identity",
   "instance",
@@ -29,6 +30,7 @@ export const FAMILY_CAPABILITIES_BY_DOMAIN: Readonly<
   Record<FamilyDomain, readonly FamilyCapabilityName[]>
 > = Object.freeze({
   swap: Object.freeze([
+    "capture",
     "discovery",
     "identity",
     "instance",
@@ -39,6 +41,7 @@ export const FAMILY_CAPABILITIES_BY_DOMAIN: Readonly<
     "victim",
   ] as const),
   protocol: Object.freeze([
+    "capture",
     "discovery",
     "identity",
     "instance",
@@ -48,8 +51,9 @@ export const FAMILY_CAPABILITIES_BY_DOMAIN: Readonly<
     "execution",
     "victim",
   ] as const),
-  funding: Object.freeze(["funding"] as const),
+  funding: Object.freeze(["capture", "funding"] as const),
   credit: Object.freeze([
+    "capture",
     "discovery",
     "identity",
     "instance",
@@ -156,6 +160,8 @@ export class FamilyCapabilityCatalog {
   constructor(input: {
     readonly modules: readonly DefinedFamilyPluginModuleInput[];
     readonly generatedManifest: GeneratedCapabilityManifest;
+    /** Production composition requires capture; synthetic catalogs may omit it. */
+    readonly requireCapture?: boolean;
   }) {
     const manifest = validateGeneratedCapabilityManifest(
       input.generatedManifest,
@@ -174,6 +180,12 @@ export class FamilyCapabilityCatalog {
     )) {
       assertDefinedFamilyPlugin(module.plugin);
       const summary = definedFamilyPluginContractSummary(module.plugin);
+      if (input.requireCapture === true && module.plugin.capture === undefined) {
+        throw new Error(
+          `${module.sourceFile} production Family ${summary.familyId} ` +
+            "must provide capture materialization",
+        );
+      }
       if (summary.definitionBoundaryHash !== module.definitionBoundaryHash) {
         throw new Error(
           `${module.sourceFile} definition boundary hash does not match its plugin`,

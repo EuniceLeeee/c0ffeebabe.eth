@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { metronomeSynthCapture } from "../protocols/metronome-synth-family/capture.js";
 import { metronomeSynthFamilyOwnedAction } from "../protocols/metronome-synth-family/action.js";
 import { metronomeSynthDiscovery } from "../protocols/metronome-synth-family/discovery.js";
 import { metronomeSynthExact } from "../protocols/metronome-synth-family/exact.js";
@@ -12,6 +13,7 @@ import { metronomeSynthRoutes } from "../protocols/metronome-synth-family/routes
 
 export const plugin = defineProtocolFamily({
   manifest: metronomeSynthFamilyManifest,
+  capture: metronomeSynthCapture,
   discovery: metronomeSynthDiscovery,
   identity: metronomeSynthIdentity,
   instance: metronomeSynthInstance,

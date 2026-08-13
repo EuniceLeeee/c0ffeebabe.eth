@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { erc4626SiloRedeemCapture } from "../protocols/erc4626-silo-redeem-family/capture.js";
 import { erc4626SiloRedeemFamilyOwnedAction } from "../protocols/erc4626-silo-redeem-family/action.js";
 import { erc4626SiloRedeemDiscovery } from "../protocols/erc4626-silo-redeem-family/discovery.js";
 import { erc4626SiloRedeemExact } from "../protocols/erc4626-silo-redeem-family/exact.js";
@@ -12,6 +13,7 @@ import { erc4626SiloRedeemRoutes } from "../protocols/erc4626-silo-redeem-family
 
 export const plugin = defineProtocolFamily({
   manifest: erc4626SiloRedeemFamilyManifest,
+  capture: erc4626SiloRedeemCapture,
   discovery: erc4626SiloRedeemDiscovery,
   identity: erc4626SiloRedeemIdentity,
   instance: erc4626SiloRedeemInstance,

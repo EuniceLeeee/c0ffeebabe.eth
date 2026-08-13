@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { wstethCapture } from "../protocols/wsteth-family/capture.js";
 import {
   wstethUnwrapFamilyOwnedAction,
   wstethWrapFamilyOwnedAction,
@@ -15,6 +16,7 @@ import { wstethRoutes } from "../protocols/wsteth-family/routes.js";
 
 export const plugin = defineProtocolFamily({
   manifest: wstethFamilyManifest,
+  capture: wstethCapture,
   discovery: wstethDiscovery,
   identity: wstethIdentity,
   instance: wstethInstance,

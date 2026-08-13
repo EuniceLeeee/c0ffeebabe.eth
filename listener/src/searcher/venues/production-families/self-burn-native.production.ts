@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { selfBurnNativeCapture } from "../protocols/self-burn-native-family/capture.js";
 import { selfBurnNativeFamilyOwnedAction } from "../protocols/self-burn-native-family/action.js";
 import { selfBurnNativeDiscovery } from "../protocols/self-burn-native-family/discovery.js";
 import { selfBurnNativeExact } from "../protocols/self-burn-native-family/exact.js";
@@ -12,6 +13,7 @@ import { selfBurnNativeRoutes } from "../protocols/self-burn-native-family/route
 
 export const plugin = defineProtocolFamily({
   manifest: selfBurnNativeFamilyManifest,
+  capture: selfBurnNativeCapture,
   discovery: selfBurnNativeDiscovery,
   identity: selfBurnNativeIdentity,
   instance: selfBurnNativeInstance,

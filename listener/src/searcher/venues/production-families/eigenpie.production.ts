@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { eigenpieCapture } from "../protocols/eigenpie-family/capture.js";
 import { eigenpieFamilyOwnedAction } from
   "../protocols/eigenpie-family/action.js";
 import { eigenpieDiscovery } from
@@ -18,6 +19,7 @@ import { eigenpieRoutes } from "../protocols/eigenpie-family/routes.js";
 
 export const plugin = defineProtocolFamily({
   manifest: eigenpieFamilyManifest,
+  capture: eigenpieCapture,
   discovery: eigenpieDiscovery,
   identity: eigenpieIdentity,
   instance: eigenpieInstance,

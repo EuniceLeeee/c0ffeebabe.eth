@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { psmCapture } from "../protocols/psm-family/capture.js";
 import { psmFamilyOwnedAction } from "../protocols/psm-family/action.js";
 import { psmDiscovery } from "../protocols/psm-family/discovery.js";
 import { psmExact } from "../protocols/psm-family/exact.js";
@@ -12,6 +13,7 @@ import { psmRoutes } from "../protocols/psm-family/routes.js";
 
 export const plugin = defineProtocolFamily({
   manifest: psmFamilyManifest,
+  capture: psmCapture,
   discovery: psmDiscovery,
   identity: psmIdentity,
   instance: psmInstance,

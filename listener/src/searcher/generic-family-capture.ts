@@ -1,38 +1,64 @@
+import { ethers } from "ethers";
 import {
   exercisedStage,
-  frameworkBlockedStage,
 } from "./architecture-migration-capture.js";
 import type {
   RawFamilyMigrationCaseCapture,
+  RawMigrationSemanticItem,
   RawMigrationStageCapture,
 } from "./architecture-migration-parity-runner.js";
+import { projectFamilyRouteGraph } from "./adapter-family-graph-runtime.js";
 import {
-  projectFamilyRouteGraph,
-} from "./adapter-family-graph-runtime.js";
+  buildFundingBorrowFragment,
+  executeFundingFamilyLiquidity,
+} from "./adapter-funding-runtime.js";
+import {
+  buildCreditExecutionFragment,
+  executeCreditRiskQuote,
+  issueCreditExecutionHandle,
+  prepareCreditFamilyRoutes,
+  projectCreditRouteGraph,
+} from "./adapter-credit-runtime.js";
+import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
 import { runStrictFamilyLifecycle } from
   "./strict-family-lifecycle-runner.js";
+import {
+  buildFamilyExecutionFragment,
+  executeCreditFamilyInstanceLifecycle,
+  executeFamilyExactQuote,
+  type AdapterFamilyPublication,
+  type PreparedFamilyInstance,
+} from "./venues/adapter-family-runtime.js";
 import type {
-  CentralAdapterRuntime,
-} from "./adapter-work-intent.js";
-import type { FamilyCapabilityCatalog } from
-  "./venues/family-capability-catalog.js";
-import type { UnifiedObservation } from
-  "./venues/adapter-family-plugin.js";
+  CaptureObservationIntent,
+  CreditCaptureVector,
+  FamilyCaptureDescriptor,
+  FamilyCaptureVector,
+  FundingCaptureVector,
+  RouteCaptureVector,
+  UnifiedObservation,
+} from "./venues/adapter-family-plugin.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
-import type { FamilyId } from
-  "./venues/adapter-family-identifiers.js";
-import type { PreparedFamilyInstance } from
-  "./venues/adapter-family-runtime.js";
-import { definedFamilyPluginContractSummary } from
-  "./venues/adapter-family-plugin.js";
-import { ethers } from "ethers";
-import type { OnchainUniv2Provider } from
-  "./architecture-migration-fixture-replay.js";
-import type { AdapterFamilyPublication } from
-  "./venues/adapter-family-runtime.js";
+import {
+  hashCanonical,
+  type CanonicalValue,
+} from "./venues/canonical-value.js";
+import {
+  definedFamilyPluginContractSummary,
+} from "./venues/adapter-family-plugin.js";
+import type {
+  FamilyCapabilityCatalog,
+  LoadedFamilyBox,
+  LoadedFamilyPlugin,
+} from "./venues/family-capability-catalog.js";
+import type { PlanFragment } from "./venues/route-leg-adapter.js";
 
-export interface GenericCaptureProvider extends OnchainUniv2Provider {
+export interface GenericCaptureProvider {
+  call(
+    transaction: { readonly to: string; readonly data: string },
+    blockTag?: number,
+  ): Promise<string>;
   getCode(address: string, blockTag?: number): Promise<string>;
   getStorage(
     address: string,
@@ -50,17 +76,60 @@ export interface GenericCaptureProvider extends OnchainUniv2Provider {
     readonly data: string;
     readonly transactionHash?: string;
   }[]>;
+  getTransactionReceipt(transactionHash: string): Promise<{
+    readonly logs: readonly {
+      readonly index?: number;
+      readonly logIndex?: number;
+      readonly address: string;
+      readonly topics: readonly string[];
+      readonly data: string;
+      readonly transactionHash?: string;
+    }[];
+  } | null>;
+  send(method: string, params: readonly unknown[]): Promise<unknown>;
+}
+
+export type GenericCaptureFinalSimulationInput =
+  | {
+      readonly kind: "route";
+      readonly family: LoadedFamilyPlugin;
+      readonly source: CanonicalSource;
+      readonly vector: RouteCaptureVector;
+      readonly fragment: PlanFragment;
+      readonly semanticId: string;
+    }
+  | {
+      readonly kind: "funding";
+      readonly family: LoadedFamilyBox;
+      readonly source: CanonicalSource;
+      readonly vector: FundingCaptureVector;
+      readonly fragment: PlanFragment;
+      readonly semanticId: string;
+    }
+  | {
+      readonly kind: "credit";
+      readonly family: LoadedFamilyBox;
+      readonly source: CanonicalSource;
+      readonly vector: CreditCaptureVector;
+      readonly fragment: PlanFragment;
+      readonly semanticId: string;
+    };
+
+/**
+ * The capture core never infers success from expected effects. A composition
+ * root must execute the exact fragment/closed plan with the mandatory reserved
+ * final-sim runtime and return its machine result here.
+ */
+export interface GenericCaptureFinalSimulation {
+  simulate(
+    input: GenericCaptureFinalSimulationInput,
+  ): Promise<CanonicalValue>;
 }
 
 const EIP1967_IMPLEMENTATION_SLOT =
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 const GENERIC_LOG_QUERY_BLOCK_SPAN = 100_000;
 
-/**
- * Central fault-isolation boundary for one plugin work item. The caller owns
- * the transport and supplies cancellation; a stuck Family cannot hold the
- * batch scheduler indefinitely or leave its provider alive in the background.
- */
 export async function runGenericCaptureWorkItem<T>(input: {
   readonly id: string;
   readonly timeoutMs: number;
@@ -77,9 +146,7 @@ export async function runGenericCaptureWorkItem<T>(input: {
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
           input.cancel();
-          reject(new Error(
-            `${input.id} exceeded ${input.timeoutMs}ms`,
-          ));
+          reject(new Error(`${input.id} exceeded ${input.timeoutMs}ms`));
         }, input.timeoutMs);
       }),
     ]);
@@ -108,12 +175,139 @@ export async function runGenericCaptureBatch<T>(input: {
   return Object.freeze(completed);
 }
 
+export async function executeCaptureObservationIntents(input: {
+  readonly family: LoadedFamilyBox;
+  readonly source: CanonicalSource;
+  readonly intents: readonly CaptureObservationIntent[];
+  readonly provider: GenericCaptureProvider;
+}): Promise<readonly UnifiedObservation[]> {
+  const observations: UnifiedObservation[] = [];
+  for (const intent of input.intents) {
+    observations.push(await executeObservationIntent({
+      ...input,
+      intent,
+    }));
+  }
+  return Object.freeze(observations);
+}
+
+async function executeObservationIntent(input: {
+  readonly family: LoadedFamilyBox;
+  readonly source: CanonicalSource;
+  readonly intent: CaptureObservationIntent;
+  readonly provider: GenericCaptureProvider;
+}): Promise<UnifiedObservation> {
+  const { intent } = input;
+  if (intent.kind === "provided-observation") {
+    assertObservationSource(intent.observation, input.source);
+    return intent.observation;
+  }
+  if (intent.kind === "address-surface") {
+    const address = ethers.getAddress(intent.address).toLowerCase();
+    const [code, implementationWord] = await Promise.all([
+      input.provider.getCode(address, input.source.number),
+      input.provider.getStorage(
+        address,
+        EIP1967_IMPLEMENTATION_SLOT,
+        input.source.number,
+      ),
+    ]);
+    if (!ethers.isHexString(code) || code === "0x") {
+      throw new Error("capture address surface has no deployed code");
+    }
+    return Object.freeze({
+      kind: "address-surface" as const,
+      source: input.source,
+      address,
+      codeHash: ethers.keccak256(code),
+      implementationWord: ethers.zeroPadValue(implementationWord, 32)
+        .toLowerCase(),
+      interfaceFingerprints: intent.interfaceFingerprints,
+    });
+  }
+  if (intent.kind === "declared-log") {
+    const discovery = requireDiscovery(input.family);
+    const pattern = discovery.logPatterns?.find((candidate) =>
+      candidate.id === intent.patternId
+    );
+    const emitter = pattern?.emitter;
+    if (
+      pattern === undefined ||
+      emitter === undefined ||
+      emitter.mode === "address"
+    ) {
+      throw new Error("capture declared-log has no singleton declaration");
+    }
+    const identityTopic = emitter.mode === "singleton-indexed-address"
+      ? ethers.zeroPadValue(
+          ethers.getAddress(intent.candidateIdentity),
+          32,
+        ).toLowerCase()
+      : normalizeWord(intent.candidateIdentity, "capture log identity");
+    const topics: (string | null)[] = [pattern.topic.toLowerCase()];
+    while (topics.length < emitter.topicIndex) topics.push(null);
+    topics.push(identityTopic);
+    const log = await findLatestDeclaredLog({
+      provider: input.provider,
+      address: emitter.address,
+      fromBlock: emitter.fromBlock,
+      toBlock: input.source.number,
+      topics,
+    });
+    if (log === null) {
+      throw new Error("capture declared singleton log was not found");
+    }
+    return Object.freeze({
+      kind: "log" as const,
+      source: input.source,
+      address: ethers.getAddress(log.address).toLowerCase(),
+      topics: Object.freeze(log.topics.map((topic) => topic.toLowerCase())),
+      data: log.data.toLowerCase(),
+      ...(log.transactionHash === undefined
+        ? {}
+        : { transactionHash: log.transactionHash.toLowerCase() }),
+    });
+  }
+  if (intent.kind === "observed-log") {
+    const receipt = await input.provider.getTransactionReceipt(
+      intent.transactionHash,
+    );
+    const log = receipt?.logs.find((candidate, index) =>
+      (candidate.index ?? candidate.logIndex ?? index) === intent.logIndex
+    );
+    if (log === undefined) {
+      throw new Error("capture observed log is absent from its receipt");
+    }
+    return Object.freeze({
+      kind: "log" as const,
+      source: input.source,
+      address: ethers.getAddress(log.address).toLowerCase(),
+      topics: Object.freeze(log.topics.map((topic) => topic.toLowerCase())),
+      data: log.data.toLowerCase(),
+      transactionHash: intent.transactionHash.toLowerCase(),
+    });
+  }
+  const trace = await input.provider.send("debug_traceTransaction", [
+    intent.transactionHash,
+    { tracer: "callTracer" },
+  ]);
+  const call = traceCallAt(trace, intent.traceAddress);
+  return Object.freeze({
+    kind: "call" as const,
+    source: input.source,
+    target: ethers.getAddress(call.to).toLowerCase(),
+    sender: ethers.getAddress(call.from).toLowerCase(),
+    data: normalizeData(call.input, "capture observed call input"),
+    transactionHash: intent.transactionHash.toLowerCase(),
+  });
+}
+
 async function findLatestDeclaredLog(input: {
   readonly provider: GenericCaptureProvider;
   readonly address: string;
   readonly fromBlock: number;
   readonly toBlock: number;
-  readonly topics: (string | null)[];
+  readonly topics: readonly (string | null)[];
 }): Promise<Awaited<ReturnType<GenericCaptureProvider["getLogs"]>>[number] | null> {
   let toBlock = input.toBlock;
   while (toBlock >= input.fromBlock) {
@@ -125,7 +319,7 @@ async function findLatestDeclaredLog(input: {
       address: input.address,
       fromBlock,
       toBlock,
-      topics: input.topics,
+      topics: [...input.topics],
     });
     const latest = logs.at(-1);
     if (latest !== undefined) return latest;
@@ -134,300 +328,405 @@ async function findLatestDeclaredLog(input: {
   return null;
 }
 
-/**
- * Per-plugin exact/execution driver registry (architecture-sanctioned:
- * each family plugin ships its own exact/execution modules). A family with a
- * registered driver gets exact/execution/final-sim exercised by the generic
- * capture; without one the stages stay honestly framework-blocked.
- */
-export interface GenericCaptureDriver {
-  readonly familyId: FamilyId;
-  buildExactQuotes(input: {
-    readonly publication: AdapterFamilyPublication;
-    readonly source: CanonicalSource;
-    readonly evidenceRefs: readonly string[];
-  }): RawMigrationStageCapture;
-  buildExecutionAndFinalSim(input: {
-    readonly publication: AdapterFamilyPublication;
-    readonly source: CanonicalSource;
-    readonly evidenceRefs: readonly string[];
-  }): {
-    readonly executionFragments: RawMigrationStageCapture;
-    readonly finalSimulations: RawMigrationStageCapture;
-  };
-}
-
-const genericCaptureDrivers = new Map<FamilyId, GenericCaptureDriver>();
-
-export function registerGenericCaptureDriver(
-  driver: GenericCaptureDriver,
-): void {
-  if (genericCaptureDrivers.has(driver.familyId)) {
-    throw new Error(
-      `generic capture driver already registered for ${driver.familyId}`,
-    );
-  }
-  genericCaptureDrivers.set(driver.familyId, driver);
-}
-
-export function resolveGenericCaptureDriver(
-  familyId: FamilyId,
-): GenericCaptureDriver | null {
-  return genericCaptureDrivers.get(familyId) ?? null;
-}
-
-/**
- * Generic observation derivation driven by the family plugin's discovery
- * declarations: singleton log emitters -> real historical log, then
- * callPatterns -> call observation, address logPatterns -> log
- * observation, addressSurfaces -> address-surface observation with real
- * code hash + EIP-1967 implementation word read at the source block.
- */
-export async function deriveFamilyObservationFromNodeData(input: {
-  readonly catalog: FamilyCapabilityCatalog;
-  readonly familyId: FamilyId;
-  readonly source: CanonicalSource;
-  readonly address: string;
-  readonly provider: GenericCaptureProvider;
-}): Promise<UnifiedObservation> {
-  const family = input.catalog.forFamily(input.familyId);
-  const discovery = "discovery" in family.plugin
-    ? family.plugin.discovery
-    : null;
-  if (discovery === null) {
-    throw new Error(
-      `family ${input.familyId} declares no discovery semantics`,
-    );
-  }
-  const address = input.address.toLowerCase();
-  const singletonPattern = discovery.logPatterns?.find((pattern) =>
-    pattern.emitter !== undefined && pattern.emitter.mode !== "address"
-  );
-  if (singletonPattern?.emitter !== undefined &&
-      singletonPattern.emitter.mode !== "address") {
-    const emitter = singletonPattern.emitter;
-    const identityTopic = emitter.mode === "singleton-indexed-bytes32"
-      ? ethers.hexlify(ethers.getBytes(address))
-      : ethers.zeroPadValue(ethers.getAddress(address), 32).toLowerCase();
-    if (ethers.dataLength(identityTopic) !== 32) {
-      throw new Error(
-        `family ${input.familyId} singleton identity must be 32 bytes`,
-      );
-    }
-    const topics: (string | null)[] = [singletonPattern.topic];
-    while (topics.length < emitter.topicIndex) topics.push(null);
-    topics.push(identityTopic.toLowerCase());
-    const log = await findLatestDeclaredLog({
-      provider: input.provider,
-      address: emitter.address,
-      fromBlock: emitter.fromBlock,
-      toBlock: input.source.number,
-      topics,
-    });
-    if (log === null) {
-      throw new Error(
-        `family ${input.familyId} has no declared singleton log for ${address}`,
-      );
-    }
-    return Object.freeze({
-      kind: "log" as const,
-      source: input.source,
-      address: log.address.toLowerCase(),
-      topics: Object.freeze([...log.topics]),
-      data: log.data,
-      ...(log.transactionHash === undefined
-        ? {}
-        : { transactionHash: log.transactionHash }),
-    });
-  }
-  if ((discovery.callPatterns?.length ?? 0) > 0) {
-    const pattern = discovery.callPatterns![0];
-    return Object.freeze({
-      kind: "call" as const,
-      source: input.source,
-      target: address,
-      data: `${pattern.selector}${"0".repeat(64)}`,
-    });
-  }
-  if ((discovery.logPatterns?.length ?? 0) > 0) {
-    const pattern = discovery.logPatterns![0];
-    return Object.freeze({
-      kind: "log" as const,
-      source: input.source,
-      address,
-      topics: Object.freeze([pattern.topic]),
-      data: "0x",
-    });
-  }
-  if ((discovery.addressSurfaces?.length ?? 0) > 0) {
-    const [code, implementationWord] = await Promise.all([
-      input.provider.getCode(address, input.source.number),
-      input.provider.getStorage(
-        address,
-        EIP1967_IMPLEMENTATION_SLOT,
-        input.source.number,
-      ),
-    ]);
-    return Object.freeze({
-      kind: "address-surface" as const,
-      source: input.source,
-      address,
-      codeHash: ethers.keccak256(code),
-      implementationWord: implementationWord.toLowerCase(),
-    });
-  }
-  throw new Error(
-    `family ${input.familyId} declares no usable discovery pattern`,
-  );
-}
-
-/**
- * Generic real-capture core (F5-b generic path): one family is captured by
- * (a) deriving the observation from the family plugin's discovery
- * declarations plus a real address, (b) running the standard strict
- * lifecycle, and (c) assembling every publication-derivable stage
- * generically. Exact/execution/final-sim are driven by the family plugin's
- * own exact/execution modules (per-plugin by architecture design), supplied
- * through the optional driver; absent a driver they are honestly marked
- * framework-blocked instead of fabricated.
- */
 export async function captureFamilyGenerically(input: {
   readonly catalog: FamilyCapabilityCatalog;
-  readonly familyId: FamilyId;
-  readonly source: CanonicalSource;
-  readonly observation: UnifiedObservation;
+  readonly descriptor: FamilyCaptureDescriptor;
+  readonly provider: GenericCaptureProvider;
   readonly runtime: CentralAdapterRuntime;
+  readonly finalSimulation: GenericCaptureFinalSimulation;
   readonly caseId?: string;
-  readonly driver?: GenericCaptureDriver | null;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const family = input.catalog.forFamily(input.familyId);
+  const family = input.catalog.forStrictFamily(input.descriptor.familyId);
+  if (family.plugin.capture === undefined) {
+    throw new Error("catalog Family has no capture materialization");
+  }
+  const vector = family.plugin.capture.materialize(input.descriptor);
+  const evidenceRefs = captureEvidenceRefs(input.descriptor);
+  const stages = vector.kind === "funding"
+    ? await captureFunding({ ...input, family, vector, evidenceRefs })
+    : vector.kind === "credit"
+      ? await captureCredit({ ...input, family, vector, evidenceRefs })
+      : await captureRoute({
+          ...input,
+          family: input.catalog.forFamily(input.descriptor.familyId),
+          vector,
+          evidenceRefs,
+        });
+  const summary = definedFamilyPluginContractSummary(family.plugin);
+  return Object.freeze({
+    familyId: input.descriptor.familyId,
+    caseId: input.caseId ??
+      `${input.descriptor.familyId}:${input.descriptor.candidateIdentity}:` +
+        `${input.descriptor.source.number}`,
+    inputFingerprint: hashCanonical(input.descriptor as unknown as CanonicalValue),
+    stateAnchorNumber: input.descriptor.source.number,
+    implementationClosureHash: summary.definitionBoundaryHash,
+    stages,
+  });
+}
+
+async function captureRoute(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly descriptor: FamilyCaptureDescriptor;
+  readonly provider: GenericCaptureProvider;
+  readonly runtime: CentralAdapterRuntime;
+  readonly finalSimulation: GenericCaptureFinalSimulation;
+  readonly family: LoadedFamilyPlugin;
+  readonly vector: RouteCaptureVector;
+  readonly evidenceRefs: readonly string[];
+}): Promise<RawFamilyMigrationCaseCapture["stages"]> {
+  const observations = await executeCaptureObservationIntents({
+    family: input.family,
+    source: input.descriptor.source,
+    intents: input.vector.observations,
+    provider: input.provider,
+  });
   const publication = await runStrictFamilyLifecycle({
     catalog: input.catalog,
-    familyId: input.familyId,
-    source: input.source,
-    observations: Object.freeze([input.observation]),
+    familyId: input.descriptor.familyId,
+    source: input.descriptor.source,
+    observations,
     runtime: input.runtime,
   });
-  const evidenceRefs = Object.freeze([
-    `onchain:1:${input.source.hash}:generic:${input.familyId}`,
-  ]);
-  const edges: RawMigrationStageCapture["items"][number][] = [];
-  const prices: RawMigrationStageCapture["items"][number][] = [];
+  const graph = routeGraphItems(input.family, publication);
+  const exactItems: RawMigrationSemanticItem[] = [];
+  const executionItems: RawMigrationSemanticItem[] = [];
+  const simulationItems: RawMigrationSemanticItem[] = [];
+  for (const instance of publication.instances) {
+    for (const route of [...instance.routeHandles].sort((left, right) =>
+      left.routeKey.localeCompare(right.routeKey)
+    )) {
+      const exact = await executeFamilyExactQuote({
+        family: input.family,
+        route,
+        amountIn: input.vector.amountIn,
+        executor: input.vector.executor,
+        runtimeEvidence: input.vector.runtimeEvidence,
+        source: input.descriptor.source,
+        generation: input.descriptor.source.generation,
+        runtime: input.runtime,
+      });
+      if (exact.status !== "resolved") {
+        throw new Error(`capture exact failed: ${exact.outcome.reasonCode}`);
+      }
+      const semanticId = `${route.routeKey}\u001f${input.vector.amountIn}`;
+      exactItems.push(semanticItem(`${semanticId}:exact`, {
+        routeKey: route.routeKey,
+        amountIn: exact.amountIn.toString(),
+        amountOut: exact.amountOut.toString(),
+        methodId: exact.methodId,
+        evidenceRefs: exact.evidenceRefs,
+      }));
+      const execution = buildFamilyExecutionFragment({
+        family: input.family,
+        actionOwnership: input.catalog,
+        route,
+        exact,
+        minAmountOut: input.vector.minAmountOut,
+        executor: input.vector.executor,
+        runtimeEvidence: input.vector.runtimeEvidence,
+      });
+      if (execution.status !== "resolved") {
+        throw new Error(`capture execution failed: ${execution.outcome.reasonCode}`);
+      }
+      executionItems.push(fragmentItem(`${semanticId}:execution`, execution.fragment));
+      const simulation = await input.finalSimulation.simulate({
+        kind: "route",
+        family: input.family,
+        source: input.descriptor.source,
+        vector: input.vector,
+        fragment: execution.fragment,
+        semanticId,
+      });
+      simulationItems.push(semanticItem(`${semanticId}:final-sim`, simulation));
+    }
+  }
+  return routeStages(publication, graph, exactItems, executionItems,
+    simulationItems, input.evidenceRefs);
+}
+
+async function captureFunding(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly descriptor: FamilyCaptureDescriptor;
+  readonly runtime: CentralAdapterRuntime;
+  readonly finalSimulation: GenericCaptureFinalSimulation;
+  readonly family: LoadedFamilyBox;
+  readonly vector: FundingCaptureVector;
+  readonly evidenceRefs: readonly string[];
+}): Promise<RawFamilyMigrationCaseCapture["stages"]> {
+  let publication: import("./adapter-funding-runtime.js").FundingFamilyPublication |
+    null = null;
+  const result = await executeFundingFamilyLiquidity({
+    family: input.family,
+    assets: input.vector.assets,
+    source: input.descriptor.source,
+    generation: input.descriptor.source.generation,
+    runtime: input.runtime,
+    publisher: { publish: (value) => { publication = value; } },
+  });
+  if (publication === null || result.publication === null) {
+    throw new Error("capture Funding Family did not publish");
+  }
+  const instances: RawMigrationSemanticItem[] = [];
+  const executions: RawMigrationSemanticItem[] = [];
+  const simulations: RawMigrationSemanticItem[] = [];
+  for (const offer of result.offers) {
+    if (input.vector.amount > offer.maxBorrow) continue;
+    const semanticId = `${offer.fundingId}\u001f${input.vector.amount}`;
+    instances.push(semanticItem(offer.fundingId, {
+      familyId: offer.familyId,
+      fundingId: offer.fundingId,
+      asset: offer.asset,
+      maxBorrow: offer.maxBorrow.toString(),
+      fee: offer.fee.toString(),
+    }));
+    const fragment = buildFundingBorrowFragment({
+      family: input.family,
+      offer,
+      source: input.descriptor.source,
+      generation: input.descriptor.source.generation,
+      amount: input.vector.amount,
+      minProfit: input.vector.minProfit,
+      children: Object.freeze([]),
+    });
+    executions.push(fragmentItem(`${semanticId}:execution`, fragment));
+    simulations.push(semanticItem(
+      `${semanticId}:final-sim`,
+      await input.finalSimulation.simulate({
+        kind: "funding",
+        family: input.family,
+        source: input.descriptor.source,
+        vector: input.vector,
+        fragment,
+        semanticId,
+      }),
+    ));
+  }
+  if (instances.length === 0) {
+    throw new Error("capture Funding Family has no executable offer");
+  }
+  return Object.freeze({
+    instances: exercisedStage(instances, input.evidenceRefs),
+    edges: declaredAbsent(input.evidenceRefs),
+    stateCoverage: declaredAbsent(input.evidenceRefs),
+    pricedEdges: declaredAbsent(input.evidenceRefs),
+    prices: declaredAbsent(input.evidenceRefs),
+    failures: exercisedStage([], input.evidenceRefs),
+    enumeratedRoutes: declaredAbsent(input.evidenceRefs),
+    exactQuotes: declaredAbsent(input.evidenceRefs),
+    executionFragments: exercisedStage(executions, input.evidenceRefs),
+    finalSimulations: exercisedStage(simulations, input.evidenceRefs),
+  });
+}
+
+async function captureCredit(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly descriptor: FamilyCaptureDescriptor;
+  readonly provider: GenericCaptureProvider;
+  readonly runtime: CentralAdapterRuntime;
+  readonly finalSimulation: GenericCaptureFinalSimulation;
+  readonly family: LoadedFamilyBox;
+  readonly vector: CreditCaptureVector;
+  readonly evidenceRefs: readonly string[];
+}): Promise<RawFamilyMigrationCaseCapture["stages"]> {
+  const observations = await executeCaptureObservationIntents({
+    family: input.family,
+    source: input.descriptor.source,
+    intents: input.vector.observations,
+    provider: input.provider,
+  });
+  const matches = observations.flatMap((observation) =>
+    input.catalog.matches(observation)
+      .filter((match) => match.familyId === input.descriptor.familyId)
+      .map((match) => ({ observation, matchedPatternId: match.patternId }))
+  );
+  if (matches.length === 0) throw new Error("capture Credit has no match");
+  const instances: PreparedFamilyInstance[] = [];
+  for (const match of matches) {
+    const result = await executeCreditFamilyInstanceLifecycle({
+      family: input.family,
+      match,
+      source: input.descriptor.source,
+      generation: input.descriptor.source.generation,
+      runtime: input.runtime,
+    });
+    if (result.instance !== null) instances.push(result.instance);
+  }
+  if (instances.length === 0) {
+    throw new Error("capture Credit Family did not issue an instance");
+  }
+  const edges: RawMigrationSemanticItem[] = [];
+  const exacts: RawMigrationSemanticItem[] = [];
+  const executions: RawMigrationSemanticItem[] = [];
+  const simulations: RawMigrationSemanticItem[] = [];
+  for (const instance of instances) {
+    const routes = prepareCreditFamilyRoutes({
+      family: input.family,
+      instance,
+      source: input.descriptor.source,
+      generation: input.descriptor.source.generation,
+    });
+    for (const route of routes.routes) {
+      const projected = projectCreditRouteGraph({ family: input.family, route });
+      edges.push(semanticItem(projected.edge.canonicalEdgeId, {
+        routeKey: route.routeKey,
+        tokenIn: projected.edge.tokenIn,
+        tokenOut: projected.edge.tokenOut,
+      }));
+      const risk = await executeCreditRiskQuote({
+        family: input.family,
+        route,
+        collateralAmount: input.vector.collateralAmount,
+        debtBps: input.vector.debtBps,
+        executor: input.vector.executor,
+        runtimeEvidence: input.vector.runtimeEvidence,
+        source: input.descriptor.source,
+        generation: input.descriptor.source.generation,
+        runtime: input.runtime,
+      });
+      if (risk.status !== "resolved") {
+        throw new Error(`capture Credit risk failed: ${risk.reasonCode}`);
+      }
+      const semanticId = `${route.routeKey}\u001f${input.vector.collateralAmount}`;
+      exacts.push(semanticItem(`${semanticId}:risk`, {
+        routeKey: route.routeKey,
+        collateralAmount: risk.collateralAmount.toString(),
+        amountOut: risk.amountOut.toString(),
+        debtBps: risk.debtBps.toString(),
+        evidenceRefs: risk.evidenceRefs,
+      }));
+      const handle = issueCreditExecutionHandle({
+        family: input.family,
+        route,
+        risk,
+        minAmountOut: input.vector.minAmountOut,
+        executor: input.vector.executor,
+        runtimeEvidence: input.vector.runtimeEvidence,
+        source: input.descriptor.source,
+        generation: input.descriptor.source.generation,
+      });
+      const execution = buildCreditExecutionFragment({
+        family: input.family,
+        actionOwnership: input.catalog,
+        handle,
+      });
+      if (execution.status !== "resolved") {
+        throw new Error(`capture Credit execution failed: ${execution.reasonCode}`);
+      }
+      executions.push(fragmentItem(`${semanticId}:execution`, execution.fragment));
+      simulations.push(semanticItem(
+        `${semanticId}:final-sim`,
+        await input.finalSimulation.simulate({
+          kind: "credit",
+          family: input.family,
+          source: input.descriptor.source,
+          vector: input.vector,
+          fragment: execution.fragment,
+          semanticId,
+        }),
+      ));
+    }
+  }
+  const instanceItems = instances.map((instance) => semanticItem(
+    instance.instanceKey,
+    {
+      familyId: instance.familyId,
+      instanceKey: instance.instanceKey,
+      staticBindingFingerprint: instance.staticBindingFingerprint,
+    },
+  ));
+  return Object.freeze({
+    instances: exercisedStage(instanceItems, input.evidenceRefs),
+    edges: exercisedStage(edges, input.evidenceRefs),
+    stateCoverage: declaredAbsent(input.evidenceRefs),
+    pricedEdges: declaredAbsent(input.evidenceRefs),
+    prices: declaredAbsent(input.evidenceRefs),
+    failures: exercisedStage([], input.evidenceRefs),
+    enumeratedRoutes: exercisedStage(orderedRoutes(edges), input.evidenceRefs),
+    exactQuotes: declaredAbsent(input.evidenceRefs),
+    executionFragments: exercisedStage(executions, input.evidenceRefs),
+    finalSimulations: exercisedStage(simulations, input.evidenceRefs),
+  });
+}
+
+function routeStages(
+  publication: AdapterFamilyPublication,
+  graph: ReturnType<typeof routeGraphItems>,
+  exactItems: readonly RawMigrationSemanticItem[],
+  executionItems: readonly RawMigrationSemanticItem[],
+  simulationItems: readonly RawMigrationSemanticItem[],
+  evidenceRefs: readonly string[],
+): RawFamilyMigrationCaseCapture["stages"] {
+  return Object.freeze({
+    instances: instanceStage(publication.instances, evidenceRefs),
+    edges: exercisedStage(graph.edges, evidenceRefs),
+    stateCoverage: exercisedStage(graph.coverage, evidenceRefs),
+    pricedEdges: exercisedStage(graph.pricedEdges, evidenceRefs),
+    prices: exercisedStage(graph.prices, evidenceRefs),
+    failures: exercisedStage([], evidenceRefs),
+    enumeratedRoutes: exercisedStage(orderedRoutes(graph.edges), evidenceRefs),
+    exactQuotes: exercisedStage(exactItems, evidenceRefs),
+    executionFragments: exercisedStage(executionItems, evidenceRefs),
+    finalSimulations: exercisedStage(simulationItems, evidenceRefs),
+  });
+}
+
+function routeGraphItems(
+  family: LoadedFamilyPlugin,
+  publication: AdapterFamilyPublication,
+): {
+  readonly edges: readonly RawMigrationSemanticItem[];
+  readonly coverage: readonly RawMigrationSemanticItem[];
+  readonly pricedEdges: readonly RawMigrationSemanticItem[];
+  readonly prices: readonly RawMigrationSemanticItem[];
+} {
+  const edges: RawMigrationSemanticItem[] = [];
+  const coverage: RawMigrationSemanticItem[] = [];
+  const pricedEdges: RawMigrationSemanticItem[] = [];
+  const prices: RawMigrationSemanticItem[] = [];
   for (const instance of publication.instances) {
     for (const route of instance.routes) {
       const handle = instance.routeHandles.find((candidate) =>
         candidate.routeKey === route.routeKey
       );
-      if (handle === undefined) {
-        throw new Error(
-          `prepared route ${route.routeKey} has no issued handle`,
-        );
-      }
+      if (handle === undefined) throw new Error("capture route handle missing");
       const projected = projectFamilyRouteGraph({
         family,
         descriptor: instance.descriptor,
         route,
         handle,
       });
-      edges.push(Object.freeze({
-        id: projected.edge.canonicalEdgeId,
-        value: Object.freeze({
-          routeKey: route.routeKey,
-          tokenIn: route.tokenIn,
-          tokenOut: route.tokenOut,
-          canonicalEdgeId: projected.edge.canonicalEdgeId,
-        }),
+      edges.push(semanticItem(projected.edge.canonicalEdgeId, {
+        routeKey: route.routeKey,
+        tokenIn: route.tokenIn,
+        tokenOut: route.tokenOut,
+        canonicalEdgeId: projected.edge.canonicalEdgeId,
       }));
     }
-    const routeByKey = new Map(
-      instance.routes.map((route) => [route.routeKey, route]),
-    );
+    const routes = new Map(instance.routes.map((route) => [route.routeKey, route]));
     for (const pricing of instance.pricingInstances) {
+      coverage.push(semanticItem(pricing.stateKey, {
+        instanceKey: instance.instanceKey,
+        stateKey: pricing.stateKey,
+      }));
       for (const [routeKey, mid] of pricing.mids) {
-        const route = routeByKey.get(routeKey);
-        if (route === undefined) {
-          throw new Error(
-            `${input.familyId} pricing route ${routeKey} is missing`,
-          );
-        }
-        prices.push(Object.freeze({
-          id: `${pricing.stateKey}:${route.tokenIn.toLowerCase()}>` +
-            `${route.tokenOut.toLowerCase()}`,
-          value: Object.freeze({
-            stateKey: pricing.stateKey,
-            mid: Object.freeze({ ...mid }),
-          }) as unknown as RawMigrationStageCapture["items"][number]["value"],
+        const route = routes.get(routeKey);
+        if (route === undefined) throw new Error("capture pricing route missing");
+        const id = `${pricing.stateKey}:${route.tokenIn.toLowerCase()}>` +
+          route.tokenOut.toLowerCase();
+        prices.push(semanticItem(id, {
+          stateKey: pricing.stateKey,
+          mid: mid as unknown as CanonicalValue,
         }));
+        pricedEdges.push(semanticItem(id, { routeKey, stateKey: pricing.stateKey }));
       }
     }
   }
-  const enumeratedRoutes: RawMigrationStageCapture["items"][number][] = edges
-    .map((edge) => edge.value as {
-      readonly routeKey: string;
-      readonly tokenIn: string;
-      readonly tokenOut: string;
-      readonly canonicalEdgeId: string;
-    })
-    .sort((left, right) => left.routeKey.localeCompare(right.routeKey))
-    .map((value, order) => Object.freeze({
-      id: value.canonicalEdgeId,
-      value: Object.freeze({
-        routeKey: value.routeKey,
-        tokenIn: value.tokenIn,
-        tokenOut: value.tokenOut,
-        canonicalEdgeId: value.canonicalEdgeId,
-        order,
-      }),
-    }));
-  const driver = input.driver === undefined
-    ? resolveGenericCaptureDriver(input.familyId)
-    : input.driver;
-  const exactQuotes = driver === null
-    ? frameworkBlockedStage(
-        evidenceRefs,
-        "generic-capture-exact-driver-not-registered",
-      )
-    : driver.buildExactQuotes({
-        publication,
-        source: input.source,
-        evidenceRefs,
-      });
-  const execution = driver === null
-    ? {
-        executionFragments: frameworkBlockedStage(
-          evidenceRefs,
-          "generic-capture-execution-driver-not-registered",
-        ),
-        finalSimulations: frameworkBlockedStage(
-          evidenceRefs,
-          "generic-capture-final-sim-driver-not-registered",
-        ),
-      }
-    : driver.buildExecutionAndFinalSim({
-        publication,
-        source: input.source,
-        evidenceRefs,
-      });
-  const instances = publication.instances;
-  const summary = definedFamilyPluginContractSummary(family.plugin);
   return Object.freeze({
-    familyId: input.familyId,
-    caseId: input.caseId ?? `${input.familyId}:${input.source.number}`,
-    inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
-    stateAnchorNumber: input.source.number,
-    implementationClosureHash: summary.definitionBoundaryHash,
-    stages: Object.freeze({
-      instances: instanceStage(instances, evidenceRefs),
-      edges: exercisedStage(edges, evidenceRefs),
-      stateCoverage: exercisedStage([], evidenceRefs),
-      pricedEdges: exercisedStage([], evidenceRefs),
-      prices: exercisedStage(prices, evidenceRefs),
-      failures: exercisedStage([], evidenceRefs),
-      enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
-      exactQuotes,
-      executionFragments: execution.executionFragments,
-      finalSimulations: execution.finalSimulations,
-    }),
+    edges: Object.freeze(edges),
+    coverage: Object.freeze(coverage),
+    pricedEdges: Object.freeze(pricedEdges),
+    prices: Object.freeze(prices),
   });
 }
 
@@ -435,12 +734,111 @@ function instanceStage(
   instances: readonly PreparedFamilyInstance[],
   evidenceRefs: readonly string[],
 ): RawMigrationStageCapture {
-  return exercisedStage(instances.map((instance) => Object.freeze({
-    id: instance.instanceKey,
-    value: Object.freeze({
+  return exercisedStage(instances.map((instance) => semanticItem(
+    instance.instanceKey,
+    {
       familyId: instance.familyId,
       instanceKey: instance.instanceKey,
       staticBindingFingerprint: instance.staticBindingFingerprint,
-    }),
-  })), evidenceRefs);
+    },
+  )), evidenceRefs);
+}
+
+function orderedRoutes(
+  edges: readonly RawMigrationSemanticItem[],
+): readonly RawMigrationSemanticItem[] {
+  return [...edges].sort((left, right) => left.id.localeCompare(right.id))
+    .map((edge, order) => semanticItem(edge.id, {
+      edgeId: edge.id,
+      order,
+    }));
+}
+
+function fragmentItem(id: string, fragment: PlanFragment): RawMigrationSemanticItem {
+  return semanticItem(id, {
+    fragmentHash: hashCanonical(fragment as unknown as CanonicalValue),
+    fragment: fragment as unknown as CanonicalValue,
+  });
+}
+
+function semanticItem(id: string, value: CanonicalValue): RawMigrationSemanticItem {
+  hashCanonical(value);
+  return Object.freeze({ id, value });
+}
+
+function declaredAbsent(evidenceRefs: readonly string[]): RawMigrationStageCapture {
+  return Object.freeze({
+    status: "declared-absent" as const,
+    items: Object.freeze([]),
+    evidenceRefs: Object.freeze([...evidenceRefs]),
+    blocker: null,
+  });
+}
+
+function captureEvidenceRefs(
+  descriptor: FamilyCaptureDescriptor,
+): readonly string[] {
+  return Object.freeze([
+    `onchain:1:${descriptor.source.hash}:catalog-capture:` +
+      `${descriptor.familyId}:${descriptor.candidateIdentity.toLowerCase()}`,
+  ]);
+}
+
+function requireDiscovery(family: LoadedFamilyBox) {
+  if (!("discovery" in family.plugin)) {
+    throw new Error("capture observation requires discovery semantics");
+  }
+  return family.plugin.discovery;
+}
+
+function assertObservationSource(
+  observation: UnifiedObservation,
+  source: CanonicalSource,
+): void {
+  if (
+    observation.source.number !== source.number ||
+    observation.source.generation !== source.generation ||
+    observation.source.hash.toLowerCase() !== source.hash.toLowerCase()
+  ) {
+    throw new Error("capture observation source mismatch");
+  }
+}
+
+function normalizeWord(value: string, label: string): string {
+  if (!ethers.isHexString(value, 32)) throw new Error(`${label} must be bytes32`);
+  return value.toLowerCase();
+}
+
+function normalizeData(value: unknown, label: string): string {
+  if (typeof value !== "string" || !ethers.isHexString(value)) {
+    throw new Error(`${label} must be hex data`);
+  }
+  return value.toLowerCase();
+}
+
+function traceCallAt(
+  trace: unknown,
+  traceAddress: readonly number[],
+): { readonly to: string; readonly from: string; readonly input: string } {
+  let current = trace;
+  for (const index of traceAddress) {
+    if (
+      current === null || typeof current !== "object" ||
+      !Array.isArray((current as { calls?: unknown }).calls)
+    ) {
+      throw new Error("capture traceAddress has no call frame");
+    }
+    current = (current as { calls: readonly unknown[] }).calls[index];
+  }
+  if (current === null || typeof current !== "object") {
+    throw new Error("capture trace frame is absent");
+  }
+  const frame = current as { to?: unknown; from?: unknown; input?: unknown };
+  if (
+    typeof frame.to !== "string" || typeof frame.from !== "string" ||
+    typeof frame.input !== "string"
+  ) {
+    throw new Error("capture trace frame lacks from/to/input");
+  }
+  return { to: frame.to, from: frame.from, input: frame.input };
 }

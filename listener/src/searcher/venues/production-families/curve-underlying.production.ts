@@ -1,4 +1,5 @@
 import { defineSwapFamily } from "../adapter-family-plugin.js";
+import { curveUnderlyingCapture } from "../swaps/curve-underlying-family/capture.js";
 import { curveUnderlyingFamilyOwnedAction } from "../swaps/curve-underlying-family/action.js";
 import { curveUnderlyingDiscovery } from "../swaps/curve-underlying-family/discovery.js";
 import { curveUnderlyingExact } from "../swaps/curve-underlying-family/exact.js";
@@ -12,6 +13,7 @@ import { curveUnderlyingSwap } from "../swaps/curve-underlying-family/swap.js";
 
 export const plugin = defineSwapFamily({
   manifest: curveUnderlyingFamilyManifest,
+  capture: curveUnderlyingCapture,
   discovery: curveUnderlyingDiscovery,
   identity: curveUnderlyingIdentity,
   instance: curveUnderlyingInstance,

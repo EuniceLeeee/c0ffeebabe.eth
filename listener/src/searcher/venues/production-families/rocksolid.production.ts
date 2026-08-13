@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { rocksolidCapture } from "../protocols/rocksolid-family/capture.js";
 import { rocksolidFamilyOwnedAction } from "../protocols/rocksolid-family/action.js";
 import { rocksolidDiscovery } from "../protocols/rocksolid-family/discovery.js";
 import { rocksolidExact } from "../protocols/rocksolid-family/exact.js";
@@ -12,6 +13,7 @@ import { rocksolidRoutes } from "../protocols/rocksolid-family/routes.js";
 
 export const plugin = defineProtocolFamily({
   manifest: rocksolidFamilyManifest,
+  capture: rocksolidCapture,
   discovery: rocksolidDiscovery,
   identity: rocksolidIdentity,
   instance: rocksolidInstance,

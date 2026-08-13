@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { astraMultiTokenCapture } from "../protocols/astra-multitoken-family/capture.js";
 import { astraMultiTokenFamilyOwnedAction } from "../protocols/astra-multitoken-family/action.js";
 import { astraMultiTokenDiscovery } from "../protocols/astra-multitoken-family/discovery.js";
 import { astraMultiTokenExact } from "../protocols/astra-multitoken-family/exact.js";
@@ -12,6 +13,7 @@ import { astraMultiTokenRoutes } from "../protocols/astra-multitoken-family/rout
 
 export const plugin = defineProtocolFamily({
   manifest: astraMultiTokenFamilyManifest,
+  capture: astraMultiTokenCapture,
   discovery: astraMultiTokenDiscovery,
   identity: astraMultiTokenIdentity,
   instance: astraMultiTokenInstance,

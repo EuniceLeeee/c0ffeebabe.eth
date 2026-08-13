@@ -22,7 +22,7 @@ import {
 } from "./production-families/loader.js";
 
 const EXPECTED_STRICT_FAMILIES = 22;
-const EXPECTED_EXACT_CAPABILITIES = 220;
+const EXPECTED_EXACT_CAPABILITIES = 242;
 
 const shadowShape = capabilityShadowArtifact as unknown as {
   readonly complete?: unknown;
@@ -69,6 +69,7 @@ if (generatedManifest.entries.length !== EXPECTED_EXACT_CAPABILITIES) {
 }
 
 const catalog = new FamilyCapabilityCatalog({
+  requireCapture: true,
   modules: strictLoad.plugins.map((module) => ({
     sourceFile: module.sourceFile,
     definitionBoundaryHash: module.definitionBoundaryHash,

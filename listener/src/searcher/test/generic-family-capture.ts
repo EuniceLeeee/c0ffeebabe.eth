@@ -1,220 +1,103 @@
 import assert from "node:assert/strict";
 import {
-  captureFamilyGenerically,
-  deriveFamilyObservationFromNodeData,
-  resolveGenericCaptureDriver,
+  executeCaptureObservationIntents,
   runGenericCaptureBatch,
   runGenericCaptureWorkItem,
-  type GenericCaptureDriver,
+  type GenericCaptureProvider,
 } from "../generic-family-capture.js";
-import { exercisedStage } from "../architecture-migration-capture.js";
-import {
-  UNIV4_FIXTURE_CURRENCY0,
-  UNIV4_FIXTURE_CURRENCY1,
-  UNIV4_FIXTURE_FEE,
-  UNIV4_FIXTURE_LIQUIDITY,
-  UNIV4_FIXTURE_LP_FEE,
-  UNIV4_FIXTURE_MANAGER,
-  UNIV4_FIXTURE_QUOTER,
-  UNIV4_FIXTURE_SQRT_PRICE_X96,
-  UNIV4_FIXTURE_STATE_VIEW,
-  UNIV4_FIXTURE_TICK_SPACING,
-  univ4FixtureRuntime,
-  WSTETH_FIXTURE_TARGET,
-  wstethFixtureRuntime,
-} from "../architecture-migration-fixture-replay.js";
-import { canonicalPoolKey } from
-  "../venues/swaps/angstrom-v4-family/codec.js";
-import { v4PoolId } from "../venues/swaps/univ4-common.js";
-import {
-  UNIV4_POOL_MANAGER_INTERFACE,
-} from "../venues/swaps/univ4-abi.js";
-import { UNIV4_FAMILY_ID } from
-  "../venues/swaps/univ4-family/manifest.js";
-import {
-  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-} from "../venues/production-family-composition.js";
-import { WSTETH_INTERFACE } from
-  "../venues/protocols/wsteth-family/codec.js";
-import { WSTETH_FAMILY_ID } from
-  "../venues/protocols/wsteth-family/manifest.js";
+import type { LoadedFamilyBox } from
+  "../venues/family-capability-catalog.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
-  number: 25_000_000,
+  number: 300_000,
   hash: `0x${"c1".repeat(32)}`,
-  generation: 1,
+  generation: 300_000,
 });
+const ADDRESS = `0x${"11".repeat(20)}`;
+const TOPIC = `0x${"22".repeat(32)}` as `0x${string}`;
 
 async function main(): Promise<void> {
   let cancelled = false;
-  await assert.rejects(
-    runGenericCaptureWorkItem({
-      id: "stuck-plugin",
-      timeoutMs: 10,
-      run: () => new Promise<never>(() => undefined),
-      cancel: () => { cancelled = true; },
-    }),
-    /stuck-plugin exceeded 10ms/,
-  );
-  assert.equal(cancelled, true, "central deadline must cancel stuck transport");
+  await assert.rejects(runGenericCaptureWorkItem({
+    id: "stuck",
+    timeoutMs: 10,
+    run: () => new Promise<never>(() => undefined),
+    cancel: () => { cancelled = true; },
+  }), /stuck exceeded 10ms/);
+  assert.equal(cancelled, true);
+
   const failures: string[] = [];
-  const batch = await runGenericCaptureBatch({
+  const continued = await runGenericCaptureBatch({
     items: [{
-      id: "stuck-plugin",
+      id: "stuck",
       timeoutMs: 10,
       run: () => new Promise<never>(() => undefined),
       cancel: () => undefined,
     }, {
-      id: "next-plugin",
+      id: "next",
       timeoutMs: 10,
       run: async () => "continued",
       cancel: () => undefined,
     }],
     onFailure: (id) => failures.push(id),
   });
-  assert.deepEqual(failures, ["stuck-plugin"]);
-  assert.deepEqual(batch, ["continued"],
-    "central batch must continue after a timed-out plugin");
+  assert.deepEqual(failures, ["stuck"]);
+  assert.deepEqual(continued, ["continued"]);
 
-  const capture = await captureFamilyGenerically({
-    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    familyId: WSTETH_FAMILY_ID,
-    source: SOURCE,
-    runtime: wstethFixtureRuntime(),
-    observation: Object.freeze({
-      kind: "call",
-      source: SOURCE,
-      target: WSTETH_FIXTURE_TARGET.toLowerCase(),
-      data: WSTETH_INTERFACE.encodeFunctionData("wrap", [1_000_000n]),
-    }),
-  });
-  assert.equal(capture.familyId, WSTETH_FAMILY_ID);
-  assert((capture.stages.instances?.items.length ?? 0) >= 1);
-  assert((capture.stages.edges?.items.length ?? 0) >= 1);
-  assert((capture.stages.prices?.items.length ?? 0) >= 1);
-  for (const stage of Object.values(capture.stages)) {
-    if (stage === undefined) continue;
-    assert(
-      stage.evidenceRefs.every((ref) =>
-        ref === `onchain:1:${SOURCE.hash}:generic:${WSTETH_FAMILY_ID}`
-      ),
-      "generic capture must carry onchain evidence refs only",
-    );
-    assert(
-      stage.evidenceRefs.every((ref) => !ref.startsWith("fixture:")),
-    );
-  }
-  assert.equal(
-    capture.stages.exactQuotes?.status,
-    "framework-blocked",
-    "exact stage must be honestly blocked until a per-plugin driver is wired",
-  );
-
-  assert.equal(resolveGenericCaptureDriver(WSTETH_FAMILY_ID), null);
-  const driver: GenericCaptureDriver = {
-    familyId: WSTETH_FAMILY_ID,
-    buildExactQuotes: ({ evidenceRefs }) => exercisedStage([Object.freeze({
-      id: "exact:1",
-      value: Object.freeze({ amountOut: "1000000" }),
-    })], evidenceRefs),
-    buildExecutionAndFinalSim: ({ evidenceRefs }) => ({
-      executionFragments: exercisedStage([Object.freeze({
-        id: "exec:1",
-        value: Object.freeze({ target: `0x${"11".repeat(20)}` }),
-      })], evidenceRefs),
-      finalSimulations: exercisedStage([Object.freeze({
-        id: "sim:1",
-        value: Object.freeze({ conservation: "conserved" }),
-      })], evidenceRefs),
-    }),
-  };
-  const driven = await captureFamilyGenerically({
-    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    familyId: WSTETH_FAMILY_ID,
-    source: SOURCE,
-    runtime: wstethFixtureRuntime(),
-    driver,
-    observation: Object.freeze({
-      kind: "call",
-      source: SOURCE,
-      target: WSTETH_FIXTURE_TARGET.toLowerCase(),
-      data: WSTETH_INTERFACE.encodeFunctionData("wrap", [1_000_000n]),
-    }),
-  });
-  assert.equal(driven.stages.exactQuotes?.status, "exercised");
-  assert.equal(driven.stages.executionFragments?.status, "exercised");
-  assert.equal(driven.stages.finalSimulations?.status, "exercised");
-
-  // Generic V4 observation is driven entirely by the discovery declaration:
-  // the descriptor supplies a logical poolId and the generic layer resolves
-  // the PoolManager Initialize log through emitter/topicIndex metadata.
-  const poolKey = canonicalPoolKey({
-    currency0: UNIV4_FIXTURE_CURRENCY0,
-    currency1: UNIV4_FIXTURE_CURRENCY1,
-    fee: Number(UNIV4_FIXTURE_FEE),
-    tickSpacing: UNIV4_FIXTURE_TICK_SPACING,
-    hooks: `0x${"00".repeat(20)}`,
-  });
-  const poolId = v4PoolId(poolKey);
-  const initializeLog = UNIV4_POOL_MANAGER_INTERFACE.encodeEventLog(
-    UNIV4_POOL_MANAGER_INTERFACE.getEvent("Initialize")!,
-    [
-      poolId,
-      poolKey.currency0,
-      poolKey.currency1,
-      poolKey.fee,
-      poolKey.tickSpacing,
-      poolKey.hooks,
-      UNIV4_FIXTURE_SQRT_PRICE_X96,
-      0,
-    ],
-  );
-  const logRanges: { readonly fromBlock: number; readonly toBlock: number }[] = [];
-  const v4Observation = await deriveFamilyObservationFromNodeData({
-    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    familyId: UNIV4_FAMILY_ID,
-    source: SOURCE,
-    address: poolId,
-    provider: {
-      call: async () => { throw new Error("log pattern must not call"); },
-      getCode: async () => { throw new Error("log pattern must not getCode"); },
-      getStorage: async () => {
-        throw new Error("log pattern must not getStorage");
-      },
-      getLogs: async (filter) => {
-        assert.equal(filter.address, UNIV4_FIXTURE_MANAGER);
-        assert.equal(filter.topics?.[1], poolId);
-        assert.notEqual(filter.fromBlock, undefined);
-        assert.notEqual(filter.toBlock, undefined);
-        logRanges.push({
-          fromBlock: filter.fromBlock!,
-          toBlock: filter.toBlock!,
-        });
-        if (logRanges.length === 1) return [];
-        return [Object.freeze({
-          address: UNIV4_FIXTURE_MANAGER,
-          topics: initializeLog.topics,
-          data: initializeLog.data,
-          transactionHash: `0x${"d1".repeat(32)}`,
-        })];
-      },
+  const pages: [number, number][] = [];
+  const provider: GenericCaptureProvider = {
+    call: async () => "0x",
+    getCode: async () => "0x01",
+    getStorage: async () => `0x${"00".repeat(32)}`,
+    getTransactionReceipt: async () => null,
+    send: async () => ({}),
+    getLogs: async (filter) => {
+      pages.push([filter.fromBlock!, filter.toBlock!]);
+      if (pages.length === 1) return [];
+      return [{
+        address: ADDRESS,
+        topics: [TOPIC, addressWord(ADDRESS)],
+        data: "0x",
+        transactionHash: `0x${"33".repeat(32)}`,
+      }];
     },
+  };
+  const syntheticFamily = Object.freeze({
+    plugin: Object.freeze({
+      manifest: Object.freeze({ familyId: "synthetic:capture" }),
+      discovery: Object.freeze({
+        logPatterns: Object.freeze([Object.freeze({
+          id: "singleton-log",
+          topic: TOPIC,
+          emitter: Object.freeze({
+            mode: "singleton-indexed-address" as const,
+            address: ADDRESS,
+            topicIndex: 1,
+            fromBlock: 1,
+          }),
+        })]),
+      }),
+    }),
+  }) as unknown as LoadedFamilyBox;
+  const observations = await executeCaptureObservationIntents({
+    family: syntheticFamily,
+    source: SOURCE,
+    intents: [{
+      kind: "declared-log",
+      patternId: "singleton-log",
+      candidateIdentity: ADDRESS,
+    }],
+    provider,
   });
-  assert.equal(v4Observation.kind, "log");
-  if (v4Observation.kind === "log") {
-    assert.equal(v4Observation.address, UNIV4_FIXTURE_MANAGER.toLowerCase());
-    assert.equal(v4Observation.topics[1], poolId);
-  }
-  assert.deepEqual(logRanges, [{
-    fromBlock: SOURCE.number - 99_999,
-    toBlock: SOURCE.number,
-  }, {
-    fromBlock: SOURCE.number - 199_999,
-    toBlock: SOURCE.number - 100_000,
-  }], "generic scanner must page declared log history backward");
+  assert.equal(observations[0]?.kind, "log");
+  assert.deepEqual(pages, [[200_001, 300_000], [100_001, 200_000]]);
   console.log("generic family capture PASS");
+}
+
+function addressWord(address: string): string {
+  return `0x${"0".repeat(24)}${address.slice(2).toLowerCase()}`;
 }
 
 main().catch((error) => {

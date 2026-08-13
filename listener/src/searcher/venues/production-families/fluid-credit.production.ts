@@ -1,4 +1,5 @@
 import { defineCreditFamily } from "../adapter-family-plugin.js";
+import { fluidCreditCapture } from "../credit/fluid-family/capture.js";
 import {
   fluidCreditLiquidateAction,
   fluidCreditVaultAction,
@@ -13,6 +14,7 @@ import { fluidCreditRoutes } from "../credit/fluid-family/routes.js";
 
 export const plugin = defineCreditFamily({
   manifest: fluidCreditFamilyManifest,
+  capture: fluidCreditCapture,
   discovery: fluidCreditDiscovery,
   identity: fluidCreditIdentity,
   instance: fluidCreditInstance,

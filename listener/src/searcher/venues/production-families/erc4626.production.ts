@@ -1,4 +1,5 @@
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { erc4626Capture } from "../protocols/erc4626-family/capture.js";
 import {
   erc4626DepositFamilyOwnedAction,
   erc4626RedeemFamilyOwnedAction,
@@ -15,6 +16,7 @@ import { erc4626Routes } from "../protocols/erc4626-family/routes.js";
 
 export const plugin = defineProtocolFamily({
   manifest: erc4626FamilyManifest,
+  capture: erc4626Capture,
   discovery: erc4626Discovery,
   identity: erc4626Identity,
   instance: erc4626Instance,

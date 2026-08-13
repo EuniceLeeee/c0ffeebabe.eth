@@ -1,4 +1,5 @@
 import { defineFundingFamily } from "../adapter-family-plugin.js";
+import { balancerFlashCapture } from "../funding/balancer-flash-family/capture.js";
 import {
   balancerFlashFamilyOwnedAction,
   balancerFlashFunding,
@@ -7,6 +8,7 @@ import {
 
 export const plugin = defineFundingFamily({
   manifest: balancerFlashManifest,
+  capture: balancerFlashCapture,
   funding: balancerFlashFunding,
   actionAdapters: [balancerFlashFamilyOwnedAction],
 });

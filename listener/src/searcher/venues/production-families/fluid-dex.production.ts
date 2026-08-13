@@ -1,4 +1,5 @@
 import { defineSwapFamily } from "../adapter-family-plugin.js";
+import { fluidDexCapture } from "../swaps/fluid-dex-family/capture.js";
 import { fluidDexFamilyOwnedAction } from "../swaps/fluid-dex-family/action.js";
 import { fluidDexDiscovery } from "../swaps/fluid-dex-family/discovery.js";
 import { fluidDexExact } from "../swaps/fluid-dex-family/exact.js";
@@ -12,6 +13,7 @@ import { fluidDexSwap } from "../swaps/fluid-dex-family/swap.js";
 
 export const plugin = defineSwapFamily({
   manifest: fluidDexFamilyManifest,
+  capture: fluidDexCapture,
   discovery: fluidDexDiscovery,
   identity: fluidDexIdentity,
   instance: fluidDexInstance,
