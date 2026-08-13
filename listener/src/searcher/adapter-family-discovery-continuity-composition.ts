@@ -6,8 +6,10 @@ import {
   type AdapterFamilyDiscoveryCheckpointReceipt,
 } from "./adapter-family-discovery-checkpoint.js";
 import {
+  createCatalogStateInstanceMutationIssuer,
   createCatalogSourceTransitionIssuer,
   createCatalogTerminalRemovalIssuer,
+  type CatalogStateInstanceMutationProof,
   type CatalogSourceTransitionProof,
   type CatalogTerminalRemovalProof,
 } from "./adapter-family-catalog-publication.js";
@@ -88,6 +90,19 @@ export interface DurableDiscoveryContinuityComposition {
     readonly reason: string;
     readonly evidenceRef: string;
   }): CatalogTerminalRemovalProof;
+  /**
+   * Issue an issuer-bound StateInstance mutation proof after the caller has
+   * re-verified state continuity between the two canonical sources. This
+   * admits a cross-generation carry; without it the carry fails closed.
+   */
+  issueStateInstanceMutation(input: {
+    readonly familyId: FamilyId;
+    readonly lineageId: string;
+    readonly instanceKey: string;
+    readonly previous: CanonicalSource;
+    readonly current: CanonicalSource;
+    readonly evidenceRef: string;
+  }): CatalogStateInstanceMutationProof;
   consumeClosureForCatalog(input: {
     readonly receipt: AdapterFamilySnapshotInventoryClosureReceipt;
     readonly source: CanonicalSource;
@@ -123,12 +138,14 @@ export function createDurableDiscoveryContinuityComposition(
     assertGenerationCurrent: () => {},
   });
   const terminalIssuer = createCatalogTerminalRemovalIssuer();
+  const mutationIssuer = createCatalogStateInstanceMutationIssuer();
   const transitionIssuer = createCatalogSourceTransitionIssuer();
   const catalogRoot = new StrictAdapterFamilyShadowCatalogPublicationRoot({
     catalog: input.catalog,
     chainId: input.chainId,
     terminalRemovalAuthority: terminalIssuer.authority,
     sourceTransitionAuthority: transitionIssuer.authority,
+    stateMutationAuthority: mutationIssuer.authority,
   });
   const closureVerifier = new AdapterFamilySnapshotInventoryClosureVerifier({
     catalog: input.catalog,
@@ -195,6 +212,22 @@ export function createDurableDiscoveryContinuityComposition(
         source: input.source,
         status: "terminal",
         reason: input.reason,
+        evidenceRef: input.evidenceRef,
+      }),
+    issueStateInstanceMutation: (input: {
+      readonly familyId: FamilyId;
+      readonly lineageId: string;
+      readonly instanceKey: string;
+      readonly previous: CanonicalSource;
+      readonly current: CanonicalSource;
+      readonly evidenceRef: string;
+    }) =>
+      mutationIssuer.issue({
+        familyId: input.familyId,
+        lineageId: input.lineageId,
+        instanceKey: input.instanceKey,
+        previous: input.previous,
+        current: input.current,
         evidenceRef: input.evidenceRef,
       }),
     consumeClosureForCatalog: (consumption: {

@@ -72,6 +72,16 @@ const SOURCE5: CanonicalSource = Object.freeze({
   hash: `0x${"55".repeat(32)}`,
   generation: 47,
 });
+const SOURCE6: CanonicalSource = Object.freeze({
+  number: SOURCE5.number + 10,
+  hash: `0x${"56".repeat(32)}`,
+  generation: 48,
+});
+const SOURCE7: CanonicalSource = Object.freeze({
+  number: SOURCE6.number + 10,
+  hash: `0x${"57".repeat(32)}`,
+  generation: 49,
+});
 const WSTETH = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const CHAIN_ID = "1";
 const REGISTRY = "strict-source-registry-v1";
@@ -470,6 +480,95 @@ async function main(): Promise<void> {
       assert(
         terminalCommitted.envelope.privateState.tombstones.has(removedKey),
         "the tombstone must be keyed by the removed instance identity",
+      );
+
+      // F1-b: an omitted instance may be carried across generations ONLY
+      // with an issuer-bound StateInstance mutation proof, issued after the
+      // central re-verifies state continuity at the current source. The
+      // carried entry is rebound to the new source while its committed
+      // value identity stays intact (no silent omission, no tombstone).
+      const carriedWstethKey = [...terminalCommitted.envelope.privateState
+        .instances.keys()][0];
+      const carriedWstethInstance =
+        terminalCommitted.envelope.privateState.instances.get(
+          carriedWstethKey,
+        )!;
+      const carryResult = await publishStrictCatalogFromLifecycle({
+        composition: prodComposition,
+        catalog: prodCat,
+        source: SOURCE6,
+        publications: Object.freeze([]),
+        verifyCarriedInstance: async ({ instanceKey, previous, current }) => {
+          if (instanceKey === carriedWstethInstance.instanceKey) {
+            assert.equal(previous.number, SOURCE5.number);
+            assert.equal(current.number, SOURCE6.number);
+            return "central:state-continuity-verified";
+          }
+          return null;
+        },
+      });
+      assert.equal(
+        carryResult.status,
+        "published",
+        carryResult.status === "unresolved"
+          ? carryResult.reason
+          : "unexpected carry result",
+      );
+      const carryCommitted = prodComposition.catalogRoot.capture();
+      assert(carryCommitted);
+      assert.equal(
+        carryCommitted.envelope.privateState.instances.size,
+        1,
+        "the carried instance must remain committed",
+      );
+      assert.equal(
+        carryCommitted.envelope.privateState.tombstones.size,
+        1,
+        "a proof-admitted carry must not create a tombstone",
+      );
+      const carriedAfter = carryCommitted.envelope.privateState.instances.get(
+        carriedWstethKey,
+      );
+      assert(carriedAfter);
+      assert.equal(
+        carriedAfter.value,
+        carriedWstethInstance.value,
+        "carry must preserve the committed value identity",
+      );
+      assert(
+        carryCommitted.envelope.snapshot.delta.carried.some(
+          (entry) => entry.key === carriedWstethKey,
+        ),
+        "the delta must record the carried instance key",
+      );
+      assert.equal(
+        carryCommitted.envelope.snapshot.source.number,
+        SOURCE6.number,
+        "the carried catalog must be rebound to the new source",
+      );
+
+      // A verifier that cannot prove continuity leaves the instance without
+      // a mutation proof, so the whole publication stays fail-closed.
+      const noProofResult = await publishStrictCatalogFromLifecycle({
+        composition: prodComposition,
+        catalog: prodCat,
+        source: SOURCE7,
+        publications: Object.freeze([]),
+        verifyCarriedInstance: async () => null,
+      });
+      assert.equal(noProofResult.status, "unresolved");
+      if (noProofResult.status === "unresolved") {
+        assert.match(
+          noProofResult.reason,
+          /StateInstance mutation proof/,
+          "unproven continuity must fail closed, never carry silently",
+        );
+      }
+      assert.equal(
+        prodComposition.catalogRoot.capture()!.envelope.privateState
+          .instances.size,
+        1,
+        "the failed unproven carry must leave the committed set unchanged",
       );
 
       // The final catalogRoot CAS must use the composition's real fences:

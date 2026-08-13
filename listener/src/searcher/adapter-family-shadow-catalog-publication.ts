@@ -9,12 +9,16 @@ import {
   type CatalogFamilyStage,
   type CatalogInventoryMode,
   type CatalogStagedInstance,
+  type CatalogStateInstanceMutationAuthority,
+  type CatalogStateInstanceMutationProof,
   type CatalogSourceTransitionAuthority,
   type CatalogSourceTransitionProof,
   type CatalogStagedInstanceBundle,
   type CatalogTerminalRemovalAuthority,
   type CatalogTerminalRemovalProof,
+  type CatalogValueCarryBinding,
   type CatalogValueBinding,
+  resolveStateInstanceMutationProof,
 } from "./adapter-family-catalog-publication.js";
 import type {
   FundingFamilyPublication,
@@ -435,6 +439,19 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
   readonly #creditRouteOwners = new WeakMap<object, CreditRouteValueOwner>();
   readonly #creditGraphOwners = new WeakMap<object, CreditGraphValueOwner>();
   readonly #prepared = new WeakMap<object, StrictShadowCatalogEnvelope>();
+  readonly #stateMutationAuthority: CatalogStateInstanceMutationAuthority;
+  /**
+   * Proof-scoped carry bindings: a carried opaque value is only accepted at
+   * the proof's current source. Every entry must remain resolvable through
+   * the pinned mutation authority; a stale entry fails closed in assertValid.
+   */
+  readonly #carryOverrides = new WeakMap<
+    object,
+    {
+      readonly proof: CatalogStateInstanceMutationProof;
+      readonly current: CanonicalSource;
+    }
+  >();
   readonly #valueAuthority: ReturnType<
     typeof createCatalogPublicationValueAuthority<
       StrictShadowCatalogInstance,
@@ -458,9 +475,11 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     readonly chainId: string;
     readonly terminalRemovalAuthority: CatalogTerminalRemovalAuthority;
     readonly sourceTransitionAuthority: CatalogSourceTransitionAuthority;
+    readonly stateMutationAuthority: CatalogStateInstanceMutationAuthority;
   }) {
     this.#catalog = input.catalog;
     this.#chainId = input.chainId;
+    this.#stateMutationAuthority = input.stateMutationAuthority;
     this.#definition = catalogPublicationDefinition(input.catalog, {
       terminalRemovalAuthority: input.terminalRemovalAuthority,
       sourceTransitionAuthority: input.sourceTransitionAuthority,
@@ -837,6 +856,10 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     readonly stages: readonly StrictShadowCatalogFamilyStage[];
     readonly sourceAnchors: readonly CatalogDiscoverySourceAnchor[];
     readonly sourceTransitionProof?: CatalogSourceTransitionProof;
+    readonly stateMutationProofs?: ReadonlyMap<
+      string,
+      CatalogStateInstanceMutationProof
+    >;
   }): PreparedStrictShadowCatalogPublication {
     if (input.previous !== this.#committed) {
       throw new Error("shadow catalog prepare must use the captured publication");
@@ -905,6 +928,9 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
       ...(input.sourceTransitionProof === undefined
         ? {}
         : { sourceTransitionProof: input.sourceTransitionProof }),
+      ...(input.stateMutationProofs === undefined
+        ? {}
+        : { stateMutationProofs: input.stateMutationProofs }),
     });
     if (
       input.previous !== null &&
@@ -1076,11 +1102,14 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
         this.#assertShadowInstance(value, binding);
         return value;
       },
-      carry: () => rejectCrossGenerationCarry(),
+      carry: (value: StrictShadowCatalogInstance, binding: CatalogValueCarryBinding) => {
+        return this.#carryWithMutationProof(value, binding);
+      },
       assertValid: (
         value: StrictShadowCatalogInstance,
         binding: CatalogValueBinding,
       ) => {
+        if (this.#applyCarryOverride(value, binding)) return;
         this.#assertShadowInstance(value, binding);
       },
     });
@@ -1095,11 +1124,14 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
         this.#assertRoute(value, binding);
         return value;
       },
-      carry: () => rejectCrossGenerationCarry(),
+      carry: (value: StrictShadowCatalogRouteHandle, binding: CatalogValueCarryBinding) => {
+        return this.#carryWithMutationProof(value, binding);
+      },
       assertValid: (
         value: StrictShadowCatalogRouteHandle,
         binding: CatalogValueBinding,
       ) => {
+        if (this.#applyCarryOverride(value, binding)) return;
         this.#assertRoute(value, binding);
       },
     });
@@ -1114,11 +1146,14 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
         this.#assertGraph(value, binding);
         return value;
       },
-      carry: () => rejectCrossGenerationCarry(),
+      carry: (value: StrictShadowCatalogGraphEntry, binding: CatalogValueCarryBinding) => {
+        return this.#carryWithMutationProof(value, binding);
+      },
       assertValid: (
         value: StrictShadowCatalogGraphEntry,
         binding: CatalogValueBinding,
       ) => {
+        if (this.#applyCarryOverride(value, binding)) return;
         this.#assertGraph(value, binding);
       },
     });
@@ -1130,14 +1165,64 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
         this.#assertPricing(value, binding);
         return value;
       },
-      carry: () => rejectCrossGenerationCarry(),
+      carry: (value: PreparedPricingStateInstance, binding: CatalogValueCarryBinding) => {
+        return this.#carryWithMutationProof(value, binding);
+      },
       assertValid: (
         value: PreparedPricingStateInstance,
         binding: CatalogValueBinding,
       ) => {
+        if (this.#applyCarryOverride(value, binding)) return;
         this.#assertPricing(value, binding);
       },
     });
+  }
+
+  #carryWithMutationProof<Value extends object>(
+    value: Value,
+    binding: CatalogValueCarryBinding,
+  ): Value {
+    if (binding.mutationProof === undefined) {
+      rejectCrossGenerationCarry();
+    }
+    const record = resolveStateInstanceMutationProof({
+      authority: this.#stateMutationAuthority,
+      proof: binding.mutationProof,
+    });
+    if (
+      record.familyId !== binding.current.familyId ||
+      record.lineageId !== binding.current.lineageId ||
+      record.instanceKey !== binding.current.instanceKey ||
+      !sameSource(record.previous, binding.previous.source) ||
+      !sameSource(record.current, binding.current.source)
+    ) {
+      throw new Error(
+        "StateInstance mutation proof binding does not match the carried value",
+      );
+    }
+    this.#carryOverrides.set(value, Object.freeze({
+      proof: binding.mutationProof,
+      current: freezeSource(binding.current.source),
+    }));
+    return value;
+  }
+
+  #applyCarryOverride(
+    value: object,
+    binding: CatalogValueBinding,
+  ): boolean {
+    const override = this.#carryOverrides.get(value);
+    if (override === undefined) return false;
+    resolveStateInstanceMutationProof({
+      authority: this.#stateMutationAuthority,
+      proof: override.proof,
+    });
+    if (!sameSource(override.current, binding.source)) {
+      throw new Error(
+        "carried value escaped its mutation-proof source binding",
+      );
+    }
+    return true;
   }
 
   #assertInstance(
@@ -1470,6 +1555,17 @@ function freezeSource(source: CanonicalSource): CanonicalSource {
     hash: source.hash.toLowerCase(),
     generation: source.generation,
   });
+}
+
+function sameSource(
+  left: CanonicalSource,
+  right: CanonicalSource,
+): boolean {
+  return (
+    left.number === right.number &&
+    left.hash.toLowerCase() === right.hash.toLowerCase() &&
+    left.generation === right.generation
+  );
 }
 
 class SealedReadonlyMap<Key, Value> implements ReadonlyMap<Key, Value> {

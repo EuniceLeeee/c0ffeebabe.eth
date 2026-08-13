@@ -106,6 +106,36 @@ export interface CatalogTerminalRemovalIssuer {
   }): CatalogTerminalRemovalProof;
 }
 
+declare const catalogStateInstanceMutationProofBrand: unique symbol;
+
+/**
+ * Runtime-opaque proof that a committed StateInstance was re-verified
+ * mutation-complete between two canonical sources. Only the issuing authority
+ * (the durable discovery continuity composition) can resolve its payload; the
+ * proof admits a cross-generation carry that would otherwise fail closed.
+ */
+export interface CatalogStateInstanceMutationProof {
+  readonly [catalogStateInstanceMutationProofBrand]: true;
+}
+
+declare const catalogStateInstanceMutationAuthorityBrand: unique symbol;
+
+export interface CatalogStateInstanceMutationAuthority {
+  readonly [catalogStateInstanceMutationAuthorityBrand]: true;
+}
+
+export interface CatalogStateInstanceMutationIssuer {
+  readonly authority: CatalogStateInstanceMutationAuthority;
+  issue(input: {
+    readonly familyId: FamilyId;
+    readonly lineageId: string;
+    readonly instanceKey: string;
+    readonly previous: CanonicalSource;
+    readonly current: CanonicalSource;
+    readonly evidenceRef: string;
+  }): CatalogStateInstanceMutationProof;
+}
+
 declare const catalogSourceTransitionProofBrand: unique symbol;
 
 /** Runtime-opaque canonical ancestry proof. */
@@ -148,6 +178,12 @@ export interface CatalogValueBinding {
 export interface CatalogValueCarryBinding {
   readonly previous: CatalogValueBinding;
   readonly current: CatalogValueBinding;
+  /**
+   * Issuer-bound StateInstance mutation proof admitting this carry. A carry
+   * without a valid proof is fail-closed: the contract must reject it rather
+   * than silently rebinding a source-bound opaque value.
+   */
+  readonly mutationProof?: CatalogStateInstanceMutationProof;
 }
 
 export interface CatalogValueContract<Value> {
@@ -316,6 +352,15 @@ interface CatalogTerminalRemovalRecord {
   readonly evidenceRef: string;
 }
 
+interface CatalogStateInstanceMutationRecord {
+  readonly familyId: FamilyId;
+  readonly lineageId: string;
+  readonly instanceKey: string;
+  readonly previous: CanonicalSource;
+  readonly current: CanonicalSource;
+  readonly evidenceRef: string;
+}
+
 interface CatalogSourceTransitionRecord {
   readonly previous: CanonicalSource;
   readonly current: CanonicalSource;
@@ -342,6 +387,10 @@ interface CatalogPublicationIssue {
 const terminalRemovalAuthorityRecords = new WeakMap<
   object,
   WeakMap<object, CatalogTerminalRemovalRecord>
+>();
+const stateInstanceMutationAuthorityRecords = new WeakMap<
+  object,
+  WeakMap<object, CatalogStateInstanceMutationRecord>
 >();
 const sourceTransitionAuthorityRecords = new WeakMap<
   object,
@@ -391,6 +440,49 @@ export function createCatalogTerminalRemovalIssuer():
     },
   });
   terminalRemovalAuthorityRecords.set(authority, proofs);
+  return issuer;
+}
+
+export function createCatalogStateInstanceMutationIssuer():
+  CatalogStateInstanceMutationIssuer {
+  const proofs = new WeakMap<object, CatalogStateInstanceMutationRecord>();
+  const authority = Object.freeze({}) as CatalogStateInstanceMutationAuthority;
+  const issuer: CatalogStateInstanceMutationIssuer = Object.freeze({
+    authority,
+    issue(input: {
+      readonly familyId: FamilyId;
+      readonly lineageId: string;
+      readonly instanceKey: string;
+      readonly previous: CanonicalSource;
+      readonly current: CanonicalSource;
+      readonly evidenceRef: string;
+    }): CatalogStateInstanceMutationProof {
+      nonempty(input.familyId, "mutation proof familyId");
+      nonempty(input.lineageId, "mutation proof lineageId");
+      nonempty(input.instanceKey, "mutation proof instanceKey");
+      assertCanonicalSource(input.previous);
+      assertCanonicalSource(input.current);
+      if (
+        input.previous.number === input.current.number &&
+        sameBlockHash(input.previous.hash, input.current.hash) &&
+        input.previous.generation === input.current.generation
+      ) {
+        throw new Error("mutation proof requires distinct canonical sources");
+      }
+      nonempty(input.evidenceRef, "mutation proof evidence ref");
+      const proof = Object.freeze({}) as CatalogStateInstanceMutationProof;
+      proofs.set(proof, Object.freeze({
+        familyId: input.familyId,
+        lineageId: input.lineageId,
+        instanceKey: input.instanceKey,
+        previous: freezeCanonicalSource(input.previous),
+        current: freezeCanonicalSource(input.current),
+        evidenceRef: input.evidenceRef,
+      }));
+      return proof;
+    },
+  });
+  stateInstanceMutationAuthorityRecords.set(authority, proofs);
   return issuer;
 }
 
@@ -572,6 +664,10 @@ export function prepareAdapterFamilyCatalogPublication<
     PricingEntry
   >;
   readonly sourceTransitionProof?: CatalogSourceTransitionProof;
+  readonly stateMutationProofs?: ReadonlyMap<
+    string,
+    CatalogStateInstanceMutationProof
+  >;
 }): AdapterFamilyCatalogPublicationEnvelope<
   Instance,
   RouteHandle,
@@ -784,11 +880,13 @@ export function prepareAdapterFamilyCatalogPublication<
           familyId: expectation.familyId,
           reason: carryReason(stage.status),
         }));
+        const mutationProof = input.stateMutationProofs?.get(key);
         const carriedInstance = carryPublishedInstance({
           previous: input.previous!,
           instance: prior,
           source: input.source,
           contract: valueAuthority.instance,
+          mutationProof,
         });
         nextInstances.set(key, carriedInstance);
         carryOpaqueBundle({
@@ -797,6 +895,7 @@ export function prepareAdapterFamilyCatalogPublication<
           source: input.source,
           expectation,
           valueAuthority,
+          mutationProof,
           nextRouteHandles,
           nextGraphEntries,
           nextPricingEntries,
@@ -1602,9 +1701,14 @@ function carryValue<Value>(
   label: string,
   previous: CatalogValueBinding,
   current: CatalogValueBinding,
+  mutationProof?: CatalogStateInstanceMutationProof,
 ): Value {
   contract.assertValid(value, previous);
-  const carried = contract.carry(value, Object.freeze({ previous, current }));
+  const carried = contract.carry(value, Object.freeze({
+    previous,
+    current,
+    ...(mutationProof === undefined ? {} : { mutationProof }),
+  }));
   contract.assertValid(carried, current);
   assertValueDeepSealed(carried, label);
   return carried;
@@ -1802,6 +1906,7 @@ function carryPublishedInstance<Instance, RouteHandle, GraphEntry, PricingEntry>
     readonly instance: CatalogPublishedInstance<Instance>;
     readonly source: CanonicalSource;
     readonly contract: CatalogValueContract<Instance>;
+    readonly mutationProof?: CatalogStateInstanceMutationProof;
   },
 ): CatalogPublishedInstance<Instance> {
   const previousBinding = instanceValueBinding(
@@ -1815,6 +1920,7 @@ function carryPublishedInstance<Instance, RouteHandle, GraphEntry, PricingEntry>
     `instance ${input.instance.key}`,
     previousBinding,
     currentBinding,
+    input.mutationProof,
   );
   return Object.freeze({
     ...input.instance,
@@ -1839,6 +1945,7 @@ function carryOpaqueBundle<Instance, RouteHandle, GraphEntry, PricingEntry>(
       GraphEntry,
       PricingEntry
     >;
+    readonly mutationProof?: CatalogStateInstanceMutationProof;
     readonly nextRouteHandles: Map<string, CatalogOpaqueEntry<RouteHandle>>;
     readonly nextGraphEntries: Map<string, CatalogOpaqueEntry<GraphEntry>>;
     readonly nextPricingEntries: Map<string, CatalogOpaqueEntry<PricingEntry>>;
@@ -1851,6 +1958,7 @@ function carryOpaqueBundle<Instance, RouteHandle, GraphEntry, PricingEntry>(
     input.valueAuthority.routeHandle,
     "route-handle",
     "route handle",
+    input.mutationProof,
   );
   const graphEntries = rebindOpaqueEntries(
     entriesForInstance(input.previous.privateState.graphEntries, input.instance.key),
@@ -1859,6 +1967,7 @@ function carryOpaqueBundle<Instance, RouteHandle, GraphEntry, PricingEntry>(
     input.valueAuthority.graphEntry,
     "graph-entry",
     "Graph entry",
+    input.mutationProof,
   );
   const pricingEntries = rebindOpaqueEntries(
     entriesForInstance(input.previous.privateState.pricingEntries, input.instance.key),
@@ -1867,6 +1976,7 @@ function carryOpaqueBundle<Instance, RouteHandle, GraphEntry, PricingEntry>(
     input.valueAuthority.pricingEntry,
     "pricing-entry",
     "pricing entry",
+    input.mutationProof,
   );
   if (input.expectation.requiresGraphProjection && routeHandles.size === 0) {
     throw new Error(`carried instance ${input.instance.key} lost its route handles`);
@@ -1903,6 +2013,7 @@ function rebindOpaqueEntries<Value>(
   contract: CatalogValueContract<Value>,
   kind: Exclude<CatalogValueKind, "instance">,
   label: string,
+  mutationProof?: CatalogStateInstanceMutationProof,
 ): ReadonlyMap<string, CatalogOpaqueEntry<Value>> {
   return new Map([...entries].map(([key, entry]) => {
     const previousBinding = opaqueValueBinding(kind, key, entry, entry.source);
@@ -1921,6 +2032,7 @@ function rebindOpaqueEntries<Value>(
       `${label} ${key}`,
       previousBinding,
       currentBinding,
+      mutationProof,
     );
     return [key, Object.freeze({
       instancePublicationKey: instance.key,
@@ -2059,6 +2171,21 @@ function resolveTerminalRemovalProof(input: {
   assertSameSource(record.source, input.source, "terminal removal proof");
   if (record.status !== "terminal") {
     throw new Error("terminal removal proof is unresolved");
+  }
+  return record;
+}
+
+export function resolveStateInstanceMutationProof(input: {
+  readonly authority: CatalogStateInstanceMutationAuthority;
+  readonly proof: CatalogStateInstanceMutationProof;
+}): CatalogStateInstanceMutationRecord {
+  const proofs = stateInstanceMutationAuthorityRecords.get(input.authority);
+  if (proofs === undefined) {
+    throw new Error("StateInstance mutation authority was not centrally issued");
+  }
+  const record = proofs.get(input.proof);
+  if (record === undefined) {
+    throw new Error("StateInstance mutation proof is forged or foreign");
   }
   return record;
 }

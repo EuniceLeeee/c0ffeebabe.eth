@@ -438,6 +438,26 @@ shadow suite/12 组 sweep 全绿。剩余 F1-b：跨代 carry 的 issuer-bound
 StateInstance mutation proof（需中央在新区块重验证并重签发
 source-bound runtime handle，另行立项，见 Phase F plan）。
 
+**P1 mutation/terminal proof — mutation/carry 半边落地（2026-08-13，
+cutover F1-b）：** 跨代 carry 现在只有 issuer-bound StateInstance
+mutation proof 才能放行，否则保持 P1-d fail-closed。
+`createCatalogStateInstanceMutationIssuer`（proof 绑定 familyId/
+lineageId/instanceKey/previous/current/evidenceRef，同源拒绝）；
+`prepareAdapterFamilyCatalogPublication` 接收按 instance publication
+key 索引的 proof 并线程进 carry 链路；shadow root 构造绑定
+`stateMutationAuthority`，carry 合约在有有效 proof 时登记
+proof-scoped source override（`assertValid` 在 proof 的 current
+source 下接受 carried 值，stale/foreign 一律 fail-closed）；组合根
+暴露 `issueStateInstanceMutation`。live publisher 新增
+`verifyCarriedInstance` 中央重验证回调：无 publication 的族，其旧实例
+经回调验证状态连续性后才签发 proof，否则不签发 → 整体拒绝。
+合同：publisher 级（有证据 carry 提交 + carried delta + value identity
+不变、无证据 fail-closed、验证失败实例集不变）、root 级（foreign
+authority `/forged or foreign/`、previous/current 不匹配
+`/binding does not match/`、合法 proof 提交并重绑 source）。
+build/shadow suite/12 组 sweep 全绿。F1 两项（terminal + mutation）
+完成。
+
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |

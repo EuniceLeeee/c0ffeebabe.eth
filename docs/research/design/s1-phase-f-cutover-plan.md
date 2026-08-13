@@ -29,12 +29,12 @@
 - **F1-a terminal settlement（已完成）：** live publisher 接受显式
   terminalRemovals 声明 → issuer-bound terminal removal proof → 合法收缩
   提交（checkpoint 见 Phase E plan）。
-- **F1-b mutation/carry proof（未开始）：** 跨代 carry 的 issuer-bound
-  StateInstance mutation proof。硬约束：shadow catalog 的 instance/route
-  handle/pricing 全部 source-bound（issue record 绑定 issue source/
-  generation），合法 carry 需要中央在新 source 重验证状态连续性并重签发
-  handle——先实现中央 re-issue API，再接 live publisher。当前行为保持
-  fail-closed（P1-d 合同）。
+- **F1-b mutation/carry proof（已完成）：** 跨代 carry 的 issuer-bound
+  StateInstance mutation proof 全链路落地：proof/authority/issuer、
+  prepare 线程、shadow root proof-scoped carry override、组合根暴露、
+  live publisher `verifyCarriedInstance` 中央重验证回调。无 proof /
+  foreign authority / binding mismatch 一律 fail-closed；有 proof 的
+  carry 保持 value identity 并把 catalog 重绑到新 source。F1 关闭。
 
 ### F2 活动型族严格观测 ingress
 

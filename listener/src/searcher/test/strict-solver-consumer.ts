@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   catalogDiscoverySourceFingerprint,
+  createCatalogStateInstanceMutationIssuer,
   createCatalogSourceTransitionIssuer,
   createCatalogTerminalRemovalIssuer,
 } from "../adapter-family-catalog-publication.js";
@@ -200,11 +201,13 @@ function anchors(canonical: CanonicalSource) {
 async function main(): Promise<void> {
   const terminalIssuer = createCatalogTerminalRemovalIssuer();
   const transitionIssuer = createCatalogSourceTransitionIssuer();
+  const mutationIssuer = createCatalogStateInstanceMutationIssuer();
   const root = new StrictAdapterFamilyShadowCatalogPublicationRoot({
     catalog: CATALOG,
     chainId: "1",
     terminalRemovalAuthority: terminalIssuer.authority,
     sourceTransitionAuthority: transitionIssuer.authority,
+    stateMutationAuthority: mutationIssuer.authority,
   });
   const source1 = source(101);
   const publication1 = await lifecycle(source1);

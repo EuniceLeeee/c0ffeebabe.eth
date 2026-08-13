@@ -3,6 +3,7 @@ import type {
 } from "./adapter-family-discovery-continuity-composition.js";
 import {
   catalogDiscoverySourceFingerprint,
+  type CatalogStateInstanceMutationProof,
 } from "./adapter-family-catalog-publication.js";
 import type {
   AdapterFamilyPublication,
@@ -11,6 +12,8 @@ import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import type { FamilyCapabilityCatalog } from
   "./venues/family-capability-catalog.js";
+import type { FamilyId } from
+  "./venues/adapter-family-identifiers.js";
 
 /**
  * Strict production publication pipeline step 2-3 (see Phase E plan): given
@@ -46,6 +49,21 @@ export async function publishStrictCatalogFromLifecycle(input: {
       readonly evidenceRef: string;
     }[];
   }[];
+  /**
+   * Central re-verification of state continuity for a previously committed
+   * instance that this family did not re-stage at the current source. Return
+   * an evidence ref when continuity is verified, or null when it cannot be
+   * proven — a null result leaves the instance without a mutation proof and
+   * the whole publication fails closed (observed-complete never carries
+   * silently). Absent callback, no carries are admitted.
+   */
+  readonly verifyCarriedInstance?: (input: {
+    readonly familyId: string;
+    readonly lineageId: string;
+    readonly instanceKey: string;
+    readonly previous: CanonicalSource;
+    readonly current: CanonicalSource;
+  }) => Promise<string | null>;
 }): Promise<
   | { readonly status: "published"; readonly revision: number }
   | { readonly status: "unresolved"; readonly reason: string }
@@ -55,6 +73,61 @@ export async function publishStrictCatalogFromLifecycle(input: {
     const publishedByFamily = new Map(
       input.publications.map((entry) => [entry.familyId, entry]),
     );
+    const previous = composition.catalogRoot.capture();
+    const priorInstancesByFamily = new Map<string, {
+      readonly familyId: FamilyId;
+      readonly lineageId: string;
+      readonly instanceKey: string;
+      readonly key: string;
+    }[]>();
+    if (previous !== null) {
+      for (const [key, instance] of previous.envelope.privateState.instances) {
+        const familyInstances = priorInstancesByFamily.get(instance.familyId) ??
+          [];
+        familyInstances.push(Object.freeze({
+          familyId: instance.familyId,
+          lineageId: instance.lineageId,
+          instanceKey: instance.instanceKey,
+          key,
+        }));
+        priorInstancesByFamily.set(instance.familyId, familyInstances);
+      }
+    }
+    const stateMutationProofs = new Map<
+      string,
+      CatalogStateInstanceMutationProof
+    >();
+    if (
+      previous !== null &&
+      input.verifyCarriedInstance !== undefined
+    ) {
+      for (const family of catalog.listAll()) {
+        const familyId = family.plugin.manifest.familyId;
+        if (publishedByFamily.has(familyId)) continue;
+        const priorInstances = priorInstancesByFamily.get(familyId) ?? [];
+        for (const prior of priorInstances) {
+          const evidenceRef = await input.verifyCarriedInstance({
+            familyId: prior.familyId,
+            lineageId: prior.lineageId,
+            instanceKey: prior.instanceKey,
+            previous: previous.envelope.snapshot.source,
+            current: source,
+          });
+          if (evidenceRef === null) continue;
+          stateMutationProofs.set(
+            prior.key,
+            composition.issueStateInstanceMutation({
+              familyId: prior.familyId,
+              lineageId: prior.lineageId,
+              instanceKey: prior.instanceKey,
+              previous: previous.envelope.snapshot.source,
+              current: source,
+              evidenceRef,
+            }),
+          );
+        }
+      }
+    }
     const stages = catalog.listAll().map((family) => {
       const familyId = family.plugin.manifest.familyId;
       const entry = publishedByFamily.get(familyId);
@@ -112,12 +185,12 @@ export async function publishStrictCatalogFromLifecycle(input: {
         });
       });
     });
-    const previous = composition.catalogRoot.capture();
     const prepared = composition.catalogRoot.prepare({
       source,
       previous,
       stages: Object.freeze(stages),
       sourceAnchors: Object.freeze(anchors),
+      stateMutationProofs: Object.freeze(stateMutationProofs),
       ...(previous === null
         ? {}
         : {

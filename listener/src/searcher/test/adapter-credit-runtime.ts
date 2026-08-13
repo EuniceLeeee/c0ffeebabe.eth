@@ -22,6 +22,7 @@ import {
 } from "../adapter-family-shadow-catalog-publication.js";
 import {
   catalogDiscoverySourceFingerprint,
+  createCatalogStateInstanceMutationIssuer,
   createCatalogSourceTransitionIssuer,
   createCatalogTerminalRemovalIssuer,
 } from "../adapter-family-catalog-publication.js";
@@ -758,11 +759,13 @@ function projectedGraphAuthorityRejectsClones(): void {
 async function creditStrictCatalogCasJoinsSamePublication(): Promise<void> {
   const terminalIssuer = createCatalogTerminalRemovalIssuer();
   const transitionIssuer = createCatalogSourceTransitionIssuer();
+  const mutationIssuer = createCatalogStateInstanceMutationIssuer();
   const root = new StrictAdapterFamilyShadowCatalogPublicationRoot({
     catalog: primary.catalog,
     chainId: "1",
     terminalRemovalAuthority: terminalIssuer.authority,
     sourceTransitionAuthority: transitionIssuer.authority,
+    stateMutationAuthority: mutationIssuer.authority,
   });
   const creditStage = root.stageCreditFamily({
     family,
@@ -897,6 +900,7 @@ async function creditStrictCatalogCasJoinsSamePublication(): Promise<void> {
     chainId: "1",
     terminalRemovalAuthority: terminalIssuer.authority,
     sourceTransitionAuthority: transitionIssuer.authority,
+    stateMutationAuthority: mutationIssuer.authority,
   });
   const zeroCreditStage = zeroRoot.stageCreditFamily({
     family,

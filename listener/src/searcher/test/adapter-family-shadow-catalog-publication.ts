@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   catalogDiscoverySourceFingerprint,
+  createCatalogStateInstanceMutationIssuer,
   createCatalogSourceTransitionIssuer,
   createCatalogTerminalRemovalIssuer,
   type CatalogSourceTransitionIssuer,
@@ -66,14 +67,17 @@ const TOKEN1 = `0x${"44".repeat(20)}`;
 function publicationRoot() {
   const terminalIssuer = createCatalogTerminalRemovalIssuer();
   const transitionIssuer = createCatalogSourceTransitionIssuer();
+  const mutationIssuer = createCatalogStateInstanceMutationIssuer();
   return Object.freeze({
     terminalIssuer,
     transitionIssuer,
+    mutationIssuer,
     root: new StrictAdapterFamilyShadowCatalogPublicationRoot({
       catalog: CATALOG,
       chainId: "1",
       terminalRemovalAuthority: terminalIssuer.authority,
       sourceTransitionAuthority: transitionIssuer.authority,
+      stateMutationAuthority: mutationIssuer.authority,
     }),
   });
 }
@@ -537,6 +541,129 @@ async function main(): Promise<void> {
     sourceTransitionProof: transitionProof(transitionIssuer, source2, source3),
   }), /requires an issuer-bound StateInstance mutation proof/);
   assertIdentitiesUnchanged(root, omissionIdentities);
+
+  // F1-b: an issuer-bound StateInstance mutation proof admits a
+  // cross-generation carry; a foreign authority or a binding mismatch stays
+  // fail-closed. Use a fresh harness so the shared root state is untouched.
+  const carryHarness = publicationRoot();
+  const carryRoot = carryHarness.root;
+  const carrySource1 = source(401);
+  const carryPub1 = await lifecycle(carrySource1);
+  const carryInitial = carryRoot.prepare({
+    source: carrySource1,
+    previous: null,
+    stages: stages({
+      root: carryRoot,
+      canonical: carrySource1,
+      route: carryRoot.stageRouteFamily({ publication: carryPub1 }),
+    }),
+    sourceAnchors: anchors({
+      canonical: carrySource1,
+      completeFamilyId: UNIV2_FAMILY_ID,
+    }),
+  });
+  await publish(carryRoot, null, carryInitial);
+  const carryCommitted1 = carryRoot.capture();
+  assert(carryCommitted1);
+  const carrySource2 = source(402);
+  const carryKey = [...carryCommitted1.envelope.privateState.instances.keys()][0];
+  const carryPrior = carryCommitted1.envelope.privateState.instances.get(
+    carryKey,
+  );
+  assert(carryPrior);
+
+  const foreignHarness = publicationRoot();
+  const foreignProof = foreignHarness.mutationIssuer.issue({
+    familyId: carryPrior.familyId,
+    lineageId: carryPrior.lineageId,
+    instanceKey: carryPrior.instanceKey,
+    previous: carrySource1,
+    current: carrySource2,
+    evidenceRef: "foreign:state-continuity",
+  });
+  assert.throws(() => carryRoot.prepare({
+    source: carrySource2,
+    previous: carryCommitted1,
+    stages: stages({ root: carryRoot, canonical: carrySource2 }),
+    sourceAnchors: anchors({ canonical: carrySource2 }),
+    sourceTransitionProof: transitionProof(
+      carryHarness.transitionIssuer,
+      carrySource1,
+      carrySource2,
+    ),
+    stateMutationProofs: new Map([[carryKey, foreignProof]]),
+  }), /forged or foreign/);
+
+  const mismatchProof = carryHarness.mutationIssuer.issue({
+    familyId: carryPrior.familyId,
+    lineageId: carryPrior.lineageId,
+    instanceKey: carryPrior.instanceKey,
+    previous: source1,
+    current: carrySource2,
+    evidenceRef: "mismatch:state-continuity",
+  });
+  assert.throws(() => carryRoot.prepare({
+    source: carrySource2,
+    previous: carryCommitted1,
+    stages: stages({ root: carryRoot, canonical: carrySource2 }),
+    sourceAnchors: anchors({ canonical: carrySource2 }),
+    sourceTransitionProof: transitionProof(
+      carryHarness.transitionIssuer,
+      carrySource1,
+      carrySource2,
+    ),
+    stateMutationProofs: new Map([[carryKey, mismatchProof]]),
+  }), /binding does not match/);
+
+  const goodProof = carryHarness.mutationIssuer.issue({
+    familyId: carryPrior.familyId,
+    lineageId: carryPrior.lineageId,
+    instanceKey: carryPrior.instanceKey,
+    previous: carrySource1,
+    current: carrySource2,
+    evidenceRef: "central:state-continuity-verified",
+  });
+  const carriedPrepared = carryRoot.prepare({
+    source: carrySource2,
+    previous: carryCommitted1,
+    stages: stages({ root: carryRoot, canonical: carrySource2 }),
+    sourceAnchors: anchors({ canonical: carrySource2 }),
+    sourceTransitionProof: transitionProof(
+      carryHarness.transitionIssuer,
+      carrySource1,
+      carrySource2,
+    ),
+    stateMutationProofs: new Map([[carryKey, goodProof]]),
+  });
+  await publish(carryRoot, carryCommitted1, carriedPrepared);
+  const carryCommitted2 = carryRoot.capture();
+  assert(carryCommitted2);
+  assert.equal(
+    carryCommitted2.envelope.privateState.instances.size,
+    carryCommitted1.envelope.privateState.instances.size,
+    "proof-admitted carry must retain the committed instance set",
+  );
+  assert.equal(carryCommitted2.envelope.snapshot.delta.removed.length, 0);
+  assert(
+    carryCommitted2.envelope.snapshot.delta.carried.some(
+      (entry) => entry.key === carryKey,
+    ),
+    "the delta must record the proof-admitted carried instance",
+  );
+  assert.equal(
+    carryCommitted2.envelope.snapshot.source.number,
+    carrySource2.number,
+    "the carried catalog must be rebound to the new source",
+  );
+  const carriedInstance = carryCommitted2.envelope.privateState.instances.get(
+    carryKey,
+  );
+  assert(carriedInstance);
+  assert.equal(
+    carriedInstance.value,
+    carryPrior.value,
+    "carry must preserve the committed value identity",
+  );
 
   // observed-complete: admission/retention over the observed set with NO
   // omission deletion authority (D-008). Re-staging keeps the instance;
