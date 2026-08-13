@@ -86,31 +86,20 @@ export async function materializeCaptureInventory(input: {
   const observations = [
     ...await addressObservations(input),
     ...await transactionObservations({ ...input, transactionHashes }),
-    ...await declaredLogObservations(input),
   ];
   const byFamily = new Map<FamilyId, CaptureInventoryEntry>();
-  for (const observation of observations) {
-    for (const match of input.catalog.matches(observation)) {
-      if (byFamily.has(match.familyId)) continue;
-      const family = input.catalog.forStrictFamily(match.familyId);
-      if (!("discovery" in family.plugin)) continue;
-      const candidate = family.plugin.discovery.decodeCandidate({
-        observation,
-        matchedPatternId: match.patternId,
-      });
-      if (candidate === null) continue;
-      const candidateIdentity = captureCandidateIdentity(
-        family,
-        candidate,
-        observation,
-      );
-      if (candidateIdentity === null) continue;
-      byFamily.set(match.familyId, Object.freeze({
-        familyId: match.familyId,
-        candidateIdentity,
-        observation,
-      }));
-    }
+  admitObservations(input.catalog, observations, byFamily);
+  const unresolvedFamilies = new Set(input.catalog.listAll().flatMap((family) =>
+    "discovery" in family.plugin && !byFamily.has(family.plugin.manifest.familyId)
+      ? [family.plugin.manifest.familyId]
+      : []
+  ));
+  if (unresolvedFamilies.size !== 0) {
+    admitObservations(
+      input.catalog,
+      await declaredLogObservations({ ...input, unresolvedFamilies }),
+      byFamily,
+    );
   }
   const discoveryIds = input.catalog.listAll().flatMap((family) =>
     "discovery" in family.plugin ? [family.plugin.manifest.familyId] : []
@@ -131,6 +120,36 @@ export async function materializeCaptureInventory(input: {
       left.familyId.localeCompare(right.familyId)
     )),
   });
+}
+
+function admitObservations(
+  catalog: FamilyCapabilityCatalog,
+  observations: readonly UnifiedObservation[],
+  byFamily: Map<FamilyId, CaptureInventoryEntry>,
+): void {
+  for (const observation of observations) {
+    for (const match of catalog.matches(observation)) {
+      if (byFamily.has(match.familyId)) continue;
+      const family = catalog.forStrictFamily(match.familyId);
+      if (!("discovery" in family.plugin)) continue;
+      const candidate = family.plugin.discovery.decodeCandidate({
+        observation,
+        matchedPatternId: match.patternId,
+      });
+      if (candidate === null) continue;
+      const candidateIdentity = captureCandidateIdentity(
+        family,
+        candidate,
+        observation,
+      );
+      if (candidateIdentity === null) continue;
+      byFamily.set(match.familyId, Object.freeze({
+        familyId: match.familyId,
+        candidateIdentity,
+        observation,
+      }));
+    }
+  }
 }
 
 async function addressObservations(input: {
@@ -215,10 +234,12 @@ async function declaredLogObservations(input: {
   readonly catalog: FamilyCapabilityCatalog;
   readonly source: CanonicalSource;
   readonly provider: CaptureInventoryProvider;
+  readonly unresolvedFamilies: ReadonlySet<FamilyId>;
 }): Promise<readonly UnifiedObservation[]> {
   const observations: UnifiedObservation[] = [];
   for (const family of input.catalog.listAll()) {
     if (!("discovery" in family.plugin)) continue;
+    if (!input.unresolvedFamilies.has(family.plugin.manifest.familyId)) continue;
     for (const pattern of family.plugin.discovery.logPatterns ?? []) {
       const emitter = pattern.emitter;
       const log = await findLatestDecodableLog({
