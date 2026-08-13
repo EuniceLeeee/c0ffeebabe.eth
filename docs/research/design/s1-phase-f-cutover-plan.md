@@ -9,6 +9,13 @@
 > `deploy-node.sh` 守护路径 + 显式 live 授权执行，bounded-live envelope
 > 全程不变。
 
+> **终态覆盖（2026-08-13）：** canonical §0.1 的“中央路径零单族逻辑”
+> 是 F5→F8 的共同前置。旧 generic CLI switch、capture-name alias、中央
+> driver/projection map、逐族 corpus/negative harness 或点名生产 Family 的
+> 框架测试即使现有测试为绿，也不具备 cutover 权。必须先由 plugin-owned
+> capability + generated catalog 取代，并通过 AST + transitive
+> import-closure gate。
+
 ## 门（代码已在库中）
 
 - `searcher:s1-cutover-readiness`：batch parity、非空 held-out negatives、
@@ -104,13 +111,18 @@
 
 ### F5 sealed-production corpus
 
-- **F5-a 采集 harness（已完成）：**
+- **F5-a 旧采集 harness（历史完成，终态重建中）：**
   `scripts/collect-s1-sealed-production-corpus.sh`：校验 descriptor
   携带 sourceBlock/sourceBlockHash + 非空 cases，本地 reth 重验 block
   hash（fail-closed），3:1 切 train/held-out，经
   `architecture-migration-capture:real` 生成两侧 sealed capture，
   并强制校验 `productionProvenance.commit` 与当前 checkout 一致，
-  写 `corpus-manifest.json`。
+  写 `corpus-manifest.json`。该实现错误地把 held-out negative 当 3:1 cases
+  切分，并依赖旧 per-family capture 入口，不能作为终态 F5 证据。
+- **F5-a2 终态通用 harness（未完成）：** catalog-issued generic capture；
+  独立 baseline/challenger 执行闭包；动态 canonical-value negative；
+  production provenance 位于 parity request；identical negative fail closed；
+  中央无单族逻辑且 AST/import-closure gate 通过。
 - **F5-b 真实 corpus 采集（待节点执行）：** 需要 22 族真实 on-chain
   descriptor（真实 pool/tx/state，不得 fixture:* 占位）在节点本地 reth
   上跑 F5-a，产出非空 held-out 并过 sealed-production acceptance
@@ -145,6 +157,18 @@
   `s1-cutover-readiness` 与 `default-authority-cutover-gate` 两道门。
   这是 **production authority cutover**，live 切换需显式授权 +
   guarded deploy；本文件不授权任何 live 广播。
+
+### F9 最终 cleanup receipt（完成定义，不可省略）
+
+- F7/F8 完成后执行 canonical §18.3 与 §20.2.6 的独立 cleanup slice；
+  `MigrationCleanupReceipt.verdict` 必须为 `pass`，全部字段绑定真实机器
+  证据。
+- production source closure 不得残留可执行 legacy pipeline、dual
+  authority、fallback、旧 runtime/schema/cache/revision/flag/I/O API 或
+  中央单族逻辑。回滚只指向上一已验收 commit/build artifact，源码不保留
+  双实现。
+- 只有 F5 eligible、F6 B→C→D→F→A、F7/F8、§18.3/§20.2.6 和最终
+  clean-process/node gates 全部通过后，才可宣称 S1/MD 交付完成。
 
 ## 回退
 

@@ -21,6 +21,41 @@
 
 ## 0. 阅读约定与 ds 基线快照
 
+### 0.1 中央路径零单族逻辑（2026-08-13 用户硬约束）
+
+以下约束优先于本文此前所有 fixture-era、逐族 capture 或兼容桥
+checkpoint；旧 checkpoint 只能作为历史证据，不能继续授权终态实现：
+
+1. 中央调度、通用采集、observation 派生、descriptor 生成、capture CLI、
+   corpus/parity harness、baseline/challenger 编排、execution/prewarm/
+   allowance projection 及其框架级测试，不得按 `familyId`、协议名、协议
+   地址、selector 或 topic 编写 `switch`/`if`、查表分发、别名映射、逐族
+   fixture/negative 列表或动态 import 变体，也不得直接 import 具体生产
+   Family、协议 ABI 或协议常量。
+2. 中央代码只执行 catalog-issued capability。它可以读取 plugin 声明中的
+   selector/topic/address surface/capture plan，但不能解释其协议含义，也
+   不能把声明值与某个生产协议常量比较。
+3. 族差异只允许存在于该 Family plugin 自有的 discovery、identity、
+   instance/routes/pricing、exact、execution/final-sim、capture
+   materialization 与 execution projection 中，并由 build-time generated
+   static catalog/capability metadata 自动注册。新增 Family 不得修改中央
+   capture/CLI/descriptor/corpus/parity 或框架级测试。
+4. 协议 ABI、基础设施单例与语义逻辑只可位于 plugin closure 及其同目录
+   plugin-local 合同测试；基础设施单例是链上身份/执行证据来源，不得成为
+   pool/vault/instance admission allowlist。实例身份仍须链上反向验证，final
+   simulation 始终 fail closed。
+5. 框架级测试使用 synthetic plugin/catalog 或动态枚举 generated catalog，
+   不得点名或直接 import 生产 Family。plugin-local 测试可以验证本族 ABI、
+   singleton 与协议语义。
+6. CI 必须以 TypeScript AST + transitive import-closure gate 验证以上性质。
+   gate 要证明具体 Family module 只能通过 generated catalog 边界进入运行
+   closure，不能被中央路径直接/旁路引用；`grep` 或“目前没有命中”不能
+   单独构成验收证据。
+
+通用 capture descriptor 的中央可见合同只有 catalog `familyId`、真实链上
+candidate/instance identity、canonical source，以及交给 plugin 解读的
+opaque binding。CLI 不拥有 capture-name alias，也不按族选择字段或 driver。
+
 全文使用四种状态，避免设计代码被误读成当前 API：
 
 - **DS 已实现**：冻结基线已经存在并有当前测试/生产调用路径；新架构应复用，不得重复发明。

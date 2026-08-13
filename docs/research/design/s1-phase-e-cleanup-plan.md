@@ -525,6 +525,18 @@ provider+revm runtime）；证据 ref = `onchain:1:<hash>:erc4626:<vault>`。
 
 ## 验收
 
+### 中央零单族逻辑前置（2026-08-13）
+
+- Pair B→C→D→F→A 的 strict 替代不得把 legacy per-family 分发搬到新的
+  中央 map/switch。identity、discovery、universe trust、schema/execution
+  projection 的族差异必须由 plugin closure 声明并经 generated catalog
+  自动注册。
+- 中央 capture/descriptor/CLI/corpus/parity/execution projection 及框架
+  测试必须通过 canonical §0.1 的 AST + transitive import-closure gate；
+  synthetic/dynamic catalog 测试替代所有点名生产 Family 的框架测试。
+- 新增 Family 若需要修改任一中央路径或框架测试，cleanup gate 必须 fail，
+  不得进入下一 pair。
+
 - 每个 pair 提交后：`npm run build`、shadow suite、`s1-regression-sweep.sh`
   全绿；删除目标不再被 `listener/src`（除自身文档）引用；
 - 全部 pairs 完成后：`searcher:live` 在无 legacy registry 引用下可编译

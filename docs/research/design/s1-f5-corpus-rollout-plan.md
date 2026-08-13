@@ -4,6 +4,14 @@
 > 本文件是自动化续跑的唯一事实来源：每轮守护恢复后先读本文件，从未完成项
 > 继续，直到 `DONE`。用户无需每轮回复。P0-6 fail-closed 门不动。
 
+> **终态合同覆盖（2026-08-13）：** 本文早期逐族 capture 函数、
+> `GenericCaptureDriver` 注册表、capture-name alias、descriptor 字段映射和
+> 3:1 train/held-out 记录仅是历史 checkpoint，不再授权终态实现。终态以
+> canonical §0.1 为准：中央只有一个 catalog-issued generic capture 入口；
+> observation/exact/execution/final-sim/capture materialization 均由 plugin
+> closure 声明；框架测试只使用 synthetic/dynamic catalog；AST + transitive
+> import-closure gate 必须通过。
+
 ## 模板契约（univ2，第一族）
 
 1. 新建 `captureUniv2OnchainCase(input: {source, provider, pool, tokenA?,
@@ -24,8 +32,9 @@
 `{catalog, familyId, source, observation, runtime}` → 通用 strict
 lifecycle → publication 派生 stages（instances/edges/prices/
 enumeratedRoutes/failures 全通用；exact/execution/finalSim 在 per-plugin
-driver 接入前诚实 `framework-blocked`，不伪造）。合同测试（wsteth
-fixture runtime：onchain 证据 ref + 无 fixture + blocked 诚实）；
+driver 接入前诚实 `framework-blocked`，不伪造）。该段描述的是历史过渡
+实现；终态不得保留中央 per-family driver registry。合同测试曾以具体族
+fixture runtime 验证过渡行为；终态框架测试须改为 synthetic catalog；
 build/shadow suite（38）/12 组 sweep 全绿。剩余：由 discovery 声明
 派生 observation 的通用函数、CLI 通用模式、exact/execution per-plugin
 driver 注册表（新族 = 插件自带模块，不再改工具链逻辑）。
@@ -33,7 +42,8 @@ driver 注册表（新族 = 插件自带模块，不再改工具链逻辑）。
 **通用路径推进 2（2026-08-13）：** `deriveFamilyObservationFromNodeData`
 按插件 discovery 声明派生 observation（callPatterns→call、logPatterns→
 log、addressSurfaces→codeHash+EIP-1967 实读）；`GenericCaptureDriver`
-注册表 + `registerGenericCaptureDriver`/`resolveGenericCaptureDriver`，
+注册表 + `registerGenericCaptureDriver`/`resolveGenericCaptureDriver`（历史
+迁移桥，现列入删除目标），
 `captureFamilyGenerically` 在 driver 注册时真实执行 exact/execution/
 finalSim，否则诚实 framework-blocked。合同测试：无 driver blocked +
 有 driver exercised。build/shadow suite（38）/12 组 sweep 全绿。
@@ -135,17 +145,32 @@ PoolManager 部署块到 source 跨 `4,056,940` blocks，reth 单请求上限
   `ArchitectureMigrationHeldOutNegativeInput` 是“故意不匹配的
   baseline/challenger 对”，必须判 `semantic-mismatch`——不是真实 cases
   的切分。因此采集分两步：
-  1. 真实 baseline：节点上从 universe 快照（univ2/univ3/univ4/
-     curve-underlying/dodo-v2/fluid-dex 真实 pool）+ protocol cache
-     verifiedCandidates（erc4626 等真实协议地址）生成 descriptor，
-     `run-architecture-migration-capture-real-cli.ts --onchain` 产出
-     `onchain:` 证据的 baseline side；
-  2. 逐族负例：对每个真实族生成篡改 challenger（univ2/univ3/dodo 交换
-     tokenA/tokenB、univ3/univ4 改 fee/tickSpacing、协议族改 vault/
-     asset 地址），同一 judge 必须输出 `semantic-mismatch`。
+  1. 真实 baseline/challenger：节点上从 catalog-owned inventory 与真实
+     strict publication 生成同输入 descriptor；两侧必须由两个独立、固定
+     commit 的可执行闭包各自采集，均携带可复核 `onchain:` 证据。禁止复制
+     side 后改 commit/captureId 冒充独立闭包。
+  2. held-out negatives：动态遍历实际 capture 的 Family cases，由中央
+     通用 canonical-value mutator 确定性篡改一个已 exercised 的语义项；
+     不得按族交换字段或维护逐族 negative 清单。每对必须由同一 judge 输出
+     `semantic-mismatch`；identical/不可变 negative 必须 fail closed。
   3. sealed-production acceptance 判定：
      `evidenceClass=sealed-production` + 非空 heldOutNegatives +
      aggregate pass + 负例全 mismatch → `eligible`；F5 关闭后再进 F6。
 - 节点执行步骤（待运行）：impl-capture 已到 `26888125` 且 build OK；
   下一步生成真实 descriptor → 跑 baseline + 负例 → parity judge →
   写 evidence JSON 到 `docs/research/design/evidence/`。
+
+### F5 最终关闭判据
+
+- descriptor generator 只从 catalog ownership/inventory 生成通用
+  `{familyId, candidateIdentity, opaqueBinding?}`，无协议名或字段映射；
+- capture CLI 只有 catalog-issued generic 路径，fixture/onchain per-family
+  switch、capture-name alias 和中央 driver map 已删除；
+- 所有 active production Family 都有真实 identity/state/exact/execution/
+  final-sim 证据；无 `fixture:` 冒充；
+- 独立 baseline/challenger 主对 aggregate pass；实际捕获的每族至少一个
+  非空 held-out negative 且全部 `semantic-mismatch`；
+- `evidenceClass=sealed-production` 且 acceptance `eligible=true`；
+- 中央零单族 AST/import-closure gate、完整 build、shadow suite、sweep 与
+  节点复核均通过。此前表格的 `completed` 只表示旧逐族合同，不足以关闭
+  F5。
