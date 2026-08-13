@@ -159,40 +159,58 @@ async function addressObservations(input: {
   readonly provider: CaptureInventoryProvider;
 }): Promise<readonly UnifiedObservation[]> {
   const observations: UnifiedObservation[] = [];
-  for (const nomination of rawAddressNominations(
+  const nominations = rawAddressNominations(
     input.rawArtifacts,
     input.catalog,
-  )) {
-    try {
-      const [code, implementationWord] = await Promise.all([
-        input.provider.getCode(nomination.address, input.source.number),
-        input.provider.getStorage(
-          nomination.address,
-          EIP1967_IMPLEMENTATION_SLOT,
-          input.source.number,
-        ),
-      ]);
-      if (!ethers.isHexString(code) || code === "0x") continue;
-      const family = input.catalog.forStrictFamily(nomination.familyId);
-      const fingerprints = "discovery" in family.plugin
-        ? Object.freeze((family.plugin.discovery.addressSurfaces ?? [])
-          .filter((pattern) => pattern.kind === "interface")
-          .map((pattern) => pattern.fingerprint))
-        : Object.freeze([]);
-      observations.push(Object.freeze({
-        kind: "address-surface" as const,
-        source: input.source,
-        address: nomination.address,
-        codeHash: ethers.keccak256(code),
-        implementationWord: ethers.zeroPadValue(implementationWord, 32)
-          .toLowerCase(),
-        interfaceFingerprints: fingerprints,
-      }));
-    } catch {
-      // A raw nomination is not authority. One unreadable address must not
-      // prevent other catalog candidates from being materialized.
-    }
+  );
+  const groups = new Map<FamilyId, typeof nominations>();
+  for (const nomination of nominations) {
+    const group = groups.get(nomination.familyId) ?? [];
+    groups.set(nomination.familyId, Object.freeze([...group, nomination]));
   }
+  await Promise.all([...groups.entries()].map(async ([familyId, candidates]) => {
+    const family = input.catalog.forStrictFamily(familyId);
+    if (!("discovery" in family.plugin)) return;
+    const discovery = family.plugin.discovery;
+    const fingerprints = Object.freeze((discovery.addressSurfaces ?? [])
+      .filter((pattern) => pattern.kind === "interface")
+      .map((pattern) => pattern.fingerprint));
+    for (const nomination of candidates) {
+      try {
+        const [code, implementationWord] = await Promise.all([
+          input.provider.getCode(nomination.address, input.source.number),
+          input.provider.getStorage(
+            nomination.address,
+            EIP1967_IMPLEMENTATION_SLOT,
+            input.source.number,
+          ),
+        ]);
+        if (!ethers.isHexString(code) || code === "0x") continue;
+        const observation = Object.freeze({
+          kind: "address-surface" as const,
+          source: input.source,
+          address: nomination.address,
+          codeHash: ethers.keccak256(code),
+          implementationWord: ethers.zeroPadValue(implementationWord, 32)
+            .toLowerCase(),
+          interfaceFingerprints: fingerprints,
+        });
+        const matches = input.catalog.matches(observation).filter((match) =>
+          match.familyId === familyId &&
+          discovery.decodeCandidate({
+            observation,
+            matchedPatternId: match.patternId,
+          }) !== null
+        );
+        if (matches.length === 0) continue;
+        observations.push(observation);
+        break;
+      } catch {
+        // A raw nomination is not authority. One unreadable address must not
+        // prevent the next plugin-declared candidate from being tested.
+      }
+    }
+  }));
   return Object.freeze(observations);
 }
 
