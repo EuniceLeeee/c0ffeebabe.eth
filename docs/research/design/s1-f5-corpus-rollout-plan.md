@@ -30,6 +30,16 @@ build/shadow suite（38）/12 组 sweep 全绿。剩余：由 discovery 声明
 派生 observation 的通用函数、CLI 通用模式、exact/execution per-plugin
 driver 注册表（新族 = 插件自带模块，不再改工具链逻辑）。
 
+**通用路径推进 2（2026-08-13）：** `deriveFamilyObservationFromNodeData`
+按插件 discovery 声明派生 observation（callPatterns→call、logPatterns→
+log、addressSurfaces→codeHash+EIP-1967 实读）；`GenericCaptureDriver`
+注册表 + `registerGenericCaptureDriver`/`resolveGenericCaptureDriver`，
+`captureFamilyGenerically` 在 driver 注册时真实执行 exact/execution/
+finalSim，否则诚实 framework-blocked。合同测试：无 driver blocked +
+有 driver exercised。build/shadow suite（38）/12 组 sweep 全绿。
+剩余：CLI `--generic` 模式（descriptor 只带 family+address，走
+derive+capture 通用路径 + strict runtime/revm）与 univ2 真实 driver。
+
 ## 滚动清单（按序，模板先 erc4626 再其余）
 
 | # | 族 | capture 函数 | 状态 |

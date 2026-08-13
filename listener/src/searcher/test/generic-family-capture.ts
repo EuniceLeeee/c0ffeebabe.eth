@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import {
   captureFamilyGenerically,
+  resolveGenericCaptureDriver,
+  type GenericCaptureDriver,
 } from "../generic-family-capture.js";
+import { exercisedStage } from "../architecture-migration-capture.js";
 import {
   WSTETH_FIXTURE_TARGET,
   wstethFixtureRuntime,
@@ -56,6 +59,41 @@ async function main(): Promise<void> {
     "framework-blocked",
     "exact stage must be honestly blocked until a per-plugin driver is wired",
   );
+
+  assert.equal(resolveGenericCaptureDriver(WSTETH_FAMILY_ID), null);
+  const driver: GenericCaptureDriver = {
+    familyId: WSTETH_FAMILY_ID,
+    buildExactQuotes: ({ evidenceRefs }) => exercisedStage([Object.freeze({
+      id: "exact:1",
+      value: Object.freeze({ amountOut: "1000000" }),
+    })], evidenceRefs),
+    buildExecutionAndFinalSim: ({ evidenceRefs }) => ({
+      executionFragments: exercisedStage([Object.freeze({
+        id: "exec:1",
+        value: Object.freeze({ target: `0x${"11".repeat(20)}` }),
+      })], evidenceRefs),
+      finalSimulations: exercisedStage([Object.freeze({
+        id: "sim:1",
+        value: Object.freeze({ conservation: "conserved" }),
+      })], evidenceRefs),
+    }),
+  };
+  const driven = await captureFamilyGenerically({
+    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+    familyId: WSTETH_FAMILY_ID,
+    source: SOURCE,
+    runtime: wstethFixtureRuntime(),
+    driver,
+    observation: Object.freeze({
+      kind: "call",
+      source: SOURCE,
+      target: WSTETH_FIXTURE_TARGET.toLowerCase(),
+      data: WSTETH_INTERFACE.encodeFunctionData("wrap", [1_000_000n]),
+    }),
+  });
+  assert.equal(driven.stages.exactQuotes?.status, "exercised");
+  assert.equal(driven.stages.executionFragments?.status, "exercised");
+  assert.equal(driven.stages.finalSimulations?.status, "exercised");
   console.log("generic family capture PASS");
 }
 

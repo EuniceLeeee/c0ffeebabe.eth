@@ -26,6 +26,129 @@ import type { PreparedFamilyInstance } from
   "./venues/adapter-family-runtime.js";
 import { definedFamilyPluginContractSummary } from
   "./venues/adapter-family-plugin.js";
+import { ethers } from "ethers";
+import type { OnchainUniv2Provider } from
+  "./architecture-migration-fixture-replay.js";
+import type { AdapterFamilyPublication } from
+  "./venues/adapter-family-runtime.js";
+
+export interface GenericCaptureProvider extends OnchainUniv2Provider {
+  getCode(address: string, blockTag?: number): Promise<string>;
+  getStorage(
+    address: string,
+    slot: string,
+    blockTag?: number,
+  ): Promise<string>;
+}
+
+const EIP1967_IMPLEMENTATION_SLOT =
+  "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+
+/**
+ * Per-plugin exact/execution driver registry (architecture-sanctioned:
+ * each family plugin ships its own exact/execution modules). A family with a
+ * registered driver gets exact/execution/final-sim exercised by the generic
+ * capture; without one the stages stay honestly framework-blocked.
+ */
+export interface GenericCaptureDriver {
+  readonly familyId: FamilyId;
+  buildExactQuotes(input: {
+    readonly publication: AdapterFamilyPublication;
+    readonly source: CanonicalSource;
+    readonly evidenceRefs: readonly string[];
+  }): RawMigrationStageCapture;
+  buildExecutionAndFinalSim(input: {
+    readonly publication: AdapterFamilyPublication;
+    readonly source: CanonicalSource;
+    readonly evidenceRefs: readonly string[];
+  }): {
+    readonly executionFragments: RawMigrationStageCapture;
+    readonly finalSimulations: RawMigrationStageCapture;
+  };
+}
+
+const genericCaptureDrivers = new Map<FamilyId, GenericCaptureDriver>();
+
+export function registerGenericCaptureDriver(
+  driver: GenericCaptureDriver,
+): void {
+  if (genericCaptureDrivers.has(driver.familyId)) {
+    throw new Error(
+      `generic capture driver already registered for ${driver.familyId}`,
+    );
+  }
+  genericCaptureDrivers.set(driver.familyId, driver);
+}
+
+export function resolveGenericCaptureDriver(
+  familyId: FamilyId,
+): GenericCaptureDriver | null {
+  return genericCaptureDrivers.get(familyId) ?? null;
+}
+
+/**
+ * Generic observation derivation driven by the family plugin's discovery
+ * declarations: callPatterns -> call observation, logPatterns -> log
+ * observation, addressSurfaces -> address-surface observation with real
+ * code hash + EIP-1967 implementation word read at the source block.
+ */
+export async function deriveFamilyObservationFromNodeData(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly familyId: FamilyId;
+  readonly source: CanonicalSource;
+  readonly address: string;
+  readonly provider: GenericCaptureProvider;
+}): Promise<UnifiedObservation> {
+  const family = input.catalog.forFamily(input.familyId);
+  const discovery = "discovery" in family.plugin
+    ? family.plugin.discovery
+    : null;
+  if (discovery === null) {
+    throw new Error(
+      `family ${input.familyId} declares no discovery semantics`,
+    );
+  }
+  const address = input.address.toLowerCase();
+  if ((discovery.callPatterns?.length ?? 0) > 0) {
+    const pattern = discovery.callPatterns![0];
+    return Object.freeze({
+      kind: "call" as const,
+      source: input.source,
+      target: address,
+      data: `${pattern.selector}${"0".repeat(64)}`,
+    });
+  }
+  if ((discovery.logPatterns?.length ?? 0) > 0) {
+    const pattern = discovery.logPatterns![0];
+    return Object.freeze({
+      kind: "log" as const,
+      source: input.source,
+      address,
+      topics: Object.freeze([pattern.topic]),
+      data: "0x",
+    });
+  }
+  if ((discovery.addressSurfaces?.length ?? 0) > 0) {
+    const [code, implementationWord] = await Promise.all([
+      input.provider.getCode(address, input.source.number),
+      input.provider.getStorage(
+        address,
+        EIP1967_IMPLEMENTATION_SLOT,
+        input.source.number,
+      ),
+    ]);
+    return Object.freeze({
+      kind: "address-surface" as const,
+      source: input.source,
+      address,
+      codeHash: ethers.keccak256(code),
+      implementationWord: implementationWord.toLowerCase(),
+    });
+  }
+  throw new Error(
+    `family ${input.familyId} declares no usable discovery pattern`,
+  );
+}
 
 /**
  * Generic real-capture core (F5-b generic path): one family is captured by
@@ -44,6 +167,7 @@ export async function captureFamilyGenerically(input: {
   readonly observation: UnifiedObservation;
   readonly runtime: CentralAdapterRuntime;
   readonly caseId?: string;
+  readonly driver?: GenericCaptureDriver | null;
 }): Promise<RawFamilyMigrationCaseCapture> {
   const family = input.catalog.forFamily(input.familyId);
   const publication = await runStrictFamilyLifecycle({
@@ -124,6 +248,35 @@ export async function captureFamilyGenerically(input: {
         order,
       }),
     }));
+  const driver = input.driver === undefined
+    ? resolveGenericCaptureDriver(input.familyId)
+    : input.driver;
+  const exactQuotes = driver === null
+    ? frameworkBlockedStage(
+        evidenceRefs,
+        "generic-capture-exact-driver-not-registered",
+      )
+    : driver.buildExactQuotes({
+        publication,
+        source: input.source,
+        evidenceRefs,
+      });
+  const execution = driver === null
+    ? {
+        executionFragments: frameworkBlockedStage(
+          evidenceRefs,
+          "generic-capture-execution-driver-not-registered",
+        ),
+        finalSimulations: frameworkBlockedStage(
+          evidenceRefs,
+          "generic-capture-final-sim-driver-not-registered",
+        ),
+      }
+    : driver.buildExecutionAndFinalSim({
+        publication,
+        source: input.source,
+        evidenceRefs,
+      });
   const instances = publication.instances;
   const summary = definedFamilyPluginContractSummary(family.plugin);
   return Object.freeze({
@@ -140,18 +293,9 @@ export async function captureFamilyGenerically(input: {
       prices: exercisedStage(prices, evidenceRefs),
       failures: exercisedStage([], evidenceRefs),
       enumeratedRoutes: exercisedStage(enumeratedRoutes, evidenceRefs),
-      exactQuotes: frameworkBlockedStage(
-        evidenceRefs,
-        "generic-capture-exact-driver-not-wired",
-      ),
-      executionFragments: frameworkBlockedStage(
-        evidenceRefs,
-        "generic-capture-execution-driver-not-wired",
-      ),
-      finalSimulations: frameworkBlockedStage(
-        evidenceRefs,
-        "generic-capture-final-sim-driver-not-wired",
-      ),
+      exactQuotes,
+      executionFragments: execution.executionFragments,
+      finalSimulations: execution.finalSimulations,
     }),
   });
 }
