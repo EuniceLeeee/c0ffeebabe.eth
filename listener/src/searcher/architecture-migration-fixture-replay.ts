@@ -4621,7 +4621,7 @@ class MetronomeSynthFixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function metronomeSynthFixtureRuntime(): CentralAdapterRuntime {
+export function metronomeSynthFixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -4643,6 +4643,10 @@ function metronomeSynthFixtureRuntime(): CentralAdapterRuntime {
 
 async function runMetronomeSynthLifecycle(
   canonical: CanonicalSource,
+  pool: string,
+  tokenIn: string,
+  tokenOut: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     METRONOME_SYNTH_FAMILY_ID,
@@ -4651,8 +4655,8 @@ async function runMetronomeSynthLifecycle(
   const swapCalldata = METRONOME_SYNTH_POOL_INTERFACE.encodeFunctionData(
     "swap",
     [
-      METRONOME_SYNTH_SUPPORTED_TOKENS[0],
-      METRONOME_SYNTH_SUPPORTED_TOKENS[1],
+      tokenIn,
+      tokenOut,
       1_000_000n,
     ],
   );
@@ -4663,13 +4667,13 @@ async function runMetronomeSynthLifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: METRONOME_SYNTH_FIXTURE_POOL,
+        target: pool.toLowerCase(),
         data: swapCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: metronomeSynthFixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -4683,14 +4687,13 @@ async function runMetronomeSynthLifecycle(
  * pair gets an active 1:1 quote. All six routes are exercised through
  * pricing, exact, execution and final simulation.
  */
-export async function captureMetronomeSynthFixtureCase(input: {
+async function buildMetronomeSynthCaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runMetronomeSynthLifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:metronome-synth:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     METRONOME_SYNTH_FAMILY_ID,
   );
@@ -4927,6 +4930,79 @@ export async function captureMetronomeSynthFixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureMetronomeSynthFixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runMetronomeSynthLifecycle(
+    input.source,
+    METRONOME_SYNTH_FIXTURE_POOL,
+    METRONOME_SYNTH_SUPPORTED_TOKENS[0],
+    METRONOME_SYNTH_SUPPORTED_TOKENS[1],
+    metronomeSynthFixtureRuntime(),
+  );
+  return buildMetronomeSynthCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:metronome-synth:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain metronome-synth capture: quoteSwapOut(tokenIn, tokenOut,
+ * 1e6) is read at the canonical source block and must return a positive
+ * amount. Fail-closed on empty reads or a zero quote.
+ */
+export async function captureMetronomeSynthOnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly pool: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const pool = input.pool.toLowerCase();
+  const raw = await input.provider.call({
+    to: pool,
+    data: METRONOME_SYNTH_POOL_INTERFACE.encodeFunctionData("quoteSwapOut", [
+      input.tokenIn,
+      input.tokenOut,
+      1_000_000n,
+    ]),
+  }, input.source.number);
+  if (raw === "0x" || raw.length < 2) {
+    throw new Error(
+      `metronome-synth quote read empty at ${input.source.number}`,
+    );
+  }
+  const amountOut = METRONOME_SYNTH_POOL_INTERFACE.decodeFunctionResult(
+    "quoteSwapOut",
+    raw,
+  )[0] as bigint;
+  if (amountOut <= 0n) {
+    throw new Error("metronome-synth reports a non-positive quote");
+  }
+  const publication = await runMetronomeSynthLifecycle(
+    input.source,
+    pool,
+    input.tokenIn,
+    input.tokenOut,
+    input.runtime,
+  );
+  return buildMetronomeSynthCaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:metronome-synth:${pool}`,
+    ]),
   });
 }
 
