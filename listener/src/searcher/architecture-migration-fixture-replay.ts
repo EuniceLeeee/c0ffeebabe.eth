@@ -5210,7 +5210,7 @@ class Erc4626FixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function erc4626FixtureRuntime(): CentralAdapterRuntime {
+export function erc4626FixtureRuntime(): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -5240,6 +5240,8 @@ function erc4626FixtureRuntime(): CentralAdapterRuntime {
 
 async function runErc4626Lifecycle(
   canonical: CanonicalSource,
+  vault: string,
+  runtime: CentralAdapterRuntime,
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ERC4626_FAMILY_ID,
@@ -5256,13 +5258,13 @@ async function runErc4626Lifecycle(
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
-        target: ERC4626_FIXTURE_VAULT,
+        target: vault.toLowerCase(),
         data: depositCalldata,
       }),
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: erc4626FixtureRuntime(),
+    runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -5276,14 +5278,13 @@ async function runErc4626Lifecycle(
  * effect-delta simulations with verified-actor caller authority; both
  * directions are exercised through pricing, exact, execution and final-sim.
  */
-export async function captureErc4626FixtureCase(input: {
+async function buildErc4626CaseCapture(input: {
   readonly source: CanonicalSource;
+  readonly publication: AdapterFamilyPublication;
+  readonly evidenceRefs: readonly string[];
   readonly caseId?: string;
 }): Promise<RawFamilyMigrationCaseCapture> {
-  const publication = await runErc4626Lifecycle(input.source);
-  const evidenceRefs = Object.freeze([
-    `fixture:erc4626:${input.source.number}:${input.source.hash}`,
-  ]);
+  const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     ERC4626_FAMILY_ID,
   );
@@ -5516,6 +5517,74 @@ export async function captureErc4626FixtureCase(input: {
       executionFragments: exercisedStage(executionFragments, evidenceRefs),
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
+  });
+}
+
+export async function captureErc4626FixtureCase(input: {
+  readonly source: CanonicalSource;
+  readonly caseId?: string;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const publication = await runErc4626Lifecycle(
+    input.source,
+    ERC4626_FIXTURE_VAULT,
+    erc4626FixtureRuntime(),
+  );
+  return buildErc4626CaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `fixture:erc4626:${input.source.number}:${input.source.hash}`,
+    ]),
+  });
+}
+
+/**
+ * Real on-chain erc4626 capture: the vault's asset() is read at the
+ * canonical source block and must agree with the descriptor (fail-closed on
+ * zero asset, empty read or mismatch). The lifecycle runs against the real
+ * vault with the caller-supplied central runtime — fixture runtime in local
+ * contract tests, the strict provider+revm runtime in production node runs.
+ */
+export async function captureErc4626OnchainCase(input: {
+  readonly source: CanonicalSource;
+  readonly provider: OnchainUniv2Provider;
+  readonly vault: string;
+  readonly asset?: string;
+  readonly caseId?: string;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<RawFamilyMigrationCaseCapture> {
+  const vault = input.vault.toLowerCase();
+  const assetRaw = await input.provider.call({
+    to: vault,
+    data: ERC4626_INTERFACE.encodeFunctionData("asset", []),
+  }, input.source.number);
+  if (assetRaw === "0x" || assetRaw.length < 2) {
+    throw new Error(
+      `erc4626 asset read empty at ${input.source.number}`,
+    );
+  }
+  const asset = (
+    ERC4626_INTERFACE.decodeFunctionResult("asset", assetRaw)[0] as string
+  ).toLowerCase();
+  if (asset === "0x0000000000000000000000000000000000000000") {
+    throw new Error(`erc4626 vault ${vault} reports a zero asset`);
+  }
+  if (input.asset !== undefined && input.asset.toLowerCase() !== asset) {
+    throw new Error("erc4626 onchain asset mismatch");
+  }
+  const publication = await runErc4626Lifecycle(
+    input.source,
+    vault,
+    input.runtime,
+  );
+  return buildErc4626CaseCapture({
+    source: input.source,
+    caseId: input.caseId,
+    publication,
+    evidenceRefs: Object.freeze([
+      `onchain:1:${input.source.hash}:erc4626:${vault}`,
+    ]),
   });
 }
 

@@ -510,6 +510,13 @@ source block。合同测试五例（正例 + token/reserves 不匹配 + 零 fact
 向 erc4626 等其余 18 族（清单
 `docs/research/design/s1-f5-corpus-rollout-plan.md`）。
 
+**F5-b erc4626 真实采集（2026-08-13，2/22）：**
+`captureErc4626OnchainCase`：vault `asset()` 在 source block 链上实读，
+零 asset / 空读 / 描述符 asset 不一致 fail-closed；lifecycle 对真实
+vault 以调用方 runtime 运行（本地合同用 fixture runtime，生产用 strict
+provider+revm runtime）；证据 ref = `onchain:1:<hash>:erc4626:<vault>`。
+合同测试四例；build/shadow suite（31）/12 组 sweep 全绿。
+
 | B | `PRODUCTION_IDENTITY_RESOLVERS` / `attestPoolIdentities` | strict 身份经 Family lifecycle identity 阶段 + source-bound consumer | 未开始 |
 | C | `landedPoolDiscovery` / `landed-event-registry` / `auto-close-router-gap` 消费 | strict discovery checkpoint + enumerator + observed-complete 事件面 | 未开始 |
 | D | `productionPoolUniverseSourceFingerprints`（universe deploy trust） | strict catalog/checkpoint 派生指纹（identity/lineage 部分先由 strict 覆盖） | 未开始 |
