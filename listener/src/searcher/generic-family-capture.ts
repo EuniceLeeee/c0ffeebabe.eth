@@ -56,6 +56,58 @@ const EIP1967_IMPLEMENTATION_SLOT =
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 
 /**
+ * Central fault-isolation boundary for one plugin work item. The caller owns
+ * the transport and supplies cancellation; a stuck Family cannot hold the
+ * batch scheduler indefinitely or leave its provider alive in the background.
+ */
+export async function runGenericCaptureWorkItem<T>(input: {
+  readonly id: string;
+  readonly timeoutMs: number;
+  readonly run: () => Promise<T>;
+  readonly cancel: () => void;
+}): Promise<T> {
+  if (!Number.isSafeInteger(input.timeoutMs) || input.timeoutMs <= 0) {
+    throw new Error("generic capture work-item timeout must be positive");
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      input.run(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          input.cancel();
+          reject(new Error(
+            `${input.id} exceeded ${input.timeoutMs}ms`,
+          ));
+        }, input.timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+export async function runGenericCaptureBatch<T>(input: {
+  readonly items: readonly {
+    readonly id: string;
+    readonly timeoutMs: number;
+    readonly run: () => Promise<T>;
+    readonly cancel: () => void;
+  }[];
+  readonly onFailure: (id: string, error: unknown) => void;
+}): Promise<readonly T[]> {
+  const completed: T[] = [];
+  for (const item of input.items) {
+    try {
+      completed.push(await runGenericCaptureWorkItem(item));
+    } catch (error) {
+      input.onFailure(item.id, error);
+    }
+  }
+  return Object.freeze(completed);
+}
+
+/**
  * Per-plugin exact/execution driver registry (architecture-sanctioned:
  * each family plugin ships its own exact/execution modules). A family with a
  * registered driver gets exact/execution/final-sim exercised by the generic

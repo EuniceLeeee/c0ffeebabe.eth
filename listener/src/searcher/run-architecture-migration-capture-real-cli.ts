@@ -78,6 +78,7 @@ import {
   captureFamilyGenerically,
   deriveFamilyObservationFromNodeData,
   resolveGenericCaptureDriver,
+  runGenericCaptureBatch,
   type GenericCaptureProvider,
 } from "./generic-family-capture.js";
 import {
@@ -132,6 +133,20 @@ interface RealCaptureCase {
   readonly currency1?: string;
   readonly hooks?: string;
   readonly lpFee?: bigint | string;
+}
+
+const GENERIC_CAPTURE_CASE_TIMEOUT_MS = positiveTimeout(
+  process.env.S1_GENERIC_CAPTURE_CASE_TIMEOUT_MS,
+  60_000,
+);
+
+function positiveTimeout(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error("S1_GENERIC_CAPTURE_CASE_TIMEOUT_MS must be positive");
+  }
+  return parsed;
 }
 
 /**
@@ -403,11 +418,8 @@ async function main(): Promise<void> {
         process.env.S1_CAPTURE_RPC_URL ?? "http://127.0.0.1:8545",
       )
     : null;
-  const genericProvider = useGeneric
-    ? new ethers.JsonRpcProvider(
-        process.env.S1_CAPTURE_RPC_URL ?? "http://127.0.0.1:8545",
-      )
-    : null;
+  const genericRpcUrl = process.env.S1_CAPTURE_RPC_URL ??
+    "http://127.0.0.1:8545";
   const source = Object.freeze({
     number: manifest.sourceBlock,
     hash: manifest.sourceBlockHash,
@@ -417,40 +429,55 @@ async function main(): Promise<void> {
     typeof generateArchitectureMigrationSideCapture
   >> => {
     const familyCases: RawFamilyMigrationCaseCapture[] = [];
-    for (const item of manifest.cases) {
-      if (useGeneric) {
-        if (genericProvider === null || item.address === undefined) {
-          throw new Error(
-            "generic mode requires provider and a case address",
-          );
+    if (useGeneric) {
+      const tasks = manifest.cases.map((item) => {
+        if (item.address === undefined) {
+          throw new Error("generic mode requires a case address");
         }
+        const address = item.address;
         const fid = familyId(
           CAPTURE_NAME_TO_CATALOG_FAMILY[item.family] ?? item.family,
         );
-        try {
-          const observation = await deriveFamilyObservationFromNodeData({
-            catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-            familyId: fid,
-            source,
-            address: item.address,
-            provider: genericProvider,
-          });
-          familyCases.push(await captureFamilyGenerically({
-            catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-            familyId: fid,
-            source,
-            observation,
-            runtime: buildGenericRuntime(genericProvider),
-            driver: resolveGenericCaptureDriver(fid),
-          }));
-        } catch (error) {
-          console.warn(
-            `[generic-capture] skipped ${item.family}: ` +
-              `${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-        continue;
-      }
+        const request = new ethers.FetchRequest(genericRpcUrl);
+        request.timeout = GENERIC_CAPTURE_CASE_TIMEOUT_MS;
+        const caseProvider = new ethers.JsonRpcProvider(request);
+        return Object.freeze({
+          id: item.family,
+          timeoutMs: GENERIC_CAPTURE_CASE_TIMEOUT_MS,
+          cancel: () => caseProvider.destroy(),
+          run: async () => {
+            try {
+              const observation = await deriveFamilyObservationFromNodeData({
+                catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+                familyId: fid,
+                source,
+                address,
+                provider: caseProvider,
+              });
+              return await captureFamilyGenerically({
+                catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+                familyId: fid,
+                source,
+                observation,
+                runtime: buildGenericRuntime(caseProvider),
+                driver: resolveGenericCaptureDriver(fid),
+              });
+            } finally {
+              caseProvider.destroy();
+            }
+          },
+        });
+      });
+      familyCases.push(...await runGenericCaptureBatch({
+        items: tasks,
+        onFailure: (id, error) => console.warn(
+          `[generic-capture] skipped ${id}: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        ),
+      }));
+    }
+    for (const item of manifest.cases) {
+      if (useGeneric) continue;
       if (useOnchain) {
         if (provider === null) throw new Error("onchain provider missing");
         try {

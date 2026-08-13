@@ -3,6 +3,8 @@ import {
   captureFamilyGenerically,
   deriveFamilyObservationFromNodeData,
   resolveGenericCaptureDriver,
+  runGenericCaptureBatch,
+  runGenericCaptureWorkItem,
   type GenericCaptureDriver,
 } from "../generic-family-capture.js";
 import { exercisedStage } from "../architecture-migration-capture.js";
@@ -46,6 +48,36 @@ const SOURCE: CanonicalSource = Object.freeze({
 });
 
 async function main(): Promise<void> {
+  let cancelled = false;
+  await assert.rejects(
+    runGenericCaptureWorkItem({
+      id: "stuck-plugin",
+      timeoutMs: 10,
+      run: () => new Promise<never>(() => undefined),
+      cancel: () => { cancelled = true; },
+    }),
+    /stuck-plugin exceeded 10ms/,
+  );
+  assert.equal(cancelled, true, "central deadline must cancel stuck transport");
+  const failures: string[] = [];
+  const batch = await runGenericCaptureBatch({
+    items: [{
+      id: "stuck-plugin",
+      timeoutMs: 10,
+      run: () => new Promise<never>(() => undefined),
+      cancel: () => undefined,
+    }, {
+      id: "next-plugin",
+      timeoutMs: 10,
+      run: async () => "continued",
+      cancel: () => undefined,
+    }],
+    onFailure: (id) => failures.push(id),
+  });
+  assert.deepEqual(failures, ["stuck-plugin"]);
+  assert.deepEqual(batch, ["continued"],
+    "central batch must continue after a timed-out plugin");
+
   const capture = await captureFamilyGenerically({
     catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
     familyId: WSTETH_FAMILY_ID,

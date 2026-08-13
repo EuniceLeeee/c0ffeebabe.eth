@@ -66,6 +66,14 @@ capability manifest、完整 build 与 49 项 shadow suite 已通过。由于
 capability artifact hash 变化，本 slice 必须与节点 enumerator/corpus
 证据重生成一起提交，旧证据不能沿用。
 
+**中央 batch liveness 补门（2026-08-13）：** 旧合同以单 Family capture
+为主，只证明同步异常后的 `catch + continue`，没有证明 RPC 永久 pending
+时 batch 仍能前进。generic 中央调度现以统一 work-item deadline 运行全部
+plugin：每项独立 RPC provider/transport timeout，deadline 触发时主动
+destroy provider，再记录该项失败并调度下一项；无 familyId/protocol
+分支。合同覆盖“第一项永久 pending → cancel/失败；第二项仍完成并进入
+batch 输出”，防止单 Family 测试误代替中央批量 liveness。
+
 ## 滚动清单（按序，模板先 erc4626 再其余）
 
 | # | 族 | capture 函数 | 状态 |
