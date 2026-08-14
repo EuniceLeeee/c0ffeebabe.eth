@@ -174,7 +174,7 @@ import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
   PRODUCTION_ADAPTER_FAMILIES,
-  productionPoolUniverseSourceFingerprints,
+  productionPoolUniverseSourceFingerprintsStrict,
 } from "./venues/production-registry.js";
 import {
   DEFAULT_PENDING_EVIDENCE_MAX_READS,
@@ -1642,7 +1642,7 @@ async function main(): Promise<void> {
     config.poolUniverseManifestPath,
   );
   const currentDexUniverseSourceFingerprints =
-    productionPoolUniverseSourceFingerprints();
+    productionPoolUniverseSourceFingerprintsStrict();
   let universeCanonicalAnchorMatches = false;
   if (poolUniverseCoverage.source !== null) {
     try {

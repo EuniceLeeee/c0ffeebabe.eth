@@ -45,6 +45,10 @@ import type {
   LoadedProductionFamilyModule,
   ProductionFamilyLoadIssue,
 } from "./production-families/loader.js";
+import { strictCatalogUniverseSourceFingerprints } from
+  "../strict-universe-source-fingerprints.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
+  "./production-family-composition.js";
 
 const LEGACY_PRODUCTION_ADAPTER_FAMILIES = Object.freeze([
   univ2StandardAdapter,
@@ -201,6 +205,23 @@ export function productionPoolUniverseSourceFingerprints():
       PRODUCTION_ADAPTER_FAMILIES.matureDexUniversePoolAdapters(),
     v2Lineages: V2_LINEAGES,
   });
+}
+
+/**
+ * F6 Pair D: universe deploy trust fingerprints that include the strict
+ * catalog-derived identity/lineage surface. The legacy identity-policies
+ * fingerprint remains for the transitional period; the strict variant binds
+ * the generated catalog (capability hashes + definition boundaries) so a
+ * family declaration change invalidates the persisted universe.
+ */
+export function productionPoolUniverseSourceFingerprintsStrict():
+  readonly string[] {
+  return Object.freeze([
+    ...productionPoolUniverseSourceFingerprints(),
+    ...strictCatalogUniverseSourceFingerprints({
+      catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+    }),
+  ]);
 }
 
 export function poolUniverseSourceFingerprints(input: {

@@ -6,7 +6,7 @@ import {
   poolUniverseCanonicalAnchorMatches,
   type PoolUniverseCoverageMetadata,
 } from "./pool-universe.js";
-import { productionPoolUniverseSourceFingerprints } from "./venues/production-registry.js";
+import { productionPoolUniverseSourceFingerprintsStrict } from "./venues/production-registry.js";
 
 export type PoolUniverseDeployTrustReason =
   | "trusted"
@@ -132,7 +132,7 @@ async function main(): Promise<void> {
       metadata,
       canonicalSource,
       currentRegistrySourceFingerprints:
-        productionPoolUniverseSourceFingerprints(),
+        productionPoolUniverseSourceFingerprintsStrict(),
       frozenSource: Number(frozenSourceRaw),
       discoveryBlocks: Number(discoveryBlocksRaw),
     });

@@ -20,7 +20,7 @@ import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
   PRODUCTION_ADAPTER_FAMILIES,
   PRODUCTION_IDENTITY_RESOLVERS,
-  productionPoolUniverseSourceFingerprints,
+  productionPoolUniverseSourceFingerprintsStrict,
 } from "./venues/production-registry.js";
 import {
   discoverLandedPools,
@@ -416,7 +416,7 @@ async function main(): Promise<void> {
     }
   }
   const registrySourceFingerprints =
-    productionPoolUniverseSourceFingerprints();
+    productionPoolUniverseSourceFingerprintsStrict();
   const file: PoolUniverseFile = {
     schemaVersion: 3,
     generatedAt: new Date().toISOString(),
