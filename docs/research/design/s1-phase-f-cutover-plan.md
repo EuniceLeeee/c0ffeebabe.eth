@@ -225,6 +225,19 @@ approve fallback 与默认 authority 尚未删除，禁止标记 F6-A/F8 complet
   需在固定 commit 上节点 dry-run 后绑定真实哈希，当前为合同占位。AST/
   import-closure 传递闭包正式证明待补（`scanLegacySymbols` 为结构扫描，
   非传递闭包）。完成这三项后才可宣称 §18.3/§20.2.6 终态。
+- **节点 dry-run 证据（2026-08-14，commit 78a52739 固定，SSM 手动）**：
+  /opt/MEV-impl-capture checkout 78a52739（git rev-parse HEAD 确认），
+  listener `npm run build` 通过（BUILD_EXIT=0）；注入 /opt/MEV/.env
+  白名单 env（SEARCHER_DRY_RUN=1、submit/MEV-Share 关闭）后 240s
+  dry-run：EXIT=124（timeout 正常终止）、零 fatal；startup manifest
+  `730bd6e0...` families=22 capabilities=242；eager state backends
+  ready（8555/8556）；DEX cursor 恢复于 25726089、universe 锚
+  25743115 → `pool universe provenance/registry/canonical anchor changed`
+  按 Pair D 合同从 max(universe.toBlock, persisted cursor) fail-closed
+  恢复；discovery continuity composition empty + inventory writer ready
+  （Pair C 正常启动）。注：节点 live searcher 进程未运行期间，
+  `node-side-serial-dry-run.sh` 无法从 live pid environ 取 env（exit 2），
+  需改用 .env 注入方式（本轮已用）。
 
 ## 回退
 
