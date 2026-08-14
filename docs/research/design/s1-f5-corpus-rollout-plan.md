@@ -509,3 +509,10 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   线；② 允许 univ4/dodo 历史池走 Alchemy archive 补池追平旧基准；
   ③ 保留原验收线，F5 记录为数据保留窗口 blocker，先推进 F6-F9。
   当前未降线、未冒充达标。
+- **token 填充分支修复（5cac62f9）**：`enrichPool` 只匹配
+  `adapter === "univ2"/"univ3"`，而 strict identity 返回
+  `univ2-standard`/`univ3-standard` → 分支不匹配、token 未填。修复后
+  universe-full2.json：**10,671 池 / 10,628 带 token / 可建有向边约
+  21,256**（修复前 6,474 边）。池数与边数仍约为旧基准一半，缺口
+  结构性（本地 reth 日志保留 7-14 天，univ4 历史池需 400 万块
+  backfill + retained 累积）。方向决策仍待用户。
