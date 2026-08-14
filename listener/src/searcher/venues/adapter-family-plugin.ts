@@ -240,6 +240,13 @@ export interface CaptureNominationProvider {
     readonly data: string;
     readonly transactionHash?: string;
   }[]>;
+  /**
+   * Optional transaction trace for tx-bound nominations (e.g. recovering a
+   * real calldata frame from a recent log's transaction). Unavailable
+   * implementations reject; the plugin then keeps the candidate unresolved
+   * instead of fabricating evidence.
+   */
+  traceTransaction?(transactionHash: string): Promise<unknown>;
 }
 
 export interface CaptureNominationSemantics {

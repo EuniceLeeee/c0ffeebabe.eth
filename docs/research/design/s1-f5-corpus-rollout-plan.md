@@ -277,10 +277,10 @@ challenger 双闭包 → held-out negatives → sealed-production judge。
   - `tx-evidence` 却声明 nominate → 拒绝（通道二选一）；
   - `tx-evidence` 无 call/log patterns → 拒绝。
   新族漏写接口直接起不来，而不是默默 unresolved。
-- 19 个生产族已声明：13 个 `nominate`（univ2/3/4、fluid-dex、silo、
-  goldx、rocksolid、metronome-synth、psm、self-burn、wsteth、erc4626、
-  credit:fluid），7 个 `tx-evidence`（astra、eigenpie、ethertoken、hgusdc、
-  dodo-v2、curve-underlying、angstrom-v4）。
+- 20 个 discovery 生产族已声明：13 个 `nominate`（univ2/3/4、
+  fluid-dex、silo、goldx、rocksolid、metronome-synth、psm、self-burn、
+  wsteth、erc4626、credit:fluid），7 个 `tx-evidence`（astra、eigenpie、
+  ethertoken、hgusdc、dodo-v2、curve-underlying、angstrom-v4）。
 - materializer unresolved 诊断区分：missing nomination capability（既无
   nominate 也无 patterns）/ nomination found nothing / tx evidence found
   nothing，缺口一眼可见。
@@ -309,3 +309,22 @@ challenger 双闭包 → held-out negatives → sealed-production judge。
 
 **该方案与用户指示一致：** “不要反推第一个 factory，去推这个 factory
 在近 1 万块的交易”——用近期真实交易证明实例存在，而不是历史创建事件。
+
+### 后续切片备注（2026-08-14）
+
+- **P0 已修**：univ4 nomination 不再返回 Swap log（decodeCandidate 拒绝
+  Swap/ModifyLiquidity 防单向哈希猜身份），改为 Swap log → trace 还原真实
+  PoolManager.swap calldata 帧 → manager-swap call observation（真实
+  calldata 解码 PoolKey，identity 仍链上重验）。
+- **materializer 输入**：`runtime-graph-pools.json` 与
+  `runtime-protocol-discovery-cache.json` 仍作 **transitional nomination
+  源**（只提名候选地址/txHash，证据由 strict 重派生）；F6 计划新增一项：
+  “移除 materializer 对 legacy 文件的依赖，提名源改为 strict 产出的
+  durable checkpoint inventory + 增量 feed”。
+- **跨运行增量**（用户方向）：materializer 增加可选 `--refresh
+  <previous-inventory>`：catalogHash 与 source block 不变时，已完整通过
+  的族从上次 inventory 直接复用（不进 nomination）；契约变更时用 pin 住的
+  真实 txHash 重放 strict（重读 receipt/trace + 新代码 decode + source
+  block 重验），而非重新扫全部 pool。
+- **self-burn 现状**：10,437 个 cache 候选全部 EIP-1967=0（proxy 门语义
+  负例），verified 0 个——当前节点数据无真实正例，保持 unresolved 不伪造。

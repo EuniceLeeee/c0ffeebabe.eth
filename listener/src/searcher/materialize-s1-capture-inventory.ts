@@ -379,6 +379,8 @@ function nominationProvider(
       toBlock: filter.toBlock ?? 0,
       topics: filter.topics ?? [],
     }),
+    traceTransaction: (transactionHash) =>
+      provider.traceTransaction(transactionHash),
   };
 }
 
