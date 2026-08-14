@@ -336,7 +336,6 @@ export interface BlockScanStateCapability<Schema = unknown, Snapshot = unknown> 
    * familyId when absent; bump it whenever compile/hydrate/decode/read-plan
    * semantics change so cached instance descriptors cannot be reused.
    */
-  readonly adapterSchemaRevision?: string;
   /**
    * Instance-mode compile hook. Required together with assembleSchema when
    * schemaMode is "state-instance-v1".
@@ -764,9 +763,7 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     };
   };
   const schemaRevision =
-    input.strictDefinitionBoundaryHash ??
-    capability.adapterSchemaRevision ??
-    familyId;
+    input.strictDefinitionBoundaryHash ?? familyId;
   /*
    * Process-local content-addressed runtime materialization store. Persisted
    * warm state contains raw reads, not CompiledStateInstance objects, so a
@@ -1388,13 +1385,13 @@ export interface GraphChangeSet {
  */
 export function schemaInputFingerprint(input: {
   readonly key: StateInstanceKey;
-  readonly adapterSchemaRevision: string;
+  readonly schemaRevision: string;
   readonly staticBindingFingerprint: string;
   readonly sharedFingerprint: string;
 }): string {
   return deterministicHash({
     key: input.key,
-    adapterSchemaRevision: input.adapterSchemaRevision,
+    schemaRevision: input.schemaRevision,
     staticBindingFingerprint: input.staticBindingFingerprint,
     sharedFingerprint: input.sharedFingerprint,
   });

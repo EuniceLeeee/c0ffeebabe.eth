@@ -284,7 +284,6 @@ function hydrateDodoV2Group(
 
 export const dodoV2BlockScanState = Object.freeze({
   schemaMode: "state-instance-v1",
-  adapterSchemaRevision: "dodo-v2-v1",
   stateKey: canonicalPoolStateKey,
 
   compileStaticSchema({ edges }: CompileStaticSchemaInput): DodoV2StateSchema {
@@ -335,7 +334,6 @@ export const dodoV2BlockScanState = Object.freeze({
     }
     const schemaInput = schemaInputFingerprint({
       key: spec.key,
-      adapterSchemaRevision: "dodo-v2-v1",
       staticBindingFingerprint: stateSchemaFingerprint(spec.edges),
       sharedFingerprint: "",
     });

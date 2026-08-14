@@ -314,7 +314,8 @@
     "searcher:dodo-v2-nomination": "node --import tsx src/searcher/test/dodo-v2-nomination.ts",
     "searcher:angstrom-v4-nomination": "node --import tsx src/searcher/test/angstrom-v4-nomination.ts",
     "searcher:strict-identity-attestation": "node --import tsx src/searcher/test/strict-identity-attestation.ts",
-    "searcher:strict-universe-source-fingerprints": "node --import tsx src/searcher/test/strict-universe-source-fingerprints.ts"
+    "searcher:strict-universe-source-fingerprints": "node --import tsx src/searcher/test/strict-universe-source-fingerprints.ts",
+    "searcher:migration-cleanup-receipt": "node --import tsx src/searcher/test/migration-cleanup-receipt.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

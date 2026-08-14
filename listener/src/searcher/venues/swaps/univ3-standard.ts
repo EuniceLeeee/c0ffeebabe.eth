@@ -199,7 +199,6 @@ const univ3LandedEvents = defineSwapLandedEvents({
 
 export const univ3BlockScanState = Object.freeze({
   schemaMode: "state-instance-v1",
-  adapterSchemaRevision: "univ3-v1",
   stateKey: canonicalPoolStateKey,
 
   compileStaticSchema({ edges }) {
@@ -304,7 +303,6 @@ export const univ3BlockScanState = Object.freeze({
     }
     const schemaInput = schemaInputFingerprint({
       key: spec.key,
-      adapterSchemaRevision: "univ3-v1",
       staticBindingFingerprint: stateSchemaFingerprint(spec.edges),
       sharedFingerprint: "",
     });

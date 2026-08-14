@@ -193,7 +193,6 @@ type AngstromSpotSnapshot = ReturnType<
  */
 export const angstromSpotBlockScanState = Object.freeze({
   schemaMode: "state-instance-v1",
-  adapterSchemaRevision: "angstrom-v4-v1",
   stateKey(edge: TokenEdge): string {
     return univ4BlockScanState.stateKey(asStandardV4Edge(edge));
   },
@@ -220,7 +219,6 @@ export const angstromSpotBlockScanState = Object.freeze({
     // unchanged instance is reused instead of recompiled every generation.
     const schemaInput = schemaInputFingerprint({
       key: input.spec.key,
-      adapterSchemaRevision: "angstrom-v4-v1",
       staticBindingFingerprint: stateSchemaFingerprint(input.spec.edges),
       sharedFingerprint: "",
     });

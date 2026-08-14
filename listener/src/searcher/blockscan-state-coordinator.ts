@@ -1408,7 +1408,7 @@ export class BlockScanStateCoordinator {
   ): string {
     return schemaInputFingerprint({
       key: group.stateKey,
-      adapterSchemaRevision: group.family.schemaRevision,
+      schemaRevision: group.family.schemaRevision,
       staticBindingFingerprint: group.schemaFingerprint,
       sharedFingerprint:
         stagedSharedFingerprint ??
@@ -2581,7 +2581,7 @@ export class BlockScanStateCoordinator {
       }
       const currentFingerprint = schemaInputFingerprint({
         key,
-        adapterSchemaRevision: input.schemaRevision,
+        schemaRevision: input.schemaRevision,
         staticBindingFingerprint: spec.staticBindingFingerprint,
         sharedFingerprint: input.sharedFingerprint,
       });
@@ -2801,7 +2801,7 @@ export class BlockScanStateCoordinator {
         spec.key,
         schemaInputFingerprint({
           key: spec.key,
-          adapterSchemaRevision: family.schemaRevision,
+          schemaRevision: family.schemaRevision,
           staticBindingFingerprint,
           sharedFingerprint,
         }),

@@ -189,7 +189,6 @@ function compileUniV4PoolEntry(
 
 export const univ4BlockScanState = Object.freeze({
   schemaMode: "state-instance-v1",
-  adapterSchemaRevision: "univ4-v1",
   stateKey(edge) {
     return statePoolId(edge);
   },
@@ -218,7 +217,6 @@ export const univ4BlockScanState = Object.freeze({
     const sharedFingerprint = "";
     const schemaInput = schemaInputFingerprint({
       key: spec.key,
-      adapterSchemaRevision: "univ4-v1",
       staticBindingFingerprint,
       sharedFingerprint,
     });
