@@ -794,7 +794,11 @@ async function enrichPool(
       return { ...base, token0, token1 };
     }
     return base;
-  } catch {
+  } catch (error) {
+    console.log(
+      `[pool-universe] enrich metadata failed ${pool.address} ` +
+        `adapter=${adapter} reason=${error instanceof Error ? error.message : String(error)}`,
+    );
     return null;
   }
 }
@@ -1010,4 +1014,3 @@ async function resolvePoolIdentityStrict(
     identitySource: entry.identitySource as VenueIdentitySource,
   };
 }
-
