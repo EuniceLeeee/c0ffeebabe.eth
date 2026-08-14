@@ -573,23 +573,19 @@ export class RevmLiveBackend implements LiveStateBackend {
   }
 
   private overlayApproveSpender(hop: QuoteHop | QuoteRequest): string | null {
-    if (this.strictExecution !== undefined &&
-        this.strictExecution.views() !== null) {
-      const projection = strictExecutionProjectionForHop({
-        catalog: this.strictExecution.catalog,
-        hop,
-      });
-      if (projection !== null) {
-        return projection.allowanceSpender;
-      }
+    // F6 Pair A: the strict execution projection is the only authority once
+    // the durable discovery composition is the default (Pair C). The legacy
+    // per-adapter allowance spender fallback has been removed; a hop without
+    // a strict projection fails closed (no overlay hint).
+    if (this.strictExecution === undefined ||
+        this.strictExecution.views() === null) {
+      return null;
     }
-    const adapter = PRODUCTION_ADAPTER_FAMILIES.routes()
-      .findForEdge(hop.adapterId);
-    const request: PreparedRouteRequest = {
-      ...hop,
-      amountIn: "amountIn" in hop ? hop.amountIn : 0n,
-    };
-    return adapter?.prepared?.allowanceSpender?.(request) ?? null;
+    const projection = strictExecutionProjectionForHop({
+      catalog: this.strictExecution.catalog,
+      hop,
+    });
+    return projection === null ? null : projection.allowanceSpender;
   }
 }
 
