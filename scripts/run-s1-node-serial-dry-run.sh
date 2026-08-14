@@ -42,7 +42,7 @@ echo "[serial-dry-run] ensure runner script at impl SHA"
 runner_cmd_id="$(aws ssm send-command \
   --instance-ids "${instance_id}" \
   --document-name AWS-RunShellScript \
-  --parameters "commands=[\"set -e; cd ${impl_dir} && git fetch origin codex/parity-capture-baseline codex/s1-unified-adapter-architecture-impl 2>&1 | tail -1 && git checkout ${impl_sha} 2>&1 | tail -1 && git rev-parse HEAD\"]" \
+  --parameters "commands=[\"set -e; cd ${impl_dir} && git fetch origin codex/s1-unified-adapter-architecture-impl 2>&1 | tail -1 && git checkout ${impl_sha} 2>&1 | tail -1 && git rev-parse HEAD\"]" \
   --query Command.CommandId --output text)"
 sleep 8
 aws ssm get-command-invocation \

@@ -21,7 +21,7 @@ mkdir -p "${outdir}"
 pkill -f -- '--port 9555' 2>/dev/null || true
 pkill -f -- '--port 9556' 2>/dev/null || true
 cd "${dir}"
-git fetch origin codex/parity-capture-baseline codex/s1-unified-adapter-architecture-impl 2>&1 | tail -1
+git fetch origin codex/s1-unified-adapter-architecture-impl 2>&1 | tail -1
 git checkout "${sha}" 2>&1 | tail -1
 checked_out="$(git rev-parse HEAD)"
 

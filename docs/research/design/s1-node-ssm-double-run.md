@@ -11,7 +11,8 @@
 - impl branch：`codex/s1-unified-adapter-architecture-impl`
   - 本地 worktree：`/private/tmp/mev-s1-impl`
   - 节点 worktree：`/opt/MEV-impl-capture`
-- baseline branch：`codex/parity-capture-baseline`
+- baseline 固定 SHA（分支 `codex/parity-capture-baseline` 已删除，改用冻结 commit）：
+  `4265971d123c2d6afc5194aa2b324104558327c7`
   - 本地 worktree：`/private/tmp/mev-parity-baseline`
   - 节点 worktree：`/opt/MEV-baseline-capture`
 - manifest（已提交证据）：
