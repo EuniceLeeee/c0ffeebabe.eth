@@ -1,4 +1,3 @@
-import { ethers } from "ethers";
 import type {
   DiscoverySemantics,
   UnifiedObservation,
@@ -50,60 +49,7 @@ export const univ2Discovery = {
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
   nominate: { nominate: nominateUniv2 },
-  factoryEnumeration: { enumerate: enumerateUniv2Factory },
 } satisfies DiscoverySemantics<UniV2Candidate>;
-
-const UNIV2_FACTORY_ADDRESS = ethers.getAddress(
-  "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
-);
-const UNIV2_FACTORY_ENUM_INTERFACE = new ethers.Interface([
-  "function allPairsLength() view returns (uint256)",
-  "function allPairs(uint256) view returns (address)",
-]);
-
-/**
- * Full factory enumeration (allPairsLength + allPairs) so the universe
- * covers every pool the factory owns, not only the activity window.
- * Reverse identity stays the admission gate; enumeration is provenance.
- */
-async function enumerateUniv2Factory(input: {
-  readonly provider: {
-    call(req: { readonly to: string; readonly data: string }, blockTag?: number): Promise<string>;
-  };
-}): Promise<readonly { readonly address: string; readonly adapter: string }[]> {
-  const rawLen = await input.provider.call({
-    to: UNIV2_FACTORY_ADDRESS,
-    data: UNIV2_FACTORY_ENUM_INTERFACE.encodeFunctionData("allPairsLength"),
-  });
-  const count = Number(UNIV2_FACTORY_ENUM_INTERFACE.decodeFunctionResult(
-    "allPairsLength",
-    rawLen,
-  )[0]);
-  if (!Number.isSafeInteger(count) || count <= 0 || count > 10_000_000) {
-    throw new Error(`univ2 factory enumeration rejected invalid pool count ${count}`);
-  }
-  const out: { address: string; adapter: string }[] = [];
-  const CHUNK = 128;
-  for (let start = 0; start < count; start += CHUNK) {
-    const size = Math.min(CHUNK, count - start);
-    const raw = await Promise.all(
-      Array.from({ length: size }, (_, i) => input.provider.call({
-        to: UNIV2_FACTORY_ADDRESS,
-        data: UNIV2_FACTORY_ENUM_INTERFACE.encodeFunctionData(
-          "allPairs",
-          [BigInt(start + i)],
-        ),
-      })),
-    );
-    for (const result of raw) {
-      out.push(Object.freeze({
-        address: ethers.getAddress("0x" + result.slice(26)).toLowerCase(),
-        adapter: "univ2",
-      }));
-    }
-  }
-  return out;
-}
 
 function decodeCandidate(
   observation: UnifiedObservation,

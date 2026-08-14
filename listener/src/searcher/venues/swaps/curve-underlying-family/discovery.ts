@@ -5,7 +5,6 @@ import type {
 } from "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
-  CURVE_METAREGISTRY,
   CURVE_UNDERLYING_I128_SELECTOR,
   CURVE_UNDERLYING_I128_SWAP_TOPIC,
   CURVE_UNDERLYING_UINT_SELECTOR,
@@ -72,58 +71,7 @@ export const curveUnderlyingDiscovery = {
       candidateAddress: Object.freeze({ from: "call-target" as const }),
     }]),
   }),
-  factoryEnumeration: { enumerate: enumerateCurveMetaregistry },
 } satisfies DiscoverySemantics<CurveUnderlyingCandidate>;
-
-const CURVE_ENUM_INTERFACE = new ethers.Interface([
-  "function pool_count() view returns (uint256)",
-  "function pool_list(uint256) view returns (address)",
-]);
-
-/**
- * Full Curve Metaregistry enumeration (pool_count + pool_list). The
- * metaregistry is the infrastructure singleton the family already uses
- * for reverse identity; enumeration is provenance, admission stays on
- * reverse verification.
- */
-async function enumerateCurveMetaregistry(input: {
-  readonly provider: {
-    call(req: { readonly to: string; readonly data: string }, blockTag?: number): Promise<string>;
-  };
-}): Promise<readonly { readonly address: string; readonly adapter: string }[]> {
-  const rawLen = await input.provider.call({
-    to: CURVE_METAREGISTRY,
-    data: CURVE_ENUM_INTERFACE.encodeFunctionData("pool_count"),
-  });
-  const count = Number(CURVE_ENUM_INTERFACE.decodeFunctionResult(
-    "pool_count",
-    rawLen,
-  )[0]);
-  if (!Number.isSafeInteger(count) || count <= 0 || count > 100_000) {
-    throw new Error(`curve metaregistry enumeration rejected invalid count ${count}`);
-  }
-  const out: { address: string; adapter: string }[] = [];
-  const CHUNK = 64;
-  for (let start = 0; start < count; start += CHUNK) {
-    const size = Math.min(CHUNK, count - start);
-    const raw = await Promise.all(
-      Array.from({ length: size }, (_, i) => input.provider.call({
-        to: CURVE_METAREGISTRY,
-        data: CURVE_ENUM_INTERFACE.encodeFunctionData(
-          "pool_list",
-          [BigInt(start + i)],
-        ),
-      })),
-    );
-    for (const result of raw) {
-      out.push(Object.freeze({
-        address: ethers.getAddress("0x" + result.slice(26)).toLowerCase(),
-        adapter: "curve-underlying",
-      }));
-    }
-  }
-  return out;
-}
 
 function decodeCandidate(
   observation: UnifiedObservation,

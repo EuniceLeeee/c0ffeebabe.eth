@@ -2,7 +2,6 @@ import type {
   DiscoverySemantics,
   UnifiedObservation,
 } from "../../adapter-family-plugin.js";
-import { ethers } from "ethers";
 import { nominateUniv3 } from "./nomination.js";
 import {
   PANCAKE_V3_SWAP_TOPIC,
@@ -71,50 +70,7 @@ export const univ3Discovery = {
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
   nominate: { nominate: nominateUniv3 },
-  factoryEnumeration: { enumerate: enumerateUniv3Factory },
 } satisfies DiscoverySemantics<UniV3Candidate>;
-
-const UNIV3_FACTORY_ADDRESS = ethers.getAddress(
-  "0x1F98431c8aD98523631AE4a59f267346ea31F984",
-);
-
-/**
- * Factory log enumeration: UniV3 has no traversal API, so pools are
- * recovered from the factory PoolCreated log (node retained window).
- */
-async function enumerateUniv3Factory(input: {
-  readonly provider: {
-    getLogs(filter: {
-      readonly address?: string;
-      readonly topics?: readonly (string | null)[];
-      readonly fromBlock?: number;
-      readonly toBlock?: number;
-    }): Promise<readonly {
-      readonly address: string;
-      readonly topics: readonly string[];
-      readonly data: string;
-    }[]>;
-  };
-}): Promise<readonly { readonly address: string; readonly adapter: string }[]> {
-  const logs = await input.provider.getLogs({
-    address: UNIV3_FACTORY_ADDRESS,
-    topics: [UNIV3_POOL_CREATED_TOPIC as `0x${string}`],
-    fromBlock: 0,
-  });
-  const out: { address: string; adapter: string }[] = [];
-  for (const log of logs) {
-    const decoded = UNIV3_FACTORY_INTERFACE.decodeEventLog(
-      "PoolCreated",
-      log.data,
-      log.topics,
-    );
-    out.push(Object.freeze({
-      address: canonicalAddress(String(decoded.pool)).toLowerCase(),
-      adapter: "univ3",
-    }));
-  }
-  return out;
-}
 
 function decodeCandidate(
   observation: UnifiedObservation,
