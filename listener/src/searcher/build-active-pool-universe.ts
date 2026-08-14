@@ -743,7 +743,13 @@ async function enrichPool(
     pool.address,
     strictBlockNumber ?? 0,
   );
-  if (!identity.ok) return null;
+  if (!identity.ok) {
+    console.log(
+      `[pool-universe] enrich identity failed ${pool.address} ` +
+        `${adapterHint} reason=${identity.reason ?? "unknown"}`,
+    );
+    return null;
+  }
   const adapter = identity.adapter;
   const base: PoolUniverseEntry = {
     address: pool.address,
