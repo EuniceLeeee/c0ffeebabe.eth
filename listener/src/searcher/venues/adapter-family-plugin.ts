@@ -280,6 +280,20 @@ export type DiscoveryEvidenceChannel =
 
 export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
   readonly sources: readonly DiscoverySourceKind[];
+  /**
+   * Plugin-owned dynamic discovery candidate-source declaration (legacy
+   * equivalent: "dex-token-domain" / "observed-interaction" /
+   * "canonical-registry"). Only families that participate in the dynamic
+   * protocol-discovery coverage coordinator declare this; address-surface
+   * static families leave it unset and are excluded from coordinator
+   * tracking. The central coordinator reads the declaration through the
+   * generated catalog projection and never maps sources itself.
+   */
+  readonly candidateSources?: readonly (
+    | "dex-token-domain"
+    | "observed-interaction"
+    | "canonical-registry"
+  )[];
   readonly callPatterns?: readonly CallPattern[];
   readonly logPatterns?: readonly LogPattern[];
   readonly addressSurfaces?: readonly AddressSurfacePattern[];
@@ -3032,6 +3046,7 @@ function validateDiscovery(discovery: DiscoverySemantics<any>): void {
     [
       "addressSurfaces",
       "callPatterns",
+      "candidateSources",
       "candidateKey",
       "decodeCandidate",
       "evidenceChannel",
@@ -3094,6 +3109,30 @@ function validateDiscovery(discovery: DiscoverySemantics<any>): void {
   for (const source of sources) {
     if (!supported.has(source as DiscoverySourceKind)) {
       throw new Error(`unsupported discovery source ${source}`);
+    }
+  }
+  const candidateSourceSet = new Set<"dex-token-domain" | "observed-interaction" | "canonical-registry">([
+    "dex-token-domain",
+    "observed-interaction",
+    "canonical-registry",
+  ]);
+  if (discovery.candidateSources !== undefined) {
+    if (!Array.isArray(discovery.candidateSources) ||
+        discovery.candidateSources.length === 0) {
+      throw new Error(
+        "discovery candidateSources must be a non-empty array when declared",
+      );
+    }
+    for (const candidateSource of discovery.candidateSources) {
+      if (!candidateSourceSet.has(candidateSource)) {
+        throw new Error(
+          `unsupported discovery candidateSource ${String(candidateSource)}`,
+        );
+      }
+    }
+    if (new Set(discovery.candidateSources).size !==
+        discovery.candidateSources.length) {
+      throw new Error("discovery candidateSources must not duplicate entries");
     }
   }
   assertSynchronousFunction(discovery.decodeCandidate, "discovery.decodeCandidate");

@@ -15,6 +15,7 @@ const WITHDRAW_PATTERN_ID = "silo-withdraw-call";
 export const erc4626SiloRedeemDiscovery = {
   evidenceChannel: "nominate" as const,
   sources: ["observed-call", "address-surface"],
+  candidateSources: ["dex-token-domain", "observed-interaction"],
   callPatterns: [
     {
       id: REDEEM_PATTERN_ID,

@@ -21,6 +21,10 @@ export const erc4626Discovery: DiscoverySemantics<Erc4626Candidate> =
       "landed-log" as const,
       "address-surface" as const,
     ]),
+    candidateSources: Object.freeze([
+      "dex-token-domain" as const,
+      "observed-interaction" as const,
+    ]),
     callPatterns: Object.freeze([
       Object.freeze({
         id: ERC4626_DEPOSIT_CALL_PATTERN_ID,

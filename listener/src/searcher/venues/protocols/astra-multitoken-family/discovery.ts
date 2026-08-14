@@ -22,6 +22,7 @@ export const ASTRA_MULTITOKEN_CHANGE_LOG_PATTERN_ID =
 export const astraMultiTokenDiscovery = {
   evidenceChannel: "nominate" as const,
   sources: ["observed-call", "landed-log"],
+  candidateSources: ["observed-interaction"],
   callPatterns: [{
     id: ASTRA_MULTITOKEN_CHANGE_CALL_PATTERN_ID,
     selector: ASTRA_MULTITOKEN_CHANGE_SELECTOR,

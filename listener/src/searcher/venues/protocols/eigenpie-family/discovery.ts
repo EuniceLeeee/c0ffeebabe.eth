@@ -17,6 +17,7 @@ import { createTxEvidenceNomination } from "../../tx-evidence-nomination.js";
 export const eigenpieDiscovery = {
   evidenceChannel: "nominate" as const,
   sources: Object.freeze(["observed-call" as const, "landed-log" as const]),
+  candidateSources: Object.freeze(["observed-interaction" as const]),
   callPatterns: Object.freeze([Object.freeze({
     id: EIGENPIE_CALL_PATTERN_ID,
     selector: EIGENPIE_INTERFACE.getFunction("depositAsset")!

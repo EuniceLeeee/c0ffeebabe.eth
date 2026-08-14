@@ -14,6 +14,7 @@ const PROXY_SHORTLIST_PATTERN_ID = "self-burn-proxy-shortlist";
 export const selfBurnNativeDiscovery = {
   evidenceChannel: "nominate" as const,
   sources: ["observed-call", "address-surface"],
+  candidateSources: ["dex-token-domain", "observed-interaction"],
   callPatterns: [{
     id: TRANSFER_SELF_PATTERN_ID,
     selector: SELF_BURN_NATIVE_TOKEN_INTERFACE.getFunction("transfer")!
