@@ -468,3 +468,18 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   含过渡桥 curve 分支），但 1200s 内 14K 块日志扫描未完成（timeout）。
   **下轮**：延长 universe 重建窗口 → materializer 以新 universe 为
   graph 输入（形状识别兼容）→ descriptor → collect → eligible 校验。
+- **根因定位（2026-08-14，用户指正后）**：新 run 的 blockscan
+  view=2117/edges=2088 **不是池少**（universe 19605 池与旧持平），而是
+  venue identity 阶段 19534 池全部被拒（`state at block #25743200 is
+  pruned`）。**根因 = /opt/MEV/.env 固化过期的
+  `SEARCHER_DISCOVERY_TO_BLOCK=25743199`**（08-13 的块，reth 修剪后
+  不可读）——EIP-1898 启动 probe 在该块上失败（fatal）。**验证修复**：
+  dry-run 覆盖 `SEARCHER_DISCOVERY_TO_BLOCK=head-1000` + 双 RPC 指向
+  本地 reth（本地 8545 对历史块 eth_call 可读，Alchemy 对 38h 前块
+  prune）→ **启动成功（EXIT=124 无 fatal）、venue identity 0 拒绝**
+  （19534 池全过）。**factory 全量枚举已撤销**（用户判定错误方向，
+  commit 211731b6 revert 为 a066cd33）：旧条件（2 天窗口 + minSwaps=1
+  + 无上限 + retained）本身产出 19546 池/37136 边，达标路径就是恢复
+  旧条件 + 本地 RPC。**下轮**：长窗口（3000s）dry-run（本地 RPC +
+  DTB 覆盖）等首次 generation 完成 → 验证 graph edges ≥3 万 →
+  materializer → descriptor → collect → eligible。
