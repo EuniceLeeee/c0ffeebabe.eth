@@ -183,9 +183,33 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   schema/cache bridge/旧 flag。每 pair 顺序：strict 替换合同绿 →
   call-site 切换 → 验证 → 删除 legacy（合同绿），任一失败回退该 pair。
   终态验收 = canonical §18.3 / §20.2.6 全门。
-- 当前 strict 侧状态：B/C/D/F 均未开始；A 剩余分支等 F8 全量 strict
-  quote。删除顺序 B→C→D→F→A，每对先建 strict 侧再删（当前无一对
-  满足删除前置，不能诚实删除）。
+- **strict 侧状态（2026-08-15 同步）**：B（attestPoolIdentitiesStrict
+  唯一权威）、C（discovery continuity composition）、D（universe 指纹
+  strict）、E（strict pricing fail-closed）、F（blockscan schema strict）、
+  A（revm strict-only overlay）的 strict 侧均已落地并保持 sweep 绿；
+  legacy 删除尚未开始。删除顺序 B→C→D→F→A，每对必须先验证 strict 侧
+  再删 legacy（当前无一对满足删除前置，不能诚实删除）。
+- **F6 查询面扩展（2026-08-15，catalog 投影驱动）**：
+  - `poolAdapterIds`（88b9cb94）：22 族插件 manifest 声明真实池 adapter
+    标签；`pool-adapter-policy` 从 legacy 切到 strict 投影。
+  - `requiresProtocolEdgesFlag`（978e531c）：protocol 族（除 psm）全
+    true、swap 族全 false；catalog 投影 `requiresProtocolEdgesFlagFor`。
+  - `candidateSources`（9651d381）：`DiscoverySemantics` 新增插件自有的
+    动态候选源声明（dex-token-domain / observed-interaction /
+    canonical-registry），7 个动态发现族（astra/eigenpie/erc4626/
+    erc4626-silo/ethertoken/self-burn/fluid-dex）各自在 discovery
+    closure 内声明；validator 同步注册字段与枚举校验。
+  - `discoverableFamilySources()`（93f59b29）：catalog 投影
+    `{familyId, sourceIds}`（仅含声明 candidateSources 的族）；
+    `ProtocolDiscoveryCoverageCoordinator` 改收投影输入；
+    main.ts `enabledProtocolDiscoveryFamilies` 切换为 catalog 成员判定，
+    legacy 适配器只保留 matcher 细节（eventTopics/callSelectors）供
+    证据指纹使用；`observedDiscoveryFamilyIds` 从投影派生。
+    credit:fluid 不在投影内——credit 走独立 lifecycle，不参与 pool
+    nomination/discovery coordinator（架构既有决定）。
+  - 后续消费点（未完成）：route-family-manifest /
+    blind-production-compatibility / main.ts `findForEdge`/`findForPool` /
+    pendingEvidence / oracleVictims 仍读 legacy，按依赖链靠后切换。
 
 ### F7 节点 composition env + committed publication
 

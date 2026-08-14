@@ -2997,6 +2997,35 @@ ops/CI gate，非部署）：**
   `972ac0cc`），receipt 写入 /tmp；该 harness 供节点 SSM 前与 CI 复跑；
 - 纯证据/CI gate，不涉及 live、签名、广播或 authority。
 
+**2026-08-15 F6 查询面 catalog 投影 checkpoint（实现 commits
+`88b9cb94`/`978e531c`/`9651d381`/`93f59b29`，非 authority cutover）：**
+
+- `FamilyManifest` 新增 `poolAdapterIds`（22 族声明真实标签，含
+  `eigenpie-deposit-router`/`self-burn-native-token`/
+  `ethertoken-native-redeem-token`）与 `requiresProtocolEdgesFlag`
+  （protocol 族除 psm 外全 true、swap 族全 false）；catalog 投影
+  `ownerOfPoolAdapter`/`poolAdapterIdsFor`/`requiresProtocolEdgesFlagFor`
+  上线，`pool-adapter-policy` 从 legacy 切到 strict 投影；
+- `DiscoverySemantics` 新增插件自有的 `candidateSources` 声明
+  （dex-token-domain / observed-interaction / canonical-registry），
+  7 个动态发现族（astra/eigenpie/erc4626/erc4626-silo/ethertoken/
+  self-burn/fluid-dex）各自在 discovery closure 内声明；validator 注册
+  字段与枚举校验；`family-capability-shadow` 同步再生成；
+- catalog 新增 `discoverableFamilySources()` 投影（仅含声明
+  candidateSources 的族），`ProtocolDiscoveryCoverageCoordinator` 改收
+  `{familyId, sourceIds}` 输入，main.ts 的 discovery family 成员判定从
+  legacy `discoverableRoutes().filter(requiresProtocolEdgesFlag)` 切到
+  catalog；legacy 适配器只保留 matcher 细节供证据指纹；
+  `observedDiscoveryFamilyIds` 从投影派生；credit:fluid 不在投影内
+  （credit 独立 lifecycle，不参与 pool nomination coordinator）；
+- 验证：listener build PASS，`s1-regression-sweep.sh` 12/12 全绿，
+  投影实跑输出 7 族（含 fluid-dex `dex-token-domain`，与 legacy 声明一致）；
+  节点 `/opt/MEV-impl-capture` 已 fail-closed exact-SHA 部署
+  `93f59b29`（部署前先停止崩溃循环中的 `mev-searcher` 单位，一次只部署
+  一个）；后续消费点（route-family-manifest / blind-production-compatibility /
+  main.ts `findForEdge`/`findForPool` / pendingEvidence / oracleVictims）
+  仍读 legacy，按依赖链靠后切换。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
