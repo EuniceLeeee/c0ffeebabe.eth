@@ -1,4 +1,7 @@
 import type { PoolEntry } from "../planner/token-graph.js";
+import {
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+} from "./production-family-composition.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "./production-registry.js";
 import type { VenueId, VenueIdentitySource } from "./registry-ids.js";
 
@@ -8,7 +11,10 @@ import type { VenueId, VenueIdentitySource } from "./registry-ids.js";
  */
 export const PRODUCTION_POOL_ADAPTERS: readonly PoolEntry["adapter"][] = Object.freeze([
   ...new Set<PoolEntry["adapter"]>([
-    ...PRODUCTION_ADAPTER_FAMILIES.routes().list().flatMap((adapter) => adapter.poolAdapters),
+    ...PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll().flatMap(
+      (family) => (family.plugin.manifest.poolAdapterIds ?? []) as
+        PoolEntry["adapter"][],
+    ),
   ]),
 ]);
 

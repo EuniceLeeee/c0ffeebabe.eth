@@ -19,4 +19,5 @@ export const erc4626FamilyManifest: FamilyManifest<"protocol"> = Object.freeze({
     Object.freeze({ slotKind: "protocol" as const, protocolAction: "redeem" as const }),
   ]),
   supportedLineages: Object.freeze([ERC4626_LINEAGE_ID]),
+  poolAdapterIds: Object.freeze(["erc4626"]),
 });

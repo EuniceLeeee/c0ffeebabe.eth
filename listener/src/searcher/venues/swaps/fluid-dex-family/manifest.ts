@@ -13,4 +13,5 @@ export const fluidDexFamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-approve"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [FLUID_DEX_FACTORY_LINEAGE_ID],
+  poolAdapterIds: ["fluid-dex"],
 } satisfies FamilyManifest<"swap">;

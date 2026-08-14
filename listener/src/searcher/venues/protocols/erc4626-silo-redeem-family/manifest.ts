@@ -15,4 +15,5 @@ export const erc4626SiloRedeemFamilyManifest = {
   requiredInfraActionAdapterIds: [],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "redeem" }],
   supportedLineages: [ERC4626_SILO_REDEEM_LINEAGE_ID],
+  poolAdapterIds: ["erc4626-silo-redeem"],
 } satisfies FamilyManifest<"protocol">;

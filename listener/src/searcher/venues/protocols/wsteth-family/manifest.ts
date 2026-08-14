@@ -16,4 +16,5 @@ export const wstethFamilyManifest = {
     { slotKind: "protocol", protocolAction: "unwrap" },
   ],
   supportedLineages: [WSTETH_LINEAGE_ID],
+  poolAdapterIds: ["wsteth"],
 } satisfies FamilyManifest<"protocol">;

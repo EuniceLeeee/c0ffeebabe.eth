@@ -149,6 +149,7 @@ export class FamilyCapabilityCatalog {
   private readonly routeFamilies: readonly LoadedFamilyPlugin[];
   private readonly familyById: ReadonlyMap<FamilyId, LoadedStrictFamilyPlugin>;
   private readonly actionOwnerById: ReadonlyMap<string, FamilyId>;
+  private readonly poolAdapterOwnerById: ReadonlyMap<string, FamilyId>;
   private readonly callMatches: ReadonlyMap<string, readonly FamilyPatternMatch[]>;
   private readonly logMatches: ReadonlyMap<string, readonly FamilyPatternMatch[]>;
   private readonly addressMatches: ReadonlyMap<
@@ -169,6 +170,7 @@ export class FamilyCapabilityCatalog {
     const generated = indexGeneratedIdentities(manifest.entries);
     const familyById = new Map<FamilyId, LoadedStrictFamilyPlugin>();
     const actionOwnerById = new Map<string, FamilyId>();
+    const poolAdapterOwnerById = new Map<string, FamilyId>();
     const callMatches = new Map<string, FamilyPatternMatch[]>();
     const logMatches = new Map<string, FamilyPatternMatch[]>();
     const addressMatches = new Map<string, FamilyPatternMatch[]>();
@@ -224,6 +226,16 @@ export class FamilyCapabilityCatalog {
         }
         actionOwnerById.set(actionId, summary.familyId);
       }
+      for (const poolAdapterId of module.plugin.manifest.poolAdapterIds ?? []) {
+        const existing = poolAdapterOwnerById.get(poolAdapterId);
+        if (existing !== undefined && existing !== summary.familyId) {
+          throw new Error(
+            `PoolAdapter ${poolAdapterId} is declared by both ${existing} ` +
+              `and ${summary.familyId}`,
+          );
+        }
+        poolAdapterOwnerById.set(poolAdapterId, summary.familyId);
+      }
 
       const discovery = "discovery" in module.plugin
         ? module.plugin.discovery
@@ -261,6 +273,7 @@ export class FamilyCapabilityCatalog {
     this.routeFamilies = Object.freeze(loadedRoutes);
     this.familyById = familyById;
     this.actionOwnerById = actionOwnerById;
+    this.poolAdapterOwnerById = poolAdapterOwnerById;
     this.callMatches = freezePatternIndex(callMatches);
     this.logMatches = freezePatternIndex(logMatches);
     this.addressMatches = freezePatternIndex(addressMatches);
@@ -318,6 +331,24 @@ export class FamilyCapabilityCatalog {
       );
     }
     return owner;
+  }
+
+  /**
+   * Family owning a legacy universe pool-adapter label (provenance only,
+   * declared by the plugin itself; never an admission gate).
+   */
+  ownerOfPoolAdapter(poolAdapterId: string): FamilyId {
+    const owner = this.poolAdapterOwnerById.get(poolAdapterId);
+    if (owner === undefined) {
+      throw new Error(
+        `Family capability catalog has no owner for pool adapter ${poolAdapterId}`,
+      );
+    }
+    return owner;
+  }
+
+  poolAdapterIdsFor(familyId: FamilyId): readonly string[] {
+    return this.forStrictFamily(familyId).plugin.manifest.poolAdapterIds ?? [];
   }
 
   matches(observation: UnifiedObservation): readonly FamilyPatternMatch[] {

@@ -13,4 +13,5 @@ export const rocksolidFamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-approve"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "wrap" }],
   supportedLineages: [ROCKSOLID_LINEAGE_ID],
+  poolAdapterIds: ["rocksolid"],
 } satisfies FamilyManifest<"protocol">;

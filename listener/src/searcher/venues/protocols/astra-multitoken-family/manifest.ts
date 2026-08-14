@@ -15,4 +15,5 @@ export const astraMultiTokenFamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-approve"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   supportedLineages: [ASTRA_MULTITOKEN_ACTIVE_REGISTRY_LINEAGE_ID],
+  poolAdapterIds: ["astra-multitoken"],
 } satisfies FamilyManifest<"protocol">;

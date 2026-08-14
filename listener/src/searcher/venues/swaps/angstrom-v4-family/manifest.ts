@@ -13,4 +13,5 @@ export const angstromV4FamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-approve"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [ANGSTROM_V4_LINEAGE_ID],
+  poolAdapterIds: ["angstrom-v4"],
 } satisfies FamilyManifest<"swap">;

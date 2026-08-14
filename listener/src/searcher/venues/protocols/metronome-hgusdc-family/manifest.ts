@@ -15,4 +15,5 @@ export const metronomeHgUsdcFamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-transfer"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "redeem" }],
   supportedLineages: [METRONOME_HGUSDC_LINEAGE_ID],
+  poolAdapterIds: ["metronome-hgusdc"],
 } satisfies FamilyManifest<"protocol">;

@@ -11,4 +11,5 @@ export const goldxFamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-approve"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   supportedLineages: [GOLDX_LINEAGE_ID],
+  poolAdapterIds: ["goldx"],
 } satisfies FamilyManifest<"protocol">;

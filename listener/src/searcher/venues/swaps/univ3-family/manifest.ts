@@ -11,4 +11,5 @@ export const univ3FamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-transfer"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [UNIV3_FACTORY_LINEAGE_ID],
+  poolAdapterIds: ["univ3"],
 } satisfies FamilyManifest<"swap">;

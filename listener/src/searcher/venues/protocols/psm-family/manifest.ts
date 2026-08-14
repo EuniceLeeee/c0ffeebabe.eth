@@ -11,4 +11,5 @@ export const psmFamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-approve"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   supportedLineages: [PSM_LINEAGE_ID],
+  poolAdapterIds: ["psm"],
 } satisfies FamilyManifest<"protocol">;

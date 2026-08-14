@@ -15,4 +15,5 @@ export const selfBurnNativeFamilyManifest = {
   requiredInfraActionAdapterIds: ["weth-deposit-value"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "redeem" }],
   supportedLineages: [SELF_BURN_NATIVE_LINEAGE_ID],
+  poolAdapterIds: ["self-burn-native-token"],
 } satisfies FamilyManifest<"protocol">;

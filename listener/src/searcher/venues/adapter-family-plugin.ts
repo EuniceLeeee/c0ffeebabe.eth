@@ -890,6 +890,15 @@ export interface FamilyManifest<Domain extends FamilyDomain> {
   readonly requiredInfraActionAdapterIds: readonly string[];
   readonly allowedTaxonomy: readonly AllowedTaxonomy[];
   readonly supportedLineages: readonly LineageId[];
+  /**
+   * Plugin-owned legacy universe pool-adapter labels (e.g. "univ2",
+   * "erc4626"). These are provenance labels consumed by the file-backed
+   * pool universe and universe deploy trust; they are never an admission
+   * gate — identity/lineage remains the authority. The central pipeline
+   * only reads this declaration through the generated catalog projection;
+   * it never hardcodes a family-specific label table.
+   */
+  readonly poolAdapterIds?: readonly string[];
 }
 
 export interface LandedEventSpec {
@@ -2918,9 +2927,17 @@ function validateManifest(
     "domain",
     "familyId",
     "ownedActionAdapterIds",
+    "poolAdapterIds",
     "requiredInfraActionAdapterIds",
     "supportedLineages",
-  ], "family manifest");
+  ], "family manifest", true, [
+    "allowedTaxonomy",
+    "domain",
+    "familyId",
+    "ownedActionAdapterIds",
+    "requiredInfraActionAdapterIds",
+    "supportedLineages",
+  ]);
   if (manifest.domain !== expectedDomain) {
     throw new Error(
       `family manifest domain ${String(manifest.domain)} does not match ${expectedDomain}`,
@@ -2951,6 +2968,9 @@ function validateManifest(
   );
   if (lineages.size !== manifest.supportedLineages.length) {
     throw new Error(`${manifest.familyId} duplicates a supported lineage`);
+  }
+  if (manifest.poolAdapterIds !== undefined) {
+    stringSet(manifest.poolAdapterIds, "poolAdapterIds", true);
   }
   if (!Array.isArray(manifest.allowedTaxonomy) ||
       manifest.allowedTaxonomy.length === 0) {

@@ -13,4 +13,5 @@ export const dodoV2FamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-transfer"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [DODO_V2_REGISTRY_LINEAGE_ID],
+  poolAdapterIds: ["dodo-v2"],
 } satisfies FamilyManifest<"swap">;

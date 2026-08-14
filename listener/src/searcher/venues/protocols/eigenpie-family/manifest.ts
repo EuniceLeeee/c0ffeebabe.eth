@@ -16,4 +16,5 @@ export const eigenpieFamilyManifest = Object.freeze({
     protocolAction: "wrap" as const,
   })]),
   supportedLineages: Object.freeze([EIGENPIE_LINEAGE_ID]),
+  poolAdapterIds: Object.freeze(["eigenpie-deposit-router"]),
 }) satisfies FamilyManifest<"protocol">;

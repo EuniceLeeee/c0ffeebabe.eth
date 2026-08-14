@@ -13,4 +13,5 @@ export const curveUnderlyingFamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-approve"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [CURVE_UNDERLYING_REGISTRY_LINEAGE_ID],
+  poolAdapterIds: ["curve-underlying"],
 } satisfies FamilyManifest<"swap">;

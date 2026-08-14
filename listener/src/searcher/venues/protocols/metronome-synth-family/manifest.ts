@@ -15,4 +15,5 @@ export const metronomeSynthFamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-approve"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   supportedLineages: [METRONOME_SYNTH_LINEAGE_ID],
+  poolAdapterIds: ["metronome-synth"],
 } satisfies FamilyManifest<"protocol">;
