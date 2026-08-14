@@ -152,6 +152,14 @@
   composition（当前 live 未开），使 strict 四步管线在生产循环真实运行并
   提交 catalogRoot（已有 challenger 节点机器证据 `78934fdf`/
   `f3c1d066`/`22c965dd`/`43a678d9`/`e2e57f0c`，需在 live 路径复验）。
+- **2026-08-14 达成（Pair C，commit 8efcf4a0）**：durable discovery
+  continuity composition 默认启用（checkpoint 路径默认
+  `searcher/state/discovery-continuity-checkpoint.json`，env 可覆盖）；
+  startup loadForRestart → enumerator → writer CAS 随每次 live publication
+  触发；`onPublicationApplied` → strict live publication chain（observation
+  shadow ingress + lifecycle + catalogRoot）。节点 dry-run：`discovery
+  continuity composition empty` 正常启动。catalogRoot 节点机器证据
+  （78934fdf 等）为 production 路径首次提交记录。
 
 ### F8 默认 authority 接线
 
@@ -160,6 +168,14 @@
   `s1-cutover-readiness` 与 `default-authority-cutover-gate` 两道门。
   这是 **production authority cutover**，live 切换需显式授权 +
   guarded deploy；本文件不授权任何 live 广播。
+- **2026-08-14 完成（commit 16cf4436）**：solver quoteSource 移除
+  `strictQuoteSource ?? liveBackend` 的 legacy fallback——strict quote
+  source 是唯一 solver 报价路径（composition 默认后 strict 总存在；
+  缺失时 fail-closed 不报价）。两道门 `s1-cutover-readiness` /
+  `default-authority-cutover-gate` PASS；shadow suite 55/55；节点 dry-run
+  240s 正常（无 fatal、composition 就绪）。revm/anvil backend 保留为
+  AmountQuoteSource 接口实现（仅非 strict rpc lane），生产默认 authority
+  为 strict-only。
 
 **Pair A strict execution projection checkpoint（2026-08-13，未完成
 cutover）：** execution plugin 合同新增必选 `runtimeProjection`，20 个
