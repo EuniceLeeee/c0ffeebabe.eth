@@ -199,6 +199,7 @@ function defineFixture(name: string, controls: FixtureControls) {
     },
     discovery: {
       sources: ["observed-call"],
+      evidenceChannel: "tx-evidence" as const,
       callPatterns: [{
         id: "fixture-call",
         selector: SELECTOR,

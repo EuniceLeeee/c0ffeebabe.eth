@@ -27,6 +27,7 @@ import type { UniV4Candidate } from "./types.js";
 import { nominateUniv4 } from "./nomination.js";
 
 export const univ4Discovery = {
+  evidenceChannel: "nominate" as const,
   sources: ["factory-log", "landed-log", "observed-call"],
   callPatterns: [{
     id: UNIV4_SWAP_CALL_PATTERN_ID,

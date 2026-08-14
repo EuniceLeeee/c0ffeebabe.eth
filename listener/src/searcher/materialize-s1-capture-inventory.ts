@@ -100,9 +100,12 @@ export async function materializeCaptureInventory(input: {
     await executeCatalogCaptureNominations({
       catalog: input.catalog,
       source: input.source,
-      nominations: opaquePoolNominations(
-        input.rawArtifacts.graph as import("./venues/canonical-value.js").CanonicalValue,
-      ),
+      nominations: opaquePoolNominations({
+        graph: input.rawArtifacts.graph as
+          import("./venues/canonical-value.js").CanonicalValue,
+        protocolCache: input.rawArtifacts.protocolCache as
+          import("./venues/canonical-value.js").CanonicalValue,
+      }),
       provider: nominationProvider(input.provider),
       alreadyAdmitted: new Set(byFamily.keys()),
     }),
@@ -112,10 +115,21 @@ export async function materializeCaptureInventory(input: {
     "discovery" in family.plugin ? [family.plugin.manifest.familyId] : []
   );
   const unresolved = discoveryIds.filter((familyId) => !byFamily.has(familyId))
-    .map((familyId) => Object.freeze({
-      familyId,
-      reason: "no raw nomination produced a plugin-decodable observation",
-    }));
+    .map((familyId) => {
+      const family = input.catalog.forStrictFamily(familyId);
+      const plugin = family.plugin;
+      const hasNominate = "discovery" in plugin &&
+        plugin.discovery.nominate !== undefined;
+      const hasTxPatterns = "discovery" in plugin &&
+        ((plugin.discovery.callPatterns?.length ?? 0) > 0 ||
+          (plugin.discovery.logPatterns?.length ?? 0) > 0);
+      const reason = !hasNominate && !hasTxPatterns
+        ? "missing nomination capability and no tx-evidence channel"
+        : hasNominate
+        ? "nomination found no plugin-decodable observation"
+        : "tx evidence produced no plugin-decodable observation";
+      return Object.freeze({ familyId, reason });
+    });
   return Object.freeze({
     format: "s1-catalog-capture-inventory-v1" as const,
     catalogHash: input.catalog.catalogHash,
@@ -316,9 +330,10 @@ function captureCandidateIdentity(
   return observation.factory;
 }
 
-function opaquePoolNominations(
-  graph: CanonicalValue,
-): readonly import("./venues/adapter-family-plugin.js").CaptureNominationInput[] {
+function opaquePoolNominations(input: {
+  readonly graph: CanonicalValue;
+  readonly protocolCache: CanonicalValue;
+}): readonly import("./venues/adapter-family-plugin.js").CaptureNominationInput[] {
   const values = new Map<string, import("./venues/adapter-family-plugin.js").CaptureNominationInput>();
   const visit = (value: unknown): void => {
     if (Array.isArray(value)) {
@@ -343,7 +358,8 @@ function opaquePoolNominations(
     }
     for (const item of Object.values(record)) visit(item);
   };
-  visit(graph);
+  visit(input.graph);
+  visit(input.protocolCache);
   return Object.freeze([...values.values()].sort((left, right) =>
     left.address.localeCompare(right.address)
   ));

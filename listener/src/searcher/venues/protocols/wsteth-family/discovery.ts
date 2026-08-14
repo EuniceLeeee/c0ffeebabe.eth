@@ -8,6 +8,7 @@ import type { WstethCandidate } from "./types.js";
 import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 export const wstethDiscovery = {
+  evidenceChannel: "nominate" as const,
   sources: ["observed-call", "address-surface"],
   callPatterns: [
     {

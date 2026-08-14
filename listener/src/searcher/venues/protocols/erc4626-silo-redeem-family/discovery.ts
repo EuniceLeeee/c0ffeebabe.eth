@@ -7,12 +7,14 @@ import {
 } from "../standard-family/common.js";
 import { ERC4626_SILO_INTERFACE } from "./shared.js";
 import type { Erc4626SiloRedeemCandidate } from "./types.js";
+import { nominateErc4626SiloRedeem } from "./nomination.js";
 
 const REDEEM_PATTERN_ID = "silo-redeem-call";
 const WITHDRAW_PATTERN_ID = "silo-withdraw-call";
 
 export const erc4626SiloRedeemDiscovery = {
-  sources: ["observed-call"],
+  evidenceChannel: "nominate" as const,
+  sources: ["observed-call", "address-surface"],
   callPatterns: [
     {
       id: REDEEM_PATTERN_ID,
@@ -37,7 +39,41 @@ export const erc4626SiloRedeemDiscovery = {
       ],
     },
   ],
+  addressSurfaces: [{
+    id: "silo-redeem-vault-surface",
+    kind: "interface" as const,
+    fingerprint: "erc4626-silo-redeem:vault-surface-v1",
+  }],
   decodeCandidate({ observation, matchedPatternId }) {
+    if (
+      observation.kind === "address-surface" &&
+      matchedPatternId === "silo-redeem-vault-surface"
+    ) {
+      const opaque = observation.opaque as
+        Readonly<Record<string, unknown>> | undefined;
+      const payoutToken = typeof opaque?.payoutToken === "string"
+        ? canonicalAddress(String(opaque.payoutToken))
+        : null;
+      const shares = typeof opaque?.sampleShares === "string"
+        ? BigInt(opaque.sampleShares)
+        : null;
+      const assets = typeof opaque?.sampleAssets === "string"
+        ? BigInt(opaque.sampleAssets)
+        : null;
+      if (
+        payoutToken === null || shares === null || assets === null ||
+        shares <= 0n || assets <= 0n ||
+        sameAddress(observation.address, payoutToken) ||
+        payoutToken === ethers.ZeroAddress
+      ) return null;
+      return Object.freeze({
+        candidateKind: "erc4626-silo-payout" as const,
+        vault: canonicalAddress(observation.address),
+        payoutToken,
+        observedMode: "redeem" as const,
+        observedAmount: shares,
+      });
+    }
     if (observation.kind !== "call") return null;
     const mode = matchedPatternId === REDEEM_PATTERN_ID
       ? "redeem" as const
@@ -71,4 +107,5 @@ export const erc4626SiloRedeemDiscovery = {
   },
   candidateKey: (candidate) =>
     `${lowerAddress(candidate.vault)}:${lowerAddress(candidate.payoutToken)}`,
+  nominate: { nominate: nominateErc4626SiloRedeem },
 } satisfies DiscoverySemantics<Erc4626SiloRedeemCandidate>;

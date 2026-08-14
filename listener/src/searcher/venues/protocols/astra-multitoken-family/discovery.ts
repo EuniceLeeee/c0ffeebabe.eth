@@ -19,6 +19,7 @@ export const ASTRA_MULTITOKEN_CHANGE_LOG_PATTERN_ID =
   "astra-multitoken-change-log";
 
 export const astraMultiTokenDiscovery = {
+  evidenceChannel: "tx-evidence" as const,
   sources: ["observed-call", "landed-log"],
   callPatterns: [{
     id: ASTRA_MULTITOKEN_CHANGE_CALL_PATTERN_ID,

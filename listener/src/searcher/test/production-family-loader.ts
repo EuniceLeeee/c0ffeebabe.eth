@@ -123,6 +123,7 @@ function strictDefinition(
       supportedLineages: [lineage],
     },
     discovery: {
+      evidenceChannel: "tx-evidence" as const,
       sources: ["landed-log"],
       logPatterns: [{
         id: patternId,

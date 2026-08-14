@@ -8,6 +8,7 @@ import type { PsmCandidate } from "./types.js";
 import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 export const psmDiscovery = {
+  evidenceChannel: "nominate" as const,
   sources: ["observed-call", "address-surface"],
   callPatterns: ["sellGem", "buyGem"].map((fn) => ({
     id: `psm-${fn.toLowerCase()}-call`,

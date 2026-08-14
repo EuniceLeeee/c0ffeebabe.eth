@@ -114,6 +114,7 @@ function core(input: {
   const observationPattern = input.edgeKind === "swap"
     ? {
         sources: [input.source],
+        evidenceChannel: "tx-evidence" as const,
         logPatterns: [{
           id: "test-observation",
           topic: HASH,
@@ -122,6 +123,7 @@ function core(input: {
       }
     : {
         sources: [input.source],
+        evidenceChannel: "tx-evidence" as const,
         callPatterns: [{
           id: "test-observation",
           selector: "0x12345678" as const,

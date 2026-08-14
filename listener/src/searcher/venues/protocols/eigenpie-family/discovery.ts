@@ -14,6 +14,7 @@ import {
 import type { EigenpieCandidate } from "./types.js";
 
 export const eigenpieDiscovery = {
+  evidenceChannel: "tx-evidence" as const,
   sources: Object.freeze(["observed-call" as const, "landed-log" as const]),
   callPatterns: Object.freeze([Object.freeze({
     id: EIGENPIE_CALL_PATTERN_ID,

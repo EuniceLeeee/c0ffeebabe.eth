@@ -105,6 +105,13 @@ export type UnifiedObservation =
       readonly codeHash: string;
       readonly implementationWord: string;
       readonly interfaceFingerprints?: readonly string[];
+      /**
+       * Plugin-owned opaque payload (e.g. a cache-backed behavior-probe
+       * sample). The framework never interprets it; the owning plugin's
+       * decodeCandidate does. Without it the observation is still a valid
+       * address surface for interface/proxy Families.
+       */
+      readonly opaque?: CanonicalValue;
     }
   | {
       /**
@@ -247,11 +254,27 @@ export interface FamilyCandidate {
   readonly candidateKind: string;
 }
 
+export type DiscoveryEvidenceChannel =
+  | "nominate"
+  | "tx-evidence";
+
 export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
   readonly sources: readonly DiscoverySourceKind[];
   readonly callPatterns?: readonly CallPattern[];
   readonly logPatterns?: readonly LogPattern[];
   readonly addressSurfaces?: readonly AddressSurfacePattern[];
+  /**
+   * Required evidence channel declaration. Every route/protocol/credit
+   * Family must state how the strict side re-derives its own admission
+   * evidence: "nominate" means the plugin owns a nomination capability that
+   * re-materializes real observations from opaque pool nominations;
+   * "tx-evidence" means the Family admits only from real observed
+   * transactions (verified txHash nominations whose receipts/traces the
+   * strict side re-reads). A Family with neither is rejected at definition
+   * time, so a missing interface can never silently pass as "unresolved".
+   * Legacy caches only nominate candidates; they never supply evidence.
+   */
+  readonly evidenceChannel: DiscoveryEvidenceChannel;
   readonly nominate?: CaptureNominationSemantics;
   decodeCandidate(input: {
     readonly observation: UnifiedObservation;
@@ -2773,14 +2796,44 @@ function validateDiscovery(discovery: DiscoverySemantics<any>): void {
       "callPatterns",
       "candidateKey",
       "decodeCandidate",
+      "evidenceChannel",
       "logPatterns",
       "nominate",
       "sources",
     ],
     "discovery semantics",
     true,
-    ["candidateKey", "decodeCandidate", "sources"],
+    ["candidateKey", "decodeCandidate", "evidenceChannel", "sources"],
   );
+  if (
+    discovery.evidenceChannel !== "nominate" &&
+    discovery.evidenceChannel !== "tx-evidence"
+  ) {
+    throw new Error(
+      "discovery must declare evidenceChannel: \"nominate\" or \"tx-evidence\"",
+    );
+  }
+  if (discovery.evidenceChannel === "nominate" &&
+      discovery.nominate === undefined) {
+    throw new Error(
+      "discovery evidenceChannel=nominate requires a nominate capability",
+    );
+  }
+  if (discovery.evidenceChannel === "tx-evidence" &&
+      discovery.nominate !== undefined) {
+    throw new Error(
+      "discovery evidenceChannel=tx-evidence must not declare nominate; " +
+        "pick one evidence channel",
+    );
+  }
+  if (discovery.evidenceChannel === "tx-evidence" &&
+      (discovery.callPatterns?.length ?? 0) === 0 &&
+      (discovery.logPatterns?.length ?? 0) === 0) {
+    throw new Error(
+      "discovery evidenceChannel=tx-evidence requires call or log patterns " +
+        "for receipt/trace decoding",
+    );
+  }
   if (discovery.nominate !== undefined) {
     assertPlainRecord(discovery.nominate, "discovery nomination semantics");
     assertExactKeys(

@@ -260,3 +260,52 @@ fail closed，本 slice 必须与节点证据重生成一起提交（原子 slic
 **剩余：** 节点上以新 materializer 重跑受限诊断，拿真实 unresolved 清单；
 随后补齐其余族的 nomination（如需）并产出真实 descriptor → baseline/
 challenger 双闭包 → held-out negatives → sealed-production judge。
+
+### evidence-channel 标配 slice（2026-08-14）
+
+**验收判据（用户决定）：** nominate 成为 route/protocol/credit Family 的必有
+能力声明，不允许“缓存里有历史条目所以碰巧通过”充当完成证据。
+
+- `DiscoverySemantics` 新增必选 `evidenceChannel: "nominate" | "tx-evidence"`：
+  - `nominate`：plugin 拥有 nomination 能力（`discovery.nominate`），从
+    opaque pool nominations 重物化真实观测；
+  - `tx-evidence`：族只从真实 observed 交易准入（verified txHash 提名，
+    strict 重读 receipt/trace 后 decode）。
+- 中央校验（`validateDiscovery`，三个 define* 构造器共用）：
+  - 无 evidenceChannel → 定义拒绝；
+  - `nominate` 无 nominate 能力 → 拒绝；
+  - `tx-evidence` 却声明 nominate → 拒绝（通道二选一）；
+  - `tx-evidence` 无 call/log patterns → 拒绝。
+  新族漏写接口直接起不来，而不是默默 unresolved。
+- 19 个生产族已声明：13 个 `nominate`（univ2/3/4、fluid-dex、silo、
+  goldx、rocksolid、metronome-synth、psm、self-burn、wsteth、erc4626、
+  credit:fluid），7 个 `tx-evidence`（astra、eigenpie、ethertoken、hgusdc、
+  dodo-v2、curve-underlying、angstrom-v4）。
+- materializer unresolved 诊断区分：missing nomination capability（既无
+  nominate 也无 patterns）/ nomination found nothing / tx evidence found
+  nothing，缺口一眼可见。
+- **legacy 缓存只能当提名源**（候选地址/txHash 值得 strict 去验证），
+  其字段不得直接当完成证据；完成证据由 strict 重派生（source block
+  重读 codeHash/EIP-1967、重读 receipt/trace、精确 topic 反推）后写入
+  checkpoint/published views/sealed corpus。
+- 深缺口（dodo/curve/angstrom/eigenpie）与 hgusdc（行为型身份）留待
+  架构完成后回溯；接线缺口（fluid-dex/self-burn/silo/credit:fluid）已
+  在本 slice 内补完。
+
+### 近期交易反推 slice（2026-08-14，节点基础设施约束适配）
+
+**节点事实（实测）：** reth 是 pruned 节点——state 只保留最近 ~75K 块
+（`state at block #X is pruned`），logs 单次查询上限 100K 块范围且更早
+日志 pruned（`pruned history unavailable`）。因此：
+
+- 历史 PairCreated/PoolCreated 创建日志反推在本节点不可用；
+- 反推改为 **pool/factory 在近期保留窗口内的真实交易日志**：univ2/3
+  查 pool 自身 emitter 的近期 Swap 日志（address=pool + topics[Swap]），
+  univ4 查 PoolManager 近期 `[Swap, poolId]`（topics 精确定位）；
+  返回真实 log（含真实 txHash），identity 阶段仍做链上反向绑定。
+- nomination 不再读 token0/token1/factory（不需要，Swap emitter 即 pool），
+  RPC 量从每 pool 4 次降到 1 次 getLogs（近窗口）。
+- source block 必须落在 reth 保留窗口内（head 附近），state/logs 才可读。
+
+**该方案与用户指示一致：** “不要反推第一个 factory，去推这个 factory
+在近 1 万块的交易”——用近期真实交易证明实例存在，而不是历史创建事件。

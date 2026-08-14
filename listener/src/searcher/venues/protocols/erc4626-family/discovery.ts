@@ -15,7 +15,8 @@ import { createAddressSurfaceNomination } from "../../address-surface-nomination
 
 export const erc4626Discovery: DiscoverySemantics<Erc4626Candidate> =
   {
-    sources: Object.freeze([
+    evidenceChannel: "nominate" as const,
+  sources: Object.freeze([
       "observed-call" as const,
       "landed-log" as const,
       "address-surface" as const,

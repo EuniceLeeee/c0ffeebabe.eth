@@ -8,6 +8,7 @@ import type { GoldxCandidate } from "./types.js";
 import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 export const goldxDiscovery = {
+  evidenceChannel: "nominate" as const,
   sources: ["observed-call", "address-surface"],
   callPatterns: [{
     id: "goldx-mint-call",

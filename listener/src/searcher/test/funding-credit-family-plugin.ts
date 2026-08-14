@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { createAddressSurfaceNomination } from "../venues/address-surface-nomination.js";
 import {
   assertDefinedFamilyPlugin,
   defineCreditFamily,
@@ -178,6 +179,7 @@ function creditDefinition(): CreditFamilyPlugin<
       supportedLineages: [creditLineage],
     },
     discovery: {
+      evidenceChannel: "nominate" as const,
       sources: ["address-surface"],
       addressSurfaces: [{
         id: "credit-vault-interface",
@@ -188,6 +190,10 @@ function creditDefinition(): CreditFamilyPlugin<
         ? { candidateKind: "credit-vault", address: observation.address }
         : null,
       candidateKey: (candidate) => candidate.address,
+      nominate: createAddressSurfaceNomination({
+        opaqueLabels: Object.freeze(["fixture-credit", "credit-vault"]),
+        interfaceFingerprints: Object.freeze(["fixture-credit-vault"]),
+      }),
     },
     identity: {
       variants: [{

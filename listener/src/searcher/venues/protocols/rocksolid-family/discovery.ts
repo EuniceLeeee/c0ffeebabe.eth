@@ -8,6 +8,7 @@ import type { RocksolidCandidate } from "./types.js";
 import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 export const rocksolidDiscovery = {
+  evidenceChannel: "nominate" as const,
   sources: ["observed-call", "address-surface"],
   callPatterns: [{
     id: "rocksolid-sync-deposit-call",

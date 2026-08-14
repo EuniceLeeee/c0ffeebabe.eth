@@ -11,6 +11,7 @@ import type { EtherTokenNativeRedeemCandidate } from "./types.js";
 const WITHDRAW_PATTERN_ID = "ethertoken-withdraw-call";
 
 export const etherTokenNativeRedeemDiscovery = {
+  evidenceChannel: "tx-evidence" as const,
   sources: ["observed-call"],
   callPatterns: [{
     id: WITHDRAW_PATTERN_ID,

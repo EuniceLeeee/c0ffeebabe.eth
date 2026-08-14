@@ -10,6 +10,7 @@ import type { MetronomeHgUsdcCandidate } from "./types.js";
 const EXECUTE_PATH_PATTERN_ID = "metronome-hgusdc-execute-path";
 
 export const metronomeHgUsdcDiscovery = {
+  evidenceChannel: "tx-evidence" as const,
   sources: ["observed-call"],
   callPatterns: [{
     id: EXECUTE_PATH_PATTERN_ID,

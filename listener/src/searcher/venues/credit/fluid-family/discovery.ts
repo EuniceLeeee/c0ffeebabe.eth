@@ -13,6 +13,7 @@ export const FLUID_CREDIT_ADDRESS_SURFACE_PATTERN_ID =
   "fluid-credit-vault-surface";
 
 export const fluidCreditDiscovery = {
+  evidenceChannel: "nominate" as const,
   sources: ["observed-call", "address-surface"],
   callPatterns: [{
     id: FLUID_CREDIT_OPERATE_CALL_PATTERN_ID,

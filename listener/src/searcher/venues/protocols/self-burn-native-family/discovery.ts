@@ -12,6 +12,7 @@ const TRANSFER_SELF_PATTERN_ID = "self-burn-transfer-self";
 const PROXY_SHORTLIST_PATTERN_ID = "self-burn-proxy-shortlist";
 
 export const selfBurnNativeDiscovery = {
+  evidenceChannel: "nominate" as const,
   sources: ["observed-call", "address-surface"],
   callPatterns: [{
     id: TRANSFER_SELF_PATTERN_ID,

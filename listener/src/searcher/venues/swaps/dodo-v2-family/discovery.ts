@@ -17,6 +17,7 @@ export const DODO_V2_SELL_QUOTE_PATTERN_ID = "dodo-v2-sell-quote-call";
 export const DODO_V2_SWAP_LOG_PATTERN_ID = "dodo-v2-swap-log";
 
 export const dodoV2Discovery = {
+  evidenceChannel: "tx-evidence" as const,
   sources: ["landed-log", "observed-call"],
   callPatterns: [{
     id: DODO_V2_SELL_BASE_PATTERN_ID,

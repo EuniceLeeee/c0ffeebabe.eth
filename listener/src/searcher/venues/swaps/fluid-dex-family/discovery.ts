@@ -6,6 +6,7 @@ import {
   lowerAddress,
 } from "./codec.js";
 import type { FluidDexCandidate } from "./types.js";
+import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 export const FLUID_DEX_SWAP_CALL_PATTERN_ID = "fluid-dex-swap-call";
 export const FLUID_DEX_SWAP_LOG_PATTERN_ID = "fluid-dex-swap-log";
@@ -13,6 +14,7 @@ export const FLUID_DEX_ADDRESS_SURFACE_PATTERN_ID =
   "fluid-dex-constants-surface";
 
 export const fluidDexDiscovery = {
+  evidenceChannel: "nominate" as const,
   sources: ["observed-call", "landed-log", "address-surface"],
   callPatterns: [{
     id: FLUID_DEX_SWAP_CALL_PATTERN_ID,
@@ -66,4 +68,8 @@ export const fluidDexDiscovery = {
     return null;
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
+  nominate: createAddressSurfaceNomination({
+    opaqueLabels: Object.freeze(["fluid-dex", "fluid"]),
+    interfaceFingerprints: Object.freeze(["fluid-dex:constantsView+swapIn"]),
+  }),
 } satisfies DiscoverySemantics<FluidDexCandidate>;

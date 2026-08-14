@@ -14,6 +14,7 @@ const QUOTE_PATTERN_ID = "metronome-synth-quote-call";
 const SURFACE_PATTERN_ID = "metronome-synth-pool-surface";
 
 export const metronomeSynthDiscovery = {
+  evidenceChannel: "nominate" as const,
   sources: ["observed-call", "address-surface"],
   callPatterns: [
     {

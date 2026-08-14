@@ -1,4 +1,3 @@
-import { ethers } from "ethers";
 import type {
   CaptureNominationInput,
   CaptureNominationProvider,
@@ -6,22 +5,17 @@ import type {
 } from "../../adapter-family-plugin.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import {
-  UNIV4_INITIALIZE_TOPIC,
-  UNIV4_POOL_MANAGER_INTERFACE,
+  UNIV4_SWAP_TOPIC,
 } from "../../swaps/univ4-abi.js";
-import {
-  UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
-  v4PoolId,
-} from "../../swaps/univ4-common.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import { canonicalPoolId } from "./codec.js";
 
 /**
- * Plugin-owned nomination: graph pool entries for V4 already carry the real
- * poolId as an opaque field. This capability queries the PoolManager singleton
- * with the exact topics [Initialize, poolId] (Bloom-indexed; no full scan) and
- * returns the real Initialize log. The identity stage re-verifies the pool key
- * from the log against the manager.
+ * Plugin-owned nomination: graph pool entries carry the real poolId as an
+ * opaque field. This capability queries the PoolManager singleton with the
+ * exact topics [Swap, poolId] in the node's retained log window and returns
+ * the real recent Swap log (no historical Initialize backscan). Identity
+ * still re-verifies the pool key against the manager before admission.
  */
 export async function nominateUniv4(input: {
   readonly nominations: readonly CaptureNominationInput[];
@@ -29,6 +23,7 @@ export async function nominateUniv4(input: {
   readonly provider: CaptureNominationProvider;
 }): Promise<readonly UnifiedObservation[]> {
   const results: UnifiedObservation[] = [];
+  const fromBlock = Math.max(0, input.source.number - NOMINATION_LOG_LOOKBACK);
   for (const nomination of input.nominations) {
     const opaque = nomination.opaque as Readonly<Record<string, unknown>>;
     if (!isUniv4OpaqueLabel(opaque)) continue;
@@ -37,10 +32,10 @@ export async function nominateUniv4(input: {
     try {
       const logs = await input.provider.getLogs({
         address: ADDR.UNISWAP_V4_POOL_MANAGER,
-        fromBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+        fromBlock,
         toBlock: input.source.number,
         topics: [
-          UNIV4_INITIALIZE_TOPIC.toLowerCase(),
+          UNIV4_SWAP_TOPIC.toLowerCase(),
           poolId.toLowerCase(),
         ],
       });
@@ -62,6 +57,8 @@ export async function nominateUniv4(input: {
   }
   return Object.freeze(results);
 }
+
+const NOMINATION_LOG_LOOKBACK = 100_000;
 
 function isUniv4OpaqueLabel(
   opaque: Readonly<Record<string, unknown>>,

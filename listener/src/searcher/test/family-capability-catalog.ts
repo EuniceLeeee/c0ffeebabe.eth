@@ -85,6 +85,7 @@ function defineFixture(
       supportedLineages: [lineage],
     },
     discovery: {
+      evidenceChannel: "tx-evidence" as const,
       sources: addressSurface === undefined
         ? ["observed-call"]
         : ["observed-call", "address-surface"],

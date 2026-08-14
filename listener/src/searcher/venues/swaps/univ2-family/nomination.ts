@@ -1,4 +1,3 @@
-import { ethers } from "ethers";
 import type {
   CaptureNominationInput,
   CaptureNominationProvider,
@@ -6,19 +5,16 @@ import type {
 } from "../../adapter-family-plugin.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import {
-  UNIV2_FACTORY_INTERFACE,
-  UNIV2_PAIR_CREATED_TOPIC,
-  UNIV2_PAIR_INTERFACE,
+  UNIV2_SWAP_TOPIC,
 } from "../../swaps/univ2-abi.js";
-import { canonicalAddress, lowerAddress } from "./codec.js";
+import { lowerAddress } from "./codec.js";
 
 /**
- * Plugin-owned nomination: graph pool entries are opaque nominations. This
- * capability reads the pair's real token0/token1/factory at the source block
- * and re-materializes the real PairCreated log with an exact topic query on
- * the factory (Bloom-indexed; no full log scan). The framework admits the
- * returned observation through catalog.matches + decodeCandidate, and the
- * identity stage re-verifies getPair(token0, token1) == pool.
+ * Plugin-owned nomination: graph pool entries are opaque nominations. The
+ * capability re-materializes a real recent Swap log emitted by the pool
+ * itself (topics + txHash from the node's retained log window; no historical
+ * PairCreated backscan). Identity still re-verifies the pair on chain
+ * (factory/getPair) before admission.
  */
 export async function nominateUniv2(input: {
   readonly nominations: readonly CaptureNominationInput[];
@@ -26,43 +22,19 @@ export async function nominateUniv2(input: {
   readonly provider: CaptureNominationProvider;
 }): Promise<readonly UnifiedObservation[]> {
   const results: UnifiedObservation[] = [];
+  const fromBlock = Math.max(0, input.source.number - NOMINATION_LOG_LOOKBACK);
   for (const nomination of input.nominations) {
     const opaque = nomination.opaque as Readonly<Record<string, unknown>>;
     if (!isUniv2OpaqueLabel(opaque)) continue;
     const pool = lowerAddress(nomination.address);
-    const pair = UNIV2_PAIR_INTERFACE;
     try {
-      const [factoryWord, token0Word, token1Word] = await Promise.all([
-        readAddress(pair, "factory", nomination.address, input),
-        readAddress(pair, "token0", nomination.address, input),
-        readAddress(pair, "token1", nomination.address, input),
-      ]);
-      if (factoryWord === null || token0Word === null || token1Word === null) {
-        continue;
-      }
-      const topics = [
-        UNIV2_PAIR_CREATED_TOPIC.toLowerCase(),
-        ethers.zeroPadValue(token0Word, 32).toLowerCase(),
-        ethers.zeroPadValue(token1Word, 32).toLowerCase(),
-      ];
       const logs = await input.provider.getLogs({
-        address: factoryWord,
-        fromBlock: 0,
+        address: pool,
+        fromBlock,
         toBlock: input.source.number,
-        topics,
+        topics: [UNIV2_SWAP_TOPIC.toLowerCase()],
       });
-      const hit = logs.find((log) => {
-        try {
-          const decoded = UNIV2_FACTORY_INTERFACE.decodeEventLog(
-            "PairCreated",
-            log.data,
-            log.topics,
-          );
-          return lowerAddress(String(decoded.pair)) === pool;
-        } catch {
-          return false;
-        }
-      });
+      const hit = logs.at(-1);
       if (hit === undefined) continue;
       results.push(Object.freeze({
         kind: "log" as const,
@@ -75,12 +47,13 @@ export async function nominateUniv2(input: {
           : { transactionHash: hit.transactionHash.toLowerCase() }),
       }));
     } catch {
-      // One unreadable nomination must not block the next one. The framework
-      // only admits observations that survive matches + decodeCandidate.
+      // One unreadable nomination must not block the next one.
     }
   }
   return Object.freeze(results);
 }
+
+const NOMINATION_LOG_LOOKBACK = 100_000;
 
 function isUniv2OpaqueLabel(
   opaque: Readonly<Record<string, unknown>>,
@@ -88,23 +61,4 @@ function isUniv2OpaqueLabel(
   const label = opaque.adapter ?? opaque.venueId ?? opaque.adapterId;
   return typeof label === "string" &&
     (label === "univ2" || label === "univ2-standard");
-}
-
-async function readAddress(
-  pair: ethers.Interface,
-  functionName: string,
-  address: string,
-  input: {
-    readonly source: CanonicalSource;
-    readonly provider: CaptureNominationProvider;
-  },
-): Promise<string | null> {
-  const data = pair.encodeFunctionData(functionName);
-  const raw = await input.provider.call(
-    { to: address, data },
-    input.source.number,
-  );
-  if (!ethers.isHexString(raw) || ethers.dataLength(raw) !== 32) return null;
-  const decoded = pair.decodeFunctionResult(functionName, raw);
-  return canonicalAddress(String(decoded[0])).toLowerCase();
 }

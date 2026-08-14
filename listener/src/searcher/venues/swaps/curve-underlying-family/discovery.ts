@@ -24,6 +24,7 @@ export const CURVE_UNDERLYING_UINT_CALL_PATTERN_ID =
   "curve-underlying-uint-call";
 
 export const curveUnderlyingDiscovery = {
+  evidenceChannel: "tx-evidence" as const,
   sources: ["landed-log", "observed-call"],
   callPatterns: [{
     id: CURVE_UNDERLYING_I128_CALL_PATTERN_ID,

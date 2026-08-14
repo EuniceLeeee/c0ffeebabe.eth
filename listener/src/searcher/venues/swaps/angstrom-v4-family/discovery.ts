@@ -31,6 +31,7 @@ const ANGSTROM_ADAPTER_INTERFACE = new ethers.Interface(
 );
 
 export const angstromV4Discovery = {
+  evidenceChannel: "tx-evidence" as const,
   sources: ["factory-log", "landed-log", "observed-call"],
   callPatterns: [{
     id: ANGSTROM_SWAP_CALL_PATTERN_ID,
