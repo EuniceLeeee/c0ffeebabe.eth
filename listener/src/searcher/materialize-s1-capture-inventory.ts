@@ -249,13 +249,7 @@ async function transactionObservations(input: {
             transactionHash: hash,
           }));
         }
-        collectTraceCalls(
-          await input.provider.traceTransaction(hash),
-          input.source,
-          hash,
-          candidates,
-        );
-        const accepted = candidates.find((observation) =>
+        let accepted = candidates.find((observation) =>
           input.catalog.matches(observation).some((match) =>
             match.familyId === familyId &&
             discovery.decodeCandidate({
@@ -264,6 +258,23 @@ async function transactionObservations(input: {
             }) !== null
           )
         );
+        if (accepted === undefined) {
+          collectTraceCalls(
+            await input.provider.traceTransaction(hash),
+            input.source,
+            hash,
+            candidates,
+          );
+          accepted = candidates.find((observation) =>
+            input.catalog.matches(observation).some((match) =>
+              match.familyId === familyId &&
+              discovery.decodeCandidate({
+                observation,
+                matchedPatternId: match.patternId,
+              }) !== null
+            )
+          );
+        }
         if (accepted === undefined) continue;
         observations.push(accepted);
         break;
@@ -457,7 +468,7 @@ function rawAddressNominations(
       ),
       inherited,
     );
-    if (resolved !== null) {
+    if (resolved !== null && familyHasAddressSurface(catalog, resolved)) {
       for (const item of Object.values(record)) {
         if (typeof item !== "string" || !ethers.isAddress(item)) continue;
         const address = ethers.getAddress(item).toLowerCase();
@@ -471,6 +482,15 @@ function rawAddressNominations(
     left.familyId.localeCompare(right.familyId) ||
     left.address.localeCompare(right.address)
   ));
+}
+
+function familyHasAddressSurface(
+  catalog: FamilyCapabilityCatalog,
+  familyId: FamilyId,
+): boolean {
+  const family = catalog.forStrictFamily(familyId);
+  return "discovery" in family.plugin &&
+    (family.plugin.discovery.addressSurfaces?.length ?? 0) > 0;
 }
 
 function catalogFamilyForLabel(
