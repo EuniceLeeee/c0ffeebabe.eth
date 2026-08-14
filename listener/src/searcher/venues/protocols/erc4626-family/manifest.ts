@@ -20,4 +20,5 @@ export const erc4626FamilyManifest: FamilyManifest<"protocol"> = Object.freeze({
   ]),
   supportedLineages: Object.freeze([ERC4626_LINEAGE_ID]),
   poolAdapterIds: Object.freeze(["erc4626"]),
+  requiresProtocolEdgesFlag: true,
 });

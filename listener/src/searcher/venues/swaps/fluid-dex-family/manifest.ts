@@ -14,4 +14,5 @@ export const fluidDexFamilyManifest = {
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [FLUID_DEX_FACTORY_LINEAGE_ID],
   poolAdapterIds: ["fluid-dex"],
+  requiresProtocolEdgesFlag: false,
 } satisfies FamilyManifest<"swap">;

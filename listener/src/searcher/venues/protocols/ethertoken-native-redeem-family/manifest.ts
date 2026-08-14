@@ -16,4 +16,5 @@ export const etherTokenNativeRedeemFamilyManifest = {
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "redeem" }],
   supportedLineages: [ETHERTOKEN_NATIVE_LINEAGE_ID],
   poolAdapterIds: ["ethertoken-native-redeem-token"],
+  requiresProtocolEdgesFlag: true,
 } satisfies FamilyManifest<"protocol">;

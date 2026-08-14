@@ -351,6 +351,11 @@ export class FamilyCapabilityCatalog {
     return this.forStrictFamily(familyId).plugin.manifest.poolAdapterIds ?? [];
   }
 
+  requiresProtocolEdgesFlagFor(familyId: FamilyId): boolean {
+    return this.forStrictFamily(familyId).plugin.manifest
+      .requiresProtocolEdgesFlag ?? false;
+  }
+
   matches(observation: UnifiedObservation): readonly FamilyPatternMatch[] {
     switch (observation.kind) {
       case "call": {

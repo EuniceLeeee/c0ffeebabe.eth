@@ -25,4 +25,5 @@ export const univ4FamilyManifest = {
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [UNIV4_MANAGER_LINEAGE_ID],
   poolAdapterIds: ["univ4"],
+  requiresProtocolEdgesFlag: false,
 } satisfies FamilyManifest<"swap">;

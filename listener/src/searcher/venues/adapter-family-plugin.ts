@@ -899,6 +899,14 @@ export interface FamilyManifest<Domain extends FamilyDomain> {
    * it never hardcodes a family-specific label table.
    */
   readonly poolAdapterIds?: readonly string[];
+  /**
+   * Protocol-edge admission flag (plugin-owned). Families that only admit
+   * instances when the central protocol-edge topology switch is enabled
+   * declare true here; swap families and credit default to false. The
+   * central pipeline reads this through the generated catalog projection,
+   * never by naming a family.
+   */
+  readonly requiresProtocolEdgesFlag?: boolean;
 }
 
 export interface LandedEventSpec {
@@ -2928,6 +2936,7 @@ function validateManifest(
     "familyId",
     "ownedActionAdapterIds",
     "poolAdapterIds",
+    "requiresProtocolEdgesFlag",
     "requiredInfraActionAdapterIds",
     "supportedLineages",
   ], "family manifest", true, [
@@ -2971,6 +2980,14 @@ function validateManifest(
   }
   if (manifest.poolAdapterIds !== undefined) {
     stringSet(manifest.poolAdapterIds, "poolAdapterIds", true);
+  }
+  if (
+    manifest.requiresProtocolEdgesFlag !== undefined &&
+    typeof manifest.requiresProtocolEdgesFlag !== "boolean"
+  ) {
+    throw new Error(
+      `${manifest.familyId} requiresProtocolEdgesFlag must be a boolean`,
+    );
   }
   if (!Array.isArray(manifest.allowedTaxonomy) ||
       manifest.allowedTaxonomy.length === 0) {

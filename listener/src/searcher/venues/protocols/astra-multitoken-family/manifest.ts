@@ -16,4 +16,5 @@ export const astraMultiTokenFamilyManifest = {
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   supportedLineages: [ASTRA_MULTITOKEN_ACTIVE_REGISTRY_LINEAGE_ID],
   poolAdapterIds: ["astra-multitoken"],
+  requiresProtocolEdgesFlag: true,
 } satisfies FamilyManifest<"protocol">;
