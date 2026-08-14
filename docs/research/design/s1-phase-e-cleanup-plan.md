@@ -568,11 +568,22 @@ provider+revm runtime）；证据 ref = `onchain:1:<hash>:erc4626:<vault>`。
   fail-closed（unknown_hook_fail_closed）。cache 族（silo/erc4626/
   astra/ethertoken/fluid）需 evidence 载荷，属 materializer 提名路径，
   不在 universe poolSets 范围。
-- **删除前置（未完成）**：main.ts 的 4 处 `attestPoolIdentities`（pinned/
-  universe/blockscan/override）与 build-active-pool-universe /
+- **删除前置（2026-08-14 完成接线，commit 3e437b47）**：main.ts 的 4 处
+  `attestPoolIdentities` 已在 gate（SEARCHER_STRICT_IDENTITY_ATTESTATION=1）
+  下切到 `attestStartupPoolSetsStrict`；build-active-pool-universe /
   active-pool-discovery / live-discovery-coordinator 的
-  PRODUCTION_IDENTITY_RESOLVERS 消费需切到 strict 版并经节点 dry-run
-  验证；完成后删除 legacy IdentityResolverRegistry 准入路径。
+  PRODUCTION_IDENTITY_RESOLVERS 消费全部增加 strict 分支（共享入口
+  `attestPoolsStrictFromProvider`：active-pool-discovery 的 identity 段、
+  live-discovery-coordinator 的 startup retry 段、build-active-pool-universe
+  的 retained inventory + 成熟元数据探针经 POOL_UNIVERSE_STRICT_IDENTITY=1
+  门控）。**节点 dry-run（2026-08-14，head≈25752035+）**：gate ON 与 gate OFF
+  双侧 searcher 启动 240s/90s 均正常（EXIT=124 timeout 终止、无 fatal、
+  DEX cursor 恢复）。剩余：删除 legacy IdentityResolverRegistry 准入路径
+  （PRODUCTION_IDENTITY_RESOLVERS 及其 onchain-resolver 消费）。
+- **框架测试修复（2026-08-14，commit 3e437b47）**：landed-pool-discovery
+  两处 stale 断言（db4e8ddb 引入的生产 union batching 期望 3-4 filters，
+  实际生产 registry 无匿名族=2 filters；76fdbe0b 的 curve retry 路由用旧
+  adapter 名）改为真实语义；23/23 PASS，shadow suite 54/54。
 - **大模版收口（2026-08-14，commit 3a2babc9）**：删除带必选 pricing/exact
   的旧 `AdapterFamilyCore`；新增 `MasterTemplate`（唯一大模版）+
   `FAMILY_CAPABILITY_APPLICABILITY` 适用表（domain → 切片 →
