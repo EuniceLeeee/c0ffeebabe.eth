@@ -542,3 +542,17 @@ provider+revm runtime）；证据 ref = `onchain:1:<hash>:erc4626:<vault>`。
   全绿；删除目标不再被 `listener/src`（除自身文档）引用；
 - 全部 pairs 完成后：`searcher:live` 在无 legacy registry 引用下可编译
   启动（dry-run），canonical §18.3/§20.2.6 全门通过，Phase E 关闭。
+
+### Pair B strict side: attestPoolIdentitiesStrict（2026-08-14）
+
+- 新增 `strict-identity-attestation.ts`：`attestPoolIdentitiesStrict`——
+  对候选池在 canonical source 上经中央 provider 重读 codeHash + EIP-1967，
+  catalog.matches 分族，经 strict lifecycle 的 identity 阶段（插件
+  identity 变体）验证，产出 accepted/rejected。legacy cache/registry
+  不提供准入凭证，strict 重派生。
+- fail-closed 合同：无代码拒绝、无 catalog match 拒绝。
+- **删除前置（未完成）**：main.ts 的 4 处 `attestPoolIdentities`（pinned/
+  universe/blockscan/override）与 build-active-pool-universe /
+  active-pool-discovery / live-discovery-coordinator 的
+  PRODUCTION_IDENTITY_RESOLVERS 消费需切到 strict 版并经节点 dry-run
+  验证；完成后删除 legacy IdentityResolverRegistry 准入路径。

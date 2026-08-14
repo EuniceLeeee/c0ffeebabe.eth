@@ -312,7 +312,8 @@
     "searcher:univ4-nomination": "node --import tsx src/searcher/test/univ4-nomination.ts",
     "searcher:erc4626-silo-nomination": "node --import tsx src/searcher/test/erc4626-silo-nomination.ts",
     "searcher:dodo-v2-nomination": "node --import tsx src/searcher/test/dodo-v2-nomination.ts",
-    "searcher:angstrom-v4-nomination": "node --import tsx src/searcher/test/angstrom-v4-nomination.ts"
+    "searcher:angstrom-v4-nomination": "node --import tsx src/searcher/test/angstrom-v4-nomination.ts",
+    "searcher:strict-identity-attestation": "node --import tsx src/searcher/test/strict-identity-attestation.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"
