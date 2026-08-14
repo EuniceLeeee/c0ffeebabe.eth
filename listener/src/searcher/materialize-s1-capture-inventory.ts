@@ -18,6 +18,7 @@ import {
 import {
   executeCatalogCaptureNominations,
 } from "./venues/capture-materialization.js";
+import { scanRecentCallSeeds } from "./recent-call-seed-scan.js";
 
 const RPC_URL = process.env.S1_CAPTURE_RPC_URL ?? "http://127.0.0.1:8545";
 
@@ -95,17 +96,27 @@ export async function materializeCaptureInventory(input: {
   );
   // Phase 2: plugin-owned nomination reverse materialization, one candidate
   // at a time with per-Family early stop; already-admitted Families skip.
+  // F6 generic call-seed scan: bare tx-bound pool rows (no txHash evidence)
+  // get real recent candidate transactions from the node's retained window,
+  // traced against the family's own declared callPatterns.
+  const poolNominations = opaquePoolNominations({
+    graph: input.rawArtifacts.graph as
+      import("./venues/canonical-value.js").CanonicalValue,
+    protocolCache: input.rawArtifacts.protocolCache as
+      import("./venues/canonical-value.js").CanonicalValue,
+  });
+  const seedNominations = await scanRecentCallSeeds({
+    catalog: input.catalog,
+    source: input.source,
+    provider: input.provider,
+    nominations: poolNominations,
+  });
   admitObservations(
     input.catalog,
     await executeCatalogCaptureNominations({
       catalog: input.catalog,
       source: input.source,
-      nominations: opaquePoolNominations({
-        graph: input.rawArtifacts.graph as
-          import("./venues/canonical-value.js").CanonicalValue,
-        protocolCache: input.rawArtifacts.protocolCache as
-          import("./venues/canonical-value.js").CanonicalValue,
-      }),
+      nominations: [...poolNominations, ...seedNominations],
       provider: nominationProvider(input.provider),
       alreadyAdmitted: new Set(byFamily.keys()),
     }),

@@ -142,7 +142,7 @@ async function matchLogs(
   return null;
 }
 
-function matchCalls(
+export function matchCalls(
   patterns: readonly CallPattern[],
   raw: unknown,
 ): { readonly target: string; readonly sender: string | null; readonly data: string } | null {
