@@ -99,10 +99,7 @@ import {
   prepareRuntimePoolRefresh,
   selectRefreshCandidates,
 } from "./runtime-pool-refresh.js";
-import {
-  prepareStartupDexIdentityRetryStage,
-  type StartupDexIdentityRetryStage,
-} from "./startup-dex-identity-retry.js";
+import type { StartupDexIdentityRetryStage } from "./startup-dex-identity-retry.js";
 import type { LiveRethReadPriority } from "./live-reth-read-priority.js";
 import type { StrategyViews } from "./strategy-views.js";
 import {
@@ -121,7 +118,6 @@ import {
 import type { LandedPoolDiscoveryCoverage } from "./venues/landed-pool-discovery.js";
 import {
   PRODUCTION_ADAPTER_FAMILIES,
-  PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "./venues/production-registry.js";
 import type {
@@ -628,15 +624,7 @@ export async function createLiveDiscoveryCoordinator(
                 "identityRetry",
                 () => prepareBoundedDexIdentityRetry({
                   currentN: targetBlock,
-                  backend: pinnedReadBackend,
                   remaining: genericIdentityRetries,
-                  identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-                  seedEntries: liveRegistry,
-                  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-                  // F6 Pair B: the strict lane attests identity through the
-                  // generated catalog + plugin lifecycle instead of the
-                  // legacy per-adapter resolver registry.
-                  strict: options.strict,
                   provider,
                 }),
               ),
@@ -2528,66 +2516,22 @@ async function strictStartupDexIdentityRetryStage(input: {
  */
 async function prepareBoundedDexIdentityRetry(input: {
   readonly currentN: number;
-  readonly backend: PinnedDexReadBackend;
   readonly remaining: readonly PoolEntry[];
-  readonly identityRegistry: IdentityResolverRegistry;
-  readonly seedEntries: readonly PoolEntry[];
-  readonly admissionPolicy: IdentityAdmissionPolicy;
-  /** F6 Pair B: attest through the generated catalog when set. */
-  readonly strict?: boolean;
-  readonly provider?: ethers.JsonRpcProvider;
+  /** F6 Pair B: attest through the generated catalog. */
+  readonly provider: ethers.JsonRpcProvider;
 }): Promise<StartupDexIdentityRetryStage<PoolEntry>> {
-  if (input.strict === true && input.provider !== undefined) {
+  if (input.remaining.length === 0) {
     return strictStartupDexIdentityRetryStage({
       currentN: input.currentN,
       provider: input.provider,
-      remaining: input.remaining,
+      remaining: [],
     });
   }
-  if (input.remaining.length === 0) {
-    return prepareStartupDexIdentityRetryStage({
-      currentN: input.currentN,
-      backend: input.backend,
-      state: { accepted: [], remaining: [] },
-      identityRegistry: input.identityRegistry,
-      seedEntries: input.seedEntries,
-      admissionPolicy: input.admissionPolicy,
-    });
-  }
-
-  const controller = new AbortController();
-  const timer = setTimeout(
-    () =>
-      controller.abort(
-        new Error(
-          `DEX identity retry exceeded ${DEX_IDENTITY_RETRY_TIMEOUT_MS}ms`,
-        ),
-      ),
-    DEX_IDENTITY_RETRY_TIMEOUT_MS,
-  );
-  const backend: PinnedDexReadBackend = Object.freeze({
-    sourceBlock: input.backend.sourceBlock,
-    call: (request: {
-      readonly to: string;
-      readonly data: string;
-      readonly blockTag?: ethers.BlockTag;
-    }) =>
-      input.backend.call(request, { signal: controller.signal }),
-    getCode: (address: string) =>
-      input.backend.getCode(address, { signal: controller.signal }),
+  return strictStartupDexIdentityRetryStage({
+    currentN: input.currentN,
+    provider: input.provider,
+    remaining: input.remaining,
   });
-  try {
-    return await prepareStartupDexIdentityRetryStage({
-      currentN: input.currentN,
-      backend,
-      state: { accepted: [], remaining: input.remaining },
-      identityRegistry: input.identityRegistry,
-      seedEntries: input.seedEntries,
-      admissionPolicy: input.admissionPolicy,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 export type LiveDiscoveryCoordinator = Awaited<

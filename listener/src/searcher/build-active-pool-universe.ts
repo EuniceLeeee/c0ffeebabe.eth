@@ -12,10 +12,7 @@ import {
   type PoolUniverseEntry,
   type PoolUniverseFile,
 } from "./pool-universe.js";
-import {
-  resolvePoolIdentity,
-  type PoolIdentityResult,
-} from "./venues/identity.js";
+import type { PoolIdentityResult } from "./venues/identity.js";
 import { attestPoolsStrictFromProvider } from "./strict-identity-attestation.js";
 import type { VenueId } from "./venues/capability.js";
 import type { VenueIdentitySource } from "./venues/identity.js";
@@ -290,16 +287,13 @@ async function main(): Promise<void> {
     backend: stateProvider,
     priorPools: priorUniversePools,
     freshPools: landed.materializedPools,
-    // F6 Pair B: strict retained inventory re-attests through the generated
-    // catalog + plugin lifecycle at the frozen source block when enabled.
-    ...(process.env.POOL_UNIVERSE_STRICT_IDENTITY === "1"
-      ? {
-          strictAttestation: {
-            provider: stateProvider as never,
-            blockNumber: latest,
-          },
-        }
-      : {}),
+    // F6 Pair B: retained inventory re-attests through the generated
+    // catalog + plugin lifecycle at the frozen source block. The legacy
+    // per-adapter resolver registry is no longer the admission authority.
+    strictAttestation: {
+      provider: stateProvider as never,
+      blockNumber: latest,
+    },
   });
   console.log(
     `[pool-universe] family-inventory: prior=${priorUniversePools.length} ` +
@@ -730,16 +724,11 @@ async function enrichPool(
       `non-mature pool adapter ${adapterHint} escaped family materialization`,
     );
   }
-  const identity = process.env.POOL_UNIVERSE_STRICT_IDENTITY === "1"
-    ? await resolvePoolIdentityStrict(
-        provider,
-        pool.address,
-        strictBlockNumber ?? 0,
-      )
-    : await resolvePoolIdentity(provider, pool.address, adapterHint, {
-        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-        admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-      });
+  const identity = await resolvePoolIdentityStrict(
+    provider,
+    pool.address,
+    strictBlockNumber ?? 0,
+  );
   if (!identity.ok) return null;
   const adapter = identity.adapter;
   const base: PoolUniverseEntry = {
@@ -787,16 +776,11 @@ async function probePoolShape(
   strictBlockNumber?: number,
 ): Promise<ProbedPoolShape | null> {
   const address = ethers.getAddress(addr);
-  const identity = process.env.POOL_UNIVERSE_STRICT_IDENTITY === "1"
-    ? await resolvePoolIdentityStrict(
-        provider,
-        address,
-        strictBlockNumber ?? await provider.getBlockNumber(),
-      )
-    : await resolvePoolIdentity(provider, address, "univ3", {
-        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-        admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-      });
+  const identity = await resolvePoolIdentityStrict(
+    provider,
+    address,
+    strictBlockNumber ?? await provider.getBlockNumber(),
+  );
   if (!identity.ok) return null;
   if (identity.adapter === "univ3") try {
     const [token0, token1, fee, tickSpacing] = await Promise.all([

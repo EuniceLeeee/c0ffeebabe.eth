@@ -13,7 +13,6 @@ import {
   type VenueId,
 } from "./venues/capability.js";
 import {
-  attestPoolIdentities,
   isRetryablePoolIdentityFailure,
   type AttestedPoolEntry,
   type IdentityCallBackend,
@@ -25,7 +24,6 @@ import {
   type IdentityAdmissionPolicy,
 } from "./venues/admission.js";
 import {
-  PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_ADAPTER_FAMILIES,
 } from "./venues/production-registry.js";
 import {
@@ -484,36 +482,26 @@ export async function scanActivePoolsDetailed(
                   ),
               }),
         };
-  let identityResult: Awaited<
-    ReturnType<typeof attestPoolIdentities<PoolEntry>>
-  >;
+  let identityResult: {
+    accepted: AttestedPoolEntry<PoolEntry>[];
+    rejected: RejectedPoolIdentity[];
+  };
   try {
-    if (options.strict) {
-      // F6 Pair B: the strict lane attests through the generated catalog and
-      // the owning plugin's nomination + identity lifecycle; the legacy
-      // per-adapter resolver registry never supplies an admission credential.
-      const strictResult = await attestPoolsStrictFromProvider({
-        provider: identityBackend as never,
-        blockNumber: strictIdentityBlockNumber(
-          options.identityBlockTag,
-          latest,
-        ),
-        pools: identityCandidates,
-      });
-      identityResult = {
-        accepted: strictResult.accepted as unknown as AttestedPoolEntry<PoolEntry>[],
-        rejected: strictResult.rejected as unknown as RejectedPoolIdentity[],
-      };
-    } else {
-      identityResult = await attestPoolIdentities(
-        identityBackend,
-        identityCandidates,
-        {
-          identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-          admissionPolicy: options.admissionPolicy,
-        },
-      );
-    }
+    // F6 Pair B: identity is attested through the generated catalog and the
+    // owning plugin's nomination + identity lifecycle; the legacy per-adapter
+    // resolver registry never supplies an admission credential.
+    const strictResult = await attestPoolsStrictFromProvider({
+      provider: identityBackend as never,
+      blockNumber: strictIdentityBlockNumber(
+        options.identityBlockTag,
+        latest,
+      ),
+      pools: identityCandidates,
+    });
+    identityResult = {
+      accepted: strictResult.accepted as unknown as AttestedPoolEntry<PoolEntry>[],
+      rejected: strictResult.rejected as unknown as RejectedPoolIdentity[],
+    };
   } finally {
     if (identityTimer !== null) clearTimeout(identityTimer);
   }

@@ -162,8 +162,6 @@ import {
   sendDexDiscoveryRpc,
 } from "./active-pool-discovery.js";
 import {
-  attestPoolIdentities,
-  createPoolIdentityCache,
   isRetryablePoolIdentityFailure,
   type PoolIdentityFailureReason,
   type RejectedPoolIdentity,
@@ -174,7 +172,6 @@ import {
 } from "./strict-identity-attestation.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
-  PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
   PRODUCTION_ADAPTER_FAMILIES,
   productionPoolUniverseSourceFingerprints,
@@ -1620,7 +1617,6 @@ async function main(): Promise<void> {
   // Declared singleton/compat protocol venues start here. Permissionless
   // families join later only through canonical discovery identity + route probe.
   const liveRegistry = filterLiveProtocolRegistry(POOL_REGISTRY, config.enableProtocolEdges);
-  const identityCache = createPoolIdentityCache();
   const rawPinnedWarmPools = loadPinnedWarmPools(config.pinnedWarmPoolPath);
   const rawUniversePools = loadPoolUniverse(config.poolUniversePath, {
     maxPools: config.poolUniverseTopN,
@@ -2071,51 +2067,23 @@ async function main(): Promise<void> {
   let protocolGraphCompleteThrough = -1;
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
   // F6 Pair B: strict identity attestation (catalog + plugin identity stage)
-  // replaces the legacy IdentityResolverRegistry when the gate is on.
-  const strictIdentityAttestation =
-    process.env.SEARCHER_STRICT_IDENTITY_ATTESTATION === "1";
+  // is the only startup identity authority; the legacy IdentityResolverRegistry
+  // path has been removed.
   const [pinnedIdentity, universeIdentity, blockscanIdentity, overrideIdentity] =
-    strictIdentityAttestation
-    ? await attestStartupPoolSetsStrict({
-        provider: strictIdentityProvider(provider),
-        source: {
-          number: discoveryToBlock,
-          hash: startupDexSourceBlockHash.toLowerCase(),
-          generation: discoveryToBlock,
-        },
-        poolSets: [
-          rawPinnedWarmPools,
-          rawUniversePools,
-          rawBlockscanUniverse,
-          rawBlockScanOverrides,
-        ],
-      })
-    : await Promise.all([
-        attestPoolIdentities(startupDexBackend, rawPinnedWarmPools, {
-          identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-          cache: identityCache,
-          seedEntries: liveRegistry,
-          admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-        }),
-        attestPoolIdentities(startupDexBackend, rawUniversePools, {
-          identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-          cache: identityCache,
-          seedEntries: liveRegistry,
-          admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-        }),
-        attestPoolIdentities(startupDexBackend, rawBlockscanUniverse, {
-          identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-          cache: identityCache,
-          seedEntries: liveRegistry,
-          admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-        }),
-        attestPoolIdentities(startupDexBackend, rawBlockScanOverrides, {
-          identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-          cache: identityCache,
-          seedEntries: liveRegistry,
-          admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-        }),
-      ]);
+    await attestStartupPoolSetsStrict({
+      provider: strictIdentityProvider(provider),
+      source: {
+        number: discoveryToBlock,
+        hash: startupDexSourceBlockHash.toLowerCase(),
+        generation: discoveryToBlock,
+      },
+      poolSets: [
+        rawPinnedWarmPools,
+        rawUniversePools,
+        rawBlockscanUniverse,
+        rawBlockScanOverrides,
+      ],
+    });
   // F6 Pair B: strict attestation returns a narrower rejected shape; bridge
   // it back to the legacy RejectedPoolIdentity for the transition consumers.
   const asLegacyRejections = (
@@ -2129,7 +2097,9 @@ async function main(): Promise<void> {
     adapter: entry.adapter,
     reason: entry.reason as PoolIdentityFailureReason,
   }));
-  const pinnedWarmPools = [...pinnedIdentity.accepted] as PinnedWarmPoolEntry[];
+  const pinnedWarmPools = [
+    ...pinnedIdentity.accepted,
+  ] as unknown as PinnedWarmPoolEntry[];
   const universePools = [...universeIdentity.accepted] as PoolEntry[];
   const blockscanUniverse = [...blockscanIdentity.accepted] as PoolEntry[];
   const blockScanOverrides = [...overrideIdentity.accepted] as PoolEntry[];
