@@ -339,12 +339,18 @@ function opaquePoolNominations(input: {
     address: string,
     opaque: Readonly<Record<string, unknown>>,
   ): void => {
-    // First-writer wins: graph pool entries carry the pool's true adapter
-    // label; the protocol cache may re-list the same address under a
-    // different matcher (e.g. self-burn proxies). Overwriting would steal
-    // the nomination from its owning Family.
-    if (!values.has(address)) {
-      values.set(address, Object.freeze({
+    // One nomination per address+label: distinct Families may legitimately
+    // claim the same on-chain address (e.g. an ERC4626 vault that is also a
+    // silo-redeem vault), and the protocol cache may re-list an address
+    // under a different matcher (e.g. self-burn proxies). Keying by the
+    // label keeps every Family's nomination reachable instead of letting
+    // one source steal the address from another.
+    const label = String(
+      opaque.adapter ?? opaque.adapterId ?? opaque.venueId ?? "",
+    ).toLowerCase();
+    const key = `${address} ${label}`;
+    if (!values.has(key)) {
+      values.set(key, Object.freeze({
         address,
         opaque: Object.freeze(opaque) as unknown as
           import("./venues/canonical-value.js").CanonicalValue,

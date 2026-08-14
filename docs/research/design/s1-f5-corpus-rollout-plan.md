@@ -366,3 +366,21 @@ unresolved 非空时 fail-closed 拒绝。
 - 新增插件脚手架 `templates/family-plugin/`（README + skeleton.ts）：
   新族从统一骨架挑 domain 所需切片，中央流水线/capture/corpus/parity
   不动；未来 LP 域只需加 domain 值 + validator + 能力槽。
+
+### 同地址多族 per-label nomination（2026-08-14）
+
+- **发现**：silo-redeem 的 pool 地址 0x3d7d… 同时被 graph 标为 erc4626
+  （identitySource: erc4626-standard）——同一地址是两个族的合法 vault。
+  first-writer-wins（按 address 去重）让 graph 的 erc4626 条目抢占了
+  silo 的 verified_candidates 提名（含 20 条行为 evidence），silo 因此
+  unresolved。
+- **修复**：opaquePoolNominations 改为按 (address, label) 复合键去重——
+  每个 label 的提名都保留，不同族可认领同一地址；同源同 label 重复仍
+  合并。
+- **ethertoken 结论（基础设施约束）**：evidence txHash（block
+  25711694）超出 reth 保留窗口（~75K 块），debug_traceTransaction 报
+  pruned——strict 无法重读其调用帧。receipt 可读但只有 Transfer 日志，
+  discovery 无匹配 logPattern。属“等真实 tx 或回溯”范畴，非代码 bug。
+- **silo 行为读确认**：source block 上 asset()/totalSupply()/
+  previewRedeem() 全部可读（head 附近窗口内），per-label 修复后
+  nomination 可携带行为 evidence，identity 在 source block 重验。
