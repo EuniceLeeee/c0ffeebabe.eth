@@ -599,7 +599,7 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "74e099b114faa6a2a406a54d5ae1cf2930f375e71c9ccfd7d2c47d2af9ea2fba",
+        "contentHash": "37acef277c9d14608c383dd858dc08cf3f3c65098074651045331b654b332bc2",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -656,7 +656,7 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "096d18850bdf8bf64369f2b283aef8dee898373d896ff7a1fc86503436b0bdd8",
+        "contentHash": "7e22d9ed15799f93e0d6b62b4b8515e30950d596bf0b751158a1dcb6d670c859",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -957,7 +957,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "c9669ae77d465c34789b438e3216f4a5d657f0804d6b824902005358f8dd465e",
+        "contentHash": "2d8a244a090128895e2bce20c63a49c3efb2754065aefe79d0e12ad43abfcfa4",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -1018,7 +1018,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "3d81fdd1d4c1d5b86512f71170407dbbeb4b5a1b3ee173883b975c9b6f345f14",
+        "contentHash": "f0139d6eb14772dfb2c79d99089f081b4bc45abe4f5d9aedbd56d55023f1874b",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -1310,7 +1310,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
-        "contentHash": "de1ac06ffb71542e4785456e05b9d28c31d0c82357f7758c87cc8f044fb1f64d",
+        "contentHash": "5beb42891b7ea6e3c6b2740e5bc65bbb583cb7d55f6765ff9054c9a1e6f5c601",
         "semanticDependencies": [
           "contract:adapter-family/victim@s1-victim-v2",
           "package:ethers@6.16.0",
@@ -6074,7 +6074,7 @@
         "familyId": "univ2-standard",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "61081f629b02e3248c4770b0d77cab7175c41b67d5990ca252e41106691405db",
+        "contentHash": "4f057d4a9d507c26711e1e0d845ded408b30fc3ca0672bc26feb66a7629a248b",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6125,7 +6125,7 @@
         "familyId": "univ2-standard",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "cb4c497b06002cb1b3683064058c44725d3233558beb2cc2edfae63243b053ef",
+        "contentHash": "fb28e9818d38979b27fe2e9e68c46f16f00db4505c1af003ed6ca5c00edaa573",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -6398,7 +6398,7 @@
         "familyId": "univ3-standard",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "dc692ed8fcfd31e672f1ba3a54eedf450cb66173ccd826faed6f103e9304f92c",
+        "contentHash": "72cbe4b3d15f5f89c8e2b984296115bdd13266c49cf6e06e20498bcc0191d777",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6451,7 +6451,7 @@
         "familyId": "univ3-standard",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "6f9208137735de945f39b98a677111f40e6b254d1e163ce664b8b721087a4b51",
+        "contentHash": "7a2a4c29a6cd864ccd68f9787a8555c03bb9b4507300ed7b8d333ed363eb41bb",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -6724,7 +6724,7 @@
         "familyId": "univ4",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "9cbbc0221a5cb48ad708d6761c8c596463bdd293a4da85ba87b59e7941bb497d",
+        "contentHash": "8009e57d5c01b7223c6429f0f08eb3d0edc04a566adcae511736251b3edf2923",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6779,7 +6779,7 @@
         "familyId": "univ4",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "33d3f135424b554a0ec128c058e604b2c38392871fc486e0db9d0691ebe38bfc",
+        "contentHash": "2c28dfd0f6ac69ed3b3bb60d18fd990883819c57fd64e5e0a1831b062b7b235c",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -7067,5 +7067,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "b833db54e7f53f14c03617bbe6169e2e86c811681617eabdf8f4dd2a9dc7c813"
+  "artifactHash": "4135b0dcf6d3783e50228dc8cf4355c23cb1b86d0359b4a29a43bf197251e416"
 }
