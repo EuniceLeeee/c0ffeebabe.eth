@@ -568,18 +568,19 @@ provider+revm runtime）；证据 ref = `onchain:1:<hash>:erc4626:<vault>`。
   fail-closed（unknown_hook_fail_closed）。cache 族（silo/erc4626/
   astra/ethertoken/fluid）需 evidence 载荷，属 materializer 提名路径，
   不在 universe poolSets 范围。
-- **删除前置（2026-08-14 完成接线，commit 3e437b47）**：main.ts 的 4 处
-  `attestPoolIdentities` 已在 gate（SEARCHER_STRICT_IDENTITY_ATTESTATION=1）
-  下切到 `attestStartupPoolSetsStrict`；build-active-pool-universe /
-  active-pool-discovery / live-discovery-coordinator 的
-  PRODUCTION_IDENTITY_RESOLVERS 消费全部增加 strict 分支（共享入口
-  `attestPoolsStrictFromProvider`：active-pool-discovery 的 identity 段、
-  live-discovery-coordinator 的 startup retry 段、build-active-pool-universe
-  的 retained inventory + 成熟元数据探针经 POOL_UNIVERSE_STRICT_IDENTITY=1
-  门控）。**节点 dry-run（2026-08-14，head≈25752035+）**：gate ON 与 gate OFF
-  双侧 searcher 启动 240s/90s 均正常（EXIT=124 timeout 终止、无 fatal、
-  DEX cursor 恢复）。剩余：删除 legacy IdentityResolverRegistry 准入路径
-  （PRODUCTION_IDENTITY_RESOLVERS 及其 onchain-resolver 消费）。
+- **删除前置（2026-08-14 完成，commit f3188a31）**：legacy 生产准入路径已
+  删除——main.ts 的 4 处 `attestPoolIdentities` 分支与 gate
+  （SEARCHER_STRICT_IDENTITY_ATTESTATION）移除，`attestStartupPoolSetsStrict`
+  是唯一启动身份权威；active-pool-discovery 与 live-discovery-coordinator
+  的 identity/retry 段 strict-only（共享入口 `attestPoolsStrictFromProvider`）；
+  build-active-pool-universe 的 retained inventory + 成熟元数据探针始终
+  strict（swap-family-inventory 保留 legacy 测试模式验证函数合同，生产
+  调用必传 strictAttestation）。**节点 dry-run（2026-08-14，head≈25752035+）**：
+  strict-only searcher 启动 240s 正常（EXIT=124、无 fatal、22 families/242
+  capabilities、DEX cursor 恢复）。
+- **Pair B 关闭条件（已满足）**：strict 侧经节点真实池验证（10/10 DEX 池
+  accepted，univ2/3/4、dodo、angstrom）；legacy 生产准入路径删除；节点
+  dry-run 无回退；build/shadow suite（54）/regression sweep（12）全绿。
 - **框架测试修复（2026-08-14，commit 3e437b47）**：landed-pool-discovery
   两处 stale 断言（db4e8ddb 引入的生产 union batching 期望 3-4 filters，
   实际生产 registry 无匿名族=2 filters；76fdbe0b 的 curve retry 路由用旧
