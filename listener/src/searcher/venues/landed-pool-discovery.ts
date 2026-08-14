@@ -1252,6 +1252,14 @@ async function materializeRegisteredDescriptors(
         context: materializationContext(input, descriptor, scan.logs),
       };
     });
+    const startedAtMs = Date.now();
+    console.log(
+      `[pool-universe] materializer ${members[0]?.descriptor.event.id ?? "?"} ` +
+        `start logs=${members.reduce(
+          (sum, member) => sum + (sourceScans.get(member.descriptor)?.logs.length ?? 0),
+          0,
+        )}`,
+    );
     const firstShared = members[0]?.descriptor.materializer?.sharedIdentity;
     if (firstShared === undefined) {
       for (const member of members) {
@@ -1269,6 +1277,10 @@ async function materializeRegisteredDescriptors(
           });
         }
       }
+      console.log(
+        `[pool-universe] materializer ${members[0]?.descriptor.event.id ?? "?"} ` +
+          `complete elapsedMs=${Date.now() - startedAtMs}`,
+      );
       return;
     }
 
@@ -1290,6 +1302,10 @@ async function materializeRegisteredDescriptors(
       }
       outcomes.set(member.descriptor, outcome);
     }
+    console.log(
+      `[pool-universe] materializer ${members[0]?.descriptor.event.id ?? "?"} ` +
+        `complete elapsedMs=${Date.now() - startedAtMs}`,
+    );
   };
 
   if (parallel) {

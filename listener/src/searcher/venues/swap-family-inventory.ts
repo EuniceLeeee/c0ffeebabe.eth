@@ -83,12 +83,22 @@ export async function retainVerifiedSwapFamilyInstances(input: {
     ownerByPoolAdapter.has(pool.adapter) &&
     !freshKeys.has(poolRegistryKey(pool))
   );
+  const startedAtMs = Date.now();
+  console.log(
+    `[pool-universe] retained family inventory candidates=${candidates.length} ` +
+      `strict=${input.strictAttestation !== undefined}`,
+  );
   const attested = input.strictAttestation === undefined
     ? await attestPoolIdentities(input.backend, candidates, {
         identityRegistry: input.identityRegistry,
         admissionPolicy: input.admissionPolicy,
       })
     : await strictRetainedAttestation(candidates, input.strictAttestation);
+  console.log(
+    `[pool-universe] retained family inventory attestation complete ` +
+      `accepted=${attested.accepted.length} rejected=${attested.rejected.length} ` +
+      `elapsedMs=${Date.now() - startedAtMs}`,
+  );
   const incomplete = attested.rejected.filter((item) =>
     isRetryablePoolIdentityFailure(item.reason)
   );
@@ -165,4 +175,3 @@ async function strictRetainedAttestation(
     rejected: result.rejected as unknown as RejectedPoolIdentity[],
   };
 }
-

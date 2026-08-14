@@ -120,7 +120,16 @@ export async function attestPoolIdentitiesStrict<
 }> {
   const accepted: StrictAttestedPool<Pool>[] = [];
   const rejected: StrictRejectedPool<Pool>[] = [];
-  for (const pool of input.pools) {
+  const total = input.pools.length;
+  const startedAtMs = Date.now();
+  for (let index = 0; index < total; index++) {
+    const pool = input.pools[index];
+    if ((index + 1) % 500 === 0) {
+      console.log(
+        `[pool-universe] strict attestation ${index + 1}/${total} ` +
+          `elapsedMs=${Date.now() - startedAtMs}`,
+      );
+    }
     const address = ethers.getAddress(pool.address);
     try {
       // Universal fact check (no protocol semantics): an address with no
