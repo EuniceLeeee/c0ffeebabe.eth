@@ -69,10 +69,6 @@ export async function executeCatalogCaptureNominations(input: {
         source: input.source,
         provider: input.provider,
       });
-      if (plugin.manifest.familyId === "protocol:erc4626-silo-redeem") {
-        const o = nomination.opaque as Record<string, unknown>;
-        console.log("SILO_NOM", (o.adapter ?? o.adapterId ?? o.venueId ?? "?"), "evidence:", Array.isArray(o.evidence) ? o.evidence.length : "none", "addr:", nomination.address.slice(0, 10));
-      }
       if (derived.length === 0) continue;
       const observation = derived[0];
       const matches = input.catalog.matches(observation);
