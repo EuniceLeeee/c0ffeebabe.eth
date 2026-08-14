@@ -197,29 +197,33 @@ async function main(): Promise<void> {
     })]),
   }) as unknown as FamilyCapabilityCatalog;
   nominationCalls = 0;
-  await assert.rejects(
-    executeCatalogCaptureNominations({
-      catalog: rejectingCatalog,
-      source: SOURCE,
-      nominations: Object.freeze([
-        Object.freeze({
-          address: POOL,
-          opaque: Object.freeze({ adapter: "synthetic-factory" }),
-        }),
-      ]),
-      provider: Object.freeze({
-        ...provider,
-        // A different txHash makes the observation fail decodeCandidate.
-        getLogs: async () => Object.freeze([Object.freeze({
-          address: FACTORY.toLowerCase(),
-          topics: Object.freeze([FACTORY_TOPIC.toLowerCase()]),
-          data: "0x",
-          transactionHash: `0x${"99".repeat(32)}`,
-        })]),
+  // Fail-closed: a nomination observation that fails decodeCandidate is a
+  // per-candidate rejection - the executor returns no admission for it
+  // (no fabrication), continues without throwing, and records the Family as
+  // unresolved via the caller's diagnostics.
+  const rejected = await executeCatalogCaptureNominations({
+    catalog: rejectingCatalog,
+    source: SOURCE,
+    nominations: Object.freeze([
+      Object.freeze({
+        address: POOL,
+        opaque: Object.freeze({ adapter: "synthetic-factory" }),
       }),
+    ]),
+    provider: Object.freeze({
+      ...provider,
+      // A different txHash makes the observation fail decodeCandidate.
+      getLogs: async () => Object.freeze([Object.freeze({
+        address: FACTORY.toLowerCase(),
+        topics: Object.freeze([FACTORY_TOPIC.toLowerCase()]),
+        data: "0x",
+        transactionHash: `0x${"99".repeat(32)}`,
+      })]),
     }),
-    /does not admit through catalog matches \+ decodeCandidate/,
-  );
+  });
+  assert.equal(rejected.length, 0);
+  assert.equal(nominationCalls, 1);
+  nominationCalls = 0;
 
   // alreadyAdmitted Families are skipped entirely (admit-as-you-go).
   nominationCalls = 0;

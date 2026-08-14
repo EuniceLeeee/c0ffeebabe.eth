@@ -80,10 +80,11 @@ export async function executeCatalogCaptureNominations(input: {
         }) !== null
       );
       if (!accepted) {
-        throw new Error(
-          `nomination for ${plugin.manifest.familyId} produced an observation ` +
-            "that does not admit through catalog matches + decodeCandidate",
-        );
+        // Fail-closed rejection of this candidate: the observation does not
+        // admit through matches + decodeCandidate (e.g. a proxy gate or
+        // behavior mismatch). This is a per-candidate rejection, not an
+        // executor defect - record it and try the next nomination.
+        continue;
       }
       observations.push(observation);
       admitted.add(plugin.manifest.familyId);
