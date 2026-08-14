@@ -123,11 +123,14 @@
   独立 baseline/challenger 执行闭包；动态 canonical-value negative；
   production provenance 位于 parity request；identical negative fail closed；
   中央无单族逻辑且 AST/import-closure gate 通过。
-- **F5-b 真实 corpus 采集（待节点执行）：** 需要 22 族真实 on-chain
+- **F5-b 真实 corpus 采集（进行中）：** 需要真实 on-chain
   descriptor（真实 pool/tx/state，不得 fixture:* 占位）在节点本地 reth
   上跑 F5-a，产出非空 held-out 并过 sealed-production acceptance
-  （`verdict: eligible`）。未采集前 sealed acceptance 保持
-  `unit-contract/ineligible`（P0-6 fail-closed，诚实不变）。
+  （`verdict: eligible`）。17/20 族真实 admitted（curve-underlying 经过渡
+  桥入图解决）。**用户最高命令（2026-08-14）**：因超过 reth trace 保留
+  窗口（state pruned）导致未迁移/未采集的族（eigenpie/ethertoken/hgusdc）
+  在管线验收中视为不存在，直接执行完整迁移；其采集状态如实记录（非吞
+  掉失败），窗口内新交易出现时经通用 call-seed 扫描器自动恢复。
 - 自动续跑契约：`docs/research/design/s1-f5-corpus-rollout-plan.md`
   （模板 univ2 → erc4626 → 其余，逐族机器判据；守护窗口每轮从该文件
   继续，不需用户逐轮确认）。

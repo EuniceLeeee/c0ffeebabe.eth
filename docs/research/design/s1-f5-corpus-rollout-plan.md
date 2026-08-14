@@ -413,7 +413,15 @@ unresolved 非空时 fail-closed 拒绝。
   （每族早停常数级）；getCode/getStorage ~10.4K（self-burn 10K+ 候选探针）。
 
 **F5 状态**：17/20 discovery 族真实 admitted（curve-underlying 经过渡桥
-入图解决）；3 族缺真实链上证据（eigenpie/ethertoken/hgusdc，非代码可补，
-需真实交易或保留窗口内回溯）。descriptor 生成器在 unresolved 非空时
-fail-closed——**在 3 族补齐真实证据前，sealed-production eligible=true
-不能宣称**。
+入图解决）。3 族（eigenpie/ethertoken/hgusdc）的 evidence 交易超出节点
+reth trace 保留窗口（state pruned，无法回放内部调用），且已确认非查询
+漏洞——call-based 族的交易存在（hgusdc 3 天窗口 2 笔真实交易、ethertoken
+3 笔保留窗口内 receipt 可读）但 trace 回放不可用，属**基础设施窗口期
+约束**，非代码可补。
+
+**用户最高命令（2026-08-14）**：管线验收中，因超过 2 天 trace 窗口期
+导致未迁移/未采集的 adapter family **视为不存在**，直接执行完整迁移。
+descriptor 生成器与 sealed-production 验收按此执行——不再因这 3 族
+unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（非吞掉
+失败），待节点 trace 窗口内出现新交易时经通用 call-seed 扫描器
+（recent-call-seed-scan.ts）自动恢复。

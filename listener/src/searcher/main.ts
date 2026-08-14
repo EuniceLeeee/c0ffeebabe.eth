@@ -4906,8 +4906,12 @@ async function processOpportunities(
           quoteProfitFloorBps: ctx.config.quoteProfitFloorBps,
           quoteSafetyBps: ctx.config.quoteSafetyBps,
           cache: ctx.cache,
+          // F8 default authority: the strict quote source is the only
+          // solver pricing path once the durable composition is the default.
+          // The legacy live backend is no longer a quote fallback; a solver
+          // without a strict source fails closed (no quote).
           quoteSource: useConfiguredBackend && ctx.config.liveBackend !== "rpc" && !localVictimApply
-            ? ctx.strictQuoteSource ?? ctx.liveBackend
+            ? ctx.strictQuoteSource
             : undefined,
           deferPhase2Sim: localVictimApply !== null && useConfiguredBackend && ctx.config.liveBackend !== "rpc",
           executionEvidence,
