@@ -483,3 +483,29 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   旧条件 + 本地 RPC。**下轮**：长窗口（3000s）dry-run（本地 RPC +
   DTB 覆盖）等首次 generation 完成 → 验证 graph edges ≥3 万 →
   materializer → descriptor → collect → eligible。
+
+### 完全重建真实规模核验（2026-08-15，commit bf6d6b94）
+
+- **head-N 源块修复（766dcf69）**：univ2/univ3 activity 池 strict
+  identity 从 1433 全挂 → 42 失败（<4%，均为第三方 V3 fork 池正确
+  拒绝：factory 非官方 Uniswap V3、getPool 反查 revert）。根因是
+  reth 对精确 head 的 eth_call 间歇性返回全零；改用 head-5 稳定源块
+  后通过。**univ4 PositionManager 反查 97% 命中（2665/2745）**。
+- **recent-log 性能修复（bf6d6b94）**：`findRecentLogHit` 默认 chunk
+  5000→500（reth getLogs 超线性，500 块 30-87ms vs 5000 块 0.8-1.7s），
+  enrich 从 15 分钟/1000 池提升到 ~55 分钟/7773 池（仍偏慢，每池
+  strict lifecycle 框架开销 ~10s 是剩余瓶颈）。
+- **完全重建 2 天窗口实测（universe-full1.json）**：**10,611 池**
+  （univ2-standard 5,566 / univ3-standard 1,981 / univ4 2,961 /
+  curve-underlying 43 / dodo-v2 38 / fluid-dex 20 / angstrom-v4 2），
+  对照旧基准 ee2e2483（19,546 池）缺口 ~9,000 池。
+- **缺口根因（结构性，非代码 bug）**：本地 reth 日志保留仅 ~7-14 天、
+  state ~1.2 天；univ4 历史池（旧 9,251）依赖 400 万块 Initialize
+  backfill + retained 累积，完全重建 2 天仅 2,961、7 天仅 3,285；
+  univ2/univ3 7 天 unique 仅比 2 天 +25%（5,507→6,867）。**完全重建
+  上限约 1.3-1.4 万池，2 万池/3 万边验收线在当前"完全重建 + 本地
+  reth + 无 Alchemy + retained 不作证据"约束下不可达**。
+- **待用户方向决策**：① 接受 ~1.3-1.4 万池为 F5 真实规模并调整验收
+  线；② 允许 univ4/dodo 历史池走 Alchemy archive 补池追平旧基准；
+  ③ 保留原验收线，F5 记录为数据保留窗口 blocker，先推进 F6-F9。
+  当前未降线、未冒充达标。
