@@ -795,7 +795,7 @@ async function enrichPool(
       );
       return { ...base, adapter: "curve-underlying", underlyingCoins: metadata.coins };
     }
-    if (adapter === "univ3") {
+    if (adapter === "univ3" || adapter === "univ3-standard") {
       const [token0, token1, fee, tickSpacing] = await Promise.all([
         callAddress(provider, pool.address, univ3Iface.encodeFunctionData("token0")),
         callAddress(provider, pool.address, univ3Iface.encodeFunctionData("token1")),
@@ -804,7 +804,7 @@ async function enrichPool(
       ]);
       return { ...base, token0, token1, fee, tickSpacing };
     }
-    if (adapter === "univ2") {
+    if (adapter === "univ2" || adapter === "univ2-standard") {
       const [token0, token1] = await Promise.all([
         callAddress(provider, pool.address, univ2Iface.encodeFunctionData("token0")),
         callAddress(provider, pool.address, univ2Iface.encodeFunctionData("token1")),
