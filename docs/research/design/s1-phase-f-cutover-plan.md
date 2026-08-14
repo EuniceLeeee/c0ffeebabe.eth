@@ -241,6 +241,25 @@ approve fallback 与默认 authority 尚未删除，禁止标记 F6-A/F8 complet
   §18.3 终态；`MigrationCleanupReceipt.verdict` 现在要求中央 + 闭包都净。
   合同测试断言 closure 字段、确定性哈希、blind 命中与 `verdict: fail`；
   shadow suite + regression sweep 保持全绿。
+- **blind T1 词汇迁移为 sealed artifact（2026-08-14，commit 待本轮）**：
+  `blind-production-compatibility.ts` 的 T1 逐族表（registered/current
+  family ids、warm-kind map、fluid legacy descriptor）与 erc4626 特判
+  从中央可执行代码移出：新建 dev/CI 生成器 `build-blind-t1-baseline.ts`
+  （不进 production import closure）产出 `generated/
+  blind-t1-baseline.generated.json`（frozenAcceptanceVocabulary +
+  generatorSourceHash），compatibility 模块只消费 sealed 数据；
+  erc4626 特判通用化为 sealed `mergeGroups` 循环（descriptor 字段顺序
+  保持，challenger-runtime/harness/artifact-freezer 测试 PASS 证明语义
+  等价）。prebuild 增加 artifact stale check。**closure familyId 分支
+  清零**：中央闭包不再有字面量逐族分支/驱动表（`centralFamilyLiteral
+  BranchesPresent=false`），只剩 `LEGACY_PRODUCTION_ADAPTER_FAMILIES`
+  一处中央残留（production authority 未迁移）。
+- **既有失败记录（非本轮引入）**：`searcher:adapter-family-blind-t1-
+  compatibility` 自 commit 02f0fbdb（移除 balancer-v3/curve-plain/
+  ekubo-router-v1 生产族）起即 fail closed——T1 冻结词汇仍含已删除族，
+  inventory 校验 throw（`freeze a new trusted acceptance generation`）；
+  原版与迁移版失败相同（验证过），不在 shadow suite。属于 blind 验收
+  体系需要新 T0 冻结的独立工作项，不阻塞 S1 F9 清理；后续轮次处理。
 - **节点 dry-run 证据（2026-08-14，commit 78a52739 固定，SSM 手动）**：
   /opt/MEV-impl-capture checkout 78a52739（git rev-parse HEAD 确认），
   listener `npm run build` 通过（BUILD_EXIT=0）；注入 /opt/MEV/.env

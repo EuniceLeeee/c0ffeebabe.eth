@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "prebuild": "node --import tsx src/searcher/build-family-capability-manifest.ts --check",
+    "prebuild": "node --import tsx src/searcher/build-family-capability-manifest.ts --check && node --import tsx src/searcher/build-blind-t1-baseline.ts --check",
     "build": "tsc",
     "build:live": "tsc -p tsconfig.live.json --noEmit",
     "start": "node dist/searcher/main.js",

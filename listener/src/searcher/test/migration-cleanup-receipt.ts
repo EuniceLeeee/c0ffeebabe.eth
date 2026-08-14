@@ -56,17 +56,15 @@ async function main(): Promise<void> {
   assert.match(String(closure.closureHash), /^[0-9a-f]{64}$/);
   assert.equal(closure.closureHash, productionImportClosure().closureHash);
   // Central authority is still the frozen legacy route baseline, so the
-  // closure honestly reports the remaining migration items: the legacy
-  // production registry list and the blind T1 baseline driver tables. The
-  // verdict must be fail until those are removed (§18.3).
+  // closure honestly reports the remaining migration item: the legacy
+  // production registry list. The verdict must be fail until it is removed
+  // (§18.3). The blind T1 baseline vocabulary has moved into the sealed
+  // generated artifact, so the closure has no literal per-family branches.
   assert.equal(closure.legacySymbolHitsPresent, true);
   assert(closure.legacySymbolHits.some(
     (hit) => hit.symbol === "LEGACY_PRODUCTION_ADAPTER_FAMILIES",
   ));
-  assert.equal(closure.centralFamilyLiteralBranchesPresent, true);
-  assert(closure.centralFamilyLiteralBranches.some(
-    (hit) => hit.file === "listener/src/searcher/blind-production-compatibility.ts",
-  ));
+  assert.equal(closure.centralFamilyLiteralBranchesPresent, false);
   assert.equal(receipt.importClosureLegacySymbolsPresent, true);
   assert.equal(receipt.importClosureFileCount, closure.fileCount);
   assert.equal(receipt.importClosureHash, closure.closureHash);

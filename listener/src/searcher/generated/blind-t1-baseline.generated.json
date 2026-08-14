@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "blind-t1-baseline-v1",
+  "frozenAcceptanceVocabulary": true,
+  "registeredRouteFamilyIds": [
+    "univ2-standard",
+    "univ3-standard",
+    "curve-plain",
+    "curve-underlying",
+    "balancer-v3",
+    "univ4",
+    "custom-swap:dodo-v2",
+    "protocol:erc4626",
+    "protocol:goldx",
+    "protocol:metronome-synth",
+    "protocol:metronome-hgusdc",
+    "protocol:psm",
+    "protocol:eigenpie",
+    "protocol:rocksolid",
+    "protocol:wsteth"
+  ],
+  "currentRouteFamilyIds": [
+    "univ2-standard",
+    "univ3-standard",
+    "curve-plain",
+    "curve-underlying",
+    "balancer-v3",
+    "univ4",
+    "custom-swap:dodo-v2",
+    "protocol:erc4626",
+    "protocol:goldx",
+    "protocol:metronome-synth",
+    "protocol:metronome-hgusdc",
+    "protocol:psm",
+    "protocol:eigenpie",
+    "protocol:rocksolid",
+    "protocol:wsteth",
+    "protocol:erc4626-silo-redeem",
+    "fluid-dex",
+    "credit:fluid"
+  ],
+  "warmKindByFamily": {
+    "univ2-standard": "mutable-pool",
+    "univ3-standard": "mutable-pool",
+    "curve-plain": "curve-pool",
+    "curve-underlying": "external-mid",
+    "balancer-v3": "external-mid",
+    "univ4": "mutable-pool",
+    "custom-swap:dodo-v2": "external-mid",
+    "fluid-dex": "legacy-mid",
+    "protocol:erc4626": "protocol-mid",
+    "protocol:erc4626-silo-redeem": "protocol-mid",
+    "protocol:goldx": "protocol-mid",
+    "protocol:metronome-synth": "protocol-mid",
+    "protocol:metronome-hgusdc": "protocol-mid",
+    "protocol:psm": "protocol-mid",
+    "protocol:eigenpie": "protocol-mid",
+    "protocol:rocksolid": "protocol-mid",
+    "protocol:wsteth": "protocol-mid",
+    "credit:fluid": null
+  },
+  "mergeGroups": {
+    "protocol:erc4626": [
+      "protocol:erc4626-silo-redeem"
+    ]
+  },
+  "fluidLegacyDescriptor": {
+    "edgeAdapterId": "fluid-dex-swap",
+    "poolAdapters": [
+      "fluid-dex"
+    ],
+    "slotKind": "swap",
+    "reason": "legacy Fluid DEX route; RouteAdapter migration is fixture-blocked"
+  },
+  "generatedFrom": "listener/src/searcher/build-blind-t1-baseline.ts",
+  "generatorSourceHash": "1155eb50f695ddbd81956ea0675b550a95e5a7d812d7911d4312da731a7327cd"
+}

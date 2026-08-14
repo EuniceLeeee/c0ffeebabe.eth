@@ -65,61 +65,37 @@ type BlindRouteFamily = Exclude<
  * to that frozen comparator is projected through these functions. Changing
  * this vocabulary would silently invalidate the trusted baseline, so a future
  * acceptance generation must freeze a new T0 instead of editing this bridge.
+ *
+ * The frozen vocabulary lives as sealed data in
+ * generated/blind-t1-baseline.generated.json (emitted by the dev/CI tool
+ * build-blind-t1-baseline.ts, which is outside the production import
+ * closure). This module only consumes it; it holds no literal per-family
+ * driver tables (§0.1).
  */
-const T1_REGISTERED_ROUTE_FAMILY_IDS = Object.freeze([
-  "univ2-standard",
-  "univ3-standard",
-  "curve-plain",
-  "curve-underlying",
-  "balancer-v3",
-  "univ4",
-  "custom-swap:dodo-v2",
-  "protocol:erc4626",
-  "protocol:goldx",
-  "protocol:metronome-synth",
-  "protocol:metronome-hgusdc",
-  "protocol:psm",
-  "protocol:eigenpie",
-  "protocol:rocksolid",
-  "protocol:wsteth",
-] as const);
+import blindT1Baseline from "./generated/blind-t1-baseline.generated.json";
 
-const T1_CURRENT_ROUTE_FAMILY_IDS = Object.freeze([
-  ...T1_REGISTERED_ROUTE_FAMILY_IDS,
-  "protocol:erc4626-silo-redeem",
-  "fluid-dex",
-  "credit:fluid",
-] as const);
-
-const T1_WARM_KIND_BY_FAMILY = Object.freeze(
-  new Map<string, BlindBaselineWarmKind | null>([
-    ["univ2-standard", "mutable-pool"],
-    ["univ3-standard", "mutable-pool"],
-    ["curve-plain", "curve-pool"],
-    ["curve-underlying", "external-mid"],
-    ["balancer-v3", "external-mid"],
-    ["univ4", "mutable-pool"],
-    ["custom-swap:dodo-v2", "external-mid"],
-    ["fluid-dex", "legacy-mid"],
-    ["protocol:erc4626", "protocol-mid"],
-    ["protocol:erc4626-silo-redeem", "protocol-mid"],
-    ["protocol:goldx", "protocol-mid"],
-    ["protocol:metronome-synth", "protocol-mid"],
-    ["protocol:metronome-hgusdc", "protocol-mid"],
-    ["protocol:psm", "protocol-mid"],
-    ["protocol:eigenpie", "protocol-mid"],
-    ["protocol:rocksolid", "protocol-mid"],
-    ["protocol:wsteth", "protocol-mid"],
-    ["credit:fluid", null],
-  ]),
+const t1RegisteredIds: readonly string[] = Object.freeze([
+  ...blindT1Baseline.registeredRouteFamilyIds,
+]);
+const t1CurrentIds: readonly string[] = Object.freeze([
+  ...blindT1Baseline.currentRouteFamilyIds,
+]);
+const t1WarmKindByFamily: ReadonlyMap<string, BlindBaselineWarmKind | null> =
+  new Map(
+    Object.entries(blindT1Baseline.warmKindByFamily) as [
+      string,
+      BlindBaselineWarmKind | null,
+    ][],
+  );
+const t1MergeGroups: ReadonlyMap<string, readonly string[]> = new Map(
+  Object.entries(blindT1Baseline.mergeGroups),
 );
-
-const T1_FLUID_LEGACY_DESCRIPTOR = Object.freeze({
-  edgeAdapterId: "fluid-dex-swap",
-  poolAdapters: Object.freeze(["fluid-dex"]),
-  slotKind: "swap",
-  reason: "legacy Fluid DEX route; RouteAdapter migration is fixture-blocked",
-});
+const t1FluidLegacyDescriptor: Readonly<{
+  readonly edgeAdapterId: string;
+  readonly poolAdapters: readonly string[];
+  readonly slotKind: string;
+  readonly reason: string;
+}> = blindT1Baseline.fluidLegacyDescriptor;
 
 export function blindCompatibilityCanonicalEdgeId(edge: TokenEdge): string {
   return `edge:${blindProductionAuditHash({
@@ -281,7 +257,7 @@ export function blindCompatibilityActiveFamilyManifestPayload(
   );
   const byId = new Map(routes.map((family) => [family.id, family] as const));
   const actualIds = [...byId.keys()].sort();
-  const expectedIds = [...T1_CURRENT_ROUTE_FAMILY_IDS].sort();
+  const expectedIds = [...t1CurrentIds].sort();
   if (
     actualIds.length !== expectedIds.length ||
     actualIds.some((id, index) => id !== expectedIds[index])
@@ -293,7 +269,7 @@ export function blindCompatibilityActiveFamilyManifestPayload(
     );
   }
 
-  const registered = T1_REGISTERED_ROUTE_FAMILY_IDS.map((familyId) => {
+  const registered = t1RegisteredIds.map((familyId) => {
     const descriptor = t1RegisteredFamilyDescriptor(familyId, byId);
     return {
       familyId: descriptor.id,
@@ -307,7 +283,7 @@ export function blindCompatibilityActiveFamilyManifestPayload(
     familyId: "legacy:fluid-dex-swap",
     kind: "legacy-route",
     descriptorSha256: blindProductionAuditHash(
-      normalizeBlindArtifactValue(T1_FLUID_LEGACY_DESCRIPTOR),
+      normalizeBlindArtifactValue(t1FluidLegacyDescriptor),
     ),
   };
   const projected = [...registered, t1FluidCreditDescriptor(byId), legacy]
@@ -333,7 +309,7 @@ export function blindCompatibilityPricingCoverage(
 
   for (const edge of graph.edges) {
     const currentFamilyId = currentFamilyIdForEdge(edge);
-    const warmKind = T1_WARM_KIND_BY_FAMILY.get(currentFamilyId);
+    const warmKind = t1WarmKindByFamily.get(currentFamilyId);
     if (warmKind === undefined) {
       throw new Error(
         `blind T1 compatibility lacks warm semantics for ${currentFamilyId}`,
@@ -430,41 +406,30 @@ function t1StateKey(
 }
 
 function t1RegisteredFamilyDescriptor(
-  familyId: typeof T1_REGISTERED_ROUTE_FAMILY_IDS[number],
+  familyId: string,
   byId: ReadonlyMap<string, BlindRouteFamily>,
 ): BlindCompatibilityFamilyDescriptor {
   const family = requiredFamily(byId, familyId);
-  const warmKind = T1_WARM_KIND_BY_FAMILY.get(family.id);
+  const warmKind = t1WarmKindByFamily.get(family.id);
   if (warmKind === undefined || warmKind === null) {
     throw new Error(`blind T1 compatibility missing warm kind for ${family.id}`);
   }
-  if (familyId !== "protocol:erc4626") {
-    return {
-      id: family.id,
-      kind: family.kind,
-      poolAdapters: Object.freeze([...family.poolAdapters]),
-      edgeAdapterIds: Object.freeze([...family.edgeAdapterIds]),
-      actionAdapterIds: Object.freeze([
-        ...family.ownedActionAdapterIds,
-        ...family.requiredInfraActionAdapterIds,
-      ]),
-      requiresProtocolEdgesFlag: family.requiresProtocolEdgesFlag,
-      warmKind,
-    };
-  }
-
-  const silo = requiredFamily(byId, "protocol:erc4626-silo-redeem");
+  // T1 merge groups fold extra families into the registered family's
+  // descriptor (frozen baseline semantics, declared in the sealed artifact).
+  const merged = (t1MergeGroups.get(familyId) ?? []).map((id) =>
+    requiredFamily(byId, id),
+  );
   return {
     id: family.id,
     kind: family.kind,
     poolAdapters: Object.freeze([...family.poolAdapters]),
     edgeAdapterIds: Object.freeze([
       ...family.edgeAdapterIds,
-      ...silo.edgeAdapterIds,
+      ...merged.flatMap((m) => [...m.edgeAdapterIds]),
     ]),
     actionAdapterIds: Object.freeze([
       ...family.ownedActionAdapterIds,
-      ...silo.ownedActionAdapterIds,
+      ...merged.flatMap((m) => [...m.ownedActionAdapterIds]),
       ...family.requiredInfraActionAdapterIds,
     ]),
     requiresProtocolEdgesFlag: family.requiresProtocolEdgesFlag,
