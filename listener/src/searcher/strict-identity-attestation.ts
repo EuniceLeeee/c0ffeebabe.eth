@@ -223,11 +223,18 @@ export async function attestPoolIdentitiesStrict<
           outcome.stage === "identity" &&
           outcome.status === "rejected"
         );
+        const anyIdentity = result.outcomes.find((outcome) =>
+          outcome.stage === "identity"
+        );
         rejected.push({
           ...pool,
           adapter: pool.adapter ?? "",
           reason: rejection === undefined
-            ? "identity_unverified:no-outcome"
+            ? anyIdentity === undefined
+              ? "identity_unverified:no-outcome"
+              : `identity_unverified:${anyIdentity.status}:${
+                  anyIdentity.reasonCode ?? "no-reason"
+                }`
             : `identity_rejected:${rejection.reasonCode ?? "no-reason"}`,
         });
         continue;
