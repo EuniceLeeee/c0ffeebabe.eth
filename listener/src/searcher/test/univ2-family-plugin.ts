@@ -866,10 +866,56 @@ assert.match(
   /source\/generation differs from its route publication handle/,
 );
 
+await testUniv2FactoryEnumeration();
+
 console.log(
   "univ2-family-plugin PASS " +
-    "(strict seven-capability parity, reverse identity, carry, victim replay, ownership)",
+    "(strict seven-capability parity, reverse identity, carry, victim replay, ownership, factory enumeration)",
 );
+
+async function testUniv2FactoryEnumeration(): Promise<void> {
+  const enumeration = univ2StrictFamilyPlugin.discovery?.factoryEnumeration;
+  assert(enumeration, "univ2 discovery must declare factory enumeration");
+  const P0 = ethers.getAddress(`0x${"11".repeat(20)}`);
+  const P1 = ethers.getAddress(`0x${"22".repeat(20)}`);
+  const P2 = ethers.getAddress(`0x${"33".repeat(20)}`);
+  const enumIface = new ethers.Interface([
+    "function allPairsLength() view returns (uint256)",
+    "function allPairs(uint256) view returns (address)",
+  ]);
+  const lenData = enumIface.encodeFunctionResult("allPairsLength", [3n]);
+  let allPairsCalls = 0;
+  const provider = {
+    call: async (req: { to: string; data: string }): Promise<string> => {
+      if (req.data === enumIface.encodeFunctionData("allPairsLength")) {
+        return lenData;
+      }
+      if (req.data.startsWith(enumIface.getFunction("allPairs")!.selector)) {
+        allPairsCalls++;
+        const decoded = enumIface.decodeFunctionData("allPairs", req.data)[0];
+        const address = [P0, P1, P2][Number(decoded)] as string;
+        return enumIface.encodeFunctionResult("allPairs", [address]);
+      }
+      throw new Error(`unexpected call ${req.data.slice(0, 10)}`);
+    },
+  };
+  const pools = await enumeration.enumerate({ provider });
+  assert.equal(pools.length, 3);
+  assert.deepEqual(
+    pools.map((pool) => pool.address),
+    [P0.toLowerCase(), P1.toLowerCase(), P2.toLowerCase()],
+  );
+  assert.equal(pools.every((pool) => pool.adapter === "univ2"), true);
+  assert.equal(allPairsCalls, 3);
+  const badLen = await enumeration.enumerate({
+    provider: {
+      call: async (req: { to: string; data: string }): Promise<string> =>
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+    },
+  }).then(() => null, (error: unknown) => error);
+  assert(badLen instanceof Error);
+  assert.match(String((badLen as Error).message), /invalid pool count/);
+}
 
 function loadedFamily(): LoadedFamilyPlugin {
   const summary = definedFamilyPluginContractSummary(univ2StrictFamilyPlugin);

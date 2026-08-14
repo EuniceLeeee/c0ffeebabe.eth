@@ -14,6 +14,8 @@ import {
 } from "./pool-universe.js";
 import type { PoolIdentityResult } from "./venues/identity.js";
 import { attestPoolsStrictFromProvider } from "./strict-identity-attestation.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
+  "./venues/production-family-composition.js";
 import type { VenueId } from "./venues/capability.js";
 import type { VenueIdentitySource } from "./venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
@@ -131,8 +133,41 @@ function loadEnv(): void {
 
 async function main(): Promise<void> {
   loadEnv();
-  const rpcUrl = process.env.MAINNET_RPC_URL;
-  if (!rpcUrl) throw new Error("MAINNET_RPC_URL required");
+  // S1 F5 universe rebuild is bound to the local reth node: it is the only
+  // source whose state retention window is deep enough for the attestation
+  // source block (toBlock≈head). A remote RPC (e.g. Alchemy) prunes old
+  // heights and was the root cause of the 19534-pool batch rejection.
+  // SEARCHER_LIVE_RPC_URL wins when present (live process convention);
+  // otherwise the rebuild defaults to the local reth endpoint and refuses
+  // to fall back to a remote MAINNET_RPC_URL unless the operator explicitly
+  // opts out with POOL_UNIVERSE_ALLOW_REMOTE_RPC=1.
+  const localRpcUrl = process.env.SEARCHER_LIVE_RPC_URL ?? "http://127.0.0.1:8545";
+  const configuredRpcUrl = process.env.MAINNET_RPC_URL;
+  const allowRemote =
+    process.env.POOL_UNIVERSE_ALLOW_REMOTE_RPC === "1";
+  const isLocalRpc = (url: string): boolean => {
+    try {
+      const { hostname } = new URL(url);
+      return (
+        hostname === "127.0.0.1" ||
+        hostname === "localhost" ||
+        hostname === "::1"
+      );
+    } catch {
+      return false;
+    }
+  };
+  const rpcUrl =
+    configuredRpcUrl !== undefined && (allowRemote || isLocalRpc(configuredRpcUrl))
+      ? configuredRpcUrl
+      : localRpcUrl;
+  if (rpcUrl !== configuredRpcUrl) {
+    console.log(
+      `[pool-universe] RPC pinned to local reth ${rpcUrl} ` +
+        `(configured MAINNET_RPC_URL=${configuredRpcUrl ?? "<unset>"} ` +
+        `allowRemote=${allowRemote})`,
+    );
+  }
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const logRpcUrl = process.env.POOL_UNIVERSE_LOG_RPC_URL;
   const logProvider = logRpcUrl
@@ -415,6 +450,52 @@ async function main(): Promise<void> {
   for (const pool of included) {
     const key = poolRegistryKey(pool);
     if (!poolByKey.has(key)) poolByKey.set(key, pool);
+  }
+  // F5 universe coverage: execute every catalog-declared factory
+  // enumeration source (plugin-owned capability; the central builder only
+  // runs the declared capability, it holds no per-family logic). Reverse
+  // identity remains the admission gate — enumeration is provenance.
+  const enumerationProvider = {
+    call: async (req: { to: string; data: string }, blockTag?: number) =>
+      stateProvider.call({ ...req, blockTag: blockTag ?? latest }),
+    getLogs: async (filter: {
+      address?: string;
+      topics?: readonly (string | null)[];
+      fromBlock?: number;
+      toBlock?: number;
+    }) => logProvider.send("eth_getLogs", [{
+      ...(filter.address === undefined ? {} : { address: filter.address }),
+      topics: [...(filter.topics ?? [])],
+      fromBlock: ethers.toQuantity(filter.fromBlock ?? 0),
+      toBlock: ethers.toQuantity(filter.toBlock ?? latest),
+    }]),
+  };
+  for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .listAll()) {
+    // Type guard: funding plugins declare no discovery slice; only
+    // plugins that declare the enumeration capability participate.
+    if (!("discovery" in family.plugin)) continue;
+    const enumeration = family.plugin.discovery.factoryEnumeration;
+    if (enumeration === undefined) continue;
+    const items = await enumeration.enumerate({
+      provider: enumerationProvider,
+    });
+    console.log(
+      `[pool-universe] factory-enumerated ${family.plugin.manifest.familyId}: ` +
+        `${items.length} pools`,
+    );
+    for (const item of items) {
+      const entry: PoolUniverseEntry = Object.freeze({
+        address: item.address,
+        adapter: item.adapter as PoolEntry["adapter"],
+        source: "factory-enumerated",
+        score: 0,
+        swapCount30d: 0,
+        lastSwapBlock: 0,
+      });
+      const key = poolRegistryKey(entry);
+      if (!poolByKey.has(key)) poolByKey.set(key, entry);
+    }
   }
   if (existsSync(discoveryQueuePath)) {
     console.log(`[pool-universe] discovery-queue: +${included.length} included, ${blocked.length} blocked`);
@@ -1004,4 +1085,3 @@ async function resolvePoolIdentityStrict(
     identitySource: entry.identitySource as VenueIdentitySource,
   };
 }
-

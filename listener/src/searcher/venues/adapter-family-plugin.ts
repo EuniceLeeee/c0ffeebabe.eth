@@ -278,11 +278,37 @@ export type DiscoveryEvidenceChannel =
   | "nominate"
   | "tx-evidence";
 
+/**
+ * Plugin-owned pool enumeration source (infrastructure singletons only).
+ * The central universe builder executes every declared enumeration source
+ * generically and merges the resulting pool addresses with the activity +
+ * retained sets; reverse identity stays the admission gate (enumeration is
+ * provenance, never an allowlist).
+ */
+export interface FactoryEnumerationSemantics {
+  enumerate(input: {
+    provider: {
+      call(req: { readonly to: string; readonly data: string }, blockTag?: number): Promise<string>;
+      getLogs(filter: {
+        readonly address?: string;
+        readonly topics?: readonly (string | null)[];
+        readonly fromBlock?: number;
+        readonly toBlock?: number;
+      }): Promise<readonly {
+        readonly address: string;
+        readonly topics: readonly string[];
+        readonly data: string;
+      }[]>;
+    };
+  }): Promise<readonly { readonly address: string; readonly adapter: string }[]>;
+}
+
 export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
   readonly sources: readonly DiscoverySourceKind[];
   readonly callPatterns?: readonly CallPattern[];
   readonly logPatterns?: readonly LogPattern[];
   readonly addressSurfaces?: readonly AddressSurfacePattern[];
+  readonly factoryEnumeration?: FactoryEnumerationSemantics;
   /**
    * Required evidence channel declaration. Every route/protocol/credit
    * Family must state how the strict side re-derives its own admission
@@ -2998,6 +3024,7 @@ function validateDiscovery(discovery: DiscoverySemantics<any>): void {
       "candidateKey",
       "decodeCandidate",
       "evidenceChannel",
+      "factoryEnumeration",
       "logPatterns",
       "nominate",
       "sources",
