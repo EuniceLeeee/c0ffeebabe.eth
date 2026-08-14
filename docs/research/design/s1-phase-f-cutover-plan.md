@@ -201,6 +201,31 @@ approve fallback 与默认 authority 尚未删除，禁止标记 F6-A/F8 complet
 - 只有 F5 eligible、F6 B→C→D→F→A、F7/F8、§18.3/§20.2.6 和最终
   clean-process/node gates 全部通过后，才可宣称 S1/MD 交付完成。
 
+- **2026-08-14 落地（commit 15f00bf0 + 944b276f）**：
+  `listener/src/searcher/migration-cleanup-receipt.ts` 落地——
+  `buildMigrationCleanupReceipt` 只扫描中央路径（searcher 顶层 +
+  live-backends，排除 `venues/` 插件自有声明与 `build-family-capability-manifest.ts`
+  dev/CI 工具），产出 `MigrationCleanupReceipt`：`schemaVersion:
+  migration-cleanup-receipt-v1`、`legacyRuntimeBranches`（激活输入/族宽
+  schema API/手工 adapterSchemaRevision/exactToCoarse 旁路/环境 I/O API
+  五类中央 legacy 符号）、`verdict`、`sourceClosureHash`、
+  `productionCatalogKind`、`traceWindowAbsentFamilyIds` 与全部机器证据字段。
+  中央路径扫描当前 `verdict: pass`（legacySummary 空、legacyRuntimeBranches
+  空）；manual `adapterSchemaRevision` 从 swaps 族声明移除，blockscan
+  schema revision 改由 strict catalog 的 `strictDefinitionBoundaryHash`
+  （capability 注册顶层参数）驱动。`searcher:migration-cleanup-receipt`
+  注册，合同测试 PASS，shadow suite 55/55，`s1-regression-sweep.sh` 12/12
+  全绿（commit 944b276f）。
+- **诚实状态（F9 未完，勿标 completed）**：`productionCatalogKind` 当前为
+  `frozen-legacy-route-authority-v1`——`LEGACY_PRODUCTION_ADAPTER_FAMILIES`
+  仍作为 `AdapterFamilyRegistry` 的 production authority 输入；切换为
+  `generated-static-imports` 需要 strict catalog 完全替代 registry 输入
+  （深桥接，非单轮）。receipt 的机器证据字段（batchParityReceiptHashes/
+  finalFamilyResultMatrixHash/activeCatalogHash/rollbackArtifactRef 等）
+  需在固定 commit 上节点 dry-run 后绑定真实哈希，当前为合同占位。AST/
+  import-closure 传递闭包正式证明待补（`scanLegacySymbols` 为结构扫描，
+  非传递闭包）。完成这三项后才可宣称 §18.3/§20.2.6 终态。
+
 ## 回退
 
 任一 slice 无法保持绿则回退该 slice（git revert + 上一已验收构建物），
