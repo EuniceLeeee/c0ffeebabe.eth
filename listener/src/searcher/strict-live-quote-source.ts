@@ -108,10 +108,21 @@ function amountOutFromMid(amountIn: bigint, mid: RouteVenueMid): bigint {
  * while the strict publication set is still growing. The final simulation
  * remains the correctness gate; this only prices candidate propagation.
  */
+export interface StrictQuoteSourceFallbackPolicy {
+  /**
+   * "legacy" (transitional): a route missing from the strict views falls
+   * back to the legacy source. "fail-closed" (F6 Pair E terminal): a route
+   * missing from committed strict views throws, so the solver never prices
+   * through a non-strict path once the durable composition is the default.
+   */
+  readonly fallback: "legacy" | "fail-closed";
+}
+
 export function createStrictQuoteSource(input: {
   readonly views: () => StrictShadowCatalogViews | null;
   readonly catalog: FamilyCapabilityCatalog;
   readonly legacy: AmountQuoteSource;
+  readonly fallback?: StrictQuoteSourceFallbackPolicy["fallback"];
 }): AmountQuoteSource {
   let cachedRevision = -1;
   let cachedIndex: StrictQuoteIndex | null = null;
@@ -159,6 +170,13 @@ export function createStrictQuoteSource(input: {
             }
           }
         }
+      }
+      if (input.fallback === "fail-closed") {
+        throw new Error(
+          `strict quote source has no committed pricing for ` +
+            `adapter=${req.adapterId} target=${req.target} ` +
+            `tokenIn=${req.tokenIn} tokenOut=${req.tokenOut}`,
+        );
       }
       return await input.legacy.quote(req);
     },

@@ -171,6 +171,38 @@ async function main(): Promise<void> {
   assert.equal(noViews.amountOut, 999n);
   assert.deepEqual(legacyCalls, ["univ2-swap", "univ2-swap", "univ2-swap"]);
 
+  // F6 Pair E: fail-closed mode never consults the legacy source.
+  const failClosedCalls: string[] = [];
+  const failClosed = createStrictQuoteSource({
+    views: () => currentViews,
+    catalog: CATALOG,
+    legacy: legacyQuoteSource(failClosedCalls),
+    fallback: "fail-closed",
+  });
+  await assert.rejects(
+    failClosed.quote({
+      adapterId: "univ2-swap",
+      target: POOL,
+      tokenIn: `0x${"44".repeat(20)}`,
+      tokenOut: TOKEN_OUT,
+      amountIn: 1_000n,
+    }),
+    /no committed pricing/,
+    "unknown route must fail closed instead of falling back",
+  );
+  await assert.rejects(
+    failClosed.quote({
+      adapterId: "univ2-swap",
+      target: POOL,
+      tokenIn: TOKEN_IN,
+      tokenOut: TOKEN_OUT,
+      amountIn: 1_000n,
+    }),
+    /no committed pricing/,
+    "no-views route must fail closed instead of falling back",
+  );
+  assert.deepEqual(failClosedCalls, [], "fail-closed mode must not call legacy");
+
   console.log("strict-live-quote-source PASS");
 }
 

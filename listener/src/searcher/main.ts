@@ -3704,6 +3704,10 @@ async function main(): Promise<void> {
                     catalog:
                       PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
                     legacy: liveBackend,
+                    // F6 Pair E: the durable composition is the default, so
+                    // the solver never prices through a non-strict path; a
+                    // route missing from committed views fails closed.
+                    fallback: "fail-closed",
                   }),
                 }),
           });
