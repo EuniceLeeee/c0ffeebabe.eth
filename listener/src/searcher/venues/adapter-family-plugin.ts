@@ -1376,6 +1376,66 @@ export type AnyFamilyPlugin = AdapterFamilyPlugin<
   any
 >;
 
+/**
+ * Unified plugin contract indexed by domain. Every Family - swap, protocol,
+ * credit, funding, and any future domain (e.g. LP) - is defined through this
+ * single discriminated type: the required/optional/prohibited capability
+ * slots are decided by the domain, not by which constructor was used. The
+ * concrete per-domain interfaces below remain as type aliases so existing
+ * production entries keep working unchanged.
+ */
+export type FamilyPlugin<Domain extends FamilyDomain> =
+  Domain extends "swap"
+    ? AnySwapFamilyPlugin
+    : Domain extends "protocol"
+    ? AnyProtocolFamilyPlugin
+    : Domain extends "credit"
+    ? AnyCreditFamilyPlugin
+    : AnyFundingFamilyPlugin;
+
+export type AnySwapFamilyPlugin = SwapFamilyPlugin<
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any
+>;
+
+export type AnyProtocolFamilyPlugin = ProtocolFamilyPlugin<
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any
+>;
+
+export type AnyCreditFamilyPlugin = CreditFamilyPlugin<
+  FamilyCandidate,
+  VerifiedIdentity,
+  CompiledInstanceDescriptor,
+  FamilyRouteDescriptor,
+  unknown,
+  object,
+  unknown
+>;
+
+export type AnyFundingFamilyPlugin = FundingFamilyPlugin<
+  FundingSourceDescriptor,
+  unknown
+>;
+
 export type AnyStrictFamilyPlugin =
   | AdapterFamilyPlugin<any, any, any, any, any, any, any, any, any, any, any>
   | FundingFamilyPlugin<FundingSourceDescriptor, unknown>
@@ -1483,7 +1543,7 @@ export function defineSwapFamily<
 ): DefinedFamilyPlugin<
   SwapFamilyPlugin<C, I, D, R, PD, PS, E, ID, PDR, ISE, PSE>
 > {
-  return defineFamily(plugin, "swap");
+  return defineFamily(plugin);
 }
 
 export function defineProtocolFamily<
@@ -1503,7 +1563,7 @@ export function defineProtocolFamily<
 ): DefinedFamilyPlugin<
   ProtocolFamilyPlugin<C, I, D, R, PD, PS, E, ID, PDR, ISE, PSE>
 > {
-  return defineFamily(plugin, "protocol");
+  return defineFamily(plugin);
 }
 
 export function defineFundingFamily<
@@ -1512,7 +1572,7 @@ export function defineFundingFamily<
 >(
   plugin: FundingFamilyPlugin<S, E>,
 ): DefinedFamilyPlugin<FundingFamilyPlugin<S, E>> {
-  return defineFamily(plugin, "funding");
+  return defineFamily(plugin);
 }
 
 export function defineCreditFamily<
@@ -1526,7 +1586,7 @@ export function defineCreditFamily<
 >(
   plugin: CreditFamilyPlugin<C, I, D, R, E, ID, ISE>,
 ): DefinedFamilyPlugin<CreditFamilyPlugin<C, I, D, R, E, ID, ISE>> {
-  return defineFamily(plugin, "credit");
+  return defineFamily(plugin);
 }
 
 export function assertDefinedFamilyPlugin(
@@ -1563,13 +1623,12 @@ export function definedFamilyPluginContractSummary(
 
 function defineFamily<Plugin extends AnyStrictFamilyPlugin>(
   plugin: Plugin,
-  expectedDomain: FamilyDomain,
 ): DefinedFamilyPlugin<Plugin> {
   if (definedFamilyPlugins.has(plugin)) {
     throw new Error("family plugin has already been defined");
   }
-  const summary = validateFamilyPlugin(plugin, expectedDomain);
-  installSynchronousGuards(plugin, expectedDomain);
+  const summary = validateFamilyPlugin(plugin, plugin.manifest.domain);
+  installSynchronousGuards(plugin, plugin.manifest.domain);
   deepFreezeDefinition(plugin, "plugin", new Set<object>());
   deepFreezeDefinition(summary, "contract summary", new Set<object>());
   definedFamilyPlugins.set(plugin, summary);

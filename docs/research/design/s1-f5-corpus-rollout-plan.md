@@ -352,3 +352,17 @@ challenger 双闭包 → held-out negatives → sealed-production judge。
 深缺口回溯（curve/angstrom/dodo）。**未达到 22 族全覆盖前，sealed-
 production eligible=true 不能宣称**；descriptor 生成器按设计在
 unresolved 非空时 fail-closed 拒绝。
+
+### 统一 FamilyPlugin 契约收敛（2026-08-14）
+
+- 新增统一判别类型 `FamilyPlugin<Domain>`（swap/protocol/credit/funding
+  按 domain 选能力槽），四个具体接口保留为类型别名，22 个 production
+  entry 零改动。
+- `defineFamily` 从 `plugin.manifest.domain` 取 domain（不再传参），
+  `defineSwapFamily` 等保留为薄包装。
+- funding 的 discovery 槽按 domain 语义**可选**（funding 无实例发现，
+  repayment target 在其 funding 能力内声明）；其余 domain 的
+  discovery 必填 evidenceChannel=nominate + nominate 能力。
+- 新增插件脚手架 `templates/family-plugin/`（README + skeleton.ts）：
+  新族从统一骨架挑 domain 所需切片，中央流水线/capture/corpus/parity
+  不动；未来 LP 域只需加 domain 值 + validator + 能力槽。

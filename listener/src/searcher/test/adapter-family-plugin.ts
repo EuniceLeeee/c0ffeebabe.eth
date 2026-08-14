@@ -643,7 +643,7 @@ const wrongDomain = swapDefinition();
 (wrongDomain.manifest as { domain: string }).domain = "protocol";
 assert.throws(
   () => defineSwapFamily(wrongDomain),
-  /does not match swap/,
+  /missing required top-level capability protocol|does not match swap/,
 );
 
 const wrongActionOwner = swapDefinition();
