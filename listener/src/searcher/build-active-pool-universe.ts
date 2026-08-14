@@ -215,7 +215,7 @@ async function main(): Promise<void> {
     process.env.POOL_UNIVERSE_MIN_SWAPS ?? String(DEFAULT_POOL_UNIVERSE_MIN_SWAPS),
   );
   const logBatch = Number(process.env.POOL_UNIVERSE_LOG_BATCH ?? "1000");
-  const topicScanMode =
+  const topicScanMode: "per-event" | "union" =
     process.env.POOL_UNIVERSE_TOPIC_SCAN_MODE === "per-event"
       ? "per-event"
       : "union";
@@ -263,7 +263,7 @@ async function main(): Promise<void> {
       `(blocks=${latest - fromBlock}, batch=${logBatch})`,
   );
 
-  const landed = await discoverLandedPools({
+  const landedDiscoveryInput = {
     registry: PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery(),
     backend: createSplitHorizonPoolDiscoveryBackend(
       stateProvider,
@@ -279,7 +279,43 @@ async function main(): Promise<void> {
     retainedPools: priorUniversePools,
     topicScanMode,
     strict: true,
-  });
+  };
+  const landed = await discoverLandedPools(landedDiscoveryInput);
+  // Generic bounded retry: deferred materialization candidates (batch
+  // timeout / transient RPC) are fed back as retryable input instead of
+  // being silently dropped. Mirrors the startup discovery retry loop;
+  // there is no per-family branch here.
+  const MAX_MATERIALIZATION_ATTEMPTS = 3;
+  let materializedPools = [...landed.materializedPools];
+  let retryablePools = [...landed.retryablePools];
+  for (
+    let attempt = 2;
+    retryablePools.length > 0 && attempt <= MAX_MATERIALIZATION_ATTEMPTS;
+    attempt++
+  ) {
+    console.log(
+      `[pool-universe] materialization retry ${attempt}/` +
+        `${MAX_MATERIALIZATION_ATTEMPTS} retryable=${retryablePools.length}`,
+    );
+    const retried = await discoverLandedPools({
+      ...landedDiscoveryInput,
+      retryablePools,
+    });
+    const seenKeys = new Set(materializedPools.map(poolRegistryKey));
+    for (const pool of retried.materializedPools) {
+      const key = poolRegistryKey(pool);
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      materializedPools.push(pool);
+    }
+    retryablePools = [...retried.retryablePools];
+  }
+  if (retryablePools.length > 0) {
+    console.log(
+      `[pool-universe] materialization retries exhausted: ` +
+        `unresolved=${retryablePools.length}`,
+    );
+  }
   // TRANSITIONAL BRIDGE (F6 Pair C/D delete-scope, expires with the
   // catalog-driven universe generator): curve-underlying is re-admitted to
   // the generic activity lane until its strict nomination path is the
@@ -302,7 +338,7 @@ async function main(): Promise<void> {
     );
   }
   console.log(
-    `[pool-universe] family-materialized=${landed.materializedPools.length}`,
+    `[pool-universe] family-materialized=${materializedPools.length}`,
   );
   const retainedFamilyInventory = await retainVerifiedSwapFamilyInstances({
     families: PRODUCTION_ADAPTER_FAMILIES.swaps(),
@@ -310,7 +346,7 @@ async function main(): Promise<void> {
     admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     backend: stateProvider,
     priorPools: priorUniversePools,
-    freshPools: landed.materializedPools,
+    freshPools: materializedPools,
     // F6 Pair B: retained inventory re-attests through the generated
     // catalog + plugin lifecycle at the frozen source block. The legacy
     // per-adapter resolver registry is no longer the admission authority.
@@ -366,7 +402,7 @@ async function main(): Promise<void> {
     });
   }
   const materializedTokenPools = [
-    ...landed.materializedPools,
+    ...materializedPools,
     ...retainedFamilyInventory.pools,
   ].map(materializedTokenPool);
   const ranked = arbRelevance
@@ -391,7 +427,7 @@ async function main(): Promise<void> {
     if (pool.token1) tokenSet.add(pool.token1.toLowerCase());
     for (const token of pool.underlyingCoins ?? []) tokenSet.add(token.toLowerCase());
   }
-  for (const pool of landed.materializedPools) {
+  for (const pool of materializedPools) {
     if (pool.token0) tokenSet.add(pool.token0.toLowerCase());
     if (pool.token1) tokenSet.add(pool.token1.toLowerCase());
   }
@@ -426,7 +462,7 @@ async function main(): Promise<void> {
   for (const pool of retainedFamilyInventory.pools) {
     poolByKey.set(poolRegistryKey(pool), pool);
   }
-  for (const pool of landed.materializedPools) {
+  for (const pool of materializedPools) {
     poolByKey.set(poolRegistryKey(pool), pool);
   }
   for (const pool of included) {

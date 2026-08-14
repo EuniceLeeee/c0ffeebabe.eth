@@ -90,6 +90,10 @@ const dodoV2LandedEvents = defineSwapLandedEvents({
 const dodoV2PoolDiscovery = createAddressLandedPoolMaterializer({
   version: "dodo-v2-address-metadata-v1",
   eventIds: ["dodo-v2-swap"],
+  // The default 3s batch budget cannot cover ~300 live pools (each needs
+  // identity base/quote + registry reverse binding + token reads). The batch
+  // budget is family-owned configuration, not a per-pool cap.
+  materializationTimeoutMs: 120_000,
   async materializePool(candidate, context) {
     const identity = await dodoV2IdentityResolver({
       backend: context.backend,
