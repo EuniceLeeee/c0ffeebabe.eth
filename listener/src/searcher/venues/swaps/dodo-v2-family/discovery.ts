@@ -11,13 +11,14 @@ import {
   DODO_V2_SWAP_TOPIC,
 } from "./codec.js";
 import type { DodoV2Candidate } from "./types.js";
+import { nominateDodoV2 } from "./nomination.js";
 
 export const DODO_V2_SELL_BASE_PATTERN_ID = "dodo-v2-sell-base-call";
 export const DODO_V2_SELL_QUOTE_PATTERN_ID = "dodo-v2-sell-quote-call";
 export const DODO_V2_SWAP_LOG_PATTERN_ID = "dodo-v2-swap-log";
 
 export const dodoV2Discovery = {
-  evidenceChannel: "tx-evidence" as const,
+  evidenceChannel: "nominate" as const,
   sources: ["landed-log", "observed-call"],
   callPatterns: [{
     id: DODO_V2_SELL_BASE_PATTERN_ID,
@@ -44,6 +45,7 @@ export const dodoV2Discovery = {
     }
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
+  nominate: { nominate: nominateDodoV2 },
 } satisfies DiscoverySemantics<DodoV2Candidate>;
 
 function decodeCandidate(

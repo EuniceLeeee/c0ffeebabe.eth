@@ -25,13 +25,14 @@ import {
   canonicalPoolKey,
 } from "./codec.js";
 import type { AngstromV4Candidate } from "./types.js";
+import { nominateAngstromV4 } from "./nomination.js";
 
 const ANGSTROM_ADAPTER_INTERFACE = new ethers.Interface(
   ANGSTROM_ADAPTER_SWAP_ABI,
 );
 
 export const angstromV4Discovery = {
-  evidenceChannel: "tx-evidence" as const,
+  evidenceChannel: "nominate" as const,
   sources: ["factory-log", "landed-log", "observed-call"],
   callPatterns: [{
     id: ANGSTROM_SWAP_CALL_PATTERN_ID,
@@ -59,6 +60,7 @@ export const angstromV4Discovery = {
   },
   candidateKey: (candidate) =>
     `${candidate.manager.toLowerCase()}\u001f${candidate.poolId}`,
+  nominate: { nominate: nominateAngstromV4 },
 } satisfies DiscoverySemantics<AngstromV4Candidate>;
 
 function decodeCandidate(

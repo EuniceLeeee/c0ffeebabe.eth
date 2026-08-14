@@ -13,6 +13,7 @@ import {
   lowerAddress,
 } from "./codec.js";
 import type { CurveUnderlyingCandidate } from "./types.js";
+import { createTxEvidenceNomination } from "../../tx-evidence-nomination.js";
 
 export const CURVE_UNDERLYING_I128_LOG_PATTERN_ID =
   "curve-underlying-i128-log";
@@ -24,7 +25,7 @@ export const CURVE_UNDERLYING_UINT_CALL_PATTERN_ID =
   "curve-underlying-uint-call";
 
 export const curveUnderlyingDiscovery = {
-  evidenceChannel: "tx-evidence" as const,
+  evidenceChannel: "nominate" as const,
   sources: ["landed-log", "observed-call"],
   callPatterns: [{
     id: CURVE_UNDERLYING_I128_CALL_PATTERN_ID,
@@ -56,6 +57,20 @@ export const curveUnderlyingDiscovery = {
     }
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
+  nominate: createTxEvidenceNomination({
+    opaqueLabels: Object.freeze(["curve-underlying"]),
+    logPatterns: Object.freeze([{
+      id: "curve-underlying-i128-swap-log",
+      topic: CURVE_UNDERLYING_I128_SWAP_TOPIC as `0x${string}`,
+      signature: "TokenExchange(address,int128,uint256,int128,uint256)",
+    }]),
+    callPatterns: Object.freeze([{
+      id: "curve-underlying-i128-swap-call",
+      selector: CURVE_UNDERLYING_I128_SELECTOR as `0x${string}`,
+      signature: "exchange(int128,int128,uint256,uint256)",
+      candidateAddress: Object.freeze({ from: "call-target" as const }),
+    }]),
+  }),
 } satisfies DiscoverySemantics<CurveUnderlyingCandidate>;
 
 function decodeCandidate(

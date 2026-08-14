@@ -34,6 +34,7 @@ function mockProvider(logs?: readonly {
       assert.deepEqual(filter.topics, [UNIV2_SWAP_TOPIC.toLowerCase()]);
       return Object.freeze([...(logs ?? [])]);
     },
+    getTransactionReceipt: async () => null,
   };
 }
 

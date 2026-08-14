@@ -6,11 +6,12 @@ import {
 } from "../standard-family/common.js";
 import { METRONOME_HGUSDC_ROUTER_INTERFACE } from "./shared.js";
 import type { MetronomeHgUsdcCandidate } from "./types.js";
+import { createTxEvidenceNomination } from "../../tx-evidence-nomination.js";
 
 const EXECUTE_PATH_PATTERN_ID = "metronome-hgusdc-execute-path";
 
 export const metronomeHgUsdcDiscovery = {
-  evidenceChannel: "tx-evidence" as const,
+  evidenceChannel: "nominate" as const,
   sources: ["observed-call"],
   callPatterns: [{
     id: EXECUTE_PATH_PATTERN_ID,
@@ -50,4 +51,14 @@ export const metronomeHgUsdcDiscovery = {
     }
   },
   candidateKey: (candidate) => lowerAddress(candidate.router),
+  nominate: createTxEvidenceNomination({
+    opaqueLabels: Object.freeze(["metronome-hgusdc", "protocol:metronome-hgusdc"]),
+    callPatterns: Object.freeze([{
+      id: "metronome-hgusdc-execute-path-call",
+      selector: METRONOME_HGUSDC_ROUTER_INTERFACE.getFunction("executePath")!
+        .selector as `0x${string}`,
+      signature: "executePath(bytes,uint256[],address)",
+      candidateAddress: Object.freeze({ from: "call-target" as const }),
+    }]),
+  }),
 } satisfies DiscoverySemantics<MetronomeHgUsdcCandidate>;

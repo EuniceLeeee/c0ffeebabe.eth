@@ -12,9 +12,10 @@ import {
   EIGENPIE_LOG_PATTERN_ID,
 } from "./codec.js";
 import type { EigenpieCandidate } from "./types.js";
+import { createTxEvidenceNomination } from "../../tx-evidence-nomination.js";
 
 export const eigenpieDiscovery = {
-  evidenceChannel: "tx-evidence" as const,
+  evidenceChannel: "nominate" as const,
   sources: Object.freeze(["observed-call" as const, "landed-log" as const]),
   callPatterns: Object.freeze([Object.freeze({
     id: EIGENPIE_CALL_PATTERN_ID,
@@ -95,4 +96,19 @@ export const eigenpieDiscovery = {
     lowerAddress(candidate.target),
     lowerAddress(candidate.tokenIn),
   ].join(":"),
+  nominate: createTxEvidenceNomination({
+    opaqueLabels: Object.freeze(["eigenpie", "protocol:eigenpie"]),
+    logPatterns: Object.freeze([{
+      id: "eigenpie-deposit",
+      topic: EIGENPIE_DEPOSIT_TOPIC as `0x${string}`,
+      signature: "Deposit(address,address,uint256)",
+    }]),
+    callPatterns: Object.freeze([{
+      id: "eigenpie-deposit-call",
+      selector: EIGENPIE_INTERFACE.getFunction("depositAsset")!
+        .selector as `0x${string}`,
+      signature: "depositAsset(address,address,uint256)",
+      candidateAddress: Object.freeze({ from: "call-target" as const }),
+    }]),
+  }),
 } satisfies DiscoverySemantics<EigenpieCandidate>;

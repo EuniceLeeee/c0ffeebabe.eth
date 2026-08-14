@@ -51,6 +51,7 @@ function mockProvider(options: {
       ]);
       return Object.freeze([...(options.logs ?? [])]);
     },
+    getTransactionReceipt: async () => null,
     traceTransaction: async () => options.trace,
   };
 }

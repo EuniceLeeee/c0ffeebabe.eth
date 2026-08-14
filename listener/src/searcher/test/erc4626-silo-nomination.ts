@@ -36,6 +36,7 @@ function mockProvider(options: {
     getCode: async () => "0x60806040",
     getStorage: async () => `0x${"00".repeat(32)}`,
     getLogs: async () => Object.freeze([]),
+    getTransactionReceipt: async () => null,
   };
 }
 

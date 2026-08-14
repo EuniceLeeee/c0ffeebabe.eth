@@ -7,11 +7,12 @@ import {
 } from "../standard-family/common.js";
 import { ETHERTOKEN_NATIVE_INTERFACE } from "./shared.js";
 import type { EtherTokenNativeRedeemCandidate } from "./types.js";
+import { createTxEvidenceNomination } from "../../tx-evidence-nomination.js";
 
 const WITHDRAW_PATTERN_ID = "ethertoken-withdraw-call";
 
 export const etherTokenNativeRedeemDiscovery = {
-  evidenceChannel: "tx-evidence" as const,
+  evidenceChannel: "nominate" as const,
   sources: ["observed-call"],
   callPatterns: [{
     id: WITHDRAW_PATTERN_ID,
@@ -45,4 +46,18 @@ export const etherTokenNativeRedeemDiscovery = {
     }
   },
   candidateKey: (candidate) => lowerAddress(candidate.token),
+  nominate: createTxEvidenceNomination({
+    opaqueLabels: Object.freeze([
+      "ethertoken-native-redeem",
+      "protocol:ethertoken-native-redeem",
+      "ethertoken-native-redeem-token",
+    ]),
+    callPatterns: Object.freeze([{
+      id: "ethertoken-native-withdraw-call",
+      selector: ETHERTOKEN_NATIVE_INTERFACE.getFunction("withdraw")!
+        .selector as `0x${string}`,
+      signature: "withdraw(address,uint256)",
+      candidateAddress: Object.freeze({ from: "call-target" as const }),
+    }]),
+  }),
 } satisfies DiscoverySemantics<EtherTokenNativeRedeemCandidate>;

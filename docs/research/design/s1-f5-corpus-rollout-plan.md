@@ -328,3 +328,27 @@ challenger 双闭包 → held-out negatives → sealed-production judge。
   block 重验），而非重新扫全部 pool。
 - **self-burn 现状**：10,437 个 cache 候选全部 EIP-1967=0（proxy 门语义
   负例），verified 0 个——当前节点数据无真实正例，保持 unresolved 不伪造。
+
+### 节点真实覆盖 checkpoint（2026-08-14，commit 6382e235）
+
+**节点 materializer 真实运行结果（真实 graph + protocol cache + 真实 RPC）：**
+
+- **admitted 13 族**：univ2/univ3/univ4（近期 Swap 反推 + univ4 trace
+  还原）、fluid-dex/credit:fluid/goldx/metronome-synth/psm/rocksolid/
+  self-burn/wsteth/erc4626（address-surface 实读）、astra（真实 tx
+  evidence）。
+- **unresolved 7 族**：curve-underlying、angstrom-v4、dodo-v2、eigenpie
+  （深语义缺口，回溯范畴）、silo（无 txHash 且 cache 行为证据需
+  identity 重验）、ethertoken（有 txHash 但 receipt/trace 无可解码
+  观测）、hgusdc（行为型身份，需真实 executePath 交易）。
+- RPC 成本：univ2/3/4 合计 3 次 getLogs + 4 次 trace（早停 + 近期窗口
+  生效）；getCode/getStorage 各 10,394 来自 self-burn 10K+ 候选探针。
+- **self-burn 说明**：0x3364（metronome-synth 池地址）是 EIP-1967 proxy，
+  self-burn 的 proxy wildcard 匹配它——同一地址被两族认领是
+  catalog.matches 的正常行为，identity 阶段按语义区分。
+
+**F5 剩余**：7 个 unresolved 族要么需要真实链上证据（eigenpie/hgusdc
+真实交易、silo 行为验证、ethertoken 回读修复），要么属于用户批准的
+深缺口回溯（curve/angstrom/dodo）。**未达到 22 族全覆盖前，sealed-
+production eligible=true 不能宣称**；descriptor 生成器按设计在
+unresolved 非空时 fail-closed 拒绝。

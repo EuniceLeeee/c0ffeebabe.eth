@@ -156,6 +156,7 @@ async function main(): Promise<void> {
       data: "0x",
       transactionHash: TX.toLowerCase(),
     })]),
+    getTransactionReceipt: async () => null,
   };
 
   // Positive loop: graph pool nomination -> plugin nomination -> log

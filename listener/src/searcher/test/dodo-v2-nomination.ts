@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { nominateUniv3 } from
-  "../venues/swaps/univ3-family/nomination.js";
+import { nominateDodoV2 } from
+  "../venues/swaps/dodo-v2-family/nomination.js";
 import type {
   CaptureNominationProvider,
   UnifiedObservation,
 } from "../venues/adapter-family-plugin.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
-import { UNIV3_SWAP_TOPIC } from "../venues/swaps/univ3-abi.js";
+import { DODO_V2_SWAP_TOPIC } from "../venues/swaps/dodo-v2-abi.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_750_000,
@@ -28,11 +28,10 @@ function mockProvider(logs?: readonly {
     getCode: async () => "0x01",
     getStorage: async () => `0x${"00".repeat(32)}`,
     getLogs: async (filter) => {
-      // The query contract: pool emitter + Swap topic + retained window.
       assert.equal(filter.address, POOL.toLowerCase());
       assert.equal(filter.toBlock, SOURCE.number);
       assert.ok((filter.fromBlock ?? 0) >= SOURCE.number - 100_000);
-      assert.deepEqual(filter.topics, [UNIV3_SWAP_TOPIC.toLowerCase()]);
+      assert.deepEqual(filter.topics, [DODO_V2_SWAP_TOPIC.toLowerCase()]);
       return Object.freeze([...(logs ?? [])]);
     },
     getTransactionReceipt: async () => null,
@@ -40,16 +39,15 @@ function mockProvider(logs?: readonly {
 }
 
 async function main(): Promise<void> {
-  // Positive: re-materializes the real recent Swap log emitted by the pool.
-  const positive = await nominateUniv3({
+  const positive = await nominateDodoV2({
     nominations: Object.freeze([Object.freeze({
       address: POOL,
-      opaque: Object.freeze({ adapter: "univ3" }),
+      opaque: Object.freeze({ adapter: "dodo-v2" }),
     })]),
     source: SOURCE,
     provider: mockProvider([Object.freeze({
       address: POOL.toLowerCase(),
-      topics: Object.freeze([UNIV3_SWAP_TOPIC.toLowerCase()]),
+      topics: Object.freeze([DODO_V2_SWAP_TOPIC.toLowerCase()]),
       data: "0x",
       transactionHash: TX.toLowerCase(),
     })]),
@@ -59,13 +57,11 @@ async function main(): Promise<void> {
     UnifiedObservation,
     { readonly kind: "log" }
   >;
-  assert.equal(observation.kind, "log");
   assert.equal(observation.address, POOL.toLowerCase());
   assert.equal(observation.transactionHash, TX.toLowerCase());
-  assert.deepEqual(observation.topics[0], UNIV3_SWAP_TOPIC.toLowerCase());
+  assert.deepEqual(observation.topics[0], DODO_V2_SWAP_TOPIC.toLowerCase());
 
-  // Foreign opaque label is ignored (framework stays family-blind).
-  const foreign = await nominateUniv3({
+  const foreign = await nominateDodoV2({
     nominations: Object.freeze([Object.freeze({
       address: POOL,
       opaque: Object.freeze({ adapter: "other" }),
@@ -75,18 +71,17 @@ async function main(): Promise<void> {
   });
   assert.equal(foreign.length, 0);
 
-  // No recent Swap log yields nothing; no fabrication.
-  const noLog = await nominateUniv3({
+  const noLog = await nominateDodoV2({
     nominations: Object.freeze([Object.freeze({
       address: POOL,
-      opaque: Object.freeze({ adapter: "univ3" }),
+      opaque: Object.freeze({ adapter: "dodo-v2" }),
     })]),
     source: SOURCE,
     provider: mockProvider([]),
   });
   assert.equal(noLog.length, 0);
 
-  console.log("univ3 nomination PASS");
+  console.log("dodo-v2 nomination PASS");
 }
 
 main().catch((error) => {

@@ -335,6 +335,22 @@ function opaquePoolNominations(input: {
   readonly protocolCache: CanonicalValue;
 }): readonly import("./venues/adapter-family-plugin.js").CaptureNominationInput[] {
   const values = new Map<string, import("./venues/adapter-family-plugin.js").CaptureNominationInput>();
+  const setNomination = (
+    address: string,
+    opaque: Readonly<Record<string, unknown>>,
+  ): void => {
+    // First-writer wins: graph pool entries carry the pool's true adapter
+    // label; the protocol cache may re-list the same address under a
+    // different matcher (e.g. self-burn proxies). Overwriting would steal
+    // the nomination from its owning Family.
+    if (!values.has(address)) {
+      values.set(address, Object.freeze({
+        address,
+        opaque: Object.freeze(opaque) as unknown as
+          import("./venues/canonical-value.js").CanonicalValue,
+      }));
+    }
+  };
   const visit = (value: unknown): void => {
     if (Array.isArray(value)) {
       for (const item of value) visit(item);
@@ -342,6 +358,32 @@ function opaquePoolNominations(input: {
     }
     if (value === null || typeof value !== "object") return;
     const record = value as Readonly<Record<string, unknown>>;
+    // verified_candidates entries carry the full candidate record (pool +
+    // evidence). Keep the whole record as opaque so tx-bound Families can
+    // consume their real txHash / behavior-probe evidence.
+    const candidate = record.candidate as
+      Readonly<Record<string, unknown>> | undefined;
+    const candidatePool = candidate?.pool as
+      Readonly<Record<string, unknown>> | undefined;
+    if (
+      candidatePool !== undefined &&
+      typeof record.adapterId === "string" &&
+      typeof candidatePool.address === "string" &&
+      ethers.isAddress(candidatePool.address)
+    ) {
+      setNomination(
+        ethers.getAddress(candidatePool.address).toLowerCase(),
+        Object.freeze({
+          ...candidatePool,
+          adapterId: record.adapterId,
+          ...(candidate?.evidence === undefined
+            ? {}
+            : { evidence: candidate.evidence }),
+        }),
+      );
+      for (const item of Object.values(record)) visit(item);
+      return;
+    }
     if (
       typeof record.address === "string" &&
       ethers.isAddress(record.address) &&
@@ -349,18 +391,10 @@ function opaquePoolNominations(input: {
         key === "adapter" || key === "venueId" || key === "adapterId"
       )
     ) {
-      const address = ethers.getAddress(record.address).toLowerCase();
-      // First-writer wins: graph pool entries carry the pool's true adapter
-      // label; the protocol cache may re-list the same address under a
-      // different matcher (e.g. self-burn proxies). Overwriting would steal
-      // the nomination from its owning Family.
-      if (!values.has(address)) {
-        values.set(address, Object.freeze({
-          address,
-          opaque: Object.freeze(record) as unknown as
-            import("./venues/canonical-value.js").CanonicalValue,
-        }));
-      }
+      setNomination(
+        ethers.getAddress(record.address).toLowerCase(),
+        record,
+      );
     }
     for (const item of Object.values(record)) visit(item);
   };
@@ -385,6 +419,8 @@ function nominationProvider(
       toBlock: filter.toBlock ?? 0,
       topics: filter.topics ?? [],
     }),
+    getTransactionReceipt: (transactionHash) =>
+      provider.getTransactionReceipt(transactionHash),
     traceTransaction: (transactionHash) =>
       provider.traceTransaction(transactionHash),
   };

@@ -12,6 +12,7 @@ import {
   sameAddress,
 } from "./codec.js";
 import type { AstraMultiTokenCandidate } from "./types.js";
+import { createTxEvidenceNomination } from "../../tx-evidence-nomination.js";
 
 export const ASTRA_MULTITOKEN_CHANGE_CALL_PATTERN_ID =
   "astra-multitoken-change-call";
@@ -19,7 +20,7 @@ export const ASTRA_MULTITOKEN_CHANGE_LOG_PATTERN_ID =
   "astra-multitoken-change-log";
 
 export const astraMultiTokenDiscovery = {
-  evidenceChannel: "tx-evidence" as const,
+  evidenceChannel: "nominate" as const,
   sources: ["observed-call", "landed-log"],
   callPatterns: [{
     id: ASTRA_MULTITOKEN_CHANGE_CALL_PATTERN_ID,
@@ -70,6 +71,20 @@ export const astraMultiTokenDiscovery = {
       transactionHash: candidate.transactionHash?.toLowerCase() ?? null,
     }),
   ].join(":"),
+  nominate: createTxEvidenceNomination({
+    opaqueLabels: Object.freeze(["astra-multitoken", "protocol:astra-multitoken"]),
+    logPatterns: Object.freeze([{
+      id: "astra-multitoken-change",
+      topic: ASTRA_MULTITOKEN_CHANGE_TOPIC as `0x${string}`,
+      signature: "Change(address,address,address,address,uint256,uint256)",
+    }]),
+    callPatterns: Object.freeze([{
+      id: "astra-multitoken-change-call",
+      selector: ASTRA_MULTITOKEN_CHANGE_SELECTOR as `0x${string}`,
+      signature: "change(address,address,address,uint256)",
+      candidateAddress: Object.freeze({ from: "call-target" as const }),
+    }]),
+  }),
 } satisfies DiscoverySemantics<AstraMultiTokenCandidate>;
 
 function decodeCallCandidate(

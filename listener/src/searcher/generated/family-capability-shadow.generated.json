@@ -290,7 +290,7 @@
         "familyId": "curve-underlying",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "656ab3338f777b7989a1e763648ea6062268c598f8f063af4dc934d6b89aee4f",
+        "contentHash": "0f3c5f873a3082ed76774706c3f49e40f7dae504ba883bd233de31ad90ebc905",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -298,7 +298,8 @@
           "src/searcher/venues/capture-materialization.ts",
           "src/searcher/venues/swaps/curve-underlying-family/codec.ts",
           "src/searcher/venues/swaps/curve-underlying-family/discovery.ts",
-          "src/searcher/venues/swaps/curve-underlying-family/manifest.ts"
+          "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
         ],
         "provenanceCommit": null
       },
@@ -338,13 +339,14 @@
         "familyId": "curve-underlying",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "022186a7a2ee06eaab3baaa769302b6a511a8c1f09fad83c8b1b24e7cdff24aa",
+        "contentHash": "33fec7a468e59a66858da7b245c60cf7250d4ea218c165ce9537a1a100020996",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/swaps/curve-underlying-family/codec.ts",
-          "src/searcher/venues/swaps/curve-underlying-family/manifest.ts"
+          "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
         ],
         "provenanceCommit": null
       },
@@ -569,14 +571,15 @@
         "familyId": "curve-underlying",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
-        "contentHash": "6c699e1a333fee12860c02baef567a35079b6382d329e2f35c778e6a85756ec9",
+        "contentHash": "02b717d927654ad0ceb1981fed1cc74644332dc60b411c1762bf87da538a4833",
         "semanticDependencies": [
           "contract:adapter-family/victim@s1-victim-v2",
           "package:ethers@6.16.0",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/swaps/curve-underlying-family/codec.ts",
           "src/searcher/venues/swaps/curve-underlying-family/discovery.ts",
-          "src/searcher/venues/swaps/curve-underlying-family/manifest.ts"
+          "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
         ],
         "provenanceCommit": null
       },
@@ -596,7 +599,7 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "df52820f56f9aba64f51b64834d83e213d463c33c82b67d119c6dea095af9291",
+        "contentHash": "e0d17ee8be34553860190dfa05fab35341f18783506695b200c57729fd5d830a",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -608,8 +611,10 @@
           "src/searcher/venues/swaps/angstrom-v4-family/codec.ts",
           "src/searcher/venues/swaps/angstrom-v4-family/discovery.ts",
           "src/searcher/venues/swaps/angstrom-v4-family/manifest.ts",
+          "src/searcher/venues/swaps/angstrom-v4-family/nomination.ts",
           "src/searcher/venues/swaps/univ4-abi.ts",
           "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/codec.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -650,7 +655,7 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "9dbb4f9087004b57710e1368a0901f0991f1a8190f3ec022107234ede167d7cd",
+        "contentHash": "ba7c08db454f16a931df2ba3a9fa6c9cb24ada4deb9495043df7363cb11756be",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -660,8 +665,10 @@
           "src/searcher/venues/swaps/angstrom-attestation.ts",
           "src/searcher/venues/swaps/angstrom-v4-family/codec.ts",
           "src/searcher/venues/swaps/angstrom-v4-family/manifest.ts",
+          "src/searcher/venues/swaps/angstrom-v4-family/nomination.ts",
           "src/searcher/venues/swaps/univ4-abi.ts",
           "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/codec.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -948,7 +955,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "0a08c08d1c1d9bb72ab899896c9c818555f5d20571b206502c503ececf3aaf79",
+        "contentHash": "1f9e66df881bde9d93fc4e4660c36b568ef430b1181e55959cd592161731e8e9",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -965,7 +972,10 @@
           "src/searcher/venues/swaps/dodo-v2-abi.ts",
           "src/searcher/venues/swaps/dodo-v2-family/codec.ts",
           "src/searcher/venues/swaps/dodo-v2-family/discovery.ts",
-          "src/searcher/venues/swaps/dodo-v2-family/manifest.ts"
+          "src/searcher/venues/swaps/dodo-v2-family/manifest.ts",
+          "src/searcher/venues/swaps/dodo-v2-family/nomination.ts",
+          "src/searcher/venues/swaps/univ2-abi.ts",
+          "src/searcher/venues/swaps/univ2-family/codec.ts"
         ],
         "provenanceCommit": null
       },
@@ -1005,7 +1015,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "43cd14d560517cba89d3e6140b7080273f73b6ac1722fe43c47bab77f3962909",
+        "contentHash": "04bcbd3294f117986e8c2f9fc6994b04c82bcd01672fa736fb8c10c8edc01064",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -1020,7 +1030,10 @@
           "src/searcher/venues/swaps/dodo-pmm-math.ts",
           "src/searcher/venues/swaps/dodo-v2-abi.ts",
           "src/searcher/venues/swaps/dodo-v2-family/codec.ts",
-          "src/searcher/venues/swaps/dodo-v2-family/manifest.ts"
+          "src/searcher/venues/swaps/dodo-v2-family/manifest.ts",
+          "src/searcher/venues/swaps/dodo-v2-family/nomination.ts",
+          "src/searcher/venues/swaps/univ2-abi.ts",
+          "src/searcher/venues/swaps/univ2-family/codec.ts"
         ],
         "provenanceCommit": null
       },
@@ -1293,7 +1306,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
-        "contentHash": "c67f3076831166e7b9b005e812d60b829d929bc5df1c695d4a52473ee52b703b",
+        "contentHash": "4c05e484a6278ed31904083552f8ce06b503f05dfc7584c1e7b813e00a7c7d09",
         "semanticDependencies": [
           "contract:adapter-family/victim@s1-victim-v2",
           "package:ethers@6.16.0",
@@ -1309,7 +1322,10 @@
           "src/searcher/venues/swaps/dodo-v2-abi.ts",
           "src/searcher/venues/swaps/dodo-v2-family/codec.ts",
           "src/searcher/venues/swaps/dodo-v2-family/discovery.ts",
-          "src/searcher/venues/swaps/dodo-v2-family/manifest.ts"
+          "src/searcher/venues/swaps/dodo-v2-family/manifest.ts",
+          "src/searcher/venues/swaps/dodo-v2-family/nomination.ts",
+          "src/searcher/venues/swaps/univ2-abi.ts",
+          "src/searcher/venues/swaps/univ2-family/codec.ts"
         ],
         "provenanceCommit": null
       },
@@ -2127,7 +2143,7 @@
         "familyId": "protocol:astra-multitoken",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "cfb3bc6f276e03264d2580ff5927d736ab3db812b62fe206a896745979da7376",
+        "contentHash": "eab8c1d1055836fe18d34cd112856611dcb382fc47e1d31dab4bfb484053ebfe",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -2137,7 +2153,8 @@
           "src/searcher/venues/capture-materialization.ts",
           "src/searcher/venues/protocols/astra-multitoken-family/codec.ts",
           "src/searcher/venues/protocols/astra-multitoken-family/discovery.ts",
-          "src/searcher/venues/protocols/astra-multitoken-family/manifest.ts"
+          "src/searcher/venues/protocols/astra-multitoken-family/manifest.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
         ],
         "provenanceCommit": null
       },
@@ -2177,7 +2194,7 @@
         "familyId": "protocol:astra-multitoken",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "d5b0cf70206a611e46e01178e3f066c61782d9c1a17c00809696b3926ce8639d",
+        "contentHash": "17ae158a31304020676c9bab10b49159bf449528cb90e8bac676aa1e841a0c4a",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -2185,7 +2202,8 @@
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/protocols/astra-multitoken-family/codec.ts",
-          "src/searcher/venues/protocols/astra-multitoken-family/manifest.ts"
+          "src/searcher/venues/protocols/astra-multitoken-family/manifest.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
         ],
         "provenanceCommit": null
       },
@@ -2427,7 +2445,7 @@
         "familyId": "protocol:eigenpie",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "52463017a8e4631887533f4621ae3fb68599324f8e1181f0a7f519b3622587d3",
+        "contentHash": "773b0b84a13fdde2cacd439c9510de0586862460d54423372d436a6c366b0ced",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -2439,7 +2457,8 @@
           "src/searcher/venues/protocols/eigenpie-family/codec.ts",
           "src/searcher/venues/protocols/eigenpie-family/discovery.ts",
           "src/searcher/venues/protocols/eigenpie-family/manifest.ts",
-          "src/searcher/venues/protocols/standard-family/common.ts"
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
         ],
         "provenanceCommit": null
       },
@@ -2479,7 +2498,7 @@
         "familyId": "protocol:eigenpie",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "8eceee59dbc81c84d910e0c3e156f553b43011602492a6668809652d5812e4ec",
+        "contentHash": "dce88edb877c16c6551800d446ab839f4ca72b7bdc1eaf9a97c17f9fdc1fea5f",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -2489,7 +2508,8 @@
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/protocols/eigenpie-family/codec.ts",
           "src/searcher/venues/protocols/eigenpie-family/manifest.ts",
-          "src/searcher/venues/protocols/standard-family/common.ts"
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
         ],
         "provenanceCommit": null
       },
@@ -3398,7 +3418,7 @@
         "familyId": "protocol:ethertoken-native-redeem",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "0eb4aa158c892262e5f6f4cbe4c2d3b033a7cd5bb23e41ebd013042ff3ca58ba",
+        "contentHash": "a0ee6f5b1f583ea9f2178ba778f947ea8dae7b868008cf0e42b1a13a3c762f28",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -3413,6 +3433,7 @@
           "src/searcher/venues/protocols/ethertoken-native-redeem-family/manifest.ts",
           "src/searcher/venues/protocols/ethertoken-native-redeem-family/shared.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -3453,7 +3474,7 @@
         "familyId": "protocol:ethertoken-native-redeem",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "7d793f602e450dff46da09837975312d82749c1f5d3f6be5d6f7fc5a33fe9065",
+        "contentHash": "8edaaa54b2f07b132c30f0b1c804bbc62225c5996bd8a1ac254fc7d43c155320",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -3466,6 +3487,7 @@
           "src/searcher/venues/protocols/ethertoken-native-redeem-family/manifest.ts",
           "src/searcher/venues/protocols/ethertoken-native-redeem-family/shared.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -4054,7 +4076,7 @@
         "familyId": "protocol:metronome-hgusdc",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "f59d44bd69880fdc317a8f2064bc93747ae07a557aa7e5b02e53f52eea9c891c",
+        "contentHash": "344db51c05f1e7422f67d973d1c2baf5bb8bf4f92c0aae0b1016c24f610cbaa0",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -4070,6 +4092,7 @@
           "src/searcher/venues/protocols/metronome-hgusdc-family/manifest.ts",
           "src/searcher/venues/protocols/metronome-hgusdc-family/shared.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -4110,7 +4133,7 @@
         "familyId": "protocol:metronome-hgusdc",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "6e1fb0cc38cae00fd57abfbde0d8c2e2b175c0c8f1bf4941e511eb511500c5fe",
+        "contentHash": "a8d152eb077445674ab37db0cfe857c615d17c4750d1dd695efe0df88a239bc9",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -4124,6 +4147,7 @@
           "src/searcher/venues/protocols/metronome-hgusdc-family/manifest.ts",
           "src/searcher/venues/protocols/metronome-hgusdc-family/shared.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -7032,5 +7056,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "86f69564447c79ea79f0bfc04d92f699bb1f3b001407eb5066c1a5427fec93b4"
+  "artifactHash": "64350db30d2ed33179a88086cd96c1ad114a4655701d3364d19fa9de8a8f0dea"
 }

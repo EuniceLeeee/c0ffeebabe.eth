@@ -241,6 +241,19 @@ export interface CaptureNominationProvider {
     readonly transactionHash?: string;
   }[]>;
   /**
+   * Re-reads the real transaction receipt for a tx-bound nomination. The
+   * plugin matches its declared log patterns against the receipt logs.
+   */
+  getTransactionReceipt(transactionHash: string): Promise<{
+    readonly blockNumber?: number;
+    readonly logs: readonly {
+      readonly address: string;
+      readonly topics: readonly string[];
+      readonly data: string;
+      readonly transactionHash?: string;
+    }[];
+  } | null>;
+  /**
    * Optional transaction trace for tx-bound nominations (e.g. recovering a
    * real calldata frame from a recent log's transaction). Unavailable
    * implementations reject; the plugin then keeps the candidate unresolved
