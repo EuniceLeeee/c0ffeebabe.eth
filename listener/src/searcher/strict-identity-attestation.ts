@@ -20,6 +20,8 @@ import { createStrictCentralAdapterRuntime } from
   "./strict-central-adapter-runtime.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
+import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
+  "./venues/production-verified-actors.js";
 
 const EIP1967_IMPLEMENTATION_SLOT =
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
@@ -306,6 +308,10 @@ function createMinimalIdentityRuntime(
       assertCurrent: () => undefined,
       verifyCanonicalSource: () => true,
     }),
+    // Family-declared verified-actor callers (evidence id -> probe actor)
+    // bind through the same central authority as production; families that
+    // declare none stay fail-closed.
+    verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
   });
 }
 
