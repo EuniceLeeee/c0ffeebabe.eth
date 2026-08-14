@@ -46,7 +46,11 @@ export async function findRecentLogHit(
 ): Promise<RecentLogEntry | null> {
   const { provider, source } = input;
   const lookback = Math.max(1, input.lookback ?? 100_000);
-  let chunk = Math.min(Math.max(1, input.chunk ?? 5_000), lookback);
+  // Local reth getLogs cost scales superlinearly with range size: a 5000-block
+  // slice takes ~1s while 500 blocks takes ~50ms. The framework helper is
+  // protocol-agnostic and slices into small chunks so plugin nominations
+  // (univ2/univ3 recent-log reverse lookup) stay fast on the node.
+  let chunk = Math.min(Math.max(1, input.chunk ?? 500), lookback);
   let to = source.number;
   let from = Math.max(0, to - chunk + 1);
   let accepts = 0;
