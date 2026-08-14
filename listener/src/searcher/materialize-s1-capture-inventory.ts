@@ -338,6 +338,7 @@ function opaquePoolNominations(input: {
   const setNomination = (
     address: string,
     opaque: Readonly<Record<string, unknown>>,
+    overrideEvidence = false,
   ): void => {
     // One nomination per address+label: distinct Families may legitimately
     // claim the same on-chain address (e.g. an ERC4626 vault that is also a
@@ -349,7 +350,27 @@ function opaquePoolNominations(input: {
       opaque.adapter ?? opaque.adapterId ?? opaque.venueId ?? "",
     ).toLowerCase();
     const key = `${address} ${label}`;
-    if (!values.has(key)) {
+    const existing = values.get(key);
+    if (existing === undefined) {
+      values.set(key, Object.freeze({
+        address,
+        opaque: Object.freeze(opaque) as unknown as
+          import("./venues/canonical-value.js").CanonicalValue,
+      }));
+      return;
+    }
+    // A verified_candidates record carries real evidence (txHash or
+    // behavior-probe samples). It must win over a bare graph/cache pool
+    // entry for the same label, otherwise the evidence is lost and the
+    // Family stays unresolved.
+    const existingOpaque = existing.opaque as Readonly<Record<string, unknown>>;
+    const incomingEvidence = Array.isArray(opaque.evidence)
+      ? opaque.evidence.length > 0
+      : false;
+    const hasEvidence = Array.isArray(existingOpaque.evidence)
+      ? existingOpaque.evidence.length > 0
+      : false;
+    if (overrideEvidence && incomingEvidence && !hasEvidence) {
       values.set(key, Object.freeze({
         address,
         opaque: Object.freeze(opaque) as unknown as
@@ -386,6 +407,7 @@ function opaquePoolNominations(input: {
             ? {}
             : { evidence: candidate.evidence }),
         }),
+        true,
       );
       for (const item of Object.values(record)) visit(item);
       return;
