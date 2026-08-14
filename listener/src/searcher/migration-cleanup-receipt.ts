@@ -51,6 +51,18 @@ function stripComments(source: string): string {
     .replace(/\/\/[^\n]*/g, "");
 }
 
+/**
+ * Families treated absent in acceptance per user direction (2026-08-14):
+ * their only evidence is older than the node trace retention window.
+ * Shared by the cleanup receipt and the F5 descriptor generator so both
+ * record the same absent set.
+ */
+export const TRACE_WINDOW_ABSENT_FAMILY_IDS: readonly string[] = Object.freeze([
+  "protocol:eigenpie",
+  "protocol:ethertoken-native-redeem",
+  "protocol:metronome-hgusdc",
+]);
+
 const EXCLUDED_DIRS = new Set([
   "node_modules",
   "dist",
@@ -217,11 +229,7 @@ export function buildMigrationCleanupReceipt(
     verdict: pass ? "pass" : "fail",
     // Explicit record of families treated absent per user direction (trace
     // retention window), never fabricated as evidence.
-    traceWindowAbsentFamilyIds: Object.freeze([
-      "protocol:eigenpie",
-      "protocol:ethertoken-native-redeem",
-      "metronome-hgusdc",
-    ]),
+    traceWindowAbsentFamilyIds: TRACE_WINDOW_ABSENT_FAMILY_IDS,
   });
 }
 

@@ -12,6 +12,8 @@ import {
 } from "../venues/production-family-composition.js";
 import type { CaptureInventoryFile } from
   "../materialize-s1-capture-inventory.js";
+import { TRACE_WINDOW_ABSENT_FAMILY_IDS } from
+  "../migration-cleanup-receipt.js";
 
 const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
 const source = Object.freeze({
@@ -64,10 +66,18 @@ const descriptor = descriptorFromCheckpoint({
   amount: 1n,
   minProfit: 0n,
 });
-assert.equal(descriptor.cases.length, catalog.listAll().length);
+// Trace-window families (eigenpie/ethertoken-native-redeem/
+// protocol:metronome-hgusdc) are treated absent per user direction: they
+// never become cases and never block coverage.
+const EXPECTED_CASES = catalog.listAll().filter(
+  (family) => !TRACE_WINDOW_ABSENT_FAMILY_IDS.includes(
+    family.plugin.manifest.familyId,
+  ),
+);
+assert.equal(descriptor.cases.length, EXPECTED_CASES.length);
 assert.deepEqual(
   descriptor.cases.map((item) => item.familyId).sort(),
-  catalog.listAll().map((family) => family.plugin.manifest.familyId).sort(),
+  EXPECTED_CASES.map((family) => family.plugin.manifest.familyId).sort(),
 );
 assert(descriptor.cases.every((item) =>
   Object.keys(item).sort().join(",") ===

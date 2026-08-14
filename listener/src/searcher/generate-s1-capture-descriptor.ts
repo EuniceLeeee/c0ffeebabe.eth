@@ -12,6 +12,8 @@ import type { CaptureInventoryFile } from
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "./venues/production-family-composition.js";
+import { TRACE_WINDOW_ABSENT_FAMILY_IDS } from
+  "./migration-cleanup-receipt.js";
 
 interface DescriptorFile {
   readonly sourceBlock: number;
@@ -34,9 +36,12 @@ export function descriptorFromInventory(input: {
   if (input.inventory.catalogHash !== catalog.catalogHash) {
     throw new Error("capture inventory catalogHash does not match generated catalog");
   }
-  if (input.inventory.unresolved.length !== 0) {
+  const unresolvedExcludingAbsent = input.inventory.unresolved.filter(
+    (item) => !TRACE_WINDOW_ABSENT_FAMILY_IDS.includes(item.familyId),
+  );
+  if (unresolvedExcludingAbsent.length !== 0) {
     throw new Error(
-      `capture inventory cannot cover generated catalog: ${input.inventory.unresolved
+      `capture inventory cannot cover generated catalog: ${unresolvedExcludingAbsent
         .map((item) => `${item.familyId}:incumbent`).sort().join(",")}`,
     );
   }
@@ -49,6 +54,13 @@ export function descriptorFromInventory(input: {
   const cases: Omit<FamilyCaptureDescriptor, "source">[] = [];
   const missing: string[] = [];
   for (const family of catalog.listAll()) {
+    if (TRACE_WINDOW_ABSENT_FAMILY_IDS.includes(
+      family.plugin.manifest.familyId,
+    )) {
+      // Treated absent per user direction: their evidence predates the
+      // node trace retention window. Recorded, never fabricated.
+      continue;
+    }
     if (family.plugin.capture === undefined) {
       missing.push(`${family.plugin.manifest.familyId}:capture`);
       continue;
@@ -127,6 +139,13 @@ export function descriptorFromCheckpoint(input: {
   const cases: Omit<FamilyCaptureDescriptor, "source">[] = [];
   const missing: string[] = [];
   for (const family of catalog.listAll()) {
+    if (TRACE_WINDOW_ABSENT_FAMILY_IDS.includes(
+      family.plugin.manifest.familyId,
+    )) {
+      // Treated absent per user direction: their evidence predates the
+      // node trace retention window. Recorded, never fabricated.
+      continue;
+    }
     if (family.plugin.capture === undefined) {
       missing.push(`${family.plugin.manifest.familyId}:capture`);
       continue;
