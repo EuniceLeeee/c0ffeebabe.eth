@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,6 +38,18 @@ const LEGACY_SYMBOL_PROBES: readonly LegacySymbolProbe[] = Object.freeze([
   { name: "adapterSchemaRevision", pattern: /\badapterSchemaRevision\b/ },
   { name: "LEGACY_PRODUCTION_ADAPTER_FAMILIES", pattern: /\bLEGACY_PRODUCTION_ADAPTER_FAMILIES\b/ },
 ]);
+
+/**
+ * Strips // and /* *\/ comments so probe scans report executable source
+ * symbols, not doc mentions. Legacy symbol names never legitimately appear
+ * inside string literals on the same line as a URL, so the line-comment
+ * strip is safe for these probes.
+ */
+function stripComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+}
 
 const EXCLUDED_DIRS = new Set([
   "node_modules",
@@ -85,7 +97,7 @@ export function scanLegacySymbols(): ReadonlyMap<string, readonly string[]> {
         !rel.endsWith("build-family-capability-manifest.ts")) ||
       rel.startsWith("listener/src/searcher/live-backends/");
     if (!central) continue;
-    const content = readFileSync(file, "utf8");
+    const content = stripComments(readFileSync(file, "utf8"));
     for (const probe of LEGACY_SYMBOL_PROBES) {
       if (!probe.pattern.test(content)) continue;
       const list = hits.get(probe.name) ?? [];
@@ -152,7 +164,11 @@ export function buildMigrationCleanupReceipt(
     ...exactToCoarseBypass,
     ...ambientIo,
   ];
-  const pass = legacyRuntimeBranches.length === 0;
+  const closure = productionImportClosure();
+  const pass =
+    legacyRuntimeBranches.length === 0 &&
+    !closure.legacySymbolHitsPresent &&
+    !closure.centralFamilyLiteralBranchesPresent;
   return Object.freeze({
     schemaVersion: "migration-cleanup-receipt-v1",
     baselineDsCommit: input.baselineDsCommit,
@@ -189,6 +205,15 @@ export function buildMigrationCleanupReceipt(
       Object.freeze([...input.systemicLiveCutoverReceiptHashes]),
     rollbackArtifactRef: input.rollbackArtifactRef,
     sourceClosureHash: sourceClosureHash(),
+    importClosureRootFile: closure.rootFile,
+    importClosureFileCount: closure.fileCount,
+    importClosureHash: closure.closureHash,
+    importClosureUnresolvedImports: closure.unresolvedImports,
+    importClosureLegacySymbolHits: closure.legacySymbolHits,
+    importClosureLegacySymbolsPresent: closure.legacySymbolHitsPresent,
+    centralFamilyLiteralBranches: closure.centralFamilyLiteralBranches,
+    centralFamilyLiteralBranchesPresent:
+      closure.centralFamilyLiteralBranchesPresent,
     verdict: pass ? "pass" : "fail",
     // Explicit record of families treated absent per user direction (trace
     // retention window), never fabricated as evidence.
@@ -197,6 +222,177 @@ export function buildMigrationCleanupReceipt(
       "protocol:ethertoken-native-redeem",
       "metronome-hgusdc",
     ]),
+  });
+}
+
+/**
+ * Transitive import-closure proof (canonical §0.1). Starts from the
+ * production live entry (main.ts) and follows every relative import
+ * (static + side-effect + dynamic) to a fixed point. The closure is then
+ * scanned for legacy authority symbols (whole closure) and for literal
+ * familyId branches in central paths (searcher top-level + live-backends,
+ * excluding venues/ plugin-owned declarations and tests).
+ */
+export interface ImportClosureReport {
+  readonly rootFile: string;
+  readonly fileCount: number;
+  readonly files: readonly string[];
+  readonly unresolvedImports: readonly string[];
+  readonly legacySymbolHits: readonly {
+    readonly symbol: string;
+    readonly file: string;
+  }[];
+  readonly legacySymbolHitsPresent: boolean;
+  readonly pluginLegacySymbolHits: readonly {
+    readonly symbol: string;
+    readonly file: string;
+  }[];
+  readonly pluginLegacySymbolHitsPresent: boolean;
+  readonly centralFamilyLiteralBranches: readonly {
+    readonly pattern: string;
+    readonly file: string;
+  }[];
+  readonly centralFamilyLiteralBranchesPresent: boolean;
+  readonly closureHash: string;
+}
+
+/** Literal familyId branches forbidden in central paths (§0.1). */
+const FAMILY_LITERAL_BRANCH_PROBES: readonly LegacySymbolProbe[] = Object.freeze([
+  {
+    name: "familyId literal comparison",
+    // Bare familyId/manifest.familyId/family.id compared against a string
+    // literal. The negative lookbehind rejects property access (input.familyId)
+    // and typeof guards (typeof x.familyId !== "string").
+    pattern: /(?<![\w.])(?:familyId|manifest\.familyId|family\.id)\s*(?:===|!==|==|!=)\s*["'][^"']+["']/
+  },
+  {
+    name: "familyId switch",
+    pattern: /switch\s*\(\s*familyId\s*\)/
+  },
+  {
+    name: "central per-family driver table",
+    pattern: /\b(?:T1_REGISTERED_ROUTE_FAMILY_IDS|T1_WARM_KIND_BY_FAMILY)\b/
+  },
+]);
+
+const SOURCE_EXTENSIONS = [".ts", ".mts", ".tsx"] as const;
+
+function relativeImportSpecifiers(source: string): readonly string[] {
+  const specs: string[] = [];
+  const re =
+    /(?:import|export)(?:\s+type)?(?:\s+[^;]*?)?\s*from\s*["'](\.[^"']+)["']|import\s*\(\s*["'](\.[^"']+)["']\s*\)|(?:^|[;\n])\s*import\s*["'](\.[^"']+)["']/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(source)) !== null) {
+    const spec = m[1] ?? m[2] ?? m[3];
+    if (spec !== undefined) specs.push(spec);
+  }
+  return specs;
+}
+
+function resolveRelativeImport(
+  fromFile: string,
+  spec: string,
+): string | null {
+  const base = resolve(dirname(fromFile), spec);
+  if (existsSync(base) && statSync(base).isFile()) return base;
+  const candidates: string[] = [];
+  if (spec.endsWith(".js")) {
+    const noJs = base.slice(0, -3);
+    for (const ext of SOURCE_EXTENSIONS) candidates.push(noJs + ext);
+  } else {
+    for (const ext of SOURCE_EXTENSIONS) candidates.push(base + ext);
+  }
+  for (const ext of SOURCE_EXTENSIONS) candidates.push(join(base, "index" + ext));
+  for (const candidate of candidates) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  }
+  return null;
+}
+
+function isCentralPath(rel: string): boolean {
+  const searcherCentral =
+    rel.startsWith("listener/src/searcher/") &&
+    !rel.includes("/test/") &&
+    !rel.endsWith("build-family-capability-manifest.ts");
+  if (searcherCentral && !rel.includes("/venues/")) return true;
+  if (rel.startsWith("listener/src/searcher/live-backends/")) return true;
+  // The production registry is a central authority file (it holds the
+  // frozen legacy family list), not a plugin-owned capability.
+  if (rel === "listener/src/searcher/venues/production-registry.ts") {
+    return true;
+  }
+  return false;
+}
+
+export function productionImportClosure(): ImportClosureReport {
+  const root = join(ROOT, "listener", "src", "searcher", "main.ts");
+  const visited = new Set<string>();
+  const queue: string[] = [root];
+  const unresolved: string[] = [];
+  while (queue.length > 0) {
+    const file = queue.pop() as string;
+    if (visited.has(file)) continue;
+    visited.add(file);
+    const source = readFileSync(file, "utf8");
+    for (const spec of relativeImportSpecifiers(source)) {
+      const resolved = resolveRelativeImport(file, spec);
+      if (resolved === null) {
+        unresolved.push(relative(ROOT, file) + " -> " + spec);
+        continue;
+      }
+      if (!visited.has(resolved)) queue.push(resolved);
+    }
+  }
+  const files = Object.freeze([...visited].sort());
+  // Central hits are the verdict inputs (central legacy symbols + literal
+  // familyId branches). Plugin-owned declarations under venues/ are the
+  // legitimate home of family semantics; their legacy-name hits are reported
+  // separately as reference (never a verdict input).
+  const legacySymbolHits: { symbol: string; file: string }[] = [];
+  const pluginLegacySymbolHits: { symbol: string; file: string }[] = [];
+  const familyBranches: { pattern: string; file: string }[] = [];
+  for (const file of files) {
+    const rel = relative(ROOT, file);
+    const content = stripComments(readFileSync(file, "utf8"));
+    const central = isCentralPath(rel);
+    const pluginOwned =
+      rel.startsWith("listener/src/searcher/venues/") &&
+      rel !== "listener/src/searcher/venues/production-registry.ts";
+    for (const probe of LEGACY_SYMBOL_PROBES) {
+      if (!probe.pattern.test(content)) continue;
+      const hit = { symbol: probe.name, file: rel };
+      if (pluginOwned) {
+        pluginLegacySymbolHits.push(hit);
+      } else {
+        legacySymbolHits.push(hit);
+      }
+    }
+    if (central) {
+      for (const probe of FAMILY_LITERAL_BRANCH_PROBES) {
+        if (probe.pattern.test(content)) {
+          familyBranches.push({ pattern: probe.name, file: rel });
+        }
+      }
+    }
+  }
+  const hasher = createHash("sha256");
+  for (const file of files) {
+    hasher.update(relative(ROOT, file));
+    hasher.update("\0");
+    hasher.update(readFileSync(file, "utf8"));
+  }
+  return Object.freeze({
+    rootFile: "listener/src/searcher/main.ts",
+    fileCount: files.length,
+    files,
+    unresolvedImports: Object.freeze(unresolved.sort()),
+    legacySymbolHits: Object.freeze(legacySymbolHits),
+    legacySymbolHitsPresent: legacySymbolHits.length > 0,
+    pluginLegacySymbolHits: Object.freeze(pluginLegacySymbolHits),
+    pluginLegacySymbolHitsPresent: pluginLegacySymbolHits.length > 0,
+    centralFamilyLiteralBranches: Object.freeze(familyBranches),
+    centralFamilyLiteralBranchesPresent: familyBranches.length > 0,
+    closureHash: hasher.digest("hex"),
   });
 }
 

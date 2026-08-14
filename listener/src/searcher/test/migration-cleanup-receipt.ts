@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   buildMigrationCleanupReceipt,
+  productionImportClosure,
   scanLegacySymbols,
   sourceClosureHash,
 } from "../migration-cleanup-receipt.js";
@@ -43,6 +44,33 @@ async function main(): Promise<void> {
   // Verdict is honest: it reflects the actual legacy symbols in the closure.
   const legacy = scanLegacySymbols();
   assert.equal(legacy.size >= 0, true);
+  // Central-path legacy scan is clean: all manual schema revisions and the
+  // legacy family-wide schema APIs are gone from the central closure.
+  assert.equal(legacy.size, 0);
+  // Transitive import-closure proof (§0.1): every relative import from
+  // main.ts resolves; the report is deterministic.
+  const closure = productionImportClosure();
+  assert.equal(closure.rootFile, "listener/src/searcher/main.ts");
+  assert(closure.fileCount > 100);
+  assert.equal(closure.unresolvedImports.length, 0);
+  assert.match(String(closure.closureHash), /^[0-9a-f]{64}$/);
+  assert.equal(closure.closureHash, productionImportClosure().closureHash);
+  // Central authority is still the frozen legacy route baseline, so the
+  // closure honestly reports the remaining migration items: the legacy
+  // production registry list and the blind T1 baseline driver tables. The
+  // verdict must be fail until those are removed (§18.3).
+  assert.equal(closure.legacySymbolHitsPresent, true);
+  assert(closure.legacySymbolHits.some(
+    (hit) => hit.symbol === "LEGACY_PRODUCTION_ADAPTER_FAMILIES",
+  ));
+  assert.equal(closure.centralFamilyLiteralBranchesPresent, true);
+  assert(closure.centralFamilyLiteralBranches.some(
+    (hit) => hit.file === "listener/src/searcher/blind-production-compatibility.ts",
+  ));
+  assert.equal(receipt.importClosureLegacySymbolsPresent, true);
+  assert.equal(receipt.importClosureFileCount, closure.fileCount);
+  assert.equal(receipt.importClosureHash, closure.closureHash);
+  assert.equal(receipt.verdict, "fail");
   console.log("migration cleanup receipt generator PASS");
 }
 

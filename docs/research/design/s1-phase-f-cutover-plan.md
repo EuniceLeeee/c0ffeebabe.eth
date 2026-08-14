@@ -225,6 +225,22 @@ approve fallback 与默认 authority 尚未删除，禁止标记 F6-A/F8 complet
   需在固定 commit 上节点 dry-run 后绑定真实哈希，当前为合同占位。AST/
   import-closure 传递闭包正式证明待补（`scanLegacySymbols` 为结构扫描，
   非传递闭包）。完成这三项后才可宣称 §18.3/§20.2.6 终态。
+- **import-closure 传递闭包检查器（2026-08-14 落地，commit 待本轮）**：
+  `productionImportClosure()` 从生产入口 `listener/src/searcher/main.ts`
+  出发，跟随全部相对 import（静态/副作用/动态）到不动点（567 文件、
+  0 unresolved），闭包内区分中央命中（verdict 输入）与 `venues/` 插件
+  声明（参考项）；注释剥离后中央 legacy 符号只剩
+  `LEGACY_PRODUCTION_ADAPTER_FAMILIES`（production-registry.ts，生产
+  authority 未迁移的真实残留）；familyId 字面量分支检查（排除 typeof
+  类型守卫）发现 `blind-production-compatibility.ts` 的 erc4626 特判与
+  T1 逐族 driver 表（`T1_REGISTERED_ROUTE_FAMILY_IDS`/
+  `T1_WARM_KIND_BY_FAMILY`，blind baseline 兼容投影，属 central corpus/
+  parity harness 范畴，需迁移为 sealed baseline 数据或删除）。
+  **verdict 收紧为 fail（诚实）**：`legacyRuntimeBranches` 空但 closure
+  未净 → 之前中央路径扫描的 `pass` 只证明中央符号删除，不证明
+  §18.3 终态；`MigrationCleanupReceipt.verdict` 现在要求中央 + 闭包都净。
+  合同测试断言 closure 字段、确定性哈希、blind 命中与 `verdict: fail`；
+  shadow suite + regression sweep 保持全绿。
 - **节点 dry-run 证据（2026-08-14，commit 78a52739 固定，SSM 手动）**：
   /opt/MEV-impl-capture checkout 78a52739（git rev-parse HEAD 确认），
   listener `npm run build` 通过（BUILD_EXIT=0）；注入 /opt/MEV/.env
