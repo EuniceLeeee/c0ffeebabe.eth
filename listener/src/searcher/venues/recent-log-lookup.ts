@@ -45,7 +45,12 @@ export async function findRecentLogHit(
   input: RecentLogQuery,
 ): Promise<RecentLogEntry | null> {
   const { provider, source } = input;
-  const lookback = Math.max(1, input.lookback ?? 100_000);
+  // Local reth retains roughly 7-14 days of logs. A default 100k-block
+  // lookback makes cold nominations scan ~200 empty slices (minutes per
+  // pool). Bound the default to the node's real retention so a miss fails
+  // fast; callers that genuinely need deep history pass an explicit
+  // lookback.
+  const lookback = Math.max(1, input.lookback ?? 10_000);
   // Local reth getLogs cost scales superlinearly with range size: a 5000-block
   // slice takes ~1s while 500 blocks takes ~50ms. The framework helper is
   // protocol-agnostic and slices into small chunks so plugin nominations
