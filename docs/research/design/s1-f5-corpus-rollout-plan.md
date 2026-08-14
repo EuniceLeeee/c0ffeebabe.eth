@@ -384,3 +384,25 @@ unresolved 非空时 fail-closed 拒绝。
 - **silo 行为读确认**：source block 上 asset()/totalSupply()/
   previewRedeem() 全部可读（head 附近窗口内），per-label 修复后
   nomination 可携带行为 evidence，identity 在 source block 重验。
+
+### F5 覆盖 checkpoint 2（2026-08-14，commit 59315ae6）
+
+**节点 materializer 真实运行：16 admitted / 4 unresolved**
+
+- **新增 admitted**：angstrom-v4（近期 [Swap, poolId] + trace 还原 calldata）、
+  erc4626-silo-redeem（verified_candidates 行为 evidence 经 override 保留，
+  address-surface 实读 + identity source block 重验）。
+- **根因修复**：graph 以 adapter=erc4626-silo-redeem 列出 0x3d7d…（与
+  verified_candidates 同 label），first-writer-wins 丢了 evidence 版本；
+  setNomination 增加 overrideEvidence——完整候选分支的 evidence 覆盖同
+  label 裸条目，不同 label 仍各自保留。
+- **unresolved 4 族**：curve-underlying（无 graph 条目/无缓存证据，需
+  metaregistry 反推）、eigenpie（无真实 depositAsset 交易）、ethertoken
+  （evidence tx 超出 reth 保留窗口，trace pruned）、hgusdc（行为型身份，
+  需真实 executePath 交易）——全部属用户批准的“等真实 tx 或回溯”范畴。
+- **RPC 成本**：univ2/3/4/dodo/angstrom 合计 ~6 getLogs + ~5 trace
+  （每族早停常数级）；getCode/getStorage ~10.4K（self-burn 10K+ 候选探针）。
+
+**F5 状态**：16/20 discovery 族真实 admitted；4 族缺真实链上证据（非代码
+可补）。descriptor 生成器在 unresolved 非空时 fail-closed——**在 4 族
+补齐真实证据前，sealed-production eligible=true 不能宣称**。
