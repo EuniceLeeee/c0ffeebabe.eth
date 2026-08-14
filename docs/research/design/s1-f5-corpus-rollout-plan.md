@@ -450,3 +450,21 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   amount/minProfit）；④ 跑 collect（双闭包 + held-out negatives +
   judge）→ `eligible=true` + `verdict=pass`；⑤ 写 evidence JSON 到
   `docs/research/design/evidence/`。
+- **节点 materializer 真实运行（2026-08-14，commit b187468f，旧 graph
+  产物）**：`materialize-s1-capture-inventory.ts` 用 Aug 12 dry-run 的
+  runtime-blockscan-pools.json + protocol-cache.json（真实只读 RPC，
+  源块取 head）：**17 admitted / 3 unresolved**——admitted 全部携带
+  真实链上观察（address-surface/log/call；rpc counts call=1/
+  getCode=11379/getStorage=11379/getLogs=16/receipt=8/trace=10）。
+  unresolved = curve-underlying（旧 graph 在过渡桥 30bdcd18 之前，
+  无 curve 提名，非 trace 族）、ethertoken/hgusdc（trace 窗口族，
+  按用户命令视为不存在）。
+- **新 graph materializer（2026-08-14，1500s dry-run 后）**：新 runtime
+  graph（edges=2088，blockscan_graph_hash=0x6b28bb…，块 25753317）
+  重跑 materializer 得 **13 admitted / 7 unresolved**——首次 generation
+  只覆盖 2088 边（hot 池优先），dodo/fluid/credit 提名缺失；universe
+  文件（19605 池）无 curve（08-13 旧文件，过渡桥前）。**曲线缺口
+  根因**：universe 需重建（impl worktree 跑 build-active-pool-universe
+  含过渡桥 curve 分支），但 1200s 内 14K 块日志扫描未完成（timeout）。
+  **下轮**：延长 universe 重建窗口 → materializer 以新 universe 为
+  graph 输入（形状识别兼容）→ descriptor → collect → eligible 校验。
