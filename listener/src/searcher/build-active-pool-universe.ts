@@ -30,6 +30,7 @@ import {
 } from "./venues/landed-pool-discovery.js";
 import { retainVerifiedSwapFamilyInstances } from "./venues/swap-family-inventory.js";
 import { UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK } from "./venues/swaps/univ4-common.js";
+import { resolveCurveUnderlyingMetadata } from "./venues/curve-underlying.js";
 
 const BLOCKS_PER_DAY = 7200;
 export const DEFAULT_POOL_UNIVERSE_MIN_SWAPS = 1;
@@ -262,11 +263,17 @@ async function main(): Promise<void> {
     topicScanMode,
     strict: true,
   });
+  // TRANSITIONAL BRIDGE (F6 Pair C/D delete-scope, expires with the
+  // catalog-driven universe generator): curve-underlying is re-admitted to
+  // the generic activity lane until its strict nomination path is the
+  // default. This is a deliberately dated exception, not a new per-family
+  // branch: it reuses the strict identity + plugin metadata path below.
   const maturePoolAdapters = new Set<PoolEntry["adapter"]>(
     PRODUCTION_ADAPTER_FAMILIES.swaps()
       .filter((family) => family.matureDexUniverseDiscovery === true)
       .flatMap((family) => family.poolAdapters),
   );
+  maturePoolAdapters.add("curve-underlying");
   const activity: Map<string, PoolActivity> = selectMatureDexActivity(
     landed.activity,
     maturePoolAdapters,
@@ -716,10 +723,17 @@ async function enrichPool(
   strictBlockNumber?: number,
 ): Promise<PoolUniverseEntry | null> {
   const adapterHint = bestAdapter(pool.adapterCounts);
-  // The generic activity lane is intentionally the retained mature V2/V3
-  // fast path. Every other registered swap family must provide its own typed
+  // The generic activity lane is the retained mature V2/V3 fast path.
+  // TRANSITIONAL BRIDGE (F6 Pair C/D delete-scope, expires with the
+  // catalog-driven universe generator): curve-underlying is re-admitted here
+  // via the strict identity path until its strict nomination is the default.
+  // Every other registered swap family must provide its own typed
   // materializer and therefore arrives through landed.materializedPools.
-  if (adapterHint !== "univ2" && adapterHint !== "univ3") {
+  if (
+    adapterHint !== "univ2" &&
+    adapterHint !== "univ3" &&
+    adapterHint !== "curve-underlying"
+  ) {
     throw new Error(
       `non-mature pool adapter ${adapterHint} escaped family materialization`,
     );
@@ -744,6 +758,19 @@ async function enrichPool(
   };
 
   try {
+    // TRANSITIONAL BRIDGE (F6 delete-scope): curve-underlying pools are
+    // enriched through the plugin-owned metadata resolver until the strict
+    // nomination path is the default. The identity above is strict; only the
+    // token-domain metadata comes from the shared curve resolver.
+    if (adapterHint === "curve-underlying" ||
+        adapter === "curve-exchange-underlying") {
+      const metadata = await resolveCurveUnderlyingMetadata(
+        { call: (req) => provider.call({ ...req, blockTag: strictBlockNumber ?? 0 }) },
+        pool.address,
+        { allowDirectPoolFallback: true },
+      );
+      return { ...base, adapter: "curve-underlying", underlyingCoins: metadata.coins };
+    }
     if (adapter === "univ3") {
       const [token0, token1, fee, tickSpacing] = await Promise.all([
         callAddress(provider, pool.address, univ3Iface.encodeFunctionData("token0")),
