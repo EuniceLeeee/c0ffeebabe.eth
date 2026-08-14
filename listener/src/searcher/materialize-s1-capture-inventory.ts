@@ -350,11 +350,17 @@ function opaquePoolNominations(input: {
       )
     ) {
       const address = ethers.getAddress(record.address).toLowerCase();
-      values.set(address, Object.freeze({
-        address,
-        opaque: Object.freeze(record) as unknown as
-          import("./venues/canonical-value.js").CanonicalValue,
-      }));
+      // First-writer wins: graph pool entries carry the pool's true adapter
+      // label; the protocol cache may re-list the same address under a
+      // different matcher (e.g. self-burn proxies). Overwriting would steal
+      // the nomination from its owning Family.
+      if (!values.has(address)) {
+        values.set(address, Object.freeze({
+          address,
+          opaque: Object.freeze(record) as unknown as
+            import("./venues/canonical-value.js").CanonicalValue,
+        }));
+      }
     }
     for (const item of Object.values(record)) visit(item);
   };

@@ -98,4 +98,33 @@ assert.equal(inventory.entries.length, 1);
 assert.equal(inventory.entries[0]?.familyId, FAMILY);
 assert.equal(inventory.entries[0]?.candidateIdentity, ADDRESS);
 assert.equal(inventory.unresolved.length, 0);
+
+// First-writer wins: when the protocol cache re-lists a graph pool address
+// under a foreign matcher label, the graph owner keeps the nomination; the
+// foreign label must not admit a second entry for this Family.
+const stolen = await materializeCaptureInventory({
+  catalog,
+  source,
+  rawArtifacts: Object.freeze({
+    graph: Object.freeze({
+      pools: Object.freeze([Object.freeze({
+        arbitraryLabel: ACTION,
+        arbitraryAddress: ADDRESS,
+      })]),
+    }),
+    protocolCache: Object.freeze({
+      evidence: Object.freeze([Object.freeze({ txHash: TX_HASH })]),
+      family: ACTION,
+      entries: Object.freeze([Object.freeze({
+        adapterId: "other:matcher",
+        address: ADDRESS,
+      })]),
+    }),
+  }),
+  provider,
+});
+assert.equal(stolen.entries.length, 1);
+assert.equal(stolen.entries[0]?.familyId, FAMILY);
+assert.equal(stolen.unresolved.length, 0);
+
 console.log("S1 capture inventory materializer PASS");
