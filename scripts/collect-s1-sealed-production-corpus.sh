@@ -6,6 +6,12 @@ set -euo pipefail
 # Family, and run the sealed-production parity judge. This orchestrator knows
 # no Family/protocol/selector/topic/address semantics.
 #
+# Both worktrees run the SAME generic catalog-driven capture CLI, each at
+# its own fixed HEAD: baseline_root is the pre-migration closure (frozen
+# earlier impl tip), challenger_root is the migration closure. Generic
+# capture consumes each closure OWN catalog/plugin semantics, so the parity
+# judge compares pre- vs post-migration behavior on the same real input.
+#
 # Node-side usage (SSM):
 #   bash /opt/MEV-impl-capture/scripts/collect-s1-sealed-production-corpus.sh \
 #     <descriptor.json> <corpus-dir> <baseline-worktree> <challenger-worktree>
@@ -50,6 +56,12 @@ if [[ -n "$(git -C "$baseline_root" status --porcelain)" ]] ||
   echo "[corpus] both capture worktrees must be clean" >&2
   exit 5
 fi
+for root in "$baseline_root" "$challenger_root"; do
+  if [[ ! -f "$root/listener/src/searcher/run-architecture-migration-capture-real-cli.ts" ]]; then
+    echo "[corpus] $root lacks the generic capture CLI at its fixed HEAD" >&2
+    exit 6
+  fi
+done
 
 run_side() {
   local root="$1"

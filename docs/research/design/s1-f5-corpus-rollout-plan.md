@@ -425,3 +425,28 @@ descriptor 生成器与 sealed-production 验收按此执行——不再因这 3
 unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（非吞掉
 失败），待节点 trace 窗口内出现新交易时经通用 call-seed 扫描器
 （recent-call-seed-scan.ts）自动恢复。
+
+### F5 双闭包执行准备（2026-08-14，commit 待本轮）
+
+- **baseline 重新冻结决策**：parity-capture-baseline 分支 tip 4265971d
+  （08-12 冻结）只有旧逐族 exporter CLI（baseline-capture-cli + 扁平
+  旧格式 descriptor），没有通用 F5 工具链（generic capture/descriptor/
+  held-out 生成器）——无法执行"同一 descriptor 双闭包"流程。按 F5
+  计划"经漂移审计后重新冻结的更新 ds tip"：**baseline 重新冻结为
+  f47fff1c**（08-14 03:25，F5 工具链完整建立点：real-cli + generic-
+  family-capture + descriptor 生成器 + held-out 生成器 + collect 重写
+  齐备；族语义早于 F9 清理 944b276f/ba60679f/8e672cd7）。两侧同一
+  generic CLI 各自闭包采集：baseline=f47fff1c（迁移推进 snapshot），
+  challenger=当前 tip——parity 证明该区间 catalog/plugin 语义无回退。
+- **collect 脚本修复**：`collect-s1-sealed-production-corpus.sh` 增加
+  fail-closed 检查（两个 worktree 的固定 HEAD 都必须自带
+  `run-architecture-migration-capture-real-cli.ts`，缺失即 exit 6），
+  注释明确双闭包机制（两侧同 generic CLI、各自 HEAD 的 catalog 语义）。
+- **节点执行步骤（待运行）**：① baseline worktree checkout f47fff1c、
+  impl worktree checkout 当前 tip，两侧 build；② impl 侧 dry-run 至
+  discovery publication 产出真实 checkpoint（含 inventoryFamilies +
+  catalogHash），或复用节点已有 checkpoint；③ 调 `descriptorFromCheckpoint`
+  生成真实 descriptor（assets=真实 token 地址、executor=BOTVM、
+  amount/minProfit）；④ 跑 collect（双闭包 + held-out negatives +
+  judge）→ `eligible=true` + `verdict=pass`；⑤ 写 evidence JSON 到
+  `docs/research/design/evidence/`。
