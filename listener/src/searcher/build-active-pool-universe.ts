@@ -1006,9 +1006,12 @@ async function resolvePoolIdentityStrict(
   });
   const entry = result.accepted[0];
   if (entry === undefined) {
+    const rejectedReason = result.rejected[0]?.reason;
     return {
       ok: false,
-      reason: "unsupported_venue",
+      reason: rejectedReason === undefined
+        ? "unsupported_venue"
+        : `rejected:${rejectedReason}`,
     };
   }
   return {
