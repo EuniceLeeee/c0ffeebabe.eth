@@ -135,11 +135,20 @@ export class AdapterFamilyRegistry {
   private blockScanStateFamilyProjection:
     | readonly RegisteredBlockScanStateFamily[]
     | null = null;
+  private readonly strictCatalog: {
+    readonly definitionBoundaryHashFor: (familyId: string) => string | null;
+  } | null;
   private readonly ownedActionOwners = new Map<string, ExecutionFamilyId>();
   private readonly registeredVenueOwners = new Map<string, ExecutionFamilyId>();
   private readonly registeredIdentitySourceOwners = new Map<string, ExecutionFamilyId>();
 
-  constructor(families: readonly AdapterFamily[]) {
+  constructor(
+    families: readonly AdapterFamily[],
+    strictCatalog?: {
+      readonly definitionBoundaryHashFor: (familyId: string) => string | null;
+    },
+  ) {
+    this.strictCatalog = strictCatalog ?? null;
     const swaps: SwapAdapter[] = [];
     const protocols: ProtocolConversionAdapter[] = [];
     const flash: FlashLoanAdapterFamily[] = [];
@@ -332,6 +341,8 @@ export class AdapterFamilyRegistry {
         ),
       ]);
     };
+    const strictHashFor = (familyId: string): string | undefined =>
+      this.strictCatalog?.definitionBoundaryHashFor(familyId) ?? undefined;
     this.blockScanStateFamilyProjection = Object.freeze([
       ...this.swapFamilies.map((family): RegisteredBlockScanStateFamily => Object.freeze({
         ...registerBlockScanStateFamily({
@@ -341,6 +352,9 @@ export class AdapterFamilyRegistry {
           mutationEvents: familyMutationTopics(family),
           ownsEdge: (edge: TokenEdge) =>
             family.edgeAdapterIds.includes(edge.adapterId),
+          ...(strictHashFor(family.id) === undefined
+            ? {}
+            : { strictDefinitionBoundaryHash: strictHashFor(family.id) }),
         }),
       })),
       ...this.protocolFamilies.map(
@@ -352,6 +366,9 @@ export class AdapterFamilyRegistry {
             mutationEvents: familyMutationTopics(family),
             ownsEdge: (edge: TokenEdge) =>
               family.edgeAdapterIds.includes(edge.adapterId),
+            ...(strictHashFor(family.id) === undefined
+              ? {}
+              : { strictDefinitionBoundaryHash: strictHashFor(family.id) }),
           }),
       ),
     ]);

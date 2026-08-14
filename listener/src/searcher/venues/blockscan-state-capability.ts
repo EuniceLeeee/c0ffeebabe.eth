@@ -586,6 +586,14 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     readonly emitter: LandedEventEmitter;
   }[];
   ownsEdge(edge: TokenEdge): boolean;
+  /**
+   * F6 Pair F: generated strict capability hash for the family when it is
+   * registered in the strict catalog. When present it replaces the manual
+   * adapterSchemaRevision (and the familyId fallback) as the schema/cache
+   * revision authority, so a family declaration change invalidates the
+   * blockscan state cache without a manual bump.
+   */
+  readonly strictDefinitionBoundaryHash?: string;
 }): RegisteredBlockScanStateFamily {
   const { familyId, lane, capability } = input;
   const mutationEvents = Object.freeze(
@@ -755,7 +763,10 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
         : {}),
     };
   };
-  const schemaRevision = capability.adapterSchemaRevision ?? familyId;
+  const schemaRevision =
+    input.strictDefinitionBoundaryHash ??
+    capability.adapterSchemaRevision ??
+    familyId;
   /*
    * Process-local content-addressed runtime materialization store. Persisted
    * warm state contains raw reads, not CompiledStateInstance objects, so a

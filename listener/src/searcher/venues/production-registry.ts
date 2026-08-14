@@ -97,7 +97,23 @@ export const PRODUCTION_FAMILY_SCAN_SHA256 = createHash("sha256")
  * forbidden as a strict lifecycle, descriptor-cache or capability authority.
  */
 export const PRODUCTION_FROZEN_LEGACY_ROUTE_BASELINE =
-  new AdapterFamilyRegistry(LEGACY_PRODUCTION_ADAPTER_FAMILIES);
+  new AdapterFamilyRegistry(
+    LEGACY_PRODUCTION_ADAPTER_FAMILIES,
+    // F6 Pair F: the block-scan state schema/cache revision derives from the
+    // generated strict catalog when the family is registered there, replacing
+    // the manual adapterSchemaRevision authority.
+    {
+      definitionBoundaryHashFor: (familyId) => {
+        try {
+          return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+            .forStrictFamily(familyId as never)
+            .definitionBoundaryHash;
+        } catch {
+          return null;
+        }
+      },
+    },
+  );
 
 /** Current production authority until the strict cutover gate closes. */
 export const PRODUCTION_ADAPTER_FAMILIES =
