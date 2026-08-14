@@ -742,6 +742,7 @@ async function enrichPool(
     provider,
     pool.address,
     strictBlockNumber ?? 0,
+    adapterHint,
   );
   if (!identity.ok) {
     console.log(
@@ -994,11 +995,14 @@ async function resolvePoolIdentityStrict(
   provider: ethers.JsonRpcProvider,
   address: string,
   blockNumber: number,
+  adapterHint?: string,
 ): Promise<PoolIdentityResult> {
   const result = await attestPoolsStrictFromProvider({
     provider: provider as never,
     blockNumber,
-    pools: [{ address, adapter: "" }],
+    // The activity adapter label is a catalog-match hint (provenance),
+    // never an admission gate: identity still re-verifies on chain.
+    pools: [{ address, adapter: adapterHint ?? "" }],
   });
   const entry = result.accepted[0];
   if (entry === undefined) {
