@@ -206,6 +206,43 @@ export interface CaptureMaterializationSemantics {
   materialize(descriptor: FamilyCaptureDescriptor): FamilyCaptureVector;
 }
 
+export interface CaptureNominationInput {
+  readonly address: string;
+  readonly opaque: CanonicalValue;
+}
+
+export interface CaptureNominationProvider {
+  call(
+    transaction: { readonly to: string; readonly data: string },
+    blockTag?: number,
+  ): Promise<string>;
+  getCode(address: string, blockTag?: number): Promise<string>;
+  getStorage(
+    address: string,
+    slot: string,
+    blockTag?: number,
+  ): Promise<string>;
+  getLogs(filter: {
+    readonly address?: string;
+    readonly fromBlock?: number;
+    readonly toBlock?: number;
+    readonly topics?: readonly (string | null)[];
+  }): Promise<readonly {
+    readonly address: string;
+    readonly topics: readonly string[];
+    readonly data: string;
+    readonly transactionHash?: string;
+  }[]>;
+}
+
+export interface CaptureNominationSemantics {
+  nominate(input: {
+    readonly nominations: readonly CaptureNominationInput[];
+    readonly source: CanonicalSource;
+    readonly provider: CaptureNominationProvider;
+  }): Promise<readonly UnifiedObservation[]>;
+}
+
 export interface FamilyCandidate {
   readonly candidateKind: string;
 }
@@ -215,6 +252,7 @@ export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
   readonly callPatterns?: readonly CallPattern[];
   readonly logPatterns?: readonly LogPattern[];
   readonly addressSurfaces?: readonly AddressSurfacePattern[];
+  readonly nominate?: CaptureNominationSemantics;
   decodeCandidate(input: {
     readonly observation: UnifiedObservation;
     readonly matchedPatternId: string;
@@ -2736,12 +2774,24 @@ function validateDiscovery(discovery: DiscoverySemantics<any>): void {
       "candidateKey",
       "decodeCandidate",
       "logPatterns",
+      "nominate",
       "sources",
     ],
     "discovery semantics",
     true,
     ["candidateKey", "decodeCandidate", "sources"],
   );
+  if (discovery.nominate !== undefined) {
+    assertPlainRecord(discovery.nominate, "discovery nomination semantics");
+    assertExactKeys(
+      discovery.nominate,
+      ["nominate"],
+      "discovery nomination semantics",
+    );
+    if (typeof discovery.nominate.nominate !== "function") {
+      throw new Error("discovery nomination nominate must be a function");
+    }
+  }
   const sources = stringSet(discovery.sources, "discovery sources", true);
   const supported = new Set<DiscoverySourceKind>([
     "factory-log",

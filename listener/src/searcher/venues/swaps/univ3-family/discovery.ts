@@ -2,6 +2,7 @@ import type {
   DiscoverySemantics,
   UnifiedObservation,
 } from "../../adapter-family-plugin.js";
+import { nominateUniv3 } from "./nomination.js";
 import {
   PANCAKE_V3_SWAP_TOPIC,
   UNIV3_BURN_TOPIC,
@@ -67,6 +68,7 @@ export const univ3Discovery = {
     }
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
+  nominate: { nominate: nominateUniv3 },
 } satisfies DiscoverySemantics<UniV3Candidate>;
 
 function decodeCandidate(

@@ -2,6 +2,7 @@ import type {
   DiscoverySemantics,
   UnifiedObservation,
 } from "../../adapter-family-plugin.js";
+import { nominateUniv2 } from "./nomination.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -46,6 +47,7 @@ export const univ2Discovery = {
     }
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
+  nominate: { nominate: nominateUniv2 },
 } satisfies DiscoverySemantics<UniV2Candidate>;
 
 function decodeCandidate(

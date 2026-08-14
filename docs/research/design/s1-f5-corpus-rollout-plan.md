@@ -217,3 +217,46 @@ PoolManager 部署块到 source 跨 `4,056,940` blocks，reth 单请求上限
   删除；原 JSON 仍在 evidence 目录作为不可执行历史证据。active sweep 改验
   generic capture、descriptor、held-out、当前 parity/authority/cutover 合同。
   新节点 sealed-production evidence 产生后才重新作为 active F5 gate 接入。
+
+### plugin-owned nomination slice（2026-08-14，原子契约变更）
+
+**根因（节点诊断确认）：** 节点上 materializer 首轮输出 11 entries + 9
+unresolved。诊断发现 graph 的裸 label（"goldx"/"wsteth"/"univ2"）无法经
+`catalogFamilyForLabel` 解析成 familyId（"protocol:goldx"/"univ2-standard"），
+因此这些 pool 条目从未进入提名，address-surface 探针也无从执行；这是中央
+label 解释的覆盖 bug，不是链上证据缺失。
+
+**方向（用户选定）：** 不做中央 per-family 反推脚本，改为 plugin-owned
+nomination 能力，经 generated catalog 自动注册：
+
+1. 契约：`DiscoverySemantics` 新增可选 `nominate?: CaptureNominationSemantics`
+   （plugin-local 能力，输入 opaque pool nominations + source + 只读 provider，
+   输出真实 `UnifiedObservation[]`）。provider 的 transport/timeout/retry/
+   分页与逐项隔离归中央。
+2. 中央 executor：`executeCatalogCaptureNominations` 只做三件事——收集 opaque
+   pool nomination → 执行 catalog 发布的 nomination 能力 → 用
+   `catalog.matches()` + plugin `decodeCandidate()` 准入，fail-closed；
+   nomination 产物不能通过 matches+decodeCandidate 时抛错，不吞掉。
+3. univ2/univ3/univ4 证明模式：graph pool 条目是 opaque nomination；plugin
+   用自己的 ABI 读 token0/token1/factory（V2）、token0/token1/fee/tickSpacing
+   （V3）、opaque poolId（V4），以精确 topics 查 factory/PoolManager 日志
+   （Bloom 索引直接定位，无全量扫描），返回真实 log（含真实 txHash）；
+   identity 阶段仍反向验证（getPair/getPool/poolKey）。
+4. address-surface 族（wsteth/psm/goldx/rocksolid/metronome-synth/
+   self-burn/erc4626/fluid-credit 等）：共享 `createAddressSurfaceNomination`
+   （plugin 声明自己认领的 opaque label + interface fingerprints，codeHash +
+   EIP-1967 实读），中央不做 label→family 映射。
+5. materializer 改为：已验证 tx 证据优先（verified_candidates 的 receipt/trace）
+   → nomination 反推 → address-surface 探针；**删除全量日志回查**
+   （`declaredLogObservations` 的 100k-block 分页扫描不再存在）。
+6. 框架合同只使用 synthetic catalog（capture-nomination-framework）：graph
+   nomination → observation → admit → fail-closed 通用循环；不点名生产
+   Family。univ2/3/4 nomination 为 plugin-local 合同（mock provider 正/负例）。
+
+**契约变更影响：** discovery 契约新增可选字段会改变 capability content
+hash → generated catalog hash 变化 → 旧节点 enumerator/corpus 证据按设计
+fail closed，本 slice 必须与节点证据重生成一起提交（原子 slice）。
+
+**剩余：** 节点上以新 materializer 重跑受限诊断，拿真实 unresolved 清单；
+随后补齐其余族的 nomination（如需）并产出真实 descriptor → baseline/
+challenger 双闭包 → held-out negatives → sealed-production judge。

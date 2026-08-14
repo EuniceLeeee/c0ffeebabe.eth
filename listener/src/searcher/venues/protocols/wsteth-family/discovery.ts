@@ -5,6 +5,7 @@ import {
 } from "../standard-family/common.js";
 import { WSTETH_INTERFACE } from "./codec.js";
 import type { WstethCandidate } from "./types.js";
+import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 export const wstethDiscovery = {
   sources: ["observed-call", "address-surface"],
@@ -52,4 +53,8 @@ export const wstethDiscovery = {
     return null;
   },
   candidateKey: (candidate) => lowerAddress(candidate.target),
+  nominate: createAddressSurfaceNomination({
+    opaqueLabels: Object.freeze(["wsteth", "protocol:wsteth"]),
+    interfaceFingerprints: Object.freeze(["wsteth-conversion-surface-v1"]),
+  }),
 } satisfies DiscoverySemantics<WstethCandidate>;

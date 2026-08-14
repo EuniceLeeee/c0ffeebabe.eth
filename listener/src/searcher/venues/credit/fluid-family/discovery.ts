@@ -5,6 +5,7 @@ import {
   lowerAddress,
 } from "./codec.js";
 import type { FluidCreditCandidate } from "./types.js";
+import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 export const FLUID_CREDIT_OPERATE_CALL_PATTERN_ID =
   "fluid-credit-operate-call";
@@ -49,4 +50,8 @@ export const fluidCreditDiscovery = {
     return null;
   },
   candidateKey: (candidate) => lowerAddress(candidate.vault),
+  nominate: createAddressSurfaceNomination({
+    opaqueLabels: Object.freeze(["fluid", "credit:fluid", "fluid-credit"]),
+    interfaceFingerprints: Object.freeze(["fluid-credit:constantsView+operate"]),
+  }),
 } satisfies DiscoverySemantics<FluidCreditCandidate>;

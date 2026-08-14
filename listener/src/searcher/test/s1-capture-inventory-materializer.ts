@@ -62,6 +62,7 @@ const source = Object.freeze({
   generation: 100,
 });
 const provider: CaptureInventoryProvider = {
+  call: async () => "0x",
   getCode: async () => "0x01",
   getStorage: async () => `0x${"00".repeat(32)}`,
   getLogs: async () => Object.freeze([]),

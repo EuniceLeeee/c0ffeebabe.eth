@@ -24,6 +24,7 @@ import {
   UNIV4_SWAP_LOG_PATTERN_ID,
 } from "./codec.js";
 import type { UniV4Candidate } from "./types.js";
+import { nominateUniv4 } from "./nomination.js";
 
 export const univ4Discovery = {
   sources: ["factory-log", "landed-log", "observed-call"],
@@ -63,6 +64,7 @@ export const univ4Discovery = {
   },
   candidateKey: (candidate) =>
     `${candidate.manager.toLowerCase()}\u001f${candidate.poolId}`,
+  nominate: { nominate: nominateUniv4 },
 } satisfies DiscoverySemantics<UniV4Candidate>;
 
 function decodeCandidate(

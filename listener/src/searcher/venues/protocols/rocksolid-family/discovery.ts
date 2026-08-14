@@ -5,6 +5,7 @@ import {
 } from "../standard-family/common.js";
 import { ROCKSOLID_INTERFACE } from "./codec.js";
 import type { RocksolidCandidate } from "./types.js";
+import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 export const rocksolidDiscovery = {
   sources: ["observed-call", "address-surface"],
@@ -43,4 +44,8 @@ export const rocksolidDiscovery = {
     return null;
   },
   candidateKey: (candidate) => lowerAddress(candidate.target),
+  nominate: createAddressSurfaceNomination({
+    opaqueLabels: Object.freeze(["rocksolid", "protocol:rocksolid"]),
+    interfaceFingerprints: Object.freeze(["rocksolid-sync-deposit-v1"]),
+  }),
 } satisfies DiscoverySemantics<RocksolidCandidate>;

@@ -11,6 +11,7 @@ import {
   ERC4626_WITHDRAW_TOPIC,
 } from "./abi.js";
 import type { Erc4626Candidate } from "./types.js";
+import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 export const erc4626Discovery: DiscoverySemantics<Erc4626Candidate> =
   {
@@ -89,4 +90,8 @@ export const erc4626Discovery: DiscoverySemantics<Erc4626Candidate> =
       return null;
     },
     candidateKey: (candidate) => lowerAddress(candidate.vault),
+    nominate: createAddressSurfaceNomination({
+      opaqueLabels: Object.freeze(["erc4626", "protocol:erc4626"]),
+      interfaceFingerprints: Object.freeze(["erc4626-standard-behavior-v1"]),
+    }),
   };

@@ -6,6 +6,7 @@ import {
 } from "../standard-family/common.js";
 import { SELF_BURN_NATIVE_TOKEN_INTERFACE } from "./shared.js";
 import type { SelfBurnNativeCandidate } from "./types.js";
+import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 const TRANSFER_SELF_PATTERN_ID = "self-burn-transfer-self";
 const PROXY_SHORTLIST_PATTERN_ID = "self-burn-proxy-shortlist";
@@ -64,4 +65,8 @@ export const selfBurnNativeDiscovery = {
     return null;
   },
   candidateKey: (candidate) => lowerAddress(candidate.token),
+  nominate: createAddressSurfaceNomination({
+    opaqueLabels: Object.freeze(["self-burn-native", "protocol:self-burn-native"]),
+    interfaceFingerprints: Object.freeze([]),
+  }),
 } satisfies DiscoverySemantics<SelfBurnNativeCandidate>;

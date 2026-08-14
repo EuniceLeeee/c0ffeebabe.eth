@@ -5,6 +5,7 @@ import {
 } from "../standard-family/common.js";
 import { GOLDX_INTERFACE } from "./codec.js";
 import type { GoldxCandidate } from "./types.js";
+import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 export const goldxDiscovery = {
   sources: ["observed-call", "address-surface"],
@@ -41,4 +42,8 @@ export const goldxDiscovery = {
     return null;
   },
   candidateKey: (candidate) => lowerAddress(candidate.target),
+  nominate: createAddressSurfaceNomination({
+    opaqueLabels: Object.freeze(["goldx", "protocol:goldx"]),
+    interfaceFingerprints: Object.freeze(["goldx-unit-mint-v1"]),
+  }),
 } satisfies DiscoverySemantics<GoldxCandidate>;

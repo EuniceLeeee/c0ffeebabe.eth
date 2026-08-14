@@ -15,10 +15,12 @@ import type {
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "./venues/production-family-composition.js";
+import {
+  executeCatalogCaptureNominations,
+} from "./venues/capture-materialization.js";
 
 const EIP1967_IMPLEMENTATION_SLOT =
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
-const LOG_PAGE_SPAN = 100_000;
 const RPC_URL = process.env.S1_CAPTURE_RPC_URL ?? "http://127.0.0.1:8545";
 
 interface RawArtifacts {
@@ -44,6 +46,10 @@ export interface CaptureInventoryFile {
 }
 
 export interface CaptureInventoryProvider {
+  call(
+    transaction: { readonly to: string; readonly data: string },
+    blockTag: number,
+  ): Promise<string>;
   getCode(address: string, blockTag: number): Promise<string>;
   getStorage(address: string, slot: string, blockTag: number): Promise<string>;
   getLogs(filter: {
@@ -83,23 +89,17 @@ export async function materializeCaptureInventory(input: {
   readonly provider: CaptureInventoryProvider;
 }): Promise<CaptureInventoryFile> {
   const observations = [
-    ...await addressObservations(input),
     ...await transactionObservations(input),
+    ...await executeCatalogCaptureNominations({
+      catalog: input.catalog,
+      source: input.source,
+      nominations: opaquePoolNominations(input.rawArtifacts.graph as import("./venues/canonical-value.js").CanonicalValue),
+      provider: nominationProvider(input.provider),
+    }),
+    ...await addressObservations(input),
   ];
   const byFamily = new Map<FamilyId, CaptureInventoryEntry>();
   admitObservations(input.catalog, observations, byFamily);
-  const unresolvedFamilies = new Set(input.catalog.listAll().flatMap((family) =>
-    "discovery" in family.plugin && !byFamily.has(family.plugin.manifest.familyId)
-      ? [family.plugin.manifest.familyId]
-      : []
-  ));
-  if (unresolvedFamilies.size !== 0) {
-    admitObservations(
-      input.catalog,
-      await declaredLogObservations({ ...input, unresolvedFamilies }),
-      byFamily,
-    );
-  }
   const discoveryIds = input.catalog.listAll().flatMap((family) =>
     "discovery" in family.plugin ? [family.plugin.manifest.familyId] : []
   );
@@ -286,85 +286,7 @@ async function transactionObservations(input: {
   return Object.freeze(observations);
 }
 
-async function declaredLogObservations(input: {
-  readonly catalog: FamilyCapabilityCatalog;
-  readonly source: CanonicalSource;
-  readonly provider: CaptureInventoryProvider;
-  readonly unresolvedFamilies: ReadonlySet<FamilyId>;
-}): Promise<readonly UnifiedObservation[]> {
-  const observations: UnifiedObservation[] = [];
-  for (const family of input.catalog.listAll()) {
-    if (!("discovery" in family.plugin)) continue;
-    if (!input.unresolvedFamilies.has(family.plugin.manifest.familyId)) continue;
-    for (const pattern of family.plugin.discovery.logPatterns ?? []) {
-      const emitter = pattern.emitter;
-      const log = await findLatestDecodableLog({
-        family,
-        patternId: pattern.id,
-        provider: input.provider,
-        ...(emitter === undefined || emitter.mode === "address"
-          ? {}
-          : { address: emitter.address }),
-        topic: pattern.topic,
-        fromBlock: emitter === undefined || emitter.mode === "address"
-          ? Math.max(
-              0,
-              input.source.number - Number(
-                process.env.S1_CAPTURE_LOG_LOOKBACK_BLOCKS ?? 5_000_000,
-              ),
-            )
-          : emitter.fromBlock,
-        toBlock: input.source.number,
-        source: input.source,
-      });
-      if (log !== null) {
-        observations.push(log);
-        break;
-      }
-    }
-  }
-  return Object.freeze(observations);
-}
 
-async function findLatestDecodableLog(input: {
-  readonly family: LoadedFamilyBox;
-  readonly patternId: string;
-  readonly provider: CaptureInventoryProvider;
-  readonly address?: string;
-  readonly topic: string;
-  readonly fromBlock: number;
-  readonly toBlock: number;
-  readonly source: CanonicalSource;
-}): Promise<UnifiedObservation | null> {
-  let toBlock = input.toBlock;
-  while (toBlock >= input.fromBlock) {
-    const fromBlock = Math.max(input.fromBlock, toBlock - LOG_PAGE_SPAN + 1);
-    let logs: Awaited<ReturnType<CaptureInventoryProvider["getLogs"]>>;
-    try {
-      logs = await input.provider.getLogs({
-        ...(input.address === undefined ? {} : { address: input.address }),
-        fromBlock,
-        toBlock,
-        topics: [input.topic],
-      });
-    } catch {
-      if (fromBlock === toBlock) return null;
-      toBlock = Math.floor((fromBlock + toBlock) / 2);
-      continue;
-    }
-    for (const raw of [...logs].reverse()) {
-      const observation = logObservation(raw, input.source);
-      if (!("discovery" in input.family.plugin)) return null;
-      const candidate = input.family.plugin.discovery.decodeCandidate({
-        observation,
-        matchedPatternId: input.patternId,
-      });
-      if (candidate !== null) return observation;
-    }
-    toBlock = fromBlock - 1;
-  }
-  return null;
-}
 
 function logObservation(
   log: {
@@ -445,6 +367,56 @@ function captureCandidateIdentity(
   }
   if (observation.kind === "address-surface") return observation.address;
   return observation.factory;
+}
+
+function opaquePoolNominations(
+  graph: CanonicalValue,
+): readonly import("./venues/adapter-family-plugin.js").CaptureNominationInput[] {
+  const values = new Map<string, import("./venues/adapter-family-plugin.js").CaptureNominationInput>();
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (value === null || typeof value !== "object") return;
+    const record = value as Readonly<Record<string, unknown>>;
+    if (
+      typeof record.address === "string" &&
+      ethers.isAddress(record.address) &&
+      Object.keys(record).some((key) =>
+        key === "adapter" || key === "venueId" || key === "adapterId"
+      )
+    ) {
+      const address = ethers.getAddress(record.address).toLowerCase();
+      values.set(address, Object.freeze({
+        address,
+        opaque: Object.freeze(record) as unknown as
+          import("./venues/canonical-value.js").CanonicalValue,
+      }));
+    }
+    for (const item of Object.values(record)) visit(item);
+  };
+  visit(graph);
+  return Object.freeze([...values.values()].sort((left, right) =>
+    left.address.localeCompare(right.address)
+  ));
+}
+
+function nominationProvider(
+  provider: CaptureInventoryProvider,
+): import("./venues/adapter-family-plugin.js").CaptureNominationProvider {
+  return {
+    call: (transaction, blockTag) => provider.call(transaction, blockTag ?? 0),
+    getCode: (address, blockTag) => provider.getCode(address, blockTag ?? 0),
+    getStorage: (address, slot, blockTag) =>
+      provider.getStorage(address, slot, blockTag ?? 0),
+    getLogs: (filter) => provider.getLogs({
+      ...(filter.address === undefined ? {} : { address: filter.address }),
+      fromBlock: filter.fromBlock ?? 0,
+      toBlock: filter.toBlock ?? 0,
+      topics: filter.topics ?? [],
+    }),
+  };
 }
 
 function rawAddressNominations(
@@ -592,6 +564,7 @@ async function main(): Promise<void> {
       generation: sourceNumber,
     });
     const provider: CaptureInventoryProvider = {
+      call: (transaction, block) => rpc.send("eth_call", [transaction, "0x" + block.toString(16)]),
       getCode: (address, block) => rpc.getCode(address, block),
       getStorage: (address, slot, block) => rpc.getStorage(address, slot, block),
       getLogs: (filter) => rpc.getLogs({ ...filter, topics: [...filter.topics] }),

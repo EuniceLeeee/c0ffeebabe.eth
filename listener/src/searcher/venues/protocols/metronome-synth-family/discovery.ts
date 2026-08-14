@@ -7,6 +7,7 @@ import {
 } from "../standard-family/common.js";
 import { METRONOME_SYNTH_POOL_INTERFACE } from "./shared.js";
 import type { MetronomeSynthCandidate } from "./types.js";
+import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 const SWAP_PATTERN_ID = "metronome-synth-swap-call";
 const QUOTE_PATTERN_ID = "metronome-synth-quote-call";
@@ -88,4 +89,8 @@ export const metronomeSynthDiscovery = {
     return null;
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
+  nominate: createAddressSurfaceNomination({
+    opaqueLabels: Object.freeze(["metronome-synth", "protocol:metronome-synth"]),
+    interfaceFingerprints: Object.freeze(["metronome-synth-membership-and-quote-v1"]),
+  }),
 } satisfies DiscoverySemantics<MetronomeSynthCandidate>;

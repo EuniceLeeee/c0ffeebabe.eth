@@ -1,5 +1,7 @@
 import type {
   CaptureMaterializationSemantics,
+  CaptureNominationInput,
+  CaptureNominationProvider,
   CaptureObservationIntent,
   CreditCaptureVector,
   DiscoverySemantics,
@@ -8,9 +10,12 @@ import type {
   FundingCaptureVector,
   RouteCaptureVector,
   RuntimeEvidence,
+  UnifiedObservation,
 } from "./adapter-family-plugin.js";
 import type { FamilyId } from "./adapter-family-identifiers.js";
+import type { CanonicalSource } from "./adapter-request-program.js";
 import type { CanonicalValue } from "./canonical-value.js";
+import type { FamilyCapabilityCatalog } from "./family-capability-catalog.js";
 
 interface RouteCaptureBinding {
   readonly observation: CanonicalValue;
@@ -31,6 +36,53 @@ interface CreditCaptureBinding extends RouteCaptureBinding {
  * owning plugin supplies the discovery declaration and the descriptor keeps
  * protocol-owned values opaque until this boundary.
  */
+/**
+ * Executes the catalog-issued nomination capability for every Family plugin
+ * that declares one. The framework feeds opaque pool nominations verbatim:
+ * each plugin filters them by its own opaque knowledge and/or on-chain
+ * verification, and returns real observations which the central executor then
+ * admits through `catalog.matches` + `decodeCandidate`. An observation that
+ * matches a Family but fails decodeCandidate is a fail-closed rejection, not
+ * a silent drop.
+ */
+export async function executeCatalogCaptureNominations(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly source: CanonicalSource;
+  readonly nominations: readonly CaptureNominationInput[];
+  readonly provider: CaptureNominationProvider;
+}): Promise<readonly UnifiedObservation[]> {
+  const observations: UnifiedObservation[] = [];
+  for (const family of input.catalog.listAll()) {
+    const plugin = family.plugin;
+    if (!("discovery" in plugin)) continue;
+    const nominate = plugin.discovery.nominate;
+    if (nominate === undefined) continue;
+    const derived = await nominate.nominate({
+      nominations: input.nominations,
+      source: input.source,
+      provider: input.provider,
+    });
+    for (const observation of derived) {
+      const matches = input.catalog.matches(observation);
+      const admitted = matches.some((match) =>
+        match.familyId === plugin.manifest.familyId &&
+        plugin.discovery.decodeCandidate({
+          observation,
+          matchedPatternId: match.patternId,
+        }) !== null
+      );
+      if (!admitted) {
+        throw new Error(
+          `nomination for ${plugin.manifest.familyId} produced an observation ` +
+            "that does not admit through catalog matches + decodeCandidate",
+        );
+      }
+      observations.push(observation);
+    }
+  }
+  return Object.freeze(observations);
+}
+
 export function createRouteCaptureMaterialization<
   Candidate extends FamilyCandidate,
 >(input: {

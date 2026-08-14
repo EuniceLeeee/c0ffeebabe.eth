@@ -5,6 +5,7 @@ import {
 } from "../standard-family/common.js";
 import { PSM_INTERFACE } from "./codec.js";
 import type { PsmCandidate } from "./types.js";
+import { createAddressSurfaceNomination } from "../../address-surface-nomination.js";
 
 export const psmDiscovery = {
   sources: ["observed-call", "address-surface"],
@@ -42,4 +43,8 @@ export const psmDiscovery = {
     return null;
   },
   candidateKey: (candidate) => lowerAddress(candidate.target),
+  nominate: createAddressSurfaceNomination({
+    opaqueLabels: Object.freeze(["psm", "protocol:psm"]),
+    interfaceFingerprints: Object.freeze(["lite-psm-gem-dai-fees-v1"]),
+  }),
 } satisfies DiscoverySemantics<PsmCandidate>;
