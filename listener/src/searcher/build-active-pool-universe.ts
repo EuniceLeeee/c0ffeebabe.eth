@@ -157,7 +157,21 @@ async function main(): Promise<void> {
     historicalLogProvider,
   ]);
   try {
-  const latest = Number(process.env.POOL_UNIVERSE_TO_BLOCK ?? await provider.getBlockNumber());
+  // Source-block stability: pin identity/state reads a few blocks behind
+  // head. Reth intermittently returns all-zero state for an exact head
+  // block (univ2/univ3 pool-static eth_calls came back empty), which made
+  // strict identity reject every mature activity pool. head-N is stable and
+  // still within the local reth retention window.
+  const requestedToBlock = Number(
+    process.env.POOL_UNIVERSE_TO_BLOCK ?? await provider.getBlockNumber(),
+  );
+  const sourceStabilityOffset = Number(
+    process.env.POOL_UNIVERSE_SOURCE_STABILITY_BLOCKS ?? "5",
+  );
+  const latest = Math.max(
+    0,
+    requestedToBlock - Math.max(0, Math.floor(sourceStabilityOffset)),
+  );
   const [
     initialStateHeader,
     initialLogHeader,
