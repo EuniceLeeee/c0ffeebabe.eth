@@ -12,7 +12,10 @@ import {
   type PoolUniverseEntry,
   type PoolUniverseFile,
 } from "./pool-universe.js";
-import type { PoolIdentityResult } from "./venues/identity.js";
+import type {
+  PoolIdentityFailureReason,
+  PoolIdentityResult,
+} from "./venues/identity.js";
 import { attestPoolsStrictFromProvider } from "./strict-identity-attestation.js";
 import type { VenueId } from "./venues/capability.js";
 import type { VenueIdentitySource } from "./venues/identity.js";
@@ -1009,9 +1012,9 @@ async function resolvePoolIdentityStrict(
     const rejectedReason = result.rejected[0]?.reason;
     return {
       ok: false,
-      reason: rejectedReason === undefined
+      reason: (rejectedReason === undefined
         ? "unsupported_venue"
-        : `rejected:${rejectedReason}`,
+        : `rejected:${rejectedReason}`) as PoolIdentityFailureReason,
     };
   }
   return {
