@@ -21,9 +21,13 @@ mkdir -p "${outdir}"
 pkill -f -- '--port 9555' 2>/dev/null || true
 pkill -f -- '--port 9556' 2>/dev/null || true
 cd "${dir}"
-git fetch origin codex/s1-unified-adapter-architecture-impl 2>&1 | tail -1
-git checkout "${sha}" 2>&1 | tail -1
+git fetch origin codex/s1-unified-adapter-architecture-impl >/dev/null 2>&1
+git checkout --detach "${sha}" >/dev/null 2>&1
 checked_out="$(git rev-parse HEAD)"
+if [ "${checked_out}" != "${sha}" ]; then
+  echo "[serial-dry-run] checkout mismatch: expected ${sha}, got ${checked_out}" >&2
+  exit 1
+fi
 
 live_pid=""
 for _ in 1 2 3 4 5; do

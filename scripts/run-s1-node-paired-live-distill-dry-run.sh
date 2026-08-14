@@ -35,7 +35,7 @@ echo "[paired-live-distill-dry-run] checkout exact SHA"
 checkout_cmd_id="$(aws ssm send-command \
   --instance-ids "${instance_id}" \
   --document-name AWS-RunShellScript \
-  --parameters "commands=[\"set -e; cd ${impl_dir} && git fetch origin codex/s1-unified-adapter-architecture-impl 2>&1 | tail -1 && git checkout ${impl_sha} 2>&1 | tail -1 && git rev-parse HEAD\"]" \
+  --parameters "commands=[\"set -e; cd ${impl_dir} && git fetch origin codex/s1-unified-adapter-architecture-impl >/dev/null 2>&1 && git checkout --detach ${impl_sha} >/dev/null 2>&1 && test \\\"\$(git rev-parse HEAD)\\\" = \\\"${impl_sha}\\\" && git rev-parse HEAD\"]" \
   --query Command.CommandId --output text)"
 sleep 8
 aws ssm get-command-invocation \
