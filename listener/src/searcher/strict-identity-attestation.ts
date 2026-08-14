@@ -138,10 +138,11 @@ export async function attestPoolIdentitiesStrict<
         source: input.source,
         nominations: Object.freeze([Object.freeze({
           address,
-          opaque: Object.freeze({
-            ...(pool.adapter === undefined ? {} : { adapter: pool.adapter }),
-            ...(pool.adapter === undefined ? {} : { adapterId: pool.adapter }),
-          }),
+          // Pool entry fields (adapter, poolId, factory, tokens, ...) ride in
+          // the plugin-owned opaque payload; the framework does not interpret
+          // any of them, the owning plugin's nomination consumes what it
+          // declares. Zero protocol semantics in central paths.
+          opaque: Object.freeze(entryOpaque(pool)) as never,
         })]),
         provider: Object.freeze({
           call: (transaction: { readonly to: string; readonly data: string }, blockTag?: number) =>
@@ -306,6 +307,26 @@ function createMinimalIdentityRuntime(
       verifyCanonicalSource: () => true,
     }),
   });
+}
+
+/**
+ * Copies the pool entry's own fields into the plugin-owned opaque payload
+ * (adapter label, poolId, factory, tokens, ...). The framework copies
+ * verbatim without interpreting any field; the owning plugin's nomination
+ * consumes the subset it declares. No protocol semantics in central paths.
+ */
+function entryOpaque(pool: { readonly address: string; readonly adapter?: string }): Record<string, unknown> {
+  const opaque: Record<string, unknown> = {};
+  if (pool.adapter !== undefined) {
+    opaque.adapter = pool.adapter;
+    opaque.adapterId = pool.adapter;
+  }
+  for (const [key, value] of Object.entries(pool)) {
+    if (key === "address" || key === "adapter") continue;
+    if (value === undefined) continue;
+    opaque[key] = value;
+  }
+  return opaque;
 }
 
 function matchFor(
