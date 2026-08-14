@@ -20,7 +20,7 @@ fi
 cd "$REPO/listener" || exit 0
 echo "=== $(date -u +%FT%TZ) reindex start ===" >> "$LOG"
 V2_LINEAGES_PATH=$(sed -n 's/^SEARCHER_V2_LINEAGES_PATH=//p' "$ENVF" 2>/dev/null | tail -1)
-if timeout 1200 env MAINNET_RPC_URL=http://127.0.0.1:8545 \
+if timeout 3200 env MAINNET_RPC_URL=http://127.0.0.1:8545 \
       SEARCHER_V2_LINEAGES_PATH="$V2_LINEAGES_PATH" \
       POOL_UNIVERSE_LOOKBACK_DAYS=2 \
       POOL_UNIVERSE_RETAIN_PATH="$RETAIN" \
