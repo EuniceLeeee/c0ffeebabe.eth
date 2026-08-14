@@ -368,6 +368,11 @@ const DEFAULT_DEX_DISCOVERY_CURSOR_PATH = resolve(
   "pools",
   "runtime-dex-graph-coverage.json",
 );
+const DEFAULT_DISCOVERY_CONTINUITY_CHECKPOINT_PATH = resolve(
+  "searcher",
+  "state",
+  "discovery-continuity-checkpoint.json",
+);
 const PROTOCOL_CURSOR_SEMANTICS_VERSION =
   "family-source-contiguous-v3-hash-anchored";
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
@@ -1727,17 +1732,17 @@ async function main(): Promise<void> {
         `cursor=${dexCursorSourceCompleteThrough ?? -1})`,
     );
   }
-  // Durable discovery continuity composition (shadow/diagnostic; OFF by
-  // default). When SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH is set,
-  // production startup adopts the file-backed checkpoint store to load and
-  // re-verify the persisted restart state, then logs its status. The
+  // F6 Pair C: durable discovery continuity composition is the default
+  // strict discovery authority. The file-backed checkpoint store loads and
+  // re-verifies the persisted restart state, then logs its status; the
   // point-in-time enumerator restores the checkpoint's durable incumbent
   // inventory and fails closed when it cannot; the checkpoint inventory
   // writer is the CAS entry for discovery producers (the live coordinator
-  // call-site is wired in the next slice). This block grants no authority
-  // and does not open complete-snapshot/omission/tombstone.
+  // call-site is wired below). Complete-snapshot/omission/tombstone remain
+  // closed unless a separate independent closure passes.
   const continuityCompositionPath =
-    process.env.SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH;
+    process.env.SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH ??
+    DEFAULT_DISCOVERY_CONTINUITY_CHECKPOINT_PATH;
   let discoveryContinuityStatus = "disabled";
   let discoveryContinuityComposition: DurableDiscoveryContinuityComposition |
     null = null;
