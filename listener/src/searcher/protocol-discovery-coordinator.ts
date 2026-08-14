@@ -14,9 +14,6 @@ import type {
   ProtocolDiscoveryProjection,
   ProtocolDiscoveryResult,
 } from "./protocol-instance-discovery.js";
-import type {
-  DiscoverableRouteLegAdapter,
-} from "./venues/route-leg-adapter.js";
 import type { PoolEntry, TokenEdge } from "./planner/token-graph.js";
 import type { AdapterFamilyRegistry } from "./venues/adapter-family-registry.js";
 import {
@@ -67,12 +64,12 @@ export class ProtocolDiscoveryCoverageCoordinator {
   readonly families: readonly DiscoveryFamilySources[];
   private readonly watermarks: Map<string, number>;
 
-  constructor(adapters: readonly DiscoverableRouteLegAdapter[]) {
-    this.families = Object.freeze(adapters.map((adapter) =>
+  constructor(familySources: readonly DiscoveryFamilySources[]) {
+    this.families = Object.freeze(familySources.map((family) =>
       Object.freeze({
-        familyId: adapter.id,
+        familyId: family.familyId,
         sourceIds: Object.freeze([
-          ...new Set(adapter.discovery.candidateSources),
+          ...new Set(family.sourceIds),
         ]),
       })
     ));

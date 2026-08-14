@@ -278,6 +278,16 @@ export type DiscoveryEvidenceChannel =
   | "nominate"
   | "tx-evidence";
 
+/**
+ * Candidate-source lanes a dynamic-discovery family owns. The central
+ * coverage coordinator reads these through the generated catalog projection;
+ * the plugin never maps sources itself.
+ */
+export type DiscoveryCandidateSourceKind =
+  | "dex-token-domain"
+  | "observed-interaction"
+  | "canonical-registry";
+
 export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
   readonly sources: readonly DiscoverySourceKind[];
   /**
@@ -289,11 +299,7 @@ export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
    * tracking. The central coordinator reads the declaration through the
    * generated catalog projection and never maps sources itself.
    */
-  readonly candidateSources?: readonly (
-    | "dex-token-domain"
-    | "observed-interaction"
-    | "canonical-registry"
-  )[];
+  readonly candidateSources?: readonly DiscoveryCandidateSourceKind[];
   readonly callPatterns?: readonly CallPattern[];
   readonly logPatterns?: readonly LogPattern[];
   readonly addressSurfaces?: readonly AddressSurfacePattern[];
@@ -3111,7 +3117,7 @@ function validateDiscovery(discovery: DiscoverySemantics<any>): void {
       throw new Error(`unsupported discovery source ${source}`);
     }
   }
-  const candidateSourceSet = new Set<"dex-token-domain" | "observed-interaction" | "canonical-registry">([
+  const candidateSourceSet = new Set<DiscoveryCandidateSourceKind>([
     "dex-token-domain",
     "observed-interaction",
     "canonical-registry",

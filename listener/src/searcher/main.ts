@@ -2276,16 +2276,31 @@ async function main(): Promise<void> {
   );
   let protocolDiscoveryOwnership: ProtocolDiscoveryOwnership =
     EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP;
-  const enabledProtocolDiscoveryFamilies = PRODUCTION_ADAPTER_FAMILIES
-    .discoverableRoutes()
-    .filter((adapter) =>
-      !adapter.requiresProtocolEdgesFlag || config.enableProtocolEdges
+  // Family membership and candidate-source lanes are owned by the strict
+  // catalog projection. Legacy adapter objects supply only matcher details
+  // (topics/selectors) for evidence fingerprints, never membership.
+  const enabledProtocolDiscoveryFamilySources =
+    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+      .discoverableFamilySources()
+      .filter((entry) =>
+        !PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+          .requiresProtocolEdgesFlagFor(entry.familyId) ||
+        config.enableProtocolEdges
+      );
+  const enabledProtocolDiscoveryFamilyIds = new Set<string>(
+    enabledProtocolDiscoveryFamilySources.map((entry) => entry.familyId),
+  );
+  const enabledProtocolDiscoveryMatcherAdapters =
+    PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes().filter((adapter) =>
+      enabledProtocolDiscoveryFamilyIds.has(adapter.id)
     );
   // Family × candidate-source completeness is owned by the discovery
   // coordinator. One current address-domain scan cannot make an observed-only
   // sibling family complete.
   const protocolDiscoveryCoverage =
-    new ProtocolDiscoveryCoverageCoordinator(enabledProtocolDiscoveryFamilies);
+    new ProtocolDiscoveryCoverageCoordinator(
+      enabledProtocolDiscoveryFamilySources,
+    );
   const adapterFamilyGraphViews = new AdapterFamilyGraphViewCoordinator(
     PRODUCTION_ADAPTER_FAMILIES,
     protocolDiscoveryCoverage,
@@ -2400,11 +2415,11 @@ async function main(): Promise<void> {
     .update(PROTOCOL_CURSOR_SEMANTICS_VERSION)
     .update(":")
     .update(protocolObservedSourceFingerprint(
-      enabledProtocolDiscoveryFamilies,
+      enabledProtocolDiscoveryMatcherAdapters,
     ))
     .digest("hex")}`;
   const discoverySourceFingerprints = protocolDiscoverySourceFingerprints(
-    enabledProtocolDiscoveryFamilies,
+    enabledProtocolDiscoveryMatcherAdapters,
   );
   let observedSourceChanged = updateProtocolObservedSourceFingerprint(
     protocolDiscoveryCache,
@@ -2412,11 +2427,11 @@ async function main(): Promise<void> {
     discoverySourceFingerprints,
   );
   const observedDiscoveryFamilyIds = new Set(
-    enabledProtocolDiscoveryFamilies
-      .filter((adapter) =>
-        adapter.discovery?.candidateSources.includes("observed-interaction")
+    enabledProtocolDiscoveryFamilySources
+      .filter((entry) =>
+        entry.sourceIds.includes("observed-interaction")
       )
-      .map((adapter) => adapter.id),
+      .map((entry) => entry.familyId),
   );
   const persistedObservedCursor = protocolDiscoveryCache.runtime.observedCursor;
   const persistedObservedCursorHash =

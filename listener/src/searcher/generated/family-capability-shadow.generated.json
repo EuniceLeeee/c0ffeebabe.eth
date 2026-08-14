@@ -1842,7 +1842,7 @@
         "familyId": "fluid-dex",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "8250091cc34ad35411bf3777b47b41a773a92e7ed38f0aaa92fa531a329db003",
+        "contentHash": "0a0caa31fe2ce3521e80411e7ac6d182f68cc9120a328dd30a5b482b56ece4a3",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -1891,7 +1891,7 @@
         "familyId": "fluid-dex",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "dd8d2c2faaa36b7b585aa37fffef93d37d076eb4a3c08cabb9f578e5f7f4cb67",
+        "contentHash": "2505c8666169ab22143fef2f6946321e2edc69234be144a54f445afbc7ac18b8",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -2120,7 +2120,7 @@
         "familyId": "fluid-dex",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
-        "contentHash": "cacbb6ce80183bc75e81045974ce6348318fd7d20dc91a378ee57deb05d6b57e",
+        "contentHash": "b48f9b91cd70dd1b1caedffcbd9adee8ee68bf13b8e08b22993df16534ff441d",
         "semanticDependencies": [
           "contract:adapter-family/victim@s1-victim-v2",
           "package:ethers@6.16.0",
@@ -7067,5 +7067,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "e826f7087ecf33e2659077cb15c61ac3dd854b4638fbc6700511acc42eec41b7"
+  "artifactHash": "9c4e0786312f49f89f72d12c4d13ec230e1f7a57a48e19663d266a9aedd8a642"
 }

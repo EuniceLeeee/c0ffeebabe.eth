@@ -16,6 +16,7 @@ export const FLUID_DEX_ADDRESS_SURFACE_PATTERN_ID =
 export const fluidDexDiscovery = {
   evidenceChannel: "nominate" as const,
   sources: ["observed-call", "landed-log", "address-surface"],
+  candidateSources: ["dex-token-domain"],
   callPatterns: [{
     id: FLUID_DEX_SWAP_CALL_PATTERN_ID,
     selector: FLUID_DEX_SWAP_SELECTOR,

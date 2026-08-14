@@ -3,6 +3,7 @@ import {
   definedFamilyPluginContractSummary,
   type AnyDefinedFamilyPlugin,
   type AnyDefinedStrictFamilyPlugin,
+  type DiscoveryCandidateSourceKind,
   type FamilyDomain,
   type UnifiedObservation,
 } from "./adapter-family-plugin.js";
@@ -354,6 +355,32 @@ export class FamilyCapabilityCatalog {
   requiresProtocolEdgesFlagFor(familyId: FamilyId): boolean {
     return this.forStrictFamily(familyId).plugin.manifest
       .requiresProtocolEdgesFlag ?? false;
+  }
+
+  /**
+   * Families that own dynamic candidate-source lanes, projected from their
+   * plugin-declared discovery semantics. The central discovery coverage
+   * coordinator reads this projection and never maps sources itself;
+   * families without a declaration are excluded from coordinator tracking.
+   */
+  discoverableFamilySources(): readonly {
+    readonly familyId: FamilyId;
+    readonly sourceIds: readonly DiscoveryCandidateSourceKind[];
+  }[] {
+    const entries: {
+      readonly familyId: FamilyId;
+      readonly sourceIds: readonly DiscoveryCandidateSourceKind[];
+    }[] = [];
+    for (const family of this.families) {
+      if (!("discovery" in family.plugin)) continue;
+      const sourceIds = family.plugin.discovery?.candidateSources ?? [];
+      if (sourceIds.length === 0) continue;
+      entries.push(Object.freeze({
+        familyId: family.plugin.manifest.familyId,
+        sourceIds: Object.freeze([...sourceIds]),
+      }));
+    }
+    return Object.freeze(entries);
   }
 
   matches(observation: UnifiedObservation): readonly FamilyPatternMatch[] {

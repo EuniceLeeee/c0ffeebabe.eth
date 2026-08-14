@@ -26,9 +26,6 @@ import {
   ProtocolDiscoveryCoverageCoordinator,
   protocolDiscoveryRangeForLane,
 } from "../protocol-discovery-coordinator.js";
-import type {
-  DiscoverableRouteLegAdapter,
-} from "../venues/route-leg-adapter.js";
 
 const OBSERVED = "observed-interaction";
 const DEX_DOMAIN = "dex-token-domain";
@@ -380,11 +377,9 @@ function operationalCursorOutrunsAuthorityAcrossRestart(): void {
 
 function positiveOnlyScanAdvancesOnlyOperationalCursor(): void {
   const fixture = {
-    id: EIGENPIE,
-    discovery: {
-      candidateSources: [OBSERVED],
-    },
-  } as unknown as DiscoverableRouteLegAdapter;
+    familyId: EIGENPIE,
+    sourceIds: [OBSERVED],
+  };
   const coordinator = new ProtocolDiscoveryCoverageCoordinator([fixture]);
   const watermarks = coordinator.snapshot();
   assert.equal(coordinator.graphCompleteThrough(watermarks), -1);
