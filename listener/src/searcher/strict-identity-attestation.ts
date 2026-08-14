@@ -207,15 +207,19 @@ export async function attestPoolIdentitiesStrict<
       });
       const identityOutcome = result.outcomes.find((outcome) =>
         outcome.stage === "identity" &&
-        (outcome.status === "verified" ||
-          outcome.status === "candidate")
+        outcome.status === "verified"
       );
-      if (identityOutcome === undefined ||
-          identityOutcome.status !== "verified") {
+      if (identityOutcome === undefined) {
+        const rejection = result.outcomes.find((outcome) =>
+          outcome.stage === "identity" &&
+          outcome.status === "rejected"
+        );
         rejected.push({
           ...pool,
           adapter: pool.adapter ?? "",
-          reason: `identity_unverified:${identityOutcome?.reasonCode ?? "no-outcome"}`,
+          reason: rejection === undefined
+            ? "identity_unverified:no-outcome"
+            : `identity_rejected:${rejection.reasonCode ?? "no-reason"}`,
         });
         continue;
       }
