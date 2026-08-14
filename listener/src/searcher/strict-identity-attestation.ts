@@ -14,6 +14,10 @@ import type { FamilyId } from
 import {
   executeAdapterFamilyLifecycleBatch,
 } from "./venues/adapter-family-runtime.js";
+import { createStrictCentralAdapterRuntime } from
+  "./strict-central-adapter-runtime.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
+  "./venues/production-family-composition.js";
 
 const EIP1967_IMPLEMENTATION_SLOT =
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
@@ -27,6 +31,10 @@ const EIP1967_IMPLEMENTATION_SLOT =
  * supplies an admission credential; the strict lifecycle re-derives it.
  */
 export interface StrictIdentityProvider {
+  call(
+    transaction: { readonly to: string; readonly data: string },
+    blockTag: number,
+  ): Promise<string>;
   getCode(address: string, blockTag: number): Promise<string>;
   getStorage(
     address: string,
@@ -35,34 +43,51 @@ export interface StrictIdentityProvider {
   ): Promise<string>;
 }
 
-export async function attestPoolIdentitiesStrict(input: {
+export type StrictAttestedPool<Pool extends {
+  readonly address: string;
+  readonly adapter?: string;
+} = { readonly address: string; readonly adapter?: string }> = Pool & {
+  readonly familyId: FamilyId;
+  readonly lineageId: string;
+  readonly subject: string;
+  /** Legacy-compatible adapter label for the transition bridge only. */
+  readonly adapter: string;
+  readonly venueId?: string;
+  readonly identitySource: string;
+}
+
+export type StrictRejectedPool<Pool extends {
+  readonly address: string;
+  readonly adapter?: string;
+}> = Pool & {
+  readonly adapter: string;
+  readonly reason: string;
+};
+
+export async function attestPoolIdentitiesStrict<
+  Pool extends { readonly address: string; readonly adapter?: string },
+>(input: {
   readonly catalog: FamilyCapabilityCatalog;
   readonly provider: StrictIdentityProvider;
   readonly runtime: CentralAdapterRuntime;
   readonly source: CanonicalSource;
-  readonly pools: readonly {
-    readonly address: string;
-    readonly adapter?: string;
-  }[];
+  readonly pools: readonly Pool[];
+  /**
+   * Maps a verified identity lineage back to the legacy adapter/venue
+   * labels consumed by still-legacy planner/solver call sites during the
+   * transition. Returns null when no legacy label exists (family is
+   * strict-only); the pool is then still accepted with its strict labels.
+   */
+  readonly adapterForLineage?: (lineageId: string) => {
+    readonly adapter: string;
+    readonly venueId?: string;
+  } | null;
 }): Promise<{
-  readonly accepted: readonly {
-    readonly address: string;
-    readonly familyId: FamilyId;
-    readonly lineageId: string;
-    readonly subject: string;
-  }[];
-  readonly rejected: readonly {
-    readonly address: string;
-    readonly reason: string;
-  }[];
+  readonly accepted: readonly StrictAttestedPool<Pool>[];
+  readonly rejected: readonly StrictRejectedPool<Pool>[];
 }> {
-  const accepted: {
-    readonly address: string;
-    readonly familyId: FamilyId;
-    readonly lineageId: string;
-    readonly subject: string;
-  }[] = [];
-  const rejected: { readonly address: string; readonly reason: string }[] = [];
+  const accepted: StrictAttestedPool<Pool>[] = [];
+  const rejected: StrictRejectedPool<Pool>[] = [];
   for (const pool of input.pools) {
     const address = ethers.getAddress(pool.address);
     try {
@@ -73,14 +98,14 @@ export async function attestPoolIdentitiesStrict(input: {
       );
       const matches = input.catalog.matches(observation);
       if (matches.length === 0) {
-        rejected.push({ address, reason: "no_catalog_match" });
+        rejected.push({ ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" });
         continue;
       }
       // Prefer the family hinted by the pool's adapter label, else the first
       // catalog match.
       const target = matchFor(input, pool, matches);
       if (target === null) {
-        rejected.push({ address, reason: "no_matching_family" });
+        rejected.push({ ...pool, adapter: pool.adapter ?? "", reason: "no_matching_family" });
         continue;
       }
       const family = input.catalog.forFamily(target.familyId);
@@ -103,25 +128,34 @@ export async function attestPoolIdentitiesStrict(input: {
       if (identityOutcome === undefined ||
           identityOutcome.status !== "verified") {
         rejected.push({
-          address,
+          ...pool,
+          adapter: pool.adapter ?? "",
           reason: `identity_unverified:${identityOutcome?.reasonCode ?? "no-outcome"}`,
         });
         continue;
       }
+      const lineageId = identityOutcome.lineageId ?? "";
+      const legacy = input.adapterForLineage?.(lineageId) ?? null;
       accepted.push(Object.freeze({
-        address,
+        ...pool,
         familyId: target.familyId,
-        lineageId: identityOutcome.lineageId ?? "",
+        lineageId,
         subject: address,
+        adapter: legacy?.adapter ?? String(target.familyId),
+        ...(legacy?.venueId === undefined
+          ? {}
+          : { venueId: legacy.venueId }),
+        identitySource: "strict-lifecycle",
       }));
     } catch (error) {
       rejected.push({
-        address,
+        ...pool,
+        adapter: pool.adapter ?? "",
         reason: error instanceof Error ? error.message.slice(0, 120) : "unknown",
       });
     }
   }
-  return Object.freeze({ accepted: Object.freeze(accepted), rejected: Object.freeze(rejected) });
+  return { accepted: Object.freeze(accepted), rejected } as const;
 }
 
 async function addressSurfaceObservation(
@@ -144,6 +178,74 @@ async function addressSurfaceObservation(
     address: address.toLowerCase(),
     codeHash: ethers.keccak256(code).toLowerCase(),
     implementationWord: ethers.zeroPadValue(implementationWord, 32).toLowerCase(),
+  });
+}
+
+/**
+ * Batch entry used by main.ts startup: attests four pool sets (pinned warm,
+ * universe, blockscan universe, blockscan overrides) through the strict
+ * identity stage with one provider-backed runtime. Returns one result per
+ * set, in input order.
+ */
+export async function attestStartupPoolSetsStrict<
+  Pool extends { readonly address: string; readonly adapter?: string },
+>(input: {
+  readonly provider: StrictIdentityProvider;
+  readonly source: CanonicalSource;
+  readonly poolSets: readonly (readonly Pool[])[];
+}): Promise<readonly {
+  readonly accepted: readonly StrictAttestedPool<Pool>[];
+  readonly rejected: readonly StrictRejectedPool<Pool>[];
+}[]> {
+  const runtime = createMinimalIdentityRuntime(input.provider);
+  const results: {
+    readonly accepted: readonly StrictAttestedPool<Pool>[];
+    readonly rejected: readonly StrictRejectedPool<Pool>[];
+  }[] = [];
+  for (const pools of input.poolSets) {
+    results.push(await attestPoolIdentitiesStrict({
+      catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+      provider: input.provider,
+      runtime,
+      source: input.source,
+      pools,
+      adapterForLineage: (lineageId) => legacyLabelsForLineage(lineageId),
+    }));
+  }
+  return Object.freeze(results);
+}
+
+function legacyLabelsForLineage(lineageId: string): {
+  readonly adapter: string;
+  readonly venueId?: string;
+} | null {
+  const familyId = lineageId.split(":")[0];
+  if (familyId === undefined || familyId === "") return null;
+  try {
+    const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+      .forStrictFamily(familyId as never);
+    const actions = family.plugin.manifest.ownedActionAdapterIds;
+    return {
+      adapter: actions[0] ?? String(familyId),
+      ...(actions[0] === undefined
+        ? {}
+        : { venueId: actions[0] }),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function createMinimalIdentityRuntime(
+  provider: StrictIdentityProvider,
+): CentralAdapterRuntime {
+  return createStrictCentralAdapterRuntime({
+    provider,
+    generationFence: Object.freeze({
+      kind: "catalog-relative" as const,
+      assertCurrent: () => undefined,
+      verifyCanonicalSource: () => true,
+    }),
   });
 }
 

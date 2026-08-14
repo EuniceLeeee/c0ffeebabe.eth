@@ -113,6 +113,7 @@ async function main(): Promise<void> {
   // assert the fail-closed paths that do not need identity execution:
   // no code -> rejected.
   const provider = {
+    call: async () => "0x",
     getCode: async () => "0x",
     getStorage: async () => `0x${"00".repeat(32)}`,
   };
@@ -132,6 +133,7 @@ async function main(): Promise<void> {
 
   // With code but no catalog match (unknown fingerprint) -> rejected.
   const provider2 = {
+    call: async () => "0x",
     getCode: async () => "0x60806040",
     getStorage: async () => `0x${"00".repeat(32)}`,
   };

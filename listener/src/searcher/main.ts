@@ -165,8 +165,10 @@ import {
   attestPoolIdentities,
   createPoolIdentityCache,
   isRetryablePoolIdentityFailure,
+  type PoolIdentityFailureReason,
   type RejectedPoolIdentity,
 } from "./venues/identity.js";
+import { attestStartupPoolSetsStrict } from "./strict-identity-attestation.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
   PRODUCTION_IDENTITY_RESOLVERS,
@@ -219,6 +221,7 @@ import {
   DEFAULT_PINNED_WARM_POOLS_PATH,
   loadPinnedWarmPools,
   pinnedWarmHopsFromGraph,
+  type PinnedWarmPoolEntry,
 } from "./pinned-warm-pools.js";
 import {
   DEFAULT_FORCE_INCLUDE_POOLIDS_PATH,
@@ -2064,50 +2067,95 @@ async function main(): Promise<void> {
   }
   let protocolGraphCompleteThrough = -1;
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
-  const [pinnedIdentity, universeIdentity, blockscanIdentity, overrideIdentity] = await Promise.all([
-    attestPoolIdentities(startupDexBackend, rawPinnedWarmPools, {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-      cache: identityCache,
-      seedEntries: liveRegistry,
-      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-    }),
-    attestPoolIdentities(startupDexBackend, rawUniversePools, {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-      cache: identityCache,
-      seedEntries: liveRegistry,
-      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-    }),
-    attestPoolIdentities(startupDexBackend, rawBlockscanUniverse, {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-      cache: identityCache,
-      seedEntries: liveRegistry,
-      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-    }),
-    attestPoolIdentities(startupDexBackend, rawBlockScanOverrides, {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-      cache: identityCache,
-      seedEntries: liveRegistry,
-      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-    }),
-  ]);
-  const pinnedWarmPools = pinnedIdentity.accepted;
-  const universePools = universeIdentity.accepted;
-  const blockscanUniverse = blockscanIdentity.accepted;
-  const blockScanOverrides = overrideIdentity.accepted;
-  logIdentityRejections("pinned", pinnedIdentity.rejected);
-  logIdentityRejections("universe", universeIdentity.rejected);
-  logIdentityRejections("blockscan-universe", blockscanIdentity.rejected);
-  logIdentityRejections("blockscan-overrides", overrideIdentity.rejected);
+  // F6 Pair B: strict identity attestation (catalog + plugin identity stage)
+  // replaces the legacy IdentityResolverRegistry when the gate is on.
+  const strictIdentityAttestation =
+    process.env.SEARCHER_STRICT_IDENTITY_ATTESTATION === "1";
+  const [pinnedIdentity, universeIdentity, blockscanIdentity, overrideIdentity] =
+    strictIdentityAttestation
+    ? await attestStartupPoolSetsStrict({
+        provider,
+        source: {
+          number: discoveryToBlock,
+          hash: startupDexSourceBlockHash.toLowerCase(),
+          generation: discoveryToBlock,
+        },
+        poolSets: [
+          rawPinnedWarmPools,
+          rawUniversePools,
+          rawBlockscanUniverse,
+          rawBlockScanOverrides,
+        ],
+      })
+    : await Promise.all([
+        attestPoolIdentities(startupDexBackend, rawPinnedWarmPools, {
+          identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+          cache: identityCache,
+          seedEntries: liveRegistry,
+          admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+        }),
+        attestPoolIdentities(startupDexBackend, rawUniversePools, {
+          identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+          cache: identityCache,
+          seedEntries: liveRegistry,
+          admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+        }),
+        attestPoolIdentities(startupDexBackend, rawBlockscanUniverse, {
+          identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+          cache: identityCache,
+          seedEntries: liveRegistry,
+          admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+        }),
+        attestPoolIdentities(startupDexBackend, rawBlockScanOverrides, {
+          identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+          cache: identityCache,
+          seedEntries: liveRegistry,
+          admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+        }),
+      ]);
+  // F6 Pair B: strict attestation returns a narrower rejected shape; bridge
+  // it back to the legacy RejectedPoolIdentity for the transition consumers.
+  const asLegacyRejections = (
+    rejected: readonly {
+      readonly address: string;
+      readonly adapter: string;
+      readonly reason: string;
+    }[],
+  ): RejectedPoolIdentity[] => rejected.map((entry) => Object.freeze({
+    address: entry.address,
+    adapter: entry.adapter,
+    reason: entry.reason as PoolIdentityFailureReason,
+  }));
+  const pinnedWarmPools = [...pinnedIdentity.accepted] as PinnedWarmPoolEntry[];
+  const universePools = [...universeIdentity.accepted] as PoolEntry[];
+  const blockscanUniverse = [...blockscanIdentity.accepted] as PoolEntry[];
+  const blockScanOverrides = [...overrideIdentity.accepted] as PoolEntry[];
+  logIdentityRejections("pinned", asLegacyRejections(pinnedIdentity.rejected));
+  logIdentityRejections("universe", asLegacyRejections(universeIdentity.rejected));
+  logIdentityRejections(
+    "blockscan-universe",
+    asLegacyRejections(blockscanIdentity.rejected),
+  );
+  logIdentityRejections(
+    "blockscan-overrides",
+    asLegacyRejections(overrideIdentity.rejected),
+  );
   const startupRetryableIdentityPools = [
-    ...retryableIdentityCandidates(rawPinnedWarmPools, pinnedIdentity.rejected),
-    ...retryableIdentityCandidates(rawUniversePools, universeIdentity.rejected),
+    ...retryableIdentityCandidates(
+      rawPinnedWarmPools,
+      asLegacyRejections(pinnedIdentity.rejected),
+    ),
+    ...retryableIdentityCandidates(
+      rawUniversePools,
+      asLegacyRejections(universeIdentity.rejected),
+    ),
     ...retryableIdentityCandidates(
       rawBlockscanUniverse,
-      blockscanIdentity.rejected,
+      asLegacyRejections(blockscanIdentity.rejected),
     ),
     ...retryableIdentityCandidates(
       rawBlockScanOverrides,
-      overrideIdentity.rejected,
+      asLegacyRejections(overrideIdentity.rejected),
     ),
   ];
   const retryableDexIdentityPools = new Map(
