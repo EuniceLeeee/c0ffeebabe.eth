@@ -16,6 +16,47 @@
 > capability + generated catalog 取代，并通过 AST + transitive
 > import-closure gate。
 
+## F9 cutover 消费点迁移清单（2026-08-14 盘点）
+
+`PRODUCTION_ADAPTER_FAMILIES`（legacy AdapterFamilyRegistry）当前被
+**~40 个调用点、20+ 文件**消费。移除 `LEGACY_PRODUCTION_ADAPTER_FAMILIES`
+需要逐消费点切到 strict catalog 等价物。按依赖分组：
+
+| 组 | 调用 | 文件 | strict 替代 | 状态 |
+|---|---|---|---|---|
+| 执行管线 | `routes().buildEdges(backend)`（§18.3 条件 3 旧 I/O 入口）、`routes().findForEdge` 的 `prepared.quote`、`findFundingByAction`/`defaultFunding`、`credits()` | planner/token-graph、solver/quoter、plan-builder、amount-propagation、flash-liquidity、pool-state-updater、planner、path-template | strict lifecycle 管线（adapter-family-runtime）+ `catalog.ownerOfAction` + strict quote（F8 已切 solver 报价，plan 构建未切） | 未开始 |
+| 族元数据查询 | `routes().list()` 的 `poolAdapters`、`swaps()`、`oracleVictims()`、`discoverableRoutes()`、`requiresProtocolEdgesFlag` | pool-adapter-policy、path-template、route-family-manifest、main.ts（mempool intake）、live-discovery-coordinator | FamilyManifest 扩展（poolAdapterIds/edgeAdapterIds/oracleVictims/requiresProtocolEdgesFlag 声明进 plugin）+ 从 catalog 投影查询面 | 未开始 |
+| pending evidence | `routes().forFamily(id).pendingTransactionEvidence`（routeActivation/scope key） | main.ts（currentHeadEvidence*，5 处） | strict `optional.pendingEvidence`（RequestProgram 形态，需投影层适配） | 未开始 |
+| victim models | `victimModels().forEdge(id)?.runtime?.buildOverlay` | live-backends/victim-overlay | strict `VictimOverlaySpec`/`LocalVictimApplySpec`（插件已声明） | 未开始 |
+| blind/audit | `list()`、`routes()`（blind T1 投影） | blind-production-compatibility、main.ts（blind session） | strict catalog listAll 投影族清单 | 未开始 |
+| registry 判定 | `isRegisteredVenueId`/`isRegisteredIdentitySource` | pool-adapter-policy | catalog/identity registry 判定 | 未开始 |
+
+依赖顺序：FamilyManifest 扩展（族元数据声明）→ catalog 查询面投影 →
+执行管线消费切 strict → blind/victim/pending 适配 → 删除 LEGACY 列表 →
+closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
+（static-protocol-registry-attestation 为未跟踪历史原型，不在清单内）
+
+**调研发现（2026-08-14，供下轮直接执行）**：
+- 每个消费点绑定 legacy 族声明字段（poolAdapters/edgeAdapterIds/
+  requiresProtocolEdgesFlag/oracleVictims/pendingTransactionEvidence/
+  victimModels），strict plugin manifest 目前只有 familyId/domain/
+  ownedActionAdapterIds/requiredInfraActionAdapterIds/allowedTaxonomy/
+  supportedLineages——缺失字段需逐项设计 strict 等价，非字段搬运。
+- `edgeAdapterIds` ↔ strict `routeProjection.projectGraph` 的
+  `routeActionAdapterId`（univ2 两处均为 `univ2-swap`），且与
+  `ownedActionAdapterIds` 一致——edge 面可经 `catalog.ownerOfAction`
+  或 routes capability 静态收敛。
+- `poolAdapter`（"univ2" 等池类型标签）是 legacy universe 世界的标签，
+  strict 世界用 lineage/pattern（`univ2:factory-child`）——pool-adapter-
+  policy 的 `PRODUCTION_POOL_ADAPTERS` 准入派生集需映射到 strict
+  lineage 集（派生集本身允许，不得硬编码）。
+- `oracleVictim`/`victimModels` 含运行时函数（matcher/priceProbe/
+  buildOverlay），只能作为 plugin capability 声明（strict 已有
+  `VictimOverlaySpec`/`LocalVictimApplySpec` 先例），不能进 manifest。
+- solver/planner 执行管线（token-graph `buildEdges` → planner →
+  amount-propagation/plan-builder/flash-liquidity）仍是活跃 legacy 路径
+  （`routes().buildEdges` 即 §18.3 条件 3 旧 I/O 入口），是最大切片。
+
 ## 门（代码已在库中）
 
 - `searcher:s1-cutover-readiness`：batch parity、非空 held-out negatives、
