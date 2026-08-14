@@ -31,6 +31,7 @@ import {
   type InstanceSemantics,
   type NormalizedSwapVictimImpact,
   type RuntimeEvidence,
+  type SwapDomainSemantics,
   type UnifiedObservation,
   type VerifiedIdentity,
   type VictimReplayLocalResult,
@@ -2001,9 +2002,17 @@ export function executeFamilyVictimReplay(
     );
   }
 
-  const swap = input.family.plugin.swap;
+  // Narrowed to a swap Family by the domain check above; the runtime
+  // treats the swap slot as present on this branch.
+  const swap = (
+    input.family.plugin as {
+      readonly swap: SwapDomainSemantics<
+        CompiledInstanceDescriptor,
+        FamilyRouteDescriptor
+      >;
+    }
+  ).swap;
   if (
-    swap === undefined ||
     swap.victimSupport !== "replay" ||
     swap.replay === undefined
   ) {

@@ -2,16 +2,21 @@ import assert from "node:assert/strict";
 import type { ActionAdapter } from "../../types.js";
 import {
   assertDefinedFamilyPlugin,
+  defineCreditFamily,
+  defineFundingFamily,
   defineProtocolFamily,
   defineSwapFamily,
   definedFamilyPluginContractSummary,
-  type AdapterFamilyCore,
   type CompiledInstanceDescriptor,
   type FamilyCandidate,
   type FamilyCaptureDescriptor,
   type FamilyCaptureVector,
+  type CreditFamilyPlugin,
   type FamilyManifest,
   type FamilyOwnedActionAdapter,
+  type FundingFamilyPlugin,
+  type FundingSourceDescriptor,
+  type MasterTemplate,
   type FamilyRouteDescriptor,
   type ProtocolFamilyPlugin,
   type SwapFamilyPlugin,
@@ -63,14 +68,18 @@ interface TestExactEvidence {
   readonly witness: string;
 }
 
-type TestCore = AdapterFamilyCore<
-  TestCandidate,
-  TestIdentity,
-  TestDescriptor,
-  TestRoute,
-  TestPricingDescriptor,
-  TestPricingSnapshot,
-  TestExactEvidence
+type TestCore = Omit<
+  MasterTemplate<
+    "swap",
+    TestCandidate,
+    TestIdentity,
+    TestDescriptor,
+    TestRoute,
+    TestPricingDescriptor,
+    TestPricingSnapshot,
+    TestExactEvidence
+  >,
+  "manifest" | "swap" | "protocol" | "credit" | "funding"
 >;
 
 const HASH = `0x${"11".repeat(32)}` as `0x${string}`;
@@ -337,6 +346,39 @@ if (false) {
   void _removedSwap;
   // @ts-expect-error Swap policy is mandatory for a Swap plugin.
   defineSwapFamily(missingSwap);
+}
+
+// Applicability-table projections: the same table that drives the runtime
+// key checks must drive the type shapes (required/optional/never per domain).
+if (false) {
+  // swap/protocol require pricing + exact; omitting either fails.
+  const swapCore = (() => {
+    const { pricing: _p, ...withoutPricing } = swapDefinition();
+    void _p;
+    return withoutPricing;
+  })();
+  // @ts-expect-error swap requires the pricing slot.
+  defineSwapFamily(swapCore);
+  // credit makes pricing optional (absent is legal) but never carries swap.
+  type TestCreditPlugin = CreditFamilyPlugin<
+    TestCandidate,
+    TestIdentity,
+    TestDescriptor,
+    TestRoute,
+    TestExactEvidence,
+    TestDescriptor,
+    unknown
+  >;
+  const creditPlugin = {} as TestCreditPlugin;
+  // @ts-expect-error credit forbids the swap slot.
+  void creditPlugin.swap;
+  // funding forbids the public discovery/identity/instance/routes slices.
+  const fundingPlugin = {} as FundingFamilyPlugin<
+    FundingSourceDescriptor,
+    unknown
+  >;
+  // @ts-expect-error funding forbids the discovery slot.
+  void fundingPlugin.discovery;
 }
 
 const rawSwap = swapDefinition();

@@ -1179,7 +1179,133 @@ export interface CreditDomainSemantics<
   readonly risk: CreditRiskSemantics<Descriptor, Route, Evidence>;
 }
 
-export interface AdapterFamilyCore<
+/**
+ * Capability applicability table: the single source of truth deciding which
+ * plugin slots each Family domain requires, allows, or forbids. Every
+ * per-domain plugin shape below is a projection of MasterTemplate through
+ * this table - the framework never hardcodes a per-family branch.
+ */
+export type FamilyCapabilityRequirement = "required" | "optional" | "never";
+
+export const FAMILY_CAPABILITY_APPLICABILITY = Object.freeze({
+  swap: Object.freeze({
+    manifest: "required",
+    capture: "optional",
+    discovery: "required",
+    identity: "required",
+    instance: "required",
+    routes: "required",
+    pricing: "required",
+    exact: "required",
+    execution: "required",
+    sharedBindings: "optional",
+    optional: "optional",
+    actionAdapters: "required",
+    swap: "required",
+    protocol: "never",
+    credit: "never",
+    funding: "never",
+  }),
+  protocol: Object.freeze({
+    manifest: "required",
+    capture: "optional",
+    discovery: "required",
+    identity: "required",
+    instance: "required",
+    routes: "required",
+    pricing: "required",
+    exact: "required",
+    execution: "required",
+    sharedBindings: "optional",
+    optional: "optional",
+    actionAdapters: "required",
+    swap: "never",
+    protocol: "required",
+    credit: "never",
+    funding: "never",
+  }),
+  credit: Object.freeze({
+    manifest: "required",
+    capture: "optional",
+    discovery: "required",
+    identity: "required",
+    instance: "required",
+    routes: "required",
+    pricing: "optional",
+    exact: "optional",
+    execution: "required",
+    sharedBindings: "never",
+    optional: "never",
+    actionAdapters: "required",
+    swap: "never",
+    protocol: "never",
+    credit: "required",
+    funding: "never",
+  }),
+  funding: Object.freeze({
+    manifest: "required",
+    capture: "optional",
+    discovery: "never",
+    identity: "never",
+    instance: "never",
+    routes: "never",
+    pricing: "never",
+    exact: "never",
+    execution: "never",
+    sharedBindings: "never",
+    optional: "never",
+    actionAdapters: "required",
+    swap: "never",
+    protocol: "never",
+    credit: "never",
+    funding: "required",
+  }),
+} as const satisfies Readonly<Record<FamilyDomain, Readonly<Record<FamilyCapabilityKey, FamilyCapabilityRequirement>>>>);
+
+export type FamilyCapabilityKey =
+  | "manifest" | "capture" | "discovery" | "identity" | "instance"
+  | "routes" | "pricing" | "exact" | "execution"
+  | "sharedBindings" | "optional" | "actionAdapters"
+  | "swap" | "protocol" | "credit" | "funding";
+
+export type FamilyCapabilityApplicability = Readonly<
+  Record<FamilyDomain, Readonly<Record<FamilyCapabilityKey, FamilyCapabilityRequirement>>>
+>;
+
+/** Literal lookup of one domain/key requirement from the table. */
+type FamilyCapabilityRequirementFor<
+  Domain extends FamilyDomain,
+  Key extends FamilyCapabilityKey,
+> = Domain extends "swap"
+  ? (typeof FAMILY_CAPABILITY_APPLICABILITY)["swap"][Key]
+  : Domain extends "protocol"
+  ? (typeof FAMILY_CAPABILITY_APPLICABILITY)["protocol"][Key]
+  : Domain extends "credit"
+  ? (typeof FAMILY_CAPABILITY_APPLICABILITY)["credit"][Key]
+  : (typeof FAMILY_CAPABILITY_APPLICABILITY)["funding"][Key];
+
+/** One capability slot projected through the applicability table. */
+type FamilyCapabilitySlice<
+  Domain extends FamilyDomain,
+  Key extends FamilyCapabilityKey,
+  Shape,
+> = FamilyCapabilityRequirementFor<Domain, Key> extends "required"
+  ? { readonly [P in Key]: Shape }
+  : FamilyCapabilityRequirementFor<Domain, Key> extends "optional"
+    ? { readonly [P in Key]?: Shape }
+    // "never" projects to an empty shape: the key does not exist on the
+    // plugin type, so "key" in plugin narrows correctly and excess-key
+    // checks reject supplying it.
+    : Record<never, never>;
+
+/**
+ * MasterTemplate: the single family plugin template. Every domain-specific
+ * plugin shape below is a projection of this template through the capability
+ * applicability table (required / optional / never), so a future domain
+ * (e.g. LP) picks its slots without touching central dispatch.
+ */
+export type MasterTemplate<
+  Domain extends FamilyDomain,
   Candidate extends FamilyCandidate,
   Identity extends VerifiedIdentity,
   Descriptor extends CompiledInstanceDescriptor,
@@ -1191,33 +1317,45 @@ export interface AdapterFamilyCore<
   PricingDraft extends object = PricingDescriptor,
   InstanceStaticEvidence = unknown,
   PricingStaticEvidence = unknown,
-> {
-  readonly capture?: CaptureMaterializationSemantics;
-  readonly discovery: DiscoverySemantics<Candidate>;
-  readonly identity: IdentitySemantics<Candidate, Identity>;
-  readonly instance: InstanceSemantics<
+  Source extends FundingSourceDescriptor = FundingSourceDescriptor,
+  LiquidityEvidence = unknown,
+  RiskEvidence = unknown,
+> =
+  FamilyCapabilitySlice<Domain, "manifest", FamilyManifest<Domain>> &
+  FamilyCapabilitySlice<Domain, "capture", CaptureMaterializationSemantics> &
+  FamilyCapabilitySlice<Domain, "discovery", DiscoverySemantics<Candidate>> &
+  FamilyCapabilitySlice<Domain, "identity", IdentitySemantics<Candidate, Identity>> &
+  FamilyCapabilitySlice<Domain, "instance", InstanceSemantics<
     Identity,
     Descriptor,
     InstanceDraft,
     InstanceStaticEvidence
-  >;
-  readonly routes: RouteProjectionSemantics<Descriptor, Route>;
-  readonly pricing: PricingSemantics<
+  >> &
+  FamilyCapabilitySlice<Domain, "routes", RouteProjectionSemantics<Descriptor, Route>> &
+  FamilyCapabilitySlice<Domain, "pricing", PricingSemantics<
     Descriptor,
     Route,
     PricingDescriptor,
     PricingSnapshot,
     PricingDraft,
     PricingStaticEvidence
-  >;
-  readonly exact: ExactQuoteSemantics<Descriptor, Route, ExactEvidence>;
-  readonly execution: ExecutionSemantics<Descriptor, Route, ExactEvidence>;
-  readonly sharedBindings?: SharedBindingSemantics<Descriptor>;
-  readonly optional?: OptionalFamilySemantics<Descriptor, Route>;
-  readonly actionAdapters: readonly FamilyOwnedActionAdapter[];
-}
+  >> &
+  FamilyCapabilitySlice<Domain, "exact", ExactQuoteSemantics<Descriptor, Route, ExactEvidence>> &
+  FamilyCapabilitySlice<Domain, "execution", ExecutionSemantics<Descriptor, Route, ExactEvidence>> &
+  FamilyCapabilitySlice<Domain, "sharedBindings", SharedBindingSemantics<Descriptor>> &
+  FamilyCapabilitySlice<Domain, "optional", OptionalFamilySemantics<Descriptor, Route>> &
+  FamilyCapabilitySlice<Domain, "actionAdapters", readonly FamilyOwnedActionAdapter[]> &
+  FamilyCapabilitySlice<Domain, "swap", SwapDomainSemantics<Descriptor, Route>> &
+  FamilyCapabilitySlice<Domain, "protocol", ProtocolDomainSemantics> &
+  FamilyCapabilitySlice<Domain, "credit", CreditDomainSemantics<Descriptor, Route, RiskEvidence>> &
+  FamilyCapabilitySlice<Domain, "funding", FundingDomainSemantics<Source, LiquidityEvidence>>;
 
-export interface SwapFamilyPlugin<
+/**
+ * Swap projection: MasterTemplate<"swap"> with pricing/exact required by the
+ * applicability table. Kept as a named type so production entries and the
+ * thin defineSwapFamily wrapper stay unchanged.
+ */
+export type SwapFamilyPlugin<
   Candidate extends FamilyCandidate,
   Identity extends VerifiedIdentity,
   Descriptor extends CompiledInstanceDescriptor,
@@ -1229,27 +1367,23 @@ export interface SwapFamilyPlugin<
   PricingDraft extends object = PricingDescriptor,
   InstanceStaticEvidence = unknown,
   PricingStaticEvidence = unknown,
-> extends AdapterFamilyCore<
-    Candidate,
-    Identity,
-    Descriptor,
-    Route,
-    PricingDescriptor,
-    PricingSnapshot,
-    ExactEvidence,
-    InstanceDraft,
-    PricingDraft,
-    InstanceStaticEvidence,
-    PricingStaticEvidence
-  > {
-  readonly manifest: FamilyManifest<"swap">;
-  readonly swap: SwapDomainSemantics<Descriptor, Route>;
-  readonly protocol?: never;
-  readonly funding?: never;
-  readonly credit?: never;
-}
+> = MasterTemplate<
+  "swap",
+  Candidate,
+  Identity,
+  Descriptor,
+  Route,
+  PricingDescriptor,
+  PricingSnapshot,
+  ExactEvidence,
+  InstanceDraft,
+  PricingDraft,
+  InstanceStaticEvidence,
+  PricingStaticEvidence
+>;
 
-export interface ProtocolFamilyPlugin<
+/** Protocol projection: MasterTemplate<"protocol">. */
+export type ProtocolFamilyPlugin<
   Candidate extends FamilyCandidate,
   Identity extends VerifiedIdentity,
   Descriptor extends CompiledInstanceDescriptor,
@@ -1261,40 +1395,23 @@ export interface ProtocolFamilyPlugin<
   PricingDraft extends object = PricingDescriptor,
   InstanceStaticEvidence = unknown,
   PricingStaticEvidence = unknown,
-> extends AdapterFamilyCore<
-    Candidate,
-    Identity,
-    Descriptor,
-    Route,
-    PricingDescriptor,
-    PricingSnapshot,
-    ExactEvidence,
-    InstanceDraft,
-    PricingDraft,
-    InstanceStaticEvidence,
-    PricingStaticEvidence
-  > {
-  readonly manifest: FamilyManifest<"protocol">;
-  readonly protocol: ProtocolDomainSemantics;
-  readonly swap?: never;
-  readonly funding?: never;
-  readonly credit?: never;
-}
+> = MasterTemplate<
+  "protocol",
+  Candidate,
+  Identity,
+  Descriptor,
+  Route,
+  PricingDescriptor,
+  PricingSnapshot,
+  ExactEvidence,
+  InstanceDraft,
+  PricingDraft,
+  InstanceStaticEvidence,
+  PricingStaticEvidence
+>;
 
-export interface FundingFamilyPlugin<
-  Source extends FundingSourceDescriptor,
-  LiquidityEvidence,
-> {
-  readonly manifest: FamilyManifest<"funding">;
-  readonly capture?: CaptureMaterializationSemantics;
-  readonly funding: FundingDomainSemantics<Source, LiquidityEvidence>;
-  readonly actionAdapters: readonly FamilyOwnedActionAdapter[];
-  readonly swap?: never;
-  readonly protocol?: never;
-  readonly credit?: never;
-}
-
-export interface CreditFamilyPlugin<
+/** Credit projection: MasterTemplate<"credit"> (pricing/exact optional). */
+export type CreditFamilyPlugin<
   Candidate extends FamilyCandidate,
   Identity extends VerifiedIdentity,
   Descriptor extends CompiledInstanceDescriptor,
@@ -1302,25 +1419,45 @@ export interface CreditFamilyPlugin<
   RiskEvidence,
   InstanceDraft extends object = Descriptor,
   InstanceStaticEvidence = unknown,
-> {
-  readonly manifest: FamilyManifest<"credit">;
-  readonly capture?: CaptureMaterializationSemantics;
-  readonly discovery: DiscoverySemantics<Candidate>;
-  readonly identity: IdentitySemantics<Candidate, Identity>;
-  readonly instance: InstanceSemantics<
-    Identity,
-    Descriptor,
-    InstanceDraft,
-    InstanceStaticEvidence
-  >;
-  readonly routes: RouteProjectionSemantics<Descriptor, Route>;
-  readonly execution: ExecutionSemantics<Descriptor, Route, RiskEvidence>;
-  readonly credit: CreditDomainSemantics<Descriptor, Route, RiskEvidence>;
-  readonly actionAdapters: readonly FamilyOwnedActionAdapter[];
-  readonly swap?: never;
-  readonly protocol?: never;
-  readonly funding?: never;
-}
+> = MasterTemplate<
+  "credit",
+  Candidate,
+  Identity,
+  Descriptor,
+  Route,
+  object,
+  object,
+  RiskEvidence,
+  InstanceDraft,
+  object,
+  InstanceStaticEvidence,
+  object,
+  FundingSourceDescriptor,
+  unknown,
+  RiskEvidence
+>;
+
+/** Funding projection: MasterTemplate<"funding"> (public slices never). */
+export type FundingFamilyPlugin<
+  Source extends FundingSourceDescriptor,
+  LiquidityEvidence,
+> = MasterTemplate<
+  "funding",
+  FamilyCandidate,
+  VerifiedIdentity,
+  CompiledInstanceDescriptor,
+  FamilyRouteDescriptor,
+  object,
+  object,
+  unknown,
+  object,
+  object,
+  unknown,
+  object,
+  Source,
+  LiquidityEvidence,
+  unknown
+>;
 
 export type AdapterFamilyPlugin<
   Candidate extends FamilyCandidate,
@@ -1494,37 +1631,28 @@ function pluginForDomain<Domain extends FamilyDomain>(
   return plugin as FamilyPluginForDomain<Domain>;
 }
 
-const COMMON_REQUIRED_KEYS = Object.freeze([
-  "actionAdapters",
-  "discovery",
-  "exact",
-  "execution",
-  "identity",
-  "instance",
-  "manifest",
-  "pricing",
-  "routes",
-]);
-const COMMON_OPTIONAL_KEYS = Object.freeze([
-  "capture",
-  "optional",
-  "sharedBindings",
-]);
-const FUNDING_REQUIRED_KEYS = Object.freeze([
-  "actionAdapters",
-  "funding",
-  "manifest",
-]);
-const CREDIT_REQUIRED_KEYS = Object.freeze([
-  "actionAdapters",
-  "credit",
-  "discovery",
-  "execution",
-  "identity",
-  "instance",
-  "manifest",
-  "routes",
-]);
+/**
+ * Domain capability key sets derived from the single applicability table -
+ * the runtime validator consumes the same table that projects the types, so
+ * a domain's required/optional/never slots can never drift apart.
+ */
+function requiredCapabilityKeys(domain: FamilyDomain): readonly string[] {
+  return Object.freeze(
+    (Object.entries(FAMILY_CAPABILITY_APPLICABILITY[domain]) as
+      readonly (readonly [FamilyCapabilityKey, FamilyCapabilityRequirement])[])
+      .filter(([, requirement]) => requirement === "required")
+      .map(([key]) => key),
+  );
+}
+
+function optionalCapabilityKeys(domain: FamilyDomain): readonly string[] {
+  return Object.freeze(
+    (Object.entries(FAMILY_CAPABILITY_APPLICABILITY[domain]) as
+      readonly (readonly [FamilyCapabilityKey, FamilyCapabilityRequirement])[])
+      .filter(([, requirement]) => requirement === "optional")
+      .map(([key]) => key),
+  );
+}
 
 export function defineSwapFamily<
   C extends FamilyCandidate,
@@ -2753,14 +2881,8 @@ function assertExactTopLevelKeys(
   plugin: object,
   domain: FamilyDomain,
 ): void {
-  const required = domain === "funding"
-    ? [...FUNDING_REQUIRED_KEYS]
-    : domain === "credit"
-    ? [...CREDIT_REQUIRED_KEYS]
-    : [...COMMON_REQUIRED_KEYS, domain];
-  const optional = domain === "swap" || domain === "protocol"
-    ? COMMON_OPTIONAL_KEYS
-    : ["capture"];
+  const required = requiredCapabilityKeys(domain);
+  const optional = optionalCapabilityKeys(domain);
   const allowed = new Set([...required, ...optional]);
   for (const key of required) {
     if (!Object.prototype.hasOwnProperty.call(plugin, key)) {
