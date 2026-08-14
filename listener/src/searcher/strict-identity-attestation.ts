@@ -14,6 +14,8 @@ import type { FamilyId } from
 import {
   executeAdapterFamilyLifecycleBatch,
 } from "./venues/adapter-family-runtime.js";
+import { executeCatalogCaptureNominations } from
+  "./venues/capture-materialization.js";
 import { createStrictCentralAdapterRuntime } from
   "./strict-central-adapter-runtime.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
@@ -91,11 +93,44 @@ export async function attestPoolIdentitiesStrict<
   for (const pool of input.pools) {
     const address = ethers.getAddress(pool.address);
     try {
-      const observation = await addressSurfaceObservation(
-        input.provider,
-        input.source,
-        address,
-      );
+      // Universal fact check (no protocol semantics): an address with no
+      // deployed code cannot carry an on-chain identity observation.
+      const deployed = await input.provider.getCode(address, input.source.number);
+      if (!ethers.isHexString(deployed) || deployed === "0x") {
+        rejected.push({ ...pool, adapter: pool.adapter ?? "", reason: "no deployed code" });
+        continue;
+      }
+      // Observation materialization is plugin-owned: run the catalog-issued
+      // nomination capability for this single pool (address + opaque adapter
+      // label). The plugin re-materializes the observation it declares
+      // (address-surface probe, recent log reverse lookup, or tx seed); the
+      // framework only executes and admits. No protocol semantics here.
+      const observations = await executeCatalogCaptureNominations({
+        catalog: input.catalog,
+        source: input.source,
+        nominations: Object.freeze([Object.freeze({
+          address,
+          opaque: Object.freeze({
+            ...(pool.adapter === undefined ? {} : { adapter: pool.adapter }),
+            ...(pool.adapter === undefined ? {} : { adapterId: pool.adapter }),
+          }),
+        })]),
+        provider: Object.freeze({
+          call: (transaction: { readonly to: string; readonly data: string }, blockTag?: number) =>
+            input.provider.call(transaction, blockTag ?? 0),
+          getCode: (a: string, blockTag?: number) =>
+            input.provider.getCode(a, blockTag ?? 0),
+          getStorage: (a: string, s: string, blockTag?: number) =>
+            input.provider.getStorage(a, s, blockTag ?? 0),
+          getLogs: async () => Object.freeze([]),
+          getTransactionReceipt: async () => null,
+        }),
+      });
+      const observation = observations[0];
+      if (observation === undefined) {
+        rejected.push({ ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" });
+        continue;
+      }
       const matches = input.catalog.matches(observation);
       if (matches.length === 0) {
         rejected.push({ ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" });
@@ -156,29 +191,6 @@ export async function attestPoolIdentitiesStrict<
     }
   }
   return { accepted: Object.freeze(accepted), rejected } as const;
-}
-
-async function addressSurfaceObservation(
-  provider: StrictIdentityProvider,
-  source: CanonicalSource,
-  address: string,
-): Promise<UnifiedObservation> {
-  const code = await provider.getCode(address, source.number);
-  if (!ethers.isHexString(code) || code === "0x") {
-    throw new Error("no deployed code");
-  }
-  const implementationWord = await provider.getStorage(
-    address,
-    EIP1967_IMPLEMENTATION_SLOT,
-    source.number,
-  );
-  return Object.freeze({
-    kind: "address-surface" as const,
-    source,
-    address: address.toLowerCase(),
-    codeHash: ethers.keccak256(code).toLowerCase(),
-    implementationWord: ethers.zeroPadValue(implementationWord, 32).toLowerCase(),
-  });
 }
 
 /**
