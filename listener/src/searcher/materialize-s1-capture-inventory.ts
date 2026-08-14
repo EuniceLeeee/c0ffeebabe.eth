@@ -348,7 +348,7 @@ function opaquePoolNominations(input: {
     const label = String(
       opaque.adapter ?? opaque.adapterId ?? opaque.venueId ?? "",
     ).toLowerCase();
-    const key = `${address} ${label}`;
+    const key = `${address}\u001f${label}`;
     if (!values.has(key)) {
       values.set(key, Object.freeze({
         address,
@@ -387,7 +387,10 @@ function opaquePoolNominations(input: {
             : { evidence: candidate.evidence }),
         }),
       );
-      for (const item of Object.values(record)) visit(item);
+      // Do not recurse into the candidate record: the full candidate opaque
+      // (pool + adapterId + evidence) is already registered; recursing would
+      // re-visit candidate.pool through the plain branch and risk dropping
+      // the evidence field from the registered opaque.
       return;
     }
     if (
