@@ -168,7 +168,10 @@ import {
   type PoolIdentityFailureReason,
   type RejectedPoolIdentity,
 } from "./venues/identity.js";
-import { attestStartupPoolSetsStrict } from "./strict-identity-attestation.js";
+import {
+  attestStartupPoolSetsStrict,
+  type StrictIdentityProvider,
+} from "./strict-identity-attestation.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
   PRODUCTION_IDENTITY_RESOLVERS,
@@ -2074,7 +2077,7 @@ async function main(): Promise<void> {
   const [pinnedIdentity, universeIdentity, blockscanIdentity, overrideIdentity] =
     strictIdentityAttestation
     ? await attestStartupPoolSetsStrict({
-        provider,
+        provider: strictIdentityProvider(provider),
         source: {
           number: discoveryToBlock,
           hash: startupDexSourceBlockHash.toLowerCase(),
@@ -7698,6 +7701,36 @@ function extractTxHashes(value: unknown): string[] {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * F6 Pair B: adapts the ethers provider to the strict identity provider
+ * shape, passing through the nomination capabilities (recent-log reverse
+ * lookup, tx seed, trace) that plugin-owned nomination consumes. The
+ * framework stays free of protocol semantics; the adapter only maps RPC
+ * verbs.
+ */
+function strictIdentityProvider(
+  provider: ethers.JsonRpcProvider,
+): StrictIdentityProvider {
+  return {
+    call: (transaction, blockTag) =>
+      provider.call({ ...transaction, blockTag } as ethers.TransactionRequest),
+    getCode: (address, blockTag) => provider.getCode(address, blockTag),
+    getStorage: (address, slot, blockTag) =>
+      provider.getStorage(address, slot, blockTag),
+    getLogs: (filter) => provider.getLogs({
+      ...(filter.address === undefined ? {} : { address: filter.address }),
+      fromBlock: filter.fromBlock ?? 0,
+      toBlock: filter.toBlock ?? 0,
+      topics: filter.topics ?? [],
+    } as unknown as ethers.Filter),
+    getTransactionReceipt: (hash) => provider.getTransactionReceipt(hash),
+    traceTransaction: (hash) => provider.send("debug_traceTransaction", [
+      hash,
+      { tracer: "callTracer" },
+    ]),
+  };
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {

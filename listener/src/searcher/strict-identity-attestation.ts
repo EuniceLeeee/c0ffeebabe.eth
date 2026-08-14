@@ -43,6 +43,34 @@ export interface StrictIdentityProvider {
     slot: string,
     blockTag: number,
   ): Promise<string>;
+  /**
+   * Optional nomination capabilities, passed through to plugin-owned
+   * nomination (recent-log reverse lookup, tx seed). Absent means the
+   * nomination falls back to the fail-closed empty implementation; the
+   * plugin then keeps candidates unresolved instead of fabricating
+   * evidence.
+   */
+  getLogs?(filter: {
+    readonly address?: string;
+    readonly fromBlock?: number;
+    readonly toBlock?: number;
+    readonly topics?: readonly (string | null)[];
+  }): Promise<readonly {
+    readonly address: string;
+    readonly topics: readonly string[];
+    readonly data: string;
+    readonly transactionHash?: string;
+  }[]>;
+  getTransactionReceipt?(transactionHash: string): Promise<{
+    readonly blockNumber?: number;
+    readonly logs: readonly {
+      readonly address: string;
+      readonly topics: readonly string[];
+      readonly data: string;
+      readonly transactionHash?: string;
+    }[];
+  } | null>;
+  traceTransaction?(transactionHash: string): Promise<unknown>;
 }
 
 export type StrictAttestedPool<Pool extends {
@@ -122,8 +150,27 @@ export async function attestPoolIdentitiesStrict<
             input.provider.getCode(a, blockTag ?? 0),
           getStorage: (a: string, s: string, blockTag?: number) =>
             input.provider.getStorage(a, s, blockTag ?? 0),
-          getLogs: async () => Object.freeze([]),
-          getTransactionReceipt: async () => null,
+          // Nomination capabilities are passed through when the caller
+          // supplies them (recent-log reverse lookup, tx seed); absent
+          // means fail-closed empty implementations.
+          getLogs: input.provider.getLogs === undefined
+            ? async () => Object.freeze([])
+            : (filter: {
+                readonly address?: string;
+                readonly fromBlock?: number;
+                readonly toBlock?: number;
+                readonly topics?: readonly (string | null)[];
+              }) => input.provider.getLogs!(filter),
+          getTransactionReceipt:
+            input.provider.getTransactionReceipt === undefined
+            ? async () => null
+            : (hash: string) => input.provider.getTransactionReceipt!(hash),
+          ...(input.provider.traceTransaction === undefined
+            ? {}
+            : {
+                traceTransaction: (hash: string) =>
+                  input.provider.traceTransaction!(hash),
+              }),
         }),
       });
       const observation = observations[0];
