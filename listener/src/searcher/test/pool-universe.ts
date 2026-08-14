@@ -53,7 +53,7 @@ async function main(): Promise<void> {
         },
         {
           address: poolAddress(3),
-          adapter: "curve",
+          adapter: "curve-underlying",
           swapCount30d: 1,
         },
       ],
@@ -478,7 +478,7 @@ async function main(): Promise<void> {
         },
         {
           address: scoreless,
-          adapter: "curve",
+          adapter: "curve-underlying",
         },
         {
           address: v4PoolManager,
