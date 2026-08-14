@@ -396,13 +396,24 @@ unresolved 非空时 fail-closed 拒绝。
   verified_candidates 同 label），first-writer-wins 丢了 evidence 版本；
   setNomination 增加 overrideEvidence——完整候选分支的 evidence 覆盖同
   label 裸条目，不同 label 仍各自保留。
-- **unresolved 4 族**：curve-underlying（无 graph 条目/无缓存证据，需
-  metaregistry 反推）、eigenpie（无真实 depositAsset 交易）、ethertoken
+- **curve-underlying 已解决（2026-08-14，commit 30bdcd18）**：根因是
+  universe 生成器在 S1 重构（a699009a）删除了 curve enrich 分支后只放行
+  univ2/univ3，curve 池在 selectMatureDexActivity 就被滤掉，根本到不了
+  身份验证——不是适配失败。按用户决策走**旧管线过渡桥**：build-active-
+  pool-universe 重新放行 curve-underlying（TRANSITIONAL BRIDGE，F6
+  delete-scope 注释标注），strict identity 仍为准入门
+  （identitySource=curve-metaregistry-underlying），仅 token-domain 元数据
+  经共享 curve resolver 补充。**节点验证（2 天窗口）**：44 个 curve-
+  underlying 池入图，underlyingCoins 完整，无抛错。删除前置：catalog
+  驱动生成器或插件 nominate 路径成为默认后，删除中央 curve 分支。
+- **unresolved 3 族**：eigenpie（无真实 depositAsset 交易）、ethertoken
   （evidence tx 超出 reth 保留窗口，trace pruned）、hgusdc（行为型身份，
   需真实 executePath 交易）——全部属用户批准的“等真实 tx 或回溯”范畴。
 - **RPC 成本**：univ2/3/4/dodo/angstrom 合计 ~6 getLogs + ~5 trace
   （每族早停常数级）；getCode/getStorage ~10.4K（self-burn 10K+ 候选探针）。
 
-**F5 状态**：16/20 discovery 族真实 admitted；4 族缺真实链上证据（非代码
-可补）。descriptor 生成器在 unresolved 非空时 fail-closed——**在 4 族
-补齐真实证据前，sealed-production eligible=true 不能宣称**。
+**F5 状态**：17/20 discovery 族真实 admitted（curve-underlying 经过渡桥
+入图解决）；3 族缺真实链上证据（eigenpie/ethertoken/hgusdc，非代码可补，
+需真实交易或保留窗口内回溯）。descriptor 生成器在 unresolved 非空时
+fail-closed——**在 3 族补齐真实证据前，sealed-production eligible=true
+不能宣称**。
