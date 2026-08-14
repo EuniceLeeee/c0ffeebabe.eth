@@ -118,26 +118,29 @@ export async function attestPoolIdentitiesStrict<
   readonly accepted: readonly StrictAttestedPool<Pool>[];
   readonly rejected: readonly StrictRejectedPool<Pool>[];
 }> {
-  const accepted: StrictAttestedPool<Pool>[] = [];
-  const rejected: StrictRejectedPool<Pool>[] = [];
+  const accepted: (StrictAttestedPool<Pool> | null)[] =
+    new Array(input.pools.length).fill(null);
+  const rejected: (StrictRejectedPool<Pool> | null)[] =
+    new Array(input.pools.length).fill(null);
   const total = input.pools.length;
   const startedAtMs = Date.now();
-  for (let index = 0; index < total; index++) {
+  // Generic bounded concurrency: startup universe/retained sets are tens of
+  // thousands of rows and each row performs multiple provider round-trips;
+  // serial attestation would take hours. Per-row error isolation and result
+  // ordering are preserved; there is no per-family branch here.
+  const ATTESTATION_CONCURRENCY = 24;
+  let completed = 0;
+  let next = 0;
+  const processPool = async (index: number): Promise<void> => {
     const pool = input.pools[index];
-    if ((index + 1) % 500 === 0) {
-      console.log(
-        `[pool-universe] strict attestation ${index + 1}/${total} ` +
-          `elapsedMs=${Date.now() - startedAtMs}`,
-      );
-    }
     const address = ethers.getAddress(pool.address);
     try {
       // Universal fact check (no protocol semantics): an address with no
       // deployed code cannot carry an on-chain identity observation.
       const deployed = await input.provider.getCode(address, input.source.number);
       if (!ethers.isHexString(deployed) || deployed === "0x") {
-        rejected.push({ ...pool, adapter: pool.adapter ?? "", reason: "no deployed code" });
-        continue;
+        rejected[index] = { ...pool, adapter: pool.adapter ?? "", reason: "no deployed code" };
+        return;
       }
       // Observation materialization is plugin-owned: run the catalog-issued
       // nomination capability for this single pool (address + opaque adapter
@@ -187,20 +190,20 @@ export async function attestPoolIdentitiesStrict<
       });
       const observation = observations[0];
       if (observation === undefined) {
-        rejected.push({ ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" });
-        continue;
+        rejected[index] = { ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" };
+        return;
       }
       const matches = input.catalog.matches(observation);
       if (matches.length === 0) {
-        rejected.push({ ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" });
-        continue;
+        rejected[index] = { ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" };
+        return;
       }
       // Prefer the family hinted by the pool's adapter label, else the first
       // catalog match.
       const target = matchFor(input, pool, matches);
       if (target === null) {
-        rejected.push({ ...pool, adapter: pool.adapter ?? "", reason: "no_matching_family" });
-        continue;
+        rejected[index] = { ...pool, adapter: pool.adapter ?? "", reason: "no_matching_family" };
+        return;
       }
       const family = input.catalog.forFamily(target.familyId);
       const result = await executeAdapterFamilyLifecycleBatch({
@@ -226,7 +229,7 @@ export async function attestPoolIdentitiesStrict<
         const anyIdentity = result.outcomes.find((outcome) =>
           outcome.stage === "identity"
         );
-        rejected.push({
+        rejected[index] = {
           ...pool,
           adapter: pool.adapter ?? "",
           reason: rejection === undefined
@@ -236,12 +239,12 @@ export async function attestPoolIdentitiesStrict<
                   anyIdentity.reasonCode ?? "no-reason"
                 }`
             : `identity_rejected:${rejection.reasonCode ?? "no-reason"}`,
-        });
-        continue;
+        };
+        return;
       }
       const lineageId = identityOutcome.lineageId ?? "";
       const legacy = input.adapterForLineage?.(lineageId) ?? null;
-      accepted.push(Object.freeze({
+      accepted[index] = Object.freeze({
         ...pool,
         familyId: target.familyId,
         lineageId,
@@ -251,16 +254,42 @@ export async function attestPoolIdentitiesStrict<
           ? {}
           : { venueId: legacy.venueId }),
         identitySource: "strict-lifecycle",
-      }));
+      });
     } catch (error) {
-      rejected.push({
+      rejected[index] = {
         ...pool,
         adapter: pool.adapter ?? "",
         reason: error instanceof Error ? error.message.slice(0, 120) : "unknown",
-      });
+      };
+    } finally {
+      completed += 1;
+      if (completed % 500 === 0) {
+        console.log(
+          `[pool-universe] strict attestation ${completed}/${total} ` +
+            `elapsedMs=${Date.now() - startedAtMs}`,
+        );
+      }
     }
-  }
-  return { accepted: Object.freeze(accepted), rejected } as const;
+  };
+  const workers = Array.from(
+    { length: Math.min(ATTESTATION_CONCURRENCY, Math.max(1, total)) },
+    async () => {
+      while (true) {
+        const index = next++;
+        if (index >= total) break;
+        await processPool(index);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return {
+    accepted: Object.freeze(
+      accepted.filter((item): item is StrictAttestedPool<Pool> => item !== null),
+    ),
+    rejected: rejected.filter(
+      (item): item is StrictRejectedPool<Pool> => item !== null,
+    ),
+  } as const;
 }
 
 /**
