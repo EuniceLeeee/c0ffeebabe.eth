@@ -546,13 +546,39 @@ provider+revm runtime）；证据 ref = `onchain:1:<hash>:erc4626:<vault>`。
 ### Pair B strict side: attestPoolIdentitiesStrict（2026-08-14）
 
 - 新增 `strict-identity-attestation.ts`：`attestPoolIdentitiesStrict`——
-  对候选池在 canonical source 上经中央 provider 重读 codeHash + EIP-1967，
-  catalog.matches 分族，经 strict lifecycle 的 identity 阶段（插件
-  identity 变体）验证，产出 accepted/rejected。legacy cache/registry
-  不提供准入凭证，strict 重派生。
-- fail-closed 合同：无代码拒绝、无 catalog match 拒绝。
+  对候选池在 canonical source 上经插件 nomination 物化 observation（地址
+  面探针、近期日志反推、tx seed），catalog.matches 分族，经 strict
+  lifecycle 的 identity 阶段（插件 identity 变体）验证，产出
+  accepted/rejected。legacy cache/registry 不提供准入凭证，strict 重派生；
+  框架只执行与准入，零协议语义（nomination 驱动，commit 7acca06b）。
+- fail-closed 合同：无代码拒绝（`no deployed code`）、无 catalog match
+  拒绝、identity 拒绝保留精确 reasonCode（如
+  `identity_rejected:...:unknown_hook_fail_closed`）。
+- provider 透传 nomination 能力（getLogs/receipt/trace，b695fcac）；pool
+  条目字段（poolId/factory/tokens）透传插件 opaque 载荷（e29cc967）；
+  高频 emitter 用共享 `findRecentLogHit` 分块查询避免节点 20000 上限
+  （6fc6b3ca）；angstrom 用 accept 回调走到真实 adapter swap 帧
+  （253410a6）；minimal runtime 绑定 production verified-actors
+  （2f48dc66）。
+- **节点真实链验证（2026-08-14，head≈25752035，SSM dry-run）**：
+  universe 真实 DEX 池全部 accepted——univ3×2/univ2×2/dodo×2 各自
+  factory-child / dodo-v2:registry-member，univ4×2
+  univ4:pool-manager-subinstance（含 hook 池走 univ4-unlock 归属），
+  angstrom×2 angstrom-v4:official-hook-poolkey；univ4 hook 池按契约
+  fail-closed（unknown_hook_fail_closed）。cache 族（silo/erc4626/
+  astra/ethertoken/fluid）需 evidence 载荷，属 materializer 提名路径，
+  不在 universe poolSets 范围。
 - **删除前置（未完成）**：main.ts 的 4 处 `attestPoolIdentities`（pinned/
   universe/blockscan/override）与 build-active-pool-universe /
   active-pool-discovery / live-discovery-coordinator 的
   PRODUCTION_IDENTITY_RESOLVERS 消费需切到 strict 版并经节点 dry-run
   验证；完成后删除 legacy IdentityResolverRegistry 准入路径。
+- **大模版收口（2026-08-14，commit 3a2babc9）**：删除带必选 pricing/exact
+  的旧 `AdapterFamilyCore`；新增 `MasterTemplate`（唯一大模版）+
+  `FAMILY_CAPABILITY_APPLICABILITY` 适用表（domain → 切片 →
+  required/optional/never）。四个 domain 类型（Swap/Protocol/Credit/
+  Funding FamilyPlugin）全部改为 MasterTemplate 投影：swap/protocol
+  pricing+exact 必选、credit 可选、funding 公共切片 never。运行时顶层键
+  校验从同一适用表派生（类型形状与运行时检查不会漂移）。四个 define*
+  入口与 22 个 production entry 零改动；build/shadow suite（54）/
+  regression sweep（12）全绿；节点复验结果与改造前一致（零回退）。
