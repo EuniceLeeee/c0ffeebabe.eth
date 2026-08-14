@@ -982,6 +982,11 @@ async function discoverLandedPoolsByTopicUnion(input: {
         )
       ),
     );
+    console.log(
+      `[pool-universe] union scan group ${groupStart + 4}/${ranges.length} ` +
+        `(blocks ${ranges[groupStart]?.fromBlock ?? 0}-` +
+        `${ranges[Math.min(groupStart + 3, ranges.length - 1)]?.toBlock ?? 0})`,
+    );
     for (const slice of slices) {
       unionComplete &&= slice.complete;
       appendAll(unionIssues, slice.issues);
@@ -1078,12 +1083,14 @@ async function discoverLandedPoolsByTopicUnion(input: {
       ]),
     });
   }
+  console.log(`[pool-universe] union scan complete, materializing descriptors`);
   const outcomes = await materializeRegisteredDescriptors(
     { ...input, batchSize },
     descriptors,
     sourceScans,
     true,
   );
+  console.log(`[pool-universe] descriptor materialization complete`);
 
   const materializedPools: PoolEntry[] = [];
   const retryablePools: PoolEntry[] = [];
