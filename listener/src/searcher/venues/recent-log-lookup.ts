@@ -24,6 +24,15 @@ export interface RecentLogQuery {
    * the chunk size so the oldest activity stays reachable.
    */
   readonly chunk?: number;
+  /**
+   * Optional acceptance check applied newest-first. A recent log whose
+   * transaction does not carry the plugin's declared call frame (e.g. a
+   * plain manager swap for a hook-backed pool) is skipped and the next
+   * newer log is tried. Plugin-owned semantics; the framework only walks.
+   */
+  readonly accept?: (entry: RecentLogEntry) => Promise<boolean>;
+  /** Upper bound on accept() calls (default 32). */
+  readonly maxAccept?: number;
 }
 
 /**
@@ -40,6 +49,8 @@ export async function findRecentLogHit(
   let chunk = Math.min(Math.max(1, input.chunk ?? 5_000), lookback);
   let to = source.number;
   let from = Math.max(0, to - chunk + 1);
+  let accepts = 0;
+  const maxAccept = Math.max(1, input.maxAccept ?? 32);
   for (let guard = 0; guard < 64 && from <= source.number; guard++) {
     try {
       const logs = await provider.getLogs({
@@ -48,16 +59,20 @@ export async function findRecentLogHit(
         toBlock: to,
         topics: input.topics,
       });
-      if (logs.length > 0) {
-        const hit = logs[logs.length - 1];
-        return {
-          address: hit.address,
-          topics: hit.topics,
-          data: hit.data,
-          ...(hit.transactionHash === undefined
+      for (let index = logs.length - 1; index >= 0; index--) {
+        const raw = logs[index];
+        const entry: RecentLogEntry = {
+          address: raw.address,
+          topics: raw.topics,
+          data: raw.data,
+          ...(raw.transactionHash === undefined
             ? {}
-            : { transactionHash: hit.transactionHash }),
+            : { transactionHash: raw.transactionHash }),
         };
+        if (input.accept === undefined) return entry;
+        accepts += 1;
+        if (accepts > maxAccept) return null;
+        if (await input.accept(entry)) return entry;
       }
       // Empty slice: step further back.
       to = from - 1;

@@ -34,6 +34,14 @@ export async function nominateAngstromV4(input: {
     const poolId = opaquePoolId(opaque);
     if (poolId === null) continue;
     try {
+      // A recent Swap log for this poolId may be a plain manager swap that
+      // never passes through the Angstrom hook adapter. Walk the newest
+      // logs (accept callback) until one traces to a real adapter swap
+      // frame; the observation then carries that real calldata.
+      const holder: {
+        frame: { readonly to: string; readonly from: string; readonly input: string } | null;
+        txHash: string | undefined;
+      } = { frame: null, txHash: undefined };
       const hit = await findRecentLogHit({
         provider: input.provider,
         source: input.source,
@@ -42,21 +50,31 @@ export async function nominateAngstromV4(input: {
           UNIV4_SWAP_TOPIC.toLowerCase(),
           poolId.toLowerCase(),
         ],
+        accept: async (entry) => {
+          if (entry.transactionHash === undefined) return false;
+          if (input.provider.traceTransaction === undefined) return false;
+          const trace = await input.provider.traceTransaction(
+            entry.transactionHash,
+          );
+          const found = findSwapFrame(trace);
+          if (found === null) return false;
+          holder.frame = found;
+          holder.txHash = entry.transactionHash;
+          return true;
+        },
       });
-      if (hit === null || hit.transactionHash === undefined) continue;
-      if (input.provider.traceTransaction === undefined) continue;
-      const trace = await input.provider.traceTransaction(
-        hit.transactionHash,
-      );
-      const frame = findSwapFrame(trace);
-      if (frame === null) continue;
+      if (hit === null || holder.frame === null || holder.txHash === undefined) {
+        continue;
+      }
+      const frame = holder.frame;
+      const txHash = holder.txHash;
       results.push(Object.freeze({
         kind: "call" as const,
         source: input.source,
         target: ethers.getAddress(frame.to).toLowerCase(),
         sender: ethers.getAddress(frame.from).toLowerCase(),
         data: frame.input.toLowerCase(),
-        transactionHash: hit.transactionHash.toLowerCase(),
+        transactionHash: txHash.toLowerCase(),
       }));
     } catch {
       // One unreadable nomination must not block the next one.
