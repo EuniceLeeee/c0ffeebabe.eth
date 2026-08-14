@@ -7,11 +7,13 @@ import type { IdentityAdmissionPolicy } from "./admission.js";
 import {
   attestPoolIdentities,
   isRetryablePoolIdentityFailure,
+  type AttestedPoolEntry,
   type IdentityCallBackend,
   type IdentityResolverRegistry,
   type RejectedPoolIdentity,
 } from "./identity.js";
 import type { SwapAdapter } from "./route-leg-adapter.js";
+import { attestPoolsStrictFromProvider } from "../strict-identity-attestation.js";
 
 export interface RetainedSwapFamilyInventory {
   readonly pools: readonly PoolUniverseEntry[];
@@ -37,6 +39,36 @@ export async function retainVerifiedSwapFamilyInstances(input: {
   readonly backend: IdentityCallBackend;
   readonly priorPools: readonly PoolUniverseEntry[];
   readonly freshPools: readonly PoolEntry[];
+  /** F6 Pair B: attest retained rows through the generated catalog when set. */
+  readonly strictAttestation?: {
+    readonly provider: {
+      call(transaction: { readonly to: string; readonly data: string }, blockTag?: number): Promise<string>;
+      getCode(address: string, blockTag?: number): Promise<string>;
+      getStorage(address: string, slot: string, blockTag?: number): Promise<string>;
+      getLogs?(filter: {
+        readonly address?: string;
+        readonly fromBlock?: number;
+        readonly toBlock?: number;
+        readonly topics?: readonly (string | null)[];
+      }): Promise<readonly {
+        readonly address: string;
+        readonly topics: readonly string[];
+        readonly data: string;
+        readonly transactionHash?: string;
+      }[]>;
+      getTransactionReceipt?(transactionHash: string): Promise<{
+        readonly blockNumber?: number;
+        readonly logs: readonly {
+          readonly address: string;
+          readonly topics: readonly string[];
+          readonly data: string;
+          readonly transactionHash?: string;
+        }[];
+      } | null>;
+      traceTransaction?(transactionHash: string): Promise<unknown>;
+    };
+    readonly blockNumber: number;
+  };
 }): Promise<RetainedSwapFamilyInventory> {
   const ownerByPoolAdapter = new Map<string, string>();
   for (const family of input.families) {
@@ -51,10 +83,12 @@ export async function retainVerifiedSwapFamilyInstances(input: {
     ownerByPoolAdapter.has(pool.adapter) &&
     !freshKeys.has(poolRegistryKey(pool))
   );
-  const attested = await attestPoolIdentities(input.backend, candidates, {
-    identityRegistry: input.identityRegistry,
-    admissionPolicy: input.admissionPolicy,
-  });
+  const attested = input.strictAttestation === undefined
+    ? await attestPoolIdentities(input.backend, candidates, {
+        identityRegistry: input.identityRegistry,
+        admissionPolicy: input.admissionPolicy,
+      })
+    : await strictRetainedAttestation(candidates, input.strictAttestation);
   const incomplete = attested.rejected.filter((item) =>
     isRetryablePoolIdentityFailure(item.reason)
   );
@@ -79,3 +113,56 @@ export async function retainVerifiedSwapFamilyInstances(input: {
     rejected: Object.freeze(attested.rejected),
   });
 }
+
+
+/**
+ * F6 Pair B: retained family inventory rows are re-attested through the
+ * generated catalog + plugin nomination/lifecycle at the pinned source block.
+ * The legacy per-adapter resolver registry never supplies a credential here.
+ */
+async function strictRetainedAttestation(
+  candidates: readonly PoolUniverseEntry[],
+  attestation: {
+    readonly provider: {
+      call(transaction: { readonly to: string; readonly data: string }, blockTag?: number): Promise<string>;
+      getCode(address: string, blockTag?: number): Promise<string>;
+      getStorage(address: string, slot: string, blockTag?: number): Promise<string>;
+      getLogs?(filter: {
+        readonly address?: string;
+        readonly fromBlock?: number;
+        readonly toBlock?: number;
+        readonly topics?: readonly (string | null)[];
+      }): Promise<readonly {
+        readonly address: string;
+        readonly topics: readonly string[];
+        readonly data: string;
+        readonly transactionHash?: string;
+      }[]>;
+      getTransactionReceipt?(transactionHash: string): Promise<{
+        readonly blockNumber?: number;
+        readonly logs: readonly {
+          readonly address: string;
+          readonly topics: readonly string[];
+          readonly data: string;
+          readonly transactionHash?: string;
+        }[];
+      } | null>;
+      traceTransaction?(transactionHash: string): Promise<unknown>;
+    };
+    readonly blockNumber: number;
+  },
+): Promise<{
+  accepted: AttestedPoolEntry<PoolUniverseEntry>[];
+  rejected: RejectedPoolIdentity[];
+}> {
+  const result = await attestPoolsStrictFromProvider({
+    provider: attestation.provider,
+    blockNumber: attestation.blockNumber,
+    pools: candidates,
+  });
+  return {
+    accepted: result.accepted as unknown as AttestedPoolEntry<PoolUniverseEntry>[],
+    rejected: result.rejected as unknown as RejectedPoolIdentity[],
+  };
+}
+

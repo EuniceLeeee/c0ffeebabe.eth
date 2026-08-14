@@ -12,7 +12,13 @@ import {
   type PoolUniverseEntry,
   type PoolUniverseFile,
 } from "./pool-universe.js";
-import { resolvePoolIdentity } from "./venues/identity.js";
+import {
+  resolvePoolIdentity,
+  type PoolIdentityResult,
+} from "./venues/identity.js";
+import { attestPoolsStrictFromProvider } from "./strict-identity-attestation.js";
+import type { VenueId } from "./venues/capability.js";
+import type { VenueIdentitySource } from "./venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
   PRODUCTION_ADAPTER_FAMILIES,
@@ -284,6 +290,16 @@ async function main(): Promise<void> {
     backend: stateProvider,
     priorPools: priorUniversePools,
     freshPools: landed.materializedPools,
+    // F6 Pair B: strict retained inventory re-attests through the generated
+    // catalog + plugin lifecycle at the frozen source block when enabled.
+    ...(process.env.POOL_UNIVERSE_STRICT_IDENTITY === "1"
+      ? {
+          strictAttestation: {
+            provider: stateProvider as never,
+            blockNumber: latest,
+          },
+        }
+      : {}),
   });
   console.log(
     `[pool-universe] family-inventory: prior=${priorUniversePools.length} ` +
@@ -314,7 +330,7 @@ async function main(): Promise<void> {
     if ((idx + 1) % 250 === 0) {
       console.log(`[pool-universe] metadata ${idx + 1}/${poolsToEnrich.length}`);
     }
-    return enrichPool(stateProvider, pool);
+    return enrichPool(stateProvider, pool, latest);
   });
   const enrichedCandidates: EnrichedRankablePool[] = [];
   for (let i = 0; i < enriched.length; i++) {
@@ -703,6 +719,7 @@ function poolTokens(pool: { token0?: string; token1?: string; tokens?: string[] 
 async function enrichPool(
   provider: ethers.JsonRpcProvider,
   pool: PoolActivity,
+  strictBlockNumber?: number,
 ): Promise<PoolUniverseEntry | null> {
   const adapterHint = bestAdapter(pool.adapterCounts);
   // The generic activity lane is intentionally the retained mature V2/V3
@@ -713,10 +730,16 @@ async function enrichPool(
       `non-mature pool adapter ${adapterHint} escaped family materialization`,
     );
   }
-  const identity = await resolvePoolIdentity(provider, pool.address, adapterHint, {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-  });
+  const identity = process.env.POOL_UNIVERSE_STRICT_IDENTITY === "1"
+    ? await resolvePoolIdentityStrict(
+        provider,
+        pool.address,
+        strictBlockNumber ?? 0,
+      )
+    : await resolvePoolIdentity(provider, pool.address, adapterHint, {
+        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+        admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+      });
   if (!identity.ok) return null;
   const adapter = identity.adapter;
   const base: PoolUniverseEntry = {
@@ -761,12 +784,19 @@ export function isClosablePair(token0: string, token1: string, tokenSet: Set<str
 async function probePoolShape(
   provider: ethers.JsonRpcProvider,
   addr: string,
+  strictBlockNumber?: number,
 ): Promise<ProbedPoolShape | null> {
   const address = ethers.getAddress(addr);
-  const identity = await resolvePoolIdentity(provider, address, "univ3", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-  });
+  const identity = process.env.POOL_UNIVERSE_STRICT_IDENTITY === "1"
+    ? await resolvePoolIdentityStrict(
+        provider,
+        address,
+        strictBlockNumber ?? await provider.getBlockNumber(),
+      )
+    : await resolvePoolIdentity(provider, address, "univ3", {
+        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+        admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+      });
   if (!identity.ok) return null;
   if (identity.adapter === "univ3") try {
     const [token0, token1, fee, tickSpacing] = await Promise.all([
@@ -931,3 +961,36 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exit(1);
   });
 }
+
+
+/**
+ * F6 Pair B: strict single-pool identity resolution through the generated
+ * catalog + plugin lifecycle. Returns the legacy PoolIdentityResult shape so
+ * the mature metadata probes keep working; the legacy per-adapter resolver
+ * registry never supplies a credential here.
+ */
+async function resolvePoolIdentityStrict(
+  provider: ethers.JsonRpcProvider,
+  address: string,
+  blockNumber: number,
+): Promise<PoolIdentityResult> {
+  const result = await attestPoolsStrictFromProvider({
+    provider: provider as never,
+    blockNumber,
+    pools: [{ address, adapter: "" }],
+  });
+  const entry = result.accepted[0];
+  if (entry === undefined) {
+    return {
+      ok: false,
+      reason: "unsupported_venue",
+    };
+  }
+  return {
+    ok: true,
+    adapter: entry.adapter as PoolEntry["adapter"],
+    venueId: entry.venueId as VenueId,
+    identitySource: entry.identitySource as VenueIdentitySource,
+  };
+}
+

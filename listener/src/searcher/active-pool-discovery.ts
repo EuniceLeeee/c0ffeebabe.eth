@@ -15,8 +15,11 @@ import {
 import {
   attestPoolIdentities,
   isRetryablePoolIdentityFailure,
+  type AttestedPoolEntry,
   type IdentityCallBackend,
+  type RejectedPoolIdentity,
 } from "./venues/identity.js";
+import { attestPoolsStrictFromProvider } from "./strict-identity-attestation.js";
 import {
   STRICT_IDENTITY_ADMISSION,
   type IdentityAdmissionPolicy,
@@ -357,6 +360,20 @@ export interface ActivePoolDiscoveryResult {
   readonly truncated: boolean;
 }
 
+function strictIdentityBlockNumber(
+  blockTag: ethers.BlockTag | undefined,
+  latest: number,
+): number {
+  if (blockTag === undefined) return latest;
+  if (typeof blockTag === "number") return blockTag;
+  if (blockTag === "latest") return latest;
+  if (blockTag === "earliest") return 0;
+  if (blockTag === "pending") return latest;
+  if (typeof blockTag === "bigint") return Number(blockTag);
+  // BlockHash tag: no numeric source available; use latest.
+  return latest;
+}
+
 export async function scanActivePoolsDetailed(
   provider: ethers.JsonRpcProvider,
   blocksBack = 300,
@@ -471,14 +488,32 @@ export async function scanActivePoolsDetailed(
     ReturnType<typeof attestPoolIdentities<PoolEntry>>
   >;
   try {
-    identityResult = await attestPoolIdentities(
-      identityBackend,
-      identityCandidates,
-      {
-        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-        admissionPolicy: options.admissionPolicy,
-      },
-    );
+    if (options.strict) {
+      // F6 Pair B: the strict lane attests through the generated catalog and
+      // the owning plugin's nomination + identity lifecycle; the legacy
+      // per-adapter resolver registry never supplies an admission credential.
+      const strictResult = await attestPoolsStrictFromProvider({
+        provider: identityBackend as never,
+        blockNumber: strictIdentityBlockNumber(
+          options.identityBlockTag,
+          latest,
+        ),
+        pools: identityCandidates,
+      });
+      identityResult = {
+        accepted: strictResult.accepted as unknown as AttestedPoolEntry<PoolEntry>[],
+        rejected: strictResult.rejected as unknown as RejectedPoolIdentity[],
+      };
+    } else {
+      identityResult = await attestPoolIdentities(
+        identityBackend,
+        identityCandidates,
+        {
+          identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+          admissionPolicy: options.admissionPolicy,
+        },
+      );
+    }
   } finally {
     if (identityTimer !== null) clearTimeout(identityTimer);
   }

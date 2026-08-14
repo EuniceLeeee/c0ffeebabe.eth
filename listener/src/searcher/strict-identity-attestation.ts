@@ -357,3 +357,88 @@ function matchFor(
   }
   return matches[0] ?? null;
 }
+
+
+/**
+ * F6 Pair B: shared strict attestation entry for the still-legacy discovery
+ * consumers (active-pool-discovery, live-discovery-coordinator,
+ * build-active-pool-universe). Accepts an ethers-shaped read provider pinned
+ * by the caller, resolves the canonical source hash for the given block, and
+ * runs the same catalog + plugin lifecycle attestation as startup. The
+ * framework only executes catalog-issued capabilities; no protocol semantics.
+ */
+export async function attestPoolsStrictFromProvider<Pool extends {
+  readonly address: string;
+  readonly adapter?: string;
+}>(input: {
+  readonly provider: {
+    call(transaction: { readonly to: string; readonly data: string }, blockTag?: number): Promise<string>;
+    getCode(address: string, blockTag?: number): Promise<string>;
+    getStorage(address: string, slot: string, blockTag?: number): Promise<string>;
+    getLogs?(filter: {
+      readonly address?: string;
+      readonly fromBlock?: number;
+      readonly toBlock?: number;
+      readonly topics?: readonly (string | null)[];
+    }): Promise<readonly {
+      readonly address: string;
+      readonly topics: readonly string[];
+      readonly data: string;
+      readonly transactionHash?: string;
+    }[]>;
+    getTransactionReceipt?(transactionHash: string): Promise<{
+      readonly blockNumber?: number;
+      readonly logs: readonly {
+        readonly address: string;
+        readonly topics: readonly string[];
+        readonly data: string;
+        readonly transactionHash?: string;
+      }[];
+    } | null>;
+    traceTransaction?(transactionHash: string): Promise<unknown>;
+  };
+  readonly blockNumber: number;
+  readonly pools: readonly Pool[];
+}): Promise<{
+  readonly accepted: readonly StrictAttestedPool<Pool>[];
+  readonly rejected: readonly StrictRejectedPool<Pool>[];
+}> {
+  const provider = input.provider as unknown as StrictIdentityProvider;
+  const hash = await readBlockHash(provider, input.blockNumber);
+  return attestPoolIdentitiesStrict({
+    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+    provider,
+    runtime: createMinimalIdentityRuntime(provider),
+    source: Object.freeze({
+      number: input.blockNumber,
+      hash,
+      generation: input.blockNumber,
+    }),
+    pools: input.pools,
+    adapterForLineage: (lineageId) => legacyLabelsForLineage(lineageId),
+  });
+}
+
+async function readBlockHash(
+  provider: StrictIdentityProvider,
+  blockNumber: number,
+): Promise<string> {
+  // The strict provider shape has no getBlock; use the call surface via
+  // eth_getBlockByNumber through the provider's raw transport when present.
+  const raw = (provider as unknown as {
+    send?(method: string, params: unknown[]): Promise<unknown>;
+  });
+  if (raw.send !== undefined) {
+    const block = await raw.send("eth_getBlockByNumber", [
+      ethers.toQuantity(blockNumber),
+      false,
+    ]);
+    const record = block as { readonly hash?: string } | null;
+    if (record !== null && typeof record?.hash === "string" && /^0x[0-9a-fA-F]{64}$/.test(record.hash)) {
+      return record.hash.toLowerCase();
+    }
+  }
+  // Last-resort canonical placeholder: an all-zero hash fails any source
+  // binding downstream, so callers must provide a hash-capable provider.
+  return "0x" + "0".repeat(64);
+}

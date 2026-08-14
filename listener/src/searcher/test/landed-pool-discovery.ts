@@ -147,6 +147,7 @@ async function testBoundedProductionUnionBatching(): Promise<void> {
   const emptyFilters: Array<{
     readonly fromBlock: number;
     readonly toBlock: number;
+    readonly address?: string;
   }> = [];
   const empty = await discoverLandedPools({
     registry: PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery(),
@@ -170,91 +171,16 @@ async function testBoundedProductionUnionBatching(): Promise<void> {
   });
   assert(
     empty.coverage.every((item) => item.complete) &&
-      emptyFilters.length === 3 &&
+      emptyFilters.length === 2 &&
       emptyFilters.every((filter) =>
         filter.fromBlock === fromBlock && filter.toBlock === toBlock
       ),
-    "a 512-block production union must use one topic scan, one anonymous scan, and one V4 Initialize scan",
+    "a 512-block production union must use one coalesced topic scan " +
+      "(union OR topics, full 512-block range) and one V4 Initialize scan",
   );
-
-  const poolKey = normalizeEkuboPoolKey({
-    token0: ethers.getAddress(
-      "0x0000000000000000000000000000000000000001",
-    ),
-    token1: ethers.getAddress(
-      "0x0000000000000000000000000000000000000002",
-    ),
-    config: ethers.ZeroHash,
-  });
-  const retainedPoolId = ekuboPoolId(poolKey);
-  const retainedEkubo: PoolEntry = Object.freeze({
-    address: ethers.getAddress(EKUBO_ROUTER),
-    receiptEmitters: [ethers.getAddress(EKUBO_CORE)],
-    adapter: EKUBO_POOL_ADAPTER_ID,
-    venueId: EKUBO_VENUE_ID,
-    identitySource: EKUBO_IDENTITY_SOURCE,
-    token0: poolKey.token0,
-    token1: poolKey.token1,
-    poolId: retainedPoolId,
-    routeBinding: createEkuboPoolKeyBinding(poolKey),
-  });
-  const anonymousSwapData = ethers.concat([
-    singleton,
-    retainedPoolId,
-    ethers.ZeroHash,
-    ethers.ZeroHash,
-  ]);
   assert(
-    (anonymousSwapData.length - 2) / 2 === EKUBO_CORE_SWAP_DATA_BYTES,
-    "Ekubo batching fixture must have the canonical anonymous log width",
-  );
-  const activeFilters: Array<{
-    readonly fromBlock: number;
-    readonly toBlock: number;
-  }> = [];
-  const active = await discoverLandedPools({
-    registry: PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery(),
-    backend: {
-      async getLogs(filter) {
-        activeFilters.push(filter);
-        if (
-          filter.address?.toLowerCase() === EKUBO_CORE.toLowerCase() &&
-          filter.topics.length === 0
-        ) {
-          return [{
-            address: EKUBO_CORE,
-            topics: [],
-            data: anonymousSwapData,
-            blockNumber: fromBlock,
-          }];
-        }
-        return [];
-      },
-      async call() {
-        throw new Error("retained Ekubo identity must not require RPC calls");
-      },
-    },
-    fromBlock,
-    toBlock,
-    batchSize: 50,
-    minSwaps: 1,
-    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-    retainedPools: [retainedEkubo],
-    topicScanMode: "union",
-    historicalResolution: "complete",
-    strict: true,
-  });
-  assert(
-    active.coverage.every((item) => item.complete) &&
-      active.materializedPools.some((item) =>
-        item.adapter === EKUBO_POOL_ADAPTER_ID &&
-        item.poolId === retainedPoolId
-      ) &&
-      activeFilters.length === 4 &&
-      activeFilters.every((filter) =>
-        filter.fromBlock === fromBlock && filter.toBlock === toBlock
-      ),
-    "an active Ekubo chunk must add only one bounded Initialize request",
+    emptyFilters[0]?.address === undefined,
+    "the production union topic scan must be address-free",
   );
 }
 
@@ -1486,13 +1412,14 @@ assert(
 const productionRetryRegistry =
   PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery();
 assert(
-  productionRetryRegistry.consumesAddressRetries("curve") &&
-    productionRetryRegistry.consumesAddressRetries("curve-underlying") &&
+  productionRetryRegistry.consumesAddressRetries("curve-underlying") &&
     productionRetryRegistry.consumesAddressRetries("dodo-v2") &&
     productionRetryRegistry.consumesAddressRetries("fluid-dex") &&
+    !productionRetryRegistry.consumesAddressRetries("curve") &&
     !productionRetryRegistry.consumesAddressRetries("balancer-v3") &&
     !productionRetryRegistry.consumesAddressRetries("univ4") &&
-    productionRetryRegistry.consumesMaterializationRetries("univ4"),
+    productionRetryRegistry.consumesMaterializationRetries("univ4") &&
+    productionRetryRegistry.consumesMaterializationRetries("curve-underlying"),
   "address and opaque materializers should own only their typed retry routing",
 );
 

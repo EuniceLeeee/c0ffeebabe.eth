@@ -109,7 +109,15 @@ import {
   PRODUCTION_IDENTITY_ADMISSION,
   type IdentityAdmissionPolicy,
 } from "./venues/admission.js";
-import type { IdentityResolverRegistry } from "./venues/identity.js";
+import type {
+  AttestedPoolEntry,
+  IdentityResolverRegistry,
+  PoolIdentityFailureReason,
+} from "./venues/identity.js";
+import {
+  attestPoolsStrictFromProvider,
+  type StrictAttestedPool,
+} from "./strict-identity-attestation.js";
 import type { LandedPoolDiscoveryCoverage } from "./venues/landed-pool-discovery.js";
 import {
   PRODUCTION_ADAPTER_FAMILIES,
@@ -625,6 +633,11 @@ export async function createLiveDiscoveryCoordinator(
                   identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
                   seedEntries: liveRegistry,
                   admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+                  // F6 Pair B: the strict lane attests identity through the
+                  // generated catalog + plugin lifecycle instead of the
+                  // legacy per-adapter resolver registry.
+                  strict: options.strict,
+                  provider,
                 }),
               ),
             )
@@ -2461,6 +2474,54 @@ export async function createLiveDiscoveryCoordinator(
 const DEX_IDENTITY_RETRY_TIMEOUT_MS = 3_000;
 
 /**
+ * F6 Pair B: strict startup DEX identity retry. The remaining candidates are
+ * attested through the generated catalog + plugin nomination/lifecycle at the
+ * pinned source block; retryable candidates (no observation / no catalog
+ * match / identity unverified) stay explicit instead of being dropped.
+ */
+async function strictStartupDexIdentityRetryStage(input: {
+  readonly currentN: number;
+  readonly provider: ethers.JsonRpcProvider;
+  readonly remaining: readonly PoolEntry[];
+}): Promise<StartupDexIdentityRetryStage<PoolEntry>> {
+  const strictResult = await attestPoolsStrictFromProvider({
+    provider: input.provider as never,
+    blockNumber: input.currentN,
+    pools: input.remaining,
+  });
+  const accepted = strictResult.accepted as unknown as AttestedPoolEntry<PoolEntry>[];
+  const remaining = input.remaining.filter((pool) =>
+    !strictResult.accepted.some((entry) =>
+      entry.address.toLowerCase() === pool.address.toLowerCase()
+    )
+  );
+  return Object.freeze({
+    sourceBlock: input.currentN,
+    accepted: Object.freeze(accepted),
+    remaining: Object.freeze(remaining),
+    permanentlyRejected: Object.freeze(
+      strictResult.rejected
+        .filter((entry) =>
+          entry.address !== undefined && entry.reason !== undefined
+        )
+        .map((entry) => ({
+          candidate: {
+            address: entry.address,
+            adapter: entry.adapter ?? "",
+          } as PoolEntry,
+          rejection: {
+            address: entry.address,
+            adapter: entry.adapter ?? "",
+            reason: entry.reason as PoolIdentityFailureReason,
+          },
+        })),
+    ),
+  });
+}
+
+/**
+
+/**
  * A retry generation must not inherit the enclosing pass's entire deadline.
  * Keep unresolved identities explicit for the next block while cancelling the
  * actual HTTP requests, so healthy adapter families can still reach pricing.
@@ -2472,7 +2533,17 @@ async function prepareBoundedDexIdentityRetry(input: {
   readonly identityRegistry: IdentityResolverRegistry;
   readonly seedEntries: readonly PoolEntry[];
   readonly admissionPolicy: IdentityAdmissionPolicy;
+  /** F6 Pair B: attest through the generated catalog when set. */
+  readonly strict?: boolean;
+  readonly provider?: ethers.JsonRpcProvider;
 }): Promise<StartupDexIdentityRetryStage<PoolEntry>> {
+  if (input.strict === true && input.provider !== undefined) {
+    return strictStartupDexIdentityRetryStage({
+      currentN: input.currentN,
+      provider: input.provider,
+      remaining: input.remaining,
+    });
+  }
   if (input.remaining.length === 0) {
     return prepareStartupDexIdentityRetryStage({
       currentN: input.currentN,
