@@ -4639,8 +4639,8 @@ async function warmCacheRejectsFingerprintMismatchedEntries(): Promise<void> {
     lane: "swap",
     capability: {
       ...univ2BlockScanState,
-      adapterSchemaRevision: "test-r1",
     },
+    strictDefinitionBoundaryHash: "test-r1",
     ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
   });
   const familyR2 = registerBlockScanStateFamily({
@@ -4648,8 +4648,8 @@ async function warmCacheRejectsFingerprintMismatchedEntries(): Promise<void> {
     lane: "swap",
     capability: {
       ...univ2BlockScanState,
-      adapterSchemaRevision: "test-r2",
     },
+    strictDefinitionBoundaryHash: "test-r2",
     ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
   });
   class CountingBackend implements BlockScanStateReadBackend {
@@ -4732,12 +4732,12 @@ async function schemaRevisionChangeForcesDirectRead(): Promise<void> {
     lane: "swap",
     capability: {
       ...univ2BlockScanState,
-      adapterSchemaRevision: "revision-v1",
       compileStateInstance(input: CompileStateInstanceInput) {
         compiles.r1++;
         return univ2BlockScanState.compileStateInstance!(input);
       },
     },
+    strictDefinitionBoundaryHash: "revision-v1",
     ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
   });
   const familyR2 = registerBlockScanStateFamily({
@@ -4745,12 +4745,12 @@ async function schemaRevisionChangeForcesDirectRead(): Promise<void> {
     lane: "swap",
     capability: {
       ...univ2BlockScanState,
-      adapterSchemaRevision: "revision-v2",
       compileStateInstance(input: CompileStateInstanceInput) {
         compiles.r2++;
         return univ2BlockScanState.compileStateInstance!(input);
       },
     },
+    strictDefinitionBoundaryHash: "revision-v2",
     ownsEdge: (edgeValue) => edgeValue.adapterId === "univ2-swap",
   });
   class CountingBackend implements BlockScanStateReadBackend {

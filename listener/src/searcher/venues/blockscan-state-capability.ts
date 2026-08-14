@@ -1385,13 +1385,15 @@ export interface GraphChangeSet {
  */
 export function schemaInputFingerprint(input: {
   readonly key: StateInstanceKey;
-  readonly schemaRevision: string;
+  readonly schemaRevision?: string;
   readonly staticBindingFingerprint: string;
   readonly sharedFingerprint: string;
 }): string {
   return deterministicHash({
     key: input.key,
-    schemaRevision: input.schemaRevision,
+    ...(input.schemaRevision === undefined
+      ? {}
+      : { schemaRevision: input.schemaRevision }),
     staticBindingFingerprint: input.staticBindingFingerprint,
     sharedFingerprint: input.sharedFingerprint,
   });
