@@ -6,6 +6,7 @@ import type {
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import { DODO_V2_SWAP_TOPIC } from "../dodo-v2-abi.js";
 import { lowerAddress } from "../univ2-family/codec.js";
+import { findRecentLogHit } from "../../recent-log-lookup.js";
 
 /**
  * Plugin-owned nomination: graph pool entries are opaque nominations. The
@@ -19,20 +20,18 @@ export async function nominateDodoV2(input: {
   readonly provider: CaptureNominationProvider;
 }): Promise<readonly UnifiedObservation[]> {
   const results: UnifiedObservation[] = [];
-  const fromBlock = Math.max(0, input.source.number - NOMINATION_LOG_LOOKBACK);
   for (const nomination of input.nominations) {
     const opaque = nomination.opaque as Readonly<Record<string, unknown>>;
     if (!isDodoOpaqueLabel(opaque)) continue;
     const pool = lowerAddress(nomination.address);
     try {
-      const logs = await input.provider.getLogs({
+      const hit = await findRecentLogHit({
+        provider: input.provider,
+        source: input.source,
         address: pool,
-        fromBlock,
-        toBlock: input.source.number,
         topics: [DODO_V2_SWAP_TOPIC.toLowerCase()],
       });
-      const hit = logs.at(-1);
-      if (hit === undefined) continue;
+      if (hit === null) continue;
       results.push(Object.freeze({
         kind: "log" as const,
         source: input.source,
@@ -49,8 +48,6 @@ export async function nominateDodoV2(input: {
   }
   return Object.freeze(results);
 }
-
-const NOMINATION_LOG_LOOKBACK = 100_000;
 
 function isDodoOpaqueLabel(
   opaque: Readonly<Record<string, unknown>>,

@@ -8,6 +8,7 @@ import {
   UNIV3_SWAP_TOPIC,
 } from "../../swaps/univ3-abi.js";
 import { lowerAddress } from "../univ2-family/codec.js";
+import { findRecentLogHit } from "../../recent-log-lookup.js";
 
 /**
  * Plugin-owned nomination: graph pool entries are opaque nominations. The
@@ -22,20 +23,18 @@ export async function nominateUniv3(input: {
   readonly provider: CaptureNominationProvider;
 }): Promise<readonly UnifiedObservation[]> {
   const results: UnifiedObservation[] = [];
-  const fromBlock = Math.max(0, input.source.number - NOMINATION_LOG_LOOKBACK);
   for (const nomination of input.nominations) {
     const opaque = nomination.opaque as Readonly<Record<string, unknown>>;
     if (!isUniv3OpaqueLabel(opaque)) continue;
     const pool = lowerAddress(nomination.address);
     try {
-      const logs = await input.provider.getLogs({
+      const hit = await findRecentLogHit({
+        provider: input.provider,
+        source: input.source,
         address: pool,
-        fromBlock,
-        toBlock: input.source.number,
         topics: [UNIV3_SWAP_TOPIC.toLowerCase()],
       });
-      const hit = logs.at(-1);
-      if (hit === undefined) continue;
+      if (hit === null) continue;
       results.push(Object.freeze({
         kind: "log" as const,
         source: input.source,
@@ -52,8 +51,6 @@ export async function nominateUniv3(input: {
   }
   return Object.freeze(results);
 }
-
-const NOMINATION_LOG_LOOKBACK = 100_000;
 
 function isUniv3OpaqueLabel(
   opaque: Readonly<Record<string, unknown>>,

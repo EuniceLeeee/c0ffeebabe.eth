@@ -11,6 +11,7 @@ import {
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import { ANGSTROM_ADAPTER_SWAP_SELECTOR } from "../angstrom-attestation.js";
 import { canonicalPoolId } from "../univ4-family/codec.js";
+import { findRecentLogHit } from "../../recent-log-lookup.js";
 
 /**
  * Plugin-owned nomination: graph pool entries carry the real poolId as an
@@ -26,7 +27,6 @@ export async function nominateAngstromV4(input: {
   readonly provider: CaptureNominationProvider;
 }): Promise<readonly UnifiedObservation[]> {
   const results: UnifiedObservation[] = [];
-  const fromBlock = Math.max(0, input.source.number - NOMINATION_LOG_LOOKBACK);
   const manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
   for (const nomination of input.nominations) {
     const opaque = nomination.opaque as Readonly<Record<string, unknown>>;
@@ -34,17 +34,16 @@ export async function nominateAngstromV4(input: {
     const poolId = opaquePoolId(opaque);
     if (poolId === null) continue;
     try {
-      const logs = await input.provider.getLogs({
+      const hit = await findRecentLogHit({
+        provider: input.provider,
+        source: input.source,
         address: ADDR.UNISWAP_V4_POOL_MANAGER,
-        fromBlock,
-        toBlock: input.source.number,
         topics: [
           UNIV4_SWAP_TOPIC.toLowerCase(),
           poolId.toLowerCase(),
         ],
       });
-      const hit = logs.at(-1);
-      if (hit === undefined || hit.transactionHash === undefined) continue;
+      if (hit === null || hit.transactionHash === undefined) continue;
       if (input.provider.traceTransaction === undefined) continue;
       const trace = await input.provider.traceTransaction(
         hit.transactionHash,
@@ -97,8 +96,6 @@ function findSwapFrame(
   }
   return null;
 }
-
-const NOMINATION_LOG_LOOKBACK = 100_000;
 
 function isAngstromOpaqueLabel(
   opaque: Readonly<Record<string, unknown>>,
