@@ -171,19 +171,17 @@ export const univ4PoolIdentityMaterializer = Object.freeze({
               if (parsed) resolved.set(parsed.poolId, parsed);
               else unresolved.push(poolIds[index]);
             }
-            const historical = await resolveV4InitsBackward(
-              context.backend,
-              ADDR.UNISWAP_V4_POOL_MANAGER,
-              UNIV4_INITIALIZE_TOPIC,
-              unresolved,
-              context.toBlock,
-              100_000,
-              bounded ? V4_HOT_INITIALIZE_LOOKBACK_BLOCKS : undefined,
-              signal,
+            // Complete rebuild lane: pool identity comes only from the
+            // retained/window Initialize set plus PositionManager reverse
+            // lookup. The deep historical Initialize backfill is deliberately
+            // not used here (local reth retention is too shallow; archive RPC
+            // is not part of the rebuild contract). Unresolved PoolIds stay
+            // retryable instead of blocking the rebuild.
+            console.log(
+              `[univ4-materializer] missing=${poolIds.length} ` +
+                `positionManagerHits=${resolved.size} ` +
+                `unresolved=${unresolved.length}`,
             );
-            for (const parsed of historical.values()) {
-              resolved.set(parsed.poolId, parsed);
-            }
             return [...resolved.values()];
           } catch (error) {
             if (context.signal?.aborted) {
@@ -390,6 +388,10 @@ export async function buildUniV4PoolEntries(
 
   const qualifying = [...activity.entries()]
     .filter(([, item]) => item.count >= minSwaps);
+  console.log(
+    `[univ4-materializer] swapLogs=${swapLogs.length} ` +
+      `uniquePoolIds=${activity.size} qualifying=${qualifying.length}`,
+  );
   const resolved = new Map<string, { parsed: ParsedV4Initialize; source: string }>();
   for (const [poolId] of qualifying) {
     const parsed = initByPoolId.get(poolId);
