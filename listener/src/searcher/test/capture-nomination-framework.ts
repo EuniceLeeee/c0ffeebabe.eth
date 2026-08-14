@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import {
   executeCatalogCaptureNominations,
 } from "../venues/capture-materialization.js";
+import { familyId } from "../venues/adapter-family-identifiers.js";
 import type {
   CaptureNominationProvider,
   UnifiedObservation,
 } from "../venues/adapter-family-plugin.js";
 import type { CanonicalSource } from "../venues/adapter-request-program.js";
 import type { FamilyCapabilityCatalog } from "../venues/family-capability-catalog.js";
+import type { FamilyId } from "../venues/adapter-family-identifiers.js";
+
+const SYNTHETIC_FACTORY_LOG = familyId("synthetic:factory-log");
+const SYNTHETIC_NO_NOMINATION = familyId("synthetic:no-nomination");
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 42,
@@ -30,7 +35,7 @@ const OTHER_FAMILY_ADDRESS = `0x${"77".repeat(20)}`;
  */
 const syntheticFamily = Object.freeze({
   plugin: Object.freeze({
-    manifest: Object.freeze({ familyId: "synthetic:factory-log" as const }),
+    manifest: Object.freeze({ familyId: SYNTHETIC_FACTORY_LOG }),
     discovery: Object.freeze({
       sources: Object.freeze(["factory-log" as const]),
       logPatterns: Object.freeze([Object.freeze({
@@ -56,6 +61,7 @@ const syntheticFamily = Object.freeze({
           readonly source: CanonicalSource;
           readonly provider: CaptureNominationProvider;
         }) => {
+          nominationCalls += 1;
           const results: UnifiedObservation[] = [];
           for (const nomination of input.nominations) {
             const opaque = nomination.opaque as Readonly<Record<string, unknown>>;
@@ -101,7 +107,7 @@ const syntheticFamily = Object.freeze({
  */
 const nominationlessFamily = Object.freeze({
   plugin: Object.freeze({
-    manifest: Object.freeze({ familyId: "synthetic:no-nomination" as const }),
+    manifest: Object.freeze({ familyId: SYNTHETIC_NO_NOMINATION }),
     discovery: Object.freeze({
       sources: Object.freeze(["observed-call" as const]),
       callPatterns: Object.freeze([Object.freeze({
@@ -131,6 +137,8 @@ const catalog = Object.freeze({
     })]);
   },
 }) as unknown as FamilyCapabilityCatalog;
+
+let nominationCalls = 0;
 
 async function main(): Promise<void> {
   const provider: CaptureNominationProvider = {
@@ -172,6 +180,12 @@ async function main(): Promise<void> {
   assert.equal(observations[0]?.kind, "log");
   assert.equal(observations[0]?.transactionHash, TX.toLowerCase());
 
+  // Per-Family early stop: the plugin was called once per candidate until
+  // the first admitted one; with two candidates and the first admitting,
+  // only one call happened for this Family (no all-pools scan).
+  assert.equal(nominationCalls, 1);
+  nominationCalls = 0;
+
   // Fail-closed: an observation that passes nomination but fails
   // decodeCandidate must be rejected by the executor.
   const rejectingCatalog = Object.freeze({
@@ -182,6 +196,7 @@ async function main(): Promise<void> {
       patternId: "synthetic-pair-created",
     })]),
   }) as unknown as FamilyCapabilityCatalog;
+  nominationCalls = 0;
   await assert.rejects(
     executeCatalogCaptureNominations({
       catalog: rejectingCatalog,
@@ -205,6 +220,25 @@ async function main(): Promise<void> {
     }),
     /does not admit through catalog matches \+ decodeCandidate/,
   );
+
+  // alreadyAdmitted Families are skipped entirely (admit-as-you-go).
+  nominationCalls = 0;
+  const skipped = await executeCatalogCaptureNominations({
+    catalog,
+    source: SOURCE,
+    nominations: Object.freeze([
+      Object.freeze({
+        address: POOL,
+        opaque: Object.freeze({ adapter: "synthetic-factory" }),
+      }),
+    ]),
+    provider,
+    alreadyAdmitted: new Set<FamilyId>([
+      syntheticFamily.plugin.manifest.familyId as FamilyId,
+    ]),
+  });
+  assert.equal(skipped.length, 0);
+  assert.equal(nominationCalls, 0);
 
   console.log("capture nomination framework PASS");
 }

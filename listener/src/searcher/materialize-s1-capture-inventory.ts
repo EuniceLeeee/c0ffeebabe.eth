@@ -19,8 +19,6 @@ import {
   executeCatalogCaptureNominations,
 } from "./venues/capture-materialization.js";
 
-const EIP1967_IMPLEMENTATION_SLOT =
-  "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 const RPC_URL = process.env.S1_CAPTURE_RPC_URL ?? "http://127.0.0.1:8545";
 
 interface RawArtifacts {
@@ -88,18 +86,28 @@ export async function materializeCaptureInventory(input: {
   readonly rawArtifacts: RawArtifacts;
   readonly provider: CaptureInventoryProvider;
 }): Promise<CaptureInventoryFile> {
-  const observations = [
-    ...await transactionObservations(input),
-    ...await executeCatalogCaptureNominations({
+  const byFamily = new Map<FamilyId, CaptureInventoryEntry>();
+  // Phase 1: verified transaction evidence first (admit as we go).
+  admitObservations(
+    input.catalog,
+    await transactionObservations(input),
+    byFamily,
+  );
+  // Phase 2: plugin-owned nomination reverse materialization, one candidate
+  // at a time with per-Family early stop; already-admitted Families skip.
+  admitObservations(
+    input.catalog,
+    await executeCatalogCaptureNominations({
       catalog: input.catalog,
       source: input.source,
-      nominations: opaquePoolNominations(input.rawArtifacts.graph as import("./venues/canonical-value.js").CanonicalValue),
+      nominations: opaquePoolNominations(
+        input.rawArtifacts.graph as import("./venues/canonical-value.js").CanonicalValue,
+      ),
       provider: nominationProvider(input.provider),
+      alreadyAdmitted: new Set(byFamily.keys()),
     }),
-    ...await addressObservations(input),
-  ];
-  const byFamily = new Map<FamilyId, CaptureInventoryEntry>();
-  admitObservations(input.catalog, observations, byFamily);
+    byFamily,
+  );
   const discoveryIds = input.catalog.listAll().flatMap((family) =>
     "discovery" in family.plugin ? [family.plugin.manifest.familyId] : []
   );
@@ -151,67 +159,6 @@ function admitObservations(
   }
 }
 
-async function addressObservations(input: {
-  readonly catalog: FamilyCapabilityCatalog;
-  readonly source: CanonicalSource;
-  readonly rawArtifacts: RawArtifacts;
-  readonly provider: CaptureInventoryProvider;
-}): Promise<readonly UnifiedObservation[]> {
-  const observations: UnifiedObservation[] = [];
-  const nominations = rawAddressNominations(
-    input.rawArtifacts,
-    input.catalog,
-  );
-  const groups = new Map<FamilyId, typeof nominations>();
-  for (const nomination of nominations) {
-    const group = groups.get(nomination.familyId) ?? [];
-    groups.set(nomination.familyId, Object.freeze([...group, nomination]));
-  }
-  await Promise.all([...groups.entries()].map(async ([familyId, candidates]) => {
-    const family = input.catalog.forStrictFamily(familyId);
-    if (!("discovery" in family.plugin)) return;
-    const discovery = family.plugin.discovery;
-    const fingerprints = Object.freeze((discovery.addressSurfaces ?? [])
-      .filter((pattern) => pattern.kind === "interface")
-      .map((pattern) => pattern.fingerprint));
-    for (const nomination of candidates) {
-      try {
-        const [code, implementationWord] = await Promise.all([
-          input.provider.getCode(nomination.address, input.source.number),
-          input.provider.getStorage(
-            nomination.address,
-            EIP1967_IMPLEMENTATION_SLOT,
-            input.source.number,
-          ),
-        ]);
-        if (!ethers.isHexString(code) || code === "0x") continue;
-        const observation = Object.freeze({
-          kind: "address-surface" as const,
-          source: input.source,
-          address: nomination.address,
-          codeHash: ethers.keccak256(code),
-          implementationWord: ethers.zeroPadValue(implementationWord, 32)
-            .toLowerCase(),
-          interfaceFingerprints: fingerprints,
-        });
-        const matches = input.catalog.matches(observation).filter((match) =>
-          match.familyId === familyId &&
-          discovery.decodeCandidate({
-            observation,
-            matchedPatternId: match.patternId,
-          }) !== null
-        );
-        if (matches.length === 0) continue;
-        observations.push(observation);
-        break;
-      } catch {
-        // A raw nomination is not authority. One unreadable address must not
-        // prevent the next plugin-declared candidate from being tested.
-      }
-    }
-  }));
-  return Object.freeze(observations);
-}
 
 async function transactionObservations(input: {
   readonly catalog: FamilyCapabilityCatalog;
@@ -419,51 +366,8 @@ function nominationProvider(
   };
 }
 
-function rawAddressNominations(
-  raw: RawArtifacts,
-  catalog: FamilyCapabilityCatalog,
-): readonly { readonly familyId: FamilyId; readonly address: string }[] {
-  const values = new Map<string, {
-    readonly familyId: FamilyId;
-    readonly address: string;
-  }>();
-  const visit = (value: unknown, inherited: FamilyId | null): void => {
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item, inherited);
-      return;
-    }
-    if (value === null || typeof value !== "object") return;
-    const record = value as Readonly<Record<string, unknown>>;
-    const resolved = Object.values(record).reduce<FamilyId | null>(
-      (current, item) => current ?? (
-        typeof item === "string" ? catalogFamilyForLabel(catalog, item) : null
-      ),
-      inherited,
-    );
-    if (resolved !== null && familyHasAddressSurface(catalog, resolved)) {
-      for (const item of Object.values(record)) {
-        if (typeof item !== "string" || !ethers.isAddress(item)) continue;
-        const address = ethers.getAddress(item).toLowerCase();
-        values.set(`${resolved}\0${address}`, { familyId: resolved, address });
-      }
-    }
-    for (const item of Object.values(record)) visit(item, resolved);
-  };
-  visit(raw, null);
-  return Object.freeze([...values.values()].sort((left, right) =>
-    left.familyId.localeCompare(right.familyId) ||
-    left.address.localeCompare(right.address)
-  ));
-}
 
-function familyHasAddressSurface(
-  catalog: FamilyCapabilityCatalog,
-  familyId: FamilyId,
-): boolean {
-  const family = catalog.forStrictFamily(familyId);
-  return "discovery" in family.plugin &&
-    (family.plugin.discovery.addressSurfaces?.length ?? 0) > 0;
-}
+
 
 function catalogFamilyForLabel(
   catalog: FamilyCapabilityCatalog,
@@ -526,20 +430,6 @@ function rawTransactionNominations(
   ));
 }
 
-function walk(
-  value: CanonicalValue,
-  visit: (key: string, value: CanonicalValue) => void,
-  key = "",
-): void {
-  visit(key, value);
-  if (Array.isArray(value)) {
-    for (const item of value) walk(item, visit);
-  } else if (value !== null && typeof value === "object") {
-    for (const [childKey, child] of Object.entries(value)) {
-      walk(child, visit, childKey);
-    }
-  }
-}
 
 async function main(): Promise<void> {
   const [graphPath, cachePath, outputPath] = process.argv.slice(2);
@@ -574,6 +464,40 @@ async function main(): Promise<void> {
         { tracer: "callTracer" },
       ]),
     };
+    const counters = {
+      call: 0,
+      getCode: 0,
+      getStorage: 0,
+      getLogs: 0,
+      getTransactionReceipt: 0,
+      traceTransaction: 0,
+    };
+    const countedProvider: CaptureInventoryProvider = {
+      call: async (transaction, block) => {
+        counters.call += 1;
+        return provider.call(transaction, block);
+      },
+      getCode: async (address, block) => {
+        counters.getCode += 1;
+        return provider.getCode(address, block);
+      },
+      getStorage: async (address, slot, block) => {
+        counters.getStorage += 1;
+        return provider.getStorage(address, slot, block);
+      },
+      getLogs: async (filter) => {
+        counters.getLogs += 1;
+        return provider.getLogs(filter);
+      },
+      getTransactionReceipt: async (hash) => {
+        counters.getTransactionReceipt += 1;
+        return provider.getTransactionReceipt(hash);
+      },
+      traceTransaction: async (hash) => {
+        counters.traceTransaction += 1;
+        return provider.traceTransaction(hash);
+      },
+    };
     const rawArtifacts = Object.freeze({
       graph: JSON.parse(await readFile(graphPath, "utf8")) as CanonicalValue,
       protocolCache: JSON.parse(await readFile(cachePath, "utf8")) as
@@ -583,13 +507,25 @@ async function main(): Promise<void> {
       catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
       source,
       rawArtifacts,
-      provider,
+      provider: countedProvider,
     });
     await writeFile(outputPath, `${JSON.stringify(inventory, null, 2)}\n`);
     process.stdout.write(
       `catalog capture inventory written: entries=${inventory.entries.length} ` +
         `unresolved=${inventory.unresolved.length}\n`,
     );
+    process.stdout.write(
+      `rpc counts: ${JSON.stringify(counters)}\n`,
+    );
+    for (const entry of inventory.entries) {
+      process.stdout.write(
+        `admitted ${entry.familyId} ${entry.observation.kind} ` +
+          `${entry.candidateIdentity}\n`,
+      );
+    }
+    for (const unresolved of inventory.unresolved) {
+      process.stdout.write(`unresolved ${unresolved.familyId}\n`);
+    }
   } finally {
     rpc.destroy();
   }

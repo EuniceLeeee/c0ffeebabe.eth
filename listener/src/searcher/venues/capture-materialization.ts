@@ -38,46 +38,56 @@ interface CreditCaptureBinding extends RouteCaptureBinding {
  */
 /**
  * Executes the catalog-issued nomination capability for every Family plugin
- * that declares one. The framework feeds opaque pool nominations verbatim:
- * each plugin filters them by its own opaque knowledge and/or on-chain
- * verification, and returns real observations which the central executor then
- * admits through `catalog.matches` + `decodeCandidate`. An observation that
- * matches a Family but fails decodeCandidate is a fail-closed rejection, not
- * a silent drop.
+ * that declares one. The framework feeds opaque pool nominations to each
+ * plugin one candidate at a time: the plugin either re-materializes a real
+ * observation for that candidate or returns nothing, and the first candidate
+ * whose observation passes `catalog.matches` + `decodeCandidate` stops the
+ * Family (per-Family early stop). Cost is therefore per-Family constant RPC,
+ * not nominations x pools. A nomination that matches a Family but fails
+ * decodeCandidate is a fail-closed rejection, not a silent drop. Families
+ * already admitted elsewhere (e.g. verified tx evidence) can be skipped with
+ * `alreadyAdmitted`.
  */
 export async function executeCatalogCaptureNominations(input: {
   readonly catalog: FamilyCapabilityCatalog;
   readonly source: CanonicalSource;
   readonly nominations: readonly CaptureNominationInput[];
   readonly provider: CaptureNominationProvider;
+  readonly alreadyAdmitted?: ReadonlySet<FamilyId>;
 }): Promise<readonly UnifiedObservation[]> {
   const observations: UnifiedObservation[] = [];
+  const admitted = new Set(input.alreadyAdmitted ?? []);
   for (const family of input.catalog.listAll()) {
     const plugin = family.plugin;
     if (!("discovery" in plugin)) continue;
     const nominate = plugin.discovery.nominate;
     if (nominate === undefined) continue;
-    const derived = await nominate.nominate({
-      nominations: input.nominations,
-      source: input.source,
-      provider: input.provider,
-    });
-    for (const observation of derived) {
+    if (admitted.has(plugin.manifest.familyId)) continue;
+    for (const nomination of input.nominations) {
+      const derived = await nominate.nominate({
+        nominations: Object.freeze([nomination]),
+        source: input.source,
+        provider: input.provider,
+      });
+      if (derived.length === 0) continue;
+      const observation = derived[0];
       const matches = input.catalog.matches(observation);
-      const admitted = matches.some((match) =>
+      const accepted = matches.some((match) =>
         match.familyId === plugin.manifest.familyId &&
         plugin.discovery.decodeCandidate({
           observation,
           matchedPatternId: match.patternId,
         }) !== null
       );
-      if (!admitted) {
+      if (!accepted) {
         throw new Error(
           `nomination for ${plugin.manifest.familyId} produced an observation ` +
             "that does not admit through catalog matches + decodeCandidate",
         );
       }
       observations.push(observation);
+      admitted.add(plugin.manifest.familyId);
+      break;
     }
   }
   return Object.freeze(observations);
