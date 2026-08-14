@@ -516,3 +516,19 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   21,256**（修复前 6,474 边）。池数与边数仍约为旧基准一半，缺口
   结构性（本地 reth 日志保留 7-14 天，univ4 历史池需 400 万块
   backfill + retained 累积）。方向决策仍待用户。
+- **retained 上限量化（28185c15 后）**：retained 文件（19605 池）按
+  adapter 分布 univ2 5726 / univ3 3238 / univ4 10026 / dodo 613 /
+  angstrom 2。univ4 retained 10,026 池中 **2 天窗口内活跃仅 2,548
+  （25%）**——其余 ~7,500 历史冷池在 strict 路径下无近期链上观测，
+  无法验证。**retained 能补的上限 ≈ 2,548 且与 fresh activity 大概率
+  重叠，救不了 2 万池目标**。同时 retained attestation 8094 候选为
+  串行逐池（每池冷池 ~19s），需数小时，已用 lookback 10K 限制
+  （28185c15）但本质仍是冷池不可验证。
+- **F5 结构性 blocker 最终结论（2026-08-15）**：完全重建 + 本地 reth
+  （日志保留 7-14 天）+ 无 Alchemy + retained 不作 eligible 证据的约束
+  组合下，**universe 上限约 1.3-1.4 万池 / ~2.1-2.5 万边**，2 万池 /
+  3 万边验收线不可达。缺口非代码 bug、非三个 family 缺失，而是
+  "strict 身份需近期链上观测"与"本地节点保留窗口"的物理约束。
+  已确认可选项：① 调整验收线接受真实规模；② 允许 univ4/dodo 历史池
+  走 archive RPC 补池；③ 保留原线、F5 记为数据窗口 blocker 先推进
+  F6-F9。当前未降线、未冒充达标。
