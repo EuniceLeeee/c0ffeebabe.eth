@@ -2486,7 +2486,7 @@
         "familyId": "protocol:eigenpie",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "12351a2c297410ed9755cb201b85e7714c58dbe618273b61527e0103ef88a7e5",
+        "contentHash": "bbca4005735779592c222f1de32c3969b4d5526330b8e184807cc8ec8a935a5a",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -2542,7 +2542,7 @@
         "familyId": "protocol:eigenpie",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "64f4a485f6d9c4863f3691407916fc72034c540887fddbd8c8a476f1cbd71930",
+        "contentHash": "f99cfaf8745fdb8689464431a0ebde33aa0966e9d5486d22ab3aa20b04737927",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -7165,5 +7165,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "939b21fa916b7dd0807a82fd82cea2cbe58be25a1f952bbd33f0b0de16bb1c6a"
+  "artifactHash": "3f2824d43e79dfb9017ea4009728e4548bbf367b58c29e90b94232c3269216c5"
 }
