@@ -29,7 +29,7 @@ export function angstromRuntimeEvidenceHash(input: {
   readonly source: CanonicalSource;
   readonly payloadHash: string;
 }): string {
-  return hashCanonical({
+  return "0x" + hashCanonical({
     familyId: ANGSTROM_V4_FAMILY_ID,
     txHash: input.txHash.toLowerCase(),
     source: {

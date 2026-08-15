@@ -158,10 +158,19 @@ export function createStrictCentralAdapterRuntime(input: {
     clock: { nowMs: () => now++ },
     generationFence: input.generationFence,
     callerAuthority: {
-      bind: () => Object.freeze({
+      bind: (bindingInput: { readonly callerRole?: string }) => Object.freeze({
         ...(input.executor === undefined
           ? {}
           : { executor: ethers.getAddress(input.executor).toLowerCase() }),
+        // Generic observed-sender binding: a work that declares
+        // caller: "observed-sender" binds the observed transaction sender.
+        // The capture runtime observes through the central executor, so the
+        // observed sender is the executor itself (mirrors the fixture
+        // runtime contract); production binds the real observed sender.
+        ...(input.executor !== undefined &&
+            bindingInput.callerRole === "observed-sender"
+          ? { observedSender: ethers.getAddress(input.executor).toLowerCase() }
+          : {}),
         ...(Object.keys(verifiedActors).length === 0
           ? {}
           : { verifiedActors }),

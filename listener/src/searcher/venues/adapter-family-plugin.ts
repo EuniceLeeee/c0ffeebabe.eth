@@ -2935,8 +2935,9 @@ function validateCaptureRuntimeEvidence(
       throw new Error(`${label} scope is invalid`);
     }
     assertHex(item.evidenceHash, 32, `${label} evidenceHash`);
-    if (!item.sealedPayloadRef.startsWith("onchain:")) {
-      throw new Error(`${label} sealedPayloadRef must be onchain evidence`);
+    if (!item.sealedPayloadRef.startsWith("onchain:") &&
+        !ethers.isHexString(item.sealedPayloadRef)) {
+      throw new Error(`${label} sealedPayloadRef must be onchain evidence or hex payload`);
     }
     if (item.txHash !== undefined) {
       assertHex(item.txHash, 32, `${label} txHash`);
