@@ -85,6 +85,9 @@ export const VENUE_IDENTITY_SOURCES = Object.freeze([
   "fluid-dex-factory-behavior",
   "fluid-vault-factory-behavior",
   "seed",
+  // The strict catalog lifecycle is the only startup identity authority; its
+  // emitted identitySource label is a registered source like any other.
+  "strict-lifecycle",
 ] as const);
 
 export type KnownVenueIdentitySource = typeof VENUE_IDENTITY_SOURCES[number];
