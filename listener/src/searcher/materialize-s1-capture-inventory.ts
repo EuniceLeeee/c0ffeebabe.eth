@@ -204,110 +204,15 @@ async function annotateStartTokens(input: {
   readonly entries: readonly CaptureInventoryEntry[];
   readonly graph: CanonicalValue;
 }): Promise<CaptureInventoryEntry[]> {
-  const ERC20 = new ethers.Interface([
-    "function decimals() view returns (uint8)",
-  ]);
-  const poolTokens = (address: string): string[] => {
-    const tokens = new Set<string>();
-    const graph = input.graph as { readonly pools?: readonly unknown[] };
-    for (const pool of graph.pools ?? []) {
-      const record = pool as Readonly<Record<string, unknown>>;
-      if (String(record.address ?? "").toLowerCase() !== address.toLowerCase()) {
-        continue;
-      }
-      for (const key of ["token0", "currency0", "fixedTokenIn"] as const) {
-        const value = record[key];
-        if (typeof value === "string" && ethers.isAddress(value)) {
-          tokens.add(ethers.getAddress(value).toLowerCase());
-        }
-      }
-      for (const key of ["token1", "currency1", "fixedTokenOut"] as const) {
-        const value = record[key];
-        if (typeof value === "string" && ethers.isAddress(value)) {
-          tokens.add(ethers.getAddress(value).toLowerCase());
-        }
-      }
-    }
-    return [...tokens];
-  };
-  const runtime = createStrictCentralAdapterRuntime({
-    provider: input.provider as never,
-    generationFence: Object.freeze({
-      kind: "catalog-relative" as const,
-      assertCurrent: () => undefined,
-      verifyCanonicalSource: () => true,
-    }),
-    verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
-  });
-  const oneUnitOf = async (token: string): Promise<bigint> => {
-    try {
-      const raw = await input.provider.call(
-        { to: token, data: ERC20.encodeFunctionData("decimals") },
-        input.source.number,
-      );
-      if (ethers.isHexString(raw) && ethers.dataLength(raw) === 32) {
-        const decoded = ERC20.decodeFunctionResult("decimals", raw) as unknown;
-        const decimals = Number(
-          (decoded as { readonly [index: number]: unknown })[0] ?? "",
-        );
-        if (Number.isSafeInteger(decimals) && decimals >= 0 && decimals <= 77) {
-          return 10n ** BigInt(decimals);
-        }
-      }
-    } catch {
-      // fall through to 18 decimals
-    }
-    return 10n ** 18n;
-  };
-  // The start token is whatever the pool actually trades, and "borrowable" is
-  // decided by the funding families themselves: central code asks each
-  // funding plugin (via its own liquidity declaration) whether it can serve
-  // the token and how much. No central token lists, no frequency guesses -
-  // the plugins own the semantics (flash loans accept arbitrary ERC20 and
-  // derive maxBorrow from the holder balance).
-  const borrowableCache = new Map<string, boolean>();
-  const borrowable = async (token: string): Promise<boolean> => {
-    const key = token.toLowerCase();
-    const cached = borrowableCache.get(key);
-    if (cached !== undefined) return cached;
-    let yes = false;
-    for (const family of input.catalog.listAll()) {
-      if (family.plugin.manifest.domain !== "funding") continue;
-      const result = await executeFundingFamilyLiquidity({
-        family,
-        assets: Object.freeze([key]),
-        source: input.source,
-        generation: input.source.generation,
-        runtime,
-        publisher: { publish: () => undefined },
-      });
-      for (const offer of result.offers) {
-        if (offer.maxBorrow >= await oneUnitOf(offer.asset.toLowerCase())) {
-          yes = true;
-          break;
-        }
-      }
-      if (yes) break;
-    }
-    borrowableCache.set(key, yes);
-    return yes;
-  };
-  const enriched: CaptureInventoryEntry[] = [];
-  for (const entry of input.entries) {
-    const tokens = poolTokens(entry.candidateIdentity);
-    let startToken: string | null = null;
-    for (const token of tokens) {
-      if (await borrowable(token)) {
-        startToken = token.toLowerCase();
-        break;
-      }
-    }
-    enriched.push(Object.freeze({
-      ...entry,
-      ...(startToken === null ? {} : { startToken }),
-    }) as CaptureInventoryEntry);
-  }
-  return enriched;
+  // Transitional start token (user-directed 2026-08-16): the loop start
+  // token is fixed to WETH until funding families declare their own
+  // borrowable-token table (planned F6+). The mandatory final sim fails
+  // closed if the funding root cannot actually borrow it.
+  const START_TOKEN = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+  return input.entries.map((entry) => Object.freeze({
+    ...entry,
+    startToken: START_TOKEN,
+  }) as CaptureInventoryEntry);
 }
 
 function admitObservations(

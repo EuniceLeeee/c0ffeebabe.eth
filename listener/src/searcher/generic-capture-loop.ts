@@ -43,9 +43,13 @@ export function buildCaptureClosedLoop(input: {
       maxPaths: 100,
     },
   );
+  // The loop must pass through the family's verification pool. A cycle
+  // that does not touch the target pool verifies nothing about this Family
+  // (and an unrelated one-pool round trip is not a capture case), so no
+  // fallback: no path through the target means no loop path.
   const through = paths.find((path) => path.edges.some((edge) =>
     edge.target.toLowerCase() === input.targetPool.toLowerCase()
-  )) ?? paths[0];
+  ));
   if (through === undefined || through.edges.length === 0) return null;
   return Object.freeze({
     startToken: input.startToken.toLowerCase(),
