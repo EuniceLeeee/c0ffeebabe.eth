@@ -927,6 +927,7 @@ export async function materializeGenericCaptureFundingPlan(input: {
   readonly runtime: CentralAdapterRuntime;
 }): Promise<GenericCaptureFundingPlan> {
   const candidates: GenericCaptureFundingPlan[] = [];
+  const fundingOutcomes = new Map<string, readonly string[]>();
   for (const family of input.catalog.listAll()) {
     if (family.plugin.manifest.domain !== "funding") continue;
     const result = await executeFundingFamilyLiquidity({
@@ -937,6 +938,12 @@ export async function materializeGenericCaptureFundingPlan(input: {
       runtime: input.runtime,
       publisher: { publish() {} },
     });
+    fundingOutcomes.set(
+      family.plugin.manifest.familyId,
+      Object.freeze(result.outcomes.map((outcome) =>
+        `${outcome.status}:${outcome.reasonCode ?? "no-reason"}`,
+      )),
+    );
     for (const offer of result.offers) {
       if (offer.maxBorrow < input.amount) continue;
       const repaymentFragment = buildFundingRepaymentFragment({
@@ -971,7 +978,10 @@ export async function materializeGenericCaptureFundingPlan(input: {
   );
   const selected = candidates[0];
   if (selected === undefined) {
-    throw new Error("generic capture has no executable catalog Funding offer");
+    throw new Error(
+      "generic capture has no executable catalog Funding offer; " +
+        `funding outcomes=${JSON.stringify([...fundingOutcomes])}`,
+    );
   }
   return selected;
 }

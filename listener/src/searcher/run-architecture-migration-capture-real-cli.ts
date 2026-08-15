@@ -168,6 +168,14 @@ async function main(): Promise<void> {
     const familyCases = await runGenericCaptureBatch({
       items: tasks,
       onFailure(id, error) {
+        console.error(
+          `[capture-case] ${id} FAILED: ` +
+            (error instanceof Error ? error.message : String(error)),
+        );
+        if (error instanceof Error && error.stack !== undefined) {
+          const lines = error.stack.split("\n").slice(0, 6);
+          console.error(`[capture-case] ${id} stack:\n${lines.join("\n")}`);
+        }
         failures.push(Object.freeze({
           id,
           reason: error instanceof Error ? error.message : String(error),

@@ -55,13 +55,18 @@ export async function runStrictFamilyLifecycle(input: {
     publisher: { publish: (value) => { publication = value; } },
   });
   if (result.publication === null || publication === null) {
-    const failed = result.outcomes.find((outcome) =>
+    const failed = result.outcomes.filter((outcome) =>
       outcome.status === "unresolved" || outcome.status === "failed"
     );
+    const summary = failed.length === 0
+      ? "no-outcome"
+      : failed.map((outcome) =>
+          `${outcome.stage}:${outcome.status}:` +
+          `${outcome.reasonCode ?? "no-reason"}`
+        ).join(" | ");
     throw new Error(
       `strict Family lifecycle did not publish for ${input.familyId}: ` +
-        `${failed?.stage ?? "unknown"} ${failed?.status ?? "unknown"} ` +
-        `${failed?.reasonCode ?? ""}`,
+        summary,
     );
   }
   return publication;
