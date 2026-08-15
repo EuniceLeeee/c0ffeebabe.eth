@@ -685,6 +685,49 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
 - capture harness 相关代码（materialize-s1-capture-inventory /
   generic-family-capture / run-architecture-migration-capture-real-cli）
   在 cutover 完成后退役（同 F6 删除范围，可执行闭包清零）。
+### F6 删除执行状态（2026-08-16 起，用户裁定：capture harness 终止，直接删旧）
+
+- **执行顺序**：B→C→D→F→A，每对 strict 侧验收证据已存在（B: f3188a31 +
+  双通道 reverse-binding 22 族合同绿；C: 8efcf4a0；D: d70b1c77；F:
+  b9ab331d；E 已收口 6589823e；A: 686a5689），按用户授权直接开删，
+  不再等待 cutover 前置。
+- **B 对进度（61fe74a9）**：startup-dex-identity-retry 的 legacy 实现
+  （prepareStartupDexIdentityRetryStage + SourcePinnedIdentityBackend +
+  测试）已删除——live-discovery-coordinator 的 strict 版
+  （strictStartupDexIdentityRetryStage / attestPoolsStrictFromProvider）
+  是唯一权威，文件保留 StartupDexIdentityRetryStage 等类型。
+  **B 对剩余**：protocol-instance-discovery 的
+  createCanonicalProtocolIdentityAttester 内部仍走 legacy
+  attestPoolIdentities（影响面：protocol-discovery-runtime 生产 +
+  erc4626/astra/eigenpie/fluid 等测试）；切换方案 = attester 内部改用
+  attestPoolsStrictFromProvider（provider + blockNumber 从 backend
+  派生），测试用 fake provider 适配。
+- **C/D/F/A 删除清单（下一轮）**：
+  - C: landedPoolDiscovery / landed-event-registry / auto-close-router-gap
+    的 legacy 消费路径（strict discovery checkpoint + enumerator 已接）；
+  - D: legacy identity-policies 指纹（strict-catalog-universe:v1 已接）；
+  - F: legacy family facade（assembleSchema / compileStaticSchema）与
+    手工 adapterSchemaRevision 的 blockscan 消费（strict
+    definitionBoundaryHash 已接，Pair E 收口后删除前置已满足）；
+  - A: revm-live-backend 的 quoteByAdapter legacy exact 分支 +
+    overlayApproveSpender legacy 分支（strict execution projection
+    686a5689 + strict quote 100% 覆盖后删除前置已满足）。
+- **capture harness 删除范围（同 F6）**：materialize-s1-capture-inventory /
+  generate-s1-capture-descriptor / run-architecture-migration-capture-real-cli
+  / run-architecture-migration-capture-cli / generic-family-capture /
+  generic-capture-loop / generic-capture-revm-final-simulation /
+  architecture-migration-capture / architecture-migration-parity-runner /
+  architecture-migration-parity / architecture-migration-baseline-normalizer /
+  architecture-migration-evidence / run-architecture-migration-parity-cli /
+  run-parity-evidence-cli / generate-architecture-migration-held-out-negatives
+  + 相关测试（generic-family-capture / s1-capture-* /
+  architecture-migration-* / *-onchain-capture）+ collect 脚本 +
+  scripts/collect-s1-sealed-production-corpus.sh。**保留**：
+  architecture-migration-fixture-replay.ts（strict 测试基础设施，
+  需解耦其 harness import：architecture-migration-capture /
+  architecture-migration-parity-runner）；adapter-family-shared-surface-
+  conformance 的 AST 门文件清单需移除已删文件。
+
 
 ### F5 验收模型方向修正：生产多跳闭环（2026-08-15 用户裁定，最新为准）
 
