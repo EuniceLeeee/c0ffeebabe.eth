@@ -248,6 +248,10 @@ export function descriptorFromCheckpoint(input: {
         : Object.freeze({
             ...common,
             amountIn: input.amount.toString(),
+            // Same route binding contract as the inventory path: the loop
+            // path key is always present (null = no closed loop through
+            // the incumbent; capture falls back to the single-leg result).
+            path: null,
           }),
     }));
   }
