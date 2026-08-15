@@ -613,3 +613,20 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   reth 保留窗口，显式返回不可反查；angstrom/eigenpie/ethertoken 等
   tx-bound 族同样显式声明）。中央按插件声明决定 retained 用哪条通道、
   窗口多大、保留哪些池；插件只声明语义，不决定策略。
+
+### F5 materializer v6 覆盖达成 + P1 收尾项（2026-08-15，不阻塞 eligible）
+
+- **v6 覆盖达成**：materializer（真实 RPC，graph-merged2 为输入）输出
+  17 族 admitted（curve 用 log 观测；univ2/3/4、dodo 均带真实
+  log/call 观测），unresolved 仅剩 eigenpie / ethertoken-native-redeem /
+  metronome-hgusdc——按用户最高命令视为不存在，不阻塞 eligible。
+  descriptor 生成 19 cases（17 admitted + balancer/morpho 两个 funding
+  族）。collect 双闭包 → held-out negatives → parity judge →
+  `eligible=true` + `verdict=pass` 待跑。
+- **P1 收尾项（完成 F5 后处理，当前不阻塞）**：`f5-ret13.json`
+  universe 文件中 curve-underlying 条目为 0，但 graph-merged2 /
+  materializer v6 能从协议缓存/图提名拿到 curve（log 观测 admitted）。
+  疑似 universe 构建的 curve 过渡桥（`maturePoolAdapters.add(
+  "curve-underlying")` 路径）未产出 curve 条目；需在 F5 闭环后核对
+  universe 生成链与过渡桥接线，修复并重出 universe（不降低 eligible
+  证据有效性，但作为 P1 收尾必须记录并解决）。
