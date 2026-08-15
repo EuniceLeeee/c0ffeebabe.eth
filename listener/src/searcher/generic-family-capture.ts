@@ -426,10 +426,30 @@ async function captureRoute(input: {
     for (const route of [...instance.routeHandles].sort((left, right) =>
       left.routeKey.localeCompare(right.routeKey)
     )) {
+      // Capture amount normalization (central tooling, no protocol
+      // semantics): the descriptor amount is a raw integer and cannot be
+      // scaled correctly for every token (a 1e18 raw amount is 1 token of
+      // an 18-decimal asset but a quadrillion units of a 6-decimal one).
+      // Normalize per route to one unit of the route input token via the
+      // universal ERC20 decimals() read (fallback to the descriptor amount
+      // on unreadable tokens), so exact quotes and the funding plan match
+      // the real borrowable surface regardless of decimals.
+      const routeDescriptor = instance.routes.find((candidate) =>
+        candidate.routeKey === route.routeKey
+      );
+      if (routeDescriptor === undefined) {
+        throw new Error("capture route descriptor missing");
+      }
+      const amountIn = await normalizedCaptureAmount({
+        provider: input.provider,
+        tokenIn: routeDescriptor.tokenIn,
+        source: input.descriptor.source,
+        fallback: input.vector.amountIn,
+      });
       const exact = await executeFamilyExactQuote({
         family: input.family,
         route,
-        amountIn: input.vector.amountIn,
+        amountIn,
         executor: input.vector.executor,
         runtimeEvidence: input.vector.runtimeEvidence,
         source: input.descriptor.source,
@@ -439,7 +459,7 @@ async function captureRoute(input: {
       if (exact.status !== "resolved") {
         throw new Error(`capture exact failed: ${exact.outcome.reasonCode}`);
       }
-      const semanticId = `${route.routeKey}\u001f${input.vector.amountIn}`;
+      const semanticId = `${route.routeKey}\u001f${amountIn}`;
       exactItems.push(semanticItem(`${semanticId}:exact`, {
         routeKey: route.routeKey,
         amountIn: exact.amountIn.toString(),
@@ -466,7 +486,7 @@ async function captureRoute(input: {
       }
       const funding = await input.fundingPlanFactory({
         assets: Object.freeze([routeRoot.tokenIn]),
-        amount: input.vector.amountIn,
+        amount: amountIn,
         minProfit: input.vector.minAmountOut,
         source: input.descriptor.source,
       });
@@ -486,6 +506,36 @@ async function captureRoute(input: {
     simulationItems, input.evidenceRefs);
 }
 
+
+async function normalizedCaptureAmount(input: {
+  readonly provider: GenericCaptureProvider;
+  readonly tokenIn: string;
+  readonly source: CanonicalSource;
+  readonly fallback: bigint;
+}): Promise<bigint> {
+  const ERC20 = new ethers.Interface([
+    "function decimals() view returns (uint8)",
+  ]);
+  try {
+    const raw = await input.provider.call(
+      { to: input.tokenIn, data: ERC20.encodeFunctionData("decimals") },
+      input.source.number,
+    );
+    if (!ethers.isHexString(raw) || ethers.dataLength(raw) !== 32) {
+      return input.fallback;
+    }
+    const decoded = ERC20.decodeFunctionResult("decimals", raw) as unknown;
+    const decimals = Number(
+      (decoded as { readonly [index: number]: unknown })[0] ?? "",
+    );
+    if (!Number.isSafeInteger(decimals) || decimals < 0 || decimals > 77) {
+      return input.fallback;
+    }
+    return 10n ** BigInt(decimals);
+  } catch {
+    return input.fallback;
+  }
+}
 async function captureFunding(input: {
   readonly catalog: FamilyCapabilityCatalog;
   readonly descriptor: FamilyCaptureDescriptor;
