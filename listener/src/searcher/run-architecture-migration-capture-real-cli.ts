@@ -182,13 +182,13 @@ async function main(): Promise<void> {
         }));
       },
     });
-    if (failures.length !== 0) {
+    if (familyCases.length !== manifest.cases.length) {
+      throw new Error("generic capture produced an incomplete denominator");
+    }
+    if (failures.length !== 0 && outPath === undefined) {
       throw new Error(
         `generic capture incomplete: ${JSON.stringify(failures)}`,
       );
-    }
-    if (familyCases.length !== manifest.cases.length) {
-      throw new Error("generic capture produced an incomplete denominator");
     }
     const evidenceRefs = Object.freeze([...new Set(familyCases.flatMap(
       (familyCase) => Object.values(familyCase.stages).flatMap(
@@ -238,6 +238,20 @@ async function main(): Promise<void> {
       familyCases,
       commonGraph: commonGraph(source, familyCases, evidenceRefs),
     });
+    if (failures.length !== 0) {
+      // Partial output: keep the successful cases inspectable (multi-hop
+      // final-sim results) even though the corpus is incomplete. The exit
+      // still fails closed.
+      await writeFile(
+        outPath!,
+        architectureMigrationSideJson(
+          generateArchitectureMigrationSideCapture(corpus),
+        ),
+      ).catch(() => undefined);
+      throw new Error(
+        `generic capture incomplete: ${JSON.stringify(failures)}`,
+      );
+    }
     return generateArchitectureMigrationSideCapture(corpus);
   };
   if (checkOnly) {
