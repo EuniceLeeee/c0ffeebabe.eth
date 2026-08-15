@@ -236,7 +236,14 @@ function routeBinding(value: CanonicalValue): RouteCaptureBinding {
   const binding = record(value, "route capture binding");
   exactKeys(
     binding,
-    ["amountIn", "executor", "minAmountOut", "observation", "runtimeEvidence"],
+    [
+      "amountIn",
+      "executor",
+      "minAmountOut",
+      "observation",
+      "path",
+      "runtimeEvidence",
+    ],
     "route capture binding",
   );
   return binding as unknown as RouteCaptureBinding;

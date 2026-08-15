@@ -32,6 +32,7 @@ import {
   type PreparedFamilyInstance,
 } from "./venues/adapter-family-runtime.js";
 import type {
+  CaptureNominationInput,
   CaptureObservationIntent,
   CreditCaptureVector,
   FamilyCaptureDescriptor,
@@ -42,6 +43,7 @@ import type {
 } from "./venues/adapter-family-plugin.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
+import type { FamilyId } from "./venues/adapter-family-identifiers.js";
 import {
   hashCanonical,
   type CanonicalValue,
@@ -54,7 +56,15 @@ import type {
   LoadedFamilyBox,
   LoadedFamilyPlugin,
 } from "./venues/family-capability-catalog.js";
-import type { PlanFragment } from "./venues/route-leg-adapter.js";
+import type {
+  CaptureLoopEdge,
+  CaptureLoopPath,
+} from "./generic-capture-loop.js";
+import type {
+  PlanFragment,
+  PlanRequirement,
+} from "./venues/route-leg-adapter.js";
+import type { ResolvedPlanNode } from "../types.js";
 
 export interface GenericCaptureProvider {
   call(
@@ -405,6 +415,10 @@ async function captureRoute(input: {
   readonly evidenceRefs: readonly string[];
   readonly fundingPlanFactory: GenericCaptureFundingPlanFactory;
 }): Promise<RawFamilyMigrationCaseCapture["stages"]> {
+  const loopPath = captureLoopPath(input.descriptor);
+  if (loopPath !== null) {
+    return captureRouteMultiHop({ ...input, loopPath });
+  }
   const observations = await executeCaptureObservationIntents({
     family: input.family,
     source: input.descriptor.source,
@@ -533,6 +547,411 @@ async function captureRoute(input: {
   return routeStages(publication, graph, exactItems, executionItems,
     simulationItems, input.evidenceRefs);
 }
+
+/**
+ * Multi-hop closed-loop capture (production model): borrow the start token,
+ * swap through each loop segment in order, repay the start token. The loop
+ * path is an opaque descriptor parameter - the capture core never interprets
+ * protocol semantics. Every segment runs the owning family's lifecycle on a
+ * real materialized observation, quotes exact amounts chained along the
+ * route, and builds its execution fragment; the fragments are composed into
+ * one cycle and executed under the funding root by the mandatory final-sim
+ * runtime. Any segment that cannot materialize, admit, quote or build fails
+ * the case closed (no silent single-leg downgrade when a path is present).
+ */
+async function captureRouteMultiHop(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly descriptor: FamilyCaptureDescriptor;
+  readonly provider: GenericCaptureProvider;
+  readonly runtime: CentralAdapterRuntime;
+  readonly finalSimulation: GenericCaptureFinalSimulation;
+  readonly family: LoadedFamilyPlugin;
+  readonly vector: RouteCaptureVector;
+  readonly evidenceRefs: readonly string[];
+  readonly fundingPlanFactory: GenericCaptureFundingPlanFactory;
+  readonly loopPath: CaptureLoopPath;
+}): Promise<RawFamilyMigrationCaseCapture["stages"]> {
+  const { loopPath } = input;
+  const targetPool = input.descriptor.candidateIdentity.toLowerCase();
+  const targetObservations = await executeCaptureObservationIntents({
+    family: input.family,
+    source: input.descriptor.source,
+    intents: input.vector.observations,
+    provider: input.provider,
+  });
+  const targetPublication = await runStrictFamilyLifecycle({
+    catalog: input.catalog,
+    familyId: input.descriptor.familyId,
+    source: input.descriptor.source,
+    observations: targetObservations,
+    runtime: input.runtime,
+  });
+  console.log(
+    `[capture-progress] family=${input.descriptor.familyId} ` +
+      `stage=loop target identity/instance done`,
+  );
+  const graph = routeGraphItems(input.family, targetPublication);
+  const exactItems: RawMigrationSemanticItem[] = [];
+  const executionItems: RawMigrationSemanticItem[] = [];
+  const simulationItems: RawMigrationSemanticItem[] = [];
+  const segmentItems: RawMigrationSemanticItem[] = [];
+  const fragments: PlanFragment[] = [];
+  let amountIn: bigint | null = null;
+  let firstAmountIn: bigint | null = null;
+  for (const edge of loopPath.edges) {
+    const isTarget = edge.pool === targetPool;
+    const familyId = isTarget
+      ? input.descriptor.familyId
+      : input.catalog.ownerOfPoolAdapter(edge.adapterId);
+    const family = isTarget ? input.family : input.catalog.forFamily(familyId);
+    const observations = isTarget
+      ? targetObservations
+      : Object.freeze([await materializeLoopPoolObservation({
+          catalog: input.catalog,
+          familyId,
+          pool: edge.pool,
+          adapterId: edge.adapterId,
+          source: input.descriptor.source,
+          provider: input.provider,
+        })]);
+    const publication = isTarget
+      ? targetPublication
+      : await runStrictFamilyLifecycle({
+          catalog: input.catalog,
+          familyId,
+          source: input.descriptor.source,
+          observations,
+          runtime: input.runtime,
+        });
+    let matched: {
+      readonly route: (typeof publication.instances)[number]["routeHandles"][number];
+      readonly routeDescriptor: (typeof publication.instances)[number]["routes"][number];
+    } | undefined;
+    for (const instance of publication.instances) {
+      for (const route of instance.routeHandles) {
+        const routeDescriptor = instance.routes.find((candidate) =>
+          candidate.routeKey === route.routeKey
+        );
+        if (routeDescriptor === undefined) continue;
+        if (
+          routeDescriptor.tokenIn.toLowerCase() === edge.tokenIn &&
+          routeDescriptor.tokenOut.toLowerCase() === edge.tokenOut
+        ) {
+          matched = Object.freeze({ route, routeDescriptor });
+          break;
+        }
+      }
+      if (matched !== undefined) break;
+    }
+    if (matched === undefined) {
+      throw new Error(
+        `capture loop edge ${edge.pool} has no ` +
+          `${edge.tokenIn}>${edge.tokenOut} route`,
+      );
+    }
+    const segmentAmountIn = amountIn ?? await normalizedCaptureAmount({
+      provider: input.provider,
+      tokenIn: loopPath.startToken,
+      source: input.descriptor.source,
+      fallback: input.vector.amountIn,
+    });
+    if (firstAmountIn === null) firstAmountIn = segmentAmountIn;
+    const exact = await executeFamilyExactQuote({
+      family,
+      route: matched.route,
+      amountIn: segmentAmountIn,
+      executor: input.vector.executor,
+      runtimeEvidence: isTarget ? input.vector.runtimeEvidence : [],
+      source: input.descriptor.source,
+      generation: input.descriptor.source.generation,
+      runtime: input.runtime,
+    });
+    if (exact.status !== "resolved") {
+      throw new Error(
+        `capture loop exact failed at ${edge.pool}: ${exact.outcome.reasonCode}`,
+      );
+    }
+    const semanticId = `${matched.routeDescriptor.routeKey}\u001f${segmentAmountIn}`;
+    exactItems.push(semanticItem(`${semanticId}:exact`, {
+      routeKey: matched.routeDescriptor.routeKey,
+      amountIn: exact.amountIn.toString(),
+      amountOut: exact.amountOut.toString(),
+      methodId: exact.methodId,
+      evidenceRefs: exact.evidenceRefs,
+    }));
+    const execution = buildFamilyExecutionFragment({
+      family,
+      actionOwnership: input.catalog,
+      route: matched.route,
+      exact,
+      minAmountOut: input.vector.minAmountOut,
+      executor: input.vector.executor,
+      runtimeEvidence: isTarget ? input.vector.runtimeEvidence : [],
+    });
+    if (execution.status !== "resolved") {
+      throw new Error(
+        `capture loop execution failed at ${edge.pool}: ` +
+          execution.outcome.reasonCode,
+      );
+    }
+    executionItems.push(fragmentItem(
+      `${semanticId}:execution`,
+      execution.fragment,
+    ));
+    fragments.push(execution.fragment);
+    segmentItems.push(semanticItem(semanticId, {
+      pool: edge.pool,
+      tokenIn: edge.tokenIn,
+      tokenOut: edge.tokenOut,
+      familyId,
+    }));
+    console.log(
+      `[capture-progress] family=${input.descriptor.familyId} ` +
+        `stage=loop segment=${edge.pool} family=${familyId} done`,
+    );
+    amountIn = exact.amountOut;
+  }
+  if (firstAmountIn === null) {
+    throw new Error("capture loop has no executable segments");
+  }
+  const loopFragment = chainCaptureFragments(fragments);
+  const funding = await input.fundingPlanFactory({
+    assets: Object.freeze([loopPath.startToken]),
+    amount: firstAmountIn,
+    minProfit: input.vector.minAmountOut,
+    source: input.descriptor.source,
+  });
+  console.log(
+    `[capture-progress] family=${input.descriptor.familyId} ` +
+      `stage=loop funding done startToken=${loopPath.startToken}`,
+  );
+  const loopSemanticId =
+    `${input.descriptor.familyId}:${loopPath.startToken}:loop`;
+  simulationItems.push(semanticItem(
+    `${loopSemanticId}:final-sim`,
+    await input.finalSimulation.simulate({
+      kind: "route",
+      family: input.family,
+      source: input.descriptor.source,
+      vector: input.vector,
+      routeFragment: loopFragment,
+      funding,
+      semanticId: loopSemanticId,
+    }),
+  ));
+  const loopEdges = [...graph.edges, ...segmentItems];
+  return Object.freeze({
+    instances: instanceStage(targetPublication.instances, input.evidenceRefs),
+    edges: exercisedStage(loopEdges, input.evidenceRefs),
+    stateCoverage: exercisedStage(graph.coverage, input.evidenceRefs),
+    pricedEdges: exercisedStage(graph.pricedEdges, input.evidenceRefs),
+    prices: exercisedStage(graph.prices, input.evidenceRefs),
+    failures: exercisedStage([], input.evidenceRefs),
+    enumeratedRoutes: exercisedStage(
+      orderedRoutes(loopEdges),
+      input.evidenceRefs,
+    ),
+    exactQuotes: exercisedStage(exactItems, input.evidenceRefs),
+    executionFragments: exercisedStage(executionItems, input.evidenceRefs),
+    finalSimulations: exercisedStage(simulationItems, input.evidenceRefs),
+  });
+}
+
+/**
+ * Reads the opaque loop path from the descriptor. The path is an opaque
+ * parameter (start token + pool segments); central code never interprets its
+ * protocol meaning. A missing path keeps the case single-leg (honest result).
+ */
+function captureLoopPath(
+  descriptor: FamilyCaptureDescriptor,
+): CaptureLoopPath | null {
+  const binding = descriptor.opaqueBinding as Readonly<Record<string, unknown>>;
+  const raw = binding.path as unknown;
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("capture loop path must be an object");
+  }
+  const path = raw as Readonly<Record<string, unknown>>;
+  const startToken = path.startToken;
+  const rawEdges = path.edges;
+  if (
+    typeof startToken !== "string" ||
+    !/^0x[0-9a-fA-F]{40}$/.test(startToken)
+  ) {
+    throw new Error("capture loop path startToken is invalid");
+  }
+  if (!Array.isArray(rawEdges)) {
+    throw new Error("capture loop path edges must be an array");
+  }
+  const edges: CaptureLoopEdge[] = [];
+  for (const rawEdge of rawEdges) {
+    if (typeof rawEdge !== "object" || rawEdge === null) {
+      throw new Error("capture loop path edge must be an object");
+    }
+    const edge = rawEdge as Readonly<Record<string, unknown>>;
+    const pool = edge.pool;
+    const tokenIn = edge.tokenIn;
+    const tokenOut = edge.tokenOut;
+    const adapterId = edge.adapterId;
+    if (typeof pool !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(pool)) {
+      throw new Error("capture loop path edge pool is invalid");
+    }
+    if (typeof tokenIn !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(tokenIn)) {
+      throw new Error("capture loop path edge tokenIn is invalid");
+    }
+    if (typeof tokenOut !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(tokenOut)) {
+      throw new Error("capture loop path edge tokenOut is invalid");
+    }
+    if (typeof adapterId !== "string" || adapterId.length === 0) {
+      throw new Error("capture loop path edge adapterId is invalid");
+    }
+    edges.push(Object.freeze({
+      pool: pool.toLowerCase(),
+      tokenIn: tokenIn.toLowerCase(),
+      tokenOut: tokenOut.toLowerCase(),
+      adapterId,
+    }));
+  }
+  if (edges.length < 2) {
+    // A one-pool cycle cannot close (one swap's output is never its input
+    // token); keep the honest single-leg path for degenerate descriptors.
+    return null;
+  }
+  return Object.freeze({
+    startToken: startToken.toLowerCase(),
+    edges: Object.freeze(edges),
+  });
+}
+
+/**
+ * Materializes a real observation for one loop segment pool through the
+ * owning family's own nomination / reverse-binding capability (fresh channel
+ * first, retain channel as fallback - the plugin declares both). The
+ * observation must admit through matches + decodeCandidate; otherwise the
+ * loop fails closed.
+ */
+async function materializeLoopPoolObservation(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly familyId: FamilyId;
+  readonly pool: string;
+  readonly adapterId: string;
+  readonly source: CanonicalSource;
+  readonly provider: GenericCaptureProvider;
+}): Promise<UnifiedObservation> {
+  const family = input.catalog.forStrictFamily(input.familyId);
+  const plugin = family.plugin;
+  if (!("discovery" in plugin)) {
+    throw new Error(
+      `capture loop pool family ${input.familyId} has no discovery`,
+    );
+  }
+  const nomination = Object.freeze({
+    address: input.pool,
+    opaque: Object.freeze({ adapter: input.adapterId }),
+  }) as unknown as CaptureNominationInput;
+  const accepted = (observation: UnifiedObservation): boolean =>
+    input.catalog.matches(observation).some((match) =>
+      match.familyId === input.familyId &&
+      plugin.discovery.decodeCandidate({
+        observation,
+        matchedPatternId: match.patternId,
+      }) !== null
+    );
+  const nominate = plugin.discovery.nominate;
+  if (nominate !== undefined) {
+    const derived = await nominate.nominate({
+      nominations: Object.freeze([nomination]),
+      source: input.source,
+      provider: input.provider,
+    });
+    const observation = derived[0];
+    if (observation !== undefined && accepted(observation)) {
+      return observation;
+    }
+  }
+  const declaration = plugin.discovery.reverseBinding;
+  if (declaration?.kind === "implementation") {
+    const derived = await declaration.reverseBinding({
+      nominations: Object.freeze([nomination]),
+      source: input.source,
+      provider: input.provider,
+    });
+    const outcome = derived[0];
+    if (outcome?.status === "verified" && accepted(outcome.observation)) {
+      return outcome.observation;
+    }
+  }
+  throw new Error(
+    `capture loop pool ${input.pool} cannot be materialized for ` +
+      input.familyId,
+  );
+}
+
+/**
+ * Composes per-segment execution fragments into one closed-loop tree.
+ * Execution order is the segment order (fragments[0] first): the tree root is
+ * the last segment's route node and earlier segments hang as children, so the
+ * BotVM post-order compile executes segment 0 .. segment N-1 before the
+ * funding root repays the start token. Requirements (approve / transfer) are
+ * materialized as nodes owned by their segment, mirroring the funding-root
+ * close-plan mapping.
+ */
+function chainCaptureFragments(
+  fragments: readonly PlanFragment[],
+): PlanFragment {
+  let chain: ResolvedPlanNode | null = null;
+  for (let index = fragments.length - 1; index >= 0; index--) {
+    const fragment = fragments[index]!;
+    const root = fragment.nodes[0];
+    if (root === undefined) {
+      throw new Error("capture loop fragment has no route root");
+    }
+    chain = {
+      ...root,
+      children: [
+        ...fragment.requirements.map(loopRequirementNode),
+        ...(chain === null ? [] : [chain]),
+      ],
+    };
+  }
+  if (chain === null) {
+    throw new Error("capture loop has no fragments");
+  }
+  return {
+    requirements: [],
+    nodes: [chain],
+  };
+}
+
+function loopRequirementNode(requirement: PlanRequirement): ResolvedPlanNode {
+  if (requirement.kind === "approve") {
+    return {
+      adapterId: "erc20-approve",
+      target: requirement.token,
+      tokenIn: requirement.token,
+      tokenOut: requirement.token,
+      amount: requirement.amount,
+      params: {
+        spender: requirement.spender,
+        amount: requirement.amount,
+      },
+      children: [],
+    };
+  }
+  return {
+    adapterId: "erc20-transfer",
+    target: requirement.token,
+    tokenIn: requirement.token,
+    tokenOut: requirement.token,
+    amount: requirement.amount,
+    params: {
+      to: requirement.pool,
+      amount: requirement.amount,
+    },
+    children: [],
+  };
+}
+
 
 
 async function normalizedCaptureAmount(input: {
