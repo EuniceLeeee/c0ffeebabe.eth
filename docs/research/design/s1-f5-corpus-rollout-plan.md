@@ -958,11 +958,15 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   `strict-lifecycle` 注册为已知 identity source；isProductionVenueId
   接受 catalog 声明的 pool-adapter labels（与 isProductionPoolAdapter
   同一插件自有投影）。节点已部署 cb761c0a（HEAD_OK + BUILD_OK）。
-- **F5 live 验收运行中（27e9046b，90min 窗口）**：生产 searcher
-  （searcher:live，dry-run）以 f5-ret13 universe 为输入在节点运行；
-  启动 12,015 池 strict attestation 为主耗时（~50min），随后 periodic
-  pass 产出 events/routes；验收事实 = family fresh 数据（S1）+
-  exact.amountOut ≈ sim.amountOut（S3/S5）+ 六步 judge verdict。
+- **F5 live 验收运行中（edf2a3b9，3h 窗口，backend=revm）**：生产
+  searcher（searcher:live，dry-run）以 f5-ret13 universe 为输入在节点
+  运行；实测启动 12,015 池 strict attestation ~60min（universe +
+  blockscan 两轮全量验证，冷池 address-surface fallback 每池 ~4-19s），
+  90min 单窗口不足以到达 periodic pass（EVENTS=0）；3h 窗口预期
+  ~2h periodic pass 产出 events/routes；验收事实 = family fresh 数据
+  （S1）+ exact.amountOut ≈ sim.amountOut（S3/S5）+ 六步 judge verdict。
+  若 3h 仍不足则考虑 SEARCHER_DISCOVERY_BACKFILL_ENABLED=0 冻结
+  discovery 追赶（checkpoint 既有做法）以保留窗口给 periodic pass。
 - **剩余**：F5 live 验收收尾（judge verdict）→ F9
   （MigrationCleanupReceipt.verdict=pass + AST/import-closure 证明）。
 
