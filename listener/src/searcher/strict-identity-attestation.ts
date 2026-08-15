@@ -131,6 +131,39 @@ export async function attestPoolIdentitiesStrict<
   const ATTESTATION_CONCURRENCY = 24;
   let completed = 0;
   let next = 0;
+  // One stable nomination provider for the whole batch: plugin-owned
+  // source-keyed caches (e.g. a manager-wide swap index) key on provider
+  // identity, so a fresh wrapper per pool would rebuild the index for every
+  // row. The provider closes over the same underlying reads for all rows.
+  const nominationProvider = Object.freeze({
+    call: (transaction: { readonly to: string; readonly data: string }, blockTag?: number) =>
+      input.provider.call(transaction, blockTag ?? 0),
+    getCode: (a: string, blockTag?: number) =>
+      input.provider.getCode(a, blockTag ?? 0),
+    getStorage: (a: string, s: string, blockTag?: number) =>
+      input.provider.getStorage(a, s, blockTag ?? 0),
+    // Nomination capabilities are passed through when the caller supplies
+    // them (recent-log reverse lookup, tx seed); absent means fail-closed
+    // empty implementations.
+    getLogs: input.provider.getLogs === undefined
+      ? async () => Object.freeze([])
+      : (filter: {
+          readonly address?: string;
+          readonly fromBlock?: number;
+          readonly toBlock?: number;
+          readonly topics?: readonly (string | null)[];
+        }) => input.provider.getLogs!(filter),
+    getTransactionReceipt:
+      input.provider.getTransactionReceipt === undefined
+      ? async () => null
+      : (hash: string) => input.provider.getTransactionReceipt!(hash),
+    ...(input.provider.traceTransaction === undefined
+      ? {}
+      : {
+          traceTransaction: (hash: string) =>
+            input.provider.traceTransaction!(hash),
+        }),
+  });
   const processPool = async (index: number): Promise<void> => {
     const pool = input.pools[index];
     const address = ethers.getAddress(pool.address);
@@ -158,35 +191,7 @@ export async function attestPoolIdentitiesStrict<
           // declares. Zero protocol semantics in central paths.
           opaque: Object.freeze(entryOpaque(pool)) as never,
         })]),
-        provider: Object.freeze({
-          call: (transaction: { readonly to: string; readonly data: string }, blockTag?: number) =>
-            input.provider.call(transaction, blockTag ?? 0),
-          getCode: (a: string, blockTag?: number) =>
-            input.provider.getCode(a, blockTag ?? 0),
-          getStorage: (a: string, s: string, blockTag?: number) =>
-            input.provider.getStorage(a, s, blockTag ?? 0),
-          // Nomination capabilities are passed through when the caller
-          // supplies them (recent-log reverse lookup, tx seed); absent
-          // means fail-closed empty implementations.
-          getLogs: input.provider.getLogs === undefined
-            ? async () => Object.freeze([])
-            : (filter: {
-                readonly address?: string;
-                readonly fromBlock?: number;
-                readonly toBlock?: number;
-                readonly topics?: readonly (string | null)[];
-              }) => input.provider.getLogs!(filter),
-          getTransactionReceipt:
-            input.provider.getTransactionReceipt === undefined
-            ? async () => null
-            : (hash: string) => input.provider.getTransactionReceipt!(hash),
-          ...(input.provider.traceTransaction === undefined
-            ? {}
-            : {
-                traceTransaction: (hash: string) =>
-                  input.provider.traceTransaction!(hash),
-              }),
-        }),
+        provider: nominationProvider,
       });
       const observation = observations[0];
       if (observation === undefined) {
