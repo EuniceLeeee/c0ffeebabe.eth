@@ -248,6 +248,14 @@ export async function attestPoolIdentitiesStrict<
         const anyIdentity = result.outcomes.find((outcome) =>
           outcome.stage === "identity"
         );
+        if (anyIdentity === undefined) {
+          console.log(
+            `[attest-debug] ${address} no identity outcome; stages=`,
+            result.outcomes.map((outcome) =>
+              `${outcome.stage}:${outcome.status}:${outcome.reasonCode ?? ""}`
+            ),
+          );
+        }
         rejected[index] = {
           ...pool,
           adapter: pool.adapter ?? "",
