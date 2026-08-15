@@ -884,6 +884,16 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   observed evidence 路径）、fluid-family-admission（active-quote 双向）、
   astra-multitoken-family（候选物化）、live-smoke（真实 RPC——需 revm/
   节点侧）、dex-live-smoke（env）→ 两道门 → F8 收口 → live 验收 → F9。
+- **eigenpie 适配分析（下轮直接做）**：eigenpie 的 nominate 是
+  createTxEvidenceNomination（需候选 opaque 带 txHash——entryOpaque 透传后
+  物化 receipt logs→AssetDeposit log observation→decode 过）；族 identity
+  的 active 校验（tokenDeltas：tokenIn 减 amountIn/tokenOut 加 amountOut +
+  totalSupply + assetDepositLogMatches（AssetDeposit 事件））→ 测试内联 fake
+  simulator（depositAsset 解码 + DEPOSITOR/TOKEN_OUT/AMOUNT_OUT fixture +
+  depositLog() 构造）；候选 pool 补 transactionHash + identityRuntime 注入
+  （269-275 段）。fixture 常量：TARGET 0x..A1/TOKEN_IN 0x..B1/TOKEN_OUT
+  0x..C1/DEPOSITOR 0x..D1/AMOUNT_IN 1000/AMOUNT_OUT 900。
+
 
 
 
