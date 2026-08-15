@@ -87,7 +87,8 @@ export const univ4Execution = {
           adapterId: "univ4-sync",
           target: input.descriptor.managerBinding.manager,
           tokenIn: input.route.realTokenIn,
-          tokenOut: "",
+          // Encoder uses params.currency; validator requires non-empty.
+          tokenOut: input.route.tokenOut,
           amount: 0n,
           params: { currency: ethers.ZeroAddress },
           children: [],
@@ -95,8 +96,9 @@ export const univ4Execution = {
         {
           adapterId: "univ4-settle-value",
           target: input.descriptor.managerBinding.manager,
-          tokenIn: "",
-          tokenOut: "",
+          // Encoder uses params; validator requires non-empty token fields.
+          tokenIn: input.route.tokenIn,
+          tokenOut: input.route.tokenOut,
           amount: input.amountIn,
           params: {},
           children: [],
