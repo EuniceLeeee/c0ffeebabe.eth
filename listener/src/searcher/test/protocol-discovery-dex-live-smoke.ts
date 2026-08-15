@@ -23,9 +23,15 @@ import {
 } from "../planner/token-graph.js";
 import { buildStrategyViews } from "../strategy-views.js";
 import {
-  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
   PRODUCTION_ADAPTER_FAMILIES,
 } from "../venues/production-registry.js";
+import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
+  "../venues/production-verified-actors.js";
+import { createStrictCentralAdapterRuntime } from
+  "../strict-central-adapter-runtime.js";
+import { RevmSimClient } from "../revm-sim-client.js";
+import { createRevmStrictSimulationTransport } from
+  "../revm-strict-simulation-transport.js";
 
 interface UniversePool {
   readonly address?: unknown;
@@ -125,6 +131,29 @@ async function main(): Promise<void> {
       },
     };
     const cache = createProtocolDiscoveryEvidenceCache();
+    // F8: identity for effect-delta families (erc4626/fluid/silo) requires
+    // the production revm simulation transport; wire the same strict
+    // central runtime main.ts assembles when the revm binary is available.
+    const revmSimBin = process.env.SEARCHER_REVM_SIM_BIN;
+    const botvmAddress = process.env.BOTVM_ADDRESS;
+    const identityRuntime = revmSimBin === undefined || botvmAddress === undefined
+      ? undefined
+      : createStrictCentralAdapterRuntime({
+          provider: provider as never,
+          generationFence: Object.freeze({
+            kind: "catalog-relative" as const,
+            assertCurrent: () => undefined,
+            verifyCanonicalSource: () => true,
+          }),
+          verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+          simulator: createRevmStrictSimulationTransport({
+            client: new RevmSimClient({
+              executablePath: revmSimBin,
+            }),
+            executor: ethers.getAddress(botvmAddress),
+            verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+          }),
+        });
     const firstScan = await scanProtocolDiscoveryRange({
       adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
       context,
@@ -135,7 +164,9 @@ async function main(): Promise<void> {
       adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
       context,
       protocolEdgesEnabled: true,
-      attestIdentity: createCanonicalProtocolIdentityAttester(),
+      attestIdentity: createCanonicalProtocolIdentityAttester(
+        identityRuntime === undefined ? {} : { identityRuntime },
+      ),
       candidatesByAdapter: firstScan.candidatesByAdapter,
       sourceComplete: firstScan.sourceComplete,
       sourceErrors: firstScan.sourceErrors,
