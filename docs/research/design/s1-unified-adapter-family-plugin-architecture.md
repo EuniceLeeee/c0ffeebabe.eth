@@ -3044,6 +3044,12 @@ ops/CI gate，非部署）：**
   retain 接口（reverseBinding：冷池可验反向绑定）；每个族都必须声明
   retain 接口，做不了的显式为空/不支持；中央决定 retained 用哪条通道、
   窗口与保留策略，插件只声明语义。待 F6 Pair B 落地。
+- **strict 验收判据（随双通道决定生效）**：每个纳入重建/验收的族必须
+  同时显式声明 fresh + retain 两条通道；retain 允许拒绝但必须显式写出
+  （返回“不可反查/不支持”，不允许缺字段）；catalog 投影逐族可查
+  `hasFresh` / `hasReverseBinding` / `reverseBindingExplicitlyUnsupported`；
+  框架合同测试覆盖“两通道都有 / retain 显式拒绝 / 缺 retain 字段即
+  校验失败”；生产 22 族全部满足后 Pair B strict 侧才算完成。
 
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`

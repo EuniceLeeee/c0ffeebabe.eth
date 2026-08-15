@@ -202,6 +202,13 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   address-surface nomination 兜底（无近期 Swap 时 getCode+指纹物化，
   身份仍链上反查），是这条通道的首个落地切片；其余族与中央策略切换
   待本 slice 完成。
+  **strict 验收判据（Pair B slice 完成条件）**：每个纳入重建/验收的族
+  必须同时显式声明 fresh + retain 两条通道；retain 允许拒绝但必须显式
+  写出（返回“不可反查/不支持”，不允许缺字段）；catalog 投影逐族可查
+  `hasFresh` / `hasReverseBinding` / `reverseBindingExplicitlyUnsupported`，
+  框架合同测试用 synthetic 族覆盖“两通道都有 / retain 显式拒绝 /
+  缺 retain 字段即校验失败”三种形状；生产 22 族全部满足后才允许宣称
+  Pair B strict 侧完成。
 - **F6 查询面扩展（2026-08-15，catalog 投影驱动）**：
   - `poolAdapterIds`（88b9cb94）：22 族插件 manifest 声明真实池 adapter
     标签；`pool-adapter-policy` 从 legacy 切到 strict 投影。

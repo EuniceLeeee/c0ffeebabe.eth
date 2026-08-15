@@ -578,6 +578,14 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   逐族拆 fresh / retained 与总数、重叠/独有。
 - **per-family fresh > 0 非硬门槛**：若人工确认某族在窗口内确实无交易，
   全 retained / fresh=0 也可算通过。当前 7 族 fresh 均 > 0，无需豁免。
+- **双方法声明是硬性验收项**：每个纳入重建/验收的族，插件必须同时
+  显式声明两条通道——fresh 接口（`nominate`：近期观测/交易证据）与
+  retain 接口（`reverseBinding`：冷池可验的反向绑定）。retain 接口
+  **允许拒绝**（例如 univ4 非 PositionManager 创建、必须回创建块
+  Initialize 且超出本地 reth 保留窗口 → 显式返回“不可反查”；tx-bound
+  族同理），但**必须显式声明，不允许缺字段/未实现**。验收对比表逐族
+  列出：fresh 方法存在 / retain 方法存在 / retain 是否显式拒绝 /
+  fresh 数 / retained 数 / 总数。
 - **retained 可存在但非 eligible 证据**：F5 eligible 仍以 fresh 重建
   能力 + 真实观测为准；retained 只是生产拓扑保留，不算重建证明。
 - **7 天窗口重跑已弃用**（用户明确“这个数据我也不要”）：F5 重建固定
