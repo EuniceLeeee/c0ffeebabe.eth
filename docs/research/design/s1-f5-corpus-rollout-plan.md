@@ -893,6 +893,18 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   depositLog() 构造）；候选 pool 补 transactionHash + identityRuntime 注入
   （269-275 段）。fixture 常量：TARGET 0x..A1/TOKEN_IN 0x..B1/TOKEN_OUT
   0x..C1/DEPOSITOR 0x..D1/AMOUNT_IN 1000/AMOUNT_OUT 900。
+- **eigenpie 全 PASS（2da91797 + a4aa821f）**：tx-evidence nomination（候选
+  transactionHash + backend receipt 返回 observedLogs）→ AssetDeposit log
+  物化；observed-sender caller authority（identityRuntime 传 executor=
+  DEPOSITOR）；active-deposit fake simulator（data "0x"（depositAsset 无
+  返回）、effects 去 blockNumber、logs 构造）；opaqueLabels 加
+  "eigenpie-deposit-router"（plugin）。manifest 重新生成（a4aa821f）。
+  节点已部署 a4aa821f（HEAD_OK + BUILD_OK）。
+- **剩余**：astra-multitoken-family（候选 0x..A1/A2 nomination empty +
+  no_catalog_match——astra 的 nominate/decode 待查）、fluid-family-admission
+  （active-quote 双向）、live-smoke（真实 RPC）、dex-live-smoke（env）→
+  两道门 → F8 收口 → live 验收 → F9。
+
 
 
 
