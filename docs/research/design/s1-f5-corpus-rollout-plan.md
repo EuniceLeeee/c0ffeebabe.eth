@@ -864,6 +864,18 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
 - **下一步**：silo/fluid/astra/eigenpie 测试适配 → 两道门
   （s1-cutover-readiness / default-authority-cutover-gate）→ F8 收口 →
   live 验收 → F9。
+- **silo 适配进展（ddb49547）**：fallback 物化透传候选 opaque（payoutToken/
+  sampleShares/sampleAssets——族 decodeCandidate 需要，9460a68d）；silo
+  测试适配（fake simulator：SILO redeem→AMOUNT_OUT + effects；discover 支持
+  identityRuntime/candidatesByAdapter；valid/timeDrift/ambiguous 段构造候选
+  + 注入 runtime——测试文件工作树）。**卡点**：族 identity 的
+  observed-payout-active-proof 在 transport 阶段 scheduler-failure（detail
+  空——executor.execute 的抛错未带 message；identity-debug 日志已加——
+  下轮定位 executor 的抛错点（issueAdapterRequestResult/freezeObservedEffects
+  或 Promise.all 的请求处理）。
+- **下一步**：silo transport 定位 → silo 全绿 → fluid/astra/eigenpie →
+  两道门 → F8 收口 → live 验收 → F9。
+
 
 
 
