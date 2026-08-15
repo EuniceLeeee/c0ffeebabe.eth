@@ -395,7 +395,18 @@ async function filterBorrowableNominations(input: {
   const ERC20 = new ethers.Interface([
     "function token0() view returns (address)",
     "function token1() view returns (address)",
+    "function coins(uint256 i) view returns (address)",
+    "function _BASE_TOKEN_() view returns (address)",
+    "function _QUOTE_TOKEN_() view returns (address)",
   ]);
+  const TOKEN_GETTERS = [
+    ["token0", ""],
+    ["token1", ""],
+    ["coins", "0"],
+    ["coins", "1"],
+    ["_BASE_TOKEN_", ""],
+    ["_QUOTE_TOKEN_", ""],
+  ] as const;
   const BORROWABLE_CONCURRENCY = 24;
   let next = 0;
   const results: boolean[] = new Array(input.nominations.length).fill(true);
@@ -407,9 +418,12 @@ async function filterBorrowableNominations(input: {
       const pool = nomination.address.toLowerCase();
       const tokens = new Set<string>();
       try {
-        for (const fn of ["token0", "token1"] as const) {
+        for (const [fn, arg] of TOKEN_GETTERS) {
           const raw = await input.provider.call(
-            { to: pool, data: ERC20.encodeFunctionData(fn) },
+            {
+              to: pool,
+              data: ERC20.encodeFunctionData(fn, arg === "" ? [] : [arg]),
+            },
             input.source.number,
           );
           if (ethers.isHexString(raw) && ethers.dataLength(raw) === 32) {
@@ -427,11 +441,13 @@ async function filterBorrowableNominations(input: {
         // the family nomination decides.
         continue;
       }
-      const borrowableHit = [...tokens].some((token) =>
-        CAPTURE_BORROWABLE_ASSETS.includes(token)
-      );
-      if (!borrowableHit && tokens.size === 2) {
-        // Two tokens, neither mainstream: not borrowable, drop.
+      // Both identified tokens must be mainstream borrowable assets: the
+      // route direction is chain-derived and cannot be steered, so a pool
+      // with any non-borrowable side can produce an unclosable route.
+      const identified = [...tokens];
+      if (identified.length === 2 && identified.some((token) =>
+        !CAPTURE_BORROWABLE_ASSETS.includes(token)
+      )) {
         results[index] = false;
       }
     }
