@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { ethers } from "ethers";
 import type { FamilyId } from "./venues/adapter-family-identifiers.js";
 import type {
+  CaptureNominationInput,
   FamilyCandidate,
   UnifiedObservation,
 } from "./venues/adapter-family-plugin.js";
@@ -112,12 +113,23 @@ export async function materializeCaptureInventory(input: {
     provider: input.provider,
     nominations: poolNominations,
   });
+  // Capture closure strategy (central, no protocol semantics): a captured
+  // route must close with a real funding plan, so the route's input token
+  // must be borrowable by the catalog funding families. Filter pool
+  // nominations to pools whose on-chain token surface includes a mainstream
+  // borrowable asset (universal ERC20 reads; pools that do not expose
+  // token0/token1 stay unfiltered).
+  const borrowableNominations = await filterBorrowableNominations({
+    provider: input.provider,
+    source: input.source,
+    nominations: poolNominations,
+  });
   admitObservations(
     input.catalog,
     await executeCatalogCaptureNominations({
       catalog: input.catalog,
       source: input.source,
-      nominations: [...poolNominations, ...seedNominations],
+      nominations: [...borrowableNominations, ...seedNominations],
       provider: nominationProvider(input.provider, input.source.number),
       alreadyAdmitted: new Set(byFamily.keys()),
     }),
@@ -132,7 +144,7 @@ export async function materializeCaptureInventory(input: {
     await executeCatalogReverseBindings({
       catalog: input.catalog,
       source: input.source,
-      nominations: [...poolNominations, ...seedNominations],
+      nominations: [...borrowableNominations, ...seedNominations],
       provider: nominationProvider(input.provider, input.source.number),
       alreadyAdmitted: new Set(byFamily.keys()),
     }),
@@ -355,6 +367,71 @@ function captureCandidateIdentity(
   }
   if (observation.kind === "address-surface") return observation.address;
   return observation.factory;
+}
+
+
+/**
+ * Central capture-closure strategy (no protocol semantics): a route capture
+ * must close with a catalog funding plan, so the route's input token must be
+ * borrowable. Pools exposing a mainstream borrowable asset in their token
+ * surface (universal ERC20 token0/token1 reads) are kept; pools whose token
+ * surface cannot be read stay unfiltered (their family nomination decides).
+ */
+const CAPTURE_BORROWABLE_ASSETS = Object.freeze([
+  "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // WETH
+  "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0", // wstETH
+  "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC
+  "0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT
+  "0x6b175474e89094c44da98b954eedeac495271d0f", // DAI
+  "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", // WBTC
+]);
+
+async function filterBorrowableNominations(input: {
+  readonly provider: CaptureInventoryProvider;
+  readonly source: CanonicalSource;
+  readonly nominations: readonly CaptureNominationInput[];
+}): Promise<readonly CaptureNominationInput[]> {
+  const borrowable: CaptureNominationInput[] = [];
+  const ERC20 = new ethers.Interface([
+    "function token0() view returns (address)",
+    "function token1() view returns (address)",
+  ]);
+  for (const nomination of input.nominations) {
+    const pool = nomination.address.toLowerCase();
+    const tokens = new Set<string>();
+    try {
+      for (const fn of ["token0", "token1"] as const) {
+        const raw = await input.provider.call(
+          { to: pool, data: ERC20.encodeFunctionData(fn) },
+          input.source.number,
+        );
+        if (ethers.isHexString(raw) && ethers.dataLength(raw) === 32) {
+          const decoded = ERC20.decodeFunctionResult(fn, raw) as unknown;
+          const token = String(
+            (decoded as { readonly [index: number]: unknown })[0] ?? "",
+          );
+          if (token !== "") tokens.add(ethers.getAddress(token).toLowerCase());
+        }
+      }
+    } catch {
+      // Token surface unreadable (non-standard pool): keep the nomination;
+      // the family nomination decides.
+      borrowable.push(nomination);
+      continue;
+    }
+    const borrowableHit = [...tokens].some((token) =>
+      CAPTURE_BORROWABLE_ASSETS.includes(token)
+    );
+    if (borrowableHit || tokens.size < 2) {
+      // Mainstream asset present, or the surface is incomplete: keep.
+      borrowable.push(nomination);
+    } else if (tokens.size === 2) {
+      // Two tokens, neither mainstream: not borrowable, drop.
+    } else {
+      borrowable.push(nomination);
+    }
+  }
+  return Object.freeze(borrowable);
 }
 
 function opaquePoolNominations(input: {
