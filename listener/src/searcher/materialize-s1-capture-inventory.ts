@@ -407,18 +407,56 @@ async function filterBorrowableNominations(input: {
     ["_QUOTE_TOKEN_", ""],
   ] as const;
 
-  // Phase 1: token surface per pool (concurrent, universal getters).
+  // Phase 1: token surface per pool. The pool-universe/graph entries already
+  // carry the token fields (token0/token1, currency0/currency1,
+  // underlyingCoins) - reading them is zero-RPC and covers every family
+  // shape (a univ4 nomination address is the PoolManager singleton with no
+  // token getters; protocol vault/proxy entries have no token0 either).
+  // Chain getters are only a fallback for entries that genuinely lack the
+  // fields; getters alone cannot cover univ4/protocol shapes.
   const tokensByPool: string[][] = new Array(input.nominations.length);
   const readable: boolean[] = new Array(input.nominations.length).fill(true);
+  let entryTokens = 0;
+  let getterFallback = 0;
+  let unreadablePools = 0;
   let next = 0;
   const reader = async (): Promise<void> => {
     while (true) {
       const index = next++;
       if (index >= input.nominations.length) return;
       const nomination = input.nominations[index]!;
+      const opaque = nomination.opaque as Readonly<Record<string, unknown>>;
       const tokens = new Set<string>();
-      // Each getter is isolated: one non-applicable getter (e.g. coins() on
-      // a univ2 pool) must not mark the whole pool unreadable.
+      for (const key of ["token0", "currency0", "fixedTokenIn"] as const) {
+        const value = opaque[key];
+        if (typeof value === "string" && ethers.isAddress(value)) {
+          tokens.add(ethers.getAddress(value).toLowerCase());
+        }
+      }
+      for (const key of ["token1", "currency1", "fixedTokenOut"] as const) {
+        const value = opaque[key];
+        if (typeof value === "string" && ethers.isAddress(value)) {
+          tokens.add(ethers.getAddress(value).toLowerCase());
+        }
+      }
+      for (const list of ["underlyingCoins", "coins"] as const) {
+        const value = opaque[list];
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            if (typeof item === "string" && ethers.isAddress(item)) {
+              tokens.add(ethers.getAddress(item).toLowerCase());
+            }
+          }
+        }
+      }
+      if (tokens.size >= 2) {
+        entryTokens += 1;
+        tokensByPool[index] = [...tokens];
+        continue;
+      }
+      // Entry lacks a full token pair: fall back to chain getters (isolated
+      // per getter). univ4/protocol shapes still fail here and stay
+      // unfiltered - their entry fields are the only reliable source.
       let anySuccess = false;
       for (const [fn, arg] of TOKEN_GETTERS) {
         try {
@@ -443,15 +481,21 @@ async function filterBorrowableNominations(input: {
           // One non-applicable getter must not fail the pool.
         }
       }
-      if (!anySuccess) {
+      if (anySuccess) {
+        getterFallback += 1;
+        tokensByPool[index] = [...tokens];
+      } else {
+        unreadablePools += 1;
         readable[index] = false;
-        continue;
       }
-      tokensByPool[index] = [...tokens];
     }
   };
   await Promise.all(
     Array.from({ length: BORROWABLE_CONCURRENCY }, () => reader()),
+  );
+  console.log(
+    "[materialize] borrowable surface entries=" + entryTokens +
+      " getter-fallback=" + getterFallback + " unreadable=" + unreadablePools,
   );
 
   // Phase 2: derive the borrowable set by executing every catalog funding
