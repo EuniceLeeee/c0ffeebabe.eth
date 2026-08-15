@@ -209,6 +209,14 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   框架合同测试用 synthetic 族覆盖“两通道都有 / retain 显式拒绝 /
   缺 retain 字段即校验失败”三种形状；生产 22 族全部满足后才允许宣称
   Pair B strict 侧完成。
+  **窗口/分片参数中央化（Pair B 子项）**：`findRecentLogHit` 的
+  `lookback`（默认 10_000）与 `chunk`（默认 500）当前被 univ2/univ3/
+  dodo/angstrom 插件隐式依赖默认值，univ4 插件在自建索引时还写死了
+  `lookback: 10_000 / chunk: 500`（已加运行日志
+  `[univ4-nomination] recent-swap index ...` 以便观测）。这些窗口/分片
+  属于中央策略：由框架在调用 nomination 时显式注入（或由中央配置读取），
+  插件只声明需要什么证据（topic/address/poolId），不再隐式吃默认值或
+  写死参数。落地后各插件行为不变，但参数来源单一化。
 - **F6 查询面扩展（2026-08-15，catalog 投影驱动）**：
   - `poolAdapterIds`（88b9cb94）：22 族插件 manifest 声明真实池 adapter
     标签；`pool-adapter-policy` 从 legacy 切到 strict 投影。

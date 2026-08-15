@@ -94,6 +94,14 @@ async function recentUniv4SwapTxHashByPoolId(input: {
     if (input.source.number - to >= input.lookback) break;
     from = Math.max(0, to - input.chunk + 1);
   }
+  // Audit log: the recent-log reverse-lookup window/chunk are currently
+  // plugin-owned constants (see nominateUniv4 call site). Centralization of
+  // these policy knobs is tracked in the F6 Pair B slice; this line makes
+  // the values used observable in every run log.
+  console.log(
+    `[univ4-nomination] recent-swap index sourceBlock=${input.source.number} ` +
+      `lookback=${input.lookback} chunk=${input.chunk} poolIds=${poolIdToTxHash.size}`,
+  );
   recentUniv4SwapIndex = Object.freeze({
     providerId: providerId(input.provider),
     sourceNumber: input.source.number,
