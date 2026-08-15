@@ -1,4 +1,9 @@
 import { ethers } from "ethers";
+// Legacy BotVM adapter bootstrap: compilePlan encodes plan nodes through the
+// shared action-adapter registry, which is populated by importing the
+// production adapter catalog (side effect). Without it the registry is
+// empty and every compiled node fails as "unknown adapter".
+import "../adapters/index.js";
 import { compilePlan } from "../shared/compiler/compiler.js";
 import { bytesToHex } from "../shared/compiler/encoder.js";
 import { buildExecuteCalldata } from
