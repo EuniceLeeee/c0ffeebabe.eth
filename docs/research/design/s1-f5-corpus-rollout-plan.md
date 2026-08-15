@@ -630,3 +630,24 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   "curve-underlying")` 路径）未产出 curve 条目；需在 F5 闭环后核对
   universe 生成链与过渡桥接线，修复并重出 universe（不降低 eligible
   证据有效性，但作为 P1 收尾必须记录并解决）。
+
+### F5 验收模型决定：生产多跳闭环（2026-08-15 用户裁定，最新为准）
+
+- **验收必须与生产实际一致**：生产套利是“借起点 token → 经多个池子的
+  路径 → 还回起点”的多跳闭环（planner 的 `BorrowableCycleToken` /
+  closed-loop 枚举、AGENTS.md 的 DEX↔DEX closed loops）。F5 capture
+  不得再用“单腿 borrow→swap→repay”的简化模型来验收。
+- **case = 真实闭环路径**：descriptor case 应是一条可执行的多跳闭环
+  （起点 token 可借），路径由中央 solver/planner 按生产逻辑拼装；
+  族验证 = 该族在真实路径中那一段的 identity/exact/execution 语义，
+  不是孤立单腿。
+- **funding 只需要起点 token 可借**（主流 WETH/USDC 通常满足），
+  不再要求路径里每个池的双 token 都可借。
+- **borrowable 过滤不构成验收约束**：单腿模型下的全局“双 token 可借”
+  过滤是错误模型的补丁——它制造了 univ4/goldx 被整体滤没的假
+  unresolved、15-25 分钟的冗余探测、以及“no executable Funding
+  offer”这类模型不匹配的假失败。应从 capture 链路移除，或最多降级为
+  “每族至少保留一个可执行代表 case”的提示，不得用可借过滤塑造 case
+  集合或掩盖 funding 真实覆盖。
+- **后续失败判读**：单腿模型下出现的 funding/borrowable 类失败先按
+  “模型不匹配”归因，再查族语义；不要继续在单腿模型上修补丁。
