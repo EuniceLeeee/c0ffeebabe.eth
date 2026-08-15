@@ -26,7 +26,12 @@ export function isProductionPoolAdapter(value: unknown): value is PoolEntry["ada
 }
 
 export function isProductionVenueId(value: unknown): value is VenueId {
-  return PRODUCTION_ADAPTER_FAMILIES.isRegisteredVenueId(value);
+  return PRODUCTION_ADAPTER_FAMILIES.isRegisteredVenueId(value) ||
+    // Strict-catalog universe rows carry the plugin-declared pool-adapter
+    // label as their venueId (provenance projection, same catalog source as
+    // PRODUCTION_POOL_ADAPTERS); accept any catalog-declared label.
+    (typeof value === "string" &&
+      PRODUCTION_POOL_ADAPTER_SET.has(value as PoolEntry["adapter"]));
 }
 
 export function isProductionVenueIdentitySource(
