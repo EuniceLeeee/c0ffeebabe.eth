@@ -74,9 +74,10 @@ async function main(): Promise<void> {
   });
   assert.equal(foreign.length, 0);
 
-  // No recent Swap log falls back to the cold-pool address-surface probe
-  // (real deployed code + interface fingerprint; identity still re-verifies
-  // on chain). A pool with deployed code yields one surface observation.
+  // No recent Swap log yields nothing from the plugin nomination; the
+  // central cold-pool address-surface fallback is tested in
+  // strict-identity-attestation (framework decides the fallback, not each
+  // plugin).
   const noLog = await nominateUniv2({
     nominations: Object.freeze([Object.freeze({
       address: POOL,
@@ -85,32 +86,9 @@ async function main(): Promise<void> {
     source: SOURCE,
     provider: mockProvider([]),
   });
-  assert.equal(noLog.length, 1);
-  const surface = noLog[0] as Extract<
-    UnifiedObservation,
-    { readonly kind: "address-surface" }
-  >;
-  assert.equal(surface.kind, "address-surface");
-  assert.equal(surface.address, POOL.toLowerCase());
-  assert(surface.codeHash.startsWith("0x"));
-  assert.deepEqual(surface.interfaceFingerprints, ["univ2-pair-surface-v1"]);
+  assert.equal(noLog.length, 0);
 
-  // No deployed code and no log yields nothing; no fabrication.
-  const empty = await nominateUniv2({
-    nominations: Object.freeze([Object.freeze({
-      address: POOL,
-      opaque: Object.freeze({ adapter: "univ2" }),
-    })]),
-    source: SOURCE,
-    provider: Object.freeze({
-      ...mockProvider([]),
-      getCode: async () => "0x",
-    }),
-  });
-  assert.equal(empty.length, 0);
-
-  // RPC failure on one nomination is isolated: no observation is emitted
-  // when the log lookup and the code probe both fail.
+  // RPC failure on one nomination is isolated.
   const failing = await nominateUniv2({
     nominations: Object.freeze([Object.freeze({
       address: POOL,
@@ -120,9 +98,6 @@ async function main(): Promise<void> {
     provider: Object.freeze({
       ...mockProvider(),
       getLogs: async () => {
-        throw new Error("rpc down");
-      },
-      getCode: async () => {
         throw new Error("rpc down");
       },
     }),

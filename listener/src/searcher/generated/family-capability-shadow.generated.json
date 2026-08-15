@@ -6074,7 +6074,7 @@
         "familyId": "univ2-standard",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "4a7b847fff7d08fd7aedc7e1f311f74839bca5d50e938e9d6f41b661bfeca5e7",
+        "contentHash": "f767f2113c43fb3a3dc7e24b010d45176351f91a658f3cc3762a472e24506cae",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6125,7 +6125,7 @@
         "familyId": "univ2-standard",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "000ddee1c6ca0738b4e7e92fe9f930f6e2364b91ff34f11a6683f457800ea960",
+        "contentHash": "fef9cb5b3e330a871b41dd172c6b439130174beaf9bda80acf49de31a951194e",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -6398,7 +6398,7 @@
         "familyId": "univ3-standard",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "bdc7ac76570fa57f1456b4b992682397269e5e43f40746c089f75239f8a3e03e",
+        "contentHash": "dba78b3aa971b40556db0e281ff70f76e3940e5356b382e0f9dcb2ebc177d24a",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6451,7 +6451,7 @@
         "familyId": "univ3-standard",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "3589ab05f4309d976f63a8f46fea19250ee5cf9dd12fda228f70f8784693eb1b",
+        "contentHash": "d68bc580d4b10634abd4ccaa01579b734330e57cd3f5be0a1f485eb8eeb3fd09",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -7065,5 +7065,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "c36bfb97d2ae91023bdf4b437fe5d47705f81bceda48b550c2dc91f00d22da0d"
+  "artifactHash": "9aaffc0312f5190b98833bcdbd21639a8ed37ce515e1f6c9bc62ef0a1abbc0e3"
 }

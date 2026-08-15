@@ -1,8 +1,5 @@
 import { ethers } from "ethers";
 import type {
-  FamilyCapabilityCatalog,
-} from "./venues/family-capability-catalog.js";
-import type {
   CentralAdapterRuntime,
 } from "./adapter-work-intent.js";
 import type { UnifiedObservation } from
@@ -11,6 +8,8 @@ import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import type { FamilyId } from
   "./venues/adapter-family-identifiers.js";
+import type { FamilyCapabilityCatalog } from
+  "./venues/family-capability-catalog.js";
 import {
   executeAdapterFamilyLifecycleBatch,
 } from "./venues/adapter-family-runtime.js";
@@ -193,10 +192,24 @@ export async function attestPoolIdentitiesStrict<
         })]),
         provider: nominationProvider,
       });
-      const observation = observations[0];
+      let observation: UnifiedObservation | undefined = observations[0];
       if (observation === undefined) {
-        rejected[index] = { ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" };
-        return;
+        // Central generic fallback (no per-family logic): when the plugin
+        // nomination produced no observation (e.g. a cold pool with no Swap
+        // in the retained window), re-materialize the address surface from
+        // deployed code plus every catalog-declared interface fingerprint.
+        // Catalog matching + chain reverse verification still decide
+        // admission; the fallback is provenance, never an allowlist.
+        observation = await centralAddressSurfaceFallback(
+          input.catalog,
+          input.provider,
+          input.source,
+          address,
+        );
+        if (observation === undefined) {
+          rejected[index] = { ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" };
+          return;
+        }
       }
       const matches = input.catalog.matches(observation);
       if (matches.length === 0) {
@@ -375,6 +388,39 @@ function createMinimalIdentityRuntime(
  * verbatim without interpreting any field; the owning plugin's nomination
  * consumes the subset it declares. No protocol semantics in central paths.
  */
+/**
+ * Central generic cold-pool fallback: re-materialize an address-surface
+ * observation from deployed code plus every catalog-declared interface
+ * fingerprint (dynamic enumeration over the catalog; no per-family list in
+ * central code). Admission still runs through catalog matching and the
+ * family lifecycle identity stage; this only supplies the observation.
+ */
+export async function centralAddressSurfaceFallback(
+  catalog: FamilyCapabilityCatalog,
+  provider: StrictIdentityProvider,
+  source: CanonicalSource,
+  address: string,
+): Promise<UnifiedObservation | undefined> {
+  const code = await provider.getCode(address, source.number);
+  if (!ethers.isHexString(code) || code === "0x") return undefined;
+  const fingerprints: string[] = [];
+  for (const family of catalog.listAll()) {
+    if (!("discovery" in family.plugin)) continue;
+    for (const surface of family.plugin.discovery.addressSurfaces ?? []) {
+      if (surface.kind === "interface") fingerprints.push(surface.fingerprint);
+    }
+  }
+  if (fingerprints.length === 0) return undefined;
+  return Object.freeze({
+    kind: "address-surface" as const,
+    source,
+    address: ethers.getAddress(address).toLowerCase(),
+    codeHash: ethers.keccak256(code).toLowerCase(),
+    implementationWord: ethers.zeroPadValue("0x", 32).toLowerCase(),
+    interfaceFingerprints: Object.freeze([...new Set(fingerprints)]),
+  } as never);
+}
+
 function entryOpaque(pool: { readonly address: string; readonly adapter?: string }): Record<string, unknown> {
   const opaque: Record<string, unknown> = {};
   if (pool.adapter !== undefined) {

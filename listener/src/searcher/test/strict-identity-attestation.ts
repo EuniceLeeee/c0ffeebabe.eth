@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import {
   attestPoolIdentitiesStrict,
+  centralAddressSurfaceFallback,
 } from "../strict-identity-attestation.js";
 import type { CentralAdapterRuntime } from
   "../adapter-work-intent.js";
@@ -153,7 +154,39 @@ async function main(): Promise<void> {
   assert.equal(noMatch.accepted.length, 0);
   assert.equal(noMatch.rejected[0]?.reason, "no_catalog_match");
 
-  console.log("strict identity attestation PASS (fail-closed paths)");
+  // Central cold-pool fallback contract: no plugin nomination result is
+  // re-materialized by the framework as an address-surface observation
+  // (deployed code + every catalog-declared interface fingerprint). This
+  // is a central rule, not per-family logic.
+  const surface = await centralAddressSurfaceFallback(
+    catalog,
+    {
+      call: async () => "0x",
+      getCode: async () => "0x60806040",
+      getStorage: async () => `0x${"00".repeat(32)}`,
+    },
+    SOURCE,
+    POOL,
+  );
+  assert(surface !== undefined);
+  assert.equal(surface.kind, "address-surface");
+  assert(surface.interfaceFingerprints?.includes(FINGERPRINT) === true);
+  assert.match(surface.codeHash, /^0x[0-9a-f]{64}$/);
+
+  // No deployed code -> no fallback observation (fail-closed).
+  const emptySurface = await centralAddressSurfaceFallback(
+    catalog,
+    {
+      call: async () => "0x",
+      getCode: async () => "0x",
+      getStorage: async () => `0x${"00".repeat(32)}`,
+    },
+    SOURCE,
+    POOL,
+  );
+  assert.equal(emptySurface, undefined);
+
+  console.log("strict identity attestation PASS (fail-closed paths + central cold-pool fallback)");
 }
 
 main().catch((error) => {
