@@ -12,7 +12,10 @@ import type {
 } from "../../adapter-family-identifiers.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
 
-export type UniV4CandidateSource = "initialize-log" | "manager-swap-call";
+export type UniV4CandidateSource =
+  | "initialize-log"
+  | "manager-swap-call"
+  | "pool-surface";
 
 export interface UniV4Candidate extends FamilyCandidate {
   readonly candidateKind: "univ4-pool-key";

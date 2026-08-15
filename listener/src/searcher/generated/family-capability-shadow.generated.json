@@ -6724,20 +6724,26 @@
         "familyId": "univ4",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "d14b97f488a9d8330e06361fe94e7bfc89669b06796fb58e62236bc7708ae18c",
+        "contentHash": "ecebfb28cb7c2ad553c2f7ac8a49236188c5e386d1a0b6159d76d5378f24554c",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/pool-registry-key.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/landed-event-registry.ts",
+          "src/searcher/venues/landed-pool-discovery.ts",
+          "src/searcher/venues/landed-pool-shared-identity.ts",
+          "src/searcher/venues/route-immutable-binding.ts",
           "src/searcher/venues/swaps/univ4-abi.ts",
           "src/searcher/venues/swaps/univ4-common.ts",
           "src/searcher/venues/swaps/univ4-family/codec.ts",
           "src/searcher/venues/swaps/univ4-family/discovery.ts",
           "src/searcher/venues/swaps/univ4-family/manifest.ts",
           "src/searcher/venues/swaps/univ4-family/nomination.ts",
+          "src/searcher/venues/swaps/univ4-pool-discovery.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -6778,18 +6784,24 @@
         "familyId": "univ4",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "61c433d25bf684559e24a868c0871d075553766e41b7bc49a33a06d6b9b6db45",
+        "contentHash": "f4c42de5084af80e3ecd2099930bc8bb900e06d922b4c1ed90ebf039f0b7a462",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/pool-registry-key.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/landed-event-registry.ts",
+          "src/searcher/venues/landed-pool-discovery.ts",
+          "src/searcher/venues/landed-pool-shared-identity.ts",
+          "src/searcher/venues/route-immutable-binding.ts",
           "src/searcher/venues/swaps/univ4-abi.ts",
           "src/searcher/venues/swaps/univ4-common.ts",
           "src/searcher/venues/swaps/univ4-family/codec.ts",
           "src/searcher/venues/swaps/univ4-family/manifest.ts",
           "src/searcher/venues/swaps/univ4-family/nomination.ts",
+          "src/searcher/venues/swaps/univ4-pool-discovery.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -7065,5 +7077,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "9aaffc0312f5190b98833bcdbd21639a8ed37ce515e1f6c9bc62ef0a1abbc0e3"
+  "artifactHash": "c8d72ecc388eb0e14fb37872caf4c23a859428d0087b94751a039a130cd428c8"
 }

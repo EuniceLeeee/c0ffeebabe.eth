@@ -10,7 +10,9 @@ import {
   UNIV4_SWAP_TOPIC,
 } from "../../swaps/univ4-abi.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
-import { canonicalPoolId } from "./codec.js";
+import { canonicalPoolId, canonicalPoolKey } from "./codec.js";
+import { resolveV4PoolKeyViaPositionManager } from
+  "../univ4-pool-discovery.js";
 
 interface RecentUniv4SwapIndex {
   readonly providerId: number;
@@ -142,21 +144,60 @@ export async function nominateUniv4(input: {
     if (poolId === null) continue;
     try {
       const transactionHash = poolIdToTxHash.get(poolId.toLowerCase());
-      if (transactionHash === undefined) continue;
-      if (input.provider.traceTransaction === undefined) continue;
-      const trace = await input.provider.traceTransaction(
-        transactionHash,
+      if (transactionHash !== undefined &&
+        input.provider.traceTransaction !== undefined
+      ) {
+        const trace = await input.provider.traceTransaction(
+          transactionHash,
+        );
+        const frame = findManagerSwapFrame(trace, manager);
+        if (frame !== null) {
+          results.push(Object.freeze({
+            kind: "call" as const,
+            source: input.source,
+            target: manager,
+            sender: frame.from.toLowerCase(),
+            data: frame.input.toLowerCase(),
+            transactionHash,
+          }));
+          continue;
+        }
+      }
+      // Cold-pool fallback: no Swap in the retained window. Recover the
+      // real PoolKey through the PositionManager reverse lookup (chain
+      // truth, no transaction needed) and carry it in the address-surface
+      // opaque payload. Identity still re-verifies the pool key against
+      // the manager at the source block.
+      const resolved = await resolveV4PoolKeyViaPositionManager(
+        { call: input.provider.call } as never,
+        ADDR.UNISWAP_V4_POSITION_MANAGER,
+        poolId,
       );
-      const frame = findManagerSwapFrame(trace, manager);
-      if (frame === null) continue;
+      if (resolved === null) continue;
+      const poolKey = canonicalPoolKey({
+        currency0: resolved.currency0,
+        currency1: resolved.currency1,
+        fee: resolved.fee,
+        tickSpacing: resolved.tickSpacing,
+        hooks: resolved.hooks,
+      });
+      const code = await input.provider.getCode(
+        ADDR.UNISWAP_V4_POOL_MANAGER,
+        input.source.number,
+      );
+      if (!ethers.isHexString(code) || code === "0x") continue;
       results.push(Object.freeze({
-        kind: "call" as const,
+        kind: "address-surface" as const,
         source: input.source,
-        target: manager,
-        sender: frame.from.toLowerCase(),
-        data: frame.input.toLowerCase(),
-        transactionHash,
-      }));
+        address: manager,
+        codeHash: ethers.keccak256(code).toLowerCase(),
+        implementationWord: ethers.zeroPadValue("0x", 32).toLowerCase(),
+        interfaceFingerprints: Object.freeze(["univ4-pool-surface-v1"]),
+        opaque: Object.freeze({
+          poolId: canonicalPoolId(poolId).toLowerCase(),
+          poolKey,
+        } as never),
+      } as never));
     } catch {
       // One unreadable nomination must not block the next one.
     }
