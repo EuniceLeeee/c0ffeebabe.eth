@@ -652,6 +652,21 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
 - **后续失败判读**：单腿模型下出现的 funding/borrowable 类失败先按
   “模型不匹配”归因，再查族语义；不要继续在单腿模型上修补丁。
 
+### F5 startToken 验收决策 + P1 token 表（2026-08-15 用户裁定，最新为准）
+
+- **当前过渡口径**：多跳验收的起点借款 token **先固定用 ETH（WETH）**，
+  闭环路径从 WETH 出发、经过各族验证池、回 WETH 还款；不再做
+  graphTokenFrequency / frequentTokens / borrowable 集探测这类绕圈实现。
+  固定 ETH 只作为 F5 过渡，不构成终态语义。
+- **正确终态（P1，新架构完成后）**：funding 族（morpho/balancer）提供
+  “可借 token 列表查询函数”（borrowable assets 查询），中央维护一个
+  **独立 token 表**（与 edge 表并列，作为第二个基础表）；startToken
+  从该表动态选择，替换固定 ETH 和现在的逐池探测。
+- 现有 `annotateStartTokens` 的 graph 高频 token + 逐池 funding 探测被
+  判定为绕圈：它既不是真实可借列表查询，也没有维护独立 token 表。
+  P1 落地时删除该实现，改为 funding 查询函数 + token 表。
+- 该 P1 项不阻塞 F5 eligible（固定 ETH 足够跑通多跳闭环验收）。
+
 ### F5 验收模型方向修正：生产多跳闭环（2026-08-15 用户裁定，最新为准）
 
 - **验收以生产实际模型为准，单腿 borrowable 过滤不构成验收约束**。生产套利是
@@ -691,4 +706,3 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
 - **下一步**：materializer v18（后台运行中）→ descriptor v14（带 path）→
   challenger 17（多跳执行）→ 逐 case 判读（环方向与族 route 不匹配等
   如实修，不猜不降级）。
-
