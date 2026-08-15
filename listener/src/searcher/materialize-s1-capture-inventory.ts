@@ -117,7 +117,7 @@ export async function materializeCaptureInventory(input: {
       catalog: input.catalog,
       source: input.source,
       nominations: [...poolNominations, ...seedNominations],
-      provider: nominationProvider(input.provider),
+      provider: nominationProvider(input.provider, input.source.number),
       alreadyAdmitted: new Set(byFamily.keys()),
     }),
     byFamily,
@@ -446,12 +446,15 @@ function opaquePoolNominations(input: {
 
 function nominationProvider(
   provider: CaptureInventoryProvider,
+  sourceBlock: number,
 ): import("./venues/adapter-family-plugin.js").CaptureNominationProvider {
   return {
-    call: (transaction, blockTag) => provider.call(transaction, blockTag ?? 0),
-    getCode: (address, blockTag) => provider.getCode(address, blockTag ?? 0),
+    call: (transaction, blockTag) =>
+      provider.call(transaction, blockTag ?? sourceBlock),
+    getCode: (address, blockTag) =>
+      provider.getCode(address, blockTag ?? sourceBlock),
     getStorage: (address, slot, blockTag) =>
-      provider.getStorage(address, slot, blockTag ?? 0),
+      provider.getStorage(address, slot, blockTag ?? sourceBlock),
     getLogs: (filter) => provider.getLogs({
       ...(filter.address === undefined ? {} : { address: filter.address }),
       fromBlock: filter.fromBlock ?? 0,

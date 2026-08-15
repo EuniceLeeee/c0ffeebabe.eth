@@ -136,11 +136,11 @@ export async function attestPoolIdentitiesStrict<
   // row. The provider closes over the same underlying reads for all rows.
   const nominationProvider = Object.freeze({
     call: (transaction: { readonly to: string; readonly data: string }, blockTag?: number) =>
-      input.provider.call(transaction, blockTag ?? 0),
+      input.provider.call(transaction, blockTag ?? input.source.number),
     getCode: (a: string, blockTag?: number) =>
-      input.provider.getCode(a, blockTag ?? 0),
+      input.provider.getCode(a, blockTag ?? input.source.number),
     getStorage: (a: string, s: string, blockTag?: number) =>
-      input.provider.getStorage(a, s, blockTag ?? 0),
+      input.provider.getStorage(a, s, blockTag ?? input.source.number),
     // Nomination capabilities are passed through when the caller supplies
     // them (recent-log reverse lookup, tx seed); absent means fail-closed
     // empty implementations.
