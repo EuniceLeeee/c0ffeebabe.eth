@@ -101,7 +101,11 @@ export const eigenpieDiscovery = {
     lowerAddress(candidate.tokenIn),
   ].join(":"),
   nominate: createTxEvidenceNomination({
-    opaqueLabels: Object.freeze(["eigenpie", "protocol:eigenpie"]),
+    opaqueLabels: Object.freeze([
+      "eigenpie",
+      "protocol:eigenpie",
+      "eigenpie-deposit-router",
+    ]),
     logPatterns: Object.freeze([{
       id: "eigenpie-deposit",
       topic: EIGENPIE_DEPOSIT_TOPIC as `0x${string}`,

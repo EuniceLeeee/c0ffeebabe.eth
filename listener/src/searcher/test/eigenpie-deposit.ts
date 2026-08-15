@@ -28,6 +28,9 @@ import {
   eigenpieIface,
 } from "../venues/protocols/eigenpie-discovery.js";
 import { eigenpieAdapter } from "../venues/protocols/eigenpie.js";
+import { createStrictCentralAdapterRuntime, type StrictSimulationTransport } from "../strict-central-adapter-runtime.js";
+import { PRODUCTION_STRICT_VERIFIED_ACTORS } from "../venues/production-verified-actors.js";
+import type { CentralAdapterRuntime } from "../adapter-work-intent.js";
 import type {
   ProtocolDiscoveryContext,
   ProtocolDiscoveryLog,
@@ -148,7 +151,9 @@ function makeContext(options: { corruptSupply?: boolean } = {}): ProtocolDiscove
     async getCode() { return "0x60006000"; },
     async getStorageAt() { return ethers.ZeroHash; },
     async getLogs() { return []; },
-    async getTransactionReceipt() { return null; },
+    async getTransactionReceipt() {
+      return { status: 1, logs: observedLogs() };
+    },
     async traceTransaction() { throw new Error("unexpected trace read"); },
     async createAccessList() {
       return [{ address: TOKEN_IN, storageKeys: [BALANCE_SLOT] }];
@@ -266,12 +271,64 @@ const falseCandidate = await matcher({
 assert(falseCandidate === null, "same selector/topic without causal exact mint must fail closed");
 console.log("[eigenpie-deposit] observed behavior classification: PASS");
 
+const eigenpieFixtureSimulator: StrictSimulationTransport = {
+  async simulate({ request }) {
+    if (request.kind !== "effect-delta-simulation") {
+      throw new Error("eigenpie fixture simulator requires effect-delta-simulation");
+    }
+    const call = request.call as { readonly to: string; readonly data: string };
+    const decoded = eigenpieIface.decodeFunctionData("depositAsset", call.data);
+    const tokenIn = ethers.getAddress(String(decoded[0])).toLowerCase();
+    const amountIn = BigInt(decoded[1]);
+    const actor = DEPOSITOR.toLowerCase();
+    const tokenOut = TOKEN_OUT.toLowerCase();
+    const amountOut = AMOUNT_OUT;
+    return {
+      data: "0x",
+      effects: {
+        tokenDeltas: [
+          { token: tokenIn, account: actor, delta: -amountIn },
+          { token: tokenOut, account: actor, delta: amountOut },
+        ],
+        totalSupplyDeltas: [{ token: tokenOut, delta: amountOut }],
+        logs: [{
+          address: depositLog().address,
+          topics: depositLog().topics,
+          data: depositLog().data,
+        }],
+      },
+    };
+  },
+};
+const eigenpieIdentityRuntime: CentralAdapterRuntime =
+  createStrictCentralAdapterRuntime({
+    provider: context.backend as never,
+    simulator: eigenpieFixtureSimulator,
+    generationFence: Object.freeze({
+      kind: "catalog-relative" as const,
+      assertCurrent: () => undefined,
+      verifyCanonicalSource: () => true,
+    }),
+    verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+    executor: DEPOSITOR,
+  });
+const candidateWithTx = {
+  ...candidate,
+  pool: {
+    ...candidate.pool,
+    ...({
+      transactionHash: ethers.keccak256(ethers.toUtf8Bytes("observed-deposit")),
+    } as unknown as Record<string, never>),
+  } as never,
+} as never;
 const discoveryResult = await runProtocolDiscovery({
   adapters: [eigenpieAdapter],
   context,
   protocolEdgesEnabled: true,
-  attestIdentity: createCanonicalProtocolIdentityAttester(),
-  candidatesByAdapter: new Map([[eigenpieAdapter.id, [candidate]]]),
+  attestIdentity: createCanonicalProtocolIdentityAttester({
+    identityRuntime: eigenpieIdentityRuntime,
+  }),
+  candidatesByAdapter: new Map([[eigenpieAdapter.id, [candidateWithTx]]]),
 });
 assert(discoveryResult.wouldAdmit.length === 1, "identity + active probe admission");
 assert(discoveryResult.wouldAdmit[0].edges.length === 1, "one exact verified route");
