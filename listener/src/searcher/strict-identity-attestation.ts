@@ -205,6 +205,7 @@ export async function attestPoolIdentitiesStrict<
           input.provider,
           input.source,
           address,
+          pool.adapter,
         );
         if (observation === undefined) {
           rejected[index] = { ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" };
@@ -400,12 +401,24 @@ export async function centralAddressSurfaceFallback(
   provider: StrictIdentityProvider,
   source: CanonicalSource,
   address: string,
+  adapterHint?: string,
 ): Promise<UnifiedObservation | undefined> {
   const code = await provider.getCode(address, source.number);
   if (!ethers.isHexString(code) || code === "0x") return undefined;
+  // Collect interface fingerprints only from the family that owns the
+  // pool-adapter hint (plugin-declared manifest field). Without an owner
+  // the fallback stays fail-closed instead of guessing a family: the
+  // observation must match the family that will verify identity.
   const fingerprints: string[] = [];
-  for (const family of catalog.listAll()) {
-    if (!("discovery" in family.plugin)) continue;
+  if (adapterHint !== undefined) {
+    let familyId: FamilyId;
+    try {
+      familyId = catalog.ownerOfPoolAdapter(adapterHint);
+    } catch {
+      return undefined;
+    }
+    const family = catalog.forStrictFamily(familyId);
+    if (!("discovery" in family.plugin)) return undefined;
     for (const surface of family.plugin.discovery.addressSurfaces ?? []) {
       if (surface.kind === "interface") fingerprints.push(surface.fingerprint);
     }
@@ -443,6 +456,16 @@ function matchFor(
   matches: readonly { readonly familyId: FamilyId; readonly patternId: string }[],
 ): { readonly familyId: FamilyId; readonly patternId: string } | null {
   if (pool.adapter !== undefined) {
+    // Prefer the family that owns the pool-adapter label (plugin-declared
+    // manifest field; catalog-projected, never a central label table),
+    // then the action-owner hint, then the first catalog match.
+    try {
+      const familyId = input.catalog.ownerOfPoolAdapter(pool.adapter);
+      const match = matches.find((candidate) => candidate.familyId === familyId);
+      if (match !== undefined) return match;
+    } catch {
+      // fall through to action-owner hint
+    }
     try {
       const familyId = input.catalog.ownerOfAction(pool.adapter);
       const match = matches.find((candidate) => candidate.familyId === familyId);

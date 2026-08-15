@@ -32,6 +32,7 @@ const family = Object.freeze({
     manifest: Object.freeze({
       familyId: FAMILY,
       domain: "protocol" as const,
+      poolAdapterIds: Object.freeze(["synthetic-pool"]),
     }),
     discovery: Object.freeze({
       evidenceChannel: "nominate" as const,
@@ -70,6 +71,10 @@ const catalog = Object.freeze({
   },
   ownerOfAction: (id: string) => {
     if (id !== ACTION) throw new Error("unknown action");
+    return FAMILY;
+  },
+  ownerOfPoolAdapter: (id: string) => {
+    if (id !== "synthetic-pool") throw new Error("unknown pool adapter");
     return FAMILY;
   },
   matches: (observation: UnifiedObservation) =>
@@ -167,6 +172,7 @@ async function main(): Promise<void> {
     },
     SOURCE,
     POOL,
+    "synthetic-pool",
   );
   assert(surface !== undefined);
   assert.equal(surface.kind, "address-surface");
@@ -183,8 +189,23 @@ async function main(): Promise<void> {
     },
     SOURCE,
     POOL,
+    "synthetic-pool",
   );
   assert.equal(emptySurface, undefined);
+
+  // Unknown adapter hint stays fail-closed (no family guessing).
+  const unknownHint = await centralAddressSurfaceFallback(
+    catalog,
+    {
+      call: async () => "0x",
+      getCode: async () => "0x60806040",
+      getStorage: async () => `0x${"00".repeat(32)}`,
+    },
+    SOURCE,
+    POOL,
+    "unrelated-adapter",
+  );
+  assert.equal(unknownHint, undefined);
 
   console.log("strict identity attestation PASS (fail-closed paths + central cold-pool fallback)");
 }
