@@ -207,42 +207,29 @@ const POOL_UNIVERSE_DISCOVERY_CONTRACT_VERSION = 1;
  * landed/factory evidence. The universe artifact persists this set and live
  * startup refuses to inherit its cursor when any item differs.
  */
-export function productionPoolUniverseSourceFingerprints():
-  readonly string[] {
-  return poolUniverseSourceFingerprints({
-    landedSourceFingerprints: PRODUCTION_ADAPTER_FAMILIES
-      .landedPoolDiscovery()
-      .list()
-      .map((descriptor) => descriptor.sourceFingerprint),
-    identityPolicies: PRODUCTION_IDENTITY_RESOLVERS.list(),
-    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-    identityCatalog: VENUE_IDENTITY_CATALOG,
-    matureDexUniversePoolAdapters:
-      PRODUCTION_ADAPTER_FAMILIES.matureDexUniversePoolAdapters(),
-    v2Lineages: V2_LINEAGES,
-  });
-}
-
-/**
- * F6 Pair D: universe deploy trust fingerprints that include the strict
- * catalog-derived identity/lineage surface. The legacy identity-policies
- * fingerprint remains for the transitional period; the strict variant binds
- * the generated catalog (capability hashes + definition boundaries) so a
- * family declaration change invalidates the persisted universe.
- */
 export function productionPoolUniverseSourceFingerprintsStrict():
   readonly string[] {
   return Object.freeze([
-    ...productionPoolUniverseSourceFingerprints(),
+    ...poolUniverseSourceFingerprints({
+      landedSourceFingerprints: PRODUCTION_ADAPTER_FAMILIES
+        .landedPoolDiscovery()
+        .list()
+        .map((descriptor) => descriptor.sourceFingerprint),
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+      identityCatalog: VENUE_IDENTITY_CATALOG,
+      matureDexUniversePoolAdapters:
+        PRODUCTION_ADAPTER_FAMILIES.matureDexUniversePoolAdapters(),
+      v2Lineages: V2_LINEAGES,
+    }),
     ...strictCatalogUniverseSourceFingerprints({
       catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
     }),
   ]);
 }
 
+
 export function poolUniverseSourceFingerprints(input: {
   readonly landedSourceFingerprints: readonly string[];
-  readonly identityPolicies: readonly IdentityResolverDescriptor[];
   readonly admissionPolicy: IdentityAdmissionPolicy;
   readonly identityCatalog: readonly VenueIdentityCatalogEntry[];
   readonly matureDexUniversePoolAdapters: readonly string[];
@@ -256,11 +243,6 @@ export function poolUniverseSourceFingerprints(input: {
       unregisteredCurveUnderlying:
         input.admissionPolicy.unregisteredCurveUnderlying,
     })}`,
-    `identity-policies:${fingerprintJson(
-      [...input.identityPolicies]
-        .sort((a, b) => a.poolAdapter.localeCompare(b.poolAdapter))
-        .map(identityPolicyFingerprintInput),
-    )}`,
     `identity-catalog:${fingerprintJson(
       input.identityCatalog.map((entry) => ({
         venue: entry.venue,

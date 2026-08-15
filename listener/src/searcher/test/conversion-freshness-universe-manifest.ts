@@ -5,12 +5,12 @@ import {
   POOL_UNIVERSE_BUILD_MANIFEST_PROFILE,
 } from "../build-active-pool-universe.js";
 import {
-  productionPoolUniverseSourceFingerprints,
+  productionPoolUniverseSourceFingerprintsStrict,
 } from "../venues/production-registry.js";
 
 export function productionUniverseRegistrySourceFingerprints():
   readonly string[] {
-  return productionPoolUniverseSourceFingerprints();
+  return productionPoolUniverseSourceFingerprintsStrict();
 }
 
 /**

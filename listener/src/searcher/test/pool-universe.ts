@@ -268,10 +268,6 @@ async function main(): Promise<void> {
     );
     console.log("[pool-universe] discovery registry provenance: PASS");
 
-    const identityPolicies: readonly IdentityResolverDescriptor[] = [{
-      poolAdapter: "univ2",
-      policy: "trusted-singleton-seed",
-    }];
     const lineage: V2LineageDescriptor = {
       venue: "v2-factory:0x0000000000000000000000000000000000000123",
       factory: poolAddress(0x123),
@@ -290,7 +286,6 @@ async function main(): Promise<void> {
     ) =>
       poolUniverseSourceFingerprints({
         landedSourceFingerprints: ["landed-a"],
-        identityPolicies,
         admissionPolicy: {
           unknownFactory,
           unregisteredCurveUnderlying: "probe",
