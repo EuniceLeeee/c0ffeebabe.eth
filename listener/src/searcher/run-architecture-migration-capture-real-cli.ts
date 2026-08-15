@@ -182,14 +182,9 @@ async function main(): Promise<void> {
         }));
       },
     });
-    if (familyCases.length !== manifest.cases.length) {
-      throw new Error("generic capture produced an incomplete denominator");
-    }
-    if (failures.length !== 0 && outPath === undefined) {
-      throw new Error(
-        `generic capture incomplete: ${JSON.stringify(failures)}`,
-      );
-    }
+    const incomplete =
+      failures.length !== 0 ||
+      familyCases.length !== manifest.cases.length;
     const evidenceRefs = Object.freeze([...new Set(familyCases.flatMap(
       (familyCase) => Object.values(familyCase.stages).flatMap(
         (stage) => stage?.evidenceRefs ?? [],
@@ -238,18 +233,22 @@ async function main(): Promise<void> {
       familyCases,
       commonGraph: commonGraph(source, familyCases, evidenceRefs),
     });
-    if (failures.length !== 0) {
-      // Partial output: keep the successful cases inspectable (multi-hop
-      // final-sim results) even though the corpus is incomplete. The exit
-      // still fails closed.
-      await writeFile(
-        outPath!,
-        architectureMigrationSideJson(
-          generateArchitectureMigrationSideCapture(corpus),
-        ),
-      ).catch(() => undefined);
+    if (incomplete) {
+      if (outPath !== undefined) {
+        // Partial output: keep the successful cases inspectable (multi-hop
+        // final-sim results) even though the corpus is incomplete. The exit
+        // still fails closed.
+        await writeFile(
+          outPath,
+          architectureMigrationSideJson(
+            generateArchitectureMigrationSideCapture(corpus),
+          ),
+        ).catch(() => undefined);
+      }
       throw new Error(
-        `generic capture incomplete: ${JSON.stringify(failures)}`,
+        failures.length !== 0
+          ? `generic capture incomplete: ${JSON.stringify(failures)}`
+          : "generic capture produced an incomplete denominator",
       );
     }
     return generateArchitectureMigrationSideCapture(corpus);
