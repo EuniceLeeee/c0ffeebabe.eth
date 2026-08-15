@@ -189,6 +189,19 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   A（revm strict-only overlay）的 strict 侧均已落地并保持 sweep 绿；
   legacy 删除尚未开始。删除顺序 B→C→D→F→A，每对必须先验证 strict 侧
   再删 legacy（当前无一对满足删除前置，不能诚实删除）。
+- **Pair B 新增待落地：Family 模版双通道（fresh + reverseBinding）**
+  （2026-08-15 用户裁定）：模版必须同时提供 fresh 接口（现有
+  `nominate`：近期观测/交易证据）与 retain 接口（新增 `reverseBinding`
+  槽位：冷池可验的反向绑定 factory-child / registry-member /
+  PositionManager / manager-state）。每个族都必须声明 retain 接口，
+  做不了的显式声明为空/不支持（univ4 非 PositionManager 创建需回创建块
+  Initialize、超出本地 reth 保留窗口 → 显式不可反查；angstrom/eigenpie/
+  ethertoken 等 tx-bound 族同理）。中央 retained 策略统一为：能反查先
+  反查；插件显式不支持时才要求近期证据或拒绝。窗口与 retain 策略在
+  中央，插件只声明语义。当前 2c051a43 已实现 univ2/univ3 冷池
+  address-surface nomination 兜底（无近期 Swap 时 getCode+指纹物化，
+  身份仍链上反查），是这条通道的首个落地切片；其余族与中央策略切换
+  待本 slice 完成。
 - **F6 查询面扩展（2026-08-15，catalog 投影驱动）**：
   - `poolAdapterIds`（88b9cb94）：22 族插件 manifest 声明真实池 adapter
     标签；`pool-adapter-policy` 从 legacy 切到 strict 投影。

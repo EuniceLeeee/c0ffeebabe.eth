@@ -569,3 +569,39 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   ~3.3K、dodo ~450，fresh 合计 ~17-18K，+ retained 近期池 + factory/
   swap-active view → 目标 2 万池/3 万边。窗口是旧基准逐项对比轴之一，
   属“定位修复重跑”而非降线。
+
+### F5 验收口径定版与运行历史（2026-08-15 用户裁定，最新为准）
+
+- **验收基线（用户定版）**：最终 universe（fresh + retained 合并计数）
+  ≥ 10,671 池 / ≥21,256 有向边即通过（10.7K/21.3K 为最低基线，不再要求
+  2 万/3 万）。通过后交付新旧对比表（新 universe vs 旧基准 ee2e2483），
+  逐族拆 fresh / retained 与总数、重叠/独有。
+- **per-family fresh > 0 非硬门槛**：若人工确认某族在窗口内确实无交易，
+  全 retained / fresh=0 也可算通过。当前 7 族 fresh 均 > 0，无需豁免。
+- **retained 可存在但非 eligible 证据**：F5 eligible 仍以 fresh 重建
+  能力 + 真实观测为准；retained 只是生产拓扑保留，不算重建证明。
+- **7 天窗口重跑已弃用**（用户明确“这个数据我也不要”）：F5 重建固定
+  2 天窗口（lookback=14400）+ retained 输入
+  （POOL_UNIVERSE_RETAIN_PATH=生产 active-pools.json），全部本地 reth。
+- **运行历史与修复（以最新 commit 为准）**：
+  - ret8：enrich 卡死（univ4 nomination 无条件建索引 → 非 univ4 池每次
+    都重建 35 万日志索引，CPU 转圈）。修复 114258a6（非 univ4 opaque
+    标签快速返回），plugin-local + 测试同步。
+  - ret9：enrich 正常提速（~100 池/分），但进程在 metadata 5000/7891
+    处被操作方终止（换 ret10），未写 universe。
+  - ret10：在 retained attestation 7500/7921 处被终止（操作方动作），
+    未写 universe。HEAD=2c051a43。
+  - 2c051a43（另一个窗口）：univ2/univ3 冷池 address-surface nomination
+    兜底——窗口内无近期 Swap 时用 getCode+接口指纹再物化观测，身份仍走
+    链上 factory/token0/token1+getPair 反查后才准入。工作树另有未提交
+    修改（strict-identity-attestation.ts、univ2/univ3 nomination 及
+    测试），属该窗口进行中工作，本窗口不触碰。
+- **模版双通道架构决定（2026-08-15 用户裁定，待 F6 Pair B 落地）**：
+  Family 模版必须同时有 fresh 接口（现有 nominate：近期观测/交易证据）
+  与 retain 接口（新增 reverseBinding：冷池可验的反向绑定
+  factory-child / registry-member / PositionManager / manager-state）。
+  每个族都必须声明 retain 接口；做不了的显式声明为空/不支持（如 univ4
+  非 PositionManager 创建、必须回创建块 Initialize 的池——超出本地
+  reth 保留窗口，显式返回不可反查；angstrom/eigenpie/ethertoken 等
+  tx-bound 族同样显式声明）。中央按插件声明决定 retained 用哪条通道、
+  窗口多大、保留哪些池；插件只声明语义，不决定策略。

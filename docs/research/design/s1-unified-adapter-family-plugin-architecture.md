@@ -3026,6 +3026,25 @@ ops/CI gate，非部署）：**
   main.ts `findForEdge`/`findForPool` / pendingEvidence / oracleVictims）
   仍读 legacy，按依赖链靠后切换。
 
+**2026-08-15 F5 验收口径定版 + 模版双通道决定 checkpoint（用户裁定，
+最新为准）：**
+
+- F5 验收基线 = 最终 universe（fresh + retained 合并计数）≥ 10,671 池 /
+  ≥21,256 有向边（最低基线，不要求 2 万/3 万）；通过后交付新旧对比表
+  （新 universe vs ee2e2483，逐族 fresh/retained/总数/重叠）。retained
+  可存在但非 eligible 证据；per-family fresh > 0 非硬门槛（人工确认无
+  交易可全 retained）。F5 重建固定 2 天窗口 + retained 输入，全部本地
+  reth，7 天窗口数据已弃用。
+- F5 运行历史：ret8 卡在 enrich（univ4 nomination 无条件建索引，修复
+  114258a6 快速返回非 univ4 标签）；ret9 在 enrich 5000/7891 被终止；
+  ret10 在 retained attestation 7500/7921 被终止（均为操作方动作）。
+  2c051a43（另一窗口）实现 univ2/univ3 冷池 address-surface nomination
+  兜底：无近期 Swap 时 getCode+接口指纹再物化观测，身份仍链上反查。
+- 模版双通道架构决定：Family 模版必须同时有 fresh 接口（nominate）与
+  retain 接口（reverseBinding：冷池可验反向绑定）；每个族都必须声明
+  retain 接口，做不了的显式为空/不支持；中央决定 retained 用哪条通道、
+  窗口与保留策略，插件只声明语义。待 F6 Pair B 落地。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
