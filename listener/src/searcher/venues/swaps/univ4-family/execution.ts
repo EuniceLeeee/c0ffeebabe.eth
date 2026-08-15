@@ -49,7 +49,10 @@ export const univ4Execution = {
       {
         adapterId: "univ4-take",
         target: input.descriptor.managerBinding.manager,
-        tokenIn: "",
+        // take() withdraws currency to the executor; the node's tokenIn is
+        // not used by the encoder (currency comes from params), but the
+        // resolved-plan validator requires a non-empty canonical tokenIn.
+        tokenIn: input.route.tokenIn,
         tokenOut: input.route.tokenOut,
         amount: input.quotedAmountOut,
         params: { currency: input.route.realTokenOut },

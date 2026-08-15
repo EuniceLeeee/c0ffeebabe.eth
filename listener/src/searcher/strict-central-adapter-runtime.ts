@@ -5,6 +5,7 @@ import type {
   CentralAdapterScheduler,
 } from "./adapter-work-intent.js";
 import { createHash } from "node:crypto";
+import { ethers } from "ethers";
 import {
   createBoundedRequestExecutor,
   type AdapterRequest,
@@ -83,6 +84,13 @@ export function createStrictCentralAdapterRuntime(input: {
    * pretending the capability exists.
    */
   readonly verifiedActors?: Readonly<Record<string, string>>;
+  /**
+   * Central executor address. Families whose programs declare
+   * caller: "executor" (e.g. univ3 exact through the swap router) bind
+   * through this authority; omitting it keeps those families fail-closed
+   * at caller-authority.
+   */
+  readonly executor?: string;
   /** Upper bound on requests admitted per work batch; default 512. */
   readonly maxRequestsPerBatch?: number;
 }): CentralAdapterRuntime {
@@ -150,9 +158,14 @@ export function createStrictCentralAdapterRuntime(input: {
     clock: { nowMs: () => now++ },
     generationFence: input.generationFence,
     callerAuthority: {
-      bind: () => Object.keys(verifiedActors).length === 0
-        ? Object.freeze({})
-        : Object.freeze({ verifiedActors }),
+      bind: () => Object.freeze({
+        ...(input.executor === undefined
+          ? {}
+          : { executor: ethers.getAddress(input.executor).toLowerCase() }),
+        ...(Object.keys(verifiedActors).length === 0
+          ? {}
+          : { verifiedActors }),
+      }),
     },
     policy: {
       bind: (policyInput: {

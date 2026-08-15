@@ -6941,7 +6941,7 @@
         "familyId": "univ4",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "1ee981b9691f876241789ef747d8a687e12a240e7f7d11990173a6357a88efc8",
+        "contentHash": "adc07f6ce4c5d6620ebd1d39000c225c9efb0d349ed22ffd1bcdc2626061c327",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -7163,5 +7163,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "c0b6f3181576a3d8b18d142b5ea78994b9602f49471c7e54482b0910e7b5ec55"
+  "artifactHash": "c99da7ef6b1489557236cfc2350a6bb3f2ae49a0e9b48b204d0674b629b2f878"
 }

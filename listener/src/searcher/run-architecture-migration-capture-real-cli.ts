@@ -79,6 +79,7 @@ function buildRuntime(
     provider,
     generationFence: Object.freeze({ assertCurrent() {} }),
     verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+    executor: EXECUTOR,
     simulator: createRevmStrictSimulationTransport({
       client,
       executor: EXECUTOR,
