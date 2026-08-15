@@ -739,6 +739,11 @@ async function captureRouteMultiHop(input: {
       semanticId: loopSemanticId,
     }),
   ));
+  console.log(
+    `[capture-progress] family=${input.descriptor.familyId} ` +
+      `stage=loop finalSim done startToken=${loopPath.startToken} ` +
+      `segments=${loopPath.edges.length}`,
+  );
   const loopEdges = [...graph.edges, ...segmentItems];
   return Object.freeze({
     instances: instanceStage(targetPublication.instances, input.evidenceRefs),
