@@ -644,9 +644,32 @@ async function captureRouteMultiHop(input: {
       if (matched !== undefined) break;
     }
     if (matched === undefined) {
-      throw new Error(
-        `capture loop edge ${edge.pool} has no ` +
-          `${edge.tokenIn}>${edge.tokenOut} route`,
+      if (!isTarget) {
+        throw new Error(
+          `capture loop edge ${edge.pool} has no ` +
+            `${edge.tokenIn}>${edge.tokenOut} route`,
+        );
+      }
+      // Target segment of a manager-type Family (one address hosts many
+      // pools, e.g. a position manager): the loop edge may be a different
+      // pool of the same manager than the one the family lifecycle
+      // verified. Execute the family's real verification route honestly -
+      // the amount chain, exact quote and mandatory final sim decide the
+      // outcome (fail-closed on any mismatch). Central code never guesses
+      // which pool the family verified.
+      const instance = publication.instances[0];
+      const route = instance?.routeHandles[0];
+      const routeDescriptor = instance?.routes[0];
+      if (route === undefined || routeDescriptor === undefined) {
+        throw new Error(
+          `capture loop target ${edge.pool} has no family route`,
+        );
+      }
+      matched = Object.freeze({ route, routeDescriptor });
+      console.log(
+        `[capture-progress] family=${input.descriptor.familyId} ` +
+          `stage=loop target edge mismatch; using family route ` +
+          `${routeDescriptor.tokenIn}>${routeDescriptor.tokenOut}`,
       );
     }
     const segmentAmountIn = amountIn ?? await normalizedCaptureAmount({
