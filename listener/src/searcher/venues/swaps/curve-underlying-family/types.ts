@@ -15,7 +15,10 @@ import type { CanonicalSource } from "../../adapter-request-program.js";
 export interface CurveUnderlyingCandidate extends FamilyCandidate {
   readonly candidateKind: "curve-underlying-pool";
   readonly pool: string;
-  readonly sourceKind: "underlying-swap-log" | "exchange-underlying-call";
+  readonly sourceKind:
+    | "underlying-swap-log"
+    | "exchange-underlying-call"
+    | "pool-surface";
   readonly hintedI: number | null;
   readonly hintedJ: number | null;
 }

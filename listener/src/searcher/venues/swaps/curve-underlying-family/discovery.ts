@@ -16,6 +16,7 @@ import {
 } from "./codec.js";
 import type { CurveUnderlyingCandidate } from "./types.js";
 import { createTxEvidenceNomination } from "../../tx-evidence-nomination.js";
+import { reverseBindCurveUnderlying } from "./reverse-binding.js";
 
 export const CURVE_UNDERLYING_I128_LOG_PATTERN_ID =
   "curve-underlying-i128-log";
@@ -25,6 +26,8 @@ export const CURVE_UNDERLYING_I128_CALL_PATTERN_ID =
   "curve-underlying-i128-call";
 export const CURVE_UNDERLYING_UINT_CALL_PATTERN_ID =
   "curve-underlying-uint-call";
+export const CURVE_UNDERLYING_POOL_SURFACE_PATTERN_ID =
+  "curve-underlying-pool-surface";
 
 export const curveUnderlyingDiscovery = {
   evidenceChannel: "nominate" as const,
@@ -51,6 +54,11 @@ export const curveUnderlyingDiscovery = {
     signature:
       "TokenExchangeUnderlying(address,uint256,uint256,uint256,uint256)",
   }],
+  addressSurfaces: [Object.freeze({
+    id: CURVE_UNDERLYING_POOL_SURFACE_PATTERN_ID,
+    kind: "interface" as const,
+    fingerprint: "curve-underlying-pool-surface-v1",
+  })],
   decodeCandidate({ observation, matchedPatternId }) {
     try {
       return decodeCandidate(observation, matchedPatternId);
@@ -73,15 +81,30 @@ export const curveUnderlyingDiscovery = {
       candidateAddress: Object.freeze({ from: "call-target" as const }),
     }]),
   }),
-  reverseBinding: explicitReverseBindingUnsupported(
-    "no reverse-binding registry declared yet (explicit unsupported)",
-  ),
+  reverseBinding: Object.freeze({
+    kind: "implementation" as const,
+    reverseBinding: reverseBindCurveUnderlying,
+  }),
 } satisfies DiscoverySemantics<CurveUnderlyingCandidate>;
 
 function decodeCandidate(
   observation: UnifiedObservation,
   matchedPatternId: string,
 ): CurveUnderlyingCandidate | null {
+  if (
+    observation.kind === "address-surface" &&
+    matchedPatternId === CURVE_UNDERLYING_POOL_SURFACE_PATTERN_ID
+  ) {
+    // Retain-channel address surface: identity still re-verifies the
+    // registry membership and underlying coins on chain before admission.
+    return Object.freeze({
+      candidateKind: "curve-underlying-pool" as const,
+      pool: canonicalAddress(observation.address),
+      sourceKind: "pool-surface" as const,
+      hintedI: null,
+      hintedJ: null,
+    });
+  }
   if (
     observation.kind === "call" &&
     (matchedPatternId === CURVE_UNDERLYING_I128_CALL_PATTERN_ID ||

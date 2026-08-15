@@ -17,6 +17,7 @@ import {
 } from "./venues/production-family-composition.js";
 import {
   executeCatalogCaptureNominations,
+  executeCatalogReverseBindings,
 } from "./venues/capture-materialization.js";
 import { scanRecentCallSeeds } from "./recent-call-seed-scan.js";
 
@@ -111,6 +112,20 @@ export async function materializeCaptureInventory(input: {
     provider: input.provider,
     nominations: poolNominations,
   });
+  // Phase 2a: retain-channel reverse binding (cold-pool chain truth: factory
+  // child / registry member / PositionManager) runs before the fresh
+  // nomination channel. Central order; the plugin only declares semantics.
+  admitObservations(
+    input.catalog,
+    await executeCatalogReverseBindings({
+      catalog: input.catalog,
+      source: input.source,
+      nominations: [...poolNominations, ...seedNominations],
+      provider: nominationProvider(input.provider, input.source.number),
+      alreadyAdmitted: new Set(byFamily.keys()),
+    }),
+    byFamily,
+  );
   admitObservations(
     input.catalog,
     await executeCatalogCaptureNominations({
