@@ -20,6 +20,11 @@ import {
   executeCatalogCaptureNominations,
   executeCatalogReverseBindings,
 } from "./venues/capture-materialization.js";
+import { executeFundingFamilyLiquidity } from "./adapter-funding-runtime.js";
+import { createStrictCentralAdapterRuntime } from
+  "./strict-central-adapter-runtime.js";
+import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
+  "./venues/production-verified-actors.js";
 import { scanRecentCallSeeds } from "./recent-call-seed-scan.js";
 
 const RPC_URL = process.env.S1_CAPTURE_RPC_URL ?? "http://127.0.0.1:8545";
@@ -120,6 +125,7 @@ export async function materializeCaptureInventory(input: {
   // borrowable asset (universal ERC20 reads; pools that do not expose
   // token0/token1 stay unfiltered).
   const borrowableNominations = await filterBorrowableNominations({
+    catalog: input.catalog,
     provider: input.provider,
     source: input.source,
     nominations: poolNominations,
@@ -370,28 +376,21 @@ function captureCandidateIdentity(
 }
 
 
-/**
- * Central capture-closure strategy (no protocol semantics): a route capture
- * must close with a catalog funding plan, so the route's input token must be
- * borrowable. Pools exposing a mainstream borrowable asset in their token
- * surface (universal ERC20 token0/token1 reads) are kept; pools whose token
- * surface cannot be read stay unfiltered (their family nomination decides).
- */
-const CAPTURE_BORROWABLE_ASSETS = Object.freeze([
-  "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // WETH
-  "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0", // wstETH
-  "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC
-  "0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT
-  "0x6b175474e89094c44da98b954eedeac495271d0f", // DAI
-  "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", // WBTC
-]);
-
 async function filterBorrowableNominations(input: {
+  readonly catalog: FamilyCapabilityCatalog;
   readonly provider: CaptureInventoryProvider;
   readonly source: CanonicalSource;
   readonly nominations: readonly CaptureNominationInput[];
 }): Promise<readonly CaptureNominationInput[]> {
-  const borrowable: CaptureNominationInput[] = [];
+  // Capture closure strategy (central, no protocol semantics): a captured
+  // route must close with a catalog funding plan, so the route's input token
+  // must be borrowable. Borrowability is DERIVED at runtime - never from a
+  // hardcoded asset list: the catalog funding families' liquidity
+  // capabilities are executed against the candidate token surface, and only
+  // their positive offers define the borrowable set. Pools whose identified
+  // token pair is not fully borrowable are dropped; unreadable surfaces stay
+  // unfiltered (the family nomination decides).
+  const BORROWABLE_CONCURRENCY = 24;
   const ERC20 = new ethers.Interface([
     "function token0() view returns (address)",
     "function token1() view returns (address)",
@@ -407,21 +406,22 @@ async function filterBorrowableNominations(input: {
     ["_BASE_TOKEN_", ""],
     ["_QUOTE_TOKEN_", ""],
   ] as const;
-  const BORROWABLE_CONCURRENCY = 24;
+
+  // Phase 1: token surface per pool (concurrent, universal getters).
+  const tokensByPool: string[][] = new Array(input.nominations.length);
+  const readable: boolean[] = new Array(input.nominations.length).fill(true);
   let next = 0;
-  const results: boolean[] = new Array(input.nominations.length).fill(true);
-  const worker = async (): Promise<void> => {
+  const reader = async (): Promise<void> => {
     while (true) {
       const index = next++;
       if (index >= input.nominations.length) return;
       const nomination = input.nominations[index]!;
-      const pool = nomination.address.toLowerCase();
       const tokens = new Set<string>();
       try {
         for (const [fn, arg] of TOKEN_GETTERS) {
           const raw = await input.provider.call(
             {
-              to: pool,
+              to: nomination.address.toLowerCase(),
               data: ERC20.encodeFunctionData(fn, arg === "" ? [] : [arg]),
             },
             input.source.number,
@@ -437,30 +437,62 @@ async function filterBorrowableNominations(input: {
           }
         }
       } catch {
-        // Token surface unreadable (non-standard pool): keep the nomination;
-        // the family nomination decides.
+        readable[index] = false;
         continue;
       }
-      // Both identified tokens must be mainstream borrowable assets: the
-      // route direction is chain-derived and cannot be steered, so a pool
-      // with any non-borrowable side can produce an unclosable route.
-      const identified = [...tokens];
-      if (identified.length === 2 && identified.some((token) =>
-        !CAPTURE_BORROWABLE_ASSETS.includes(token)
-      )) {
-        results[index] = false;
-      }
+      tokensByPool[index] = [...tokens];
     }
   };
   await Promise.all(
-    Array.from({ length: BORROWABLE_CONCURRENCY }, () => worker()),
+    Array.from({ length: BORROWABLE_CONCURRENCY }, () => reader()),
   );
-  for (let i = 0; i < input.nominations.length; i++) {
-    if (results[i]) borrowable.push(input.nominations[i]!);
-  }
-  return Object.freeze(borrowable);
-}
 
+  // Phase 2: derive the borrowable set by executing every catalog funding
+  // family's liquidity capability against the identified token surface.
+  // Dynamic enumeration over the catalog; no family names, no address table.
+  const identified = [...new Set(tokensByPool.flat())].sort();
+  const borrowable = new Set<string>();
+  if (identified.length > 0) {
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: input.provider as never,
+      generationFence: Object.freeze({
+        kind: "catalog-relative" as const,
+        assertCurrent: () => undefined,
+        verifyCanonicalSource: () => true,
+      }),
+      verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+    });
+    for (const family of input.catalog.listAll()) {
+      if (family.plugin.manifest.domain !== "funding") continue;
+      const result = await executeFundingFamilyLiquidity({
+        family,
+        assets: Object.freeze(identified),
+        source: input.source,
+        generation: input.source.generation,
+        runtime,
+        publisher: { publish: () => undefined },
+      });
+      for (const offer of result.offers) {
+        if (offer.maxBorrow > 0n) {
+          borrowable.add(offer.asset.toLowerCase());
+        }
+      }
+    }
+  }
+
+  // Phase 3: keep pools whose identified pair is fully borrowable; pools
+  // with an unreadable surface stay (the family nomination decides).
+  const borrowableNominations: CaptureNominationInput[] = [];
+  for (let i = 0; i < input.nominations.length; i++) {
+    const tokens = tokensByPool[i] ?? [];
+    if (!readable[i] || tokens.length < 2 || tokens.every((token) =>
+      borrowable.has(token)
+    )) {
+      borrowableNominations.push(input.nominations[i]!);
+    }
+  }
+  return Object.freeze(borrowableNominations);
+}
 function opaquePoolNominations(input: {
   readonly graph: CanonicalValue;
   readonly protocolCache: CanonicalValue;
