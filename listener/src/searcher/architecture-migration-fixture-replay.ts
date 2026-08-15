@@ -355,10 +355,6 @@ import type {
 } from "./adapter-work-intent.js";
 import { projectFamilyRouteGraph } from
   "./adapter-family-graph-runtime.js";
-import {
-  exercisedStage,
-  frameworkBlockedStage,
-} from "./architecture-migration-capture.js";
 import type { UniV2Descriptor, UniV2Route } from
   "./venues/swaps/univ2-family/types.js";
 import type { UniV2ExactEvidence } from
@@ -373,11 +369,76 @@ import type { UniV4ExactEvidence } from
   "./venues/swaps/univ4-family/types.js";
 import type { ExpectedEffect } from
   "./venues/adapter-family-plugin.js";
-import type {
-  ArchitectureMigrationStage,
-  RawFamilyMigrationCaseCapture,
-  RawMigrationStageCapture,
-} from "./architecture-migration-parity-runner.js";
+// Localized capture-harness stage contract (the harness itself is
+// retired; fixture replay keeps the stage envelope for strict tests).
+export const ARCHITECTURE_MIGRATION_STAGES = Object.freeze([
+  "instances",
+  "edges",
+  "stateCoverage",
+  "pricedEdges",
+  "prices",
+  "failures",
+  "enumeratedRoutes",
+  "exactQuotes",
+  "executionFragments",
+  "finalSimulations",
+] as const);
+
+export type ArchitectureMigrationStage =
+  (typeof ARCHITECTURE_MIGRATION_STAGES)[number];
+
+export type MigrationStageStatus =
+  | "exercised"
+  | "declared-absent"
+  | "framework-blocked";
+
+export interface RawMigrationSemanticItem {
+  readonly id: string;
+  readonly value: CanonicalValue;
+}
+
+export interface RawMigrationStageCapture {
+  readonly status: MigrationStageStatus;
+  readonly items: readonly RawMigrationSemanticItem[];
+  readonly evidenceRefs: readonly string[];
+  readonly blocker: string | null;
+}
+
+export interface RawFamilyMigrationCaseCapture {
+  readonly familyId: string;
+  readonly caseId: string;
+  readonly inputFingerprint: string;
+  readonly stateAnchorNumber: number;
+  readonly implementationClosureHash: string;
+  readonly stages: Readonly<
+    Partial<Record<ArchitectureMigrationStage, RawMigrationStageCapture>>
+  >;
+}
+
+export function frameworkBlockedStage(
+  evidenceRefs: readonly string[],
+  blocker = "capture-harness-stage-not-wired",
+): RawMigrationStageCapture {
+  return Object.freeze({
+    status: "framework-blocked" as const,
+    items: Object.freeze([]),
+    evidenceRefs: Object.freeze([...evidenceRefs]),
+    blocker,
+  });
+}
+
+export function exercisedStage(
+  items: readonly RawMigrationStageCapture["items"][number][],
+  evidenceRefs: readonly string[],
+): RawMigrationStageCapture {
+  return Object.freeze({
+    status: "exercised" as const,
+    items: Object.freeze([...items]),
+    evidenceRefs: Object.freeze([...evidenceRefs]),
+    blocker: null,
+  });
+}
+
 
 const CATALOG = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
 const FAMILY = CATALOG.forFamily(UNIV2_FAMILY_ID);

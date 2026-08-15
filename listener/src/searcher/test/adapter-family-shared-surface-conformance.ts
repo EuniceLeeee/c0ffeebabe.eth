@@ -47,7 +47,6 @@ const LEGACY_AUTHORITY_BOUNDARIES = new Set([
   "src/searcher/venues/route-leg-registry.ts",
   "src/searcher/venues/landed-event-registry.ts",
   "src/searcher/architecture-migration-fixture-replay.ts",
-  "src/searcher/architecture-migration-baseline-normalizer.ts",
   "src/adapters/adapter-descriptors.ts",
   "src/adapters/flash-providers.ts",
 ].map((path) => resolve(LISTENER_ROOT, path)));
@@ -60,11 +59,6 @@ const LEGACY_AUTHORITY_BOUNDARIES = new Set([
  */
 const CENTRAL_ROOTS = Object.freeze([
   "src/searcher/main.ts",
-  "src/searcher/generic-family-capture.ts",
-  "src/searcher/run-architecture-migration-capture-real-cli.ts",
-  "src/searcher/architecture-migration-capture.ts",
-  "src/searcher/architecture-migration-parity.ts",
-  "src/searcher/architecture-migration-parity-runner.ts",
   "src/searcher/strict-execution-projection.ts",
   "src/searcher/strict-family-lifecycle-runner.ts",
   "src/searcher/adapter-work-intent.ts",
@@ -74,10 +68,6 @@ const CENTRAL_ROOTS = Object.freeze([
 ] as const);
 
 const FRAMEWORK_TEST_ROOTS = Object.freeze([
-  "src/searcher/test/generic-family-capture.ts",
-  "src/searcher/test/architecture-migration-capture.ts",
-  "src/searcher/test/architecture-migration-parity.ts",
-  "src/searcher/test/architecture-migration-parity-runner.ts",
   "src/searcher/test/strict-execution-projection.ts",
   "src/searcher/test/strict-family-lifecycle-runner.ts",
   "src/searcher/test/family-capability-catalog.ts",
