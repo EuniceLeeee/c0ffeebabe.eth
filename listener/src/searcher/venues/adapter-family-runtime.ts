@@ -493,6 +493,12 @@ function snapshotFamilyLifecycleMatch(
                   ...observation.interfaceFingerprints,
                 ]),
             }),
+          // Plugin-owned opaque payload must survive the lifecycle
+          // snapshot (e.g. a cold-pool PoolKey recovered from the
+          // PositionManager reverse lookup); decodeCandidate reads it.
+          ...(observation.opaque === undefined
+            ? {}
+            : { opaque: observation.opaque }),
         }),
       });
     case "factory-log":

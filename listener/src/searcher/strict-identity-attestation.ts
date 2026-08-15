@@ -194,6 +194,7 @@ export async function attestPoolIdentitiesStrict<
       });
       let observation: UnifiedObservation | undefined = observations[0];
       if (observation === undefined) {
+        console.log(`[attest-debug] ${address} plugin nomination empty; central fallback`);
         // Central generic fallback (no per-family logic): when the plugin
         // nomination produced no observation (e.g. a cold pool with no Swap
         // in the retained window), re-materialize the address surface from
@@ -225,6 +226,11 @@ export async function attestPoolIdentitiesStrict<
         return;
       }
       const family = input.catalog.forFamily(target.familyId);
+      console.log(
+        `[attest-debug] ${address} lifecycle target=${target.familyId} ` +
+          `pattern=${target.patternId} obsKind=${observation.kind} ` +
+          `opaque=${JSON.stringify((observation as { opaque?: unknown }).opaque ?? null).slice(0, 80)}`,
+      );
       const result = await executeAdapterFamilyLifecycleBatch({
         family,
         matches: Object.freeze([Object.freeze({
