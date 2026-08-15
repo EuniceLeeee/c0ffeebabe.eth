@@ -685,6 +685,19 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
 - capture harness 相关代码（materialize-s1-capture-inventory /
   generic-family-capture / run-architecture-migration-capture-real-cli）
   在 cutover 完成后退役（同 F6 删除范围，可执行闭包清零）。
+
+### F5 验收原则：事实验收，不写人为验收脚本（2026-08-16 用户裁定）
+
+- **验收 = 事实**，不维护人为验收脚本/harness：
+  1. family 在 edge 有真实 fresh 数据（S1：发现/身份/准入/图成功）；
+  2. sim 结束后同 amountIn 下 `exact.amountOut ≈ sim.amountOut`
+     （S3 与 S5 执行链路一致）；
+  3. 六步 judge 对 live strict 管线产出的 receipts 出 verdict
+     （exact/planning/sizing/calldata/finalSim/repayment/EV）。
+- 人为验收脚本会自带 bug（代表池选择、funding 模型、裁剪 runtime
+  装配），成为假失败来源；不得再以并行 harness 作为验收判据。
+- 验收数据全部来自 live 生产路径（cutover 后 strict 管线）的真实运行，
+  judge 只读结果，不解释管线内部。
 ### F6 删除执行状态（2026-08-16 起，用户裁定：capture harness 终止，直接删旧）
 
 - **执行顺序**：B→C→D→F→A，每对 strict 侧验收证据已存在（B: f3188a31 +
