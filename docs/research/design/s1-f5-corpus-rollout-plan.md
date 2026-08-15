@@ -917,7 +917,28 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   仅 provider（无 simulator 需求——quote 是 eth-call）；候选 0xee3273 的
   no_catalog_match 待查（fluid nominate address-surface + opaqueLabels
   "fluid-dex"/"fluid"）。
-- **剩余**：fluid → live-smoke（真实 RPC）→ dex-live-smoke（env）→ 两道门
+- **fluid-family-admission 全 PASS（25b0d082）**：中央 attester 增加
+  credit-domain 分支（`executeCreditFamilyInstanceLifecycle`，镜像 shadow
+  reattestor 的 domain 分支）；`legacyLabelsForLineage` 改用族声明的
+  `poolAdapterIds[0]`（fluid-dex 从错误 action label 'fluid-dex-swap'
+  修正为 pool label 'fluid-dex'）；fluid-credit opaqueLabels 补
+  'fluid-vault'；测试内联 fluidFixtureSimulator（vault operate
+  effect-delta：tokenDeltas 满足观察声明）+ fakeBackend call 对 swapIn
+  selector 抛 `FluidDexSwapResult` revert（ADDRESS_DEAD quote 通道）。
+  fluid 6 族测试（含 erc4626 系/eigenpie/astra）+ build 全绿。
+  节点已部署 25b0d082（HEAD_OK + BUILD_OK）。
+- **live-smoke / dex-live-smoke 全 PASS（44cdccf5 测试接线 + 节点 revm 重建）**：
+  两个 live smoke 测试在 SEARCHER_REVM_SIM_BIN+BOTVM_ADDRESS 存在时装配生产
+  revm strict central runtime（createStrictCentralAdapterRuntime +
+  createRevmStrictSimulationTransport，镜像 main.ts 2832-2841）；
+  节点侧旧 revm-sim 二进制协议过时（strictSimulate 缺 to/data 字段），
+  已按 deploy-node.sh 内容寻址方式重建并发布
+  `/opt/MEV-runtime/revm/revm-sim-45131e4b…`（.env 同步）。
+  live-smoke：unseeded ERC4626（0x8F135b…）admitted + 2 protocol edges；
+  dex-live-smoke（universe 3000 池）：admissions=1、added=1、
+  firstProbes=4200、secondCacheHits=1400、wallMs=14577。
+  节点已部署 44cdccf5（HEAD_OK + BUILD_OK）。
+- **剩余**：两道门（s1-cutover-readiness / default-authority-cutover-gate）
   → F8 收口 → live 验收 → F9。
 
 
