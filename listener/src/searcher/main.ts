@@ -2936,6 +2936,9 @@ async function main(): Promise<void> {
     protocolDiscoveryCoverage,
     startupActivePoolDiscovery,
     startupDexSourceBlockHash,
+    ...(strictCentralRuntime === null
+      ? {}
+      : { identityRuntime: strictCentralRuntime }),
     initial: {
       strategyViews,
       protocolOwnership: protocolDiscoveryOwnership,

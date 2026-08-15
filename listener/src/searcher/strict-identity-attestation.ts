@@ -575,6 +575,14 @@ export async function attestPoolsStrictFromProvider<Pool extends {
    * default "nominate-first".
    */
   readonly channelOrder?: "reverse-binding-first" | "nominate-first";
+  /**
+   * F8: production-shaped runtime for identity attestation. Defaults to the
+   * minimal provider runtime; families whose identity needs an
+   * effect-delta simulation transport (erc4626/fluid/silo/self-burn) stay
+   * fail-closed unless the caller supplies a runtime with the production
+   * revm simulation transport.
+   */
+  readonly runtime?: CentralAdapterRuntime;
 }): Promise<{
   readonly accepted: readonly StrictAttestedPool<Pool>[];
   readonly rejected: readonly StrictRejectedPool<Pool>[];
@@ -584,7 +592,7 @@ export async function attestPoolsStrictFromProvider<Pool extends {
   return attestPoolIdentitiesStrict({
     catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
     provider,
-    runtime: createMinimalIdentityRuntime(provider),
+    runtime: input.runtime ?? createMinimalIdentityRuntime(provider),
     source: Object.freeze({
       number: input.blockNumber,
       hash,

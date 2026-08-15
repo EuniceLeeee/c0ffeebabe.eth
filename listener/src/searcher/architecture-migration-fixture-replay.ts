@@ -1,3 +1,4 @@
+import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
 import assert from "node:assert/strict";
 import {
   executeAdapterFamilyLifecycleBatch,
@@ -11200,3 +11201,124 @@ async function buildFluidCreditCaseCapture(input: {
     }),
   });
 }
+
+
+/**
+ * F8: fixture simulation transport for strict identity attestation tests.
+ * Simulates effect-delta requests for ERC4626-shaped vaults (deposit/redeem)
+ * with configurable conversion ratios so the produced effects match the
+ * fixture backend's preview conversions. Asset address is learned from the
+ * deposit preCall (approve on the underlying); redeem reuses it.
+ */
+export function createFixtureStrictSimulationTransport(input?: {
+  /** shares = assets * num / den (default 1/1). */
+  readonly depositSharesRatio?: readonly [bigint, bigint];
+  /** assets = shares * num / den (default 1/1). */
+  readonly redeemAssetsRatio?: readonly [bigint, bigint];
+  /** Probe actor for token deltas/logs (default erc4626 probe actor). */
+  readonly actor?: string;
+}): StrictSimulationTransport {
+  const sharesRatio = input?.depositSharesRatio ?? ([1n, 1n] as const);
+  const assetsRatio = input?.redeemAssetsRatio ?? ([1n, 1n] as const);
+  const actor = (input?.actor ?? ERC4626_PROBE_ACTOR).toLowerCase();
+  let knownAsset: string | undefined;
+  return Object.freeze({
+    async simulate(sim: {
+      readonly request: import("./venues/adapter-request-program.js").AdapterRequest;
+      readonly source: import("./venues/adapter-request-program.js").CanonicalSource;
+    }) {
+      const request = sim.request;
+      if (request.kind !== "effect-delta-simulation") {
+        throw new Error(
+          "fixture simulation transport requires effect-delta-simulation",
+        );
+      }
+      const call = request.call as {
+        readonly to: string;
+        readonly data: string;
+      };
+      const selector = call.data.slice(0, 10);
+      const vault = ethers.getAddress(call.to).toLowerCase();
+      const depositSelector =
+        ERC4626_INTERFACE.getFunction("deposit")!.selector;
+      const redeemSelector =
+        ERC4626_INTERFACE.getFunction("redeem")!.selector;
+      const eventLog = (
+        eventName: "Deposit" | "Withdraw",
+        assets: bigint,
+        shares: bigint,
+      ) => {
+        const encoded = ERC4626_INTERFACE.encodeEventLog(
+          eventName,
+          eventName === "Deposit"
+            ? [actor, actor, assets, shares]
+            : [actor, actor, actor, assets, shares],
+        );
+        return Object.freeze({
+          address: vault,
+          topics: Object.freeze([...encoded.topics]),
+          data: encoded.data,
+        });
+      };
+      if (selector === depositSelector) {
+        const assets = BigInt(
+          ERC4626_INTERFACE.decodeFunctionData("deposit", call.data)[0],
+        );
+        const shares = (assets * sharesRatio[0]) / sharesRatio[1];
+        knownAsset = request.preCalls?.[0]?.to.toLowerCase() ?? knownAsset;
+        return Object.freeze({
+          data: ERC4626_INTERFACE.encodeFunctionResult("deposit", [shares]),
+          effects: Object.freeze({
+            tokenDeltas: Object.freeze([
+              Object.freeze({
+                token: knownAsset ?? "",
+                account: actor,
+                delta: -assets,
+              }),
+              Object.freeze({
+                token: vault,
+                account: actor,
+                delta: shares,
+              }),
+            ]),
+            totalSupplyDeltas: Object.freeze([
+              Object.freeze({ token: vault, delta: shares }),
+            ]),
+            logs: Object.freeze([eventLog("Deposit", assets, shares)]),
+          }),
+        });
+      }
+      if (selector === redeemSelector) {
+        const shares = BigInt(
+          ERC4626_INTERFACE.decodeFunctionData("redeem", call.data)[0],
+        );
+        const assets = (shares * assetsRatio[0]) / assetsRatio[1];
+        return Object.freeze({
+          data: ERC4626_INTERFACE.encodeFunctionResult("redeem", [assets]),
+          effects: Object.freeze({
+            tokenDeltas: Object.freeze([
+              Object.freeze({
+                token: vault,
+                account: actor,
+                delta: -shares,
+              }),
+              Object.freeze({
+                token: knownAsset ?? "",
+                account: actor,
+                delta: assets,
+              }),
+            ]),
+            totalSupplyDeltas: Object.freeze([
+              Object.freeze({ token: vault, delta: -shares }),
+            ]),
+            logs: Object.freeze([eventLog("Withdraw", assets, shares)]),
+          }),
+        });
+      }
+      throw new Error(
+        `fixture simulation transport unknown selector ${selector}`,
+      );
+    },
+  });
+}
+

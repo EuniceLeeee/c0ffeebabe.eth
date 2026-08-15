@@ -126,6 +126,7 @@ import type {
 } from "./venues/route-leg-adapter.js";
 import { routeInstanceKey } from "./venues/route-instance-identity.js";
 import { poolRegistryKey } from "./pool-universe.js";
+import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
 
 const DISCOVERY_BACKFILL_FOREGROUND_HANDOFF_MS = 1_000;
 
@@ -204,6 +205,8 @@ export interface LiveDiscoveryCoordinatorDeps {
   readonly protocolDiscoveryMaxCatchupBlocks: number;
   readonly protocolDiscoveryShadow: boolean;
   readonly protocolDiscoveryChainId: bigint;
+  /** F8: production-shaped identity runtime (revm simulation transport). */
+  readonly identityRuntime?: CentralAdapterRuntime;
   readonly protocolDiscoveryCachePath: string;
   readonly protocolDiscoveryCache: ProtocolDiscoveryEvidenceCache;
   /** Durable DEX graph coverage cursor path (resumed across restarts). */
@@ -284,6 +287,7 @@ export async function createLiveDiscoveryCoordinator(
     blindProductionAudit,
     mempoolIntakeRefresh,
     logRuntimeRefreshFailures,
+    identityRuntime,
   } = deps;
   const {
     graph,
@@ -967,6 +971,7 @@ export async function createLiveDiscoveryCoordinator(
       traceMemo: options.traceMemo ?? createProtocolTraceMemo(),
       shadow: protocolDiscoveryShadow,
       control: options.control,
+      ...(identityRuntime === undefined ? {} : { identityRuntime }),
     });
     const scanRangeHashAfter = await readDexDiscoveryBlockHash(
       provider,

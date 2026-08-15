@@ -21,6 +21,7 @@ import {
 } from "./observed-protocol-discovery.js";
 import type { StrategyViews } from "./strategy-views.js";
 import type { IdentityResolverRegistry } from "./venues/identity.js";
+import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
 import type {
   ProtocolCandidate,
   ProtocolDiscoveryLog,
@@ -38,6 +39,8 @@ export interface ProtocolDiscoveryRuntimeInput {
   readonly observedHistoryProvider?: ethers.JsonRpcProvider;
   readonly adapters: readonly RouteLegAdapter[];
   readonly identityRegistry: IdentityResolverRegistry;
+  /** F8: production-shaped identity runtime (revm simulation transport). */
+  readonly identityRuntime?: CentralAdapterRuntime;
   readonly protocolEdgesEnabled: boolean;
   readonly chainId?: bigint | number | string;
   readonly probeExecutor?: string;
@@ -225,9 +228,11 @@ export async function prepareActiveProtocolDiscoveryPass(
     scanned.candidatesByAdapter,
     input.bootstrapCandidates,
   );
-  const attestIdentity = createCanonicalProtocolIdentityAttester({
-    identityRegistry: input.identityRegistry,
-  });
+  const attestIdentity = createCanonicalProtocolIdentityAttester(
+    input.identityRuntime === undefined
+      ? undefined
+      : { identityRuntime: input.identityRuntime },
+  );
   const initialResult = await runProtocolDiscovery({
     adapters: input.adapters,
     context,
@@ -522,9 +527,11 @@ export async function prepareObservedProtocolDiscoveryPass(
     adapters: input.adapters,
     context,
     protocolEdgesEnabled: input.protocolEdgesEnabled,
-    attestIdentity: createCanonicalProtocolIdentityAttester({
-      identityRegistry: input.identityRegistry,
-    }),
+    attestIdentity: createCanonicalProtocolIdentityAttester(
+      input.identityRuntime === undefined
+        ? undefined
+        : { identityRuntime: input.identityRuntime },
+    ),
     candidatesByAdapter: observed.candidatesByAdapter,
     sourceComplete: observed.sourceErrors.length === 0,
     sourceErrors: observed.sourceErrors,

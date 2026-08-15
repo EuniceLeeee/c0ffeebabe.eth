@@ -16,14 +16,9 @@ import {
   type ProtocolDiscoveryFamilyGuardOptions,
   withProtocolDiscoveryFamilyContext,
 } from "./protocol-discovery-family-guard.js";
-import { STRICT_IDENTITY_ADMISSION } from "./venues/admission.js";
-import {
-  attestPoolIdentities,
-  createPoolIdentityCache,
-  type AttestedPoolEntry,
-  type IdentityResolverRegistry,
-  type PoolIdentityCache,
-} from "./venues/identity.js";
+import type { AttestedPoolEntry } from "./venues/identity.js";
+import { attestPoolsStrictFromProvider } from "./strict-identity-attestation.js";
+import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
 import type {
   AttestedProtocolInstance,
   ExecutionFamilyId,
@@ -959,26 +954,48 @@ export type ProtocolIdentityAttester = (
   context: ProtocolDiscoveryContext,
 ) => Promise<AttestedPoolEntry<PoolEntry> | null>;
 
-export function createCanonicalProtocolIdentityAttester(input: {
-  identityRegistry: IdentityResolverRegistry;
-  cache?: PoolIdentityCache;
+export function createCanonicalProtocolIdentityAttester(input?: {
+  /**
+   * F8: production-shaped identity runtime (revm simulation transport +
+   * verified-actor authority). When absent the attestation falls back to
+   * the context-declared runtime, then to the minimal provider runtime;
+   * families needing effect-delta simulation stay fail-closed.
+   */
+  readonly identityRuntime?: CentralAdapterRuntime;
 }): ProtocolIdentityAttester {
-  const cache = input.cache ?? createPoolIdentityCache();
   return async (_adapter, candidate, context) => {
-    const result = await attestPoolIdentities(context.backend, [candidate.pool], {
-      identityRegistry: input.identityRegistry,
-      cache,
-      admissionPolicy: STRICT_IDENTITY_ADMISSION,
-      // Discovery candidates never receive legacy seed credentials.
-      seedEntries: [],
+    const runtime = input?.identityRuntime ??
+      (context.identityRuntime as CentralAdapterRuntime | undefined);
+    const backend = context.backend;
+    // The discovery backend exposes getStorageAt/getLogs/... with a
+    // per-call control parameter; the strict provider shape uses
+    // getStorage/slot and a blockTag. Adapt structurally (the backend is
+    // already pinned to the canonical block by the discovery lane).
+    const strictProvider = {
+      call: (tx: { readonly to: string; readonly data: string }) =>
+        backend.call(tx),
+      getCode: (address: string) => backend.getCode(address),
+      getStorage: (address: string, slot: string) =>
+        backend.getStorageAt(address, BigInt(slot)),
+      getLogs: (filter: {
+        readonly address?: string;
+        readonly fromBlock?: number;
+        readonly toBlock?: number;
+        readonly topics?: readonly (string | null)[];
+      }) => backend.getLogs(filter as never),
+      getTransactionReceipt: (hash: string) =>
+        backend.getTransactionReceipt(hash),
+      traceTransaction: (hash: string) => backend.traceTransaction(hash),
+    };
+    const result = await attestPoolsStrictFromProvider({
+      provider: strictProvider as never,
+      blockNumber: context.blockNumber,
+      pools: [candidate.pool],
+      ...(runtime === undefined ? {} : { runtime }),
     });
     const accepted = result.accepted[0];
-    if (accepted) return accepted;
-    const rejected = result.rejected[0];
-    if (rejected?.reason === "identity_call_failed") {
-      throw new RetryableProtocolDiscoveryError(
-        `identity_call_failed for ${rejected.address}`,
-      );
+    if (accepted) {
+      return accepted as unknown as AttestedPoolEntry<PoolEntry>;
     }
     return null;
   };

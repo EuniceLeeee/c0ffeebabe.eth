@@ -365,6 +365,12 @@ export interface ProtocolDiscoveryContext {
   readonly probeExecutor?: string;
   /** Previously admitted instances are re-probed so upgrades and route removal replace atomically. */
   readonly retainedInstances: readonly AttestedProtocolInstance[];
+  /**
+   * F8: production-shaped identity runtime (revm simulation transport +
+   * verified-actor authority) declared by the discovery lane. Absent means
+   * families needing effect-delta simulation stay fail-closed.
+   */
+  readonly identityRuntime?: unknown;
 }
 
 export interface ProtocolCandidate {
