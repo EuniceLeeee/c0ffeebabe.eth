@@ -484,8 +484,12 @@ async function captureRoute(input: {
       if (routeRoot === undefined) {
         throw new Error("capture execution fragment has no route root");
       }
+      // The funding plan is decided by the route's input vector, not by
+      // the execution fragment root: fragment nodes may carry placeholder
+      // token fields (take/settle/wrap), which would make the funding
+      // asset address invalid and the plan fail closed.
       const funding = await input.fundingPlanFactory({
-        assets: Object.freeze([routeRoot.tokenIn]),
+        assets: Object.freeze([routeDescriptor.tokenIn]),
         amount: amountIn,
         minProfit: input.vector.minAmountOut,
         source: input.descriptor.source,
