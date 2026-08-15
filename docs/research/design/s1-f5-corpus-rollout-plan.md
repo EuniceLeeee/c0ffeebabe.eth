@@ -673,3 +673,22 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   tokenIn）；**下一轮改为生产多跳闭环 case**（借起点 token → 中央 solver 按生产
   逻辑拼路径 → 还起点 token），每族验证它在路径中那一段的 exact/execution
   语义。期间“每族挑主流可执行代表池”只是过渡妥协，不是验收口径。
+### F5 多跳闭环落地（2026-08-15 晚，代码已提交 3eb13b4d）
+
+- **多跳执行已完成**：descriptor case 携带不透明 `path`（startToken +
+  edges[{pool, tokenIn, tokenOut, adapterId}]），中央 capture 逐段执行：
+  每段按该池族物化观测（plugin 声明 nominate/reverseBinding 通道）→
+  lifecycle → exact（金额沿路径链式传递，首段 = startToken 归一化 1
+  unit）→ execution fragment；所有 fragment 组合成闭环树（BotVM
+  post-order 保证段 0..N-1 顺序执行）→ funding（仅 startToken）→
+  finalSim 在 funding root 下执行整环（借起点 → 逐池 swap → 还起点）。
+  任何一段无法物化/准入/报价/构建即 fail-closed。无 path 时保留单腿为
+  诚实 fallback。路径/段是不透明参数，中央不解释协议语义。
+- **v18 重跑原因**：v17 生成于 ae4d328c 之前 4 分钟（22:47 vs 22:51），
+  不含 annotateStartTokens，全部 entry 无 startToken → descriptor v13
+  全部 NO-PATH → challenger 15 全是单腿结构性失败。节点探针确认 funding
+  探测正常（morpho/balancer 对 WETH/USDC 均有 offers，maxBorrow 巨大）。
+- **下一步**：materializer v18（后台运行中）→ descriptor v14（带 path）→
+  challenger 17（多跳执行）→ 逐 case 判读（环方向与族 route 不匹配等
+  如实修，不猜不降级）。
+
