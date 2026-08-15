@@ -38,7 +38,8 @@ function mockProvider(options: {
     getCode: async () => "0x01",
     getStorage: async () => `0x${"00".repeat(32)}`,
     getLogs: async (filter) => {
-      // Query contract: PoolManager emitter + [Swap, poolId] + retained window.
+      // Plugin-owned batched reverse lookup: one manager-wide Swap scan per
+      // source block indexes poolId -> newest tx; per-pool trace follows.
       assert.equal(
         filter.address?.toLowerCase(),
         ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
@@ -47,7 +48,6 @@ function mockProvider(options: {
       assert.ok((filter.fromBlock ?? 0) >= SOURCE.number - 100_000);
       assert.deepEqual(filter.topics, [
         UNIV4_SWAP_TOPIC.toLowerCase(),
-        POOL_ID.toLowerCase(),
       ]);
       return Object.freeze([...(options.logs ?? [])]);
     },

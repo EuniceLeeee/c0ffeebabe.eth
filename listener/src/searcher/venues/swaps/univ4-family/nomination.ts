@@ -11,7 +11,94 @@ import {
 } from "../../swaps/univ4-abi.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import { canonicalPoolId } from "./codec.js";
-import { findRecentLogHit } from "../../recent-log-lookup.js";
+
+interface RecentUniv4SwapIndex {
+  readonly providerId: number;
+  readonly sourceNumber: number;
+  /** Newest Swap transaction hash per poolId within the retained window. */
+  readonly poolIdToTxHash: ReadonlyMap<string, string>;
+}
+
+const providerIdByProvider = new WeakMap<object, number>();
+let nextProviderId = 0;
+
+function providerId(provider: CaptureNominationProvider): number {
+  let id = providerIdByProvider.get(provider);
+  if (id === undefined) {
+    id = nextProviderId++;
+    providerIdByProvider.set(provider, id);
+  }
+  return id;
+}
+
+/**
+ * Plugin-owned source-keyed cache: retained/startup attestation visits one
+ * candidate at a time, and a per-candidate recent-log scan would replay the
+ * same manager-wide window thousands of times (each cold pool = ~20 getLogs
+ * on the local node). Scanning the window once per source block and indexing
+ * poolId -> newest Swap tx keeps the nomination evidence identical (same
+ * newest log, same trace) while making cold lookups O(1) in memory.
+ */
+let recentUniv4SwapIndex: RecentUniv4SwapIndex | null = null;
+
+async function recentUniv4SwapTxHashByPoolId(input: {
+  readonly source: CanonicalSource;
+  readonly provider: CaptureNominationProvider;
+  readonly lookback: number;
+  readonly chunk: number;
+}): Promise<ReadonlyMap<string, string>> {
+  if (
+    recentUniv4SwapIndex !== null &&
+    recentUniv4SwapIndex.providerId === providerId(input.provider) &&
+    recentUniv4SwapIndex.sourceNumber === input.source.number
+  ) {
+    return recentUniv4SwapIndex.poolIdToTxHash;
+  }
+  const poolIdToTxHash = new Map<string, string>();
+  const manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
+  let to = input.source.number;
+  let from = Math.max(0, to - input.chunk + 1);
+  for (let guard = 0; guard < 128 && from <= input.source.number; guard++) {
+    let chunk = input.chunk;
+    let logs: readonly {
+      readonly address: string;
+      readonly topics: readonly string[];
+      readonly data: string;
+      readonly transactionHash?: string;
+    }[] = [];
+    try {
+      logs = await input.provider.getLogs({
+        address: manager,
+        fromBlock: from,
+        toBlock: to,
+        topics: [UNIV4_SWAP_TOPIC.toLowerCase()],
+      });
+    } catch {
+      if (chunk <= 64) break;
+      chunk = Math.floor(chunk / 2);
+      from = Math.max(0, to - chunk + 1);
+      continue;
+    }
+    // Newest slice first; keep the first (newest) tx hash per poolId.
+    for (let index = logs.length - 1; index >= 0; index--) {
+      const log = logs[index];
+      const poolId = log.topics[1]?.toLowerCase();
+      if (poolId === undefined || poolId.length !== 66) continue;
+      if (poolIdToTxHash.has(poolId)) continue;
+      if (log.transactionHash === undefined) continue;
+      poolIdToTxHash.set(poolId, log.transactionHash.toLowerCase());
+    }
+    to = from - 1;
+    if (input.source.number - to >= input.lookback) break;
+    from = Math.max(0, to - input.chunk + 1);
+  }
+  recentUniv4SwapIndex = Object.freeze({
+    providerId: providerId(input.provider),
+    sourceNumber: input.source.number,
+    poolIdToTxHash: Object.freeze(poolIdToTxHash),
+  });
+  return recentUniv4SwapIndex.poolIdToTxHash;
+}
 
 /**
  * Plugin-owned nomination: graph pool entries carry the real poolId as an
@@ -29,25 +116,23 @@ export async function nominateUniv4(input: {
 }): Promise<readonly UnifiedObservation[]> {
   const results: UnifiedObservation[] = [];
   const manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
+  const poolIdToTxHash = await recentUniv4SwapTxHashByPoolId({
+    source: input.source,
+    provider: input.provider,
+    lookback: 10_000,
+    chunk: 500,
+  });
   for (const nomination of input.nominations) {
     const opaque = nomination.opaque as Readonly<Record<string, unknown>>;
     if (!isUniv4OpaqueLabel(opaque)) continue;
     const poolId = opaquePoolId(opaque);
     if (poolId === null) continue;
     try {
-      const hit = await findRecentLogHit({
-        provider: input.provider,
-        source: input.source,
-        address: ADDR.UNISWAP_V4_POOL_MANAGER,
-        topics: [
-          UNIV4_SWAP_TOPIC.toLowerCase(),
-          poolId.toLowerCase(),
-        ],
-      });
-      if (hit === null || hit.transactionHash === undefined) continue;
+      const transactionHash = poolIdToTxHash.get(poolId.toLowerCase());
+      if (transactionHash === undefined) continue;
       if (input.provider.traceTransaction === undefined) continue;
       const trace = await input.provider.traceTransaction(
-        hit.transactionHash,
+        transactionHash,
       );
       const frame = findManagerSwapFrame(trace, manager);
       if (frame === null) continue;
@@ -57,7 +142,7 @@ export async function nominateUniv4(input: {
         target: manager,
         sender: frame.from.toLowerCase(),
         data: frame.input.toLowerCase(),
-        transactionHash: hit.transactionHash.toLowerCase(),
+        transactionHash,
       }));
     } catch {
       // One unreadable nomination must not block the next one.

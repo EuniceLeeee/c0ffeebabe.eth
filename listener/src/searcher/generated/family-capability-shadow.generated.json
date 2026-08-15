@@ -6724,7 +6724,7 @@
         "familyId": "univ4",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "43402cc95f86c6544158316dcf2c7ba5451f2e93fe05bbeb2320f31d1b8a0368",
+        "contentHash": "38fc74335bca74dc562b507ed8ce212fb88feceac0de27aa457fbce60263e613",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6732,7 +6732,6 @@
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/capture-materialization.ts",
-          "src/searcher/venues/recent-log-lookup.ts",
           "src/searcher/venues/swaps/univ4-abi.ts",
           "src/searcher/venues/swaps/univ4-common.ts",
           "src/searcher/venues/swaps/univ4-family/codec.ts",
@@ -6779,14 +6778,13 @@
         "familyId": "univ4",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "46c64f9571f4538e1b49a310b70890c9f510f089ba67fe6f4659580d5057f9e0",
+        "contentHash": "60e784fc88119741d146a5f85c133e17a44ff8dd03ab6351e1dae9404af21b21",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
-          "src/searcher/venues/recent-log-lookup.ts",
           "src/searcher/venues/swaps/univ4-abi.ts",
           "src/searcher/venues/swaps/univ4-common.ts",
           "src/searcher/venues/swaps/univ4-family/codec.ts",
@@ -7067,5 +7065,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "9c4e0786312f49f89f72d12c4d13ec230e1f7a57a48e19663d266a9aedd8a642"
+  "artifactHash": "b1b2ce94355c3d255ab7a6dcdee281092a4ccdff34417646292cc9adaf711089"
 }
