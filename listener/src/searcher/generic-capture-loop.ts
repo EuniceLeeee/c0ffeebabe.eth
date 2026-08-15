@@ -1,4 +1,4 @@
-import { buildTokenPaths, type TokenEdge } from "./planner/token-graph.js";
+import type { TokenEdge } from "./planner/token-graph.js";
 
 /**
  * Multi-hop closed-loop path assembly for capture cases (central tooling,
@@ -23,37 +23,75 @@ export interface CaptureLoopPath {
 }
 
 /**
- * Assemble the closed loop through the target pool. Uses the planner's
- * token-path search (pinned to the target pool so the cycle provably
- * passes through the family's verification point). Returns null when the
- * graph cannot close a cycle from the start token through the target.
+ * Assemble the closed loop through the target pool. The walk is constrained
+ * so the returned cycle provably passes through the family's verification
+ * pool: paths that return to the start token before touching the target are
+ * not cycles for this Family. Branching is bounded per token (pinned target
+ * edges always kept) and the shortest through-target cycle wins; the walk
+ * stops as soon as one is found. Returns null when the graph cannot close a
+ * cycle from the start token through the target.
  */
 export function buildCaptureClosedLoop(input: {
   readonly edges: readonly TokenEdge[];
   readonly startToken: string;
   readonly targetPool: string;
 }): CaptureLoopPath | null {
-  const paths = buildTokenPaths(
-    input.edges as TokenEdge[],
-    input.startToken,
-    input.startToken,
-    {
-      maxHops: 5,
-      pinnedPools: new Set([input.targetPool.toLowerCase()]),
-      maxPaths: 100,
-    },
-  );
-  // The loop must pass through the family's verification pool. A cycle
-  // that does not touch the target pool verifies nothing about this Family
-  // (and an unrelated one-pool round trip is not a capture case), so no
-  // fallback: no path through the target means no loop path.
-  const through = paths.find((path) => path.edges.some((edge) =>
-    edge.target.toLowerCase() === input.targetPool.toLowerCase()
-  ));
-  if (through === undefined || through.edges.length === 0) return null;
+  const start = input.startToken.toLowerCase();
+  const target = input.targetPool.toLowerCase();
+  const maxHops = 5;
+  const maxPoolsPerToken = 20;
+  const outByToken = new Map<string, TokenEdge[]>();
+  for (const edge of input.edges) {
+    const key = edge.tokenIn.toLowerCase();
+    const bucket = outByToken.get(key);
+    if (bucket === undefined) outByToken.set(key, [edge]);
+    else bucket.push(edge);
+  }
+  // Per-token branching bound: pinned (target) edges always survive; the
+  // rest keep the top-N by score so the walk stays bounded on hub tokens.
+  for (const [key, bucket] of outByToken) {
+    if (bucket.length <= maxPoolsPerToken) continue;
+    const pinned = bucket.filter((edge) => edge.target.toLowerCase() === target);
+    const rest = bucket
+      .filter((edge) => edge.target.toLowerCase() !== target)
+      .sort((left, right) => (right.score ?? 0) - (left.score ?? 0))
+      .slice(0, Math.max(0, maxPoolsPerToken - pinned.length));
+    outByToken.set(key, [...pinned, ...rest]);
+  }
+  const walk = (
+    token: string,
+    path: TokenEdge[],
+    seenTarget: boolean,
+  ): TokenEdge[] | null => {
+    if (path.length > 0 && token === start) {
+      return seenTarget ? path : null;
+    }
+    if (path.length >= maxHops) return null;
+    // A repeated token (pool input) cannot close a simple cycle; this also
+    // keeps the DFS finite.
+    if (path.some((used) => used.target.toLowerCase() === token)) return null;
+    const outs = outByToken.get(token);
+    if (outs === undefined) return null;
+    for (const edge of outs) {
+      if (path.some((used) =>
+        used.target.toLowerCase() === edge.target.toLowerCase() &&
+        used.tokenIn.toLowerCase() === edge.tokenIn.toLowerCase() &&
+        used.tokenOut.toLowerCase() === edge.tokenOut.toLowerCase()
+      )) continue;
+      const found = walk(
+        edge.tokenOut.toLowerCase(),
+        [...path, edge],
+        seenTarget || edge.target.toLowerCase() === target,
+      );
+      if (found !== null) return found;
+    }
+    return null;
+  };
+  const result = walk(start, [], false);
+  if (result === null) return null;
   return Object.freeze({
-    startToken: input.startToken.toLowerCase(),
-    edges: Object.freeze(through.edges.map((edge) => Object.freeze({
+    startToken: start,
+    edges: Object.freeze(result.map((edge) => Object.freeze({
       pool: edge.target.toLowerCase(),
       tokenIn: edge.tokenIn.toLowerCase(),
       tokenOut: edge.tokenOut.toLowerCase(),
