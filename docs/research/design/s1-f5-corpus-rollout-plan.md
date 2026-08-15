@@ -875,6 +875,16 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   或 Promise.all 的请求处理）。
 - **下一步**：silo transport 定位 → silo 全绿 → fluid/astra/eigenpie →
   两道门 → F8 收口 → live 验收 → F9。
+- **silo + address-candidate-unit 全 PASS（a8e63143）**：silo 的 transport
+  scheduler-failure 定位 = fake effects 缺 observe 声明的 logs（补 logs: []
+  后通过）；silo 全断言绿（valid/timeDrift/ambiguous/noSimulation/observed/
+  mode fail-closed）；address-candidate-unit 绿（9/10 fake + runtime 注入）。
+  节点已部署 a8e63143（HEAD_OK + BUILD_OK）。
+- **剩余**：eigenpie-deposit（候选 0x000000 no_catalog_match——候选 opaque/
+  observed evidence 路径）、fluid-family-admission（active-quote 双向）、
+  astra-multitoken-family（候选物化）、live-smoke（真实 RPC——需 revm/
+  节点侧）、dex-live-smoke（env）→ 两道门 → F8 收口 → live 验收 → F9。
+
 
 
 
