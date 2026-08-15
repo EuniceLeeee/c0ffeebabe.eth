@@ -177,7 +177,11 @@ export async function nominateUniv4(input: {
       // opaque payload. Identity still re-verifies the pool key against
       // the manager at the source block.
       const resolved = await resolveV4PoolKeyViaPositionManager(
-        { call: input.provider.call } as never,
+        // The reverse lookup passes an AbortSignal control as the second
+        // call argument; the nomination provider treats that slot as a
+        // block tag, so drop it (single-call, no cancellation needed).
+        { call: (req: { to: string; data: string }) =>
+            input.provider.call(req) } as never,
         ADDR.UNISWAP_V4_POSITION_MANAGER,
         poolId,
       );
