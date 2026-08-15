@@ -941,8 +941,18 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   dex-live-smoke（universe 3000 池）：admissions=1、added=1、
   firstProbes=4200、secondCacheHits=1400、wallMs=14577。
   节点已部署 44cdccf5（HEAD_OK + BUILD_OK）。
-- **剩余**：两道门（s1-cutover-readiness / default-authority-cutover-gate）
-  → F8 收口 → live 验收 → F9。
+- **两道门全 PASS（当前轮）**：`searcher:s1-cutover-readiness` PASS、
+  `searcher:default-authority-cutover-gate` PASS；systemic-live-gate、
+  production-family-startup-manifest、strict-catalog-consumer-diagnostic、
+  adapter-family-shadow-suite 37/37 全绿。
+- **F8 收口（03ac4f51 docs 确认）**：B 对 attester 项关闭——attester/
+  attestPoolsStrictFromProvider runtime 注入 + context identityRuntime
+  通道 + main.ts production revm runtime；8 个族测试全 PASS（含 fluid）；
+  live-smoke / dex-live-smoke 节点真实 RPC 全 PASS；F8 中央 runtime
+  装配（authority/scheduler/simulator）到位。
+- **剩余**：F5 live 验收（生产 searcher 跑 ret13 universe，六步 judge
+  对 live receipts 出 verdict）→ F9（MigrationCleanupReceipt.verdict=pass
+  + AST/import-closure 证明）。
 
 
 
