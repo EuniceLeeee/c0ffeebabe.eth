@@ -759,11 +759,26 @@ const transientIdentityContext: ProtocolDiscoveryContext = {
     },
   },
 };
+const transientIdentityRuntime = createStrictCentralAdapterRuntime({
+  provider: transientIdentityContext.backend as never,
+  simulator: createFixtureStrictSimulationTransport({
+    depositSharesRatio: [9n, 10n],
+    redeemAssetsRatio: [10n, 9n],
+  }),
+  generationFence: Object.freeze({
+    kind: "catalog-relative" as const,
+    assertCurrent: () => undefined,
+    verifyCanonicalSource: () => true,
+  }),
+  verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+});
 const transientIdentityFailure = await runProtocolDiscovery({
   adapters: [erc4626Adapter],
   context: transientIdentityContext,
   protocolEdgesEnabled: true,
-  attestIdentity: attester,
+  attestIdentity: createCanonicalProtocolIdentityAttester({
+    identityRuntime: transientIdentityRuntime,
+  }),
   candidatesByAdapter: addressScan.candidatesByAdapter,
 });
 console.log("[debug] transient evalComplete=", transientIdentityFailure.evaluationComplete, " keys=", transientIdentityFailure.evaluatedInstanceKeys.size);

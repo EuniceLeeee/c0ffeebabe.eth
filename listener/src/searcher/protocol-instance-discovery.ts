@@ -964,6 +964,7 @@ export function createCanonicalProtocolIdentityAttester(input?: {
   readonly identityRuntime?: CentralAdapterRuntime;
 }): ProtocolIdentityAttester {
   return async (_adapter, candidate, context) => {
+    try {
     const runtime = input?.identityRuntime ??
       (context.identityRuntime as CentralAdapterRuntime | undefined);
     const backend = context.backend;
@@ -995,6 +996,10 @@ export function createCanonicalProtocolIdentityAttester(input?: {
     });
     const accepted = result.accepted[0];
     const rejected = result.rejected[0];
+    console.log(
+      `[attester-debug] ${candidate.pool.address.slice(0, 8)} accepted=${result.accepted.length} ` +
+        `rejected=${result.rejected.length} first=${result.rejected[0]?.reason ?? "-"}`,
+    );
     if (rejected !== undefined && isRetryableIdentityRejection(rejected.reason)) {
       // A transient chain read failure is retryable discovery work, not a
       // deterministic negative proof: surface it so the caller retains
@@ -1005,6 +1010,13 @@ export function createCanonicalProtocolIdentityAttester(input?: {
       return accepted as unknown as AttestedPoolEntry<PoolEntry>;
     }
     return null;
+    } catch (error) {
+      console.log(
+        `[attester-debug] ${candidate.pool.address.slice(0, 8)} THREW: ` +
+          (error instanceof Error ? error.message.slice(0, 200) : String(error)),
+      );
+      throw error;
+    }
   };
 }
 
@@ -1016,7 +1028,9 @@ export function createCanonicalProtocolIdentityAttester(input?: {
 function isRetryableIdentityRejection(reason: string): boolean {
   return reason.includes("resource-limited") ||
     reason.includes(":retry") ||
-    reason.includes(":timeout");
+    reason.includes(":timeout") ||
+    reason.endsWith(":rpc") ||
+    reason.includes(":rpc:");
 }
 
 /**
@@ -2144,7 +2158,11 @@ class RetryableProtocolDiscoveryError extends Error {
 }
 
 function isRetryableProtocolDiscoveryFailure(value: unknown): boolean {
+  // Explicit identity-retryable marker: a strict attestation rejection
+  // classified as transient (resource-limited/timeout) is retryable
+  // discovery work regardless of the underlying error chain codes.
   const chain = protocolDiscoveryErrorChain(value);
+  if (chain.some((item) => item instanceof RetryableProtocolDiscoveryError)) return true;
   if (chain.some(isDeterministicProtocolRpcFailure)) return false;
   const retryableCodes = new Set([
     "NETWORK_ERROR",
