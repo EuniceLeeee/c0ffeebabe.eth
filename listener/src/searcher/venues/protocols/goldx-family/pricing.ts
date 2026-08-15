@@ -84,9 +84,14 @@ export const goldxPricing = {
     },
   },
   dependencies: ({ descriptor }) => Object.freeze([
-    descriptor.target,
-    descriptor.route.tokenIn,
-    descriptor.route.tokenOut,
+    // The mint route's tokenOut is the GOLDx token itself (descriptor.target),
+    // so the raw triple can repeat an address; the pricing validator requires
+    // unique dependencies.
+    ...new Set([
+      descriptor.target,
+      descriptor.route.tokenIn,
+      descriptor.route.tokenOut,
+    ]),
   ]),
   mutation: {
     affectedStateKeys: ({ descriptor, observation }) =>

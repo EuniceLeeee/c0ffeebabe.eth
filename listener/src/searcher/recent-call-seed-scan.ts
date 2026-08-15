@@ -30,6 +30,12 @@ export async function scanRecentCallSeeds(input: {
 }): Promise<readonly CaptureNominationInput[]> {
   const maxSeeds = Math.max(1, input.maxSeedsPerAddress ?? 3);
   const extra: CaptureNominationInput[] = [];
+  // Per-family early stop: a tx-bound family only needs ONE real seed to
+  // materialize its observation (and the capture chain re-reads the same
+  // tx), so once a family has a hit, its remaining candidate addresses are
+  // skipped. Without this the scan walks every bare address (hundreds per
+  // family) and traces up to maxSeeds transactions each.
+  const seededFamilies = new Set<string>();
   for (const nomination of input.nominations) {
     const address = ethers.getAddress(nomination.address).toLowerCase();
     const opaque = nomination.opaque as Readonly<Record<string, unknown>>;
@@ -66,6 +72,7 @@ export async function scanRecentCallSeeds(input: {
     if (discovery.txSeedNominations !== true) continue;
     const callPatterns = discovery.callPatterns ?? [];
     if (callPatterns.length === 0) continue;
+    if (seededFamilies.has(family)) continue;
     const trace = input.provider.traceTransaction;
     if (trace === undefined) continue;
     const txHashes = await recentTxHashesForAddress({
@@ -87,6 +94,8 @@ export async function scanRecentCallSeeds(input: {
             transactionHash: txHash,
           }) as never,
         }));
+        seededFamilies.add(family);
+        break;
       } catch {
         // One unreadable trace must not block the next candidate.
       }

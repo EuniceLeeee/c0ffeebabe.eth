@@ -398,6 +398,18 @@ export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
    * semantics in central paths.
    */
   readonly txSeedNominations?: boolean;
+  /**
+   * Plugin-owned declaration: materialize the family's runtime evidence
+   * from a real observed transaction (e.g. a tx-bound attestation derived
+   * from the observation's transaction). The central descriptor builder
+   * executes this capability for every family that declares it; families
+   * without it carry an empty runtime-evidence list. The plugin declares
+   * semantics; the central harness never interprets protocol payloads.
+   */
+  readonly runtimeEvidenceFromObservation?: (input: {
+    readonly observation: UnifiedObservation;
+    readonly source: CanonicalSource;
+  }) => readonly RuntimeEvidence[];
   readonly evidenceChannel: DiscoveryEvidenceChannel;
   readonly nominate?: CaptureNominationSemantics;
   decodeCandidate(input: {
@@ -3146,6 +3158,7 @@ function validateDiscovery(
       "logPatterns",
       "nominate",
       "reverseBinding",
+      "runtimeEvidenceFromObservation",
       "sources",
       "txSeedNominations",
     ],

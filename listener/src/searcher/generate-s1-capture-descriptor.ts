@@ -85,11 +85,27 @@ export function descriptorFromInventory(input: {
       missing.push(`${family.plugin.manifest.familyId}:incumbent`);
       continue;
     }
+    // Plugin-declared runtime-evidence materialization: when the family
+    // owns an observation-to-runtime-evidence capability (e.g. a tx-bound
+    // attestation derived from the real observed transaction), the central
+    // descriptor builder executes it; otherwise the evidence list stays
+    // empty. The plugin declares semantics; the central harness only
+    // executes the catalog-issued capability.
+    const declaredEvidence =
+      "discovery" in family.plugin
+        ? family.plugin.discovery?.runtimeEvidenceFromObservation
+        : undefined;
+    const runtimeEvidence = declaredEvidence === undefined
+      ? Object.freeze([])
+      : Object.freeze(declaredEvidence({
+          observation: incumbent.observation,
+          source: input.inventory.source,
+        }));
     const common = {
       executor,
       minAmountOut: input.minProfit.toString(),
       observation: incumbent.observation as unknown as CanonicalValue,
-      runtimeEvidence: Object.freeze([]),
+      runtimeEvidence: runtimeEvidence as unknown as CanonicalValue,
     };
     cases.push(Object.freeze({
       familyId: family.plugin.manifest.familyId,

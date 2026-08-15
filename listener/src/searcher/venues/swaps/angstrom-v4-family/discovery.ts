@@ -28,6 +28,7 @@ import {
 } from "./codec.js";
 import type { AngstromV4Candidate } from "./types.js";
 import { nominateAngstromV4 } from "./nomination.js";
+import { angstromRuntimeEvidenceFromObservation } from "./evidence.js";
 
 const ANGSTROM_ADAPTER_INTERFACE = new ethers.Interface(
   ANGSTROM_ADAPTER_SWAP_ABI,
@@ -63,6 +64,7 @@ export const angstromV4Discovery = {
   candidateKey: (candidate) =>
     `${candidate.manager.toLowerCase()}\u001f${candidate.poolId}`,
   nominate: { nominate: nominateAngstromV4 },
+  runtimeEvidenceFromObservation: angstromRuntimeEvidenceFromObservation,
   reverseBinding: explicitReverseBindingUnsupported(
     "tx-bound family; no reverse-binding registry (explicit unsupported)",
   ),
