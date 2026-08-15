@@ -396,40 +396,51 @@ async function filterBorrowableNominations(input: {
     "function token0() view returns (address)",
     "function token1() view returns (address)",
   ]);
-  for (const nomination of input.nominations) {
-    const pool = nomination.address.toLowerCase();
-    const tokens = new Set<string>();
-    try {
-      for (const fn of ["token0", "token1"] as const) {
-        const raw = await input.provider.call(
-          { to: pool, data: ERC20.encodeFunctionData(fn) },
-          input.source.number,
-        );
-        if (ethers.isHexString(raw) && ethers.dataLength(raw) === 32) {
-          const decoded = ERC20.decodeFunctionResult(fn, raw) as unknown;
-          const token = String(
-            (decoded as { readonly [index: number]: unknown })[0] ?? "",
+  const BORROWABLE_CONCURRENCY = 24;
+  let next = 0;
+  const results: boolean[] = new Array(input.nominations.length).fill(true);
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const index = next++;
+      if (index >= input.nominations.length) return;
+      const nomination = input.nominations[index]!;
+      const pool = nomination.address.toLowerCase();
+      const tokens = new Set<string>();
+      try {
+        for (const fn of ["token0", "token1"] as const) {
+          const raw = await input.provider.call(
+            { to: pool, data: ERC20.encodeFunctionData(fn) },
+            input.source.number,
           );
-          if (token !== "") tokens.add(ethers.getAddress(token).toLowerCase());
+          if (ethers.isHexString(raw) && ethers.dataLength(raw) === 32) {
+            const decoded = ERC20.decodeFunctionResult(fn, raw) as unknown;
+            const token = String(
+              (decoded as { readonly [index: number]: unknown })[0] ?? "",
+            );
+            if (token !== "") {
+              tokens.add(ethers.getAddress(token).toLowerCase());
+            }
+          }
         }
+      } catch {
+        // Token surface unreadable (non-standard pool): keep the nomination;
+        // the family nomination decides.
+        continue;
       }
-    } catch {
-      // Token surface unreadable (non-standard pool): keep the nomination;
-      // the family nomination decides.
-      borrowable.push(nomination);
-      continue;
+      const borrowableHit = [...tokens].some((token) =>
+        CAPTURE_BORROWABLE_ASSETS.includes(token)
+      );
+      if (!borrowableHit && tokens.size === 2) {
+        // Two tokens, neither mainstream: not borrowable, drop.
+        results[index] = false;
+      }
     }
-    const borrowableHit = [...tokens].some((token) =>
-      CAPTURE_BORROWABLE_ASSETS.includes(token)
-    );
-    if (borrowableHit || tokens.size < 2) {
-      // Mainstream asset present, or the surface is incomplete: keep.
-      borrowable.push(nomination);
-    } else if (tokens.size === 2) {
-      // Two tokens, neither mainstream: not borrowable, drop.
-    } else {
-      borrowable.push(nomination);
-    }
+  };
+  await Promise.all(
+    Array.from({ length: BORROWABLE_CONCURRENCY }, () => worker()),
+  );
+  for (let i = 0; i < input.nominations.length; i++) {
+    if (results[i]) borrowable.push(input.nominations[i]!);
   }
   return Object.freeze(borrowable);
 }
