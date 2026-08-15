@@ -29,6 +29,9 @@ import {
   readAstraTokenSet,
 } from "../venues/protocols/astra-multitoken-discovery.js";
 import { astraMultiTokenAdapter } from "../venues/protocols/astra-multitoken.js";
+import { createStrictCentralAdapterRuntime, type StrictSimulationTransport } from "../strict-central-adapter-runtime.js";
+import { PRODUCTION_STRICT_VERIFIED_ACTORS } from "../venues/production-verified-actors.js";
+import type { CentralAdapterRuntime } from "../adapter-work-intent.js";
 import type {
   ProtocolDiscoveryContext,
   ProtocolDiscoveryLog,
@@ -253,7 +256,7 @@ const backend: ProtocolDiscoveryReadBackend = {
     return [];
   },
   async getTransactionReceipt() {
-    return null;
+    return { status: 1, logs: receiptLogs };
   },
   async traceTransaction() {
     throw new Error("unexpected trace read");
@@ -391,13 +394,72 @@ assert.deepEqual(
   "one target must remain one dynamic Astra instance",
 );
 
+const astraFixtureSimulator: StrictSimulationTransport = {
+  async simulate({ request }) {
+    if (request.kind !== "effect-delta-simulation") {
+      throw new Error("astra fixture simulator requires effect-delta-simulation");
+    }
+    const call = request.call as { readonly to: string; readonly data: string };
+    const decoded = astraMultiTokenIface.decodeFunctionData(
+      "change",
+      call.data,
+    );
+    const tokenIn = ethers.getAddress(String(decoded[0])).toLowerCase();
+    const tokenOut = ethers.getAddress(String(decoded[1])).toLowerCase();
+    const amountIn = BigInt(decoded[2]);
+    const target = ethers.getAddress(call.to).toLowerCase();
+    const actor = CHANGER.toLowerCase();
+    const amountOut = quote(target, amountIn);
+    return {
+      data: astraMultiTokenIface.encodeFunctionResult("change", [amountOut]),
+      effects: {
+        tokenDeltas: [
+          { token: tokenIn, account: actor, delta: -amountIn },
+          { token: tokenIn, account: target, delta: amountIn },
+          { token: tokenOut, account: actor, delta: amountOut },
+          { token: tokenOut, account: target, delta: -amountOut },
+        ],
+        logs: [{
+          address: target,
+          topics: changeLog(target, tokenIn, tokenOut, amountIn, amountOut)
+            .topics,
+          data: changeLog(target, tokenIn, tokenOut, amountIn, amountOut).data,
+        }],
+      },
+    };
+  },
+};
+const astraIdentityRuntime: CentralAdapterRuntime =
+  createStrictCentralAdapterRuntime({
+    provider: context.backend as never,
+    simulator: astraFixtureSimulator,
+    generationFence: Object.freeze({
+      kind: "catalog-relative" as const,
+      assertCurrent: () => undefined,
+      verifyCanonicalSource: () => true,
+    }),
+    verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+    executor: CHANGER,
+  });
 const discovery = await runProtocolDiscovery({
   adapters: [astraMultiTokenAdapter],
   context,
   protocolEdgesEnabled: true,
-  attestIdentity: createCanonicalProtocolIdentityAttester(),
+  attestIdentity: createCanonicalProtocolIdentityAttester({
+    identityRuntime: astraIdentityRuntime,
+  }),
   candidatesByAdapter: new Map([
-    [astraMultiTokenAdapter.id, candidates],
+    [astraMultiTokenAdapter.id, candidates.map((candidate) => ({
+      ...candidate,
+      pool: {
+        ...candidate.pool,
+        ...({
+          transactionHash: ethers.keccak256(
+            ethers.toUtf8Bytes("astra-two-instance"),
+          ),
+        } as unknown as Record<string, never>),
+      } as never,
+    }))],
   ]),
 });
 assert.equal(discovery.wouldAdmit.length, 2, "both sibling instances admitted");
