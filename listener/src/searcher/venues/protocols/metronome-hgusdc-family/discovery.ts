@@ -14,6 +14,7 @@ const EXECUTE_PATH_PATTERN_ID = "metronome-hgusdc-execute-path";
 
 export const metronomeHgUsdcDiscovery = {
   evidenceChannel: "nominate" as const,
+  txSeedNominations: true,
   sources: ["observed-call"],
   callPatterns: [{
     id: EXECUTE_PATH_PATTERN_ID,

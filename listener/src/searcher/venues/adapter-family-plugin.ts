@@ -389,6 +389,15 @@ export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
    * projection and never maps semantics itself.
    */
   readonly reverseBinding?: ReverseBindingDeclaration;
+  /**
+   * Plugin-owned declaration: the family's fresh nomination capability
+   * consumes an opaque txHash seed (tx-bound nomination re-reading the real
+   * receipt/trace). The central generic call-seed scanner only scans
+   * candidates of families that declare this; log-reverse-lookup families
+   * (which find their own recent logs) stay out of the scan. No protocol
+   * semantics in central paths.
+   */
+  readonly txSeedNominations?: boolean;
   readonly evidenceChannel: DiscoveryEvidenceChannel;
   readonly nominate?: CaptureNominationSemantics;
   decodeCandidate(input: {
@@ -3138,6 +3147,7 @@ function validateDiscovery(
       "nominate",
       "reverseBinding",
       "sources",
+      "txSeedNominations",
     ],
     "discovery semantics",
     true,

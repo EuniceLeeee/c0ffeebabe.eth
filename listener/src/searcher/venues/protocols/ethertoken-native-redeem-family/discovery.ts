@@ -15,6 +15,7 @@ const WITHDRAW_PATTERN_ID = "ethertoken-withdraw-call";
 
 export const etherTokenNativeRedeemDiscovery = {
   evidenceChannel: "nominate" as const,
+  txSeedNominations: true,
   sources: ["observed-call"],
   candidateSources: ["observed-interaction"],
   callPatterns: [{

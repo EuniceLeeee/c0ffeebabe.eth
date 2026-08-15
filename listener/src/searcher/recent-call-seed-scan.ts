@@ -60,6 +60,10 @@ export async function scanRecentCallSeeds(input: {
     if (!("discovery" in plugin)) continue;
     const discovery = plugin.discovery;
     if (discovery.evidenceChannel !== "nominate") continue;
+    // Only families that declare tx-bound nomination (consume an opaque
+    // txHash seed) are scanned; log-reverse-lookup families find their own
+    // recent logs and would only pay the scan cost.
+    if (discovery.txSeedNominations !== true) continue;
     const callPatterns = discovery.callPatterns ?? [];
     if (callPatterns.length === 0) continue;
     const trace = input.provider.traceTransaction;

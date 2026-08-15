@@ -31,6 +31,7 @@ export const CURVE_UNDERLYING_POOL_SURFACE_PATTERN_ID =
 
 export const curveUnderlyingDiscovery = {
   evidenceChannel: "nominate" as const,
+  txSeedNominations: true,
   sources: ["landed-log", "observed-call"],
   callPatterns: [{
     id: CURVE_UNDERLYING_I128_CALL_PATTERN_ID,
