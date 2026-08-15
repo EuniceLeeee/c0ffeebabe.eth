@@ -18,6 +18,8 @@ import {
 } from "./codec.js";
 import type { UniV2Candidate } from "./types.js";
 
+export const UNIV2_PAIR_SURFACE_PATTERN_ID = "univ2-pair-surface";
+
 export const univ2Discovery = {
   evidenceChannel: "nominate" as const,
   sources: ["factory-log", "landed-log", "observed-call"],
@@ -40,6 +42,11 @@ export const univ2Discovery = {
     topic: UNIV2_SYNC_TOPIC,
     signature: "Sync(uint112,uint112)",
   }],
+  addressSurfaces: [Object.freeze({
+    id: UNIV2_PAIR_SURFACE_PATTERN_ID,
+    kind: "interface" as const,
+    fingerprint: "univ2-pair-surface-v1",
+  })],
   decodeCandidate({ observation, matchedPatternId }) {
     try {
       return decodeCandidate(observation, matchedPatternId);
@@ -72,6 +79,19 @@ function decodeCandidate(
     observation.kind === "log"
   ) {
     return candidate("pair-sync-log", observation.address);
+  }
+  if (
+    matchedPatternId === UNIV2_PAIR_SURFACE_PATTERN_ID &&
+    observation.kind === "address-surface"
+  ) {
+    return Object.freeze({
+      candidateKind: "univ2-pair" as const,
+      sourceKind: "pair-surface" as const,
+      pool: canonicalAddress(observation.address),
+      hintedFactory: null,
+      hintedToken0: null,
+      hintedToken1: null,
+    });
   }
   if (
     matchedPatternId !== UNIV2_PAIR_CREATED_PATTERN_ID ||

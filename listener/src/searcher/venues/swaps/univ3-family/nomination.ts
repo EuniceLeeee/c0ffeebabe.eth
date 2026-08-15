@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import type {
   CaptureNominationInput,
   CaptureNominationProvider,
@@ -34,17 +35,34 @@ export async function nominateUniv3(input: {
         address: pool,
         topics: [UNIV3_SWAP_TOPIC.toLowerCase()],
       });
-      if (hit === null) continue;
-      results.push(Object.freeze({
-        kind: "log" as const,
-        source: input.source,
-        address: lowerAddress(hit.address),
-        topics: Object.freeze(hit.topics.map((topic) => topic.toLowerCase())),
-        data: hit.data.toLowerCase(),
-        ...(hit.transactionHash === undefined
-          ? {}
-          : { transactionHash: hit.transactionHash.toLowerCase() }),
-      }));
+      if (hit !== null) {
+        results.push(Object.freeze({
+          kind: "log" as const,
+          source: input.source,
+          address: lowerAddress(hit.address),
+          topics: Object.freeze(hit.topics.map((topic) => topic.toLowerCase())),
+          data: hit.data.toLowerCase(),
+          ...(hit.transactionHash === undefined
+            ? {}
+            : { transactionHash: hit.transactionHash.toLowerCase() }),
+        }));
+        continue;
+      }
+      // Cold-pool fallback: no Swap in the retained window. Re-materialize
+      // the pool surface directly (deployed code + interface fingerprint);
+      // identity still re-verifies on chain (factory/token0/token1/fee +
+      // getPool reverse binding) before admission. No transaction needed.
+      const code = await input.provider.getCode(pool, input.source.number);
+      if (ethers.isHexString(code) && code !== "0x") {
+        results.push(Object.freeze({
+          kind: "address-surface" as const,
+          source: input.source,
+          address: pool,
+          codeHash: ethers.keccak256(code).toLowerCase(),
+          implementationWord: ethers.zeroPadValue("0x", 32).toLowerCase(),
+          interfaceFingerprints: Object.freeze(["univ3-pool-surface-v1"]),
+        } as never));
+      }
     } catch {
       // One unreadable nomination must not block the next one.
     }

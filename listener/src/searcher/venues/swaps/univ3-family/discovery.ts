@@ -26,6 +26,8 @@ import {
 } from "./codec.js";
 import type { UniV3Candidate } from "./types.js";
 
+export const UNIV3_POOL_SURFACE_PATTERN_ID = "univ3-pool-surface";
+
 export const univ3Discovery = {
   evidenceChannel: "nominate" as const,
   sources: ["factory-log", "landed-log", "observed-call"],
@@ -61,6 +63,11 @@ export const univ3Discovery = {
     topic: UNIV3_BURN_TOPIC as `0x${string}`,
     signature: "Burn(address,int24,int24,uint128,uint256,uint256)",
   }],
+  addressSurfaces: [Object.freeze({
+    id: UNIV3_POOL_SURFACE_PATTERN_ID,
+    kind: "interface" as const,
+    fingerprint: "univ3-pool-surface-v1",
+  })],
   decodeCandidate({ observation, matchedPatternId }) {
     try {
       return decodeCandidate(observation, matchedPatternId);
@@ -76,6 +83,12 @@ function decodeCandidate(
   observation: UnifiedObservation,
   matchedPatternId: string,
 ): UniV3Candidate | null {
+  if (
+    matchedPatternId === UNIV3_POOL_SURFACE_PATTERN_ID &&
+    observation.kind === "address-surface"
+  ) {
+    return addressCandidate("pool-surface", observation.address);
+  }
   if (
     matchedPatternId === UNIV3_SWAP_CALL_PATTERN_ID &&
     observation.kind === "call"

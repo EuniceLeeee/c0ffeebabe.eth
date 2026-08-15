@@ -15,7 +15,8 @@ export type UniV2CandidateSource =
   | "pair-created"
   | "pair-call"
   | "pair-swap-log"
-  | "pair-sync-log";
+  | "pair-sync-log"
+  | "pair-surface";
 
 export interface UniV2Candidate extends FamilyCandidate {
   readonly candidateKind: "univ2-pair";

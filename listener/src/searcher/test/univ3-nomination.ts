@@ -75,7 +75,9 @@ async function main(): Promise<void> {
   });
   assert.equal(foreign.length, 0);
 
-  // No recent Swap log yields nothing; no fabrication.
+  // No recent Swap log falls back to the cold-pool address-surface probe
+  // (real deployed code + interface fingerprint; identity still re-verifies
+  // on chain). A pool with deployed code yields one surface observation.
   const noLog = await nominateUniv3({
     nominations: Object.freeze([Object.freeze({
       address: POOL,
@@ -84,7 +86,29 @@ async function main(): Promise<void> {
     source: SOURCE,
     provider: mockProvider([]),
   });
-  assert.equal(noLog.length, 0);
+  assert.equal(noLog.length, 1);
+  const surface = noLog[0] as Extract<
+    UnifiedObservation,
+    { readonly kind: "address-surface" }
+  >;
+  assert.equal(surface.kind, "address-surface");
+  assert.equal(surface.address, POOL.toLowerCase());
+  assert(surface.codeHash.startsWith("0x"));
+  assert.deepEqual(surface.interfaceFingerprints, ["univ3-pool-surface-v1"]);
+
+  // No deployed code and no log yields nothing; no fabrication.
+  const empty = await nominateUniv3({
+    nominations: Object.freeze([Object.freeze({
+      address: POOL,
+      opaque: Object.freeze({ adapter: "univ3" }),
+    })]),
+    source: SOURCE,
+    provider: Object.freeze({
+      ...mockProvider([]),
+      getCode: async () => "0x",
+    }),
+  });
+  assert.equal(empty.length, 0);
 
   console.log("univ3 nomination PASS");
 }

@@ -14,7 +14,8 @@ import type { CanonicalSource } from "../../adapter-request-program.js";
 export type UniV3CandidateSource =
   | "pool-created"
   | "pool-call"
-  | "pool-swap-log";
+  | "pool-swap-log"
+  | "pool-surface";
 
 export interface UniV3Candidate extends FamilyCandidate {
   readonly candidateKind: "univ3-pool";
