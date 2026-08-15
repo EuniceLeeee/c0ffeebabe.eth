@@ -230,30 +230,6 @@ async function annotateStartTokens(input: {
     }
     return [...tokens];
   };
-  const graphTokenFrequency = new Map<string, number>();
-  const graph = input.graph as { readonly pools?: readonly unknown[] };
-  for (const pool of graph.pools ?? []) {
-    const record = pool as Readonly<Record<string, unknown>>;
-    for (const key of ["token0", "currency0", "fixedTokenIn"] as const) {
-      const value = record[key];
-      if (typeof value === "string" && ethers.isAddress(value)) {
-        const token = ethers.getAddress(value).toLowerCase();
-        graphTokenFrequency.set(token, (graphTokenFrequency.get(token) ?? 0) + 1);
-      }
-    }
-    for (const key of ["token1", "currency1", "fixedTokenOut"] as const) {
-      const value = record[key];
-      if (typeof value === "string" && ethers.isAddress(value)) {
-        const token = ethers.getAddress(value).toLowerCase();
-        graphTokenFrequency.set(token, (graphTokenFrequency.get(token) ?? 0) + 1);
-      }
-    }
-  }
-  const frequentTokens = [...graphTokenFrequency.entries()]
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 8)
-    .map(([token]) => token);
-
   const runtime = createStrictCentralAdapterRuntime({
     provider: input.provider as never,
     generationFence: Object.freeze({
@@ -283,14 +259,23 @@ async function annotateStartTokens(input: {
     }
     return 10n ** 18n;
   };
-  const borrowable = new Set<string>();
-  const probeTokens = [...new Set(frequentTokens)];
-  if (probeTokens.length > 0) {
+  // The start token is whatever the pool actually trades, and "borrowable" is
+  // decided by the funding families themselves: central code asks each
+  // funding plugin (via its own liquidity declaration) whether it can serve
+  // the token and how much. No central token lists, no frequency guesses -
+  // the plugins own the semantics (flash loans accept arbitrary ERC20 and
+  // derive maxBorrow from the holder balance).
+  const borrowableCache = new Map<string, boolean>();
+  const borrowable = async (token: string): Promise<boolean> => {
+    const key = token.toLowerCase();
+    const cached = borrowableCache.get(key);
+    if (cached !== undefined) return cached;
+    let yes = false;
     for (const family of input.catalog.listAll()) {
       if (family.plugin.manifest.domain !== "funding") continue;
       const result = await executeFundingFamilyLiquidity({
         family,
-        assets: Object.freeze(probeTokens),
+        assets: Object.freeze([key]),
         source: input.source,
         generation: input.source.generation,
         runtime,
@@ -298,17 +283,21 @@ async function annotateStartTokens(input: {
       });
       for (const offer of result.offers) {
         if (offer.maxBorrow >= await oneUnitOf(offer.asset.toLowerCase())) {
-          borrowable.add(offer.asset.toLowerCase());
+          yes = true;
+          break;
         }
       }
+      if (yes) break;
     }
-  }
+    borrowableCache.set(key, yes);
+    return yes;
+  };
   const enriched: CaptureInventoryEntry[] = [];
   for (const entry of input.entries) {
     const tokens = poolTokens(entry.candidateIdentity);
     let startToken: string | null = null;
-    for (const token of [...tokens, ...frequentTokens]) {
-      if (borrowable.has(token.toLowerCase())) {
+    for (const token of tokens) {
+      if (await borrowable(token)) {
         startToken = token.toLowerCase();
         break;
       }
