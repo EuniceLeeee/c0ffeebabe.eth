@@ -651,3 +651,25 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   集合或掩盖 funding 真实覆盖。
 - **后续失败判读**：单腿模型下出现的 funding/borrowable 类失败先按
   “模型不匹配”归因，再查族语义；不要继续在单腿模型上修补丁。
+
+### F5 验收模型方向修正：生产多跳闭环（2026-08-15 用户裁定，最新为准）
+
+- **验收以生产实际模型为准，单腿 borrowable 过滤不构成验收约束**。生产套利是
+  多跳闭环：借一个可借起点 token（morpho/balancer 闪贷）→ 经 token graph 若干池
+  swap → 回到起点 token 还款。中间池子的 token **不需要可借**——只有起点 token
+  需要。planner.ts 的 BorrowableCycleToken/rotatedPlans 与
+  solver/flash-liquidity.ts 已证明生产即多跳闭环。
+- **单腿 + borrowable 过滤是人为简化，只会制造假失败**：① 要求池子“双 token
+  都可借”比生产严得多；② 池子输入 token 可以是前一跳换来的，不需要直接可借；
+  ③ 用可借性塑造 case 集合会掩盖 funding 真实覆盖（哪些 token 真借不到看不
+  到）；④ 吃掉族覆盖（曾导致 univ4/goldx 被整体滤为 unresolved）；⑤ 额外
+  15-25 分钟探测。**已删除**：materializer 不再按可借性过滤提名池，per-family
+  early stop 取第一个物化的池，capture 对起点 token 如实报告 funding 结果。
+- **funding 闭环是中央机制，验一次就够**（借→swap→还一个 case 跑通即证明
+  borrow/repay fragment 与 finalSim 守恒在中央层正确）；**各族 case 验的是各族
+  插件语义**（identity/exact/execution/pricing 在真实链上是否准入与正确），
+  F5 要求每族一个真实正例即为此目的。两者不耦合为同一门槛。
+- **case 模型演进**：当前 capture 为单腿 case（借 tokenIn → 一个池 swap → 还
+  tokenIn）；**下一轮改为生产多跳闭环 case**（借起点 token → 中央 solver 按生产
+  逻辑拼路径 → 还起点 token），每族验证它在路径中那一段的 exact/execution
+  语义。期间“每族挑主流可执行代表池”只是过渡妥协，不是验收口径。

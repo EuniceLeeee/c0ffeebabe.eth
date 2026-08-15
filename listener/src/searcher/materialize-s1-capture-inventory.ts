@@ -118,24 +118,19 @@ export async function materializeCaptureInventory(input: {
     provider: input.provider,
     nominations: poolNominations,
   });
-  // Capture closure strategy (central, no protocol semantics): a captured
-  // route must close with a real funding plan, so the route's input token
-  // must be borrowable by the catalog funding families. Filter pool
-  // nominations to pools whose on-chain token surface includes a mainstream
-  // borrowable asset (universal ERC20 reads; pools that do not expose
-  // token0/token1 stay unfiltered).
-  const borrowableNominations = await filterBorrowableNominations({
-    catalog: input.catalog,
-    provider: input.provider,
-    source: input.source,
-    nominations: poolNominations,
-  });
+  // Capture closure is the production multi-hop model: a route borrows a
+  // borrowable start token, swaps through the graph, and repays the start
+  // token. The pool nomination list is NOT filtered by borrowability -
+  // per-family early stop keeps the first materialized pool and capture
+  // reports the honest funding result for its start token. A central
+  // funding closure is verified once; family semantics are verified per
+  // family through its own case.
   admitObservations(
     input.catalog,
     await executeCatalogCaptureNominations({
       catalog: input.catalog,
       source: input.source,
-      nominations: [...borrowableNominations, ...seedNominations],
+      nominations: [...poolNominations, ...seedNominations],
       provider: nominationProvider(input.provider, input.source.number),
       alreadyAdmitted: new Set(byFamily.keys()),
     }),
@@ -150,7 +145,7 @@ export async function materializeCaptureInventory(input: {
     await executeCatalogReverseBindings({
       catalog: input.catalog,
       source: input.source,
-      nominations: [...borrowableNominations, ...seedNominations],
+      nominations: [...poolNominations, ...seedNominations],
       provider: nominationProvider(input.provider, input.source.number),
       alreadyAdmitted: new Set(byFamily.keys()),
     }),
@@ -376,224 +371,8 @@ function captureCandidateIdentity(
 }
 
 
-async function filterBorrowableNominations(input: {
-  readonly catalog: FamilyCapabilityCatalog;
-  readonly provider: CaptureInventoryProvider;
-  readonly source: CanonicalSource;
-  readonly nominations: readonly CaptureNominationInput[];
-}): Promise<readonly CaptureNominationInput[]> {
-  // Capture closure strategy (central, no protocol semantics): a captured
-  // route must close with a catalog funding plan, so the route's input token
-  // must be borrowable. Borrowability is DERIVED at runtime - never from a
-  // hardcoded asset list: the catalog funding families' liquidity
-  // capabilities are executed against the candidate token surface, and only
-  // their positive offers define the borrowable set. Pools whose identified
-  // token pair is not fully borrowable are dropped; unreadable surfaces stay
-  // unfiltered (the family nomination decides).
-  const BORROWABLE_CONCURRENCY = 24;
-  const ERC20 = new ethers.Interface([
-    "function token0() view returns (address)",
-    "function token1() view returns (address)",
-    "function coins(uint256 i) view returns (address)",
-    "function _BASE_TOKEN_() view returns (address)",
-    "function _QUOTE_TOKEN_() view returns (address)",
-  ]);
-  const TOKEN_GETTERS = [
-    ["token0", ""],
-    ["token1", ""],
-    ["coins", "0"],
-    ["coins", "1"],
-    ["_BASE_TOKEN_", ""],
-    ["_QUOTE_TOKEN_", ""],
-  ] as const;
 
-  // Phase 1: token surface per pool. The pool-universe/graph entries already
-  // carry the token fields (token0/token1, currency0/currency1,
-  // underlyingCoins) - reading them is zero-RPC and covers every family
-  // shape (a univ4 nomination address is the PoolManager singleton with no
-  // token getters; protocol vault/proxy entries have no token0 either).
-  // Chain getters are only a fallback for entries that genuinely lack the
-  // fields; getters alone cannot cover univ4/protocol shapes.
-  const tokensByPool: string[][] = new Array(input.nominations.length);
-  const readable: boolean[] = new Array(input.nominations.length).fill(true);
-  let entryTokens = 0;
-  let getterFallback = 0;
-  let unreadablePools = 0;
-  let next = 0;
-  const reader = async (): Promise<void> => {
-    while (true) {
-      const index = next++;
-      if (index >= input.nominations.length) return;
-      const nomination = input.nominations[index]!;
-      const opaque = nomination.opaque as Readonly<Record<string, unknown>>;
-      const tokens = new Set<string>();
-      for (const key of ["token0", "currency0", "fixedTokenIn"] as const) {
-        const value = opaque[key];
-        if (typeof value === "string" && ethers.isAddress(value)) {
-          tokens.add(ethers.getAddress(value).toLowerCase());
-        }
-      }
-      for (const key of ["token1", "currency1", "fixedTokenOut"] as const) {
-        const value = opaque[key];
-        if (typeof value === "string" && ethers.isAddress(value)) {
-          tokens.add(ethers.getAddress(value).toLowerCase());
-        }
-      }
-      for (const list of ["underlyingCoins", "coins"] as const) {
-        const value = opaque[list];
-        if (Array.isArray(value)) {
-          for (const item of value) {
-            if (typeof item === "string" && ethers.isAddress(item)) {
-              tokens.add(ethers.getAddress(item).toLowerCase());
-            }
-          }
-        }
-      }
-      if (tokens.size >= 2) {
-        entryTokens += 1;
-        tokensByPool[index] = [...tokens];
-        continue;
-      }
-      // Entry lacks a full token pair: fall back to chain getters (isolated
-      // per getter). univ4/protocol shapes still fail here and stay
-      // unfiltered - their entry fields are the only reliable source.
-      let anySuccess = false;
-      for (const [fn, arg] of TOKEN_GETTERS) {
-        try {
-          const raw = await input.provider.call(
-            {
-              to: nomination.address.toLowerCase(),
-              data: ERC20.encodeFunctionData(fn, arg === "" ? [] : [arg]),
-            },
-            input.source.number,
-          );
-          if (ethers.isHexString(raw) && ethers.dataLength(raw) === 32) {
-            const decoded = ERC20.decodeFunctionResult(fn, raw) as unknown;
-            const token = String(
-              (decoded as { readonly [index: number]: unknown })[0] ?? "",
-            );
-            if (token !== "") {
-              tokens.add(ethers.getAddress(token).toLowerCase());
-              anySuccess = true;
-            }
-          }
-        } catch {
-          // One non-applicable getter must not fail the pool.
-        }
-      }
-      if (anySuccess) {
-        getterFallback += 1;
-        tokensByPool[index] = [...tokens];
-      } else {
-        unreadablePools += 1;
-        readable[index] = false;
-      }
-    }
-  };
-  await Promise.all(
-    Array.from({ length: BORROWABLE_CONCURRENCY }, () => reader()),
-  );
-  console.log(
-    "[materialize] borrowable surface entries=" + entryTokens +
-      " getter-fallback=" + getterFallback + " unreadable=" + unreadablePools,
-  );
 
-  // Phase 2: derive the borrowable set by executing every catalog funding
-  // family's liquidity capability against the identified token surface.
-  // Dynamic enumeration over the catalog; no family names, no address table.
-  // A token is borrowable only when a funding offer can cover one whole unit
-  // of the token (10 ** decimals), matching the normalized capture amount;
-  // a dust balance below one unit is not a closable route.
-  const identified = [...new Set(tokensByPool.flat())].sort();
-  const borrowable = new Set<string>();
-  if (identified.length > 0) {
-    const runtime = createStrictCentralAdapterRuntime({
-      provider: input.provider as never,
-      generationFence: Object.freeze({
-        kind: "catalog-relative" as const,
-        assertCurrent: () => undefined,
-        verifyCanonicalSource: () => true,
-      }),
-      verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
-    });
-    const DECIMALS = new ethers.Interface([
-      "function decimals() view returns (uint8)",
-    ]);
-    let decNext = 0;
-    const decimalsByToken = new Map<string, bigint>();
-    const decWorker = async (): Promise<void> => {
-      while (true) {
-        const index = decNext++;
-        if (index >= identified.length) return;
-        const token = identified[index]!;
-        try {
-          const raw = await input.provider.call(
-            { to: token, data: DECIMALS.encodeFunctionData("decimals") },
-            input.source.number,
-          );
-          if (ethers.isHexString(raw) && ethers.dataLength(raw) === 32) {
-            const decoded = DECIMALS.decodeFunctionResult("decimals", raw) as unknown;
-            const decimals = Number(
-              (decoded as { readonly [index: number]: unknown })[0] ?? "",
-            );
-            if (Number.isSafeInteger(decimals) && decimals >= 0 && decimals <= 77) {
-              decimalsByToken.set(token, 10n ** BigInt(decimals));
-            }
-          }
-        } catch {
-          // Unreadable decimals: fall back to 18-decimal units below.
-        }
-      }
-    };
-    await Promise.all(
-      Array.from({ length: BORROWABLE_CONCURRENCY }, () => decWorker()),
-    );
-    for (const family of input.catalog.listAll()) {
-      if (family.plugin.manifest.domain !== "funding") continue;
-      const result = await executeFundingFamilyLiquidity({
-        family,
-        assets: Object.freeze(identified),
-        source: input.source,
-        generation: input.source.generation,
-        runtime,
-        publisher: { publish: () => undefined },
-      });
-      for (const offer of result.offers) {
-        const oneUnit = decimalsByToken.get(offer.asset.toLowerCase()) ?? 10n ** 18n;
-        if (offer.maxBorrow >= oneUnit) {
-          borrowable.add(offer.asset.toLowerCase());
-        }
-      }
-    }
-  }
-
-  // Phase 3: keep pools whose identified pair is fully borrowable; pools
-  // with an unreadable surface stay (the family nomination decides).
-  const borrowableNominations: CaptureNominationInput[] = [];
-  let dropped = 0;
-  let unreadable = 0;
-  for (let i = 0; i < input.nominations.length; i++) {
-    const tokens = tokensByPool[i] ?? [];
-    if (!readable[i]) {
-      unreadable += 1;
-      borrowableNominations.push(input.nominations[i]!);
-      continue;
-    }
-    if (tokens.length < 2 || tokens.every((token) =>
-      borrowable.has(token)
-    )) {
-      borrowableNominations.push(input.nominations[i]!);
-      continue;
-    }
-    dropped += 1;
-  }
-  console.log(
-    "[materialize] borrowable filter nominations=" + input.nominations.length +
-      " identified=" + identified.length + " borrowable=" + borrowable.size +
-      " dropped=" + dropped + " unreadable=" + unreadable,
-  );
-  return Object.freeze(borrowableNominations);
-}
 function opaquePoolNominations(input: {
   readonly graph: CanonicalValue;
   readonly protocolCache: CanonicalValue;
