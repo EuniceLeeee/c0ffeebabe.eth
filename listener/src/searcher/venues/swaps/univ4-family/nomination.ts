@@ -181,7 +181,7 @@ export async function nominateUniv4(input: {
         // call argument; the nomination provider treats that slot as a
         // block tag, so drop it (single-call, no cancellation needed).
         { call: (req: { to: string; data: string }) =>
-            input.provider.call(req) } as never,
+            input.provider.call(req, input.source.number) } as never,
         ADDR.UNISWAP_V4_POSITION_MANAGER,
         poolId,
       );
