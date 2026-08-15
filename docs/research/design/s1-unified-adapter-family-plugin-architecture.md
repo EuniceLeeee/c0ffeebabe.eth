@@ -3051,6 +3051,27 @@ ops/CI gate，非部署）：**
   框架合同测试覆盖“两通道都有 / retain 显式拒绝 / 缺 retain 字段即
   校验失败”；生产 22 族全部满足后 Pair B strict 侧才算完成。
 
+**2026-08-16 F5 事实验收 + 执行顺序调整 checkpoint（用户裁定，最新为准）：**
+
+- **F5 重建部分达成**：ret13 = 12,015 池 / 24,030 边（修订基线
+  10.7K 池 / ≥21.3K 边，最终 universe 按 fresh+retained 合并计数），
+  fresh 9,221 / retained 2,794；retained 可存在但非 eligible 证据。
+- **验收 = 事实验收，不写人为验收脚本**：capture harness
+  （materialize-s1-capture-inventory / generic-family-capture /
+  run-architecture-migration-capture-real-cli 等）终止并列入 F6 删除
+  范围；终态验收 = live strict 管线（F7/F8 cutover 后生产路径）产出
+  的事实：① family 在 edge 有真实 fresh 数据（S1）；② 同 amountIn 下
+  exact.amountOut ≈ sim.amountOut（S3/S5 一致）；③ 六步 judge 对 live
+  receipts 出 verdict（exact/planning/sizing/calldata/finalSim/
+  repayment/EV）。人为 harness 的代表池/funding/runtime 装配 bug 不再
+  作为验收失败来源。
+- **执行顺序**：F6 删 legacy（含 capture harness）→ F7/F8 cutover
+  （中央 runtime 装配 authority/scheduler/simulator 到位）→ F5 live
+  事实验收 → F9 cleanup。单族真实 bug（goldx/univ4/angstrom）不阻塞
+  顺序，live 验收暴露后修。
+- **startToken 过渡**：当前固定 ETH（WETH）；P1（新架构完成后）实现
+  funding 可借 token 列表查询函数 + 独立 token 表。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

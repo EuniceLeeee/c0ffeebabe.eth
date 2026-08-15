@@ -238,6 +238,15 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   - 后续消费点（未完成）：route-family-manifest /
     blind-production-compatibility / main.ts `findForEdge`/`findForPool` /
     pendingEvidence / oracleVictims 仍读 legacy，按依赖链靠后切换。
+- **F5 验收路径变更（2026-08-16 用户裁定）**：capture harness
+  （materialize-s1-capture-inventory / generic-family-capture /
+  run-architecture-migration-capture-real-cli / generic-capture-loop 等）
+  终止并列入 F6 删除范围，不再作为验收判据。F5 终态验收 = live strict
+  管线事实验收：edge fresh 数据（S1）+ 同 amountIn 下 exact↔sim 一致
+  （S3/S5）+ 六步 judge 对 live receipts 出 verdict。执行顺序
+  F6 → F7/F8（中央 runtime 装配 authority/scheduler/simulator）→ F5
+  live 验收 → F9。六步 judge 判据补充：receipt 带
+  `(amountIn, exact.amountOut, sim.amountOut)` 三元组做容差对照。
 
 ### F7 节点 composition env + committed publication
 
