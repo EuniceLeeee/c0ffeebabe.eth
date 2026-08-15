@@ -904,6 +904,22 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   no_catalog_match——astra 的 nominate/decode 待查）、fluid-family-admission
   （active-quote 双向）、live-smoke（真实 RPC）、dex-live-smoke（env）→
   两道门 → F8 收口 → live 验收 → F9。
+- **astra-multitoken-family 全 PASS（822b093b）**：tx-evidence log nomination
+  （backend receipt 返回 receiptLogs + 候选 transactionHash）→ Change log
+  物化；change fixture simulator（quote(target, amountIn) 2/3 倍 + 4 项
+  tokenDeltas + Change 日志 + change 结果编码）；observed-sender executor=
+  CHANGER。节点已部署 822b093b（HEAD_OK + BUILD_OK）。
+- **fluid 适配分析（下轮直接做）**：族 identity 三阶段（constants →
+  reverse-binding（factory getDexAddress）→ active-quote（swapIn
+  return-or-revert-data——FluidDexSwapResult revert data 编码（selector +
+  amountOut——amountOut = amountIn*9/10 按方向））；fakeBackend 的 call 需
+  swapIn selector 抛 revert（带 FluidDexSwapResult data）；identityRuntime
+  仅 provider（无 simulator 需求——quote 是 eth-call）；候选 0xee3273 的
+  no_catalog_match 待查（fluid nominate address-surface + opaqueLabels
+  "fluid-dex"/"fluid"）。
+- **剩余**：fluid → live-smoke（真实 RPC）→ dex-live-smoke（env）→ 两道门
+  → F8 收口 → live 验收 → F9。
+
 
 
 
