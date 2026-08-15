@@ -838,6 +838,33 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   attester/attestPoolsStrictFromProvider 支持 runtime 注入（context
   identityRuntime 通道），main.ts 传 production runtime，测试用 fake
   simulator（effect-delta 结果构造）。
+### F8 identity 测试适配进展（2026-08-16 续，ef513cff）
+
+- **通道全部落地（545b551b + 93b037f6 + ef513cff）**：attestPoolsStrictFromProvider
+  runtime 注入、attester strict 权威 + backend 适配（getStorageAt→getStorage、
+  control 忽略）、context identityRuntime、coordinator/main 透传
+  strictCentralRuntime（生产 revm）、accepted adapter 回退候选池标签、
+  retryable rejection 分类（resource-limited/:rpc/:timeout → 
+  RetryableProtocolDiscoveryError——错误链 instanceof + reason 模式）。
+- **erc4626-instance-discovery 全 PASS**（strict runtime + fixture
+  simulation transport：9/10 比例、动态 vault/asset/actor、transient
+  retry 合同——identity 主线 + probe + claims + retry 全部验证）。
+- **测试适配状态**：silo-redeem-family（族特有 SILO redeem 接口——
+  simulateCalls 通道非 runtime.simulator——需族-specific fake simulator）、
+  fluid-family-admission（identity factory-child-active-quote 双向 quote——
+  fake backend 深度）、astra-multitoken-family（候选 0x000000 物化无 code）、
+  eigenpie-deposit（部分断言）、live-smoke（真实 RPC——需 revm/节点侧）、
+  dex-live-smoke（缺 SEARCHER_PROTOCOL_DISCOVERY_UNIVERSE_PATH env）——
+  逐个下轮处理。
+- **节点已部署 ef513cff（HEAD_OK + BUILD_OK）**。
+- **用户澄清（2026-08-16）**：不需要人工 tx——4626 等族 identity 的
+  active 证明用 revm 模拟（fork 真实状态跑 deposit/redeem），生产
+  coordinator 已传 strictCentralRuntime；只有 revm 模拟失败/冷池才需
+  tx 兜底。
+- **下一步**：silo/fluid/astra/eigenpie 测试适配 → 两道门
+  （s1-cutover-readiness / default-authority-cutover-gate）→ F8 收口 →
+  live 验收 → F9。
+
 
 
 
