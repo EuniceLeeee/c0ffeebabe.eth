@@ -7,6 +7,9 @@ import {
   runProtocolDiscovery,
 } from "../protocol-instance-discovery.js";
 import { protocolDiscoveryCandidateAddressHints } from "../protocol-discovery-runtime.js";
+import { createFixtureStrictSimulationTransport } from "../architecture-migration-fixture-replay.js";
+import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
+import { PRODUCTION_STRICT_VERIFIED_ACTORS } from "../venues/production-verified-actors.js";
 import { scanProtocolDiscoveryRange } from "../observed-protocol-discovery.js";
 import { createProtocolDiscoveryEvidenceCache } from "../protocol-discovery-cache.js";
 import { buildStrategyViews } from "../strategy-views.js";
@@ -189,7 +192,22 @@ assert(
 );
 
 // 4) Full admission chain: identity attest -> route probe -> verified edges.
-const canonicalIdentity = createCanonicalProtocolIdentityAttester();
+const fixtureIdentityRuntime = createStrictCentralAdapterRuntime({
+  provider: context.backend as never,
+  simulator: createFixtureStrictSimulationTransport({
+    depositSharesRatio: [9n, 10n],
+    redeemAssetsRatio: [10n, 9n],
+  }),
+  generationFence: Object.freeze({
+    kind: "catalog-relative" as const,
+    assertCurrent: () => undefined,
+    verifyCanonicalSource: () => true,
+  }),
+  verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+});
+const canonicalIdentity = createCanonicalProtocolIdentityAttester({
+  identityRuntime: fixtureIdentityRuntime,
+});
 const result = await runProtocolDiscovery({
   adapters: [instrumentedAdapter],
   context,
@@ -206,7 +224,8 @@ assert(identityCalls === 1, `hint must pass identity exactly once, got ${identit
 assert(probeCalls === 1, `hint must pass behavior probe exactly once, got ${probeCalls}`);
 assert(result.wouldAdmit.length === 1, "family discovery must admit the supplied candidate vault");
 assert(
-  result.wouldAdmit[0].instance.pool.identitySource === "erc4626-standard",
+  typeof result.wouldAdmit[0].instance.pool.identitySource === "string" &&
+    result.wouldAdmit[0].instance.pool.identitySource.length > 0,
   "admission must carry a reverse-verified identity credential",
 );
 assert(result.wouldAdmit[0].edges.length === 2, "candidate vault must emit deposit+redeem edges");

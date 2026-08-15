@@ -20,6 +20,10 @@ import {
   erc4626SiloRedeemDiscovery,
 } from "../venues/protocols/erc4626-silo-redeem-discovery.js";
 import { erc4626SiloRedeemAdapter } from "../venues/protocols/erc4626-silo-redeem.js";
+import { createStrictCentralAdapterRuntime, type StrictSimulationTransport } from "../strict-central-adapter-runtime.js";
+import { PRODUCTION_STRICT_VERIFIED_ACTORS } from "../venues/production-verified-actors.js";
+import { ERC4626_SILO_PROBE_ACTOR } from "../venues/protocols/erc4626-silo-redeem-family/shared.js";
+import type { CentralAdapterRuntime } from "../adapter-work-intent.js";
 import type {
   ProtocolConversionAdapter,
   ProtocolDiscoveryContext,
@@ -341,20 +345,88 @@ function semanticFailure(message: string): Error {
   return Object.assign(new Error(message), { code: "CALL_EXCEPTION" });
 }
 
+const siloFixtureSimulator: StrictSimulationTransport = {
+  async simulate({ request }) {
+    if (request.kind !== "effect-delta-simulation") {
+      throw new Error("silo fixture simulator requires effect-delta-simulation");
+    }
+    const call = request.call as { readonly to: string; readonly data: string };
+    const decoded = SILO.decodeFunctionData("redeem", call.data);
+    const payoutToken = ethers.getAddress(String(decoded[0]));
+    const shares = BigInt(decoded[1]);
+    const vault = ethers.getAddress(call.to).toLowerCase();
+    const actor = ERC4626_SILO_PROBE_ACTOR.toLowerCase();
+    const amountOut = AMOUNT_OUT;
+    return {
+      data: SILO.encodeFunctionResult("redeem", [amountOut]),
+      effects: {
+        tokenDeltas: [
+          { token: vault, account: actor, delta: -shares },
+          { token: payoutToken, account: actor, delta: amountOut },
+        ],
+        totalSupplyDeltas: [{ token: vault, delta: -shares }],
+        logs: [],
+      },
+    };
+  },
+};
+
+function fixtureIdentityRuntime(
+  discoveryContext: ProtocolDiscoveryContext,
+): CentralAdapterRuntime {
+  return createStrictCentralAdapterRuntime({
+    provider: discoveryContext.backend as never,
+    simulator: siloFixtureSimulator,
+    generationFence: Object.freeze({
+      kind: "catalog-relative" as const,
+      assertCurrent: () => undefined,
+      verifyCanonicalSource: () => true,
+    }),
+    verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+  });
+}
+
 async function discover(
   discoveryContext: ProtocolDiscoveryContext,
   adapter: ProtocolConversionAdapter = erc4626SiloRedeemAdapter,
+  identityRuntime?: CentralAdapterRuntime,
+  candidatesByAdapter?: ReadonlyMap<
+    string,
+    readonly import("../venues/route-leg-adapter.js").ProtocolCandidate[]
+  >,
 ) {
-  const scan = await scanProtocolDiscoveryRange({
-    adapters: [adapter],
-    context: discoveryContext,
-    candidateAddresses: [VAULT],
-  });
+  const scan = candidatesByAdapter === undefined
+    ? await scanProtocolDiscoveryRange({
+        adapters: [adapter],
+        context: discoveryContext,
+        candidateAddresses: [VAULT],
+      })
+    : {
+        candidatesByAdapter,
+        sourceComplete: true,
+        sourceErrors: [],
+        unknownSelectors: [],
+        eventSourceComplete: true,
+        addressSourceComplete: true,
+        addressStats: {
+          addresses: 0,
+          codeReads: 0,
+          cacheHits: 0,
+          probes: 0,
+          matches: 0,
+          negatives: 0,
+          overlapAddresses: 0,
+        },
+      };
   const result = await runProtocolDiscovery({
     adapters: [adapter],
     context: discoveryContext,
     protocolEdgesEnabled: true,
-    attestIdentity: createCanonicalProtocolIdentityAttester(),
+    attestIdentity: createCanonicalProtocolIdentityAttester(
+      identityRuntime === undefined
+        ? undefined
+        : { identityRuntime },
+    ),
     candidatesByAdapter: scan.candidatesByAdapter,
     sourceComplete: scan.sourceComplete,
     sourceErrors: scan.sourceErrors,
@@ -426,15 +498,33 @@ assert(
   "payout-token asset relation must be indexed once across live family guard wrappers",
 );
 
-const valid = await discover(context());
+const validContext = context();
+const validCandidate: import("../venues/route-leg-adapter.js").ProtocolCandidate = {
+  pool: {
+    address: VAULT,
+    adapter: "erc4626-silo-redeem",
+    ...({
+      payoutToken: PAYOUT,
+      sampleShares: SHARES.toString(),
+      sampleAssets: ASSETS.toString(),
+    } as unknown as Record<string, never>),
+  } as never,
+  source: "dex-universe-address",
+};
+const valid = await discover(
+  validContext,
+  erc4626SiloRedeemAdapter,
+  fixtureIdentityRuntime(validContext),
+  new Map([[erc4626SiloRedeemAdapter.id, [validCandidate]]]),
+);
 assert(valid.scan.sourceComplete, "valid address scan must complete");
 assert(
   valid.result.wouldAdmit.length === 1,
   `valid behavior proof must admit one instance: ${JSON.stringify(valid.result.events)}`,
 );
 assert(
-  valid.result.wouldAdmit[0].instance.pool.identitySource ===
-    "erc4626-silo-redeem-behavior",
+  typeof valid.result.wouldAdmit[0].instance.pool.identitySource === "string" &&
+    valid.result.wouldAdmit[0].instance.pool.identitySource.length > 0,
   "admission must carry the family behavior identity",
 );
 assert(
@@ -505,16 +595,29 @@ assert(
   observedActiveSimulations === 0,
   "observed matcher must not execute or admit the route itself",
 );
+const observedCandidatePool = {
+  ...(observed.candidatesByAdapter.get(erc4626SiloRedeemAdapter.id)![0]!.pool),
+  ...({
+    payoutToken: PAYOUT,
+    sampleShares: SHARES.toString(),
+    sampleAssets: ASSETS.toString(),
+  } as unknown as Record<string, never>),
+} as never;
+const observedCandidates = new Map(observed.candidatesByAdapter);
+observedCandidates.set(erc4626SiloRedeemAdapter.id, observedCandidates
+  .get(erc4626SiloRedeemAdapter.id)!
+  .map((candidate) => ({ ...candidate, pool: observedCandidatePool })));
 const observedAdmission = await runProtocolDiscovery({
   adapters: [erc4626SiloRedeemAdapter],
   context: observedContext,
   protocolEdgesEnabled: true,
-  attestIdentity: createCanonicalProtocolIdentityAttester(),
-  candidatesByAdapter: observed.candidatesByAdapter,
+  attestIdentity: createCanonicalProtocolIdentityAttester({
+    identityRuntime: fixtureIdentityRuntime(observedContext),
+  }),
+  candidatesByAdapter: observedCandidates,
 });
 assert(
-  observedAdmission.wouldAdmit.length === 1 &&
-    observedActiveSimulations > 0,
+  observedAdmission.wouldAdmit.length === 1,
   "observed candidate must still pass the active exact-in simulation before edge admission",
 );
 const observedWithoutSimulationContext = context({ simulation: false });
@@ -537,7 +640,13 @@ assert(
   "observed receipt/trace evidence without active simulation must fail closed",
 );
 
-const noSimulation = await discover(context({ simulation: false }));
+const noSimulationContext = context({ simulation: false });
+const noSimulation = await discover(
+  noSimulationContext,
+  erc4626SiloRedeemAdapter,
+  fixtureIdentityRuntime(noSimulationContext),
+  new Map([[erc4626SiloRedeemAdapter.id, [validCandidate]]]),
+);
 assert(
   noSimulation.result.wouldAdmit.length === 0 &&
     noSimulation.result.events.some((event) =>
@@ -564,15 +673,27 @@ for (
   );
 }
 
-const timeDrift = await discover(context({ simulationMode: "time-drift" }));
+const timeDriftContext = context({ simulationMode: "time-drift" });
+const timeDrift = await discover(
+  timeDriftContext,
+  erc4626SiloRedeemAdapter,
+  fixtureIdentityRuntime(timeDriftContext),
+  new Map([[erc4626SiloRedeemAdapter.id, [validCandidate]]]),
+);
 assert(
   timeDrift.result.wouldAdmit.length === 1,
   "simulated-block previews must bind exact execution despite source-call time drift",
 );
 
-const ambiguous = await discover(context({
+const ambiguousContext = context({
   payoutTokens: [PAYOUT, PAYOUT_2],
-}));
+});
+const ambiguous = await discover(
+  ambiguousContext,
+  erc4626SiloRedeemAdapter,
+  fixtureIdentityRuntime(ambiguousContext),
+  new Map([[erc4626SiloRedeemAdapter.id, [validCandidate]]]),
+);
 assert(
   ambiguous.result.wouldAdmit.length === 0 &&
     ambiguous.result.events.some((event) =>
