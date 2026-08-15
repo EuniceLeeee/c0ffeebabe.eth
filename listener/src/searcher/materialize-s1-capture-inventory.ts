@@ -112,12 +112,9 @@ export async function materializeCaptureInventory(input: {
     provider: input.provider,
     nominations: poolNominations,
   });
-  // Phase 2a: retain-channel reverse binding (cold-pool chain truth: factory
-  // child / registry member / PositionManager) runs before the fresh
-  // nomination channel. Central order; the plugin only declares semantics.
   admitObservations(
     input.catalog,
-    await executeCatalogReverseBindings({
+    await executeCatalogCaptureNominations({
       catalog: input.catalog,
       source: input.source,
       nominations: [...poolNominations, ...seedNominations],
@@ -126,9 +123,13 @@ export async function materializeCaptureInventory(input: {
     }),
     byFamily,
   );
+  // Phase 2a: retain-channel reverse binding (cold-pool chain truth: factory
+  // child / registry member / PositionManager) is the fallback after the
+  // fresh nomination channel. Central order; the plugin only declares
+  // semantics.
   admitObservations(
     input.catalog,
-    await executeCatalogCaptureNominations({
+    await executeCatalogReverseBindings({
       catalog: input.catalog,
       source: input.source,
       nominations: [...poolNominations, ...seedNominations],

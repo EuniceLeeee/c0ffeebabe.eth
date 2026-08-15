@@ -40,9 +40,16 @@ export async function scanRecentCallSeeds(input: {
     if (label === "") continue;
     let family;
     try {
+      // Pool entries carry the family's pool-adapter label (provenance);
+      // tx-seed rows carry an action label. Resolve through both catalog
+      // projections (dynamic enumeration; no per-family list).
       family = input.catalog.ownerOfAction(label);
     } catch {
-      continue;
+      try {
+        family = input.catalog.ownerOfPoolAdapter(label);
+      } catch {
+        continue;
+      }
     }
     let plugin;
     try {
