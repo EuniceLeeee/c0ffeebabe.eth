@@ -152,9 +152,10 @@ export function descriptorFromInventory(input: {
         : Object.freeze({
             ...common,
             amountIn: input.amount.toString(),
-            ...(loopPath === null || loopPath === undefined
-              ? {}
-              : { path: loopPath as unknown as CanonicalValue }),
+            // The loop path is an opaque binding key for every route case
+            // (null = no closed loop through the target; the capture core
+            // falls back to the honest single-leg result).
+            path: (loopPath ?? null) as unknown as CanonicalValue,
           }),
     }));
   }
