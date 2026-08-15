@@ -170,17 +170,155 @@ export async function materializeCaptureInventory(input: {
         : "tx evidence produced no plugin-decodable observation";
       return Object.freeze({ familyId, reason });
     });
+  // Multi-hop capture closure: derive a borrowable start token per family
+  // (dynamic funding-liquidity probing over the admitted pool's entry
+  // tokens plus the most frequent graph tokens; no hardcoded asset list).
+  // The descriptor builder uses it to assemble the closed loop through the
+  // family's verification pool.
+  const entries = await annotateStartTokens({
+    catalog: input.catalog,
+    provider: input.provider,
+    source: input.source,
+    entries: [...byFamily.values()],
+    graph: input.rawArtifacts.graph as
+      import("./venues/canonical-value.js").CanonicalValue,
+  });
   return Object.freeze({
     format: "s1-catalog-capture-inventory-v1" as const,
     catalogHash: input.catalog.catalogHash,
     source: input.source,
-    entries: Object.freeze([...byFamily.values()].sort((left, right) =>
+    entries: Object.freeze(entries.sort((left, right) =>
       left.familyId.localeCompare(right.familyId)
     )),
     unresolved: Object.freeze(unresolved.sort((left, right) =>
       left.familyId.localeCompare(right.familyId)
     )),
   });
+}
+
+
+async function annotateStartTokens(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly provider: CaptureInventoryProvider;
+  readonly source: CanonicalSource;
+  readonly entries: readonly CaptureInventoryEntry[];
+  readonly graph: CanonicalValue;
+}): Promise<CaptureInventoryEntry[]> {
+  const ERC20 = new ethers.Interface([
+    "function decimals() view returns (uint8)",
+  ]);
+  const poolTokens = (address: string): string[] => {
+    const tokens = new Set<string>();
+    const graph = input.graph as { readonly pools?: readonly unknown[] };
+    for (const pool of graph.pools ?? []) {
+      const record = pool as Readonly<Record<string, unknown>>;
+      if (String(record.address ?? "").toLowerCase() !== address.toLowerCase()) {
+        continue;
+      }
+      for (const key of ["token0", "currency0", "fixedTokenIn"] as const) {
+        const value = record[key];
+        if (typeof value === "string" && ethers.isAddress(value)) {
+          tokens.add(ethers.getAddress(value).toLowerCase());
+        }
+      }
+      for (const key of ["token1", "currency1", "fixedTokenOut"] as const) {
+        const value = record[key];
+        if (typeof value === "string" && ethers.isAddress(value)) {
+          tokens.add(ethers.getAddress(value).toLowerCase());
+        }
+      }
+    }
+    return [...tokens];
+  };
+  const graphTokenFrequency = new Map<string, number>();
+  const graph = input.graph as { readonly pools?: readonly unknown[] };
+  for (const pool of graph.pools ?? []) {
+    const record = pool as Readonly<Record<string, unknown>>;
+    for (const key of ["token0", "currency0", "fixedTokenIn"] as const) {
+      const value = record[key];
+      if (typeof value === "string" && ethers.isAddress(value)) {
+        const token = ethers.getAddress(value).toLowerCase();
+        graphTokenFrequency.set(token, (graphTokenFrequency.get(token) ?? 0) + 1);
+      }
+    }
+    for (const key of ["token1", "currency1", "fixedTokenOut"] as const) {
+      const value = record[key];
+      if (typeof value === "string" && ethers.isAddress(value)) {
+        const token = ethers.getAddress(value).toLowerCase();
+        graphTokenFrequency.set(token, (graphTokenFrequency.get(token) ?? 0) + 1);
+      }
+    }
+  }
+  const frequentTokens = [...graphTokenFrequency.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 8)
+    .map(([token]) => token);
+
+  const runtime = createStrictCentralAdapterRuntime({
+    provider: input.provider as never,
+    generationFence: Object.freeze({
+      kind: "catalog-relative" as const,
+      assertCurrent: () => undefined,
+      verifyCanonicalSource: () => true,
+    }),
+    verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+  });
+  const oneUnitOf = async (token: string): Promise<bigint> => {
+    try {
+      const raw = await input.provider.call(
+        { to: token, data: ERC20.encodeFunctionData("decimals") },
+        input.source.number,
+      );
+      if (ethers.isHexString(raw) && ethers.dataLength(raw) === 32) {
+        const decoded = ERC20.decodeFunctionResult("decimals", raw) as unknown;
+        const decimals = Number(
+          (decoded as { readonly [index: number]: unknown })[0] ?? "",
+        );
+        if (Number.isSafeInteger(decimals) && decimals >= 0 && decimals <= 77) {
+          return 10n ** BigInt(decimals);
+        }
+      }
+    } catch {
+      // fall through to 18 decimals
+    }
+    return 10n ** 18n;
+  };
+  const borrowable = new Set<string>();
+  const probeTokens = [...new Set(frequentTokens)];
+  if (probeTokens.length > 0) {
+    for (const family of input.catalog.listAll()) {
+      if (family.plugin.manifest.domain !== "funding") continue;
+      const result = await executeFundingFamilyLiquidity({
+        family,
+        assets: Object.freeze(probeTokens),
+        source: input.source,
+        generation: input.source.generation,
+        runtime,
+        publisher: { publish: () => undefined },
+      });
+      for (const offer of result.offers) {
+        if (offer.maxBorrow >= await oneUnitOf(offer.asset.toLowerCase())) {
+          borrowable.add(offer.asset.toLowerCase());
+        }
+      }
+    }
+  }
+  const enriched: CaptureInventoryEntry[] = [];
+  for (const entry of input.entries) {
+    const tokens = poolTokens(entry.candidateIdentity);
+    let startToken: string | null = null;
+    for (const token of [...tokens, ...frequentTokens]) {
+      if (borrowable.has(token.toLowerCase())) {
+        startToken = token.toLowerCase();
+        break;
+      }
+    }
+    enriched.push(Object.freeze({
+      ...entry,
+      ...(startToken === null ? {} : { startToken }),
+    }) as CaptureInventoryEntry);
+  }
+  return enriched;
 }
 
 function admitObservations(

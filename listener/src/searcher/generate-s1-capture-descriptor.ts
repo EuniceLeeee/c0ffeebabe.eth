@@ -14,6 +14,10 @@ import {
 } from "./venues/production-family-composition.js";
 import { TRACE_WINDOW_ABSENT_FAMILY_IDS } from
   "./migration-cleanup-receipt.js";
+import {
+  buildCaptureClosedLoop,
+  edgesFromPoolEntries,
+} from "./generic-capture-loop.js";
 
 interface DescriptorFile {
   readonly sourceBlock: number;
@@ -31,6 +35,15 @@ export function descriptorFromInventory(input: {
   readonly executor: string;
   readonly amount: bigint;
   readonly minProfit: bigint;
+  /** Pool-universe entries for multi-hop closed-loop assembly (optional). */
+  readonly graph?: readonly {
+    readonly address?: string;
+    readonly token0?: string;
+    readonly token1?: string;
+    readonly currency0?: string;
+    readonly currency1?: string;
+    readonly adapter?: string;
+  }[];
 }): DescriptorFile {
   const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
   if (input.inventory.catalogHash !== catalog.catalogHash) {
@@ -107,6 +120,26 @@ export function descriptorFromInventory(input: {
       observation: incumbent.observation as unknown as CanonicalValue,
       runtimeEvidence: runtimeEvidence as unknown as CanonicalValue,
     };
+    // Multi-hop closed loop (production model): assemble the cycle through
+    // the family's verification pool from the family's borrowable start
+    // token. The path rides as an opaque parameter; the central capture
+    // executes it. Without a graph or a start token the case stays
+    // single-leg (honest result for the start token).
+    let loopPath: unknown;
+    if (input.graph !== undefined) {
+      const entry = input.inventory.entries.find((candidate) =>
+        candidate.familyId === family.plugin.manifest.familyId
+      );
+      const startToken = (entry as { readonly startToken?: string }).startToken;
+      if (typeof startToken === "string") {
+        const edges = edgesFromPoolEntries(input.graph);
+        loopPath = buildCaptureClosedLoop({
+          edges,
+          startToken,
+          targetPool: incumbent.candidateIdentity,
+        });
+      }
+    }
     cases.push(Object.freeze({
       familyId: family.plugin.manifest.familyId,
       candidateIdentity: incumbent.candidateIdentity,
@@ -116,7 +149,13 @@ export function descriptorFromInventory(input: {
             collateralAmount: input.amount.toString(),
             debtBps: "5000",
           })
-        : Object.freeze({ ...common, amountIn: input.amount.toString() }),
+        : Object.freeze({
+            ...common,
+            amountIn: input.amount.toString(),
+            ...(loopPath === null || loopPath === undefined
+              ? {}
+              : { path: loopPath as unknown as CanonicalValue }),
+          }),
     }));
   }
   if (missing.length !== 0) {
@@ -237,14 +276,14 @@ function canonicalAddresses(
 }
 
 async function main(): Promise<void> {
-  const [checkpointPath, assetsPath, outputPath] = process.argv.slice(2);
+  const [checkpointPath, assetsPath, outputPath, graphPath] = process.argv.slice(2);
   if (
     checkpointPath === undefined || assetsPath === undefined ||
     outputPath === undefined
   ) {
     throw new Error(
       "usage: generate-s1-capture-descriptor.ts <checkpoint.json> " +
-        "<asset-addresses.json> <descriptor.json>",
+        "<asset-addresses.json> <descriptor.json> [pool-universe.json]",
     );
   }
   const executor = process.env.S1_CAPTURE_EXECUTOR;
@@ -264,8 +303,18 @@ async function main(): Promise<void> {
     amount: positiveBigint(process.env.S1_CAPTURE_AMOUNT, 1n),
     minProfit: nonnegativeBigint(process.env.S1_CAPTURE_MIN_PROFIT, 0n),
   };
+  const graph = graphPath === undefined
+    ? undefined
+    : JSON.parse(await readFile(graphPath, "utf8")) as
+        { readonly pools?: readonly unknown[] };
   const descriptor = rawInventory.format === "s1-catalog-capture-inventory-v1"
-    ? descriptorFromInventory({ inventory: rawInventory, ...common })
+    ? descriptorFromInventory({
+        inventory: rawInventory,
+        ...common,
+        ...(graph === undefined
+          ? {}
+          : { graph: (graph.pools ?? []) as never }),
+      })
     : descriptorFromCheckpoint({ checkpoint: rawInventory, ...common });
   await writeFile(outputPath, `${JSON.stringify(descriptor, null, 2)}\n`);
   process.stdout.write(
