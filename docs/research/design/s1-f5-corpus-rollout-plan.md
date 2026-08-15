@@ -775,6 +775,43 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   686a5689 + strict quote 100% 覆盖后删除前置已满足，下一轮删除）。
 - **harness 删除（剩余）**：按上轮清单（14 核心文件 + 20 测试 + collect
   脚本；fixture-replay 解耦保留）。
+### F6 完成 + harness 退役 + F7/F8 状态（2026-08-16 续）
+
+- **A 对（验证关闭）**：revm-live-backend 的 quoteByAdapter 已 strict-only
+  （adapter.prepared.quote → quoteUnsupportedReason → fail-closed，无 legacy
+  分支）；overlayApproveSpender 已 strict-only（strict execution projection
+  唯一权威，无投影返回 null fail-closed）；prewarm legacy 回退已删
+  （D-011）。A 对完成。
+- **capture harness 已退役（0686ac4b）**：materializer / descriptor 生成器 /
+  real-cli / capture-cli / generic-family-capture / generic-capture-loop /
+  revm-final-simulation / architecture-migration-capture / parity-runner /
+  parity / baseline-normalizer / evidence / parity-cli / evidence-cli /
+  held-out 生成器（15 核心）+ 30 测试（s1-capture-* / architecture-migration-* /
+  generic-family-capture / 21 个 onchain-capture）+ scripts
+  （collect-s1-sealed-production-corpus.sh / capture-migration-parity.sh）已删；
+  package.json 36 个 harness 脚本删；s1-regression-sweep 清理；
+  **architecture-migration-fixture-replay.ts 保留**（strict 测试基础设施）并
+  解耦（本地化 ARCHITECTURE_MIGRATION_STAGES / RawFamilyMigrationCaseCapture /
+  exercisedStage / frameworkBlockedStage，~79 行改动）；AST 门
+  （adapter-family-shared-surface-conformance）清单移除已删文件。
+  完整 build 绿；strict-family-lifecycle-runner / strict-carry-continuity /
+  strict-catalog-live-publisher / discovery-continuity-composition /
+  shadow-catalog-publication / strict-execution-projection 全绿。
+  **节点 dry-run（0686ac4b，head≈25770K）**：searcher 启动 + 运行 240s+
+  （19967 行日志、0 fatal、hint/impact 循环正常）——harness 删除无破坏 live 路径。
+- **F7 状态**：durable discovery continuity composition 默认启用
+  （8efcf4a0），catalogRoot 节点机器证据已有。
+- **F8 状态**：solver quoteSource strict-only（16cf4436，两道门 PASS、
+  shadow 55/55）；main.ts 中央 runtime 完整装配（2832-2841：
+  createStrictCentralAdapterRuntime + verifiedActors +
+  createRevmStrictSimulationTransport，composition 默认时）。
+  **F8 剩余（B 对 attester 项）**：protocol-discovery 的
+  createCanonicalProtocolIdentityAttester 走 minimal runtime（无 simulator）
+  → erc4626/fluid/silo identity fail-closed。修法（下一轮）：
+  attester/attestPoolsStrictFromProvider 支持 runtime 注入（context
+  identityRuntime 通道），main.ts 传 production runtime，测试用 fake
+  simulator（effect-delta 结果构造）。
+
 
 
 
