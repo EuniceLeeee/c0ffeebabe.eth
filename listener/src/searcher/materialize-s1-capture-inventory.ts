@@ -417,8 +417,11 @@ async function filterBorrowableNominations(input: {
       if (index >= input.nominations.length) return;
       const nomination = input.nominations[index]!;
       const tokens = new Set<string>();
-      try {
-        for (const [fn, arg] of TOKEN_GETTERS) {
+      // Each getter is isolated: one non-applicable getter (e.g. coins() on
+      // a univ2 pool) must not mark the whole pool unreadable.
+      let anySuccess = false;
+      for (const [fn, arg] of TOKEN_GETTERS) {
+        try {
           const raw = await input.provider.call(
             {
               to: nomination.address.toLowerCase(),
@@ -433,10 +436,14 @@ async function filterBorrowableNominations(input: {
             );
             if (token !== "") {
               tokens.add(ethers.getAddress(token).toLowerCase());
+              anySuccess = true;
             }
           }
+        } catch {
+          // One non-applicable getter must not fail the pool.
         }
-      } catch {
+      }
+      if (!anySuccess) {
         readable[index] = false;
         continue;
       }
