@@ -519,14 +519,28 @@ async function filterBorrowableNominations(input: {
   // Phase 3: keep pools whose identified pair is fully borrowable; pools
   // with an unreadable surface stay (the family nomination decides).
   const borrowableNominations: CaptureNominationInput[] = [];
+  let dropped = 0;
+  let unreadable = 0;
   for (let i = 0; i < input.nominations.length; i++) {
     const tokens = tokensByPool[i] ?? [];
-    if (!readable[i] || tokens.length < 2 || tokens.every((token) =>
+    if (!readable[i]) {
+      unreadable += 1;
+      borrowableNominations.push(input.nominations[i]!);
+      continue;
+    }
+    if (tokens.length < 2 || tokens.every((token) =>
       borrowable.has(token)
     )) {
       borrowableNominations.push(input.nominations[i]!);
+      continue;
     }
+    dropped += 1;
   }
+  console.log(
+    "[materialize] borrowable filter nominations=" + input.nominations.length +
+      " identified=" + identified.length + " borrowable=" + borrowable.size +
+      " dropped=" + dropped + " unreadable=" + unreadable,
+  );
   return Object.freeze(borrowableNominations);
 }
 function opaquePoolNominations(input: {
