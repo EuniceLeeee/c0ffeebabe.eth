@@ -532,3 +532,40 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   已确认可选项：① 调整验收线接受真实规模；② 允许 univ4/dodo 历史池
   走 archive RPC 补池；③ 保留原线、F5 记为数据窗口 blocker 先推进
   F6-F9。当前未降线、未冒充达标。
+
+### F5 根因定位与修复（2026-08-15，目标文件确立 2 万池/3 万边验收线）
+
+- **旧基准逐项对比（ee2e2483 vs universe-full2）**：按正确键（univ4
+  用 poolId，其余用 address）计算，旧 19,546 池中 univ2 5,579 /
+  univ3 4,120 / univ4 9,251 / dodo 594；新 10,671 池中 univ2 5,625 /
+  univ3 1,981 / univ4 2,963 / dodo 37 / curve 43 / fluid 20 /
+  angstrom 2。univ2 持平（窗口轮换），univ3 差 ~2.1K、univ4 差 ~6.3K、
+  dodo 差 ~557。
+- **地面真值（本地 reth 直接数 Swap 日志 emitter）**：新窗口 univ2
+  5,653 / univ3 2,040 / univ4 3,042 / dodo 311；旧窗口 univ2 5,613 /
+  univ3 4,059 / dodo 293。→ univ3 差池是市场活动减半（非 bug），
+  univ4/dodo 差池是 retained 冷池（strict 需要近期观测）。
+- **dodo 真实漏检修复（1a62c665）**：311 个新窗口 emitter 中 306 个能过
+  registry 反查，但 universe 只进 37。根因 = `createAddressLandedPool
+  Materializer` 默认 3s 整批超时（dodo materializer elapsed≈3.2s），
+  超时后候选进 retryable 且 universe 构建丢弃 retryable。修复：dodo
+  materializer 超时 120s（族内配置）+ universe 构建通用 retryable 重试
+  （最多 3 轮，对齐 main.ts startup 模式，无逐族分支）。修复后 dodo
+  materialized≈330，仍有 75 个 retryable 为持久失败（后续单独核查）。
+- **retained 串行瓶颈（cfc41c37）**：strict retained attestation 原为
+  串行逐池（500 池/21 分钟，7,836 池需 ~5.5h，CPU 0% 纯等 RPC）。
+  改为 24 并发 + 按 index 保序 + 逐池错误隔离（无逐族分支）；
+  测试 PASS（strict-identity-attestation）。
+- **univ4 冷池逐池扫描瓶颈（bd2c2225）**：univ4 nomination 逐池
+  `findRecentLogHit`（冷池 20 次 getLogs × 7K 池）。改为 plugin-owned
+  source-keyed manager 全窗口 Swap 索引（一次 ~20 次 getLogs 建
+  poolId→最新 tx 索引，按 source+provider 缓存），冷池 O(1) 内存查询，
+  活跃池仍走真实 trace；plugin-local 测试契约同步更新。
+- **日志保留边界实测**：本地 reth 3d/5d/7d 有日志，10d 起为空 →
+  有效窗口 ~7-8 天。2 天窗口 + strict retained（只收近期有观测的池）
+  最多 ~12K 池，2 万线需更长窗口。
+- **7 天窗口重跑（进行中，universe-ret6，lookback=50400）**：仍在本地
+  reth 保留内；预期 univ3 恢复旧窗口池（~4-5K）、univ2 ~8K、univ4
+  ~3.3K、dodo ~450，fresh 合计 ~17-18K，+ retained 近期池 + factory/
+  swap-active view → 目标 2 万池/3 万边。窗口是旧基准逐项对比轴之一，
+  属“定位修复重跑”而非降线。
