@@ -186,8 +186,12 @@ export function directedPoolMid(input: {
     feeBps: input.feeBps,
     reserveA: input.reserveIn,
     reserveB: input.reserveOut,
-    sqrtABX96: input.sqrtPriceX96,
-    liquidity: input.liquidity,
+    // Canonical-value safe: an absent optional field stays absent (a
+    // present-but-undefined field is rejected by hashCanonical).
+    ...(input.sqrtPriceX96 === undefined
+      ? {}
+      : { sqrtABX96: input.sqrtPriceX96 }),
+    ...(input.liquidity === undefined ? {} : { liquidity: input.liquidity }),
     depthProxy: finiteBigintNumber(depth),
   });
 }
