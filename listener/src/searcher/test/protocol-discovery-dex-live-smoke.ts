@@ -135,9 +135,7 @@ async function main(): Promise<void> {
       adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
       context,
       protocolEdgesEnabled: true,
-      attestIdentity: createCanonicalProtocolIdentityAttester({
-        identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-      }),
+      attestIdentity: createCanonicalProtocolIdentityAttester(),
       candidatesByAdapter: firstScan.candidatesByAdapter,
       sourceComplete: firstScan.sourceComplete,
       sourceErrors: firstScan.sourceErrors,

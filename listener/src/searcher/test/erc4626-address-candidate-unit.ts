@@ -189,9 +189,7 @@ assert(
 );
 
 // 4) Full admission chain: identity attest -> route probe -> verified edges.
-const canonicalIdentity = createCanonicalProtocolIdentityAttester({
-  identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-});
+const canonicalIdentity = createCanonicalProtocolIdentityAttester();
 const result = await runProtocolDiscovery({
   adapters: [instrumentedAdapter],
   context,

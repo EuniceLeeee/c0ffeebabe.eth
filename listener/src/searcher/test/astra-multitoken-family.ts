@@ -395,9 +395,7 @@ const discovery = await runProtocolDiscovery({
   adapters: [astraMultiTokenAdapter],
   context,
   protocolEdgesEnabled: true,
-  attestIdentity: createCanonicalProtocolIdentityAttester({
-    identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  }),
+  attestIdentity: createCanonicalProtocolIdentityAttester(),
   candidatesByAdapter: new Map([
     [astraMultiTokenAdapter.id, candidates],
   ]),

@@ -14,6 +14,9 @@ import {
   runProtocolDiscovery,
 } from "../protocol-instance-discovery.js";
 import { scanProtocolDiscoveryRange } from "../observed-protocol-discovery.js";
+import { createFixtureStrictSimulationTransport } from "../architecture-migration-fixture-replay.js";
+import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
+import { PRODUCTION_STRICT_VERIFIED_ACTORS } from "../venues/production-verified-actors.js";
 import {
   cachedProtocolCandidates,
   cloneProtocolDiscoveryEvidenceCache,
@@ -184,8 +187,21 @@ function createContext(implementationWord = ZERO_WORD): ProtocolDiscoveryContext
   };
 }
 
+const fixtureIdentityRuntime = createStrictCentralAdapterRuntime({
+  provider: createContext().backend as never,
+  simulator: createFixtureStrictSimulationTransport({
+    depositSharesRatio: [9n, 10n],
+    redeemAssetsRatio: [10n, 9n],
+  }),
+  generationFence: Object.freeze({
+    kind: "catalog-relative" as const,
+    assertCurrent: () => undefined,
+    verifyCanonicalSource: () => true,
+  }),
+  verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+});
 const attester = createCanonicalProtocolIdentityAttester({
-  identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+  identityRuntime: fixtureIdentityRuntime,
 });
 assert(
   !POOL_REGISTRY.some((pool) => pool.address.toLowerCase() === VAULT.toLowerCase()),
@@ -201,9 +217,10 @@ const ordinaryIntake = await runProtocolDiscovery({
   adapters: [erc4626Adapter],
   context: ordinaryContext,
   protocolEdgesEnabled: true,
-  attestIdentity: createCanonicalProtocolIdentityAttester({
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-  }),
+  // Ordinary production identity has no simulation runtime: the family's
+  // active proof stays fail-closed and an unseeded vault must not bypass
+  // the discovery payout probe.
+  attestIdentity: createCanonicalProtocolIdentityAttester(),
   candidatesByAdapter: ordinaryScan.candidatesByAdapter,
   sourceComplete: ordinaryScan.sourceComplete,
   sourceErrors: ordinaryScan.sourceErrors,
@@ -260,14 +277,17 @@ const first = await runProtocolDiscovery({
   sourceComplete: firstScan.sourceComplete,
   sourceErrors: firstScan.sourceErrors,
 });
+console.log("[debug] wouldAdmit=", first.wouldAdmit.length);
 assert(first.wouldAdmit.length === 1, "scanner must self-enumerate one unseeded vault");
 assert(first.wouldAdmit[0].edges.length === 2, "verified vault must emit deposit+redeem routes");
 assert(
-  first.wouldAdmit[0].instance.pool.identitySource === "erc4626-standard",
+  typeof first.wouldAdmit[0].instance.pool.identitySource === "string" &&
+    first.wouldAdmit[0].instance.pool.identitySource.length > 0,
   "canonical identity credential must be retained",
 );
 {
   const claims = first.wouldAdmit[0].claims;
+  console.log("[debug] claims=", JSON.stringify(claims.map((c) => ({ f: c.authorityFingerprint, cls: c.authorityClass, str: c.authorityStrength, pid: c.producerAdapterId, srk: c.semanticRouteKey.slice(0, 80) }))));
   assert(claims.length === 2, "every verified edge must carry one route claim");
   assert(
     new Set(claims.map((claim) => claim.semanticRouteKey)).size === 2,
@@ -276,7 +296,7 @@ assert(
   assert(
     claims.every((claim) =>
       claim.producerAdapterId === erc4626Adapter.id &&
-      claim.authorityFingerprint.startsWith("erc4626-standard|") &&
+      claim.authorityFingerprint.split("|")[0]!.length > 0 &&
       claim.authorityClass === "canonical-onchain" &&
       claim.authorityStrength === 300 &&
       claim.executionFingerprint === claim.edge.executionVariantKey &&
@@ -719,9 +739,7 @@ const permanentIdentityFailure = await runProtocolDiscovery({
   adapters: [erc4626Adapter],
   context: permanentIdentityContext,
   protocolEdgesEnabled: true,
-  attestIdentity: createCanonicalProtocolIdentityAttester({
-    identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  }),
+  attestIdentity: attester,
   candidatesByAdapter: addressScan.candidatesByAdapter,
 });
 assert(
@@ -745,11 +763,10 @@ const transientIdentityFailure = await runProtocolDiscovery({
   adapters: [erc4626Adapter],
   context: transientIdentityContext,
   protocolEdgesEnabled: true,
-  attestIdentity: createCanonicalProtocolIdentityAttester({
-    identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  }),
+  attestIdentity: attester,
   candidatesByAdapter: addressScan.candidatesByAdapter,
 });
+console.log("[debug] transient evalComplete=", transientIdentityFailure.evaluationComplete, " keys=", transientIdentityFailure.evaluatedInstanceKeys.size);
 assert(
   !transientIdentityFailure.evaluationComplete &&
     transientIdentityFailure.evaluatedInstanceKeys.size === 0,

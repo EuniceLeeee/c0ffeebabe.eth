@@ -354,9 +354,7 @@ async function discover(
     adapters: [adapter],
     context: discoveryContext,
     protocolEdgesEnabled: true,
-    attestIdentity: createCanonicalProtocolIdentityAttester({
-      identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-    }),
+    attestIdentity: createCanonicalProtocolIdentityAttester(),
     candidatesByAdapter: scan.candidatesByAdapter,
     sourceComplete: scan.sourceComplete,
     sourceErrors: scan.sourceErrors,
@@ -511,9 +509,7 @@ const observedAdmission = await runProtocolDiscovery({
   adapters: [erc4626SiloRedeemAdapter],
   context: observedContext,
   protocolEdgesEnabled: true,
-  attestIdentity: createCanonicalProtocolIdentityAttester({
-    identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  }),
+  attestIdentity: createCanonicalProtocolIdentityAttester(),
   candidatesByAdapter: observed.candidatesByAdapter,
 });
 assert(
@@ -533,9 +529,7 @@ const observedRejected = await runProtocolDiscovery({
   adapters: [erc4626SiloRedeemAdapter],
   context: observedWithoutSimulationContext,
   protocolEdgesEnabled: true,
-  attestIdentity: createCanonicalProtocolIdentityAttester({
-    identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  }),
+  attestIdentity: createCanonicalProtocolIdentityAttester(),
   candidatesByAdapter: observedWithoutSimulation.candidatesByAdapter,
 });
 assert(

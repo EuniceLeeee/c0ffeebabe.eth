@@ -270,9 +270,7 @@ const discoveryResult = await runProtocolDiscovery({
   adapters: [eigenpieAdapter],
   context,
   protocolEdgesEnabled: true,
-  attestIdentity: createCanonicalProtocolIdentityAttester({
-    identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  }),
+  attestIdentity: createCanonicalProtocolIdentityAttester(),
   candidatesByAdapter: new Map([[eigenpieAdapter.id, [candidate]]]),
 });
 assert(discoveryResult.wouldAdmit.length === 1, "identity + active probe admission");

@@ -67,9 +67,7 @@ async function main(): Promise<void> {
       baselineGraph.flatMap((edge) => [edge.tokenIn.toLowerCase(), edge.tokenOut.toLowerCase()]),
     )];
     const baselineTokenSet = new Set(baselineTokens);
-    const attester = createCanonicalProtocolIdentityAttester({
-      identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-    });
+    const attester = createCanonicalProtocolIdentityAttester();
 
     for (const log of candidates) {
       const target = ethers.getAddress(log.address);

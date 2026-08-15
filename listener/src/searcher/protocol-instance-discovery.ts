@@ -994,11 +994,29 @@ export function createCanonicalProtocolIdentityAttester(input?: {
       ...(runtime === undefined ? {} : { runtime }),
     });
     const accepted = result.accepted[0];
+    const rejected = result.rejected[0];
+    if (rejected !== undefined && isRetryableIdentityRejection(rejected.reason)) {
+      // A transient chain read failure is retryable discovery work, not a
+      // deterministic negative proof: surface it so the caller retains
+      // prior ownership instead of evicting the route.
+      throw new RetryableProtocolDiscoveryError(`identity retryable: ${rejected.reason}`);
+    }
     if (accepted) {
       return accepted as unknown as AttestedPoolEntry<PoolEntry>;
     }
     return null;
   };
+}
+
+/**
+ * Generic retryable-classification for strict identity rejections: the
+ * strict authority marks transient chain-read failures with a stable
+ * reason suffix; everything else is a deterministic rejection.
+ */
+function isRetryableIdentityRejection(reason: string): boolean {
+  return reason.includes("resource-limited") ||
+    reason.includes(":retry") ||
+    reason.includes(":timeout");
 }
 
 /**

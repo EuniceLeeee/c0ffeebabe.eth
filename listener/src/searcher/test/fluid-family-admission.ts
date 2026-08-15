@@ -235,7 +235,7 @@ async function runAdmission(backend: ProtocolDiscoveryReadBackend) {
     context: ctx,
     // Fluid swap/credit are not governed by SEARCHER_ENABLE_PROTOCOL_EDGES.
     protocolEdgesEnabled: false,
-    attestIdentity: createCanonicalProtocolIdentityAttester({ identityRegistry }),
+    attestIdentity: createCanonicalProtocolIdentityAttester(),
     candidatesByAdapter: await candidates(ctx),
   });
 }

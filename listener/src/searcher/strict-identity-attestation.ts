@@ -317,13 +317,21 @@ export async function attestPoolIdentitiesStrict<
         familyId: target.familyId,
         lineageId,
         subject: address,
-        adapter: legacy?.adapter ?? String(target.familyId),
+        // The legacy adapter label comes from the lineage projection; when
+        // absent, keep the candidate's own pool adapter label so downstream
+        // consumers that key on pool adapters (e.g. protocol discovery's
+        // poolAdapters admission) still match.
+        adapter: legacy?.adapter ?? pool.adapter ?? String(target.familyId),
         ...(legacy?.venueId === undefined
           ? {}
           : { venueId: legacy.venueId }),
         identitySource: "strict-lifecycle",
       });
     } catch (error) {
+      console.log(
+        `[attest-debug] ${address} lifecycle THREW: ` +
+          (error instanceof Error ? error.message.slice(0, 200) : String(error)),
+      );
       rejected[index] = {
         ...pool,
         adapter: pool.adapter ?? "",
