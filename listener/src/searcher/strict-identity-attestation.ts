@@ -243,6 +243,7 @@ export async function attestPoolIdentitiesStrict<
           input.source,
           address,
           pool.adapter,
+          entryOpaque(pool),
         );
         if (observation === undefined) {
           rejected[index] = { ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" };
@@ -459,6 +460,7 @@ export async function centralAddressSurfaceFallback(
   source: CanonicalSource,
   address: string,
   adapterHint?: string,
+  opaque?: Readonly<Record<string, unknown>>,
 ): Promise<UnifiedObservation | undefined> {
   const code = await provider.getCode(address, source.number);
   if (!ethers.isHexString(code) || code === "0x") return undefined;
@@ -488,6 +490,7 @@ export async function centralAddressSurfaceFallback(
     codeHash: ethers.keccak256(code).toLowerCase(),
     implementationWord: ethers.zeroPadValue("0x", 32).toLowerCase(),
     interfaceFingerprints: Object.freeze([...new Set(fingerprints)]),
+    ...(opaque === undefined ? {} : { opaque }),
   } as never);
 }
 
