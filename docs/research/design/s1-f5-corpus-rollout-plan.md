@@ -969,6 +969,14 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   discovery 追赶（checkpoint 既有做法）以保留窗口给 periodic pass。
 - **剩余**：F5 live 验收收尾（judge verdict）→ F9
   （MigrationCleanupReceipt.verdict=pass + AST/import-closure 证明）。
+- **F9 预检发现（本轮，待 F5 后执行）**：blockscan-state-capability 族
+  hook 仍含 `assembleSchema`/`extendStaticSchema`/`compileStaticSchema`
+  接口，且 univ2-standard/univ4/dodo-v2/angstrom-v4 等 legacy 适配器仍
+  实现 `assembleSchema`（F6 checkpoint 称'无定义已删'，实际仍有实现）；
+  §18.3 gate 2（schema API 删除）与 gate 8（clean-process reload）需在
+  F9 slice 处理：确认这些 hook 是否被 blockscan-state 生产路径调用，
+  若仅为能力接口保留则剥离 legacy 实现并更新 AST 门清单；若被调用则
+  属 migration_incomplete 项，需先迁移。
 
 
 
