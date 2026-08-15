@@ -667,6 +667,25 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   P1 落地时删除该实现，改为 funding 查询函数 + token 表。
 - 该 P1 项不阻塞 F5 eligible（固定 ETH 足够跑通多跳闭环验收）。
 
+### F5 验收路径决定：终止 capture harness，终态验收走 live 管线
+（2026-08-16 用户裁定，最新为准）
+
+- **删除旧管线、停止 capture harness**：F5 的 materializer → descriptor →
+  collect（generic capture）被判定为“为跑验收而搭的并行管线”，其
+  代表池选择、funding 模型、裁剪 runtime 装配产生一批人为 bug，不代表
+  真实管线缺陷。不再用 capture harness 作为验收路径。
+- **终态验收 = live 严格管线**：F6 删除 legacy 后，F7/F8 cutover 让
+  production composition 只组装 strict closure，default authority 切到
+  strict；届时 F5 的 eligible 证据直接来自 live 管线在真实 universe 上
+  的运行（真实闭环、真实 finalSim/EV 门），不再由并行 harness 产出。
+- **真实缺陷保留清单（live 也会撞，必须修）**：goldx pricing 依赖
+  重复、univ4 执行节点空 token 字段、angstrom runtimeEvidence 注入、
+  capture runtime 的 authority/scheduler/simulator 装配——这些是 strict
+  实现缺陷，不因验收路径改变而消失。
+- capture harness 相关代码（materialize-s1-capture-inventory /
+  generic-family-capture / run-architecture-migration-capture-real-cli）
+  在 cutover 完成后退役（同 F6 删除范围，可执行闭包清零）。
+
 ### F5 验收模型方向修正：生产多跳闭环（2026-08-15 用户裁定，最新为准）
 
 - **验收以生产实际模型为准，单腿 borrowable 过滤不构成验收约束**。生产套利是
