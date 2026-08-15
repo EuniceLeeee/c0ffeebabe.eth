@@ -7,7 +7,7 @@
         "familyId": "credit:fluid",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "d5408b410f9952fd7d06bed2cd9162c4d6eeb197d8ffc5a4ca44b0ea592bfa6c",
+        "contentHash": "7ff6545a4fa3c8a9627795e8721005f4f7b64885f07b8cb900afc0c6350b3051",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -68,7 +68,7 @@
         "familyId": "credit:fluid",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "455d29f7a2ea618f51a4588d42b7dd1411c6d03a4f89d13b3d8e9e8cb6f80a3a",
+        "contentHash": "3474a1de55bc28d27a262c65c3ffea209a47e07a3d95b50dd9de5be994a261d2",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -7165,5 +7165,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "3f2824d43e79dfb9017ea4009728e4548bbf367b58c29e90b94232c3269216c5"
+  "artifactHash": "c215243e5df8099b4074b6ae3153eaaab65411a4ec2885f0d2373cc0e3881987"
 }

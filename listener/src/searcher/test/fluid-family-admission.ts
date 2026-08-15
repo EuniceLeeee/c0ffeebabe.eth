@@ -13,19 +13,26 @@ import type {
   ProtocolDiscoveryContext,
   ProtocolDiscoveryReadBackend,
 } from "../venues/route-leg-adapter.js";
-import { IdentityResolverRegistry } from "../venues/identity.js";
 import {
   fluidCreditAdapter,
   fluidVaultDiscovery,
-  fluidVaultIdentityResolver,
 } from "../venues/credit/fluid.js";
 import {
   fluidDexAdapter,
   fluidDexDiscovery,
-  fluidDexIdentityResolver,
 } from "../venues/swaps/fluid-dex.js";
 import { bindRouteInstanceIdentity } from "../venues/route-instance-identity.js";
 import { POOL_REGISTRY } from "../planner/token-graph.js";
+import {
+  createStrictCentralAdapterRuntime,
+  type StrictSimulationTransport,
+} from "../strict-central-adapter-runtime.js";
+import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
+  "../venues/production-verified-actors.js";
+import { FLUID_DEX_INTERFACE } from
+  "../venues/swaps/fluid-dex-family/codec.js";
+import { FLUID_CREDIT_PROBE_ACTOR } from
+  "../venues/credit/fluid-family/codec.js";
 
 const DEX = ethers.getAddress(ADDR.FLUID_DEX_USDC_USDT);
 const VAULT = ethers.getAddress(ADDR.FLUID_VAULT_WSTUSR_USDC);
@@ -119,6 +126,23 @@ function fakeBackend(input: {
       ) {
         return erc20.encodeFunctionResult("decimals", [6]);
       }
+      if (target === DEX && selector === dexSwap.getFunction("swapIn")!.selector) {
+        // Fluid's ADDRESS_DEAD quote path reports the quote through its
+        // declared FluidDexSwapResult custom error (return-or-revert-data).
+        const decoded = dexSwap.decodeFunctionData("swapIn", req.data);
+        const amountIn = BigInt(decoded[1]);
+        const amountOut = amountIn * 9n / 10n;
+        throw Object.assign(
+          new Error("execution reverted: FluidDexSwapResult"),
+          {
+            code: "CALL_EXCEPTION",
+            data: FLUID_DEX_INTERFACE.encodeErrorResult(
+              "FluidDexSwapResult",
+              [amountOut],
+            ),
+          },
+        );
+      }
       throw Object.assign(new Error(`execution reverted: unsupported call ${target} ${selector}`), {
         code: "CALL_EXCEPTION",
         data: "0x",
@@ -189,6 +213,35 @@ function simulatedUint(value: bigint) {
   return { status: 1, returnData: erc20.encodeFunctionResult("balanceOf", [value]), logs: [] };
 }
 
+const fluidFixtureSimulator: StrictSimulationTransport = {
+  async simulate({ request }) {
+    if (request.kind !== "effect-delta-simulation") {
+      throw new Error("fluid fixture simulator requires effect-delta-simulation");
+    }
+    const call = request.call as { readonly to: string; readonly data: string };
+    if (ethers.getAddress(call.to) !== VAULT) {
+      throw new Error("fluid fixture simulator unexpected call target");
+    }
+    const decoded = vaultConstantsIface.decodeFunctionData("operate", call.data);
+    const collateralAmount = BigInt(decoded[1]);
+    const debtAmount = BigInt(decoded[2]);
+    // Observe declares return-data + token-delta only; no logs.
+    return {
+      data: vaultConstantsIface.encodeFunctionResult("operate", [
+        1n,
+        collateralAmount,
+        debtAmount,
+      ]),
+      effects: {
+        tokenDeltas: [
+          { token: SUPPLY, account: FLUID_CREDIT_PROBE_ACTOR, delta: -collateralAmount },
+          { token: BORROW, account: FLUID_CREDIT_PROBE_ACTOR, delta: debtAmount },
+        ],
+      },
+    };
+  },
+};
+
 function simulatedBool(value: boolean) {
   return { status: 1, returnData: erc20.encodeFunctionResult("approve", [value]), logs: [] };
 }
@@ -226,16 +279,26 @@ async function candidates(ctx: ProtocolDiscoveryContext) {
 
 async function runAdmission(backend: ProtocolDiscoveryReadBackend) {
   const ctx = context(backend);
-  const identityRegistry = new IdentityResolverRegistry([
-    { poolAdapter: "fluid-dex", policy: "onchain-resolver", resolve: fluidDexIdentityResolver },
-    { poolAdapter: "fluid-vault", policy: "onchain-resolver", resolve: fluidVaultIdentityResolver },
-  ], () => true);
+  const identityRuntime = createStrictCentralAdapterRuntime({
+    provider: backend as never,
+    // The vault's active operate proof is effect-delta-simulation; the
+    // fixture transport mirrors the production revm transport.
+    simulator: fluidFixtureSimulator,
+    generationFence: Object.freeze({
+      kind: "catalog-relative" as const,
+      assertCurrent: () => undefined,
+      verifyCanonicalSource: () => true,
+    }),
+    verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+  });
   return runProtocolDiscovery({
     adapters: [fluidDexAdapter, fluidCreditAdapter],
     context: ctx,
     // Fluid swap/credit are not governed by SEARCHER_ENABLE_PROTOCOL_EDGES.
     protocolEdgesEnabled: false,
-    attestIdentity: createCanonicalProtocolIdentityAttester(),
+    attestIdentity: createCanonicalProtocolIdentityAttester({
+      identityRuntime,
+    }),
     candidatesByAdapter: await candidates(ctx),
   });
 }

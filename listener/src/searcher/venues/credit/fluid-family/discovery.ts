@@ -54,7 +54,12 @@ export const fluidCreditDiscovery = {
   },
   candidateKey: (candidate) => lowerAddress(candidate.vault),
   nominate: createAddressSurfaceNomination({
-    opaqueLabels: Object.freeze(["fluid", "credit:fluid", "fluid-credit"]),
+    opaqueLabels: Object.freeze([
+      "fluid",
+      "credit:fluid",
+      "fluid-credit",
+      "fluid-vault",
+    ]),
     interfaceFingerprints: Object.freeze(["fluid-credit:constantsView+operate"]),
   }),
   reverseBinding: explicitReverseBindingUnsupported(

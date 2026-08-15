@@ -12,7 +12,10 @@ import type { FamilyCapabilityCatalog } from
   "./venues/family-capability-catalog.js";
 import {
   executeAdapterFamilyLifecycleBatch,
+  executeCreditFamilyInstanceLifecycle,
 } from "./venues/adapter-family-runtime.js";
+import type { LoadedFamilyPlugin } from
+  "./venues/family-capability-catalog.js";
 import {
   executeCatalogCaptureNominations,
   executeCatalogReverseBindings,
@@ -262,14 +265,62 @@ export async function attestPoolIdentitiesStrict<
         rejected[index] = { ...pool, adapter: pool.adapter ?? "", reason: "no_matching_family" };
         return;
       }
-      const family = input.catalog.forFamily(target.familyId);
+      const family = input.catalog.forStrictFamily(target.familyId);
       console.log(
         `[attest-debug] ${address} lifecycle target=${target.familyId} ` +
           `pattern=${target.patternId} obsKind=${observation.kind} ` +
           `opaque=${JSON.stringify((observation as { opaque?: unknown }).opaque ?? null).slice(0, 80)}`,
       );
+      if (family.plugin.manifest.domain === "credit") {
+        // Credit families have their own instance lifecycle (identity +
+        // instance only, no route publication). The central framework runs
+        // the catalog-issued credit capability; no credit semantics here.
+        const creditResult = await executeCreditFamilyInstanceLifecycle({
+          family,
+          match: Object.freeze({
+            matchedPatternId: target.patternId,
+            observation,
+          }),
+          source: input.source,
+          generation: input.source.generation,
+          runtime: input.runtime,
+        });
+        if (creditResult.instance === null) {
+          const rejection = creditResult.outcomes.find((outcome) =>
+            outcome.stage === "identity" &&
+            outcome.status === "rejected"
+          );
+          const anyIdentity = creditResult.outcomes.find((outcome) =>
+            outcome.stage === "identity"
+          );
+          rejected[index] = {
+            ...pool,
+            adapter: pool.adapter ?? "",
+            reason: rejection === undefined
+              ? anyIdentity === undefined
+                ? "identity_unverified:no-outcome"
+                : `identity_unverified:${anyIdentity.status}:${anyIdentity.reasonCode ?? "no-reason"}`
+              : `identity_rejected:${rejection.reasonCode ?? "no-reason"}`,
+          };
+          return;
+        }
+        const lineageId = creditResult.instance.lineageId;
+        const legacy = input.adapterForLineage?.(lineageId) ?? null;
+        accepted[index] = Object.freeze({
+          ...pool,
+          familyId: target.familyId,
+          lineageId,
+          subject: address,
+          adapter: legacy?.adapter ?? pool.adapter ?? String(target.familyId),
+          ...(legacy?.venueId === undefined
+            ? {}
+            : { venueId: legacy.venueId }),
+          identitySource: "strict-lifecycle",
+        });
+        return;
+      }
       const result = await executeAdapterFamilyLifecycleBatch({
-        family,
+        family: family as unknown as LoadedFamilyPlugin,
         matches: Object.freeze([Object.freeze({
           matchedPatternId: target.patternId,
           observation,
@@ -412,12 +463,18 @@ function legacyLabelsForLineage(lineageId: string): {
   try {
     const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
       .forStrictFamily(familyId as never);
-    const actions = family.plugin.manifest.ownedActionAdapterIds;
+    // The legacy universe pool row keys on the family's declared
+    // pool-adapter label (plugin-owned manifest field), not the action
+    // adapter id; fall back to the action adapter only when the family
+    // declares no pool adapter label.
+    const poolAdapters = family.plugin.manifest.poolAdapterIds ?? [];
+    const label = poolAdapters[0] ??
+      family.plugin.manifest.ownedActionAdapterIds[0];
     return {
-      adapter: actions[0] ?? String(familyId),
-      ...(actions[0] === undefined
+      adapter: label ?? String(familyId),
+      ...(label === undefined
         ? {}
-        : { venueId: actions[0] }),
+        : { venueId: label }),
     };
   } catch {
     return null;
