@@ -950,9 +950,21 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   通道 + main.ts production revm runtime；8 个族测试全 PASS（含 fluid）；
   live-smoke / dex-live-smoke 节点真实 RPC 全 PASS；F8 中央 runtime
   装配（authority/scheduler/simulator）到位。
-- **剩余**：F5 live 验收（生产 searcher 跑 ret13 universe，六步 judge
-  对 live receipts 出 verdict）→ F9（MigrationCleanupReceipt.verdict=pass
-  + AST/import-closure 证明）。
+- **F5 live 运行集成修复（651b0235 + cb761c0a，live 暴露）**：ret13
+  universe 行携带 `identitySource=strict-lifecycle`（strict attester
+  自身输出）与 plugin 声明的 pool-adapter label 作 venueId（如
+  `univ4-unlock`），生产 pool-universe loader 的 registry-ids /
+  isProductionVenueId 校验拒绝——strict 管线输出无法回载。修复：
+  `strict-lifecycle` 注册为已知 identity source；isProductionVenueId
+  接受 catalog 声明的 pool-adapter labels（与 isProductionPoolAdapter
+  同一插件自有投影）。节点已部署 cb761c0a（HEAD_OK + BUILD_OK）。
+- **F5 live 验收运行中（27e9046b，90min 窗口）**：生产 searcher
+  （searcher:live，dry-run）以 f5-ret13 universe 为输入在节点运行；
+  启动 12,015 池 strict attestation 为主耗时（~50min），随后 periodic
+  pass 产出 events/routes；验收事实 = family fresh 数据（S1）+
+  exact.amountOut ≈ sim.amountOut（S3/S5）+ 六步 judge verdict。
+- **剩余**：F5 live 验收收尾（judge verdict）→ F9
+  （MigrationCleanupReceipt.verdict=pass + AST/import-closure 证明）。
 
 
 
