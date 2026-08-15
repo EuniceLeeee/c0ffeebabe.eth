@@ -450,6 +450,9 @@ async function filterBorrowableNominations(input: {
   // Phase 2: derive the borrowable set by executing every catalog funding
   // family's liquidity capability against the identified token surface.
   // Dynamic enumeration over the catalog; no family names, no address table.
+  // A token is borrowable only when a funding offer can cover one whole unit
+  // of the token (10 ** decimals), matching the normalized capture amount;
+  // a dust balance below one unit is not a closable route.
   const identified = [...new Set(tokensByPool.flat())].sort();
   const borrowable = new Set<string>();
   if (identified.length > 0) {
@@ -462,6 +465,38 @@ async function filterBorrowableNominations(input: {
       }),
       verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
     });
+    const DECIMALS = new ethers.Interface([
+      "function decimals() view returns (uint8)",
+    ]);
+    let decNext = 0;
+    const decimalsByToken = new Map<string, bigint>();
+    const decWorker = async (): Promise<void> => {
+      while (true) {
+        const index = decNext++;
+        if (index >= identified.length) return;
+        const token = identified[index]!;
+        try {
+          const raw = await input.provider.call(
+            { to: token, data: DECIMALS.encodeFunctionData("decimals") },
+            input.source.number,
+          );
+          if (ethers.isHexString(raw) && ethers.dataLength(raw) === 32) {
+            const decoded = DECIMALS.decodeFunctionResult("decimals", raw) as unknown;
+            const decimals = Number(
+              (decoded as { readonly [index: number]: unknown })[0] ?? "",
+            );
+            if (Number.isSafeInteger(decimals) && decimals >= 0 && decimals <= 77) {
+              decimalsByToken.set(token, 10n ** BigInt(decimals));
+            }
+          }
+        } catch {
+          // Unreadable decimals: fall back to 18-decimal units below.
+        }
+      }
+    };
+    await Promise.all(
+      Array.from({ length: BORROWABLE_CONCURRENCY }, () => decWorker()),
+    );
     for (const family of input.catalog.listAll()) {
       if (family.plugin.manifest.domain !== "funding") continue;
       const result = await executeFundingFamilyLiquidity({
@@ -473,7 +508,8 @@ async function filterBorrowableNominations(input: {
         publisher: { publish: () => undefined },
       });
       for (const offer of result.offers) {
-        if (offer.maxBorrow > 0n) {
+        const oneUnit = decimalsByToken.get(offer.asset.toLowerCase()) ?? 10n ** 18n;
+        if (offer.maxBorrow >= oneUnit) {
           borrowable.add(offer.asset.toLowerCase());
         }
       }
