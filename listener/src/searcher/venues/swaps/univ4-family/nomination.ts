@@ -115,6 +115,19 @@ export async function nominateUniv4(input: {
   readonly provider: CaptureNominationProvider;
 }): Promise<readonly UnifiedObservation[]> {
   const results: UnifiedObservation[] = [];
+  // Fast path: a non-univ4 opaque nomination (e.g. a univ2/univ3 activity
+  // pool during universe enrich) must not pay for the manager-wide swap
+  // index. The plugin declares which opaque labels it owns; the framework
+  // feeds every family every nomination.
+  if (
+    !input.nominations.some((nomination) =>
+      isUniv4OpaqueLabel(
+        nomination.opaque as Readonly<Record<string, unknown>>,
+      )
+    )
+  ) {
+    return Object.freeze(results);
+  }
   const manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
   const poolIdToTxHash = await recentUniv4SwapTxHashByPoolId({
     source: input.source,

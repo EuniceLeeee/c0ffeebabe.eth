@@ -163,6 +163,29 @@ async function main(): Promise<void> {
   });
   assert.equal(badPoolId.length, 0);
 
+  // Non-univ4 opaque label fast path: no manager-wide scan, no trace.
+  let getLogsCalls = 0;
+  const nonUniv4 = await nominateUniv4({
+    nominations: Object.freeze([Object.freeze({
+      address: `0x${"ab".repeat(20)}`,
+      opaque: Object.freeze({ adapter: "univ2-standard" }),
+    })]),
+    source: SOURCE,
+    provider: {
+      call: async () => "0x",
+      getCode: async () => "0x01",
+      getStorage: async () => `0x${"00".repeat(32)}`,
+      getLogs: async () => {
+        getLogsCalls += 1;
+        return Object.freeze([]);
+      },
+      getTransactionReceipt: async () => null,
+      traceTransaction: async () => null,
+    },
+  });
+  assert.equal(nonUniv4.length, 0);
+  assert.equal(getLogsCalls, 0, "non-univ4 nomination must not scan logs");
+
   console.log("univ4 nomination PASS");
 }
 
