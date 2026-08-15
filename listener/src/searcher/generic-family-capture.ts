@@ -418,7 +418,15 @@ async function captureRoute(input: {
     observations,
     runtime: input.runtime,
   });
+  console.log(
+    `[capture-progress] family=${input.descriptor.familyId} ` +
+      `stage=identity/instance done`,
+  );
   const graph = routeGraphItems(input.family, publication);
+  console.log(
+    `[capture-progress] family=${input.descriptor.familyId} ` +
+      `stage=routes done edges=${graph.edges.length}`,
+  );
   const exactItems: RawMigrationSemanticItem[] = [];
   const executionItems: RawMigrationSemanticItem[] = [];
   const simulationItems: RawMigrationSemanticItem[] = [];
@@ -459,6 +467,10 @@ async function captureRoute(input: {
       if (exact.status !== "resolved") {
         throw new Error(`capture exact failed: ${exact.outcome.reasonCode}`);
       }
+      console.log(
+        `[capture-progress] family=${input.descriptor.familyId} ` +
+          `stage=exact done route=${route.routeKey}`,
+      );
       const semanticId = `${route.routeKey}\u001f${amountIn}`;
       exactItems.push(semanticItem(`${semanticId}:exact`, {
         routeKey: route.routeKey,
@@ -479,6 +491,10 @@ async function captureRoute(input: {
       if (execution.status !== "resolved") {
         throw new Error(`capture execution failed: ${execution.outcome.reasonCode}`);
       }
+      console.log(
+        `[capture-progress] family=${input.descriptor.familyId} ` +
+          `stage=execution done route=${route.routeKey}`,
+      );
       executionItems.push(fragmentItem(`${semanticId}:execution`, execution.fragment));
       const routeRoot = execution.fragment.nodes[0];
       if (routeRoot === undefined) {
@@ -494,6 +510,10 @@ async function captureRoute(input: {
         minProfit: input.vector.minAmountOut,
         source: input.descriptor.source,
       });
+      console.log(
+        `[capture-progress] family=${input.descriptor.familyId} ` +
+          `stage=funding done route=${route.routeKey}`,
+      );
       const simulation = await input.finalSimulation.simulate({
         kind: "route",
         family: input.family,
@@ -503,6 +523,10 @@ async function captureRoute(input: {
         funding,
         semanticId,
       });
+      console.log(
+        `[capture-progress] family=${input.descriptor.familyId} ` +
+          `stage=finalSim done route=${route.routeKey}`,
+      );
       simulationItems.push(semanticItem(`${semanticId}:final-sim`, simulation));
     }
   }
@@ -562,6 +586,10 @@ async function captureFunding(input: {
   if (publication === null || result.publication === null) {
     throw new Error("capture Funding Family did not publish");
   }
+  console.log(
+    `[capture-progress] family=${input.descriptor.familyId} ` +
+      `stage=funding-liquidity done offers=${result.offers.length}`,
+  );
   const instances: RawMigrationSemanticItem[] = [];
   const executions: RawMigrationSemanticItem[] = [];
   const simulations: RawMigrationSemanticItem[] = [];
@@ -615,6 +643,10 @@ async function captureFunding(input: {
   if (instances.length === 0) {
     throw new Error("capture Funding Family has no executable offer");
   }
+  console.log(
+    `[capture-progress] family=${input.descriptor.familyId} ` +
+      `stage=funding-execution/finalSim done offers=${instances.length}`,
+  );
   return Object.freeze({
     instances: exercisedStage(instances, input.evidenceRefs),
     edges: declaredAbsent(input.evidenceRefs),
@@ -666,6 +698,10 @@ async function captureCredit(input: {
   if (instances.length === 0) {
     throw new Error("capture Credit Family did not issue an instance");
   }
+  console.log(
+    `[capture-progress] family=${input.descriptor.familyId} ` +
+      `stage=identity/instance done instances=${instances.length}`,
+  );
   const edges: RawMigrationSemanticItem[] = [];
   const exacts: RawMigrationSemanticItem[] = [];
   const executions: RawMigrationSemanticItem[] = [];
@@ -698,6 +734,10 @@ async function captureCredit(input: {
       if (risk.status !== "resolved") {
         throw new Error(`capture Credit risk failed: ${risk.reasonCode}`);
       }
+      console.log(
+        `[capture-progress] family=${input.descriptor.familyId} ` +
+          `stage=exact/risk done route=${route.routeKey}`,
+      );
       const semanticId = `${route.routeKey}\u001f${input.vector.collateralAmount}`;
       exacts.push(semanticItem(`${semanticId}:risk`, {
         routeKey: route.routeKey,
@@ -724,6 +764,10 @@ async function captureCredit(input: {
       if (execution.status !== "resolved") {
         throw new Error(`capture Credit execution failed: ${execution.reasonCode}`);
       }
+      console.log(
+        `[capture-progress] family=${input.descriptor.familyId} ` +
+          `stage=execution done route=${route.routeKey}`,
+      );
       executions.push(fragmentItem(`${semanticId}:execution`, execution.fragment));
       const funding = await input.fundingPlanFactory({
         assets: Object.freeze([projected.edge.tokenIn]),
@@ -731,6 +775,10 @@ async function captureCredit(input: {
         minProfit: input.vector.minAmountOut,
         source: input.descriptor.source,
       });
+      console.log(
+        `[capture-progress] family=${input.descriptor.familyId} ` +
+          `stage=funding done route=${route.routeKey}`,
+      );
       simulations.push(semanticItem(
         `${semanticId}:final-sim`,
         await input.finalSimulation.simulate({
