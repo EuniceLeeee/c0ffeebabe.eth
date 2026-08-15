@@ -798,6 +798,33 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   strict-catalog-live-publisher / discovery-continuity-composition /
   shadow-catalog-publication / strict-execution-projection 全绿。
   **节点 dry-run（0686ac4b，head≈25770K）**：searcher 启动 + 运行 240s+
+### F8 runtime 装配落地 + B 对 attester 切换（2026-08-16 续，545b551b）
+
+- **通道完成（545b551b）**：attestPoolsStrictFromProvider 接受可选
+  runtime（默认 minimal）；createCanonicalProtocolIdentityAttester 切换
+  strict 权威（attestPoolsStrictFromProvider）并适配 discovery backend
+  （getStorageAt→getStorage / 每调用 control 忽略——backend 已 pin 块）；
+  ProtocolDiscoveryContext 增 identityRuntime?；protocol-discovery-runtime
+  / live-discovery-coordinator / main.ts 逐层透传 identityRuntime
+  （strictCentralRuntime，composition 存在时）。8 个测试的 attester 调用
+  已切 strict（无参）；fixture-replay 新增 createFixtureStrictSimulationTransport
+  （ERC4626 形状 deposit/redeem，可配 9/10 比例，动态 vault/asset/actor）。
+- **测试适配进行中（工作树未提交）**：erc4626-instance-discovery 等 4 测试
+  注入 identityRuntime（fake simulator）后 identity 仍 unresolved——调试
+  发现：nominate 物化 address-surface 成功（getStorage 适配后），族
+  identity base→active 链（fake simulation effects 匹配 9/10 fixture）
+  理论上应 verified，但 attestation 的 accepted 为空。**下一步调试**：
+  attestation 结果日志（accepted/rejected 计数 + lifecycle identity
+  outcome 的 reasonCode——已加日志但未命中（可能 identityOutcome 找到后
+  的 accepted 路径问题，或 lifecycle 抛错被 catch 吞）。
+- **用户提议（tx 验证）**：attester 的族 active 证明需要真实交易事件
+  evidence（withdraw/deposit）——用户可人工提供 tx hash，节点 receipt 读
+  logs 派生族 evidence（F5 live 口径真实观测）。待 identity 链修通后作为
+  evidence 注入通道实现。
+- 生产正确性（不受测试影响）：生产 coordinator 传 strictCentralRuntime
+  后，需要 simulator 的族（erc4626/fluid/silo/self-burn）的协议发现身份
+  将可用；测试环境的 fake 适配是独立的（测试合同验证）。
+
   （19967 行日志、0 fatal、hint/impact 循环正常）——harness 删除无破坏 live 路径。
 - **F7 状态**：durable discovery continuity composition 默认启用
   （8efcf4a0），catalogRoot 节点机器证据已有。
