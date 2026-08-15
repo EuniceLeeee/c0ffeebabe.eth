@@ -832,12 +832,15 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   shadow 55/55）；main.ts 中央 runtime 完整装配（2832-2841：
   createStrictCentralAdapterRuntime + verifiedActors +
   createRevmStrictSimulationTransport，composition 默认时）。
-  **F8 剩余（B 对 attester 项）**：protocol-discovery 的
-  createCanonicalProtocolIdentityAttester 走 minimal runtime（无 simulator）
-  → erc4626/fluid/silo identity fail-closed。修法（下一轮）：
-  attester/attestPoolsStrictFromProvider 支持 runtime 注入（context
-  identityRuntime 通道），main.ts 传 production runtime，测试用 fake
-  simulator（effect-delta 结果构造）。
+  **F8 B 对 attester 项已收口（545b551b + 93b037f6 + 25b0d082 + 44cdccf5）**：
+  attester/attestPoolsStrictFromProvider runtime 注入 + context
+  identityRuntime 通道落地，main.ts 传 production runtime（revm）；
+  8 个族测试全部适配（erc4626 系/eigenpie/astra/fluid 全 PASS，fake
+  simulator 等价生产 revm 路径）；live-smoke / dex-live-smoke 在节点以
+  生产 revm 传输真实 RPC 全 PASS；两道门（s1-cutover-readiness /
+  default-authority-cutover-gate）PASS；adapter-family-shadow-suite 37/37
+  + systemic-live-gate + startup-manifest + strict-catalog-consumer-diagnostic
+  全绿。F8 收口达成。
 ### F8 identity 测试适配进展（2026-08-16 续，ef513cff）
 
 - **通道全部落地（545b551b + 93b037f6 + ef513cff）**：attestPoolsStrictFromProvider
