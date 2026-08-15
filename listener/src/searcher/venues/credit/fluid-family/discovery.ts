@@ -1,4 +1,6 @@
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   FLUID_VAULT_OPERATE_SELECTOR,
@@ -55,4 +57,7 @@ export const fluidCreditDiscovery = {
     opaqueLabels: Object.freeze(["fluid", "credit:fluid", "fluid-credit"]),
     interfaceFingerprints: Object.freeze(["fluid-credit:constantsView+operate"]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "credit family; no reverse-binding registry declared (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<FluidCreditCandidate>;

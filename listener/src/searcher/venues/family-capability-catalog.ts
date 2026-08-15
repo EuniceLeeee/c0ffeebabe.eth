@@ -3,6 +3,7 @@ import {
   definedFamilyPluginContractSummary,
   type AnyDefinedFamilyPlugin,
   type AnyDefinedStrictFamilyPlugin,
+  type CaptureReverseBindingSemantics,
   type DiscoveryCandidateSourceKind,
   type FamilyDomain,
   type UnifiedObservation,
@@ -355,6 +356,36 @@ export class FamilyCapabilityCatalog {
   requiresProtocolEdgesFlagFor(familyId: FamilyId): boolean {
     return this.forStrictFamily(familyId).plugin.manifest
       .requiresProtocolEdgesFlag ?? false;
+  }
+
+  /**
+   * Retain-channel projections, read from the plugin-declared discovery
+   * semantics (never a central per-family list). The central retained
+   * attestation decides channel order through these projections; the plugin
+   * only declares semantics.
+   */
+  hasReverseBinding(familyId: FamilyId): boolean {
+    const family = this.forStrictFamily(familyId);
+    if (!("discovery" in family.plugin)) return false;
+    return family.plugin.discovery?.reverseBinding?.kind === "implementation";
+  }
+
+  reverseBindingExplicitlyUnsupported(familyId: FamilyId): boolean {
+    const family = this.forStrictFamily(familyId);
+    if (!("discovery" in family.plugin)) return false;
+    return family.plugin.discovery?.reverseBinding?.kind ===
+      "explicitly-unsupported";
+  }
+
+  reverseBindingFor(
+    familyId: FamilyId,
+  ): CaptureReverseBindingSemantics["reverseBinding"] | undefined {
+    const family = this.forStrictFamily(familyId);
+    if (!("discovery" in family.plugin)) return undefined;
+    const declaration = family.plugin.discovery?.reverseBinding;
+    return declaration?.kind === "implementation"
+      ? declaration.reverseBinding
+      : undefined;
   }
 
   /**

@@ -1,4 +1,6 @@
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -48,4 +50,7 @@ export const psmDiscovery = {
     opaqueLabels: Object.freeze(["psm", "protocol:psm"]),
     interfaceFingerprints: Object.freeze(["lite-psm-gem-dai-fees-v1"]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<PsmCandidate>;

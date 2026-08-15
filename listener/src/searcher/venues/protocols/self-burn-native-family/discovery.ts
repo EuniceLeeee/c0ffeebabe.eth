@@ -1,4 +1,6 @@
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -71,4 +73,7 @@ export const selfBurnNativeDiscovery = {
     opaqueLabels: Object.freeze(["self-burn-native", "protocol:self-burn-native"]),
     interfaceFingerprints: Object.freeze([]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<SelfBurnNativeCandidate>;

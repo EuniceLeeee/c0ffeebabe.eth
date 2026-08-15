@@ -1,5 +1,7 @@
 import { ethers } from "ethers";
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -109,4 +111,7 @@ export const erc4626SiloRedeemDiscovery = {
   candidateKey: (candidate) =>
     `${lowerAddress(candidate.vault)}:${lowerAddress(candidate.payoutToken)}`,
   nominate: { nominate: nominateErc4626SiloRedeem },
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<Erc4626SiloRedeemCandidate>;

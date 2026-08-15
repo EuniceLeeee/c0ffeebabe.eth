@@ -1,8 +1,10 @@
+import { ethers } from "ethers";
 import type {
   DiscoverySemantics,
   UnifiedObservation,
 } from "../../adapter-family-plugin.js";
 import { nominateUniv3 } from "./nomination.js";
+import { reverseBindUniv3 } from "./reverse-binding.js";
 import {
   PANCAKE_V3_SWAP_TOPIC,
   UNIV3_BURN_TOPIC,
@@ -77,6 +79,10 @@ export const univ3Discovery = {
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
   nominate: { nominate: nominateUniv3 },
+  reverseBinding: Object.freeze({
+    kind: "implementation" as const,
+    reverseBinding: reverseBindUniv3,
+  }),
 } satisfies DiscoverySemantics<UniV3Candidate>;
 
 function decodeCandidate(
@@ -87,7 +93,40 @@ function decodeCandidate(
     matchedPatternId === UNIV3_POOL_SURFACE_PATTERN_ID &&
     observation.kind === "address-surface"
   ) {
-    return addressCandidate("pool-surface", observation.address);
+    // The retain-channel reverse binding may carry chain-truth hints
+    // (factory() read at the source block plus pool-entry token/fee);
+    // the family lifecycle still re-verifies every hint on chain before
+    // admission, so a mismatch is a rejection, never a pass.
+    const opaque = observation.opaque as Readonly<Record<string, unknown>>;
+    const feeRaw = opaque.fee;
+    const hintedFee = (typeof feeRaw === "string" || typeof feeRaw === "number")
+      ? (() => {
+          try {
+            return BigInt(String(feeRaw));
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+    return Object.freeze({
+      candidateKind: "univ3-pool" as const,
+      sourceKind: "pool-surface" as const,
+      pool: canonicalAddress(observation.address),
+      hintedFactory: typeof opaque.factory === "string" &&
+          ethers.isAddress(opaque.factory)
+        ? canonicalAddress(opaque.factory)
+        : null,
+      hintedToken0: typeof opaque.token0 === "string" &&
+          ethers.isAddress(opaque.token0)
+        ? canonicalAddress(opaque.token0)
+        : null,
+      hintedToken1: typeof opaque.token1 === "string" &&
+          ethers.isAddress(opaque.token1)
+        ? canonicalAddress(opaque.token1)
+        : null,
+      hintedFee,
+      hintedTickSpacing: null,
+    });
   }
   if (
     matchedPatternId === UNIV3_SWAP_CALL_PATTERN_ID &&

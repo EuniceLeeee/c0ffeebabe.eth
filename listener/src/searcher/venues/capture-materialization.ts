@@ -94,6 +94,59 @@ export async function executeCatalogCaptureNominations(input: {
   return Object.freeze(observations);
 }
 
+/**
+ * Executes the catalog-issued retain-channel reverse-binding capability for
+ * every Family plugin that declares a real implementation. Symmetric to
+ * executeCatalogCaptureNominations: the framework feeds opaque pool
+ * nominations to each plugin one candidate at a time; a "verified" outcome
+ * whose observation passes catalog.matches + decodeCandidate is
+ * admitted for that Family (per-Family early stop). "unsupported" /
+ * "failed" outcomes contribute nothing here; the central retained
+ * attestation falls through to the fresh nomination channel afterwards.
+ * Families that declared explicitly-unsupported (or nothing) are skipped.
+ * No protocol semantics in central paths.
+ */
+export async function executeCatalogReverseBindings(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly source: CanonicalSource;
+  readonly nominations: readonly CaptureNominationInput[];
+  readonly provider: CaptureNominationProvider;
+  readonly alreadyAdmitted?: ReadonlySet<FamilyId>;
+}): Promise<readonly UnifiedObservation[]> {
+  const observations: UnifiedObservation[] = [];
+  const admitted = new Set(input.alreadyAdmitted ?? []);
+  for (const family of input.catalog.listAll()) {
+    const plugin = family.plugin;
+    if (!("discovery" in plugin)) continue;
+    const declaration = plugin.discovery.reverseBinding;
+    if (declaration?.kind !== "implementation") continue;
+    if (admitted.has(plugin.manifest.familyId)) continue;
+    for (const nomination of input.nominations) {
+      const derived = await declaration.reverseBinding({
+        nominations: Object.freeze([nomination]),
+        source: input.source,
+        provider: input.provider,
+      });
+      const outcome = derived[0];
+      if (outcome === undefined || outcome.status !== "verified") continue;
+      const observation = outcome.observation;
+      const matches = input.catalog.matches(observation);
+      const accepted = matches.some((match) =>
+        match.familyId === plugin.manifest.familyId &&
+        plugin.discovery.decodeCandidate({
+          observation,
+          matchedPatternId: match.patternId,
+        }) !== null
+      );
+      if (!accepted) continue;
+      observations.push(observation);
+      admitted.add(plugin.manifest.familyId);
+      break;
+    }
+  }
+  return Object.freeze(observations);
+}
+
 export function createRouteCaptureMaterialization<
   Candidate extends FamilyCandidate,
 >(input: {

@@ -270,6 +270,72 @@ export interface CaptureNominationSemantics {
   }): Promise<readonly UnifiedObservation[]>;
 }
 
+/**
+ * Retain-channel reverse-binding outcome. One outcome per input nomination,
+ * in input order. "verified" carries the re-materialized observation (the
+ * central pipeline still runs catalog matching + decodeCandidate + the
+ * family lifecycle identity stage before admission); "unsupported" is an
+ * explicit per-candidate refusal (the central pipeline then falls through
+ * to the fresh nomination channel); "failed" is a chain-read failure
+ * (same central fall-through). Plugin-owned semantics; the central
+ * retained attestation decides channel order, never the plugin.
+ */
+export type ReverseBindingOutcome =
+  | {
+      readonly status: "verified";
+      readonly observation: UnifiedObservation;
+    }
+  | { readonly status: "unsupported"; readonly reason: string }
+  | { readonly status: "failed"; readonly reason: string };
+
+/**
+ * Plugin-owned retain-channel capability: re-materialize a real observation
+ * for a cold candidate from chain truth (factory-child, registry-member,
+ * PositionManager reverse lookup) without requiring recent activity. The
+ * framework only executes the catalog-issued capability; no protocol
+ * semantics in central paths.
+ */
+export interface CaptureReverseBindingSemantics {
+  reverseBinding(input: {
+    readonly nominations: readonly CaptureNominationInput[];
+    readonly source: CanonicalSource;
+    readonly provider: CaptureNominationProvider;
+  }): Promise<readonly ReverseBindingOutcome[]>;
+}
+
+/**
+ * Retain-channel declaration: either a real reverse-binding implementation
+ * or an explicit unsupported declaration. The central retained attestation
+ * reads this through the generated catalog projection (hasReverseBinding /
+ * reverseBindingExplicitlyUnsupported / reverseBindingFor) and decides
+ * channel order; the plugin only declares semantics.
+ */
+export type ReverseBindingDeclaration =
+  | {
+      readonly kind: "implementation";
+      readonly reverseBinding:
+        CaptureReverseBindingSemantics["reverseBinding"];
+    }
+  | { readonly kind: "explicitly-unsupported"; readonly reason: string };
+
+/**
+ * Framework-level declaration helper (no protocol semantics): declares a
+ * family's retain channel as explicitly unsupported. Allowed by the
+ * validator for swap/protocol/credit families; the central pipeline skips
+ * the reverse-binding channel for that family and falls through to the
+ * fresh nomination channel.
+ */
+export function explicitReverseBindingUnsupported(
+  reason: string,
+): ReverseBindingDeclaration {
+  if (typeof reason !== "string" || reason.trim().length === 0) {
+    throw new Error(
+      "explicit reverse-binding unsupported reason must be a non-empty string",
+    );
+  }
+  return Object.freeze({ kind: "explicitly-unsupported", reason });
+}
+
 export interface FamilyCandidate {
   readonly candidateKind: string;
 }
@@ -314,6 +380,15 @@ export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
    * time, so a missing interface can never silently pass as "unresolved".
    * Legacy caches only nominate candidates; they never supply evidence.
    */
+  /**
+   * Retain-channel declaration (plugin-owned): reverse binding that
+   * re-verifies a cold pool from chain truth without recent activity
+   * (factory-child / registry-member / PositionManager). Either a real
+   * implementation or an explicit unsupported declaration; the central
+   * retained attestation decides channel order through the catalog
+   * projection and never maps semantics itself.
+   */
+  readonly reverseBinding?: ReverseBindingDeclaration;
   readonly evidenceChannel: DiscoveryEvidenceChannel;
   readonly nominate?: CaptureNominationSemantics;
   decodeCandidate(input: {
@@ -2321,7 +2396,7 @@ function validateFamilyPlugin(
       : expectedDomain === "swap"
       ? pluginForDomain(plugin, "swap")
       : pluginForDomain(plugin, "protocol");
-    validateDiscovery(routedPlugin.discovery);
+    validateDiscovery(routedPlugin.discovery, expectedDomain);
     validateIdentity(routedPlugin.identity, manifest);
     validateInstance(routedPlugin.instance);
     validateRoutes(routedPlugin.routes);
@@ -3045,7 +3120,10 @@ function validateManifest(
   }
 }
 
-function validateDiscovery(discovery: DiscoverySemantics<any>): void {
+function validateDiscovery(
+  discovery: DiscoverySemantics<any>,
+  domain: FamilyDomain,
+): void {
   assertPlainRecord(discovery, "discovery semantics");
   assertExactKeys(
     discovery,
@@ -3058,12 +3136,63 @@ function validateDiscovery(discovery: DiscoverySemantics<any>): void {
       "evidenceChannel",
       "logPatterns",
       "nominate",
+      "reverseBinding",
       "sources",
     ],
     "discovery semantics",
     true,
     ["candidateKey", "decodeCandidate", "evidenceChannel", "sources"],
   );
+  // Retain-channel declaration is mandatory for every non-funding Family
+  // (swap/protocol/credit): either a real reverse-binding implementation or
+  // an explicit unsupported declaration. Funding families have no discovery
+  // semantics at all. A missing declaration is a definition-time failure, so
+  // a family can never silently pass as "no retain channel".
+  if (domain !== "funding" && discovery.reverseBinding === undefined) {
+    throw new Error(
+      "discovery must declare reverseBinding (implementation or " +
+        "explicitly-unsupported) for swap/protocol/credit families",
+    );
+  }
+  if (discovery.reverseBinding !== undefined) {
+    assertPlainRecord(
+      discovery.reverseBinding,
+      "discovery reverse binding declaration",
+    );
+    assertExactKeys(
+      discovery.reverseBinding,
+      ["kind", "reason", "reverseBinding"],
+      "discovery reverse binding declaration",
+      true,
+      ["kind"],
+    );
+    if (
+      discovery.reverseBinding.kind === "implementation" &&
+      typeof discovery.reverseBinding.reverseBinding !== "function"
+    ) {
+      throw new Error(
+        "discovery reverseBinding implementation must declare a reverseBinding function",
+      );
+    }
+    if (
+      discovery.reverseBinding.kind === "explicitly-unsupported" &&
+      (typeof discovery.reverseBinding.reason !== "string" ||
+        discovery.reverseBinding.reason.trim().length === 0)
+    ) {
+      throw new Error(
+        "discovery reverseBinding explicitly-unsupported requires a non-empty reason",
+      );
+    }
+    if (
+      discovery.reverseBinding.kind !== "implementation" &&
+      discovery.reverseBinding.kind !== "explicitly-unsupported"
+    ) {
+      throw new Error(
+        "discovery reverseBinding declaration kind must be " +
+          "\"implementation\" or \"explicitly-unsupported\"",
+      );
+    }
+  }
   if (
     discovery.evidenceChannel !== "nominate" &&
     discovery.evidenceChannel !== "tx-evidence"

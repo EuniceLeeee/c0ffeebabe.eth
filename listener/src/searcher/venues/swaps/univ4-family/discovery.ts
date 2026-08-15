@@ -26,6 +26,7 @@ import {
 import type { V4PoolKey } from "../../../planner/token-graph.js";
 import type { UniV4Candidate } from "./types.js";
 import { nominateUniv4 } from "./nomination.js";
+import { reverseBindUniv4 } from "./reverse-binding.js";
 
 export const UNIV4_POOL_SURFACE_PATTERN_ID = "univ4-pool-surface";
 
@@ -74,6 +75,10 @@ export const univ4Discovery = {
   candidateKey: (candidate) =>
     `${candidate.manager.toLowerCase()}\u001f${candidate.poolId}`,
   nominate: { nominate: nominateUniv4 },
+  reverseBinding: Object.freeze({
+    kind: "implementation" as const,
+    reverseBinding: reverseBindUniv4,
+  }),
 } satisfies DiscoverySemantics<UniV4Candidate>;
 
 function decodeCandidate(

@@ -169,6 +169,10 @@ async function strictRetainedAttestation(
     provider: attestation.provider,
     blockNumber: attestation.blockNumber,
     pools: candidates,
+    // Central retained-attestation strategy: the retain channel (cold-pool
+    // reverse binding from chain truth) runs before the fresh nomination
+    // channel. The plugin never decides this order.
+    channelOrder: "reverse-binding-first",
   });
   return {
     accepted: result.accepted as unknown as AttestedPoolEntry<PoolUniverseEntry>[],

@@ -3,6 +3,8 @@ import type {
   DiscoverySemantics,
   UnifiedObservation,
 } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   CURVE_UNDERLYING_I128_SELECTOR,
@@ -71,6 +73,9 @@ export const curveUnderlyingDiscovery = {
       candidateAddress: Object.freeze({ from: "call-target" as const }),
     }]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared yet (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<CurveUnderlyingCandidate>;
 
 function decodeCandidate(

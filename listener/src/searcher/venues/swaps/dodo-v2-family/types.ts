@@ -16,7 +16,8 @@ import type { DodoPmmState } from "../dodo-pmm-math.js";
 export type DodoV2CandidateSource =
   | "sell-base-call"
   | "sell-quote-call"
-  | "swap-log";
+  | "swap-log"
+  | "pool-surface";
 
 export interface DodoV2Candidate extends FamilyCandidate {
   readonly candidateKind: "dodo-v2-pool";

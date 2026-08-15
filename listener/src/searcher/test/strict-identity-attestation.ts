@@ -207,7 +207,223 @@ async function main(): Promise<void> {
   );
   assert.equal(unknownHint, undefined);
 
-  console.log("strict identity attestation PASS (fail-closed paths + central cold-pool fallback)");
+
+  // Retain-channel contract: with channelOrder "reverse-binding-first" the
+  // central pipeline runs the catalog-issued reverse-binding capability
+  // before the fresh nomination channel. The synthetic family declares an
+  // implementation that materializes the address-surface observation, so
+  // the retained row is admitted through it; the stub runtime has no
+  // identity outcome, so the row fails in identity, not in observation.
+  const reverseBindingFamily = Object.freeze({
+    plugin: Object.freeze({
+      manifest: Object.freeze({
+        familyId: "synthetic:reverse-binding",
+        domain: "protocol" as const,
+        poolAdapterIds: Object.freeze(["synthetic-rb-pool"]),
+      }),
+      discovery: Object.freeze({
+        evidenceChannel: "nominate" as const,
+        sources: Object.freeze(["address-surface" as const]),
+        addressSurfaces: Object.freeze([Object.freeze({
+          id: "synthetic-surface",
+          kind: "interface" as const,
+          fingerprint: FINGERPRINT,
+        })]),
+        decodeCandidate: (input: {
+          readonly observation: UnifiedObservation;
+          readonly matchedPatternId: string;
+        }) => input.observation.kind === "address-surface" &&
+            input.matchedPatternId === "synthetic-surface"
+          ? Object.freeze({ candidateKind: "synthetic" as const })
+          : null,
+        candidateKey: () => POOL.toLowerCase(),
+        reverseBinding: Object.freeze({
+          kind: "implementation" as const,
+          reverseBinding: async () => Object.freeze([Object.freeze({
+            status: "verified" as const,
+            observation: Object.freeze({
+              kind: "address-surface" as const,
+              source: SOURCE,
+              address: POOL,
+              codeHash: ethers.keccak256("0x60806040"),
+              implementationWord: ethers.zeroPadValue("0x", 32),
+              interfaceFingerprints: Object.freeze([FINGERPRINT]),
+            }),
+          })]),
+        }),
+      }),
+      identity: Object.freeze({
+        variants: Object.freeze([]),
+        identityKey: () => POOL.toLowerCase(),
+      }),
+    }),
+  });
+  const rbCatalog = Object.freeze({
+    catalogHash: "e".repeat(64),
+    listAll: () => Object.freeze([reverseBindingFamily]),
+    forFamily: (id: string) => {
+      if (id !== "synthetic:reverse-binding") throw new Error("unknown family");
+      return reverseBindingFamily;
+    },
+    forStrictFamily: (id: string) => {
+      if (id !== "synthetic:reverse-binding") throw new Error("unknown family");
+      return reverseBindingFamily;
+    },
+    ownerOfAction: () => {
+      throw new Error("unknown action");
+    },
+    ownerOfPoolAdapter: (id: string) => {
+      if (id !== "synthetic-rb-pool") throw new Error("unknown pool adapter");
+      return "synthetic:reverse-binding";
+    },
+    matches: (observation: UnifiedObservation) =>
+      observation.kind === "address-surface" &&
+        observation.interfaceFingerprints?.includes(FINGERPRINT)
+      ? Object.freeze([Object.freeze({
+          familyId: "synthetic:reverse-binding",
+          patternId: "synthetic-surface",
+        })])
+      : Object.freeze([]),
+  }) as unknown as FamilyCapabilityCatalog;
+  let rbGetCodeCalls = 0;
+  const rbResult = await attestPoolIdentitiesStrict({
+    catalog: rbCatalog,
+    provider: {
+      call: async () => "0x",
+      getCode: async () => {
+        rbGetCodeCalls += 1;
+        return "0x60806040";
+      },
+      getStorage: async () => "0x" + "00".repeat(32),
+    },
+    runtime: runtime(false),
+    source: SOURCE,
+    pools: Object.freeze([Object.freeze({
+      address: POOL,
+      adapter: "synthetic-rb-pool",
+    })]),
+    channelOrder: "reverse-binding-first",
+  });
+  assert.equal(rbResult.accepted.length, 0);
+  assert.equal(rbResult.rejected.length, 1);
+  // The observation was materialized through the retain channel (verified
+  // reverse-binding observation, no central address-surface fallback): the
+  // universal no-code check is the only getCode call (1), and the row
+  // reaches the family lifecycle (which rejects the un-issued synthetic box
+  // before identity). The stub runtime has no identity outcome.
+  assert.equal(
+    rbGetCodeCalls,
+    1,
+    "retain-channel observation must bypass the central fallback getCode",
+  );
+  assert.match(
+    rbResult.rejected[0]?.reason ?? "",
+    /issued by the central catalog|identity/,
+    "retain-channel observation must reach the family lifecycle",
+  );
+
+  // Explicitly-unsupported declaration: the central pipeline skips the
+  // reverse-binding channel for that family and falls through to fresh
+  // nomination (which the family does not declare) and then the central
+  // address-surface fallback.
+  const unsupportedFamily = Object.freeze({
+    plugin: Object.freeze({
+      manifest: Object.freeze({
+        familyId: "synthetic:unsupported",
+        domain: "protocol" as const,
+        poolAdapterIds: Object.freeze(["synthetic-un-pool"]),
+      }),
+      discovery: Object.freeze({
+        evidenceChannel: "nominate" as const,
+        sources: Object.freeze(["address-surface" as const]),
+        addressSurfaces: Object.freeze([Object.freeze({
+          id: "synthetic-surface",
+          kind: "interface" as const,
+          fingerprint: FINGERPRINT,
+        })]),
+        decodeCandidate: (input: {
+          readonly observation: UnifiedObservation;
+          readonly matchedPatternId: string;
+        }) => input.observation.kind === "address-surface" &&
+            input.matchedPatternId === "synthetic-surface"
+          ? Object.freeze({ candidateKind: "synthetic" as const })
+          : null,
+        candidateKey: () => POOL.toLowerCase(),
+        reverseBinding: Object.freeze({
+          kind: "explicitly-unsupported" as const,
+          reason: "synthetic test: no retain channel",
+        }),
+      }),
+      identity: Object.freeze({
+        variants: Object.freeze([]),
+        identityKey: () => POOL.toLowerCase(),
+      }),
+    }),
+  });
+  const unCatalog = Object.freeze({
+    catalogHash: "f".repeat(64),
+    listAll: () => Object.freeze([unsupportedFamily]),
+    forFamily: (id: string) => {
+      if (id !== "synthetic:unsupported") throw new Error("unknown family");
+      return unsupportedFamily;
+    },
+    forStrictFamily: (id: string) => {
+      if (id !== "synthetic:unsupported") throw new Error("unknown family");
+      return unsupportedFamily;
+    },
+    ownerOfAction: () => {
+      throw new Error("unknown action");
+    },
+    ownerOfPoolAdapter: (id: string) => {
+      if (id !== "synthetic-un-pool") throw new Error("unknown pool adapter");
+      return "synthetic:unsupported";
+    },
+    matches: (observation: UnifiedObservation) =>
+      observation.kind === "address-surface" &&
+        observation.interfaceFingerprints?.includes(FINGERPRINT)
+      ? Object.freeze([Object.freeze({
+          familyId: "synthetic:unsupported",
+          patternId: "synthetic-surface",
+        })])
+      : Object.freeze([]),
+  }) as unknown as FamilyCapabilityCatalog;
+  let unGetCodeCalls = 0;
+  const unResult = await attestPoolIdentitiesStrict({
+    catalog: unCatalog,
+    provider: {
+      call: async () => "0x",
+      getCode: async () => {
+        unGetCodeCalls += 1;
+        return "0x60806040";
+      },
+      getStorage: async () => "0x" + "00".repeat(32),
+    },
+    runtime: runtime(false),
+    source: SOURCE,
+    pools: Object.freeze([Object.freeze({
+      address: POOL,
+      adapter: "synthetic-un-pool",
+    })]),
+    channelOrder: "reverse-binding-first",
+  });
+  assert.equal(unResult.accepted.length, 0);
+  assert.equal(unResult.rejected.length, 1);
+  // Explicitly-unsupported retain channel: the central pipeline skips
+  // reverse binding and falls through to fresh nomination (undeclared) and
+  // then the central address-surface fallback (second getCode call), and
+  // the row reaches the family lifecycle.
+  assert.equal(
+    unGetCodeCalls,
+    2,
+    "explicitly-unsupported retain channel must fall through to the central fallback",
+  );
+  assert.match(
+    unResult.rejected[0]?.reason ?? "",
+    /issued by the central catalog|identity/,
+    "explicitly-unsupported retain channel must reach the family lifecycle",
+  );
+
+  console.log("strict identity attestation PASS (fail-closed paths + central cold-pool fallback + retain-channel contract)");
 }
 
 main().catch((error) => {

@@ -1,4 +1,6 @@
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -49,4 +51,7 @@ export const rocksolidDiscovery = {
     opaqueLabels: Object.freeze(["rocksolid", "protocol:rocksolid"]),
     interfaceFingerprints: Object.freeze(["rocksolid-sync-deposit-v1"]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<RocksolidCandidate>;

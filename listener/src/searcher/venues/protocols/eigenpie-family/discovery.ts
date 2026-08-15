@@ -1,5 +1,7 @@
 import { ethers } from "ethers";
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -112,4 +114,7 @@ export const eigenpieDiscovery = {
       candidateAddress: Object.freeze({ from: "call-target" as const }),
     }]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<EigenpieCandidate>;

@@ -1,4 +1,6 @@
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -58,4 +60,7 @@ export const wstethDiscovery = {
     opaqueLabels: Object.freeze(["wsteth", "protocol:wsteth"]),
     interfaceFingerprints: Object.freeze(["wsteth-conversion-surface-v1"]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<WstethCandidate>;

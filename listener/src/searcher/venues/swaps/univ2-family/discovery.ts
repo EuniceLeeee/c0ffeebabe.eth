@@ -1,8 +1,10 @@
+import { ethers } from "ethers";
 import type {
   DiscoverySemantics,
   UnifiedObservation,
 } from "../../adapter-family-plugin.js";
 import { nominateUniv2 } from "./nomination.js";
+import { reverseBindUniv2 } from "./reverse-binding.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -56,6 +58,10 @@ export const univ2Discovery = {
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
   nominate: { nominate: nominateUniv2 },
+  reverseBinding: Object.freeze({
+    kind: "implementation" as const,
+    reverseBinding: reverseBindUniv2,
+  }),
 } satisfies DiscoverySemantics<UniV2Candidate>;
 
 function decodeCandidate(
@@ -84,13 +90,27 @@ function decodeCandidate(
     matchedPatternId === UNIV2_PAIR_SURFACE_PATTERN_ID &&
     observation.kind === "address-surface"
   ) {
+    // The retain-channel reverse binding may carry chain-truth hints
+    // (factory() read at the source block plus pool-entry tokens); the
+    // family lifecycle still re-verifies every hint on chain before
+    // admission, so a mismatch is a rejection, never a pass.
+    const opaque = observation.opaque as Readonly<Record<string, unknown>>;
     return Object.freeze({
       candidateKind: "univ2-pair" as const,
       sourceKind: "pair-surface" as const,
       pool: canonicalAddress(observation.address),
-      hintedFactory: null,
-      hintedToken0: null,
-      hintedToken1: null,
+      hintedFactory: typeof opaque.factory === "string" &&
+          ethers.isAddress(opaque.factory)
+        ? canonicalAddress(opaque.factory)
+        : null,
+      hintedToken0: typeof opaque.token0 === "string" &&
+          ethers.isAddress(opaque.token0)
+        ? canonicalAddress(opaque.token0)
+        : null,
+      hintedToken1: typeof opaque.token1 === "string" &&
+          ethers.isAddress(opaque.token1)
+        ? canonicalAddress(opaque.token1)
+        : null,
     });
   }
   if (

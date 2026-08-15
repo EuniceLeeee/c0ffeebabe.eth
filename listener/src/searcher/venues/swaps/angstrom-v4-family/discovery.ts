@@ -4,6 +4,8 @@ import type {
   DiscoverySemantics,
   UnifiedObservation,
 } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   ANGSTROM_ADAPTER_SWAP_ABI,
   ANGSTROM_ADAPTER_SWAP_SELECTOR,
@@ -61,6 +63,9 @@ export const angstromV4Discovery = {
   candidateKey: (candidate) =>
     `${candidate.manager.toLowerCase()}\u001f${candidate.poolId}`,
   nominate: { nominate: nominateAngstromV4 },
+  reverseBinding: explicitReverseBindingUnsupported(
+    "tx-bound family; no reverse-binding registry (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<AngstromV4Candidate>;
 
 function decodeCandidate(

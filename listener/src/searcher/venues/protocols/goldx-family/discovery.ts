@@ -1,4 +1,6 @@
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -47,4 +49,7 @@ export const goldxDiscovery = {
     opaqueLabels: Object.freeze(["goldx", "protocol:goldx"]),
     interfaceFingerprints: Object.freeze(["goldx-unit-mint-v1"]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<GoldxCandidate>;

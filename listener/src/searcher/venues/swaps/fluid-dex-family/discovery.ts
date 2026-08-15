@@ -1,4 +1,6 @@
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   FLUID_DEX_SWAP_SELECTOR,
@@ -73,4 +75,7 @@ export const fluidDexDiscovery = {
     opaqueLabels: Object.freeze(["fluid-dex", "fluid"]),
     interfaceFingerprints: Object.freeze(["fluid-dex:constantsView+swapIn"]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared yet (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<FluidDexCandidate>;

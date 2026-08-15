@@ -12,10 +12,12 @@ import {
 } from "./codec.js";
 import type { DodoV2Candidate } from "./types.js";
 import { nominateDodoV2 } from "./nomination.js";
+import { reverseBindDodoV2 } from "./reverse-binding.js";
 
 export const DODO_V2_SELL_BASE_PATTERN_ID = "dodo-v2-sell-base-call";
 export const DODO_V2_SELL_QUOTE_PATTERN_ID = "dodo-v2-sell-quote-call";
 export const DODO_V2_SWAP_LOG_PATTERN_ID = "dodo-v2-swap-log";
+export const DODO_V2_POOL_SURFACE_PATTERN_ID = "dodo-v2-pool-surface";
 
 export const dodoV2Discovery = {
   evidenceChannel: "nominate" as const,
@@ -37,6 +39,11 @@ export const dodoV2Discovery = {
     signature:
       "DODOSwap(address,address,uint256,uint256,address,address)",
   }],
+  addressSurfaces: [Object.freeze({
+    id: DODO_V2_POOL_SURFACE_PATTERN_ID,
+    kind: "interface" as const,
+    fingerprint: "dodo-pool-surface-v1",
+  })],
   decodeCandidate({ observation, matchedPatternId }) {
     try {
       return decodeCandidate(observation, matchedPatternId);
@@ -46,12 +53,30 @@ export const dodoV2Discovery = {
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
   nominate: { nominate: nominateDodoV2 },
+  reverseBinding: Object.freeze({
+    kind: "implementation" as const,
+    reverseBinding: reverseBindDodoV2,
+  }),
 } satisfies DiscoverySemantics<DodoV2Candidate>;
 
 function decodeCandidate(
   observation: UnifiedObservation,
   matchedPatternId: string,
 ): DodoV2Candidate | null {
+  if (
+    observation.kind === "address-surface" &&
+    matchedPatternId === DODO_V2_POOL_SURFACE_PATTERN_ID
+  ) {
+    // Retain-channel address surface: identity still re-verifies the pool
+    // behavior and registry membership on chain before admission.
+    return Object.freeze({
+      candidateKind: "dodo-v2-pool" as const,
+      sourceKind: "pool-surface" as const,
+      pool: canonicalAddress(observation.address),
+      hintedTokenIn: null,
+      hintedTokenOut: null,
+    });
+  }
   if (
     observation.kind === "call" &&
     matchedPatternId === DODO_V2_SELL_BASE_PATTERN_ID

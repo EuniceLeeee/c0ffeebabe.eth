@@ -13,8 +13,10 @@ import type { FamilyCapabilityCatalog } from
 import {
   executeAdapterFamilyLifecycleBatch,
 } from "./venues/adapter-family-runtime.js";
-import { executeCatalogCaptureNominations } from
-  "./venues/capture-materialization.js";
+import {
+  executeCatalogCaptureNominations,
+  executeCatalogReverseBindings,
+} from "./venues/capture-materialization.js";
 import { createStrictCentralAdapterRuntime } from
   "./strict-central-adapter-runtime.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
@@ -113,6 +115,16 @@ export async function attestPoolIdentitiesStrict<
     readonly adapter: string;
     readonly venueId?: string;
   } | null;
+  /**
+   * Central evidence-channel order for this attestation batch. Default
+   * "nominate-first" keeps fresh discovery on the plugin nomination channel
+   * (recent observation / trace evidence). "reverse-binding-first" runs the
+   * retain channel first (cold-pool reverse binding from chain truth) and
+   * only falls through to fresh nomination when the retain channel produced
+   * no admissible observation — the central retained-attestation strategy.
+   * The plugin never decides this order.
+   */
+  readonly channelOrder?: "reverse-binding-first" | "nominate-first";
 }): Promise<{
   readonly accepted: readonly StrictAttestedPool<Pool>[];
   readonly rejected: readonly StrictRejectedPool<Pool>[];
@@ -175,23 +187,47 @@ export async function attestPoolIdentitiesStrict<
         return;
       }
       // Observation materialization is plugin-owned: run the catalog-issued
-      // nomination capability for this single pool (address + opaque adapter
-      // label). The plugin re-materializes the observation it declares
-      // (address-surface probe, recent log reverse lookup, or tx seed); the
-      // framework only executes and admits. No protocol semantics here.
-      const observations = await executeCatalogCaptureNominations({
-        catalog: input.catalog,
-        source: input.source,
-        nominations: Object.freeze([Object.freeze({
-          address,
-          // Pool entry fields (adapter, poolId, factory, tokens, ...) ride in
-          // the plugin-owned opaque payload; the framework does not interpret
-          // any of them, the owning plugin's nomination consumes what it
-          // declares. Zero protocol semantics in central paths.
-          opaque: Object.freeze(entryOpaque(pool)) as never,
-        })]),
-        provider: nominationProvider,
-      });
+      // capability for this single pool (address + opaque adapter label).
+      // The central evidence-channel order decides whether the retain
+      // channel (cold-pool reverse binding from chain truth) runs before
+      // the fresh nomination channel (recent log / trace evidence); the
+      // plugin never decides this order. No protocol semantics here.
+      const nominations = Object.freeze([Object.freeze({
+        address,
+        // Pool entry fields (adapter, poolId, factory, tokens, ...) ride in
+        // the plugin-owned opaque payload; the framework does not interpret
+        // any of them, the owning plugin's nomination consumes what it
+        // declares. Zero protocol semantics in central paths.
+        opaque: Object.freeze(entryOpaque(pool)) as never,
+      })]);
+      let observations: readonly UnifiedObservation[];
+      if (input.channelOrder === "reverse-binding-first") {
+        // Retain channel first: reverse binding needs no recent activity and
+        // is the cheap chain-truth path for retained rows. Fall through to
+        // the fresh nomination channel only when it produced no admissible
+        // observation (explicit unsupported / failed / no match).
+        observations = await executeCatalogReverseBindings({
+          catalog: input.catalog,
+          source: input.source,
+          nominations,
+          provider: nominationProvider,
+        });
+        if (observations.length === 0) {
+          observations = await executeCatalogCaptureNominations({
+            catalog: input.catalog,
+            source: input.source,
+            nominations,
+            provider: nominationProvider,
+          });
+        }
+      } else {
+        observations = await executeCatalogCaptureNominations({
+          catalog: input.catalog,
+          source: input.source,
+          nominations,
+          provider: nominationProvider,
+        });
+      }
       let observation: UnifiedObservation | undefined = observations[0];
       if (observation === undefined) {
         console.log(`[attest-debug] ${address} plugin nomination empty; central fallback`);
@@ -532,6 +568,13 @@ export async function attestPoolsStrictFromProvider<Pool extends {
   };
   readonly blockNumber: number;
   readonly pools: readonly Pool[];
+  /**
+   * Central evidence-channel order (see attestPoolIdentitiesStrict).
+   * Retained re-attestation passes "reverse-binding-first" (retain channel
+   * from chain truth before fresh nomination); fresh discovery keeps the
+   * default "nominate-first".
+   */
+  readonly channelOrder?: "reverse-binding-first" | "nominate-first";
 }): Promise<{
   readonly accepted: readonly StrictAttestedPool<Pool>[];
   readonly rejected: readonly StrictRejectedPool<Pool>[];
@@ -549,6 +592,9 @@ export async function attestPoolsStrictFromProvider<Pool extends {
     }),
     pools: input.pools,
     adapterForLineage: (lineageId) => legacyLabelsForLineage(lineageId),
+    ...(input.channelOrder === undefined
+      ? {}
+      : { channelOrder: input.channelOrder }),
   });
 }
 

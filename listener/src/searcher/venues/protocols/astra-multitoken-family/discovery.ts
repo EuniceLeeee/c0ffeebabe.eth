@@ -2,6 +2,8 @@ import type {
   DiscoverySemantics,
   UnifiedObservation,
 } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import { hashCanonical } from "../../canonical-value.js";
 import {
   ASTRA_MULTITOKEN_CHANGE_SELECTOR,
@@ -86,6 +88,9 @@ export const astraMultiTokenDiscovery = {
       candidateAddress: Object.freeze({ from: "call-target" as const }),
     }]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<AstraMultiTokenCandidate>;
 
 function decodeCallCandidate(

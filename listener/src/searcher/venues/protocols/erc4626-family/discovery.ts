@@ -1,4 +1,6 @@
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import { canonicalAddress, lowerAddress } from "../standard-family/common.js";
 import {
   ERC4626_DEPOSIT_CALL_PATTERN_ID,
@@ -99,4 +101,7 @@ export const erc4626Discovery: DiscoverySemantics<Erc4626Candidate> =
       opaqueLabels: Object.freeze(["erc4626", "protocol:erc4626"]),
       interfaceFingerprints: Object.freeze(["erc4626-standard-behavior-v1"]),
     }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared (explicit unsupported)",
+  ),
   };

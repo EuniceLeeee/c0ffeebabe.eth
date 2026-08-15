@@ -10,9 +10,11 @@ import {
   UNIV4_SWAP_TOPIC,
 } from "../../swaps/univ4-abi.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
-import { canonicalPoolId, canonicalPoolKey } from "./codec.js";
-import { resolveV4PoolKeyViaPositionManager } from
-  "../univ4-pool-discovery.js";
+import { canonicalPoolId } from "./codec.js";
+import {
+  isUniv4OpaqueLabel,
+  opaquePoolId,
+} from "./reverse-binding.js";
 
 interface RecentUniv4SwapIndex {
   readonly providerId: number;
@@ -171,45 +173,12 @@ export async function nominateUniv4(input: {
           continue;
         }
       }
-      // Cold-pool fallback: no Swap in the retained window. Recover the
-      // real PoolKey through the PositionManager reverse lookup (chain
-      // truth, no transaction needed) and carry it in the address-surface
-      // opaque payload. Identity still re-verifies the pool key against
-      // the manager at the source block.
-      const resolved = await resolveV4PoolKeyViaPositionManager(
-        // The reverse lookup passes an AbortSignal control as the second
-        // call argument; the nomination provider treats that slot as a
-        // block tag, so drop it (single-call, no cancellation needed).
-        { call: (req: { to: string; data: string }) =>
-            input.provider.call(req, input.source.number) } as never,
-        ADDR.UNISWAP_V4_POSITION_MANAGER,
-        poolId,
-      );
-      if (resolved === null) continue;
-      const poolKey = canonicalPoolKey({
-        currency0: resolved.currency0,
-        currency1: resolved.currency1,
-        fee: resolved.fee,
-        tickSpacing: resolved.tickSpacing,
-        hooks: resolved.hooks,
-      });
-      const code = await input.provider.getCode(
-        ADDR.UNISWAP_V4_POOL_MANAGER,
-        input.source.number,
-      );
-      if (!ethers.isHexString(code) || code === "0x") continue;
-      results.push(Object.freeze({
-        kind: "address-surface" as const,
-        source: input.source,
-        address: manager,
-        codeHash: ethers.keccak256(code).toLowerCase(),
-        implementationWord: ethers.zeroPadValue("0x", 32).toLowerCase(),
-        interfaceFingerprints: Object.freeze(["univ4-pool-surface-v1"]),
-        opaque: Object.freeze({
-          poolId: canonicalPoolId(poolId).toLowerCase(),
-          poolKey,
-        } as never),
-      } as never));
+      // Cold-pool fallback no longer lives here: the retain channel
+      // (PositionManager reverse binding, no recent activity needed) is a
+      // plugin-owned reverseBinding capability and the central retained
+      // attestation decides when it runs before this fresh channel. The
+      // fresh channel only carries real recent-observation evidence.
+      continue;
     } catch {
       // One unreadable nomination must not block the next one.
     }
@@ -250,26 +219,4 @@ function findManagerSwapFrame(
     }
   }
   return null;
-}
-
-function isUniv4OpaqueLabel(
-  opaque: Readonly<Record<string, unknown>>,
-): boolean {
-  const label = opaque.adapter ?? opaque.venueId ?? opaque.adapterId;
-  return typeof label === "string" &&
-    (label === "univ4" || label === "univ4-standard");
-}
-
-function opaquePoolId(
-  opaque: Readonly<Record<string, unknown>>,
-): string | null {
-  const raw = opaque.poolId ?? opaque.id;
-  if (typeof raw !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(raw)) {
-    return null;
-  }
-  try {
-    return canonicalPoolId(String(raw)).toLowerCase();
-  } catch {
-    return null;
-  }
 }

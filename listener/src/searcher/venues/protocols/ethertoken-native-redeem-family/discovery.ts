@@ -1,5 +1,7 @@
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -61,4 +63,7 @@ export const etherTokenNativeRedeemDiscovery = {
       candidateAddress: Object.freeze({ from: "call-target" as const }),
     }]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<EtherTokenNativeRedeemCandidate>;

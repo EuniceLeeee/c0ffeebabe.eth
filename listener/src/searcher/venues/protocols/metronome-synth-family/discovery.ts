@@ -1,5 +1,7 @@
 import { ethers } from "ethers";
 import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
+import { explicitReverseBindingUnsupported } from
+  "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -94,4 +96,7 @@ export const metronomeSynthDiscovery = {
     opaqueLabels: Object.freeze(["metronome-synth", "protocol:metronome-synth"]),
     interfaceFingerprints: Object.freeze(["metronome-synth-membership-and-quote-v1"]),
   }),
+  reverseBinding: explicitReverseBindingUnsupported(
+    "no reverse-binding registry declared (explicit unsupported)",
+  ),
 } satisfies DiscoverySemantics<MetronomeSynthCandidate>;
