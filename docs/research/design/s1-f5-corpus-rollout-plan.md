@@ -727,6 +727,42 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   需解耦其 harness import：architecture-migration-capture /
   architecture-migration-parity-runner）；adapter-family-shared-surface-
   conformance 的 AST 门文件清单需移除已删文件。
+### F6 执行进度（2026-08-16 续）
+
+- **B 对（61fe74a9 + 本轮）**：startup-dex-identity-retry legacy 实现已删
+  （strictStartupDexIdentityRetryStage 唯一权威）。**B 对剩余**：
+  protocol-instance-discovery 的 createCanonicalProtocolIdentityAttester
+  内部仍走 legacy attestPoolIdentities——strict 切换方案已验证：
+  attester 改用 attestPoolsStrictFromProvider（context.backend +
+  context.blockNumber 派生），但 **erc4626/fluid/silo 的 identity 需要
+  effect-delta simulator**（minimal runtime 无）→ 4 个测试
+  （erc4626-instance-discovery / erc4626-silo-redeem-family /
+  fluid-family-admission / protocol-discovery-live-smoke）红。**决策**：
+  attester 切换与 **F8 中央 runtime 装配**（simulator 注入 + context
+  identityRuntime 通道 + 测试 fake simulator）**一起落地**（生产 runtime
+  带 revm transport 后这些族 identity 自然通过），已回退保持全绿。
+- **C 对（本轮验证关闭）**：coordinator/main 的 landedPoolDiscovery 消费
+  已是 strict/通用（coverage 跟踪 + retained 物化重试
+  consumesMaterializationRetries），无 shadow-only 权威残留；landed
+  registry 为通用 registry（插件声明派生）合法保留。
+- **D 对（68329009，已删）**：productionPoolUniverseSourceFingerprints
+  legacy 版删除；strict 版去掉 identity-policies 指纹（strict catalog
+  派生 surface 是唯一 identity/lineage 权威），保留 landed/mature/v2
+  universe 生成参数指纹；poolUniverseSourceFingerprints 输入去
+  identityPolicies；测试适配（conversion-freshness-universe-manifest /
+  pool-universe）。pool-universe 15/15、strict-universe-source-fingerprints、
+  conversion-freshness-production-evidence 全绿。
+- **F 对（本轮验证关闭）**：blockscan revision 已全 strict 派生
+  （strictDefinitionBoundaryHash ?? familyId，b9ab331d）；assembleSchema
+  无定义（已删）；手工 adapterSchemaRevision 无 blockscan 消费（仅
+  manifest 观测 + F9 receipt 检查）；compileStaticSchema 是族能力接口
+  保留。blockscan-state-coordinator / -backend / -startup-warm 42/42 绿。
+- **A 对（剩余）**：revm-live-backend 的 quoteByAdapter legacy exact 分支
+  + overlayApproveSpender legacy 分支（strict execution projection
+  686a5689 + strict quote 100% 覆盖后删除前置已满足，下一轮删除）。
+- **harness 删除（剩余）**：按上轮清单（14 核心文件 + 20 测试 + collect
+  脚本；fixture-replay 解耦保留）。
+
 
 
 ### F5 验收模型方向修正：生产多跳闭环（2026-08-15 用户裁定，最新为准）
