@@ -1022,6 +1022,14 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   `MigrationCleanupReceipt.verdict=pass` + AST/import-closure 证明。
 - **F9 前置已备**：s1-cutover-readiness PASS、default-authority-cutover-
   gate PASS（合同）、F5 live 事实已齐、8 族测试 + live smokes 全绿。
+- **F9 授权门**：设计文档明确“默认 authority 切换（需 cutover-readiness
+  ready + 人工授权）”——把 `PRODUCTION_ADAPTER_FAMILIES` 从 legacy
+  baseline 切到 strict catalog 投影、移除 28 个生产消费者的 legacy
+  权威读取，属人工授权门（对照 §4 Rule 1 类安全门，非自动可执行）；
+  D-011 已授权 Phase E legacy 删除 slice（可回退、逐 slice 保绿），
+  但默认 authority 本体切换仍需用户显式 OK。当前状态：全部自动化
+  前置完成（F5 事实 + 两道门 + F8 收口 + 8 族测试 + live smokes），
+  F9 cutover 本体等待人工授权后执行。
 - **F9 预检发现（本轮，待 F5 后执行）**：blockscan-state-capability 族
   hook 仍含 `assembleSchema`/`extendStaticSchema`/`compileStaticSchema`
   接口，且 univ2-standard/univ4/dodo-v2/angstrom-v4 等 legacy 适配器仍
