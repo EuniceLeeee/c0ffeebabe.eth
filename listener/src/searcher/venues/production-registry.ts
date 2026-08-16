@@ -100,7 +100,10 @@ const POOL_UNIVERSE_DISCOVERY_CONTRACT_VERSION = 1;
  */
 export function productionPoolUniverseSourceFingerprintsStrict():
   readonly string[] {
-  return Object.freeze([
+  // The two parts are independently sorted; the union must be canonicalized
+  // (sorted + unique) because the universe manifest parser and the deploy
+  // trust checker compare the set element-wise against this projection.
+  return Object.freeze([...new Set([
     ...poolUniverseSourceFingerprints({
       landedSourceFingerprints: PRODUCTION_ADAPTER_FAMILIES
         .landedPoolDiscovery()
@@ -115,9 +118,8 @@ export function productionPoolUniverseSourceFingerprintsStrict():
     ...strictCatalogUniverseSourceFingerprints({
       catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
     }),
-  ]);
+  ])].sort());
 }
-
 
 export function poolUniverseSourceFingerprints(input: {
   readonly landedSourceFingerprints: readonly string[];
