@@ -1022,14 +1022,19 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   `MigrationCleanupReceipt.verdict=pass` + AST/import-closure 证明。
 - **F9 前置已备**：s1-cutover-readiness PASS、default-authority-cutover-
   gate PASS（合同）、F5 live 事实已齐、8 族测试 + live smokes 全绿。
-- **F9 授权门**：设计文档明确“默认 authority 切换（需 cutover-readiness
-  ready + 人工授权）”——把 `PRODUCTION_ADAPTER_FAMILIES` 从 legacy
-  baseline 切到 strict catalog 投影、移除 28 个生产消费者的 legacy
-  权威读取，属人工授权门（对照 §4 Rule 1 类安全门，非自动可执行）；
-  D-011 已授权 Phase E legacy 删除 slice（可回退、逐 slice 保绿），
-  但默认 authority 本体切换仍需用户显式 OK。当前状态：全部自动化
-  前置完成（F5 事实 + 两道门 + F8 收口 + 8 族测试 + live smokes），
-  F9 cutover 本体等待人工授权后执行。
+- **授权门纠正（2026-08-16 用户裁定，覆盖此前“F9 等待人工授权”条目）**：
+  用户执行顺序为 F6 legacy 删除 → F7 production composition strict
+  closure → **F8 = 完成 default-authority cutover**（中央 runtime 装配
+  authority/scheduler/simulator 到位）→ F5 终态验收（live strict 管线）
+  → F9（§18.3/§20.2.6 receipt verdict=pass）。F7/F8 cutover（含默认
+  authority 切换本体）**均已授权**，不是待人工门；仅签名/广播/提额/
+  扩大 envelope 保持人工门。F8 默认 authority cutover 执行中：把
+  `PRODUCTION_ADAPTER_FAMILIES` 从 legacy baseline 切到 strict catalog
+  投影（含 findForPool/findForEdge/routes/ownership 投影），移除 28 个
+  生产消费者的 legacy 权威读取，`LEGACY_PRODUCTION_ADAPTER_FAMILIES`
+  与 `PRODUCTION_FROZEN_LEGACY_ROUTE_BASELINE` 权威退役（§18.3 gate
+  1/6）。前置已备：F5 事实 + 两道门 + F8 收口 + 8 族测试 + live smokes
+  全绿。
 - **F9 预检发现（本轮，待 F5 后执行）**：blockscan-state-capability 族
   hook 仍含 `assembleSchema`/`extendStaticSchema`/`compileStaticSchema`
   接口，且 univ2-standard/univ4/dodo-v2/angstrom-v4 等 legacy 适配器仍
