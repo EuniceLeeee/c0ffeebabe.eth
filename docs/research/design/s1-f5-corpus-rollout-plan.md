@@ -1003,8 +1003,25 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   在本窗口为冷池/电路保护（startup minimal-runtime 导致的 retryable 触
   发 family circuit，后续 pass 恢复；live-smoke 已单池证明 revm 准入），
   按用户裁定单族缺口不阻塞验收顺序。
-- **剩余**：F9（MigrationCleanupReceipt.verdict=pass + AST/import-closure
-  证明；含 assembleSchema/extendStaticSchema 族 hook 清理）。
+- **F9 范围评估（本轮）**：`migration-cleanup-receipt` 生成器已存在且
+  诚实报 `verdict: fail`（`LEGACY_PRODUCTION_ADAPTER_FAMILIES` 仍在
+  production closure——`PRODUCTION_FROZEN_LEGACY_ROUTE_BASELINE` 仍是
+  `PRODUCTION_ADAPTER_FAMILIES` 生产权威，strict catalog 仍 shadow）；
+  28 个生产文件消费 legacy 权威（planner/solver/detector/backends/
+  active-pool-discovery 等）；`default-authority-cutover-gate` 前置：
+  strictConsumerActive + legacyAuthorityActive=false + batchParity +
+  heldOutNegatives + systemicLiveGate。
+- **F9 剩余工作**：① 默认 authority cutover——把 28 个生产消费者从
+  legacy `PRODUCTION_ADAPTER_FAMILIES` 切到 strict catalog 投影（含
+  findForPool/findForEdge/routes/ownership 投影），`PRODUCTION_ADAPTER_
+  FAMILIES` 变为 strict-only；② 移除 `LEGACY_PRODUCTION_ADAPTER_FAMILIES`
+  与 `PRODUCTION_FROZEN_LEGACY_ROUTE_BASELINE` 权威（§18.3 gate 1/6）；
+  ③ 族 hook 清理确认（assembleSchema/extendStaticSchema 族内声明为
+  plugin 能力可留，中央闭包零命中已由 receipt scan 证明）；④ 绑定
+  batchParity/heldOut/systemicLive/catalog/clean-cold/warm 哈希 →
+  `MigrationCleanupReceipt.verdict=pass` + AST/import-closure 证明。
+- **F9 前置已备**：s1-cutover-readiness PASS、default-authority-cutover-
+  gate PASS（合同）、F5 live 事实已齐、8 族测试 + live smokes 全绿。
 - **F9 预检发现（本轮，待 F5 后执行）**：blockscan-state-capability 族
   hook 仍含 `assembleSchema`/`extendStaticSchema`/`compileStaticSchema`
   接口，且 univ2-standard/univ4/dodo-v2/angstrom-v4 等 legacy 适配器仍
