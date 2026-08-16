@@ -1092,3 +1092,16 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
 - **下一步**：materializer v18（后台运行中）→ descriptor v14（带 path）→
   challenger 17（多跳执行）→ 逐 case 判读（环方向与族 route 不匹配等
   如实修，不猜不降级）。
+
+### F8 default-authority cutover 完成（2026-08-16，c949d56f）
+
+- **中央 registry 切 strict-only**：`PRODUCTION_ADAPTER_FAMILIES` 改为
+  `strict-catalog-registry-projection.ts` 投影（22 族，legacy 表面元数据
+  桥接或 `StrictOnlySurfaceError` fail-closed）；blockscan pricing/funding
+  读取走 committed strict views（main 安装中央 views provider）；路由图
+  从 strict views 取边；LEGACY 权威列表与 legacy identity-policy 机器删除。
+- 两道门（s1-cutover-readiness / default-authority-cutover-gate）、shadow
+  suite 37/37、build 绿；节点部署 c949d56f 中（universe 需按新指纹重建——
+  legacy retain 行的 provenance source 已失效，fresh 2d 重建后台进行）。
+- 剩余 F9 项：legacy solver call-site（quoter/plan-builder/revm/victim/
+  credit/pending-evidence）删除 → MigrationCleanupReceipt verdict=pass。
