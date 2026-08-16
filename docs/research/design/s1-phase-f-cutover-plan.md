@@ -287,6 +287,24 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   fixture，如 venue-identity/victim-effect/route-adapters/dodo-v2）。
   遗留 legacy-machinery 测试（swap-observation/protocol-blockscan-state 的
   fixture 断言、amtsearch 的 legacy solver plan 构建）随 F9 删除或改写。
+- **2026-08-17 节点 runtime 收敛（commit ed028aee→6342b759，节点 8 次部署）**：F8
+  默认 authority 下 strict 管线在 production 循环真实提交。四个运行时缺口逐个
+  关闭：(a) 协议 trace 门依赖空 legacy discoverableRoutes——strict catalog log
+  pattern topics 模块级注入（ed028aee）；(b) DEX backfill lane 的 heavyweight
+  strict incumbent attestation 卡住且 DEX-preempt 永远饿死独立 protocol lane——
+  protocol backfill 与 DEX 并行调度（739bc30d）+ observed cursor 锚定 startup
+  source（c85a3c9d）；(c) strict projected adapters 缺 discovery capability，
+  协议扫描零 adapter——DiscoverySemantics→legacy scan 词汇桥（candidateSources/
+  eventTopics/callSelectors/address-surface+observed-call matcher、fail-closed
+  identity resolver、cache policy 持久化 matched candidates；8503de55+9b4de6a5），
+  silo-redeem/ethertoken/self-burn 补 observed log pattern；(d) address-surface
+  observation 误用 adapterId|address 缓存键（bd6c7d3e）+ blockscan observed lane
+  事件源入 observedEvents（6342b759）。节点证据：strict catalog root committed:
+  revision=N instances=16 pricing=16（多族实例持续提交）、protocol discovery
+  address_probe 2400+/pass、observed-call 169 事件、lifecycle 仅剩 fluid-dex
+  identity rpc 与 silo no-outcome 两族缺口。node env：
+  SEARCHER_DISCOVERY_BACKFILL_ENABLED=1（F5 冻结 0 会饿死 strict 观察面）、
+  universe 1500 pools。本地两道门 PASS、shadow suite 全绿、build 绿。
 - **2026-08-14 完成（commit 16cf4436）**：solver quoteSource 移除
   `strictQuoteSource ?? liveBackend` 的 legacy fallback——strict quote
   source 是唯一 solver 报价路径（composition 默认后 strict 总存在；
