@@ -269,7 +269,7 @@ export function deriveLiveDiscoveryAddressSurfaceObservations(input: {
     }
   }
   const byFamily = new Map<FamilyId, UnifiedObservation[]>();
-  for (const [address, entry] of input.publication.protocolEvidenceCache
+  for (const [_key, entry] of input.publication.protocolEvidenceCache
     .addressEntries) {
     if (entry.candidate === null) continue;
     const familyId = input.familyIdForAdapter(entry.adapterId);
@@ -280,6 +280,10 @@ export function deriveLiveDiscoveryAddressSurfaceObservations(input: {
           (pattern) => pattern.kind === "interface",
         ).map((pattern) => pattern.fingerprint)
       : undefined;
+    // The cache key is "adapterId|address"; the address lives on the entry
+    // value. Using the key would feed "fluid-dex|0x..." to the family
+    // decodeCandidate (invalid address).
+    const address = entry.address;
     const observation: UnifiedObservation = Object.freeze({
       kind: "address-surface",
       source: input.source,
