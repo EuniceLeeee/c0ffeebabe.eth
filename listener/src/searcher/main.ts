@@ -3842,6 +3842,30 @@ interface HandleCtx {
 }
 
 /**
+ * F8: the strict catalog's plugin log patterns are the enumerable receipt
+ * surface for the protocol-trace gate (the legacy adapter list is empty, so
+ * the trace gate cannot infer patterns from it). Module-level because
+ * handleHint is a module-level function.
+ */
+let strictTraceTopics: ReadonlySet<string> | null = null;
+const strictCatalogTraceTopics = (): ReadonlySet<string> => {
+  if (strictTraceTopics === null) {
+    const topics = new Set<string>();
+    for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+      .listAll()) {
+      const discovery = "discovery" in family.plugin
+        ? family.plugin.discovery
+        : null;
+      for (const pattern of discovery?.logPatterns ?? []) {
+        topics.add(pattern.topic.toLowerCase());
+      }
+    }
+    strictTraceTopics = topics;
+  }
+  return strictTraceTopics;
+};
+
+/**
  * Process a single MEV-Share hint. Two paths:
  *
  * Hint logs are fragmentary observation evidence. They can nominate pools and
@@ -4150,6 +4174,9 @@ async function handleHint(
         PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes().filter((adapter) =>
           !adapter.requiresProtocolEdgesFlag || ctx.config.enableProtocolEdges
         ),
+        // F8: the strict catalog's plugin log patterns are the enumerable
+        // receipt surface; the legacy adapter list is empty.
+        strictCatalogTraceTopics(),
       )
     ) {
       void ctx.observeProtocolTxHash(txHash);

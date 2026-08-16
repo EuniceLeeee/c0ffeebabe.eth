@@ -209,13 +209,24 @@ export function createProtocolTraceMemo(
   };
 }
 
-/** Receipt-only, cheap gate for deciding whether a call trace can teach us a protocol route. */
+/**
+ * Receipt-only, cheap gate for deciding whether a call trace can teach us a
+ * protocol route. F8: the legacy adapter list is empty (the strict catalog
+ * owns discovery), so callers pass the strict catalog's log-pattern topics
+ * as the enumerable surface; the LP mint/burn heuristic stays unchanged.
+ */
 export function shouldTraceForProtocolDiscovery(
   logs: readonly ProtocolDiscoveryLog[],
   adapters: readonly RouteLegAdapter[],
+  strictCatalogTopics?: ReadonlySet<string>,
 ): boolean {
   const declaredTopics = registeredEventTopics(adapters);
-  if (logs.some((log) => declaredTopics.has(log.topics[0]?.toLowerCase() ?? ""))) return true;
+  if (
+    logs.some((log) =>
+      declaredTopics.has(log.topics[0]?.toLowerCase() ?? "") ||
+      strictCatalogTopics?.has(log.topics[0]?.toLowerCase() ?? "")
+    )
+  ) return true;
   const lpEmitters = new Set(
     logs
       .filter((log) => LP_TOPICS.has(log.topics[0]?.toLowerCase() ?? ""))
