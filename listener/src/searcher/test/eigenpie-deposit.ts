@@ -17,10 +17,8 @@ import {
   attestPoolIdentities,
   createPoolIdentityCache,
 } from "../venues/identity.js";
-import {
-  PRODUCTION_IDENTITY_RESOLVERS,
-  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-} from "../venues/production-registry.js";
+import { PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS } from
+  "../venues/production-registry.js";
 import {
   EIGENPIE_POOL_ADAPTER,
   pairInstanceId,
@@ -238,7 +236,15 @@ const candidate = await matcher({
 assert(candidate !== null, "receipt + causal trace must produce a candidate");
 assert(candidate.pool.logicalInstanceId === pairInstanceId(TOKEN_IN, TOKEN_OUT), "pair instance id");
 const ordinaryIntake = await attestPoolIdentities(context.backend, [candidate.pool], {
-  identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  // F8: production identity policy machinery is strict-only; this fixture
+  // rebuilds the legacy Eigenpie seed policy locally.
+  identityRegistry: new IdentityResolverRegistry(
+    Object.freeze([{
+      poolAdapter: EIGENPIE_POOL_ADAPTER,
+      policy: "trusted-singleton-seed" as const,
+    }]),
+    (poolAdapter) => poolAdapter === EIGENPIE_POOL_ADAPTER,
+  ),
 });
 assert(
   ordinaryIntake.accepted.length === 0 &&

@@ -8,9 +8,14 @@ import {
 } from "../detector/victim-effect.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { metronomeSynthAdapter } from "../venues/protocols/metronome.js";
 
-const ORACLE_VICTIMS = PRODUCTION_ADAPTER_FAMILIES.oracleVictims();
+// F8: the production registry projects no legacy oracle-victim descriptors
+// (oracle victim detection is strict-owned). This fixture exercises the legacy
+// oracle-victim machinery from the legacy adapter's own declaration.
+const ORACLE_VICTIMS = metronomeSynthAdapter.oracleVictim === undefined
+  ? []
+  : [metronomeSynthAdapter.oracleVictim];
 
 const QUOTER = new ethers.Interface([
   "function quoteSwapOut(address syntheticTokenIn, address syntheticTokenOut, uint256 amountIn) " +

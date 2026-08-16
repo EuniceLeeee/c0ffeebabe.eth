@@ -37,8 +37,8 @@ try {
   assert(overrides.length === expected.size, "blockscan overrides must accept every production adapter");
   assert(
     overrides.some((entry) => entry.adapter === "curve-underlying") &&
-      overrides.some((entry) => entry.adapter === "balancer-v3"),
-    "blockscan overrides must accept Curve underlying and Balancer V3",
+      overrides.some((entry) => entry.adapter === "univ4"),
+    "blockscan overrides must accept Curve underlying and Univ4 adapters",
   );
 
   const universePath = join(dir, "active-pools.json");

@@ -1943,10 +1943,12 @@ async function execute<Schema, Snapshot>(
       .pricing("swap")
       .find((family) => family.id === familyId);
     assert(production, `non-production swap purity fixture ${familyId}`);
-    assert.equal(
+    // F8: production pricing is the strict-views-backed capability; the
+    // legacy fixture capability is no longer the production authority.
+    assert.notEqual(
       production.pricingState,
       capability,
-      `${familyId}: fixture tests the wrong pricingState capability`,
+      `${familyId}: production pricingState must be strict-views-backed`,
     );
     assert(
       !pureFixtureFamilyIds.has(familyId),

@@ -7,7 +7,8 @@ import type {
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import { STRICT_IDENTITY_ADMISSION } from "../venues/admission.js";
 import { dodoV2IdentityResolver } from "../venues/identity.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { RouteLegRegistry } from "../venues/route-leg-registry.js";
+import { dodoV2Adapter } from "../venues/swaps/dodo-v2.js";
 import {
   dodoV2BlockScanState,
   dodoV2PoolIface,
@@ -244,8 +245,11 @@ class Backend implements TokenQueryBackend {
 const previousQuoteActor = process.env.BOTVM_OWNER;
 process.env.BOTVM_OWNER = QUOTE_ACTOR;
 const backend = new Backend();
-const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily("custom-swap:dodo-v2");
-const edges = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(
+// F8: production route surfaces are strict-only; the legacy dodo family
+// exercises the legacy graph/quote/plan machinery through its own registry.
+const dodoRegistry = new RouteLegRegistry([dodoV2Adapter]);
+const adapter = dodoRegistry.forFamily("custom-swap:dodo-v2");
+const edges = await dodoRegistry.buildEdges(
   { address: POOL, adapter: "dodo-v2", score: 9 },
   backend,
 );

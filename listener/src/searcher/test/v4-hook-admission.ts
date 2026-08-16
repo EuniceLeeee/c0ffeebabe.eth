@@ -1,4 +1,6 @@
 import { ADDR } from "../../shared/constants/addresses.js";
+import { setProductionStrictViewsProvider } from
+  "../venues/strict-catalog-registry-projection.js";
 import {
   buildTokenGraph,
   buildTokenGraphWithResults,
@@ -79,57 +81,113 @@ async function edgeCount(pool: PoolEntry): Promise<number> {
 }
 
 async function main(): Promise<void> {
-  const hooked = await buildTokenGraphWithResults(stubBackend, [hookedPool]);
-  const hooked_edges = hooked.edges.length;
-  const hookless_native_edges = await edgeCount(hooklessNativePool);
-  const nativeWeth = await buildTokenGraphWithResults(
-    stubBackend,
-    [nativeWethPool],
+  // F8: the routing graph sources its edges from the committed strict views;
+  // V4 hook admission semantics are strict-owned. The fixture commits only
+  // the hookless native instance (2 edges); hooked/native-self pools are
+  // absent from the committed views and stay retryable at the graph level.
+  const source = Object.freeze({
+    number: 100,
+    hash: "0x" + "00".repeat(32),
+    generation: 1,
+  });
+  const hooklessEdges = [0, 1].map((index) => Object.freeze({
+    adapterId: "univ4-unlock",
+    target: ADDR.UNISWAP_V4_POOL_MANAGER,
+    tokenIn: index === 0 ? ADDR.ZERO : "0xc8Fb80fCc03f699C70ff0CC08C09106288888888",
+    tokenOut: index === 0 ? "0xc8Fb80fCc03f699C70ff0CC08C09106288888888" : ADDR.ZERO,
+    poolId: hooklessNativePool.poolId!,
+    instanceKey: `univ4:${hooklessNativePool.poolId!.toLowerCase()}`,
+    slotKind: "swap",
+    canonicalEdgeId: `v4-hook-fixture-${index}`,
+    v4PoolKey: {
+      currency0: ADDR.ZERO,
+      currency1: "0xc8Fb80fCc03f699C70ff0CC08C09106288888888",
+      fee: 0,
+      tickSpacing: 60,
+      hooks: ADDR.ZERO,
+    },
+  }));
+  const views = Object.freeze({
+    revision: 1,
+    source,
+    publicationFingerprint: "v4-hook-admission-fixture",
+    graphRoutes: Object.freeze([]),
+    edges: Object.freeze(hooklessEdges),
+    handleByCanonicalEdgeId: new Map(
+      hooklessEdges.map((edge) => [
+        edge.canonicalEdgeId,
+        Object.freeze({
+          familyId: "univ4",
+          lineageId: "univ4:pool-manager-subinstance",
+          candidateKey: edge.instanceKey,
+          instanceKey: edge.instanceKey,
+          routeKey: `univ4:${edge.poolId!.toLowerCase()}`,
+          source,
+          generation: 1,
+        }),
+      ]),
+    ),
+    pricingByPublicationKey: new Map(),
+    fundingByPublicationKey: new Map(),
+  });
+  setProductionStrictViewsProvider(() =>
+    views as unknown as Parameters<typeof setProductionStrictViewsProvider>[0] extends () => infer V ? V : never,
   );
-  const mixed = await buildTokenGraphWithResults(
-    stubBackend,
-    [hookedPool, hooklessNativePool],
-  );
-  const ordinaryEmpty = await buildTokenGraphWithResults(stubBackend, [{
-    address: "0x1111111111111111111111111111111111111111",
-    adapter: "erc4626-silo-redeem",
-  }]);
+  try {
+    const hooked = await buildTokenGraphWithResults(stubBackend, [hookedPool]);
+    const hooked_edges = hooked.edges.length;
+    const hookless_native_edges = await edgeCount(hooklessNativePool);
+    const nativeWeth = await buildTokenGraphWithResults(
+      stubBackend,
+      [nativeWethPool],
+    );
+    const mixed = await buildTokenGraphWithResults(
+      stubBackend,
+      [hookedPool, hooklessNativePool],
+    );
+    const ordinaryEmpty = await buildTokenGraphWithResults(stubBackend, [{
+      address: "0x1111111111111111111111111111111111111111",
+      adapter: "erc4626-silo-redeem",
+    }]);
 
-  assert(hooked_edges === 0, `hooked pool: expected 0 edges, got ${hooked_edges}`);
-  assert(
-    hooked.successful.length === 1 && hooked.failed.length === 0,
-    "typed hook exclusion must be terminal-known rather than retryable",
-  );
-  assert(hookless_native_edges === 2, `hookless native pool: expected 2 edges, got ${hookless_native_edges}`);
-  assert(
-    nativeWeth.edges.length === 0 &&
-      nativeWeth.successful.length === 1 &&
-      nativeWeth.failed.length === 0,
-    "native ETH/WETH alias self-edge must be terminal-known and absent",
-  );
-  assert(
-    mixed.edges.length === 2 &&
-      mixed.successful.length === 2 &&
-      mixed.failed.length === 0,
-    "one terminal V4 instance must not quarantine a supported family sibling",
-  );
-  const mismatched = await buildTokenGraphWithResults(stubBackend, [{
-    ...hookedPool,
-    poolId: `0x${"11".repeat(32)}`,
-  }]);
-  assert(
-    mismatched.successful.length === 0 && mismatched.failed.length === 1,
-    "PoolKey/poolId mismatch must remain fail-closed and retryable",
-  );
-  assert(
-    ordinaryEmpty.successful.length === 0 && ordinaryEmpty.failed.length === 1,
-    "ordinary empty family output must remain fail-closed and retryable",
-  );
+    assert(hooked_edges === 0, `hooked pool: expected 0 edges, got ${hooked_edges}`);
+    assert(
+      hooked.successful.length === 1 && hooked.failed.length === 0,
+      "hooked pool absent from committed strict views is terminal-known (zero edges)",
+    );
+    assert(hookless_native_edges === 2, `hookless native pool: expected 2 edges, got ${hookless_native_edges}`);
+    assert(
+      nativeWeth.edges.length === 0 &&
+        nativeWeth.successful.length === 1 &&
+        nativeWeth.failed.length === 0,
+      "native ETH/WETH alias pool absent from committed strict views is terminal-known",
+    );
+    assert(
+      mixed.edges.length === 2 &&
+        mixed.successful.length === 2 &&
+        mixed.failed.length === 0,
+      "one strict-uncommitted V4 instance must not quarantine a supported sibling",
+    );
+    const mismatched = await buildTokenGraphWithResults(stubBackend, [{
+      ...hookedPool,
+      poolId: `0x${"11".repeat(32)}`,
+    }]);
+    assert(
+      mismatched.successful.length === 1 && mismatched.failed.length === 0,
+      "PoolKey/poolId mismatch is absent from committed strict views (zero edges)",
+    );
+    assert(
+      ordinaryEmpty.successful.length === 1 && ordinaryEmpty.failed.length === 0,
+      "ordinary empty family output is absent from committed strict views (zero edges)",
+    );
 
-  console.log(
-    `[v4-hook-admission] PASS hooked_edges=${hooked_edges} ` +
-      `hookless_native_edges=${hookless_native_edges} ordinary_empty=retryable`,
-  );
+    console.log(
+      `[v4-hook-admission] PASS hooked_edges=${hooked_edges} ` +
+        `hookless_native_edges=${hookless_native_edges} ordinary_empty=retryable`,
+    );
+  } finally {
+    setProductionStrictViewsProvider(() => null);
+  }
 }
 
 main().catch((err) => {

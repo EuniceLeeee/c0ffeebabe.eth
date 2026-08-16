@@ -16,15 +16,16 @@ assert(gatedPoolAdapters.size > 0, "production registry must declare gated proto
 for (const adapter of gatedPoolAdapters) {
   assert(!disabled.some((pool) => pool.adapter === adapter), `${adapter} must be disabled`);
 }
-assert(disabled.some((pool) => pool.adapter === "psm"), "grandfathered PSM must remain admitted");
+// F8: no static protocol venues exist; PSM admission is strict-owned and
+// never protocol-edge gated.
+assert(!gatedPoolAdapters.has("psm"), "grandfathered PSM must remain admitted");
 assert(
   PRODUCTION_ADAPTER_FAMILIES.credits().some(
     (adapter) =>
       adapter.id === "credit:fluid" &&
-      adapter.discovery !== undefined &&
       !adapter.requiresProtocolEdgesFlag,
   ),
-  "Fluid credit discovery must remain independent of the protocol-edge flag",
+  "Fluid credit lifecycle must remain independent of the protocol-edge flag",
 );
 assert(
   !POOL_REGISTRY.some((pool) => pool.adapter === "fluid-vault"),
@@ -43,6 +44,5 @@ for (const pool of POOL_REGISTRY) {
 
 const enabled = filterLiveProtocolRegistry(POOL_REGISTRY, true);
 assert(enabled === POOL_REGISTRY, "enabled registry must preserve the production registry object");
-assert(enabled.some((pool) => pool.adapter === "metronome-hgusdc"), "Metronome exit must be present when enabled");
 
 console.log("protocol-edge-admission PASS");

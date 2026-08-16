@@ -493,49 +493,27 @@ async function main(): Promise<void> {
   const venues = routedSwapVenues();
   assert(venues.length > 0, "no routed swap venues found in path templates");
 
-  const deferred: string[] = [];
+  // F8: every production swap family projects an explicit detect-only victim
+  // model; victim replay/overlay reproduction is owned by the strict
+  // pipeline. The legacy replay callback parity/rollback sections are
+  // therefore not exercised against production venues.
   const detectOnly: string[] = [];
   for (const adapterId of venues) {
     const victimModel = PRODUCTION_ADAPTER_FAMILIES.victimModels().forEdge(adapterId);
     assert(victimModel !== null, `victim model missing for active swap edge ${adapterId}`);
-    if (victimModel.runtime === null) {
-      detectOnly.push(adapterId);
-      continue;
-    }
-    if (CURVE_DEFERRED.has(adapterId)) {
-      deferred.push(adapterId);
-      continue;
-    }
-
-    const seed = seedForAdapter(adapterId);
     assert(
-      seed !== null,
-      `overlay coverage missing event post-state seed for replay-enabled venue ${adapterId}`,
+      victimModel.runtime === null,
+      `${adapterId} must be explicit detect-only at F8 (strict replay ownership)`,
     );
-    assert(
-      postImpactSupportsStateOverrides(seed),
-      `overlay coverage missing postImpactStateOverrides kind for routed venue ${adapterId}`,
-    );
-    assert(
-      await hasCaptureBranch(adapterId),
-      `overlay coverage missing PoolImpact *PostState capture branch for routed venue ${adapterId}`,
-    );
-    console.log(`[overlay-coverage] ${adapterId}: event capture + override shape PASS`);
+    detectOnly.push(adapterId);
   }
 
   for (const adapterId of detectOnly) {
     console.log(`[overlay-coverage] ${adapterId}: explicit detect-only/fail-closed PASS`);
   }
-  for (const adapterId of deferred) {
-    console.log(`[overlay-coverage] ${adapterId}: DEFERRED (curve balances storage layout not safely unified)`);
-  }
-  await testOverlayCallbackParity();
-  await testOverlayFailureIsFamilyLocal();
-  await testRpcReplayRollsBackFamilyFailure();
   console.log(
     `overlay-venue-coverage PASS (` +
-      `${venues.length - deferred.length - detectOnly.length} structural, ` +
-      `${detectOnly.length} detect-only, ${deferred.length} deferred)`,
+      `${detectOnly.length} detect-only, 0 deferred, 0 legacy replay venues)`,
   );
 }
 

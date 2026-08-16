@@ -6,6 +6,8 @@ import type {
   RouteLegKind,
 } from "./route-leg-adapter.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "./production-registry.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
+  "./production-family-composition.js";
 
 export type RouteFamilyCandidateSource = RouteCandidateSourceKind;
 
@@ -43,19 +45,27 @@ export function deriveRouteFamilyManifest(
   adapters: readonly RouteLegAdapter[],
 ): readonly RouteFamilyManifestEntry[] {
   return Object.freeze(adapters.map((adapter) => {
-    const protocolAdapter = adapter.kind === "protocol-conversion"
-      ? adapter as ProtocolConversionAdapter
-      : null;
-    const discovery = protocolAdapter?.discovery;
-    if (discovery && !adapter.requiresProtocolEdgesFlag) {
+    // F8: dynamic candidate sources are projected from the strict catalog
+    // (plugin-declared discovery semantics), never from a legacy adapter
+    // discovery object. The registry remains the sole registration source for
+    // the static surface; this function never grows a second family table.
+    const dynamicSources =
+      PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .discoverableFamilySources()
+        .find((entry) => entry.familyId === adapter.id)?.sourceIds ?? [];
+    if (
+      dynamicSources.length > 0 &&
+      adapter.kind === "protocol-conversion" &&
+      !adapter.requiresProtocolEdgesFlag
+    ) {
       throw new Error(
         `route family manifest: ${adapter.id} dynamic admission must require protocol edges`,
       );
     }
 
-    const dynamicAdmission = discovery
+    const dynamicAdmission = dynamicSources.length > 0
       ? Object.freeze({
-          candidateSources: Object.freeze([...discovery.candidateSources]),
+          candidateSources: Object.freeze([...dynamicSources]),
           requiresProtocolEdgesFlag: true as const,
         })
       : null;
@@ -73,7 +83,9 @@ export function deriveRouteFamilyManifest(
         ...adapter.ownedActionAdapterIds,
         ...adapter.requiredInfraActionAdapterIds,
       ]),
-      declaredVenueCount: protocolAdapter?.declaredVenues.length ?? 0,
+      declaredVenueCount: adapter.kind === "protocol-conversion"
+        ? (adapter as ProtocolConversionAdapter).declaredVenues.length
+        : 0,
       staticRequiresProtocolEdgesFlag: adapter.requiresProtocolEdgesFlag,
       dynamicAdmission,
     });

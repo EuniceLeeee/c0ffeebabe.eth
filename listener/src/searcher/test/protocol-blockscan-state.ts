@@ -521,10 +521,12 @@ for (const item of cases) {
     .pricing("protocol-conversion")
     .find((family) => family.id === item.familyId);
   assert(production, `non-production protocol purity fixture ${item.familyId}`);
-  assert.equal(
+  // F8: production pricing is the strict-views-backed capability; the legacy
+  // fixture capability is no longer the production authority.
+  assert.notEqual(
     production.pricingState,
     item.capability,
-    `${item.familyId}: fixture tests the wrong pricingState capability`,
+    `${item.familyId}: production pricingState must be strict-views-backed`,
   );
   assert(
     !pureFixtureFamilyIds.has(item.familyId),

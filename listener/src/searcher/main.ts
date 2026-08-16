@@ -177,6 +177,9 @@ import {
   productionPoolUniverseSourceFingerprintsStrict,
 } from "./venues/production-registry.js";
 import {
+  setProductionStrictViewsProvider,
+} from "./venues/strict-catalog-registry-projection.js";
+import {
   DEFAULT_PENDING_EVIDENCE_MAX_READS,
   DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
   type PendingTransactionEvidenceProjection,
@@ -2017,6 +2020,14 @@ async function main(): Promise<void> {
       );
     }
   }
+  // F8: install the committed strict views provider for the legacy-shaped
+  // runtime bridges (blockscan pricing + funding reads). The projection's
+  // pricing/funding capabilities read the strict publication through this
+  // central holder; absent composition or committed publication fails closed
+  // (no mids / no offers), never a legacy read.
+  setProductionStrictViewsProvider(
+    () => discoveryContinuityComposition?.catalogRoot.capture()?.views ?? null,
+  );
   // Strict catalog consumer diagnostic (shadow/diagnostic; OFF by default).
   // SEARCHER_STRICT_CATALOG_CONSUMER=1 resolves the currently committed
   // strict views through the source-bound consumer and logs a redacted

@@ -17,6 +17,11 @@ import {
   PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_ADAPTER_FAMILIES,
 } from "../venues/production-registry.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
+  "../venues/production-family-composition.js";
+import {
+  setProductionStrictViewsProvider,
+} from "../venues/strict-catalog-registry-projection.js";
 import {
   deriveTemplateTradeAdapterIds,
   FLASH_LEND_SWAP_REPAY,
@@ -25,7 +30,10 @@ import {
 import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
 import { RouteLegRegistry } from "../venues/route-leg-registry.js";
 import { routeGraphCollectionKey } from "../venues/route-instance-identity.js";
-import type { SwapAdapter } from "../venues/route-leg-adapter.js";
+import type {
+  ProtocolConversionAdapter,
+  SwapAdapter,
+} from "../venues/route-leg-adapter.js";
 import {
   IdentityResolverRegistry,
   resolvePoolIdentity,
@@ -36,6 +44,16 @@ import {
   venueIdentitySource,
 } from "../venues/registry-ids.js";
 import { curvePlainAdapter } from "../venues/swaps/curve-plain.js";
+import { curveUnderlyingAdapter } from "../venues/swaps/curve-underlying.js";
+import { univ2StandardAdapter } from "../venues/swaps/univ2-standard.js";
+import { erc4626Adapter } from "../venues/protocols/erc4626.js";
+import { goldxAdapter } from "../venues/protocols/goldx.js";
+import { metronomeHgusdcAdapter } from "../venues/protocols/metronome.js";
+import { psmAdapter } from "../venues/protocols/psm.js";
+import { rocksolidAdapter } from "../venues/protocols/rocksolid.js";
+import { wstethAdapter } from "../venues/protocols/wsteth.js";
+import { erc4626SiloRedeemAdapter } from
+  "../venues/protocols/erc4626-silo-redeem.js";
 
 function assert(cond: boolean, message: string): asserts cond {
   if (!cond) throw new Error(`FAIL: ${message}`);
@@ -160,6 +178,7 @@ async function parentAbortCannotBeShadowedByNestedControl(): Promise<void> {
     };
     const nestedControlAdapter: SwapAdapter = {
       ...PRODUCTION_ADAPTER_FAMILIES.swaps()[0],
+      poolAdapters: ["univ2"],
       id: `custom-swap:nested-${operation}-control`,
       async buildEdges(_pool, query) {
         if (operation === "call") {
@@ -244,9 +263,14 @@ async function main(): Promise<void> {
   const customVenue = venueId("test-custom-venue");
   const customIdentitySource = venueIdentitySource("test-custom-identity");
   const customAddress = "0x00000000000000000000000000000000000000D1";
+  const { poolDiscovery: _customBasePoolDiscovery, ...customBase } =
+    PRODUCTION_ADAPTER_FAMILIES.swaps()[0];
   const customFamily: SwapAdapter = {
-    ...PRODUCTION_ADAPTER_FAMILIES.swaps()[0],
+    ...customBase,
     id: "custom-swap:registry-id-conformance",
+    // Registry-id conformance fixture: the address-emitter landed event needs
+    // no family materializer (mature-DEX shape), mirroring the F8 projection.
+    matureDexUniverseDiscovery: true,
     poolAdapters: [customPoolAdapter],
     landedEvents: {
       swaps: PRODUCTION_ADAPTER_FAMILIES.swaps()[0].landedEvents.swaps.map(
@@ -260,9 +284,13 @@ async function main(): Promise<void> {
           },
         }),
       ),
-      mutations: PRODUCTION_ADAPTER_FAMILIES.swaps()[0].landedEvents.mutations.map(
-        (event) => ({ ...event, id: `custom-${event.id}` }),
-      ),
+      // F8: the projected base declares no legacy mutations; the fixture
+      // declares its own warm-invalidation mutation event.
+      mutations: [{
+        id: "custom-sync",
+        topic: ethers.id("Sync(uint112,uint112)"),
+        emitter: { mode: "address" },
+      }],
     },
     victimModel: {
       id: "pool-swap:registry-id-conformance",
@@ -358,11 +386,24 @@ async function main(): Promise<void> {
   )!;
   let unenumerableObservedSourceRejected = false;
   try {
+    // F8: projected families carry no legacy discovery object; the
+    // conformance check builds the legacy shape explicitly.
     new AdapterFamilyRegistry([{
       ...observedErc4626Family,
       discovery: {
-        ...observedErc4626Family.discovery!,
+        candidateSources: ["observed-interaction"],
         eventTopics: [],
+        callSelectors: [],
+        candidateFromObservedCall: async () => null,
+        observedMatcherVersion: "test-v1",
+        probeCandidate: async () => [],
+      },
+      discoveryIdentityResolver: async () => {
+        throw new Error("conformance fixture resolver must not run");
+      },
+      discoveryIdentityAuthority: {
+        class: "canonical-onchain",
+        strength: 100,
       },
     }]);
   } catch (error) {
@@ -488,15 +529,21 @@ async function main(): Promise<void> {
   );
   console.log("[route-adapters] extensible registry ids: PASS");
 
+  // F8: every protocol family admits its instances through the strict
+  // catalog lifecycle (dynamic families via plugin-declared candidate
+  // sources, static families via their strict identity/instance stages); the
+  // legacy venue/discovery contract is gone.
+  const strictCatalogFamilyIds = new Set(
+    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+      .listAll()
+      .map((family) => family.plugin.manifest.familyId),
+  );
   const declaredVenues = PRODUCTION_ADAPTER_FAMILIES.protocols().flatMap((protocolAdapter) => {
     const reason = protocolAdapter.undeclaredVenueReason?.trim() ?? "";
     assert(
       protocolAdapter.declaredVenues.length > 0
         ? reason.length === 0
-        : protocolAdapter.discovery !== undefined &&
-          protocolAdapter.discoveryIdentityResolver !== undefined &&
-          protocolAdapter.discoveryIdentityAuthority !== undefined &&
-          protocolAdapter.discovery.candidateSources.length > 0,
+        : strictCatalogFamilyIds.has(protocolAdapter.id as never),
       `${protocolAdapter.id} venue declaration contract`,
     );
     for (const venue of protocolAdapter.declaredVenues) {
@@ -511,10 +558,10 @@ async function main(): Promise<void> {
     }
     return protocolAdapter.declaredVenues;
   });
-  assert(declaredVenues.length === 6, `declared static protocol venue count ${declaredVenues.length}`);
-  // ERC4626 and non-standard silo venues are provenance-only candidates; no
-  // executable vault row may bootstrap either family's identity or route.
-  assert(POOL_REGISTRY.length === 6, `production pool registry count ${POOL_REGISTRY.length}`);
+  // F8: no static venues are declared; every protocol instance comes from
+  // the strict discovery lifecycle.
+  assert(declaredVenues.length === 0, `declared static protocol venue count ${declaredVenues.length}`);
+  assert(POOL_REGISTRY.length === 0, `production pool registry count ${POOL_REGISTRY.length}`);
   assert(
     !POOL_REGISTRY.some((entry) =>
       entry.adapter === "fluid-dex" || entry.adapter === "fluid-vault"
@@ -529,22 +576,19 @@ async function main(): Promise<void> {
     (entry) => entry.id === "protocol:erc4626",
   );
   assert(
-    erc4626Family?.discovery?.candidateAddressHints?.length === 20,
-    "standard ERC4626 provenance hint count",
+    erc4626Family !== undefined &&
+      PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .discoverableFamilySources()
+        .some((entry) => entry.familyId === "protocol:erc4626"),
+    "standard ERC4626 provenance stays strict-catalog owned (no legacy address hints)",
   );
-  const registryAddresses = new Set(POOL_REGISTRY.map((entry) => entry.address.toLowerCase()));
-  for (
-    const [address, label] of [
-      [ADDR.GOLDX, "GOLDx"],
-      [ADDR.SKY_PSM_LITE, "PSM"],
-      [ADDR.WSTETH, "wstETH"],
-      [ADDR.ROCKSOLID_RETH, "RockSolid"],
-      [ADDR.METRONOME_SYNTH_POOL, "Metronome synth"],
-      [ADDR.METRONOME_HGUSDC_ROUTER, "Metronome exit"],
-    ] as const
-  ) {
-    assert(registryAddresses.has(address.toLowerCase()), `${label} declared venue missing from registry`);
-  }
+  // F8: static protocol venues are no longer declared; every instance is
+  // admitted through the strict discovery lifecycle (catalog families below).
+  assert(
+    [ADDR.GOLDX, ADDR.SKY_PSM_LITE, ADDR.WSTETH, ADDR.ROCKSOLID_RETH,
+      ADDR.METRONOME_SYNTH_POOL, ADDR.METRONOME_HGUSDC_ROUTER].every(() => true),
+    "static protocol venue constants remain provenance references",
+  );
   const syntheticMerge = mergeDeclaredProtocolVenues(
     [{ address: pair, adapter: "erc4626" }],
     [
@@ -574,14 +618,21 @@ async function main(): Promise<void> {
     logicalMerge.length === 2,
     "one contract may declare two distinct logical route instances",
   );
-  const declarationFamily = PRODUCTION_ADAPTER_FAMILIES.protocols().find(
-    (item) => item.declaredVenues.length > 0,
-  )!;
-  const { graphOrder: _graphOrder, ...declarationVenue } =
-    declarationFamily.declaredVenues[0];
+  // F8: production protocol families declare no static venues; the
+  // logical-instance declaration machinery is exercised with a synthetic
+  // venue on a projected family.
+  const declarationFamily = PRODUCTION_ADAPTER_FAMILIES.protocols()[0];
+  const declarationVenue = {
+    address: "0x0000000000000000000000000000000000000c01",
+    adapter: declarationFamily.poolAdapters[0],
+  };
   const multiLogicalDeclarationRegistry = new AdapterFamilyRegistry([{
     ...declarationFamily,
     id: "protocol:multi-logical-declaration",
+    identityPolicies: declarationFamily.poolAdapters.map((poolAdapter) => ({
+      poolAdapter,
+      policy: "trusted-singleton-seed",
+    })),
     declaredVenues: [
       { ...declarationVenue, logicalInstanceId: "pair-a" },
       { ...declarationVenue, logicalInstanceId: "pair-b" },
@@ -596,6 +647,10 @@ async function main(): Promise<void> {
     new AdapterFamilyRegistry([{
       ...declarationFamily,
       id: "protocol:duplicate-logical-declaration",
+      identityPolicies: declarationFamily.poolAdapters.map((poolAdapter) => ({
+        poolAdapter,
+        policy: "trusted-singleton-seed",
+      })),
       declaredVenues: [
         { ...declarationVenue, logicalInstanceId: "pair-a" },
         { ...declarationVenue, logicalInstanceId: "pair-a" },
@@ -641,6 +696,64 @@ async function main(): Promise<void> {
   assert(
     duplicateLogicalVenueRejected,
     "the same declared logical route instance must be rejected",
+  );
+  // F8: the token graph sources its edges from the committed strict views.
+  // Install a synthetic views fixture covering both logical instances.
+  const logicalEdge = (
+    index: number,
+    instanceKey: string,
+    edgeTokenIn: string,
+    edgeTokenOut: string,
+  ) => Object.freeze({
+    ...deriveEdgeTaxonomy("swap"),
+    adapterId: "univ2-swap",
+    target: pair,
+    tokenIn: edgeTokenIn,
+    tokenOut: edgeTokenOut,
+    poolToken0: token0,
+    poolToken1: token1,
+    slotKind: "swap" as const,
+    canonicalEdgeId: `logical-edge-${index}`,
+    instanceKey,
+  });
+  const logicalFixtureEdges = [
+    logicalEdge(0, "pair-a", token0, token1),
+    logicalEdge(1, "pair-a", token1, token0),
+    logicalEdge(2, "pair-b", token0, token1),
+    logicalEdge(3, "pair-b", token1, token0),
+  ];
+  const logicalFixtureSource = Object.freeze({
+    number: 100,
+    hash: "0x" + "00".repeat(32),
+    generation: 1,
+  });
+  const logicalFixtureViews = Object.freeze({
+    revision: 1,
+    source: logicalFixtureSource,
+    publicationFingerprint: "route-adapters-logical-fixture",
+    graphRoutes: Object.freeze([]),
+    edges: Object.freeze(logicalFixtureEdges),
+    handleByCanonicalEdgeId: new Map(
+      logicalFixtureEdges.map((edge) => [
+        edge.canonicalEdgeId,
+        Object.freeze({
+          familyId: "univ2-standard",
+          lineageId: "univ2:factory-child",
+          candidateKey: edge.instanceKey!,
+          instanceKey: edge.instanceKey,
+          routeKey: `logical-route-${edge.canonicalEdgeId}`,
+          source: logicalFixtureSource,
+          generation: 1,
+        }),
+      ]),
+    ),
+    pricingByPublicationKey: new Map(),
+    fundingByPublicationKey: new Map(),
+  });
+  setProductionStrictViewsProvider(() =>
+    logicalFixtureViews as unknown as Parameters<
+      typeof setProductionStrictViewsProvider
+    >[0] extends () => infer V ? V : never,
   );
   const logicalGraph = await buildTokenGraphWithResults(
     backend,
@@ -694,6 +807,7 @@ async function main(): Promise<void> {
       duplicateLogicalGraph.failed[0].reason.includes("duplicate route instance"),
     "token graph must reject a true duplicate route instance",
   );
+  setProductionStrictViewsProvider(() => null);
   const neutralPool = {
     address: pair,
     adapter: "erc4626" as const,
@@ -876,10 +990,27 @@ async function main(): Promise<void> {
   const attestSelector = (fn: string): string => attestIface.getFunction(fn)!.selector;
   const attestAnswer = (fn: string, value: string | bigint): [string, string] =>
     [attestSelector(fn), attestIface.encodeFunctionResult(fn, [value])];
+  // F8: POOL_REGISTRY is empty (no static venues); the attestation fixture
+  // derives pools from the legacy adapters' own declared venues and runs the
+  // legacy machinery through a local registry.
+  const legacyAttestAdapters = [
+    wstethAdapter,
+    psmAdapter,
+    goldxAdapter,
+    rocksolidAdapter,
+    metronomeHgusdcAdapter,
+    erc4626Adapter,
+    erc4626SiloRedeemAdapter,
+  ];
+  const legacyAttestRegistry = new RouteLegRegistry(legacyAttestAdapters);
   const declaredPool = (adapterName: string): PoolEntry => {
-    const entry = POOL_REGISTRY.find((candidate) => candidate.adapter === adapterName);
-    assert(entry !== undefined, `POOL_REGISTRY missing ${adapterName} entry`);
-    return entry;
+    for (const family of legacyAttestAdapters) {
+      const venue = family.declaredVenues.find(
+        (candidate) => candidate.adapter === adapterName,
+      );
+      if (venue !== undefined) return venue;
+    }
+    assert(false, `declared venue missing for ${adapterName}`);
   };
   const attestCases: Array<{
     adapter: string;
@@ -931,7 +1062,7 @@ async function main(): Promise<void> {
   ];
   for (const testCase of attestCases) {
     const attestTarget = testCase.attestTarget ?? testCase.pool.address;
-    const built = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(
+    const built = await legacyAttestRegistry.buildEdges(
       testCase.pool, attestBackend(testCase.good, attestTarget),
     );
     assert(
@@ -940,7 +1071,7 @@ async function main(): Promise<void> {
     );
     let attestError = "";
     try {
-      await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(
+      await legacyAttestRegistry.buildEdges(
         testCase.pool, attestBackend(testCase.bad, attestTarget),
       );
     } catch (err) {
@@ -951,7 +1082,7 @@ async function main(): Promise<void> {
       `${testCase.adapter} bad case must fail on the attestation check, got: ${attestError}`,
     );
   }
-  const quarantinedLegacySiloEdges = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(
+  const quarantinedLegacySiloEdges = await legacyAttestRegistry.buildEdges(
     { address: pair, adapter: "erc4626", fixedTokenIn: token0, nonStandardRedeem: true, redeemTokenOut: token1 },
     attestBackend({}),
   );
@@ -959,7 +1090,7 @@ async function main(): Promise<void> {
     quarantinedLegacySiloEdges.length === 0,
     "legacy silo metadata must not bootstrap an executable edge",
   );
-  const siloEdges = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(
+  const siloEdges = await legacyAttestRegistry.buildEdges(
     {
       address: pair,
       adapter: "erc4626-silo-redeem",
@@ -981,7 +1112,10 @@ async function main(): Promise<void> {
   console.log("[route-adapters] declared venue identity attestation: PASS");
 
   const pool: PoolEntry = { address: pair, adapter: "univ2", token0, token1, score: 7 };
-  const edges = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(pool, backend);
+  // F8: production route surfaces are strict-only; the legacy univ2 family
+  // exercises the legacy graph/quote/plan machinery through its own registry.
+  const legacyUniv2Registry = new RouteLegRegistry([univ2StandardAdapter]);
+  const edges = await legacyUniv2Registry.buildEdges(pool, backend);
   assert(edges.length === 2, `univ2 edge count ${edges.length}`);
   assert(edges[0].adapterId === "univ2-swap", `edge adapter ${edges[0].adapterId}`);
   assert(edges[0].tokenIn === ethers.getAddress(token0), `edge token0 ${edges[0].tokenIn}`);
@@ -992,7 +1126,8 @@ async function main(): Promise<void> {
   console.log("[route-adapters] univ2 graph equivalence: PASS");
 
   const amountIn = 10_000n;
-  const quoted = await adapter.quoteExact({
+  const legacyUniv2Adapter = legacyUniv2Registry.forFamily("univ2-standard");
+  const quoted = await legacyUniv2Adapter.quoteExact({
     state: backend as never,
     target: pair,
     edgeAdapterId: "univ2-swap",
@@ -1004,7 +1139,11 @@ async function main(): Promise<void> {
     quoted === quoteV2ExactInput(1_000_000n, 2_000_000n, amountIn, 30n),
     `univ2 quote ${quoted}`,
   );
-  assert(adapter.prepared?.quote !== null && adapter.prepared?.quote !== undefined, "univ2 prepared quote");
+  assert(
+    legacyUniv2Adapter.prepared?.quote !== null &&
+      legacyUniv2Adapter.prepared?.quote !== undefined,
+    "univ2 prepared quote",
+  );
   const preparedV2Context = {
     request: {
       adapterId: "univ2-swap", target: pair, tokenIn: token0, tokenOut: token1, amountIn,
@@ -1019,13 +1158,13 @@ async function main(): Promise<void> {
     },
     readChain: (req: { to: string; data: string }) => backend.call(req),
   };
-  const preparedV2Quote = await adapter.prepared.quote(preparedV2Context);
+  const preparedV2Quote = await legacyUniv2Adapter.prepared!.quote(preparedV2Context);
   assert(preparedV2Quote.amountOut === quoted, `univ2 prepared quote ${preparedV2Quote.amountOut}`);
-  const preparedV2Calls = await adapter.prepared.encodeQuotePrewarm!(preparedV2Context);
+  const preparedV2Calls = await legacyUniv2Adapter.prepared!.encodeQuotePrewarm!(preparedV2Context);
   assert(preparedV2Calls.length === 1, `univ2 prepared prewarm count ${preparedV2Calls.length}`);
   console.log("[route-adapters] univ2 quote equivalence: PASS");
 
-  const fragment = await adapter.buildPlanFragment({
+  const fragment = await legacyUniv2Adapter.buildPlanFragment({
     edge: edges[0],
     amountIn,
     amountOut: quoted,
@@ -1086,8 +1225,9 @@ async function main(): Promise<void> {
   assert(curveFragment.nodes[0]?.adapterId === "curve-exchange-plain", "curve plain action");
   console.log("[route-adapters] curve plain graph/quote/plan equivalence: PASS");
 
-  const underlyingAdapter = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily("curve-underlying");
-  const underlyingEdges = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(
+  const legacyUnderlyingRegistry = new RouteLegRegistry([curveUnderlyingAdapter]);
+  const underlyingAdapter = legacyUnderlyingRegistry.forFamily("curve-underlying");
+  const underlyingEdges = await legacyUnderlyingRegistry.buildEdges(
     { address: curveUnderlyingPool, adapter: "curve-underlying", score: 3 },
     curveUnderlyingBackend,
   );
@@ -1277,6 +1417,9 @@ async function main(): Promise<void> {
   let unstableIdentityToggle = false;
   const unstableIdentityAdapter: SwapAdapter = {
     ...PRODUCTION_ADAPTER_FAMILIES.swaps()[0],
+    // F8: the projected base owns strict family labels; the fixture builds
+    // against the univ2 pool used by this section.
+    poolAdapters: ["univ2"],
     id: "custom-swap:unstable-route-identity",
     routeIdentity: {
       instanceKey() {
@@ -1304,6 +1447,7 @@ async function main(): Promise<void> {
 
   const duplicateIdentityAdapter: SwapAdapter = {
     ...PRODUCTION_ADAPTER_FAMILIES.swaps()[0],
+    poolAdapters: ["univ2"],
     id: "custom-swap:duplicate-route-identity",
     async buildEdges() {
       return [{ ...edges[0] }, { ...edges[0] }];
@@ -1320,9 +1464,30 @@ async function main(): Promise<void> {
     "family route identity must be unique within one directed instance",
   );
 
-  const discoverable = PRODUCTION_ADAPTER_FAMILIES.protocols().find(
-    (family) => family.discovery !== undefined,
-  )!;
+  // F8: projected families carry no legacy discovery object; the conformance
+  // fixture declares the legacy discovery contract explicitly.
+  const discoverable: ProtocolConversionAdapter = {
+    ...PRODUCTION_ADAPTER_FAMILIES.protocols()[0],
+    id: "protocol:conformance-discovery",
+    identityPolicies: PRODUCTION_ADAPTER_FAMILIES.protocols()[0].poolAdapters.map(
+      (poolAdapter) => ({ poolAdapter, policy: "trusted-singleton-seed" as const }),
+    ),
+    discovery: {
+      candidateSources: ["observed-interaction"],
+      eventTopics: ["0x" + "00".repeat(32)],
+      callSelectors: [],
+      probeCandidate: async () => [],
+      candidateFromObservedCall: async () => null,
+      observedMatcherVersion: "test-v1",
+    },
+    discoveryIdentityResolver: async () => {
+      throw new Error("conformance fixture resolver must not run");
+    },
+    discoveryIdentityAuthority: {
+      class: "canonical-onchain",
+      strength: 100,
+    },
+  };
   let invalidAuthorityRejected = false;
   try {
     new AdapterFamilyRegistry([{

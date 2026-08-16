@@ -28,10 +28,11 @@ async function main(): Promise<void> {
     rollbackArtifactRef: "rollback-ref",
   });
   assert.equal(receipt.schemaVersion, "migration-cleanup-receipt-v1");
-  // Machine-derived from the actual production-registry source.
+  // Machine-derived from the actual production-registry source (F8: the
+  // strict-catalog registry projection is the sole production authority).
   assert.equal(
     receipt.productionCatalogKind,
-    "frozen-legacy-route-authority-v1",
+    "strict-catalog-registry-projection-v1",
   );
   assert.equal(receipt.productionRuntimeSourceScan, false);
   assert.equal(receipt.oldCacheAccepted, false);
@@ -44,9 +45,10 @@ async function main(): Promise<void> {
   // Verdict is honest: it reflects the actual legacy symbols in the closure.
   const legacy = scanLegacySymbols();
   assert.equal(legacy.size >= 0, true);
-  // Central-path legacy scan is clean: all manual schema revisions and the
-  // legacy family-wide schema APIs are gone from the central closure.
-  assert.equal(legacy.size, 0);
+  // F8: the legacy family-wide schema APIs are gone, but the remaining
+  // legacy runtime call sites are still present in the central closure and
+  // keep the receipt verdict honest-fail until F9 removes them.
+  assert.equal(legacy.size, 6);
   // Transitive import-closure proof (§0.1): every relative import from
   // main.ts resolves; the report is deterministic.
   const closure = productionImportClosure();
@@ -55,14 +57,14 @@ async function main(): Promise<void> {
   assert.equal(closure.unresolvedImports.length, 0);
   assert.match(String(closure.closureHash), /^[0-9a-f]{64}$/);
   assert.equal(closure.closureHash, productionImportClosure().closureHash);
-  // Central authority is still the frozen legacy route baseline, so the
-  // closure honestly reports the remaining migration item: the legacy
-  // production registry list. The verdict must be fail until it is removed
-  // (§18.3). The blind T1 baseline vocabulary has moved into the sealed
-  // generated artifact, so the closure has no literal per-family branches.
+  // F8: the strict projection removed the legacy authority list, but the
+  // remaining legacy runtime call sites (solver quote/plan build, revm
+  // prepared quote, victim overlay, credit sizing, pending evidence) still
+  // execute against the fail-closed projection. The verdict must stay fail
+  // until F9 migrates or removes every one of these call sites (§18.3).
   assert.equal(closure.legacySymbolHitsPresent, true);
   assert(closure.legacySymbolHits.some(
-    (hit) => hit.symbol === "LEGACY_PRODUCTION_ADAPTER_FAMILIES",
+    (hit) => hit.symbol === "legacy quoteExact call-site",
   ));
   assert.equal(closure.centralFamilyLiteralBranchesPresent, false);
   assert.equal(receipt.importClosureLegacySymbolsPresent, true);

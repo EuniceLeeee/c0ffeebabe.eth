@@ -4,34 +4,7 @@ import {
   PRODUCTION_IDENTITY_ADMISSION,
   type IdentityAdmissionPolicy,
 } from "./admission.js";
-import { fluidCreditAdapter } from "./credit/fluid.js";
-import { balancerFlashFamily } from "./funding/balancer-flash.js";
-import { morphoFlashFamily } from "./funding/morpho-flash.js";
-import { erc4626Adapter } from "./protocols/erc4626.js";
-import { erc4626SiloRedeemAdapter } from "./protocols/erc4626-silo-redeem.js";
-import { goldxAdapter } from "./protocols/goldx.js";
-import { metronomeHgusdcAdapter, metronomeSynthAdapter } from "./protocols/metronome.js";
-import { psmAdapter } from "./protocols/psm.js";
-import { eigenpieAdapter } from "./protocols/eigenpie.js";
-import { rocksolidAdapter } from "./protocols/rocksolid.js";
-import { wstethAdapter } from "./protocols/wsteth.js";
-import { selfBurnNativeAdapter } from "./protocols/self-burn-native.js";
-import { astraMultiTokenAdapter } from "./protocols/astra-multitoken.js";
-import {
-  etherTokenNativeRedeemAdapter,
-} from "./protocols/ethertoken-native-redeem.js";
-import { curveUnderlyingAdapter } from "./swaps/curve-underlying.js";
-import { univ2StandardAdapter } from "./swaps/univ2-standard.js";
-import { univ3StandardAdapter } from "./swaps/univ3-standard.js";
-import { univ4Adapter } from "./swaps/univ4.js";
-import { angstromV4Adapter } from "./swaps/angstrom-v4.js";
-import { dodoV2Adapter } from "./swaps/dodo-v2.js";
-import { fluidDexAdapter } from "./swaps/fluid-dex.js";
-import {
-  assertIdentityResolverCoverage,
-  IdentityResolverRegistry,
-  type IdentityResolverDescriptor,
-} from "./identity.js";
+import { IdentityResolverRegistry } from "./identity.js";
 import {
   V2_LINEAGES,
   type V2LineageDescriptor,
@@ -50,35 +23,17 @@ import { strictCatalogUniverseSourceFingerprints } from
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./production-family-composition.js";
 
-const LEGACY_PRODUCTION_ADAPTER_FAMILIES = Object.freeze([
-  univ2StandardAdapter,
-  univ3StandardAdapter,
-  curveUnderlyingAdapter,
-  univ4Adapter,
-  angstromV4Adapter,
-  dodoV2Adapter,
-  fluidDexAdapter,
-  erc4626Adapter,
-  erc4626SiloRedeemAdapter,
-  goldxAdapter,
-  metronomeSynthAdapter,
-  metronomeHgusdcAdapter,
-  psmAdapter,
-  eigenpieAdapter,
-  rocksolidAdapter,
-  wstethAdapter,
-  selfBurnNativeAdapter,
-  astraMultiTokenAdapter,
-  etherTokenNativeRedeemAdapter,
-  fluidCreditAdapter,
-  balancerFlashFamily,
-  morphoFlashFamily,
-] satisfies readonly AdapterFamily[]);
+import {
+  createStrictRegistryProjection,
+  strictProjectionFingerprint,
+} from "./strict-catalog-registry-projection.js";
 
 /**
- * Strict definitions remain shadow-only until the catalog, common Graph,
- * pricing, exact, planner and action consumers cut over atomically. Production
- * authority therefore stays on one complete legacy closure during migration.
+ * F8: the strict catalog is the sole production authority. The legacy-shaped
+ * AdapterFamily projection below carries only bridged metadata and
+ * fail-closed runtime surfaces (StrictOnlySurfaceError); every runtime
+ * capability is owned by the strict pipeline. The legacy Family closure is
+ * deleted; nothing routes, prices, builds or simulates through it.
  */
 export const PRODUCTION_FAMILY_MODULES: readonly LoadedProductionFamilyModule[] =
   Object.freeze([]);
@@ -86,119 +41,55 @@ export const PRODUCTION_FAMILY_LOAD_ISSUES: readonly ProductionFamilyLoadIssue[]
   Object.freeze([]);
 export const PRODUCTION_FAMILY_SCAN_SHA256 = createHash("sha256")
   .update(JSON.stringify({
-    kind: "frozen-legacy-route-authority-v1",
-    familyIds: LEGACY_PRODUCTION_ADAPTER_FAMILIES.map((family) => family.id),
+    kind: "strict-catalog-registry-projection-v1",
+    projectionFingerprint: strictProjectionFingerprint(
+      PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+    ),
   }))
   .digest("hex");
 
 /**
- * Read-only compatibility projection for route consumers not yet ported to
- * strict lifecycle/catalog APIs. It is frozen at the pre-S1 behavior and is
- * forbidden as a strict lifecycle, descriptor-cache or capability authority.
+ * F8: strict-catalog projection registry. This is a metadata bridge for the
+ * remaining legacy-shaped call sites; it is forbidden as a strict lifecycle,
+ * descriptor-cache or capability authority. Block-scan schema/cache revisions
+ * derive from the strict catalog definition-boundary hashes (F6 Pair F).
  */
-export const PRODUCTION_FROZEN_LEGACY_ROUTE_BASELINE =
-  new AdapterFamilyRegistry(
-    LEGACY_PRODUCTION_ADAPTER_FAMILIES,
-    // F6 Pair F: the block-scan state schema/cache revision derives from the
-    // generated strict catalog when the family is registered there, replacing
-    // the manual adapterSchemaRevision authority.
-    {
-      definitionBoundaryHashFor: (familyId) => {
-        try {
-          return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-            .forStrictFamily(familyId as never)
-            .definitionBoundaryHash;
-        } catch {
-          return null;
-        }
-      },
+export const PRODUCTION_STRICT_PROJECTED_FAMILIES =
+  createStrictRegistryProjection(PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG);
+
+export const PRODUCTION_ADAPTER_FAMILIES = new AdapterFamilyRegistry(
+  PRODUCTION_STRICT_PROJECTED_FAMILIES,
+  {
+    definitionBoundaryHashFor: (familyId) => {
+      try {
+        return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+          .forStrictFamily(familyId as never)
+          .definitionBoundaryHash;
+      } catch {
+        return null;
+      }
     },
-  );
-
-/** Current production authority until the strict cutover gate closes. */
-export const PRODUCTION_ADAPTER_FAMILIES =
-  PRODUCTION_FROZEN_LEGACY_ROUTE_BASELINE;
-
-const CODE_OWNED_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] =
-  Object.freeze(
-    PRODUCTION_ADAPTER_FAMILIES.routes().list().flatMap(
-      (adapter) => [...adapter.identityPolicies],
-    ),
-  );
-
-const dynamicProtocolIdentityResolvers = new Map(
-  PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes().flatMap((adapter) => {
-    return adapter.poolAdapters.map((poolAdapter) => [
-      poolAdapter,
-      adapter.discoveryIdentityResolver,
-    ] as const);
-  }),
-);
-
-const codeOwnedPoolAdapters = new Set(
-  CODE_OWNED_IDENTITY_POLICIES.map((descriptor) => descriptor.poolAdapter),
+  },
+  { strictProjected: true },
 );
 
 /**
- * A discovery-capable family brings its own identity resolver in the same
- * registration. Existing static families keep their code-owned seed policy;
- * the discovery registry below swaps only their dynamic admission path.
- */
-const PRODUCTION_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] = [
-  ...CODE_OWNED_IDENTITY_POLICIES,
-  // Discovery-only families must remain untrusted in ordinary file/factory
-  // intake. Their strong resolver is exposed only through the protocol
-  // discovery registry after source evidence + active probe have run.
-  ...[...dynamicProtocolIdentityResolvers]
-    .filter(([poolAdapter]) => !codeOwnedPoolAdapters.has(poolAdapter))
-    .map(([poolAdapter]) => ({
-      poolAdapter,
-      policy: "trusted-singleton-seed" as const,
-    })),
-];
-
-/**
- * Identity admission stays independent from execution, while startup-time
- * conformance makes a newly registered route pool impossible to omit silently.
+ * F8: legacy identity-policy machinery is removed. Startup admission is
+ * strict-only (attestStartupPoolSetsStrict); protocol discovery is catalog
+ * driven. These empty registries exist only so remaining legacy-shaped call
+ * sites keep their shape; no admission flows through them, and a lookup that
+ * reaches them fails closed (no policy for any pool adapter).
  */
 export const PRODUCTION_IDENTITY_RESOLVERS = new IdentityResolverRegistry(
-  PRODUCTION_IDENTITY_POLICIES,
-  (poolAdapter) => PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(poolAdapter) !== null,
+  Object.freeze([]),
+  () => false,
 );
 
-const PROTOCOL_DISCOVERY_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] =
-  PRODUCTION_IDENTITY_POLICIES.map((descriptor) => {
-    const resolve = dynamicProtocolIdentityResolvers.get(descriptor.poolAdapter);
-    return resolve
-      ? {
-          poolAdapter: descriptor.poolAdapter,
-          policy: "onchain-resolver",
-          resolve,
-          registeredVenueIds: descriptor.registeredVenueIds,
-          registeredIdentitySources: descriptor.registeredIdentitySources,
-        }
-      : descriptor;
-  });
-
-/**
- * Canonical production identity registry for adapter-owned protocol discovery.
- * It differs for every discovery-capable protocol family: candidate provenance
- * is constrained by that family's sources, and its mandatory behavior probe
- * follows identity before any edge is projected.
- */
-export const PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS = new IdentityResolverRegistry(
-  PROTOCOL_DISCOVERY_IDENTITY_POLICIES,
-  (poolAdapter) => PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(poolAdapter) !== null,
-);
-
-assertIdentityResolverCoverage(
-  PRODUCTION_ADAPTER_FAMILIES.routes().list(),
-  PRODUCTION_IDENTITY_RESOLVERS,
-);
-assertIdentityResolverCoverage(
-  PRODUCTION_ADAPTER_FAMILIES.routes().list(),
-  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-);
+export const PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS =
+  new IdentityResolverRegistry(
+    Object.freeze([]),
+    () => false,
+  );
 
 const POOL_UNIVERSE_DISCOVERY_CONTRACT_VERSION = 1;
 
@@ -288,7 +179,7 @@ export function poolUniverseSourceFingerprints(input: {
 }
 
 function identityPolicyFingerprintInput(
-  descriptor: IdentityResolverDescriptor,
+  descriptor: import("./identity.js").IdentityResolverDescriptor,
 ): Record<string, unknown> {
   return {
     poolAdapter: descriptor.poolAdapter,

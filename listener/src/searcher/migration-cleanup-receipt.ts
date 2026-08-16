@@ -37,6 +37,18 @@ const LEGACY_SYMBOL_PROBES: readonly LegacySymbolProbe[] = Object.freeze([
   { name: "extendStaticSchema", pattern: /\bextendStaticSchema\b/ },
   { name: "adapterSchemaRevision", pattern: /\badapterSchemaRevision\b/ },
   { name: "LEGACY_PRODUCTION_ADAPTER_FAMILIES", pattern: /\bLEGACY_PRODUCTION_ADAPTER_FAMILIES\b/ },
+  // F8: the strict projection removed the legacy authority, but the legacy
+  // runtime call sites (solver quote/plan build, revm prepared quote, flash
+  // borrow fragment, credit sizing, victim overlay, pending evidence) still
+  // execute against the fail-closed projection. The receipt stays fail until
+  // F9 migrates or removes every one of these central call sites.
+  { name: "legacy quoteExact call-site", pattern: /\.quoteExact\(\{/ },
+  { name: "legacy buildPlanFragment call-site", pattern: /\.buildPlanFragment\(\{/ },
+  { name: "legacy prepared quote call-site", pattern: /\.prepared\.quote\(/ },
+  { name: "legacy borrow fragment call-site", pattern: /\.funding\.buildBorrowFragment\(/ },
+  { name: "legacy credit sizing call-site", pattern: /\.creditPolicy\.quoteOutputByDebtBps\(/ },
+  { name: "legacy victim overlay call-site", pattern: /\.victimModels\(\)/ },
+  { name: "legacy pending evidence call-site", pattern: /pendingTransactionEvidence\(\)/ },
 ]);
 
 /**
@@ -415,6 +427,9 @@ function productionCatalogKind(): string {
   );
   try {
     const source = readFileSync(registryPath, "utf8");
+    if (source.includes("strict-catalog-registry-projection-v1")) {
+      return "strict-catalog-registry-projection-v1";
+    }
     if (source.includes("frozen-legacy-route-authority-v1")) {
       return "frozen-legacy-route-authority-v1";
     }

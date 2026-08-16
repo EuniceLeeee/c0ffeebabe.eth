@@ -15,6 +15,8 @@ import {
 } from "../pool-universe.js";
 import { enabledDiscoveryAdapters } from "../protocol-discovery-runtime.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
+  "../venues/production-family-composition.js";
 import {
   loadProductionReplayDiscoveredPools,
   PRODUCTION_REPLAY_ARTIFACT_PRODUCER,
@@ -125,31 +127,40 @@ assert.notEqual(
   siloVaultKey,
   "discovery projection rows must be owner-qualified without fake logical ids",
 );
-const enabledDiscoveryFamilies = enabledDiscoveryAdapters(
-  PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes(),
-  true,
-);
+// F8: discovery scope is projected from the strict catalog's plugin-declared
+// candidate sources; the legacy discoverableRoutes surface is empty.
+const catalogDiscoveryScope = (
+  protocolEdgesEnabled: boolean,
+): readonly string[] =>
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .discoverableFamilySources()
+    .filter((entry) =>
+      !PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .requiresProtocolEdgesFlagFor(entry.familyId) ||
+      protocolEdgesEnabled,
+    )
+    .map((entry) => entry.familyId);
+const enabledDiscoveryFamilyIds = new Set(catalogDiscoveryScope(true));
 assert(
-  enabledDiscoveryFamilies.some((family) => family.id === "fluid-dex"),
+  enabledDiscoveryFamilyIds.has("fluid-dex"),
   "production replay discovery scope must include dynamic swap families",
 );
 assert(
-  enabledDiscoveryFamilies.some((family) => family.id === "credit:fluid"),
-  "production replay discovery scope must include dynamic credit families",
+  !enabledDiscoveryFamilyIds.has("credit:fluid"),
+  "production replay discovery scope must exclude the credit family (independent lifecycle)",
 );
-const protocolDisabledDiscoveryFamilies = enabledDiscoveryAdapters(
-  PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes(),
-  false,
-);
+const protocolDisabledDiscoveryFamilyIds = new Set(catalogDiscoveryScope(false));
 assert(
-  protocolDisabledDiscoveryFamilies.every(
-    (family) => !family.requiresProtocolEdgesFlag,
+  [...protocolDisabledDiscoveryFamilyIds].every(
+    (familyId) =>
+      !PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .requiresProtocolEdgesFlagFor(familyId as never),
   ),
   "disabled protocol edges must exclude every family that requires the flag",
 );
 assert(
-  protocolDisabledDiscoveryFamilies.some((family) => family.id === "fluid-dex") &&
-    protocolDisabledDiscoveryFamilies.some((family) => family.id === "credit:fluid"),
+  protocolDisabledDiscoveryFamilyIds.has("fluid-dex") &&
+    !protocolDisabledDiscoveryFamilyIds.has("credit:fluid"),
   "disabled protocol edges must retain dynamic families that do not require the flag",
 );
 
@@ -337,7 +348,16 @@ try {
 
 function owned(pool: PoolEntry): PoolEntry {
   const family = PRODUCTION_ADAPTER_FAMILIES.routes().forPool(pool.adapter);
-  assert(family.discovery, `${family.id} must be dynamically discoverable`);
+  if (family.kind !== "credit") {
+    // F8: dynamic discoverability is projected from the strict catalog's
+    // plugin-declared candidate sources, not from a legacy discovery object.
+    assert(
+      PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .discoverableFamilySources()
+        .some((entry) => entry.familyId === family.id),
+      `${family.id} must be dynamically discoverable`,
+    );
+  }
   return {
     ...pool,
     discoveryOwnerAdapterId: family.id,

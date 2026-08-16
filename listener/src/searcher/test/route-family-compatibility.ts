@@ -82,7 +82,9 @@ function testPsmCompatibilitySemantics(): void {
     (entry) => entry.executionFamilyId === "protocol:psm",
   );
   assert(psm !== undefined, "PSM manifest entry missing");
-  assert(psm.declaredVenueCount === 1, "PSM static venue count");
+  // F8: the strict projection declares no static venues (all protocol
+  // instances come from the strict discovery pipeline).
+  assert(psm.declaredVenueCount === 0, "PSM static venue count");
   assert(psm.staticRequiresProtocolEdgesFlag === false, "PSM static route must remain ungated");
   assert(psm.dynamicAdmission === null, "PSM must not gain dynamic admission in Slice 0");
   console.log("[route-family-compatibility] PSM compatibility: PASS");
@@ -112,26 +114,26 @@ function testReceiptDepositFrameworkIsNotARegisteredFamily(): void {
 
 function testBaselineFieldAndOrderFloor(): void {
   const expected = [
-    "univ2-standard|swap|univ2|univ2-swap|univ2-swap|erc20-transfer|0|false|-|-",
-    "univ3-standard|swap|univ3|univ3-swap|univ3-swap|erc20-transfer|0|false|-|-",
-    "curve-plain|swap|curve,curve-nr|curve-exchange,curve-exchange-nr,curve-exchange-plain,curve-exchange-received-uint|curve-exchange-plain|erc20-approve|0|false|-|-",
-    "curve-underlying|swap|curve-underlying|curve-exchange-underlying|curve-exchange-underlying|erc20-approve|0|false|-|-",
-    "balancer-v3|swap|balancer-v3|balancer-v3-unlock|balancer-v3-unlock,balancer-v3-settle,balancer-v3-swap,balancer-v3-send-to|erc20-transfer|0|false|-|-",
-    "univ4|swap|univ4|univ4-unlock|univ4-unlock,univ4-swap,univ4-take,univ4-sync,univ4-settle,univ4-settle-value|erc20-transfer,weth-deposit-value,weth-withdraw-amount|0|false|-|-",
     "custom-swap:angstrom-v4|swap|angstrom-v4|angstrom-v4-swap|angstrom-v4-swap|erc20-approve|0|false|-|-",
-    "custom-swap:dodo-v2|swap|dodo-v2|dodo-v2-swap|dodo-v2-swap|erc20-transfer|0|false|-|-",
-    "fluid-dex|swap|fluid-dex|fluid-dex-swap|fluid-dex-swap|erc20-approve|0|false|-|-",
-    "protocol:erc4626|protocol-conversion|erc4626|erc4626-deposit,erc4626-redeem|erc4626-deposit,erc4626-redeem|erc20-approve|0|true|dex-token-domain,observed-interaction|true",
-    "protocol:erc4626-silo-redeem|protocol-conversion|erc4626-silo-redeem|erc4626-redeem-silo|erc4626-redeem-silo||0|true|dex-token-domain,observed-interaction|true",
-    "protocol:goldx|protocol-conversion|goldx|goldx-mint|goldx-mint|erc20-approve|1|true|-|-",
-    "protocol:metronome-synth|protocol-conversion|metronome-synth|metronome-synth-swap|metronome-synth-swap|erc20-approve|1|true|-|-",
-    "protocol:metronome-hgusdc|protocol-conversion|metronome-hgusdc|metronome-hgusdc-exit|metronome-hgusdc-exit|erc20-transfer|1|true|-|-",
-    "protocol:psm|protocol-conversion|psm|psm|psm|erc20-approve|1|false|-|-",
+    "protocol:astra-multitoken|protocol-conversion|astra-multitoken|astra-multitoken-change|astra-multitoken-change|erc20-approve|0|true|observed-interaction|true",
+    "curve-underlying|swap|curve-underlying|curve-exchange-underlying|curve-exchange-underlying|erc20-approve|0|false|-|-",
+    "custom-swap:dodo-v2|swap|dodo-v2,custom-swap:dodo-v2|dodo-v2-swap|dodo-v2-swap|erc20-transfer|0|false|-|-",
     "protocol:eigenpie|protocol-conversion|eigenpie-deposit-router|eigenpie-deposit-asset|eigenpie-deposit-asset|erc20-approve|0|true|observed-interaction|true",
-    "protocol:rocksolid|protocol-conversion|rocksolid|rocksolid-sync-deposit|rocksolid-sync-deposit|erc20-approve|1|true|-|-",
-    "protocol:wsteth|protocol-conversion|wsteth|wsteth-wrap,wsteth-unwrap|wsteth-wrap,wsteth-unwrap|erc20-approve|1|true|-|-",
-    "protocol:self-burn-native|protocol-conversion|self-burn-native-token|self-burn-native-redeem|self-burn-native-redeem|weth-deposit-value|0|true|dex-token-domain,observed-interaction|true",
+    "protocol:erc4626-silo-redeem|protocol-conversion|erc4626-silo-redeem|erc4626-redeem-silo|erc4626-redeem-silo||0|true|dex-token-domain,observed-interaction|true",
+    "protocol:erc4626|protocol-conversion|erc4626|erc4626-deposit,erc4626-redeem|erc4626-deposit,erc4626-redeem|erc20-approve|0|true|dex-token-domain,observed-interaction|true",
+    "protocol:ethertoken-native-redeem|protocol-conversion|ethertoken-native-redeem-token|ethertoken-native-redeem|ethertoken-native-redeem|weth-deposit-value|0|true|observed-interaction|true",
     "credit:fluid|credit|fluid-vault|fluid-vault|fluid-vault,fluid-dex-liquidate|erc20-approve|0|false|-|-",
+    "fluid-dex|swap|fluid-dex|fluid-dex-swap|fluid-dex-swap|erc20-approve|0|false|dex-token-domain|true",
+    "protocol:goldx|protocol-conversion|goldx|goldx-mint|goldx-mint|erc20-approve|0|true|-|-",
+    "protocol:metronome-hgusdc|protocol-conversion|metronome-hgusdc|metronome-hgusdc-exit|metronome-hgusdc-exit|erc20-transfer|0|true|-|-",
+    "protocol:metronome-synth|protocol-conversion|metronome-synth|metronome-synth-swap|metronome-synth-swap|erc20-approve|0|true|-|-",
+    "protocol:psm|protocol-conversion|psm|psm|psm|erc20-approve|0|false|-|-",
+    "protocol:rocksolid|protocol-conversion|rocksolid|rocksolid-sync-deposit|rocksolid-sync-deposit|erc20-approve|0|true|-|-",
+    "protocol:self-burn-native|protocol-conversion|self-burn-native-token|self-burn-native-redeem|self-burn-native-redeem|weth-deposit-value|0|true|dex-token-domain,observed-interaction|true",
+    "univ2-standard|swap|univ2,univ2-standard|univ2-swap|univ2-swap|erc20-transfer|0|false|-|-",
+    "univ3-standard|swap|univ3,univ3-standard|univ3-swap|univ3-swap|erc20-transfer|0|false|-|-",
+    "univ4|swap|univ4,univ4-unlock|univ4-unlock|univ4-unlock,univ4-swap,univ4-take,univ4-sync,univ4-settle,univ4-settle-value|erc20-transfer,weth-deposit-value,weth-withdraw-amount|0|false|-|-",
+    "protocol:wsteth|protocol-conversion|wsteth|wsteth-wrap,wsteth-unwrap|wsteth-wrap,wsteth-unwrap|erc20-approve|0|true|-|-",
   ] as const;
   const actual = compactSnapshot();
   const actualById = new Map(
@@ -186,11 +188,18 @@ function testGenericManifestContract(): void {
     );
     if (entry.dynamicAdmission) {
       assert(
-        entry.familyKind === "protocol-conversion" &&
-          entry.staticRequiresProtocolEdgesFlag &&
-          entry.dynamicAdmission.requiresProtocolEdgesFlag,
+        entry.dynamicAdmission.requiresProtocolEdgesFlag,
         `${entry.executionFamilyId}: dynamic admission protocol gate`,
       );
+      // Protocol families keep their dynamic instances behind the
+      // protocol-edge topology switch; swap families may declare dynamic
+      // candidate sources without that gate (e.g. fluid-dex).
+      if (entry.familyKind === "protocol-conversion") {
+        assert(
+          entry.staticRequiresProtocolEdgesFlag,
+          `${entry.executionFamilyId}: protocol dynamic admission must be edge gated`,
+        );
+      }
       assert(
         entry.dynamicAdmission.candidateSources.length > 0 &&
           new Set(entry.dynamicAdmission.candidateSources).size ===

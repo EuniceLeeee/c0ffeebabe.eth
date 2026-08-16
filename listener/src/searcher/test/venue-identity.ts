@@ -12,10 +12,13 @@ import {
 import { resolveCurveUnderlyingMetadata } from "../venues/curve-underlying.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
-  PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_ADAPTER_FAMILIES,
-  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
+import { univ2StandardAdapter } from "../venues/swaps/univ2-standard.js";
+import { univ3StandardAdapter } from "../venues/swaps/univ3-standard.js";
+import { curveUnderlyingAdapter } from "../venues/swaps/curve-underlying.js";
+import { fluidDexAdapter } from "../venues/swaps/fluid-dex.js";
+import type { RouteLegAdapter } from "../venues/route-leg-adapter.js";
 import {
   factoryDiscoverySourcesForPoolAdapters,
   findVenueByFactory,
@@ -29,6 +32,43 @@ import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
 }
+
+// F8: production identity policy machinery is strict-only. These resolver
+// fixtures exercise the legacy resolver machinery the same way production
+// previously wired it (built from the legacy adapters' own declarations); no
+// production admission flows through them.
+const TEST_LEGACY_ROUTE_ADAPTERS: readonly RouteLegAdapter[] = Object.freeze([
+  univ2StandardAdapter,
+  univ3StandardAdapter,
+  curveUnderlyingAdapter,
+  fluidDexAdapter,
+]);
+const TEST_LEGACY_IDENTITY_RESOLVERS = new IdentityResolverRegistry(
+  Object.freeze(
+    TEST_LEGACY_ROUTE_ADAPTERS.flatMap((adapter) => [...adapter.identityPolicies]),
+  ),
+  (poolAdapter) =>
+    TEST_LEGACY_ROUTE_ADAPTERS.some((adapter) =>
+      adapter.poolAdapters.includes(poolAdapter),
+    ),
+);
+const TEST_LEGACY_DISCOVERY_RESOLVERS = new IdentityResolverRegistry(
+  Object.freeze(
+    TEST_LEGACY_ROUTE_ADAPTERS.flatMap((adapter) =>
+      adapter.discoveryIdentityResolver === undefined
+        ? []
+        : adapter.poolAdapters.map((poolAdapter) => ({
+            poolAdapter,
+            policy: "onchain-resolver" as const,
+            resolve: adapter.discoveryIdentityResolver!,
+          })),
+    ),
+  ),
+  (poolAdapter) =>
+    TEST_LEGACY_ROUTE_ADAPTERS.some((adapter) =>
+      adapter.poolAdapters.includes(poolAdapter),
+    ),
+);
 
 const factoryIface = new ethers.Interface([
   "function factory() view returns (address)",
@@ -152,6 +192,14 @@ class FakeProvider {
     topics?: string[];
     blockNumber?: string;
   }>> {
+    // Strict identity attestation pins the source block hash (F6 Pair B); a
+    // synthetic canonical hash is sufficient for this fake.
+    if (method === "eth_getBlockByNumber") {
+      return [{
+        address: "0x0000000000000000000000000000000000000000",
+        blockNumber: String(args[0]),
+      }];
+    }
     assert(method === "eth_getLogs", `unexpected RPC method ${method}`);
     const requestedAddresses = (Array.isArray(args[0]?.address)
       ? args[0].address
@@ -477,7 +525,7 @@ async function testV2LineageDescriptor(): Promise<void> {
 
   const provider = new FakeProvider();
   const identity = await resolvePoolIdentity(provider, PANCAKE_V2_PAIR, "univ2", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
   });
   assert(identity.ok && identity.venueId === "pancake-v2", "Pancake V2 strict identity");
   assert(identity.ok && identity.adapter === "univ2", "Pancake V2 execution adapter");
@@ -528,7 +576,7 @@ async function testV2LineageDescriptor(): Promise<void> {
     provider,
     UNMEASURED_V2_PAIR,
     "univ2",
-    { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS },
+    { identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS },
   );
   assert(
     unmeasured.ok &&
@@ -545,7 +593,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     { call: async () => "0x" },
     address(0x112),
     "univ2",
-    { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS },
+    { identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS },
   );
   assert(
     !malformedFactory.ok && malformedFactory.reason === "behavior_mismatch",
@@ -559,7 +607,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     },
     address(0x113),
     "univ2",
-    { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS },
+    { identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS },
   );
   assert(
     !transportFailure.ok &&
@@ -577,7 +625,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     address(0x114),
     "curve-underlying",
     {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     },
   );
@@ -623,7 +671,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     address(0x119),
     "curve-underlying",
     {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     },
   );
@@ -768,7 +816,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     compatibleMetaPool,
     "curve-underlying",
     {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     },
   );
@@ -799,7 +847,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     address(0x117),
     "curve-underlying",
     {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     },
   );
@@ -830,7 +878,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     address(0x118),
     "curve-underlying",
     {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     },
   );
@@ -885,7 +933,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     address(0x115),
     "curve-underlying",
     {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     },
   );
@@ -899,7 +947,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     address(0x115),
     "curve-underlying",
     {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     },
   );
@@ -909,25 +957,25 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     "Curve-underlying transport rejection must not poison the backend cache",
   );
   const panorama = await resolvePoolIdentity(provider, PANORAMA_POOL, "univ2", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
   });
   assert(!panorama.ok, "Panoramaswap must not reuse univ2 from the Swap topic");
   assert(panorama.reason === "unsupported_venue", `Panoramaswap reason=${panorama.reason}`);
   assert(panorama.venueId === "panoramaswap-v1", `Panoramaswap venue=${panorama.venueId}`);
 
   const unknown = await resolvePoolIdentity(provider, UNKNOWN_PAIR, "univ2", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
   });
   assert(!unknown.ok && unknown.reason === "unknown_factory", "unknown factory must fail closed");
 
   const corrected = await resolvePoolIdentity(provider, UNI_PAIR, "univ3", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
   });
   assert(corrected.ok, "known factory must resolve despite a wrong event-derived adapter hint");
   assert(corrected.adapter === "univ2", "factory must select the canonical runtime adapter");
 
   const provisionalV2 = await resolvePoolIdentity(provider, UNKNOWN_PAIR, "univ2", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
     admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   });
   assert(
@@ -964,7 +1012,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
       throw new Error(`unexpected V2 reverse-binding call ${to}:${selector}`);
     },
   }, mismatchedV2Pool, "univ2", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
     admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   });
   assert(
@@ -972,7 +1020,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     "a provisional V2 selector lookalike without factory reverse-binding must fail closed",
   );
   const provisionalV3 = await resolvePoolIdentity(provider, UNKNOWN_PAIR, "univ3", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
     admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   });
   assert(
@@ -980,7 +1028,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     "standard-shape V3 must pass provisional behavior proof",
   );
   const fakeV3 = await resolvePoolIdentity(provider, FAKE_V3_POOL, "univ3", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
     admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   });
   assert(
@@ -1016,7 +1064,7 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
       throw new Error(`unexpected reverse-mismatch identity call ${to}:${selector}`);
     },
   }, mismatchedV3Pool, "univ3", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
   });
   assert(
     !reverseMismatch.ok && reverseMismatch.reason === "behavior_mismatch",
@@ -1081,14 +1129,14 @@ async function testRuntimeScanUsesIdentity(): Promise<void> {
 async function testBalancerV3Identity(): Promise<void> {
   const provider = new FakeProvider();
   const registered = await resolvePoolIdentity(provider, BALANCER_V3_POOL, "balancer-v3", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
   });
   assert(registered.ok, "registered Balancer V3 pool should pass identity attestation");
   assert(registered.adapter === "balancer-v3", "Balancer V3 runtime adapter mismatch");
   assert(registered.identitySource === "balancer-v3-vault", "Balancer V3 identity provenance missing");
 
   const fake = await resolvePoolIdentity(provider, FAKE_BALANCER_V3_POOL, "balancer-v3", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
   });
   assert(!fake.ok, "unregistered Balancer V3 pool must fail closed");
   assert(fake.reason === "balancer_v3_unregistered", `Balancer V3 rejection reason=${fake.reason}`);
@@ -1103,7 +1151,7 @@ async function testPersistedMetadataCannotBypassNodeIdentity(): Promise<void> {
     venueId: "univ2" as const,
     factory: UNIV2_FACTORY,
     identitySource: "factory-call" as const,
-  }], { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS });
+  }], { identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS });
   assert(result.accepted.length === 0, "forged persisted identity must not be admitted");
   assert(result.rejected[0]?.venueId === "panoramaswap-v1", "node factory must replace stale metadata");
   assert(
@@ -1115,7 +1163,7 @@ async function testPersistedMetadataCannotBypassNodeIdentity(): Promise<void> {
     address: UNI_PAIR,
     adapter: "univ3",
     venueId: "univ3" as const,
-  }], { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS });
+  }], { identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS });
   assert(corrected.accepted.length === 1, "known factory should correct stale adapter metadata");
   assert(corrected.accepted[0]?.adapter === "univ2", "persisted adapter must yield to factory identity");
   assert(corrected.accepted[0]?.venueId === "univ2", "persisted venue must yield to factory identity");
@@ -1125,7 +1173,7 @@ async function testPersistedMetadataCannotBypassNodeIdentity(): Promise<void> {
 async function testCurveIdentityDoesNotChooseAdapter(): Promise<void> {
   const provider = new FakeProvider();
   const identity = await resolvePoolIdentity(provider, CURVE_POOL, "curve-nr", {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
   });
   assert(identity.ok, "registered Curve pool should pass identity attestation");
   assert(identity.adapter === "curve-nr", "curated adapter must remain unchanged");
@@ -1138,7 +1186,7 @@ async function testV4ManagerIdentity(): Promise<void> {
   const canonical = await attestPoolIdentities(provider, [{
     address: ADDR.UNISWAP_V4_POOL_MANAGER,
     adapter: "univ4",
-  }], { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS });
+  }], { identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS });
   assert(canonical.accepted.length === 1, "canonical v4 manager must be admitted");
   assert(canonical.accepted[0]?.venueId === "univ4", "v4 canonical venue identity");
   assert(canonical.accepted[0]?.identitySource === "v4-manager", "v4 identity provenance");
@@ -1146,7 +1194,7 @@ async function testV4ManagerIdentity(): Promise<void> {
   const result = await attestPoolIdentities(provider, [{
     address: FAKE_V4_MANAGER,
     adapter: "univ4",
-  }], { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS });
+  }], { identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS });
   assert(result.accepted.length === 0, "arbitrary v4 manager must not be admitted");
   assert(result.rejected[0]?.reason === "adapter_mismatch", "v4 rejection reason");
   console.log("[venue-identity] v4 manager identity: PASS");
@@ -1159,7 +1207,7 @@ async function testProtocolAdaptersRequireExactEnabledSeeds(): Promise<void> {
     { address: FAKE_PSM, adapter: "psm" },
   ];
   const result = await attestPoolIdentities(provider, candidates, {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    identityRegistry: TEST_LEGACY_IDENTITY_RESOLVERS,
     seedEntries: [{ address: PSM_SEED, adapter: "psm", venueId: "psm" }],
   });
   assert(result.accepted.length === 1, "exact enabled protocol seed should be admitted");
@@ -1180,15 +1228,15 @@ async function testProtocolAdaptersRequireExactEnabledSeeds(): Promise<void> {
 
 function testIdentityRegistryConformance(): void {
   assertIdentityResolverCoverage(
-    PRODUCTION_ADAPTER_FAMILIES.routes().list(),
-    PRODUCTION_IDENTITY_RESOLVERS,
+    TEST_LEGACY_ROUTE_ADAPTERS,
+    TEST_LEGACY_IDENTITY_RESOLVERS,
   );
   let missingPolicyError = "";
   try {
     assertIdentityResolverCoverage([
-      ...PRODUCTION_ADAPTER_FAMILIES.routes().list(),
+      ...TEST_LEGACY_ROUTE_ADAPTERS,
       { id: "compat:synthetic", poolAdapters: ["synthetic-pool-adapter"] },
-    ], PRODUCTION_IDENTITY_RESOLVERS);
+    ], TEST_LEGACY_IDENTITY_RESOLVERS);
   } catch (error) {
     missingPolicyError = error instanceof Error ? error.message : String(error);
   }
@@ -1196,7 +1244,7 @@ function testIdentityRegistryConformance(): void {
     missingPolicyError.includes("missing=[synthetic-pool-adapter]"),
     "synthetic route adapter without identity policy must fail explicitly",
   );
-  const fluidOrdinary = PRODUCTION_IDENTITY_RESOLVERS.list().find(
+  const fluidOrdinary = TEST_LEGACY_IDENTITY_RESOLVERS.list().find(
     (descriptor) => descriptor.poolAdapter === "fluid-dex",
   );
   assert(
@@ -1204,7 +1252,7 @@ function testIdentityRegistryConformance(): void {
       fluidOrdinary.canonicalAddress === undefined,
     "ordinary Fluid DEX intake must not bypass active family admission",
   );
-  const fluidDiscovery = PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS.list().find(
+  const fluidDiscovery = TEST_LEGACY_DISCOVERY_RESOLVERS.list().find(
     (descriptor) => descriptor.poolAdapter === "fluid-dex",
   );
   assert(
@@ -1215,13 +1263,13 @@ function testIdentityRegistryConformance(): void {
 }
 
 async function testRouteRegistryOwnsProductionSupport(): Promise<void> {
-  assert(PRODUCTION_IDENTITY_RESOLVERS.supportsRoutePool("univ2"), "registered route pool support");
+  assert(TEST_LEGACY_IDENTITY_RESOLVERS.supportsRoutePool("univ2"), "registered route pool support");
   assert(
-    PRODUCTION_IDENTITY_RESOLVERS.supportsRoutePool("fluid-dex"),
+    TEST_LEGACY_IDENTITY_RESOLVERS.supportsRoutePool("fluid-dex"),
     "registered Fluid execution family must own route support",
   );
   assert(
-    !PRODUCTION_IDENTITY_RESOLVERS.supportsRoutePool("synthetic-pool-adapter"),
+    !TEST_LEGACY_IDENTITY_RESOLVERS.supportsRoutePool("synthetic-pool-adapter"),
     "unknown identity must not imply route support",
   );
 

@@ -20,8 +20,8 @@ import { selectMatureDexActivity } from "../build-active-pool-universe.js";
 import { poolProjectionRowKey } from "../pool-universe.js";
 import {
   PRODUCTION_ADAPTER_FAMILIES,
-  PRODUCTION_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
+import { IdentityResolverRegistry } from "../venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
 import { poolAdapterId } from "../venues/registry-ids.js";
 import type { PoolEntry } from "../planner/token-graph.js";
@@ -68,6 +68,7 @@ const bytesAdapter = poolAdapterId("test-singleton-bytes32-pool");
 const base = PRODUCTION_ADAPTER_FAMILIES.swaps()[0];
 const {
   matureDexUniverseDiscovery: _baseMatureDexUniverseDiscovery,
+  poolDiscovery: _basePoolDiscovery,
   ...nonMatureBase
 } = base;
 
@@ -169,14 +170,17 @@ async function testBoundedProductionUnionBatching(): Promise<void> {
     historicalResolution: "complete",
     strict: true,
   });
+  // F8: the projected event surface is topic-based (strict patterns carry
+  // topics; call-based patterns stay strict-owned), so one coalesced
+  // address-free union scan covers the whole production event set.
   assert(
     empty.coverage.every((item) => item.complete) &&
-      emptyFilters.length === 2 &&
+      emptyFilters.length === 1 &&
       emptyFilters.every((filter) =>
         filter.fromBlock === fromBlock && filter.toBlock === toBlock
       ),
     "a 512-block production union must use one coalesced topic scan " +
-      "(union OR topics, full 512-block range) and one V4 Initialize scan",
+      "(union OR topics, full 512-block range)",
   );
   assert(
     emptyFilters[0]?.address === undefined,
@@ -360,6 +364,9 @@ const syntheticAddressFamily: SwapAdapter = {
     materialization: "family",
     poolDiscovery: syntheticAddressMaterializer,
   }),
+  // F8: the helper base is a strict-projected family whose edge adapter ids
+  // belong to the strict family; this synthetic fixture owns univ2-swap edges.
+  edgeAdapterIds: ["univ2-swap"],
   async buildEdges(candidate) {
     if (!candidate.token0 || !candidate.token1) {
       throw new Error("synthetic family metadata missing");
@@ -1029,6 +1036,10 @@ assert(
 const unionFamily: SwapAdapter = {
   ...base,
   id: "custom-swap:union-discovery",
+  // F8: the helper base is a strict-projected family without a mature-DEX
+  // marker; this synthetic union fixture declares it explicitly so its
+  // address-emitter event needs no family materializer.
+  matureDexUniverseDiscovery: true,
   poolAdapters: [addressAdapter, bytesAdapter],
   identityPolicies: [
     {
@@ -1292,9 +1303,15 @@ const retainedCurveBackend = {
     });
   },
 };
+// F8: production identity policy machinery is strict-only; this fixture
+// rebuilds the legacy Curve resolver from the legacy adapter's own policy.
+const retainedCurveResolvers = new IdentityResolverRegistry(
+  Object.freeze(curveUnderlyingAdapter.identityPolicies),
+  (poolAdapter) => poolAdapter === "curve-underlying",
+);
 const retainedCurve = await retainVerifiedSwapFamilyInstances({
   families: [curveUnderlyingAdapter],
-  identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  identityRegistry: retainedCurveResolvers,
   admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   backend: retainedCurveBackend,
   priorPools: [{
@@ -1321,7 +1338,7 @@ assert(
 const readsAfterRetention = retainedCurveReads;
 const freshlyObservedCurve = await retainVerifiedSwapFamilyInstances({
   families: [curveUnderlyingAdapter],
-  identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  identityRegistry: retainedCurveResolvers,
   admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   backend: retainedCurveBackend,
   priorPools: retainedCurve.pools,
@@ -1411,16 +1428,26 @@ assert(
 
 const productionRetryRegistry =
   PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery();
+// F8: every projected materializer is a strict-only fail-closed deferred
+// materializer. It consumes neither typed retry channel (address or opaque)
+// because re-materialization is owned by the strict pipeline; unresolved
+// identities always return through the raw retryablePools channel instead.
 assert(
-  productionRetryRegistry.consumesAddressRetries("curve-underlying") &&
-    productionRetryRegistry.consumesAddressRetries("dodo-v2") &&
-    productionRetryRegistry.consumesAddressRetries("fluid-dex") &&
-    !productionRetryRegistry.consumesAddressRetries("curve") &&
-    !productionRetryRegistry.consumesAddressRetries("balancer-v3") &&
-    !productionRetryRegistry.consumesAddressRetries("univ4") &&
-    productionRetryRegistry.consumesMaterializationRetries("univ4") &&
-    productionRetryRegistry.consumesMaterializationRetries("curve-underlying"),
-  "address and opaque materializers should own only their typed retry routing",
+  [...productionRetryRegistry.list()].every(
+    (descriptor) =>
+      !productionRetryRegistry.consumesAddressRetries(
+        descriptor.event.discovery.poolAdapter,
+      ) &&
+      !productionRetryRegistry.consumesMaterializationRetries(
+        descriptor.event.discovery.poolAdapter,
+      ),
+  ),
+  "strict-projected materializers must not claim typed retry ownership",
+);
+assert(
+  !productionRetryRegistry.consumesAddressRetries("curve") &&
+    !productionRetryRegistry.consumesAddressRetries("balancer-v3"),
+  "unregistered adapters must never claim retry ownership",
 );
 
 console.log("landed-pool-discovery PASS (23/23)");

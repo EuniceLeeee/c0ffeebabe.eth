@@ -147,6 +147,15 @@ export class AdapterFamilyRegistry {
     strictCatalog?: {
       readonly definitionBoundaryHashFor: (familyId: string) => string | null;
     },
+    options?: {
+      /**
+       * F8: families are a strict-catalog projection. Legacy-only
+       * assertions (identity policy coverage, protocol venue declarations)
+       * do not apply because the strict pipeline owns identity/discovery;
+       * every other registry invariant still holds.
+       */
+      readonly strictProjected?: boolean;
+    },
   ) {
     this.strictCatalog = strictCatalog ?? null;
     const swaps: SwapAdapter[] = [];
@@ -193,8 +202,11 @@ export class AdapterFamilyRegistry {
       routes,
       this.registeredVenueOwners,
       this.registeredIdentitySourceOwners,
+      options?.strictProjected === true,
     );
-    assertProtocolVenueDeclarations(protocols);
+    if (options?.strictProjected !== true) {
+      assertProtocolVenueDeclarations(protocols);
+    }
     this.routeRegistry = new RouteLegRegistry(routes);
     this.swapFamilies = Object.freeze(swaps);
     this.protocolFamilies = Object.freeze(protocols);
@@ -1015,6 +1027,7 @@ function assertRouteIdentityDeclarations(
   adapters: readonly RouteLegAdapter[],
   registeredVenueOwners: Map<string, ExecutionFamilyId>,
   registeredIdentitySourceOwners: Map<string, ExecutionFamilyId>,
+  strictProjected: boolean,
 ): void {
   for (const adapter of adapters) {
     if (
@@ -1045,19 +1058,21 @@ function assertRouteIdentityDeclarations(
       }
       localPoolAdapters.add(poolAdapter);
     }
-    const declared = new Set(adapter.identityPolicies.map((item) => item.poolAdapter));
-    const expected = new Set(adapter.poolAdapters);
-    const missing = [...expected].filter((item) => !declared.has(item));
-    const extra = [...declared].filter((item) => !expected.has(item));
-    if (
-      declared.size !== adapter.identityPolicies.length ||
-      missing.length > 0 ||
-      extra.length > 0
-    ) {
-      throw new Error(
-        `adapter-family registry: ${adapter.id} identity coverage mismatch ` +
-          `missing=[${missing.join(",")}] extra=[${extra.join(",")}]`,
-      );
+    if (!strictProjected) {
+      const declared = new Set(adapter.identityPolicies.map((item) => item.poolAdapter));
+      const expected = new Set(adapter.poolAdapters);
+      const missing = [...expected].filter((item) => !declared.has(item));
+      const extra = [...declared].filter((item) => !expected.has(item));
+      if (
+        declared.size !== adapter.identityPolicies.length ||
+        missing.length > 0 ||
+        extra.length > 0
+      ) {
+        throw new Error(
+          `adapter-family registry: ${adapter.id} identity coverage mismatch ` +
+            `missing=[${missing.join(",")}] extra=[${extra.join(",")}]`,
+        );
+      }
     }
     for (const policy of adapter.identityPolicies) {
       registerIdentityIds(

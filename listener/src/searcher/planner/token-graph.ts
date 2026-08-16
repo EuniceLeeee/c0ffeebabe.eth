@@ -5,10 +5,16 @@ import type { VenueIdentitySource } from "../venues/identity.js";
 import type { PoolAdapterId } from "../venues/registry-ids.js";
 import type { CanonicalEdgeId } from "../venues/blockscan-state-capability.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import {
+  resolveStrictEdgesForPool,
+} from "../venues/strict-catalog-registry-projection.js";
 import type { DeclaredProtocolVenue } from "../venues/route-leg-adapter.js";
 import type { RouteEdgeBuildControl } from "../venues/route-leg-adapter.js";
 import type { RouteImmutableBinding } from "../venues/route-immutable-binding.js";
-import { isRouteInstanceNotApplicableError } from "../venues/route-instance-availability.js";
+import {
+  isRouteInstanceNotApplicableError,
+  RouteInstanceNotApplicableError,
+} from "../venues/route-instance-availability.js";
 import {
   edgeExecutionVariantKey,
   edgeInstanceKey,
@@ -490,14 +496,21 @@ export function buildTokenIndex(edges: TokenEdge[]): Map<string, Set<string>> {
 
 async function queryPoolEdges(
   pool: PoolEntry,
-  backend: TokenQueryBackend,
-  control?: RouteEdgeBuildControl,
+  _backend: TokenQueryBackend,
+  _control?: RouteEdgeBuildControl,
 ): Promise<TokenEdge[]> {
-  return PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(
-    pool,
-    backend,
-    control,
-  );
+  // F8: the routing graph is sourced from the committed strict views; the
+  // legacy family buildEdges path is strict-only (throws). A pool without
+  // committed strict edges is terminal-known at the graph level (the strict
+  // publication is the authority); it re-enters the graph when a later
+  // committed publication covers it.
+  const strictEdges = resolveStrictEdgesForPool(pool);
+  if (strictEdges.length === 0) {
+    throw new RouteInstanceNotApplicableError(
+      `strict graph: pool ${pool.adapter} ${pool.address} has no committed strict edges`,
+    );
+  }
+  return [...strictEdges];
 }
 
 function registeredRouteInstanceKey(pool: PoolEntry): string {

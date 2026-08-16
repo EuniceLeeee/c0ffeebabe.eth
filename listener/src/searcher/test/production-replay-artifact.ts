@@ -4,6 +4,8 @@ import { ethers } from "ethers";
 import { poolProjectionRowKey } from "../pool-universe.js";
 import type { PoolEntry, VerifiedRouteSpec } from "../planner/token-graph.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
+  "../venues/production-family-composition.js";
 import type { FamilySourceCoverage } from "../../shared/evidence/canonical-edge-set.js";
 
 export const PRODUCTION_REPLAY_ARTIFACT_SCHEMA = 4 as const;
@@ -173,7 +175,15 @@ export function selectProductionReplayDiscoveredPools(
       throw new Error(`discovered pool ${key} has no probe-verified route`);
     }
     const family = PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pool.adapter);
-    if (!family?.discovery) {
+    // F8: dynamic ownership is projected from the strict catalog's
+    // plugin-declared candidate sources; the legacy discovery object is gone.
+    const dynamicallyOwned = family !== null && (
+      family.kind === "credit" ||
+      PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .discoverableFamilySources()
+        .some((entry) => entry.familyId === family.id)
+    );
+    if (!dynamicallyOwned) {
       throw new Error(`discovered pool ${key} is not owned by a dynamic route family`);
     }
     if (

@@ -13,7 +13,6 @@ import {
 } from "../venues/production-infra-actions.js";
 import {
   PRODUCTION_ADAPTER_FAMILIES,
-  PRODUCTION_FROZEN_LEGACY_ROUTE_BASELINE,
 } from "../venues/production-registry.js";
 
 assert.equal(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.modules.length, 0);
@@ -61,17 +60,12 @@ for (const action of PRODUCTION_STRICT_SHADOW_FAMILY_OWNED_ACTION_ADAPTERS) {
   );
 }
 
-assert.equal(
-  PRODUCTION_ADAPTER_FAMILIES,
-  PRODUCTION_FROZEN_LEGACY_ROUTE_BASELINE,
-  "legacy route callers receive only the explicitly frozen compatibility view",
-);
 assert.deepEqual(
-  PRODUCTION_FROZEN_LEGACY_ROUTE_BASELINE.list().map((family) => family.id).sort(),
+  PRODUCTION_ADAPTER_FAMILIES.list().map((family) => family.id).sort(),
   PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins
     .map((module) => module.familyId)
     .sort(),
-  "strict shadow and legacy production must cover the same complete Family cohort",
+  "the strict projection must cover the same complete Family cohort as the strict catalog",
 );
 
 const firstBlockScanFamilies =
