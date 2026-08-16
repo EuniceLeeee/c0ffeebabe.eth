@@ -333,6 +333,42 @@ export async function scanProtocolDiscoveryRange(input: {
     }
   }
 
+  // F8: the blockscan observed lane is the strict pipeline event
+  // observation surface (the mempool trace gate cannot fire for public
+  // mempool hints, which carry no logs). Surface the matched protocol logs
+  // into the evidence cache so the strict publication chain derives event
+  // observations with real amounts. Dedup against the existing buffer so
+  // repeated scans of one range never duplicate events.
+  const observedEventBuffer = input.evidenceCache?.runtime.observedEvents;
+  if (observedEventBuffer !== undefined && eventLogs.length > 0) {
+    const seenKeys = new Set(observedEventBuffer.map((event) =>
+      event.kind === "log"
+        ? `log:${event.blockNumber}:${event.transactionHash ?? ""}:` +
+            `${event.topics?.[0]?.toLowerCase() ?? ""}`
+        : `call:${event.blockNumber}:${event.transactionHash ?? ""}:` +
+            `${event.data.slice(0, 10).toLowerCase()}`
+    ));
+    for (const log of eventLogs) {
+      if (log.transactionHash === undefined ||
+          log.blockNumber === undefined) {
+        continue;
+      }
+      const key = `log:${log.blockNumber}:` +
+        `${log.transactionHash.toLowerCase()}:` +
+        `${log.topics[0]?.toLowerCase() ?? ""}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      observedEventBuffer.push(Object.freeze({
+        kind: "log" as const,
+        address: log.address.toLowerCase(),
+        topics: Object.freeze([...log.topics]),
+        data: log.data,
+        transactionHash: log.transactionHash.toLowerCase(),
+        blockNumber: log.blockNumber,
+      }));
+    }
+  }
+
   const txHashes = new Set<string>();
   const txBlocks = new Map<string, number>();
   for (const log of eventLogs) {
