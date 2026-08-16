@@ -3229,7 +3229,20 @@ async function main(): Promise<void> {
     sharedPlanner: planner,
     backrunStatePublisher,
     routeTelemetry: blockScanRouteTelemetry,
-    discovery: liveDiscovery.blockScanHooks,
+    // F8: the nminus1 producer's topology cache adopts the discovery
+    // topology key after an interval; the committed strict edges merge into
+    // the runtime graph without changing that key, so the producer would
+    // keep the pre-merge (empty) edge set forever. Suffix the key with the
+    // strict root revision so each strict publication forces a re-adopt.
+    discovery: Object.freeze({
+      ...liveDiscovery.blockScanHooks,
+      topologyKey: () => {
+        const strictRevision =
+          discoveryContinuityComposition?.catalogRoot.capture()
+            ?.envelope.snapshot.revision ?? -1;
+        return `${liveDiscovery.blockScanHooks.topologyKey()}:strict:${strictRevision}`;
+      },
+    }),
     blind: {
       enabled: blindProductionAudit,
       activeSource: () => activeBlindSourceHead,
