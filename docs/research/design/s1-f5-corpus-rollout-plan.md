@@ -971,6 +971,20 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   验收事实 = family fresh 数据（S1）+ exact.amountOut ≈ sim.amountOut
   （S3/S5）+ 六步 judge verdict。ret13 全量池数验收已在 universe 构建
   层达成（12,015 池 ≥ 基线），live 验收只取代表性 fresh 事实。
+- **F5 live 验收首轮结果（f588b5dd，subset，backfill 冻结）**：738 events
+  + 810 routes；blockscan-refine-shadow 440+ pass 产出真实 exact 引用
+  （familyOutcomes：univ2 175+/univ3 135+/univ4 105+/dodo 19+/curve 77+
+  /psm 10+ 全 positive，real positiveMaxInputMin/Max）——S1/S3/S5 的
+  blockscan 侧事实达成；但协议族（erc4626 53/self-burn 82/silo 3）
+  全部 identity rejected `resource-limited`——startup active-pool-
+  discovery 用 minimal runtime（无 simulator），且本 run 冻结
+  SEARCHER_DISCOVERY_BACKFILL_ENABLED=0 使 coordinator 的 periodic
+  protocol-discovery 车道（带 identityRuntime）未运行。
+- **F5 live 验收第二轮（4b72d7bc，backfill 开）**：恢复 protocol
+  backfill 车道（coordinator periodic protocol discovery 带生产 revm
+  identityRuntime），预期 erc4626/fluid/silo/self-burn 经 effect-delta
+  simulation 准入（与 live-smoke 单池验证一致）；blockscan 车道继续
+  产出 S1/S3/S5 事实；3h 窗口。
 - **剩余**：F5 live 验收收尾（judge verdict）→ F9
   （MigrationCleanupReceipt.verdict=pass + AST/import-closure 证明）。
 - **F9 预检发现（本轮，待 F5 后执行）**：blockscan-state-capability 族
