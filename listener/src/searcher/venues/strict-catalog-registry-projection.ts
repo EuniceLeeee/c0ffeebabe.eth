@@ -869,6 +869,28 @@ function bridgeProtocolDiscoveryCapability(
       callPatterns.map((pattern) => pattern.selector.toLowerCase()),
     ),
     addressMatcherVersion: "strict-address-surface-v1",
+    ...(sources.includes("dex-token-domain" as const)
+      ? {
+          // The shared scanner persists matched candidates into the evidence
+          // cache only through the cache-policy path. The strict matcher
+          // output is immutable while code+implementation match, so the
+          // fingerprint is exactly those two values (already read by the
+          // scanner, no extra reads).
+          addressMatcherCachePolicy: {
+            kind: "current-block-dependency-fingerprint" as const,
+            invariant:
+              "matcher-output-immutable-while-code-implementation-and-dependencies-match" as const,
+            version: "strict-address-surface-v1",
+            async currentDependencyFingerprint(
+              candidate: ProtocolAddressCandidateSurface,
+            ): Promise<string> {
+              return ethers.keccak256(
+                ethers.concat([candidate.codeHash, candidate.implementationWord]),
+              );
+            },
+          },
+        }
+      : {}),
     ...(sources.includes("observed-interaction" as const)
       ? { observedMatcherVersion: "strict-observed-call-v1" }
       : {}),
