@@ -305,6 +305,16 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   identity rpc 与 silo no-outcome 两族缺口。node env：
   SEARCHER_DISCOVERY_BACKFILL_ENABLED=1（F5 冻结 0 会饿死 strict 观察面）、
   universe 1500 pools。本地两道门 PASS、shadow suite 全绿、build 绿。
+- **2026-08-17 状态机收敛（commit e7b7174a→52122d5e）**：blockscan state machine
+  从 expected=0 推进到 `expected=15`（protocol:erc4626 keys=15）。三个缺口：(e)
+  observed-interaction 族 watermark 是 contiguous source，watermark=0 永远无法
+  推进——startup 锚定 seedObserved（e7b7174a）；(f) strict 实例的 pool 不在 DEX
+  universe pool set——committed strict edges 在每次 strict publication 合并进
+  runtime graph（98091024，dedup by canonicalEdgeId + 检测地址表）；(g) 图视图
+  缓存按 discovery topologyKey 键控，strict 合并不改变该 key——缓存永远冻结
+  空边集——topologyKey 后缀 strict root revision（52122d5e）。剩余：`priced=0`
+  （expected=15）——strict pricing state 的 mids 推导（生命周期 pricing 证据），
+  下轮跟进。
 - **2026-08-14 完成（commit 16cf4436）**：solver quoteSource 移除
   `strictQuoteSource ?? liveBackend` 的 legacy fallback——strict quote
   source 是唯一 solver 报价路径（composition 默认后 strict 总存在；
