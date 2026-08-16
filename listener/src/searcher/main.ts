@@ -1833,9 +1833,31 @@ async function main(): Promise<void> {
           if (cursor.completeThroughHash === null) return;
           const previousCatalogRoot =
             discoveryContinuityComposition.catalogRoot.capture();
+          // F8: the legacy observed cursor cannot advance (the observed
+          // protocol-discovery pass is inert), so pinning the publication
+          // source to it would strand every observation behind the anchor.
+          // Anchor at the current canonical head instead: recent observations
+          // qualify and the strict pipeline stays self-sufficient.
+          let sourceBlock = cursor.completeThroughBlock;
+          let sourceHash = cursor.completeThroughHash;
+          try {
+            const headNumber = await provider.getBlockNumber();
+            if (
+              Number.isSafeInteger(headNumber) &&
+              headNumber >= sourceBlock
+            ) {
+              const headHash = await readBlockHash(provider, headNumber);
+              if (/^0x[0-9a-fA-F]{64}$/.test(headHash)) {
+                sourceBlock = headNumber;
+                sourceHash = headHash.toLowerCase();
+              }
+            }
+          } catch {
+            // Keep the cursor anchor on head read failure (fail closed).
+          }
           const source = Object.freeze({
-            number: cursor.completeThroughBlock,
-            hash: cursor.completeThroughHash,
+            number: sourceBlock,
+            hash: sourceHash,
             generation:
               (previousCatalogRoot?.envelope.snapshot.source.generation ?? -1) +
               1,
