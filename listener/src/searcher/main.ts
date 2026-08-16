@@ -3332,8 +3332,17 @@ async function main(): Promise<void> {
     adapterRuntimeCoordinator: () => adapterRuntimeCoordinator,
     flashTokens: () => flashTokens,
     buildGraphView(input) {
+      // F8: the graph view cache is keyed by the discovery topology, which
+      // never changes when the committed strict edges merge into the runtime
+      // graph; a stable key would freeze the pre-merge (empty) edge set
+      // forever. Suffix the key with the strict root revision so each strict
+      // publication rebuilds the view with the merged edges.
+      const strictRevision =
+        discoveryContinuityComposition?.catalogRoot.capture()
+          ?.envelope.snapshot.revision ?? -1;
       return adapterFamilyGraphViews.build({
         ...input,
+        topologyKey: `${input.topologyKey}:strict:${strictRevision}`,
         dexSourceCompleteThrough: dexGraphCoverage.sourceCompleteThrough,
         retryablePools: [
           ...retryableDexGraphPools.values(),
