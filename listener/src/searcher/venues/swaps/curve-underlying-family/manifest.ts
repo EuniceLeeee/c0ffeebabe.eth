@@ -14,5 +14,6 @@ export const curveUnderlyingFamilyManifest = {
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [CURVE_UNDERLYING_REGISTRY_LINEAGE_ID],
   poolAdapterIds: ["curve-underlying"],
+  edgeAdapterIds: ["curve-exchange-underlying"],
   requiresProtocolEdgesFlag: false,
 } satisfies FamilyManifest<"swap">;

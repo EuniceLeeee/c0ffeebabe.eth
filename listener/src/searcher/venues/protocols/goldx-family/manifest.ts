@@ -12,5 +12,6 @@ export const goldxFamilyManifest = {
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   supportedLineages: [GOLDX_LINEAGE_ID],
   poolAdapterIds: ["goldx"],
+  edgeAdapterIds: ["goldx-mint"],
   requiresProtocolEdgesFlag: true,
 } satisfies FamilyManifest<"protocol">;

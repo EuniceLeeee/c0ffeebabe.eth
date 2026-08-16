@@ -16,5 +16,6 @@ export const metronomeHgUsdcFamilyManifest = {
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "redeem" }],
   supportedLineages: [METRONOME_HGUSDC_LINEAGE_ID],
   poolAdapterIds: ["metronome-hgusdc"],
+  edgeAdapterIds: ["metronome-hgusdc-exit"],
   requiresProtocolEdgesFlag: true,
 } satisfies FamilyManifest<"protocol">;

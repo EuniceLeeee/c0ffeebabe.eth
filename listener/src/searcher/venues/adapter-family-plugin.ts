@@ -1016,6 +1016,28 @@ export interface FamilyManifest<Domain extends FamilyDomain> {
    */
   readonly poolAdapterIds?: readonly string[];
   /**
+   * Plugin-owned route/edge action-adapter labels (e.g. "univ2-swap",
+   * "univ4-unlock"). These are the edge-adapter provenance labels consumed
+   * by the legacy-shaped route ownership projection (findForEdge /
+   * edgeAdapterIds ownership scans); they are never an admission gate —
+   * catalog action ownership remains the authority. The central pipeline
+   * only reads this declaration through the generated catalog projection;
+   * it never hardcodes a family-specific label table.
+   */
+  readonly edgeAdapterIds?: readonly string[];
+  /**
+   * Plugin-owned funding priorities (funding domain only). These are the
+   * planning/liquidity priorities consumed by the legacy-shaped funding
+   * projection (flash-loan framework ordering); they are never an
+   * admission gate — the strict funding capability remains the authority.
+   * The central pipeline only reads this declaration through the generated
+   * catalog projection; it never hardcodes a family-specific priority table.
+   */
+  readonly fundingPriority?: {
+    readonly planningPriority: number;
+    readonly liquidityPriority: number;
+  };
+  /**
    * Protocol-edge admission flag (plugin-owned). Families that only admit
    * instances when the central protocol-edge topology switch is enabled
    * declare true here; swap families and credit default to false. The
@@ -3050,7 +3072,9 @@ function validateManifest(
   assertExactKeys(manifest, [
     "allowedTaxonomy",
     "domain",
+    "edgeAdapterIds",
     "familyId",
+    "fundingPriority",
     "ownedActionAdapterIds",
     "poolAdapterIds",
     "requiresProtocolEdgesFlag",
@@ -3097,6 +3121,31 @@ function validateManifest(
   }
   if (manifest.poolAdapterIds !== undefined) {
     stringSet(manifest.poolAdapterIds, "poolAdapterIds", true);
+  }
+  if (manifest.edgeAdapterIds !== undefined) {
+    stringSet(manifest.edgeAdapterIds, "edgeAdapterIds", true);
+    for (const edgeAdapterId of manifest.edgeAdapterIds) {
+      if (!owned.has(edgeAdapterId)) {
+        throw new Error(
+          manifest.familyId + " edge adapter " + edgeAdapterId + " is not a family-owned action",
+        );
+      }
+    }
+  }
+  if (manifest.fundingPriority !== undefined) {
+    if (expectedDomain !== "funding") {
+      throw new Error(
+        manifest.familyId + " fundingPriority is only allowed for funding families",
+      );
+    }
+    if (
+      !Number.isSafeInteger(manifest.fundingPriority.planningPriority) ||
+      !Number.isSafeInteger(manifest.fundingPriority.liquidityPriority)
+    ) {
+      throw new Error(
+        manifest.familyId + " fundingPriority must be safe integers",
+      );
+    }
   }
   if (
     manifest.requiresProtocolEdgesFlag !== undefined &&

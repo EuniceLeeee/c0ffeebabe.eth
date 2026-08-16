@@ -14,5 +14,6 @@ export const dodoV2FamilyManifest = {
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [DODO_V2_REGISTRY_LINEAGE_ID],
   poolAdapterIds: ["dodo-v2", "custom-swap:dodo-v2"],
+  edgeAdapterIds: ["dodo-v2-swap"],
   requiresProtocolEdgesFlag: false,
 } satisfies FamilyManifest<"swap">;

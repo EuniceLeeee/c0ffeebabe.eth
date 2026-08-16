@@ -28,6 +28,7 @@ export const balancerFlashManifest = {
   requiredInfraActionAdapterIds: ["assert-balance", "erc20-transfer"],
   allowedTaxonomy: [{ slotKind: "flash" }],
   supportedLineages: [lineageId("balancer-flash")],
+  fundingPriority: { planningPriority: 1, liquidityPriority: 0 },
 } satisfies FamilyManifest<"funding">;
 
 export const balancerFlashFunding =

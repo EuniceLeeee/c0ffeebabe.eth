@@ -17,5 +17,6 @@ export const wstethFamilyManifest = {
   ],
   supportedLineages: [WSTETH_LINEAGE_ID],
   poolAdapterIds: ["wsteth"],
+  edgeAdapterIds: ["wsteth-wrap", "wsteth-unwrap"],
   requiresProtocolEdgesFlag: true,
 } satisfies FamilyManifest<"protocol">;

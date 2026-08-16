@@ -12,5 +12,6 @@ export const univ2FamilyManifest = {
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [UNIV2_FACTORY_LINEAGE_ID],
   poolAdapterIds: ["univ2", "univ2-standard"],
+  edgeAdapterIds: ["univ2-swap"],
   requiresProtocolEdgesFlag: false,
 } satisfies FamilyManifest<"swap">;

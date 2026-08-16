@@ -13,4 +13,6 @@ export const fluidCreditFamilyManifest = {
   requiredInfraActionAdapterIds: ["erc20-approve"],
   allowedTaxonomy: [{ slotKind: "lend" }],
   supportedLineages: [FLUID_CREDIT_FACTORY_LINEAGE_ID],
+  poolAdapterIds: ["fluid-vault"],
+  edgeAdapterIds: ["fluid-vault"],
 } satisfies FamilyManifest<"credit">;

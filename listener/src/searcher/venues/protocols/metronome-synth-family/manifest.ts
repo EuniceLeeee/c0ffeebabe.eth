@@ -16,5 +16,6 @@ export const metronomeSynthFamilyManifest = {
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   supportedLineages: [METRONOME_SYNTH_LINEAGE_ID],
   poolAdapterIds: ["metronome-synth"],
+  edgeAdapterIds: ["metronome-synth-swap"],
   requiresProtocolEdgesFlag: true,
 } satisfies FamilyManifest<"protocol">;

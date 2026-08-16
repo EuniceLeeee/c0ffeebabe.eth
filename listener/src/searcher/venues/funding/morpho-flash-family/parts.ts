@@ -28,6 +28,7 @@ export const morphoFlashManifest = {
   requiredInfraActionAdapterIds: ["assert-balance", "erc20-approve"],
   allowedTaxonomy: [{ slotKind: "flash" }],
   supportedLineages: [lineageId("morpho-flash")],
+  fundingPriority: { planningPriority: 0, liquidityPriority: 1 },
 } satisfies FamilyManifest<"funding">;
 
 export const morphoFlashFunding =

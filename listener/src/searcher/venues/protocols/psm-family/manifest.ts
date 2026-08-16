@@ -12,5 +12,6 @@ export const psmFamilyManifest = {
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   supportedLineages: [PSM_LINEAGE_ID],
   poolAdapterIds: ["psm"],
+  edgeAdapterIds: ["psm"],
   requiresProtocolEdgesFlag: false,
 } satisfies FamilyManifest<"protocol">;

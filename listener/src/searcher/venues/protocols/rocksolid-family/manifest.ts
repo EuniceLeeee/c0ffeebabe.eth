@@ -14,5 +14,6 @@ export const rocksolidFamilyManifest = {
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "wrap" }],
   supportedLineages: [ROCKSOLID_LINEAGE_ID],
   poolAdapterIds: ["rocksolid"],
+  edgeAdapterIds: ["rocksolid-sync-deposit"],
   requiresProtocolEdgesFlag: true,
 } satisfies FamilyManifest<"protocol">;

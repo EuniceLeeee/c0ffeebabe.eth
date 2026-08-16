@@ -14,5 +14,6 @@ export const angstromV4FamilyManifest = {
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [ANGSTROM_V4_LINEAGE_ID],
   poolAdapterIds: ["angstrom-v4"],
+  edgeAdapterIds: ["angstrom-v4-swap"],
   requiresProtocolEdgesFlag: false,
 } satisfies FamilyManifest<"swap">;

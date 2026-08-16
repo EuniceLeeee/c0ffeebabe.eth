@@ -16,5 +16,6 @@ export const selfBurnNativeFamilyManifest = {
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "redeem" }],
   supportedLineages: [SELF_BURN_NATIVE_LINEAGE_ID],
   poolAdapterIds: ["self-burn-native-token"],
+  edgeAdapterIds: ["self-burn-native-redeem"],
   requiresProtocolEdgesFlag: true,
 } satisfies FamilyManifest<"protocol">;
