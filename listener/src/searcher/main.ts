@@ -1997,6 +1997,48 @@ async function main(): Promise<void> {
                 `instances=${committedRoot.envelope.privateState.instances.size} ` +
                 `pricing=${committedRoot.views.pricingByPublicationKey.size}`,
             );
+            // F8: the runtime graphs are built from the DEX universe pool
+            // set, so protocol instances only enter through this merge of
+            // the committed strict edges. Without it the blockscan state
+            // machine never sees state keys for the strict families and
+            // prices nothing (expected=0). Dedup by canonical edge id.
+            const strictEdges = committedRoot.views.edges;
+            if (strictEdges.length > 0) {
+              const mergeStrictEdges = (
+                current: readonly TokenEdge[] | undefined,
+              ): TokenEdge[] => {
+                const seen = new Set((current ?? []).map(strictEdgeKey));
+                const merged = [...(current ?? [])];
+                for (const edge of strictEdges) {
+                  const key = strictEdgeKey(edge);
+                  if (seen.has(key)) continue;
+                  seen.add(key);
+                  merged.push(edge);
+                }
+                return merged;
+              };
+              graph = mergeStrictEdges(graph);
+              if (blockScanGraph !== undefined) {
+                blockScanGraph = mergeStrictEdges(blockScanGraph);
+              }
+              blockScanPlanner?.setGraph(blockScanGraph ?? []);
+              const strictPoolEntries = new Map<string, string>();
+              for (const edge of strictEdges) {
+                if (edge.target === undefined) continue;
+                const address = edge.target.toLowerCase();
+                const existing = strictPoolEntries.get(address);
+                if (existing === undefined) {
+                  strictPoolEntries.set(address, edge.adapterId);
+                }
+              }
+              for (const [address, adapter] of strictPoolEntries) {
+                allPoolMap.set(address, adapter);
+              }
+              console.log(
+                `[searcher/live] strict edges merged into runtime graph: ` +
+                  `edges=${strictEdges.length} pools=${strictPoolEntries.size}`,
+              );
+            }
           }
           // The durable checkpoint follows the committed catalogRoot CAS at
           // the same source, so appliedThrough never leads the recoverable
@@ -2364,7 +2406,7 @@ async function main(): Promise<void> {
     strategyViews.backrun,
   );
   logProvisionalV2GraphInstances("backrun", backrunGraphBuild.successful);
-  const graph = backrunGraphBuild.edges;
+  let graph = backrunGraphBuild.edges;
   logRuntimeRefreshFailures(backrunGraphBuild.failed, "graph build skipped");
   const retryableDexGraphPools = new Map(
     backrunGraphBuild.failed.map((failure) => [
@@ -3847,6 +3889,21 @@ interface HandleCtx {
    * composition is configured.
    */
   readonly strictQuoteSource?: AmountQuoteSource;
+}
+
+/**
+ * Dedup key for a runtime graph edge. The committed strict edges carry a
+ * canonicalEdgeId; legacy-built edges fall back to the identity composite.
+ */
+function strictEdgeKey(edge: TokenEdge): string {
+  const canonical = (edge as { canonicalEdgeId?: unknown }).canonicalEdgeId;
+  if (typeof canonical === "string" && canonical.length > 0) return canonical;
+  return [
+    edge.adapterId,
+    edge.target?.toLowerCase() ?? "",
+    edge.tokenIn?.toLowerCase() ?? "",
+    edge.tokenOut?.toLowerCase() ?? "",
+  ].join("|");
 }
 
 /**
