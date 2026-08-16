@@ -3335,14 +3335,21 @@ async function main(): Promise<void> {
       // F8: the graph view cache is keyed by the discovery topology, which
       // never changes when the committed strict edges merge into the runtime
       // graph; a stable key would freeze the pre-merge (empty) edge set
-      // forever. Suffix the key with the strict root revision so each strict
-      // publication rebuilds the view with the merged edges.
-      const strictRevision =
-        discoveryContinuityComposition?.catalogRoot.capture()
-          ?.envelope.snapshot.revision ?? -1;
+      // forever. Key the strict portion by the CURRENT graph's strict-edge
+      // fingerprint: it changes exactly when the merge lands, so the cache
+      // entry for a fingerprint always carries the merged edges (the
+      // revision suffix raced the merge and could freeze a pre-merge view).
+      const strictEdges = input.edges.filter((edge) =>
+        typeof (edge as { canonicalEdgeId?: unknown }).canonicalEdgeId ===
+          "string"
+      );
+      const strictFingerprint = strictEdges.length === 0
+        ? "none"
+        : hashTokenGraph(strictEdges);
       return adapterFamilyGraphViews.build({
         ...input,
-        topologyKey: `${input.topologyKey}:strict:${strictRevision}`,
+        topologyKey:
+          `${input.topologyKey}:strict:${strictFingerprint}`,
         dexSourceCompleteThrough: dexGraphCoverage.sourceCompleteThrough,
         retryablePools: [
           ...retryableDexGraphPools.values(),
