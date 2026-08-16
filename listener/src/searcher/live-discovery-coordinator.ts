@@ -1935,9 +1935,16 @@ export async function createLiveDiscoveryCoordinator(
   const operationalDiscoveryCompleteThrough = (
     state: LiveDiscoveryPublicationState,
   ): number => {
+    // F8: the strict catalog owns discovery and the observed cursor is
+    // anchored at the startup discovery source even without a persisted
+    // legacy cursor. Anchor the protocol lane there too; falling back to the
+    // DEX coverage END would compare head-vs-head and starve the protocol
+    // backfill forever. A null hash (no anchor at all) stays fail-closed.
     const observedThrough = protocolDiscoveryCoverage.hasObservedSource()
       ? state.protocolObservedCursor.completeThroughBlock
-      : state.dexGraphCoverage.sourceCompleteThrough;
+      : state.protocolObservedCursor.completeThroughHash === null
+        ? state.dexGraphCoverage.sourceCompleteThrough
+        : state.protocolObservedCursor.completeThroughBlock;
     return Math.min(
       state.dexGraphCoverage.sourceCompleteThrough,
       observedThrough,
@@ -2053,6 +2060,13 @@ export async function createLiveDiscoveryCoordinator(
       dexTargetThrough,
       hasDexProjectionRetry: hasProjectionRetry,
     });
+    console.log(
+      "[searcher/live] discovery backfill plan: " +
+        "source=" + source.number + " dexSource=" + dexSourceThrough +
+        " dexTarget=" + dexTargetThrough +
+        " protocolTarget=" + protocolTargetThrough +
+        " lanes=" + JSON.stringify(lanePlan),
+    );
     if (lanePlan.protocol === "preempt") {
       protocolBackfillLane.invalidate("DEX backfill priority");
       const fromBlock = dexSourceThrough + 1;
