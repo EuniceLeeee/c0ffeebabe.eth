@@ -50,7 +50,12 @@ import type {
   CreditAdapterFamily,
   ExecutionFamilyId,
   FlashLoanAdapterFamily,
+  ProtocolAddressCandidateSurface,
+  ProtocolCandidate,
   ProtocolConversionAdapter,
+  ProtocolDiscoveryCapability,
+  ProtocolDiscoveryContext,
+  RouteCandidateSourceKind,
   RouteLegAdapter,
   SwapAdapter,
 } from "./route-leg-adapter.js";
@@ -63,8 +68,11 @@ import type {
   FamilyDomain,
   FamilyManifest,
   LogPattern,
+  UnifiedObservation,
 } from "./adapter-family-plugin.js";
+import { ethers } from "ethers";
 import type { FamilyId } from "./adapter-family-identifiers.js";
+import type { CanonicalSource } from "./adapter-request-program.js";
 import type { StrictShadowCatalogViews } from
   "../adapter-family-shadow-catalog-publication.js";
 import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
@@ -696,6 +704,7 @@ function projectSwapFamily(
 ): SwapAdapter {
   const manifest = family.plugin.manifest;
   const familyId = toExecutionFamilyId(manifest.familyId);
+  const discovery = bridgeProtocolDiscoveryCapability(family);
   const poolAdapters = Object.freeze([
     ...(manifest.poolAdapterIds ?? []),
   ]) as readonly PoolEntry["adapter"][];
@@ -716,6 +725,24 @@ function projectSwapFamily(
     prepared: null,
     routeIdentity: bridgeRouteIdentity(),
     matureDexUniverseDiscovery: matureDex ? true : undefined,
+    ...(discovery === undefined
+      ? {}
+      : {
+          discovery,
+          // F8: identity is owned by the strict pipeline (revm attestation
+          // via the central runtime); the legacy resolver registry is empty
+          // by design and this resolver fails closed so no legacy lane can
+          // manufacture identity.
+          discoveryIdentityResolver: async () =>
+            Object.freeze({
+              ok: false as const,
+              reason: "behavior_mismatch" as const,
+            }),
+          discoveryIdentityAuthority: Object.freeze({
+            class: "canonical-onchain" as const,
+            strength: 0,
+          }),
+        }),
     landedEvents: bridgeLandedEvents(family),
     // Mature DEX families (univ2/univ3) keep the legacy shape: no family
     // materializer (generic address-emitter events). Every other swap family
@@ -741,14 +768,225 @@ function projectSwapFamily(
   });
 }
 
+/**
+ * Structural view of the plugin discovery semantics the bridge consumes.
+ * The plugin owns all matching semantics; the bridge only re-declares the
+ * surfaces the legacy scan can enumerate (sources, topics, selectors,
+ * address surfaces) and delegates candidate decoding to the plugin.
+ */
+type BridgeDiscoverySemantics = {
+  readonly candidateSources?: readonly RouteCandidateSourceKind[];
+  readonly callPatterns?: readonly {
+    readonly id: string;
+    readonly selector: string;
+  }[];
+  readonly logPatterns?: readonly {
+    readonly id: string;
+    readonly topic: string;
+  }[];
+  readonly addressSurfaces?: readonly {
+    readonly id: string;
+    readonly kind: string;
+    readonly fingerprint: string;
+  }[];
+  decodeCandidate(input: {
+    readonly observation: UnifiedObservation;
+    readonly matchedPatternId: string;
+  }): unknown | null;
+};
+
+/**
+ * Protocol-discovery capability bridge: the strict plugin discovery
+ * semantics projected to the legacy scan vocabulary. The legacy scan only
+ * surfaces candidates (address-surface + observed-call nomination through
+ * the plugin own decodeCandidate); admission, probing and edge building
+ * stay strict-owned, so probeCandidate fails closed with an empty edge set.
+ * The strict lifecycle re-verifies every surfaced candidate through its own
+ * identity stage before any instance enters a committed views snapshot.
+ */
+function bridgeProtocolDiscoveryCapability(
+  family: LoadedStrictFamilyPlugin,
+): ProtocolDiscoveryCapability | undefined {
+  const plugin = family.plugin as unknown as {
+    readonly discovery?: BridgeDiscoverySemantics;
+  };
+  const discovery = plugin.discovery;
+  if (discovery === undefined) return undefined;
+  const manifest = family.plugin.manifest;
+  const poolAdapter = (manifest.poolAdapterIds?.[0] ?? manifest.familyId) as
+    PoolEntry["adapter"];
+  const callPatterns = discovery.callPatterns ?? [];
+  const logPatterns = discovery.logPatterns ?? [];
+  const surfacePattern = (discovery.addressSurfaces ?? []).find((surface) =>
+    surface.kind === "interface" ||
+    surface.kind === "code-hash" ||
+    surface.kind === "proxy-implementation"
+  );
+  // The legacy scan API carries no canonical source; the plugin decode
+  // candidate consumes only observation payload fields (kind/address/data/
+  // topics/sender/hash), never the source slot. The strict pipeline
+  // materializes real canonical sources later; this placeholder keeps the
+  // ephemeral decode input type-honest.
+  const syntheticSource = (blockNumber: number): CanonicalSource =>
+    Object.freeze({
+      number: blockNumber,
+      hash: "0x" + "00".repeat(32),
+      generation: -1,
+    });
+  const decode = (
+    observation: UnifiedObservation,
+    matchedPatternId: string,
+  ): unknown | null =>
+    discovery.decodeCandidate({ observation, matchedPatternId });
+  const call = (
+    decoded: unknown,
+    target: string,
+    source: string,
+    evidence: readonly unknown[],
+  ): ProtocolCandidate | null =>
+    decoded === null
+      ? null
+      : Object.freeze({
+          pool: Object.freeze({
+            address: ethers.getAddress(target),
+            adapter: poolAdapter,
+          }),
+          source,
+          evidence: Object.freeze(evidence),
+        });
+  const sources = Object.freeze([
+    ...(discovery.candidateSources ?? []),
+  ]);
+  // Static families (no dynamic candidate sources) stay out of the legacy
+  // scan entirely; their observations flow through the strict pipeline.
+  if (sources.length === 0) return undefined;
+  return Object.freeze({
+    candidateSources: sources,
+    eventTopics: Object.freeze(
+      logPatterns.map((pattern) => pattern.topic.toLowerCase()),
+    ),
+    callSelectors: Object.freeze(
+      callPatterns.map((pattern) => pattern.selector.toLowerCase()),
+    ),
+    addressMatcherVersion: "strict-address-surface-v1",
+    ...(sources.includes("observed-interaction" as const)
+      ? { observedMatcherVersion: "strict-observed-call-v1" }
+      : {}),
+    ...(sources.includes("dex-token-domain" as const)
+      ? { async candidateFromAddress(
+          candidate: ProtocolAddressCandidateSurface,
+          context: ProtocolDiscoveryContext,
+        ): Promise<ProtocolCandidate | null> {
+          const surface = surfacePattern;
+          if (surface === undefined) return null;
+          const decoded = decode(
+            Object.freeze({
+              kind: "address-surface" as const,
+              source: syntheticSource(context.blockNumber),
+              address: candidate.target,
+              codeHash: candidate.codeHash,
+              implementationWord: candidate.implementationWord,
+            }),
+            surface.id,
+          );
+          return call(
+            decoded,
+            candidate.target,
+            "strict-address-surface",
+            [
+              Object.freeze({
+                kind: "address-surface" as const,
+                fingerprint: surface.fingerprint,
+                codeHash: candidate.codeHash.toLowerCase(),
+                implementationWord: candidate.implementationWord.toLowerCase(),
+              }),
+            ],
+          );
+        } }
+      : {}),
+    async probeCandidate(
+      _instance: unknown,
+      _context: ProtocolDiscoveryContext,
+    ): Promise<readonly TokenEdge[]> {
+      // The strict lifecycle owns probing and edges; never fabricate legacy
+      // edges from a strict-family admission.
+      return Object.freeze([]);
+    },
+    ...(sources.includes("observed-interaction" as const)
+      ? { async candidateFromObservedCall(
+          callInput: {
+            readonly target: string;
+            readonly selector: string;
+            readonly input: string;
+            readonly from?: string;
+            readonly txHash: string;
+          },
+          context: ProtocolDiscoveryContext,
+        ): Promise<ProtocolCandidate | null> {
+            for (const pattern of callPatterns) {
+              if (pattern.selector.toLowerCase() !== callInput.selector.toLowerCase()) {
+                continue;
+              }
+              const decoded = decode(
+                Object.freeze({
+                  kind: "call" as const,
+                  source: syntheticSource(context.blockNumber),
+                  target: callInput.target,
+                  data: callInput.input,
+                  ...(callInput.from === undefined
+                    ? {}
+                    : { sender: callInput.from }),
+                  transactionHash: callInput.txHash,
+                }),
+                pattern.id,
+              );
+              return call(
+                decoded,
+                callInput.target,
+                "strict-observed-call",
+                [
+                  Object.freeze({
+                    kind: "observed-call" as const,
+                    patternId: pattern.id,
+                    txHash: callInput.txHash,
+                    blockNumber: context.blockNumber,
+                  }),
+                ],
+              );
+            }
+            return null;
+          } }
+      : {}),
+  });
+}
+
 function projectProtocolFamily(
   family: LoadedStrictFamilyPlugin,
 ): ProtocolConversionAdapter {
   const manifest = family.plugin.manifest;
   const familyId = toExecutionFamilyId(manifest.familyId);
+  const discovery = bridgeProtocolDiscoveryCapability(family);
   return Object.freeze({
     id: familyId,
     kind: "protocol-conversion",
+    ...(discovery === undefined
+      ? {}
+      : {
+          discovery,
+          // F8: identity is owned by the strict pipeline (revm attestation
+          // via the central runtime); the legacy resolver registry is empty
+          // by design and this resolver fails closed so no legacy lane can
+          // manufacture identity.
+          discoveryIdentityResolver: async () =>
+            Object.freeze({
+              ok: false as const,
+              reason: "behavior_mismatch" as const,
+            }),
+          discoveryIdentityAuthority: Object.freeze({
+            class: "canonical-onchain" as const,
+            strength: 0,
+          }),
+        }),
     ownedActionAdapterIds: Object.freeze([...manifest.ownedActionAdapterIds]),
     requiredInfraActionAdapterIds: Object.freeze([
       ...manifest.requiredInfraActionAdapterIds,

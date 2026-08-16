@@ -13,6 +13,14 @@ import { createTxEvidenceNomination } from "../../tx-evidence-nomination.js";
 
 const WITHDRAW_PATTERN_ID = "ethertoken-withdraw-call";
 
+/**
+ * EtherToken-compatible withdrawals emit a family-specific Destruction event.
+ * Candidate provenance for the observed lane; admission still requires the
+ * ERC20 surface and an active state-override delta proof.
+ */
+const ETHERTOKEN_DESTRUCTION_EVENT_TOPIC =
+  "0x9a1b418bc061a5d80270261562e6986a35d995f8051145f277be16103abd3453";
+
 export const etherTokenNativeRedeemDiscovery = {
   evidenceChannel: "nominate" as const,
   txSeedNominations: true,
@@ -25,6 +33,11 @@ export const etherTokenNativeRedeemDiscovery = {
     signature: "withdraw(uint256)",
     candidateAddress: { from: "call-target" },
     argumentProjection: [{ index: 0, type: "uint256", name: "amount" }],
+  }],
+  logPatterns: [{
+    id: "ethertoken-destruction-log",
+    topic: ETHERTOKEN_DESTRUCTION_EVENT_TOPIC as `0x${string}`,
+    signature: "Destruction(address,uint256)",
   }],
   decodeCandidate({ observation, matchedPatternId }) {
     if (

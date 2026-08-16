@@ -13,6 +13,14 @@ import { createAddressSurfaceNomination } from "../../address-surface-nomination
 const TRANSFER_SELF_PATTERN_ID = "self-burn-transfer-self";
 const PROXY_SHORTLIST_PATTERN_ID = "self-burn-proxy-shortlist";
 
+/**
+ * Self-burn receipts emit a family-specific Destruction event. Candidate
+ * provenance for the observed lane; admission still requires the ERC20
+ * surface and an active state-override delta proof.
+ */
+const SELF_BURN_NATIVE_EVENT_TOPIC =
+  "0x5dd085b6070b4cae004f84daafd199fd55b0bdfa11c3a802baffe89c2419d8c2";
+
 export const selfBurnNativeDiscovery = {
   evidenceChannel: "nominate" as const,
   sources: ["observed-call", "address-surface"],
@@ -27,6 +35,11 @@ export const selfBurnNativeDiscovery = {
       { index: 0, type: "address", name: "recipient" },
       { index: 1, type: "uint256", name: "amount" },
     ],
+  }],
+  logPatterns: [{
+    id: "self-burn-destruction-log",
+    topic: SELF_BURN_NATIVE_EVENT_TOPIC as `0x${string}`,
+    signature: "Destruction(address,uint256)",
   }],
   addressSurfaces: [{
     id: PROXY_SHORTLIST_PATTERN_ID,

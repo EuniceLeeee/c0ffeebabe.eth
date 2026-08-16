@@ -14,6 +14,14 @@ import { nominateErc4626SiloRedeem } from "./nomination.js";
 const REDEEM_PATTERN_ID = "silo-redeem-call";
 const WITHDRAW_PATTERN_ID = "silo-withdraw-call";
 
+/**
+ * Silo vaults emit the standard ERC4626 Withdraw event on redeem/withdraw.
+ * Candidate provenance for the observed lane; admission still requires the
+ * payout surface and an active state-override delta proof.
+ */
+const ERC4626_WITHDRAW_EVENT_TOPIC =
+  "0xfbde797d201c681b91056529119e0b02407c7bb96a4a2c75c01fc9667232c8db";
+
 export const erc4626SiloRedeemDiscovery = {
   evidenceChannel: "nominate" as const,
   sources: ["observed-call", "address-surface"],
@@ -42,6 +50,11 @@ export const erc4626SiloRedeemDiscovery = {
       ],
     },
   ],
+  logPatterns: [{
+    id: "silo-redeem-withdraw-log",
+    topic: ERC4626_WITHDRAW_EVENT_TOPIC as `0x${string}`,
+    signature: "Withdraw(address,address,address,uint256,uint256)",
+  }],
   addressSurfaces: [{
     id: "silo-redeem-vault-surface",
     kind: "interface" as const,
