@@ -2552,6 +2552,14 @@ async function main(): Promise<void> {
     protocolDiscoveryCoverage.seedObserved(
       observedAuthority.completeThroughBlock,
     );
+  } else if (lastProtocolDiscoveryBlockHash !== null) {
+    // F8: no persisted observed authority. The observed-interaction family
+    // watermarks are a contiguous source: at 0 they can never advance (a
+    // bounded recent scan cannot manufacture coverage over the skipped
+    // gap). Anchor them at the startup discovery source, mirroring the
+    // observed-cursor fallback above, so the observed lane advances from
+    // the anchor instead of being stuck at 0 forever.
+    protocolDiscoveryCoverage.seedObserved(lastProtocolDiscoveryBlock);
   }
   if (observedSourceChanged) {
     console.warn(
