@@ -2506,12 +2506,26 @@ async function main(): Promise<void> {
     protocolDiscoveryStartup.mode === "contiguous" &&
     observedAuthority?.completeThroughBlock ===
       protocolDiscoveryStartup.cursorBefore;
-  lastProtocolDiscoveryBlock =
+  const cachedObservedCursor =
     protocolDiscoveryCache.runtime.observedCursor ?? -1;
+  lastProtocolDiscoveryBlock = cachedObservedCursor;
   let lastProtocolDiscoveryBlockHash =
-    lastProtocolDiscoveryBlock >= 0
+    cachedObservedCursor >= 0
       ? protocolDiscoveryCache.runtime.observedCursorHash
       : null;
+  // F8: the legacy observed protocol-discovery pass is inert (the strict
+  // pipeline owns discovery), so a persisted legacy observed cursor can no
+  // longer advance. Without one, the strict publisher would block forever on
+  // a null cursor; anchor it at the startup discovery source instead (the
+  // canonical hash is read and stability-asserted at startup).
+  if (
+    lastProtocolDiscoveryBlockHash === null &&
+    startupDexSourceBlockHash !== null &&
+    startupDexSourceBlockHash !== ""
+  ) {
+    lastProtocolDiscoveryBlock = discoveryToBlock;
+    lastProtocolDiscoveryBlockHash = startupDexSourceBlockHash;
+  }
   if (observedAuthority !== null) {
     protocolDiscoveryCoverage.seedObserved(
       observedAuthority.completeThroughBlock,
