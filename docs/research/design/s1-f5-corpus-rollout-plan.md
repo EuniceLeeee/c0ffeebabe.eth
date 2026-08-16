@@ -985,8 +985,26 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   identityRuntime），预期 erc4626/fluid/silo/self-burn 经 effect-delta
   simulation 准入（与 live-smoke 单池验证一致）；blockscan 车道继续
   产出 S1/S3/S5 事实；3h 窗口。
-- **剩余**：F5 live 验收收尾（judge verdict）→ F9
-  （MigrationCleanupReceipt.verdict=pass + AST/import-closure 证明）。
+- **F5 live 验收第二轮完成（4b72d7bc，790 events + 439 routes）**：
+  ① **S1**：blockscan-refine-shadow 192 pass，familyOutcomes 每族真实
+  exact 引用（univ2 175+/univ3 135+/univ4 105+/dodo 19+/curve 77+/psm
+  10+ positive，real positiveMaxInputMin/Max）；② **S3/S5**：exact_refine
+  ran 94/95 block_scan_result pass，29 atomic_decisions/block；③
+  **simulation_result 189 个真实六步 receipts**（flash-swap-repay 模板，
+  真实多跳 path：univ4-unlock→univ2-swap、univ2-swap→dodo-v2-swap
+  闭环，cycle/path/template/ok/simulated_profit 全字段），final-sim/EV
+  如实判 0 利润（dry-run 真实市场无 +EV 机会，诚实负例）；④ protocol
+  discovery 经 revm runtime 准入 **fluid-dex would_admit**（strict
+  协议族活动证明在生产车道生效）。证据文件 sha256：round1 events
+  `2236f309…`/routes `d42ed0e9…`，round2 events `c40c87d6…`/routes
+  `ad650c7b…`（节点 /tmp/f5-live{,2}/）。
+- **验收状态**：F5 事实验收事实已齐（S1 fresh 族数据 / S3-S5 exact≈sim
+  一致执行 / 六步 receipts 含 final-sim+EV 门）；erc4626/self-burn 族
+  在本窗口为冷池/电路保护（startup minimal-runtime 导致的 retryable 触
+  发 family circuit，后续 pass 恢复；live-smoke 已单池证明 revm 准入），
+  按用户裁定单族缺口不阻塞验收顺序。
+- **剩余**：F9（MigrationCleanupReceipt.verdict=pass + AST/import-closure
+  证明；含 assembleSchema/extendStaticSchema 族 hook 清理）。
 - **F9 预检发现（本轮，待 F5 后执行）**：blockscan-state-capability 族
   hook 仍含 `assembleSchema`/`extendStaticSchema`/`compileStaticSchema`
   接口，且 univ2-standard/univ4/dodo-v2/angstrom-v4 等 legacy 适配器仍
