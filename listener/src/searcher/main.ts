@@ -1995,7 +1995,9 @@ async function main(): Promise<void> {
               `[searcher/live] strict catalog root committed: ` +
                 `revision=${committedRoot.envelope.snapshot.revision} ` +
                 `instances=${committedRoot.envelope.privateState.instances.size} ` +
-                `pricing=${committedRoot.views.pricingByPublicationKey.size}`,
+                `pricing=${committedRoot.views.pricingByPublicationKey.size} ` +
+                `mids=${countStrictViewsMids(committedRoot.views)} ` +
+                `edges=${committedRoot.views.edges.length}`,
             );
             // F8: the runtime graphs are built from the DEX universe pool
             // set, so protocol instances only enter through this merge of
@@ -3918,6 +3920,21 @@ interface HandleCtx {
    * composition is configured.
    */
   readonly strictQuoteSource?: AmountQuoteSource;
+}
+
+/**
+ * Total committed strict pricing mids across families (diagnostic).
+ */
+function countStrictViewsMids(views: {
+  readonly pricingByPublicationKey: ReadonlyMap<string, {
+    readonly mids: ReadonlyMap<string, unknown>;
+  }>;
+}): number {
+  let total = 0;
+  for (const state of views.pricingByPublicationKey.values()) {
+    total += state.mids.size;
+  }
+  return total;
 }
 
 /**
