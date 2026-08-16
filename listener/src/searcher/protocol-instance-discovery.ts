@@ -996,10 +996,6 @@ export function createCanonicalProtocolIdentityAttester(input?: {
     });
     const accepted = result.accepted[0];
     const rejected = result.rejected[0];
-    console.log(
-      `[attester-debug] ${candidate.pool.address.slice(0, 8)} accepted=${result.accepted.length} ` +
-        `rejected=${result.rejected.length} first=${result.rejected[0]?.reason ?? "-"}`,
-    );
     if (rejected !== undefined && isRetryableIdentityRejection(rejected.reason)) {
       // A transient chain read failure is retryable discovery work, not a
       // deterministic negative proof: surface it so the caller retains
@@ -1011,10 +1007,6 @@ export function createCanonicalProtocolIdentityAttester(input?: {
     }
     return null;
     } catch (error) {
-      console.log(
-        `[attester-debug] ${candidate.pool.address.slice(0, 8)} THREW: ` +
-          (error instanceof Error ? error.message.slice(0, 200) : String(error)),
-      );
       throw error;
     }
   };

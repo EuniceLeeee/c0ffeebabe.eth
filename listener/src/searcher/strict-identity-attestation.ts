@@ -233,7 +233,6 @@ export async function attestPoolIdentitiesStrict<
       }
       let observation: UnifiedObservation | undefined = observations[0];
       if (observation === undefined) {
-        console.log(`[attest-debug] ${address} plugin nomination empty; central fallback`);
         // Central generic fallback (no per-family logic): when the plugin
         // nomination produced no observation (e.g. a cold pool with no Swap
         // in the retained window), re-materialize the address surface from
@@ -266,11 +265,6 @@ export async function attestPoolIdentitiesStrict<
         return;
       }
       const family = input.catalog.forStrictFamily(target.familyId);
-      console.log(
-        `[attest-debug] ${address} lifecycle target=${target.familyId} ` +
-          `pattern=${target.patternId} obsKind=${observation.kind} ` +
-          `opaque=${JSON.stringify((observation as { opaque?: unknown }).opaque ?? null).slice(0, 80)}`,
-      );
       if (family.plugin.manifest.domain === "credit") {
         // Credit families have their own instance lifecycle (identity +
         // instance only, no route publication). The central framework runs
@@ -342,13 +336,6 @@ export async function attestPoolIdentitiesStrict<
         const anyIdentity = result.outcomes.find((outcome) =>
           outcome.stage === "identity"
         );
-        console.log(
-          `[attest-debug] ${address} identity ${anyIdentity === undefined ? "absent" : anyIdentity.status} ` +
-            `reason=${anyIdentity?.reasonCode ?? "no-reason"}; stages=`,
-          result.outcomes.map((outcome) =>
-            `${outcome.stage}:${outcome.status}:${outcome.reasonCode ?? ""}`
-          ),
-        );
         rejected[index] = {
           ...pool,
           adapter: pool.adapter ?? "",
@@ -380,10 +367,6 @@ export async function attestPoolIdentitiesStrict<
         identitySource: "strict-lifecycle",
       });
     } catch (error) {
-      console.log(
-        `[attest-debug] ${address} lifecycle THREW: ` +
-          (error instanceof Error ? error.message.slice(0, 200) : String(error)),
-      );
       rejected[index] = {
         ...pool,
         adapter: pool.adapter ?? "",

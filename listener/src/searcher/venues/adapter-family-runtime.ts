@@ -2986,10 +2986,6 @@ async function resolveIdentity(input: {
         runtime: input.runtime,
       });
       if (work.status === "unresolved") {
-        console.log(
-          `[identity-debug] ${variant.id} unresolved code=${work.failure.code} ` +
-            `stage=${work.failure.stage ?? ""} message=${work.failure.message ?? ""}`,
-        );
         unresolved.push(`${variant.id}:${work.failure.code}`);
         if (work.receipt.dedupeKey !== null) {
           evidenceRefs.push(`work:${work.receipt.dedupeKey}`);
