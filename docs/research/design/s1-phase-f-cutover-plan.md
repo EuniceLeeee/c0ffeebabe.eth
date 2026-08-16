@@ -270,6 +270,23 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   `s1-cutover-readiness` 与 `default-authority-cutover-gate` 两道门。
   这是 **production authority cutover**，live 切换需显式授权 +
   guarded deploy；本文件不授权任何 live 广播。
+- **2026-08-16 完成（commit c949d56f）**：default-authority cutover 落地。
+  `PRODUCTION_ADAPTER_FAMILIES` 改为 strict-catalog 投影
+  （`strict-catalog-registry-projection.ts`）：22 族 legacy-shaped 表面全部
+  由 plugin manifest 元数据桥接或 `StrictOnlySurfaceError` fail-closed；
+  blockscan pricing 与 funding 读取经中央 views provider 直接消费 committed
+  strict views（composition 未提交时 fail-closed 无 mids/offers）；路由图
+  buildEdges 改从 strict views 取边（token-graph queryPoolEdges）；动态
+  admission 清单与 route-family-manifest 从 catalog 投影；LEGACY 权威列表
+  与 legacy identity-policy 机器删除（空 resolver registry 仅留形状）。
+  四道命名路径（路由图/blockscan pricing/discovery/identity resolvers）
+  同 slice 迁移。`MigrationCleanupReceipt` 增加 F9 遗留 legacy runtime
+  call-site 探针（quoter/plan-builder/revm/victim/credit/pending-evidence），
+  verdict 保持 fail 直至 F9 删除。两道门 PASS、shadow suite 37/37、build
+  绿；本地单测按 F8 表面更新（legacy 机器测试改用 legacy adapter 本地
+  fixture，如 venue-identity/victim-effect/route-adapters/dodo-v2）。
+  遗留 legacy-machinery 测试（swap-observation/protocol-blockscan-state 的
+  fixture 断言、amtsearch 的 legacy solver plan 构建）随 F9 删除或改写。
 - **2026-08-14 完成（commit 16cf4436）**：solver quoteSource 移除
   `strictQuoteSource ?? liveBackend` 的 legacy fallback——strict quote
   source 是唯一 solver 报价路径（composition 默认后 strict 总存在；
