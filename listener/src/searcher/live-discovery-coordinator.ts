@@ -2068,19 +2068,28 @@ export async function createLiveDiscoveryCoordinator(
         " lanes=" + JSON.stringify(lanePlan),
     );
     if (lanePlan.protocol === "preempt") {
-      protocolBackfillLane.invalidate("DEX backfill priority");
       const fromBlock = dexSourceThrough + 1;
       const toBlock = Math.min(
         dexTargetThrough,
         dexSourceThrough + discoveryBackfillMaxBlocks,
       );
-      dexBackfillLane.schedule({
+      const dexScheduled = dexBackfillLane.schedule({
         id:
           `dex:${fromBlock}-${toBlock}@` +
           `${source.number}:${source.hash}`,
         range: { fromBlock, toBlock },
         source: { number: source.number, hash: source.hash },
       }, base);
+      console.log(
+        "[searcher/live] dex backfill schedule " +
+          fromBlock + "-" + toBlock + " -> " +
+          JSON.stringify(dexScheduled),
+      );
+      // F8: the protocol lane is independent of the DEX lane. A wedged
+      // heavyweight strict DEX pass must not starve strict protocol
+      // discovery, which is the observation source for the whole strict
+      // pipeline. Schedule it alongside the DEX chunk.
+      scheduleProtocolBackfill(source, base, protocolTargetThrough);
       return;
     }
 
