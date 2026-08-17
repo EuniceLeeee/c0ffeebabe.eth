@@ -6810,7 +6810,7 @@
         "familyId": "univ4",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "fc6d1a8dd86aa96a08732635bf56495a1084a605e262b8cbf6d5cceed03bf508",
+        "contentHash": "7e519c7643f00c58f77dcd2e7abcfb100e3b6ca4a098f95d88ca6f1ea80ee6c9",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6871,7 +6871,7 @@
         "familyId": "univ4",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "9bb82a7d822c9641278d7a951fde3a7a2d44379fdc74ccdf70e48b97c23f32a4",
+        "contentHash": "e843f50d6ec9a04b38017b6170473818665fbd1e23854855953d075ac5381a27",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -7165,5 +7165,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "792d13355a15e9b3d716e1a1b03be8ddfb45593a2494ca14245f5bd3722a7bd4"
+  "artifactHash": "e3b52ddfd164f02e26f476df953389ca8711a78a405387fc0a2770219ebdbd42"
 }
