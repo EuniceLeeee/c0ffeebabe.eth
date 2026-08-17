@@ -1,8 +1,5 @@
 import type { ActionAdapter } from "../types.js";
-import {
-  descriptorFor,
-  type AdapterDescriptor,
-} from "./adapter-descriptors.js";
+import type { AdapterDescriptor } from "./adapter-descriptors.js";
 
 const adapters = new Map<string, ActionAdapter>();
 
@@ -65,35 +62,11 @@ function descriptorForRegisteredAdapter(
   adapter: ActionAdapter,
 ): AdapterDescriptor | null {
   const inline = adapter.descriptor;
-  if (inline !== undefined) {
-    if (inline.adapterId !== adapter.id) {
-      throw new Error(
-        `adapter ${adapter.id} descriptor id mismatch: ${inline.adapterId}`,
-      );
-    }
-    const legacy = descriptorFor(adapter.id);
-    if (
-      legacy !== null &&
-      !sameDescriptor(legacy, inline)
-    ) {
-      throw new Error(
-        `adapter ${adapter.id} inline descriptor conflicts with legacy catalog`,
-      );
-    }
-    return inline;
+  if (inline === undefined) return null;
+  if (inline.adapterId !== adapter.id) {
+    throw new Error(
+      `adapter ${adapter.id} descriptor id mismatch: ${inline.adapterId}`,
+    );
   }
-  return descriptorFor(adapter.id);
-}
-
-function sameDescriptor(
-  left: AdapterDescriptor,
-  right: AdapterDescriptor,
-): boolean {
-  return left.adapterId === right.adapterId &&
-    left.lineage === right.lineage &&
-    left.edgeKind === right.edgeKind &&
-    left.action === right.action &&
-    left.canSendValue === right.canSendValue &&
-    left.leavesStandingPositionDefault ===
-      right.leavesStandingPositionDefault;
+  return inline;
 }

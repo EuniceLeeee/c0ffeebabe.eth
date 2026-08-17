@@ -1,7 +1,6 @@
 import "../../shared/adapters/index.js";
 
 import {
-  descriptorFor,
   type AdapterDescriptor,
 } from "../../adapters/adapter-descriptors.js";
 import {
@@ -12,6 +11,9 @@ import {
   listDescriptors,
 } from "../../adapters/registry.js";
 import type { EdgeKind } from "../strategy-taxonomy.js";
+import {
+  PRODUCTION_STRICT_SHADOW_ACTION_ADAPTERS,
+} from "../venues/production-family-composition.js";
 
 type EdgeKindKey = EdgeKind | "null";
 
@@ -73,13 +75,31 @@ function testEdgeKindCounts(): void {
     counts[edgeKindKey(descriptor.edgeKind)] += 1;
   }
 
-  assert(counts.swap >= 16, `swap count regressed below baseline: ${counts.swap}`);
-  assert(counts.flash === 2, `flash count ${counts.flash}`);
-  assert(counts.protocol >= 11, `protocol count regressed below baseline: ${counts.protocol}`);
-  assert(counts.credit === 2, `credit count ${counts.credit}`);
-  assert(counts.null === 3, `null count ${counts.null}`);
-  assert(counts.lp === 0, `lp count ${counts.lp}`);
-  console.log("[adapter-descriptors] edgeKind counts: PASS");
+  const expected: Record<EdgeKindKey, number> = {
+    swap: 0,
+    credit: 0,
+    lp: 0,
+    flash: 0,
+    protocol: 0,
+    null: 0,
+  };
+  for (const action of PRODUCTION_STRICT_SHADOW_ACTION_ADAPTERS) {
+    assert(action.descriptor !== undefined, `${action.id}: inline descriptor missing`);
+    expected[edgeKindKey(action.descriptor.edgeKind)] += 1;
+  }
+  for (const kind of Object.keys(counts) as EdgeKindKey[]) {
+    assert(
+      counts[kind] === expected[kind],
+      `${kind} count ${counts[kind]} does not match strict closure ${expected[kind]}`,
+    );
+  }
+  assert(counts.swap > 0, "strict closure must contain swap actions");
+  assert(counts.flash > 0, "strict closure must contain funding actions");
+  assert(counts.protocol > 0, "strict closure must contain protocol actions");
+  assert(counts.credit > 0, "strict closure must contain credit actions");
+  assert(counts.null > 0, "strict closure must contain infrastructure actions");
+  assert(counts.lp === 0, "strict closure must not admit unsupported LP actions");
+  console.log("[adapter-descriptors] strict edgeKind closure: PASS");
 }
 
 function testClassifyCall(): void {

@@ -6,6 +6,14 @@ export const assertBalanceAdapter: ActionAdapter = {
   id: "assert-balance",
   isWrapper: false,
   field2Offset: null,
+  descriptor: {
+    adapterId: "assert-balance",
+    lineage: "erc20-infra",
+    edgeKind: null,
+    action: "guard",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
 
   encode(node: ResolvedPlanNode, _executor: string, _inner: Uint8Array) {
     const threshold = node.amount;

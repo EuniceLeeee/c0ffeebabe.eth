@@ -124,9 +124,9 @@ export interface ActionAdapter {
   isWrapper: boolean;
   field2Offset: number | ((node: ResolvedPlanNode) => number) | null;
   /**
-   * New family-owned actions declare their semantic descriptor beside their
-   * encoder. Existing actions may continue using the legacy central catalog
-   * until migrated.
+   * Family-owned and shared-infrastructure actions declare their semantic
+   * descriptor beside the encoder. Production registration accepts only the
+   * strict composition, whose closure validates this descriptor.
    */
   readonly descriptor?: AdapterDescriptor;
 

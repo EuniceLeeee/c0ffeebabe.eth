@@ -1,5 +1,5 @@
 import { ethers, type JsonRpcError, type JsonRpcPayload } from "ethers";
-import { mergePoolProjectionRows } from "./active-pool-discovery.js";
+import { mergePoolProjectionRows } from "./pool-registry-merge.js";
 import {
   buildTokenIndex,
   type PoolEntry,

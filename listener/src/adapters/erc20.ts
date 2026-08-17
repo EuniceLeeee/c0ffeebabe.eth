@@ -11,6 +11,14 @@ export const erc20ApproveAdapter: ActionAdapter = {
   id: "erc20-approve",
   isWrapper: false,
   field2Offset: null,
+  descriptor: {
+    adapterId: "erc20-approve",
+    lineage: "erc20-infra",
+    edgeKind: null,
+    action: "approve",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
 
   encode(node: ResolvedPlanNode, executor: string, _inner: Uint8Array) {
     const spender = (node.params.spender as string) || executor;
@@ -28,6 +36,14 @@ export const erc20TransferAdapter: ActionAdapter = {
   id: "erc20-transfer",
   isWrapper: false,
   field2Offset: null,
+  descriptor: {
+    adapterId: "erc20-transfer",
+    lineage: "erc20-infra",
+    edgeKind: null,
+    action: "transfer",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
 
   encode(node: ResolvedPlanNode, executor: string, _inner: Uint8Array) {
     const to = (node.params.to as string) || executor;

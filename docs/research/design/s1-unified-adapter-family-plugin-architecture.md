@@ -3644,6 +3644,39 @@ deploy-time legacy dependency；因此不得声明 F5、F9、legacy=0 或 produc
 deploy-trust、cron、auto-close 等 standalone legacy 文件仍待后续物理清理；本批未部署，未取得
 新 PID/log/F5/100-of-100，也不等于 F9 或 production cutover。
 
+**2026-08-18 strict action/descriptor authority 第十八批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是实际部署、F5、F9 或 production cutover）：**
+
+- production adapter bootstrap 已删除手写 encoder import 列表、
+  `PRODUCTION_ADAPTER_FAMILIES.actionIds()` 与 `production-registry.ts` import；现在只注册 generated
+  strict composition 已完成 Family ownership、infra closure、descriptor 与 action 唯一性校验的
+  `PRODUCTION_STRICT_SHADOW_ACTION_ADAPTERS`。当前精确闭包为 35 个 action：12 swap、16 protocol、
+  2 funding/flash、2 credit、3 shared infra；不会再因旧 bootstrap 多注册已退出 strict catalog 的
+  encoder；
+- `adapter-descriptors.ts` 的 300+ 行中央 adapterId→lineage/edgeKind/action 风险表及其 fallback 已
+  物理删除，只保留类型合同。Family-owned encoder 的 descriptor 由对应 strict Family 同文件边界
+  签发；`assert-balance`、ERC20 approve/transfer、WETH wrap/unwrap 五个 shared infra encoder 也已
+  自描述。registry 对缺 descriptor 或 descriptor.adapterId 不匹配一律 fail closed；Credit 的两个
+  action 仍被合同强制为 `edgeKind=credit` 且 `leavesStandingPositionDefault=true`，不会降级为普通
+  swap 或绕过 standing-position guard；
+- `protocol-instance-discovery.ts` 的 pool merge helper 已改从 protocol-neutral
+  `pool-registry-merge.ts` 直接导入，不再为了一个纯函数把 `active-pool-discovery.ts` 拉入 production
+  import closure。F9 scanner 同时新增 `PRODUCTION_ADAPTER_FAMILIES`、production-registry import、
+  active-pool-discovery import 三类真实 probes，verdict 由当下扫描结果推导，不再硬编码昨日 hit 数；
+- `main.ts` 的 transitive production closure 当前 531 文件、unresolved import=0、
+  legacy symbol hit=0、central Family literal branch=0；但 repo-wide central scan 仍诚实命中
+  standalone `active-pool-discovery`、`build-active-pool-universe`、`pool-universe-deploy-trust`、
+  `auto-close-router-gap`，所以 `MigrationCleanupReceipt.verdict` 仍为 fail，不能以 production closure
+  已清零偷报 F9；
+- 相关 adapter descriptor、production composition、strict declarations、protocol discovery、F9
+  receipt 合同和 listener 完整 `build` 已通过。shared-surface broad scanner 仍把 generated manifest
+  的 Family literals、shared ERC20/WETH selectors、compiler `skip` 等既有框架内容报为 Family central
+  branch；该脚本结果只作定位参考，不替代本节真实 source/import-closure 证据，也不允许据此恢复旧
+  registry/runtime。
+
+下一批继续物理删除上述 standalone legacy authority 与 cron/AB deploy 调用；在 repo-wide 扫描、
+真实 runtime consumer authority 和 live provenance 全部关闭前，不部署、不宣称 legacy=0。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

@@ -45,10 +45,6 @@ async function main(): Promise<void> {
   // Verdict is honest: it reflects the actual legacy symbols in the closure.
   const legacy = scanLegacySymbols();
   assert.equal(legacy.size >= 0, true);
-  // F8: the legacy family-wide schema APIs are gone, but the remaining
-  // legacy runtime call sites are still present in the central closure and
-  // keep the receipt verdict honest-fail until F9 removes them.
-  assert.equal(legacy.size, 6);
   // Transitive import-closure proof (§0.1): every relative import from
   // main.ts resolves; the report is deterministic.
   const closure = productionImportClosure();
@@ -57,20 +53,22 @@ async function main(): Promise<void> {
   assert.equal(closure.unresolvedImports.length, 0);
   assert.match(String(closure.closureHash), /^[0-9a-f]{64}$/);
   assert.equal(closure.closureHash, productionImportClosure().closureHash);
-  // F8: the strict projection removed the legacy authority list, but the
-  // remaining legacy runtime call sites (solver quote/plan build, revm
-  // prepared quote, victim overlay, credit sizing, pending evidence) still
-  // execute against the fail-closed projection. The verdict must stay fail
-  // until F9 migrates or removes every one of these call sites (§18.3).
-  assert.equal(closure.legacySymbolHitsPresent, true);
-  assert(closure.legacySymbolHits.some(
-    (hit) => hit.symbol === "legacy quoteExact call-site",
-  ));
+  // Keep the fixture phase-agnostic: it verifies that the generated verdict
+  // follows the current source/closure evidence instead of pinning yesterday's
+  // hit count or forcing a migration-complete answer.
   assert.equal(closure.centralFamilyLiteralBranchesPresent, false);
-  assert.equal(receipt.importClosureLegacySymbolsPresent, true);
+  assert.equal(
+    receipt.importClosureLegacySymbolsPresent,
+    closure.legacySymbolHitsPresent,
+  );
   assert.equal(receipt.importClosureFileCount, closure.fileCount);
   assert.equal(receipt.importClosureHash, closure.closureHash);
-  assert.equal(receipt.verdict, "fail");
+  const expectedVerdict = legacy.size === 0 &&
+      !closure.legacySymbolHitsPresent &&
+      !closure.centralFamilyLiteralBranchesPresent
+    ? "pass"
+    : "fail";
+  assert.equal(receipt.verdict, expectedVerdict);
   console.log("migration cleanup receipt generator PASS");
 }
 

@@ -23,6 +23,14 @@ export const wethDepositValueAdapter: ActionAdapter = {
   id: "weth-deposit-value",
   isWrapper: false,
   field2Offset: null,
+  descriptor: {
+    adapterId: "weth-deposit-value",
+    lineage: "weth",
+    edgeKind: "protocol",
+    action: "wrap",
+    canSendValue: true,
+    leavesStandingPositionDefault: false,
+  },
 
   encode(node: ResolvedPlanNode, _executor: string, _inner: Uint8Array) {
     const calldata = new ethers.Interface(["function deposit() payable"]).encodeFunctionData("deposit");
@@ -39,6 +47,14 @@ export const wethWithdrawAmountAdapter: ActionAdapter = {
   id: "weth-withdraw-amount",
   isWrapper: false,
   field2Offset: null,
+  descriptor: {
+    adapterId: "weth-withdraw-amount",
+    lineage: "weth",
+    edgeKind: "protocol",
+    action: "unwrap",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
 
   encode(node: ResolvedPlanNode, _executor: string, _inner: Uint8Array) {
     const calldata = new ethers.Interface(["function withdraw(uint256)"]).encodeFunctionData("withdraw", [node.amount]);

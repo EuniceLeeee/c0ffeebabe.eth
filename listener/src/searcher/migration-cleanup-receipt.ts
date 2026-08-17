@@ -37,6 +37,15 @@ const LEGACY_SYMBOL_PROBES: readonly LegacySymbolProbe[] = Object.freeze([
   { name: "extendStaticSchema", pattern: /\bextendStaticSchema\b/ },
   { name: "adapterSchemaRevision", pattern: /\badapterSchemaRevision\b/ },
   { name: "LEGACY_PRODUCTION_ADAPTER_FAMILIES", pattern: /\bLEGACY_PRODUCTION_ADAPTER_FAMILIES\b/ },
+  { name: "PRODUCTION_ADAPTER_FAMILIES bridge", pattern: /\bPRODUCTION_ADAPTER_FAMILIES\b/ },
+  {
+    name: "production-registry import",
+    pattern: /from\s+["'][^"']*venues\/production-registry\.js["']/,
+  },
+  {
+    name: "active-pool-discovery import",
+    pattern: /from\s+["'][^"']*active-pool-discovery\.js["']/,
+  },
   // F8: the strict projection removed the legacy authority, but the legacy
   // runtime call sites (solver quote/plan build, revm prepared quote, flash
   // borrow fragment, credit sizing, victim overlay, pending evidence) still
@@ -181,12 +190,18 @@ export function buildMigrationCleanupReceipt(
     ...(legacy.get("quoteExact(ctx.state)") ?? []),
     ...(legacy.get("buildPlanFragment(ctx.state)") ?? []),
   ];
+  const legacyAuthorityImports = [
+    ...(legacy.get("PRODUCTION_ADAPTER_FAMILIES bridge") ?? []),
+    ...(legacy.get("production-registry import") ?? []),
+    ...(legacy.get("active-pool-discovery import") ?? []),
+  ];
   const legacyRuntimeBranches = [
     ...legacyActivationInputs,
     ...familyWideSchemaApis,
     ...manualSchemaRevisions,
     ...exactToCoarseBypass,
     ...ambientIo,
+    ...legacyAuthorityImports,
   ];
   const closure = productionImportClosure();
   const pass =

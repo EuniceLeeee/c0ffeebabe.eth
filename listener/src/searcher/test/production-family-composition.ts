@@ -11,9 +11,6 @@ import {
 import {
   PRODUCTION_INFRA_ACTION_ADAPTERS,
 } from "../venues/production-infra-actions.js";
-import {
-  PRODUCTION_ADAPTER_FAMILIES,
-} from "../venues/production-registry.js";
 
 assert.equal(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.modules.length, 0);
 assert.equal(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.issues.length, 0);
@@ -61,39 +58,12 @@ for (const action of PRODUCTION_STRICT_SHADOW_FAMILY_OWNED_ACTION_ADAPTERS) {
 }
 
 assert.deepEqual(
-  PRODUCTION_ADAPTER_FAMILIES.list().map((family) => family.id).sort(),
-  PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins
-    .map((module) => module.familyId)
-    .sort(),
-  "the strict projection must cover the same complete Family cohort as the strict catalog",
-);
-
-const firstBlockScanFamilies =
-  PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies();
-const nextBlockScanFamilies =
-  PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies();
-assert.equal(
-  nextBlockScanFamilies,
-  firstBlockScanFamilies,
-  "block-scan registrations must remain stable across graph generations",
-);
-for (let index = 0; index < firstBlockScanFamilies.length; index++) {
-  assert.equal(
-    nextBlockScanFamilies[index],
-    firstBlockScanFamilies[index],
-    `block-scan Family registration ${firstBlockScanFamilies[index]?.familyId} ` +
-      "must retain its process-local runtime descriptors",
-  );
-}
-
-const legacyActionClosure = PRODUCTION_ADAPTER_FAMILIES.actionIds();
-assert.deepEqual(
   listAll().map((action) => action.id).sort(),
-  [...legacyActionClosure.owned, ...legacyActionClosure.requiredInfra].sort(),
-  "production bootstrap must register exactly the current legacy route closure",
+  PRODUCTION_STRICT_SHADOW_ACTION_ADAPTERS.map((action) => action.id).sort(),
+  "production bootstrap must register exactly the strict action closure",
 );
 
 console.log(
   "production-family-composition PASS " +
-    "(22 strict shadow Families / 242 exact capabilities / complete legacy production closure)",
+    "(22 strict Families / 242 exact capabilities / complete strict action closure)",
 );
