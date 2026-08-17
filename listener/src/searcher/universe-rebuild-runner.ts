@@ -154,6 +154,9 @@ export async function rebuildUniverse(
     store: input.store,
     runId: input.runId,
   });
+  // Best-effort graceful stop: SIGTERM/SIGINT flush the completed outcomes
+  // (the store's stale-lock recovery lets the next run reclaim afterwards).
+  writer.installSignalFlush();
   const scheduled: Promise<void>[] = [];
   for (const candidate of candidates) {
     const candidateKey = input.familyCandidateKey(candidate);

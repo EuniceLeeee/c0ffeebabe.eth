@@ -203,6 +203,7 @@
     "searcher:universe-rebuild-startup-cli": "node --import tsx src/searcher/test/universe-rebuild-startup-cli.ts",
     "searcher:startup-universe-rebuild": "node --import tsx src/searcher/test/startup-universe-rebuild.ts",
     "searcher:universe-rebuild-rehydrator": "node --import tsx src/searcher/test/universe-rebuild-rehydrator.ts",
+    "searcher:universe-rebuild-stale-lock": "node --import tsx src/searcher/test/universe-rebuild-stale-lock.ts",
     "searcher:default-authority-cutover-gate": "node --import tsx src/searcher/test/default-authority-cutover-gate.ts",
     "searcher:production-family-startup-manifest": "node --import tsx src/searcher/test/production-family-startup-manifest.ts",
     "searcher:systemic-live-gate": "node --import tsx src/searcher/test/systemic-live-gate.ts",

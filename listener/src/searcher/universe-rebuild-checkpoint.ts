@@ -236,28 +236,69 @@ export class UniverseRebuildCheckpointStore {
     return next;
   }
 
+  /**
+   * Sidecar lock with stale-PID recovery: a crashed/killed writer leaves
+   * the lock file behind, and the next writer must reclaim it once the
+   * recorded holder PID is provably dead (ESRCH). A live holder keeps
+   * failing closed.
+   */
+  async #acquireLock(): Promise<void> {
+    try {
+      await writeFile(this.#lockPath, String(process.pid) + "\n", {
+        flag: "wx",
+        mode: 0o600,
+      });
+      return;
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code)
+        : "";
+      if (code !== "EEXIST") throw error;
+    }
+    let holderPid: number | null = null;
+    try {
+      const content = await readFile(this.#lockPath, "utf8");
+      const parsed = Number(content.trim());
+      holderPid = Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+    } catch {
+      holderPid = null;
+    }
+    if (holderPid !== null) {
+      try {
+        process.kill(holderPid, 0);
+        // The holder is alive: the lock is genuinely held.
+        throw new Error(
+          "universe rebuild checkpoint CAS lock is held by writer " +
+            holderPid,
+        );
+      } catch (error) {
+        const code = error && typeof error === "object" && "code" in error
+          ? String((error as { code?: unknown }).code)
+          : "";
+        if (code !== "ESRCH") {
+          // kill(0) succeeded: live holder.
+          throw new Error(
+            "universe rebuild checkpoint CAS lock is held by writer " +
+              holderPid,
+          );
+        }
+        // ESRCH: the holder is dead - reclaim the stale lock.
+      }
+    }
+    await unlink(this.#lockPath).catch(() => undefined);
+    await writeFile(this.#lockPath, String(process.pid) + "\n", {
+      flag: "wx",
+      mode: 0o600,
+    });
+  }
+
   async #cas(
     expectedRevision: number | undefined,
     mutate: (current: StartupCheckpointEnvelope | null) => StartupCheckpointEnvelope,
   ): Promise<StartupCheckpointEnvelope> {
     return this.#withLock(async () => {
       await mkdir(dirname(this.#path), { recursive: true, mode: 0o700 });
-      try {
-        await writeFile(this.#lockPath, String(process.pid) + "\n", {
-          flag: "wx",
-          mode: 0o600,
-        });
-      } catch (error) {
-        const code = error && typeof error === "object" && "code" in error
-          ? String((error as { code?: unknown }).code)
-          : "";
-        if (code === "EEXIST") {
-          throw new Error(
-            "universe rebuild checkpoint CAS lock is held by another writer",
-          );
-        }
-        throw error;
-      }
+      await this.#acquireLock();
       try {
         const current = await this.load();
         if (
