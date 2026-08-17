@@ -233,7 +233,19 @@ async function main(): Promise<void> {
     ? parsePoolUniverseJson(
         retainedUniverseSnapshot,
         retainedUniversePath,
-        { minScore: 0, dropUnsupportedAdapters: true },
+        {
+          minScore: 0,
+          dropUnsupportedAdapters: true,
+          // Historical snapshots may carry identity provenance labels emitted
+          // by a prior plugin closure (e.g. legacy angstrom-v4-hook-poolkey).
+          // Tolerate them here as opaque input provenance: the builder
+          // immediately re-attests every retained row through the generated
+          // catalog + plugin lifecycle (retainVerifiedSwapFamilyInstances),
+          // which overwrites the label before the row can enter the output
+          // snapshot. The runtime and deploy-time trust validator keep the
+          // strict fail-closed parse.
+          allowUnregisteredIdentitySource: true,
+        },
       )
     : [];
 
