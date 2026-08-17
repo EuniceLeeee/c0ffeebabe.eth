@@ -25,6 +25,8 @@ interface Fixture {
   readonly attestCalls: Map<string, number>;
   readonly failKeys: Set<string>;
   readonly builtFamilySizes: number[];
+  readonly scanCalls: () => number;
+  readonly maxConcurrentAttestations: () => number;
   readonly input: RebuildUniverseInput;
 }
 
@@ -38,6 +40,9 @@ function makeFixture(
   const attestCalls = new Map<string, number>();
   const failKeys = new Set<string>(["c"]);
   const builtFamilySizes: number[] = [];
+  let scanCallCount = 0;
+  let activeAttestations = 0;
+  let maxConcurrentAttestations = 0;
   const candidates = (ids: readonly string[]) =>
     Object.freeze(ids.map((id) => Object.freeze({ id })));
   const observations = (ids: readonly string[]) =>
@@ -46,6 +51,7 @@ function makeFixture(
     store,
     runId: "run-1",
     lookbackBlocks: 14_400,
+    attestationConcurrency: 2,
     freezeCanonicalHead: async () => SOURCE,
     scanSwapWindow: async () => observations(["a", "b", "c"]),
     familyCandidateKey: (candidate) =>
@@ -63,6 +69,13 @@ function makeFixture(
     attestFamilyInstanceOnce: async (input) => {
       const id = String((input.candidate as { id: string }).id);
       attestCalls.set(id, (attestCalls.get(id) ?? 0) + 1);
+      activeAttestations++;
+      maxConcurrentAttestations = Math.max(
+        maxConcurrentAttestations,
+        activeAttestations,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      activeAttestations--;
       if (failKeys.has(id)) {
         return Object.freeze({
           status: "retryable",
@@ -133,11 +146,32 @@ function makeFixture(
         )),
       });
     },
-    buildCoverage: () => Object.freeze([]),
+    buildCoverage: ({ cutoff }) => Object.freeze([Object.freeze({
+      familyId: "univ2",
+      sourceId: "startup-universe",
+      completeThroughBlock: cutoff.number,
+      completeThroughHash: cutoff.hash,
+    })]),
     assertCanonicalHead: async () => undefined,
     ...overrides,
   };
-  return { store, attestCalls, failKeys, builtFamilySizes, input };
+  const scan = input.scanSwapWindow;
+  const countedInput = Object.freeze({
+    ...input,
+    scanSwapWindow: async (scanInput: Parameters<typeof scan>[0]) => {
+      scanCallCount++;
+      return await scan(scanInput);
+    },
+  });
+  return {
+    store,
+    attestCalls,
+    failKeys,
+    builtFamilySizes,
+    scanCalls: () => scanCallCount,
+    maxConcurrentAttestations: () => maxConcurrentAttestations,
+    input: countedInput,
+  };
 }
 
 async function main(): Promise<void> {
@@ -155,6 +189,11 @@ async function main(): Promise<void> {
     assert.equal(f.attestCalls.get("a"), 1);
     assert.equal(f.attestCalls.get("b"), 1);
     assert.equal(f.attestCalls.get("c"), 1);
+    assert.equal(
+      f.maxConcurrentAttestations(),
+      2,
+      "attestation must use the configured bounded worker pool",
+    );
     let checkpoint: StartupCheckpointEnvelope | null = await f.store.load();
     assert.equal(
       checkpoint?.inProgressRun?.outcomesByCandidateKey["cand:c"]?.status,
@@ -174,6 +213,11 @@ async function main(): Promise<void> {
     await assert.rejects(
       () => rebuildUniverse(f.input),
       UniverseRunIncomplete,
+    );
+    assert.equal(
+      f.scanCalls(),
+      1,
+      "resume must use the durable exact candidate partition without rescanning",
     );
     assert.equal(
       f.attestCalls.get("a"),

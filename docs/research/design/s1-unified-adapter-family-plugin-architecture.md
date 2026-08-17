@@ -644,19 +644,17 @@ D-008 落实为第三种 publication 模式，合同级；production 接线仍�
 - 证据：shadow suite（12 合同）全过 + regression sweep 12 组全过 +
   完整 build。
 
-> **2026-08-12 运行模式最终决策（continuous-first，P1-f）：**
-> continuous publication 是生产主模式：每代冻结一个
-> `{number, hash, generation}` source，串行化（coalescing）链内
-> 完成显式 gap 闭合、terminal settlement 与原子 catalogRoot CAS，
-> 且 durable checkpoint 只在 catalog CAS 成功后于同一 source 推进
-> （appliedThrough 永不领先可恢复 authority）。startup-only 只是
-> 性能降级方案，不是 authority 降级：两者都不得把
-> verified-candidate 提名清单当作精确全集。live 路径一律
-> `observed-complete`（无 omission/tombstone 删除权）；
-> `complete-snapshot` 只授予有精确枚举 receipt 的 bootstrap 路径，
-> 且每 Family 独立签发/消费 receipt（不得共享）。canonical source
-> 校验为 block-hash + 有界祖先链，generation 单调由 catalogRoot
-> 自身 fence，reorg/stale generation 一律 fail-closed。
+> **2026-08-17 运行模式最终决策（startup-only fixed-cutoff，以本条覆盖
+> 2026-08-12 continuous-first）：** production 启动先冻结
+> `{number, hash, generation}`，合并全部 startup poolSets 与插件声明的
+> 显式范围 event 补充，形成 durable exact candidate partition；按
+> `FamilyCandidateKey/FamilyInstanceKey` 每实例只跑一次 lifecycle。只有
+> Graph+catalog+coverage+cutoff 的 `readyGeneration` 单 CAS 成功后才能创建
+> producer。producer generation 内 discovery/backfill/protocol trace/
+> topology publication 全冻结；不存在 continuous lifecycle/catalog CAS，
+> 也不存在旧 Graph 或二次 merge。下一次启动重扫新的两天 Swap 范围，
+> 但复用仍 canonical 且 Family implementation/authority 未变化的 verified
+> memo，只验证新增、失效与 retryable 精确差集。
 
 > **2026-08-12 P1 处置决策（D-012，md 收口）：** 剩余 P1
 > （StateInstance mutation/terminal proof、活动族 call/log ingress、
@@ -5481,6 +5479,8 @@ universe rebuild 的正确性路径改为三类 durable 状态 + 固定 cutoff +
   staticProjection、evidenceFingerprint、memoFingerprint。
 - `inProgressRun`：当前唯一未完成 rebuild。fixed cutoff number+hash、
   fromBlock、universeHash、candidateSetHash、candidateCount、
+  `candidatesByKey`（compact exact partition；observedThrough 持久化后恢复
+  直接按 key 使用，不重扫移动窗口）、
   observedThrough（只证 Swap 范围已扫完，不推进 appliedThrough）、
   `appliedThrough=null`（run 未完成期间不可提前）、
   outcomesByCandidateKey：
@@ -5491,7 +5491,8 @@ universe rebuild 的正确性路径改为三类 durable 状态 + 固定 cutoff +
     projection) + failureCode(rpc|deadline|aborted|resource-limited) +
     requestFingerprint + reasonCode + attemptCount + lastAttemptAt。
   rpc/deadline 等 retryable 绝不伪装成 rejected。
-- `readyGeneration`：最后一次完整可用 Graph。cutoff/universeHash/
+- `readyGeneration`：最后一次完整可用 Graph。cutoff/universeRange{fromBlock,
+  toBlock}/universeHash/
   catalogHash/activeInstanceKeys/publicationSetHash/sourceCoverage/
   observedThrough/appliedThrough（均为 number+hash）、catalogSnapshot/
   graphSnapshot/graphHash。catalogHash、publicationSetHash 与 graphHash
@@ -5502,7 +5503,9 @@ universe rebuild 的正确性路径改为三类 durable 状态 + 固定 cutoff +
 ### 22.2 写入（AttestationCheckpointWriter + UniverseRebuildCheckpointStore）
 - 单写者文件 CAS：sidecar lock、temp + fsync + atomic rename + dir fsync；
   损坏/篡改/CAS 冲突 fail-closed（fingerprint 校验）。
-- 每 25 条或 2-5 秒 flush；SIGTERM/SIGINT flush；kill -9 最多丢最后一批。
+- 每 25 条或 2-5 秒 flush；SIGTERM/SIGINT 先 flush、移除 handler 后重新
+  投递原 signal，保证 systemd/人工停止不会被 handler 吞掉；kill -9 最多
+  丢最后一批。
 - flush 只写 memo/run outcome，绝不推进 ready。verified memo 与引用它的
   verified outcome 必须由同一个 `casMergeAttestationWrites` 原子写入；
   禁止先推进 outcome、再另一次 CAS 写 memo。probe 的 memo + replacement
@@ -5517,10 +5520,17 @@ universe rebuild 的正确性路径改为三类 durable 状态 + 固定 cutoff +
   的 production 正确性路径。
 
 ### 22.3 流程（rebuildUniverse）
-freezeCanonicalHead → 重扫最新两天 Swap（cutoff hash 固定）→ 按
-block number+hash+txHash+logIndex+address+全部 topics+pool identity 完整去重 → 按
+无 incumbent run 时 freezeCanonicalHead → 合并 pinned/universe/blockscan/
+override 全部 startup poolSets + 重扫最新两天插件声明事件（cutoff hash
+固定；mutation-only/不完整事件不得凭中央 topic 猜测实例）→ 先按 block
+number+hash+txHash+logIndex+address+全部 topics 完整去重，再由插件
+`decodeCandidate/candidateKey/emitter` 给出实例身份并按 Family+Instance
+去重 → 原子保存 `candidatesByKey` exact partition。若 incumbent run 存在，
+直接恢复其原 cutoff + candidatesByKey，不重扫新窗口。随后按
 familyCandidateKey 恢复：run.verified 跳过 / memo 可复用（family hash +
-candidate fingerprint + authority + canonical proofSource）直接
+candidate fingerprint + 当前 cutoff 的 runtime code hash/EIP-1967
+implementationWord authority fingerprint + 对旧 proofSource number+hash
+重新做 canonical 校验；任一 implementation/code 变化即失效）直接
 writer.record / 否则 attestOnce（cache miss 才执行一次完整
 identity→materialization→projection，收集 publications）→ 周期 flush →
 retryable>0 抛 UniverseRunIncomplete（durable incomplete，禁止 ready）→
@@ -5557,16 +5567,26 @@ universe-rebuild-probe-cli.ts、universe-rebuild-production.ts（生产接线：
 strict lifecycle attestOnce / canonical seal / canonical head 校验）、
 universe-rebuild-startup-cli.ts（独立重建命令）、startup-universe-rebuild.ts
 （producer baseline）。
-### 22.7 producer freeze（审计 §5/§6，commit c5c81229）
-`SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH` 配置后，producer（live
-coordinator）只有在 readyGeneration 存在时才创建：
-- 无 ready（或 run 进行中）→ 启动 fail-closed，提示先跑
-  `searcher:universe-rebuild-startup` 并用 probe 关闭 retryable。
-- `resolveProducerBaseline` 把 observed-event 扫描起点钉在 ready
-  cutoff：历史窗口不重扫（ready run 已覆盖两天窗口），首轮
-  protocol-backfill 起点 = max(持久化 cursor, baseline)（coordinator
-  `observationScanFrom`）；observed/applied cursor 永不回卷到 cutoff 之前。
-- 未配置时行为不变（当前 startup 路径仍是默认）。
+### 22.7 production startup + strict-only Graph + producer freeze
+`SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH` 为必填；缺失即 fail-closed。
+searcher 进程在创建 producer 前直接 begin/resume `rebuildUniverse`，不再
+要求外部 CLI 先生成一个与 main poolSets 脱节的 Graph：
+- 四组 startup poolSets 与插件声明 event supplement 进入同一 run；该 event
+  union 已覆盖 factory/Swap 范围，main 不得在 ready 后再次调用 legacy
+  factory/active-pool scan 或重复 identity；attestation 使用有界 24-worker
+  pool，禁止对全 universe 一次性启动 RPC；retryable>0 持久化 incomplete
+  并阻塞启动，可用 status/probe 定向关闭；
+- ready load 时复核 graph/catalog roots、appliedThrough==cutoff、全 source
+  coverage，并从 memo 重新签发 process-local handles；
+- backrun 与 blockscan 引用同一 ready Graph；删除
+  `buildTokenGraphWithResults()` production 调用、raw universe→edge 桥、
+  strict edge 二次 merge；无 ready 没有 fallback；
+- process-local catalog 只由同一 ready 的 rehydrated publications 重建，
+  并逐 canonicalEdgeId 与 ready Graph 对齐；
+- coordinator `producerGenerationFrozen=true`：不启动 backfill timer，
+  receipt/trace preparation no-op，任何 topology publication 直接抛错；
+  shutdown 不写 discovery/cursor。下一代只能由下一次 startup rebuild
+  产生。
 ### 22.8 切换部署 runbook（exact-SHA systemd 部署，审计 §部署）
 前置核对（每次部署前）：remote 领先先同步（`git -C /opt/MEV fetch origin` +
 确认 `origin/codex/s1-unified-adapter-architecture-impl` == 本地 HEAD）；
@@ -5580,21 +5600,19 @@ coordinator）只有在 readyGeneration 存在时才创建：
 > 因此“精确暂停 + 保留恢复配置”当前为 N/A（无调度器需暂停，无配置需恢复）。
 
 切换序列：
-1. （一次性）新 universe 重建：`searcher:universe-rebuild-startup
-   --checkpoint /opt/MEV-runtime/universe-rebuild-checkpoint.json`
-   —— fixed cutoff + 逐实例持久化；retryable 用
-   `searcher:universe-rebuild-probe` 关闭；全部关闭后 READY。
+1. searcher systemd 启动本身执行/恢复 fixed-cutoff rebuild；若因 retryable
+   fail-closed，使用 `searcher:universe-rebuild-status` 与
+   `searcher:universe-rebuild-probe` 在原 run/cutoff 定向关闭，然后重启
+   systemd 继续 finalize，不另起移动窗口。
 2. `sudo env SEARCHER_DEPLOY_REF=origin/codex/s1-unified-adapter-architecture-impl
    SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH=/opt/MEV-runtime/universe-rebuild-checkpoint.json
    bash scripts/deploy-node.sh`（exact-SHA + systemd + SEARCHER_RUNTIME_COMMIT；
    禁止 nohup；dry-run 保持）。
-3. 部署后验证（F5）：`strict catalog startup publisher` /
-   `strict startup edges merged into runtime graph` /
+3. 部署后验证（F5）：`strict ready graph loaded` /
+   `strict ready catalog loaded` /
    `universe rebuild ready generation=... producer baseline freeze` /
    `expected=`/`priced=` 增长；systemd 重启后 checkpoint 复用（restore
    路径）+ 仅验证差集；连续 100/100。
 
-未配置 `SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH` 时行为不变（当前
-startup 路径为默认），用于回退。
-
-
+禁止用“未配置 checkpoint”回退旧路径；回滚只能部署上一已验收 exact
+SHA，不能把 legacy Graph/fallback 接回当前 runtime。

@@ -28,29 +28,12 @@ import { blockScanRouteId } from "./blockscan-route-identity.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import {
-  prepareActiveProtocolDiscoveryPass,
-} from "./protocol-discovery-runtime.js";
-import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   projectVerifiedProtocolPool,
-  protocolEdgeKey,
-  protocolInstanceKey,
   type ProtocolDiscoveryOwnership,
-  type ProtocolDiscoveryResult,
 } from "./protocol-instance-discovery.js";
 import {
-  advanceProtocolObservedContiguousAuthority,
-  cachedProtocolCandidates,
   createProtocolDiscoveryEvidenceCache,
-  invalidateProtocolObservedHistory,
-  loadProtocolDiscoveryEvidenceCache,
-  pruneProtocolDiscoveryAddressCache,
-  protocolObservedCursorAnchorMatches,
-  reconcileProtocolDiscoveryEvidenceCache,
-  recordProtocolRouteOwnership,
-  saveProtocolDiscoveryEvidenceCache,
-  setProtocolObservedCursor,
-  updateProtocolObservedSourceFingerprint,
 } from "./protocol-discovery-cache.js";
 import {
   loadDexDiscoveryCursor,
@@ -59,12 +42,8 @@ import {
 import {
   createProtocolTraceMemo,
   protocolDiscoverySourceFingerprints,
-  protocolObservedSourceFingerprint,
   shouldTraceForProtocolDiscovery,
 } from "./observed-protocol-discovery.js";
-import {
-  planDiscoveryStartup,
-} from "./discovery-source-watermark.js";
 import {
   type LiveDiscoveryPublicationState,
 } from "./live-discovery-publication.js";
@@ -73,7 +52,6 @@ import type { CanonicalSource } from
 import {
   createLiveDiscoveryCoordinator,
   readBlockHash,
-  resolveCanonicalSourceTransition,
 } from "./live-discovery-coordinator.js";
 import {
   createDurableDiscoveryContinuityComposition,
@@ -84,20 +62,8 @@ import {
   type DiscoveryInventoryEnumerator,
 } from "./adapter-family-discovery-inventory-enumerator.js";
 import {
-  CheckpointDiscoveryInventoryWriter,
-  type DiscoveryCheckpointInventoryWriter,
-} from "./adapter-family-discovery-inventory-writer.js";
-import {
-  deriveLiveDiscoveryCheckpointInventory,
-  deriveLiveDiscoveryAddressSurfaceObservations,
-  resolveStrictFamilyIdForAdapter,
-} from "./live-discovery-checkpoint-inventory.js";
-import {
   resolveStrictCatalogConsumerDiagnostic,
 } from "./strict-catalog-consumer-diagnostic.js";
-import {
-  createCoalescingPublicationChain,
-} from "./strict-live-publication-chain.js";
 import {
   createStrictQuoteSource,
 } from "./strict-live-quote-source.js";
@@ -111,19 +77,8 @@ import {
   createRevmStrictSimulationTransport,
 } from "./revm-strict-simulation-transport.js";
 import {
-  runStrictFamilyLifecycle,
-} from "./strict-family-lifecycle-runner.js";
-import {
   publishStrictCatalogFromLifecycle,
-  restoreStrictCatalogFromCheckpoint,
 } from "./strict-catalog-live-publisher.js";
-import {
-  reverifyCarriedInstanceContinuity,
-} from "./strict-carry-continuity.js";
-import {
-  deriveLiveDiscoveryEventObservations,
-  mergeFamilyObservations,
-} from "./live-discovery-event-observations.js";
 import type { CentralAdapterRuntime } from
   "./adapter-work-intent.js";
 import {
@@ -136,8 +91,6 @@ import {
   PRODUCTION_STRICT_VERIFIED_ACTORS,
 } from "./venues/production-verified-actors.js";
 import {
-  emitProtocolDiscoveryEvents,
-  emitStaticSuppressedProtocolEvents,
   ProtocolDiscoveryCandidateDomain,
   ProtocolDiscoveryCoverageCoordinator,
 } from "./protocol-discovery-coordinator.js";
@@ -146,7 +99,6 @@ import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
 import { TemplatePlanner } from "./planner/planner.js";
 import {
-  buildTokenGraphWithResults,
   buildTokenIndex,
   POOL_REGISTRY,
   type PoolEntry,
@@ -154,10 +106,6 @@ import {
   type TokenQueryBackend,
 } from "./planner/token-graph.js";
 import {
-  filterStartupActivePoolIncumbents,
-  scanActivePoolsDetailed,
-  indexFactoryPools,
-  mergeStartupActivePoolDiscovery,
   mergePoolRegistries,
   sendDexDiscoveryRpc,
 } from "./active-pool-discovery.js";
@@ -166,16 +114,21 @@ import {
   type PoolIdentityFailureReason,
   type RejectedPoolIdentity,
 } from "./venues/identity.js";
-import {
-  attestStartupPoolSetsStrict,
-  mergeStartupFamilyPublications,
-  type StrictIdentityProvider,
-} from "./strict-identity-attestation.js";
 import { UniverseRebuildCheckpointStore } from
   "./universe-rebuild-checkpoint.js";
+import {
+  UniverseRunIncomplete,
+  rebuildUniverse,
+} from "./universe-rebuild-runner.js";
+import { createRebuildWiring } from "./universe-rebuild-production.js";
+import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
+import {
+  sealPublication,
+  type AdapterFamilyPublication,
+  type PreparedFamilyInstance,
+} from "./venues/adapter-family-runtime.js";
 import { resolveProducerBaseline } from
   "./startup-universe-rebuild.js";
-import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
   PRODUCTION_ADAPTER_FAMILIES,
@@ -216,7 +169,6 @@ import {
 import {
   assertDexSourceHashStable,
   createDexGraphCoverageState,
-  createPinnedDexReadBackend,
   MempoolIntakeRefreshSignal,
 } from "./runtime-pool-refresh.js";
 import { computeBidEth, evaluateEv, valueInEth } from "./ev-evaluator.js";
@@ -381,8 +333,6 @@ const DEFAULT_DISCOVERY_CONTINUITY_CHECKPOINT_PATH = resolve(
   "state",
   "discovery-continuity-checkpoint.json",
 );
-const PROTOCOL_CURSOR_SEMANTICS_VERSION =
-  "family-source-contiguous-v3-hash-anchored";
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
@@ -1555,7 +1505,6 @@ async function main(): Promise<void> {
 
   const discoveryBlocks = Number(process.env.SEARCHER_DISCOVERY_BLOCKS ?? "300");
   const discoveryTopN = Number(process.env.SEARCHER_DISCOVERY_TOP_N ?? "100");
-  const factoryBlocks = Number(process.env.SEARCHER_FACTORY_BLOCKS ?? "50000");
   const protocolDiscoveryBlocks = Math.max(
     1,
     Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_BLOCKS ?? "300"),
@@ -1598,7 +1547,6 @@ async function main(): Promise<void> {
       clearTimeout(timer);
     }
   }
-  const startupDexBackend = createPinnedDexReadBackend(provider, discoveryToBlock);
   const refreshIntervalMs = Number(process.env.SEARCHER_REFRESH_INTERVAL_MS ?? "300000"); // 5 min
   // Protocol discovery runs on its own cadence, decoupled from the DEX refresh
   // timer. Both lanes still serialize through one mutation queue below.
@@ -1610,18 +1558,6 @@ async function main(): Promise<void> {
     protocolDiscoveryBlocks,
     Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_MAX_CATCHUP_BLOCKS ?? "50000"),
   );
-  const protocolDiscoveryStartupFallbackBlocks = Number(
-    process.env.SEARCHER_PROTOCOL_DISCOVERY_STARTUP_FALLBACK_BLOCKS ??
-      "10000",
-  );
-  if (
-    !Number.isSafeInteger(protocolDiscoveryStartupFallbackBlocks) ||
-    protocolDiscoveryStartupFallbackBlocks < 0
-  ) {
-    throw new Error(
-      "SEARCHER_PROTOCOL_DISCOVERY_STARTUP_FALLBACK_BLOCKS must be a non-negative integer",
-    );
-  }
   const mainnetBackend: TokenQueryBackend = {
     call: async (req) => provider.call(req),
     getLogs: async (req) => provider.send("eth_getLogs", [req]),
@@ -1758,19 +1694,8 @@ async function main(): Promise<void> {
   let discoveryContinuityComposition: DurableDiscoveryContinuityComposition |
     null = null;
   let discoveryInventoryEnumerator: DiscoveryInventoryEnumerator | null = null;
-  let discoveryInventoryWriter: DiscoveryCheckpointInventoryWriter | null = null;
   let strictCentralRuntime: CentralAdapterRuntime | null = null;
   let restartTrustedSource: CanonicalSource | null = null;
-  let runStrictLivePublicationChain:
-    (() => Promise<void>) | null = null;
-  const strictLivePublicationChain = createCoalescingPublicationChain(
-    (error) => {
-      console.warn(
-        "[searcher/live] strict live publication chain failed: " +
-          `${error instanceof Error ? error.message : String(error)}`,
-      );
-    },
-  );
   if (
     continuityCompositionPath !== undefined &&
     continuityCompositionPath.trim() !== ""
@@ -1818,287 +1743,6 @@ async function main(): Promise<void> {
         new CheckpointDiscoveryInventoryEnumerator({
           checkpointStore: discoveryContinuityComposition.store,
         });
-      discoveryInventoryWriter =
-        new CheckpointDiscoveryInventoryWriter({
-          checkpointStore: discoveryContinuityComposition.store,
-          checkpointIssuer: discoveryContinuityComposition.checkpointIssuer,
-        });
-      runStrictLivePublicationChain = async (): Promise<void> => {
-          if (
-            discoveryInventoryWriter === null ||
-            discoveryContinuityComposition === null ||
-            strictCentralRuntime === null
-          ) {
-            return;
-          }
-          const composition = discoveryContinuityComposition;
-          const strictRuntime = strictCentralRuntime;
-          // One capture per chain run: checkpoint inventory and the
-          // catalogRoot CAS must describe the same publication state.
-          const envelope = liveDiscovery.capture();
-          if (envelope === null) return;
-          const cursor = envelope.protocolObservedCursor;
-          if (cursor.completeThroughHash === null) return;
-          const previousCatalogRoot =
-            discoveryContinuityComposition.catalogRoot.capture();
-          // F8: the legacy observed cursor cannot advance (the observed
-          // protocol-discovery pass is inert), so pinning the publication
-          // source to it would strand every observation behind the anchor.
-          // Anchor at the current canonical head instead: recent observations
-          // qualify and the strict pipeline stays self-sufficient.
-          let sourceBlock = cursor.completeThroughBlock;
-          let sourceHash = cursor.completeThroughHash;
-          try {
-            const headNumber = await provider.getBlockNumber();
-            if (
-              Number.isSafeInteger(headNumber) &&
-              headNumber >= sourceBlock
-            ) {
-              const headHash = await readBlockHash(provider, headNumber);
-              if (/^0x[0-9a-fA-F]{64}$/.test(headHash)) {
-                sourceBlock = headNumber;
-                sourceHash = headHash.toLowerCase();
-              }
-            }
-          } catch {
-            // Keep the cursor anchor on head read failure (fail closed).
-          }
-          const source = Object.freeze({
-            number: sourceBlock,
-            hash: sourceHash,
-            generation:
-              (previousCatalogRoot?.envelope.snapshot.source.generation ?? -1) +
-              1,
-          });
-          const addressObservations =
-            deriveLiveDiscoveryAddressSurfaceObservations({
-              publication: envelope,
-              source,
-              catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-              familyIdForAdapter: (adapterId) =>
-                resolveStrictFamilyIdForAdapter(
-                  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-                  adapterId,
-                ),
-            });
-          const eventObservations =
-            deriveLiveDiscoveryEventObservations({
-              events: envelope.protocolEvidenceCache.runtime.observedEvents,
-              source,
-              catalog:
-                PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-            });
-          {
-            const ring = envelope.protocolEvidenceCache.runtime.observedEvents;
-            const ringTopics = new Map<string, number>();
-            for (const event of ring) {
-              const topic = event.topics?.[0]?.toLowerCase() ?? "none";
-              ringTopics.set(topic, (ringTopics.get(topic) ?? 0) + 1);
-            }
-            console.log(
-              "[searcher/live] observed ring: n=" + ring.length + " " +
-                [...ringTopics.entries()]
-                  .sort((a, b) => b[1] - a[1])
-                  .slice(0, 10)
-                  .map(([topic, count]) => topic.slice(0, 10) + "=" + count)
-                  .join(" "),
-            );
-          }
-          const observations = mergeFamilyObservations(
-            addressObservations,
-            eventObservations,
-          );
-          if (observations.size === 0) return;
-          console.log(
-            "[searcher/live] strict observations: families=" +
-              observations.size + " " +
-              [...observations.entries()].map(([familyId, obs]) =>
-                familyId + "=" + obs.length
-              ).sort().join(" "),
-          );
-          if (previousCatalogRoot !== null) {
-            const previousSource =
-              previousCatalogRoot.envelope.snapshot.source;
-            const transition = await resolveCanonicalSourceTransition(
-              provider,
-              previousSource,
-              source,
-            );
-            if (transition !== "canonical-descendant") {
-              console.warn(
-                `[searcher/live] strict catalog publish skipped: ` +
-                  `source transition is not canonical-descendant ` +
-                  `${previousSource.number}->${source.number}`,
-              );
-              return;
-            }
-          }
-          const publications = [];
-          // Small families first: a handful of verified nominations (for
-          // example fluid-dex) publish before the large erc4626 cohort
-          // saturates the node RPC with base identity reads.
-          const familyEntries = [...observations.entries()].sort(
-            (left, right) => left[1].length - right[1].length,
-          );
-          for (const [familyId, familyObservations] of familyEntries) {
-            try {
-              publications.push(Object.freeze({
-                familyId,
-                publication: await runStrictFamilyLifecycle({
-                  catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-                  familyId,
-                  source,
-                  observations: familyObservations,
-                  runtime: strictCentralRuntime,
-                }),
-              }));
-            } catch (error) {
-              console.warn(
-                "[searcher/live] strict lifecycle failed for " +
-                  `${familyId}: ` +
-                  `${error instanceof Error ? error.message : String(error)}`,
-              );
-            }
-          }
-          if (publications.length === 0) return;
-          const result = await publishStrictCatalogFromLifecycle({
-            composition: discoveryContinuityComposition,
-            catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-            source,
-            publications: Object.freeze(publications),
-            verifyCarriedInstance: async ({
-              familyId,
-              lineageId,
-              instanceKey,
-              current,
-            }) => {
-              const committedRoot =
-                composition.catalogRoot.capture();
-              if (committedRoot === null) return null;
-              const carried = [...committedRoot.envelope.privateState
-                .instances.values()].find((entry) =>
-                  entry.familyId === familyId &&
-                  entry.lineageId === lineageId &&
-                  entry.instanceKey === instanceKey
-                );
-              if (carried === undefined || !("descriptor" in carried.value)) {
-                return null;
-              }
-              return reverifyCarriedInstanceContinuity({
-                catalog:
-                  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-                familyId,
-                instance: carried.value,
-                current,
-                runtime: strictRuntime,
-                readAddressSurface: async (address, at) => {
-                  try {
-                    const [code, word] = await Promise.all([
-                      provider.getCode(address, at.number),
-                      provider.getStorage(
-                        "0x360894a13ba1a3210667c828492db98dca3e2076" +
-                          "cc3735a920a3ca505d382bbc",
-                        address,
-                        at.number,
-                      ),
-                    ]);
-                    return Object.freeze({
-                      codeHash: ethers.keccak256(code),
-                      implementationWord: word.toLowerCase(),
-                    });
-                  } catch {
-                    return null;
-                  }
-                },
-              });
-            },
-          });
-          console.log(
-            `[searcher/live] strict catalog live publisher ` +
-              `${result.status}` +
-              (result.status === "unresolved" ? `: ${result.reason}` : ""),
-          );
-          if (result.status !== "published") return;
-          const committedRoot =
-            discoveryContinuityComposition.catalogRoot.capture();
-          if (committedRoot !== null) {
-            console.log(
-              `[searcher/live] strict catalog root committed: ` +
-                `revision=${committedRoot.envelope.snapshot.revision} ` +
-                `instances=${committedRoot.envelope.privateState.instances.size} ` +
-                `pricing=${committedRoot.views.pricingByPublicationKey.size} ` +
-                `mids=${countStrictViewsMids(committedRoot.views)} ` +
-                `edges=${committedRoot.views.edges.length}`,
-            );
-            // F8: the runtime graphs are built from the DEX universe pool
-            // set, so protocol instances only enter through this merge of
-            // the committed strict edges. Without it the blockscan state
-            // machine never sees state keys for the strict families and
-            // prices nothing (expected=0). Dedup by canonical edge id.
-            const strictEdges = committedRoot.views.edges;
-            if (strictEdges.length > 0) {
-              const mergeStrictEdges = (
-                current: readonly TokenEdge[] | undefined,
-              ): TokenEdge[] => {
-                const seen = new Set((current ?? []).map(strictEdgeKey));
-                const merged = [...(current ?? [])];
-                for (const edge of strictEdges) {
-                  const key = strictEdgeKey(edge);
-                  if (seen.has(key)) continue;
-                  seen.add(key);
-                  merged.push(edge);
-                }
-                return merged;
-              };
-              graph = mergeStrictEdges(graph);
-              if (blockScanGraph !== undefined) {
-                blockScanGraph = mergeStrictEdges(blockScanGraph);
-              }
-              blockScanPlanner?.setGraph(blockScanGraph ?? []);
-              const strictPoolEntries = new Map<string, string>();
-              for (const edge of strictEdges) {
-                if (edge.target === undefined) continue;
-                const address = edge.target.toLowerCase();
-                const existing = strictPoolEntries.get(address);
-                if (existing === undefined) {
-                  strictPoolEntries.set(address, edge.adapterId);
-                }
-              }
-              for (const [address, adapter] of strictPoolEntries) {
-                allPoolMap.set(address, adapter);
-              }
-              console.log(
-                `[searcher/live] strict edges merged into runtime graph: ` +
-                  `edges=${strictEdges.length} pools=${strictPoolEntries.size}`,
-              );
-            }
-          }
-          // The durable checkpoint follows the committed catalogRoot CAS at
-          // the same source, so appliedThrough never leads the recoverable
-          // strict authority.
-          const derived = deriveLiveDiscoveryCheckpointInventory({
-            publication: envelope,
-            source,
-            catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-            familyIdForAdapter: (adapterId) =>
-              resolveStrictFamilyIdForAdapter(
-                PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-                adapterId,
-              ),
-          });
-          const writeResult = await discoveryInventoryWriter.write({
-            source,
-            watermarks: derived.watermarks,
-            inventoryFamilies: derived.inventoryFamilies,
-          });
-          console.log(
-            `[searcher/live] discovery checkpoint inventory ` +
-              `${writeResult.status}` +
-              (writeResult.status === "unresolved"
-                ? `: ${writeResult.reason}`
-                : ""),
-          );
-        };
       const loaded = await discoveryContinuityComposition.loadForRestart();
       discoveryContinuityStatus = loaded.status;
       if (loaded.status === "trusted") {
@@ -2182,29 +1826,115 @@ async function main(): Promise<void> {
   }
   let protocolGraphCompleteThrough = -1;
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
-  // F6 Pair B: strict identity attestation (catalog + plugin identity stage)
-  // is the only startup identity authority; the legacy IdentityResolverRegistry
-  // path has been removed.
-  const startupAttestation = await attestStartupPoolSetsStrict({
-    provider: strictIdentityProvider(provider),
-    source: {
-      number: discoveryToBlock,
-      hash: startupDexSourceBlockHash.toLowerCase(),
-      generation: discoveryToBlock,
-    },
-    poolSets: [
-      rawPinnedWarmPools,
-      rawUniversePools,
-      rawBlockscanUniverse,
-      rawBlockScanOverrides,
-    ],
+  // P0 strict startup authority: one fixed-cutoff durable run owns the union
+  // of every startup pool set plus plugin-declared event supplements. It
+  // attests each Family+Instance once, persists the exact partition, and
+  // returns only after Graph+catalog+coverage are one readyGeneration.
+  const universeRebuildCheckpointPath =
+    process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH;
+  if (
+    universeRebuildCheckpointPath === undefined ||
+    universeRebuildCheckpointPath.trim() === ""
+  ) {
+    throw new Error(
+      "strict startup requires SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH",
+    );
+  }
+  const rebuildStore = new UniverseRebuildCheckpointStore({
+    path: universeRebuildCheckpointPath,
   });
-  const [pinnedIdentity, universeIdentity, blockscanIdentity, overrideIdentity] =
-    startupAttestation.sets;
-  // F8/audit P0-b: sealed lifecycle publications for the deduplicated union
-  // of attested startup pools; merged per family and committed through the
-  // composition below so the startup work is not discarded.
-  const startupAttestationPublications = startupAttestation.publications;
+  const startupCandidates = Object.freeze([
+    ...rawPinnedWarmPools,
+    ...rawUniversePools,
+    ...rawBlockscanUniverse,
+    ...rawBlockScanOverrides,
+  ].map((candidate) => Object.freeze({ ...candidate })));
+  const rebuildWiring = createRebuildWiring({
+    rpcUrl: config.rpcUrl,
+    startupCandidates,
+  });
+  let readyUniverse;
+  try {
+    readyUniverse = await rebuildUniverse({
+      ...rebuildWiring,
+      store: rebuildStore,
+      runId: process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID ??
+        "strict-startup-rebuild",
+      lookbackBlocks: Number(
+        process.env.SEARCHER_UNIVERSE_REBUILD_LOOKBACK_BLOCKS ?? "14400",
+      ),
+      log: (message) => console.log("[searcher/startup] " + message),
+    });
+  } catch (error) {
+    if (error instanceof UniverseRunIncomplete) {
+      throw new Error(
+        "strict startup rebuild incomplete: run=" + error.runId +
+          " retryable=" + error.retryableCount +
+          " (probe durable failures before producer start)",
+      );
+    }
+    throw error;
+  }
+  const rebuildEnvelope = await rebuildStore.load();
+  if (
+    rebuildEnvelope === null ||
+    rebuildEnvelope.readyGeneration === null ||
+    rebuildEnvelope.readyGeneration.generation !== readyUniverse.generation
+  ) {
+    throw new Error("strict startup readyGeneration failed root verification");
+  }
+  const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
+  const activeInstanceKeys = new Set(readyUniverse.activeInstanceKeys);
+  const readyInstances = Object.values(rebuildEnvelope.verifiedMemos)
+    .filter((memo) => activeInstanceKeys.has(memo.familyInstanceKey))
+    .map((memo) => rebuildWiring.rehydrateVerifiedInstance({
+      memo,
+      cutoff: readyUniverse.cutoff,
+    }) as PreparedFamilyInstance);
+  if (readyInstances.length !== activeInstanceKeys.size) {
+    throw new Error(
+      "strict startup readyGeneration lost an active memo/instance",
+    );
+  }
+  const readyInstancesByFamily = new Map<string, PreparedFamilyInstance[]>();
+  for (const instance of readyInstances) {
+    const siblings = readyInstancesByFamily.get(instance.familyId);
+    if (siblings === undefined) {
+      readyInstancesByFamily.set(instance.familyId, [instance]);
+    } else {
+      siblings.push(instance);
+    }
+  }
+  const startupAttestationPublications: readonly AdapterFamilyPublication[] =
+    Object.freeze([...readyInstancesByFamily.entries()].map(
+      ([familyId, instances]) => sealPublication({
+        familyId: familyId as never,
+        source: readyUniverse.cutoff,
+        generation: readyUniverse.cutoff.generation,
+        instances: Object.freeze(instances),
+        outcomes: Object.freeze([]),
+      }),
+    ));
+
+  // Transition-only pool views remain useful for detector metadata, but no
+  // longer grant identity or Graph admission. readyGeneration is the sole
+  // executable authority.
+  const pinnedIdentity = Object.freeze({
+    accepted: rawPinnedWarmPools,
+    rejected: Object.freeze([]),
+  });
+  const universeIdentity = Object.freeze({
+    accepted: rawUniversePools,
+    rejected: Object.freeze([]),
+  });
+  const blockscanIdentity = Object.freeze({
+    accepted: rawBlockscanUniverse,
+    rejected: Object.freeze([]),
+  });
+  const overrideIdentity = Object.freeze({
+    accepted: rawBlockScanOverrides,
+    rejected: Object.freeze([]),
+  });
   // F6 Pair B: strict attestation returns a narrower rejected shape; bridge
   // it back to the legacy RejectedPoolIdentity for the transition consumers.
   const asLegacyRejections = (
@@ -2260,88 +1990,50 @@ async function main(): Promise<void> {
   );
   const landedPoolDiscoveryRegistry =
     PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery();
-  const startupFamilyMaterializationRetries = [
-    ...retryableDexIdentityPools.values(),
-  ].filter((pool) =>
-    landedPoolDiscoveryRegistry.consumesMaterializationRetries(pool.adapter)
-  );
-
-  // Phase 1: Factory event indexing — discover ALL pools created in recent N blocks
-  const factoryPools = await indexFactoryPools(
-    provider,
-    factoryBlocks,
-    discoveryToBlock,
-    { strict: true },
-  );
-  // Phase 2: Swap event discovery — find most active pools (may include Curve etc.)
-  const startupActivePoolDiscovery = await scanActivePoolsDetailed(
-    provider,
-    discoveryBlocks,
-    Number.POSITIVE_INFINITY,
-    discoveryToBlock,
-    {
-      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-      identityBackend: startupDexBackend,
-      identityBlockTag: discoveryToBlock,
-      // Reuse the current-N admitted, full file-backed family inventory when
-      // singleton events expose only opaque identities (for example a V4
-      // poolId). The family materializer validates the retained shape before
-      // accepting it; genuinely new identities still take the normal on-chain
-      // backfill path.
-      retainedPools: blockscanUniverse,
-      retryablePools: startupFamilyMaterializationRetries,
-      ...(protocolDiscoveryHistoryProvider === undefined
-        ? {}
-        : {
-            historicalLogProvider: protocolDiscoveryHistoryProvider,
-            historicalLogAnchor: {
-              blockNumber: discoveryToBlock,
-              blockHash: startupDexSourceBlockHash,
-            },
-          }),
-      topicScanMode: "union",
-      strict: true,
-    },
-  );
-  for (const pool of startupFamilyMaterializationRetries) {
-    retryableDexIdentityPools.delete(poolRegistryKey(pool));
-  }
-  for (const pool of startupActivePoolDiscovery.retryablePools) {
-    retryableDexIdentityPools.set(poolRegistryKey(pool), pool);
-  }
-  const swapPools = [...startupActivePoolDiscovery.pools];
-  const routeFamilies = PRODUCTION_ADAPTER_FAMILIES.routes();
-  const familyIdForStartupPool = (pool: PoolEntry): string | null =>
-    routeFamilies.findForPool(pool.adapter)?.id ?? null;
-  // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
-  // Apply the registry-declared family admission switch. No venue identity is
-  // interpreted here; families that do not require the switch remain active.
+  const readyCoverageKeys = new Set(readyUniverse.sourceCoverage.map(
+    (coverage) => `${coverage.familyId}\u001f${coverage.sourceId}`,
+  ));
+  // The strict event union was already scanned and attested in rebuildUniverse.
+  // Reconstruct only the compatibility coverage shell expected by the frozen
+  // coordinator; do not repeat factory/swap scans or identity work here.
+  const startupActivePoolDiscovery = Object.freeze({
+    pools: Object.freeze([]),
+    coverage: Object.freeze(landedPoolDiscoveryRegistry.list().flatMap(
+      (descriptor) => descriptor.event.executionFamilies.map((familyId) =>
+        Object.freeze({
+          familyId: familyId as never,
+          sourceId: descriptor.sourceId,
+          sourceFingerprint: descriptor.sourceFingerprint,
+          eventId: descriptor.event.id,
+          consumed: true,
+          complete: readyCoverageKeys.has(
+            `${familyId}\u001fevent:${descriptor.event.id}`,
+          ),
+          issues: Object.freeze([]),
+        })
+      ),
+    )),
+    retryablePools: Object.freeze([]),
+    cacheRevalidation: Object.freeze({
+      stalePoolKeys: Object.freeze([]),
+      revalidatedPoolKeys: Object.freeze([]),
+    }),
+    truncated: false,
+  });
+  // Transition-only pool views are metadata. They cannot add an executable
+  // edge; readyGeneration remains the sole Graph authority.
   const incumbentPools =
     mergePoolRegistries(
       mergePoolRegistries(
         mergePoolRegistries(liveRegistry, pinnedWarmPools),
         universePools,
       ),
-      factoryPools,
+      blockscanUniverse,
     );
-  const basePools = mergeStartupActivePoolDiscovery(
-    incumbentPools,
-    startupActivePoolDiscovery,
-    familyIdForStartupPool,
-  );
-  const startupBlockscanUniverse = filterStartupActivePoolIncumbents(
-    blockscanUniverse,
-    startupActivePoolDiscovery,
-    familyIdForStartupPool,
-  );
-  const startupBlockScanOverrides = filterStartupActivePoolIncumbents(
-    blockScanOverrides,
-    startupActivePoolDiscovery,
-    familyIdForStartupPool,
-  );
-  const suppressedDexPoolKeys = new Set(
-    startupActivePoolDiscovery.cacheRevalidation.stalePoolKeys,
-  );
+  const basePools = incumbentPools;
+  const startupBlockscanUniverse = blockscanUniverse;
+  const startupBlockScanOverrides = blockScanOverrides;
+  const suppressedDexPoolKeys = new Set<string>();
   const pairCompletionCandidates = config.pairCompletion
     ? selectPairCompletionPools(
       basePools,
@@ -2363,9 +2055,9 @@ async function main(): Promise<void> {
     `[searcher/live] pool registry: ${liveRegistry.length} protocol + ` +
       `${pinnedWarmPools.length} pinned + ${universePools.length} universe ` +
       `(forceInclude=${config.poolUniverseForceInclude.length}) + ` +
-      `${factoryPools.length} factory + ${swapPools.length} swap-active + ` +
+      `${blockscanUniverse.length} blockscan metadata + ` +
       `${pairCompletionAdded} pair-completion = ` +
-      `${allPools.length} total`,
+      `${allPools.length} total (strict event scan already consumed)`,
   );
   const strategyViewOptions = {
     blockscanMaxPools: Number(process.env.SEARCHER_BLOCKSCAN_VIEW_MAX_POOLS ?? 6000),
@@ -2437,44 +2129,21 @@ async function main(): Promise<void> {
     );
   }
 
-  // Build routing graph from all pools. File-backed universe entries can carry
-  // token0/token1 metadata, so V2/V3 graph construction avoids per-pool token
-  // eth_call unless the generated file is missing that metadata.
-  // Factory pools are queried for token0/token1 in parallel batches.
-  // This is ~1500 eth_call pairs at startup but gives full routing coverage.
-  const backrunGraphBuild = await buildTokenGraphWithResults(
-    startupDexBackend,
-    strategyViews.backrun,
+  // strict-only Graph authority. The persisted ready snapshot was produced
+  // by catalog-issued route handles and Family projectGraph during the same
+  // CAS as cutoff/catalog/coverage. Backrun and blockscan consume this one
+  // immutable generation; raw pool views cannot manufacture an edge.
+  let graph = strictReadyRuntime.graph as TokenEdge[];
+  let blockScanGraph: TokenEdge[] | undefined = enableBlockScan
+    ? graph
+    : undefined;
+  const retryableDexGraphPools = new Map<string, PoolEntry>();
+  if (enableBlockScan) blockScanPlanner?.setGraph(blockScanGraph ?? []);
+  console.log(
+    `[searcher/live] strict ready graph loaded: generation=` +
+      `${readyUniverse.generation} graph_hash=${readyUniverse.graphHash} ` +
+      `edges=${graph.length} backrun=true blockscan=${enableBlockScan}`,
   );
-  logProvisionalGraphInstances("backrun", backrunGraphBuild.successful);
-  let graph = backrunGraphBuild.edges;
-  logRuntimeRefreshFailures(backrunGraphBuild.failed, "graph build skipped");
-  const retryableDexGraphPools = new Map(
-    backrunGraphBuild.failed.map((failure) => [
-      poolRegistryKey(failure.pool),
-      failure.pool,
-    ] as const),
-  );
-  let blockScanGraph: TokenEdge[] | undefined;
-  if (enableBlockScan) {
-    const blockscanGraphBuild = await buildTokenGraphWithResults(
-      startupDexBackend,
-      strategyViews.blockscan,
-    );
-    logProvisionalGraphInstances("blockscan", blockscanGraphBuild.successful);
-    blockScanGraph = blockscanGraphBuild.edges;
-    logRuntimeRefreshFailures(blockscanGraphBuild.failed, "blockscan graph build skipped");
-    for (const failure of blockscanGraphBuild.failed) {
-      retryableDexGraphPools.set(poolRegistryKey(failure.pool), failure.pool);
-    }
-    blockScanPlanner?.setGraph(blockScanGraph);
-    const blockscanGraphHash = hashTokenGraph(blockScanGraph);
-    console.log(
-      `[searcher/blockscan] graph built: edges=${blockScanGraph.length} ` +
-        `from blockscan view=${strategyViews.blockscan.length} ` +
-      `blockscan_graph_hash=${blockscanGraphHash}`,
-    );
-  }
   const startupDexCanonicalHash = await readBlockHash(provider, discoveryToBlock);
   assertDexSourceHashStable(
     discoveryToBlock,
@@ -2486,10 +2155,7 @@ async function main(): Promise<void> {
     // A source-complete scan and executable projection are separate proofs.
     // Failed pool projections stay retryable without erasing the source cursor.
     graphCompleteThrough:
-      retryableDexGraphPools.size === 0 &&
-        retryableDexIdentityPools.size === 0
-      ? initialDexSourceCompleteThrough
-      : -1,
+      readyUniverse.appliedThrough.number,
   });
   const protocolCandidateDomain = new ProtocolDiscoveryCandidateDomain({
     registry: PRODUCTION_ADAPTER_FAMILIES,
@@ -2502,8 +2168,6 @@ async function main(): Promise<void> {
     backrunEdges,
     blockscanEdges,
   );
-  const currentProtocolDexDomain = (): string[] =>
-    protocolDexDomainFor(graph, blockScanGraph);
   const protocolAddressCandidatesFor = (
     backrunEdges: readonly TokenEdge[],
     blockscanEdges: readonly TokenEdge[] | undefined,
@@ -2511,441 +2175,56 @@ async function main(): Promise<void> {
     backrunEdges,
     blockscanEdges,
   );
-  const currentProtocolAddressCandidates = (): string[] =>
-    protocolAddressCandidatesFor(graph, blockScanGraph);
-  const protocolGraphBefore = graph.filter((edge) => edge.slotKind === "protocol");
-  const protocolEdgeKeysBefore = new Set(protocolGraphBefore.map(protocolEdgeKey));
   const protocolDiscoveryCachePath = process.env.SEARCHER_PROTOCOL_DISCOVERY_CACHE_PATH ??
     DEFAULT_PROTOCOL_DISCOVERY_CACHE_PATH;
   const protocolDiscoveryChainId = (await provider.getNetwork()).chainId;
-  const protocolDiscoveryCache = blindProductionAudit
-    ? createProtocolDiscoveryEvidenceCache(protocolDiscoveryChainId)
-    : loadProtocolDiscoveryEvidenceCache(
-        protocolDiscoveryCachePath,
-        protocolDiscoveryChainId,
-      );
-  // Salt the registry fingerprint with cursor semantics so a cursor persisted
-  // by the former recent-window-as-complete implementation is invalidated once
-  // instead of being trusted as contiguous history after upgrade.
-  const observedSourceFingerprint = `0x${createHash("sha256")
-    .update(PROTOCOL_CURSOR_SEMANTICS_VERSION)
-    .update(":")
-    .update(protocolObservedSourceFingerprint(
-      enabledProtocolDiscoveryMatcherAdapters,
-    ))
-    .digest("hex")}`;
+  // The producer must not load the former operational candidate cache as
+  // discovery, coverage, cursor or ownership authority. The strict
+  // readyGeneration already owns the exact startup partition and executable
+  // Graph. This empty cache only satisfies the frozen coordinator interface.
+  const protocolDiscoveryCache = createProtocolDiscoveryEvidenceCache(
+    protocolDiscoveryChainId,
+  );
   const discoverySourceFingerprints = protocolDiscoverySourceFingerprints(
     enabledProtocolDiscoveryMatcherAdapters,
   );
-  let observedSourceChanged = updateProtocolObservedSourceFingerprint(
-    protocolDiscoveryCache,
-    observedSourceFingerprint,
-    discoverySourceFingerprints,
+  const readyStartupFamilies = new Set(
+    readyUniverse.sourceCoverage
+      .filter((coverage) => coverage.sourceId === "startup-universe")
+      .map((coverage) => coverage.familyId),
   );
-  const observedDiscoveryFamilyIds = new Set(
-    enabledProtocolDiscoveryFamilySources
-      .filter((entry) =>
-        entry.sourceIds.includes("observed-interaction")
-      )
-      .map((entry) => entry.familyId),
-  );
-  const persistedObservedCursor = protocolDiscoveryCache.runtime.observedCursor;
-  const persistedObservedCursorHash =
-    protocolDiscoveryCache.runtime.observedCursorHash;
-  if (persistedObservedCursor !== null) {
-    const canonicalCursorHash = persistedObservedCursor <= discoveryToBlock
-      ? await readBlockHash(provider, persistedObservedCursor)
-      : null;
-    if (
-      canonicalCursorHash === null ||
-      !protocolObservedCursorAnchorMatches(
-        protocolDiscoveryCache,
-        persistedObservedCursor,
-        canonicalCursorHash,
-      )
-    ) {
-      console.warn(
-        `[searcher/live] protocol observed cursor anchor invalid; ` +
-          `cursor=${persistedObservedCursor} cached_hash=` +
-          `${persistedObservedCursorHash ?? "missing"} canonical_hash=` +
-          `${canonicalCursorHash ?? "unavailable"}; rebuilding canonical history`,
-      );
-      invalidateProtocolObservedHistory(
-        protocolDiscoveryCache,
-        observedDiscoveryFamilyIds,
-      );
-      observedSourceChanged = true;
-    }
-  }
-  const persistedObservedAuthority =
-    protocolDiscoveryCache.runtime.observedContiguousAuthority;
-  if (persistedObservedAuthority !== null) {
-    const canonicalAuthorityHash = await readBlockHash(
-      provider,
-      persistedObservedAuthority.completeThroughBlock,
-    );
-    if (
-      canonicalAuthorityHash !==
-        persistedObservedAuthority.completeThroughHash
-    ) {
-      console.warn(
-        `[searcher/live] protocol contiguous authority invalid; ` +
-          `cursor=${persistedObservedAuthority.completeThroughBlock} ` +
-          `cached_hash=${persistedObservedAuthority.completeThroughHash} ` +
-          `canonical_hash=${canonicalAuthorityHash ?? "unavailable"}`,
-      );
-      protocolDiscoveryCache.runtime.observedContiguousAuthority = null;
-    }
-  }
-  const protocolDiscoveryStartup = planDiscoveryStartup({
-    targetBlock: discoveryToBlock,
-    persistedCursor: protocolDiscoveryCache.runtime.observedCursor,
-    sourceRegistryChanged: observedSourceChanged,
-    recentBlocks: protocolDiscoveryBlocks,
-    maxCatchupBlocks: protocolDiscoveryMaxCatchupBlocks,
-    bootstrapMode: "recent-positive",
-  });
-  const observedAuthority =
-    protocolDiscoveryCache.runtime.observedContiguousAuthority;
-  const initialProtocolObservedCoverageAuthoritative =
-    protocolDiscoveryStartup.mode === "contiguous" &&
-    observedAuthority?.completeThroughBlock ===
-      protocolDiscoveryStartup.cursorBefore;
-  const cachedObservedCursor =
-    protocolDiscoveryCache.runtime.observedCursor ?? -1;
-  lastProtocolDiscoveryBlock = cachedObservedCursor;
-  let lastProtocolDiscoveryBlockHash =
-    cachedObservedCursor >= 0
-      ? protocolDiscoveryCache.runtime.observedCursorHash
-      : null;
-  // F8: the legacy observed protocol-discovery pass is inert (the strict
-  // pipeline owns discovery), so a persisted legacy observed cursor can no
-  // longer advance. Without one, the strict publisher would block forever on
-  // a null cursor; anchor it at the startup discovery source instead (the
-  // canonical hash is read and stability-asserted at startup).
-  if (
-    lastProtocolDiscoveryBlockHash === null &&
-    startupDexSourceBlockHash !== null &&
-    startupDexSourceBlockHash !== ""
-  ) {
-    lastProtocolDiscoveryBlock = discoveryToBlock;
-    lastProtocolDiscoveryBlockHash = startupDexSourceBlockHash;
-  }
-  if (observedAuthority !== null) {
-    protocolDiscoveryCoverage.seedObserved(
-      observedAuthority.completeThroughBlock,
-    );
-  } else if (lastProtocolDiscoveryBlockHash !== null) {
-    // F8: no persisted observed authority. The observed-interaction family
-    // watermarks are a contiguous source: at 0 they can never advance (a
-    // bounded recent scan cannot manufacture coverage over the skipped
-    // gap). Anchor them at the startup discovery source, mirroring the
-    // observed-cursor fallback above, so the observed lane advances from
-    // the anchor instead of being stuck at 0 forever.
-    protocolDiscoveryCoverage.seedObserved(lastProtocolDiscoveryBlock);
-  }
-  if (observedSourceChanged) {
-    console.warn(
-      `[searcher/live] protocol observed-source registry changed; ` +
-        `startup_positive_only=${protocolDiscoveryStartup.range.fromBlock}-` +
-        `${protocolDiscoveryStartup.range.toBlock} ` +
-        `fingerprint=${observedSourceFingerprint}`,
-    );
-  } else if (!initialProtocolObservedCoverageAuthoritative) {
-    console.warn(
-      `[searcher/live] protocol discovery has no authoritative cursor; ` +
-        `startup_positive_only=${protocolDiscoveryStartup.range.fromBlock}-` +
-        `${protocolDiscoveryStartup.range.toBlock}`,
-    );
-  } else if (protocolDiscoveryStartup.range.toBlock < discoveryToBlock) {
-    console.warn(
-      `[searcher/live] protocol discovery cursor catch-up chunk: ` +
-        `range=${protocolDiscoveryStartup.range.fromBlock}-` +
-        `${protocolDiscoveryStartup.range.toBlock} ` +
-        `remaining_through=${discoveryToBlock} ` +
-        `cap=${protocolDiscoveryMaxCatchupBlocks}`,
-    );
-  }
-  // Reload persisted route ownership as retained CANDIDATES only: edges were
-  // stripped at save time, so nothing routes until this pass re-attests and
-  // re-probes each instance. Incumbent static edges participate later in
-  // semantic-route arbitration; address equality is never an admission gate.
-  if (protocolDiscoveryCache.routeOwnership.admissions.length > 0) {
-    const reloadedAdmissions = new Map(
-      protocolDiscoveryCache.routeOwnership.admissions
-        .map((item) => [
-          protocolInstanceKey(item.adapterId, item.instance.pool),
-          { adapterId: item.adapterId, instance: item.instance, edges: [], claims: [] },
-        ] as const),
-    );
-    protocolDiscoveryOwnership = {
-      version: protocolDiscoveryCache.routeOwnership.version,
-      admissions: reloadedAdmissions,
-    };
-  }
-  const persistProtocolDiscoveryEvidence = (result: ProtocolDiscoveryResult): void => {
-    if (blindProductionAudit || protocolDiscoveryShadow) return;
-    // evaluatedInstanceKeys excludes retryable identity/probe failures, so
-    // per-key reconciliation is safe even when an unrelated source read failed.
-    reconcileProtocolDiscoveryEvidenceCache(protocolDiscoveryCache, result);
-    recordProtocolRouteOwnership(protocolDiscoveryCache, protocolDiscoveryOwnership);
-    // Ownership must be materialized before pruning: the capacity cap is an
-    // optimization and may never evict a newly admitted active instance.
-    pruneProtocolDiscoveryAddressCache(protocolDiscoveryCache, {
-      currentBlock: discoveryToBlock,
-    });
-    try {
-      saveProtocolDiscoveryEvidenceCache(protocolDiscoveryCachePath, protocolDiscoveryCache);
-    } catch (error) {
-      console.warn(
-        `[searcher/live] protocol discovery cache write failed: ` +
-          `${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  };
-  const initialProtocolGraphTokens = currentProtocolDexDomain();
-  const initialProtocolAddressCandidates = currentProtocolAddressCandidates();
-  // One memo across the live observed lane and the range scanner: a landed tx
-  // is debug_traced at most once no matter which entrance sees it first.
+  protocolDiscoveryCoverage.replace(new Map(
+    enabledProtocolDiscoveryFamilySources.flatMap((family) =>
+      family.sourceIds.map((sourceId) => [
+        `${family.familyId}\u001f${sourceId}`,
+        readyStartupFamilies.has(family.familyId)
+          ? readyUniverse.appliedThrough.number
+          : -1,
+      ] as const)
+    ),
+  ));
+  lastProtocolDiscoveryBlock = readyUniverse.appliedThrough.number;
+  const lastProtocolDiscoveryBlockHash = readyUniverse.appliedThrough.hash;
+  protocolGraphCompleteThrough = readyUniverse.appliedThrough.number;
+  // Retained only for the frozen coordinator interface. Producer-time receipt
+  // handling returns before this memo can trace or publish anything.
   let protocolTraceMemo = createProtocolTraceMemo();
   console.log(
-    `[searcher/live] protocol discovery cache: address=${protocolDiscoveryCache.addressEntries.size} ` +
-      `verified=${protocolDiscoveryCache.verifiedCandidates.size} ` +
-      `cursor=${protocolDiscoveryCache.runtime.observedCursor ?? "none"} ` +
-      `ownership=${protocolDiscoveryCache.routeOwnership.admissions.length} ` +
-      `path=${protocolDiscoveryCachePath}`,
+    `[searcher/live] strict startup coverage restored: ` +
+      `cursor=${lastProtocolDiscoveryBlock}:${lastProtocolDiscoveryBlockHash} ` +
+      `sources=${readyUniverse.sourceCoverage.length} ` +
+      `legacy_cache_authority=disabled`,
   );
-  const initialProtocolDiscoveryRange = protocolDiscoveryStartup.range;
-  const initialProtocolRangeHashBefore = await readBlockHash(
-    provider,
-    initialProtocolDiscoveryRange.toBlock,
-  );
-  const initialProtocolDiscovery = await prepareActiveProtocolDiscoveryPass({
-    provider,
-    ...(protocolDiscoveryHistoryProvider === undefined
-      ? {}
-      : { observedHistoryProvider: protocolDiscoveryHistoryProvider }),
-    adapters: PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes(),
-    identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-    protocolEdgesEnabled: config.enableProtocolEdges,
-    chainId: protocolDiscoveryChainId,
-    probeExecutor: config.botvmAddress,
-    currentOwnership: protocolDiscoveryOwnership,
-    currentBackrunPools: strategyViews.backrun,
-    currentBackrunGraph: graph,
-    currentBlockscanGraph: blockScanGraph,
-    buildStrategyViews: rebuildStrategyViews,
-    blockNumber: discoveryToBlock,
-    fromBlock: initialProtocolDiscoveryRange.fromBlock,
-    toBlock: initialProtocolDiscoveryRange.toBlock,
-    graphTokens: initialProtocolGraphTokens,
-    candidateAddresses: initialProtocolAddressCandidates,
-    evidenceCache: protocolDiscoveryCache,
-    bootstrapCandidates: cachedProtocolCandidates(protocolDiscoveryCache),
-    ...(!blindProductionAudit &&
-        initialProtocolDiscoveryRange.fromBlock > 0 &&
-        protocolDiscoveryStartupFallbackBlocks > 0
-      ? {
-          startupFallback: {
-            searchBeforeBlock: initialProtocolDiscoveryRange.fromBlock - 1,
-            maxLookbackBlocks: protocolDiscoveryStartupFallbackBlocks,
-          },
-        }
-      : {}),
-    traceMemo: protocolTraceMemo,
-    shadow: protocolDiscoveryShadow,
-  });
-  const initialProtocolRangeHashAfter = await readBlockHash(
-    provider,
-    initialProtocolDiscoveryRange.toBlock,
-  );
-  assertDexSourceHashStable(
-    initialProtocolDiscoveryRange.toBlock,
-    initialProtocolRangeHashBefore,
-    initialProtocolRangeHashAfter,
-  );
-  emitProtocolDiscoveryEvents(
-    initialProtocolDiscovery.result.events,
-    protocolDiscoveryShadow ? "shadow" : "active",
-    initialProtocolDiscoveryRange.toBlock,
-  );
-  emitStaticSuppressedProtocolEvents(
-    initialProtocolDiscovery.projection,
-    protocolDiscoveryShadow ? "shadow" : "active",
-    initialProtocolDiscoveryRange.toBlock,
-  );
-  if (
-    initialProtocolDiscovery.startupFallback.searchedFamilyIds.length > 0
-  ) {
-    console.log(
-      `[searcher/live] protocol startup fallback: searched=` +
-        `${initialProtocolDiscovery.startupFallback.searchedFamilyIds.length} ` +
-        `recovered=` +
-        `${initialProtocolDiscovery.startupFallback.recoveredFamilyIds.length} ` +
-        `txs=${initialProtocolDiscovery.startupFallback.inspectedTransactions} ` +
-        `errors=${initialProtocolDiscovery.startupFallback.errors.length}`,
-    );
-  }
-  if (initialProtocolDiscovery.projection) {
-    const projection = initialProtocolDiscovery.projection;
-    replaceArray(graph, projection.backrunGraph);
-    strategyViews = projection.strategyViews;
-    protocolDiscoveryOwnership = projection.ownership;
-    if (blockScanGraph && projection.blockscanGraph) {
-      replaceArray(blockScanGraph, projection.blockscanGraph);
-      blockScanPlanner?.setGraph(blockScanGraph);
-    }
-    if (!blindProductionAudit) {
-      dumpRuntimeGraphPools(strategyViews.backrun);
-      dumpRuntimeGraphPools(
-        strategyViews.blockscan,
-        DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH,
-      );
-    }
-  }
-  if (!protocolDiscoveryShadow) {
-    const advanced = protocolDiscoveryCoverage.advance({
-      range: initialProtocolDiscoveryRange,
-      scanner: initialProtocolDiscovery.scanner,
-      result: initialProtocolDiscovery.result,
-      positiveOnlyObserved: !initialProtocolObservedCoverageAuthoritative,
-      evaluationBlock: discoveryToBlock,
-    });
-    protocolDiscoveryCoverage.replace(advanced.watermarks);
-    const priorProtocolDiscoveryBlock = lastProtocolDiscoveryBlock;
-    lastProtocolDiscoveryBlock =
-      protocolDiscoveryCoverage.nextObservedCursor({
-        currentCursor: lastProtocolDiscoveryBlock,
-        range: initialProtocolDiscoveryRange,
-        watermarks: advanced.watermarks,
-        positiveOnlyObserved: !initialProtocolObservedCoverageAuthoritative,
-        eventSourceComplete:
-          initialProtocolDiscovery.scanner.eventSourceComplete,
-      });
-    if (lastProtocolDiscoveryBlock !== priorProtocolDiscoveryBlock) {
-      if (lastProtocolDiscoveryBlock !== initialProtocolDiscoveryRange.toBlock) {
-        throw new Error(
-          "protocol discovery advanced to an unanchored partial range",
-        );
-      }
-      lastProtocolDiscoveryBlockHash = initialProtocolRangeHashAfter;
-    }
-    setProtocolObservedCursor(
-      protocolDiscoveryCache,
-      lastProtocolDiscoveryBlock >= 0 ? lastProtocolDiscoveryBlock : null,
-      lastProtocolDiscoveryBlock >= 0
-        ? lastProtocolDiscoveryBlockHash
-        : null,
-    );
-    const observedFamilies = protocolDiscoveryCoverage.families
-      .filter((family) =>
-        family.sourceIds.includes("observed-interaction")
-      )
-      .map((family) => ({
-        familyId: family.familyId,
-        sourceIds: ["observed-interaction"],
-      }));
-    const observedCoverage = new Map<string, boolean>(
-      initialProtocolDiscovery.result.familySourceCoverage
-        .filter((coverage) =>
-          coverage.sourceId === "observed-interaction"
-        )
-        .map((coverage) => [coverage.familyId, coverage.complete]),
-    );
-    /*
-     * A clean positive-only startup scan is the intended "operational cursor"
-     * seed (planDiscoveryStartup): it fully scans a recent window with no
-     * retryable errors, so observed-only families must not stay at
-     * complete-through 0 forever. Seed the contiguous authority and persist
-     * the cursor so the next startup resumes in contiguous mode.
-     */
-    const observedScanClean =
-      observedFamilies.length > 0 &&
-      observedFamilies.every(
-        (family) => observedCoverage.get(family.familyId) === true,
-      ) &&
-      initialProtocolDiscovery.scanner.eventSourceComplete === true;
-    const observedAuthoritySeeded =
-      initialProtocolObservedCoverageAuthoritative ||
-      observedScanClean;
-    console.log(
-      `[searcher/live] protocol observed seed: mode=${protocolDiscoveryStartup.mode} ` +
-        `families=${observedFamilies.length} scanClean=${observedScanClean} ` +
-        `authoritative=${initialProtocolObservedCoverageAuthoritative} ` +
-        `eventSourceComplete=${initialProtocolDiscovery.scanner.eventSourceComplete} ` +
-        `observedComplete=${JSON.stringify([...observedCoverage])}`,
-    );
-    if (observedAuthoritySeeded && observedFamilies.length > 0) {
-      const authority = advanceProtocolObservedContiguousAuthority({
-        cache: protocolDiscoveryCache,
-        families: observedFamilies,
-        familySourceCoverage: observedFamilies.map((family) => ({
-          familyId: family.familyId,
-          sourceId: "observed-interaction",
-          complete: observedCoverage.get(family.familyId) === true,
-        })),
-        fromBlock: initialProtocolDiscoveryRange.fromBlock,
-        toBlock: initialProtocolDiscoveryRange.toBlock,
-        toBlockHash: initialProtocolRangeHashAfter!,
-        contiguousSourceIds: new Set(["observed-interaction"]),
-      });
-      if (
-        authority !== null &&
-        !initialProtocolObservedCoverageAuthoritative
-      ) {
-        // Persist the seeded cursor so a restart resumes contiguous mode
-        // instead of re-scanning the recent window as positive-only forever.
-        setProtocolObservedCursor(
-          protocolDiscoveryCache,
-          initialProtocolDiscoveryRange.toBlock,
-          initialProtocolRangeHashAfter!,
-        );
-      }
-      console.log(
-        `[searcher/live] protocol observed seed done: ` +
-          `authority=${authority?.completeThroughBlock ?? null} ` +
-          `cursor=${protocolDiscoveryCache.runtime.observedCursor} ` +
-          `memAuthority=${
-            protocolDiscoveryCache.runtime.observedContiguousAuthority
-              ?.completeThroughBlock ?? null
-          }`,
-      );
-    }
-    protocolGraphCompleteThrough =
-      protocolDiscoveryCoverage.graphCompleteThrough(advanced.watermarks);
-  }
-  // Persist after ownership/cursor advanced so the snapshot survives a restart.
-  persistProtocolDiscoveryEvidence(initialProtocolDiscovery.result);
-  const protocolGraphAfter = graph.filter((edge) => edge.slotKind === "protocol");
-  const addedProtocolEdges = protocolGraphAfter.filter(
-    (edge) => !protocolEdgeKeysBefore.has(protocolEdgeKey(edge)),
-  );
-  console.log(
-    `[searcher/live] protocol discovery ${protocolDiscoveryShadow ? "shadow" : "active"}: ` +
-      `instances=${protocolDiscoveryOwnership.admissions.size} ` +
-      `would_admit=${initialProtocolDiscovery.result.wouldAdmit.length} ` +
-      `protocol_edges=${protocolGraphBefore.length}->${protocolGraphAfter.length} ` +
-      `added=${addedProtocolEdges.length} ` +
-      `address_probe=${initialProtocolDiscovery.scanner.addressStats.probes} ` +
-      `address_cache_hit=${initialProtocolDiscovery.scanner.addressStats.cacheHits} ` +
-      `address_overlap=${initialProtocolDiscovery.scanner.addressStats.overlapAddresses} ` +
-      `range=${initialProtocolDiscoveryRange.fromBlock}-` +
-      `${initialProtocolDiscoveryRange.toBlock} ` +
-      `coverage_mode=${protocolDiscoveryStartup.mode}`,
-  );
-  for (const edge of addedProtocolEdges) {
-    console.log(
-      `[searcher/live] protocol graph + adapter=${edge.adapterId} target=${edge.target} ` +
-        `${edge.tokenIn}->${edge.tokenOut}`,
-    );
-  }
   const tokenIndex = buildTokenIndex(graph);
 
-  // Detection uses ALL known pool addresses (factory + swap + hardcoded)
-  // for matching hint logs. Map: address → adapter type.
-  // Routing graph is a subset for path finding.
+  // Detection admission comes from the strict ready Graph itself. Legacy
+  // pool views cannot nominate a producer-time address absent from Graph.
   const allPoolMap = new Map<string, string>();
-  for (const p of strategyViews.backrun) allPoolMap.set(p.address.toLowerCase(), p.adapter);
+  for (const edge of graph) {
+    if (ethers.isAddress(edge.target)) {
+      allPoolMap.set(edge.target.toLowerCase(), edge.adapterId);
+    }
+  }
   detector.setGraph(graph);
   detector.setPoolAddressMap(allPoolMap);
   detector.setTokenQuery(mainnetBackend);
@@ -2969,43 +2248,29 @@ async function main(): Promise<void> {
     if (discoveryContinuityComposition !== null) {
       strictCentralRuntime = createStrictCentralAdapterRuntime({
         provider,
-        generationFence: Object.freeze({ assertCurrent() {} }),
+        generationFence: Object.freeze({
+          assertCurrent(generation: number, source: CanonicalSource) {
+            if (
+              generation !== readyUniverse.cutoff.generation ||
+              source.number !== readyUniverse.cutoff.number ||
+              source.hash.toLowerCase() !==
+                readyUniverse.cutoff.hash.toLowerCase() ||
+              source.generation !== readyUniverse.cutoff.generation
+            ) {
+              throw new Error(
+                "strict runtime escaped committed readyGeneration",
+              );
+            }
+          },
+        }),
         verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+        executor: config.botvmAddress,
         simulator: createRevmStrictSimulationTransport({
           client: revmSimClient,
           executor: config.botvmAddress,
           verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
         }),
       });
-    }
-    if (
-      discoveryContinuityComposition !== null &&
-      strictCentralRuntime !== null &&
-      discoveryInventoryEnumerator !== null &&
-      restartTrustedSource !== null
-    ) {
-      try {
-        const restoreResult = await restoreStrictCatalogFromCheckpoint({
-          composition: discoveryContinuityComposition,
-          catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-          source: restartTrustedSource,
-          enumerate: (source) =>
-            discoveryInventoryEnumerator!.enumerate(source),
-          runtime: strictCentralRuntime,
-        });
-        console.log(
-          `[searcher/live] strict catalog restore ` +
-            `${restoreResult.status}` +
-            (restoreResult.status === "unresolved"
-              ? `: ${restoreResult.reason}`
-              : ` revision=${restoreResult.revision}`),
-        );
-      } catch (error) {
-        console.warn(
-          `[searcher/live] strict catalog restore failed: ` +
-            `${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
     }
     const revmLiveBackend = new RevmLiveBackend(
       revmSimClient,
@@ -3028,90 +2293,61 @@ async function main(): Promise<void> {
       : new HybridLiveBackend(revmLiveBackend, rpcLiveBackend);
   }
 
-  // F8/audit P0-b: the startup attestation ran the full family lifecycle
-  // for every universe pool; merge the sealed per-pool publications into
-  // one publication per family and commit them through the same composition
-  // the live rounds use, so the strict catalog root starts at universe scale
-  // instead of discarding the startup work. On a fresh start (no trusted
-  // checkpoint) this is the first publication; on a restart the checkpoint
-  // restore above already repopulated the root, and re-publishing the same
-  // instances would need per-instance carries for every prior row.
-  if (
-    discoveryContinuityComposition !== null &&
-    restartTrustedSource === null
-  ) {
-    const startupPublications = mergeStartupFamilyPublications(
-      startupAttestationPublications,
-    );
-    if (startupPublications.length > 0) {
-      const startupPublishResult = await publishStrictCatalogFromLifecycle({
-        composition: discoveryContinuityComposition,
-        catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-        source: Object.freeze({
-          number: discoveryToBlock,
-          hash: startupDexSourceBlockHash.toLowerCase(),
-          generation: discoveryToBlock,
-        }),
-        publications: Object.freeze(startupPublications),
-      });
-      console.log(
-        "[searcher/live] strict catalog startup publisher " +
-          startupPublishResult.status +
-          (startupPublishResult.status === "unresolved"
-            ? ": " + startupPublishResult.reason
-            : ""),
-      );
-      if (startupPublishResult.status === "published") {
-        const committedRoot =
-          discoveryContinuityComposition.catalogRoot.capture();
-        if (committedRoot !== null) {
-          const strictEdges = committedRoot.views.edges;
-          const mergeStrictEdgesInto = (
-            current: readonly TokenEdge[] | undefined,
-          ): TokenEdge[] => {
-            const seen = new Set((current ?? []).map(strictEdgeKey));
-            const merged = [...(current ?? [])];
-            for (const edge of strictEdges) {
-              const key = strictEdgeKey(edge);
-              if (seen.has(key)) continue;
-              seen.add(key);
-              merged.push(edge);
-            }
-            return merged;
-          };
-          graph = mergeStrictEdgesInto(graph);
-          if (blockScanGraph !== undefined) {
-            blockScanGraph = mergeStrictEdgesInto(blockScanGraph);
-          }
-          blockScanPlanner?.setGraph(blockScanGraph ?? []);
-          const strictPoolEntries = new Map<string, string>();
-          for (const edge of strictEdges) {
-            if (edge.target === undefined) continue;
-            const address = edge.target.toLowerCase();
-            const existing = strictPoolEntries.get(address);
-            if (existing === undefined) {
-              strictPoolEntries.set(address, edge.adapterId);
-            }
-          }
-          for (const [address, adapter] of strictPoolEntries) {
-            allPoolMap.set(address, adapter);
-          }
-          console.log(
-            "[searcher/live] strict startup edges merged into runtime graph: " +
-              "edges=" + strictEdges.length +
-              " pools=" + strictPoolEntries.size +
-              " revision=" + committedRoot.envelope.snapshot.revision +
-              " instances=" + committedRoot.envelope.privateState.instances.size,
-          );
-        }
-      }
-    }
+  // Reconstruct the in-memory catalog only from the same readyGeneration.
+  // This is deterministic process-local handle issuance, not a second
+  // discovery/lifecycle run and not a merge into another Graph.
+  if (discoveryContinuityComposition === null) {
+    throw new Error("strict startup requires production catalog composition");
   }
+  const startupPublishResult = await publishStrictCatalogFromLifecycle({
+    composition: discoveryContinuityComposition,
+    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+    source: readyUniverse.cutoff,
+    publications: Object.freeze(startupAttestationPublications.map(
+      (publication) => Object.freeze({
+        familyId: publication.familyId,
+        publication,
+      }),
+    )),
+  });
+  if (startupPublishResult.status !== "published") {
+    throw new Error(
+      "strict ready catalog publication failed: " +
+        startupPublishResult.reason,
+    );
+  }
+  const committedReadyRoot =
+    discoveryContinuityComposition.catalogRoot.capture();
+  if (committedReadyRoot === null) {
+    throw new Error("strict ready catalog root is absent after publication");
+  }
+  const readyEdgeIds = [...strictReadyRuntime.graph].map((edge) =>
+    String((edge as { canonicalEdgeId?: unknown }).canonicalEdgeId ?? "")
+  ).sort();
+  const committedEdgeIds = [...committedReadyRoot.views.edges].map((edge) =>
+    String((edge as { canonicalEdgeId?: unknown }).canonicalEdgeId ?? "")
+  ).sort();
+  if (
+    readyEdgeIds.length !== committedEdgeIds.length ||
+    readyEdgeIds.some((edgeId, index) => edgeId !== committedEdgeIds[index])
+  ) {
+    throw new Error(
+      "strict ready Graph/catalog edge set diverged during rehydration",
+    );
+  }
+  console.log(
+    "[searcher/live] strict ready catalog loaded: generation=" +
+      readyUniverse.generation +
+      " cutoff=" + readyUniverse.cutoff.number +
+      " catalog_hash=" + readyUniverse.catalogHash +
+      " instances=" + committedReadyRoot.envelope.privateState.instances.size +
+      " edges=" + committedReadyRoot.views.edges.length,
+  );
 
   // Incremental refresh: scan recent blocks for new pools every N minutes
   const knownPoolKeys = new Set(
     [
-      ...backrunGraphBuild.successful.map((item) => poolRegistryKey(item.pool)),
+      ...strategyViews.backrun.map((pool) => poolRegistryKey(pool)),
       ...[...protocolDiscoveryOwnership.admissions.values()]
         .map((item) =>
           poolProjectionRowKey(projectVerifiedProtocolPool(item))
@@ -3125,7 +2361,7 @@ async function main(): Promise<void> {
     knownPoolKeys.delete(retryKey);
   }
   const knownPoolAddrs = new Set(
-    strategyViews.backrun.map((pool) => pool.address.toLowerCase()),
+    [...allPoolMap.keys()],
   );
   const mempoolIntakeRefresh = new MempoolIntakeRefreshSignal();
   // Audit §5/§6 producer freeze: when a universe-rebuild checkpoint is
@@ -3134,38 +2370,19 @@ async function main(): Promise<void> {
   // it, and the historical event window is not re-scanned (the ready run
   // already covered it). No ready generation (or an incomplete run) fails
   // closed before the producer is created.
-  let startupObservationScanFrom: number | null = null;
-  const universeRebuildCheckpointPath =
-    process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH;
-  if (
-    universeRebuildCheckpointPath !== undefined &&
-    universeRebuildCheckpointPath.trim() !== ""
-  ) {
-    const rebuildStore = new UniverseRebuildCheckpointStore({
-      path: universeRebuildCheckpointPath,
-    });
-    const rebuildEnvelope = await rebuildStore.load();
-    if (rebuildEnvelope === null || rebuildEnvelope.readyGeneration === null) {
-      throw new Error(
-        "universe rebuild producer gate: no ready generation at " +
-          universeRebuildCheckpointPath +
-          " (run searcher:universe-rebuild-startup and probe retryables first)",
-      );
-    }
-    const baseline = resolveProducerBaseline({
-      ready: rebuildEnvelope.readyGeneration,
-      currentHead: discoveryToBlock,
-    });
-    startupObservationScanFrom = baseline.observationScanFrom;
-    console.log(
-      "[searcher/live] universe rebuild ready generation=" +
-        baseline.ready.generation +
-        " cutoff=" + baseline.ready.cutoff.number +
-        " instances=" + baseline.activeInstanceKeys.size +
-        " producer baseline freeze (scan from " +
-        baseline.observationScanFrom + ")",
-    );
-  }
+  const baseline = resolveProducerBaseline({
+    ready: readyUniverse,
+    currentHead: discoveryToBlock,
+  });
+  const startupObservationScanFrom = baseline.observationScanFrom;
+  console.log(
+    "[searcher/live] universe rebuild ready generation=" +
+      baseline.ready.generation +
+      " cutoff=" + baseline.ready.cutoff.number +
+      " instances=" + baseline.activeInstanceKeys.size +
+      " producer baseline freeze (scan from " +
+      baseline.observationScanFrom + ")",
+  );
   const liveDiscovery = await createLiveDiscoveryCoordinator({
     provider,
     ...(protocolDiscoveryHistoryProvider === undefined
@@ -3206,9 +2423,8 @@ async function main(): Promise<void> {
               fromBlock: poolUniverseCoverage.fromBlock,
               toBlock: poolUniverseCoverage.toBlock,
             }),
-    ...(startupObservationScanFrom === null
-      ? {}
-      : { observationScanFrom: startupObservationScanFrom }),
+    observationScanFrom: startupObservationScanFrom,
+    producerGenerationFrozen: true,
     ...(strictCentralRuntime === null
       ? {}
       : { identityRuntime: strictCentralRuntime }),
@@ -3243,9 +2459,6 @@ async function main(): Promise<void> {
     onPublicationApplied(next) {
       strategyViews = next.strategyViews;
       dexGraphCoverage = { ...next.dexGraphCoverage };
-      if (runStrictLivePublicationChain !== null) {
-        strictLivePublicationChain.enqueue(runStrictLivePublicationChain);
-      }
     },
     async persistRuntimeGraphs(next) {
       await Promise.all([
@@ -4098,36 +3311,6 @@ interface HandleCtx {
    * composition is configured.
    */
   readonly strictQuoteSource?: AmountQuoteSource;
-}
-
-/**
- * Total committed strict pricing mids across families (diagnostic).
- */
-function countStrictViewsMids(views: {
-  readonly pricingByPublicationKey: ReadonlyMap<string, {
-    readonly mids: ReadonlyMap<string, unknown>;
-  }>;
-}): number {
-  let total = 0;
-  for (const state of views.pricingByPublicationKey.values()) {
-    total += state.mids.size;
-  }
-  return total;
-}
-
-/**
- * Dedup key for a runtime graph edge. The committed strict edges carry a
- * canonicalEdgeId; legacy-built edges fall back to the identity composite.
- */
-function strictEdgeKey(edge: TokenEdge): string {
-  const canonical = (edge as { canonicalEdgeId?: unknown }).canonicalEdgeId;
-  if (typeof canonical === "string" && canonical.length > 0) return canonical;
-  return [
-    edge.adapterId,
-    edge.target?.toLowerCase() ?? "",
-    edge.tokenIn?.toLowerCase() ?? "",
-    edge.tokenOut?.toLowerCase() ?? "",
-  ].join("|");
 }
 
 /**
@@ -8065,36 +7248,6 @@ function extractTxHashes(value: unknown): string[] {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * F6 Pair B: adapts the ethers provider to the strict identity provider
- * shape, passing through the nomination capabilities (recent-log reverse
- * lookup, tx seed, trace) that plugin-owned nomination consumes. The
- * framework stays free of protocol semantics; the adapter only maps RPC
- * verbs.
- */
-function strictIdentityProvider(
-  provider: ethers.JsonRpcProvider,
-): StrictIdentityProvider {
-  return {
-    call: (transaction, blockTag) =>
-      provider.call({ ...transaction, blockTag } as ethers.TransactionRequest),
-    getCode: (address, blockTag) => provider.getCode(address, blockTag),
-    getStorage: (address, slot, blockTag) =>
-      provider.getStorage(address, slot, blockTag),
-    getLogs: (filter) => provider.getLogs({
-      ...(filter.address === undefined ? {} : { address: filter.address }),
-      fromBlock: filter.fromBlock ?? 0,
-      toBlock: filter.toBlock ?? 0,
-      topics: filter.topics ?? [],
-    } as unknown as ethers.Filter),
-    getTransactionReceipt: (hash) => provider.getTransactionReceipt(hash),
-    traceTransaction: (hash) => provider.send("debug_traceTransaction", [
-      hash,
-      { tracer: "callTracer" },
-    ]),
-  };
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {

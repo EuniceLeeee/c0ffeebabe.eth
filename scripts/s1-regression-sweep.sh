@@ -39,6 +39,7 @@ run_test universe-rebuild-production npm run searcher:universe-rebuild-productio
 run_test universe-rebuild-sigterm npm run searcher:universe-rebuild-sigterm
 run_test universe-rebuild-startup-cli npm run searcher:universe-rebuild-startup-cli
 run_test startup-universe-rebuild npm run searcher:startup-universe-rebuild
+run_test strict-ready-runtime npm run searcher:strict-ready-runtime
 run_test universe-rebuild-rehydrator npm run searcher:universe-rebuild-rehydrator
 run_test universe-rebuild-stale-lock npm run searcher:universe-rebuild-stale-lock
 

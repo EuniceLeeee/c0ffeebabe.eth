@@ -53,11 +53,23 @@ async function main(): Promise<void> {
     // The child recorded 60 outcomes with no explicit flush and a long
     // interval; SIGTERM must trigger the flush.
     child.kill("SIGTERM");
-    const exit = await new Promise<number | null>((resolve) => {
-      child.on("exit", (code) => resolve(code));
-      setTimeout(() => resolve(null), 15_000);
+    const exit = await new Promise<{
+      readonly observed: boolean;
+      readonly code: number | null;
+      readonly signal: NodeJS.Signals | null;
+    }>((resolve) => {
+      child.on("exit", (code, signal) => resolve({
+        observed: true,
+        code,
+        signal,
+      }));
+      setTimeout(() => resolve({ observed: false, code: null, signal: null }), 15_000);
     });
-    assert(exit !== null, "harness must exit after SIGTERM");
+    assert(exit.observed, "harness must exit after SIGTERM");
+    assert(
+      exit.signal === "SIGTERM" || exit.code === 0,
+      "harness must terminate after its durable flush",
+    );
     // Give the flush a moment, then verify the durable envelope.
     await new Promise((resolve) => setTimeout(resolve, 500));
     const store = new UniverseRebuildCheckpointStore({ path: checkpoint });

@@ -15,6 +15,10 @@ function ready(): ReadyUniverseGeneration {
   return Object.freeze({
     generation: 1,
     cutoff: SOURCE,
+    universeRange: Object.freeze({
+      fromBlock: SOURCE.number - 14_399,
+      toBlock: SOURCE.number,
+    }),
     universeHash: "u",
     catalogHash: "c",
     activeInstanceKeys: Object.freeze(["inst:a", "inst:b"]),

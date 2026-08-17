@@ -57,6 +57,13 @@ export interface UniverseRebuildDependencies {
   readonly dedupeFamilyCandidates: (
     observations: readonly unknown[],
   ) => readonly unknown[];
+  /** Compact evidence pointer retained for a first-attempt retryable. */
+  readonly candidateEvidenceRef?: (candidate: unknown) => {
+    readonly blockNumber: number;
+    readonly blockHash: string;
+    readonly txHash?: string;
+    readonly logIndex?: number;
+  } | undefined;
   /**
    * Cross-run memo reuse: returns a memo only when Family + InstanceKey,
    * candidate fingerprint and per-Family definition hash all match and the
@@ -104,6 +111,7 @@ export interface UniverseRebuildDependencies {
   }[]) => unknown;
   readonly buildCoverage: (input: {
     readonly observations: readonly unknown[];
+    readonly candidates: readonly unknown[];
     readonly cutoff: CanonicalSource;
   }) => ReadyUniverseGeneration["sourceCoverage"];
   /** Assert the cutoff hash still holds before the final CAS. */
@@ -114,6 +122,8 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
   readonly store: UniverseRebuildCheckpointStore;
   readonly runId: string;
   readonly lookbackBlocks: number;
+  /** Bounded identity/materialization workers; defaults to 24. */
+  readonly attestationConcurrency?: number;
   /** Optional progress logging. */
   readonly log?: (message: string) => void;
 }
@@ -122,15 +132,46 @@ export async function rebuildUniverse(
   input: RebuildUniverseInput,
 ): Promise<ReadyUniverseGeneration> {
   const log = input.log ?? ((): void => undefined);
-  const cutoff = await input.freezeCanonicalHead();
-  const fromBlock = Math.max(0, cutoff.number - input.lookbackBlocks + 1);
-
-  // 1. Re-scan the latest two-day Swap window at the frozen cutoff.
-  const observations = await input.scanSwapWindow({ fromBlock, cutoff });
-  const candidates = input.dedupeFamilyCandidates(observations);
+  let checkpoint = await input.store.load() ?? null;
+  const incumbentRun = checkpoint?.inProgressRun ?? null;
+  let cutoff: CanonicalSource;
+  let fromBlock: number;
+  let observations: readonly unknown[];
+  let candidates: readonly unknown[];
+  if (incumbentRun !== null) {
+    if (incumbentRun.runId !== input.runId) {
+      throw new Error(
+        "universe rebuild checkpoint: another run is in progress (" +
+          incumbentRun.runId + ")",
+      );
+    }
+    // Once observedThrough is durable, resume the exact compact partition at
+    // its original cutoff. Never rescan a moving window or depend on an
+    // array index such as "8000".
+    cutoff = incumbentRun.cutoff;
+    fromBlock = incumbentRun.fromBlock;
+    observations = Object.freeze([]);
+    candidates = Object.freeze(Object.entries(incumbentRun.candidatesByKey)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([, candidate]) => candidate));
+  } else {
+    cutoff = await input.freezeCanonicalHead();
+    fromBlock = Math.max(0, cutoff.number - input.lookbackBlocks + 1);
+    // A crash before this scan is sealed may rescan; after beginOrResumeRun,
+    // the compact exact partition is durable and no scan is repeated.
+    observations = await input.scanSwapWindow({ fromBlock, cutoff });
+    candidates = input.dedupeFamilyCandidates(observations);
+  }
+  const candidatesByKey = Object.freeze(Object.fromEntries(
+    candidates.map((candidate) => [input.familyCandidateKey(candidate), candidate]),
+  ));
+  if (Object.keys(candidatesByKey).length !== candidates.length) {
+    throw new Error(
+      "universe rebuild: dedupe produced duplicate FamilyCandidateKey entries",
+    );
+  }
 
   // 2. Create or resume the same fixed-cutoff run.
-  let checkpoint = await input.store.load() ?? null;
   checkpoint = await input.store.beginOrResumeRun({
     expectedRevision: checkpoint?.revision ?? 0,
     runId: input.runId,
@@ -139,6 +180,7 @@ export async function rebuildUniverse(
     universeHash: hashCandidateSet(candidates, input.familyCandidateKey),
     candidateSetHash: hashCandidateSet(candidates, input.familyCandidateKey),
     candidateCount: candidates.length,
+    candidatesByKey,
     observedThrough: Object.freeze({
       number: cutoff.number,
       hash: cutoff.hash,
@@ -148,6 +190,7 @@ export async function rebuildUniverse(
   if (run === null || run.runId !== input.runId) {
     throw new Error("universe rebuild: run did not begin");
   }
+  const attestationCheckpoint = checkpoint;
 
   // 3. Restore by durable key; verify only the diff.
   const writer = new AttestationCheckpointWriter({
@@ -156,19 +199,31 @@ export async function rebuildUniverse(
   });
   // Best-effort graceful stop: SIGTERM/SIGINT flush the completed outcomes
   // (the store's stale-lock recovery lets the next run reclaim afterwards).
-  writer.installSignalFlush();
-  const scheduled: Promise<void>[] = [];
-  for (const candidate of candidates) {
+  const uninstallSignalFlush = writer.installSignalFlush({
+    terminateAfterFlush: true,
+  });
+  const pendingCandidates = candidates.filter((candidate) => {
     const candidateKey = input.familyCandidateKey(candidate);
     const oldOutcome = run.outcomesByCandidateKey[candidateKey];
-    if (oldOutcome?.status === "verified") {
-      continue;
+    return oldOutcome?.status !== "verified";
+  });
+  let nextCandidate = 0;
+  const processCandidate = async (candidate: unknown): Promise<void> => {
+    const candidateKey = input.familyCandidateKey(candidate);
+    const oldOutcome = run.outcomesByCandidateKey[candidateKey];
+    let reusableMemo: DurableVerifiedMemo | null = null;
+    try {
+      reusableMemo = await input.findReusableMemo({
+        candidate,
+        checkpoint: attestationCheckpoint,
+        cutoff,
+      });
+    } catch (error) {
+      log(
+        "universe rebuild memo revalidation failed for " + candidateKey +
+          ": " + (error instanceof Error ? error.message : String(error)),
+      );
     }
-    const reusableMemo = await input.findReusableMemo({
-      candidate,
-      checkpoint,
-      cutoff,
-    });
     if (reusableMemo !== null) {
       writer.record(Object.freeze({
         status: "verified",
@@ -176,20 +231,19 @@ export async function rebuildUniverse(
         familyInstanceKey: reusableMemo.familyInstanceKey,
         memoFingerprint: reusableMemo.memoFingerprint,
       }));
-      continue;
+      return;
     }
     const evidenceRef = oldOutcome?.status === "retryable"
       ? oldOutcome.evidenceRef
-      : undefined;
+      : input.candidateEvidenceRef?.(candidate);
     const attemptCount = oldOutcome?.status === "retryable"
       ? oldOutcome.attemptCount
       : 0;
-    scheduled.push((async (): Promise<void> => {
-      const result = await input.attestFamilyInstanceOnce({
-        candidate,
-        cutoff,
-        ...(evidenceRef === undefined ? {} : { evidenceRef }),
-      });
+    const result = await input.attestFamilyInstanceOnce({
+      candidate,
+      cutoff,
+      ...(evidenceRef === undefined ? {} : { evidenceRef }),
+    });
       if (result.status === "verified") {
         const memo = input.sealDurableVerifiedMemo({
           candidate,
@@ -231,10 +285,22 @@ export async function rebuildUniverse(
         attemptCount: attemptCount + 1,
         lastAttemptAt: new Date().toISOString(),
       }));
-    })());
+  };
+  const requestedConcurrency = input.attestationConcurrency ?? 24;
+  if (!Number.isSafeInteger(requestedConcurrency) || requestedConcurrency < 1) {
+    throw new Error("universe rebuild attestation concurrency is invalid");
   }
-  await Promise.all(scheduled);
+  await Promise.all(Array.from({
+    length: Math.min(requestedConcurrency, Math.max(1, pendingCandidates.length)),
+  }, async () => {
+    while (true) {
+      const index = nextCandidate++;
+      if (index >= pendingCandidates.length) return;
+      await processCandidate(pendingCandidates[index]);
+    }
+  }));
   await writer.flush();
+  uninstallSignalFlush();
 
   // 4. Reload and inspect the run.
   checkpoint = await input.store.load() ?? checkpoint;
@@ -286,8 +352,12 @@ export async function rebuildUniverse(
   const ready = Object.freeze({
     generation: (checkpoint.readyGeneration?.generation ?? 0) + 1,
     cutoff: Object.freeze({ ...cutoff }),
+    universeRange: Object.freeze({
+      fromBlock: currentRun.fromBlock,
+      toBlock: cutoff.number,
+    }),
     universeHash: currentRun.universeHash,
-    catalogHash: hashCatalog(catalogSnapshot),
+    catalogHash: hashReadyCatalogSnapshot(catalogSnapshot),
     activeInstanceKeys: Object.freeze(activeMemos.map((memo) =>
       memo.familyInstanceKey
     ).sort()),
@@ -297,9 +367,9 @@ export async function rebuildUniverse(
       number: cutoff.number,
       hash: cutoff.hash,
     }),
-    sourceCoverage: input.buildCoverage({ observations, cutoff }),
+    sourceCoverage: input.buildCoverage({ observations, candidates, cutoff }),
     graphSnapshot,
-    graphHash: hashGraph(graphSnapshot),
+    graphHash: hashReadyGraphSnapshot(graphSnapshot),
     catalogSnapshot,
   }) as ReadyUniverseGeneration;
 
@@ -475,11 +545,11 @@ function hashPublications(catalogSnapshot: unknown): string {
   );
 }
 
-function hashGraph(graph: unknown): string {
+export function hashReadyGraphSnapshot(graph: unknown): string {
   return createDigest("graph-v2:" + canonicalJson(graph));
 }
 
-function hashCatalog(catalog: unknown): string {
+export function hashReadyCatalogSnapshot(catalog: unknown): string {
   return createDigest("catalog-v1:" + canonicalJson(catalog));
 }
 

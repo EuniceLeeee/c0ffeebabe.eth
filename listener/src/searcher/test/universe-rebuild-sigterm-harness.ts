@@ -15,6 +15,12 @@ async function main(): Promise<void> {
     universeHash: "u",
     candidateSetHash: "c",
     candidateCount: count,
+    candidatesByKey: Object.freeze(Object.fromEntries(
+      Array.from({ length: count }, (_, index) => [
+        "sig:" + index,
+        Object.freeze({ id: "sig:" + index }),
+      ]),
+    )),
     observedThrough: Object.freeze({ number: source.number, hash: source.hash }),
   });
   // batchSize above the outcome count: nothing auto-flushes; the SIGTERM
@@ -25,12 +31,9 @@ async function main(): Promise<void> {
     batchSize: 1_000,
     maxIntervalMs: 60_000,
   });
-  writer.installSignalFlush();
-  // SIGTERM: flush the completed outcomes, then exit cleanly. The interval
-  // keeps the event loop alive so the async flush can complete.
-  process.on("SIGTERM", () => {
-    void writer.flush().finally(() => process.exit(0));
-  });
+  writer.installSignalFlush({ terminateAfterFlush: true });
+  // The writer owns SIGTERM: it flushes, removes its listener and re-delivers
+  // the signal so the process actually stops without a second shutdown hook.
   const keepAlive = setInterval(() => undefined, 5_000);
   void keepAlive;
   for (let i = 0; i < count; i++) {

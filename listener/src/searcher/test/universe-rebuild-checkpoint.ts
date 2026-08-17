@@ -55,6 +55,7 @@ async function main(): Promise<void> {
       universeHash: "u1",
       candidateSetHash: "c1",
       candidateCount: 2,
+      candidatesByKey: Object.freeze({ a: Object.freeze({ id: "a" }), b: Object.freeze({ id: "b" }) }),
       observedThrough: Object.freeze({
         number: SOURCE.number,
         hash: SOURCE.hash,
@@ -71,6 +72,7 @@ async function main(): Promise<void> {
       universeHash: "u1",
       candidateSetHash: "c1",
       candidateCount: 2,
+      candidatesByKey: Object.freeze({ a: Object.freeze({ id: "a" }), b: Object.freeze({ id: "b" }) }),
       observedThrough: Object.freeze({
         number: SOURCE.number,
         hash: SOURCE.hash,
@@ -86,6 +88,7 @@ async function main(): Promise<void> {
         universeHash: "u-drifted",
         candidateSetHash: "c-drifted",
         candidateCount: 2,
+        candidatesByKey: Object.freeze({ a: Object.freeze({ id: "a" }), b: Object.freeze({ id: "b" }) }),
         observedThrough: Object.freeze({
           number: SOURCE.number,
           hash: SOURCE.hash,
@@ -104,6 +107,7 @@ async function main(): Promise<void> {
         universeHash: "u1",
         candidateSetHash: "c1",
         candidateCount: 2,
+        candidatesByKey: Object.freeze({ a: Object.freeze({ id: "a" }), b: Object.freeze({ id: "b" }) }),
         observedThrough: Object.freeze({
           number: SOURCE.number,
           hash: SOURCE.hash,
@@ -206,13 +210,17 @@ async function main(): Promise<void> {
         ready: Object.freeze({
           generation: 1,
           cutoff: SOURCE,
+          universeRange: Object.freeze({
+            fromBlock: SOURCE.number - 14_399,
+            toBlock: SOURCE.number,
+          }),
           universeHash: "u1",
           catalogHash: "cat",
           activeInstanceKeys: Object.freeze(["inst-a", "inst-b"]),
           publicationSetHash: "ps",
           observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
           appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
-          sourceCoverage: Object.freeze([]),
+          sourceCoverage: Object.freeze([Object.freeze({ familyId: "univ2", sourceId: "startup-universe", completeThroughBlock: SOURCE.number, completeThroughHash: SOURCE.hash })]),
           graphSnapshot: Object.freeze({ edges: Object.freeze([]) }),
           graphHash: "g1",
           catalogSnapshot: Object.freeze({ instances: Object.freeze([]) }),
@@ -226,13 +234,17 @@ async function main(): Promise<void> {
       ready: Object.freeze({
         generation: 1,
         cutoff: SOURCE,
+        universeRange: Object.freeze({
+          fromBlock: SOURCE.number - 14_399,
+          toBlock: SOURCE.number,
+        }),
         universeHash: "u1",
         catalogHash: "cat",
         activeInstanceKeys: Object.freeze(["inst-a", "inst-b"]),
         publicationSetHash: "ps",
         observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
         appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
-        sourceCoverage: Object.freeze([]),
+        sourceCoverage: Object.freeze([Object.freeze({ familyId: "univ2", sourceId: "startup-universe", completeThroughBlock: SOURCE.number, completeThroughHash: SOURCE.hash })]),
         graphSnapshot: Object.freeze({ edges: Object.freeze([]) }),
         graphHash: "g1",
         catalogSnapshot: Object.freeze({ instances: Object.freeze([]) }),
@@ -274,6 +286,12 @@ async function main(): Promise<void> {
       universeHash: "u1",
       candidateSetHash: "c1",
       candidateCount: 30,
+      candidatesByKey: Object.freeze(Object.fromEntries(
+        Array.from({ length: 30 }, (_, index) => [
+          "k" + index,
+          Object.freeze({ id: "k" + index }),
+        ]),
+      )),
       observedThrough: Object.freeze({
         number: SOURCE.number,
         hash: SOURCE.hash,
@@ -292,8 +310,16 @@ async function main(): Promise<void> {
         memoFingerprint: "fp-k" + i,
       }) as RunOutcome, memoFor("k" + i));
     }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    const afterBatch = await writerStore.load();
+    let afterBatch = await writerStore.load();
+    const batchDeadline = Date.now() + 5_000;
+    while (
+      Object.keys(afterBatch?.inProgressRun?.outcomesByCandidateKey ?? {})
+        .length < 25 &&
+      Date.now() < batchDeadline
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      afterBatch = await writerStore.load();
+    }
     assert.equal(
       Object.keys(afterBatch?.inProgressRun?.outcomesByCandidateKey ?? {}).length,
       25,

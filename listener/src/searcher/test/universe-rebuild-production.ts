@@ -4,9 +4,12 @@ import {
   canReuseMemo,
   candidateFingerprint,
   candidateFromLog,
+  candidatesFromLog,
   createRebuildWiring,
   familyDefinitionHash,
   fullLogIdentityKey,
+  isChainProvenTerminalReason,
+  memoAuthorityFingerprint,
   rebuildFamilyCandidateKey,
   type RebuildScanObservation,
 } from "../universe-rebuild-production.js";
@@ -43,6 +46,7 @@ function makeMemo(
   const familyId = String(candidate.familyId ?? "unknown-family");
   const fp = candidateFingerprint(candidate);
   const fdh = familyDefinitionHash(familyId);
+  const authorityFingerprint = authorityFor(candidate);
   const base = Object.freeze({
     familyCandidateKey: "k",
     familyInstanceKey: "inst",
@@ -53,7 +57,7 @@ function makeMemo(
     familyDefinitionHash: fdh,
     validity: Object.freeze({
       policy: "immutable-code",
-      authorityFingerprint: fdh,
+      authorityFingerprint,
       proofSource: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
     }),
     verifiedIdentity: Object.freeze({}),
@@ -63,6 +67,17 @@ function makeMemo(
     memoFingerprint: "mf",
   });
   return Object.freeze({ ...base, ...overrides }) as DurableVerifiedMemo;
+}
+
+function authorityFor(
+  candidate: Readonly<Record<string, unknown>>,
+): string {
+  return memoAuthorityFingerprint({
+    familyId: String(candidate.familyId ?? "unknown-family"),
+    address: String(candidate.address),
+    code: "0x6000",
+    implementationWord: "0x" + "00".repeat(32),
+  });
 }
 
 async function main(): Promise<void> {
@@ -83,14 +98,27 @@ async function main(): Promise<void> {
     "full log identity binds the canonical block hash",
   );
 
-  // Candidate from a V4-style log: poolId extracted from topic1.
-  const v4Log = log({
+  // Central code must not guess that topic1 is a poolId. For an ordinary
+  // Swap it is a different indexed field; plugin decode owns identity.
+  const indexedSwap = log({
     address: "0x000000000004444c5dc75cB358380D2e3dE08A90".toLowerCase(),
     topics: Object.freeze([SWAP_TOPIC, "0x" + "55".repeat(32)]),
   });
-  const v4Candidate = candidateFromLog(v4Log);
-  assert.equal(v4Candidate.poolId, "0x" + "55".repeat(32));
-  assert.equal(v4Candidate.address, "0x000000000004444c5dc75cB358380D2e3dE08A90".toLowerCase());
+  const indexedCandidate = candidateFromLog(indexedSwap);
+  assert.equal(indexedCandidate.poolId, undefined);
+  const v4Swap = log({
+    address: "0x000000000004444c5dc75cB358380D2e3dE08A90".toLowerCase(),
+    topics: Object.freeze([
+      ethers.id("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)")
+        .toLowerCase(),
+      "0x" + "55".repeat(32),
+    ]),
+  });
+  assert.equal(
+    candidatesFromLog(v4Swap).length,
+    0,
+    "mutation-only V4 Swap cannot nominate a partial PoolKey",
+  );
 
   // Candidate fingerprint is stable and excludes dynamic fields.
   assert.equal(
@@ -116,7 +144,13 @@ async function main(): Promise<void> {
   const candidate = candidateFromLog(a);
   const familyId = String(candidate.familyId ?? "");
   assert.equal(
-    canReuseMemo({ memo: makeMemo(candidate), candidate, cutoff: SOURCE, familyId }),
+    canReuseMemo({
+      memo: makeMemo(candidate),
+      candidate,
+      cutoff: SOURCE,
+      familyId,
+      currentAuthorityFingerprint: authorityFor(candidate),
+    }),
     true,
   );
   assert.equal(
@@ -125,6 +159,7 @@ async function main(): Promise<void> {
       candidate,
       cutoff: SOURCE,
       familyId,
+      currentAuthorityFingerprint: authorityFor(candidate),
     }),
     false,
     "family mismatch must invalidate",
@@ -135,6 +170,7 @@ async function main(): Promise<void> {
       candidate,
       cutoff: SOURCE,
       familyId,
+      currentAuthorityFingerprint: authorityFor(candidate),
     }),
     false,
     "candidate fingerprint mismatch must invalidate",
@@ -145,6 +181,7 @@ async function main(): Promise<void> {
       candidate,
       cutoff: SOURCE,
       familyId,
+      currentAuthorityFingerprint: authorityFor(candidate),
     }),
     false,
     "family definition hash mismatch must invalidate",
@@ -164,6 +201,7 @@ async function main(): Promise<void> {
       candidate,
       cutoff: SOURCE,
       familyId,
+      currentAuthorityFingerprint: authorityFor(candidate),
     }),
     false,
     "dependency-proof policy is not reusable without re-verification",
@@ -173,7 +211,7 @@ async function main(): Promise<void> {
       memo: makeMemo(candidate, {
         validity: Object.freeze({
           policy: "immutable-code",
-          authorityFingerprint: "fdh",
+          authorityFingerprint: authorityFor(candidate),
           proofSource: Object.freeze({
             number: SOURCE.number - 1,
             hash: "0x" + "b2".repeat(32),
@@ -183,9 +221,57 @@ async function main(): Promise<void> {
       candidate,
       cutoff: SOURCE,
       familyId,
+      currentAuthorityFingerprint: authorityFor(candidate),
+    }),
+    true,
+    "older immutable proof is reusable only after production rechecks its hash",
+  );
+  assert.equal(
+    canReuseMemo({
+      memo: makeMemo(candidate, {
+        validity: Object.freeze({
+          policy: "immutable-code",
+          authorityFingerprint: "wrong-authority",
+          proofSource: Object.freeze({
+            number: SOURCE.number,
+            hash: SOURCE.hash,
+          }),
+        }),
+      }),
+      candidate,
+      cutoff: SOURCE,
+      familyId,
+      currentAuthorityFingerprint: authorityFor(candidate),
     }),
     false,
-    "stale proof source must invalidate",
+    "authority fingerprint mismatch invalidates reuse",
+  );
+  assert.notEqual(
+    authorityFor(candidate),
+    memoAuthorityFingerprint({
+      familyId,
+      address: String(candidate.address),
+      code: "0x6001",
+      implementationWord: "0x" + "00".repeat(32),
+    }),
+    "runtime code changes invalidate a durable memo",
+  );
+  assert.notEqual(
+    authorityFor(candidate),
+    memoAuthorityFingerprint({
+      familyId,
+      address: String(candidate.address),
+      code: "0x6000",
+      implementationWord: "0x" + "01".repeat(32),
+    }),
+    "proxy implementation changes invalidate a durable memo",
+  );
+  assert.equal(isChainProvenTerminalReason("no deployed code"), true);
+  assert.equal(isChainProvenTerminalReason("identity_rejected:bad_factory"), true);
+  assert.equal(
+    isChainProvenTerminalReason("missing response (requestBody=...)") ,
+    false,
+    "unknown transport failures stay retryable, never become rejection proof",
   );
 
   // Candidate dedupe is per pool, not per log: hundreds of Swap logs of
@@ -220,6 +306,64 @@ async function main(): Promise<void> {
     (poolACandidate as { blockNumber?: number }).blockNumber,
     SOURCE.number,
   );
+
+  // Shared-address startup candidates remain distinct by plugin-owned
+  // poolId and never collapse to the manager address.
+  const manager = "0x000000000004444c5dc75cB358380D2e3dE08A90".toLowerCase();
+  const seeded = wiring.dedupeFamilyCandidates(Object.freeze([
+    Object.freeze({
+      kind: "startup-candidate",
+      candidate: Object.freeze({
+        address: manager,
+        adapter: "univ4",
+        familyId: "univ4-standard",
+        poolId: "0x" + "55".repeat(32),
+      }),
+    }),
+    Object.freeze({
+      kind: "startup-candidate",
+      candidate: Object.freeze({
+        address: manager,
+        adapter: "univ4",
+        familyId: "univ4-standard",
+        poolId: "0x" + "66".repeat(32),
+      }),
+    }),
+  ]));
+  assert.equal(seeded.length, 2, "V4 candidates dedupe by Family+poolId");
+  const duplicatePoolSetCandidate = Object.freeze({
+    address: "0x" + "88".repeat(20),
+    adapter: "univ2",
+    familyId: "univ2-standard",
+  });
+  assert.equal(
+    wiring.dedupeFamilyCandidates(Object.freeze(Array.from(
+      { length: 4 },
+      () => Object.freeze({
+        kind: "startup-candidate",
+        candidate: duplicatePoolSetCandidate,
+      }),
+    ))).length,
+    1,
+    "pinned/universe/blockscan/override copies attest once",
+  );
+  const coverage = wiring.buildCoverage({
+    observations: Object.freeze([]),
+    candidates: Object.freeze([]),
+    cutoff: SOURCE,
+  });
+  assert(coverage.some((row) =>
+    row.familyId === "univ2-standard" &&
+    row.sourceId === "startup-universe"
+  ));
+  assert(coverage.some((row) =>
+    row.familyId === "univ2-standard" &&
+    row.sourceId === "event:univ2-pair-created"
+  ));
+  assert(coverage.every((row) =>
+    row.completeThroughBlock === SOURCE.number &&
+    row.completeThroughHash === SOURCE.hash
+  ));
 
   console.log("universe rebuild production wiring PASS");
 }

@@ -23,6 +23,9 @@ async function main(): Promise<void> {
       universeHash: "u",
       candidateSetHash: "c",
       candidateCount: 1,
+      candidatesByKey: Object.freeze({
+        "stale:0": Object.freeze({ address: "0x" + "11".repeat(20) }),
+      }),
       observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
     });
     // Simulate a killed writer: a lock file naming a dead PID. The next

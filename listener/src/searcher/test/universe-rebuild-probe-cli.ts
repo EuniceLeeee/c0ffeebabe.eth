@@ -27,6 +27,9 @@ async function main(): Promise<void> {
       universeHash: "u1",
       candidateSetHash: "c1",
       candidateCount: 1,
+      candidatesByKey: Object.freeze({
+        "cand:a": Object.freeze({ address: "0x" + "11".repeat(20) }),
+      }),
       observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
     });
     await store.casMergeRunOutcomes("run-1", Object.freeze([Object.freeze({

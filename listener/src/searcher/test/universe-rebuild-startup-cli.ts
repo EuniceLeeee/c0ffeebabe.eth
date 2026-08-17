@@ -47,7 +47,7 @@ const wiringSource = [
   "    rehydrateVerifiedInstance: (input) => Object.freeze({ familyId: 'univ2-standard', familyInstanceKey: input.memo.familyInstanceKey, instanceKey: input.memo.instanceKey }),",
   "    aggregateOnceByFamily: (instances) => Object.freeze(instances.map((i) => Object.freeze({ familyId: 'univ2-standard', instance: i }))),",
   "    buildGraphSnapshot: () => Object.freeze({ format: 'strict-rebuild-graph-v1', edges: Object.freeze([]) }),",
-  "    buildCoverage: () => Object.freeze([]),",
+  "    buildCoverage: ({ cutoff }) => Object.freeze([Object.freeze({ familyId: 'univ2-standard', sourceId: 'startup-universe', completeThroughBlock: cutoff.number, completeThroughHash: cutoff.hash })]),",
   "    assertCanonicalHead: async () => undefined,",
   "  });",
   "}",
@@ -93,6 +93,9 @@ async function main(): Promise<void> {
       universeHash: "u",
       candidateSetHash: "c",
       candidateCount: 1,
+      candidatesByKey: Object.freeze({
+        "cand:x": Object.freeze({ address: "0x" + "11".repeat(20) }),
+      }),
       observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
     });
     await store2.casMergeRunOutcomes("run-i", Object.freeze([Object.freeze({

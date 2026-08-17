@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
@@ -82,6 +82,8 @@ export interface InProgressUniverseRun {
   readonly universeHash: string;
   readonly candidateSetHash: string;
   readonly candidateCount: number;
+  /** Compact exact partition; sufficient to resume without rescanning. */
+  readonly candidatesByKey: Readonly<Record<string, unknown>>;
   /** Swap range fully scanned; never advances appliedThrough by itself. */
   readonly observedThrough: { readonly number: number; readonly hash: string };
   /**
@@ -96,6 +98,10 @@ export interface InProgressUniverseRun {
 export interface ReadyUniverseGeneration {
   readonly generation: number;
   readonly cutoff: CanonicalSource;
+  readonly universeRange: {
+    readonly fromBlock: number;
+    readonly toBlock: number;
+  };
   readonly universeHash: string;
   readonly catalogHash: string;
   readonly activeInstanceKeys: readonly string[];
@@ -129,11 +135,26 @@ export interface StartupCheckpointEnvelope {
 
 /** Deterministic canonical JSON (sorted keys) for hashing. */
 export function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
     return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new Error("checkpoint canonical value number must be finite");
+    }
+    return JSON.stringify(value);
+  }
+  if (typeof value !== "object") {
+    throw new Error(
+      "unsupported checkpoint canonical value type: " + typeof value,
+    );
   }
   if (Array.isArray(value)) {
     return "[" + value.map((item) => canonicalJson(item)).join(",") + "]";
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error("checkpoint canonical values must be plain records");
   }
   const record = value as Record<string, unknown>;
   const keys = Object.keys(record).sort();
@@ -517,8 +538,14 @@ export class UniverseRebuildCheckpointStore {
     readonly universeHash: string;
     readonly candidateSetHash: string;
     readonly candidateCount: number;
+    readonly candidatesByKey: Readonly<Record<string, unknown>>;
     readonly observedThrough: { readonly number: number; readonly hash: string };
   }): Promise<StartupCheckpointEnvelope> {
+    if (Object.keys(input.candidatesByKey).length !== input.candidateCount) {
+      throw new Error(
+        "universe rebuild checkpoint: candidate partition/count mismatch",
+      );
+    }
     return this.#cas(input.expectedRevision, (current) => {
       const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
       const existing = base.inProgressRun;
@@ -537,6 +564,8 @@ export class UniverseRebuildCheckpointStore {
           existing.universeHash !== input.universeHash ||
           existing.candidateSetHash !== input.candidateSetHash ||
           existing.candidateCount !== input.candidateCount ||
+          canonicalJson(existing.candidatesByKey) !==
+            canonicalJson(input.candidatesByKey) ||
           existing.observedThrough.number !== input.observedThrough.number ||
           existing.observedThrough.hash.toLowerCase() !==
             input.observedThrough.hash.toLowerCase()
@@ -557,6 +586,7 @@ export class UniverseRebuildCheckpointStore {
           universeHash: input.universeHash,
           candidateSetHash: input.candidateSetHash,
           candidateCount: input.candidateCount,
+          candidatesByKey: Object.freeze({ ...input.candidatesByKey }),
           observedThrough: Object.freeze({ ...input.observedThrough }),
           appliedThrough: null,
           outcomesByCandidateKey: Object.freeze({}),
@@ -669,15 +699,32 @@ export class AttestationCheckpointWriter {
   }
 
   /** Install SIGTERM/SIGINT flush (best-effort; kill -9 loses one batch). */
-  installSignalFlush(): () => void {
-    const handler = (): void => {
-      void this.flush();
+  installSignalFlush(input?: { readonly terminateAfterFlush?: boolean }): () => void {
+    let terminating = false;
+    const handle = (signal: "SIGTERM" | "SIGINT"): void => {
+      if (terminating) return;
+      if (input?.terminateAfterFlush !== true) {
+        void this.flush();
+        return;
+      }
+      terminating = true;
+      remove();
+      void this.flush().finally(() => {
+        // Re-deliver after removing our listeners so the OS/default signal
+        // semantics stop the startup process only after the durable flush.
+        process.kill(process.pid, signal);
+      });
     };
-    process.on("SIGTERM", handler);
-    process.on("SIGINT", handler);
+    const onTerm = (): void => handle("SIGTERM");
+    const onInt = (): void => handle("SIGINT");
+    const remove = (): void => {
+      process.off("SIGTERM", onTerm);
+      process.off("SIGINT", onInt);
+    };
+    process.on("SIGTERM", onTerm);
+    process.on("SIGINT", onInt);
     return () => {
-      process.off("SIGTERM", handler);
-      process.off("SIGINT", handler);
+      remove();
     };
   }
 }
@@ -728,7 +775,9 @@ function assertReadyPromotion(
   }).sort();
   const activeInstances = [...ready.activeInstanceKeys].sort();
   const sameInstances = expectedInstances.length === activeInstances.length &&
-    expectedInstances.every((value, index) => value === activeInstances[index]);
+    expectedInstances.every((value, index) => value === activeInstances[index]) &&
+    new Set(expectedInstances).size === expectedInstances.length &&
+    new Set(activeInstances).size === activeInstances.length;
   const sameCutoff = ready.cutoff.number === run.cutoff.number &&
     ready.cutoff.hash.toLowerCase() === run.cutoff.hash.toLowerCase() &&
     ready.cutoff.generation === run.cutoff.generation;
@@ -738,9 +787,16 @@ function assertReadyPromotion(
       run.observedThrough.hash.toLowerCase();
   const appliedAtCutoff = ready.appliedThrough.number === run.cutoff.number &&
     ready.appliedThrough.hash.toLowerCase() === run.cutoff.hash.toLowerCase();
+  const coverageKeys = new Set(ready.sourceCoverage.map((coverage) =>
+    coverage.familyId + "|" + coverage.sourceId
+  ));
   if (
     !sameCutoff || !observedMatches || !appliedAtCutoff || !sameInstances ||
+    ready.universeRange.fromBlock !== run.fromBlock ||
+    ready.universeRange.toBlock !== run.cutoff.number ||
     ready.universeHash !== run.universeHash ||
+    ready.sourceCoverage.length === 0 ||
+    coverageKeys.size !== ready.sourceCoverage.length ||
     ready.sourceCoverage.some((coverage) =>
       coverage.completeThroughBlock !== run.cutoff.number ||
       coverage.completeThroughHash?.toLowerCase() !==

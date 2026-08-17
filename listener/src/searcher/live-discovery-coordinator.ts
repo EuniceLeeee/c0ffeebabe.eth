@@ -314,8 +314,20 @@ export interface LiveDiscoveryCoordinatorDeps {
    * block (the ready run already observed/attested the window).
    */
   readonly observationScanFrom?: number | null;
+  /** Freeze discovery/backfill/trace/topology for the producer generation. */
+  readonly producerGenerationFrozen?: boolean;
   /** Coarse N-1 state reads preempt retryable discovery transport reads. */
   readonly readPriority?: Pick<LiveRethReadPriority, "runBackground">;
+}
+
+export function assertProducerGenerationPublicationAllowed(
+  producerGenerationFrozen: boolean,
+): void {
+  if (producerGenerationFrozen) {
+    throw new Error(
+      "producer generation freeze forbids discovery/topology publication",
+    );
+  }
 }
 
 /**
@@ -326,6 +338,7 @@ export interface LiveDiscoveryCoordinatorDeps {
 export async function createLiveDiscoveryCoordinator(
   deps: LiveDiscoveryCoordinatorDeps,
 ) {
+  const producerGenerationFrozen = deps.producerGenerationFrozen === true;
   const {
     provider,
     observedHistoryProvider,
@@ -1746,6 +1759,7 @@ export async function createLiveDiscoveryCoordinator(
   const publishLiveDiscoveryState = (
     state: LiveDiscoveryPublicationState,
   ): void => {
+    assertProducerGenerationPublicationAllowed(producerGenerationFrozen);
     if (discoveryUnsafeReason !== null) {
       throw new Error(
         `refusing unsafe discovery publication: ` +
@@ -2196,6 +2210,7 @@ export async function createLiveDiscoveryCoordinator(
   const scheduleDiscoveryBackfill = async (
     targetBlock?: number,
   ): Promise<void> => {
+    if (producerGenerationFrozen) return;
     if (!discoveryBackfillEnabled) return;
     const latest = targetBlock ?? await provider.getBlockNumber();
     const source = await observeLiveCanonicalHeader(latest);
@@ -2274,7 +2289,7 @@ export async function createLiveDiscoveryCoordinator(
   const start = (): void => {
     if (started || stopped) return;
     started = true;
-    if (blindProductionAudit) return;
+    if (blindProductionAudit || producerGenerationFrozen) return;
     refreshTimer = setInterval(() => {
       void scheduleDiscoveryBackfill().catch((error) => {
         console.warn(
@@ -2316,7 +2331,11 @@ export async function createLiveDiscoveryCoordinator(
     // revision so shutdown never flushes an older cache snapshot.
     await observedProtocolPreparationTail;
     await protocolDiscoveryQueue.settled();
-    if (!blindProductionAudit && discoveryUnsafeReason === null) {
+    if (
+      !blindProductionAudit &&
+      !producerGenerationFrozen &&
+      discoveryUnsafeReason === null
+    ) {
       persistenceWriter.schedule(discoveryPublicationRevision);
       dexCursorWriter.schedule(discoveryPublicationRevision);
     }
@@ -2345,6 +2364,7 @@ export async function createLiveDiscoveryCoordinator(
     blockNumber: number;
     receipt: ProtocolDiscoveryReceipt;
   }): Promise<void> => {
+    if (producerGenerationFrozen) return;
     const enabledDiscoveryAdapters = PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes()
       .filter((adapter) =>
         !adapter.requiresProtocolEdgesFlag || config.enableProtocolEdges
