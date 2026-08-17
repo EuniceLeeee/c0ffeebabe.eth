@@ -4,7 +4,9 @@ import type { VenueId } from "../venues/capability.js";
 import type { VenueIdentitySource } from "../venues/identity.js";
 import type { PoolAdapterId } from "../venues/registry-ids.js";
 import type { CanonicalEdgeId } from "../venues/blockscan-state-capability.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
+  "../strict-production-family-declarations.js";
+import { poolRegistryKey } from "../pool-registry-key.js";
 import {
   resolveStrictEdgesForPool,
 } from "../venues/strict-catalog-registry-projection.js";
@@ -18,8 +20,6 @@ import {
 import {
   edgeExecutionVariantKey,
   edgeInstanceKey,
-  routeGraphCollectionKey,
-  routeInstanceKey,
 } from "../venues/route-instance-identity.js";
 export { v4HooksAffectSwap, v4PoolId } from "../venues/swaps/univ4-common.js";
 
@@ -193,11 +193,6 @@ export interface VerifiedRouteSpec {
   poolToken1?: string;
 }
 
-// DEX pools are discovered via scanActivePools / factory events. Static protocol
-// singletons come from their registered adapters; externally discovered families
-// and legacy compat venues stay here until they have a derived admission source.
-const EXTERNAL_AND_LEGACY_POOL_REGISTRY: PoolEntry[] = [];
-
 /**
  * Merge adapter-owned static venues into the legacy registry without changing
  * the pre-migration edge order. New declarations omit graphOrder and append.
@@ -246,10 +241,9 @@ export function mergeDeclaredProtocolVenues(
   return result;
 }
 
-export const POOL_REGISTRY: PoolEntry[] = mergeDeclaredProtocolVenues(
-  EXTERNAL_AND_LEGACY_POOL_REGISTRY,
-  PRODUCTION_ADAPTER_FAMILIES.protocols().flatMap((adapter) => adapter.declaredVenues),
-);
+/** Compatibility default for analysis callers. Production main never consumes
+ * this list: startup strict discovery is the only instance authority. */
+export const POOL_REGISTRY: PoolEntry[] = [];
 
 // ─── Auto-build graph from pool registry via eth_call ─────────
 
@@ -307,29 +301,29 @@ export async function buildTokenGraphWithResults(
   if (!Number.isFinite(familyTimeoutMs) || familyTimeoutMs <= 0) {
     throw new Error("token-graph familyTimeoutMs must be positive");
   }
-  const routeRegistry = PRODUCTION_ADAPTER_FAMILIES.routes();
   const seenInstances = new Set<string>();
   const described = pools.map((pool) => {
-    const family = routeRegistry.findForPool(pool.adapter);
-    let registrationFailure = family
-      ? null
-      : `route-leg registry: unsupported pool adapter ${pool.adapter}`;
-    if (family) {
-      try {
-        const instanceKey = routeGraphCollectionKey(family, pool);
-        if (seenInstances.has(instanceKey)) {
-          registrationFailure =
-            `token-graph: duplicate route instance ${instanceKey}`;
-        } else {
-          seenInstances.add(instanceKey);
-        }
-      } catch (error) {
-        registrationFailure = errorMessage(error);
+    let familyId: string | null = null;
+    let registrationFailure: string | null = null;
+    try {
+      familyId = PRODUCTION_STRICT_FAMILY_DECLARATIONS.familyIdForPool(
+        pool.adapter,
+      );
+      const instanceKey = registeredRouteInstanceKey(pool);
+      if (seenInstances.has(instanceKey)) {
+        registrationFailure =
+          `token-graph: duplicate route instance ${instanceKey}`;
+      } else {
+        seenInstances.add(instanceKey);
       }
+    } catch (error) {
+      registrationFailure =
+        `strict catalog: unsupported pool adapter ${pool.adapter}: ` +
+        errorMessage(error);
     }
     return Object.freeze({
       pool,
-      familyId: family?.id ?? null,
+      familyId,
       registrationFailure,
     });
   });
@@ -514,11 +508,7 @@ async function queryPoolEdges(
 }
 
 function registeredRouteInstanceKey(pool: PoolEntry): string {
-  const family = PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pool.adapter);
-  return routeInstanceKey(
-    family ?? { id: `unregistered:${pool.adapter}` },
-    pool,
-  );
+  return poolRegistryKey(pool);
 }
 
 function createPoolBuildControl(

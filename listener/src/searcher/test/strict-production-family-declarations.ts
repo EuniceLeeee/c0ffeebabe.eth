@@ -315,6 +315,7 @@ for (const relative of [
   "../venues/route-family-manifest.ts",
   "../detector/detector.ts",
   "../detector/blockscan-scanner.ts",
+  "../planner/token-graph.ts",
 ]) {
   const source = readFileSync(new URL(relative, import.meta.url), "utf8");
   assert.equal(

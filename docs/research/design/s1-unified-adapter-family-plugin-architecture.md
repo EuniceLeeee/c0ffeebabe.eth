@@ -3487,6 +3487,40 @@ legacy=0。token-graph、live-discovery、active-pool/auto-close 等 production 
 registry import；继续按“先物理删除调用点、strict 缺口 fail closed、只参考 Git 历史”的顺序
 清理。producer 仍未部署，未取得新 exact SHA/PID/log anchor 的 F5 或连续 100/100。
 
+**2026-08-18 token-graph / static registry 第十二批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- production `main.ts` 已物理删除 `POOL_REGISTRY` 输入。startup candidate set 不再从
+  static/legacy protocol venue list 起步；唯一实例 authority 是 fixed-cutoff strict discovery
+  union，`liveRegistry` 明确为空。是否启用 protocol edges 只能过滤已由 strict Family
+  attestation 证明的实例，不能让静态地址直接进入 Graph；
+- `planner/token-graph.ts` 已物理删除 `PRODUCTION_ADAPTER_FAMILIES`。兼容分析调用的
+  `buildTokenGraphWithResults()` 只能用 strict catalog 的 `ownerOfPoolAdapter()` 归属 pool，
+  再从 committed strict views 取 canonical edges；unknown/retired pool adapter fail closed，
+  不再调用 legacy `RouteLegAdapter.buildEdges()`、registry alias 或 protocol
+  `declaredVenues`。默认 `POOL_REGISTRY=[]` 仅保留为非 production API 兼容值，main 不读取；
+- pool row 的去重使用无 registry 依赖的 `poolRegistryKey()`：address、logical instance、
+  poolId/PoolKey 与 route binding 都进入 generic physical identity。同址多 V4 pool 或 logical
+  instance 保持隔离，完全相同 row 被拒绝；Family/action ownership仍由 strict catalog
+  单独校验，不能由 key 本身授予 admission；
+- `searcher:strict-ready-runtime` 新增源码合同，禁止 production main 重新出现
+  `POOL_REGISTRY`；`searcher:strict-production-family-declarations` 禁止 token-graph 重新导入
+  `PRODUCTION_ADAPTER_FAMILIES`。同轮通过 strict declarations、strict ready runtime、strict
+  ready GraphView、default-authority cutover、route-adapters 17/17、production startup
+  manifest、strict production runtime session 与 listener 完整 `build`。
+
+旧 `searcher:runtime-pool-refresh` 与 `searcher:token-graph-family-isolation` 仍在测试已经退出
+production 的“producer 期间发现新池→RPC buildEdges→扩图”行为；前者把无 strict edge
+误写成稍后可由 legacy token query 恢复，后者还期待已退出 catalog 的 Balancer/Curve
+adapter 启动 transport timeout。这与 ready topology + producer freeze 冲突，未计入本批
+通过，也不能要求恢复旧动态构边。后续清理 live-discovery/runtime-refresh 时应物理删除这些
+调用点，保留纯 batching/cancellation 基础能力时另写不带 topology authority 的合同。
+
+本 checkpoint 关闭 token-graph/static registry 的 production authority，不等于全局
+legacy=0。live-discovery coordinator、active-pool/build-universe、router discovery 与
+auto-close 工具仍直接读取 legacy registry；下一批继续先删 production 调用点，再以 strict
+discovery/catalog projection闭合。未部署，未产生 F5 live provenance。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

@@ -45,7 +45,6 @@ import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
 import { TemplatePlanner } from "./planner/planner.js";
 import {
   buildTokenIndex,
-  POOL_REGISTRY,
   type PoolEntry,
   type TokenEdge,
   type TokenQueryBackend,
@@ -1322,9 +1321,9 @@ async function main(): Promise<void> {
     call: async (req) => provider.call(req),
     getLogs: async (req) => provider.send("eth_getLogs", [req]),
   };
-  // Declared singleton/compat protocol venues start here. Permissionless
-  // families join later only through canonical discovery identity + route probe.
-  const liveRegistry = filterLiveProtocolRegistry(POOL_REGISTRY, config.enableProtocolEdges);
+  // Strict startup discovery is the only instance authority. No static or
+  // legacy protocol venue enters the candidate set through token-graph state.
+  const liveRegistry: PoolEntry[] = [];
   const rawPinnedWarmPools = loadPinnedWarmPools(config.pinnedWarmPoolPath);
   const rawUniversePools = loadPoolUniverse(config.poolUniversePath, {
     maxPools: config.poolUniverseTopN,
