@@ -1,8 +1,36 @@
+import { ethers } from "ethers";
 import { V2_LINEAGES } from "./v2-lineage.js";
 import type { VenueId } from "./registry-ids.js";
 export type { VenueId } from "./registry-ids.js";
 
 export type FactoryIdentityPoolAdapter = "univ2" | "univ3";
+
+export interface FactoryEventSemantics {
+  readonly topic: string;
+  readonly poolAddressFromLog: (log: {
+    readonly data: string;
+  }) => string;
+}
+
+const UNIV2_PAIR_CREATED_TOPIC = ethers.id(
+  "PairCreated(address,address,address,uint256)",
+);
+const UNIV3_POOL_CREATED_TOPIC = ethers.id(
+  "PoolCreated(address,address,uint24,int24,address)",
+);
+
+export const UNIV2_FACTORY_EVENT: FactoryEventSemantics = Object.freeze({
+  // PairCreated data: pair address in the first 32 bytes.
+  topic: UNIV2_PAIR_CREATED_TOPIC,
+  poolAddressFromLog: (log: { readonly data: string }) =>
+    ethers.getAddress("0x" + log.data.slice(26, 66)),
+});
+export const UNIV3_FACTORY_EVENT: FactoryEventSemantics = Object.freeze({
+  // V3 PoolCreated data ends with the pool address.
+  topic: UNIV3_POOL_CREATED_TOPIC,
+  poolAddressFromLog: (log: { readonly data: string }) =>
+    ethers.getAddress("0x" + log.data.replace("0x", "").slice(-40)),
+});
 
 export type VenueIdentityCatalogEntry =
   | {
@@ -17,6 +45,7 @@ export type VenueIdentityCatalogEntry =
        */
       readonly poolAdapter: FactoryIdentityPoolAdapter;
       readonly compatibility: "standard";
+      readonly factoryEvent: FactoryEventSemantics;
     }
   | {
       readonly venue: VenueId;
@@ -74,6 +103,7 @@ export const VENUE_IDENTITY_CATALOG: readonly VenueIdentityCatalogEntry[] =
       discovery: { mode: "factory", factories: [descriptor.factory] },
       poolAdapter: "univ2",
       compatibility: "standard",
+      factoryEvent: UNIV2_FACTORY_EVENT,
     })),
     {
       venue: "univ3",
@@ -83,6 +113,7 @@ export const VENUE_IDENTITY_CATALOG: readonly VenueIdentityCatalogEntry[] =
       },
       poolAdapter: "univ3",
       compatibility: "standard",
+      factoryEvent: UNIV3_FACTORY_EVENT,
     },
     {
       // Pancake V3 is a distinct identity with standard V3 execution shape.
@@ -93,6 +124,7 @@ export const VENUE_IDENTITY_CATALOG: readonly VenueIdentityCatalogEntry[] =
       },
       poolAdapter: "univ3",
       compatibility: "standard",
+      factoryEvent: UNIV3_FACTORY_EVENT,
     },
     {
       venue: "univ3-fork-075c",
@@ -102,6 +134,7 @@ export const VENUE_IDENTITY_CATALOG: readonly VenueIdentityCatalogEntry[] =
       },
       poolAdapter: "univ3",
       compatibility: "standard",
+      factoryEvent: UNIV3_FACTORY_EVENT,
     },
     {
       venue: "dodo-v2",

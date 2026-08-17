@@ -37,9 +37,6 @@ import {
 } from "./venues/landed-pool-discovery.js";
 
 // Factory event topics
-const UNIV2_PAIR_CREATED = ethers.id("PairCreated(address,address,address,uint256)");
-const UNIV3_POOL_CREATED = ethers.id("PoolCreated(address,address,uint24,int24,address)");
-
 // ─── Factory-based full pool indexing ───────────────────────
 
 const FACTORY_LOG_BATCH = 5000;
@@ -77,12 +74,8 @@ const FACTORIES: FactoryDef[] = factoryDiscoverySourcesForPoolAdapters(
     address,
     adapter,
     venueId: identity.venue,
-    topic: adapter === "univ2" ? UNIV2_PAIR_CREATED : UNIV3_POOL_CREATED,
-    parsePool: adapter === "univ2"
-      // PairCreated data: pair address in first 32 bytes, then uint256.
-      ? (log: { data: string }) => ethers.getAddress("0x" + log.data.slice(26, 66))
-      // V3 PoolCreated data ends with the pool address.
-      : (log: { data: string }) => ethers.getAddress("0x" + log.data.replace("0x", "").slice(-40)),
+    topic: identity.factoryEvent.topic,
+    parsePool: identity.factoryEvent.poolAddressFromLog,
   }));
 });
 

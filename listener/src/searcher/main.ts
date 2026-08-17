@@ -684,7 +684,7 @@ function logRuntimeRefreshFailures(
   }
 }
 
-function logProvisionalV2GraphInstances(
+function logProvisionalGraphInstances(
   plane: "backrun" | "blockscan",
   successful: readonly {
     readonly pool: PoolEntry;
@@ -693,14 +693,13 @@ function logProvisionalV2GraphInstances(
 ): void {
   for (const { pool, edges } of successful) {
     if (
-      pool.adapter !== "univ2" ||
       pool.identitySource !== "factory-call-provisional" ||
       edges.length === 0
     ) {
       continue;
     }
     console.log(
-      `[searcher/live] provisional_v2_graph_instance ${JSON.stringify({
+      `[searcher/live] provisional_graph_instance ${JSON.stringify({
         plane,
         pool: pool.address.toLowerCase(),
         factory: pool.factory?.toLowerCase() ?? null,
@@ -2430,7 +2429,7 @@ async function main(): Promise<void> {
     startupDexBackend,
     strategyViews.backrun,
   );
-  logProvisionalV2GraphInstances("backrun", backrunGraphBuild.successful);
+  logProvisionalGraphInstances("backrun", backrunGraphBuild.successful);
   let graph = backrunGraphBuild.edges;
   logRuntimeRefreshFailures(backrunGraphBuild.failed, "graph build skipped");
   const retryableDexGraphPools = new Map(
@@ -2445,7 +2444,7 @@ async function main(): Promise<void> {
       startupDexBackend,
       strategyViews.blockscan,
     );
-    logProvisionalV2GraphInstances("blockscan", blockscanGraphBuild.successful);
+    logProvisionalGraphInstances("blockscan", blockscanGraphBuild.successful);
     blockScanGraph = blockscanGraphBuild.edges;
     logRuntimeRefreshFailures(blockscanGraphBuild.failed, "blockscan graph build skipped");
     for (const failure of blockscanGraphBuild.failed) {
