@@ -6,7 +6,6 @@ import {
 
 const topology: BlockScanFrozenTopologyDependencies = Object.freeze({
   topologyKey: `strict-ready:7:0x${"ab".repeat(32)}`,
-  landedCoverage: Object.freeze([]),
   async observeHeader(blockNumber: number) {
     return Object.freeze({
       number: blockNumber,
@@ -27,7 +26,6 @@ assert.deepEqual(captured, {
   dexComplete: true,
   protocolComplete: true,
   sourceBlockHash: header.hash,
-  landedCoverage: topology.landedCoverage,
 });
 assert.equal(Object.isFrozen(captured), true);
 assert.throws(

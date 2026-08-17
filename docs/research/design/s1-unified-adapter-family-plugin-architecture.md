@@ -3240,6 +3240,36 @@ current-source session 等价替换，不能把已删的 live coordinator 接回
   fail-closed。下一批必须用 ready topology + current-source strict pricing
   等价替换后物理删除，禁止重新安装 provider。
 
+**2026-08-18 ready GraphView 第五批物理删除 checkpoint（实现提交承载本
+checkpoint；不是部署、F5 或 production cutover）：**
+
+- production `main.ts` 已删除 `AdapterFamilyGraphViewCoordinator`、
+  `ProtocolDiscoveryCoverageCoordinator`、DEX retryable/coverage shell、
+  protocol source fingerprints 与 landed-event compatibility coverage 的全部
+  GraphView 调用点；frozen producer topology 不再携带 legacy-shaped landed
+  coverage；
+- 新增 `StrictReadyGraphViewCoordinator`：构造时绑定 ready generation 的
+  `generation/graphHash/catalogHash/sourceCoverage` 与 exact edge object set，
+  每个 current source 只能更新 canonical `{number,hash,generation}` shell；
+  topology key、edge 数量/顺序/对象身份或 catalog action owner 导致的
+  `canonicalEdgeId` 任一变化均 fail closed；
+- GraphView 的 current-source coverage 现在明确表示“同一个 frozen ready
+  topology 在本 current source 被消费”，fingerprint 绑定 ready Graph/catalog
+  roots 与原始 Family×source。它不声称 producer 又扫描到了 current-head
+  新实例，也不能添加/删除 topology；下一次 topology 更新仍只能由下一次
+  startup rebuild 产生；
+- blind base 与 ordinary blockscan 也必须使用同一 ready topology key，不能
+  构造第二个 blind/legacy Graph lineage。新增
+  `searcher:strict-ready-graph-view` 合同覆盖 source-shell 更新、topology cache、
+  wrong key 与 cloned edge 拒绝；`searcher:strict-ready-runtime` 同时禁止旧
+  GraphView/coverage 标识返回 production main；两项合同、
+  `searcher:blockscan-frozen-topology` 与 listener 完整 `build` 通过；
+- coarse current-N pricing 仍通过 `AdapterRuntimeCoordinator` 的
+  legacy-shaped registry projection，且旧 views provider 已不存在，因此仍为
+  fail-closed 缺口。下一批必须把 strict prepared instance 的 current pricing
+  request/decode/derive 接入 current-source session，再删除该 pricing bridge；
+  本 checkpoint 不授权部署。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

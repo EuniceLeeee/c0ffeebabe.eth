@@ -22,9 +22,6 @@ import {
 import { blockScanRouteId } from "./blockscan-route-identity.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
-import {
-  protocolDiscoverySourceFingerprints,
-} from "./observed-protocol-discovery.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import {
@@ -43,8 +40,6 @@ import {
 import {
   PRODUCTION_STRICT_VERIFIED_ACTORS,
 } from "./venues/production-verified-actors.js";
-import { ProtocolDiscoveryCoverageCoordinator } from
-  "./protocol-discovery-coordinator.js";
 import { createBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
@@ -113,7 +108,6 @@ import {
   hashTokenGraph,
 } from "./strategy-views.js";
 import {
-  createDexGraphCoverageState,
   MempoolIntakeRefreshSignal,
 } from "./runtime-pool-refresh.js";
 import { computeBidEth, evaluateEv, valueInEth } from "./ev-evaluator.js";
@@ -137,7 +131,6 @@ import {
 import {
   DEFAULT_POOL_UNIVERSE_PATH,
   loadPoolUniverse,
-  loadPoolUniverseCoverageMetadata,
   loadPoolUniverseGeneratedAt,
   poolRegistryKey,
   selectPairCompletionPools,
@@ -152,9 +145,8 @@ import {
 import { JsonRpcBlockScanStateReadBackend } from "./blockscan-state-read-backend.js";
 import { AdapterRuntimeCoordinator } from "./adapter-runtime-coordinator.js";
 import { LiveRethReadPriority } from "./live-reth-read-priority.js";
-import {
-  AdapterFamilyGraphViewCoordinator,
-} from "./adapter-family-graph-view-coordinator.js";
+import { StrictReadyGraphViewCoordinator } from
+  "./strict-ready-graph-view.js";
 import {
   BlockScanRuntimeLoop,
   type BlockScanAtomicResult,
@@ -1429,10 +1421,6 @@ async function main(): Promise<void> {
     minScore: 0,
     allowUnregisteredIdentitySource: true,
   });
-  const poolUniverseCoverage = loadPoolUniverseCoverageMetadata(
-    config.poolUniversePath,
-    config.poolUniverseManifestPath,
-  );
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
   // P0 strict startup authority: one fixed-cutoff durable run owns the union
   // of every startup pool set plus plugin-declared event supplements. It
@@ -1558,38 +1546,6 @@ async function main(): Promise<void> {
     "blockscan-overrides",
     asLegacyRejections(overrideIdentity.rejected),
   );
-  const landedPoolDiscoveryRegistry =
-    PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery();
-  const readyCoverageKeys = new Set(readyUniverse.sourceCoverage.map(
-    (coverage) => `${coverage.familyId}\u001f${coverage.sourceId}`,
-  ));
-  // The strict event union was already scanned and attested in rebuildUniverse.
-  // Reconstruct only the compatibility coverage shell expected by the frozen
-  // coordinator; do not repeat factory/swap scans or identity work here.
-  const startupActivePoolDiscovery = Object.freeze({
-    pools: Object.freeze([]),
-    coverage: Object.freeze(landedPoolDiscoveryRegistry.list().flatMap(
-      (descriptor) => descriptor.event.executionFamilies.map((familyId) =>
-        Object.freeze({
-          familyId: familyId as never,
-          sourceId: descriptor.sourceId,
-          sourceFingerprint: descriptor.sourceFingerprint,
-          eventId: descriptor.event.id,
-          consumed: true,
-          complete: readyCoverageKeys.has(
-            `${familyId}\u001fevent:${descriptor.event.id}`,
-          ),
-          issues: Object.freeze([]),
-        })
-      ),
-    )),
-    retryablePools: Object.freeze([]),
-    cacheRevalidation: Object.freeze({
-      stalePoolKeys: Object.freeze([]),
-      revalidatedPoolKeys: Object.freeze([]),
-    }),
-    truncated: false,
-  });
   // Transition-only pool views are metadata. They cannot add an executable
   // edge; readyGeneration remains the sole Graph authority.
   const incumbentPools =
@@ -1638,36 +1594,6 @@ async function main(): Promise<void> {
     startupBlockScanOverrides,
     strategyViewOptions,
   );
-  // Family membership and candidate-source lanes are owned by the strict
-  // catalog projection. Legacy adapter objects supply only matcher details
-  // (topics/selectors) for evidence fingerprints, never membership.
-  const enabledProtocolDiscoveryFamilySources =
-    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-      .discoverableFamilySources()
-      .filter((entry) =>
-        !PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-          .requiresProtocolEdgesFlagFor(entry.familyId) ||
-        config.enableProtocolEdges
-      );
-  const enabledProtocolDiscoveryFamilyIds = new Set<string>(
-    enabledProtocolDiscoveryFamilySources.map((entry) => entry.familyId),
-  );
-  const enabledProtocolDiscoveryMatcherAdapters =
-    PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes().filter((adapter) =>
-      enabledProtocolDiscoveryFamilyIds.has(adapter.id)
-    );
-  // Family × candidate-source completeness is owned by the discovery
-  // coordinator. One current address-domain scan cannot make an observed-only
-  // sibling family complete.
-  const protocolDiscoveryCoverage =
-    new ProtocolDiscoveryCoverageCoordinator(
-      enabledProtocolDiscoveryFamilySources,
-    );
-  const adapterFamilyGraphViews = new AdapterFamilyGraphViewCoordinator(
-    PRODUCTION_ADAPTER_FAMILIES,
-    protocolDiscoveryCoverage,
-  );
-  let lastProtocolDiscoveryBlock = -1;
   console.log(
     `[searcher/live] strategy views: backrun=${strategyViews.backrun.length} ` +
       `blockscan=${strategyViews.blockscan.length} ` +
@@ -1691,35 +1617,12 @@ async function main(): Promise<void> {
   let blockScanGraph: TokenEdge[] | undefined = enableBlockScan
     ? graph
     : undefined;
-  const retryableDexGraphPools = new Map<string, PoolEntry>();
   if (enableBlockScan) blockScanPlanner?.setGraph(blockScanGraph ?? []);
   console.log(
     `[searcher/live] strict ready graph loaded: generation=` +
       `${readyUniverse.generation} graph_hash=${readyUniverse.graphHash} ` +
       `edges=${graph.length} backrun=true blockscan=${enableBlockScan}`,
   );
-  const dexGraphCoverage = createDexGraphCoverageState({
-    sourceCompleteThrough: readyUniverse.appliedThrough.number,
-    graphCompleteThrough: readyUniverse.appliedThrough.number,
-  });
-  const discoverySourceFingerprints = protocolDiscoverySourceFingerprints(
-    enabledProtocolDiscoveryMatcherAdapters,
-  );
-  const readyStartupFamilies = new Set(
-    readyUniverse.sourceCoverage
-      .filter((coverage) => coverage.sourceId === "startup-universe")
-      .map((coverage) => coverage.familyId),
-  );
-  protocolDiscoveryCoverage.replace(new Map(
-    enabledProtocolDiscoveryFamilySources.flatMap((family) =>
-      family.sourceIds.map((sourceId) => [
-        `${family.familyId}\u001f${sourceId}`,
-        readyStartupFamilies.has(family.familyId)
-          ? readyUniverse.appliedThrough.number
-          : -1,
-      ] as const)
-    ),
-  ));
   console.log(
     `[searcher/live] strict startup coverage restored: ` +
       `cutoff=${readyUniverse.appliedThrough.number}:` +
@@ -1728,6 +1631,11 @@ async function main(): Promise<void> {
       `legacy_cache_authority=disabled`,
   );
   const tokenIndex = buildTokenIndex(graph);
+  const strictReadyGraphViews = new StrictReadyGraphViewCoordinator({
+    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+    ready: readyUniverse,
+    edges: graph,
+  });
 
   // Detection admission comes from the strict ready Graph itself. Legacy
   // pool views cannot nominate a producer-time address absent from Graph.
@@ -1987,7 +1895,6 @@ async function main(): Promise<void> {
   const frozenProducerTopology = Object.freeze({
     topologyKey:
       `strict-ready:${readyUniverse.generation}:${readyUniverse.graphHash}`,
-    landedCoverage: Object.freeze([...startupActivePoolDiscovery.coverage]),
     async observeHeader(blockNumber: number) {
       const block = await provider.getBlock(blockNumber);
       if (
@@ -2099,32 +2006,13 @@ async function main(): Promise<void> {
     adapterRuntimeCoordinator: () => adapterRuntimeCoordinator,
     flashTokens: () => flashTokens,
     buildGraphView(input) {
-      // F8: the graph view cache is keyed by the discovery topology, which
-      // never changes when the committed strict edges merge into the runtime
-      // graph; a stable key would freeze the pre-merge (empty) edge set
-      // forever. Key the strict portion by the CURRENT graph's strict-edge
-      // fingerprint: it changes exactly when the merge lands, so the cache
-      // entry for a fingerprint always carries the merged edges (the
-      // revision suffix raced the merge and could freeze a pre-merge view).
-      const strictEdges = input.edges.filter((edge) =>
-        typeof (edge as { canonicalEdgeId?: unknown }).canonicalEdgeId ===
-          "string"
-      );
-      const strictFingerprint = strictEdges.length === 0
-        ? "none"
-        : hashTokenGraph(strictEdges);
-      return adapterFamilyGraphViews.build({
-        ...input,
-        topologyKey:
-          `${input.topologyKey}:strict:${strictFingerprint}`,
-        dexSourceCompleteThrough: dexGraphCoverage.sourceCompleteThrough,
-        retryablePools: [
-          ...retryableDexGraphPools.values(),
-        ],
-        dexUniverseFingerprint: poolUniverseCoverage.contentSha256,
-        strategyViewHash: strategyViews.versions.blockscan_view_hash,
-        protocolSourceFingerprints: discoverySourceFingerprints,
-        protocolEdgesEnabled: config.enableProtocolEdges,
+      return strictReadyGraphViews.build({
+        id: input.id,
+        topologyKey: input.topologyKey,
+        generation: input.generation,
+        sourceBlock: input.sourceBlock,
+        sourceBlockHash: input.sourceBlockHash,
+        edges: input.edges,
       });
     },
     readBlockHash,
@@ -2312,28 +2200,14 @@ async function main(): Promise<void> {
     if (!blockScanGraph) {
       throw new Error("blind production prepare has no block-scan graph");
     }
-    if (dexGraphCoverage.graphCompleteThrough < control.base.number) {
-      throw new Error(
-        "blind production DEX base graph is not complete at N-1",
-      );
-    }
     const baseGeneration = blockScanRuntimeLoop.nextGeneration();
-    const baseGraph = adapterFamilyGraphViews.build({
+    const baseGraph = strictReadyGraphViews.build({
       id: `blind-base:${hashTokenGraph([...blockScanGraph])}`,
       generation: baseGeneration,
       sourceBlock: control.base.number,
       sourceBlockHash: control.base.hash,
       edges: Object.freeze([...blockScanGraph]),
-      topologyKey: `blind:${hashTokenGraph([...blockScanGraph])}`,
-      dexSourceCompleteThrough: dexGraphCoverage.sourceCompleteThrough,
-      retryablePools: [
-        ...retryableDexGraphPools.values(),
-      ],
-      dexUniverseFingerprint: poolUniverseCoverage.contentSha256,
-      strategyViewHash: strategyViews.versions.blockscan_view_hash,
-      landedCoverage: frozenProducerTopology.landedCoverage,
-      protocolSourceFingerprints: discoverySourceFingerprints,
-      protocolEdgesEnabled: config.enableProtocolEdges,
+      topologyKey: frozenProducerTopology.topologyKey,
     });
     const baseGraphArtifact = createBlindProductionArtifact(
       "base-graph-view",

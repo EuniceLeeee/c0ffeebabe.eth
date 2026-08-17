@@ -467,8 +467,6 @@ export interface BlockScanFrozenTopologyDependencies {
   observeHeader(blockNumber: number): Promise<CanonicalHeader>;
   /** Hash/root of the startup-ready Graph/catalog generation. */
   readonly topologyKey: string;
-  /** Immutable landed-event coverage sealed with the ready generation. */
-  readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
 }
 
 export function bindFrozenTopologyToHeader(
@@ -478,7 +476,6 @@ export function bindFrozenTopologyToHeader(
   readonly dexComplete: true;
   readonly protocolComplete: true;
   readonly sourceBlockHash: string;
-  readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
 } {
   if (topology.topologyKey.trim() === "") {
     throw new Error("frozen topology key is empty");
@@ -487,7 +484,6 @@ export function bindFrozenTopologyToHeader(
     dexComplete: true,
     protocolComplete: true,
     sourceBlockHash: header.hash,
-    landedCoverage: topology.landedCoverage,
   });
 }
 
@@ -838,8 +834,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   }
 
   private landedCoverage(): readonly LandedPoolDiscoveryCoverage[] {
-    return this.deps.frozenTopology?.landedCoverage ??
-      this.deps.discovery!.capture().landedCoverage;
+    return this.deps.discovery?.capture().landedCoverage ?? Object.freeze([]);
   }
 
   schedule(
@@ -2012,10 +2007,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         // Startup committed Graph/catalog is the only topology authority for
         // this process. Current-head work observes only the canonical header;
         // it cannot scan, backfill, advance a cursor, or publish topology.
-        discoveryPass = bindFrozenTopologyToHeader(
+        const frozen = bindFrozenTopologyToHeader(
           this.deps.frozenTopology,
           sourceHeader,
         );
+        discoveryPass = Object.freeze({
+          ...frozen,
+          landedCoverage: Object.freeze([]),
+        });
         this.passStageLabel = "state:frozen-topology";
       } else {
       const discovery = this.deps.discovery!;

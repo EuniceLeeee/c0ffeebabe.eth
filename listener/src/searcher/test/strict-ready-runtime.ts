@@ -111,6 +111,10 @@ for (const forbidden of [
   "setProductionStrictViewsProvider",
   "SEARCHER_STRICT_CATALOG_CONSUMER",
   "SEARCHER_STRICT_SOLVER_CONSUMER",
+  "AdapterFamilyGraphViewCoordinator",
+  "ProtocolDiscoveryCoverageCoordinator",
+  "createDexGraphCoverageState",
+  "protocolDiscoverySourceFingerprints",
 ]) {
   assert.equal(
     mainSource.includes(forbidden),
@@ -120,6 +124,7 @@ for (const forbidden of [
 }
 assert(mainSource.includes("resolveStrictReadyRuntime(readyUniverse)"));
 assert(mainSource.includes("new StrictProductionRuntimeRoot({"));
+assert(mainSource.includes("new StrictReadyGraphViewCoordinator({"));
 assert(mainSource.includes("frozenTopology: frozenProducerTopology"));
 assert(mainSource.includes("for (const edge of graph)"));
 
