@@ -315,6 +315,15 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   空边集——topologyKey 后缀 strict root revision（52122d5e）。剩余：`priced=0`
   （expected=15）——strict pricing state 的 mids 推导（生命周期 pricing 证据），
   下轮跟进。
+- **2026-08-17 状态机定价接通（commit 9be60f6a→1bca0578）**：expected 稳定
+  `26`（此前在 15/37/0 间翻转）：图视图缓存与 nminus1 producer 拓扑缓存均按
+  discovery topologyKey 键控，strict 合并不改该 key——两处都改为按当前图的
+  strict-edge 指纹键控（hashTokenGraph(canonicalEdgeId 边)，merge 落地即变
+  键，9be60f6a 为 buildGraphView、1bca0578 为 producer）；revision 后缀与
+  chain merge 延迟在 240s 采纳窗口内竞争（同码重启 expected 翻转）已消除。
+  committed root 证据：`instances=26 pricing=26 mids=26 edges=26`（mids 就绪）。
+  剩余最后一步：`priced=0`（expected=26）——状态机内 strict capability
+  deriveMids 的解析/键空间验证（下轮本地复现 coordinator pricing 路径）。
 - **2026-08-14 完成（commit 16cf4436）**：solver quoteSource 移除
   `strictQuoteSource ?? liveBackend` 的 legacy fallback——strict quote
   source 是唯一 solver 报价路径（composition 默认后 strict 总存在；
