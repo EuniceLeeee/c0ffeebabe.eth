@@ -1631,6 +1631,9 @@ async function main(): Promise<void> {
     forceInclude: config.poolUniverseForceInclude,
     highSpreadPairQuota: config.poolUniverseHighSpreadPairQuota,
     highSpreadMinFee: config.poolUniverseHighSpreadMinFee,
+    // Universe provenance is historical input only. Strict attestation below
+    // is the sole admission authority and rewrites identitySource on success.
+    allowUnregisteredIdentitySource: true,
   });
   const rawBlockscanUniverse = loadPoolUniverse(config.poolUniversePath, {
     maxPools: 0,
@@ -1638,6 +1641,7 @@ async function main(): Promise<void> {
     // domain. Arb score ranks swap planning; it is not an identity gate for a
     // share token that may expose a protocol conversion route.
     minScore: 0,
+    allowUnregisteredIdentitySource: true,
   });
   const poolUniverseCoverage = loadPoolUniverseCoverageMetadata(
     config.poolUniversePath,
@@ -2084,7 +2088,10 @@ async function main(): Promise<void> {
           });
           console.log(
             `[searcher/live] discovery checkpoint inventory ` +
-              `${writeResult.status}`,
+              `${writeResult.status}` +
+              (writeResult.status === "unresolved"
+                ? `: ${writeResult.reason}`
+                : ""),
           );
         };
       const loaded = await discoveryContinuityComposition.loadForRestart();
