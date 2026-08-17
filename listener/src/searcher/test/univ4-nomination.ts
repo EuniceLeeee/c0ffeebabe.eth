@@ -186,6 +186,48 @@ async function main(): Promise<void> {
   assert.equal(nonUniv4.length, 0);
   assert.equal(getLogsCalls, 0, "non-univ4 nomination must not scan logs");
 
+  // P1 (audit): in-flight dedupe. Concurrent cold nominations on one
+  // provider + source must share a single manager-wide window build;
+  // without the shared promise each worker replays the scan.
+  let concurrentGetLogsCalls = 0;
+  const concurrentProvider = {
+    call: async () => "0x",
+    getCode: async () => "0x01",
+    getStorage: async () => "0x" + "00".repeat(32),
+    getLogs: async (filter: { readonly fromBlock?: number; readonly toBlock?: number }) => {
+      concurrentGetLogsCalls += 1;
+      return Object.freeze([Object.freeze({
+        address: ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
+        topics: Object.freeze([UNIV4_SWAP_TOPIC.toLowerCase(), POOL_ID]),
+        data: "0x",
+        transactionHash: TX,
+      })]);
+    },
+    getTransactionReceipt: async () => null,
+    traceTransaction: async () => managerSwapTrace(),
+  };
+  const nomination = Object.freeze({
+    kind: "pool" as const,
+    opaque: Object.freeze({ adapter: "univ4", poolId: POOL_ID }),
+  });
+  const concurrent = await Promise.all(Array.from({ length: 4 }, () =>
+    nominateUniv4({
+      nominations: Object.freeze([nomination]),
+      source: SOURCE,
+      provider: concurrentProvider,
+    }),
+  ));
+  // One build scans lookback/chunk = 10000/500 = 20 manager-wide getLogs
+  // slices; four concurrent cold nominations must share that single build
+  // (80 slices without the in-flight dedupe).
+  assert.equal(
+    concurrentGetLogsCalls,
+    20,
+    "concurrent cold nominations must share one window build",
+  );
+  assert.equal(concurrent[0].length, 1);
+  assert.equal(concurrent[3].length, 1);
+
   console.log("univ4 nomination PASS");
 }
 

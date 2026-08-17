@@ -44,6 +44,20 @@ function providerId(provider: CaptureNominationProvider): number {
  * newest log, same trace) while making cold lookups O(1) in memory.
  */
 let recentUniv4SwapIndex: RecentUniv4SwapIndex | null = null;
+/**
+ * In-flight dedupe for the cold window build (audit P1): concurrent
+ * attestation workers all miss the settled cache on the first call at a
+ * source, and without this every worker replays the same manager-wide
+ * 10k-block index scan (24 identical builds in the logs). One promise is
+ * shared per (provider, sourceNumber); failures clear the slot so the next
+ * call retries instead of poisoning the cache.
+ */
+let recentUniv4SwapIndexInFlight:
+  | {
+    readonly key: { readonly providerId: number; readonly sourceNumber: number };
+    readonly promise: Promise<ReadonlyMap<string, string>>;
+  }
+  | null = null;
 
 async function recentUniv4SwapTxHashByPoolId(input: {
   readonly source: CanonicalSource;
@@ -51,13 +65,25 @@ async function recentUniv4SwapTxHashByPoolId(input: {
   readonly lookback: number;
   readonly chunk: number;
 }): Promise<ReadonlyMap<string, string>> {
+  const key = {
+    providerId: providerId(input.provider),
+    sourceNumber: input.source.number,
+  };
   if (
     recentUniv4SwapIndex !== null &&
-    recentUniv4SwapIndex.providerId === providerId(input.provider) &&
-    recentUniv4SwapIndex.sourceNumber === input.source.number
+    recentUniv4SwapIndex.providerId === key.providerId &&
+    recentUniv4SwapIndex.sourceNumber === key.sourceNumber
   ) {
     return recentUniv4SwapIndex.poolIdToTxHash;
   }
+  if (
+    recentUniv4SwapIndexInFlight !== null &&
+    recentUniv4SwapIndexInFlight.key.providerId === key.providerId &&
+    recentUniv4SwapIndexInFlight.key.sourceNumber === key.sourceNumber
+  ) {
+    return recentUniv4SwapIndexInFlight.promise;
+  }
+  const build = (async (): Promise<ReadonlyMap<string, string>> => {
   const poolIdToTxHash = new Map<string, string>();
   const manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
   let to = input.source.number;
@@ -105,11 +131,18 @@ async function recentUniv4SwapTxHashByPoolId(input: {
       `lookback=${input.lookback} chunk=${input.chunk} poolIds=${poolIdToTxHash.size}`,
   );
   recentUniv4SwapIndex = Object.freeze({
-    providerId: providerId(input.provider),
-    sourceNumber: input.source.number,
+    providerId: key.providerId,
+    sourceNumber: key.sourceNumber,
     poolIdToTxHash: Object.freeze(poolIdToTxHash),
   });
   return recentUniv4SwapIndex.poolIdToTxHash;
+  })();
+  recentUniv4SwapIndexInFlight = Object.freeze({ key, promise: build });
+  try {
+    return await build;
+  } finally {
+    recentUniv4SwapIndexInFlight = null;
+  }
 }
 
 /**
