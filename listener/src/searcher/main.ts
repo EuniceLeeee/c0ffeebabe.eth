@@ -1885,6 +1885,13 @@ async function main(): Promise<void> {
             eventObservations,
           );
           if (observations.size === 0) return;
+          console.log(
+            "[searcher/live] strict observations: families=" +
+              observations.size + " " +
+              [...observations.entries()].map(([familyId, obs]) =>
+                familyId + "=" + obs.length
+              ).sort().join(" "),
+          );
           if (previousCatalogRoot !== null) {
             const previousSource =
               previousCatalogRoot.envelope.snapshot.source;
