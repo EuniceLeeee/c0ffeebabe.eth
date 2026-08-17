@@ -71,7 +71,7 @@ import {
 import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 import type { ProtocolAction } from "../strategy-taxonomy.js";
 import { FLASH_SWAP_REPAY, type PathTemplate } from "../templates/path-template.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import {
   DEFAULT_PENDING_EVIDENCE_MAX_READS,
   DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
@@ -459,7 +459,7 @@ function loadFixture(path: string, artifactRoot?: string): AdapterReplayFixture 
   if (root.schemaVersion !== 3) throw new Error(`${path}: unsupported schemaVersion`);
   const id = fixtureId(root.id, `${path}.id`);
   const executionFamilyId = nonEmptyString(root.executionFamilyId, `${path}.executionFamilyId`) as ExecutionFamilyId;
-  PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(executionFamilyId);
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forFamily(executionFamilyId);
   const referenceTx = txHash(root.referenceTx, `${path}.referenceTx`);
   const lane = root.lane;
   if (lane !== "block-scan" && lane !== "backrun") throw new Error(`${path}.lane invalid`);
@@ -476,7 +476,7 @@ function loadFixture(path: string, artifactRoot?: string): AdapterReplayFixture 
     adapterId: nonEmptyString(flashRaw.adapterId, `${path}.flash.adapterId`),
     token: address(flashRaw.token, `${path}.flash.token`),
   };
-  if (!PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(flash.adapterId)) {
+  if (!STRICT_PROJECTED_FAMILY_TEST_REGISTRY.findFundingByAction(flash.adapterId)) {
     throw new Error(`${path}: unknown flash adapter ${flash.adapterId}`);
   }
   if (!Array.isArray(root.route) || root.route.length < 2) throw new Error(`${path}.route must contain 2..8 legs`);
@@ -799,7 +799,7 @@ function parsePool(raw: unknown, field: string): RoutePoolIdentity {
     "redeemTokenOut", "receiptEmitters", "logicalInstanceId",
   ], field, ["adapter", "address"]);
   const adapter = nonEmptyString(value.adapter, `${field}.adapter`) as PoolEntry["adapter"];
-  PRODUCTION_ADAPTER_FAMILIES.routes().forPool(adapter);
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forPool(adapter);
   const pool: RoutePoolIdentity = { adapter, address: address(value.address, `${field}.address`) };
   for (const name of ADDRESS_FIELDS) {
     if (name === "address" || value[name] === undefined) continue;
@@ -829,8 +829,8 @@ function parsePool(raw: unknown, field: string): RoutePoolIdentity {
 }
 
 function familyForLeg(leg: AdapterReplayLeg, fixturePath: string): ExecutionFamilyId {
-  const poolFamily = PRODUCTION_ADAPTER_FAMILIES.routes().forPool(leg.pool.adapter);
-  const edgeFamily = PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(leg.edgeAdapterId);
+  const poolFamily = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forPool(leg.pool.adapter);
+  const edgeFamily = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(leg.edgeAdapterId);
   if (poolFamily.id !== edgeFamily.id) {
     throw new Error(
       `${fixturePath}: leg ${leg.seq} pool family ${poolFamily.id} disagrees with edge family ${edgeFamily.id}`,
@@ -1056,7 +1056,7 @@ async function validateReferenceRoute(
         executionTarget: executionSurfaces[legIndex].target,
         expectedEncodedSelector: executionSurfaces[legIndex].selector,
         requireTokenCoverage:
-          PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyId).kind !== "swap",
+          STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forFamily(familyId).kind !== "swap",
         usedReceiptLogIndexes,
       });
     } catch (error) {
@@ -1448,7 +1448,7 @@ function normalizedFailureOwnerFamilyId(
     attributed as ExecutionFamilyId,
   )
     ? attributed
-    : PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(attributed)?.id ?? null;
+    : STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().findForEdge(attributed)?.id ?? null;
   return normalized !== null
     && routeExecutionFamilies.includes(normalized as ExecutionFamilyId)
     ? normalized
@@ -1693,7 +1693,7 @@ async function validateReferenceSwapImpacts(
   }));
   const observed: ReferenceObservedImpact[] = [];
   const swapFamilies = [...new Set(fixture.route
-    .map((leg) => PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyForLeg(leg, fixture.id)))
+    .map((leg) => STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forFamily(familyForLeg(leg, fixture.id)))
     .filter((adapter) => adapter.kind === "swap")
     .map((adapter) => adapter.id))];
   const sourceGeneration = createVictimSourceGeneration({
@@ -1735,7 +1735,7 @@ function matchReferenceSwapImpacts(
   const consumed = new Set<number>();
   let previousLogIndex = -1;
   return fixture.route.flatMap((leg, index) => {
-    const family = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyForLeg(leg, fixture.id));
+    const family = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forFamily(familyForLeg(leg, fixture.id));
     if (family.kind !== "swap") return [];
     const edge = edges[index];
     const observedIndex = observed.findIndex((candidate, candidateIndex) =>
@@ -2279,7 +2279,7 @@ function runReferenceMatcherSelfTests(): void {
     }],
   } as ResolvedPlan["root"];
   const v4Identity = resolvedPlanExecutionIdentity(
-    PRODUCTION_ADAPTER_FAMILIES.routes().forFamily("univ4"),
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forFamily("univ4"),
     v4Node,
   );
   assert.deepEqual(v4Identity, {
@@ -2609,7 +2609,7 @@ async function buildPinnedRoute(
     const familyId = familyForLeg(leg, fixture.id);
     try {
       const pool = materializeReplayPool(leg);
-      const emitted = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(pool, state);
+      const emitted = await STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().buildEdges(pool, state);
       const matches = emitted.filter((candidate) =>
         candidate.adapterId === leg.edgeAdapterId &&
         candidate.tokenIn.toLowerCase() === leg.tokenIn.toLowerCase() &&
@@ -2641,7 +2641,7 @@ async function bootstrapPendingExecutionEvidence(
   upstream: ethers.JsonRpcProvider,
   fixture: AdapterReplayFixture,
 ): Promise<readonly PendingExecutionEvidence[]> {
-  const family = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(
+  const family = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forFamily(
     fixture.executionFamilyId,
   );
   if (!family.pendingTransactionEvidence) return Object.freeze([]);
@@ -2659,7 +2659,7 @@ async function bootstrapPendingExecutionEvidence(
   if (!localHead?.hash) {
     throw new Error("adapter replay could not read local canonical head");
   }
-  const result = await PRODUCTION_ADAPTER_FAMILIES
+  const result = await STRICT_PROJECTED_FAMILY_TEST_REGISTRY
     .pendingTransactionEvidence()
     .observe(
       {
@@ -3078,7 +3078,7 @@ async function replayFixture(
     report.stages.familyEdges = true;
     const referenceSwapImpactHash = await validateReferenceSwapImpacts(upstream, fixture, edges);
 
-    const flashFamily = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(
+    const flashFamily = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.findFundingByAction(
       fixture.flash.adapterId,
     )!;
     const maxInput = await state.getTokenBalance(
@@ -3468,7 +3468,7 @@ async function replayFixture(
 async function main(): Promise<void> {
   const args = parseArgs();
   if (args.probeFamily) {
-    const registered = PRODUCTION_ADAPTER_FAMILIES.routes().list()
+    const registered = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().list()
       .some((adapter) => adapter.id === args.probeFamily);
     console.log(`ADAPTER_FAMILY_REGISTRY_PROBE=${JSON.stringify({
       schemaVersion: 1,
@@ -3538,7 +3538,7 @@ async function main(): Promise<void> {
 }
 
 function printFamilyCoverage(fixtures: readonly AdapterReplayFixture[]): void {
-  const coverage = PRODUCTION_ADAPTER_FAMILIES.routes().list().map((adapter) => {
+  const coverage = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().list().map((adapter) => {
     const familyFixtures = fixtures
       .filter((fixture) => fixture.executionFamilyId === adapter.id)
       .map((fixture) => fixture.id)
@@ -3554,7 +3554,7 @@ function printFamilyCoverage(fixtures: readonly AdapterReplayFixture[]): void {
 }
 
 function familyContractSha256(executionFamilyId: ExecutionFamilyId): string {
-  const family = PRODUCTION_ADAPTER_FAMILIES.forFamily(executionFamilyId);
+  const family = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.forFamily(executionFamilyId);
   const route = "poolAdapters" in family
     ? {
         poolAdapters: [...family.poolAdapters].sort(),

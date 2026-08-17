@@ -3,7 +3,8 @@ import type { TokenEdge } from "../../searcher/planner/token-graph.js";
 import {
   blockScanEdgeMetadataFingerprint,
 } from "../../searcher/venues/blockscan-state-capability.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../../searcher/venues/production-registry.js";
+import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
+  "../../searcher/strict-production-family-declarations.js";
 import type { SemanticJson } from "./semantic-six-step.js";
 
 export interface CanonicalEdgeSetEvidence {
@@ -124,32 +125,35 @@ export function productionShardCompleteness(input: {
   readonly familySourceCoverage: readonly FamilySourceCoverage[];
   readonly requiredFamilyIds: readonly string[] | null;
 }): CanonicalShardCompleteness {
-  const routes = PRODUCTION_ADAPTER_FAMILIES.routes();
+  const declarations = PRODUCTION_STRICT_FAMILY_DECLARATIONS;
   const required = new Set(input.requiredFamilyIds ?? []);
   const matureDex = new Set(
-    PRODUCTION_ADAPTER_FAMILIES.swaps()
-      .filter((family) => family.matureDexUniverseDiscovery)
+    declarations.routeFamilies
+      .filter((family) => family.kind === "swap")
       .map((family) => family.id),
   );
   const dynamicSwap = new Set(
-    PRODUCTION_ADAPTER_FAMILIES.swaps()
-      .filter((family) => family.poolDiscovery)
+    declarations.routeFamilies
+      .filter((family) =>
+        family.kind === "swap" && family.candidateSources.length > 0
+      )
       .map((family) => family.id),
   );
   const graph = canonicalMaterializedGraphEvidence(
     input.edges,
-    (edge) => routes.forEdge(edge.adapterId).id,
+    (edge) => declarations.familyIdForEdge(edge.adapterId),
   );
   const graphByFamily = new Map(
     graph.familyEdges.map((entry) => [entry.familyId, entry]),
   );
   const dex = canonicalEdgeSetEvidence(input.edges.filter((edge) =>
-    matureDex.has(routes.forEdge(edge.adapterId).id)
+    matureDex.has(declarations.familyIdForEdge(edge.adapterId))
   ));
   const dexIssues = dex.edgeCount === 0
     ? ["materialized DEX universe contains no executable edge"]
     : [];
-  const familyShards = routes.list().map((family): CanonicalFamilyShard => {
+  const familyShards = declarations.routeFamilies.map(
+    (family): CanonicalFamilyShard => {
     const edgeSet = graphByFamily.get(family.id) ??
       canonicalEdgeSetEvidence([]);
     const sourceCoverage = input.familySourceCoverage
@@ -157,7 +161,7 @@ export function productionShardCompleteness(input: {
       .sort((a, b) => a.sourceId.localeCompare(b.sourceId));
     const sourceKind = matureDex.has(family.id)
       ? "dex-universe"
-      : family.discovery || dynamicSwap.has(family.id)
+      : family.candidateSources.length > 0 || dynamicSwap.has(family.id)
         ? "dynamic-discovery"
         : "registry-declared";
     const issues = sourceKind === "dex-universe"
@@ -182,7 +186,8 @@ export function productionShardCompleteness(input: {
       sourceCoverage,
       issues,
     };
-  }).sort((a, b) => a.familyId.localeCompare(b.familyId));
+    },
+  ).sort((a, b) => a.familyId.localeCompare(b.familyId));
   const selected = input.requiredFamilyIds !== null;
   return {
     schemaVersion: 1,

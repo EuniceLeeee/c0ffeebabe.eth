@@ -4,7 +4,7 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import {
   SELF_BURN_NATIVE_EDGE_ADAPTER,
   SELF_BURN_NATIVE_POOL_ADAPTER,
@@ -305,7 +305,7 @@ assert.throws(() =>
 );
 
 assert.equal(
-  PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(
     SELF_BURN_NATIVE_EDGE_ADAPTER,
   ).id,
   selfBurnNativeAdapter.id,

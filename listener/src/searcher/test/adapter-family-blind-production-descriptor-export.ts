@@ -9,8 +9,8 @@ import type {
   AdapterFamily,
 } from "../venues/route-leg-adapter.js";
 import type { RouteLegRegistry } from "../venues/route-leg-registry.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from
-  "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from
+  "./strict-family-test-compat.js";
 import {
   blindHistoricalRpcCacheKey,
   buildBlindHistoricalPrewarmPlan,
@@ -24,7 +24,7 @@ import { sha256Canonical } from "./adapter-family-blind-contract.js";
 
 /**
  * Narrow projection used by tests. Production callers use
- * PRODUCTION_ADAPTER_FAMILIES through exportProductionBlindRequirements.
+ * STRICT_PROJECTED_FAMILY_TEST_REGISTRY through exportProductionBlindRequirements.
  */
 export interface BlindProductionDescriptorRegistry {
   list(): readonly AdapterFamily[];
@@ -71,7 +71,7 @@ export function exportProductionBlindRequirements(input: {
   readonly fundingAssets: readonly string[];
   readonly registry?: BlindProductionDescriptorRegistry;
 }): BlindProductionDescriptorExport {
-  const registry = input.registry ?? PRODUCTION_ADAPTER_FAMILIES;
+  const registry = input.registry ?? STRICT_PROJECTED_FAMILY_TEST_REGISTRY;
   assertVerifiedGraphShape(input.graph);
   const registryFamilies = [...registry.list()]
     .map((family) => family.id)

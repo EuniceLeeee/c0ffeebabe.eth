@@ -23,7 +23,8 @@ import {
   findVenueByFactory,
   type VenueId,
 } from "../../../listener/src/searcher/venues/capability.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../../../listener/src/searcher/venues/production-registry.js";
+import { STRICT_FAMILY_ANALYSIS_REGISTRY } from
+  "../strict-family-analysis.js";
 import type { PoolEntry } from "../../../listener/src/searcher/planner/token-graph.js";
 import { findV2LineageByFactory } from "../../../listener/src/searcher/venues/v2-lineage.js";
 import type { AdapterFamilyRegistry } from "../../../listener/src/searcher/venues/adapter-family-registry.js";
@@ -814,7 +815,7 @@ export function classifyVenueGapsFromFixtures(
   fixtures: VenueIdentityFixture[],
   graphPools: Set<string> | null,
   v4PoolIds: Set<string> = new Set(),
-  registry: AdapterFamilyRegistry = PRODUCTION_ADAPTER_FAMILIES,
+  registry: AdapterFamilyRegistry = STRICT_FAMILY_ANALYSIS_REGISTRY,
 ): VenueGap[] {
   return fixtures.map((fixture) =>
     classifyResolvedVenue(
@@ -830,9 +831,9 @@ export function classifyVenueGapsFromLogFixtures(
   logs: any[],
   graphPools: Set<string> | null,
   v4PoolIds: Set<string> = new Set(),
-  registry: AdapterFamilyRegistry = PRODUCTION_ADAPTER_FAMILIES,
+  registry: AdapterFamilyRegistry = STRICT_FAMILY_ANALYSIS_REGISTRY,
   landedEvents: LandedEventRegistry =
-    PRODUCTION_ADAPTER_FAMILIES.landedEvents(),
+    STRICT_FAMILY_ANALYSIS_REGISTRY.landedEvents(),
 ): VenueGap[] {
   return extractPoolIdentities({ logs }, landedEvents).map((identity) =>
     classifyResolvedVenue(
@@ -872,7 +873,7 @@ async function classifyVenueGapsForIdentities(
         resolveKnownPoolIdentity(identity),
         graphPools,
         v4PoolIds,
-        PRODUCTION_ADAPTER_FAMILIES,
+        STRICT_FAMILY_ANALYSIS_REGISTRY,
       );
     }
     if (!isAddress(identity.pool)) {
@@ -880,18 +881,18 @@ async function classifyVenueGapsForIdentities(
         venueOnlyIdentity(identity.pool, identity.venue ?? "unknown", null),
         graphPools,
         v4PoolIds,
-        PRODUCTION_ADAPTER_FAMILIES,
+        STRICT_FAMILY_ANALYSIS_REGISTRY,
       );
     }
     const resolved = await resolveVenueForAddress(
       identity.pool,
-      PRODUCTION_ADAPTER_FAMILIES,
+      STRICT_FAMILY_ANALYSIS_REGISTRY,
     );
     return classifyResolvedVenue(
       resolved,
       graphPools,
       v4PoolIds,
-      PRODUCTION_ADAPTER_FAMILIES,
+      STRICT_FAMILY_ANALYSIS_REGISTRY,
     );
   });
 }
@@ -964,7 +965,9 @@ function classifyResolvedVenue(
   registry: AdapterFamilyRegistry,
 ): VenueGap {
   const normalizedPool = lower(identity.pool);
-  const poolInRoutingGraph = identity.poolAdapter === "univ4"
+  const singletonPoolIdentity = ethers.isHexString(identity.pool, 32);
+  const poolInRoutingGraph = identity.poolAdapter === "univ4" ||
+      singletonPoolIdentity
     ? v4PoolIds.has(normalizedPool)
     : graphPools ? graphPools.has(normalizedPool) : null;
   if (identity.status === "incompatible" || identity.status === "unmeasured-v2-fee") {
@@ -1182,7 +1185,7 @@ function summarizeVenueGapType(gaps: VenueGap[]): VenueGapType | null {
 export function extractPoolIdentities(
   receipt: any,
   landedEvents: LandedEventRegistry =
-    PRODUCTION_ADAPTER_FAMILIES.landedEvents(),
+    STRICT_FAMILY_ANALYSIS_REGISTRY.landedEvents(),
 ): PoolIdentity[] {
   const pools = new Map<string, {
     readonly pool: string;

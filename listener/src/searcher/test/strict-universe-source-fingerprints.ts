@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { strictCatalogUniverseSourceFingerprints } from
+import {
+  productionPoolUniverseSourceFingerprintsStrict,
+  strictCatalogUniverseSourceFingerprints,
+} from
   "../strict-universe-source-fingerprints.js";
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
-import {
-  productionPoolUniverseSourceFingerprintsStrict,
-} from "../venues/production-registry.js";
 
 async function main(): Promise<void> {
   const strict = productionPoolUniverseSourceFingerprintsStrict();

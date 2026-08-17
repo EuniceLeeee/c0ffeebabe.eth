@@ -6,7 +6,7 @@ import {
 } from "../pool-universe.js";
 import {
   productionPoolUniverseSourceFingerprintsStrict,
-} from "../venues/production-registry.js";
+} from "../strict-universe-source-fingerprints.js";
 
 export function productionUniverseRegistrySourceFingerprints():
   readonly string[] {

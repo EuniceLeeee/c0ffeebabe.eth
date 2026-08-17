@@ -17,8 +17,8 @@ import {
   attestPoolIdentities,
   createPoolIdentityCache,
 } from "../venues/identity.js";
-import { PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS } from
-  "../venues/production-registry.js";
+import { STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY } from
+  "./strict-family-test-compat.js";
 import {
   EIGENPIE_POOL_ADAPTER,
   pairInstanceId,

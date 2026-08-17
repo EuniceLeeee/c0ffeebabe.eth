@@ -1,11 +1,11 @@
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import {
   VictimModelRegistry,
   type VictimModelDescriptor,
 } from "../venues/victim-model-registry.js";
 import { settleVictimRuntimeStage } from "../venues/victim-runtime-supervisor.js";
 
-const PRODUCTION_VICTIM_MODELS = PRODUCTION_ADAPTER_FAMILIES.victimModels();
+const PRODUCTION_VICTIM_MODELS = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.victimModels();
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -15,7 +15,7 @@ function testBindingsAreRouteBacked(): void {
   for (const model of PRODUCTION_VICTIM_MODELS.list()) {
     for (const edgeAdapterId of model.edgeAdapterIds) {
       assert(
-        PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(edgeAdapterId) !== null,
+        STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().findForEdge(edgeAdapterId) !== null,
         `${model.id}: unknown route edge ${edgeAdapterId}`,
       );
     }
@@ -25,7 +25,7 @@ function testBindingsAreRouteBacked(): void {
 
 function testEverySwapEdgeHasAnExplicitVictimDisposition(): void {
   const expected = new Set(
-    PRODUCTION_ADAPTER_FAMILIES.swaps().flatMap((family) => family.edgeAdapterIds),
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps().flatMap((family) => family.edgeAdapterIds),
   );
   const actual = new Set(
     PRODUCTION_VICTIM_MODELS.list()
@@ -81,12 +81,12 @@ function testOracleModelIsOrthogonal(): void {
   const oracle = PRODUCTION_VICTIM_MODELS.forId("oracle-rawtx:metronome");
   assert(oracle?.kind === "oracle-rawtx", "oracle raw-tx model missing");
   assert(oracle.edgeAdapterIds.length === 0, "oracle model must not claim route edges");
-  const declaration = PRODUCTION_ADAPTER_FAMILIES.oracleVictims().find(
+  const declaration = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.oracleVictims().find(
     (candidate) => candidate.modelId === oracle.id,
   );
   assert(declaration !== undefined, "oracle model must derive from a family declaration");
   for (const affected of declaration.affectedEdges) {
-    const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
+    const owner = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().findForEdge(
       affected.adapterId,
     );
     assert(
@@ -127,7 +127,7 @@ function testDuplicateBindingRejected(): void {
 }
 
 function testRegistryCallbacksMatchFamilyDeclarations(): void {
-  for (const family of PRODUCTION_ADAPTER_FAMILIES.swaps()) {
+  for (const family of STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps()) {
     const model = PRODUCTION_VICTIM_MODELS.forEdge(family.edgeAdapterIds[0]);
     assert(model !== null, `${family.id}: missing victim model`);
     if (family.victimModel.mode === "detect-only") {

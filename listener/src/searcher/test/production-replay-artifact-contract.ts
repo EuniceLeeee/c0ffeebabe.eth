@@ -14,7 +14,7 @@ import {
   poolRegistryKey,
 } from "../pool-universe.js";
 import { enabledDiscoveryAdapters } from "../protocol-discovery-runtime.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "../venues/production-family-composition.js";
 import {
@@ -347,7 +347,7 @@ try {
 }
 
 function owned(pool: PoolEntry): PoolEntry {
-  const family = PRODUCTION_ADAPTER_FAMILIES.routes().forPool(pool.adapter);
+  const family = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forPool(pool.adapter);
   if (family.kind !== "credit") {
     // F8: dynamic discoverability is projected from the strict catalog's
     // plugin-declared candidate sources, not from a legacy discovery object.

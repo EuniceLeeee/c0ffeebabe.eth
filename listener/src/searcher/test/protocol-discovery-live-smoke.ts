@@ -16,8 +16,8 @@ import {
 } from "../planner/token-graph.js";
 import { buildStrategyViews } from "../strategy-views.js";
 import {
-  PRODUCTION_ADAPTER_FAMILIES,
-} from "../venues/production-registry.js";
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY,
+} from "./strict-family-test-compat.js";
 import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
   "../venues/production-verified-actors.js";
 import { createStrictCentralAdapterRuntime } from
@@ -128,11 +128,11 @@ async function main(): Promise<void> {
         graphTokens: baselineTokens,
       });
       const scanned = await scanProtocolDiscoveryRange({
-        adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
+        adapters: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols(),
         context,
       });
       const result = await runProtocolDiscovery({
-        adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
+        adapters: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols(),
         context,
         protocolEdgesEnabled: true,
         attestIdentity: attester,

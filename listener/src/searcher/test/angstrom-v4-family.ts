@@ -7,8 +7,8 @@ import {
   blockScanMulticallIface,
 } from "../blockscan-multicall.js";
 import {
-  PRODUCTION_ADAPTER_FAMILIES,
-} from "../venues/production-registry.js";
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY,
+} from "./strict-family-test-compat.js";
 import {
   STRICT_IDENTITY_ADMISSION,
 } from "../venues/admission.js";
@@ -194,7 +194,7 @@ async function main(): Promise<void> {
     { kind: "family" },
     "an empty-block attestation authorizes the current-head Angstrom family",
   );
-  const observed = await PRODUCTION_ADAPTER_FAMILIES
+  const observed = await STRICT_PROJECTED_FAMILY_TEST_REGISTRY
     .pendingTransactionEvidence()
     .observe(
       {
@@ -236,7 +236,7 @@ async function main(): Promise<void> {
     (1n << 256n) - 1n,
   ]);
   observerReads = 0;
-  const staleObserved = await PRODUCTION_ADAPTER_FAMILIES
+  const staleObserved = await STRICT_PROJECTED_FAMILY_TEST_REGISTRY
     .pendingTransactionEvidence()
     .observe(
       {
@@ -280,7 +280,7 @@ async function main(): Promise<void> {
     (1n << 256n) - 1n,
   ]);
   observerReads = 0;
-  const mixedObserved = await PRODUCTION_ADAPTER_FAMILIES
+  const mixedObserved = await STRICT_PROJECTED_FAMILY_TEST_REGISTRY
     .pendingTransactionEvidence()
     .observe(
       {
@@ -322,7 +322,7 @@ async function main(): Promise<void> {
     (1n << 256n) - 1n,
   ]);
   observerReads = 0;
-  const contractObserved = await PRODUCTION_ADAPTER_FAMILIES
+  const contractObserved = await STRICT_PROJECTED_FAMILY_TEST_REGISTRY
     .pendingTransactionEvidence()
     .observe(
       {
@@ -368,7 +368,7 @@ async function main(): Promise<void> {
   };
   const materialized = await angstromV4Adapter.poolDiscovery!.materialize({
     familyId: angstromV4Adapter.id,
-    event: PRODUCTION_ADAPTER_FAMILIES
+    event: STRICT_PROJECTED_FAMILY_TEST_REGISTRY
       .landedEvents()
       .eventsForFamily(angstromV4Adapter.id)[0]!,
     logs: [swapLog],
@@ -406,7 +406,7 @@ async function main(): Promise<void> {
   assert.equal(pool.poolId, poolId);
   assert.equal(pool.logicalInstanceId, poolId);
 
-  const edges = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(
+  const edges = await STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().buildEdges(
     pool,
     { async call() { throw new Error("inline PoolKey must require no RPC"); } },
   );

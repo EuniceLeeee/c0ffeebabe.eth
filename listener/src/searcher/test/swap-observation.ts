@@ -13,7 +13,7 @@ import {
 } from "../detector/pool-impact.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import {
   CURVE_TOKEN_EXCHANGE_TOPICS,
   LandedEventRegistry,
@@ -1044,8 +1044,8 @@ async function testV4SwapperDeltaSign(): Promise<void> {
 }
 
 function testRegistryConformance(): void {
-  const registry = PRODUCTION_ADAPTER_FAMILIES.landedEvents();
-  for (const adapter of PRODUCTION_ADAPTER_FAMILIES.swaps()) {
+  const registry = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.landedEvents();
+  for (const adapter of STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps()) {
     assert(
       adapter.observation.topics.length > 0 ||
         (adapter.observation.anonymousLogs?.length ?? 0) > 0,
@@ -1084,7 +1084,7 @@ function testRegistryConformance(): void {
   );
   let missingEventError = "";
   try {
-    const existing = PRODUCTION_ADAPTER_FAMILIES.swaps()[0];
+    const existing = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps()[0];
     new LandedEventRegistry([{
       ...existing,
       observation: {
@@ -1104,7 +1104,7 @@ function testRegistryConformance(): void {
 async function testSharedAddressScanner(): Promise<void> {
   const queried = new Set<string>();
   const result = await scanAddressLandedSwapActivity({
-    events: PRODUCTION_ADAPTER_FAMILIES.landedEvents().swapEvents,
+    events: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.landedEvents().swapEvents,
     fromBlock: 10,
     toBlock: 11,
     batchSize: 1,

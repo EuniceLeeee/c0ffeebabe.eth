@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { loadBlockScanViewOverrides } from "../blockscan-view-overrides.js";
 import { loadPinnedWarmPools } from "../pinned-warm-pools.js";
 import { loadPoolUniverse } from "../pool-universe.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import { PRODUCTION_POOL_ADAPTERS } from "../venues/pool-adapter-policy.js";
 
 function assert(condition: boolean, message: string): asserts condition {
@@ -16,7 +16,7 @@ function address(index: number): string {
 }
 
 const expected = new Set([
-  ...PRODUCTION_ADAPTER_FAMILIES.routes().list().flatMap((adapter) => adapter.poolAdapters),
+  ...STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().list().flatMap((adapter) => adapter.poolAdapters),
 ]);
 assert(PRODUCTION_POOL_ADAPTERS.length === expected.size, "derived adapter set cardinality");
 assert(

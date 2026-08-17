@@ -19,8 +19,8 @@ import { isKnownDexPoolProjection } from "../startup-pool-reconciliation.js";
 import { selectMatureDexActivity } from "../pool-activity-selection.js";
 import { poolProjectionRowKey } from "../pool-universe.js";
 import {
-  PRODUCTION_ADAPTER_FAMILIES,
-} from "../venues/production-registry.js";
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY,
+} from "./strict-family-test-compat.js";
 import { IdentityResolverRegistry } from "../venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
 import { poolAdapterId } from "../venues/registry-ids.js";
@@ -65,7 +65,7 @@ const bytesTopic = ethers.id("CustomBytesSwap(bytes32,uint256)");
 const poolId = `0x${"ab".repeat(32)}`;
 const addressAdapter = poolAdapterId("test-singleton-address-pool");
 const bytesAdapter = poolAdapterId("test-singleton-bytes32-pool");
-const base = PRODUCTION_ADAPTER_FAMILIES.swaps()[0];
+const base = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps()[0];
 const {
   matureDexUniverseDiscovery: _baseMatureDexUniverseDiscovery,
   poolDiscovery: _basePoolDiscovery,
@@ -151,7 +151,7 @@ async function testBoundedProductionUnionBatching(): Promise<void> {
     readonly address?: string;
   }> = [];
   const empty = await discoverLandedPools({
-    registry: PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery(),
+    registry: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.landedPoolDiscovery(),
     backend: {
       async getLogs(filter) {
         emptyFilters.push(filter);
@@ -1427,7 +1427,7 @@ assert(
 );
 
 const productionRetryRegistry =
-  PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery();
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY.landedPoolDiscovery();
 // F8: every projected materializer is a strict-only fail-closed deferred
 // materializer. It consumes neither typed retry channel (address or opaque)
 // because re-materialization is owned by the strict pipeline; unresolved

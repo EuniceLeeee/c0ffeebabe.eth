@@ -25,7 +25,7 @@ import {
   type LearningCase,
   upsertCase,
 } from "../learning/learning-case.js";
-import { TOPICS } from "../registry/protocols.js";
+import { ADDR, TOPICS } from "../registry/protocols.js";
 import {
   classifyTxShape,
   type RawLog,
@@ -107,13 +107,12 @@ test("deriveEdgeKindsFromLogs classifies topic0 into stable edge kinds", () => {
   assert.deepEqual(deriveEdgeKindsFromLogs(null), []);
 });
 
-test("production-registered GOLDx mint adds protocol only for the successful registered target", async () => {
+test("strict-attested GOLDx mint adds protocol only for the supplied runtime instance", async () => {
   const registry = await requireProductionRouteCallRegistry();
+  const goldx = { address: ADDR.GOLDX, adapter: "goldx" };
   const matchesProtocolCall = (target: string, callSelector: string) =>
-    registry.matchesProtocolCall(target, callSelector);
+    registry.matchesProtocolCall(target, callSelector, [goldx]);
   const selector = ethers.id("mint(address,uint256)").slice(0, 10);
-  const goldx = registry.pools.find((pool) => pool.adapter === "goldx");
-  assert(goldx, "production GOLDx pool missing");
   const swapLogs = [{ topics: [TOPICS.univ3Swap] }];
   assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
     to: "0x0000000000000000000000000000000000000001",
@@ -131,13 +130,15 @@ test("production-registered GOLDx mint adds protocol only for the successful reg
   }, matchesProtocolCall), ["swap"]);
 });
 
-test("production-registered RockSolid syncDeposit needs no analysis target list", async () => {
+test("strict-attested RockSolid syncDeposit uses the supplied runtime instance", async () => {
   const registry = await requireProductionRouteCallRegistry();
+  const rocksolid = {
+    address: "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+    adapter: "rocksolid",
+  };
   const matchesProtocolCall = (target: string, callSelector: string) =>
-    registry.matchesProtocolCall(target, callSelector);
+    registry.matchesProtocolCall(target, callSelector, [rocksolid]);
   const selector = ethers.id("syncDeposit(uint256,address,address)").slice(0, 10);
-  const rocksolid = registry.pools.find((pool) => pool.adapter === "rocksolid");
-  assert(rocksolid, "production RockSolid pool missing");
   const swapLogs = [{ topics: [TOPICS.univ3Swap] }];
   assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
     to: rocksolid.address,

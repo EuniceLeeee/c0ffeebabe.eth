@@ -432,24 +432,21 @@ export function productionImportClosure(): ImportClosureReport {
 }
 
 function productionCatalogKind(): string {
-  const registryPath = join(
+  const compositionPath = join(
     ROOT,
     "listener",
     "src",
     "searcher",
     "venues",
-    "production-registry.ts",
+    "production-family-composition.ts",
   );
   try {
-    const source = readFileSync(registryPath, "utf8");
-    if (source.includes("strict-catalog-registry-projection-v1")) {
-      return "strict-catalog-registry-projection-v1";
-    }
-    if (source.includes("frozen-legacy-route-authority-v1")) {
-      return "frozen-legacy-route-authority-v1";
-    }
-    if (source.includes("generated-static-imports")) {
-      return "generated-static-imports";
+    const source = readFileSync(compositionPath, "utf8");
+    if (
+      source.includes("PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG") &&
+      source.includes("loadStrictProductionFamilyPlugins")
+    ) {
+      return "strict-family-capability-catalog-v1";
     }
     return "unknown";
   } catch {

@@ -1,4 +1,6 @@
-import { ADAPTER_DESCRIPTORS } from "../../../listener/src/adapters/adapter-descriptors.js";
+import "../../../listener/src/adapters/index.js";
+import { listDescriptors } from
+  "../../../listener/src/adapters/registry.js";
 import { ADDR as LISTENER_ADDR } from "../../../listener/src/shared/constants/addresses.js";
 import { POOL_REGISTRY } from "../../../listener/src/searcher/planner/token-graph.js";
 import { lower, TOPICS } from "../registry/protocols.js";
@@ -179,19 +181,19 @@ export const OUR_VAULT_ADDRESSES: ReadonlySet<string> = new Set(
 );
 
 const PRODUCTION_SWAP_LINEAGES: ReadonlySet<string> = new Set(
-  Object.values(ADAPTER_DESCRIPTORS)
+  listDescriptors()
     .filter((descriptor) => descriptor.edgeKind === "swap" && descriptor.action === "swap")
     .map((descriptor) => descriptor.lineage),
 );
 
 const PRODUCTION_FLASH_LINEAGES: ReadonlySet<string> = new Set(
-  Object.values(ADAPTER_DESCRIPTORS)
+  listDescriptors()
     .filter((descriptor) => descriptor.edgeKind === "flash" && descriptor.action === "flash")
     .map((descriptor) => descriptor.lineage),
 );
 
 const PRODUCTION_PROTOCOL_ACTIONS: ReadonlySet<string> = new Set(
-  Object.values(ADAPTER_DESCRIPTORS)
+  listDescriptors()
     .filter((descriptor) => descriptor.edgeKind === "protocol")
     .map((descriptor) => `${descriptor.lineage}:${descriptor.action}`),
 );

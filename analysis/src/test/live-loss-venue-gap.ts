@@ -14,8 +14,6 @@ import {
   type VenueIdentityFixture,
 } from "../cli/live-loss.js";
 import { ADDR, TOPICS } from "../registry/protocols.js";
-import { AdapterFamilyRegistry } from "../../../listener/src/searcher/venues/adapter-family-registry.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../../../listener/src/searcher/venues/production-registry.js";
 import {
   ADDRESS_LANDED_EVENT_EMITTER,
   defineSwapLandedEvents,
@@ -102,10 +100,10 @@ assert.deepEqual(
     gap.buildable,
   ]),
   [
-    ["psm", "psm", "detection_gap", true, true, true],
-    ["goldx", "goldx", "detection_gap", true, true, true],
+    ["unknown", null, "unknown", null, null, null],
+    ["unknown", null, "unknown", null, null, null],
   ],
-  "static protocol identities must derive from family declaredVenues",
+  "an address without strict attestation must not inherit legacy declaredVenues",
 );
 
 const fluidSwapLog = {
@@ -127,30 +125,8 @@ assert.deepEqual(
     fluidGap.quotable,
     fluidGap.buildable,
   ],
-  ["fluid", "fluid-dex", "detection_gap", true, true, true],
-  "the family-owned Fluid landed-event descriptor must resolve its pool adapter",
-);
-
-const registryWithoutFluidDex = new AdapterFamilyRegistry(
-  PRODUCTION_ADAPTER_FAMILIES.list().filter(
-    (family) => family.id !== "fluid-dex",
-  ),
-);
-const missingFluidFamily = classifyVenueGapsFromLogFixtures(
-  [fluidSwapLog],
-  fluidGraph,
-  new Set(),
-  registryWithoutFluidDex,
-)[0];
-assert.deepEqual(
-  [
-    missingFluidFamily.gap_type,
-    missingFluidFamily.discoverable,
-    missingFluidFamily.quotable,
-    missingFluidFamily.buildable,
-  ],
-  ["execution_adapter_gap", true, false, false],
-  "a landed-event identity whose family is unregistered must be an execution adapter gap",
+  ["unknown", "fluid-dex", "detection_gap", true, true, true],
+  "strict landed evidence may resolve the adapter without inventing a venue label",
 );
 
 const ambiguousLandedEvents = new LandedEventRegistry([
@@ -212,8 +188,8 @@ const trackedV4Gaps = classifyVenueGapsFromLogFixtures(
 );
 assert.equal(trackedV4Gaps.length, 1);
 assert.equal(trackedV4Gaps[0].pool, trackedV4PoolId);
-assert.equal(trackedV4Gaps[0].venue, "univ4");
-assert.equal(trackedV4Gaps[0].gap_type, "detection_gap");
+assert.equal(trackedV4Gaps[0].venue, "unknown");
+assert.equal(trackedV4Gaps[0].gap_type, "unknown");
 assert.equal(trackedV4Gaps[0].pool_in_routing_graph, true);
 assert.equal(trackedV4Gaps.some((gap) => gap.pool === manager), false);
 
@@ -224,8 +200,8 @@ const untrackedV4Gaps = classifyVenueGapsFromLogFixtures(
 );
 assert.equal(untrackedV4Gaps.length, 1);
 assert.equal(untrackedV4Gaps[0].pool, untrackedV4PoolId);
-assert.equal(untrackedV4Gaps[0].venue, "univ4");
-assert.equal(untrackedV4Gaps[0].gap_type, "pool_gap");
+assert.equal(untrackedV4Gaps[0].venue, "unknown");
+assert.equal(untrackedV4Gaps[0].gap_type, "unknown");
 assert.equal(untrackedV4Gaps[0].pool_in_routing_graph, false);
 assert.equal(untrackedV4Gaps.some((gap) => gap.pool === manager), false);
 

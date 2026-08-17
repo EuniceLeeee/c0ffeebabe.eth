@@ -17,10 +17,10 @@ import {
 } from "../protocol-instance-discovery.js";
 import { scanObservedProtocolTrace } from "../observed-protocol-discovery.js";
 import {
-  PRODUCTION_ADAPTER_FAMILIES,
-  PRODUCTION_FAMILY_LOAD_ISSUES,
-  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-} from "../venues/production-registry.js";
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY,
+  STRICT_PROJECTED_FAMILY_TEST_LOAD_ISSUES,
+  STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY,
+} from "./strict-family-test-compat.js";
 import {
   ASTRA_MULTITOKEN_CHANGE_SELECTOR,
   ASTRA_MULTITOKEN_EDGE_ADAPTER,
@@ -57,12 +57,12 @@ function callException(message: string): Error & { readonly code: string } {
 }
 
 assert.deepEqual(
-  PRODUCTION_FAMILY_LOAD_ISSUES,
+  STRICT_PROJECTED_FAMILY_TEST_LOAD_ISSUES,
   [],
   "Astra production entry must load without an isolated failure",
 );
 assert.equal(
-  PRODUCTION_ADAPTER_FAMILIES.forFamily(astraMultiTokenAdapter.id),
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY.forFamily(astraMultiTokenAdapter.id),
   astraMultiTokenAdapter,
   "Astra must be active through the production registry",
 );

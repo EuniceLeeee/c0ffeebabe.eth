@@ -3746,6 +3746,42 @@ deploy-trust、cron、auto-close 等 standalone legacy 文件仍待后续物理�
 下一批继续物理删除 `listener/src/searcher/venues/production-registry.ts` 以及 shared evidence、analysis、
 test 对该 facade 的依赖；中央/consumer authority 与最终 live provenance 全闭合前继续禁止部署。
 
+**2026-08-18 production-registry facade 第二十一批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是 actual live、restart、100/100 或最终 S1 验收）：**
+
+- `listener/src/searcher/venues/production-registry.ts` 已物理删除，repo 中不存在
+  `production-registry.js` import。`canonical-edge-set.ts` 的 Family ownership、DEX shard 与 dynamic
+  shard 分类改为直接读取 `PRODUCTION_STRICT_FAMILY_DECLARATIONS`；unknown edge 仍由 strict catalog
+  ownership fail closed，不能回退到旧 route registry；
+- universe source fingerprint 的纯函数及 production strict 入口已移入
+  `strict-universe-source-fingerprints.ts`。production fingerprint 直接绑定 22-Family strict catalog、
+  definition boundary、strict swap pool adapters、identity/admission catalog 与 V2 lineage；不再先构造
+  `PRODUCTION_ADAPTER_FAMILIES`、landed registry 或 empty identity resolver facade；
+- 历史 listener fixture 若仍需要验证旧-shaped comparator，只能显式导入
+  `test/strict-family-test-compat.ts`。该对象由 strict catalog 当场投影，位于 test 目录，不进入
+  production closure，不能 discovery/admit/publish/price/plan/execute，也不作为 acceptance evidence；
+  新合同禁止依赖它。这里保留的是测试输入形状，不是旧 runtime authority 或 fallback；
+- analysis 的 `live-loss` 改为读取 strict-catalog 生成的 read-only analysis projection；未有 strict
+  attestation 的固定 protocol address、venue label 或 V4 hook Family 一律保持 unknown，不再从
+  `declaredVenues`/中央地址表制造 production support。GOLDx/RockSolid trace 测试改为显式传入已
+  attested runtime instance。`bundle-postmortem` factory coverage 和 production route-call matcher 直接
+  读取 strict declarations。`loop-coverage` 也不再读取已删除的中央 `ADAPTER_DESCRIPTORS` 表，而从
+  strict production action registry 的 Family-owned inline descriptors 推导；
+- `MigrationCleanupReceipt.productionCatalogKind` 现在从
+  `production-family-composition.ts` 验证 strict loader+catalog，报告
+  `strict-family-capability-catalog-v1`。本地结构 receipt 为 `verdict=pass`；repo-wide central legacy
+  map 空，`main.ts` closure 531 文件、unresolved=0、legacy hit=0、central Family literal branch=0；
+- 同轮通过 listener 完整 `build`、analysis 完整 `build`、22 Family/242 exact capability production
+  composition、strict declarations、strict universe fingerprint、pool-universe 15/15、strict-ready、
+  default-authority gate、blockscan selection、MigrationCleanupReceipt、live-loss venue gap、LearningCase
+  15/15 与 354-tool index。旧 loop-coverage golden 中依赖中央 descriptor 缺项的 7 个预期已不再是
+  authority gate；当前工具已按 strict inline descriptors 运行，其 golden 更新只能反映实际 strict
+  capabilities，不能为了旧 hash 恢复中央表。
+
+本 checkpoint 已关闭 production registry facade，但最终验收仍必须由新 exact commit 的 systemd
+dry-run live 证明 universe/edges、全适用 Family、exact path、final sim 全部来自 strict ready
+generation，并完成 restart reuse 与连续 100/100；未取得这些证据前不部署、不宣称最终 F9/S1 完成。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

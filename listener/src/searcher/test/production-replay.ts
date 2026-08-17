@@ -96,9 +96,9 @@ import {
 import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
 import {
-  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  PRODUCTION_ADAPTER_FAMILIES,
-} from "../venues/production-registry.js";
+  STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY,
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY,
+} from "./strict-family-test-compat.js";
 import {
   DEFAULT_PENDING_EVIDENCE_MAX_READS,
   DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
@@ -556,14 +556,14 @@ async function main(): Promise<void> {
     if (!parentHeader?.hash) throw new Error("winner parent header missing");
     const frozenPendingExecutionEvidence =
       await observeFrozenTransactionExecutionEvidence({
-        projection: PRODUCTION_ADAPTER_FAMILIES.pendingTransactionEvidence(),
+        projection: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.pendingTransactionEvidence(),
         transaction: Object.freeze({
           hash: winnerTransaction.hash,
           to: winnerTransaction.to,
           data: winnerTransaction.data,
         }),
         familyRequiresCurrentHeadEvidence(familyId) {
-          return PRODUCTION_ADAPTER_FAMILIES.routes()
+          return STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes()
             .forFamily(familyId)
             .pendingTransactionEvidence?.routeActivation ===
               "current-head-block-scan";
@@ -651,11 +651,11 @@ async function main(): Promise<void> {
     const parentBackend = tokenBackend(provider, parentBlock);
     const baseGraph = (await buildTokenGraph(parentBackend, basePools)).map(lowerEdge);
     const dexAdapters = new Set(
-      PRODUCTION_ADAPTER_FAMILIES.swaps().flatMap((adapter) => [...adapter.poolAdapters]),
+      STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps().flatMap((adapter) => [...adapter.poolAdapters]),
     );
     const protocolEdgesEnabled = true;
     const discoveryAdapters = enabledDiscoveryAdapters(
-      PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes(),
+      STRICT_PROJECTED_FAMILY_TEST_REGISTRY.discoverableRoutes(),
       protocolEdgesEnabled,
     );
     const graphTokens = [...new Set([
@@ -672,7 +672,7 @@ async function main(): Promise<void> {
     const pass = await prepareActiveProtocolDiscoveryPass({
       provider,
       adapters: discoveryAdapters,
-      identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+      identityRegistry: STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY,
       protocolEdgesEnabled,
       chainId,
       probeExecutor: DEFAULT_SEARCHER_EXECUTOR,
@@ -713,7 +713,7 @@ async function main(): Promise<void> {
     const referencePass = await prepareObservedProtocolDiscoveryPass({
       provider,
       adapters: discoveryAdapters,
-      identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+      identityRegistry: STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY,
       protocolEdgesEnabled,
       chainId,
       probeExecutor: DEFAULT_SEARCHER_EXECUTOR,
@@ -1024,7 +1024,7 @@ async function main(): Promise<void> {
       try {
         const evidenceFamilyIds = pendingExecutionEvidenceFamilyIds(
           selected.opportunity.seedEdges,
-          PRODUCTION_ADAPTER_FAMILIES.routes(),
+          STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes(),
         );
         const executionEvidence = selectFrozenRouteExecutionEvidence(
           frozenPendingExecutionEvidence,
@@ -3037,7 +3037,7 @@ async function conserveFrozenCalldata(input: {
 export function resolveFrozenFundingHolder(
   fundingActionId: string,
 ): string {
-  const funding = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(
+  const funding = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.findFundingByAction(
     fundingActionId,
   );
   if (!funding) {
@@ -3353,7 +3353,7 @@ async function proveReplayConservation(
   expectedGrossProfit: bigint,
 ): Promise<NonNullable<ReplayReport["terminalGates"]["repaymentAndConservation"]>> {
   const flashAdapterId = solved.root.adapterId;
-  const funding = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(flashAdapterId);
+  const funding = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.findFundingByAction(flashAdapterId);
   if (!funding) {
     throw new Error(
       `repayment/conservation cannot resolve flash family ${flashAdapterId}`,
@@ -3716,7 +3716,7 @@ function materializedGraphEvidence(
 ): CanonicalMaterializedGraphEvidence {
   return canonicalMaterializedGraphEvidence(
     graph.map((edge) => lowerEdge(edge)),
-    (edge) => PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id,
+    (edge) => STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(edge.adapterId).id,
   );
 }
 
@@ -3788,7 +3788,7 @@ function canonicalHuntEdge(edge: HuntEdge): HuntEdge {
 
 function routeFamilyIds(route: readonly HuntEdge[]): string[] {
   return [...new Set(route.map((edge) =>
-    PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(edge.adapterId).id
   ))].sort();
 }
 

@@ -44,7 +44,7 @@ import {
   readV3WarmMid,
   type RouteVenueMid,
 } from "../venues/mid-readers.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 
 export const V2_V3_SHADOW_PARITY_PROFILE =
   "v2-v3-shadow-parity-v1" as const;
@@ -229,7 +229,7 @@ export function selectV2V3UniverseCandidates(
   ) {
     throw new Error("candidateLimitPerFamily must be a positive integer");
   }
-  const routeRegistry = PRODUCTION_ADAPTER_FAMILIES.routes();
+  const routeRegistry = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes();
   const ranked = pools
     .map((pool, index) => ({
       pool,
@@ -677,7 +677,7 @@ export function v2V3ShadowParityExitCode(
 }
 
 function selectedStateFamilies(): readonly RegisteredBlockScanStateFamily[] {
-  const selected = PRODUCTION_ADAPTER_FAMILIES
+  const selected = STRICT_PROJECTED_FAMILY_TEST_REGISTRY
     .blockScanStateFamilies()
     .filter(
       (family) =>
@@ -1188,7 +1188,7 @@ function stateEconomicHash(state: NormalizedState): string {
 }
 
 function familyIdForEdge(edge: TokenEdge): string {
-  const matches = PRODUCTION_ADAPTER_FAMILIES
+  const matches = STRICT_PROJECTED_FAMILY_TEST_REGISTRY
     .routes()
     .list()
     .filter((family) => family.edgeAdapterIds.includes(edge.adapterId));
@@ -1201,7 +1201,7 @@ function familyIdForEdge(edge: TokenEdge): string {
 }
 
 function familyIdForPool(pool: PoolEntry): ShadowFamilyId | null {
-  const id = PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pool.adapter)?.id;
+  const id = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().findForPool(pool.adapter)?.id;
   return id === "univ2-standard" || id === "univ3-standard" ? id : null;
 }
 

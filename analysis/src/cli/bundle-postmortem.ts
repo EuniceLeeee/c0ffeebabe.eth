@@ -1587,7 +1587,7 @@ async function runtimeVenueByFactory(factory: string): Promise<{
       "../../../listener/src/searcher/venues/capability.js"
     );
     const production = await import(
-      "../../../listener/src/searcher/venues/production-registry.js"
+      "../../../listener/src/searcher/strict-production-family-declarations.js"
     );
     const identity = identityCatalog.findVenueByFactory(factory);
     if (!identity) return null;
@@ -1595,7 +1595,9 @@ async function runtimeVenueByFactory(factory: string): Promise<{
       return { venue: identity.venue };
     }
     const sources = identityCatalog.factoryDiscoverySourcesForPoolAdapters(
-      production.PRODUCTION_ADAPTER_FAMILIES.matureDexUniversePoolAdapters(),
+      production.PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies
+        .filter((family) => family.kind === "swap")
+        .flatMap((family) => [...family.poolAdapters]),
     );
     return {
       venue: identity.venue,

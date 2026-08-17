@@ -32,7 +32,7 @@ async function main(): Promise<void> {
   // strict-catalog registry projection is the sole production authority).
   assert.equal(
     receipt.productionCatalogKind,
-    "strict-catalog-registry-projection-v1",
+    "strict-family-capability-catalog-v1",
   );
   assert.equal(receipt.productionRuntimeSourceScan, false);
   assert.equal(receipt.oldCacheAccepted, false);

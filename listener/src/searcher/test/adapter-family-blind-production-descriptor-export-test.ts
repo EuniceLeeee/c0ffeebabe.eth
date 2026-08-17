@@ -3,8 +3,8 @@ import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import {
   createVerifiedGraphView,
 } from "../venues/blockscan-state-capability.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from
-  "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from
+  "./strict-family-test-compat.js";
 import {
   buildProductionBlindHistoricalPrewarmPlan,
   exportProductionBlindRequirements,
@@ -54,7 +54,7 @@ const graph = createVerifiedGraphView({
   ],
   familyIdForEdge: () => "univ2-standard",
 });
-const activeFamilyIds = PRODUCTION_ADAPTER_FAMILIES.list()
+const activeFamilyIds = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.list()
   .map((family) => family.id);
 
 const exported = exportProductionBlindRequirements({
@@ -97,16 +97,16 @@ assert.throws(
 );
 
 const missingPricingFamilyRegistry: BlindProductionDescriptorRegistry = {
-  list: () => PRODUCTION_ADAPTER_FAMILIES.list(),
-  routes: () => PRODUCTION_ADAPTER_FAMILIES.routes(),
+  list: () => STRICT_PROJECTED_FAMILY_TEST_REGISTRY.list(),
+  routes: () => STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes(),
   blockScanStateFamilies: () =>
-    PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies().filter(
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.blockScanStateFamilies().filter(
       (family) => family.familyId !== "univ2-standard",
     ),
   fundingStateFamilies: () =>
-    PRODUCTION_ADAPTER_FAMILIES.fundingStateFamilies(),
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.fundingStateFamilies(),
   isBlockScanPricedEdge: (edge) =>
-    PRODUCTION_ADAPTER_FAMILIES.isBlockScanPricedEdge(edge),
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.isBlockScanPricedEdge(edge),
 };
 assert.throws(
   () => exportProductionBlindRequirements({

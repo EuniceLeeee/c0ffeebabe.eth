@@ -12,7 +12,7 @@ import {
   type ProtocolDiscoveryEvidenceCache,
 } from "../protocol-discovery-cache.js";
 import type { ProtocolCandidate } from "../venues/route-leg-adapter.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 
 const PROTOCOL_DISCOVERY_CACHE_SCHEMA = 5;
 const SHA256_RE = /^[0-9a-f]{64}$/;
@@ -363,7 +363,7 @@ function assertRegisteredDiscoveryOwner(
   adapterId: string,
   poolAdapter?: string,
 ): void {
-  const family = PRODUCTION_ADAPTER_FAMILIES.routes().list().find(
+  const family = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().list().find(
     (candidate) => candidate.id === adapterId,
   );
   if (

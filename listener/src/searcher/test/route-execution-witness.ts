@@ -7,7 +7,7 @@ import {
 } from "../../shared/executor/botvm-executor.js";
 import type { ResolvedPlan } from "../solver/solver.js";
 import type { TokenEdge } from "../planner/token-graph.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import {
   planExecutionIdentityMatchesEdge,
   resolvedPlanExecutionIdentity,
@@ -15,7 +15,7 @@ import {
 
 type RegisteredRouteFamily = ReturnType<
   ReturnType<
-    typeof PRODUCTION_ADAPTER_FAMILIES.routes
+    typeof STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes
   >["forEdge"]
 >;
 
@@ -82,12 +82,12 @@ function resolvedPlanExecutionEvidenceCore(
   requireFundingOwner: boolean,
 ): ResolvedPlanExecutionEvidence {
   const fundingFamily =
-    PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(root.adapterId);
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.findFundingByAction(root.adapterId);
   if (
     requireFundingOwner &&
     (
       !fundingFamily ||
-      PRODUCTION_ADAPTER_FAMILIES.ownerForAction(root.adapterId) !==
+      STRICT_PROJECTED_FAMILY_TEST_REGISTRY.ownerForAction(root.adapterId) !==
         fundingFamily.id
     )
   ) {
@@ -102,14 +102,14 @@ function resolvedPlanExecutionEvidenceCore(
 
   for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
     const edge = edges[edgeIndex];
-    const family = PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(
+    const family = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(
       edge.adapterId,
     );
     let selectedIndex = -1;
     for (let index = cursor; index < topLevel.length; index++) {
       const node = topLevel[index];
       if (
-        PRODUCTION_ADAPTER_FAMILIES.ownerForAction(node.adapterId) !==
+        STRICT_PROJECTED_FAMILY_TEST_REGISTRY.ownerForAction(node.adapterId) !==
           family.id ||
         !resolvedNodeMatchesEdge(family, node, edge)
       ) {
@@ -130,7 +130,7 @@ function resolvedPlanExecutionEvidenceCore(
     cursor = selectedIndex + 1;
     const subtree = planSubtree(node);
     for (const action of subtree) {
-      const owner = PRODUCTION_ADAPTER_FAMILIES.ownerForAction(
+      const owner = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.ownerForAction(
         action.adapterId,
       );
       const allowedInfra =
@@ -169,7 +169,7 @@ function resolvedPlanExecutionEvidenceCore(
   const requiredSupport = new Set([
     ...(fundingFamily?.requiredInfraActionAdapterIds ?? []),
     ...edges.flatMap((edge) =>
-      PRODUCTION_ADAPTER_FAMILIES.routes()
+      STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes()
         .forEdge(edge.adapterId)
         .requiredInfraActionAdapterIds),
   ]);
@@ -179,7 +179,7 @@ function resolvedPlanExecutionEvidenceCore(
     if (selectedIndexes.has(index)) continue;
     const node = topLevel[index];
     if (
-      PRODUCTION_ADAPTER_FAMILIES.ownerForAction(node.adapterId) !== null ||
+      STRICT_PROJECTED_FAMILY_TEST_REGISTRY.ownerForAction(node.adapterId) !== null ||
       !requiredSupport.has(node.adapterId) ||
       node.children.length !== 0
     ) {

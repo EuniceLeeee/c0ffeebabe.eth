@@ -23,8 +23,8 @@ import {
 } from "../planner/token-graph.js";
 import { buildStrategyViews } from "../strategy-views.js";
 import {
-  PRODUCTION_ADAPTER_FAMILIES,
-} from "../venues/production-registry.js";
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY,
+} from "./strict-family-test-compat.js";
 import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
   "../venues/production-verified-actors.js";
 import { createStrictCentralAdapterRuntime } from
@@ -83,14 +83,14 @@ async function main(): Promise<void> {
     const blockNumber = await provider.getBlockNumber();
     const dexUniverse = universePools(universePath, maxPools);
     const dexPoolAdapters = new Set(
-      PRODUCTION_ADAPTER_FAMILIES.swaps().flatMap((adapter) => [...adapter.poolAdapters]),
+      STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps().flatMap((adapter) => [...adapter.poolAdapters]),
     );
     const dexCandidateAddresses = protocolCandidateAddressesFromDexUniverse(
       dexUniverse,
       dexPoolAdapters,
     );
     const candidateAddressHints = protocolDiscoveryCandidateAddressHints(
-      PRODUCTION_ADAPTER_FAMILIES.protocols(),
+      STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols(),
     );
     const candidateAddresses = [...new Set([
       ...dexCandidateAddresses,
@@ -155,13 +155,13 @@ async function main(): Promise<void> {
           }),
         });
     const firstScan = await scanProtocolDiscoveryRange({
-      adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
+      adapters: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols(),
       context,
       candidateAddresses,
       evidenceCache: cache,
     });
     const result = await runProtocolDiscovery({
-      adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
+      adapters: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols(),
       context,
       protocolEdgesEnabled: true,
       attestIdentity: createCanonicalProtocolIdentityAttester(
@@ -192,7 +192,7 @@ async function main(): Promise<void> {
     }
 
     const secondScan = await scanProtocolDiscoveryRange({
-      adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
+      adapters: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols(),
       context,
       candidateAddresses,
       evidenceCache: cache,

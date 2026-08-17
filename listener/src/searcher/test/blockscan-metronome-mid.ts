@@ -6,7 +6,7 @@ import {
 import type { TokenEdge } from "../planner/token-graph.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 
 const BLOCK = 25_535_037;
 const UNIT = 10n ** 18n;
@@ -76,8 +76,8 @@ function scan(protocolMids?: ReadonlyMap<string, ProtocolMid>) {
   });
 }
 
-const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().forEdge("metronome-hgusdc-exit");
-const pricingAdapter = PRODUCTION_ADAPTER_FAMILIES.protocols().find(
+const adapter = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge("metronome-hgusdc-exit");
+const pricingAdapter = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols().find(
   (candidate) => candidate.id === adapter.id,
 );
 assert(

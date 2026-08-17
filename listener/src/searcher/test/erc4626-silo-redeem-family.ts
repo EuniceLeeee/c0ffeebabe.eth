@@ -11,7 +11,7 @@ import {
   withProtocolDiscoveryFamilyContext,
 } from "../protocol-discovery-family-guard.js";
 import { POOL_REGISTRY } from "../planner/token-graph.js";
-import { PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS } from "../venues/production-registry.js";
+import { STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
 import {
   ERC4626_SILO_PROBE_HOLDER,

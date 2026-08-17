@@ -1,6 +1,6 @@
 import { filterLiveProtocolRegistry } from "../main.js";
 import { POOL_REGISTRY } from "../planner/token-graph.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -8,7 +8,7 @@ function assert(condition: boolean, message: string): asserts condition {
 
 const disabled = filterLiveProtocolRegistry(POOL_REGISTRY, false);
 const gatedPoolAdapters = new Set(
-  PRODUCTION_ADAPTER_FAMILIES.routes().list()
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().list()
     .filter((adapter) => adapter.requiresProtocolEdgesFlag)
     .flatMap((adapter) => adapter.poolAdapters),
 );
@@ -20,7 +20,7 @@ for (const adapter of gatedPoolAdapters) {
 // never protocol-edge gated.
 assert(!gatedPoolAdapters.has("psm"), "grandfathered PSM must remain admitted");
 assert(
-  PRODUCTION_ADAPTER_FAMILIES.credits().some(
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY.credits().some(
     (adapter) =>
       adapter.id === "credit:fluid" &&
       !adapter.requiresProtocolEdgesFlag,
@@ -34,7 +34,7 @@ assert(
 assert(gatedPoolAdapters.has("goldx"), "GoldX must be covered by descriptor metadata");
 
 for (const pool of POOL_REGISTRY) {
-  const descriptor = PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pool.adapter);
+  const descriptor = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().findForPool(pool.adapter);
   if (!descriptor) continue;
   assert(
     disabled.includes(pool) === !descriptor.requiresProtocolEdgesFlag,

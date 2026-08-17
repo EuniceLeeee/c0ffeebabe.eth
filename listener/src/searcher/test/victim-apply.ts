@@ -5,7 +5,7 @@ import { v3SwapExactInput, v3SwapToState, type V3PoolState } from "../solver/v3-
 import { quoteV2ExactInput, v2FeeBpsForFactory } from "../solver/v2-fee.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { PoolImpact } from "../detector/pool-impact.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -37,7 +37,7 @@ async function assertLocalCallbackParity(
   expected: Awaited<ReturnType<typeof applyVictimSwapLocally>>,
   state?: StateBackend,
 ): Promise<void> {
-  const callback = PRODUCTION_ADAPTER_FAMILIES
+  const callback = STRICT_PROJECTED_FAMILY_TEST_REGISTRY
     .victimModels()
     .forEdge(impact.matchedAdapterId)
     ?.runtime

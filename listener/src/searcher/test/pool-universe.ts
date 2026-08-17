@@ -13,7 +13,7 @@ import {
 import type { PoolEntry } from "../planner/token-graph.js";
 import {
   poolUniverseSourceFingerprints,
-} from "../venues/production-registry.js";
+} from "../strict-universe-source-fingerprints.js";
 import { VENUE_IDENTITY_CATALOG } from "../venues/capability.js";
 import type { IdentityResolverDescriptor } from "../venues/identity.js";
 import type { V2LineageDescriptor } from "../venues/v2-lineage.js";

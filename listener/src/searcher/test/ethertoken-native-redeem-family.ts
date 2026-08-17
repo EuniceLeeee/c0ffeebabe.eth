@@ -12,7 +12,7 @@ import {
   assertPureSynchronousDeriveMids,
   createAmbientIoPoisonHarness,
 } from "../venues/blockscan-state-capability.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import {
   ETHERTOKEN_DESTRUCTION_EVENT_TOPIC,
   ETHERTOKEN_NATIVE_REDEEM_EDGE_ADAPTER,
@@ -275,7 +275,7 @@ assert.equal(
 );
 
 assert.equal(
-  PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(
     ETHERTOKEN_NATIVE_REDEEM_EDGE_ADAPTER,
   ).id,
   etherTokenNativeRedeemAdapter.id,

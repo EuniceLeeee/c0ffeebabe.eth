@@ -14,9 +14,9 @@ import {
 import { quoteV2ExactInput } from "../solver/v2-fee.js";
 import { buildMempoolIntakePlan } from "../mempool-intake.js";
 import {
-  PRODUCTION_IDENTITY_RESOLVERS,
-  PRODUCTION_ADAPTER_FAMILIES,
-} from "../venues/production-registry.js";
+  STRICT_EMPTY_POOL_IDENTITY_TEST_REGISTRY,
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY,
+} from "./strict-family-test-compat.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "../venues/production-family-composition.js";
 import {
@@ -177,7 +177,7 @@ async function parentAbortCannotBeShadowedByNestedControl(): Promise<void> {
       },
     };
     const nestedControlAdapter: SwapAdapter = {
-      ...PRODUCTION_ADAPTER_FAMILIES.swaps()[0],
+      ...STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps()[0],
       poolAdapters: ["univ2"],
       id: `custom-swap:nested-${operation}-control`,
       async buildEdges(_pool, query) {
@@ -240,7 +240,7 @@ async function parentAbortCannotBeShadowedByNestedControl(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const adapters = PRODUCTION_ADAPTER_FAMILIES.routes().list();
+  const adapters = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().list();
   assert(adapters.length > 0, "production route registry must not be empty");
   assert(
     new Set(adapters.map((item) => item.id)).size === adapters.length,
@@ -248,15 +248,15 @@ async function main(): Promise<void> {
   );
   for (const routeAdapter of adapters) {
     for (const poolAdapter of routeAdapter.poolAdapters) {
-      assert(PRODUCTION_ADAPTER_FAMILIES.routes().forPool(poolAdapter) === routeAdapter, `${routeAdapter.id} pool alias`);
+      assert(STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forPool(poolAdapter) === routeAdapter, `${routeAdapter.id} pool alias`);
     }
     for (const edgeAdapterId of routeAdapter.edgeAdapterIds) {
-      assert(PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edgeAdapterId) === routeAdapter, `${routeAdapter.id} edge alias`);
+      assert(STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(edgeAdapterId) === routeAdapter, `${routeAdapter.id} edge alias`);
     }
   }
-  const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().forEdge("univ2-swap");
+  const adapter = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge("univ2-swap");
   assert(adapter.id === "univ2-standard", `univ2 family ${adapter.id}`);
-  assert(PRODUCTION_ADAPTER_FAMILIES.routes().forPool("univ2") === adapter, "pool alias lookup");
+  assert(STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forPool("univ2") === adapter, "pool alias lookup");
   console.log("[route-adapters] registry aliases: PASS");
 
   const customPoolAdapter = poolAdapterId("test-custom-pool");
@@ -264,7 +264,7 @@ async function main(): Promise<void> {
   const customIdentitySource = venueIdentitySource("test-custom-identity");
   const customAddress = "0x00000000000000000000000000000000000000D1";
   const { poolDiscovery: _customBasePoolDiscovery, ...customBase } =
-    PRODUCTION_ADAPTER_FAMILIES.swaps()[0];
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps()[0];
   const customFamily: SwapAdapter = {
     ...customBase,
     id: "custom-swap:registry-id-conformance",
@@ -273,7 +273,7 @@ async function main(): Promise<void> {
     matureDexUniverseDiscovery: true,
     poolAdapters: [customPoolAdapter],
     landedEvents: {
-      swaps: PRODUCTION_ADAPTER_FAMILIES.swaps()[0].landedEvents.swaps.map(
+      swaps: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps()[0].landedEvents.swaps.map(
         (event) => ({
           ...event,
           id: `custom-${event.id}`,
@@ -351,7 +351,7 @@ async function main(): Promise<void> {
     "registered custom family must enter public-mempool intake automatically",
   );
   const productionSwapEventCount =
-    PRODUCTION_ADAPTER_FAMILIES.landedEvents().swapEvents.length;
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.landedEvents().swapEvents.length;
   let badPluginRejected = false;
   try {
     new AdapterFamilyRegistry([{
@@ -376,12 +376,12 @@ async function main(): Promise<void> {
   }
   assert(badPluginRejected, "invalid family event declaration must reject that registration");
   assert(
-    PRODUCTION_ADAPTER_FAMILIES.landedEvents().swapEvents.length ===
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.landedEvents().swapEvents.length ===
       productionSwapEventCount &&
-      PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge("univ2-swap") !== null,
+      STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().findForEdge("univ2-swap") !== null,
     "a rejected family registration must not poison existing families",
   );
-  const observedErc4626Family = PRODUCTION_ADAPTER_FAMILIES.protocols().find(
+  const observedErc4626Family = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols().find(
     (family) => family.id === "protocol:erc4626",
   )!;
   let unenumerableObservedSourceRejected = false;
@@ -538,7 +538,7 @@ async function main(): Promise<void> {
       .listAll()
       .map((family) => family.plugin.manifest.familyId),
   );
-  const declaredVenues = PRODUCTION_ADAPTER_FAMILIES.protocols().flatMap((protocolAdapter) => {
+  const declaredVenues = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols().flatMap((protocolAdapter) => {
     const reason = protocolAdapter.undeclaredVenueReason?.trim() ?? "";
     assert(
       protocolAdapter.declaredVenues.length > 0
@@ -554,7 +554,7 @@ async function main(): Promise<void> {
         ),
         `${protocolAdapter.id} declared venue missing from graph registry`,
       );
-      PRODUCTION_IDENTITY_RESOLVERS.forPool(venue.adapter);
+      STRICT_EMPTY_POOL_IDENTITY_TEST_REGISTRY.forPool(venue.adapter);
     }
     return protocolAdapter.declaredVenues;
   });
@@ -572,7 +572,7 @@ async function main(): Promise<void> {
     POOL_REGISTRY.filter((entry) => entry.adapter === "erc4626" && !entry.nonStandardRedeem).length === 0,
     "standard ERC4626 executable fallback count",
   );
-  const erc4626Family = PRODUCTION_ADAPTER_FAMILIES.protocols().find(
+  const erc4626Family = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols().find(
     (entry) => entry.id === "protocol:erc4626",
   );
   assert(
@@ -621,7 +621,7 @@ async function main(): Promise<void> {
   // F8: production protocol families declare no static venues; the
   // logical-instance declaration machinery is exercised with a synthetic
   // venue on a projected family.
-  const declarationFamily = PRODUCTION_ADAPTER_FAMILIES.protocols()[0];
+  const declarationFamily = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols()[0];
   const declarationVenue = {
     address: "0x0000000000000000000000000000000000000c01",
     adapter: declarationFamily.poolAdapters[0],
@@ -844,7 +844,7 @@ async function main(): Promise<void> {
   let missingDeclarationRejected = false;
   try {
     new AdapterFamilyRegistry([{
-        ...PRODUCTION_ADAPTER_FAMILIES.protocols().find(
+        ...STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols().find(
           (item) => item.declaredVenues.length > 0,
         )!,
         id: "protocol:missing-venue-declaration",
@@ -863,7 +863,7 @@ async function main(): Promise<void> {
   );
   let reasonOnlyProtocolRejected = false;
   try {
-    const declared = PRODUCTION_ADAPTER_FAMILIES.protocols().find(
+    const declared = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols().find(
       (item) => item.declaredVenues.length > 0,
     )!;
     new AdapterFamilyRegistry([{
@@ -879,7 +879,7 @@ async function main(): Promise<void> {
     reasonOnlyProtocolRejected,
     "a reason string must not activate a family without discovery/identity/source",
   );
-  const grandfatheredProtocol = PRODUCTION_ADAPTER_FAMILIES.protocols().find(
+  const grandfatheredProtocol = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols().find(
     (item) => !item.requiresProtocolEdgesFlag,
   );
   assert(grandfatheredProtocol !== undefined, "test requires one grandfathered protocol adapter");
@@ -902,7 +902,7 @@ async function main(): Promise<void> {
   let unversionedAddressMatcherRejected = false;
   try {
     new AdapterFamilyRegistry([{
-        ...PRODUCTION_ADAPTER_FAMILIES.protocols().find((item) => item.id === "protocol:erc4626")!,
+        ...STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols().find((item) => item.id === "protocol:erc4626")!,
         discovery: {
           candidateSources: ["dex-token-domain"],
           eventTopics: [],
@@ -920,7 +920,7 @@ async function main(): Promise<void> {
   );
   let unprovenAddressCacheRejected = false;
   try {
-    const base = PRODUCTION_ADAPTER_FAMILIES.protocols().find(
+    const base = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols().find(
       (item) => item.id === "protocol:erc4626",
     )!;
     new AdapterFamilyRegistry([{
@@ -1179,7 +1179,7 @@ async function main(): Promise<void> {
 
   const retiredCurveRegistry = new RouteLegRegistry([curvePlainAdapter]);
   assert(
-    PRODUCTION_ADAPTER_FAMILIES.routes().findForPool("curve") === null,
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().findForPool("curve") === null,
     "retired Curve plain Family must not re-enter production through migration",
   );
   const curveAdapter = retiredCurveRegistry.forFamily("curve-plain");
@@ -1300,7 +1300,7 @@ async function main(): Promise<void> {
   console.log("[route-adapters] action registry coverage: PASS");
 
   const expectedTemplateAdapters = deriveTemplateTradeAdapterIds(
-    PRODUCTION_ADAPTER_FAMILIES.routes().list(),
+    STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().list(),
   );
   for (const template of [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY]) {
     const slotAdapters = template.slots.find((slot) => slot.id === "swap")?.adapters ?? [];
@@ -1311,7 +1311,7 @@ async function main(): Promise<void> {
     );
   }
   const withSynthetic = deriveTemplateTradeAdapterIds([
-    ...PRODUCTION_ADAPTER_FAMILIES.routes().list(),
+    ...STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().list(),
     {
       edgeAdapterIds: ["synthetic-route-adapter"],
       allowedTaxonomy: [{ slotKind: "swap" }],
@@ -1327,7 +1327,7 @@ async function main(): Promise<void> {
   );
   console.log("[route-adapters] path-template registry derivation: PASS");
 
-  for (const protocolAdapter of PRODUCTION_ADAPTER_FAMILIES.protocols()) {
+  for (const protocolAdapter of STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols()) {
     const blockscanAdmitted = protocolAdapter.allowedTaxonomy.some((taxonomy) =>
       taxonomy.slotKind === "protocol" &&
       !deriveEdgeTaxonomy(taxonomy.slotKind, taxonomy.protocolAction).leavesStandingPosition
@@ -1416,7 +1416,7 @@ async function main(): Promise<void> {
 
   let unstableIdentityToggle = false;
   const unstableIdentityAdapter: SwapAdapter = {
-    ...PRODUCTION_ADAPTER_FAMILIES.swaps()[0],
+    ...STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps()[0],
     // F8: the projected base owns strict family labels; the fixture builds
     // against the univ2 pool used by this section.
     poolAdapters: ["univ2"],
@@ -1446,7 +1446,7 @@ async function main(): Promise<void> {
   );
 
   const duplicateIdentityAdapter: SwapAdapter = {
-    ...PRODUCTION_ADAPTER_FAMILIES.swaps()[0],
+    ...STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps()[0],
     poolAdapters: ["univ2"],
     id: "custom-swap:duplicate-route-identity",
     async buildEdges() {
@@ -1467,9 +1467,9 @@ async function main(): Promise<void> {
   // F8: projected families carry no legacy discovery object; the conformance
   // fixture declares the legacy discovery contract explicitly.
   const discoverable: ProtocolConversionAdapter = {
-    ...PRODUCTION_ADAPTER_FAMILIES.protocols()[0],
+    ...STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols()[0],
     id: "protocol:conformance-discovery",
-    identityPolicies: PRODUCTION_ADAPTER_FAMILIES.protocols()[0].poolAdapters.map(
+    identityPolicies: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols()[0].poolAdapters.map(
       (poolAdapter) => ({ poolAdapter, policy: "trusted-singleton-seed" as const }),
     ),
     discovery: {

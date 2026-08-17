@@ -7,9 +7,9 @@ import * as ts from "typescript";
 import "../../adapters/index.js";
 import { listAll } from "../../adapters/registry.js";
 import {
-  PRODUCTION_ADAPTER_FAMILIES,
-  PRODUCTION_FAMILY_MODULES,
-} from "../venues/production-registry.js";
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY,
+  STRICT_PROJECTED_FAMILY_TEST_MODULES,
+} from "./strict-family-test-compat.js";
 
 export interface FamilyOwnedActionBinding {
   readonly id: string;
@@ -70,7 +70,7 @@ const ACTION_INDEX = resolve(LISTENER_ROOT, "src/adapters/index.ts");
 
 export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
   const { program, checker } = loadProgram();
-  const runtimeFamilies = PRODUCTION_ADAPTER_FAMILIES.list();
+  const runtimeFamilies = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.list();
   const roots = productionFamilyRoots(
     program,
     checker,
@@ -276,7 +276,7 @@ function productionFamilyRoots(
       path: imported.path,
     };
   });
-  for (const module of PRODUCTION_FAMILY_MODULES) {
+  for (const module of STRICT_PROJECTED_FAMILY_TEST_MODULES) {
     roots.push({
       binding: "productionFamilyModule",
       imported: "productionFamilyModule.family",
@@ -373,7 +373,7 @@ function activeActionSources(
       `family ownership cannot resolve action catalog entry ${element.getText(index)}`,
     );
   }
-  for (const module of PRODUCTION_FAMILY_MODULES) {
+  for (const module of STRICT_PROJECTED_FAMILY_TEST_MODULES) {
     const entryPath = resolve(
       LISTENER_ROOT,
       "src/searcher/venues/production-families",
@@ -558,12 +558,12 @@ function registryAllowedRanges(source: ts.SourceFile): readonly ts.TextRange[] {
 function familyRegistrationArray(
   source: ts.SourceFile,
 ): ts.ArrayLiteralExpression | null {
-  const legacy = findVariable(source, "LEGACY_PRODUCTION_ADAPTER_FAMILIES");
+  const legacy = findVariable(source, "LEGACY_STRICT_PROJECTED_FAMILY_TEST_REGISTRY");
   if (legacy?.initializer) {
     const found = firstArrayLiteral(legacy.initializer);
     if (found) return found;
   }
-  const declaration = findVariable(source, "PRODUCTION_ADAPTER_FAMILIES");
+  const declaration = findVariable(source, "STRICT_PROJECTED_FAMILY_TEST_REGISTRY");
   return declaration?.initializer &&
       ts.isNewExpression(declaration.initializer) &&
       declaration.initializer.arguments?.[0] &&
@@ -978,7 +978,7 @@ function runOwnershipManifestSelfTests(): void {
   const registrySource = (families: readonly string[]): string =>
     `${families.map((name) =>
       `import { ${name} } from "./swaps/${name}.js";`).join("\n")}\n` +
-    `export const PRODUCTION_ADAPTER_FAMILIES = ` +
+    `export const STRICT_PROJECTED_FAMILY_TEST_REGISTRY = ` +
     `new Registry([${families.join(",")}]);\n` +
     "const centralLogic = true;\n";
   assert.equal(

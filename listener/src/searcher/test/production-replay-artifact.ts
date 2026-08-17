@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { poolProjectionRowKey } from "../pool-universe.js";
 import type { PoolEntry, VerifiedRouteSpec } from "../planner/token-graph.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "../venues/production-family-composition.js";
 import type { FamilySourceCoverage } from "../../shared/evidence/canonical-edge-set.js";
@@ -174,7 +174,7 @@ export function selectProductionReplayDiscoveredPools(
     if (!pool.verifiedRoutes || pool.verifiedRoutes.length === 0) {
       throw new Error(`discovered pool ${key} has no probe-verified route`);
     }
-    const family = PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pool.adapter);
+    const family = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().findForPool(pool.adapter);
     // F8: dynamic ownership is projected from the strict catalog's
     // plugin-declared candidate sources; the legacy discovery object is gone.
     const dynamicallyOwned = family !== null && (
@@ -294,7 +294,7 @@ function assertDiscoveredPoolCoverage(
 function parseProjectedPool(raw: unknown, index: number): PoolEntry {
   if (!isRecord(raw)) throw new Error(`pools[${index}] must be an object`);
   const adapter = stringField(raw.adapter, `pools[${index}].adapter`) as PoolEntry["adapter"];
-  PRODUCTION_ADAPTER_FAMILIES.routes().forPool(adapter);
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forPool(adapter);
   const pool: PoolEntry = {
     address: addressField(raw.address, `pools[${index}].address`),
     adapter,

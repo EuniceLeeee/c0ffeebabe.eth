@@ -43,9 +43,9 @@ import { buildTokenPaths, POOL_REGISTRY, type TokenEdge } from "../planner/token
 import { buildStrategyViews } from "../strategy-views.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import {
-  PRODUCTION_IDENTITY_RESOLVERS,
-  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-} from "../venues/production-registry.js";
+  STRICT_EMPTY_POOL_IDENTITY_TEST_REGISTRY,
+  STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY,
+} from "./strict-family-test-compat.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
 import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
 import {

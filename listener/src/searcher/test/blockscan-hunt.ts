@@ -117,10 +117,10 @@ import { DEFAULT_BRIBE_BPS } from "../live-envelope.js";
 import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
 import { buildStrategyViews } from "../strategy-views.js";
 import {
-  PRODUCTION_ADAPTER_FAMILIES,
-  PRODUCTION_IDENTITY_RESOLVERS,
-  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-} from "../venues/production-registry.js";
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY,
+  STRICT_EMPTY_POOL_IDENTITY_TEST_REGISTRY,
+  STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY,
+} from "./strict-family-test-compat.js";
 import type {
   PendingExecutionEvidence,
   ProtocolCandidate,
@@ -723,7 +723,7 @@ function huntGraphView(input: {
     sourceBlock: input.sourceBlock,
     sourceBlockHash: input.sourceBlockHash,
     completenessWatermark: input.sourceBlock,
-    perSourceCoverage: PRODUCTION_ADAPTER_FAMILIES
+    perSourceCoverage: STRICT_PROJECTED_FAMILY_TEST_REGISTRY
       .blockScanStateFamilies()
       .map((family) => ({
         familyId: family.familyId,
@@ -736,7 +736,7 @@ function huntGraphView(input: {
       })),
     edges: input.edges,
     familyIdForEdge: (edge) =>
-      PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id,
+      STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(edge.adapterId).id,
   });
 }
 
@@ -750,7 +750,7 @@ function diagnosticShardCompleteness(
   }[],
   requiredRoute: readonly TokenEdge[],
 ): Readonly<Record<string, SemanticJson>> {
-  const routes = PRODUCTION_ADAPTER_FAMILIES.routes();
+  const routes = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes();
   return semanticShardCompletenessEvidence(productionShardCompleteness({
     edges: graph,
     familySourceCoverage,
@@ -865,7 +865,7 @@ async function main(): Promise<void> {
       mode: pendingEvidenceInput === null ? "periodic" : "combined",
       evidence: executionEvidence,
       familyForEdge: (edgeAdapterId) => {
-        const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
+        const owner = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().findForEdge(
           edgeAdapterId,
         );
         return owner?.pendingTransactionEvidence?.routeActivation ===
@@ -874,7 +874,7 @@ async function main(): Promise<void> {
           : null;
       },
       edgeScopeKey: (edge) => {
-        const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
+        const owner = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().findForEdge(
           edge.adapterId,
         );
         const capability = owner?.pendingTransactionEvidence;
@@ -883,7 +883,7 @@ async function main(): Promise<void> {
           : null;
       },
       evidenceScopeKeys: (evidence) => {
-        const owner = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(
+        const owner = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forFamily(
           evidence.familyId,
         );
         const capability = owner.pendingTransactionEvidence;
@@ -919,7 +919,7 @@ async function main(): Promise<void> {
       createPinnedDexReadBackend(provider, cfg.blockNumber),
       rawUniversePools,
       {
-        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+        identityRegistry: STRICT_EMPTY_POOL_IDENTITY_TEST_REGISTRY,
         admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
         seedEntries: staticProtocolPools,
       },
@@ -982,13 +982,13 @@ async function main(): Promise<void> {
     }
     if (!process.env.PRODUCTION_REPLAY_DISCOVERY_ARTIFACT) {
       const discoverableFamilies =
-        PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes();
+        STRICT_PROJECTED_FAMILY_TEST_REGISTRY.discoverableRoutes();
       const discoveryFamilySources = discoverableFamilies.map((family) => ({
         familyId: family.id,
         sourceIds: [...new Set(family.discovery!.candidateSources)],
       }));
       const dexPoolAdapters = new Set(
-        PRODUCTION_ADAPTER_FAMILIES.swaps()
+        STRICT_PROJECTED_FAMILY_TEST_REGISTRY.swaps()
           .flatMap((family) => [...family.poolAdapters]),
       );
       const graphTokens = [...new Set([
@@ -1158,7 +1158,7 @@ async function main(): Promise<void> {
           ? {}
           : { observedHistoryProvider }),
         adapters: discoverableFamilies,
-        identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+        identityRegistry: STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY,
         protocolEdgesEnabled: true,
         chainId: protocolChainId,
         probeExecutor: DEFAULT_SEARCHER_EXECUTOR,
@@ -1397,7 +1397,7 @@ async function main(): Promise<void> {
       const materializedGraph = canonicalMaterializedGraphEvidence(
         edges,
         (edge) =>
-          PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id,
+          STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(edge.adapterId).id,
         diagnosticChangesProductionCaps()
           ? "diagnostic_override"
           : "production_config",
@@ -1534,9 +1534,9 @@ async function main(): Promise<void> {
         sourceBlock: cfg.blockNumber - 1,
         sourceBlockHash: baseBlock.hash,
       }),
-      families: PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies(),
+      families: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.blockScanStateFamilies(),
       requiresPricing: (edge) =>
-        PRODUCTION_ADAPTER_FAMILIES.isBlockScanPricedEdge(edge),
+        STRICT_PROJECTED_FAMILY_TEST_REGISTRY.isBlockScanPricedEdge(edge),
       deadlineAtMs: prewarmStartedAtMs + prewarmBudgetMs,
     });
     console.log(
@@ -1592,9 +1592,9 @@ async function main(): Promise<void> {
     const stateStartedAtMs = Date.now();
     const preparedState = await stateCoordinator.prepare({
       graph: graphView,
-      families: PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies(),
+      families: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.blockScanStateFamilies(),
       requiresPricing: (edge) =>
-        PRODUCTION_ADAPTER_FAMILIES.isBlockScanPricedEdge(edge),
+        STRICT_PROJECTED_FAMILY_TEST_REGISTRY.isBlockScanPricedEdge(edge),
       deadlineAtMs: passDeadlineAtMs,
     });
     const stateWallMs = Date.now() - stateStartedAtMs;
@@ -1618,7 +1618,7 @@ async function main(): Promise<void> {
     }
     const pricing = preparedState.snapshot;
     const familyQuoteCoverage = summarizeAdapterFamilyQuotes(pricing);
-    const pricedFamilyIds = PRODUCTION_ADAPTER_FAMILIES
+    const pricedFamilyIds = STRICT_PROJECTED_FAMILY_TEST_REGISTRY
       .blockScanStateFamilies()
       .map((family) => family.familyId);
     const familyCoverageAssessment = assessAdapterFamilyQuoteCoverage(
@@ -1628,12 +1628,12 @@ async function main(): Promise<void> {
     );
     console.log(
       `ADAPTER_FAMILY_QUOTE_COVERAGE=${JSON.stringify({
-        registeredFamilies: PRODUCTION_ADAPTER_FAMILIES.list().length,
+        registeredFamilies: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.list().length,
         pricedFamilies:
-          PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies().length,
-        creditFamilies: PRODUCTION_ADAPTER_FAMILIES.credits().length,
+          STRICT_PROJECTED_FAMILY_TEST_REGISTRY.blockScanStateFamilies().length,
+        creditFamilies: STRICT_PROJECTED_FAMILY_TEST_REGISTRY.credits().length,
         fundingFamilies:
-          PRODUCTION_ADAPTER_FAMILIES.fundingStateFamilies().length,
+          STRICT_PROJECTED_FAMILY_TEST_REGISTRY.fundingStateFamilies().length,
         status: preparedState.status,
         wallMs: stateWallMs,
         families: familyQuoteCoverage,
@@ -1669,7 +1669,7 @@ async function main(): Promise<void> {
     );
     const resolvedEdgeKeys = new Set(pricing.coverage.resolvedEdgeKeys);
     const scanEdges = graphView.edges.filter((edge) =>
-      !PRODUCTION_ADAPTER_FAMILIES.isBlockScanPricedEdge(edge) ||
+      !STRICT_PROJECTED_FAMILY_TEST_REGISTRY.isBlockScanPricedEdge(edge) ||
       resolvedEdgeKeys.has(blockScanEdgeKey(edge))
     );
 
@@ -2151,7 +2151,7 @@ async function main(): Promise<void> {
     const materializedGraph = canonicalMaterializedGraphEvidence(
       edges,
       (edge) =>
-        PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id,
+        STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(edge.adapterId).id,
     );
     const report = {
       stateBlock: cfg.blockNumber,
@@ -2371,9 +2371,9 @@ function pricedTokens(): Map<string, { maxBorrow: bigint }> {
 function summarizeAdapterFamilyQuotes(
   snapshot: BlockScanStateSnapshot,
 ): AdapterFamilyQuoteCoverageSummary[] {
-  return PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies().map((family) => {
+  return STRICT_PROJECTED_FAMILY_TEST_REGISTRY.blockScanStateFamilies().map((family) => {
     const ownedEdges = snapshot.graph.edges.filter((edge) =>
-      PRODUCTION_ADAPTER_FAMILIES.isBlockScanPricedEdge(edge) &&
+      STRICT_PROJECTED_FAMILY_TEST_REGISTRY.isBlockScanPricedEdge(edge) &&
       family.ownsEdge(edge)
     );
     let positiveQuotes = 0;
@@ -2418,7 +2418,7 @@ async function proveDiagnosticConservation(
   flashAdapterId: string,
   expectedCalldata: string,
 ): Promise<boolean> {
-  const funding = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(
+  const funding = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.findFundingByAction(
     flashAdapterId,
   );
   if (!funding) {
@@ -2691,7 +2691,7 @@ async function solveSelected(
       diagnosticSimulation?.success &&
       diagnosticSimulation.rawCalldata
     ) {
-      const funding = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(
+      const funding = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.findFundingByAction(
         solved.root.adapterId,
       );
       if (!funding) {
@@ -2732,13 +2732,13 @@ async function solveSelected(
         leavesStandingPosition:
           leavesStandingPosition ?? pathLeavesStandingPosition(opp.seedEdges),
         requiredFamilyIds: [...new Set(opp.seedEdges.map((edge) =>
-          PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id
+          STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(edge.adapterId).id
         ))].sort(),
         shardCompleteness: productionShardCompleteness({
           edges: fullGraph,
           familySourceCoverage,
           requiredFamilyIds: [...new Set(opp.seedEdges.map((edge) =>
-            PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id
+            STRICT_PROJECTED_FAMILY_TEST_REGISTRY.routes().forEdge(edge.adapterId).id
           ))].sort(),
         }),
       };

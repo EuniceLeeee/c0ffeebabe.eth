@@ -72,7 +72,7 @@ import {
 } from "../venues/swaps/univ4.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
 import { TRUSTED_V2_LINEAGES } from "../venues/v2-lineage.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 
 const SOURCE_BLOCK = 22_000_000;
 const SOURCE_HASH = `0x${"ab".repeat(32)}`;
@@ -217,7 +217,7 @@ function runConcentratedLiquidityPrecisionBoundary(): void {
   );
 }
 const pureCoveredFamilyIds = new Set(pureFixtureFamilyIds);
-for (const family of PRODUCTION_ADAPTER_FAMILIES.pricing("swap")) {
+for (const family of STRICT_PROJECTED_FAMILY_TEST_REGISTRY.pricing("swap")) {
   const factoryCase = factoryOwnedDeriveMidsPurityCase(family.pricingState);
   if (!factoryCase) continue;
   const purity = assertPureSynchronousDeriveMids({
@@ -234,7 +234,7 @@ for (const family of PRODUCTION_ADAPTER_FAMILIES.pricing("swap")) {
 }
 assert.deepEqual(
   [...pureCoveredFamilyIds].sort(),
-  PRODUCTION_ADAPTER_FAMILIES.pricing("swap").map((family) => family.id).sort(),
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY.pricing("swap").map((family) => family.id).sort(),
   "every production swap pricing family requires one passing purity fixture",
 );
 
@@ -1939,7 +1939,7 @@ async function execute<Schema, Snapshot>(
     });
   }
   if (options.recordProductionFixture !== false) {
-    const production = PRODUCTION_ADAPTER_FAMILIES
+    const production = STRICT_PROJECTED_FAMILY_TEST_REGISTRY
       .pricing("swap")
       .find((family) => family.id === familyId);
     assert(production, `non-production swap purity fixture ${familyId}`);

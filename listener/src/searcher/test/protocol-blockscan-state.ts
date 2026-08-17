@@ -38,7 +38,7 @@ import { ETHERTOKEN_NATIVE_REDEEM_EDGE_ADAPTER } from
 import { eigenpieIface } from "../venues/protocols/eigenpie-discovery.js";
 import { metronomeSynthPoolIface } from "../venues/protocols/protocol-quote.js";
 import { ADDR } from "../../shared/constants/addresses.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 
 const block = 25_593_210;
 const blockHash = `0x${"11".repeat(32)}`;
@@ -517,7 +517,7 @@ for (const item of cases) {
     edges: item.edges,
     harness: createAmbientIoPoisonHarness(),
   });
-  const production = PRODUCTION_ADAPTER_FAMILIES
+  const production = STRICT_PROJECTED_FAMILY_TEST_REGISTRY
     .pricing("protocol-conversion")
     .find((family) => family.id === item.familyId);
   assert(production, `non-production protocol purity fixture ${item.familyId}`);
@@ -537,7 +537,7 @@ for (const item of cases) {
 }
 assert.deepEqual(
   [...pureFixtureFamilyIds].sort(),
-  PRODUCTION_ADAPTER_FAMILIES
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY
     .pricing("protocol-conversion")
     .map((family) => family.id)
     .sort(),

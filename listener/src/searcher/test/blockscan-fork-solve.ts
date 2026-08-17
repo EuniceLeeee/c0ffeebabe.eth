@@ -57,7 +57,7 @@ import {
   type V4PoolKey,
 } from "../planner/token-graph.js";
 import { attestPoolIdentities } from "../venues/identity.js";
-import { PRODUCTION_IDENTITY_RESOLVERS } from "../venues/production-registry.js";
+import { STRICT_EMPTY_POOL_IDENTITY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
 import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
@@ -447,7 +447,7 @@ async function assertEdgesInGraph(
         try {
           const candidate = poolEntryForLeg(leg, adapter);
           const identity = await attestPoolIdentities(backend, [candidate], {
-            identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+            identityRegistry: STRICT_EMPTY_POOL_IDENTITY_TEST_REGISTRY,
             seedEntries: POOL_REGISTRY,
           });
           if (identity.accepted.length !== 1) {
@@ -674,11 +674,11 @@ async function detectRocksolidBalancerV3Opportunity(
     const rawPinned = loadPinnedWarmPools();
     const [universeIdentity, pinnedIdentity] = await Promise.all([
       attestPoolIdentities(state.provider, rawUniverse, {
-        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+        identityRegistry: STRICT_EMPTY_POOL_IDENTITY_TEST_REGISTRY,
         seedEntries: liveRegistry,
       }),
       attestPoolIdentities(state.provider, rawPinned, {
-        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+        identityRegistry: STRICT_EMPTY_POOL_IDENTITY_TEST_REGISTRY,
         seedEntries: liveRegistry,
       }),
     ]);
