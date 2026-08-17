@@ -10,7 +10,6 @@ import type {
   QuoteRequest,
   QuoteResult,
 } from "../live-state-backend.js";
-import { findPreparedQuoteEdge } from "../live-state-backend.js";
 import {
   RevmSimClient,
   type OverlayPreCall,
@@ -25,10 +24,6 @@ import {
   postImpactSupportsStateOverrides,
 } from "../solver/post-impact-overrides.js";
 import type { ResolvedPlan } from "../solver/solver.js";
-// Legacy quote/approve consumption stays until Pair E (strict pricing
-// consumer) is wired; only prewarm/funding legacy reads were removed in the
-// Pair A partial deletion.
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
   resolveFundingPrewarmAddresses,
   strictExecutionProjectionForHop,
@@ -42,10 +37,6 @@ import type { FamilyCapabilityCatalog } from
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
-import type {
-  PreparedRouteContext,
-  PreparedRouteRequest,
-} from "../venues/route-leg-adapter.js";
 import { buildVictimOverlay, overlaySupportsAdapter } from "./victim-overlay.js";
 
 const WHALE = "0x000000000000000000000000000000000000dEaD";
@@ -148,7 +139,8 @@ export class RevmLiveBackend implements LiveStateBackend {
     return (
       input.path === "hash-only" &&
       input.impact !== null &&
-      overlaySupportsAdapter(input.impact.matchedAdapterId)
+      input.strictSession !== undefined &&
+      overlaySupportsAdapter(input.impact, input.strictSession)
     );
   }
 
@@ -174,7 +166,10 @@ export class RevmLiveBackend implements LiveStateBackend {
     if (input.path !== "hash-only" || !input.impact) {
       throw new Error(`revm backend supports hash-only/mined only (path=${input.path})`);
     }
-    if (!overlaySupportsAdapter(input.impact.matchedAdapterId)) {
+    if (
+      input.strictSession === undefined ||
+      !overlaySupportsAdapter(input.impact, input.strictSession)
+    ) {
       throw new Error(`revm overlay unsupported adapter ${input.impact.matchedAdapterId}`);
     }
 
@@ -188,7 +183,7 @@ export class RevmLiveBackend implements LiveStateBackend {
     const usePostImpactOverrides = stateOverrides.length > 0;
     const overlay = usePostImpactOverrides
       ? null
-      : await buildVictimOverlay(input.impact, {
+      : await buildVictimOverlay(input.impact, input.strictSession, {
           graph: this.graph,
           read: (req) => this.readVictimOverlayState(req, baseBlock),
         }, remainingPrepareMs(input));
@@ -445,25 +440,10 @@ export class RevmLiveBackend implements LiveStateBackend {
       throw new Error("revm quote called before prepareVictimState");
     }
     if (req.amountIn <= 0n) return { amountOut: 0n, latencyMs: 0 };
-    const res = await this.quoteByAdapter(req);
-    if (res.cacheStats) {
-      console.log(
-        `[searcher/revm] quote ${req.adapterId} ${req.target.slice(0, 10)} ` +
-          `warm=${res.cacheStats.warmHits} cold=${res.cacheStats.coldMisses} ${res.latencyMs}ms`,
-      );
-    }
-    return res;
-  }
-
-  private async quoteByAdapter(req: QuoteRequest): Promise<QuoteResult> {
-    const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(req.adapterId);
-    if (adapter?.prepared?.quote) {
-      return adapter.prepared.quote(this.preparedContext(req, req.amountIn));
-    }
-    if (adapter?.prepared?.quoteUnsupportedReason) {
-      throw new Error(adapter.prepared.quoteUnsupportedReason);
-    }
-    throw new Error(`no revm quoter for adapter ${req.adapterId}`);
+    throw new Error(
+      `direct revm quote authority was removed for ${req.adapterId}; ` +
+        "use a strict current-source session",
+    );
   }
 
   /**
@@ -556,20 +536,6 @@ export class RevmLiveBackend implements LiveStateBackend {
       throw new Error(`revm quote returned empty output at ${to}`);
     }
     return { output: resp.output, latencyMs: resp.latencyMs, cacheStats: resp.cacheStats };
-  }
-
-  private preparedRequest(hop: QuoteHop, amountIn: bigint): PreparedRouteRequest {
-    return { ...hop, amountIn };
-  }
-
-  private preparedContext(hop: QuoteHop, amountIn: bigint): PreparedRouteContext {
-    const request = this.preparedRequest(hop, amountIn);
-    return {
-      request,
-      edge: findPreparedQuoteEdge(this.graph, request),
-      callPrepared: (to, data, options) => this.callPrepared(to, data, options),
-      readChain: ({ to, data }) => this.provider.call({ to, data }),
-    };
   }
 
   private overlayApproveSpender(hop: QuoteHop | QuoteRequest): string | null {

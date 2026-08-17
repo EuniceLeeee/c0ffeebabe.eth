@@ -17,10 +17,11 @@ import {
   blockScanEdgeFamilyId,
 } from "../detector/blockscan-family-budget.js";
 import type { TokenPath } from "../planner/token-graph.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
-import { buildFlashLoanRoot } from "../venues/funding/flash-loan-framework.js";
 import type {
-  PendingExecutionEvidence,
+  StrictProductionExactHandle,
+  StrictProductionRuntimeSession,
+} from "../strict-production-runtime-session.js";
+import type {
   PlanFragment,
 } from "../venues/route-leg-adapter.js";
 
@@ -47,10 +48,10 @@ export async function buildResolvedPlanFromPath(
   executor: string,
   state: StateBackend,
   minProfit: bigint = 1n,
-  flashAdapterId: string =
-    PRODUCTION_ADAPTER_FAMILIES.defaultFunding().funding.actionAdapterId,
+  flashAdapterId?: string,
   rawOutputs?: bigint[],
-  executionEvidence?: readonly PendingExecutionEvidence[],
+  strictSession?: StrictProductionRuntimeSession,
+  exactHandles?: readonly StrictProductionExactHandle[],
 ): Promise<ResolvedPlanNode> {
   if (amounts.length !== path.edges.length + 1) {
     throw new Error(
@@ -60,6 +61,17 @@ export async function buildResolvedPlanFromPath(
   if (rawOutputs !== undefined && rawOutputs.length !== path.edges.length) {
     throw new Error(
       `rawOutputs length ${rawOutputs.length} != edges (${path.edges.length})`,
+    );
+  }
+  if (strictSession === undefined) {
+    throw new Error("plan-builder requires a strict current-source session");
+  }
+  if (flashAdapterId === undefined || flashAdapterId.length === 0) {
+    throw new Error("plan-builder requires a strict Funding action");
+  }
+  if (exactHandles?.length !== path.edges.length) {
+    throw new Error(
+      `exact handles length ${exactHandles?.length ?? 0} != edges (${path.edges.length})`,
     );
   }
 
@@ -99,58 +111,49 @@ export async function buildResolvedPlanFromPath(
     const amtOut = amounts[i + 1];
     const rawOut = rawOutputs?.[i];
 
-    const routeAdapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(edge.adapterId);
-    if (routeAdapter) {
-      let fragment: PlanFragment;
-      try {
-        fragment = await routeAdapter.buildPlanFragment({
-          edge,
-          amountIn: amtIn,
-          amountOut: amtOut,
-          rawOut,
-          executor,
-          state,
-          executionEvidence: executionEvidence?.find(
-            (evidence) => evidence.familyId === routeAdapter.id,
-          ),
-        });
-      } catch (error) {
-        if (
-          error instanceof BlockScanFamilyAttributedError ||
-          isStateCallAbortedError(error) ||
-          isControlFailure(error)
-        ) {
-          throw error;
-        }
-        throw new BlockScanFamilyAttributedError(
-          blockScanEdgeFamilyId(edge),
-          "plan build",
-          error,
-        );
+    let fragment: PlanFragment;
+    try {
+      const execution = strictSession.buildExecution({
+        edge,
+        exact: exactHandles[i],
+        minAmountOut: amtOut,
+        executor,
+      });
+      if (execution.status !== "resolved") {
+        const reason = "reasonCode" in execution
+          ? execution.reasonCode
+          : execution.outcome.reasonCode;
+        throw new Error(`strict execution unresolved: ${reason}`);
       }
-      for (const requirement of fragment.requirements) {
-        if (requirement.kind === "approve") {
-          ensureApprove(requirement.token, requirement.spender, requirement.amount);
-        } else {
-          transferToPool(requirement.token, requirement.pool, requirement.amount);
-        }
+      fragment = execution.fragment;
+    } catch (error) {
+      if (
+        error instanceof BlockScanFamilyAttributedError ||
+        isStateCallAbortedError(error) ||
+        isControlFailure(error)
+      ) {
+        throw error;
       }
-      inner.push(...fragment.nodes);
-      continue;
+      throw new BlockScanFamilyAttributedError(
+        blockScanEdgeFamilyId(edge),
+        "plan build",
+        error,
+      );
     }
-
-    throw new BlockScanFamilyAttributedError(
-      blockScanEdgeFamilyId(edge),
-      "plan build",
-      new Error(`plan-builder: no family owns adapter ${edge.adapterId}`),
-    );
+    for (const requirement of fragment.requirements) {
+      if (requirement.kind === "approve") {
+        ensureApprove(requirement.token, requirement.spender, requirement.amount);
+      } else {
+        transferToPool(requirement.token, requirement.pool, requirement.amount);
+      }
+    }
+    inner.push(...fragment.nodes);
   }
 
-  const flashFamily = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(flashAdapterId);
-  if (!flashFamily) throw new Error(`plan-builder: unknown flash adapter ${flashAdapterId}`);
-  return buildFlashLoanRoot(flashFamily, {
-    flashToken,
-    flashAmount,
+  return strictSession.buildFundingRoot({
+    actionAdapterId: flashAdapterId,
+    asset: flashToken,
+    amount: flashAmount,
     minProfit,
     children: inner,
   });

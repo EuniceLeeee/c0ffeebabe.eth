@@ -1,6 +1,7 @@
 import {
   executeAdapterWork,
   type AdapterWorkOutcome,
+  type AdapterWorkControl,
   type CentralAdapterRuntime,
 } from "./adapter-work-intent.js";
 import { deriveEdgeTaxonomy } from "./strategy-taxonomy.js";
@@ -382,6 +383,7 @@ export async function executeCreditRiskQuote(input: {
   readonly source: CanonicalSource;
   readonly generation: number;
   readonly runtime: CentralAdapterRuntime;
+  readonly control?: AdapterWorkControl;
 }): Promise<CreditRiskQuoteOutcome> {
   let plugin: RuntimeCreditPlugin;
   let routeRecord: CreditRouteRuntimeHandleRecord;
@@ -432,6 +434,7 @@ export async function executeCreditRiskQuote(input: {
         programInput,
       },
       runtime: input.runtime,
+      ...(input.control === undefined ? {} : { control: input.control }),
     });
   } catch (error) {
     return terminalRisk("unresolved", `risk-work:${errorMessage(error)}`);

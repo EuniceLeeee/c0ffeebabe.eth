@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { ethers } from "ethers";
 import {
   buildFamilyRouteGraphView,
 } from "../adapter-family-graph-runtime.js";
@@ -37,6 +38,9 @@ const WRONG_HASH: CanonicalSource = Object.freeze({
   hash: `0x${"63".repeat(32)}`,
 });
 const EXECUTOR = `0x${"64".repeat(20)}`;
+const ERC20_BALANCE = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
+]);
 
 const pool = Object.freeze({
   pool: UNIV2_FIXTURE_POOL,
@@ -74,14 +78,17 @@ const root = new StrictProductionRuntimeRoot({
 function runtime(source: CanonicalSource) {
   return createStrictCentralAdapterRuntime({
     provider: {
-      call: async () => UNIV2_PAIR_INTERFACE.encodeFunctionResult(
-        "getReserves",
-        [
-          pool.reserves.reserve0,
-          pool.reserves.reserve1,
-          pool.reserves.blockTimestampLast,
-        ],
-      ),
+      call: async (request) => request.data.slice(0, 10).toLowerCase() ===
+          UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector.toLowerCase()
+        ? UNIV2_PAIR_INTERFACE.encodeFunctionResult(
+            "getReserves",
+            [
+              pool.reserves.reserve0,
+              pool.reserves.reserve1,
+              pool.reserves.blockTimestampLast,
+            ],
+          )
+        : ERC20_BALANCE.encodeFunctionResult("balanceOf", [10n ** 24n]),
       getCode: async () => "0x01",
       getStorage: async () => `0x${"00".repeat(32)}`,
     },
@@ -102,12 +109,20 @@ function runtime(source: CanonicalSource) {
 }
 
 const strictRuntime = runtime(CURRENT);
-assert.throws(
-  () => root.createSession({ source: WRONG_HASH, runtime: strictRuntime }),
+await assert.rejects(
+  root.createSession({
+    source: WRONG_HASH,
+    runtime: strictRuntime,
+    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+  }),
   /generation fence rejected stale source/,
 );
 
-const session = root.createSession({ source: CURRENT, runtime: strictRuntime });
+const session = await root.createSession({
+  source: CURRENT,
+  runtime: strictRuntime,
+  fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+});
 assert.equal(session.edges.length, startupView.edges.length);
 assert.deepEqual(
   session.edges.map((edge) => edge.canonicalEdgeId).sort(),
@@ -116,11 +131,81 @@ assert.deepEqual(
 assert(session.edges.every((edge) =>
   session.familyIdForEdge(edge) === publication.familyId
 ));
+assert.deepEqual(
+  session.fundingActionIds(UNIV2_FIXTURE_TOKEN0),
+  ["morpho-flash", "balancer-flash"],
+);
+const fundingRoot = session.buildFundingRoot({
+  actionAdapterId: "morpho-flash",
+  asset: UNIV2_FIXTURE_TOKEN0,
+  amount: 1_000_000n,
+  minProfit: 1n,
+  children: Object.freeze([]),
+});
+assert.equal(fundingRoot.adapterId, "morpho-flash");
+assert.equal(fundingRoot.tokenIn.toLowerCase(), UNIV2_FIXTURE_TOKEN0.toLowerCase());
+assert.throws(
+  () => session.buildFundingRoot({
+    actionAdapterId: "missing-funding-action",
+    asset: UNIV2_FIXTURE_TOKEN0,
+    amount: 1_000_000n,
+    minProfit: 1n,
+    children: Object.freeze([]),
+  }),
+  /no Funding offer/,
+);
+assert.throws(
+  () => session.buildFundingRoot({
+    actionAdapterId: "morpho-flash",
+    asset: UNIV2_FIXTURE_TOKEN1,
+    amount: 1_000_000n,
+    minProfit: 1n,
+    children: Object.freeze([]),
+  }),
+  /no Funding offer/,
+);
+assert.throws(
+  () => session.buildFundingRoot({
+    actionAdapterId: "morpho-flash",
+    asset: UNIV2_FIXTURE_TOKEN0,
+    amount: 10n ** 24n + 1n,
+    minProfit: 1n,
+    children: Object.freeze([]),
+  }),
+  /no Funding offer/,
+);
 
 const edge = session.edges.find((candidate) =>
   candidate.tokenIn.toLowerCase() === UNIV2_FIXTURE_TOKEN0.toLowerCase()
 )!;
-const exact = await session.quoteExact({
+assert(session.supportsVictimReplay(edge));
+const victim = session.replayVictim({
+  edge,
+  impact: Object.freeze({
+    pool: UNIV2_FIXTURE_POOL,
+    tokenIn: edge.tokenIn,
+    tokenOut: edge.tokenOut,
+    amountIn: 1_000_000n,
+    exactPostState: Object.freeze({
+      reserve0: pool.reserves.reserve0 + 1_000_000n,
+      reserve1: pool.reserves.reserve1 - 1_000n,
+      feeBps: 30n,
+      blockTimestampLast: pool.reserves.blockTimestampLast,
+    }),
+  }),
+  preState: null,
+  validUntil: 1_800_000_000n,
+});
+assert.equal(victim.status, "resolved");
+if (victim.status === "resolved") {
+  assert(victim.overlay !== null);
+  assert.equal(victim.overlay.preCalls.length, 2);
+  assert.equal(
+    (victim.exactPostState as { readonly kind?: unknown } | null)?.kind,
+    "v2",
+  );
+}
+const exact = await session.issueExact({
   edge,
   amountIn: 1_000_000n,
   executor: EXECUTOR,
@@ -133,7 +218,6 @@ const execution = session.buildExecution({
   exact,
   minAmountOut: exact.amountOut - 1n,
   executor: EXECUTOR,
-  runtimeEvidence: Object.freeze([]),
 });
 assert.equal(execution.status, "resolved");
 
@@ -143,14 +227,14 @@ assert.throws(
     exact: Object.freeze({ ...exact }) as typeof exact,
     minAmountOut: exact.amountOut - 1n,
     executor: EXECUTOR,
-    runtimeEvidence: Object.freeze([]),
   }),
   /same session-issued route\/exact authority/,
 );
 
-const foreignSession = root.createSession({
+const foreignSession = await root.createSession({
   source: CURRENT,
   runtime: strictRuntime,
+  fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
 });
 assert.throws(
   () => foreignSession.buildExecution({
@@ -160,7 +244,6 @@ assert.throws(
     exact,
     minAmountOut: exact.amountOut - 1n,
     executor: EXECUTOR,
-    runtimeEvidence: Object.freeze([]),
   }),
   /same session-issued route\/exact authority/,
 );
@@ -182,13 +265,17 @@ const stale = await executeFamilyExactQuote({
 });
 assert.notEqual(stale.status, "resolved");
 
-assert.throws(
-  () => new StrictProductionRuntimeRoot({
+await assert.rejects(
+  new StrictProductionRuntimeRoot({
     catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
     readySource: STARTUP,
     readyGraph: startupView.edges.slice(1),
     readyInstances: publication.instances,
-  }).createSession({ source: CURRENT, runtime: strictRuntime }),
+  }).createSession({
+    source: CURRENT,
+    runtime: strictRuntime,
+    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+  }),
   /topology differs/,
 );
 

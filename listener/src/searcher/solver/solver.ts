@@ -31,17 +31,19 @@ import {
 } from "../detector/blockscan-family-budget.js";
 import type { CandidatePlan } from "../planner/planner.js";
 import type { V4PoolKey } from "../planner/token-graph.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
-import type { PendingExecutionEvidence } from "../venues/route-leg-adapter.js";
+import type { StrictProductionRuntimeSession } from
+  "../strict-production-runtime-session.js";
+import type { RuntimeEvidence } from
+  "../venues/adapter-family-plugin.js";
+import type { AdapterWorkControl } from "../adapter-work-intent.js";
 import { geometricGrid, goldenSectionMaximize } from "./amount-bounds.js";
 import {
   propagateAmounts,
   propagateAmountsWithRawOutputs,
-  type AmountQuoteSource,
 } from "./amount-propagation.js";
 import { buildResolvedPlanFromPath } from "./plan-builder.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
-import { quote, type V4QuotePathStats } from "./quoter.js";
+import type { V4QuotePathStats } from "./quoter.js";
 
 export interface ResolvedPlan {
   root: ResolvedPlanNode;
@@ -89,9 +91,6 @@ export interface SolveOptions {
   /** Path B: warmed pool-state cache for local-math quotes (no per-trial RPC).
    *  When omitted, quotes fall back to on-chain eth_call. */
   cache?: PoolStateCache;
-  /** Live fast backend quote source. When supplied, amount propagation quotes
-   *  through the prepared backend state instead of the Anvil StateBackend. */
-  quoteSource?: AmountQuoteSource;
   /** Per-hop quote haircut. 10000 = no haircut. */
   quoteSafetyBps?: bigint;
   /** Admit near-miss quote candidates into phase-2 sim.
@@ -110,8 +109,10 @@ export interface SolveOptions {
   /** Optional per-call timing sink. Reset at solve entry and updated before
    *  returns or throws, so callers can account for rejected solver attempts. */
   timing?: SolverTiming;
-  /** Immutable evidence carried by the current pending transaction. */
-  executionEvidence?: readonly PendingExecutionEvidence[];
+  /** Required single authority for current-source exact and execution. */
+  strictSession?: StrictProductionRuntimeSession;
+  /** Plugin-issued evidence carried by this exact source/session. */
+  runtimeEvidence?: readonly RuntimeEvidence[];
 }
 
 export interface Solver {
@@ -215,6 +216,10 @@ export class AnvilSolver implements Solver {
       BigInt(process.env.SEARCHER_QUOTE_PROFIT_FLOOR_BPS ?? (process.env.SEARCHER_DRY_RUN === "1" ? "20" : "0"));
     const deferPhase2Sim = opts.deferPhase2Sim ?? false;
     const debugQuotes = process.env.SEARCHER_SOLVER_DEBUG_QUOTES === "1";
+    if (opts.strictSession === undefined) {
+      throw new Error("solver requires a strict current-source session");
+    }
+    const strictSession = opts.strictSession;
     const controlledState = solverControl.active
       ? withStateCallControl(state, {
           deadlineAtMs: Number.isFinite(solverControl.deadlineAtMs)
@@ -223,9 +228,12 @@ export class AnvilSolver implements Solver {
           signal: solverControl.signal,
         })
       : state;
-    const controlledQuoteSource = opts.quoteSource && solverControl.active
-      ? controlledAmountQuoteSource(opts.quoteSource, solverControl)
-      : opts.quoteSource;
+    const adapterWorkControl: AdapterWorkControl = Object.freeze({
+      ...(Number.isFinite(solverControl.deadlineAtMs)
+        ? { deadlineAtMs: solverControl.deadlineAtMs }
+        : {}),
+      signal: solverControl.signal,
+    });
     const pastDeadline = (): boolean =>
       solverControl.signal.aborted ||
       Date.now() >= solverControl.deadlineAtMs;
@@ -269,9 +277,10 @@ export class AnvilSolver implements Solver {
       resolveSearchCenter(plan, flashToken, controlledState, {
         executor,
         cache: opts.cache,
-        quoteSource: controlledQuoteSource,
         v4QuoteStats,
-        executionEvidence: opts.executionEvidence,
+        strictSession,
+        runtimeEvidence: opts.runtimeEvidence,
+        adapterWorkControl,
         shouldStop: pastDeadline,
       }),
     );
@@ -308,9 +317,10 @@ export class AnvilSolver implements Solver {
             executor,
             fluidDebtBps,
             cache: opts.cache,
-            quoteSource: controlledQuoteSource,
             v4QuoteStats,
-            executionEvidence: opts.executionEvidence,
+            strictSession,
+            runtimeEvidence: opts.runtimeEvidence,
+            adapterWorkControl,
             safetyBps: quoteSafetyBps,
             shouldStop: pastDeadline,
           }),
@@ -331,7 +341,9 @@ export class AnvilSolver implements Solver {
       return profit;
     };
 
-    for (const fluidDebtBps of creditDebtBpsCandidates(plan)) {
+    for (const fluidDebtBps of strictSession.creditDebtBpsCandidates(
+      plan.tokenPath,
+    )) {
       if (pastDeadline()) {
         lastFailure = `deadline ${deadlineMs}ms reached during quote search`;
         break;
@@ -408,14 +420,17 @@ export class AnvilSolver implements Solver {
     }
     // Keep enough to cover every bps (fluid) or finalSimTopN amounts (non-fluid).
     ranked.splice(Math.max(finalSimTopN, bestPerBps.size));
-    const adapters = flashAdapterIds(plan);
+    const fundingActions = strictSession.fundingActionIds(flashToken);
+    if (fundingActions.length === 0) {
+      throw new Error(`no strict Funding offer for ${flashToken}`);
+    }
     const positiveQuotes = scored.filter((c) => c.quoteProfit > 0n).length;
     const floorQuotes = scored.length - positiveQuotes;
 
     console.log(
       `[searcher/ac3] solver: quote search ${quoteCount} pts → ` +
         `${positiveQuotes} positive${floorQuotes > 0 ? ` + ${floorQuotes} floor-admitted` : ""}, ` +
-        `sim top-${ranked.length} amounts x ${adapters.length} flash ` +
+        `sim top-${ranked.length} amounts x ${fundingActions.length} flash ` +
         `safetyBps=${quoteSafetyBps} quoteFloorBps=${quoteProfitFloorBps} ` +
         `maxFlash=${maxFlashAmount ?? "unbounded"} ` +
         `path=${pathSummary(plan.tokenPath)}`,
@@ -433,20 +448,25 @@ export class AnvilSolver implements Solver {
       }
       let amounts: bigint[];
       let rawOutputs: bigint[];
+      let exactHandles: Awaited<ReturnType<
+        typeof propagateAmountsWithRawOutputs
+      >>["exactHandles"];
       try {
         const propagated = await timed("simMs", "final amount propagation", () =>
           propagateAmountsWithRawOutputs(plan.tokenPath, cand.flashAmount, controlledState, {
             executor,
             fluidDebtBps: cand.fluidDebtBps,
             cache: opts.cache,
-            quoteSource: controlledQuoteSource,
-            executionEvidence: opts.executionEvidence,
+            strictSession,
+            runtimeEvidence: opts.runtimeEvidence,
+            adapterWorkControl,
             safetyBps: quoteSafetyBps,
             shouldStop: pastDeadline,
           }),
         );
         amounts = propagated.amounts;
         rawOutputs = propagated.rawOutputs;
+        exactHandles = propagated.exactHandles;
       } catch (err) {
         recordFailureAttribution(phase2Failures, err);
         lastFailure = `propagation failed: ${err instanceof Error ? err.message : String(err)}`;
@@ -454,6 +474,15 @@ export class AnvilSolver implements Solver {
         continue;
       }
 
+      const adapters = strictSession.fundingActionIds(
+        flashToken,
+        cand.flashAmount,
+      );
+      if (adapters.length === 0) {
+        lastFailure =
+          `no strict Funding offer for ${flashToken} amount=${cand.flashAmount}`;
+        continue;
+      }
       for (const flashAdapterId of adapters) {
         if (pastDeadline()) {
           lastFailure = `deadline ${deadlineMs}ms reached before sim`;
@@ -478,7 +507,8 @@ export class AnvilSolver implements Solver {
               targetNetProfit,
               flashAdapterId,
               rawOutputs,
-              opts.executionEvidence,
+              strictSession,
+              exactHandles,
             ),
           );
         } catch (err) {
@@ -538,7 +568,7 @@ export class AnvilSolver implements Solver {
     }
     if (!best) {
       throw terminalSolveError(new Error(
-        `no profitable plan (sim'd top-${ranked.length} amounts x ${adapters.length} flash): ${lastFailure}`,
+        `no profitable plan (sim'd top-${ranked.length} strict-funded amounts): ${lastFailure}`,
       ), phase2Failures);
     }
     return best;
@@ -613,16 +643,6 @@ function createSolverControl(
   };
 }
 
-function controlledAmountQuoteSource(
-  source: AmountQuoteSource,
-  control: SolverControl,
-): AmountQuoteSource {
-  return {
-    quote: (request) =>
-      runSolverOperation(control, "prepared quote", () => source.quote(request)),
-  };
-}
-
 function runSolverOperation<T>(
   control: SolverControl,
   label: string,
@@ -675,10 +695,6 @@ function solverControlError(
   );
 }
 
-function flashAdapterIds(plan: CandidatePlan): string[] {
-  return plan.flashAdapterIds?.length ? plan.flashAdapterIds : [plan.flashAdapterId];
-}
-
 function shouldAdmitQuoteCandidate(
   quoteProfit: bigint,
   flashAmount: bigint,
@@ -714,17 +730,6 @@ function capGrid(grid: bigint[], max: bigint | null): bigint[] {
     out.push(amount);
   }
   return out;
-}
-
-function creditDebtBpsCandidates(
-  plan: { tokenPath: { edges: { adapterId: string }[] } },
-): bigint[] {
-  for (const family of PRODUCTION_ADAPTER_FAMILIES.credits()) {
-    if (plan.tokenPath.edges.some((edge) => family.edgeAdapterIds.includes(edge.adapterId))) {
-      return [...family.creditPolicy.debtBpsCandidates];
-    }
-  }
-  return [0n];
 }
 
 function pathSummary(path: { edges: { adapterId: string; tokenIn: string; tokenOut: string }[] }): string {
@@ -775,9 +780,10 @@ export async function resolveSearchCenter(
   options: {
     executor?: string;
     cache?: PoolStateCache;
-    quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
-    executionEvidence?: readonly PendingExecutionEvidence[];
+    strictSession?: StrictProductionRuntimeSession;
+    runtimeEvidence?: readonly RuntimeEvidence[];
+    adapterWorkControl?: AdapterWorkControl;
     shouldStop?: () => boolean;
   },
 ): Promise<bigint> {
@@ -795,10 +801,16 @@ export async function resolveSearchCenter(
 
   const impact = impactFromOpportunity(plan.opportunity);
   if (!impact) return victimAmount;
+  if (options.strictSession === undefined) {
+    throw new Error("search-center quote requires a strict current-source session");
+  }
 
   const reverseImpactIndex = findReverseImpactEdgeIndex(plan, impact);
   const impactV4PoolKey = findImpactV4PoolKey(plan, impact);
-  if (reverseImpactIndex >= 0 && prefixCanBeInverted(plan, reverseImpactIndex)) {
+  if (
+    reverseImpactIndex >= 0 &&
+    prefixCanBeInverted(plan, reverseImpactIndex, options.strictSession)
+  ) {
     const desiredImpactInput = await quoteImpactOutput(
       impact,
       victimAmount,
@@ -819,21 +831,21 @@ export async function resolveSearchCenter(
   if (sameAddress(impact.tokenIn, flashToken)) return victimAmount;
 
   if (sameAddress(impact.tokenOut, flashToken)) {
-    // Prefer local math (cache/state); fall back to the live quoteSource only
-    // when local can't serve it — same local-first dispatch as quoteEdge.
+    // The current-source strict session owns this exact quote as well as the
+    // later route propagation and execution handle.
     return quoteImpactOutput(impact, victimAmount, state, options, impactV4PoolKey);
   }
 
   return victimAmount;
 }
 
-function prefixCanBeInverted(plan: CandidatePlan, reverseImpactIndex: number): boolean {
+function prefixCanBeInverted(
+  plan: CandidatePlan,
+  reverseImpactIndex: number,
+  strictSession: StrictProductionRuntimeSession,
+): boolean {
   const prefix = plan.tokenPath.edges.slice(0, reverseImpactIndex);
-  return !PRODUCTION_ADAPTER_FAMILIES.credits().some(
-    (family) =>
-      family.creditPolicy.blocksPrefixInversion &&
-      prefix.some((edge) => family.edgeAdapterIds.includes(edge.adapterId)),
-  );
+  return !prefix.some((edge) => strictSession.blocksPrefixInversion(edge));
 }
 
 function findReverseImpactEdgeIndex(plan: CandidatePlan, impact: OpportunityImpact): number {
@@ -873,49 +885,40 @@ async function quoteImpactOutput(
   options: {
     executor?: string;
     cache?: PoolStateCache;
-    quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
-    executionEvidence?: readonly PendingExecutionEvidence[];
+    strictSession?: StrictProductionRuntimeSession;
+    runtimeEvidence?: readonly RuntimeEvidence[];
+    adapterWorkControl?: AdapterWorkControl;
     shouldStop?: () => boolean;
   },
   v4PoolKey?: V4PoolKey,
 ): Promise<bigint> {
   if (options.shouldStop?.()) throw new Error("reverse-impact center aborted: deadline reached");
-  let quoted: bigint;
-  try {
-    quoted = await quote(
-      impact.matchedAdapterId,
-      impact.pool,
-      impact.tokenIn,
-      impact.tokenOut,
-      victimAmount,
-      state,
-      options.cache,
-      v4PoolKey,
-      impact.poolToken0,
-      impact.poolToken1,
-      options.v4QuoteStats,
-      options.executor,
-      options.executionEvidence,
-    );
-  } catch (err) {
-    if (!options.quoteSource) throw err;
-    quoted = (await options.quoteSource.quote({
-      adapterId: impact.matchedAdapterId,
-      target: impact.pool,
-      tokenIn: impact.tokenIn,
-      tokenOut: impact.tokenOut,
-      amountIn: victimAmount,
-      v4PoolKey,
-      poolToken0: impact.poolToken0,
-      poolToken1: impact.poolToken1,
-      executionEvidence: options.executionEvidence?.find(
-        (evidence) => evidence.familyId ===
-          PRODUCTION_ADAPTER_FAMILIES.routes()
-            .findForEdge(impact.matchedAdapterId)?.id,
-      ),
-    })).amountOut;
+  if (options.strictSession === undefined) {
+    throw new Error("victim-impact quote requires a strict current-source session");
   }
+  void state;
+  void v4PoolKey;
+  const edge = options.strictSession.edges.find((candidate) =>
+    candidate.adapterId === impact.matchedAdapterId &&
+    sameAddress(candidate.target, impact.pool) &&
+    sameAddress(candidate.tokenIn, impact.tokenIn) &&
+    sameAddress(candidate.tokenOut, impact.tokenOut) &&
+    sameV4Pool(candidate.poolId, impact.poolId)
+  );
+  if (edge === undefined || options.executor === undefined) {
+    throw new Error("strict session has no victim-impact quote edge");
+  }
+  const exact = await options.strictSession.issueExact({
+    edge,
+    amountIn: victimAmount,
+    executor: options.executor,
+    runtimeEvidence: options.runtimeEvidence ?? Object.freeze([]),
+    ...(options.adapterWorkControl === undefined
+      ? {}
+      : { control: options.adapterWorkControl }),
+  });
+  const quoted = exact.amountOut;
   return quoted > 0n ? quoted : 1n;
 }
 
@@ -927,13 +930,17 @@ async function approximatePrefixInputForOutput(
   options: {
     executor?: string;
     cache?: PoolStateCache;
-    quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
-    executionEvidence?: readonly PendingExecutionEvidence[];
+    strictSession?: StrictProductionRuntimeSession;
+    runtimeEvidence?: readonly RuntimeEvidence[];
+    adapterWorkControl?: AdapterWorkControl;
     shouldStop?: () => boolean;
   },
 ): Promise<bigint> {
   if (desiredOutput <= 0n) return 1n;
+  if (options.strictSession === undefined) {
+    throw new Error("prefix quote requires a strict current-source session");
+  }
   const prefix = { edges: plan.tokenPath.edges.slice(0, reverseImpactIndex) };
   if (prefix.edges.length === 0) return desiredOutput;
 
@@ -945,9 +952,10 @@ async function approximatePrefixInputForOutput(
       const amounts = await propagateAmounts(prefix, flashAmount, state, {
         executor: options.executor,
         cache: options.cache,
-        quoteSource: options.quoteSource,
         v4QuoteStats: options.v4QuoteStats,
-        executionEvidence: options.executionEvidence,
+        strictSession: options.strictSession,
+        runtimeEvidence: options.runtimeEvidence,
+        adapterWorkControl: options.adapterWorkControl,
         shouldStop: options.shouldStop,
       });
       return amounts[amounts.length - 1] ?? 0n;

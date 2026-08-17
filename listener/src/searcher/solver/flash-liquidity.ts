@@ -1,5 +1,4 @@
 import { ethers } from "ethers";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 
 /**
  * Dynamic flash-loan borrowability, read from chain — NOT a hardcoded allowlist.
@@ -31,15 +30,6 @@ export interface FlashProvider {
   holder: string;
 }
 
-export const DEFAULT_FLASH_PROVIDERS: readonly FlashProvider[] = Object.freeze(
-  [...PRODUCTION_ADAPTER_FAMILIES.funding()]
-    .sort((a, b) => a.funding.liquidityPriority - b.funding.liquidityPriority)
-    .map((family) => Object.freeze({
-      adapterId: family.funding.actionAdapterId,
-      holder: family.funding.liquidityHolder,
-    })),
-);
-
 export interface FlashSource {
   /** Largest single-provider borrowable amount for the token. */
   amount: bigint;
@@ -60,8 +50,12 @@ export class FlashLiquidityCache {
 
   constructor(
     private readonly provider: ethers.JsonRpcProvider,
-    private readonly providers: readonly FlashProvider[] = DEFAULT_FLASH_PROVIDERS,
-  ) {}
+    private readonly providers: readonly FlashProvider[],
+  ) {
+    if (providers.length === 0) {
+      throw new Error("FlashLiquidityCache requires strict-issued providers");
+    }
+  }
 
   /** Borrowable depth for a token (0 if unknown/none). */
   borrowable(token: string): bigint {
@@ -118,8 +112,7 @@ export class FlashLiquidityCache {
       for (const token of batch) {
         let best: FlashSource = {
           amount: 0n,
-          adapterId: this.providers[0]?.adapterId ??
-            PRODUCTION_ADAPTER_FAMILIES.defaultFunding().funding.actionAdapterId,
+          adapterId: this.providers[0]!.adapterId,
         };
         for (const p of this.providers) {
           const r = results[i++];

@@ -65,13 +65,11 @@ import {
   resolveStrictCatalogConsumerDiagnostic,
 } from "./strict-catalog-consumer-diagnostic.js";
 import {
-  createStrictQuoteSource,
-} from "./strict-live-quote-source.js";
-import {
   resolveStrictSolverConsumer,
 } from "./strict-solver-consumer.js";
 import {
   createStrictCentralAdapterRuntime,
+  type StrictSimulationTransport,
 } from "./strict-central-adapter-runtime.js";
 import {
   createRevmStrictSimulationTransport,
@@ -122,6 +120,10 @@ import {
 } from "./universe-rebuild-runner.js";
 import { createRebuildWiring } from "./universe-rebuild-production.js";
 import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
+import {
+  StrictProductionRuntimeRoot,
+  type StrictProductionRuntimeSession,
+} from "./strict-production-runtime-session.js";
 import {
   sealPublication,
   type AdapterFamilyPublication,
@@ -224,8 +226,6 @@ import {
   pendingEvidenceScopeKeys,
 } from "./blockscan-pending-evidence.js";
 import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
-import type { AmountQuoteSource } from
-  "./solver/amount-propagation.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import {
   PoolStateCache,
@@ -1896,6 +1896,12 @@ async function main(): Promise<void> {
       "strict startup readyGeneration lost an active memo/instance",
     );
   }
+  const strictRuntimeRoot = new StrictProductionRuntimeRoot({
+    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+    readySource: readyUniverse.cutoff,
+    readyGraph: strictReadyRuntime.graph,
+    readyInstances,
+  });
   const readyInstancesByFamily = new Map<string, PreparedFamilyInstance[]>();
   for (const instance of readyInstances) {
     const siblings = readyInstancesByFamily.get(instance.familyId);
@@ -2240,10 +2246,16 @@ async function main(): Promise<void> {
   );
 
   // Now that the graph exists, wire the configured revm/hybrid backend.
+  let strictSimulationTransport: StrictSimulationTransport | undefined;
   if (config.liveBackend !== "rpc") {
     const revmSimClient = new RevmSimClient({
       executablePath: process.env.SEARCHER_REVM_SIM_BIN,
       timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
+    });
+    strictSimulationTransport = createRevmStrictSimulationTransport({
+      client: revmSimClient,
+      executor: config.botvmAddress,
+      verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
     });
     if (discoveryContinuityComposition !== null) {
       strictCentralRuntime = createStrictCentralAdapterRuntime({
@@ -2265,11 +2277,7 @@ async function main(): Promise<void> {
         }),
         verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
         executor: config.botvmAddress,
-        simulator: createRevmStrictSimulationTransport({
-          client: revmSimClient,
-          executor: config.botvmAddress,
-          verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
-        }),
+        simulator: strictSimulationTransport,
       });
     }
     const revmLiveBackend = new RevmLiveBackend(
@@ -2292,6 +2300,50 @@ async function main(): Promise<void> {
       ? revmLiveBackend
       : new HybridLiveBackend(revmLiveBackend, rpcLiveBackend);
   }
+
+  const strictSessionCache = new Map<
+    string,
+    Promise<StrictProductionRuntimeSession>
+  >();
+  const strictSessionFor = (
+    source: CanonicalSource,
+  ): Promise<StrictProductionRuntimeSession> => {
+    const key = `${source.number}:${source.hash.toLowerCase()}:${source.generation}`;
+    const incumbent = strictSessionCache.get(key);
+    if (incumbent !== undefined) return incumbent;
+    const runtime = createStrictCentralAdapterRuntime({
+      provider,
+      ...(strictSimulationTransport === undefined
+        ? {}
+        : { simulator: strictSimulationTransport }),
+      generationFence: Object.freeze({
+        assertCurrent(generation: number, candidate: CanonicalSource) {
+          if (
+            generation !== source.generation ||
+            candidate.number !== source.number ||
+            candidate.hash.toLowerCase() !== source.hash.toLowerCase() ||
+            candidate.generation !== source.generation
+          ) {
+            throw new Error("strict current-source generation is stale");
+          }
+        },
+      }),
+      verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+      executor: config.botvmAddress,
+    });
+    const pending = strictRuntimeRoot.createSession({
+      source,
+      runtime,
+      fundingAssets: flashTokens,
+    }).catch((error) => {
+      if (strictSessionCache.get(key) === pending) {
+        strictSessionCache.delete(key);
+      }
+      throw error;
+    });
+    strictSessionCache.set(key, pending);
+    return pending;
+  };
 
   // Reconstruct the in-memory catalog only from the same readyGeneration.
   // This is deterministic process-local handle issuance, not a second
@@ -2613,6 +2665,7 @@ async function main(): Promise<void> {
     executionWorkers: blockScanExecutionWorkers,
     finalSimulationWorkers: blockScanFinalSimulationWorkers,
     rpcUrl: config.rpcUrl,
+    strictSession: strictSessionFor,
     rethTransportScheduler: blockScanRethTransportScheduler,
     runtimeAbort: blockScanRuntimeAbort,
     sharedPlanner: planner,
@@ -3229,24 +3282,9 @@ async function main(): Promise<void> {
             recentWarmPools,
             pinnedWarmTargets,
             blockTracker,
+            strictSessionFor,
             observeProtocolReceipt: liveDiscovery.observeProtocolReceipt,
             observeProtocolTxHash: liveDiscovery.observeProtocolTxHash,
-            ...(discoveryContinuityComposition === null
-              ? {}
-              : {
-                  strictQuoteSource: createStrictQuoteSource({
-                    views: () =>
-                      discoveryContinuityComposition.catalogRoot.capture()
-                        ?.views ?? null,
-                    catalog:
-                      PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-                    legacy: liveBackend,
-                    // F6 Pair E: the durable composition is the default, so
-                    // the solver never prices through a non-strict path; a
-                    // route missing from committed views fails closed.
-                    fallback: "fail-closed",
-                  }),
-                }),
           });
         } catch (err) {
           console.log(
@@ -3299,18 +3337,15 @@ interface HandleCtx {
   pinnedWarmTargets: Set<string>;
   /** Latest mined block, kept fresh by the WS newHeads stream (no per-hint poll). */
   blockTracker: { latest: number };
+  strictSessionFor(
+    source: CanonicalSource,
+  ): Promise<StrictProductionRuntimeSession>;
   observeProtocolReceipt(input: {
     txHash: string;
     blockNumber: number;
     receipt: ProtocolDiscoveryReceipt;
   }): Promise<void>;
   observeProtocolTxHash(txHash: string): Promise<void>;
-  /**
-   * Pair E: solver quote source backed by committed strict catalog pricing
-   * views with per-family/per-availability legacy fallback. Absent when no
-   * composition is configured.
-   */
-  readonly strictQuoteSource?: AmountQuoteSource;
 }
 
 /**
@@ -4087,18 +4122,10 @@ async function processOpportunities(
       );
       continue;
     }
-    const evidenceFamilyIds = [...new Set(plans.flatMap((plan) =>
-      plan.tokenPath.edges.flatMap((edge) => {
-        const owner = PRODUCTION_ADAPTER_FAMILIES.routes()
-          .findForEdge(edge.adapterId);
-        return owner?.pendingTransactionEvidence === undefined
-          ? []
-          : [owner.id];
-      })
-    ))];
-    const executionEvidence = evidenceFamilyIds.length > 0
-      ? await sourceMeta.resolveExecutionEvidence(evidenceFamilyIds)
-      : Object.freeze([]);
+    // Runtime evidence is issued by the strict catalog/session from a pinned
+    // observation. The former protocol-trace conduit is not an execution
+    // authority and cannot nominate a Family from central code.
+    const executionEvidence = Object.freeze([]);
 
     // Backend selection happens after planning. Preparing an overlay for an
     // opportunity with zero candidate paths is pure latency waste (observed as
@@ -4110,6 +4137,11 @@ async function processOpportunities(
       ctx.provider,
       prepareBaseBlock,
     );
+    const strictSession = await ctx.strictSessionFor(Object.freeze({
+      number: prepareBaseBlock,
+      hash: prepareBaseBlockHash,
+      generation: prepareBaseBlock,
+    }));
     if (fixturePath === "hash-only" && opp.victimEffect.kind === "swap") {
       const generation = oppImpact?.sourceGeneration;
       const transitionGeneration = opp.victimEffect.transition?.sourceGeneration;
@@ -4148,6 +4180,7 @@ async function processOpportunities(
         oppImpact,
         prepareBaseBlock,
         Math.max(1, oppDeadlineAtMs - Date.now()),
+        strictSession,
       );
       if (!settled.ok) {
         lastTerminalState = "sim-revert";
@@ -4178,6 +4211,7 @@ async function processOpportunities(
       ),
       postImpact: exactPostImpact ?? undefined,
       deadlineAtMs: oppDeadlineAtMs,
+      strictSession,
     };
     if (exactPostImpact !== null) {
       console.log(
@@ -4207,7 +4241,7 @@ async function processOpportunities(
     let jitWarmCurrent: Promise<void> | null = null;
     const supportsConfiguredBackend = ctx.config.liveBackend !== "rpc" &&
       (ctx.liveBackend.supportsPath?.(prepareInput) ?? true);
-    if (!overlayExact && supportsConfiguredBackend && oppImpact && victimUsesLocalCacheApply(oppImpact.matchedAdapterId)) {
+    if (!overlayExact && supportsConfiguredBackend && oppImpact && victimUsesLocalCacheApply(oppImpact.matchedAdapterId, strictSession)) {
       const applyStarted = Date.now();
       ctx.cache.beginHint(prepareInput.baseBlock);
       const localReadState = blockReadState(ctx.state, ctx.provider, prepareInput.baseBlock);
@@ -4217,6 +4251,7 @@ async function processOpportunities(
         prepareInput.baseBlock,
         localReadState,
         Math.max(1, oppDeadlineAtMs - Date.now()),
+        strictSession,
       );
       if (!settled.ok) {
         lastTerminalState = "sim-revert";
@@ -4234,7 +4269,7 @@ async function processOpportunities(
       localVictimApply = settled.value;
       if (!localVictimApply) {
         try {
-          if (victimNeedsMutablePoolRefresh(oppImpact.matchedAdapterId)) {
+          if (victimNeedsMutablePoolRefresh(oppImpact.matchedAdapterId, strictSession)) {
             await ctx.poolStateUpdater.update(prepareInput.baseBlock, [{
               adapterId: oppImpact.matchedAdapterId,
               target: oppImpact.pool,
@@ -4248,6 +4283,7 @@ async function processOpportunities(
               prepareInput.baseBlock,
               localReadState,
               Math.max(1, oppDeadlineAtMs - Date.now()),
+              strictSession,
             );
             if (!refreshed.ok) {
               lastTerminalState = "sim-revert";
@@ -4360,16 +4396,19 @@ async function processOpportunities(
           await replayVictimSwapOnAnvil(
             ctx.state,
             oppImpact,
-            ctx.graph,
+            strictSession,
             Math.max(1, oppDeadlineAtMs - Date.now()),
           );
         }
         await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
       } catch (err) {
-        const familyId = PRODUCTION_ADAPTER_FAMILIES
-          .routes()
-          .findForEdge(oppImpact.matchedAdapterId)
-          ?.id ?? oppImpact.matchedAdapterId;
+        const strictEdge = strictSession.edges.find((edge) =>
+          edge.adapterId === oppImpact.matchedAdapterId &&
+          edge.target.toLowerCase() === oppImpact.pool.toLowerCase()
+        );
+        const familyId = strictEdge === undefined
+          ? oppImpact.matchedAdapterId
+          : strictSession.familyIdForEdge(strictEdge);
         const message = err instanceof Error ? err.message : String(err);
         lastTerminalState = "sim-revert";
         lastTerminalError =
@@ -4395,7 +4434,8 @@ async function processOpportunities(
     // state reads (PoolStateCache warm-up + quoter fallback) through the live
     // backend's warm post-victim overlay. This is what makes path-B local math
     // run against the shifted state instead of re-faulting slots or bypassing the
-    // cache entirely via quoteSource. rpc mode keeps the anvil state backend.
+    // cache entirely via a separate quote authority. rpc mode keeps the anvil
+    // state backend; exact/execution authority still belongs to strictSession.
     const useRevmReadState = useConfiguredBackend && ctx.config.liveBackend !== "rpc" && !localVictimApply;
     ctx.cache.beginHint(
       prepareInput.baseBlock,
@@ -4470,15 +4510,9 @@ async function processOpportunities(
           quoteProfitFloorBps: ctx.config.quoteProfitFloorBps,
           quoteSafetyBps: ctx.config.quoteSafetyBps,
           cache: ctx.cache,
-          // F8 default authority: the strict quote source is the only
-          // solver pricing path once the durable composition is the default.
-          // The legacy live backend is no longer a quote fallback; a solver
-          // without a strict source fails closed (no quote).
-          quoteSource: useConfiguredBackend && ctx.config.liveBackend !== "rpc" && !localVictimApply
-            ? ctx.strictQuoteSource
-            : undefined,
           deferPhase2Sim: localVictimApply !== null && useConfiguredBackend && ctx.config.liveBackend !== "rpc",
-          executionEvidence,
+          strictSession,
+          runtimeEvidence: Object.freeze([]),
         });
         deps.segMark("solve");
         ctx.counters.solverSuccess++;

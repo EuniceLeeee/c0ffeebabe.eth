@@ -3097,7 +3097,6 @@ async function replayFixture(
           {
             executor: DEFAULT_SEARCHER_EXECUTOR,
             safetyBps: 10_000n,
-            executionEvidence,
           },
         );
       } catch (error) {
@@ -3161,7 +3160,7 @@ async function replayFixture(
           quoteProfitFloorBps: 0n,
           quoteSafetyBps: 9_999n,
           cache,
-          executionEvidence,
+          runtimeEvidence: Object.freeze([]),
         });
       } catch (error) {
         throw stabilizeFamilyAttributedFailure(
@@ -3183,7 +3182,6 @@ async function replayFixture(
           {
             executor: DEFAULT_SEARCHER_EXECUTOR,
             safetyBps: 10_000n,
-            executionEvidence,
           },
         );
       } catch (error) {

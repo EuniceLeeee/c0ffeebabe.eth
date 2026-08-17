@@ -479,7 +479,7 @@ async function quoteDiagnosticRoute(
       {
         executor: DEFAULT_SEARCHER_EXECUTOR,
         safetyBps: 10_000n,
-        executionEvidence,
+          runtimeEvidence: Object.freeze([]),
       },
     );
     const quotedAmountOut = propagated.amounts.at(-1)!;
@@ -1822,7 +1822,7 @@ async function main(): Promise<void> {
         familyTimeoutMs: refineFamilyTimeoutMs,
         maxConcurrentPerFamily: refineMaxConcurrentPerFamily,
         executor: DEFAULT_SEARCHER_EXECUTOR,
-        executionEvidence,
+        runtimeEvidence: Object.freeze([]),
       },
     );
     if (TARGET_BLIND_FREEZE && refinement.deadlineHit) {
@@ -2559,7 +2559,7 @@ async function solveSelected(
         plans[0],
         opp.flashToken,
         state,
-        { executionEvidence },
+        { runtimeEvidence: Object.freeze([]) },
       );
       searchCenter = center.toString();
       solved = await solver.solve(plans[0], state, simulator, {
@@ -2567,7 +2567,7 @@ async function solveSelected(
         gssMaxTries: 8,
         quoteProfitFloorBps: 0n,
         quoteSafetyBps: 10000n,
-        executionEvidence,
+        runtimeEvidence: Object.freeze([]),
       });
     } catch (err) {
       solveError = err instanceof Error ? err.message : String(err);
@@ -2582,7 +2582,6 @@ async function solveSelected(
           {
             executor: DEFAULT_SEARCHER_EXECUTOR,
             safetyBps: 10000n,
-            executionEvidence,
           },
         );
         diagnosticHopAmounts = opp.seedEdges.map((edge, index) => ({

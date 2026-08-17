@@ -12,6 +12,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import "../../shared/adapters/index.js";
+import { ADDR } from "../../shared/constants/addresses.js";
 import { compilePlan } from "../../shared/compiler/compiler.js";
 import {
   buildExecuteCalldata,
@@ -322,7 +323,10 @@ async function main(): Promise<void> {
     planner.setMaxHops(Math.max(3, route.length));
     planner.setMaxPoolsPerToken(8);
     planner.setMaxCandidates(20);
-    const flashLiquidity = new FlashLiquidityCache(postState.provider);
+    const flashLiquidity = new FlashLiquidityCache(postState.provider, [
+      { adapterId: "morpho-flash", holder: ADDR.MORPHO },
+      { adapterId: "balancer-flash", holder: ADDR.BALANCER_VAULT },
+    ]);
     await flashLiquidity.refresh(unique(graph.flatMap((edge) => [edge.tokenIn, edge.tokenOut])));
     planner.setFlashLiquidity(flashLiquidity);
 

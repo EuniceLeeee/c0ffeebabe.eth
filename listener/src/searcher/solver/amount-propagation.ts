@@ -8,20 +8,22 @@ import {
 } from "../detector/blockscan-family-budget.js";
 import type { TokenEdge, TokenPath } from "../planner/token-graph.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
-import { quote, type V4QuotePathStats } from "./quoter.js";
-import type { QuoteRequest, QuoteResult } from "../live-state-backend.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
-import type { PendingExecutionEvidence } from "../venues/route-leg-adapter.js";
-
-export interface AmountQuoteSource {
-  quote(req: QuoteRequest): Promise<QuoteResult>;
-}
+import type { V4QuotePathStats } from "./quoter.js";
+import type {
+  StrictProductionExactHandle,
+  StrictProductionRuntimeSession,
+} from "../strict-production-runtime-session.js";
+import type { RuntimeEvidence } from
+  "../venues/adapter-family-plugin.js";
+import type { AdapterWorkControl } from "../adapter-work-intent.js";
 
 export interface PropagatedAmounts {
   /** Haircutted per-edge amounts used for downstream sizing and profit checks. */
   amounts: bigint[];
   /** Raw pre-haircut quote output for each edge; rawOutputs[i] is edge i output. */
   rawOutputs: bigint[];
+  /** Issuer-sealed exact authority for each edge; consumed unchanged by S4. */
+  exactHandles: StrictProductionExactHandle[];
 }
 
 /**
@@ -40,9 +42,10 @@ export async function propagateAmounts(
     executor?: string;
     fluidDebtBps?: bigint;
     cache?: PoolStateCache;
-    quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
-    executionEvidence?: readonly PendingExecutionEvidence[];
+    strictSession?: StrictProductionRuntimeSession;
+    runtimeEvidence?: readonly RuntimeEvidence[];
+    adapterWorkControl?: AdapterWorkControl;
     safetyBps?: bigint;
     /** Abort between hops when the solver deadline passes, so a single cold
      *  quote point doesn't run past the TTL uninterrupted. */
@@ -60,9 +63,10 @@ export async function propagateAmountsWithRawOutputs(
     executor?: string;
     fluidDebtBps?: bigint;
     cache?: PoolStateCache;
-    quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
-    executionEvidence?: readonly PendingExecutionEvidence[];
+    strictSession?: StrictProductionRuntimeSession;
+    runtimeEvidence?: readonly RuntimeEvidence[];
+    adapterWorkControl?: AdapterWorkControl;
     safetyBps?: bigint;
     /** Abort between hops when the solver deadline passes, so a single cold
      *  quote point doesn't run past the TTL uninterrupted. */
@@ -71,6 +75,7 @@ export async function propagateAmountsWithRawOutputs(
 ): Promise<PropagatedAmounts> {
   const amounts: bigint[] = [flashAmount];
   const rawOutputs: bigint[] = [];
+  const exactHandles: StrictProductionExactHandle[] = [];
   let cur = flashAmount;
   const safetyBps = options.safetyBps ?? 10000n;
   for (const edge of path.edges) {
@@ -79,12 +84,23 @@ export async function propagateAmountsWithRawOutputs(
     }
     let out: bigint;
     try {
-      const creditFamily = PRODUCTION_ADAPTER_FAMILIES.credits().find(
-        (family) => family.edgeAdapterIds.includes(edge.adapterId),
-      );
-      out = creditFamily && options.fluidDebtBps !== undefined
-        ? creditFamily.creditPolicy.quoteOutputByDebtBps(cur, options.fluidDebtBps)
-        : await quoteEdge(edge, cur, state, options);
+      if (options.strictSession === undefined || options.executor === undefined) {
+        throw new Error("amount propagation requires a strict current-source session");
+      }
+      const exact = await options.strictSession.issueExact({
+        edge,
+        amountIn: cur,
+        executor: options.executor,
+        runtimeEvidence: options.runtimeEvidence ?? Object.freeze([]),
+        ...(options.adapterWorkControl === undefined
+          ? {}
+          : { control: options.adapterWorkControl }),
+        ...(options.strictSession.blocksPrefixInversion(edge)
+          ? { creditDebtBps: options.fluidDebtBps }
+          : {}),
+      });
+      out = exact.amountOut;
+      exactHandles.push(exact);
     } catch (error) {
       if (
         error instanceof BlockScanFamilyAttributedError ||
@@ -113,69 +129,11 @@ export async function propagateAmountsWithRawOutputs(
     amounts.push(spendable);
     cur = spendable;
   }
-  return { amounts, rawOutputs };
+  return { amounts, rawOutputs, exactHandles };
 }
 
-/**
- * Quote one edge, preferring local closed-form math via the quoter (which uses
- * the warmed PoolStateCache for curve/v2/v3, falling back to state.call). The
- * live quoteSource (revm) is only a backstop for adapters/conditions local math
- * can't handle (e.g. V4, or a v3 swap crossing beyond the warmed words). In revm
- * mode `state` is backed by the prepared overlay, so local math reads the same
- * post-victim state the daemon holds — µs per trial instead of a daemon quote.
- */
-async function quoteEdge(
-  edge: TokenEdge,
-  amountIn: bigint,
-  state: StateBackend,
-  options: {
-    executor?: string;
-    cache?: PoolStateCache;
-    quoteSource?: AmountQuoteSource;
-    v4QuoteStats?: V4QuotePathStats;
-    executionEvidence?: readonly PendingExecutionEvidence[];
-  },
-): Promise<bigint> {
-  try {
-    return await quote(
-      edge.adapterId,
-      edge.target,
-      edge.tokenIn,
-      edge.tokenOut,
-      amountIn,
-      state,
-      options.cache,
-      edge.v4PoolKey,
-      edge.poolToken0,
-      edge.poolToken1,
-      options.v4QuoteStats,
-      options.executor,
-      options.executionEvidence,
-      edge,
-    );
-  } catch (err) {
-    if (!options.quoteSource) throw err;
-    const routeAdapter =
-      PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(edge.adapterId);
-    return (await options.quoteSource.quote({
-      canonicalEdgeId: edge.canonicalEdgeId,
-      instanceKey: edge.instanceKey,
-      executionVariantKey: edge.executionVariantKey,
-      adapterId: edge.adapterId,
-      target: edge.target,
-      tokenIn: edge.tokenIn,
-      tokenOut: edge.tokenOut,
-      amountIn,
-      v4PoolKey: edge.v4PoolKey,
-      poolToken0: edge.poolToken0,
-      poolToken1: edge.poolToken1,
-      executionEvidence: options.executionEvidence?.find(
-        (evidence) => evidence.familyId === routeAdapter?.id,
-      ),
-    })).amountOut;
-  }
-}
-
+/** Every hop is quoted by the same strict current-source session; no prepared
+ * backend or local-math fallback may mint a second exact authority. */
 function isControlFailure(error: unknown): boolean {
   return error instanceof Error &&
     /\b(?:abort(?:ed)?|deadline|timed?\s*out|timeout)\b/i.test(error.message);

@@ -11,14 +11,122 @@ import { AnvilSolver, resolveSearchCenter } from "../solver/solver.js";
 import { propagateAmounts } from "../solver/amount-propagation.js";
 import type {
   StateBackend,
-  StateCallControl,
 } from "../../shared/state/state-backend.js";
 import type { CandidatePlan } from "../planner/planner.js";
+import type { TokenEdge } from "../planner/token-graph.js";
+import type { StrictProductionRuntimeSession } from
+  "../strict-production-runtime-session.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import {
   BlockScanFamilyAttributedError,
 } from "../detector/blockscan-family-budget.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+
+const TEST_EXECUTOR = "0x00000000000000000000000000000000000000ee";
+
+interface TestExactRequest {
+  readonly adapterId: string;
+  readonly target: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly amountIn: bigint;
+}
+
+function testStrictSession(
+  plan: CandidatePlan,
+  quote: (request: TestExactRequest) => Promise<bigint>,
+  options: TestStrictSessionOptions = {},
+): StrictProductionRuntimeSession {
+  const pathEdges = [...(plan.tokenPath?.edges ?? [])];
+  const victimEffect = plan.opportunity.kind === "backrun-arb"
+    ? plan.opportunity.victimEffect
+    : undefined;
+  if (victimEffect?.kind === "swap") {
+    const impact = victimEffect.impact;
+    pathEdges.push({
+      adapterId: impact.matchedAdapterId,
+      target: impact.pool,
+      tokenIn: impact.tokenIn,
+      tokenOut: impact.tokenOut,
+      slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
+      ...(impact.poolId === undefined ? {} : { poolId: impact.poolId }),
+    });
+  }
+  return testStrictSessionForEdges(pathEdges, quote, options);
+}
+
+interface TestStrictSessionOptions {
+  readonly blocksPrefixInversion?: (edge: TokenEdge) => boolean;
+  readonly buildFundingRoot?: (
+    input: Parameters<StrictProductionRuntimeSession["buildFundingRoot"]>[0],
+  ) => unknown;
+}
+
+function testStrictSessionForEdges(
+  edges: readonly TokenEdge[],
+  quote: (request: TestExactRequest) => Promise<bigint>,
+  options: TestStrictSessionOptions = {},
+): StrictProductionRuntimeSession {
+  type ExactInput = Parameters<StrictProductionRuntimeSession["issueExact"]>[0];
+  type ExactHandle = Awaited<ReturnType<StrictProductionRuntimeSession["issueExact"]>>;
+  const issued = new WeakMap<object, ExactInput>();
+  return Object.freeze({
+    edges: Object.freeze([...edges]),
+    blocksPrefixInversion: (edge: TokenEdge) =>
+      options.blocksPrefixInversion?.(edge) ?? false,
+    creditDebtBpsCandidates: () => Object.freeze([0n]),
+    fundingActionIds: () => Object.freeze(["morpho-flash"]),
+    async issueExact(input: ExactInput): Promise<ExactHandle> {
+      const amountOut = await quote({
+        adapterId: input.edge.adapterId,
+        target: input.edge.target,
+        tokenIn: input.edge.tokenIn,
+        tokenOut: input.edge.tokenOut,
+        amountIn: input.amountIn,
+      });
+      const handle = Object.freeze({ amountOut }) as ExactHandle;
+      issued.set(handle as object, input);
+      return handle;
+    },
+    buildExecution(input: Parameters<StrictProductionRuntimeSession["buildExecution"]>[0]) {
+      const exact = issued.get(input.exact as object);
+      if (exact === undefined || exact.edge !== input.edge) {
+        throw new Error("test strict session rejected a foreign exact handle");
+      }
+      return Object.freeze({
+        status: "resolved" as const,
+        fragment: Object.freeze({
+          requirements: Object.freeze([]),
+          nodes: Object.freeze([Object.freeze({
+            adapterId: input.edge.adapterId,
+            target: input.edge.target,
+            tokenIn: input.edge.tokenIn,
+            tokenOut: input.edge.tokenOut,
+            amount: exact.amountIn,
+            params: Object.freeze({ minAmountOut: input.minAmountOut }),
+            children: Object.freeze([]),
+          })]),
+        }),
+      });
+    },
+    buildFundingRoot(
+      input: Parameters<StrictProductionRuntimeSession["buildFundingRoot"]>[0],
+    ) {
+      if (options.buildFundingRoot !== undefined) {
+        return options.buildFundingRoot(input);
+      }
+      return Object.freeze({
+        adapterId: input.actionAdapterId,
+        target: input.asset,
+        tokenIn: input.asset,
+        tokenOut: input.asset,
+        amount: input.amount,
+        params: Object.freeze({ minProfit: input.minProfit }),
+        children: Object.freeze([...input.children]),
+      });
+    },
+  }) as unknown as StrictProductionRuntimeSession;
+}
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -150,17 +258,16 @@ async function testSearchCenterTokenNormalization(): Promise<void> {
   } as unknown as Parameters<typeof resolveSearchCenter>[0];
 
   const center = await resolveSearchCenter(plan, weth, {} as StateBackend, {
-    quoteSource: {
-      quote: async (req) => {
+    executor: TEST_EXECUTOR,
+    strictSession: testStrictSession(plan, async (req) => {
         quoteCalls++;
         assert(req.adapterId === "univ3-swap", `center quote: adapter ${req.adapterId}`);
         assert(req.target === pool, `center quote: target ${req.target}`);
         assert(req.tokenIn === usdc, `center quote: tokenIn ${req.tokenIn}`);
         assert(req.tokenOut === weth, `center quote: tokenOut ${req.tokenOut}`);
         assert(req.amountIn === 35_000_000n, `center quote: amountIn ${req.amountIn}`);
-        return { amountOut: quotedWeth, latencyMs: 0 };
-      },
-    },
+        return quotedWeth;
+    }),
   });
 
   assert(quoteCalls === 1, `center quote: expected one call, got ${quoteCalls}`);
@@ -208,15 +315,14 @@ async function testUnboundedReverseImpactCenter(): Promise<void> {
   } as unknown as CandidatePlan;
 
   const center = await resolveSearchCenter(plan, weth, {} as StateBackend, {
-    quoteSource: {
-      quote: async (req) => {
+    executor: TEST_EXECUTOR,
+    strictSession: testStrictSession(plan, async (req) => {
         if (req.target === pools[3] && req.tokenIn === weth && req.tokenOut === cel) {
-          return { amountOut: 1000n, latencyMs: 0 };
+          return 1000n;
         }
         const multiplier = req.target === pools[0] ? 2n : req.target === pools[1] ? 3n : 5n;
-        return { amountOut: req.amountIn * multiplier, latencyMs: 0 };
-      },
-    },
+        return req.amountIn * multiplier;
+    }),
   });
 
   assert(center === 34n, `unbounded reverse center: expected 34, got ${center}`);
@@ -258,15 +364,14 @@ async function testCrossDecimalReverseImpactCenter(): Promise<void> {
   } as unknown as CandidatePlan;
 
   const center = await resolveSearchCenter(plan, weth, {} as StateBackend, {
-    quoteSource: {
-      quote: async (req) => {
+    executor: TEST_EXECUTOR,
+    strictSession: testStrictSession(plan, async (req) => {
         if (req.target === impactPool && req.tokenIn === weth && req.tokenOut === usdc) {
-          return { amountOut: 2_000_000n, latencyMs: 0 };
+          return 2_000_000n;
         }
         prefixQuotes++;
-        return { amountOut: req.amountIn / 1_000_000_000_000n, latencyMs: 0 };
-      },
-    },
+        return req.amountIn / 1_000_000_000_000n;
+    }),
   });
 
   assert(center >= 2_000_000_000_000_000_000n, `cross-decimal center too small: ${center}`);
@@ -308,14 +413,12 @@ async function testMinimalNonZeroReverseImpactCenter(): Promise<void> {
   } as unknown as CandidatePlan;
 
   const center = await resolveSearchCenter(plan, tokenA, {} as StateBackend, {
-    quoteSource: {
-      quote: async (req) => ({
-        amountOut: req.target === impactPool && req.tokenIn === tokenA
+    executor: TEST_EXECUTOR,
+    strictSession: testStrictSession(plan, async (req) =>
+      req.target === impactPool && req.tokenIn === tokenA
           ? 1n
           : req.amountIn / 1_000_000_000_000n,
-        latencyMs: 0,
-      }),
-    },
+    ),
   });
 
   assert(center >= 1_000_000_000_000n, `minimal nonzero center too small: ${center}`);
@@ -357,12 +460,13 @@ async function testBoundedCenterFallsBackToCap(): Promise<void> {
   } as unknown as CandidatePlan;
 
   const center = await resolveSearchCenter(plan, tokenA, {} as StateBackend, {
-    quoteSource: {
-      quote: async (req) => ({
-        amountOut: req.target === impactPool && req.tokenIn === tokenA ? 1000n : req.amountIn,
-        latencyMs: 0,
-      }),
-    },
+    executor: TEST_EXECUTOR,
+    strictSession: testStrictSession(
+      plan,
+      async (req) => req.target === impactPool && req.tokenIn === tokenA
+        ? 1000n
+        : req.amountIn,
+    ),
   });
 
   assert(center === 100n, `bounded reverse-impact center: ${center}`);
@@ -423,20 +527,15 @@ async function testMinimalNonZeroCenterFindsProfit(): Promise<void> {
     {
       finalSimTopN: 1,
       quoteSafetyBps: 10000n,
-      quoteSource: {
-        quote: async (req) => {
+      strictSession: testStrictSession(plan, async (req) => {
           if (req.target === impactPool && req.tokenIn === tokenA) {
-            return { amountOut: 1n, latencyMs: 0 };
+            return 1n;
           }
           if (req.target === prefixPool) {
-            return { amountOut: req.amountIn / 1_000_000_000_000n, latencyMs: 0 };
+            return req.amountIn / 1_000_000_000_000n;
           }
-          return {
-            amountOut: req.amountIn === 1n ? 1_500_000_000_000n : req.amountIn,
-            latencyMs: 0,
-          };
-        },
-      },
+          return req.amountIn === 1n ? 1_500_000_000_000n : req.amountIn;
+      }),
     },
   );
 
@@ -485,17 +584,16 @@ async function testReverseImpactDeadlineBetweenPrefixHops(): Promise<void> {
   try {
     await resolveSearchCenter(plan, tokenA, {} as StateBackend, {
       shouldStop: () => stop,
-      quoteSource: {
-        quote: async (req) => {
-          if (req.target === pools[2] && req.tokenIn === tokenA) return { amountOut: 10n, latencyMs: 0 };
+      executor: TEST_EXECUTOR,
+      strictSession: testStrictSession(plan, async (req) => {
+          if (req.target === pools[2] && req.tokenIn === tokenA) return 10n;
           if (req.target === pools[0]) {
             stop = true;
-            return { amountOut: req.amountIn, latencyMs: 0 };
+            return req.amountIn;
           }
           secondPrefixQuotes++;
-          return { amountOut: req.amountIn, latencyMs: 0 };
-        },
-      },
+          return req.amountIn;
+      }),
     });
   } catch (error) {
     message = error instanceof Error ? error.message : String(error);
@@ -540,12 +638,15 @@ async function testParameterizedPrefixKeepsDebtSearch(): Promise<void> {
   } as unknown as CandidatePlan;
 
   const center = await resolveSearchCenter(plan, weth, {} as StateBackend, {
-    quoteSource: {
-      quote: async () => {
+    executor: TEST_EXECUTOR,
+    strictSession: testStrictSession(
+      plan,
+      async () => {
         quotes++;
         throw new Error("parameterized prefix must be left to the debt-bps search");
       },
-    },
+      { blocksPrefixInversion: (edge) => edge.adapterId === "fluid-vault" },
+    ),
   });
 
   assert(center === 123_456n, `parameterized prefix center: ${center}`);
@@ -571,9 +672,18 @@ async function testDefaultSafetyHasNoHaircut(): Promise<void> {
     1000n,
     {} as StateBackend,
     {
-      quoteSource: {
-        quote: async () => ({ amountOut: 1234n, latencyMs: 0 }),
-      },
+      executor: TEST_EXECUTOR,
+      strictSession: testStrictSessionForEdges(
+        [{
+          adapterId: "univ2-swap",
+          target: "0x0000000000000000000000000000000000000001",
+          tokenIn: tokenA,
+          tokenOut: tokenB,
+          slotKind: "swap",
+          ...deriveEdgeTaxonomy("swap"),
+        }],
+        async () => 1234n,
+      ),
     },
   );
 
@@ -655,9 +765,7 @@ async function testSolverUsesUnifiedDefaultSafety(): Promise<void> {
         gridHalfWidth: 0,
         finalSimTopN: 1,
         gssMaxTries: 3,
-        quoteSource: {
-          quote: async (req) => ({ amountOut: req.amountIn * 2n, latencyMs: 0 }),
-        },
+        strictSession: testStrictSession(plan, async (req) => req.amountIn * 2n),
       },
     );
   } finally {
@@ -726,9 +834,7 @@ async function testQuoteProfitFloorAdmitsNearMiss(): Promise<void> {
       finalSimTopN: 1,
       quoteSafetyBps: 10000n,
       quoteProfitFloorBps: 20n,
-      quoteSource: {
-        quote: async (req) => ({ amountOut: req.amountIn - 1n, latencyMs: 0 }),
-      },
+      strictSession: testStrictSession(plan, async (req) => req.amountIn - 1n),
     },
   );
 
@@ -796,12 +902,7 @@ async function testDeferredPhasePreservesTopNFallbacks(): Promise<void> {
       gridHalfWidth: 2,
       gssMaxTries: 3,
       quoteSafetyBps: 10000n,
-      quoteSource: {
-        quote: async (req) => ({
-          amountOut: req.amountIn * 2n,
-          latencyMs: 0,
-        }),
-      },
+      strictSession: testStrictSession(plan, async (req) => req.amountIn * 2n),
       onDeferredCandidates: (candidates) => {
         deferred = candidates;
       },
@@ -872,6 +973,9 @@ async function testSolverPreservesTypedLegOwner(): Promise<void> {
         gridHalfWidth: 1,
         gssMaxTries: 1,
         quoteSafetyBps: 10000n,
+        strictSession: testStrictSession(plan, async () => {
+          throw new Error("typed owner exact failure");
+        }),
       },
     );
   } catch (error) {
@@ -885,24 +989,18 @@ async function testSolverPreservesTypedLegOwner(): Promise<void> {
   console.log("[amtsearch] solver preserves typed per-leg family owner: PASS");
 }
 
-async function testSolverAbsoluteDeadlineAbortsNeverSettlingStateQuote(): Promise<void> {
-  const plan = deadlineRegressionPlan("never-state");
-  let observedControl: StateCallControl | undefined;
-  const state = {
-    call(
-      _req: { to: string; data: string; from?: string },
-      control?: StateCallControl,
-    ): Promise<string> {
-      observedControl = control;
-      return new Promise(() => undefined);
-    },
-  } as unknown as StateBackend;
+async function testSolverAbsoluteDeadlineAbortsNeverSettlingStrictExact(): Promise<void> {
+  const plan = deadlineRegressionPlan("never-exact");
   const startedAt = Date.now();
   let message = "";
   try {
     await new AnvilSolver().solve(
       plan,
-      state,
+      {
+        call: async () => {
+          throw new Error("strict exact test unexpectedly touched StateBackend");
+        },
+      } as unknown as StateBackend,
       {
         executor: "0x00000000000000000000000000000000000000ee",
         simulate: async () => ({ success: false, netProfit: 0n }),
@@ -912,6 +1010,10 @@ async function testSolverAbsoluteDeadlineAbortsNeverSettlingStateQuote(): Promis
         gridHalfWidth: 0,
         gssMaxTries: 1,
         quoteSafetyBps: 10000n,
+        strictSession: testStrictSession(
+          plan,
+          async () => await new Promise<bigint>(() => undefined),
+        ),
       },
     );
   } catch (error) {
@@ -920,34 +1022,27 @@ async function testSolverAbsoluteDeadlineAbortsNeverSettlingStateQuote(): Promis
 
   const elapsedMs = Date.now() - startedAt;
   assert(/absolute deadline reached/.test(message), `absolute deadline error: ${message}`);
-  assert(elapsedMs < 500, `never-settling state quote held solver for ${elapsedMs}ms`);
-  assert(observedControl?.deadlineAtMs === startedAt + 60, "state call did not receive absolute deadline");
-  assert(observedControl?.signal?.aborted === true, "state call did not receive the aborted solver signal");
-  console.log("[amtsearch] absolute deadline aborts never-settling state quote: PASS");
+  assert(elapsedMs < 500, `never-settling strict exact held solver for ${elapsedMs}ms`);
+  console.log("[amtsearch] absolute deadline aborts never-settling strict exact: PASS");
 }
 
-async function testSolverCallerAbortStopsNeverSettlingFamilyPlan(): Promise<void> {
-  const routeRegistry = PRODUCTION_ADAPTER_FAMILIES.routes();
-  const edgeOwners = (
-    routeRegistry as unknown as {
-      byEdgeAdapter: Map<string, ReturnType<typeof routeRegistry.forEdge>>;
-    }
-  ).byEdgeAdapter;
-  const original = edgeOwners.get("univ2-swap");
-  assert(original !== undefined, "missing univ2 family for deadline regression");
+async function testSolverCallerAbortStopsNeverSettlingStrictFundingRoot(): Promise<void> {
+  const plan = deadlineRegressionPlan("never-funding-root");
   let quoteCalls = 0;
-  let planBuildStarted = false;
-  edgeOwners.set("univ2-swap", {
-    ...original!,
-    quoteExact: async (ctx) => {
+  let fundingRootStarted = false;
+  const strictSession = testStrictSession(
+    plan,
+    async (request) => {
       quoteCalls++;
-      return ctx.amountIn * 2n;
+      return request.amountIn * 2n;
     },
-    buildPlanFragment: async () => {
-      planBuildStarted = true;
-      return new Promise(() => undefined);
+    {
+      buildFundingRoot: () => {
+        fundingRootStarted = true;
+        return new Promise(() => undefined);
+      },
     },
-  });
+  );
 
   const controller = new AbortController();
   const abortTimer = setTimeout(
@@ -958,7 +1053,7 @@ async function testSolverCallerAbortStopsNeverSettlingFamilyPlan(): Promise<void
   let message = "";
   try {
     await new AnvilSolver().solve(
-      deadlineRegressionPlan("never-plan"),
+      plan,
       {
         call: async () => {
           throw new Error("family quote unexpectedly touched state");
@@ -974,24 +1069,24 @@ async function testSolverCallerAbortStopsNeverSettlingFamilyPlan(): Promise<void
         gssMaxTries: 1,
         finalSimTopN: 1,
         quoteSafetyBps: 10000n,
+        strictSession,
       },
     );
   } catch (error) {
     message = error instanceof Error ? error.message : String(error);
   } finally {
     clearTimeout(abortTimer);
-    edgeOwners.set("univ2-swap", original!);
   }
 
   const elapsedMs = Date.now() - startedAt;
   assert(
-    planBuildStarted,
-    `never-settling family plan promise was not reached ` +
+    fundingRootStarted,
+    `never-settling strict Funding root promise was not reached ` +
       `(quotes=${quoteCalls}, error=${message})`,
   );
   assert(/aborted by caller/.test(message), `caller abort error: ${message}`);
-  assert(elapsedMs < 1_000, `never-settling family plan held solver for ${elapsedMs}ms`);
-  console.log("[amtsearch] caller abort stops never-settling family plan: PASS");
+  assert(elapsedMs < 1_000, `never-settling strict Funding root held solver for ${elapsedMs}ms`);
+  console.log("[amtsearch] caller abort stops never-settling strict Funding root: PASS");
 }
 
 function deadlineRegressionPlan(cycleId: string): CandidatePlan {
@@ -1065,8 +1160,8 @@ async function main(): Promise<void> {
   await testQuoteProfitFloorAdmitsNearMiss();
   await testDeferredPhasePreservesTopNFallbacks();
   await testSolverPreservesTypedLegOwner();
-  await testSolverAbsoluteDeadlineAbortsNeverSettlingStateQuote();
-  await testSolverCallerAbortStopsNeverSettlingFamilyPlan();
+  await testSolverAbsoluteDeadlineAbortsNeverSettlingStrictExact();
+  await testSolverCallerAbortStopsNeverSettlingStrictFundingRoot();
   console.log("amount-search PASS (20/20)");
 }
 

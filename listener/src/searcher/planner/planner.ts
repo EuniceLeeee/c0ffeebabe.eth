@@ -5,7 +5,6 @@ import { passesConstraints } from "../templates/constraints.js";
 import { buildTokenPaths, type TokenEdge, type TokenPath } from "./token-graph.js";
 import type { FlashLiquidityView } from "../solver/flash-liquidity.js";
 import type { ProfitTokenValuation } from "../profit-token-valuation.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
   edgeMatchesVictimSelector,
   type OracleVictimEffect,
@@ -123,7 +122,7 @@ export class TemplatePlanner implements Planner {
   private profitTokenValuation: ProfitTokenValuation | null = null;
   private lastDiagnostic: NoCandidateDiagnostic | null = null;
 
-  /** Inject a pre-built graph (from buildTokenGraph). Falls back to hardcoded default. */
+  /** Inject the sole ready-generation Graph. An absent Graph yields no plans. */
   setGraph(graph: TokenEdge[]): void {
     this.graph = graph;
   }
@@ -187,9 +186,9 @@ export class TemplatePlanner implements Planner {
         break;
       }
       const flashSlot = template.slots.find((s) => s.kind === "flash");
-      const defaultFlash = PRODUCTION_ADAPTER_FAMILIES.defaultFunding().funding.actionAdapterId;
-      const flashAdapters = flashSlot?.adapters ?? [defaultFlash];
-      const preferredFlash = flashAdapters[0] ?? defaultFlash;
+      const flashAdapters = flashSlot?.adapters ?? [];
+      const preferredFlash = flashAdapters[0];
+      if (preferredFlash === undefined) continue;
 
       // Full graph (template-adapter-filtered only). Relevance to the victim
       // impact is enforced at the PATH level by focusPathsOnImpact below — NOT by
@@ -387,9 +386,9 @@ export class TemplatePlanner implements Planner {
         break;
       }
       const flashSlot = template.slots.find((s) => s.kind === "flash");
-      const defaultFlash = PRODUCTION_ADAPTER_FAMILIES.defaultFunding().funding.actionAdapterId;
-      const flashAdapters = flashSlot?.adapters ?? [defaultFlash];
-      const preferredFlash = liveFlashSource?.adapterId ?? flashAdapters[0] ?? defaultFlash;
+      const flashAdapters = flashSlot?.adapters ?? [];
+      const preferredFlash = liveFlashSource?.adapterId ?? flashAdapters[0];
+      if (preferredFlash === undefined) continue;
       if (liveFlashSource && !flashAdapters.includes(liveFlashSource.adapterId)) {
         continue;
       }
@@ -437,15 +436,18 @@ function minBigint(a: bigint, b: bigint): bigint {
 }
 
 function buildAbstractRoot(path: TokenPath, opp: Pick<PlannedOpportunity, "startToken" | "profitToken">, flashAdapterId: string): PlanNode {
-  const flashFamily = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(flashAdapterId);
-  if (!flashFamily) throw new Error(`unknown flash adapter: ${flashAdapterId}`);
+  // This root is a non-executable planning shell. S4 discards it and asks the
+  // current-source strict session to build a Funding-issued root. Keeping an
+  // unresolved target here makes accidental compilation fail closed instead
+  // of consulting the retired central Funding registry.
   return {
     adapterId: flashAdapterId,
-    target: flashFamily.funding.target,
+    target: "strict-current-source-funding",
     tokenIn: opp.startToken,
     tokenOut: opp.startToken,
     amount: { kind: "balance-bps", token: opp.startToken, account: "executor", bps: 0 },
     params: {
+      authority: "strict-current-source-session",
       mode: "mode-b",
       route: path.edges.map((edge) => ({
         adapterId: edge.adapterId,

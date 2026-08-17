@@ -1,7 +1,10 @@
 import { ethers } from "ethers";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { TokenEdge, V4PoolKey } from "../planner/token-graph.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import type { StrictProductionRuntimeSession } from
+  "../strict-production-runtime-session.js";
+import type { RuntimeEvidence } from
+  "../venues/adapter-family-plugin.js";
 import type {
   PendingExecutionEvidence,
   V4QuotePathStats,
@@ -44,29 +47,28 @@ export async function quote(
   executor?: string,
   executionEvidence?: readonly PendingExecutionEvidence[],
   edge?: TokenEdge,
+  strictSession?: StrictProductionRuntimeSession,
+  runtimeEvidence: readonly RuntimeEvidence[] = Object.freeze([]),
 ): Promise<bigint> {
   if (amountIn <= 0n) return 0n;
-  const routeAdapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(adapterId);
-  if (routeAdapter) {
-    const familyEvidence = executionEvidence?.find(
-      (evidence) => evidence.familyId === routeAdapter.id,
-    );
-    return routeAdapter.quoteExact({
-      state,
-      executor,
-      target,
-      edgeAdapterId: adapterId,
-      amountIn,
-      tokenIn,
-      tokenOut,
-      poolToken0,
-      poolToken1,
-      cache,
-      v4PoolKey,
-      v4QuoteStats,
-      executionEvidence: familyEvidence,
+  void state;
+  void cache;
+  void v4PoolKey;
+  void poolToken0;
+  void poolToken1;
+  void v4QuoteStats;
+  void executionEvidence;
+  if (strictSession !== undefined && edge !== undefined && executor !== undefined) {
+    const exact = await strictSession.issueExact({
       edge,
+      amountIn,
+      executor,
+      runtimeEvidence,
     });
+    return exact.amountOut;
   }
-  throw new MissingRouteQuoterError(adapterId);
+  throw new MissingRouteQuoterError(
+    `${adapterId} (strict current-source session required for ` +
+      `${target}:${tokenIn}->${tokenOut})`,
+  );
 }

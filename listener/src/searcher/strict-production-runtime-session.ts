@@ -1,7 +1,15 @@
-import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
+import type {
+  AdapterWorkControl,
+  CentralAdapterRuntime,
+} from "./adapter-work-intent.js";
 import {
   buildFamilyRouteGraphView,
 } from "./adapter-family-graph-runtime.js";
+import {
+  buildFundingBorrowFragment,
+  executeFundingFamilyLiquidity,
+  type PreparedFundingOffer,
+} from "./adapter-funding-runtime.js";
 import {
   buildCreditExecutionFragment,
   executeCreditRiskQuote,
@@ -12,18 +20,26 @@ import {
   type SealedCreditRiskQuoteHandle,
 } from "./adapter-credit-runtime.js";
 import type { TokenEdge } from "./planner/token-graph.js";
+import type { ResolvedPlanNode } from "../shared/types/plan.js";
 import type { RuntimeEvidence } from
   "./venues/adapter-family-plugin.js";
+import type {
+  NormalizedSwapVictimImpact,
+  UnifiedObservation,
+} from "./venues/adapter-family-plugin.js";
 import {
   buildFamilyExecutionFragment,
+  executeFamilyVictimReplay,
   executeFamilyExactQuote,
   reissuePreparedInstanceAuthority,
   reissuePreparedInstanceRouteHandles,
   type FamilyExecutionOutcome,
+  type FamilyVictimReplayOutcome,
   type FamilyRouteRuntimeHandle,
   type PreparedFamilyInstance,
   type SealedFamilyExactQuoteHandle,
 } from "./venues/adapter-family-runtime.js";
+import type { CanonicalValue } from "./venues/canonical-value.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import type { CanonicalEdgeId } from
@@ -62,6 +78,11 @@ interface ExactBinding {
   readonly route: StrictRouteBinding;
   readonly executor: string;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
+}
+
+interface FundingBinding {
+  readonly family: LoadedFamilyBox;
+  readonly offer: PreparedFundingOffer;
 }
 
 /**
@@ -110,10 +131,11 @@ export class StrictProductionRuntimeRoot {
     Object.freeze(this);
   }
 
-  createSession(input: {
+  async createSession(input: {
     readonly source: CanonicalSource;
     readonly runtime: CentralAdapterRuntime;
-  }): StrictProductionRuntimeSession {
+    readonly fundingAssets: readonly string[];
+  }): Promise<StrictProductionRuntimeSession> {
     assertCanonicalSource(input.source);
     input.runtime.generationFence.assertCurrent(
       input.source.generation,
@@ -193,6 +215,23 @@ export class StrictProductionRuntimeRoot {
           });
       bindings.set(projected.edge.canonicalEdgeId, binding);
     }
+
+    const fundingBindings: FundingBinding[] = [];
+    for (const family of this.#catalog.listAll()) {
+      if (family.plugin.manifest.domain !== "funding") continue;
+      const result = await executeFundingFamilyLiquidity({
+        family,
+        assets: input.fundingAssets,
+        source: input.source,
+        generation: input.source.generation,
+        runtime: input.runtime,
+        publisher: Object.freeze({ publish() {} }),
+      });
+      fundingBindings.push(...result.offers.map((offer) => Object.freeze({
+        family,
+        offer,
+      })));
+    }
     return new StrictProductionRuntimeSession({
       catalog: this.#catalog,
       source: input.source,
@@ -200,6 +239,7 @@ export class StrictProductionRuntimeRoot {
       readySource: this.#readySource,
       edges: view.edges,
       bindings,
+      fundingBindings,
     });
   }
 }
@@ -212,6 +252,7 @@ export class StrictProductionRuntimeSession {
   readonly #catalog: FamilyCapabilityCatalog;
   readonly #runtime: CentralAdapterRuntime;
   readonly #bindings: ReadonlyMap<CanonicalEdgeId, StrictRouteBinding>;
+  readonly #fundingBindings: readonly FundingBinding[];
   readonly #exactBindings = new WeakMap<object, ExactBinding>();
 
   constructor(input: {
@@ -221,6 +262,7 @@ export class StrictProductionRuntimeSession {
     readonly runtime: CentralAdapterRuntime;
     readonly edges: readonly TokenEdge[];
     readonly bindings: ReadonlyMap<CanonicalEdgeId, StrictRouteBinding>;
+    readonly fundingBindings: readonly FundingBinding[];
   }) {
     this.#catalog = input.catalog;
     this.source = Object.freeze({ ...input.source });
@@ -228,6 +270,7 @@ export class StrictProductionRuntimeSession {
     this.#runtime = input.runtime;
     this.edges = Object.freeze([...input.edges]);
     this.#bindings = new Map(input.bindings);
+    this.#fundingBindings = Object.freeze([...input.fundingBindings]);
     Object.freeze(this);
   }
 
@@ -239,12 +282,152 @@ export class StrictProductionRuntimeSession {
     return this.#resolve(edge).kind === "credit";
   }
 
-  async quoteExact(input: {
+  fundingActionIds(asset: string, amount?: bigint): readonly string[] {
+    const normalizedAsset = asset.toLowerCase();
+    return Object.freeze(this.#fundingBindings
+      .filter(({ offer }) =>
+        offer.asset.toLowerCase() === normalizedAsset &&
+        (amount === undefined || offer.maxBorrow >= amount)
+      )
+      .sort((left, right) =>
+        left.offer.planningPriority - right.offer.planningPriority ||
+        left.offer.liquidityPriority - right.offer.liquidityPriority ||
+        left.offer.actionAdapterId.localeCompare(right.offer.actionAdapterId)
+      )
+      .map(({ offer }) => offer.actionAdapterId));
+  }
+
+  buildFundingRoot(input: {
+    readonly actionAdapterId: string;
+    readonly asset: string;
+    readonly amount: bigint;
+    readonly minProfit: bigint;
+    readonly children: readonly ResolvedPlanNode[];
+  }): ResolvedPlanNode {
+    const normalizedAsset = input.asset.toLowerCase();
+    const binding = this.#fundingBindings.find(({ offer }) =>
+      offer.actionAdapterId === input.actionAdapterId &&
+      offer.asset.toLowerCase() === normalizedAsset &&
+      offer.maxBorrow >= input.amount
+    );
+    if (binding === undefined) {
+      throw new Error(
+        `strict session has no Funding offer ${input.actionAdapterId} ` +
+          `${input.asset} amount=${input.amount}`,
+      );
+    }
+    const fragment = buildFundingBorrowFragment({
+      family: binding.family,
+      offer: binding.offer,
+      source: this.source,
+      generation: this.source.generation,
+      amount: input.amount,
+      minProfit: input.minProfit,
+      children: Object.freeze([Object.freeze({
+        requirements: Object.freeze([]),
+        nodes: Object.freeze([...input.children]),
+      })]),
+    });
+    if (fragment.requirements.length !== 0 || fragment.nodes.length !== 1) {
+      throw new Error("strict Funding fragment must produce one closed root");
+    }
+    return fragment.nodes[0]!;
+  }
+
+  supportsVictimReplay(edge: TokenEdge): boolean {
+    const route = this.#resolve(edge);
+    if (
+      route.kind !== "route" ||
+      route.family.plugin.manifest.domain !== "swap"
+    ) {
+      return false;
+    }
+    const plugin = route.family.plugin as unknown as {
+      readonly swap: {
+        readonly victimSupport: string;
+        readonly replay?: unknown;
+      };
+    };
+    return plugin.swap.victimSupport === "replay" &&
+      plugin.swap.replay !== undefined;
+  }
+
+  replayVictim(input: {
+    readonly edge: TokenEdge;
+    readonly impact: NormalizedSwapVictimImpact;
+    readonly preState: CanonicalValue | null;
+    readonly validUntil: bigint;
+  }): FamilyVictimReplayOutcome {
+    const route = this.#resolve(input.edge);
+    if (route.kind !== "route") {
+      throw new Error("Credit route cannot own a swap victim replay");
+    }
+    return executeFamilyVictimReplay({
+      family: route.family,
+      route: route.handle,
+      impact: input.impact,
+      preState: input.preState,
+      validUntil: input.validUntil,
+      source: this.source,
+      generation: this.source.generation,
+      runtime: this.#runtime,
+    });
+  }
+
+  runtimeEvidenceFromObservation(
+    observation: UnifiedObservation,
+  ): readonly RuntimeEvidence[] {
+    assertObservationSource(observation, this.source);
+    const evidence: RuntimeEvidence[] = [];
+    const seen = new Set<string>();
+    for (const match of this.#catalog.matches(observation)) {
+      const family = this.#catalog.forStrictFamily(match.familyId);
+      if (!("discovery" in family.plugin)) continue;
+      const derive = family.plugin.discovery?.runtimeEvidenceFromObservation;
+      if (derive === undefined) continue;
+      for (const item of derive({ observation, source: this.source })) {
+        if (
+          item.familyId !== family.plugin.manifest.familyId ||
+          item.source.number !== this.source.number ||
+          item.source.hash.toLowerCase() !== this.source.hash.toLowerCase() ||
+          item.source.generation !== this.source.generation
+        ) {
+          throw new Error("plugin runtime evidence escaped its Family/source");
+        }
+        const key = `${item.familyId}\u001f${item.evidenceId}\u001f${item.evidenceHash}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        evidence.push(item);
+      }
+    }
+    return Object.freeze(evidence);
+  }
+
+  creditDebtBpsCandidates(path: { readonly edges: readonly TokenEdge[] }): readonly bigint[] {
+    for (const edge of path.edges) {
+      const route = this.#resolve(edge);
+      if (route.kind !== "credit") continue;
+      const plugin = route.family.plugin;
+      if (plugin.manifest.domain !== "credit") {
+        throw new Error("strict Credit binding escaped its domain");
+      }
+      const risk = (plugin as unknown as {
+        readonly credit: {
+          readonly risk: { readonly debtBpsCandidates: readonly bigint[] };
+        };
+      }).credit.risk;
+      return Object.freeze([...risk.debtBpsCandidates]);
+    }
+    return Object.freeze([0n]);
+  }
+
+  async issueExact(input: {
     readonly edge: TokenEdge;
     readonly amountIn: bigint;
     readonly executor: string;
     readonly runtimeEvidence: readonly RuntimeEvidence[];
     readonly creditDebtBps?: bigint;
+    readonly control?: AdapterWorkControl;
   }): Promise<StrictProductionExactHandle> {
     this.#runtime.generationFence.assertCurrent(
       this.source.generation,
@@ -264,6 +447,7 @@ export class StrictProductionRuntimeSession {
           source: this.source,
           generation: this.source.generation,
           runtime: this.#runtime,
+          ...(input.control === undefined ? {} : { control: input.control }),
         })
       : await executeFamilyExactQuote({
           family: route.family,
@@ -274,6 +458,7 @@ export class StrictProductionRuntimeSession {
           source: this.source,
           generation: this.source.generation,
           runtime: this.#runtime,
+          ...(input.control === undefined ? {} : { control: input.control }),
         });
     if (exact.status !== "resolved") {
       const reason = "reasonCode" in exact
@@ -296,7 +481,6 @@ export class StrictProductionRuntimeSession {
     readonly exact: StrictProductionExactHandle;
     readonly minAmountOut: bigint;
     readonly executor: string;
-    readonly runtimeEvidence: readonly RuntimeEvidence[];
   }): StrictProductionExecutionOutcome {
     const route = this.#resolve(input.edge);
     const exactBinding = this.#exactBindings.get(input.exact);
@@ -316,7 +500,7 @@ export class StrictProductionRuntimeSession {
         risk: input.exact as SealedCreditRiskQuoteHandle,
         minAmountOut: input.minAmountOut,
         executor: input.executor,
-        runtimeEvidence: input.runtimeEvidence,
+        runtimeEvidence: exactBinding.runtimeEvidence,
         source: this.source,
         generation: this.source.generation,
       });
@@ -333,7 +517,7 @@ export class StrictProductionRuntimeSession {
       exact: input.exact as SealedFamilyExactQuoteHandle,
       minAmountOut: input.minAmountOut,
       executor: input.executor,
-      runtimeEvidence: input.runtimeEvidence,
+      runtimeEvidence: exactBinding.runtimeEvidence,
     });
   }
 
@@ -410,5 +594,18 @@ function assertCanonicalSource(source: CanonicalSource): void {
     !/^0x[0-9a-fA-F]{64}$/.test(source.hash)
   ) {
     throw new Error("strict production session source must be canonical");
+  }
+}
+
+function assertObservationSource(
+  observation: UnifiedObservation,
+  source: CanonicalSource,
+): void {
+  if (
+    observation.source.number !== source.number ||
+    observation.source.hash.toLowerCase() !== source.hash.toLowerCase() ||
+    observation.source.generation !== source.generation
+  ) {
+    throw new Error("runtime observation escaped its current-source session");
   }
 }

@@ -1,6 +1,7 @@
 import {
   executeAdapterWork,
   type AdapterWorkOutcome,
+  type AdapterWorkControl,
   type CentralAdapterRuntime,
 } from "../adapter-work-intent.js";
 import {
@@ -1097,6 +1098,7 @@ export interface FamilyExactQuoteInvocation {
   readonly source: CanonicalSource;
   readonly generation: number;
   readonly runtime: CentralAdapterRuntime;
+  readonly control?: AdapterWorkControl;
   /** Central policy bound; Family code cannot raise this limit. */
   readonly maxDependentReadRounds?: number;
 }
@@ -1122,6 +1124,7 @@ export async function executeFamilyExactQuote(
     source: snapshotCanonicalSource(input.source),
     generation: input.generation,
     runtime: input.runtime,
+    ...(input.control === undefined ? {} : { control: input.control }),
     ...(input.maxDependentReadRounds === undefined
       ? {}
       : { maxDependentReadRounds: input.maxDependentReadRounds }),
@@ -1573,6 +1576,9 @@ function executeExactRoundWork<Evidence>(input: {
       programInput: input.programInput,
     },
     runtime: input.invocation.runtime,
+    ...(input.invocation.control === undefined
+      ? {}
+      : { control: input.invocation.control }),
   });
 }
 

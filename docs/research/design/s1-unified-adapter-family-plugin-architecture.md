@@ -3128,6 +3128,46 @@ checkpoint；不是部署、F5 或 production cutover）：**
   再由编译缺口逐项接入本 strict session；期间可读取含旧管线的 Git commit
   参考，但不得把旧 runtime、Graph 或 fallback 接回生产 closure。
 
+**2026-08-18 strict exact / execution / Funding / victim 第一批物理删除
+checkpoint（实现提交承载本 checkpoint；不是部署、F5 或 production
+cutover）：**
+
+- solver amount propagation 不再接受 `AmountQuoteSource`、`quoteSource` 或
+  legacy `executionEvidence` 注入；每 hop 必须由同一 current-source
+  `StrictProductionRuntimeSession.issueExact()` 签发 opaque exact handle，S4
+  只能把该对象原样交回同一 session 的 `buildExecution()`。缺 session、
+  executor、ready edge 或 issuer binding 全部 fail closed；direct revm/local
+  math 不再能铸造第二套 exact authority；
+- plan builder 已删除 `PRODUCTION_ADAPTER_FAMILIES` 的 route/funding dispatch、
+  `findFundingByAction()` 与 legacy flash-root 构造；Funding liquidity/offer 在
+  session 创建时由当前 source 执行 Funding Family，solver 对每个候选金额
+  重新筛选 `fundingActionIds(asset, amount)`，S4 由同一 session 构造 Funding
+  root。planner 中的 root 只保留显式不可执行的 strict-session shell，不能
+  被误当成 calldata authority；
+- victim overlay、RPC victim replay、post-impact decode 与 local-apply 判断已
+  改由同一 strict session 的 edge owner/replay capability 驱动；中央
+  `victimModels()` 不再是生产 authority；
+- 已物理删除带 `legacy|fail-closed` 双模式的
+  `strict-live-quote-source` 及其旧合同、旧 overlay registry-coverage 合同、
+  central flash-provider descriptor 合同；amount-search 回归现在注入的是
+  issuer-shaped strict-session fixture，不再保留 `quoteSource` API；
+- 定向合同已覆盖同 session exact→execution、clone/foreign handle 拒绝、
+  current-source victim replay、Funding action/asset/额度拒绝，以及 solver
+  deadline/caller abort；blockscan/solver 的绝对 deadline 与 AbortSignal 现在
+  穿过 strict session、普通 Family/Credit Request Program、中央 scheduler
+  直到 provider transport，retry backoff 同样可取消。blockscan budget 合同的
+  exact oracle 已与被删除的 production registry/quoter 解耦，测试夹具不能
+  重新激活 legacy authority。以下验证均通过：
+  `searcher:blockscan-candidate-refinement`、
+  `searcher:strict-production-runtime-session`、`searcher:amtsearch`（20/20）、
+  `searcher:adapter-credit-runtime` 与 listener 完整 `build`。
+
+本 checkpoint 只关闭第一批中央 exact/execution/Funding/victim fallback。
+`main.ts` 中仍存在的 legacy discovery/coarse state/trace ownership 与
+blockscan hot-discovery closure 必须按同一顺序继续物理删除并由 frozen
+ready-generation/current-source strict authority 替换；在此之前不得部署或
+声称 default-authority / F5 / F9 完成。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

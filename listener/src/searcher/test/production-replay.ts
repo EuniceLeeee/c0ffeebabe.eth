@@ -1069,7 +1069,7 @@ async function main(): Promise<void> {
           quoteProfitFloorBps: validationPolicy.quoteProfitFloorBps,
           quoteSafetyBps: validationPolicy.quoteSafetyBps,
           cache,
-          executionEvidence,
+          runtimeEvidence: Object.freeze([]),
         });
         solverReached = true;
         report.stages.solver = "pass";
@@ -1098,7 +1098,6 @@ async function main(): Promise<void> {
             executor: DEFAULT_SEARCHER_EXECUTOR,
             safetyBps: validationPolicy.quoteSafetyBps,
             cache,
-            executionEvidence,
           },
         );
         const sim = await simulator.simulate(solved);

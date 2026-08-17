@@ -1,7 +1,8 @@
 import { ethers } from "ethers";
 import { AnvilStateBackend } from "../../shared/state/state-backend.js";
 import type { PoolImpact } from "../detector/pool-impact.js";
-import type { TokenEdge } from "../planner/token-graph.js";
+import type { StrictProductionRuntimeSession } from
+  "../strict-production-runtime-session.js";
 import { buildVictimOverlay } from "./victim-overlay.js";
 
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
@@ -10,11 +11,11 @@ const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
 export async function replayVictimSwapOnAnvil(
   state: AnvilStateBackend,
   impact: PoolImpact,
-  graph: TokenEdge[],
+  session: StrictProductionRuntimeSession,
   timeoutMs?: number,
 ): Promise<void> {
-  const overlay = await buildVictimOverlay(impact, {
-    graph,
+  const overlay = await buildVictimOverlay(impact, session, {
+    graph: session.edges,
     read: (req) => state.call(req),
   }, timeoutMs);
 

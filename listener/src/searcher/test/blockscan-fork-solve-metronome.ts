@@ -173,7 +173,10 @@ async function main(): Promise<void> {
     planner.setMaxHops(3);
     planner.setMaxPoolsPerToken(8);
     planner.setMaxCandidates(20);
-    const flashLiquidity = new FlashLiquidityCache(state.provider);
+    const flashLiquidity = new FlashLiquidityCache(state.provider, [
+      { adapterId: "morpho-flash", holder: ADDR.MORPHO },
+      { adapterId: "balancer-flash", holder: ADDR.BALANCER_VAULT },
+    ]);
     await flashLiquidity.refresh(unique(graph.flatMap((edge) => [edge.tokenIn, edge.tokenOut])));
     planner.setFlashLiquidity(flashLiquidity);
     const plans = await planner.plan(opportunity, [FLASH_SWAP_REPAY]);

@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
 import { ethers } from "ethers";
-import type { StateBackend } from "../../shared/state/state-backend.js";
+import {
+  withStateCallControl,
+  type StateBackend,
+} from "../../shared/state/state-backend.js";
 import {
   exactProbePriority,
-  refineBlockScanCandidates,
+  refineBlockScanCandidates as refineBlockScanCandidatesStrict,
   type BlockScanProbeDiagnostic,
+  type BlockScanRefinementOptions,
 } from "../detector/blockscan-candidate-refinement.js";
 import { selectFamilyFairExpansionEdges } from "../detector/blockscan-scanner-core.js";
 import {
@@ -22,6 +26,114 @@ import {
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import { buildTokenPaths, type TokenEdge } from "../planner/token-graph.js";
 import { canonicalEdgeId } from "../venues/blockscan-state-capability.js";
+import type { StrictProductionRuntimeSession } from
+  "../strict-production-runtime-session.js";
+import {
+  quoteV2ExactInput,
+  v2FeeBpsForFactory,
+} from "../solver/v2-fee.js";
+
+/**
+ * This budget/circuit suite uses a deliberately small test-only exact oracle
+ * behind the strict-session boundary. It does not import or authorize the
+ * removed production registry/quoter path; strict issuer semantics are
+ * covered separately by the production-session contract.
+ */
+function refineBlockScanCandidates(
+  state: StateBackend,
+  opportunities: readonly BlockScanOpportunity[],
+  maxCandidates: number,
+  deadlineAtMs: number,
+  pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>,
+  onProbe?: (diagnostic: BlockScanProbeDiagnostic) => void,
+  concurrency?: number,
+  options: BlockScanRefinementOptions = {},
+) {
+  const strictSession = Object.freeze({
+    async issueExact(input: Parameters<StrictProductionRuntimeSession["issueExact"]>[0]) {
+      observedIssueDeadlineAtMs = input.control?.deadlineAtMs;
+      assert(input.control !== undefined, "strict refinement fixture requires work control");
+      const controlledState = withStateCallControl(state, input.control);
+      const amountOut = input.edge.adapterId === "univ2-swap"
+        ? await quoteTestUniV2Exact(controlledState, input)
+        : input.edge.adapterId === "self-burn-native-redeem"
+          ? await quoteTestSelfBurnExact(controlledState, input)
+          : (() => {
+              throw new BlockScanFamilyAttributedError(
+                blockScanEdgeFamilyId(input.edge),
+                "exact quote",
+                new Error(`no strict test oracle ${input.edge.adapterId}`),
+              );
+            })();
+      return Object.freeze({ amountOut });
+    },
+  }) as unknown as StrictProductionRuntimeSession;
+  return refineBlockScanCandidatesStrict(
+    state,
+    opportunities,
+    maxCandidates,
+    deadlineAtMs,
+    pricedTokens,
+    onProbe,
+    concurrency,
+    { ...options, executor: options.executor ?? ethers.ZeroAddress, strictSession },
+  );
+}
+
+async function quoteTestUniV2Exact(
+  state: StateBackend,
+  input: Parameters<StrictProductionRuntimeSession["issueExact"]>[0],
+): Promise<bigint> {
+  const token0Raw = await state.call({
+    to: input.edge.target,
+    data: pair.encodeFunctionData("token0"),
+  });
+  const token0 = ethers.getAddress(`0x${token0Raw.slice(-40)}`);
+  const reservesRaw = await state.call({
+    to: input.edge.target,
+    data: pair.encodeFunctionData("getReserves"),
+  });
+  const reserves = pair.decodeFunctionResult("getReserves", reservesRaw);
+  const factoryRaw = await state.call({
+    to: input.edge.target,
+    data: pair.encodeFunctionData("factory"),
+  });
+  const factory = pair.decodeFunctionResult("factory", factoryRaw)[0] as string;
+  const feeBps = v2FeeBpsForFactory(factory);
+  if (feeBps === null) throw new Error("test V2 factory has no fee rule");
+  const zeroForOne = input.edge.tokenIn.toLowerCase() === token0.toLowerCase();
+  const reserve0 = BigInt(reserves[0]);
+  const reserve1 = BigInt(reserves[1]);
+  return quoteV2ExactInput(
+    zeroForOne ? reserve0 : reserve1,
+    zeroForOne ? reserve1 : reserve0,
+    input.amountIn,
+    feeBps,
+  );
+}
+
+async function quoteTestSelfBurnExact(
+  state: StateBackend,
+  input: Parameters<StrictProductionRuntimeSession["issueExact"]>[0],
+): Promise<bigint> {
+  if (state.simulateTokenToNativeDelta === undefined) {
+    throw new Error("self-burn test oracle requires value-delta simulation");
+  }
+  const result = await state.simulateTokenToNativeDelta({
+    token: input.edge.target,
+    caller: input.executor,
+    amountIn: input.amountIn,
+    callData: "0x",
+  });
+  if (
+    result.tokenInSpent !== input.amountIn ||
+    result.totalSupplyBurned !== input.amountIn ||
+    result.nativeOut <= 0n
+  ) {
+    throw new Error("self-burn test oracle invariants failed");
+  }
+  return result.nativeOut;
+}
 
 const TOKEN_6 = "0x0000000000000000000000000000000000000006";
 const TOKEN_18 = "0x0000000000000000000000000000000000000018";
@@ -82,6 +194,7 @@ let activeCalls = 0;
 let token0Calls = 0;
 let abortCount = 0;
 let observedDeadlineAtMs: number | undefined;
+let observedIssueDeadlineAtMs: number | undefined;
 let observedSignal = false;
 const state = {
   call(req: { data: string }, control?: TestCallControl): Promise<string> {
@@ -126,7 +239,7 @@ const delayedOpportunity: BlockScanOpportunity = {
   }],
 };
 const diagnostics: BlockScanProbeDiagnostic[] = [];
-const deadlineAtMs = Date.now() + 80;
+const deadlineAtMs = Date.now() + 250;
 const refinement = refineBlockScanCandidates(
   state,
   [delayedOpportunity],
@@ -145,6 +258,7 @@ const watchdog = new Promise<never>((_resolve, reject) => {
 });
 const delayedResult = await Promise.race([refinement, watchdog]);
 clearTimeout(watchdogTimer!);
+assert.equal(observedIssueDeadlineAtMs, deadlineAtMs, "strict session must receive refinement control");
 assert.equal(observedDeadlineAtMs, deadlineAtMs, "the absolute refinement deadline must reach call()");
 assert.equal(observedSignal, true, "the refinement deadline must carry an AbortSignal");
 assert.equal(abortCount, 1, "the in-flight quote transport must be aborted exactly once");

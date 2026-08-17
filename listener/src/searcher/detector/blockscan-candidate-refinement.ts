@@ -4,10 +4,6 @@ import {
   type StateBackend,
   withStateCallControl,
 } from "../../shared/state/state-backend.js";
-import {
-  MissingRouteQuoterError,
-  quote,
-} from "../solver/quoter.js";
 import type { BlockScanOpportunity } from "./detector.js";
 import { BLOCKSCAN_MIN_EXECUTABLE_INPUT } from "./blockscan-sizing-constants.js";
 import {
@@ -20,9 +16,10 @@ import {
   orderByBlockScanFamily,
   selectByBlockScanFamily,
 } from "./blockscan-family-budget.js";
-import type {
-  PendingExecutionEvidence,
-} from "../venues/route-leg-adapter.js";
+import type { StrictProductionRuntimeSession } from
+  "../strict-production-runtime-session.js";
+import type { RuntimeEvidence } from
+  "../venues/adapter-family-plugin.js";
 
 const DEFAULT_CONCURRENCY = 24;
 const DEFAULT_FAMILY_PROBE_TIMEOUT_MS = 1_000;
@@ -118,8 +115,10 @@ export interface BlockScanRefinementOptions {
    * shared QuoteContext.
    */
   readonly executor?: string;
-  /** Immutable evidence context for this exact route pass only. */
-  readonly executionEvidence?: readonly PendingExecutionEvidence[];
+  /** Sole current-source exact authority for this route pass. */
+  readonly strictSession?: StrictProductionRuntimeSession;
+  /** Plugin-issued evidence bound to that exact source/session. */
+  readonly runtimeEvidence?: readonly RuntimeEvidence[];
   /** Caller-owned pass cancellation. */
   readonly signal?: AbortSignal;
 }
@@ -455,7 +454,8 @@ export async function refineBlockScanCandidates(
         familyDeadlineAtMs,
         familyController.signal,
         options.executor,
-        options.executionEvidence,
+        options.strictSession,
+        options.runtimeEvidence,
         () =>
           familyDeadlineAtMs < deadlineAtMs
             ? new FamilyProbeDeadlineError(familyIds, localBudgetMs)
@@ -732,7 +732,8 @@ async function exactProbeMarginBps(
   deadlineAtMs: number,
   signal: AbortSignal,
   executor?: string,
-  executionEvidence?: readonly PendingExecutionEvidence[],
+  strictSession?: StrictProductionRuntimeSession,
+  runtimeEvidence: readonly RuntimeEvidence[] = Object.freeze([]),
   deadlineError: () => Error = () =>
     new ProbeDeadlineError("exact probe deadline reached"),
   onEdgeSuccess: (
@@ -756,32 +757,25 @@ async function exactProbeMarginBps(
       );
     }
     try {
-      amount = await awaitWithAbort(
-        quote(
-          edge.adapterId,
-          edge.target,
-          edge.tokenIn,
-          edge.tokenOut,
-          amount,
-          state,
-          undefined,
-          edge.v4PoolKey,
-          edge.poolToken0,
-          edge.poolToken1,
-          undefined,
-          executor,
-          executionEvidence,
-        ),
-        signal,
-      );
+      void state;
+      if (strictSession === undefined || executor === undefined) {
+        throw new Error("exact refinement requires a strict current-source session");
+      }
+      const exact = await awaitWithAbort(strictSession.issueExact({
+        edge,
+        amountIn: amount,
+        executor,
+        runtimeEvidence,
+        control: { deadlineAtMs, signal },
+      }), signal);
+      amount = exact.amountOut;
     } catch (error) {
+      if (error instanceof BlockScanFamilyAttributedError) throw error;
       throw new BlockScanFamilyAttributedError(
         blockScanEdgeFamilyId(edge),
         "exact quote",
         error,
-        error instanceof MissingRouteQuoterError
-          ? null
-          : edge.canonicalEdgeId ?? null,
+        edge.canonicalEdgeId ?? null,
       );
     }
     onEdgeSuccess(edge);

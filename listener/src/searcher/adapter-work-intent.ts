@@ -155,7 +155,13 @@ export interface CentralAdapterScheduler {
     readonly requests: readonly AdapterRequest[];
     readonly dedupeKey: string;
     readonly callerAuthority: CentralCallerAuthority;
+    readonly control?: AdapterWorkControl;
   }): SchedulerIssuedAdapterExecutor;
+}
+
+export interface AdapterWorkControl {
+  readonly deadlineAtMs?: number;
+  readonly signal?: AbortSignal;
 }
 
 export interface AdapterWorkClock {
@@ -387,6 +393,7 @@ export function canonicalAdapterWorkDedupeKey(input: {
 export async function executeAdapterWork<Input, Evidence>(input: {
   readonly intent: AdapterWorkIntent<Input, Evidence>;
   readonly runtime: CentralAdapterRuntime;
+  readonly control?: AdapterWorkControl;
 }): Promise<AdapterWorkOutcome<Evidence>> {
   const { intent, runtime } = input;
   let phase: AdapterWorkFailureStage = "intent";
@@ -413,6 +420,7 @@ export async function executeAdapterWork<Input, Evidence>(input: {
     subjectKey = adapterWorkSubjectKey(subject);
 
     phase = "generation-fence-before-io";
+    assertAdapterWorkControl(input.control);
     runtime.generationFence.assertCurrent(intent.generation, source);
 
     let declaredRequirements: RequestRequirements | null = null;
@@ -498,7 +506,7 @@ export async function executeAdapterWork<Input, Evidence>(input: {
         phase = "policy";
         const policyBefore = now(runtime.clock);
         try {
-          schedule = freezeAdapterSchedule(runtime.policy.bind({
+          const bound = runtime.policy.bind({
             workClass: frameworkWorkClassForAdapterStage(intent.stage),
             stage: intent.stage,
             familyId: intent.familyId,
@@ -507,7 +515,14 @@ export async function executeAdapterWork<Input, Evidence>(input: {
             source,
             requirements: declaredRequirements,
             requestCount: requests.length,
-          }), intent.stage);
+          });
+          schedule = freezeAdapterSchedule({
+            ...bound,
+            deadlineAtMs: Math.min(
+              bound.deadlineAtMs,
+              input.control?.deadlineAtMs ?? Number.POSITIVE_INFINITY,
+            ),
+          }, intent.stage);
         } finally {
           policyWallMs += elapsed(policyBefore, now(runtime.clock));
         }
@@ -540,6 +555,7 @@ export async function executeAdapterWork<Input, Evidence>(input: {
           requests,
           dedupeKey,
           callerAuthority: callerAuthority ?? EMPTY_CALLER_AUTHORITY,
+          ...(input.control === undefined ? {} : { control: input.control }),
         });
         assertIssuedExecutor(issued);
         issued.executor.assertSupported(declaredRequirements);
@@ -555,12 +571,14 @@ export async function executeAdapterWork<Input, Evidence>(input: {
         }
 
         phase = "generation-fence-before-io";
+        assertAdapterWorkControl(input.control);
         runtime.generationFence.assertCurrent(intent.generation, source);
 
         phase = "transport";
         const results = await scheduled.executor.execute(executionInput);
 
         phase = "generation-fence-after-io";
+        assertAdapterWorkControl(input.control);
         runtime.generationFence.assertCurrent(intent.generation, source);
 
         phase = "transport";
@@ -735,6 +753,19 @@ function assertIntent<Input, Evidence>(
     if (Object.prototype.hasOwnProperty.call(intent, field)) {
       throw new Error(`Adapter work intent must not declare central field ${field}`);
     }
+  }
+}
+
+function assertAdapterWorkControl(control: AdapterWorkControl | undefined): void {
+  if (control === undefined) return;
+  if (control.signal?.aborted) {
+    throw control.signal.reason ?? new Error("adapter work aborted");
+  }
+  if (
+    control.deadlineAtMs !== undefined &&
+    Date.now() >= control.deadlineAtMs
+  ) {
+    throw new Error("adapter work deadline reached");
   }
 }
 

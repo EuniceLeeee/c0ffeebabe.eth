@@ -31,6 +31,10 @@ import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
 import type { TokenEdge } from "./planner/token-graph.js";
 import type { ResolvedPlan } from "./solver/solver.js";
 import type { AnvilSolver } from "./solver/solver.js";
+import type { StrictProductionRuntimeSession } from
+  "./strict-production-runtime-session.js";
+import type { CanonicalSource } from
+  "./venues/adapter-request-program.js";
 import {
   BotVMSimulator,
   type SimulationResult,
@@ -532,6 +536,10 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   /** Dedicated S5 resources; never used by exact refinement or solver work. */
   readonly finalSimulationWorkers: readonly BlockScanExecutionWorker[];
   readonly rpcUrl: string;
+  /** Sole current-source Family/exact/execution/Funding authority. */
+  readonly strictSession?: (
+    source: CanonicalSource,
+  ) => Promise<StrictProductionRuntimeSession>;
   /**
    * Override the exact-probe quote backend. Production uses the source-hash
    * pinned reth micro-batch backend; harnesses inject a deterministic fake.
@@ -2833,6 +2841,17 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       if (exactSourceBlockHash === null) {
         throw new Error("exact quote source hash is unavailable");
       }
+      if (runtimeSourceBlock === null) {
+        throw new Error("strict exact source block is unavailable");
+      }
+      if (this.deps.strictSession === undefined) {
+        throw new Error("block-scan requires a strict current-source session");
+      }
+      const strictSession = await this.deps.strictSession(Object.freeze({
+        number: runtimeSourceBlock,
+        hash: exactSourceBlockHash,
+        generation,
+      }));
       let exactYieldedMs = 0;
       const producerLagBlocks = (): number => {
         const snapshot = adapterRuntimeCoordinator.latestPricingSnapshot();
@@ -2952,7 +2971,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         this.deps.midConcurrency,
         {
           executor: this.deps.executorAddress,
-          executionEvidence,
+          strictSession,
+          runtimeEvidence: Object.freeze([]),
           signal: passSignal,
           admissionSpreadBps:
             blockScanCfg.exactAdmissionSpreadBps ??
@@ -3213,7 +3233,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                 gssMaxTries: 8,
                 quoteProfitFloorBps: 0n,
                 quoteSafetyBps: 10000n,
-                executionEvidence,
+                strictSession,
+                runtimeEvidence: Object.freeze([]),
                 signal: passSignal,
                 onDeferredCandidates: (resolved) => {
                   deferredCandidates = resolved;

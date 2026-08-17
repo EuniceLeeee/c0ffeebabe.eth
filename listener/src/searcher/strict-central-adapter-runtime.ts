@@ -3,6 +3,7 @@ import type {
   CentralScheduleDecision,
   CentralAdapterRuntime,
   CentralAdapterScheduler,
+  AdapterWorkControl,
 } from "./adapter-work-intent.js";
 import { createHash } from "node:crypto";
 import { ethers } from "ethers";
@@ -18,10 +19,22 @@ import {
 } from "./venues/canonical-value.js";
 
 interface StrictProvider {
-  call(tx: { readonly to: string; readonly data: string }, block?: number):
-    Promise<string>;
-  getCode(address: string, block?: number): Promise<string>;
-  getStorage(address: string, slot: string, block?: number): Promise<string>;
+  call(
+    tx: { readonly to: string; readonly data: string },
+    block?: number,
+    control?: AdapterWorkControl,
+  ): Promise<string>;
+  getCode(
+    address: string,
+    block?: number,
+    control?: AdapterWorkControl,
+  ): Promise<string>;
+  getStorage(
+    address: string,
+    slot: string,
+    block?: number,
+    control?: AdapterWorkControl,
+  ): Promise<string>;
 }
 
 export interface StrictSimulationTransport {
@@ -122,6 +135,7 @@ export function createStrictCentralAdapterRuntime(input: {
               input.simulator,
               request,
               execution.source,
+              issueInput.control,
             ),
           ));
           transportWallMs = Date.now() - startedAtMs;
@@ -220,7 +234,9 @@ async function executeRequest(
   simulator: StrictSimulationTransport | undefined,
   request: AdapterRequest,
   source: CanonicalSource,
+  control?: AdapterWorkControl,
 ): Promise<AdapterRequestResult> {
+  assertTransportControl(control);
   try {
     if (request.kind === "eth-call") {
       const outcome = await withRpcRetry(async () => {
@@ -228,7 +244,7 @@ async function executeRequest(
           const data = await provider.call({
             to: request.to,
             data: request.data,
-          }, source.number);
+          }, source.number, control);
           return { completion: "returned" as const, data };
         } catch (error) {
           // A family-declared revert is evidence, not a transport failure.
@@ -246,7 +262,7 @@ async function executeRequest(
           }
           throw error;
         }
-      });
+      }, control);
       return issueResult({
         id: request.id,
         source,
@@ -257,8 +273,9 @@ async function executeRequest(
       });
     }
     if (request.kind === "get-code") {
-      const data = await withRpcRetry(() =>
-        provider.getCode(request.address, source.number),
+      const data = await withRpcRetry(
+        () => provider.getCode(request.address, source.number, control),
+        control,
       );
       return issueResult({
         id: request.id,
@@ -274,7 +291,8 @@ async function executeRequest(
         request.address,
         request.slot,
         source.number,
-      ));
+        control,
+      ), control);
       return issueResult({
         id: request.id,
         source,
@@ -370,12 +388,13 @@ async function executeRequest(
       source: Object.freeze(source),
       failure: "resource-limited" as const,
     });
-  } catch {
+  } catch (error) {
+    const failure = transportControlFailure(control, error);
     return Object.freeze({
       id: request.id,
       ok: false as const,
       source: Object.freeze(source),
-      failure: "rpc" as const,
+      failure,
     });
   }
 }
@@ -391,14 +410,69 @@ function isCallException(error: unknown): boolean {
  * A CALL_EXCEPTION on a return-data request is a semantic revert and is also
  * not retried, so a genuinely reverting read cannot double RPC load.
  */
-async function withRpcRetry<T>(work: () => Promise<T>): Promise<T> {
+async function withRpcRetry<T>(
+  work: () => Promise<T>,
+  control?: AdapterWorkControl,
+): Promise<T> {
   try {
+    assertTransportControl(control);
     return await work();
   } catch (error) {
     if (isCallException(error)) throw error;
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    assertTransportControl(control);
+    await waitForRetry(25, control);
+    assertTransportControl(control);
     return await work();
   }
+}
+
+function assertTransportControl(control: AdapterWorkControl | undefined): void {
+  if (control?.signal?.aborted) {
+    throw control.signal.reason ?? new Error("strict transport aborted");
+  }
+  if (
+    control?.deadlineAtMs !== undefined &&
+    Date.now() >= control.deadlineAtMs
+  ) {
+    throw new Error("strict transport deadline reached");
+  }
+}
+
+function transportControlFailure(
+  control: AdapterWorkControl | undefined,
+  error: unknown,
+): "aborted" | "deadline" | "rpc" {
+  if (control?.signal?.aborted) return "aborted";
+  if (
+    control?.deadlineAtMs !== undefined &&
+    Date.now() >= control.deadlineAtMs
+  ) return "deadline";
+  return error instanceof Error && /\b(?:abort(?:ed)?|cancelled)\b/i.test(error.message)
+    ? "aborted"
+    : error instanceof Error && /\b(?:deadline|timed?\s*out|timeout)\b/i.test(error.message)
+      ? "deadline"
+      : "rpc";
+}
+
+function waitForRetry(
+  delayMs: number,
+  control: AdapterWorkControl | undefined,
+): Promise<void> {
+  if (control?.signal === undefined) {
+    return new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  const signal = control.signal;
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, delayMs);
+    const abort = (): void => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new Error("strict transport aborted"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
 }
 
 function extractStrictRevertData(error: unknown): string | null {

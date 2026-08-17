@@ -6,6 +6,8 @@ import type { SimulationResult } from "./simulator/botvm-simulator.js";
 import type { PostImpactSeed } from "./solver/pool-state-cache.js";
 import type { TokenEdge, V4PoolKey } from "./planner/token-graph.js";
 import type { PendingExecutionEvidence } from "./venues/route-leg-adapter.js";
+import type { StrictProductionRuntimeSession } from
+  "./strict-production-runtime-session.js";
 
 export type LiveBackendKind = "rpc" | "revm" | "hybrid";
 
@@ -31,6 +33,8 @@ export interface PrepareInput {
   postImpact?: PostImpactSeed;
   /** Absolute opportunity deadline; family-local preparation may not publish after it. */
   deadlineAtMs?: number;
+  /** Sole Family/route authority for victim replay at this pinned source. */
+  strictSession?: StrictProductionRuntimeSession;
 }
 
 export interface PreparedState {
