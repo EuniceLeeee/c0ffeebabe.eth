@@ -37,6 +37,8 @@ run_test universe-rebuild-runner npm run searcher:universe-rebuild-runner
 run_test universe-rebuild-probe-cli npm run searcher:universe-rebuild-probe-cli
 run_test universe-rebuild-production npm run searcher:universe-rebuild-production
 run_test universe-rebuild-sigterm npm run searcher:universe-rebuild-sigterm
+run_test universe-rebuild-startup-cli npm run searcher:universe-rebuild-startup-cli
+run_test startup-universe-rebuild npm run searcher:startup-universe-rebuild
 
 finished=$(date -u +%s)
 sha="$(git -C "${impl_dir}" rev-parse HEAD)"
