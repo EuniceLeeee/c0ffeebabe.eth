@@ -3303,6 +3303,45 @@ session 的 Graph+current pricing，再物理删除旧 pricing coordinator 调�
 strict session 或任一 required pricing classification 必须 fail closed，禁止把旧
 registry projection、views provider 或 legacy state fallback 接回。
 
+**2026-08-18 production legacy pricing coordinator 第七批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- production `main.ts` 已物理删除 `new AdapterRuntimeCoordinator(...)`、
+  `new BlockScanStateCoordinator(...)` 以及独立 legacy Funding state backend；
+  `BlockScanRuntimeLoop` 只接受 `CurrentSourceRuntimeCoordinator`，production
+  唯一注入为 `StrictCurrentRuntimeCoordinator`。旧 coordinator 源文件与历史
+  harness 暂留作 Git/合同参考，但不再是 production runtime authority；
+- `StrictCurrentRuntimeCoordinator` 从同一个 source-bound
+  `StrictProductionRuntimeSession` 原子生成 ready Graph object、current mids、
+  插件证明的 unavailable partition 与只读 Funding liquidity view。scanner edge
+  exact-set/hash 必须等于 ready `GraphView` 的 scanner partition；mid 必须引用
+  GraphView 内的精确 edge object；source number/hash/generation 任一不一致即拒绝；
+  session/Funding/pricing/execution preparation 任一步失败都不能改变最后已发布的
+  pricing snapshot；
+- Pricing 与 Funding Request Program 均贯通同一 deadline/AbortSignal；任一 Funding
+  outcome 为 unresolved/failed 会阻断整个 strict session，不能伪装成零流动性。
+  planner 只拿 liquidity projection，Funding executable offer/action issuer 仍封装在
+  strict session 内；blind replay reset 同时清空 current snapshot 与 session cache；
+- current-head pending envelope 不再作为 legacy quote/solver 参数直接注入。strict
+  session 先复核 family、source number+hash、tx/payload/evidence hash，再生成协议中立
+  transaction-scoped `RuntimeEvidence`；同一个不可变 evidence object 同时进入 exact
+  与 solver。Family payload 语义仍由插件拥有；Angstrom 在自己的 evidence validator
+  中验证 generic pending envelope、attestation payload 与 current-head proof，中央
+  不比较 Angstrom selector/topic 或解释 attestation；
+- `searcher:strict-production-runtime-session` 覆盖 Graph object identity、current
+  pricing failure 不发布、pending source/hash mismatch fail-closed 与 Funding；
+  `searcher:blockscan-runtime-startup-warm` 42/42 覆盖 strict-shaped fixture、同 head
+  evidence FIFO/隔离、exact+solver 同证据和 cancellation；Angstrom Family 合同覆盖
+  generic pending envelope。另有 `searcher:strict-ready-runtime`、
+  `searcher:strict-ready-graph-view`、`searcher:blockscan-frozen-topology` 与 listener
+  完整 `build` 通过。
+
+本 checkpoint 关闭 production coarse/current pricing 与 Funding snapshot 的旧
+coordinator authority，但不等于全部中央 legacy 已删除。下一批继续以编译/静态合同
+暴露 `PRODUCTION_ADAPTER_FAMILIES` 在 pending intake、landed-event、pool-state updater
+等 production 调用点，并逐项改为 strict catalog/current-source session；缺 strict
+replacement 时维持 fail-closed，绝不临时恢复旧 registry fallback。本批未部署。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

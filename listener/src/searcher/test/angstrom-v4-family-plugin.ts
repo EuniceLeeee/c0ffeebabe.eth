@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import { angstromV4SwapActionAdapter } from "../../adapters/angstrom-v4.js";
 import { ADDR } from "../../shared/constants/addresses.js";
+import { PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND } from
+  "../runtime-evidence.js";
 import type { UnifiedObservation } from "../venues/adapter-family-plugin.js";
 import { definedFamilyPluginContractSummary } from "../venues/adapter-family-plugin.js";
 import type {
@@ -16,6 +18,7 @@ import {
 } from "../venues/swaps/angstrom-v4-family/codec.js";
 import {
   angstromRuntimeEvidenceHash,
+  requireAngstromRuntimeEvidence,
 } from "../venues/swaps/angstrom-v4-family/evidence.js";
 import {
   ANGSTROM_ADAPTER_SWAP_ABI,
@@ -239,6 +242,31 @@ const runtimeEvidence = Object.freeze({
   }),
   sealedPayloadRef: payload,
 });
+const pendingRuntimeEvidence = Object.freeze({
+  ...runtimeEvidence,
+  kind: PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND,
+  evidenceHash: ethers.keccak256(
+    ethers.AbiCoder.defaultAbiCoder().encode(
+      ["string", "bytes32", "uint256", "bytes32", "bytes32"],
+      [
+        runtimeEvidence.familyId,
+        TX_HASH,
+        SOURCE.number,
+        SOURCE.hash,
+        payloadHash,
+      ],
+    ),
+  ),
+});
+assert.equal(
+  requireAngstromRuntimeEvidence({
+    descriptor,
+    source: SOURCE,
+    runtimeEvidence: [pendingRuntimeEvidence],
+  }).payloadHash,
+  payloadHash,
+  "Angstrom must validate the generic strict pending envelope before use",
+);
 const amountIn = 1_000_000n;
 const exactInput = {
   descriptor,

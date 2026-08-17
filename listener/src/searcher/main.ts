@@ -136,15 +136,13 @@ import {
   selectPairCompletionPools,
 } from "./pool-universe.js";
 import {
-  BlockScanStateCoordinator,
-} from "./blockscan-state-coordinator.js";
-import {
   BlockScanBackrunStateBridge,
   BufferedBlockScanBackrunStatePublisher,
 } from "./blockscan-backrun-state-bridge.js";
 import { JsonRpcBlockScanStateReadBackend } from "./blockscan-state-read-backend.js";
-import { AdapterRuntimeCoordinator } from "./adapter-runtime-coordinator.js";
 import { LiveRethReadPriority } from "./live-reth-read-priority.js";
+import { StrictCurrentRuntimeCoordinator } from
+  "./strict-current-runtime-coordinator.js";
 import { StrictReadyGraphViewCoordinator } from
   "./strict-ready-graph-view.js";
 import {
@@ -172,7 +170,10 @@ import {
   type LocalVictimApplyResult,
 } from "./solver/victim-apply.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
-import { executeFinalSimulationWork } from "./adapter-work-intent.js";
+import {
+  executeFinalSimulationWork,
+  type AdapterWorkControl,
+} from "./adapter-work-intent.js";
 import {
   FinalSimulationWorkRuntimeError,
   type FinalSimulationWorkRuntime,
@@ -903,7 +904,7 @@ async function main(): Promise<void> {
   planner.setMaxPoolsPerToken(maxPoolsPerToken);
   planner.setMaxRotationsPerPath(maxRotationsPerPath);
   let blockScanPlanner: TemplatePlanner | undefined;
-  let adapterRuntimeCoordinator: AdapterRuntimeCoordinator | undefined;
+  let currentRuntimeCoordinator: StrictCurrentRuntimeCoordinator | undefined;
   const liveRethReadPriority = new LiveRethReadPriority();
   let blockScanStateReadBackend:
     JsonRpcBlockScanStateReadBackend | undefined;
@@ -1127,81 +1128,7 @@ async function main(): Promise<void> {
       transportScheduler: blockScanRethTransportScheduler,
       transportLane: "producer-bulk",
     });
-    /*
-     * Funding is intentionally isolated from pricing/proof transport. The two
-     * flash providers read every graph asset at current N; sharing the pricing
-     * backend's four FIFO slots allowed those balance reads to starve Uni
-     * mutation proofs and turned a family-local slowdown into a global miss.
-     * aggregate3 preserves exact source-hash pinning while collapsing the
-     * funding fan-out into bounded calls on the local node.
-     */
-    const fundingStateReads = new JsonRpcBlockScanStateReadBackend(
-      config.rpcUrl,
-      {
-        maxBatchSize: Math.max(
-          1,
-          Number(
-            process.env.SEARCHER_BLOCKSCAN_FUNDING_MULTICALL_BATCH_SIZE ??
-              "500",
-          ),
-        ),
-        maxConcurrentBatches: Math.max(
-          1,
-          Number(
-            process.env.SEARCHER_BLOCKSCAN_FUNDING_MULTICALL_CONCURRENCY ??
-              "4",
-          ),
-        ),
-        multicallMode: "aggregate3",
-        transportScheduler: blockScanRethTransportScheduler,
-        transportLane: "exact",
-      },
-    );
     blockScanStateReadBackend = familyStateReads;
-    const protocolTouchMode =
-      process.env.SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE ?? "off";
-    if (
-      protocolTouchMode !== "off" &&
-      protocolTouchMode !== "shadow" &&
-      protocolTouchMode !== "enabled"
-    ) {
-      throw new Error(
-        "SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE must be off, shadow or enabled",
-      );
-    }
-    adapterRuntimeCoordinator = new AdapterRuntimeCoordinator(
-      PRODUCTION_ADAPTER_FAMILIES,
-      new BlockScanStateCoordinator(familyStateReads, {
-        // Cold N-1 preparation may legitimately take longer than one live
-        // pass. Source-N work is still hard-bounded by the enclosing absolute
-        // pass deadline, which is always the tighter limit in the hot loop.
-        familyTimeoutMs: Math.max(
-          1,
-          Number(
-            process.env.SEARCHER_BLOCKSCAN_STATE_FAMILY_TIMEOUT_MS ?? "120000",
-          ),
-        ),
-        incrementalRangeBlocks: Math.max(
-          1,
-          Number(
-            process.env.SEARCHER_BLOCKSCAN_INCREMENTAL_RANGE_BLOCKS ??
-              "128",
-          ),
-        ),
-        cachePath:
-          process.env.SEARCHER_BLOCKSCAN_STATE_CACHE_PATH ??
-          "/opt/MEV-runtime/blockscan-state-cache.jsonl",
-        protocolAddressTouchMode: protocolTouchMode,
-        onProtocolAddressTouchShadowTelemetry: (telemetry) => {
-          console.log(
-            `[searcher/blockscan-protocol-touch-shadow] ${
-              JSON.stringify({ mode: protocolTouchMode, ...telemetry })
-            }`,
-          );
-        },
-      }),
-      fundingStateReads,
-    );
   }
   const solver = new AnvilSolver();
   // Direct provider for v3 tick data — anvil-over-RPC is slow + wrong for TickLens.
@@ -1691,6 +1618,7 @@ async function main(): Promise<void> {
   >();
   const strictSessionFor = (
     source: CanonicalSource,
+    control?: AdapterWorkControl,
   ): Promise<StrictProductionRuntimeSession> => {
     const key = `${source.number}:${source.hash.toLowerCase()}:${source.generation}`;
     const incumbent = strictSessionCache.get(key);
@@ -1719,6 +1647,7 @@ async function main(): Promise<void> {
       source,
       runtime,
       fundingAssets: flashTokens,
+      ...(control === undefined ? {} : { control }),
     }).catch((error) => {
       if (strictSessionCache.get(key) === pending) {
         strictSessionCache.delete(key);
@@ -1728,6 +1657,10 @@ async function main(): Promise<void> {
     strictSessionCache.set(key, pending);
     return pending;
   };
+  currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(
+    strictSessionFor,
+    () => strictSessionCache.clear(),
+  );
 
   // The ready envelope is the only startup catalog/Graph lineage. Rehydrated
   // instances are handed directly to StrictProductionRuntimeRoot above; there
@@ -2003,7 +1936,7 @@ async function main(): Promise<void> {
     isShuttingDown: () => shuttingDown,
     blockScanGraph: () => blockScanGraph,
     blockScanPlanner: () => blockScanPlanner,
-    adapterRuntimeCoordinator: () => adapterRuntimeCoordinator,
+    currentRuntimeCoordinator: () => currentRuntimeCoordinator,
     flashTokens: () => flashTokens,
     buildGraphView(input) {
       return strictReadyGraphViews.build({
@@ -2184,7 +2117,7 @@ async function main(): Promise<void> {
     // coordinator will retain only this attempt's fresh N-1 predecessor, while
     // the backrun bridge must not retain prior source-N live/tick cache state.
     blockScanBackrunState.resetDynamicStateForReplay();
-    await adapterRuntimeCoordinator!.resetDynamicStateForReplay();
+    await currentRuntimeCoordinator!.resetDynamicStateForReplay();
     await Promise.all([
       ...blockScanExecutionWorkers,
       ...blockScanFinalSimulationWorkers,
@@ -2213,7 +2146,7 @@ async function main(): Promise<void> {
       "base-graph-view",
       blindGraphArtifactPayload(baseGraph),
     );
-    const baseRuntime = await adapterRuntimeCoordinator!.prepare({
+    const baseRuntime = await currentRuntimeCoordinator!.prepare({
       graph: baseGraph,
       fundingTokens: [...new Set([
         ...flashTokens,

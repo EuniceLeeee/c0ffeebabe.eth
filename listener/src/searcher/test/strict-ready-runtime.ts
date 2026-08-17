@@ -115,6 +115,8 @@ for (const forbidden of [
   "ProtocolDiscoveryCoverageCoordinator",
   "createDexGraphCoverageState",
   "protocolDiscoverySourceFingerprints",
+  "new AdapterRuntimeCoordinator(",
+  "new BlockScanStateCoordinator(",
 ]) {
   assert.equal(
     mainSource.includes(forbidden),
@@ -125,6 +127,7 @@ for (const forbidden of [
 assert(mainSource.includes("resolveStrictReadyRuntime(readyUniverse)"));
 assert(mainSource.includes("new StrictProductionRuntimeRoot({"));
 assert(mainSource.includes("new StrictReadyGraphViewCoordinator({"));
+assert(mainSource.includes("new StrictCurrentRuntimeCoordinator("));
 assert(mainSource.includes("frozenTopology: frozenProducerTopology"));
 assert(mainSource.includes("for (const edge of graph)"));
 

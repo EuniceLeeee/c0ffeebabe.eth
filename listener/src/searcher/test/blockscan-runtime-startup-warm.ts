@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import {
-  AdapterRuntimeCoordinator,
   FlashFundingSnapshot,
   type AdapterRuntimePrepareResult,
   type CurrentNExactExecutionContextResult,
@@ -28,6 +27,7 @@ import {
   type BlockScanEnumerationSolverTelemetrySink,
   type BlockScanPendingEvidenceTrigger,
   type BlockScanRuntimeLoopDependencies,
+  type CurrentSourceRuntimeCoordinator,
 } from "../blockscan-runtime-loop.js";
 import {
   CanonicalHeaderJournal,
@@ -47,6 +47,12 @@ import type {
   TokenEdge,
 } from "../planner/token-graph.js";
 import type { ResolvedPlan } from "../solver/solver.js";
+import type { StrictProductionRuntimeSession } from
+  "../strict-production-runtime-session.js";
+import type { RuntimeEvidence } from
+  "../venues/adapter-family-plugin.js";
+import { PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND } from
+  "../runtime-evidence.js";
 import { createProtocolDiscoveryEvidenceCache } from
   "../protocol-discovery-cache.js";
 import { ProtocolDiscoveryMutationQueue } from
@@ -62,10 +68,7 @@ import {
   type VerifiedGraphView,
 } from "../venues/blockscan-state-capability.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from
-  "../venues/production-registry.js";
 import type {
-  ExactQuoteContext,
   ExecutionFamilyId,
   PendingExecutionEvidence,
 } from "../venues/route-leg-adapter.js";
@@ -742,46 +745,17 @@ async function sameHeadEvidenceTransactionsRemainFifoAndIsolated(): Promise<void
 async function exactRefineAndSolverShareOneBoundEvidenceContext(): Promise<void> {
   const sourceBlock = 615;
   const edgeAdapterId = "fixture-current-head-swap";
-  const routeRegistry = PRODUCTION_ADAPTER_FAMILIES.routes() as unknown as {
-    readonly byEdgeAdapter: Map<string, {
-      readonly id: ExecutionFamilyId;
-      quoteExact(ctx: ExactQuoteContext): Promise<bigint>;
-    }>;
-  };
-  assert.equal(
-    routeRegistry.byEdgeAdapter.has(edgeAdapterId),
-    false,
-    "the test-only edge adapter id must not collide with production",
-  );
-  const exactQuoteEvidence: PendingExecutionEvidence[] = [];
-  let harness: ReturnType<typeof createHarness> | null = null;
-
-  // quote() deliberately resolves through the production registry singleton.
-  // Register one synthetic family edge for this isolated process, then remove
-  // it in finally, so the test exercises the real dispatcher without naming
-  // or mutating any production family adapter.
-  routeRegistry.byEdgeAdapter.set(edgeAdapterId, Object.freeze({
-    id: PENDING_EVIDENCE_FAMILY,
-    async quoteExact(ctx: ExactQuoteContext): Promise<bigint> {
-      assert(
-        ctx.executionEvidence,
-        "the custom current-head family must receive exact quote evidence",
-      );
-      exactQuoteEvidence.push(ctx.executionEvidence);
-      return ctx.amountIn + 1n;
+  const harness = createHarness(
+    sourceBlock - 1,
+    ["complete"],
+    {
+      startupWarmEnabled: false,
+      routePipeline: true,
+      routeEdgeAdapterId: edgeAdapterId,
+      pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
     },
-  }));
+  );
   try {
-    harness = createHarness(
-      sourceBlock - 1,
-      ["complete"],
-      {
-        startupWarmEnabled: false,
-        routePipeline: true,
-        routeEdgeAdapterId: edgeAdapterId,
-        pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
-      },
-    );
     const trigger = pendingEvidenceTrigger(
       sourceBlock,
       0x6151,
@@ -790,25 +764,22 @@ async function exactRefineAndSolverShareOneBoundEvidenceContext(): Promise<void>
     const expectedEvidence = trigger.evidence[0]!;
 
     assert.equal(harness.loop.schedulePendingEvidence(trigger), true);
-    await waitFor(() => harness!.solverExecutionEvidence.length === 1);
+    await waitFor(() => harness.solverExecutionEvidence.length === 1);
 
     assert(
-      exactQuoteEvidence.length > 0,
-      "the combined pass must run at least one exact family quote",
+      harness.exactQuoteRuntimeEvidence.length > 0,
+      "the combined pass must issue at least one strict exact quote",
     );
-    for (const observed of exactQuoteEvidence) {
+    const solverEvidence = harness.solverExecutionEvidence[0]?.[0];
+    assert(solverEvidence, "solver must receive strict runtime evidence");
+    for (const observed of harness.exactQuoteRuntimeEvidence) {
       assert.strictEqual(
-        observed,
-        expectedEvidence,
+        observed[0],
+        solverEvidence,
         "every exact quote hop must receive the immutable tx/head-bound " +
-          "evidence object from this pass",
+          "strict evidence object later consumed by solver",
       );
     }
-    assert.strictEqual(
-      harness.solverExecutionEvidence[0]?.[0],
-      expectedEvidence,
-      "solver must receive the same evidence object used by exact refinement",
-    );
     const recomputedEvidenceHash = ethers.keccak256(
       ethers.AbiCoder.defaultAbiCoder().encode(
         ["string", "bytes32", "uint256", "bytes32", "bytes32"],
@@ -823,24 +794,29 @@ async function exactRefineAndSolverShareOneBoundEvidenceContext(): Promise<void>
     );
     assert.deepEqual(
       {
-        txHash: expectedEvidence.txHash,
-        headBlockNumber: expectedEvidence.headBlockNumber,
-        headHash: expectedEvidence.headHash,
-        payloadHash: expectedEvidence.payloadHash,
-        evidenceHash: expectedEvidence.evidenceHash,
+        familyId: solverEvidence.familyId,
+        kind: solverEvidence.kind,
+        txHash: solverEvidence.txHash,
+        source: solverEvidence.source,
+        evidenceHash: solverEvidence.evidenceHash,
+        sealedPayloadRef: solverEvidence.sealedPayloadRef,
       },
       {
+        familyId: expectedEvidence.familyId,
+        kind: PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND,
         txHash: trigger.txHash,
-        headBlockNumber: trigger.head.number,
-        headHash: trigger.head.hash,
-        payloadHash: ethers.keccak256(expectedEvidence.canonicalPayload),
+        source: {
+          number: trigger.head.number,
+          hash: trigger.head.hash,
+          generation: 1,
+        },
         evidenceHash: recomputedEvidenceHash,
+        sealedPayloadRef: expectedEvidence.canonicalPayload,
       },
-      "the shared object must remain bound to the triggering tx and head",
+      "strict runtime evidence must remain bound to the triggering tx/head/payload",
     );
   } finally {
-    routeRegistry.byEdgeAdapter.delete(edgeAdapterId);
-    await harness?.loop.shutdown();
+    await harness.loop.shutdown();
   }
 }
 
@@ -1930,9 +1906,8 @@ function createHarness(
     ? routePipelineEdges(options.routeEdgeAdapterId)
     : [];
   let solverInvocations = 0;
-  const solverExecutionEvidence: Array<
-    readonly PendingExecutionEvidence[]
-  > = [];
+  const solverExecutionEvidence: Array<readonly RuntimeEvidence[]> = [];
+  const exactQuoteRuntimeEvidence: Array<readonly RuntimeEvidence[]> = [];
   const notStartedRecords: Array<{
     readonly sourceBlock: number;
     readonly sourceBlockHash: string | null;
@@ -2149,7 +2124,7 @@ function createHarness(
         },
       };
     },
-  } as unknown as AdapterRuntimeCoordinator;
+  } as unknown as CurrentSourceRuntimeCoordinator;
 
   const blockScanPlanner = {
     setFlashLiquidity() {},
@@ -2210,12 +2185,12 @@ function createHarness(
       _state: unknown,
       _simulator: unknown,
       solveOptions?: {
-        readonly executionEvidence?: readonly PendingExecutionEvidence[];
+        readonly runtimeEvidence?: readonly RuntimeEvidence[];
       },
     ) {
       solverInvocations++;
       solverExecutionEvidence.push(Object.freeze([
-        ...(solveOptions?.executionEvidence ?? []),
+        ...(solveOptions?.runtimeEvidence ?? []),
       ]));
       return resolvedPlan(options.solverNetProfit ?? 0n);
     },
@@ -2253,6 +2228,12 @@ function createHarness(
       PreparedDiscovery
     >["finalSimulationWorkers"],
     rpcUrl: "http://127.0.0.1:8545",
+    strictSession: async (source) =>
+      strictRouteSession(
+        source,
+        pipelineEdges,
+        (runtimeEvidence) => exactQuoteRuntimeEvidence.push(runtimeEvidence),
+      ),
     exactQuoteStateFactory: () => workerState as never,
     runtimeAbort,
     executorAddress: "0x0000000000000000000000000000000000000001",
@@ -2462,7 +2443,7 @@ function createHarness(
       blockScanPlanner as unknown as BlockScanRuntimeLoopDependencies<
         PreparedDiscovery
       >["blockScanPlanner"] extends () => infer T ? T : never,
-    adapterRuntimeCoordinator: () => runtimeCoordinator,
+    currentRuntimeCoordinator: () => runtimeCoordinator,
     flashTokens: () => [],
     buildGraphView: (input) => graphAt(
       input.generation,
@@ -2522,6 +2503,7 @@ function createHarness(
       return solverInvocations;
     },
     solverExecutionEvidence,
+    exactQuoteRuntimeEvidence,
     forkAtControls,
     notStartedRecords,
     routeTelemetryRecords,
@@ -2739,6 +2721,68 @@ function routePipelineMids(
       depthProxy: 1e18,
     }];
   }));
+}
+
+/**
+ * Minimal issuer-shaped fixture for the route pipeline. Exact results are
+ * minted by the same source-bound session passed through refinement and the
+ * solver; the harness deliberately provides no registry or legacy quote
+ * fallback.
+ */
+function strictRouteSession(
+  source: StrictProductionRuntimeSession["source"],
+  edges: readonly TokenEdge[],
+  onIssueExact: (runtimeEvidence: readonly RuntimeEvidence[]) => void,
+): StrictProductionRuntimeSession {
+  const ownedEdges = new Set(edges.map(strictFixtureEdgeIdentity));
+  return Object.freeze({
+    source: Object.freeze({ ...source }),
+    edges: Object.freeze([...edges]),
+    runtimeEvidenceFromPendingExecution(
+      evidence: readonly PendingExecutionEvidence[],
+    ): readonly RuntimeEvidence[] {
+      return Object.freeze(evidence.map((item) => {
+        assert.equal(item.headBlockNumber, source.number);
+        assert.equal(item.headHash.toLowerCase(), source.hash.toLowerCase());
+        return Object.freeze({
+          evidenceId: `pending:${item.txHash.toLowerCase()}`,
+          familyId: item.familyId as RuntimeEvidence["familyId"],
+          kind: PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND,
+          scope: "transaction" as const,
+          source,
+          txHash: item.txHash.toLowerCase(),
+          evidenceHash: item.evidenceHash.toLowerCase(),
+          sealedPayloadRef: item.canonicalPayload,
+        });
+      }));
+    },
+    async issueExact(
+      input: Parameters<StrictProductionRuntimeSession["issueExact"]>[0],
+    ) {
+      assert.equal(
+        ownedEdges.has(strictFixtureEdgeIdentity(input.edge)),
+        true,
+        "strict fixture must issue exact authority only for its own Graph edge",
+      );
+      onIssueExact(input.runtimeEvidence);
+      const cheap = input.edge.target.toLowerCase() === ROUTE_POOL_CHEAP;
+      const forward = input.edge.tokenIn.toLowerCase() === ROUTE_TOKEN_A;
+      const amountOut = cheap
+        ? (forward ? input.amountIn * 2n : input.amountIn / 2n)
+        : input.amountIn;
+      return Object.freeze({ amountOut });
+    },
+  }) as unknown as StrictProductionRuntimeSession;
+}
+
+function strictFixtureEdgeIdentity(edge: TokenEdge): string {
+  return [
+    edge.adapterId,
+    edge.target.toLowerCase(),
+    edge.tokenIn.toLowerCase(),
+    edge.tokenOut.toLowerCase(),
+    edge.slotKind,
+  ].join("\u001f");
 }
 
 function telemetryRouteKey(opportunity: {

@@ -2,6 +2,8 @@ import { ethers } from "ethers";
 import type {
   RuntimeEvidence,
 } from "../../adapter-family-plugin.js";
+import { PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND } from
+  "../../../runtime-evidence.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
 import {
@@ -48,7 +50,10 @@ export function requireAngstromRuntimeEvidence(input: {
 }): BoundAngstromRuntimeEvidence {
   const matching = input.runtimeEvidence.filter((item) =>
     item.familyId === ANGSTROM_V4_FAMILY_ID &&
-    item.kind === "angstrom-empty-block-attestation"
+    (
+      item.kind === "angstrom-empty-block-attestation" ||
+      item.kind === PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND
+    )
   );
   if (matching.length !== 1) {
     throw new Error(
@@ -81,13 +86,26 @@ export function requireAngstromRuntimeEvidence(input: {
     throw new Error("angstrom-v4 sealed execution payload is not hex");
   }
   const payloadHash = ethers.keccak256(payload);
-  if (
-    runtime.evidenceHash !== angstromRuntimeEvidenceHash({
-      txHash: runtime.txHash,
-      source: runtime.source,
-      payloadHash,
-    })
-  ) {
+  const expectedEvidenceHash = runtime.kind ===
+      PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND
+    ? ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ["string", "bytes32", "uint256", "bytes32", "bytes32"],
+          [
+            runtime.familyId,
+            runtime.txHash,
+            runtime.source.number,
+            runtime.source.hash,
+            payloadHash,
+          ],
+        ),
+      )
+    : angstromRuntimeEvidenceHash({
+        txHash: runtime.txHash,
+        source: runtime.source,
+        payloadHash,
+      });
+  if (runtime.evidenceHash.toLowerCase() !== expectedEvidenceHash.toLowerCase()) {
     throw new Error("angstrom-v4 execution evidence hash mismatch");
   }
   const attestations = decodeAngstromExecutionEvidence(payload);

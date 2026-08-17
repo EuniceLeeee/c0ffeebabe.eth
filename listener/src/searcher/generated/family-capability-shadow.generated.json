@@ -610,11 +610,12 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "f9d9dabae400e9729c5b028f1cf2ba8424b38fe1c8356e44ecb74f3afd92e06a",
+        "contentHash": "fd48155441fc3425c7d3197fe80b457ceae4a05dcda89a58937121e79f4f05e7",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/runtime-evidence.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/canonical-value.ts",
@@ -670,11 +671,12 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "3879db9c2fd7ed5fabef9fe9665a2c9d50f03890674f9b65653cae6fd56be421",
+        "contentHash": "2dfdbc52d7c5e3d6e1cd6c8e4c004fbd4269e705ffbe1db6e410d4655cc1f6c7",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/runtime-evidence.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/canonical-value.ts",
@@ -708,13 +710,14 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "36c6454feaa514837b9f8566444595a17551534c0dbebd2c16f015deb47eb98f",
+        "contentHash": "82fb22436cb05a62c79c5038debbc29c663aa2a581eee96491328c905cb16a49",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/searcher/blockscan-multicall.ts",
           "src/searcher/detector/blockscan-sizing-constants.ts",
+          "src/searcher/runtime-evidence.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/blockscan-state-capability.ts",
@@ -749,7 +752,7 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "9aaa024c36c0f9bdd17038aeda06f7c9863b752cc35025508af0a60c6b7407ee",
+        "contentHash": "10a3fe350e316e6108248734ddd4dfff627ae1e2dbf847941f90cda20e78fa02",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -757,6 +760,7 @@
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/angstrom-v4.ts",
           "src/encoder.ts",
+          "src/searcher/runtime-evidence.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
@@ -7165,5 +7169,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "3a0f692acd0082c45d8e72ccc684d6239fcfb6f44c42259976b70df73b27f246"
+  "artifactHash": "7361d6c5ed2ef9de2acad3b70f71c6ae0b6ac1058abb442b3def52600f797e7f"
 }

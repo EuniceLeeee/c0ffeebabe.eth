@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import {
   executeAdapterWork,
+  type AdapterWorkControl,
   type AdapterWorkReceipt,
   type CentralAdapterRuntime,
 } from "./adapter-work-intent.js";
@@ -105,6 +106,7 @@ export async function executeFundingFamilyLiquidity(input: {
   readonly source: CanonicalSource;
   readonly generation: number;
   readonly runtime: CentralAdapterRuntime;
+  readonly control?: AdapterWorkControl;
   readonly publisher: FundingFamilyPublicationSink;
 }): Promise<FundingFamilyRuntimeResult> {
   const family = input.family;
@@ -139,6 +141,7 @@ export async function executeFundingFamilyLiquidity(input: {
       source,
       generation,
       runtime: input.runtime,
+      ...(input.control === undefined ? {} : { control: input.control }),
     })
   ));
   const offers = Object.freeze(settled.flatMap((item) => item.offers));
@@ -246,6 +249,7 @@ async function executeFundingSource(input: {
   readonly source: CanonicalSource;
   readonly generation: number;
   readonly runtime: CentralAdapterRuntime;
+  readonly control?: AdapterWorkControl;
 }): Promise<{
   readonly offers: readonly PreparedFundingOffer[];
   readonly outcome: FundingInstanceOutcome;
@@ -271,6 +275,7 @@ async function executeFundingSource(input: {
       programInput,
     },
     runtime: input.runtime,
+    ...(input.control === undefined ? {} : { control: input.control }),
   });
   if (work.status === "unresolved") {
     return Object.freeze({

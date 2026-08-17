@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import type {
   AdapterWorkControl,
   CentralAdapterRuntime,
@@ -20,9 +21,13 @@ import {
   type SealedCreditRiskQuoteHandle,
 } from "./adapter-credit-runtime.js";
 import type { TokenEdge } from "./planner/token-graph.js";
+import type { FlashLiquidityView, FlashSource } from
+  "./solver/flash-liquidity.js";
 import type { ResolvedPlanNode } from "../shared/types/plan.js";
 import type { RuntimeEvidence } from
   "./venues/adapter-family-plugin.js";
+import { PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND } from
+  "./runtime-evidence.js";
 import type {
   NormalizedSwapVictimImpact,
   UnifiedObservation,
@@ -44,6 +49,9 @@ import type { CanonicalValue } from "./venues/canonical-value.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
+import { familyId } from "./venues/adapter-family-identifiers.js";
+import type { PendingExecutionEvidence } from
+  "./venues/route-leg-adapter.js";
 import type { CanonicalEdgeId } from
   "./venues/blockscan-state-capability.js";
 import type {
@@ -147,6 +155,7 @@ export class StrictProductionRuntimeRoot {
     readonly source: CanonicalSource;
     readonly runtime: CentralAdapterRuntime;
     readonly fundingAssets: readonly string[];
+    readonly control?: AdapterWorkControl;
   }): Promise<StrictProductionRuntimeSession> {
     assertCanonicalSource(input.source);
     input.runtime.generationFence.assertCurrent(
@@ -207,6 +216,7 @@ export class StrictProductionRuntimeRoot {
         source: input.source,
         generation: input.source.generation,
         runtime: input.runtime,
+        ...(input.control === undefined ? {} : { control: input.control }),
       });
       if (refreshed.instance === null) {
         const reasons = refreshed.outcomes
@@ -274,7 +284,10 @@ export class StrictProductionRuntimeRoot {
             `strict current pricing missing for ${projected.edge.canonicalEdgeId}`,
           );
         }
-        currentPricing.set(projected.edge.canonicalEdgeId, pricing);
+        currentPricing.set(
+          projected.edge.canonicalEdgeId,
+          bindCurrentPricingToEdge(pricing, projected.edge),
+        );
       }
     }
 
@@ -287,8 +300,19 @@ export class StrictProductionRuntimeRoot {
         source: input.source,
         generation: input.source.generation,
         runtime: input.runtime,
+        ...(input.control === undefined ? {} : { control: input.control }),
         publisher: Object.freeze({ publish() {} }),
       });
+      const incomplete = result.outcomes.filter((outcome) =>
+        outcome.status !== "verified"
+      );
+      if (incomplete.length > 0) {
+        throw new Error(
+          `strict current Funding incomplete for ` +
+            `${family.plugin.manifest.familyId} (` +
+            `${incomplete.map((outcome) => outcome.reasonCode).sort().join(",")})`,
+        );
+      }
       fundingBindings.push(...result.offers.map((offer) => Object.freeze({
         family,
         offer,
@@ -368,6 +392,92 @@ export class StrictProductionRuntimeSession {
       );
     }
     return pricing;
+  }
+
+  /**
+   * Bind already validated pending input to this exact source/session without
+   * interpreting its Family-owned payload. Exact Family code remains the only
+   * consumer allowed to assign protocol meaning to sealedPayloadRef.
+   */
+  runtimeEvidenceFromPendingExecution(
+    evidence: readonly PendingExecutionEvidence[],
+  ): readonly RuntimeEvidence[] {
+    const bound: RuntimeEvidence[] = [];
+    const seen = new Set<string>();
+    for (const item of evidence) {
+      if (
+        item.headBlockNumber !== this.source.number ||
+        item.headHash.toLowerCase() !== this.source.hash.toLowerCase() ||
+        !ethers.isHexString(item.txHash, 32) ||
+        !ethers.isHexString(item.canonicalPayload) ||
+        !ethers.isHexString(item.payloadHash, 32) ||
+        !ethers.isHexString(item.evidenceHash, 32)
+      ) {
+        throw new Error("pending execution evidence differs from strict source");
+      }
+      this.#catalog.forStrictFamily(familyId(item.familyId));
+      const payloadHash = ethers.keccak256(item.canonicalPayload);
+      const expectedEvidenceHash = ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ["string", "bytes32", "uint256", "bytes32", "bytes32"],
+          [
+            item.familyId,
+            item.txHash,
+            item.headBlockNumber,
+            item.headHash,
+            payloadHash,
+          ],
+        ),
+      );
+      if (
+        payloadHash.toLowerCase() !== item.payloadHash.toLowerCase() ||
+        expectedEvidenceHash.toLowerCase() !== item.evidenceHash.toLowerCase()
+      ) {
+        throw new Error("pending execution evidence hash mismatch");
+      }
+      const key = `${item.familyId}\u001f${item.txHash.toLowerCase()}\u001f` +
+        item.evidenceHash.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      bound.push(Object.freeze({
+        evidenceId: `pending:${item.txHash.toLowerCase()}`,
+        familyId: familyId(item.familyId),
+        kind: PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND,
+        scope: "transaction" as const,
+        source: this.source,
+        txHash: item.txHash.toLowerCase(),
+        evidenceHash: item.evidenceHash.toLowerCase(),
+        sealedPayloadRef: item.canonicalPayload,
+      }));
+    }
+    return Object.freeze(bound);
+  }
+
+  /** Planner-only projection; executable Funding authority remains private. */
+  fundingLiquidityView(): FlashLiquidityView {
+    const sources = new Map<string, FlashSource>();
+    for (const { offer } of this.#fundingBindings) {
+      const asset = offer.asset.toLowerCase();
+      const incumbent = sources.get(asset);
+      if (
+        incumbent === undefined ||
+        offer.maxBorrow > incumbent.amount
+      ) {
+        sources.set(asset, Object.freeze({
+          amount: offer.maxBorrow,
+          adapterId: offer.actionAdapterId,
+          fundingId: offer.fundingId,
+        }));
+      }
+    }
+    return Object.freeze({
+      borrowable(token: string): bigint {
+        return sources.get(token.toLowerCase())?.amount ?? 0n;
+      },
+      source(token: string): FlashSource | null {
+        return sources.get(token.toLowerCase()) ?? null;
+      },
+    });
   }
 
   fundingActionIds(asset: string, amount?: bigint): readonly string[] {
@@ -647,6 +757,20 @@ function currentPricingForRoute(
         reason: reason!,
       })
     : Object.freeze({ status: "priced" as const, mid });
+}
+
+function bindCurrentPricingToEdge(
+  pricing: StrictCurrentRoutePricing,
+  edge: TokenEdge,
+): StrictCurrentRoutePricing {
+  if (pricing.status === "behavior-proven-unavailable") return pricing;
+  return Object.freeze({
+    status: "priced" as const,
+    mid: Object.freeze({
+      ...pricing.mid,
+      edges: Object.freeze([edge]) as unknown as TokenEdge[],
+    }),
+  });
 }
 
 function assertSameReadyTopology(

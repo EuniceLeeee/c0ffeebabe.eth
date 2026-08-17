@@ -14,12 +14,22 @@ import { createStrictCentralAdapterRuntime } from
   "../strict-central-adapter-runtime.js";
 import { StrictProductionRuntimeRoot } from
   "../strict-production-runtime-session.js";
+import { StrictCurrentRuntimeCoordinator } from
+  "../strict-current-runtime-coordinator.js";
+import { PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND } from
+  "../runtime-evidence.js";
 import { executeFamilyExactQuote } from
   "../venues/adapter-family-runtime.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
+import { createVerifiedGraphView } from
+  "../venues/blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "../venues/production-family-composition.js";
+import type {
+  ExecutionFamilyId,
+  PendingExecutionEvidence,
+} from "../venues/route-leg-adapter.js";
 import { UNIV2_PAIR_INTERFACE } from
   "../venues/swaps/univ2-family/codec.js";
 
@@ -85,6 +95,7 @@ function runtime(
     }>;
     readonly onCurrentPricingRead?: () => void;
     readonly failCurrentPricing?: boolean;
+    readonly failFunding?: boolean;
   } = {},
 ) {
   const reserves = options.reserves ?? pool.reserves;
@@ -107,6 +118,9 @@ function runtime(
               reserves.blockTimestampLast,
             ],
           );
+        }
+        if (options.failFunding === true) {
+          throw new Error("current Funding transport failed");
         }
         return ERC20_BALANCE.encodeFunctionResult("balanceOf", [10n ** 24n]);
       },
@@ -206,6 +220,60 @@ assert.throws(
   /no Funding offer/,
 );
 
+const pendingPayload = ethers.toBeHex(0x1234, 32);
+const pendingPayloadHash = ethers.keccak256(pendingPayload);
+const pendingTxHash = `0x${"65".repeat(32)}`;
+const pendingFamilyId = publication.familyId as ExecutionFamilyId;
+const pendingEvidenceHash = ethers.keccak256(
+  ethers.AbiCoder.defaultAbiCoder().encode(
+    ["string", "bytes32", "uint256", "bytes32", "bytes32"],
+    [
+      pendingFamilyId,
+      pendingTxHash,
+      CURRENT.number,
+      CURRENT.hash,
+      pendingPayloadHash,
+    ],
+  ),
+);
+const pendingEvidence: PendingExecutionEvidence = Object.freeze({
+  familyId: pendingFamilyId,
+  txHash: pendingTxHash,
+  headBlockNumber: CURRENT.number,
+  headHash: CURRENT.hash,
+  canonicalPayload: pendingPayload,
+  payloadHash: pendingPayloadHash,
+  evidenceHash: pendingEvidenceHash,
+});
+const boundPending = session.runtimeEvidenceFromPendingExecution([
+  pendingEvidence,
+]);
+assert.equal(boundPending.length, 1);
+assert.deepEqual(boundPending[0], {
+  evidenceId: `pending:${pendingTxHash}`,
+  familyId: publication.familyId,
+  kind: PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND,
+  scope: "transaction",
+  source: CURRENT,
+  txHash: pendingTxHash,
+  evidenceHash: pendingEvidenceHash,
+  sealedPayloadRef: pendingPayload,
+});
+assert.throws(
+  () => session.runtimeEvidenceFromPendingExecution([Object.freeze({
+    ...pendingEvidence,
+    headHash: WRONG_HASH.hash,
+  })]),
+  /differs from strict source/,
+);
+assert.throws(
+  () => session.runtimeEvidenceFromPendingExecution([Object.freeze({
+    ...pendingEvidence,
+    evidenceHash: `0x${"00".repeat(32)}`,
+  })]),
+  /hash mismatch/,
+);
+
 const edge = session.edges.find((candidate) =>
   candidate.tokenIn.toLowerCase() === UNIV2_FIXTURE_TOKEN0.toLowerCase()
 )!;
@@ -224,7 +292,141 @@ if (currentPricing?.status === "priced") {
     startupMid.mid,
     "current session must not reuse the startup pricing snapshot",
   );
+  assert.equal(
+    currentPricing.mid.edges[0],
+    edge,
+    "current pricing must bind the exact strict-session edge object",
+  );
 }
+
+const currentGraph = createVerifiedGraphView({
+  id: "strict-current-runtime-test",
+  generation: CURRENT.generation,
+  sourceBlock: CURRENT.number,
+  sourceBlockHash: CURRENT.hash,
+  completenessWatermark: CURRENT.number,
+  perSourceCoverage: Object.freeze([Object.freeze({
+    familyId: publication.familyId,
+    sourceId: "strict-ready-test",
+    sourceFingerprint: "strict-ready-test-v1",
+    completeThroughBlock: CURRENT.number,
+    completeThroughHash: CURRENT.hash,
+  })]),
+  familyIdForEdge: () => publication.familyId,
+  edges: startupView.edges,
+});
+let resetCount = 0;
+const currentCoordinator = new StrictCurrentRuntimeCoordinator(
+  async (source, control) => await root.createSession({
+    source,
+    runtime: strictRuntime,
+    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+    ...(control === undefined ? {} : { control }),
+  }),
+  () => {
+    resetCount++;
+  },
+);
+const currentRuntime = await currentCoordinator.prepare({
+  graph: currentGraph,
+  fundingTokens: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(currentRuntime.status, "complete");
+assert.equal(currentRuntime.snapshot.graph, currentGraph);
+assert.equal(
+  currentRuntime.snapshot.pricing.coverage.expectedEdgeKeys.length,
+  currentGraph.scannerEdgeCount,
+);
+for (const graphEdge of currentGraph.edges) {
+  const mid = currentRuntime.snapshot.pricing.mids.get(
+    graphEdge.canonicalEdgeId!,
+  );
+  assert(mid);
+  assert.equal(mid.edges[0], graphEdge);
+}
+assert.equal(
+  currentCoordinator.latestPricingSnapshot()?.sourceBlock,
+  CURRENT.number,
+);
+await currentCoordinator.resetDynamicStateForReplay();
+assert.equal(currentCoordinator.latestPricingSnapshot(), null);
+assert.equal(resetCount, 1);
+
+const failingCoordinator = new StrictCurrentRuntimeCoordinator(
+  async (source, control) => await root.createSession({
+    source,
+    runtime: runtime(CURRENT, { failCurrentPricing: true }),
+    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+    ...(control === undefined ? {} : { control }),
+  }),
+  () => {},
+);
+await assert.rejects(
+  failingCoordinator.prepareCoarsePricing({
+    graph: currentGraph,
+    deadlineAtMs: Date.now() + 10_000,
+  }),
+  /strict current pricing incomplete/,
+);
+assert.equal(
+  failingCoordinator.latestPricingSnapshot(),
+  null,
+  "failed strict pricing cannot publish a partial snapshot",
+);
+let failAfterPublication = false;
+const retainingCoordinator = new StrictCurrentRuntimeCoordinator(
+  async (source, control) => await root.createSession({
+    source,
+    runtime: runtime(CURRENT, {
+      failCurrentPricing: failAfterPublication,
+    }),
+    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+    ...(control === undefined ? {} : { control }),
+  }),
+  () => {},
+);
+await retainingCoordinator.prepareCoarsePricing({
+  graph: currentGraph,
+  deadlineAtMs: Date.now() + 10_000,
+});
+const retainedPricing = retainingCoordinator.latestPricingSnapshot();
+assert(retainedPricing);
+failAfterPublication = true;
+await assert.rejects(
+  retainingCoordinator.prepareCoarsePricing({
+    graph: currentGraph,
+    deadlineAtMs: Date.now() + 10_000,
+  }),
+  /strict current pricing incomplete/,
+);
+assert.strictEqual(
+  retainingCoordinator.latestPricingSnapshot(),
+  retainedPricing,
+  "failed strict refresh cannot replace the last atomic pricing snapshot",
+);
+const failingFundingCoordinator = new StrictCurrentRuntimeCoordinator(
+  async (source, control) => await root.createSession({
+    source,
+    runtime: runtime(CURRENT, { failFunding: true }),
+    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+    ...(control === undefined ? {} : { control }),
+  }),
+  () => {},
+);
+await assert.rejects(
+  failingFundingCoordinator.prepare({
+    graph: currentGraph,
+    fundingTokens: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+    deadlineAtMs: Date.now() + 10_000,
+  }),
+  /strict current Funding incomplete/,
+);
+assert.equal(
+  failingFundingCoordinator.latestPricingSnapshot(),
+  null,
+  "Funding failure cannot publish pricing with invented zero liquidity",
+);
 assert(session.supportsVictimReplay(edge));
 const victim = session.replayVictim({
   edge,

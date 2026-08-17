@@ -47,13 +47,16 @@ import {
   type FinalSimulationWorkRuntime,
 } from "./final-simulation-work-runtime.js";
 import { FLASH_SWAP_REPAY } from "./templates/path-template.js";
-import {
-  AdapterRuntimeCoordinator,
-  type AdapterRuntimeSnapshot,
-  type CurrentNExactExecutionContext,
-  type CurrentNExactExecutionContextResult,
+import type {
+  AdapterRuntimePrepareResult,
+  AdapterRuntimeSnapshot,
+  CurrentNExactExecutionContext,
+  CurrentNExactExecutionContextResult,
+  PrepareAdapterRuntimeInput,
+  PrepareCurrentNExactExecutionContextInput,
 } from "./adapter-runtime-coordinator.js";
 import type {
+  BlockScanLaggingTopologyRefreshMode,
   BlockScanFamilyTelemetry,
   BlockScanStateIssue,
   BlockScanStatePrepareResult,
@@ -698,7 +701,7 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   isShuttingDown(): boolean;
   blockScanGraph(): readonly TokenEdge[] | undefined;
   blockScanPlanner(): TemplatePlanner | undefined;
-  adapterRuntimeCoordinator(): AdapterRuntimeCoordinator | undefined;
+  currentRuntimeCoordinator(): CurrentSourceRuntimeCoordinator | undefined;
   flashTokens(): readonly string[];
   buildGraphView(input: {
     readonly id: string;
@@ -721,6 +724,25 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   submitAtomic(input: BlockScanAtomicExecutionInput): Promise<BlockScanAtomicResult>;
 }
 
+export interface CurrentSourceRuntimeCoordinator {
+  latestPricingSnapshot(): BlockScanStateSnapshot | null;
+  prepareCoarsePricing(input: {
+    readonly graph: VerifiedGraphView;
+    readonly deadlineAtMs: number;
+    readonly familySettleDeadlineAtMs?: number;
+    readonly laggingTopologyRefreshMode?:
+      BlockScanLaggingTopologyRefreshMode;
+    readonly signal?: AbortSignal;
+  }): Promise<BlockScanStatePrepareResult>;
+  resetDynamicStateForReplay(): Promise<void>;
+  prepare(
+    input: PrepareAdapterRuntimeInput,
+  ): Promise<AdapterRuntimePrepareResult>;
+  prepareCurrentNExactExecutionContext(
+    input: PrepareCurrentNExactExecutionContextInput,
+  ): Promise<CurrentNExactExecutionContextResult>;
+}
+
 /**
  * Owns the one-at-a-time current-head block-scan pass. Main constructs the
  * dependencies and keeps discovery/blind state ownership; this loop owns only
@@ -738,7 +760,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   private readonly completedCoarsePricingByBlock =
     new Map<number, BlockScanStateSnapshot>();
   private pendingCoarsePricing: {
-    readonly coordinator: AdapterRuntimeCoordinator;
+    readonly coordinator: CurrentSourceRuntimeCoordinator;
     readonly graph: VerifiedGraphView;
   } | null = null;
   private latestScheduledHead: number | null = null;
@@ -858,7 +880,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   private maybeStartProducerAtObservation(blockNumber: number): void {
     if (this.startupWarmPending || this.deps.blind.enabled) return;
     if (this.deps.nMinusOneFallbackEnabled !== true) return;
-    const coordinator = this.deps.adapterRuntimeCoordinator();
+    const coordinator = this.deps.currentRuntimeCoordinator();
     const graph = this.deps.blockScanGraph();
     if (!coordinator || !graph) return;
     const producerView = this.producerGraphView({
@@ -1169,7 +1191,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   }
 
   private enqueueCoarsePricing(input: {
-    readonly coordinator: AdapterRuntimeCoordinator;
+    readonly coordinator: CurrentSourceRuntimeCoordinator;
     readonly graph: VerifiedGraphView;
   }): void {
     if (this.coarsePricingActive) {
@@ -1185,7 +1207,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   }
 
   private startCoarsePricing(input: {
-    readonly coordinator: AdapterRuntimeCoordinator;
+    readonly coordinator: CurrentSourceRuntimeCoordinator;
     readonly graph: VerifiedGraphView;
   }): void {
     const startedAtMs = Date.now();
@@ -1471,7 +1493,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   }
 
   private completedCoarsePricing(
-    coordinator: AdapterRuntimeCoordinator,
+    coordinator: CurrentSourceRuntimeCoordinator,
     sourceBlock: number,
   ): BlockScanStateSnapshot | null {
     const tracked = this.completedCoarsePricingByBlock.get(sourceBlock);
@@ -1483,7 +1505,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   }
 
   private async waitForAdjacentCoarsePricing(
-    coordinator: AdapterRuntimeCoordinator,
+    coordinator: CurrentSourceRuntimeCoordinator,
     expectedSourceBlock: number,
     deadlineAtMs: number,
     signal: AbortSignal,
@@ -1632,14 +1654,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     const blockScanGraph = this.deps.blockScanGraph();
     const blockScanCfg = this.deps.blockScanConfig;
     const blockScanPlanner = this.deps.blockScanPlanner();
-    const adapterRuntimeCoordinator = this.deps.adapterRuntimeCoordinator();
+    const currentRuntimeCoordinator = this.deps.currentRuntimeCoordinator();
     const blockScanExecutionWorkers = this.deps.executionWorkers;
     const blockScanFinalSimulationWorkers = this.deps.finalSimulationWorkers;
     console.log(
       `[searcher/blockscan-debug] runHead enter block=${blockNumber} ` +
         `enabled=${this.deps.enabled} graph=${blockScanGraph?.length ?? "none"} ` +
         `cfg=${blockScanCfg ? "yes" : "no"} planner=${blockScanPlanner ? "yes" : "no"} ` +
-        `coord=${adapterRuntimeCoordinator ? "yes" : "no"} ` +
+        `coord=${currentRuntimeCoordinator ? "yes" : "no"} ` +
         `workers=${blockScanExecutionWorkers.length} ` +
         `finalSimWorkers=${blockScanFinalSimulationWorkers.length} ` +
         `shutdown=${this.deps.isShuttingDown()}`,
@@ -1650,7 +1672,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       !blockScanGraph ||
       !blockScanCfg ||
       !blockScanPlanner ||
-      !adapterRuntimeCoordinator ||
+      !currentRuntimeCoordinator ||
       blockScanExecutionWorkers.length === 0 ||
       blockScanFinalSimulationWorkers.length === 0
     ) {
@@ -2332,7 +2354,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             return;
           }
           this.enqueueCoarsePricing({
-            coordinator: adapterRuntimeCoordinator,
+            coordinator: currentRuntimeCoordinator,
             graph: this.producerGraphView({
               edges: graphEdges,
               topologyKey: this.topologyKey(),
@@ -2507,7 +2529,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       let exactFundingTokens: readonly string[] = [];
       if (!useNMinusOneFallback) {
         this.passStageLabel = "state:prepare";
-        const runtime = await adapterRuntimeCoordinator.prepare({
+        const runtime = await currentRuntimeCoordinator.prepare({
           graph: graphView,
           fundingTokens: [...new Set([
             ...this.deps.flashTokens(),
@@ -2703,7 +2725,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         this.passStageLabel = "state:wait-adjacent";
         const expectedCoarseBlock = blockNumber - 1;
         const predecessorPricing = await this.waitForAdjacentCoarsePricing(
-          adapterRuntimeCoordinator,
+          currentRuntimeCoordinator,
           expectedCoarseBlock,
           passDeadlineAtMs - Math.max(1, this.deps.solveReserveMs),
           passSignal,
@@ -2921,9 +2943,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         hash: exactSourceBlockHash,
         generation,
       }));
+      const runtimeEvidence = strictSession
+        .runtimeEvidenceFromPendingExecution(executionEvidence);
       let exactYieldedMs = 0;
       const producerLagBlocks = (): number => {
-        const snapshot = adapterRuntimeCoordinator.latestPricingSnapshot();
+        const snapshot = currentRuntimeCoordinator.latestPricingSnapshot();
         const producerSource = snapshot?.sourceBlock ?? -1;
         const newestHead = this.latestScheduledHead ?? blockNumber;
         return Math.max(0, newestHead - producerSource);
@@ -3041,7 +3065,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         {
           executor: this.deps.executorAddress,
           strictSession,
-          runtimeEvidence: Object.freeze([]),
+          runtimeEvidence,
           signal: passSignal,
           admissionSpreadBps:
             blockScanCfg.exactAdmissionSpreadBps ??
@@ -3097,7 +3121,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
          * forks remain lazy until the solver actually starts on a worker.
          */
         const exactContext: CurrentNExactExecutionContextResult =
-          await adapterRuntimeCoordinator
+          await currentRuntimeCoordinator
             .prepareCurrentNExactExecutionContext({
               graph: graphView,
               fundingTokens: exactFundingTokens,
@@ -3303,7 +3327,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
                 quoteProfitFloorBps: 0n,
                 quoteSafetyBps: 10000n,
                 strictSession,
-                runtimeEvidence: Object.freeze([]),
+                runtimeEvidence,
                 signal: passSignal,
                 onDeferredCandidates: (resolved) => {
                   deferredCandidates = resolved;

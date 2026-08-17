@@ -3139,6 +3139,7 @@ async function preparePricingState(input: {
   readonly generation: number;
   readonly runtime: CentralAdapterRuntime;
   readonly maxDependentReadRounds: number;
+  readonly control?: AdapterWorkControl;
   readonly inheritedEvidenceRefs: readonly string[];
 }): Promise<PricingPreparation> {
   const familyId = input.family.plugin.manifest.familyId;
@@ -3521,6 +3522,7 @@ export async function refreshPreparedFamilyInstancePricing(input: {
   readonly generation: number;
   readonly runtime: CentralAdapterRuntime;
   readonly maxDependentReadRounds?: number;
+  readonly control?: AdapterWorkControl;
 }): Promise<PreparedFamilyPricingRefreshResult> {
   assertIssuedPreparedFamilyInstance(input);
   const refreshed = await Promise.all(input.instance.pricingInstances.map(
@@ -3546,6 +3548,7 @@ export async function refreshPreparedFamilyInstancePricing(input: {
         generation: input.generation,
         runtime: input.runtime,
         maxDependentReadRounds: input.maxDependentReadRounds ?? 4,
+        ...(input.control === undefined ? {} : { control: input.control }),
         inheritedEvidenceRefs: pricing.evidenceRefs,
         inheritedOutcomes: Object.freeze([]),
       });
@@ -3593,6 +3596,7 @@ function executeCurrentWork<Input, Evidence>(
     readonly source: CanonicalSource;
     readonly generation: number;
     readonly runtime: CentralAdapterRuntime;
+    readonly control?: AdapterWorkControl;
   },
   program: RequestProgram<Input, Evidence>,
   programInput: Input,
@@ -3608,6 +3612,7 @@ function executeCurrentWork<Input, Evidence>(
       programInput,
     },
     runtime: input.runtime,
+    ...(input.control === undefined ? {} : { control: input.control }),
   });
 }
 
