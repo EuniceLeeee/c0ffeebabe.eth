@@ -3521,6 +3521,36 @@ legacy=0。live-discovery coordinator、active-pool/build-universe、router disc
 auto-close 工具仍直接读取 legacy registry；下一批继续先删 production 调用点，再以 strict
 discovery/catalog projection闭合。未部署，未产生 F5 live provenance。
 
+**2026-08-18 producer-time live-discovery 第十三批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- production source closure 证明 `live-discovery-coordinator.ts` 已无 runtime import，只有
+  三个旧测试引用。该 3,010 行 coordinator 仍包含 producer 期间 DEX/protocol discovery、
+  trace preparation、backfill timer、runtime pool refresh、Graph merge 与 topology publication，
+  与 §22.7 的 startup-only ready topology 直接冲突；本批已物理删除整文件，没有把它改造成
+  第二条 strict coordinator；
+- producer freeze 是必须保留的安全门，不随旧 coordinator 删除。最小独立模块
+  `producer-generation-freeze.ts` 只提供 generic
+  `assertProducerGenerationPublicationAllowed()`；frozen generation 请求 discovery/topology
+  publication 必须抛错。`strict-ready-runtime` 同时增加源码闭包合同，禁止 main 重新引用
+  `live-discovery-coordinator`；
+- 物理删除只验证旧 coordinator 的 `discovery-publication-invariants` 与
+  `strict-live-source-transition` 两个测试及 package scripts。它们覆盖的是已退出 production
+  的 hot publication/CAS/backfill priority 与 coordinator-local ancestor walk，不是当前
+  ready/current-source producer 合同；没有为了保留测试而留下 runtime legacy。canonical
+  cutoff/hash、ready Graph/catalog CAS、current-source canonical fence 与 producer freeze
+  分别仍由 universe rebuild、strict ready runtime/session 与 current runtime 合同承载；
+- 同轮通过 `strict-ready-runtime`、`strict-ready-graph-view`、
+  `blockscan-frozen-topology`、更新后的完整 adapter-family shadow suite（不再调用已删除的
+  transition 脚本）以及 listener 完整 `build`。本批净删除 4,289 行旧 coordinator/fixture
+  代码。
+
+本 checkpoint 物理关闭 producer-time discovery/backfill/trace/topology publication 管线；
+production producer 只能消费 startup-ready topology 并更新 current-source pricing，不能扩图。
+active-pool/build-universe/router/auto-close 独立工具仍有 legacy registry import，strict catalog
+projection 中也仍有为未迁移工具保留的 legacy-shaped facade；这些继续按后续 cleanup slice
+处理。本批未部署，未宣称 production cutover 或 F5/F9 完成。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

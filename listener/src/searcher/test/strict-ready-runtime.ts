@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolveStrictReadyRuntime } from "../strict-ready-runtime.js";
 import { assertProducerGenerationPublicationAllowed } from
-  "../live-discovery-coordinator.js";
+  "../producer-generation-freeze.js";
 import {
   hashReadyCatalogSnapshot,
   hashReadyGraphSnapshot,
@@ -118,6 +118,7 @@ for (const forbidden of [
   "protocolDiscoverySourceFingerprints",
   "new AdapterRuntimeCoordinator(",
   "new BlockScanStateCoordinator(",
+  "live-discovery-coordinator",
 ]) {
   assert.equal(
     mainSource.includes(forbidden),
