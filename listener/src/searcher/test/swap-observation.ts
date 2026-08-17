@@ -53,6 +53,7 @@ const CURVE_IFACE = new ethers.Interface([
   "function exchange_received(uint256 i,uint256 j,uint256 dx,uint256 minDy)",
   "function exchange_underlying(uint256 i,uint256 j,uint256 dx,uint256 minDy)",
   "event TokenExchange(address indexed buyer,int128 soldId,uint256 tokensSold,int128 boughtId,uint256 tokensBought)",
+  "event TokenExchangeUnderlying(address indexed buyer,int128 soldId,uint256 tokensSold,int128 boughtId,uint256 tokensBought)",
 ]);
 const ERC20_IFACE = new ethers.Interface([
   "event Transfer(address indexed from,address indexed to,uint256 value)",
@@ -401,7 +402,7 @@ async function testStrictTriggerConsumptionContract(): Promise<void> {
   );
 }
 
-async function testBalancerV3IndexedPoolIdentity(): Promise<void> {
+async function testRetiredBalancerV3HasNoReceiptAuthority(): Promise<void> {
   const graph = [edge({ adapterId: "balancer-v3-unlock", target: POOL })];
   const impacts = await detectImpactFromLogs([
     eventLog(BALANCER_V3_IFACE, "Swap", ADDR.BALANCER_V3_VAULT, [
@@ -414,10 +415,10 @@ async function testBalancerV3IndexedPoolIdentity(): Promise<void> {
       3n,
     ]),
   ], graph);
-  const impact = impacts.find((candidate) => candidate.matchedAdapterId === "balancer-v3-unlock");
-  assert(impact !== undefined, "Balancer V3 Vault event should match the indexed pool");
-  assert(impact.pool.toLowerCase() === POOL.toLowerCase(), "Vault emitter must not replace pool identity");
-  assert(impact.amountIn === 123n && impact.amountOut === 120n, "Balancer V3 amounts");
+  assert(
+    impacts.every((candidate) => candidate.matchedAdapterId !== "balancer-v3-unlock"),
+    "a retired Family must not regain receipt authority from a legacy graph edge",
+  );
 }
 
 async function testCrossFamilyReceiptOrder(): Promise<void> {
@@ -890,7 +891,7 @@ async function testTopicAndBroadMapDoNotCreateIdentity(): Promise<void> {
 
 async function testCurveDirectCallIsFamilyOwnedAndDirectional(): Promise<void> {
   const graph = [edge({
-    adapterId: "curve-exchange",
+    adapterId: "curve-exchange-underlying",
     target: POOL,
     curveI: 0,
     curveJ: 1,
@@ -913,9 +914,12 @@ async function testCurveDirectCallIsFamilyOwnedAndDirectional(): Promise<void> {
   };
   const matched = await detectPoolImpact({
     ...baseEvent,
-    input: CURVE_IFACE.encodeFunctionData("exchange", [0, 1, 123n, 0n]),
+    input: CURVE_IFACE.encodeFunctionData(
+      "exchange_underlying(uint256,uint256,uint256,uint256)",
+      [0, 1, 123n, 0n],
+    ),
   }, graph);
-  assert(matched.length === 1, "Curve family should decode its admitted direct call");
+  assert(matched.length === 1, "Curve underlying Family should decode its admitted direct call");
   assert(matched[0].amountIn === 123n, "Curve direct-call amount");
   assert(
     matched[0].sourceGeneration?.sourceBlockHash === ethers.ZeroHash,
@@ -923,9 +927,12 @@ async function testCurveDirectCallIsFamilyOwnedAndDirectional(): Promise<void> {
   );
   const receiptPreferred = await detectPoolImpactTransition({
     ...baseEvent,
-    input: CURVE_IFACE.encodeFunctionData("exchange", [0, 1, 123n, 0n]),
+    input: CURVE_IFACE.encodeFunctionData(
+      "exchange_underlying(uint256,uint256,uint256,uint256)",
+      [0, 1, 123n, 0n],
+    ),
     logs: [
-      eventLog(CURVE_IFACE, "TokenExchange", POOL, [
+      eventLog(CURVE_IFACE, "TokenExchangeUnderlying", POOL, [
         SENDER,
         0,
         122n,
@@ -940,35 +947,24 @@ async function testCurveDirectCallIsFamilyOwnedAndDirectional(): Promise<void> {
       receiptPreferred.impacts[0]?.amountIn === 122n,
     "an admitted receipt observation must replace direct-call evidence for the same pool",
   );
-  const uintReceived = await detectPoolImpact({
-    ...baseEvent,
-    input: CURVE_IFACE.encodeFunctionData(
-      "exchange_received(uint256,uint256,uint256,uint256)",
-      [0, 1, 123n, 0n],
-    ),
-  }, graph);
-  assert(
-    uintReceived.length === 1,
-    "Curve family should decode its admitted uint-index exchange_received call",
-  );
   const wrongFamilyEntrypoint = await detectPoolImpactTransition({
     ...baseEvent,
-    input: CURVE_IFACE.encodeFunctionData(
-      "exchange_underlying(uint256,uint256,uint256,uint256)",
-      [0, 1, 123n, 0n],
-    ),
+    input: CURVE_IFACE.encodeFunctionData("exchange", [0, 1, 123n, 0n]),
   }, graph);
   assert(
     wrongFamilyEntrypoint.impacts.length === 0 &&
       wrongFamilyEntrypoint.unresolved.some((item) =>
         item.reason === "direct-call-decode-failed"
       ),
-    "underlying entrypoint must not be coerced onto a plain Curve edge",
+    "plain entrypoint must not be coerced onto an underlying Curve edge",
   );
 
   const mismatched = await detectPoolImpactTransition({
     ...baseEvent,
-    input: CURVE_IFACE.encodeFunctionData("exchange", [2, 3, 123n, 0n]),
+    input: CURVE_IFACE.encodeFunctionData(
+      "exchange_underlying(uint256,uint256,uint256,uint256)",
+      [2, 3, 123n, 0n],
+    ),
   }, graph);
   assert(
     mismatched.impacts.length === 0,
@@ -982,7 +978,10 @@ async function testCurveDirectCallIsFamilyOwnedAndDirectional(): Promise<void> {
   const wrongReceiptSource = await detectPoolImpactTransition({
     ...baseEvent,
     receiptBlockNumber: 2,
-    input: CURVE_IFACE.encodeFunctionData("exchange", [0, 1, 123n, 0n]),
+    input: CURVE_IFACE.encodeFunctionData(
+      "exchange_underlying(uint256,uint256,uint256,uint256)",
+      [0, 1, 123n, 0n],
+    ),
   }, graph);
   assert(
     !wrongReceiptSource.complete &&
@@ -994,7 +993,10 @@ async function testCurveDirectCallIsFamilyOwnedAndDirectional(): Promise<void> {
   const wrongReceiptParent = await detectPoolImpactTransition({
     ...baseEvent,
     receiptParentBlockHash: ethers.id("other-parent"),
-    input: CURVE_IFACE.encodeFunctionData("exchange", [0, 1, 123n, 0n]),
+    input: CURVE_IFACE.encodeFunctionData(
+      "exchange_underlying(uint256,uint256,uint256,uint256)",
+      [0, 1, 123n, 0n],
+    ),
   }, graph);
   assert(
     !wrongReceiptParent.complete &&
@@ -1108,7 +1110,7 @@ async function testSharedAddressScanner(): Promise<void> {
     batchSize: 1,
     async getLogs(event, fromBlock) {
       queried.add(event.id);
-      if (event.id !== "curve-underlying-uint") return [];
+      if (event.id !== "univ2-pair-swap-log") return [];
       return [{ address: POOL, blockNumber: fromBlock }];
     },
   });
@@ -1116,11 +1118,12 @@ async function testSharedAddressScanner(): Promise<void> {
   assert(activity?.count === 2, "shared scanner must aggregate both block batches");
   assert(activity.lastSwapBlock === 11, "shared scanner last swap block");
   assert(
-    activity.adapterCounts.get("curve-underlying") === 2,
+    activity.adapterCounts.get("univ2") === 2,
     "shared scanner must project descriptor pool adapter",
   );
   assert(
-    queried.has("univ2-swap") && queried.has("balancer-v3-swap") === false,
+    queried.has("univ2-pair-swap-log") &&
+      queried.has("balancer-v3-swap") === false,
     "shared address scanner must query address emitters only",
   );
 }
@@ -1129,7 +1132,7 @@ await testReceiptLevelV2Correlation();
 await testV2FinalReceiptStateAndMalformedIsolation();
 await testUnknownSameTopicPoolIsNoMatch();
 await testStrictTriggerConsumptionContract();
-await testBalancerV3IndexedPoolIdentity();
+await testRetiredBalancerV3HasNoReceiptAuthority();
 await testCrossFamilyReceiptOrder();
 await testMultiPoolTransitionRetainsEveryAffectedPool();
 await testRepeatedV3UsesTransactionFinalPostState();

@@ -378,9 +378,10 @@ const CURVE_UNDERLYING_DIRECT_SELECTORS = new Set([
 export function createUniV2SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
-  landedEvents: readonly LandedSwapEventDeclaration[];
+  landedEvents?: readonly LandedSwapEventDeclaration[];
+  topics?: readonly string[];
 }): SwapObservationCapability {
-  const topics = topicsFromDeclarations(input.landedEvents);
+  const topics = observationTopics(input);
   return createStrictSwapObservation({
     topics,
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
@@ -455,9 +456,10 @@ export function createUniV2SwapObservation(input: {
 export function createUniV3SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
-  landedEvents: readonly LandedSwapEventDeclaration[];
+  landedEvents?: readonly LandedSwapEventDeclaration[];
+  topics?: readonly string[];
 }): SwapObservationCapability {
-  const topics = topicsFromDeclarations(input.landedEvents);
+  const topics = observationTopics(input);
   return createStrictSwapObservation({
     topics,
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
@@ -505,9 +507,10 @@ export function createUniV3SwapObservation(input: {
 export function createCurveSwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
-  landedEvents: readonly LandedSwapEventDeclaration[];
+  landedEvents?: readonly LandedSwapEventDeclaration[];
+  topics?: readonly string[];
 }): SwapObservationCapability {
-  const topics = topicsFromDeclarations(input.landedEvents);
+  const topics = observationTopics(input);
   const topicSet = new Set(topics);
   const directCallSelectors = CURVE_DIRECT_SELECTORS;
   const plainAdapterIds = input.adapterIds.filter((adapterId) =>
@@ -582,7 +585,8 @@ export function createCurveSwapObservation(input: {
 export function createUniV4SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
-  landedEvents: readonly LandedSwapEventDeclaration[];
+  landedEvents?: readonly LandedSwapEventDeclaration[];
+  topics?: readonly string[];
   /**
    * Swap-affecting hooks may alter the final caller balance after PoolManager
    * emits Swap. Such families still reuse the exact PoolKey/post-state decoder,
@@ -592,10 +596,12 @@ export function createUniV4SwapObservation(input: {
 }): SwapObservationCapability {
   const events = input.landedEvents;
   return createStrictSwapObservation({
-    topics: topicsFromDeclarations(events),
+    topics: observationTopics(input),
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
     observedPoolIdentity(log: SwapEventLog) {
-      return observedFamilyPoolIdentity(events, log);
+      return events === undefined
+        ? log.topics[1]?.toLowerCase() ?? null
+        : observedFamilyPoolIdentity(events, log);
     },
     async decodeSwapImpacts(ctx: ReceiptSwapObservationContext) {
       const impacts: CandidateSwapImpact[] = [];
@@ -719,9 +725,10 @@ export function createBalancerV3SwapObservation(input: {
 export function createDodoV2SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
-  landedEvents: readonly LandedSwapEventDeclaration[];
+  landedEvents?: readonly LandedSwapEventDeclaration[];
+  topics?: readonly string[];
 }): SwapObservationCapability {
-  const topics = topicsFromDeclarations(input.landedEvents);
+  const topics = observationTopics(input);
   return createStrictSwapObservation({
     topics,
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
@@ -783,6 +790,30 @@ function topicsFromDeclarations(
       event.topic === null ? [] : [event.topic.toLowerCase()]
     )),
   ]);
+}
+
+function observationTopics(input: {
+  readonly landedEvents?: readonly LandedSwapEventDeclaration[];
+  readonly topics?: readonly string[];
+}): readonly string[] {
+  if (
+    (input.landedEvents === undefined) === (input.topics === undefined)
+  ) {
+    throw new Error(
+      "swap observation requires exactly one landedEvents/topics source",
+    );
+  }
+  const topics = input.landedEvents === undefined
+    ? input.topics!
+    : topicsFromDeclarations(input.landedEvents);
+  const normalized = [...new Set(topics.map((topic) => topic.toLowerCase()))];
+  if (
+    normalized.length === 0 ||
+    normalized.some((topic) => !ethers.isHexString(topic, 32))
+  ) {
+    throw new Error("swap observation topics must be non-empty bytes32 values");
+  }
+  return Object.freeze(normalized);
 }
 
 export function decodeUniV2SwapData(data: string): {

@@ -11,6 +11,7 @@ import {
   UNIV3_MINT_TOPIC,
   UNIV3_POOL_CREATED_TOPIC,
   UNIV3_POOL_INTERFACE,
+  UNIV3_SWAP_ROUTER,
   UNIV3_SWAP_TOPIC,
 } from "../univ3-abi.js";
 import {
@@ -25,6 +26,7 @@ import {
 } from "./codec.js";
 import type { UniV3Descriptor, UniV3Route } from "./types.js";
 import { univ3VictimReplay } from "./victim.js";
+import { createUniV3SwapObservation } from "../../swap-observation.js";
 
 const SWAP_PATTERN_IDS = Object.freeze([
   UNIV3_SWAP_LOG_PATTERN_ID,
@@ -61,6 +63,14 @@ export const univ3Swap = {
     ],
     decode: ({ observation }) => decodeEffects(observation),
   },
+  receiptObservation: createUniV3SwapObservation({
+    adapterIds: ["univ3-swap"],
+    canonicalIntakeTargets: [
+      UNIV3_SWAP_ROUTER,
+      "0xe592427a0aece92de3edee1f18e0157c05861564",
+    ],
+    topics: [UNIV3_SWAP_TOPIC, PANCAKE_V3_SWAP_TOPIC],
+  }),
   victimSupport: "replay",
   replay: univ3VictimReplay,
   poolMaterialization: {

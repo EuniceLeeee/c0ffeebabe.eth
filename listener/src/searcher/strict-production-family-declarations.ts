@@ -29,6 +29,8 @@ import type {
 } from "./venues/route-leg-adapter.js";
 import type { StrictOracleVictimDescriptor } from
   "./detector/victim-effect.js";
+import type { SwapObservationCapability } from
+  "./venues/swap-observation.js";
 
 const FAMILY_WIDE_ACTIVATION_SCOPE = "family-wide";
 const ZERO_HASH = `0x${"00".repeat(32)}`;
@@ -60,6 +62,12 @@ export interface StrictLandedLog {
   readonly transactionHash?: string;
 }
 
+export interface StrictSwapObservationGroup {
+  readonly observation: SwapObservationCapability;
+  readonly familyIds: readonly string[];
+  readonly edgeAdapterIds: ReadonlySet<string>;
+}
+
 type RoutePluginProjection = {
   readonly manifest: {
     readonly familyId: FamilyId;
@@ -83,6 +91,7 @@ type RoutePluginProjection = {
         readonly observation: UnifiedObservation;
       }): "swap" | "mutation" | null;
     };
+    readonly receiptObservation: SwapObservationCapability;
   };
   readonly protocol?: {
     readonly oracleVictim?: OracleVictimSpec;
@@ -96,6 +105,7 @@ export class StrictProductionFamilyDeclarations {
   readonly fundingActionIds: readonly string[];
   readonly creditActionIds: readonly string[];
   readonly oracleVictims: readonly StrictOracleVictimDescriptor[];
+  readonly swapObservationGroups: readonly StrictSwapObservationGroup[];
 
   readonly #catalog: FamilyCapabilityCatalog;
   readonly #activationByFamily: ReadonlySet<string>;
@@ -120,6 +130,7 @@ export class StrictProductionFamilyDeclarations {
     const creditActionIds: string[] = [];
     const oracleVictims: StrictOracleVictimDescriptor[] = [];
     const oracleVictimIds = new Set<string>();
+    const swapObservationGroups: StrictSwapObservationGroup[] = [];
 
     for (const loaded of catalog.listAll()) {
       const plugin = loaded.plugin as unknown as RoutePluginProjection;
@@ -173,6 +184,18 @@ export class StrictProductionFamilyDeclarations {
         requiresProtocolEdgesFlag:
           manifest.requiresProtocolEdgesFlag ?? false,
       }));
+      if (manifest.domain === "swap") {
+        if (plugin.swap === undefined) {
+          throw new Error(
+            `strict declarations: ${manifest.familyId} lacks swap semantics`,
+          );
+        }
+        swapObservationGroups.push(Object.freeze({
+          observation: plugin.swap.receiptObservation,
+          familyIds: Object.freeze([manifest.familyId]),
+          edgeAdapterIds: new Set(manifest.edgeAdapterIds ?? []),
+        }));
+      }
       for (const edgeAdapterId of manifest.edgeAdapterIds ?? []) {
         if (catalog.ownerOfAction(edgeAdapterId) !== manifest.familyId) {
           throw new Error(
@@ -254,6 +277,7 @@ export class StrictProductionFamilyDeclarations {
     );
     this.creditActionIds = uniqueActionIds("credit", creditActionIds);
     this.oracleVictims = Object.freeze(oracleVictims);
+    this.swapObservationGroups = Object.freeze(swapObservationGroups);
     this.routeFamilies = Object.freeze(routeFamilies);
     this.pendingEvidence = createPendingTransactionEvidenceProjection(
       observers,

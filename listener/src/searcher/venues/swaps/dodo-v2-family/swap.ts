@@ -9,6 +9,7 @@ import {
 } from "./codec.js";
 import { DODO_V2_SWAP_LOG_PATTERN_ID } from "./discovery.js";
 import type { DodoV2Descriptor, DodoV2Route } from "./types.js";
+import { createDodoV2SwapObservation } from "../../swap-observation.js";
 
 export const dodoV2Swap = {
   landedEvents: {
@@ -24,6 +25,13 @@ export const dodoV2Swap = {
     patternIds: [DODO_V2_SWAP_LOG_PATTERN_ID],
     decode: ({ observation }) => decodeSwapEffects(observation),
   },
+  receiptObservation: createDodoV2SwapObservation({
+    adapterIds: ["dodo-v2-swap"],
+    canonicalIntakeTargets: [
+      "0xa356867fDCEa8e71AEaF87805808803806231FdC",
+    ],
+    topics: [DODO_V2_SWAP_TOPIC],
+  }),
   victimSupport: "detect-only",
   poolMaterialization: {
     patternIds: [DODO_V2_SWAP_LOG_PATTERN_ID],

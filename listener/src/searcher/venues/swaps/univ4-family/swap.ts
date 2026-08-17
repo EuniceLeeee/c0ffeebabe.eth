@@ -2,6 +2,7 @@ import type {
   SwapDomainSemantics,
   UnifiedObservation,
 } from "../../adapter-family-plugin.js";
+import { ADDR } from "../../../../shared/constants/addresses.js";
 import {
   UNIV4_INITIALIZE_TOPIC,
   UNIV4_MODIFY_LIQUIDITY_TOPIC,
@@ -21,6 +22,7 @@ import {
 } from "./codec.js";
 import type { UniV4Descriptor, UniV4Route } from "./types.js";
 import { univ4VictimReplay } from "./victim.js";
+import { createUniV4SwapObservation } from "../../swap-observation.js";
 
 export const univ4Swap = {
   landedEvents: {
@@ -40,6 +42,15 @@ export const univ4Swap = {
     patternIds: [UNIV4_SWAP_CALL_PATTERN_ID, UNIV4_SWAP_LOG_PATTERN_ID],
     decode: ({ observation }) => decodeEffects(observation),
   },
+  receiptObservation: createUniV4SwapObservation({
+    adapterIds: ["univ4-unlock"],
+    canonicalIntakeTargets: [
+      ADDR.UNISWAP_V4_POOL_MANAGER,
+      "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+      "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+    ],
+    topics: [UNIV4_SWAP_TOPIC],
+  }),
   victimSupport: "replay",
   replay: univ4VictimReplay,
   poolMaterialization: {

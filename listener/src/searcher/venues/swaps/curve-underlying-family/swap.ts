@@ -16,6 +16,7 @@ import type {
   CurveUnderlyingDescriptor,
   CurveUnderlyingRoute,
 } from "./types.js";
+import { createCurveSwapObservation } from "../../swap-observation.js";
 
 const LOG_PATTERN_IDS = Object.freeze([
   CURVE_UNDERLYING_I128_LOG_PATTERN_ID,
@@ -33,6 +34,17 @@ export const curveUnderlyingSwap = {
     patternIds: LOG_PATTERN_IDS,
     decode: ({ observation }) => decodeSwapEffects(observation),
   },
+  receiptObservation: createCurveSwapObservation({
+    adapterIds: ["curve-exchange-underlying"],
+    canonicalIntakeTargets: [
+      "0x99a58482bd75cbab83b27ec03ca68ff489b5788f",
+      "0x16c6521dff6bab339122a0fe25a9116693265353",
+    ],
+    topics: [
+      CURVE_UNDERLYING_I128_SWAP_TOPIC,
+      CURVE_UNDERLYING_UINT_SWAP_TOPIC,
+    ],
+  }),
   victimSupport: "detect-only",
   poolMaterialization: {
     patternIds: LOG_PATTERN_IDS,

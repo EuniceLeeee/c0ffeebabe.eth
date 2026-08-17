@@ -3443,6 +3443,50 @@ swap observer registry 接回；下一批必须让 strict Family observation 产
 impact/mutation exact partition，并继续由 current-source session 执行 victim replay。本批未
 部署。
 
+**2026-08-18 Swap receipt observation 第十一批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- production `pool-impact.ts` 已物理删除 `PRODUCTION_ADAPTER_FAMILIES`；receipt topic、
+  singleton pool identity、adapter ownership 与 decoder 都从 build-time strict catalog 的
+  `SwapDomainSemantics.receiptObservation` 投影。中央只负责按已 admission 的 Graph edge
+  匹配 Family+instance、完整 receipt batching、deadline、exact-trigger consumption、跨 Family
+  隔离与 final transition；同 topic、broad label、foreign adapter 或未知 pool 都不能取得
+  admission；
+- UniV2、UniV3、UniV4、DODO V2、Curve-underlying、Angstrom V4 与 Fluid DEX 七个
+  production Swap Family 均显式声明 receipt observer。Family-owned topics 可直接来自 strict
+  discovery pattern，不再绕回 legacy landed-event declaration。UniV2 的 Swap 是唯一方向
+  trigger，Sync 只参与同 receipt 的 final reserve post-state；UniV3/V4 直接携带 landed exact
+  post-state；V4 singleton 始终以 poolId 区分，同 token pair 的两个 fee tier 不得合并，native
+  currency 只在已匹配 PoolKey 后别名为 WETH；
+- V4 `Swap` 的 `BalanceDelta` 按 unlock caller 语义解释：负数是 caller 支付的 input，正数是
+  caller 收到的 output。旧 `v4-impact-detect` 曾把它解释为 pool balance 并反转 USDC/USDT，
+  现已修正；不得为该 stale fixture 破坏 strict decoder 和 native-ETH 合同。Angstrom hook
+  可能在 PoolManager event 之后改变 caller delta，所以 observer 保留 poolId/post-state 但不
+  伪造 `amountOut`；
+- Fluid 当前没有可验证的公开稳定 receipt ABI。其已 admission pool 命中 owned topic 时明确
+  `observer-decode-failed`/unresolved，不再用 paired Transfer 猜 token 方向或金额，也不恢复
+  legacy fallback。退出 strict catalog 的 Balancer V3 与 Curve-plain 历史 fixture 同样被改为
+  “不得从旧 Graph edge/topic 重新获得 receipt authority”；仍有 replacement 的
+  Curve-underlying direct/receipt 合同继续通过；
+- 新合同 `searcher:strict-receipt-authority` 覆盖 V2 Swap+Sync exact partition、V3 landed
+  post-state、V4 poolId/WETH alias、双 poolId 隔离、Angstrom 无伪造 amountOut、Fluid
+  fail-closed、foreign edge no-admission 及 `pool-impact.ts` 源码 closure。同轮通过
+  `searcher:swap-observation`、`searcher:strict-production-family-declarations`、七个 strict
+  Swap Family plugin 合同、V4 impact、victim-source-filter、victim-effect 3/3、blockscan
+  scanner 20/20、production boundary、route-family-compatibility 6/6 与 listener 完整
+  `build`。
+
+旧 `searcher:victimapply` 仍无 strict current-source session，却要求 registry callback 成功；
+它不符合当前 production `applyVictimSwapLocallySettled(..., strictSession)` 的 authority
+合同，未计入本批通过项，也不能驱动恢复无 session 的 fallback。后续迁移该 fixture 时必须从
+ready/current-source session 构造真实 edge authority。完整 planner 中已退出 catalog 的
+Balancer V3 replay fixture同理只能降级为历史比较，不得阻塞 strict 迁移。
+
+本 checkpoint 只关闭 Swap receipt detector 的中央 legacy authority，不等于全局
+legacy=0。token-graph、live-discovery、active-pool/auto-close 等 production source 仍有 legacy
+registry import；继续按“先物理删除调用点、strict 缺口 fail closed、只参考 Git 历史”的顺序
+清理。producer 仍未部署，未取得新 exact SHA/PID/log anchor 的 F5 或连续 100/100。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

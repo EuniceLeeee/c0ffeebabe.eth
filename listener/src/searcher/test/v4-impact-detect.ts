@@ -50,14 +50,16 @@ async function main() {
   }
   if (id8 === id7) fail("fee 8 and fee 7 hashed to the same poolId");
 
-  // Real on-chain swap on the fee-8 pool (tx 0xd60d80df): USDT in / USDC out.
+  // V4 Swap reports the unlock caller's BalanceDelta: negative is paid by the
+  // caller (input), positive is received (output). The historical version of
+  // this fixture treated it as the pool's balance delta and inverted the route.
   const i8 = await detectImpactFromLogs([swapLog(id8, -35013321757n, 35045872323n)], edges);
   const v8 = i8.filter((i) => i.matchedAdapterId === "univ4-unlock");
   if (v8.length !== 1) fail(`fee8 swap: expected 1 v4 impact, got ${v8.length}`);
   else {
-    if (v8[0].tokenIn.toLowerCase() !== USDT.toLowerCase()) fail(`tokenIn ${v8[0].tokenIn} != USDT`);
-    if (v8[0].tokenOut.toLowerCase() !== USDC.toLowerCase()) fail(`tokenOut ${v8[0].tokenOut} != USDC`);
-    if (v8[0].amountIn !== 35045872323n) fail(`amountIn ${v8[0].amountIn} != 35045872323`);
+    if (v8[0].tokenIn.toLowerCase() !== USDC.toLowerCase()) fail(`tokenIn ${v8[0].tokenIn} != USDC`);
+    if (v8[0].tokenOut.toLowerCase() !== USDT.toLowerCase()) fail(`tokenOut ${v8[0].tokenOut} != USDT`);
+    if (v8[0].amountIn !== 35013321757n) fail(`amountIn ${v8[0].amountIn} != 35013321757`);
     if (v8[0].poolId !== id8) fail(`impact.poolId ${v8[0].poolId} != id8 (identity lost)`);
   }
 

@@ -24,6 +24,7 @@ import {
   assertBoundFamilyOwnedAction,
   type FamilyOwnedActionAdapter,
 } from "./family-owned-action.js";
+import type { SwapObservationCapability } from "./swap-observation.js";
 
 export type { FamilyOwnedActionAdapter } from "./family-owned-action.js";
 
@@ -1221,6 +1222,8 @@ export interface SwapDomainSemantics<
 > {
   readonly landedEvents: LandedEventSpec;
   readonly observation: SwapObservationSpec;
+  /** Family-owned receipt batching/decoding projected into the detector. */
+  readonly receiptObservation?: SwapObservationCapability;
   readonly victimSupport:
     | "none"
     | "detect-only"
@@ -4271,9 +4274,15 @@ function validateSwapDomain(
     "observation",
     "overlay",
     "poolMaterialization",
+    "receiptObservation",
     "replay",
     "victimSupport",
-  ], "swap domain semantics", true, ["landedEvents", "observation", "victimSupport"]);
+  ], "swap domain semantics", true, [
+    "landedEvents",
+    "observation",
+    "receiptObservation",
+    "victimSupport",
+  ]);
   const patternIds = new Set(discoveryPatternIds(discovery));
   assertExactKeys(
     swap.landedEvents,
@@ -4289,6 +4298,25 @@ function validateSwapDomain(
   );
   validatePatternConsumer(swap.observation, "swap.observation", patternIds);
   assertSynchronousFunction(swap.observation.decode, "swap.observation.decode");
+  if (swap.receiptObservation === undefined) {
+    throw new Error("swap.receiptObservation is required");
+  }
+  assertPlainRecord(swap.receiptObservation, "swap.receiptObservation");
+  if (
+    !Array.isArray(swap.receiptObservation.topics) ||
+    swap.receiptObservation.topics.length === 0 ||
+    swap.receiptObservation.topics.some((topic) =>
+      typeof topic !== "string" || !ethers.isHexString(topic, 32)
+    ) ||
+    typeof swap.receiptObservation.observedPoolIdentity !== "function" ||
+    typeof swap.receiptObservation.decodeReceiptImpacts !== "function"
+  ) {
+    throw new Error("swap.receiptObservation is invalid");
+  }
+  validateAddressList(
+    swap.receiptObservation.canonicalIntakeTargets,
+    "swap.receiptObservation canonicalIntakeTargets",
+  );
   if (swap.poolMaterialization !== undefined) {
     assertExactKeys(
       swap.poolMaterialization,

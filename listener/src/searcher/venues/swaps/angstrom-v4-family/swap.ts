@@ -30,6 +30,7 @@ import type {
   AngstromV4Route,
 } from "./types.js";
 import { angstromV4VictimReplay } from "./victim.js";
+import { createUniV4SwapObservation } from "../../swap-observation.js";
 
 const ANGSTROM_ADAPTER_INTERFACE = new ethers.Interface(
   ANGSTROM_ADAPTER_SWAP_ABI,
@@ -54,6 +55,16 @@ export const angstromV4Swap = {
     patternIds: [ANGSTROM_SWAP_CALL_PATTERN_ID, ANGSTROM_SWAP_LOG_PATTERN_ID],
     decode: ({ observation }) => decodeEffects(observation),
   },
+  receiptObservation: createUniV4SwapObservation({
+    adapterIds: ["angstrom-v4-swap"],
+    canonicalIntakeTargets: [
+      ANGSTROM_MAINNET_ADAPTER,
+      ANGSTROM_MAINNET_HOOK,
+      ADDR.UNISWAP_V4_POOL_MANAGER,
+    ],
+    topics: [UNIV4_SWAP_TOPIC],
+    includeAmountOut: false,
+  }),
   victimSupport: "replay",
   replay: angstromV4VictimReplay,
   poolMaterialization: {

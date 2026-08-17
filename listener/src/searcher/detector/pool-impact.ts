@@ -1,7 +1,8 @@
 import { ethers } from "ethers";
 import type { OrderflowEvent } from "../orderflow/manual-source.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
+  "../strict-production-family-declarations.js";
 import type {
   ObservedSwapImpact,
   OwnedReceiptTrigger,
@@ -996,11 +997,7 @@ function validateConsumedTriggerExactSet(
 }
 
 function observationGroups(): ObservationGroup[] {
-  return PRODUCTION_ADAPTER_FAMILIES.swaps().map((family) => ({
-    observation: family.observation,
-    familyIds: Object.freeze([family.id]),
-    edgeAdapterIds: new Set(family.edgeAdapterIds),
-  }));
+  return [...PRODUCTION_STRICT_FAMILY_DECLARATIONS.swapObservationGroups];
 }
 
 function positiveFiniteNumber(
@@ -1016,15 +1013,7 @@ function ownerFamilyId(
   edgeAdapterId: string,
 ): string | null {
   if (!group.edgeAdapterIds.has(edgeAdapterId)) return null;
-  for (const family of PRODUCTION_ADAPTER_FAMILIES.swaps()) {
-    if (
-      group.familyIds.includes(family.id) &&
-      family.edgeAdapterIds.includes(edgeAdapterId)
-    ) {
-      return family.id;
-    }
-  }
-  return null;
+  return group.familyIds.length === 1 ? group.familyIds[0] : null;
 }
 
 function impactMatchesAdmittedEdge(

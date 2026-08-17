@@ -199,6 +199,7 @@
     "searcher:strict-ready-graph-view": "node --import tsx src/searcher/test/strict-ready-graph-view.ts",
     "searcher:strict-production-runtime-session": "node --import tsx src/searcher/test/strict-production-runtime-session.ts",
     "searcher:strict-production-family-declarations": "node --import tsx src/searcher/test/strict-production-family-declarations.ts",
+    "searcher:strict-receipt-authority": "node --import tsx src/searcher/test/strict-receipt-authority.ts",
     "searcher:universe-rebuild-rehydrator": "node --import tsx src/searcher/test/universe-rebuild-rehydrator.ts",
     "searcher:universe-rebuild-stale-lock": "node --import tsx src/searcher/test/universe-rebuild-stale-lock.ts",
     "searcher:default-authority-cutover-gate": "node --import tsx src/searcher/test/default-authority-cutover-gate.ts",

@@ -15,6 +15,8 @@ import {
 } from "./codec.js";
 import type { UniV2Descriptor, UniV2Route } from "./types.js";
 import { univ2VictimReplay } from "./victim.js";
+import { UNIV2_ROUTER } from "./victim.js";
+import { createUniV2SwapObservation } from "../../swap-observation.js";
 
 export const univ2Swap = {
   landedEvents: {
@@ -35,6 +37,11 @@ export const univ2Swap = {
     ],
     decode: ({ observation }) => decodeEffects(observation),
   },
+  receiptObservation: createUniV2SwapObservation({
+    adapterIds: ["univ2-swap"],
+    canonicalIntakeTargets: [UNIV2_ROUTER],
+    topics: [UNIV2_SWAP_TOPIC],
+  }),
   victimSupport: "replay",
   replay: univ2VictimReplay,
   poolMaterialization: {
