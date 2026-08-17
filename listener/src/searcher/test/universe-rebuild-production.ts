@@ -70,7 +70,7 @@ async function main(): Promise<void> {
   assert.notEqual(fullLogIdentityKey(a), fullLogIdentityKey(b));
   assert.equal(
     fullLogIdentityKey(a),
-    "log:25750000:0x" + "33".repeat(32) + ":0:0x" + "11".repeat(20) + ":" +
+    "log:25750000::0x" + "33".repeat(32) + ":0:0x" + "11".repeat(20) + ":" +
       SWAP_TOPIC + ",0x" + "22".repeat(32),
     "full log identity includes every topic",
   );

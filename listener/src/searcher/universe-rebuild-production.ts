@@ -602,7 +602,9 @@ export function createRebuildWiring(input?: {
   }
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const topics = strictCatalogLogTopics();
-  const scanBatch = 2_000;
+  // reth caps eth_getLogs at 20000 results; the strict-topic union is
+  // high-volume, so start small and halve on the max-results error.
+  const scanBatch = 1_000;
   const probe = createProbeWiring({ rpcUrl });
 
   const wiring: UniverseRebuildDependencies = {
@@ -627,22 +629,45 @@ export function createRebuildWiring(input?: {
         const end = Math.min(scanInput.cutoff.number, start + scanBatch - 1);
         const topicFilter: Array<null | string | Array<string>> =
           topics.length === 1 ? [topics[0]] : [[...topics]];
-        const batch = await provider.getLogs({
-          topics: topicFilter,
-          fromBlock: start,
-          toBlock: end,
-        });
-        for (const log of batch) {
-          logs.push(Object.freeze({
-            address: log.address.toLowerCase(),
-            topics: Object.freeze([...log.topics]),
-            data: log.data,
-            ...(log.transactionHash === undefined
-              ? {}
-              : { transactionHash: log.transactionHash.toLowerCase() }),
-            blockNumber: log.blockNumber,
-            ...(log.index === undefined ? {} : { logIndex: log.index }),
-          }));
+        // reth's eth_getLogs caps at 20000 results: halve the slice on the
+        // max-results error and retry the same range; a hard floor keeps
+        // progress fail-closed.
+        let batchSize = scanBatch;
+        let from = start;
+        while (from <= end) {
+          const to = Math.min(end, from + batchSize - 1);
+          try {
+            const batch = await provider.getLogs({
+              topics: topicFilter,
+              fromBlock: from,
+              toBlock: to,
+            });
+            for (const log of batch) {
+              logs.push(Object.freeze({
+                address: log.address.toLowerCase(),
+                topics: Object.freeze([...log.topics]),
+                data: log.data,
+                ...(log.transactionHash === undefined
+                  ? {}
+                  : { transactionHash: log.transactionHash.toLowerCase() }),
+                blockNumber: log.blockNumber,
+                ...(log.blockHash === undefined
+                  ? {}
+                  : { blockHash: log.blockHash.toLowerCase() }),
+                ...(log.index === undefined ? {} : { logIndex: log.index }),
+              }));
+            }
+            from = to + 1;
+            batchSize = scanBatch;
+          } catch (error) {
+            if (batchSize <= 64) {
+              throw new Error(
+                "swap window scan failed at " + from + "-" + to + ": " +
+                  (error instanceof Error ? error.message : String(error)),
+              );
+            }
+            batchSize = Math.floor(batchSize / 2);
+          }
         }
       }
       return Object.freeze(logs);
