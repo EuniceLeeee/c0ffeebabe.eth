@@ -139,6 +139,7 @@ const DISCOVERY_BACKFILL_FOREGROUND_HANDOFF_MS = 1_000;
  * stays scoped to the legacy observed-interaction surface inside the scanner.
  */
 let strictCatalogObservedTopicsCache: ReadonlySet<string> | null = null;
+let strictCatalogObservedTopicsLogged = false;
 const strictCatalogObservedTopics = (): ReadonlySet<string> => {
   if (strictCatalogObservedTopicsCache === null) {
     const topics = new Set<string>();
@@ -152,6 +153,13 @@ const strictCatalogObservedTopics = (): ReadonlySet<string> => {
       }
     }
     strictCatalogObservedTopicsCache = topics;
+  }
+  if (!strictCatalogObservedTopicsLogged) {
+    strictCatalogObservedTopicsLogged = true;
+    console.log(
+      "[searcher/live] strict catalog observed topics=" +
+        strictCatalogObservedTopicsCache.size,
+    );
   }
   return strictCatalogObservedTopicsCache;
 };

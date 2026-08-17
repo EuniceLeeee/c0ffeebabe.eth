@@ -1880,6 +1880,22 @@ async function main(): Promise<void> {
               catalog:
                 PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
             });
+          {
+            const ring = envelope.protocolEvidenceCache.runtime.observedEvents;
+            const ringTopics = new Map<string, number>();
+            for (const event of ring) {
+              const topic = event.topics?.[0]?.toLowerCase() ?? "none";
+              ringTopics.set(topic, (ringTopics.get(topic) ?? 0) + 1);
+            }
+            console.log(
+              "[searcher/live] observed ring: n=" + ring.length + " " +
+                [...ringTopics.entries()]
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 10)
+                  .map(([topic, count]) => topic.slice(0, 10) + "=" + count)
+                  .join(" "),
+            );
+          }
           const observations = mergeFamilyObservations(
             addressObservations,
             eventObservations,
