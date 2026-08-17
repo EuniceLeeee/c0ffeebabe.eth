@@ -1105,3 +1105,21 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   legacy retain 行的 provenance source 已失效，fresh 2d 重建后台进行）。
 - 剩余 F9 项：legacy solver call-site（quoter/plan-builder/revm/victim/
   credit/pending-evidence）删除 → MigrationCleanupReceipt verdict=pass。
+
+### 当前推进状态（2026-08-17，live strict）
+
+- 分支、remote 与节点 `/opt/MEV` 已 exact-SHA 对齐到
+  `2eceb6f8b512fdb40ec7eacf22f31288d244aea9`；节点进程仍在运行。
+- 最新 `blockscan-nminus1-state`：`sourceBlock=25772716`, `generation=687`,
+  `expected=257`, `priced=255`, `status=degraded`, `issueCount=25`。所以
+  当前 live 进度明确写为 **255/257**，不是 F5 `eligible=true`。
+- DEX observed/lifecycle 已经能够产出 strict state keys；未覆盖项以
+  `graph-incomplete`/`degraded` 逐族记录。当前不能用 retained、旧 harness
+  或降低 denominator 补齐缺口。
+- Angstrom V4 仍报告 `no-outcome`：V4 日志已被观察面捕获，但已部署 strict
+  路径尚未把 opaque `poolId` 变成可发布的真实 tx-bound observation。中央
+  只负责转发/调度，协议解释必须留在 plugin nomination。
+- `2eceb6f8` 新增一次性历史 observed-event lookback（env-gated，默认不扩大
+  增量窗口）；这不是 Angstrom 语义修复，也没有改变本次 255/257 事实。
+  工作树中尚未提交的 nomination bridge 不得计入验收，必须完成完整部署纪律
+  后再重跑。F5 live、F9 cleanup receipt 仍未终态关闭。

@@ -535,3 +535,22 @@ issueCount=25 来自族源完整性缺口（landed-event 落后 ~3 块、dex-tok
 complete through 0、observed-interaction 未追平；curve/self-burn/astra/
 silo/angstrom 等族级缺口），需后续批次逐个补齐才能让状态机 status 转
 degraded→ok；单族失败结构化记录、不降门槛。
+
+## 当前 live 复核（2026-08-17，节点 HEAD `2eceb6f8`）
+
+节点 `/opt/MEV`、本地分支与 `origin` 已按 exact-SHA 核对为
+`2eceb6f8b512fdb40ec7eacf22f31288d244aea9`。最新机器记录为
+`sourceBlock=25772716`, `generation=687`, `expected=257`, `priced=255`,
+`status=degraded`, `issueCount=25`；因此当前覆盖仍为 **255/257**，只能作
+诊断进度，不能写成 F5 `eligible=true`。
+
+`custom-swap:angstrom-v4` 仍有重复的
+`strict lifecycle ... no-outcome`。已确认这不是“没有 topic”：原始 V4/Angstrom
+日志已进入 observed 面；当前已部署路径仍缺从 opaque `poolId` 观测到真实
+tx-bound proof 的可发布结果。`2eceb6f8` 的一次性历史窗口能力是中央通用、
+环境开关控制的补扫，不是 Angstrom 专用修复，且本次结果未改变 255/257。
+
+工作树中的 nomination bridge 尚未提交/部署，不能计入节点证据。下一步必须按
+“测试 → build → commit/push → 节点 exact-SHA 同步 → live 重跑”执行；在
+Angstrom 与其余 `graph-incomplete` 来源闭合、`status` 收敛且六步 live receipts
+完整前，F5/F9 均保持未关闭。

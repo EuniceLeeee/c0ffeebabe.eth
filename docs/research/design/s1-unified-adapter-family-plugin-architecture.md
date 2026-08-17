@@ -3072,6 +3072,34 @@ ops/CI gate，非部署）：**
 - **startToken 过渡**：当前固定 ETH（WETH）；P1（新架构完成后）实现
   funding 可借 token 列表查询函数 + 独立 token 表。
 
+**2026-08-17 live strict revalidation checkpoint（节点事实，未关闭 F5/F9）：**
+
+- 当前分支 `codex/s1-unified-adapter-architecture-impl` 的本地 HEAD、
+  `origin` 与节点 `/opt/MEV` 均已核对为
+  `2eceb6f8b512fdb40ec7eacf22f31288d244aea9`；节点进程仍在运行，不能用
+  旧进程或旧 commit 解释结果。
+- 最新 `blockscan-nminus1-state`（`sourceBlock=25772716`, `generation=687`）
+  为 `expected=257`, `priced=255`, `status=degraded`, `issueCount=25`。
+  因而当前 live coverage 仍是 **255/257**；这只是诊断覆盖数，不是
+  `eligible=true`，也不等同于 F5 终态通过。
+- DEX strict observed/lifecycle 已进入状态机（当前 state keys 包含
+  `univ2-standard=5`、`univ3-standard=107`、`univ4=1`、`dodo-v2=9`、
+  `fluid-dex=1` 等）；剩余问题按 source/family 逐项记录为
+  `graph-incomplete`/`degraded`，不得通过降低 denominator 或把 retained
+  当 eligible 证据关闭。
+- `custom-swap:angstrom-v4` 仍反复出现
+  `strict lifecycle ... no-outcome`。这说明原始 V4/Angstrom 观测进入了
+  观察面，但仅含 opaque `poolId` 的事件还没有在已部署路径中形成可发布的
+  tx-bound 真实证明；不能宣称 Angstrom 已闭环。
+- `2eceb6f8` 新增的是中央通用、env-gated 的一次性历史 observed-event
+  lookback（`SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS`）；它只扩大首次观测
+  窗口，不引入协议分支。该 commit 的 live 结果仍为 255/257，因此该项不
+  作为 Angstrom 修复或 F5 通过证据。
+- 工作树另有未提交的通用 live nomination bridge 与 Angstrom plugin-local
+  nomination 改动；它们不是本次节点证据，必须先 build/合同测试、commit、
+  exact-SHA 部署后才能重新计入 live 结果。F5 仍按“live strict 事实验收”
+  运行，F9 的 `MigrationCleanupReceipt.verdict=pass` 仍未产生。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
