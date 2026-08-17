@@ -38,6 +38,12 @@ export interface ProtocolDiscoveryRuntimeInput {
    */
   readonly observedHistoryProvider?: ethers.JsonRpcProvider;
   readonly adapters: readonly RouteLegAdapter[];
+  /**
+   * F8: enumerable strict-catalog event topics for the observed lane. Logs
+   * matching these enter the strict observedEvents surface directly without
+   * receipt/trace work.
+   */
+  readonly extraEventTopics?: ReadonlySet<string>;
   readonly identityRegistry: IdentityResolverRegistry;
   /** F8: production-shaped identity runtime (revm simulation transport). */
   readonly identityRuntime?: CentralAdapterRuntime;
@@ -190,6 +196,9 @@ export async function prepareActiveProtocolDiscoveryPass(
       evidenceCache: input.evidenceCache ?? createProtocolDiscoveryEvidenceCache(),
       ...(input.traceMemo === undefined ? {} : { traceMemo: input.traceMemo }),
       ...(input.control === undefined ? {} : { control: input.control }),
+      ...(input.extraEventTopics === undefined
+        ? {}
+        : { extraEventTopics: input.extraEventTopics }),
     })
     : {
       candidatesByAdapter: new Map(),

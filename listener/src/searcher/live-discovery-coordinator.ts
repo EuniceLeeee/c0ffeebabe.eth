@@ -120,6 +120,8 @@ import {
   PRODUCTION_ADAPTER_FAMILIES,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "./venues/production-registry.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
+  "./venues/production-family-composition.js";
 import type {
   ProtocolDiscoveryReadControl,
   ProtocolDiscoveryReceipt,
@@ -129,6 +131,30 @@ import { poolRegistryKey } from "./pool-universe.js";
 import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
 
 const DISCOVERY_BACKFILL_FOREGROUND_HANDOFF_MS = 1_000;
+
+/**
+ * F8: the strict catalog's full log-pattern topic surface. The observed lane
+ * scans these into the strict observedEvents feed (feeding strict family
+ * lifecycles with real amounts for every catalog family); receipt/trace work
+ * stays scoped to the legacy observed-interaction surface inside the scanner.
+ */
+let strictCatalogObservedTopicsCache: ReadonlySet<string> | null = null;
+const strictCatalogObservedTopics = (): ReadonlySet<string> => {
+  if (strictCatalogObservedTopicsCache === null) {
+    const topics = new Set<string>();
+    for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+      .listAll()) {
+      const discovery = "discovery" in family.plugin
+        ? family.plugin.discovery
+        : null;
+      for (const pattern of discovery?.logPatterns ?? []) {
+        topics.add(pattern.topic.toLowerCase());
+      }
+    }
+    strictCatalogObservedTopicsCache = topics;
+  }
+  return strictCatalogObservedTopicsCache;
+};
 
 interface LiveDiscoveryConfig {
   readonly poolUniverseTopN: number;
@@ -972,6 +998,11 @@ export async function createLiveDiscoveryCoordinator(
       shadow: protocolDiscoveryShadow,
       control: options.control,
       ...(identityRuntime === undefined ? {} : { identityRuntime }),
+      // F8: the full strict-catalog log-pattern surface feeds the strict
+      // observedEvents feed (DEX families and protocol families alike);
+      // receipt/trace work stays scoped to the legacy observed-interaction
+      // surface inside the scanner.
+      extraEventTopics: strictCatalogObservedTopics(),
     });
     const scanRangeHashAfter = await readDexDiscoveryBlockHash(
       provider,

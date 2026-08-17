@@ -260,6 +260,14 @@ export async function scanProtocolDiscoveryRange(input: {
   familyGuardOptions?: ProtocolDiscoveryFamilyGuardOptions;
   /** Parent pass lifetime shared by scanner reads and family callbacks. */
   control?: ProtocolDiscoveryReadControl;
+  /**
+   * F8: additional enumerable event topics from the strict catalog (all
+   * families' log patterns). Logs matching these enter the strict
+   * observedEvents surface directly (feeding strict-family lifecycles with
+   * real amounts); they never trigger receipt/trace work, which stays scoped
+   * to the legacy adapters' observed-interaction surface.
+   */
+  readonly extraEventTopics?: ReadonlySet<string>;
 }): Promise<ProtocolDiscoveryRangeResult> {
   const passControl = mergeProtocolDiscoveryReadControls(
     protocolDiscoveryReadControlFromFamilyOptions(input.familyGuardOptions),
@@ -304,7 +312,11 @@ export async function scanProtocolDiscoveryRange(input: {
     };
   });
 
-  const topics = [...registeredEventTopics(input.adapters)].sort();
+  const topics = [...new Set([
+    ...registeredEventTopics(input.adapters),
+    ...(input.extraEventTopics ?? []),
+  ])].sort();
+  const traceTopics = new Set(registeredEventTopics(input.adapters));
   const eventLogs: ProtocolDiscoveryLog[] = [];
   const observedFamilyGuard = new ProtocolDiscoveryFamilyGuard(
     sourceAwareFamilyGuardOptions(input.familyGuardOptions, passControl),
@@ -372,6 +384,12 @@ export async function scanProtocolDiscoveryRange(input: {
   const txHashes = new Set<string>();
   const txBlocks = new Map<string, number>();
   for (const log of eventLogs) {
+    // F8: extra-catalog logs feed the strict observedEvents surface without
+    // receipt/trace work; only the legacy adapters' own topics require the
+    // trace path (observed-call matching).
+    if (log.topics[0] === undefined || !traceTopics.has(log.topics[0].toLowerCase())) {
+      continue;
+    }
     if (log.transactionHash) {
       const txHash = log.transactionHash.toLowerCase();
       txHashes.add(txHash);
