@@ -75,20 +75,41 @@ const root = new StrictProductionRuntimeRoot({
   readyInstances: publication.instances,
 });
 
-function runtime(source: CanonicalSource) {
+function runtime(
+  source: CanonicalSource,
+  options: {
+    readonly reserves?: Readonly<{
+      readonly reserve0: bigint;
+      readonly reserve1: bigint;
+      readonly blockTimestampLast: number;
+    }>;
+    readonly onCurrentPricingRead?: () => void;
+    readonly failCurrentPricing?: boolean;
+  } = {},
+) {
+  const reserves = options.reserves ?? pool.reserves;
   return createStrictCentralAdapterRuntime({
     provider: {
-      call: async (request) => request.data.slice(0, 10).toLowerCase() ===
-          UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector.toLowerCase()
-        ? UNIV2_PAIR_INTERFACE.encodeFunctionResult(
+      call: async (request) => {
+        if (
+          request.data.slice(0, 10).toLowerCase() ===
+            UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector.toLowerCase()
+        ) {
+          options.onCurrentPricingRead?.();
+          if (options.failCurrentPricing === true) {
+            throw new Error("current pricing transport failed");
+          }
+          return UNIV2_PAIR_INTERFACE.encodeFunctionResult(
             "getReserves",
             [
-              pool.reserves.reserve0,
-              pool.reserves.reserve1,
-              pool.reserves.blockTimestampLast,
+              reserves.reserve0,
+              reserves.reserve1,
+              reserves.blockTimestampLast,
             ],
-          )
-        : ERC20_BALANCE.encodeFunctionResult("balanceOf", [10n ** 24n]),
+          );
+        }
+        return ERC20_BALANCE.encodeFunctionResult("balanceOf", [10n ** 24n]);
+      },
       getCode: async () => "0x01",
       getStorage: async () => `0x${"00".repeat(32)}`,
     },
@@ -108,7 +129,17 @@ function runtime(source: CanonicalSource) {
   });
 }
 
-const strictRuntime = runtime(CURRENT);
+let currentPricingReads = 0;
+const strictRuntime = runtime(CURRENT, {
+  reserves: Object.freeze({
+    reserve0: pool.reserves.reserve0 * 3n,
+    reserve1: pool.reserves.reserve1,
+    blockTimestampLast: pool.reserves.blockTimestampLast + 1,
+  }),
+  onCurrentPricingRead() {
+    currentPricingReads++;
+  },
+});
 await assert.rejects(
   root.createSession({
     source: WRONG_HASH,
@@ -178,6 +209,22 @@ assert.throws(
 const edge = session.edges.find((candidate) =>
   candidate.tokenIn.toLowerCase() === UNIV2_FIXTURE_TOKEN0.toLowerCase()
 )!;
+assert.equal(currentPricingReads, 1, "one current pricing shard read per session");
+const currentPricing = session.currentPricingForEdge(edge);
+assert.equal(currentPricing?.status, "priced");
+const startupRouteKey = startupView.handleByCanonicalEdgeId.get(
+  edge.canonicalEdgeId!,
+)!.routeKey;
+const startupMid = publication.instances[0].pricingInstances
+  .find((pricing) => pricing.mids.has(startupRouteKey))!
+  .mids.get(startupRouteKey)!;
+if (currentPricing?.status === "priced") {
+  assert.notEqual(
+    currentPricing.mid.mid,
+    startupMid.mid,
+    "current session must not reuse the startup pricing snapshot",
+  );
+}
 assert(session.supportsVictimReplay(edge));
 const victim = session.replayVictim({
   edge,
@@ -264,6 +311,35 @@ const stale = await executeFamilyExactQuote({
   runtime: strictRuntime,
 });
 assert.notEqual(stale.status, "resolved");
+
+const unavailableSession = await root.createSession({
+  source: CURRENT,
+  runtime: runtime(CURRENT, {
+    reserves: Object.freeze({
+      reserve0: 0n,
+      reserve1: pool.reserves.reserve1,
+      blockTimestampLast: pool.reserves.blockTimestampLast,
+    }),
+  }),
+  fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+});
+assert.equal(
+  unavailableSession.currentPricingForEdge(
+    unavailableSession.edges.find((candidate) =>
+      candidate.canonicalEdgeId === edge.canonicalEdgeId
+    )!,
+  )?.status,
+  "behavior-proven-unavailable",
+);
+
+await assert.rejects(
+  root.createSession({
+    source: CURRENT,
+    runtime: runtime(CURRENT, { failCurrentPricing: true }),
+    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+  }),
+  /strict current pricing incomplete/,
+);
 
 await assert.rejects(
   new StrictProductionRuntimeRoot({

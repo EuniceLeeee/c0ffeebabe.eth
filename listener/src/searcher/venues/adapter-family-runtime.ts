@@ -3244,9 +3244,57 @@ async function preparePricingState(input: {
   }
   outcomes.push(pricingOutcome(input, "pricing-compile", "verified",
     "pricing-descriptor-compiled", evidenceRefs));
+  return await executePreparedPricingCurrent({
+    family: input.family,
+    candidateKey: input.candidateKey,
+    identity: input.identity,
+    instanceKey: input.instanceKey,
+    stateKey: input.stateKey,
+    routes: input.routes,
+    pricingDescriptor,
+    dependencies,
+    groupBindingFingerprint,
+    staticBindingFingerprint,
+    compatibilityFingerprint,
+    staticEvidenceFingerprint,
+    source: input.source,
+    generation: input.generation,
+    runtime: input.runtime,
+    maxDependentReadRounds: input.maxDependentReadRounds,
+    inheritedEvidenceRefs: evidenceRefs,
+    inheritedOutcomes: outcomes,
+  });
+}
 
+interface PreparedPricingCurrentInput {
+  readonly family: LoadedFamilyPlugin;
+  readonly candidateKey: string;
+  readonly identity: Pick<VerifiedIdentity, "lineageId">;
+  readonly instanceKey: InstanceKey;
+  readonly stateKey: string;
+  readonly routes: readonly FamilyRouteDescriptor[];
+  readonly pricingDescriptor: object;
+  readonly dependencies: readonly string[];
+  readonly groupBindingFingerprint: string;
+  readonly staticBindingFingerprint: string;
+  readonly compatibilityFingerprint: string;
+  readonly staticEvidenceFingerprint: string;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+  readonly runtime: CentralAdapterRuntime;
+  readonly maxDependentReadRounds: number;
+  readonly inheritedEvidenceRefs: readonly string[];
+  readonly inheritedOutcomes: readonly AdapterInstanceOutcome[];
+}
+
+async function executePreparedPricingCurrent(
+  input: PreparedPricingCurrentInput,
+): Promise<PricingPreparation> {
+  const familyId = input.family.plugin.manifest.familyId;
+  const outcomes = [...input.inheritedOutcomes];
+  const evidenceRefs = [...input.inheritedEvidenceRefs];
   const currentInput = Object.freeze({
-    descriptor: pricingDescriptor,
+    descriptor: input.pricingDescriptor,
     routes: input.routes,
     source: input.source,
   });
@@ -3371,7 +3419,7 @@ async function preparePricingState(input: {
   try {
     snapshot = requireObject(
       input.family.plugin.pricing.current.decodeSnapshot({
-        descriptor: pricingDescriptor,
+        descriptor: input.pricingDescriptor,
         initialResults,
         dependentEvidence: Object.freeze([...dependentEvidence]),
       }),
@@ -3380,7 +3428,7 @@ async function preparePricingState(input: {
     deepFreezeOpaqueRuntimeValue(snapshot, "pricing snapshot");
     mids = validateRouteMap(
       input.family.plugin.pricing.current.deriveMids({
-        descriptor: pricingDescriptor,
+        descriptor: input.pricingDescriptor,
         snapshot,
         routes: input.routes,
       }),
@@ -3392,7 +3440,7 @@ async function preparePricingState(input: {
       ? new SealedReadonlyMap<RouteKey, string>(new Map())
       : validateRouteMap(
           input.family.plugin.pricing.current.classifyUnavailable({
-            descriptor: pricingDescriptor,
+            descriptor: input.pricingDescriptor,
             snapshot,
             routes: input.routes,
           }),
@@ -3439,19 +3487,103 @@ async function preparePricingState(input: {
       stateKey: input.stateKey,
     })}`,
     routes: Object.freeze([...input.routes]),
-    pricingDescriptor,
+    pricingDescriptor: input.pricingDescriptor,
     snapshot,
     mids,
     unavailable,
-    dependencies,
-    groupBindingFingerprint,
-    staticBindingFingerprint,
-    snapshotCompatibilityFingerprint: compatibilityFingerprint,
-    staticEvidenceFingerprint,
+    dependencies: input.dependencies,
+    groupBindingFingerprint: input.groupBindingFingerprint,
+    staticBindingFingerprint: input.staticBindingFingerprint,
+    snapshotCompatibilityFingerprint: input.compatibilityFingerprint,
+    staticEvidenceFingerprint: input.staticEvidenceFingerprint,
     currentEvidenceFingerprint,
     evidenceRefs: Object.freeze(uniqueSorted(evidenceRefs)),
   });
   return sealPricingPreparation(state, outcomes);
+}
+
+export interface PreparedFamilyPricingRefreshResult {
+  readonly instance: PreparedFamilyInstance | null;
+  readonly outcomes: readonly AdapterInstanceOutcome[];
+}
+
+/**
+ * Refresh only current-source pricing for a memo-rehydrated instance.
+ * Identity, materialization, route projection and static evidence are not run
+ * again; the strict plugin's current request/decode/derive program is the sole
+ * source of current mids. Any unresolved shard makes the whole instance
+ * unavailable to the current-source session.
+ */
+export async function refreshPreparedFamilyInstancePricing(input: {
+  readonly family: LoadedFamilyPlugin;
+  readonly instance: PreparedFamilyInstance;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+  readonly runtime: CentralAdapterRuntime;
+  readonly maxDependentReadRounds?: number;
+}): Promise<PreparedFamilyPricingRefreshResult> {
+  assertIssuedPreparedFamilyInstance(input);
+  const refreshed = await Promise.all(input.instance.pricingInstances.map(
+    async (pricing) => {
+      assertIssuedPreparedFamilyPricingStateInstance({
+        ...input,
+        pricing,
+      });
+      return await executePreparedPricingCurrent({
+        family: input.family,
+        candidateKey: input.instance.candidateKey,
+        identity: Object.freeze({ lineageId: input.instance.lineageId }),
+        instanceKey: input.instance.instanceKey,
+        stateKey: pricing.stateKey,
+        routes: pricing.routes,
+        pricingDescriptor: pricing.pricingDescriptor,
+        dependencies: pricing.dependencies,
+        groupBindingFingerprint: pricing.groupBindingFingerprint,
+        staticBindingFingerprint: pricing.staticBindingFingerprint,
+        compatibilityFingerprint: pricing.snapshotCompatibilityFingerprint,
+        staticEvidenceFingerprint: pricing.staticEvidenceFingerprint,
+        source: input.source,
+        generation: input.generation,
+        runtime: input.runtime,
+        maxDependentReadRounds: input.maxDependentReadRounds ?? 4,
+        inheritedEvidenceRefs: pricing.evidenceRefs,
+        inheritedOutcomes: Object.freeze([]),
+      });
+    },
+  ));
+  const outcomes = Object.freeze(refreshed.flatMap((item) => item.outcomes));
+  const pricingInstances = refreshed.flatMap((item) =>
+    item.state === null ? [] : [item.state]
+  );
+  if (pricingInstances.length !== input.instance.pricingInstances.length) {
+    return Object.freeze({ instance: null, outcomes });
+  }
+  const routes = Object.freeze(pricingInstances.flatMap((state) => state.routes));
+  const expectedRouteKeys = input.instance.routes.map((route) => route.routeKey).sort();
+  const actualRouteKeys = routes.map((route) => route.routeKey).sort();
+  if (
+    expectedRouteKeys.length !== actualRouteKeys.length ||
+    expectedRouteKeys.some((routeKey, index) => routeKey !== actualRouteKeys[index])
+  ) {
+    throw new Error("current pricing changed the ready route partition");
+  }
+  const prepared = Object.freeze({
+    ...input.instance,
+    routes,
+    routeHandles: Object.freeze([]),
+    pricingInstances: Object.freeze(pricingInstances),
+    evidenceRefs: Object.freeze(uniqueSorted([
+      ...input.instance.evidenceRefs,
+      ...pricingInstances.flatMap((pricing) => pricing.evidenceRefs),
+    ])),
+  }) as PreparedFamilyInstance;
+  registerIssuedPreparedFamilyInstance({
+    family: input.family,
+    instance: prepared,
+    source: snapshotCanonicalSource(input.source),
+    generation: input.generation,
+  });
+  return Object.freeze({ instance: prepared, outcomes });
 }
 
 function executeCurrentWork<Input, Evidence>(
@@ -4635,7 +4767,7 @@ function pricingOutcome(
   input: {
     readonly family: LoadedFamilyPlugin;
     readonly candidateKey: string;
-    readonly identity: VerifiedIdentity;
+    readonly identity: Pick<VerifiedIdentity, "lineageId">;
     readonly instanceKey: InstanceKey;
     readonly stateKey: string;
     readonly source: CanonicalSource;

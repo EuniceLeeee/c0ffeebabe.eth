@@ -3270,6 +3270,39 @@ checkpoint；不是部署、F5 或 production cutover）：**
   request/decode/derive 接入 current-source session，再删除该 pricing bridge；
   本 checkpoint 不授权部署。
 
+**2026-08-18 strict current-source pricing 第六批替换 checkpoint（实现提交
+承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- `adapter-family-runtime.ts` 已把既有 Pricing current
+  `requirements → buildRequests → decodeSnapshot → deriveMids /
+  classifyUnavailable` 提取为可复用的 current-source 执行边界；
+  `refreshPreparedFamilyInstancePricing()` 只复用 ready memo 恢复出的 descriptor、
+  route partition、static binding/evidence 与 compatibility fingerprint，不重新运行
+  identity、materialization、route projection 或 static evidence；
+- `StrictProductionRuntimeRoot.createSession()` 先在 current source 重签 instance
+  authority，再逐 pricing StateInstance 执行上述 current request program。任一
+  shard 为 failed/unresolved 时整个 session 构造失败，不能发布部分 mids、部分
+  route handle 或缩水 Graph；只有插件明确给出的
+  `behavior-proven-unavailable` 可以作为该 route 的 terminal current-source
+  classification；
+- session 在所有 current pricing 完成后才重签 route handle、投影 Graph，并把
+  每个 Swap/Protocol `canonicalEdgeId` 原子绑定到本 session 的 current
+  `RouteVenueMid | behavior-proven-unavailable`。Credit 保持 exact-only，不由中央
+  伪造 coarse mid；最终 projected topology 仍必须与 ready Graph exact-set + edge
+  shell 完全相同；
+- `searcher:strict-production-runtime-session` 合同已证明 current source 会重新发
+  pricing request、startup mid 不会被复用、零储备只形成插件证明的 unavailable、
+  transport failure 阻断 session publication，且 ready topology 不变；同时
+  `searcher:strict-ready-runtime`、`searcher:strict-ready-graph-view`、
+  `searcher:blockscan-frozen-topology` 与 listener 完整 `build` 通过。
+
+本 checkpoint 只建立了 strict current pricing 的唯一可用 replacement。production
+coarse scanner 仍消费 `AdapterRuntimeCoordinator` / legacy-shaped
+`BlockScanStateCoordinator` snapshot；下一批必须先让 scanner 原子消费同一 strict
+session 的 Graph+current pricing，再物理删除旧 pricing coordinator 调用点。缺
+strict session 或任一 required pricing classification 必须 fail closed，禁止把旧
+registry projection、views provider 或 legacy state fallback 接回。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
