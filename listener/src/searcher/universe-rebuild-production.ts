@@ -677,16 +677,27 @@ export function createRebuildWiring(input?: {
         candidate as Readonly<Record<string, unknown>>,
       ),
     dedupeFamilyCandidates: (observations) => {
-      const seen = new Set<string>();
-      const candidates: unknown[] = [];
+      // Candidate dedupe is per pool (familyCandidateKey), NOT per log: a
+      // two-day window holds hundreds of Swap logs per pool, and the run
+      // attests one Family+Instance once. Full log identity dedupe (audit
+      // P0.6) still governs the observation feed; here the newest log per
+      // pool becomes the representative candidate + evidence ref.
+      const byKey = new Map<string, { log: RebuildScanObservation }>();
       for (const observation of observations) {
         const log = observation as RebuildScanObservation;
-        const key = fullLogIdentityKey(log);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        candidates.push(candidateFromLog(log));
+        const candidate = candidateFromLog(log);
+        const key = rebuildFamilyCandidateKey(candidate);
+        const existing = byKey.get(key);
+        if (
+          existing === undefined ||
+          (log.blockNumber ?? 0) > (existing.log.blockNumber ?? 0)
+        ) {
+          byKey.set(key, { log });
+        }
       }
-      return Object.freeze(candidates);
+      return Object.freeze([...byKey.values()].map(({ log }) =>
+        candidateFromLog(log)
+      ));
     },
     findReusableMemo: async (memoInput) => {
       const candidate = memoInput.candidate as

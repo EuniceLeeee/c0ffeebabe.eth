@@ -4,6 +4,7 @@ import {
   canReuseMemo,
   candidateFingerprint,
   candidateFromLog,
+  createRebuildWiring,
   familyDefinitionHash,
   fullLogIdentityKey,
   rebuildFamilyCandidateKey,
@@ -178,6 +179,39 @@ async function main(): Promise<void> {
     }),
     false,
     "stale proof source must invalidate",
+  );
+
+  // Candidate dedupe is per pool, not per log: hundreds of Swap logs of
+  // one pool in the window collapse to a single candidate carrying the
+  // newest log as its evidence; a second pool stays a second candidate.
+  const wiring = createRebuildWiring({
+    rpcUrl: "http://127.0.0.1:1",
+  });
+  const poolALogs = Object.freeze([
+    log({ blockNumber: SOURCE.number - 100, logIndex: 1 }),
+    log({ blockNumber: SOURCE.number - 50, logIndex: 2 }),
+    log({ blockNumber: SOURCE.number, logIndex: 3 }),
+  ]);
+  const poolBLog = log({
+    address: "0x" + "66".repeat(20),
+    topics: Object.freeze([SWAP_TOPIC, "0x" + "77".repeat(32)]),
+    logIndex: 0,
+  });
+  const deduped = wiring.dedupeFamilyCandidates(
+    Object.freeze([...poolALogs, poolBLog]),
+  );
+  assert.equal(deduped.length, 2, "one candidate per pool, never per log");
+  const poolACandidate = deduped.find((candidate) =>
+    (candidate as { address: string }).address === "0x" + "11".repeat(20)
+  );
+  assert.equal(
+    (poolACandidate as { logIndex?: number }).logIndex,
+    3,
+    "the newest log is the representative evidence",
+  );
+  assert.equal(
+    (poolACandidate as { blockNumber?: number }).blockNumber,
+    SOURCE.number,
   );
 
   console.log("universe rebuild production wiring PASS");
