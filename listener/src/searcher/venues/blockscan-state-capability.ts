@@ -332,6 +332,13 @@ export interface BlockScanStateCapability<Schema = unknown, Snapshot = unknown> 
    */
   readonly schemaMode?: SchemaMode;
   /**
+   * Declared zero-read current-N pricing: mids come from committed strict
+   * views rather than per-block state reads (strict views-backed families).
+   * The coordinator then accepts an empty current-N read plan and derives
+   * mids from the committed snapshot instead of failing the state key.
+   */
+  readonly readlessPricing?: boolean;
+  /**
    * Adapter schema/decoder revision for instance fingerprints. Defaults to the
    * familyId when absent; bump it whenever compile/hydrate/decode/read-plan
    * semantics change so cached instance descriptors cannot be reused.
@@ -520,6 +527,8 @@ export interface RegisteredBlockScanStateFamily {
   readonly familyId: string;
   readonly lane: BlockScanPricingLane;
   readonly schemaMode: SchemaMode;
+  /** True when the family prices from committed strict views without reads. */
+  readonly readlessPricing: boolean;
   readonly addressTouchCarryPolicy: "always-current" | "dependency-touch";
   /**
    * Mutation events scanned from the adapter family's landed-event
@@ -934,6 +943,7 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
     familyId,
     lane,
     schemaMode: capability.schemaMode ?? "legacy-family",
+    readlessPricing: capability.readlessPricing === true,
     schemaRevision,
     addressTouchCarryPolicy:
       capability.addressTouchCarryPolicy ?? "always-current",

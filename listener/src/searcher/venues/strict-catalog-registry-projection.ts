@@ -460,6 +460,9 @@ function createStrictViewsPricingCapability(
   return Object.freeze({
     familyId,
     schemaMode: "legacy-family",
+    // F8: mids are derived from the committed strict views; current-N pricing
+    // performs no legacy state reads.
+    readlessPricing: true,
     stateKey: stateKeyFor,
     compileStaticSchema() {
       return Object.freeze({ format: STRICT_VIEWS_SCHEMA_FORMAT, familyId });

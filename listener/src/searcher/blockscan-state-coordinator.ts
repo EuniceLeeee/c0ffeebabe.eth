@@ -3517,7 +3517,12 @@ export class BlockScanStateCoordinator {
             );
           }
           if (round === 0 && reads.length === 0) {
-            throw new Error("current-N state key emitted no reads");
+            // Strict views-backed families declare zero-read pricing: their
+            // mids come from the committed strict views, so an empty current-N
+            // read plan is the contract, not an error.
+            if (!group.family.readlessPricing) {
+              throw new Error("current-N state key emitted no reads");
+            }
           }
           if (round > 0 && reads.length === 0) {
             closedStateKeys.add(group.stateKey);
