@@ -122,6 +122,33 @@ export function poolInstanceKey(pool: {
   return "address:" + pool.address.toLowerCase();
 }
 
+/**
+ * Family-aware startup candidate key (audit P0.1): hash(familyId, plugin
+ * candidate identity). The family is resolved from the pool's adapter label
+ * through the catalog (ownerOfPoolAdapter, then ownerOfAction) so the same
+ * physical address serving multiple families never collapses into one
+ * attestation; pools without a resolvable family keep the address/poolId
+ * identity under "unknown-family".
+ */
+export function startupFamilyCandidateKey(
+  catalog: FamilyCapabilityCatalog,
+  pool: { readonly address: string; readonly adapter?: string },
+): string {
+  let familyId = "unknown-family";
+  if (pool.adapter !== undefined) {
+    try {
+      familyId = catalog.ownerOfPoolAdapter(pool.adapter);
+    } catch {
+      try {
+        familyId = catalog.ownerOfAction(pool.adapter);
+      } catch {
+        familyId = "unknown-family";
+      }
+    }
+  }
+  return familyId + "|" + poolInstanceKey(pool);
+}
+
 export async function attestPoolIdentitiesStrict<
   Pool extends { readonly address: string; readonly adapter?: string },
 >(input: {
@@ -447,7 +474,15 @@ export async function attestPoolIdentitiesStrict<
   for (let i = 0; i < input.pools.length; i++) {
     const entry = accepted[i] ?? rejected[i];
     if (entry === null || entry === undefined) continue;
-    outcomesByKey.set(poolInstanceKey(input.pools[i]), entry);
+    // Family-aware key so a shared physical address serving multiple
+    // families keeps one outcome per family (audit P0.1); fall back to the
+    // plain instance key when no family resolves.
+    const pool = input.pools[i];
+    const familyKey = startupFamilyCandidateKey(input.catalog, pool);
+    const key = familyKey === "unknown-family|" + poolInstanceKey(pool)
+      ? poolInstanceKey(pool)
+      : familyKey;
+    outcomesByKey.set(key, entry);
   }
   return {
     accepted: Object.freeze(
@@ -569,14 +604,15 @@ export async function attestStartupPoolSetsStrict<
   // universe and blockscan-universe sets both load the same file-backed
   // snapshot (they differ only in selection: topN/minScore), so a serial
   // per-set pass runs the same family lifecycle twice for every pool.
-  // Key on the central per-instance identity (poolId for shared-address
-  // families, address otherwise) and distribute the single attestation
-  // outcome to every set that contains the pool.
+  // Key on the family-aware candidate identity (audit P0.1):
+  // hash(familyId, plugin candidate identity) so a shared address serving
+  // several families never collapses, and distribute the single
+  // attestation outcome to every set that contains the pool.
   const uniquePools: Pool[] = [];
   const seen = new Set<string>();
   for (const set of input.poolSets) {
     for (const pool of set) {
-      const key = poolInstanceKey(pool);
+      const key = startupFamilyCandidateKey(catalog, pool);
       if (seen.has(key)) continue;
       seen.add(key);
       uniquePools.push(pool);
@@ -596,7 +632,11 @@ export async function attestStartupPoolSetsStrict<
     const accepted: StrictAttestedPool<Pool>[] = [];
     const rejected: StrictRejectedPool<Pool>[] = [];
     for (const pool of set) {
-      const outcome = byKey.get(poolInstanceKey(pool));
+      const familyKey = startupFamilyCandidateKey(catalog, pool);
+      const lookupKey = familyKey === "unknown-family|" + poolInstanceKey(pool)
+        ? poolInstanceKey(pool)
+        : familyKey;
+      const outcome = byKey.get(lookupKey);
       if (outcome === undefined) {
         rejected.push({
           ...pool,

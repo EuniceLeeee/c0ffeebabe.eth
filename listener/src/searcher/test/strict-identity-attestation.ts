@@ -6,6 +6,7 @@ import {
   centralAddressSurfaceFallback,
   mergeStartupFamilyPublications,
   poolInstanceKey,
+  startupFamilyCandidateKey,
 } from "../strict-identity-attestation.js";
 import type { CentralAdapterRuntime } from
   "../adapter-work-intent.js";
@@ -426,6 +427,54 @@ async function main(): Promise<void> {
     "explicitly-unsupported retain channel must reach the family lifecycle",
   );
 
+  // P0.1: family-aware candidate key. A shared physical address serving
+  // two families (distinct adapter labels) keeps two keys; the same
+  // family + pool collapses to one.
+  const twoFamilyCatalog = Object.freeze({
+    catalogHash: "f".repeat(64),
+    listAll: () => Object.freeze([family]),
+    forFamily: (id: string) => {
+      if (id !== FAMILY) throw new Error("unknown family");
+      return family;
+    },
+    forStrictFamily: (id: string) => {
+      if (id !== FAMILY) throw new Error("unknown family");
+      return family;
+    },
+    ownerOfAction: () => { throw new Error("unknown action"); },
+    ownerOfPoolAdapter: (id: string) => {
+      if (id === "synthetic-pool") return "synthetic:identity";
+      if (id === "synthetic-pool-b") return "synthetic:family-b";
+      throw new Error("unknown pool adapter");
+    },
+    matches: () => Object.freeze([]),
+  }) as unknown as FamilyCapabilityCatalog;
+  const sharedAddr = "0x" + "55".repeat(20);
+  assert.equal(
+    startupFamilyCandidateKey(twoFamilyCatalog, Object.freeze({
+      address: sharedAddr,
+      adapter: "synthetic-pool",
+    })),
+    "synthetic:identity|address:" + sharedAddr.toLowerCase(),
+  );
+  assert.notEqual(
+    startupFamilyCandidateKey(twoFamilyCatalog, Object.freeze({
+      address: sharedAddr,
+      adapter: "synthetic-pool",
+    })),
+    startupFamilyCandidateKey(twoFamilyCatalog, Object.freeze({
+      address: sharedAddr,
+      adapter: "synthetic-pool-b",
+    })),
+    "one shared address across two families must not collapse",
+  );
+  assert.equal(
+    startupFamilyCandidateKey(twoFamilyCatalog, Object.freeze({
+      address: sharedAddr,
+      adapter: "unresolvable-adapter",
+    })),
+    "unknown-family|address:" + sharedAddr.toLowerCase(),
+  );
   // P0-a: per-instance key contract. Shared-address families (V4/Angstrom)
   // key on the plugin-owned poolId; every other pool keys on its address.
   assert.equal(
