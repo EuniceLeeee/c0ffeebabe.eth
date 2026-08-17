@@ -36,6 +36,7 @@ run_test universe-rebuild-checkpoint npm run searcher:universe-rebuild-checkpoin
 run_test universe-rebuild-runner npm run searcher:universe-rebuild-runner
 run_test universe-rebuild-probe-cli npm run searcher:universe-rebuild-probe-cli
 run_test universe-rebuild-production npm run searcher:universe-rebuild-production
+run_test universe-rebuild-sigterm npm run searcher:universe-rebuild-sigterm
 
 finished=$(date -u +%s)
 sha="$(git -C "${impl_dir}" rev-parse HEAD)"
