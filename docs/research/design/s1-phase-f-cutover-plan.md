@@ -305,6 +305,16 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   identity rpc 与 silo no-outcome 两族缺口。node env：
   SEARCHER_DISCOVERY_BACKFILL_ENABLED=1（F5 冻结 0 会饿死 strict 观察面）、
   universe 1500 pools。本地两道门 PASS、shadow suite 全绿、build 绿。
+- **2026-08-17 F6 收尾（commit 57c91f09）**：`scripts/s1-regression-sweep.sh`
+  仍引用 5 个已删 harness 脚本（generic-family-capture / s1-capture-
+  inventory-materializer / architecture-migration-held-out-generator /
+  s1-capture-descriptor-generator / architecture-migration-parity-runner），
+  `set -euo pipefail` 下 sweep 在首个缺失脚本处退出、receipt 永远写不出——
+  F6 机器证据门实际失效。已清除 5 行过期引用并重跑：
+  `[s1-regression] PASS commit=57c91f09 tests=7`，receipt 归档
+  docs/research/design/evidence/s1-regression-receipt-57c91f09.json。
+  F6 至此文档口径收尾（A/B/C/D/F + harness 全 closed/deleted；sweep
+  全绿 receipt 为机器证据）。
 - **2026-08-17 状态机收敛（commit e7b7174a→52122d5e）**：blockscan state machine
   从 expected=0 推进到 `expected=15`（protocol:erc4626 keys=15）。三个缺口：(e)
   observed-interaction 族 watermark 是 contiguous source，watermark=0 永远无法

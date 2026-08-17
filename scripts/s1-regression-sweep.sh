@@ -26,15 +26,7 @@ run_test() {
 }
 
 run_test build npm run build
-run_test generic-family-capture npm run searcher:generic-family-capture
-run_test s1-capture-inventory-materializer \
-  npm run searcher:s1-capture-inventory-materializer
-run_test architecture-migration-held-out-generator \
-  npm run searcher:architecture-migration-held-out-generator
-run_test s1-capture-descriptor-generator \
-  npm run searcher:s1-capture-descriptor-generator
 run_test adapter-family-shadow-suite npm run searcher:adapter-family-shadow-suite
-run_test architecture-migration-parity-runner npm run searcher:architecture-migration-parity-runner
 run_test default-authority-cutover-gate npm run searcher:default-authority-cutover-gate
 run_test systemic-live-gate npm run searcher:systemic-live-gate
 run_test s1-cutover-readiness npm run searcher:s1-cutover-readiness
