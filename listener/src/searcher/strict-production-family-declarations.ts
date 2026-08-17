@@ -9,6 +9,7 @@ import type {
   DiscoveryCandidateSourceKind,
   DiscoverySemantics,
   FamilyCandidate,
+  OracleVictimSpec,
   RuntimeEvidence,
   UnifiedObservation,
 } from "./venues/adapter-family-plugin.js";
@@ -26,6 +27,8 @@ import type {
   PendingTransactionEvidenceContext,
   PendingTransactionEvidenceInput,
 } from "./venues/route-leg-adapter.js";
+import type { StrictOracleVictimDescriptor } from
+  "./detector/victim-effect.js";
 
 const FAMILY_WIDE_ACTIVATION_SCOPE = "family-wide";
 const ZERO_HASH = `0x${"00".repeat(32)}`;
@@ -82,9 +85,7 @@ type RoutePluginProjection = {
     };
   };
   readonly protocol?: {
-    readonly oracleVictim?: {
-      readonly canonicalIntakeTargets?: readonly string[];
-    };
+    readonly oracleVictim?: OracleVictimSpec;
   };
 };
 
@@ -94,6 +95,7 @@ export class StrictProductionFamilyDeclarations {
   readonly routeFamilies: readonly StrictRouteFamilyDeclaration[];
   readonly fundingActionIds: readonly string[];
   readonly creditActionIds: readonly string[];
+  readonly oracleVictims: readonly StrictOracleVictimDescriptor[];
 
   readonly #catalog: FamilyCapabilityCatalog;
   readonly #activationByFamily: ReadonlySet<string>;
@@ -116,6 +118,8 @@ export class StrictProductionFamilyDeclarations {
       readonly planningPriority: number;
     }> = [];
     const creditActionIds: string[] = [];
+    const oracleVictims: StrictOracleVictimDescriptor[] = [];
+    const oracleVictimIds = new Set<string>();
 
     for (const loaded of catalog.listAll()) {
       const plugin = loaded.plugin as unknown as RoutePluginProjection;
@@ -202,6 +206,19 @@ export class StrictProductionFamilyDeclarations {
         canonicalTargets,
         canonicalTargetSet,
       );
+      if (plugin.protocol?.oracleVictim !== undefined) {
+        const descriptor = createStrictOracleVictimDescriptor(
+          manifest.familyId,
+          plugin.protocol.oracleVictim,
+        );
+        if (oracleVictimIds.has(descriptor.id)) {
+          throw new Error(
+            `strict declarations: duplicate oracle victim ${descriptor.id}`,
+          );
+        }
+        oracleVictimIds.add(descriptor.id);
+        oracleVictims.push(descriptor);
+      }
       const activation = discovery?.runtimeEvidenceRouteActivation;
       const derive = discovery?.pendingRuntimeEvidenceFromObservation;
       if (activation === undefined && derive === undefined) continue;
@@ -236,6 +253,7 @@ export class StrictProductionFamilyDeclarations {
       ).map((entry) => entry.actionId),
     );
     this.creditActionIds = uniqueActionIds("credit", creditActionIds);
+    this.oracleVictims = Object.freeze(oracleVictims);
     this.routeFamilies = Object.freeze(routeFamilies);
     this.pendingEvidence = createPendingTransactionEvidenceProjection(
       observers,
@@ -307,6 +325,55 @@ export class StrictProductionFamilyDeclarations {
     }
     return false;
   }
+}
+
+function createStrictOracleVictimDescriptor(
+  familyId: FamilyId,
+  oracle: OracleVictimSpec,
+): StrictOracleVictimDescriptor {
+  const runtime = oracle.runtimeDetection;
+  return Object.freeze({
+    id: runtime.id,
+    affectedEdges: Object.freeze(runtime.affectedEdges.map((edge) =>
+      Object.freeze({ ...edge })
+    )),
+    priceProbe: Object.freeze({ ...runtime.priceProbe }),
+    maxSearchHops: runtime.maxSearchHops,
+    matches(input: {
+      readonly to: string | null;
+      readonly data: string;
+      readonly blockNumber: number;
+    }) {
+      if (
+        input.to === null ||
+        !ethers.isAddress(input.to) ||
+        !ethers.isHexString(input.data) ||
+        !Number.isSafeInteger(input.blockNumber) ||
+        input.blockNumber < 0
+      ) {
+        return false;
+      }
+      try {
+        return oracle.decode({
+          observation: Object.freeze({
+            kind: "call" as const,
+            source: Object.freeze({
+              number: input.blockNumber,
+              hash: ZERO_HASH,
+              generation: 0,
+            }),
+            target: ethers.getAddress(input.to),
+            data: input.data,
+          }),
+        }) !== null;
+      } catch (error) {
+        throw new Error(
+          `strict oracle victim ${familyId}/${runtime.id} failed: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    },
+  });
 }
 
 function uniqueActionIds(

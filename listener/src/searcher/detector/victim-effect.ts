@@ -66,6 +66,23 @@ export interface OracleVictimDescriptor {
   readonly maxSearchHops: number;
 }
 
+/** Strict catalog declaration: the Family owns call decoding/matching. */
+export interface StrictOracleVictimDescriptor {
+  readonly id: string;
+  readonly affectedEdges: readonly VictimEdgeSelector[];
+  readonly priceProbe: OracleEdgePriceProbe;
+  readonly maxSearchHops: number;
+  matches(input: {
+    readonly to: string | null;
+    readonly data: string;
+    readonly blockNumber: number;
+  }): boolean;
+}
+
+export type OracleVictimRuntimeDescriptor =
+  | OracleVictimDescriptor
+  | StrictOracleVictimDescriptor;
+
 export interface OracleEdgePriceProbe {
   readonly signature: string;
   readonly functionName: string;
@@ -92,10 +109,12 @@ export async function matchOracleVictimEffect(
   before: TokenQueryBackend | null,
   beforeBlock: number,
   after: Pick<StateBackend, "call">,
-  descriptors: readonly OracleVictimDescriptor[],
+  descriptors: readonly OracleVictimRuntimeDescriptor[],
 ): Promise<OracleVictimEffect | null> {
   const descriptor = descriptors.find((candidate) =>
-    matchesCall(candidate.matcher, to, input),
+    "matches" in candidate
+      ? candidate.matches({ to, data: input, blockNumber: beforeBlock + 1 })
+      : matchesCall(candidate.matcher, to, input),
   );
   if (!descriptor || !before) return null;
 

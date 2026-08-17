@@ -8,10 +8,11 @@ import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import {
   matchOracleVictimEffect,
   oracleAffectedGraphEdges,
-  type OracleVictimDescriptor,
+  type OracleVictimRuntimeDescriptor,
   type VictimEffect,
 } from "./victim-effect.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
+  "../strict-production-family-declarations.js";
 
 export interface Opportunity {
   kind: "backrun-arb";
@@ -61,8 +62,8 @@ export class BackrunDetector implements Detector {
   private tokenQuery: TokenQueryBackend | null = null;
 
   constructor(
-    private readonly oracleVictims: readonly OracleVictimDescriptor[] =
-      PRODUCTION_ADAPTER_FAMILIES.oracleVictims(),
+    private readonly oracleVictims: readonly OracleVictimRuntimeDescriptor[] =
+      PRODUCTION_STRICT_FAMILY_DECLARATIONS.oracleVictims,
   ) {}
 
   /** Inject a verified pre-built graph (from buildTokenGraph). */
@@ -132,12 +133,17 @@ export class BackrunDetector implements Detector {
       graph.flatMap((e) => [e.tokenIn.toLowerCase(), e.tokenOut.toLowerCase()]),
     );
 
-    const routeRegistry = PRODUCTION_ADAPTER_FAMILIES.routes();
     const mutationEdges = graph.filter((edge) => {
-      const owner = routeRegistry.findForEdge(edge.adapterId);
-      if (!owner) return false;
+      let familyId: string;
+      try {
+        familyId = PRODUCTION_STRICT_FAMILY_DECLARATIONS.familyIdForEdge(
+          edge.adapterId,
+        );
+      } catch {
+        return false;
+      }
       return transition.mutations.some((mutation) =>
-        owner.id === mutation.familyId &&
+        familyId === mutation.familyId &&
         (
           edge.poolId?.toLowerCase() === mutation.poolIdentity.toLowerCase() ||
           edge.target.toLowerCase() === mutation.poolIdentity.toLowerCase()

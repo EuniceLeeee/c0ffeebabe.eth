@@ -1193,6 +1193,23 @@ export interface OracleVictimSpec {
   readonly callPatterns: readonly CallPattern[];
   /** Public-mempool shortlist only; never instance admission or coverage. */
   readonly canonicalIntakeTargets?: readonly string[];
+  /** Matching stays Family-owned in decode(); this declares the generic effect. */
+  readonly runtimeDetection: {
+    readonly id: string;
+    readonly affectedEdges: readonly {
+      readonly adapterId: string;
+      readonly target?: string;
+      readonly tokenIn?: string;
+      readonly tokenOut?: string;
+    }[];
+    readonly priceProbe: {
+      readonly signature: string;
+      readonly functionName: string;
+      readonly amountIn: bigint;
+      readonly outputIndex: number;
+    };
+    readonly maxSearchHops: number;
+  };
   decode(input: {
     readonly observation: UnifiedObservation;
   }): CanonicalValue | null;
@@ -2498,6 +2515,7 @@ function validateFamilyPlugin(
     validateProtocolDomain(
       protocolPlugin.protocol,
       protocolPlugin.discovery,
+      manifest as FamilyManifest<"protocol">,
     );
   }
 
@@ -4368,6 +4386,7 @@ function validateSwapDomain(
 function validateProtocolDomain(
   protocol: ProtocolDomainSemantics,
   discovery: DiscoverySemantics<any>,
+  manifest: FamilyManifest<"protocol">,
 ): void {
   assertPlainRecord(protocol, "protocol domain semantics");
   assertExactKeys(
@@ -4405,10 +4424,15 @@ function validateProtocolDomain(
     assertPlainRecord(protocol.oracleVictim, "protocol.oracleVictim");
     assertExactKeys(
       protocol.oracleVictim,
-      ["callPatterns", "canonicalIntakeTargets", "decode"],
+      [
+        "callPatterns",
+        "canonicalIntakeTargets",
+        "decode",
+        "runtimeDetection",
+      ],
       "protocol.oracleVictim",
       true,
-      ["callPatterns", "decode"],
+      ["callPatterns", "decode", "runtimeDetection"],
     );
     validateAddressList(
       protocol.oracleVictim.canonicalIntakeTargets,
@@ -4420,6 +4444,69 @@ function validateProtocolDomain(
     }
     for (const pattern of protocol.oracleVictim.callPatterns) {
       validateCallPattern(pattern, "protocol oracleVictim call pattern");
+    }
+    const runtimeDetection = protocol.oracleVictim.runtimeDetection;
+    assertPlainRecord(
+      runtimeDetection,
+      "protocol oracleVictim runtimeDetection",
+    );
+    assertExactKeys(
+      runtimeDetection,
+      ["affectedEdges", "id", "maxSearchHops", "priceProbe"],
+      "protocol oracleVictim runtimeDetection",
+    );
+    if (
+      typeof runtimeDetection.id !== "string" ||
+      runtimeDetection.id.trim().length === 0 ||
+      !Number.isSafeInteger(runtimeDetection.maxSearchHops) ||
+      runtimeDetection.maxSearchHops <= 0 ||
+      !Array.isArray(runtimeDetection.affectedEdges) ||
+      runtimeDetection.affectedEdges.length === 0
+    ) {
+      throw new Error("protocol oracleVictim has invalid runtimeDetection");
+    }
+    for (const edge of runtimeDetection.affectedEdges) {
+      assertPlainRecord(edge, "protocol oracleVictim affected edge");
+      assertExactKeys(
+        edge,
+        ["adapterId", "target", "tokenIn", "tokenOut"],
+        "protocol oracleVictim affected edge",
+        true,
+        ["adapterId"],
+      );
+      if (
+        typeof edge.adapterId !== "string" ||
+        !manifest.edgeAdapterIds?.includes(edge.adapterId)
+      ) {
+        throw new Error(
+          "protocol oracleVictim affected edge is not Family-owned",
+        );
+      }
+      validateAddressList(
+        [edge.target, edge.tokenIn, edge.tokenOut].filter(
+          (value): value is string => value !== undefined,
+        ),
+        "protocol oracleVictim affected edge address",
+      );
+    }
+    const priceProbe = runtimeDetection.priceProbe;
+    assertPlainRecord(priceProbe, "protocol oracleVictim priceProbe");
+    assertExactKeys(
+      priceProbe,
+      ["amountIn", "functionName", "outputIndex", "signature"],
+      "protocol oracleVictim priceProbe",
+    );
+    if (
+      typeof priceProbe.signature !== "string" ||
+      priceProbe.signature.trim().length === 0 ||
+      typeof priceProbe.functionName !== "string" ||
+      priceProbe.functionName.trim().length === 0 ||
+      typeof priceProbe.amountIn !== "bigint" ||
+      priceProbe.amountIn <= 0n ||
+      !Number.isSafeInteger(priceProbe.outputIndex) ||
+      priceProbe.outputIndex < 0
+    ) {
+      throw new Error("protocol oracleVictim has invalid priceProbe");
     }
     assertSynchronousFunction(
       protocol.oracleVictim.decode,

@@ -15,7 +15,8 @@ import {
   type SyncMidReadContext,
 } from "../venues/mid-readers.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
+  "../strict-production-family-declarations.js";
 import {
   blockScanSelectionProvenance,
   estimateResolvedRingSpreadBps,
@@ -127,9 +128,12 @@ function buildLegacyMidBook(
 function legacyReader(
   edge: TokenEdge,
 ): ((ctx: SyncMidReadContext) => RouteVenueMid | null) | null {
-  const family = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(edge.adapterId);
-  if (!family) return null;
-  return readAnyWarmMid;
+  try {
+    PRODUCTION_STRICT_FAMILY_DECLARATIONS.familyIdForEdge(edge.adapterId);
+    return readAnyWarmMid;
+  } catch {
+    return null;
+  }
 }
 
 function edgeVenueIdentity(edge: TokenEdge): string {

@@ -8,6 +8,7 @@ import {
 import {
   METRONOME_SYNTH_FORWARDER_INTERFACE,
   METRONOME_SYNTH_ORACLE_BINDING,
+  METRONOME_SYNTH_SAMPLE,
 } from "./shared.js";
 
 export const metronomeSynthOracleVictim = {
@@ -23,6 +24,22 @@ export const metronomeSynthOracleVictim = {
       { index: 1, type: "bytes", name: "payload" },
     ],
   }],
+  runtimeDetection: {
+    id: "metronome-eth-usd",
+    affectedEdges: [{
+      adapterId: "metronome-synth-swap",
+      target: ADDR.METRONOME_SYNTH_POOL,
+    }],
+    priceProbe: {
+      signature:
+        "quoteSwapOut(address syntheticTokenIn, address syntheticTokenOut, uint256 amountIn) " +
+        "view returns (uint256 amountOut, uint256 fee)",
+      functionName: "quoteSwapOut",
+      amountIn: METRONOME_SYNTH_SAMPLE,
+      outputIndex: 0,
+    },
+    maxSearchHops: 8,
+  },
   decode({ observation }: { readonly observation: UnifiedObservation }) {
     if (
       observation.kind !== "call" ||

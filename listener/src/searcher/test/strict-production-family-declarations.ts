@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
 import {
   PRODUCTION_STRICT_FAMILY_DECLARATIONS,
   StrictProductionFamilyDeclarations,
@@ -21,6 +22,8 @@ import {
 } from "../venues/swaps/blockscan-state-shared.js";
 import { UNIV2_SWAP_TOPIC } from
   "../venues/swaps/univ2-family/codec.js";
+import { METRONOME_SYNTH_FORWARDER_INTERFACE } from
+  "../venues/protocols/metronome-synth-family/shared.js";
 import {
   deriveTemplateTradeAdapterIds,
   FLASH_LEND_SWAP_REPAY,
@@ -112,6 +115,27 @@ assert.deepEqual(
   new Set(PRODUCTION_STRICT_FAMILY_DECLARATIONS.creditActionIds),
 );
 assert(!strictTradeAdapters.includes("fluid-vault"));
+assert.equal(PRODUCTION_STRICT_FAMILY_DECLARATIONS.oracleVictims.length, 1);
+const oracleVictim = PRODUCTION_STRICT_FAMILY_DECLARATIONS.oracleVictims[0]!;
+assert.equal(oracleVictim.id, "metronome-eth-usd");
+assert.deepEqual(oracleVictim.affectedEdges, [{
+  adapterId: "metronome-synth-swap",
+  target: ADDR.METRONOME_SYNTH_POOL,
+}]);
+const oracleForward = METRONOME_SYNTH_FORWARDER_INTERFACE.encodeFunctionData(
+  "forward",
+  [ADDR.METRONOME_ORACLE, `0xb1dc65a4${"00".repeat(32)}`],
+);
+assert(oracleVictim.matches({
+  to: ADDR.METRONOME_ORACLE_FORWARDER,
+  data: oracleForward,
+  blockNumber: HEAD.number,
+}));
+assert(!oracleVictim.matches({
+  to: ADDR.METRONOME_ORACLE,
+  data: oracleForward,
+  blockNumber: HEAD.number,
+}));
 
 const targets = new Set(
   PRODUCTION_STRICT_FAMILY_DECLARATIONS.canonicalIntakeTargets.map(
@@ -289,6 +313,8 @@ for (const relative of [
   "../solver/pool-state-updater.ts",
   "../templates/path-template.ts",
   "../venues/route-family-manifest.ts",
+  "../detector/detector.ts",
+  "../detector/blockscan-scanner.ts",
 ]) {
   const source = readFileSync(new URL(relative, import.meta.url), "utf8");
   assert.equal(

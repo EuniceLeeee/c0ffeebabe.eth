@@ -3417,6 +3417,32 @@ legacy runtime 接回。本批未部署。
 live-discovery 与 active-pool 工具仍需继续按“先删除调用点、strict 缺口 fail closed、只参考
 Git 历史”的顺序清理。本批未部署。
 
+**2026-08-18 Oracle victim / detector ownership 第十批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- `BackrunDetector` 与 historical blockscan scanner facade 已物理删除
+  `PRODUCTION_ADAPTER_FAMILIES`。mutation edge 与 warm-mid edge ownership 均取 strict
+  catalog；未知 adapter 无 owner 时 fail closed，不做名称/selector fallback；
+- `OracleVictimSpec` 新增 Family-owned `runtimeDetection`：只声明 generic affected-edge
+  selector、price-probe request shape 与 max hops；call 是否命中仍必须调用该 Family 的
+  `decode()`。Metronome Family 自己验证 Forwarder、内层 canonical Oracle 与内层 selector，
+  中央 detector 不比较 Metronome 地址/selector，也不读取旧 oracle-victim registry；
+- strict declaration projection 校验 affected edge 必须属于同一 Family，冻结 runtime
+  descriptor，并以 Family decode closure 执行 call match。public-mempool canonical target 仍
+  只作 shortlist，不授予 route/instance admission；price probe 后续只会作用于 ready Graph
+  中与该 Family selector 匹配的 edge；
+- `searcher:strict-production-family-declarations` 覆盖正/负 forwarded-call match 与源码
+  closure；`searcher:victim-effect` 3/3、`searcher:blockscan-scanner` 20/20、
+  `searcher:blockscan-scanner-production-boundary`、`searcher:route-family-compatibility` 6/6
+  以及 listener 完整 `build` 通过。
+
+本 checkpoint 只迁移 Oracle victim 与 detector ownership。Swap receipt impact 仍通过
+`pool-impact.ts` 的 legacy-projected observation facade，而该 facade 故意 unresolved；因此
+native-ETH V4 planner 合同的 expected 1 / got 0 仍是下一批必须闭合的真实缺口。不得把旧
+swap observer registry 接回；下一批必须让 strict Family observation 产生完整 receipt
+impact/mutation exact partition，并继续由 current-source session 执行 victim replay。本批未
+部署。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
