@@ -194,6 +194,7 @@
     "searcher:strict-catalog-consumer-diagnostic": "node --import tsx src/searcher/test/strict-catalog-consumer-diagnostic.ts",
     "searcher:universe-rebuild-checkpoint": "node --import tsx src/searcher/test/universe-rebuild-checkpoint.ts",
     "searcher:universe-rebuild-runner": "node --import tsx src/searcher/test/universe-rebuild-runner.ts",
+    "searcher:universe-rebuild-status": "node --import tsx src/searcher/universe-rebuild-status-cli.ts",
     "searcher:default-authority-cutover-gate": "node --import tsx src/searcher/test/default-authority-cutover-gate.ts",
     "searcher:production-family-startup-manifest": "node --import tsx src/searcher/test/production-family-startup-manifest.ts",
     "searcher:systemic-live-gate": "node --import tsx src/searcher/test/systemic-live-gate.ts",
