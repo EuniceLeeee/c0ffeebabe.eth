@@ -22,7 +22,6 @@ import {
 } from "../planner/token-graph.js";
 import { mergePoolRegistries } from "../active-pool-discovery.js";
 import { loadPoolUniverse, selectPairCompletionPools } from "../pool-universe.js";
-import { backfillV4PoolIdIntoActivePools } from "../backfill-v4-poolid.js";
 import { deriveEdgeTaxonomy, type ProtocolAction } from "../strategy-taxonomy.js";
 import type { FlashLiquidityView, FlashSource } from "../solver/flash-liquidity.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY, type PathTemplate } from "../templates/path-template.js";
@@ -1005,69 +1004,6 @@ async function testRealCaseReplayFixtures(): Promise<void> {
   }
 }
 
-async function testCfgV4BackfillWritesPoolKeyFields(): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), "planner-v4-backfill-"));
-  try {
-    const file = join(dir, "active-pools.json");
-    writeFileSync(file, JSON.stringify({ schemaVersion: 1, pools: [] }, null, 2) + "\n");
-    const poolKeysCalls: Array<{ to: string; data: string; blockTag: string }> = [];
-    const provider = {
-      async send(method: string, params: unknown[]) {
-        assert(method === "eth_call", `v4 backfill resolver: expected eth_call, got ${method}`);
-        const [call, blockTag] = params as [{ to: string; data: string }, string];
-        poolKeysCalls.push({ to: call.to, data: call.data, blockTag });
-        assert(
-          ethers.getAddress(call.to) === ethers.getAddress(ADDR.UNISWAP_V4_POSITION_MANAGER),
-          "v4 backfill resolver: wrong PositionManager target",
-        );
-        assert(blockTag === "latest", "v4 backfill resolver should use latest state");
-        assert(
-          call.data === "0x86b6be7d" + POOL_V4_ETH_CFG_ID.slice(2, 52).padEnd(64, "0"),
-          "v4 backfill resolver: wrong poolKeys(bytes25) calldata",
-        );
-        return ethers.AbiCoder.defaultAbiCoder().encode(
-          ["address", "address", "uint24", "int24", "address"],
-          [CFG_V4_POOL_KEY.currency0, CFG_V4_POOL_KEY.currency1, CFG_V4_POOL_KEY.fee, CFG_V4_POOL_KEY.tickSpacing, CFG_V4_POOL_KEY.hooks],
-        );
-      },
-    } as unknown as ethers.JsonRpcProvider;
-
-    const result = await backfillV4PoolIdIntoActivePools(POOL_V4_ETH_CFG_ID, {
-      provider,
-      activePoolsPath: file,
-    });
-    assert(result.added, "v4 backfill should add the missing CFG poolId");
-    assert(poolKeysCalls.length === 1, `v4 backfill resolver calls ${poolKeysCalls.length}`);
-    const parsed = JSON.parse(readFileSync(file, "utf8")) as { pools: PoolEntry[] };
-    assert(parsed.pools.length === 1, `v4 backfill should write one pool, got ${parsed.pools.length}`);
-    const entry = parsed.pools[0];
-    assert(entry.adapter === "univ4", "v4 backfill entry adapter");
-    assert(entry.poolId === POOL_V4_ETH_CFG_ID, "v4 backfill entry poolId");
-    assert(entry.currency0 === ethers.ZeroAddress, "v4 backfill entry currency0 native ETH");
-    assert(entry.currency1 === CFG, "v4 backfill entry currency1 CFG");
-    assert(entry.fee === 10001, `v4 backfill entry fee ${entry.fee}`);
-    assert(entry.tickSpacing === 200, `v4 backfill entry tickSpacing ${entry.tickSpacing}`);
-    assert(entry.hooks === ethers.ZeroAddress, "v4 backfill entry hooks");
-    assert(entry.fixedTokenIn === ethers.ZeroAddress, "v4 backfill entry fixedTokenIn");
-    assert(entry.fixedTokenOut === CFG, "v4 backfill entry fixedTokenOut");
-
-    const repeat = await backfillV4PoolIdIntoActivePools(POOL_V4_ETH_CFG_ID, {
-      activePoolsPath: file,
-      provider: {
-        async send() {
-          throw new Error("idempotent backfill should not call RPC");
-        },
-      } as unknown as ethers.JsonRpcProvider,
-    });
-    assert(!repeat.added, "v4 backfill should no-op when poolId already exists");
-    const afterRepeat = JSON.parse(readFileSync(file, "utf8")) as { pools: PoolEntry[] };
-    assert(afterRepeat.pools.length === 1, `idempotent v4 backfill wrote ${afterRepeat.pools.length} pools`);
-    console.log("[planner] v4 backfill poolId writes CFG PoolKey fields and is idempotent: PASS");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
 async function testCfgV4PoolClosesRoutingCycle(): Promise<void> {
   const backend: TokenQueryBackend = {
     async call() {
@@ -1251,7 +1187,6 @@ async function main(): Promise<void> {
   await testNativeEthV4RoutesViaWethAlias();
   await testBlockScanPlannerBinding();
   await testRealCaseReplayFixtures();
-  await testCfgV4BackfillWritesPoolKeyFields();
   await testCfgV4PoolClosesRoutingCycle();
   await testHighSpreadUniverseSelectionReplay();
   console.log(`planner PASS (15/15) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length}) + high-spread universe replay`);

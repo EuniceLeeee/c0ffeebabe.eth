@@ -2,25 +2,12 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
-import {
-  backfillV4PoolId,
-  type V4BackfillOptions,
-  type V4BackfillResult,
-} from "./backfill-v4-poolid.js";
 import { appendForceIncludePoolIds } from "./force-include.js";
-
-type BackfillV4PoolIdFn = (
-  poolId: string,
-  opts: V4BackfillOptions,
-) => Promise<V4BackfillResult>;
 
 export interface AutoCloseRouteGapOptions {
   reportPath: string;
-  rpcUrl?: string;
-  activePoolsPath?: string;
   forceIncludePath?: string;
   findingsPath?: string;
-  backfillV4PoolIdFn?: BackfillV4PoolIdFn;
   log?: (line: string) => void;
 }
 
@@ -91,7 +78,6 @@ export async function autoCloseRouteGap(
   // (which only carries hash/index/backrun_positioned). Close every not-in-graph venue observed.
   const competitors = Array.isArray(report.analyzed_competitors) ? report.analyzed_competitors : [];
 
-  const backfill = opts.backfillV4PoolIdFn ?? backfillV4PoolId;
   const closedV4PoolIds: string[] = [];
   const forceIncludeAdded: string[] = [];
   const needsActivePools: string[] = [];
@@ -116,22 +102,18 @@ export async function autoCloseRouteGap(
 
       try {
         // Data-driven venue identity: a bytes32 id is a pool-key venue
-        // (backfill its canonical id); anything else is an address venue.
-        // No protocol/family name is consulted.
+        // (force-include by its canonical id); anything else is an address
+        // venue. No protocol/family name is consulted.
         if (BYTES32_RE.test(id)) {
           const poolId = normalizePoolId(id);
-          const result = await backfill(poolId, {
-            rpcUrl: opts.rpcUrl,
-            activePoolsPath: opts.activePoolsPath,
-          });
-          const appendResult = appendForceIncludePoolIds([result.poolId], opts.forceIncludePath);
-          if (result.added) closedV4PoolIds.push(result.poolId);
+          const appendResult = appendForceIncludePoolIds([poolId], opts.forceIncludePath);
+          if (appendResult.added.length > 0) closedV4PoolIds.push(poolId);
           forceIncludeAdded.push(...appendResult.added);
           appendFinding(findingsPath, {
             ts: new Date().toISOString(),
             kind: "closed",
             protocol,
-            id: result.poolId,
+            id: poolId,
             report: opts.reportPath,
           });
           continue;
