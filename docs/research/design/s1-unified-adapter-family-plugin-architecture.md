@@ -5482,6 +5482,7 @@ universe rebuild 的正确性路径改为三类 durable 状态 + 固定 cutoff +
 - `inProgressRun`：当前唯一未完成 rebuild。fixed cutoff number+hash、
   fromBlock、universeHash、candidateSetHash、candidateCount、
   observedThrough（只证 Swap 范围已扫完，不推进 appliedThrough）、
+  `appliedThrough=null`（run 未完成期间不可提前）、
   outcomesByCandidateKey：
   - verified → familyInstanceKey + memoFingerprint；
   - terminal-rejected（chain-proven）→ reasonCode + evidenceFingerprint；
@@ -5492,22 +5493,32 @@ universe rebuild 的正确性路径改为三类 durable 状态 + 固定 cutoff +
   rpc/deadline 等 retryable 绝不伪装成 rejected。
 - `readyGeneration`：最后一次完整可用 Graph。cutoff/universeHash/
   catalogHash/activeInstanceKeys/publicationSetHash/sourceCoverage/
-  graphSnapshot/graphHash。
+  observedThrough/appliedThrough（均为 number+hash）、catalogSnapshot/
+  graphSnapshot/graphHash。catalogHash、publicationSetHash 与 graphHash
+  分别哈希完整 canonical 内容，不允许只哈希 familyId 或
+  `String(object)`。
 - 不保留长期原始 tx inbox；candidate journal 不是正确性路径。
 
 ### 22.2 写入（AttestationCheckpointWriter + UniverseRebuildCheckpointStore）
 - 单写者文件 CAS：sidecar lock、temp + fsync + atomic rename + dir fsync；
   损坏/篡改/CAS 冲突 fail-closed（fingerprint 校验）。
 - 每 25 条或 2-5 秒 flush；SIGTERM/SIGINT flush；kill -9 最多丢最后一批。
-- flush 只写 memo/run outcome，绝不推进 ready。
-- 操作：beginOrResumeRun（同 cutoff 幂等、异 runId fail-closed）、
-  casMergeRunOutcomes、casReplaceRunOutcome（attemptCount 守卫）、
-  casUpsertMemo、casCommitReadyGeneration（expectedRevision 守卫，清空
-  run 置 ready）。
+- flush 只写 memo/run outcome，绝不推进 ready。verified memo 与引用它的
+  verified outcome 必须由同一个 `casMergeAttestationWrites` 原子写入；
+  禁止先推进 outcome、再另一次 CAS 写 memo。probe 的 memo + replacement
+  outcome 也必须同一 CAS。
+- 操作：beginOrResumeRun（同 runId 只有 cutoff/fromBlock/universeHash/
+  candidateSetHash/candidateCount/observedThrough 全相同才幂等，否则
+  fail-closed；异 runId fail-closed）、casMergeAttestationWrites、
+  casReplaceRunOutcome（attemptCount + memo/outcome 一致性守卫）、
+  casCommitReadyGeneration（expectedRevision + exact terminal partition +
+  verified memo 完整性 + activeInstanceKeys + cutoff/coverage/appliedThrough
+  守卫，清空 run 置 ready）。`casUpsertMemo` 不得作为 verified outcome
+  的 production 正确性路径。
 
 ### 22.3 流程（rebuildUniverse）
 freezeCanonicalHead → 重扫最新两天 Swap（cutoff hash 固定）→ 按
-block+txHash+logIndex+address+topic/pool identity 完整去重 → 按
+block number+hash+txHash+logIndex+address+全部 topics+pool identity 完整去重 → 按
 familyCandidateKey 恢复：run.verified 跳过 / memo 可复用（family hash +
 candidate fingerprint + authority + canonical proofSource）直接
 writer.record / 否则 attestOnce（cache miss 才执行一次完整
@@ -5516,7 +5527,11 @@ retryable>0 抛 UniverseRunIncomplete（durable incomplete，禁止 ready）→
 exact partition 校验（active == verified ∪ chain-proven terminal
 rejected）→ rehydrate（canonical memo 重组装，本地校验/组装，不重发
 identity RPC；routeHandles 不可反序列化，由中央 rehydrator 重新签发）→
-逐族聚合一次 → buildGraph → assertCanonical(cutoff) → 一次 CAS 原子提升
+逐族聚合一次（同族所有 instance 必须保留，禁止 Map 只留首池）→
+由 catalog-issued route handle + Family projectGraph 生成 Graph →
+以 JSON-safe canonical codec 保存 descriptor/static projection（bigint/Map
+不得被 JSON 静默丢失），中央重新签发并登记 process-local routeHandles →
+assertCanonical(cutoff) → 一次 CAS 原子提升
 Graph+catalog+coverage+cutoff readyGeneration → 之后才创建 producer。
 
 ### 22.4 单池 probe（rebuild-probe / probeOneFailure）
@@ -5581,6 +5596,5 @@ coordinator）只有在 readyGeneration 存在时才创建：
 
 未配置 `SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH` 时行为不变（当前
 startup 路径为默认），用于回退。
-
 
 

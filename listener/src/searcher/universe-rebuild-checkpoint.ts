@@ -84,6 +84,12 @@ export interface InProgressUniverseRun {
   readonly candidateCount: number;
   /** Swap range fully scanned; never advances appliedThrough by itself. */
   readonly observedThrough: { readonly number: number; readonly hash: string };
+  /**
+   * Null until the completed exact partition is promoted.  An in-progress
+   * run must never advertise an applied cursor merely because observation or
+   * some instance attestations finished.
+   */
+  readonly appliedThrough: null;
   readonly outcomesByCandidateKey: Readonly<Record<string, RunOutcome>>;
 }
 
@@ -94,6 +100,8 @@ export interface ReadyUniverseGeneration {
   readonly catalogHash: string;
   readonly activeInstanceKeys: readonly string[];
   readonly publicationSetHash: string;
+  readonly observedThrough: { readonly number: number; readonly hash: string };
+  readonly appliedThrough: { readonly number: number; readonly hash: string };
   readonly sourceCoverage: readonly {
     readonly familyId: string;
     readonly sourceId: string;
@@ -102,6 +110,13 @@ export interface ReadyUniverseGeneration {
   }[];
   readonly graphSnapshot: unknown;
   readonly graphHash: string;
+  readonly catalogSnapshot: unknown;
+}
+
+export interface AttestationCheckpointWrite {
+  readonly outcome: RunOutcome;
+  /** Present exactly when a verified outcome introduces/replaces its memo. */
+  readonly memo?: DurableVerifiedMemo;
 }
 
 export interface StartupCheckpointEnvelope {
@@ -298,7 +313,22 @@ export class UniverseRebuildCheckpointStore {
     runId: string,
     outcomes: readonly RunOutcome[],
   ): Promise<StartupCheckpointEnvelope> {
-    if (outcomes.length === 0) {
+    return this.casMergeAttestationWrites(
+      runId,
+      outcomes.map((outcome) => Object.freeze({ outcome })),
+    );
+  }
+
+  /**
+   * Atomically merge attestation outcomes and their verified memos.  A
+   * verified outcome can never become durable before the memo it names; a
+   * crash therefore leaves either the old envelope or the complete pair.
+   */
+  async casMergeAttestationWrites(
+    runId: string,
+    writes: readonly AttestationCheckpointWrite[],
+  ): Promise<StartupCheckpointEnvelope> {
+    if (writes.length === 0) {
       throw new Error("universe rebuild checkpoint: empty outcome batch");
     }
     return this.#cas(undefined, (current) => {
@@ -312,12 +342,35 @@ export class UniverseRebuildCheckpointStore {
       const merged: Record<string, RunOutcome> = {
         ...run.outcomesByCandidateKey,
       };
-      for (const outcome of outcomes) {
+      const memos: Record<string, DurableVerifiedMemo> = {
+        ...base.verifiedMemos,
+      };
+      for (const write of writes) {
+        const { outcome, memo } = write;
+        if (memo !== undefined) {
+          assertMemoMatchesVerifiedOutcome(memo, outcome);
+          memos[memo.familyCandidateKey] = Object.freeze(memo);
+        }
+        if (outcome.status === "verified") {
+          const durableMemo = memos[outcome.familyCandidateKey];
+          if (durableMemo === undefined) {
+            throw new Error(
+              "universe rebuild checkpoint: verified outcome has no memo " +
+                outcome.familyCandidateKey,
+            );
+          }
+          assertMemoMatchesVerifiedOutcome(durableMemo, outcome);
+        } else if (memo !== undefined) {
+          throw new Error(
+            "universe rebuild checkpoint: non-verified outcome carried memo",
+          );
+        }
         merged[outcome.familyCandidateKey] = outcome;
       }
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
+        verifiedMemos: Object.freeze(memos),
         inProgressRun: Object.freeze({
           ...run,
           outcomesByCandidateKey: Object.freeze(merged),
@@ -332,6 +385,7 @@ export class UniverseRebuildCheckpointStore {
     readonly familyCandidateKey: string;
     readonly expectedAttemptCount: number;
     readonly nextOutcome: RunOutcome;
+    readonly memo?: DurableVerifiedMemo;
   }): Promise<StartupCheckpointEnvelope> {
     return this.#cas(undefined, (current) => {
       const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
@@ -353,9 +407,30 @@ export class UniverseRebuildCheckpointStore {
             input.familyCandidateKey,
         );
       }
+      const memos: Record<string, DurableVerifiedMemo> = {
+        ...base.verifiedMemos,
+      };
+      if (input.memo !== undefined) {
+        assertMemoMatchesVerifiedOutcome(input.memo, input.nextOutcome);
+        memos[input.memo.familyCandidateKey] = Object.freeze(input.memo);
+      }
+      if (input.nextOutcome.status === "verified") {
+        const durableMemo = memos[input.familyCandidateKey];
+        if (durableMemo === undefined) {
+          throw new Error(
+            "universe rebuild checkpoint: verified probe outcome has no memo",
+          );
+        }
+        assertMemoMatchesVerifiedOutcome(durableMemo, input.nextOutcome);
+      } else if (input.memo !== undefined) {
+        throw new Error(
+          "universe rebuild checkpoint: non-verified probe carried memo",
+        );
+      }
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
+        verifiedMemos: Object.freeze(memos),
         inProgressRun: Object.freeze({
           ...run,
           outcomesByCandidateKey: Object.freeze({
@@ -382,6 +457,7 @@ export class UniverseRebuildCheckpointStore {
             input.runId,
         );
       }
+      assertReadyPromotion(base, run, input.ready);
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
@@ -412,6 +488,22 @@ export class UniverseRebuildCheckpointStore {
               existing.runId + ")",
           );
         }
+        if (
+          existing.cutoff.number !== input.cutoff.number ||
+          existing.cutoff.hash.toLowerCase() !== input.cutoff.hash.toLowerCase() ||
+          existing.cutoff.generation !== input.cutoff.generation ||
+          existing.fromBlock !== input.fromBlock ||
+          existing.universeHash !== input.universeHash ||
+          existing.candidateSetHash !== input.candidateSetHash ||
+          existing.candidateCount !== input.candidateCount ||
+          existing.observedThrough.number !== input.observedThrough.number ||
+          existing.observedThrough.hash.toLowerCase() !==
+            input.observedThrough.hash.toLowerCase()
+        ) {
+          throw new Error(
+            "universe rebuild checkpoint: runId resumed with different fixed input",
+          );
+        }
         return base;
       }
       return Object.freeze({
@@ -425,6 +517,7 @@ export class UniverseRebuildCheckpointStore {
           candidateSetHash: input.candidateSetHash,
           candidateCount: input.candidateCount,
           observedThrough: Object.freeze({ ...input.observedThrough }),
+          appliedThrough: null,
           outcomesByCandidateKey: Object.freeze({}),
         }),
       });
@@ -478,7 +571,7 @@ export class AttestationCheckpointWriter {
   readonly #runId: string;
   readonly #batchSize: number;
   readonly #maxIntervalMs: number;
-  #pending: RunOutcome[] = [];
+  #pending: AttestationCheckpointWrite[] = [];
   #flushing: Promise<void> | null = null;
   #timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -494,8 +587,11 @@ export class AttestationCheckpointWriter {
     this.#maxIntervalMs = input.maxIntervalMs ?? 5_000;
   }
 
-  record(outcome: RunOutcome): void {
-    this.#pending.push(outcome);
+  record(outcome: RunOutcome, memo?: DurableVerifiedMemo): void {
+    this.#pending.push(Object.freeze({
+      outcome,
+      ...(memo === undefined ? {} : { memo }),
+    }));
     if (this.#pending.length >= this.#batchSize) {
       void this.flush();
       return;
@@ -512,13 +608,19 @@ export class AttestationCheckpointWriter {
   async flush(): Promise<void> {
     if (this.#flushing !== null) return this.#flushing;
     if (this.#pending.length === 0) return;
-    const batch = this.#pending.splice(0);
     if (this.#timer !== null) {
       clearTimeout(this.#timer);
       this.#timer = null;
     }
-    this.#flushing = this.#store.casMergeRunOutcomes(this.#runId, batch)
-      .then(() => undefined)
+    // Drain until empty: records can arrive while the first CAS is in
+    // flight, and a caller awaiting flush() must not finalize a run while a
+    // second batch is still only in memory.
+    this.#flushing = (async (): Promise<void> => {
+      while (this.#pending.length > 0) {
+        const batch = this.#pending.splice(0);
+        await this.#store.casMergeAttestationWrites(this.#runId, batch);
+      }
+    })()
       .finally(() => {
         this.#flushing = null;
       });
@@ -536,5 +638,76 @@ export class AttestationCheckpointWriter {
       process.off("SIGTERM", handler);
       process.off("SIGINT", handler);
     };
+  }
+}
+
+function assertMemoMatchesVerifiedOutcome(
+  memo: DurableVerifiedMemo,
+  outcome: RunOutcome,
+): asserts outcome is Extract<RunOutcome, { readonly status: "verified" }> {
+  if (
+    outcome.status !== "verified" ||
+    memo.familyCandidateKey !== outcome.familyCandidateKey ||
+    memo.familyInstanceKey !== outcome.familyInstanceKey ||
+    memo.memoFingerprint !== outcome.memoFingerprint
+  ) {
+    throw new Error(
+      "universe rebuild checkpoint: memo/outcome atomic pair mismatch",
+    );
+  }
+}
+
+function assertReadyPromotion(
+  envelope: StartupCheckpointEnvelope,
+  run: InProgressUniverseRun,
+  ready: ReadyUniverseGeneration,
+): void {
+  const outcomes = Object.values(run.outcomesByCandidateKey);
+  if (
+    outcomes.length !== run.candidateCount ||
+    outcomes.some((outcome) => outcome.status === "retryable")
+  ) {
+    throw new Error(
+      "universe rebuild checkpoint: ready promotion requires exact terminal partition",
+    );
+  }
+  const verified = outcomes.filter((outcome): outcome is Extract<
+    RunOutcome,
+    { readonly status: "verified" }
+  > => outcome.status === "verified");
+  const expectedInstances = verified.map((outcome) => {
+    const memo = envelope.verifiedMemos[outcome.familyCandidateKey];
+    if (memo === undefined) {
+      throw new Error(
+        "universe rebuild checkpoint: ready promotion lost verified memo",
+      );
+    }
+    assertMemoMatchesVerifiedOutcome(memo, outcome);
+    return memo.familyInstanceKey;
+  }).sort();
+  const activeInstances = [...ready.activeInstanceKeys].sort();
+  const sameInstances = expectedInstances.length === activeInstances.length &&
+    expectedInstances.every((value, index) => value === activeInstances[index]);
+  const sameCutoff = ready.cutoff.number === run.cutoff.number &&
+    ready.cutoff.hash.toLowerCase() === run.cutoff.hash.toLowerCase() &&
+    ready.cutoff.generation === run.cutoff.generation;
+  const observedMatches = ready.observedThrough.number ===
+      run.observedThrough.number &&
+    ready.observedThrough.hash.toLowerCase() ===
+      run.observedThrough.hash.toLowerCase();
+  const appliedAtCutoff = ready.appliedThrough.number === run.cutoff.number &&
+    ready.appliedThrough.hash.toLowerCase() === run.cutoff.hash.toLowerCase();
+  if (
+    !sameCutoff || !observedMatches || !appliedAtCutoff || !sameInstances ||
+    ready.universeHash !== run.universeHash ||
+    ready.sourceCoverage.some((coverage) =>
+      coverage.completeThroughBlock !== run.cutoff.number ||
+      coverage.completeThroughHash?.toLowerCase() !==
+        run.cutoff.hash.toLowerCase()
+    )
+  ) {
+    throw new Error(
+      "universe rebuild checkpoint: ready generation is not bound to completed run",
+    );
   }
 }

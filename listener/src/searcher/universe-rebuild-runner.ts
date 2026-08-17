@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   AttestationCheckpointWriter,
   UniverseRebuildCheckpointStore,
+  canonicalJson,
   type DurableVerifiedMemo,
   type InProgressUniverseRun,
   type ReadyUniverseGeneration,
@@ -95,11 +96,11 @@ export interface UniverseRebuildDependencies {
   }) => unknown;
   readonly aggregateOnceByFamily: (instances: readonly unknown[]) => readonly {
     readonly familyId: string;
-    readonly instance: unknown;
+    readonly instances: readonly unknown[];
   }[];
   readonly buildGraphSnapshot: (publications: readonly {
     readonly familyId: string;
-    readonly instance: unknown;
+    readonly instances: readonly unknown[];
   }[]) => unknown;
   readonly buildCoverage: (input: {
     readonly observations: readonly unknown[];
@@ -198,8 +199,7 @@ export async function rebuildUniverse(
           familyCandidateKey: candidateKey,
           familyInstanceKey: memo.familyInstanceKey,
           memoFingerprint: memo.memoFingerprint,
-        }));
-        await input.store.casUpsertMemo(memo);
+        }), memo);
         return;
       }
       if (result.status === "terminal-rejected") {
@@ -259,6 +259,7 @@ export async function rebuildUniverse(
 
   // 6. Rehydrate from verified memos, aggregate once per family, seal ready.
   const instances: unknown[] = [];
+  const activeMemos: DurableVerifiedMemo[] = [];
   for (const candidate of candidates) {
     const candidateKey = input.familyCandidateKey(candidate);
     const outcome = currentRun.outcomesByCandidateKey[candidateKey];
@@ -273,23 +274,30 @@ export async function rebuildUniverse(
           " lost its memo " + outcome.memoFingerprint,
       );
     }
+    activeMemos.push(memo);
     instances.push(input.rehydrateVerifiedInstance({ memo, cutoff }));
   }
   const publications = input.aggregateOnceByFamily(instances);
   const graphSnapshot = input.buildGraphSnapshot(publications);
+  const catalogSnapshot = buildCatalogSnapshot(activeMemos);
   const ready = Object.freeze({
     generation: (checkpoint.readyGeneration?.generation ?? 0) + 1,
     cutoff: Object.freeze({ ...cutoff }),
     universeHash: currentRun.universeHash,
-    catalogHash: "strict-catalog:" + currentRun.candidateSetHash,
-    activeInstanceKeys: Object.freeze(instances.map((instance) =>
-      String((instance as { familyInstanceKey?: unknown }).familyInstanceKey ??
-        "")
-    ).filter((key) => key.length > 0)),
-    publicationSetHash: hashPublications(publications),
+    catalogHash: hashCatalog(catalogSnapshot),
+    activeInstanceKeys: Object.freeze(activeMemos.map((memo) =>
+      memo.familyInstanceKey
+    ).sort()),
+    publicationSetHash: hashPublications(catalogSnapshot),
+    observedThrough: Object.freeze({ ...currentRun.observedThrough }),
+    appliedThrough: Object.freeze({
+      number: cutoff.number,
+      hash: cutoff.hash,
+    }),
     sourceCoverage: input.buildCoverage({ observations, cutoff }),
     graphSnapshot,
     graphHash: hashGraph(graphSnapshot),
+    catalogSnapshot,
   }) as ReadyUniverseGeneration;
 
   // 7. Final single CAS: Graph, coverage and cutoff become ready together.
@@ -396,6 +404,7 @@ export async function probeOneFailure(input: {
       : { evidenceRef: old.evidenceRef }),
   });
   let next: RunOutcome;
+  let verifiedMemo: DurableVerifiedMemo | undefined;
   if (result.status === "verified") {
     const memo = input.sealDurableVerifiedMemo({
       candidate: input.decodeCandidateSnapshot(old.candidateSnapshot),
@@ -403,7 +412,7 @@ export async function probeOneFailure(input: {
       proofSource: run.cutoff,
       familyCandidateKey: input.familyCandidateKey,
     });
-    await input.store.casUpsertMemo(memo);
+    verifiedMemo = memo;
     next = Object.freeze({
       status: "verified",
       familyCandidateKey: input.familyCandidateKey,
@@ -441,6 +450,7 @@ export async function probeOneFailure(input: {
     familyCandidateKey: input.familyCandidateKey,
     expectedAttemptCount: old.attemptCount,
     nextOutcome: next,
+    ...(verifiedMemo === undefined ? {} : { memo: verifiedMemo }),
   });
   return next;
 }
@@ -456,17 +466,40 @@ function hashCandidateSet(
   );
 }
 
-function hashPublications(
-  publications: readonly { readonly familyId: string }[],
-): string {
+function hashPublications(catalogSnapshot: unknown): string {
   return createDigest(
-    "publications-v1:" +
-      publications.map((publication) => publication.familyId).sort().join(","),
+    "publications-v2:" + canonicalJson(catalogSnapshot),
   );
 }
 
 function hashGraph(graph: unknown): string {
-  return createDigest("graph-v1:" + String(graph));
+  return createDigest("graph-v2:" + canonicalJson(graph));
+}
+
+function hashCatalog(catalog: unknown): string {
+  return createDigest("catalog-v1:" + canonicalJson(catalog));
+}
+
+function buildCatalogSnapshot(
+  memos: readonly DurableVerifiedMemo[],
+): unknown {
+  return Object.freeze({
+    format: "strict-rebuild-catalog-v1",
+    instances: Object.freeze([...memos]
+      .sort((left, right) =>
+        left.familyInstanceKey.localeCompare(right.familyInstanceKey)
+      )
+      .map((memo) => Object.freeze({
+        familyCandidateKey: memo.familyCandidateKey,
+        familyInstanceKey: memo.familyInstanceKey,
+        familyId: memo.familyId,
+        instanceKey: memo.instanceKey,
+        memoFingerprint: memo.memoFingerprint,
+        compiledDescriptor: memo.compiledDescriptor,
+        staticProjection: memo.staticProjection,
+        evidenceFingerprint: memo.evidenceFingerprint,
+      }))),
+  });
 }
 
 function createDigest(seed: string): string {

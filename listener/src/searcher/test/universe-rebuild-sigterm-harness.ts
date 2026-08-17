@@ -1,4 +1,4 @@
-import { UniverseRebuildCheckpointStore, AttestationCheckpointWriter } from "../universe-rebuild-checkpoint.js";
+import { UniverseRebuildCheckpointStore, AttestationCheckpointWriter, type DurableVerifiedMemo } from "../universe-rebuild-checkpoint.js";
 // Child harness: begin a run, record N outcomes, install the signal flush,
 // then wait for SIGTERM and exit after the flush.
 const path = process.env.CKPT_PATH;
@@ -34,12 +34,32 @@ async function main(): Promise<void> {
   const keepAlive = setInterval(() => undefined, 5_000);
   void keepAlive;
   for (let i = 0; i < count; i++) {
+    const key = "sig:" + i;
+    const memo = Object.freeze({
+      familyCandidateKey: key,
+      familyInstanceKey: "inst:" + i,
+      familyId: "univ2-standard",
+      candidateKey: key,
+      instanceKey: "inst:" + i,
+      candidateFingerprint: "candidate:" + i,
+      familyDefinitionHash: "family-definition",
+      validity: Object.freeze({
+        policy: "immutable-code",
+        authorityFingerprint: "authority",
+        proofSource: Object.freeze({ number: source.number, hash: source.hash }),
+      }),
+      verifiedIdentity: Object.freeze({ key }),
+      compiledDescriptor: Object.freeze({ key }),
+      staticProjection: Object.freeze({ routes: Object.freeze([]) }),
+      evidenceFingerprint: "evidence:" + i,
+      memoFingerprint: "memo:" + i,
+    }) as DurableVerifiedMemo;
     writer.record(Object.freeze({
       status: "verified",
-      familyCandidateKey: "sig:" + i,
+      familyCandidateKey: key,
       familyInstanceKey: "inst:" + i,
       memoFingerprint: "memo:" + i,
-    }));
+    }), memo);
   }
   // Do not flush explicitly: the SIGTERM handler must do it.
   console.log("READY");

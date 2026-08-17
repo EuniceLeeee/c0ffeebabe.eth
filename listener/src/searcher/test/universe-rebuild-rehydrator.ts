@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   assertIssuedFamilyRouteRuntimeHandle,
+  assertIssuedPreparedFamilyInstance,
   reissuePreparedInstanceRouteHandles,
 } from "../venues/adapter-family-runtime.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
@@ -98,8 +99,8 @@ async function main(): Promise<void> {
   const rebuilt = wiring.rehydrateVerifiedInstance({
     memo: memoFor(),
     cutoff: SOURCE,
-  }) as { readonly routeHandles?: readonly unknown[]; readonly familyInstanceKey: string };
-  assert.equal(rebuilt.familyInstanceKey, "inst:key");
+  }) as { readonly routeHandles?: readonly unknown[]; readonly instanceKey: string };
+  assert.equal(rebuilt.instanceKey, INSTANCE_KEY);
   assert.equal(
     (rebuilt.routeHandles ?? []).length,
     1,
@@ -110,6 +111,12 @@ async function main(): Promise<void> {
     rebuiltFamily as never,
     (rebuilt.routeHandles as never[])[0],
   );
+  assertIssuedPreparedFamilyInstance({
+    family: rebuiltFamily as never,
+    instance: rebuilt as never,
+    source: SOURCE,
+    generation: SOURCE.generation,
+  });
 
   console.log("universe rebuild rehydrator PASS");
 }

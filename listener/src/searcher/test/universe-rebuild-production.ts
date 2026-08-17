@@ -30,6 +30,7 @@ function log(overrides: Partial<RebuildScanObservation>): RebuildScanObservation
     data: "0x",
     transactionHash: "0x" + "33".repeat(32),
     blockNumber: 25_750_000,
+    blockHash: "0x" + "44".repeat(32),
     logIndex: 0,
     ...overrides,
   });
@@ -71,9 +72,15 @@ async function main(): Promise<void> {
   assert.notEqual(fullLogIdentityKey(a), fullLogIdentityKey(b));
   assert.equal(
     fullLogIdentityKey(a),
-    "log:25750000::0x" + "33".repeat(32) + ":0:0x" + "11".repeat(20) + ":" +
+    "log:25750000:0x" + "44".repeat(32) + ":0x" + "33".repeat(32) +
+      ":0:0x" + "11".repeat(20) + ":" +
       SWAP_TOPIC + ",0x" + "22".repeat(32),
     "full log identity includes every topic",
+  );
+  assert.notEqual(
+    fullLogIdentityKey(a),
+    fullLogIdentityKey(log({ blockHash: "0x" + "99".repeat(32) })),
+    "full log identity binds the canonical block hash",
   );
 
   // Candidate from a V4-style log: poolId extracted from topic1.

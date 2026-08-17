@@ -3623,19 +3623,30 @@ export function reissuePreparedInstanceRouteHandles(input: {
 }): PreparedFamilyInstance {
   assertIssuedLoadedFamilyBox(input.family);
   assertSource(input.source, input.generation);
-  const handles = input.instance.routes.map((route) =>
+  // Build one fresh object and issue every handle against that exact object.
+  // Returning a spread clone after issuance would leave the WeakMap records
+  // bound to a different instance and exact/execution would reject it.
+  const prepared = {
+    ...input.instance,
+    routeHandles: [] as FamilyRouteRuntimeHandle[],
+  } satisfies PreparedFamilyInstance;
+  prepared.routeHandles = Object.freeze(prepared.routes.map((route) =>
     issueFamilyRouteRuntimeHandle({
       family: input.family,
-      instance: input.instance,
+      instance: prepared,
       route,
       source: input.source,
       generation: input.generation,
-    }),
-  );
-  return Object.freeze({
-    ...input.instance,
-    routeHandles: Object.freeze(handles),
+    })
+  )) as unknown as FamilyRouteRuntimeHandle[];
+  Object.freeze(prepared);
+  registerIssuedPreparedFamilyInstance({
+    family: input.family,
+    instance: prepared,
+    source: snapshotCanonicalSource(input.source),
+    generation: input.generation,
   });
+  return prepared;
 }
 
 function issueFamilyRouteRuntimeHandle(input: {

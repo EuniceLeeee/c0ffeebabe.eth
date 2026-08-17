@@ -24,6 +24,7 @@ interface Fixture {
   readonly store: UniverseRebuildCheckpointStore;
   readonly attestCalls: Map<string, number>;
   readonly failKeys: Set<string>;
+  readonly builtFamilySizes: number[];
   readonly input: RebuildUniverseInput;
 }
 
@@ -36,6 +37,7 @@ function makeFixture(
   });
   const attestCalls = new Map<string, number>();
   const failKeys = new Set<string>(["c"]);
+  const builtFamilySizes: number[] = [];
   const candidates = (ids: readonly string[]) =>
     Object.freeze(ids.map((id) => Object.freeze({ id })));
   const observations = (ids: readonly string[]) =>
@@ -103,19 +105,39 @@ function makeFixture(
         familyId: input.memo.familyId,
         instanceKey: input.memo.instanceKey,
       }),
-    aggregateOnceByFamily: (instances) =>
-      Object.freeze(instances.map((instance) =>
-        Object.freeze({
-          familyId: String((instance as { familyId: string }).familyId),
-          instance,
-        })
-      )),
-    buildGraphSnapshot: () => Object.freeze({ edges: Object.freeze([]) }),
+    aggregateOnceByFamily: (instances) => {
+      const byFamily = new Map<string, unknown[]>();
+      for (const instance of instances) {
+        const familyId = String((instance as { familyId: string }).familyId);
+        const familyInstances = byFamily.get(familyId);
+        if (familyInstances === undefined) byFamily.set(familyId, [instance]);
+        else familyInstances.push(instance);
+      }
+      return Object.freeze([...byFamily.entries()].map(
+        ([familyId, familyInstances]) => Object.freeze({
+          familyId,
+          instances: Object.freeze(familyInstances),
+        }),
+      ));
+    },
+    buildGraphSnapshot: (publications) => {
+      builtFamilySizes.push(...publications.map((item) => item.instances.length));
+      return Object.freeze({
+        edges: Object.freeze(publications.flatMap((item) =>
+          item.instances.map((instance) => Object.freeze({
+            familyId: item.familyId,
+            instanceKey: String(
+              (instance as { instanceKey?: unknown }).instanceKey ?? "",
+            ),
+          }))
+        )),
+      });
+    },
     buildCoverage: () => Object.freeze([]),
     assertCanonicalHead: async () => undefined,
     ...overrides,
   };
-  return { store, attestCalls, failKeys, input };
+  return { store, attestCalls, failKeys, builtFamilySizes, input };
 }
 
 async function main(): Promise<void> {
@@ -187,6 +209,11 @@ async function main(): Promise<void> {
       [...ready.activeInstanceKeys].sort(),
       ["inst:a", "inst:b", "inst:c"],
     );
+    assert.deepEqual(
+      f.builtFamilySizes,
+      [3],
+      "one family publication must retain all three instance pools",
+    );
     checkpoint = await f.store.load();
     assert.equal(checkpoint?.inProgressRun, null);
     assert.equal(checkpoint?.readyGeneration?.generation, 1);
@@ -212,6 +239,16 @@ async function main(): Promise<void> {
     assert.deepEqual(
       [...ready2.activeInstanceKeys].sort(),
       ["inst:a", "inst:b"],
+    );
+    assert.notEqual(
+      ready2.catalogHash,
+      ready.catalogHash,
+      "catalog root must bind the exact active instance set",
+    );
+    assert.notEqual(
+      ready2.graphHash,
+      ready.graphHash,
+      "graph root must bind graph contents, not object stringification",
     );
   } finally {
     await rm(dir, { recursive: true, force: true });

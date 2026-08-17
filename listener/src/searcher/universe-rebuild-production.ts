@@ -7,6 +7,7 @@ import {
 } from "./universe-rebuild-checkpoint.js";
 import type { UniverseRebuildProbeWiring } from "./universe-rebuild-probe-cli.js";
 import type { UniverseRebuildDependencies } from "./universe-rebuild-runner.js";
+import { buildFamilyRouteGraphView } from "./adapter-family-graph-runtime.js";
 import { reissuePreparedInstanceRouteHandles } from
   "./venues/adapter-family-runtime.js";
 import { attestPoolIdentitiesStrict } from "./strict-identity-attestation.js";
@@ -210,7 +211,95 @@ function canonicalCandidateSnapshot(
     ...(candidate.adapter === undefined ? {} : { adapter: candidate.adapter }),
     ...(candidate.token0 === undefined ? {} : { token0: candidate.token0 }),
     ...(candidate.token1 === undefined ? {} : { token1: candidate.token1 }),
+    ...(candidate.blockNumber === undefined
+      ? {}
+      : { blockNumber: candidate.blockNumber }),
+    ...(candidate.blockHash === undefined ? {} : { blockHash: candidate.blockHash }),
+    ...(candidate.transactionHash === undefined
+      ? {}
+      : { transactionHash: candidate.transactionHash }),
+    ...(candidate.logIndex === undefined ? {} : { logIndex: candidate.logIndex }),
   });
+}
+
+type DurableEncodedValue =
+  | null | boolean | string | number
+  | readonly DurableEncodedValue[]
+  | { readonly [key: string]: DurableEncodedValue };
+
+/** JSON-safe codec for memo data (bigints and Maps are explicit, never lost). */
+function encodeDurableValue(
+  value: unknown,
+  seen: Set<object> = new Set<object>(),
+): DurableEncodedValue {
+  if (value === null || typeof value === "boolean" || typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("durable value number is not finite");
+    return value;
+  }
+  if (typeof value === "bigint") {
+    return Object.freeze({ $durableType: "bigint", value: value.toString() });
+  }
+  if (typeof value !== "object") {
+    throw new Error("unsupported durable value type: " + typeof value);
+  }
+  if (seen.has(value)) throw new Error("durable value must not contain cycles");
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return Object.freeze(value.map((item) => encodeDurableValue(item, seen)));
+    }
+    if (value instanceof Map) {
+      const entries = [...value.entries()].map(([key, item]) => Object.freeze([
+        encodeDurableValue(key, seen),
+        encodeDurableValue(item, seen),
+      ] as const));
+      entries.sort((left, right) =>
+        canonicalJson(left[0]).localeCompare(canonicalJson(right[0]))
+      );
+      return Object.freeze({
+        $durableType: "map",
+        entries: Object.freeze(entries),
+      });
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error("durable value objects must be plain records");
+    }
+    const encoded: Record<string, DurableEncodedValue> = {};
+    for (const key of Object.keys(value as object).sort()) {
+      encoded[key] = encodeDurableValue(
+        (value as Record<string, unknown>)[key],
+        seen,
+      );
+    }
+    return Object.freeze(encoded);
+  } finally {
+    seen.delete(value);
+  }
+}
+
+function decodeDurableValue(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map(decodeDurableValue));
+  }
+  const record = value as Record<string, unknown>;
+  if (record.$durableType === "bigint") return BigInt(String(record.value));
+  if (record.$durableType === "map") {
+    const entries = Array.isArray(record.entries) ? record.entries : [];
+    return new Map(entries.map((entry) => {
+      if (!Array.isArray(entry) || entry.length !== 2) {
+        throw new Error("durable map entry is invalid");
+      }
+      return [decodeDurableValue(entry[0]), decodeDurableValue(entry[1])];
+    }));
+  }
+  return Object.freeze(Object.fromEntries(
+    Object.entries(record).map(([key, item]) => [key, decodeDurableValue(item)]),
+  ));
 }
 
 function sealMemoFromPublication(input: {
@@ -245,9 +334,9 @@ function sealMemoFromPublication(input: {
         hash: input.proofSource.hash,
       }),
     }),
-    verifiedIdentity: input.verifiedIdentity,
-    compiledDescriptor: input.compiledDescriptor,
-    staticProjection: input.staticProjection,
+    verifiedIdentity: encodeDurableValue(input.verifiedIdentity),
+    compiledDescriptor: encodeDurableValue(input.compiledDescriptor),
+    staticProjection: encodeDurableValue(input.staticProjection),
     evidenceFingerprint: input.evidenceFingerprint,
     memoFingerprint: "",
   });
@@ -401,9 +490,12 @@ export function createProbeWiring(
           readonly instanceKey: string;
           readonly descriptor?: unknown;
           readonly evidenceRefs?: readonly string[];
+          readonly routes?: readonly unknown[];
           readonly pricingInstances?: readonly {
             readonly routes?: readonly unknown[];
           }[];
+          readonly staticBindingFingerprint?: string;
+          readonly staticEvidenceFingerprint?: string;
         } | null;
       };
       const familyId = result.accepted.familyId;
@@ -425,7 +517,19 @@ export function createProbeWiring(
           source: Object.freeze(sealInput.proofSource),
         }),
         compiledDescriptor: result.instance?.descriptor ?? null,
-        staticProjection: result.instance?.pricingInstances ?? null,
+        staticProjection: result.instance === null || result.instance === undefined
+          ? null
+          : Object.freeze({
+              format: "prepared-family-instance-v1",
+              routes: result.instance.routes ?? Object.freeze([]),
+              pricingInstances:
+                result.instance.pricingInstances ?? Object.freeze([]),
+              staticBindingFingerprint:
+                result.instance.staticBindingFingerprint ?? "",
+              staticEvidenceFingerprint:
+                result.instance.staticEvidenceFingerprint ?? "",
+              evidenceRefs: result.instance.evidenceRefs ?? Object.freeze([]),
+            }),
         evidenceFingerprint: digest(
           "evidence:" + canonicalJson(
             result.instance?.evidenceRefs ?? [],
@@ -463,6 +567,7 @@ export interface RebuildScanObservation {
   readonly data: string;
   readonly transactionHash?: string;
   readonly blockNumber?: number;
+  readonly blockHash?: string;
   readonly logIndex?: number;
 }
 
@@ -502,6 +607,7 @@ export function familyForObservation(
 /** Full log identity dedupe (block + txHash + logIndex + address + topics). */
 export function fullLogIdentityKey(log: RebuildScanObservation): string {
   return "log:" + (log.blockNumber ?? "?") + ":" +
+    (log.blockHash?.toLowerCase() ?? "") + ":" +
     (log.transactionHash ?? "") + ":" +
     (log.logIndex ?? "?") + ":" +
     log.address.toLowerCase() + ":" +
@@ -524,6 +630,9 @@ export function candidateFromLog(
       ? {}
       : { transactionHash: log.transactionHash.toLowerCase() }),
     ...(log.blockNumber === undefined ? {} : { blockNumber: log.blockNumber }),
+    ...(log.blockHash === undefined
+      ? {}
+      : { blockHash: log.blockHash.toLowerCase() }),
     ...(log.logIndex === undefined ? {} : { logIndex: log.logIndex }),
   });
 }
@@ -724,8 +833,14 @@ export function createRebuildWiring(input?: {
       // (audit §9: handles are never serialized; the central rehydrator
       // re-issues them bound to the exact stored route descriptors). The
       // instance's routes/pricing come from the memo's static projection.
-      const projection = rehydrateInput.memo.staticProjection as unknown as {
+      const projection = decodeDurableValue(
+        rehydrateInput.memo.staticProjection,
+      ) as {
         readonly routes?: readonly unknown[];
+        readonly pricingInstances?: readonly unknown[];
+        readonly staticBindingFingerprint?: string;
+        readonly staticEvidenceFingerprint?: string;
+        readonly evidenceRefs?: readonly string[];
       };
       const routes = projection?.routes ?? [];
       const instance = Object.freeze({
@@ -736,82 +851,75 @@ export function createRebuildWiring(input?: {
         ),
         candidateKey: rehydrateInput.memo.candidateKey,
         instanceKey: rehydrateInput.memo.instanceKey,
-        descriptor: rehydrateInput.memo.compiledDescriptor ?? null,
+        descriptor: decodeDurableValue(
+          rehydrateInput.memo.compiledDescriptor,
+        ) ?? null,
         routes: Object.freeze(routes),
         routeHandles: Object.freeze([]),
-        pricingInstances: Object.freeze([]),
-        staticBindingFingerprint: "",
-        staticEvidenceFingerprint: rehydrateInput.memo.evidenceFingerprint,
-        evidenceRefs: Object.freeze([]),
+        pricingInstances: Object.freeze(projection?.pricingInstances ?? []),
+        staticBindingFingerprint: projection?.staticBindingFingerprint ?? "",
+        staticEvidenceFingerprint: projection?.staticEvidenceFingerprint ??
+          rehydrateInput.memo.evidenceFingerprint,
+        evidenceRefs: Object.freeze(projection?.evidenceRefs ?? []),
       }) as never;
-      let family;
-      try {
-        family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-          .forStrictFamily(rehydrateInput.memo.familyId as never);
-      } catch {
-        family = null;
-      }
-      const rehydrated = family === null
-        ? instance
-        : reissuePreparedInstanceRouteHandles({
-            family: family as never,
-            instance: instance as never,
-            source: Object.freeze({
-              number: rehydrateInput.memo.validity.proofSource.number,
-              hash: rehydrateInput.memo.validity.proofSource.hash,
-              generation: rehydrateInput.memo.validity.proofSource.number,
-            }),
-            generation: rehydrateInput.memo.validity.proofSource.number,
-          });
-      return Object.freeze({
-        ...rehydrated,
-        familyInstanceKey: rehydrateInput.memo.familyInstanceKey,
-        evidenceFingerprint: rehydrateInput.memo.evidenceFingerprint,
-        proofSource: Object.freeze({
-          number: rehydrateInput.memo.validity.proofSource.number,
-          hash: rehydrateInput.memo.validity.proofSource.hash,
-        }),
+      const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .forStrictFamily(rehydrateInput.memo.familyId as never);
+      const rehydrated = reissuePreparedInstanceRouteHandles({
+        family: family as never,
+        instance: instance as never,
+        // Proof provenance remains in the memo; process-local authority is
+        // re-issued for the new ready run's canonical source/generation.
+        source: Object.freeze({ ...rehydrateInput.cutoff }),
+        generation: rehydrateInput.cutoff.generation,
       });
+      // Return the exact centrally-issued instance.  Wrapping/spreading it
+      // after handle issuance would create an unissued look-alike that the
+      // catalog/exact boundary must reject.
+      return rehydrated;
     },
     aggregateOnceByFamily: (instances) => {
-      const byFamily = new Map<string, unknown>();
+      const byFamily = new Map<string, unknown[]>();
       for (const instance of instances) {
         const familyId = String(
           (instance as { familyId?: unknown }).familyId ?? "",
         );
         if (familyId.length === 0) continue;
-        if (!byFamily.has(familyId)) byFamily.set(familyId, instance);
+        const siblings = byFamily.get(familyId);
+        if (siblings === undefined) byFamily.set(familyId, [instance]);
+        else siblings.push(instance);
       }
-      return Object.freeze([...byFamily.entries()].map(([familyId, instance]) =>
-        Object.freeze({ familyId, instance })
+      return Object.freeze([...byFamily.entries()].map(([familyId, familyInstances]) =>
+        Object.freeze({
+          familyId,
+          instances: Object.freeze([...familyInstances].sort((left, right) =>
+            String((left as { instanceKey?: unknown }).instanceKey ?? "")
+              .localeCompare(String(
+                (right as { instanceKey?: unknown }).instanceKey ?? "",
+              ))
+          )),
+        })
       ));
     },
     buildGraphSnapshot: (publications) => {
       const edges: unknown[] = [];
       for (const publication of publications) {
-        const instance = publication.instance as {
-          readonly projection?: readonly {
-            readonly routes?: readonly {
-              readonly routeKey?: string;
-              readonly source?: string;
-              readonly target?: string;
-              readonly adapterId?: string;
-            }[];
-          }[];
-        };
-        for (const state of instance.projection ?? []) {
-          for (const route of state.routes ?? []) {
-            if (route.routeKey === undefined) continue;
-            edges.push(Object.freeze({
-              routeKey: route.routeKey,
-              ...(route.source === undefined ? {} : { source: route.source }),
-              ...(route.target === undefined ? {} : { target: route.target }),
-              ...(route.adapterId === undefined
-                ? {}
-                : { adapterId: route.adapterId }),
-              familyId: publication.familyId,
-            }));
-          }
+        const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+          .forStrictFamily(publication.familyId as never);
+        for (const rawInstance of publication.instances) {
+          const instance = rawInstance as {
+            readonly descriptor: unknown;
+            readonly routes: readonly unknown[];
+            readonly routeHandles: readonly unknown[];
+          };
+          const view = buildFamilyRouteGraphView({
+            routes: Object.freeze(instance.routes.map((route, index) => ({
+              family: family as never,
+              descriptor: instance.descriptor as never,
+              route: route as never,
+              handle: instance.routeHandles[index] as never,
+            }))),
+          });
+          edges.push(...view.edges);
         }
       }
       return Object.freeze({

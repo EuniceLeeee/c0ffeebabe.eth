@@ -19,9 +19,12 @@ function ready(): ReadyUniverseGeneration {
     catalogHash: "c",
     activeInstanceKeys: Object.freeze(["inst:a", "inst:b"]),
     publicationSetHash: "p",
+    observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+    appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
     sourceCoverage: Object.freeze([]),
     graphSnapshot: Object.freeze({}),
     graphHash: "g",
+    catalogSnapshot: Object.freeze({ instances: Object.freeze([]) }),
   }) as ReadyUniverseGeneration;
 }
 

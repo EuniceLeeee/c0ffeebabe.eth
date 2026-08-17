@@ -54,7 +54,7 @@ async function main(): Promise<void> {
       fromBlock: SOURCE.number - 14_399,
       universeHash: "u1",
       candidateSetHash: "c1",
-      candidateCount: 3,
+      candidateCount: 2,
       observedThrough: Object.freeze({
         number: SOURCE.number,
         hash: SOURCE.hash,
@@ -70,13 +70,30 @@ async function main(): Promise<void> {
       fromBlock: SOURCE.number - 14_399,
       universeHash: "u1",
       candidateSetHash: "c1",
-      candidateCount: 3,
+      candidateCount: 2,
       observedThrough: Object.freeze({
         number: SOURCE.number,
         hash: SOURCE.hash,
       }),
     });
     assert.equal(resumed.revision, 2, "resume of the same run must not bump");
+    await assert.rejects(
+      () => store.beginOrResumeRun({
+        expectedRevision: 2,
+        runId: "run-1",
+        cutoff: SOURCE,
+        fromBlock: SOURCE.number - 14_399,
+        universeHash: "u-drifted",
+        candidateSetHash: "c-drifted",
+        candidateCount: 2,
+        observedThrough: Object.freeze({
+          number: SOURCE.number,
+          hash: SOURCE.hash,
+        }),
+      }),
+      /different fixed input/,
+      "same runId must not attach a different cutoff/candidate partition",
+    );
     // A different run id while one is in progress fails closed.
     await assert.rejects(
       () => store.beginOrResumeRun({
@@ -86,7 +103,7 @@ async function main(): Promise<void> {
         fromBlock: SOURCE.number - 14_399,
         universeHash: "u1",
         candidateSetHash: "c1",
-        candidateCount: 3,
+        candidateCount: 2,
         observedThrough: Object.freeze({
           number: SOURCE.number,
           hash: SOURCE.hash,
@@ -94,16 +111,28 @@ async function main(): Promise<void> {
       }),
       /another run is in progress/,
     );
+    await assert.rejects(
+      () => store.casMergeRunOutcomes("run-1", Object.freeze([
+        Object.freeze({
+          status: "verified",
+          familyCandidateKey: "orphan",
+          familyInstanceKey: "inst-orphan",
+          memoFingerprint: "fp-orphan",
+        }) as RunOutcome,
+      ])),
+      /verified outcome has no memo/,
+      "a verified cursor/outcome must never lead its durable memo",
+    );
 
     // Merge outcomes; verified + retryable land per candidate key.
-    const merged = await store.casMergeRunOutcomes("run-1", Object.freeze([
-      Object.freeze({
+    const merged = await store.casMergeAttestationWrites("run-1", Object.freeze([
+      Object.freeze({ outcome: Object.freeze({
         status: "verified",
         familyCandidateKey: "a",
         familyInstanceKey: "inst-a",
         memoFingerprint: "fp-a",
-      }) as RunOutcome,
-      Object.freeze({
+      }) as RunOutcome, memo: memoFor("a") }),
+      Object.freeze({ outcome: Object.freeze({
         status: "retryable",
         familyCandidateKey: "b",
         familyId: "univ2",
@@ -119,7 +148,7 @@ async function main(): Promise<void> {
         reasonCode: "factory-child-reverse-binding:rpc",
         attemptCount: 1,
         lastAttemptAt: "2026-08-17T00:00:00.000Z",
-      }) as RunOutcome,
+      }) as RunOutcome }),
     ]));
     assert.equal(merged.inProgressRun?.outcomesByCandidateKey["a"]?.status, "verified");
     assert.equal(
@@ -161,6 +190,7 @@ async function main(): Promise<void> {
         familyInstanceKey: "inst-b",
         memoFingerprint: "fp-b",
       }) as RunOutcome,
+      memo: memoFor("b"),
     });
     assert.equal(replaced.inProgressRun?.outcomesByCandidateKey["b"]?.status, "verified");
 
@@ -180,9 +210,12 @@ async function main(): Promise<void> {
           catalogHash: "cat",
           activeInstanceKeys: Object.freeze(["inst-a", "inst-b"]),
           publicationSetHash: "ps",
+          observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+          appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
           sourceCoverage: Object.freeze([]),
           graphSnapshot: Object.freeze({ edges: Object.freeze([]) }),
           graphHash: "g1",
+          catalogSnapshot: Object.freeze({ instances: Object.freeze([]) }),
         }) as ReadyUniverseGeneration,
       }),
       /CAS conflict/,
@@ -197,9 +230,12 @@ async function main(): Promise<void> {
         catalogHash: "cat",
         activeInstanceKeys: Object.freeze(["inst-a", "inst-b"]),
         publicationSetHash: "ps",
+        observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+        appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
         sourceCoverage: Object.freeze([]),
         graphSnapshot: Object.freeze({ edges: Object.freeze([]) }),
         graphHash: "g1",
+        catalogSnapshot: Object.freeze({ instances: Object.freeze([]) }),
       }) as ReadyUniverseGeneration,
     });
     assert.equal(ready.inProgressRun, null);
@@ -252,9 +288,9 @@ async function main(): Promise<void> {
       writer.record(Object.freeze({
         status: "verified",
         familyCandidateKey: "k" + i,
-        familyInstanceKey: "inst-" + i,
-        memoFingerprint: "fp-" + i,
-      }) as RunOutcome);
+        familyInstanceKey: "inst-k" + i,
+        memoFingerprint: "fp-k" + i,
+      }) as RunOutcome, memoFor("k" + i));
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
     const afterBatch = await writerStore.load();
@@ -266,9 +302,9 @@ async function main(): Promise<void> {
     writer.record(Object.freeze({
       status: "verified",
       familyCandidateKey: "k25",
-      familyInstanceKey: "inst-25",
-      memoFingerprint: "fp-25",
-    }) as RunOutcome);
+      familyInstanceKey: "inst-k25",
+      memoFingerprint: "fp-k25",
+    }) as RunOutcome, memoFor("k25"));
     await writer.flush();
     const afterFlush = await writerStore.load();
     assert.equal(
