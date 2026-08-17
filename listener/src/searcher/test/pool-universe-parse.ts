@@ -31,4 +31,27 @@ assert.equal(
 );
 assert.equal(dropped[0]?.adapter, "univ2");
 
+const historicalProvenance = {
+  ...supported,
+  identitySource: "historical-plugin-provenance",
+};
+assert.throws(
+  () => parsePoolUniverseJson(
+    JSON.stringify({ pools: [historicalProvenance] }),
+    "fixture",
+  ),
+  /unsupported identity source/,
+  "unregistered provenance remains rejected by the default strict parser",
+);
+const retainedProvenance = parsePoolUniverseJson(
+  JSON.stringify({ pools: [historicalProvenance] }),
+  "fixture",
+  { allowUnregisteredIdentitySource: true },
+);
+assert.equal(
+  retainedProvenance[0]?.identitySource,
+  "historical-plugin-provenance",
+  "explicit provenance compatibility retains the label for immediate strict attestation",
+);
+
 console.log("pool-universe-parse PASS");

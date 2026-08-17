@@ -10,6 +10,7 @@ import {
   isProductionVenueId,
   isProductionVenueIdentitySource,
 } from "./venues/pool-adapter-policy.js";
+import { venueIdentitySource } from "./venues/registry-ids.js";
 import {
   poolProjectionRowKey,
   poolRegistryKey,
@@ -95,6 +96,14 @@ export interface PoolUniverseLoadOptions {
    * fail-closed behavior.
    */
   dropUnsupportedAdapters?: boolean;
+  /**
+   * Historical universe rows may carry an identity provenance label emitted
+   * by a prior plugin closure. When enabled, retain that label as opaque
+   * input provenance; the caller must immediately run strict attestation,
+   * which overwrites the field before the row can enter a runtime graph.
+   * This never makes the label an admission credential.
+   */
+  allowUnregisteredIdentitySource?: boolean;
 }
 
 export function poolUniverseCanonicalAnchorMatches(
@@ -163,7 +172,11 @@ export function parsePoolUniverseJson(
       );
       return;
     }
-    parsedPools.push(parsePoolUniverseEntry(entry, field));
+    parsedPools.push(parsePoolUniverseEntry(
+      entry,
+      field,
+      opts.allowUnregisteredIdentitySource === true,
+    ));
   });
   const activePools = parsedPools
     .filter((pool) => pool.topologyRetained !== true)
@@ -517,7 +530,11 @@ function appendForceIncluded(
   return out;
 }
 
-function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry {
+function parsePoolUniverseEntry(
+  raw: unknown,
+  field: string,
+  allowUnregisteredIdentitySource = false,
+): PoolUniverseEntry {
   if (!isRecord(raw)) throw new Error(`${field} must be an object`);
   const adapter = raw.adapter;
   if (!isProductionPoolAdapter(adapter)) {
@@ -531,7 +548,11 @@ function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry 
     adapter,
     venueId: venueIdField(raw.venueId, `${field}.venueId`),
     factory: optionalAddress(raw.factory, `${field}.factory`),
-    identitySource: identitySourceField(raw.identitySource, `${field}.identitySource`),
+    identitySource: identitySourceField(
+      raw.identitySource,
+      `${field}.identitySource`,
+      allowUnregisteredIdentitySource,
+    ),
     poolId: stringField(raw.poolId, `${field}.poolId`),
     routeBinding: routeImmutableBindingField(
       raw.routeBinding,
@@ -603,9 +624,21 @@ function venueIdField(value: unknown, field: string): VenueId | undefined {
   return normalized;
 }
 
-function identitySourceField(value: unknown, field: string): VenueIdentitySource | undefined {
+function identitySourceField(
+  value: unknown,
+  field: string,
+  allowUnregistered = false,
+): VenueIdentitySource | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (!isProductionVenueIdentitySource(value)) {
+    if (
+      allowUnregistered &&
+      typeof value === "string" &&
+      value.trim().length > 0 &&
+      value.trim() === value
+    ) {
+      return venueIdentitySource(value);
+    }
     throw new Error(`${field} has unsupported identity source ${String(value)}`);
   }
   return value;
