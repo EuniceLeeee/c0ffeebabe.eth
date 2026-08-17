@@ -517,10 +517,10 @@ searcher PID 208616，dirty 文件保留）：
 - `strict observations: families=8`：univ2-standard=509、univ3-standard=566、
   univ4=407、dodo-v2=26、angstrom=395、fluid-dex=992、erc4626=998、
   silo=13（DEX 族不再静默）。
-- `strict catalog root committed: revision=3..5 instances=128 pricing=129
-  mids=249 edges=251`（从 12 增长）。
-- `strict edges merged into runtime graph: edges=251 pools=128`。
-- blockscan-nminus1-state：`expected=251 priced=249`，state keys 含
+- `strict catalog root committed: revision=2 instances=134 pricing=135
+  mids=255 edges=257`（从 12 增长）。
+- `strict edges merged into runtime graph: edges=257 pools=134`。
+- blockscan-nminus1-state：`expected=257 priced=255`（收敛后），state keys 含
   univ3=107、univ2=5、univ4=1、dodo=9、fluid=1、erc4626=5。
 - 无新 fatal（当前进程 tail 800 行 0 fatal）。
 
