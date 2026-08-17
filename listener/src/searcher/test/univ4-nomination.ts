@@ -207,7 +207,7 @@ async function main(): Promise<void> {
     traceTransaction: async () => managerSwapTrace(),
   };
   const nomination = Object.freeze({
-    kind: "pool" as const,
+    address: ADDR.UNISWAP_V4_POOL_MANAGER,
     opaque: Object.freeze({ adapter: "univ4", poolId: POOL_ID }),
   });
   const concurrent = await Promise.all(Array.from({ length: 4 }, () =>
