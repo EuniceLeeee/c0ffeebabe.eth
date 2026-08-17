@@ -135,6 +135,34 @@ import type { StrictLiveObservedEvent } from
 const DISCOVERY_BACKFILL_FOREGROUND_HANDOFF_MS = 1_000;
 
 /**
+ * F8: one-shot historical event-window lookback for the strict observedEvents
+ * feed. Configured via SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS (default 0 =
+ * incremental window only). The first protocol-backfill scan extends the
+ * event log window back so pools whose swap logs predate the incremental
+ * cursor (e.g. the ret13 2d universe) still get observed; later passes use
+ * the normal window and the tx-level feed dedup keeps the sweep idempotent.
+ */
+let observedEventLookbackPending = true;
+const observedEventLookbackBlocks = (): number | undefined => {
+  if (!observedEventLookbackPending) return undefined;
+  const raw = process.env.SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS;
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    console.warn(
+      "[searcher/live] invalid SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS=" +
+        raw + "; ignoring",
+    );
+    return undefined;
+  }
+  observedEventLookbackPending = false;
+  console.log(
+    "[searcher/live] observed event historical lookback blocks=" + parsed,
+  );
+  return parsed;
+};
+
+/**
  * F8: the strict catalog's full log-pattern topic surface. The observed lane
  * scans these into the strict observedEvents feed (feeding strict family
  * lifecycles with real amounts for every catalog family); receipt/trace work
@@ -1021,8 +1049,12 @@ export async function createLiveDiscoveryCoordinator(
       // F8: the full strict-catalog log-pattern surface feeds the strict
       // observedEvents feed (DEX families and protocol families alike);
       // receipt/trace work stays scoped to the legacy observed-interaction
-      // surface inside the scanner.
+      // surface inside the scanner. The first pass optionally extends the
+      // event window back over the universe build window (one-shot).
       extraEventTopics: strictCatalogObservedTopics(),
+      ...(observedEventLookbackBlocks() === undefined
+        ? {}
+        : { eventWindowLookbackBlocks: observedEventLookbackBlocks() }),
     });
     const scanRangeHashAfter = await readDexDiscoveryBlockHash(
       provider,

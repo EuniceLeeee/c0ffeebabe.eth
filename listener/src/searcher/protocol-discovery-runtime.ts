@@ -44,6 +44,8 @@ export interface ProtocolDiscoveryRuntimeInput {
    * receipt/trace work.
    */
   readonly extraEventTopics?: ReadonlySet<string>;
+  /** One-shot historical event-window lookback (see scanner). */
+  readonly eventWindowLookbackBlocks?: number;
   readonly identityRegistry: IdentityResolverRegistry;
   /** F8: production-shaped identity runtime (revm simulation transport). */
   readonly identityRuntime?: CentralAdapterRuntime;
@@ -199,6 +201,9 @@ export async function prepareActiveProtocolDiscoveryPass(
       ...(input.extraEventTopics === undefined
         ? {}
         : { extraEventTopics: input.extraEventTopics }),
+      ...(input.eventWindowLookbackBlocks === undefined
+        ? {}
+        : { eventWindowLookbackBlocks: input.eventWindowLookbackBlocks }),
     })
     : {
       candidatesByAdapter: new Map(),

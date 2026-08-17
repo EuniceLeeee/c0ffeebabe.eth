@@ -268,6 +268,17 @@ export async function scanProtocolDiscoveryRange(input: {
    * to the legacy adapters' observed-interaction surface.
    */
   readonly extraEventTopics?: ReadonlySet<string>;
+  /**
+   * F8: one-shot historical event-window lookback for the strict
+   * observedEvents feed. When set, the first pass extends the event log
+   * window back to (toBlock - lookback + 1) so pools whose swap logs
+   * predate the incremental cursor still get observed (the ret13 universe
+   * was built over a 2d window; without this their logs are never read and
+   * the pools can never become instances). Subsequent passes use the
+   * normal incremental window; the feed dedups by tx, so the historical
+   * sweep is idempotent.
+   */
+  readonly eventWindowLookbackBlocks?: number;
 }): Promise<ProtocolDiscoveryRangeResult> {
   const passControl = mergeProtocolDiscoveryReadControls(
     protocolDiscoveryReadControlFromFamilyOptions(input.familyGuardOptions),
@@ -321,8 +332,14 @@ export async function scanProtocolDiscoveryRange(input: {
   const observedFamilyGuard = new ProtocolDiscoveryFamilyGuard(
     sourceAwareFamilyGuardOptions(input.familyGuardOptions, passControl),
   );
+  const eventWindowFrom = input.eventWindowLookbackBlocks === undefined
+    ? input.context.fromBlock
+    : Math.max(
+        input.context.fromBlock,
+        input.context.toBlock - input.eventWindowLookbackBlocks + 1,
+      );
   if (topics.length > 0) {
-    for (let start = input.context.fromBlock; start <= input.context.toBlock; start += LOG_BATCH) {
+    for (let start = eventWindowFrom; start <= input.context.toBlock; start += LOG_BATCH) {
       throwIfProtocolDiscoveryParentStopped(passControl);
       const end = Math.min(input.context.toBlock, start + LOG_BATCH - 1);
       try {
