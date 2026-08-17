@@ -49,10 +49,8 @@ import {
   type TokenEdge,
   type TokenQueryBackend,
 } from "./planner/token-graph.js";
-import {
-  mergePoolRegistries,
-  sendDexDiscoveryRpc,
-} from "./active-pool-discovery.js";
+import { mergePoolRegistries } from "./pool-registry-merge.js";
+import { sendDexDiscoveryRpc } from "./dex-discovery-transport.js";
 import type {
   PoolIdentityFailureReason,
   RejectedPoolIdentity,

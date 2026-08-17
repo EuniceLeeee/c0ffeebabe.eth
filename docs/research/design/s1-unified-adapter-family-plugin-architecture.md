@@ -3551,6 +3551,30 @@ active-pool/build-universe/router/auto-close 独立工具仍有 legacy registry 
 projection 中也仍有为未迁移工具保留的 legacy-shaped facade；这些继续按后续 cleanup slice
 处理。本批未部署，未宣称 production cutover 或 F5/F9 完成。
 
+**2026-08-18 production utility dependency closure 第十四批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- production `main.ts` 与 pending-evidence session 已不再从
+  `active-pool-discovery.ts` 导入通用 JSON-RPC helper。abortable transport、deadline、signal
+  merge、background read control 被提取到无 registry/admission 依赖的
+  `dex-discovery-transport.ts`；保留的是中央 batching/deadline/backpressure 所需基础能力，
+  不是 legacy discovery authority；
+- pool registry/projection row 的 generic merge 被提取到
+  `pool-registry-merge.ts`。production main 与 runtime pool refresh 直接依赖该纯 key merge，
+  不再为了复用两个数组 helper 而加载 active-pool factory/topic/registry declaration；merge
+  只能合并上游已经证明的 row，不能授予 identity、coverage 或 Graph admission；
+- `active-pool-discovery.ts` 暂时 re-export 两组基础 helper，保持 standalone analysis/build
+  tooling 与未迁测试可编译；production strict source closure 新增合同，禁止 `main.ts` 恢复
+  `active-pool-discovery` import。这是单向依赖切断，不是用新文件包装旧 authority；
+- 同轮通过 `strict-ready-runtime`、pending evidence session/transaction、blockscan startup warm
+  42/42、strict production runtime session 与 listener 完整 `build`。
+
+本 checkpoint 关闭的是 production utility 对 legacy discovery module 的间接依赖，不等于
+全局 legacy=0。`active-pool-discovery`、build-universe、router discovery 与 auto-close 等
+standalone legacy tooling 仍待迁移或物理删除；后续继续先删 production/默认 authority 调用点，
+strict 缺口 fail closed，只把历史 commit 当参考。本批未部署，也没有新的 PID/log anchor 或
+连续 100/100 live 证据。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

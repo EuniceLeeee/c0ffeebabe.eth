@@ -101,6 +101,7 @@ const mainSource = await readFile(new URL("../main.ts", import.meta.url), "utf8"
 for (const forbidden of [
   "buildTokenGraphWithResults",
   "POOL_REGISTRY",
+  "active-pool-discovery",
   "strict edges merged into runtime graph",
   "strict startup edges merged into runtime graph",
   "runStrictLivePublicationChain",

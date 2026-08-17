@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { sendDexDiscoveryRpc } from "./active-pool-discovery.js";
+import { sendDexDiscoveryRpc } from "./dex-discovery-transport.js";
 import {
   PendingEvidenceTaskQueueFullError,
   type PendingEvidenceTaskPriority,

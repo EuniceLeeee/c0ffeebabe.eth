@@ -7,10 +7,10 @@ import {
 } from "./planner/token-graph.js";
 import {
   mergeDexDiscoveryReadControls,
-  mergePoolProjectionRows,
   sendDexDiscoveryRpc,
   type DexDiscoveryReadControl,
-} from "./active-pool-discovery.js";
+} from "./dex-discovery-transport.js";
+import { mergePoolProjectionRows } from "./pool-registry-merge.js";
 import {
   poolProjectionRowKey,
   poolRegistryKey,
