@@ -60,10 +60,22 @@ export const univ4Discovery = {
     id: UNIV4_SWAP_LOG_PATTERN_ID,
     topic: UNIV4_SWAP_TOPIC as `0x${string}`,
     signature: UNIV4_SWAP_SIGNATURE,
+    emitter: {
+      mode: "singleton-indexed-bytes32",
+      address: ADDR.UNISWAP_V4_POOL_MANAGER,
+      topicIndex: 1,
+      fromBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+    },
   }, {
     id: UNIV4_MODIFY_LIQUIDITY_PATTERN_ID,
     topic: UNIV4_MODIFY_LIQUIDITY_TOPIC as `0x${string}`,
     signature: UNIV4_MODIFY_LIQUIDITY_SIGNATURE,
+    emitter: {
+      mode: "singleton-indexed-bytes32",
+      address: ADDR.UNISWAP_V4_POOL_MANAGER,
+      topicIndex: 1,
+      fromBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+    },
   }],
   addressSurfaces: [Object.freeze({
     id: UNIV4_POOL_SURFACE_PATTERN_ID,

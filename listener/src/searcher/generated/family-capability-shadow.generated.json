@@ -620,7 +620,7 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "7c91b0ddc77d35140e8d197b4e8a89d055d53b7b2e78f783866e498c8c0d923d",
+        "contentHash": "7ddf3592f925fc5790d362e3483a44e05c8af9fd6ef0a372bb1c9a1e0da9a7bb",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -687,7 +687,7 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "7566181dc1dd4599566a8e73b4935ddfa283ef98b26c1ad091bbb046e6a1f247",
+        "contentHash": "89f6198c034aa27cd64e111cdee3e2162e3a70808a5f42e42c3c6b7e686253f9",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -6897,7 +6897,7 @@
         "familyId": "univ4",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "9d114f49e7aa35a3fe6daaf8f12bb0c7fde7b4be083d21ec94cf3e2290b3b4b5",
+        "contentHash": "0067391f8f385e06c3a1b034cc112f53f63a76c2e8c17e2ce2ef3d695b70ffd3",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6958,7 +6958,7 @@
         "familyId": "univ4",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "4f26b4dc4aee254ad379b16123e398197c76fedc07eaeb1899fac352ecf28e6d",
+        "contentHash": "e8ab72e1a0228243723a7edffc22c752782995ee68ba762fd28a07e02142ca7b",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -7260,5 +7260,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "8d61cc1dbb06c16a38c5766122fa1679f111754aeee66ce5843f34b93a4d9cde"
+  "artifactHash": "40ad8766c06c4bc7902727318bbe0978ea15b4a96334da90126bf52d626f5493"
 }

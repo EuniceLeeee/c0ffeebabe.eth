@@ -18,7 +18,10 @@ import {
   UNIV4_SWAP_SIGNATURE,
   UNIV4_SWAP_TOPIC,
 } from "../univ4-abi.js";
-import { v4PoolId } from "../univ4-common.js";
+import {
+  UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+  v4PoolId,
+} from "../univ4-common.js";
 import {
   ANGSTROM_INITIALIZE_PATTERN_ID,
   ANGSTROM_SWAP_CALL_PATTERN_ID,
@@ -58,10 +61,22 @@ export const angstromV4Discovery = {
     topic: UNIV4_INITIALIZE_TOPIC as `0x${string}`,
     signature:
       "Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)",
+    emitter: {
+      mode: "singleton-indexed-bytes32",
+      address: ADDR.UNISWAP_V4_POOL_MANAGER,
+      topicIndex: 1,
+      fromBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+    },
   }, {
     id: ANGSTROM_SWAP_LOG_PATTERN_ID,
     topic: UNIV4_SWAP_TOPIC as `0x${string}`,
     signature: UNIV4_SWAP_SIGNATURE,
+    emitter: {
+      mode: "singleton-indexed-bytes32",
+      address: ADDR.UNISWAP_V4_POOL_MANAGER,
+      topicIndex: 1,
+      fromBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+    },
   }],
   decodeCandidate({ observation, matchedPatternId }) {
     try {

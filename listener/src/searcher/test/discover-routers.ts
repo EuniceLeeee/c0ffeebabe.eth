@@ -4,6 +4,11 @@ import { tmpdir } from "node:os";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
+  UNIV4_SWAP_TOPIC,
+} from "../venues/swaps/univ4-abi.js";
+import { UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK } from
+  "../venues/swaps/univ4-common.js";
+import {
   discoverRouters,
   type BlockData,
 } from "../discover-routers.js";
@@ -22,10 +27,6 @@ function assertArrayEq(actual: string[], expected: string[], msg: string): void 
 
 const V3_SWAP_TOPIC0 = "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67";
 const TRANSFER_TOPIC0 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-const BALANCER_V3_SWAP_TOPIC0 = ethers.id(
-  "Swap(address,address,address,uint256,uint256,uint256,uint256)",
-);
-
 const ROUTER = address(0xaa);
 const ARB_BOT = address(0xbb);
 const TOKEN_TRANSFER_TO = address(0xcc);
@@ -91,10 +92,11 @@ function makeBlocks(): Map<number, BlockData> {
     const txs = byBlock.get(n) ?? [];
     blocks.set(n, {
       number: n,
+      hash: blockHash(n),
       txs: txs.map((tx) => ({ to: tx.to, from: tx.from })),
       receipts: txs.map((tx) => ({
         to: tx.to,
-        logs: [{ address: tx.logAddress, topics: [tx.topic0] }],
+        logs: [{ address: tx.logAddress, topics: [tx.topic0], data: "0x" }],
       })),
     });
   }
@@ -148,23 +150,25 @@ async function main(): Promise<void> {
     );
 
     const singleton = await discoverRouters({
-      fromBlock: 1,
-      toBlock: 1,
+      fromBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+      toBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
       allowlist: new Set(),
       minTxs: 2,
       minPools: 2,
       minCallers: 1,
       append: false,
       async fetchBlock() {
-        const pools = [address(0xe1), address(0xe2)];
+        const pools = [bytes32(0xe1), bytes32(0xe2)];
         return {
-          number: 1,
+          number: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+          hash: blockHash(UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK),
           txs: pools.map(() => ({ to: ROUTER, from: address(0xe0) })),
           receipts: pools.map((pool) => ({
             to: ROUTER,
             logs: [{
-              address: ADDR.BALANCER_V3_VAULT,
-              topics: [BALANCER_V3_SWAP_TOPIC0, ethers.zeroPadValue(pool, 32)],
+              address: ADDR.UNISWAP_V4_POOL_MANAGER,
+              topics: [UNIV4_SWAP_TOPIC, pool],
+              data: "0x",
             }],
           })),
         };
@@ -172,11 +176,11 @@ async function main(): Promise<void> {
     });
     assert(
       singleton.qualified[0]?.pools === 2,
-      "Balancer V3 discovery should count indexed pools, not one Vault emitter",
+      "strict V4 discovery should count poolIds, not one PoolManager emitter",
     );
     const fakeSingleton = await discoverRouters({
-      fromBlock: 1,
-      toBlock: 1,
+      fromBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+      toBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
       allowlist: new Set(),
       minTxs: 1,
       minPools: 1,
@@ -184,19 +188,24 @@ async function main(): Promise<void> {
       append: false,
       async fetchBlock() {
         return {
-          number: 1,
+          number: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+          hash: blockHash(UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK),
           txs: [{ to: ROUTER, from: address(0xe0) }],
           receipts: [{
             to: ROUTER,
             logs: [{
               address: address(0xef),
-              topics: [BALANCER_V3_SWAP_TOPIC0, ethers.zeroPadValue(address(0xe1), 32)],
+              topics: [UNIV4_SWAP_TOPIC, bytes32(0xe1)],
+              data: "0x",
             }],
           }],
         };
       },
     });
-    assert(fakeSingleton.qualified.length === 0, "fake Vault emitter must not qualify a router");
+    assert(
+      fakeSingleton.qualified.length === 0,
+      "foreign V4 topic emitter must not qualify a router",
+    );
 
     const first = await discoverRouters({
       fromBlock: 1,
@@ -226,7 +235,15 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("[discover-routers] adapter topics + singleton pool identity + idempotence PASS");
+  console.log("[discover-routers] strict topics + singleton pool identity + idempotence PASS");
+}
+
+function blockHash(value: number): string {
+  return ethers.toBeHex(value, 32);
+}
+
+function bytes32(value: number): string {
+  return ethers.toBeHex(value, 32);
 }
 
 main().catch((err) => {

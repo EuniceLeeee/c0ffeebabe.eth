@@ -310,6 +310,7 @@ assert.throws(
 
 for (const relative of [
   "../main.ts",
+  "../discover-routers.ts",
   "../venues/pool-adapter-policy.ts",
   "../solver/pool-state-updater.ts",
   "../templates/path-template.ts",

@@ -3620,6 +3620,30 @@ registry 依赖，继续后续物理删除。本批未部署、未宣称 F5/F9 �
 节点部署。standalone cron/build/trust 文件仍存在供后续物理清理，router auto-discovery 仍是下一条
 deploy-time legacy dependency；因此不得声明 F5、F9、legacy=0 或 production cutover。
 
+**2026-08-18 router-flow strict topic authority 第十七批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是实际部署、F5 或 production cutover）：**
+
+- deploy 仍保留近期 router flow nomination，但 `discover-routers.ts` 已删除
+  `PRODUCTION_ADAPTER_FAMILIES.landedEvents()` 与 `production-registry.ts` import。Swap topic、
+  classification 与 singleton emitter identity 只来自 generated strict catalog；非 Swap pattern、
+  foreign singleton emitter、malformed block/hash/log 均不计入 router qualification；
+- `StrictProductionFamilyDeclarations.swapPoolIdentities()` 只产生 telemetry identity，不授予 pool
+  admission。普通池按 log address，shared singleton 按 catalog-issued indexed address/bytes32；同一
+  V4 log 可被 UniV4 与 Angstrom 两个 Family 理解，但 router diversity 按 physical poolId 去重，
+  不把 Family 重叠虚增成多个 pool；
+- UniV4 与 Angstrom 的 strict discovery 已为 Swap/ModifyLiquidity/Initialize 中相应 singleton
+  pattern 补齐 manager、topicIndex、deployment fromBlock emitter binding；foreign PoolManager
+  topic spoof 不再算可信 pool identity。generated 242-capability content hashes 同步刷新；
+- 旧 router fixture 依赖已退出 strict catalog 的 Balancer V3。合同已改为当前 UniV4 PoolManager
+  的两个 poolId + foreign emitter 负例；capability-manifest fixture 则补齐当前所有域必需的
+  capture root（22×10），不再因测试自身停留在旧 9-capability shape 而阻塞。同步通过 router、
+  strict declarations、UniV4、Angstrom、manifest generator 合同与 listener 完整 `build`。
+
+本 checkpoint 删除 deploy-time router topic 的 legacy registry authority，但 router allowlist
+本身仍只是 mempool flow nomination，不证明 universe/Graph/edge。active-pool/build-universe、
+deploy-trust、cron、auto-close 等 standalone legacy 文件仍待后续物理清理；本批未部署，未取得
+新 PID/log/F5/100-of-100，也不等于 F9 或 production cutover。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

@@ -9,6 +9,7 @@ import type {
   DiscoveryCandidateSourceKind,
   DiscoverySemantics,
   FamilyCandidate,
+  LogPattern,
   OracleVictimSpec,
   RuntimeEvidence,
   UnifiedObservation,
@@ -349,6 +350,65 @@ export class StrictProductionFamilyDeclarations {
     }
     return false;
   }
+
+  /**
+   * Pool/instance identities for router-flow telemetry, derived only from
+   * catalog-issued Swap log patterns. These identities never grant instance
+   * admission; the startup lifecycle still performs the on-chain proof.
+   */
+  swapPoolIdentities(log: StrictLandedLog): readonly string[] {
+    const observation = landedLogObservation(log);
+    if (observation === null) return Object.freeze([]);
+    const identities = new Set<string>();
+    for (const match of this.#catalog.matches(observation)) {
+      const plugin = this.#catalog.forStrictFamily(match.familyId).plugin as
+        unknown as RoutePluginProjection;
+      if (
+        plugin.manifest.domain !== "swap" ||
+        plugin.swap === undefined ||
+        plugin.discovery === undefined ||
+        plugin.swap.landedEvents.classify({ observation }) !== "swap"
+      ) {
+        continue;
+      }
+      const pattern = plugin.discovery.logPatterns?.find(
+        (candidate) => candidate.id === match.patternId,
+      );
+      if (pattern === undefined) continue;
+      const identity = strictSwapLogIdentity(pattern, observation);
+      // Router diversity counts physical/logical pools, not the number of
+      // strict Families that can interpret the same receipt (V4 + hook
+      // families intentionally overlap on one PoolManager log).
+      if (identity !== null) identities.add(identity);
+    }
+    return Object.freeze([...identities].sort());
+  }
+}
+
+function strictSwapLogIdentity(
+  pattern: LogPattern,
+  observation: Extract<UnifiedObservation, { readonly kind: "log" }>,
+): string | null {
+  const emitter = pattern.emitter;
+  if (emitter === undefined || emitter.mode === "address") {
+    return observation.address.toLowerCase();
+  }
+  if (
+    observation.source.number < emitter.fromBlock ||
+    observation.address.toLowerCase() !== emitter.address.toLowerCase()
+  ) {
+    return null;
+  }
+  const indexed = observation.topics[emitter.topicIndex];
+  if (!ethers.isHexString(indexed, 32)) return null;
+  if (emitter.mode === "singleton-indexed-bytes32") {
+    return indexed.toLowerCase();
+  }
+  try {
+    return ethers.getAddress(`0x${indexed.slice(-40)}`).toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 function createStrictOracleVictimDescriptor(
@@ -528,7 +588,9 @@ function appendCanonicalTargets(
   }
 }
 
-function landedLogObservation(log: StrictLandedLog): UnifiedObservation | null {
+function landedLogObservation(
+  log: StrictLandedLog,
+): Extract<UnifiedObservation, { readonly kind: "log" }> | null {
   if (
     !ethers.isAddress(log.address) ||
     !Number.isSafeInteger(log.blockNumber) ||

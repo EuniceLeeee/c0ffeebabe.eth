@@ -55,6 +55,7 @@ try {
     export const manifest = { familyId: "swap:fixture" } as const;
   `);
   for (const capability of [
+    "capture",
     "discovery",
     "identity",
     "instance",
@@ -137,8 +138,8 @@ try {
     fundingArtifact.exact
       .filter((record) => record.root.absence === null)
       .map((record) => record.identity.capability),
-    ["funding"],
-    "Funding must hash its own semantics without fake route/pricing roots",
+    ["capture", "funding"],
+    "Funding must hash capture+funding without fake route/pricing roots",
   );
   assert(
     fundingArtifact.exact.find((record) =>
@@ -169,7 +170,15 @@ try {
       .filter((record) => record.root.absence === null)
       .map((record) => record.identity.capability)
       .sort(),
-    ["credit", "discovery", "execution", "identity", "instance", "routes"],
+    [
+      "capture",
+      "credit",
+      "discovery",
+      "execution",
+      "identity",
+      "instance",
+      "routes",
+    ],
     "Credit must omit fake pricing/exact while preserving route and risk roots",
   );
 
@@ -527,6 +536,7 @@ async function writeStrictProductionEntry(input?: {
   await writeFixtureFile("src/production/fixture.production.ts", `
     import { defineSwapFamily } from "../framework.js";
     import { manifest } from "../manifest.js";
+    import { capture } from "../capture.js";
     import { discovery } from "../discovery.js";
     import { identity } from "../identity.js";
     import { instance } from "../instance.js";
@@ -537,6 +547,7 @@ async function writeStrictProductionEntry(input?: {
     import { action } from "../action.js";
     export const plugin = defineSwapFamily({
       manifest,
+      capture,
       discovery,
       identity,
       instance,
@@ -554,10 +565,12 @@ async function writeFundingProductionEntry(): Promise<void> {
   await writeFixtureFile("src/production/fixture.production.ts", `
     import { defineFundingFamily } from "../framework.js";
     import { manifest } from "../manifest.js";
+    import { capture } from "../capture.js";
     import { funding } from "../funding.js";
     import { action } from "../action.js";
     export const plugin = defineFundingFamily({
       manifest,
+      capture,
       funding,
       actionAdapters: [action],
     });
@@ -568,6 +581,7 @@ async function writeCreditProductionEntry(): Promise<void> {
   await writeFixtureFile("src/production/fixture.production.ts", `
     import { defineCreditFamily } from "../framework.js";
     import { manifest } from "../manifest.js";
+    import { capture } from "../capture.js";
     import { discovery } from "../discovery.js";
     import { identity } from "../identity.js";
     import { instance } from "../instance.js";
@@ -577,6 +591,7 @@ async function writeCreditProductionEntry(): Promise<void> {
     import { action } from "../action.js";
     export const plugin = defineCreditFamily({
       manifest,
+      capture,
       discovery,
       identity,
       instance,

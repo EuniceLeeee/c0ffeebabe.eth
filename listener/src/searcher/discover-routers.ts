@@ -7,15 +7,22 @@ import {
   DEFAULT_FORCE_INCLUDE_ROUTERS_PATH,
 } from "./force-include.js";
 import { buildMempoolToAddressFilter } from "./main.js";
-import {
-  observedLandedPoolIdentity,
-} from "./venues/landed-event-registry.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "./venues/production-registry.js";
+import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
+  "./strict-production-family-declarations.js";
 
 export interface BlockData {
   number: number;
+  hash: string;
   txs: { to: string | null; from: string }[];
-  receipts: { to: string | null; logs: { address: string; topics: string[] }[] }[];
+  receipts: {
+    to: string | null;
+    logs: {
+      address: string;
+      topics: string[];
+      data: string;
+      transactionHash?: string;
+    }[];
+  }[];
 }
 
 export interface DiscoverRoutersOptions {
@@ -106,7 +113,13 @@ export async function discoverRouters(
       if (allowlist.has(key)) continue;
 
       const swapPoolIdentities = receipt.logs
-        .flatMap((log) => observedSwapPoolIdentities(log));
+        .flatMap((log) =>
+          PRODUCTION_STRICT_FAMILY_DECLARATIONS.swapPoolIdentities({
+            ...log,
+            blockNumber: block.number,
+            blockHash: block.hash,
+          })
+        );
       if (swapPoolIdentities.length === 0) continue;
 
       const stats = getStats(statsByTo, to);
@@ -142,14 +155,6 @@ export async function discoverRouters(
   }
 
   return { candidates, qualified, added };
-}
-
-function observedSwapPoolIdentities(log: { address: string; topics: string[] }): string[] {
-  const topic0 = log.topics[0];
-  if (typeof topic0 !== "string") return [];
-  return [...new Set(PRODUCTION_ADAPTER_FAMILIES.landedEvents().eventsForTopic(topic0)
-    .map((event) => observedLandedPoolIdentity(event, log))
-    .filter((identity): identity is string => identity !== null))];
 }
 
 function getStats(statsByTo: Map<string, MutableStats>, address: string): MutableStats {
@@ -200,6 +205,7 @@ async function fetchBlockFromRpc(
 
   return {
     number: n,
+    hash: block.hash ?? "",
     txs: block.prefetchedTransactions.map((tx) => ({ to: tx.to, from: tx.from })),
     receipts: parseRpcReceipts(rawReceipts),
   };
@@ -213,12 +219,16 @@ function parseRpcReceipts(value: unknown): BlockData["receipts"] {
     return {
       to: typeof receipt.to === "string" ? receipt.to : null,
       logs: logs.map((log) => {
-        if (!isRecord(log)) return { address: "", topics: [] };
+        if (!isRecord(log)) return { address: "", topics: [], data: "" };
         return {
           address: typeof log.address === "string" ? log.address : "",
           topics: Array.isArray(log.topics)
             ? log.topics.filter((topic): topic is string => typeof topic === "string")
             : [],
+          data: typeof log.data === "string" ? log.data : "",
+          ...(typeof log.transactionHash === "string"
+            ? { transactionHash: log.transactionHash }
+            : {}),
         };
       }),
     };
