@@ -966,7 +966,7 @@ run_preflight_safely() {
 }
 
 validate_running_pair() {
-  local mode sources expected_backrun expected_mempool expected_mev_share a_pid b_pid a_log b_log key expected a_router_path b_router_path a_revm_path b_revm_path
+  local mode sources expected_backrun expected_mempool expected_mev_share a_pid b_pid a_log b_log key expected a_router_path b_router_path a_revm_path b_revm_path a_checkpoint_path b_checkpoint_path
   mode=$(lane_mode)
   sources=$(victim_mode)
   if [ "$mode" = "dual" ]; then
@@ -1069,6 +1069,22 @@ validate_running_pair() {
     || die "champion universe drift"
   [ "$(hash_file "$(state_field b_universe_path)")" = "$(state_field b_universe_hash)" ] \
     || die "challenger universe drift"
+  a_checkpoint_path=$(process_env_get \
+    "$a_pid" SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH)
+  b_checkpoint_path=$(process_env_get \
+    "$b_pid" SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH)
+  [ "$a_checkpoint_path" = "$(state_field a_rebuild_checkpoint_path)" ] \
+    || die "champion rebuild checkpoint path drift"
+  [ "$b_checkpoint_path" = "$(state_field b_rebuild_checkpoint_path)" ] \
+    || die "challenger rebuild checkpoint path drift"
+  [ "$a_checkpoint_path" != "$b_checkpoint_path" ] \
+    || die "A/B rebuild checkpoints alias the same path"
+  [ "$(hash_file "$a_checkpoint_path")" = \
+      "$(state_field a_rebuild_checkpoint_hash)" ] \
+    || die "champion ready checkpoint drift"
+  [ "$(hash_file "$b_checkpoint_path")" = \
+      "$(state_field b_rebuild_checkpoint_hash)" ] \
+    || die "challenger ready checkpoint drift"
 }
 
 build_runtime_env() {
@@ -1086,7 +1102,7 @@ build_runtime_env() {
     expected_mev_share=0
   fi
   input_mode=$(env_get AB_INPUT_MODE); input_mode=${input_mode:-shared}
-  [ "$input_mode" = "shared" ] || [ "$input_mode" = "challenger" ] || die "AB_INPUT_MODE must be shared|challenger"
+  [ "$input_mode" = "shared" ] || die "AB_INPUT_MODE must be shared"
   allowed=",$(env_get AB_ALLOWED_CONFIG_DELTA),"
   a_env="$ROOT/a-search.env"
   runtime_env="$ROOT/b-runtime.env"
@@ -1105,7 +1121,7 @@ build_runtime_env() {
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH|SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$a_common"
@@ -1152,6 +1168,9 @@ EOF
   if [ -s "${B_UNIVERSE_MANIFEST:-}" ]; then
     echo "SEARCHER_POOL_UNIVERSE_MANIFEST_PATH=$B_UNIVERSE_MANIFEST" >> "$runtime_env"
   fi
+  [ -s "${B_REBUILD_CHECKPOINT:-}" ] \
+    || die "prepared challenger rebuild checkpoint missing"
+  echo "SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH=$B_REBUILD_CHECKPOINT" >> "$runtime_env"
   python3 - "$a_common" "$runtime_env" <<'PY'
 import sys
 for path in sys.argv[1:]:
@@ -1168,7 +1187,7 @@ PY
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH|SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$b_common"
@@ -1297,7 +1316,7 @@ prepare_challenger_dependencies() {
 }
 
 resolve_a_universe() {
-  local a_pool_path a_manifest_path a_universe_schema
+  local a_pool_path a_manifest_path a_universe_schema a_checkpoint_path
   a_pool_path=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_PATH)
   if [ -z "$a_pool_path" ]; then
     A_UNIVERSE="$MAIN_REPO/listener/searcher/pools/active-pools.json"
@@ -1329,81 +1348,38 @@ resolve_a_universe() {
   if [ -n "$A_UNIVERSE_MANIFEST" ]; then
     validate_universe_manifest "$A_UNIVERSE_MANIFEST" "$A_UNIVERSE"
   fi
+  a_checkpoint_path=$(file_env_get \
+    "$A_PROCESS_ENV" SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH)
+  [[ "$a_checkpoint_path" = /* ]] \
+    || die "champion rebuild checkpoint path must be absolute"
+  [ -s "$a_checkpoint_path" ] \
+    || die "champion rebuild checkpoint missing: $a_checkpoint_path"
+  A_REBUILD_CHECKPOINT=$a_checkpoint_path
 }
 
 prepare_candidate_universes() {
-  local experiment=$1 input_mode=$2 from_block to_block generator_log universe_tmp universe_manifest_tmp universe_hash universe_snapshot universe_schema
+  local experiment=$1
   A_REPLAY_UNIVERSE="$ROOT/universe/$experiment-baseline-active-pools.json"
   cp -f "$A_UNIVERSE" "$A_REPLAY_UNIVERSE"
   [ "$(hash_file "$A_REPLAY_UNIVERSE")" = "$(hash_file "$A_UNIVERSE")" ] \
     || die "could not freeze the champion replay universe"
 
-  if [ "$input_mode" = "shared" ]; then
-    B_UNIVERSE="$ROOT/universe/$experiment-challenger-active-pools.json"
-    cp -f "$A_UNIVERSE" "$B_UNIVERSE"
-    B_UNIVERSE_MANIFEST=
-    if [ -n "${A_UNIVERSE_MANIFEST:-}" ]; then
-      B_UNIVERSE_MANIFEST="$B_UNIVERSE.manifest.json"
-      cp -f "$A_UNIVERSE_MANIFEST" "$B_UNIVERSE_MANIFEST"
-      validate_universe_manifest "$B_UNIVERSE_MANIFEST" "$B_UNIVERSE"
-    fi
-    return
+  B_UNIVERSE="$ROOT/universe/$experiment-challenger-active-pools.json"
+  cp -f "$A_UNIVERSE" "$B_UNIVERSE"
+  [ "$(hash_file "$B_UNIVERSE")" = "$(hash_file "$A_UNIVERSE")" ] \
+    || die "could not freeze the shared challenger nomination universe"
+  B_UNIVERSE_MANIFEST=
+  if [ -n "${A_UNIVERSE_MANIFEST:-}" ]; then
+    B_UNIVERSE_MANIFEST="$B_UNIVERSE.manifest.json"
+    cp -f "$A_UNIVERSE_MANIFEST" "$B_UNIVERSE_MANIFEST"
+    validate_universe_manifest "$B_UNIVERSE_MANIFEST" "$B_UNIVERSE"
   fi
 
-  from_block=$(jq -er '.fromBlock | select(type == "number" and floor == . and . >= 0)' "$A_UNIVERSE") \
-    || die "champion universe has invalid fromBlock"
-  to_block=$(jq -er '.toBlock | select(type == "number" and floor == . and . >= 0)' "$A_UNIVERSE") \
-    || die "champion universe has invalid toBlock"
-  [ "$from_block" -le "$to_block" ] || die "champion universe block window is inverted"
-  universe_tmp="$ROOT/universe/$experiment-challenger-active-pools.tmp.json"
-  universe_manifest_tmp="$universe_tmp.manifest.json"
-  generator_log="$ROOT/candidate/$experiment-universe-build.log"
-  rm -f "$universe_tmp" "$universe_manifest_tmp"
-  (
-    cd "$WT/listener"
-    timeout 900 flock -w 30 /run/lock/mev-pooluniverse.lock \
-      env -i \
-      PATH="$PATH" HOME="${HOME:-/root}" \
-      MAINNET_RPC_URL="$LOCAL_RPC" \
-      POOL_UNIVERSE_FROM_BLOCK="$from_block" \
-      POOL_UNIVERSE_TO_BLOCK="$to_block" \
-      POOL_UNIVERSE_RETAIN_PATH="$A_UNIVERSE" \
-      POOL_UNIVERSE_OUT="$universe_tmp" \
-      POOL_UNIVERSE_MANIFEST_OUT="$universe_manifest_tmp" \
-      npx tsx src/searcher/build-active-pool-universe.ts
-  ) >"$generator_log" 2>&1 \
-    || die "challenger universe generation failed (see $generator_log)"
-  [ -f "$universe_tmp" ] \
-    || die "challenger universe generator produced no universe"
-  universe_schema=$(jq -r '.schemaVersion // 0' "$universe_tmp")
-  if [ "$universe_schema" = "3" ]; then
-    [ -f "$universe_manifest_tmp" ] \
-      || die "schema-v3 challenger universe generator produced no manifest"
-  fi
-  jq -e --argjson from "$from_block" --argjson to "$to_block" '
-    (.schemaVersion == 2 or .schemaVersion == 3)
-    and .fromBlock == $from
-    and .toBlock == $to
-    and (.pools | type == "array" and length > 0)
-  ' "$universe_tmp" >/dev/null \
-    || die "challenger universe does not preserve the champion block window"
-  universe_hash=$(hash_file "$universe_tmp")
-  [[ "$universe_hash" =~ ^[a-f0-9]{64}$ ]] || die "challenger universe hash is invalid"
-  universe_snapshot="$ROOT/universe/active-pools-$universe_hash.json"
-  if [ -f "$universe_snapshot" ]; then
-    [ "$(hash_file "$universe_snapshot")" = "$universe_hash" ] \
-      || die "existing challenger universe snapshot hash mismatch"
-    rm -f "$universe_tmp"
-  else
-    mv "$universe_tmp" "$universe_snapshot"
-  fi
-  B_UNIVERSE_MANIFEST=
-  if [ -f "$universe_manifest_tmp" ]; then
-    B_UNIVERSE_MANIFEST="$universe_snapshot.manifest.json"
-    mv "$universe_manifest_tmp" "$B_UNIVERSE_MANIFEST"
-    validate_universe_manifest "$B_UNIVERSE_MANIFEST" "$universe_snapshot"
-  fi
-  B_UNIVERSE="$universe_snapshot"
+  B_REBUILD_CHECKPOINT="$ROOT/universe/$experiment-challenger-rebuild-checkpoint.json"
+  cp -f "$A_REBUILD_CHECKPOINT" "$B_REBUILD_CHECKPOINT"
+  [ "$(hash_file "$B_REBUILD_CHECKPOINT")" = \
+      "$(hash_file "$A_REBUILD_CHECKPOINT")" ] \
+    || die "could not isolate the champion ready checkpoint for challenger"
 }
 
 deploy() {
@@ -1419,8 +1395,8 @@ deploy() {
   [ "$allow_runtime_view_delta" = "0" ] || [ "$allow_runtime_view_delta" = "1" ] \
     || die "allow-runtime-view-delta must be 0|1"
   requested_input_mode=$(env_get AB_INPUT_MODE); requested_input_mode=${requested_input_mode:-shared}
-  [ "$requested_input_mode" = "shared" ] || [ "$requested_input_mode" = "challenger" ] \
-    || die "AB_INPUT_MODE must be shared|challenger"
+  [ "$requested_input_mode" = "shared" ] \
+    || die "AB_INPUT_MODE must be shared"
   requested_config_delta=$(env_get AB_ALLOWED_CONFIG_DELTA)
   [ -z "$requested_config_delta" ] \
     || die "A/B candidate config deltas are forbidden; change one reviewed code variable instead"
@@ -1535,7 +1511,7 @@ deploy() {
   prepare_challenger_dependencies
   (cd "$WT/listener" && npm run build:live >/tmp/mev-ab-build.log 2>&1) \
     || die "challenger live closure build failed (see /tmp/mev-ab-build.log)"
-  prepare_candidate_universes "$experiment" "$requested_input_mode"
+  prepare_candidate_universes "$experiment"
   run_preflight_safely
   local deploy_a_pid deploy_a_restarts deploy_a_commit replay_top_n
   deploy_a_pid=$(systemctl show -p MainPID --value "$A_UNIT")
@@ -1740,6 +1716,10 @@ deploy() {
     b_universe_generator_commit "$b_commit" \
     a_universe_hash_after "$a_universe_hash" b_universe_hash_after "$b_universe_hash" failure_reason "" \
     a_universe_path "$A_UNIVERSE" b_universe_path "$B_UNIVERSE" input_mode "$INPUT_MODE" \
+    a_rebuild_checkpoint_path "$A_REBUILD_CHECKPOINT" \
+    b_rebuild_checkpoint_path "$B_REBUILD_CHECKPOINT" \
+    a_rebuild_checkpoint_hash "$(hash_file "$A_REBUILD_CHECKPOINT")" \
+    b_rebuild_checkpoint_hash "$(hash_file "$B_REBUILD_CHECKPOINT")" \
     baseline_replay_universe_path "$A_REPLAY_UNIVERSE" \
     baseline_replay_universe_hash "$(hash_file "$A_REPLAY_UNIVERSE")" \
     pool_universe_top_n "$replay_top_n" \
@@ -1862,8 +1842,8 @@ PY
   [[ "$replay_top_n" =~ ^[1-9][0-9]*$ ]] || die "acceptance pool universe top-N is invalid"
   [ "$allow_runtime_view_delta" = "0" ] || [ "$allow_runtime_view_delta" = "1" ] \
     || die "acceptance runtime-view delta is invalid"
-  [ "$input_mode" = "shared" ] || [ "$input_mode" = "challenger" ] \
-    || die "acceptance input mode is invalid"
+  [ "$input_mode" = "shared" ] \
+    || die "acceptance input mode must be shared"
   [ "$lane" = "blockscan-only" ] || [ "$lane" = "dual" ] \
     || die "acceptance lane mode is invalid"
   [ "$require_stage_advance" = "0" ] || [ "$require_stage_advance" = "1" ] \

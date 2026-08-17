@@ -827,8 +827,8 @@ function matchFor(
 
 /**
  * F6 Pair B: shared strict attestation entry for the still-legacy discovery
- * consumers (active-pool-discovery, startup universe rebuild,
- * build-active-pool-universe). Accepts an ethers-shaped read provider pinned
+ * consumers (startup universe rebuild and focused diagnostic probes). Accepts
+ * an ethers-shaped read provider pinned
  * by the caller, resolves the canonical source hash for the given block, and
  * runs the same catalog + plugin lifecycle attestation as startup. The
  * framework only executes catalog-issued capabilities; no protocol semantics.

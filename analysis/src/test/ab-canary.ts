@@ -98,7 +98,7 @@ test("deploy freezes immutable universes for independent acceptance", () => {
   ) as { include?: unknown };
 
   assert.doesNotMatch(wrapper, /B_UNIVERSE="\$WT\/listener\/searcher\/pools\/active-pools\.json"/);
-  assert.match(wrapper, /prepare_candidate_universes "\$experiment" "\$requested_input_mode"/);
+  assert.match(wrapper, /prepare_candidate_universes "\$experiment"/);
   assert.match(
     wrapper,
     /\(cd "\$WT\/listener" && npm run build:live/,
@@ -106,8 +106,8 @@ test("deploy freezes immutable universes for independent acceptance", () => {
   );
   assert.deepEqual(liveTsconfig.include, [
     "src/searcher/main.ts",
-    "src/searcher/build-active-pool-universe.ts",
     "src/searcher/blockscan-enumeration-solver-worker.ts",
+    "src/searcher/venues/production-families/*.production.ts",
   ], "trusted live typecheck must include every entry executed by the A/B wrapper");
   assert.match(
     wrapper,
@@ -136,43 +136,29 @@ test("deploy freezes immutable universes for independent acceptance", () => {
     2,
     "the dedicated route sidecar must be excluded from both A/B common-config comparisons",
   );
-  assert.match(wrapper, /POOL_UNIVERSE_FROM_BLOCK="\$from_block"/);
-  assert.match(wrapper, /POOL_UNIVERSE_TO_BLOCK="\$to_block"/);
-  const universeBuildStart = wrapper.indexOf("timeout 900");
-  const universeBuildEnd = wrapper.indexOf(
-    "npx tsx src/searcher/build-active-pool-universe.ts",
-    universeBuildStart,
+  assert.doesNotMatch(wrapper, /build-active-pool-universe/);
+  assert.match(wrapper, /AB_INPUT_MODE must be shared/);
+  assert.match(wrapper, /cp -f "\$A_UNIVERSE" "\$B_UNIVERSE"/);
+  assert.match(wrapper, /shared challenger nomination universe/);
+  assert.match(wrapper, /champion rebuild checkpoint path must be absolute/);
+  assert.match(wrapper, /cp -f "\$A_REBUILD_CHECKPOINT" "\$B_REBUILD_CHECKPOINT"/);
+  assert.match(wrapper, /A\/B rebuild checkpoints alias the same path/);
+  assert.match(
+    wrapper,
+    /SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH=\$B_REBUILD_CHECKPOINT/,
   );
-  assert.ok(universeBuildStart >= 0, "candidate universe build must retain its timeout");
-  assert.ok(universeBuildEnd > universeBuildStart, "candidate universe builder invocation is missing");
-  const universeBuild = wrapper.slice(universeBuildStart, universeBuildEnd);
-  const flockIndex = universeBuild.indexOf("flock -w 30 /run/lock/mev-pooluniverse.lock");
-  const cleanEnvIndex = universeBuild.indexOf("env -i");
-  const pathIndex = universeBuild.indexOf("PATH=");
-  assert.ok(flockIndex >= 0, "candidate universe builds must share the pool-universe lock");
-  assert.ok(cleanEnvIndex > flockIndex, "the clean environment must execute under the shared lock");
-  assert.ok(pathIndex > cleanEnvIndex, "builder environment assignments must follow env -i");
-  assert.match(universeBuild, /POOL_UNIVERSE_RETAIN_PATH="\$A_UNIVERSE"/);
-  assert.match(universeBuild, /POOL_UNIVERSE_MANIFEST_OUT="\$universe_manifest_tmp"/);
-  assert.doesNotMatch(
-    universeBuild,
-    /POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=0/,
-    "the challenger must not disable registered-family topology recovery",
-  );
-  assert.match(wrapper, /\.schemaVersion == 2 or \.schemaVersion == 3/);
-  assert.match(wrapper, /schema-v3 challenger universe generator produced no manifest/);
   assert.match(wrapper, /schema-v3 champion universe has no manifest/);
   assert.match(wrapper, /pool-universe-build-manifest-v1/);
   assert.match(wrapper, /\.output\.contentSha256 == \$universe_hash/);
   assert.match(wrapper, /\.source\.number == \$to_block/);
   assert.match(wrapper, /a_universe_manifest_hash/);
   assert.match(wrapper, /b_universe_manifest_hash/);
-  assert.match(wrapper, /B_UNIVERSE_MANIFEST="\$universe_snapshot\.manifest\.json"/);
+  assert.match(wrapper, /B_UNIVERSE_MANIFEST="\$B_UNIVERSE\.manifest\.json"/);
   assert.match(
     wrapper,
     /SEARCHER_POOL_UNIVERSE_MANIFEST_PATH=\$B_UNIVERSE_MANIFEST/,
   );
-  assert.match(wrapper, /active-pools-\$universe_hash\.json/);
+  assert.match(wrapper, /b_rebuild_checkpoint_hash/);
   assert.match(wrapper, /baseline_replay_universe_path "\$A_REPLAY_UNIVERSE"/);
   assert.match(wrapper, /--baseline-universe "\$baseline_universe"/);
   assert.match(wrapper, /--challenger-universe "\$challenger_universe"/);

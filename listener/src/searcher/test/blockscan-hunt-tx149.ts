@@ -273,9 +273,13 @@ async function runCommand(
 
 async function run(): Promise<void> {
   const work = mkdtempSync(join(tmpdir(), "mev-tx149-replay-"));
-  const universe = cli.universePath === undefined
-    ? join(work, "active-pools.json")
-    : realpathSync(cli.universePath);
+  if (cli.universePath === undefined) {
+    throw new Error(
+      "--universe is required; the retired offline universe builder is not " +
+        "a correctness or replay fallback",
+    );
+  }
+  const universe = realpathSync(cli.universePath);
   const huntOut = join(work, "hunt.json");
   const baseEnv = cleanEnv();
   const diagnostic = cli.diagnosticMaxCandidates !== undefined;
@@ -295,29 +299,6 @@ async function run(): Promise<void> {
       : 20 * 60 * 1_000;
 
   try {
-    if (cli.universePath === undefined) {
-      const generated = await runCommand(
-        ["--import", "tsx", "src/searcher/build-active-pool-universe.ts"],
-        {
-          ...baseEnv,
-          MAINNET_RPC_URL: RPC_URL,
-          POOL_UNIVERSE_FROM_BLOCK: String(UNIVERSE_FROM_BLOCK),
-          POOL_UNIVERSE_TO_BLOCK: String(UNIVERSE_TO_BLOCK),
-          POOL_UNIVERSE_OUT: universe,
-          POOL_UNIVERSE_MAX_POOLS: "0",
-          POOL_UNIVERSE_ARB_RELEVANCE: "1",
-          POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS: "0",
-        },
-        diagnostic,
-      );
-      if (generated.error || generated.status !== 0) {
-        throw new Error(
-          `universe generation failed (${generated.status ?? "signal"}): `
-          + `${generated.error?.message ?? tail(generated.stderr)}`,
-        );
-      }
-    }
-
     const universeFile = JSON.parse(readFileSync(universe, "utf8")) as {
       schemaVersion?: number;
       fromBlock?: number;

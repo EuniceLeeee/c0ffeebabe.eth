@@ -110,7 +110,6 @@ const CURATED: Record<string, Curated> = {
   "analysis:tool-index": meta("ops", ["tool-discovery", "tool-selection"], "zero-cu", "Generate and query the current analysis/replay capability index.", 100),
   "analysis:tool-run": meta("ops", ["tool-execution", "tool-evidence"], "zero-cu", "Run one dynamically selected read-only tool and append a machine execution receipt.", 100),
   "listener:auto-close-route-gap": meta("ops", ["route-gap", "auto-close", "graph"], "local-rpc", "Close a confirmed route gap from a canonical report.", 90),
-  "listener:auto-close-router-gap": meta("ops", ["router-gap", "auto-close", "flow-admission"], "local-rpc", "Close a confirmed router admission gap.", 90),
   "listener:searcher:blockscan-hunt": meta("replay", ["block-scan", "pinned-replay", "production-stage"], "fork", "Trusted parent-block replay for a pinned production sample.", 100),
   "listener:searcher:loop-fork-gate": meta("replay", ["block-scan", "pinned-replay", "closed-loop"], "fork", "Fork gate for one explicit closed-loop fixture.", 95),
   "listener:searcher:liveready": meta("gate", ["live-readiness", "graph", "execution"], "fork", "Validate live searcher readiness against a fork.", 85),

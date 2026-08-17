@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   POOL_UNIVERSE_BUILD_MANIFEST_PROFILE,
-} from "../build-active-pool-universe.js";
+} from "../pool-universe.js";
 import {
   productionPoolUniverseSourceFingerprintsStrict,
 } from "../venues/production-registry.js";

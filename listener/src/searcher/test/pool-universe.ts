@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { mergePoolRegistries } from "../active-pool-discovery.js";
+import { mergePoolRegistries } from "../pool-registry-merge.js";
 import {
   loadPoolUniverse,
   loadPoolUniverseCoverageMetadata,
@@ -10,7 +10,6 @@ import {
   poolUniverseCanonicalAnchorMatches,
   selectPairCompletionPools,
 } from "../pool-universe.js";
-import { evaluatePoolUniverseDeployTrust } from "../pool-universe-deploy-trust.js";
 import type { PoolEntry } from "../planner/token-graph.js";
 import {
   poolUniverseSourceFingerprints,
@@ -203,57 +202,6 @@ async function main(): Promise<void> {
       }),
       "orphaned manifest source must fail closed",
     );
-    const canonicalCoverageSource = {
-      number: 20,
-      hash: `0x${"12".repeat(32)}`,
-      stateRoot: `0x${"34".repeat(32)}`,
-    };
-    const deployTrust = (overrides: {
-      frozenSource?: number;
-      fingerprints?: readonly string[];
-      canonicalSource?: typeof canonicalCoverageSource;
-    } = {}) => evaluatePoolUniverseDeployTrust({
-      poolCount: 1,
-      metadata: coverage,
-      canonicalSource: overrides.canonicalSource ?? canonicalCoverageSource,
-      currentRegistrySourceFingerprints:
-        overrides.fingerprints ?? ["source-a", "source-b"],
-      frozenSource: overrides.frozenSource ?? 321,
-      discoveryBlocks: 300,
-    });
-    assert(
-      deployTrust().trusted,
-      "deploy trust must accept the exact landed-window boundary",
-    );
-    assert(
-      deployTrust({ frozenSource: 322 }).reason ===
-        "landed_window_not_bridged",
-      "deploy trust must reject one block beyond the landed-window boundary",
-    );
-    assert(
-      deployTrust({ fingerprints: ["source-a", "source-c"] }).reason ===
-        "registry_source_mismatch",
-      "deploy trust must reject a changed production registry fingerprint",
-    );
-    assert(
-      deployTrust({
-        canonicalSource: {
-          ...canonicalCoverageSource,
-          hash: `0x${"56".repeat(32)}`,
-        },
-      }).reason === "canonical_source_mismatch",
-      "deploy trust must reject an orphaned canonical source hash",
-    );
-    assert(
-      deployTrust({
-        canonicalSource: {
-          ...canonicalCoverageSource,
-          stateRoot: `0x${"78".repeat(32)}`,
-        },
-      }).reason === "canonical_source_mismatch",
-      "deploy trust must reject an orphaned canonical source state root",
-    );
-    console.log("[pool-universe] deploy/runtime trust parity: PASS");
     writeFileSync(coverageFile, JSON.stringify({
       schemaVersion: 3,
       fromBlock: 10,

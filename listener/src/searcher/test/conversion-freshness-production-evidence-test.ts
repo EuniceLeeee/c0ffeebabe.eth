@@ -10,8 +10,10 @@ import type { AdapterRuntimeSnapshot } from "../adapter-runtime-coordinator.js";
 import { FlashFundingSnapshot } from "../adapter-runtime-coordinator.js";
 import {
   pinProviderCallsToBlock,
+} from "../pool-discovery-read-backend.js";
+import {
   POOL_UNIVERSE_BUILD_MANIFEST_PROFILE,
-} from "../build-active-pool-universe.js";
+} from "../pool-universe.js";
 import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";

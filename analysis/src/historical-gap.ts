@@ -1147,7 +1147,6 @@ const ALWAYS_LIVE_DISTRIBUTION_FILES = new Set([
   "listener/src/searcher/detector/victim-source-quality.ts",
   "listener/src/searcher/execution/inclusion-tracker.ts",
   "listener/src/searcher/execution/submission-coordinator.ts",
-  "listener/src/searcher/build-active-pool-universe.ts",
   "listener/src/searcher/planner/planner.ts",
   "listener/src/searcher/planner/token-graph.ts",
   "listener/src/searcher/pool-universe.ts",

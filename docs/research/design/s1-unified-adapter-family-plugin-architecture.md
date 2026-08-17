@@ -3677,6 +3677,38 @@ deploy-trust、cron、auto-close 等 standalone legacy 文件仍待后续物理�
 下一批继续物理删除上述 standalone legacy authority 与 cron/AB deploy 调用；在 repo-wide 扫描、
 真实 runtime consumer authority 和 live provenance 全部关闭前，不部署、不宣称 legacy=0。
 
+**2026-08-18 standalone universe authority 第十九批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是实际部署、F5、F9 或 production cutover）：**
+
+- 已物理删除 `build-active-pool-universe.ts`、`pool-universe-deploy-trust.ts`、
+  `auto-close-router-gap.ts`、`reindex-pool-universe-cron.sh` 及其专属旧测试/CLI/package 入口；
+  `tsconfig.live.json` 也不再把 offline builder 当 live entry。searcher 启动、deploy、cron、router
+  工具和 A/B wrapper 均没有第二个 universe writer；
+- 旧 builder 内仍有复用价值的 canonical block-tag transport、split-horizon log transport 与 mature
+  activity 纯选择器已分别移到 `pool-discovery-read-backend.ts`、`pool-activity-selection.ts`。这些
+  helper 不引用 catalog/registry，不扫描、不准入、不推进 coverage/cursor，也不发布 Graph；相关
+  fixture 继续验证 block hash pin、历史 provider 边界与选择纯函数，不能被重新升级成 universe
+  authority；
+- historical tx149 replay 删除了“缺 universe 就临时运行旧 builder”的 fallback；调用者必须显式
+  提供已冻结 universe，否则 fail closed。V4 fixture 同步删除已被 strict ready Graph 取代的
+  `buildTokenGraph(raw universe)` 断言，仅保留 PoolKey materialization、history backfill、retry 与
+  round-trip 合同；这不是降低 Graph 验收，正式 Graph 原子性仍由 strict startup/ready 合同与实际
+  live provenance 验收；
+- A/B wrapper 现在只接受 `AB_INPUT_MODE=shared`：B 的 nomination universe 按字节复制 A；同时从
+  champion process env 解析绝对 `SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH`，复制为 B 独立 checkpoint
+  文件，再把独立路径唯一写入 B process env。A/B checkpoint 路径相同立即 fail closed；两份 ready
+  checkpoint 在 B ready 后分别记录 path+hash 并持续校验 drift。wrapper 不再在 Reth 上额外跑
+  900 秒 builder，也不会让两个进程共享同一 CAS 文件；
+- 同步通过 pool-universe 15/15、V4 materialization 15/15、landed discovery 23/23、conversion
+  production evidence、runtime defaults、F9 receipt、A/B 63/63、bash syntax 与 listener 完整
+  `build`。repo-wide central legacy scan 现在只剩 `active-pool-discovery.ts` 的
+  `PRODUCTION_ADAPTER_FAMILIES`/production-registry import；`main.ts` closure 仍为 legacy hit=0、
+  unresolved import=0、central Family branch=0。
+
+下一批物理删除最后的 `active-pool-discovery.ts` 及测试侧工具 import，并继续清理 analysis/evidence
+对 `production-registry` facade 的依赖。完成前继续禁止部署，不能把 repo-wide F9 的剩余一处误报
+为 legacy=0。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

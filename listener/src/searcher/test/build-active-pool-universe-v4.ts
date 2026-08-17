@@ -15,7 +15,7 @@ import {
   type LandedPoolDiscoveryLog as RawLog,
 } from "../venues/landed-pool-discovery.js";
 import { loadPoolUniverse, type PoolUniverseEntry } from "../pool-universe.js";
-import { buildTokenGraph, type TokenQueryBackend, v4PoolId } from "../planner/token-graph.js";
+import { v4PoolId } from "../planner/token-graph.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
 import { univ4Adapter } from "../venues/swaps/univ4.js";
@@ -23,7 +23,7 @@ import { UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK } from "../venues/swaps/univ4-comm
 import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
 import {
   createSplitHorizonPoolDiscoveryBackend,
-} from "../build-active-pool-universe.js";
+} from "../pool-discovery-read-backend.js";
 
 const initIface = new ethers.Interface([
   "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
@@ -777,38 +777,11 @@ async function main(): Promise<void> {
     assertInlineV4Fields(roundTripped);
     console.log("[pool-universe-v4] loadPoolUniverse round-trip: PASS");
 
-    let backendCalls = 0;
-    const backend: TokenQueryBackend = {
-      async call() {
-        backendCalls++;
-        throw new Error("unexpected backend.call");
-      },
-      async getLogs() {
-        backendCalls++;
-        throw new Error("unexpected backend.getLogs");
-      },
-    };
-    const edges = await buildTokenGraph(backend, [roundTripped]);
-    assert(backendCalls === 0, `inline v4 PoolKey should avoid backend calls, got ${backendCalls}`);
-    assert(edges.length === 2, `expected 2 directed v4 edges, got ${edges.length}`);
-    assert(edges.every((edge) => edge.adapterId === "univ4-unlock"), "edges should use univ4 adapter");
-    assert(edges.every((edge) => edge.target === poolManager), "edges should target PoolManager");
-    assert(edges.every((edge) => edge.poolId === aboveA.poolId), "edges should carry canonical poolId");
-    assert(edges.every((edge) => edge.v4PoolKey !== undefined), "edges should carry v4 PoolKey");
-    assert(
-      edges.some((edge) => edge.tokenIn === aboveA.currency0 && edge.tokenOut === aboveA.currency1),
-      "forward v4 edge should use currency0 -> currency1",
-    );
-    assert(
-      edges.some((edge) => edge.tokenIn === aboveA.currency1 && edge.tokenOut === aboveA.currency0),
-      "reverse v4 edge should use currency1 -> currency0",
-    );
-    console.log("[pool-universe-v4] buildTokenGraph inline PoolKey path: PASS");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe-v4 PASS (16/16)");
+  console.log("pool-universe-v4 PASS (15/15)");
 }
 
 main().catch((err) => {
