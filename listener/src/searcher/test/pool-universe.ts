@@ -534,8 +534,8 @@ async function main(): Promise<void> {
     assert(forced.some((pool) => pool.address === belowCut), "forceInclude should promote below-cut pool");
     assert(forced.some((pool) => pool.address === scoreless), "forceInclude should promote scoreless pool");
     assert(
-      warnings.every((line) => !line.includes("forceInclude skipped univ4 entry")),
-      "non-v4 forceInclude should not warn about v4 entries",
+      warnings.every((line) => !line.includes("forceInclude skipped pool-key entry")),
+      "non-pool-key forceInclude should not warn about pool-key entries",
     );
     console.log("[pool-universe] forceInclude minScore-bypass non-v4: PASS");
 
@@ -602,8 +602,8 @@ async function main(): Promise<void> {
       "forceInclude should promote v4 entry by poolId",
     );
     assert(
-      v4Warnings.every((line) => !line.includes("forceInclude skipped univ4 entry")),
-      "v4 poolId forceInclude should not warn about address ambiguity",
+      v4Warnings.every((line) => !line.includes("forceInclude skipped pool-key entry")),
+      "pool-key forceInclude should not warn about address ambiguity",
     );
     console.log("[pool-universe] forceInclude v4 poolId admission/dedup: PASS");
 
@@ -624,8 +624,8 @@ async function main(): Promise<void> {
       "v4 address forceInclude should skip ambiguous PoolManager identity",
     );
     assert(
-      addressOnlyWarnings.some((line) => line.includes("forceInclude skipped univ4 entry")),
-      "v4 address forceInclude should warn about ambiguity",
+      addressOnlyWarnings.some((line) => line.includes("forceInclude skipped pool-key entry")),
+      "address-only forceInclude should warn about pool-key ambiguity",
     );
     console.log("[pool-universe] forceInclude v4 address ambiguity skip: PASS");
   } finally {

@@ -280,13 +280,14 @@ export function inferAutoClosePoolIds(reportPath: string): AutoCloseRunnerResult
   const closedV4PoolIds: string[] = [];
   const forceIncludeAdded: string[] = [];
   for (const venue of missingTouchedVenues(report)) {
-    const protocol = venue.protocol;
     const id = venue.id;
-    if (typeof protocol !== "string" || typeof id !== "string") continue;
-    if (protocol === "univ4" && BYTES32_RE.test(id)) {
+    if (typeof id !== "string") continue;
+    // Data-driven venue identity: bytes32 ids are pool-key venues, anything
+    // else is an address venue. No protocol/family name is consulted.
+    if (BYTES32_RE.test(id)) {
       closedV4PoolIds.push(id.toLowerCase());
       forceIncludeAdded.push(id.toLowerCase());
-    } else if ((protocol === "univ2" || protocol === "univ3") && ADDRESS_RE.test(id)) {
+    } else if (ADDRESS_RE.test(id)) {
       forceIncludeAdded.push(id);
     }
   }

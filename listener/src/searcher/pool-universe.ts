@@ -419,7 +419,6 @@ function appendSelected(
 
 function impliedSpreadFee(pool: PoolUniverseEntry): number {
   if (typeof pool.fee === "number") return pool.fee;
-  if (pool.adapter === "univ2") return 3000;
   return 0;
 }
 
@@ -462,13 +461,13 @@ function appendForceIncluded(
       throw new Error(`forceInclude entry must be an address or bytes32 poolId: ${item}`);
     }
   }
-  // Preserve the historical address-level behavior for every unbound
-  // non-V4 row. Only explicitly binding-aware rows opt into multi-instance
-  // force inclusion at one physical address.
+  // Address-level identity applies to every row without a pool-key id or an
+  // explicit route binding; rows carrying either opt into multi-instance
+  // force inclusion at one physical address. No family name is consulted.
   const seenAddrs = new Set(
     selected
       .filter((pool) =>
-        pool.adapter !== "univ4" && pool.routeBinding === undefined
+        pool.poolId === undefined && pool.routeBinding === undefined
       )
       .map((pool) => pool.address.toLowerCase()),
   );
@@ -477,29 +476,29 @@ function appendForceIncluded(
       .filter((pool) => pool.routeBinding !== undefined)
       .map(poolRegistryKey),
   );
-  const seenV4PoolIds = new Set(
+  const seenPoolIds = new Set(
     selected
-      .filter((pool) => pool.adapter === "univ4" && typeof pool.poolId === "string")
+      .filter((pool) => typeof pool.poolId === "string")
       .map((pool) => pool.poolId!.toLowerCase()),
   );
-  const warnedV4 = new Set<string>();
+  const warnedPoolId = new Set<string>();
   const out = [...selected];
   for (const pool of allPools) {
     const addressKey = pool.address.toLowerCase();
-    if (pool.adapter === "univ4") {
-      const poolId = pool.poolId?.toLowerCase();
+    const poolId = pool.poolId?.toLowerCase();
+    if (poolId !== undefined) {
       if (poolId && wantedPoolIds.has(poolId)) {
-        if (seenV4PoolIds.has(poolId)) continue;
+        if (seenPoolIds.has(poolId)) continue;
         out.push(pool);
-        seenV4PoolIds.add(poolId);
+        seenPoolIds.add(poolId);
         continue;
       }
-      if (wantedAddrs.has(addressKey) && !warnedV4.has(addressKey)) {
+      if (wantedAddrs.has(addressKey) && !warnedPoolId.has(addressKey)) {
         console.warn(
-          `[pool-universe] forceInclude skipped univ4 entry ${pool.address}: ` +
-            "address-only identity is ambiguous for the v4 PoolManager",
+          `[pool-universe] forceInclude skipped pool-key entry ${pool.address}: ` +
+            "address-only identity is ambiguous for a pool-key venue",
         );
-        warnedV4.add(addressKey);
+        warnedPoolId.add(addressKey);
       }
       continue;
     }
@@ -527,7 +526,6 @@ function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry 
   const score = numberField(raw.score, `${field}.score`) ??
     numberField(raw.swapCount30d, `${field}.swapCount30d`) ??
     0;
-  const isV4 = adapter === "univ4";
   return {
     address: checksumField(raw.address ?? raw.pool, `${field}.address`),
     adapter,
@@ -540,12 +538,8 @@ function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry 
       `${field}.routeBinding`,
     ),
     score,
-    fixedTokenIn: isV4
-      ? optionalCurrency(raw.fixedTokenIn, `${field}.fixedTokenIn`)
-      : optionalAddress(raw.fixedTokenIn, `${field}.fixedTokenIn`),
-    fixedTokenOut: isV4
-      ? optionalCurrency(raw.fixedTokenOut, `${field}.fixedTokenOut`)
-      : optionalAddress(raw.fixedTokenOut, `${field}.fixedTokenOut`),
+    fixedTokenIn: optionalCurrency(raw.fixedTokenIn, `${field}.fixedTokenIn`),
+    fixedTokenOut: optionalCurrency(raw.fixedTokenOut, `${field}.fixedTokenOut`),
     fixedSlotKind: parseFixedSlotKind(raw.fixedSlotKind, `${field}.fixedSlotKind`),
     token0: optionalAddress(raw.token0, `${field}.token0`),
     token1: optionalAddress(raw.token1, `${field}.token1`),
