@@ -12,6 +12,13 @@ import { reissuePreparedInstanceRouteHandles } from
   "./venues/adapter-family-runtime.js";
 import { attestPoolIdentitiesStrict } from "./strict-identity-attestation.js";
 import { createMinimalIdentityRuntime } from "./strict-identity-attestation.js";
+import { createStrictCentralAdapterRuntime } from
+  "./strict-central-adapter-runtime.js";
+import { RevmSimClient } from "./revm-sim-client.js";
+import { createRevmStrictSimulationTransport } from
+  "./revm-strict-simulation-transport.js";
+import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
+  "./venues/production-verified-actors.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type { CanonicalSource } from
@@ -372,7 +379,30 @@ export function createProbeWiring(
   }
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const strictProvider = providerAdapter(provider);
-  const runtime = createMinimalIdentityRuntime(strictProvider);
+  // Simulation-dependent families (erc4626/silo/fluid-vault/self-burn) keep
+  // their identity fail-closed under the minimal runtime; when the revm
+  // simulator binary + executor are available (production), use the full
+  // runtime so those families can verify.
+  const revmBin = process.env.SEARCHER_REVM_SIM_BIN;
+  const executor = process.env.BOTVM_ADDRESS;
+  const runtime = revmBin !== undefined && revmBin.trim() !== "" &&
+      executor !== undefined && executor.trim() !== ""
+    ? createStrictCentralAdapterRuntime({
+        provider: strictProvider as never,
+        generationFence: Object.freeze({ assertCurrent() {} }),
+        verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+        simulator: createRevmStrictSimulationTransport({
+          client: new RevmSimClient({
+            executablePath: revmBin,
+            timeoutMs: Number(
+              process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000",
+            ),
+          }),
+          executor,
+          verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+        }),
+      })
+    : createMinimalIdentityRuntime(strictProvider);
   const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
 
   type AttestOnce = NonNullable<UniverseRebuildProbeWiring["attestFamilyInstanceOnce"]>;
