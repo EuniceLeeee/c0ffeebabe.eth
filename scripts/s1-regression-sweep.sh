@@ -32,6 +32,7 @@ run_test systemic-live-gate npm run searcher:systemic-live-gate
 run_test s1-cutover-readiness npm run searcher:s1-cutover-readiness
 run_test production-family-startup-manifest npm run searcher:production-family-startup-manifest
 run_test strict-catalog-consumer-diagnostic npm run searcher:strict-catalog-consumer-diagnostic
+run_test universe-rebuild-checkpoint npm run searcher:universe-rebuild-checkpoint
 
 finished=$(date -u +%s)
 sha="$(git -C "${impl_dir}" rev-parse HEAD)"

@@ -1,0 +1,540 @@
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import type { CanonicalSource } from
+  "./venues/adapter-request-program.js";
+
+/**
+ * Durable universe-rebuild checkpoint (adversarial audit §1-§4). Three
+ * durable states only:
+ * - verifiedMemos: cross-rebuild reusable Family + InstanceKey proofs;
+ * - inProgressRun: the single unfinished rebuild at one fixed cutoff;
+ * - readyGeneration: the last complete usable Graph/catalog snapshot.
+ * No long-term raw tx inbox, no recovery from progress counters, no
+ * permanent candidate journal.
+ */
+
+export interface DurableVerifiedMemo {
+  readonly familyCandidateKey: string;
+  readonly familyInstanceKey: string;
+  readonly familyId: string;
+  readonly candidateKey: string;
+  readonly instanceKey: string;
+  /** Static candidate identity only; no swapCount/lastSwapBlock etc. */
+  readonly candidateFingerprint: string;
+  /** Per-Family definition hash; never the global catalog hash. */
+  readonly familyDefinitionHash: string;
+  readonly validity: {
+    readonly policy: "immutable-code" | "dependency-proof";
+    readonly authorityFingerprint: string;
+    readonly proofSource: { readonly number: number; readonly hash: string };
+  };
+  readonly verifiedIdentity: unknown;
+  readonly compiledDescriptor: unknown;
+  readonly staticProjection: unknown;
+  readonly evidenceFingerprint: string;
+  readonly memoFingerprint: string;
+}
+
+export interface RetryableAttempt {
+  readonly status: "retryable";
+  readonly familyCandidateKey: string;
+  readonly familyId: string;
+  /** Enough to retry one instance; never the full raw tx. */
+  readonly candidateSnapshot: unknown;
+  readonly evidenceRef?: {
+    readonly blockNumber: number;
+    readonly blockHash: string;
+    readonly txHash?: string;
+    readonly logIndex?: number;
+  };
+  readonly stage:
+    | "nomination"
+    | "identity"
+    | "materialization"
+    | "projection";
+  readonly failureCode: "rpc" | "deadline" | "aborted" | "resource-limited";
+  readonly requestFingerprint?: string;
+  readonly reasonCode: string;
+  readonly attemptCount: number;
+  readonly lastAttemptAt: string;
+}
+
+export type RunOutcome =
+  | {
+    readonly status: "verified";
+    readonly familyCandidateKey: string;
+    readonly familyInstanceKey: string;
+    readonly memoFingerprint: string;
+  }
+  | {
+    readonly status: "terminal-rejected";
+    readonly familyCandidateKey: string;
+    readonly reasonCode: string;
+    readonly evidenceFingerprint: string;
+  }
+  | RetryableAttempt;
+
+export interface InProgressUniverseRun {
+  readonly runId: string;
+  readonly cutoff: CanonicalSource;
+  readonly fromBlock: number;
+  readonly universeHash: string;
+  readonly candidateSetHash: string;
+  readonly candidateCount: number;
+  /** Swap range fully scanned; never advances appliedThrough by itself. */
+  readonly observedThrough: { readonly number: number; readonly hash: string };
+  readonly outcomesByCandidateKey: Readonly<Record<string, RunOutcome>>;
+}
+
+export interface ReadyUniverseGeneration {
+  readonly generation: number;
+  readonly cutoff: CanonicalSource;
+  readonly universeHash: string;
+  readonly catalogHash: string;
+  readonly activeInstanceKeys: readonly string[];
+  readonly publicationSetHash: string;
+  readonly sourceCoverage: readonly {
+    readonly familyId: string;
+    readonly sourceId: string;
+    readonly completeThroughBlock: number;
+    readonly completeThroughHash: string | null;
+  }[];
+  readonly graphSnapshot: unknown;
+  readonly graphHash: string;
+}
+
+export interface StartupCheckpointEnvelope {
+  readonly revision: number;
+  readonly verifiedMemos: Readonly<Record<string, DurableVerifiedMemo>>;
+  readonly inProgressRun: InProgressUniverseRun | null;
+  readonly readyGeneration: ReadyUniverseGeneration | null;
+  readonly checkpointFingerprint: string;
+}
+
+/** Deterministic canonical JSON (sorted keys) for hashing. */
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return "[" + value.map((item) => canonicalJson(item)).join(",") + "]";
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return "{" + keys.map((key) =>
+    JSON.stringify(key) + ":" + canonicalJson(record[key])
+  ).join(",") + "}";
+}
+
+export function envelopeFingerprint(
+  envelope: Omit<StartupCheckpointEnvelope, "checkpointFingerprint">,
+): string {
+  return createHash("sha256")
+    .update(canonicalJson({
+      revision: envelope.revision,
+      verifiedMemos: envelope.verifiedMemos,
+      inProgressRun: envelope.inProgressRun,
+      readyGeneration: envelope.readyGeneration,
+    }))
+    .digest("hex");
+}
+
+function parseEnvelope(raw: string): StartupCheckpointEnvelope {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(
+      "universe rebuild checkpoint is not valid JSON: " +
+        (error instanceof Error ? error.message : String(error)),
+    );
+  }
+  const record = parsed as Record<string, unknown>;
+  if (typeof record !== "object" || record === null) {
+    throw new Error("universe rebuild checkpoint must be an object");
+  }
+  if (!Number.isSafeInteger(record.revision) || Number(record.revision) < 1) {
+    throw new Error("universe rebuild checkpoint revision is invalid");
+  }
+  if (
+    typeof record.verifiedMemos !== "object" ||
+    record.verifiedMemos === null ||
+    typeof record.checkpointFingerprint !== "string" ||
+    !/^[0-9a-f]{64}$/.test(record.checkpointFingerprint)
+  ) {
+    throw new Error("universe rebuild checkpoint fields are invalid");
+  }
+  const envelope = record as unknown as StartupCheckpointEnvelope;
+  if (
+    envelopeFingerprint({
+      revision: envelope.revision,
+      verifiedMemos: envelope.verifiedMemos,
+      inProgressRun: envelope.inProgressRun ?? null,
+      readyGeneration: envelope.readyGeneration ?? null,
+    }) !== envelope.checkpointFingerprint
+  ) {
+    throw new Error("universe rebuild checkpoint fingerprint mismatch");
+  }
+  return Object.freeze(envelope);
+}
+
+/**
+ * Single-writer file-backed CAS store. Every mutation is read-verify-apply
+ * with an expected revision, temp-file + fsync + atomic rename + directory
+ * fsync, and a sidecar lock file (matching the discovery checkpoint
+ * backend). Corruption, tampering or a CAS conflict fail closed (throw);
+ * a partial write can never become the incumbent envelope.
+ */
+export class UniverseRebuildCheckpointStore {
+  readonly #path: string;
+  readonly #lockPath: string;
+  #mutex: Promise<void> = Promise.resolve();
+
+  constructor(input: { readonly path: string }) {
+    this.#path = input.path;
+    this.#lockPath = input.path + ".lock";
+  }
+
+  async load(): Promise<StartupCheckpointEnvelope | null> {
+    let raw: string;
+    try {
+      raw = await readFile(this.#path, "utf8");
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code)
+        : "";
+      if (code === "ENOENT") return null;
+      throw error;
+    }
+    if (raw.trim().length === 0) return null;
+    return parseEnvelope(raw);
+  }
+
+  #serialize(envelope: StartupCheckpointEnvelope): string {
+    return JSON.stringify(envelope, null, 2) + "\n";
+  }
+
+  #withLock<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.#mutex.then(fn, fn);
+    this.#mutex = next.then(() => undefined, () => undefined);
+    return next;
+  }
+
+  async #cas(
+    expectedRevision: number | undefined,
+    mutate: (current: StartupCheckpointEnvelope | null) => StartupCheckpointEnvelope,
+  ): Promise<StartupCheckpointEnvelope> {
+    return this.#withLock(async () => {
+      await mkdir(dirname(this.#path), { recursive: true, mode: 0o700 });
+      try {
+        await writeFile(this.#lockPath, String(process.pid) + "\n", {
+          flag: "wx",
+          mode: 0o600,
+        });
+      } catch (error) {
+        const code = error && typeof error === "object" && "code" in error
+          ? String((error as { code?: unknown }).code)
+          : "";
+        if (code === "EEXIST") {
+          throw new Error(
+            "universe rebuild checkpoint CAS lock is held by another writer",
+          );
+        }
+        throw error;
+      }
+      try {
+        const current = await this.load();
+        if (
+          expectedRevision !== undefined &&
+          (current?.revision ?? 0) !== expectedRevision
+        ) {
+          throw new Error(
+            "universe rebuild checkpoint CAS conflict: revision " +
+              (current?.revision ?? 0) + " != expected " + expectedRevision,
+          );
+        }
+        const next = mutate(current);
+        const sealed = Object.freeze({
+          ...next,
+          checkpointFingerprint: envelopeFingerprint({
+            revision: next.revision,
+            verifiedMemos: next.verifiedMemos,
+            inProgressRun: next.inProgressRun,
+            readyGeneration: next.readyGeneration,
+          }),
+        });
+        const serialized = this.#serialize(sealed);
+        const tmp = this.#path + ".tmp." + process.pid;
+        await writeFile(tmp, serialized, { mode: 0o600 });
+        const fs = await import("node:fs/promises");
+        const file = await fs.open(tmp, "r");
+        try {
+          await file.sync();
+        } finally {
+          await file.close();
+        }
+        await rename(tmp, this.#path);
+        await fs.open(dirname(this.#path), "r").then(async (dir) => {
+          try {
+            await dir.sync();
+          } finally {
+            await dir.close();
+          }
+        }).catch(() => {
+          // Directory fsync is best-effort on platforms that refuse it.
+        });
+        return next;
+      } finally {
+        await import("node:fs/promises").then((fs) =>
+          fs.unlink(this.#lockPath).catch(() => undefined)
+        );
+      }
+    });
+  }
+
+  /** Append a batch of run outcomes (single CAS; never advances ready). */
+  async casMergeRunOutcomes(
+    runId: string,
+    outcomes: readonly RunOutcome[],
+  ): Promise<StartupCheckpointEnvelope> {
+    if (outcomes.length === 0) {
+      throw new Error("universe rebuild checkpoint: empty outcome batch");
+    }
+    return this.#cas(undefined, (current) => {
+      const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
+      const run = base.inProgressRun;
+      if (run === null || run.runId !== runId) {
+        throw new Error(
+          "universe rebuild checkpoint: no matching in-progress run " + runId,
+        );
+      }
+      const merged: Record<string, RunOutcome> = {
+        ...run.outcomesByCandidateKey,
+      };
+      for (const outcome of outcomes) {
+        merged[outcome.familyCandidateKey] = outcome;
+      }
+      return Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        inProgressRun: Object.freeze({
+          ...run,
+          outcomesByCandidateKey: Object.freeze(merged),
+        }),
+      });
+    });
+  }
+
+  /** Replace one retryable outcome, guarded by the attempt count. */
+  async casReplaceRunOutcome(input: {
+    readonly runId: string;
+    readonly familyCandidateKey: string;
+    readonly expectedAttemptCount: number;
+    readonly nextOutcome: RunOutcome;
+  }): Promise<StartupCheckpointEnvelope> {
+    return this.#cas(undefined, (current) => {
+      const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
+      const run = base.inProgressRun;
+      if (run === null || run.runId !== input.runId) {
+        throw new Error(
+          "universe rebuild checkpoint: no matching in-progress run " +
+            input.runId,
+        );
+      }
+      const old = run.outcomesByCandidateKey[input.familyCandidateKey];
+      if (
+        old === undefined ||
+        old.status !== "retryable" ||
+        old.attemptCount !== input.expectedAttemptCount
+      ) {
+        throw new Error(
+          "universe rebuild checkpoint: probe CAS conflict for " +
+            input.familyCandidateKey,
+        );
+      }
+      return Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        inProgressRun: Object.freeze({
+          ...run,
+          outcomesByCandidateKey: Object.freeze({
+            ...run.outcomesByCandidateKey,
+            [input.familyCandidateKey]: input.nextOutcome,
+          }),
+        }),
+      });
+    });
+  }
+
+  /** Atomically promote the completed run to the ready generation. */
+  async casCommitReadyGeneration(input: {
+    readonly expectedRevision: number;
+    readonly runId: string;
+    readonly ready: ReadyUniverseGeneration;
+  }): Promise<StartupCheckpointEnvelope> {
+    return this.#cas(input.expectedRevision, (current) => {
+      const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
+      const run = base.inProgressRun;
+      if (run === null || run.runId !== input.runId) {
+        throw new Error(
+          "universe rebuild checkpoint: no matching in-progress run " +
+            input.runId,
+        );
+      }
+      return Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        inProgressRun: null,
+        readyGeneration: Object.freeze(input.ready),
+      });
+    });
+  }
+
+  /** Create the fixed-cutoff run or return the existing one for it. */
+  async beginOrResumeRun(input: {
+    readonly expectedRevision: number;
+    readonly runId: string;
+    readonly cutoff: CanonicalSource;
+    readonly fromBlock: number;
+    readonly universeHash: string;
+    readonly candidateSetHash: string;
+    readonly candidateCount: number;
+    readonly observedThrough: { readonly number: number; readonly hash: string };
+  }): Promise<StartupCheckpointEnvelope> {
+    return this.#cas(input.expectedRevision, (current) => {
+      const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
+      const existing = base.inProgressRun;
+      if (existing !== null) {
+        if (existing.runId !== input.runId) {
+          throw new Error(
+            "universe rebuild checkpoint: another run is in progress (" +
+              existing.runId + ")",
+          );
+        }
+        return base;
+      }
+      return Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        inProgressRun: Object.freeze({
+          runId: input.runId,
+          cutoff: Object.freeze({ ...input.cutoff }),
+          fromBlock: input.fromBlock,
+          universeHash: input.universeHash,
+          candidateSetHash: input.candidateSetHash,
+          candidateCount: input.candidateCount,
+          observedThrough: Object.freeze({ ...input.observedThrough }),
+          outcomesByCandidateKey: Object.freeze({}),
+        }),
+      });
+    });
+  }
+
+  /** Add/refresh one durable verified memo. */
+  async casUpsertMemo(
+    memo: DurableVerifiedMemo,
+  ): Promise<StartupCheckpointEnvelope> {
+    return this.#cas(undefined, (current) => {
+      const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
+      return Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        verifiedMemos: Object.freeze({
+          ...base.verifiedMemos,
+          [memo.familyCandidateKey]: Object.freeze(memo),
+        }),
+      });
+    });
+  }
+
+  /** Seal a fresh envelope for a brand-new checkpoint file. */
+  static emptyEnvelope(): StartupCheckpointEnvelope {
+    const base = Object.freeze({
+      revision: 0,
+      verifiedMemos: Object.freeze({}),
+      inProgressRun: null,
+      readyGeneration: null,
+    });
+    return Object.freeze({
+      ...base,
+      revision: 1,
+      checkpointFingerprint: envelopeFingerprint({
+        ...base,
+        revision: 1,
+      }),
+    });
+  }
+}
+
+/**
+ * Serial durable outcome writer (audit §4): workers hand completed outcomes
+ * here; batches flush every N outcomes or after a max interval, and a
+ * signal hook flushes pending outcomes before exit. A crash loses at most
+ * the last batch; the store CAS never advances the ready generation.
+ */
+export class AttestationCheckpointWriter {
+  readonly #store: UniverseRebuildCheckpointStore;
+  readonly #runId: string;
+  readonly #batchSize: number;
+  readonly #maxIntervalMs: number;
+  #pending: RunOutcome[] = [];
+  #flushing: Promise<void> | null = null;
+  #timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(input: {
+    readonly store: UniverseRebuildCheckpointStore;
+    readonly runId: string;
+    readonly batchSize?: number;
+    readonly maxIntervalMs?: number;
+  }) {
+    this.#store = input.store;
+    this.#runId = input.runId;
+    this.#batchSize = input.batchSize ?? 25;
+    this.#maxIntervalMs = input.maxIntervalMs ?? 5_000;
+  }
+
+  record(outcome: RunOutcome): void {
+    this.#pending.push(outcome);
+    if (this.#pending.length >= this.#batchSize) {
+      void this.flush();
+      return;
+    }
+    if (this.#timer === null) {
+      this.#timer = setTimeout(() => {
+        this.#timer = null;
+        void this.flush();
+      }, this.#maxIntervalMs);
+      if (typeof this.#timer.unref === "function") this.#timer.unref();
+    }
+  }
+
+  async flush(): Promise<void> {
+    if (this.#flushing !== null) return this.#flushing;
+    if (this.#pending.length === 0) return;
+    const batch = this.#pending.splice(0);
+    if (this.#timer !== null) {
+      clearTimeout(this.#timer);
+      this.#timer = null;
+    }
+    this.#flushing = this.#store.casMergeRunOutcomes(this.#runId, batch)
+      .then(() => undefined)
+      .finally(() => {
+        this.#flushing = null;
+      });
+    return this.#flushing;
+  }
+
+  /** Install SIGTERM/SIGINT flush (best-effort; kill -9 loses one batch). */
+  installSignalFlush(): () => void {
+    const handler = (): void => {
+      void this.flush();
+    };
+    process.on("SIGTERM", handler);
+    process.on("SIGINT", handler);
+    return () => {
+      process.off("SIGTERM", handler);
+      process.off("SIGINT", handler);
+    };
+  }
+}
