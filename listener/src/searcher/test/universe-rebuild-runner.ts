@@ -27,7 +27,10 @@ interface Fixture {
   readonly input: RebuildUniverseInput;
 }
 
-function makeFixture(dir: string): Fixture {
+function makeFixture(
+  dir: string,
+  overrides?: Partial<Pick<RebuildUniverseInput, "runId" | "scanSwapWindow">>,
+): Fixture {
   const store = new UniverseRebuildCheckpointStore({
     path: join(dir, "checkpoint.json"),
   });
@@ -110,6 +113,7 @@ function makeFixture(dir: string): Fixture {
     buildGraphSnapshot: () => Object.freeze({ edges: Object.freeze([]) }),
     buildCoverage: () => Object.freeze([]),
     assertCanonicalHead: async () => undefined,
+    ...overrides,
   };
   return { store, attestCalls, failKeys, input };
 }
@@ -189,14 +193,15 @@ async function main(): Promise<void> {
     assert.equal(f.attestCalls.get("a"), 1, "no re-attestation after ready");
 
     // B: a NEW run reuses verified memos across rebuilds (order independent).
-    const f2 = makeFixture(dir);
-    f2.input.runId = "run-2";
     // Shuffled candidate order; scan returns [b, a] (order changed).
-    f2.input.scanSwapWindow = async () =>
-      Object.freeze([
-        Object.freeze({ id: "b", block: SOURCE.number }),
-        Object.freeze({ id: "a", block: SOURCE.number }),
-      ]);
+    const f2 = makeFixture(dir, {
+      runId: "run-2",
+      scanSwapWindow: async () =>
+        Object.freeze([
+          Object.freeze({ id: "b", block: SOURCE.number }),
+          Object.freeze({ id: "a", block: SOURCE.number }),
+        ]),
+    });
     const ready2 = await rebuildUniverse(f2.input);
     assert.equal(ready2.generation, 2);
     assert.equal(
