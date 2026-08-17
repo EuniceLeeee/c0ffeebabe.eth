@@ -5552,5 +5552,30 @@ coordinator）只有在 readyGeneration 存在时才创建：
   protocol-backfill 起点 = max(持久化 cursor, baseline)（coordinator
   `observationScanFrom`）；observed/applied cursor 永不回卷到 cutoff 之前。
 - 未配置时行为不变（当前 startup 路径仍是默认）。
+### 22.8 切换部署 runbook（exact-SHA systemd 部署，审计 §部署）
+前置核对（每次部署前）：remote 领先先同步（`git -C /opt/MEV fetch origin` +
+确认 `origin/codex/s1-unified-adapter-architecture-impl` == 本地 HEAD）；
+无 searcher/build 进程（`ps` 核对）；pool-universe cron/timer 精确暂停并保留
+恢复配置（记录原 crontab/timer 定义）；reth 健康（`eth_blockNumber`）；
+锁文件空闲（`lslocks`）。
+
+切换序列：
+1. （一次性）新 universe 重建：`searcher:universe-rebuild-startup
+   --checkpoint /opt/MEV-runtime/universe-rebuild-checkpoint.json`
+   —— fixed cutoff + 逐实例持久化；retryable 用
+   `searcher:universe-rebuild-probe` 关闭；全部关闭后 READY。
+2. `sudo env SEARCHER_DEPLOY_REF=origin/codex/s1-unified-adapter-architecture-impl
+   SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH=/opt/MEV-runtime/universe-rebuild-checkpoint.json
+   bash scripts/deploy-node.sh`（exact-SHA + systemd + SEARCHER_RUNTIME_COMMIT；
+   禁止 nohup；dry-run 保持）。
+3. 部署后验证（F5）：`strict catalog startup publisher` /
+   `strict startup edges merged into runtime graph` /
+   `universe rebuild ready generation=... producer baseline freeze` /
+   `expected=`/`priced=` 增长；systemd 重启后 checkpoint 复用（restore
+   路径）+ 仅验证差集；连续 100/100。
+
+未配置 `SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH` 时行为不变（当前
+startup 路径为默认），用于回退。
+
 
 
