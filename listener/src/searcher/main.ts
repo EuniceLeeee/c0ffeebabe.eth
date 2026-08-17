@@ -3150,6 +3150,18 @@ async function main(): Promise<void> {
     protocolDiscoveryCoverage,
     startupActivePoolDiscovery,
     startupDexSourceBlockHash,
+    // F8/audit P0-e: the first protocol-backfill's observed-event window is
+    // bound to the universe build window (manifest fromBlock..toBlock), so
+    // pools whose swap logs predate the incremental cursor still get
+    // observed exactly once. The scanner asserts the toBlock hash itself.
+    observedEventLookbackWindow:
+      poolUniverseCoverage.fromBlock === null ||
+        poolUniverseCoverage.toBlock === null
+        ? null
+        : Object.freeze({
+            fromBlock: poolUniverseCoverage.fromBlock,
+            toBlock: poolUniverseCoverage.toBlock,
+          }),
     ...(strictCentralRuntime === null
       ? {}
       : { identityRuntime: strictCentralRuntime }),

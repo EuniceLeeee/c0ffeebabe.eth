@@ -137,32 +137,15 @@ import type { StrictLiveObservedEvent } from
 const DISCOVERY_BACKFILL_FOREGROUND_HANDOFF_MS = 1_000;
 
 /**
- * F8: one-shot historical event-window lookback for the strict observedEvents
- * feed. Configured via SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS (default 0 =
- * incremental window only). The first protocol-backfill scan extends the
- * event log window back so pools whose swap logs predate the incremental
- * cursor (e.g. the ret13 2d universe) still get observed; later passes use
- * the normal window and the tx-level feed dedup keeps the sweep idempotent.
+ * F8/audit P0-e: one-shot historical event-window start for the strict
+ * observedEvents feed. The first protocol-backfill scans events from the
+ * universe build window's fromBlock (deps.observedEventLookbackWindow,
+ * manifest-verified) or, as a reversible fallback, from
+ * toBlock - SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS + 1. Later passes use
+ * the normal incremental window and the tx-level feed dedup keeps the sweep
+ * idempotent. The window is bound to the universe publication, not to a
+ * relative current-head counter.
  */
-let observedEventLookbackPending = true;
-const observedEventLookbackBlocks = (): number | undefined => {
-  if (!observedEventLookbackPending) return undefined;
-  const raw = process.env.SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS;
-  if (raw === undefined || raw.trim() === "") return undefined;
-  const parsed = Number(raw);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-    console.warn(
-      "[searcher/live] invalid SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS=" +
-        raw + "; ignoring",
-    );
-    return undefined;
-  }
-  observedEventLookbackPending = false;
-  console.log(
-    "[searcher/live] observed event historical lookback blocks=" + parsed,
-  );
-  return parsed;
-};
 
 /**
  * F8: the strict catalog's full log-pattern topic surface. The observed lane
@@ -312,6 +295,19 @@ export interface LiveDiscoveryCoordinatorDeps {
     label?: string,
   ) => void;
   readonly onFatalReorg: (reason: string) => void;
+  /**
+   * F8/audit P0-e: explicit historical event-window bound for the strict
+   * observedEvents feed (the universe build window: manifest-verified
+   * fromBlock..toBlock). The first protocol-backfill scans events from this
+   * start once (per-process one-shot); null/absent keeps the incremental
+   * window unless SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS is set as a
+   * reversible fallback. The window is bound to the universe publication,
+   * not to a relative current-head counter.
+   */
+  readonly observedEventLookbackWindow?: {
+    readonly fromBlock: number;
+    readonly toBlock: number;
+  } | null;
   /** Coarse N-1 state reads preempt retryable discovery transport reads. */
   readonly readPriority?: Pick<LiveRethReadPriority, "runBackground">;
 }
@@ -355,6 +351,35 @@ export async function createLiveDiscoveryCoordinator(
     logRuntimeRefreshFailures,
     identityRuntime,
   } = deps;
+  let observedEventLookbackPending = true;
+  const observedEventWindowFrom = (
+    toBlock: number,
+  ): number | undefined => {
+    if (!observedEventLookbackPending) return undefined;
+    observedEventLookbackPending = false;
+    const window = deps.observedEventLookbackWindow;
+    if (window !== null && window !== undefined) {
+      console.log(
+        "[searcher/live] observed event historical window " +
+          window.fromBlock + ".." + window.toBlock,
+      );
+      return Math.max(0, Math.min(window.fromBlock, toBlock));
+    }
+    const raw = process.env.SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS;
+    if (raw === undefined || raw.trim() === "") return undefined;
+    const parsed = Number(raw);
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+      console.warn(
+        "[searcher/live] invalid SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS=" +
+          raw + "; ignoring",
+      );
+      return undefined;
+    }
+    console.log(
+      "[searcher/live] observed event historical lookback blocks=" + parsed,
+    );
+    return Math.max(0, toBlock - parsed + 1);
+  };
   const {
     graph,
     blockScanGraph,
@@ -1022,6 +1047,7 @@ export async function createLiveDiscoveryCoordinator(
       current.backrunGraph,
       current.blockscanGraph,
     );
+    const eventWindowFrom = observedEventWindowFrom(scanRange.toBlock);
     const pass = await prepareActiveProtocolDiscoveryPass({
       provider,
       ...(observedHistoryProvider === undefined
@@ -1053,10 +1079,13 @@ export async function createLiveDiscoveryCoordinator(
       // receipt/trace work stays scoped to the legacy observed-interaction
       // surface inside the scanner. The first pass optionally extends the
       // event window back over the universe build window (one-shot).
+      // NOTE: the one-shot window function is consumed exactly once per
+      // process (pending flips on the first call), so the call site must
+      // invoke it a single time.
       extraEventTopics: strictCatalogObservedTopics(),
-      ...(observedEventLookbackBlocks() === undefined
+      ...(eventWindowFrom === undefined
         ? {}
-        : { eventWindowLookbackBlocks: observedEventLookbackBlocks() }),
+        : { eventWindowFrom }),
     });
     const scanRangeHashAfter = await readDexDiscoveryBlockHash(
       provider,

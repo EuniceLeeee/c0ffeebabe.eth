@@ -280,7 +280,12 @@ export async function scanProtocolDiscoveryRange(input: {
    * normal incremental window; the feed dedups by tx, so the historical
    * sweep is idempotent.
    */
-  readonly eventWindowLookbackBlocks?: number;
+  /**
+   * Absolute event-window start for the strict observedEvents feed. When
+   * set, the event log scan starts here instead of at the incremental
+   * fromBlock, so a historical universe window is observed once (one-shot).
+   */
+  readonly eventWindowFrom?: number;
 }): Promise<ProtocolDiscoveryRangeResult> {
   const passControl = mergeProtocolDiscoveryReadControls(
     protocolDiscoveryReadControlFromFamilyOptions(input.familyGuardOptions),
@@ -334,12 +339,9 @@ export async function scanProtocolDiscoveryRange(input: {
   const observedFamilyGuard = new ProtocolDiscoveryFamilyGuard(
     sourceAwareFamilyGuardOptions(input.familyGuardOptions, passControl),
   );
-  const eventWindowFrom = input.eventWindowLookbackBlocks === undefined
+  const eventWindowFrom = input.eventWindowFrom === undefined
     ? input.context.fromBlock
-    : Math.max(
-        input.context.fromBlock,
-        input.context.toBlock - input.eventWindowLookbackBlocks + 1,
-      );
+    : Math.max(0, Math.min(input.eventWindowFrom, input.context.toBlock));
   if (topics.length > 0) {
     for (let start = eventWindowFrom; start <= input.context.toBlock; start += LOG_BATCH) {
       throwIfProtocolDiscoveryParentStopped(passControl);
