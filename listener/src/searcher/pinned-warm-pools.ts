@@ -66,6 +66,9 @@ export function pinnedWarmHopsFromGraph(
 
   const hops: PinnedWarmHop[] = [];
   for (const pool of pools) {
+    // Data-driven warm-pool identity: pools carrying the v4-style key tuple
+    // (currency0/1 + fee + tickSpacing + hooks) match edges on that tuple;
+    // other pools match on the bare address. No family name is consulted.
     const poolKey = poolEntryV4PoolKeyIdentity(pool);
     for (const dir of pool.warmDirections) {
       const edge = edgeByDirection.get(directionKey(pool.address, dir.tokenIn, dir.tokenOut, poolKey));
@@ -107,12 +110,8 @@ function parsePinnedWarmPool(raw: unknown, index: number, path: string): PinnedW
     adapter,
     label: typeof raw.label === "string" ? raw.label : undefined,
     poolId: optionalString(raw.poolId, `${path}[${index}].poolId`),
-    fixedTokenIn: adapter === "univ4"
-      ? optionalCurrency(raw.fixedTokenIn, `${path}[${index}].fixedTokenIn`)
-      : optionalAddress(raw.fixedTokenIn, `${path}[${index}].fixedTokenIn`),
-    fixedTokenOut: adapter === "univ4"
-      ? optionalCurrency(raw.fixedTokenOut, `${path}[${index}].fixedTokenOut`)
-      : optionalAddress(raw.fixedTokenOut, `${path}[${index}].fixedTokenOut`),
+    fixedTokenIn: optionalAddress(raw.fixedTokenIn, `${path}[${index}].fixedTokenIn`),
+    fixedTokenOut: optionalAddress(raw.fixedTokenOut, `${path}[${index}].fixedTokenOut`),
     fixedSlotKind: parseFixedSlotKind(raw.fixedSlotKind, `${path}[${index}].fixedSlotKind`),
     token0: optionalAddress(raw.token0, `${path}[${index}].token0`),
     token1: optionalAddress(raw.token1, `${path}[${index}].token1`),
@@ -124,13 +123,12 @@ function parsePinnedWarmPool(raw: unknown, index: number, path: string): PinnedW
     warmDirections: parseWarmDirections(
       raw.warmDirections,
       `${path}[${index}].warmDirections`,
-      adapter === "univ4",
     ),
   };
   return entry;
 }
 
-function parseWarmDirections(raw: unknown, field: string, allowNative: boolean): PinnedWarmDirection[] {
+function parseWarmDirections(raw: unknown, field: string): PinnedWarmDirection[] {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new Error(`${field} must be an array`);
   return raw.map((dir, i) => {
@@ -144,12 +142,8 @@ function parseWarmDirections(raw: unknown, field: string, allowNative: boolean):
       throw new Error(`${field}[${i}].weight must be a positive integer`);
     }
     return {
-      tokenIn: allowNative
-        ? currencyField(dir.tokenIn, `${field}[${i}].tokenIn`)
-        : checksumField(dir.tokenIn, `${field}[${i}].tokenIn`),
-      tokenOut: allowNative
-        ? currencyField(dir.tokenOut, `${field}[${i}].tokenOut`)
-        : checksumField(dir.tokenOut, `${field}[${i}].tokenOut`),
+      tokenIn: checksumField(dir.tokenIn, `${field}[${i}].tokenIn`),
+      tokenOut: checksumField(dir.tokenOut, `${field}[${i}].tokenOut`),
       amountIn: BigInt(amountIn),
       weight,
     };
@@ -159,11 +153,6 @@ function parseWarmDirections(raw: unknown, field: string, allowNative: boolean):
 function checksumField(value: unknown, field: string): string {
   if (typeof value !== "string") throw new Error(`${field} must be an address string`);
   return ethers.getAddress(value);
-}
-
-function currencyField(value: unknown, field: string): string {
-  if (typeof value === "string" && value.toLowerCase() === "0x0") return ethers.ZeroAddress;
-  return checksumField(value, field);
 }
 
 function optionalAddress(value: unknown, field: string): string | undefined {
@@ -208,9 +197,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function v4PoolKeyIdentity(key: TokenEdge["v4PoolKey"] | undefined): string {
+  if (!key) return "";
+  return [
+    key.currency0.toLowerCase(),
+    key.currency1.toLowerCase(),
+    String(key.fee),
+    String(key.tickSpacing),
+    key.hooks.toLowerCase(),
+  ].join(":");
+}
+
 function poolEntryV4PoolKeyIdentity(pool: PoolEntry): string {
   if (
-    pool.adapter !== "univ4" ||
     pool.currency0 === undefined ||
     pool.currency1 === undefined ||
     pool.fee === undefined ||
@@ -225,16 +224,5 @@ function poolEntryV4PoolKeyIdentity(pool: PoolEntry): string {
     String(pool.fee),
     String(pool.tickSpacing),
     pool.hooks.toLowerCase(),
-  ].join(":");
-}
-
-function v4PoolKeyIdentity(key: TokenEdge["v4PoolKey"] | undefined): string {
-  if (!key) return "";
-  return [
-    key.currency0.toLowerCase(),
-    key.currency1.toLowerCase(),
-    String(key.fee),
-    String(key.tickSpacing),
-    key.hooks.toLowerCase(),
   ].join(":");
 }

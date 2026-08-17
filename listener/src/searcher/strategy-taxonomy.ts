@@ -54,10 +54,9 @@ export function edgeKindFromSlotKind(slotKind: SlotKind): EdgeKind {
 }
 
 /** PoolEntry → EdgeKind, BEFORE edges exist (view projection). MUST agree with deriveEdgeTaxonomy:
- *  a credit adapter (fluid-vault) or a lend-fixed pool → "credit"; a protocol-fixed pool →
- *  "protocol"; everything else → "swap". ("lp" is analysis-only, never derived here.) */
+ *  a lend-fixed pool → "credit"; a protocol-fixed pool → "protocol"; everything else →
+ *  "swap". ("lp" is analysis-only, never derived here.) */
 export function edgeKindFromPoolEntry(p: { adapter: string; fixedSlotKind?: "lend" | "swap" | "protocol" }): EdgeKind {
-  if (p.adapter === "fluid-vault") return "credit";
   if (p.fixedSlotKind === "lend") return "credit";
   if (p.fixedSlotKind === "protocol") return "protocol";
   return "swap";

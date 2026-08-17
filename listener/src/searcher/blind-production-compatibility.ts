@@ -185,11 +185,6 @@ export function blindCompatibilityFamilyId(edge: TokenEdge): string {
       `blind T1 compatibility has no family owner for ${edge.adapterId}`,
     );
   }
-  if (current === "fluid-dex") return "legacy:fluid-dex-swap";
-  if (current === "credit:fluid") return "compat:fluid-credit";
-  if (current === "protocol:erc4626-silo-redeem") {
-    return "protocol:erc4626";
-  }
   return current;
 }
 

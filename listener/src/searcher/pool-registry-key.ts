@@ -11,12 +11,6 @@ import {
 export function poolRegistryKey(pool: PoolEntry): string {
   const routeBindingHash =
     validatedRouteImmutableBindingHash(pool.routeBinding);
-  if (routeBindingHash === null && pool.adapter !== "univ4") {
-    const address = pool.address.toLowerCase();
-    return pool.logicalInstanceId === undefined
-      ? address
-      : `${address}:${pool.logicalInstanceId}`;
-  }
   if (routeBindingHash !== null) {
     return JSON.stringify([
       pool.address.toLowerCase(),
@@ -30,15 +24,33 @@ export function poolRegistryKey(pool: PoolEntry): string {
       pool.hooks?.toLowerCase() ?? null,
     ]);
   }
-  return [
-    pool.address.toLowerCase(),
-    pool.poolId?.toLowerCase() ?? "",
-    pool.currency0?.toLowerCase() ?? "",
-    pool.currency1?.toLowerCase() ?? "",
-    pool.fee === undefined ? "" : String(pool.fee),
-    pool.tickSpacing === undefined ? "" : String(pool.tickSpacing),
-    pool.hooks?.toLowerCase() ?? "",
-  ].join(":");
+  // Data-driven physical identity: a pool carrying v4-style identity fields
+  // (poolId, or the currency/fee/tickSpacing/hooks tuple) keys on those
+  // fields; a bare address keys on the address. No family name is consulted.
+  const hasV4StyleIdentity =
+    pool.poolId !== undefined ||
+    (
+      pool.currency0 !== undefined &&
+      pool.currency1 !== undefined &&
+      pool.fee !== undefined &&
+      pool.tickSpacing !== undefined &&
+      pool.hooks !== undefined
+    );
+  if (hasV4StyleIdentity) {
+    return [
+      pool.address.toLowerCase(),
+      pool.poolId?.toLowerCase() ?? "",
+      pool.currency0?.toLowerCase() ?? "",
+      pool.currency1?.toLowerCase() ?? "",
+      pool.fee === undefined ? "" : String(pool.fee),
+      pool.tickSpacing === undefined ? "" : String(pool.tickSpacing),
+      pool.hooks?.toLowerCase() ?? "",
+    ].join(":");
+  }
+  const address = pool.address.toLowerCase();
+  return pool.logicalInstanceId === undefined
+    ? address
+    : `${address}:${pool.logicalInstanceId}`;
 }
 
 /**

@@ -212,23 +212,27 @@ function testHashesDeterministicAndSensitive(): void {
 }
 
 function testEdgeKindFromPoolEntry(): void {
-  assertEdgeKind(edgeKindFromPoolEntry({ adapter: "fluid-vault" }), "credit", "fluid-vault");
   assertEdgeKind(
-    edgeKindFromPoolEntry({ adapter: "univ3", fixedSlotKind: "lend" }),
+    edgeKindFromPoolEntry({ adapter: "undeclared-pool" }),
+    "swap",
+    "no declared slot defaults to swap",
+  );
+  assertEdgeKind(
+    edgeKindFromPoolEntry({ adapter: "declared-lend-pool", fixedSlotKind: "lend" }),
     "credit",
     "fixed lend pool",
   );
 
-  for (const adapter of ["univ2", "univ3", "univ4", "curve"] as const) {
+  for (const adapter of ["swap-a", "swap-b", "swap-c"] as const) {
     assertEdgeKind(edgeKindFromPoolEntry({ adapter }), "swap", adapter);
   }
 
   assert(
-    edgeKindFromPoolEntry({ adapter: "univ3", fixedSlotKind: "lend" }) === deriveEdgeTaxonomy("lend").edgeKind,
+    edgeKindFromPoolEntry({ adapter: "lend-a", fixedSlotKind: "lend" }) === deriveEdgeTaxonomy("lend").edgeKind,
     "pool-entry lend edge kind should agree with deriveEdgeTaxonomy(lend)",
   );
   assert(
-    edgeKindFromPoolEntry({ adapter: "univ3", fixedSlotKind: "swap" }) === deriveEdgeTaxonomy("swap").edgeKind,
+    edgeKindFromPoolEntry({ adapter: "swap-d", fixedSlotKind: "swap" }) === deriveEdgeTaxonomy("swap").edgeKind,
     "pool-entry swap edge kind should agree with deriveEdgeTaxonomy(swap)",
   );
   console.log("[universe-split] edgeKindFromPoolEntry: PASS");
