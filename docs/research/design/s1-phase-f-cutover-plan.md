@@ -554,6 +554,53 @@ tx-bound proof 的可发布结果。`2eceb6f8` 的一次性历史窗口能力是
 “测试 → build → commit/push → 节点 exact-SHA 同步 → live 重跑”执行；在
 Angstrom 与其余 `graph-incomplete` 来源闭合、`status` 收敛且六步 live receipts
 完整前，F5/F9 均保持未关闭。
+## 对抗审计 P0 修复（2026-08-17，commits 984c5440/016a728d/5f24f795/dfcaf055）
+
+外部对抗审计（257-audit-current-startup.log）逐条验证属实，并按其设计修复：
+
+- **P0-a（984c5440）**：startup poolSets 按每实例身份键（V4/Angstrom 用
+  poolId、其余用 address）去重，universe 与 blockscanUniverse 同源文件只
+  attest 一次（原来 12,015 池 attest 两遍，第二遍还排队在后面）。
+  `attestPoolIdentitiesStrict` 新增 `outcomesByKey` 供并集结果分发。
+- **P0-b（016a728d）**：startup attestation 收集每个池的 sealed lifecycle
+  publication（原来 publisher 是 no-op，实例/投影全丢）；按 family 合并为
+  单 publication（`mergeStartupFamilyPublications` + 导出
+  `sealPublication`）后经 `publishStrictCatalogFromLifecycle` 在 startup
+  source 提交到 composition（fresh start 才发布，restart 走 checkpoint
+  restore），并把 committed strict edges 合并进 runtime graph/blockscan
+  graph/pool map（coordinator 创建前）。
+- **P0-c（016a728d）**：`publishedByFamily.has(familyId)` 整族跳过 carry
+  改为逐实例 carry——本轮未重发布的每个 (familyId, lineageId, instanceKey)
+  单独 reverify + issuer-bound mutation proof。
+- **P0-d（5f24f795）**：observation 去重键从 block+txHash+topic0 改为完整
+  日志身份 block+txHash+logIndex+address+全部 topics（`logIndex` 从
+  eth_getLogs 贯穿 `ProtocolDiscoveryLog`/`StrictLiveObservedEvent`；
+  共享 helper `strictObservedEventDedupeKey` 供 scanner buffer、严格
+  观察派生、coordinator 合并三处使用）。
+- **P0-e（dfcaf055）**：修复 lookback 双调用副作用（一次性消费在第一次
+  调用就翻转，值永远到不了 scan）+ Math.max 无法向历史扩展；改为首个
+  protocol-backfill 接收**绝对** `eventWindowFrom`，绑定 universe build
+  window（manifest fromBlock..toBlock，main.ts 从
+  `loadPoolUniverseCoverageMetadata` 传入），`SEARCHER_OBSERVED_EVENT_
+  LOOKBACK_BLOCKS` 仅作可回退 fallback；scan 的 canonical source-hash
+  断言绑定 cutoff。
+
+测试：strict-identity-attestation（去重 + merge 单元）、strict-catalog-
+live-publisher、strict-live-observation-feed、observed-protocol-discovery
+全绿。tsc 仅剩另一窗口未提交 nomination 文件的既有 TS2339。
+
+本地验证补充：用节点真实持久化 cache（2923 entries）+ 空/全 coverage 直接
+跑 writer.write() 均 committed（revision=1）——checkpoint writer/CAS 路径
+健康；历史 67 次 unresolved 全来自旧代码 run（无 reason 后缀），当前代码
+首轮发布后即可看到真实行为。
+
+节点运行时代码确认（审计同判）：PID 216494 07:57:51 启动早于 2eceb6f8
+（08:40:11 UTC）——运行代码至多是 259eef30，已 kill；旧 run 的
+"attestation 两轮串行" 与 no-op publisher 丢弃成果意味着等它没有任何
+可信 ETA。rebuild（pid 227686，dfcaf055 之前代码 + retain 修复）产出
+新 universe 后：trust 校验 → publish → deploy-node.sh 部署
+（systemd + RUNTIME_COMMIT 绑定）。
+
 ## ret13 12015 池宇宙 + 历史窗口回扫（2026-08-17，commit 2a0f928d）
 
 节点实际状态修正：上一节的“searcher inactive”不准确——节点在
