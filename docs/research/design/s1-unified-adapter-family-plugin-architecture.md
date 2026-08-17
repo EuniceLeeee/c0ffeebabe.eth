@@ -5559,6 +5559,11 @@ coordinator）只有在 readyGeneration 存在时才创建：
 恢复配置（记录原 crontab/timer 定义）；reth 健康（`eth_blockNumber`）；
 锁文件空闲（`lslocks`）。
 
+> 2026-08-17 实测：节点无 crontab 条目、无匹配 systemd timer、cron.d 无引用——
+> 之前的 reindex 进程为手动启动，已全部清除；cron 日志最后一条为
+> `reindex FAILED/timeout — kept existing active-pools.json`（09:48:49Z）。
+> 因此“精确暂停 + 保留恢复配置”当前为 N/A（无调度器需暂停，无配置需恢复）。
+
 切换序列：
 1. （一次性）新 universe 重建：`searcher:universe-rebuild-startup
    --checkpoint /opt/MEV-runtime/universe-rebuild-checkpoint.json`
