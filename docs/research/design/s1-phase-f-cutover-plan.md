@@ -315,6 +315,14 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   docs/research/design/evidence/s1-regression-receipt-57c91f09.json。
   F6 至此文档口径收尾（A/B/C/D/F + harness 全 closed/deleted；sweep
   全绿 receipt 为机器证据）。
+- **2026-08-17 observed lane 全 catalog 注入生效（commit 57c91f09）**：DEX 族
+  实例面接通——observed lane 扫描全部 strict catalog log-pattern topics，DEX
+  Swap 日志直进 strict observedEvents（不触发 trace），lifecycle 开始消化。
+  节点证据：`strict catalog root committed: instances=44 pricing=44 mids=44
+  edges=44`（此前 2）、`blockscan-nminus1-state expected=44 priced=44`（全量
+  定价）、observed-interaction watermark 推进。blockscan pass `outcome: ran`
+  （state/enumeration 阶段 ran）。当前 44 条边均为 erc4626（22 vault × 2
+  方向）；DEX 族 lifecycle 批量处理中（观察量大，coalescing 链串行消化）。
 - **2026-08-17 状态机收敛（commit e7b7174a→52122d5e）**：blockscan state machine
   从 expected=0 推进到 `expected=15`（protocol:erc4626 keys=15）。三个缺口：(e)
   observed-interaction 族 watermark 是 contiguous source，watermark=0 永远无法
