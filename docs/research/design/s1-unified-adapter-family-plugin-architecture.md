@@ -3098,6 +3098,36 @@ ops/CI gate，非部署）：**
   exact-SHA 部署后才能重新计入 live 结果。F5 仍按“live strict 事实验收”
   运行，F9 的 `MigrationCleanupReceipt.verdict=pass` 仍未产生。
 
+**2026-08-17 current-source strict execution root checkpoint（实现提交承载本
+checkpoint；不是部署、F5 或 production cutover）：**
+
+- 新增 `StrictProductionRuntimeRoot` / `StrictProductionRuntimeSession`：只接收
+  原子 `readyGeneration` 已准入的 Graph 与 `PreparedFamilyInstance`；每个
+  current source 仅重签 process-local route authority，并逐
+  `canonicalEdgeId` 与 ready Graph 做 exact-set + edge shell 对齐。这个入口
+  不暴露 discovery/backfill/trace/topology publication，也不允许 startup
+  cutoff handle 直接用于 current-N exact。
+- 普通 Swap/Protocol 的 current-source exact 通过
+  `executeFamilyExactQuote` 返回 issuer-sealed handle；execution 只能消费同一
+  session、同一 edge、同一 executor/evidence 下的原 handle。clone、foreign
+  session、hash/generation mismatch 与 Graph drift 均 fail closed。
+- 修复 Credit 重启断链：Credit identity/instance lifecycle 现在把 issued
+  instance 封入 startup durable publication/memo；rehydrate 先由中央重新签发
+  `PreparedFamilyInstance` authority，再由 `prepareCreditFamilyRoutes` 签发
+  current-source Credit route。多实例通过 `stageCreditFamilyBatch` 作为同一
+  Family exact partition 进入 Graph/catalog，不再只保留一个 vault 或静默
+  丢失 Credit instance。
+- `SEARCHER_ATTESTATION_CONCURRENCY` 保留默认 24，但非法、0、负值或超过
+  256 立即失败，禁止 `NaN/0 worker` 静默产出空 partition。
+- 本 slice 的合同只验证不可伪造 authority/source/topology 关系；测试脚本
+  不拥有 live verdict。最终仍以实际
+  `attestation → readyGeneration → 全族 Graph edge → strict exact → strict
+  execution/calldata → mandatory final sim` lineage 与六步事实验收为最高
+  准则。
+- 后续删除顺序以用户裁定为准：先物理删除中央 legacy authority/fallback，
+  再由编译缺口逐项接入本 strict session；期间可读取含旧管线的 Git commit
+  参考，但不得把旧 runtime、Graph 或 fallback 接回生产 closure。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
@@ -5538,7 +5568,9 @@ exact partition 校验（active == verified ∪ chain-proven terminal
 rejected）→ rehydrate（canonical memo 重组装，本地校验/组装，不重发
 identity RPC；routeHandles 不可反序列化，由中央 rehydrator 重新签发）→
 逐族聚合一次（同族所有 instance 必须保留，禁止 Map 只留首池）→
-由 catalog-issued route handle + Family projectGraph 生成 Graph →
+由 catalog-issued route handle + Family projectGraph 生成 Graph（Credit
+instance 同样必须持久化；重启后先重签 instance authority，再由 Credit
+issuer 投影 route，禁止把 Credit 当普通 route Family 或静默丢弃）→
 以 JSON-safe canonical codec 保存 descriptor/static projection（bigint/Map
 不得被 JSON 静默丢失），中央重新签发并登记 process-local routeHandles →
 assertCanonical(cutoff) → 一次 CAS 原子提升
@@ -5583,6 +5615,11 @@ searcher 进程在创建 producer 前直接 begin/resume `rebuildUniverse`，不
   strict edge 二次 merge；无 ready 没有 fallback；
 - process-local catalog 只由同一 ready 的 rehydrated publications 重建，
   并逐 canonicalEdgeId 与 ready Graph 对齐；
+- producer/current-N exact 不复用 startup cutoff handle；中央只对 frozen
+  ready instances 重签 current-source handle，并再次逐 canonicalEdgeId
+  对齐，不得借重签增加/删除 topology。amount propagation 必须保留每 hop
+  issuer-sealed exact handle，plan/execution 只能消费同一 handle；Credit
+  route/risk/execution 必须属于同一 issuer closure；
 - coordinator `producerGenerationFrozen=true`：不启动 backfill timer，
   receipt/trace preparation no-op，任何 topology publication 直接抛错；
   shutdown 不写 discovery/cursor。下一代只能由下一次 startup rebuild

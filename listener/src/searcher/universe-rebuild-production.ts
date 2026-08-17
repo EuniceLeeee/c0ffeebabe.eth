@@ -11,6 +11,12 @@ import type { UniverseRebuildDependencies } from "./universe-rebuild-runner.js";
 import { buildFamilyRouteGraphView } from "./adapter-family-graph-runtime.js";
 import { reissuePreparedInstanceRouteHandles } from
   "./venues/adapter-family-runtime.js";
+import { reissuePreparedInstanceAuthority } from
+  "./venues/adapter-family-runtime.js";
+import {
+  prepareCreditFamilyRoutes,
+  projectCreditRouteGraph,
+} from "./adapter-credit-runtime.js";
 import { attestPoolIdentitiesStrict } from "./strict-identity-attestation.js";
 import { createMinimalIdentityRuntime } from "./strict-identity-attestation.js";
 import { createStrictCentralAdapterRuntime } from
@@ -1109,14 +1115,21 @@ export function createRebuildWiring(input?: {
       }) as never;
       const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
         .forStrictFamily(rehydrateInput.memo.familyId as never);
-      const rehydrated = reissuePreparedInstanceRouteHandles({
-        family: family as never,
-        instance: instance as never,
-        // Proof provenance remains in the memo; process-local authority is
-        // re-issued for the new ready run's canonical source/generation.
-        source: Object.freeze({ ...rehydrateInput.cutoff }),
-        generation: rehydrateInput.cutoff.generation,
-      });
+      const rehydrated = family.plugin.manifest.domain === "credit"
+        ? reissuePreparedInstanceAuthority({
+            family,
+            instance: instance as never,
+            source: Object.freeze({ ...rehydrateInput.cutoff }),
+            generation: rehydrateInput.cutoff.generation,
+          })
+        : reissuePreparedInstanceRouteHandles({
+            family: family as never,
+            instance: instance as never,
+            // Proof provenance remains in the memo; process-local authority is
+            // re-issued for the new ready run's canonical source/generation.
+            source: Object.freeze({ ...rehydrateInput.cutoff }),
+            generation: rehydrateInput.cutoff.generation,
+          });
       // Return the exact centrally-issued instance.  Wrapping/spreading it
       // after handle issuance would create an unissued look-alike that the
       // catalog/exact boundary must reject.
@@ -1145,11 +1158,26 @@ export function createRebuildWiring(input?: {
         })
       ));
     },
-    buildGraphSnapshot: (publications) => {
+    buildGraphSnapshot: (publications, cutoff) => {
       const edges: unknown[] = [];
       for (const publication of publications) {
         const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
           .forStrictFamily(publication.familyId as never);
+        if (family.plugin.manifest.domain === "credit") {
+          for (const rawInstance of publication.instances) {
+            const instance = rawInstance as never;
+            const credit = prepareCreditFamilyRoutes({
+              family,
+              instance,
+              source: cutoff,
+              generation: cutoff.generation,
+            });
+            edges.push(...credit.routes.map((route) =>
+              projectCreditRouteGraph({ family, route }).edge
+            ));
+          }
+          continue;
+        }
         for (const rawInstance of publication.instances) {
           const instance = rawInstance as {
             readonly descriptor: unknown;

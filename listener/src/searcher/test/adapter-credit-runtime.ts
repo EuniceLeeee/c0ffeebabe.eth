@@ -192,6 +192,7 @@ await creditExecutionHandleRejectsForgedForeignAndTamperedHandles();
 await creditExecutionHandleIssueRejectsWrongBinding();
 projectedGraphAuthorityRejectsClones();
 await creditStrictCatalogCasJoinsSamePublication();
+await creditBatchStagesExactInstancePartition();
 
 console.log(
   "adapter Credit runtime PASS " +
@@ -916,6 +917,66 @@ async function creditStrictCatalogCasJoinsSamePublication(): Promise<void> {
     stages: [zeroCreditStage],
     sourceAnchors: anchorsFor(SOURCE),
   }), /has no route handles/);
+}
+
+async function creditBatchStagesExactInstancePartition(): Promise<void> {
+  const terminalIssuer = createCatalogTerminalRemovalIssuer();
+  const transitionIssuer = createCatalogSourceTransitionIssuer();
+  const mutationIssuer = createCatalogStateInstanceMutationIssuer();
+  const root = new StrictAdapterFamilyShadowCatalogPublicationRoot({
+    catalog: primary.catalog,
+    chainId: "1",
+    terminalRemovalAuthority: terminalIssuer.authority,
+    sourceTransitionAuthority: transitionIssuer.authority,
+    stateMutationAuthority: mutationIssuer.authority,
+  });
+  const stage = root.stageCreditFamilyBatch({
+    family,
+    publications: Object.freeze([
+      Object.freeze({ publication: publicationA, instance: instanceA }),
+      Object.freeze({ publication: publicationB, instance: instanceB }),
+    ]),
+  });
+  assert.equal(stage.instances.length, 2);
+  assert.throws(() => root.stageCreditFamilyBatch({
+    family,
+    publications: Object.freeze([
+      Object.freeze({ publication: publicationA, instance: instanceA }),
+      Object.freeze({ publication: publicationA, instance: instanceA }),
+    ]),
+  }), /duplicates instance/);
+  const sourceAnchors = primary.catalog.listAll().flatMap((catalogFamily) => {
+    const sourceIds = "discovery" in catalogFamily.plugin
+      ? catalogFamily.plugin.discovery.sources
+      : [];
+    return sourceIds.map((sourceId) => Object.freeze({
+      familyId: catalogFamily.plugin.manifest.familyId,
+      sourceId,
+      sourceFingerprint: catalogDiscoverySourceFingerprint({
+        familyId: catalogFamily.plugin.manifest.familyId,
+        sourceId,
+        source: SOURCE,
+      }),
+      authority: "append-only-nomination" as const,
+      status: "complete" as const,
+      completeThroughBlock: SOURCE.number,
+      completeThroughHash: SOURCE.hash,
+    }));
+  });
+  const prepared = root.prepare({
+    source: SOURCE,
+    previous: null,
+    stages: Object.freeze([stage]),
+    sourceAnchors,
+  });
+  assert.equal(await root.compareAndPublish({
+    expected: null,
+    staged: prepared,
+    verifyCanonicalSource: () => {},
+    assertGenerationCurrent: () => {},
+  }), true);
+  assert.equal(root.capture()?.views.edges.length, 2);
+  assert.equal(root.capture()?.views.handleByCanonicalEdgeId.size, 2);
 }
 
 function observedFluidCreditPlugin(

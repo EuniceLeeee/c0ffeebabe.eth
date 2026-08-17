@@ -3649,6 +3649,44 @@ export function reissuePreparedInstanceRouteHandles(input: {
   return prepared;
 }
 
+/**
+ * Re-issue only the process-local PreparedFamilyInstance authority.
+ *
+ * Credit instances have no route-Family handles: their route handles are
+ * issued by `prepareCreditFamilyRoutes`. Durable memos therefore restore the
+ * canonical descriptor first through this boundary, then the Credit runtime
+ * issues its own source-bound route closure. This keeps serialized data from
+ * masquerading as a live issuer handle after restart.
+ */
+export function reissuePreparedInstanceAuthority(input: {
+  readonly family: LoadedFamilyBox;
+  readonly instance: PreparedFamilyInstance;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+}): PreparedFamilyInstance {
+  assertIssuedLoadedFamilyBox(input.family);
+  assertSource(input.source, input.generation);
+  if (
+    input.instance.familyId !== input.family.plugin.manifest.familyId ||
+    input.instance.descriptor.familyId !== input.family.plugin.manifest.familyId ||
+    input.instance.instanceKey !== input.instance.descriptor.instanceKey ||
+    input.instance.lineageId !== input.instance.descriptor.lineageId
+  ) {
+    throw new Error("Prepared Family instance escaped its catalog FamilyBox");
+  }
+  const prepared = Object.freeze({
+    ...input.instance,
+    routeHandles: Object.freeze([]),
+  }) as PreparedFamilyInstance;
+  registerIssuedPreparedFamilyInstance({
+    family: input.family,
+    instance: prepared,
+    source: snapshotCanonicalSource(input.source),
+    generation: input.generation,
+  });
+  return prepared;
+}
+
 function issueFamilyRouteRuntimeHandle(input: {
   readonly family: LoadedFamilyPlugin;
   readonly instance: PreparedFamilyInstance;

@@ -23,6 +23,7 @@ import type {
 import {
   runStrictFamilyLifecycle,
 } from "./strict-family-lifecycle-runner.js";
+import { prepareCreditFamilyRoutes } from "./adapter-credit-runtime.js";
 
 /**
  * Strict production publication pipeline step 2-3 (see Phase E plan): given
@@ -163,6 +164,22 @@ export async function publishStrictCatalogFromLifecycle(input: {
       const familyId = family.plugin.manifest.familyId;
       const entry = publishedByFamily.get(familyId);
       if (entry !== undefined) {
+        if (family.plugin.manifest.domain === "credit") {
+          return composition.catalogRoot.stageCreditFamilyBatch({
+            family,
+            publications: Object.freeze(entry.publication.instances.map(
+              (instance) => Object.freeze({
+                instance,
+                publication: prepareCreditFamilyRoutes({
+                  family,
+                  instance,
+                  source: entry.publication.source,
+                  generation: entry.publication.generation,
+                }),
+              }),
+            )),
+          });
+        }
         const terminalRemovals = (entry.terminalRemovals ?? []).map(
           (removal) =>
             composition.issueTerminalRemoval({

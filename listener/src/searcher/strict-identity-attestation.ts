@@ -210,8 +210,22 @@ export async function attestPoolIdentitiesStrict<
   // Generic bounded concurrency: startup universe/retained sets are tens of
   // thousands of rows and each row performs multiple provider round-trips;
   // serial attestation would take hours. Per-row error isolation and result
-  // ordering are preserved; there is no per-family branch here.
-  const ATTESTATION_CONCURRENCY = 24;
+  // ordering are preserved; there is no per-family branch here. The default
+  // (24) trades memory for throughput; rebuild tooling on memory-constrained
+  // nodes lowers it via SEARCHER_ATTESTATION_CONCURRENCY (in-flight trace
+  // evidence dominates the heap).
+  const attestationConcurrency = Number(
+    process.env.SEARCHER_ATTESTATION_CONCURRENCY ?? "24",
+  );
+  if (
+    !Number.isSafeInteger(attestationConcurrency) ||
+    attestationConcurrency < 1 ||
+    attestationConcurrency > 256
+  ) {
+    throw new Error(
+      "SEARCHER_ATTESTATION_CONCURRENCY must be an integer in [1, 256]",
+    );
+  }
   let completed = 0;
   let next = 0;
   // One stable nomination provider for the whole batch: plugin-owned
@@ -367,6 +381,19 @@ export async function attestPoolIdentitiesStrict<
           };
           return;
         }
+        // Credit has an identity/instance lifecycle but intentionally no
+        // route-Family publication. Seal the issued instance into the same
+        // startup result channel so the durable rebuild can persist it and
+        // the central rehydrator can re-issue source-bound Credit routes
+        // after a restart. The generic publisher dispatches this envelope to
+        // the Credit staging boundary; it is never treated as a route Family.
+        publications[index] = sealPublication({
+          familyId: target.familyId,
+          source: input.source,
+          generation: input.source.generation,
+          instances: Object.freeze([creditResult.instance]),
+          outcomes: creditResult.outcomes,
+        });
         const lineageId = creditResult.instance.lineageId;
         const legacy = input.adapterForLineage?.(lineageId) ?? null;
         accepted[index] = Object.freeze({
@@ -457,7 +484,7 @@ export async function attestPoolIdentitiesStrict<
     }
   };
   const workers = Array.from(
-    { length: Math.min(ATTESTATION_CONCURRENCY, Math.max(1, total)) },
+    { length: Math.min(attestationConcurrency, Math.max(1, total)) },
     async () => {
       while (true) {
         const index = next++;

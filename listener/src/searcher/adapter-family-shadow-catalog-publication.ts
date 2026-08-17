@@ -850,6 +850,62 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     });
   }
 
+  /** Stage the exact Credit instance partition as one Family shard. */
+  stageCreditFamilyBatch(input: {
+    readonly family: LoadedFamilyBox;
+    readonly publications: readonly {
+      readonly publication: PreparedCreditRoutePublication;
+      readonly instance: PreparedFamilyInstance;
+    }[];
+    readonly centralScores?: ReadonlyMap<string, number>;
+  }): StrictShadowCatalogFamilyStage {
+    if (input.publications.length === 0) {
+      throw new Error("Credit Family batch requires at least one instance");
+    }
+    const stages = input.publications.map((entry) => this.stageCreditFamily({
+      family: input.family,
+      publication: entry.publication,
+      instance: entry.instance,
+      centralScores: input.centralScores,
+    }));
+    const first = stages[0];
+    if (stages.some((stage) =>
+      stage.familyId !== first.familyId ||
+      stage.source.number !== first.source.number ||
+      stage.source.hash.toLowerCase() !== first.source.hash.toLowerCase() ||
+      stage.source.generation !== first.source.generation
+    )) {
+      throw new Error("Credit Family batch mixed families or sources");
+    }
+    const instanceKeys = new Set<string>();
+    const routeKeys = new Set<string>();
+    const instances = stages.flatMap((stage) => stage.instances).map((instance) => {
+      if (instanceKeys.has(instance.instancePublicationKey)) {
+        throw new Error(
+          `Credit Family batch duplicates instance ${instance.instancePublicationKey}`,
+        );
+      }
+      instanceKeys.add(instance.instancePublicationKey);
+      for (const routeKey of instance.routeHandles.keys()) {
+        if (routeKeys.has(routeKey)) {
+          throw new Error(`Credit Family batch duplicates route ${routeKey}`);
+        }
+        routeKeys.add(routeKey);
+      }
+      return instance;
+    });
+    return Object.freeze({
+      familyId: first.familyId,
+      domain: "credit" as const,
+      source: first.source,
+      status: "resolved" as const,
+      inventoryMode: "append-only-delta" as const,
+      instances: Object.freeze(instances),
+      terminalRemovals: Object.freeze([]),
+      outcomeRefs: Object.freeze([]),
+    });
+  }
+
   prepare(input: {
     readonly source: CanonicalSource;
     readonly previous: CommittedStrictShadowCatalogPublication | null;

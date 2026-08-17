@@ -108,7 +108,7 @@ export interface UniverseRebuildDependencies {
   readonly buildGraphSnapshot: (publications: readonly {
     readonly familyId: string;
     readonly instances: readonly unknown[];
-  }[]) => unknown;
+  }[], cutoff: CanonicalSource) => unknown;
   readonly buildCoverage: (input: {
     readonly observations: readonly unknown[];
     readonly candidates: readonly unknown[];
@@ -347,7 +347,7 @@ export async function rebuildUniverse(
     instances.push(input.rehydrateVerifiedInstance({ memo, cutoff }));
   }
   const publications = input.aggregateOnceByFamily(instances);
-  const graphSnapshot = input.buildGraphSnapshot(publications);
+  const graphSnapshot = input.buildGraphSnapshot(publications, cutoff);
   const catalogSnapshot = buildCatalogSnapshot(activeMemos);
   const ready = Object.freeze({
     generation: (checkpoint.readyGeneration?.generation ?? 0) + 1,

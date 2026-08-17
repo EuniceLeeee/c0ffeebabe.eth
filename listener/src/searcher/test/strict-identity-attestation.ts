@@ -117,6 +117,27 @@ function runtime(verified: boolean): CentralAdapterRuntime {
 }
 
 async function main(): Promise<void> {
+  const previousConcurrency = process.env.SEARCHER_ATTESTATION_CONCURRENCY;
+  process.env.SEARCHER_ATTESTATION_CONCURRENCY = "0";
+  try {
+    await assert.rejects(attestPoolIdentitiesStrict({
+      catalog,
+      provider: {
+        call: async () => "0x",
+        getCode: async () => "0x",
+        getStorage: async () => `0x${"00".repeat(32)}`,
+      },
+      runtime: runtime(true),
+      source: SOURCE,
+      pools: Object.freeze([]),
+    }), /SEARCHER_ATTESTATION_CONCURRENCY must be an integer in \[1, 256\]/);
+  } finally {
+    if (previousConcurrency === undefined) {
+      delete process.env.SEARCHER_ATTESTATION_CONCURRENCY;
+    } else {
+      process.env.SEARCHER_ATTESTATION_CONCURRENCY = previousConcurrency;
+    }
+  }
   // The attestation calls executeAdapterFamilyLifecycleBatch, which needs a
   // real runtime; for the contract we verify the observation construction and
   // match routing by stubbing the lifecycle through the runtime shape. We
