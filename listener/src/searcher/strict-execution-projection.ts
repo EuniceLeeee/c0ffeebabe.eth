@@ -1,6 +1,3 @@
-import type {
-  StrictShadowCatalogViews,
-} from "./adapter-family-shadow-catalog-publication.js";
 import type { FamilyCapabilityCatalog } from
   "./venues/family-capability-catalog.js";
 import type {
@@ -60,23 +57,21 @@ function validateExecutionRuntimeProjection(
 }
 
 /**
- * Execution-facing projections from a committed strict publication.
- * Pair A step 1: funding prewarm addresses. The strict funding family
- * plugin already declares repayment execution targets (target /
- * liquidityHolder), so the projection is a direct 1:1 mapping from the
- * committed funding states — no legacy registry read.
+ * Best-effort prewarm projection from strict Funding definitions. Repayment
+ * targets are static Family semantics, so warming them does not require a
+ * runtime publication view and does not confer offer/execution authority.
+ * Funding offers remain issuer-bound to the current-source strict session.
  */
 export function strictFundingPrewarmAddresses(input: {
-  readonly views: StrictShadowCatalogViews;
   readonly catalog: FamilyCapabilityCatalog;
 }): readonly string[] {
   const addresses = new Set<string>();
-  for (const state of input.views.fundingByPublicationKey.values()) {
-    if (state.kind !== "funding") continue;
-    const family = input.catalog.forStrictFamily(state.familyId);
+  for (const family of input.catalog.listAll()) {
+    if (family.plugin.manifest.domain !== "funding") continue;
     if (!("funding" in family.plugin) || family.plugin.funding === undefined) {
       throw new Error(
-        `strict funding publication ${state.familyId} has no funding plugin`,
+        `strict Funding definition ${family.plugin.manifest.familyId} ` +
+          "has no funding semantics",
       );
     }
     addresses.add(family.plugin.funding.repayment.target.toLowerCase());
@@ -88,28 +83,10 @@ export function strictFundingPrewarmAddresses(input: {
 }
 
 /**
- * Funding prewarm selection (Pair A partial): committed strict funding
- * states are the only source. Without a committed publication the live
- * path has no strict funding data (accepted Phase E risk); the legacy
- * registry fallback has been removed.
- */
-export function resolveFundingPrewarmAddresses(input: {
-  readonly strictViews: StrictShadowCatalogViews | null;
-  readonly catalog: FamilyCapabilityCatalog;
-}): readonly string[] {
-  if (input.strictViews === null) return Object.freeze([]);
-  return strictFundingPrewarmAddresses({
-    views: input.strictViews,
-    catalog: input.catalog,
-  });
-}
-
-/**
  * Route prewarm projection: for each hop whose adapter belongs to a strict
  * Family, prewarm the hop target and both tokens. Unknown adapters yield no
- * extra addresses (same default as the legacy optional prewarm). Only
- * meaningful when a committed strict publication is available; the live
- * backend gates this behind the strict-execution env flag.
+ * extra addresses. This is a static optimization projection; current-source
+ * route/exact/execution authority remains in StrictProductionRuntimeSession.
  */
 export function strictRoutePrewarmAddresses(input: {
   readonly catalog: FamilyCapabilityCatalog;

@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
-import type {
-  StrictShadowCatalogViews,
-} from "../adapter-family-shadow-catalog-publication.js";
 import {
-  resolveFundingPrewarmAddresses,
   strictExecutionProjectionForHop,
   strictFundingPrewarmAddresses,
   strictRoutePrewarmAddresses,
 } from "../strict-execution-projection.js";
-import type { CanonicalSource } from
-  "../venues/adapter-request-program.js";
 import type { FamilyId } from
   "../venues/adapter-family-identifiers.js";
 import type { ExecutionRuntimeProjection } from
@@ -24,12 +18,6 @@ const TARGET = `0x${"11".repeat(20)}`;
 const TOKEN_IN = `0x${"22".repeat(20)}`;
 const TOKEN_OUT = `0x${"33".repeat(20)}`;
 const LIQUIDITY_HOLDER = `0x${"44".repeat(20)}`;
-const SOURCE: CanonicalSource = Object.freeze({
-  number: 25_700_444,
-  hash: `0x${"51".repeat(32)}`,
-  generation: 44,
-});
-
 const HOP = Object.freeze({
   adapterId: ACTION_ID,
   target: TARGET,
@@ -50,6 +38,24 @@ function syntheticCatalog(
     }),
 ): FamilyCapabilityCatalog {
   return Object.freeze({
+    listAll() {
+      return Object.freeze([
+        Object.freeze({
+          plugin: Object.freeze({
+            manifest: Object.freeze({
+              domain: "funding" as const,
+              familyId: FUNDING_FAMILY,
+            }),
+            funding: Object.freeze({
+              repayment: Object.freeze({
+                target: TARGET,
+                liquidityHolder: LIQUIDITY_HOLDER,
+              }),
+            }),
+          }),
+        }),
+      ]);
+    },
     ownerOfAction(adapterId: string) {
       if (adapterId !== ACTION_ID) throw new Error("unknown synthetic action");
       return ROUTE_FAMILY;
@@ -77,18 +83,6 @@ function syntheticCatalog(
       throw new Error("unknown synthetic Family");
     },
   }) as unknown as FamilyCapabilityCatalog;
-}
-
-function fundingState() {
-  return Object.freeze({
-    kind: "funding" as const,
-    familyId: FUNDING_FAMILY,
-    source: SOURCE,
-    generation: SOURCE.generation,
-    tombstone: false,
-    offers: Object.freeze([]),
-    outcomes: Object.freeze([]),
-  });
 }
 
 function main(): void {
@@ -147,23 +141,10 @@ function main(): void {
     Object.freeze([]),
   );
 
-  const views = Object.freeze({
-    fundingByPublicationKey: new Map([
-      ["funding:synthetic", fundingState()],
-    ]),
-  }) as unknown as StrictShadowCatalogViews;
-  const fundingAddresses = strictFundingPrewarmAddresses({ views, catalog });
+  const fundingAddresses = strictFundingPrewarmAddresses({ catalog });
   assert.deepEqual(
     fundingAddresses,
     Object.freeze([TARGET, LIQUIDITY_HOLDER].sort()),
-  );
-  assert.deepEqual(
-    resolveFundingPrewarmAddresses({ strictViews: null, catalog }),
-    Object.freeze([]),
-  );
-  assert.deepEqual(
-    resolveFundingPrewarmAddresses({ strictViews: views, catalog }),
-    fundingAddresses,
   );
 
   console.log(

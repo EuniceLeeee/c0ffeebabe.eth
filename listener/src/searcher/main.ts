@@ -1962,14 +1962,7 @@ async function main(): Promise<void> {
       provider,
       graph,
       config.rpcUrl,
-      discoveryContinuityComposition === null
-        ? undefined
-        : {
-            views: () =>
-              discoveryContinuityComposition.catalogRoot.capture()
-                ?.views ?? null,
-            catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-          },
+      PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
     );
     liveBackend = config.liveBackend === "revm"
       ? revmLiveBackend

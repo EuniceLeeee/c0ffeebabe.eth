@@ -25,18 +25,12 @@ import {
 } from "../solver/post-impact-overrides.js";
 import type { ResolvedPlan } from "../solver/solver.js";
 import {
-  resolveFundingPrewarmAddresses,
   strictExecutionProjectionForHop,
+  strictFundingPrewarmAddresses,
   strictRoutePrewarmAddresses,
 } from "../strict-execution-projection.js";
-import type {
-  StrictShadowCatalogViews,
-} from "../adapter-family-shadow-catalog-publication.js";
 import type { FamilyCapabilityCatalog } from
   "../venues/family-capability-catalog.js";
-import {
-  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-} from "../venues/production-family-composition.js";
 import { buildVictimOverlay, overlaySupportsAdapter } from "./victim-overlay.js";
 
 const WHALE = "0x000000000000000000000000000000000000dEaD";
@@ -70,10 +64,7 @@ export class RevmLiveBackend implements LiveStateBackend {
     private readonly provider: ethers.JsonRpcProvider,
     private readonly graph: TokenEdge[],
     private readonly rpcUrl: string,
-    private readonly strictExecution?: {
-      readonly views: () => StrictShadowCatalogViews | null;
-      readonly catalog: FamilyCapabilityCatalog;
-    },
+    private readonly strictCatalog?: FamilyCapabilityCatalog,
   ) {}
 
   private async canonicalBlockHash(blockNumber: number): Promise<string> {
@@ -227,21 +218,18 @@ export class RevmLiveBackend implements LiveStateBackend {
     if (input.impact) push(input.impact.pool);
     push(this.executor);
     push(this.owner);
-    for (const address of resolveFundingPrewarmAddresses({
-      strictViews: this.strictExecution === undefined
-        ? null
-        : this.strictExecution.views(),
-      catalog: this.strictExecution?.catalog ??
-        PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    })) {
-      push(address);
+    if (this.strictCatalog !== undefined) {
+      for (const address of strictFundingPrewarmAddresses({
+        catalog: this.strictCatalog,
+      })) {
+        push(address);
+      }
     }
     for (const hop of input.routeHops ?? []) {
       push(hop.target);
-      if (this.strictExecution !== undefined &&
-          this.strictExecution.views() !== null) {
+      if (this.strictCatalog !== undefined) {
         for (const address of strictRoutePrewarmAddresses({
-          catalog: this.strictExecution.catalog,
+          catalog: this.strictCatalog,
           hops: [hop],
         })) {
           push(address);
@@ -354,21 +342,18 @@ export class RevmLiveBackend implements LiveStateBackend {
       WHALE,
       ...calls.map((call) => call.to),
     ]) pushPrewarm(address);
-    for (const address of resolveFundingPrewarmAddresses({
-      strictViews: this.strictExecution === undefined
-        ? null
-        : this.strictExecution.views(),
-      catalog: this.strictExecution?.catalog ??
-        PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    })) {
-      pushPrewarm(address);
+    if (this.strictCatalog !== undefined) {
+      for (const address of strictFundingPrewarmAddresses({
+        catalog: this.strictCatalog,
+      })) {
+        pushPrewarm(address);
+      }
     }
     for (const hop of hops) {
       pushPrewarm(hop.target);
-      if (this.strictExecution !== undefined &&
-          this.strictExecution.views() !== null) {
+      if (this.strictCatalog !== undefined) {
         for (const address of strictRoutePrewarmAddresses({
-          catalog: this.strictExecution.catalog,
+          catalog: this.strictCatalog,
           hops: [hop],
         })) {
           pushPrewarm(address);
@@ -415,10 +400,9 @@ export class RevmLiveBackend implements LiveStateBackend {
     amountIn: bigint,
   ): Promise<OverlayPreCall[]> {
     try {
-      if (this.strictExecution !== undefined &&
-          this.strictExecution.views() !== null) {
+      if (this.strictCatalog !== undefined) {
         const projection = strictExecutionProjectionForHop({
-          catalog: this.strictExecution.catalog,
+          catalog: this.strictCatalog,
           hop,
         });
         if (projection !== null) {
@@ -539,16 +523,14 @@ export class RevmLiveBackend implements LiveStateBackend {
   }
 
   private overlayApproveSpender(hop: QuoteHop | QuoteRequest): string | null {
-    // F6 Pair A: the strict execution projection is the only authority once
-    // the durable discovery composition is the default (Pair C). The legacy
-    // per-adapter allowance spender fallback has been removed; a hop without
-    // a strict projection fails closed (no overlay hint).
-    if (this.strictExecution === undefined ||
-        this.strictExecution.views() === null) {
+    // Catalog-issued execution semantics are the only source of this optional
+    // hint. A missing strict catalog/projection stays cold; it never falls back
+    // to a per-adapter registry or changes execution authority.
+    if (this.strictCatalog === undefined) {
       return null;
     }
     const projection = strictExecutionProjectionForHop({
-      catalog: this.strictExecution.catalog,
+      catalog: this.strictCatalog,
       hop,
     });
     return projection === null ? null : projection.allowanceSpender;

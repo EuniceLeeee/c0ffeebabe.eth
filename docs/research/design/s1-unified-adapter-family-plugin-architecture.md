@@ -3193,6 +3193,27 @@ live catalog publisher 重建桥，以及 `AdapterFamilyGraphViewCoordinator` �
 legacy-shaped coverage/registry 的依赖；只能以 ready envelope + strict
 current-source session 等价替换，不能把已删的 live coordinator 接回。
 
+**2026-08-18 Revm catalog-views 解耦第三批物理删除 checkpoint（实现提交
+承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- `RevmLiveBackend` 的 production 构造已删除
+  `StrictShadowCatalogViews`/`discoveryContinuityComposition.catalogRoot`
+  输入；route quote prewarm、allowance hint 与 Funding repayment prewarm
+  只读取 strict capability catalog 的静态插件语义，不再以第二套 runtime
+  publication view 作为启用条件；
+- Funding prewarm 现在遍历 catalog 中 domain=`funding` 的 Family，读取其
+  `repayment.target/liquidityHolder`。该投影只决定 best-effort warm 地址，
+  不签发 Funding offer、route、exact 或 execution authority；真实 offer 与
+  plan root 仍只能由同一 current-source `StrictProductionRuntimeSession`
+  执行 Funding Family 后签发；
+- 缺 catalog 或缺 execution projection 时 Revm 保持 cold/fail-closed，绝不
+  回退到 legacy per-adapter registry。定向
+  `searcher:strict-execution-projection` 合同与 listener 完整 `build` 通过；
+- startup 的 discovery-continuity composition、二次 lifecycle/catalog
+  publisher 与 GraphView registry/coverage bridge 仍未删除，是下一批物理
+  删除目标。本 checkpoint 不证明 ready envelope 已成为唯一 startup catalog
+  lineage，也不授权部署。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
