@@ -100,6 +100,25 @@ export type StrictRejectedPool<Pool extends {
   readonly reason: string;
 };
 
+/**
+ * Central per-instance identity key for startup pool-set deduplication.
+ * Shared-address families (Uniswap V4 / Angstrom pools all sit behind one
+ * PoolManager / adapter entrypoint) key on the plugin-owned opaque poolId
+ * field; every other pool keys on its address. This mirrors what the owning
+ * family's instance lifecycle stages, so the same pool present in several
+ * startup sets is attested exactly once and the outcome distributed to each
+ * set. No protocol semantics: the field name is a plugin-owned convention.
+ */
+export function poolInstanceKey(pool: {
+  readonly address: string;
+}): string {
+  const poolId = (pool as { readonly poolId?: unknown }).poolId;
+  if (typeof poolId === "string" && poolId.trim().length > 0) {
+    return "poolId:" + poolId.toLowerCase();
+  }
+  return "address:" + pool.address.toLowerCase();
+}
+
 export async function attestPoolIdentitiesStrict<
   Pool extends { readonly address: string; readonly adapter?: string },
 >(input: {
@@ -131,6 +150,16 @@ export async function attestPoolIdentitiesStrict<
 }): Promise<{
   readonly accepted: readonly StrictAttestedPool<Pool>[];
   readonly rejected: readonly StrictRejectedPool<Pool>[];
+  /**
+   * Per-pool outcomes keyed by the central per-instance identity key
+   * (poolId for shared-address families, address otherwise). Callers that
+   * attest one deduplicated union and distribute results to overlapping
+   * sets use this instead of the filtered arrays.
+   */
+  readonly outcomesByKey: ReadonlyMap<
+    string,
+    StrictAttestedPool<Pool> | StrictRejectedPool<Pool>
+  >;
 }> {
   const accepted: (StrictAttestedPool<Pool> | null)[] =
     new Array(input.pools.length).fill(null);
@@ -393,6 +422,15 @@ export async function attestPoolIdentitiesStrict<
     },
   );
   await Promise.all(workers);
+  const outcomesByKey = new Map<
+    string,
+    StrictAttestedPool<Pool> | StrictRejectedPool<Pool>
+  >();
+  for (let i = 0; i < input.pools.length; i++) {
+    const entry = accepted[i] ?? rejected[i];
+    if (entry === null || entry === undefined) continue;
+    outcomesByKey.set(poolInstanceKey(input.pools[i]), entry);
+  }
   return {
     accepted: Object.freeze(
       accepted.filter((item): item is StrictAttestedPool<Pool> => item !== null),
@@ -400,6 +438,7 @@ export async function attestPoolIdentitiesStrict<
     rejected: rejected.filter(
       (item): item is StrictRejectedPool<Pool> => item !== null,
     ),
+    outcomesByKey,
   } as const;
 }
 
@@ -420,21 +459,54 @@ export async function attestStartupPoolSetsStrict<
   readonly rejected: readonly StrictRejectedPool<Pool>[];
 }[]> {
   const runtime = createMinimalIdentityRuntime(input.provider);
-  const results: {
-    readonly accepted: readonly StrictAttestedPool<Pool>[];
-    readonly rejected: readonly StrictRejectedPool<Pool>[];
-  }[] = [];
-  for (const pools of input.poolSets) {
-    results.push(await attestPoolIdentitiesStrict({
-      catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-      provider: input.provider,
-      runtime,
-      source: input.source,
-      pools,
-      adapterForLineage: (lineageId) => legacyLabelsForLineage(lineageId),
-    }));
+  const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+  // Attest each unique pool exactly once across the startup sets. The
+  // universe and blockscan-universe sets both load the same file-backed
+  // snapshot (they differ only in selection: topN/minScore), so a serial
+  // per-set pass runs the same family lifecycle twice for every pool.
+  // Key on the central per-instance identity (poolId for shared-address
+  // families, address otherwise) and distribute the single attestation
+  // outcome to every set that contains the pool.
+  const uniquePools: Pool[] = [];
+  const seen = new Set<string>();
+  for (const set of input.poolSets) {
+    for (const pool of set) {
+      const key = poolInstanceKey(pool);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      uniquePools.push(pool);
+    }
   }
-  return Object.freeze(results);
+  const uniqueResult = await attestPoolIdentitiesStrict({
+    catalog,
+    provider: input.provider,
+    runtime,
+    source: input.source,
+    pools: uniquePools,
+    adapterForLineage: (lineageId) => legacyLabelsForLineage(lineageId),
+  });
+  const byKey = uniqueResult.outcomesByKey;
+  return Object.freeze(input.poolSets.map((set) => {
+    const accepted: StrictAttestedPool<Pool>[] = [];
+    const rejected: StrictRejectedPool<Pool>[] = [];
+    for (const pool of set) {
+      const outcome = byKey.get(poolInstanceKey(pool));
+      if (outcome === undefined) {
+        rejected.push({
+          ...pool,
+          adapter: pool.adapter ?? "",
+          reason: "attestation-miss",
+        });
+        continue;
+      }
+      if ("reason" in outcome) {
+        rejected.push(outcome as StrictRejectedPool<Pool>);
+      } else {
+        accepted.push(outcome as StrictAttestedPool<Pool>);
+      }
+    }
+    return Object.freeze({ accepted, rejected });
+  }));
 }
 
 function legacyLabelsForLineage(lineageId: string): {

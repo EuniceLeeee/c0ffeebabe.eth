@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import {
   attestPoolIdentitiesStrict,
+  attestStartupPoolSetsStrict,
   centralAddressSurfaceFallback,
+  poolInstanceKey,
 } from "../strict-identity-attestation.js";
 import type { CentralAdapterRuntime } from
   "../adapter-work-intent.js";
@@ -423,7 +425,120 @@ async function main(): Promise<void> {
     "explicitly-unsupported retain channel must reach the family lifecycle",
   );
 
-  console.log("strict identity attestation PASS (fail-closed paths + central cold-pool fallback + retain-channel contract)");
+  // P0-a: per-instance key contract. Shared-address families (V4/Angstrom)
+  // key on the plugin-owned poolId; every other pool keys on its address.
+  assert.equal(
+    poolInstanceKey(Object.freeze({ address: POOL })),
+    "address:" + POOL.toLowerCase(),
+  );
+  const sharedAddress = "0x" + "44".repeat(20);
+  assert.equal(
+    poolInstanceKey(Object.freeze({
+      address: sharedAddress,
+      poolId: "0x" + "a1".repeat(32),
+    })),
+    "poolId:" + "0x" + "a1".repeat(32),
+  );
+  assert.notEqual(
+    poolInstanceKey(Object.freeze({
+      address: sharedAddress,
+      poolId: "0x" + "a1".repeat(32),
+    })),
+    poolInstanceKey(Object.freeze({
+      address: sharedAddress,
+      poolId: "0x" + "b2".repeat(32),
+    })),
+    "distinct poolIds on one shared address must not collapse",
+  );
+
+  // P0-a: startup pool-set deduplication. The universe and blockscan sets
+  // both load the same snapshot; each unique pool must be attested exactly
+  // once and the outcome distributed to every set that contains it. The
+  // no-code provider rejects every row at the universal fact check (one
+  // getCode per unique pool).
+  let getCodeCalls = 0;
+  const dedupeProvider = {
+    call: async () => "0x",
+    getCode: async () => {
+      getCodeCalls += 1;
+      return "0x";
+    },
+    getStorage: async () => "0x" + "00".repeat(32),
+  };
+  const dedupeResult = await attestStartupPoolSetsStrict({
+    provider: dedupeProvider,
+    source: SOURCE,
+    poolSets: Object.freeze([
+      Object.freeze([
+        Object.freeze({ address: POOL, adapter: "synthetic-pool" }),
+        Object.freeze({ address: "0x" + "22".repeat(20), adapter: "synthetic-pool" }),
+      ]),
+      Object.freeze([
+        Object.freeze({ address: POOL, adapter: "synthetic-pool" }),
+        Object.freeze({ address: "0x" + "33".repeat(20), adapter: "synthetic-pool" }),
+      ]),
+    ]),
+  });
+  assert.equal(
+    getCodeCalls,
+    3,
+    "a pool present in two startup sets must be attested exactly once",
+  );
+  assert.equal(dedupeResult.length, 2);
+  assert.equal(dedupeResult[0].rejected.length, 2);
+  assert.equal(dedupeResult[1].rejected.length, 2);
+  assert.equal(dedupeResult[0].accepted.length, 0);
+  assert.equal(dedupeResult[1].accepted.length, 0);
+  assert.equal(dedupeResult[0].rejected[0]?.reason, "no deployed code");
+  assert.equal(dedupeResult[1].rejected[0]?.reason, "no deployed code");
+
+  // poolId-keyed dedupe: one shared address with distinct poolIds keeps
+  // every pool (the key is the plugin-owned instance identity, not the
+  // address); the same poolId across sets still attests once.
+  let poolIdCalls = 0;
+  const poolIdProvider = {
+    call: async () => "0x",
+    getCode: async () => {
+      poolIdCalls += 1;
+      return "0x";
+    },
+    getStorage: async () => "0x" + "00".repeat(32),
+  };
+  const poolIdResult = await attestStartupPoolSetsStrict({
+    provider: poolIdProvider,
+    source: SOURCE,
+    poolSets: Object.freeze([
+      Object.freeze([
+        Object.freeze({
+          address: sharedAddress,
+          poolId: "0x" + "a1".repeat(32),
+          adapter: "synthetic-pool",
+        }),
+      ]),
+      Object.freeze([
+        Object.freeze({
+          address: sharedAddress,
+          poolId: "0x" + "a1".repeat(32),
+          adapter: "synthetic-pool",
+        }),
+        Object.freeze({
+          address: sharedAddress,
+          poolId: "0x" + "b2".repeat(32),
+          adapter: "synthetic-pool",
+        }),
+      ]),
+    ]),
+  });
+  assert.equal(
+    poolIdCalls,
+    2,
+    "distinct poolIds on one shared address must each attest",
+  );
+  assert.equal(poolIdResult[0].rejected.length, 1);
+  assert.equal(poolIdResult[1].rejected.length, 2);
+  assert.equal(poolIdResult[0].rejected[0]?.reason, "no deployed code");
+
+  console.log("strict identity attestation PASS (fail-closed paths + central cold-pool fallback + retain-channel contract + startup set dedupe)");
 }
 
 main().catch((error) => {
