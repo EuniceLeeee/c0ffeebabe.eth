@@ -497,3 +497,34 @@ TRACE_WINDOW_ABSENT_FAMILY_IDS（用户裁定验收数据）；fixture-replay �
 剩余待处理：requiresProtocolEdgesFlag / slotKind 类别开关的进一步收敛为
 插件声明（当前为 manifest 字段的通用消费）；LEGACY_PRODUCTION_ADAPTER_
 FAMILIES 权威拆除（F9 深桥）。
+
+## DEX 观察面 live 验证（2026-08-17，commit 94d17ef6）
+
+根因（94d17ef6 修复）：protocol backfill 的 rebase 同时要求 DEX routing
+fingerprint 与预备时一致，而 DEX lane 每几秒发布 → protocol 作业永远
+rebase 失败被丢弃 → 扫描写入（observedEvents/address）从不发布，ring 恒空、
+observed cursor 卡在启动块。修复：(1) protocol-only rebase 不再被 DEX
+routing fingerprint 门住；(2) rebase 时把 staged 扫描的 observedEvents /
+address 写入合并进 current cache，而不是用 fresh clone 替换（旧逻辑每次
+rebase 都丢掉扫描产出）。
+
+节点验证证据（/opt/MEV + /opt/MEV-impl-capture = 94d17ef6，build 绿，
+searcher PID 208616，dirty 文件保留）：
+
+- `strict catalog observed topics=22`；`observed ring: n=1550`，topic 分布
+  含 univ3（499）/univ4+angstrom（394）/univ2（255）/curve（254）/
+  pancake-v3（57）/fluid（18）等。
+- `strict observations: families=8`：univ2-standard=509、univ3-standard=566、
+  univ4=407、dodo-v2=26、angstrom=395、fluid-dex=992、erc4626=998、
+  silo=13（DEX 族不再静默）。
+- `strict catalog root committed: revision=3..5 instances=128 pricing=129
+  mids=249 edges=251`（从 12 增长）。
+- `strict edges merged into runtime graph: edges=251 pools=128`。
+- blockscan-nminus1-state：`expected=251 priced=249`，state keys 含
+  univ3=107、univ2=5、univ4=1、dodo=9、fluid=1、erc4626=5。
+- 无新 fatal（当前进程 tail 800 行 0 fatal）。
+
+未满足的最后一项：blockscan-family 最近 pass `outcome=degraded`
+（issueCount=25，来源为已知未完成族 graph-incomplete：curve/self-burn/
+astra/silo/angstrom 等，非崩溃）。`outcome: ran` 需这些族补齐后才能标绿；
+单族失败按规则结构化记录、不降门槛。
