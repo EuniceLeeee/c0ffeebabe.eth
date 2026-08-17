@@ -5462,3 +5462,82 @@ compiler/static request 与 family-wide compiler/assemble 都必须为零。它�
     §20.2.6 的 cleanup slice 从源码和运行时删除；回滚依靠上一已验收构建物，不靠常驻双实现。
 18. 实施基线是 `origin/codex/ds-blockscan-state-timing-refactor@94cdf1d4...`；若分支前进，先审计差异再更新
     baseline，不能重新用 `main` 的现状替代 ds 事实。
+---
+
+## §22 可恢复的 durable universe rebuild（对抗审计 §1-§6，2026-08-17）
+
+universe rebuild 的正确性路径改为三类 durable 状态 + 固定 cutoff + 按 key
+恢复，禁止用进度数字（"8000/12015"）或"等全量结束才写"恢复：
+
+### 22.1 状态模型（StartupCheckpointEnvelope）
+- `verifiedMemos`：跨 rebuild 复用。键 = familyCandidateKey =
+  hash(familyId, plugin candidateKey)；含 familyInstanceKey =
+  hash(familyId, verified instanceKey)。V2/V3 实例键 = pool address；V4 =
+  poolId（共享 PoolManager 地址不可作键）；多族共址由 familyId 隔离。
+  每个 memo 带 candidateFingerprint（静态候选身份，无 swapCount 等动态
+  字段）、familyDefinitionHash（逐 Family，不用全局 catalogHash）、
+  validity(policy: immutable-code|dependency-proof, authorityFingerprint,
+  proofSource{number,hash})、verifiedIdentity、compiledDescriptor、
+  staticProjection、evidenceFingerprint、memoFingerprint。
+- `inProgressRun`：当前唯一未完成 rebuild。fixed cutoff number+hash、
+  fromBlock、universeHash、candidateSetHash、candidateCount、
+  observedThrough（只证 Swap 范围已扫完，不推进 appliedThrough）、
+  outcomesByCandidateKey：
+  - verified → familyInstanceKey + memoFingerprint；
+  - terminal-rejected（chain-proven）→ reasonCode + evidenceFingerprint；
+  - retryable → compact candidateSnapshot + evidenceRef(blockNumber/
+    blockHash/txHash/logIndex) + stage(nomination|identity|materialization|
+    projection) + failureCode(rpc|deadline|aborted|resource-limited) +
+    requestFingerprint + reasonCode + attemptCount + lastAttemptAt。
+  rpc/deadline 等 retryable 绝不伪装成 rejected。
+- `readyGeneration`：最后一次完整可用 Graph。cutoff/universeHash/
+  catalogHash/activeInstanceKeys/publicationSetHash/sourceCoverage/
+  graphSnapshot/graphHash。
+- 不保留长期原始 tx inbox；candidate journal 不是正确性路径。
+
+### 22.2 写入（AttestationCheckpointWriter + UniverseRebuildCheckpointStore）
+- 单写者文件 CAS：sidecar lock、temp + fsync + atomic rename + dir fsync；
+  损坏/篡改/CAS 冲突 fail-closed（fingerprint 校验）。
+- 每 25 条或 2-5 秒 flush；SIGTERM/SIGINT flush；kill -9 最多丢最后一批。
+- flush 只写 memo/run outcome，绝不推进 ready。
+- 操作：beginOrResumeRun（同 cutoff 幂等、异 runId fail-closed）、
+  casMergeRunOutcomes、casReplaceRunOutcome（attemptCount 守卫）、
+  casUpsertMemo、casCommitReadyGeneration（expectedRevision 守卫，清空
+  run 置 ready）。
+
+### 22.3 流程（rebuildUniverse）
+freezeCanonicalHead → 重扫最新两天 Swap（cutoff hash 固定）→ 按
+block+txHash+logIndex+address+topic/pool identity 完整去重 → 按
+familyCandidateKey 恢复：run.verified 跳过 / memo 可复用（family hash +
+candidate fingerprint + authority + canonical proofSource）直接
+writer.record / 否则 attestOnce（cache miss 才执行一次完整
+identity→materialization→projection，收集 publications）→ 周期 flush →
+retryable>0 抛 UniverseRunIncomplete（durable incomplete，禁止 ready）→
+exact partition 校验（active == verified ∪ chain-proven terminal
+rejected）→ rehydrate（canonical memo 重组装，本地校验/组装，不重发
+identity RPC；routeHandles 不可反序列化，由中央 rehydrator 重新签发）→
+逐族聚合一次 → buildGraph → assertCanonical(cutoff) → 一次 CAS 原子提升
+Graph+catalog+coverage+cutoff readyGeneration → 之后才创建 producer。
+
+### 22.4 单池 probe（rebuild-probe / probeOneFailure）
+load run → assert 原 cutoff hash → 取 retryable candidateSnapshot +
+evidenceRef → 只对目标 key attestOnce（不重扫窗口、不重跑其他池）→
+成功写 memo 与 run outcome 同一 CAS；失败 bump attemptCount；最后一个
+retryable 关闭后才允许 finalize。
+
+### 22.5 V4 recent-swap index
+key = H(provider, source.number, source.hash, manager, topic0, lookback,
+chunk)；settled/inFlight 双 Map；同 key 并发只建一次；失败清除后可重试
+（不污染 settled）；不同 key 互不干扰；chunk 减半跨迭代保持（修复原
+循环内重置导致"失败后部分/空索引被当 settled"的缺陷）。
+
+### 22.6 CLI
+- `searcher:universe-rebuild-status --checkpoint <path> [--json]`
+- `searcher:universe-rebuild-probe --checkpoint <path> --run-id <id>
+  --family-candidate-key <key>` 或 `--failure-code <code> [--limit N]`
+
+实现位置：universe-rebuild-checkpoint.ts（store+writer）、
+universe-rebuild-runner.ts（流程+probe）、universe-rebuild-status-cli.ts、
+universe-rebuild-probe-cli.ts、universe-rebuild-production.ts（生产接线：
+strict lifecycle attestOnce / canonical seal / canonical head 校验）。
+

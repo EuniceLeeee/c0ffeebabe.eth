@@ -644,7 +644,7 @@ function legacyLabelsForLineage(lineageId: string): {
   }
 }
 
-function createMinimalIdentityRuntime(
+export function createMinimalIdentityRuntime(
   provider: StrictIdentityProvider,
 ): CentralAdapterRuntime {
   return createStrictCentralAdapterRuntime({
