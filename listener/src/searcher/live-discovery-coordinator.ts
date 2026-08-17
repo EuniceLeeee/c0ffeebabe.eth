@@ -308,6 +308,12 @@ export interface LiveDiscoveryCoordinatorDeps {
     readonly fromBlock: number;
     readonly toBlock: number;
   } | null;
+  /**
+   * Audit §5/§6 producer freeze: when a universe-rebuild ready generation
+   * exists, the first protocol-backfill scan never starts before this
+   * block (the ready run already observed/attested the window).
+   */
+  readonly observationScanFrom?: number | null;
   /** Coarse N-1 state reads preempt retryable discovery transport reads. */
   readonly readPriority?: Pick<LiveRethReadPriority, "runBackground">;
 }
@@ -1008,11 +1014,12 @@ export async function createLiveDiscoveryCoordinator(
     },
   ) => {
     const hasObservedSource = protocolDiscoveryCoverage.hasObservedSource();
+    const frozenScanFrom = deps.observationScanFrom ?? 0;
     const scanRange = options.scanRange !== undefined
       ? options.scanRange
       : hasObservedSource
         ? planContiguousDiscoveryChunk(
-          current.lastObservedBlock,
+          Math.max(current.lastObservedBlock, frozenScanFrom),
           latestProtocolBlock,
           protocolDiscoveryMaxCatchupBlocks,
         )

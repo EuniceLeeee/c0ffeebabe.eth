@@ -171,6 +171,10 @@ import {
   mergeStartupFamilyPublications,
   type StrictIdentityProvider,
 } from "./strict-identity-attestation.js";
+import { UniverseRebuildCheckpointStore } from
+  "./universe-rebuild-checkpoint.js";
+import { resolveProducerBaseline } from
+  "./startup-universe-rebuild.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
@@ -3124,6 +3128,44 @@ async function main(): Promise<void> {
     strategyViews.backrun.map((pool) => pool.address.toLowerCase()),
   );
   const mempoolIntakeRefresh = new MempoolIntakeRefreshSignal();
+  // Audit §5/§6 producer freeze: when a universe-rebuild checkpoint is
+  // configured, the producer starts only after a ready generation exists
+  // at the frozen cutoff; the observed/applied cursors never rewind before
+  // it, and the historical event window is not re-scanned (the ready run
+  // already covered it). No ready generation (or an incomplete run) fails
+  // closed before the producer is created.
+  let startupObservationScanFrom: number | null = null;
+  const universeRebuildCheckpointPath =
+    process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH;
+  if (
+    universeRebuildCheckpointPath !== undefined &&
+    universeRebuildCheckpointPath.trim() !== ""
+  ) {
+    const rebuildStore = new UniverseRebuildCheckpointStore({
+      path: universeRebuildCheckpointPath,
+    });
+    const rebuildEnvelope = await rebuildStore.load();
+    if (rebuildEnvelope === null || rebuildEnvelope.readyGeneration === null) {
+      throw new Error(
+        "universe rebuild producer gate: no ready generation at " +
+          universeRebuildCheckpointPath +
+          " (run searcher:universe-rebuild-startup and probe retryables first)",
+      );
+    }
+    const baseline = resolveProducerBaseline({
+      ready: rebuildEnvelope.readyGeneration,
+      currentHead: discoveryToBlock,
+    });
+    startupObservationScanFrom = baseline.observationScanFrom;
+    console.log(
+      "[searcher/live] universe rebuild ready generation=" +
+        baseline.ready.generation +
+        " cutoff=" + baseline.ready.cutoff.number +
+        " instances=" + baseline.activeInstanceKeys.size +
+        " producer baseline freeze (scan from " +
+        baseline.observationScanFrom + ")",
+    );
+  }
   const liveDiscovery = await createLiveDiscoveryCoordinator({
     provider,
     ...(protocolDiscoveryHistoryProvider === undefined
@@ -3155,13 +3197,18 @@ async function main(): Promise<void> {
     // pools whose swap logs predate the incremental cursor still get
     // observed exactly once. The scanner asserts the toBlock hash itself.
     observedEventLookbackWindow:
-      poolUniverseCoverage.fromBlock === null ||
-        poolUniverseCoverage.toBlock === null
+      startupObservationScanFrom !== null
         ? null
-        : Object.freeze({
-            fromBlock: poolUniverseCoverage.fromBlock,
-            toBlock: poolUniverseCoverage.toBlock,
-          }),
+        : poolUniverseCoverage.fromBlock === null ||
+            poolUniverseCoverage.toBlock === null
+          ? null
+          : Object.freeze({
+              fromBlock: poolUniverseCoverage.fromBlock,
+              toBlock: poolUniverseCoverage.toBlock,
+            }),
+    ...(startupObservationScanFrom === null
+      ? {}
+      : { observationScanFrom: startupObservationScanFrom }),
     ...(strictCentralRuntime === null
       ? {}
       : { identityRuntime: strictCentralRuntime }),
