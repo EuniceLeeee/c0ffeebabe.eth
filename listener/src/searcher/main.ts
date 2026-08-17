@@ -28,29 +28,12 @@ import {
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import {
-  createDurableDiscoveryContinuityComposition,
-  type DurableDiscoveryContinuityComposition,
-} from "./adapter-family-discovery-continuity-composition.js";
-import {
-  CheckpointDiscoveryInventoryEnumerator,
-  type DiscoveryInventoryEnumerator,
-} from "./adapter-family-discovery-inventory-enumerator.js";
-import {
-  resolveStrictCatalogConsumerDiagnostic,
-} from "./strict-catalog-consumer-diagnostic.js";
-import {
-  resolveStrictSolverConsumer,
-} from "./strict-solver-consumer.js";
-import {
   createStrictCentralAdapterRuntime,
   type StrictSimulationTransport,
 } from "./strict-central-adapter-runtime.js";
 import {
   createRevmStrictSimulationTransport,
 } from "./revm-strict-simulation-transport.js";
-import {
-  publishStrictCatalogFromLifecycle,
-} from "./strict-catalog-live-publisher.js";
 import {
   productionFamilyStartupManifest,
 } from "./production-family-startup-manifest.js";
@@ -93,20 +76,14 @@ import {
   StrictProductionRuntimeRoot,
   type StrictProductionRuntimeSession,
 } from "./strict-production-runtime-session.js";
-import {
-  sealPublication,
-  type AdapterFamilyPublication,
-  type PreparedFamilyInstance,
-} from "./venues/adapter-family-runtime.js";
+import type { PreparedFamilyInstance } from
+  "./venues/adapter-family-runtime.js";
 import { resolveProducerBaseline } from
   "./startup-universe-rebuild.js";
 import {
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
   PRODUCTION_ADAPTER_FAMILIES,
 } from "./venues/production-registry.js";
-import {
-  setProductionStrictViewsProvider,
-} from "./venues/strict-catalog-registry-projection.js";
 import {
   DEFAULT_PENDING_EVIDENCE_MAX_READS,
   DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
@@ -282,11 +259,6 @@ import {
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const DEFAULT_RUNTIME_GRAPH_POOLS_PATH = resolve("searcher", "pools", "runtime-graph-pools.json");
 const DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH = resolve("searcher", "pools", "runtime-blockscan-pools.json");
-const DEFAULT_DISCOVERY_CONTINUITY_CHECKPOINT_PATH = resolve(
-  "searcher",
-  "state",
-  "discovery-continuity-checkpoint.json",
-);
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
@@ -1461,150 +1433,6 @@ async function main(): Promise<void> {
     config.poolUniversePath,
     config.poolUniverseManifestPath,
   );
-  // F6 Pair C: durable discovery continuity composition is the default
-  // strict discovery authority. The file-backed checkpoint store loads and
-  // re-verifies the persisted restart state, then logs its status; the
-  // point-in-time enumerator restores the checkpoint's durable incumbent
-  // inventory and fails closed when it cannot; the checkpoint inventory
-  // writer is the CAS entry for discovery producers (the live coordinator
-  // call-site is wired below). Complete-snapshot/omission/tombstone remain
-  // closed unless a separate independent closure passes.
-  const continuityCompositionPath =
-    process.env.SEARCHER_DISCOVERY_CONTINUITY_COMPOSITION_PATH ??
-    DEFAULT_DISCOVERY_CONTINUITY_CHECKPOINT_PATH;
-  let discoveryContinuityStatus = "disabled";
-  let discoveryContinuityComposition: DurableDiscoveryContinuityComposition |
-    null = null;
-  let discoveryInventoryEnumerator: DiscoveryInventoryEnumerator | null = null;
-  let restartTrustedSource: CanonicalSource | null = null;
-  if (
-    continuityCompositionPath !== undefined &&
-    continuityCompositionPath.trim() !== ""
-  ) {
-    try {
-      discoveryContinuityComposition =
-        createDurableDiscoveryContinuityComposition({
-        catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-        chainId: String((await provider.getNetwork()).chainId),
-        sourceRegistryFingerprint: "strict-source-registry-v1",
-        checkpointPath: continuityCompositionPath,
-        enumerateSnapshotInventory: async (source) => {
-          if (discoveryInventoryEnumerator === null) {
-            throw new Error(
-              "production point-in-time enumerator source is not wired",
-            );
-          }
-          return await discoveryInventoryEnumerator.enumerate(source);
-        },
-        verifyCanonicalSource: async (source) => {
-          const hash = await readBlockHash(provider, source.number);
-          if (hash.toLowerCase() !== source.hash.toLowerCase()) {
-            throw new Error(
-              `discovery continuity checkpoint source hash mismatch at ` +
-                `${source.number}`,
-            );
-          }
-        },
-        assertGenerationCurrent: (source) => {
-          const committed =
-            discoveryContinuityComposition?.catalogRoot.capture() ?? null;
-          if (
-            committed !== null &&
-            source.generation <=
-              committed.envelope.snapshot.source.generation
-          ) {
-            throw new Error(
-              `strict catalog source generation is stale: ` +
-                `${source.generation}`,
-            );
-          }
-        },
-      });
-      discoveryInventoryEnumerator =
-        new CheckpointDiscoveryInventoryEnumerator({
-          checkpointStore: discoveryContinuityComposition.store,
-        });
-      const loaded = await discoveryContinuityComposition.loadForRestart();
-      discoveryContinuityStatus = loaded.status;
-      if (loaded.status === "trusted") {
-        restartTrustedSource = loaded.snapshot.source;
-      }
-      console.log(
-        `[searcher/live] discovery continuity composition ` +
-          `${discoveryContinuityStatus}`,
-      );
-      console.log(
-        `[searcher/live] discovery continuity inventory writer ready`,
-      );
-    } catch (error) {
-      discoveryContinuityStatus =
-        `failed:${error instanceof Error ? error.message : String(error)}`;
-      console.warn(
-        `[searcher/live] discovery continuity composition ` +
-          `${discoveryContinuityStatus}`,
-      );
-    }
-  }
-  // F8: install the committed strict views provider for the legacy-shaped
-  // runtime bridges (blockscan pricing + funding reads). The projection's
-  // pricing/funding capabilities read the strict publication through this
-  // central holder; absent composition or committed publication fails closed
-  // (no mids / no offers), never a legacy read.
-  setProductionStrictViewsProvider(
-    () => discoveryContinuityComposition?.catalogRoot.capture()?.views ?? null,
-  );
-  // Strict catalog consumer diagnostic (shadow/diagnostic; OFF by default).
-  // SEARCHER_STRICT_CATALOG_CONSUMER=1 resolves the currently committed
-  // strict views through the source-bound consumer and logs a redacted
-  // summary. It never feeds the solver and never falls back to the legacy
-  // registry; this grants no default-authority cutover.
-  if (process.env.SEARCHER_STRICT_CATALOG_CONSUMER === "1") {
-    let strictConsumerStatus: string;
-    try {
-      const committed =
-        discoveryContinuityComposition?.catalogRoot.capture() ?? null;
-      strictConsumerStatus = committed === null
-        ? "no-committed-publication"
-        : resolveStrictCatalogConsumerDiagnostic({
-            composition: discoveryContinuityComposition,
-            source: committed.views.source,
-            generation: committed.views.source.generation,
-          });
-    } catch (error) {
-      strictConsumerStatus =
-        `failed:${error instanceof Error ? error.message : String(error)}`;
-    }
-    console.log(
-      `[searcher/live] strict catalog consumer diagnostic ` +
-        strictConsumerStatus,
-    );
-  }
-  // Strict solver consumer (solver-shaped wiring; OFF by default).
-  // SEARCHER_STRICT_SOLVER_CONSUMER=1 resolves the complete strict read
-  // surface (every pricing mid, funding offer and credit route) through the
-  // source-bound consumer and logs counts. It never feeds the legacy
-  // registry; the planner call-site remains part of the default-authority
-  // cutover and is not enabled here.
-  if (process.env.SEARCHER_STRICT_SOLVER_CONSUMER === "1") {
-    let strictSolverStatus: string;
-    try {
-      const committed =
-        discoveryContinuityComposition?.catalogRoot.capture() ?? null;
-      strictSolverStatus = committed === null
-        ? "no-committed-publication"
-        : resolveStrictSolverConsumer({
-            composition: discoveryContinuityComposition,
-            source: committed.views.source,
-            generation: committed.views.source.generation,
-          });
-    } catch (error) {
-      strictSolverStatus =
-        `failed:${error instanceof Error ? error.message : String(error)}`;
-    }
-    console.log(
-      `[searcher/live] strict solver consumer ` + strictSolverStatus,
-    );
-  }
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
   // P0 strict startup authority: one fixed-cutoff durable run owns the union
   // of every startup pool set plus plugin-declared event supplements. It
@@ -1682,26 +1510,6 @@ async function main(): Promise<void> {
     readyGraph: strictReadyRuntime.graph,
     readyInstances,
   });
-  const readyInstancesByFamily = new Map<string, PreparedFamilyInstance[]>();
-  for (const instance of readyInstances) {
-    const siblings = readyInstancesByFamily.get(instance.familyId);
-    if (siblings === undefined) {
-      readyInstancesByFamily.set(instance.familyId, [instance]);
-    } else {
-      siblings.push(instance);
-    }
-  }
-  const startupAttestationPublications: readonly AdapterFamilyPublication[] =
-    Object.freeze([...readyInstancesByFamily.entries()].map(
-      ([familyId, instances]) => sealPublication({
-        familyId: familyId as never,
-        source: readyUniverse.cutoff,
-        generation: readyUniverse.cutoff.generation,
-        instances: Object.freeze(instances),
-        outcomes: Object.freeze([]),
-      }),
-    ));
-
   // Transition-only pool views remain useful for detector metadata, but no
   // longer grant identity or Graph admission. readyGeneration is the sole
   // executable authority.
@@ -2013,55 +1821,16 @@ async function main(): Promise<void> {
     return pending;
   };
 
-  // Reconstruct the in-memory catalog only from the same readyGeneration.
-  // This is deterministic process-local handle issuance, not a second
-  // discovery/lifecycle run and not a merge into another Graph.
-  if (discoveryContinuityComposition === null) {
-    throw new Error("strict startup requires production catalog composition");
-  }
-  const startupPublishResult = await publishStrictCatalogFromLifecycle({
-    composition: discoveryContinuityComposition,
-    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    source: readyUniverse.cutoff,
-    publications: Object.freeze(startupAttestationPublications.map(
-      (publication) => Object.freeze({
-        familyId: publication.familyId,
-        publication,
-      }),
-    )),
-  });
-  if (startupPublishResult.status !== "published") {
-    throw new Error(
-      "strict ready catalog publication failed: " +
-        startupPublishResult.reason,
-    );
-  }
-  const committedReadyRoot =
-    discoveryContinuityComposition.catalogRoot.capture();
-  if (committedReadyRoot === null) {
-    throw new Error("strict ready catalog root is absent after publication");
-  }
-  const readyEdgeIds = [...strictReadyRuntime.graph].map((edge) =>
-    String((edge as { canonicalEdgeId?: unknown }).canonicalEdgeId ?? "")
-  ).sort();
-  const committedEdgeIds = [...committedReadyRoot.views.edges].map((edge) =>
-    String((edge as { canonicalEdgeId?: unknown }).canonicalEdgeId ?? "")
-  ).sort();
-  if (
-    readyEdgeIds.length !== committedEdgeIds.length ||
-    readyEdgeIds.some((edgeId, index) => edgeId !== committedEdgeIds[index])
-  ) {
-    throw new Error(
-      "strict ready Graph/catalog edge set diverged during rehydration",
-    );
-  }
+  // The ready envelope is the only startup catalog/Graph lineage. Rehydrated
+  // instances are handed directly to StrictProductionRuntimeRoot above; there
+  // is no second lifecycle/publication/CAS or shadow catalog root.
   console.log(
     "[searcher/live] strict ready catalog loaded: generation=" +
       readyUniverse.generation +
       " cutoff=" + readyUniverse.cutoff.number +
       " catalog_hash=" + readyUniverse.catalogHash +
-      " instances=" + committedReadyRoot.envelope.privateState.instances.size +
-      " edges=" + committedReadyRoot.views.edges.length,
+      " instances=" + readyInstances.length +
+      " edges=" + strictReadyRuntime.graph.length,
   );
 
   // Incremental refresh: scan recent blocks for new pools every N minutes

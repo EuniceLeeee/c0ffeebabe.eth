@@ -105,6 +105,12 @@ for (const forbidden of [
   "runStrictLivePublicationChain",
   "scanActivePoolsDetailed",
   "indexFactoryPools",
+  "createDurableDiscoveryContinuityComposition",
+  "CheckpointDiscoveryInventoryEnumerator",
+  "publishStrictCatalogFromLifecycle",
+  "setProductionStrictViewsProvider",
+  "SEARCHER_STRICT_CATALOG_CONSUMER",
+  "SEARCHER_STRICT_SOLVER_CONSUMER",
 ]) {
   assert.equal(
     mainSource.includes(forbidden),
@@ -113,7 +119,8 @@ for (const forbidden of [
   );
 }
 assert(mainSource.includes("resolveStrictReadyRuntime(readyUniverse)"));
-assert(mainSource.includes("producerGenerationFrozen: true"));
+assert(mainSource.includes("new StrictProductionRuntimeRoot({"));
+assert(mainSource.includes("frozenTopology: frozenProducerTopology"));
 assert(mainSource.includes("for (const edge of graph)"));
 
 console.log("strict ready runtime PASS");

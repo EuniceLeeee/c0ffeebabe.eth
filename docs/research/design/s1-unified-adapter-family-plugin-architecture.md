@@ -3214,6 +3214,32 @@ current-source session 等价替换，不能把已删的 live coordinator 接回
   删除目标。本 checkpoint 不证明 ready envelope 已成为唯一 startup catalog
   lineage，也不授权部署。
 
+**2026-08-18 startup 二次 publication 第四批物理删除 checkpoint（实现提交
+承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- production `main.ts` 已物理删除
+  `createDurableDiscoveryContinuityComposition`、
+  `CheckpointDiscoveryInventoryEnumerator`、
+  `publishStrictCatalogFromLifecycle`、`setProductionStrictViewsProvider` 及
+  strict catalog/solver diagnostic shadow wiring；旧 discovery-continuity
+  文件 checkpoint 不再参与 production startup；
+- ready memo 不再被重新 `sealPublication` 后送入第二个 catalog root/CAS。
+  startup 只校验 `StartupCheckpointEnvelope.readyGeneration` 的 Graph/catalog/
+  coverage/cutoff roots，rehydrate active instances，并直接构造唯一
+  `StrictProductionRuntimeRoot`；catalog/Graph 日志计数也只来自这一个 ready
+  envelope；
+- `searcher:strict-ready-runtime` 新增 production-source 合同，禁止上述旧
+  composition/publisher/provider/diagnostic 标识重新进入 main，并要求 ready
+  resolver、strict root 与 frozen topology production wiring 同时存在。已过时
+  的 `producerGenerationFrozen: true` 字面量断言改为检查真实类型互斥入口
+  `frozenTopology: frozenProducerTopology`，不为测试恢复已删 coordinator；
+- `searcher:strict-ready-runtime`、`searcher:blockscan-frozen-topology` 与
+  listener 完整 `build` 通过。`AdapterFamilyGraphViewCoordinator` 和
+  `strict-catalog-registry-projection` 仍是 coarse pricing 的 legacy-shaped
+  bridge；production 当前没有旧 views provider，因而这些入口只会空结果/
+  fail-closed。下一批必须用 ready topology + current-source strict pricing
+  等价替换后物理删除，禁止重新安装 provider。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
