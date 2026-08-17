@@ -117,12 +117,17 @@ OPP_TTL_MS="${SEARCHER_OPP_TTL_MS:-5000}"
 # because SSM spawns a fresh sh (no SEARCHER_* inherited), so the :-fallback ALWAYS applied. Deploy-
 # controlled (like OPP_TTL_MS) so it survives the recover-from-process .env rebuild. Latency-affordable.
 POOL_UNIVERSE_TOP_N="${SEARCHER_POOL_UNIVERSE_TOP_N:-20000}"
+UNIVERSE_REBUILD_CHECKPOINT_PATH="${SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH:-/opt/MEV-runtime/universe-rebuild-checkpoint.json}"
+case "$UNIVERSE_REBUILD_CHECKPOINT_PATH" in
+  /*) ;;
+  *) { say "ABORT: SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH must be absolute"; exit 9; } ;;
+esac
 PROFIT_HAIRCUT_BPS="${SEARCHER_PROFIT_HAIRCUT_BPS:-0}"
 [ "$PROFIT_HAIRCUT_BPS" -ge 0 ] && [ "$PROFIT_HAIRCUT_BPS" -le 10000 ] \
   || { say "ABORT: SEARCHER_PROFIT_HAIRCUT_BPS must be 0..10000"; exit 9; }
-STARTUP_BANNER_TIMEOUT_SECONDS="${SEARCHER_STARTUP_BANNER_TIMEOUT_SECONDS:-600}"
-[ "$STARTUP_BANNER_TIMEOUT_SECONDS" -ge 60 ] && [ "$STARTUP_BANNER_TIMEOUT_SECONDS" -le 1200 ] \
-  || { say "ABORT: SEARCHER_STARTUP_BANNER_TIMEOUT_SECONDS must be 60..1200"; exit 9; }
+STARTUP_BANNER_TIMEOUT_SECONDS="${SEARCHER_STARTUP_BANNER_TIMEOUT_SECONDS:-3600}"
+[ "$STARTUP_BANNER_TIMEOUT_SECONDS" -ge 60 ] && [ "$STARTUP_BANNER_TIMEOUT_SECONDS" -le 3600 ] \
+  || { say "ABORT: SEARCHER_STARTUP_BANNER_TIMEOUT_SECONDS must be 60..3600"; exit 9; }
 LIVE_MARKER=$REPO/.deploy-live
 N_MINUS_ONE_MARKER=$REPO/.blockscan-nminus1
 LOCAL_RPC=http://127.0.0.1:8545
@@ -201,7 +206,7 @@ recover_running_env() {
     [ -n "$line" ] || continue
     key=${line%%=*}
     case "$key" in
-      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_PROFIT_HAIRCUT_BPS|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ETH_USD|SEARCHER_GAS_BUFFER_MULT_X10|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ENABLE_MEV_SHARE|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT|SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK|SEARCHER_BLOCKSCAN_STATE_MULTICALL|SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE|SEARCHER_DEPLOY_REF) continue ;;
+      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH|SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH|SEARCHER_PROFIT_HAIRCUT_BPS|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ETH_USD|SEARCHER_GAS_BUFFER_MULT_X10|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ENABLE_MEV_SHARE|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT|SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK|SEARCHER_BLOCKSCAN_STATE_MULTICALL|SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE|SEARCHER_DEPLOY_REF) continue ;;
       SEARCHER_*) echo "$line"; continue ;;
     esac
     for wanted in $NON_SEARCHER_KEYS; do
@@ -233,6 +238,7 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   recover_running_env > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
+  echo "SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH=$UNIVERSE_REBUILD_CHECKPOINT_PATH" >> "$tmp"
   echo "SEARCHER_PROFIT_HAIRCUT_BPS=$PROFIT_HAIRCUT_BPS" >> "$tmp"
   echo "SEARCHER_DISCOVERY_TO_BLOCK=$DISCOVERY_TO_BLOCK" >> "$tmp"
   echo "SEARCHER_EVENTS_PATH=$EVENTS_PATH" >> "$tmp"
@@ -290,9 +296,10 @@ else
   case "$PROTOCOL_TOUCH_MODE" in off|shadow|enabled) ;; *) abort_runtime "SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE must be off, shadow or enabled" ;; esac
   tmp=$(mktemp)
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
-  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_PROFIT_HAIRCUT_BPS|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ETH_USD|SEARCHER_GAS_BUFFER_MULT_X10|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ENABLE_MEV_SHARE|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT|SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK|SEARCHER_BLOCKSCAN_STATE_MULTICALL|SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE|SEARCHER_DEPLOY_REF)=' "$ENVF" > "$tmp"
+  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH|SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH|SEARCHER_PROFIT_HAIRCUT_BPS|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ETH_USD|SEARCHER_GAS_BUFFER_MULT_X10|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ENABLE_MEV_SHARE|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT|SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK|SEARCHER_BLOCKSCAN_STATE_MULTICALL|SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE|SEARCHER_DEPLOY_REF)=' "$ENVF" > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
+  echo "SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH=$UNIVERSE_REBUILD_CHECKPOINT_PATH" >> "$tmp"
   echo "SEARCHER_PROFIT_HAIRCUT_BPS=$PROFIT_HAIRCUT_BPS" >> "$tmp"
   echo "SEARCHER_DISCOVERY_TO_BLOCK=$DISCOVERY_TO_BLOCK" >> "$tmp"
   echo "SEARCHER_EVENTS_PATH=$EVENTS_PATH" >> "$tmp"
@@ -509,167 +516,21 @@ if [ -n "$V2_LINEAGE_SNAPSHOT" ]; then
   say "V2 lineages pinned: hash=$V2_LINEAGE_HASH lineages=$V2_LINEAGE_COUNT"
 fi
 
-# ── Pool-universe re-index (best-effort build; fail-closed selected input) ──
-REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-2}"
-REINDEX_OUT="$REPO/listener/searcher/pools/active-pools.json"
-REINDEX_TMP="/tmp/active-pools.reindex.$$.json"
-REINDEX_MANIFEST="$REINDEX_OUT.manifest.json"
-REINDEX_TMP_MANIFEST="$REINDEX_TMP.manifest.json"
-REINDEX_RETAIN="${POOL_UNIVERSE_RETAIN_PATH:-$REINDEX_OUT}"
-UNIVERSE_SNAPSHOT_DIR=/opt/MEV-runtime/universe
-UNIVERSE_LOCK=/run/lock/mev-pooluniverse.lock
-UNIVERSE_LOCK_WAIT_SECONDS="${POOL_UNIVERSE_LOCK_WAIT_SECONDS:-300}"
-[[ "$UNIVERSE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]] \
-  && [ "$UNIVERSE_LOCK_WAIT_SECONDS" -ge 30 ] \
-  && [ "$UNIVERSE_LOCK_WAIT_SECONDS" -le 600 ] \
-  || abort_runtime "POOL_UNIVERSE_LOCK_WAIT_SECONDS must be 30..600"
-POOL_UNIVERSE_DISCOVERY_BLOCKS=$(env_value SEARCHER_DISCOVERY_BLOCKS "$ENVF")
-POOL_UNIVERSE_DISCOVERY_BLOCKS="${POOL_UNIVERSE_DISCOVERY_BLOCKS:-300}"
-[[ "$POOL_UNIVERSE_DISCOVERY_BLOCKS" =~ ^[0-9]+$ ]] \
-  || abort_runtime "SEARCHER_DISCOVERY_BLOCKS must be a non-negative integer"
-POOL_UNIVERSE_V2_LINEAGES_PATH=$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")
-validate_pool_universe_selection() {
-  local universe_path=$1 manifest_path=$2 frozen_source=$3
-  local discovery_blocks=$4 v2_lineages_path=$5
-  (
-    cd "$REPO/listener" &&
-      env SEARCHER_V2_LINEAGES_PATH="$v2_lineages_path" \
-        node --import tsx src/searcher/pool-universe-deploy-trust.ts \
-          "$universe_path" \
-          "$manifest_path" \
-          "$frozen_source" \
-          "$discovery_blocks" \
-          "$LOCAL_RPC"
-  )
-}
-# The cron writer owns the same lock across its build + atomic publication.
-# Deploy must own it from input selection through content-addressed snapshot
-# publication, otherwise cron can replace the canonical files between the
-# freshness check, validation and copy.
-exec 9>"$UNIVERSE_LOCK"
-flock -w "$UNIVERSE_LOCK_WAIT_SECONDS" 9 \
-  || abort_runtime \
-    "could not lock pool universe selection at $UNIVERSE_LOCK after ${UNIVERSE_LOCK_WAIT_SECONDS}s"
-# Debounce: with frequent dry-run on/off toggles, re-scanning on EVERY restart is wasteful. Skip if the
-# universe is already runtime-trusted — its manifest uses the selected V2
-# lineage/production registry, its source is still canonical, and its landed
-# window bridges the next process's SEARCHER_DISCOVERY_BLOCKS contract. The
-# optional MAX_STALE_BLOCKS controls when deploy must attempt a refresh. The
-# runtime-trust validator below remains the acceptance boundary if that refresh
-# fails; setting the value to 0 therefore forces an attempt without making a
-# transient indexer failure take down an otherwise runtime-compatible deploy.
-# (The 30-min cron keeps it far fresher, so this check usually skips; it only fires if the cron lapsed.)
-# Block-based, NOT mtime — mtime is a deceptive deploy re-save; toBlock is the real data freshness.
-REINDEX_MAX_STALE_BLOCKS="${POOL_UNIVERSE_MAX_STALE_BLOCKS:-7200}"
-if ! REINDEX_CUR_TOBLOCK=$(
-  validate_pool_universe_selection \
-    "$REINDEX_OUT" \
-    "$REINDEX_MANIFEST" \
-    "$DISCOVERY_TO_BLOCK" \
-    "$POOL_UNIVERSE_DISCOVERY_BLOCKS" \
-    "$POOL_UNIVERSE_V2_LINEAGES_PATH" \
-    2>/dev/null
-); then
-  REINDEX_CUR_TOBLOCK=0
+# ── Startup universe authority ───────────────────────────────────────────────
+# The searcher owns the fixed-cutoff scan, durable per-instance attestation and
+# atomic ready Graph/catalog promotion. Deploy must not run a second universe
+# rebuild or validate a legacy manifest as admission authority. Any configured
+# pool-universe file is only a historical nomination input to that startup run.
+UNIVERSE_REBUILD_DIR=$(dirname "$UNIVERSE_REBUILD_CHECKPOINT_PATH")
+mkdir -p "$UNIVERSE_REBUILD_DIR" \
+  || abort_runtime "could not create universe rebuild checkpoint directory"
+[ -d "$UNIVERSE_REBUILD_DIR" ] && [ -w "$UNIVERSE_REBUILD_DIR" ] \
+  || abort_runtime "universe rebuild checkpoint directory is not writable"
+if [ -e "$UNIVERSE_REBUILD_CHECKPOINT_PATH" ] \
+   && [ ! -f "$UNIVERSE_REBUILD_CHECKPOINT_PATH" ]; then
+  abort_runtime "universe rebuild checkpoint path is not a regular file"
 fi
-if [ "$REINDEX_CUR_TOBLOCK" -gt 0 ] \
-   && [ "$REINDEX_CUR_TOBLOCK" -le "$DISCOVERY_TO_BLOCK" ] \
-   && [ "$((DISCOVERY_TO_BLOCK - REINDEX_CUR_TOBLOCK))" -lt "$REINDEX_MAX_STALE_BLOCKS" ] \
-   && [ -s "$REINDEX_MANIFEST" ]; then
-  say "pool universe already fresh (toBlock=$REINDEX_CUR_TOBLOCK, source=$DISCOVERY_TO_BLOCK, $((DISCOVERY_TO_BLOCK - REINDEX_CUR_TOBLOCK)) < $REINDEX_MAX_STALE_BLOCKS blocks) — skipping re-index."
-elif say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, V4 from deployment)…"; \
-   timeout 1500 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
-       SEARCHER_V2_LINEAGES_PATH="$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")" \
-       POOL_UNIVERSE_TO_BLOCK="$DISCOVERY_TO_BLOCK" \
-       POOL_UNIVERSE_LOOKBACK_DAYS="$REINDEX_DAYS" \
-       POOL_UNIVERSE_RETAIN_PATH="$REINDEX_RETAIN" \
-       POOL_UNIVERSE_OUT="$REINDEX_TMP" \
-       POOL_UNIVERSE_MANIFEST_OUT="$REINDEX_TMP_MANIFEST" \
-       sh -c '
-         archive=$(sed -n "s/^SEARCHER_PROTOCOL_DISCOVERY_ARCHIVE_RPC_URL=//p" "$0/.env" | tail -1)
-         [ -n "$archive" ] ||
-           archive=$(sed -n "s/^MAINNET_RPC_URL=//p" "$0/.env" | tail -1)
-         if [ -n "$archive" ] && [ "$archive" != "$MAINNET_RPC_URL" ]; then
-           export POOL_UNIVERSE_HISTORY_LOG_RPC_URL="$archive"
-         fi
-         unset archive
-         cd "$0/listener" &&
-           npx tsx src/searcher/build-active-pool-universe.ts
-       ' "$REPO" \
-       >/tmp/deploy-reindex.log 2>&1 \
-   && [ -s "$REINDEX_TMP" ] && [ -s "$REINDEX_TMP_MANIFEST" ] \
-   && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); p=d["pools"] if isinstance(d,dict) else d; sys.exit(0 if len(p)>0 else 1)' "$REINDEX_TMP"; then
-  POOLS=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); p=d["pools"] if isinstance(d,dict) else d; print(len(p))' "$REINDEX_TMP")
-  cp -a "$REINDEX_OUT" "${REINDEX_OUT}.bak-$(date +%s)" 2>/dev/null || true
-  cp -a "$REINDEX_MANIFEST" "${REINDEX_MANIFEST}.bak-$(date +%s)" 2>/dev/null || true
-  mv "$REINDEX_TMP" "$REINDEX_OUT"
-  mv "$REINDEX_TMP_MANIFEST" "$REINDEX_MANIFEST"
-  say "pool universe re-indexed: $POOLS pools (toBlock=$DISCOVERY_TO_BLOCK)."
-else
-  say "WARNING: pool-universe re-index failed/timed out — keeping existing active-pools.json (deploy continues)."
-  rm -f "$REINDEX_TMP" "$REINDEX_TMP_MANIFEST" 2>/dev/null || true
-fi
-
-# The selected canonical pair is a deploy input, not a best-effort hint.
-# Validate its exact frozen source and output digest while the cron writer is
-# excluded. A failed rebuild may keep an older valid snapshot, but a future,
-# malformed or mismatched pair must stop rather than start a permanently-behind
-# discovery generation.
-REINDEX_SELECTED_TOBLOCK=$(
-  validate_pool_universe_selection \
-    "$REINDEX_OUT" \
-    "$REINDEX_MANIFEST" \
-    "$DISCOVERY_TO_BLOCK" \
-    "$POOL_UNIVERSE_DISCOVERY_BLOCKS" \
-    "$POOL_UNIVERSE_V2_LINEAGES_PATH"
-) || abort_runtime \
-  "selected pool universe/manifest is not runtime-trusted at frozen source $DISCOVERY_TO_BLOCK"
-
-# Pin the running process to an immutable, content-addressed universe. The 30-minute indexer may replace
-# active-pools.json while an A/B window is running; that file update must become input to the NEXT deploy,
-# not silently mutate the champion's recorded fairness input mid-window.
-UNIVERSE_HASH=$(sha256sum "$REINDEX_OUT" 2>/dev/null | awk '{print $1}')
-case "$UNIVERSE_HASH" in
-  [0-9a-f][0-9a-f]*) ;;
-  *) abort_runtime "could not hash pool universe $REINDEX_OUT" ;;
-esac
-[ "${#UNIVERSE_HASH}" = "64" ] \
-  || abort_runtime "invalid pool universe hash for $REINDEX_OUT"
-mkdir -p "$UNIVERSE_SNAPSHOT_DIR" \
-  || abort_runtime "could not create $UNIVERSE_SNAPSHOT_DIR"
-UNIVERSE_SNAPSHOT="$UNIVERSE_SNAPSHOT_DIR/active-pools-$UNIVERSE_HASH.json"
-UNIVERSE_MANIFEST_SNAPSHOT="$UNIVERSE_SNAPSHOT.manifest.json"
-if [ ! -f "$UNIVERSE_SNAPSHOT" ]; then
-  SNAPSHOT_TMP="$UNIVERSE_SNAPSHOT.tmp.$$"
-  cp "$REINDEX_OUT" "$SNAPSHOT_TMP" \
-    || abort_runtime "could not snapshot pool universe"
-  chmod 444 "$SNAPSHOT_TMP"
-  mv "$SNAPSHOT_TMP" "$UNIVERSE_SNAPSHOT"
-fi
-[ "$(sha256sum "$UNIVERSE_SNAPSHOT" | awk '{print $1}')" = "$UNIVERSE_HASH" ] \
-  || abort_runtime "content-addressed universe snapshot failed verification"
-if [ -s "$REINDEX_MANIFEST" ] && [ ! -f "$UNIVERSE_MANIFEST_SNAPSHOT" ]; then
-  MANIFEST_SNAPSHOT_TMP="$UNIVERSE_MANIFEST_SNAPSHOT.tmp.$$"
-  cp "$REINDEX_MANIFEST" "$MANIFEST_SNAPSHOT_TMP" \
-    || abort_runtime "could not snapshot pool universe manifest"
-  chmod 444 "$MANIFEST_SNAPSHOT_TMP"
-  mv "$MANIFEST_SNAPSHOT_TMP" "$UNIVERSE_MANIFEST_SNAPSHOT"
-fi
-[ -s "$UNIVERSE_MANIFEST_SNAPSHOT" ] \
-  || abort_runtime "content-addressed universe manifest snapshot is missing"
-[ "$(sha256sum "$UNIVERSE_MANIFEST_SNAPSHOT" | awk '{print $1}')" = \
-  "$(sha256sum "$REINDEX_MANIFEST" | awk '{print $1}')" ] \
-  || abort_runtime "content-addressed universe manifest snapshot failed verification"
-flock -u 9
-exec 9>&-
-tmp=$(mktemp)
-grep -Ev '^SEARCHER_POOL_UNIVERSE_(PATH|MANIFEST_PATH)=' "$ENVF" > "$tmp" || true
-echo "SEARCHER_POOL_UNIVERSE_PATH=$UNIVERSE_SNAPSHOT" >> "$tmp"
-if [ -s "$UNIVERSE_MANIFEST_SNAPSHOT" ]; then
-  echo "SEARCHER_POOL_UNIVERSE_MANIFEST_PATH=$UNIVERSE_MANIFEST_SNAPSHOT" >> "$tmp"
-fi
-cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
-say "pool universe pinned: hash=$UNIVERSE_HASH toBlock=$REINDEX_SELECTED_TOBLOCK snapshot=$UNIVERSE_SNAPSHOT"
+say "startup universe authority: checkpoint=$UNIVERSE_REBUILD_CHECKPOINT_PATH (pool file is nomination-only)"
 
 # ── Router allowlist auto-discovery (best-effort; never blocks/aborts the deploy) ──
 # Proactive flow-admission refresh: scan recent local-reth blocks for out-of-allowlist `to` contracts
@@ -719,8 +580,6 @@ sleep 8
 ACTIVE=$(systemctl is-active mev-searcher)
 NEWPID=$(systemctl show -p MainPID --value mev-searcher)
 DRY=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_DRY_RUN=$DRY_VAL")
-PROCESS_UNIVERSE=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null \
-  | sed -n 's/^SEARCHER_POOL_UNIVERSE_PATH=//p' | tail -1)
 BACKRUN_EXPECTED=$BACKRUN_VAL
 MEMPOOL_EXPECTED=$MEMPOOL_VAL
 MEV_SHARE_EXPECTED=$MEV_SHARE_VAL
@@ -731,6 +590,8 @@ PROCESS_ANVIL_PORT=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -n
 PROCESS_BLOCKSCAN_ANVIL_PORT=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -n 's/^SEARCHER_BLOCKSCAN_ANVIL_PORT=//p' | tail -1)
 PROCESS_EAGER_STATE=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -n 's/^SEARCHER_EAGER_STATE_BACKEND=//p' | tail -1)
 PROCESS_RUNTIME_COMMIT=$(process_env_value SEARCHER_RUNTIME_COMMIT "$NEWPID")
+PROCESS_REBUILD_CHECKPOINT=$(process_env_value \
+  SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH "$NEWPID")
 PROCESS_N_MINUS_ONE=$(process_env_value SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK "$NEWPID")
 PROCESS_BLOCKSCAN_STATE_MULTICALL=$(process_env_value SEARCHER_BLOCKSCAN_STATE_MULTICALL "$NEWPID")
 PROCESS_PROTOCOL_TOUCH_MODE=$(process_env_value SEARCHER_BLOCKSCAN_PROTOCOL_TOUCH_MODE "$NEWPID")
@@ -760,6 +621,10 @@ if [ "$PROCESS_EAGER_STATE" != "$BACKRUN_EXPECTED" ]; then
 fi
 if [ "$PROCESS_RUNTIME_COMMIT" != "$DEPLOY_COMMIT" ]; then
   abort_runtime "restarted process runtime commit does not match deployed checkout"
+fi
+if [ "$(process_env_count SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH "$NEWPID")" != "1" ] \
+   || [ "$PROCESS_REBUILD_CHECKPOINT" != "$UNIVERSE_REBUILD_CHECKPOINT_PATH" ]; then
+  abort_runtime "restarted process did not retain the durable universe rebuild checkpoint"
 fi
 if [ "$(process_env_count SEARCHER_BLOCKSCAN_STATE_MULTICALL "$NEWPID")" != "1" ] \
    || [ "$PROCESS_BLOCKSCAN_STATE_MULTICALL" != "$BLOCKSCAN_STATE_MULTICALL" ]; then
@@ -802,12 +667,9 @@ if [ "$MODE" = "LIVE" ]; then
     "$(printf %s "$WALLET" | tr '[:upper:]' '[:lower:]')" ] \
     || abort_runtime "effective BotVM owner changed after restart"
 fi
-if [ "$PROCESS_UNIVERSE" != "$UNIVERSE_SNAPSHOT" ] \
-   || [ "$(sha256sum "$PROCESS_UNIVERSE" 2>/dev/null | awk '{print $1}')" != "$UNIVERSE_HASH" ]; then
-  abort_runtime "restarted process did not retain the verified immutable universe snapshot"
-fi
-say "runtime universe verified: $PROCESS_UNIVERSE hash=$UNIVERSE_HASH"
+say "runtime universe checkpoint verified: $PROCESS_REBUILD_CHECKPOINT"
 BANNER=""
+READY_BANNER=""
 for _ in $(seq 1 "$STARTUP_BANNER_TIMEOUT_SECONDS"); do
   STARTUP_LOG=$(tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null)
   STARTUP_FATAL=$(printf '%s\n' "$STARTUP_LOG" \
@@ -823,11 +685,17 @@ for _ in $(seq 1 "$STARTUP_BANNER_TIMEOUT_SECONDS"); do
       "searcher process changed before startup banner (active=$CURRENT_ACTIVE pid=$CURRENT_PID expected=$NEWPID)"
   fi
   BANNER=$(printf '%s\n' "$STARTUP_LOG" | grep 'pool registry:' | tail -1)
-  [ -n "$BANNER" ] && break
+  READY_BANNER=$(printf '%s\n' "$STARTUP_LOG" \
+    | grep 'universe rebuild ready generation=' | tail -1)
+  [ -n "$BANNER" ] && [ -n "$READY_BANNER" ] && break
   sleep 1
 done
 if [ -z "$BANNER" ]; then
   abort_runtime "missing pool registry startup banner after restart (log $LOGF)"
+fi
+if [ -z "$READY_BANNER" ]; then
+  abort_runtime \
+    "startup universe rebuild did not reach ready before the one-hour diagnosis boundary (log $LOGF)"
 fi
 tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
   | grep "\[searcher/live\] backrun=$( [ "$BACKRUN_EXPECTED" = "1" ] && echo enabled || echo disabled )" >/dev/null \
@@ -852,9 +720,7 @@ if [ -f "$REPO/.block-scan" ]; then
       "block-scan route telemetry banner missing for $BLOCKSCAN_ROUTE_EVENTS_PATH"
 fi
 say "startup banner: $BANNER"
-if echo "$BANNER" | grep -Eq '(^|[[:space:]])universe=0([^0-9]|$)|\+ 0 universe([^0-9]|$)'; then
-  abort_runtime "pool universe loaded zero pools after restart"
-fi
+say "startup universe ready: $READY_BANNER"
 if [ "$MODE" = "LIVE" ]; then
   say "########################################################################"
   say "### DONE — *** LIVE BROADCAST MODE *** on bounded test wallet $WALLET  ###"

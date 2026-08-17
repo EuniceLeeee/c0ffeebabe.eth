@@ -3596,6 +3596,30 @@ strict 缺口 fail closed，只把历史 commit 当参考。本批未部署，�
 strict lifecycle 完成。deploy trust/build-universe 与 standalone discovery/router tooling 仍有旧
 registry 依赖，继续后续物理删除。本批未部署、未宣称 F5/F9 或 production cutover。
 
+**2026-08-18 exact-SHA deploy startup-authority 第十六批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是实际部署、F5 或 production cutover）：**
+
+- `deploy-node.sh` 已物理删除 deploy-time `build-active-pool-universe.ts` 重扫、legacy
+  `pool-universe-deploy-trust.ts` manifest 验证、reindex freshness/cursor、cron lock 与 immutable
+  universe manifest publication。部署不再创建第二个移动窗口或让 legacy registry/manifest
+  决定 admission；已有 pool 文件若配置，只是 searcher fixed-cutoff run 的 nomination input；
+- deploy 在运行进程恢复和冷启动两条 env 路径均唯一写入
+  `SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH`（默认
+  `/opt/MEV-runtime/universe-rebuild-checkpoint.json`），启动前验证绝对路径/父目录/regular-file，
+  重启后验证 PID 环境中的 exact path。`main.ts` 同时删除从未消费的 universe manifest config；
+- deploy readiness 不再以 `+ 0 universe`（旧 file nomination 数量）判失败，而是等待
+  `universe rebuild ready generation=... producer baseline freeze`。等待上限为一小时；到界必须
+  fail closed 并进入 status/probe 量化诊断，不能继续纯等；
+- runtime-defaults 的 final-sim fence 合同原来硬找已删除的
+  `simulator.simulate(resolved)`。本批只把观察点更新为当前统一
+  `executeFinalSimulationWork`，没有为测试恢复旧 transport；post-sim number+hash fence 仍先于
+  success/EV。同步通过 bash syntax、runtime-defaults、strict-ready、universe rebuild runner、
+  startup baseline 与 listener 完整 `build`。
+
+本 checkpoint 使 exact-SHA systemd 部署接线与 §22 的单一 durable envelope 一致，但没有执行
+节点部署。standalone cron/build/trust 文件仍存在供后续物理清理，router auto-discovery 仍是下一条
+deploy-time legacy dependency；因此不得声明 F5、F9、legacy=0 或 production cutover。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
@@ -6108,7 +6132,8 @@ searcher 进程在创建 producer 前直接 begin/resume `rebuildUniverse`，不
 1. searcher systemd 启动本身执行/恢复 fixed-cutoff rebuild；若因 retryable
    fail-closed，使用 `searcher:universe-rebuild-status` 与
    `searcher:universe-rebuild-probe` 在原 run/cutoff 定向关闭，然后重启
-   systemd 继续 finalize，不另起移动窗口。
+   systemd 继续 finalize，不另起移动窗口。`deploy-node.sh` 不运行
+   build-active-pool-universe/deploy-trust；pool 文件只可提供 nomination。
 2. `sudo env SEARCHER_DEPLOY_REF=origin/codex/s1-unified-adapter-architecture-impl
    SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH=/opt/MEV-runtime/universe-rebuild-checkpoint.json
    bash scripts/deploy-node.sh`（exact-SHA + systemd + SEARCHER_RUNTIME_COMMIT；

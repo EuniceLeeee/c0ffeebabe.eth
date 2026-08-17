@@ -103,88 +103,44 @@ assert(
 );
 console.log("[runtime-defaults] deploy preserves protocol touch mode: PASS");
 
-assert(
-  deployNode.includes('POOL_UNIVERSE_TO_BLOCK="$DISCOVERY_TO_BLOCK"'),
-  "deploy must build the universe at the same frozen source as the searcher",
-);
-assert(
-  deployNode.includes(
-    '[ "$REINDEX_CUR_TOBLOCK" -le "$DISCOVERY_TO_BLOCK" ]',
-  ),
-  "deploy freshness check must reject a universe newer than its frozen source",
-);
-assert(
-  !deployNode.includes("REINDEX_HEAD="),
-  "deploy freshness must not compare against a later, independently-read head",
-);
-const universeLockAt = deployNode.indexOf('exec 9>"$UNIVERSE_LOCK"');
-const universeSelectionAt = deployNode.indexOf("REINDEX_CUR_TOBLOCK=");
-const universeSnapshotAt = deployNode.indexOf("UNIVERSE_HASH=");
-const universeUnlockAt = deployNode.indexOf("flock -u 9");
-assert(
-  universeLockAt >= 0 &&
-    universeLockAt < universeSelectionAt &&
-    universeSelectionAt < universeSnapshotAt &&
-    universeSnapshotAt < universeUnlockAt,
-  "deploy must hold the cron universe lock from selection through immutable snapshot",
-);
+for (const retiredUniverseAuthority of [
+  "build-active-pool-universe.ts",
+  "pool-universe-deploy-trust.ts",
+  "REINDEX_CUR_TOBLOCK",
+  "UNIVERSE_LOCK",
+  "UNIVERSE_MANIFEST_SNAPSHOT",
+]) {
+  assert(
+    !deployNode.includes(retiredUniverseAuthority),
+    `deploy must not restore legacy universe authority ${retiredUniverseAuthority}`,
+  );
+}
+const checkpointWrites = deployNode.match(
+  /echo "SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH=\$UNIVERSE_REBUILD_CHECKPOINT_PATH"/g,
+)?.length ?? 0;
 assert(
   deployNode.includes(
-    'UNIVERSE_LOCK_WAIT_SECONDS="${POOL_UNIVERSE_LOCK_WAIT_SECONDS:-300}"',
-  ) && deployNode.includes('flock -w "$UNIVERSE_LOCK_WAIT_SECONDS" 9'),
-  "deploy must wait through one normal cron universe publication instead of killing the live searcher after 30 seconds",
-);
-assert(
-  deployNode.includes(
-    "node --import tsx src/searcher/pool-universe-deploy-trust.ts",
+    'UNIVERSE_REBUILD_CHECKPOINT_PATH="${SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH:-/opt/MEV-runtime/universe-rebuild-checkpoint.json}"',
   ) &&
+    checkpointWrites === 2 &&
+    deployNode.includes("PROCESS_REBUILD_CHECKPOINT=$(process_env_value") &&
     deployNode.includes(
-      'POOL_UNIVERSE_DISCOVERY_BLOCKS=$(env_value SEARCHER_DISCOVERY_BLOCKS "$ENVF")',
+      'SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH "$NEWPID")',
     ) &&
     deployNode.includes(
-      'POOL_UNIVERSE_V2_LINEAGES_PATH=$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")',
+      'process_env_count SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH "$NEWPID"',
     ) &&
     deployNode.includes(
-      'env SEARCHER_V2_LINEAGES_PATH="$v2_lineages_path"',
-    ),
-  "deploy must validate universe trust with the next runtime registry and landed window",
+      'READY_BANNER=$(printf \'%s\\n\' "$STARTUP_LOG"',
+    ) &&
+    deployNode.includes("universe rebuild ready generation=") &&
+    deployNode.includes(
+      'STARTUP_BANNER_TIMEOUT_SECONDS="${SEARCHER_STARTUP_BANNER_TIMEOUT_SECONDS:-3600}"',
+    ) &&
+    !deployNode.includes("pool universe loaded zero pools after restart"),
+  "deploy must bind and verify the sole durable startup universe authority",
 );
-assert(
-  deployNode.includes(
-    'pool universe re-indexed: $POOLS pools (toBlock=$DISCOVERY_TO_BLOCK)',
-  ),
-  "deploy must report the exact frozen universe source",
-);
-console.log("[runtime-defaults] deploy pins universe and searcher to one source: PASS");
-
-const universeCron = readFileSync(
-  new URL(
-    "../../../../scripts/reindex-pool-universe-cron.sh",
-    import.meta.url,
-  ),
-  "utf8",
-);
-assert(
-  universeCron.includes(
-    "V2_LINEAGES_PATH=$(sed -n 's/^SEARCHER_V2_LINEAGES_PATH=//p' \"$ENVF\"",
-  ) && universeCron.includes(
-    'SEARCHER_V2_LINEAGES_PATH="$V2_LINEAGES_PATH"',
-  ),
-  "cron universe builds must use the same V2 lineage snapshot as the runtime",
-);
-const cronLockAt = universeCron.indexOf("flock -n 9");
-const cronUniversePublishAt = universeCron.indexOf('mv "$TMP" "$OUT"');
-const cronManifestPublishAt = universeCron.indexOf(
-  'mv "$TMP_MANIFEST" "$OUT_MANIFEST"',
-);
-assert(
-  cronLockAt >= 0 &&
-    cronLockAt < cronUniversePublishAt &&
-    cronUniversePublishAt < cronManifestPublishAt &&
-    !universeCron.includes("flock -u 9"),
-  "cron must hold the shared universe lock across both canonical publications",
-);
-console.log("[runtime-defaults] deploy/cron universe publication is serialized: PASS");
+console.log("[runtime-defaults] deploy binds startup-only durable universe authority: PASS");
 
 const deployAb = readFileSync(
   new URL("../../../../scripts/deploy-ab-challenger.sh", import.meta.url),
@@ -318,7 +274,9 @@ const atomicStart = mainSource.indexOf(
   "async function maybeSubmitBlockScanAtomic",
 );
 const atomicSource = mainSource.slice(atomicStart);
-const simulationAt = atomicSource.indexOf("simulator.simulate(resolved)");
+const simulationAt = atomicSource.indexOf(
+  "const sim = await executeFinalSimulationWork({",
+);
 const postSimulationFenceAt = atomicSource.indexOf(
   '"post-simulation source-head verification"',
 );

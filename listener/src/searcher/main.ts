@@ -309,7 +309,6 @@ interface LiveConfig {
   stateWatchMaxPools: number;
   pinnedWarmPoolPath: string;
   poolUniversePath: string;
-  poolUniverseManifestPath: string;
   poolUniverseTopN: number;
   poolUniverseMinScore: number;
   poolUniverseForceInclude: string[];
@@ -748,9 +747,6 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     stateWatchMaxPools: Number(process.env.SEARCHER_STATE_WATCH_MAX_POOLS ?? "64"),
     pinnedWarmPoolPath: process.env.SEARCHER_PINNED_WARM_POOLS ?? DEFAULT_PINNED_WARM_POOLS_PATH,
     poolUniversePath,
-    poolUniverseManifestPath:
-      process.env.SEARCHER_POOL_UNIVERSE_MANIFEST_PATH ??
-      `${poolUniversePath}.manifest.json`,
     poolUniverseTopN: Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "20000"),
     poolUniverseMinScore: Number(process.env.SEARCHER_POOL_UNIVERSE_MIN_SCORE ?? "1"),
     poolUniverseForceInclude,
@@ -1998,7 +1994,6 @@ async function main(): Promise<void> {
     wallet: blindWallet,
     pinnedWarmPoolPath: _blindPinnedWarmPoolPath,
     poolUniversePath: _blindPoolUniversePath,
-    poolUniverseManifestPath: _blindPoolUniverseManifestPath,
     forceIncludePoolIdsPath: _blindForceIncludePoolIdsPath,
     liveFixtureDir: _blindLiveFixtureDir,
     poolUniverseForceInclude: blindForceIncludePoolIds,
