@@ -554,3 +554,50 @@ tx-bound proof 的可发布结果。`2eceb6f8` 的一次性历史窗口能力是
 “测试 → build → commit/push → 节点 exact-SHA 同步 → live 重跑”执行；在
 Angstrom 与其余 `graph-incomplete` 来源闭合、`status` 收敛且六步 live receipts
 完整前，F5/F9 均保持未关闭。
+## ret13 12015 池宇宙 + 历史窗口回扫（2026-08-17，commit 2a0f928d）
+
+节点实际状态修正：上一节的“searcher inactive”不准确——节点在
+`2eceb6f8`（launch2 后再次部署）以 DRY 模式运行在旧 ret13 快照
+（`/opt/MEV-runtime/universe/f5-ret13.json`，12015 池，toBlock=25758963）
+上，启动 strict attestation（8000/12015 @ ~63min，与重建抢 reth 时更慢），
+进程 env 含 `SEARCHER_POOL_UNIVERSE_TOP_N=20000`、`SEARCHER_DRY_RUN=1`。
+
+ret13 重建 retain 失败修复（2a0f928d）：重建（RETAIN=旧 ret13）在
+`pools[11697].identitySource` 报 `unsupported identity source
+angstrom-v4-hook-poolkey`。全量 12015 条中仅 2 条携带该旧 provenance
+（均为活跃 angstrom hook-poolkey 池：USDC/WETH、WETH/USDT，lastSwap 在
+窗口内）。根因：259eef30 为运行时加载加了
+`allowUnregisteredIdentitySource`（main.ts:1640），但 builder 的 retain
+解析（build-active-pool-universe.ts priorUniversePools）漏接该选项。
+修复：retain 调用传 `allowUnregisteredIdentitySource: true`，沿用同一
+契约——标签仅作输入 provenance，builder 经
+`retainVerifiedSwapFamilyInstances`（strictAttestation）立即对全部 retained
+行重 attestation 并覆写标签，输出快照保持干净；deploy-time trust 校验与
+运行时保持严格解析。测试 pool-universe-parse 通过；节点 /opt/MEV 已
+exact-SHA `2a0f928d`。
+
+重建（节点 pid 227686，`POOL_UNIVERSE_TO_BLOCK=25773809`、
+`LOOKBACK_DAYS=2`、RETAIN=旧 ret13、OUT=/tmp/ret13-new.json）：retain
+解析通过（0 unsupported 报错），窗口 [25759404, 25773804]，union scan
+15 组完成，retained family inventory 重 attestation 3637 候选进行中，
+后续为 enrich/rank/输出。完成 → trust 校验（pool-universe-deploy-trust，
+当前代码指纹）→ publish 到 active-pools.json → deploy（debounce 命中跳过
+1500s 重建）。
+
+部署计划（部署纪律 + debounce 细节）：先 stop searcher（触发 deploy
+“no running process”分支，.env 中非管理键保留），在 .env 追加
+`SEARCHER_OBSERVED_EVENT_LOOKBACK_BLOCKS=14400`（对齐新重建窗口起点），
+再 `SEARCHER_DEPLOY_REF=origin/codex/s1-unified-adapter-architecture-impl`
+deploy。部署后首轮 protocol-backfill 一次性回扫 [head-14400, head]，
+观察 12015 池窗口内 Swap 日志 → 新实例/边跳升（目标：边数从 257 显著
+增长、expected/priced 同步），验证 F8 证据驱动管线在大池面上的覆盖能力。
+
+checkpoint 持久化（重启沿用）仍 unresolved：节点 67 次
+`checkpoint inventory unresolved` 全部来自旧 run（无 reason 后缀）；
+当前 run（2eceb6f8 含 6a191b17 reason 日志）首次发布后即可拿到真实
+reason。节点无 `searcher/state/discovery-continuity-checkpoint.json`
+残留文件；后端 mkdir recursive + 原子 CAS，首次 CAS(expected=null) 路径
+代码上成立。待 reason 到手后修复（本地 dbg-checkpoint.ts 复现 harness
+已就绪）。
+
+
