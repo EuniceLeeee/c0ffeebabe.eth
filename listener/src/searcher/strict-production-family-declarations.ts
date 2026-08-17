@@ -6,6 +6,7 @@ import {
   type PendingTransactionEvidenceProjection,
 } from "./venues/adapter-family-registry.js";
 import type {
+  DiscoveryCandidateSourceKind,
   DiscoverySemantics,
   FamilyCandidate,
   RuntimeEvidence,
@@ -19,6 +20,7 @@ import type { FamilyCapabilityCatalog } from
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import type {
+  AllowedTaxonomy,
   ExecutionFamilyId,
   PendingExecutionEvidence,
   PendingTransactionEvidenceContext,
@@ -41,6 +43,8 @@ export interface StrictRouteFamilyDeclaration {
   readonly edgeAdapterIds: readonly string[];
   readonly ownedActionAdapterIds: readonly string[];
   readonly requiredInfraActionAdapterIds: readonly string[];
+  readonly allowedTaxonomy: readonly AllowedTaxonomy[];
+  readonly candidateSources: readonly DiscoveryCandidateSourceKind[];
   readonly requiresProtocolEdgesFlag: boolean;
 }
 
@@ -56,11 +60,16 @@ export interface StrictLandedLog {
 type RoutePluginProjection = {
   readonly manifest: {
     readonly familyId: FamilyId;
-    readonly domain: "swap" | "protocol" | "credit";
+    readonly domain: "swap" | "protocol" | "credit" | "funding";
     readonly poolAdapterIds?: readonly string[];
     readonly edgeAdapterIds?: readonly string[];
     readonly ownedActionAdapterIds: readonly string[];
     readonly requiredInfraActionAdapterIds: readonly string[];
+    readonly allowedTaxonomy: readonly AllowedTaxonomy[];
+    readonly fundingPriority?: {
+      readonly planningPriority: number;
+      readonly liquidityPriority: number;
+    };
     readonly requiresProtocolEdgesFlag?: boolean;
     readonly livePoolStateKind?: StrictLivePoolStateKind;
   };
@@ -83,6 +92,8 @@ export class StrictProductionFamilyDeclarations {
   readonly pendingEvidence: PendingTransactionEvidenceProjection;
   readonly canonicalIntakeTargets: readonly string[];
   readonly routeFamilies: readonly StrictRouteFamilyDeclaration[];
+  readonly fundingActionIds: readonly string[];
+  readonly creditActionIds: readonly string[];
 
   readonly #catalog: FamilyCapabilityCatalog;
   readonly #activationByFamily: ReadonlySet<string>;
@@ -99,13 +110,42 @@ export class StrictProductionFamilyDeclarations {
     const canonicalTargetSet = new Set<string>();
     const observers: PendingTransactionEvidenceObserverRegistration[] = [];
     const routeFamilies: StrictRouteFamilyDeclaration[] = [];
+    const fundingActions: Array<{
+      readonly familyId: string;
+      readonly actionId: string;
+      readonly planningPriority: number;
+    }> = [];
+    const creditActionIds: string[] = [];
 
     for (const loaded of catalog.listAll()) {
       const plugin = loaded.plugin as unknown as RoutePluginProjection;
       const manifest = plugin.manifest;
+      if (manifest.domain === "funding") {
+        const planningPriority = manifest.fundingPriority?.planningPriority;
+        if (
+          planningPriority === undefined ||
+          !Number.isSafeInteger(planningPriority) ||
+          planningPriority < 0
+        ) {
+          throw new Error(
+            `strict declarations: ${manifest.familyId} has invalid funding priority`,
+          );
+        }
+        fundingActions.push(...manifest.ownedActionAdapterIds.map(
+          (actionId) => Object.freeze({
+            familyId: manifest.familyId,
+            actionId,
+            planningPriority,
+          }),
+        ));
+        continue;
+      }
       if (manifest.domain !== "swap" && manifest.domain !== "protocol" &&
           manifest.domain !== "credit") {
         continue;
+      }
+      if (manifest.domain === "credit") {
+        creditActionIds.push(...manifest.ownedActionAdapterIds);
       }
       routeFamilies.push(Object.freeze({
         id: manifest.familyId,
@@ -119,6 +159,12 @@ export class StrictProductionFamilyDeclarations {
         ]),
         requiredInfraActionAdapterIds: Object.freeze([
           ...manifest.requiredInfraActionAdapterIds,
+        ]),
+        allowedTaxonomy: Object.freeze(
+          manifest.allowedTaxonomy.map((entry) => Object.freeze({ ...entry })),
+        ),
+        candidateSources: Object.freeze([
+          ...(plugin.discovery?.candidateSources ?? []),
         ]),
         requiresProtocolEdgesFlag:
           manifest.requiresProtocolEdgesFlag ?? false,
@@ -181,9 +227,16 @@ export class StrictProductionFamilyDeclarations {
     this.#activationByFamily = activationByFamily;
     this.#livePoolStateKindByEdge = livePoolStateKindByEdge;
     this.canonicalIntakeTargets = Object.freeze(canonicalTargets);
-    this.routeFamilies = Object.freeze(routeFamilies.sort((left, right) =>
-      left.id.localeCompare(right.id)
-    ));
+    this.fundingActionIds = uniqueActionIds(
+      "funding",
+      fundingActions.sort((left, right) =>
+        left.planningPriority - right.planningPriority ||
+        left.familyId.localeCompare(right.familyId) ||
+        left.actionId.localeCompare(right.actionId)
+      ).map((entry) => entry.actionId),
+    );
+    this.creditActionIds = uniqueActionIds("credit", creditActionIds);
+    this.routeFamilies = Object.freeze(routeFamilies);
     this.pendingEvidence = createPendingTransactionEvidenceProjection(
       observers,
     );
@@ -254,6 +307,20 @@ export class StrictProductionFamilyDeclarations {
     }
     return false;
   }
+}
+
+function uniqueActionIds(
+  domain: "funding" | "credit",
+  actionIds: readonly string[],
+): readonly string[] {
+  const unique = [...new Set(actionIds)];
+  if (
+    unique.length !== actionIds.length ||
+    unique.some((actionId) => actionId.trim().length === 0)
+  ) {
+    throw new Error(`strict declarations: invalid ${domain} action ownership`);
+  }
+  return Object.freeze(unique);
 }
 
 function createPendingObserver(

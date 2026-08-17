@@ -1,6 +1,7 @@
 import { deriveEdgeTaxonomy, type ProtocolAction, type SlotKind } from "../strategy-taxonomy.js";
 import type { AllowedTaxonomy } from "../venues/route-leg-adapter.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
+  "../strict-production-family-declarations.js";
 
 export type TemplateSlotKind = "flash" | "lend" | "swap" | "repay" | "guard";
 
@@ -52,14 +53,24 @@ function isTemplateTradeTaxonomy(input: {
 }
 
 const TRADE_LEG_ADAPTERS = deriveTemplateTradeAdapterIds(
-  PRODUCTION_ADAPTER_FAMILIES.routes().list(),
+  PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies,
 );
 
 export const FLASH_LEND_SWAP_REPAY: PathTemplate = {
   name: "flash-lend-swap-repay",
   slots: [
-    { id: "flash", kind: "flash", adapters: [...PRODUCTION_ADAPTER_FAMILIES.fundingActionIds()] },
-    { id: "lend", kind: "lend", adapters: [...PRODUCTION_ADAPTER_FAMILIES.creditActionIds()], min: 1, max: 4 },
+    {
+      id: "flash",
+      kind: "flash",
+      adapters: [...PRODUCTION_STRICT_FAMILY_DECLARATIONS.fundingActionIds],
+    },
+    {
+      id: "lend",
+      kind: "lend",
+      adapters: [...PRODUCTION_STRICT_FAMILY_DECLARATIONS.creditActionIds],
+      min: 1,
+      max: 4,
+    },
     { id: "swap", kind: "swap", adapters: TRADE_LEG_ADAPTERS, min: 1, max: 8 },
     { id: "repay", kind: "repay", adapters: ["erc20-approve", "erc20-transfer"] },
     { id: "guard", kind: "guard", adapters: ["assert-balance"] },
@@ -73,7 +84,11 @@ export const FLASH_LEND_SWAP_REPAY: PathTemplate = {
 export const FLASH_SWAP_REPAY: PathTemplate = {
   name: "flash-swap-repay",
   slots: [
-    { id: "flash", kind: "flash", adapters: [...PRODUCTION_ADAPTER_FAMILIES.fundingActionIds()] },
+    {
+      id: "flash",
+      kind: "flash",
+      adapters: [...PRODUCTION_STRICT_FAMILY_DECLARATIONS.fundingActionIds],
+    },
     { id: "swap", kind: "swap", adapters: TRADE_LEG_ADAPTERS, min: 1, max: 8 },
     { id: "repay", kind: "repay", adapters: ["erc20-approve", "erc20-transfer"] },
     { id: "guard", kind: "guard", adapters: ["assert-balance"] },

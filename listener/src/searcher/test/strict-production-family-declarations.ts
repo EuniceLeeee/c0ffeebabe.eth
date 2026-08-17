@@ -21,6 +21,11 @@ import {
 } from "../venues/swaps/blockscan-state-shared.js";
 import { UNIV2_SWAP_TOPIC } from
   "../venues/swaps/univ2-family/codec.js";
+import {
+  deriveTemplateTradeAdapterIds,
+  FLASH_LEND_SWAP_REPAY,
+  FLASH_SWAP_REPAY,
+} from "../templates/path-template.js";
 
 const HEAD = Object.freeze({
   number: 25_900_001,
@@ -79,6 +84,34 @@ assert.equal(
     } as never),
   "family-wide",
 );
+assert.deepEqual(
+  new Set(PRODUCTION_STRICT_FAMILY_DECLARATIONS.fundingActionIds),
+  new Set(["morpho-flash", "balancer-flash"]),
+);
+assert.deepEqual(
+  new Set(PRODUCTION_STRICT_FAMILY_DECLARATIONS.creditActionIds),
+  new Set(["fluid-vault", "fluid-dex-liquidate"]),
+);
+const strictTradeAdapters = deriveTemplateTradeAdapterIds(
+  PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies,
+);
+for (const template of [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY]) {
+  assert.deepEqual(
+    new Set(template.slots.find((slot) => slot.id === "swap")?.adapters),
+    new Set(strictTradeAdapters),
+  );
+  assert.deepEqual(
+    new Set(template.slots.find((slot) => slot.id === "flash")?.adapters),
+    new Set(PRODUCTION_STRICT_FAMILY_DECLARATIONS.fundingActionIds),
+  );
+}
+assert.deepEqual(
+  new Set(
+    FLASH_LEND_SWAP_REPAY.slots.find((slot) => slot.id === "lend")?.adapters,
+  ),
+  new Set(PRODUCTION_STRICT_FAMILY_DECLARATIONS.creditActionIds),
+);
+assert(!strictTradeAdapters.includes("fluid-vault"));
 
 const targets = new Set(
   PRODUCTION_STRICT_FAMILY_DECLARATIONS.canonicalIntakeTargets.map(
@@ -251,7 +284,12 @@ assert.throws(
   /duplicates\/zeros intake target/,
 );
 
-for (const relative of ["../main.ts", "../solver/pool-state-updater.ts"]) {
+for (const relative of [
+  "../main.ts",
+  "../solver/pool-state-updater.ts",
+  "../templates/path-template.ts",
+  "../venues/route-family-manifest.ts",
+]) {
   const source = readFileSync(new URL(relative, import.meta.url), "utf8");
   assert.equal(
     source.includes("PRODUCTION_ADAPTER_FAMILIES"),

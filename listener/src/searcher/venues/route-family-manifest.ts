@@ -1,15 +1,15 @@
 import type {
   ExecutionFamilyId,
-  ProtocolConversionAdapter,
-  RouteCandidateSourceKind,
-  RouteLegAdapter,
   RouteLegKind,
 } from "./route-leg-adapter.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "./production-registry.js";
-import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
-  "./production-family-composition.js";
+import type { DiscoveryCandidateSourceKind } from
+  "./adapter-family-plugin.js";
+import {
+  PRODUCTION_STRICT_FAMILY_DECLARATIONS,
+  type StrictRouteFamilyDeclaration,
+} from "../strict-production-family-declarations.js";
 
-export type RouteFamilyCandidateSource = RouteCandidateSourceKind;
+export type RouteFamilyCandidateSource = DiscoveryCandidateSourceKind;
 
 export interface RouteFamilyDynamicAdmissionManifest {
   readonly candidateSources: readonly RouteFamilyCandidateSource[];
@@ -37,22 +37,14 @@ export interface RouteFamilyManifestEntry {
 }
 
 /**
- * Project a compatibility manifest from the actual high-level adapter objects.
- * The adapter registry remains the sole registration source; this function must
- * never grow a second hand-maintained family table.
+ * Project a compatibility manifest from strict catalog declarations. This is
+ * metadata only: it cannot admit an instance or issue an execution handle.
  */
 export function deriveRouteFamilyManifest(
-  adapters: readonly RouteLegAdapter[],
+  adapters: readonly StrictRouteFamilyDeclaration[],
 ): readonly RouteFamilyManifestEntry[] {
   return Object.freeze(adapters.map((adapter) => {
-    // F8: dynamic candidate sources are projected from the strict catalog
-    // (plugin-declared discovery semantics), never from a legacy adapter
-    // discovery object. The registry remains the sole registration source for
-    // the static surface; this function never grows a second family table.
-    const dynamicSources =
-      PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-        .discoverableFamilySources()
-        .find((entry) => entry.familyId === adapter.id)?.sourceIds ?? [];
+    const dynamicSources = adapter.candidateSources;
     if (
       dynamicSources.length > 0 &&
       adapter.kind === "protocol-conversion" &&
@@ -71,7 +63,7 @@ export function deriveRouteFamilyManifest(
       : null;
 
     return Object.freeze({
-      executionFamilyId: adapter.id,
+      executionFamilyId: adapter.id as ExecutionFamilyId,
       familyKind: adapter.kind,
       poolAdapters: Object.freeze([...adapter.poolAdapters]),
       edgeAdapterIds: Object.freeze([...adapter.edgeAdapterIds]),
@@ -83,9 +75,7 @@ export function deriveRouteFamilyManifest(
         ...adapter.ownedActionAdapterIds,
         ...adapter.requiredInfraActionAdapterIds,
       ]),
-      declaredVenueCount: adapter.kind === "protocol-conversion"
-        ? (adapter as ProtocolConversionAdapter).declaredVenues.length
-        : 0,
+      declaredVenueCount: 0,
       staticRequiresProtocolEdgesFlag: adapter.requiresProtocolEdgesFlag,
       dynamicAdmission,
     });
@@ -93,5 +83,5 @@ export function deriveRouteFamilyManifest(
 }
 
 export const PRODUCTION_ROUTE_FAMILY_MANIFEST = deriveRouteFamilyManifest(
-  PRODUCTION_ADAPTER_FAMILIES.routes().list(),
+  PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies,
 );

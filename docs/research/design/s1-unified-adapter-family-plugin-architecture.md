@@ -3387,6 +3387,36 @@ production source 仍有 legacy registry import；因此不得声称全局 legac
 闭合编译缺口；任一时刻缺 strict authority 均 fail closed，只可参考旧 commit，禁止把
 legacy runtime 接回。本批未部署。
 
+**2026-08-18 path-template / route-manifest 第九批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- production `path-template.ts` 与 `route-family-manifest.ts` 已物理删除
+  `PRODUCTION_ADAPTER_FAMILIES`。flash slot 只取 strict Funding manifest 的 owned
+  action，并严格按 `fundingPriority.planningPriority`、Family ID、action ID 排序；lend
+  slot 只取 strict Credit owned action；trade slot 只取 strict route Family 的
+  `allowedTaxonomy`，继续通过 `deriveEdgeTaxonomy()` 排除任何
+  `leavesStandingPosition=true` 的 route。Credit/debt action 不会因“看起来能兑换”而被
+  塞进普通 swap slot；
+- strict declaration projection 新增 `allowedTaxonomy`、`candidateSources`、Funding
+  planning priority 与 Credit/Funding action ownership。route composition 保持
+  build-time static catalog 的稳定顺序，不另按 Family ID 重排；合同首次运行抓到并修复
+  Balancer/Morpho Funding priority 反转与 route order drift，修复只补 strict manifest
+  authority，没有恢复 legacy registry；
+- `PRODUCTION_ROUTE_FAMILY_MANIFEST` 现在直接从 strict declarations 生成；动态 candidate
+  source、protocol-edge flag、pool/edge/action ownership 都属于同一个 catalog root。
+  `declaredVenueCount=0` 明确表示 static/legacy venue 不再是 production admission source；
+- `searcher:strict-production-family-declarations` 覆盖 Funding/Credit/trade 三类 slot、
+  standing-position 排除及源码 closure；`searcher:route-family-compatibility` 6/6、
+  `searcher:route-adapters` 17/17 与 listener 完整 `build` 通过。完整
+  `searcher:planner` 另在未改动的 native-ETH V4 victim-impact decode（expected 1 / got 0）
+  暴露后续 detector/landed-event 迁移缺口；该失败不属于 path-template replacement，未被
+  伪报为通过，也不会以恢复 legacy template/registry 来绕过。
+
+本 checkpoint 关闭的是 planner template 与 route manifest 的中央 legacy authority，
+不是全局 legacy=0。detector oracle-victim/landed impact、token-graph 历史 facade、
+live-discovery 与 active-pool 工具仍需继续按“先删除调用点、strict 缺口 fail closed、只参考
+Git 历史”的顺序清理。本批未部署。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

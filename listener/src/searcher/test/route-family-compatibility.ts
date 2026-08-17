@@ -2,7 +2,8 @@ import {
   PRODUCTION_ROUTE_FAMILY_MANIFEST,
   deriveRouteFamilyManifest,
 } from "../venues/route-family-manifest.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
+  "../strict-production-family-declarations.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -24,7 +25,7 @@ function compactSnapshot(): readonly string[] {
 }
 
 function testOneToOneProjection(): void {
-  const adapters = PRODUCTION_ADAPTER_FAMILIES.routes().list();
+  const adapters = PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies;
   const derived = deriveRouteFamilyManifest(adapters);
   assert(derived.length === adapters.length, "manifest must contain exactly one row per adapter");
   assert(
@@ -91,15 +92,15 @@ function testPsmCompatibilitySemantics(): void {
 }
 
 function testReceiptDepositFrameworkIsNotARegisteredFamily(): void {
-  const erc4626 = PRODUCTION_ADAPTER_FAMILIES.protocols().find(
+  const erc4626 = PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies.find(
     (adapter) => adapter.id === "protocol:erc4626",
   );
-  const eigenpie = PRODUCTION_ADAPTER_FAMILIES.protocols().find(
+  const eigenpie = PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies.find(
     (adapter) => adapter.id === "protocol:eigenpie",
   );
   assert(erc4626 !== undefined && eigenpie !== undefined, "receipt-deposit users missing");
   assert(
-    !PRODUCTION_ADAPTER_FAMILIES.protocols().some(
+    !PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies.some(
       (adapter) => adapter.id === "protocol:receipt-deposit",
     ),
     "ReceiptDepositFramework must never become a registry owner",
