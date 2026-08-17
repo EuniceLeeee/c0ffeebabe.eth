@@ -19,10 +19,6 @@ import {
 import {
   verifySelectedConversionProductionLive,
 } from "./conversion-freshness-production-live.js";
-import {
-  freezeConversionProductionInputs,
-  verifySelectedConversionProductionFullLive,
-} from "./conversion-freshness-production-full-live.js";
 
 const rpcUrl = process.env.CONVERSION_FRESHNESS_RPC_URL ??
   process.env.SEARCHER_LIVE_RPC_URL ??
@@ -35,12 +31,6 @@ assert(
 
 const predicate = wstethFreshnessPrivatePredicate();
 const artifactDir = process.env.CONVERSION_FRESHNESS_ARTIFACT_DIR?.trim();
-const productionInputs = artifactDir
-  ? freezeConversionProductionInputs({
-      env: process.env,
-      artifactDirectory: resolve(artifactDir),
-    })
-  : null;
 const secret = {
   seed: randomBytes(32).toString("hex"),
   salt: randomBytes(32).toString("hex"),
@@ -49,9 +39,7 @@ const plan = buildConversionFreshnessPlan({
   predicate,
   ...WSTETH_FRESHNESS_INTEGRATION_RANGE,
   minEligibleCardinality: 32,
-  productionInputsSha256: productionInputs
-    ? sha256Canonical(productionInputs)
-    : sha256Canonical({ profile: "component-only" }),
+  productionInputsSha256: sha256Canonical({ profile: "component-only" }),
   secret,
 });
 if (artifactDir) {
@@ -59,7 +47,6 @@ if (artifactDir) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);
   writeArtifact(`${directory}/plan.json`, plan, 0o644);
-  writeArtifact(`${directory}/production-inputs.json`, productionInputs, 0o644);
   writeArtifact(`${directory}/predicate.private.json`, predicate, 0o600);
   writeArtifact(`${directory}/secret.private.json`, secret, 0o600);
   console.log(
@@ -136,55 +123,6 @@ if (process.env.CONVERSION_FRESHNESS_SKIP_COMPONENT === "1") {
       `selectedBlock=${revealed.selected.sourceBlock} production=not-run`,
   );
   process.exit(0);
-}
-const fullUniversePath =
-  process.env.CONVERSION_FRESHNESS_FULL_UNIVERSE_PATH?.trim();
-if (fullUniversePath) {
-  assert(
-    productionInputs,
-    "production-full conversion requires CONVERSION_FRESHNESS_ARTIFACT_DIR",
-  );
-  const production = await verifySelectedConversionProductionFullLive({
-    rpcUrl,
-    predicate,
-    reveal: revealed,
-    productionInputs,
-    universePath: fullUniversePath,
-    universeManifestPath:
-      process.env.CONVERSION_FRESHNESS_FULL_UNIVERSE_MANIFEST?.trim() ||
-      `${fullUniversePath}.manifest.json`,
-    stateDeadlineMs: Number(
-      process.env.CONVERSION_FRESHNESS_STATE_DEADLINE_MS ?? "600000",
-    ),
-    ...(process.env.CONVERSION_FRESHNESS_SCAN_BUDGET_MS === undefined
-      ? {}
-      : {
-          scanBudgetMs: Number(
-            process.env.CONVERSION_FRESHNESS_SCAN_BUDGET_MS,
-          ),
-        }),
-  });
-  if (artifactDir) {
-    writeArtifact(
-      `${resolve(artifactDir)}/production-full.private.json`,
-      production,
-      0o600,
-    );
-  }
-  console.log(
-    `conversion-freshness-oracle-live COMPLETE candidates=${scanned.candidates.length} ` +
-      `selectedBlock=${revealed.selected.sourceBlock} ` +
-      `production=${production.comparison.freshnessEvidence} ` +
-      `graph=${production.graph.edges} ` +
-      `baseCandidates=${production.scanner.baseCandidates.length} ` +
-      `sourceCandidates=${production.scanner.sourceCandidates.length} ` +
-      `targetRanks=${production.scanner.targetBaseRanks.join(",") || "none"};` +
-      `${production.scanner.targetSourceWithoutUpdateRanks.join(",") || "none"}->` +
-      `${production.scanner.targetSourceRanks.join(",") || "none"}`,
-  );
-  process.exit(
-    production.comparison.freshnessEvidence === "selected" ? 0 : 2,
-  );
 }
 const production = await verifySelectedConversionProductionLive({
   rpcUrl,

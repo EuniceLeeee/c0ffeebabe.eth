@@ -20,7 +20,7 @@ import {
   type TokenQueryBackend,
   type V4PoolKey,
 } from "../planner/token-graph.js";
-import { mergePoolRegistries } from "../active-pool-discovery.js";
+import { mergePoolRegistries } from "../pool-registry-merge.js";
 import { loadPoolUniverse, selectPairCompletionPools } from "../pool-universe.js";
 import { deriveEdgeTaxonomy, type ProtocolAction } from "../strategy-taxonomy.js";
 import type { FlashLiquidityView, FlashSource } from "../solver/flash-liquidity.js";

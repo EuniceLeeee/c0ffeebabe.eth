@@ -70,7 +70,7 @@ import type { BlockScanOpportunity } from "../detector/detector.js";
 import {
   mergePoolProjectionRows,
   mergePoolRegistries,
-} from "../active-pool-discovery.js";
+} from "../pool-registry-merge.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import {
   buildTokenPaths,

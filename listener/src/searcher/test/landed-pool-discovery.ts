@@ -15,7 +15,7 @@ import {
   type LandedPoolDiscoveryReadBackend,
   type LandedPoolMaterializationCapability,
 } from "../venues/landed-pool-discovery.js";
-import { isKnownDexPoolProjection } from "../active-pool-discovery.js";
+import { isKnownDexPoolProjection } from "../startup-pool-reconciliation.js";
 import { selectMatureDexActivity } from "../pool-activity-selection.js";
 import { poolProjectionRowKey } from "../pool-universe.js";
 import {

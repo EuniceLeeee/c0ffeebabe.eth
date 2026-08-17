@@ -37,7 +37,7 @@ import {
   type ProtocolMid,
 } from "../detector/blockscan-scanner.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
-import { mergePoolRegistries } from "../active-pool-discovery.js";
+import { mergePoolRegistries } from "../pool-registry-merge.js";
 import { filterLiveProtocolRegistry } from "../main.js";
 import { loadPinnedWarmPools } from "../pinned-warm-pools.js";
 import { TemplatePlanner } from "../planner/planner.js";

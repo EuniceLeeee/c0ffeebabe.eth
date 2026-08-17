@@ -28,7 +28,7 @@ import {
   installForkBotVm,
 } from "../../shared/executor/botvm-executor.js";
 import { buildTokenGraph, POOL_REGISTRY, type TokenEdge } from "../planner/token-graph.js";
-import { mergePoolRegistries } from "../active-pool-discovery.js";
+import { mergePoolRegistries } from "../pool-registry-merge.js";
 import {
   DEFAULT_PINNED_WARM_POOLS_PATH,
   loadPinnedWarmPools,

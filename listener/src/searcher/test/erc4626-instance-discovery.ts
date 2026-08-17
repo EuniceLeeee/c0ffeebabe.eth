@@ -37,7 +37,7 @@ import {
   protocolCandidateAddressesFromDexGraph,
   protocolCandidateAddressesFromDexUniverse,
 } from "../protocol-discovery-runtime.js";
-import { mergePoolRegistries } from "../active-pool-discovery.js";
+import { mergePoolRegistries } from "../pool-registry-merge.js";
 import { poolRegistryKey } from "../pool-universe.js";
 import { buildTokenPaths, POOL_REGISTRY, type TokenEdge } from "../planner/token-graph.js";
 import { buildStrategyViews } from "../strategy-views.js";

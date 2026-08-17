@@ -55,7 +55,7 @@ import {
   BlockScanFamilyAttributedError,
   blockScanAttributedFailureFamilyId,
 } from "../detector/blockscan-family-budget.js";
-import { sendDexDiscoveryRpc } from "../active-pool-discovery.js";
+import { sendDexDiscoveryRpc } from "../dex-discovery-transport.js";
 import { evaluateEv } from "../ev-evaluator.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";

@@ -48,11 +48,6 @@ import {
   type ConversionProductionExpectation,
 } from "./conversion-freshness-production-evidence.js";
 import {
-  freezeConversionProductionInputs,
-  resolveConversionProductionFullConfig,
-  validateConversionProductionInputs,
-} from "./conversion-freshness-production-full-live.js";
-import {
   productionUniverseRegistrySourceFingerprints,
   validateConversionUniverseBuildManifest,
 } from "./conversion-freshness-universe-manifest.js";
@@ -354,80 +349,9 @@ assert.throws(
 );
 
 assertUniverseManifestContract();
-assertResolvedConfigContract();
-assertFrozenProductionInputsContract();
 await assertPinnedUniverseProviderContract();
 
 console.log("conversion-freshness-production-evidence PASS");
-
-function assertResolvedConfigContract(): void {
-  const config = resolveConversionProductionFullConfig({
-    SEARCHER_FORCE_INCLUDE_POOLIDS_PATH:
-      resolve(tmpdir(), "conversion-no-force-include.json"),
-    SEARCHER_POOL_UNIVERSE_TOP_N: "20000",
-    SEARCHER_BLOCKSCAN_MAX_CANDIDATES: "321",
-    SEARCHER_ENABLE_PROTOCOL_EDGES: "1",
-    BOTVM_ADDRESS: protocolTarget,
-  });
-  assert.equal(config.universeTopN, 20_000);
-  assert.equal(config.universeHighSpreadPairQuota, 150);
-  assert.equal(config.pairCompletion, true);
-  assert.equal(config.blockscanExtraPools, 6_000);
-  assert.equal(config.scanner.maxCandidates, 321);
-  assert.equal(config.scanner.budgetMs, 1_500);
-  assert.equal(config.scanner.pinnedOutsideBudget, false);
-  assert.equal(config.protocolEdgesEnabled, true);
-  assert.equal(config.protocolDiscoveryShadow, false);
-  assert.equal(config.probeExecutor.toLowerCase(), protocolTarget.toLowerCase());
-  assert.throws(
-    () => resolveConversionProductionFullConfig({
-      SEARCHER_POOL_UNIVERSE_TOP_N: "not-a-number",
-      BOTVM_ADDRESS: protocolTarget,
-    }),
-    /SEARCHER_POOL_UNIVERSE_TOP_N/,
-  );
-}
-
-function assertFrozenProductionInputsContract(): void {
-  const directory = mkdtempSync(resolve(tmpdir(), "conversion-inputs-"));
-  const pinned = resolve(directory, "pinned.json");
-  const force = resolve(directory, "force.json");
-  const queue = resolve(directory, "queue.json");
-  writeFileSync(pinned, JSON.stringify({ pools: [] }));
-  writeFileSync(force, JSON.stringify([]));
-  writeFileSync(queue, JSON.stringify({ queue: [] }));
-  try {
-    const manifest = freezeConversionProductionInputs({
-      artifactDirectory: directory,
-      env: {
-        BOTVM_ADDRESS: protocolTarget,
-        SEARCHER_ENABLE_PROTOCOL_EDGES: "1",
-        SEARCHER_PINNED_WARM_POOLS: pinned,
-        SEARCHER_FORCE_INCLUDE_POOLIDS_PATH: force,
-        SEARCHER_PROTOCOL_DISCOVERY_CACHE_PATH:
-          resolve(directory, "missing-cache.json"),
-        POOL_UNIVERSE_DISCOVERY_QUEUE_PATH: queue,
-      },
-    });
-    validateConversionProductionInputs(
-      manifest,
-      sha256Canonical(manifest),
-    );
-    const frozenPinned = manifest.files.find(
-      (file) => file.role === "pinned-warm-pools",
-    )!;
-    writeFileSync(frozenPinned.frozenPath, JSON.stringify({ pools: [{}] }));
-    assert.throws(
-      () => validateConversionProductionInputs(
-        manifest,
-        sha256Canonical(manifest),
-      ),
-      /frozen input changed/,
-    );
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-}
 
 async function assertPinnedUniverseProviderContract(): Promise<void> {
   const requests: Array<{

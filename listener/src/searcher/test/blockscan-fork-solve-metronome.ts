@@ -19,7 +19,7 @@ import {
   installForkBotVm,
 } from "../../shared/executor/botvm-executor.js";
 import { AnvilStateBackend } from "../../shared/state/state-backend.js";
-import { mergePoolRegistries } from "../active-pool-discovery.js";
+import { mergePoolRegistries } from "../pool-registry-merge.js";
 import { BackrunDetector } from "../detector/detector.js";
 import { filterLiveProtocolRegistry } from "../main.js";
 import { TemplatePlanner, type CandidatePlan } from "../planner/planner.js";

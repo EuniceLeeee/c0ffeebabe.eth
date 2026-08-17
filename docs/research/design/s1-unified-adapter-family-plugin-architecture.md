@@ -3709,6 +3709,43 @@ deploy-trust、cron、auto-close 等 standalone legacy 文件仍待后续物理�
 对 `production-registry` facade 的依赖。完成前继续禁止部署，不能把 repo-wide F9 的剩余一处误报
 为 legacy=0。
 
+**2026-08-18 active-pool legacy authority 第二十批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是实际部署、F5、最终 F9 或 production cutover）：**
+
+- 已物理删除最后的 `active-pool-discovery.ts`。因此旧 factory recent scan、swap-active scan、
+  raw universe identity admission、旧 retained-pool fast path 与旧 Graph startup merge 不再存在可被
+  production 或诊断脚本重新接回的入口；所有 `active-pool-discovery.js` import 已归零。原来只为旧
+  scanner 服务的 `live-readiness`、`dex-discovery-rpc-cancellation`、`universe-split`、
+  `venue-identity` 与 conversion production-full raw-universe harness/CLI/package 入口同步物理删除。
+  陈旧测试不再成为恢复旧 authority 的理由；conversion component evidence 仍保留，但已删除
+  production-full raw-universe 分支；
+- 仍被当前 strict 测试/诊断复用的 RPC transport 和 registry/projection merge 已直接改从
+  `dex-discovery-transport.ts`、`pool-registry-merge.ts` 导入。cache conflict reconciliation 三个纯
+  函数独立为 `startup-pool-reconciliation.ts`；该模块没有 provider、RPC、factory/topic catalog、
+  identity admission、coverage/cursor writer 或 Graph publication 能力，不能成为第二个 discovery
+  authority；
+- Angstrom shared-PoolKey 合同删除了调用旧 production scanner 与 raw-universe runtime refresh 的
+  断言，保留 Family-owned landed materialization、shared physical lookup、retry、cache conflict
+  revalidation、foreign projection isolation、source mismatch 与 projection integrity。正式 runtime
+  Graph 的原子性和 producer freeze 仍由 strict startup/ready 合同及实际 live provenance 验收，
+  不再由 legacy wrapper fixture 代证；
+- 本地结构证据现在为 repo-wide central legacy map 空、`main.ts` import closure 531 文件、
+  unresolved import=0、legacy symbol hit=0、central Family literal branch=0；按当前结构输入生成的
+  `MigrationCleanupReceipt.verdict` 为 `pass`。这只关闭中央旧 authority 的结构条件：
+  `production-registry.ts` 非 production facade 及 analysis/shared evidence 引用仍待下一批物理清理，
+  且尚无新 exact-SHA systemd runtime、strict universe/edge/exact/final-sim provenance、restart reuse 或
+  连续 100/100，所以不能据此宣称最终 F9 或 S1 完成；
+- 同轮通过 landed discovery 23/23、Angstrom shared-PoolKey discovery、strict-ready runtime、
+  conversion production evidence、MigrationCleanupReceipt generator 与 listener 完整 `build`。
+  已删除的 `liveready`/`universe-split` 不再冒充 canonical 工具，tool index 同步去掉两个 curated
+  条目并通过 354-tool `--check`。
+  `searcher:angstrom-v4` 聚合入口中旧 `angstrom-v4-family.ts` 仍依赖 legacy registry composition，
+  在 `custom-swap:angstrom-v4` 注册断言处失败；该失败准确标出下一批需删除/迁移的 test-only registry
+  facade，不允许为使旧聚合脚本变绿而恢复旧 runtime。
+
+下一批继续物理删除 `listener/src/searcher/venues/production-registry.ts` 以及 shared evidence、analysis、
+test 对该 facade 的依赖；中央/consumer authority 与最终 live provenance 全闭合前继续禁止部署。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

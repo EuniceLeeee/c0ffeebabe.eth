@@ -46,10 +46,8 @@ import {
   installForkBotVm,
 } from "../../shared/executor/botvm-executor.js";
 import { AnvilStateBackend } from "../../shared/state/state-backend.js";
-import {
-  mergePoolRegistries,
-  sendDexDiscoveryRpc,
-} from "../active-pool-discovery.js";
+import { sendDexDiscoveryRpc } from "../dex-discovery-transport.js";
+import { mergePoolRegistries } from "../pool-registry-merge.js";
 import { canonicalTokenRing, cycleFingerprint } from "../detector/cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import { detectImpactFromLogs, type PoolImpact } from "../detector/pool-impact.js";
