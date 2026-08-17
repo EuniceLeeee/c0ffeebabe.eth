@@ -33,23 +33,11 @@ import {
 } from "./venues/landed-pool-discovery.js";
 import { retainVerifiedSwapFamilyInstances } from "./venues/swap-family-inventory.js";
 import { UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK } from "./venues/swaps/univ4-common.js";
-import { resolveCurveUnderlyingMetadata } from "./venues/curve-underlying.js";
 
 const BLOCKS_PER_DAY = 7200;
 export const DEFAULT_POOL_UNIVERSE_MIN_SWAPS = 1;
 export const POOL_UNIVERSE_BUILD_MANIFEST_PROFILE =
   "pool-universe-build-manifest-v1" as const;
-const univ2Iface = new ethers.Interface([
-  "function token0() view returns (address)",
-  "function token1() view returns (address)",
-  "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
-]);
-const univ3Iface = new ethers.Interface([
-  "function token0() view returns (address)",
-  "function token1() view returns (address)",
-  "function fee() view returns (uint24)",
-  "function tickSpacing() view returns (int24)",
-]);
 
 interface DiscoveryQueueEntry {
   addr?: unknown;
@@ -57,25 +45,16 @@ interface DiscoveryQueueEntry {
   source?: unknown;
 }
 
-type ProbedPoolShape =
-  | {
-      adapter: "univ3";
-      token0: string;
-      token1: string;
-      fee: number;
-      tickSpacing: number;
-      venueId: PoolUniverseEntry["venueId"];
-      factory: string;
-      identitySource: PoolUniverseEntry["identitySource"];
-    }
-  | {
-      adapter: "univ2";
-      token0: string;
-      token1: string;
-      venueId: PoolUniverseEntry["venueId"];
-      factory: string;
-      identitySource: PoolUniverseEntry["identitySource"];
-    };
+type ProbedPoolShape = {
+  adapter: PoolEntry["adapter"];
+  token0?: string;
+  token1?: string;
+  fee?: number;
+  tickSpacing?: number;
+  venueId: PoolUniverseEntry["venueId"];
+  factory: string;
+  identitySource: PoolUniverseEntry["identitySource"];
+};
 
 type PoolActivity = LandedPoolActivity;
 
@@ -316,17 +295,11 @@ async function main(): Promise<void> {
         `unresolved=${retryablePools.length}`,
     );
   }
-  // TRANSITIONAL BRIDGE (F6 Pair C/D delete-scope, expires with the
-  // catalog-driven universe generator): curve-underlying is re-admitted to
-  // the generic activity lane until its strict nomination path is the
-  // default. This is a deliberately dated exception, not a new per-family
-  // branch: it reuses the strict identity + plugin metadata path below.
   const maturePoolAdapters = new Set<PoolEntry["adapter"]>(
     PRODUCTION_ADAPTER_FAMILIES.swaps()
       .filter((family) => family.matureDexUniverseDiscovery === true)
       .flatMap((family) => family.poolAdapters),
   );
-  maturePoolAdapters.add("curve-underlying");
   const activity: Map<string, PoolActivity> = selectMatureDexActivity(
     landed.activity,
     maturePoolAdapters,
@@ -776,21 +749,6 @@ async function enrichPool(
   strictBlockNumber?: number,
 ): Promise<PoolUniverseEntry | null> {
   const adapterHint = bestAdapter(pool.adapterCounts);
-  // The generic activity lane is the retained mature V2/V3 fast path.
-  // TRANSITIONAL BRIDGE (F6 Pair C/D delete-scope, expires with the
-  // catalog-driven universe generator): curve-underlying is re-admitted here
-  // via the strict identity path until its strict nomination is the default.
-  // Every other registered swap family must provide its own typed
-  // materializer and therefore arrives through landed.materializedPools.
-  if (
-    adapterHint !== "univ2" &&
-    adapterHint !== "univ3" &&
-    adapterHint !== "curve-underlying"
-  ) {
-    throw new Error(
-      `non-mature pool adapter ${adapterHint} escaped family materialization`,
-    );
-  }
   const identity = await resolvePoolIdentityStrict(
     provider,
     pool.address,
@@ -818,35 +776,8 @@ async function enrichPool(
   };
 
   try {
-    // TRANSITIONAL BRIDGE (F6 delete-scope): curve-underlying pools are
-    // enriched through the plugin-owned metadata resolver until the strict
-    // nomination path is the default. The identity above is strict; only the
-    // token-domain metadata comes from the shared curve resolver.
-    if (adapterHint === "curve-underlying" ||
-        adapter === "curve-exchange-underlying") {
-      const metadata = await resolveCurveUnderlyingMetadata(
-        { call: (req) => provider.call({ ...req, blockTag: strictBlockNumber ?? 0 }) },
-        pool.address,
-        { allowDirectPoolFallback: true },
-      );
-      return { ...base, adapter: "curve-underlying", underlyingCoins: metadata.coins };
-    }
-    if (adapter === "univ3" || adapter === "univ3-standard") {
-      const [token0, token1, fee, tickSpacing] = await Promise.all([
-        callAddress(provider, pool.address, univ3Iface.encodeFunctionData("token0")),
-        callAddress(provider, pool.address, univ3Iface.encodeFunctionData("token1")),
-        callNumber(provider, pool.address, univ3Iface.encodeFunctionData("fee"), "fee"),
-        callNumber(provider, pool.address, univ3Iface.encodeFunctionData("tickSpacing"), "tickSpacing"),
-      ]);
-      return { ...base, token0, token1, fee, tickSpacing };
-    }
-    if (adapter === "univ2" || adapter === "univ2-standard") {
-      const [token0, token1] = await Promise.all([
-        callAddress(provider, pool.address, univ2Iface.encodeFunctionData("token0")),
-        callAddress(provider, pool.address, univ2Iface.encodeFunctionData("token1")),
-      ]);
-      return { ...base, token0, token1 };
-    }
+    // Family-owned materializers supply token-domain metadata; this generic
+    // lane carries only the strict identity fields.
     return base;
   } catch (error) {
     console.log(
@@ -873,42 +804,12 @@ async function probePoolShape(
     strictBlockNumber ?? await provider.getBlockNumber(),
   );
   if (!identity.ok) return null;
-  if (identity.adapter === "univ3") try {
-    const [token0, token1, fee, tickSpacing] = await Promise.all([
-      callAddress(provider, address, univ3Iface.encodeFunctionData("token0")),
-      callAddress(provider, address, univ3Iface.encodeFunctionData("token1")),
-      callNumber(provider, address, univ3Iface.encodeFunctionData("fee"), "fee"),
-      callNumber(provider, address, univ3Iface.encodeFunctionData("tickSpacing"), "tickSpacing"),
-    ]);
-    return {
-      adapter: "univ3",
-      token0,
-      token1,
-      fee,
-      tickSpacing,
-      venueId: identity.venueId,
-      factory: identity.factory!,
-      identitySource: identity.identitySource,
-    };
-  } catch { /* an identity match still needs the expected pool ABI */ }
-
-  if (identity.adapter === "univ2") try {
-    const [token0, token1, reserves] = await Promise.all([
-      callAddress(provider, address, univ2Iface.encodeFunctionData("token0")),
-      callAddress(provider, address, univ2Iface.encodeFunctionData("token1")),
-      provider.call({ to: address, data: univ2Iface.encodeFunctionData("getReserves") }),
-    ]);
-    univ2Iface.decodeFunctionResult("getReserves", reserves);
-    return {
-      adapter: "univ2",
-      token0,
-      token1,
-      venueId: identity.venueId,
-      factory: identity.factory!,
-      identitySource: identity.identitySource,
-    };
-  } catch { /* fall through */ }
-  return null;
+  return {
+    adapter: identity.adapter,
+    venueId: identity.venueId,
+    factory: identity.factory ?? "",
+    identitySource: identity.identitySource,
+  };
 }
 
 export async function consumeDiscoveryQueue(
@@ -950,7 +851,11 @@ export async function consumeDiscoveryQueue(
         blocked.push({ addr, reason: "blocked_on_adapter" });
         continue;
       }
-      if (!isClosablePair(shape.token0, shape.token1, tokenSet)) {
+      if (
+        shape.token0 === undefined ||
+        shape.token1 === undefined ||
+        !isClosablePair(shape.token0, shape.token1, tokenSet)
+      ) {
         blocked.push({ addr, reason: "not_closable_in_current_graph" });
         continue;
       }
@@ -962,8 +867,8 @@ export async function consumeDiscoveryQueue(
         identitySource: shape.identitySource,
         token0: shape.token0,
         token1: shape.token1,
-        fee: shape.adapter === "univ3" ? shape.fee : undefined,
-        tickSpacing: shape.adapter === "univ3" ? shape.tickSpacing : undefined,
+        fee: shape.fee,
+        tickSpacing: shape.tickSpacing,
         source: typeof entry.source === "string" ? entry.source : undefined,
         score: undefined,
       });
@@ -989,26 +894,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function bestAdapter(adapterCounts: Map<PoolEntry["adapter"], number>): PoolEntry["adapter"] {
   return [...adapterCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-}
-
-async function callAddress(
-  provider: ethers.JsonRpcProvider,
-  to: string,
-  data: string,
-): Promise<string> {
-  const result = await provider.call({ to, data });
-  return ethers.getAddress("0x" + result.slice(-40));
-}
-
-async function callNumber(
-  provider: ethers.JsonRpcProvider,
-  to: string,
-  data: string,
-  method: "fee" | "tickSpacing",
-): Promise<number> {
-  const result = await provider.call({ to, data });
-  const decoded = univ3Iface.decodeFunctionResult(method, result);
-  return Number(decoded[0]);
 }
 
 async function mapLimit<T, R>(
