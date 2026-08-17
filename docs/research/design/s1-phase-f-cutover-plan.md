@@ -524,7 +524,14 @@ searcher PID 208616，dirty 文件保留）：
   univ3=107、univ2=5、univ4=1、dodo=9、fluid=1、erc4626=5。
 - 无新 fatal（当前进程 tail 800 行 0 fatal）。
 
-未满足的最后一项：blockscan-family 最近 pass `outcome=degraded`
-（issueCount=25，来源为已知未完成族 graph-incomplete：curve/self-burn/
-astra/silo/angstrom 等，非崩溃）。`outcome: ran` 需这些族补齐后才能标绿；
-单族失败按规则结构化记录、不降门槛。
+收敛后（2026-08-17 继续运行 ~30 分钟）：blockscan-family 最近 20 个 pass
+`outcome: ran ×16 / budget_exceeded ×4`（0 degraded）；`expected=257
+priced=255` 稳定；当前进程 0 fatal。判据全部满足：ring 非空、DEX 族
+lifecycle 运行、root instances 增长（12→134）、blockscan expected/priced
+>44、DEX 族出现在 state keys、pass outcome ran。
+
+仍记录（不阻塞本次验证、按规则继续跟踪）：状态机 `status=degraded`
+issueCount=25 来自族源完整性缺口（landed-event 落后 ~3 块、dex-token-domain
+complete through 0、observed-interaction 未追平；curve/self-burn/astra/
+silo/angstrom 等族级缺口），需后续批次逐个补齐才能让状态机 status 转
+degraded→ok；单族失败结构化记录、不降门槛。
