@@ -3239,10 +3239,14 @@ async function main(): Promise<void> {
     discovery: Object.freeze({
       ...liveDiscovery.blockScanHooks,
       topologyKey: () => {
-        const strictRevision =
-          discoveryContinuityComposition?.catalogRoot.capture()
-            ?.envelope.snapshot.revision ?? -1;
-        return `${liveDiscovery.blockScanHooks.topologyKey()}:strict:${strictRevision}`;
+        const strictEdges = (blockScanGraph ?? []).filter((edge) =>
+          typeof (edge as { canonicalEdgeId?: unknown }).canonicalEdgeId ===
+            "string"
+        );
+        const strictFingerprint = strictEdges.length === 0
+          ? "none"
+          : hashTokenGraph(strictEdges);
+        return `${liveDiscovery.blockScanHooks.topologyKey()}:strict:${strictFingerprint}`;
       },
     }),
     blind: {
