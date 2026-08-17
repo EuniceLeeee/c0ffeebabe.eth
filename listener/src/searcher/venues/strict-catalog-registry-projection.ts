@@ -477,14 +477,29 @@ function createStrictViewsPricingCapability(
       const index = edgeIndexFor();
       const derived = new Map<string, RouteVenueMid>();
       if (index === null) return derived;
+      let unresolvedBindings = 0;
+      let unresolvedMids = 0;
       for (const edge of edges) {
         const key = edge.canonicalEdgeId ?? stateKeyFor(edge);
         const binding = edge.canonicalEdgeId === undefined
           ? null
           : index.byEdge.get(edge.canonicalEdgeId) ?? null;
-        if (binding === null) continue;
+        if (binding === null) { unresolvedBindings++; continue; }
         const resolved = index.midByRoute.get(binding.routeKey);
         if (resolved !== undefined) derived.set(key, resolved.mid);
+        else unresolvedMids++;
+      }
+      if (derived.size === 0 && edges.length > 0) {
+        console.log(
+          "[strict-views] deriveMids empty: edges=" + edges.length +
+            " unresolvedBindings=" + unresolvedBindings +
+            " unresolvedMids=" + unresolvedMids +
+            " index.byEdge=" + index.byEdge.size +
+            " index.midByRoute=" + index.midByRoute.size +
+            " familyId=" + familyId +
+            " viewsRev=" + index.revision +
+            " edgeSample=" + (edges[0]?.canonicalEdgeId ?? "none"),
+        );
       }
       return derived;
     },
