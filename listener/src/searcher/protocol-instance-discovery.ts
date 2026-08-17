@@ -405,6 +405,7 @@ interface RawProtocolDiscoveryLog {
   readonly data: string;
   readonly transactionHash: string;
   readonly blockNumber: string;
+  readonly logIndex?: string;
 }
 
 interface RawProtocolDiscoveryReceipt {
@@ -419,6 +420,9 @@ function normalizeProtocolDiscoveryLog(log: RawProtocolDiscoveryLog) {
     data: log.data,
     transactionHash: log.transactionHash,
     blockNumber: Number(BigInt(log.blockNumber)),
+    ...(log.logIndex === undefined
+      ? {}
+      : { logIndex: Number(BigInt(log.logIndex)) }),
   };
 }
 

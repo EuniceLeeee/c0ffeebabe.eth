@@ -14,6 +14,37 @@ export interface StrictLiveObservedEvent {
   readonly data: string;
   readonly transactionHash?: string;
   readonly blockNumber: number;
+  /**
+   * Log position within its transaction receipt. Part of the full log
+   * identity for deduplication: a multi-hop transaction can emit several
+   * same-topic Swap logs from different pools, and several V4 poolId swaps
+   * all share the PoolManager address.
+   */
+  readonly logIndex?: number;
+}
+
+/**
+ * Full-identity dedupe key for one observed event. Logs key on block +
+ * transaction hash + logIndex + address + every topic (not just topic0), so
+ * distinct pool swaps inside one transaction never collapse; calls key on
+ * block + transaction hash + target + selector. Deduplication by the
+ * plugin-produced canonical candidate/instance key happens later inside the
+ * family lifecycle, never here.
+ */
+export function strictObservedEventDedupeKey(
+  event: StrictLiveObservedEvent,
+): string {
+  if (event.kind === "log") {
+    return "log:" + event.blockNumber + ":" +
+      (event.transactionHash ?? "") + ":" +
+      (event.logIndex === undefined ? "?" : String(event.logIndex)) + ":" +
+      event.address.toLowerCase() + ":" +
+      (event.topics ?? []).map((topic) => topic.toLowerCase()).join(",");
+  }
+  return "call:" + event.blockNumber + ":" +
+    (event.transactionHash ?? "") + ":" +
+    event.address.toLowerCase() + ":" +
+    event.data.slice(0, 10).toLowerCase();
 }
 
 /**
@@ -55,11 +86,7 @@ export function deriveLiveDiscoveryEventObservations(input: {
           ? {}
           : { transactionHash: event.transactionHash }),
       });
-    const dedupeKey = event.kind === "log"
-      ? `log:${event.blockNumber}:${event.transactionHash ?? ""}:` +
-          `${event.topics?.[0]?.toLowerCase() ?? ""}`
-      : `call:${event.blockNumber}:${event.transactionHash ?? ""}:` +
-          `${event.data.slice(0, 10).toLowerCase()}`;
+    const dedupeKey = strictObservedEventDedupeKey(event);
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
     for (const match of input.catalog.matches(observation)) {

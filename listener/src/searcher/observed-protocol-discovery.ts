@@ -5,6 +5,8 @@ import {
   type ProtocolAddressCacheEntry,
   type ProtocolDiscoveryEvidenceCache,
 } from "./protocol-discovery-cache.js";
+import { strictObservedEventDedupeKey } from
+  "./live-discovery-event-observations.js";
 import {
   ProtocolDiscoveryFamilyCircuitOpen,
   ProtocolDiscoveryFamilyGuard,
@@ -371,20 +373,24 @@ export async function scanProtocolDiscoveryRange(input: {
   const observedEventBuffer = input.evidenceCache?.runtime.observedEvents;
   if (observedEventBuffer !== undefined && eventLogs.length > 0) {
     const seenKeys = new Set(observedEventBuffer.map((event) =>
-      event.kind === "log"
-        ? `log:${event.blockNumber}:${event.transactionHash ?? ""}:` +
-            `${event.topics?.[0]?.toLowerCase() ?? ""}`
-        : `call:${event.blockNumber}:${event.transactionHash ?? ""}:` +
-            `${event.data.slice(0, 10).toLowerCase()}`
+      strictObservedEventDedupeKey(event)
     ));
     for (const log of eventLogs) {
       if (log.transactionHash === undefined ||
           log.blockNumber === undefined) {
         continue;
       }
-      const key = `log:${log.blockNumber}:` +
-        `${log.transactionHash.toLowerCase()}:` +
-        `${log.topics[0]?.toLowerCase() ?? ""}`;
+      const key = strictObservedEventDedupeKey(Object.freeze({
+        kind: "log" as const,
+        address: log.address.toLowerCase(),
+        topics: Object.freeze([...log.topics]),
+        data: log.data,
+        transactionHash: log.transactionHash.toLowerCase(),
+        blockNumber: log.blockNumber,
+        ...(log.logIndex === undefined
+          ? {}
+          : { logIndex: log.logIndex }),
+      }));
       if (seenKeys.has(key)) continue;
       seenKeys.add(key);
       observedEventBuffer.push(Object.freeze({
@@ -394,6 +400,9 @@ export async function scanProtocolDiscoveryRange(input: {
         data: log.data,
         transactionHash: log.transactionHash.toLowerCase(),
         blockNumber: log.blockNumber,
+        ...(log.logIndex === undefined
+          ? {}
+          : { logIndex: log.logIndex }),
       }));
     }
   }

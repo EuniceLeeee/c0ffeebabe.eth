@@ -129,6 +129,8 @@ import type {
 import { routeInstanceKey } from "./venues/route-instance-identity.js";
 import { poolRegistryKey } from "./pool-universe.js";
 import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
+import { strictObservedEventDedupeKey } from
+  "./live-discovery-event-observations.js";
 import type { StrictLiveObservedEvent } from
   "./live-discovery-event-observations.js";
 
@@ -1703,11 +1705,7 @@ export async function createLiveDiscoveryCoordinator(
   };
 
   function observedEventKey(event: StrictLiveObservedEvent): string {
-    return event.kind === "log"
-      ? `log:${event.blockNumber}:${event.transactionHash ?? ""}:` +
-          `${event.topics?.[0]?.toLowerCase() ?? ""}`
-      : `call:${event.blockNumber}:${event.transactionHash ?? ""}:` +
-          `${event.data.slice(0, 10).toLowerCase()}`;
+    return strictObservedEventDedupeKey(event);
   }
   const publishLiveDiscoveryState = (
     state: LiveDiscoveryPublicationState,

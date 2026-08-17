@@ -250,6 +250,8 @@ export interface ProtocolDiscoveryLog {
   readonly data: string;
   readonly transactionHash?: string;
   readonly blockNumber?: number;
+  /** Log position within its transaction receipt (full-identity dedupe). */
+  readonly logIndex?: number;
 }
 
 export interface ProtocolDiscoveryReceipt {
