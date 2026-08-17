@@ -464,3 +464,36 @@ approve fallback 与默认 authority 尚未删除，禁止标记 F6-A/F8 complet
 任一 slice 无法保持绿则回退该 slice（git revert + 上一已验收构建物），
 并在 Phase E plan 如实记录。cutover 门保持 `not-ready` 期间，节点继续
 legacy authority（bounded-live envelope 不变）。
+
+## 中央家族/协议分类清理（2026-08-17，commit b82383ce→e8e7a7db）
+
+用户裁定：中央管弦内不允许存在协议类别/adapter-family 分类；删除后流程
+暂可不跑通，但 build 必须保持绿。逐批完成并 commit/push：
+
+- pool-registry-key：univ4 特判移除，按 route binding / poolId 字段数据驱动。
+- pinned-warm-pools：univ4 特判移除，fixedToken/warmDirections 通用解析，
+  warm pool key 按字段存在性派生。
+- strategy-taxonomy：fluid-vault 特判移除（slot 必须由池声明）。
+- blind-production-compatibility：fluid-dex/credit:fluid/erc4626-silo 兼容
+  别名与 fluid-credit/fluid-dex legacy descriptor 特判删除；冻结库存门
+  需要冻结新 baseline 才能重新通过（接受）。
+- auto-close-route-gap / route-gap-watcher：venue 分支改为 id 形态驱动
+  （bytes32 pool-key vs address）。
+- detector/blockscan-scanner：legacyReader 家族 switch 删除，改为按状态
+  快照形状数据驱动的 readAnyWarmMid；删除孤儿 blockscan-curve-mids。
+- active-pool-discovery：univ2/univ3 工厂 topic/解析分支删除，工厂事件
+  语义由 venue catalog 声明（factoryEvent），中央只消费声明。
+- build-active-pool-universe：univ2/univ3/curve-underlying 元数据 enrichment
+  桥与 discovery-queue 家族探测删除，通用 lane 只携带 strict identity 字段；
+  无 token 元数据时 queue 条目 fail-closed 阻塞（族物化器提供前不通过）。
+- 删除 univ4 专用 backfill-v4-poolid 工具 + npm script + 直接测试。
+- main.ts：univ2 专用 provisional 图日志泛化。
+
+保持不动（文档化例外）：build-blind-t1-baseline 冻结 T0/T1 词汇（sealed
+桥，不进生产 closure）；migration-cleanup-receipt 的
+TRACE_WINDOW_ABSENT_FAMILY_IDS（用户裁定验收数据）；fixture-replay 测试
+基建；pool-state-cache 的 v2/v3/v4/curve 状态形状 kind（数据模型）。
+
+剩余待处理：requiresProtocolEdgesFlag / slotKind 类别开关的进一步收敛为
+插件声明（当前为 manifest 字段的通用消费）；LEGACY_PRODUCTION_ADAPTER_
+FAMILIES 权威拆除（F9 深桥）。
