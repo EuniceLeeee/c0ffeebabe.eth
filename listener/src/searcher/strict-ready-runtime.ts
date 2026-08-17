@@ -4,6 +4,7 @@ import type { ReadyUniverseGeneration } from
 import {
   hashReadyCatalogSnapshot,
   hashReadyGraphSnapshot,
+  hashReadyPublicationSet,
 } from "./universe-rebuild-runner.js";
 
 /**
@@ -46,7 +47,8 @@ export function resolveStrictReadyRuntime(
   }
   if (
     hashReadyGraphSnapshot(ready.graphSnapshot) !== ready.graphHash ||
-    hashReadyCatalogSnapshot(ready.catalogSnapshot) !== ready.catalogHash
+    hashReadyCatalogSnapshot(ready.catalogSnapshot) !== ready.catalogHash ||
+    hashReadyPublicationSet(ready.catalogSnapshot) !== ready.publicationSetHash
   ) {
     throw new Error("strict readyGeneration root mismatch");
   }

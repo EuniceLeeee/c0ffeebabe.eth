@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import {
+  attestationPoolFromCandidate,
   canReuseMemo,
   candidateFingerprint,
   candidateFromLog,
   candidatesFromLog,
+  createProbeWiring,
   createRebuildWiring,
   familyDefinitionHash,
   fullLogIdentityKey,
@@ -280,6 +282,105 @@ async function main(): Promise<void> {
   const wiring = createRebuildWiring({
     rpcUrl: "http://127.0.0.1:1",
   });
+  const richCandidate = Object.freeze({
+    address: "0x" + "88".repeat(20),
+    adapter: "univ4",
+    familyId: "univ4-standard",
+    pluginCandidateKey: "manager:pool-id",
+    amountIn: 123n,
+    poolKey: Object.freeze({
+      currency0: "0x" + "11".repeat(20),
+      currency1: "0x" + "22".repeat(20),
+      fee: 3_000,
+      tickSpacing: 60,
+      hooks: "0x" + "00".repeat(20),
+    }),
+  });
+  const encodedRichCandidate = wiring.encodeCandidateSnapshot!(richCandidate);
+  assert.doesNotThrow(
+    () => JSON.stringify(encodedRichCandidate),
+    "durable candidate partitions must encode bigint/plugin fields",
+  );
+  assert.deepEqual(
+    wiring.decodeCandidateSnapshot!(encodedRichCandidate),
+    richCandidate,
+    "resume/probe must restore the complete plugin-owned candidate",
+  );
+  assert.deepEqual(
+    attestationPoolFromCandidate(richCandidate).poolKey,
+    richCandidate.poolKey,
+    "strict attestation must not drop event-dependent Family payload",
+  );
+  assert.equal(
+    attestationPoolFromCandidate(richCandidate).amountIn,
+    123n,
+  );
+
+  // The production memo sealer and reuse predicate must share one candidate
+  // fingerprint algorithm. This exercises the actual production sealer; a
+  // hand-built memo can otherwise make both unit helpers look green while
+  // every real restart misses the cache.
+  const probeWiring = createProbeWiring({ rpcUrl: "http://127.0.0.1:1" });
+  const sealed = probeWiring.sealDurableVerifiedMemo({
+    candidate,
+    result: Object.freeze({
+      accepted: Object.freeze({
+        familyId,
+        lineageId: familyId,
+        subject: String(candidate.address),
+      }),
+      authorityFingerprint: authorityFor(candidate),
+      instance: Object.freeze({
+        instanceKey: "canonical-instance",
+        descriptor: Object.freeze({}),
+        routes: Object.freeze([]),
+        pricingInstances: Object.freeze([]),
+        evidenceRefs: Object.freeze([]),
+      }),
+    }),
+    proofSource: SOURCE,
+    familyCandidateKey: rebuildFamilyCandidateKey(candidate),
+  });
+  assert.equal(sealed.candidateFingerprint, candidateFingerprint(candidate));
+  assert.equal(
+    canReuseMemo({
+      memo: sealed,
+      candidate,
+      cutoff: SOURCE,
+      familyId,
+      currentAuthorityFingerprint: authorityFor(candidate),
+    }),
+    true,
+    "a production-sealed immutable memo must be reusable on restart",
+  );
+  const aliasSealed = probeWiring.sealDurableVerifiedMemo({
+    candidate: Object.freeze({
+      ...candidate,
+      pluginCandidateKey: "alias-candidate-key",
+    }),
+    result: Object.freeze({
+      accepted: Object.freeze({
+        familyId,
+        lineageId: familyId,
+        subject: String(candidate.address),
+      }),
+      authorityFingerprint: authorityFor(candidate),
+      instance: Object.freeze({
+        instanceKey: "canonical-instance",
+        descriptor: Object.freeze({}),
+        routes: Object.freeze([]),
+        pricingInstances: Object.freeze([]),
+        evidenceRefs: Object.freeze([]),
+      }),
+    }),
+    proofSource: SOURCE,
+    familyCandidateKey: "alias",
+  });
+  assert.equal(
+    aliasSealed.familyInstanceKey,
+    sealed.familyInstanceKey,
+    "FamilyInstanceKey must derive from verified instanceKey, not nomination alias",
+  );
   const poolALogs = Object.freeze([
     log({ blockNumber: SOURCE.number - 100, logIndex: 1 }),
     log({ blockNumber: SOURCE.number - 50, logIndex: 2 }),

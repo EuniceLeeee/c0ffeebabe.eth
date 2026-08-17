@@ -147,6 +147,31 @@ function classifyFailure(reason: string): RetryableAttempt["failureCode"] {
   return "rpc";
 }
 
+/**
+ * Preserve the plugin-owned candidate payload when entering strict
+ * attestation. The central layer normalizes only the address/known shell;
+ * PoolKey, actor/token/amount and other Family fields remain opaque and are
+ * consumed by that Family's nomination/materialization capability.
+ */
+export function attestationPoolFromCandidate(
+  candidate: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> & {
+  readonly address: string;
+  readonly adapter?: string;
+} {
+  const address = String(candidate.address ?? "");
+  return Object.freeze({
+    ...candidate,
+    address,
+    ...(candidate.adapter === undefined
+      ? {}
+      : { adapter: String(candidate.adapter) }),
+    ...(candidate.poolId === undefined
+      ? {}
+      : { poolId: String(candidate.poolId) }),
+  });
+}
+
 export function isChainProvenTerminalReason(reason: string): boolean {
   const normalized = reason.trim().toLowerCase();
   return normalized === "no deployed code" ||
@@ -245,23 +270,12 @@ async function readBlockHash(
 function canonicalCandidateSnapshot(
   candidate: Readonly<Record<string, unknown>>,
 ): unknown {
-  return Object.freeze({
-    address: candidate.address,
-    ...(candidate.poolId === undefined
-      ? {}
-      : { poolId: candidate.poolId }),
-    ...(candidate.adapter === undefined ? {} : { adapter: candidate.adapter }),
-    ...(candidate.token0 === undefined ? {} : { token0: candidate.token0 }),
-    ...(candidate.token1 === undefined ? {} : { token1: candidate.token1 }),
-    ...(candidate.blockNumber === undefined
-      ? {}
-      : { blockNumber: candidate.blockNumber }),
-    ...(candidate.blockHash === undefined ? {} : { blockHash: candidate.blockHash }),
-    ...(candidate.transactionHash === undefined
-      ? {}
-      : { transactionHash: candidate.transactionHash }),
-    ...(candidate.logIndex === undefined ? {} : { logIndex: candidate.logIndex }),
-  });
+  // Keep the complete plugin-owned candidate. Event-dependent Families can
+  // require fields beyond address/poolId (PoolKey, payout token, actor,
+  // amounts, etc.); dropping them makes a single-pool retry impossible. The
+  // durable codec is JSON-safe and this snapshot lives only in the current
+  // in-progress run, not in a permanent raw-transaction inbox.
+  return encodeDurableValue(candidate);
 }
 
 type DurableEncodedValue =
@@ -494,15 +508,7 @@ export function createProbeWiring(
       attestInput: Parameters<AttestOnce>[0],
     ): Promise<Awaited<ReturnType<AttestOnce>>> => {
       const candidate = attestInput.candidate as Readonly<Record<string, unknown>>;
-      const pool = Object.freeze({
-        address: String(candidate.address ?? ""),
-        ...(candidate.adapter === undefined
-          ? {}
-          : { adapter: String(candidate.adapter) }),
-        ...(candidate.poolId === undefined
-          ? {}
-          : { poolId: String(candidate.poolId) }),
-      });
+      const pool = attestationPoolFromCandidate(candidate);
       if (!ethers.isAddress(pool.address)) {
         return terminalRejected("invalid_candidate_address");
       }
@@ -564,6 +570,21 @@ export function createProbeWiring(
       }
       const publication = result.publications[0] ?? null;
       const instance = publication?.instances[0] ?? null;
+      if (instance === null) {
+        // Identity alone is not a verified universe instance. A missing
+        // materialization/projection must remain durable-retryable and block
+        // ready; otherwise the cursor could advance while the Graph silently
+        // omits an identity-accepted pool.
+        return retryable({
+          candidate,
+          reasonCode: "strict lifecycle produced no materialized instance",
+          stage: publication === null ? "materialization" : "projection",
+          failureCode: "resource-limited",
+          ...(attestInput.evidenceRef === undefined
+            ? {}
+            : { evidenceRef: attestInput.evidenceRef }),
+        });
+      }
       return verified(Object.freeze({
         accepted,
         publication,
@@ -601,7 +622,7 @@ export function createProbeWiring(
       const instanceKey = result.instance?.instanceKey ??
         digest("instance:" + familyId + "|" + candidateInstanceIdentity(candidate));
       const familyInstanceKey = digest(
-        "instance:" + familyId + "|" + candidateInstanceIdentity(candidate),
+        "family-instance-v1:" + familyId + "|" + instanceKey,
       );
       return sealMemoFromPublication({
         candidate,
@@ -634,9 +655,7 @@ export function createProbeWiring(
           ),
         ),
         proofSource: sealInput.proofSource,
-        candidateFingerprint: digest(
-          "candidate:" + canonicalJson(canonicalCandidateSnapshot(candidate)),
-        ),
+        candidateFingerprint: candidateFingerprint(candidate),
         authorityFingerprint: result.authorityFingerprint,
       });
     },
@@ -648,7 +667,8 @@ export function createProbeWiring(
         );
       }
     },
-    decodeCandidateSnapshot: (snapshot: unknown) => snapshot,
+    decodeCandidateSnapshot: (snapshot: unknown) =>
+      decodeDurableValue(snapshot),
   });
 }
 
@@ -903,6 +923,10 @@ export function createRebuildWiring(input?: {
   const probe = createProbeWiring({ rpcUrl });
 
   const wiring: UniverseRebuildDependencies = {
+    encodeCandidateSnapshot: (candidate) =>
+      encodeDurableValue(candidate),
+    decodeCandidateSnapshot: (snapshot) =>
+      decodeDurableValue(snapshot),
     freezeCanonicalHead: async () => {
       const block = await provider.getBlock("latest");
       if (block === null || block.hash === null) {

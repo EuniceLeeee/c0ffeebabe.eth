@@ -361,7 +361,7 @@ export class UniverseRebuildCheckpointStore {
         }).catch(() => {
           // Directory fsync is best-effort on platforms that refuse it.
         });
-        return next;
+        return sealed;
       } finally {
         await import("node:fs/promises").then((fs) =>
           fs.unlink(this.#lockPath).catch(() => undefined)
@@ -750,10 +750,19 @@ function assertReadyPromotion(
   run: InProgressUniverseRun,
   ready: ReadyUniverseGeneration,
 ): void {
-  const outcomes = Object.values(run.outcomesByCandidateKey);
+  const candidateKeys = Object.keys(run.candidatesByKey).sort();
+  const outcomeEntries = Object.entries(run.outcomesByCandidateKey)
+    .sort(([left], [right]) => left.localeCompare(right));
+  const outcomes = outcomeEntries.map(([, outcome]) => outcome);
   if (
+    candidateKeys.length !== run.candidateCount ||
     outcomes.length !== run.candidateCount ||
-    outcomes.some((outcome) => outcome.status === "retryable")
+    outcomeEntries.some(([key, outcome], index) =>
+      key !== candidateKeys[index] ||
+      outcome.familyCandidateKey !== key ||
+      (outcome.status !== "verified" &&
+        outcome.status !== "terminal-rejected")
+    )
   ) {
     throw new Error(
       "universe rebuild checkpoint: ready promotion requires exact terminal partition",
@@ -787,11 +796,22 @@ function assertReadyPromotion(
       run.observedThrough.hash.toLowerCase();
   const appliedAtCutoff = ready.appliedThrough.number === run.cutoff.number &&
     ready.appliedThrough.hash.toLowerCase() === run.cutoff.hash.toLowerCase();
+  const graphRootMatches = ready.graphHash === createHash("sha256")
+    .update("graph-v2:" + canonicalJson(ready.graphSnapshot))
+    .digest("hex");
+  const catalogRootMatches = ready.catalogHash === createHash("sha256")
+    .update("catalog-v1:" + canonicalJson(ready.catalogSnapshot))
+    .digest("hex");
+  const publicationRootMatches = ready.publicationSetHash ===
+    createHash("sha256")
+      .update("publications-v2:" + canonicalJson(ready.catalogSnapshot))
+      .digest("hex");
   const coverageKeys = new Set(ready.sourceCoverage.map((coverage) =>
     coverage.familyId + "|" + coverage.sourceId
   ));
   if (
     !sameCutoff || !observedMatches || !appliedAtCutoff || !sameInstances ||
+    !graphRootMatches || !catalogRootMatches || !publicationRootMatches ||
     ready.universeRange.fromBlock !== run.fromBlock ||
     ready.universeRange.toBlock !== run.cutoff.number ||
     ready.universeHash !== run.universeHash ||

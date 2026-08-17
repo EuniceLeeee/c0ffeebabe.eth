@@ -3782,6 +3782,41 @@ test 对该 facade 的依赖；中央/consumer authority 与最终 live provenan
 dry-run live 证明 universe/edges、全适用 Family、exact path、final sim 全部来自 strict ready
 generation，并完成 restart reuse 与连续 100/100；未取得这些证据前不部署、不宣称最终 F9/S1 完成。
 
+**2026-08-18 durable restart/reuse 第二十二批正确性 checkpoint
+（实现提交承载本 checkpoint；不是 actual live、restart receipt、100/100 或最终 S1 验收）：**
+
+- 修复 production memo 的真实跨窗口复用：`sealDurableVerifiedMemo()` 与
+  `canReuseMemo()` 现在使用同一 `candidateFingerprint()`；此前测试用手工 memo 会绿，但 production
+  sealer 使用另一前缀，导致每个新 rebuild 都全量 miss、重新 attest。新增合同直接调用 production
+  sealer 后再走 reuse predicate，防止两套 helper 各自自洽却无法跨重启复用；
+- `candidatesByKey` 和 retryable `candidateSnapshot` 现在使用完整 JSON-safe durable codec，保留插件拥有的
+  PoolKey、actor/token/amount、bigint、Map 与其他 materialization 字段。恢复和单池 probe 先解码为原始
+  candidate；不再只保存 address/poolId 后丢失 event-dependent Family 的必要证据。strict attestation
+  同时透传完整 opaque candidate，不再由 rebuild wiring 截断协议字段；这些快照只存在当前
+  `inProgressRun`，仍不形成长期 raw-tx inbox/candidate journal；
+- `familyInstanceKey` 改为绑定 lifecycle 验证后的 `familyId + instanceKey`，不再绑定 nomination alias。
+  四组 startup poolSets 仍先按 FamilyCandidateKey 去重；同一 verified instance 的 authority 因此具有
+  稳定的跨来源键。identity 通过但 materialization/projection 没有产出实例时现在写 retryable 并阻塞
+  ready，不能再以空 descriptor/空 Graph 静默推进 cursor；
+- 同一未完成 run 的 verified outcome 在进程/代码重启后，会先重校验 candidate fingerprint、逐 Family
+  definition hash、当前 cutoff code hash/EIP-1967 implementation word 与旧 proofSource canonical hash；
+  有效 memo 不重跑 lifecycle，失效 memo 只重做该实例。chain-proven terminal rejection 不因普通重启
+  重跑；unexpected worker throw 的 `finally` 仍会 flush 已完成 siblings，且缺 outcome 的 key 使 exact
+  partition/ready CAS fail closed；
+- `universeHash` 现在哈希完整 durable candidate partition，`candidateSetHash` 单独哈希 key set。最终
+  `casCommitReadyGeneration` 在写入内部重新核对 candidatesByKey/outcomes 的逐 key exact partition、verified
+  memo/active instance 集、cutoff/coverage，以及 Graph/catalog/publicationSet 三个 canonical root；runtime
+  load 也复核 publicationSet root。store mutation 返回的 envelope 使用刚写入的 sealed fingerprint，不再
+  把前一 revision fingerprint 暴露给同进程调用者；
+- 定向合同覆盖 production seal→reuse、bigint/PoolKey round-trip、opaque payload 保留、verified
+  invalidation、terminal carry、unexpected worker partial flush、ready root tamper、single-pool probe、SIGTERM、
+  stale lock、V4 in-flight 单建/失败重试、strict-ready root/load；listener 完整 build 同轮通过。
+
+本批关闭的是部署前 startup durability/reuse 的代码缺口。结构 receipt 与本地合同仍不能代替实际
+systemd dry-run：必须在下一精确 pushed SHA 上取得 ready universe/全适用 Family edges、strict exact、
+strict final-sim、checkpoint restart 差集复用以及同 PID/process-start/log inode 的连续 100/100 后，才可
+继续声称 F5/F9/S1 最终验收。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

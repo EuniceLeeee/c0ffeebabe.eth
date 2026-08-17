@@ -57,6 +57,10 @@ export interface UniverseRebuildDependencies {
   readonly dedupeFamilyCandidates: (
     observations: readonly unknown[],
   ) => readonly unknown[];
+  /** JSON-safe durable form used by candidatesByKey and retry/probe resume. */
+  readonly encodeCandidateSnapshot?: (candidate: unknown) => unknown;
+  /** Restore the exact candidate value (including bigint/Map fields). */
+  readonly decodeCandidateSnapshot?: (snapshot: unknown) => unknown;
   /** Compact evidence pointer retained for a first-attempt retryable. */
   readonly candidateEvidenceRef?: (candidate: unknown) => {
     readonly blockNumber: number;
@@ -132,6 +136,8 @@ export async function rebuildUniverse(
   input: RebuildUniverseInput,
 ): Promise<ReadyUniverseGeneration> {
   const log = input.log ?? ((): void => undefined);
+  const encodeCandidate = input.encodeCandidateSnapshot ?? ((value) => value);
+  const decodeCandidate = input.decodeCandidateSnapshot ?? ((value) => value);
   let checkpoint = await input.store.load() ?? null;
   const incumbentRun = checkpoint?.inProgressRun ?? null;
   let cutoff: CanonicalSource;
@@ -153,7 +159,7 @@ export async function rebuildUniverse(
     observations = Object.freeze([]);
     candidates = Object.freeze(Object.entries(incumbentRun.candidatesByKey)
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([, candidate]) => candidate));
+      .map(([, candidate]) => decodeCandidate(candidate)));
   } else {
     cutoff = await input.freezeCanonicalHead();
     fromBlock = Math.max(0, cutoff.number - input.lookbackBlocks + 1);
@@ -163,7 +169,10 @@ export async function rebuildUniverse(
     candidates = input.dedupeFamilyCandidates(observations);
   }
   const candidatesByKey = Object.freeze(Object.fromEntries(
-    candidates.map((candidate) => [input.familyCandidateKey(candidate), candidate]),
+    candidates.map((candidate) => [
+      input.familyCandidateKey(candidate),
+      encodeCandidate(candidate),
+    ]),
   ));
   if (Object.keys(candidatesByKey).length !== candidates.length) {
     throw new Error(
@@ -177,7 +186,7 @@ export async function rebuildUniverse(
     runId: input.runId,
     cutoff,
     fromBlock,
-    universeHash: hashCandidateSet(candidates, input.familyCandidateKey),
+    universeHash: hashUniverseCandidatePartition(candidatesByKey),
     candidateSetHash: hashCandidateSet(candidates, input.familyCandidateKey),
     candidateCount: candidates.length,
     candidatesByKey,
@@ -205,7 +214,12 @@ export async function rebuildUniverse(
   const pendingCandidates = candidates.filter((candidate) => {
     const candidateKey = input.familyCandidateKey(candidate);
     const oldOutcome = run.outcomesByCandidateKey[candidateKey];
-    return oldOutcome?.status !== "verified";
+    // A verified outcome is revalidated against the current Family hash,
+    // deployment/implementation authority and canonical proof source before
+    // it is trusted after a process/code restart. A valid memo skips the
+    // lifecycle; an invalid one is attested again. Chain-proven terminal
+    // outcomes remain terminal for this fixed candidate partition.
+    return oldOutcome?.status !== "terminal-rejected";
   });
   let nextCandidate = 0;
   const processCandidate = async (candidate: unknown): Promise<void> => {
@@ -225,6 +239,13 @@ export async function rebuildUniverse(
       );
     }
     if (reusableMemo !== null) {
+      if (
+        oldOutcome?.status === "verified" &&
+        oldOutcome.familyInstanceKey === reusableMemo.familyInstanceKey &&
+        oldOutcome.memoFingerprint === reusableMemo.memoFingerprint
+      ) {
+        return;
+      }
       writer.record(Object.freeze({
         status: "verified",
         familyCandidateKey: candidateKey,
@@ -290,17 +311,23 @@ export async function rebuildUniverse(
   if (!Number.isSafeInteger(requestedConcurrency) || requestedConcurrency < 1) {
     throw new Error("universe rebuild attestation concurrency is invalid");
   }
-  await Promise.all(Array.from({
-    length: Math.min(requestedConcurrency, Math.max(1, pendingCandidates.length)),
-  }, async () => {
-    while (true) {
-      const index = nextCandidate++;
-      if (index >= pendingCandidates.length) return;
-      await processCandidate(pendingCandidates[index]);
-    }
-  }));
-  await writer.flush();
-  uninstallSignalFlush();
+  try {
+    await Promise.all(Array.from({
+      length: Math.min(requestedConcurrency, Math.max(1, pendingCandidates.length)),
+    }, async () => {
+      while (true) {
+        const index = nextCandidate++;
+        if (index >= pendingCandidates.length) return;
+        await processCandidate(pendingCandidates[index]);
+      }
+    }));
+  } finally {
+    // Even an unexpected worker failure must preserve every sibling that
+    // already completed. The failed key remains unaccounted and therefore
+    // cannot advance appliedThrough or readyGeneration.
+    await writer.flush();
+    uninstallSignalFlush();
+  }
 
   // 4. Reload and inspect the run.
   checkpoint = await input.store.load() ?? checkpoint;
@@ -361,7 +388,7 @@ export async function rebuildUniverse(
     activeInstanceKeys: Object.freeze(activeMemos.map((memo) =>
       memo.familyInstanceKey
     ).sort()),
-    publicationSetHash: hashPublications(catalogSnapshot),
+    publicationSetHash: hashReadyPublicationSet(catalogSnapshot),
     observedThrough: Object.freeze({ ...currentRun.observedThrough }),
     appliedThrough: Object.freeze({
       number: cutoff.number,
@@ -539,7 +566,15 @@ function hashCandidateSet(
   );
 }
 
-function hashPublications(catalogSnapshot: unknown): string {
+function hashUniverseCandidatePartition(
+  candidatesByKey: Readonly<Record<string, unknown>>,
+): string {
+  return createDigest(
+    "universe-candidate-partition-v1:" + canonicalJson(candidatesByKey),
+  );
+}
+
+export function hashReadyPublicationSet(catalogSnapshot: unknown): string {
   return createDigest(
     "publications-v2:" + canonicalJson(catalogSnapshot),
   );

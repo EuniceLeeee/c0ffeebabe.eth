@@ -6,6 +6,7 @@ import { assertProducerGenerationPublicationAllowed } from
 import {
   hashReadyCatalogSnapshot,
   hashReadyGraphSnapshot,
+  hashReadyPublicationSet,
 } from "../universe-rebuild-runner.js";
 import type { ReadyUniverseGeneration } from
   "../universe-rebuild-checkpoint.js";
@@ -46,7 +47,7 @@ function ready(): ReadyUniverseGeneration {
     universeHash: "u",
     catalogHash: hashReadyCatalogSnapshot(catalogSnapshot),
     activeInstanceKeys: Object.freeze(["family-instance:1"]),
-    publicationSetHash: "p",
+    publicationSetHash: hashReadyPublicationSet(catalogSnapshot),
     observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
     appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
     sourceCoverage: Object.freeze([Object.freeze({
@@ -76,6 +77,14 @@ assert.throws(
   })),
   /root mismatch/,
   "Graph content/root mismatch must fail closed",
+);
+assert.throws(
+  () => resolveStrictReadyRuntime(Object.freeze({
+    ...ready(),
+    publicationSetHash: "tampered",
+  })),
+  /root mismatch/,
+  "publication-set content/root mismatch must fail closed",
 );
 assert.throws(
   () => resolveStrictReadyRuntime(Object.freeze({

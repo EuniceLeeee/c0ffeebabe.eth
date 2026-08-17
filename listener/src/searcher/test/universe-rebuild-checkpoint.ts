@@ -9,12 +9,19 @@ import {
   type ReadyUniverseGeneration,
   type RunOutcome,
 } from "../universe-rebuild-checkpoint.js";
+import {
+  hashReadyCatalogSnapshot,
+  hashReadyGraphSnapshot,
+  hashReadyPublicationSet,
+} from "../universe-rebuild-runner.js";
 
 const SOURCE = Object.freeze({
   number: 25_750_000,
   hash: "0x" + "a1".repeat(32),
   generation: 1,
 });
+const READY_GRAPH = Object.freeze({ edges: Object.freeze([]) });
+const READY_CATALOG = Object.freeze({ instances: Object.freeze([]) });
 
 function memoFor(key: string): DurableVerifiedMemo {
   const fp = "fp-" + key;
@@ -201,54 +208,50 @@ async function main(): Promise<void> {
     // Memo upsert.
     const withMemo = await store.casUpsertMemo(memoFor("a"));
     const currentRevision = withMemo.revision;
+    const readyGeneration = Object.freeze({
+      generation: 1,
+      cutoff: SOURCE,
+      universeRange: Object.freeze({
+        fromBlock: SOURCE.number - 14_399,
+        toBlock: SOURCE.number,
+      }),
+      universeHash: "u1",
+      catalogHash: hashReadyCatalogSnapshot(READY_CATALOG),
+      activeInstanceKeys: Object.freeze(["inst-a", "inst-b"]),
+      publicationSetHash: hashReadyPublicationSet(READY_CATALOG),
+      observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+      appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+      sourceCoverage: Object.freeze([Object.freeze({ familyId: "univ2", sourceId: "startup-universe", completeThroughBlock: SOURCE.number, completeThroughHash: SOURCE.hash })]),
+      graphSnapshot: READY_GRAPH,
+      graphHash: hashReadyGraphSnapshot(READY_GRAPH),
+      catalogSnapshot: READY_CATALOG,
+    }) as ReadyUniverseGeneration;
 
     // Ready commit with a stale revision fails closed.
     await assert.rejects(
       () => store.casCommitReadyGeneration({
         expectedRevision: 1,
         runId: "run-1",
-        ready: Object.freeze({
-          generation: 1,
-          cutoff: SOURCE,
-          universeRange: Object.freeze({
-            fromBlock: SOURCE.number - 14_399,
-            toBlock: SOURCE.number,
-          }),
-          universeHash: "u1",
-          catalogHash: "cat",
-          activeInstanceKeys: Object.freeze(["inst-a", "inst-b"]),
-          publicationSetHash: "ps",
-          observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
-          appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
-          sourceCoverage: Object.freeze([Object.freeze({ familyId: "univ2", sourceId: "startup-universe", completeThroughBlock: SOURCE.number, completeThroughHash: SOURCE.hash })]),
-          graphSnapshot: Object.freeze({ edges: Object.freeze([]) }),
-          graphHash: "g1",
-          catalogSnapshot: Object.freeze({ instances: Object.freeze([]) }),
-        }) as ReadyUniverseGeneration,
+        ready: readyGeneration,
       }),
       /CAS conflict/,
+    );
+    await assert.rejects(
+      () => store.casCommitReadyGeneration({
+        expectedRevision: currentRevision,
+        runId: "run-1",
+        ready: Object.freeze({
+          ...readyGeneration,
+          publicationSetHash: "tampered",
+        }),
+      }),
+      /not bound to completed run/,
+      "Graph/catalog/publication roots must be checked inside the ready CAS",
     );
     const ready = await store.casCommitReadyGeneration({
       expectedRevision: currentRevision,
       runId: "run-1",
-      ready: Object.freeze({
-        generation: 1,
-        cutoff: SOURCE,
-        universeRange: Object.freeze({
-          fromBlock: SOURCE.number - 14_399,
-          toBlock: SOURCE.number,
-        }),
-        universeHash: "u1",
-        catalogHash: "cat",
-        activeInstanceKeys: Object.freeze(["inst-a", "inst-b"]),
-        publicationSetHash: "ps",
-        observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
-        appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
-        sourceCoverage: Object.freeze([Object.freeze({ familyId: "univ2", sourceId: "startup-universe", completeThroughBlock: SOURCE.number, completeThroughHash: SOURCE.hash })]),
-        graphSnapshot: Object.freeze({ edges: Object.freeze([]) }),
-        graphHash: "g1",
-        catalogSnapshot: Object.freeze({ instances: Object.freeze([]) }),
-      }) as ReadyUniverseGeneration,
+      ready: readyGeneration,
     });
     assert.equal(ready.inProgressRun, null);
     assert.equal(ready.readyGeneration?.generation, 1);

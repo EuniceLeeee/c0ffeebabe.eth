@@ -24,6 +24,8 @@ interface Fixture {
   readonly store: UniverseRebuildCheckpointStore;
   readonly attestCalls: Map<string, number>;
   readonly failKeys: Set<string>;
+  readonly terminalKeys: Set<string>;
+  readonly invalidReusableKeys: Set<string>;
   readonly builtFamilySizes: number[];
   readonly scanCalls: () => number;
   readonly maxConcurrentAttestations: () => number;
@@ -39,6 +41,8 @@ function makeFixture(
   });
   const attestCalls = new Map<string, number>();
   const failKeys = new Set<string>(["c"]);
+  const terminalKeys = new Set<string>();
+  const invalidReusableKeys = new Set<string>();
   const builtFamilySizes: number[] = [];
   let scanCallCount = 0;
   let activeAttestations = 0;
@@ -62,6 +66,7 @@ function makeFixture(
       ),
     findReusableMemo: async (input) => {
       const key = (input.candidate as { id: string }).id;
+      if (invalidReusableKeys.has(key)) return null;
       const memo = input.checkpoint.verifiedMemos["cand:" + key];
       if (memo === undefined) return null;
       return memo;
@@ -76,6 +81,12 @@ function makeFixture(
       );
       await new Promise((resolve) => setTimeout(resolve, 5));
       activeAttestations--;
+      if (terminalKeys.has(id)) {
+        return Object.freeze({
+          status: "terminal-rejected",
+          reasonCode: "identity_rejected:fixture",
+        });
+      }
       if (failKeys.has(id)) {
         return Object.freeze({
           status: "retryable",
@@ -167,6 +178,8 @@ function makeFixture(
     store,
     attestCalls,
     failKeys,
+    terminalKeys,
+    invalidReusableKeys,
     builtFamilySizes,
     scanCalls: () => scanCallCount,
     maxConcurrentAttestations: () => maxConcurrentAttestations,
@@ -227,6 +240,18 @@ async function main(): Promise<void> {
     assert.equal(f.attestCalls.get("b"), 1);
     assert.equal(f.attestCalls.get("c"), 2, "retryable key is re-attested");
 
+    // A code/family/authority change between process starts invalidates an
+    // already-durable verified memo. The key is re-attested, while unchanged
+    // verified siblings still skip the lifecycle.
+    f.invalidReusableKeys.add("a");
+    await assert.rejects(
+      () => rebuildUniverse(f.input),
+      UniverseRunIncomplete,
+    );
+    assert.equal(f.attestCalls.get("a"), 2);
+    assert.equal(f.attestCalls.get("b"), 1);
+    f.invalidReusableKeys.delete("a");
+
     // Probe: only the target key, at the fixed cutoff.
     const probeBefore = f.attestCalls.get("c") ?? 0;
     f.failKeys.delete("c");
@@ -247,6 +272,7 @@ async function main(): Promise<void> {
     );
 
     // After the last retryable closes, the run finalizes into ready.
+    const aCallsBeforeFinalize = f.attestCalls.get("a");
     const ready = await rebuildUniverse(f.input);
     assert.equal(ready.generation, 1);
     assert.deepEqual(
@@ -261,7 +287,11 @@ async function main(): Promise<void> {
     checkpoint = await f.store.load();
     assert.equal(checkpoint?.inProgressRun, null);
     assert.equal(checkpoint?.readyGeneration?.generation, 1);
-    assert.equal(f.attestCalls.get("a"), 1, "no re-attestation after ready");
+    assert.equal(
+      f.attestCalls.get("a"),
+      aCallsBeforeFinalize,
+      "a valid durable memo must not re-attest during finalization",
+    );
 
     // B: a NEW run reuses verified memos across rebuilds (order independent).
     // Shuffled candidate order; scan returns [b, a] (order changed).
@@ -294,6 +324,56 @@ async function main(): Promise<void> {
       ready.graphHash,
       "graph root must bind graph contents, not object stringification",
     );
+
+    // C: a chain-proven terminal rejection is already accounted for. A
+    // restart of the same incomplete run retries only retryable keys.
+    const terminalFixture = makeFixture(join(dir, "terminal"));
+    terminalFixture.terminalKeys.add("b");
+    await assert.rejects(
+      () => rebuildUniverse(terminalFixture.input),
+      UniverseRunIncomplete,
+    );
+    assert.equal(terminalFixture.attestCalls.get("b"), 1);
+    await assert.rejects(
+      () => rebuildUniverse(terminalFixture.input),
+      UniverseRunIncomplete,
+    );
+    assert.equal(
+      terminalFixture.attestCalls.get("b"),
+      1,
+      "resume must preserve a chain-proven terminal rejection",
+    );
+
+    // D: an unexpected worker failure cannot discard completed siblings or
+    // accidentally promote ready. The finally flush is the crash/partial-run
+    // durability boundary.
+    const throwFixture = makeFixture(join(dir, "worker-throw"));
+    const originalAttest = throwFixture.input.attestFamilyInstanceOnce;
+    await assert.rejects(
+      () => rebuildUniverse(Object.freeze({
+        ...throwFixture.input,
+        attestationConcurrency: 1,
+        attestFamilyInstanceOnce: async (
+          attestInput: Parameters<typeof originalAttest>[0],
+        ) => {
+          if ((attestInput.candidate as { id: string }).id === "c") {
+            throw new Error("fixture unexpected worker failure");
+          }
+          return await originalAttest(attestInput);
+        },
+      })),
+      /unexpected worker failure/,
+    );
+    const afterThrow = await throwFixture.store.load();
+    assert.equal(
+      afterThrow?.inProgressRun?.outcomesByCandidateKey["cand:a"]?.status,
+      "verified",
+    );
+    assert.equal(
+      afterThrow?.inProgressRun?.outcomesByCandidateKey["cand:b"]?.status,
+      "verified",
+    );
+    assert.equal(afterThrow?.readyGeneration, null);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
