@@ -880,6 +880,14 @@ export async function createLiveDiscoveryCoordinator(
       knownPoolKeys: current.knownPoolKeys,
     },
     evidenceCache = current.protocolEvidenceCache,
+    // F8: the protocol-backfill staging path passes a purpose-built staging
+    // clone and must NOT have it re-cloned here: a second clone would swallow
+    // every scanner write (observedEvents feed, address matches) into a
+    // throwaway object while the publication reads the pre-scan staging clone,
+    // silently dropping all extra-catalog event observations. Explicitly
+    // staged caches are scanned in place; only the default (live publication
+    // cache) fallback is cloned for isolation.
+    cloneEvidenceCache = true,
   ): ProtocolDiscoveryBase => ({
     strategyViews: {
       backrun: [...graphBase.strategyViews.backrun],
@@ -895,7 +903,9 @@ export async function createLiveDiscoveryCoordinator(
       version: current.protocolOwnership.version,
       admissions: new Map(current.protocolOwnership.admissions),
     },
-    evidenceCache: cloneProtocolDiscoveryEvidenceCache(evidenceCache),
+    evidenceCache: cloneEvidenceCache
+      ? cloneProtocolDiscoveryEvidenceCache(evidenceCache)
+      : evidenceCache,
     familyGraphCompleteThrough: new Map(
       [...current.protocolFamilySourceCoverage].map(([key, anchor]) => [
         key,
@@ -1251,6 +1261,9 @@ export async function createLiveDiscoveryCoordinator(
           knownPoolKeys: stagedKnownPoolKeys,
         },
         stagedProtocolCache,
+        // Scan the staged clone in place so scanner writes (observedEvents,
+        // address matches) land in the cache that actually publishes.
+        false,
       );
       const observedRange =
         protocolDiscoveryCoverage.hasObservedSource()
