@@ -9,13 +9,7 @@ import type { TokenEdge } from "../planner/token-graph.js";
 import { v4PoolId } from "../planner/token-graph.js";
 import type { PoolStateCache } from "../solver/pool-state-cache.js";
 import {
-  readCurveUnderlyingExternalMid,
-  readCurveWarmMid,
-  readExternalSwapMid,
-  readProtocolExternalMid,
-  readV2WarmMid,
-  readV3WarmMid,
-  readV4WarmMid,
+  readAnyWarmMid,
   type ExternalMidQuote,
   type RouteVenueMid,
   type SyncMidReadContext,
@@ -135,13 +129,7 @@ function legacyReader(
 ): ((ctx: SyncMidReadContext) => RouteVenueMid | null) | null {
   const family = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(edge.adapterId);
   if (!family) return null;
-  if (family.kind === "protocol-conversion") return readProtocolExternalMid;
-  if (family.id === "univ2-standard") return readV2WarmMid;
-  if (family.id === "univ3-standard") return readV3WarmMid;
-  if (family.id === "univ4") return readV4WarmMid;
-  if (family.id === "curve-plain") return readCurveWarmMid;
-  if (family.id === "curve-underlying") return readCurveUnderlyingExternalMid;
-  return readExternalSwapMid;
+  return readAnyWarmMid;
 }
 
 function edgeVenueIdentity(edge: TokenEdge): string {

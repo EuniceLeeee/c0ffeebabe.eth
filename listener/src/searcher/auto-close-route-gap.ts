@@ -130,7 +130,7 @@ export async function autoCloseRouteGap(
           appendFinding(findingsPath, {
             ts: new Date().toISOString(),
             kind: "closed",
-            protocol: "univ4",
+            protocol,
             id: result.poolId,
             report: opts.reportPath,
           });

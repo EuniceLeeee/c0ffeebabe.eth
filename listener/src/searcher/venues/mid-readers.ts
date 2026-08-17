@@ -100,6 +100,24 @@ export function readExternalSwapMid(ctx: SyncMidReadContext): RouteVenueMid | nu
   return readExternalMid("external-swap", ctx);
 }
 
+/**
+ * Data-driven warm-mid read: probes the pool state cache for whichever
+ * snapshot shape the venue actually carries (v2/v3/v4/curve), then falls back
+ * to the external-swap quote. No family name is consulted; the state shape is
+ * the only discriminator.
+ */
+export function readAnyWarmMid(ctx: SyncMidReadContext): RouteVenueMid | null {
+  const v2 = ctx.cache.snapshotV2(ctx.pool, ctx.sourceBlock);
+  if (v2 !== null) return readV2Mid(v2, ctx);
+  const v3 = ctx.cache.snapshotV3(ctx.pool, ctx.sourceBlock);
+  if (v3 !== null) return readV3Mid(v3, ctx);
+  const v4 = ctx.cache.snapshotV4(ctx.pool, ctx.sourceBlock);
+  if (v4 !== null) return readV4Mid(v4, ctx);
+  const curve = ctx.cache.snapshotCurve(ctx.pool, ctx.sourceBlock);
+  if (curve !== null) return readCurveMid(curve, ctx);
+  return readExternalSwapMid(ctx);
+}
+
 function readV2Mid(snapshot: V2Seed | null, ctx: SyncMidReadContext): RouteVenueMid | null {
   if (!snapshot) return null;
   const token0 = snapshot.token0.toLowerCase();

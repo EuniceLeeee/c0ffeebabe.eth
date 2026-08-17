@@ -90,12 +90,6 @@ const t1WarmKindByFamily: ReadonlyMap<string, BlindBaselineWarmKind | null> =
 const t1MergeGroups: ReadonlyMap<string, readonly string[]> = new Map(
   Object.entries(blindT1Baseline.mergeGroups),
 );
-const t1FluidLegacyDescriptor: Readonly<{
-  readonly edgeAdapterId: string;
-  readonly poolAdapters: readonly string[];
-  readonly slotKind: string;
-  readonly reason: string;
-}> = blindT1Baseline.fluidLegacyDescriptor;
 
 export function blindCompatibilityCanonicalEdgeId(edge: TokenEdge): string {
   return `edge:${blindProductionAuditHash({
@@ -274,14 +268,7 @@ export function blindCompatibilityActiveFamilyManifestPayload(
       ),
     };
   });
-  const legacy = {
-    familyId: "legacy:fluid-dex-swap",
-    kind: "legacy-route",
-    descriptorSha256: blindProductionAuditHash(
-      normalizeBlindArtifactValue(t1FluidLegacyDescriptor),
-    ),
-  };
-  const projected = [...registered, t1FluidCreditDescriptor(byId), legacy]
+  const projected = [...registered]
     .sort((a, b) => a.familyId.localeCompare(b.familyId));
   return Object.freeze({
     families: Object.freeze(projected),
@@ -429,35 +416,6 @@ function t1RegisteredFamilyDescriptor(
     ]),
     requiresProtocolEdgesFlag: family.requiresProtocolEdgesFlag,
     warmKind,
-  };
-}
-
-function t1FluidCreditDescriptor(
-  byId: ReadonlyMap<string, BlindRouteFamily>,
-): {
-  readonly familyId: string;
-  readonly kind: string;
-  readonly descriptorSha256: string;
-} {
-  const family = requiredFamily(byId, "credit:fluid");
-  const descriptor: BlindCompatibilityFamilyDescriptor = {
-    id: "compat:fluid-credit",
-    kind: "compat",
-    poolAdapters: Object.freeze([...family.poolAdapters]),
-    edgeAdapterIds: Object.freeze([...family.edgeAdapterIds]),
-    actionAdapterIds: Object.freeze([
-      ...family.edgeAdapterIds,
-      ...family.requiredInfraActionAdapterIds,
-    ]),
-    requiresProtocolEdgesFlag: family.requiresProtocolEdgesFlag,
-    warmKind: null,
-  };
-  return {
-    familyId: descriptor.id,
-    kind: descriptor.kind,
-    descriptorSha256: blindProductionAuditHash(
-      normalizeBlindArtifactValue(descriptor),
-    ),
   };
 }
 
