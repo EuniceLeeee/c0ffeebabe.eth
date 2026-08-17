@@ -5539,5 +5539,18 @@ chunk)；settled/inFlight 双 Map；同 key 并发只建一次；失败清除后
 实现位置：universe-rebuild-checkpoint.ts（store+writer）、
 universe-rebuild-runner.ts（流程+probe）、universe-rebuild-status-cli.ts、
 universe-rebuild-probe-cli.ts、universe-rebuild-production.ts（生产接线：
-strict lifecycle attestOnce / canonical seal / canonical head 校验）。
+strict lifecycle attestOnce / canonical seal / canonical head 校验）、
+universe-rebuild-startup-cli.ts（独立重建命令）、startup-universe-rebuild.ts
+（producer baseline）。
+### 22.7 producer freeze（审计 §5/§6，commit c5c81229）
+`SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH` 配置后，producer（live
+coordinator）只有在 readyGeneration 存在时才创建：
+- 无 ready（或 run 进行中）→ 启动 fail-closed，提示先跑
+  `searcher:universe-rebuild-startup` 并用 probe 关闭 retryable。
+- `resolveProducerBaseline` 把 observed-event 扫描起点钉在 ready
+  cutoff：历史窗口不重扫（ready run 已覆盖两天窗口），首轮
+  protocol-backfill 起点 = max(持久化 cursor, baseline)（coordinator
+  `observationScanFrom`）；observed/applied cursor 永不回卷到 cutoff 之前。
+- 未配置时行为不变（当前 startup 路径仍是默认）。
+
 
