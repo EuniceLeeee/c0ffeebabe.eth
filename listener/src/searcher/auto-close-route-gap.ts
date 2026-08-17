@@ -49,7 +49,7 @@ type AutoCloseFinding =
   | {
       ts: string;
       kind: "closed";
-      protocol: "univ4";
+      protocol: string;
       id: string;
       report: string;
     }
@@ -115,7 +115,10 @@ export async function autoCloseRouteGap(
       seen.add(key);
 
       try {
-        if (protocol === "univ4") {
+        // Data-driven venue identity: a bytes32 id is a pool-key venue
+        // (backfill its canonical id); anything else is an address venue.
+        // No protocol/family name is consulted.
+        if (BYTES32_RE.test(id)) {
           const poolId = normalizePoolId(id);
           const result = await backfill(poolId, {
             rpcUrl: opts.rpcUrl,
@@ -134,22 +137,19 @@ export async function autoCloseRouteGap(
           continue;
         }
 
-        if (protocol === "univ2" || protocol === "univ3") {
-          const address = normalizeAddress(id);
-          const appendResult = appendForceIncludePoolIds([address], opts.forceIncludePath);
-          forceIncludeAdded.push(...appendResult.added);
-          const note = `needs_active_pools:${address}`;
-          needsActivePools.push(note);
-          log(note);
-          appendFinding(findingsPath, {
-            ts: new Date().toISOString(),
-            kind: "needs_active_pools",
-            protocol,
-            id: address,
-            report: opts.reportPath,
-          });
-          continue;
-        }
+        const address = normalizeAddress(id);
+        const appendResult = appendForceIncludePoolIds([address], opts.forceIncludePath);
+        forceIncludeAdded.push(...appendResult.added);
+        const note = `needs_active_pools:${address}`;
+        needsActivePools.push(note);
+        log(note);
+        appendFinding(findingsPath, {
+          ts: new Date().toISOString(),
+          kind: "needs_active_pools",
+          protocol,
+          id: address,
+          report: opts.reportPath,
+        });
       } catch (err) {
         const failure = { protocol, id, error: errorMessage(err) };
         failed.push(failure);
@@ -162,9 +162,6 @@ export async function autoCloseRouteGap(
         });
         continue;
       }
-
-      // Unknown protocol in real data: skip (don't crash the auto-fix loop).
-      log(`[auto-close] skipping unsupported venue protocol: ${protocol}`);
     }
   }
 

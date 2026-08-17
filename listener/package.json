@@ -20,7 +20,6 @@
     "searcher:ac3": "tsx src/searcher/test/ac3.ts",
     "searcher:liveready": "tsx src/searcher/test/live-readiness.ts",
     "searcher:pool-universe": "tsx src/searcher/build-active-pool-universe.ts",
-    "refresh-v2-lineages": "node --import tsx src/searcher/refresh-v2-lineages.ts",
     "v4-backfill-poolid": "node --import tsx src/searcher/backfill-v4-poolid.ts",
     "auto-close-route-gap": "node --import tsx src/searcher/auto-close-route-gap.ts",
     "auto-close-router-gap": "node --import tsx src/searcher/auto-close-router-gap.ts",
