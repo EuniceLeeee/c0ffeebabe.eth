@@ -554,6 +554,24 @@ tx-bound proof 的可发布结果。`2eceb6f8` 的一次性历史窗口能力是
 “测试 → build → commit/push → 节点 exact-SHA 同步 → live 重跑”执行；在
 Angstrom 与其余 `graph-incomplete` 来源闭合、`status` 收敛且六步 live receipts
 完整前，F5/F9 均保持未关闭。
+## F6 legacy call-site 删除地图（2026-08-17，部署/F5 后执行）
+
+MigrationCleanupReceipt 的 import-closure 扫描（scanLegacySymbols）当前 6
+个命中（legacy.size === 6；borrow-fragment probe 已干净）：
+
+| probe | 文件 |
+|---|---|
+| legacy quoteExact call-site (`.quoteExact({`) | solver/quoter.ts |
+| legacy buildPlanFragment call-site (`.buildPlanFragment({`) | solver/plan-builder.ts |
+| legacy prepared quote call-site (`.prepared.quote(`) | live-backends/revm-live-backend.ts |
+| legacy credit sizing call-site (`.creditPolicy.quoteOutputByDebtBps(`) | solver/amount-propagation.ts |
+| legacy victim overlay call-site (`.victimModels()`) | live-backends/victim-overlay.ts, solver/victim-apply.ts |
+| legacy pending evidence call-site (`pendingTransactionEvidence()`) | main.ts |
+
+删除顺序（F6）：先证明 strict replacement live-load-bearing（F5 部署后），
+再逐对删除并跑 receipt（verdict 从 fail 转 pass 前保持 legacy.size 递减且
+closure.legacySymbolHitsPresent 最终 false）。
+
 ## 对抗审计 P0 修复（2026-08-17，commits 984c5440/016a728d/5f24f795/dfcaf055）
 
 外部对抗审计（257-audit-current-startup.log）逐条验证属实，并按其设计修复：
