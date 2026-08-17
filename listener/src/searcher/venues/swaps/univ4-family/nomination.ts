@@ -17,8 +17,11 @@ import {
 } from "./reverse-binding.js";
 
 interface RecentUniv4SwapIndex {
-  readonly providerId: number;
-  readonly sourceNumber: number;
+  /**
+   * Full identity key of the window this index covers. Different cutoff
+   * hashes, managers, topics, lookback or chunk never share an index.
+   */
+  readonly key: string;
   /** Newest Swap transaction hash per poolId within the retained window. */
   readonly poolIdToTxHash: ReadonlyMap<string, string>;
 }
@@ -42,54 +45,82 @@ function providerId(provider: CaptureNominationProvider): number {
  * on the local node). Scanning the window once per source block and indexing
  * poolId -> newest Swap tx keeps the nomination evidence identical (same
  * newest log, same trace) while making cold lookups O(1) in memory.
+ *
+ * The cache key covers the full window identity (provider + source number +
+ * source hash + manager + topic0 + lookback + chunk), so a different
+ * cutoff/hash, manager, topic or window shape never reuses an index. Settled
+ * and in-flight indexes are kept in separate maps: concurrent cold callers
+ * share one build (audit P1), a failed build never poisons the settled
+ * cache (the next call retries), and two different keys never interfere.
  */
-let recentUniv4SwapIndex: RecentUniv4SwapIndex | null = null;
-/**
- * In-flight dedupe for the cold window build (audit P1): concurrent
- * attestation workers all miss the settled cache on the first call at a
- * source, and without this every worker replays the same manager-wide
- * 10k-block index scan (24 identical builds in the logs). One promise is
- * shared per (provider, sourceNumber); failures clear the slot so the next
- * call retries instead of poisoning the cache.
- */
-let recentUniv4SwapIndexInFlight:
-  | {
-    readonly key: { readonly providerId: number; readonly sourceNumber: number };
-    readonly promise: Promise<ReadonlyMap<string, string>>;
-  }
-  | null = null;
+const settledIndexes = new Map<string, RecentUniv4SwapIndex>();
+const inFlightIndexes = new Map<string, Promise<RecentUniv4SwapIndex>>();
+
+function recentSwapIndexKey(input: {
+  readonly source: CanonicalSource;
+  readonly provider: CaptureNominationProvider;
+  readonly manager: string;
+  readonly topic0: string;
+  readonly lookback: number;
+  readonly chunk: number;
+}): string {
+  return JSON.stringify(Object.freeze({
+    providerId: providerId(input.provider),
+    sourceNumber: input.source.number,
+    sourceHash: input.source.hash.toLowerCase(),
+    manager: input.manager.toLowerCase(),
+    topic0: input.topic0.toLowerCase(),
+    lookback: input.lookback,
+    chunk: input.chunk,
+  }));
+}
 
 async function recentUniv4SwapTxHashByPoolId(input: {
   readonly source: CanonicalSource;
   readonly provider: CaptureNominationProvider;
+  readonly manager: string;
+  readonly topic0: string;
   readonly lookback: number;
   readonly chunk: number;
 }): Promise<ReadonlyMap<string, string>> {
-  const key = {
-    providerId: providerId(input.provider),
-    sourceNumber: input.source.number,
-  };
-  if (
-    recentUniv4SwapIndex !== null &&
-    recentUniv4SwapIndex.providerId === key.providerId &&
-    recentUniv4SwapIndex.sourceNumber === key.sourceNumber
-  ) {
-    return recentUniv4SwapIndex.poolIdToTxHash;
-  }
-  if (
-    recentUniv4SwapIndexInFlight !== null &&
-    recentUniv4SwapIndexInFlight.key.providerId === key.providerId &&
-    recentUniv4SwapIndexInFlight.key.sourceNumber === key.sourceNumber
-  ) {
-    return recentUniv4SwapIndexInFlight.promise;
-  }
-  const build = (async (): Promise<ReadonlyMap<string, string>> => {
+  const key = recentSwapIndexKey(input);
+  const settled = settledIndexes.get(key);
+  if (settled !== undefined) return settled.poolIdToTxHash;
+  const running = inFlightIndexes.get(key);
+  if (running !== undefined) return (await running).poolIdToTxHash;
+  const promise = buildRecentUniv4SwapIndex(input)
+    .then((index) => {
+      settledIndexes.set(key, index);
+      return index;
+    })
+    .finally(() => {
+      // Never clear a newer promise started for the same key.
+      if (inFlightIndexes.get(key) === promise) {
+        inFlightIndexes.delete(key);
+      }
+    });
+  inFlightIndexes.set(key, promise);
+  return (await promise).poolIdToTxHash;
+}
+
+async function buildRecentUniv4SwapIndex(input: {
+  readonly source: CanonicalSource;
+  readonly provider: CaptureNominationProvider;
+  readonly manager: string;
+  readonly topic0: string;
+  readonly lookback: number;
+  readonly chunk: number;
+}): Promise<RecentUniv4SwapIndex> {
   const poolIdToTxHash = new Map<string, string>();
-  const manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
+  const manager = input.manager.toLowerCase();
   let to = input.source.number;
   let from = Math.max(0, to - input.chunk + 1);
+  let scanFailed = false;
+  // chunk persists across iterations so a failing slice really halves; a
+  // per-iteration reset would retry the same full slice 128 times and then
+  // cache a partial/empty index as settled.
+  let chunk = input.chunk;
   for (let guard = 0; guard < 128 && from <= input.source.number; guard++) {
-    let chunk = input.chunk;
     let logs: readonly {
       readonly address: string;
       readonly topics: readonly string[];
@@ -101,10 +132,15 @@ async function recentUniv4SwapTxHashByPoolId(input: {
         address: manager,
         fromBlock: from,
         toBlock: to,
-        topics: [UNIV4_SWAP_TOPIC.toLowerCase()],
+        topics: [input.topic0.toLowerCase()],
       });
     } catch {
-      if (chunk <= 64) break;
+      if (chunk <= 64) {
+        // A hard scan failure must not settle a partial/empty index: the
+        // contract is fail-retryable, never poisoned-cache.
+        scanFailed = true;
+        break;
+      }
       chunk = Math.floor(chunk / 2);
       from = Math.max(0, to - chunk + 1);
       continue;
@@ -130,19 +166,16 @@ async function recentUniv4SwapTxHashByPoolId(input: {
     `[univ4-nomination] recent-swap index sourceBlock=${input.source.number} ` +
       `lookback=${input.lookback} chunk=${input.chunk} poolIds=${poolIdToTxHash.size}`,
   );
-  recentUniv4SwapIndex = Object.freeze({
-    providerId: key.providerId,
-    sourceNumber: key.sourceNumber,
+  if (scanFailed) {
+    throw new Error(
+      "univ4 recent-swap index scan failed (retryable, cache untouched)",
+    );
+  }
+  const key = recentSwapIndexKey(input);
+  return Object.freeze({
+    key,
     poolIdToTxHash: Object.freeze(poolIdToTxHash),
   });
-  return recentUniv4SwapIndex.poolIdToTxHash;
-  })();
-  recentUniv4SwapIndexInFlight = Object.freeze({ key, promise: build });
-  try {
-    return await build;
-  } finally {
-    recentUniv4SwapIndexInFlight = null;
-  }
 }
 
 /**
@@ -177,6 +210,8 @@ export async function nominateUniv4(input: {
   const poolIdToTxHash = await recentUniv4SwapTxHashByPoolId({
     source: input.source,
     provider: input.provider,
+    manager,
+    topic0: UNIV4_SWAP_TOPIC,
     lookback: 10_000,
     chunk: 500,
   });

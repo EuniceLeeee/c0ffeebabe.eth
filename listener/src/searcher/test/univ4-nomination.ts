@@ -44,8 +44,10 @@ function mockProvider(options: {
         filter.address?.toLowerCase(),
         ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
       );
-      assert.equal(filter.toBlock, SOURCE.number);
+      // The window walks backward slice by slice from the source block.
+      assert.ok((filter.toBlock ?? 0) <= SOURCE.number);
       assert.ok((filter.fromBlock ?? 0) >= SOURCE.number - 100_000);
+      assert.ok((filter.toBlock ?? 0) - (filter.fromBlock ?? 0) + 1 <= 100_000);
       assert.deepEqual(filter.topics, [
         UNIV4_SWAP_TOPIC.toLowerCase(),
       ]);
@@ -227,6 +229,85 @@ async function main(): Promise<void> {
   );
   assert.equal(concurrent[0].length, 1);
   assert.equal(concurrent[3].length, 1);
+
+  // Contract: a different cutoff hash never reuses the settled index.
+  let diffHashGetLogsCalls = 0;
+  const diffHashProvider = {
+    call: async () => "0x",
+    getCode: async () => "0x01",
+    getStorage: async () => "0x" + "00".repeat(32),
+    getLogs: async () => {
+      diffHashGetLogsCalls += 1;
+      return Object.freeze([Object.freeze({
+        address: ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
+        topics: Object.freeze([UNIV4_SWAP_TOPIC.toLowerCase(), POOL_ID]),
+        data: "0x",
+        transactionHash: TX,
+      })]);
+    },
+    getTransactionReceipt: async () => null,
+    traceTransaction: async () => managerSwapTrace(),
+  };
+  const otherSource = Object.freeze({
+    number: SOURCE.number,
+    hash: "0x" + "b2".repeat(32),
+    generation: 2,
+  });
+  await nominateUniv4({
+    nominations: Object.freeze([nomination]),
+    source: otherSource,
+    provider: diffHashProvider,
+  });
+  const afterDiffHash = diffHashGetLogsCalls;
+  assert.equal(
+    afterDiffHash,
+    20,
+    "a different source hash must build its own index (20 slices)",
+  );
+
+  // Contract: a failed build never poisons the settled cache; the next
+  // call retries and succeeds.
+  let flakyCalls = 0;
+  const flakyProvider = {
+    call: async () => "0x",
+    getCode: async () => "0x01",
+    getStorage: async () => "0x" + "00".repeat(32),
+    getLogs: async () => {
+      flakyCalls += 1;
+      // One full failed build = 4 halved slices (500 -> 250 -> 125 -> 62).
+      if (flakyCalls <= 4) throw new Error("transient rpc");
+      return Object.freeze([Object.freeze({
+        address: ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
+        topics: Object.freeze([UNIV4_SWAP_TOPIC.toLowerCase(), POOL_ID]),
+        data: "0x",
+        transactionHash: TX,
+      })]);
+    },
+    getTransactionReceipt: async () => null,
+    traceTransaction: async () => managerSwapTrace(),
+  };
+  let flakyRejected = false;
+  try {
+    await nominateUniv4({
+      nominations: Object.freeze([nomination]),
+      source: SOURCE,
+      provider: flakyProvider,
+    });
+  } catch {
+    flakyRejected = true;
+  }
+  assert.equal(flakyRejected, true, "transient build failure must reject");
+  const afterFlakyFailure = flakyCalls;
+  const retried = await nominateUniv4({
+    nominations: Object.freeze([nomination]),
+    source: SOURCE,
+    provider: flakyProvider,
+  });
+  assert.equal(retried.length, 1, "retry after failure must succeed");
+  assert.ok(
+    flakyCalls > afterFlakyFailure,
+    "a failed build must not poison the settled cache (retry rebuilds)",
+  );
 
   console.log("univ4 nomination PASS");
 }
