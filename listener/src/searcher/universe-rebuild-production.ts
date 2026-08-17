@@ -7,6 +7,8 @@ import {
 } from "./universe-rebuild-checkpoint.js";
 import type { UniverseRebuildProbeWiring } from "./universe-rebuild-probe-cli.js";
 import type { UniverseRebuildDependencies } from "./universe-rebuild-runner.js";
+import { reissuePreparedInstanceRouteHandles } from
+  "./venues/adapter-family-runtime.js";
 import { attestPoolIdentitiesStrict } from "./strict-identity-attestation.js";
 import { createMinimalIdentityRuntime } from "./strict-identity-attestation.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
@@ -680,20 +682,61 @@ export function createRebuildWiring(input?: {
     },
     attestFamilyInstanceOnce: probe.attestFamilyInstanceOnce,
     sealDurableVerifiedMemo: probe.sealDurableVerifiedMemo,
-    rehydrateVerifiedInstance: (rehydrateInput) =>
-      Object.freeze({
+    rehydrateVerifiedInstance: (rehydrateInput) => {
+      // Rebuild the prepared instance from the memo's canonical data and
+      // re-issue the process-local route handles at the memo's proof source
+      // (audit §9: handles are never serialized; the central rehydrator
+      // re-issues them bound to the exact stored route descriptors). The
+      // instance's routes/pricing come from the memo's static projection.
+      const projection = rehydrateInput.memo.staticProjection as unknown as {
+        readonly routes?: readonly unknown[];
+      };
+      const routes = projection?.routes ?? [];
+      const instance = Object.freeze({
         familyId: rehydrateInput.memo.familyId,
-        familyInstanceKey: rehydrateInput.memo.familyInstanceKey,
-        instanceKey: rehydrateInput.memo.instanceKey,
+        lineageId: String(
+          (rehydrateInput.memo.verifiedIdentity as { lineageId?: unknown })
+            .lineageId ?? rehydrateInput.memo.familyId,
+        ),
         candidateKey: rehydrateInput.memo.candidateKey,
-        descriptor: rehydrateInput.memo.compiledDescriptor,
-        projection: rehydrateInput.memo.staticProjection,
+        instanceKey: rehydrateInput.memo.instanceKey,
+        descriptor: rehydrateInput.memo.compiledDescriptor ?? null,
+        routes: Object.freeze(routes),
+        routeHandles: Object.freeze([]),
+        pricingInstances: Object.freeze([]),
+        staticBindingFingerprint: "",
+        staticEvidenceFingerprint: rehydrateInput.memo.evidenceFingerprint,
+        evidenceRefs: Object.freeze([]),
+      }) as never;
+      let family;
+      try {
+        family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+          .forStrictFamily(rehydrateInput.memo.familyId as never);
+      } catch {
+        family = null;
+      }
+      const rehydrated = family === null
+        ? instance
+        : reissuePreparedInstanceRouteHandles({
+            family: family as never,
+            instance: instance as never,
+            source: Object.freeze({
+              number: rehydrateInput.memo.validity.proofSource.number,
+              hash: rehydrateInput.memo.validity.proofSource.hash,
+              generation: rehydrateInput.memo.validity.proofSource.number,
+            }),
+            generation: rehydrateInput.memo.validity.proofSource.number,
+          });
+      return Object.freeze({
+        ...rehydrated,
+        familyInstanceKey: rehydrateInput.memo.familyInstanceKey,
         evidenceFingerprint: rehydrateInput.memo.evidenceFingerprint,
         proofSource: Object.freeze({
           number: rehydrateInput.memo.validity.proofSource.number,
           hash: rehydrateInput.memo.validity.proofSource.hash,
         }),
-      }),
+      });
+    },
     aggregateOnceByFamily: (instances) => {
       const byFamily = new Map<string, unknown>();
       for (const instance of instances) {

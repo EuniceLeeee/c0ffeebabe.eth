@@ -3608,6 +3608,36 @@ function assertPreparedRoute(
   }
 }
 
+/**
+ * Audit §9: central rehydration of process-local route handles from a
+ * memo-rebuilt instance. Route handles are never serialized; after a
+ * restart or a durable-memo rebuild, the central runtime re-issues fresh
+ * handles bound to the exact stored route descriptors at the canonical
+ * source. No identity RPC runs here - only local assembly + issuance.
+ */
+export function reissuePreparedInstanceRouteHandles(input: {
+  readonly family: LoadedFamilyPlugin;
+  readonly instance: PreparedFamilyInstance;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+}): PreparedFamilyInstance {
+  assertIssuedLoadedFamilyBox(input.family);
+  assertSource(input.source, input.generation);
+  const handles = input.instance.routes.map((route) =>
+    issueFamilyRouteRuntimeHandle({
+      family: input.family,
+      instance: input.instance,
+      route,
+      source: input.source,
+      generation: input.generation,
+    }),
+  );
+  return Object.freeze({
+    ...input.instance,
+    routeHandles: Object.freeze(handles),
+  });
+}
+
 function issueFamilyRouteRuntimeHandle(input: {
   readonly family: LoadedFamilyPlugin;
   readonly instance: PreparedFamilyInstance;
