@@ -4,6 +4,7 @@ import {
   attestPoolIdentitiesStrict,
   attestStartupPoolSetsStrict,
   centralAddressSurfaceFallback,
+  mergeStartupFamilyPublications,
   poolInstanceKey,
 } from "../strict-identity-attestation.js";
 import type { CentralAdapterRuntime } from
@@ -484,13 +485,13 @@ async function main(): Promise<void> {
     3,
     "a pool present in two startup sets must be attested exactly once",
   );
-  assert.equal(dedupeResult.length, 2);
-  assert.equal(dedupeResult[0].rejected.length, 2);
-  assert.equal(dedupeResult[1].rejected.length, 2);
-  assert.equal(dedupeResult[0].accepted.length, 0);
-  assert.equal(dedupeResult[1].accepted.length, 0);
-  assert.equal(dedupeResult[0].rejected[0]?.reason, "no deployed code");
-  assert.equal(dedupeResult[1].rejected[0]?.reason, "no deployed code");
+  assert.equal(dedupeResult.sets.length, 2);
+  assert.equal(dedupeResult.sets[0].rejected.length, 2);
+  assert.equal(dedupeResult.sets[1].rejected.length, 2);
+  assert.equal(dedupeResult.sets[0].accepted.length, 0);
+  assert.equal(dedupeResult.sets[1].accepted.length, 0);
+  assert.equal(dedupeResult.sets[0].rejected[0]?.reason, "no deployed code");
+  assert.equal(dedupeResult.sets[1].rejected[0]?.reason, "no deployed code");
 
   // poolId-keyed dedupe: one shared address with distinct poolIds keeps
   // every pool (the key is the plugin-owned instance identity, not the
@@ -534,11 +535,50 @@ async function main(): Promise<void> {
     2,
     "distinct poolIds on one shared address must each attest",
   );
-  assert.equal(poolIdResult[0].rejected.length, 1);
-  assert.equal(poolIdResult[1].rejected.length, 2);
-  assert.equal(poolIdResult[0].rejected[0]?.reason, "no deployed code");
+  assert.equal(poolIdResult.sets[0].rejected.length, 1);
+  assert.equal(poolIdResult.sets[1].rejected.length, 2);
+  assert.equal(poolIdResult.sets[0].rejected[0]?.reason, "no deployed code");
 
-  console.log("strict identity attestation PASS (fail-closed paths + central cold-pool fallback + retain-channel contract + startup set dedupe)");
+  // P0-b: mergeStartupFamilyPublications combines per-pool publications
+  // of one family into a single sealed publication, deduping instances.
+  const pubSource = Object.freeze({ number: 1, hash: "0x" + "aa".repeat(32), generation: 1 });
+  const mkInstance = (key: string) => Object.freeze({
+    familyId: FAMILY as never,
+    lineageId: "synthetic:lineage" as never,
+    instanceKey: key,
+    candidateKey: key,
+    evidenceRefs: Object.freeze([]),
+    staticBindingFingerprint: "b",
+    staticEvidenceFingerprint: "e",
+    descriptor: Object.freeze({ provenance: Object.freeze([]) }),
+    pricingInstances: Object.freeze([]),
+    routes: Object.freeze([]),
+  }) as never;
+  const pubA = Object.freeze({
+    familyId: FAMILY as never,
+    source: pubSource,
+    generation: 1,
+    instances: Object.freeze([mkInstance("pool-a"), mkInstance("pool-b")]),
+    outcomes: Object.freeze([]),
+    publicationFingerprint: "x",
+  }) as never;
+  const pubB = Object.freeze({
+    familyId: FAMILY as never,
+    source: pubSource,
+    generation: 1,
+    instances: Object.freeze([mkInstance("pool-b"), mkInstance("pool-c")]),
+    outcomes: Object.freeze([]),
+    publicationFingerprint: "y",
+  }) as never;
+  const merged = mergeStartupFamilyPublications([pubA, pubB, null]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].familyId, FAMILY);
+  assert.equal(merged[0].publication.instances.length, 3, "instances deduped by instanceKey");
+  const keys = merged[0].publication.instances.map((i) => i.instanceKey).sort();
+  assert.deepEqual(keys, ["pool-a", "pool-b", "pool-c"]);
+  assert.match(merged[0].publication.publicationFingerprint, /^[0-9a-f]{64}$/);
+  assert.equal(mergeStartupFamilyPublications([]).length, 0);
+  console.log("strict identity attestation PASS (fail-closed paths + central cold-pool fallback + retain-channel contract + startup set dedupe + publication merge)");
 }
 
 main().catch((error) => {

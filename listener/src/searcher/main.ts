@@ -168,6 +168,7 @@ import {
 } from "./venues/identity.js";
 import {
   attestStartupPoolSetsStrict,
+  mergeStartupFamilyPublications,
   type StrictIdentityProvider,
 } from "./strict-identity-attestation.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
@@ -2180,21 +2181,26 @@ async function main(): Promise<void> {
   // F6 Pair B: strict identity attestation (catalog + plugin identity stage)
   // is the only startup identity authority; the legacy IdentityResolverRegistry
   // path has been removed.
+  const startupAttestation = await attestStartupPoolSetsStrict({
+    provider: strictIdentityProvider(provider),
+    source: {
+      number: discoveryToBlock,
+      hash: startupDexSourceBlockHash.toLowerCase(),
+      generation: discoveryToBlock,
+    },
+    poolSets: [
+      rawPinnedWarmPools,
+      rawUniversePools,
+      rawBlockscanUniverse,
+      rawBlockScanOverrides,
+    ],
+  });
   const [pinnedIdentity, universeIdentity, blockscanIdentity, overrideIdentity] =
-    await attestStartupPoolSetsStrict({
-      provider: strictIdentityProvider(provider),
-      source: {
-        number: discoveryToBlock,
-        hash: startupDexSourceBlockHash.toLowerCase(),
-        generation: discoveryToBlock,
-      },
-      poolSets: [
-        rawPinnedWarmPools,
-        rawUniversePools,
-        rawBlockscanUniverse,
-        rawBlockScanOverrides,
-      ],
-    });
+    startupAttestation.sets;
+  // F8/audit P0-b: sealed lifecycle publications for the deduplicated union
+  // of attested startup pools; merged per family and committed through the
+  // composition below so the startup work is not discarded.
+  const startupAttestationPublications = startupAttestation.publications;
   // F6 Pair B: strict attestation returns a narrower rejected shape; bridge
   // it back to the legacy RejectedPoolIdentity for the transition consumers.
   const asLegacyRejections = (
@@ -3016,6 +3022,86 @@ async function main(): Promise<void> {
     liveBackend = config.liveBackend === "revm"
       ? revmLiveBackend
       : new HybridLiveBackend(revmLiveBackend, rpcLiveBackend);
+  }
+
+  // F8/audit P0-b: the startup attestation ran the full family lifecycle
+  // for every universe pool; merge the sealed per-pool publications into
+  // one publication per family and commit them through the same composition
+  // the live rounds use, so the strict catalog root starts at universe scale
+  // instead of discarding the startup work. On a fresh start (no trusted
+  // checkpoint) this is the first publication; on a restart the checkpoint
+  // restore above already repopulated the root, and re-publishing the same
+  // instances would need per-instance carries for every prior row.
+  if (
+    discoveryContinuityComposition !== null &&
+    restartTrustedSource === null
+  ) {
+    const startupPublications = mergeStartupFamilyPublications(
+      startupAttestationPublications,
+    );
+    if (startupPublications.length > 0) {
+      const startupPublishResult = await publishStrictCatalogFromLifecycle({
+        composition: discoveryContinuityComposition,
+        catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+        source: Object.freeze({
+          number: discoveryToBlock,
+          hash: startupDexSourceBlockHash.toLowerCase(),
+          generation: discoveryToBlock,
+        }),
+        publications: Object.freeze(startupPublications),
+      });
+      console.log(
+        "[searcher/live] strict catalog startup publisher " +
+          startupPublishResult.status +
+          (startupPublishResult.status === "unresolved"
+            ? ": " + startupPublishResult.reason
+            : ""),
+      );
+      if (startupPublishResult.status === "published") {
+        const committedRoot =
+          discoveryContinuityComposition.catalogRoot.capture();
+        if (committedRoot !== null) {
+          const strictEdges = committedRoot.views.edges;
+          const mergeStrictEdgesInto = (
+            current: readonly TokenEdge[] | undefined,
+          ): TokenEdge[] => {
+            const seen = new Set((current ?? []).map(strictEdgeKey));
+            const merged = [...(current ?? [])];
+            for (const edge of strictEdges) {
+              const key = strictEdgeKey(edge);
+              if (seen.has(key)) continue;
+              seen.add(key);
+              merged.push(edge);
+            }
+            return merged;
+          };
+          graph = mergeStrictEdgesInto(graph);
+          if (blockScanGraph !== undefined) {
+            blockScanGraph = mergeStrictEdgesInto(blockScanGraph);
+          }
+          blockScanPlanner?.setGraph(blockScanGraph ?? []);
+          const strictPoolEntries = new Map<string, string>();
+          for (const edge of strictEdges) {
+            if (edge.target === undefined) continue;
+            const address = edge.target.toLowerCase();
+            const existing = strictPoolEntries.get(address);
+            if (existing === undefined) {
+              strictPoolEntries.set(address, edge.adapterId);
+            }
+          }
+          for (const [address, adapter] of strictPoolEntries) {
+            allPoolMap.set(address, adapter);
+          }
+          console.log(
+            "[searcher/live] strict startup edges merged into runtime graph: " +
+              "edges=" + strictEdges.length +
+              " pools=" + strictPoolEntries.size +
+              " revision=" + committedRoot.envelope.snapshot.revision +
+              " instances=" + committedRoot.envelope.privateState.instances.size,
+          );
+        }
+      }
+    }
   }
 
   // Incremental refresh: scan recent blocks for new pools every N minutes

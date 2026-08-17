@@ -13,7 +13,10 @@ import type { FamilyCapabilityCatalog } from
 import {
   executeAdapterFamilyLifecycleBatch,
   executeCreditFamilyInstanceLifecycle,
+  sealPublication,
 } from "./venues/adapter-family-runtime.js";
+import type { AdapterFamilyPublication } from
+  "./venues/adapter-family-runtime.js";
 import type { LoadedFamilyPlugin } from
   "./venues/family-capability-catalog.js";
 import {
@@ -160,10 +163,20 @@ export async function attestPoolIdentitiesStrict<
     string,
     StrictAttestedPool<Pool> | StrictRejectedPool<Pool>
   >;
+  /**
+   * Sealed family lifecycle publications per input pool (null when the
+   * lifecycle staged no instance for that pool). The startup attestation
+   * collects these instead of discarding the lifecycle work: the universe
+   * pools are re-sealed per family and committed through the composition,
+   * so the strict catalog root starts at universe scale.
+   */
+  readonly publications: readonly (AdapterFamilyPublication | null)[];
 }> {
   const accepted: (StrictAttestedPool<Pool> | null)[] =
     new Array(input.pools.length).fill(null);
   const rejected: (StrictRejectedPool<Pool> | null)[] =
+    new Array(input.pools.length).fill(null);
+  const publications: (AdapterFamilyPublication | null)[] =
     new Array(input.pools.length).fill(null);
   const total = input.pools.length;
   const startedAtMs = Date.now();
@@ -351,8 +364,13 @@ export async function attestPoolIdentitiesStrict<
         source: input.source,
         generation: input.source.generation,
         runtime: input.runtime,
+        // The identity outcome below decides admission; the sealed
+        // publication (instances + route projections) is collected on the
+        // result so the startup aggregation can commit it through the
+        // composition instead of discarding the lifecycle work.
         publisher: { publish: () => undefined },
       });
+      publications[index] = result.publication;
       const identityOutcome = result.outcomes.find((outcome) =>
         outcome.stage === "identity" &&
         outcome.status === "verified"
@@ -439,7 +457,85 @@ export async function attestPoolIdentitiesStrict<
       (item): item is StrictRejectedPool<Pool> => item !== null,
     ),
     outcomesByKey,
+    publications: Object.freeze(publications),
   } as const;
+}
+
+/**
+ * F8/audit P0-b: merge per-pool startup attestation publications into one
+ * sealed publication per family at the shared attestation source, so the
+ * startup universe's instances can be committed through the composition in
+ * a single catalogRoot publication (the live publisher takes exactly one
+ * publication per family). Instances are deduped by instanceKey; a family
+ * whose merged set is not uniquely sealable (duplicate state instance keys)
+ * fails closed and is skipped with a log line.
+ */
+export function mergeStartupFamilyPublications(
+  publications: readonly (AdapterFamilyPublication | null)[],
+): readonly {
+  readonly familyId: string;
+  readonly publication: AdapterFamilyPublication;
+}[] {
+  const byFamily = new Map<string, {
+    readonly source: AdapterFamilyPublication["source"];
+    readonly generation: number;
+    readonly instances: Map<
+      string,
+      AdapterFamilyPublication["instances"][number]
+    >;
+    readonly outcomes: AdapterFamilyPublication["outcomes"];
+  }>();
+  for (const publication of publications) {
+    if (publication === null) continue;
+    const entry = byFamily.get(publication.familyId);
+    if (entry === undefined) {
+      const instances = new Map<
+        string,
+        AdapterFamilyPublication["instances"][number]
+      >();
+      for (const instance of publication.instances) {
+        instances.set(instance.instanceKey, instance);
+      }
+      byFamily.set(publication.familyId, {
+        source: publication.source,
+        generation: publication.generation,
+        instances,
+        outcomes: Object.freeze([...publication.outcomes]),
+      });
+      continue;
+    }
+    for (const instance of publication.instances) {
+      if (!entry.instances.has(instance.instanceKey)) {
+        entry.instances.set(instance.instanceKey, instance);
+      }
+    }
+  }
+  const merged: {
+    readonly familyId: string;
+    readonly publication: AdapterFamilyPublication;
+  }[] = [];
+  for (const [familyId, entry] of byFamily) {
+    const instances = Object.freeze([...entry.instances.values()]);
+    try {
+      merged.push(Object.freeze({
+        familyId,
+        publication: sealPublication({
+          familyId: familyId as never,
+          source: entry.source,
+          generation: entry.generation,
+          instances,
+          outcomes: entry.outcomes,
+        }),
+      }));
+    } catch (error) {
+      console.warn(
+        "[strict-attestation] startup publication merge failed for " +
+          familyId + ": " +
+          (error instanceof Error ? error.message : String(error)),
+      );
+    }
+  }
+  return Object.freeze(merged);
 }
 
 /**
@@ -454,10 +550,19 @@ export async function attestStartupPoolSetsStrict<
   readonly provider: StrictIdentityProvider;
   readonly source: CanonicalSource;
   readonly poolSets: readonly (readonly Pool[])[];
-}): Promise<readonly {
-  readonly accepted: readonly StrictAttestedPool<Pool>[];
-  readonly rejected: readonly StrictRejectedPool<Pool>[];
-}[]> {
+}): Promise<{
+  /** Per-set accepted/rejected results, in input order. */
+  readonly sets: readonly {
+    readonly accepted: readonly StrictAttestedPool<Pool>[];
+    readonly rejected: readonly StrictRejectedPool<Pool>[];
+  }[];
+  /**
+   * Sealed lifecycle publications for the deduplicated union of pools
+   * (aligned with the unique pools attested once). The startup wiring
+   * merges these per family and commits them through the composition.
+   */
+  readonly publications: readonly (AdapterFamilyPublication | null)[];
+}> {
   const runtime = createMinimalIdentityRuntime(input.provider);
   const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
   // Attest each unique pool exactly once across the startup sets. The
@@ -486,7 +591,8 @@ export async function attestStartupPoolSetsStrict<
     adapterForLineage: (lineageId) => legacyLabelsForLineage(lineageId),
   });
   const byKey = uniqueResult.outcomesByKey;
-  return Object.freeze(input.poolSets.map((set) => {
+  return Object.freeze({
+    sets: Object.freeze(input.poolSets.map((set) => {
     const accepted: StrictAttestedPool<Pool>[] = [];
     const rejected: StrictRejectedPool<Pool>[] = [];
     for (const pool of set) {
@@ -505,8 +611,10 @@ export async function attestStartupPoolSetsStrict<
         accepted.push(outcome as StrictAttestedPool<Pool>);
       }
     }
-    return Object.freeze({ accepted, rejected });
-  }));
+      return Object.freeze({ accepted, rejected });
+    })),
+    publications: Object.freeze(uniqueResult.publications),
+  });
 }
 
 function legacyLabelsForLineage(lineageId: string): {

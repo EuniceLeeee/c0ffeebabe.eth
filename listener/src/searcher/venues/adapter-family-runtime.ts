@@ -4644,7 +4644,13 @@ function publicationFailureOutcomes(
   })));
 }
 
-function sealPublication(input: Omit<
+/**
+ * Seal one family publication: sorts instances, computes the canonical
+ * publication fingerprint. Exported for central aggregation paths (startup
+ * universe attestation merges per-pool publications into one per-family
+ * publication at the same source before committing through the composition).
+ */
+export function sealPublication(input: Omit<
   AdapterFamilyPublication,
   "publicationFingerprint"
 >): AdapterFamilyPublication {

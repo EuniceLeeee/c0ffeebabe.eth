@@ -110,11 +110,33 @@ export async function publishStrictCatalogFromLifecycle(input: {
       previous !== null &&
       input.verifyCarriedInstance !== undefined
     ) {
+      // Per-instance carry (audit P0-c): a family that re-published any
+      // instance this round must still carry every prior instance it did
+      // NOT re-stage, each with its own issuer-bound state mutation proof.
+      // Skipping the whole family on "has any publication" silently drops
+      // the un-republished instances (route Family publication carry
+      // requires an issuer-bound StateInstance mutation proof). Coverage
+      // watermarks stay family+source granularity; instance results are
+      // always per (familyId, lineageId, instanceKey).
+      const republished = new Set<string>();
+      for (const [familyId, entry] of publishedByFamily) {
+        for (const instance of entry.publication.instances) {
+          republished.add(
+            `${familyId}\u0000${instance.lineageId}\u0000${instance.instanceKey}`,
+          );
+        }
+      }
       for (const family of catalog.listAll()) {
         const familyId = family.plugin.manifest.familyId;
-        if (publishedByFamily.has(familyId)) continue;
         const priorInstances = priorInstancesByFamily.get(familyId) ?? [];
         for (const prior of priorInstances) {
+          if (
+            republished.has(
+              `${prior.familyId}\u0000${prior.lineageId}\u0000${prior.instanceKey}`,
+            )
+          ) {
+            continue;
+          }
           const evidenceRef = await input.verifyCarriedInstance({
             familyId: prior.familyId,
             lineageId: prior.lineageId,
