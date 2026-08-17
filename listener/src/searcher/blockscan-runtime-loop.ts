@@ -462,6 +462,35 @@ interface BlockScanDiscoveryDependencies<PreparedDiscovery> {
   finish(prepared: PreparedDiscovery): void;
 }
 
+export interface BlockScanFrozenTopologyDependencies {
+  /** Canonical current-head observation; never scans or publishes topology. */
+  observeHeader(blockNumber: number): Promise<CanonicalHeader>;
+  /** Hash/root of the startup-ready Graph/catalog generation. */
+  readonly topologyKey: string;
+  /** Immutable landed-event coverage sealed with the ready generation. */
+  readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
+}
+
+export function bindFrozenTopologyToHeader(
+  topology: BlockScanFrozenTopologyDependencies,
+  header: CanonicalHeader,
+): {
+  readonly dexComplete: true;
+  readonly protocolComplete: true;
+  readonly sourceBlockHash: string;
+  readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
+} {
+  if (topology.topologyKey.trim() === "") {
+    throw new Error("frozen topology key is empty");
+  }
+  return Object.freeze({
+    dexComplete: true,
+    protocolComplete: true,
+    sourceBlockHash: header.hash,
+    landedCoverage: topology.landedCoverage,
+  });
+}
+
 export interface ProducerTopologyCache {
   readonly topologyKey: string;
   readonly edges: readonly TokenEdge[];
@@ -557,7 +586,10 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
     BufferedBlockScanBackrunStatePublisher,
     "publish"
   >;
-  readonly discovery: BlockScanDiscoveryDependencies<PreparedDiscovery>;
+  /** Legacy mutable topology dependency; absent from strict production. */
+  readonly discovery?: BlockScanDiscoveryDependencies<PreparedDiscovery>;
+  /** Strict production topology, frozen before the producer is created. */
+  readonly frozenTopology?: BlockScanFrozenTopologyDependencies;
   readonly blind: BlockScanBlindDependencies;
   /**
    * Minimum wall-clock interval between background discovery backfill
@@ -738,6 +770,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   constructor(
     private readonly deps: BlockScanRuntimeLoopDependencies<PreparedDiscovery>,
   ) {
+    if ((deps.discovery === undefined) === (deps.frozenTopology === undefined)) {
+      throw new Error(
+        "block-scan requires exactly one mutable discovery or frozen topology",
+      );
+    }
     this.startupWarmPending =
       deps.startupWarmEnabled && !deps.blind.enabled;
     this.scheduler = new LatestHeadScheduler(
@@ -786,8 +823,23 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         deps.discoveryProducerYieldPerReadMaxWaitMs ?? 250,
       ),
     } as const;
-    deps.discovery.lane.setProducerYield(producerYieldHook);
-    deps.discovery.protocolLane?.setProducerYield(producerYieldHook);
+    deps.discovery?.lane.setProducerYield(producerYieldHook);
+    deps.discovery?.protocolLane?.setProducerYield(producerYieldHook);
+  }
+
+  private observeTopologyHeader(blockNumber: number): Promise<CanonicalHeader> {
+    return this.deps.frozenTopology?.observeHeader(blockNumber) ??
+      this.deps.discovery!.observeHeader(blockNumber);
+  }
+
+  private topologyKey(): string {
+    return this.deps.frozenTopology?.topologyKey ??
+      this.deps.discovery!.topologyKey();
+  }
+
+  private landedCoverage(): readonly LandedPoolDiscoveryCoverage[] {
+    return this.deps.frozenTopology?.landedCoverage ??
+      this.deps.discovery!.capture().landedCoverage;
   }
 
   schedule(
@@ -814,11 +866,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     const coordinator = this.deps.adapterRuntimeCoordinator();
     const graph = this.deps.blockScanGraph();
     if (!coordinator || !graph) return;
-    const captured = this.deps.discovery.capture();
     const producerView = this.producerGraphView({
       edges: Object.freeze([...graph]),
-      topologyKey: this.deps.discovery.topologyKey(),
-      landedCoverage: captured.landedCoverage,
+      topologyKey: this.topologyKey(),
+      landedCoverage: this.landedCoverage(),
       generation: this.nextGeneration(),
       sourceBlock: blockNumber,
       sourceBlockHash: "",
@@ -846,6 +897,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
    * occupy reth for 10-20s each while the producer waits on small reads.
    */
   private maybeScheduleDiscoveryBackfill(blockNumber: number): void {
+    if (this.deps.discovery === undefined) return;
     const minIntervalMs = Math.max(
       0,
       this.deps.discoveryBackfillMinIntervalMs ?? 30_000,
@@ -1247,7 +1299,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         let header;
         const observeHeaderStartedAtMs = Date.now();
         try {
-          header = await this.deps.discovery.observeHeader(nextBlock);
+          header = await this.observeTopologyHeader(nextBlock);
         } catch {
           this.producerCriticalActive = false;
           break;
@@ -1915,7 +1967,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       stage: string,
     ): Promise<CanonicalHeader> =>
       awaitBlockScanDeadline(
-        this.deps.discovery.observeHeader(canonicalBlock),
+        this.observeTopologyHeader(canonicalBlock),
         passDeadlineAtMs,
         stage,
         undefined,
@@ -1928,7 +1980,6 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     let exactQuoteState: StateBackend | null = null;
     let exactTransportDrainMs = 0;
     try {
-      const discovery = this.deps.discovery;
       // Historical discovery is prepared in a dedicated cancellable lane.
       // The mutation queue performs only descriptor/hash checks, a pure DEX
       // delta fold and one synchronous publication; no provider/trace/probe
@@ -1950,6 +2001,24 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         finishStage("state", "failed");
         return;
       }
+      let discoveryPass: {
+        readonly dexComplete: boolean;
+        readonly protocolComplete: boolean;
+        readonly sourceBlockHash: string;
+        readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
+      };
+      let nextAdmissionThrough = blockNumber;
+      if (this.deps.frozenTopology !== undefined) {
+        // Startup committed Graph/catalog is the only topology authority for
+        // this process. Current-head work observes only the canonical header;
+        // it cannot scan, backfill, advance a cursor, or publish topology.
+        discoveryPass = bindFrozenTopologyToHeader(
+          this.deps.frozenTopology,
+          sourceHeader,
+        );
+        this.passStageLabel = "state:frozen-topology";
+      } else {
+      const discovery = this.deps.discovery!;
       const consumePreparedBackfill = async (): Promise<number | null> => {
         const ready = discovery.lane.readyDescriptor();
         if (!ready) return null;
@@ -2180,8 +2249,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         discovery.finish(preparedDiscovery);
         nextDiscovery = publishedDiscovery;
       }
-      const nextDescriptor = this.deps.discovery.describeCaptured();
-      const nextAdmissionThrough = dexAdmissionCompleteThrough(nextDiscovery);
+      const nextDescriptor = discovery.describeCaptured();
+      nextAdmissionThrough = dexAdmissionCompleteThrough(nextDiscovery);
       const requiredAdmissionThrough = useNMinusOneFallback
         ? requiredPredecessor
         : blockNumber;
@@ -2207,13 +2276,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         // GraphView excludes only those owning families from this live pass.
         this.maybeScheduleDiscoveryBackfill(blockNumber);
       }
-      const discoveryPass = {
+      discoveryPass = {
         dexComplete: nextAdmissionThrough >= requiredAdmissionThrough,
         protocolComplete: nextDescriptor.graphCompleteThrough >=
           requiredAdmissionThrough,
         sourceBlockHash: sourceHeader.hash,
         landedCoverage: nextDiscovery.landedCoverage,
       };
+      }
       const sourceBlockHash = discoveryPass.sourceBlockHash;
       const currentGraph = this.deps.blockScanGraph();
       if (!currentGraph) {
@@ -2222,13 +2292,13 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       const graphEdges = Object.freeze([...currentGraph]);
       const generation = this.nextGeneration();
       const graphView = this.deps.buildGraphView({
-        id: `blockscan:${this.deps.discovery.topologyKey()}`,
+        id: `blockscan:${this.topologyKey()}`,
         generation,
         sourceBlock: blockNumber,
         sourceBlockHash,
         edges: graphEdges,
         landedCoverage: discoveryPass.landedCoverage,
-        topologyKey: this.deps.discovery.topologyKey(),
+        topologyKey: this.topologyKey(),
       });
       if (useNMinusOneFallback) {
         // Register current-N production before any predecessor wait or
@@ -2266,7 +2336,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             coordinator: adapterRuntimeCoordinator,
             graph: this.producerGraphView({
               edges: graphEdges,
-              topologyKey: this.deps.discovery.topologyKey(),
+              topologyKey: this.topologyKey(),
               landedCoverage: discoveryPass.landedCoverage,
               generation,
               sourceBlock: blockNumber,

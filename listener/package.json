@@ -257,6 +257,7 @@
     "searcher:blockscan-route-telemetry-performance": "node --import tsx src/searcher/test/blockscan-enumeration-solver-telemetry-performance.ts",
     "searcher:blockscan-pending-evidence": "node --import tsx src/searcher/test/blockscan-pending-evidence-contract.ts",
     "searcher:blockscan-runtime-startup-warm": "node --import tsx src/searcher/test/blockscan-runtime-startup-warm.ts",
+    "searcher:blockscan-frozen-topology": "node --import tsx src/searcher/test/blockscan-frozen-topology.ts",
     "searcher:blockscan-pricing-source-mode": "node --import tsx src/searcher/test/blockscan-pricing-source-mode.ts",
     "searcher:swap-blockscan-state": "node --import tsx src/searcher/test/swap-blockscan-state-capabilities.ts",
     "searcher:univ3-static-binding-cache": "node --import tsx src/searcher/test/univ3-static-binding-cache.ts",

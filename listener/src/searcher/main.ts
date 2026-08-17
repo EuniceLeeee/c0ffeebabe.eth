@@ -1,9 +1,4 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import {
-  mkdir as mkdirAsync,
-  rename as renameAsync,
-  writeFile as writeFileAsync,
-} from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -28,31 +23,10 @@ import { blockScanRouteId } from "./blockscan-route-identity.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import {
-  EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
-  projectVerifiedProtocolPool,
-  type ProtocolDiscoveryOwnership,
-} from "./protocol-instance-discovery.js";
-import {
-  createProtocolDiscoveryEvidenceCache,
-} from "./protocol-discovery-cache.js";
-import {
-  loadDexDiscoveryCursor,
-  resolveInitialDexSourceCompleteThrough,
-} from "./discovery-dex-cursor.js";
-import {
-  createProtocolTraceMemo,
   protocolDiscoverySourceFingerprints,
-  shouldTraceForProtocolDiscovery,
 } from "./observed-protocol-discovery.js";
-import {
-  type LiveDiscoveryPublicationState,
-} from "./live-discovery-publication.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
-import {
-  createLiveDiscoveryCoordinator,
-  readBlockHash,
-} from "./live-discovery-coordinator.js";
 import {
   createDurableDiscoveryContinuityComposition,
   type DurableDiscoveryContinuityComposition,
@@ -77,8 +51,6 @@ import {
 import {
   publishStrictCatalogFromLifecycle,
 } from "./strict-catalog-live-publisher.js";
-import type { CentralAdapterRuntime } from
-  "./adapter-work-intent.js";
 import {
   productionFamilyStartupManifest,
 } from "./production-family-startup-manifest.js";
@@ -88,10 +60,8 @@ import {
 import {
   PRODUCTION_STRICT_VERIFIED_ACTORS,
 } from "./venues/production-verified-actors.js";
-import {
-  ProtocolDiscoveryCandidateDomain,
-  ProtocolDiscoveryCoverageCoordinator,
-} from "./protocol-discovery-coordinator.js";
+import { ProtocolDiscoveryCoverageCoordinator } from
+  "./protocol-discovery-coordinator.js";
 import { createBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
@@ -107,10 +77,9 @@ import {
   mergePoolRegistries,
   sendDexDiscoveryRpc,
 } from "./active-pool-discovery.js";
-import {
-  isRetryablePoolIdentityFailure,
-  type PoolIdentityFailureReason,
-  type RejectedPoolIdentity,
+import type {
+  PoolIdentityFailureReason,
+  RejectedPoolIdentity,
 } from "./venues/identity.js";
 import { UniverseRebuildCheckpointStore } from
   "./universe-rebuild-checkpoint.js";
@@ -134,7 +103,6 @@ import { resolveProducerBaseline } from
 import {
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
   PRODUCTION_ADAPTER_FAMILIES,
-  productionPoolUniverseSourceFingerprintsStrict,
 } from "./venues/production-registry.js";
 import {
   setProductionStrictViewsProvider,
@@ -148,7 +116,6 @@ import type {
   ExecutionFamilyId,
   PendingExecutionEvidence,
   PendingTransactionEvidenceHead,
-  ProtocolDiscoveryReceipt,
 } from "./venues/route-leg-adapter.js";
 import {
   validateRouteImmutableBinding,
@@ -169,7 +136,6 @@ import {
   hashTokenGraph,
 } from "./strategy-views.js";
 import {
-  assertDexSourceHashStable,
   createDexGraphCoverageState,
   MempoolIntakeRefreshSignal,
 } from "./runtime-pool-refresh.js";
@@ -196,8 +162,6 @@ import {
   loadPoolUniverse,
   loadPoolUniverseCoverageMetadata,
   loadPoolUniverseGeneratedAt,
-  poolUniverseCanonicalAnchorMatches,
-  poolProjectionRowKey,
   poolRegistryKey,
   selectPairCompletionPools,
 } from "./pool-universe.js";
@@ -318,16 +282,6 @@ import {
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const DEFAULT_RUNTIME_GRAPH_POOLS_PATH = resolve("searcher", "pools", "runtime-graph-pools.json");
 const DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH = resolve("searcher", "pools", "runtime-blockscan-pools.json");
-const DEFAULT_PROTOCOL_DISCOVERY_CACHE_PATH = resolve(
-  "searcher",
-  "pools",
-  "runtime-protocol-discovery-cache.json",
-);
-const DEFAULT_DEX_DISCOVERY_CURSOR_PATH = resolve(
-  "searcher",
-  "pools",
-  "runtime-dex-graph-coverage.json",
-);
 const DEFAULT_DISCOVERY_CONTINUITY_CHECKPOINT_PATH = resolve(
   "searcher",
   "state",
@@ -610,34 +564,6 @@ function logIdentityRejections(source: string, rejected: RejectedPoolIdentity[])
   );
 }
 
-function retryableIdentityCandidates(
-  pools: readonly PoolEntry[],
-  rejected: readonly RejectedPoolIdentity[],
-): PoolEntry[] {
-  const retryable = new Set(
-    rejected
-      .filter((item) => isRetryablePoolIdentityFailure(item.reason))
-      .map((item) => `${item.address.toLowerCase()}:${item.adapter}`),
-  );
-  return pools.filter((pool) =>
-    retryable.has(`${pool.address.toLowerCase()}:${pool.adapter}`)
-  );
-}
-
-function logRuntimeRefreshFailures(
-  failed: Array<{ pool: PoolEntry; reason: string }>,
-  context = "refresh retryable",
-): void {
-  for (const item of failed.slice(0, 5)) {
-    console.log(
-      `[searcher/live] ${context} pool=${poolRegistryKey(item.pool)} ` +
-        `reason=${item.reason}`,
-    );
-  }
-  if (failed.length > 5) {
-    console.log(`[searcher/live] ${context} additional=${failed.length - 5}`);
-  }
-}
 
 function logProvisionalGraphInstances(
   plane: "backrun" | "blockscan",
@@ -723,21 +649,6 @@ function dumpRuntimeGraphPools(
   }
 }
 
-async function dumpRuntimeGraphPoolsAsync(
-  pools: readonly PoolEntry[],
-  path = DEFAULT_RUNTIME_GRAPH_POOLS_PATH,
-): Promise<void> {
-  const serialized = serializeRuntimeGraphPools(pools);
-  await mkdirAsync(dirname(path), { recursive: true });
-  const temporary =
-    `${path}.${process.pid}.${Date.now().toString(36)}.tmp`;
-  await writeFileAsync(temporary, serialized);
-  await renameAsync(temporary, path);
-  console.log(
-    `[searcher/live] runtime graph pools dumped: ${path} ` +
-      `count=${pools.length}`,
-  );
-}
 
 function serializeRuntimeGraphPools(pools: readonly PoolEntry[]): string {
   const normalized = pools.map((pool) => ({
@@ -777,13 +688,15 @@ function liveRpcUrl(): string {
   return url;
 }
 
-function protocolDiscoveryArchiveRpcUrl(liveUrl: string): string | undefined {
-  const explicit = process.env.SEARCHER_PROTOCOL_DISCOVERY_ARCHIVE_RPC_URL;
-  if (explicit) return explicit === liveUrl ? undefined : explicit;
-  const archive = process.env.SEARCHER_LIVE_RPC_URL
-    ? process.env.MAINNET_RPC_URL
-    : undefined;
-  return archive && archive !== liveUrl ? archive : undefined;
+async function readBlockHash(
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+): Promise<string> {
+  const block = await provider.getBlock(blockNumber);
+  if (block?.hash === null || block?.hash === undefined) {
+    throw new Error(`missing canonical hash for block ${blockNumber}`);
+  }
+  return block.hash.toLowerCase();
 }
 
 function liveWsUrl(rpcUrl: string): string {
@@ -929,28 +842,6 @@ async function main(): Promise<void> {
   const rpcUrl = liveRpcUrl();
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
-  const protocolDiscoveryArchiveUrl =
-    protocolDiscoveryArchiveRpcUrl(rpcUrl);
-  const protocolDiscoveryHistoryProvider = protocolDiscoveryArchiveUrl
-    ? new ethers.JsonRpcProvider(
-        protocolDiscoveryArchiveUrl,
-        undefined,
-        { batchMaxCount: 1 },
-      )
-    : undefined;
-  let protocolDiscoveryHistoryProviderDestroyed = false;
-  const destroyProtocolDiscoveryHistoryProvider = (): void => {
-    if (
-      !protocolDiscoveryHistoryProvider ||
-      protocolDiscoveryHistoryProviderDestroyed
-    ) return;
-    protocolDiscoveryHistoryProviderDestroyed = true;
-    protocolDiscoveryHistoryProvider.destroy();
-  };
-  console.log(
-    `[searcher/live] protocol discovery observed-history=` +
-      `${protocolDiscoveryHistoryProvider ? "separate-aligned" : "local"}`,
-  );
   const config = buildConfig(provider);
   const blindPrepareBudgetRaw = Number(
     process.env.SEARCHER_BLIND_PREPARE_BUDGET_MS ?? "120000",
@@ -1503,13 +1394,6 @@ async function main(): Promise<void> {
     console.log(`[searcher/live] recording live fixtures to ${config.liveFixtureDir}`);
   }
 
-  const discoveryBlocks = Number(process.env.SEARCHER_DISCOVERY_BLOCKS ?? "300");
-  const discoveryTopN = Number(process.env.SEARCHER_DISCOVERY_TOP_N ?? "100");
-  const protocolDiscoveryBlocks = Math.max(
-    1,
-    Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_BLOCKS ?? "300"),
-  );
-  const protocolDiscoveryShadow = process.env.SEARCHER_PROTOCOL_DISCOVERY_SHADOW === "1";
   const discoveryToBlock = process.env.SEARCHER_DISCOVERY_TO_BLOCK === undefined
     ? await provider.getBlockNumber()
     : Number(process.env.SEARCHER_DISCOVERY_TO_BLOCK);
@@ -1547,17 +1431,6 @@ async function main(): Promise<void> {
       clearTimeout(timer);
     }
   }
-  const refreshIntervalMs = Number(process.env.SEARCHER_REFRESH_INTERVAL_MS ?? "300000"); // 5 min
-  // Protocol discovery runs on its own cadence, decoupled from the DEX refresh
-  // timer. Both lanes still serialize through one mutation queue below.
-  const protocolDiscoveryIntervalMs = Math.max(
-    1_000,
-    Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_INTERVAL_MS ?? "300000"),
-  );
-  const protocolDiscoveryMaxCatchupBlocks = Math.max(
-    protocolDiscoveryBlocks,
-    Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_MAX_CATCHUP_BLOCKS ?? "50000"),
-  );
   const mainnetBackend: TokenQueryBackend = {
     call: async (req) => provider.call(req),
     getLogs: async (req) => provider.send("eth_getLogs", [req]),
@@ -1588,97 +1461,6 @@ async function main(): Promise<void> {
     config.poolUniversePath,
     config.poolUniverseManifestPath,
   );
-  const currentDexUniverseSourceFingerprints =
-    productionPoolUniverseSourceFingerprintsStrict();
-  let universeCanonicalAnchorMatches = false;
-  if (poolUniverseCoverage.source !== null) {
-    try {
-      const anchor = await provider.getBlock(poolUniverseCoverage.source.number);
-      universeCanonicalAnchorMatches = poolUniverseCanonicalAnchorMatches(
-        poolUniverseCoverage,
-        anchor,
-      );
-    } catch {
-      universeCanonicalAnchorMatches = false;
-    }
-  }
-  const universeRegistryMatches =
-    poolUniverseCoverage.manifestVerified &&
-    universeCanonicalAnchorMatches &&
-    poolUniverseCoverage.toBlock !== null &&
-    poolUniverseCoverage.toBlock <= discoveryToBlock &&
-    poolUniverseCoverage.registrySourceFingerprints !== null &&
-    poolUniverseCoverage.registrySourceFingerprints.length ===
-      currentDexUniverseSourceFingerprints.length &&
-    poolUniverseCoverage.registrySourceFingerprints.every(
-      (fingerprint, index) =>
-        fingerprint === currentDexUniverseSourceFingerprints[index],
-    );
-  // The recent factory window cannot prove landed-event coverage for
-  // Curve/DODO/V4/Balancer. Only the actual landed scan may bridge the
-  // persisted universe cursor to this startup source.
-  const startupLandedDiscoveryFloor = Math.max(
-    0,
-    discoveryToBlock - discoveryBlocks,
-  );
-  const dexDiscoveryCursorPath =
-    process.env.SEARCHER_DISCOVERY_DEX_CURSOR_PATH ??
-    DEFAULT_DEX_DISCOVERY_CURSOR_PATH;
-  const loadedDexCursor = blindProductionAudit
-    ? null
-    : await loadDexDiscoveryCursor(dexDiscoveryCursorPath);
-  let dexCursorSourceCompleteThrough: number | null = null;
-  if (
-    loadedDexCursor !== null &&
-    loadedDexCursor.sourceCompleteThrough >= 0 &&
-    loadedDexCursor.sourceHash !== null
-  ) {
-    try {
-      const cursorHash = await readBlockHash(
-        provider,
-        loadedDexCursor.sourceCompleteThrough,
-      );
-      if (cursorHash.toLowerCase() === loadedDexCursor.sourceHash.toLowerCase()) {
-        dexCursorSourceCompleteThrough =
-          loadedDexCursor.sourceCompleteThrough;
-        console.log(
-          `[searcher/live] DEX coverage cursor resumed at block ` +
-            `${loadedDexCursor.sourceCompleteThrough}`,
-        );
-      } else {
-        console.warn(
-          `[searcher/live] persisted DEX coverage cursor is not canonical ` +
-            `at ${loadedDexCursor.sourceCompleteThrough}; ignoring`,
-        );
-      }
-    } catch {
-      console.warn(
-        `[searcher/live] could not validate persisted DEX coverage cursor ` +
-          `at ${loadedDexCursor.sourceCompleteThrough}; ignoring`,
-      );
-    }
-  }
-  const trustedThrough = Math.max(
-    poolUniverseCoverage.toBlock ?? -1,
-    dexCursorSourceCompleteThrough ?? -1,
-  );
-  const initialDexSourceCompleteThrough =
-    resolveInitialDexSourceCompleteThrough({
-      universeRegistryMatches,
-      universeToBlock: poolUniverseCoverage.toBlock,
-      startupLandedDiscoveryFloor,
-      discoveryToBlock,
-      trustedThrough,
-    });
-  if (!universeRegistryMatches) {
-    console.warn(
-      "[searcher/live] pool universe provenance/registry/canonical anchor " +
-        "changed or is unverifiable; source completeness will resume from " +
-        `max(universe.toBlock, persisted cursor) ` +
-        `(universe=${poolUniverseCoverage.toBlock ?? -1}, ` +
-        `cursor=${dexCursorSourceCompleteThrough ?? -1})`,
-    );
-  }
   // F6 Pair C: durable discovery continuity composition is the default
   // strict discovery authority. The file-backed checkpoint store loads and
   // re-verifies the persisted restart state, then logs its status; the
@@ -1694,7 +1476,6 @@ async function main(): Promise<void> {
   let discoveryContinuityComposition: DurableDiscoveryContinuityComposition |
     null = null;
   let discoveryInventoryEnumerator: DiscoveryInventoryEnumerator | null = null;
-  let strictCentralRuntime: CentralAdapterRuntime | null = null;
   let restartTrustedSource: CanonicalSource | null = null;
   if (
     continuityCompositionPath !== undefined &&
@@ -1824,7 +1605,6 @@ async function main(): Promise<void> {
       `[searcher/live] strict solver consumer ` + strictSolverStatus,
     );
   }
-  let protocolGraphCompleteThrough = -1;
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
   // P0 strict startup authority: one fixed-cutoff durable run owns the union
   // of every startup pool set plus plugin-declared event supplements. It
@@ -1970,30 +1750,6 @@ async function main(): Promise<void> {
     "blockscan-overrides",
     asLegacyRejections(overrideIdentity.rejected),
   );
-  const startupRetryableIdentityPools = [
-    ...retryableIdentityCandidates(
-      rawPinnedWarmPools,
-      asLegacyRejections(pinnedIdentity.rejected),
-    ),
-    ...retryableIdentityCandidates(
-      rawUniversePools,
-      asLegacyRejections(universeIdentity.rejected),
-    ),
-    ...retryableIdentityCandidates(
-      rawBlockscanUniverse,
-      asLegacyRejections(blockscanIdentity.rejected),
-    ),
-    ...retryableIdentityCandidates(
-      rawBlockScanOverrides,
-      asLegacyRejections(overrideIdentity.rejected),
-    ),
-  ];
-  const retryableDexIdentityPools = new Map(
-    mergePoolRegistries([], startupRetryableIdentityPools).map((pool) => [
-      poolRegistryKey(pool),
-      pool,
-    ] as const),
-  );
   const landedPoolDiscoveryRegistry =
     PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery();
   const readyCoverageKeys = new Set(readyUniverse.sourceCoverage.map(
@@ -2039,7 +1795,6 @@ async function main(): Promise<void> {
   const basePools = incumbentPools;
   const startupBlockscanUniverse = blockscanUniverse;
   const startupBlockScanOverrides = blockScanOverrides;
-  const suppressedDexPoolKeys = new Set<string>();
   const pairCompletionCandidates = config.pairCompletion
     ? selectPairCompletionPools(
       basePools,
@@ -2069,27 +1824,12 @@ async function main(): Promise<void> {
     blockscanMaxPools: Number(process.env.SEARCHER_BLOCKSCAN_VIEW_MAX_POOLS ?? 6000),
     poolUniverseGeneratedAt: loadPoolUniverseGeneratedAt(config.poolUniversePath),
   };
-  const rebuildStrategyViews = (
-    backrunPools: PoolEntry[],
-    suppressedSupplementalPoolKeys: ReadonlySet<string> = new Set<string>(),
-  ) => buildStrategyViews(
-    backrunPools,
-    blockscanUniverse.filter((pool) =>
-      !suppressedSupplementalPoolKeys.has(poolProjectionRowKey(pool))
-    ),
-    blockScanOverrides.filter((pool) =>
-      !suppressedSupplementalPoolKeys.has(poolProjectionRowKey(pool))
-    ),
-    strategyViewOptions,
-  );
   let strategyViews = buildStrategyViews(
     allPools,
     startupBlockscanUniverse,
     startupBlockScanOverrides,
     strategyViewOptions,
   );
-  let protocolDiscoveryOwnership: ProtocolDiscoveryOwnership =
-    EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP;
   // Family membership and candidate-source lanes are owned by the strict
   // catalog projection. Legacy adapter objects supply only matcher details
   // (topics/selectors) for evidence fingerprints, never membership.
@@ -2150,47 +1890,10 @@ async function main(): Promise<void> {
       `${readyUniverse.generation} graph_hash=${readyUniverse.graphHash} ` +
       `edges=${graph.length} backrun=true blockscan=${enableBlockScan}`,
   );
-  const startupDexCanonicalHash = await readBlockHash(provider, discoveryToBlock);
-  assertDexSourceHashStable(
-    discoveryToBlock,
-    startupDexSourceBlockHash,
-    startupDexCanonicalHash,
-  );
-  let dexGraphCoverage = createDexGraphCoverageState({
-    sourceCompleteThrough: initialDexSourceCompleteThrough,
-    // A source-complete scan and executable projection are separate proofs.
-    // Failed pool projections stay retryable without erasing the source cursor.
-    graphCompleteThrough:
-      readyUniverse.appliedThrough.number,
+  const dexGraphCoverage = createDexGraphCoverageState({
+    sourceCompleteThrough: readyUniverse.appliedThrough.number,
+    graphCompleteThrough: readyUniverse.appliedThrough.number,
   });
-  const protocolCandidateDomain = new ProtocolDiscoveryCandidateDomain({
-    registry: PRODUCTION_ADAPTER_FAMILIES,
-    dexUniverse: rawBlockscanUniverse,
-  });
-  const protocolDexDomainFor = (
-    backrunEdges: readonly TokenEdge[],
-    blockscanEdges: readonly TokenEdge[] | undefined,
-  ): string[] => protocolCandidateDomain.graphTokens(
-    backrunEdges,
-    blockscanEdges,
-  );
-  const protocolAddressCandidatesFor = (
-    backrunEdges: readonly TokenEdge[],
-    blockscanEdges: readonly TokenEdge[] | undefined,
-  ): string[] => protocolCandidateDomain.addresses(
-    backrunEdges,
-    blockscanEdges,
-  );
-  const protocolDiscoveryCachePath = process.env.SEARCHER_PROTOCOL_DISCOVERY_CACHE_PATH ??
-    DEFAULT_PROTOCOL_DISCOVERY_CACHE_PATH;
-  const protocolDiscoveryChainId = (await provider.getNetwork()).chainId;
-  // The producer must not load the former operational candidate cache as
-  // discovery, coverage, cursor or ownership authority. The strict
-  // readyGeneration already owns the exact startup partition and executable
-  // Graph. This empty cache only satisfies the frozen coordinator interface.
-  const protocolDiscoveryCache = createProtocolDiscoveryEvidenceCache(
-    protocolDiscoveryChainId,
-  );
   const discoverySourceFingerprints = protocolDiscoverySourceFingerprints(
     enabledProtocolDiscoveryMatcherAdapters,
   );
@@ -2209,15 +1912,10 @@ async function main(): Promise<void> {
       ] as const)
     ),
   ));
-  lastProtocolDiscoveryBlock = readyUniverse.appliedThrough.number;
-  const lastProtocolDiscoveryBlockHash = readyUniverse.appliedThrough.hash;
-  protocolGraphCompleteThrough = readyUniverse.appliedThrough.number;
-  // Retained only for the frozen coordinator interface. Producer-time receipt
-  // handling returns before this memo can trace or publish anything.
-  let protocolTraceMemo = createProtocolTraceMemo();
   console.log(
     `[searcher/live] strict startup coverage restored: ` +
-      `cursor=${lastProtocolDiscoveryBlock}:${lastProtocolDiscoveryBlockHash} ` +
+      `cutoff=${readyUniverse.appliedThrough.number}:` +
+      `${readyUniverse.appliedThrough.hash} ` +
       `sources=${readyUniverse.sourceCoverage.length} ` +
       `legacy_cache_authority=disabled`,
   );
@@ -2257,29 +1955,6 @@ async function main(): Promise<void> {
       executor: config.botvmAddress,
       verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
     });
-    if (discoveryContinuityComposition !== null) {
-      strictCentralRuntime = createStrictCentralAdapterRuntime({
-        provider,
-        generationFence: Object.freeze({
-          assertCurrent(generation: number, source: CanonicalSource) {
-            if (
-              generation !== readyUniverse.cutoff.generation ||
-              source.number !== readyUniverse.cutoff.number ||
-              source.hash.toLowerCase() !==
-                readyUniverse.cutoff.hash.toLowerCase() ||
-              source.generation !== readyUniverse.cutoff.generation
-            ) {
-              throw new Error(
-                "strict runtime escaped committed readyGeneration",
-              );
-            }
-          },
-        }),
-        verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
-        executor: config.botvmAddress,
-        simulator: strictSimulationTransport,
-      });
-    }
     const revmLiveBackend = new RevmLiveBackend(
       revmSimClient,
       config.botvmAddress,
@@ -2397,25 +2072,6 @@ async function main(): Promise<void> {
   );
 
   // Incremental refresh: scan recent blocks for new pools every N minutes
-  const knownPoolKeys = new Set(
-    [
-      ...strategyViews.backrun.map((pool) => poolRegistryKey(pool)),
-      ...[...protocolDiscoveryOwnership.admissions.values()]
-        .map((item) =>
-          poolProjectionRowKey(projectVerifiedProtocolPool(item))
-        ),
-    ],
-  );
-  for (const retryKey of retryableDexGraphPools.keys()) {
-    knownPoolKeys.delete(retryKey);
-  }
-  for (const retryKey of retryableDexIdentityPools.keys()) {
-    knownPoolKeys.delete(retryKey);
-  }
-  const knownPoolAddrs = new Set(
-    [...allPoolMap.keys()],
-  );
-  const mempoolIntakeRefresh = new MempoolIntakeRefreshSignal();
   // Audit §5/§6 producer freeze: when a universe-rebuild checkpoint is
   // configured, the producer starts only after a ready generation exists
   // at the frozen cutoff; the observed/applied cursors never rewind before
@@ -2426,7 +2082,6 @@ async function main(): Promise<void> {
     ready: readyUniverse,
     currentHead: discoveryToBlock,
   });
-  const startupObservationScanFrom = baseline.observationScanFrom;
   console.log(
     "[searcher/live] universe rebuild ready generation=" +
       baseline.ready.generation +
@@ -2435,100 +2090,8 @@ async function main(): Promise<void> {
       " producer baseline freeze (scan from " +
       baseline.observationScanFrom + ")",
   );
-  const liveDiscovery = await createLiveDiscoveryCoordinator({
-    provider,
-    ...(protocolDiscoveryHistoryProvider === undefined
-      ? {}
-      : { observedHistoryProvider: protocolDiscoveryHistoryProvider }),
-    mainnetBackend,
-    liveRegistry,
-    retainedDexUniverse: blockscanUniverse,
-    config: {
-      poolUniverseTopN: config.poolUniverseTopN,
-      enableProtocolEdges: config.enableProtocolEdges,
-      botvmAddress: config.botvmAddress,
-    },
-    discoveryToBlock,
-    discoveryTopN,
-    refreshIntervalMs,
-    protocolDiscoveryIntervalMs,
-    protocolDiscoveryMaxCatchupBlocks,
-    protocolDiscoveryShadow,
-    protocolDiscoveryChainId,
-    protocolDiscoveryCachePath,
-    protocolDiscoveryCache,
-    dexDiscoveryCursorPath,
-    protocolDiscoveryCoverage,
-    startupActivePoolDiscovery,
-    startupDexSourceBlockHash,
-    // F8/audit P0-e: the first protocol-backfill's observed-event window is
-    // bound to the universe build window (manifest fromBlock..toBlock), so
-    // pools whose swap logs predate the incremental cursor still get
-    // observed exactly once. The scanner asserts the toBlock hash itself.
-    observedEventLookbackWindow:
-      startupObservationScanFrom !== null
-        ? null
-        : poolUniverseCoverage.fromBlock === null ||
-            poolUniverseCoverage.toBlock === null
-          ? null
-          : Object.freeze({
-              fromBlock: poolUniverseCoverage.fromBlock,
-              toBlock: poolUniverseCoverage.toBlock,
-            }),
-    observationScanFrom: startupObservationScanFrom,
-    producerGenerationFrozen: true,
-    ...(strictCentralRuntime === null
-      ? {}
-      : { identityRuntime: strictCentralRuntime }),
-    initial: {
-      strategyViews,
-      protocolOwnership: protocolDiscoveryOwnership,
-      lastProtocolDiscoveryBlock,
-      lastProtocolDiscoveryBlockHash,
-      protocolGraphCompleteThrough,
-      dexGraphCoverage,
-      graph,
-      blockScanGraph,
-      tokenIndex,
-      poolAddressMap: allPoolMap,
-      flashTokens,
-      knownPoolKeys,
-      knownPoolAddresses: knownPoolAddrs,
-      suppressedDexPoolKeys,
-      retryableDexGraphPools,
-      retryableDexIdentityPools,
-    },
-    rebuildStrategyViews,
-    protocolDexDomainFor,
-    protocolAddressCandidatesFor,
-    blockScanPlanner,
-    detector,
-    planner,
-    blockScanRuntimeAbort,
-    blindProductionAudit,
-    mempoolIntakeRefresh,
-    getProtocolTraceMemo: () => protocolTraceMemo,
-    onPublicationApplied(next) {
-      strategyViews = next.strategyViews;
-      dexGraphCoverage = { ...next.dexGraphCoverage };
-    },
-    async persistRuntimeGraphs(next) {
-      await Promise.all([
-        dumpRuntimeGraphPoolsAsync(next.backrun),
-        dumpRuntimeGraphPoolsAsync(
-          next.blockscan,
-          DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH,
-        ),
-      ]);
-    },
-    logRuntimeRefreshFailures: (failures, label) =>
-      logRuntimeRefreshFailures([...failures], label),
-    onFatalReorg() {
-      shuttingDown = true;
-    },
-    readPriority: liveRethReadPriority,
-  });
-  liveDiscovery.start();
+  const knownPoolAddrs = new Set(allPoolMap.keys());
+  const mempoolIntakeRefresh = new MempoolIntakeRefreshSignal();
 
   let processedHints = 0;
   let busy = false;
@@ -2659,6 +2222,27 @@ async function main(): Promise<void> {
   let activeBlindSourceHead: BlindProductionSourceHeadControl | null = null;
   let preparedBlindBase: BlindProductionPrepareControl | null = null;
   let preparedBlindDynamicResetNonce: string | null = null;
+  const frozenProducerTopology = Object.freeze({
+    topologyKey:
+      `strict-ready:${readyUniverse.generation}:${readyUniverse.graphHash}`,
+    landedCoverage: Object.freeze([...startupActivePoolDiscovery.coverage]),
+    async observeHeader(blockNumber: number) {
+      const block = await provider.getBlock(blockNumber);
+      if (
+        block === null ||
+        block.hash === null ||
+        !Number.isSafeInteger(block.number) ||
+        block.number !== blockNumber
+      ) {
+        throw new Error(`missing canonical header ${blockNumber}`);
+      }
+      return Object.freeze({
+        number: block.number,
+        hash: block.hash.toLowerCase(),
+        parentHash: block.parentHash.toLowerCase(),
+      });
+    },
+  });
   const blockScanRuntimeLoop = new BlockScanRuntimeLoop({
     enabled: enableBlockScan,
     blockScanConfig: blockScanCfg,
@@ -2671,24 +2255,7 @@ async function main(): Promise<void> {
     sharedPlanner: planner,
     backrunStatePublisher,
     routeTelemetry: blockScanRouteTelemetry,
-    // F8: the nminus1 producer's topology cache adopts the discovery
-    // topology key after an interval; the committed strict edges merge into
-    // the runtime graph without changing that key, so the producer would
-    // keep the pre-merge (empty) edge set forever. Suffix the key with the
-    // strict root revision so each strict publication forces a re-adopt.
-    discovery: Object.freeze({
-      ...liveDiscovery.blockScanHooks,
-      topologyKey: () => {
-        const strictEdges = (blockScanGraph ?? []).filter((edge) =>
-          typeof (edge as { canonicalEdgeId?: unknown }).canonicalEdgeId ===
-            "string"
-        );
-        const strictFingerprint = strictEdges.length === 0
-          ? "none"
-          : hashTokenGraph(strictEdges);
-        return `${liveDiscovery.blockScanHooks.topologyKey()}:strict:${strictFingerprint}`;
-      },
-    }),
+    frozenTopology: frozenProducerTopology,
     blind: {
       enabled: blindProductionAudit,
       activeSource: () => activeBlindSourceHead,
@@ -2696,27 +2263,6 @@ async function main(): Promise<void> {
       preparedArtifacts: () => preparedBlindArtifacts,
       dynamicResetNonce: () => preparedBlindDynamicResetNonce,
     },
-    discoveryBackfillMinIntervalMs: Math.max(
-      0,
-      Number(
-        process.env.SEARCHER_DISCOVERY_BACKFILL_MIN_INTERVAL_MS ??
-          "30000",
-      ),
-    ),
-    discoveryProducerYieldMaxWaitMs: Math.max(
-      0,
-      Number(
-        process.env.SEARCHER_DISCOVERY_PRODUCER_YIELD_MAX_WAIT_MS ??
-          "10000",
-      ),
-    ),
-    discoveryProducerYieldPerReadMaxWaitMs: Math.max(
-      0,
-      Number(
-        process.env.SEARCHER_DISCOVERY_PRODUCER_YIELD_PER_READ_MAX_WAIT_MS ??
-          "250",
-      ),
-    ),
     exactProducerLagYieldMs: Math.max(
       0,
       Number(
@@ -2812,7 +2358,6 @@ async function main(): Promise<void> {
         dexSourceCompleteThrough: dexGraphCoverage.sourceCompleteThrough,
         retryablePools: [
           ...retryableDexGraphPools.values(),
-          ...retryableDexIdentityPools.values(),
         ],
         dexUniverseFingerprint: poolUniverseCoverage.contentSha256,
         strategyViewHash: strategyViews.versions.blockscan_view_hash,
@@ -2935,23 +2480,9 @@ async function main(): Promise<void> {
     : null;
 
   let blindSessionBase:
-    | {
-        readonly anchor: BlindProductionPrepareControl["base"];
-        readonly runtimeState: LiveDiscoveryPublicationState;
-      }
+    | { readonly anchor: BlindProductionPrepareControl["base"] }
     | null = null;
   let preparedBlindArtifacts: PreparedBlindProductionArtifacts | null = null;
-  const captureBlindBaseRuntimeState =
-    (): LiveDiscoveryPublicationState =>
-      liveDiscovery.capture();
-
-  const restoreBlindBaseRuntimeState = (
-    base: LiveDiscoveryPublicationState,
-  ): void => {
-    liveDiscovery.publish(base);
-    protocolTraceMemo = createProtocolTraceMemo();
-    blockScanRejectBlacklist.entries.clear();
-  };
 
   const assertBlindBackendAnchor = async (
     expected: BlindProductionPrepareControl["base"],
@@ -2979,12 +2510,10 @@ async function main(): Promise<void> {
     if (activeBlindSourceHead || preparedBlindBase) {
       throw new Error("blind production attempt overlaps an active/prepared attempt");
     }
-    await liveDiscovery.settled();
     await assertBlindBackendAnchor(control.base);
     if (!blindSessionBase) {
       blindSessionBase = {
         anchor: { ...control.base },
-        runtimeState: captureBlindBaseRuntimeState(),
       };
     } else {
       if (
@@ -2998,7 +2527,7 @@ async function main(): Promise<void> {
           "blind production session cannot reuse runtime state across base anchors",
         );
       }
-      restoreBlindBaseRuntimeState(blindSessionBase.runtimeState);
+      blockScanRejectBlacklist.entries.clear();
     }
     // A blind attempt may target the same source N/hash as the previous
     // attempt. Clear both dynamic publishers before rebuilding N-1: the
@@ -3037,11 +2566,10 @@ async function main(): Promise<void> {
       dexSourceCompleteThrough: dexGraphCoverage.sourceCompleteThrough,
       retryablePools: [
         ...retryableDexGraphPools.values(),
-        ...retryableDexIdentityPools.values(),
       ],
       dexUniverseFingerprint: poolUniverseCoverage.contentSha256,
       strategyViewHash: strategyViews.versions.blockscan_view_hash,
-      landedCoverage: liveDiscovery.capture().landedCoverage,
+      landedCoverage: frozenProducerTopology.landedCoverage,
       protocolSourceFingerprints: discoverySourceFingerprints,
       protocolEdgesEnabled: config.enableProtocolEdges,
     });
@@ -3196,15 +2724,6 @@ async function main(): Promise<void> {
             `${error instanceof Error ? error.message : String(error)}`,
         );
       }
-      try {
-        await liveDiscovery.shutdown();
-      } catch (error) {
-        console.warn(
-          `[searcher/live] discovery persistence flush failed: ` +
-          `${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-      destroyProtocolDiscoveryHistoryProvider();
       state.stop();
     })();
     return stopRuntimePromise;
@@ -3283,8 +2802,6 @@ async function main(): Promise<void> {
             pinnedWarmTargets,
             blockTracker,
             strictSessionFor,
-            observeProtocolReceipt: liveDiscovery.observeProtocolReceipt,
-            observeProtocolTxHash: liveDiscovery.observeProtocolTxHash,
           });
         } catch (err) {
           console.log(
@@ -3340,37 +2857,7 @@ interface HandleCtx {
   strictSessionFor(
     source: CanonicalSource,
   ): Promise<StrictProductionRuntimeSession>;
-  observeProtocolReceipt(input: {
-    txHash: string;
-    blockNumber: number;
-    receipt: ProtocolDiscoveryReceipt;
-  }): Promise<void>;
-  observeProtocolTxHash(txHash: string): Promise<void>;
 }
-
-/**
- * F8: the strict catalog's plugin log patterns are the enumerable receipt
- * surface for the protocol-trace gate (the legacy adapter list is empty, so
- * the trace gate cannot infer patterns from it). Module-level because
- * handleHint is a module-level function.
- */
-let strictTraceTopics: ReadonlySet<string> | null = null;
-const strictCatalogTraceTopics = (): ReadonlySet<string> => {
-  if (strictTraceTopics === null) {
-    const topics = new Set<string>();
-    for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-      .listAll()) {
-      const discovery = "discovery" in family.plugin
-        ? family.plugin.discovery
-        : null;
-      for (const pattern of discovery?.logPatterns ?? []) {
-        topics.add(pattern.topic.toLowerCase());
-      }
-    }
-    strictTraceTopics = topics;
-  }
-  return strictTraceTopics;
-};
 
 /**
  * Process a single MEV-Share hint. Two paths:
@@ -3541,7 +3028,6 @@ async function handleHint(
   let eventReceiptTransactionHash: string | undefined;
   let eventLogsCompleteness: NonNullable<OrderflowEvent["logsCompleteness"]> =
     "fragment";
-  let observedProtocolReceipt: ProtocolDiscoveryReceipt | null = null;
   let submissionMode: BundleSubmission["mode"] = "hash-only";
   let fixturePath: LiveFixturePath = "hash-only";
   let countedHintImpact = false;
@@ -3675,19 +3161,6 @@ async function handleHint(
       stage: "detect",
       reason: "no_matching_graph_pool",
     });
-    if (
-      shouldTraceForProtocolDiscovery(
-        hintLogs,
-        PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes().filter((adapter) =>
-          !adapter.requiresProtocolEdgesFlag || ctx.config.enableProtocolEdges
-        ),
-        // F8: the strict catalog's plugin log patterns are the enumerable
-        // receipt surface; the legacy adapter list is empty.
-        strictCatalogTraceTopics(),
-      )
-    ) {
-      void ctx.observeProtocolTxHash(txHash);
-    }
     throw new Error("no matching graph pool");
   } else {
     // Token hit but no pool impact — try to fetch full tx from RPC
@@ -3755,16 +3228,6 @@ async function handleHint(
       }
       eventReceiptParentBlockHash = receiptBlock.parentHash;
       eventLogsCompleteness = "complete-receipt";
-      observedProtocolReceipt = {
-        status: receipt.status,
-        logs: receipt.logs.map((log) => ({
-          address: log.address,
-          topics: [...log.topics],
-          data: log.data,
-          transactionHash: log.transactionHash,
-          blockNumber: log.blockNumber,
-        })),
-      };
       // Debug: classify receipt log events
       const swapCount = eventLogs.filter((log) =>
         PRODUCTION_ADAPTER_FAMILIES.landedEvents().isSwapLog(log)
@@ -3901,14 +3364,6 @@ async function handleHint(
     logsCompleteness: eventLogsCompleteness,
     victimState: fixturePath === "hash-only" ? "must-overlay" : "materialized",
   };
-
-  if (observedProtocolReceipt) {
-    void ctx.observeProtocolReceipt({
-      txHash,
-      blockNumber: eventBlockNumber,
-      receipt: observedProtocolReceipt,
-    });
-  }
 
   segMark("prep"); // path A impersonateSwap / path B applyRawTx / path C refetch
   const opportunities = await ctx.detector.detect(event, ctx.state);

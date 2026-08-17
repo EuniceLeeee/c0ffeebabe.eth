@@ -3168,6 +3168,31 @@ blockscan hot-discovery closure 必须按同一顺序继续物理删除并由 fr
 ready-generation/current-source strict authority 替换；在此之前不得部署或
 声称 default-authority / F5 / F9 完成。
 
+**2026-08-18 producer frozen-topology 第二批物理删除 checkpoint（实现提交
+承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- production `main.ts` 已物理删除 `createLiveDiscoveryCoordinator()` 调用及
+  它的 DEX/protocol backfill、cursor、candidate cache、runtime Graph dump、
+  receipt/tx trace publication、shutdown flush 接线；producer 不再持有
+  discovery `lane/prepare/publish/scheduleBackfill` 能力；
+- `BlockScanRuntimeLoop` 新增互斥的 frozen-ready topology 输入。生产只注入
+  ready generation 的 `topologyKey`、不可变 landed coverage 与 canonical
+  header reader；每个 current-N pass 只重签 current-source strict session
+  并读取/定价同一 ready Graph，不能扫描、补历史、推进 cursor 或改变
+  topology。mutable discovery 输入暂仅保留给既有回归夹具，生产构造同时
+  提供两种输入或两种都不提供都会 fail closed；
+- mempool receipt 仍可用于 victim transition/detection，但不再旁路发送给
+  protocol discovery/trace；blind replay 只重置动态 pricing/execution
+  publisher，不再 capture/restore 一份 legacy discovery publication；
+- `searcher:blockscan-frozen-topology` 合同证明 production-shaped topology
+  capability 不含 lane/prepare/publish/backfill，空 ready topology root 会
+  fail closed；该合同与 listener 完整 `build` 通过。
+
+下一批必须继续删除 startup 时仍在使用的 discovery-continuity composition /
+live catalog publisher 重建桥，以及 `AdapterFamilyGraphViewCoordinator` 对
+legacy-shaped coverage/registry 的依赖；只能以 ready envelope + strict
+current-source session 等价替换，不能把已删的 live coordinator 接回。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
