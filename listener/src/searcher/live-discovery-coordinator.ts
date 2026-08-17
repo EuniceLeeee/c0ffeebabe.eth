@@ -129,6 +129,8 @@ import type {
 import { routeInstanceKey } from "./venues/route-instance-identity.js";
 import { poolRegistryKey } from "./pool-universe.js";
 import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
+import type { StrictLiveObservedEvent } from
+  "./live-discovery-event-observations.js";
 
 const DISCOVERY_BACKFILL_FOREGROUND_HANDOFF_MS = 1_000;
 
@@ -1626,19 +1628,55 @@ export async function createLiveDiscoveryCoordinator(
     }
     if (
       describeProtocolPublicationSlice(current) !==
-        prepared.baseProtocolFingerprint ||
-      describeDexRoutingSlice(current) !==
-        prepared.baseDexRoutingFingerprint
+        prepared.baseProtocolFingerprint
     ) {
       return null;
     }
     return validateCombinedDiscoveryTransition(current, {
       ...prepared,
-      stagedProtocolCache: cloneProtocolDiscoveryEvidenceCache(
+      stagedProtocolCache: mergeProtocolScanCache(
         current.protocolEvidenceCache,
+        prepared.stagedProtocolCache!,
       ),
     });
   };
+
+  /**
+   * Rebase the prepared protocol scan onto the current published cache while
+   * preserving every scanner write (observedEvents feed and address matches)
+   * from the staged scan. Replacing the staged cache with a fresh clone of the
+   * current cache would silently discard the event observations that the whole
+   * protocol backfill pass exists to produce.
+   */
+  const mergeProtocolScanCache = (
+    current: ProtocolDiscoveryEvidenceCache,
+    staged: ProtocolDiscoveryEvidenceCache,
+  ): ProtocolDiscoveryEvidenceCache => {
+    const merged = cloneProtocolDiscoveryEvidenceCache(current);
+    const seenEvents = new Set(merged.runtime.observedEvents.map(
+      observedEventKey,
+    ));
+    for (const event of staged.runtime.observedEvents) {
+      const key = observedEventKey(event);
+      if (seenEvents.has(key)) continue;
+      seenEvents.add(key);
+      merged.runtime.observedEvents.push(event);
+    }
+    for (const [key, entry] of staged.addressEntries) {
+      if (!merged.addressEntries.has(key)) {
+        merged.addressEntries.set(key, entry);
+      }
+    }
+    return merged;
+  };
+
+  function observedEventKey(event: StrictLiveObservedEvent): string {
+    return event.kind === "log"
+      ? `log:${event.blockNumber}:${event.transactionHash ?? ""}:` +
+          `${event.topics?.[0]?.toLowerCase() ?? ""}`
+      : `call:${event.blockNumber}:${event.transactionHash ?? ""}:` +
+          `${event.data.slice(0, 10).toLowerCase()}`;
+  }
   const publishLiveDiscoveryState = (
     state: LiveDiscoveryPublicationState,
   ): void => {
