@@ -35,6 +35,7 @@ run_test strict-catalog-consumer-diagnostic npm run searcher:strict-catalog-cons
 run_test universe-rebuild-checkpoint npm run searcher:universe-rebuild-checkpoint
 run_test universe-rebuild-runner npm run searcher:universe-rebuild-runner
 run_test universe-rebuild-probe-cli npm run searcher:universe-rebuild-probe-cli
+run_test universe-rebuild-production npm run searcher:universe-rebuild-production
 
 finished=$(date -u +%s)
 sha="$(git -C "${impl_dir}" rev-parse HEAD)"

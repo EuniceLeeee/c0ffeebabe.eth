@@ -6,6 +6,7 @@ import {
   type RetryableAttempt,
 } from "./universe-rebuild-checkpoint.js";
 import type { UniverseRebuildProbeWiring } from "./universe-rebuild-probe-cli.js";
+import type { UniverseRebuildDependencies } from "./universe-rebuild-runner.js";
 import { attestPoolIdentitiesStrict } from "./strict-identity-attestation.js";
 import { createMinimalIdentityRuntime } from "./strict-identity-attestation.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
@@ -444,4 +445,318 @@ export function createProbeWiring(
     },
     decodeCandidateSnapshot: (snapshot: unknown) => snapshot,
   });
+}
+
+/**
+ * Full rebuild wiring (audit §5): freeze the canonical head, scan the
+ * strict-catalog Swap window, dedupe by full log identity into family-aware
+ * candidates, reuse verified memos across windows, rehydrate instances from
+ * memos, aggregate once per family and build the canonical graph snapshot.
+ * All reads are pinned to the run cutoff hash.
+ */
+
+export interface RebuildScanObservation {
+  readonly address: string;
+  readonly topics: readonly string[];
+  readonly data: string;
+  readonly transactionHash?: string;
+  readonly blockNumber?: number;
+  readonly logIndex?: number;
+}
+
+export function strictCatalogLogTopics(): readonly string[] {
+  const topics = new Set<string>();
+  for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .listAll()) {
+    const discovery = "discovery" in family.plugin
+      ? family.plugin.discovery
+      : null;
+    for (const pattern of discovery?.logPatterns ?? []) {
+      topics.add(pattern.topic.toLowerCase());
+    }
+  }
+  return [...topics].sort();
+}
+
+export function familyForObservation(
+  observation: {
+    readonly address: string;
+    readonly topics?: readonly string[];
+    readonly data: string;
+  },
+): string | null {
+  const matches = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.matches(
+    Object.freeze({
+      kind: "log",
+      source: Object.freeze({ number: 0, hash: "", generation: 0 }),
+      address: observation.address.toLowerCase(),
+      topics: Object.freeze([...(observation.topics ?? [])]),
+      data: observation.data,
+    }) as never,
+  );
+  return matches[0]?.familyId ?? null;
+}
+
+/** Full log identity dedupe (block + txHash + logIndex + address + topics). */
+export function fullLogIdentityKey(log: RebuildScanObservation): string {
+  return "log:" + (log.blockNumber ?? "?") + ":" +
+    (log.transactionHash ?? "") + ":" +
+    (log.logIndex ?? "?") + ":" +
+    log.address.toLowerCase() + ":" +
+    (log.topics ?? []).map((topic) => topic.toLowerCase()).join(",");
+}
+
+export function candidateFromLog(
+  log: RebuildScanObservation,
+): Readonly<Record<string, unknown>> {
+  const familyId = familyForObservation(log);
+  const poolId = log.topics[1];
+  return Object.freeze({
+    address: log.address.toLowerCase(),
+    ...(poolId !== undefined && poolId.length === 66
+      ? { poolId: poolId.toLowerCase() }
+      : {}),
+    ...(familyId === null ? {} : { familyId }),
+    adapter: adapterLabelForFamily(familyId),
+    ...(log.transactionHash === undefined
+      ? {}
+      : { transactionHash: log.transactionHash.toLowerCase() }),
+    ...(log.blockNumber === undefined ? {} : { blockNumber: log.blockNumber }),
+    ...(log.logIndex === undefined ? {} : { logIndex: log.logIndex }),
+  });
+}
+
+function adapterLabelForFamily(familyId: string | null): string | undefined {
+  if (familyId === null) return undefined;
+  try {
+    const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+      .forStrictFamily(familyId as never);
+    return family.plugin.manifest.poolAdapterIds?.[0] ??
+      family.plugin.manifest.ownedActionAdapterIds[0];
+  } catch {
+    return undefined;
+  }
+}
+
+export function rebuildFamilyCandidateKey(
+  candidate: Readonly<Record<string, unknown>>,
+): string {
+  const familyId = typeof candidate.familyId === "string"
+    ? candidate.familyId
+    : "unknown-family";
+  return hashFamilyCandidateKey(familyId, candidateInstanceIdentity(candidate));
+}
+
+export function candidateFingerprint(
+  candidate: Readonly<Record<string, unknown>>,
+): string {
+  return digest("candidate-fp-v1:" + canonicalJson({
+    address: candidate.address,
+    ...(candidate.poolId === undefined ? {} : { poolId: candidate.poolId }),
+    ...(candidate.adapter === undefined ? {} : { adapter: candidate.adapter }),
+    ...(candidate.familyId === undefined
+      ? {}
+      : { familyId: candidate.familyId }),
+  }));
+}
+
+export function canReuseMemo(input: {
+  readonly memo: DurableVerifiedMemo;
+  readonly candidate: Readonly<Record<string, unknown>>;
+  readonly cutoff: CanonicalSource;
+  readonly familyId: string;
+}): boolean {
+  if (
+    input.memo.familyId !== input.familyId ||
+    input.memo.candidateFingerprint !== candidateFingerprint(input.candidate) ||
+    input.memo.familyDefinitionHash !== familyDefinitionHash(input.familyId)
+  ) {
+    return false;
+  }
+  if (input.memo.validity.policy !== "immutable-code") {
+    return false;
+  }
+  if (
+    input.memo.validity.proofSource.number !== input.cutoff.number ||
+    input.memo.validity.proofSource.hash.toLowerCase() !==
+      input.cutoff.hash.toLowerCase()
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function createRebuildWiring(input?: {
+  readonly rpcUrl?: string;
+}): UniverseRebuildDependencies {
+  const rpcUrl = input?.rpcUrl ??
+    process.env.SEARCHER_LIVE_RPC_URL ??
+    process.env.MAINNET_RPC_URL;
+  if (rpcUrl === undefined || rpcUrl.trim().length === 0) {
+    throw new Error(
+      "universe rebuild production wiring requires SEARCHER_LIVE_RPC_URL " +
+        "or MAINNET_RPC_URL",
+    );
+  }
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const topics = strictCatalogLogTopics();
+  const scanBatch = 2_000;
+  const probe = createProbeWiring({ rpcUrl });
+
+  const wiring: UniverseRebuildDependencies = {
+    freezeCanonicalHead: async () => {
+      const block = await provider.getBlock("latest");
+      if (block === null || block.hash === null) {
+        throw new Error("canonical head unavailable");
+      }
+      return Object.freeze({
+        number: block.number,
+        hash: block.hash.toLowerCase(),
+        generation: block.number,
+      });
+    },
+    scanSwapWindow: async (scanInput) => {
+      const logs: RebuildScanObservation[] = [];
+      for (
+        let start = scanInput.fromBlock;
+        start <= scanInput.cutoff.number;
+        start += scanBatch
+      ) {
+        const end = Math.min(scanInput.cutoff.number, start + scanBatch - 1);
+        const topicFilter: Array<null | string | Array<string>> =
+          topics.length === 1 ? [topics[0]] : [[...topics]];
+        const batch = await provider.getLogs({
+          topics: topicFilter,
+          fromBlock: start,
+          toBlock: end,
+        });
+        for (const log of batch) {
+          logs.push(Object.freeze({
+            address: log.address.toLowerCase(),
+            topics: Object.freeze([...log.topics]),
+            data: log.data,
+            ...(log.transactionHash === undefined
+              ? {}
+              : { transactionHash: log.transactionHash.toLowerCase() }),
+            blockNumber: log.blockNumber,
+            ...(log.index === undefined ? {} : { logIndex: log.index }),
+          }));
+        }
+      }
+      return Object.freeze(logs);
+    },
+    familyCandidateKey: (candidate) =>
+      rebuildFamilyCandidateKey(
+        candidate as Readonly<Record<string, unknown>>,
+      ),
+    dedupeFamilyCandidates: (observations) => {
+      const seen = new Set<string>();
+      const candidates: unknown[] = [];
+      for (const observation of observations) {
+        const log = observation as RebuildScanObservation;
+        const key = fullLogIdentityKey(log);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        candidates.push(candidateFromLog(log));
+      }
+      return Object.freeze(candidates);
+    },
+    findReusableMemo: async (memoInput) => {
+      const candidate = memoInput.candidate as
+        Readonly<Record<string, unknown>>;
+      const familyId = typeof candidate.familyId === "string"
+        ? candidate.familyId
+        : "unknown-family";
+      const memo = memoInput.checkpoint.verifiedMemos[
+        rebuildFamilyCandidateKey(candidate)
+      ];
+      if (memo === undefined) return null;
+      return canReuseMemo({
+        memo,
+        candidate,
+        cutoff: memoInput.cutoff,
+        familyId,
+      }) ? memo : null;
+    },
+    attestFamilyInstanceOnce: probe.attestFamilyInstanceOnce,
+    sealDurableVerifiedMemo: probe.sealDurableVerifiedMemo,
+    rehydrateVerifiedInstance: (rehydrateInput) =>
+      Object.freeze({
+        familyId: rehydrateInput.memo.familyId,
+        familyInstanceKey: rehydrateInput.memo.familyInstanceKey,
+        instanceKey: rehydrateInput.memo.instanceKey,
+        candidateKey: rehydrateInput.memo.candidateKey,
+        descriptor: rehydrateInput.memo.compiledDescriptor,
+        projection: rehydrateInput.memo.staticProjection,
+        evidenceFingerprint: rehydrateInput.memo.evidenceFingerprint,
+        proofSource: Object.freeze({
+          number: rehydrateInput.memo.validity.proofSource.number,
+          hash: rehydrateInput.memo.validity.proofSource.hash,
+        }),
+      }),
+    aggregateOnceByFamily: (instances) => {
+      const byFamily = new Map<string, unknown>();
+      for (const instance of instances) {
+        const familyId = String(
+          (instance as { familyId?: unknown }).familyId ?? "",
+        );
+        if (familyId.length === 0) continue;
+        if (!byFamily.has(familyId)) byFamily.set(familyId, instance);
+      }
+      return Object.freeze([...byFamily.entries()].map(([familyId, instance]) =>
+        Object.freeze({ familyId, instance })
+      ));
+    },
+    buildGraphSnapshot: (publications) => {
+      const edges: unknown[] = [];
+      for (const publication of publications) {
+        const instance = publication.instance as {
+          readonly projection?: readonly {
+            readonly routes?: readonly {
+              readonly routeKey?: string;
+              readonly source?: string;
+              readonly target?: string;
+              readonly adapterId?: string;
+            }[];
+          }[];
+        };
+        for (const state of instance.projection ?? []) {
+          for (const route of state.routes ?? []) {
+            if (route.routeKey === undefined) continue;
+            edges.push(Object.freeze({
+              routeKey: route.routeKey,
+              ...(route.source === undefined ? {} : { source: route.source }),
+              ...(route.target === undefined ? {} : { target: route.target }),
+              ...(route.adapterId === undefined
+                ? {}
+                : { adapterId: route.adapterId }),
+              familyId: publication.familyId,
+            }));
+          }
+        }
+      }
+      return Object.freeze({
+        format: "strict-rebuild-graph-v1",
+        edges: Object.freeze(edges),
+      });
+    },
+    buildCoverage: (coverageInput) =>
+      Object.freeze([...new Set<string>(
+        coverageInput.observations.map((observation) => {
+          const candidate = candidateFromLog(
+            observation as RebuildScanObservation,
+          );
+          return typeof candidate.familyId === "string"
+            ? candidate.familyId
+            : "unknown-family";
+        }),
+      )].sort().map((familyId) => Object.freeze({
+        familyId,
+        sourceId: "swap-window",
+        completeThroughBlock: coverageInput.cutoff.number,
+        completeThroughHash: coverageInput.cutoff.hash,
+      }))),
+    assertCanonicalHead: probe.assertCanonicalHead,
+  };
+  return Object.freeze(wiring);
 }

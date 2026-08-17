@@ -197,6 +197,7 @@
     "searcher:universe-rebuild-status": "node --import tsx src/searcher/universe-rebuild-status-cli.ts",
     "searcher:universe-rebuild-probe": "node --import tsx src/searcher/universe-rebuild-probe-cli.ts",
     "searcher:universe-rebuild-probe-cli": "node --import tsx src/searcher/test/universe-rebuild-probe-cli.ts",
+    "searcher:universe-rebuild-production": "node --import tsx src/searcher/test/universe-rebuild-production.ts",
     "searcher:default-authority-cutover-gate": "node --import tsx src/searcher/test/default-authority-cutover-gate.ts",
     "searcher:production-family-startup-manifest": "node --import tsx src/searcher/test/production-family-startup-manifest.ts",
     "searcher:systemic-live-gate": "node --import tsx src/searcher/test/systemic-live-gate.ts",
