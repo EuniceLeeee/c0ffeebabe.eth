@@ -509,6 +509,19 @@ function createStrictViewsPricingCapability(
     ): ReadonlyMap<string, string> {
       const index = edgeIndexFor();
       const unavailable = new Map<string, string>();
+      if (index === null) {
+        console.log(
+          "[strict-views] unavailable: views index is null for " + familyId +
+            " edges=" + edges.length,
+        );
+      } else if (edges.length > 0 && index.byEdge.size === 0) {
+        console.log(
+          "[strict-views] unavailable: index.byEdge is EMPTY for " + familyId +
+            " edges=" + edges.length + " midByRoute=" + index.midByRoute.size +
+            " viewsRev=" + index.revision +
+            " edgeSample=" + (edges[0]?.canonicalEdgeId ?? "none"),
+        );
+      }
       for (const edge of edges) {
         const key = edge.canonicalEdgeId ?? stateKeyFor(edge);
         const binding = edge.canonicalEdgeId === undefined
