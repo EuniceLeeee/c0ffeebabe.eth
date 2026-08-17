@@ -102,6 +102,7 @@ for (const forbidden of [
   "buildTokenGraphWithResults",
   "POOL_REGISTRY",
   "active-pool-discovery",
+  "venues/production-registry",
   "strict edges merged into runtime graph",
   "strict startup edges merged into runtime graph",
   "runStrictLivePublicationChain",

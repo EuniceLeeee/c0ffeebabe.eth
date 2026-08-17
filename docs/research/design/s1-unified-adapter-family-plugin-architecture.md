@@ -3575,6 +3575,27 @@ standalone legacy tooling 仍待迁移或物理删除；后续继续先删 produ
 strict 缺口 fail closed，只把历史 commit 当参考。本批未部署，也没有新的 PID/log anchor 或
 连续 100/100 live 证据。
 
+**2026-08-18 file-backed universe label authority 第十五批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- production `main.ts` 已删除未使用的
+  `PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS` import；strict startup 不再仅为一个空
+  legacy resolver registry 实例化 `production-registry.ts`；
+- `pool-adapter-policy.ts` 不再通过 `PRODUCTION_ADAPTER_FAMILIES` 判断 universe row 的
+  venue/source 标签。pool adapter 与同名 venue provenance 直接来自 generated strict catalog
+  的 `manifest.poolAdapterIds`；通用已知 venue/identity-source 只由无 Family authority 的
+  `registry-ids.ts` 语法集合校验。自定义 historical identitySource 在 startup 仍只能走
+  `allowUnregisteredIdentitySource` 作为 opaque nomination，随后必须 strict attest，不能凭标签
+  获得 admission；
+- strict source 合同同时禁止 main 与 pool adapter policy 恢复 `production-registry` import。
+  同轮通过 strict-ready、strict declarations、24-label pool policy、pool universe parse、完整
+  universe 15/15 与 listener `build`。
+
+本 checkpoint 关闭 file-backed nomination label validation 对 legacy-shaped Family registry 的
+依赖；它不授权 universe row 进入 Graph，identity/materialization/projection 仍只由 fixed-cutoff
+strict lifecycle 完成。deploy trust/build-universe 与 standalone discovery/router tooling 仍有旧
+registry 依赖，继续后续物理删除。本批未部署、未宣称 F5/F9 或 production cutover。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

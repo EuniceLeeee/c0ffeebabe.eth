@@ -310,6 +310,7 @@ assert.throws(
 
 for (const relative of [
   "../main.ts",
+  "../venues/pool-adapter-policy.ts",
   "../solver/pool-state-updater.ts",
   "../templates/path-template.ts",
   "../venues/route-family-manifest.ts",
@@ -323,6 +324,16 @@ for (const relative of [
     false,
     `${relative} must not restore central legacy Family authority`,
   );
+  if (
+    relative === "../main.ts" ||
+    relative === "../venues/pool-adapter-policy.ts"
+  ) {
+    assert.equal(
+      source.includes("production-registry"),
+      false,
+      `${relative} must derive file-backed labels from the strict catalog`,
+    );
+  }
 }
 
 console.log("strict production family declarations PASS");

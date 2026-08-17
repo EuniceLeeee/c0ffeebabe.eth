@@ -74,9 +74,6 @@ import type { PreparedFamilyInstance } from
 import { resolveProducerBaseline } from
   "./startup-universe-rebuild.js";
 import {
-  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-} from "./venues/production-registry.js";
-import {
   DEFAULT_PENDING_EVIDENCE_MAX_READS,
   DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
   type PendingTransactionEvidenceProjection,

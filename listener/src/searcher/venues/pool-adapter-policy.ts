@@ -2,8 +2,12 @@ import type { PoolEntry } from "../planner/token-graph.js";
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "./production-family-composition.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "./production-registry.js";
-import type { VenueId, VenueIdentitySource } from "./registry-ids.js";
+import {
+  isKnownVenueId,
+  isKnownVenueIdentitySource,
+  type VenueId,
+  type VenueIdentitySource,
+} from "./registry-ids.js";
 
 /**
  * Runtime pool adapter ids accepted by file-backed production inputs.
@@ -26,7 +30,7 @@ export function isProductionPoolAdapter(value: unknown): value is PoolEntry["ada
 }
 
 export function isProductionVenueId(value: unknown): value is VenueId {
-  return PRODUCTION_ADAPTER_FAMILIES.isRegisteredVenueId(value) ||
+  return isKnownVenueId(value) ||
     // Strict-catalog universe rows carry the plugin-declared pool-adapter
     // label as their venueId (provenance projection, same catalog source as
     // PRODUCTION_POOL_ADAPTERS); accept any catalog-declared label.
@@ -37,5 +41,5 @@ export function isProductionVenueId(value: unknown): value is VenueId {
 export function isProductionVenueIdentitySource(
   value: unknown,
 ): value is VenueIdentitySource {
-  return PRODUCTION_ADAPTER_FAMILIES.isRegisteredIdentitySource(value);
+  return isKnownVenueIdentitySource(value);
 }
