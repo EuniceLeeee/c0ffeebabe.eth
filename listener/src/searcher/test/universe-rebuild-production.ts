@@ -306,6 +306,30 @@ async function main(): Promise<void> {
     richCandidate,
     "resume/probe must restore the complete plugin-owned candidate",
   );
+  const candidateWithOptionalUndefined = Object.freeze({
+    ...richCandidate,
+    optionalFactory: undefined,
+    nested: Object.freeze({
+      retained: "identity",
+      optionalHint: undefined,
+    }),
+  });
+  const encodedOptional = wiring.encodeCandidateSnapshot!(
+    candidateWithOptionalUndefined,
+  );
+  assert.deepEqual(
+    wiring.decodeCandidateSnapshot!(encodedOptional),
+    Object.freeze({
+      ...richCandidate,
+      nested: Object.freeze({ retained: "identity" }),
+    }),
+    "durable object snapshots omit optional undefined fields recursively",
+  );
+  assert.throws(
+    () => wiring.encodeCandidateSnapshot!(["stable", undefined]),
+    /unsupported durable value type: undefined/,
+    "undefined array positions remain ambiguous and fail closed",
+  );
   assert.deepEqual(
     attestationPoolFromCandidate(richCandidate).poolKey,
     richCandidate.poolKey,

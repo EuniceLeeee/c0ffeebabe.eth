@@ -326,10 +326,15 @@ function encodeDurableValue(
     }
     const encoded: Record<string, DurableEncodedValue> = {};
     for (const key of Object.keys(value as object).sort()) {
-      encoded[key] = encodeDurableValue(
-        (value as Record<string, unknown>)[key],
-        seen,
-      );
+      const item = (value as Record<string, unknown>)[key];
+      // Match JSON object semantics for optional plugin fields. Production
+      // PoolEntry candidates commonly materialize optional properties as own
+      // keys whose value is undefined; omitting those keys is deterministic
+      // and round-trips to the same effective candidate. Keep rejecting
+      // undefined in arrays and Map entries, where omission would change
+      // position/key identity and make the durable partition ambiguous.
+      if (item === undefined) continue;
+      encoded[key] = encodeDurableValue(item, seen);
     }
     return Object.freeze(encoded);
   } finally {

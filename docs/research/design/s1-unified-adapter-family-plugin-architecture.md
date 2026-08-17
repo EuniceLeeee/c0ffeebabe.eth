@@ -3817,6 +3817,27 @@ systemd dry-run：必须在下一精确 pushed SHA 上取得 ready universe/全�
 strict final-sim、checkpoint restart 差集复用以及同 PID/process-start/log inode 的连续 100/100 后，才可
 继续声称 F5/F9/S1 最终验收。
 
+**2026-08-18 production candidate `undefined` codec 第二十三批 live-derived
+正确性 checkpoint（实现提交承载本 checkpoint；不是 ready/restart/100/100 或最终 cutover）：**
+
+- `89785be74c37bf02f7dba0663ce571dafadc4a3d` 已由 `deploy-node.sh` 以
+  systemd、`SEARCHER_DRY_RUN=1` 和精确 `SEARCHER_RUNTIME_COMMIT` 启动；process anchor 为
+  PID `248003`、start `2026-08-17 23:45:30 UTC`、`/var/log/mev-live.log`
+  inode `25609`。producer 创建前，production pool-universe 的真实候选形状触发
+  `unsupported durable value type: undefined`；checkpoint 尚未创建，进程按 startup fail-closed
+  退出。因此该节点运行是有效的缺口证据，不是 F5 pass；
+- 根因是完整 candidate codec 把普通对象里显式存在、值为 `undefined` 的插件可选键当成非法值。
+  `PoolEntry`/Family candidate 的可选字段在 production loader 中可以保留为 own key；JSON 对象的
+  确定性语义应当省略这些键。codec 现在递归省略**对象属性**中的 `undefined`，但数组位置和 Map
+  key/value 中的 `undefined` 仍 fail closed，因为省略它们会改变位置或键身份并制造恢复歧义；
+- production wiring 合同新增带顶层及嵌套 optional-undefined 的真实形状 round-trip，断言有效
+  identity/PoolKey/bigint 字段完整保留、可选键被规范化省略；同时断言 array `undefined` 继续拒绝。
+  `searcher:universe-rebuild-production` 与 listener 完整 `npm run build` 同轮通过。
+
+本修复只关闭由实际节点暴露的 durable candidate 编码缺口。必须重新部署本批的新精确 pushed
+SHA，取得非空 durable partition、原子 ready Graph/catalog/coverage、restart memo 差集复用、全适用
+Family strict edge/exact/final-sim provenance 与连续 100/100，才可推进 F5/F9 最终验收。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
