@@ -161,7 +161,13 @@ function providerAdapter(
     call: async (transaction, blockTag) =>
       provider.send("eth_call", [
         { to: transaction.to, data: transaction.data },
-        blockTag ?? "latest",
+        // reth requires the tag as hex; the central runtime passes a
+        // decimal block number.
+        blockTag === undefined
+          ? "latest"
+          : typeof blockTag === "number"
+            ? "0x" + blockTag.toString(16)
+            : blockTag,
       ]) as Promise<string>,
     getCode: async (address, blockTag) =>
       provider.getCode(address, blockTag ?? "latest"),
