@@ -324,6 +324,17 @@ closure 清零 + verdict=pass。每步保持 build/shadow/sweep 绿。
   committed root 证据：`instances=26 pricing=26 mids=26 edges=26`（mids 就绪）。
   剩余最后一步：`priced=0`（expected=26）——状态机内 strict capability
   deriveMids 的解析/键空间验证（下轮本地复现 coordinator pricing 路径）。
+- **2026-08-17 priced>0 达成（commit 41414b51）**：根因 = 协调器硬拒绝空
+  current-N reads（`current-N state key emitted no reads`，causes 26 条
+  descriptor 错误），而 strict views-backed capability 的 mids 来自 committed
+  views 不执行逐块读取。修复：capability 声明 `readlessPricing`（数据驱动，
+  无族分支），协调器对 readless 族豁免空 reads 错误并直接从 committed
+  snapshot derive mids。节点证据：`blockscan-nminus1-state expected=2 priced=2`
+  （priced>0 达成）、composition `instances=2 pricing=2 mids=2 edges=2` 持续
+  提交、blockscan pass `outcome: ran`。本地完整管线复现（真实 composition
+  + 生产 registry + 状态机 compile→deriveMids）derived=2 PASS。剩余：DEX 族
+  （univ2/univ3/…）实例面——strict 图需要 DEX 边（observed lane 现只扫桥接
+  族 topics）；F5 live 验收（ret13 真实 universe 闭环）。
 - **2026-08-14 完成（commit 16cf4436）**：solver quoteSource 移除
   `strictQuoteSource ?? liveBackend` 的 legacy fallback——strict quote
   source 是唯一 solver 报价路径（composition 默认后 strict 总存在；
