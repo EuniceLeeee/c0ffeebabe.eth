@@ -2,7 +2,9 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { QuoteRequest } from "../live-state-backend.js";
 import { v4PoolId } from "../planner/token-graph.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import {
+  PRODUCTION_STRICT_FAMILY_DECLARATIONS,
+} from "../strict-production-family-declarations.js";
 import {
   PoolStateCache,
   type V2Seed,
@@ -429,10 +431,9 @@ function poolUpdateKey(hop: QuoteRequest): string {
 }
 
 function productionLivePoolStateKind(adapterId: string): LivePoolStateKind | null {
-  const family = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(adapterId);
-  return family?.kind === "swap"
-    ? family.livePoolState?.kind ?? null
-    : null;
+  return PRODUCTION_STRICT_FAMILY_DECLARATIONS.livePoolStateKindForEdge(
+    adapterId,
+  );
 }
 
 function v3WordRange(tick: number, tickSpacing: number): number[] {

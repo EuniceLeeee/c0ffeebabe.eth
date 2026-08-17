@@ -3342,6 +3342,51 @@ coordinator authority，但不等于全部中央 legacy 已删除。下一批继
 等 production 调用点，并逐项改为 strict catalog/current-source session；缺 strict
 replacement 时维持 fail-closed，绝不临时恢复旧 registry fallback。本批未部署。
 
+**2026-08-18 production Family declaration 第八批物理删除 checkpoint
+（实现提交承载本 checkpoint；不是部署、F5 或 production cutover）：**
+
+- production 新增由 build-time strict catalog 派生的只读
+  `StrictProductionFamilyDeclarations`；`main.ts` 与 pool-state updater 已物理删除
+  `PRODUCTION_ADAPTER_FAMILIES` 直接依赖。edge/pool ownership、protocol-edge flag、
+  current-head evidence Family/scope、landed swap-log classification、mempool canonical
+  intake、blind route descriptor 与 mutable pool-state kind 均由已加载 Family manifest /
+  capability 声明投影，不再由中央 legacy registry、Family 名称或地址分派；
+- strict 插件合同新增 `canonicalIntakeTargets`、
+  `runtimeEvidenceRouteActivation`、`pendingRuntimeEvidenceFromObservation` 与
+  `livePoolStateKind`。UniV2/3/4、DODO、Curve-underlying、Angstrom 与 Metronome 各自声明
+  public-mempool shortlist；这些地址只缩小观察入口，绝不授予 instance admission、
+  source coverage 或完整枚举 authority。UniV2/3/4 的 mutable state kind 与 Angstrom
+  current-head family-wide activation 同样由 Family 自声明；
+- Angstrom pending path 没有被机械降级成同步 selector 识别：Family-owned derivation 在
+  fixed current head 内继续执行 Hook -> Controller、Controller -> canonical Hook、
+  validator membership 与 EOA signature 校验。中央 projection 只提供 deadline/read
+  budget/隔离 transport，并复核 family、tx、source 与 payload/evidence hash；读取失败或
+  authority 不一致 fail closed；
+- route-hop execution evidence 的 owner 取自同一个
+  `StrictProductionRuntimeSession`，mempool filter 只接受 strict catalog-issued canonical
+  targets；inactive legacy-only Balancer targets 不再为通过旧测试被重新加入。blind
+  artifact 仅消费 strict route declarations，不重新安装 legacy Family facade；
+- 新合同 `searcher:strict-production-family-declarations` 覆盖 strict ownership、protocol
+  flag、pool-state kind、canonical intake、landed log 与 Angstrom 三次 authority read；
+  同轮通过 `pending-transaction-evidence`、`pending-evidence-session`、
+  `blockscan-pending-evidence`、`angstrom-v4-family-plugin`、
+  `mempool-router-filter`、pool-state updater、`strict-production-runtime-session`、
+  `blockscan-runtime-startup-warm` 42/42 以及 listener 完整 `build`。
+
+两个旧合同没有被伪造成 strict 验收：`runtime-pool-refresh` 仍假定 raw universe 可经
+已删除的 legacy `buildTokenGraphWithResults()` RPC 构边；当前无 committed strict
+publication 必须 terminal-not-applicable/fail closed。冻结的 blind T1 inventory 又包含
+已退出 strict catalog 的旧 Family，并缺少当前 strict Family。两者都只能改写/降级为
+历史比较工具，不能要求 runtime 恢复旧 Graph 或伪造 Family descriptor。它们未计入本批
+通过项，也不替代实际 live + 六步 provenance 验收。
+
+本 checkpoint 只关闭 `main.ts`、pool-state updater 与本批 blind/intake 调用面的中央
+legacy Family authority。token-graph、detector、live-discovery、active-pool 工具等其他
+production source 仍有 legacy registry import；因此不得声称全局 legacy=0。下一批继续
+先物理删除这些 authority/fallback，再用 strict current-source/catalog-issued replacement
+闭合编译缺口；任一时刻缺 strict authority 均 fail closed，只可参考旧 commit，禁止把
+legacy runtime 接回。本批未部署。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

@@ -7,7 +7,6 @@ import "../shared/adapters/index.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
-import { oracleVictimWatchTargets } from "./detector/victim-effect.js";
 import type { BlockScanCoreConfig } from "./detector/blockscan-scanner-core.js";
 import {
   awaitBlockScanDeadline,
@@ -71,13 +70,14 @@ import {
   StrictProductionRuntimeRoot,
   type StrictProductionRuntimeSession,
 } from "./strict-production-runtime-session.js";
+import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
+  "./strict-production-family-declarations.js";
 import type { PreparedFamilyInstance } from
   "./venues/adapter-family-runtime.js";
 import { resolveProducerBaseline } from
   "./startup-universe-rebuild.js";
 import {
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  PRODUCTION_ADAPTER_FAMILIES,
 } from "./venues/production-registry.js";
 import {
   DEFAULT_PENDING_EVIDENCE_MAX_READS,
@@ -152,10 +152,6 @@ import {
   type BlockScanRejectBlacklistEntry,
   type BlockScanRejectBlacklistState,
 } from "./blockscan-runtime-loop.js";
-import {
-  pendingEvidenceEdgeScopeKey,
-  pendingEvidenceScopeKeys,
-} from "./blockscan-pending-evidence.js";
 import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import {
@@ -1902,36 +1898,28 @@ async function main(): Promise<void> {
     midConcurrency: blockScanMidConcurrency,
     executorAddress: config.botvmAddress,
     currentHeadEvidenceFamilyForEdge(edgeAdapterId) {
-      const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
+      return PRODUCTION_STRICT_FAMILY_DECLARATIONS
+        .currentHeadEvidenceFamilyForEdge(
         edgeAdapterId,
       );
-      return owner?.pendingTransactionEvidence?.routeActivation ===
-          "current-head-block-scan"
-        ? owner.id
-        : null;
     },
     currentHeadEvidenceScopeKeyForEdge(edge) {
-      const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
-        edge.adapterId,
-      );
-      const capability = owner?.pendingTransactionEvidence;
-      return capability
-        ? pendingEvidenceEdgeScopeKey(capability, edge)
-        : null;
+      return PRODUCTION_STRICT_FAMILY_DECLARATIONS
+        .currentHeadEvidenceScopeKeyForEdge(
+          edge,
+        );
     },
     currentHeadEvidenceScopeKeys(evidence) {
-      const owner = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(
-        evidence.familyId,
-      );
-      const capability = owner.pendingTransactionEvidence;
-      return capability
-        ? pendingEvidenceScopeKeys(capability, evidence)
-        : Object.freeze([]);
+      return PRODUCTION_STRICT_FAMILY_DECLARATIONS
+        .currentHeadEvidenceScopeKeys(
+          evidence,
+        );
     },
     isCurrentHeadEvidenceFamily(familyId) {
-      const owner = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyId);
-      return owner.pendingTransactionEvidence?.routeActivation ===
-        "current-head-block-scan";
+      return PRODUCTION_STRICT_FAMILY_DECLARATIONS
+        .isCurrentHeadEvidenceFamily(
+          familyId,
+        );
     },
     isShuttingDown: () => shuttingDown,
     blockScanGraph: () => blockScanGraph,
@@ -2058,7 +2046,7 @@ async function main(): Promise<void> {
         universeGeneratedAt: strategyViewOptions.poolUniverseGeneratedAt,
         selectedUniverse: blockscanUniverse,
         strategyViewVersion: strategyViews.versions.blockscan_view_hash,
-        families: PRODUCTION_ADAPTER_FAMILIES.list(),
+        families: PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies,
       })
     : null;
 
@@ -2799,7 +2787,7 @@ async function handleHint(
       eventLogsCompleteness = "complete-receipt";
       // Debug: classify receipt log events
       const swapCount = eventLogs.filter((log) =>
-        PRODUCTION_ADAPTER_FAMILIES.landedEvents().isSwapLog(log)
+        PRODUCTION_STRICT_FAMILY_DECLARATIONS.isSwapLog(log)
       ).length;
       const xferCount = eventLogs.filter((l) => l.topics[0]?.toLowerCase() === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef").length;
       console.log(
@@ -3231,6 +3219,7 @@ async function processOpportunities(
       routeHops: dedupeRouteHops(
         plans,
         ctx.config.revmPrewarmRouteHops,
+        strictSession,
         executionEvidence,
       ),
       postImpact: exactPostImpact ?? undefined,
@@ -3256,6 +3245,7 @@ async function processOpportunities(
         const hop of dedupeRouteHops(
           plans,
           Number.MAX_SAFE_INTEGER,
+          strictSession,
         )
       ) {
         ctx.recentWarmPools.record(hop, oppImpact.amountIn, prepareInput.baseBlock, ctx.pinnedWarmTargets);
@@ -4914,6 +4904,7 @@ function dedupeRouteHops(
     tokenPath: { edges: TokenEdge[] };
   }>,
   maxHops: number,
+  strictSession: StrictProductionRuntimeSession,
   executionEvidence: readonly PendingExecutionEvidence[] = [],
 ): QuoteHop[] {
   if (maxHops <= 0) return [];
@@ -4924,9 +4915,7 @@ function dedupeRouteHops(
       const key = quoteHopIdentityKey(edge);
       if (seen.has(key)) continue;
       seen.add(key);
-      const owner = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(
-        edge.adapterId,
-      );
+      const familyId = strictSession.familyIdForEdge(edge);
       hops.push({
         canonicalEdgeId: edge.canonicalEdgeId,
         instanceKey: edge.instanceKey,
@@ -4939,7 +4928,7 @@ function dedupeRouteHops(
         poolToken1: edge.poolToken1,
         v4PoolKey: edge.v4PoolKey,
         executionEvidence: executionEvidence.find(
-          (evidence) => evidence.familyId === owner?.id,
+          (evidence) => evidence.familyId === familyId,
         ),
       });
       if (hops.length >= maxHops) return hops;
@@ -5207,7 +5196,7 @@ async function* mempoolHints(
   const interesting = (to: string | null | undefined): boolean =>
     isMempoolIntakeTarget(to, fullAddressSet, liveGraphTargets);
   const pendingEvidence =
-    PRODUCTION_ADAPTER_FAMILIES.pendingTransactionEvidence();
+    PRODUCTION_STRICT_FAMILY_DECLARATIONS.pendingEvidence;
   const reportedEvidenceFailures = new Set<string>();
   const pendingEvidenceTimeoutMs = Number(
     process.env.SEARCHER_PENDING_EVIDENCE_TIMEOUT_MS ??
@@ -5592,11 +5581,8 @@ async function* localFirehoseMempoolHints(
         pendingEvidenceTimeoutMs,
       );
       const activating = validated.filter((item) => {
-        const owner = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(
-          item.familyId,
-        );
-        return owner.pendingTransactionEvidence?.routeActivation ===
-          "current-head-block-scan";
+        return PRODUCTION_STRICT_FAMILY_DECLARATIONS
+          .isCurrentHeadEvidenceFamily(item.familyId);
       });
       if (activating.length === 0 || !onPendingExecutionEvidence) {
         return validated;
@@ -5633,9 +5619,8 @@ async function* localFirehoseMempoolHints(
       },
     ): void => {
       const familyIds = session.candidateFamilyIds.filter((familyId) => {
-        const owner = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyId);
-        return owner.pendingTransactionEvidence?.routeActivation ===
-          "current-head-block-scan";
+        return PRODUCTION_STRICT_FAMILY_DECLARATIONS
+          .isCurrentHeadEvidenceFamily(familyId);
       });
       if (familyIds.length === 0) return;
       void session.resolve(familyIds, "canonical")
@@ -5941,9 +5926,14 @@ let wsRpcId = 1;
 
 export function filterLiveProtocolRegistry(pools: PoolEntry[], enabled: boolean): PoolEntry[] {
   if (enabled) return pools;
-  return pools.filter((pool) =>
-    PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pool.adapter)?.requiresProtocolEdgesFlag !== true
-  );
+  return pools.filter((pool) => {
+    try {
+      return !PRODUCTION_STRICT_FAMILY_DECLARATIONS
+        .requiresProtocolEdgesForPool(pool.adapter);
+    } catch {
+      return false;
+    }
+  });
 }
 
 export function buildMempoolToAddressFilter(pools: PoolEntry[], routersPath?: string): string[] {
@@ -5971,11 +5961,9 @@ export function buildMempoolIntakeWithRouters(
   const maxAddresses = Number(process.env.SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES ?? "300");
   const intake = buildMempoolIntakePlan({
     pools,
-    swaps: PRODUCTION_ADAPTER_FAMILIES.swaps(),
+    canonicalTargets:
+      PRODUCTION_STRICT_FAMILY_DECLARATIONS.canonicalIntakeTargets,
     dynamicRouterTargets: forceRouters,
-    additionalCanonicalTargets: oracleVictimWatchTargets(
-      PRODUCTION_ADAPTER_FAMILIES.oracleVictims(),
-    ),
     options: { hotPoolTopN, filteredMaxAddresses: maxAddresses },
   });
   if (intake.filteredTargets.length === 0) {

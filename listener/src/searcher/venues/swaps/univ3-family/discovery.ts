@@ -13,6 +13,7 @@ import {
   UNIV3_MINT_TOPIC,
   UNIV3_POOL_CREATED_TOPIC,
   UNIV3_SWAP_SELECTOR,
+  UNIV3_SWAP_ROUTER,
   UNIV3_SWAP_TOPIC,
 } from "../univ3-abi.js";
 import {
@@ -33,6 +34,10 @@ export const UNIV3_POOL_SURFACE_PATTERN_ID = "univ3-pool-surface";
 export const univ3Discovery = {
   evidenceChannel: "nominate" as const,
   sources: ["factory-log", "landed-log", "observed-call"],
+  canonicalIntakeTargets: [
+    UNIV3_SWAP_ROUTER,
+    "0xe592427a0aece92de3edee1f18e0157c05861564",
+  ],
   callPatterns: [{
     id: UNIV3_SWAP_CALL_PATTERN_ID,
     selector: UNIV3_SWAP_SELECTOR,

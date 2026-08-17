@@ -14,4 +14,5 @@ export const univ2FamilyManifest = {
   poolAdapterIds: ["univ2", "univ2-standard"],
   edgeAdapterIds: ["univ2-swap"],
   requiresProtocolEdgesFlag: false,
+  livePoolStateKind: "constant-product-v2",
 } satisfies FamilyManifest<"swap">;

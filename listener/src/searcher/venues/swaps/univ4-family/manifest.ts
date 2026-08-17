@@ -27,4 +27,5 @@ export const univ4FamilyManifest = {
   poolAdapterIds: ["univ4", "univ4-unlock"],
   edgeAdapterIds: ["univ4-unlock"],
   requiresProtocolEdgesFlag: false,
+  livePoolStateKind: "singleton-v4",
 } satisfies FamilyManifest<"swap">;

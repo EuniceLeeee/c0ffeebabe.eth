@@ -22,6 +22,9 @@ export const DODO_V2_POOL_SURFACE_PATTERN_ID = "dodo-v2-pool-surface";
 export const dodoV2Discovery = {
   evidenceChannel: "nominate" as const,
   sources: ["landed-log", "observed-call"],
+  canonicalIntakeTargets: [
+    "0xa356867fDCEa8e71AEaF87805808803806231FdC",
+  ],
   callPatterns: [{
     id: DODO_V2_SELL_BASE_PATTERN_ID,
     selector: DODO_V2_SELL_BASE_SELECTOR,

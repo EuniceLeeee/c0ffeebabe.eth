@@ -39,7 +39,10 @@ async function main(): Promise<void> {
     emptySourceRejected = true;
   }
   assert(emptySourceRejected, "enabled backrun lane rejects an empty victim-source set");
-  assert(hashOnlyImpactReplayAdmitted("univ2-swap"), "V2 hash-only replay remains admitted");
+  assert(
+    !hashOnlyImpactReplayAdmitted("univ2-swap"),
+    "hash-only replay must fail closed without a strict current-source session",
+  );
   assert(
     !hashOnlyImpactReplayAdmitted("balancer-v3-unlock"),
     "Balancer V3 receipt observation must remain public-raw-tx only",
@@ -81,9 +84,9 @@ async function main(): Promise<void> {
       "adapter intake should include UniV2 Router02",
     );
     assert(
-      includesAddress(before, ADDR.BALANCER_V3_ROUTER) &&
-        includesAddress(before, ADDR.BALANCER_V3_VAULT),
-      "Balancer V3 adapter should admit its canonical Router and Vault",
+      !includesAddress(before, ADDR.BALANCER_V3_ROUTER) &&
+        !includesAddress(before, ADDR.BALANCER_V3_VAULT),
+      "inactive legacy-only Balancer targets must not enter strict intake",
     );
 
     const previousTopN = process.env.SEARCHER_MEMPOOL_FILTER_TOP_N;

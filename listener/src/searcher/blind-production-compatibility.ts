@@ -12,16 +12,16 @@ import {
 import {
   normalizeBlindArtifactValue,
 } from "./blind-production-sanitize.js";
-import type { AdapterFamily } from "./venues/route-leg-adapter.js";
+import {
+  PRODUCTION_STRICT_FAMILY_DECLARATIONS,
+  type StrictRouteFamilyDeclaration,
+} from "./strict-production-family-declarations.js";
 import type {
   VerifiedGraphView,
 } from "./venues/blockscan-state-capability.js";
 import {
   blockScanEdgeKey,
 } from "./venues/blockscan-state-capability.js";
-import {
-  PRODUCTION_ADAPTER_FAMILIES,
-} from "./venues/production-registry.js";
 
 type BlindBaselineWarmKind =
   | "mutable-pool"
@@ -52,10 +52,7 @@ interface BlindCompatibilityFamilyDescriptor {
   readonly warmKind: BlindBaselineWarmKind | null;
 }
 
-type BlindRouteFamily = Exclude<
-  AdapterFamily,
-  { readonly kind: "flash-loan" }
->;
+type BlindRouteFamily = StrictRouteFamilyDeclaration;
 
 /**
  * T0/T1 were deliberately frozen before the family-line implementation.
@@ -172,14 +169,15 @@ export function blindCompatibilityPoolIdentity(pool: PoolEntry): unknown {
 }
 
 export function blindCompatibilityFamilyId(edge: TokenEdge): string {
-  const current = PRODUCTION_ADAPTER_FAMILIES.routes()
-    .findForEdge(edge.adapterId)?.id;
-  if (!current) {
+  try {
+    return PRODUCTION_STRICT_FAMILY_DECLARATIONS.familyIdForEdge(
+      edge.adapterId,
+    );
+  } catch {
     throw new Error(
       `blind T1 compatibility has no family owner for ${edge.adapterId}`,
     );
   }
-  return current;
 }
 
 export function blindCompatibilityRouteStep(
@@ -239,12 +237,9 @@ export function blindCompatibilityGraphArtifactPayload(
 }
 
 export function blindCompatibilityActiveFamilyManifestPayload(
-  families: readonly AdapterFamily[],
+  families: readonly StrictRouteFamilyDeclaration[],
 ): Readonly<Record<string, unknown>> {
-  const routes = families.filter(
-    (family): family is BlindRouteFamily => "poolAdapters" in family,
-  );
-  const byId = new Map(routes.map((family) => [family.id, family] as const));
+  const byId = new Map(families.map((family) => [family.id, family] as const));
   const actualIds = [...byId.keys()].sort();
   const expectedIds = [...t1CurrentIds].sort();
   if (
@@ -358,14 +353,15 @@ function t1EdgeMetadata(edge: TokenEdge): Readonly<Record<string, unknown>> {
 }
 
 function currentFamilyIdForEdge(edge: TokenEdge): string {
-  const familyId = PRODUCTION_ADAPTER_FAMILIES.routes()
-    .findForEdge(edge.adapterId)?.id;
-  if (!familyId) {
+  try {
+    return PRODUCTION_STRICT_FAMILY_DECLARATIONS.familyIdForEdge(
+      edge.adapterId,
+    );
+  } catch {
     throw new Error(
       `blind T1 compatibility has no current family for ${edge.adapterId}`,
     );
   }
-  return familyId;
 }
 
 function t1StateKey(

@@ -1,7 +1,8 @@
 import { createInterface } from "node:readline";
 import type { PoolEntry } from "./planner/token-graph.js";
 import type { VerifiedGraphView } from "./venues/blockscan-state-capability.js";
-import type { AdapterFamily } from "./venues/route-leg-adapter.js";
+import type { StrictRouteFamilyDeclaration } from
+  "./strict-production-family-declarations.js";
 import type { AdapterRuntimeSnapshot } from "./adapter-runtime-coordinator.js";
 import type {
   BlockScanStageBoundary,
@@ -160,7 +161,7 @@ export function createBlindProductionStaticArtifacts(input: {
   readonly universeGeneratedAt: string | null;
   readonly selectedUniverse: readonly PoolEntry[];
   readonly strategyViewVersion: string;
-  readonly families: readonly AdapterFamily[];
+  readonly families: readonly StrictRouteFamilyDeclaration[];
 }) {
   const resolvedConfig = createBlindProductionArtifact(
     "resolved-config",

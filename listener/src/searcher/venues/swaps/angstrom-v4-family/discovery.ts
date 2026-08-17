@@ -10,6 +10,7 @@ import {
   ANGSTROM_ADAPTER_SWAP_ABI,
   ANGSTROM_ADAPTER_SWAP_SELECTOR,
   ANGSTROM_MAINNET_ADAPTER,
+  ANGSTROM_MAINNET_HOOK,
 } from "../angstrom-attestation.js";
 import {
   UNIV4_INITIALIZE_TOPIC,
@@ -28,7 +29,10 @@ import {
 } from "./codec.js";
 import type { AngstromV4Candidate } from "./types.js";
 import { nominateAngstromV4 } from "./nomination.js";
-import { angstromRuntimeEvidenceFromObservation } from "./evidence.js";
+import {
+  angstromPendingRuntimeEvidenceFromObservation,
+  angstromRuntimeEvidenceFromObservation,
+} from "./evidence.js";
 
 const ANGSTROM_ADAPTER_INTERFACE = new ethers.Interface(
   ANGSTROM_ADAPTER_SWAP_ABI,
@@ -37,6 +41,11 @@ const ANGSTROM_ADAPTER_INTERFACE = new ethers.Interface(
 export const angstromV4Discovery = {
   evidenceChannel: "nominate" as const,
   sources: ["factory-log", "landed-log", "observed-call"],
+  canonicalIntakeTargets: [
+    ANGSTROM_MAINNET_ADAPTER,
+    ANGSTROM_MAINNET_HOOK,
+    ADDR.UNISWAP_V4_POOL_MANAGER,
+  ],
   callPatterns: [{
     id: ANGSTROM_SWAP_CALL_PATTERN_ID,
     selector: ANGSTROM_ADAPTER_SWAP_SELECTOR as `0x${string}`,
@@ -65,6 +74,12 @@ export const angstromV4Discovery = {
     `${candidate.manager.toLowerCase()}\u001f${candidate.poolId}`,
   nominate: { nominate: nominateAngstromV4 },
   runtimeEvidenceFromObservation: angstromRuntimeEvidenceFromObservation,
+  runtimeEvidenceRouteActivation: {
+    mode: "current-head-block-scan" as const,
+    scope: "family" as const,
+  },
+  pendingRuntimeEvidenceFromObservation:
+    angstromPendingRuntimeEvidenceFromObservation,
   reverseBinding: explicitReverseBindingUnsupported(
     "tx-bound family; no reverse-binding registry (explicit unsupported)",
   ),

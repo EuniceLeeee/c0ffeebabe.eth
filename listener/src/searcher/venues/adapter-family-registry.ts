@@ -93,7 +93,7 @@ export interface PendingTransactionEvidenceProjection {
   ): Promise<PendingTransactionEvidenceDispatchResult>;
 }
 
-interface RegisteredPendingTransactionEvidenceObserver {
+export interface PendingTransactionEvidenceObserverRegistration {
   readonly familyId: ExecutionFamilyId;
   readonly mightMatch: (tx: PendingTransactionEvidenceInput) => boolean;
   readonly observe: (
@@ -164,7 +164,7 @@ export class AdapterFamilyRegistry {
     const credit: CreditAdapterFamily[] = [];
     const liquidity: LiquidityAdapterFamily[] = [];
     const routes: RouteLegAdapter[] = [];
-    const pendingEvidenceObservers: RegisteredPendingTransactionEvidenceObserver[] = [];
+    const pendingEvidenceObservers: PendingTransactionEvidenceObserverRegistration[] = [];
 
     for (const family of families) {
       this.registerBase(family, pendingEvidenceObservers);
@@ -453,7 +453,7 @@ export class AdapterFamilyRegistry {
 
   private registerBase(
     family: AdapterFamily,
-    pendingEvidenceObservers: RegisteredPendingTransactionEvidenceObserver[],
+    pendingEvidenceObservers: PendingTransactionEvidenceObserverRegistration[],
   ): void {
     if (this.byId.has(family.id)) {
       throw new Error(`adapter-family registry: duplicate family ${family.id}`);
@@ -538,8 +538,8 @@ export class AdapterFamilyRegistry {
   }
 }
 
-function createPendingTransactionEvidenceProjection(
-  observers: readonly RegisteredPendingTransactionEvidenceObserver[],
+export function createPendingTransactionEvidenceProjection(
+  observers: readonly PendingTransactionEvidenceObserverRegistration[],
 ): PendingTransactionEvidenceProjection {
   const registered = Object.freeze([...observers]);
   const familyIds = Object.freeze(registered.map((observer) => observer.familyId));
@@ -648,7 +648,7 @@ class PendingEvidenceDispatchError extends Error {
 }
 
 async function runPendingEvidenceObserver(
-  observer: RegisteredPendingTransactionEvidenceObserver,
+  observer: PendingTransactionEvidenceObserverRegistration,
   input: PendingTransactionEvidenceInput,
   head: PendingTransactionEvidenceHead,
   transport: PendingTransactionEvidenceTransport,

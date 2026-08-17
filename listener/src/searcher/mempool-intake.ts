@@ -20,13 +20,18 @@ export interface MempoolIntakePlan {
 
 export function buildMempoolIntakePlan(input: {
   pools: readonly PoolEntry[];
-  swaps: readonly SwapAdapter[];
+  /** Legacy-shaped isolated-test input; production passes strict targets. */
+  swaps?: readonly SwapAdapter[];
+  canonicalTargets?: readonly string[];
   dynamicRouterTargets?: readonly string[];
   additionalCanonicalTargets?: readonly string[];
   options: MempoolIntakeOptions;
 }): MempoolIntakePlan {
   const canonical = uniqueAddresses([
-    ...input.swaps.flatMap((adapter) => adapter.observation.canonicalIntakeTargets),
+    ...(input.swaps ?? []).flatMap(
+      (adapter) => adapter.observation.canonicalIntakeTargets,
+    ),
+    ...(input.canonicalTargets ?? []),
     ...(input.additionalCanonicalTargets ?? []),
   ]);
   const dynamic = uniqueAddresses(input.dynamicRouterTargets ?? []);

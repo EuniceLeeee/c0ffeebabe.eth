@@ -7,12 +7,25 @@ import { PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND } from
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
 import {
+  ANGSTROM_MAINNET_ADAPTER,
   ANGSTROM_ADAPTER_SWAP_SELECTOR,
   decodeAngstromExecutionEvidence,
   encodeAngstromExecutionEvidence,
+  extractAngstromAttestationCandidates,
+  MAX_ANGSTROM_ATTESTATIONS_PER_EVIDENCE,
   parseAngstromAttestation,
+  type AngstromAttestationCandidate,
   type VerifiedAngstromAttestation,
 } from "../angstrom-attestation.js";
+import {
+  ANGSTROM_MAINNET_HOOK,
+} from "../angstrom-attestation.js";
+import {
+  BLOCKSCAN_MULTICALL3,
+  decodeMulticall,
+  encodeMulticall,
+  type MulticallItem,
+} from "../blockscan-state-shared.js";
 import type {
   UnifiedObservation,
 } from "../../adapter-family-plugin.js";
@@ -200,4 +213,183 @@ export function angstromRuntimeEvidenceFromObservation(input: {
     // Not a decodable angstrom swap call.
   }
   return Object.freeze([]);
+}
+
+const ANGSTROM_CONTROLLER_SLOT = 0n;
+const ANGSTROM_NODE_MAPPING_SLOT = 1n;
+const ANGSTROM_HOOK_STATE_INTERFACE = new ethers.Interface([
+  "function extsload(uint256 slot) view returns (uint256 value)",
+]);
+const ANGSTROM_CONTROLLER_INTERFACE = new ethers.Interface([
+  "function ANGSTROM() view returns (address)",
+]);
+
+/**
+ * Current-head pending evidence. Unlike the synchronous observation
+ * projection, this path proves the live Hook -> Controller -> validator
+ * authority at the exact frozen head before the central dispatcher seals the
+ * payload. Protocol knowledge stays in the Family; the dispatcher only owns
+ * bounded transport and the outer tx/head hash binding.
+ */
+export async function angstromPendingRuntimeEvidenceFromObservation(input: {
+  readonly observation: UnifiedObservation;
+  readonly source: CanonicalSource;
+  call(read: { readonly to: string; readonly data: string }): Promise<string>;
+}): Promise<readonly RuntimeEvidence[]> {
+  const observation = input.observation;
+  if (
+    observation.kind !== "call" ||
+    observation.transactionHash === undefined ||
+    observation.target.toLowerCase() !== ANGSTROM_MAINNET_ADAPTER.toLowerCase()
+  ) {
+    return Object.freeze([]);
+  }
+  const extraction = extractAngstromAttestationCandidates({
+    to: observation.target,
+    data: observation.data,
+  });
+  const unique = new Map<string, AngstromAttestationCandidate>();
+  for (const candidate of extraction.calls.flatMap((call) => call.attestations)) {
+    unique.set(candidate.evidenceHash.toLowerCase(), candidate);
+  }
+  if (unique.size === 0) return Object.freeze([]);
+  if (unique.size > MAX_ANGSTROM_ATTESTATIONS_PER_EVIDENCE) {
+    throw new Error(
+      `angstrom-v4 pending evidence exceeds ` +
+        `${MAX_ANGSTROM_ATTESTATIONS_PER_EVIDENCE} unique attestations`,
+    );
+  }
+  const verified = await verifyCurrentAngstromAuthority(
+    input.source,
+    [...unique.values()],
+    input.call,
+  );
+  if (verified.length === 0) return Object.freeze([]);
+  const payload = encodeAngstromExecutionEvidence(verified);
+  const payloadHash = ethers.keccak256(payload);
+  const txHash = observation.transactionHash.toLowerCase();
+  return Object.freeze([Object.freeze({
+    evidenceId: "pending:angstrom-current-head",
+    familyId: ANGSTROM_V4_FAMILY_ID,
+    kind: "angstrom-empty-block-attestation",
+    scope: "transaction" as const,
+    source: input.source,
+    txHash,
+    evidenceHash: angstromRuntimeEvidenceHash({
+      txHash,
+      source: input.source,
+      payloadHash,
+    }),
+    sealedPayloadRef: payload,
+  })]);
+}
+
+async function verifyCurrentAngstromAuthority(
+  source: CanonicalSource,
+  candidates: readonly AngstromAttestationCandidate[],
+  call: (read: { readonly to: string; readonly data: string }) => Promise<string>,
+): Promise<readonly VerifiedAngstromAttestation[]> {
+  if (!candidates.some((candidate) =>
+    candidate.blockNumber === BigInt(source.number)
+  )) {
+    return Object.freeze([]);
+  }
+  const controllerWord = await call({
+    to: ANGSTROM_MAINNET_HOOK,
+    data: ANGSTROM_HOOK_STATE_INTERFACE.encodeFunctionData(
+      "extsload",
+      [ANGSTROM_CONTROLLER_SLOT],
+    ),
+  });
+  const controllerSlot = ethers.toBeHex(
+    BigInt(
+      ANGSTROM_HOOK_STATE_INTERFACE.decodeFunctionResult(
+        "extsload",
+        controllerWord,
+      )[0],
+    ),
+    32,
+  );
+  const controller = ethers.getAddress(ethers.dataSlice(controllerSlot, 12));
+  if (controller === ethers.ZeroAddress) {
+    throw new Error("angstrom-v4 hook has no controller");
+  }
+  const canonicalHookRaw = await call({
+    to: controller,
+    data: ANGSTROM_CONTROLLER_INTERFACE.encodeFunctionData("ANGSTROM"),
+  });
+  const canonicalHook = ethers.getAddress(String(
+    ANGSTROM_CONTROLLER_INTERFACE.decodeFunctionResult(
+      "ANGSTROM",
+      canonicalHookRaw,
+    )[0],
+  ));
+  if (canonicalHook !== ethers.getAddress(ANGSTROM_MAINNET_HOOK)) {
+    throw new Error(
+      `angstrom-v4 controller ${controller} does not govern canonical hook`,
+    );
+  }
+
+  const validators = [...new Set(
+    candidates.map((candidate) => candidate.validator.toLowerCase()),
+  )];
+  const items: MulticallItem[] = validators.map((validator) => ({
+    label: angstromNodeProofLabel(validator),
+    target: ANGSTROM_MAINNET_HOOK,
+    callData: ANGSTROM_HOOK_STATE_INTERFACE.encodeFunctionData(
+      "extsload",
+      [angstromNodeMappingStorageSlot(validator)],
+    ),
+    allowFailure: true,
+  }));
+  const proofRaw = await call({
+    to: BLOCKSCAN_MULTICALL3,
+    data: encodeMulticall(items),
+  });
+  const proofs = decodeMulticall({
+    id: "angstrom-v4-current-authority",
+    ok: true,
+    sourceBlock: source.number,
+    sourceBlockHash: source.hash,
+    provenance: {
+      kind: "immutable-fork",
+      source,
+      forkId: `pending-evidence:${source.hash}`,
+    },
+    data: proofRaw,
+  }, items);
+  const authorized = new Set(validators.filter((validator) => {
+    const result = proofs.get(angstromNodeProofLabel(validator));
+    if (!result?.success || result.returnData === "0x") return false;
+    try {
+      return BigInt(
+        ANGSTROM_HOOK_STATE_INTERFACE.decodeFunctionResult(
+          "extsload",
+          result.returnData,
+        )[0],
+      ) === 1n;
+    } catch {
+      return false;
+    }
+  }));
+  return Object.freeze(candidates.flatMap((candidate) =>
+    authorized.has(candidate.validator.toLowerCase()) &&
+      candidate.eoaSignatureValid &&
+      candidate.blockNumber === BigInt(source.number)
+      ? [Object.freeze({ ...candidate, verification: "eoa" as const })]
+      : []
+  ));
+}
+
+function angstromNodeMappingStorageSlot(validator: string): bigint {
+  return BigInt(ethers.keccak256(
+    ethers.AbiCoder.defaultAbiCoder().encode(
+      ["address", "uint256"],
+      [validator, ANGSTROM_NODE_MAPPING_SLOT],
+    ),
+  ));
+}
+
+function angstromNodeProofLabel(validator: string): string {
+  return `angstrom-v4-node:${validator.toLowerCase()}`;
 }

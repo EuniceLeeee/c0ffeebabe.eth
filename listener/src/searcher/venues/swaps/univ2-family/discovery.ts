@@ -5,6 +5,7 @@ import type {
 } from "../../adapter-family-plugin.js";
 import { nominateUniv2 } from "./nomination.js";
 import { reverseBindUniv2 } from "./reverse-binding.js";
+import { UNIV2_ROUTER } from "./victim.js";
 import {
   canonicalAddress,
   lowerAddress,
@@ -25,6 +26,7 @@ export const UNIV2_PAIR_SURFACE_PATTERN_ID = "univ2-pair-surface";
 export const univ2Discovery = {
   evidenceChannel: "nominate" as const,
   sources: ["factory-log", "landed-log", "observed-call"],
+  canonicalIntakeTargets: [UNIV2_ROUTER],
   callPatterns: [{
     id: UNIV2_SWAP_CALL_PATTERN_ID,
     selector: UNIV2_SWAP_SELECTOR,

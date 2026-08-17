@@ -33,6 +33,10 @@ export const curveUnderlyingDiscovery = {
   evidenceChannel: "nominate" as const,
   txSeedNominations: true,
   sources: ["landed-log", "observed-call"],
+  canonicalIntakeTargets: [
+    "0x99a58482bd75cbab83b27ec03ca68ff489b5788f",
+    "0x16c6521dff6bab339122a0fe25a9116693265353",
+  ],
   callPatterns: [{
     id: CURVE_UNDERLYING_I128_CALL_PATTERN_ID,
     selector: CURVE_UNDERLYING_I128_SELECTOR,

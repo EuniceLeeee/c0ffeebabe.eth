@@ -11,6 +11,7 @@ import {
 } from "./shared.js";
 
 export const metronomeSynthOracleVictim = {
+  canonicalIntakeTargets: [ADDR.METRONOME_ORACLE_FORWARDER],
   callPatterns: [{
     id: "metronome-oracle-forward",
     selector: METRONOME_SYNTH_FORWARDER_INTERFACE.getFunction("forward")!

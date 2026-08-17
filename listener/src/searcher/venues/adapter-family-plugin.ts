@@ -356,6 +356,8 @@ export type DiscoveryCandidateSourceKind =
 
 export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
   readonly sources: readonly DiscoverySourceKind[];
+  /** Public-mempool shortlist only; never instance admission or coverage. */
+  readonly canonicalIntakeTargets?: readonly string[];
   /**
    * Plugin-owned dynamic discovery candidate-source declaration (legacy
    * equivalent: "dex-token-domain" / "observed-interaction" /
@@ -410,6 +412,23 @@ export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
     readonly observation: UnifiedObservation;
     readonly source: CanonicalSource;
   }) => readonly RuntimeEvidence[];
+  /**
+   * Current-head route activation. The central dispatcher owns deadlines,
+   * cancellation, read budgets and evidence hashing; the Family owns all
+   * protocol-specific extraction and authorization reads.
+   */
+  readonly runtimeEvidenceRouteActivation?: {
+    readonly mode: "current-head-block-scan";
+    readonly scope: "family";
+  };
+  readonly pendingRuntimeEvidenceFromObservation?: (input: {
+    readonly observation: UnifiedObservation;
+    readonly source: CanonicalSource;
+    call(read: {
+      readonly to: string;
+      readonly data: string;
+    }): Promise<string>;
+  }) => Promise<readonly RuntimeEvidence[]>;
   readonly evidenceChannel: DiscoveryEvidenceChannel;
   readonly nominate?: CaptureNominationSemantics;
   decodeCandidate(input: {
@@ -1045,6 +1064,11 @@ export interface FamilyManifest<Domain extends FamilyDomain> {
    * never by naming a family.
    */
   readonly requiresProtocolEdgesFlag?: boolean;
+  /** Generic low-latency mutable pool-state projection; Swap-only. */
+  readonly livePoolStateKind?:
+    | "constant-product-v2"
+    | "concentrated-v3"
+    | "singleton-v4";
 }
 
 export interface LandedEventSpec {
@@ -1167,6 +1191,8 @@ export interface VictimReplaySpec<
 
 export interface OracleVictimSpec {
   readonly callPatterns: readonly CallPattern[];
+  /** Public-mempool shortlist only; never instance admission or coverage. */
+  readonly canonicalIntakeTargets?: readonly string[];
   decode(input: {
     readonly observation: UnifiedObservation;
   }): CanonicalValue | null;
@@ -2986,6 +3012,23 @@ function validateAddress(value: unknown, label: string): void {
   }
 }
 
+function validateAddressList(
+  values: readonly string[] | undefined,
+  label: string,
+): void {
+  if (values === undefined) return;
+  if (!Array.isArray(values)) throw new Error(`${label} must be an array`);
+  const seen = new Set<string>();
+  for (const value of values) {
+    validateAddress(value, label);
+    const normalized = ethers.getAddress(value).toLowerCase();
+    if (normalized === ethers.ZeroAddress.toLowerCase() || seen.has(normalized)) {
+      throw new Error(`${label} contains a duplicate or zero address`);
+    }
+    seen.add(normalized);
+  }
+}
+
 function validatePositiveBigint(value: unknown, label: string): void {
   if (typeof value !== "bigint" || value <= 0n) {
     throw new Error(`${label} must be a positive bigint`);
@@ -3075,6 +3118,7 @@ function validateManifest(
     "edgeAdapterIds",
     "familyId",
     "fundingPriority",
+    "livePoolStateKind",
     "ownedActionAdapterIds",
     "poolAdapterIds",
     "requiresProtocolEdgesFlag",
@@ -3155,6 +3199,22 @@ function validateManifest(
       `${manifest.familyId} requiresProtocolEdgesFlag must be a boolean`,
     );
   }
+  if (manifest.livePoolStateKind !== undefined) {
+    if (expectedDomain !== "swap") {
+      throw new Error(
+        `${manifest.familyId} livePoolStateKind is only allowed for swap families`,
+      );
+    }
+    if (!new Set([
+      "constant-product-v2",
+      "concentrated-v3",
+      "singleton-v4",
+    ]).has(manifest.livePoolStateKind)) {
+      throw new Error(
+        `${manifest.familyId} has unsupported livePoolStateKind`,
+      );
+    }
+  }
   if (!Array.isArray(manifest.allowedTaxonomy) ||
       manifest.allowedTaxonomy.length === 0) {
     throw new Error(`${manifest.familyId} must declare allowed taxonomy`);
@@ -3201,13 +3261,16 @@ function validateDiscovery(
     [
       "addressSurfaces",
       "callPatterns",
+      "canonicalIntakeTargets",
       "candidateSources",
       "candidateKey",
       "decodeCandidate",
       "evidenceChannel",
       "logPatterns",
       "nominate",
+      "pendingRuntimeEvidenceFromObservation",
       "reverseBinding",
+      "runtimeEvidenceRouteActivation",
       "runtimeEvidenceFromObservation",
       "sources",
       "txSeedNominations",
@@ -3216,6 +3279,41 @@ function validateDiscovery(
     true,
     ["candidateKey", "decodeCandidate", "evidenceChannel", "sources"],
   );
+  validateAddressList(
+    discovery.canonicalIntakeTargets,
+    "discovery canonicalIntakeTargets",
+  );
+  const activation = discovery.runtimeEvidenceRouteActivation;
+  const pendingDerive = discovery.pendingRuntimeEvidenceFromObservation;
+  if ((activation === undefined) !== (pendingDerive === undefined)) {
+    throw new Error(
+      "discovery runtime evidence activation requires a pending derivation",
+    );
+  }
+  if (activation !== undefined) {
+    assertPlainRecord(activation, "runtime evidence route activation");
+    assertExactKeys(
+      activation,
+      ["mode", "scope"],
+      "runtime evidence route activation",
+    );
+    if (
+      activation.mode !== "current-head-block-scan" ||
+      activation.scope !== "family"
+    ) {
+      throw new Error("unsupported runtime evidence route activation");
+    }
+    if (discovery.runtimeEvidenceFromObservation === undefined) {
+      throw new Error(
+        "pending runtime evidence requires ordinary observation derivation",
+      );
+    }
+    if (typeof pendingDerive !== "function") {
+      throw new Error(
+        "discovery.pendingRuntimeEvidenceFromObservation must be a function",
+      );
+    }
+  }
   // Retain-channel declaration is mandatory for every non-funding Family
   // (swap/protocol/credit): either a real reverse-binding implementation or
   // an explicit unsupported declaration. Funding families have no discovery
@@ -4307,8 +4405,14 @@ function validateProtocolDomain(
     assertPlainRecord(protocol.oracleVictim, "protocol.oracleVictim");
     assertExactKeys(
       protocol.oracleVictim,
-      ["callPatterns", "decode"],
+      ["callPatterns", "canonicalIntakeTargets", "decode"],
       "protocol.oracleVictim",
+      true,
+      ["callPatterns", "decode"],
+    );
+    validateAddressList(
+      protocol.oracleVictim.canonicalIntakeTargets,
+      "protocol oracleVictim canonicalIntakeTargets",
     );
     if (!Array.isArray(protocol.oracleVictim.callPatterns) ||
         protocol.oracleVictim.callPatterns.length === 0) {

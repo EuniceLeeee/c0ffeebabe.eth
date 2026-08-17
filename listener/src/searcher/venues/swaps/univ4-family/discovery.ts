@@ -33,6 +33,11 @@ export const UNIV4_POOL_SURFACE_PATTERN_ID = "univ4-pool-surface";
 export const univ4Discovery = {
   evidenceChannel: "nominate" as const,
   sources: ["factory-log", "landed-log", "observed-call"],
+  canonicalIntakeTargets: [
+    ADDR.UNISWAP_V4_POOL_MANAGER,
+    "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+    "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+  ],
   callPatterns: [{
     id: UNIV4_SWAP_CALL_PATTERN_ID,
     selector: UNIV4_SWAP_SELECTOR,

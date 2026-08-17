@@ -15,12 +15,11 @@ import type {
   TokenEdge,
 } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
+  "../strict-production-family-declarations.js";
 import {
   createVerifiedGraphView,
 } from "../venues/blockscan-state-capability.js";
-import {
-  PRODUCTION_ADAPTER_FAMILIES,
-} from "../venues/production-registry.js";
 
 const HASH = `0x${"11".repeat(32)}`;
 const TOKEN_A = "0x0000000000000000000000000000000000000001";
@@ -119,7 +118,7 @@ function main(): void {
   );
 
   const manifest = blindCompatibilityActiveFamilyManifestPayload(
-    PRODUCTION_ADAPTER_FAMILIES.list(),
+    PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies,
   ) as {
     readonly familyCount: number;
     readonly registryFingerprint: string;
