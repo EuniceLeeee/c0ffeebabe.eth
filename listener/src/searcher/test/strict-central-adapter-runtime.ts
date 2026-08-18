@@ -307,6 +307,34 @@ async function main(): Promise<void> {
     boundAuthority.verifiedActors?.["erc4626-probe-actor"],
     PRODUCTION_STRICT_VERIFIED_ACTORS["erc4626-probe-actor"],
   );
+  const observedSender = `0x${"7a".repeat(20)}`;
+  const observedRuntime = createStrictCentralAdapterRuntime({
+    provider: mockProvider() as never,
+    generationFence: Object.freeze({ assertCurrent() {} }),
+    executor: `0x${"7b".repeat(20)}`,
+    observedSender,
+  });
+  const observedAuthority = observedRuntime.callerAuthority.bind({
+    callerRole: "observed-sender",
+  } as never) as { readonly observedSender?: string; readonly executor?: string };
+  assert.equal(observedAuthority.observedSender, observedSender);
+  assert.notEqual(
+    observedAuthority.observedSender,
+    observedAuthority.executor,
+    "the executor must never impersonate the observed sender",
+  );
+  const executorOnlyRuntime = createStrictCentralAdapterRuntime({
+    provider: mockProvider() as never,
+    generationFence: Object.freeze({ assertCurrent() {} }),
+    executor: `0x${"7b".repeat(20)}`,
+  });
+  assert.equal(
+    (executorOnlyRuntime.callerAuthority.bind({
+      callerRole: "observed-sender",
+    } as never) as { readonly observedSender?: string }).observedSender,
+    undefined,
+    "observed-sender authority fails closed without canonical evidence",
+  );
   const verifiedProgram = Object.freeze({
     requirements: () => Object.freeze({
       transports: ["eth-call" as const],

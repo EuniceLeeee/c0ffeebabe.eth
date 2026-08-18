@@ -6590,3 +6590,23 @@ searcher 进程在创建 producer 前直接 begin/resume `rebuildUniverse`，不
 
 禁止用“未配置 checkpoint”回退旧路径；回滚只能部署上一已验收 exact
 SHA，不能把 legacy Graph/fallback 接回当前 runtime。
+
+### 22.9 observed-sender authority（2026-08-18）
+
+声明 `caller: observed-sender` 的 Family 不得把中央 executor/BotVM 当作
+观察到的调用者。startup rebuild 只在 durable candidate 的
+`actor + evidenceRef{blockNumber,blockHash,txHash,logIndex}` 与原 fixed
+cutoff 下的 canonical block、transaction、receipt 和 exact log 全部一致，
+且该 exact log 重新通过 catalog-issued plugin `decodeCandidate/candidateKey`
+得到同一 FamilyCandidateKey/actor 后，才向中央 runtime 与 revm transport
+签发 `observedSender`。这里不要求 actor 等于外层 `tx.from`：router/聚合器
+中转时，协议实际观察到的 sender 可以由 Family-owned event/call 语义给出；
+中央只校验完整证据身份并重新调用插件，不能自行解释协议字段。runtime cache
+key 同时绑定 cutoff number+hash+generation 与 observed sender，避免不同候选
+共享 caller authority。证据缺失或插件重解码不一致是 chain-proven terminal
+rejection；RPC/canonical recheck 失败保持 retryable 并阻塞 ready。
+
+本条合同由 `searcher:universe-rebuild-production` 与
+`searcher:strict-central-adapter-runtime` 覆盖，listener 完整 build 同轮通过。
+它只关闭 caller authority 缺口，不构成 ready、F5、100/100 或 production
+cutover 证据。

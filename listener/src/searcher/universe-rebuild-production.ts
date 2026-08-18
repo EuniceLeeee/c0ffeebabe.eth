@@ -74,6 +74,127 @@ export function hashFamilyCandidateKey(
   return digest("family-candidate-v1:" + familyId + "|" + candidateIdentity);
 }
 
+class ObservedSenderEvidenceMismatch extends Error {}
+
+/**
+ * Bind an observed-sender caller to the exact durable log evidence that
+ * nominated the candidate.  This is deliberately Family-blind: any plugin
+ * asking for an observed sender must carry the same canonical transaction +
+ * log identity, and the central runtime never substitutes the executor.
+ */
+export function validateObservedSenderEvidence(input: {
+  readonly candidate: Readonly<Record<string, unknown>>;
+  readonly evidenceRef: {
+    readonly blockNumber: number;
+    readonly blockHash: string;
+    readonly txHash?: string;
+    readonly logIndex?: number;
+  } | undefined;
+  readonly canonicalBlockHash: string;
+  readonly transaction: {
+    readonly hash: string;
+    readonly blockNumber: number | null;
+    readonly blockHash: string | null;
+  } | null;
+  readonly receipt: {
+    readonly blockNumber: number;
+    readonly blockHash: string;
+    readonly logs: readonly {
+      readonly index: number;
+      readonly address: string;
+      readonly topics: readonly string[];
+      readonly data: string;
+      readonly transactionHash: string;
+    }[];
+  } | null;
+  /** Candidates re-decoded by the catalog-issued plugin from the exact log. */
+  readonly redecodedCandidates: readonly Readonly<Record<string, unknown>>[];
+}): string | undefined {
+  const actor = input.candidate.actor;
+  if (actor === undefined) return undefined;
+  if (typeof actor !== "string" || !ethers.isAddress(actor)) {
+    throw new ObservedSenderEvidenceMismatch(
+      "observed sender candidate actor is not an address",
+    );
+  }
+  const evidence = input.evidenceRef;
+  if (
+    evidence === undefined ||
+    evidence.txHash === undefined ||
+    evidence.logIndex === undefined
+  ) {
+    throw new ObservedSenderEvidenceMismatch(
+      "observed sender requires exact transaction/log evidence",
+    );
+  }
+  const candidateBlockNumber = input.candidate.blockNumber;
+  const candidateBlockHash = input.candidate.blockHash;
+  const candidateTxHash = input.candidate.transactionHash;
+  const candidateLogIndex = input.candidate.logIndex;
+  if (
+    candidateBlockNumber !== evidence.blockNumber ||
+    typeof candidateBlockHash !== "string" ||
+    candidateBlockHash.toLowerCase() !== evidence.blockHash.toLowerCase() ||
+    typeof candidateTxHash !== "string" ||
+    candidateTxHash.toLowerCase() !== evidence.txHash.toLowerCase() ||
+    candidateLogIndex !== evidence.logIndex
+  ) {
+    throw new ObservedSenderEvidenceMismatch(
+      "observed sender candidate/evidence identity mismatch",
+    );
+  }
+  if (
+    input.canonicalBlockHash.toLowerCase() !==
+      evidence.blockHash.toLowerCase()
+  ) {
+    throw new Error("observed sender historical block is no longer canonical");
+  }
+  const tx = input.transaction;
+  if (
+    tx === null ||
+    tx.hash.toLowerCase() !== evidence.txHash.toLowerCase() ||
+    tx.blockNumber !== evidence.blockNumber ||
+    tx.blockHash?.toLowerCase() !== evidence.blockHash.toLowerCase()
+  ) {
+    throw new ObservedSenderEvidenceMismatch(
+      "observed sender transaction proof mismatch",
+    );
+  }
+  const receipt = input.receipt;
+  if (
+    receipt === null ||
+    receipt.blockNumber !== evidence.blockNumber ||
+    receipt.blockHash.toLowerCase() !== evidence.blockHash.toLowerCase()
+  ) {
+    throw new ObservedSenderEvidenceMismatch(
+      "observed sender receipt proof mismatch",
+    );
+  }
+  const log = receipt.logs.find((item) => item.index === evidence.logIndex);
+  if (
+    log === undefined ||
+    log.transactionHash.toLowerCase() !== evidence.txHash.toLowerCase()
+  ) {
+    throw new ObservedSenderEvidenceMismatch(
+      "observed sender log proof mismatch",
+    );
+  }
+  const familyCandidateKey = rebuildFamilyCandidateKey(input.candidate);
+  const redecoded = input.redecodedCandidates.find((candidate) =>
+    rebuildFamilyCandidateKey(candidate) === familyCandidateKey
+  );
+  if (
+    redecoded === undefined ||
+    typeof redecoded.actor !== "string" ||
+    redecoded.actor.toLowerCase() !== actor.toLowerCase()
+  ) {
+    throw new ObservedSenderEvidenceMismatch(
+      "observed sender plugin re-decode mismatch",
+    );
+  }
+  return ethers.getAddress(actor).toLowerCase();
+}
+
 /** Opaque per-instance identity carried by a scan candidate. */
 export function candidateInstanceIdentity(
   candidate: Readonly<Record<string, unknown>>,
@@ -468,9 +589,12 @@ export function createProbeWiring(
       })
     : null;
   const runtimeByCutoff = new Map<string, CentralAdapterRuntime>();
-  const runtimeFor = (cutoff: CanonicalSource): CentralAdapterRuntime => {
+  const runtimeFor = (
+    cutoff: CanonicalSource,
+    observedSender?: string,
+  ): CentralAdapterRuntime => {
     const cutoffKey = cutoff.number + ":" + cutoff.hash.toLowerCase() + ":" +
-      cutoff.generation;
+      cutoff.generation + ":" + (observedSender?.toLowerCase() ?? "none");
     const incumbent = runtimeByCutoff.get(cutoffKey);
     if (incumbent !== undefined) return incumbent;
     const runtime = revmClient === null || executor === undefined
@@ -492,9 +616,11 @@ export function createProbeWiring(
             },
           }),
           verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+          ...(observedSender === undefined ? {} : { observedSender }),
           simulator: createRevmStrictSimulationTransport({
             client: revmClient,
             executor,
+            ...(observedSender === undefined ? {} : { observedSender }),
             verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
           }),
         });
@@ -547,7 +673,61 @@ export function createProbeWiring(
       }
       let result: Awaited<ReturnType<typeof attestPoolIdentitiesStrict>>;
       let authorityFingerprint: string;
+      let observedSender: string | undefined;
       try {
+        if (candidate.actor !== undefined) {
+          const evidence = attestInput.evidenceRef;
+          if (
+            evidence === undefined ||
+            evidence.txHash === undefined ||
+            evidence.logIndex === undefined
+          ) {
+            throw new ObservedSenderEvidenceMismatch(
+              "observed sender requires exact transaction/log evidence",
+            );
+          }
+          const [canonicalBlockHash, transaction, receipt] = await Promise.all([
+            readBlockHash(provider, evidence.blockNumber),
+            provider.getTransaction(evidence.txHash),
+            provider.getTransactionReceipt(evidence.txHash),
+          ]);
+          const receiptLog = receipt?.logs.find((log) =>
+            log.index === evidence.logIndex
+          );
+          const redecodedCandidates = receiptLog === undefined
+            ? Object.freeze([])
+            : candidatesFromLog(Object.freeze({
+                address: receiptLog.address,
+                topics: Object.freeze([...receiptLog.topics]),
+                data: receiptLog.data,
+                transactionHash: receiptLog.transactionHash,
+                blockNumber: receipt?.blockNumber,
+                blockHash: receipt?.blockHash,
+                logIndex: receiptLog.index,
+              }));
+          observedSender = validateObservedSenderEvidence({
+            candidate,
+            evidenceRef: evidence,
+            canonicalBlockHash,
+            transaction: transaction === null ? null : Object.freeze({
+              hash: transaction.hash,
+              blockNumber: transaction.blockNumber,
+              blockHash: transaction.blockHash,
+            }),
+            receipt: receipt === null ? null : Object.freeze({
+              blockNumber: receipt.blockNumber,
+              blockHash: receipt.blockHash,
+              logs: Object.freeze(receipt.logs.map((log) => Object.freeze({
+                index: log.index,
+                address: log.address,
+                topics: Object.freeze([...log.topics]),
+                data: log.data,
+                transactionHash: log.transactionHash,
+              }))),
+            }),
+            redecodedCandidates,
+          });
+        }
         const [code, implementationWord] = await Promise.all([
           strictProvider.getCode(pool.address, attestInput.cutoff.number),
           strictProvider.getStorage(
@@ -565,12 +745,17 @@ export function createProbeWiring(
         result = await attestPoolIdentitiesStrict({
           catalog,
           provider: strictProvider,
-          runtime: runtimeFor(attestInput.cutoff),
+          runtime: runtimeFor(attestInput.cutoff, observedSender),
           source: attestInput.cutoff,
           pools: Object.freeze([pool]),
           channelOrder: "reverse-binding-first",
         });
       } catch (error) {
+        if (error instanceof ObservedSenderEvidenceMismatch) {
+          return terminalRejected(
+            "observed_sender_evidence_mismatch:" + error.message,
+          );
+        }
         return retryable({
           candidate,
           reasonCode: error instanceof Error

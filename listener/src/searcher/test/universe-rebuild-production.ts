@@ -13,6 +13,7 @@ import {
   isChainProvenTerminalReason,
   memoAuthorityFingerprint,
   rebuildFamilyCandidateKey,
+  validateObservedSenderEvidence,
   type RebuildScanObservation,
 } from "../universe-rebuild-production.js";
 import type { DurableVerifiedMemo } from "../universe-rebuild-checkpoint.js";
@@ -123,6 +124,65 @@ async function main(): Promise<void> {
     fullLogIdentityKey(log({ blockHash: "0x" + "99".repeat(32) })),
     "full log identity binds the canonical block hash",
   );
+
+  // Observed-sender authority is recovered only from the exact canonical
+  // transaction/log and a catalog-plugin re-decode of that same log. The
+  // executor is intentionally absent from this contract.
+  const observedActor = "0x" + "ab".repeat(20);
+  const observedCandidate = Object.freeze({
+    address: a.address,
+    actor: observedActor,
+    familyId: "protocol:test-observed",
+    pluginCandidateKey: "observed:key",
+    blockNumber: a.blockNumber,
+    blockHash: a.blockHash,
+    transactionHash: a.transactionHash,
+    logIndex: a.logIndex,
+  });
+  const evidenceRef = Object.freeze({
+    blockNumber: a.blockNumber!,
+    blockHash: a.blockHash!,
+    txHash: a.transactionHash!,
+    logIndex: a.logIndex!,
+  });
+  const observedReceipt = Object.freeze({
+    blockNumber: a.blockNumber!,
+    blockHash: a.blockHash!,
+    logs: Object.freeze([Object.freeze({
+      index: a.logIndex!,
+      address: a.address,
+      topics: a.topics,
+      data: a.data,
+      transactionHash: a.transactionHash!,
+    })]),
+  });
+  assert.equal(validateObservedSenderEvidence({
+    candidate: observedCandidate,
+    evidenceRef,
+    canonicalBlockHash: a.blockHash!,
+    transaction: Object.freeze({
+      hash: a.transactionHash!,
+      blockNumber: a.blockNumber!,
+      blockHash: a.blockHash!,
+    }),
+    receipt: observedReceipt,
+    redecodedCandidates: Object.freeze([observedCandidate]),
+  }), observedActor);
+  assert.throws(() => validateObservedSenderEvidence({
+    candidate: observedCandidate,
+    evidenceRef,
+    canonicalBlockHash: a.blockHash!,
+    transaction: Object.freeze({
+      hash: a.transactionHash!,
+      blockNumber: a.blockNumber!,
+      blockHash: a.blockHash!,
+    }),
+    receipt: observedReceipt,
+    redecodedCandidates: Object.freeze([Object.freeze({
+      ...observedCandidate,
+      actor: "0x" + "cd".repeat(20),
+    })]),
+  }), /plugin re-decode mismatch/);
 
   // Central code must not guess that topic1 is a poolId. For an ordinary
   // Swap it is a different indexed field; plugin decode owns identity.

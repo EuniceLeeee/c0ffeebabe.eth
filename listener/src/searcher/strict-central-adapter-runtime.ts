@@ -98,6 +98,12 @@ export function createStrictCentralAdapterRuntime(input: {
    */
   readonly verifiedActors?: Readonly<Record<string, string>>;
   /**
+   * Sender sealed by the current candidate's canonical observation evidence.
+   * This is deliberately independent from `executor`: a production BotVM must
+   * never impersonate the sender of an observed protocol interaction.
+   */
+  readonly observedSender?: string;
+  /**
    * Central executor address. Families whose programs declare
    * caller: "executor" (e.g. univ3 exact through the swap router) bind
    * through this authority; omitting it keeps those families fail-closed
@@ -176,14 +182,15 @@ export function createStrictCentralAdapterRuntime(input: {
         ...(input.executor === undefined
           ? {}
           : { executor: ethers.getAddress(input.executor).toLowerCase() }),
-        // Generic observed-sender binding: a work that declares
-        // caller: "observed-sender" binds the observed transaction sender.
-        // The capture runtime observes through the central executor, so the
-        // observed sender is the executor itself (mirrors the fixture
-        // runtime contract); production binds the real observed sender.
-        ...(input.executor !== undefined &&
+        // Generic observed-sender binding: production supplies the sender
+        // sealed by candidate observation evidence. Never derive it from the
+        // executor/BotVM address.
+        ...(input.observedSender !== undefined &&
             bindingInput.callerRole === "observed-sender"
-          ? { observedSender: ethers.getAddress(input.executor).toLowerCase() }
+          ? {
+              observedSender: ethers.getAddress(input.observedSender)
+                .toLowerCase(),
+            }
           : {}),
         ...(Object.keys(verifiedActors).length === 0
           ? {}
