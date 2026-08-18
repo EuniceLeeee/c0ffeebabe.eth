@@ -947,6 +947,85 @@ export function strictCatalogSourceCoverageKeys(): {
   });
 }
 
+/** Source scan chunk policy; bound into the event plan fingerprint. */
+export const SOURCE_SCAN_BATCH_BLOCKS = 1_000;
+export const SOURCE_MIN_CHUNK_BLOCKS = 64;
+
+/**
+ * Ordered current-code identity of every strict family. Any capability
+ * content hash change (identity/discovery/capture/...), pattern declaration
+ * change or decoder change alters these hashes, so a plan fingerprint bound
+ * to them fails closed on resume whenever the sealing code differs from the
+ * current catalog.
+ */
+export function strictFamilyDefinitionHashes(): readonly string[] {
+  return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .listAll()
+    .map((family) => family.plugin.manifest.familyId)
+    .sort()
+    .map((familyId) => familyDefinitionHash(familyId));
+}
+
+/**
+ * Plan identity of the startup nomination source. Binds code identity only:
+ * coverage keys + current family definitions. The input snapshot itself is
+ * bound by the receipt's observationSetHash; a startup-universe key proves
+ * the nomination partition was consumed and attested, never that no chain
+ * instance exists outside it (enumerator/omission authority is absent).
+ */
+export function startupSourcePlanFingerprint(input: {
+  readonly coverageKeys: readonly string[];
+  readonly familyDefinitionHashes: readonly string[];
+}): string {
+  return digest("source-plan-v1:" + canonicalJson({
+    sourceKind: "startup-candidate-union",
+    coverageKeys: input.coverageKeys,
+    familyDefinitionHashes: input.familyDefinitionHashes,
+  }));
+}
+
+/**
+ * Plan identity of the catalog event scan source. Binds the exact topic
+ * union, the covered event keys and the family code identity, plus the
+ * chunk policy the scanner promises. topic/emitter/decoder changes all
+ * move the fingerprint, so a durable event receipt sealed by an older
+ * source plan can never be accepted by a newer catalog.
+ */
+export function catalogEventSourcePlanFingerprint(input: {
+  readonly topics: readonly string[];
+  readonly coverageKeys: readonly string[];
+  readonly familyDefinitionHashes: readonly string[];
+}): string {
+  return digest("source-plan-v1:" + canonicalJson({
+    sourceKind: "catalog-event-union",
+    topics: input.topics,
+    coverageKeys: input.coverageKeys,
+    familyDefinitionHashes: input.familyDefinitionHashes,
+    initialChunkBlocks: SOURCE_SCAN_BATCH_BLOCKS,
+    minimumChunkBlocks: SOURCE_MIN_CHUNK_BLOCKS,
+  }));
+}
+
+/** Current expected plan fingerprints for both required sources. */
+export function expectedSourcePlanFingerprints(): {
+  readonly startup: string;
+  readonly events: string;
+} {
+  const coverageKeys = strictCatalogSourceCoverageKeys();
+  const familyDefinitionHashes = strictFamilyDefinitionHashes();
+  return Object.freeze({
+    startup: startupSourcePlanFingerprint({
+      coverageKeys: coverageKeys.startup,
+      familyDefinitionHashes,
+    }),
+    events: catalogEventSourcePlanFingerprint({
+      topics: strictCatalogLogTopics(),
+      coverageKeys: coverageKeys.events,
+      familyDefinitionHashes,
+    }),
+  });
+}
+
 export function familyForObservation(
   observation: {
     readonly address: string;
@@ -1210,8 +1289,10 @@ export function createRebuildWiring(input?: {
   const topics = strictCatalogLogTopics();
   const sourceCoverageKeys = strictCatalogSourceCoverageKeys();
   // reth caps eth_getLogs at 20000 results; the strict-topic union is
-  // high-volume, so start small and halve on the max-results error.
-  const scanBatch = 1_000;
+  // high-volume, so start small and halve on the max-results error. The
+  // chunk policy is a plan-bound constant (SOURCE_SCAN_BATCH_BLOCKS /
+  // SOURCE_MIN_CHUNK_BLOCKS): changing it moves the event plan fingerprint
+  // and fails closed on resume.
   const probe = createProbeWiring({ rpcUrl });
 
   const wiring: UniverseRebuildDependencies = {
@@ -1223,6 +1304,10 @@ export function createRebuildWiring(input?: {
       ...sourceCoverageKeys.startup,
       ...sourceCoverageKeys.events,
     ]),
+    // Current source-plan identity. Every durable receipt sealed by this
+    // wiring carries queryFingerprint == plan fingerprint; resume rejects
+    // receipts sealed by any other code version (audit P0-STOP-1).
+    expectedSourcePlanFingerprints: () => expectedSourcePlanFingerprints(),
     freezeCanonicalHead: async () => {
       const block = await provider.getBlock("latest");
       if (block === null || block.hash === null) {
@@ -1240,15 +1325,18 @@ export function createRebuildWiring(input?: {
       for (
         let start = scanInput.fromBlock;
         start <= scanInput.cutoff.number;
-        start += scanBatch
+        start += SOURCE_SCAN_BATCH_BLOCKS
       ) {
-        const end = Math.min(scanInput.cutoff.number, start + scanBatch - 1);
+        const end = Math.min(
+          scanInput.cutoff.number,
+          start + SOURCE_SCAN_BATCH_BLOCKS - 1,
+        );
         const topicFilter: Array<null | string | Array<string>> =
           topics.length === 1 ? [topics[0]] : [[...topics]];
         // reth's eth_getLogs caps at 20000 results: halve the slice on the
         // max-results error and retry the same range; a hard floor keeps
         // progress fail-closed.
-        let batchSize = scanBatch;
+        let batchSize = SOURCE_SCAN_BATCH_BLOCKS;
         let from = start;
         while (from <= end) {
           const to = Math.min(end, from + batchSize - 1);
@@ -1293,9 +1381,9 @@ export function createRebuildWiring(input?: {
               }));
             }
             from = to + 1;
-            batchSize = scanBatch;
+            batchSize = SOURCE_SCAN_BATCH_BLOCKS;
           } catch (error) {
-            if (batchSize <= 64) {
+            if (batchSize <= SOURCE_MIN_CHUNK_BLOCKS) {
               throw new Error(
                 "swap window scan failed at " + from + "-" + to + ": " +
                   (error instanceof Error ? error.message : String(error)),
@@ -1318,14 +1406,14 @@ export function createRebuildWiring(input?: {
           encodeDurableValue(candidate)
         ),
       );
-      const startupQueryFingerprint = digest(
-        "startup-candidate-query-v1:" + canonicalJson({
-          coverageKeys: sourceCoverageKeys.startup,
-          candidateSnapshotHash: digest(
-            "startup-candidate-snapshot-v1:" + canonicalJson(startupSnapshot),
-          ),
-        }),
-      );
+      // The plan fingerprint binds the current source implementation
+      // (coverage keys + family code identity); the input snapshot itself is
+      // bound by observationSetHash below. Resume compares queryFingerprint
+      // against the current plan and fails closed on any code drift.
+      const startupQueryFingerprint = startupSourcePlanFingerprint({
+        coverageKeys: sourceCoverageKeys.startup,
+        familyDefinitionHashes: strictFamilyDefinitionHashes(),
+      });
       const startupObservationHash = digest(
         "startup-candidate-observations-v1:" + canonicalJson(startupSnapshot),
       );
@@ -1365,14 +1453,13 @@ export function createRebuildWiring(input?: {
         status: "complete" as const,
       })];
       if (sourceCoverageKeys.events.length > 0) {
-        const eventQueryFingerprint = digest(
-          "catalog-event-query-v1:" + canonicalJson({
-            topic0: topics,
-            coverageKeys: sourceCoverageKeys.events,
-            initialChunkBlocks: scanBatch,
-            minimumChunkBlocks: 64,
-          }),
-        );
+        // Same source-plan identity the runner compares on resume: binds
+        // topic union, coverage keys, family code identity and chunk policy.
+        const eventQueryFingerprint = catalogEventSourcePlanFingerprint({
+          topics,
+          coverageKeys: sourceCoverageKeys.events,
+          familyDefinitionHashes: strictFamilyDefinitionHashes(),
+        });
         const eventObservationHash = digest(
           "catalog-event-observations-v1:" + canonicalJson(logs),
         );

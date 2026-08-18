@@ -67,6 +67,23 @@ export interface UniverseRebuildDependencies {
   readonly decodeCandidateSnapshot?: (snapshot: unknown) => unknown;
   /** Exact Family x source set declared by the loaded strict catalog. */
   readonly requiredSourceCoverageKeys: () => readonly string[];
+  /**
+   * Audit P0-STOP-1 (source-plan binding): current code identity of each
+   * required source plan. Every durable receipt's queryFingerprint must
+   * equal the plan fingerprint for its source kind. A mismatch means the
+   * sealing code/query/capability changed after the receipt was written
+   * (e.g. pattern id kept but topic or discovery capability changed): the
+   * stale receipt can no longer prove the source complete and the run
+   * fails closed instead of promoting ready. The plan fingerprints bind
+   * code identity only (catalog capability hashes + pattern declarations
+   * + chunk policy) and never the input snapshot: a startup-universe key
+   * proves the nomination partition was consumed, not that no chain
+   * instance exists outside it.
+   */
+  readonly expectedSourcePlanFingerprints: () => {
+    readonly startup: string;
+    readonly events: string;
+  };
   /** Compact evidence pointer retained for a first-attempt retryable. */
   readonly candidateEvidenceRef?: (candidate: unknown) => {
     readonly blockNumber: number;
@@ -256,6 +273,10 @@ export async function rebuildUniverse(
   assertExactSourceCoverageSet(
     sourceReceipts,
     input.requiredSourceCoverageKeys(),
+  );
+  assertReceiptsMatchCurrentSourcePlan(
+    sourceReceipts,
+    input.expectedSourcePlanFingerprints(),
   );
 
   // 2. Create or resume the same fixed-cutoff run.
@@ -499,6 +520,37 @@ export async function rebuildUniverse(
       " candidates=" + candidates.length,
   );
   return ready;
+}
+
+/**
+ * Audit P0-STOP-1: every durable receipt must have been sealed by the same
+ * source/query implementation the current catalog declares. queryFingerprint
+ * is the receipt-side plan identity; a mismatch (pattern id kept but topic,
+ * emitter or discovery capability changed) fails closed so a stale receipt
+ * can never prove a source complete for the current code.
+ */
+export function assertReceiptsMatchCurrentSourcePlan(
+  receipts: readonly DurableSourceReceipt[],
+  plan: { readonly startup: string; readonly events: string },
+): void {
+  for (const receipt of receipts) {
+    const expected = receipt.sourceKind === "startup-candidate-union"
+      ? plan.startup
+      : receipt.sourceKind === "catalog-event-union"
+        ? plan.events
+        : null;
+    if (expected === null) {
+      throw new Error(
+        "universe rebuild: source receipt kind is not bound to a source plan",
+      );
+    }
+    if (receipt.queryFingerprint !== expected) {
+      throw new Error(
+        "universe rebuild: durable source receipt does not match the " +
+          "current source plan; explicit fixed-run migration is required",
+      );
+    }
+  }
 }
 
 export function assertExactSourceCoverageSet(

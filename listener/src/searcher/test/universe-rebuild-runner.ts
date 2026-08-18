@@ -11,6 +11,7 @@ import {
   type StartupCheckpointEnvelope,
 } from "../universe-rebuild-checkpoint.js";
 import {
+  assertReceiptsMatchCurrentSourcePlan,
   UniverseRunIncomplete,
   probeOneFailure,
   rebuildUniverse,
@@ -64,7 +65,11 @@ function makeFixture(
   dir: string,
   overrides?: Partial<Pick<
     RebuildUniverseInput,
-    "runId" | "scanSwapWindow" | "lookbackBlocks" | "universeWindowFrom"
+    | "runId"
+    | "scanSwapWindow"
+    | "lookbackBlocks"
+    | "universeWindowFrom"
+    | "expectedSourcePlanFingerprints"
   >>,
 ): Fixture {
   const store = new UniverseRebuildCheckpointStore({
@@ -96,6 +101,10 @@ function makeFixture(
       "cand:" + String((candidate as { id: string }).id),
     requiredSourceCoverageKeys: () =>
       Object.freeze(["univ2|startup-universe"]),
+    expectedSourcePlanFingerprints: () => Object.freeze({
+      startup: "2".repeat(64),
+      events: "5".repeat(64),
+    }),
     dedupeFamilyCandidates: (obs) =>
       candidates(
         [...new Set(obs.map((o) => String((o as { id: string }).id)))],
@@ -445,6 +454,35 @@ async function main(): Promise<void> {
       null,
       "false source completeness must not begin a durable run",
     );
+    const staleSourcePlan = makeFixture(join(dir, "stale-source-plan"));
+    await assert.rejects(
+      () => rebuildUniverse(Object.freeze({
+        ...staleSourcePlan.input,
+        expectedSourcePlanFingerprints: () => Object.freeze({
+          startup: "9".repeat(64),
+          events: "5".repeat(64),
+        }),
+      })),
+      /does not match the current source plan/,
+    );
+    assert.equal(
+      await staleSourcePlan.store.load(),
+      null,
+      "a receipt sealed by stale source code cannot begin a durable run",
+    );
+    assert.throws(
+      () => assertReceiptsMatchCurrentSourcePlan(
+        Object.freeze([Object.freeze({
+          ...sourceReceipts(SOURCE.number - 14_399)[0]!,
+          sourceKind: "unknown-source-kind" as never,
+        })]),
+        Object.freeze({
+          startup: "2".repeat(64),
+          events: "5".repeat(64),
+        }),
+      ),
+      /source receipt kind is not bound/,
+    );
     const scanCrash = makeFixture(join(dir, "source-scan-crash"), {
       scanSwapWindow: async () => {
         throw new Error("fixture source chunk failed");
@@ -500,6 +538,87 @@ async function main(): Promise<void> {
       /explicit fromBlock is invalid/,
     );
     assert.equal(await invalidRange.store.load(), null);
+
+    // G-plan: durable source receipts must be sealed by the current source
+    // plan (audit P0-STOP-1). A matching plan passes; any drift between the
+    // sealing code and the current catalog (stale topic/decoder/capability)
+    // fails closed before the run can attest or mint coverage.
+    const planReceiptFixture = (
+      dir: string,
+      plan: string,
+    ): Fixture => makeFixture(dir, {
+      scanSwapWindow: async (scanInput) => {
+        const receipt = sourceReceipts(scanInput.fromBlock)[0]!;
+        return Object.freeze({
+          observations: Object.freeze(["a", "b", "c"].map((id) =>
+            Object.freeze({ id, block: SOURCE.number }),
+          )),
+          sourceReceipts: Object.freeze([Object.freeze({
+            ...receipt,
+            queryFingerprint: plan,
+          })]),
+        });
+      },
+    });
+    const matchingPlan = planReceiptFixture(join(dir, "matching-plan"), "9".repeat(64));
+    await assert.rejects(
+      () => rebuildUniverse(Object.freeze({
+        ...matchingPlan.input,
+        expectedSourcePlanFingerprints: () =>
+          Object.freeze({ startup: "9".repeat(64), events: "9".repeat(64) }),
+      })),
+      UniverseRunIncomplete,
+    );
+    assert.equal(
+      (await matchingPlan.store.load())?.inProgressRun?.sourceReceipts?.[0]
+        ?.queryFingerprint,
+      "9".repeat(64),
+      "matching-plan receipt must be accepted into the durable run",
+    );
+    const stalePlan = planReceiptFixture(join(dir, "stale-plan"), "a".repeat(64));
+    await assert.rejects(
+      () => rebuildUniverse(Object.freeze({
+        ...stalePlan.input,
+        expectedSourcePlanFingerprints: () =>
+          Object.freeze({ startup: "b".repeat(64), events: "b".repeat(64) }),
+      })),
+      /does not match the current source plan/,
+      "stale topic/capability plan must fail closed",
+    );
+    assert.equal(
+      await stalePlan.store.load(),
+      null,
+      "a stale-plan receipt must not begin a durable run",
+    );
+    // Resume drift: receipts were durable under plan X; the catalog changed
+    // (same pattern ids, new implementation) so plan Y must reject the old
+    // receipts instead of silently attesting the old partition to ready.
+    const resumeDrift = planReceiptFixture(join(dir, "resume-drift"), "c".repeat(64));
+    const planC = () => Object.freeze({
+      startup: "c".repeat(64),
+      events: "c".repeat(64),
+    });
+    await assert.rejects(
+      () => rebuildUniverse(Object.freeze({
+        ...resumeDrift.input,
+        expectedSourcePlanFingerprints: planC,
+      })),
+      UniverseRunIncomplete,
+    );
+    assert.equal(
+      (await resumeDrift.store.load())?.inProgressRun?.sourceReceipts?.length,
+      1,
+      "first run seals receipts under plan c",
+    );
+    await assert.rejects(
+      () => rebuildUniverse(Object.freeze({
+        ...resumeDrift.input,
+        expectedSourcePlanFingerprints: () =>
+          Object.freeze({ startup: "d".repeat(64), events: "d".repeat(64) }),
+      })),
+      /does not match the current source plan/,
+      "resume must reject receipts sealed by a different code version",
+    );
 
     // G: the deployed pre-receipt fixed checkpoint is upgraded in place.
     // The runner replays the original fixed range, requires the exact same
