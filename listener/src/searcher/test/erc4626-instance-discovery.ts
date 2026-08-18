@@ -39,7 +39,7 @@ import {
 } from "../protocol-discovery-runtime.js";
 import { mergePoolRegistries } from "../pool-registry-merge.js";
 import { poolRegistryKey } from "../pool-universe.js";
-import { buildTokenPaths, POOL_REGISTRY, type TokenEdge } from "../planner/token-graph.js";
+import { buildTokenPaths, type TokenEdge } from "../planner/token-graph.js";
 import { buildStrategyViews } from "../strategy-views.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import {
@@ -203,10 +203,6 @@ const fixtureIdentityRuntime = createStrictCentralAdapterRuntime({
 const attester = createCanonicalProtocolIdentityAttester({
   identityRuntime: fixtureIdentityRuntime,
 });
-assert(
-  !POOL_REGISTRY.some((pool) => pool.address.toLowerCase() === VAULT.toLowerCase()),
-  "scanner target must not exist in the production registry",
-);
 
 const ordinaryContext = createContext();
 const ordinaryScan = await scanProtocolDiscoveryRange({

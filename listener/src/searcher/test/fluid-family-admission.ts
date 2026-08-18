@@ -22,7 +22,6 @@ import {
   fluidDexDiscovery,
 } from "../venues/swaps/fluid-dex.js";
 import { bindRouteInstanceIdentity } from "../venues/route-instance-identity.js";
-import { POOL_REGISTRY } from "../planner/token-graph.js";
 import {
   createStrictCentralAdapterRuntime,
   type StrictSimulationTransport,
@@ -303,10 +302,6 @@ async function runAdmission(backend: ProtocolDiscoveryReadBackend) {
   });
 }
 
-assert(
-  !POOL_REGISTRY.some((pool) => pool.adapter === "fluid-dex" || pool.adapter === "fluid-vault"),
-  "Fluid executable rows must not remain in the legacy static registry",
-);
 assert.deepEqual(fluidDexDiscovery.candidateAddressHints, [ADDR.FLUID_DEX_USDC_USDT]);
 assert(
   !fluidDexDiscovery.candidateAddressHints!.some(

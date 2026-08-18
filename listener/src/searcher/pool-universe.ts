@@ -435,28 +435,6 @@ function impliedSpreadFee(pool: PoolUniverseEntry): number {
   return 0;
 }
 
-export function selectPairCompletionPools(
-  admittedPools: PoolEntry[],
-  candidatePools: PoolUniverseEntry[],
-): PoolUniverseEntry[] {
-  const admittedPairs = new Set<string>();
-  for (const pool of admittedPools) {
-    const key = unorderedTokenPairKey(pool);
-    if (key) admittedPairs.add(key);
-  }
-  const admittedPoolKeys = new Set(admittedPools.map(poolRegistryKey));
-  for (const pool of candidatePools) {
-    if (!admittedPoolKeys.has(poolRegistryKey(pool))) continue;
-    const key = unorderedTokenPairKey(pool);
-    if (key) admittedPairs.add(key);
-  }
-  if (admittedPairs.size === 0) return [];
-  return candidatePools.filter((pool) => {
-    const key = unorderedTokenPairKey(pool);
-    return key !== null && admittedPairs.has(key);
-  });
-}
-
 function appendForceIncluded(
   selected: PoolUniverseEntry[],
   allPools: PoolUniverseEntry[],

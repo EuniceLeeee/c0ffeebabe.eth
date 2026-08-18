@@ -19,7 +19,7 @@ import {
   type V4PoolKey,
 } from "../planner/token-graph.js";
 import { mergePoolRegistries } from "../pool-registry-merge.js";
-import { loadPoolUniverse, selectPairCompletionPools } from "../pool-universe.js";
+import { loadPoolUniverse } from "../pool-universe.js";
 import { deriveEdgeTaxonomy, type ProtocolAction } from "../strategy-taxonomy.js";
 import type { FlashLiquidityView, FlashSource } from "../solver/flash-liquidity.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY, type PathTemplate } from "../templates/path-template.js";
@@ -1140,18 +1140,8 @@ async function testHighSpreadUniverseSelectionReplay(): Promise<void> {
       highSpreadPairQuota: 150,
       highSpreadMinFee: 10000,
     });
-    const completion = selectPairCompletionPools(
-      highSpreadSelected,
-      loadPoolUniverse(file, { maxPools: 0, minScore: 1 }),
-    );
-    const completed = mergePoolRegistries(highSpreadSelected, completion);
-    assert(
-      completed.some((pool) => pool.address === POOL_1151_USDT_A) &&
-        completed.some((pool) => pool.address === POOL_1151_USDT_B),
-      "high-spread replay after: high-fee pair floor plus pair-completion should include both real pools",
-    );
     const planner = new TemplatePlanner();
-    planner.setGraph(completed.flatMap(poolToSwapEdges));
+    planner.setGraph(highSpreadSelected.flatMap(poolToSwapEdges));
     planner.setMaxHops(2);
     const plans = await planner.plan(
       opportunityWithImpact(REAL_USDT, TOK_1151, POOL_1151_USDT_A, REAL_USDT),

@@ -128,7 +128,6 @@ import {
   loadPoolUniverseCoverageMetadata,
   loadPoolUniverseGeneratedAt,
   poolRegistryKey,
-  selectPairCompletionPools,
 } from "./pool-universe.js";
 import {
   BlockScanBackrunStateBridge,
@@ -268,7 +267,6 @@ interface LiveConfig {
    * requiresProtocolEdgesFlag. The kernel never names individual families;
    * each registration owns whether this switch applies.
    */
-  enableProtocolEdges: boolean;
   mevShareSseUrl: string;
   liveBackend: LiveBackendKind;
   botvmAddress: string;
@@ -316,7 +314,6 @@ interface LiveConfig {
   forceIncludePoolIdsPath: string;
   poolUniverseHighSpreadPairQuota: number;
   poolUniverseHighSpreadMinFee: number;
-  pairCompletion: boolean;
   recordLiveFixtures: boolean;
   liveFixtureDir: string;
   /** Phantom-profit guard: reject final profit > this many bps of the flash
@@ -713,7 +710,6 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     enableBackrun,
     enableMempool,
     enableMevShare,
-    enableProtocolEdges: process.env.SEARCHER_ENABLE_PROTOCOL_EDGES === "1",
     mevShareSseUrl: process.env.MEV_SHARE_SSE_URL ?? DEFAULT_MEV_SHARE_SSE_URL,
     liveBackend: parseLiveBackendKind(process.env.SEARCHER_LIVE_BACKEND ?? "rpc"),
     botvmAddress: ethers.getAddress(botvmAddress),
@@ -754,7 +750,6 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     forceIncludePoolIdsPath,
     poolUniverseHighSpreadPairQuota: Number(process.env.SEARCHER_POOL_UNIVERSE_HIGH_SPREAD_PAIR_QUOTA ?? "150"),
     poolUniverseHighSpreadMinFee: Number(process.env.SEARCHER_POOL_UNIVERSE_HIGH_SPREAD_MIN_FEE ?? "10000"),
-    pairCompletion: process.env.SEARCHER_PAIR_COMPLETION !== "0",
     recordLiveFixtures: process.env.SEARCHER_RECORD_LIVE_FIXTURES === "1",
     liveFixtureDir: process.env.SEARCHER_LIVE_FIXTURE_DIR ?? resolve("searcher", "live-fixtures"),
     maxProfitBpsOfFlash: BigInt(process.env.SEARCHER_MAX_PROFIT_BPS_OF_FLASH ?? "2000"),
@@ -1258,8 +1253,7 @@ async function main(): Promise<void> {
     `[searcher/live] poolUniverse=${config.poolUniversePath} ` +
       `topN=${config.poolUniverseTopN} minScore=${config.poolUniverseMinScore} ` +
       `highSpreadPairQuota=${config.poolUniverseHighSpreadPairQuota} ` +
-      `highSpreadMinFee=${config.poolUniverseHighSpreadMinFee} ` +
-      `pairCompletion=${config.pairCompletion ? "on" : "off"}`,
+      `highSpreadMinFee=${config.poolUniverseHighSpreadMinFee}`,
   );
   console.log(
     `[searcher/live] solverDeadlineMs=${config.solverDeadlineMs} ` +
@@ -1497,37 +1491,19 @@ async function main(): Promise<void> {
   const basePools = incumbentPools;
   const startupBlockscanUniverse = blockscanUniverse;
   const startupBlockScanOverrides = blockScanOverrides;
-  const pairCompletionCandidates = config.pairCompletion
-    ? selectPairCompletionPools(
-      basePools,
-      startupBlockscanUniverse,
-    )
-    : [];
-  const allPools = mergePoolRegistries(basePools, pairCompletionCandidates);
-  const pairCompletionAdded = allPools.length - basePools.length;
-  console.log(
-    `[searcher/live] pair-completion: +${pairCompletionAdded} alternate-venue pools` +
-      (config.pairCompletion ? "" : " (disabled)"),
-  );
-  console.log(
-    `[searcher/live] protocolEdges=${config.enableProtocolEdges
-      ? "enabled"
-      : "disabled (registry-gated protocol venues off)"}`,
-  );
   console.log(
     `[searcher/live] pool registry: ${liveRegistry.length} protocol + ` +
       `${pinnedWarmPools.length} pinned + ${universePools.length} universe ` +
       `(forceInclude=${config.poolUniverseForceInclude.length}) + ` +
       `${blockscanUniverse.length} blockscan metadata + ` +
-      `${pairCompletionAdded} pair-completion = ` +
-      `${allPools.length} total (strict event scan already consumed)`,
+  `${basePools.length} total (strict event scan already consumed)`,
   );
   const strategyViewOptions = {
     blockscanMaxPools: Number(process.env.SEARCHER_BLOCKSCAN_VIEW_MAX_POOLS ?? 6000),
     poolUniverseGeneratedAt: loadPoolUniverseGeneratedAt(config.poolUniversePath),
   };
   let strategyViews = buildStrategyViews(
-    allPools,
+    basePools,
     startupBlockscanUniverse,
     startupBlockScanOverrides,
     strategyViewOptions,
@@ -5930,18 +5906,6 @@ class FatalMempoolSubscriptionError extends Error {
 }
 
 let wsRpcId = 1;
-
-export function filterLiveProtocolRegistry(pools: PoolEntry[], enabled: boolean): PoolEntry[] {
-  if (enabled) return pools;
-  return pools.filter((pool) => {
-    try {
-      return !PRODUCTION_STRICT_FAMILY_DECLARATIONS
-        .requiresProtocolEdgesForPool(pool.adapter);
-    } catch {
-      return false;
-    }
-  });
-}
 
 export function buildMempoolToAddressFilter(pools: PoolEntry[], routersPath?: string): string[] {
   const forceRouters = loadForceIncludeRouters(

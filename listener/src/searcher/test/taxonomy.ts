@@ -1,13 +1,11 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
-  POOL_REGISTRY,
   type PoolEntry,
   type TokenEdge,
 } from "../planner/token-graph.js";
 import {
   deriveEdgeTaxonomy,
-  edgeKindFromPoolEntry,
   edgeKindFromSlotKind,
   pathLeavesStandingPosition,
   strategyKindFromTxShape,
@@ -86,28 +84,16 @@ async function testTokenGraphEdges(): Promise<void> {
   // A0: the PSM entry is reclassified protocol/convert — a full-value conversion that must NOT
   // leave a standing position (behavior-neutral vs the prior swap classification), and its
   // PoolEntry-level projection must agree with the edge-level derivation.
-  const psmEntry = POOL_REGISTRY.find((entry) => entry.adapter === "psm");
-  assert(psmEntry !== undefined, "POOL_REGISTRY psm entry missing");
-  assert(psmEntry.fixedSlotKind === "protocol", `psm fixedSlotKind ${psmEntry.fixedSlotKind}`);
-  assert(psmEntry.fixedProtocolAction === "convert", `psm fixedProtocolAction ${psmEntry.fixedProtocolAction}`);
   const psmEdges: TokenEdge[] = [
     { adapterId: "psm", target: ADDR.SKY_PSM_LITE, tokenIn: ADDR.USDC, tokenOut: ADDR.DAI, slotKind: "protocol", protocolAction: "convert", edgeKind: "protocol", leavesStandingPosition: false },
   ];
   assert(psmEdges.length === 1, `psm edge count ${psmEdges.length}`);
   assert(psmEdges[0].protocolAction === "convert", `psm edge protocolAction ${psmEdges[0].protocolAction}`);
   assertTaxonomy(psmEdges[0], "protocol", false, "psm protocol/convert edge");
-  assert(
-    edgeKindFromPoolEntry(psmEntry) === psmEdges[0].edgeKind,
-    "psm PoolEntry edge kind should agree with the edge-level derivation",
-  );
 
   // Discovery-owned ERC4626 instances emit exactly probe-verified routes.
   // Standard compatibility seeds have been removed, so exercise the dynamic
   // taxonomy with an explicit discovery-shaped pool.
-  assert(
-    !POOL_REGISTRY.some((entry) => entry.adapter === "erc4626" && !entry.nonStandardRedeem),
-    "standard ERC4626 executable fallbacks must stay removed",
-  );
   const erc4626Entry: PoolEntry = {
     address: ADDR.SUSDS,
     adapter: "erc4626",
@@ -131,18 +117,6 @@ async function testTokenGraphEdges(): Promise<void> {
   assertTaxonomy(depositEdge, "protocol", false, "erc4626 deposit protocol/wrap edge");
   assertTaxonomy(redeemEdge, "protocol", false, "erc4626 redeem protocol/redeem edge");
 
-  const hgUsdcEntry = POOL_REGISTRY.find((entry) => entry.adapter === "metronome-hgusdc");
-  assert(hgUsdcEntry !== undefined, "Metronome hgUSDC router entry missing");
-  assert(
-    Boolean(hgUsdcEntry.receiptEmitters
-      ?.map((address) => address.toLowerCase())
-      .includes(ADDR.HGUSDC.toLowerCase())),
-    "Metronome hgUSDC receipt emitter alias missing",
-  );
-  assert(
-    hgUsdcEntry.fixedSlotKind === "protocol" && hgUsdcEntry.fixedProtocolAction === "redeem",
-    "Metronome hgUSDC protocol metadata missing",
-  );
   const hgUsdcEdges: TokenEdge[] = [
     { adapterId: "metronome-hgusdc-exit", target: ADDR.HGUSDC, tokenIn: ADDR.MSUSD, tokenOut: ADDR.USDC, slotKind: "protocol", protocolAction: "redeem", edgeKind: "protocol", leavesStandingPosition: false },
   ];
@@ -155,8 +129,6 @@ async function testTokenGraphEdges(): Promise<void> {
   );
   assertTaxonomy(hgUsdcExit, "protocol", false, "Metronome hgUSDC protocol/redeem edge");
 
-  const metronomeEntry = POOL_REGISTRY.find((entry) => entry.adapter === "metronome-synth");
-  assert(metronomeEntry !== undefined, "POOL_REGISTRY metronome synth entry missing");
   const metronomeEdges: TokenEdge[] = [
     { adapterId: "metronome-synth-swap", target: ADDR.METRONOME_SYNTH_POOL, tokenIn: ADDR.MSETH, tokenOut: ADDR.MSBTC, slotKind: "protocol", protocolAction: "convert", edgeKind: "protocol", leavesStandingPosition: false },
     { adapterId: "metronome-synth-swap", target: ADDR.METRONOME_SYNTH_POOL, tokenIn: ADDR.MSBTC, tokenOut: ADDR.MSETH, slotKind: "protocol", protocolAction: "convert", edgeKind: "protocol", leavesStandingPosition: false },

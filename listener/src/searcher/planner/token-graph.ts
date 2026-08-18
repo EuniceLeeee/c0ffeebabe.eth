@@ -241,9 +241,6 @@ export function mergeDeclaredProtocolVenues(
   return result;
 }
 
-/** Compatibility default for analysis callers. Production main never consumes
- * this list: startup strict discovery is the only instance authority. */
-export const POOL_REGISTRY: PoolEntry[] = [];
 
 // --- Auto-build graph from pool registry via eth_call ---
 //

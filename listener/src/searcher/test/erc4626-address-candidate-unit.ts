@@ -15,7 +15,6 @@ import { createProtocolDiscoveryEvidenceCache } from "../protocol-discovery-cach
 import { buildStrategyViews } from "../strategy-views.js";
 import {
   buildTokenPaths,
-  POOL_REGISTRY,
   type PoolEntry,
 } from "../planner/token-graph.js";
 import { STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY } from "./strict-family-test-compat.js";
@@ -140,12 +139,6 @@ const candidateAddressHints = protocolDiscoveryCandidateAddressHints([erc4626Ada
 assert(
   JSON.stringify(candidateAddressHints) === JSON.stringify(expectedHints),
   "registry-owned ERC4626 provenance hint set must stay frozen at 20 addresses",
-);
-assert(
-  POOL_REGISTRY.filter(
-    (pool) => pool.adapter === "erc4626" && !pool.nonStandardRedeem,
-  ).length === 0,
-  "standard ERC4626 hints must not remain executable PoolEntries",
 );
 
 const baseDiscovery = erc4626Adapter.discovery;

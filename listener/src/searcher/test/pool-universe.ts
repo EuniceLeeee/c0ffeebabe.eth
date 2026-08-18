@@ -8,7 +8,6 @@ import {
   loadPoolUniverseCoverageMetadata,
   POOL_UNIVERSE_BUILD_MANIFEST_PROFILE,
   poolUniverseCanonicalAnchorMatches,
-  selectPairCompletionPools,
 } from "../pool-universe.js";
 import type { PoolEntry } from "../planner/token-graph.js";
 import {
@@ -333,65 +332,6 @@ async function main(): Promise<void> {
 
     const unlimited = loadPoolUniverse(rankedFile, { maxPools: 0, minScore: 1 });
     assert(unlimited.length === 1502, `topN=0 should load all pools, got ${unlimited.length}`);
-    console.log("[pool-universe] topN=0 unlimited: PASS");
-
-    const pairCompletionFile = join(dir, "pair-completion-pools.json");
-    const pairAHigh = poolAddress(0x3001);
-    const pairAAlt = poolAddress(0x3002);
-    const pairBHigh = poolAddress(0x3003);
-    const pairCAlt = poolAddress(0x3004);
-    writeFileSync(pairCompletionFile, JSON.stringify({
-      pools: [
-        {
-          address: pairAHigh,
-          adapter: "univ3",
-          token0: poolAddress(0xa001),
-          token1: poolAddress(0xa002),
-          score: 100,
-        },
-        {
-          address: pairAAlt,
-          adapter: "univ3",
-          token0: poolAddress(0xa001),
-          token1: poolAddress(0xa002),
-          score: 3,
-        },
-        {
-          address: pairBHigh,
-          adapter: "univ2",
-          token0: poolAddress(0xb001),
-          token1: poolAddress(0xb002),
-          score: 50,
-        },
-        {
-          address: pairCAlt,
-          adapter: "univ2",
-          token0: poolAddress(0xc001),
-          token1: poolAddress(0xc002),
-          score: 2,
-        },
-      ],
-    }));
-    const admitted = loadPoolUniverse(pairCompletionFile, { maxPools: 2, minScore: 1 });
-    assert(
-      admitted.map((pool) => pool.address).join(",") === `${pairAHigh},${pairBHigh}`,
-      "pair-completion setup should admit pairA-high + pairB-high in topN=2",
-    );
-    const admittedRuntime: PoolEntry[] = admitted.map((pool) =>
-      pool.address === pairAHigh
-        ? { address: pool.address, adapter: pool.adapter, score: pool.score }
-        : pool,
-    );
-    const pairCompletion = selectPairCompletionPools(
-      admittedRuntime,
-      loadPoolUniverse(pairCompletionFile, { maxPools: 0, minScore: 1 }),
-    );
-    const completed = mergePoolRegistries(admittedRuntime, pairCompletion);
-    assert(completed.length === 3, `pair-completion should append one alternate, got ${completed.length}`);
-    assert(completed.some((pool) => pool.address === pairAAlt), "pair-completion should append pairA score-3 alternate");
-    assert(!completed.some((pool) => pool.address === pairCAlt), "pair-completion should not append unadmitted pairC");
-    console.log("[pool-universe] pair-completion alternate admission: PASS");
-
     const forceFile = join(dir, "force-pools.json");
     const belowCut = poolAddress(0x2003);
     const scoreless = poolAddress(0x2004);

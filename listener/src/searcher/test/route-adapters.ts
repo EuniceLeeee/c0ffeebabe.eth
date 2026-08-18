@@ -6,7 +6,6 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import {
   mergeDeclaredProtocolVenues,
-  POOL_REGISTRY,
   type PoolEntry,
   type TokenQueryBackend,
 } from "../planner/token-graph.js";
@@ -547,12 +546,6 @@ async function main(): Promise<void> {
     );
     for (const venue of protocolAdapter.declaredVenues) {
       assert(venue.score === undefined, `${protocolAdapter.id} static venue must stay pinned`);
-      assert(
-        POOL_REGISTRY.some((pool) =>
-          pool.address.toLowerCase() === venue.address.toLowerCase() && pool.adapter === venue.adapter
-        ),
-        `${protocolAdapter.id} declared venue missing from graph registry`,
-      );
       STRICT_EMPTY_POOL_IDENTITY_TEST_REGISTRY.forPool(venue.adapter);
     }
     return protocolAdapter.declaredVenues;
@@ -560,17 +553,6 @@ async function main(): Promise<void> {
   // F8: no static venues are declared; every protocol instance comes from
   // the strict discovery lifecycle.
   assert(declaredVenues.length === 0, `declared static protocol venue count ${declaredVenues.length}`);
-  assert(POOL_REGISTRY.length === 0, `production pool registry count ${POOL_REGISTRY.length}`);
-  assert(
-    !POOL_REGISTRY.some((entry) =>
-      entry.adapter === "fluid-dex" || entry.adapter === "fluid-vault"
-    ),
-    "Fluid executable fallbacks must be discovery-owned",
-  );
-  assert(
-    POOL_REGISTRY.filter((entry) => entry.adapter === "erc4626" && !entry.nonStandardRedeem).length === 0,
-    "standard ERC4626 executable fallback count",
-  );
   const erc4626Family = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.protocols().find(
     (entry) => entry.id === "protocol:erc4626",
   );

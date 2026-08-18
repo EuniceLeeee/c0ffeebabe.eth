@@ -10,7 +10,6 @@ import {
 import {
   withProtocolDiscoveryFamilyContext,
 } from "../protocol-discovery-family-guard.js";
-import { POOL_REGISTRY } from "../planner/token-graph.js";
 import { STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
 import {
@@ -434,12 +433,6 @@ async function discover(
   return { scan, result };
 }
 
-assert(
-  !POOL_REGISTRY.some(
-    (pool) => pool.address.toLowerCase() === VAULT.toLowerCase(),
-  ),
-  "legacy srUSDe static executable row must be removed",
-);
 assert(
   erc4626Adapter.edgeAdapterIds.every((id) => id !== "erc4626-redeem-silo") &&
     erc4626Adapter.ownedActionAdapterIds.every((id) => id !== "erc4626-redeem-silo"),
