@@ -64,6 +64,7 @@ export const erc4626Identity: IdentitySemantics<
         caller: "verified-actor" as const,
         effects: [
           "return-data" as const,
+          "revert-data" as const,
           "token-delta" as const,
           "total-supply-delta" as const,
           "logs" as const,
