@@ -2288,10 +2288,10 @@ let _ = db.basic_ref(storage_owner);
                             })?;
                         mark_account_touched(db, storage_owner);
                         let Ok(balance) = erc20_balance_of(db, block_env, token, to) else {
-                        eprintln!("[revm-sim] deal slot balance after write: {balance}");
-eprintln!("[revm-sim] deal slot try token={token:#x} owner={storage_owner:#x} slot={slot:#x} amount={amount}");
                             break;
                         };
+eprintln!("[revm-sim] deal slot try token={token:#x} owner={storage_owner:#x} slot={slot:#x} amount={amount}");
+eprintln!("[revm-sim] deal slot balance after write: {balance}");
                         if balance >= amount {
                             applied = true;
                             break;
