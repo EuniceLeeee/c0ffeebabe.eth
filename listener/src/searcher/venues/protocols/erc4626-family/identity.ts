@@ -360,6 +360,7 @@ function activeRequests(
       }),
       observe: Object.freeze([
         "return-data" as const,
+        "revert-data" as const,
         "token-delta" as const,
         "total-supply-delta" as const,
         "logs" as const,
@@ -402,6 +403,7 @@ function activeRequests(
       }),
       observe: Object.freeze([
         "return-data" as const,
+        "revert-data" as const,
         "token-delta" as const,
         "total-supply-delta" as const,
         "logs" as const,
