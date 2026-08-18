@@ -194,6 +194,14 @@ test("node deploy installs and verifies production analysis tooling before resta
     script,
     /SEARCHER_DEPLOY_SHA must be the pre-approved exact 40-hex commit/,
   );
+  assert.match(
+    script,
+    /git -C \/opt\/MEV show "\$APPROVED_SHA:scripts\/deploy-node\.sh"/,
+  );
+  assert.doesNotMatch(
+    script,
+    /git -C \/opt\/MEV show origin\/main:scripts\/deploy-node\.sh/,
+  );
   assert.match(script, /git cat-file -e "\$DEPLOY_SHA\^\{commit\}"/);
   assert.match(
     script,

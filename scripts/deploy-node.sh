@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # Safe node deploy: checkout one pre-approved exact commit and restart the searcher.
 #
-# Runs ON the EC2 node (SSM-only, no SSH). Bootstraps itself from git so it is always
-# the latest version:
-#   aws ssm send-command ... --parameters 'commands=[
-#     "git -C /opt/MEV fetch origin -q && git -C /opt/MEV show origin/main:scripts/deploy-node.sh | sudo bash"]'
+# Runs ON the EC2 node (SSM-only, no SSH). The bootstrap must execute this
+# script from the same pre-approved commit; a mutable branch copy can change
+# deployment semantics before the exact checkout guard runs:
+#   APPROVED_SHA=<40-lowercase-hex>
+#   git -C /opt/MEV fetch origin -q
+#   git -C /opt/MEV show "$APPROVED_SHA:scripts/deploy-node.sh" \
+#     | sudo env SEARCHER_DEPLOY_SHA="$APPROVED_SHA" \
+#       SEARCHER_DEPLOY_REF=origin/codex/<branch> bash
 # SEARCHER_DEPLOY_SHA is mandatory (40 lowercase hex). SEARCHER_DEPLOY_REF is
 # only an ancestry constraint: set origin/codex/<branch> for an intentional
 # branch validation; the default remains origin/main.

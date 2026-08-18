@@ -147,6 +147,12 @@ assert(
     deployNode.includes(
       "SEARCHER_DEPLOY_SHA must be the pre-approved exact 40-hex commit",
     ) &&
+    deployNode.includes(
+      'git -C /opt/MEV show "$APPROVED_SHA:scripts/deploy-node.sh"',
+    ) &&
+    !deployNode.includes(
+      "git -C /opt/MEV show origin/main:scripts/deploy-node.sh",
+    ) &&
     deployNode.includes('git cat-file -e "$DEPLOY_SHA^{commit}"') &&
     deployNode.includes(
       'git merge-base --is-ancestor "$DEPLOY_SHA" "$DEPLOY_REF"',
