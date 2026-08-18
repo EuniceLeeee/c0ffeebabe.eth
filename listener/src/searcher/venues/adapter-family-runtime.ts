@@ -2992,7 +2992,10 @@ async function resolveIdentity(input: {
         runtime: input.runtime,
       });
       if (work.status === "unresolved") {
-        unresolved.push(`${variant.id}:${work.failure.code}`);
+        unresolved.push(
+          variant.id + ":" + work.failure.code + ":" +
+            work.failure.message.slice(0, 120),
+        );
         if (work.receipt.dedupeKey !== null) {
           evidenceRefs.push(`work:${work.receipt.dedupeKey}`);
         }
