@@ -3838,6 +3838,29 @@ strict final-sim、checkpoint restart 差集复用以及同 PID/process-start/lo
 SHA，取得非空 durable partition、原子 ready Graph/catalog/coverage、restart memo 差集复用、全适用
 Family strict edge/exact/final-sim provenance 与连续 100/100，才可推进 F5/F9 最终验收。
 
+**2026-08-18 production `SealedReadonlyMap` 第二十四批 live-derived
+正确性 checkpoint（实现提交承载本 checkpoint；仍不是 ready/restart/100/100）：**
+
+- `2df661394bcfa11ed48a850a98186efcf1baf8e3` 在 systemd dry-run PID
+  `255443`（start `2026-08-17 23:54:59 UTC`）成功完成 fixed-cutoff scan，并原子写入
+  `strict-startup-rebuild`：cutoff `25778225/0xef7c15db458db835dce388730d3700e7cd211e42c4653e704327de412f1d0adc`、
+  candidateCount `13842`、checkpoint inode `1389689`、size `11892485`。首批 lifecycle
+  在 memo seal 时因 `durable value objects must be plain records` fail-closed；outcomes=0、
+  applied/ready 未推进，producer 未创建；
+- 使用 production wiring 在该 checkpoint 的原 cutoff 上只读重放首批候选、禁止写 checkpoint。
+  48/48 identity/materialization/projection 均 verified；唯一非 plain 类型为内部
+  `SealedReadonlyMap`（192 处），精确位于 pricing instance 的 `mids`/`unavailable`，没有发现
+  Date、Set、typed bytes 或其他 class。由此排除泛化 class codec，只增加对
+  `[object SealedReadonlyMap]` 且完整实现 size/entries/get/has/iterator 的精确识别；
+- 该类型按现有 durable Map envelope 排序编码，恢复时解码为普通 `Map`。production rehydrator
+  继续从 canonical identity/descriptor/static projection 重新签发 route handles，绝不序列化
+  process-local handle。合同直接调用 production memo sealer，覆盖真实 pricing
+  `mids/unavailable` 的 bigint/string round-trip；production wiring 合同与 listener 完整 build 同轮通过。
+
+下一次部署必须复用上述同一 in-progress run/cutoff，不得重新扫描移动窗口；已持久化候选应直接进入
+逐实例 attestation，并持续按 batch 写 outcomes。只有 retryable=0、exact partition 完整且 ready CAS
+成功后才可创建 producer。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

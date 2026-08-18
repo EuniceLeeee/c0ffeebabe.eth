@@ -283,6 +283,25 @@ type DurableEncodedValue =
   | readonly DurableEncodedValue[]
   | { readonly [key: string]: DurableEncodedValue };
 
+function isSealedReadonlyMap(
+  value: object,
+): value is ReadonlyMap<unknown, unknown> {
+  const candidate = value as {
+    readonly size?: unknown;
+    readonly entries?: unknown;
+    readonly get?: unknown;
+    readonly has?: unknown;
+    readonly [Symbol.iterator]?: unknown;
+  };
+  return Object.prototype.toString.call(value) ===
+      "[object SealedReadonlyMap]" &&
+    Number.isSafeInteger(candidate.size) && Number(candidate.size) >= 0 &&
+    typeof candidate.entries === "function" &&
+    typeof candidate.get === "function" &&
+    typeof candidate.has === "function" &&
+    typeof candidate[Symbol.iterator] === "function";
+}
+
 /** JSON-safe codec for memo data (bigints and Maps are explicit, never lost). */
 function encodeDurableValue(
   value: unknown,
@@ -307,7 +326,7 @@ function encodeDurableValue(
     if (Array.isArray(value)) {
       return Object.freeze(value.map((item) => encodeDurableValue(item, seen)));
     }
-    if (value instanceof Map) {
+    if (value instanceof Map || isSealedReadonlyMap(value)) {
       const entries = [...value.entries()].map(([key, item]) => Object.freeze([
         encodeDurableValue(key, seen),
         encodeDurableValue(item, seen),

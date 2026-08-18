@@ -28,6 +28,30 @@ const SWAP_TOPIC = ethers.id(
   "Swap(address,uint256,uint256,uint256,uint256,address)",
 ).toLowerCase();
 
+class TestSealedReadonlyMap<Key, Value> implements ReadonlyMap<Key, Value> {
+  readonly #values: Map<Key, Value>;
+
+  constructor(values: ReadonlyMap<Key, Value>) {
+    this.#values = new Map(values);
+    Object.freeze(this);
+  }
+
+  get size(): number { return this.#values.size; }
+  get(key: Key): Value | undefined { return this.#values.get(key); }
+  has(key: Key): boolean { return this.#values.has(key); }
+  entries(): MapIterator<[Key, Value]> { return this.#values.entries(); }
+  keys(): MapIterator<Key> { return this.#values.keys(); }
+  values(): MapIterator<Value> { return this.#values.values(); }
+  forEach(
+    callbackfn: (value: Value, key: Key, map: ReadonlyMap<Key, Value>) => void,
+    thisArg?: unknown,
+  ): void {
+    this.#values.forEach((value, key) => callbackfn.call(thisArg, value, key, this));
+  }
+  [Symbol.iterator](): MapIterator<[Key, Value]> { return this.entries(); }
+  get [Symbol.toStringTag](): string { return "SealedReadonlyMap"; }
+}
+
 function log(overrides: Partial<RebuildScanObservation>): RebuildScanObservation {
   return Object.freeze({
     address: "0x" + "11".repeat(20),
@@ -345,6 +369,12 @@ async function main(): Promise<void> {
   // hand-built memo can otherwise make both unit helpers look green while
   // every real restart misses the cache.
   const probeWiring = createProbeWiring({ rpcUrl: "http://127.0.0.1:1" });
+  const mids = new TestSealedReadonlyMap(new Map([
+    ["route:0", 1_000_000n],
+  ]));
+  const unavailable = new TestSealedReadonlyMap(new Map([
+    ["route:1", "no-static-mid"],
+  ]));
   const sealed = probeWiring.sealDurableVerifiedMemo({
     candidate,
     result: Object.freeze({
@@ -358,7 +388,11 @@ async function main(): Promise<void> {
         instanceKey: "canonical-instance",
         descriptor: Object.freeze({}),
         routes: Object.freeze([]),
-        pricingInstances: Object.freeze([]),
+        pricingInstances: Object.freeze([Object.freeze({
+          routes: Object.freeze([]),
+          mids,
+          unavailable,
+        })]),
         evidenceRefs: Object.freeze([]),
       }),
     }),
@@ -366,6 +400,20 @@ async function main(): Promise<void> {
     familyCandidateKey: rebuildFamilyCandidateKey(candidate),
   });
   assert.equal(sealed.candidateFingerprint, candidateFingerprint(candidate));
+  const decodedProjection = wiring.decodeCandidateSnapshot!(
+    sealed.staticProjection,
+  ) as {
+    readonly pricingInstances: readonly {
+      readonly mids: ReadonlyMap<string, bigint>;
+      readonly unavailable: ReadonlyMap<string, string>;
+    }[];
+  };
+  assert.equal(decodedProjection.pricingInstances[0]?.mids.get("route:0"), 1_000_000n);
+  assert.equal(
+    decodedProjection.pricingInstances[0]?.unavailable.get("route:1"),
+    "no-static-mid",
+    "production SealedReadonlyMap pricing state round-trips as a durable Map",
+  );
   assert.equal(
     canReuseMemo({
       memo: sealed,
