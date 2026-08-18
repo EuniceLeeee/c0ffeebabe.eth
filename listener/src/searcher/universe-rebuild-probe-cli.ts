@@ -118,26 +118,39 @@ async function main(): Promise<void> {
     );
     return;
   }
-  for (const target of targets) {
-    const next = await probeOneFailure({
-      store,
-      runId: args.runId,
-      familyCandidateKey: target.familyCandidateKey,
-      attestFamilyInstanceOnce: wiring.attestFamilyInstanceOnce,
-      sealDurableVerifiedMemo: wiring.sealDurableVerifiedMemo,
-      assertCanonicalHead: wiring.assertCanonicalHead,
-      decodeCandidateSnapshot: wiring.decodeCandidateSnapshot,
-    });
-    console.log(
-      "universe-rebuild-probe " + target.familyCandidateKey + " -> " +
-        next.status +
-        (next.status === "retryable"
-          ? " attempt=" + next.attemptCount + " reason=" + next.reasonCode
-          : next.status === "verified"
-            ? " memo=" + next.memoFingerprint
-            : " reason=" + next.reasonCode),
-    );
-  }
+  // Concurrent probes are safe: each write is a CAS guarded by the target's
+  // attemptCount and the store's file lock, so distinct keys never clobber
+  // each other. Bounded workers keep the RPC load on the local node sane.
+  const concurrency = Math.max(
+    1,
+    Math.min(8, Number(process.env.SEARCHER_PROBE_CONCURRENCY ?? "4")),
+  );
+  let nextTarget = 0;
+  await Promise.all(Array.from({ length: concurrency }, async () => {
+    while (true) {
+      const index = nextTarget++;
+      if (index >= targets.length) return;
+      const target = targets[index];
+      const next = await probeOneFailure({
+        store,
+        runId: args.runId,
+        familyCandidateKey: target.familyCandidateKey,
+        attestFamilyInstanceOnce: wiring.attestFamilyInstanceOnce,
+        sealDurableVerifiedMemo: wiring.sealDurableVerifiedMemo,
+        assertCanonicalHead: wiring.assertCanonicalHead,
+        decodeCandidateSnapshot: wiring.decodeCandidateSnapshot,
+      });
+      console.log(
+        "universe-rebuild-probe " + target.familyCandidateKey + " -> " +
+          next.status +
+          (next.status === "retryable"
+            ? " attempt=" + next.attemptCount + " reason=" + next.reasonCode
+            : next.status === "verified"
+              ? " memo=" + next.memoFingerprint
+              : " reason=" + next.reasonCode),
+      );
+    }
+  }));
 }
 
 /**
