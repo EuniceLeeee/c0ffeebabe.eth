@@ -583,22 +583,23 @@ export function createProbeWiring(
   // runtime so those families can verify.
   const revmBin = process.env.SEARCHER_REVM_SIM_BIN;
   const executor = process.env.BOTVM_ADDRESS;
-  const revmClient = revmBin !== undefined && revmBin.trim() !== "" &&
-      executor !== undefined && executor.trim() !== ""
-    ? new RevmSimClient({
-        executablePath: revmBin,
-        timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
-      })
-    : null;
-  const runtimeByCutoff = new Map<string, CentralAdapterRuntime>();
+  // NOTE: the revm-sim daemon serves requests single-threaded over stdin; one
+  // slow request (archive prestateTracer can exceed the HTTP timeout) blocks
+  // every queued request. The probe runs concurrent workers, so sharing one
+  // daemon across workers deadlocks them. Each runtime gets its own
+  // RevmSimClient (its own daemon process): per-key isolation means one slow
+  // key can never block siblings.
   const runtimeFor = (
     cutoff: CanonicalSource,
     observedSender?: string,
   ): CentralAdapterRuntime => {
-    const cutoffKey = cutoff.number + ":" + cutoff.hash.toLowerCase() + ":" +
-      cutoff.generation + ":" + (observedSender?.toLowerCase() ?? "none");
-    const incumbent = runtimeByCutoff.get(cutoffKey);
-    if (incumbent !== undefined) return incumbent;
+    const revmClient = revmBin !== undefined && revmBin.trim() !== "" &&
+        executor !== undefined && executor.trim() !== ""
+      ? new RevmSimClient({
+          executablePath: revmBin,
+          timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
+        })
+      : null;
     const runtime = revmClient === null || executor === undefined
       ? createMinimalIdentityRuntime(strictProvider)
       : createStrictCentralAdapterRuntime({
@@ -626,7 +627,6 @@ export function createProbeWiring(
             verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
           }),
         });
-    runtimeByCutoff.set(cutoffKey, runtime);
     return runtime;
   };
   const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
