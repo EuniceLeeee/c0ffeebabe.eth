@@ -2268,6 +2268,11 @@ where
                 for (storage_owner, slot) in
                     discover_erc20_balance_storage_candidates(remote, token, to)?
                 {
+// The balance may live in a proxy implementation: its
+// code must be warm before balanceOf executes, or
+// code_by_hash_ref fails and the call reverts to 0.
+let _ = db.basic_ref(token);
+let _ = db.basic_ref(storage_owner);
                     let original = db.storage(storage_owner, slot).map_err(|err| {
                         anyhow!(
                             "failed reading discovered slot {storage_owner:#x}:{slot:#x}: {err}"
