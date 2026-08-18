@@ -4,6 +4,8 @@ import type {
   AdapterRequest,
   AdapterRequestResult,
 } from "../../adapter-request-program.js";
+import { RequiredAdapterRequestError } from
+  "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
 import {
   assertSameSource,
@@ -15,7 +17,6 @@ import {
   effectsProjection,
   requireRuntimeCode,
   sameAddress,
-  successfulResult,
   tokenDeltaAtLeast,
   totalSupplyDeltaAtLeast,
 } from "../standard-family/common.js";
@@ -74,12 +75,15 @@ export const erc4626Identity: IdentitySemantics<
       return activeRequests(evidence as Erc4626BaseEvidence);
     },
     decode({ step, results }) {
-      const successful = results.map((result) => {
-        if (!result.ok) {
-          throw new Error(`ERC4626 identity unresolved: ${result.failure}`);
+      const optionalDirectionIds = step.evidence === undefined
+        ? new Set<string>()
+        : new Set(["active-deposit", "active-redeem"]);
+      const successful = results.filter((result) => result.ok);
+      for (const result of results) {
+        if (!result.ok && !optionalDirectionIds.has(result.id)) {
+          throw new RequiredAdapterRequestError(result);
         }
-        return result;
-      });
+      }
       assertSameSource(successful);
       return step.evidence === undefined
         ? decodeBaseEvidence(step.candidate.vault, results)
@@ -295,6 +299,7 @@ function activeRequests(
     ),
     Object.freeze({
       id: "active-deposit",
+      required: false,
       kind: "effect-delta-simulation" as const,
       preCalls: Object.freeze([Object.freeze({
         caller: Object.freeze({
@@ -346,6 +351,7 @@ function activeRequests(
     ));
     requests.push(Object.freeze({
       id: "active-redeem",
+      required: false,
       kind: "effect-delta-simulation" as const,
       call: Object.freeze({
         caller: Object.freeze({
@@ -393,35 +399,39 @@ function decodeActiveEvidence(
   );
   const roundTripSafe =
     roundTrip <= base.sampleAssets + tolerance(base.sampleAssets);
-  const deposit = successfulResult(results, "active-deposit");
-  const depositReturned = deposit.completion === "returned";
+  const depositResult = results.find((result) => result.id === "active-deposit");
+  if (depositResult === undefined) {
+    throw new Error("ERC4626 active-deposit result is missing");
+  }
+  const deposit = depositResult.ok ? depositResult : null;
+  const depositReturned = deposit?.completion === "returned";
   const depositAmountOut = depositReturned
-    ? decodeSimulationUint("deposit", deposit.data)
+    ? decodeSimulationUint("deposit", deposit!.data)
     : 0n;
   const depositVerified = roundTripSafe && depositReturned &&
     depositAmountOut === base.previewDeposit &&
     tokenDeltaAtLeast({
-      result: deposit,
+      result: deposit!,
       token: base.asset,
       account: ERC4626_PROBE_ACTOR,
       direction: "decrease",
       amount: base.sampleAssets,
     }) &&
     tokenDeltaAtLeast({
-      result: deposit,
+      result: deposit!,
       token: base.vault,
       account: ERC4626_PROBE_ACTOR,
       direction: "increase",
       amount: base.previewDeposit,
     }) &&
     totalSupplyDeltaAtLeast({
-      result: deposit,
+      result: deposit!,
       token: base.vault,
       direction: "increase",
       amount: base.previewDeposit,
     }) &&
     lifecycleEventMatches(
-      deposit,
+      deposit!,
       "Deposit",
       base,
       base.sampleAssets,
@@ -470,6 +480,15 @@ function decodeActiveEvidence(
         base.sampleShares,
       );
   }
+  const unresolvedDirections = [depositResult, redeemResult]
+    .filter((result): result is Extract<
+      AdapterRequestResult,
+      { readonly ok: false }
+    > => result !== undefined && !result.ok)
+    .sort((left, right) => left.id.localeCompare(right.id));
+  if (!depositVerified && !redeemVerified && unresolvedDirections.length > 0) {
+    throw new RequiredAdapterRequestError(unresolvedDirections[0]!);
+  }
   return Object.freeze({
     ...base,
     phase: "active",
@@ -482,6 +501,15 @@ function decodeActiveEvidence(
       roundTrip,
       depositVerified,
       redeemVerified,
+      directionOutcomes: Object.freeze(results
+        .filter((result) =>
+          result.id === "active-deposit" || result.id === "active-redeem"
+        )
+        .map((result) => ({
+          id: result.id,
+          status: result.ok ? "ok" : "failure",
+          outcome: result.ok ? result.completion : result.failure,
+        }))),
       resultEffects: results.filter((result) => result.ok).map((result) => ({
         id: result.id,
         completion: result.completion,

@@ -3924,6 +3924,35 @@ cutoff 不变。禁止为了提速清空 checkpoint 或创建移动窗口。
 simulation、Astra authority 与 Fluid declared quote 剩余 retryable；retryable 未归零前
 producer 仍不得创建，也不得宣称 production cutover。
 
+**2026-08-18 ERC4626 direction-isolated active proof 第二十七批
+live-derived 正确性 checkpoint（实现提交承载本 checkpoint；不是 ready、F5 或
+production cutover）：**
+
+- 标准 ERC4626 的 `active-deposit` / `active-redeem` effect simulation 是两个
+  可独立证明的方向，不再是任一 transport/resource failure 就丢弃整个 vault 的
+  all-or-nothing batch。两个 request 现在显式 `required:false`，但这只允许 Family
+  decoder 看见方向级失败；shared `active-asset-code`、roundtrip 与 preview evidence
+  仍 required，中央 caller/source/generation fence 不降级；
+- 一个方向同时通过 return value、asset/share delta、total-supply delta 与标准事件
+  proof 时，即使 sibling 方向为 `rpc/deadline/aborted/resource-limited`，仍只签发已
+  证明方向的 identity/descriptor/route。失败方向不会投影 edge，也不会被通用 Graph
+  builder 补回；其 failure class 被纳入 behavior proof fingerprint；
+- 当两个方向都没有 positive proof 且至少一个方向是 transport/resource failure 时，
+  decoder 重新抛出原始 `RequiredAdapterRequestError`，startup outcome 保持 retryable，
+  不能伪装成 `erc4626_execution_surfaces_failed`。只有两个方向的 request 都完成、但
+  effect/return/log 行为均不成立时，才是 chain-proven terminal rejection；
+- `searcher:erc4626-family-plugin` 合同覆盖 deposit-only、redeem-only、双 resource
+  failure、双 completed-negative 与 shared required failure；同批通过
+  `searcher:strict-identity-attestation`、`searcher:universe-rebuild-production`、
+  capability manifest check 与 listener 完整 build。
+
+部署本批新 exact SHA 时仍必须复用 runId `strict-startup-rebuild`、candidateCount
+`13842` 与 cutoff
+`25778225/0xef7c15db458db835dce388730d3700e7cd211e42c4653e704327de412f1d0adc`；
+不得清 checkpoint 或创建移动窗口。只有原 retryable keys 被新 Family hash 失效并重验、
+exact partition 闭合、`retryable=0`、`appliedThrough==cutoff` 且 Graph/catalog/coverage
+一次 CAS ready 后，才能创建 producer。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约

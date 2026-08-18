@@ -3056,7 +3056,7 @@
         "familyId": "protocol:erc4626",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "711cf341db2815f349d261af9560a7176a32ddbf4b961be8af7d92543638d26d",
+        "contentHash": "2a46c38c96827dc9f0740a73df702151af70fd75584e66da5470bc3dce33db79",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -3064,6 +3064,7 @@
           "src/adapters/protocol-legs.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-program.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/protocols/erc4626-family/abi.ts",
@@ -7260,5 +7261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "2667ac8d65727b5d2da9fe4db3a56ecccdd7476beb9b264d6dac3675e34048a3"
+  "artifactHash": "1ffb6eed359da9b004e4e957708224da68058171221e579f569975a2365560c6"
 }

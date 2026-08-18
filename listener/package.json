@@ -214,6 +214,7 @@
     "searcher:dodo-v2-family-plugin": "node --import tsx src/searcher/test/dodo-v2-family-plugin.ts",
     "searcher:angstrom-v4-family-plugin": "node --import tsx src/searcher/test/angstrom-v4-family-plugin.ts",
     "searcher:curve-underlying-family-plugin": "node --import tsx src/searcher/test/curve-underlying-family-plugin.ts",
+    "searcher:erc4626-family-plugin": "node --import tsx src/searcher/test/erc4626-family-plugin.ts",
     "searcher:fluid-dex-family-plugin": "node --import tsx src/searcher/test/fluid-dex-family-plugin.ts",
     "searcher:fluid-credit-family-plugin": "node --import tsx src/searcher/test/fluid-credit-family-plugin.ts",
     "searcher:astra-multitoken-family-plugin": "node --import tsx src/searcher/test/astra-multitoken-family-plugin.ts",
