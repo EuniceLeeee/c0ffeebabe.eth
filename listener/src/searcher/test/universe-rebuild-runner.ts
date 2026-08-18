@@ -62,7 +62,10 @@ interface Fixture {
 
 function makeFixture(
   dir: string,
-  overrides?: Partial<Pick<RebuildUniverseInput, "runId" | "scanSwapWindow">>,
+  overrides?: Partial<Pick<
+    RebuildUniverseInput,
+    "runId" | "scanSwapWindow" | "lookbackBlocks" | "universeWindowFrom"
+  >>,
 ): Fixture {
   const store = new UniverseRebuildCheckpointStore({
     path: join(dir, "checkpoint.json"),
@@ -457,7 +460,48 @@ async function main(): Promise<void> {
       "a partial scan cannot advance observedThrough or ready",
     );
 
-    // F: the deployed pre-receipt fixed checkpoint is upgraded in place.
+    // F: an explicit universe lower bound can only expand the default
+    // rolling window. It becomes part of the durable run/receipt range;
+    // a later bound cannot silently narrow the required two-day scan.
+    const expandedRange = makeFixture(join(dir, "expanded-range"), {
+      universeWindowFrom: SOURCE.number - 20_000,
+    });
+    await assert.rejects(
+      () => rebuildUniverse(expandedRange.input),
+      UniverseRunIncomplete,
+    );
+    const expandedCheckpoint = await expandedRange.store.load();
+    assert.equal(
+      expandedCheckpoint?.inProgressRun?.fromBlock,
+      SOURCE.number - 20_000,
+    );
+    assert.equal(
+      expandedCheckpoint?.inProgressRun?.sourceReceipts?.[0]?.fromBlock,
+      SOURCE.number - 20_000,
+      "source receipt must bind the expanded explicit range",
+    );
+    const nonNarrowingRange = makeFixture(join(dir, "non-narrowing-range"), {
+      universeWindowFrom: SOURCE.number - 1_000,
+    });
+    await assert.rejects(
+      () => rebuildUniverse(nonNarrowingRange.input),
+      UniverseRunIncomplete,
+    );
+    assert.equal(
+      (await nonNarrowingRange.store.load())?.inProgressRun?.fromBlock,
+      SOURCE.number - 14_399,
+      "explicit range must not narrow the rolling activity window",
+    );
+    const invalidRange = makeFixture(join(dir, "invalid-range"), {
+      universeWindowFrom: -1,
+    });
+    await assert.rejects(
+      () => rebuildUniverse(invalidRange.input),
+      /explicit fromBlock is invalid/,
+    );
+    assert.equal(await invalidRange.store.load(), null);
+
+    // G: the deployed pre-receipt fixed checkpoint is upgraded in place.
     // The runner replays the original fixed range, requires the exact same
     // candidate partition, attaches receipts, and preserves runId/cutoff.
     const legacy = makeFixture(join(dir, "legacy-source-receipt"));

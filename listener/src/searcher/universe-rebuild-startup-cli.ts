@@ -13,6 +13,7 @@ import type { UniverseRebuildDependencies } from "./universe-rebuild-runner.js";
  *
  *   npm run searcher:universe-rebuild-startup -- \
  *     --checkpoint <path> [--rpc-url <url>] [--lookback-blocks <N>] \
+ *     [--from-block <N>] \
  *     [--run-id <id>]
  */
 
@@ -20,6 +21,7 @@ interface Args {
   readonly checkpoint: string;
   readonly rpcUrl?: string;
   readonly lookbackBlocks: number;
+  readonly universeWindowFrom?: number;
   readonly runId: string;
 }
 
@@ -27,6 +29,7 @@ function parseArgs(argv: readonly string[]): Args {
   let checkpoint = "";
   let rpcUrl: string | undefined;
   let lookbackBlocks = 14_400;
+  let universeWindowFrom: number | undefined;
   let runId = "startup-rebuild";
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -39,18 +42,32 @@ function parseArgs(argv: readonly string[]): Args {
     if (arg === "--checkpoint") checkpoint = next();
     else if (arg === "--rpc-url") rpcUrl = next();
     else if (arg === "--lookback-blocks") lookbackBlocks = Number(next());
+    else if (arg === "--from-block") universeWindowFrom = Number(next());
     else if (arg === "--run-id") runId = next();
   }
   if (checkpoint.trim().length === 0) {
     throw new Error(
       "usage: searcher:universe-rebuild-startup --checkpoint <path> " +
-        "[--rpc-url <url>] [--lookback-blocks <N>] [--run-id <id>]",
+        "[--rpc-url <url>] [--lookback-blocks <N>] [--from-block <N>] " +
+        "[--run-id <id>]",
     );
   }
   if (!Number.isSafeInteger(lookbackBlocks) || lookbackBlocks <= 0) {
     throw new Error("--lookback-blocks must be a positive integer");
   }
-  return { checkpoint, rpcUrl, lookbackBlocks, runId };
+  if (
+    universeWindowFrom !== undefined &&
+    (!Number.isSafeInteger(universeWindowFrom) || universeWindowFrom < 0)
+  ) {
+    throw new Error("--from-block must be a non-negative integer");
+  }
+  return {
+    checkpoint,
+    rpcUrl,
+    lookbackBlocks,
+    ...(universeWindowFrom === undefined ? {} : { universeWindowFrom }),
+    runId,
+  };
 }
 
 async function loadWiring(args: Args): Promise<UniverseRebuildDependencies> {
@@ -80,6 +97,9 @@ async function main(): Promise<void> {
       store,
       runId: args.runId,
       lookbackBlocks: args.lookbackBlocks,
+      ...(args.universeWindowFrom === undefined
+        ? {}
+        : { universeWindowFrom: args.universeWindowFrom }),
       log: (message) => console.log("[universe-rebuild] " + message),
     });
     console.log(

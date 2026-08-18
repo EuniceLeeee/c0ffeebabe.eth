@@ -64,7 +64,8 @@ async function main(): Promise<void> {
     const out = execFileSync(
       "node",
       ["--import", "tsx", "src/searcher/universe-rebuild-startup-cli.ts",
-        "--checkpoint", checkpoint, "--run-id", "run-s", "--lookback-blocks", "14400"],
+        "--checkpoint", checkpoint, "--run-id", "run-s", "--lookback-blocks", "14400",
+        "--from-block", String(SOURCE.number - 20_000)],
       {
         cwd: process.cwd(),
         env: { ...process.env, SEARCHER_UNIVERSE_REBUILD_WIRING_PATH: wiring },
@@ -76,6 +77,11 @@ async function main(): Promise<void> {
     const store = new UniverseRebuildCheckpointStore({ path: checkpoint });
     const envelope = await store.load();
     assert.equal(envelope?.readyGeneration?.generation, 1);
+    assert.equal(
+      envelope?.readyGeneration?.universeRange.fromBlock,
+      SOURCE.number - 20_000,
+      "CLI explicit range must expand and bind the ready universe",
+    );
     assert.equal(envelope?.inProgressRun, null);
     assert.equal(
       Object.keys(envelope?.verifiedMemos ?? {}).length,

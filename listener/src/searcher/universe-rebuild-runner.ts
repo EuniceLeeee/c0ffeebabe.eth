@@ -131,6 +131,12 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
   readonly store: UniverseRebuildCheckpointStore;
   readonly runId: string;
   readonly lookbackBlocks: number;
+  /**
+   * Optional lower bound carried by the explicit universe snapshot. It may
+   * expand the default rolling window into history, but can never narrow it.
+   * An incumbent fixed run always keeps its already-durable fromBlock.
+   */
+  readonly universeWindowFrom?: number;
   /** Bounded identity/materialization workers; defaults to 24. */
   readonly attestationConcurrency?: number;
   /** Optional progress logging. */
@@ -140,6 +146,16 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
 export async function rebuildUniverse(
   input: RebuildUniverseInput,
 ): Promise<ReadyUniverseGeneration> {
+  if (!Number.isSafeInteger(input.lookbackBlocks) || input.lookbackBlocks <= 0) {
+    throw new Error("universe rebuild lookbackBlocks must be a positive integer");
+  }
+  if (
+    input.universeWindowFrom !== undefined &&
+    (!Number.isSafeInteger(input.universeWindowFrom) ||
+      input.universeWindowFrom < 0)
+  ) {
+    throw new Error("universe rebuild explicit fromBlock is invalid");
+  }
   const log = input.log ?? ((): void => undefined);
   const encodeCandidate = input.encodeCandidateSnapshot ?? ((value) => value);
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value) => value);
@@ -207,7 +223,13 @@ export async function rebuildUniverse(
     }
   } else {
     cutoff = await input.freezeCanonicalHead();
-    fromBlock = Math.max(0, cutoff.number - input.lookbackBlocks + 1);
+    const defaultFromBlock = Math.max(
+      0,
+      cutoff.number - input.lookbackBlocks + 1,
+    );
+    fromBlock = input.universeWindowFrom === undefined
+      ? defaultFromBlock
+      : Math.min(defaultFromBlock, input.universeWindowFrom);
     // A crash before this scan is sealed may rescan; after beginOrResumeRun,
     // the compact exact partition is durable and no scan is repeated.
     const scanned = await input.scanSwapWindow({ fromBlock, cutoff });
@@ -215,6 +237,11 @@ export async function rebuildUniverse(
     sourceReceipts = scanned.sourceReceipts;
     candidates = input.dedupeFamilyCandidates(observations);
   }
+  log(
+    "universe rebuild fixed source range: run=" + input.runId +
+      " from=" + fromBlock + " cutoff=" + cutoff.number + ":" + cutoff.hash +
+      " resumed=" + String(incumbentRun !== null),
+  );
   const candidatesByKey = Object.freeze(Object.fromEntries(
     candidates.map((candidate) => [
       input.familyCandidateKey(candidate),

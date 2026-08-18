@@ -647,7 +647,11 @@ D-008 落实为第三种 publication 模式，合同级；production 接线仍�
 > **2026-08-17 运行模式最终决策（startup-only fixed-cutoff，以本条覆盖
 > 2026-08-12 continuous-first）：** production 启动先冻结
 > `{number, hash, generation}`，合并全部 startup poolSets 与插件声明的
-> 显式范围 event 补充，形成 durable exact candidate partition；按
+> 显式范围 event 补充，形成 durable exact candidate partition。新 run 的
+> event 下界取 `min(最新两天默认下界, 显式 operator 下界,
+> 已验证 universe snapshot 下界)`，因此外部输入只能扩大、不能缩短严格扫描；
+> incumbent run 永远继续使用 envelope 已固定的 `fromBlock`，配置变化不得移动
+> 原 run。按
 > `FamilyCandidateKey/FamilyInstanceKey` 每实例只跑一次 lifecycle。只有
 > Graph+catalog+coverage+cutoff 的 `readyGeneration` 单 CAS 成功后才能创建
 > producer。producer generation 内 discovery/backfill/protocol trace/
@@ -6489,8 +6493,12 @@ universe rebuild 的正确性路径改为三类 durable 状态 + 固定 cutoff +
 
 ### 22.3 流程（rebuildUniverse）
 无 incumbent run 时 freezeCanonicalHead → 合并 pinned/universe/blockscan/
-override 全部 startup poolSets + 重扫显式 `fromBlock..cutoff` 的插件声明事件（cutoff hash
-固定；mutation-only/不完整事件不得凭中央 topic 猜测实例）→ 先按 block
+override 全部 startup poolSets + 重扫显式 `fromBlock..cutoff` 的插件声明事件。
+`fromBlock` 取最新两天 rolling 下界与 `SEARCHER_UNIVERSE_REBUILD_FROM_BLOCK`/
+verified universe manifest `fromBlock` 的最小值；后二者只能扩展历史范围，pool
+文件/manifest 仍仅是 nomination/range hint，不能授予 admission、coverage、cursor
+或 complete-snapshot authority。incumbent fixed run 忽略后来配置并保持其 durable
+`fromBlock`（cutoff hash 固定；mutation-only/不完整事件不得凭中央 topic 猜测实例）→ 先按 block
 number+hash+txHash+logIndex+address+全部 topics 完整去重，再由插件
 `decodeCandidate/candidateKey/emitter` 给出实例身份并按 Family+Instance
 去重 → 只有完整 query/chunk partition 全部成功后，才把
@@ -6535,6 +6543,9 @@ chunk)；settled/inFlight 双 Map；同 key 并发只建一次；失败清除后
 循环内重置导致"失败后部分/空索引被当 settled"的缺陷）。
 
 ### 22.6 CLI
+- `searcher:universe-rebuild-startup --checkpoint <path>
+  [--lookback-blocks N] [--from-block N] [--run-id id]`；`--from-block`
+  只能把 rolling 下界向历史扩展，最终 range 写入 run/source receipt/ready envelope；
 - `searcher:universe-rebuild-status --checkpoint <path> [--json]`
 - `searcher:universe-rebuild-probe --checkpoint <path> --run-id <id>
   --family-candidate-key <key>` 或 `--failure-code <code> [--limit N]`
@@ -6588,6 +6599,9 @@ searcher 进程在创建 producer 前直接 begin/resume `rebuildUniverse`，不
    `searcher:universe-rebuild-probe` 在原 run/cutoff 定向关闭，然后重启
    systemd 继续 finalize，不另起移动窗口。`deploy-node.sh` 不运行
    build-active-pool-universe/deploy-trust；pool 文件只可提供 nomination。
+   新 run 可由 verified universe manifest 或显式
+   `SEARCHER_UNIVERSE_REBUILD_FROM_BLOCK` 扩大 event 历史下界；恢复现有
+   `strict-startup-rebuild` 时不得用该配置改写固定 `fromBlock`。
 2. 先记录本轮人工批准的 40 位 commit 为 `<APPROVED_SHA>`；fetch 后必须用
    `git -C /opt/MEV show
    "<APPROVED_SHA>:scripts/deploy-node.sh"` 取出同一 approved commit 的部署
