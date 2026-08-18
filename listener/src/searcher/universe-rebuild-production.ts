@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { ethers } from "ethers";
 import {
   canonicalJson,
+  type DurableSourceChunkReceipt,
+  type DurableSourceReceipt,
   type DurableVerifiedMemo,
   type ReadyUniverseGeneration,
   type RetryableAttempt,
@@ -922,6 +924,29 @@ export function strictCatalogLogTopics(): readonly string[] {
   return [...topics].sort();
 }
 
+export function strictCatalogSourceCoverageKeys(): {
+  readonly startup: readonly string[];
+  readonly events: readonly string[];
+} {
+  const startup: string[] = [];
+  const events: string[] = [];
+  for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .listAll()) {
+    const familyId = family.plugin.manifest.familyId;
+    startup.push(familyId + "|startup-universe");
+    const discovery = "discovery" in family.plugin
+      ? family.plugin.discovery
+      : null;
+    for (const pattern of discovery?.logPatterns ?? []) {
+      events.push(familyId + "|event:" + pattern.id);
+    }
+  }
+  return Object.freeze({
+    startup: Object.freeze([...new Set(startup)].sort()),
+    events: Object.freeze([...new Set(events)].sort()),
+  });
+}
+
 export function familyForObservation(
   observation: {
     readonly address: string;
@@ -1135,6 +1160,7 @@ export function createRebuildWiring(input?: {
   }
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const topics = strictCatalogLogTopics();
+  const sourceCoverageKeys = strictCatalogSourceCoverageKeys();
   // reth caps eth_getLogs at 20000 results; the strict-topic union is
   // high-volume, so start small and halve on the max-results error.
   const scanBatch = 1_000;
@@ -1145,6 +1171,10 @@ export function createRebuildWiring(input?: {
       encodeDurableValue(candidate),
     decodeCandidateSnapshot: (snapshot) =>
       decodeDurableValue(snapshot),
+    requiredSourceCoverageKeys: () => Object.freeze([
+      ...sourceCoverageKeys.startup,
+      ...sourceCoverageKeys.events,
+    ]),
     freezeCanonicalHead: async () => {
       const block = await provider.getBlock("latest");
       if (block === null || block.hash === null) {
@@ -1158,6 +1188,7 @@ export function createRebuildWiring(input?: {
     },
     scanSwapWindow: async (scanInput) => {
       const logs: RebuildScanObservation[] = [];
+      const eventChunks: DurableSourceChunkReceipt[] = [];
       for (
         let start = scanInput.fromBlock;
         start <= scanInput.cutoff.number;
@@ -1179,6 +1210,25 @@ export function createRebuildWiring(input?: {
               fromBlock: from,
               toBlock: to,
             });
+            const normalizedBatch = batch.map((log) => Object.freeze({
+              address: log.address.toLowerCase(),
+              topics: Object.freeze([...log.topics].map((topic) =>
+                topic.toLowerCase()
+              )),
+              data: log.data.toLowerCase(),
+              transactionHash: log.transactionHash?.toLowerCase() ?? null,
+              blockNumber: log.blockNumber,
+              blockHash: log.blockHash?.toLowerCase() ?? null,
+              logIndex: log.index ?? null,
+            }));
+            eventChunks.push(Object.freeze({
+              fromBlock: from,
+              toBlock: to,
+              resultCount: normalizedBatch.length,
+              resultHash: digest(
+                "source-chunk-v1:" + canonicalJson(normalizedBatch),
+              ),
+            }));
             for (const log of batch) {
               logs.push(Object.freeze({
                 address: log.address.toLowerCase(),
@@ -1207,13 +1257,112 @@ export function createRebuildWiring(input?: {
           }
         }
       }
-      return Object.freeze([
+      const observations = Object.freeze([
         ...(input?.startupCandidates ?? []).map((candidate) => Object.freeze({
           kind: "startup-candidate",
           candidate,
         })),
         ...logs,
       ]);
+      const providerIdentity = digest("provider-v1:" + rpcUrl.trim());
+      const startupSnapshot = Object.freeze(
+        (input?.startupCandidates ?? []).map((candidate) =>
+          encodeDurableValue(candidate)
+        ),
+      );
+      const startupQueryFingerprint = digest(
+        "startup-candidate-query-v1:" + canonicalJson({
+          coverageKeys: sourceCoverageKeys.startup,
+          candidateSnapshotHash: digest(
+            "startup-candidate-snapshot-v1:" + canonicalJson(startupSnapshot),
+          ),
+        }),
+      );
+      const startupObservationHash = digest(
+        "startup-candidate-observations-v1:" + canonicalJson(startupSnapshot),
+      );
+      const receipts: DurableSourceReceipt[] = [Object.freeze({
+        sourceKey: digest("source-key-v1:" + canonicalJson({
+          sourceKind: "startup-candidate-union",
+          providerIdentity: "startup-input-snapshot",
+          queryFingerprint: startupQueryFingerprint,
+          fromBlock: scanInput.fromBlock,
+          toBlock: scanInput.cutoff.number,
+          cutoffHash: scanInput.cutoff.hash,
+        })),
+        sourceKind: "startup-candidate-union" as const,
+        providerIdentity: "startup-input-snapshot",
+        queryFingerprint: startupQueryFingerprint,
+        fromBlock: scanInput.fromBlock,
+        toBlock: scanInput.cutoff.number,
+        cutoffNumber: scanInput.cutoff.number,
+        cutoffHash: scanInput.cutoff.hash,
+        coverageKeys: sourceCoverageKeys.startup,
+        completedChunks: Object.freeze([Object.freeze({
+          fromBlock: scanInput.fromBlock,
+          toBlock: scanInput.cutoff.number,
+          resultCount: startupSnapshot.length,
+          resultHash: startupObservationHash,
+        })]),
+        observationSetHash: startupObservationHash,
+        observedThrough: Object.freeze({
+          number: scanInput.cutoff.number,
+          hash: scanInput.cutoff.hash,
+        }),
+        appliedThrough: Object.freeze({
+          number: scanInput.cutoff.number,
+          hash: scanInput.cutoff.hash,
+        }),
+        retryableCount: 0 as const,
+        status: "complete" as const,
+      })];
+      if (sourceCoverageKeys.events.length > 0) {
+        const eventQueryFingerprint = digest(
+          "catalog-event-query-v1:" + canonicalJson({
+            topic0: topics,
+            coverageKeys: sourceCoverageKeys.events,
+            initialChunkBlocks: scanBatch,
+            minimumChunkBlocks: 64,
+          }),
+        );
+        const eventObservationHash = digest(
+          "catalog-event-observations-v1:" + canonicalJson(logs),
+        );
+        receipts.push(Object.freeze({
+          sourceKey: digest("source-key-v1:" + canonicalJson({
+            sourceKind: "catalog-event-union",
+            providerIdentity,
+            queryFingerprint: eventQueryFingerprint,
+            fromBlock: scanInput.fromBlock,
+            toBlock: scanInput.cutoff.number,
+            cutoffHash: scanInput.cutoff.hash,
+          })),
+          sourceKind: "catalog-event-union" as const,
+          providerIdentity,
+          queryFingerprint: eventQueryFingerprint,
+          fromBlock: scanInput.fromBlock,
+          toBlock: scanInput.cutoff.number,
+          cutoffNumber: scanInput.cutoff.number,
+          cutoffHash: scanInput.cutoff.hash,
+          coverageKeys: sourceCoverageKeys.events,
+          completedChunks: Object.freeze(eventChunks),
+          observationSetHash: eventObservationHash,
+          observedThrough: Object.freeze({
+            number: scanInput.cutoff.number,
+            hash: scanInput.cutoff.hash,
+          }),
+          appliedThrough: Object.freeze({
+            number: scanInput.cutoff.number,
+            hash: scanInput.cutoff.hash,
+          }),
+          retryableCount: 0 as const,
+          status: "complete" as const,
+        }));
+      }
+      return Object.freeze({
+        observations,
+        sourceReceipts: Object.freeze(receipts),
+      });
     },
     familyCandidateKey: (candidate) =>
       rebuildFamilyCandidateKey(
@@ -1470,23 +1619,26 @@ export function createRebuildWiring(input?: {
     },
     buildCoverage: (coverageInput) => {
       const rows: ReadyUniverseGeneration["sourceCoverage"][number][] = [];
-      for (const family of
-        PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll()) {
-        rows.push(Object.freeze({
-          familyId: family.plugin.manifest.familyId,
-          sourceId: "startup-universe",
-          completeThroughBlock: coverageInput.cutoff.number,
-          completeThroughHash: coverageInput.cutoff.hash,
-        }));
-        const discovery = "discovery" in family.plugin
-          ? family.plugin.discovery
-          : null;
-        for (const pattern of discovery?.logPatterns ?? []) {
+      for (const receipt of coverageInput.sourceReceipts) {
+        if (
+          receipt.status !== "complete" ||
+          receipt.retryableCount !== 0 ||
+          receipt.appliedThrough.number !== coverageInput.cutoff.number ||
+          receipt.appliedThrough.hash.toLowerCase() !==
+            coverageInput.cutoff.hash.toLowerCase()
+        ) {
+          throw new Error("source receipt is incomplete at ready cutoff");
+        }
+        for (const coverageKey of receipt.coverageKeys) {
+          const separator = coverageKey.indexOf("|");
+          if (separator <= 0 || separator === coverageKey.length - 1) {
+            throw new Error("source receipt coverage key is invalid");
+          }
           rows.push(Object.freeze({
-            familyId: family.plugin.manifest.familyId,
-            sourceId: "event:" + pattern.id,
-            completeThroughBlock: coverageInput.cutoff.number,
-            completeThroughHash: coverageInput.cutoff.hash,
+            familyId: coverageKey.slice(0, separator),
+            sourceId: coverageKey.slice(separator + 1),
+            completeThroughBlock: receipt.appliedThrough.number,
+            completeThroughHash: receipt.appliedThrough.hash,
           }));
         }
       }

@@ -16,7 +16,10 @@ import {
   validateObservedSenderEvidence,
   type RebuildScanObservation,
 } from "../universe-rebuild-production.js";
-import type { DurableVerifiedMemo } from "../universe-rebuild-checkpoint.js";
+import type {
+  DurableSourceReceipt,
+  DurableVerifiedMemo,
+} from "../universe-rebuild-checkpoint.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
 
@@ -607,9 +610,30 @@ async function main(): Promise<void> {
     1,
     "pinned/universe/blockscan/override copies attest once",
   );
+  const coverageReceipt: DurableSourceReceipt = Object.freeze({
+    sourceKey: "1".repeat(64),
+    sourceKind: "catalog-event-union",
+    providerIdentity: "fixture",
+    queryFingerprint: "2".repeat(64),
+    fromBlock: SOURCE.number - 14_399,
+    toBlock: SOURCE.number,
+    cutoffNumber: SOURCE.number,
+    cutoffHash: SOURCE.hash,
+    coverageKeys: wiring.requiredSourceCoverageKeys(),
+    completedChunks: Object.freeze([Object.freeze({
+      fromBlock: SOURCE.number - 14_399,
+      toBlock: SOURCE.number,
+      resultCount: 0,
+      resultHash: "3".repeat(64),
+    })]),
+    observationSetHash: "4".repeat(64),
+    observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+    appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+    retryableCount: 0,
+    status: "complete",
+  });
   const coverage = wiring.buildCoverage({
-    observations: Object.freeze([]),
-    candidates: Object.freeze([]),
+    sourceReceipts: Object.freeze([coverageReceipt]),
     cutoff: SOURCE,
   });
   assert(coverage.some((row) =>

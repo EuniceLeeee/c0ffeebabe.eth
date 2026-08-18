@@ -4,6 +4,7 @@ import {
   UniverseRebuildCheckpointStore,
   canonicalJson,
   type DurableVerifiedMemo,
+  type DurableSourceReceipt,
   type InProgressUniverseRun,
   type ReadyUniverseGeneration,
   type RetryableAttempt,
@@ -50,7 +51,10 @@ export interface UniverseRebuildDependencies {
   readonly scanSwapWindow: (input: {
     readonly fromBlock: number;
     readonly cutoff: CanonicalSource;
-  }) => Promise<readonly unknown[]>;
+  }) => Promise<{
+    readonly observations: readonly unknown[];
+    readonly sourceReceipts: readonly DurableSourceReceipt[];
+  }>;
   /** Full log identity key (block + txHash + logIndex + address + topics). */
   readonly familyCandidateKey: (candidate: unknown) => string;
   /** Unique family candidates for the run (dedupe by familyCandidateKey). */
@@ -61,6 +65,8 @@ export interface UniverseRebuildDependencies {
   readonly encodeCandidateSnapshot?: (candidate: unknown) => unknown;
   /** Restore the exact candidate value (including bigint/Map fields). */
   readonly decodeCandidateSnapshot?: (snapshot: unknown) => unknown;
+  /** Exact Family x source set declared by the loaded strict catalog. */
+  readonly requiredSourceCoverageKeys: () => readonly string[];
   /** Compact evidence pointer retained for a first-attempt retryable. */
   readonly candidateEvidenceRef?: (candidate: unknown) => {
     readonly blockNumber: number;
@@ -114,8 +120,7 @@ export interface UniverseRebuildDependencies {
     readonly instances: readonly unknown[];
   }[], cutoff: CanonicalSource) => unknown;
   readonly buildCoverage: (input: {
-    readonly observations: readonly unknown[];
-    readonly candidates: readonly unknown[];
+    readonly sourceReceipts: readonly DurableSourceReceipt[];
     readonly cutoff: CanonicalSource;
   }) => ReadyUniverseGeneration["sourceCoverage"];
   /** Assert the cutoff hash still holds before the final CAS. */
@@ -144,6 +149,7 @@ export async function rebuildUniverse(
   let fromBlock: number;
   let observations: readonly unknown[];
   let candidates: readonly unknown[];
+  let sourceReceipts: readonly DurableSourceReceipt[];
   if (incumbentRun !== null) {
     if (incumbentRun.runId !== input.runId) {
       throw new Error(
@@ -160,12 +166,53 @@ export async function rebuildUniverse(
     candidates = Object.freeze(Object.entries(incumbentRun.candidatesByKey)
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([, candidate]) => decodeCandidate(candidate)));
+    if (incumbentRun.sourceReceipts === undefined) {
+      // Backward-compatible migration for the already-running fixed
+      // checkpoint: re-run only the exact historical source query, require
+      // the resulting candidate partition to be byte-identical, then attach
+      // receipts. Never clear or replace the run/cutoff/outcomes.
+      const rescanned = await input.scanSwapWindow({ fromBlock, cutoff });
+      const rescannedCandidates = input.dedupeFamilyCandidates(
+        rescanned.observations,
+      );
+      const rescannedByKey = Object.freeze(Object.fromEntries(
+        rescannedCandidates.map((candidate) => [
+          input.familyCandidateKey(candidate),
+          encodeCandidate(candidate),
+        ]),
+      ));
+      if (
+        hashCandidateSet(rescannedCandidates, input.familyCandidateKey) !==
+          incumbentRun.candidateSetHash ||
+        hashUniverseCandidatePartition(rescannedByKey) !==
+          incumbentRun.universeHash
+      ) {
+        throw new Error(
+          "universe rebuild: fixed-run source receipt rescan changed " +
+            "the durable candidate partition",
+        );
+      }
+      assertExactSourceCoverageSet(
+        rescanned.sourceReceipts,
+        input.requiredSourceCoverageKeys(),
+      );
+      checkpoint = await input.store.casSetRunSourceReceipts({
+        expectedRevision: checkpoint?.revision ?? 0,
+        runId: input.runId,
+        sourceReceipts: rescanned.sourceReceipts,
+      });
+      sourceReceipts = rescanned.sourceReceipts;
+    } else {
+      sourceReceipts = incumbentRun.sourceReceipts;
+    }
   } else {
     cutoff = await input.freezeCanonicalHead();
     fromBlock = Math.max(0, cutoff.number - input.lookbackBlocks + 1);
     // A crash before this scan is sealed may rescan; after beginOrResumeRun,
     // the compact exact partition is durable and no scan is repeated.
-    observations = await input.scanSwapWindow({ fromBlock, cutoff });
+    const scanned = await input.scanSwapWindow({ fromBlock, cutoff });
+    observations = scanned.observations;
+    sourceReceipts = scanned.sourceReceipts;
     candidates = input.dedupeFamilyCandidates(observations);
   }
   const candidatesByKey = Object.freeze(Object.fromEntries(
@@ -179,6 +226,10 @@ export async function rebuildUniverse(
       "universe rebuild: dedupe produced duplicate FamilyCandidateKey entries",
     );
   }
+  assertExactSourceCoverageSet(
+    sourceReceipts,
+    input.requiredSourceCoverageKeys(),
+  );
 
   // 2. Create or resume the same fixed-cutoff run.
   checkpoint = await input.store.beginOrResumeRun({
@@ -194,6 +245,7 @@ export async function rebuildUniverse(
       number: cutoff.number,
       hash: cutoff.hash,
     }),
+    sourceReceipts,
   });
   const run = checkpoint.inProgressRun;
   if (run === null || run.runId !== input.runId) {
@@ -401,7 +453,7 @@ export async function rebuildUniverse(
       number: cutoff.number,
       hash: cutoff.hash,
     }),
-    sourceCoverage: input.buildCoverage({ observations, candidates, cutoff }),
+    sourceCoverage: input.buildCoverage({ sourceReceipts, cutoff }),
     graphSnapshot,
     graphHash: hashReadyGraphSnapshot(graphSnapshot),
     catalogSnapshot,
@@ -420,6 +472,25 @@ export async function rebuildUniverse(
       " candidates=" + candidates.length,
   );
   return ready;
+}
+
+export function assertExactSourceCoverageSet(
+  receipts: readonly DurableSourceReceipt[],
+  requiredKeys: readonly string[],
+): void {
+  const required = new Set(requiredKeys);
+  const completed = new Set(receipts.flatMap((receipt) => receipt.coverageKeys));
+  if (
+    required.size === 0 ||
+    required.size !== requiredKeys.length ||
+    completed.size !== required.size ||
+    [...required].some((key) => !completed.has(key))
+  ) {
+    throw new Error(
+      "universe rebuild: completed source receipt set does not match " +
+        "the strict catalog required source exact set",
+    );
+  }
 }
 
 function assertExactCandidatePartition(

@@ -6440,6 +6440,10 @@ universe rebuild 的正确性路径改为三类 durable 状态 + 固定 cutoff +
   fromBlock、universeHash、candidateSetHash、candidateCount、
   `candidatesByKey`（compact exact partition；observedThrough 持久化后恢复
   直接按 key 使用，不重扫移动窗口）、
+  `sourceReceipts`（startup candidate snapshot 与 catalog event-topic union
+  的 exact query receipts；每条绑定 provider/query fingerprint、from/to、
+  cutoff number+hash、完整 contiguous chunk partition、observation set hash
+  与其可授予的 Family×source exact keys）、
   observedThrough（只证 Swap 范围已扫完，不推进 appliedThrough）、
   `appliedThrough=null`（run 未完成期间不可提前）、
   outcomesByCandidateKey：
@@ -6485,12 +6489,16 @@ universe rebuild 的正确性路径改为三类 durable 状态 + 固定 cutoff +
 
 ### 22.3 流程（rebuildUniverse）
 无 incumbent run 时 freezeCanonicalHead → 合并 pinned/universe/blockscan/
-override 全部 startup poolSets + 重扫最新两天插件声明事件（cutoff hash
+override 全部 startup poolSets + 重扫显式 `fromBlock..cutoff` 的插件声明事件（cutoff hash
 固定；mutation-only/不完整事件不得凭中央 topic 猜测实例）→ 先按 block
 number+hash+txHash+logIndex+address+全部 topics 完整去重，再由插件
 `decodeCandidate/candidateKey/emitter` 给出实例身份并按 Family+Instance
-去重 → 原子保存 `candidatesByKey` exact partition。若 incumbent run 存在，
-直接恢复其原 cutoff + candidatesByKey，不重扫新窗口。随后按
+去重 → 只有完整 query/chunk partition 全部成功后，才把
+`candidatesByKey + sourceReceipts` 原子保存为 exact partition。若 incumbent
+run 已有 source receipts，直接恢复其原 cutoff + candidatesByKey，不重扫新
+窗口；部署前创建的 pre-receipt incumbent run 只允许在原 from/to/cutoff
+重扫一次，并要求 universeHash/candidateSetHash 完全一致后，用 CAS 原地补
+receipt，禁止清空、更换 runId/cutoff 或吸收移动窗口。随后按
 familyCandidateKey 恢复：run.verified 跳过 / memo 可复用（family hash +
 candidate fingerprint + 当前 cutoff 的 runtime code hash/EIP-1967
 implementationWord authority fingerprint + 对旧 proofSource number+hash
@@ -6499,7 +6507,9 @@ writer.record / 否则 attestOnce（cache miss 才执行一次完整
 identity→materialization→projection，收集 publications）→ 周期 flush →
 retryable>0 抛 UniverseRunIncomplete（durable incomplete，禁止 ready）→
 exact partition 校验（active == verified ∪ chain-proven terminal
-rejected）→ rehydrate（canonical memo 重组装，本地校验/组装，不重发
+rejected）+ required Family×source exact set == completed receipt exact set，
+且每条 receipt status=complete/retryable=0/appliedThrough==cutoff → rehydrate
+（canonical memo 重组装，本地校验/组装，不重发
 identity RPC；routeHandles 不可反序列化，由中央 rehydrator 重新签发）→
 逐族聚合一次（同族所有 instance 必须保留，禁止 Map 只留首池）→
 由 catalog-issued route handle + Family projectGraph 生成 Graph（Credit
@@ -6610,3 +6620,30 @@ rejection；RPC/canonical recheck 失败保持 retryable 并阻塞 ready。
 `searcher:strict-central-adapter-runtime` 覆盖，listener 完整 build 同轮通过。
 它只关闭 caller authority 缺口，不构成 ready、F5、100/100 或 production
 cutover 证据。
+
+### 22.10 durable source completion receipts（2026-08-18）
+
+`buildCoverage()` 不再遍历 catalog 并自行把全部 source 标成 cutoff。
+production fixed-range scanner 在每个 `eth_getLogs` chunk 成功后记录
+`fromBlock/toBlock/resultCount/resultHash`；只有全部 contiguous chunks 覆盖
+原 `fromBlock..cutoff`，才生成 `catalog-event-union` receipt。四组 startup
+输入的完整 snapshot 同时生成独立 `startup-candidate-union` receipt。两者与
+candidate partition 在同一 `inProgressRun` envelope 中持久化；部分 RPC、
+进程崩溃或缺尾 chunk 不产生 receipt，也不推进 observed/applied/ready。
+
+runner 在 attestation 前比较：loaded strict catalog 的 required
+Family×source exact set 必须与全部 receipt 可授予的 completed exact set 完全
+相等。最终 coverage 只能由这些 receipts 投影，checkpoint CAS 再次要求 ready
+coverage exact set 等于 run receipt exact set、全部 number+hash 到 cutoff，且
+Graph/catalog/publication roots、candidate terminal partition 同时成立。这样
+catalog declaration 只能声明“需要扫描什么”，不能自行授予“已经完整扫描”。
+
+向后兼容只针对当前固定 run `strict-startup-rebuild`：若旧 envelope 没有
+`sourceReceipts`，新 runtime 在原 cutoff/range 重跑 source query，且只有重建
+后的 `universeHash + candidateSetHash` 与 durable partition 完全一致才 CAS
+补入 receipts；否则 fail-closed，绝不清 checkpoint 或换移动窗口。
+
+合同覆盖 source scan throw/partial chunk、伪造或缺失 required exact set、
+catalog-shaped coverage 无 receipt、pre-receipt fixed run 原地升级、ready CAS
+原子性、SIGTERM flush；listener 完整 build 同轮通过。本条只关闭 false-ready
+P0，不构成实际 ready、F5、restart、100/100 或 cutover 证据。

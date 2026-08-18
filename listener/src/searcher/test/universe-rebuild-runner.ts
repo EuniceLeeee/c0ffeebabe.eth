@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   UniverseRebuildCheckpointStore,
+  canonicalJson,
+  type DurableSourceReceipt,
   type DurableVerifiedMemo,
   type StartupCheckpointEnvelope,
 } from "../universe-rebuild-checkpoint.js";
@@ -19,6 +22,31 @@ const SOURCE = Object.freeze({
   hash: "0x" + "a1".repeat(32),
   generation: 1,
 });
+
+function sourceReceipts(fromBlock: number): readonly DurableSourceReceipt[] {
+  return Object.freeze([Object.freeze({
+    sourceKey: "1".repeat(64),
+    sourceKind: "startup-candidate-union" as const,
+    providerIdentity: "fixture",
+    queryFingerprint: "2".repeat(64),
+    fromBlock,
+    toBlock: SOURCE.number,
+    cutoffNumber: SOURCE.number,
+    cutoffHash: SOURCE.hash,
+    coverageKeys: Object.freeze(["univ2|startup-universe"]),
+    completedChunks: Object.freeze([Object.freeze({
+      fromBlock,
+      toBlock: SOURCE.number,
+      resultCount: 3,
+      resultHash: "3".repeat(64),
+    })]),
+    observationSetHash: "4".repeat(64),
+    observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+    appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+    retryableCount: 0 as const,
+    status: "complete" as const,
+  })]);
+}
 
 interface Fixture {
   readonly store: UniverseRebuildCheckpointStore;
@@ -57,9 +85,14 @@ function makeFixture(
     lookbackBlocks: 14_400,
     attestationConcurrency: 2,
     freezeCanonicalHead: async () => SOURCE,
-    scanSwapWindow: async () => observations(["a", "b", "c"]),
+    scanSwapWindow: async (scanInput) => Object.freeze({
+      observations: observations(["a", "b", "c"]),
+      sourceReceipts: sourceReceipts(scanInput.fromBlock),
+    }),
     familyCandidateKey: (candidate) =>
       "cand:" + String((candidate as { id: string }).id),
+    requiredSourceCoverageKeys: () =>
+      Object.freeze(["univ2|startup-universe"]),
     dedupeFamilyCandidates: (obs) =>
       candidates(
         [...new Set(obs.map((o) => String((o as { id: string }).id)))],
@@ -157,12 +190,17 @@ function makeFixture(
         )),
       });
     },
-    buildCoverage: ({ cutoff }) => Object.freeze([Object.freeze({
-      familyId: "univ2",
-      sourceId: "startup-universe",
-      completeThroughBlock: cutoff.number,
-      completeThroughHash: cutoff.hash,
-    })]),
+    buildCoverage: ({ sourceReceipts: receipts }) => Object.freeze(
+      receipts.flatMap((receipt) => receipt.coverageKeys.map((key) => {
+        const separator = key.indexOf("|");
+        return Object.freeze({
+          familyId: key.slice(0, separator),
+          sourceId: key.slice(separator + 1),
+          completeThroughBlock: receipt.appliedThrough.number,
+          completeThroughHash: receipt.appliedThrough.hash,
+        });
+      })),
+    ),
     assertCanonicalHead: async () => undefined,
     ...overrides,
   };
@@ -297,11 +335,13 @@ async function main(): Promise<void> {
     // Shuffled candidate order; scan returns [b, a] (order changed).
     const f2 = makeFixture(dir, {
       runId: "run-2",
-      scanSwapWindow: async () =>
-        Object.freeze([
+      scanSwapWindow: async (scanInput) => Object.freeze({
+        observations: Object.freeze([
           Object.freeze({ id: "b", block: SOURCE.number }),
           Object.freeze({ id: "a", block: SOURCE.number }),
         ]),
+        sourceReceipts: sourceReceipts(scanInput.fromBlock),
+      }),
     });
     const ready2 = await rebuildUniverse(f2.input);
     assert.equal(ready2.generation, 2);
@@ -374,6 +414,87 @@ async function main(): Promise<void> {
       "verified",
     );
     assert.equal(afterThrow?.readyGeneration, null);
+
+    // E: a catalog-shaped but incomplete source set is rejected before the
+    // run can attest or mint coverage. A source scan crash likewise leaves no
+    // observed/applied cursor or ready envelope behind.
+    const falseCoverage = makeFixture(join(dir, "false-coverage"), {
+      scanSwapWindow: async (scanInput) => {
+        const receipt = sourceReceipts(scanInput.fromBlock)[0]!;
+        return Object.freeze({
+          observations: Object.freeze([Object.freeze({
+            id: "a",
+            block: SOURCE.number,
+          })]),
+          sourceReceipts: Object.freeze([Object.freeze({
+            ...receipt,
+            coverageKeys: Object.freeze(["univ2|event:only-partial"]),
+          })]),
+        });
+      },
+    });
+    await assert.rejects(
+      () => rebuildUniverse(falseCoverage.input),
+      /required source exact set/,
+    );
+    assert.equal(
+      await falseCoverage.store.load(),
+      null,
+      "false source completeness must not begin a durable run",
+    );
+    const scanCrash = makeFixture(join(dir, "source-scan-crash"), {
+      scanSwapWindow: async () => {
+        throw new Error("fixture source chunk failed");
+      },
+    });
+    await assert.rejects(
+      () => rebuildUniverse(scanCrash.input),
+      /source chunk failed/,
+    );
+    assert.equal(
+      await scanCrash.store.load(),
+      null,
+      "a partial scan cannot advance observedThrough or ready",
+    );
+
+    // F: the deployed pre-receipt fixed checkpoint is upgraded in place.
+    // The runner replays the original fixed range, requires the exact same
+    // candidate partition, attaches receipts, and preserves runId/cutoff.
+    const legacy = makeFixture(join(dir, "legacy-source-receipt"));
+    const legacyCandidates = Object.freeze({
+      "cand:a": Object.freeze({ id: "a" }),
+      "cand:b": Object.freeze({ id: "b" }),
+      "cand:c": Object.freeze({ id: "c" }),
+    });
+    const digest = (value: string): string =>
+      createHash("sha256").update(value).digest("hex");
+    await legacy.store.beginOrResumeRun({
+      expectedRevision: 0,
+      runId: "run-1",
+      cutoff: SOURCE,
+      fromBlock: SOURCE.number - 14_399,
+      universeHash: digest(
+        "universe-candidate-partition-v1:" + canonicalJson(legacyCandidates),
+      ),
+      candidateSetHash: digest(
+        "candidate-set-v1:cand:a,cand:b,cand:c",
+      ),
+      candidateCount: 3,
+      candidatesByKey: legacyCandidates,
+      observedThrough: Object.freeze({
+        number: SOURCE.number,
+        hash: SOURCE.hash,
+      }),
+    });
+    await assert.rejects(
+      () => rebuildUniverse(legacy.input),
+      UniverseRunIncomplete,
+    );
+    const migrated = await legacy.store.load();
+    assert.equal(migrated?.inProgressRun?.runId, "run-1");
+    assert.equal(migrated?.inProgressRun?.cutoff.hash, SOURCE.hash);
+    assert.equal(migrated?.inProgressRun?.sourceReceipts?.length, 1);
+    assert.equal(legacy.scanCalls(), 1, "legacy receipt backfill scans once");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

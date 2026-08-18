@@ -75,6 +75,37 @@ export type RunOutcome =
   }
   | RetryableAttempt;
 
+export interface DurableSourceChunkReceipt {
+  readonly fromBlock: number;
+  readonly toBlock: number;
+  readonly resultCount: number;
+  readonly resultHash: string;
+}
+
+/**
+ * Durable proof that one exact startup source query completed at the fixed
+ * cutoff. A receipt may grant several Family x source coverage keys when one
+ * catalog-issued topic-union query covers them atomically, but it must name
+ * that exact set and every completed range chunk.
+ */
+export interface DurableSourceReceipt {
+  readonly sourceKey: string;
+  readonly sourceKind: "startup-candidate-union" | "catalog-event-union";
+  readonly providerIdentity: string;
+  readonly queryFingerprint: string;
+  readonly fromBlock: number;
+  readonly toBlock: number;
+  readonly cutoffNumber: number;
+  readonly cutoffHash: string;
+  readonly coverageKeys: readonly string[];
+  readonly completedChunks: readonly DurableSourceChunkReceipt[];
+  readonly observationSetHash: string;
+  readonly observedThrough: { readonly number: number; readonly hash: string };
+  readonly appliedThrough: { readonly number: number; readonly hash: string };
+  readonly retryableCount: 0;
+  readonly status: "complete";
+}
+
 export interface InProgressUniverseRun {
   readonly runId: string;
   readonly cutoff: CanonicalSource;
@@ -86,6 +117,12 @@ export interface InProgressUniverseRun {
   readonly candidatesByKey: Readonly<Record<string, unknown>>;
   /** Swap range fully scanned; never advances appliedThrough by itself. */
   readonly observedThrough: { readonly number: number; readonly hash: string };
+  /**
+   * Optional only for backward-compatible loading of a pre-receipt fixed run.
+   * Such a run cannot promote until an exact fixed-range rescan attaches the
+   * receipts with casSetRunSourceReceipts().
+   */
+  readonly sourceReceipts?: readonly DurableSourceReceipt[];
   /**
    * Null until the completed exact partition is promoted.  An in-progress
    * run must never advertise an applied cursor merely because observation or
@@ -547,6 +584,48 @@ export class UniverseRebuildCheckpointStore {
     });
   }
 
+  /**
+   * Backfill source receipts for a pre-receipt fixed run after an exact
+   * fixed-cutoff rescan. Existing receipts are immutable and must match.
+   */
+  async casSetRunSourceReceipts(input: {
+    readonly expectedRevision: number;
+    readonly runId: string;
+    readonly sourceReceipts: readonly DurableSourceReceipt[];
+  }): Promise<StartupCheckpointEnvelope> {
+    assertCompleteSourceReceipts(input.sourceReceipts);
+    return this.#cas(input.expectedRevision, (current) => {
+      const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
+      const run = base.inProgressRun;
+      if (run === null || run.runId !== input.runId) {
+        throw new Error(
+          "universe rebuild checkpoint: no matching in-progress run " +
+            input.runId,
+        );
+      }
+      assertSourceReceiptsBindRun(input.sourceReceipts, run);
+      if (run.sourceReceipts !== undefined) {
+        if (
+          canonicalJson(run.sourceReceipts) !==
+            canonicalJson(input.sourceReceipts)
+        ) {
+          throw new Error(
+            "universe rebuild checkpoint: source receipts are immutable",
+          );
+        }
+        return base;
+      }
+      return Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        inProgressRun: Object.freeze({
+          ...run,
+          sourceReceipts: Object.freeze([...input.sourceReceipts]),
+        }),
+      });
+    });
+  }
+
   /** Create the fixed-cutoff run or return the existing one for it. */
   async beginOrResumeRun(input: {
     readonly expectedRevision: number;
@@ -558,11 +637,19 @@ export class UniverseRebuildCheckpointStore {
     readonly candidateCount: number;
     readonly candidatesByKey: Readonly<Record<string, unknown>>;
     readonly observedThrough: { readonly number: number; readonly hash: string };
+    readonly sourceReceipts?: readonly DurableSourceReceipt[];
   }): Promise<StartupCheckpointEnvelope> {
     if (Object.keys(input.candidatesByKey).length !== input.candidateCount) {
       throw new Error(
         "universe rebuild checkpoint: candidate partition/count mismatch",
       );
+    }
+    if (input.sourceReceipts !== undefined) {
+      assertCompleteSourceReceipts(input.sourceReceipts);
+      assertSourceReceiptsBindRun(input.sourceReceipts, {
+        cutoff: input.cutoff,
+        fromBlock: input.fromBlock,
+      });
     }
     return this.#cas(input.expectedRevision, (current) => {
       const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
@@ -586,7 +673,11 @@ export class UniverseRebuildCheckpointStore {
             canonicalJson(input.candidatesByKey) ||
           existing.observedThrough.number !== input.observedThrough.number ||
           existing.observedThrough.hash.toLowerCase() !==
-            input.observedThrough.hash.toLowerCase()
+            input.observedThrough.hash.toLowerCase() ||
+          (existing.sourceReceipts !== undefined &&
+            input.sourceReceipts !== undefined &&
+            canonicalJson(existing.sourceReceipts) !==
+              canonicalJson(input.sourceReceipts))
         ) {
           throw new Error(
             "universe rebuild checkpoint: runId resumed with different fixed input",
@@ -606,6 +697,11 @@ export class UniverseRebuildCheckpointStore {
           candidateCount: input.candidateCount,
           candidatesByKey: Object.freeze({ ...input.candidatesByKey }),
           observedThrough: Object.freeze({ ...input.observedThrough }),
+          ...(input.sourceReceipts === undefined
+            ? {}
+            : {
+                sourceReceipts: Object.freeze([...input.sourceReceipts]),
+              }),
           appliedThrough: null,
           outcomesByCandidateKey: Object.freeze({}),
         }),
@@ -824,16 +920,24 @@ function assertReadyPromotion(
     createHash("sha256")
       .update("publications-v2:" + canonicalJson(ready.catalogSnapshot))
       .digest("hex");
+  const sourceReceipts = run.sourceReceipts ?? [];
+  assertCompleteSourceReceipts(sourceReceipts);
+  assertSourceReceiptsBindRun(sourceReceipts, run);
+  const requiredCoverageKeys = new Set(sourceReceipts.flatMap((receipt) =>
+    receipt.coverageKeys
+  ));
   const coverageKeys = new Set(ready.sourceCoverage.map((coverage) =>
     coverage.familyId + "|" + coverage.sourceId
   ));
+  const exactCoverageSet = requiredCoverageKeys.size === coverageKeys.size &&
+    [...requiredCoverageKeys].every((key) => coverageKeys.has(key));
   if (
     !sameCutoff || !observedMatches || !appliedAtCutoff || !sameInstances ||
     !graphRootMatches || !catalogRootMatches || !publicationRootMatches ||
     ready.universeRange.fromBlock !== run.fromBlock ||
     ready.universeRange.toBlock !== run.cutoff.number ||
     ready.universeHash !== run.universeHash ||
-    ready.sourceCoverage.length === 0 ||
+    ready.sourceCoverage.length === 0 || !exactCoverageSet ||
     coverageKeys.size !== ready.sourceCoverage.length ||
     ready.sourceCoverage.some((coverage) =>
       coverage.completeThroughBlock !== run.cutoff.number ||
@@ -843,6 +947,107 @@ function assertReadyPromotion(
   ) {
     throw new Error(
       "universe rebuild checkpoint: ready generation is not bound to completed run",
+    );
+  }
+}
+
+function assertCompleteSourceReceipts(
+  receipts: readonly DurableSourceReceipt[],
+): void {
+  if (receipts.length === 0) {
+    throw new Error(
+      "universe rebuild checkpoint: source completion receipts are absent",
+    );
+  }
+  const sourceKeys = new Set<string>();
+  const coverageKeys = new Set<string>();
+  for (const receipt of receipts) {
+    if (
+      !/^[0-9a-f]{64}$/.test(receipt.sourceKey) ||
+      !/^[0-9a-f]{64}$/.test(receipt.queryFingerprint) ||
+      !/^[0-9a-f]{64}$/.test(receipt.observationSetHash) ||
+      receipt.providerIdentity.length === 0 ||
+      !Number.isSafeInteger(receipt.fromBlock) ||
+      !Number.isSafeInteger(receipt.toBlock) ||
+      receipt.fromBlock < 0 ||
+      receipt.toBlock < receipt.fromBlock ||
+      receipt.cutoffNumber !== receipt.toBlock ||
+      receipt.cutoffHash.toLowerCase() !==
+        receipt.observedThrough.hash.toLowerCase() ||
+      receipt.observedThrough.number !== receipt.cutoffNumber ||
+      receipt.appliedThrough.number !== receipt.cutoffNumber ||
+      receipt.appliedThrough.hash.toLowerCase() !==
+        receipt.cutoffHash.toLowerCase() ||
+      receipt.status !== "complete" ||
+      receipt.retryableCount !== 0 ||
+      receipt.coverageKeys.length === 0 ||
+      receipt.completedChunks.length === 0 ||
+      sourceKeys.has(receipt.sourceKey)
+    ) {
+      throw new Error(
+        "universe rebuild checkpoint: source completion receipt is invalid",
+      );
+    }
+    sourceKeys.add(receipt.sourceKey);
+    let expectedFrom = receipt.fromBlock;
+    for (const chunk of receipt.completedChunks) {
+      if (
+        chunk.fromBlock !== expectedFrom ||
+        chunk.toBlock < chunk.fromBlock ||
+        chunk.toBlock > receipt.toBlock ||
+        !Number.isSafeInteger(chunk.resultCount) ||
+        chunk.resultCount < 0 ||
+        !/^[0-9a-f]{64}$/.test(chunk.resultHash)
+      ) {
+        throw new Error(
+          "universe rebuild checkpoint: source chunk partition is invalid",
+        );
+      }
+      expectedFrom = chunk.toBlock + 1;
+    }
+    if (expectedFrom !== receipt.toBlock + 1) {
+      throw new Error(
+        "universe rebuild checkpoint: source chunks do not cover exact range",
+      );
+    }
+    const localCoverage = new Set(receipt.coverageKeys);
+    if (localCoverage.size !== receipt.coverageKeys.length) {
+      throw new Error(
+        "universe rebuild checkpoint: source receipt repeats coverage key",
+      );
+    }
+    for (const key of localCoverage) {
+      if (coverageKeys.has(key) || !key.includes("|")) {
+        throw new Error(
+          "universe rebuild checkpoint: source coverage exact set is invalid",
+        );
+      }
+      coverageKeys.add(key);
+    }
+  }
+}
+
+function assertSourceReceiptsBindRun(
+  receipts: readonly DurableSourceReceipt[],
+  run: {
+    readonly cutoff: CanonicalSource;
+    readonly fromBlock: number;
+  },
+): void {
+  if (receipts.some((receipt) =>
+    receipt.fromBlock !== run.fromBlock ||
+    receipt.toBlock !== run.cutoff.number ||
+    receipt.cutoffNumber !== run.cutoff.number ||
+    receipt.cutoffHash.toLowerCase() !== run.cutoff.hash.toLowerCase() ||
+    receipt.observedThrough.number !== run.cutoff.number ||
+    receipt.observedThrough.hash.toLowerCase() !==
+      run.cutoff.hash.toLowerCase() ||
+    receipt.appliedThrough.number !== run.cutoff.number ||
+    receipt.appliedThrough.hash.toLowerCase() !==
+      run.cutoff.hash.toLowerCase()
+  )) {
+    throw new Error(
+      "universe rebuild checkpoint: source receipt escaped fixed run",
     );
   }
 }

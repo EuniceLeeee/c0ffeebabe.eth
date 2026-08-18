@@ -6,6 +6,7 @@ import {
   AttestationCheckpointWriter,
   UniverseRebuildCheckpointStore,
   type DurableVerifiedMemo,
+  type DurableSourceReceipt,
   type ReadyUniverseGeneration,
   type RunOutcome,
 } from "../universe-rebuild-checkpoint.js";
@@ -22,6 +23,32 @@ const SOURCE = Object.freeze({
 });
 const READY_GRAPH = Object.freeze({ edges: Object.freeze([]) });
 const READY_CATALOG = Object.freeze({ instances: Object.freeze([]) });
+
+function sourceReceipts(): readonly DurableSourceReceipt[] {
+  const fromBlock = SOURCE.number - 14_399;
+  return Object.freeze([Object.freeze({
+    sourceKey: "1".repeat(64),
+    sourceKind: "startup-candidate-union" as const,
+    providerIdentity: "fixture",
+    queryFingerprint: "2".repeat(64),
+    fromBlock,
+    toBlock: SOURCE.number,
+    cutoffNumber: SOURCE.number,
+    cutoffHash: SOURCE.hash,
+    coverageKeys: Object.freeze(["univ2|startup-universe"]),
+    completedChunks: Object.freeze([Object.freeze({
+      fromBlock,
+      toBlock: SOURCE.number,
+      resultCount: 2,
+      resultHash: "3".repeat(64),
+    })]),
+    observationSetHash: "4".repeat(64),
+    observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+    appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+    retryableCount: 0 as const,
+    status: "complete" as const,
+  })]);
+}
 
 function memoFor(key: string): DurableVerifiedMemo {
   const fp = "fp-" + key;
@@ -207,7 +234,6 @@ async function main(): Promise<void> {
 
     // Memo upsert.
     const withMemo = await store.casUpsertMemo(memoFor("a"));
-    const currentRevision = withMemo.revision;
     const readyGeneration = Object.freeze({
       generation: 1,
       cutoff: SOURCE,
@@ -226,6 +252,38 @@ async function main(): Promise<void> {
       graphHash: hashReadyGraphSnapshot(READY_GRAPH),
       catalogSnapshot: READY_CATALOG,
     }) as ReadyUniverseGeneration;
+
+    await assert.rejects(
+      () => store.casCommitReadyGeneration({
+        expectedRevision: withMemo.revision,
+        runId: "run-1",
+        ready: readyGeneration,
+      }),
+      /source completion receipts are absent/,
+      "catalog-shaped coverage cannot promote without durable source receipts",
+    );
+    const partialReceipt = sourceReceipts()[0]!;
+    await assert.rejects(
+      () => store.casSetRunSourceReceipts({
+        expectedRevision: withMemo.revision,
+        runId: "run-1",
+        sourceReceipts: Object.freeze([Object.freeze({
+          ...partialReceipt,
+          completedChunks: Object.freeze([Object.freeze({
+            ...partialReceipt.completedChunks[0]!,
+            toBlock: SOURCE.number - 1,
+          })]),
+        })]),
+      }),
+      /do not cover exact range/,
+      "a partial source chunk write cannot grant cutoff coverage",
+    );
+    const withReceipts = await store.casSetRunSourceReceipts({
+      expectedRevision: withMemo.revision,
+      runId: "run-1",
+      sourceReceipts: sourceReceipts(),
+    });
+    const currentRevision = withReceipts.revision;
 
     // Ready commit with a stale revision fails closed.
     await assert.rejects(
