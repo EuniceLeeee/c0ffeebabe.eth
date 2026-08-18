@@ -472,12 +472,18 @@ export async function runRequestProgram<Input, Evidence>(input: {
     // reverted deterministically at this cutoff), never a transport or
     // program error. Surface it as such so identity can reject terminally
     // instead of retrying forever.
-    const reverted = results.find((result) =>
-      result.completion === "reverted-as-declared"
+    // A decode failure over a result set whose chain shape is
+    // deterministic at this cutoff (a reverted-as-declared outcome, or an
+    // empty "0x" return that a contract without the requested function
+    // produces) is chain evidence itself, never a transport or program
+    // error: the same call at the same block always returns the same shape.
+    const chainShape = results.find((result) =>
+      result.completion === "reverted-as-declared" ||
+      (result.completion === "returned" && result.data === "0x")
     );
-    if (reverted !== undefined) {
+    if (chainShape !== undefined) {
       throw new ChainRevertEvidenceError(
-        `decode over reverted result ${reverted.id}: ` +
+        `decode over chain-shaped result ${chainShape.id}: ` +
           (error instanceof Error ? error.message : String(error)),
       );
     }
