@@ -89,9 +89,33 @@ export type AdapterRequest =
       }[];
       readonly call: {
         readonly caller: CallerRef;
+        /**
+         * Caller execution mode for effect-delta simulations. Default
+         * "top-level" runs the caller as the outer transaction sender
+         * (EIP-3607 enforced: a contract address cannot be tx.origin).
+         * "impersonated-call-frame" simulates the caller as the msg.sender
+         * of an inner CALL frame (EIP-3607 disabled for that frame only),
+         * matching protocols whose observed actor is an executor/router
+         * contract that internally invokes the target.
+         */
+        readonly executionMode?:
+          "top-level" | "impersonated-call-frame";
         readonly to: string;
         readonly data: string;
       };
+      /**
+       * Exact (token x account) effect observation scope. Each entry binds
+       * one token to one account whose delta must be observed; the central
+       * transport materializes CallerRef entries against the caller
+       * authority and literal addresses as-is. Families verifying
+       * multi-account transfers (e.g. router: actor -> target -> actor)
+       * declare the full scope here. Defaults to observing the resolved
+       * caller only for every token in overrideIntent/observe.
+       */
+      readonly observeTokenBalances?: readonly {
+        readonly token: string;
+        readonly account: CallerRef | string;
+      }[];
       readonly overrideIntent: FundedCallerOverrideIntent;
       readonly observe: readonly EffectObservationKind[];
     };

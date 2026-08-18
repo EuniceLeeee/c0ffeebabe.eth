@@ -134,6 +134,13 @@ export interface StrictSimulateRequest {
   observeAccounts?: string[];
   observeTotalSupply?: string[];
   observeLogs?: boolean;
+  /**
+   * Caller execution mode: "top-level" (default, EIP-3607 enforced) or
+   * "impersonated-call-frame" (EIP-3607 disabled for this frame only; the
+   * caller acts as an inner CALL msg.sender, matching observed executor/
+   * router actors).
+   */
+  callerMode?: "top-level" | "impersonated-call-frame";
 }
 
 /** Back-compat one-shot request: a fully self-described victim+arb simulation. */

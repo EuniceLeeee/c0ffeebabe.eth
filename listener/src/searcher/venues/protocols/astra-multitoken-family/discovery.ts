@@ -75,6 +75,11 @@ export const astraMultiTokenDiscovery = {
       transactionHash: candidate.transactionHash?.toLowerCase() ?? null,
     }),
   ].join(":"),
+  // One Astra instance is the protocol target; evidence rows from
+  // different observed swaps (actor/pair/amount/txHash vary) all
+  // aggregate under the same target.
+  instanceNominationKey: (candidate) =>
+    lowerAddress((candidate as AstraMultiTokenCandidate).target),
   nominate: createTxEvidenceNomination({
     opaqueLabels: Object.freeze(["astra-multitoken", "protocol:astra-multitoken"]),
     logPatterns: Object.freeze([{

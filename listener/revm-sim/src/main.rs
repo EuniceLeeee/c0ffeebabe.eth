@@ -814,6 +814,7 @@ fn simulate(req: SimRequest, started: Instant) -> Result<SimResponse> {
             Bytes::from(call.calldata),
             call.gas_limit,
             true,
+            false,
         )?;
         if !pre.result.is_success() {
             bail!("preCall failed: {}", format_execution_result(&pre.result));
@@ -823,7 +824,7 @@ fn simulate(req: SimRequest, started: Instant) -> Result<SimResponse> {
 
     let pre = erc20_balance_of(&mut db, &block_env, profit_token, executor)?;
     let main = execute_call(
-        &mut db, &block_env, owner, executor, calldata, gas_limit, true,
+        &mut db, &block_env, owner, executor, calldata, gas_limit, true, false,
     )?;
     let gas_used = main.result.tx_gas_used();
     let success = main.result.is_success();
@@ -930,6 +931,8 @@ enum DaemonRequest {
         observe_total_supply: Vec<String>,
         #[serde(default)]
         observe_logs: bool,
+        #[serde(default)]
+        caller_mode: String,
     },
     #[serde(rename_all = "camelCase")]
     Simulate {
@@ -1163,6 +1166,7 @@ impl Daemon {
                 observe_accounts,
                 observe_total_supply,
                 observe_logs,
+                caller_mode,
             } => self.strict_simulate(
                 block_number,
                 rpc_url,
@@ -1176,6 +1180,7 @@ impl Daemon {
                 observe_accounts,
                 observe_total_supply,
                 observe_logs,
+                caller_mode,
                 started,
             ),
             DaemonRequest::Simulate {
@@ -1503,6 +1508,7 @@ impl Daemon {
                 Bytes::from(call.calldata.clone()),
                 call.gas_limit,
                 true,
+                false,
             )?;
             if !pre.result.is_success() {
                 bail!("preCall failed: {}", format_execution_result(&pre.result));
@@ -1543,6 +1549,7 @@ impl Daemon {
                 Bytes::from(call.calldata.clone()),
                 call.gas_limit,
                 true,
+                false,
             )?;
             if !pre.result.is_success() {
                 bail!("preCall failed: {}", format_execution_result(&pre.result));
@@ -1683,6 +1690,7 @@ impl Daemon {
             calldata,
             gas_limit.unwrap_or(DEFAULT_GAS_LIMIT),
             true,
+            false,
         )?;
         let gas_used = main.result.tx_gas_used();
         let success = main.result.is_success();
@@ -1729,6 +1737,7 @@ impl Daemon {
         observe_accounts: Vec<String>,
         observe_total_supply: Vec<String>,
         observe_logs: bool,
+        caller_mode: String,
         started: Instant,
     ) -> Result<DaemonResponse> {
         self.ensure_warm(block_number, rpc_url)?;
@@ -1813,8 +1822,16 @@ impl Daemon {
             db.commit(pre.state);
         }
 
+        let disable_eip3607 = caller_mode == "impersonated-call-frame";
         let main = execute_call(
-            &mut db, &block_env, caller, target, calldata, gas_limit, true,
+            &mut db,
+            &block_env,
+            caller,
+            target,
+            calldata,
+            gas_limit,
+            true,
+            disable_eip3607,
         )?;
         let success = main.result.is_success();
         let output = main
@@ -2068,6 +2085,7 @@ where
         Bytes::from(data),
         300_000,
         false,
+        false,
     )?;
     if !output.result.is_success() {
         bail!(
@@ -2093,6 +2111,7 @@ where
         token,
         Bytes::from_static(&TOTAL_SUPPLY_SELECTOR),
         300_000,
+        false,
         false,
     )?;
     if !output.result.is_success() {
@@ -2462,6 +2481,7 @@ fn execute_call<D>(
     data: Bytes,
     gas_limit: u64,
     stateful: bool,
+    disable_eip3607: bool,
 ) -> Result<revm::context_interface::result::ResultAndState>
 where
     D: DatabaseRef<Error = RpcError>,
@@ -2483,6 +2503,12 @@ where
             cfg.set_spec_and_mainnet_gas_params(SpecId::PRAGUE);
             cfg.disable_nonce_check = true;
             cfg.tx_chain_id_check = false;
+            // EIP-3607 rejects a contract address as tx.origin. The
+            // impersonated-call-frame mode simulates the observed actor as
+            // an inner CALL msg.sender (router/executor contract that
+            // internally invokes the target), which must not be blocked by
+            // the top-level rule. Top-level simulations keep EIP-3607.
+            cfg.disable_eip3607 = disable_eip3607;
         })
         .with_block(block_env.clone())
         .with_db(db);

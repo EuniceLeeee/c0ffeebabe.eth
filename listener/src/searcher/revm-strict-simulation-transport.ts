@@ -6,6 +6,7 @@ import type {
 import type {
   StrictSimulationTransport,
 } from "./strict-central-adapter-runtime.js";
+import { canonicalAddress } from "./venues/protocols/standard-family/common.js";
 import type {
   AdapterRequest,
   CallerRef,
@@ -67,6 +68,34 @@ export function createRevmStrictSimulationTransport(input: {
         input.observedSender,
         input.verifiedActors,
       );
+      const observeTokenBalances = request.observeTokenBalances ?? [];
+      const materializedObservations = observeTokenBalances.map(
+        (entry) => Object.freeze({
+          token: canonicalAddress(entry.token),
+          account: typeof entry.account === "string"
+            ? canonicalAddress(entry.account)
+            : resolveCaller(
+                entry.account,
+                input.executor,
+                input.observedSender,
+                input.verifiedActors,
+              ),
+        }),
+      );
+      // Exact scope wins; otherwise observe the resolved caller for every
+      // funded/override token (legacy default).
+      const observeTokens = materializedObservations.length > 0
+        ? unique(materializedObservations.map((observation) => observation.token))
+        : unique([
+            ...(request.overrideIntent.tokenBalances ?? []).map(
+              (deal) => deal.token,
+            ),
+            request.call.to,
+          ]);
+      const observeAccounts = materializedObservations.length > 0
+        ? unique(materializedObservations.map((observation) => observation.account))
+        : [from];
+      const callerMode = request.call.executionMode ?? "top-level";
       const preCalls: OverlayPreCall[] = (request.preCalls ?? []).map(
         (call) => Object.freeze({
           from: resolveCaller(
@@ -86,14 +115,7 @@ export function createRevmStrictSimulationTransport(input: {
         to: from,
         amount: deal.amount.toString(),
       }));
-      // The family verifies deltas for the funded asset AND the call target
-      // (e.g. ERC4626 asset out + vault shares in), so observe both.
-      const observeTokens = unique([
-        ...(request.overrideIntent.tokenBalances ?? []).map(
-          (deal) => deal.token,
-        ),
-        request.call.to,
-      ]);
+
       const observeTotalSupply = request.observe.includes("total-supply-delta")
         ? [request.call.to]
         : [];
@@ -108,6 +130,8 @@ export function createRevmStrictSimulationTransport(input: {
         observeTokens,
         observeTotalSupply,
         observeLogs,
+        observeAccounts,
+        callerMode,
       });
       if (resp.success !== true) {
         // A simulated revert is chain-proven negative evidence (the pool's

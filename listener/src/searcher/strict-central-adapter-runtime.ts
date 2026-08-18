@@ -409,15 +409,21 @@ async function executeRequest(
             }),
           });
         }
+        // A non-revert simulation failure is a caller-mode / transport-
+        // contract gap, never a resource shortage: classify it as
+        // "aborted" (typed) so the probe surfaces a caller-mode reason
+        // instead of an unbounded resource-limited retry loop.
+        const message = error instanceof Error ? error.message : String(error);
+        const callerModeGap = /RejectCallerWithCode|EIP-3607|sender has deployed code|is not EOA/i
+          .test(message);
         console.warn(
-          `[strict-runtime] strict simulation fail-closed: ` +
-            `${error instanceof Error ? error.message : String(error)}`,
+          `[strict-runtime] strict simulation fail-closed: ` + message,
         );
         return Object.freeze({
           id: request.id,
           ok: false as const,
           source: Object.freeze(source),
-          failure: "resource-limited" as const,
+          failure: callerModeGap ? ("aborted" as const) : ("resource-limited" as const),
         });
       }
     }

@@ -14,6 +14,7 @@ import {
   ASTRA_MULTITOKEN_BASE_INTERFACE_ID,
   ASTRA_MULTITOKEN_CHANGE_TOPIC,
   ASTRA_MULTITOKEN_INTERFACE,
+  ASTRA_ERC20_INTERFACE,
   ASTRA_MULTITOKEN_INTERFACE_ID,
   MAX_ASTRA_MULTITOKEN_TOKENS,
   assertSameSource,
@@ -183,6 +184,11 @@ function activeBehaviorRequests(
     kind: "effect-delta-simulation" as const,
     call: Object.freeze({
       caller: Object.freeze({ kind: "observed-sender" as const }),
+      // The observed actor is an executor/router contract (the outer tx's
+      // `to`, never tx.from) that internally CALLs the Astra target. It is
+      // simulated as the msg.sender of an inner call frame, so EIP-3607
+      // (contract addresses cannot be tx.origin) must not apply to it.
+      executionMode: "impersonated-call-frame" as const,
       to: evidence.target,
       data: ASTRA_MULTITOKEN_INTERFACE.encodeFunctionData("change", [
         candidate.tokenIn,
@@ -191,6 +197,37 @@ function activeBehaviorRequests(
         0n,
       ]),
     }),
+    // Fund the router: the observed actor must hold tokenIn to spend it.
+    preCalls: Object.freeze([Object.freeze({
+      caller: Object.freeze({ kind: "observed-sender" as const }),
+      to: canonicalAddress(candidate.tokenIn),
+      data: ASTRA_ERC20_INTERFACE.encodeFunctionData("approve", [
+        canonicalAddress(evidence.target),
+        candidate.amountIn,
+      ]),
+    })]),
+    // Exact effect scope: the verifier requires deltas on both sides of
+    // the transfer for both tokens (tokenIn: actor -> target, tokenOut:
+    // target -> actor). The literal target address is not a caller role,
+    // so it is declared as a literal observation account.
+    observeTokenBalances: Object.freeze([
+      Object.freeze({
+        token: candidate.tokenIn,
+        account: Object.freeze({ kind: "observed-sender" as const }),
+      }),
+      Object.freeze({
+        token: candidate.tokenIn,
+        account: canonicalAddress(evidence.target),
+      }),
+      Object.freeze({
+        token: candidate.tokenOut,
+        account: Object.freeze({ kind: "observed-sender" as const }),
+      }),
+      Object.freeze({
+        token: candidate.tokenOut,
+        account: canonicalAddress(evidence.target),
+      }),
+    ]),
     overrideIntent: Object.freeze({
       caller: Object.freeze({ kind: "observed-sender" as const }),
       tokenBalances: Object.freeze([Object.freeze({

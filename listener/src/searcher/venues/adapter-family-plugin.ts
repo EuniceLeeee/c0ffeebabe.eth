@@ -437,6 +437,15 @@ export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
     readonly matchedPatternId: string;
   }): Candidate | null;
   candidateKey(candidate: Candidate): string;
+  /**
+   * Plugin-owned instance nomination identity: the stable on-chain subject
+   * (e.g. the protocol target) that all evidence rows for one instance
+   * aggregate under. Defaults to the address surface; families whose
+   * candidateKey embeds actor/pair/amount/txHash (so multiple evidence
+   * rows map to one instance) declare this to dedupe at the instance
+   * level without any central per-family branch.
+   */
+  readonly instanceNominationKey?: (candidate: unknown) => string;
 }
 
 export interface IdentityProvenance {
