@@ -387,6 +387,16 @@ tar czf "$REPO-deploy-$TS.tar.gz" -T "/tmp/dirty-$TS.txt" 2>/dev/null
 # above, then remove every one under the repo so the exact-SHA clean check is
 # not blocked by filesystem artifacts.
 find "$REPO" -type f -name '._*' -delete 2>/dev/null || true
+# Runtime-generated untracked artifacts (live fixtures, hints, tool outputs)
+# accumulate between deploys. Remove every non-marker untracked entry now so
+# the exact-SHA clean contract stays re-entrant; the searcher is already
+# stopped above, so nothing regenerates them before restart.
+git -C "$REPO" ls-files -o --exclude-standard | \
+  grep -v -E '^\.(backrun|block-scan|blockscan-nminus1|blockscan-submit|deploy-live|protocol-edges|live-start-balance-eth|mempool)$' | \
+  while IFS= read -r artifact; do
+    [ -n "$artifact" ] || continue
+    rm -rf "$REPO/$artifact" 2>/dev/null || true
+  done
 git fetch origin -q || abort_runtime "git fetch origin failed"
 DEPLOY_SHA=${SEARCHER_DEPLOY_SHA:-}
 [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] \
