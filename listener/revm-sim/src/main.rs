@@ -2201,24 +2201,50 @@ where
         }
         if !applied {
             if let Some(remote) = remote {
-                for slot in discover_erc20_balance_slots(remote, token, to)? {
-                    let original = db.storage(token, slot).map_err(|err| {
-                        anyhow!("failed reading discovered slot {token:#x}:{slot:#x}: {err}")
+                for (storage_owner, slot) in
+                    discover_erc20_balance_storage_candidates(remote, token, to)?
+                {
+                    let original = db.storage(storage_owner, slot).map_err(|err| {
+                        anyhow!(
+                            "failed reading discovered slot {storage_owner:#x}:{slot:#x}: {err}"
+                        )
                     })?;
-                    db.insert_account_storage(token, slot, amount)
-                        .map_err(|err| {
-                            anyhow!("failed writing discovered slot {token:#x}:{slot:#x}: {err}")
-                        })?;
-                    mark_account_touched(db, token);
-                    if erc20_balance_of(db, block_env, token, to).unwrap_or(U256::ZERO) >= amount {
-                        applied = true;
+                    let mut override_value = amount;
+                    for attempt in 0..4 {
+                        db.insert_account_storage(storage_owner, slot, override_value)
+                            .map_err(|err| {
+                                anyhow!(
+                                    "failed writing discovered slot {storage_owner:#x}:{slot:#x}: {err}"
+                                )
+                            })?;
+                        mark_account_touched(db, storage_owner);
+                        let Ok(balance) = erc20_balance_of(db, block_env, token, to) else {
+                            break;
+                        };
+                        if balance >= amount {
+                            applied = true;
+                            break;
+                        }
+                        let Some(next) = next_discovered_balance_override(
+                            amount,
+                            override_value,
+                            balance,
+                            attempt,
+                        ) else {
+                            break;
+                        };
+                        override_value = next;
+                    }
+                    if applied {
                         break;
                     }
-                    db.insert_account_storage(token, slot, original)
+                    db.insert_account_storage(storage_owner, slot, original)
                         .map_err(|err| {
-                            anyhow!("failed restoring discovered slot {token:#x}:{slot:#x}: {err}")
+                            anyhow!(
+                                "failed restoring discovered slot {storage_owner:#x}:{slot:#x}: {err}"
+                            )
                         })?;
-                    mark_account_touched(db, token);
+                    mark_account_touched(db, storage_owner);
                 }
             }
         }
@@ -2230,19 +2256,38 @@ where
 }
 
 /// Exact ERC20 balance-slot discovery: trace `balanceOf(account)` with
-/// prestateTracer and return every storage slot the token reads. Proxy metadata
-/// commonly appears alongside the balance mapping, so callers must verify each
-/// candidate and restore failed overrides instead of trusting the first key.
-fn discover_erc20_balance_slots(
+/// prestateTracer and return every `(storage owner, slot)` the call reads.
+/// Proxy metadata may sit beside the balance mapping, while some tokens keep
+/// balances in an external ledger, so callers verify and restore every pair.
+fn discover_erc20_balance_storage_candidates(
     remote: &RemoteRevmDb,
     token: Address,
     account: Address,
-) -> Result<Vec<U256>> {
+) -> Result<Vec<(Address, U256)>> {
+    let observed = trace_erc20_balance_prestate(remote, token, account)?;
+    let primary_control = parse_address("0x000000000000000000000000000000000000dead")?;
+    let fallback_control = parse_address("0x000000000000000000000000000000000000beef")?;
+    let control_account = if account == primary_control {
+        fallback_control
+    } else {
+        primary_control
+    };
+    let control = trace_erc20_balance_prestate(remote, token, control_account)?;
+    Ok(account_specific_storage_candidates(
+        &observed, &control, token,
+    ))
+}
+
+fn trace_erc20_balance_prestate(
+    remote: &RemoteRevmDb,
+    token: Address,
+    account: Address,
+) -> Result<Value> {
     let mut data = Vec::with_capacity(36);
     data.extend_from_slice(&BALANCE_OF_SELECTOR);
     data.extend_from_slice(&[0u8; 12]);
     data.extend_from_slice(account.as_slice());
-    let result = remote.rpc.call(
+    remote.rpc.call(
         "debug_traceCall",
         json!([
             {
@@ -2253,32 +2298,75 @@ fn discover_erc20_balance_slots(
             remote.block_tag,
             { "tracer": "prestateTracer" }
         ]),
-    )?;
-    Ok(prestate_storage_slots(&result, token))
+    )
 }
 
-fn prestate_storage_slots(result: &Value, token: Address) -> Vec<U256> {
-    let token_key = format!("{token:#x}");
-    let storage = result
-        .as_object()
-        .and_then(|accounts| {
-            accounts.get(&token_key).or_else(|| {
-                accounts
-                    .iter()
-                    .find(|(key, _)| key.eq_ignore_ascii_case(&token_key))
-                    .map(|(_, value)| value)
-            })
-        })
-        .and_then(|entry| entry.get("storage"))
-        .and_then(Value::as_object);
-    let mut slots = storage
+fn account_specific_storage_candidates(
+    observed: &Value,
+    control: &Value,
+    token: Address,
+) -> Vec<(Address, U256)> {
+    let control_candidates = prestate_storage_candidates(control, token)
         .into_iter()
-        .flat_map(|storage| storage.keys())
-        .filter_map(|key| parse_u256(key).ok())
+        .collect::<HashSet<_>>();
+    prestate_storage_candidates(observed, token)
+        .into_iter()
+        .filter(|candidate| !control_candidates.contains(candidate))
+        .collect()
+}
+
+fn prestate_storage_candidates(result: &Value, token: Address) -> Vec<(Address, U256)> {
+    let mut candidates = result
+        .as_object()
+        .into_iter()
+        .flat_map(|accounts| accounts.iter())
+        .filter_map(|(address, entry)| {
+            Some((
+                parse_address(&address.to_ascii_lowercase()).ok()?,
+                entry.get("storage")?.as_object()?,
+            ))
+        })
+        .flat_map(|(address, storage)| {
+            storage
+                .keys()
+                .filter_map(move |key| Some((address, parse_u256(key).ok()?)))
+        })
         .collect::<Vec<_>>();
-    slots.sort_unstable();
-    slots.dedup();
-    slots
+    candidates.sort_unstable_by(|left, right| {
+        (left.0 != token)
+            .cmp(&(right.0 != token))
+            .then_with(|| left.0.as_slice().cmp(right.0.as_slice()))
+            .then_with(|| left.1.cmp(&right.1))
+    });
+    candidates.dedup();
+    candidates
+}
+
+fn next_discovered_balance_override(
+    amount: U256,
+    current: U256,
+    observed: U256,
+    attempt: usize,
+) -> Option<U256> {
+    let factor = if observed.is_zero() {
+        if attempt > 0 {
+            return None;
+        }
+        U256::from(256)
+    } else {
+        let quotient = amount / observed;
+        quotient
+            + if amount % observed == U256::ZERO {
+                U256::ZERO
+            } else {
+                U256::from(1)
+            }
+    };
+    if factor <= U256::from(1) {
+        return None;
+    }
+    let next = current.checked_mul(factor)?;
+    (next > current).then_some(next)
 }
 
 fn token_deals_have_known_slots(
@@ -2527,25 +2615,67 @@ mod tests {
     #[test]
     fn prestate_balance_slot_discovery_keeps_all_proxy_candidates() {
         let token = parse_address("0x1111111111111111111111111111111111111111").unwrap();
+        let ledger = parse_address("0x2222222222222222222222222222222222222222").unwrap();
         let balance_slot = "0x0000000000000000000000000000000000000000000000000000000000001234";
         let implementation_slot =
             "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+        let ledger_slot = "0x9991e46462d01cd99cb3addaedea4e66a4a732f038990c838e11421e4651bfcf";
+        let control_balance_slot =
+            "0x0000000000000000000000000000000000000000000000000000000000005678";
+        let control_ledger_slot =
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         let result: Value = serde_json::from_str(&format!(
-            r#"{{"{}":{{"storage":{{"{}":"0x01","{}":"0x02","invalid":"0x03"}}}}}}"#,
+            r#"{{"{}":{{"storage":{{"{}":"0x01","{}":"0x02","invalid":"0x03"}}}},"{}":{{"storage":{{"{}":"0x04"}}}}}}"#,
             format!("{token:#x}").to_uppercase(),
             implementation_slot,
             balance_slot,
+            ledger,
+            ledger_slot,
+        ))
+        .unwrap();
+        let control: Value = serde_json::from_str(&format!(
+            r#"{{"{}":{{"storage":{{"{}":"0x01","{}":"0x05"}}}},"{}":{{"storage":{{"{}":"0x06"}}}}}}"#,
+            token,
+            implementation_slot,
+            control_balance_slot,
+            ledger,
+            control_ledger_slot,
         ))
         .unwrap();
 
-        let slots = prestate_storage_slots(&result, token);
+        let slots = prestate_storage_candidates(&result, token);
 
         assert_eq!(
             slots,
             vec![
-                parse_u256(balance_slot).unwrap(),
-                parse_u256(implementation_slot).unwrap(),
+                (token, parse_u256(balance_slot).unwrap()),
+                (token, parse_u256(implementation_slot).unwrap()),
+                (ledger, parse_u256(ledger_slot).unwrap()),
             ]
+        );
+        assert_eq!(
+            account_specific_storage_candidates(&result, &control, token),
+            vec![
+                (token, parse_u256(balance_slot).unwrap()),
+                (ledger, parse_u256(ledger_slot).unwrap()),
+            ],
+        );
+    }
+
+    #[test]
+    fn discovered_balance_override_scales_from_observed_balance() {
+        let amount = U256::from(1_000_000);
+        assert_eq!(
+            next_discovered_balance_override(amount, amount, U256::from(3_906), 0,),
+            Some(U256::from(257_000_000)),
+        );
+        assert_eq!(
+            next_discovered_balance_override(amount, amount, U256::ZERO, 0),
+            Some(U256::from(256_000_000)),
+        );
+        assert_eq!(
+            next_discovered_balance_override(amount, amount, U256::ZERO, 1),
+            None,
         );
     }
 }

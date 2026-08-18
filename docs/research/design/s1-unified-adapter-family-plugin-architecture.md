@@ -3980,6 +3980,45 @@ production cutover）：**
 simulation revert 的方向继续 fail-closed，不得为了让 ready 前进而降级。Astra caller authority
 与 Fluid quote encoding 仍是独立待闭合项；`retryable>0` 时 producer 仍不得创建。
 
+**2026-08-18 external-ledger/scaled-balance deal 第二十九批 live-derived
+正确性 checkpoint（实现提交承载本 checkpoint；不是 ready、F5 或 production cutover）：**
+
+- 第二十八批 exact SHA `ecab6d5140b26e650faa9a496a01cabcafa8c7ca`
+  已由 systemd 以 PID `336476`、process start `2026-08-18 01:31:49Z`、
+  log inode `25609`、content-addressed revm binary
+  `f5f8bf01873fb6ea7abe009ecae54c004d191d5ff5c9a0bf50652bcbffe36918`
+  启动；`SEARCHER_DRY_RUN=1`、live marker absent，并继续报告
+  `sourceBlock=25778225`。新 runtime 仍有 `could not locate ERC20 balance slot`，
+  证明“同 token 多 slot 只取首项”是必要修复但不是完整根因，不能据第二十八批
+  声称 blocker 已关闭；
+- 原 cutoff 的只读 `debug_traceCall` + `eth_call` state override 给出两个独立反例：
+  token `0x00000000efe302beaa2b3e6e1b18d08d69a9012a` 的真实 full slot
+  写入 `1,000,000` 后 `balanceOf(probeActor)` 仅为 `3,906`，写入
+  `256,000,000` 才为 `1,000,000`；token
+  `0xf051b0d91a79b296234a6906500dc147ed0e3213` 自身 prestate 没有 storage，
+  balance mapping 位于外部 ledger `0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0`，
+  对该 ledger full slot 写入 `1,000,000` 后 token `balanceOf` 精确返回
+  `1,000,000`。因此不能假设 storage owner 永远等于 token，也不能假设 raw
+  stored balance 永远等于 ERC20 exposed balance；
+- 中央 revm discovery 现在分别 trace `balanceOf(probeActor)` 与一个不同的固定
+  control account，收集完整 `(storageOwner, fullSlot)` 后删除两次 trace 共有的
+  implementation/global-state reads，只保留 account-specific candidates；token-owned
+  candidates 优先，其余按 owner+slot 确定性排序/去重。每个候选先保存原值，写入
+  amount 后用真实 `balanceOf` 验证；若 exposed balance 为正但不足，则按
+  `ceil(amount/observed)` 放大 raw override 并重新验证，零值只允许一次有界
+  `×256` probe，总尝试数固定为四。候选失败或 call revert 必须恢复原 storage；
+  只有 effect simulation 内成功候选保留，后续 return/token delta/totalSupply
+  delta/log proof 仍 fail-closed；
+- Rust contracts 覆盖 control trace 排除 shared proxy metadata、token balance + external ledger account-specific 候选、
+  大小写 address、malformed slot 忽略、observed-ratio scaling 与 zero-probe 上界；
+  同批通过 `cargo fmt --check`、完整 Rust tests、ERC4626 Family、strict revm
+  transport、strict identity attestation contracts 及 listener 完整 build。
+
+部署本批新 exact SHA 后必须继续复用同一 run/cutoff/candidate partition，并从新
+process anchor 重新量化 balance-slot failures 与 ERC4626 retryable；若剩余失败来自
+真实 token transfer/vault policy revert，继续作为方向级 unresolved/negative proof，
+不得扩大 storage probe 或放宽 final effect gate 来追求 `ready`。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
