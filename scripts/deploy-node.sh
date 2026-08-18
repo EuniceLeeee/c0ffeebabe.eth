@@ -406,8 +406,14 @@ git reset --hard "$DEPLOY_SHA" \
 DEPLOY_COMMIT=$(git rev-parse HEAD)
 [ "$DEPLOY_COMMIT" = "$DEPLOY_SHA" ] \
   || abort_runtime "checkout HEAD does not match approved deployment SHA"
-[ -z "$(git status --porcelain --untracked-files=normal)" ] \
-  || abort_runtime "approved deployment checkout is not clean"
+# Runtime marker files (dry-run/live/block-scan toggles) live untracked in
+# the worktree by design; they drive env generation below and are not source
+# dirt. Any other tracked or untracked change fails the exact-SHA contract.
+DEPLOY_DIRTY=$(git status --porcelain --untracked-files=normal | \
+  grep -v -E '^\?\? \.(backrun|block-scan|blockscan-nminus1|blockscan-submit|deploy-live|protocol-edges)$' | \
+  head -1)
+[ -z "$DEPLOY_DIRTY" ] \
+  || abort_runtime "approved deployment checkout is not clean: $DEPLOY_DIRTY"
 say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1) approved=$DEPLOY_SHA ref=$DEPLOY_REF"
 
 # ── 4. Build + production-analysis preflight ──
