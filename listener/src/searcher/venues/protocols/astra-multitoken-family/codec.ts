@@ -17,6 +17,8 @@ export const ASTRA_MULTITOKEN_INTERFACE = new ethers.Interface([
 
 export const ASTRA_ERC20_INTERFACE = new ethers.Interface([
   "function decimals() view returns (uint8)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function balanceOf(address account) view returns (uint256)",
 ]);
 
 export const ASTRA_MULTITOKEN_CHANGE_SELECTOR = ASTRA_MULTITOKEN_INTERFACE

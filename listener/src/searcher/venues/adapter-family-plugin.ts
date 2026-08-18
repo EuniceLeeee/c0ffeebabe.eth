@@ -3303,6 +3303,7 @@ function validateDiscovery(
       "candidateKey",
       "decodeCandidate",
       "evidenceChannel",
+      "instanceNominationKey",
       "logPatterns",
       "nominate",
       "pendingRuntimeEvidenceFromObservation",

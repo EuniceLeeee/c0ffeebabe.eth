@@ -1278,6 +1278,7 @@ function assertRequestShape(request: AdapterRequest): void {
           "call",
           "overrideIntent",
           "observe",
+          "observeTokenBalances",
         ],
         `${request.id} simulation request`,
       );
@@ -1296,7 +1297,7 @@ function assertRequestShape(request: AdapterRequest): void {
       }
       assertRecordKeys(
         request.call,
-        ["caller", "to", "data"],
+        ["caller", "executionMode", "to", "data"],
         `${request.id} simulation call`,
       );
       assertRecordKeys(
