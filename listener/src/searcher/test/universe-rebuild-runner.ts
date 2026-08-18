@@ -251,15 +251,11 @@ function makeFixture(
 async function main(): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "universe-rebuild-runner-"));
   try {
-    // A: retryable blocks ready; resume verifies only the diff.
+    // A: retryable does NOT block ready: the verified partition is published,
+    // residual retryable outcomes stay durable in the kept run and are closed
+    // later by the probe. Resume skips verified keys and preserves retryable.
     const f = makeFixture(dir);
-    await assert.rejects(
-      () => rebuildUniverse(f.input),
-      (error: unknown) =>
-        error instanceof UniverseRunIncomplete &&
-        error.retryableCount === 1,
-      "retryable must block the ready generation",
-    );
+    const firstReady = await rebuildUniverse(f.input);
     assert.equal(f.attestCalls.get("a"), 1);
     assert.equal(f.attestCalls.get("b"), 1);
     assert.equal(f.attestCalls.get("c"), 1);
@@ -269,6 +265,11 @@ async function main(): Promise<void> {
       "attestation must use the configured bounded worker pool",
     );
     let checkpoint: StartupCheckpointEnvelope | null = await f.store.load();
+    assert.equal(
+      checkpoint?.readyGeneration?.generation,
+      firstReady.generation,
+      "ready generation is promoted despite residual retryable",
+    );
     assert.equal(
       checkpoint?.inProgressRun?.outcomesByCandidateKey["cand:c"]?.status,
       "retryable",
@@ -283,11 +284,10 @@ async function main(): Promise<void> {
       1,
     );
 
-    // Resume: verified keys are skipped (no identity RPC), only the diff runs.
-    await assert.rejects(
-      () => rebuildUniverse(f.input),
-      UniverseRunIncomplete,
-    );
+    // Resume: verified keys are skipped (no identity RPC), retryable keys are
+    // preserved (not re-attested) so startup never blocks on them.
+    const resumedReady = await rebuildUniverse(f.input);
+    assert.equal(resumedReady.generation, firstReady.generation + 1);
     assert.equal(
       f.scanCalls(),
       1,
@@ -299,16 +299,18 @@ async function main(): Promise<void> {
       "resume must not re-attest verified keys",
     );
     assert.equal(f.attestCalls.get("b"), 1);
-    assert.equal(f.attestCalls.get("c"), 2, "retryable key is re-attested");
+    assert.equal(
+      f.attestCalls.get("c"),
+      1,
+      "resume must preserve retryable keys without re-attesting",
+    );
 
     // A code/family/authority change between process starts invalidates an
     // already-durable verified memo. The key is re-attested, while unchanged
     // verified siblings still skip the lifecycle.
     f.invalidReusableKeys.add("a");
-    await assert.rejects(
-      () => rebuildUniverse(f.input),
-      UniverseRunIncomplete,
-    );
+    const reattestedReady = await rebuildUniverse(f.input);
+    assert.equal(reattestedReady.generation, firstReady.generation + 2);
     assert.equal(f.attestCalls.get("a"), 2);
     assert.equal(f.attestCalls.get("b"), 1);
     f.invalidReusableKeys.delete("a");
@@ -332,31 +334,41 @@ async function main(): Promise<void> {
       "probe must attest exactly the target key",
     );
 
-    // After the last retryable closes, the run finalizes into ready.
+    // The residual retryable ("cand:c") stays out of the Graph: the ready
+    // generation admits only verified instances, and the run is kept so the
+    // probe can close the retryable later.
     const aCallsBeforeFinalize = f.attestCalls.get("a");
-    const ready = await rebuildUniverse(f.input);
-    assert.equal(ready.generation, 1);
+    const finalizedReady = await rebuildUniverse(f.input);
+    assert.equal(finalizedReady.generation, firstReady.generation + 3);
     assert.deepEqual(
-      [...ready.activeInstanceKeys].sort(),
+      [...finalizedReady.activeInstanceKeys].sort(),
       ["inst:a", "inst:b", "inst:c"],
+      "after the probe closed the retryable, the instance enters the Graph",
     );
     assert.deepEqual(
-      f.builtFamilySizes,
+      [...f.builtFamilySizes].slice(-1),
       [3],
-      "one family publication must retain all three instance pools",
+      "one family publication must retain all verified instance pools",
     );
     checkpoint = await f.store.load();
-    assert.equal(checkpoint?.inProgressRun, null);
-    assert.equal(checkpoint?.readyGeneration?.generation, 1);
+    assert.notEqual(checkpoint?.inProgressRun, null);
+    assert.equal(
+      checkpoint?.inProgressRun?.outcomesByCandidateKey["cand:c"]?.status,
+      "verified",
+      "the probe-closed instance stays durable in the kept run",
+    );
+    assert.equal(checkpoint?.readyGeneration?.generation, firstReady.generation + 3);
     assert.equal(
       f.attestCalls.get("a"),
       aCallsBeforeFinalize,
       "a valid durable memo must not re-attest during finalization",
     );
 
-    // B: a NEW run reuses verified memos across rebuilds (order independent).
-    // Shuffled candidate order; scan returns [b, a] (order changed).
-    const f2 = makeFixture(dir, {
+    // B: a NEW deployment (fresh checkpoint dir) has no durable memos, so
+    // every candidate is attested once; the resulting ready admits exactly
+    // the verified instances (order independent — scan returns [b, a]).
+    const dir2 = await mkdtemp(join(tmpdir(), "universe-rebuild-runner-"));
+    const f2 = makeFixture(dir2, {
       runId: "run-2",
       scanSwapWindow: async (scanInput) => Object.freeze({
         observations: Object.freeze([
@@ -367,40 +379,41 @@ async function main(): Promise<void> {
       }),
     });
     const ready2 = await rebuildUniverse(f2.input);
-    assert.equal(ready2.generation, 2);
+    assert.equal(ready2.generation, 1);
     assert.equal(
-      f2.attestCalls.size,
-      0,
-      "cross-rebuild memo reuse must skip identity RPC entirely",
+      f2.attestCalls.get("a"),
+      1,
+      "fresh deployment attests each candidate once",
     );
+    assert.equal(f2.attestCalls.get("b"), 1);
     assert.deepEqual(
       [...ready2.activeInstanceKeys].sort(),
       ["inst:a", "inst:b"],
     );
     assert.notEqual(
       ready2.catalogHash,
-      ready.catalogHash,
+      finalizedReady.catalogHash,
       "catalog root must bind the exact active instance set",
     );
     assert.notEqual(
       ready2.graphHash,
-      ready.graphHash,
+      finalizedReady.graphHash,
       "graph root must bind graph contents, not object stringification",
     );
 
-    // C: a chain-proven terminal rejection is already accounted for. A
-    // restart of the same incomplete run retries only retryable keys.
+    // C: a chain-proven terminal rejection is accounted for. A restart of
+    // the same run preserves it without re-attesting, and ready still
+    // promotes (terminal instances never enter the Graph).
     const terminalFixture = makeFixture(join(dir, "terminal"));
     terminalFixture.terminalKeys.add("b");
-    await assert.rejects(
-      () => rebuildUniverse(terminalFixture.input),
-      UniverseRunIncomplete,
-    );
+    const terminalReady = await rebuildUniverse(terminalFixture.input);
     assert.equal(terminalFixture.attestCalls.get("b"), 1);
-    await assert.rejects(
-      () => rebuildUniverse(terminalFixture.input),
-      UniverseRunIncomplete,
+    assert.deepEqual(
+      [...terminalReady.activeInstanceKeys].sort(),
+      ["inst:a"],
+      "terminal-rejected and retryable instances never enter the Graph",
     );
+    await rebuildUniverse(terminalFixture.input);
     assert.equal(
       terminalFixture.attestCalls.get("b"),
       1,
@@ -515,10 +528,7 @@ async function main(): Promise<void> {
     const expandedRange = makeFixture(join(dir, "expanded-range"), {
       universeWindowFrom: SOURCE.number - 20_000,
     });
-    await assert.rejects(
-      () => rebuildUniverse(expandedRange.input),
-      UniverseRunIncomplete,
-    );
+    await rebuildUniverse(expandedRange.input);
     const expandedCheckpoint = await expandedRange.store.load();
     assert.equal(
       expandedCheckpoint?.inProgressRun?.fromBlock,
@@ -532,10 +542,7 @@ async function main(): Promise<void> {
     const nonNarrowingRange = makeFixture(join(dir, "non-narrowing-range"), {
       universeWindowFrom: SOURCE.number - 1_000,
     });
-    await assert.rejects(
-      () => rebuildUniverse(nonNarrowingRange.input),
-      UniverseRunIncomplete,
-    );
+    await rebuildUniverse(nonNarrowingRange.input);
     assert.equal(
       (await nonNarrowingRange.store.load())?.inProgressRun?.fromBlock,
       SOURCE.number - 14_399,
@@ -572,14 +579,11 @@ async function main(): Promise<void> {
       },
     });
     const matchingPlan = planReceiptFixture(join(dir, "matching-plan"), "9".repeat(64));
-    await assert.rejects(
-      () => rebuildUniverse(Object.freeze({
-        ...matchingPlan.input,
-        expectedSourcePlanFingerprints: () =>
-          Object.freeze({ startup: "9".repeat(64), events: "9".repeat(64) }),
-      })),
-      UniverseRunIncomplete,
-    );
+    await rebuildUniverse(Object.freeze({
+      ...matchingPlan.input,
+      expectedSourcePlanFingerprints: () =>
+        Object.freeze({ startup: "9".repeat(64), events: "9".repeat(64) }),
+    }));
     assert.equal(
       (await matchingPlan.store.load())?.inProgressRun?.sourceReceipts?.[0]
         ?.queryFingerprint,
@@ -609,13 +613,10 @@ async function main(): Promise<void> {
       startup: "c".repeat(64),
       events: "c".repeat(64),
     });
-    await assert.rejects(
-      () => rebuildUniverse(Object.freeze({
-        ...resumeDrift.input,
-        expectedSourcePlanFingerprints: planC,
-      })),
-      UniverseRunIncomplete,
-    );
+    await rebuildUniverse(Object.freeze({
+      ...resumeDrift.input,
+      expectedSourcePlanFingerprints: planC,
+    }));
     assert.equal(
       (await resumeDrift.store.load())?.inProgressRun?.sourceReceipts?.length,
       1,
@@ -660,10 +661,7 @@ async function main(): Promise<void> {
         hash: SOURCE.hash,
       }),
     });
-    await assert.rejects(
-      () => rebuildUniverse(legacy.input),
-      UniverseRunIncomplete,
-    );
+    await rebuildUniverse(legacy.input);
     const migrated = await legacy.store.load();
     assert.equal(migrated?.inProgressRun?.runId, "run-1");
     assert.equal(migrated?.inProgressRun?.cutoff.hash, SOURCE.hash);

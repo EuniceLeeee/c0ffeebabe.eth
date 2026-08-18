@@ -83,7 +83,11 @@ async function main(): Promise<void> {
       SOURCE.number - 20_000,
       "CLI explicit range must expand and bind the ready universe",
     );
-    assert.equal(envelope?.inProgressRun, null);
+    assert.notEqual(
+      envelope?.inProgressRun,
+      null,
+      "the run is kept after ready (residual retryable stays probe-closable)",
+    );
     assert.equal(
       Object.keys(envelope?.verifiedMemos ?? {}).length,
       2,

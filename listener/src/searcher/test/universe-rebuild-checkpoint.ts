@@ -311,7 +311,11 @@ async function main(): Promise<void> {
       runId: "run-1",
       ready: readyGeneration,
     });
-    assert.equal(ready.inProgressRun, null);
+    assert.notEqual(
+      ready.inProgressRun,
+      null,
+      "the run is kept after ready so residual retryable stays probe-closable",
+    );
     assert.equal(ready.readyGeneration?.generation, 1);
     assert.equal(ready.verifiedMemos["a"]?.familyInstanceKey, "inst-a");
     // Reload after ready: fingerprint still verifies.

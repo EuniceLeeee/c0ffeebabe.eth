@@ -337,6 +337,12 @@ export async function rebuildUniverse(
   const pendingCandidates = candidates.filter((candidate) => {
     const candidateKey = input.familyCandidateKey(candidate);
     const oldOutcome = run.outcomesByCandidateKey[candidateKey];
+    // Residual retryable outcomes are preserved, never re-attested during
+    // startup: they stay durable in the run, stay out of the Graph, and are
+    // closed later by the probe. Re-attesting them here would block startup
+    // on the same slow/failing keys every restart. (Probe runs re-attest
+    // exactly one retryable key at a time.)
+    if (oldOutcome?.status === "retryable") return false;
     // A verified outcome is revalidated against the current Family hash,
     // deployment/implementation authority and canonical proof source before
     // it is trusted after a process/code restart. A valid memo skips the
@@ -633,9 +639,14 @@ function assertExactCandidatePartition(
           " has no active candidate in this window",
       );
     }
-    if (outcome.status !== "verified" && outcome.status !== "terminal-rejected") {
+    const status: string = outcome.status;
+    if (
+      status !== "verified" &&
+      status !== "terminal-rejected" &&
+      status !== "retryable"
+    ) {
       throw new Error(
-        "universe rebuild: unaccounted outcome " + key + " = " + outcome.status,
+        "universe rebuild: unaccounted outcome " + key + " = " + status,
       );
     }
     accounted.add(key);
