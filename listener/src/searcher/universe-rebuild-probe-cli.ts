@@ -35,6 +35,7 @@ interface ProbeArgs {
   readonly familyCandidateKey?: string;
   readonly failureCode?: string;
   readonly limit: number;
+  readonly offset: number;
 }
 
 function parseArgs(argv: readonly string[]): ProbeArgs {
@@ -43,6 +44,7 @@ function parseArgs(argv: readonly string[]): ProbeArgs {
   let familyCandidateKey: string | undefined;
   let failureCode: string | undefined;
   let limit = 20;
+  let offset = 0;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const next = (): string => {
@@ -58,6 +60,7 @@ function parseArgs(argv: readonly string[]): ProbeArgs {
     else if (arg === "--family-candidate-key") familyCandidateKey = next();
     else if (arg === "--failure-code") failureCode = next();
     else if (arg === "--limit") limit = Number(next());
+    else if (arg === "--offset") offset = Number(next());
   }
   if (checkpoint.trim().length === 0 || runId.trim().length === 0) {
     throw new Error(
@@ -76,7 +79,7 @@ function parseArgs(argv: readonly string[]): ProbeArgs {
   if (!Number.isSafeInteger(limit) || limit <= 0 || limit > 500) {
     throw new Error("--limit must be 1..500");
   }
-  return { checkpoint, runId, familyCandidateKey, failureCode, limit };
+  return { checkpoint, runId, familyCandidateKey, failureCode, limit, offset };
 }
 
 /**
@@ -108,7 +111,7 @@ async function main(): Promise<void> {
     args.familyCandidateKey !== undefined
       ? outcome.familyCandidateKey === args.familyCandidateKey
       : outcome.failureCode === args.failureCode
-  ).slice(0, args.limit);
+  ).slice(args.offset, args.offset + args.limit);
   if (targets.length === 0) {
     console.log(
       "universe-rebuild-probe: no matching retryable outcome" +
