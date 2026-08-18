@@ -14,7 +14,7 @@ import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
 import type { FamilyCapabilityCatalog } from
   "../venues/family-capability-catalog.js";
-import type { UnifiedObservation } from
+import type { CaptureNominationProvider, UnifiedObservation } from
   "../venues/adapter-family-plugin.js";
 import type {
   AdapterInstanceOutcome,
@@ -239,6 +239,7 @@ async function main(): Promise<void> {
   // implementation that materializes the address-surface observation, so
   // the retained row is admitted through it; the stub runtime has no
   // identity outcome, so the row fails in identity, not in observation.
+  const rbNominationProviders: CaptureNominationProvider[] = [];
   const reverseBindingFamily = Object.freeze({
     plugin: Object.freeze({
       manifest: Object.freeze({
@@ -264,17 +265,22 @@ async function main(): Promise<void> {
         candidateKey: () => POOL.toLowerCase(),
         reverseBinding: Object.freeze({
           kind: "implementation" as const,
-          reverseBinding: async () => Object.freeze([Object.freeze({
-            status: "verified" as const,
-            observation: Object.freeze({
-              kind: "address-surface" as const,
-              source: SOURCE,
-              address: POOL,
-              codeHash: ethers.keccak256("0x60806040"),
-              implementationWord: ethers.zeroPadValue("0x", 32),
-              interfaceFingerprints: Object.freeze([FINGERPRINT]),
-            }),
-          })]),
+          reverseBinding: async (input: {
+            readonly provider: CaptureNominationProvider;
+          }) => {
+            rbNominationProviders.push(input.provider);
+            return Object.freeze([Object.freeze({
+              status: "verified" as const,
+              observation: Object.freeze({
+                kind: "address-surface" as const,
+                source: SOURCE,
+                address: POOL,
+                codeHash: ethers.keccak256("0x60806040"),
+                implementationWord: ethers.zeroPadValue("0x", 32),
+                interfaceFingerprints: Object.freeze([FINGERPRINT]),
+              }),
+            })]);
+          },
         }),
       }),
       identity: Object.freeze({
@@ -311,16 +317,17 @@ async function main(): Promise<void> {
       : Object.freeze([]),
   }) as unknown as FamilyCapabilityCatalog;
   let rbGetCodeCalls = 0;
+  const rbProvider = {
+    call: async () => "0x",
+    getCode: async () => {
+      rbGetCodeCalls += 1;
+      return "0x60806040";
+    },
+    getStorage: async () => "0x" + "00".repeat(32),
+  };
   const rbResult = await attestPoolIdentitiesStrict({
     catalog: rbCatalog,
-    provider: {
-      call: async () => "0x",
-      getCode: async () => {
-        rbGetCodeCalls += 1;
-        return "0x60806040";
-      },
-      getStorage: async () => "0x" + "00".repeat(32),
-    },
+    provider: rbProvider,
     runtime: runtime(false),
     source: SOURCE,
     pools: Object.freeze([Object.freeze({
@@ -345,6 +352,23 @@ async function main(): Promise<void> {
     rbResult.rejected[0]?.reason ?? "",
     /issued by the central catalog|identity/,
     "retain-channel observation must reach the family lifecycle",
+  );
+  await attestPoolIdentitiesStrict({
+    catalog: rbCatalog,
+    provider: rbProvider,
+    runtime: runtime(false),
+    source: SOURCE,
+    pools: Object.freeze([Object.freeze({
+      address: POOL,
+      adapter: "synthetic-rb-pool",
+    })]),
+    channelOrder: "reverse-binding-first",
+  });
+  assert.equal(rbNominationProviders.length, 2);
+  assert.equal(
+    rbNominationProviders[0],
+    rbNominationProviders[1],
+    "per-candidate calls at one source must share nomination provider identity",
   );
 
   // Explicitly-unsupported declaration: the central pipeline skips the

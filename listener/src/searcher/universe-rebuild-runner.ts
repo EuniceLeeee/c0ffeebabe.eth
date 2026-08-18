@@ -199,6 +199,13 @@ export async function rebuildUniverse(
   if (run === null || run.runId !== input.runId) {
     throw new Error("universe rebuild: run did not begin");
   }
+  if (incumbentRun !== null) {
+    // One canonical fence per resume is sufficient for same-run memos: their
+    // authority proof is already bound to this exact historical cutoff.
+    // Re-reading code/storage/proof hash for every verified instance would
+    // turn a restart into a full-universe RPC pass instead of a diff resume.
+    await input.assertCanonicalHead(cutoff);
+  }
   const attestationCheckpoint = checkpoint;
 
   // 3. Restore by durable key; verify only the diff.

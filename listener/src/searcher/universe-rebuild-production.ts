@@ -8,6 +8,7 @@ import {
 } from "./universe-rebuild-checkpoint.js";
 import type { UniverseRebuildProbeWiring } from "./universe-rebuild-probe-cli.js";
 import type { UniverseRebuildDependencies } from "./universe-rebuild-runner.js";
+import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
 import { buildFamilyRouteGraphView } from "./adapter-family-graph-runtime.js";
 import { reissuePreparedInstanceRouteHandles } from
   "./venues/adapter-family-runtime.js";
@@ -466,8 +467,13 @@ export function createProbeWiring(
         timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
       })
     : null;
-  const runtimeFor = (cutoff: CanonicalSource) =>
-    revmClient === null || executor === undefined
+  const runtimeByCutoff = new Map<string, CentralAdapterRuntime>();
+  const runtimeFor = (cutoff: CanonicalSource): CentralAdapterRuntime => {
+    const cutoffKey = cutoff.number + ":" + cutoff.hash.toLowerCase() + ":" +
+      cutoff.generation;
+    const incumbent = runtimeByCutoff.get(cutoffKey);
+    if (incumbent !== undefined) return incumbent;
+    const runtime = revmClient === null || executor === undefined
       ? createMinimalIdentityRuntime(strictProvider)
       : createStrictCentralAdapterRuntime({
           provider: strictProvider as never,
@@ -492,6 +498,9 @@ export function createProbeWiring(
             verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
           }),
         });
+    runtimeByCutoff.set(cutoffKey, runtime);
+    return runtime;
+  };
   const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
 
   type AttestOnce = NonNullable<UniverseRebuildProbeWiring["attestFamilyInstanceOnce"]>;
@@ -1088,10 +1097,36 @@ export function createRebuildWiring(input?: {
       const familyId = typeof candidate.familyId === "string"
         ? candidate.familyId
         : "unknown-family";
-      const memo = memoInput.checkpoint.verifiedMemos[
-        rebuildFamilyCandidateKey(candidate)
-      ];
+      const candidateKey = rebuildFamilyCandidateKey(candidate);
+      const memo = memoInput.checkpoint.verifiedMemos[candidateKey];
       if (memo === undefined) return null;
+      const run = memoInput.checkpoint.inProgressRun;
+      const oldOutcome = run?.outcomesByCandidateKey[candidateKey];
+      const sameFixedRun = run !== null && run !== undefined &&
+        run.cutoff.number === memoInput.cutoff.number &&
+        run.cutoff.hash.toLowerCase() === memoInput.cutoff.hash.toLowerCase() &&
+        run.cutoff.generation === memoInput.cutoff.generation;
+      if (
+        sameFixedRun &&
+        oldOutcome?.status === "verified" &&
+        oldOutcome.memoFingerprint === memo.memoFingerprint &&
+        memo.validity.proofSource.number === memoInput.cutoff.number &&
+        memo.validity.proofSource.hash.toLowerCase() ===
+          memoInput.cutoff.hash.toLowerCase() &&
+        canReuseMemo({
+          memo,
+          candidate,
+          cutoff: memoInput.cutoff,
+          familyId,
+          // The run's canonical hash is asserted once before resume. At the
+          // same historical source, the already sealed code/implementation
+          // authority cannot change; only candidate/Family hashes need the
+          // pure canReuseMemo recheck here.
+          currentAuthorityFingerprint: memo.validity.authorityFingerprint,
+        })
+      ) {
+        return memo;
+      }
       const address = String(candidate.address ?? "");
       if (!ethers.isAddress(address)) return null;
       const [code, implementationWord] = await Promise.all([

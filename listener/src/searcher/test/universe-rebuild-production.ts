@@ -425,6 +425,33 @@ async function main(): Promise<void> {
     true,
     "a production-sealed immutable memo must be reusable on restart",
   );
+  const sameRunCandidateKey = rebuildFamilyCandidateKey(candidate);
+  const sameRunMemo = await wiring.findReusableMemo({
+    candidate,
+    cutoff: SOURCE,
+    checkpoint: Object.freeze({
+      revision: 2,
+      verifiedMemos: Object.freeze({ [sameRunCandidateKey]: sealed }),
+      inProgressRun: Object.freeze({
+        cutoff: SOURCE,
+        outcomesByCandidateKey: Object.freeze({
+          [sameRunCandidateKey]: Object.freeze({
+            status: "verified",
+            familyCandidateKey: sameRunCandidateKey,
+            familyInstanceKey: sealed.familyInstanceKey,
+            memoFingerprint: sealed.memoFingerprint,
+          }),
+        }),
+      }),
+      readyGeneration: null,
+      checkpointFingerprint: "f".repeat(64),
+    }) as never,
+  });
+  assert.equal(
+    sameRunMemo,
+    sealed,
+    "same fixed run reuses its sealed memo without per-instance authority RPC",
+  );
   const aliasSealed = probeWiring.sealDurableVerifiedMemo({
     candidate: Object.freeze({
       ...candidate,

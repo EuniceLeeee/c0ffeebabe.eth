@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import type {
   CentralAdapterRuntime,
 } from "./adapter-work-intent.js";
-import type { UnifiedObservation } from
+import type { CaptureNominationProvider, UnifiedObservation } from
   "./venues/adapter-family-plugin.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
@@ -80,6 +80,52 @@ export interface StrictIdentityProvider {
     }[];
   } | null>;
   traceTransaction?(transactionHash: string): Promise<unknown>;
+}
+
+const nominationProviderSessions = new WeakMap<
+  StrictIdentityProvider,
+  Map<string, CaptureNominationProvider>
+>();
+
+function nominationProviderFor(input: {
+  readonly provider: StrictIdentityProvider;
+  readonly source: CanonicalSource;
+}): CaptureNominationProvider {
+  let bySource = nominationProviderSessions.get(input.provider);
+  if (bySource === undefined) {
+    bySource = new Map();
+    nominationProviderSessions.set(input.provider, bySource);
+  }
+  const sourceKey = input.source.number + ":" +
+    input.source.hash.toLowerCase() + ":" + input.source.generation;
+  const incumbent = bySource.get(sourceKey);
+  if (incumbent !== undefined) return incumbent;
+  const session = Object.freeze({
+    call: (
+      transaction: { readonly to: string; readonly data: string },
+      blockTag?: number,
+    ) => input.provider.call(transaction, blockTag ?? input.source.number),
+    getCode: (address: string, blockTag?: number) =>
+      input.provider.getCode(address, blockTag ?? input.source.number),
+    getStorage: (address: string, slot: string, blockTag?: number) =>
+      input.provider.getStorage(address, slot, blockTag ?? input.source.number),
+    getLogs: input.provider.getLogs === undefined
+      ? async () => Object.freeze([])
+      : (filter: Parameters<NonNullable<StrictIdentityProvider["getLogs"]>>[0]) =>
+        input.provider.getLogs!(filter),
+    getTransactionReceipt:
+      input.provider.getTransactionReceipt === undefined
+        ? async () => null
+        : (hash: string) => input.provider.getTransactionReceipt!(hash),
+    ...(input.provider.traceTransaction === undefined
+      ? {}
+      : {
+          traceTransaction: (hash: string) =>
+            input.provider.traceTransaction!(hash),
+        }),
+  });
+  bySource.set(sourceKey, session);
+  return session;
 }
 
 export type StrictAttestedPool<Pool extends {
@@ -228,38 +274,13 @@ export async function attestPoolIdentitiesStrict<
   }
   let completed = 0;
   let next = 0;
-  // One stable nomination provider for the whole batch: plugin-owned
-  // source-keyed caches (e.g. a manager-wide swap index) key on provider
-  // identity, so a fresh wrapper per pool would rebuild the index for every
-  // row. The provider closes over the same underlying reads for all rows.
-  const nominationProvider = Object.freeze({
-    call: (transaction: { readonly to: string; readonly data: string }, blockTag?: number) =>
-      input.provider.call(transaction, blockTag ?? input.source.number),
-    getCode: (a: string, blockTag?: number) =>
-      input.provider.getCode(a, blockTag ?? input.source.number),
-    getStorage: (a: string, s: string, blockTag?: number) =>
-      input.provider.getStorage(a, s, blockTag ?? input.source.number),
-    // Nomination capabilities are passed through when the caller supplies
-    // them (recent-log reverse lookup, tx seed); absent means fail-closed
-    // empty implementations.
-    getLogs: input.provider.getLogs === undefined
-      ? async () => Object.freeze([])
-      : (filter: {
-          readonly address?: string;
-          readonly fromBlock?: number;
-          readonly toBlock?: number;
-          readonly topics?: readonly (string | null)[];
-        }) => input.provider.getLogs!(filter),
-    getTransactionReceipt:
-      input.provider.getTransactionReceipt === undefined
-      ? async () => null
-      : (hash: string) => input.provider.getTransactionReceipt!(hash),
-    ...(input.provider.traceTransaction === undefined
-      ? {}
-      : {
-          traceTransaction: (hash: string) =>
-            input.provider.traceTransaction!(hash),
-        }),
+  // One stable source-bound nomination provider for the underlying provider,
+  // even when the durable rebuild invokes this function once per candidate.
+  // Plugin caches (notably V4's manager-wide recent-swap index) bind their
+  // settled/in-flight key to this provider identity + canonical source.
+  const nominationProvider = nominationProviderFor({
+    provider: input.provider,
+    source: input.source,
   });
   const processPool = async (index: number): Promise<void> => {
     const pool = input.pools[index];

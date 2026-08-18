@@ -3861,6 +3861,36 @@ Family strict edge/exact/final-sim provenance 与连续 100/100，才可推进 F
 逐实例 attestation，并持续按 batch 写 outcomes。只有 retryable=0、exact partition 完整且 ready CAS
 成功后才可创建 producer。
 
+**2026-08-18 source-session/V4 复用第二十五批 live-derived 性能与恢复
+checkpoint（实现提交承载本 checkpoint；不是 ready 或 F5 pass）：**
+
+- `90b03501a6c5e5c19f1248261481f136b8f6e072` 从同一 fixed run 正确恢复并持续
+  batch checkpoint；约 11 分钟达到 outcomes `600/13842`（498 verified、79 terminal-rejected、
+  23 retryable），revision `112`，applied/ready 仍未推进。稳定吞吐约 55 instance/分钟，投影超过
+  4 小时，触发“超过一小时不得纯等待”的诊断门；
+- 同一 process anchor 的日志出现 25 条完全相同的
+  `recent-swap index sourceBlock=25778225 lookback=10000 chunk=500 poolIds=2615`。
+  V4 settled+inFlight cache 本身正确，但 rebuild 外层逐 candidate 调用
+  `attestPoolIdentitiesStrict([pool])`；该函数每次重新包装同一个底层 provider，导致 cache key 的
+  provider identity 每次不同，24 workers 各自重建 manager-wide 10k-block index；
+- strict identity 现在按“底层 provider + canonical source number/hash/generation”复用唯一
+  `CaptureNominationProvider` session。逐实例仍只执行一次 identity→materialization→projection，
+  但同 cutoff 的 plugin settled/inFlight cache 看见同一 provider identity。production probe wiring
+  同时按 cutoff 复用唯一 central runtime，避免逐 pool 重建 runtime/session cache；不同 hash/generation
+  绝不共享；
+- 同一个未完成 run 重启时，先对 cutoff 做一次 canonical hash fence；随后已 verified key 只重校验
+  candidate fingerprint、Family definition hash、memo/outcome fingerprint 与 stored authority binding，
+  不再为每个已完成实例重复读取 code、EIP-1967 slot 和 proof block。新窗口或不同 cutoff 仍执行完整
+  authority/canonical 复核，失效/new/retryable key 仍单独 attest；
+- 合同覆盖两次 per-candidate strict attestation 在同 provider+source 下获得相同 nomination provider
+  identity、同-run sealed memo 在离线 RPC 下直接复用，以及 resume canonical fence；
+  `searcher:strict-identity-attestation`、`searcher:universe-rebuild-production`、
+  `searcher:universe-rebuild-runner` 与 listener 完整 build 同轮通过。
+
+部署本批新 SHA 时必须先由 systemd/SIGTERM flush 当前 writer，再复用原 cutoff checkpoint；验收要求
+V4 index 对该 provider/source 只 build 一次、旧 verified 立即 carry、outcome 继续增长且 candidateCount/
+cutoff 不变。禁止为了提速清空 checkpoint 或创建移动窗口。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
