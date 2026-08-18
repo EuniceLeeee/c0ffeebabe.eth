@@ -17,7 +17,6 @@ import {
 import { JsonRpcBlockScanStateReadBackend } from "../blockscan-state-read-backend.js";
 import type { QuoteRequest } from "../live-state-backend.js";
 import {
-  buildTokenGraphWithResults,
   type PoolEntry,
   type TokenEdge,
   type TokenQueryBackend,
@@ -541,120 +540,6 @@ export async function compareV2V3ShadowRange(
         "missing-log-full-refresh",
       ],
     }),
-  });
-}
-
-export interface RunV2V3ShadowParityLiveInput {
-  readonly rpcUrl: string;
-  readonly universePath: string;
-  readonly outPath: string;
-  readonly fromBlock: number;
-  readonly toBlock: number;
-  readonly expectedSingleHash?: string;
-  readonly poolsPerFamily: number;
-  readonly candidateLimitPerFamily: number;
-  readonly timeoutMs: number;
-}
-
-export async function runV2V3ShadowParityLive(
-  input: RunV2V3ShadowParityLiveInput,
-): Promise<V2V3ShadowParityArtifact> {
-  const provider = new ethers.JsonRpcProvider(input.rpcUrl, undefined, {
-    staticNetwork: true,
-  });
-  const [network, headers] = await Promise.all([
-    provider.getNetwork(),
-    readHeaderRange(provider, input.fromBlock, input.toBlock),
-  ]);
-  if (input.expectedSingleHash) {
-    if (headers.length !== 1) {
-      throw new Error("--source-hash is valid only for a single source block");
-    }
-    if (
-      headers[0].hash.toLowerCase() !== input.expectedSingleHash.toLowerCase()
-    ) {
-      throw new Error(
-        `source hash mismatch for block ${headers[0].number}`,
-      );
-    }
-  }
-  const universeRaw = readFileSync(input.universePath);
-  const universeContentSha256 = createHash("sha256")
-    .update(universeRaw)
-    .digest("hex");
-  const universe = loadPoolUniverse(input.universePath, {
-    missingOk: false,
-    maxPools: 0,
-    minScore: 0,
-  });
-  const ranked = selectV2V3UniverseCandidates(
-    universe,
-    input.candidateLimitPerFamily,
-  );
-  const candidateRows = [
-    ...(ranked.get("univ2-standard") ?? []),
-    ...(ranked.get("univ3-standard") ?? []),
-  ];
-  const sourceBlock = headers[0].number;
-  const graphBackend: TokenQueryBackend = {
-    call(req, control) {
-      return provider.call(
-        { ...req, blockTag: sourceBlock },
-      ).then(String);
-    },
-  };
-  const graph = await buildTokenGraphWithResults(
-    graphBackend,
-    candidateRows.map((entry) => entry.pool),
-    {
-      quiet: true,
-      deadlineAtMs: Date.now() + input.timeoutMs,
-      familyTimeoutMs: input.timeoutMs,
-    },
-  );
-  const rankByPool = new Map(
-    candidateRows.map((entry) => [
-      poolSelectionKey(entry.pool),
-      entry.rank,
-    ]),
-  );
-  const selected: SelectedV2V3Pool[] = [];
-  for (const success of graph.successful) {
-    const familyId = familyIdForPool(success.pool);
-    if (!familyId) continue;
-    if (
-      selected.filter((entry) => entry.familyId === familyId).length >=
-        input.poolsPerFamily
-    ) {
-      continue;
-    }
-    selected.push(Object.freeze({
-      familyId,
-      rank: rankByPool.get(poolSelectionKey(success.pool)) ?? 0,
-      pool: success.pool as PoolUniverseEntry,
-      edges: Object.freeze(success.edges),
-    }));
-  }
-  assertSelectedCohort(selected, input.poolsPerFamily);
-  const backend = new JsonRpcBlockScanStateReadBackend(input.rpcUrl, {
-    multicallMode: "rpc-batch",
-  });
-  return compareV2V3ShadowRange({
-    chainId: Number(network.chainId),
-    headers,
-    selectedPools: Object.freeze(selected),
-    legacyProvider: provider,
-    coordinatorBackend: backend,
-    universeContentSha256,
-    universeRowCount: universe.length,
-    poolsPerFamily: input.poolsPerFamily,
-    candidateLimitPerFamily: input.candidateLimitPerFamily,
-    expectedSingleHash: input.expectedSingleHash,
-    timeoutMs: input.timeoutMs,
-    verifyHeader: async (expected) => {
-      const observed = await readHeader(provider, expected.number);
-      return observed;
-    },
   });
 }
 
@@ -1449,27 +1334,4 @@ function positiveSafeInteger(
     throw new Error(`${label} must be ${allowZero ? "non-negative" : "positive"}`);
   }
   return parsed;
-}
-
-async function main(): Promise<void> {
-  const options = parseCli(process.argv.slice(2));
-  const artifact = await runV2V3ShadowParityLive(options);
-  const sha256 = writeCanonicalShadowArtifact(options.outPath, artifact);
-  console.log(
-    `[v2-v3-shadow-parity] status=${artifact.status} ` +
-      `blocks=${artifact.summary.blocks} sha256=${sha256} out=${options.outPath}`,
-  );
-  process.exitCode = v2V3ShadowParityExitCode(artifact);
-}
-
-const invokedPath = process.argv[1] ? resolve(process.argv[1]) : "";
-if (invokedPath && fileURLToPath(import.meta.url) === invokedPath) {
-  main().catch((error) => {
-    console.error(
-      `[v2-v3-shadow-parity] failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-    process.exitCode = 1;
-  });
 }

@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { DEFAULT_SEARCHER_OWNER } from "../../shared/executor/botvm-executor.js";
-import { buildTokenGraph, type PoolEntry } from "../planner/token-graph.js";
+import type { TokenEdge } from "../planner/token-graph.js";
 import { quote as rpcQuote } from "../solver/quoter.js";
 import { RevmSimClient } from "../revm-sim-client.js";
 import { RevmLiveBackend } from "../live-backends/revm-live-backend.js";
@@ -25,15 +25,45 @@ function loadEnv(): void {
   }
 }
 
-const POOLS: PoolEntry[] = [
-  { address: ADDR.UNISWAP_V3_USDC_WETH_100, adapter: "univ3" },
-  { address: ADDR.CURVE_3POOL, adapter: "curve" },
+// Strict graph authority: edges come from the verified family lifecycle,
+// never from a parallel eth_call builder. Fixture mirrors the univ3/curve/psm
+// lifecycle projections the smoke quotes.
+const GRAPH: TokenEdge[] = [
   {
-    address: ADDR.SKY_PSM_LITE,
-    adapter: "psm",
-    fixedTokenIn: ADDR.USDC,
-    fixedTokenOut: ADDR.DAI,
-    fixedSlotKind: "swap",
+    adapterId: "univ3-swap",
+    target: ADDR.UNISWAP_V3_USDC_WETH_100,
+    tokenIn: ADDR.USDC,
+    tokenOut: ADDR.WETH,
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+    v3Fee: 500,
+    v3TickSpacing: 10,
+    poolToken0: ADDR.USDC,
+    poolToken1: ADDR.WETH,
+  },
+  {
+    adapterId: "curve-exchange-plain",
+    target: ADDR.CURVE_3POOL,
+    tokenIn: ADDR.USDC,
+    tokenOut: ADDR.USDT,
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+    poolToken0: ADDR.USDC,
+    poolToken1: ADDR.USDT,
+  },
+  {
+    adapterId: "psm",
+    target: ADDR.SKY_PSM_LITE,
+    tokenIn: ADDR.USDC,
+    tokenOut: ADDR.DAI,
+    slotKind: "protocol",
+    protocolAction: "convert",
+    edgeKind: "protocol",
+    leavesStandingPosition: false,
+    poolToken0: ADDR.USDC,
+    poolToken1: ADDR.DAI,
   },
 ];
 
@@ -47,7 +77,7 @@ async function main(): Promise<void> {
   const callAtBlock = {
     call: async (req: { to: string; data: string }) => provider.call({ ...req, blockTag: block }),
   };
-  const graph = await buildTokenGraph(callAtBlock, POOLS);
+  const graph = GRAPH;
   const client = new RevmSimClient({
     timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
   });

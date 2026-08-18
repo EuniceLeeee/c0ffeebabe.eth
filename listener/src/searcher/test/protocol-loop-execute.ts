@@ -14,7 +14,7 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { AnvilStateBackend } from "../../shared/state/state-backend.js";
 import "../../shared/adapters/index.js";
-import { buildTokenGraph, type TokenEdge, type TokenPath } from "../planner/token-graph.js";
+import type { TokenEdge, TokenPath } from "../planner/token-graph.js";
 import { quote } from "../solver/quoter.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
@@ -61,7 +61,34 @@ async function main(): Promise<void> {
   await state.provider.send("anvil_setBalance", [DEFAULT_SEARCHER_EXECUTOR, "0x56bc75e2d63100000"]); // executor gas
   console.log(`[protocol-loop] forked ${ANVIL_URL} @ block ${block} + BotVM executor installed`);
 
-  const edges = await buildTokenGraph(state, [PSM_ENTRY, CURVE_3POOL_ENTRY]);
+  // Strict graph authority: edges come from the verified family lifecycle,
+  // never from a parallel eth_call builder. Fixture mirrors the PSM and
+  // Curve 3pool lifecycle projections at this fork block.
+  const edges: TokenEdge[] = [
+    {
+      adapterId: "psm",
+      target: ADDR.SKY_PSM_LITE,
+      tokenIn: ADDR.USDC,
+      tokenOut: ADDR.DAI,
+      slotKind: "protocol",
+      protocolAction: "convert",
+      edgeKind: "protocol",
+      leavesStandingPosition: false,
+      poolToken0: ADDR.USDC,
+      poolToken1: ADDR.DAI,
+    },
+    {
+      adapterId: "curve",
+      target: ADDR.CURVE_3POOL,
+      tokenIn: ADDR.DAI,
+      tokenOut: ADDR.USDC,
+      slotKind: "swap",
+      edgeKind: "swap",
+      leavesStandingPosition: false,
+      poolToken0: ADDR.DAI,
+      poolToken1: ADDR.USDC,
+    },
+  ];
   const lc = (s: string) => s.toLowerCase();
   const psmEdge = edges.find((e: TokenEdge) => e.adapterId === "psm" && lc(e.tokenIn) === lc(ADDR.USDC) && lc(e.tokenOut) === lc(ADDR.DAI));
   const curveEdge = edges.find((e: TokenEdge) => e.adapterId.startsWith("curve") && lc(e.tokenIn) === lc(ADDR.DAI) && lc(e.tokenOut) === lc(ADDR.USDC) && lc(e.target) === lc(ADDR.CURVE_3POOL));

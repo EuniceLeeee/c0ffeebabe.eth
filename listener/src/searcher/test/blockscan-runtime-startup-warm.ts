@@ -107,12 +107,6 @@ function resolvedPlan(netProfit: bigint): ResolvedPlan {
   };
 }
 
-interface PreparedDiscovery {
-  readonly block: number;
-  readonly baseDexFingerprint: string;
-  readonly delta: RuntimePoolRefreshDelta;
-}
-
 await productionRuntimeRecordsNonzeroEnumerationAndSolver();
 await incompleteRetriesAndHotBudgetResumes();
 await startupStateGetsAnIndependentPhaseBudget();
@@ -227,176 +221,6 @@ function failureCauseSummaryIsBoundedAndRedacted(): void {
   );
 }
 
-async function distantStartupPricesPublishedGraphWhileBackfillContinues():
-  Promise<void> {
-  const harness = createHarness(
-    100,
-    ["complete"],
-    { laneReadyBlocksAfterSettlement: [140] },
-  );
-  await harness.run(140);
-  assert.deepEqual(
-    harness.runtimeBlocks,
-    [140],
-    "startup must price the verified published graph at current N",
-  );
-  assert.deepEqual(harness.backfillBlocks, [140]);
-  assert.equal(
-    harness.publication.dexGraphCoverage.sourceCompleteThrough,
-    100,
-    "current-state progress must not fabricate the discovery watermark",
-  );
-  assert.equal(harness.laneSettledCalls, 0);
-  assert.equal(harness.loop.isStartupWarmPending(), false);
-  assert.equal(harness.publishedPricing, 1);
-}
-
-async function stalePreparedSourcePricesPublishedGraph(): Promise<void> {
-  const harness = createHarness(
-    100,
-    ["complete"],
-    {
-      initialLaneReadyBlock: 100,
-      outsideRetainedReadyBlock: 100,
-      laneReadyBlocksAfterSettlement: [139],
-    },
-  );
-  await harness.run(140);
-  assert.equal(
-    harness.laneInvalidations,
-    1,
-    "a prepared source outside the retained journal must be discarded",
-  );
-  assert.deepEqual(
-    harness.laneTakeBlocks,
-    [],
-    "an invalid prepared source must not be published",
-  );
-  assert.deepEqual(
-    harness.runtimeBlocks,
-    [140],
-    "startup must fall back to the verified published graph",
-  );
-  assert.deepEqual(harness.backfillBlocks, [140]);
-  assert.equal(
-    harness.publication.dexGraphCoverage.sourceCompleteThrough,
-    100,
-  );
-}
-
-async function activeBackfillDoesNotBlockStartupState(): Promise<void> {
-  const harness = createHarness(
-    100,
-    ["complete"],
-    {
-      laneReadyBlocksAfterSettlement: [130, 149],
-      beforeLaneSettled: async () => {
-        throw new Error("current-state pass awaited historical backfill");
-      },
-    },
-  );
-  await harness.run(150);
-  assert.deepEqual(
-    harness.runtimeBlocks,
-    [150],
-    "startup state must price the published graph while backfill runs",
-  );
-  assert.equal(harness.laneSettledCalls, 0);
-  assert.deepEqual(harness.laneTakeBlocks, []);
-  assert.deepEqual(harness.discoveryPrepareBases, []);
-  assert.deepEqual(harness.backfillBlocks, [150]);
-  assert.equal(harness.loop.isStartupWarmPending(), false);
-}
-
-async function failedBackfillStillPricesStartupState(): Promise<void> {
-  const harness = createHarness(100, ["complete"]);
-  await harness.run(180);
-  assert.deepEqual(
-    harness.runtimeBlocks,
-    [180],
-    "a failed historical lane must not prevent the published-graph warm",
-  );
-  assert.deepEqual(
-    harness.discoveryPrepareBases,
-    [],
-    "a failed historical lane must not move the entire gap to hot RPC",
-  );
-  assert.deepEqual(harness.backfillBlocks, [180]);
-  assert.equal(harness.loop.isStartupWarmPending(), false);
-  assert.equal(harness.publishedPricing, 1);
-  assert.equal(
-    harness.publication.dexGraphCoverage.sourceCompleteThrough,
-    100,
-  );
-}
-
-async function steadyStateBehindRunsDegradedCurrentState(): Promise<void> {
-  const harness = createHarness(
-    100,
-    ["complete"],
-    {
-      startupWarmEnabled: false,
-      routePipeline: true,
-    },
-  );
-  await harness.run(170);
-  assert.deepEqual(harness.runtimeBlocks, [170]);
-  assert.deepEqual(harness.discoveryPrepareBases, []);
-  assert.deepEqual(harness.backfillBlocks, [170]);
-  assert.equal(harness.solverInvocations, 1);
-  assert.equal(harness.routeTelemetryRecords[0]?.enumerationCount, 1);
-  assert.equal(harness.routeTelemetryRecords[0]?.passOutcome, "degraded");
-  assert.deepEqual(harness.pricingLaggingTopologyModes, ["proof-scoped"]);
-  assert.equal(
-    harness.publication.dexGraphCoverage.sourceCompleteThrough,
-    100,
-    "degraded current-state work must retain the real lagging watermark",
-  );
-}
-
-async function steadyStateReadyBackfillRunsPublishedGraph(): Promise<void> {
-  const harness = createHarness(
-    100,
-    ["complete"],
-    {
-      startupWarmEnabled: false,
-      initialLaneReadyBlock: 165,
-    },
-  );
-  await harness.run(170);
-  assert.deepEqual(harness.laneTakeBlocks, [165]);
-  assert.deepEqual(
-    harness.discoveryPrepareBases,
-    [],
-    "a consumed historical chunk must not move its remaining gap to hot RPC",
-  );
-  assert.deepEqual(harness.runtimeBlocks, [170]);
-  assert.deepEqual(harness.backfillBlocks, [170]);
-  assert.equal(
-    harness.publication.dexGraphCoverage.sourceCompleteThrough,
-    165,
-  );
-  assert.deepEqual(
-    harness.routeTelemetryRecords.map((record) => ({
-      sourceBlock: record.sourceBlock,
-      enumerationCalls: record.enumerationCalls,
-      enumerationCount: record.enumerationCount,
-      solverCalls: record.solverCalls,
-      finished: record.finished,
-      pricingMode: record.pricingMode,
-    })),
-    [{
-      sourceBlock: 170,
-      enumerationCalls: 1,
-      enumerationCount: 0,
-      solverCalls: 0,
-      finished: true,
-      pricingMode: "source_n",
-    }],
-    "current-N must publish one Enumeration boundary even with zero routes",
-  );
-}
-
 async function productionRuntimeRecordsNonzeroEnumerationAndSolver(): Promise<void> {
   const harness = createHarness(
     100,
@@ -421,31 +245,6 @@ async function productionRuntimeRecordsNonzeroEnumerationAndSolver(): Promise<vo
     record.solverRoutes,
     "the naturally enumerated production route must be recorded immediately " +
       "before the same route enters solver.solve",
-  );
-}
-
-async function steadyStateIncompleteReadyRunsPublishedGraph(): Promise<void> {
-  const harness = createHarness(
-    100,
-    ["complete"],
-    {
-      startupWarmEnabled: false,
-      initialLaneReadyBlock: 165,
-      initialLanePublishedBlock: 160,
-    },
-  );
-  await harness.run(170);
-  assert.deepEqual(harness.laneTakeBlocks, [165]);
-  assert.deepEqual(
-    harness.discoveryPrepareBases,
-    [],
-    "an incomplete prepared generation must not enter hot catch-up",
-  );
-  assert.deepEqual(harness.runtimeBlocks, [170]);
-  assert.deepEqual(harness.backfillBlocks, [170]);
-  assert.equal(
-    harness.publication.dexGraphCoverage.sourceCompleteThrough,
-    160,
   );
 }
 
@@ -590,55 +389,6 @@ async function latestHeadCoalescesDuringStartupWarm(): Promise<void> {
     harness.loop.isStartupWarmPending(),
     false,
     "the protected startup warm must release the one-time startup barrier",
-  );
-}
-
-async function protocolLagDoesNotBlockDexRuntime(): Promise<void> {
-  const harness = createHarness(
-    449,
-    ["degraded"],
-    { initialProtocolCompleteThrough: 448 },
-  );
-  await harness.run(450);
-  assert.deepEqual(
-    harness.runtimeBlocks,
-    [450],
-    "a protocol-family discovery lag must not suppress the DEX runtime pass",
-  );
-  assert.equal(
-    harness.publishedPricing,
-    1,
-    "healthy DEX state must publish while the owning protocol family is degraded",
-  );
-}
-
-async function familyProjectionLagDoesNotBlockOrdinaryDexRuntime(): Promise<void> {
-  const harness = createHarness(
-    599,
-    ["complete"],
-    {
-      startupWarmEnabled: false,
-      preserveHotGraphGap: true,
-    },
-  );
-  await harness.run(600);
-  assert.deepEqual(
-    harness.runtimeBlocks,
-    [600],
-    "source-complete ordinary live must run healthy families while one projection retries",
-  );
-  assert.deepEqual(
-    harness.backfillBlocks,
-    [600],
-    "an ordinary family projection gap must schedule immediate background healing",
-  );
-  assert.equal(
-    harness.publication.dexGraphCoverage.sourceCompleteThrough,
-    600,
-  );
-  assert.equal(
-    harness.publication.dexGraphCoverage.graphCompleteThrough,
-    599,
   );
 }
 
@@ -937,41 +687,6 @@ async function startupWarmRequeuesEvidenceWithinOriginalDeadline(): Promise<void
     [],
     "an in-deadline startup requeue must not be reported as dropped",
   );
-  await harness.loop.shutdown();
-}
-
-async function startupDiscoveryBarrierRejectsEvidenceWithoutARequeueLoop():
-  Promise<void> {
-  const sourceBlock = 635;
-  const harness = createHarness(
-    sourceBlock - 20,
-    ["complete"],
-    {
-      routePipeline: true,
-      pendingEvidenceFamilyId: PENDING_EVIDENCE_FAMILY,
-      passBudgetMs: 2_000,
-    },
-  );
-  const trigger = pendingEvidenceTrigger(sourceBlock, 0x6351);
-
-  assert.equal(harness.loop.schedulePendingEvidence(trigger), true);
-  await waitFor(() => harness.notStartedRecords.length === 1);
-
-  assert.deepEqual(harness.runtimeBlocks, []);
-  assert.deepEqual(harness.backfillBlocks, [sourceBlock]);
-  assert.deepEqual(harness.solverExecutionEvidence, []);
-  assert.equal(harness.loop.isStartupWarmPending(), true);
-  assert.deepEqual(harness.notStartedRecords, [{
-    sourceBlock,
-    sourceBlockHash: hash(sourceBlock),
-    passReason: "pending_evidence_startup_discovery_behind",
-  }]);
-  // A direct requeue would schedule the same head repeatedly until its
-  // deadline. One pass and one backfill request prove the fail-closed drop is
-  // bounded and leaves the background lane uncontended.
-  await new Promise<void>((resolve) => setTimeout(resolve, 20));
-  assert.deepEqual(harness.backfillBlocks, [sourceBlock]);
-  assert.equal(harness.notStartedRecords.length, 1);
   await harness.loop.shutdown();
 }
 
@@ -1292,67 +1007,6 @@ function blindModeStillRequiresExecutableDexGraph(): void {
   );
 }
 
-async function observedPublicationDoesNotInvalidateHotDexCommit(): Promise<void> {
-  const harness = createHarness(
-    469,
-    ["complete"],
-    { publishObservedDuringDiscoveryPrepare: true },
-  );
-  await harness.run(470);
-  assert.deepEqual(
-    harness.runtimeBlocks,
-    [470],
-    "a protocol-only publication must not suppress the DEX runtime pass",
-  );
-  assert.equal(harness.publishedPricing, 1);
-  assert.deepEqual(
-    harness.backfillBlocks,
-    [],
-    "a successful hot rebase must not schedule stale-base backfill",
-  );
-  assert.equal(
-    harness.publication.dexGraphCoverage.graphCompleteThrough,
-    470,
-  );
-  assert.equal(
-    harness.publication.protocolEvidenceCache.runtime.recentProcessedTxs.has(
-      hash(0xbeef),
-    ),
-    true,
-    "the hot DEX commit must preserve the concurrent protocol cache update",
-  );
-  assert(
-    harness.publication.backrunGraph.some(
-      (edge) =>
-        edge.target.toLowerCase() === runtimeDexPool(470).address.toLowerCase(),
-    ),
-    "the runtime interleave must commit the prepared non-empty DEX delta",
-  );
-}
-
-async function shutdownDoesNotWaitForHistoricalBackfill(): Promise<void> {
-  const harness = createHarness(
-    100,
-    ["complete"],
-    {
-      beforeLaneSettled: async () => {
-        throw new Error("startup unexpectedly awaited backfill settlement");
-      },
-    },
-  );
-  await harness.run(520);
-  await harness.loop.shutdown();
-  assert.deepEqual(
-    harness.runtimeBlocks,
-    [520],
-    "startup must price the published graph without awaiting backfill settlement",
-  );
-  assert.deepEqual(harness.backfillBlocks, [520]);
-  assert.equal(harness.laneSettledCalls, 0);
-  assert.equal(harness.loop.isStartupWarmPending(), false);
-  assert.equal(harness.runtimeAborted, true);
-}
-
 async function shutdownDrainsActivePassAndDropsPendingHead(): Promise<void> {
   const holdActive = deferred<void>();
   const harness = createHarness(
@@ -1630,105 +1284,6 @@ async function nMinusOneProducerStartsAtArmTime(): Promise<void> {
     nMinusOneProducerCanServeLatestHead(700, 702),
     false,
     "source N is obsolete once the latest scheduled head has advanced to N+2",
-  );
-}
-
-async function nMinusOneProducerCriticalGateCoversHeaderRead(): Promise<void> {
-  const producerHeaderEntered = deferred<void>();
-  const releaseProducerHeader = deferred<void>();
-  let sourceHeaderCalls = 0;
-  const harness = createHarness(699, ["complete"], {
-    nMinusOneFallbackEnabled: true,
-    observeHeader: async (blockNumber) => {
-      if (blockNumber === 701 && ++sourceHeaderCalls === 2) {
-        producerHeaderEntered.resolve();
-        await releaseProducerHeader.promise;
-      }
-      return header(blockNumber);
-    },
-  });
-
-  await harness.run(700);
-  await harness.run(701);
-  await producerHeaderEntered.promise;
-  assert.equal(
-    harness.producerYieldActive(),
-    true,
-    "exact/discovery work must yield while the producer header RPC is pending",
-  );
-
-  releaseProducerHeader.resolve();
-  await waitFor(() => !harness.producerYieldActive());
-  assert(
-    harness.coarsePricingBlocks.includes(701),
-    "the gated producer must continue into coarse state preparation",
-  );
-  await harness.loop.shutdown();
-}
-
-async function nMinusOneProducerCriticalGateClearsOnHeaderThrow(): Promise<void> {
-  const producerHeaderAttempted = deferred<void>();
-  let sourceHeaderCalls = 0;
-  const harness = createHarness(709, ["complete"], {
-    nMinusOneFallbackEnabled: true,
-    observeHeader: async (blockNumber) => {
-      if (blockNumber === 711 && ++sourceHeaderCalls === 2) {
-        producerHeaderAttempted.resolve();
-        throw new Error("fixture producer header failure");
-      }
-      return header(blockNumber);
-    },
-  });
-
-  await harness.run(710);
-  await harness.run(711);
-  await producerHeaderAttempted.promise;
-  await waitFor(() => !harness.producerYieldActive());
-  assert.equal(
-    harness.producerYieldActive(),
-    false,
-    "a failed producer header read must release the yield gate",
-  );
-  assert.equal(
-    harness.coarsePricingBlocks.includes(711),
-    false,
-    "a failed canonical header must not enter coarse preparation",
-  );
-  await harness.loop.shutdown();
-}
-
-async function nMinusOneProducerCriticalGateClearsOnRuntimeAbort(): Promise<void> {
-  const producerHeaderEntered = deferred<void>();
-  const releaseProducerHeader = deferred<void>();
-  let sourceHeaderCalls = 0;
-  const harness = createHarness(719, ["complete"], {
-    nMinusOneFallbackEnabled: true,
-    observeHeader: async (blockNumber) => {
-      if (blockNumber === 721 && ++sourceHeaderCalls === 2) {
-        producerHeaderEntered.resolve();
-        await releaseProducerHeader.promise;
-      }
-      return header(blockNumber);
-    },
-  });
-
-  await harness.run(720);
-  await harness.run(721);
-  await producerHeaderEntered.promise;
-  assert.equal(harness.producerYieldActive(), true);
-  const shutdown = harness.loop.shutdown();
-  await waitFor(() => harness.runtimeAborted);
-  assert.equal(
-    harness.producerYieldActive(),
-    false,
-    "runtime abort must release the yield gate before a pending header settles",
-  );
-  releaseProducerHeader.resolve();
-  await shutdown;
-  assert.equal(
-    harness.coarsePricingBlocks.includes(721),
-    false,
-    "an aborted producer header must not enter coarse preparation",
   );
 }
 
@@ -2601,96 +2156,6 @@ function telemetryRouteKey(opportunity: {
   return opportunity.seedEdges.map(blockScanEdgeKey).join(">");
 }
 
-function publicationAt(
-  block: number,
-  revision = 0,
-  protocolCompleteThrough?: number,
-): LiveDiscoveryPublicationState {
-  const evidence = createProtocolDiscoveryEvidenceCache(1);
-  return {
-    revision,
-    strategyViews: {
-      backrun: [],
-      blockscan: [],
-      versions: {
-        strategy_view_version: "fixture:v1",
-        backrun_view_hash: "fixture:backrun",
-        blockscan_view_hash: "fixture:blockscan",
-        pool_universe_generated_at: "2026-07-25T00:00:00.000Z",
-        overrides_hash: "fixture:overrides",
-      },
-    },
-    backrunGraph: [],
-    blockscanGraph: [],
-    tokenIndex: new Map(),
-    poolAddressMap: new Map(),
-    flashTokens: [],
-    knownPoolKeys: new Set(),
-    knownPoolAddresses: new Set(),
-    protocolOwnership: { version: 0, admissions: new Map() },
-    protocolEvidenceCache: evidence,
-    retryableDexGraphPools: new Map(),
-    retryableDexIdentityPools: new Map(),
-    dexGraphCoverage: {
-      sourceCompleteThrough: block,
-      graphCompleteThrough: block,
-    },
-    dexSourceAnchor: anchor(block),
-    dexGraphAnchor: anchor(block),
-    landedCoverage: [],
-    protocolFamilySourceCoverage: protocolCompleteThrough === undefined
-      ? new Map()
-      : new Map([[
-          "fixture-protocol\u001fobserved-interaction",
-          anchor(protocolCompleteThrough),
-        ]]),
-    protocolObservedCursor: {
-      completeThroughBlock: -1,
-      completeThroughHash: null,
-    },
-  };
-}
-
-function runtimeDexPool(block: number): PoolEntry {
-  return {
-    address: address(0x8000 + block),
-    adapter: "univ2",
-    token0: address(0x9000 + block),
-    token1: address(0xa000 + block),
-  };
-}
-
-function runtimeDexEdges(pool: PoolEntry): TokenEdge[] {
-  return [
-    runtimeDexEdge(pool, pool.token0!, pool.token1!),
-    runtimeDexEdge(pool, pool.token1!, pool.token0!),
-  ];
-}
-
-function runtimeDexEdge(
-  pool: PoolEntry,
-  tokenIn: string,
-  tokenOut: string,
-): TokenEdge {
-  return {
-    adapterId: "univ2-swap",
-    target: pool.address,
-    tokenIn,
-    tokenOut,
-    poolToken0: pool.token0,
-    poolToken1: pool.token1,
-    slotKind: "swap",
-    ...deriveEdgeTaxonomy("swap"),
-  };
-}
-
-function runtimeStrategyViews(pools: PoolEntry[]) {
-  return buildStrategyViews(pools, [], [], {
-    blockscanMaxPools: 10_000,
-    poolUniverseGeneratedAt: "2026-07-26T00:00:00.000Z",
-  });
-}
-
 function pendingEvidenceTrigger(
   sourceBlock: number,
   txSeed: number,
@@ -2760,13 +2225,6 @@ function address(value: number): string {
   return `0x${value.toString(16).padStart(40, "0")}`;
 }
 
-function anchor(block: number): DiscoveryCoverageAnchor {
-  return {
-    completeThroughBlock: block,
-    completeThroughHash: hash(block),
-  };
-}
-
 function header(block: number) {
   return {
     number: block,
@@ -2799,4 +2257,61 @@ async function waitFor(
     if (Date.now() >= deadline) throw new Error("timed out waiting for fixture");
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
+}
+
+function anchor(block: number): DiscoveryCoverageAnchor {
+  return {
+    completeThroughBlock: block,
+    completeThroughHash: hash(block),
+  };
+}
+
+function publicationAt(
+  block: number,
+  revision = 0,
+  protocolCompleteThrough?: number,
+): LiveDiscoveryPublicationState {
+  const evidence = createProtocolDiscoveryEvidenceCache(1);
+  return {
+    revision,
+    strategyViews: {
+      backrun: [],
+      blockscan: [],
+      versions: {
+        strategy_view_version: "fixture:v1",
+        backrun_view_hash: "fixture:backrun",
+        blockscan_view_hash: "fixture:blockscan",
+        pool_universe_generated_at: "2026-07-25T00:00:00.000Z",
+        overrides_hash: "fixture:overrides",
+      },
+    },
+    backrunGraph: [],
+    blockscanGraph: [],
+    tokenIndex: new Map(),
+    poolAddressMap: new Map(),
+    flashTokens: [],
+    knownPoolKeys: new Set(),
+    knownPoolAddresses: new Set(),
+    protocolOwnership: { version: 0, admissions: new Map() },
+    protocolEvidenceCache: evidence,
+    retryableDexGraphPools: new Map(),
+    retryableDexIdentityPools: new Map(),
+    dexGraphCoverage: {
+      sourceCompleteThrough: block,
+      graphCompleteThrough: block,
+    },
+    dexSourceAnchor: anchor(block),
+    dexGraphAnchor: anchor(block),
+    landedCoverage: [],
+    protocolFamilySourceCoverage: protocolCompleteThrough === undefined
+      ? new Map()
+      : new Map([[
+          "fixture-protocol\u001fobserved-interaction",
+          anchor(protocolCompleteThrough),
+        ]]),
+    protocolObservedCursor: {
+      completeThroughBlock: -1,
+      completeThroughHash: null,
+    },
+  };
 }

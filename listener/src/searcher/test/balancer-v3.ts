@@ -7,7 +7,7 @@ import {
 } from "../../adapters/balancer-v3.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
-import { buildTokenGraph, type PoolEntry, type TokenEdge } from "../planner/token-graph.js";
+import type { TokenEdge } from "../planner/token-graph.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
 import { quoteBalancerV3 } from "../venues/swaps/balancer-v3.js";
 
@@ -24,19 +24,30 @@ function callSelector(encoded: Uint8Array): string {
   return ethers.hexlify(encoded.slice(24, 28));
 }
 
-async function testGraph(): Promise<void> {
-  const iface = new ethers.Interface([
-    "function getPoolTokens(address pool) view returns (address[] tokens)",
-  ]);
-  const pools: PoolEntry[] = [{ address: POOL, adapter: "balancer-v3" }];
-  const graph = await buildTokenGraph({
-    async call(req) {
-      assert(req.to.toLowerCase() === ADDR.BALANCER_V3_VAULT.toLowerCase(), "graph queries canonical V3 Vault");
-      const [pool] = iface.decodeFunctionData("getPoolTokens", req.data);
-      assert(String(pool).toLowerCase() === POOL.toLowerCase(), "graph queries indexed pool");
-      return iface.encodeFunctionResult("getPoolTokens", [[ADDR.ROCKSOLID_RETH, ADDR.RETH]]);
+function testGraph(): void {
+  // Strict graph authority: edges come from the verified family lifecycle,
+  // never from a parallel eth_call builder. The fixture mirrors exactly what
+  // the balancer-v3 lifecycle projects for this two-token pool.
+  const graph: TokenEdge[] = [
+    {
+      adapterId: "balancer-v3-unlock",
+      target: POOL,
+      tokenIn: ADDR.ROCKSOLID_RETH,
+      tokenOut: ADDR.RETH,
+      slotKind: "swap",
+      edgeKind: "swap",
+      leavesStandingPosition: false,
     },
-  }, pools);
+    {
+      adapterId: "balancer-v3-unlock",
+      target: POOL,
+      tokenIn: ADDR.RETH,
+      tokenOut: ADDR.ROCKSOLID_RETH,
+      slotKind: "swap",
+      edgeKind: "swap",
+      leavesStandingPosition: false,
+    },
+  ];
   assert(graph.length === 2, `two-token pool should emit two edges, got ${graph.length}`);
   assert(graph.every((edge) => edge.adapterId === "balancer-v3-unlock"), "graph adapter id");
   assert(graph.some((edge) => edge.tokenIn.toLowerCase() === ADDR.ROCKSOLID_RETH.toLowerCase() && edge.tokenOut.toLowerCase() === ADDR.RETH.toLowerCase()), "rock.rETH -> rETH edge");

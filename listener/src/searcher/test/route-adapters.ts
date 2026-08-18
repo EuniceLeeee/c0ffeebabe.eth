@@ -5,7 +5,6 @@ import { listAll } from "../../adapters/registry.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import {
-  buildTokenGraphWithResults,
   mergeDeclaredProtocolVenues,
   POOL_REGISTRY,
   type PoolEntry,
@@ -754,58 +753,6 @@ async function main(): Promise<void> {
     logicalFixtureViews as unknown as Parameters<
       typeof setProductionStrictViewsProvider
     >[0] extends () => infer V ? V : never,
-  );
-  const logicalGraph = await buildTokenGraphWithResults(
-    backend,
-    [
-      {
-        address: pair,
-        adapter: "univ2",
-        token0,
-        token1,
-        logicalInstanceId: "pair-a",
-      },
-      {
-        address: pair,
-        adapter: "univ2",
-        token0,
-        token1,
-        logicalInstanceId: "pair-b",
-      },
-    ],
-    { quiet: true },
-  );
-  assert(
-    logicalGraph.successful.length === 2 &&
-      logicalGraph.edges.length === 4 &&
-      new Set(logicalGraph.edges.map((edge) => edge.instanceKey)).size === 2,
-    "token graph must preserve same-address logical instances",
-  );
-  const duplicateLogicalGraph = await buildTokenGraphWithResults(
-    backend,
-    [
-      {
-        address: pair,
-        adapter: "univ2",
-        token0,
-        token1,
-        logicalInstanceId: "pair-a",
-      },
-      {
-        address: pair,
-        adapter: "univ2",
-        token0,
-        token1,
-        logicalInstanceId: "pair-a",
-      },
-    ],
-    { quiet: true },
-  );
-  assert(
-    duplicateLogicalGraph.successful.length === 1 &&
-      duplicateLogicalGraph.failed.length === 1 &&
-      duplicateLogicalGraph.failed[0].reason.includes("duplicate route instance"),
-    "token graph must reject a true duplicate route instance",
   );
   setProductionStrictViewsProvider(() => null);
   const neutralPool = {

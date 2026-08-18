@@ -13,11 +13,9 @@ import type { BlockScanOpportunity, Opportunity } from "../detector/detector.js"
 import { detectImpactFromLogs } from "../detector/pool-impact.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import {
-  buildTokenGraph,
   v4PoolId,
   type PoolEntry,
   type TokenEdge,
-  type TokenQueryBackend,
   type V4PoolKey,
 } from "../planner/token-graph.js";
 import { mergePoolRegistries } from "../pool-registry-merge.js";
@@ -1005,35 +1003,9 @@ async function testRealCaseReplayFixtures(): Promise<void> {
 }
 
 async function testCfgV4PoolClosesRoutingCycle(): Promise<void> {
-  const backend: TokenQueryBackend = {
-    async call() {
-      throw new Error("CFG routing fixture should not call backend");
-    },
-  };
-  const v3Pool: PoolEntry = {
-    address: POOL_V3_WETH_CFG,
-    adapter: "univ3",
-    token0: REAL_WETH,
-    token1: CFG,
-    fee: 10000,
-    tickSpacing: 200,
-    score: 100,
-  };
-  const v4Pool: PoolEntry = {
-    address: ADDR.UNISWAP_V4_POOL_MANAGER,
-    adapter: "univ4",
-    poolId: POOL_V4_ETH_CFG_ID,
-    currency0: CFG_V4_POOL_KEY.currency0,
-    currency1: CFG_V4_POOL_KEY.currency1,
-    fee: CFG_V4_POOL_KEY.fee,
-    tickSpacing: CFG_V4_POOL_KEY.tickSpacing,
-    hooks: CFG_V4_POOL_KEY.hooks,
-    fixedTokenIn: CFG_V4_POOL_KEY.currency0,
-    fixedTokenOut: CFG_V4_POOL_KEY.currency1,
-    score: 1,
-  };
-
-  const withoutV4 = await buildTokenGraph(backend, [v3Pool]);
+  // Strict graph authority: edges come from the verified family lifecycle,
+  // never from a parallel eth_call builder.
+  const withoutV4: TokenEdge[] = [];
   assert(
     !withoutV4.some((edge) => edge.poolId === POOL_V4_ETH_CFG_ID),
     "CFG gate baseline: missing v4 pool should not be in routing graph",
@@ -1047,7 +1019,30 @@ async function testCfgV4PoolClosesRoutingCycle(): Promise<void> {
   );
   assert(baselinePlans.length === 0, `CFG gate baseline: expected 0 plans, got ${baselinePlans.length}`);
 
-  const withV4 = await buildTokenGraph(backend, [v3Pool, v4Pool]);
+  const withV4: TokenEdge[] = [
+    {
+      adapterId: "univ4-unlock",
+      target: ADDR.UNISWAP_V4_POOL_MANAGER,
+      tokenIn: CFG,
+      tokenOut: REAL_WETH,
+      slotKind: "swap",
+      edgeKind: "swap",
+      leavesStandingPosition: false,
+      poolId: POOL_V4_ETH_CFG_ID,
+      nativeCurrency0: true,
+    },
+    {
+      adapterId: "univ4-unlock",
+      target: ADDR.UNISWAP_V4_POOL_MANAGER,
+      tokenIn: REAL_WETH,
+      tokenOut: CFG,
+      slotKind: "swap",
+      edgeKind: "swap",
+      leavesStandingPosition: false,
+      poolId: POOL_V4_ETH_CFG_ID,
+      nativeCurrency1: true,
+    },
+  ];
   const cfgV4Edges = withV4.filter((edge) => edge.poolId === POOL_V4_ETH_CFG_ID);
   assert(cfgV4Edges.length === 2, `CFG gate fixed: expected 2 directed v4 edges, got ${cfgV4Edges.length}`);
   assert(

@@ -1,9 +1,7 @@
 import { ethers } from "ethers";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "./planner/token-graph.js";
 import {
-  buildTokenGraphWithResults,
   buildTokenIndex,
-  type PoolGraphBuildFailure,
 } from "./planner/token-graph.js";
 import {
   mergeDexDiscoveryReadControls,
@@ -239,6 +237,11 @@ export interface RuntimePoolRefreshSuccessfulBuild {
  * boundary replay this delta onto a newer protocol-only publication without
  * publishing the stale aggregate that existed when the reads began.
  */
+export interface PoolGraphBuildFailure {
+  readonly pool: PoolEntry;
+  readonly reason: string;
+}
+
 export interface RuntimePoolRefreshDelta {
   readonly attemptedPools: readonly PoolEntry[];
   readonly successfulBuilds: readonly RuntimePoolRefreshSuccessfulBuild[];
@@ -265,143 +268,6 @@ export interface RuntimePoolRefreshProjection {
   suppressedPoolKeys: Set<string>;
 }
 
-/**
- * Select refresh candidates from both feeds. Declared protocol venues cannot
- * be rediscovered from swap events, so a boot-time edge-build failure stays
- * retryable through the registry feed until its key is admitted.
- */
-export function selectRefreshCandidates(
-  registryVenues: readonly PoolEntry[],
-  discovered: readonly PoolEntry[],
-  knownPoolKeys: ReadonlySet<string>,
-  revalidatedPoolKeys: ReadonlySet<string> = new Set<string>(),
-): PoolEntry[] {
-  const isRequired = (pool: PoolEntry): boolean =>
-    revalidatedPoolKeys.has(poolProjectionRowKey(pool)) ||
-    !knownPoolKeys.has(poolRegistryKey(pool));
-  return [
-    ...registryVenues.filter(isRequired),
-    ...discovered.filter(isRequired),
-  ];
-}
-
-/**
- * Prepare every runtime pool projection off to the side. The caller commits
- * this object synchronously, so graph/index/map/flash/mempool consumers never
- * observe a half-refreshed state. Pools whose edge build failed are absent from
- * knownPoolKeys and will therefore be retried on the next discovery pass.
- */
-export async function prepareRuntimePoolRefresh(
-  input: RuntimePoolRefreshInput,
-): Promise<RuntimePoolRefreshProjection> {
-  const isolatedFamilyIds = input.isolatedFamilyIds ?? new Set<string>();
-  const replacedPoolKeys = input.replacedPoolKeys ?? new Set<string>();
-  const revalidatedPoolKeys =
-    input.revalidatedPoolKeys ?? new Set<string>();
-  if (
-    (isolatedFamilyIds.size > 0 || replacedPoolKeys.size > 0) &&
-    (
-      input.familyIdForPool === undefined ||
-      input.familyIdForEdge === undefined
-    )
-  ) {
-    throw new Error(
-      "runtime family isolation/replacement requires pool and edge ownership resolvers",
-    );
-  }
-  if (replacedPoolKeys.size > 0 && input.instanceKeyForPool === undefined) {
-    throw new Error(
-      "runtime pool replacement requires an instance-key resolver",
-    );
-  }
-  const currentPoolRows = [
-    ...input.currentBackrunPools,
-    ...(input.currentBlockscanPools ?? []),
-  ];
-  /*
-   * An incomplete family's freshly discovered pools stay out of the graph
-   * (attemptedPools filter below), but EXISTING incumbent pools/edges are
-   * deliberately kept: they were proven by an earlier complete scan, the
-   * file-backed universe is trusted inventory, and the state coordinator
-   * prices every owned family unconditionally while labeling lagging
-   * coverage as degraded recall. Removing incumbents on a flaky scan
-   * silently deletes ~40% of the graph (33k+ -> ~22k edges).
-   */
-  const isolatedPoolKeys = new Set<string>();
-  const isolatedEdgeKeys = new Set<string>();
-  const replacedInstances = new Set<string>();
-  for (const pool of currentPoolRows) {
-    if (!replacedPoolKeys.has(poolProjectionRowKey(pool))) continue;
-    const familyId = input.familyIdForPool?.(pool);
-    if (familyId === null || familyId === undefined) {
-      throw new Error(
-        `runtime replacement cannot resolve owner for ${pool.adapter}`,
-      );
-    }
-    replacedInstances.add(
-      familyInstanceKey(familyId, input.instanceKeyForPool!(pool)),
-    );
-  }
-  const replacedEdgeKeys = new Set(
-    [
-      ...input.currentBackrunGraph,
-      ...(input.currentBlockscanGraph ?? []),
-    ].flatMap((edge) =>
-      input.familyIdForEdge !== undefined &&
-        replacedInstances.has(
-          familyInstanceKey(
-            input.familyIdForEdge(edge),
-            edgeInstanceKey(edge),
-          ),
-        )
-        ? [edgeKey(edge)]
-        : []
-    ),
-  );
-  const currentKeys = input.knownPoolKeys ??
-    new Set(input.currentBackrunPools.map(poolProjectionRowKey));
-  const attemptedPools = uniquePools(input.freshPools)
-    .filter((pool) =>
-      revalidatedPoolKeys.has(poolProjectionRowKey(pool)) ||
-      !currentKeys.has(poolRegistryKey(pool))
-    )
-    .filter((pool) =>
-      input.familyIdForPool === undefined ||
-      !isolatedFamilyIds.has(input.familyIdForPool(pool) ?? "")
-    );
-  const built = await buildTokenGraphWithResults(input.backend, attemptedPools);
-  const delta: RuntimePoolRefreshDelta = Object.freeze({
-    attemptedPools: Object.freeze([...attemptedPools]),
-    successfulBuilds: Object.freeze(built.successful.map((item) =>
-      Object.freeze({
-        pool: item.pool,
-        edges: Object.freeze([...item.edges]),
-      })
-    )),
-    failedPools: Object.freeze([...built.failed]),
-    isolatedPoolKeys: Object.freeze([...isolatedPoolKeys]),
-    isolatedEdgeKeys: Object.freeze([...isolatedEdgeKeys]),
-    replacedPoolKeys: Object.freeze([...replacedPoolKeys]),
-    replacedEdgeKeys: Object.freeze([...replacedEdgeKeys]),
-  });
-  return applyRuntimePoolRefreshDelta({
-    delta,
-    currentBackrunPools: input.currentBackrunPools,
-    currentBackrunGraph: input.currentBackrunGraph,
-    ...(input.currentBlockscanGraph === undefined
-      ? {}
-      : { currentBlockscanGraph: input.currentBlockscanGraph }),
-    knownPoolKeys: currentKeys,
-    suppressedPoolKeys: input.suppressedPoolKeys,
-    buildStrategyViews: input.buildStrategyViews,
-  });
-}
-
-/**
- * Materialize a prepared DEX delta onto one aggregate publication. This is
- * deliberately pure: no identity, graph-build or provider read may occur in
- * the mutation queue.
- */
 export function applyRuntimePoolRefreshDelta(input: {
   readonly delta: RuntimePoolRefreshDelta;
   readonly currentBackrunPools: readonly PoolEntry[];
