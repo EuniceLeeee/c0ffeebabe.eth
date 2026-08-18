@@ -16,6 +16,7 @@ export const ERC4626_INTERFACE = new ethers.Interface([
 ]);
 
 export const ERC4626_ERC20_INTERFACE = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
   "function decimals() view returns (uint8)",
   "function approve(address spender,uint256 amount) returns (bool)",
 ]);

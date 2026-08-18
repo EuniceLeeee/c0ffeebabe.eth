@@ -8,6 +8,7 @@ import type {
 import { RequiredAdapterRequestError } from
   "../venues/adapter-request-program.js";
 import {
+  ERC4626_ERC20_INTERFACE,
   ERC4626_INTERFACE,
   ERC4626_PROBE_ACTOR,
 } from "../venues/protocols/erc4626-family/abi.js";
@@ -64,6 +65,30 @@ assert.equal(
   requests.find((request) => request.id === "active-redeem")?.required,
   false,
 );
+const assetBalanceRequest = requests.find((request) =>
+  request.id === "active-asset-balance"
+);
+assert.equal(assetBalanceRequest?.kind, "eth-call");
+if (assetBalanceRequest?.kind !== "eth-call") {
+  throw new Error("active asset balance request is not an eth-call");
+}
+assert.equal(assetBalanceRequest.completion, "return-or-revert-data");
+assert.equal(
+  assetBalanceRequest.required,
+  false,
+);
+const shareBalanceRequest = requests.find((request) =>
+  request.id === "active-share-balance"
+);
+assert.equal(shareBalanceRequest?.kind, "eth-call");
+if (shareBalanceRequest?.kind !== "eth-call") {
+  throw new Error("active share balance request is not an eth-call");
+}
+assert.equal(shareBalanceRequest.completion, "return-or-revert-data");
+assert.equal(
+  shareBalanceRequest.required,
+  false,
+);
 
 const depositOnly = decodeActive(
   depositSuccess(),
@@ -106,6 +131,62 @@ assert.deepEqual(
   "only two completed negative behavior probes are chain-proven rejection",
 );
 
+const malformedAssetSurface = decodeResults([
+  ...commonActiveResults().map((result) =>
+    result.id === "active-asset-balance"
+      ? success("active-asset-balance", `0x${"00".repeat(64)}`)
+      : result.id === "active-share-balance"
+      ? failure("active-share-balance", "rpc")
+      : result
+  ),
+  failure("active-deposit", "resource-limited"),
+  failure("active-redeem", "rpc"),
+]);
+assert.deepEqual(
+  variant.decide({
+    candidate: CANDIDATE,
+    evidence: malformedAssetSurface,
+    step: 2,
+  }),
+  { status: "rejected", reason: "erc4626_erc20_surfaces_failed" },
+  "malformed ERC20 balance data is chain-proven rejection, not retryable simulation",
+);
+
+const revertedShareSurface = decodeResults([
+  ...commonActiveResults().map((result) =>
+    result.id === "active-share-balance"
+      ? reverted("active-share-balance", "0x")
+      : result
+  ),
+  failure("active-deposit", "resource-limited"),
+  failure("active-redeem", "rpc"),
+]);
+assert.deepEqual(
+  variant.decide({
+    candidate: CANDIDATE,
+    evidence: revertedShareSurface,
+    step: 2,
+  }),
+  { status: "rejected", reason: "erc4626_erc20_surfaces_failed" },
+  "declared ERC20 balance revert is chain-proven rejection",
+);
+
+assert.throws(
+  () => decodeResults([
+    ...commonActiveResults().map((result) =>
+      result.id === "active-share-balance"
+        ? failure("active-share-balance", "deadline")
+        : result
+    ),
+    depositSuccess(),
+    redeemSuccess(),
+  ]),
+  (error: unknown) =>
+    error instanceof RequiredAdapterRequestError &&
+    error.failureCode === "deadline",
+  "an unresolved balance surface remains retryable when no sibling proves rejection",
+);
+
 assert.throws(
   () => variant.decode({
     step: activeStep,
@@ -127,9 +208,15 @@ function decodeActive(
   deposit: AdapterRequestResult,
   redeem: AdapterRequestResult,
 ): Erc4626ActiveEvidence {
+  return decodeResults([...commonActiveResults(), deposit, redeem]);
+}
+
+function decodeResults(
+  results: readonly AdapterRequestResult[],
+): Erc4626ActiveEvidence {
   return variant.decode({
     step: activeStep,
-    results: [...commonActiveResults(), deposit, redeem],
+    results,
   }) as Erc4626ActiveEvidence;
 }
 
@@ -150,6 +237,14 @@ function verifiedDirections(evidence: Erc4626ActiveEvidence): {
 function commonActiveResults(): readonly AdapterRequestResult[] {
   return Object.freeze([
     success("active-asset-code", "0x6002"),
+    success(
+      "active-asset-balance",
+      ERC4626_ERC20_INTERFACE.encodeFunctionResult("balanceOf", [0n]),
+    ),
+    success(
+      "active-share-balance",
+      ERC4626_ERC20_INTERFACE.encodeFunctionResult("balanceOf", [0n]),
+    ),
     success(
       "active-roundtrip",
       ERC4626_INTERFACE.encodeFunctionResult("previewRedeem", [1_000n]),
@@ -253,5 +348,16 @@ function failure(
     ok: false as const,
     source: SOURCE,
     failure: failureCode,
+  });
+}
+
+function reverted(id: string, data: string): AdapterRequestResult {
+  return Object.freeze({
+    id,
+    ok: true as const,
+    source: SOURCE,
+    provenance: PROVENANCE,
+    completion: "reverted-as-declared" as const,
+    data,
   });
 }

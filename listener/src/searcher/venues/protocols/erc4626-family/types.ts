@@ -34,6 +34,7 @@ export interface Erc4626BaseEvidence {
 export interface Erc4626ActiveEvidence
   extends Omit<Erc4626BaseEvidence, "phase"> {
   readonly phase: "active";
+  readonly erc20SurfacesValid: boolean;
   readonly depositVerified: boolean;
   readonly redeemVerified: boolean;
   readonly behaviorProofHash: string;

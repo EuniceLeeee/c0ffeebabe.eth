@@ -77,7 +77,12 @@ export const erc4626Identity: IdentitySemantics<
     decode({ step, results }) {
       const optionalDirectionIds = step.evidence === undefined
         ? new Set<string>()
-        : new Set(["active-deposit", "active-redeem"]);
+        : new Set([
+            "active-asset-balance",
+            "active-share-balance",
+            "active-deposit",
+            "active-redeem",
+          ]);
       const successful = results.filter((result) => result.ok);
       for (const result of results) {
         if (!result.ok && !optionalDirectionIds.has(result.id)) {
@@ -102,6 +107,12 @@ export const erc4626Identity: IdentitySemantics<
               status: "rejected" as const,
               reason: "erc4626_standard_views_failed",
             };
+      }
+      if (!proof.erc20SurfacesValid) {
+        return {
+          status: "rejected" as const,
+          reason: "erc4626_erc20_surfaces_failed",
+        };
       }
       if (!proof.depositVerified && !proof.redeemVerified) {
         return {
@@ -290,6 +301,20 @@ function activeRequests(
   if (!evidence.baseValid) return [];
   const requests: AdapterRequest[] = [
     codeRequest("active-asset-code", evidence.asset),
+    declaredCallRequest(
+      "active-asset-balance",
+      evidence.asset,
+      ERC4626_ERC20_INTERFACE.encodeFunctionData("balanceOf", [
+        ERC4626_PROBE_ACTOR,
+      ]),
+    ),
+    declaredCallRequest(
+      "active-share-balance",
+      evidence.vault,
+      ERC4626_ERC20_INTERFACE.encodeFunctionData("balanceOf", [
+        ERC4626_PROBE_ACTOR,
+      ]),
+    ),
     callRequest(
       "active-roundtrip",
       evidence.vault,
@@ -391,6 +416,26 @@ function decodeActiveEvidence(
   results: readonly AdapterRequestResult[],
 ): Erc4626ActiveEvidence {
   const assetCode = requireRuntimeCode(results, "active-asset-code");
+  const assetBalanceSurface = balanceSurfaceOutcome(
+    results,
+    "active-asset-balance",
+  );
+  const shareBalanceSurface = balanceSurfaceOutcome(
+    results,
+    "active-share-balance",
+  );
+  const balanceSurfaces = [assetBalanceSurface, shareBalanceSurface];
+  const erc20SurfacesValid = balanceSurfaces.every((outcome) =>
+    outcome.status === "valid"
+  );
+  if (!balanceSurfaces.some((outcome) => outcome.status === "invalid")) {
+    const unresolved = balanceSurfaces.find((outcome) =>
+      outcome.status === "unresolved"
+    );
+    if (unresolved?.status === "unresolved") {
+      throw new RequiredAdapterRequestError(unresolved.result);
+    }
+  }
   const roundTrip = decodeUint(
     ERC4626_INTERFACE,
     "previewRedeem",
@@ -486,19 +531,24 @@ function decodeActiveEvidence(
       { readonly ok: false }
     > => result !== undefined && !result.ok)
     .sort((left, right) => left.id.localeCompare(right.id));
-  if (!depositVerified && !redeemVerified && unresolvedDirections.length > 0) {
+  if (
+    erc20SurfacesValid && !depositVerified && !redeemVerified &&
+    unresolvedDirections.length > 0
+  ) {
     throw new RequiredAdapterRequestError(unresolvedDirections[0]!);
   }
   return Object.freeze({
     ...base,
     phase: "active",
     assetCodeHash: ethers.keccak256(assetCode),
+    erc20SurfacesValid,
     depositVerified,
     redeemVerified,
     behaviorProofHash: hashCanonical({
       vault: base.vault,
       asset: base.asset,
       roundTrip,
+      erc20SurfacesValid,
       depositVerified,
       redeemVerified,
       directionOutcomes: Object.freeze(results
@@ -517,6 +567,51 @@ function decodeActiveEvidence(
       })),
     }),
   });
+}
+
+function declaredCallRequest(
+  id: string,
+  to: string,
+  data: string,
+): AdapterRequest {
+  return Object.freeze({
+    id,
+    required: false,
+    kind: "eth-call" as const,
+    to: canonicalAddress(to),
+    data,
+    completion: "return-or-revert-data" as const,
+  });
+}
+
+function balanceSurfaceOutcome(
+  results: readonly AdapterRequestResult[],
+  id: string,
+):
+  | { readonly status: "valid" }
+  | { readonly status: "invalid" }
+  | {
+      readonly status: "unresolved";
+      readonly result: Extract<AdapterRequestResult, { readonly ok: false }>;
+    } {
+  const result = results.find((candidate) => candidate.id === id);
+  if (result === undefined) {
+    throw new Error(`ERC4626 balance surface result ${id} is missing`);
+  }
+  if (!result.ok) {
+    return Object.freeze({ status: "unresolved" as const, result });
+  }
+  if (result.completion !== "returned" || !/^0x[0-9a-fA-F]{64}$/.test(
+    result.data,
+  )) {
+    return Object.freeze({ status: "invalid" as const });
+  }
+  try {
+    ERC4626_ERC20_INTERFACE.decodeFunctionResult("balanceOf", result.data);
+    return Object.freeze({ status: "valid" as const });
+  } catch {
+    return Object.freeze({ status: "invalid" as const });
+  }
 }
 
 function decodeSimulationUint(

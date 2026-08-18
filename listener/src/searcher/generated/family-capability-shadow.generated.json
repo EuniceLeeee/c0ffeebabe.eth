@@ -2876,7 +2876,7 @@
         "familyId": "protocol:erc4626",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "cb0325600ca1ccf0ca2fa2e38b48ad89e9511bc59934c854230ac83394ba21f9",
+        "contentHash": "112229aca2cab17e4836743270429ea3728da79a111377048dd95ae2b31c1dbf",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -2932,7 +2932,7 @@
         "familyId": "protocol:erc4626",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "08140fef487a5c4765f9664525c9374a208760c32ce236ee12e266a821deed6c",
+        "contentHash": "affa81b9221230cabba79e554ee09837ac8f86eb89e21533f308810a2c85ece0",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -2966,7 +2966,7 @@
         "familyId": "protocol:erc4626",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "e91a7dce03283b372c3d95ba313be7069cfd44c8c2e053008083bd4172ffb50a",
+        "contentHash": "d227f0ec6cea91678f04530162effb10abfdecc410e1dc17af1558a9d063a760",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -3056,7 +3056,7 @@
         "familyId": "protocol:erc4626",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "2a46c38c96827dc9f0740a73df702151af70fd75584e66da5470bc3dce33db79",
+        "contentHash": "14453fc264af391b72b634890940dfc2ff3ce50436c273922fa42c6a880671b1",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -3121,7 +3121,7 @@
         "familyId": "protocol:erc4626",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "ae8ab7b835759b2eb5fa0f6ed0ef592361b05ca98bff6675b9359c0838d973bf",
+        "contentHash": "083c956a69ecb91337efc7649072e993e1dddc75585389b77307844b44c0350e",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -7261,5 +7261,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "1ffb6eed359da9b004e4e957708224da68058171221e579f569975a2365560c6"
+  "artifactHash": "43b2e36c66810a697a4c940010485045c564ffdb95aafc7311e42ffdd2039b01"
 }

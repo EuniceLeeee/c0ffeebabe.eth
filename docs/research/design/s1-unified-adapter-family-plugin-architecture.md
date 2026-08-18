@@ -4009,8 +4009,9 @@ simulation revert 的方向继续 fail-closed，不得为了让 ready 前进而�
   `×256` probe，总尝试数固定为四。候选失败或 call revert 必须恢复原 storage；
   只有 effect simulation 内成功候选保留，后续 return/token delta/totalSupply
   delta/log proof 仍 fail-closed；
-- Rust contracts 覆盖 control trace 排除 shared proxy metadata、token balance + external ledger account-specific 候选、
-  大小写 address、malformed slot 忽略、observed-ratio scaling 与 zero-probe 上界；
+- Rust contracts 覆盖 control trace 排除 shared proxy metadata、token balance +
+  external ledger account-specific 候选、大小写 address、malformed slot 忽略、
+  observed-ratio scaling 与 zero-probe 上界；
   同批通过 `cargo fmt --check`、完整 Rust tests、ERC4626 Family、strict revm
   transport、strict identity attestation contracts 及 listener 完整 build。
 
@@ -4018,6 +4019,43 @@ simulation revert 的方向继续 fail-closed，不得为了让 ready 前进而�
 process anchor 重新量化 balance-slot failures 与 ERC4626 retryable；若剩余失败来自
 真实 token transfer/vault policy revert，继续作为方向级 unresolved/negative proof，
 不得扩大 storage probe 或放宽 final effect gate 来追求 `ready`。
+
+**2026-08-18 ERC4626 canonical ERC20 surface 第三十批 live-derived
+正确性 checkpoint（实现提交承载本 checkpoint；不是 ready、F5 或 production cutover）：**
+
+- 第二十九批 exact SHA `3bb92eca16832b6b51725ac90a4aa493fc122607`
+  已由 systemd 以 PID `359425`、process start `2026-08-18 01:52:47Z`、
+  log inode `25609`、content-addressed revm binary
+  `addf7d10b0e6f18c8b2a815b40a7e965e15ccbf6d7b923568f7547f1b1f3aef7`
+  启动并复用 fixed cutoff。按最后一次 `searcher:live` banner 切分后，旧批量
+  balance-slot failures 降为仅两枚 token 各一次；第二十九批复现的 scaled token
+  `0x00000000efe302beaa2b3e6e1b18d08d69a9012a` 与 external-ledger token
+  `0xf051b0d91a79b296234a6906500dc147ed0e3213` 均为零，且 fatal=0，证明中央
+  account-specific deal 生效；
+- 剩余 token `0x5a6a4d54456819380173272a5e8e9b9904bdf41b` 的
+  `balanceOf(probeActor)` 在 state override 后返回数千字节而非 canonical 32-byte
+  uint；`0x007e0b8e99c6134e81a1eaae754460e3202cb671` 同时出现 share
+  `totalSupply`/balance surface revert。它们是“ERC4626 candidate 的 asset/share
+  并非可证明标准 ERC20 surface”的确定性负证据，不是继续扩大 storage search 的
+  resource problem；
+- ERC4626 active shared proof 现在对 asset 与 vault share 各声明一个
+  `return-or-revert-data` `balanceOf(probeActor)` request，并要求 returned payload
+  严格为 canonical 32-byte uint。declared revert 或 malformed payload 直接产生
+  `erc4626_erc20_surfaces_failed` terminal rejection；真实 rpc/deadline/abort 仍
+  保持 retryable。两条 balance request 使用 `required:false` 只为让 Family decoder
+  同时看见 typed outcomes：若任一 sibling 已给出 deterministic invalid，即使另一条
+  transport unresolved，候选仍可安全 reject；若没有 invalid 且任一 unresolved，仍
+  重抛原始 `RequiredAdapterRequestError`；
+- 合同覆盖 canonical request declaration、malformed asset + sibling rpc 的 terminal
+  rejection、declared share revert、纯 deadline retryable、方向级 partial proof 与
+  shared required failure；同批重新生成/校验 Family capability artifact，并通过
+  ERC4626、strict identity、universe production wiring、strict revm transport 合同与
+  listener 完整 build。
+
+部署本批新 exact SHA 后仍复用原 run/cutoff/candidate partition；验收应看到上述两枚
+invalid surfaces 从 retryable 转为 chain-proven terminal outcomes，而不是被投影为
+route。随后再按剩余 typed retryable 分组闭合 Astra caller authority、Fluid quote
+encoding 与真实 RPC failures；在 `retryable=0` 和原子 ready 前 producer 仍禁止创建。
 
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
