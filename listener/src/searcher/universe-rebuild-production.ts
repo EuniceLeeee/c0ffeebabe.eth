@@ -933,6 +933,11 @@ export function strictCatalogSourceCoverageKeys(): {
   for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
     .listAll()) {
     const familyId = family.plugin.manifest.familyId;
+    // This key proves that the exact startup nomination partition for the
+    // Family was consumed and attested at the cutoff. It is not an
+    // enumerator/omission grant: retained pool files remain nomination-only,
+    // and a missing row may be reported only as "no candidate in the exact
+    // partition", never as proof that no chain instance exists.
     startup.push(familyId + "|startup-universe");
     const discovery = "discovery" in family.plugin
       ? family.plugin.discovery

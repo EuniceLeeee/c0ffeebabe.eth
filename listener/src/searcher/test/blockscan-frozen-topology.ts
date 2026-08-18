@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   bindFrozenTopologyToHeader,
   type BlockScanFrozenTopologyDependencies,
@@ -35,5 +36,23 @@ assert.throws(
   ),
   /frozen topology key is empty/,
 );
+
+const runtimeLoopSource = readFileSync(
+  new URL("../blockscan-runtime-loop.ts", import.meta.url),
+  "utf8",
+);
+for (const forbidden of [
+  "BlockScanDiscoveryDependencies",
+  "readonly discovery?",
+  "scheduleBackfill",
+  "LiveDiscoveryPublicationState",
+  "runtime-pool-refresh",
+] as const) {
+  assert.equal(
+    runtimeLoopSource.includes(forbidden),
+    false,
+    `strict producer loop retained mutable topology authority: ${forbidden}`,
+  );
+}
 
 console.log("blockscan frozen topology contract: PASS");

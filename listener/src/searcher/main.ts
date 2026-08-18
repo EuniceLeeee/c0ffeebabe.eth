@@ -103,7 +103,7 @@ import {
 } from "./strategy-views.js";
 import {
   MempoolIntakeRefreshSignal,
-} from "./runtime-pool-refresh.js";
+} from "./mempool-intake-refresh-signal.js";
 import { computeBidEth, evaluateEv, valueInEth } from "./ev-evaluator.js";
 import {
   createProfitTokenValuation,
@@ -1888,13 +1888,6 @@ async function main(): Promise<void> {
       Number(
         process.env.SEARCHER_BLOCKSCAN_EXACT_PRODUCER_LAG_YIELD_BUDGET_MS ??
           "10000",
-      ),
-    ),
-    producerTopologyAdoptIntervalMs: Math.max(
-      0,
-      Number(
-        process.env.SEARCHER_BLOCKSCAN_PRODUCER_TOPOLOGY_ADOPT_MS ??
-          "240000",
       ),
     ),
     largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,

@@ -2,13 +2,14 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import { buildMempoolIntakeWithRouters } from "../main.js";
+import { MempoolIntakeRefreshSignal } from
+  "../mempool-intake-refresh-signal.js";
 import {
   applyRuntimePoolRefreshDelta,
   assertDexSourceHashStable,
   completeDexGraphCoverageScan,
   createDexGraphCoverageState,
   createPinnedDexReadBackend,
-  MempoolIntakeRefreshSignal,
   planDexGraphCoverageScan,
   prepareRuntimePoolRefresh,
   selectRefreshCandidates,

@@ -1729,10 +1729,16 @@ production cutover 前必须选择并验收至少一种中央 bootstrap authorit
 1. 保存 canonical observation journal，并按 source/watermark 重放产生 incumbent 的原始 call/log/address surface；或
 2. 对每个 persisted incumbent 生成中央 `address-surface` nomination，同时保证对应 Family 声明完整的 surface pattern。
 
-**2026-08-08 实施审计：** 当前 22 个严格 Family 中只有 9 个声明 `addressSurfaces`；现有 factory/active/landed
-startup 路径还会把原始发现事实压成 `PoolEntry`。因此第二条目前不能覆盖全 catalog，不能用它独立授权 cutover。
-在 observation journal/replay 落地，或其余需要 bootstrap 的 Family 补齐可反向验证的 surface declaration 之前，严格
-publication 只能是 shadow/partial，production Graph authority 必须继续留在已冻结的旧路径。
+**2026-08-18 终态替代：** 上述 2026-08-08 审计描述的是旧 continuous/shadow
+composition，不能再被解释成“保留旧 Graph authority”的依据。§22 的 fixed-cutoff
+startup rebuild 现在把四组 nomination、显式范围 event query、exact candidate
+partition、逐实例 strict attestation、Graph/catalog/coverage 和 canonical CAS 组成
+一个 fail-closed readyGeneration；未 ready 就不创建 producer。首次部署前直接物理
+删除旧 Graph builder/bridge/fallback，历史实现只允许从 Git 查阅，绝不接回 runtime。
+startup snapshot 仍只是 nomination partition，不因写入 receipt 获得链上全实例
+enumeration 或 omission 权；活动型 Family 的静默缺席也不能伪装成 chain-wide
+complete-snapshot。F5 只能如实报告“exact partition 无 candidate”或逐实例
+attested/rejected lineage，不能把它扩大成“链上不存在其他实例”。
 
 bootstrap 只负责重新提名，不是 admission 旁路。每个 incumbent 仍须在当前 capability 下重做链上 reverse/behavior
 proof；旧 `PoolEntry`、旧 route 或地址表不能直接铸成 verified descriptor。中央 publication metadata 必须记录每个
@@ -6665,6 +6671,13 @@ production fixed-range scanner 在每个 `eth_getLogs` chunk 成功后记录
 输入的完整 snapshot 同时生成独立 `startup-candidate-union` receipt。两者与
 candidate partition 在同一 `inProgressRun` envelope 中持久化；部分 RPC、
 进程崩溃或缺尾 chunk 不产生 receipt，也不推进 observed/applied/ready。
+其中 startup receipt 只证明每个 Family 的 exact nomination partition 已在该
+cutoff 被消费并进入 attestation；pool file/override/retained row 仍无 admission、
+enumeration、omission、cursor 或 complete-snapshot authority。event receipt 才证明
+显式 `fromBlock..cutoff` query 的连续 chunk 完成。in-progress receipt 内的
+`appliedThrough` 表示 source observation 已原子写入固定 candidate partition；
+正式 run/Graph 的 applied cursor 仍只能在 terminal partition 完整后随 ready CAS
+一起提升。
 
 runner 在 attestation 前比较：loaded strict catalog 的 required
 Family×source exact set 必须与全部 receipt 可授予的 completed exact set 完全
@@ -6672,6 +6685,14 @@ Family×source exact set 必须与全部 receipt 可授予的 completed exact se
 coverage exact set 等于 run receipt exact set、全部 number+hash 到 cutoff，且
 Graph/catalog/publication roots、candidate terminal partition 同时成立。这样
 catalog declaration 只能声明“需要扫描什么”，不能自行授予“已经完整扫描”。
+
+receipt 还必须绑定当前 source-plan fingerprint，而不只绑定稳定的 sourceId：
+startup plan 哈希 catalog required keys 与逐 Family capability content hash；event
+plan 另外哈希完整 topic union、decoder/capability identity 与 chunk policy。resume
+时当前 runtime 必须逐 source kind 重算并精确比较 `queryFingerprint`；topic、
+decoder、Family implementation 或扫描策略任一变化都会使旧 receipt fail-closed，
+禁止用“sourceId 没变”沿用旧 coverage。该校验是 production dependency 的必填项，
+不能由测试或替代 wiring 省略。
 
 向后兼容只针对当前固定 run `strict-startup-rebuild`：若旧 envelope 没有
 `sourceReceipts`，新 runtime 在原 cutoff/range 重跑 source query，且只有重建
@@ -6682,3 +6703,37 @@ catalog declaration 只能声明“需要扫描什么”，不能自行授予“
 catalog-shaped coverage 无 receipt、pre-receipt fixed run 原地升级、ready CAS
 原子性、SIGTERM flush；listener 完整 build 同轮通过。本条只关闭 false-ready
 P0，不构成实际 ready、F5、restart、100/100 或 cutover 证据。
+
+### 22.11 strict-only producer loop（2026-08-18）
+
+`BlockScanRuntimeLoop` 的 mutable discovery/publication alternative 已物理删除：
+依赖合同只接受必填 `frozenTopology`，constructor 对任何残留 `discovery` 属性
+fail-closed；current-head pass 只观察 canonical header，并把同一 ready Graph
+绑定到 pricing/exact generation。producer loop 不再导入
+`LiveDiscoveryPublicationState`、`DiscoveryBackfillLane`、mutation queue 或
+runtime pool refresh，也没有 schedule/consume/rebase/publish topology 分支。
+
+同时删除 producer topology adoption cache。冻结 generation 不需要“延迟采纳”
+另一张 Graph；缓存旧 edge object 反而可能遮住越权 mutation。每次 current-source
+GraphView 都把当前 edge object 集与 ready topology key 交给 strict coordinator
+复核。mempool subscription refresh signal 已移到中性模块，main 不再为了这个
+通用通知能力依赖 legacy pool-refresh authority。
+
+合同 `searcher:blockscan-frozen-topology` 断言 producer source 不含 mutable
+topology 符号；迁移后的 `searcher:blockscan-runtime-startup-warm` 只执行 frozen
+topology 下仍 load-bearing 的 current-state、pending evidence、N-1、exact 与
+shutdown 合同，旧 continuous-discovery fixture 不再是通过条件；listener 完整
+build 同轮通过。此批只关闭 producer loop 的第一处物理调用面；
+`runtime-pool-refresh`、`live-discovery-publication` 与
+`buildTokenGraphWithResults()` 的剩余 test/diagnostic source 实体仍必须在下一
+coherent slice 删除或迁移到 strict ready fixture，完成前禁止部署，也不构成
+ready/F5/F9/cutover 证据。
+
+工具对账 manifest `/tmp/s1-strict-graph-tool-manifest.json` 的 SHA-256 为
+`323128ff2b8e18eb95f84edbb9a30f322ee4f8a08610600fd45a9f0cfeee1697`：
+`tool-reconciled: listener:searcher:adapter-family-graph-runtime agrees`；
+`tool-reconciled: analysis:adapter-family-boundary-gate n/a`，因为该 gate 只判定
+“单 Family 改动是否越界”，本批是明确授权的中央 systemic Graph authority
+删除，不可被伪装成 family-local。对应 synthetic runtime fixture 仅补齐现行
+必填的 `reverseBinding=explicitly-unsupported` 声明，没有改变 production
+Family 或为通过脚本恢复旧 authority。

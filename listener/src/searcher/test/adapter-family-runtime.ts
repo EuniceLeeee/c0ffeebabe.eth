@@ -29,6 +29,7 @@ import {
 import {
   defineProtocolFamily,
   definedFamilyPluginContractSummary,
+  explicitReverseBindingUnsupported,
   type CompiledInstanceDescriptor,
   type FamilyOwnedActionAdapter,
   type FamilyRouteDescriptor,
@@ -200,6 +201,9 @@ function defineFixture(name: string, controls: FixtureControls) {
     discovery: {
       sources: ["observed-call"],
       evidenceChannel: "tx-evidence" as const,
+      reverseBinding: explicitReverseBindingUnsupported(
+        "synthetic observed-call fixture has no retained-instance channel",
+      ),
       callPatterns: [{
         id: "fixture-call",
         selector: SELECTOR,

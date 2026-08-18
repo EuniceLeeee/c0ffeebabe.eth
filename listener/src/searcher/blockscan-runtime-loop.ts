@@ -70,20 +70,8 @@ import {
   type LatestHeadObservation,
 } from "./latest-head-scheduler.js";
 import {
-  type DiscoveryBackfillControl,
-  DiscoveryBackfillLane,
-  type DiscoveryBackfillStateDescriptor,
-} from "./discovery-backfill-lane.js";
-import {
-  CanonicalHeaderJournal,
-  CanonicalHeaderOutsideRetentionError,
   type CanonicalHeader,
 } from "./canonical-header-journal.js";
-import {
-  describeLiveDiscoveryPublicationState,
-  type LiveDiscoveryPublicationState,
-} from "./live-discovery-publication.js";
-import { ProtocolDiscoveryMutationQueue } from "./protocol-discovery-coordinator.js";
 import type { LandedPoolDiscoveryCoverage } from "./venues/landed-pool-discovery.js";
 import type { VerifiedGraphView } from "./venues/blockscan-state-capability.js";
 import {
@@ -168,15 +156,6 @@ class BlockScanHeadSupersededInterruption extends Error {
     super(`block-scan head superseded by ${newerHead}`);
     this.name = "BlockScanHeadSupersededInterruption";
   }
-}
-
-export function dexRuntimeAdmissionCompleteThrough(
-  state: LiveDiscoveryPublicationState,
-  blindEnabled: boolean,
-): number {
-  return blindEnabled
-    ? state.dexGraphCoverage.graphCompleteThrough
-    : state.dexGraphCoverage.sourceCompleteThrough;
 }
 
 export function incompleteBlockScanFamilies(
@@ -425,46 +404,6 @@ interface PlannedBlockScanSolve {
   planCount: number;
 }
 
-interface BlockScanDiscoveryDependencies<PreparedDiscovery> {
-  readonly lane: DiscoveryBackfillLane<
-    LiveDiscoveryPublicationState,
-    PreparedDiscovery
-  >;
-  /** Protocol-history backfill shares the same producer-yield gate. */
-  readonly protocolLane?: DiscoveryBackfillLane<
-    LiveDiscoveryPublicationState,
-    PreparedDiscovery
-  >;
-  readonly journal: CanonicalHeaderJournal;
-  readonly queue: ProtocolDiscoveryMutationQueue;
-  observeHeader(blockNumber: number): Promise<CanonicalHeader>;
-  capture(): LiveDiscoveryPublicationState;
-  /** O(1) descriptor of the currently published state (computed once per publish). */
-  describeCaptured(): DiscoveryBackfillStateDescriptor;
-  /** O(1) content key of the published graph topology. */
-  topologyKey(): string;
-  publish(state: LiveDiscoveryPublicationState): void;
-  finishPublished(): void;
-  scheduleBackfill(blockNumber: number): void | Promise<void>;
-  prepare(
-    base: LiveDiscoveryPublicationState,
-    input: {
-      readonly source: { readonly number: number; readonly hash: string };
-      readonly through: number;
-      readonly control?: DiscoveryBackfillControl;
-    },
-  ): Promise<PreparedDiscovery>;
-  /**
-   * Pure current-head rebase. A null result means the DEX slice itself changed
-   * or route arbitration must be rerun by the combined background lane.
-   */
-  validateHot(
-    current: LiveDiscoveryPublicationState,
-    prepared: PreparedDiscovery,
-  ): LiveDiscoveryPublicationState | null;
-  finish(prepared: PreparedDiscovery): void;
-}
-
 export interface BlockScanFrozenTopologyDependencies {
   /** Canonical current-head observation; never scans or publishes topology. */
   observeHeader(blockNumber: number): Promise<CanonicalHeader>;
@@ -488,33 +427,6 @@ export function bindFrozenTopologyToHeader(
     protocolComplete: true,
     sourceBlockHash: header.hash,
   });
-}
-
-export interface ProducerTopologyCache {
-  readonly topologyKey: string;
-  readonly edges: readonly TokenEdge[];
-  readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
-  readonly adoptedAtMs: number;
-}
-
-/**
- * Decide whether the background N-1 producer adopts a new discovery
- * topology now or keeps producing on the previous one. Adoption is forced
- * on the first arm and on an unchanged topology (cache hit); otherwise the
- * delta is deferred until the minimum interval elapses, so small frequent
- * publications do not force an 8-14s ownership/schema rebuild per block.
- */
-export function resolveProducerTopologyAdoption(
-  cache: ProducerTopologyCache | null,
-  topologyKey: string,
-  now: number,
-  adoptIntervalMs: number,
-): boolean {
-  if (cache !== null && cache.topologyKey === topologyKey) {
-    return false;
-  }
-  return cache === null ||
-    now - cache.adoptedAtMs >= Math.max(0, adoptIntervalMs);
 }
 
 interface BlockScanBlindDependencies {
@@ -557,7 +469,7 @@ export interface ExactQuoteStateFactoryInput {
   readonly transportScheduler?: Pick<RethTransportScheduler, "run">;
 }
 
-export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
+export interface BlockScanRuntimeLoopDependencies {
   readonly enabled: boolean;
   readonly blockScanConfig: BlockScanCoreConfig | undefined;
   readonly executionWorkers: readonly BlockScanExecutionWorker[];
@@ -585,28 +497,9 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
     BufferedBlockScanBackrunStatePublisher,
     "publish"
   >;
-  /** Legacy mutable topology dependency; absent from strict production. */
-  readonly discovery?: BlockScanDiscoveryDependencies<PreparedDiscovery>;
-  /** Strict production topology, frozen before the producer is created. */
-  readonly frozenTopology?: BlockScanFrozenTopologyDependencies;
+  /** Sole topology authority, frozen from readyGeneration before producer creation. */
+  readonly frozenTopology: BlockScanFrozenTopologyDependencies;
   readonly blind: BlockScanBlindDependencies;
-  /**
-   * Minimum wall-clock interval between background discovery backfill
-   * schedules. Discovery scans are cheap to defer but expensive to run: one
-   * 1-8 block scan can occupy reth for 10-20s and delay the producer's small
-   * direct reads, which pushes N-1 publication past the head cadence. A
-   * bounded cadence keeps the background healer alive without starving the
-   * hot chain.
-   */
-  readonly discoveryBackfillMinIntervalMs?: number;
-  /**
-   * Max wall-clock a scheduled discovery backfill scan waits for the
-   * producer's critical state phase to finish before it defers to the next
-   * scheduling tick.
-   */
-  readonly discoveryProducerYieldMaxWaitMs?: number;
-  /** Per background discovery read wait while the producer is critical. */
-  readonly discoveryProducerYieldPerReadMaxWaitMs?: number;
   /**
    * Hard wall-clock budget for one exact-refine stage. Exact probes are
    * optional work; a long probe tail in pass N can delay pass N+1 beyond the
@@ -629,17 +522,6 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
    * persistently lagging producer cannot starve exact forever.
    */
   readonly exactProducerLagYieldBudgetMs?: number;
-  /**
-   * Minimum wall-clock interval between producer topology adoptions. The
-   * background N-1 producer pays a full ownership/schema rebuild
-   * (topologyFor + preparedPhases, measured 8-14s) whenever discovery
-   * publishes a graph delta, and discovery publishes small deltas (+2-18
-   * edges) every ~2 minutes. Each rebuild pushes the N-1 publication past
-   * the head cadence and produces a stale_state pass. Deferring adoption to
-   * this interval coalesces the deltas into one rebuild while the consumer
-   * still enumerates/exacts against the fresh graph.
-   */
-  readonly producerTopologyAdoptIntervalMs?: number;
   readonly routeTelemetry?: BlockScanEnumerationSolverTelemetrySink;
   readonly largeGraphEdgeThreshold: number;
   readonly largeGraphPassBudgetMs: number;
@@ -744,16 +626,14 @@ export interface CurrentSourceRuntimeCoordinator {
 }
 
 /**
- * Owns the one-at-a-time current-head block-scan pass. Main constructs the
- * dependencies and keeps discovery/blind state ownership; this loop owns only
- * scheduling, worker orchestration and the unchanged stage sequence.
+ * Owns the one-at-a-time current-head block-scan pass. Main supplies one
+ * startup-ready frozen topology plus blind/runtime dependencies; this loop
+ * owns scheduling, worker orchestration and the unchanged stage sequence.
  */
-export class BlockScanRuntimeLoop<PreparedDiscovery> {
+export class BlockScanRuntimeLoop {
   private generation = 0;
   private producerCriticalActive = false;
   private startupWarmPending: boolean;
-  private lastDiscoveryBackfillScheduledAtMs = 0;
-  private producerTopologyCache: ProducerTopologyCache | null = null;
   private readonly scheduler: LatestHeadScheduler;
   private coarsePricingActive: Promise<void> | null = null;
   private coarsePricingActiveSourceBlock: number | null = null;
@@ -786,12 +666,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   } | null = null;
 
   constructor(
-    private readonly deps: BlockScanRuntimeLoopDependencies<PreparedDiscovery>,
+    private readonly deps: BlockScanRuntimeLoopDependencies,
   ) {
-    if ((deps.discovery === undefined) === (deps.frozenTopology === undefined)) {
-      throw new Error(
-        "block-scan requires exactly one mutable discovery or frozen topology",
-      );
+    if ("discovery" in deps) {
+      throw new Error("block-scan rejects mutable discovery authority");
     }
     this.startupWarmPending =
       deps.startupWarmEnabled && !deps.blind.enabled;
@@ -830,33 +708,18 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         });
       },
     );
-    const producerYieldHook = {
-      active: () => this.producerCriticalActive,
-      maxWaitMs: Math.max(
-        0,
-        deps.discoveryProducerYieldMaxWaitMs ?? 10_000,
-      ),
-      perReadMaxWaitMs: Math.max(
-        0,
-        deps.discoveryProducerYieldPerReadMaxWaitMs ?? 250,
-      ),
-    } as const;
-    deps.discovery?.lane.setProducerYield(producerYieldHook);
-    deps.discovery?.protocolLane?.setProducerYield(producerYieldHook);
   }
 
   private observeTopologyHeader(blockNumber: number): Promise<CanonicalHeader> {
-    return this.deps.frozenTopology?.observeHeader(blockNumber) ??
-      this.deps.discovery!.observeHeader(blockNumber);
+    return this.deps.frozenTopology.observeHeader(blockNumber);
   }
 
   private topologyKey(): string {
-    return this.deps.frozenTopology?.topologyKey ??
-      this.deps.discovery!.topologyKey();
+    return this.deps.frozenTopology.topologyKey;
   }
 
   private landedCoverage(): readonly LandedPoolDiscoveryCoverage[] {
-    return this.deps.discovery?.capture().landedCoverage ?? Object.freeze([]);
+    return Object.freeze([]);
   }
 
   schedule(
@@ -908,33 +771,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
   }
 
   /**
-   * Bound the background discovery healer's cadence. The runtime loop asks
-   * for a backfill on every degraded/stale pass; a completed scan immediately
-   * frees the lane, so those requests currently start scans back-to-back and
-   * occupy reth for 10-20s each while the producer waits on small reads.
-   */
-  private maybeScheduleDiscoveryBackfill(blockNumber: number): void {
-    if (this.deps.discovery === undefined) return;
-    const minIntervalMs = Math.max(
-      0,
-      this.deps.discoveryBackfillMinIntervalMs ?? 30_000,
-    );
-    const now = Date.now();
-    if (now - this.lastDiscoveryBackfillScheduledAtMs < minIntervalMs) {
-      return;
-    }
-    this.lastDiscoveryBackfillScheduledAtMs = now;
-    void this.deps.discovery.scheduleBackfill(blockNumber);
-  }
-
-  /**
-   * Build the producer's graph view with topology adoption coalescing. The
-   * consumer's exact/enumeration view always uses the fresh graph; only the
-   * background N-1 producer defers adoption, so small discovery deltas do
-   * not force an 8-14s ownership/schema rebuild on every publication. Once
-   * the adoption interval elapses, the accumulated delta is absorbed in one
-   * rebuild. New pools are simply absent from coarse carry for at most one
-   * interval; pricing remains source-pinned and correctness is unchanged.
+   * Bind the immutable ready topology to this producer source. The strict
+   * GraphView coordinator rejects any changed edge object or topology key;
+   * there is no adoption cache that could hide an unauthorized mutation.
    */
   private producerGraphView(input: {
     readonly edges: readonly TokenEdge[];
@@ -944,43 +783,15 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     readonly sourceBlock: number;
     readonly sourceBlockHash: string;
   }): VerifiedGraphView {
-    const adoptIntervalMs = Math.max(
-      0,
-      this.deps.producerTopologyAdoptIntervalMs ?? 240_000,
-    );
-    const cache = this.producerTopologyCache;
-    const now = Date.now();
-    const adopt = resolveProducerTopologyAdoption(
-      cache,
-      input.topologyKey,
-      now,
-      adoptIntervalMs,
-    );
-    const build = (
-      topologyKey: string,
-      edges: readonly TokenEdge[],
-      landedCoverage: readonly LandedPoolDiscoveryCoverage[],
-    ): VerifiedGraphView =>
-      this.deps.buildGraphView({
-        id: `blockscan:${topologyKey}`,
-        generation: input.generation,
-        sourceBlock: input.sourceBlock,
-        sourceBlockHash: input.sourceBlockHash,
-        edges,
-        landedCoverage,
-        topologyKey,
-      });
-    if (adopt) {
-      this.producerTopologyCache = Object.freeze({
-        topologyKey: input.topologyKey,
-        edges: input.edges,
-        landedCoverage: input.landedCoverage,
-        adoptedAtMs: now,
-      });
-      return build(input.topologyKey, input.edges, input.landedCoverage);
-    }
-    // Defer the delta: keep the previous topology until the interval elapses.
-    return build(cache!.topologyKey, cache!.edges, cache!.landedCoverage);
+    return this.deps.buildGraphView({
+      id: `blockscan:${input.topologyKey}`,
+      generation: input.generation,
+      sourceBlock: input.sourceBlock,
+      sourceBlockHash: input.sourceBlockHash,
+      edges: input.edges,
+      landedCoverage: input.landedCoverage,
+      topologyKey: input.topologyKey,
+    });
   }
 
   private advanceLatestHead(blockNumber: number): void {
@@ -1997,10 +1808,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     let exactQuoteState: StateBackend | null = null;
     let exactTransportDrainMs = 0;
     try {
-      // Historical discovery is prepared in a dedicated cancellable lane.
-      // The mutation queue performs only descriptor/hash checks, a pure DEX
-      // delta fold and one synchronous publication; no provider/trace/probe
-      // I/O runs inside it.
+      // The startup-ready topology is immutable for the lifetime of this
+      // producer. Only the current canonical header and state are observed
+      // here; discovery, backfill and topology publication do not exist in
+      // this loop.
       const sourceHeader = await observeCanonicalHeader(
         blockNumber,
         "source canonical header",
@@ -2018,297 +1829,22 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         finishStage("state", "failed");
         return;
       }
-      let discoveryPass: {
-        readonly dexComplete: boolean;
-        readonly protocolComplete: boolean;
-        readonly sourceBlockHash: string;
-        readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
-      };
-      let nextAdmissionThrough = blockNumber;
-      if (this.deps.frozenTopology !== undefined) {
-        // Startup committed Graph/catalog is the only topology authority for
-        // this process. Current-head work observes only the canonical header;
-        // it cannot scan, backfill, advance a cursor, or publish topology.
-        const frozen = bindFrozenTopologyToHeader(
-          this.deps.frozenTopology,
-          sourceHeader,
-        );
-        discoveryPass = Object.freeze({
-          ...frozen,
-          landedCoverage: Object.freeze([]),
-        });
-        this.passStageLabel = "state:frozen-topology";
-      } else {
-      const discovery = this.deps.discovery!;
-      const consumePreparedBackfill = async (): Promise<number | null> => {
-        const ready = discovery.lane.readyDescriptor();
-        if (!ready) return null;
-        if (ready.source.number > sourceHeader.number) {
-          // The latest-head scheduler already has (or will receive) the newer
-          // head. Preserve this generation for that pass; do not extend the
-          // current head's canonical journal into its future.
-          return null;
-        }
-        let preparedHeader: CanonicalHeader;
-        try {
-          preparedHeader = await observeCanonicalHeader(
-            ready.source.number,
-            "prepared canonical header",
-          );
-        } catch (error) {
-          if (!(error instanceof CanonicalHeaderOutsideRetentionError)) {
-            throw error;
-          }
-          discovery.lane.invalidate(
-            `prepared source ${ready.source.number} fell outside ` +
-              `retained canonical journal at ` +
-              `${error.retainedHeadNumber}`,
-          );
-          return null;
-        }
-        const proof = discovery.journal.proof(preparedHeader.number);
-        const taken = await discovery.queue.enqueue(
-          "dex-refresh",
-          async () => {
-            const result = discovery.lane.takeForHotHead({
-              targetSource: {
-                number: sourceHeader.number,
-                hash: sourceHeader.hash,
-              },
-              currentState: discovery.capture(),
-              canonicalPreparedSource: proof === null
-                ? null
-                : {
-                    revision: proof.revision,
-                    source: proof.source,
-                  },
-              currentCanonicalRevision: discovery.journal.revision,
-            });
-            if (result.status !== "degraded") {
-              discovery.publish(result.state);
-            }
-            return result;
-          },
-        );
-        if (taken.status !== "degraded") {
-          discovery.finishPublished();
-          return ready.source.number;
-        }
-        return null;
-      };
-      const consumedPreparedSource = await consumePreparedBackfill();
-      this.passStageLabel = "state:discovery-consumed";
-
-      let base = discovery.capture();
-      this.passStageLabel = "state:discovery-base";
-      const dexAdmissionCompleteThrough = (
-        state: LiveDiscoveryPublicationState,
-      ): number =>
-        dexRuntimeAdmissionCompleteThrough(
-          state,
-          this.deps.blind.enabled,
-        );
-      const requiredPredecessor = Math.max(
-        0,
-        blockNumber -
-          (useNMinusOneFallback ? nMinusOneMaxGraphLagBlocks : 1),
+      // readyGeneration is the only topology authority for this process.
+      // Current-head work observes the canonical header and binds the exact
+      // immutable edge set to pricing/exact; it cannot scan, backfill,
+      // advance a topology cursor, or publish a Graph generation.
+      const frozen = bindFrozenTopologyToHeader(
+        this.deps.frozenTopology,
+        sourceHeader,
       );
-      let useLaggingPublishedDiscovery = false;
-      if (
-        dexAdmissionCompleteThrough(base) < requiredPredecessor
-      ) {
-        const predecessorStillBehind =
-          dexAdmissionCompleteThrough(base) < requiredPredecessor;
-        const canStrictlyCatchCurrentHead =
-          !startupWarmAttempt &&
-          !useNMinusOneFallback &&
-          consumedPreparedSource !== null &&
-          dexAdmissionCompleteThrough(base) >= consumedPreparedSource;
-        if (!this.deps.blind.enabled && predecessorStillBehind) {
-          if (startupWarmAttempt) {
-            if (executionContext) {
-              /*
-               * Pending-execution evidence cannot survive an unbounded cold
-               * discovery catch-up: current-head authorization must stay
-               * fail-closed. Record the rejection instead of requeueing a
-               * tight same-head loop that would starve the backfill itself.
-               */
-              outcome = "degraded";
-              fullCoverage = false;
-              skippedReason =
-                `startup_discovery_backfill_behind:` +
-                `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`;
-              degradedRecallReasons = Object.freeze([
-                `discovery_source_coverage_behind:` +
-                `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`,
-              ]);
-              this.recordPendingEvidenceNotStarted(
-                executionContext,
-                "pending_evidence_startup_discovery_behind",
-              );
-              finishStage("state", "failed");
-              this.maybeScheduleDiscoveryBackfill(blockNumber);
-              return;
-            }
-            /*
-             * Plain startup warm: the cold-state foreground lease that made
-             * the old fail-closed barrier necessary was removed (coarse
-             * production no longer holds the shared reth foreground lease),
-             * so a one-time bootstrap barrier now only deadlocks: the
-             * discovery backfill's per-block scan rate is at the head
-             * cadence, the watermark can stay behind indefinitely, the warm
-             * never publishes, no state base ever exists, and the N-1
-             * incremental path can never carry.
-             *
-             * Proceed on the verified published graph instead, exactly like
-             * steady-state degraded recall: the graph may miss newly landed
-             * venues, but it cannot invent an edge, and pricing known pools
-             * at current N is source-pinned. The warm's source-N bootstrap
-             * read seeds lastGoodByStateKey, after which every periodic N-1
-             * generation carries unchanged pools from that base and only
-             * reads pools the previous block actually traded. The historical
-             * scan keeps healing in its bounded background lane.
-             */
-            useLaggingPublishedDiscovery = true;
-            outcome = "degraded";
-            fullCoverage = false;
-            degradedRecallReasons = Object.freeze([
-              `discovery_source_coverage_behind:` +
-              `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`,
-            ]);
-          } else {
-            // A verified published graph is safe to price at current N even when
-            // its source-coverage watermark is catching up: it may miss newly
-            // landed venues, but it cannot invent an edge. Keep the historical
-            // scan in its bounded background lane and publish honest degraded
-            // recall instead of starving every current-state pass behind it.
-            useLaggingPublishedDiscovery = true;
-            outcome = "degraded";
-            fullCoverage = false;
-            degradedRecallReasons = Object.freeze([
-              `discovery_source_coverage_behind:` +
-              `${dexAdmissionCompleteThrough(base)}<${requiredPredecessor}`,
-            ]);
-          }
-        }
-        // A complete prepared generation can only be behind because heads
-        // advanced while it was running. The existing hot transition may
-        // strictly scan that elapsed suffix within the ordinary pass budget.
-        // An incomplete/failed historical generation never enters this path.
-        if (
-          !useLaggingPublishedDiscovery &&
-          (
-            Date.now() >= passDeadlineAtMs ||
-            (predecessorStillBehind && !canStrictlyCatchCurrentHead)
-          )
-        ) {
-          outcome = "degraded";
-          const admissionThrough = dexAdmissionCompleteThrough(base);
-          skippedReason =
-            admissionThrough < requiredPredecessor
-              ? `discovery_backfill_behind:` +
-                `${admissionThrough}<` +
-                `${requiredPredecessor}`
-              : "startup_discovery_deadline";
-          finishStage("state", "failed");
-          this.maybeScheduleDiscoveryBackfill(blockNumber);
-          return;
-        }
-      }
-      this.passStageLabel = "state:discovery-gate";
-
-      let nextDiscovery: LiveDiscoveryPublicationState;
-      if (useNMinusOneFallback || useLaggingPublishedDiscovery) {
-        /*
-         * N-1 fallback consumes an already-completed predecessor price view.
-         * A lagging discovery watermark likewise uses only its verified
-         * published graph while the bounded backfill lane heals topology.
-         * Neither case moves historical work into the current-head RPC path.
-         */
-        nextDiscovery = base;
-      } else {
-        const hotControl: DiscoveryBackfillControl = {
-          signal: passSignal,
-          deadlineAtMs: passDeadlineAtMs,
-          run: (work) => work(passSignal),
-        };
-        const preparedDiscovery = await discovery.prepare(base, {
-          source: {
-            number: sourceHeader.number,
-            hash: sourceHeader.hash,
-          },
-          through: blockNumber,
-          control: hotControl,
-        });
-        const canonicalAfter = await observeCanonicalHeader(
-          blockNumber,
-          "post-discovery canonical header",
-        );
-        const publishedDiscovery = await discovery.queue.enqueue(
-          "dex-refresh",
-          async () => {
-            if (canonicalAfter.hash !== sourceHeader.hash) {
-              return null;
-            }
-            const current = discovery.capture();
-            const rebased = discovery.validateHot(
-              current,
-              preparedDiscovery,
-            );
-            if (rebased === null) return null;
-            discovery.publish(rebased);
-            return rebased;
-          },
-        );
-        if (publishedDiscovery === null) {
-          outcome = "degraded";
-          skippedReason = "discovery_hot_rebase_conflict";
-          finishStage("state", "failed");
-          this.maybeScheduleDiscoveryBackfill(blockNumber);
-          return;
-        }
-        discovery.finish(preparedDiscovery);
-        nextDiscovery = publishedDiscovery;
-      }
-      const nextDescriptor = discovery.describeCaptured();
-      nextAdmissionThrough = dexAdmissionCompleteThrough(nextDiscovery);
-      const requiredAdmissionThrough = useNMinusOneFallback
-        ? requiredPredecessor
-        : blockNumber;
-      if (
-        nextAdmissionThrough < requiredAdmissionThrough &&
-        !useLaggingPublishedDiscovery
-      ) {
-        outcome = "degraded";
-        skippedReason =
-          `discovery_current_incomplete:` +
-          `${nextAdmissionThrough}<${requiredAdmissionThrough}`;
-        finishStage("state", "failed");
-        this.maybeScheduleDiscoveryBackfill(blockNumber);
-        return;
-      }
-      if (
-        useLaggingPublishedDiscovery ||
-        nextDiscovery.dexGraphCoverage.graphCompleteThrough <
-          requiredAdmissionThrough
-      ) {
-        // The source range is canonical and complete, but one or more family
-        // projections remain retryable. Keep healing in the background while
-        // GraphView excludes only those owning families from this live pass.
-        this.maybeScheduleDiscoveryBackfill(blockNumber);
-      }
-      discoveryPass = {
-        dexComplete: nextAdmissionThrough >= requiredAdmissionThrough,
-        protocolComplete: nextDescriptor.graphCompleteThrough >=
-          requiredAdmissionThrough,
-        sourceBlockHash: sourceHeader.hash,
-        landedCoverage: nextDiscovery.landedCoverage,
-      };
-      }
+      const discoveryPass = Object.freeze({
+        ...frozen,
+        landedCoverage: Object.freeze([]),
+      });
       const sourceBlockHash = discoveryPass.sourceBlockHash;
       const currentGraph = this.deps.blockScanGraph();
       if (!currentGraph) {
-        throw new Error("block-scan graph disappeared during discovery");
+        throw new Error("block-scan strict ready graph disappeared");
       }
       const graphEdges = Object.freeze([...currentGraph]);
       const generation = this.nextGeneration();
@@ -2832,11 +2368,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             recallMode: fallbackCoarse.recallMode,
             fullCoverage: fallbackCoarse.fullCoverage,
             degradedRecallReasons: fallbackCoarse.degradedRecallReasons,
-            graphCompleteThrough: nextAdmissionThrough,
-            graphLagBlocks: Math.max(
-              0,
-              blockNumber - nextAdmissionThrough,
-            ),
+            graphCompleteThrough: blockNumber,
+            graphLagBlocks: 0,
             stateReadyHeadAgeMs: Math.max(
               0,
               Date.now() - passStartedAtMs,

@@ -15,12 +15,9 @@ import {
   assertExactContextMatchesGraph,
   blockScanCandidateFundingTokens,
   BlockScanRuntimeLoop,
-  dexRuntimeAdmissionCompleteThrough,
   incompleteBlockScanFamilies,
   NMinusOneProducerGate,
   nMinusOneProducerCanServeLatestHead,
-  resolveProducerTopologyAdoption,
-  type ProducerTopologyCache,
   summarizeBlockScanIssueCauses,
   type BlockScanAtomicExecutionInput,
   type BlockScanAtomicResult,
@@ -116,26 +113,16 @@ interface PreparedDiscovery {
   readonly delta: RuntimePoolRefreshDelta;
 }
 
-await distantStartupPricesPublishedGraphWhileBackfillContinues();
-await stalePreparedSourcePricesPublishedGraph();
-await activeBackfillDoesNotBlockStartupState();
-await failedBackfillStillPricesStartupState();
-await steadyStateBehindRunsDegradedCurrentState();
-await steadyStateReadyBackfillRunsPublishedGraph();
 await productionRuntimeRecordsNonzeroEnumerationAndSolver();
-await steadyStateIncompleteReadyRunsPublishedGraph();
 await incompleteRetriesAndHotBudgetResumes();
 await startupStateGetsAnIndependentPhaseBudget();
 await degradedSnapshotCompletesStartupWithoutScanning();
 await latestHeadCoalescesDuringStartupWarm();
-await protocolLagDoesNotBlockDexRuntime();
-await familyProjectionLagDoesNotBlockOrdinaryDexRuntime();
 await sameHeadEvidenceTransactionsRemainFifoAndIsolated();
 await exactRefineAndSolverShareOneBoundEvidenceContext();
 await pendingEvidenceCooperativelyInterruptsOrdinaryPass();
 await pendingEvidenceInterruptsNonCooperativeAtomicFinalSim();
 await startupWarmRequeuesEvidenceWithinOriginalDeadline();
-await startupDiscoveryBarrierRejectsEvidenceWithoutARequeueLoop();
 await startupWarmRecordsExpiredEvidenceInsteadOfSilentlyDropping();
 await evidenceReorgKeepsFollowingEvidencePassCombined();
 await unavailableDependenciesDrainEvidenceFifoWithoutLeakingKeys();
@@ -143,17 +130,11 @@ await sameHeightReorgForcesEvidenceBackToCombinedMode();
 await newerEvidenceHeadCancelsBlockedEvidencePass();
 await workerForkReceivesPassCancellationControl();
 blindModeStillRequiresExecutableDexGraph();
-await observedPublicationDoesNotInvalidateHotDexCommit();
-await shutdownDoesNotWaitForHistoricalBackfill();
 await shutdownDrainsActivePassAndDropsPendingHead();
 await nMinusOneTrackerStaysOutsideNormalRuntimePublication();
 await nMinusOneRecoveryBacklogStaysOnHotBudget();
 await nMinusOneWaitsForItsOnlyAdjacentProducer();
 await nMinusOneProducerStartsAtArmTime();
-await nMinusOneProducerCriticalGateCoversHeaderRead();
-await nMinusOneProducerCriticalGateClearsOnHeaderThrow();
-await nMinusOneProducerCriticalGateClearsOnRuntimeAbort();
-await producerTopologyAdoptionCoalescesDeltas();
 nMinusOneExactJoinRejectsMixedAnchor();
 nMinusOneFundingIsCandidateLocal();
 blindModeDoesNotEnterOrdinaryStartupWarm();
@@ -161,48 +142,8 @@ familyFailureSummaryNamesOnlyNonCompleteFamilies();
 failureCauseSummaryIsBoundedAndRedacted();
 
 console.log(
-    "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (42/42)",
+    "[blockscan-runtime-startup-warm] strict frozen topology runtime: PASS",
 );
-
-async function producerTopologyAdoptionCoalescesDeltas(): Promise<void> {
-  const cacheBase: ProducerTopologyCache = {
-    topologyKey: "topology-a",
-    edges: [],
-    landedCoverage: [],
-    adoptedAtMs: 1_000,
-  };
-  // First arm always adopts.
-  assert.equal(
-    resolveProducerTopologyAdoption(null, "topology-a", 1_000, 240_000),
-    true,
-  );
-  // Same topology: no re-adoption.
-  assert.equal(
-    resolveProducerTopologyAdoption(cacheBase, "topology-a", 2_000, 240_000),
-    false,
-  );
-  // New topology within the interval: defer.
-  assert.equal(
-    resolveProducerTopologyAdoption(cacheBase, "topology-b", 2_000, 240_000),
-    false,
-  );
-  // New topology after the interval: adopt (coalesces accumulated deltas).
-  assert.equal(
-    resolveProducerTopologyAdoption(
-      cacheBase,
-      "topology-b",
-      1_000 + 240_001,
-      240_000,
-    ),
-    true,
-  );
-  // Zero interval: every new topology is adopted immediately.
-  assert.equal(
-    resolveProducerTopologyAdoption(cacheBase, "topology-b", 2_000, 0),
-    true,
-  );
-}
 
 function nMinusOneFundingIsCandidateLocal(): void {
   assert.deepEqual(
@@ -1340,12 +1281,12 @@ function blindModeStillRequiresExecutableDexGraph(): void {
     },
   };
   assert.equal(
-    dexRuntimeAdmissionCompleteThrough(state, false),
+    state.dexGraphCoverage.sourceCompleteThrough,
     650,
     "ordinary live admission follows canonical source coverage",
   );
   assert.equal(
-    dexRuntimeAdmissionCompleteThrough(state, true),
+    state.dexGraphCoverage.graphCompleteThrough,
     649,
     "blind/audit admission remains pinned to executable graph coverage",
   );
@@ -1461,6 +1402,7 @@ async function nMinusOneTrackerStaysOutsideNormalRuntimePublication(): Promise<v
   await harness.run(701);
   await waitFor(() => harness.coarsePricingBlocks.includes(701));
   await harness.run(702);
+  await waitFor(() => harness.coarsePricingBlocks.includes(702));
   assert.deepEqual(
     harness.runtimeBlocks,
     [700],
@@ -2195,7 +2137,7 @@ function createHarness(
       return resolvedPlan(options.solverNetProfit ?? 0n);
     },
   };
-  const deps: BlockScanRuntimeLoopDependencies<PreparedDiscovery> = {
+  const deps: BlockScanRuntimeLoopDependencies = {
     enabled: true,
     blockScanConfig: {
       maxHops: 3,
@@ -2212,9 +2154,7 @@ function createHarness(
       state: workerState,
       solver: workerSolver,
       simulator: {},
-    }] as unknown) as BlockScanRuntimeLoopDependencies<
-      PreparedDiscovery
-    >["executionWorkers"],
+    }] as unknown) as BlockScanRuntimeLoopDependencies["executionWorkers"],
     finalSimulationWorkers: ([{
       state: {
         provider: {},
@@ -2224,9 +2164,7 @@ function createHarness(
       },
       solver: workerSolver,
       simulator: {},
-    }] as unknown) as BlockScanRuntimeLoopDependencies<
-      PreparedDiscovery
-    >["finalSimulationWorkers"],
+    }] as unknown) as BlockScanRuntimeLoopDependencies["finalSimulationWorkers"],
     rpcUrl: "http://127.0.0.1:8545",
     strictSession: async (source) =>
       strictRouteSession(
@@ -2244,145 +2182,19 @@ function createHarness(
         return {};
       },
     },
-    discovery: {
-      lane: {
-        setProducerYield: (hook: { readonly active: () => boolean }) => {
-          producerYieldActive = hook.active;
-        },
-        readyDescriptor: () =>
-          laneReadyBlock === null
-            ? null
-            : {
-                jobId: 1,
-                planId: `fixture:${laneReadyBlock}`,
-                source: {
-                  number: laneReadyBlock,
-                  hash: hash(laneReadyBlock),
-                },
-              },
-        settled: async () => {
-          laneSettledCalls++;
-          await options.beforeLaneSettled?.();
-          laneReadyBlock =
-            laneReadyBlocksAfterSettlement.shift() ?? null;
-        },
-        takeForHotHead: () => {
-          assert.notEqual(laneReadyBlock, null);
-          const sourceBlock = laneReadyBlock!;
-          const publishedBlock =
-            options.initialLanePublishedBlock ?? sourceBlock;
-          laneReadyBlock = null;
-          laneTakeBlocks.push(sourceBlock);
-          return {
-            status: "ready_degraded",
-            state: publicationAt(
-              publishedBlock,
-              publication.revision + 1,
-            ),
-            planId: `fixture:${sourceBlock}`,
-            jobId: 1,
-            graphCompleteThrough: publishedBlock,
-            reason: "coverage_behind",
-          };
-        },
-        invalidate: () => {
-          laneInvalidations++;
-          laneReadyBlock = null;
-        },
-      },
-      journal,
-      queue,
-      describeCaptured: () =>
-        describeLiveDiscoveryPublicationState(publication),
-      topologyKey: () =>
-        computeDiscoveryGraphTopologyKey(publication),
+    frozenTopology: {
+      topologyKey: "strict-ready:fixture",
       observeHeader: async (blockNumber: number) => {
-        if (blockNumber === options.outsideRetainedReadyBlock) {
-          throw new CanonicalHeaderOutsideRetentionError(
-            blockNumber,
-            blockNumber + 2_048,
-          );
-        }
-        return options.observeHeader?.(blockNumber) ?? header(blockNumber);
+        const observed = await options.observeHeader?.(blockNumber) ??
+          header(blockNumber);
+        return Object.freeze({
+          ...observed,
+          parentHash: "parentHash" in observed
+            ? String(observed.parentHash)
+            : hash(Math.max(0, blockNumber - 1)),
+        });
       },
-      capture: () => cloneLiveDiscoveryPublicationState(publication),
-      publish: (next: LiveDiscoveryPublicationState) => {
-        publication = cloneLiveDiscoveryPublicationState(next);
-      },
-      finishPublished() {},
-      scheduleBackfill: async (blockNumber: number) => {
-        backfillBlocks.push(blockNumber);
-      },
-      prepare: async (
-        base: LiveDiscoveryPublicationState,
-        input: { readonly through: number },
-      ) => {
-        await options.beforeDiscoveryPrepare?.();
-        discoveryPrepareBases.push(
-          base.dexGraphCoverage.graphCompleteThrough,
-        );
-        const pool = runtimeDexPool(input.through);
-        const delta: RuntimePoolRefreshDelta = {
-          attemptedPools: [pool],
-          successfulBuilds: [{
-            pool,
-            edges: runtimeDexEdges(pool),
-          }],
-          failedPools: [],
-        };
-        const prepared: PreparedDiscovery = {
-          block: input.through,
-          baseDexFingerprint: describeDexPublicationSlice(base),
-          delta,
-        };
-        if (options.publishObservedDuringDiscoveryPrepare) {
-          await queue.enqueue("observed", async () => {
-            const observed = cloneLiveDiscoveryPublicationState(publication);
-            observed.protocolEvidenceCache.runtime.recentProcessedTxs.set(
-              hash(0xbeef),
-              input.through,
-            );
-            publication = {
-              ...observed,
-              revision: observed.revision + 1,
-            };
-          });
-        }
-        return prepared;
-      },
-      validateHot: (
-        current: LiveDiscoveryPublicationState,
-        prepared: PreparedDiscovery,
-      ) =>
-        rebaseHotDexPublication({
-          current,
-          patch: {
-            baseDexFingerprint: prepared.baseDexFingerprint,
-            chainId: "1",
-            delta: prepared.delta,
-            retryableDexGraphPools: current.retryableDexGraphPools,
-            retryableDexIdentityPools: current.retryableDexIdentityPools,
-            // Ordinary live may publish a source-complete generation while one
-            // family projection remains retryable. Blind mode must still reject
-            // the same fixture before runtime preparation.
-            dexGraphCoverage: {
-              sourceCompleteThrough: prepared.block,
-              graphCompleteThrough: options.preserveHotGraphGap
-                ? current.dexGraphCoverage.graphCompleteThrough
-                : prepared.block,
-            },
-            dexSourceAnchor: anchor(prepared.block),
-            dexGraphAnchor: options.preserveHotGraphGap
-              ? current.dexGraphAnchor
-              : anchor(prepared.block),
-            landedCoverage: current.landedCoverage,
-          },
-          buildStrategyViews: runtimeStrategyViews,
-        }),
-      finish() {},
-    } as unknown as BlockScanRuntimeLoopDependencies<
-      PreparedDiscovery
-    >["discovery"],
+    },
     blind: {
       enabled: options.blindEnabled ?? false,
       activeSource: () => null,
@@ -2440,9 +2252,7 @@ function createHarness(
     blockScanGraph: () =>
       runtimeDependenciesAvailable ? pipelineEdges : undefined,
     blockScanPlanner: () =>
-      blockScanPlanner as unknown as BlockScanRuntimeLoopDependencies<
-        PreparedDiscovery
-      >["blockScanPlanner"] extends () => infer T ? T : never,
+      blockScanPlanner as unknown as BlockScanRuntimeLoopDependencies["blockScanPlanner"] extends () => infer T ? T : never,
     currentRuntimeCoordinator: () => runtimeCoordinator,
     flashTokens: () => [],
     buildGraphView: (input) => graphAt(
@@ -2475,7 +2285,7 @@ function createHarness(
       return publishedPricing;
     },
     producerYieldActive() {
-      return producerYieldActive?.() ?? false;
+      return false;
     },
     get plannerGraphCalls() {
       return plannerGraphCalls;
