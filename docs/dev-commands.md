@@ -22,9 +22,13 @@ cast receipt <txhash> --rpc-url $MAINNET_RPC_URL --json | jq '.logs'
 
 ## Node deploy (the ONE broadcast-safe op — details in `docs/research/HERMES.md`)
 ```bash
+APPROVED_SHA=<40-lowercase-hex>
 aws ssm send-command --instance-ids i-0ff908dedeec9ebc6 --document-name AWS-RunShellScript \
-  --parameters 'commands=["git -C /opt/MEV fetch origin -q && git -C /opt/MEV show origin/main:scripts/deploy-node.sh | sudo bash"]'
+  --parameters "commands=[\"git -C /opt/MEV fetch origin -q && git -C /opt/MEV show ${APPROVED_SHA}:scripts/deploy-node.sh | sudo env SEARCHER_DEPLOY_SHA=${APPROVED_SHA} SEARCHER_DEPLOY_REF=origin/codex/s1-unified-adapter-architecture-impl bash\"]"
 ```
+
+The deploy script itself and the runtime checkout must come from the same
+pre-approved SHA. Never bootstrap the deploy script from a mutable branch ref.
 
 ## Validation gates
 Searcher-change gates + harness commands: `docs/research/gates.md`. Trace-diff / reproduction review

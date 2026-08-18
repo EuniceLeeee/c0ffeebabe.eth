@@ -1104,6 +1104,54 @@ export function rebuildFamilyCandidateKey(
   return hashFamilyCandidateKey(familyId, candidateInstanceIdentity(candidate));
 }
 
+/**
+ * Pre-partition alias key. A retained shared-manager row historically names
+ * only poolId while a catalog event candidate names manager + poolId through
+ * pluginCandidateKey. Both represent the same Family instance nomination.
+ * The generic address+opaque-poolId pair collapses that alias before any
+ * lifecycle work without changing the durable key of an incumbent run.
+ */
+export function rebuildFamilyInstanceDedupeKey(
+  candidate: Readonly<Record<string, unknown>>,
+): string {
+  const familyId = typeof candidate.familyId === "string"
+    ? candidate.familyId
+    : "unknown-family";
+  const address = candidate.address;
+  const poolId = candidate.poolId;
+  const identity = typeof address === "string" && address.trim().length > 0 &&
+      typeof poolId === "string" && poolId.trim().length > 0
+    ? address.toLowerCase() + "\u001f" + poolId.toLowerCase()
+    : candidateInstanceIdentity(candidate);
+  return hashFamilyCandidateKey(familyId, identity);
+}
+
+function preferCandidateRepresentative(
+  incumbent: Readonly<Record<string, unknown>>,
+  candidate: Readonly<Record<string, unknown>>,
+): boolean {
+  const incumbentBlock = Number.isSafeInteger(incumbent.blockNumber)
+    ? Number(incumbent.blockNumber)
+    : -1;
+  const candidateBlock = Number.isSafeInteger(candidate.blockNumber)
+    ? Number(candidate.blockNumber)
+    : -1;
+  if (candidateBlock !== incumbentBlock) return candidateBlock > incumbentBlock;
+  const evidenceScore = (value: Readonly<Record<string, unknown>>): number =>
+    Number(typeof value.transactionHash === "string") +
+    Number(typeof value.blockHash === "string") +
+    Number(Number.isSafeInteger(value.logIndex)) +
+    Number(typeof value.pluginCandidateKey === "string");
+  const incumbentEvidence = evidenceScore(incumbent);
+  const candidateEvidence = evidenceScore(candidate);
+  if (candidateEvidence !== incumbentEvidence) {
+    return candidateEvidence > incumbentEvidence;
+  }
+  return candidateFingerprint(candidate).localeCompare(
+    candidateFingerprint(incumbent),
+  ) < 0;
+}
+
 export function candidateFingerprint(
   candidate: Readonly<Record<string, unknown>>,
 ): string {
@@ -1387,7 +1435,14 @@ export function createRebuildWiring(input?: {
             ? raw.familyId
             : familyIdForCandidate(raw);
           const candidate = Object.freeze({ ...raw, familyId });
-          byKey.set(rebuildFamilyCandidateKey(candidate), candidate);
+          const key = rebuildFamilyInstanceDedupeKey(candidate);
+          const existing = byKey.get(key);
+          if (
+            existing === undefined ||
+            preferCandidateRepresentative(existing, candidate)
+          ) {
+            byKey.set(key, candidate);
+          }
           continue;
         }
         const log = observation as RebuildScanObservation;
@@ -1395,12 +1450,11 @@ export function createRebuildWiring(input?: {
         if (seenLogs.has(logKey)) continue;
         seenLogs.add(logKey);
         for (const candidate of candidatesFromLog(log)) {
-          const key = rebuildFamilyCandidateKey(candidate);
+          const key = rebuildFamilyInstanceDedupeKey(candidate);
           const existing = byKey.get(key);
           if (
             existing === undefined ||
-            Number(candidate.blockNumber ?? 0) >
-              Number(existing.blockNumber ?? 0)
+            preferCandidateRepresentative(existing, candidate)
           ) {
             byKey.set(key, candidate);
           }

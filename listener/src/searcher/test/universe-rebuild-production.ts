@@ -13,6 +13,7 @@ import {
   isChainProvenTerminalReason,
   memoAuthorityFingerprint,
   rebuildFamilyCandidateKey,
+  rebuildFamilyInstanceDedupeKey,
   validateObservedSenderEvidence,
   type RebuildScanObservation,
 } from "../universe-rebuild-production.js";
@@ -594,6 +595,59 @@ async function main(): Promise<void> {
     }),
   ]));
   assert.equal(seeded.length, 2, "V4 candidates dedupe by Family+poolId");
+  const sharedPoolId = "0x" + "77".repeat(32);
+  const retainedAlias = Object.freeze({
+    address: manager,
+    adapter: "univ4",
+    familyId: "univ4-standard",
+    poolId: sharedPoolId,
+  });
+  const eventAlias = Object.freeze({
+    ...retainedAlias,
+    pluginCandidateKey: manager + "\u001f" + sharedPoolId,
+    transactionHash: "0x" + "91".repeat(32),
+    blockNumber: SOURCE.number,
+    blockHash: SOURCE.hash,
+    logIndex: 7,
+  });
+  assert.notEqual(
+    rebuildFamilyCandidateKey(retainedAlias),
+    rebuildFamilyCandidateKey(eventAlias),
+    "legacy retained/event nomination spellings are distinct durable keys",
+  );
+  assert.equal(
+    rebuildFamilyInstanceDedupeKey(retainedAlias),
+    rebuildFamilyInstanceDedupeKey(eventAlias),
+    "Family+address+poolId must collapse the retained/event alias",
+  );
+  const aliases = wiring.dedupeFamilyCandidates(Object.freeze([
+    Object.freeze({ kind: "startup-candidate", candidate: retainedAlias }),
+    Object.freeze({ kind: "startup-candidate", candidate: eventAlias }),
+  ]));
+  assert.equal(aliases.length, 1, "one Family instance enters the run once");
+  assert.equal(
+    (aliases[0] as { pluginCandidateKey?: string }).pluginCandidateKey,
+    eventAlias.pluginCandidateKey,
+    "the exact source-bound event candidate is the representative",
+  );
+  const reversedAliases = wiring.dedupeFamilyCandidates(Object.freeze([
+    Object.freeze({ kind: "startup-candidate", candidate: eventAlias }),
+    Object.freeze({ kind: "startup-candidate", candidate: retainedAlias }),
+  ]));
+  assert.equal(
+    (reversedAliases[0] as { pluginCandidateKey?: string }).pluginCandidateKey,
+    eventAlias.pluginCandidateKey,
+    "alias representative selection must not depend on pool-set order",
+  );
+  const siblingManager = Object.freeze({
+    ...retainedAlias,
+    address: "0x" + "99".repeat(20),
+  });
+  assert.notEqual(
+    rebuildFamilyInstanceDedupeKey(retainedAlias),
+    rebuildFamilyInstanceDedupeKey(siblingManager),
+    "same poolId behind different managers remains a distinct instance",
+  );
   const duplicatePoolSetCandidate = Object.freeze({
     address: "0x" + "88".repeat(20),
     adapter: "univ2",

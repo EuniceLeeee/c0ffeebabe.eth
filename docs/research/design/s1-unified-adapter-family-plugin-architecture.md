@@ -6500,8 +6500,13 @@ verified universe manifest `fromBlock` 的最小值；后二者只能扩展历�
 或 complete-snapshot authority。incumbent fixed run 忽略后来配置并保持其 durable
 `fromBlock`（cutoff hash 固定；mutation-only/不完整事件不得凭中央 topic 猜测实例）→ 先按 block
 number+hash+txHash+logIndex+address+全部 topics 完整去重，再由插件
-`decodeCandidate/candidateKey/emitter` 给出实例身份并按 Family+Instance
-去重 → 只有完整 query/chunk partition 全部成功后，才把
+`decodeCandidate/candidateKey/emitter` 给出实例身份。进入 durable partition
+前，带 `address+poolId` 的 retained/event 两种 nomination 使用
+`hash(Family,address,poolId)` 作为 alias-dedupe key；这只消除同一 shared-manager
+实例的两种输入拼写，不改变不同 manager 或不同 Family 的身份。代表候选按
+source block、完整 evidence、稳定 fingerprint 确定，与 poolSets 输入顺序无关，
+因此同一 Family+Instance 只进入一次 lifecycle；最终 CAS 仍要求
+`familyInstanceKey` 唯一并对未预见的 identity collision fail-closed。只有完整 query/chunk partition 全部成功后，才把
 `candidatesByKey + sourceReceipts` 原子保存为 exact partition。若 incumbent
 run 已有 source receipts，直接恢复其原 cutoff + candidatesByKey，不重扫新
 窗口；部署前创建的 pre-receipt incumbent run 只允许在原 from/to/cutoff
@@ -6527,6 +6532,13 @@ issuer 投影 route，禁止把 Credit 当普通 route Family 或静默丢弃）
 不得被 JSON 静默丢失），中央重新签发并登记 process-local routeHandles →
 assertCanonical(cutoff) → 一次 CAS 原子提升
 Graph+catalog+coverage+cutoff readyGeneration → 之后才创建 producer。
+
+固定节点 checkpoint 在修改 alias-dedupe 前以只读 SSM command
+`f4ad3da7-dcec-4c34-956e-5eee754522c3` 聚合核对：runId
+`strict-startup-rebuild`、candidateCount/candidateRows 均为 `13842`，
+`verifiedDuplicateInstanceExtra=0`，按 `Family+address+poolId` 归一后的
+`canonicalAliasGroups=0`。因此本改动无需、也不得改写现有 partition；它只在
+未来 scan 形成 partition 前消除别名。该检查不是 ready/F5/live lineage 证据。
 
 ### 22.4 单池 probe（rebuild-probe / probeOneFailure）
 load run → assert 原 cutoff hash → 取 retryable candidateSnapshot +
