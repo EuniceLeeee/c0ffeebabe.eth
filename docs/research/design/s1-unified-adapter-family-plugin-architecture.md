@@ -1,9 +1,14 @@
 # S1 统一扫描驱动的 Adapter Family 插件架构与实现合同
 
-> 状态：**以 ds 分支为实现基线的目标架构合同与迁移/删除计划。** 本文统一 Swap / Protocol Adapter
+> 状态：**最终 strict-only 运行时合同（2026-08-18 hard cutover 后）。** 本文统一 Swap / Protocol Adapter
 > Family 的动态发现、身份准入、实例编译、路线投影、coarse pricing、exact quote、执行片段、特殊协议
-> 语义和失败隔离。它既记录 ds 已经实现的基础设施，也定义从当前双模式代码迁到最终单路径合同的剩余工作；
-> 不得把“ds 已实现”“迁移期兼容桥”和“最终目标”混写成同一种状态。
+> 语义和失败隔离。唯一启动/运行链路是 fixed-cutoff startup discovery → durable attestation →
+> atomic readyGeneration(Graph+catalog+coverage+cutoff) → create producer → backrun/blockscan 消费同一
+> frozen Graph → current-source strict exact → strict request/execution program → final simulation；
+> 无 readyGeneration 必须阻塞或 fail-closed。旧 Graph/runtime 管线（buildTokenGraph*、POOL_REGISTRY、
+> runtime pool refresh、live-discovery publication/checkpoint inventory、strict-catalog live publisher、
+> producer-time discovery/backfill/protocol trace/topology publication、secondary edge merge、
+> protocol-edges flag）已物理删除（0b58021f / 49890a0f / 7aba5424），不存在双轨或兼容 fallback。
 >
 > 本文在上述范围内取代旧文档中的中央手写 Family 清单、全 Family `schema.pools/groups`、手工
 > `adapterSchemaRevision`、Adapter 内直接 RPC，以及靠具体协议名扩展中央分支等目标设计；并已直接吸收
@@ -6723,11 +6728,15 @@ GraphView 都把当前 edge object 集与 ready topology key 交给 strict coord
 topology 符号；迁移后的 `searcher:blockscan-runtime-startup-warm` 只执行 frozen
 topology 下仍 load-bearing 的 current-state、pending evidence、N-1、exact 与
 shutdown 合同，旧 continuous-discovery fixture 不再是通过条件；listener 完整
-build 同轮通过。此批只关闭 producer loop 的第一处物理调用面；
-`runtime-pool-refresh`、`live-discovery-publication` 与
-`buildTokenGraphWithResults()` 的剩余 test/diagnostic source 实体仍必须在下一
-coherent slice 删除或迁移到 strict ready fixture，完成前禁止部署，也不构成
-ready/F5/F9/cutover 证据。
+build 同轮通过。此批只关闭 producer loop 的第一处物理调用面；随后
+`runtime-pool-refresh`、`live-discovery-publication`、`live-discovery-checkpoint-inventory`、
+`strict-catalog-live-publisher`、`buildTokenGraphWithResults()` 及整条
+producer-time discovery/publication 链（protocol-discovery-*、observed-protocol-discovery、
+live-discovery-*、adapter-family-graph-view-coordinator）与 `POOL_REGISTRY` 已在
+`0b58021f` / `49890a0f` / `7aba5424` 物理删除（-21,500+ 行），deploy-node.sh 同步清理
+已删 flag；exact-SHA 部署（`7aba5424`）已在节点 dry-run 验证：pre-receipt run 原地
+重扫附加 source receipts 且 source plan 校验通过，producer freeze 在 retryable>0 时
+fail-closed（searcher fatal，producer 不创建）。
 
 工具对账 manifest `/tmp/s1-strict-graph-tool-manifest.json` 的 SHA-256 为
 `323128ff2b8e18eb95f84edbb9a30f322ee4f8a08610600fd45a9f0cfeee1697`：
@@ -6737,3 +6746,60 @@ ready/F5/F9/cutover 证据。
 删除，不可被伪装成 family-local。对应 synthetic runtime fixture 仅补齐现行
 必填的 `reverseBinding=explicitly-unsupported` 声明，没有改变 production
 Family 或为通过脚本恢复旧 authority。
+
+## Final Strict-Only Runtime（2026-08-18 hard cutover）
+
+自 `0b58021f` / `49890a0f` / `7aba5424` 起，本仓库不再存在任何第二套 Graph/runtime 管线。
+以下是唯一允许存在的启动与运行链路，其余一切拓扑来源（legacy builder、runtime refresh、
+live publication、producer-time discovery、secondary merge、flag gate）均已物理删除。
+
+### 唯一链路
+
+```
+fixed-cutoff startup discovery（scanSwapWindow + catalog-issued topics）
+→ durable per-instance attestation（identity → materialization → projection，memo 密封）
+→ atomic readyGeneration（Graph + catalog + coverage + cutoff 单次 CAS）
+→ create producer（仅 ready 后）
+→ backrun/blockscan 消费同一 frozen Graph（strictReadyRuntime.graph）
+→ current-source strict exact（generation/cutoff fence）
+→ strict request/execution program（adapter-family lifecycle routes）
+→ final simulation（revm，fail-closed）
+```
+
+### 合同
+
+1. **无 readyGeneration 必须阻塞或 fail-closed**：searcher 启动时 checkpoint 无 ready 且
+   run retryable>0 → `fatal: strict startup rebuild incomplete`，producer 不创建
+   （节点部署实测：`retryable=398` 时 searcher fatal，部署脚本检测 fatal 并 abort）。
+2. **producer 运行期间禁止任何 topology 变化**：无 discovery、无 backfill、无 protocol trace
+   discovery、无 topology publication、无 Graph generation 变化。`blockscan-frozen-topology`
+   合同在源码层断言 producer loop 不含 mutable discovery/topology 符号。
+3. **raw pool views 不能制造 edge**：startup pool 文件仅是 nomination input；admission 与
+   Graph 由 strict attestation + readyGeneration 独占。
+4. **source completion 是 durable receipt 投影**：buildCoverage 只从
+   `DurableSourceReceipt`（含 query/source plan 指纹）生成；resume 时 receipt 的
+   queryFingerprint 必须等于当前 source plan（family capability 哈希 + topics + chunk 策略），
+   否则 fail-closed。startup-universe 覆盖键只证明 nomination partition 被消费，不是
+   穷尽枚举/omission authority。
+5. **durable 恢复**：pre-receipt run 在原 fromBlock..cutoff 重扫，candidate partition
+   必须与 incumbent 逐字节一致才能附加 receipts；verified memo 三指纹（family 定义、
+   authority、proof source）跨 run 复用；terminal-rejected 在 fixed partition 内保持
+   settled；retryable 用单池 probe 闭合。
+6. **legacy authority = 0**：`buildTokenGraph` / `buildTokenGraphWithResults` /
+   `POOL_REGISTRY` / `prepareRuntimePoolRefresh` / `selectRefreshCandidates` /
+   `filterLiveProtocolRegistry` / `pairCompletion` / `enableProtocolEdges` 及整条
+   live-discovery publication/checkpoint/protocol-trace 链已删除；部署脚本不再透传
+   `SEARCHER_ENABLE_PROTOCOL_EDGES`。保留的通用基础设施（RPC batching、dedupe、
+   deadline/abort、backpressure、canonical/generation fence、standing-position guard、
+   final simulation、execution transport）不拥有 admission/coverage/Graph authority。
+
+### 验收证据链（部署与 live）
+
+- exact-SHA 部署：`7aba5424`（deploy-node.sh：marker 白名单 + untracked 清理 + AppleDouble
+  repo-wide，使 clean 合同可重入）。
+- 节点 dry-run 实测：HEAD=7aba5424、mev-searcher systemd active、pre-receipt run
+  `strict-startup-rebuild` 原地重扫并附加 2 条 source receipts（source plan 校验通过）、
+  retryable=398 时 producer freeze fail-closed。
+- 剩余验收（待 retryable 闭合后）：全族 Universe/Instance 与 Edge/Graph 矩阵、live exact
+  lineage、final-sim lineage、restart 差集复用与连续 100/100、F6–F9 receipts、
+  MigrationCleanupReceipt.verdict=pass。
