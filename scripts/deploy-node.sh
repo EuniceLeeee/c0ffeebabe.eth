@@ -384,8 +384,9 @@ fi
 git ls-files -m -o --exclude-standard 2>/dev/null | grep -v node_modules > "/tmp/dirty-$TS.txt"
 tar czf "$REPO-deploy-$TS.tar.gz" -T "/tmp/dirty-$TS.txt" 2>/dev/null
 # macOS AppleDouble sidecars are not source files. Preserve them in the backup
-# above, then remove only the two namespaces scanned by the production tool index.
-find "$REPO/analysis/src/cli" "$REPO/scripts" -type f -name '._*' -delete 2>/dev/null || true
+# above, then remove every one under the repo so the exact-SHA clean check is
+# not blocked by filesystem artifacts.
+find "$REPO" -type f -name '._*' -delete 2>/dev/null || true
 git fetch origin -q || abort_runtime "git fetch origin failed"
 DEPLOY_SHA=${SEARCHER_DEPLOY_SHA:-}
 [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] \
