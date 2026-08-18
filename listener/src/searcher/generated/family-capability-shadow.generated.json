@@ -461,7 +461,7 @@
         "familyId": "curve-underlying",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "88819a784a8ee20ea816c623c437a96c5277fd357ca82d33b0f77afde8099783",
+        "contentHash": "452cd5315ae6d484d2cdb7fbc38eac4dde282dc97aaf5822ec2e09ccbcbaa802",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -6398,7 +6398,7 @@
         "familyId": "univ2-standard",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "e7924e1ece39d88e77c09241bf0782855320962b8e000a6e3b4af3c9a2ec0071",
+        "contentHash": "f2f91953f15a835ef8f4113dcb4da0efa3c122e56228e6850c5397fa47c317d8",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -6731,7 +6731,7 @@
         "familyId": "univ3-standard",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "03f9fc619dc6cc533fd144a208f6bfafb8e7bca9b04c8c15be67349c217a23e6",
+        "contentHash": "617a39acdbbacb50554c6677880a4c2af3b9482f38049ada0dd34ebb000b1fa0",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -7260,5 +7260,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "40ad8766c06c4bc7902727318bbe0978ea15b4a96334da90126bf52d626f5493"
+  "artifactHash": "2667ac8d65727b5d2da9fe4db3a56ecccdd7476beb9b264d6dac3675e34048a3"
 }

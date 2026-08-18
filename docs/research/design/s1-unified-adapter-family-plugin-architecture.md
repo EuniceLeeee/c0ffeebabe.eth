@@ -3891,6 +3891,39 @@ checkpoint（实现提交承载本 checkpoint；不是 ready 或 F5 pass）：**
 V4 index 对该 provider/source 只 build 一次、旧 verified 立即 carry、outcome 继续增长且 candidateCount/
 cutoff 不变。禁止为了提速清空 checkpoint 或创建移动窗口。
 
+**2026-08-18 probe/CAS 与 Family negative-proof 第二十六批 live-derived
+正确性 checkpoint（实现提交承载本 checkpoint；不是 ready 或 F5 pass）：**
+
+- `310432c24ecd663f657cea4cd45b99c4df6366fd` 的 systemd dry-run 在同一
+  `strict-startup-rebuild` 上继续到 revision `493`、outcomes `1835/13842`
+  （1518 verified、244 terminal-rejected、73 retryable），cutoff 仍为
+  `25778225/0xef7c15db458db835dce388730d3700e7cd211e42c4653e704327de412f1d0adc`，
+  appliedThrough 仍为 null、ready=false。外部 failure-code probe 与 startup
+  batch writer 同时碰到 sidecar lock；旧实现把 live holder 当立即 fatal，systemd
+  因 `CAS lock is held by writer` 退出。store 现在对另一个进程的短 atomic CAS
+  有界等待并重新读取 incumbent；dead PID 仍回收，超时仍 fail-closed，probe 的
+  attemptCount guard 仍防止同 key 覆盖；
+- 原 cutoff 上的只读链上复核证明部分 `rpc` 并非 provider 抖动：V2/V3 candidate
+  的 pool static surface 正常返回，但 factory `getPair/getPool` 确定性 revert。
+  V2/V3 Family 现在把 reverse call 声明为 `return-or-revert-data`；pinned declared
+  revert 进入 Family decision 并产出 `factory_reverse_binding_failed` 的 chain-proven
+  rejection。真实 transport `rpc/deadline` 仍为 required request failure，继续
+  retryable，不得借此降级；
+- Curve MetaRegistry 对失败样本实际返回有效 handler/underlying coin binding；旧
+  behavior batch 却要求每个 i/j × probe amount 都正常 return，任一合法方向或金额
+  的确定性 revert 会丢掉 sibling 成功证据。behavior request 现在声明 revert data，
+  Family decoder 只把该方向/金额视为无 witness，仍可用其他 positive `get_dy_underlying`
+  建立方向；任何真实 transport failure 仍 unresolved/retryable；
+- 合同覆盖跨 store 短锁等待、stale PID 回收/超时、V2/V3 declared-revert negative
+  proof、Curve sibling revert isolation；相关 Family/checkpoint 合同与 listener 完整
+  build 必须在同一提交通过。ERC4626 `standalone-standard-behavior:resource-limited`
+  属于 simulation capability 缺口，明确不在本批伪装为 negative proof，仍阻塞 ready。
+
+部署本批新 SHA 后必须继续复用同一 candidate partition/cutoff。先确认 V2/V3/Curve
+上述 deterministic failures 转为 chain-proven terminal outcomes，再单独关闭 ERC4626
+simulation、Astra authority 与 Fluid declared quote 剩余 retryable；retryable 未归零前
+producer 仍不得创建，也不得宣称 production cutover。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
@@ -6296,6 +6329,11 @@ universe rebuild 的正确性路径改为三类 durable 状态 + 固定 cutoff +
 ### 22.2 写入（AttestationCheckpointWriter + UniverseRebuildCheckpointStore）
 - 单写者文件 CAS：sidecar lock、temp + fsync + atomic rename + dir fsync；
   损坏/篡改/CAS 冲突 fail-closed（fingerprint 校验）。
+- sidecar lock 是跨进程的**串行化短锁**：另一个 live writer 正在完成原子
+  write/fsync/rename 时，调用方在固定上界内等待后重新读取最新 envelope；不能因
+  startup writer 与单池 probe 碰到数毫秒锁重叠就杀掉任一进程。holder PID 已死时
+  回收 stale lock；live holder 超过上界仍 fail-closed。该等待不允许两个 writer
+  同时进入 CAS，也不把 candidate journal 变成正确性路径。
 - 每 25 条或 2-5 秒 flush；SIGTERM/SIGINT 先 flush、移除 handler 后重新
   投递原 signal，保证 systemd/人工停止不会被 handler 吞掉；kill -9 最多
   丢最后一批。
@@ -6343,7 +6381,9 @@ Graph+catalog+coverage+cutoff readyGeneration → 之后才创建 producer。
 load run → assert 原 cutoff hash → 取 retryable candidateSnapshot +
 evidenceRef → 只对目标 key attestOnce（不重扫窗口、不重跑其他池）→
 成功写 memo 与 run outcome 同一 CAS；失败 bump attemptCount；最后一个
-retryable 关闭后才允许 finalize。
+retryable 关闭后才允许 finalize。probe 与仍在运行的 startup worker 共用上述
+CAS 串行化短锁；二者的 atomic writes 可以有界排队，但任何 per-key attemptCount
+冲突仍 fail-closed，不能 last-write-wins。
 
 ### 22.5 V4 recent-swap index
 key = H(provider, source.number, source.hash, manager, topic0, lookback,

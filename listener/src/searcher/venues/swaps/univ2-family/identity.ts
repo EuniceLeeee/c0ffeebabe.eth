@@ -3,7 +3,10 @@ import type {
   IdentitySemantics,
   IdentityStepInput,
 } from "../../adapter-family-plugin.js";
-import type { AdapterRequest } from "../../adapter-request-program.js";
+import type {
+  AdapterRequest,
+  AdapterRequestResult,
+} from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
 import {
   canonicalAddress,
@@ -47,7 +50,10 @@ export const univ2Identity = {
             evidence.token0,
             evidence.token1,
           ]),
-          completion: "return-data" as const,
+          // A factory-shaped contract may deterministically revert for an
+          // unsupported pair domain. That pinned revert is negative Family
+          // evidence, not a transient RPC failure.
+          completion: "return-or-revert-data" as const,
         })];
       }
       return [];
@@ -85,11 +91,9 @@ export const univ2Identity = {
         factory: prior.factory,
         token0: prior.token0,
         token1: prior.token1,
-        reversePool: decodeAddressResult(
+        reversePool: decodeReversePool(
           results,
           REVERSE_REQUEST_ID,
-          UNIV2_FACTORY_INTERFACE,
-          "getPair",
         ),
       });
     },
@@ -108,6 +112,26 @@ function buildPoolStaticRequests(
     call(TOKEN0_REQUEST_ID, candidate.pool, "token0"),
     call(TOKEN1_REQUEST_ID, candidate.pool, "token1"),
   ];
+}
+
+function decodeReversePool(
+  results: readonly AdapterRequestResult[],
+  id: string,
+): string {
+  const result = results.find((candidate) => candidate.id === id);
+  if (result === undefined) throw new Error(`univ2 request result ${id} is missing`);
+  if (!result.ok) {
+    throw new Error(`univ2 request result ${id} is unresolved: ${result.failure}`);
+  }
+  if (result.completion === "reverted-as-declared") {
+    return "0x0000000000000000000000000000000000000000";
+  }
+  return decodeAddressResult(
+    results,
+    id,
+    UNIV2_FACTORY_INTERFACE,
+    "getPair",
+  );
 }
 
 function call(

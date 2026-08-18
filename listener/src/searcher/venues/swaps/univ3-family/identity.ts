@@ -3,7 +3,10 @@ import type {
   IdentitySemantics,
   IdentityStepInput,
 } from "../../adapter-family-plugin.js";
-import type { AdapterRequest } from "../../adapter-request-program.js";
+import type {
+  AdapterRequest,
+  AdapterRequestResult,
+} from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
 import {
   factoryBoundUniV3Quoter,
@@ -59,7 +62,9 @@ export const univ3Identity = {
             tokenB,
             evidence.fee,
           ]),
-          completion: "return-data" as const,
+          // A pinned getPool revert is a chain-proven failed reverse binding,
+          // while a genuine transport error remains an unresolved result.
+          completion: "return-or-revert-data" as const,
         })];
       }
       return [];
@@ -111,11 +116,9 @@ export const univ3Identity = {
         token1: prior.token1,
         fee: prior.fee,
         tickSpacing: prior.tickSpacing,
-        reversePool: decodeAddressResult(
+        reversePool: decodeReversePool(
           results,
           REVERSE_REQUEST_ID,
-          UNIV3_FACTORY_INTERFACE,
-          "getPool",
         ),
       });
     },
@@ -136,6 +139,26 @@ function buildPoolStaticRequests(
     poolCall(FEE_REQUEST_ID, candidate.pool, "fee"),
     poolCall(TICK_SPACING_REQUEST_ID, candidate.pool, "tickSpacing"),
   ];
+}
+
+function decodeReversePool(
+  results: readonly AdapterRequestResult[],
+  id: string,
+): string {
+  const result = results.find((candidate) => candidate.id === id);
+  if (result === undefined) throw new Error(`univ3 request result ${id} is missing`);
+  if (!result.ok) {
+    throw new Error(`univ3 request result ${id} is unresolved: ${result.failure}`);
+  }
+  if (result.completion === "reverted-as-declared") {
+    return "0x0000000000000000000000000000000000000000";
+  }
+  return decodeAddressResult(
+    results,
+    id,
+    UNIV3_FACTORY_INTERFACE,
+    "getPool",
+  );
 }
 
 function poolCall(

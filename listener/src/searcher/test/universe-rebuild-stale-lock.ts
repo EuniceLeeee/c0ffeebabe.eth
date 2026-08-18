@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UniverseRebuildCheckpointStore } from "../universe-rebuild-checkpoint.js";
@@ -50,10 +50,47 @@ async function main(): Promise<void> {
       "retryable",
       "a dead holder's stale lock must be reclaimed",
     );
-    // A live holder still fails closed.
+    // A live holder performing a short atomic write is waited out. This is
+    // the production startup-writer + explicit single-pool-probe race: both
+    // remain one serialized writer and neither process is killed.
     await writeFile(path + ".lock", String(process.pid) + "\n", { mode: 0o600 });
+    const waitingStore = new UniverseRebuildCheckpointStore({
+      path,
+      lockWaitTimeoutMs: 250,
+      lockRetryMs: 5,
+    });
+    const release = setTimeout(() => {
+      void unlink(path + ".lock");
+    }, 25);
+    const waited = await waitingStore.casMergeRunOutcomes(
+      "run-stale",
+      Object.freeze([Object.freeze({
+        status: "retryable",
+        familyCandidateKey: "stale:0",
+        familyId: "univ2-standard",
+        candidateSnapshot: Object.freeze({ address: "0x" + "11".repeat(20) }),
+        stage: "identity",
+        failureCode: "rpc",
+        reasonCode: "rpc-after-probe-race",
+        attemptCount: 2,
+        lastAttemptAt: "2026-08-17T00:00:01.000Z",
+      })]),
+    );
+    clearTimeout(release);
+    assert.equal(
+      waited.inProgressRun?.outcomesByCandidateKey["stale:0"]?.status,
+      "retryable",
+    );
+
+    // A live holder that does not finish within the bound still fails closed.
+    await writeFile(path + ".lock", String(process.pid) + "\n", { mode: 0o600 });
+    const boundedStore = new UniverseRebuildCheckpointStore({
+      path,
+      lockWaitTimeoutMs: 25,
+      lockRetryMs: 5,
+    });
     await assert.rejects(
-      () => store.casMergeRunOutcomes("run-stale", Object.freeze([
+      () => boundedStore.casMergeRunOutcomes("run-stale", Object.freeze([
         Object.freeze({
           status: "verified",
           familyCandidateKey: "stale:1",

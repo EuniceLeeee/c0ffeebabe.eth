@@ -158,6 +158,10 @@ assert.deepEqual(forgedDecision, {
   status: "rejected",
   reason: "factory_reverse_binding_failed",
 });
+assert.deepEqual(runIdentityDecision(candidate, FACTORY, null), {
+  status: "rejected",
+  reason: "factory_reverse_binding_failed",
+}, "a pinned factory revert is chain-proven failed reverse binding");
 
 const descriptorDraft = univ2StrictFamilyPlugin.instance.compileDraft(identity);
 const descriptor = univ2StrictFamilyPlugin.instance.finalizeDescriptor({
@@ -1021,7 +1025,7 @@ function runIdentity(
 function runIdentityDecision(
   candidateInput: UniV2Candidate,
   factory: string,
-  reversePool: string,
+  reversePool: string | null,
 ): ReturnType<typeof identityVariant.decide> {
   const initial = { candidate: candidateInput, evidence: undefined, step: 0 };
   assert.deepEqual(identityVariant.decide(initial), { status: "continue" });
@@ -1064,17 +1068,31 @@ function runIdentityDecision(
     throw new Error("univ2 reverse binding request must be eth-call");
   }
   assert.equal(reverseRequests[0].to, factory);
+  assert.equal(reverseRequests[0].completion, "return-or-revert-data");
   const reverseEvidence = identityVariant.decode({
     step: reverseStep,
-    results: [success(
-      "factory-get-pair",
-      UNIV2_FACTORY_INTERFACE.encodeFunctionResult("getPair", [reversePool]),
-    )],
+    results: reversePool === null
+      ? [declaredRevert("factory-get-pair")]
+      : [success(
+          "factory-get-pair",
+          UNIV2_FACTORY_INTERFACE.encodeFunctionResult("getPair", [reversePool]),
+        )],
   }) as UniV2IdentityEvidence;
   return identityVariant.decide({
     candidate: candidateInput,
     evidence: reverseEvidence,
     step: 2,
+  });
+}
+
+function declaredRevert(id: string): AdapterRequestResult {
+  return Object.freeze({
+    id,
+    ok: true as const,
+    source: SOURCE,
+    provenance: PROVENANCE,
+    completion: "reverted-as-declared" as const,
+    data: "0x",
   });
 }
 

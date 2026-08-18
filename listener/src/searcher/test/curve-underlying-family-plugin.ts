@@ -297,9 +297,19 @@ function runIdentity(
     evidence: registry,
     step: 1,
   });
+  assert(
+    behaviorRequests.every((request) =>
+      request.kind === "eth-call" &&
+      request.completion === "return-or-revert-data"
+    ),
+    "behavior probes declare deterministic per-direction reverts",
+  );
   const behaviorResults = behaviorRequests.map((request) => {
     const [, i, j, probe] = request.id.split(":");
     const positive = i === "0" && j === "1" && probe === "1";
+    if (i === "1" && j === "0" && probe === "0") {
+      return declaredRevert(request.id);
+    }
     return success(
       request.id,
       CURVE_UNDERLYING_POOL_INTERFACE.encodeFunctionResult(
@@ -360,6 +370,17 @@ function success(id: string, data: string): AdapterRequestResult {
     provenance: PROVENANCE,
     completion: "returned" as const,
     data,
+  });
+}
+
+function declaredRevert(id: string): AdapterRequestResult {
+  return Object.freeze({
+    id,
+    ok: true as const,
+    source: SOURCE,
+    provenance: PROVENANCE,
+    completion: "reverted-as-declared" as const,
+    data: "0x",
   });
 }
 

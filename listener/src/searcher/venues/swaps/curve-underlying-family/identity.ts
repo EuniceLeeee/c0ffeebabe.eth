@@ -128,7 +128,10 @@ function behaviorRequests(
               CURVE_BEHAVIOR_PROBE_AMOUNTS[probe],
             ],
           ),
-          completion: "return-data" as const,
+          // Individual directions/amounts may deterministically revert even
+          // when a sibling direction proves the pool. Preserve that pinned
+          // negative result without weakening genuine transport failures.
+          completion: "return-or-revert-data" as const,
         }));
       }
     }
@@ -165,19 +168,18 @@ function decodeBehaviorProof(
       if (i === j) continue;
       let witness: CurveUnderlyingVerifiedDirection | null = null;
       for (let probe = 0; probe < CURVE_BEHAVIOR_PROBE_AMOUNTS.length; probe++) {
-        const result = requireSuccessfulResult(
+        const result = behaviorAmountOut(
           results,
           behaviorRequestId(i, j, probe),
         );
-        const amountOut = decodeGetDy(result.data);
-        if (amountOut > 0n && witness === null) {
+        if (result !== null && result > 0n && witness === null) {
           witness = Object.freeze({
             i,
             j,
             tokenIn: prior.coins[i],
             tokenOut: prior.coins[j],
             behaviorProbeAmountIn: CURVE_BEHAVIOR_PROBE_AMOUNTS[probe],
-            behaviorProbeAmountOut: amountOut,
+            behaviorProbeAmountOut: result,
           });
         }
       }
@@ -191,6 +193,21 @@ function decodeBehaviorProof(
     coins: prior.coins,
     verifiedDirections: Object.freeze(verifiedDirections),
   });
+}
+
+function behaviorAmountOut(
+  results: readonly AdapterRequestResult[],
+  id: string,
+): bigint | null {
+  const result = results.find((candidate) => candidate.id === id);
+  if (result === undefined) {
+    throw new Error(`curve-underlying result ${id} is missing`);
+  }
+  if (!result.ok) {
+    throw new Error(`curve-underlying unresolved: ${result.failure}`);
+  }
+  if (result.completion === "reverted-as-declared") return null;
+  return decodeGetDy(result.data);
 }
 
 function decideIdentity(

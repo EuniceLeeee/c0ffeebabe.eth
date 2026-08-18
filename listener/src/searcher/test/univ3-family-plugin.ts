@@ -130,6 +130,10 @@ assert.deepEqual(runIdentityDecision(candidate, FACTORY, FORGED_POOL), {
   status: "rejected",
   reason: "factory_reverse_binding_failed",
 });
+assert.deepEqual(runIdentityDecision(candidate, FACTORY, null), {
+  status: "rejected",
+  reason: "factory_reverse_binding_failed",
+}, "a pinned factory revert is chain-proven failed reverse binding");
 assert.throws(
   () => identityVariant.decode({
     step: { candidate, evidence: undefined, step: 0 },
@@ -835,7 +839,7 @@ function runIdentity(
 function runIdentityDecision(
   candidateInput: UniV3Candidate,
   factory: string,
-  reversePool: string,
+  reversePool: string | null,
 ): ReturnType<typeof identityVariant.decide> {
   const initial = { candidate: candidateInput, evidence: undefined, step: 0 };
   assert.deepEqual(identityVariant.decide(initial), { status: "continue" });
@@ -874,12 +878,15 @@ function runIdentityDecision(
   assert.equal(requests[0].kind, "eth-call");
   if (requests[0].kind !== "eth-call") throw new Error("reverse request kind");
   assert.equal(requests[0].to, factory);
+  assert.equal(requests[0].completion, "return-or-revert-data");
   const reverseEvidence = identityVariant.decode({
     step: reverseStep,
-    results: [success(
-      "factory-get-pool",
-      UNIV3_FACTORY_INTERFACE.encodeFunctionResult("getPool", [reversePool]),
-    )],
+    results: reversePool === null
+      ? [declaredRevert("factory-get-pool")]
+      : [success(
+          "factory-get-pool",
+          UNIV3_FACTORY_INTERFACE.encodeFunctionResult("getPool", [reversePool]),
+        )],
   }) as UniV3IdentityEvidence;
   return identityVariant.decide({
     candidate: candidateInput,

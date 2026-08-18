@@ -225,11 +225,26 @@ function parseEnvelope(raw: string): StartupCheckpointEnvelope {
 export class UniverseRebuildCheckpointStore {
   readonly #path: string;
   readonly #lockPath: string;
+  readonly #lockWaitTimeoutMs: number;
+  readonly #lockRetryMs: number;
   #mutex: Promise<void> = Promise.resolve();
 
-  constructor(input: { readonly path: string }) {
+  constructor(input: {
+    readonly path: string;
+    /** Bound for a different process's short atomic-write critical section. */
+    readonly lockWaitTimeoutMs?: number;
+    readonly lockRetryMs?: number;
+  }) {
     this.#path = input.path;
     this.#lockPath = input.path + ".lock";
+    this.#lockWaitTimeoutMs = input.lockWaitTimeoutMs ?? 5_000;
+    this.#lockRetryMs = input.lockRetryMs ?? 10;
+    if (!Number.isSafeInteger(this.#lockWaitTimeoutMs) || this.#lockWaitTimeoutMs < 1) {
+      throw new Error("universe rebuild checkpoint lock wait must be positive");
+    }
+    if (!Number.isSafeInteger(this.#lockRetryMs) || this.#lockRetryMs < 1) {
+      throw new Error("universe rebuild checkpoint lock retry must be positive");
+    }
   }
 
   async load(): Promise<StartupCheckpointEnvelope | null> {
@@ -260,57 +275,60 @@ export class UniverseRebuildCheckpointStore {
   /**
    * Sidecar lock with stale-PID recovery: a crashed/killed writer leaves
    * the lock file behind, and the next writer must reclaim it once the
-   * recorded holder PID is provably dead (ESRCH). A live holder keeps
-   * failing closed.
+   * recorded holder PID is provably dead (ESRCH). A live holder is allowed
+   * to finish its bounded atomic write so the startup writer and an explicit
+   * single-pool probe remain one serialized writer instead of killing each
+   * other. A holder that exceeds the bound still fails closed.
    */
   async #acquireLock(): Promise<void> {
-    try {
-      await writeFile(this.#lockPath, String(process.pid) + "\n", {
-        flag: "wx",
-        mode: 0o600,
-      });
-      return;
-    } catch (error) {
-      const code = error && typeof error === "object" && "code" in error
-        ? String((error as { code?: unknown }).code)
-        : "";
-      if (code !== "EEXIST") throw error;
-    }
-    let holderPid: number | null = null;
-    try {
-      const content = await readFile(this.#lockPath, "utf8");
-      const parsed = Number(content.trim());
-      holderPid = Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
-    } catch {
-      holderPid = null;
-    }
-    if (holderPid !== null) {
+    const deadline = Date.now() + this.#lockWaitTimeoutMs;
+    while (true) {
       try {
-        process.kill(holderPid, 0);
-        // The holder is alive: the lock is genuinely held.
-        throw new Error(
-          "universe rebuild checkpoint CAS lock is held by writer " +
-            holderPid,
-        );
+        await writeFile(this.#lockPath, String(process.pid) + "\n", {
+          flag: "wx",
+          mode: 0o600,
+        });
+        return;
       } catch (error) {
         const code = error && typeof error === "object" && "code" in error
           ? String((error as { code?: unknown }).code)
           : "";
-        if (code !== "ESRCH") {
-          // kill(0) succeeded: live holder.
-          throw new Error(
-            "universe rebuild checkpoint CAS lock is held by writer " +
-              holderPid,
-          );
-        }
-        // ESRCH: the holder is dead - reclaim the stale lock.
+        if (code !== "EEXIST") throw error;
       }
+      let holderPid: number | null = null;
+      try {
+        const content = await readFile(this.#lockPath, "utf8");
+        const parsed = Number(content.trim());
+        holderPid = Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+      } catch {
+        holderPid = null;
+      }
+      let holderAlive = false;
+      if (holderPid !== null) {
+        try {
+          process.kill(holderPid, 0);
+          holderAlive = true;
+        } catch (error) {
+          const code = error && typeof error === "object" && "code" in error
+            ? String((error as { code?: unknown }).code)
+            : "";
+          if (code !== "ESRCH") throw error;
+        }
+      }
+      if (!holderAlive) {
+        await unlink(this.#lockPath).catch(() => undefined);
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          "universe rebuild checkpoint CAS lock is held by writer " +
+            holderPid,
+        );
+      }
+      await new Promise<void>((resolve) =>
+        setTimeout(resolve, Math.min(this.#lockRetryMs, deadline - Date.now()))
+      );
     }
-    await unlink(this.#lockPath).catch(() => undefined);
-    await writeFile(this.#lockPath, String(process.pid) + "\n", {
-      flag: "wx",
-      mode: 0o600,
-    });
   }
 
   async #cas(
