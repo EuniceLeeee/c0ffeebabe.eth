@@ -277,16 +277,17 @@ const undeclaredRevertExecutor = createBoundedRequestExecutor({
     }];
   },
 });
-await assert.rejects(
-  runRequestProgram({
-    familyId: id,
-    program: staticProgram,
-    programInput: undefined,
-    source,
-    executor: undeclaredRevertExecutor,
-  }),
-  /returned undeclared revert data/,
-);
+// An eth-call execution-layer revert is chain-proven evidence at the fixed
+// cutoff (the central runtime surfaces it as reverted-as-declared for any
+// declared completion); it passes validation and reaches the family decode.
+const undeclaredRevertProgram = await runRequestProgram({
+  familyId: id,
+  program: staticProgram,
+  programInput: undefined,
+  source,
+  executor: undeclaredRevertExecutor,
+});
+assert.equal(undeclaredRevertProgram.evidence, "static-decoded");
 
 await assert.rejects(
   runRequestProgram({

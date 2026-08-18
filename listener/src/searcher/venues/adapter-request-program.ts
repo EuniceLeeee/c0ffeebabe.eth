@@ -1463,8 +1463,12 @@ function assertResultSet(
         request.kind === "effect-delta-simulation"
         ? request
         : undefined;
+      // An execution-layer revert is chain evidence for any eth-call: the
+      // callee reverted deterministically at the fixed cutoff, so the
+      // central runtime surfaces it as reverted-as-declared regardless of
+      // the request's declared completion, and the family decode decides.
       const revertAllowed = request.kind === "eth-call"
-        ? request.completion === "return-or-revert-data"
+        ? true
         : simulationRequest?.observe.includes("revert-data") === true;
       if (result.completion === "reverted-as-declared" && !revertAllowed) {
         throw new Error(
