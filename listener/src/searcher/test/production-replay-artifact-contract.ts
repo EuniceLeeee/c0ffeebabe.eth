@@ -13,7 +13,6 @@ import {
   poolProjectionRowKey,
   poolRegistryKey,
 } from "../pool-universe.js";
-import { enabledDiscoveryAdapters } from "../protocol-discovery-runtime.js";
 import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "../venues/production-family-composition.js";

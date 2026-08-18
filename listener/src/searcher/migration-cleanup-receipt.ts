@@ -58,6 +58,27 @@ const LEGACY_SYMBOL_PROBES: readonly LegacySymbolProbe[] = Object.freeze([
   { name: "legacy credit sizing call-site", pattern: /\.creditPolicy\.quoteOutputByDebtBps\(/ },
   { name: "legacy victim overlay call-site", pattern: /\.victimModels\(\)/ },
   { name: "legacy pending evidence call-site", pattern: /pendingTransactionEvidence\(\)/ },
+  // 2026-08-18 hard cutover symbols (0b58021f / 49890a0f / 7aba5424): the
+  // legacy graph builder, static registry, runtime refresh and live discovery
+  // pipeline are physically gone; any reappearance fails the receipt.
+  { name: "buildTokenGraphWithResults", pattern: /\bbuildTokenGraphWithResults\b/ },
+  { name: "buildTokenGraph", pattern: /\bbuildTokenGraph\b/ },
+  { name: "POOL_REGISTRY", pattern: /\bPOOL_REGISTRY\b/ },
+  { name: "prepareRuntimePoolRefresh", pattern: /\bprepareRuntimePoolRefresh\b/ },
+  { name: "selectRefreshCandidates", pattern: /\bselectRefreshCandidates\b/ },
+  { name: "filterLiveProtocolRegistry", pattern: /\bfilterLiveProtocolRegistry\b/ },
+  { name: "selectPairCompletionPools", pattern: /\bselectPairCompletionPools\b/ },
+  { name: "pairCompletion", pattern: /\bpairCompletion\b/ },
+  { name: "enableProtocolEdges", pattern: /\benableProtocolEdges\b/ },
+  { name: "SEARCHER_ENABLE_PROTOCOL_EDGES", pattern: /SEARCHER_ENABLE_PROTOCOL_EDGES/ },
+  { name: "live-discovery-publication import", pattern: /live-discovery-publication\.js/ },
+  { name: "live-discovery-checkpoint-inventory import", pattern: /live-discovery-checkpoint-inventory\.js/ },
+  { name: "strict-catalog-live-publisher import", pattern: /strict-catalog-live-publisher\.js/ },
+  { name: "runtime-pool-refresh import", pattern: /runtime-pool-refresh\.js/ },
+  { name: "protocol-discovery-coordinator import", pattern: /protocol-discovery-coordinator\.js/ },
+  { name: "observed-protocol-discovery import", pattern: /observed-protocol-discovery\.js/ },
+  { name: "live-discovery-coordinator import", pattern: /live-discovery-coordinator\.js/ },
+  { name: "adapter-family-graph-view-coordinator import", pattern: /adapter-family-graph-view-coordinator\.js/ },
 ]);
 
 /**
