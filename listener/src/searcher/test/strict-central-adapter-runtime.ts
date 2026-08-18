@@ -174,9 +174,13 @@ async function main(): Promise<void> {
   assert(revertResults[0]!.ok === true);
   assert.equal(revertResults[0]!.completion, "reverted-as-declared");
   assert.equal(revertResults[0]!.data, "0xdeadbeef");
-  assert.equal(revertResults[1]!.ok, false);
-  assert(revertResults[1]!.ok === false);
-  assert.equal(revertResults[1]!.failure, "rpc");
+  // An execution-layer revert is chain-proven evidence at the fixed cutoff
+  // even when the request declared return-data: retrying cannot change a
+  // deterministic revert, so it must not be classified as a transport rpc.
+  assert.equal(revertResults[1]!.ok, true);
+  assert(revertResults[1]!.ok === true);
+  assert.equal(revertResults[1]!.completion, "reverted-as-declared");
+  assert.equal(revertResults[1]!.data, "0xdeadbeef");
 
   const failingSimulatorRuntime = createStrictCentralAdapterRuntime({
     provider: mockProvider() as never,

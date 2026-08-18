@@ -2992,6 +2992,16 @@ async function resolveIdentity(input: {
         runtime: input.runtime,
       });
       if (work.status === "unresolved") {
+        if (work.failure.code === "chain-revert") {
+          // A decode failure over chain-proven reverted outcomes is terminal
+          // negative evidence (the callee reverted deterministically at this
+          // cutoff), not an unresolved transport/program failure.
+          rejected.push(
+            variant.id + ":chain-revert:" +
+              work.failure.message.slice(0, 120),
+          );
+          break;
+        }
         unresolved.push(
           variant.id + ":" + work.failure.code + ":" +
             work.failure.message.slice(0, 120),

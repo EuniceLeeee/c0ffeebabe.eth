@@ -173,6 +173,18 @@ export type AdapterRequestResult =
       readonly failure: "rpc" | "deadline" | "aborted" | "resource-limited";
     };
 
+/**
+ * A decode failure over chain-proven reverted outcomes: the callee reverted
+ * deterministically at the fixed cutoff, so this is terminal negative
+ * evidence, not a transport or program failure.
+ */
+export class ChainRevertEvidenceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ChainRevertEvidenceError";
+  }
+}
+
 /** A required transport failure is unresolved and must never reach decode. */
 export class RequiredAdapterRequestError extends Error {
   readonly failureCode: Extract<
@@ -445,13 +457,32 @@ export async function runRequestProgram<Input, Evidence>(input: {
     throw new RequiredAdapterRequestError(requiredFailure);
   }
   const trustedResultsFingerprint = fingerprintTrustedResults(results);
-  const evidence = requireSynchronous(
-    input.program.decode({
-      programInput: input.programInput,
-      results,
-    }),
-    "request decode",
-  );
+  let evidence: Evidence;
+  try {
+    evidence = requireSynchronous(
+      input.program.decode({
+        programInput: input.programInput,
+        results,
+      }),
+      "request decode",
+    );
+  } catch (error) {
+    // A decode failure over a result set that contains chain-proven
+    // reverted-as-declared outcomes is itself chain evidence (the callee
+    // reverted deterministically at this cutoff), never a transport or
+    // program error. Surface it as such so identity can reject terminally
+    // instead of retrying forever.
+    const reverted = results.find((result) =>
+      result.completion === "reverted-as-declared"
+    );
+    if (reverted !== undefined) {
+      throw new ChainRevertEvidenceError(
+        `decode over reverted result ${reverted.id}: ` +
+          (error instanceof Error ? error.message : String(error)),
+      );
+    }
+    throw error;
+  }
   const reuseProof = staticReusePolicy !== undefined &&
       results.every((result) => result.ok)
     ? issueStaticEvidenceReuseProof({

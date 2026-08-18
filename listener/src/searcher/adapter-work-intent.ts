@@ -7,6 +7,7 @@ import {
   assertIssuedBoundedRequestExecutor,
   createBoundedRequestExecutor,
   physicalRequestSetFingerprint,
+  ChainRevertEvidenceError,
   runRequestProgram,
   RequiredAdapterRequestError,
   type AdapterRequest,
@@ -222,6 +223,7 @@ export type AdapterWorkFailureCode =
   | "invalid-intent"
   | "stale-generation"
   | "invalid-program"
+  | "chain-revert"
   | "authority-failure"
   | "policy-failure"
   | "admission-failure"
@@ -1039,6 +1041,14 @@ function freezeFailure(
       disposition: "unresolved" as const,
       stage: error.failureStage,
       code: error.failureCode,
+      message: error.message,
+    });
+  }
+  if (error instanceof ChainRevertEvidenceError) {
+    return Object.freeze({
+      disposition: "unresolved" as const,
+      stage: "decode" as const,
+      code: "chain-revert" as const,
       message: error.message,
     });
   }

@@ -254,26 +254,19 @@ async function executeRequest(
           }, source.number, control);
           return { completion: "returned" as const, data };
         } catch (error) {
-          // A family-declared revert is evidence, not a transport failure.
-          // Surface the revert payload as reverted-as-declared exactly like
-          // the legacy work runtime so identity decode can reject or accept
-          // on family semantics (for example FluidDexSwapResult quotes). A
-          // CALL_EXCEPTION without revert data (e.g. a getPair probe against
-          // a factory-shaped contract that reverts bare) is still a declared
-          // revert: chain-proven negative evidence, never a transport rpc.
-          if (request.completion === "return-or-revert-data") {
-            const revertData = extractStrictRevertData(error);
-            // A revert is chain-proven negative evidence whether it carries
-            // revert data (ethers CALL_EXCEPTION with data, or any provider
-            // error exposing a data/returnData/revert payload) or reverts
-            // bare (CALL_EXCEPTION with data=null). Transport failures
-            // without either shape stay unresolved/rpc.
-            if (revertData !== null || isCallException(error)) {
-              return {
-                completion: "reverted-as-declared" as const,
-                data: revertData ?? "0x",
-              };
-            }
+          // An execution-layer revert is chain-proven negative evidence at
+          // the fixed cutoff, not a transport failure, whether the request
+          // declared revert tolerance or not: the callee deterministically
+          // reverts at this block, and retrying cannot change that. Surface
+          // it as reverted-as-declared so the family decode can reject or
+          // accept on its own semantics. Transport failures without a revert
+          // shape (deadline, node errors, rate limits) stay unresolved/rpc.
+          const revertData = extractStrictRevertData(error);
+          if (revertData !== null || isCallException(error)) {
+            return {
+              completion: "reverted-as-declared" as const,
+              data: revertData ?? "0x",
+            };
           }
           throw error;
         }
