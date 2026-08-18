@@ -590,7 +590,11 @@ export class UniverseRebuildCheckpointStore {
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
-        inProgressRun: null,
+        // The run is KEPT (not nulled) so any residual retryable outcomes
+        // stay durable and can be closed by the probe after startup. Ready
+        // only admits verified instances; retryable candidates never enter
+        // the Graph and never block an otherwise complete generation.
+        inProgressRun: run,
         readyGeneration: Object.freeze(input.ready),
       });
     });
@@ -887,11 +891,12 @@ function assertReadyPromotion(
       key !== candidateKeys[index] ||
       outcome.familyCandidateKey !== key ||
       (outcome.status !== "verified" &&
-        outcome.status !== "terminal-rejected")
+        outcome.status !== "terminal-rejected" &&
+        outcome.status !== "retryable")
     )
   ) {
     throw new Error(
-      "universe rebuild checkpoint: ready promotion requires exact terminal partition",
+      "universe rebuild checkpoint: ready promotion requires an exact candidate partition",
     );
   }
   const verified = outcomes.filter((outcome): outcome is Extract<

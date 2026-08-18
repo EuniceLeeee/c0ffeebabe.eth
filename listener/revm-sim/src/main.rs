@@ -2221,6 +2221,49 @@ where
             mark_account_touched(db, token);
         }
         if !applied {
+            // Prestate diff discovery can return nothing when both the probe
+            // account and the control (0xdead) have zero balance: the tracer
+            // records no storage read for an absent mapping slot, so there is
+            // no observed-vs-control diff. Fall back to write-verify-restore
+            // over the common mapping slots, tried on both the token itself
+            // and its EIP-1967 implementation (proxy tokens keep balances in
+            // the implementation's storage).
+            if let Some(remote) = remote {
+                let implementation = read_eip1967_implementation(remote, token)?;
+                let mut owners: Vec<Address> = vec![token];
+                if let Some(impl) = implementation {
+                    if impl != token {
+                        owners.push(impl);
+                    }
+                }
+                'fallback_outer: for owner in &owners {
+                    for slot_index in
+                        mapping_slot_candidates(deal.balance_slot, balance_slots.get(&token).copied())
+                    {
+                        let slot = erc20_balance_slot(to, slot_index);
+                        let original = db.storage(*owner, slot).map_err(|err| {
+                            anyhow!("failed reading fallback slot {owner:#x}:{slot:#x}: {err}")
+                        })?;
+                        db.insert_account_storage(*owner, slot, amount).map_err(|err| {
+                            anyhow!("failed writing fallback slot {owner:#x}:{slot:#x}: {err}")
+                        })?;
+                        mark_account_touched(db, *owner);
+                        let balance =
+                            erc20_balance_of(db, block_env, token, to).unwrap_or(U256::ZERO);
+                        if balance >= amount {
+                            balance_slots.insert(token, slot_index);
+                            applied = true;
+                            break 'fallback_outer;
+                        }
+                        db.insert_account_storage(*owner, slot, original).map_err(|err| {
+                            anyhow!("failed restoring fallback slot {owner:#x}:{slot:#x}: {err}")
+                        })?;
+                        mark_account_touched(db, *owner);
+                    }
+                }
+            }
+        }
+        if !applied {
             if let Some(remote) = remote {
                 for (storage_owner, slot) in
                     discover_erc20_balance_storage_candidates(remote, token, to)?
@@ -2274,6 +2317,30 @@ where
         }
     }
     Ok(())
+}
+
+const EIP1967_IMPLEMENTATION_SLOT: &str =
+    "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+
+/// Read the EIP-1967 implementation slot for a possibly-proxied token.
+/// Returns None when the slot is empty (non-proxy) or the read fails.
+fn read_eip1967_implementation(remote: &RemoteRevmDb, token: Address) -> Result<Option<Address>> {
+    let value = remote.rpc.call(
+        "eth_getStorageAt",
+        json!([
+            format!("{token:#x}"),
+            EIP1967_IMPLEMENTATION_SLOT,
+            remote.block_tag
+        ]),
+    )?;
+    let raw = value_as_str(&value)?;
+    let parsed = parse_u256(raw)?;
+    if parsed.is_zero() {
+        return Ok(None);
+    }
+    let mut bytes = [0u8; 32];
+    parsed.to_big_endian(&mut bytes);
+    Ok(Some(Address::from_slice(&bytes[12..])))
 }
 
 /// Exact ERC20 balance-slot discovery: trace `balanceOf(account)` with

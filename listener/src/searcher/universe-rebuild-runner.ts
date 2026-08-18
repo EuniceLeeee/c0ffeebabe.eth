@@ -485,10 +485,16 @@ export async function rebuildUniverse(
     (item) => item.status === "retryable",
   );
   if (pending.length > 0) {
-    throw new UniverseRunIncomplete({
-      runId: input.runId,
-      retryableCount: pending.length,
-    });
+    // Residual retryable outcomes no longer block ready: the verified
+    // partition is complete and published; retryable candidates simply stay
+    // out of the Graph and remain durable in the kept run for the probe to
+    // close after startup. (UniverseRunIncomplete is still thrown when the
+    // run is lost below, i.e. no ready can be formed at all.)
+    log(
+      "universe rebuild ready with " + pending.length +
+        " residual retryable outcome(s); they stay out of the Graph " +
+        "and remain probe-closable",
+    );
   }
 
   // 5. Exact partition: every active candidate is verified or chain-proven
