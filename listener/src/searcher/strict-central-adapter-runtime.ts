@@ -396,14 +396,23 @@ async function executeRequest(
             }),
             completion: "reverted-as-declared" as const,
             data: extractStrictRevertData(error) ?? "0x",
-            // A revert produces no state effects; provide the declared
-            // observation collections as empty so the request-program
-            // validator sees them fulfilled.
+            // A revert produces no state effects; provide exactly the
+            // declared observation collections as empty so the
+            // request-program validator sees them fulfilled, and leave
+            // undeclared kinds absent.
             effects: Object.freeze({
-              tokenDeltas: Object.freeze([]),
-              nativeDeltas: Object.freeze([]),
-              totalSupplyDeltas: Object.freeze([]),
-              logs: Object.freeze([]),
+              ...(request.observe.includes("token-delta")
+                ? { tokenDeltas: Object.freeze([]) }
+                : {}),
+              ...(request.observe.includes("native-delta")
+                ? { nativeDeltas: Object.freeze([]) }
+                : {}),
+              ...(request.observe.includes("total-supply-delta")
+                ? { totalSupplyDeltas: Object.freeze([]) }
+                : {}),
+              ...(request.observe.includes("logs")
+                ? { logs: Object.freeze([]) }
+                : {}),
             }),
           });
         }
