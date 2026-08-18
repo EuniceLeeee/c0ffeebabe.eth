@@ -2357,18 +2357,14 @@ fn discover_erc20_balance_storage_candidates(
     token: Address,
     account: Address,
 ) -> Result<Vec<(Address, U256)>> {
+    // Every storage slot read by balanceOf(account) is a candidate. We do
+    // NOT diff against a control account: when both the probe account and
+    // the control have zero balance, the tracer records the same mapping
+    // slot with value 0 for both, and the diff removes the one correct
+    // slot. The caller write-verifies each candidate and keeps the first
+    // slot whose written value is read back as balanceOf >= amount.
     let observed = trace_erc20_balance_prestate(remote, token, account)?;
-    let primary_control = parse_address("0x000000000000000000000000000000000000dead")?;
-    let fallback_control = parse_address("0x000000000000000000000000000000000000beef")?;
-    let control_account = if account == primary_control {
-        fallback_control
-    } else {
-        primary_control
-    };
-    let control = trace_erc20_balance_prestate(remote, token, control_account)?;
-    Ok(account_specific_storage_candidates(
-        &observed, &control, token,
-    ))
+    Ok(prestate_storage_candidates(&observed, token))
 }
 
 fn trace_erc20_balance_prestate(
