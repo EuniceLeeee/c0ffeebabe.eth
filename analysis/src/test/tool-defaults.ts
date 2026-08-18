@@ -189,12 +189,23 @@ test("node deploy installs and verifies production analysis tooling before resta
   assert.match(script, /SEARCHER_LIVE_RPC_URL=\$LOCAL_RPC/);
   assert.match(script, /SEARCHER_LIVE_WS_URL=\$LOCAL_WS/);
   assert.match(script, /SEARCHER_RUNTIME_COMMIT=\$DEPLOY_COMMIT/);
-  assert.match(script, /SEARCHER_FORCE_INCLUDE_ROUTERS_PATH=\$ROUTER_SNAPSHOT/);
+  assert.match(script, /DEPLOY_SHA=\$\{SEARCHER_DEPLOY_SHA:-\}/);
   assert.match(
     script,
-    /export POOL_UNIVERSE_HISTORY_LOG_RPC_URL="\$archive"/,
-    "pool-universe deploy refresh must use the configured archive only for historical logs",
+    /SEARCHER_DEPLOY_SHA must be the pre-approved exact 40-hex commit/,
   );
+  assert.match(script, /git cat-file -e "\$DEPLOY_SHA\^\{commit\}"/);
+  assert.match(
+    script,
+    /git merge-base --is-ancestor "\$DEPLOY_SHA" "\$DEPLOY_REF"/,
+  );
+  assert.match(script, /git reset --hard "\$DEPLOY_SHA"/);
+  assert.doesNotMatch(script, /git reset --hard "\$DEPLOY_REF"/);
+  assert.match(
+    script,
+    /startup log runtime commit does not match approved deployment SHA/,
+  );
+  assert.match(script, /SEARCHER_FORCE_INCLUDE_ROUTERS_PATH=\$ROUTER_SNAPSHOT/);
   assert.match(
     script,
     /searcher fatal before startup banner/,

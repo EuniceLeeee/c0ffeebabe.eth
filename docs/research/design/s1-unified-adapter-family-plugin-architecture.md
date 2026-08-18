@@ -6588,10 +6588,15 @@ searcher 进程在创建 producer 前直接 begin/resume `rebuildUniverse`，不
    `searcher:universe-rebuild-probe` 在原 run/cutoff 定向关闭，然后重启
    systemd 继续 finalize，不另起移动窗口。`deploy-node.sh` 不运行
    build-active-pool-universe/deploy-trust；pool 文件只可提供 nomination。
-2. `sudo env SEARCHER_DEPLOY_REF=origin/codex/s1-unified-adapter-architecture-impl
+2. 先记录本轮人工批准的 40 位 commit 为 `<APPROVED_SHA>`；随后执行
+   `sudo env SEARCHER_DEPLOY_SHA=<APPROVED_SHA>
+   SEARCHER_DEPLOY_REF=origin/codex/s1-unified-adapter-architecture-impl
    SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH=/opt/MEV-runtime/universe-rebuild-checkpoint.json
-   bash scripts/deploy-node.sh`（exact-SHA + systemd + SEARCHER_RUNTIME_COMMIT；
-   禁止 nohup；dry-run 保持）。
+   bash scripts/deploy-node.sh`。`SEARCHER_DEPLOY_SHA` 必填且只能是 exact
+   40-hex；`SEARCHER_DEPLOY_REF` 仅作 remote ancestry 约束，不是 checkout
+   authority。脚本必须证明 approved SHA == clean git HEAD == `.env`
+   `SEARCHER_RUNTIME_COMMIT` == `/proc/$PID/environ` runtime commit == 本次
+   startup log `runtime_commit`（systemd；禁止 nohup；dry-run 保持）。
 3. 部署后验证（F5）：`strict ready graph loaded` /
    `strict ready catalog loaded` /
    `universe rebuild ready generation=... producer baseline freeze` /

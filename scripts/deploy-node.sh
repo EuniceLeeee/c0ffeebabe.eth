@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Safe node deploy: update /opt/MEV to an allowlisted remote ref and restart the searcher.
+# Safe node deploy: checkout one pre-approved exact commit and restart the searcher.
 #
 # Runs ON the EC2 node (SSM-only, no SSH). Bootstraps itself from git so it is always
 # the latest version:
 #   aws ssm send-command ... --parameters 'commands=[
 #     "git -C /opt/MEV fetch origin -q && git -C /opt/MEV show origin/main:scripts/deploy-node.sh | sudo bash"]'
-# Set SEARCHER_DEPLOY_REF=origin/codex/<branch> only for an intentional branch
-# validation; the default and every unqualified deploy remain origin/main.
+# SEARCHER_DEPLOY_SHA is mandatory (40 lowercase hex). SEARCHER_DEPLOY_REF is
+# only an ancestry constraint: set origin/codex/<branch> for an intentional
+# branch validation; the default remains origin/main.
 #
 # DRY-RUN vs LIVE (broadcast) — the guard, and the one bounded escape hatch:
 #  - DEFAULT = DRY-RUN. If SEARCHER_DRY_RUN=1 cannot be ensured, ABORT without restarting
@@ -384,6 +385,9 @@ tar czf "$REPO-deploy-$TS.tar.gz" -T "/tmp/dirty-$TS.txt" 2>/dev/null
 # above, then remove only the two namespaces scanned by the production tool index.
 find "$REPO/analysis/src/cli" "$REPO/scripts" -type f -name '._*' -delete 2>/dev/null || true
 git fetch origin -q || abort_runtime "git fetch origin failed"
+DEPLOY_SHA=${SEARCHER_DEPLOY_SHA:-}
+[[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] \
+  || abort_runtime "SEARCHER_DEPLOY_SHA must be the pre-approved exact 40-hex commit"
 DEPLOY_REF=${SEARCHER_DEPLOY_REF:-origin/main}
 case "$DEPLOY_REF" in
   origin/main|origin/codex/*|origin/ab/*) ;;
@@ -391,8 +395,18 @@ case "$DEPLOY_REF" in
 esac
 git show-ref --verify --quiet "refs/remotes/$DEPLOY_REF" \
   || abort_runtime "deployment ref is unavailable: $DEPLOY_REF"
-git reset --hard "$DEPLOY_REF" || abort_runtime "git reset to $DEPLOY_REF failed"
-say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1) ref=$DEPLOY_REF"
+git cat-file -e "$DEPLOY_SHA^{commit}" \
+  || abort_runtime "approved deployment commit is unavailable: $DEPLOY_SHA"
+git merge-base --is-ancestor "$DEPLOY_SHA" "$DEPLOY_REF" \
+  || abort_runtime "approved deployment commit is not an ancestor of $DEPLOY_REF"
+git reset --hard "$DEPLOY_SHA" \
+  || abort_runtime "git reset to approved SHA $DEPLOY_SHA failed"
+DEPLOY_COMMIT=$(git rev-parse HEAD)
+[ "$DEPLOY_COMMIT" = "$DEPLOY_SHA" ] \
+  || abort_runtime "checkout HEAD does not match approved deployment SHA"
+[ -z "$(git status --porcelain --untracked-files=normal)" ] \
+  || abort_runtime "approved deployment checkout is not clean"
+say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1) approved=$DEPLOY_SHA ref=$DEPLOY_REF"
 
 # ── 4. Build + production-analysis preflight ──
 ( cd "$REPO/listener" && npm run build ) \
@@ -400,7 +414,6 @@ say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1) ref=$DEP
 # Build the next revm daemon outside the live worktree. The old A process keeps
 # its immutable process environment throughout every later preflight; only the
 # restarted process receives the new content-addressed executable path.
-DEPLOY_COMMIT=$(git rev-parse HEAD)
 [[ "$DEPLOY_COMMIT" =~ ^[0-9a-f]{40}$ ]] || abort_runtime "deployed commit identity is invalid"
 REVM_MANIFEST="$REPO/listener/revm-sim/Cargo.toml"
 REVM_CARGO=${REVM_CARGO:-/root/.cargo/bin/cargo}
@@ -445,6 +458,8 @@ echo "SEARCHER_RUNTIME_COMMIT=$DEPLOY_COMMIT" >> "$tmp"
 echo "SEARCHER_REVM_SIM_BIN=$REVM_RUNTIME_BIN" >> "$tmp"
 canonicalize_env "$tmp" || { rm -f "$tmp"; abort_runtime "could not bind runtime commit"; }
 cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
+[ "$(env_value SEARCHER_RUNTIME_COMMIT "$ENVF")" = "$DEPLOY_SHA" ] \
+  || abort_runtime "persisted runtime commit does not match approved deployment SHA"
 
 # ── V2 factory/fee lineage refresh (one snapshot shared by every process) ──
 V2_LINEAGE_LOOKBACK_BLOCKS="${V2_LINEAGE_LOOKBACK_BLOCKS:-7200}"
@@ -622,6 +637,9 @@ fi
 if [ "$PROCESS_RUNTIME_COMMIT" != "$DEPLOY_COMMIT" ]; then
   abort_runtime "restarted process runtime commit does not match deployed checkout"
 fi
+if [ "$PROCESS_RUNTIME_COMMIT" != "$DEPLOY_SHA" ]; then
+  abort_runtime "restarted process runtime commit does not match approved deployment SHA"
+fi
 if [ "$(process_env_count SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH "$NEWPID")" != "1" ] \
    || [ "$PROCESS_REBUILD_CHECKPOINT" != "$UNIVERSE_REBUILD_CHECKPOINT_PATH" ]; then
   abort_runtime "restarted process did not retain the durable universe rebuild checkpoint"
@@ -697,6 +715,9 @@ if [ -z "$READY_BANNER" ]; then
   abort_runtime \
     "startup universe rebuild did not reach ready before the one-hour diagnosis boundary (log $LOGF)"
 fi
+printf '%s\n' "$STARTUP_LOG" \
+  | grep -F "[searcher/live] runtime_commit=$DEPLOY_SHA" >/dev/null \
+  || abort_runtime "startup log runtime commit does not match approved deployment SHA"
 tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
   | grep "\[searcher/live\] backrun=$( [ "$BACKRUN_EXPECTED" = "1" ] && echo enabled || echo disabled )" >/dev/null \
   || abort_runtime "backrun startup banner does not match marker-controlled posture"
@@ -728,5 +749,5 @@ if [ "$MODE" = "LIVE" ]; then
   say "### to revert to dry-run on the next deploy.                           ###"
   say "########################################################################"
 else
-  say "DONE — dry-run on $DEPLOY_REF. backup: $REPO-deploy-$TS.tar.gz"
+  say "DONE — dry-run exact=$DEPLOY_SHA ref=$DEPLOY_REF. backup: $REPO-deploy-$TS.tar.gz"
 fi

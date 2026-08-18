@@ -142,6 +142,36 @@ assert(
 );
 console.log("[runtime-defaults] deploy binds startup-only durable universe authority: PASS");
 
+assert(
+  deployNode.includes("DEPLOY_SHA=${SEARCHER_DEPLOY_SHA:-}") &&
+    deployNode.includes(
+      "SEARCHER_DEPLOY_SHA must be the pre-approved exact 40-hex commit",
+    ) &&
+    deployNode.includes('git cat-file -e "$DEPLOY_SHA^{commit}"') &&
+    deployNode.includes(
+      'git merge-base --is-ancestor "$DEPLOY_SHA" "$DEPLOY_REF"',
+    ) &&
+    deployNode.includes('git reset --hard "$DEPLOY_SHA"') &&
+    !deployNode.includes('git reset --hard "$DEPLOY_REF"') &&
+    deployNode.includes(
+      'checkout HEAD does not match approved deployment SHA',
+    ) &&
+    deployNode.includes(
+      'approved deployment checkout is not clean',
+    ) &&
+    deployNode.includes(
+      'persisted runtime commit does not match approved deployment SHA',
+    ) &&
+    deployNode.includes(
+      'restarted process runtime commit does not match approved deployment SHA',
+    ) &&
+    deployNode.includes(
+      '[searcher/live] runtime_commit=$DEPLOY_SHA',
+    ),
+  "deploy must require one pre-approved exact SHA across checkout/env/process/log",
+);
+console.log("[runtime-defaults] deploy enforces pre-approved exact SHA: PASS");
+
 const deployAb = readFileSync(
   new URL("../../../../scripts/deploy-ab-challenger.sh", import.meta.url),
   "utf8",
