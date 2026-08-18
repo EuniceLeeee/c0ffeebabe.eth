@@ -238,7 +238,7 @@ function defineFixture(name: string, controls: FixtureControls) {
         }),
         decide: ({ candidate, evidence }) => {
           if (controls.prematureNegative) {
-            return { status: "rejected", reason: "premature-negative" };
+            return { status: "invalid-program", reasonCode: "premature-negative" };
           }
           if (evidence === undefined) return { status: "continue" };
           const probe = evidence as FixtureProbe;
@@ -255,7 +255,11 @@ function defineFixture(name: string, controls: FixtureControls) {
                   }],
                 },
               }
-            : { status: "rejected", reason: "active-probe-negative" };
+            : {
+                status: "chain-proven-rejected",
+                reasonCode: "active-probe-negative",
+                evidenceRequestIds: [`identity:${candidate.pool}`],
+              };
         },
       }],
       identityKey: (identity) => identity.subject,
@@ -1491,7 +1495,7 @@ async function testSharedBindingProjectionThenableIsUnresolved(): Promise<void> 
     outcome.candidateKey === GOOD &&
     outcome.stage === "instance-compile" &&
     outcome.status === "unresolved" &&
-    outcome.reasonCode === "adapter-work:decode:decode-failure"
+    outcome.reasonCode === "adapter-work:decode:family-decode"
   ));
   assert.equal(controls.unavailableCalls, 0);
 }

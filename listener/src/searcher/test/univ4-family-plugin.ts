@@ -88,14 +88,14 @@ assert.deepEqual(
     candidate: { ...initializeCandidate, manager: EXECUTOR },
     step: 0,
   }),
-  { status: "rejected", reason: "foreign_pool_manager" },
+  { status: "chain-proven-rejected", reasonCode: "foreign_pool_manager", evidenceRequestIds: [] },
 );
 assert.deepEqual(
   identityVariant.decide({
     candidate: { ...initializeCandidate, poolId: ethers.ZeroHash },
     step: 0,
   }),
-  { status: "rejected", reason: "poolkey_reverse_binding_failed" },
+  { status: "chain-proven-rejected", reasonCode: "poolkey_reverse_binding_failed", evidenceRequestIds: [] },
 );
 assert.deepEqual(
   identityVariant.decide({
@@ -106,7 +106,7 @@ assert.deepEqual(
     },
     step: 0,
   }),
-  { status: "rejected", reason: "unknown_hook_fail_closed" },
+  { status: "chain-proven-rejected", reasonCode: "unknown_hook_fail_closed", evidenceRequestIds: [] },
 );
 const verified = identityVariant.decide({
   candidate: initializeCandidate,

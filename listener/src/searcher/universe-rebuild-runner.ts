@@ -113,7 +113,23 @@ export interface UniverseRebuildDependencies {
     };
   }) => Promise<
     | { readonly status: "verified"; readonly result: unknown }
-    | { readonly status: "terminal-rejected"; readonly reasonCode: string }
+    | {
+        readonly status: "terminal-rejected";
+        readonly reasonCode: string;
+        /**
+         * Family-declared chain-proven negative evidence, bound to the
+         * exact request program, trusted result set, Family definition,
+         * implementation authority and fixed cutoff. Any change re-attests.
+         */
+        readonly binding: {
+          readonly familyDefinitionHash: string;
+          readonly requestFingerprint: string;
+          readonly trustedResultsFingerprint: string;
+          readonly authorityFingerprint: string;
+          readonly candidateFingerprint: string;
+          readonly cutoff: { readonly number: number; readonly hash: string };
+        };
+      }
     | Omit<RetryableAttempt, "status" | "familyCandidateKey" | "familyId" |
         "attemptCount" | "lastAttemptAt"> & { readonly status: "retryable" }
   >;
@@ -325,8 +341,23 @@ export async function rebuildUniverse(
     // deployment/implementation authority and canonical proof source before
     // it is trusted after a process/code restart. A valid memo skips the
     // lifecycle; an invalid one is attested again. Chain-proven terminal
-    // outcomes remain terminal for this fixed candidate partition.
-    return oldOutcome?.status !== "terminal-rejected";
+    // outcomes stay terminal ONLY while every binding (Family definition,
+    // request program, trusted result set, authority, candidate, cutoff)
+    // still equals the current values; any change re-attests.
+    if (oldOutcome?.status !== "terminal-rejected") return true;
+    const binding = oldOutcome;
+    if (
+      typeof binding.familyDefinitionHash !== "string" ||
+      typeof binding.requestFingerprint !== "string" ||
+      typeof binding.authorityFingerprint !== "string" ||
+      binding.cutoff?.hash === undefined ||
+      binding.cutoff.number !== cutoff.number ||
+      binding.cutoff.hash.toLowerCase() !== cutoff.hash.toLowerCase()
+    ) {
+      // Legacy/unbound or cutoff-mismatched terminal outcome: re-attest.
+      return true;
+    }
+    return false;
   });
   let nextCandidate = 0;
   const processCandidate = async (candidate: unknown): Promise<void> => {
@@ -392,7 +423,15 @@ export async function rebuildUniverse(
           status: "terminal-rejected",
           familyCandidateKey: candidateKey,
           reasonCode: result.reasonCode,
-          evidenceFingerprint: "chain-proof:" + result.reasonCode,
+          familyDefinitionHash: result.binding.familyDefinitionHash,
+          requestFingerprint: result.binding.requestFingerprint,
+          trustedResultsFingerprint: result.binding.trustedResultsFingerprint,
+          authorityFingerprint: result.binding.authorityFingerprint,
+          candidateFingerprint: result.binding.candidateFingerprint,
+          cutoff: Object.freeze({
+            number: result.binding.cutoff.number,
+            hash: result.binding.cutoff.hash,
+          }),
         }));
         return;
       }
@@ -681,7 +720,15 @@ export async function probeOneFailure(input: {
       status: "terminal-rejected",
       familyCandidateKey: input.familyCandidateKey,
       reasonCode: result.reasonCode,
-      evidenceFingerprint: "chain-proof:" + result.reasonCode,
+      familyDefinitionHash: result.binding.familyDefinitionHash,
+      requestFingerprint: result.binding.requestFingerprint,
+      trustedResultsFingerprint: result.binding.trustedResultsFingerprint,
+      authorityFingerprint: result.binding.authorityFingerprint,
+      candidateFingerprint: result.binding.candidateFingerprint,
+      cutoff: Object.freeze({
+        number: result.binding.cutoff.number,
+        hash: result.binding.cutoff.hash,
+      }),
     });
   } else {
     next = Object.freeze({

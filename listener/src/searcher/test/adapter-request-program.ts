@@ -679,5 +679,143 @@ await assert.rejects(
   /requires at least one dependency key/,
 );
 
+// ─── P0: central never infers chain meaning from a decode failure ───
+// A decode bug plus a sibling reverted/empty result must NOT become a
+// terminal chain-revert: the Family alone decides whether a revert/empty
+// result negates identity.
+{
+  const decodeBugExecutor = createBoundedRequestExecutor({
+    ...executorHandlers,
+    assertSupported() {},
+    assertWithinBudget() {},
+    assertCallerBinding() {},
+    async execute() {
+      return [
+        Object.freeze({
+          id: "sibling-0x",
+          ok: true,
+          source,
+          provenance: { kind: "eip1898", fingerprint: "trusted-read" },
+          completion: "returned",
+          data: "0x",
+        } satisfies AdapterRequestResult),
+        Object.freeze({
+          id: "buggy-decode",
+          ok: true,
+          source,
+          provenance: { kind: "eip1898", fingerprint: "trusted-read" },
+          completion: "returned",
+          data: "0x01",
+        } satisfies AdapterRequestResult),
+      ];
+    },
+  });
+  await assert.rejects(
+    runRequestProgram({
+      familyId: id,
+      program: {
+        requirements: () => ({ transports: ["eth-call"] }),
+        buildRequests: () => [
+          Object.freeze({
+            id: "sibling-0x",
+            kind: "eth-call",
+            to: `0x${'66'.repeat(20)}`,
+            data: "0x01",
+            completion: "return-data",
+          } satisfies AdapterRequest),
+          Object.freeze({
+            id: "buggy-decode",
+            kind: "eth-call",
+            to: `0x${'66'.repeat(20)}`,
+            data: "0x02",
+            completion: "return-data",
+          } satisfies AdapterRequest),
+        ],
+        decode: () => { throw new Error("ABI decode bug"); },
+      },
+      programInput: undefined,
+      source,
+      executor: decodeBugExecutor,
+    }),
+    /family decode failed: ABI decode bug/,
+  );
+}
+
+// A required request transport failure is a RequiredAdapterRequestError
+// (retryable) and never reaches decode — the central runtime does not
+// reclassify transport uncertainty as chain evidence.
+{
+  const requiredTransportExecutor = createBoundedRequestExecutor({
+    ...executorHandlers,
+    assertSupported() {},
+    assertWithinBudget() {},
+    assertCallerBinding() {},
+    async execute() {
+      return [
+        Object.freeze({
+          id: "state",
+          ok: false,
+          source,
+          failure: "rpc",
+        } satisfies AdapterRequestResult),
+      ];
+    },
+  });
+  await assert.rejects(
+    runRequestProgram({
+      familyId: id,
+      program: {
+        requirements: () => ({ transports: ["eth-call"] }),
+        buildRequests: () => requests,
+        decode: () => { throw new Error("decode after transport failure"); },
+      },
+      programInput: undefined,
+      source,
+      executor: requiredTransportExecutor,
+    }),
+    /required adapter request state failed: rpc/,
+  );
+}
+
+// An OPTIONAL request transport failure still reaches decode; the central
+// runtime classifies the resulting decode failure as transport-uncertain
+// (decode-failure, retryable) instead of chain-proven terminal.
+{
+  const optionalRequest = Object.freeze({
+    ...requests[0],
+    required: false,
+  } satisfies AdapterRequest);
+  const optionalTransportExecutor = createBoundedRequestExecutor({
+    ...executorHandlers,
+    assertSupported() {},
+    assertWithinBudget() {},
+    assertCallerBinding() {},
+    async execute() {
+      return [
+        Object.freeze({
+          id: "state",
+          ok: false,
+          source,
+          failure: "rpc",
+        } satisfies AdapterRequestResult),
+      ];
+    },
+  });
+  await assert.rejects(
+    runRequestProgram({
+      familyId: id,
+      program: {
+        requirements: () => ({ transports: ["eth-call"] }),
+        buildRequests: () => [optionalRequest],
+        decode: () => { throw new Error("decode after optional transport failure"); },
+      },
+      programInput: undefined,
+      source,
+      executor: optionalTransportExecutor,
+    }),
+    /family decode failed: decode after optional transport failure/,
+  );
+}
+
 assert.equal(executeCalls, 3);
 console.log("adapter-request-program PASS (declarative source-bound execution)");

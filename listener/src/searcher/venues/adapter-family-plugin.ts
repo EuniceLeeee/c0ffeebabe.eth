@@ -473,7 +473,14 @@ export type IdentityRejectReason = string;
 export type IdentityDecision<Identity extends VerifiedIdentity> =
   | { readonly status: "continue" }
   | { readonly status: "verified"; readonly identity: Identity }
-  | { readonly status: "rejected"; readonly reason: IdentityRejectReason };
+  | {
+      readonly status: "chain-proven-rejected";
+      readonly reasonCode: string;
+      /** Request ids whose chain-proven outcomes (revert/empty/mismatch) prove the instance does not exist at the fixed cutoff. */
+      readonly evidenceRequestIds: readonly string[];
+    }
+  | { readonly status: "retryable"; readonly reasonCode: string }
+  | { readonly status: "invalid-program"; readonly reasonCode: string };
 
 export interface IdentityVariant<
   Candidate extends FamilyCandidate,

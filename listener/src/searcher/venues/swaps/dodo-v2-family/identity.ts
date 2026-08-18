@@ -219,7 +219,13 @@ function decideIdentity(
     return { status: "continue" };
   }
   if (!evidence.listedPools.some((listed) => sameAddress(listed, evidence.pool))) {
-    return { status: "rejected", reason: "registry_reverse_binding_failed" };
+    // The DODO V2 registry at the fixed cutoff does not list this pool:
+    // chain-proven negative reverse binding.
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "registry_reverse_binding_failed",
+      evidenceRequestIds: [REGISTRY_REQUEST_ID],
+    };
   }
   const registryBinding = Object.freeze({
     registry: evidence.registry,

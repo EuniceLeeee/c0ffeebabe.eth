@@ -127,12 +127,14 @@ assert.equal(
   "unknown reverse-verified factory is admitted without borrowing a foreign quoter",
 );
 assert.deepEqual(runIdentityDecision(candidate, FACTORY, FORGED_POOL), {
-  status: "rejected",
-  reason: "factory_reverse_binding_failed",
+  status: "chain-proven-rejected",
+  reasonCode: "factory_reverse_binding_failed",
+  evidenceRequestIds: ["factory-get-pool"],
 });
 assert.deepEqual(runIdentityDecision(candidate, FACTORY, null), {
-  status: "rejected",
-  reason: "factory_reverse_binding_failed",
+  status: "chain-proven-rejected",
+  reasonCode: "factory_reverse_binding_failed",
+  evidenceRequestIds: ["factory-get-pool"],
 }, "a pinned factory revert is chain-proven failed reverse binding");
 assert.throws(
   () => identityVariant.decode({

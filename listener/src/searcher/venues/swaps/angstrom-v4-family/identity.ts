@@ -193,35 +193,67 @@ function decideIdentity(
   evidence: AngstromV4IdentityEvidence | undefined,
 ): IdentityDecision<AngstromV4Identity> {
   const candidate = input.candidate;
+  // Family-declared chain-proven negatives: candidate/singleton field
+  // mismatches, poolId/poolKey reverse-binding failure, missing hook
+  // controller, controller reverse-binding mismatch and uninitialized pool
+  // state are all deterministic facts at the fixed cutoff.
   if (!sameAddress(candidate.manager, ADDR.UNISWAP_V4_POOL_MANAGER)) {
-    return { status: "rejected", reason: "foreign_pool_manager" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "foreign_pool_manager",
+      evidenceRequestIds: [],
+    };
   }
   if (!sameAddress(candidate.adapter, ANGSTROM_MAINNET_ADAPTER)) {
-    return { status: "rejected", reason: "foreign_angstrom_adapter" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "foreign_angstrom_adapter",
+      evidenceRequestIds: [],
+    };
   }
   const poolKey = canonicalPoolKey(candidate.poolKey);
   if (!sameAddress(poolKey.hooks, ANGSTROM_MAINNET_HOOK)) {
-    return { status: "rejected", reason: "foreign_hook_fail_closed" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "foreign_hook_fail_closed",
+      evidenceRequestIds: [],
+    };
   }
   try {
     assertPoolKeyIdentity(candidate.poolId, poolKey);
   } catch {
-    return { status: "rejected", reason: "poolkey_reverse_binding_failed" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "poolkey_reverse_binding_failed",
+      evidenceRequestIds: [],
+    };
   }
   if (evidence === undefined || evidence.phase === "pool-hook-static") {
     if (
       evidence?.phase === "pool-hook-static" &&
       sameAddress(evidence.controller, ethers.ZeroAddress)
     ) {
-      return { status: "rejected", reason: "hook_controller_missing" };
+      return {
+        status: "chain-proven-rejected",
+        reasonCode: "hook_controller_missing",
+        evidenceRequestIds: [CONTROLLER_SLOT_REQUEST_ID],
+      };
     }
     return { status: "continue" };
   }
   if (!sameAddress(evidence.canonicalHook, ANGSTROM_MAINNET_HOOK)) {
-    return { status: "rejected", reason: "controller_reverse_binding_failed" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "controller_reverse_binding_failed",
+      evidenceRequestIds: [CONTROLLER_REVERSE_REQUEST_ID],
+    };
   }
   if (evidence.sqrtPriceX96 === 0n) {
-    return { status: "rejected", reason: "pool_not_initialized" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "pool_not_initialized",
+      evidenceRequestIds: [SLOT0_REQUEST_ID],
+    };
   }
   const manager = canonicalAddress(candidate.manager);
   const adapter = canonicalAddress(candidate.adapter);

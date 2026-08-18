@@ -85,8 +85,9 @@ export const selfBurnNativeIdentity = {
       if (proof === undefined) return { status: "continue" as const };
       if (!proof.behaviorValid) {
         return {
-          status: "rejected" as const,
-          reason: "self_burn_behavior_failed",
+          status: "chain-proven-rejected" as const,
+          reasonCode: "self_burn_behavior_failed",
+              evidenceRequestIds: ["identity-active-self-burn", "active-self-burn-effect-proof"],
         };
       }
       if (proof.phase !== "active") return { status: "continue" as const };

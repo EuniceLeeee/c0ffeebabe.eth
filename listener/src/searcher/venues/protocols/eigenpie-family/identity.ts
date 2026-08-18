@@ -188,8 +188,9 @@ export const eigenpieIdentity = {
               quote.amountOut !== candidate.observedAmountOut)
           ) {
             return {
-              status: "rejected" as const,
-              reason: "eigenpie_quote_binding_failed",
+              status: "chain-proven-rejected" as const,
+              reasonCode: "eigenpie_quote_binding_failed",
+              evidenceRequestIds: ["identity-active-deposit", "observed-active-pair"],
             };
           }
         }
@@ -198,8 +199,9 @@ export const eigenpieIdentity = {
       const proof = evidence as EigenpieActiveEvidence;
       if (!proof.active) {
         return {
-          status: "rejected" as const,
-          reason: "eigenpie_active_deposit_failed",
+          status: "chain-proven-rejected" as const,
+          reasonCode: "eigenpie_active_deposit_failed",
+              evidenceRequestIds: ["identity-active-deposit"],
         };
       }
       const subject = pairSubject(

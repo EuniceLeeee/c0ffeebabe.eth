@@ -116,8 +116,9 @@ export const erc4626SiloRedeemIdentity = {
       if (proof === undefined) return { status: "continue" as const };
       if (!proof.behaviorValid) {
         return {
-          status: "rejected" as const,
-          reason: "silo_static_behavior_failed",
+          status: "chain-proven-rejected" as const,
+          reasonCode: "silo_static_behavior_failed",
+              evidenceRequestIds: ["identity-active-redeem", "observed-payout-active-proof"],
         };
       }
       if (proof.phase !== "active") return { status: "continue" as const };

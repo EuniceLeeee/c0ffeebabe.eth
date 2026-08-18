@@ -29,6 +29,8 @@ export interface Erc4626BaseEvidence {
   readonly previewDeposit: bigint;
   readonly previewRedeem: bigint;
   readonly baseValid: boolean;
+  /** Family-declared negative-evidence request ids when baseValid=false. */
+  readonly evidenceRequestIds?: readonly string[];
 }
 
 export interface Erc4626ActiveEvidence

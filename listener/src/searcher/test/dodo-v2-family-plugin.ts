@@ -109,8 +109,9 @@ assert.equal(backend.lastFeeActor, DODO_V2_QUOTE_ACTOR);
 
 const forgedDecision = await runIdentityDecision(candidate, backend, FORGED_POOL);
 assert.deepEqual(forgedDecision, {
-  status: "rejected",
-  reason: "registry_reverse_binding_failed",
+  status: "chain-proven-rejected",
+  reasonCode: "registry_reverse_binding_failed",
+  evidenceRequestIds: ["registry-get-dodo-pool"],
 });
 
 const descriptorDraft = dodoV2StrictFamilyPlugin.instance.compileDraft(identity);

@@ -110,8 +110,9 @@ export const metronomeHgUsdcIdentity = {
       if (proof === undefined) return { status: "continue" as const };
       if (!proof.behaviorValid) {
         return {
-          status: "rejected" as const,
-          reason: "metronome_hgusdc_binding_failed",
+          status: "chain-proven-rejected" as const,
+          reasonCode: "metronome_hgusdc_binding_failed",
+              evidenceRequestIds: ["observed-path-active-quote-proof"],
         };
       }
       if (proof.phase !== "active") return { status: "continue" as const };

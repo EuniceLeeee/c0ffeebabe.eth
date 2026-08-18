@@ -155,12 +155,14 @@ assert.equal(
 
 const forgedDecision = runIdentityDecision(candidate, FACTORY, FORGED_POOL);
 assert.deepEqual(forgedDecision, {
-  status: "rejected",
-  reason: "factory_reverse_binding_failed",
+  status: "chain-proven-rejected",
+  reasonCode: "factory_reverse_binding_failed",
+  evidenceRequestIds: ["factory-get-pair"],
 });
 assert.deepEqual(runIdentityDecision(candidate, FACTORY, null), {
-  status: "rejected",
-  reason: "factory_reverse_binding_failed",
+  status: "chain-proven-rejected",
+  reasonCode: "factory_reverse_binding_failed",
+  evidenceRequestIds: ["factory-get-pair"],
 }, "a pinned factory revert is chain-proven failed reverse binding");
 
 const descriptorDraft = univ2StrictFamilyPlugin.instance.compileDraft(identity);

@@ -76,7 +76,7 @@ assert.deepEqual(
     evidence: forgedReverse,
     step: 2,
   }),
-  { status: "rejected", reason: "factory_reverse_binding_failed" },
+  { status: "chain-proven-rejected", reasonCode: "factory_reverse_binding_failed", evidenceRequestIds: ["factory-reverse-dex"] },
 );
 assert.throws(
   () => fluidDexStrictFamilyPlugin.identity.variants[0].decode({

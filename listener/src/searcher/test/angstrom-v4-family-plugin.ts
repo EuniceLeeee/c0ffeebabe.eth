@@ -92,14 +92,14 @@ assert.deepEqual(
     candidate: { ...candidate, adapter: EXECUTOR },
     step: 0,
   }),
-  { status: "rejected", reason: "foreign_angstrom_adapter" },
+  { status: "chain-proven-rejected", reasonCode: "foreign_angstrom_adapter", evidenceRequestIds: [] },
 );
 assert.deepEqual(
   identityVariant.decide({
     candidate: { ...candidate, manager: EXECUTOR },
     step: 0,
   }),
-  { status: "rejected", reason: "foreign_pool_manager" },
+  { status: "chain-proven-rejected", reasonCode: "foreign_pool_manager", evidenceRequestIds: [] },
 );
 assert.deepEqual(
   identityVariant.decide({
@@ -110,7 +110,7 @@ assert.deepEqual(
     },
     step: 0,
   }),
-  { status: "rejected", reason: "foreign_hook_fail_closed" },
+  { status: "chain-proven-rejected", reasonCode: "foreign_hook_fail_closed", evidenceRequestIds: [] },
 );
 const staticEvidence = {
   phase: "pool-hook-static" as const,

@@ -71,7 +71,19 @@ export type RunOutcome =
     readonly status: "terminal-rejected";
     readonly familyCandidateKey: string;
     readonly reasonCode: string;
-    readonly evidenceFingerprint: string;
+    /**
+     * Family-declared chain-proven negative evidence. Every binding must
+     * equal the current value on resume or the candidate is re-attested:
+     * a Family definition/request-program/authority/cutoff change invalidates
+     * the old terminal outcome instead of silently keeping an instance
+     * permanently excluded.
+     */
+    readonly familyDefinitionHash: string;
+    readonly requestFingerprint: string;
+    readonly trustedResultsFingerprint: string;
+    readonly authorityFingerprint: string;
+    readonly candidateFingerprint: string;
+    readonly cutoff: { readonly number: number; readonly hash: string };
   }
   | RetryableAttempt;
 

@@ -122,7 +122,7 @@ assert.deepEqual(
     evidence: forgedReverse,
     step: 2,
   }),
-  { status: "rejected", reason: "factory_reverse_binding_failed" },
+  { status: "chain-proven-rejected", reasonCode: "factory_reverse_binding_failed", evidenceRequestIds: ["factory-reverse-vault"] },
 );
 
 const validReverse = runThroughReverse(callCandidate, VAULT);
@@ -139,7 +139,7 @@ assert.deepEqual(
     evidence: inactive,
     step: 3,
   }),
-  { status: "rejected", reason: "nonzero_operate_effect_proof_failed" },
+  { status: "chain-proven-rejected", reasonCode: "nonzero_operate_effect_proof_failed", evidenceRequestIds: ["active-operate-effect-proof"] },
   "a missing borrow-token delta cannot prove active credit behavior",
 );
 assert.throws(

@@ -94,8 +94,9 @@ export const etherTokenNativeRedeemIdentity = {
       if (proof === undefined) return { status: "continue" as const };
       if (!proof.behaviorValid) {
         return {
-          status: "rejected" as const,
-          reason: "ethertoken_native_behavior_failed",
+          status: "chain-proven-rejected" as const,
+          reasonCode: "ethertoken_native_behavior_failed",
+              evidenceRequestIds: ["identity-active-withdraw", "active-ethertoken-native-effect-proof"],
         };
       }
       if (proof.phase !== "active") return { status: "continue" as const };

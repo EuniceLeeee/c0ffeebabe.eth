@@ -2955,7 +2955,7 @@ async function resolveIdentity(input: {
         }
         break;
       }
-      if (decision.status === "rejected") {
+      if (decision.status === "chain-proven-rejected") {
         if (
           (plugin.manifest.domain === "protocol" ||
             plugin.manifest.domain === "credit") &&
@@ -2964,7 +2964,22 @@ async function resolveIdentity(input: {
           failed.push(`protocol-negative-proof-missing:${variant.id}`);
           break;
         }
-        rejected.push(`${variant.id}:${decision.reason}`);
+        // The Family itself declares, with evidence request ids, that
+        // chain-proven outcomes (revert/empty/mismatch at the fixed
+        // cutoff) prove this instance does not exist. The central runtime
+        // never infers this from result shapes.
+        rejected.push(`chain-proven:${variant.id}:${decision.reasonCode}`);
+        break;
+      }
+      if (decision.status === "invalid-program") {
+        // Family program error: blocked diagnostic. Never a terminal
+        // rejection and never auto-retried; re-attested when Family code
+        // or definition changes.
+        failed.push(`invalid-program:${variant.id}:${decision.reasonCode}`);
+        break;
+      }
+      if (decision.status === "retryable") {
+        unresolved.push(`${variant.id}:${decision.reasonCode}`);
         break;
       }
       if (step >= input.maxSteps) {
@@ -2992,16 +3007,12 @@ async function resolveIdentity(input: {
         runtime: input.runtime,
       });
       if (work.status === "unresolved") {
-        if (work.failure.code === "chain-revert") {
-          // A decode failure over chain-proven reverted outcomes is terminal
-          // negative evidence (the callee reverted deterministically at this
-          // cutoff), not an unresolved transport/program failure.
-          rejected.push(
-            variant.id + ":chain-revert:" +
-              work.failure.message.slice(0, 120),
-          );
-          break;
-        }
+        // No central chain-revert inference exists: whether a reverted or
+        // empty result negates identity is the Family's own decision
+        // (chain-proven-rejected) made in its decode/decide. Transport-
+        // uncertain decode failures stay unresolved (retryable);
+        // deterministic Family program errors surface as invalid-program
+        // (blocked diagnostic, never terminal).
         unresolved.push(
           variant.id + ":" + work.failure.code + ":" +
             work.failure.message.slice(0, 120),

@@ -87,8 +87,9 @@ export const wstethIdentity = {
         proof.unwrapSampleOut <= 0n
       ) {
         return {
-          status: "rejected" as const,
-          reason: "wsteth_active_binding_failed",
+          status: "chain-proven-rejected" as const,
+          reasonCode: "wsteth_active_binding_failed",
+              evidenceRequestIds: ["steth-active-binding"],
         };
       }
       return {

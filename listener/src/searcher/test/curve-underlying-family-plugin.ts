@@ -83,7 +83,7 @@ assert.deepEqual(
     evidence: noRegistryEvidence,
     step: 1,
   }),
-  { status: "rejected", reason: "registry_reverse_binding_failed" },
+  { status: "chain-proven-rejected", reasonCode: "registry_reverse_binding_failed", evidenceRequestIds: ["registry-handlers"] },
   "a pool address is not admitted without dynamic MetaRegistry reverse proof",
 );
 assert.throws(

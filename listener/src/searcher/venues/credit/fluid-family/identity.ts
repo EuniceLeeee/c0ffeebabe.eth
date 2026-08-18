@@ -256,19 +256,35 @@ function decideIdentity(
   if (evidence.phase === "constants") {
     return evidence.vaultHasCode
       ? { status: "continue" }
-      : { status: "rejected", reason: "vault_has_no_code" };
+      : {
+          status: "chain-proven-rejected",
+          reasonCode: "vault_has_no_code",
+          evidenceRequestIds: [VAULT_CODE_ID],
+        };
   }
   if (evidence.phase === "reverse-binding") {
     if (!sameAddress(evidence.reverseVault, evidence.constants.vault)) {
-      return { status: "rejected", reason: "factory_reverse_binding_failed" };
+      return {
+        status: "chain-proven-rejected",
+        reasonCode: "factory_reverse_binding_failed",
+        evidenceRequestIds: [FACTORY_REVERSE_ID],
+      };
     }
     if (!evidence.supplyTokenHasCode || !evidence.borrowTokenHasCode) {
-      return { status: "rejected", reason: "credit_token_code_binding_failed" };
+      return {
+        status: "chain-proven-rejected",
+        reasonCode: "credit_token_code_binding_failed",
+        evidenceRequestIds: [SUPPLY_CODE_ID, BORROW_CODE_ID],
+      };
     }
     return { status: "continue" };
   }
   if (!evidence.active) {
-    return { status: "rejected", reason: "nonzero_operate_effect_proof_failed" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "nonzero_operate_effect_proof_failed",
+      evidenceRequestIds: [ACTIVE_OPERATE_ID],
+    };
   }
   const constants = evidence.binding.constants;
   const factoryBinding = Object.freeze({

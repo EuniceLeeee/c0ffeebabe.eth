@@ -56,7 +56,7 @@ export const goldxIdentity = {
       if (evidence === undefined) return { status: "continue" as const };
       const proof = evidence as GoldxIdentityEvidence;
       if (proof.unit <= 0n) {
-        return { status: "rejected" as const, reason: "goldx_unit_inactive" };
+        return { status: "chain-proven-rejected" as const, reasonCode: "goldx_unit_inactive", evidenceRequestIds: ["active-unit-mint"] };
       }
       return {
         status: "verified" as const,

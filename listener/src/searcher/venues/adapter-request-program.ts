@@ -174,14 +174,21 @@ export type AdapterRequestResult =
     };
 
 /**
- * A decode failure over chain-proven reverted outcomes: the callee reverted
- * deterministically at the fixed cutoff, so this is terminal negative
- * evidence, not a transport or program failure.
+ * A Family decode failure. The central runtime never infers protocol
+ * meaning from result shapes: whether a reverted/empty result negates an
+ * instance is a Family-owned decision made in its own decode/decide
+ * (chain-proven-rejected). A decode failure over a set that still contains
+ * transport failures is transport-uncertain (retryable); over a fully
+ * deterministic set it is a Family program error (invalid-program) that
+ * must never become a terminal rejection.
  */
-export class ChainRevertEvidenceError extends Error {
-  constructor(message: string) {
+export class FamilyDecodeError extends Error {
+  readonly uncertainty: "transport" | "deterministic";
+
+  constructor(message: string, uncertainty: "transport" | "deterministic") {
     super(message);
-    this.name = "ChainRevertEvidenceError";
+    this.name = "FamilyDecodeError";
+    this.uncertainty = uncertainty;
   }
 }
 
@@ -467,27 +474,19 @@ export async function runRequestProgram<Input, Evidence>(input: {
       "request decode",
     );
   } catch (error) {
-    // A decode failure over a result set that contains chain-proven
-    // reverted-as-declared outcomes is itself chain evidence (the callee
-    // reverted deterministically at this cutoff), never a transport or
-    // program error. Surface it as such so identity can reject terminally
-    // instead of retrying forever.
-    // A decode failure over a result set whose chain shape is
-    // deterministic at this cutoff (a reverted-as-declared outcome, or an
-    // empty "0x" return that a contract without the requested function
-    // produces) is chain evidence itself, never a transport or program
-    // error: the same call at the same block always returns the same shape.
-    const chainShape = results.find((result) =>
-      result.completion === "reverted-as-declared" ||
-      (result.completion === "returned" && result.data === "0x")
+    // The central runtime never infers protocol meaning from result shapes:
+    // whether a reverted or empty result negates an instance is decided by
+    // the Family's own decode/decide (chain-proven-rejected). A decode
+    // failure over a set that still contains transport failures stays
+    // retryable (the transport outcome is uncertain); over a fully
+    // deterministic set it is a Family program error that must never become
+    // a terminal rejection and must never be auto-retried into one.
+    const transportUncertain = results.some((result) => !result.ok);
+    throw new FamilyDecodeError(
+      `family decode failed: ` +
+        (error instanceof Error ? error.message : String(error)),
+      transportUncertain ? "transport" : "deterministic",
     );
-    if (chainShape !== undefined) {
-      throw new ChainRevertEvidenceError(
-        `decode over chain-shaped result ${chainShape.id}: ` +
-          (error instanceof Error ? error.message : String(error)),
-      );
-    }
-    throw error;
   }
   const reuseProof = staticReusePolicy !== undefined &&
       results.every((result) => result.ok)

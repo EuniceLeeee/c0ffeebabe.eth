@@ -105,20 +105,27 @@ export const erc4626Identity: IdentitySemantics<
         return proof.baseValid
           ? { status: "continue" as const }
           : {
-              status: "rejected" as const,
-              reason: "erc4626_standard_views_failed",
+              status: "chain-proven-rejected" as const,
+              reasonCode: "erc4626_standard_views_failed",
+              evidenceRequestIds:
+                proof.evidenceRequestIds !== undefined
+                  ? proof.evidenceRequestIds
+                  : ["base-asset", "base-total-assets", "base-total-supply"],
             };
       }
       if (!proof.erc20SurfacesValid) {
         return {
-          status: "rejected" as const,
-          reason: "erc4626_erc20_surfaces_failed",
+          status: "chain-proven-rejected" as const,
+          reasonCode: "erc4626_erc20_surfaces_failed",
+          evidenceRequestIds: ["base-asset"],
         };
       }
       if (!proof.depositVerified && !proof.redeemVerified) {
+        // Both declared execution surfaces reverted at the fixed cutoff.
         return {
-          status: "rejected" as const,
-          reason: "erc4626_execution_surfaces_failed",
+          status: "chain-proven-rejected" as const,
+          reasonCode: "erc4626_execution_surfaces_failed",
+          evidenceRequestIds: ["active-deposit", "active-redeem"],
         };
       }
       return {
@@ -194,11 +201,53 @@ function baseRequests(vault: string): readonly AdapterRequest[] {
   return Object.freeze(requests);
 }
 
+function requestShape(
+  results: readonly AdapterRequestResult[],
+  id: string,
+): "returned" | "reverted" | "missing" {
+  const result = results.find((candidate) => candidate.id === id);
+  if (result === undefined || !result.ok) return "missing";
+  return result.completion === "returned" ? "returned" : "reverted";
+}
+
+function invalidBaseEvidence(
+  vault: string,
+  code: string,
+  evidenceRequestIds: readonly string[],
+): Erc4626BaseEvidence {
+  return Object.freeze({
+    phase: "base",
+    vault: canonicalAddress(vault),
+    vaultCodeHash: ethers.keccak256(code),
+    asset: ethers.ZeroAddress,
+    assetCodeHash: hashCanonical({ asset: ethers.ZeroAddress }),
+    totalAssets: 0n,
+    totalSupply: 0n,
+    sampleAssets: 0n,
+    sampleShares: 0n,
+    previewDeposit: 0n,
+    previewRedeem: 0n,
+    baseValid: false,
+    evidenceRequestIds: Object.freeze([...evidenceRequestIds]),
+  });
+}
+
 function decodeBaseEvidence(
   vault: string,
   results: readonly AdapterRequestResult[],
 ): Erc4626BaseEvidence {
   const code = requireRuntimeCode(results, "base-vault-code");
+  // Family-declared negative evidence: a pinned revert or empty return for
+  // a standard ERC4626 view is deterministic chain shape at the fixed
+  // cutoff and is interpreted by THIS Family as "not a standard vault".
+  // The central runtime never infers this from result shapes.
+  if (requestShape(results, "base-asset") !== "returned") {
+    return invalidBaseEvidence(vault, code, [
+      "base-asset",
+      "base-total-assets",
+      "base-total-supply",
+    ]);
+  }
   const asset = decodeAddress(
     ERC4626_INTERFACE,
     "asset",
@@ -206,11 +255,20 @@ function decodeBaseEvidence(
     "base-asset",
   );
   if (sameAddress(asset, ethers.ZeroAddress) || sameAddress(asset, vault)) {
-    throw new Error("ERC4626 asset relation is invalid");
+    return invalidBaseEvidence(vault, code, ["base-asset"]);
   }
   const assetCodeResult = results.find((result) =>
     result.id === "base-asset-code"
   );
+  if (
+    requestShape(results, "base-total-assets") !== "returned" ||
+    requestShape(results, "base-total-supply") !== "returned"
+  ) {
+    return invalidBaseEvidence(vault, code, [
+      "base-total-assets",
+      "base-total-supply",
+    ]);
+  }
   const totalAssets = decodeUint(
     ERC4626_INTERFACE,
     "totalAssets",
@@ -235,6 +293,17 @@ function decodeBaseEvidence(
   } | null = null;
   for (let index = 0; index < ERC4626_SAMPLE_AMOUNTS.length; index++) {
     const amount = ERC4626_SAMPLE_AMOUNTS[index];
+    // A reverted/empty sample view is Family-declared negative evidence
+    // for that sample direction; it must not crash decode (which would
+    // surface as a program error instead of a chain-proven rejection).
+    if (
+      requestShape(results, `base-convert-shares:${index}`) !== "returned" ||
+      requestShape(results, `base-preview-deposit:${index}`) !== "returned" ||
+      requestShape(results, `base-convert-assets:${index}`) !== "returned" ||
+      requestShape(results, `base-preview-redeem:${index}`) !== "returned"
+    ) {
+      continue;
+    }
     const shares = decodeUint(
       ERC4626_INTERFACE,
       "convertToShares",

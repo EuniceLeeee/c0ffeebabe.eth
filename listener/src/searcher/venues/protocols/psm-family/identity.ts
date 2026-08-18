@@ -80,8 +80,9 @@ export const psmIdentity = {
         proof.tout > PSM_WAD
       ) {
         return {
-          status: "rejected" as const,
-          reason: "psm_active_pair_failed",
+          status: "chain-proven-rejected" as const,
+          reasonCode: "psm_active_pair_failed",
+              evidenceRequestIds: ["lite-active-pair"],
         };
       }
       return {

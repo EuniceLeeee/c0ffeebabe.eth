@@ -180,6 +180,10 @@ function creditDefinition(): CreditFamilyPlugin<
     },
     discovery: {
       evidenceChannel: "nominate" as const,
+      reverseBinding: Object.freeze({
+        kind: "explicitly-unsupported" as const,
+        reason: "synthetic test: no retain channel",
+      }),
       sources: ["address-surface"],
       addressSurfaces: [{
         id: "credit-vault-interface",
@@ -211,7 +215,10 @@ function creditDefinition(): CreditFamilyPlugin<
         decide: ({ candidate, evidence, step }) => step === 0
           ? { status: "continue" }
           : evidence === undefined
-          ? { status: "rejected", reason: "missing-proof" }
+          ? {
+              status: "retryable",
+              reasonCode: "missing-proof",
+            }
           : {
               status: "verified",
               identity: {

@@ -130,6 +130,17 @@ function makeFixture(
         return Object.freeze({
           status: "terminal-rejected",
           reasonCode: "identity_rejected:fixture",
+          binding: Object.freeze({
+            familyDefinitionHash: "family-def-" + id,
+            requestFingerprint: "req-" + id,
+            trustedResultsFingerprint: "results-" + id,
+            authorityFingerprint: "authority-" + id,
+            candidateFingerprint: "candidate-" + id,
+            cutoff: Object.freeze({
+              number: input.cutoff.number,
+              hash: input.cutoff.hash,
+            }),
+          }),
         });
       }
       if (failKeys.has(id)) {

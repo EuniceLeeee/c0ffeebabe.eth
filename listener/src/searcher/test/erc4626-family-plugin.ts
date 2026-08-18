@@ -127,7 +127,7 @@ const behaviorFailed = decodeActive(
 );
 assert.deepEqual(
   variant.decide({ candidate: CANDIDATE, evidence: behaviorFailed, step: 2 }),
-  { status: "rejected", reason: "erc4626_execution_surfaces_failed" },
+  { status: "chain-proven-rejected", reasonCode: "erc4626_execution_surfaces_failed", evidenceRequestIds: ["active-deposit", "active-redeem"] },
   "only two completed negative behavior probes are chain-proven rejection",
 );
 
@@ -148,7 +148,7 @@ assert.deepEqual(
     evidence: malformedAssetSurface,
     step: 2,
   }),
-  { status: "rejected", reason: "erc4626_erc20_surfaces_failed" },
+  { status: "chain-proven-rejected", reasonCode: "erc4626_erc20_surfaces_failed", evidenceRequestIds: ["base-asset"] },
   "malformed ERC20 balance data is chain-proven rejection, not retryable simulation",
 );
 
@@ -167,7 +167,7 @@ assert.deepEqual(
     evidence: revertedShareSurface,
     step: 2,
   }),
-  { status: "rejected", reason: "erc4626_erc20_surfaces_failed" },
+  { status: "chain-proven-rejected", reasonCode: "erc4626_erc20_surfaces_failed", evidenceRequestIds: ["base-asset"] },
   "declared ERC20 balance revert is chain-proven rejection",
 );
 

@@ -638,8 +638,12 @@ export function createProbeWiring(
     (U extends { readonly status: "terminal-rejected" } ? U : never) : never;
   type RetryableReturn = Awaited<ReturnType<AttestOnce>> extends infer U ?
     (U extends { readonly status: "retryable" } ? U : never) : never;
-  const terminalRejected = (reasonCode: string): TerminalReturn =>
-    Object.freeze({ status: "terminal-rejected", reasonCode }) as TerminalReturn;
+  const terminalRejected = (reasonCode: string, binding: TerminalReturn["binding"]): TerminalReturn =>
+    Object.freeze({
+      status: "terminal-rejected",
+      reasonCode,
+      binding: Object.freeze(binding),
+    }) as TerminalReturn;
   const retryable = (input2: {
     readonly candidate: Readonly<Record<string, unknown>>;
     readonly reasonCode: string;
@@ -671,7 +675,17 @@ export function createProbeWiring(
       const candidate = attestInput.candidate as Readonly<Record<string, unknown>>;
       const pool = attestationPoolFromCandidate(candidate);
       if (!ethers.isAddress(pool.address)) {
-        return terminalRejected("invalid_candidate_address");
+        return terminalRejected("invalid_candidate_address", {
+          familyDefinitionHash: familyDefinitionHash(familyIdForCandidate(candidate)),
+          requestFingerprint: "",
+          trustedResultsFingerprint: "",
+          authorityFingerprint: "",
+          candidateFingerprint: candidateFingerprint(candidate),
+          cutoff: Object.freeze({
+            number: attestInput.cutoff.number,
+            hash: attestInput.cutoff.hash,
+          }),
+        });
       }
       let result: Awaited<ReturnType<typeof attestPoolIdentitiesStrict>>;
       let authorityFingerprint: string;
@@ -756,6 +770,17 @@ export function createProbeWiring(
         if (error instanceof ObservedSenderEvidenceMismatch) {
           return terminalRejected(
             "observed_sender_evidence_mismatch:" + error.message,
+            {
+              familyDefinitionHash: familyDefinitionHash(familyIdForCandidate(candidate)),
+              requestFingerprint: "",
+              trustedResultsFingerprint: "",
+              authorityFingerprint: "",
+              candidateFingerprint: candidateFingerprint(candidate),
+              cutoff: Object.freeze({
+                number: attestInput.cutoff.number,
+                hash: attestInput.cutoff.hash,
+              }),
+            },
           );
         }
         return retryable({
@@ -786,7 +811,17 @@ export function createProbeWiring(
               : { evidenceRef: attestInput.evidenceRef }),
           });
         }
-        return terminalRejected(reason);
+        return terminalRejected(reason, {
+          familyDefinitionHash: familyDefinitionHash(familyIdForCandidate(candidate)),
+          requestFingerprint: "",
+          trustedResultsFingerprint: "",
+          authorityFingerprint,
+          candidateFingerprint: candidateFingerprint(candidate),
+          cutoff: Object.freeze({
+            number: attestInput.cutoff.number,
+            hash: attestInput.cutoff.hash,
+          }),
+        });
       }
       const publication = result.publications[0] ?? null;
       const instance = publication?.instances[0] ?? null;

@@ -81,14 +81,16 @@ export const metronomeSynthIdentity = {
         return proof.tokens.length >= 2
           ? { status: "continue" as const }
           : {
-              status: "rejected" as const,
-              reason: "metronome_synth_membership_failed",
+              status: "chain-proven-rejected" as const,
+              reasonCode: "metronome_synth_membership_failed",
+              evidenceRequestIds: ["active-synth-membership"],
             };
       }
       if (proof.directions.length === 0) {
         return {
-          status: "rejected" as const,
-          reason: "metronome_synth_quotes_failed",
+          status: "chain-proven-rejected" as const,
+          reasonCode: "metronome_synth_quotes_failed",
+          evidenceRequestIds: ["active-synth-membership"],
         };
       }
       return {

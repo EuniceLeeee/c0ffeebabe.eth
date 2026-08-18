@@ -113,23 +113,44 @@ function decideIdentity(
   evidence: UniV4IdentityEvidence | undefined,
 ): IdentityDecision<UniV4Identity> {
   const candidate = input.candidate;
+  // These are explicit Family declarations, not central inferences:
+  // candidate-declared fields contradict the known V4 singleton, the
+  // poolId/poolKey identity hash does not reverse-bind, a nonstandard hook
+  // is outside this Family's semantics, or the chain state view reports an
+  // uninitialized pool at the fixed cutoff.
   if (!sameAddress(candidate.manager, ADDR.UNISWAP_V4_POOL_MANAGER)) {
-    return { status: "rejected", reason: "foreign_pool_manager" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "foreign_pool_manager",
+      evidenceRequestIds: [],
+    };
   }
   const poolKey = canonicalPoolKey(candidate.poolKey);
   try {
     assertPoolKeyIdentity(candidate.poolId, poolKey);
   } catch {
-    return { status: "rejected", reason: "poolkey_reverse_binding_failed" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "poolkey_reverse_binding_failed",
+      evidenceRequestIds: [],
+    };
   }
   // The standard Family owns only the hook-free execution semantics. Any
   // nonzero hook is a separate behavior Family until explicitly proven.
   if (!sameAddress(poolKey.hooks, ethers.ZeroAddress)) {
-    return { status: "rejected", reason: "unknown_hook_fail_closed" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "unknown_hook_fail_closed",
+      evidenceRequestIds: [],
+    };
   }
   if (evidence === undefined) return { status: "continue" };
   if (evidence.sqrtPriceX96 === 0n) {
-    return { status: "rejected", reason: "pool_not_initialized" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "pool_not_initialized",
+      evidenceRequestIds: [SLOT0_REQUEST_ID],
+    };
   }
   const manager = canonicalAddress(candidate.manager);
   const poolId = canonicalPoolId(candidate.poolId);

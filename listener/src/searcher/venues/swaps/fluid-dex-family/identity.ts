@@ -255,14 +255,22 @@ function decideIdentity(
   }
   if (evidence.phase === "reverse-binding") {
     if (!sameAddress(evidence.reverseDex, evidence.pool)) {
-      return { status: "rejected", reason: "factory_reverse_binding_failed" };
+      return {
+        status: "chain-proven-rejected",
+        reasonCode: "factory_reverse_binding_failed",
+        evidenceRequestIds: [FACTORY_REVERSE_ID],
+      };
     }
     if (
       !evidence.poolHasCode ||
       !evidence.token0HasCode ||
       !evidence.token1HasCode
     ) {
-      return { status: "rejected", reason: "fluid_dex_code_binding_failed" };
+      return {
+        status: "chain-proven-rejected",
+        reasonCode: "fluid_dex_code_binding_failed",
+        evidenceRequestIds: [POOL_CODE_ID, TOKEN0_CODE_ID, TOKEN1_CODE_ID],
+      };
     }
     return { status: "continue" };
   }
@@ -270,7 +278,12 @@ function decideIdentity(
     evidence.zeroToOneAmountOut === null ||
     evidence.oneToZeroAmountOut === null
   ) {
-    return { status: "rejected", reason: "bidirectional_active_quote_failed" };
+    // Both declared active quote directions reverted at the fixed cutoff.
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "bidirectional_active_quote_failed",
+      evidenceRequestIds: [ZERO_TO_ONE_PROBE_ID, ONE_TO_ZERO_PROBE_ID],
+    };
   }
   const binding = evidence.binding;
   const factoryBinding = Object.freeze({

@@ -63,8 +63,9 @@ export const rocksolidIdentity = {
       const proof = evidence as RocksolidIdentityEvidence;
       if (proof.sampleShares <= 0n) {
         return {
-          status: "rejected" as const,
-          reason: "rocksolid_active_quote_failed",
+          status: "chain-proven-rejected" as const,
+          reasonCode: "rocksolid_active_quote_failed",
+              evidenceRequestIds: ["active-sync-deposit"],
         };
       }
       return {

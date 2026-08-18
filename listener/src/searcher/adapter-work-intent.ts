@@ -7,7 +7,7 @@ import {
   assertIssuedBoundedRequestExecutor,
   createBoundedRequestExecutor,
   physicalRequestSetFingerprint,
-  ChainRevertEvidenceError,
+  FamilyDecodeError,
   runRequestProgram,
   RequiredAdapterRequestError,
   type AdapterRequest,
@@ -223,7 +223,8 @@ export type AdapterWorkFailureCode =
   | "invalid-intent"
   | "stale-generation"
   | "invalid-program"
-  | "chain-revert"
+  | "family-decode"
+  | "chain-proven-rejected"
   | "authority-failure"
   | "policy-failure"
   | "admission-failure"
@@ -1044,11 +1045,18 @@ function freezeFailure(
       message: error.message,
     });
   }
-  if (error instanceof ChainRevertEvidenceError) {
+  if (error instanceof FamilyDecodeError) {
+    // A Family decode failure is never chain evidence: whether a reverted
+    // or empty result negates identity is the Family's own decision
+    // (chain-proven-rejected). Transport-uncertain sets stay retryable;
+    // fully deterministic sets are Family program errors that must never
+    // become terminal rejections and are never auto-retried into one.
     return Object.freeze({
       disposition: "unresolved" as const,
       stage: "decode" as const,
-      code: "chain-revert" as const,
+      code: error.uncertainty === "transport"
+        ? "decode-failure" as const
+        : "family-decode" as const,
       message: error.message,
     });
   }

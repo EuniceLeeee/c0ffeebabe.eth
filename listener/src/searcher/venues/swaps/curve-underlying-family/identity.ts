@@ -216,19 +216,40 @@ function decideIdentity(
 ): IdentityDecision<CurveUnderlyingIdentity> {
   if (evidence === undefined) return { status: "continue" };
   if (evidence.phase === "registry-surface") {
+    // Chain-proven at the fixed cutoff: no code at the pool address, no
+    // metaregistry handler reverse-binds the pool, or the underlying coin
+    // domain is outside the supported surface.
     if (!evidence.poolHasCode) {
-      return { status: "rejected", reason: "pool_has_no_code" };
+      return {
+        status: "chain-proven-rejected",
+        reasonCode: "pool_has_no_code",
+        evidenceRequestIds: [POOL_CODE_ID],
+      };
     }
     if (evidence.handlers.length === 0) {
-      return { status: "rejected", reason: "registry_reverse_binding_failed" };
+      return {
+        status: "chain-proven-rejected",
+        reasonCode: "registry_reverse_binding_failed",
+        evidenceRequestIds: [REGISTRY_HANDLERS_ID],
+      };
     }
     if (evidence.coins.length < 2 || evidence.coins.length > 8) {
-      return { status: "rejected", reason: "invalid_underlying_coin_domain" };
+      return {
+        status: "chain-proven-rejected",
+        reasonCode: "invalid_underlying_coin_domain",
+        evidenceRequestIds: [REGISTRY_COINS_ID],
+      };
     }
     return { status: "continue" };
   }
   if (evidence.verifiedDirections.length === 0) {
-    return { status: "rejected", reason: "no_behavior_proven_direction" };
+    // All declared behavior directions reverted/returned zero at the fixed
+    // cutoff: the pool exposes no proven swap direction.
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "no_behavior_proven_direction",
+      evidenceRequestIds: [],
+    };
   }
   if (
     input.candidate.hintedI !== null &&
@@ -238,7 +259,11 @@ function decideIdentity(
       direction.j === input.candidate.hintedJ
     )
   ) {
-    return { status: "rejected", reason: "observed_direction_not_behavior_proven" };
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "observed_direction_not_behavior_proven",
+      evidenceRequestIds: [],
+    };
   }
   const registryBinding = Object.freeze({
     registry: CURVE_METAREGISTRY,

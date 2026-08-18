@@ -165,10 +165,23 @@ function decideIdentity(
     (candidate.hintedToken1 !== null &&
       !sameAddress(candidate.hintedToken1, evidence.token1))
   ) {
-    return { status: "rejected", reason: "candidate_static_binding_mismatch" };
+    // Chain-proven at the fixed cutoff: the pool's declared token/factory
+    // fields contradict the candidate's hinted identity.
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "candidate_static_binding_mismatch",
+      evidenceRequestIds: [FACTORY_REQUEST_ID, TOKEN0_REQUEST_ID, TOKEN1_REQUEST_ID],
+    };
   }
   if (!sameAddress(evidence.reversePool, candidate.pool)) {
-    return { status: "rejected", reason: "factory_reverse_binding_failed" };
+    // getPair at the fixed cutoff returns a different pool (or the zero
+    // address / a pinned revert): chain-proven negative evidence that this
+    // pair does not exist under this factory.
+    return {
+      status: "chain-proven-rejected",
+      reasonCode: "factory_reverse_binding_failed",
+      evidenceRequestIds: [REVERSE_REQUEST_ID],
+    };
   }
   const pool = canonicalAddress(candidate.pool);
   const factory = canonicalAddress(evidence.factory);
