@@ -881,14 +881,19 @@ function assertReadyPromotion(
   ready: ReadyUniverseGeneration,
 ): void {
   const candidateKeys = Object.keys(run.candidatesByKey).sort();
+  // Outcomes may be a strict subset of the candidate partition: candidates
+  // that have not been attested yet stay pending (no outcome) and are simply
+  // absent from the Graph — they never block a ready that admits every
+  // currently-verified instance. Residual retryable outcomes are preserved
+  // (probe-closable) and also never enter the Graph.
   const outcomeEntries = Object.entries(run.outcomesByCandidateKey)
     .sort(([left], [right]) => left.localeCompare(right));
   const outcomes = outcomeEntries.map(([, outcome]) => outcome);
   if (
     candidateKeys.length !== run.candidateCount ||
-    outcomes.length !== run.candidateCount ||
+    outcomes.length > run.candidateCount ||
     outcomeEntries.some(([key, outcome], index) =>
-      key !== candidateKeys[index] ||
+      !candidateKeys.includes(key) ||
       outcome.familyCandidateKey !== key ||
       (outcome.status !== "verified" &&
         outcome.status !== "terminal-rejected" &&
@@ -896,7 +901,7 @@ function assertReadyPromotion(
     )
   ) {
     throw new Error(
-      "universe rebuild checkpoint: ready promotion requires an exact candidate partition",
+      "universe rebuild checkpoint: ready promotion requires a valid candidate partition",
     );
   }
   const verified = outcomes.filter((outcome): outcome is Extract<

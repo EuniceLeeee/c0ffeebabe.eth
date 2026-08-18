@@ -100,6 +100,20 @@ interface ExactBinding {
   readonly runtimeEvidence: readonly RuntimeEvidence[];
 }
 
+interface InstanceRefreshOutcome {
+  readonly routes: readonly {
+    readonly family: LoadedFamilyPlugin;
+    readonly descriptor: PreparedFamilyInstance["descriptor"];
+    readonly route: PreparedFamilyInstance["routes"][number];
+    readonly handle: FamilyRouteRuntimeHandle;
+  }[];
+  readonly creditRoutes: readonly ReturnType<typeof projectCreditRouteGraph>[];
+  readonly pricing: readonly [
+    FamilyRouteRuntimeHandle,
+    StrictCurrentRoutePricing,
+  ][];
+}
+
 interface FundingBinding {
   readonly family: LoadedFamilyBox;
   readonly offer: PreparedFundingOffer;
@@ -175,81 +189,47 @@ export class StrictProductionRuntimeRoot {
       StrictCurrentRoutePricing
     >();
 
-    for (const readyInstance of this.#readyInstances) {
-      const strictFamily = this.#catalog.forStrictFamily(readyInstance.familyId);
-      if (strictFamily.plugin.manifest.domain === "credit") {
-        const currentInstance = reissuePreparedInstanceAuthority({
-          family: strictFamily,
-          instance: readyInstance,
-          source: input.source,
-          generation: input.source.generation,
-        });
-        const publication = prepareCreditFamilyRoutes({
-          family: strictFamily,
-          instance: currentInstance,
-          source: input.source,
-          generation: input.source.generation,
-        });
-        creditRoutes.push(...publication.routes.map((route) =>
-          projectCreditRouteGraph({ family: strictFamily, route })
-        ));
-        continue;
+    /*
+     * Ready instances refresh independently through the shared transport
+     * (each refresh already fans its own requests out in parallel), so the
+     * session refresh runs them under bounded concurrency. A sequential
+     * 1,700-instance refresh at ~15ms/round trip took ~26s per producer
+     * generation — slower than mainnet's ~12s block time, so the N-1 chain
+     * could never keep up and every pass degraded. Results are collected per
+     * index and flattened in original ready order, so route/credit ordering
+     * (and the ready-topology assertion) is unchanged.
+     */
+    const refreshConcurrency = Math.max(1, Math.min(16, this.#readyInstances.length));
+    const refreshedOutcomes = new Array<InstanceRefreshOutcome | null>(
+      this.#readyInstances.length,
+    );
+    let refreshCursor = 0;
+    const refreshWorkers = Array.from(
+      { length: refreshConcurrency },
+      async () => {
+        for (;;) {
+          const index = refreshCursor++;
+          if (index >= this.#readyInstances.length) return;
+          const readyInstance = this.#readyInstances[index]!;
+          refreshedOutcomes[index] = await this.refreshReadyInstancePricing({
+            readyInstance,
+            source: input.source,
+            runtime: input.runtime,
+            ...(input.control === undefined ? {} : { control: input.control }),
+          });
+        }
+      },
+    );
+    await Promise.all(refreshWorkers);
+    for (const outcome of refreshedOutcomes) {
+      if (outcome === null) {
+        throw new Error("strict ready instance refresh did not complete");
       }
-      if (
-        strictFamily.plugin.manifest.domain !== "swap" &&
-        strictFamily.plugin.manifest.domain !== "protocol"
-      ) {
-        throw new Error(
-          `strict ready instance has unsupported domain ${strictFamily.plugin.manifest.domain}`,
-        );
+      routes.push(...outcome.routes);
+      creditRoutes.push(...outcome.creditRoutes);
+      for (const [handle, pricing] of outcome.pricing) {
+        pricingByHandle.set(handle, pricing);
       }
-      const family = this.#catalog.forFamily(readyInstance.familyId);
-      const currentAuthority = reissuePreparedInstanceAuthority({
-        family,
-        instance: readyInstance,
-        source: input.source,
-        generation: input.source.generation,
-      });
-      const refreshed = await refreshPreparedFamilyInstancePricing({
-        family,
-        instance: currentAuthority,
-        source: input.source,
-        generation: input.source.generation,
-        runtime: input.runtime,
-        ...(input.control === undefined ? {} : { control: input.control }),
-      });
-      if (refreshed.instance === null) {
-        const reasons = refreshed.outcomes
-          .filter((outcome) =>
-            outcome.status === "failed" || outcome.status === "unresolved"
-          )
-          .map((outcome) => outcome.reasonCode)
-          .sort();
-        throw new Error(
-          `strict current pricing incomplete for ${readyInstance.familyId}:` +
-            `${readyInstance.instanceKey}` +
-            (reasons.length === 0 ? "" : ` (${reasons.join(",")})`),
-        );
-      }
-      const currentInstance = reissuePreparedInstanceRouteHandles({
-        family,
-        instance: refreshed.instance,
-        source: input.source,
-        generation: input.source.generation,
-      });
-      routes.push(...currentInstance.routes.map((route, index) => {
-        const handle = currentInstance.routeHandles[index]!;
-        pricingByHandle.set(
-          handle,
-          currentPricingForRoute(currentInstance, route.routeKey),
-        );
-        return {
-          family,
-          descriptor: currentInstance.descriptor,
-          route,
-          handle,
-        };
-      }));
     }
 
     const view = buildFamilyRouteGraphView({ routes, creditRoutes });
@@ -327,6 +307,101 @@ export class StrictProductionRuntimeRoot {
       bindings,
       currentPricing,
       fundingBindings,
+    });
+  }
+
+  private async refreshReadyInstancePricing(input: {
+    readonly readyInstance: PreparedFamilyInstance;
+    readonly source: CanonicalSource;
+    readonly runtime: CentralAdapterRuntime;
+    readonly control?: AdapterWorkControl;
+  }): Promise<InstanceRefreshOutcome> {
+    const { readyInstance, source, runtime, control } = input;
+    const strictFamily = this.#catalog.forStrictFamily(readyInstance.familyId);
+    if (strictFamily.plugin.manifest.domain === "credit") {
+      const currentInstance = reissuePreparedInstanceAuthority({
+        family: strictFamily,
+        instance: readyInstance,
+        source,
+        generation: source.generation,
+      });
+      const publication = prepareCreditFamilyRoutes({
+        family: strictFamily,
+        instance: currentInstance,
+        source,
+        generation: source.generation,
+      });
+      return Object.freeze({
+        routes: Object.freeze([]),
+        creditRoutes: Object.freeze(publication.routes.map((route) =>
+          projectCreditRouteGraph({ family: strictFamily, route })
+        )),
+        pricing: Object.freeze([]),
+      });
+    }
+    if (
+      strictFamily.plugin.manifest.domain !== "swap" &&
+      strictFamily.plugin.manifest.domain !== "protocol"
+    ) {
+      throw new Error(
+        `strict ready instance has unsupported domain ${strictFamily.plugin.manifest.domain}`,
+      );
+    }
+    const family = this.#catalog.forFamily(readyInstance.familyId);
+    const currentAuthority = reissuePreparedInstanceAuthority({
+      family,
+      instance: readyInstance,
+      source,
+      generation: source.generation,
+    });
+    const refreshed = await refreshPreparedFamilyInstancePricing({
+      family,
+      instance: currentAuthority,
+      source,
+      generation: source.generation,
+      runtime,
+      ...(control === undefined ? {} : { control }),
+    });
+    if (refreshed.instance === null) {
+      const reasons = refreshed.outcomes
+        .filter((outcome) =>
+          outcome.status === "failed" || outcome.status === "unresolved"
+        )
+        .map((outcome) => outcome.reasonCode)
+        .sort();
+      throw new Error(
+        `strict current pricing incomplete for ${readyInstance.familyId}:` +
+          `${readyInstance.instanceKey}` +
+          (reasons.length === 0 ? "" : ` (${reasons.join(",")})`),
+      );
+    }
+    const currentInstance = reissuePreparedInstanceRouteHandles({
+      family,
+      instance: refreshed.instance,
+      source,
+      generation: source.generation,
+    });
+    const pricing: [
+      FamilyRouteRuntimeHandle,
+      StrictCurrentRoutePricing,
+    ][] = [];
+    const routes = currentInstance.routes.map((route, index) => {
+      const handle = currentInstance.routeHandles[index]!;
+      pricing.push([
+        handle,
+        currentPricingForRoute(currentInstance, route.routeKey),
+      ]);
+      return {
+        family,
+        descriptor: currentInstance.descriptor,
+        route,
+        handle,
+      };
+    });
+    return Object.freeze({
+      routes: Object.freeze(routes),
+      creditRoutes: Object.freeze([]),
+      pricing: Object.freeze(pricing),
     });
   }
 }

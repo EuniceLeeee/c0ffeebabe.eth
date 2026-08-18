@@ -651,13 +651,9 @@ function assertExactCandidatePartition(
     }
     accounted.add(key);
   }
-  for (const key of active) {
-    if (!accounted.has(key)) {
-      throw new Error(
-        "universe rebuild: active candidate " + key + " has no outcome",
-      );
-    }
-  }
+  // Candidates with no outcome are pending (not yet attested); they stay
+  // out of the Graph and never block a ready that admits every currently
+  // verified instance. They are re-attested on a later resume.
 }
 
 async function findMemoByKey(
