@@ -110,9 +110,17 @@ export function createRevmStrictSimulationTransport(input: {
         observeLogs,
       });
       if (resp.success !== true) {
-        throw new Error(
-          resp.revertReason ?? "revm strict simulation reverted",
+        // A simulated revert is chain-proven negative evidence (the pool's
+        // execution at the fixed cutoff reverts deterministically), never a
+        // resource failure. Mark it as a CALL_EXCEPTION with the revert
+        // payload so the central runtime classifies it reverted-as-declared.
+        const reason = resp.revertReason ?? "0x";
+        const error = new Error(
+          `revm strict simulation reverted: ${reason}`,
         );
+        (error as { code?: string }).code = "CALL_EXCEPTION";
+        (error as { data?: string }).data = reason;
+        throw error;
       }
       const effects = resp.strict;
       if (effects === undefined) {

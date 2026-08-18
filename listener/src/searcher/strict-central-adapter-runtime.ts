@@ -377,10 +377,27 @@ async function executeRequest(
             : { effects: Object.freeze(simulated.effects) }),
         });
       } catch (error) {
-        // An unsupported simulation capability (observe, funded override,
-        // verified actor) is a capability gap, never a chain RPC failure.
-        // Keep the failure code honest and surface the underlying reason for
-        // observability instead of discarding it.
+        // A simulated revert is chain-proven negative evidence at the fixed
+        // cutoff (the revm transport marks it CALL_EXCEPTION + revert
+        // payload); surface it as reverted-as-declared so family decode can
+        // reject deterministically. Any other simulation failure is a
+        // capability gap or resource issue, never a chain RPC failure;
+        // keep the failure code honest and surface the reason.
+        if (isCallException(error)) {
+          return Object.freeze({
+            id: request.id,
+            ok: true as const,
+            source: Object.freeze(source),
+            provenance: Object.freeze({
+              kind: "strict-simulation-transport",
+              fingerprint: createHash("sha256")
+                .update(JSON.stringify({ id: request.id, revert: true }))
+                .digest("hex"),
+            }),
+            completion: "reverted-as-declared" as const,
+            data: extractStrictRevertData(error) ?? "0x",
+          });
+        }
         console.warn(
           `[strict-runtime] strict simulation fail-closed: ` +
             `${error instanceof Error ? error.message : String(error)}`,
