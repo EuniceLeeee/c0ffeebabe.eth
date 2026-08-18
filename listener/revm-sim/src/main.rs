@@ -1732,9 +1732,7 @@ impl Daemon {
         started: Instant,
     ) -> Result<DaemonResponse> {
         self.ensure_warm(block_number, rpc_url)?;
-        let remote_rc = Rc::clone(
-            &self.warm.as_ref().expect("warm set above").remote,
-        );
+        let remote_rc = Rc::clone(&self.warm.as_ref().expect("warm set above").remote);
         let mut db = CacheDB::new(SharedRemote(Rc::clone(&remote_rc)));
         let block_env = load_block_env(
             &self.warm.as_ref().expect("warm set").remote.rpc,
@@ -1748,9 +1746,7 @@ impl Daemon {
         let mut fund_account = |address: Address| -> Result<()> {
             let info = db
                 .basic(address)
-                .map_err(|err| {
-                    anyhow!("strict fund basic {address:#x}: {err}")
-                })?
+                .map_err(|err| anyhow!("strict fund basic {address:#x}: {err}"))?
                 .unwrap_or_default();
             let mut funded = info;
             funded.balance = U256::MAX;
@@ -1795,10 +1791,7 @@ impl Daemon {
         for raw in &observe_total_supply {
             let token = parse_address(raw)?;
             supply_tokens.push(token);
-            supply_before.push((
-                token,
-                erc20_total_supply(&mut db, &block_env, token)?,
-            ));
+            supply_before.push((token, erc20_total_supply(&mut db, &block_env, token)?));
         }
 
         for call in parsed_pre_calls {
@@ -1821,13 +1814,7 @@ impl Daemon {
         }
 
         let main = execute_call(
-            &mut db,
-            &block_env,
-            caller,
-            target,
-            calldata,
-            gas_limit,
-            true,
+            &mut db, &block_env, caller, target, calldata, gas_limit, true,
         )?;
         let success = main.result.is_success();
         let output = main
@@ -2095,11 +2082,7 @@ where
     Ok(parse_u256_from_evm_output(bytes.as_ref()))
 }
 
-fn erc20_total_supply<D>(
-    db: &mut CacheDB<D>,
-    block_env: &BlockEnv,
-    token: Address,
-) -> Result<U256>
+fn erc20_total_supply<D>(db: &mut CacheDB<D>, block_env: &BlockEnv, token: Address) -> Result<U256>
 where
     D: DatabaseRef<Error = RpcError>,
 {
@@ -2218,23 +2201,24 @@ where
         }
         if !applied {
             if let Some(remote) = remote {
-                if let Some(slot) =
-                    discover_erc20_balance_slot(remote, token, to)?
-                {
-                    db.insert_account_storage(token, slot, amount).map_err(
-                        |err| {
-                            anyhow!(
-                                "failed writing discovered slot {token:#x}:{slot:#x}: {err}"
-                            )
-                        },
-                    )?;
+                for slot in discover_erc20_balance_slots(remote, token, to)? {
+                    let original = db.storage(token, slot).map_err(|err| {
+                        anyhow!("failed reading discovered slot {token:#x}:{slot:#x}: {err}")
+                    })?;
+                    db.insert_account_storage(token, slot, amount)
+                        .map_err(|err| {
+                            anyhow!("failed writing discovered slot {token:#x}:{slot:#x}: {err}")
+                        })?;
                     mark_account_touched(db, token);
-                    if erc20_balance_of(db, block_env, token, to)
-                        .unwrap_or(U256::ZERO)
-                        >= amount
-                    {
+                    if erc20_balance_of(db, block_env, token, to).unwrap_or(U256::ZERO) >= amount {
                         applied = true;
+                        break;
                     }
+                    db.insert_account_storage(token, slot, original)
+                        .map_err(|err| {
+                            anyhow!("failed restoring discovered slot {token:#x}:{slot:#x}: {err}")
+                        })?;
+                    mark_account_touched(db, token);
                 }
             }
         }
@@ -2246,13 +2230,14 @@ where
 }
 
 /// Exact ERC20 balance-slot discovery: trace `balanceOf(account)` with
-/// prestateTracer and return the first storage slot the token reads. Covers
-/// vaults/tokens whose mapping slot is outside the common candidate list.
-fn discover_erc20_balance_slot(
+/// prestateTracer and return every storage slot the token reads. Proxy metadata
+/// commonly appears alongside the balance mapping, so callers must verify each
+/// candidate and restore failed overrides instead of trusting the first key.
+fn discover_erc20_balance_slots(
     remote: &RemoteRevmDb,
     token: Address,
     account: Address,
-) -> Result<Option<U256>> {
+) -> Result<Vec<U256>> {
     let mut data = Vec::with_capacity(36);
     data.extend_from_slice(&BALANCE_OF_SELECTOR);
     data.extend_from_slice(&[0u8; 12]);
@@ -2269,19 +2254,31 @@ fn discover_erc20_balance_slot(
             { "tracer": "prestateTracer" }
         ]),
     )?;
+    Ok(prestate_storage_slots(&result, token))
+}
+
+fn prestate_storage_slots(result: &Value, token: Address) -> Vec<U256> {
     let token_key = format!("{token:#x}");
     let storage = result
-        .get(&token_key)
+        .as_object()
+        .and_then(|accounts| {
+            accounts.get(&token_key).or_else(|| {
+                accounts
+                    .iter()
+                    .find(|(key, _)| key.eq_ignore_ascii_case(&token_key))
+                    .map(|(_, value)| value)
+            })
+        })
         .and_then(|entry| entry.get("storage"))
         .and_then(Value::as_object);
-    if let Some(storage) = storage {
-        for key in storage.keys() {
-            if let Ok(slot) = parse_u256(key) {
-                return Ok(Some(slot));
-            }
-        }
-    }
-    Ok(None)
+    let mut slots = storage
+        .into_iter()
+        .flat_map(|storage| storage.keys())
+        .filter_map(|key| parse_u256(key).ok())
+        .collect::<Vec<_>>();
+    slots.sort_unstable();
+    slots.dedup();
+    slots
 }
 
 fn token_deals_have_known_slots(
@@ -2521,4 +2518,34 @@ fn parse_hex_bytes(value: &str) -> Result<Vec<u8>> {
 
 fn hex_quantity_u64(value: u64) -> String {
     format!("0x{value:x}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prestate_balance_slot_discovery_keeps_all_proxy_candidates() {
+        let token = parse_address("0x1111111111111111111111111111111111111111").unwrap();
+        let balance_slot = "0x0000000000000000000000000000000000000000000000000000000000001234";
+        let implementation_slot =
+            "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+        let result: Value = serde_json::from_str(&format!(
+            r#"{{"{}":{{"storage":{{"{}":"0x01","{}":"0x02","invalid":"0x03"}}}}}}"#,
+            format!("{token:#x}").to_uppercase(),
+            implementation_slot,
+            balance_slot,
+        ))
+        .unwrap();
+
+        let slots = prestate_storage_slots(&result, token);
+
+        assert_eq!(
+            slots,
+            vec![
+                parse_u256(balance_slot).unwrap(),
+                parse_u256(implementation_slot).unwrap(),
+            ]
+        );
+    }
 }

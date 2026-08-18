@@ -3953,6 +3953,33 @@ production cutover）：**
 exact partition 闭合、`retryable=0`、`appliedThrough==cutoff` 且 Graph/catalog/coverage
 一次 CAS ready 后，才能创建 producer。
 
+**2026-08-18 revm proxy balance-slot candidate verification 第二十八批
+live-derived 正确性 checkpoint（实现提交承载本 checkpoint；不是 ready、F5 或
+production cutover）：**
+
+- `3039717a354b9fc91a359b242b879f605a0370de` 的 exact-SHA systemd dry-run
+  继续复用原 `strict-startup-rebuild`；ERC4626 方向隔离已经进入 production
+  wiring，但失败样本仍大量报告 `could not locate ERC20 balance slot`。根因位于
+  中央 revm deal transport：common mapping-slot candidates 未命中后，
+  `debug_traceCall`/`prestateTracer` 可能同时返回 EIP-1967 implementation/admin
+  slot 与真正 balance mapping full storage key，旧实现只取 object 的第一个 key，
+  第一次 override 验证失败后就错误判定整个 token 无可用 balance slot；
+- discovery 现在返回该 token prestate 中全部可解析 storage keys，按 `U256`
+  确定性排序并去重，且 address key 大小写不影响匹配。deal transport 对每个 full
+  storage key 先读取原值、临时写入 amount、调用 `balanceOf(account)` 验证；失败即
+  恢复原值并继续下一个，只有全部失败才返回 resource failure。成功的 full key 不写入
+  `HashMap<Address,u64>`：该 cache 只保存 mapping slot index，两类 authority 不混用；
+- Rust regression 构造同一 proxy token 同时读取 implementation slot、真实 balance
+  slot 与 malformed key，证明 parser 保留全部合法候选而非首项；同批通过
+  `cargo fmt --check`、`cargo test --manifest-path listener/revm-sim/Cargo.toml`、
+  `searcher:erc4626-family-plugin`、`searcher:revm-strict-simulation-transport`、
+  `searcher:strict-identity-attestation` 与 listener 完整 build。
+
+部署本批新 exact SHA 后仍只能恢复同一 run/cutoff/candidate partition，不得清 checkpoint。
+必须用新 process anchor 量化 ERC4626 `resource-limited` 是否关闭；仍为真实 deterministic
+simulation revert 的方向继续 fail-closed，不得为了让 ready 前进而降级。Astra caller authority
+与 Fluid quote encoding 仍是独立待闭合项；`retryable>0` 时 producer 仍不得创建。
+
 **2026-08-09 topology adoption runtime-descriptor 修复 checkpoint（实现 commit
 `90887cc53e9649805fc1acb88e09a1e2f1b4d019`）：** `febda231` 的节点观测在 block `25713055`
 发生确定性覆盖断崖：前 30 代 `priced/expected` 约为 `87.9%–91.5%`，随后 45 代稳定为约
