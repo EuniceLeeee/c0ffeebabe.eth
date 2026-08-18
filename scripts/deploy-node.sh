@@ -411,7 +411,7 @@ DEPLOY_COMMIT=$(git rev-parse HEAD)
 # the worktree by design; they drive env generation below and are not source
 # dirt. Any other tracked or untracked change fails the exact-SHA contract.
 DEPLOY_DIRTY=$(git status --porcelain --untracked-files=normal | \
-  grep -v -E '^\?\? (\.(backrun|block-scan|blockscan-nminus1|blockscan-submit|deploy-live|protocol-edges|live-start-balance-eth|mempool)|listener/out/)$' | \
+  grep -v -E '^\?\? (\.(backrun|block-scan|blockscan-nminus1|blockscan-submit|deploy-live|protocol-edges|live-start-balance-eth|mempool)|listener/out/?)$' | \
   head -1)
 [ -z "$DEPLOY_DIRTY" ] \
   || abort_runtime "approved deployment checkout is not clean: $DEPLOY_DIRTY"
