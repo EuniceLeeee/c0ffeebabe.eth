@@ -396,6 +396,15 @@ async function executeRequest(
             }),
             completion: "reverted-as-declared" as const,
             data: extractStrictRevertData(error) ?? "0x",
+            // A revert produces no state effects; provide the declared
+            // observation collections as empty so the request-program
+            // validator sees them fulfilled.
+            effects: Object.freeze({
+              tokenDeltas: Object.freeze([]),
+              nativeDeltas: Object.freeze([]),
+              totalSupplyDeltas: Object.freeze([]),
+              logs: Object.freeze([]),
+            }),
           });
         }
         console.warn(
