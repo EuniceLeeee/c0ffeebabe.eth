@@ -126,7 +126,7 @@ async function main(): Promise<void> {
   // each other. Bounded workers keep the RPC load on the local node sane.
   const concurrency = Math.max(
     1,
-    Math.min(8, Number(process.env.SEARCHER_PROBE_CONCURRENCY ?? "4")),
+    Math.min(16, Number(process.env.SEARCHER_PROBE_CONCURRENCY ?? "4")),
   );
   let nextTarget = 0;
   await Promise.all(Array.from({ length: concurrency }, async () => {
