@@ -8,7 +8,7 @@ import { buildLoopCoverageOutput } from "../cli/venue-discovery-bq.js";
 import { classifyTxLoopCoverage, type TxLoopCoverage } from "../discovery/loop-coverage.js";
 import { TOPICS } from "../registry/protocols.js";
 import { ADDR } from "../../../listener/src/shared/constants/addresses.js";
-import { POOL_REGISTRY } from "../../../listener/src/searcher/planner/token-graph.js";
+import type { PoolEntry } from "../../../listener/src/searcher/planner/token-graph.js";
 
 interface ExactFixture {
   source: string;
@@ -213,6 +213,9 @@ test("both exact Coffee PoolBalanceChanged rows are liquidity, never swap or fun
 });
 
 test("a Fluid discovery candidate stays unassessed without an attested runtime universe", () => {
+  // The legacy static pool registry is gone: no runtime instance is admitted
+  // by a registry row, so the empty registry keeps this contract explicit.
+  const POOL_REGISTRY: readonly PoolEntry[] = [];
   const fluidAddress = ADDR.FLUID_DEX_USDC_USDT.toLowerCase();
   const fluidEntry = POOL_REGISTRY.find((entry) => entry.address.toLowerCase() === fluidAddress);
   assert.equal(
@@ -638,6 +641,9 @@ function assertDynamicAdmissionBoundary(
     );
   }
 
+  // The legacy static pool registry is gone: no runtime instance is admitted
+  // by a registry row, so the empty registry keeps this contract explicit.
+  const POOL_REGISTRY: readonly PoolEntry[] = [];
   const fluidAddress = ADDR.FLUID_DEX_USDC_USDT.toLowerCase();
   const derivedFluidUnassessedTxs = perTx
     .filter((tx) => tx.observedSwapVenues.some((venue) =>

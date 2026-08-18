@@ -2,7 +2,7 @@ import "../../../listener/src/adapters/index.js";
 import { listDescriptors } from
   "../../../listener/src/adapters/registry.js";
 import { ADDR as LISTENER_ADDR } from "../../../listener/src/shared/constants/addresses.js";
-import { POOL_REGISTRY } from "../../../listener/src/searcher/planner/token-graph.js";
+import type { PoolEntry } from "../../../listener/src/searcher/planner/token-graph.js";
 import { lower, TOPICS } from "../registry/protocols.js";
 import type { VenueScanInput } from "./venue-evidence.js";
 
@@ -163,6 +163,10 @@ const TRACE_REQUIRED_AUXILIARY_TOPICS: ReadonlySet<string> = new Set(
     TOPICS.aaveV3Repay,
   ].map(lower),
 );
+
+// The legacy static pool registry is physically gone; analysis tools operate on
+// chain evidence and strict ready generations only.
+const POOL_REGISTRY: readonly PoolEntry[] = [];
 
 const REGISTERED_ENTRY_BY_ADDRESS = new Map(
   POOL_REGISTRY.flatMap((entry) => [

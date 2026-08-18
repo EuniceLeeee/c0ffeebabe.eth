@@ -56,7 +56,7 @@ async function loadRegistry(): Promise<ProductionRouteCallRegistry | null> {
         family.poolAdapters.map((poolAdapter) => [String(poolAdapter), family] as const)
       ),
     );
-    const pools: readonly ProductionRoutePoolFact[] = tokenGraph.POOL_REGISTRY;
+    const pools: readonly ProductionRoutePoolFact[] = [];
 
     function findRouteActionAdapter(edgeAdapterId: string): TraceActionMatcher | null {
       const registered = routeFamilies.routeFamilies.some((family) =>
