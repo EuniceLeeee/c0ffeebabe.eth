@@ -2231,9 +2231,9 @@ where
             if let Some(remote) = remote {
                 let implementation = read_eip1967_implementation(remote, token)?;
                 let mut owners: Vec<Address> = vec![token];
-                if let Some(impl) = implementation {
-                    if impl != token {
-                        owners.push(impl);
+                if let Some(impl_addr) = implementation {
+                    if impl_addr != token {
+                        owners.push(impl_addr);
                     }
                 }
                 'fallback_outer: for owner in &owners {
@@ -2334,13 +2334,18 @@ fn read_eip1967_implementation(remote: &RemoteRevmDb, token: Address) -> Result<
         ]),
     )?;
     let raw = value_as_str(&value)?;
-    let parsed = parse_u256(raw)?;
-    if parsed.is_zero() {
+    let normalized = raw.strip_prefix("0x").unwrap_or(&raw);
+    if normalized.chars().all(|c| c == '0') {
         return Ok(None);
     }
-    let mut bytes = [0u8; 32];
-    parsed.to_big_endian(&mut bytes);
-    Ok(Some(Address::from_slice(&bytes[12..])))
+    // The implementation slot holds a 20-byte address right-aligned in 32
+    // bytes; take the last 40 hex chars (20 bytes).
+    let address_hex = &normalized[normalized.len().saturating_sub(40)..];
+    let address = parse_address(&format!("0x{address_hex}"))?;
+    if address.is_zero() {
+        return Ok(None);
+    }
+    Ok(Some(address))
 }
 
 /// Exact ERC20 balance-slot discovery: trace `balanceOf(account)` with
