@@ -1840,7 +1840,8 @@ impl Daemon {
                 from: caller,
                 to: target,
                 calldata: calldata.to_vec(),
-                gas_limit: Some(gas_limit),
+                gas_limit,
+                allowance_slot: None,
             });
             let refs: Vec<&ParsedPreCall> = trace_calls.iter().collect();
             match trace_prefetch(&remote_rc, &db_for_trace, &refs) {
