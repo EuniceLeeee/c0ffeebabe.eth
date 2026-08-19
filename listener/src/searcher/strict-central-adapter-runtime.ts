@@ -180,9 +180,19 @@ export function createStrictCentralAdapterRuntime(input: {
             Partial<CentralScheduleDecision> | undefined)?.rethLane ?? "exact";
           const rethStartedAtMs = Date.now();
           let queueWaitMs = 0;
+          /*
+           * Funding liquidity reads are lightweight, mandatory and serialized
+           * inside the producer session itself (they run after the instance
+           * pricing phase of the same createSession). Routing them through the
+           * shared permit scheduler made them queue ~1s behind the producer's
+           * own pricing permits (and behind the pass's session funding), which
+           * added 10-14s to every exact_refine. They are producer-internal
+           * work, not competing traffic: bypass the scheduler.
+           */
+          const fundingBound = execution.familyId.startsWith("flash-loan:");
           const rethResults = rethBound.length === 0
             ? []
-            : transportScheduler === undefined
+            : transportScheduler === undefined || fundingBound
               ? await Promise.all(rethBound.map(runRequest))
               : await transportScheduler.run(
                   rethLane,
