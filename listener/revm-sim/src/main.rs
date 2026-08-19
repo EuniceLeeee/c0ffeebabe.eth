@@ -1811,7 +1811,7 @@ impl Daemon {
                 &block_env,
                 call.from,
                 call.to,
-                Bytes::from(call.calldata),
+                Bytes::from(call.calldata.clone()),
                 call.gas_limit,
                 true,
                 false,
