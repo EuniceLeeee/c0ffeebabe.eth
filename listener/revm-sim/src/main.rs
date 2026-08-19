@@ -316,6 +316,7 @@ struct SeedStats {
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
 struct ParsedPreCall {
     from: Address,
     to: Address,
@@ -1822,6 +1823,41 @@ impl Daemon {
                 );
             }
             db.commit(pre.state);
+        }
+
+        // Strict exact probes execute against the same cold remote on every
+        // block. Prefetch the touched state of the main call (plus any
+        // preCalls) in ONE debug_traceCall prestateTracer round trip so the
+        // execution below hits the warm shared cache instead of serial-faulting
+        // every slot to the archive RPC. Mirrors prepare's trace_prefetch.
+        {
+            let db_for_trace = CacheDB::new(SharedRemote(Rc::clone(&remote_rc)));
+            let mut trace_calls: Vec<ParsedPreCall> = Vec::new();
+            for call in &parsed_pre_calls {
+                trace_calls.push(call.clone());
+            }
+            trace_calls.push(ParsedPreCall {
+                from: caller,
+                to: target,
+                calldata: calldata.to_vec(),
+                gas_limit: Some(gas_limit),
+            });
+            let refs: Vec<&ParsedPreCall> = trace_calls.iter().collect();
+            match trace_prefetch(&remote_rc, &db_for_trace, &refs) {
+                Ok(stats) => {
+                    if stats.seeded_accounts + stats.seeded_slots > 0 {
+                        eprintln!(
+                            "[revm-sim] strictSimulate prefetch seeded {} accounts + {} slots ({}ms)",
+                            stats.seeded_accounts,
+                            stats.seeded_slots,
+                            started.elapsed().as_millis(),
+                        );
+                    }
+                }
+                Err(err) => eprintln!(
+                    "[revm-sim] strictSimulate trace prefetch failed: {err}"
+                ),
+            }
         }
 
         let disable_eip3607 = caller_mode == "impersonated-call-frame";
