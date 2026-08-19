@@ -1,8 +1,0 @@
-{
-  "schema_version": 1,
-  "command": "npm run competitor-calibration",
-  "fixture_set": "coffee-20260704 + postmortem-0x9be73297",
-  "passed": 14,
-  "failed": 0,
-  "status": "pass"
-}

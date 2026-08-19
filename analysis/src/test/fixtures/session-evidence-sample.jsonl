@@ -1,6 +1,0 @@
-{"type":"user","message":{"role":"user","content":"Please extract the method trace evidence."}}
-{"type":"user","message":{"role":"user","content":"Stop hook feedback: command-name should not be treated as a human ask."}}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hidden reasoning must never appear","signature":"sig"},{"type":"text","text":"I found the visible conclusion."},{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"CLAUDE.md"}},{"type":"tool_use","id":"toolu_2","name":"Bash","input":{"command":"npm run method-trace-check -- docs/analysis/example.md"}}]}}
-{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"CLAUDE.md contents"}]}}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"more hidden text","signature":"sig2"}]}}
-{"type":"summary","summary":"non-message events are skipped"}
