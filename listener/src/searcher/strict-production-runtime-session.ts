@@ -199,7 +199,7 @@ export class StrictProductionRuntimeRoot {
      * index and flattened in original ready order, so route/credit ordering
      * (and the ready-topology assertion) is unchanged.
      */
-    const refreshConcurrency = Math.max(1, Math.min(16, this.#readyInstances.length));
+    const refreshConcurrency = Math.max(1, Math.min(32, this.#readyInstances.length));
     const refreshedOutcomes = new Array<InstanceRefreshOutcome | null>(
       this.#readyInstances.length,
     );
