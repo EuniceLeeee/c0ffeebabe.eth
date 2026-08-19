@@ -620,6 +620,20 @@ reference-only工具进入runtime/validator closure；旧repo package/blob未登
 新增Family/Strategy修改中央源码；reuse ledger与实际production blob closure不一致。脚本只机械收集和比较
 这些事实，不能通过修改allowlist把违规结构声明为正确。
 
+[PFD] required credit只能来自固定Git/build分母与pinned compiler/build graph：TypeScript/JavaScript读取exact
+`tsconfig`、NodeNext resolution、workspace package exports/imports及build metafile；Rust读取locked cargo
+metadata、compiler messages/dep-info、features/build-script/proc-macro与generated inputs；Solidity读取pinned
+Forge build-info或solc standard-json、remappings及完整compiler input。若当前release尚无某语言，该adapter可
+absent；该语言的第一个source进入denominator时必须先交付并qualification对应adapter，否则boundary verdict
+为invalid，不能靠删除extension或optional root放行。
+
+[PFD] 分母来自exact clean pushed Git tree、build manifests与generated output tree，不来自调用者可调的
+`sourceExtensions`、任意exclude或repository-wide `other` root；manifest、compiler、resolver、generator与
+denominator roots全部hash绑定。自写lexical scanner只可标记
+`coverageClass="bootstrap-lexical" / requiredCredit=false / legacyZeroCredit=false`，不得命名为最终check、挂名
+证明production closure或使baseline通过。所有mutation fixture按caseId+path+offset+diagnostic形成exact
+multiset；“出现过某个错误”不能给同文件其他漏检攻击喂绿。
+
 ## 9. Family SDK and plugin boundary
 
 ### 9.1 Build-time Family 大模板与 stable core
@@ -1858,6 +1872,11 @@ interface ProductionReceiptV1 {
 }
 ~~~
 
+[PFD] `ProductionReceipt.logRangeArtifactRef.locator`必须是`file-range`，且其`systemId`与`bootIdHash`必须
+分别等于producer anchor；log与raw-boundary artifact必须不同。跨system、跨boot、无device/inode/range的日志
+不能伪装成该process的production evidence。其immutable mirror仍须由qualified resolver证明bytes/hash/length/
+media/schema与retention lease真实可读；结构hash自洽本身不是live事实。
+
 [PFD] EvidenceEvent引用input/output SemanticArtifact与ProductionReceipt，形成事实lineage；它不是跨stage业务
 DTO，也不能让producer metadata改变语义artifact ID。不是每次hot-path amount search/quote都写durable
 WorkLedger：只有startup partition/outcomes、ready、submission intent等跨restart authority按其合同持久化；
@@ -2207,11 +2226,22 @@ ordinal 0的accepted anchor，`committedBeforeFirstHead`不得靠布尔自报。
 process/filesystem、数学reference model或独立EVM重建：
 
 ~~~ts
+interface ObserverRoleSpecV1 {
+  readonly roleId: string;
+  readonly observationSchema: SchemaRef;
+  readonly anchorPolicyDigest: Hash;
+  readonly observerQualificationSpecDigest: Hash;
+  readonly requiredCriticalMutationIds: readonly string[];
+  readonly minimumIndependentOracleCases: DecimalString;
+}
+
 interface PredicateSpecV1 {
   readonly predicateId: string;
   readonly version: SemVer;
   readonly claimSchemaRefs: readonly SchemaRef[];
   readonly observationSchemaRefs: readonly SchemaRef[];
+  readonly requiredObserverRoles: readonly ObserverRoleSpecV1[];
+  readonly observerRoleSetHash: Hash;
   readonly passRuleDigest: Hash;
   readonly failRuleDigest: Hash;
   readonly invalidRuleDigest: Hash;
@@ -2219,7 +2249,9 @@ interface PredicateSpecV1 {
   readonly tolerancePolicyDigest: Hash;
   readonly forbiddenProducerSelectors: readonly string[];
   readonly criticalMutationIds: readonly string[];
+  readonly criticalMutationSetHash: Hash;
   readonly independentOracleKinds: readonly IndependentOracleKind[];
+  readonly verifierQualificationSpecDigest: Hash;
   readonly specDigest: Hash;
 }
 ~~~
@@ -2280,6 +2312,9 @@ interface VerifierQualificationCertificateV1 {
     readonly roleId: string;
     readonly observationSchema: SchemaRef;
     readonly anchorPolicyDigest: Hash;
+    readonly observerQualificationSpecDigest: Hash;
+    readonly requiredCriticalMutationIds: readonly string[];
+    readonly minimumIndependentOracleCases: DecimalString;
     readonly observerQualificationId: Hash;
   }[];
   readonly caseSetRoot: Hash;
@@ -2331,6 +2366,7 @@ interface AcceptanceQueryV1 {
   readonly queryId: Hash;
   readonly payloadHash: Hash;
   readonly predicateSpecDigest: Hash;
+  readonly qualificationRegistryRoot: Hash;
   readonly subjectArtifactRoot: Hash;
   readonly qualifiedFactSnapshotId: Hash;
   readonly processAnchorHash: Hash;
@@ -2363,6 +2399,13 @@ interface AcceptanceCertificateV1 {
 字段。AcceptanceCertificate绑定exact query、claim/observation/raw roots、qualification registry与完整reason set，
 不能把旧pass certificate换一组facts重放。
 
+[PFD] executable schema的`schemaHash`绑定完整declarative descriptor；任何cross-field refinement还必须把
+versioned `refinementSpecDigest`写入descriptor。禁止用`Function.toString()`冒充可移植实现身份，也禁止只靠
+同名`refinementId`。Verifier certificate的`predicateImplementationDigest`是完整load-bearing verifier closure
+digest，必须覆盖canonical codec、schema refinement实现、registry/lineage validator与predicate program；其中
+任一实现变化都会使旧certificate stale。这样规范变化改变schemaHash，规范不变但实现变化也必须重新
+qualification。
+
 [PFD] production acceptance只能引用current qualification：predicate spec/implementation或任一load-bearing
 observer digest变化，旧证书立即stale并使verdict invalid。`declaredCriticalMutationIds`必须与
 `rejectedOrInvalidMutationIds` exact相等，且independentOracleCaseCount>0；DS/impl witness不计入该count，
@@ -2378,6 +2421,12 @@ observer证书”替未资格化adapter背书。
 role，且其`observerQualificationId`必须属于该verifier certificate声明的exact IDs。缺role、额外load-bearing
 observation或用未参与verifier qualification的可替换observer，均invalid；更换observer必须重新qualification并
 签发新Verifier certificate。
+
+[PFD] 每个role的`observerQualificationSpecDigest`必须与对应Observer certificate的
+`qualificationSpecDigest`精确相等；它不是predicate spec digest。Role声明的observation schema、anchor policy、
+required mutation exact set与minimum independent-oracle cases也必须逐项由current certificate满足。
+`requiredObserverRoles`、`observerQualificationIds`、mutation IDs及registry certificate/revocation sets均按schema
+规定严格排序；外部乱序直接invalid，GateCore不得normalize后放行。
 
 [PFD] Observation facts先由`observationSchema` exact decode/re-encode，再复算`canonicalFactsHash`；snapshot的
 ordered claim/observation/raw IDs与三个set roots必须exact相符。Acquisition ProductionReceipt必须属于同一
@@ -2409,6 +2458,11 @@ chain / Reth / process / math / independent EVM ──qualified observations─�
 raw artifacts规范化为`ReferenceWitnessReceipt { trustLevel: "untrusted-reference" }`；不能调用builder、
 planner、solver、quoter、executor或simulator补齐事实，不能改变runtime，也无权定义成功或获得independent
 oracle credit。acceptance core只读neutral claims与qualified observations，不读旧DTO。
+
+[REJ] 旧`semanticStages(raw.selected)`、production-replay、blind/capture/paired-live与日志KPI parser不得进入
+acceptance authority。尤其禁止从一个producer-selected对象合成`quote positive / execution success / decision
+allow`六个pass；malformed/unknown行、缺timing或缺root不能被skip后缩小分母。它们最多提供带raw locator的
+untrusted witness或diagnostic，production success只能来自六个真实load-bearing boundary facts。
 
 [PFD] DS是downstream/head-session/live/performance事实的主要reference producer，因为它能稳定跑出这些边界；
 它不能伪造strict attestation、atomic readyGeneration或Family publication lineage。impl只用于它能稳定产生的

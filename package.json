@@ -1,0 +1,24 @@
+{
+  "name": "@aloha/searcher",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.12.1",
+  "workspaces": [
+    "acceptance/*",
+    "apps/*",
+    "families/*",
+    "packages/*",
+    "specs/*",
+    "strategies/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "build": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.41",
+    "typescript": "5.9.3"
+  }
+}
