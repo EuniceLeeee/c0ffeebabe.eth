@@ -179,6 +179,7 @@ export function createStrictCentralAdapterRuntime(input: {
           const rethLane = (issueInput.schedule as
             Partial<CentralScheduleDecision> | undefined)?.rethLane ?? "exact";
           const rethStartedAtMs = Date.now();
+          let queueWaitMs = 0;
           const rethResults = rethBound.length === 0
             ? []
             : transportScheduler === undefined
@@ -187,7 +188,10 @@ export function createStrictCentralAdapterRuntime(input: {
                   rethLane,
                   issueInput.control?.signal ??
                     new AbortController().signal,
-                  () => Promise.all(rethBound.map(runRequest)),
+                  (lease) => {
+                    queueWaitMs = Math.max(0, lease.queueWaitMs);
+                    return Promise.all(rethBound.map(runRequest));
+                  },
                 );
           if (rethBound.length > 0) {
             const elapsedMs = Date.now() - rethStartedAtMs;
@@ -197,6 +201,7 @@ export function createStrictCentralAdapterRuntime(input: {
                   " rethCalls=" + rethBound.length +
                   " simCalls=" + simulated.length +
                   " wallMs=" + elapsedMs +
+                  " queueWaitMs=" + queueWaitMs +
                   " family=" + execution.familyId,
               );
             }
