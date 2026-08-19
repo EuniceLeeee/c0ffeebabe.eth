@@ -1581,6 +1581,7 @@ export class BlockScanRuntimeLoop {
     let coarseSourceBlock: number | null = null;
     let coarseSourceBlockHash: string | null = null;
     let exactSourceBlockHash: string | null = null;
+    let exactSourceGeneration: number | null = null;
     let observedSourceBlockHash: string | null = null;
     let fullCoverage = true;
     let degradedRecallReasons: readonly string[] = Object.freeze([]);
@@ -2180,6 +2181,7 @@ export class BlockScanRuntimeLoop {
         if (this.deps.blind.enabled) auditRuntime = snapshot;
         runtimeSourceBlock = snapshot.sourceBlock;
         exactSourceBlockHash = snapshot.sourceBlockHash;
+        exactSourceGeneration = snapshot.generation;
         blockScanPlanner.setFlashLiquidity(snapshot.funding);
         this.deps.sharedPlanner.setFlashLiquidity(snapshot.funding);
         if (startupWarmAttempt) {
@@ -2474,7 +2476,12 @@ export class BlockScanRuntimeLoop {
       const strictSession = await this.deps.strictSession(Object.freeze({
         number: runtimeSourceBlock,
         hash: exactSourceBlockHash,
-        generation,
+        // Reuse the producer's generation for this source so the strict
+        // session cache (keyed by number:hash:generation) hits the session
+        // the N-1 producer already built. A per-pass generation here missed
+        // the cache and re-ran the full 1706-instance createSession inside
+        // exact_refine, adding ~13s to every pass.
+        generation: exactSourceGeneration ?? generation,
       }));
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
