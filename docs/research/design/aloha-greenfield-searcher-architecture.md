@@ -10,6 +10,12 @@
 >
 > 本文只定义从空仓库直接实现的最终系统；不定义迁移、shadow或legacy双轨。本轮不执行部署，文中只设计
 > future exact-SHA systemd dry-run边界；绝不授予签名或广播授权。
+>
+> 本文是 Aloha 的唯一 normative architecture。外部 greenfield v1.2 bundle 与旧仓库只作为设计来源和
+> `untrusted-reference`；其 qualification、clean-room 与边界治理要求经本文明确吸收后才生效。发生冲突时，
+> 本文的 single authority、immutable producer session、protocol-neutral core、plugin-owned typed outcome 与
+> independent-fact verdict 优先。禁止执行者在两份文档间选择更容易实现的条款；任何新冲突必须通过版本化
+> ADR与新canonical commit解决，不能silent merge。
 
 ## 0. 判断标签、引用方法与强制用语
 
@@ -19,7 +25,7 @@
 |---|---|
 | [VEF] | verified existing fact：在冻结 SHA 的源码、测试或已归档记录中可复核的既有事实 |
 | [MDR] | mature design retained：已经暴露并修过真实问题、且符合 Aloha 解耦边界的成熟设计 |
-| [ASR] | asset selected for reuse：选定复用的资产；可能是原样代码，也可能是明确范围的算法 |
+| [ASR] | asset selected for reuse：经reference lock选定的pure symbol、declaration或明确不变量；不表示旧runtime可复制 |
 | [BRW] | asset requiring boundary rewrite：机制可参考，但 authority、类型、依赖或接口必须重写 |
 | [REJ] | asset explicitly rejected：禁止进入 Aloha 的代码、语义或 authority |
 | [PFD] | proposed final design：Aloha 的强制终态设计 |
@@ -38,8 +44,8 @@ nl -ba 输出计算。
 [PFD] Aloha 是一次绿地、strict-only、单 authority 重写。它从空仓库直接实现最终 contract，
 不连接旧 runtime，不先恢复旧测试，不保留 compatibility facade，也不以新旧数量 parity 定义成功。
 
-[MDR] 绿地不等于拒绝成熟路线。只要旧机制满足以下全部条件，就可以作为主要参考、原样复用或
-最小提取：
+[MDR] 绿地不等于拒绝成熟路线。只要旧机制满足以下全部条件，就可以作为主要参考、逐symbol采用
+已证明的isolated pure kernel，或按新contract重写其成熟choreography：
 
 - authority 与状态所有权唯一；
 - 中央只解释通用 contract，不识别 Family 名称、地址、ABI、selector、topic、数学或 storage slot；
@@ -97,9 +103,12 @@ authority。独立builder随后恢复inProgress或构建next generation，仍只
 6. active GraphView 在 producer session 内不可变，下一 generation 可并行构建并在安全边界原子切换；
 7. 每个 fixed-cutoff run 的每个 Family+Instance 只 attest 一次，restart 只做差集；
 8. 统一调度不以重复扫描、重复 materialization、重复 projection 或无界并发换取正确性；
-9. impl 与 Aloha 都由同一个、先冻结的事实验收协议判断；
+9. DS、impl 与 Aloha 都由同一个、先冻结且已资格化的事实验收协议判断；DS/impl只是不可信reference
+   producers，独立链上、Reth、数学与EVM事实才是oracle；
 10. 默认 dry-run，final simulation、standing-position、repayment、conservation 与 submission gate
-    全部 fail closed。
+    全部 fail closed；
+11. stable Family core只定义所有Family共同生命周期；未来新增domain或Family种类只增加versioned
+    extension与自己的package，不修改中央pipeline，也不使未声明依赖的Family或predicate重验。
 
 ### 2.2 Non-goals
 
@@ -111,6 +120,8 @@ authority。独立builder随后恢复inProgress或构建next generation，仍只
 - 运行时 mutable topology；
 - target route、pinned route 或手写成功 fixture；
 - keeper/reward、inventory、private path、sandwich、JIT-LP；
+- 当前release的Liquidity/LP authoring template、LP capability/schema/interpreter、LP Family、LP fixture、
+  LP catalog/BOM entry或LP strategy；本轮只冻结通用extension与局部失效机制，不创建placeholder/stub；
 - 本轮生产代码、测试实现、部署、进程操作、签名或广播。
 
 [PFD] Aloha 可以继续支持当前 mission 内的 blockscan 与 public-mempool backrun，但两条 lane 必须
@@ -185,19 +196,25 @@ oldSha
 oldPath
 selectedSymbolOrRange
 oldContentHash
+referenceLockId
+adoptionMode = isolated-pure-kernel | invariant-only-rewrite | reference-witness | rejected
+newContractHash
 newPath
 dependencyClosureHash
 authorityOwned = false
+oldRuntimeDependency = false
 familyBranches = none for central assets
 schemaRoundTrip = pass
 failureSemantics = declared
 acceptanceEvidenceRefs
+qualificationCertificateRefs
 reviewer
 ~~~
 
-[PFD] 如果只是改名、改 import 或移动文件，而算法和语义不变，记录为原样代码复用；如果删除了
-旧类型、旧 authority、Family 分支或 handwritten DTO，则记录为边界重写。不能把大段重写包装成
-“原样复用”。
+[PFD] 旧source tree、package/import layout、runtime type、checkpoint、compatibility facade与whole directory
+永不复制。只有先定义新contract、无I/O/hidden state/旧runtime type的isolated pure symbol或单一纯声明模块，
+才可在exact blob lock与独立事实证明后adopt；其他资产只允许提取不变量并从零实现新shell、authority、schema
+和port。不能把改名、移动文件或大段复制包装成“重写”。
 
 ## 5. Legacy architecture/code reuse matrix
 
@@ -205,7 +222,7 @@ reviewer
 
 | 代码 | 结论 |
 |---|---|
-| R0 | 原样代码复用：文件或明确 symbol 可复制；只允许 import 路径和 license header 的机械调整 |
+| R0 | isolated pure-kernel/declaration adoption：新contract先行，exact symbol/blob可采用；禁止runtime/lifecycle/whole tree |
 | R1 | 成熟设计复用：保留合同与算法，按新 port 实现 |
 | R2 | 提取纯算法：只拿无 authority 的局部算法 |
 | R3 | 按新接口重写：旧边界、状态或依赖不可进入 |
@@ -222,6 +239,18 @@ reviewer
 [PFD] `source存在`或`test存在`只标记审计locator，不是运行证据；表中所有未执行效果均标[MTM]。若路径不
 符合上述唯一展开规则，必须在单元格写完整SHA:path，禁止靠文件名猜测。
 
+#### 5.1.1 Clean-room reference lock 与 reuse ledger
+
+[PFD] 新repo在任何旧代码读取或case导入前，必须创建machine-readable `reference-lock.json` 与append-only
+`reuse-ledger.yaml`。前者锁定source repository、exact commit、path、blob、license和允许的disposition；后者
+逐symbol记录新contract、adoption mode、destination、dependency closure、所需证据与review。旧仓库只能由
+`tools/reference-only/**`按lock读取，不能成为submodule、vendor tree、build input或runtime dependency。
+
+[PFD] required CI必须复核lock中的blob仍精确匹配、ledger覆盖所有production reuse、source-repository
+production import closure为零、reference-only工具不进入acceptance predicate或production transitive closure。
+旧输出只可生成`trustLevel = untrusted-reference`的neutral claim/witness，不能生成expected verdict、qualified
+observer/verifier certificate或production acceptance pass。
+
 ### 5.2 中央、状态与运行时资产
 
 | 标签 / 判断 | 旧 SHA 与路径 | 当前职责；authority / 特判 / 隐藏状态 | 证据与已知问题 | Aloha 目标；复用前合同；失效条件 |
@@ -233,9 +262,9 @@ reviewer
 | [REJ] R4 | impl@d33c8b48 planner/token-graph.ts 的 PoolEntry、merge/query bridge、strict-catalog-registry-projection.ts、route-leg-registry.ts | legacy-shaped Graph/registry authority；大量 protocol fields、fallback shape、中央 adapter lookup | token-graph.ts:43-170,196-252,297-313 | 不设目标 package；永不恢复。新 Graph 只含通用 routing fact 和 opaque handles |
 | [BRW] R3 | impl@d33c8b48 strict-production-runtime-session.ts | current-source session；ready instance refresh；固定 16 pool，共享 slow/fast slots | :192-223；串行 26s 根因；固定 16 未做 transport/Family isolation | packages/state-runtime；保留 deterministic per-index assembly，改为 RPC fast、REVM heavy、Family quota、explicit unresolved coverage |
 | [BRW] R3 | impl@d33c8b48 strict-central-adapter-runtime.ts | provider/simulator transport 与 caller authority；手写 provenance；错误分类 | :330-364 漏字段；:412-427 caller gap 分类不正确 | packages/request-program + packages/capability-interpreters；只执行完整FrozenProgram envelope；codec mismatch/caller mode gap为invalidProgram，RPC/deadline为retryable |
-| [ASR] R1 | impl@d33c8b48 final-simulation-work-runtime.ts | final-sim admission、reserved resources、queue、fence、retire；不拥有协议语义 | :49-145,291-535,570-724；final-sim tests | packages/final-sim；调度内核近原样重用，类型 port 重写；execution program schema、source/gen、safety root 变化使 receipt 不可复用 |
+| [ASR] R1 | impl@d33c8b48 final-simulation-work-runtime.ts | final-sim admission、reserved resources、queue、fence、retire；不拥有协议语义 | :49-145,291-535,570-724；final-sim tests | packages/final-sim；保留调度不变量并按新port/queue/cancellation重写；execution program schema、source/gen、safety root 变化使 receipt 不可复用 |
 | [BRW] R3 | impl@d33c8b48 revm-sim-client.ts；listener/revm-sim/src/main.rs | single FIFO daemon 与 REVM engine；daemon/queue/prepared cache 隐藏状态 | client:175-261证明共享FIFO存在HOL结构；afcc07e8改为per-attest隔离但实际效果[MTM]；Rust仅impersonated frame放宽EIP-3607 | runtime/revm-workers + packages/request-program；提取REVM engine/caller-mode规则，重写有界worker pool、single-flight、request id、deadline、kill/reap |
-| [ASR] R0 | DS@466cf84f live-reth-read-priority.ts | 无 authority 的 idempotent background preemption primitive；内部 active attempts/waiters | :28-145,181-234；13 个 race/abort tests | packages/scheduler/src/preemptible-background.ts；允许原样代码复用，由外层 bounded scheduler 提供 queue cap 与 Family quota；只有该 primitive 语义变化才重跑其消费者合同 |
+| [ASR] R1 | DS@466cf84f live-reth-read-priority.ts | 无 authority 的 idempotent background preemption primitive；内部 active attempts/waiters | :28-145,181-234；13 个 race/abort tests | packages/scheduler/src/preemptible-background.ts；保留抢占/abort不变量但按新WorkClass、queue和cancellation contract重写；旧文件不复制 |
 | [ASR] R1 | DS@466cf84f reth-transport-scheduler.ts | physical-request permit、lane reserve、active/queued metrics；固定四 lane，无 queue cap/Family fairness | :1-13,30-35,46-118,160-218；scheduler tests:26-98 | packages/scheduler；保留 reserve/abort/release 算法，扩展通用 WorkClass、bounded ingress、per-Family fairness；调度 policy 变化不使 semantic memo 失效 |
 | [ASR] R2 | DS@466cf84f blockscan-state-coordinator.ts | topology/state compilation、static read dedupe、per-family deadlines、CAS；混有旧 topology publication authority | :345-378,805-818,1677-1774,1849-2104,2672-2854,3351-3572 | packages/state-runtime；只提取 physical read dedupe、changed-set compile、family-local settlement、canonical CAS；旧 live topology publication不移植 |
 | [BRW] R3 | DS@466cf84fe7791baa848974af32ff1b502bfd103c:listener/src/searcher/{blockscan-runtime-loop,discovery-backfill-lane}.ts | producer orchestration与性能调度；混有 N-1 fallback、旧 Graph/state/solver/final submission | loop:800-903,1165-1240,1260-1347,2787-2910,3672-3685；backfill:200-262,446-490 | apps/searcher-runtime + packages/producer；提取 head sequencing、critical header、exact budget、yield telemetry；拒绝 N-1 authority与旧 topology mutation |
@@ -268,7 +297,7 @@ reviewer
 | [ASR] R2 | impl@d33c8b48:src/BotVM.sol | 旧execution VM、callback state、owner entry与transient slots；整体拥有旧execution authority | :7-21仅覆盖旧15 opcode中的9个；:34-55 owner/self gate；:95-209 VM | 旧contract整体R4；只可逐symbol提取无协议opcode dispatch算法到contracts/executor，重新证明opcode completeness/callback/auth；新contract hash失效execution receipts |
 | [ASR] R2 | impl@d33c8b48:src/BotVMEncoder.sol | 旧bytecode encoder；与旧opcode schema强耦合 | 冻结source与Solidity tests存在，本轮未执行[MTM] | 只有新executor选择完全相同的已审计opcode encoding时提取pure encode symbol；否则R4，不保compat encoder |
 | [REJ] R4 | impl@d33c8b48:src/BotVMScriptBuilder.sol | route-specific script builder与旧execution形状 | 固定旧route/action assembly | 永不移植；新program只由generated ActionOwner按versioned execution schema生成 |
-| [ASR] R0 | impl@d33c8b48:src/interfaces/{IERC20,IFluidVault,IMorpho,ISwap}.sol | 四个纯 ABI interface，无 runtime authority | 冻结source；旧compile/tests只作locator，本轮未执行[MTM] | contracts/interfaces；按§5.5精确blob白名单原样复用，接口 hash进入使用它的 Family kernel closure |
+| [ASR] R0 | impl@d33c8b48:src/interfaces/{IERC20,IFluidVault,IMorpho,ISwap}.sol | 四个纯 ABI declaration，无 runtime authority | 冻结source；旧compile/tests只作locator，本轮未执行[MTM] | contracts/interfaces；新contract先行后按§5.5 exact declaration blob采用，接口 hash进入使用它的 Family kernel closure |
 | [REJ] R4 | impl@d33c8b48 src/FlashArb.sol、Constants.sol 的具体路线 | wstUSR/Morpho/Fluid/PSM/V3/V4/Curve 硬编码执行合同 | FlashArb.sol:10-17,35-82,84-180 | 永不作为通用 Aloha execution authority；协议动作必须由 plugin action owner生成 |
 | [ASR] R2 | impl@d33c8b48 shared/evidence/semantic-six-step.ts、impl@d33c8b48 analysis {six-step-validation-controller,six-step-validation-lifecycle,six-step-judgment}.ts | semantic evidence、validator、controller、merge/review lifecycle；旧 stage/route/branch authority混合 | semantic-six-step.ts:42-258；controller:313-680,1403-1651；lifecycle:327-570 | acceptance/schema-codec + acceptance/validator；提取 canonical/ordered/commitment算法，重写所有 stage和控制面 |
 | [ASR] R2 | impl@d33c8b48 analysis trusted-six-step-runtime-attestation.ts | SHA/PID/starttime、content-addressed inputs、secret filtering；AWS/SSM耦合 | :72-199,276-399；AWS/SSM :17-19,201-274,402-613 | acceptance/collectors；提取纯验证，部署 collector为port；AWS/SSM/path不进入core schema |
@@ -277,20 +306,19 @@ reviewer
 | [BRW] R3 | impl@d33c8b48 scripts/deploy-node.sh 与 systemd shell | exact SHA、dry-run/live marker、wallet cap、EV gate；同时含大量旧 env/feature flags并读取私钥 | deploy-node.sh:16-23,337-380,401-480,616-696 | deploy/runtime-shell；保留 exact SHA、systemd、default dry-run、human gate；删除 legacy flags；evidence collector不得读取私钥 |
 | [REJ] R4 | DS@466cf84fe7791baa848974af32ff1b502bfd103c:listener/src/searcher/blockscan-runtime-loop.ts 的N-1 fallback及runtime topology authority | 旧系统的降级 availability与mutable topology机制 | DS@466cf84fe7791baa848974af32ff1b502bfd103c:docs/research/design/blockscan-current-n-latency-recovery-20260727.md:154-177,625-676 | 不进入 Aloha correctness path；Aloha只接受current-source exact，generation只能通过完整ready CAS和安全边界adopt |
 
-### 5.5 原样代码复用白名单
+### 5.5 Isolated declaration adoption 白名单
 
-[PFD] R0是封闭的exact-file清单，不是实施者可自行扩展的资产类别。Git blob ID绑定冻结内容；复制时
-ReuseReceipt另记SHA-256、license与new dependency closure：
+[PFD] R0是封闭的isolated declaration清单，不是实施者可自行扩展的资产类别。Git blob ID绑定冻结内容；
+采用前必须已有独立新contract，ReuseReceipt另记SHA-256、license与new dependency closure：
 
 | 冻结SHA:path | Git blob ID | R0范围 | Aloha目标 |
 |---|---|---|---|
-| DS@466cf84fe7791baa848974af32ff1b502bfd103c:listener/src/searcher/live-reth-read-priority.ts | 5fcb3e00e4bc59de406bab820c38ccea6df27713 | entire file；只允许机械import/license调整 | packages/scheduler/src/preemptible-background.ts |
 | impl@d33c8b48d43f0191db4354ebe4192d805ac9323f:src/interfaces/IERC20.sol | 6235ad08ac04be0b3030678fb614bb3d9273a034 | entire interface | contracts/interfaces/IERC20.sol |
 | impl@d33c8b48d43f0191db4354ebe4192d805ac9323f:src/interfaces/IFluidVault.sol | 4abea40103ce2e59e1894a367c84f04a1ed71a83 | entire interface | contracts/interfaces/IFluidVault.sol |
 | impl@d33c8b48d43f0191db4354ebe4192d805ac9323f:src/interfaces/IMorpho.sol | 828245a0ca0bf08035c64c506edde0cf9447bc6e | entire interface | contracts/interfaces/IMorpho.sol |
 | impl@d33c8b48d43f0191db4354ebe4192d805ac9323f:src/interfaces/ISwap.sol | 5eab400561a96533cf3d204e3dddc3577c0d84c3 | entire interface | contracts/interfaces/ISwap.sol |
 
-[PFD] 以上五项之外没有R0。Pure math、ABI、codec helper即使看起来无状态，也统一是R2逐symbol提取；
+[PFD] 以上四项之外没有R0。Pure math、ABI、codec helper即使看起来无状态，也统一是R2逐symbol提取；
 authority-bearing文件、catalog、request codec、checkpoint schema、Graph type、runtime composition、planner、
 REVM client、final submission与validator均不得整体复制。新增R0必须先修订本canonical并重新审计，不得由
 实施Agent在ReuseReceipt中自行升级R2/R3。§5.2–§5.7明确列出的glob/紧密模块按对应row执行；任何未被这些
@@ -342,7 +370,7 @@ row机械覆盖的旧文件或symbol默认R4不移植。若实施中发现遗漏
 | execution/inclusion-tracker.ts | generic inclusion/slot state，依赖旧bundle receipt | test/inclusion-tracker.ts存在[MTM] | R2提取state machine | submission只消费sealed final-sim+authorization receipt |
 | scripts/deploy-ab-challenger.sh | A/B、paired deployment/cutover authority | frozen script存在 | R4完全废弃 | Aloha只有exact-SHA systemd dry-run shell |
 
-[PFD] Family ABI与pure math不属于R0；四个Solidity interface与一个DS scheduler primitive是全部白名单，
+[PFD] Family ABI与pure math不属于R0；四个Solidity interface declaration是全部白名单，
 精确SHA/path/blob见§5.5。
 
 ### 5.7 冻结 Family kernel inventory
@@ -351,6 +379,10 @@ row机械覆盖的旧文件或symbol默认R4不移植。若实施中发现遗漏
 `impl@d33c8b48d43f0191db4354ebe4192d805ac9323f:listener/src/searcher/generated/production-family-entries.generated.ts:1-47`
 精确列出22个entry。该清单是本次复用审计分母，不是Aloha中央admission allowlist；Aloha release分母最终只
 来自独立release-intent BOM与generated exact equality。
+
+[PFD] 下表的Swap/Protocol/Funding/Credit只是人类复用审计与owner分组标签，不是FamilyManifest字段、runtime
+domain enum、中央dispatch、validator分支或未来封闭集合。当前release不含LP；不得据此生成LP placeholder、
+absence slot或验收分支。
 
 | 审计组 | 冻结entry / kernel资产 | Aloha处理 |
 |---|---|---|
@@ -405,18 +437,25 @@ row机械覆盖的旧文件或symbol默认R4不移植。若实施中发现遗漏
 ├── specs/
 │   ├── core-envelope/                # 稳定核心 schema + reason codes
 │   ├── evidence/                     # frozen Evidence Schema
+│   ├── predicates/                   # versioned pass/fail/invalid Fact Contracts
 │   ├── capability-index/             # capability IDs/versions/dependencies
 │   ├── authority-proof/              # architecture-neutral proof programs
-│   └── release-intent/               # independently reviewed Family BOM exact set
+│   ├── governance/                    # architecture-boundaries/reference-lock/reuse-ledger schemas
+│   └── release-intent/               # independently reviewed Family/Strategy BOM exact set
 ├── generated/
 │   ├── family-catalog/               # immutable definitions/data/root
+│   ├── strategy-catalog/             # generated current strategy refs; no LP strategy
 │   └── runtime-composition/           # only generated imports of Family public entries
 ├── packages/
 │   ├── canonical-codec/              # schema-derived canonical bytes/hash
 │   ├── canonical-source/             # header/state-root/canonical view
 │   ├── durable-store/                # one SQLite WAL content/CAS implementation
 │   ├── observation/                  # raw block/log/tx ingestion
-│   ├── family-sdk/                   # plugin ports + opaque handle issuers
+│   ├── family-sdk/
+│   │   ├── authoring/                # build-time generic big template; never runtime-imported
+│   │   ├── conformance/              # compiles/validates definitions
+│   │   └── runtime-refs/             # narrow stage refs + opaque handle issuers
+│   ├── strategy-sdk/                 # planning composition contract; protocol-neutral
 │   ├── capability-contracts/         # versioned capability envelopes
 │   ├── capability-interpreters/      # generic EVM/RPC/effect interpreters
 │   ├── artifact-fingerprint/         # code/schema/interpreter closure hashes
@@ -447,6 +486,8 @@ row机械覆盖的旧文件或symbol默认R4不移植。若实施中发现遗漏
 │       ├── manifest/
 │       ├── kernel/                    # ABI/math/reverse-binding
 │       └── capabilities/              # nomination/identity/state/exact/action
+├── strategies/
+│   └── <strategy-id>/                # current production strategies only; no LP strategy
 ├── runtime/
 │   └── revm-workers/                 # isolated single-flight worker protocol
 ├── contracts/
@@ -455,17 +496,24 @@ row机械覆盖的旧文件或symbol默认R4不移植。若实施中发现遗漏
 ├── acceptance/
 │   ├── schema-codec/                 # generated independently from specs
 │   ├── validator/                    # no production imports
-│   ├── adapters/impl-readonly/
+│   ├── predicate-specs/
+│   ├── reference-models/             # math/small-model/independent engine oracles
+│   ├── observer-qualification/
 │   ├── authority-proof-interpreters/ # generic replay of declared proof programs
 │   ├── collectors/
 │   ├── negative-corpus/
 │   └── cli/
+├── tools/
+│   └── reference-only/
+│       ├── ds/                       # exact-SHA claim importer; untrusted-reference
+│       └── impl/                     # exact-SHA claim importer; untrusted-reference
 └── deploy/
     ├── systemd/
     └── runtime-shell/
 ~~~
 
-[PFD] generated/runtime-composition 是唯一允许 import families/<id>/public-entry 的文件集合；它完全由
+[PFD] generated/runtime-composition 是唯一允许 import families/<id>/public-entry 与当前strategy public entry
+的文件集合；它完全由
 release-intent BOM + manifests 生成，禁止手写分支，并同时输出source hash、executable closure root与
 definitionCatalogRoot。apps/searcher-runtime 只 import 该content-addressed generated module和中央ports，
 不得直接import某个Family。packages/**永不importfamilies/**。
@@ -479,7 +527,9 @@ definitionCatalogRoot。apps/searcher-runtime 只 import 该content-addressed ge
 | canonical-source | CanonicalSourceView(number/hash/stateRoot) | Family identity、Graph、quote |
 | durable-store | SQLite writer lease、immutable content bytes、transaction/fsync/GC primitives | outcome语义、ready/current root选择 |
 | observation | immutable raw observation receipt | identity completeness、edge |
-| Family plugin | protocol meaning、canonical identity、descriptor、route memo、state/exact/action interpretation | canonical header、CAS、scheduler permit |
+| Family authoring definition | build-time protocol meaning、canonical identity、descriptor、route memo、state/exact/action declarations | runtime authority、canonical header、CAS、scheduler permit |
+| generated Family stage refs | 当前stage唯一issuer/capability/action owner refs | 完整authoring definition、其他stage能力、protocol dispatch |
+| Strategy plugin | generic capability refs如何组成planning problem/constraints | Family协议语义、Graph写、solver kernel、submission |
 | generated/family-catalog | release内Family/capability/action exact set及roots | 链上实例admission |
 | release-intent | 人工审阅的release Family BOM exact set | plugin执行、链上实例admission |
 | attestation | fixed-run candidate partition与typed outcome | plugin protocol verdict |
@@ -507,9 +557,9 @@ flowchart TD
   APP["apps/searcher-runtime"] --> PROD["producer / planner / exact / execution / final-sim"]
   APP --> GEN["ready-generation / graph / attestation"]
   APP --> COMPOSE["generated runtime composition"]
-  COMPOSE --> CAT["generated/family-catalog"]
-  COMPOSE --> FAM["families/* public entries"]
-  CAT --> SDK["family-sdk + capability contracts"]
+  COMPOSE --> CAT["generated family/strategy catalogs"]
+  COMPOSE --> FAM["families + strategies public entries"]
+  CAT --> SDK["family-sdk runtime refs + capability contracts"]
   FAM --> SDK
   FAM --> KERNEL["family-local kernel"]
   PROD --> SDK
@@ -525,9 +575,16 @@ flowchart TD
 [PFD] 构建必须用 dependency rules 阻止：
 
 - packages/** import families/**；
+- production packages、stages、orchestrator或apps import `family-sdk/authoring`、完整Family definition或
+  callable runtime god object；authoring façade只允许families/*/family-definition与catalog-generator导入；
 - 一个 Family import 另一个 Family 的内部实现；
 - planner、solver、state-runtime、execution-program import protocol ABI/math；
 - acceptance import apps/**、packages/** production implementation 或 families/**；
+- acceptance predicate/observer import `tools/reference-only/**`或根据DS/impl/Aloha身份选择不同规则；
+- acceptance/{validator,predicate-specs,reference-models} import acceptance/collectors、environment adapters、
+  RPC/network/filesystem/process/child-process clients；GateCore只读冻结QualifiedFactSnapshot并运行pure codec/
+  interpreter/reference model；
+- tools/reference-only进入production、generated runtime或acceptance predicate transitive closure；
 - evidence adapter import production builder/planner/solver；
 - apps/operator-cli直接打开durable DB、构造candidate或取得PromotionCallerToken；它只能读status snapshot或经
   runtime-local admin port请求同run retryable probe；
@@ -554,11 +611,22 @@ generated definition catalog与runtime composition exact set不完全相等，bu
 | final-sim infrastructure failure | unresolved | 否 | 不submission，受损worker退休 |
 | evidence write失败 | evidence gap | 否 | dry-run可记录失败；任何external submission必须fail closed |
 
+### 8.5 Machine-enforced boundary CI
+
+[PFD] `architecture-boundaries`、`production-import-closure`、`reference-lock-integrity`、
+`reuse-ledger-coverage`、`generated-reproducibility`与`acceptance-isolation`是required checks。它们读取
+machine-readable manifests并在以下任一事实成立时阻止merge：禁止import/literal出现；authoring façade或
+reference-only工具进入runtime/validator closure；旧repo package/blob未登记；handwritten generated diff；
+新增Family/Strategy修改中央源码；reuse ledger与实际production blob closure不一致。脚本只机械收集和比较
+这些事实，不能通过修改allowlist把违规结构声明为正确。
+
 ## 9. Family SDK and plugin boundary
 
-### 9.1 Stable core envelope
+### 9.1 Build-time Family 大模板与 stable core
 
-[PFD] Family SDK 只固定少量长期稳定概念：
+[PFD] 完整大模板必须保留，但它是Family作者和catalog compiler使用的build-time authoring façade，不是
+runtime god interface。大模板一次呈现manifest、共同lifecycle、versioned extensions、action owners与事实
+声明，以强类型关系防止Family内部字段错配；production stages永远不能import或持有它。
 
 ~~~ts
 type FamilyId = OpaqueString<"FamilyId">;
@@ -566,26 +634,76 @@ type FamilyCandidateKey = Hash;
 type FamilyInstanceKey = OpaqueString<"FamilyInstanceKey">;
 type CapabilityId = OpaqueString<"CapabilityId">;
 
-interface FamilyManifest {
-  familyId: FamilyId;
-  pluginCodeHash: Hash;
-  authorityDeclaration: AuthorityDeclaration;
-  capabilities: readonly DeclaredCapabilityRef[];
-  actionOwners: readonly ActionOwnerDeclaration[];
+type AuthoringCapabilitySlot<C> =
+  | { readonly kind: "present"; readonly module: C }
+  | { readonly kind: "absent"; readonly reason: DeclaredAbsenceReason };
+
+interface FamilyAuthoringDefinitionV1<Extensions extends CapabilityAuthoringMap> {
+  readonly manifest: FamilyManifestAuthoring;
+  readonly core: {
+    readonly nomination: NominationAuthoringModule;
+    readonly identity: IdentityAuthoringModule;
+    readonly materialization: MaterializationAuthoringModule;
+    readonly projection: ProjectionAuthoringModule;
+    readonly rehydration: RehydrationAuthoringModule;
+  };
+  readonly extensions: {
+    readonly [K in keyof Extensions]: AuthoringCapabilitySlot<Extensions[K]>;
+  };
+  readonly actionOwners: readonly ActionOwnerAuthoringDeclaration[];
+  readonly acceptanceDeclarations: readonly FamilyFactContractRef[];
 }
 
-interface FamilyPlugin {
-  manifest: FamilyManifest;
-  nomination: CapabilityHandle<"nomination">;
-  identity: CapabilityHandle<"identity">;
-  materialization: CapabilityHandle<"materialization">;
-  projection: CapabilityHandle<"projection">;
-  optional: ReadonlyMap<CapabilityId, CapabilityHandle>;
-}
+declare function defineFamily<E extends CapabilityAuthoringMap>(
+  definition: FamilyAuthoringDefinitionV1<E>,
+): FamilyAuthoringDefinitionV1<E>; // build-time only
 ~~~
 
-[PFD] Candidate、Identity、Descriptor、RouteMemo、State、Choice 与 Action payload 对中央都是
-schema-tagged opaque canonical bytes。中央可以校验 schema/hash/size/source/issuer，但不能解析协议意义。
+[PFD] `core`只固定每个load-bearing Family都必须经历的nomination→identity→materialization→projection与
+rehydration lifecycle，以及Family/issuer/schema/source/authority/hash引用；它不固定任何domain payload、
+资产数量、position种类、quote模型或execution action。`extensions`只覆盖当前release capability index中已
+声明的slot；未来尚不存在的domain不在本baseline伪造`absent`条目。
+
+[PFD] 本release只有通用`defineFamily()`，不提供`defineLiquidityFamily`、LP archetype或LP capability。
+未来MAY增加authoring-only domain helper，但它只能把typed authoring fields编译为同一versioned extension
+slots；不得进入runtime、增加stable core字段或产生中央domain union。若某需求确实改变所有Family共同语义，
+必须单独core-major ADR、全局impact声明和重新qualification，不能把单个新domain需求伪装成core升级。
+
+### 9.1.1 Generated runtime refs
+
+[PFD] catalog compiler把大模板编译为不可调用的definition data与stage-local refs：
+
+~~~ts
+interface GeneratedFamilyEntryV1 {
+  readonly familyId: FamilyId;
+  readonly familyDefinitionHash: Hash;
+  readonly issuerRef: FamilyIssuerRef;
+  readonly authorityRef: AuthorityDeclarationRef;
+  readonly lifecycleRefs: {
+    readonly nomination: CapabilityRef;
+    readonly identity: CapabilityRef;
+    readonly materialization: CapabilityRef;
+    readonly projection: CapabilityRef;
+    readonly rehydration: CapabilityRef;
+  };
+  readonly extensionRefs: readonly CapabilityRef[];
+  readonly actionOwnerRefs: readonly ActionOwnerRef[];
+  readonly factContractRefs: readonly FamilyFactContractRef[];
+}
+
+type StageFamilyRefs =
+  | { readonly stage: "nomination"; readonly nomination: NominationRef }
+  | { readonly stage: "identity"; readonly identity: IdentityRef }
+  | { readonly stage: "materialization"; readonly materialization: MaterializationRef }
+  | { readonly stage: "projection"; readonly projection: ProjectionRef }
+  | { readonly stage: "rehydration"; readonly rehydration: RehydrationRef }
+  | { readonly stage: "capability"; readonly capability: DeclaredCapabilityRef };
+~~~
+
+[PFD] runtime catalog按stage签发最窄ref；attestation、Graph、planner、exact与execution均不能取得完整
+`GeneratedFamilyEntryV1`或其它stage callable。Candidate、Identity、Descriptor、RouteMemo、State、Choice与
+Action payload对中央都是schema-tagged opaque canonical bytes；中央可以校验schema/hash/size/source/issuer，
+但不能解析协议意义。
 
 ### 9.2 Plugin-owned keys
 
@@ -618,6 +736,30 @@ H(familyDefinitionHash, instanceNominationKey) 形成 FamilyCandidateKey，并�
 [PFD] 中央 composition、attestation engine、Graph、planner、solver、exact coordinator、compiler、
 evidence schema与validator源码不变。若新增 Family 要修改这些包，接口设计未达标。
 
+[PFD] 新增当前已有capability集合内的Family只改自己的package、release-intent与generated artifacts。未来新增
+domain时，默认只增加自己的versioned extension schema/interpreter、可选authoring helper、Family package与
+BOM entry；stable core、中央runtime、planner/solver与validator core仍不变。未声明新extension依赖的既有
+Family/Strategy继续复用原semantic receipts。当前实施工作包不包含LP。
+
+### 9.4 Family Plugin 与 Strategy Plugin 分离
+
+[PFD] Family声明“某实例能做什么”；Strategy声明“如何把generic capability/Graph refs组成planning problem”。
+Strategy不得importFamily实现或协议字段，planner/solver kernel也不得按strategy id分支：
+
+~~~ts
+interface StrategyAuthoringDefinitionV1 {
+  readonly strategyId: StrategyId;
+  readonly requiredCapabilityPredicates: readonly CapabilityPredicateRef[];
+  readonly planningProblemIssuer: PlanningProblemIssuerRef;
+  readonly constraintSchemaRefs: readonly SchemaRef[];
+  readonly factContractRefs: readonly PredicateSpecRef[];
+}
+~~~
+
+[PFD] strategy compiler同样只生成窄runtime ref与dependency closure。新增未来LP组合策略只能增加新的strategy
+package、BOM与generated entry，不修改Family core、planner kernel、solver kernel或validator core；本release
+不定义LP strategy。
+
 ## 10. Capability/version/invalidation model
 
 ### 10.1 Capability contract
@@ -640,12 +782,22 @@ interface CapabilityModule<Program, Output> {
     facts: readonly TransportFact[],
   ): ProgramInterpretation<Output>;
 }
+
+interface ExtensionSlotDeclaration {
+  readonly capabilityRef: CapabilityRef;
+  readonly requiredByArtifactKinds: readonly ArtifactKind[];
+  readonly dependencyIds: readonly CapabilityId[];
+  readonly ownerRef: GeneratedOwnerRef;
+}
 ~~~
 
 [PFD] capability ID 标识语义，version 标识兼容合同，schemaHash 绑定数据形状，
 interpreterHash 绑定执行/解释语义。pluginCodeHash、authorityHash 与 canonicalIdentityHash 单独绑定。
 展示层 MAY 从 manifest 读取 opaque namespace/tag，但中央不得把 swap/protocol/funding/credit 固定成 union，
 也不得按 namespace 分派或失效；语义只来自显式 capability ID 与 dependency closure。
+
+[PFD] authoring helper只在build-time把强类型字段编译成`ExtensionSlotDeclaration`；runtime没有domain helper。
+任何artifact只能读取自己声明的slot及传递依赖，未声明extension不能被interpreter读取，也不能进入其fingerprint。
 
 ### 10.2 局部指纹
 
@@ -680,7 +832,7 @@ capability及传递依赖进入fingerprint。未声明或未被该artifact请求
 |---|---|
 | 某Family代码变化 | 只失效implementation closure包含该symbol/module的artifacts；完整familyDefinition lineage更新 |
 | 某declared capability schema/interpreter | 只失效requested dependency closure包含它的artifacts/Families |
-| 新增未被既有 Family 声明的 Credit capability | 新/opt-in Credit Family；既有 Swap/Protocol 不失效 |
+| 新增未被既有 Family/Strategy 声明的future-domain capability | 新/opt-in声明者；既有未依赖Family/Strategy不失效 |
 | authority declaration或proof-source identity | 使用该 authority 的 Family |
 | canonical identity hash | 该 FamilyInstance |
 | nomination evidence变化，但identity/static validity仍成立 | 更新observation receipt；不自动失效verified identity memo |
@@ -688,6 +840,7 @@ capability及传递依赖进入fingerprint。未声明或未被该artifact请求
 | scheduling、telemetry、日志展示变化 | semantic memo不失效 |
 | final-sim safety contract变化 | execution/final-sim receipt失效；identity memo不失效 |
 | definition catalog新增独立Family | global definitionCatalogRoot变化；既有Family semantic memo仍可内容寻址复用 |
+| strategy catalog/implementation变化 | 新producer sessions、planning/exact downstream artifacts；ready Graph与Family memo不失效 |
 
 [PFD] “commit 变化”本身不是 semantic invalidation。每次部署仍需 exact runtime SHA 与新 process
 anchor，但未受影响的 content-addressed Family memo 可以组合进新 ready generation。
@@ -710,6 +863,11 @@ function affectedArtifacts(
 
 [PFD] generated catalog 必须输出 impact receipt：changed capabilities、affected artifacts/Families、reusable
 memo roots、new definitionCatalogRoot。不能因global definitionCatalogRoot改变而粗暴重跑全部Family。
+
+[PFD] 未来若增加LP或其他domain authoring helper、新capability和新Family，允许global catalog root变化；既有
+Swap/Protocol等未声明依赖者的requested closure roots、memo、predicate qualification与pinned semantic
+outputs必须byte-stable并100%复用，旧generated entries也必须byte-identical。这里的LP仅是假设性impact case；
+当前catalog不得签发任何LP CapabilityId或SchemaRef。
 
 ## 11. Schema-driven freeze / codec / rehydration
 
@@ -759,8 +917,8 @@ plugin issue
 10. schema 升级不做兼容猜测；显式 upgrader 本身是版本化、hash-bound 的 capability。
 
 [PFD] stable core envelope 只承载所有 Family 都需要的引用：schemaRef、issuer、source、authority、
-capabilityRef、canonical payload bytes、hash 与 cancellation/deadline。Credit 以后增加新字段时，新增或
-升级 Credit capability schema；Swap 与不依赖该 capability 的 Protocol payload 不变化、不失效。
+capabilityRef、canonical payload bytes、hash 与 cancellation/deadline。未来domain增加新字段时，新增或
+升级自己的capability schema；任何不依赖该capability的payload不变化、不失效。本baseline不预建LP字段。
 
 ### 11.3 Freeze 与 rehydrate
 
@@ -1165,9 +1323,10 @@ Graph file 先内容寻址写完并 fsync，root row 最后原子指向；崩溃
 
 ### 15.2 Protocol-neutral Graph
 
-[PFD] PersistedGraphEdge只包含通用路由事实：endpoint asset refs、direction、persistent RehydrationRef、
-generic constraint refs、owning Family+Instance lineage、static projection hash。它不含v2FeeBps、v3Fee、
-curveI/J、v4PoolKey、protocol name、ABI、storage slot 或中央可解释的 protocol kind。
+[PFD] PersistedGraphEdge只包含通用transition事实：ordered input/output asset ports、opaque transition ref、
+persistent RehydrationRef、generic constraint refs、owning Family+Instance lineage、static projection hash。它
+不假设二元swap、固定资产数量或position模型，也不含v2FeeBps、v3Fee、curveI/J、v4PoolKey、protocol name、
+ABI、storage slot或中央可解释的protocol/domain kind。`Edge`只是当前Graph成员命名，不授予swap taxonomy。
 
 ~~~ts
 interface RehydrationRef {
@@ -1294,10 +1453,23 @@ interpreter hashes。它是 execution program 的唯一价格/状态输入。
 compiler 只负责有序组合、资金流引用、caller/preCall/effect contract、repayment/standing-position/
 conservation obligations 与 hash；不知道 swap、vault、debt mint 或具体协议。
 
-[PFD] standing-position guard 不是协议分类表。Family capability 声明通用 position/debt/credit obligations，
-中央 safety engine 只验证“所有声明 obligation 已关闭或被明确允许”“资产守恒”“借款已偿还”。Unknown
-obligation、缺声明或无法证明均 fail closed。这样新增 Credit 只新增 capability owner，不在中央新增
-Fluid/Silo/Astra 名字分支，同时不会把 debt mint 当普通 swap 绕过安全门。
+[PFD] standing-position guard不是协议分类表，obligation也不是position/debt/credit的中央closed union：
+
+~~~ts
+interface SafetyObligationRef {
+  readonly schemaRef: SchemaRef;
+  readonly ownerRef: GeneratedSafetyOwnerRef;
+  readonly verifierHash: Hash;
+  readonly subjectRoot: Hash;
+  readonly proofRoot: Hash;
+}
+~~~
+
+[PFD] Family capability签发versioned obligations，generated owner/verifier解释具体语义。中央safety engine只
+验证声明exact set完整、owner/schema/hash有效、每个verifier receipt为satisfied或explicitly-permitted，并
+执行通用资产守恒及当前release要求的repayment/standing-position policy。Unknown、漏声明、unresolved或proof
+不相容均fail closed。这样当前debt mint不会被当普通swap绕过安全门；未来新position语义也只新增extension
+owner，不改safety core。本baseline不定义LP obligation schema。
 
 ### 16.6 Final simulation 与 submission
 
@@ -1379,7 +1551,7 @@ ResourceProfile hash；调整调度参数不使semantic memo失效，但必须�
 | shared work | 同 WorkKey 同时 physical build count=1；无 unbounded queue/process |
 | unchanged restart | 未失效 verified memo reuse=100%；旧 verified instance attestation count=0 |
 | producer header/source acquisition | P95≤1.5s，P99≤2.5s |
-| eligible head terminal accounting | 连续100个 eligible canonical heads 必须100/100产生明确 terminal receipt，silent missing=0 |
+| eligible head terminal accounting | 连续100个 eligible canonical heads 必须100/100产生healthy terminal receipt，silent/unhealthy=0 |
 | head completion | P95≤8s，P99≤11s，单head hard deadline<12s；超出即性能门失败而非丢样本 |
 | planner→exact→program（有candidate） | P95≤2.5s，P99≤3.5s，不含final-sim |
 | final simulation queue wait | P95≤0.5s，P99≤1s；无资源时明确fail closed |
@@ -1402,19 +1574,32 @@ ResourceProfile hash；调整调度参数不使semantic memo失效，但必须�
 run后临时放宽，也不得用 impl 更慢来判 Aloha pass。
 
 [PFD] 100/100 指“同一 exact SHA、PID/process-start、log inode、generation 下连续100个 eligible canonical
-heads 全部被及时、显式结算”，不是99%、不是任选100个、不是100次脚本循环，也不要求每个 head 都有
-盈利 candidate。至少一条真实 dry-run candidate 仍须完整通过六步。
+heads 全部被及时、显式且健康地结算”，不是99%、不是任选100个、不是100次脚本循环，也不要求每个 head
+都有盈利candidate。Healthy只允许`complete-no-candidate`（完整scan/coverage证明无candidate）或
+`complete-candidates-terminal`（该head全部admitted candidates按冻结policy正常结算，包括正常policy reject或
+final-sim reject）；timeout、queue-full、resource failure、stale、unknown、evidence invalid或未完成均是unhealthy，
+仍占分母并使100/100失败。至少一条真实dry-run candidate仍须完整通过六步。
 
 [PFD] eligible set由独立canonical-header collector在process进入ready-serving状态时预先确定：该区间内每个
 canonical replacement head都eligible；no-candidate、timeout、queue-full、stale、resource failure仍在分母。
 Orphaned reorg head单列并由canonical replacement替代，不允许operator、runtime或validator事后挑样本。
 Warmup/maintenance只能以process/ready anchor划定整个连续区间，不能从运行区间中删除失败head。
 
+[PFD] 在首个计数head前必须持久化
+`windowStartAnchor + eligibilityRuleHash + performanceProfileHash + targetCount(100)`；commit后不能因看到结果
+而后移起点或缩短窗口。pre-ready heads从未进入该窗口；reorg orphan只由同一ordinal的canonical replacement
+结算。除此以外`excludedHeads`必须为空，missing/unknown直接fail或invalid，不能用“客观原因”删除。
+
 [PFD] Critical-path各P99预算按11s显式组成，并与head completion P99使用同一candidate-bearing head分母，
 避免“每个组件单独过门但总和超过12s”。无candidate head仍进入100/100 terminal分母，但不伪装成
 planner→final-sim latency样本。Cold/warm generation
 按candidate分母、fast/heavy mix与complete receipt set同时报告；若真实candidate规模不同，仍同时使用绝对
 hard gate和per-lane throughput，不能只用较小分母宣称更快。
+
+[PFD] `PerformancePredicateSpec`固定nearest-rank percentile：对升序整数微秒样本
+`Pq = samples[ceil(q*n)-1]`，不插值；head start是canonical head被producer session接收的monotonic timestamp，
+terminal是sealed healthy/unhealthy receipt的monotonic timestamp。全head timing sample count必须等于100；
+candidate-path样本count必须等于content-addressed candidate-bearing head set，缺样本使verdict invalid，绝不skip。
 
 ### 17.5 事实指标与对比
 
@@ -1428,17 +1613,24 @@ receipt set。旧实现只用于定位回归：Aloha 即使比旧实现快也不
 
 ## 18. Existing six-step asset audit
 
+[VEF] 本节另对当前 impl exact head
+`1e87b7813bca0d0bcc2710c701f1f46c30f035fd` 做了只读复核。该 SHA 只锁定本节的验收资产判断，
+不把当前 impl 扩张成 Aloha 的 source baseline，也不改变 §5 的 greenfield reuse 白名单；任何最终采用仍须进入
+`reference-lock.json` 与逐 symbol `ReuseReceipt`。
+
 ### 18.1 可提取机制
 
-| 标签 / 判断 | impl@d33c8b48 资产 | 可保留事实机制 | 必须删除/重写的旧语义 | Aloha 目标 |
+| 标签 / 判断 | impl@1e87b781 资产 | 可保留事实机制 | 必须删除/重写的旧语义 | Aloha 目标 |
 |---|---|---|---|---|
-| [ASR] R2 | listener/src/shared/evidence/semantic-six-step.ts | canonical JSON/hash、semantic output 与 metrics 分离、ordered prefix、terminal semantics、cross-step commitment、deep freeze | discovery_admission_graph、route_enumeration、quote/solve/final-sim/EV stage；family bypass；legacy readers | acceptance/schema-codec + validator；全新 six stage 与 exact-key schema |
-| [ASR] R2 | analysis/src/six-step-validation-controller.ts | content-addressed inputs、exact set、payload/evidence hash复算、state anchor复核、fsync/rename seal | production imports、target route、trusted reference、旧 Graph builder、review/merge/rollback | independent validator/collectors；只读 raw facts，不运行production builder |
-| [ASR] R2 | analysis/src/six-step-validation-lifecycle.ts | chain validation、process before/after stability、full-envelope digest | branch/reviewer/merge/cleanup lifecycle、checkpoint/final merge verdict | immutable run receipt lifecycle；不管理Git迁移 |
-| [ASR] R2 | analysis/src/trusted-six-step-runtime-attestation.ts | exact SHA、PID/start ticks、content-addressed inputs、secret filtering、parent anchor | AWS/SSM、固定region/host/path进入core | environment collector port + process anchor schema |
-| [BRW] R3 | analysis/src/six-step-judgment.ts | fail-closed pure evaluator shape | adapter_merge、production_gap、listener/family imports、非canonical receipt hash | architecture-neutral fact verdict |
-| [ASR] R2 | listener/src/searcher/systemic-live-gate.ts | 所有事实门全过才pass、coverage/throughput/latency fail closed | 旧route/Families truth | absolute budget evaluator |
-| [BRW] R3 | serial-systemic-live-evidence.ts、paired-live | percentile/coverage/throughput math | tolerant parser、同block覆盖、paired/parity correctness authority | exact process/run/generation join；serial只作diagnostic |
+| [ASR] R2 | listener/src/shared/evidence/semantic-six-step.ts:68-192,288-402 | canonical JSON/hash、semantic output 与 metrics 分离、ordered prefix、terminal-after-stop、cross-step commitment、deep freeze | 固定旧六步、route target、Family bypass、legacy schema readers与按旧字段判 pass | acceptance/schema-codec + validator；schema-derived exact fields、Aloha DAG 与逐parent commitments |
+| [ASR] R2 | analysis/src/six-step-validation-controller.ts:313-680,1403-1651 | content-addressed inputs、exact set、payload/evidence hash复算、state anchor复核、同目录 fsync+rename seal | import/call production builder、target route/trusted reference、worktree/branch/review/rollback orchestration | independent collectors只封存raw facts；validator不运行planner/Graph/exact/sim补事实 |
+| [ASR] R2 | analysis/src/six-step-validation-lifecycle.ts:117-163,327-500 | ordered receipt validation、process/anchor稳定、完整envelope digest | branch/reviewer/merge/cleanup、checkpoint/final migration verdict与Git inspector | immutable run-receipt codec；Git release proof是独立predicate，不是事实生命周期 |
+| [ASR] R2 | analysis/src/trusted-six-step-runtime-attestation.ts:72-199,276-400 | canonical payload、exact top-level keys、PID/start ticks、runtime/config cross-binding、content-addressed inputs、receipt/parent anchor | AWS/SSM command、固定instance/region/systemd unit、`/opt/MEV-runtime`、全量environ与固定tunnel | qualified environment collector port + portable process/artifact/log anchor；nested schema也exact |
+| [ASR] R2 | analysis/src/cli/six-step-validation-gate.ts:11-36 | `read authenticated facts → pure evaluator → deterministic exit` 的薄CLI边界 | 把preauthenticated receipt误当raw/live真实性；旧judgment DTO | GateCore纯AND/三值判定；CLI不采证、不补事实、不拥有authority |
+| [BRW] R3 | analysis/src/six-step-judgment.ts:35-214 | fail-closed纯 evaluator 形状与reason catalog | adapter_merge、production_gap、listener/Family imports、旧promotion receipt | architecture-neutral PredicateSpec evaluator；只接受qualified observations |
+| [ASR] R2 | listener/src/searcher/systemic-live-gate.ts:37-82 | 所有独立事实门全过才pass并列出失败reason | paired baseline/challenger身份、直接信任report布尔值、旧relative/parity truth | 从raw receipt set独立复算的绝对预算AND gate |
+| [BRW] R3 | listener/src/searcher/serial-systemic-live-evidence.ts:26-143 | per-head聚合、percentile/throughput纯计算概念；serial明确永不单独授权 | tolerant parser、后写覆盖、95% floor、伪candidate overlap、调用者window、relative baseline authority | 预冻结连续canonical denominator；exact process/run/generation join；serial只作diagnostic |
+| [BRW] R3 | listener/src/searcher/migration-cleanup-receipt.ts:336-451 | 相对import closure遍历、unresolved记录、closure hash作为一个observer | regex冒充AST、仅从main.ts出发、遗漏entry/language/generated/runtime、hardcoded Family absence、receipt字段未进入verdict | AST/module/build/runtime多源closure predicates；不能由单scanner自证legacy=0 |
 
 [VEF] 冻结source中已有mutation cases：semantic-six-step.ts:183-292,378-402（digest/order/terminal）；
 six-step-validation-lifecycle.ts:553-713,738-899（splice/commitment/stage/runtime/envelope）；
@@ -1447,12 +1639,75 @@ trusted-six-step-runtime-attestation.ts:128-329（snapshot/input/secret/parent�
 listener/src/searcher/test/systemic-live-gate.ts:102-189（任一门fail closed）。[MTM] 本轮未运行这些tests，
 因此只选择mutation机制，不宣称冻结test当前pass。
 
+### 18.2 当前 impl 验收资产的对抗结论
+
+[REJ] 以下不是“小瑕疵”，而是足以制造 production 假阳性的已证实边界，因此 Aloha 不得复制对应
+report shape、阈值或test命名：
+
+1. `listener/src/searcher/node-serial-systemic-live.ts:49-68` 无论 `gateVerdict` 是什么都固定输出顶层
+   `status: "pass"`；读取顶层status的automation会把明确的not-pass误报为pass。
+2. `serial-systemic-live-evidence.ts:31-85` 静默跳过坏JSON/缺block，以剩余Map作为分母；同block后写覆盖
+   前写；缺outcome也被当completed；P95只看有`total_ms`的子集。坏证据因此可能通过“缩小分母”变好。
+3. `serial-systemic-live-evidence.ts:93-133` 只有任意窗口95% floor，不是同SHA/PID/start/log inode/generation
+   下预冻结的连续100/100；`candidateOverlapPass`甚至复用了heads-per-second，没有计算candidate集合交集。
+4. `systemic-live-gate.ts:85-116` 只转抄`PairedLiveReport`布尔字段，不从raw facts复算；其手写一head fixture
+   只能证明boolean aggregator，不证明live事实。
+5. `migration-cleanup-receipt.ts:198-290` 的pass没有覆盖传入的全部commit/catalog/six-step/systemic字段，
+   symbol表中多项硬切换probe也未全部进入verdict；source scan是regex且import closure仅从`main.ts`的相对
+   literal imports出发。它只能是辅助sensor，不能证明源码、binary、runtime object与consumer authority均为零。
+6. `listener/package.json:137,170,250` 名为serial/systemic/migration的命令实际运行unit fixture/test；绿色
+   只证明helper处理了fixture，不能获得production acceptance credit。
+7. `analysis/src/six-step-validation-controller.ts:815-900` 不是读取六个生产边界Event，而是从一个
+   `raw.selected`对象一次性合成六个`pass`，并硬写target present、positive quote、simulation success与allow；
+   这是最危险的“验收/采集编排器自己生成想验收的事实”（旧capture harness也属于此类风险），整段R4拒绝；
+   多Agent开发workflow不是这里所说的验收编排器。
+8. `semantic-six-step.ts:288-355` 的手写canonical JSON仍接受普通JavaScript number，且旧extensions允许任意
+   key；Aloha只能保留内容寻址思想，实际codec必须由schema生成、拒绝unsafe number/duplicate/unknown core
+   fields，扩展必须显式`SchemaRef`。
+
+[PFD] 因此，impl可作为事实验收器的“机制语料”和untrusted reference producer，但不存在一份可直接复制后
+即宣称合格的验收脚本。Aloha必须先冻结PredicateSpec与独立oracle，再按新边界重写。测试可人工构造
+negative/invalid mutation来资格化validator，但手写success fixture、脚本顶层status、旧receipt verdict与旧分支
+数量都不构成production pass。
+
+### 18.3 Aloha 验收组件边界
+
+~~~text
+raw runtime / chain / Reth / process / filesystem
+                    │
+                    ▼
+       qualified ObserverAdapter
+  (environment-specific read-only collection)
+                    │ raw locator + bytes hash + observer certificate
+                    ▼
+              EvidenceCore
+   (canonical exact schema + lineage + immutable seal)
+                    │ authenticated claims + qualified observations
+                    ▼
+               pure GateCore
+ (frozen PredicateSpecs; pass / fail / invalid + reasons)
+~~~
+
+[PFD] `EvidenceCore`不得import systemd、AWS/SSM、DS、impl、Aloha production、planner或Family代码；
+`ObserverAdapter`不得生成expected verdict，也不得调用production builder补缺失事实；`GateCore`不得读日志
+文案或trust任意report布尔值。环境transport metadata只进入外层observation envelope；若locator本身load-bearing，
+必须连同content hash、byte length、media/schema ref和observer qualification一起被hash绑定。
+
+[PFD] process observer至少在采集前后复核PID、start ticks、boot ID、service/cgroup identity、executable hash与
+deployment manifest；log observer绑定device/inode/offset range/raw bytes hash。配置只采显式allowlist字段，
+不得先读取完整进程环境再靠敏感词denylist过滤。链上receipt/header/state必须保留可重读raw locator，validator
+独立复算bytes hash与canonical relation。
+
+[PFD] acceptance CLI只能序列化最终`AcceptanceCertificate.verdict`：`pass`唯一对应exit 0，`fail`与`invalid`
+使用不同的非零exit code；若保留顶层`status`，它必须由同一verdict机械派生且字面相等。CLI不得同时输出
+pass与任何内部non-pass，也不得用“命令成功执行”覆盖predicate结果。
+
 [REJ] 旧六步不能靠改名映射成新六步：旧 step 1 混合 discovery 与 Graph，旧 step 2 是 route
 enumeration，旧 step 3/4 是 quote→solver，旧 step 5 才是 sim，旧 step 6 是 EV。Aloha 的 planner→exact
-顺序、独立 execution program 与 atomic ready receipt 都没有一对一旧 stage。impl-first calibration 可以
+顺序、独立 execution program 与 atomic ready receipt 都没有一对一旧 stage。reference-producer calibration 可以
 诚实显示 missing fact，不能合成成功。
 
-### 18.2 永不进入新 schema 的旧字段
+### 18.4 永不进入新 schema 的旧字段
 
 [REJ] production_route_stage、family_execution、discovery_admission_graph、route_enumeration、
 exact_quote_refine、plan_and_size、fork_final_sim、production_ev、bypassed、route_pinned、fixture_route_sha256、
@@ -1465,12 +1720,174 @@ AWS region、path 或 systemId 选择宽松规则。
 
 ## 19. New fact-only Evidence Schema
 
-### 19.1 Schema
+### 19.1 SemanticArtifact、ProductionReceipt 与 claim boundary
+
+[PFD] 语义结果与“哪个实现、哪个进程、花了多久产生它”必须分离。相同canonical语义可拥有相同
+SemanticArtifactId；runtime commit、PID、worker、raw locator与latency只进入ProductionReceipt：
+
+~~~ts
+type ReadOnlyArtifactLocatorV1 =
+  | {
+      readonly kind: "file-range";
+      readonly systemId: string;
+      readonly bootIdHash: Hash;
+      readonly device: DecimalString;
+      readonly inode: DecimalString;
+      readonly startInclusive: DecimalString;
+      readonly endExclusive: DecimalString;
+    }
+  | {
+      readonly kind: "checkpoint-record";
+      readonly storeIdentityHash: Hash;
+      readonly namespaceHash: Hash;
+      readonly keyHash: Hash;
+      readonly revision: DecimalString;
+      readonly recordHash: Hash;
+    }
+  | {
+      readonly kind: "chain-object";
+      readonly chainId: DecimalString;
+      readonly blockNumber: DecimalString;
+      readonly blockHash: BlockHash;
+      readonly objectKind: "header" | "transaction" | "receipt" | "state-proof" | "logs";
+      readonly objectKeyHash: Hash;
+    }
+  | {
+      readonly kind: "content-object";
+      readonly storeIdentityHash: Hash;
+      readonly objectKey: Hash;
+    }
+  | {
+      readonly kind: "json-pointer";
+      readonly parentLocatorId: Hash;
+      readonly pointer: string;
+    };
+
+interface ReadOnlyArtifactRefV1 {
+  readonly artifactRefId: Hash;
+  readonly locatorId: Hash;
+  readonly locator: ReadOnlyArtifactLocatorV1;
+  readonly immutableMirrorLocatorId: Hash;
+  readonly immutableMirrorLocator: Extract<
+    ReadOnlyArtifactLocatorV1,
+    { readonly kind: "content-object" }
+  >;
+  readonly contentSha256: Hash;
+  readonly byteLength: DecimalString;
+  readonly mediaType: string;
+  readonly schema: SchemaRef | null;
+  readonly resolverPolicyHash: Hash;
+  readonly retentionLeaseReceiptId: Hash;
+}
+
+interface ResolverPolicyV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.artifact-resolver-policy";
+  readonly policyHash: Hash;
+  readonly allowedLocatorKind: "content-object";
+  readonly digestAlgorithm: "sha256";
+  readonly maxByteLength: DecimalString;
+  readonly requireExactLengthMediaAndSchema: true;
+  readonly minimumRemainingStoreEpochs: DecimalString;
+  readonly failureOutcome: "invalid";
+}
+
+interface RetentionLeaseReceiptV1 {
+  readonly receiptId: Hash;
+  readonly storeIdentityHash: Hash;
+  readonly objectKey: Hash;
+  readonly contentSha256: Hash;
+  readonly validFromStoreEpoch: DecimalString;
+  readonly validThroughStoreEpoch: DecimalString;
+  readonly issuerId: string;
+  readonly issuerQualificationId: Hash;
+  readonly qualificationRegistryRoot: Hash;
+}
+
+interface ArtifactResolutionResultV1 {
+  readonly resultId: Hash;
+  readonly artifactRefId: Hash;
+  readonly resolverPolicyHash: Hash;
+  readonly resolverImplementationDigest: Hash;
+  readonly resolverQualificationId: Hash;
+  readonly qualificationRegistryRoot: Hash;
+  readonly resolvedAtStoreEpoch: DecimalString;
+  readonly bytes: Bytes | null;
+  readonly observedContentSha256: Hash | null;
+  readonly observedByteLength: DecimalString | null;
+  readonly outcome: "resolved" | "missing" | "mismatch" | "lease-invalid";
+}
+
+interface ReadOnlyArtifactResolver {
+  resolve(
+    ref: ReadOnlyArtifactRefV1,
+    policy: ResolverPolicyV1,
+    lease: RetentionLeaseReceiptV1,
+  ): Promise<ArtifactResolutionResultV1>;
+}
+
+interface SemanticArtifactV1 {
+  readonly schema: SchemaRef;
+  readonly artifactId: Hash;
+  readonly inputArtifactIds: readonly Hash[];
+  readonly dependencyClosureRoot: Hash;
+  readonly canonicalPayloadHash: Hash;
+}
+
+interface ProductionReceiptV1 {
+  readonly receiptId: Hash;
+  readonly artifactId: Hash;
+  readonly producer: {
+    readonly systemId: string;
+    readonly commitSha: GitSha40;
+    readonly executableHash: Hash;
+    readonly deploymentManifestHash: Hash;
+    readonly serviceIdentityHash: Hash;
+    readonly pid: DecimalString;
+    readonly processStartTicks: DecimalString;
+    readonly bootIdHash: Hash;
+  };
+  readonly logRangeArtifactRef: ReadOnlyArtifactRefV1;
+  readonly sourceAnchorHash: Hash;
+  readonly startedMonotonicNs: DecimalString;
+  readonly finishedMonotonicNs: DecimalString;
+  readonly durationUs: DecimalString;
+  readonly rawBoundaryArtifactRef: ReadOnlyArtifactRefV1;
+  readonly semanticConfigDigest: Hash;
+  readonly resourceMetricsHash: Hash;
+}
+~~~
+
+[PFD] EvidenceEvent引用input/output SemanticArtifact与ProductionReceipt，形成事实lineage；它不是跨stage业务
+DTO，也不能让producer metadata改变语义artifact ID。不是每次hot-path amount search/quote都写durable
+WorkLedger：只有startup partition/outcomes、ready、submission intent等跨restart authority按其合同持久化；
+head内临时artifact可随bounded session回收，但被验收引用的artifact/receipt必须content-addressed可读取。该模型
+不创建第二ArtifactStore、第二checkpoint或第二ready authority。
+
+### 19.2 Evidence Schema
 
 [PFD] EvidenceEventV1 顶层 core 字段 exact-key；扩展只能位于已声明 schema hash 的 extensions：
 
 ~~~ts
 type SchemaRef = Readonly<{ id: string; version: SemVer; schemaHash: Hash }>;
+
+interface SourceAnchor {
+  readonly chainId: DecimalString;
+  readonly number: DecimalString;
+  readonly hash: BlockHash;
+  readonly stateRoot: Hash;
+}
+
+interface ProcessAnchorV1 {
+  readonly systemId: string;
+  readonly commitSha: GitSha40;
+  readonly executableHash: Hash;
+  readonly deploymentManifestHash: Hash;
+  readonly serviceIdentityHash: Hash;
+  readonly pid: DecimalString;
+  readonly processStartTicks: DecimalString;
+  readonly bootIdHash: Hash;
+}
 
 type EvidenceScopeV1 =
   | {
@@ -1506,20 +1923,24 @@ interface EvidenceEventV1 {
     systemId: string;
     emitterKind: "native" | "read-only-adapter";
     emitterCodeHash: Hash;
-    rawArtifactHash: Hash;
-    rawLocator: ReadOnlyArtifactLocator;
+    rawBoundaryArtifactRef: ReadOnlyArtifactRefV1;
   };
 
   runtime: {
     commitSha: GitSha40;
     executableHash: Hash;
+    deploymentManifestHash: Hash;
+    serviceIdentityHash: Hash;
     pid: DecimalString;
     processStartTicks: DecimalString;
     bootIdHash: Hash;
-    logDevice: DecimalString;
-    logInode: DecimalString;
-    logOffsetStart: DecimalString;
-    logOffsetEnd: DecimalString;
+    logRangeArtifactRefId: Hash;
+  };
+
+  artifactLineage: {
+    inputArtifactIds: readonly Hash[];
+    outputArtifactId: Hash;
+    productionReceiptId: Hash;
   };
 
   scope: EvidenceScopeV1;
@@ -1527,6 +1948,7 @@ interface EvidenceEventV1 {
   runSequence: DecimalString;
   cutoff: { number: DecimalString; hash: BlockHash; stateRoot: Hash };
   definitionCatalogRoot: Hash;
+  strategyCatalogRoot: Hash | null;
   instanceCatalogRoot: Hash | null;
   graphRoot: Hash | null;
 
@@ -1587,7 +2009,8 @@ interface EvidenceEventV1 {
 [PFD] scope按stage exact匹配：stage 1只能是builder-run，generationId必须为null，因为attestation先于
 generation产生，且rejected/retryable/invalidProgram可能永远不属于任何generation；stage 2只能是
 ready-generation；stage 3–6只能是producer-session。definitionCatalogRoot在六层均必填；stage 1的
-instanceCatalogRoot/graphRoot必须为null，stage 2–6必须非null并沿DAG相容。candidateKey始终必填；
+instanceCatalogRoot/graphRoot必须为null，stage 2–6必须非null并沿DAG相容。strategyCatalogRoot在stage1/2为
+null、stage3–6为同一非null root；strategy变化不伪造新的attestation或ready。candidateKey始终必填；
 pre-identity rejected/retryable/invalidProgram的instanceKey为null，verified stage 1及stage 2–6必须非null。
 不得为失败候选伪造instanceKey或预先分配generationId。
 
@@ -1603,11 +2026,30 @@ orderedInstanceBindingsRoot；每个叶子绑定该leg的instance publication、
 closure、原stage-1 attestation Event与stage-2 ready/edge membership Event。顶层family/instance只是展示
 anchor；只验证anchor不足以接受整条route。
 
-### 19.2 Hash 与真实性
+### 19.3 Hash 与真实性
 
 ~~~text
 capabilitySetHash =
   H("aloha/capability-set/v1", canonical(sorted capabilities))
+
+locatorId =
+  H("aloha/read-only-artifact-locator/v1", canonical(exact locator union payload))
+
+artifactRefId =
+  H("aloha/read-only-artifact-ref/v1", locatorId, immutableMirrorLocatorId,
+    contentSha256, byteLength, mediaType, schema,
+    resolverPolicyHash, retentionLeaseReceiptId)
+
+processAnchorHash =
+  H("aloha/process-anchor/v1", canonical(ProcessAnchorV1 exact fields))
+
+resolverPolicyHash =
+  H("aloha/artifact-resolver-policy/v1",
+    canonical(all ResolverPolicy fields except policyHash))
+
+resolutionResultId =
+  H("aloha/artifact-resolution-result/v1",
+    canonical(all ArtifactResolutionResult fields except resultId))
 
 inputHash =
   H("aloha/stage-input/v1", stage.id, inputSchema, canonical(inputs))
@@ -1616,12 +2058,56 @@ outputHash =
   H("aloha/stage-output/v1", stage.id, factSchema,
     canonical(facts), outcome, reasonCode)
 
+artifactId =
+  H("aloha/semantic-artifact/v1", schema,
+    canonical(schema-defined ordered inputArtifactIds),
+    dependencyClosureRoot, canonicalPayloadHash)
+
+receiptId =
+  H("aloha/production-receipt/v1",
+    canonical(all ProductionReceipt fields except receiptId))
+
 eventId =
   H("aloha/evidence-event/v1", canonical(all fields except eventId))
 ~~~
 
+[PFD] 文中其他`*ReceiptV1.receiptId`同样使用各自kind的domain separator并绑定除receiptId外全部exact字段；
+任何被传入却未进入ID或verdict复算的字段都是schema错误，validator必须invalid。
+
 [PFD] outputHash 只绑定语义事实，支持跨步 commitment；eventId 绑定完整 envelope，包括 runtime、latency、
 source 与 raw locator。修改 telemetry 后也必须改变 eventId，不能无痕覆盖。
+
+[PFD] outputHash绑定的exact payload就是该stage的`stage.id + factSchema + facts + outcome + reasonCode`，并必须
+等于对应SemanticArtifact的canonicalPayloadHash；validator从artifact bytes独立重算artifactId，从receipt bytes
+独立重算receiptId。Event的artifactLineage必须exact等于这些已读取对象，且
+`receipt.artifactId == event.artifactLineage.outputArtifactId`；event中的runtime/source/latency必须与
+ProductionReceipt精确相符。换producer但语义与依赖完全相同可以保持artifactId，receiptId/eventId必须变化。
+
+[PFD] `ProcessAnchorV1`只含稳定process identity，不含每条Event不同的log range；validator从每个tail Event对应
+ProductionReceipt的producer字段重建同一个ProcessAnchor并复算等于query.processAnchorHash。每条Event自己的
+logRangeArtifactRef仍独立校验，不能用相同process anchor掩盖跨log splice。
+
+[PFD] ObserverAdapter从exact union重算source与immutable-mirror locator IDs，通过qualified
+`ReadOnlyArtifactResolver`从mirror按`objectKey=contentSha256`重读bytes，复核contentSha256/byteLength/media/
+schema后才可封存QualifiedFactSnapshot。`file-range`必须满足`endExclusive-startInclusive == byteLength`，并与
+同一boot/device/inode对象一致；JSON pointer先验证parent content再取值。Boundary raw artifact与process log
+range使用两个独立ArtifactRef，禁止用一个含糊hash同时代表二者。
+
+[PFD] 所有`*ArtifactRefId`与snapshot的`orderedRawArtifactRefIds`只引用`artifactRefId`；`locatorId`仅标识“去哪里
+读取”，不绑定读取到的bytes，绝不能代替artifactRefId进入content/lineage root。
+
+[PFD] Source locator用于provenance，可能因log rotation或远端retention失效；因此collector在发出ArtifactRef前
+必须把exact bytes写入immutable content store并取得覆盖整个验收/复核期的retention lease。Resolver port只允许
+按content-object locator读取，不允许builder/planner/simulator调用；mirror缺失、lease过期、resolver policy/
+implementation未资格化或bytes不匹配均invalid。Chain/checkpoint locator的opaque hashed selector不能独立满足
+可重读性，必须依赖该immutable mirror；GateCore仍不做I/O，只消费已封存snapshot。
+
+[PFD] Lease subject必须exact等于ArtifactRef的mirror
+`storeIdentityHash + objectKey + contentSha256`，issuer qualification在同registry current且未revoked；
+`resolvedAtStoreEpoch`必须位于lease区间，且剩余epoch满足policy。Resolution result的implementation/
+qualification、policy、registry与ArtifactRef逐项匹配，只有`resolved`且bytes/hash/length/media/schema全相等才可
+生成QualifiedObservation；其他outcome一律invalid。RetentionLeaseReceipt作为`*ReceiptV1`按§19.3绑定全部字段，
+resolver policy/result也按上式独立重算，不能靠store自报“仍可读”。
 
 [PFD] outcome与reasonCode属于语义结果，必须进入outputHash；否则把verified改成rejected仍可能维持child
 commitment。Stage 1成功结果使用verified，stage 2–6过程成功使用success。
@@ -1630,7 +2116,7 @@ commitment。Stage 1成功结果使用verified，stage 2–6过程成功使用su
 只读 raw artifact locator、checkpoint/root 复算、独立 Reth/on-chain 复核与真实 final-sim receipt。成功 verdict
 不得来自手写 fixture、手写 TokenEdge、validator 自建 Graph 或“日志打印了 success”。
 
-### 19.3 Event 写入边界
+### 19.4 Event 写入边界
 
 [PFD] emitter 在每个 production boundary 收到已经存在的 authority object，仅 canonicalize/hash/append；
 它不能构造 candidate、publication、Graph、plan、quote、program 或 simulation result。Evidence append 必须
@@ -1647,57 +2133,321 @@ parentEventIds和Merkle membership proof直接引用该leased generation的原st
 原artifact locator、原process、promotion revision及当前memo/GraphView reuse receipt。这样失败candidate、
 跨generation memo reuse、restart和多leg route都形成真实provenance DAG，而不伪造未来generation身份。
 
-[PFD] rawLocator 是只读、内容寻址定位（file/device/inode/offset、checkpoint key/root、receipt JSON pointer
-等），不得包含 RPC secret、private key、完整环境变量或可签名材料。
+[PFD] `ReadOnlyArtifactRefV1`是只读、内容寻址定位与bytes commitment（file range、checkpoint record、chain
+object、content object或validated JSON pointer），不得包含RPC secret、private key、完整环境变量或可签名材料。
 
-[PFD] Evidence Schema还包含两个非六步、同样exact-key/hash-bound的聚合receipt：CoverageReceiptV1
-编码release-intent exact set、source partitions、zero-candidate与全族分母；HeadTerminalReceiptV1编码每个
-eligible canonical head的terminal/no-candidate/failure与deadline。它们不能伪造instanceKey，也不能替代
-某条candidate的六步DAG。
+[PFD] Evidence Schema还包含非六步、同样exact-key/hash-bound的聚合receipt。它们不能伪造instanceKey，也
+不能替代某条candidate的六步DAG：
 
-## 20. impl-first validator calibration
+~~~ts
+interface HeadWindowCommitmentV1 {
+  readonly windowId: Hash;
+  readonly readyServingAnchor: SourceAnchor;
+  readonly producerAnchorHash: Hash;
+  readonly generationId: string;
+  readonly eligibilityRuleHash: Hash;
+  readonly performanceProfileHash: Hash;
+  readonly targetCount: "100";
+  readonly commitProductionReceiptId: Hash;
+  readonly commitArtifactRef: ReadOnlyArtifactRefV1;
+  readonly committedMonotonicNs: DecimalString;
+}
+
+type HealthyHeadOutcome =
+  | "complete-no-candidate"
+  | "complete-candidates-terminal";
+type UnhealthyHeadOutcome =
+  | "timeout" | "queue-full" | "resource-failure" | "stale"
+  | "unknown" | "evidence-invalid" | "incomplete";
+
+interface HeadTerminalReceiptV1 {
+  readonly receiptId: Hash;
+  readonly windowId: Hash;
+  readonly ordinal: DecimalString; // exact 0..99
+  readonly canonicalHead: SourceAnchor;
+  readonly supersededOrphanObservationRoot: Hash | null;
+  readonly processGenerationLogAnchorHash: Hash;
+  readonly sourceCoverageRoot: Hash;
+  readonly candidateSetRoot: Hash;
+  readonly orderedCandidateTerminalReceiptRoot: Hash;
+  readonly outcome: HealthyHeadOutcome | UnhealthyHeadOutcome;
+  readonly healthy: boolean; // derived from outcome, never independently trusted
+  readonly acceptedMonotonicNs: DecimalString;
+  readonly terminalMonotonicNs: DecimalString;
+  readonly rawReceiptSetRoot: Hash;
+}
+
+interface PerformanceAcceptanceReceiptV1 {
+  readonly receiptId: Hash;
+  readonly predicateSpecDigest: Hash;
+  readonly qualificationCertificateIds: readonly Hash[];
+  readonly windowCommitmentHash: Hash;
+  readonly orderedHeadTerminalReceiptRoot: Hash;
+  readonly headCount: "100";
+  readonly healthyHeadCount: DecimalString;
+  readonly candidateBearingHeadSetRoot: Hash;
+  readonly fullHeadTimingSampleRoot: Hash;
+  readonly candidatePathTimingSampleRoot: Hash;
+  readonly metricRecomputationRoot: Hash;
+  readonly rawReceiptSetRoot: Hash;
+  readonly verdict: "pass" | "fail" | "invalid";
+}
+~~~
+
+[PFD] `CoverageReceiptV1`编码release-intent exact set、source partitions、zero-candidate与全族分母。
+Performance pass要求100个ordinal exact且唯一、canonical replacement规则成立、`healthyHeadCount=100`、全部样本
+和roots可从raw locators独立复算；commit ArtifactRef/ProductionReceipt的log offset与monotonic time必须严格早于
+ordinal 0的accepted anchor，`committedBeforeFirstHead`不得靠布尔自报。任何重复/缺失/unknown或receipt内部
+布尔值与derived outcome不一致均invalid。
+
+### 19.5 Claim、observation 与 PredicateSpec
+
+[PFD] DS、impl与Aloha runtime产生的Event、artifact和receipt首先都是`claim`；`strict`、`success`或branch名
+不会让claim自动变成事实。Load-bearing observation由独立observer从raw locator、canonical chain、Reth、
+process/filesystem、数学reference model或独立EVM重建：
+
+~~~ts
+interface PredicateSpecV1 {
+  readonly predicateId: string;
+  readonly version: SemVer;
+  readonly claimSchemaRefs: readonly SchemaRef[];
+  readonly observationSchemaRefs: readonly SchemaRef[];
+  readonly passRuleDigest: Hash;
+  readonly failRuleDigest: Hash;
+  readonly invalidRuleDigest: Hash;
+  readonly anchorPolicyDigest: Hash;
+  readonly tolerancePolicyDigest: Hash;
+  readonly forbiddenProducerSelectors: readonly string[];
+  readonly criticalMutationIds: readonly string[];
+  readonly independentOracleKinds: readonly IndependentOracleKind[];
+  readonly specDigest: Hash;
+}
+~~~
+
+[PFD] predicate只能读取声明的claim/observation schemas；同一canonical inputs/facts不得因producer为DS、impl或
+Aloha而改变verdict。缺load-bearing observation、unknown schema、stale qualification或不完整分母返回
+`invalid`；已观察到违反contract的事实才返回`fail`；事实完整且predicate成立才返回`pass`。展示层可显示
+producer identity，predicate不得据此选阈值、放宽stage或改变expected result。
+
+### 19.6 Verifier / Observer Qualification
+
+~~~ts
+interface QualificationRegistrySnapshotV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.qualification-registry";
+  readonly registryId: Hash;
+  readonly payloadHash: Hash;
+  readonly epoch: DecimalString;
+  readonly trustedIssuerSetRoot: Hash;
+  readonly certificateSetRoot: Hash;
+  readonly revokedCertificateIdsRoot: Hash;
+  readonly previousRegistryRoot: Hash | null;
+  readonly governanceApprovalHash: Hash;
+}
+
+interface ObserverQualificationCertificateV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.observer-qualification";
+  readonly certificateId: Hash;
+  readonly payloadHash: Hash;
+  readonly qualificationSpecDigest: Hash;
+  readonly observerImplementationDigest: Hash;
+  readonly observedSchemaIds: readonly SchemaRef[];
+  readonly qualifiedLocatorKinds: readonly ReadOnlyArtifactLocatorV1["kind"][];
+  readonly anchorValidationMethodDigest: Hash;
+  readonly positiveCaseRoot: Hash;
+  readonly negativeCaseRoot: Hash;
+  readonly invalidCaseRoot: Hash;
+  readonly declaredCriticalMutationIds: readonly string[];
+  readonly rejectedOrInvalidMutationIds: readonly string[];
+  readonly independentOracleCaseRoot: Hash;
+  readonly independentOracleCaseCount: DecimalString;
+  readonly issuerId: string;
+  readonly issuedAtRegistryEpoch: DecimalString;
+  readonly verdict: "qualified" | "not-qualified";
+}
+
+interface VerifierQualificationCertificateV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.verifier-qualification";
+  readonly certificateId: Hash;
+  readonly payloadHash: Hash;
+  readonly qualificationSpecDigest: Hash;
+  readonly predicateSpecDigest: Hash;
+  readonly predicateImplementationDigest: Hash;
+  readonly observerQualificationIds: readonly Hash[];
+  readonly requiredObserverRoles: readonly {
+    readonly roleId: string;
+    readonly observationSchema: SchemaRef;
+    readonly anchorPolicyDigest: Hash;
+    readonly observerQualificationId: Hash;
+  }[];
+  readonly caseSetRoot: Hash;
+  readonly declaredCriticalMutationIds: readonly string[];
+  readonly rejectedOrInvalidMutationIds: readonly string[];
+  readonly independentOracleCaseRoot: Hash;
+  readonly independentOracleCaseCount: DecimalString;
+  readonly oldReferenceCaseCount: DecimalString;
+  readonly counterexampleRoot: Hash;
+  readonly issuerId: string;
+  readonly issuedAtRegistryEpoch: DecimalString;
+  readonly verdict: "qualified" | "not-qualified";
+}
+
+interface QualifiedObservationEnvelopeV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.qualified-observation";
+  readonly observationId: Hash;
+  readonly payloadHash: Hash;
+  readonly observationSchema: SchemaRef;
+  readonly observerImplementationDigest: Hash;
+  readonly observerQualificationId: Hash;
+  readonly qualificationRegistryRoot: Hash;
+  readonly anchorPolicyDigest: Hash;
+  readonly observedClaimIds: readonly Hash[];
+  readonly rawArtifactRefs: readonly ReadOnlyArtifactRefV1[];
+  readonly acquisitionProductionReceiptId: Hash;
+  readonly canonicalFacts: CanonicalJson;
+  readonly canonicalFactsHash: Hash;
+}
+
+interface QualifiedFactSnapshotV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.qualified-fact-snapshot";
+  readonly snapshotId: Hash;
+  readonly payloadHash: Hash;
+  readonly claimSetRoot: Hash;
+  readonly observationSetRoot: Hash;
+  readonly rawArtifactSetRoot: Hash;
+  readonly qualificationRegistryRoot: Hash;
+  readonly orderedClaimIds: readonly Hash[];
+  readonly orderedObservationIds: readonly Hash[];
+  readonly orderedRawArtifactRefIds: readonly Hash[];
+}
+
+interface AcceptanceQueryV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.acceptance-query";
+  readonly queryId: Hash;
+  readonly payloadHash: Hash;
+  readonly predicateSpecDigest: Hash;
+  readonly subjectArtifactRoot: Hash;
+  readonly qualifiedFactSnapshotId: Hash;
+  readonly processAnchorHash: Hash;
+  readonly correlationId: string | null;
+}
+
+interface AcceptanceCertificateV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.acceptance-certificate";
+  readonly certificateId: Hash;
+  readonly payloadHash: Hash;
+  readonly acceptanceQueryId: Hash;
+  readonly subjectArtifactRoot: Hash;
+  readonly claimSetRoot: Hash;
+  readonly observationSetRoot: Hash;
+  readonly rawArtifactSetRoot: Hash;
+  readonly qualificationRegistryRoot: Hash;
+  readonly predicateSpecDigest: Hash;
+  readonly verifierQualificationId: Hash;
+  readonly observerQualificationIds: readonly Hash[];
+  readonly reasonSetRoot: Hash;
+  readonly verdict: "pass" | "fail" | "invalid";
+}
+~~~
+
+[PFD] 上述每种对象均使用自己的domain separator：
+`payloadHash = H("<kind>/payload/v1", canonical(all fields except objectId/payloadHash))`，再以
+`objectId = H("<kind>/id/v1", payloadHash)`生成其`registryId/certificateId/observationId/snapshotId/queryId`。
+所有数组按schema声明的ordered或sorted语义exact编码；不得JSON stringify猜测、忽略未知字段或排除任意时间/commit
+字段。AcceptanceCertificate绑定exact query、claim/observation/raw roots、qualification registry与完整reason set，
+不能把旧pass certificate换一组facts重放。
+
+[PFD] production acceptance只能引用current qualification：predicate spec/implementation或任一load-bearing
+observer digest变化，旧证书立即stale并使verdict invalid。`declaredCriticalMutationIds`必须与
+`rejectedOrInvalidMutationIds` exact相等，且independentOracleCaseCount>0；DS/impl witness不计入该count，
+也不能定义expected verdict。
+
+[PFD] QualificationRegistrySnapshot由release-governance冻结的受信issuer set批准；validator绑定query指定的
+exact registry root，复核certificate membership、issuer、epoch与revocation。`verdict:"qualified"`自报没有效力。
+每条load-bearing observation逐条复核：certificate subject implementation digest、observed schema、locator kind、
+anchor policy与envelope完全匹配，且certificate在该registry current且未revoked；不能用“系统里存在一张合格
+observer证书”替未资格化adapter背书。
+
+[PFD] Verifier certificate的`requiredObserverRoles`是exact set；每条被predicate消费的observation必须匹配一个
+role，且其`observerQualificationId`必须属于该verifier certificate声明的exact IDs。缺role、额外load-bearing
+observation或用未参与verifier qualification的可替换observer，均invalid；更换observer必须重新qualification并
+签发新Verifier certificate。
+
+[PFD] Observation facts先由`observationSchema` exact decode/re-encode，再复算`canonicalFactsHash`；snapshot的
+ordered claim/observation/raw IDs与三个set roots必须exact相符。Acquisition ProductionReceipt必须属于同一
+observer implementation/process并绑定这些raw refs；任一ID不存在、重复、splice或无法定位均invalid。
+
+[PFD] observer也必须被证明能正确观察：canonical header至少交叉本地execution client与独立source；root/
+Graph由独立reader重算；exact由独立整数数学、第二语言或pinned fork验证；final-sim由不同engine/fork比较
+normalized effects；heuristic solver只验证feasible/best-found honesty，只有声明bounds内的小图exhaustive
+oracle才可声称optimal。一个“不同名字但共享同一错误实现”的collector不算独立。
+
+[PFD] 不要求先写完未来所有Family/domain测试。先资格化最小全局事实底座；之后每个vertical slice严格按
+claim schema→observation schema→PredicateSpec→positive/negative/invalid/mutation cases→independent oracle→
+qualify verifier/observer→production implementation→replay/live facts推进。手写损坏case可校准拒绝路径，
+手写成功fixture永远不能提供production success。
+
+## 20. DS / impl reference-producer calibration
 
 ### 20.1 独立拓扑
 
 ~~~text
-impl runtime ──真实 artifact──> impl read-only adapter ──EvidenceEventV1──┐
-                                                                          ├─> one frozen validator
-Aloha runtime ────────────────> native evidence emitter ──EvidenceEventV1─┘
+DS runtime   ──raw artifacts──> tools/reference-only/ds   ──untrusted claim──┐
+impl runtime ──raw artifacts──> tools/reference-only/impl ──untrusted claim──┼─> frozen predicates
+Aloha runtime ────────────────> native evidence emitter  ──production claim─┘
 
-Reth / on-chain ──────────────> independent fact collector ───────────────┘
+chain / Reth / process / math / independent EVM ──qualified observations───┘
 ~~~
 
-[PFD] acceptance package 不 import impl 或 Aloha production源码。impl adapter 是只读 translator，不能调用
-builder、planner、solver、quoter、executor或 simulator补齐事实，不能改变 runtime，也无权定义成功。
+[PFD] acceptance package不importDS、impl或Aloha production源码。两个reference-only importers只把已存在的
+raw artifacts规范化为`ReferenceWitnessReceipt { trustLevel: "untrusted-reference" }`；不能调用builder、
+planner、solver、quoter、executor或simulator补齐事实，不能改变runtime，也无权定义成功或获得independent
+oracle credit。acceptance core只读neutral claims与qualified observations，不读旧DTO。
+
+[PFD] DS是downstream/head-session/live/performance事实的主要reference producer，因为它能稳定跑出这些边界；
+它不能伪造strict attestation、atomic readyGeneration或Family publication lineage。impl只用于它能稳定产生的
+startup、durable attestation、Family+Instance、ready/Graph与restart/memo前段事实；不要求它在当前时效性瓶颈
+下跑完exact/execution/final-sim或满足Aloha性能预算。任何reference缺失后段都只使该case`missing/invalid`，
+不拖住qualification framework或architecture baseline。
 
 ### 20.2 校准顺序
 
 [PFD] 在任何 Aloha production implementation 开始前：
 
-1. 实现独立 schema/codec、state machine、validator 与 mutation corpus；
-2. 固定一个 impl exact SHA、executable hash、PID/start/boot/log inode 与 raw artifact set；
-3. adapter 读取 impl 的 six-step receipt、producer receipt、checkpoint/catalog/Graph、process/log stat 与
-   Reth/on-chain anchors；
-4. 每个 Event 字段必须有 raw artifact hash 与 locator；不存在的事实不生成；
-5. 同一 validator 运行 impl evidence；缺 readyGeneration、instance attestation或 execution lineage 时诚实
-   missing-stage，不为 impl 放宽；
-6. 人工审查随机样本，独立复算 roots 与 Reth facts；
-7. 运行完整负向 corpus；
-8. 修复 validator/adapter 的真实读取 bug，并同时重跑 impl；
-9. 冻结 schemaVersion、schemaHash、reasonCodeCatalogHash、validator exact commit、validator bundle hash、
-   negativeCorpusRoot、implAdapter hash 与 calibrationReceiptRoot；
-10. 只有冻结 receipt 成立，Aloha production agents 才从 architecture-baseline 开始实现。
+1. 冻结core Claim/Observation schemas、PredicateSpecs、pass/fail/invalid语义与critical mutation IDs；
+2. 实现最小qualification runner、independent reference models与observers，先签发current observer证书；
+3. 固定DS与impl各自exact SHA、executable hash、PID/start/boot/log inode与raw artifact set；
+4. reference-only importers逐字段附raw artifact hash/locator；不存在的事实不生成；
+5. 用DS校准其真实downstream/live/performance子谓词，用impl校准其真实startup/attestation/ready/Graph子谓词；
+6. 用chain/Reth/process/math/independent EVM或bounded exhaustive model产生expected verdict；DS/impl不得提供；
+7. 对每个predicate运行positive、negative、invalid、metamorphic与声明的全部critical mutations，保存counterexample；
+8. 人工抽查raw locators与独立复算结果；确认collector/validator bug后修复并重跑受影响case，而不改production；
+9. 冻结schema/spec/validator/observer/corpus/reference-importer digests及qualification certificate roots；
+10. 最小全局事实底座和首个vertical slice资格化后签发architecture baseline；后续slice必须在自己的production
+    implementation开始前完成同样qualification，不要求预写未来所有Family/domain测试。
 
-[PFD] “impl-first”是校准读取与判定，不是要求 impl 达到 Aloha终态。旧实现缺事实就是校准成功暴露的
-缺口。新旧数量无需 parity；两者只需接受同一事实合同。
+[PFD] DS或impl某predicate为invalid不等于qualification framework失败；只要该predicate已有独立positive/
+negative/invalid coverage和current certificates，baseline可成立。真正阻塞某个Aloha production slice的是该
+slice无qualified predicate/observer，或Aloha自身缺load-bearing事实。新旧数量无需parity。
 
 ### 20.3 Validator bug policy
 
 [PFD] 当 validator 与 source/checkpoint/runtime/on-chain事实冲突：先定位 raw locator、schema decode、窗口、
-join 与 lineage。确认 validator bug 后：升级 validator版本与hash、加入最小负向/回归 case、同时重跑 impl
-与Aloha。禁止修改正确production authority迎合脚本，禁止只给 Aloha 特判，禁止沿用旧错误 verdict。
+join 与 lineage。确认 validator/observer bug 后：升级implementation digest、使旧qualification stale、加入最小
+负向/回归case并重跑受影响的DS/impl/Aloha claims。禁止修改正确production authority迎合脚本，禁止为任一
+producer特判，禁止沿用旧错误verdict。
 
 ## 21. Six-step acceptance protocol
+
+[PFD] six-step是Aloha production DoD必需的端到端scenario，不是全部acceptance architecture。独立predicates
+还必须分别验证source coverage、universe exact partition、Graph closure、solver feasibility、local transition、
+compiler、independent simulation、restart/idempotency、resource bulkhead与qualification自身。
 
 ### 21.1 通用 DAG 规则
 
@@ -1708,14 +2458,15 @@ stage 4→5→6再形成当前candidate的线性tail。
 [PFD] Stage 1保留原builder-run/runtime/process anchor且generationId=null；Stage 2保留实际promotion的
 ready-generation scope。Stage 3–6必须拥有相同当前runtime commit/PID/start/boot/log inode、
 producerSessionId、correlationId、generationId、definitionCatalogRoot、generationRefreshPolicyHash、
-instanceCatalogRoot、graphRoot及GraphView lease，并且其scope.builderRunId等于leased ready的origin run。
+strategyCatalogRoot、instanceCatalogRoot、graphRoot及GraphView lease，并且其scope.builderRunId等于leased
+ready的origin run。
 所有DAG节点cutoff/Family-capability leaf bindings必须相容；parentEventIds/outputHashes、Merkle membership与
 sequence必须可复算，但不得错误要求stage 1拥有尚不存在的generation。
 
 [PFD] Restart不重发stage 1/2；stage 3引用持久的原stage-2 Events及ready/memo-reuse receipt。每个leg均须
 验证，不能用anchor Family代表其他legs。Stage 1/2非verified结果terminal且不得进入stage3 ancestry；
 stage 3–6任何非success outcome terminal。不存在bypass/not_reached成功占位。GraphView lease在stage3–6
-不变；全局adopt新generation时旧session仍持有原lease直至DAG tail终止。
+不变，strategyCatalogRoot也不变；全局adopt新generation时旧session仍持有原lease直至DAG tail终止。
 
 ### 21.2 Step 1 — Universe / Instance
 
@@ -1744,9 +2495,10 @@ pool/default/legacy来源。
 
 ### 21.4 Step 3 — Planner consumption
 
-[PFD] 验证生产 planner 实际持有该 immutable GraphView lease，route的orderedInstanceBindingsRoot来自同一
-graphRoot/generation，未注入target route，未调用default/legacy Graph或fallback。Validator只验证object
-lineage和roots，不重新运行planner生成一条“应该存在”的route。
+[PFD] 验证生产 planner 实际持有该 immutable GraphView lease与当前generated strategy ref，route的
+orderedInstanceBindingsRoot来自同一graphRoot/generation，planning problem绑定同一strategyCatalogRoot，未
+注入target route，未调用default/legacy Graph或fallback。Validator只验证object lineage和roots，不重新运行
+planner生成一条“应该存在”的route。
 
 ### 21.5 Step 4 — Current-source exact
 
@@ -1766,7 +2518,7 @@ mode、preCalls、call sequence、exact observation pairs、repayment/standing-p
 可独立重放/复算的receipt；final sim使用顶层
 交易语义，generation/canonical fence、repayment、conservation、standing-position与submission safety gate
 实际执行。成功或明确simulation revert都可形成真实terminal事实；只有success且其他门通过才可产生unsigned
-dry-run success。Harness/capture/fork fixture不能替代真实目标环境dry-run receipt。
+dry-run success。验收/采集编排器、capture输出或fork fixture不能替代真实目标环境dry-run receipt。
 
 ## 22. Negative validator calibration
 
@@ -1776,9 +2528,9 @@ dry-run success。Harness/capture/fork fixture不能替代真实目标环境dry-
 |---|---|
 | stage | 删除、重复、交换任一步；terminal后追加；ordinal/id不一致 |
 | run/process | splice两个run/correlation；SHA、executable、PID、start ticks、boot ID不一致；篡改stage1/2原builder anchor或restart reuse receipt |
-| log | device/inode改变；offset重叠、倒退、越界；rawArtifactHash不匹配 |
+| log | boot/device/inode改变；offset重叠、倒退、越界；logRangeArtifactRef bytes/hash/length不匹配 |
 | canonical | 相同number不同hash/stateRoot；source越出declared range |
-| generation | stage1伪造非null generation、stage/scope kind错配；generationId、generationRefreshPolicyHash、definitionCatalogRoot、instanceCatalogRoot、graphRoot、promotion revision不一致；ready前producer启动；session中lease变化 |
+| generation | stage1伪造非null generation、stage/scope kind错配；generationId、generationRefreshPolicyHash、definitionCatalogRoot、strategyCatalogRoot、instanceCatalogRoot、graphRoot、promotion revision不一致；ready前producer启动；session中lease/strategy root变化 |
 | Family | familyDefinitionHash、capabilitySetHash、candidateKey、nullable instance规则、ordered route-leg root不一致；删除/替换某leg stage1/2 membership |
 | hash chain | 修改facts/outcome/reason不改hash；重算output/event但不改child input；parent Events/outputs DAG断裂 |
 | exact | 伪造exact、缺current source或Reth binding、fallback=true |
@@ -1790,6 +2542,11 @@ dry-run success。Harness/capture/fork fixture不能替代真实目标环境dry-
 [PFD] negative corpus 可以人为损坏真实 evidence，也可以构造最小无成功语义的格式样本来测 parser；它不能
 用手写成功 fixture证明production成功。每个 mutation记录base artifact root、mutator code hash、expected
 reason与实际validator reason，corpus root进入冻结 receipt。
+
+[PFD] 表格类别不等于coverage。每个PredicateSpec必须列出exact `criticalMutationIds`，qualification certificate
+复核declared集合与rejected-or-invalid集合完全相等。至少覆盖anchor hash/stateRoot、parent/event ID、amount±1、
+ordered route/instance binding、artifact/root、execution bytes、effect delta、observer证书移除或stale、独立
+observation移除；每个未按预期拒绝的case输出content-addressed counterexample并使certificate not-qualified。
 
 [PFD] Validator还必须证明自己不会：按Family名称分支、import production实现、自己构建Graph/quote/program、
 从日志文案推导success、容忍坏JSON后跳过、把同block后写覆盖前写、让empty denominator pass。
@@ -1807,11 +2564,12 @@ runtime composition exact equality，不在源码手写22或242。每个release 
 3. 每个candidate均chain-proven rejected；
 4. retryable/invalidProgram（此时整体不得ready/pass）。
 
-[PFD] Funding/Credit允许在目标window无实例，但必须给出source coverage、zero-candidate partition与catalog
-entry，不能silent missing。对有instances的Family，分别报告candidate、verified、rejected、retryable、
-invalidProgram、instancePublication、projectedEdge、declaredExactCapability、ownedAction计数与roots；这些
-字段均由architecture-neutral schema定义，不沿用旧expected/priced术语。Family名称仅用于展示；verdict由
-BOM exact set与schema facts驱动。
+[PFD] 所有release Family统一按自己声明的SourcePlan与exact partition判断：有实例、zero-candidate或
+chain-proven rejected都必须有coverage和catalog entry，validator不得因Funding/Credit/任何domain名称放宽。
+对有instances的Family，分别报告candidate、verified、rejected、retryable、invalidProgram、
+instancePublication、projectedEdge、declaredExactCapability、ownedAction计数与roots；这些字段均由
+architecture-neutral schema定义，不沿用旧expected/priced术语。Family名称只用于展示；verdict由BOM exact
+set与schema facts驱动。当前BOM没有LP entry，因此既不要求也不接受伪LP row。
 
 ### 23.2 Restart 与差集
 
@@ -1829,12 +2587,21 @@ BOM exact set与schema facts驱动。
 ### 23.3 Performance事实门
 
 [PFD] 使用同一 exact SHA、PID/start、log inode、generation与连续 canonical window收集第17节指标。必须同时
-给出raw Event/metric receipt set root、eligible denominator、excluded heads及客观原因、queue caps、provider/
-hardware profile。任何missing或unknown不从分母删除。
+给出raw Event/metric receipt set root、eligible denominator、exclusion audit、queue caps、provider/hardware
+profile。Normalized denominator的`excludedHeads` MUST为空；pre-ready observations与被replacement取代的orphan
+只进入独立non-denominator audit。任何missing或unknown不从分母删除。
+
+[PFD] 首个计数head前只冻结window start、eligibility rule、profile与targetCount；真实未来99个hash不可能也不得
+预知。之后canonical-header collector在outcome可见前按规则append-only接收下一个head并分配ordinal，最终ordered
+number/hash set只能由该预冻规则与append log推导；reorg以显式orphan→replacement lineage在同ordinal结算，不做
+last-write-wins覆盖。每个ordinal恰有一个最终terminal receipt；duplicate、坏JSON、未知outcome、缺timing、越界
+log offset或采集中process/generation变化均使窗口`invalid`，不得skip。timing sample数必须等于denominator；
+candidate overlap必须从两个content-addressed candidate sets计算，不能用heads/sec代替；窗口时长由monotonic
+start/end anchors复算，不能信调用者传入。顶层verdict只能由PredicateSpec结果派生，不得与内部gate冲突。
 
 [PFD] 最终门至少包括：
 
-- 连续100/100 eligible heads显式terminal且满足固定deadline profile；
+- 连续100/100 eligible heads为healthy terminal且满足固定deadline profile；
 - P50/P95/P99与throughput满足绝对预算；
 - source scan count、single-flight physical build、attest/materialize/project counts满足不重复不变量；
 - memo reuse与restart差集满足预期；
@@ -1842,6 +2609,64 @@ hardware profile。任何missing或unknown不从分母删除。
 - producer active generation冻结；
 - 至少一条真实dry-run candidate在同lineage完成六步；
 - legacy authority/import/runtime/log/consumer=0。
+
+### 23.4 Architecture isolation predicates
+
+[PFD] 除six-step外，required architecture predicates至少包括：
+
+- `authoring-facade-runtime-closure-zero`：build-time大模板不进入production closure；
+- `source-repository-production-closure-zero`：旧repo与reference-only工具不load-bearing；
+- `legacy-authority-zero` aggregate gate：仅当下述两个独立predicate均持有current pass certificate才pass；其
+  AST/module graph覆盖所有production entrypoints、generated/package alias、worker/child process、Rust/Solidity
+  与deploy manifests，并与executable/runtime object lineage、logs及consumer receipts交叉；regex symbol scan/
+  import closure hash只是一项observation，不能单独pass；
+- `unaffected-capability-closure-stability`：新增未被依赖的capability/Family/Strategy后，既有closure roots、
+  semantic receipts、pinned-input outputs与qualification保持有效；
+- `new-domain-extension-isolation`：未来新增domain只能改变自己的extension specs、Family/Strategy packages、
+  release-intent与generated artifacts；stable core和中央源码diff为零；
+- `family-resource-bulkhead`：一个Family超时、crash或资源尖峰时，只使自己的facts unresolved，关键lane预算不失守。
+
+[PFD] 当前不创建LP template或adapter来跑`new-domain-extension-isolation`。该predicate先用schema-level arbitrary
+extension和mutation证明通用机制；未来真正提出LP时，再用真实LP package作为该change set的事实输入，且既有
+Swap/Protocol等未依赖closure必须byte-identical。
+
+[PFD] legacy-zero拆成两个独立predicate：`source-repository-production-closure-zero`证明旧repo/reference-only
+依赖为零；`legacy-shaped-authority-zero`证明新repo内没有换名后的compat facade、fallback、第二Graph/catalog/
+checkpoint authority或runtime topology writer。两者共同消费以下exact receipt；任一unresolved/dynamic unknown
+均为invalid，而不是从分母移除：
+
+~~~ts
+interface LegacyAuthorityClosureReceiptV1 {
+  readonly receiptId: Hash;
+  readonly predicateSpecDigests: readonly [
+    sourceRepositoryProductionClosureZero: Hash,
+    legacyShapedAuthorityZero: Hash,
+  ];
+  readonly qualificationCertificateIds: readonly [Hash, Hash];
+  readonly releaseIntentRoot: Hash;
+  readonly productionEntrypointDenominatorRoot: Hash;
+  readonly tsJsAstModuleClosureRoot: Hash;
+  readonly generatedAndPackageAliasClosureRoot: Hash;
+  readonly workerChildDynamicEntrypointRoot: Hash;
+  readonly rustBinaryClosureRoot: Hash;
+  readonly solidityDeploymentAndAbiOwnershipRoot: Hash;
+  readonly deployManifestAndSystemdExecRoot: Hash;
+  readonly executableLoadedObjectRoot: Hash;
+  readonly consumerObjectLineageRoot: Hash;
+  readonly runtimeLogWindowRoot: Hash;
+  readonly unresolvedEntrypointRefs: readonly ReadOnlyArtifactLocatorV1[];
+  readonly oldRepositoryLoadBearingRefs: readonly ReadOnlyArtifactLocatorV1[];
+  readonly forbiddenAuthorityRefs: readonly ReadOnlyArtifactLocatorV1[];
+  readonly compatibilityFacadeOrFallbackRefs: readonly ReadOnlyArtifactLocatorV1[];
+  readonly verdict: "pass" | "fail" | "invalid";
+}
+~~~
+
+[PFD] 所有字段都参与receiptId与verdict复算；release-intent声明的每个app、CLI、worker、child、dynamic loader、
+native binary、deployed contract与systemd ExecStart必须进入entrypoint denominator。Source scanner、build manifest、
+deployed executable/loaded object、consumer lineage与同一process/log window相互交叉，任何一层自报零都不能独立pass。
+两个digest与qualification certificate按上列固定顺序exact绑定，并分别签发AcceptanceCertificate；aggregate verdict
+只是二者AND，不能用一张generic cleanup证书替代。
 
 [PFD] Unit/build/fixture、部分Graph、单次进程启动、来源不明的edge数、旧新数量parity或某脚本打印pass均
 不能替代上述事实。Build只证明implemented；真实lineage、restart与性能门共同成立才证明该架构落地。
@@ -1851,24 +2676,24 @@ hardware profile。任何missing或unknown不从分母删除。
 [PFD] 本节是接口和 authority 伪代码，不是生产实现。所有 Hash 操作都有 domain separator；所有
 persist/CAS 都指单 writer transaction；所有 Promise 都接受 cancellation/deadline。
 
-### 24.1 FamilyPlugin 与 CapabilityModule
+### 24.1 Family authoring compiler、runtime refs 与 CapabilityModule
 
 ~~~ts
-interface FamilyPluginV1 {
-  readonly manifest: FrozenFamilyManifest;
+function compileFamilyDefinition(
+  definition: FamilyAuthoringDefinitionV1<CapabilityAuthoringMap>,
+  releaseIntent: FrozenReleaseIntent,
+): GeneratedFamilyEntryV1 {
+  assertExactStableCoreKeys(definition.core);
+  assertEveryExtensionDeclaredInCurrentCapabilityIndex(definition.extensions);
+  assertNoUndeclaredActionOwner(definition.actionOwners);
+  assertFactContractsExist(definition.acceptanceDeclarations);
+  return emitDataOnlyEntryAndStageLocalRefs(definition, releaseIntent);
+}
 
-  // Plugin owns candidate and instance semantics.
-  sourcePlans(cutoff: CanonicalCutoff): readonly SourcePlan[];
-  nominate(facts: readonly SourceFact[]): Promise<readonly OpaqueCandidate[]>;
-  instanceNominationKey(candidate: OpaqueCandidate): OpaqueCanonicalKey;
-  verifyIdentity(input: IdentityInput): Promise<FamilyDecision<OpaqueIdentity>>;
-  instanceKey(identity: OpaqueIdentity): FamilyInstanceKey;
-  materialize(identity: OpaqueIdentity): Promise<FamilyDecision<OpaqueDescriptor>>;
-  project(descriptor: OpaqueDescriptor): Promise<FamilyDecision<OpaqueStaticProjection>>;
-
-  // Handles are process-local and issuer-bound.
-  rehydrate(memo: VerifiedMemo, source: CanonicalSourceView): IssuedRouteHandle;
-  capability(id: CapabilityId): DeclaredCapabilityHandle;
+interface RuntimeFamilyPortRegistryV1 {
+  requireForStage(familyId: FamilyId, stage: StageId): StageFamilyRefs;
+  requireCapability(ref: CapabilityRef): DeclaredCapabilityHandle;
+  requireActionOwner(ref: ActionOwnerRef): DeclaredActionOwnerHandle;
 }
 
 interface CapabilityModuleV1<P, F, O> {
@@ -1883,8 +2708,9 @@ interface CapabilityModuleV1<P, F, O> {
 }
 ~~~
 
-[PFD] 中央 lifecycle 只看 union tag 与 hashes，不解析 OpaqueIdentity/Descriptor/Projection/Output。Plugin
-不能自行写 checkpoint、Graph、evidence success 或 submission；capability interpreter 不能取得未声明 port。
+[PFD] compiler是完整大模板的唯一消费者；runtime registry只按stage返回窄ref。中央lifecycle只看union tag与
+hashes，不解析OpaqueIdentity/Descriptor/Projection/Output。Family module不能自行写checkpoint、Graph、
+evidence success或submission；capability interpreter不能取得未声明port。
 
 ### 24.2 Schema codec、freeze 与 rehydrate
 
@@ -1938,17 +2764,17 @@ function persistFrozen(tx: Transaction, program: FrozenProgramEnvelope<unknown>)
 function rehydrateRouteHandle(
   memo: VerifiedMemo,
   reuseProof: PluginIssuedReuseProof,
-  plugin: FamilyPluginV1,
+  rehydrator: DeclaredRehydrationHandle,
   currentCatalog: GeneratedCatalog,
   source: CanonicalSourceView,
 ): IssuedRouteHandle {
-  assert(memo.familyId === plugin.manifest.familyId);
-  assert(reuseProof.memoHash === memo.hash && reuseProof.currentIssuer === plugin.manifest.familyId);
+  assert(memo.familyId === rehydrator.familyId);
+  assert(reuseProof.memoHash === memo.hash && reuseProof.currentIssuer === rehydrator.issuerRef);
   assert(reuseProof.requestedArtifactDependencyRoot ===
     currentCatalog.requiredArtifactDependencyRoot(memo.familyId, "route-rehydration"));
-  assert(validateMemoDependenciesWithPluginProof(memo, reuseProof, currentCatalog, source) === "reusable");
+  assert(validateMemoDependenciesWithOwnerProof(memo, reuseProof, currentCatalog, source) === "reusable");
   const canonicalMemo = verifiedMemoCodec.decodeExact(memo.canonicalBytes);
-  return plugin.rehydrate(canonicalMemo, source); // issuer creates a new non-serializable handle
+  return rehydrator.rehydrate(canonicalMemo, source); // narrow issuer creates a non-serializable handle
 }
 ~~~
 
@@ -2405,8 +3231,16 @@ async function withHeadSession(head: CanonicalHead, work: (s: ProducerSession) =
     const lease = await activeGeneration.acquireLease();
     try {
       await validateServingLease(lease, generatedCatalog.loadExact(), GENERATION_REFRESH_POLICY, head);
+      const strategies = generatedStrategyCatalog.loadExact();
+      assertStrategyCatalogMatchesReleaseIntent(strategies);
       const source = await canonicalSource.openHeadSession(head);
-      const session = deepFreeze({ lease, source, correlationRoot: newCorrelationRoot() });
+      const session = deepFreeze({
+        lease,
+        source,
+        strategyCatalogRoot: strategies.root,
+        strategyRefs: strategies.stageLocalPlanningRefs(),
+        correlationRoot: newCorrelationRoot(),
+      });
       try { await work(session); }
       finally { await source.close(); }
     } finally { await lease.release(); }
@@ -2438,7 +3272,10 @@ async function evaluateCandidate(
   session: ProducerSession,
   trigger: TriggerFact,
 ): Promise<DryRunReceipt> {
-  const planned = planner.enumerate(session.lease.graphView, trigger); // generic, no Family branch
+  const planningProblems = session.strategyRefs.map(ref =>
+    ref.issuePlanningProblem(session.lease.graphView, trigger),
+  );
+  const planned = planner.enumerate(planningProblems); // generic, no Family/strategy branch
   for (const route of planned) {
     const correlationId = correlationFor(session, trigger, route);
     const authorityParents = loadAndVerifyOriginalStage2ParentsForEveryRouteLeg(
@@ -2483,8 +3320,14 @@ repayment、conservation与standing-position verdict的sealedFinal；不能先�
 function emitEvidence(boundary: BoundaryObject, ctx: EvidenceContext): EventId {
   const eventWithoutId = evidenceSchema.encodeExact({
     ...ctx.stableRuntimeAndLineage,
+    artifactLineage: {
+      inputArtifactIds: boundary.inputArtifactIds,
+      outputArtifactId: boundary.semanticArtifactId,
+      productionReceiptId: boundary.productionReceiptId,
+    },
     scope: ctx.scope,
     definitionCatalogRoot: ctx.definitionCatalogRoot,
+    strategyCatalogRoot: ctx.strategyCatalogRoot,       // null for stages 1/2
     instanceCatalogRoot: ctx.instanceCatalogRoot, // null is allowed only for stage 1
     graphRoot: ctx.graphRoot,                     // null is allowed only for stage 1
     familyId: boundary.familyId,
@@ -2513,37 +3356,81 @@ function emitEvidence(boundary: BoundaryObject, ctx: EvidenceContext): EventId {
   return event.eventId;
 }
 
-function validateSixStep(query: AcceptanceQuery, stores: ReadOnlyFactStores): Verdict {
-  const tail = stores.events.exactCorrelation(query.processAnchor, query.correlationId);
+function validateSixStep(
+  query: AcceptanceQueryV1,
+  snapshot: FrozenQualifiedFactSnapshotView,
+): Verdict {
+  requireQueryAndSnapshotIdsRecompute(query, snapshot);
+  requireSnapshotRootsAndExactObservationIdsRecompute(snapshot);
+  const registry = snapshot.requireQualificationRegistry(query);
+  const qualified = registry.currentVerifierFor(
+    query.predicateSpecDigest,
+    SIX_STEP_PREDICATE_IMPLEMENTATION_DIGEST,
+  );
+  if (!qualified) {
+    return invalid("qualification-missing-or-stale");
+  }
+  for (const observation of snapshot.observations) {
+    requireObservationIdAndPayloadRecompute(observation);
+    requireObservationMatchesCurrentCertificateSubjectSchemaLocatorAndAnchor(
+      observation,
+      registry,
+      qualified.requiredObserverRoles,
+    );
+  }
+  requireObserverRolesExactCoverage(snapshot.observations, qualified.requiredObserverRoles);
+
+  const tail = snapshot.claims.exactCorrelation(
+    query.processAnchorHash,
+    query.correlationId,
+  );
   requireExactOrderedTail(tail, [3, 4, 5, 6]);
-  requireSameProducerSessionGenerationRootsAndLease(tail);
+  requireSameProducerSessionGenerationStrategyRootsAndLease(tail);
   requireStage3ManyParentsThenLinearStage4To6(tail);
 
-  const stage2Parents = requireExactOrderedRouteLegParents(tail[0], stores.events);
+  const stage2Parents = requireExactOrderedRouteLegParents(tail[0], snapshot.claims);
   const stage1Parents: EvidenceEventV1[] = [];
   for (const [legIndex, stage2] of stage2Parents.entries()) {
     requireStage(stage2, 2);
     requireOriginalBuilderRuntimeAndRawLocator(stage2);
     requireReadyMembershipForLeg(stage2, tail[0].facts.orderedInstanceBindingsRoot, legIndex);
-    const stage1 = requireSingleParent(stage2, stores.events);
+    const stage1 = requireSingleParent(stage2, snapshot.claims);
     stage1Parents.push(stage1);
     requireStage(stage1, 1);
     requireOriginalBuilderRuntimeAndRawLocator(stage1);
     requireCandidateInstanceAndDefinitionOrReuseBinding(stage1, stage2);
-    requireMemoReuseProofWhenDeclared(stage1, stage2, stores.rawArtifacts);
-    requireAuthorityProofReplay(stores.authorityProof, stores.reth, stage1);
+    requireMemoReuseProofWhenDeclared(stage1, stage2, snapshot.observations);
+    requireAuthorityProofReplay(
+      acceptancePureInterpreters.authorityProof,
+      snapshot.requireQualifiedObservation("authority-proof", stage1.eventId),
+      stage1,
+    );
   }
 
-  requireReadyBeforePlanner(stores.checkpoint, stage2Parents, tail[0]);
-  requireCurrentStateReplay(stores.reth, tail[1]);
+  requireReadyBeforePlanner(
+    snapshot.requireQualifiedObservation("ready-checkpoint", tail[0].eventId),
+    stage2Parents,
+    tail[0],
+  );
+  requireCurrentStateReplay(
+    acceptancePureInterpreters.stateFact,
+    snapshot.requireQualifiedObservation("current-state", tail[1].eventId),
+    tail[1],
+  );
   requireEveryLegExactAndActionOwner(tail[1], tail[2], stage2Parents);
   requireRealFinalSimAndSafetyReceipt(tail[2], tail[3]);
-  return sealFailClosedDagVerdict([...stage1Parents, ...stage2Parents, ...tail]);
+  return evaluateQualifiedPredicate(
+    qualified,
+    [...stage1Parents, ...stage2Parents, ...tail],
+    snapshot.observations,
+  );
 }
 ~~~
 
-[PFD] query只含process anchor、correlationId与fact stores；不含target route、Family特判、builder callback或
-“expected success”fixture。
+[PFD] ObserverAdapter在GateCore调用前完成所有Reth/RPC、checkpoint、filesystem、process与log I/O并封存
+`QualifiedFactSnapshotV1`；`FrozenQualifiedFactSnapshotView`只是对该content-addressed snapshot的纯exact decode，
+不能延迟访问外部系统。query只含subject/process/correlation与snapshot ID；不含target route、Family特判、
+builder callback或“expected success”fixture。
 
 ## 25. Multi-Agent ownership and integration plan
 
@@ -2553,37 +3440,39 @@ function validateSixStep(query: AcceptanceQuery, stores: ReadOnlyFactStores): Ve
 两个Agent同时拥有同一package，禁止直接编辑另一个owner目录。跨package变化先改冻结spec并由integration
 owner签发新baseline；不能靠临时相互import解决。
 
-[PFD] 先冻结四类合同：Evidence Schema、core envelope/codec、Family/capability ports、authority/dependency
-rules。冻结前只允许原型与审计；冻结后production工作包并行。工作包按完整模块边界拆分，不按单函数或
-单测试微切片。
+[PFD] 先冻结五类合同：Claim/Observation/Evidence schemas与PredicateSpecs、qualification规则、core
+envelope/codec、Family/Strategy/capability ports、authority/dependency rules。冻结前只允许原型与审计；
+最小事实底座与首个slice资格化后production工作包并行。工作包按完整模块边界拆分，不按单函数或单测试微切片。
 
 ### 25.2 工作包
 
 | Owner Agent | 可修改目录 | 禁止修改 | 输入 → 输出 / authority | 集成事实门 | 并行关系 |
 |---|---|---|---|---|---|
 | Core contract steward | specs/core-envelope、specs/capability-index、specs/authority-proof | apps、families、generated、validator | reviewed contracts → frozen spec roots；无runtime authority | exact schema/dependency hashes、跨语言vectors | 最先，与Acceptance contract共同freeze |
-| Release-intent steward | specs/release-intent | generated、apps、Family源码 | 独立reviewed Family public-entry BOM → releaseIntentRoot | 两人review签名、manifest refs存在、无silent omission | Family proposals后串行；不得兼任runtime integration owner |
-| Acceptance contract/schema | specs/evidence、acceptance/schema-codec、acceptance/validator、acceptance/authority-proof-interpreters、acceptance/negative-corpus、acceptance/cli | apps、packages、families、specs/release-intent | raw Evidence/Coverage/Head receipts → verdict；无production authority | impl calibration root、mutation corpus全拒绝、validator frozen hash | 最先；冻结后继续只读审计 |
-| impl evidence adapter | acceptance/adapters/impl-readonly | impl工作树、production packages、validator | impl raw artifacts → canonical events；无成功创造权 | 每字段locator/hash，缺事实诚实fail | 与schema Agent协作，先于production |
+| Release-intent steward | specs/release-intent | generated、apps、Family/Strategy源码 | 独立reviewed Family/Strategy public-entry BOM → releaseIntentRoot | 两人review签名、manifest refs存在、无silent omission；当前LP=absent from BOM | proposals后串行；不得兼任runtime integration owner |
+| Acceptance contract/schema | specs/{evidence,predicates}、acceptance/{schema-codec,validator,predicate-specs,reference-models,observer-qualification,authority-proof-interpreters,negative-corpus,cli} | apps、production packages、families、tools/reference-only、specs/release-intent | claims+qualified observations → pass/fail/invalid；无production authority | current verifier/observer certificates、critical mutations exact覆盖、independent oracle>0 | 最先；冻结后继续只读审计 |
+| DS reference importer | tools/reference-only/ds | DS写入、production、validator | DS raw downstream/live/performance artifacts → untrusted witness claims | 每字段locator/hash；缺strict前段诚实invalid | schema冻结后与impl importer并行 |
+| impl reference importer | tools/reference-only/impl | impl写入、production、validator | impl raw startup/attestation/ready/Graph artifacts → untrusted witness claims | 每字段locator/hash；缺后段诚实invalid且不拖baseline | schema冻结后与DS importer并行 |
 | Canonical/durable checkpoint | packages/canonical-source、packages/canonical-codec、packages/durable-store、packages/checkpoint | Family/planner/execution | chain source + SQLite tx → SourceView/content/CAS root；拥有canonical、physical durability与checkpoint pointer | crash/reorg/CAS/partial-write/GC reachability事实 | contract冻结后可并行 |
-| Family SDK/catalog generator | packages/family-sdk、packages/artifact-fingerprint、packages/catalog-generator | concrete families、planner、specs/release-intent、generated手写 | manifests+BOM → issuer/catalog/impact/composition roots | dependency closure、unknown schema fail、local invalidation、reproducible output | 与capability Agent并行，先于Family ports |
-| Generated artifacts（machine-only） | generated/family-catalog、generated/runtime-composition仅由catalog-generator写 | 所有人手工编辑 | releaseIntentRoot+manifest roots → byte-reproducible artifacts | clean regenerate diff=0、BOM/catalog/runtime exact equality | integration owner只运行generator，不编辑产物 |
+| Family SDK/catalog generator | packages/family-sdk、packages/artifact-fingerprint、packages/catalog-generator | concrete families、planner、specs/release-intent、generated手写 | build-time big definitions+BOM → narrow stage refs/catalog/impact/composition roots | authoring runtime closure=0、dependency closure、local invalidation、reproducible output | 与capability Agent并行，先于Family ports；不做LP template |
+| Strategy SDK/catalog | packages/strategy-sdk、generated/strategy-catalog、strategies/<current> | Family internals、planner/solver kernel、LP strategy | generic capability predicates+BOM → planning problem issuer refs | no protocol import/central switch、strategy-local closure | Family runtime refs稳定后并行；只做当前策略 |
+| Generated artifacts（machine-only） | generated/{family-catalog,strategy-catalog,runtime-composition}仅由generator写 | 所有人手工编辑 | releaseIntentRoot+manifest roots → byte-reproducible artifacts | clean regenerate diff=0、BOM/catalog/runtime exact equality | integration owner只运行generator，不编辑产物 |
 | Capability/interpreter | packages/capability-contracts、packages/capability-interpreters、packages/request-program | concreteFamily、scheduler internals | FrozenProgram → typed facts/interpretation ports | round-trip、field mutation、error ownership | 与SDK并行 |
-| Discovery/attestation/generation builder | packages/observation、packages/discovery、packages/attestation、packages/generation-builder、apps/operator-cli | checkpoint internals、Family语义、ready internals、apps/searcher-runtime | SourcePlans+plugins+ports → exact partition/outcomes及唯一build orchestration；operator-cli仅status/read或向runtime admin port提交retryable probe，不直接开DB writer | 50-block、dedupe、once、typed outcome、无第二startup/promotion path | 依赖SDK/canonical contracts；与Graph owner按port并行 |
+| Discovery/attestation/generation builder | packages/observation、packages/discovery、packages/attestation、packages/generation-builder、apps/operator-cli | checkpoint internals、Family语义、完整authoring definition、ready internals、apps/searcher-runtime | SourcePlans+stage-local refs+ports → exact partition/outcomes及唯一build orchestration；operator-cli仅status/read或向runtime admin port提交retryable probe，不直接开DB writer | 50-block、dedupe、once、typed outcome、无第二startup/promotion path | 依赖SDK/canonical contracts；与Graph owner按port并行 |
 | Graph/readyGeneration | packages/catalog、packages/ready-generation、packages/graph | raw universe、Family internals、startup orchestration | verified publications + PromotionCallerToken → atomic immutable GraphView | full-root closure/CAS/canonical fence/crash/lease/adoption | 与state/scheduler并行 |
 | State/scheduler/REVM | packages/scheduler、packages/shared-work、packages/state-runtime、runtime/revm-workers | Graph authority、Family math | generic work/program → source-bound facts | single-flight、quota、abort/HOL、permit守恒 | contract冻结后并行 |
 | Producer/head-session | packages/producer | Graph write、discovery/attestation、Family语义、apps composition | active ready lease + canonical heads → immutable ProducerSession/correlation；拥有session admission/barrier，不拥有topology | serving-age/release/policy fence、100/100 terminal、active lease不变 | 依赖Graph/canonical/scheduler ports；与planner并行 |
 | Planner/exact | packages/planner、packages/solver、packages/exact | families、protocol ABI/math | GraphView+opaque ports → route/current exact | no protocol import、current-source/fallback=0 | 依赖Graph/SDK port，不依赖Family实现细节 |
 | Execution/final-sim | packages/execution-program、packages/final-sim、packages/safety、packages/submission、contracts/executor、contracts/interfaces | Family identities、signer secret | owned actions → program/real sim/unsigned receipt | action ownership、安全门、strict top-level sim | 与planner后半并行 |
 | Evidence/telemetry | packages/evidence-emitter、packages/telemetry、acceptance/collectors | validator logic、production object creation | boundary objects → immutable events/metrics | raw locator、fsync、secret redaction | 所有owner提供boundary port |
-| Family port groups | families/<assigned-set> | central packages、其他Family | frozen kernel + SDK → plugin/capabilities | identity/exact/action事实、无central import | 按Swap/Protocol/Funding/Credit分组并行 |
+| Family port groups | families/<assigned-set> | central packages、其他Family | locked pure kernels/invariants + big authoring template → generated narrow refs/capabilities | identity/exact/action事实、无central import | 按当前release-intent ownership cohort分组；cohort不进schema/runtime/validator；无LP cohort |
 | Runtime integration owner | apps/searcher-runtime、deploy/systemd、deploy/runtime-shell | Family内部实现、validator、release-intent、generated手写 | generated catalog+composition+ports →唯一process | dependency closure、exact SHA、dry-run lineage | 最后集成；可运行generator但不可改生成物 |
 
 [PFD] Family groups不是“一族一个中央补丁”。每组只修改自己目录；发现SDK缺能力时提交Capability Proposal：
 新schema、通用语义、依赖closure与受影响Families。普通Family或capability扩展只能增加已声明的extension/
 interpreter module，不得修改validator core或EvidenceEvent core schema；同一通用validator按schemaRef与
 generated registry校验。只有确实改变所有模块共享含义的stable core envelope升级，才允许显式新major
-schema并触发全局重验，不能把单个Credit/Family需求包装成core升级。无关Family保持原memo与验收，不进行
+schema并触发全局重验，不能把单个Family或future-domain需求包装成core升级。无关Family保持原memo与验收，不进行
 全量重跑。
 
 ### 25.3 Integration protocol
@@ -2604,9 +3493,10 @@ Family switch/address/ABI/selector或compat wrapper，拒绝集成并回到capab
 
 ### 25.4 可并行与必须串行的边界
 
-[PFD] Schema/validator calibration与core contract freeze必须串行在前；之后canonical/checkpoint、SDK/
-capability、scheduler/state、Graph store可并行；Family port在SDK release后并行；planner/exact、execution/
-final-sim在各自port稳定后并行；runtime composition、systemd dry-run与六步事实验收串行收口。
+[PFD] Claim/Observation/Predicate specs、qualification framework与core contract freeze必须串行在前；随后DS/
+impl reference importers、independent observers与boundary CI可并行，签发acceptance baseline后canonical/checkpoint、
+SDK/capability、scheduler/state、Graph store再并行；Family port在SDK release后并行；planner/exact、execution/
+final-sim在各自port稳定后并行；runtime composition、systemd dry-run与Aloha六步事实验收串行收口。
 
 [PFD] 不允许为了多Agent吞吐创建共享“central TODO file”。跨owner问题进入content-addressed contract issue；
 只有owner修改包，消费者更新到新spec hash。
@@ -2615,17 +3505,24 @@ final-sim在各自port稳定后并行；runtime composition、systemd dry-run与
 
 [PFD] 这是空仓库内部的依赖顺序，不是旧runtime迁移、shadow或逐步cutover：
 
-1. **冻结事实语言**：实现Evidence Schema、canonical codec、six-step state machine与negative corpus。
-   Verify：schema hash、validator bundle hash、corpus root可复算。
-2. **校准validator**：实现impl read-only adapter，读取真实impl dry-run/live artifacts与Reth事实。
-   Verify：真实存在的事实可定位；缺事实诚实fail；mutation全部fail。
-3. **签发architecture-baseline**：冻结core envelope、capability refs、error taxonomy、authority/dependency rules。
-   Verify：所有owner只依赖spec hashes；新增Credit示例只影响declared closure。
-4. **建立repo与依赖门**：创建最终package tree、forbidden-import linter、generated catalog pipeline。
-   Verify：packages不能importfamilies，acceptance不能importproduction，空catalog可确定性生成。
-5. **并行实现foundation**：canonical/durable-store/checkpoint、codec/SDK、scheduler/shared-work、REVM worker
-   protocol、Graph store。
-   Verify：reorg/CAS/crash、round-trip、single-flight/HOL、immutable lease事实合同。
+1. **冻结架构无关事实语言**：定义Claim/Observation/Evidence schemas、PredicateSpecs、pass/fail/invalid、
+   SemanticArtifact/ProductionReceipt与critical mutation sets；实现最小qualification runner。
+   Verify：schema/spec/implementation digests、observer/verifier certificate schemas与corpus root可复算。
+2. **资格化并校准事实底座**：DS reference importer校准downstream/live/performance读取；impl importer校准
+   startup/attestation/ready/Graph读取；expected只来自qualified chain/Reth/process/math/independent EVM。
+   Verify：DS/impl不存在的事实诚实invalid；全部declared mutations拒绝；current certificates成立。impl后段
+   不要求跑通，也不以其时效性阻塞baseline。
+3. **签发architecture-baseline**：冻结core envelope、generic Family大模板、generated narrow refs、Strategy/
+   capability ports、error taxonomy与authority/dependency rules。
+   Verify：所有owner只依赖spec hashes；arbitrary future-domain extension只影响declared closure；当前无LP schema。
+4. **建立clean-room repo与依赖门**：创建最终package tree、reference-lock/reuse-ledger、boundary required CI、
+   generated family/strategy catalog pipeline。
+   Verify：production旧repo closure=0、authoring/runtime closure=0、acceptance不importproduction/reference tools、
+   空catalog可确定性生成。
+5. **并行实现foundation**：canonical/durable-store/checkpoint、codec/Family authoring compiler+runtime refs、
+   capability/Strategy SDK、scheduler/shared-work、REVM worker protocol、Graph store。
+   Verify：reorg/CAS/crash、round-trip、single-flight/HOL、immutable lease、extension local invalidation事实合同；
+   不交付LP template/capability/Family/strategy。
 6. **实现discovery/attestation/generation-builder**：declared SourcePlan、50-block observation、merged dedupe、
    typed outcomes、per-key durable writer、probe、memo impact与唯一source→promotion orchestration。
    Verify：SIGTERM中途恢复、exact partition、rejection不跨cutoff、invalidProgram阻止ready。
@@ -2637,18 +3534,24 @@ final-sim在各自port稳定后并行；runtime composition、systemd dry-run与
    Verify：source-bound exact lineage；central Family/protocol import=0。
 10. **接入execution/final-sim/safety**：owned actions、obligations、reservedsim与unsigneddry-run。
     Verify：unknown action/obligationfail；最终top-level语义；standing/repayment/conservation执行。
-11. **选择性移植Family kernels**：按ReuseReceipt复制ABI、reverse identity、math、exact/action算法，重写shell。
-    Verify：每Family仅修改自己目录；oldclosurehash→newport evidence；central无分支。
+11. **逐symbol采用或重写Family kernels**：按reference lock/ReuseReceipt只采用已证明的isolated pure symbol或
+    declaration；reverse identity、lifecycle、schema、authority与shell全部按大模板/新ports实现。
+    Verify：每Family仅修改自己目录；old symbol hash→new contract evidence；whole-file/runtime copy=0；central无分支。
 12. **完成generatedcatalog与全族矩阵**：所有Familyexactset有source/outcome/publication/edge说明。
-    Verify：Funding/Credit zero也有partition；silentmissing=0。
-13. **接入nativeemitter**：在六个真实boundary写Event；validator保持frozen且无productionimport。
-    Verify：rawlocator/root/Reth复核；不能通过手写成功fixture。
+    Verify：所有Family统一按SourcePlan/exact partition；silentmissing=0；当前BOM与catalog均无LP entry。
+13. **接入nativeemitter**：在真实boundaries写SemanticArtifact、ProductionReceipt与Event；validator保持frozen
+    且无productionimport。
+    Verify：rawlocator/root/qualified observations复核；不能通过手写成功fixture。
 14. **做restart/差集/性能事实验收**：SIGTERM/systemd restart、memo reuse、singleprobe、100/100、P99。
     Verify：绝对预算、物理work不重复、Reth/CPU/queue不失控。
 15. **exact-SHA systemd dry-run**：clean pushed SHA、executable/process/log anchor、默认无signer。
     Verify：runtime commit=deployed SHA；无nohup/旧process；不签名不广播。
 16. **完成一条真实six-step lineage与全局零证明**：真实candidate到finalsim，同roots/correlation。
-    Verify：legacy authority/import/runtime/log/consumer=0；所有事实门pass。
+    Verify：legacy authority/import/runtime/log/consumer=0；所有production predicates/observers持current
+    qualification且事实门pass。
+
+[PFD] 步骤5以后仍按vertical slice执行fact contract→qualification→implementation→replay/live。冻结core
+framework不等于提前写完未来所有测试；任何Agent不得先写production再补一个迎合其对象形状的predicate。
 
 [PFD] 每一步不要求旧测试绿，不运行旧runtime作为Aloha fallback。实现中发现问题时按事实层定位：
 
@@ -2695,9 +3598,11 @@ final-sim在各自port稳定后并行；runtime composition、systemd dry-run与
 
 | 风险 | 已采用的终态决定 | 禁止的“快捷修复” | 事实证明 |
 |---|---|---|---|
-| Greenfield重复发明成熟算法 | 按文件ReuseReceipt选择性复用纯算法/成熟choreography | 全复制旧runtime或为了新颖全重写 | old/newcontent hash、dependency closure、contract evidence |
+| Greenfield重复发明成熟算法 | reference-lock后逐symbol采用pure kernel或按不变量重写choreography | 全复制旧runtime、whole file adoption或为了新颖拒绝成熟不变量 | lock/ledger、old/newcontent hash、dependency closure、contract evidence |
 | 中央再次吸收Family特判 | opaque payload + generatedowner + capability proposal | if familyId、地址/ABI/selector/topic switch | forbidden import/literal审计 + 新Family不改central diff |
-| Credit扩展导致Swap全重验 | declared transitive capability closure局部失效 | global definitionCatalogRoot变化即全量attest | impact receipt + unaffected memo reuse=100% |
+| future-domain扩展导致既有Family全重验 | declared transitive capability closure局部失效 | global definitionCatalogRoot变化即全量attest | impact receipt + unaffected memo/qualification reuse=100% |
+| Family大模板变runtime god object | build-time authoring façade→generated stage-local refs | stages持有完整Family definition/callable map | authoring-facade-runtime-closure-zero |
+| 为未来LP预塞中央union或空模板 | 当前无LP资产，只保留generic extension slot | LP enum、placeholder capability/Family/fixture | current BOM LP=0 + arbitrary extension isolation |
 | freeze层静默丢字段 | one schema生成codec/freeze/persist/transport/hash | handwritten DTO/copy | byte round-trip + per-field mutation + cross-language vectors |
 | plugin bug变永久rejection | typed transportfacts，只有plugin显式proof可reject | decode throw+0x/revert中央推断 | proof binding + newcutoff revalidation |
 | 50 blocks遗漏老实例 | observation与identityinventory分authority | recent swap冒充universe completeness | SourcePlan coverage + point-in-time enumeration |
@@ -2706,8 +3611,8 @@ final-sim在各自port稳定后并行；runtime composition、systemd dry-run与
 | 统一调度变慢 | shared scan/single-flight、diff、lanes、quota、reserved capacity | 无界并发或跳过正确性 | physical work count + queues + 100/100 budgets |
 | slowFamily拖死全局 | RPC/REVM/finalsim隔离、perFamilyquota/circuit | 每attest新daemon或singleFIFO | heavy/light progress与permit守恒 |
 | activeGraph漂移 | immutablelease + safe adoption barrier | continuous publication/secondarymerge | root/lease events stage3–6不变 |
-| validator塑造错误production | pre-freeze independentvalidator，rawfactonly | 为脚本绿改authority、targetfixture | impl+Aloha同validator、negative corpus、Reth复核 |
-| impl校准被误当oracle | impl只做第一个被测系统，缺事实诚实fail | 数量parity或放宽schema | calibration receipt列missing bindings |
+| 未资格化validator/observer塑造错误production | spec先行、current qualification、raw facts only | 为脚本绿改authority、target fixture | certificates、critical mutation exact coverage、independent oracle |
+| DS/impl reference被误当oracle | 两者只产untrusted witness；DS校准后段、impl校准前段 | 数量parity、要求impl跑完整后段或分支特判 | reference receipts列missing/invalid且independentOracleCount不含旧系统 |
 | finalsim被effectsim替代 | 独立top-level strictsim与reservedworkers | global disable EIP-3607 | stage6真实receipt + program/source binding |
 | 多Agent互相覆盖 | 独立worktree、packageownership、frozen specs | sharedtree/central TODO/微补丁 | diff ownership与integration receipt |
 
@@ -2723,11 +3628,15 @@ final-sim在各自port稳定后并行；runtime composition、systemd dry-run与
 - CandidateKey稳定，RunCandidateKey绑定run/cutoff；不按数组index恢复；
 - checkpoint逻辑单envelope、首个production物理实现固定SQLite WAL；
 - protocol语义只在Family/capability，中央无固定Family/domain union；
+- 完整Family大模板只在build-time；runtime只接收generated stage-local refs；
+- 当前release不定义LP template/capability/Family/fixture/catalog entry/strategy；未来domain只通过versioned
+  extension与自己的Family/Strategy package接入，不使未依赖closure重验；
 - freeze/transport/hash来自同一schema；
 - planner/solver只看genericGraph与opaqueports；
 - current-source exact与final simulation无fallback；
 - standing-position/repayment/conservation是通用obligation安全门，不是中央协议分类；
-- acceptance先在impl真实证据上校准并冻结，之后同一schema/validator验Aloha；
+- acceptance先资格化predicate/observers，再用DS真实后段事实与impl真实前段事实校准；两者均非oracle，之后
+  同一spec/implementation验Aloha；
 - 成功验收只来自事实lineage；测试脚本是读者/校验器，不是truth creator；
 - 性能是correctness交付的一部分，连续100/100与绝对预算不以旧实现失败而豁免；
 - 默认dry-run；本文不授权签名或广播。
@@ -2746,16 +3655,20 @@ imports始终R3/R4，不能以“仍在审计”为由复制。
 
 [PFD] Aloha只在以下事实同时成立时完成：
 
-1. frozen schema/validator在impl校准且negative corpus全通过；
+1. frozen Claim/Observation/Evidence schemas与PredicateSpecs已签current verifier/observer qualification；DS
+   downstream与impl startup reference cases按各自真实覆盖校准，critical mutation exact set全拒绝或invalid，
+   independent oracle count为正；不要求impl后段通过；
 2. Aloha exact pushed SHA、clean tree、systemd/executable/PID/start/log anchor一致；
 3. generated catalog exact set的全族Universe/Instance与Edge/Graph矩阵无silent missing；
 4. readyGeneration为同一CAS，producer只持有immutableGraphView；
 5. 至少一条真实dry-run candidate以同generation/cutoff/roots/correlation完成六步到finalsim；
 6. restart复用、差集、singleprobe与SIGTERM恢复由durable facts证明；
 7. 连续100/100与P50/P95/P99、throughput、resource/queue预算通过；
-8. central Family/protocol semantics=0，legacy authority/import/runtime/log/consumer=0；
+8. central Family/protocol/domain semantics=0，authoring façade runtime closure=0，旧repo/reference-only
+   production closure=0，legacy authority/import/runtime/log/consumer=0；
 9. defaultdry-run、finalsim、standing/repayment/conservation与human signing/broadcast gate完整；
-10. canonical文档、schema、generated catalog、runtime与acceptance receipt指向同一版本化合同。
+10. canonical文档、schema、generated catalog、runtime与acceptance receipt指向同一版本化合同；当前release
+    BOM/catalog无LP资产，generic extension isolation predicate有效。
 
 [PFD] 任一项缺失都只能报告具体缺口，不能用build、unit、fixture、partialGraph、单次live、数量parity或
 脚本自报pass替代。
