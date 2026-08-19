@@ -311,10 +311,11 @@ async function main(): Promise<void> {
       runId: "run-1",
       ready: readyGeneration,
     });
-    assert.equal(
+    assert.notEqual(
       ready.inProgressRun,
       null,
-      "the completed run clears after atomic ready promotion",
+      "the completed run is kept after atomic ready promotion so residual " +
+        "retryable outcomes stay durable and probe-closable",
     );
     assert.equal(ready.readyGeneration?.generation, 1);
     assert.equal(ready.verifiedMemos["a"]?.familyInstanceKey, "inst-a");

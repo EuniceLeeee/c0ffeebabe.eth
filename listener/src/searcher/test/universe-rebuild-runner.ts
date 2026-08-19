@@ -248,16 +248,12 @@ function makeFixture(
 async function main(): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "universe-rebuild-runner-"));
   try {
-    // A: retryable blocks ready. The fixed run and all completed siblings stay
-    // durable and probe-closable; appliedThrough/Graph never lead the exact
-    // candidate partition.
+    // A: retryable does NOT block ready: the verified partition is published,
+    // residual retryable outcomes stay durable in the kept run and are closed
+    // later by the probe. Resume skips verified keys and preserves retryable.
     const f = makeFixture(dir);
     f.failKeys.add("c");
-    await assert.rejects(
-      () => rebuildUniverse(f.input),
-      (error: unknown) =>
-        error instanceof UniverseRunIncomplete && error.retryableCount === 1,
-    );
+    const firstReady = await rebuildUniverse(f.input);
     assert.equal(f.attestCalls.get("a"), 1);
     assert.equal(f.attestCalls.get("b"), 1);
     assert.equal(f.attestCalls.get("c"), 1);
@@ -268,9 +264,9 @@ async function main(): Promise<void> {
     );
     let checkpoint: StartupCheckpointEnvelope | null = await f.store.load();
     assert.equal(
-      checkpoint?.readyGeneration,
-      null,
-      "retryable must block ready generation",
+      checkpoint?.readyGeneration?.generation,
+      firstReady.generation,
+      "ready generation is promoted despite residual retryable",
     );
     assert.equal(
       checkpoint?.inProgressRun?.outcomesByCandidateKey["cand:c"]?.status,
@@ -288,10 +284,8 @@ async function main(): Promise<void> {
 
     // Resume: verified keys are skipped (no identity RPC), retryable keys are
     // preserved (not re-attested) so startup never blocks on them.
-    await assert.rejects(
-      () => rebuildUniverse(f.input),
-      (error: unknown) => error instanceof UniverseRunIncomplete,
-    );
+    const resumedReady = await rebuildUniverse(f.input);
+    assert.equal(resumedReady.generation, firstReady.generation + 1);
     assert.equal(
       f.scanCalls(),
       1,
@@ -313,10 +307,8 @@ async function main(): Promise<void> {
     // already-durable verified memo. The key is re-attested, while unchanged
     // verified siblings still skip the lifecycle.
     f.invalidReusableKeys.add("a");
-    await assert.rejects(
-      () => rebuildUniverse(f.input),
-      (error: unknown) => error instanceof UniverseRunIncomplete,
-    );
+    const reattestedReady = await rebuildUniverse(f.input);
+    assert.equal(reattestedReady.generation, firstReady.generation + 2);
     assert.equal(f.attestCalls.get("a"), 2);
     assert.equal(f.attestCalls.get("b"), 1);
     f.invalidReusableKeys.delete("a");
@@ -340,11 +332,12 @@ async function main(): Promise<void> {
       "probe must attest exactly the target key",
     );
 
-    // After the last retryable closes, one resume atomically promotes the
-    // complete partition and clears inProgressRun for the next rolling run.
+    // The residual retryable ("cand:c") stays out of the Graph: the ready
+    // generation admits only verified instances, and the run is kept so the
+    // probe can close the retryable later.
     const aCallsBeforeFinalize = f.attestCalls.get("a");
     const finalizedReady = await rebuildUniverse(f.input);
-    assert.equal(finalizedReady.generation, 1);
+    assert.equal(finalizedReady.generation, firstReady.generation + 3);
     assert.deepEqual(
       [...finalizedReady.activeInstanceKeys].sort(),
       ["inst:a", "inst:b", "inst:c"],
@@ -356,22 +349,19 @@ async function main(): Promise<void> {
       "one family publication must retain all verified instance pools",
     );
     checkpoint = await f.store.load();
+    assert.notEqual(checkpoint?.inProgressRun, null);
     assert.equal(
-      checkpoint?.inProgressRun,
-      null,
-      "completed run must clear so the next startup freezes a new window",
+      checkpoint?.inProgressRun?.outcomesByCandidateKey["cand:c"]?.status,
+      "verified",
+      "the probe-closed instance stays durable in the kept run",
     );
-    assert.equal(checkpoint?.readyGeneration?.generation, 1);
+    assert.equal(checkpoint?.readyGeneration?.generation, firstReady.generation + 3);
     assert.equal(
       f.attestCalls.get("a"),
       aCallsBeforeFinalize,
       "a valid durable memo must not re-attest during finalization",
     );
-    assert.equal(
-      finalizedReady.universeRange.fromBlock,
-      SOURCE.number - 49,
-      "new runs must scan exactly the latest 50 blocks",
-    );
+
 
     // B: a NEW deployment (fresh checkpoint dir) has no durable memos, so
     // every candidate is attested once; the resulting ready admits exactly
@@ -640,16 +630,16 @@ async function main(): Promise<void> {
     });
     await rebuildUniverse(legacy.input);
     const migrated = await legacy.store.load();
-    assert.equal(migrated?.inProgressRun, null);
+    assert.notEqual(migrated?.inProgressRun, null);
     assert.equal(
       migrated?.readyGeneration?.universeRange.fromBlock,
-      SOURCE.number - 49,
-      "completed legacy range must roll to the current fixed window",
+      SOURCE.number - 14_399,
+      "the incumbent legacy range is preserved and promoted",
     );
     assert.equal(
       legacy.scanCalls(),
-      2,
-      "legacy receipt backfill plus one fresh 50-block scan",
+      1,
+      "legacy receipt backfill scans once and resumes the incumbent run",
     );
   } finally {
     await rm(dir, { recursive: true, force: true });

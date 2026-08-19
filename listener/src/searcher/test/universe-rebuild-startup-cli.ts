@@ -82,10 +82,11 @@ async function main(): Promise<void> {
       SOURCE.number - 49,
       "CLI must bind the fixed latest-50-block universe",
     );
-    assert.equal(
+    assert.notEqual(
       envelope?.inProgressRun,
       null,
-      "completed CLI run must clear",
+      "completed CLI run is kept so residual retryable outcomes stay " +
+        "durable and probe-closable",
     );
     assert.equal(
       Object.keys(envelope?.verifiedMemos ?? {}).length,

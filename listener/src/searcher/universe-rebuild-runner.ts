@@ -470,14 +470,16 @@ export async function rebuildUniverse(
     (item) => item.status === "retryable",
   );
   if (pending.length > 0) {
+    // Residual retryable outcomes no longer block ready: the verified
+    // partition is complete and published; retryable candidates simply stay
+    // out of the Graph and remain durable in the kept run for the probe to
+    // close after startup. (UniverseRunIncomplete is still thrown when the
+    // run is lost below, i.e. no ready can be formed at all.)
     log(
-      "universe rebuild incomplete with " + pending.length +
-        " retryable outcome(s); fixed run remains probe-closable",
+      "universe rebuild ready with " + pending.length +
+        " residual retryable outcome(s); they stay out of the Graph " +
+        "and remain probe-closable",
     );
-    throw new UniverseRunIncomplete({
-      runId: input.runId,
-      retryableCount: pending.length,
-    });
   }
 
   // 5. Exact partition: every active candidate is verified or chain-proven
@@ -547,20 +549,13 @@ export async function rebuildUniverse(
       " instances=" + ready.activeInstanceKeys.length +
       " candidates=" + candidates.length,
   );
-  // A checkpoint created before the fixed-window policy may contain a fully
-  // completed wider run. It is promoted/cleared above for atomic recovery,
-  // but it must never be returned as the current production window. Continue
-  // in the same startup invocation with a fresh canonical 50-block run.
-  if (
-    incumbentRun !== null &&
-    fromBlock !== strictEdgeCollectionFromBlock(cutoff.number)
-  ) {
-    log(
-      "universe rebuild retired completed legacy range; starting current " +
-        "fixed edge window",
-    );
-    return await rebuildUniverse(input);
-  }
+  // The run is KEPT (never cleared) so residual retryable outcomes stay
+  // durable and probe-closable after startup, and an incumbent run always
+  // keeps its already-durable fromBlock: resume continues the same fixed
+  // window instead of re-freezing a new one. There is no legacy-range
+  // recursion — a wider pre-policy run is promoted as-is and its receipts
+  // are backfilled in place (assertSourceReceiptsBindRun still enforces the
+  // exact candidate partition and receipt range).
   return ready;
 }
 

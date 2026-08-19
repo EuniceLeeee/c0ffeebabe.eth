@@ -590,10 +590,11 @@ export class UniverseRebuildCheckpointStore {
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
-        // A completed exact partition is no longer in progress. Verified
-        // memos and the ready generation remain durable; clearing the run is
-        // what permits the next startup to freeze a new 50-block cutoff.
-        inProgressRun: null,
+        // The run is KEPT (not nulled) so any residual retryable outcomes
+        // stay durable and can be closed by the probe after startup. Ready
+        // only admits verified instances; retryable candidates never enter
+        // the Graph and never block an otherwise complete generation.
+        inProgressRun: run,
         readyGeneration: Object.freeze(input.ready),
       });
     });
@@ -885,12 +886,18 @@ function assertReadyPromotion(
   const outcomes = outcomeEntries.map(([, outcome]) => outcome);
   if (
     candidateKeys.length !== run.candidateCount ||
-    outcomes.length !== run.candidateCount ||
+    // Outcomes may be a strict subset of the candidate partition: candidates
+    // that have not been attested yet stay pending (no outcome) and are
+    // simply absent from the Graph — they never block a ready that admits
+    // every currently-verified instance. Residual retryable outcomes are
+    // preserved (probe-closable) and also never enter the Graph.
+    outcomes.length > run.candidateCount ||
     outcomeEntries.some(([key, outcome], index) =>
       !candidateKeys.includes(key) ||
       outcome.familyCandidateKey !== key ||
       (outcome.status !== "verified" &&
-        outcome.status !== "terminal-rejected")
+        outcome.status !== "terminal-rejected" &&
+        outcome.status !== "retryable")
     )
   ) {
     throw new Error(
