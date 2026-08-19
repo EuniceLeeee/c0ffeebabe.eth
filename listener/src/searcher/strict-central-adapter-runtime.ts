@@ -178,6 +178,7 @@ export function createStrictCentralAdapterRuntime(input: {
           // omit schedule entirely, so resolve the lane defensively.
           const rethLane = (issueInput.schedule as
             Partial<CentralScheduleDecision> | undefined)?.rethLane ?? "exact";
+          const rethStartedAtMs = Date.now();
           const rethResults = rethBound.length === 0
             ? []
             : transportScheduler === undefined
@@ -188,6 +189,18 @@ export function createStrictCentralAdapterRuntime(input: {
                     new AbortController().signal,
                   () => Promise.all(rethBound.map(runRequest)),
                 );
+          if (rethBound.length > 0) {
+            const elapsedMs = Date.now() - rethStartedAtMs;
+            if (elapsedMs > 200) {
+              console.log(
+                "[strict-exec] lane=" + rethLane +
+                  " rethCalls=" + rethBound.length +
+                  " simCalls=" + simulated.length +
+                  " wallMs=" + elapsedMs +
+                  " family=" + execution.familyId,
+              );
+            }
+          }
           const simResults = simulated.length === 0
             ? []
             : await Promise.all(simulated.map(runRequest));
