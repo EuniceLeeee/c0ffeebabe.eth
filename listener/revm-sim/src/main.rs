@@ -1827,37 +1827,81 @@ impl Daemon {
 
         // Strict exact probes execute against the same cold remote on every
         // block. Prefetch the touched state of the main call (plus any
-        // preCalls) in ONE debug_traceCall prestateTracer round trip so the
-        // execution below hits the warm shared cache instead of serial-faulting
-        // every slot to the archive RPC. Mirrors prepare's trace_prefetch.
+        // preCalls) in ONE debug_traceCall prestateTracer round trip AND warm
+        // the tokenDeals' balance slots / approve allowance slots in ONE
+        // batched warm_batch, so the execution below (including
+        // apply_token_deals' write-verify-restore) hits the warm shared cache
+        // instead of serial-faulting every slot to the archive RPC. Mirrors
+        // prepare's T2a warm_batch + trace_prefetch.
         {
-            let db_for_trace = CacheDB::new(SharedRemote(Rc::clone(&remote_rc)));
-            let mut trace_calls: Vec<ParsedPreCall> = Vec::new();
-            for call in &parsed_pre_calls {
-                trace_calls.push(call.clone());
+            let mut accounts: Vec<Address> = vec![Address::ZERO, caller];
+            for d in &token_deals {
+                let token = parse_address(&d.token)?;
+                let to = parse_address(&d.to)?;
+                accounts.push(token);
+                accounts.push(to);
             }
-            trace_calls.push(ParsedPreCall {
-                from: caller,
-                to: target,
-                calldata: calldata.to_vec(),
-                gas_limit,
-                allowance_slot: None,
-            });
-            let refs: Vec<&ParsedPreCall> = trace_calls.iter().collect();
-            match trace_prefetch(&remote_rc, &db_for_trace, &refs) {
-                Ok(stats) => {
-                    if stats.seeded_accounts + stats.seeded_slots > 0 {
-                        eprintln!(
-                            "[revm-sim] strictSimulate prefetch seeded {} accounts + {} slots ({}ms)",
-                            stats.seeded_accounts,
-                            stats.seeded_slots,
-                            started.elapsed().as_millis(),
-                        );
+            for call in &parsed_pre_calls {
+                accounts.push(call.from);
+                accounts.push(call.to);
+            }
+            accounts.push(target);
+            let mut storage: Vec<(Address, U256)> = Vec::new();
+            for d in &token_deals {
+                let token = parse_address(&d.token)?;
+                let to = parse_address(&d.to)?;
+                for idx in mapping_slot_candidates(
+                    d.balance_slot,
+                    self.balance_slots.get(&token).copied(),
+                ) {
+                    storage.push((token, erc20_balance_slot(to, idx)));
+                }
+            }
+            for call in &parsed_pre_calls {
+                if let Some(spender) = decode_approve_spender(&call.calldata) {
+                    if let Some(slot) = call.allowance_slot {
+                        self.allowance_slots.insert(call.to, slot);
+                    }
+                    for idx in mapping_slot_candidates(
+                        call.allowance_slot,
+                        self.allowance_slots.get(&call.to).copied(),
+                    ) {
+                        storage.push((call.to, erc20_allowance_slot(call.from, spender, idx)));
                     }
                 }
-                Err(err) => eprintln!(
-                    "[revm-sim] strictSimulate trace prefetch failed: {err}"
-                ),
+            }
+            if remote_rc
+                .warm_batch(&accounts, &storage, None)
+                .is_ok()
+            {
+                let db_for_trace = CacheDB::new(SharedRemote(Rc::clone(&remote_rc)));
+                let mut trace_calls: Vec<ParsedPreCall> = Vec::new();
+                for call in &parsed_pre_calls {
+                    trace_calls.push(call.clone());
+                }
+                trace_calls.push(ParsedPreCall {
+                    from: caller,
+                    to: target,
+                    calldata: calldata.to_vec(),
+                    gas_limit,
+                    allowance_slot: None,
+                });
+                let refs: Vec<&ParsedPreCall> = trace_calls.iter().collect();
+                match trace_prefetch(&remote_rc, &db_for_trace, &refs) {
+                    Ok(stats) => {
+                        if stats.seeded_accounts + stats.seeded_slots > 0 {
+                            eprintln!(
+                                "[revm-sim] strictSimulate prefetch seeded {} accounts + {} slots ({}ms)",
+                                stats.seeded_accounts,
+                                stats.seeded_slots,
+                                started.elapsed().as_millis(),
+                            );
+                        }
+                    }
+                    Err(err) => eprintln!(
+                        "[revm-sim] strictSimulate trace prefetch failed: {err}"
+                    ),
+                }
             }
         }
 
