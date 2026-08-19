@@ -448,6 +448,7 @@ export async function refineBlockScanCandidates(
     attempted++;
     recordShadowTotal(opportunity);
     try {
+      const probeStartedAtMs = Date.now();
       const probe = exactProbeMarginBps(
         controlledState,
         opportunity,
@@ -464,6 +465,14 @@ export async function refineBlockScanCandidates(
         () => stageBudget.recordRouteSuccess(opportunity.seedEdges),
       );
       const marginBps = await probe;
+      const probeWallMs = Date.now() - probeStartedAtMs;
+      if (probeWallMs > 100) {
+        console.log(
+          "[exact-probe] idx=" + index +
+            " wallMs=" + probeWallMs +
+            " families=" + familyIds.join(","),
+        );
+      }
       if (deadlineController.signal.aborted || Date.now() >= deadlineAtMs) {
         throw new ProbeDeadlineError("exact probe deadline reached");
       }
