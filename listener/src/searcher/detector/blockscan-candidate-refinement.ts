@@ -22,8 +22,8 @@ import type { RuntimeEvidence } from
   "../venues/adapter-family-plugin.js";
 
 const DEFAULT_CONCURRENCY = 24;
-const DEFAULT_FAMILY_PROBE_TIMEOUT_MS = 1_000;
-const DEFAULT_MAX_CONCURRENT_PER_FAMILY = 3;
+const DEFAULT_FAMILY_PROBE_TIMEOUT_MS = 1_500;
+const DEFAULT_MAX_CONCURRENT_PER_FAMILY = 12;
 
 export interface BlockScanRefinementResult {
   opportunities: BlockScanOpportunity[];
