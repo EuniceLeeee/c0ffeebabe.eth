@@ -16,7 +16,10 @@ import type {
 } from "./blockscan-state-coordinator.js";
 import type { FlashLiquidityView, FlashSource } from
   "./solver/flash-liquidity.js";
-import type { StrictProductionRuntimeSession } from
+import type {
+  StrictProductionRuntimeSession,
+  StrictProductionSessionKind,
+} from
   "./strict-production-runtime-session.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
@@ -35,6 +38,8 @@ type StrictSessionProvider = (
     readonly deadlineAtMs?: number;
     readonly signal?: AbortSignal;
   },
+  kind?: StrictProductionSessionKind,
+  fundingAssets?: readonly string[],
 ) => Promise<StrictProductionRuntimeSession>;
 
 /**
@@ -74,6 +79,7 @@ export class StrictCurrentRuntimeCoordinator
     const session = await this.sessionFor(
       sourceFor(input.graph),
       controlFor(settleDeadlineAtMs, input.signal),
+      "pricing",
     );
     assertWorkOpen(settleDeadlineAtMs, input.signal);
     const pricing = buildStrictPricingSnapshot(session, input.graph);
@@ -95,6 +101,7 @@ export class StrictCurrentRuntimeCoordinator
     const sessionPromise = this.sessionFor(
       source,
       controlFor(settleDeadlineAtMs, input.signal),
+      "pricing",
     );
     const executionStartedAtMs = Date.now();
     const executionPromise = input.prepareExecution === undefined
@@ -162,6 +169,8 @@ export class StrictCurrentRuntimeCoordinator
     const session = await this.sessionFor(
       source,
       controlFor(settleDeadlineAtMs, input.signal),
+      "exact",
+      input.fundingTokens,
     );
     if (input.prepareExecution !== undefined) {
       await input.prepareExecution({

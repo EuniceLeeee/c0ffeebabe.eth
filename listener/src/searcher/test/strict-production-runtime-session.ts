@@ -247,13 +247,34 @@ assert.ok(
   "ready instance refresh must make real concurrent progress",
 );
 assert.ok(
-  maxActivePricingReads <= 16,
+  maxActivePricingReads <= 128,
   "ready instance refresh must respect the bounded concurrency cap",
 );
 assert.deepEqual(
   parallelSession.edges.map((candidate) => candidate.canonicalEdgeId),
   parallelStartupView.edges.map((candidate) => candidate.canonicalEdgeId),
   "concurrent refresh must preserve deterministic ready edge order",
+);
+let exactPricingReads = 0;
+const exactSession = await parallelRoot.createSession({
+  source: CURRENT,
+  runtime: runtime(CURRENT, {
+    onCurrentPricingRead() {
+      exactPricingReads++;
+    },
+  }),
+  fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+  kind: "exact",
+});
+assert.equal(
+  exactPricingReads,
+  0,
+  "exact session must not refresh the full ready pricing set",
+);
+assert.equal(
+  exactSession.currentPricingForEdge(exactSession.edges[0]!),
+  null,
+  "exact session must not pretend to own coarse current mids",
 );
 assert.equal(session.edges.length, startupView.edges.length);
 assert.deepEqual(

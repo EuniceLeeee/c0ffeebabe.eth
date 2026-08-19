@@ -64,6 +64,13 @@ export type StrictProductionExactHandle =
   | SealedFamilyExactQuoteHandle
   | SealedCreditRiskQuoteHandle;
 
+/**
+ * A pricing session refreshes every ready instance and publishes current mids.
+ * An exact session only re-issues the ready route authorities at the pinned
+ * source; exact/solver work does not need to rebuild the coarse pricing view.
+ */
+export type StrictProductionSessionKind = "pricing" | "exact";
+
 export type StrictProductionExecutionOutcome = FamilyExecutionOutcome | ReturnType<
   typeof buildCreditExecutionFragment
 >;
@@ -169,6 +176,7 @@ export class StrictProductionRuntimeRoot {
     readonly source: CanonicalSource;
     readonly runtime: CentralAdapterRuntime;
     readonly fundingAssets: readonly string[];
+    readonly kind?: StrictProductionSessionKind;
     readonly control?: AdapterWorkControl;
   }): Promise<StrictProductionRuntimeSession> {
     assertCanonicalSource(input.source);
@@ -189,46 +197,100 @@ export class StrictProductionRuntimeRoot {
       StrictCurrentRoutePricing
     >();
 
-    /*
-     * Ready instances refresh independently through the shared transport
-     * (each refresh already fans its own requests out in parallel), so the
-     * session refresh runs them under bounded concurrency. A sequential
-     * 1,700-instance refresh at ~15ms/round trip took ~26s per producer
-     * generation — slower than mainnet's ~12s block time, so the N-1 chain
-     * could never keep up and every pass degraded. Results are collected per
-     * index and flattened in original ready order, so route/credit ordering
-     * (and the ready-topology assertion) is unchanged.
-     */
-    const refreshConcurrency = Math.max(1, Math.min(32, this.#readyInstances.length));
-    const refreshedOutcomes = new Array<InstanceRefreshOutcome | null>(
-      this.#readyInstances.length,
-    );
-    let refreshCursor = 0;
-    const refreshWorkers = Array.from(
-      { length: refreshConcurrency },
-      async () => {
-        for (;;) {
-          const index = refreshCursor++;
-          if (index >= this.#readyInstances.length) return;
-          const readyInstance = this.#readyInstances[index]!;
-          refreshedOutcomes[index] = await this.refreshReadyInstancePricing({
-            readyInstance,
-            source: input.source,
-            runtime: input.runtime,
-            ...(input.control === undefined ? {} : { control: input.control }),
-          });
+    const kind = input.kind ?? "pricing";
+    if (kind === "pricing") {
+      /*
+       * Ready instances refresh independently through the shared transport
+       * (each refresh already fans its own requests out in parallel), so the
+       * session refresh runs them under bounded concurrency. Results are
+       * collected per index and flattened in original ready order, preserving
+       * route/credit ordering and the ready-topology assertion.
+       */
+      // A ready pricing instance normally emits one small eth_call.  The
+      // local Reth endpoint sustains this bounded fan-out; keeping it high
+      // enough to finish the full ready set within one block cadence avoids
+      // turning a producer generation into a permanent N-1 backlog.
+      const refreshConcurrency = Math.max(1, Math.min(128, this.#readyInstances.length));
+      const refreshedOutcomes = new Array<InstanceRefreshOutcome | null>(
+        this.#readyInstances.length,
+      );
+      let refreshCursor = 0;
+      const refreshWorkers = Array.from(
+        { length: refreshConcurrency },
+        async () => {
+          for (;;) {
+            const index = refreshCursor++;
+            if (index >= this.#readyInstances.length) return;
+            const readyInstance = this.#readyInstances[index]!;
+            refreshedOutcomes[index] = await this.refreshReadyInstancePricing({
+              readyInstance,
+              source: input.source,
+              runtime: input.runtime,
+              ...(input.control === undefined ? {} : { control: input.control }),
+            });
+          }
+        },
+      );
+      await Promise.all(refreshWorkers);
+      for (const outcome of refreshedOutcomes) {
+        if (outcome === null) {
+          throw new Error("strict ready instance refresh did not complete");
         }
-      },
-    );
-    await Promise.all(refreshWorkers);
-    for (const outcome of refreshedOutcomes) {
-      if (outcome === null) {
-        throw new Error("strict ready instance refresh did not complete");
+        routes.push(...outcome.routes);
+        creditRoutes.push(...outcome.creditRoutes);
+        for (const [handle, pricing] of outcome.pricing) {
+          pricingByHandle.set(handle, pricing);
+        }
       }
-      routes.push(...outcome.routes);
-      creditRoutes.push(...outcome.creditRoutes);
-      for (const [handle, pricing] of outcome.pricing) {
-        pricingByHandle.set(handle, pricing);
+    } else {
+      /*
+       * Exact/solver stages already have a coarse producer snapshot. They
+       * need source-bound route authorities, not another all-instance
+       * current-pricing read. Re-issuing the process-local handles is purely
+       * local and keeps exact work on the pinned source without paying the
+       * producer's 3k-instance refresh cost a second time.
+       */
+      for (const readyInstance of this.#readyInstances) {
+        const strictFamily = this.#catalog.forStrictFamily(
+          readyInstance.familyId,
+        );
+        if (strictFamily.plugin.manifest.domain === "credit") {
+          const currentInstance = reissuePreparedInstanceAuthority({
+            family: strictFamily,
+            instance: readyInstance,
+            source: input.source,
+            generation: input.source.generation,
+          });
+          const publication = prepareCreditFamilyRoutes({
+            family: strictFamily,
+            instance: currentInstance,
+            source: input.source,
+            generation: input.source.generation,
+          });
+          creditRoutes.push(...publication.routes.map((route) =>
+            projectCreditRouteGraph({ family: strictFamily, route })
+          ));
+          continue;
+        }
+        const family = this.#catalog.forFamily(readyInstance.familyId);
+        const currentAuthority = reissuePreparedInstanceAuthority({
+          family,
+          instance: readyInstance,
+          source: input.source,
+          generation: input.source.generation,
+        });
+        const currentInstance = reissuePreparedInstanceRouteHandles({
+          family,
+          instance: currentAuthority,
+          source: input.source,
+          generation: input.source.generation,
+        });
+        routes.push(...currentInstance.routes.map((route, index) => ({
+          family,
+          descriptor: currentInstance.descriptor,
+          route,
+          handle: currentInstance.routeHandles[index]!,
+        })));
       }
     }
 
@@ -259,15 +321,17 @@ export class StrictProductionRuntimeRoot {
       bindings.set(projected.edge.canonicalEdgeId, binding);
       if (binding.kind === "route") {
         const pricing = pricingByHandle.get(binding.handle);
-        if (pricing === undefined) {
+        if (pricing === undefined && kind === "pricing") {
           throw new Error(
             `strict current pricing missing for ${projected.edge.canonicalEdgeId}`,
           );
         }
-        currentPricing.set(
-          projected.edge.canonicalEdgeId,
-          bindCurrentPricingToEdge(pricing, projected.edge),
-        );
+        if (pricing !== undefined) {
+          currentPricing.set(
+            projected.edge.canonicalEdgeId,
+            bindCurrentPricingToEdge(pricing, projected.edge),
+          );
+        }
       }
     }
 
@@ -307,6 +371,7 @@ export class StrictProductionRuntimeRoot {
       bindings,
       currentPricing,
       fundingBindings,
+      pricingComplete: kind === "pricing",
     });
   }
 
@@ -419,6 +484,7 @@ export class StrictProductionRuntimeSession {
     StrictCurrentRoutePricing
   >;
   readonly #fundingBindings: readonly FundingBinding[];
+  readonly #pricingComplete: boolean;
   readonly #exactBindings = new WeakMap<object, ExactBinding>();
 
   constructor(input: {
@@ -433,6 +499,7 @@ export class StrictProductionRuntimeSession {
       StrictCurrentRoutePricing
     >;
     readonly fundingBindings: readonly FundingBinding[];
+    readonly pricingComplete?: boolean;
   }) {
     this.#catalog = input.catalog;
     this.source = Object.freeze({ ...input.source });
@@ -442,6 +509,7 @@ export class StrictProductionRuntimeSession {
     this.#bindings = new Map(input.bindings);
     this.#currentPricing = new Map(input.currentPricing);
     this.#fundingBindings = Object.freeze([...input.fundingBindings]);
+    this.#pricingComplete = input.pricingComplete ?? true;
     Object.freeze(this);
   }
 
@@ -462,6 +530,7 @@ export class StrictProductionRuntimeSession {
     if (binding.kind === "credit") return null;
     const pricing = this.#currentPricing.get(binding.edge.canonicalEdgeId);
     if (pricing === undefined) {
+      if (!this.#pricingComplete) return null;
       throw new Error(
         `strict session has no current pricing for ${binding.edge.canonicalEdgeId}`,
       );

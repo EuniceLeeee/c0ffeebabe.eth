@@ -33,6 +33,8 @@ import type { ResolvedPlan } from "./solver/solver.js";
 import type { AnvilSolver } from "./solver/solver.js";
 import type { StrictProductionRuntimeSession } from
   "./strict-production-runtime-session.js";
+import type { StrictProductionSessionKind } from
+  "./strict-production-runtime-session.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import {
@@ -479,6 +481,12 @@ export interface BlockScanRuntimeLoopDependencies {
   /** Sole current-source Family/exact/execution/Funding authority. */
   readonly strictSession?: (
     source: CanonicalSource,
+    control?: {
+      readonly deadlineAtMs?: number;
+      readonly signal?: AbortSignal;
+    },
+    kind?: StrictProductionSessionKind,
+    fundingAssets?: readonly string[],
   ) => Promise<StrictProductionRuntimeSession>;
   /**
    * Override the exact-probe quote backend. Production uses the source-hash
@@ -2440,6 +2448,13 @@ export class BlockScanRuntimeLoop {
       sealAuditBoundary("enumeration_done", "enumeration");
       scannedPairs = coarse.scannedPairs;
       candidates = coarse.opportunities.length;
+      // The exact/solver session only needs Funding authority for the
+      // candidate start tokens.  Passing this bounded set avoids re-running
+      // provider reads for the entire graph when the coarse producer is
+      // already available.
+      exactFundingTokens = blockScanCandidateFundingTokens(
+        coarse.opportunities,
+      );
       if (Date.now() >= passDeadlineAtMs) {
         outcome = "budget_exceeded";
         skippedReason = "scanner_deadline";
@@ -2506,7 +2521,22 @@ export class BlockScanRuntimeLoop {
           " -> source=" + exactSource.number + ":" +
           exactSource.generation,
       );
-      const strictSession = await this.deps.strictSession(exactSource);
+      const exactSessionKind: StrictProductionSessionKind =
+        producerSnapshot !== null &&
+          producerSnapshot.sourceBlock === exactSource.number &&
+          producerSnapshot.sourceBlockHash?.toLowerCase() ===
+            exactSource.hash.toLowerCase()
+          ? "pricing"
+          : "exact";
+      const strictSession = await this.deps.strictSession(
+        exactSource,
+        Object.freeze({
+          deadlineAtMs: refineDeadline,
+          signal: passSignal,
+        }),
+        exactSessionKind,
+        exactFundingTokens,
+      );
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
       let exactYieldedMs = 0;

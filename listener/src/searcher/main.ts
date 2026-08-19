@@ -66,6 +66,7 @@ import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
 import {
   StrictProductionRuntimeRoot,
   type StrictProductionRuntimeSession,
+  type StrictProductionSessionKind,
 } from "./strict-production-runtime-session.js";
 import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
   "./strict-production-family-declarations.js";
@@ -1518,8 +1519,18 @@ async function main(): Promise<void> {
   const strictSessionFor = (
     source: CanonicalSource,
     control?: AdapterWorkControl,
+    kind: StrictProductionSessionKind = "pricing",
+    fundingAssets: readonly string[] = flashTokens,
   ): Promise<StrictProductionRuntimeSession> => {
-    const key = `${source.number}:${source.hash.toLowerCase()}:${source.generation}`;
+    const fundingKey = [...new Set(fundingAssets.map((token) =>
+      token.toLowerCase()
+    ))].sort().join(",");
+    const fundingFingerprint = createHash("sha256")
+      .update(fundingKey)
+      .digest("hex")
+      .slice(0, 16);
+    const key = `${kind}:${source.number}:${source.hash.toLowerCase()}:` +
+      `${source.generation}:${fundingFingerprint}`;
     const incumbent = strictSessionCache.get(key);
     if (incumbent !== undefined) {
       console.log(
@@ -1561,7 +1572,8 @@ async function main(): Promise<void> {
     const pending = strictRuntimeRoot.createSession({
       source,
       runtime,
-      fundingAssets: flashTokens,
+      fundingAssets,
+      kind,
       ...(control === undefined ? {} : { control }),
     }).catch((error) => {
       if (strictSessionCache.get(key) === pending) {
