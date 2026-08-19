@@ -1521,7 +1521,17 @@ async function main(): Promise<void> {
   ): Promise<StrictProductionRuntimeSession> => {
     const key = `${source.number}:${source.hash.toLowerCase()}:${source.generation}`;
     const incumbent = strictSessionCache.get(key);
-    if (incumbent !== undefined) return incumbent;
+    if (incumbent !== undefined) {
+      console.log(
+        "[strict-session-cache] hit key=" + key +
+          " size=" + strictSessionCache.size,
+      );
+      return incumbent;
+    }
+    console.log(
+      "[strict-session-cache] MISS key=" + key +
+        " size=" + strictSessionCache.size,
+    );
     const runtime = createStrictCentralAdapterRuntime({
       provider,
       ...(strictSimulationTransport === undefined
