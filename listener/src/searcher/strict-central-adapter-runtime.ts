@@ -181,18 +181,23 @@ export function createStrictCentralAdapterRuntime(input: {
           const rethStartedAtMs = Date.now();
           let queueWaitMs = 0;
           /*
-           * Funding liquidity reads are lightweight, mandatory and serialized
-           * inside the producer session itself (they run after the instance
-           * pricing phase of the same createSession). Routing them through the
-           * shared permit scheduler made them queue ~1s behind the producer's
-           * own pricing permits (and behind the pass's session funding), which
-           * added 10-14s to every exact_refine. They are producer-internal
-           * work, not competing traffic: bypass the scheduler.
+           * Producer-internal work (the session's own instance pricing refresh
+           * and funding liquidity reads) must NOT route through the shared
+           * permit scheduler: it is the producer itself, and permit-limiting
+           * it made the 1706-instance refresh queue ~145ms per batch behind
+           * itself (7-8s producer generations) while the pass's funding
+           * queued ~1s per call (13-15s exact_refine). Only the pass's exact
+           * traffic (exact-refine lane) competes with the producer and needs
+           * the permit reservation. Producer-bulk / producer-critical /
+           * discovery work is the producer's own pipeline: bypass.
            */
-          const fundingBound = execution.familyId.startsWith("flash-loan:");
+          const producerInternal =
+            rethLane === "producer-bulk" ||
+            rethLane === "producer-critical" ||
+            rethLane === "discovery";
           const rethResults = rethBound.length === 0
             ? []
-            : transportScheduler === undefined || fundingBound
+            : transportScheduler === undefined || producerInternal
               ? await Promise.all(rethBound.map(runRequest))
               : await transportScheduler.run(
                   rethLane,
