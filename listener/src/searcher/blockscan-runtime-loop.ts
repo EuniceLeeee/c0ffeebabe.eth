@@ -2473,21 +2473,40 @@ export class BlockScanRuntimeLoop {
       if (this.deps.strictSession === undefined) {
         throw new Error("block-scan requires a strict current-source session");
       }
-      // Reuse the N-1 producer's generation for this source so the strict
-      // session cache (keyed by number:hash:generation) hits the session the
-      // producer already built. A per-pass generation here (or the pass's own
-      // prepared snapshot) missed the cache and re-ran the full
-      // 1706-instance createSession inside exact_refine, adding ~13s to
-      // every pass and leaking one session per block.
+      // Reuse the N-1 producer's session for this exact source. The strict
+      // session cache is keyed number:hash:generation and the producer built
+      // its session under latestPricingSnapshot's generation; a per-pass
+      // generation missed the cache and re-ran the full 1706-instance
+      // createSession inside exact_refine (~13s per pass, one leaked session
+      // per block). The producer's published snapshot is the exact
+      // predecessor this pass enumerated against, so bind its source/hash/
+      // generation verbatim.
       const producerSnapshot = currentRuntimeCoordinator.latestPricingSnapshot();
-      const strictSession = await this.deps.strictSession(Object.freeze({
-        number: runtimeSourceBlock,
-        hash: exactSourceBlockHash,
-        generation: producerSnapshot !== null &&
-            producerSnapshot.sourceBlock === runtimeSourceBlock
-          ? producerSnapshot.generation
-          : exactSourceGeneration ?? generation,
-      }));
+      const exactSource = producerSnapshot !== null &&
+          producerSnapshot.sourceBlock === runtimeSourceBlock &&
+          producerSnapshot.sourceBlockHash?.toLowerCase() ===
+            exactSourceBlockHash?.toLowerCase()
+        ? Object.freeze({
+            number: producerSnapshot.sourceBlock,
+            hash: producerSnapshot.sourceBlockHash,
+            generation: producerSnapshot.generation,
+          })
+        : Object.freeze({
+            number: runtimeSourceBlock,
+            hash: exactSourceBlockHash,
+            generation: exactSourceGeneration ?? generation,
+          });
+      console.log(
+        "[exact-source] producer=" +
+          (producerSnapshot === null
+            ? "none"
+            : producerSnapshot.sourceBlock + ":" + producerSnapshot.generation) +
+          " runtime=" + runtimeSourceBlock +
+          " hash=" + (exactSourceBlockHash ?? "null").slice(0, 10) +
+          " -> source=" + exactSource.number + ":" +
+          exactSource.generation,
+      );
+      const strictSession = await this.deps.strictSession(exactSource);
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
       let exactYieldedMs = 0;
