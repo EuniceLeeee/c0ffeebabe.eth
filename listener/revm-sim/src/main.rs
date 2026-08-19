@@ -1805,7 +1805,7 @@ impl Daemon {
             supply_before.push((token, erc20_total_supply(&mut db, &block_env, token)?));
         }
 
-        for call in parsed_pre_calls {
+        for call in &parsed_pre_calls {
             let pre = execute_call(
                 &mut db,
                 &block_env,
