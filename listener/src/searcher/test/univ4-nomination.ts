@@ -44,10 +44,12 @@ function mockProvider(options: {
         filter.address?.toLowerCase(),
         ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
       );
-      // The window walks backward slice by slice from the source block.
-      assert.ok((filter.toBlock ?? 0) <= SOURCE.number);
-      assert.ok((filter.fromBlock ?? 0) >= SOURCE.number - 100_000);
-      assert.ok((filter.toBlock ?? 0) - (filter.fromBlock ?? 0) + 1 <= 100_000);
+      assert.equal(filter.toBlock, SOURCE.number);
+      assert.equal(
+        filter.fromBlock,
+        SOURCE.number - 49,
+        "plugin auxiliary nomination must use the shared exact 50-block range",
+      );
       assert.deepEqual(filter.topics, [
         UNIV4_SWAP_TOPIC.toLowerCase(),
       ]);
@@ -219,12 +221,11 @@ async function main(): Promise<void> {
       provider: concurrentProvider,
     }),
   ));
-  // One build scans lookback/chunk = 10000/500 = 20 manager-wide getLogs
-  // slices; four concurrent cold nominations must share that single build
-  // (80 slices without the in-flight dedupe).
+  // One build is one exact 50-block getLogs call; four concurrent cold
+  // nominations must share that same in-flight build.
   assert.equal(
     concurrentGetLogsCalls,
-    20,
+    1,
     "concurrent cold nominations must share one window build",
   );
   assert.equal(concurrent[0].length, 1);
@@ -261,8 +262,8 @@ async function main(): Promise<void> {
   const afterDiffHash = diffHashGetLogsCalls;
   assert.equal(
     afterDiffHash,
-    20,
-    "a different source hash must build its own index (20 slices)",
+    1,
+    "a different source hash must build its own exact-range index",
   );
 
   // Contract: a failed build never poisons the settled cache; the next
@@ -274,8 +275,7 @@ async function main(): Promise<void> {
     getStorage: async () => "0x" + "00".repeat(32),
     getLogs: async () => {
       flakyCalls += 1;
-      // One full failed build = 4 halved slices (500 -> 250 -> 125 -> 62).
-      if (flakyCalls <= 4) throw new Error("transient rpc");
+      if (flakyCalls === 1) throw new Error("transient rpc");
       return Object.freeze([Object.freeze({
         address: ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
         topics: Object.freeze([UNIV4_SWAP_TOPIC.toLowerCase(), POOL_ID]),

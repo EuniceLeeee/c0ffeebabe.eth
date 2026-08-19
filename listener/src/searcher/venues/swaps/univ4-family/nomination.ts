@@ -15,6 +15,8 @@ import {
   isUniv4OpaqueLabel,
   opaquePoolId,
 } from "./reverse-binding.js";
+import { STRICT_EDGE_COLLECTION_WINDOW_BLOCKS } from
+  "../../../strict-edge-collection-policy.js";
 
 interface RecentUniv4SwapIndex {
   /**
@@ -113,13 +115,17 @@ async function buildRecentUniv4SwapIndex(input: {
 }): Promise<RecentUniv4SwapIndex> {
   const poolIdToTxHash = new Map<string, string>();
   const manager = input.manager.toLowerCase();
+  const windowFrom = Math.max(
+    0,
+    input.source.number - input.lookback + 1,
+  );
   let to = input.source.number;
-  let from = Math.max(0, to - input.chunk + 1);
+  let chunk = Math.min(input.chunk, input.lookback);
+  let from = Math.max(windowFrom, to - chunk + 1);
   let scanFailed = false;
   // chunk persists across iterations so a failing slice really halves; a
   // per-iteration reset would retry the same full slice 128 times and then
   // cache a partial/empty index as settled.
-  let chunk = input.chunk;
   for (let guard = 0; guard < 128 && from <= input.source.number; guard++) {
     let logs: readonly {
       readonly address: string;
@@ -142,7 +148,7 @@ async function buildRecentUniv4SwapIndex(input: {
         break;
       }
       chunk = Math.floor(chunk / 2);
-      from = Math.max(0, to - chunk + 1);
+      from = Math.max(windowFrom, to - chunk + 1);
       continue;
     }
     // Newest slice first; keep the first (newest) tx hash per poolId.
@@ -155,13 +161,11 @@ async function buildRecentUniv4SwapIndex(input: {
       poolIdToTxHash.set(poolId, log.transactionHash.toLowerCase());
     }
     to = from - 1;
-    if (input.source.number - to >= input.lookback) break;
-    from = Math.max(0, to - input.chunk + 1);
+    if (to < windowFrom) break;
+    chunk = Math.min(input.chunk, to - windowFrom + 1);
+    from = Math.max(windowFrom, to - chunk + 1);
   }
-  // Audit log: the recent-log reverse-lookup window/chunk are currently
-  // plugin-owned constants (see nominateUniv4 call site). Centralization of
-  // these policy knobs is tracked in the F6 Pair B slice; this line makes
-  // the values used observable in every run log.
+  // Keep the shared production window visible in runtime evidence.
   console.log(
     `[univ4-nomination] recent-swap index sourceBlock=${input.source.number} ` +
       `lookback=${input.lookback} chunk=${input.chunk} poolIds=${poolIdToTxHash.size}`,
@@ -212,8 +216,8 @@ export async function nominateUniv4(input: {
     provider: input.provider,
     manager,
     topic0: UNIV4_SWAP_TOPIC,
-    lookback: 10_000,
-    chunk: 500,
+    lookback: STRICT_EDGE_COLLECTION_WINDOW_BLOCKS,
+    chunk: STRICT_EDGE_COLLECTION_WINDOW_BLOCKS,
   });
   for (const nomination of input.nominations) {
     const opaque = nomination.opaque as Readonly<Record<string, unknown>>;

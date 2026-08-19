@@ -1376,7 +1376,10 @@ export function createRebuildWiring(input?: {
         // reth's eth_getLogs caps at 20000 results: halve the slice on the
         // max-results error and retry the same range; a hard floor keeps
         // progress fail-closed.
-        let batchSize = SOURCE_SCAN_BATCH_BLOCKS;
+        let batchSize = Math.min(
+          SOURCE_SCAN_BATCH_BLOCKS,
+          end - start + 1,
+        );
         let from = start;
         while (from <= end) {
           const to = Math.min(end, from + batchSize - 1);
@@ -1421,7 +1424,10 @@ export function createRebuildWiring(input?: {
               }));
             }
             from = to + 1;
-            batchSize = SOURCE_SCAN_BATCH_BLOCKS;
+            batchSize = Math.min(
+              SOURCE_SCAN_BATCH_BLOCKS,
+              end - from + 1,
+            );
           } catch (error) {
             if (batchSize <= SOURCE_MIN_CHUNK_BLOCKS) {
               throw new Error(
@@ -1544,8 +1550,8 @@ export function createRebuildWiring(input?: {
         candidate as Readonly<Record<string, unknown>>,
       ),
     dedupeFamilyCandidates: (observations) => {
-      // Candidate dedupe is per pool (familyCandidateKey), NOT per log: a
-      // two-day window holds hundreds of Swap logs per pool, and the run
+      // Candidate dedupe is per pool (familyCandidateKey), NOT per log: the
+      // fixed activity window may hold multiple Swap logs per pool, and the run
       // attests one Family+Instance once. Full log identity dedupe (audit
       // P0.6) still governs the observation feed; here the newest log per
       // pool becomes the representative candidate + evidence ref.

@@ -2,6 +2,8 @@ import type {
   CaptureNominationProvider,
 } from "./adapter-family-plugin.js";
 import type { CanonicalSource } from "./adapter-request-program.js";
+import { strictEdgeCollectionFromBlock } from
+  "../strict-edge-collection-policy.js";
 
 export interface RecentLogEntry {
   readonly address: string;
@@ -15,15 +17,6 @@ export interface RecentLogQuery {
   readonly source: CanonicalSource;
   readonly address?: string;
   readonly topics: readonly (string | null)[];
-  /** Total lookback window from the source block (default 100_000). */
-  readonly lookback?: number;
-  /**
-   * Chunk the window into slices (default 5_000 blocks) so a high-volume
-   * emitter never exceeds the node's eth_getLogs result cap; the newest
-   * non-empty slice wins. A slice that still overflows is retried at half
-   * the chunk size so the oldest activity stays reachable.
-   */
-  readonly chunk?: number;
   /**
    * Optional acceptance check applied newest-first. A recent log whose
    * transaction does not carry the plugin's declared call frame (e.g. a
@@ -45,55 +38,32 @@ export async function findRecentLogHit(
   input: RecentLogQuery,
 ): Promise<RecentLogEntry | null> {
   const { provider, source } = input;
-  // Local reth retains roughly 7-14 days of logs. A default 100k-block
-  // lookback makes cold nominations scan ~200 empty slices (minutes per
-  // pool). Bound the default to the node's real retention so a miss fails
-  // fast; callers that genuinely need deep history pass an explicit
-  // lookback.
-  const lookback = Math.max(1, input.lookback ?? 10_000);
-  // Local reth getLogs cost scales superlinearly with range size: a 5000-block
-  // slice takes ~1s while 500 blocks takes ~50ms. The framework helper is
-  // protocol-agnostic and slices into small chunks so plugin nominations
-  // (univ2/univ3 recent-log reverse lookup) stay fast on the node.
-  let chunk = Math.min(Math.max(1, input.chunk ?? 500), lookback);
-  let to = source.number;
-  let from = Math.max(0, to - chunk + 1);
   let accepts = 0;
   const maxAccept = Math.max(1, input.maxAccept ?? 32);
-  for (let guard = 0; guard < 64 && from <= source.number; guard++) {
-    try {
-      const logs = await provider.getLogs({
-        ...(input.address === undefined ? {} : { address: input.address }),
-        fromBlock: from,
-        toBlock: to,
-        topics: input.topics,
-      });
-      for (let index = logs.length - 1; index >= 0; index--) {
-        const raw = logs[index];
-        const entry: RecentLogEntry = {
-          address: raw.address,
-          topics: raw.topics,
-          data: raw.data,
-          ...(raw.transactionHash === undefined
-            ? {}
-            : { transactionHash: raw.transactionHash }),
-        };
-        if (input.accept === undefined) return entry;
-        accepts += 1;
-        if (accepts > maxAccept) return null;
-        if (await input.accept(entry)) return entry;
-      }
-      // Empty slice: step further back.
-      to = from - 1;
-      from = Math.max(0, to - chunk + 1);
-      continue;
-    } catch {
-      // Slice overflowed the node cap: retry the same window at half size.
-      if (chunk <= 64) return null;
-      chunk = Math.floor(chunk / 2);
-      from = Math.max(0, to - chunk + 1);
-      continue;
+  try {
+    const logs = await provider.getLogs({
+      ...(input.address === undefined ? {} : { address: input.address }),
+      fromBlock: strictEdgeCollectionFromBlock(source.number),
+      toBlock: source.number,
+      topics: input.topics,
+    });
+    for (let index = logs.length - 1; index >= 0; index--) {
+      const raw = logs[index];
+      const entry: RecentLogEntry = {
+        address: raw.address,
+        topics: raw.topics,
+        data: raw.data,
+        ...(raw.transactionHash === undefined
+          ? {}
+          : { transactionHash: raw.transactionHash }),
+      };
+      if (input.accept === undefined) return entry;
+      accepts += 1;
+      if (accepts > maxAccept) return null;
+      if (await input.accept(entry)) return entry;
     }
+  } catch {
+    return null;
   }
   return null;
 }

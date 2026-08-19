@@ -13,10 +13,12 @@ import {
 } from "./universe-rebuild-checkpoint.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
+import { strictEdgeCollectionFromBlock } from
+  "./strict-edge-collection-policy.js";
 
 /**
  * Durable universe rebuild runner (adversarial audit §5-§6). Every rebuild
- * re-scans the latest two-day Swap window at a frozen canonical cutoff,
+ * scans exactly the latest production edge window at a frozen canonical cutoff,
  * restores the fixed-cutoff run by durable candidate key, verifies only the
  * diff (new / invalidated / failed candidates), persists outcomes through
  * the serial writer, and - only when retryable is empty and the candidate
@@ -163,13 +165,6 @@ export interface UniverseRebuildDependencies {
 export interface RebuildUniverseInput extends UniverseRebuildDependencies {
   readonly store: UniverseRebuildCheckpointStore;
   readonly runId: string;
-  readonly lookbackBlocks: number;
-  /**
-   * Optional lower bound carried by the explicit universe snapshot. It may
-   * expand the default rolling window into history, but can never narrow it.
-   * An incumbent fixed run always keeps its already-durable fromBlock.
-   */
-  readonly universeWindowFrom?: number;
   /** Bounded identity/materialization workers; defaults to 24. */
   readonly attestationConcurrency?: number;
   /** Optional progress logging. */
@@ -179,16 +174,6 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
 export async function rebuildUniverse(
   input: RebuildUniverseInput,
 ): Promise<ReadyUniverseGeneration> {
-  if (!Number.isSafeInteger(input.lookbackBlocks) || input.lookbackBlocks <= 0) {
-    throw new Error("universe rebuild lookbackBlocks must be a positive integer");
-  }
-  if (
-    input.universeWindowFrom !== undefined &&
-    (!Number.isSafeInteger(input.universeWindowFrom) ||
-      input.universeWindowFrom < 0)
-  ) {
-    throw new Error("universe rebuild explicit fromBlock is invalid");
-  }
   const log = input.log ?? ((): void => undefined);
   const encodeCandidate = input.encodeCandidateSnapshot ?? ((value) => value);
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value) => value);
@@ -256,13 +241,7 @@ export async function rebuildUniverse(
     }
   } else {
     cutoff = await input.freezeCanonicalHead();
-    const defaultFromBlock = Math.max(
-      0,
-      cutoff.number - input.lookbackBlocks + 1,
-    );
-    fromBlock = input.universeWindowFrom === undefined
-      ? defaultFromBlock
-      : Math.min(defaultFromBlock, input.universeWindowFrom);
+    fromBlock = strictEdgeCollectionFromBlock(cutoff.number);
     // A crash before this scan is sealed may rescan; after beginOrResumeRun,
     // the compact exact partition is durable and no scan is repeated.
     const scanned = await input.scanSwapWindow({ fromBlock, cutoff });
@@ -491,16 +470,14 @@ export async function rebuildUniverse(
     (item) => item.status === "retryable",
   );
   if (pending.length > 0) {
-    // Residual retryable outcomes no longer block ready: the verified
-    // partition is complete and published; retryable candidates simply stay
-    // out of the Graph and remain durable in the kept run for the probe to
-    // close after startup. (UniverseRunIncomplete is still thrown when the
-    // run is lost below, i.e. no ready can be formed at all.)
     log(
-      "universe rebuild ready with " + pending.length +
-        " residual retryable outcome(s); they stay out of the Graph " +
-        "and remain probe-closable",
+      "universe rebuild incomplete with " + pending.length +
+        " retryable outcome(s); fixed run remains probe-closable",
     );
+    throw new UniverseRunIncomplete({
+      runId: input.runId,
+      retryableCount: pending.length,
+    });
   }
 
   // 5. Exact partition: every active candidate is verified or chain-proven
@@ -570,6 +547,20 @@ export async function rebuildUniverse(
       " instances=" + ready.activeInstanceKeys.length +
       " candidates=" + candidates.length,
   );
+  // A checkpoint created before the fixed-window policy may contain a fully
+  // completed wider run. It is promoted/cleared above for atomic recovery,
+  // but it must never be returned as the current production window. Continue
+  // in the same startup invocation with a fresh canonical 50-block run.
+  if (
+    incumbentRun !== null &&
+    fromBlock !== strictEdgeCollectionFromBlock(cutoff.number)
+  ) {
+    log(
+      "universe rebuild retired completed legacy range; starting current " +
+        "fixed edge window",
+    );
+    return await rebuildUniverse(input);
+  }
   return ready;
 }
 
@@ -651,9 +642,13 @@ function assertExactCandidatePartition(
     }
     accounted.add(key);
   }
-  // Candidates with no outcome are pending (not yet attested); they stay
-  // out of the Graph and never block a ready that admits every currently
-  // verified instance. They are re-attested on a later resume.
+  if (accounted.size !== active.size) {
+    const missing = [...active].filter((key) => !accounted.has(key)).sort();
+    throw new Error(
+      "universe rebuild: exact candidate partition has pending outcome(s): " +
+        missing.join(","),
+    );
+  }
 }
 
 async function findMemoByKey(

@@ -8,6 +8,12 @@
 > 本次重写的事实锚点是
 > 5f104cedd4b4778316c177ce4fa08a6761af85b1。该 SHA 只记录重写时实际审阅的代码状态，
 > 不是部署、live、F5、100/100 或 S1 完成声明；后续实现和验收必须绑定各自新的 exact SHA。
+>
+> 2026-08-19 的 F5 性能/窗口实现以
+> cc20732658cbd77cf867208a93eb2c389d45bb3f 为父提交：本轮合同固定 startup edge/candidate
+> observation 为最近 50 blocks，并要求 current-source instance refresh 有界并行。该记录仍只是
+> implementation checkpoint；在新的 exact SHA 完成 systemd dry-run 与本文件第 16 节事实验收前，
+> 不构成 F5 或 production cutover 声明。
 
 ## 0. 第一要义：事实验收，直接硬切
 
@@ -69,23 +75,24 @@ merge, default edge, legacy quoter, legacy exact path, legacy execution path, or
 8. The central runtime contains no Family name, protocol address, protocol ABI, protocol selector/topic
    meaning, storage layout, or protocol math.
 
-### 1.2 Safe partial readiness versus final completeness
+### 1.2 Durable incomplete state versus ready authority
 
 Discovery coverage and attestation completeness are separate facts.
 
 - sourceCoverage.appliedThrough == cutoff proves the declared source range was consumed.
 - It does not prove that every nominated instance verified.
-- A readyGeneration may contain the safe verified subset for dry-run live diagnosis only when every omitted
-  candidate is explicitly present in the same durable envelope as terminal-rejected, retryable, or pending,
-  and readyGeneration.completeness is "partial".
-- Only verified publications enter Graph/catalog. Retryable and pending candidates never enter Graph.
-- A partial readyGeneration is usable production input in dry-run, but it is not F5/S1 completion evidence.
+- A durable inProgressRun may contain the safe verified subset for diagnosis, while every omitted candidate
+  remains explicitly terminal-rejected, retryable, or pending in that same envelope.
+- Only verified publications enter a candidate Graph/catalog snapshot. Retryable and pending candidates
+  never enter Graph.
+- An incomplete snapshot is not a readyGeneration and cannot create a producer, including in dry-run.
 - Final S1 acceptance requires no silent missing candidate and no unresolved pending/retryable candidate in
   the declared final partition. Funding and Credit may have no live instance only with explicit capability
   and absence evidence.
 
-This distinction lets live expose real Family failures without discarding already verified work or falsely
-claiming that the verified subset is the complete universe.
+Single-pool probe and checkpoint inspection expose Family failures without discarding already verified work
+or falsely claiming that a verified subset is the complete universe. Live begins only after the partition is
+complete.
 
 ## 2. Authority boundaries
 
@@ -447,6 +454,26 @@ All declared discovery sources bind explicit fromBlock..cutoff ranges and source
 plans come from the generated Family catalog. A candidate journal or warm cache may nominate work, but it
 cannot prove coverage, advance a cursor, admit an instance, or create a Graph edge.
 
+The production edge/candidate observation policy is one code-owned range:
+
+~~~ts
+const EDGE_COLLECTION_WINDOW_BLOCKS = 50;
+const fromBlock = Math.max(0, cutoff.number - 49);
+~~~
+
+- a new run queries exactly `[cutoff.number - 49 .. cutoff.number]`;
+- CLI flags, environment variables, legacy universe metadata, and warm-cache metadata cannot expand or
+  narrow it;
+- catalog event scans and every plugin auxiliary recent-log nomination bind that same number/hash cutoff and
+  range;
+- an unfinished run always resumes its original durable range and cutoff; it never changes window halfway;
+- a completed pre-policy wider run is atomically retired before startup creates and returns the current
+  50-block ready generation.
+
+The 50-block range is an observation policy, not an admission shortcut. Static reverse-verified identity,
+durable verified memos, and active startup nominations remain available across rolling windows; old files
+still cannot grant coverage or create edges.
+
 ### 5.1 Full evidence identity
 
 Log dedupe preserves block number, block hash, transaction hash, log index, emitter address, topic identity,
@@ -645,7 +672,7 @@ interface ReadyGeneration {
     readonly retryable: number;
     readonly pending: number;
   };
-  readonly completeness: "partial" | "complete";
+  readonly completeness: "complete";
   readonly instances: readonly PersistedFamilyInstance[];
   readonly graph: PersistedGraph;
 }
@@ -656,21 +683,24 @@ function promoteReady(
 ): StartupCheckpointEnvelope {
   assertCanonicalHash(run.cutoff);
   assertAllSourceReceiptsBound(run);
-  assertNoUnknownCandidateOutcome(run);
+  assertExactCandidatePartition(run);
+  assertRetryableAndPendingEqualZero(run);
 
   const verified = verifiedOutcomes(run);
   const ready = buildVerifiedOnlyReadyGeneration(run, verified);
 
   return compareAndSwapEnvelope(envelope.revision, {
     ...envelope,
+    inProgressRun: null,
     readyGeneration: ready,
   });
 }
 ~~~
 
-Promotion never advances source facts that are not durably proven. A partial ready explicitly retains
-retryable/pending accounting and cannot be relabeled complete. Final acceptance requires completeness ==
-"complete".
+Promotion never advances source facts that are not durably proven. A retryable or pending outcome keeps the
+fixed run durable and probe-closable but blocks promotion. Successful promotion clears inProgressRun while
+retaining verifiedMemos and readyGeneration; the next startup can therefore freeze a new rolling 50-block
+cutoff instead of restoring an already-completed historical run forever.
 
 ## 7. Persisted Graph and runtime rehydration
 
@@ -759,6 +789,19 @@ Protocol math may live in reusable libraries, but dependency direction matters: 
 those libraries; central scanner/solver code may not import a V2/V3/V4/Curve-specific state reader or math
 module. Central caching keys sealed state by route binding, source number/hash, Family definition hash,
 request-set fingerprint, and authority. A cache never grants admission or Graph authority.
+
+Current-source refresh is atomic and block-cadence aware:
+
+- ready instances refresh under a bounded shared worker pool; independent instances must not form one
+  1,700-item serial RPC chain;
+- the same source number/hash/generation shares one in-flight session promise across blockscan/backrun;
+- results are stored by ready-instance index and flattened in deterministic ready order;
+- one failed instance rejects the whole new session and cannot publish a partial pricing snapshot;
+- Funding refresh and final source/generation fences remain fail-closed.
+
+The concurrency cap is a resource policy, not a Family contract. A Family plugin still issues its request
+program; the kernel only schedules independent issued programs. Adding or changing an unrelated capability
+closure therefore does not require revalidating Families that do not depend on it.
 
 ## 9. Victim observation and post-impact state
 
@@ -1155,7 +1198,8 @@ lineage.
 
 After a controlled systemd restart:
 
-- the same valid readyGeneration is loaded or deterministically rehydrated;
+- startup freezes a new current 50-block run while retaining the prior atomic readyGeneration as durable
+  evidence until the new generation promotes;
 - verified memos are reused only when all fingerprints remain valid;
 - only new, invalidated, retryable, and pending differences are processed;
 - an original-cutoff single-pool probe updates only its FamilyCandidateKey;
@@ -1167,6 +1211,16 @@ After a controlled systemd restart:
 The final exact SHA/PID/process-start/log-inode window records continuous 100/100 health. The denominator and
 meaning come from actual production attempts, not a handwritten fixture set. Every failed attempt is
 retained with its first failed lineage stage.
+
+For the F5 latency stage, the same runtime anchor must additionally show over a continuous multi-block
+window:
+
+- strict current-source generation wall time remains below observed block cadence;
+- the coarse producer catches up to the required adjacent N-1 source instead of remaining 100 blocks behind;
+- `no_adjacent_precompleted_coarse` does not persist;
+- state runs and real scanned/expected/priced counts are non-zero;
+- scheduler queue time and strict session refresh wall time are reported separately. `scheduler_queue_ms=0`
+  is not evidence of low latency when the producer itself takes longer than one block.
 
 ### 16.7 Legacy zero and receipts
 

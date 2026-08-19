@@ -94,6 +94,9 @@ function runtime(
       readonly blockTimestampLast: number;
     }>;
     readonly onCurrentPricingRead?: () => void;
+    readonly onCurrentPricingReadStart?: (target: string) => void;
+    readonly onCurrentPricingReadEnd?: (target: string) => void;
+    readonly currentPricingDelayMs?: number;
     readonly failCurrentPricing?: boolean;
     readonly failFunding?: boolean;
   } = {},
@@ -106,18 +109,30 @@ function runtime(
           request.data.slice(0, 10).toLowerCase() ===
             UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector.toLowerCase()
         ) {
-          options.onCurrentPricingRead?.();
-          if (options.failCurrentPricing === true) {
-            throw new Error("current pricing transport failed");
+          const target = request.to.toLowerCase();
+          options.onCurrentPricingReadStart?.(target);
+          try {
+            if ((options.currentPricingDelayMs ?? 0) > 0) {
+              await new Promise((resolve) => setTimeout(
+                resolve,
+                options.currentPricingDelayMs,
+              ));
+            }
+            options.onCurrentPricingRead?.();
+            if (options.failCurrentPricing === true) {
+              throw new Error("current pricing transport failed");
+            }
+            return UNIV2_PAIR_INTERFACE.encodeFunctionResult(
+              "getReserves",
+              [
+                reserves.reserve0,
+                reserves.reserve1,
+                reserves.blockTimestampLast,
+              ],
+            );
+          } finally {
+            options.onCurrentPricingReadEnd?.(target);
           }
-          return UNIV2_PAIR_INTERFACE.encodeFunctionResult(
-            "getReserves",
-            [
-              reserves.reserve0,
-              reserves.reserve1,
-              reserves.blockTimestampLast,
-            ],
-          );
         }
         if (options.failFunding === true) {
           throw new Error("current Funding transport failed");
@@ -168,6 +183,78 @@ const session = await root.createSession({
   runtime: strictRuntime,
   fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
 });
+
+// Performance contract: independent ready instances refresh under the
+// bounded pool, each exactly once, while the resulting strict topology keeps
+// deterministic ready order. This checks concurrency directly rather than
+// relying on a machine-dependent wall-clock threshold.
+const parallelPublications = await Promise.all(Array.from(
+  { length: 20 },
+  (_, index) => runUniv2Lifecycle(STARTUP, Object.freeze({
+    ...pool,
+    pool: `0x${(0x1000 + index).toString(16).padStart(40, "0")}`,
+  })),
+));
+const parallelReadyInstances = Object.freeze(parallelPublications.flatMap(
+  (candidate) => candidate.instances,
+));
+const parallelStartupView = buildFamilyRouteGraphView({
+  routes: parallelReadyInstances.flatMap((instance) =>
+    instance.routes.map((route, index) => ({
+      family,
+      descriptor: instance.descriptor,
+      route,
+      handle: instance.routeHandles[index],
+    }))
+  ),
+});
+const parallelRoot = new StrictProductionRuntimeRoot({
+  catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+  readySource: STARTUP,
+  readyGraph: parallelStartupView.edges,
+  readyInstances: parallelReadyInstances,
+});
+let activePricingReads = 0;
+let maxActivePricingReads = 0;
+let totalParallelPricingReads = 0;
+const parallelSession = await parallelRoot.createSession({
+  source: CURRENT,
+  runtime: runtime(CURRENT, {
+    currentPricingDelayMs: 5,
+    onCurrentPricingReadStart() {
+      activePricingReads++;
+      maxActivePricingReads = Math.max(
+        maxActivePricingReads,
+        activePricingReads,
+      );
+    },
+    onCurrentPricingReadEnd() {
+      activePricingReads--;
+    },
+    onCurrentPricingRead() {
+      totalParallelPricingReads++;
+    },
+  }),
+  fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+});
+assert.equal(
+  totalParallelPricingReads,
+  parallelReadyInstances.length,
+  "each ready instance must perform exactly one current pricing read",
+);
+assert.ok(
+  maxActivePricingReads > 1,
+  "ready instance refresh must make real concurrent progress",
+);
+assert.ok(
+  maxActivePricingReads <= 16,
+  "ready instance refresh must respect the bounded concurrency cap",
+);
+assert.deepEqual(
+  parallelSession.edges.map((candidate) => candidate.canonicalEdgeId),
+  parallelStartupView.edges.map((candidate) => candidate.canonicalEdgeId),
+  "concurrent refresh must preserve deterministic ready edge order",
+);
 assert.equal(session.edges.length, startupView.edges.length);
 assert.deepEqual(
   session.edges.map((edge) => edge.canonicalEdgeId).sort(),

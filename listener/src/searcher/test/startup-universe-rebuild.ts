@@ -16,7 +16,7 @@ function ready(): ReadyUniverseGeneration {
     generation: 1,
     cutoff: SOURCE,
     universeRange: Object.freeze({
-      fromBlock: SOURCE.number - 14_399,
+      fromBlock: SOURCE.number - 49,
       toBlock: SOURCE.number,
     }),
     universeHash: "u",
@@ -49,8 +49,8 @@ async function main(): Promise<void> {
   assert.equal(
     observationScanFromWithBaseline({
       baseline: atHead,
-      defaultScanFrom: SOURCE.number - 14_399,
-      universeWindowFrom: SOURCE.number - 14_399,
+      defaultScanFrom: SOURCE.number - 49,
+      universeWindowFrom: SOURCE.number - 49,
     }),
     SOURCE.number,
     "the historical window is not re-scanned after ready",
@@ -60,9 +60,9 @@ async function main(): Promise<void> {
     observationScanFromWithBaseline({
       baseline: null,
       defaultScanFrom: SOURCE.number,
-      universeWindowFrom: SOURCE.number - 14_399,
+      universeWindowFrom: SOURCE.number - 49,
     }),
-    SOURCE.number - 14_399,
+    SOURCE.number - 49,
     "no baseline: the universe window bound applies",
   );
   // The incremental default is never pushed before the ready cutoff.
@@ -70,7 +70,7 @@ async function main(): Promise<void> {
     observationScanFromWithBaseline({
       baseline: behind,
       defaultScanFrom: SOURCE.number - 1_000,
-      universeWindowFrom: SOURCE.number - 14_399,
+      universeWindowFrom: SOURCE.number - 49,
     }),
     Math.max(SOURCE.number - 1_000, SOURCE.number),
     "incremental default stays at or after the ready cutoff",

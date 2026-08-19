@@ -125,7 +125,6 @@ import {
 import {
   DEFAULT_POOL_UNIVERSE_PATH,
   loadPoolUniverse,
-  loadPoolUniverseCoverageMetadata,
   loadPoolUniverseGeneratedAt,
   poolRegistryKey,
 } from "./pool-universe.js";
@@ -1277,29 +1276,6 @@ async function main(): Promise<void> {
     allowUnregisteredIdentitySource: true,
   });
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
-  const universeCoverageMetadata = loadPoolUniverseCoverageMetadata(
-    config.poolUniversePath,
-  );
-  const configuredUniverseWindowFrom =
-    process.env.SEARCHER_UNIVERSE_REBUILD_FROM_BLOCK;
-  let universeWindowFrom: number | undefined;
-  if (configuredUniverseWindowFrom !== undefined) {
-    const parsed = Number(configuredUniverseWindowFrom);
-    if (!Number.isSafeInteger(parsed) || parsed < 0) {
-      throw new Error(
-        "SEARCHER_UNIVERSE_REBUILD_FROM_BLOCK must be a non-negative integer",
-      );
-    }
-    universeWindowFrom = parsed;
-  } else if (
-    universeCoverageMetadata.manifestVerified &&
-    universeCoverageMetadata.fromBlock !== null
-  ) {
-    // The legacy file never grants coverage/admission. Its verified range may
-    // only expand the strict scanner's lower bound; the runner still performs
-    // and receipts the complete catalog-issued query itself.
-    universeWindowFrom = universeCoverageMetadata.fromBlock;
-  }
   // P0 strict startup authority: one fixed-cutoff durable run owns the union
   // of every startup pool set plus plugin-declared event supplements. It
   // attests each Family+Instance once, persists the exact partition, and
@@ -1334,10 +1310,6 @@ async function main(): Promise<void> {
       store: rebuildStore,
       runId: process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID ??
         "strict-startup-rebuild",
-      lookbackBlocks: Number(
-        process.env.SEARCHER_UNIVERSE_REBUILD_LOOKBACK_BLOCKS ?? "14400",
-      ),
-      ...(universeWindowFrom === undefined ? {} : { universeWindowFrom }),
       log: (message) => console.log("[searcher/startup] " + message),
     });
   } catch (error) {

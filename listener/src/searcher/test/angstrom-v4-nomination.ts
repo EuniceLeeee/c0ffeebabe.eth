@@ -40,6 +40,8 @@ function mockProvider(options: {
     getStorage: async () => `0x${"00".repeat(32)}`,
     getLogs: async (filter) => {
       assert.equal(filter.address?.toLowerCase(), ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase());
+      assert.equal(filter.fromBlock, SOURCE.number - 49);
+      assert.equal(filter.toBlock, SOURCE.number);
       assert.deepEqual(filter.topics, [
         UNIV4_SWAP_TOPIC.toLowerCase(),
         POOL_ID.toLowerCase(),

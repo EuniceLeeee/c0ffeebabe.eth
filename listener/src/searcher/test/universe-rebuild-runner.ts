@@ -67,8 +67,6 @@ function makeFixture(
     RebuildUniverseInput,
     | "runId"
     | "scanSwapWindow"
-    | "lookbackBlocks"
-    | "universeWindowFrom"
     | "expectedSourcePlanFingerprints"
   >>,
 ): Fixture {
@@ -76,7 +74,7 @@ function makeFixture(
     path: join(dir, "checkpoint.json"),
   });
   const attestCalls = new Map<string, number>();
-  const failKeys = new Set<string>(["c"]);
+  const failKeys = new Set<string>();
   const terminalKeys = new Set<string>();
   const invalidReusableKeys = new Set<string>();
   const builtFamilySizes: number[] = [];
@@ -90,7 +88,6 @@ function makeFixture(
   const input: RebuildUniverseInput = {
     store,
     runId: "run-1",
-    lookbackBlocks: 14_400,
     attestationConcurrency: 2,
     freezeCanonicalHead: async () => SOURCE,
     scanSwapWindow: async (scanInput) => Object.freeze({
@@ -251,11 +248,16 @@ function makeFixture(
 async function main(): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "universe-rebuild-runner-"));
   try {
-    // A: retryable does NOT block ready: the verified partition is published,
-    // residual retryable outcomes stay durable in the kept run and are closed
-    // later by the probe. Resume skips verified keys and preserves retryable.
+    // A: retryable blocks ready. The fixed run and all completed siblings stay
+    // durable and probe-closable; appliedThrough/Graph never lead the exact
+    // candidate partition.
     const f = makeFixture(dir);
-    const firstReady = await rebuildUniverse(f.input);
+    f.failKeys.add("c");
+    await assert.rejects(
+      () => rebuildUniverse(f.input),
+      (error: unknown) =>
+        error instanceof UniverseRunIncomplete && error.retryableCount === 1,
+    );
     assert.equal(f.attestCalls.get("a"), 1);
     assert.equal(f.attestCalls.get("b"), 1);
     assert.equal(f.attestCalls.get("c"), 1);
@@ -266,9 +268,9 @@ async function main(): Promise<void> {
     );
     let checkpoint: StartupCheckpointEnvelope | null = await f.store.load();
     assert.equal(
-      checkpoint?.readyGeneration?.generation,
-      firstReady.generation,
-      "ready generation is promoted despite residual retryable",
+      checkpoint?.readyGeneration,
+      null,
+      "retryable must block ready generation",
     );
     assert.equal(
       checkpoint?.inProgressRun?.outcomesByCandidateKey["cand:c"]?.status,
@@ -286,8 +288,10 @@ async function main(): Promise<void> {
 
     // Resume: verified keys are skipped (no identity RPC), retryable keys are
     // preserved (not re-attested) so startup never blocks on them.
-    const resumedReady = await rebuildUniverse(f.input);
-    assert.equal(resumedReady.generation, firstReady.generation + 1);
+    await assert.rejects(
+      () => rebuildUniverse(f.input),
+      (error: unknown) => error instanceof UniverseRunIncomplete,
+    );
     assert.equal(
       f.scanCalls(),
       1,
@@ -309,8 +313,10 @@ async function main(): Promise<void> {
     // already-durable verified memo. The key is re-attested, while unchanged
     // verified siblings still skip the lifecycle.
     f.invalidReusableKeys.add("a");
-    const reattestedReady = await rebuildUniverse(f.input);
-    assert.equal(reattestedReady.generation, firstReady.generation + 2);
+    await assert.rejects(
+      () => rebuildUniverse(f.input),
+      (error: unknown) => error instanceof UniverseRunIncomplete,
+    );
     assert.equal(f.attestCalls.get("a"), 2);
     assert.equal(f.attestCalls.get("b"), 1);
     f.invalidReusableKeys.delete("a");
@@ -334,12 +340,11 @@ async function main(): Promise<void> {
       "probe must attest exactly the target key",
     );
 
-    // The residual retryable ("cand:c") stays out of the Graph: the ready
-    // generation admits only verified instances, and the run is kept so the
-    // probe can close the retryable later.
+    // After the last retryable closes, one resume atomically promotes the
+    // complete partition and clears inProgressRun for the next rolling run.
     const aCallsBeforeFinalize = f.attestCalls.get("a");
     const finalizedReady = await rebuildUniverse(f.input);
-    assert.equal(finalizedReady.generation, firstReady.generation + 3);
+    assert.equal(finalizedReady.generation, 1);
     assert.deepEqual(
       [...finalizedReady.activeInstanceKeys].sort(),
       ["inst:a", "inst:b", "inst:c"],
@@ -351,17 +356,21 @@ async function main(): Promise<void> {
       "one family publication must retain all verified instance pools",
     );
     checkpoint = await f.store.load();
-    assert.notEqual(checkpoint?.inProgressRun, null);
     assert.equal(
-      checkpoint?.inProgressRun?.outcomesByCandidateKey["cand:c"]?.status,
-      "verified",
-      "the probe-closed instance stays durable in the kept run",
+      checkpoint?.inProgressRun,
+      null,
+      "completed run must clear so the next startup freezes a new window",
     );
-    assert.equal(checkpoint?.readyGeneration?.generation, firstReady.generation + 3);
+    assert.equal(checkpoint?.readyGeneration?.generation, 1);
     assert.equal(
       f.attestCalls.get("a"),
       aCallsBeforeFinalize,
       "a valid durable memo must not re-attest during finalization",
+    );
+    assert.equal(
+      finalizedReady.universeRange.fromBlock,
+      SOURCE.number - 49,
+      "new runs must scan exactly the latest 50 blocks",
     );
 
     // B: a NEW deployment (fresh checkpoint dir) has no durable memos, so
@@ -401,23 +410,17 @@ async function main(): Promise<void> {
       "graph root must bind graph contents, not object stringification",
     );
 
-    // C: a chain-proven terminal rejection is accounted for. A restart of
-    // the same run preserves it without re-attesting, and ready still
-    // promotes (terminal instances never enter the Graph).
+    // C: a chain-proven terminal rejection is accounted for and never enters
+    // the Graph. The completed run clears; a new rolling run may reuse its
+    // bound outcome only through durable memo/attestation semantics.
     const terminalFixture = makeFixture(join(dir, "terminal"));
     terminalFixture.terminalKeys.add("b");
     const terminalReady = await rebuildUniverse(terminalFixture.input);
     assert.equal(terminalFixture.attestCalls.get("b"), 1);
     assert.deepEqual(
       [...terminalReady.activeInstanceKeys].sort(),
-      ["inst:a"],
-      "terminal-rejected and retryable instances never enter the Graph",
-    );
-    await rebuildUniverse(terminalFixture.input);
-    assert.equal(
-      terminalFixture.attestCalls.get("b"),
-      1,
-      "resume must preserve a chain-proven terminal rejection",
+      ["inst:a", "inst:c"],
+      "terminal-rejected instances never enter the Graph",
     );
 
     // D: an unexpected worker failure cannot discard completed siblings or
@@ -522,40 +525,15 @@ async function main(): Promise<void> {
       "a partial scan cannot advance observedThrough or ready",
     );
 
-    // F: an explicit universe lower bound can only expand the default
-    // rolling window. It becomes part of the durable run/receipt range;
-    // a later bound cannot silently narrow the required two-day scan.
-    const expandedRange = makeFixture(join(dir, "expanded-range"), {
-      universeWindowFrom: SOURCE.number - 20_000,
-    });
-    await rebuildUniverse(expandedRange.input);
-    const expandedCheckpoint = await expandedRange.store.load();
+    // F: the production API has no lookback/from override. Receipts and ready
+    // bind exactly cutoff-49..cutoff; old universe metadata cannot expand it.
+    const fixedRange = makeFixture(join(dir, "fixed-range"));
+    const fixedReady = await rebuildUniverse(fixedRange.input);
+    assert.equal(fixedReady.universeRange.fromBlock, SOURCE.number - 49);
     assert.equal(
-      expandedCheckpoint?.inProgressRun?.fromBlock,
-      SOURCE.number - 20_000,
+      fixedReady.sourceCoverage[0]?.completeThroughBlock,
+      SOURCE.number,
     );
-    assert.equal(
-      expandedCheckpoint?.inProgressRun?.sourceReceipts?.[0]?.fromBlock,
-      SOURCE.number - 20_000,
-      "source receipt must bind the expanded explicit range",
-    );
-    const nonNarrowingRange = makeFixture(join(dir, "non-narrowing-range"), {
-      universeWindowFrom: SOURCE.number - 1_000,
-    });
-    await rebuildUniverse(nonNarrowingRange.input);
-    assert.equal(
-      (await nonNarrowingRange.store.load())?.inProgressRun?.fromBlock,
-      SOURCE.number - 14_399,
-      "explicit range must not narrow the rolling activity window",
-    );
-    const invalidRange = makeFixture(join(dir, "invalid-range"), {
-      universeWindowFrom: -1,
-    });
-    await assert.rejects(
-      () => rebuildUniverse(invalidRange.input),
-      /explicit fromBlock is invalid/,
-    );
-    assert.equal(await invalidRange.store.load(), null);
 
     // G-plan: durable source receipts must be sealed by the current source
     // plan (audit P0-STOP-1). A matching plan passes; any drift between the
@@ -585,10 +563,9 @@ async function main(): Promise<void> {
         Object.freeze({ startup: "9".repeat(64), events: "9".repeat(64) }),
     }));
     assert.equal(
-      (await matchingPlan.store.load())?.inProgressRun?.sourceReceipts?.[0]
-        ?.queryFingerprint,
-      "9".repeat(64),
-      "matching-plan receipt must be accepted into the durable run",
+      (await matchingPlan.store.load())?.readyGeneration?.generation,
+      1,
+      "matching-plan receipt must permit atomic ready promotion",
     );
     const stalePlan = planReceiptFixture(join(dir, "stale-plan"), "a".repeat(64));
     await assert.rejects(
@@ -618,9 +595,9 @@ async function main(): Promise<void> {
       expectedSourcePlanFingerprints: planC,
     }));
     assert.equal(
-      (await resumeDrift.store.load())?.inProgressRun?.sourceReceipts?.length,
+      (await resumeDrift.store.load())?.readyGeneration?.generation,
       1,
-      "first run seals receipts under plan c",
+      "first run seals and promotes receipts under plan c",
     );
     await assert.rejects(
       () => rebuildUniverse(Object.freeze({
@@ -663,10 +640,17 @@ async function main(): Promise<void> {
     });
     await rebuildUniverse(legacy.input);
     const migrated = await legacy.store.load();
-    assert.equal(migrated?.inProgressRun?.runId, "run-1");
-    assert.equal(migrated?.inProgressRun?.cutoff.hash, SOURCE.hash);
-    assert.equal(migrated?.inProgressRun?.sourceReceipts?.length, 1);
-    assert.equal(legacy.scanCalls(), 1, "legacy receipt backfill scans once");
+    assert.equal(migrated?.inProgressRun, null);
+    assert.equal(
+      migrated?.readyGeneration?.universeRange.fromBlock,
+      SOURCE.number - 49,
+      "completed legacy range must roll to the current fixed window",
+    );
+    assert.equal(
+      legacy.scanCalls(),
+      2,
+      "legacy receipt backfill plus one fresh 50-block scan",
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

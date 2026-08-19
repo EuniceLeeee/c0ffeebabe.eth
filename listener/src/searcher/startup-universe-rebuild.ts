@@ -33,7 +33,7 @@ export function resolveProducerBaseline(input: {
 
 /**
  * The historical event window must not start before the ready cutoff: the
- * ready run already observed/attested the two-day window, so the producer
+ * ready run already observed/attested the fixed startup edge window, so the producer
  * resumes from the cutoff instead of re-scanning it. Returns the scan
  * start for the observed-event feed.
  */

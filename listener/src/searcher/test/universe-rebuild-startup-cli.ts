@@ -65,8 +65,7 @@ async function main(): Promise<void> {
     const out = execFileSync(
       "node",
       ["--import", "tsx", "src/searcher/universe-rebuild-startup-cli.ts",
-        "--checkpoint", checkpoint, "--run-id", "run-s", "--lookback-blocks", "14400",
-        "--from-block", String(SOURCE.number - 20_000)],
+        "--checkpoint", checkpoint, "--run-id", "run-s"],
       {
         cwd: process.cwd(),
         env: { ...process.env, SEARCHER_UNIVERSE_REBUILD_WIRING_PATH: wiring },
@@ -80,18 +79,44 @@ async function main(): Promise<void> {
     assert.equal(envelope?.readyGeneration?.generation, 1);
     assert.equal(
       envelope?.readyGeneration?.universeRange.fromBlock,
-      SOURCE.number - 20_000,
-      "CLI explicit range must expand and bind the ready universe",
+      SOURCE.number - 49,
+      "CLI must bind the fixed latest-50-block universe",
     );
-    assert.notEqual(
+    assert.equal(
       envelope?.inProgressRun,
       null,
-      "the run is kept after ready (residual retryable stays probe-closable)",
+      "completed CLI run must clear",
     );
     assert.equal(
       Object.keys(envelope?.verifiedMemos ?? {}).length,
       2,
       "both candidates verified with memos",
+    );
+
+    // The production range is code-owned. Former lookback/from flags must
+    // fail closed instead of silently expanding the 50-block window.
+    const overrideCheckpoint = join(dir, "override-checkpoint.json");
+    let overrideCode = 0;
+    try {
+      execFileSync(
+        "node",
+        ["--import", "tsx", "src/searcher/universe-rebuild-startup-cli.ts",
+          "--checkpoint", overrideCheckpoint, "--lookback-blocks", "14400"],
+        {
+          cwd: process.cwd(),
+          env: { ...process.env, SEARCHER_UNIVERSE_REBUILD_WIRING_PATH: wiring },
+          encoding: "utf8",
+        },
+      );
+    } catch (error) {
+      overrideCode = (error as { status?: number }).status ?? 0;
+    }
+    assert.equal(overrideCode, 1, "range override flag must fail closed");
+    assert.equal(
+      await new UniverseRebuildCheckpointStore({ path: overrideCheckpoint })
+        .load(),
+      null,
+      "rejected range override must not create a checkpoint",
     );
 
     // INCOMPLETE path: a retryable remains -> durable incomplete + exit 2.
@@ -131,7 +156,7 @@ async function main(): Promise<void> {
       execFileSync(
         "node",
         ["--import", "tsx", "src/searcher/universe-rebuild-startup-cli.ts",
-          "--checkpoint", checkpoint2, "--run-id", "run-other", "--lookback-blocks", "14400"],
+          "--checkpoint", checkpoint2, "--run-id", "run-other"],
         {
           cwd: process.cwd(),
           env: { ...process.env, SEARCHER_UNIVERSE_REBUILD_WIRING_PATH: wiring },
