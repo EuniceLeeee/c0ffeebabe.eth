@@ -24,6 +24,7 @@ import type { AdapterFamilyLifecycleContentCache } from
   "./adapter-family-lifecycle-content-cache.js";
 import type { AdapterFamilyExactQuoteCache } from
   "./adapter-family-exact-quote-cache.js";
+import type { RethTransportLane } from "./reth-transport-scheduler.js";
 
 export const ADAPTER_WORK_STAGES = Object.freeze([
   "identity",
@@ -80,6 +81,14 @@ export interface CentralScheduleDecision {
     | "effect-sim"
     | "final-sim";
   readonly fairnessKey: string;
+  /**
+   * Architecture-neutral physical transport lane for this step. The policy
+   * maps AdapterWorkStage → RethTransportLane through the shared
+   * transport-schedule-policy module; runtimes execute their physical I/O
+   * through the shared permit scheduler on this lane. Optional for
+   * compatibility: a runtime without the shared scheduler ignores it.
+   */
+  readonly rethLane?: RethTransportLane;
 }
 
 export type FinalSimulationScheduleDecision = CentralScheduleDecision & {

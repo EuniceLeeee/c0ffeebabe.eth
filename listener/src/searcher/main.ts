@@ -1541,6 +1541,12 @@ async function main(): Promise<void> {
       }),
       verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
       executor: config.botvmAddress,
+      // Shared physical-transport permit scheduler: exact/discovery share the
+      // residual capacity after the N-1 producer reserve, so exact probes can
+      // never starve the producer chain (same contract as the legacy runtime).
+      ...(blockScanRethTransportScheduler === undefined
+        ? {}
+        : { transportScheduler: blockScanRethTransportScheduler }),
     });
     const pending = strictRuntimeRoot.createSession({
       source,

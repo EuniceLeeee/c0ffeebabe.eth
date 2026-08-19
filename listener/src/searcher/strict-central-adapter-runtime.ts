@@ -4,7 +4,12 @@ import type {
   CentralAdapterRuntime,
   CentralAdapterScheduler,
   AdapterWorkControl,
+  CentralAdapterPolicyInput,
 } from "./adapter-work-intent.js";
+import {
+  rethLaneForAdapterStage,
+} from "./transport-schedule-policy.js";
+import type { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import { createHash } from "node:crypto";
 import { ethers } from "ethers";
 import {
@@ -112,6 +117,14 @@ export function createStrictCentralAdapterRuntime(input: {
   readonly executor?: string;
   /** Upper bound on requests admitted per work batch; default 512. */
   readonly maxRequestsPerBatch?: number;
+  /**
+   * Shared physical-transport permit scheduler. When supplied, every
+   * reth-bound request (eth-call/get-code/get-storage) executes inside
+   * scheduler.run(schedule.rethLane, ...) so producer lanes keep their
+   * reserved capacity and exact/discovery share the residual. Simulation
+   * requests bypass the scheduler (they hit the revm-sim daemon, not reth).
+   */
+  readonly transportScheduler?: Pick<RethTransportScheduler, "run">;
 }): CentralAdapterRuntime {
   let now = Date.now();
   const maxRequestsPerBatch = input.maxRequestsPerBatch ?? 512;
@@ -135,15 +148,60 @@ export function createStrictCentralAdapterRuntime(input: {
         },
         execute: async (execution) => {
           const startedAtMs = Date.now();
-          const results = await Promise.all(execution.requests.map(
-            (request) => executeRequest(
-              input.provider,
-              input.simulator,
-              request,
-              execution.source,
-              issueInput.control,
-            ),
-          ));
+          /*
+           * Simulation requests hit the revm-sim daemon (not reth) and must
+           * NOT consume a reth transport permit; only eth-call / get-code /
+           * get-storage are reth-bound. The shared permit scheduler (when
+           * wired) keeps the producer lanes' reserved capacity intact while
+           * exact/discovery share the residual — the same physical-transport
+           * contract the legacy runtime used.
+           */
+          const runRequest = (
+            request: AdapterRequest,
+          ): Promise<AdapterRequestResult> => executeRequest(
+            input.provider,
+            input.simulator,
+            request,
+            execution.source,
+            issueInput.control,
+          );
+          const rethBound = execution.requests.filter((request) =>
+            request.kind !== "state-override-simulation" &&
+            request.kind !== "effect-delta-simulation"
+          );
+          const simulated = execution.requests.filter((request) =>
+            request.kind === "state-override-simulation" ||
+            request.kind === "effect-delta-simulation"
+          );
+          const transportScheduler = input.transportScheduler;
+          // issueExecutor is the central contract entry; direct harness calls may
+          // omit schedule entirely, so resolve the lane defensively.
+          const rethLane = (issueInput.schedule as
+            Partial<CentralScheduleDecision> | undefined)?.rethLane ?? "exact";
+          const rethResults = rethBound.length === 0
+            ? []
+            : transportScheduler === undefined
+              ? await Promise.all(rethBound.map(runRequest))
+              : await transportScheduler.run(
+                  rethLane,
+                  issueInput.control?.signal ??
+                    new AbortController().signal,
+                  () => Promise.all(rethBound.map(runRequest)),
+                );
+          const simResults = simulated.length === 0
+            ? []
+            : await Promise.all(simulated.map(runRequest));
+          const results = execution.requests.map((request) => {
+            const found = [...rethResults, ...simResults].find(
+              (result) => result.id === request.id,
+            );
+            if (found === undefined) {
+              throw new Error(
+                `strict central runtime lost result for ${request.id}`,
+              );
+            }
+            return found;
+          });
           transportWallMs = Date.now() - startedAtMs;
           return results;
         },
@@ -198,10 +256,7 @@ export function createStrictCentralAdapterRuntime(input: {
       }),
     },
     policy: {
-      bind: (policyInput: {
-        readonly stage: string;
-        readonly subjectKey: string;
-      }) => ({
+      bind: (policyInput: CentralAdapterPolicyInput) => ({
         lane: policyInput.stage === "identity"
           ? "critical-proof" as const
           : "background" as const,
@@ -209,6 +264,10 @@ export function createStrictCentralAdapterRuntime(input: {
         maxAttempts: 1,
         transportPool: "state-read" as const,
         fairnessKey: policyInput.subjectKey,
+        // Architecture-neutral step scheduling: the policy maps the stage to
+        // the shared transport lane so the runtime below can execute physical
+        // reth I/O through the shared permit scheduler.
+        rethLane: rethLaneForAdapterStage(policyInput.stage),
       }),
     },
     budgets: {
