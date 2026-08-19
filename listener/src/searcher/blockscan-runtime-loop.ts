@@ -2473,15 +2473,20 @@ export class BlockScanRuntimeLoop {
       if (this.deps.strictSession === undefined) {
         throw new Error("block-scan requires a strict current-source session");
       }
+      // Reuse the N-1 producer's generation for this source so the strict
+      // session cache (keyed by number:hash:generation) hits the session the
+      // producer already built. A per-pass generation here (or the pass's own
+      // prepared snapshot) missed the cache and re-ran the full
+      // 1706-instance createSession inside exact_refine, adding ~13s to
+      // every pass and leaking one session per block.
+      const producerSnapshot = currentRuntimeCoordinator.latestPricingSnapshot();
       const strictSession = await this.deps.strictSession(Object.freeze({
         number: runtimeSourceBlock,
         hash: exactSourceBlockHash,
-        // Reuse the producer's generation for this source so the strict
-        // session cache (keyed by number:hash:generation) hits the session
-        // the N-1 producer already built. A per-pass generation here missed
-        // the cache and re-ran the full 1706-instance createSession inside
-        // exact_refine, adding ~13s to every pass.
-        generation: exactSourceGeneration ?? generation,
+        generation: producerSnapshot !== null &&
+            producerSnapshot.sourceBlock === runtimeSourceBlock
+          ? producerSnapshot.generation
+          : exactSourceGeneration ?? generation,
       }));
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
