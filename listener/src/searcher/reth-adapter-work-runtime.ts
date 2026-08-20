@@ -102,7 +102,6 @@ export interface RethAdapterWorkRuntimeOptions {
   readonly maxInFlightPrograms?: number;
   readonly maxQueuedBatches?: number;
   readonly maxActiveBatchesPerFairnessKey?: number;
-  readonly maxActiveBatchesPerFamily?: number;
   /**
    * Bounded physical-session grace used only to coalesce near-simultaneous
    * consumers. Each consumer still observes its own logical deadline.
@@ -127,7 +126,6 @@ export interface RethAdapterWorkRuntime extends CentralAdapterRuntime {
     readonly inFlightPrograms: number;
     readonly coalescedWaiters: number;
     readonly activeBatchesByFairnessKey: Readonly<Record<string, number>>;
-    readonly activeBatchesByFamily: Readonly<Record<string, number>>;
     readonly queuedBatches: number;
   }>;
 }
@@ -176,7 +174,6 @@ const DEFAULT_MAX_PHYSICAL_BATCH_SIZE = 32;
 const DEFAULT_MAX_IN_FLIGHT_PROGRAMS = 256;
 const DEFAULT_MAX_QUEUED_BATCHES = 256;
 const DEFAULT_MAX_ACTIVE_BATCHES_PER_FAIRNESS_KEY = 1;
-const DEFAULT_MAX_ACTIVE_BATCHES_PER_FAMILY = 2;
 const DEFAULT_PHYSICAL_DEDUPE_WINDOW_MS = 25;
 
 export function centralLaneForAdapterStage(
@@ -307,7 +304,6 @@ interface NormalizedRuntimeOptions {
   readonly maxInFlightPrograms: number;
   readonly maxQueuedBatches: number;
   readonly maxActiveBatchesPerFairnessKey: number;
-  readonly maxActiveBatchesPerFamily: number;
   readonly physicalDedupeWindowMs: number;
   readonly stageLimits: Readonly<Record<
     AdapterWorkStage,
@@ -389,11 +385,6 @@ function normalizeOptions(
       DEFAULT_MAX_ACTIVE_BATCHES_PER_FAIRNESS_KEY,
       "maxActiveBatchesPerFairnessKey",
     ),
-    maxActiveBatchesPerFamily: positiveOption(
-      options.maxActiveBatchesPerFamily,
-      DEFAULT_MAX_ACTIVE_BATCHES_PER_FAMILY,
-      "maxActiveBatchesPerFamily",
-    ),
     physicalDedupeWindowMs: positiveOption(
       options.physicalDedupeWindowMs,
       DEFAULT_PHYSICAL_DEDUPE_WINDOW_MS,
@@ -421,7 +412,6 @@ interface SharedExecution {
 class RethCentralAdapterScheduler implements CentralAdapterScheduler {
   private readonly inFlight = new Map<string, SharedExecution>();
   private readonly instanceFairGate: FairPhysicalBatchGate;
-  private readonly familyFairGate: FairPhysicalBatchGate;
   private coalescedWaiters = 0;
   private nextSharedExecutionId = 0;
 
@@ -432,10 +422,6 @@ class RethCentralAdapterScheduler implements CentralAdapterScheduler {
     this.instanceFairGate = new FairPhysicalBatchGate({
       maxQueued: options.maxQueuedBatches,
       maxActivePerKey: options.maxActiveBatchesPerFairnessKey,
-    });
-    this.familyFairGate = new FairPhysicalBatchGate({
-      maxQueued: options.maxQueuedBatches,
-      maxActivePerKey: options.maxActiveBatchesPerFamily,
     });
   }
 
@@ -573,7 +559,6 @@ class RethCentralAdapterScheduler implements CentralAdapterScheduler {
           rethLane,
           backend,
           timing: sharedTiming,
-          familyFairnessKey: input.subject.familyId,
           instanceFairnessKey: adapterInstanceFairnessKey(input),
         });
         const shared: SharedExecution = {
@@ -628,9 +613,7 @@ class RethCentralAdapterScheduler implements CentralAdapterScheduler {
       inFlightPrograms: this.inFlight.size,
       coalescedWaiters: this.coalescedWaiters,
       activeBatchesByFairnessKey: this.instanceFairGate.activeSnapshot(),
-      activeBatchesByFamily: this.familyFairGate.activeSnapshot(),
-      queuedBatches:
-        this.instanceFairGate.queuedCount() + this.familyFairGate.queuedCount(),
+      queuedBatches: this.instanceFairGate.queuedCount(),
     });
   }
 
@@ -709,7 +692,6 @@ class RethCentralAdapterScheduler implements CentralAdapterScheduler {
     readonly rethLane: RethTransportLane;
     readonly backend: RethAdapterBatchBackend;
     readonly timing: MutableSchedulerTiming;
-    readonly familyFairnessKey: string;
     readonly instanceFairnessKey: string;
   }): Promise<readonly AdapterRequestResult[]> {
     if (input.requests.length === 0) return Object.freeze([]);
@@ -736,7 +718,6 @@ class RethCentralAdapterScheduler implements CentralAdapterScheduler {
     readonly rethLane: RethTransportLane;
     readonly backend: RethAdapterBatchBackend;
     readonly timing: MutableSchedulerTiming;
-    readonly familyFairnessKey: string;
     readonly instanceFairnessKey: string;
   }): Promise<readonly AdapterRequestResult[]> {
     const completed = new Map<string, AdapterRequestResult>();
@@ -876,37 +857,19 @@ class RethCentralAdapterScheduler implements CentralAdapterScheduler {
 
   private async acquireFairness(
     input: Readonly<{
-      readonly familyFairnessKey: string;
       readonly instanceFairnessKey: string;
       readonly rethLane: RethTransportLane;
     }>,
     signal: AbortSignal,
   ): Promise<() => void> {
     const priority = lanePriority(input.rethLane);
-    // Instance first: a same-instance waiter never occupies a Family slot and
-    // therefore cannot block another instance of that Family from progressing.
-    const releaseInstance = await this.instanceFairGate.acquire({
+    // One central physical queue. The key is an opaque instance/work identity;
+    // Family IDs never create a quota or a separate queue.
+    return this.instanceFairGate.acquire({
       key: input.instanceFairnessKey,
       priority,
       signal,
     });
-    try {
-      const releaseFamily = await this.familyFairGate.acquire({
-        key: input.familyFairnessKey,
-        priority,
-        signal,
-      });
-      let released = false;
-      return () => {
-        if (released) return;
-        released = true;
-        releaseFamily();
-        releaseInstance();
-      };
-    } catch (error) {
-      releaseInstance();
-      throw error;
-    }
   }
 }
 

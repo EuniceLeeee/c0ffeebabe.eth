@@ -617,7 +617,7 @@ async function staleQueuedWorkStopsBeforePhysicalIo(): Promise<void> {
   assert.equal(h.scheduler.inner.snapshot().activeTotal, 0);
 }
 
-async function familyAndInstanceFairness(): Promise<void> {
+async function instanceFairnessUsesOneCentralQueue(): Promise<void> {
   const backend = new BlockingBackend();
   const h = harness({ backend });
   const instanceA = instanceKey("runtime-test:instance-a");
@@ -653,24 +653,22 @@ async function familyAndInstanceFairness(): Promise<void> {
       runtime: h.runtime,
     }),
   ];
-  for (let turn = 0; backend.started < 2 && turn < 20; turn++) {
+  for (let turn = 0; backend.started < 3 && turn < 20; turn++) {
     await new Promise((resolve) => setImmediate(resolve));
   }
-  assert.equal(backend.started, 2, "two distinct instances may use the Family cap");
-  assert.equal(
-    h.runtime.snapshot().activeBatchesByFamily[FAMILY],
-    2,
-    "one Family must be capped independently of transport capacity",
+  assert(
+    backend.started >= 3,
+    "distinct instances of one Family must share the central queue without a Family cap",
   );
   assert.equal(
     h.runtime.snapshot().queuedBatches,
-    2,
-    "same-instance and over-Family-cap work must remain in bounded fair queues",
+    1,
+    "only the second request for the same instance remains queued",
   );
   backend.unblock();
   const outcomes = await Promise.all(works);
   assert(outcomes.every((outcome) => outcome.status === "resolved"));
-  assert.equal(backend.maxActive, 2, "Family fairness cap must hold");
+  assert.equal(backend.maxActive, 3, "distinct instances may execute concurrently");
 }
 
 async function physicalPermitScopeAndFinalSimIsolation(): Promise<void> {
@@ -719,7 +717,7 @@ await longerConsumerOutsideWindowGetsIndependentSession();
 await logicalDeadlineDoesNotReleasePhysicalOwnership();
 await failureTypingAndBoundedRetry();
 await staleQueuedWorkStopsBeforePhysicalIo();
-await familyAndInstanceFairness();
+await instanceFairnessUsesOneCentralQueue();
 await physicalPermitScopeAndFinalSimIsolation();
 
 console.log(
