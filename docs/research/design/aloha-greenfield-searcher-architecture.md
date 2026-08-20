@@ -6,7 +6,8 @@
 >
 > 冻结实现参考：impl@d33c8b48d43f0191db4354ebe4192d805ac9323f。
 >
-> 冻结性能参考：codex/ds-blockscan-state-timing-refactor@466cf84fe7791baa848974af32ff1b502bfd103c。
+> 补充成熟模块复用审计：impl@ccb41fbb175fefaf6c388d62521c68966cc7c4a6。旧实现只提供可定位的
+> 算法/行为样本；Aloha 性能不继承旧分支 verdict，最终只由 Aloha 自己的事实窗口证明。
 >
 > 本文只定义从空仓库直接实现的最终系统；不定义迁移、shadow或legacy双轨。本轮不执行部署，文中只设计
 > future exact-SHA systemd dry-run边界；绝不授予签名或广播授权。
@@ -73,6 +74,8 @@ canonical cutoff(number + hash)
 → immutable GraphView lease
 → producer
 → blockscan / backrun
+→ Family-owned current-source coarse projections
+→ protocol-neutral rank/prune + Top-K/bounded-unranked admission
 → generic planner / solver
 → current-source exact
 → strict execution program
@@ -103,12 +106,14 @@ authority。独立builder随后恢复inProgress或构建next generation，仍只
 6. active GraphView 在 producer session 内不可变，下一 generation 可并行构建并在安全边界原子切换；
 7. 每个 fixed-cutoff run 的每个 Family+Instance 只 attest 一次，restart 只做差集；
 8. 统一调度不以重复扫描、重复 materialization、重复 projection 或无界并发换取正确性；
-9. DS、impl 与 Aloha 都由同一个、先冻结且已资格化的事实验收协议判断；DS/impl只是不可信reference
-   producers，独立链上、Reth、数学与EVM事实才是oracle；
+9. impl 与 Aloha 都由同一个、先冻结且已资格化的事实验收协议判断；impl只是不可信reference
+   producer，独立链上、Reth、数学与EVM事实才是oracle；
 10. 默认 dry-run，final simulation、standing-position、repayment、conservation 与 submission gate
     全部 fail closed；
 11. stable Family core只定义所有Family共同生命周期；未来新增domain或Family种类只增加versioned
     extension与自己的package，不修改中央pipeline，也不使未声明依赖的Family或predicate重验。
+12. coarse pricing、ranking、bounded exact refinement、EV/valuation、mempool intake、head scheduling与安全门
+    都作为正式模块保留；解耦只改变其authority/contract边界，不得以“绿地重写”为由删除成熟搜索漏斗。
 
 ### 2.2 Non-goals
 
@@ -135,7 +140,7 @@ authority。独立builder随后恢复inProgress或构建next generation，仍只
 |---|---|---|
 | [VEF] | Aloha@0a712e515b003cd6f578727be26360a8632bfcff | 分支 codex/aloha；审计开始时仅有 AGENTS.md，工作树干净 |
 | [VEF] | impl@d33c8b48d43f0191db4354ebe4192d805ac9323f | 旧 worktree HEAD 与冻结 SHA 相同；未跟踪的 listener/src/searcher/transport-schedule-policy.ts 属于用户，未读取为稳定事实、未修改 |
-| [VEF] | DS@466cf84fe7791baa848974af32ff1b502bfd103c | 仅从 Git 对象读取；旧 DS 工作树状态不进入结论 |
+| [VEF] | impl@ccb41fbb175fefaf6c388d62521c68966cc7c4a6 | 补充成熟能力遗漏审计只从该committed Git object读取；dirty impl工作树不进入结论 |
 
 ### 3.2 关键既有事实
 
@@ -154,10 +159,14 @@ authority。独立builder随后恢复inProgress或构建next generation，仍只
 | [VEF] | RevmSimClient 是单 daemon、stdin/stdout FIFO response queue；一个慢请求会 head-of-line block 后续请求 | impl@d33c8b48:listener/src/searcher/revm-sim-client.ts:175-261；commit afcc07e8 的冻结提交说明 |
 | [VEF]/[MTM] | afcc07e8 的冻结结构为每个attest创建独立daemon，因此不再共享同一FIFO；按结构隔离sibling HOL，但实际时延效果本轮未测；进程数仍随并发key增长 | impl@d33c8b48:listener/src/searcher/universe-rebuild-production.ts:566-630 |
 | [VEF] | final-sim runtime 已使用专属资源、有限 queue、source/generation/plan fence、deadline、abort 与 interrupted-resource retirement | impl@d33c8b48:listener/src/searcher/final-simulation-work-runtime.ts:49-145,291-461,463-535,570-724 |
-| [VEF] | DS scheduler 以 producer-critical、producer-bulk、exact、discovery 分 lane，并为 producer 预留 transport capacity | DS@466cf84f:listener/src/searcher/reth-transport-scheduler.ts:1-13,30-35,46-118,160-218 |
-| [VEF] | DS background transport 支持 idempotent、abort-aware 的抢占与重试，critical 串行、foreground 可并发 | DS@466cf84f:listener/src/searcher/live-reth-read-priority.ts:28-145,181-234 |
-| [VEF] | DS 记录了 28-35s hot state、126-166s startup、8-17s header read、900+ probes 造成 15-20s heavy block 等真实慢路径 | DS@466cf84f:docs/research/design/blockscan-current-n-latency-recovery-20260727.md:54-65,635-676；blockscan-runtime-loop.ts:1222-1240,2818-2887 |
-| [VEF] | 旧 DS 的 end-to-end P95 <10s 是验收目标，不是已达事实；归档结论是 implemented_not_fixed | DS 设计文档:540-565,625-629 |
+| [VEF] | impl scheduler 以 producer-critical、producer-bulk、exact、discovery 分 lane，并为 producer 预留 physical transport capacity | impl@ccb41fbb:listener/src/searcher/reth-transport-scheduler.ts:1-13,30-35,46-118,160-218 |
+| [VEF] | impl background transport 支持 idempotent、abort-aware 的抢占与重试，critical 串行、foreground 可并发 | impl@ccb41fbb:listener/src/searcher/live-reth-read-priority.ts:28-145,181-234 |
+| [MTM] | Aloha 的head/session/startup/exact P50/P95/P99与resource budgets没有从旧实现继承的pass结论 | 必须由Aloha同一exact SHA/PID/source窗口的raw facts实测；impl数字只能定位回归，不能签发Aloha verdict |
+| [VEF] | impl已有current-source coarse mid→ring score→rank→cheap exact refinement的成熟漏斗，但旧core仍依赖TokenEdge/协议形状、JS number，并允许deadline-unprobed fallback | impl@ccb41fbb:listener/src/searcher/detector/blockscan-scanner-core.ts:100-166,172-246,661-805；blockscan-candidate-refinement.ts:92-145,146-195,620-756 |
+| [VEF] | impl已有next-block base fee、source-pinned oracle freshness、gas/bid/EV算术；旧shell把Chainlink地址和默认profit-token表写在中央 | impl@ccb41fbb:listener/src/searcher/ev-evaluator.ts:6-17,79-117,119-163,165-273；profit-token-valuation.ts:1-69 |
+| [VEF] | impl已有canonical优先的pending evidence隔离、per-owner bounded queue、单tx冻结head与single-flight observation | impl@ccb41fbb:listener/src/searcher/pending-evidence-admission-queue.ts:23-130,132-235；pending-evidence-session.ts:16-140 |
+| [VEF] | impl latest-head scheduler在单active pass下只保留最新pending head，并显式记录coalesced/drop与same-head revision | impl@ccb41fbb:listener/src/searcher/latest-head-scheduler.ts:23-49,61-145,147-218 |
+| [VEF] | impl已有有界amount search、current-source逐leg exact propagation和链上Funding capacity refresh；旧Funding cache仍硬编码Multicall/adapter holder语义 | impl@ccb41fbb:listener/src/searcher/solver/amount-bounds.ts:7-79；amount-propagation.ts:20-137；flash-liquidity.ts:3-16,27-129 |
 | [VEF] | 旧 TokenEdge/PoolEntry 仍包含 V2/V3/V4/Curve、factory、poolId、fee、storage/taxonomy 等协议形状及 legacy registry 语义 | impl@d33c8b48:listener/src/searcher/planner/token-graph.ts:43-170,196-252 |
 | [VEF] | 旧六步具备 canonical hash、ordered prefix、cross-step commitment，但 stage 仍是 discovery/route/quote/plan/final-sim/EV | impl@d33c8b48:listener/src/shared/evidence/semantic-six-step.ts:3-22,42-90,164-258 |
 
@@ -183,6 +192,9 @@ verdict 都不是 Aloha correctness oracle。
 | [MDR] | bounded worker pool + deterministic result order | 保留 per-index result assembly；按 RPC/REVM/lane/Family 再分配容量 |
 | [MDR] | producer transport reserve 与抢占式 background | 保留按 physical request 获取 permit、abort 清 queue、producer critical reserve |
 | [MDR] | final-sim reserved capacity | final-sim 不与 discovery、attestation、exact 共用 worker 或 daemon |
+| [MDR] | coarse economic funnel | Family-owned current-source coarse projection只负责排序；Top-K加bounded unranked lane，只有带保守proof的profit upper bound才能hard prune |
+| [MDR] | source-bound EV/valuation | next-block fee、measured gas、current valuation与bid policy分别绑定source和provider；未知valuation/gas/freshness不得通过submission EV gate |
+| [MDR] | latest-head coalescing与pending intake bulkhead | 单active+latest pending、drop accounting；canonical traffic优先，unknown evidence按owner有界隔离且不能挤掉canonical |
 | [MDR] | caller mode 局部放宽 EIP-3607 | 只允许 impersonated internal frame；最终顶层交易 simulation 始终严格 |
 | [MDR] | transport fact 与 Family decision 分离 | transport只返回returned、reverted或transportFailure；framework/plugin contract defect单独形成invalidProgram，绝不伪装成transport fact或链上否定 |
 | [MDR] | semantic hash + causal chain + process anchor | 由新 Evidence Schema 重写字段，但保留内容寻址、ordered chain、exact SHA/PID/starttime |
@@ -233,7 +245,7 @@ reviewer
 - `impl@d33c8b48 <bare-searcher-file>` = `impl@d33c8b48d43f0191db4354ebe4192d805ac9323f:listener/src/searcher/<file>`；
 - `impl@d33c8b48 venues/...`、`planner/...`、`solver/...`、`execution/...`、`detector/...` = 同SHA的`listener/src/searcher/<written-path>`；
 - `impl@d33c8b48 shared/...` = 同SHA的`listener/src/shared/<remaining-path>`；`impl@d33c8b48 analysis ...` = 同SHA的`analysis/src/<remaining-path>`；
-- `DS@466cf84f <bare-searcher-file>` = `DS@466cf84fe7791baa848974af32ff1b502bfd103c:listener/src/searcher/<file>`；
+- `impl@ccb41fbb <bare-searcher-file>` = `impl@ccb41fbb175fefaf6c388d62521c68966cc7c4a6:listener/src/searcher/<file>`；
 - 以`src/`、`listener/`、`analysis/`、`scripts/`或`docs/`开头的path从repo root解析；冒号后的`:a-b`始终是冻结object的`nl -ba`行号。
 
 [PFD] `source存在`或`test存在`只标记审计locator，不是运行证据；表中所有未执行效果均标[MTM]。若路径不
@@ -264,11 +276,13 @@ observer/verifier certificate或production acceptance pass。
 | [BRW] R3 | impl@d33c8b48 strict-central-adapter-runtime.ts | provider/simulator transport 与 caller authority；手写 provenance；错误分类 | :330-364 漏字段；:412-427 caller gap 分类不正确 | packages/request-program + packages/capability-interpreters；只执行完整FrozenProgram envelope；codec mismatch/caller mode gap为invalidProgram，RPC/deadline为retryable |
 | [ASR] R1 | impl@d33c8b48 final-simulation-work-runtime.ts | final-sim admission、reserved resources、queue、fence、retire；不拥有协议语义 | :49-145,291-535,570-724；final-sim tests | packages/final-sim；保留调度不变量并按新port/queue/cancellation重写；execution program schema、source/gen、safety root 变化使 receipt 不可复用 |
 | [BRW] R3 | impl@d33c8b48 revm-sim-client.ts；listener/revm-sim/src/main.rs | single FIFO daemon 与 REVM engine；daemon/queue/prepared cache 隐藏状态 | client:175-261证明共享FIFO存在HOL结构；afcc07e8改为per-attest隔离但实际效果[MTM]；Rust仅impersonated frame放宽EIP-3607 | runtime/revm-workers + packages/request-program；提取REVM engine/caller-mode规则，重写有界worker pool、single-flight、request id、deadline、kill/reap |
-| [ASR] R1 | DS@466cf84f live-reth-read-priority.ts | 无 authority 的 idempotent background preemption primitive；内部 active attempts/waiters | :28-145,181-234；13 个 race/abort tests | packages/scheduler/src/preemptible-background.ts；保留抢占/abort不变量但按新WorkClass、queue和cancellation contract重写；旧文件不复制 |
-| [ASR] R1 | DS@466cf84f reth-transport-scheduler.ts | physical-request permit、lane reserve、active/queued metrics；固定四 lane，无 queue cap/Family fairness | :1-13,30-35,46-118,160-218；scheduler tests:26-98 | packages/scheduler；保留 reserve/abort/release 算法，扩展通用 WorkClass、bounded ingress、per-Family fairness；调度 policy 变化不使 semantic memo 失效 |
-| [ASR] R2 | DS@466cf84f blockscan-state-coordinator.ts | topology/state compilation、static read dedupe、per-family deadlines、CAS；混有旧 topology publication authority | :345-378,805-818,1677-1774,1849-2104,2672-2854,3351-3572 | packages/state-runtime；只提取 physical read dedupe、changed-set compile、family-local settlement、canonical CAS；旧 live topology publication不移植 |
-| [BRW] R3 | DS@466cf84fe7791baa848974af32ff1b502bfd103c:listener/src/searcher/{blockscan-runtime-loop,discovery-backfill-lane}.ts | producer orchestration与性能调度；混有 N-1 fallback、旧 Graph/state/solver/final submission | loop:800-903,1165-1240,1260-1347,2787-2910,3672-3685；backfill:200-262,446-490 | apps/searcher-runtime + packages/producer；提取 head sequencing、critical header、exact budget、yield telemetry；拒绝 N-1 authority与旧 topology mutation |
+| [ASR] R1 | impl@ccb41fbb live-reth-read-priority.ts | 无 authority 的 idempotent background preemption primitive；内部 active attempts/waiters | :28-145,181-234；源码定义caller abort不重试、internal preemption重试 | packages/scheduler/src/preemptible-background.ts；保留抢占/abort不变量但按新WorkClass、queue和cancellation contract重写；旧文件不复制 |
+| [ASR] R1 | impl@ccb41fbb reth-transport-scheduler.ts | physical-request permit、lane reserve、active/queued metrics；固定四 lane，无 queue cap/owner fairness | :1-13,30-35,46-118,160-218 | packages/scheduler；保留 reserve/abort/release算法，扩展通用WorkClass、bounded ingress、owner fairness；调度policy变化不使semantic memo失效 |
+| [BRW] R2/R3 | impl@ccb41fbb blockscan-state-coordinator.ts | state physical-read dedupe、changed-set与settlement有成熟机制；同一巨型类仍拥有旧published pointer、N-1与topology cache/CAS | :330-406,736-846,898-1016,1435-1507；本轮只作源码审计[MTM] | packages/state-runtime只提取source-bound read grouping、single-flight、changed-set与family-local settlement；published topology、N-1 carry与Graph authority全部拒绝 |
+| [BRW] R3 | impl@ccb41fbb {blockscan-runtime-loop,discovery-backfill-lane}.ts | head orchestration、yield/cancellation与telemetry混有N-1 state producer、旧publication和producer-time backfill | loop:280-320,410-430,637-748；backfill:185-239,291-423 | packages/producer/scheduler只重写latest-head sequencing、cancellation与work telemetry；禁止N-1 exact authority、producer-time discovery/backfill及任何topology publication |
 | [ASR] R1 | impl@d33c8b48 canonical-header-journal.ts、producer-generation-freeze.ts | canonical header proof 与禁止 producer publication；journal size/process state | generation-freeze.ts:1-12；canonical journal tests | packages/canonical-source + packages/producer；保留 hash/fence原则，重写为 SourceView 与 GraphView lease |
+| [ASR] R1 | impl@ccb41fbb latest-head-scheduler.ts | 单active/latest-pending coalescing、same-head revision、drop accounting；不拥有Graph/Family语义 | :23-49,61-145,147-218；旧test只作算法locator[MTM] | packages/producer/head-scheduler；保留状态机并将revision绑定immutable SourceSession/trigger context；不得用revision刷新topology |
+| [BRW] R1/R3 | impl@ccb41fbb {mempool-intake,pending-evidence-admission-queue,pending-evidence-session}.ts | full-vs-filtered targets、canonical优先、unknown per-Family queue、one-tx frozen head；旧类型依赖PoolEntry/SwapAdapter/ExecutionFamilyId | intake:5-62；queue:23-130,132-235；session:16-140 | packages/producer/backrun-intake + scheduler；从ready GraphView与generated observation owners派生目标，central只按opaque ownerRef公平；unknown evidence不可挤掉canonical，provider subset不能冒充complete intake |
 | [BRW] R3 | impl@d33c8b48 shared/state/anvil-pool.ts、state-backend.ts、live-state-backend.ts | fork/state access 与 worker lifecycle；旧 pool、source fallback、transport ownership | state/backend/reorg/abort tests | packages/state-runtime/fork-port；提取 fork lease、reset cancellation、source pin；不得授予 topology、identity 或 exact authority |
 
 ### 5.3 Family、capability、planner 与执行资产
@@ -284,7 +298,13 @@ observer/verifier certificate或production acceptance pass。
 | [BRW] R3 | impl@d33c8b48 venues/**-family/{manifest,routes,codec,capture,discovery}.ts 与 *-family-plugin.ts | plugin assembly、old capture/route DTO 与 schema手写；Family authority | capture/parity形状与旧 catalog耦合 | families/<family>/manifest + capability-local schema-derived codec；manifest和schema重写，nomination/identity算法可调用旧提取 kernel |
 | [REJ] R4 | impl@d33c8b48 production-family-composition.ts、production-families/loader.ts、family-capability-shadow.ts、strict-catalog-registry-projection.ts | 手写中央 composition、shadow catalog与legacy facade | 新 Family 仍需碰中央 loader/registry；名称含 strict 不改变边界 | 由 build-time manifest discovery 生成 catalog；中央只 import generated artifact |
 | [BRW] R3 | impl@d33c8b48 planner/planner.ts、solver/{solver,plan-builder,quoter,pool-state-updater,victim-apply,post-impact-overrides}.ts | route enumeration、sizing、exact、victim与protocol state混合；import旧 TokenEdge/Family math | old route/solver tests和live路径可作算法参考 | packages/planner + packages/solver + packages/exact；中央只处理通用 edge、opaque choice/handle；Family math经 capability port调用 |
+| [ASR] R2/R3 | impl@ccb41fbb detector/{blockscan-scanner-core,blockscan-candidate-refinement,blockscan-mid-batch}.ts | ring enumeration、coarse score/rank、ordered bounded reads、cheap exact refine；旧实现依赖TokenEdge/协议mid fields/JS number，且deadline-unprobed可回流fallback | scanner:100-166,172-246,661-805；refinement:92-145,146-195,620-756；mid-batch:1-46 | packages/coarse-economics + planner/refinement；保留漏斗choreography与deterministic bounded batch，重写schema/ports；普通score只排序，unprobed进入bounded unranked lane且仍必须exact，绝不作为execution fallback |
+| [BRW] R1/R3 | impl@ccb41fbb {ev-evaluator,profit-token-valuation}.ts | next-block EIP-1559、gas/bid/valuation/freshness；旧中央写死Chainlink与token rule表 | ev:6-17,79-117,119-163,165-273；valuation:1-69 | packages/economics + safety；采用EIP-1559/整数舍入pure kernels，oracle/asset valuation由generated owner capability提供current-source facts；unknown valuation/gas/freshness fail-closed于EV/submission |
 | [ASR] R2 | impl@d33c8b48 solver/{amount-bounds,amount-propagation,v2-constant-product-math,v2-fee,v3-math,v4-math,curve-math}.ts | 纯数值算法与协议数学；当前位于中央 | mathematical tests；中央 import协议 math违反边界 | 通用 amount bounds留 solver；V2/V3/V4/Curve math移动对应 Family kernel，不得由中央 import |
+| [ASR] R2/R3 | impl@ccb41fbb solver/{amount-bounds,amount-propagation,flash-liquidity}.ts | bounded grid/GSS、逐leg strict exact、Funding capacity aggregation；旧flash cache硬编码Multicall和adapter holder，propagation仍依赖旧edge/session | bounds:7-79；propagation:20-137；flash:3-16,27-129 | packages/solver保留generic bounded optimizer和ordered exact propagation；Funding plugin签发source-bound CapacityFact，central只比较asset/amount/owner handle；Multicall只是generic transport batching |
+| [BRW] R2/R3 | impl@ccb41fbb detector/victim-effect.ts、live-backends/victim-overlay.ts、detector/victim-source-quality.ts | trigger matching/affected-edge/overlay流程成熟，但中央旧union含swap/oracle、selector/ABI/adapter fields；历史sender streak可hard skip | victim-effect:9-91,105-165,167-240；overlay:18-97,99-125；quality:13-55 | families/<id>/trigger-effect capability + packages/producer/trigger-session；plugin输出opaque affected handles与EffectProgram，central只编排source-bound replay；source-quality仅telemetry/soft rank，不得hard admission |
+| [BRW] R3 | impl@ccb41fbb detector/pool-impact.ts | mutation-only impact、receipt/log identity、source-generation binding、Family observer exact-trigger consumption、direct-call与receipt合并、ordered transition与post-state completeness；同时混有旧PoolEntry/TokenEdge形状 | :23-86,97-124,126-241,245-479,506-705,707-862；本轮只读审计[MTM] | families/<id>/trigger-effect + packages/producer/trigger-session；完整保留`receipt/log identity → source binding → Family observer → exact trigger → unresolved/mutation-only/impact分离 → ordered transition → overlay/replay`；禁止中央看到Swap topic就构造impact，禁止mutation-only伪造token direction；旧DTO和中央union重写 |
+| [BRW] R3 | impl@ccb41fbb solver/pool-state-cache.ts、pinned-warm-pools.ts | V2/V3/V4/Curve warm state、epoch、tick/bitmap、batch warm与overlay invalidation是成熟性能能力；同时中央持有协议map、文件配置和静态fallback风险 | pool-state-cache.ts:1-14,294-412,414-559,561-729,731-1040+；pinned-warm-pools.ts:33-100,102-227；本轮只读审计[MTM] | packages/state-runtime + families/<id>/state; Family-owned `StateRead/StateSnapshot`与通用source-bound cache；保留warm/local math与invalidate算法，删除中央V2/V3/V4/Curve map；pinned hint只能引用ready Graph中的opaque edge，不得创建admission/edge/topology；warm失败显式unresolved，禁止pinned/legacy quoter fallback |
 | [REJ] R4 | impl@d33c8b48 listener/src/compiler.ts | old registry lookup、skip/empty fallback | :12-15,30-57 明确 adapterId 分派并跳过 skip | 不移植；packages/execution-program 只按 generated ActionOwner handle 编译，unknown owner fail closed |
 | [ASR] R1 | impl@d33c8b48 final-simulation runner、solver/final-verify-gate.ts | mandatory simulation与profit floor；中央 safety | final-sim worker tests；旧 EV字段需剥离 | packages/final-sim + packages/safety；保留 mandatory gate，输入改为 sealed ExecutionProgram 与 SafetyContract |
 | [BRW] R3 | impl@d33c8b48 standing-guard.ts、execution/bundle-router.ts | standing-position double guard、dry-run router、production signer；marker path与legacy taxonomy耦合 | standing-guard.ts:20-47；bundle-router.ts:31-84,115-203 | packages/safety + packages/submission；保留双重 fail-closed原则与 unsigned dry-run ID，重写 marker/config、taxonomy与 signer port |
@@ -301,10 +321,9 @@ observer/verifier certificate或production acceptance pass。
 | [REJ] R4 | impl@d33c8b48 src/FlashArb.sol、Constants.sol 的具体路线 | wstUSR/Morpho/Fluid/PSM/V3/V4/Curve 硬编码执行合同 | FlashArb.sol:10-17,35-82,84-180 | 永不作为通用 Aloha execution authority；协议动作必须由 plugin action owner生成 |
 | [ASR] R2 | impl@d33c8b48 shared/evidence/semantic-six-step.ts、impl@d33c8b48 analysis {six-step-validation-controller,six-step-validation-lifecycle,six-step-judgment}.ts | semantic evidence、validator、controller、merge/review lifecycle；旧 stage/route/branch authority混合 | semantic-six-step.ts:42-258；controller:313-680,1403-1651；lifecycle:327-570 | acceptance/schema-codec + acceptance/validator；提取 canonical/ordered/commitment算法，重写所有 stage和控制面 |
 | [ASR] R2 | impl@d33c8b48 analysis trusted-six-step-runtime-attestation.ts | SHA/PID/starttime、content-addressed inputs、secret filtering；AWS/SSM耦合 | :72-199,276-399；AWS/SSM :17-19,201-274,402-613 | acceptance/collectors；提取纯验证，部署 collector为port；AWS/SSM/path不进入core schema |
-| [BRW] R3 | impl@d33c8b48 {systemic-live-gate,serial-systemic-live-evidence}.ts；DS@466cf84fe7791baa848974af32ff1b502bfd103c:analysis/src/{blockscan-kpi,blockscan-window}.ts | coverage/throughput/P95 evaluator与log parser | systemic gate:37-82；serial:26-144；DS window:49-86,300-354 | acceptance/validator + acceptance/collectors；保留计算概念，改成 exact process/run/root joins、P99与raw receipt set |
+| [BRW] R3 | impl@d33c8b48 {systemic-live-gate,serial-systemic-live-evidence}.ts | coverage/throughput/P95 evaluator与log parser | systemic gate:37-82；serial:26-144；只证明旧计算形状，不证明Aloha预算[MTM] | acceptance/validator + acceptance/collectors；保留计算概念，改成exact process/run/root joins、P99与raw receipt set |
 | [REJ] R4 | impl@d33c8b48 architecture-migration-fixture-replay.ts、blind-*、paired-live、shadow/capture/parity与对应成功 fixtures | 迁移、target/capture、对比 authority | 不能证明production-issued对象 | 不进入 Aloha；只允许人为损坏 evidence 用于 validator negative calibration |
 | [BRW] R3 | impl@d33c8b48 scripts/deploy-node.sh 与 systemd shell | exact SHA、dry-run/live marker、wallet cap、EV gate；同时含大量旧 env/feature flags并读取私钥 | deploy-node.sh:16-23,337-380,401-480,616-696 | deploy/runtime-shell；保留 exact SHA、systemd、default dry-run、human gate；删除 legacy flags；evidence collector不得读取私钥 |
-| [REJ] R4 | DS@466cf84fe7791baa848974af32ff1b502bfd103c:listener/src/searcher/blockscan-runtime-loop.ts 的N-1 fallback及runtime topology authority | 旧系统的降级 availability与mutable topology机制 | DS@466cf84fe7791baa848974af32ff1b502bfd103c:docs/research/design/blockscan-current-n-latency-recovery-20260727.md:154-177,625-676 | 不进入 Aloha correctness path；Aloha只接受current-source exact，generation只能通过完整ready CAS和安全边界adopt |
 
 ### 5.5 Isolated declaration adoption 白名单
 
@@ -350,13 +369,19 @@ row机械覆盖的旧文件或symbol默认R4不移植。若实施中发现遗漏
 | reth-adapter-work-runtime.ts | old request DTO→scheduler/transport；settled/inFlight、fairness、consumer deadline hidden state；参与字段丢失 | source:421-704,923-1022,1420-1476；test存在[MTM] | R3 payload边界，R2提取single-flight/fairness | request-program→scheduler generic port；完整FrozenProgram WorkKey |
 | revm-strict-simulation-transport.ts | old request shape→Rust client；token/account拆分边界 | source:70-123与test存在[MTM] | R3重写transport schema | FrozenProgram exact pairs→runtime/revm-workers；pair/schema/source变化失效 |
 | blockscan-state-read-backend.ts | source-pinned batching、semaphore、physical lifecycle hidden queue | source:208-317,1880-2036,2059-2116；test存在[MTM] | R2提取算法，ports重写 | state-runtime→scheduler/RPC port；不得importGraph/Family math |
+| venues/blockscan-state-capability.ts | BlockSource/ChainLog/MutationQueryDescriptor、Family state projection、mutation classification/carry proof、coverage/source facts、source-bound StateRead与retryable failure；同时承载旧schema assembly | impl@ccb41fbb source:18-75,77-183,185-223,241-286,321-380[VEF] | R2提取Family state语义与mutation/carry不变量；R3重写schema/ports | packages/state-runtime + families/<id>/state；coordinator只做batch/deadline/retry/publication，source provenance由core绑定；不得由state coordinator拥有Graph/topology或第二mutable cache |
 | blockscan-state-cache.ts | source-pinned resumable raw cache | source:9-24 | R3 schema重写 | state-runtime→packages/durable-store；key含chainId/block hash/request+codec hash |
 | blockscan-multicall.ts、blockscan-pass-deadline.ts | generic batching/deadline但输入旧Pool/Graph shapes | deadline test存在[MTM] | R2提取generic算法 | scheduler/state-runtime only；不得创建edge或coverage |
+| venues/route-immutable-binding.ts、venues/route-instance-identity.ts | immutable binding/hash与Family-owned instance/edge/plan identity算法成熟，但旧payload含旧DTO、adapter/PoolEntry fallback与protocol fields | impl@ccb41fbb route-immutable-binding.ts:3-138；route-instance-identity.ts:12-252[VEF] | R2提取domain-separated hash/ownership/duplicate检查；R3重写payload与issued handle | packages/planner + packages/graph；identity由`FamilyInstanceKey + direction + ExecutionVariantKey + opaque route binding`组成；中央只验证hash/lease/generation，不能从PoolEntry/TokenEdge推导协议语义 |
+| blockscan-route-identity.ts | deterministic route identity思想；旧preimage含adapterId/PoolEntry fields并用JSON stringify | impl@ccb41fbb source:1-61[VEF] | R3 schema重写，R2提取domain-separated ordered identity不变量 | packages/planner；RouteId只哈希ordered canonical edge refs、directions、generation/Graph binding和strategy objective，不含协议字段 |
+| mempool-intake-refresh-signal.ts | process-local observer set；旧语义可在任意notify重连filtered subscription | impl@ccb41fbb source:1-13[VEF] | R2提取subscription primitive，R3重写adoption trigger | producer/backrun-intake只在ready generation安全adopt或provider reconnect时重建filter；notify不得改变Graph/admission authority |
 | blockscan-backrun-state-bridge.ts | current-N snapshot→旧PoolStateCache的第二mutable state publication；V2/V3 taxonomy | source:1-90及tests存在[MTM] | R4 bridge authority；R2仅提取source monotonicity/check算法 | blockscan/backrun直接消费同一SourceSession+state-runtime facts，不复制到第二cache |
 | blockscan-enumeration-solver-{telemetry,worker}.ts | bounded worker/file writer含queue hidden state；payload仍是旧route/pricing mode | source开头及tests存在[MTM] | R3 telemetry schema；R2提取bounded writer/rotation算法 | packages/telemetry只写architecture-neutral receipts，永不影响planner/acceptance verdict |
 | blockscan-view-overrides.ts | 文件中的raw PoolEntry注入production view，含legacy adapter taxonomy | source:1-55[VEF] | R4完全废弃 | 不允许operator file创建edge/instance；测试输入只在contract test process内 |
 | detector/blockscan-scanner-core.ts | generic ring/path scan依赖旧TokenGraph | source存在；冻结tests/旧live未在本轮验证[MTM] | R2提取scan/ring算法 | producer→protocol-neutral GraphView/planner port |
 | detector/blockscan-scanner-production.ts | production facade把AdapterRuntimeSnapshot/TokenEdge/pricing/funding合并并带degraded mode | source:1-90[VEF] | R3重写boundary；core scan算法沿上一行R2 | packages/producer→packages/planner，只收immutable GraphView/SourceSession；无degraded/default edge |
+| venues/swaps/view-quote-blockscan-state.ts、adaptive-view-quote-blockscan-state.ts | grouped prerequisite/dependent reads、Family-owned decode、source-pinned amount ladder与bounded rounds；旧实现仍把alternate quote写成中央fallback语义 | view-quote:22-109,125-337；adaptive:24-122,124-329[VEF] | R2提取分轮read/依赖与bounded ladder算法；R3重写schema/ports | families/<id>/quote + packages/state-runtime；healthy path只跑首选amount，失败才走capability-local bounded alternate program；zero/revert/unresolved显式返回，绝不能成为中央legacy quoter |
+| blockscan-pass-timeline.ts | state→enumeration→exact_refine→planner_solver→final_sim→EV阶段顺序、cumulative head budget、atomic timing merge | impl@ccb41fbb source:1-155[VEF] | R2提取architecture-neutral timeline/receipt算法，R3重写字段 | packages/telemetry + acceptance/collectors；只观察阶段顺序、预算与timing，不拥有routing/correctness authority，不得以timeline脚本补production事实 |
 | live-backends/revm-live-backend.ts | 巨型legacy backend混合TokenEdge、compiler、victim overlay、balance slots、strict catalog与fallback | source:1-90及旧tests存在[MTM] | R4 facade；REVM transport/kernel复用已由独立rows覆盖 | state-runtime/exact/final-sim各自port；禁止重建“all-in-one backend” |
 | strict-current-runtime-coordinator.ts | large facade连接ready、Family refresh、state | source存在；证据仅源码[MTM] | R4 facade，局部session思想已在R1模块体现 | 不设对应facade；producer/state/exact分owner |
 | strict-catalog-consumer-diagnostic.ts | diagnostic直接消费旧strict catalog shape | source存在[VEF] | R4删除；不保compat CLI | acceptance只读Evidence/roots，不importproduction catalog |
@@ -472,6 +497,8 @@ absence slot或验收分支。
 │   ├── graph/                        # persisted projection + GraphView lease
 │   ├── producer/                     # head sessions, blockscan/backrun
 │   ├── state-runtime/                # source-bound state acquisition
+│   ├── coarse-economics/             # current-source projections, rank/prune proof
+│   ├── economics/                    # valuation, gas, EV and bid policy
 │   ├── planner/                      # protocol-neutral path enumeration
 │   ├── solver/                       # amount scheduling + opaque choices
 │   ├── exact/                        # current-source exact coordinator
@@ -485,7 +512,7 @@ absence slot或验收分支。
 │   └── <family-id>/
 │       ├── manifest/
 │       ├── kernel/                    # ABI/math/reverse-binding
-│       └── capabilities/              # nomination/identity/state/exact/action
+│       └── capabilities/              # nomination/identity/state/coarse/trigger/exact/action
 ├── strategies/
 │   └── <strategy-id>/                # current production strategies only; no LP strategy
 ├── runtime/
@@ -505,7 +532,6 @@ absence slot或验收分支。
 │   └── cli/
 ├── tools/
 │   └── reference-only/
-│       ├── ds/                       # exact-SHA claim importer; untrusted-reference
 │       └── impl/                     # exact-SHA claim importer; untrusted-reference
 └── deploy/
     ├── systemd/
@@ -540,6 +566,8 @@ definitionCatalogRoot。apps/searcher-runtime 只 import 该content-addressed ge
 | graph | persisted generic edges与immutable GraphView lease | protocol math、live topology mutation |
 | producer | source-bound session与candidate lineage | Graph publication |
 | state-runtime | current-source sealed state facts | identity/admission |
+| coarse-economics | source-bound coarse projection aggregation、generic rank与有proof的prune | edge creation、exact/execute authority、协议math |
+| economics | current valuation/gas/EV/bid policy与sealed economic receipt | Family pricing math、signing/broadcast authorization |
 | planner/solver | generic path与amount schedule | Family dispatch、protocol math |
 | exact | current-source exact orchestration | legacy quote fallback |
 | execution-program | owned action assembly与program hash | unknown action guessing |
@@ -554,7 +582,7 @@ definitionCatalogRoot。apps/searcher-runtime 只 import 该content-addressed ge
 
 ~~~mermaid
 flowchart TD
-  APP["apps/searcher-runtime"] --> PROD["producer / planner / exact / execution / final-sim"]
+  APP["apps/searcher-runtime"] --> PROD["producer / coarse-economics / planner / exact / economics / execution / final-sim"]
   APP --> GEN["ready-generation / graph / attestation"]
   APP --> COMPOSE["generated runtime composition"]
   COMPOSE --> CAT["generated family/strategy catalogs"]
@@ -580,7 +608,7 @@ flowchart TD
 - 一个 Family import 另一个 Family 的内部实现；
 - planner、solver、state-runtime、execution-program import protocol ABI/math；
 - acceptance import apps/**、packages/** production implementation 或 families/**；
-- acceptance predicate/observer import `tools/reference-only/**`或根据DS/impl/Aloha身份选择不同规则；
+- acceptance predicate/observer import `tools/reference-only/**`或根据impl/Aloha producer身份选择不同规则；
 - acceptance/{validator,predicate-specs,reference-models} import acceptance/collectors、environment adapters、
   RPC/network/filesystem/process/child-process clients；GateCore只读冻结QualifiedFactSnapshot并运行pure codec/
   interpreter/reference model；
@@ -1401,6 +1429,27 @@ backrun 共享相同 generation，但各自有有界 ingress 与 correlationId�
 [PFD] source session 绑定 canonical head number/hash/stateRoot；reorg 或 hash mismatch 取消该 head 全部
 plan/exact/sim。旧 state 只能作为非 authority cache，命中后仍验证 source key。
 
+[PFD] head scheduler采用单active+latest-pending状态机；中间head可coalesce但每次drop都产事实，same-head
+revision只表示新的immutable trigger/evidence context，绝不刷新Graph或改变generation。shutdown停止admission、
+取消pending并等待active按deadline结算，不能留下无terminal的eligible head。
+
+[PFD] public-mempool intake的完整target set由当前GraphView实例与generated observation/trigger owners联合签发。
+provider-side filtered subscription只是优化：只有另有完整local firehose时才允许subset；否则filtered truncation使
+coverage invalid。canonical target traffic始终优先，unknown/evidence-promoted traffic按opaque ownerRef使用有界
+queue、per-head admission cap与round-robin，不能挤掉canonical或兄弟owner。每笔pending tx只冻结一个canonical
+head/source并对同owner observation single-flight。
+
+[PFD] victim/trigger decode、affected instances、pre-state/post-state effects、overlay/preCalls与可观测账户全部属于
+Family TriggerEffect capability。中央只接收schema-bound `TriggerFact + affected handle refs + EffectProgram`并在
+同一SourceSession编排replay；不保留中央`swap|oracle` union、selector/ABI/adapter switch。历史sender/source
+quality只能用于telemetry或soft rank，不能hard skip或形成chain-proven rejection。
+
+[PFD] TriggerEffect capability必须保留完整的impact证据链：receipt/log identity先绑定canonical source generation，
+再由Family observer消费exact trigger并声明affected instance；direct-call与receipt evidence必须按完整log身份去重
+并合并，mutation-only只能表示状态变化、不能自行生成token方向。`unresolved`、`mutation-only`与可执行impact是三种
+不同事实；ordered transition、pre/post-state completeness、overlay/preCalls与replay source必须可独立复算。中央不
+能因看到topic、selector或某个空effect替Family作chain-proven否定，也不能用sender质量历史硬跳过。
+
 ### 16.2 State acquisition
 
 [PFD] Family capability 声明 StateReadProgram；中央 state-runtime 合并相同 physical reads、batch、dedupe、
@@ -1410,9 +1459,83 @@ Curve state struct，不读协议 storage slot，不做协议数学。
 [PFD] shared read key 至少绑定 chainId、provider/backend epoch、source number+hash+stateRoot、request codec、
 target、calldata/storage key 与 block tag。逻辑 consumers 可以各自 timeout；物理请求完成前 permit 不释放。
 
-### 16.3 Planner 与 solver
+[PFD] hot/warm cache只保存canonical raw read bytes或owner-sealed derived fact，不保存mutable protocol object。
+跨head复用必须由capability声明validity/dependency proof并在新source复核；否则只允许同source WorkKey命中。
+changed-set optimization只决定“哪些read可复用”，不能把上一head的coarse/exact结果升级成current authority。
+cache miss、stale或decode mismatch返回unavailable/retryable，禁止回落到default price或旧pool-state backend。
 
-[PFD] planner 只消费 immutable generic GraphView，输出有序 RouteHandle refs 与通用 constraints。solver 只
+[PFD] warm/local state cache是性能实现，不是第二authority。Family在自己的StateRead/StateSnapshot capability中
+拥有V2/V3/V4/Curve等协议状态解释、tick/bitmap或curve batch warm算法；中央只拥有source-bound cache envelope、
+single-flight、epoch/invalidation与backpressure。cache key至少包含`chainId + provider/backend epoch + source
+number/hash/stateRoot + instanceRef + stateSchema/interpreter fingerprint + request parameters`。命中旧source、
+schema或overlay时必须显式失效并重新读；warm失败返回`unresolved/retryable`，不能退回pinned pool、旧quoter或静态
+默认值。operator warm hint最多引用ready Graph中的opaque edge ref，永远不能创建instance、edge、coverage或
+topology。
+
+[PFD] prerequisite/dependent quote reads使用Family-owned versioned QuoteProgram：健康路径只读首选amount，失败时
+由该Family声明的bounded alternate ladder按预算尝试；zero/revert/missing decode是unresolved或plugin outcome，
+不是中央legacy quoter fallback。新增quote capability只使声明它的Family的state/quote closure失效。
+
+### 16.3 Coarse economic projection、rank 与 prune
+
+[PFD] 粗价格/粗经济漏斗是正式load-bearing性能模块，不能因为Graph解耦而删除。它位于immutable GraphView
+与planner/exact之间：Family-owned capability根据当前SourceSession签发source-bound coarse projection；中央
+只执行通用fixed-point组合、排序、预算与proof检查。50-block observation只负责近期edge/behavior evidence，
+绝不提供价格；Graph/Edge只保存静态route fact，绝不把移动价格写入graphRoot。
+
+~~~ts
+interface CoarseEdgeProjectionV1 {
+  readonly edgeRef: IssuedGraphEdgeRef;
+  readonly direction: "forward" | "reverse";
+  readonly generationId: string;
+  readonly graphRoot: Hash;
+  readonly source: CanonicalSourceView;
+  readonly ownerRef: GeneratedCapabilityOwnerRef;
+  readonly capabilityDigest: Hash;
+  readonly dependencyRoot: Hash;
+  readonly stateFactsRoot: Hash;
+  readonly sampleInput: { readonly asset: AssetRef; readonly amount: U256String };
+  readonly estimatedOutput: { readonly asset: AssetRef; readonly amount: U256String } | null;
+  readonly conservativeOutputUpperBound:
+    | { readonly amount: U256String; readonly proofProgramRef: AuthorityProofProgramRef; readonly proofRoot: Hash }
+    | null;
+  readonly inputCapacityUpperBound: U256String | null;
+  readonly status: "rankable" | "unavailable";
+  readonly reasonCode: StableReasonCode | null;
+}
+
+interface CoarseRouteAssessmentV1 {
+  readonly routeId: Hash;
+  readonly projectionRoot: Hash;
+  readonly rankScore: SignedDecimalString | null;
+  readonly profitUpperBound:
+    | { readonly numeraire: AssetRef; readonly amount: SignedDecimalString; readonly proofRoot: Hash }
+    | null;
+}
+~~~
+
+[PFD] 每个projection必须精确绑定`edgeRef + direction + generationId + graphRoot + current number/hash/stateRoot +
+capabilityDigest + dependencyRoot`；任一不符即`unavailable`，禁止拿旧generation、旧head或另一方向的粗估。
+粗投影只用整数/fixed-point/rational canonical bytes，禁止JS floating point成为hard-prune authority。
+
+[PFD] admission固定为两条队列：`Top-K rankable`加`bounded unranked`。缺coarse capability、read失败、proof缺失
+或projection unavailable的route按opaque ownerRef round-robin进入unranked预算，必须显式记`not-probed`事实，
+不能silent drop。普通`rankScore`只改变顺序；只有所有依赖均有可复核保守上界、中央generic bound composer生成
+`profitUpperBound`，且该上界仍低于ObjectiveProfile的最小净收益时，才允许hard prune。hard-prune receipt必须绑定
+完整projection/proof/valuation/gas roots。任何被送入后续的route仍必须current-source exact；unprobed或粗估正值
+都不能成为execution fallback。
+
+[PFD] coarse extension是versioned optional capability：实现它的Family在自己的package提供program与interpreter，
+不实现的Family仍可走unranked lane。新增或改变coarse capability只失效该owner的coarse cache/相关performance
+qualification；不改变static Edge/Graph、identity memo，也不使无依赖的Swap/Protocol/Credit Family重验。
+
+### 16.4 Planner 与 solver
+
+[PFD] planner 只消费 immutable generic GraphView，输出有序 RouteHandle refs 与通用 constraints。每个route必须由
+`FamilyInstanceKey + direction + ExecutionVariantKey + opaque immutable binding`签发；binding payload/hash由
+schema生成并绑定issuer、GraphView lease、generation与strategy objective。中央只检查canonical hash、owner与
+duplicate/ordering，不读取或重建协议字段；rehydration通过owner reissuer重新签发不可序列化handle，旧
+PoolEntry/TokenEdge不能作为route identity来源。solver 只
 安排 amount/budget 与比较 owning capability 返回的 opaque evaluated choices。二者不得 import Family、
 ABI、protocol math、address tables 或 protocol state；不得存在 default edge、legacy quote 或 handcrafted
 route injection。
@@ -1452,7 +1575,13 @@ interface ObjectiveProfileV1 {
 [PFD] 如果某协议需要新的约束或选择语义，新增 versioned capability/interpreter；只有声明者进入 impact
 closure。不能在 solver 写 if familyId 或扩充一个固定 protocol union。
 
-### 16.4 Current-source exact
+[PFD] amount search保留victim/trigger anchored grid、严格次数上限、deterministic bounded optimization和逐leg
+amount propagation；每个probe都走同一current-source exact coordinator。Funding capacity由Funding plugin的
+StateRead/Capacity capability签发`asset + maxAmount + ownerHandle + source/proof root`，中央只比较容量并选择
+owner handle。Morpho/Balancer地址、balanceOf holder、Multicall地址或flash action不得进入solver；Multicall只可
+作为state-runtime通用batch transport。没有足够source-bound capacity时route不可执行，禁止静态allowlist猜测。
+
+### 16.5 Current-source exact
 
 [PFD] exact coordinator 对 route 中每个 handle：复核 issuer/lease，取得 current SourceSession，执行 owning
 StateReadProgram 与 ExactProgram，由 owning capability 解释。任何 missing owner、schema mismatch、stale
@@ -1461,7 +1590,7 @@ source 或 unresolved fact 使该 route fail closed。禁止 pinned-state、lega
 [PFD] exact 输出绑定 ordered instances root、state facts root、source anchor、amounts、constraints 与 owning
 interpreter hashes。它是 execution program 的唯一价格/状态输入。
 
-### 16.5 Execution program 与 safety
+### 16.6 Execution program、economics 与 safety
 
 [PFD] 每个 action 由 generated catalog 中唯一 ActionOwner 编译为 schema-tagged opaque action bytes。中央
 compiler 只负责有序组合、资金流引用、caller/preCall/effect contract、repayment/standing-position/
@@ -1485,7 +1614,13 @@ interface SafetyObligationRef {
 不相容均fail closed。这样当前debt mint不会被当普通swap绕过安全门；未来新position语义也只新增extension
 owner，不改safety core。本baseline不定义LP obligation schema。
 
-### 16.6 Final simulation 与 submission
+[PFD] economics在final-sim产生真实gas后签发source-bound EconomicReceipt：next-block EIP-1559 fee由目标parent
+整数计算，profit-token valuation来自generated valuation/oracle owner的current-source fact，bid由versioned
+policy计算。WETH、stablecoin、Chainlink地址或token decimals不得写进central evaluator；这些是asset/oracle
+capability data。valuation unavailable、oracle stale、gas measurement unavailable或fee source mismatch都不能
+通过EV/submission gate。coarse阶段可读取同一valuation view帮助排序，但不能替代final EconomicReceipt。
+
+### 16.7 Final simulation 与 submission
 
 [PFD] final simulation 使用独立保留 worker、当前 source、完整 execution program 与与真实顶层交易相同的
 EIP-3607/nonce/value/gas语义。它必须重新验证 repayment、conservation、standing-position、generation 与
@@ -1507,7 +1642,7 @@ canonical fence。Effect-attestation 的 impersonated internal frame 不能降�
 | [VEF] | 约1,700 current-source reads串行约26s | impl@d33c8b48 strict-production-runtime-session.ts:192-223 | physical-read coalescing、changed dependency set、lane reserve、bounded concurrency |
 | [VEF] | 单REVM FIFO可能HOL；per-attest daemon会把进程数绑到并发 | impl@d33c8b48 revm-sim-client.ts:175-261、universe-rebuild-production.ts:566-630 | fixed isolated worker pool、single-flight、request id/deadline/kill-reap |
 | [MTM] | heavy与light混队列可造成resource starvation | 目标环境实际failure mix尚待Aloha measurement，不写成d33当前事实 | fast/heavy/final-sim lane隔离、quota、retry budget/circuit breaker |
-| [VEF] | background Reth read可与producer critical竞争 | DS@466cf84f reth-transport-scheduler.ts:1-13,46-118与live-reth-read-priority.ts:28-145 | producer保留physical permits，background可抢占且有界 |
+| [VEF] | background Reth read可与producer critical竞争 | impl@ccb41fbb reth-transport-scheduler.ts:1-13,46-118与live-reth-read-priority.ts:28-145 | producer保留physical permits，background可抢占且有界 |
 | [PFD] | 2-day scan不再是recent edge contract | 这是新终态决定，不冒充旧实现事实 | recent edge窗口固定50 blocks；identity coverage走独立complete source |
 
 [PFD] 性能修复不能通过降低 canonical fence、跳过 Family、使用 stale state、恢复 N-1 或绕过 final sim 获得。
@@ -1564,13 +1699,16 @@ ResourceProfile hash；调整调度参数不使semantic memo失效，但必须�
 | identity lifecycle | 同 run 同 FamilyCandidateKey identity count≤1；同 FamilyInstanceKey materialize/project count≤1 |
 | shared work | 同 WorkKey 同时 physical build count=1；无 unbounded queue/process |
 | unchanged restart | 未失效 verified memo reuse=100%；旧 verified instance attestation count=0 |
-| producer header/source acquisition | P95≤1.5s，P99≤2.5s |
+| producer header/source+coarse acquisition | combined P95≤1.5s，P99≤2.5s；coarse read与header共享去重但不占final-sim reserve |
+| coarse projection/rank | 每个enumerated route必须为rankable或unavailable；同WorkKey physical projection≤1；P95≤1s、P99≤2s |
+| coarse admission | Top-K与bounded-unranked分母/selected/not-probed exact守恒；无proof hard-prune=0，silent drop=0 |
 | eligible head terminal accounting | 连续100个 eligible canonical heads 必须100/100产生healthy terminal receipt，silent/unhealthy=0 |
 | head completion | P95≤8s，P99≤11s，单head hard deadline<12s；超出即性能门失败而非丢样本 |
 | planner→exact→program（有candidate） | P95≤2.5s，P99≤3.5s，不含final-sim |
 | final simulation queue wait | P95≤0.5s，P99≤1s；无资源时明确fail closed |
 | final simulation service / queue+service | service P95≤2s、P99≤3s；queue+service P99≤4s、hard≤5s |
-| head critical-path composition | source 2.5s + planner/exact/program 3.5s + final queue 1s + final service 3s + overhead 1s = P99 budget 11s |
+| economic seal | final gas、next-block fee、valuation、bid、EV全部同source/plan/sim root；unknown/stale通过submission=0 |
+| head critical-path composition | source+coarse 2.5s + planner/exact/program 3.5s + final queue 1s + final service 3s + overhead 1s = P99 budget 11s |
 | restart ready reuse | 若ready仍canonical且closure不变，进程启动后≤30s签发GraphView，不全量attest |
 | new generation recent scan | 50-block scan P95≤15s、hard≤30s；同source physical scan=1 |
 | warm next-generation / fresh finalization | changed/retryable≤5%时P95≤120s、hard≤5min；从age=20触发，hard完成时仍须age<50，否则不得adopt |
@@ -1604,7 +1742,7 @@ Warmup/maintenance只能以process/ready anchor划定整个连续区间，不能
 而后移起点或缩短窗口。pre-ready heads从未进入该窗口；reorg orphan只由同一ordinal的canonical replacement
 结算。除此以外`excludedHeads`必须为空，missing/unknown直接fail或invalid，不能用“客观原因”删除。
 
-[PFD] Critical-path各P99预算按11s显式组成，并与head completion P99使用同一candidate-bearing head分母，
+[PFD] Critical-path各P99预算按11s显式组成；coarse包含在source+coarse combined budget内，不再重复相加，并与head completion P99使用同一candidate-bearing head分母，
 避免“每个组件单独过门但总和超过12s”。无candidate head仍进入100/100 terminal分母，但不伪装成
 planner→final-sim latency样本。Cold/warm generation
 按candidate分母、fast/heavy mix与complete receipt set同时报告；若真实candidate规模不同，仍同时使用绝对
@@ -1621,7 +1759,7 @@ candidate-path样本count必须等于content-addressed candidate-bearing head se
 single-flight join、dedupe hit、memo reuse、retry reason、RPC/REVM concurrency、CPU、RSS、worker restart、
 completed/missed heads、P50/P95/P99。分母与完整 receipt set 必须随指标一起 hash。
 
-[PFD] 对比 DS/impl 时使用相同 canonical head window、provider、hardware profile、dry-run policy 与 raw
+[PFD] 对比 impl/Aloha 时使用相同 canonical head window、provider、hardware profile、dry-run policy 与 raw
 receipt set。旧实现只用于定位回归：Aloha 即使比旧实现快也不能替代绝对预算、六步 lineage 或安全门；
 旧实现即使失败也不能自动让 Aloha 通过。
 
@@ -1702,7 +1840,7 @@ raw runtime / chain / Reth / process / filesystem
  (frozen PredicateSpecs; pass / fail / invalid + reasons)
 ~~~
 
-[PFD] `EvidenceCore`不得import systemd、AWS/SSM、DS、impl、Aloha production、planner或Family代码；
+[PFD] `EvidenceCore`不得import systemd、AWS/SSM、impl、任意reference importer、Aloha production、planner或Family代码；
 `ObserverAdapter`不得生成expected verdict，也不得调用production builder补缺失事实；`GateCore`不得读日志
 文案或trust任意report布尔值。环境transport metadata只进入外层observation envelope；若locator本身load-bearing，
 必须连同content hash、byte length、media/schema ref和observer qualification一起被hash绑定。
@@ -2221,7 +2359,7 @@ ordinal 0的accepted anchor，`committedBeforeFirstHead`不得靠布尔自报。
 
 ### 19.5 Claim、observation 与 PredicateSpec
 
-[PFD] DS、impl与Aloha runtime产生的Event、artifact和receipt首先都是`claim`；`strict`、`success`或branch名
+[PFD] impl与Aloha runtime产生的Event、artifact和receipt首先都是`claim`；`strict`、`success`或branch名
 不会让claim自动变成事实。Load-bearing observation由独立observer从raw locator、canonical chain、Reth、
 process/filesystem、数学reference model或独立EVM重建：
 
@@ -2256,8 +2394,8 @@ interface PredicateSpecV1 {
 }
 ~~~
 
-[PFD] predicate只能读取声明的claim/observation schemas；同一canonical inputs/facts不得因producer为DS、impl或
-Aloha而改变verdict。缺load-bearing observation、unknown schema、stale qualification或不完整分母返回
+[PFD] predicate只能读取声明的claim/observation schemas；同一canonical inputs/facts不得因producer为impl或
+Aloha而改变verdict。DS不再是本重写的reference producer或校准对象。缺load-bearing observation、unknown schema、stale qualification或不完整分母返回
 `invalid`；已观察到违反contract的事实才返回`fail`；事实完整且predicate成立才返回`pass`。展示层可显示
 producer identity，predicate不得据此选阈值、放宽stage或改变expected result。
 
@@ -2408,7 +2546,7 @@ qualification。
 
 [PFD] production acceptance只能引用current qualification：predicate spec/implementation或任一load-bearing
 observer digest变化，旧证书立即stale并使verdict invalid。`declaredCriticalMutationIds`必须与
-`rejectedOrInvalidMutationIds` exact相等，且independentOracleCaseCount>0；DS/impl witness不计入该count，
+`rejectedOrInvalidMutationIds` exact相等，且independentOracleCaseCount>0；impl witness不计入该count，
 也不能定义expected verdict。
 
 [PFD] QualificationRegistrySnapshot由release-governance冻结的受信issuer set批准；validator绑定query指定的
@@ -2442,19 +2580,18 @@ claim schema→observation schema→PredicateSpec→positive/negative/invalid/mu
 qualify verifier/observer→production implementation→replay/live facts推进。手写损坏case可校准拒绝路径，
 手写成功fixture永远不能提供production success。
 
-## 20. DS / impl reference-producer calibration
+## 20. impl-only reference-producer calibration
 
 ### 20.1 独立拓扑
 
 ~~~text
-DS runtime   ──raw artifacts──> tools/reference-only/ds   ──untrusted claim──┐
-impl runtime ──raw artifacts──> tools/reference-only/impl ──untrusted claim──┼─> frozen predicates
-Aloha runtime ────────────────> native evidence emitter  ──production claim─┘
+impl runtime ──raw artifacts──> tools/reference-only/impl ──untrusted claim──┐
+Aloha runtime ────────────────> native evidence emitter  ──production claim─┼─> frozen predicates
 
-chain / Reth / process / math / independent EVM ──qualified observations───┘
+chain / Reth / process / math / independent EVM ──qualified observations────┘
 ~~~
 
-[PFD] acceptance package不importDS、impl或Aloha production源码。两个reference-only importers只把已存在的
+[PFD] acceptance package不import impl或Aloha production源码。唯一reference-only importer只把已存在的
 raw artifacts规范化为`ReferenceWitnessReceipt { trustLevel: "untrusted-reference" }`；不能调用builder、
 planner、solver、quoter、executor或simulator补齐事实，不能改变runtime，也无权定义成功或获得independent
 oracle credit。acceptance core只读neutral claims与qualified observations，不读旧DTO。
@@ -2464,11 +2601,11 @@ acceptance authority。尤其禁止从一个producer-selected对象合成`quote 
 allow`六个pass；malformed/unknown行、缺timing或缺root不能被skip后缩小分母。它们最多提供带raw locator的
 untrusted witness或diagnostic，production success只能来自六个真实load-bearing boundary facts。
 
-[PFD] DS是downstream/head-session/live/performance事实的主要reference producer，因为它能稳定跑出这些边界；
-它不能伪造strict attestation、atomic readyGeneration或Family publication lineage。impl只用于它能稳定产生的
-startup、durable attestation、Family+Instance、ready/Graph与restart/memo前段事实；不要求它在当前时效性瓶颈
-下跑完exact/execution/final-sim或满足Aloha性能预算。任何reference缺失后段都只使该case`missing/invalid`，
-不拖住qualification framework或architecture baseline。
+[PFD] impl只用于校准它实际产生且能由raw locator复核的事实，例如startup、durable attestation、
+Family+Instance、readyGeneration、Graph、restart与memo reuse。impl没有真实证据的exact、execution、
+final-sim、完整性能或live downstream事实必须是`missing/invalid`；不能由代码形状、日志文案或旧脚本推成pass，
+也不能反过来降低Aloha最终验收要求。Aloha的exact、execution、final-sim、性能和完整六步lineage只能由
+Aloha自己的实际live事实证明。
 
 ### 20.2 校准顺序
 
@@ -2476,17 +2613,17 @@ startup、durable attestation、Family+Instance、ready/Graph与restart/memo前�
 
 1. 冻结core Claim/Observation schemas、PredicateSpecs、pass/fail/invalid语义与critical mutation IDs；
 2. 实现最小qualification runner、independent reference models与observers，先签发current observer证书；
-3. 固定DS与impl各自exact SHA、executable hash、PID/start/boot/log inode与raw artifact set；
+3. 固定唯一impl exact SHA、executable hash、PID/start/boot/log inode与raw artifact set；
 4. reference-only importers逐字段附raw artifact hash/locator；不存在的事实不生成；
-5. 用DS校准其真实downstream/live/performance子谓词，用impl校准其真实startup/attestation/ready/Graph子谓词；
-6. 用chain/Reth/process/math/independent EVM或bounded exhaustive model产生expected verdict；DS/impl不得提供；
+5. 只用impl实际覆盖校准对应predicates；
+6. 用chain/Reth/process/math/independent EVM或bounded exhaustive model产生expected verdict；impl不得提供；
 7. 对每个predicate运行positive、negative、invalid、metamorphic与声明的全部critical mutations，保存counterexample；
 8. 人工抽查raw locators与独立复算结果；确认collector/validator bug后修复并重跑受影响case，而不改production；
 9. 冻结schema/spec/validator/observer/corpus/reference-importer digests及qualification certificate roots；
 10. 最小全局事实底座和首个vertical slice资格化后签发architecture baseline；后续slice必须在自己的production
     implementation开始前完成同样qualification，不要求预写未来所有Family/domain测试。
 
-[PFD] DS或impl某predicate为invalid不等于qualification framework失败；只要该predicate已有独立positive/
+[PFD] impl某predicate为invalid不等于qualification framework失败；只要该predicate已有独立positive/
 negative/invalid coverage和current certificates，baseline可成立。真正阻塞某个Aloha production slice的是该
 slice无qualified predicate/observer，或Aloha自身缺load-bearing事实。新旧数量无需parity。
 
@@ -2494,7 +2631,7 @@ slice无qualified predicate/observer，或Aloha自身缺load-bearing事实。新
 
 [PFD] 当 validator 与 source/checkpoint/runtime/on-chain事实冲突：先定位 raw locator、schema decode、窗口、
 join 与 lineage。确认 validator/observer bug 后：升级implementation digest、使旧qualification stale、加入最小
-负向/回归case并重跑受影响的DS/impl/Aloha claims。禁止修改正确production authority迎合脚本，禁止为任一
+负向/回归case并重跑受影响的impl/Aloha claims。禁止修改正确production authority迎合脚本，禁止为任一
 producer特判，禁止沿用旧错误verdict。
 
 ## 21. Six-step acceptance protocol
@@ -2551,8 +2688,10 @@ pool/default/legacy来源。
 
 [PFD] 验证生产 planner 实际持有该 immutable GraphView lease与当前generated strategy ref，route的
 orderedInstanceBindingsRoot来自同一graphRoot/generation，planning problem绑定同一strategyCatalogRoot，未
-注入target route，未调用default/legacy Graph或fallback。Validator只验证object lineage和roots，不重新运行
-planner生成一条“应该存在”的route。
+注入target route，未调用default/legacy Graph或fallback。Stage 3同时引用该route的current-source coarse
+projection root与admission receipt，明确它来自ranked Top-K还是bounded-unranked lane；projection必须绑定同一
+edge/direction/generation/graph/source。普通score不得形成hard prune；若审计hard-prune分支，validator用通用
+proof program独立复核profit upper bound。Validator不重新运行planner生成一条“应该存在”的route。
 
 ### 21.5 Step 4 — Current-source exact
 
@@ -2572,7 +2711,9 @@ mode、preCalls、call sequence、exact observation pairs、repayment/standing-p
 可独立重放/复算的receipt；final sim使用顶层
 交易语义，generation/canonical fence、repayment、conservation、standing-position与submission safety gate
 实际执行。成功或明确simulation revert都可形成真实terminal事实；只有success且其他门通过才可产生unsigned
-dry-run success。验收/采集编排器、capture输出或fork fixture不能替代真实目标环境dry-run receipt。
+dry-run success。success还必须引用同source/plan/sim的EconomicReceipt，证明真实gas、next-block fee、current
+valuation、bid与net EV；unknown/stale不能通过。验收/采集编排器、capture输出或fork fixture不能替代真实目标
+环境dry-run receipt。
 
 ## 22. Negative validator calibration
 
@@ -2588,8 +2729,9 @@ dry-run success。验收/采集编排器、capture输出或fork fixture不能替
 | Family | familyDefinitionHash、capabilitySetHash、candidateKey、nullable instance规则、ordered route-leg root不一致；删除/替换某leg stage1/2 membership |
 | hash chain | 修改facts/outcome/reason不改hash；重算output/event但不改child input；parent Events/outputs DAG断裂 |
 | exact | 伪造exact、缺current source或Reth binding、fallback=true |
+| coarse | projection换edge/direction/head/generation；普通score伪装profit upper bound；删除unranked/not-probed accounting；50-block observation冒充current price |
 | execution | 伪造program、缺action owner/interpreter/exact binding、观察pair被Cartesian展开 |
-| simulation | 伪造final-sim、缺program/source/receipt；用effect sim替代final sim |
+| simulation/economics | 伪造final-sim、缺program/source/receipt；用effect sim替代final sim；gas/fee/valuation/bid splice或stale仍allow |
 | schema | unknown core field、duplicate key、非规范number/address/hash、未知version被忽略 |
 | performance | 空分母、丢失败样本、任选100 heads、跨PID拼接、serial证据冒充同窗 |
 
@@ -2621,7 +2763,8 @@ runtime composition exact equality，不在源码手写22或242。每个release 
 [PFD] 所有release Family统一按自己声明的SourcePlan与exact partition判断：有实例、zero-candidate或
 chain-proven rejected都必须有coverage和catalog entry，validator不得因Funding/Credit/任何domain名称放宽。
 对有instances的Family，分别报告candidate、verified、rejected、retryable、invalidProgram、
-instancePublication、projectedEdge、declaredExactCapability、ownedAction计数与roots；这些字段均由
+instancePublication、projectedEdge、declaredCoarseCapability、coarseRankable/unavailable、unrankedAdmission、
+declaredExactCapability、ownedAction计数与roots；这些字段均由
 architecture-neutral schema定义，不沿用旧expected/priced术语。Family名称只用于展示；verdict由BOM exact
 set与schema facts驱动。当前BOM没有LP entry，因此既不要求也不接受伪LP row。
 
@@ -2678,6 +2821,8 @@ start/end anchors复算，不能信调用者传入。顶层verdict只能由Predi
   semantic receipts、pinned-input outputs与qualification保持有效；
 - `new-domain-extension-isolation`：未来新增domain只能改变自己的extension specs、Family/Strategy packages、
   release-intent与generated artifacts；stable core和中央源码diff为零；
+- `coarse-authority-isolation`：coarse projection不进入Graph root、不签发exact/action；无proof score mutation只改
+  排序不改hard-prune集合，missing capability仍有bounded-unranked accounting；
 - `family-resource-bulkhead`：一个Family超时、crash或资源尖峰时，只使自己的facts unresolved，关键lane预算不失守。
 
 [PFD] 当前不创建LP template或adapter来跑`new-domain-extension-isolation`。该predicate先用schema-level arbitrary
@@ -3319,9 +3464,49 @@ async function adoptAtSafeBoundary(next: ReadyGenerationV1): Promise<void> {
 [PFD] builder可并行但不能调用activeGeneration mutation。Adoption barrier是唯一写active pointer的地方；
 exclusive gate先阻止新session acquire，再drain、CAS并重开；session中禁止adopt其lease。
 
-### 24.11 Planner → exact → execution → final-sim
+### 24.11 Route enumeration → coarse funnel → exact → execution → final-sim/economics
 
 ~~~ts
+function admitCoarse(
+  routes: readonly RouteHandle[],
+  assessments: ReadonlyMap<Hash, CoarseRouteAssessmentV1>,
+  objective: ObjectiveProfileV1,
+  budgets: { ranked: number; unranked: number },
+): CoarseAdmissionV1 {
+  const hardPruned: ProvenPrune[] = [];
+  const rankable: RankedRoute[] = [];
+  const unranked: RouteHandle[] = [];
+  for (const route of routes) {
+    const assessment = assessments.get(route.routeId);
+    if (
+      assessment?.profitUpperBound !== null &&
+      assessment?.profitUpperBound !== undefined &&
+      assetRefHash(assessment.profitUpperBound.numeraire) === assetRefHash(objective.numeraire) &&
+      authorityProofs.verifyConservativeUpperBound(assessment) &&
+      BigInt(assessment.profitUpperBound.amount) < BigInt(objective.minNetGain)
+    ) {
+      hardPruned.push(sealPrune(route, assessment));
+    } else if (assessment?.rankScore !== null && assessment?.rankScore !== undefined) {
+      rankable.push({ route, score: BigInt(assessment.rankScore) });
+    } else {
+      unranked.push(route);
+    }
+  }
+  const rankedSelected = stableTopK(rankable, budgets.ranked);
+  const unrankedSelected = deterministicOwnerRoundRobin(unranked, budgets.unranked);
+  const terminalIds = new Set([
+    ...rankedSelected.map(item => item.route.routeId),
+    ...unrankedSelected.map(route => route.routeId),
+    ...hardPruned.map(item => item.routeId),
+  ]);
+  return sealExactAccounting({
+    ranked: rankedSelected,
+    unranked: unrankedSelected,
+    hardPruned,
+    notProbed: routes.filter(route => !terminalIds.has(route.routeId)),
+  });
+}
+
 async function evaluateCandidate(
   session: ProducerSession,
   trigger: TriggerFact,
@@ -3329,13 +3514,34 @@ async function evaluateCandidate(
   const planningProblems = session.strategyRefs.map(ref =>
     ref.issuePlanningProblem(session.lease.graphView, trigger),
   );
-  const planned = planner.enumerate(planningProblems); // generic, no Family/strategy branch
-  for (const route of planned) {
+  const enumerated = planner.enumerate(planningProblems); // generic, no Family/strategy branch
+  const projections = await coarseEconomics.projectCurrentSource({
+    routes: enumerated,
+    graphLease: session.lease,
+    source: session.source,
+    capabilityOwners: generatedCatalog.coarseOwners(),
+  });
+  const admission = coarseEconomics.admit({
+    routes: enumerated,
+    projections,
+    objective: session.objective,
+    rankedLimit: session.budgets.rankedExact,
+    unrankedLimit: session.budgets.unrankedExact,
+  });
+  assertExactCoarseAccounting(enumerated, projections, admission);
+  assert(admission.hardPruned.every(item => item.profitUpperBoundProof !== null));
+
+  for (const route of admission.forExact) {
     const correlationId = correlationFor(session, trigger, route);
     const authorityParents = loadAndVerifyOriginalStage2ParentsForEveryRouteLeg(
       route, session.lease,
     ); // each stage2 has its original stage1 parent; no event is re-emitted
-    emitStage3PlannerFact(session, correlationId, route, { parents: authorityParents });
+    emitStage3PlannerFact(session, correlationId, route, {
+      parents: authorityParents,
+      coarseProjectionRoot: admission.projectionRootFor(route),
+      admissionClass: admission.classFor(route), // ranked | bounded-unranked
+      accountingRoot: admission.accountingRoot,
+    });
 
     const exact = await exactCoordinator.evaluateCurrentSource({
       route, graphLease: session.lease, source: session.source, correlationId,
@@ -3351,12 +3557,25 @@ async function evaluateCandidate(
     const rawSimulation = await finalSimulation.runReserved({
       program, source: session.source, graphLease: session.lease, topLevelRules: STRICT,
     });
+    const economic = await economics.sealCurrentSource({
+      objective: session.objective,
+      program,
+      simulation: rawSimulation,
+      source: session.source,
+      valuationOwners: generatedCatalog.valuationOwners(),
+      bidPolicy: session.bidPolicy,
+    });
     const sealedFinal = await safety.verifyCanonicalFencesAndSealFinalReceipt({
       rawSimulation, program, source: session.source, graphLease: session.lease,
+      economic,
       requiredObligations: REQUIRED_SAFETY_PROFILE,
     });
     emitStage6SimulationFact(session, correlationId, sealedFinal);
-    if (sealedFinal.outcome === "success" && submission.isDryRun()) {
+    if (
+      sealedFinal.outcome === "success" &&
+      economic.verdict === "positive-net-ev" &&
+      submission.isDryRun()
+    ) {
       return submission.recordUnsignedDryRun(program, sealedFinal);
     }
   }
@@ -3505,8 +3724,7 @@ envelope/codec、Family/Strategy/capability ports、authority/dependency rules�
 | Core contract steward | specs/core-envelope、specs/capability-index、specs/authority-proof | apps、families、generated、validator | reviewed contracts → frozen spec roots；无runtime authority | exact schema/dependency hashes、跨语言vectors | 最先，与Acceptance contract共同freeze |
 | Release-intent steward | specs/release-intent | generated、apps、Family/Strategy源码 | 独立reviewed Family/Strategy public-entry BOM → releaseIntentRoot | 两人review签名、manifest refs存在、无silent omission；当前LP=absent from BOM | proposals后串行；不得兼任runtime integration owner |
 | Acceptance contract/schema | specs/{evidence,predicates}、acceptance/{schema-codec,validator,predicate-specs,reference-models,observer-qualification,authority-proof-interpreters,negative-corpus,cli} | apps、production packages、families、tools/reference-only、specs/release-intent | claims+qualified observations → pass/fail/invalid；无production authority | current verifier/observer certificates、critical mutations exact覆盖、independent oracle>0 | 最先；冻结后继续只读审计 |
-| DS reference importer | tools/reference-only/ds | DS写入、production、validator | DS raw downstream/live/performance artifacts → untrusted witness claims | 每字段locator/hash；缺strict前段诚实invalid | schema冻结后与impl importer并行 |
-| impl reference importer | tools/reference-only/impl | impl写入、production、validator | impl raw startup/attestation/ready/Graph artifacts → untrusted witness claims | 每字段locator/hash；缺后段诚实invalid且不拖baseline | schema冻结后与DS importer并行 |
+| impl reference importer | tools/reference-only/impl | impl写入、production、validator | impl raw artifacts → untrusted witness claims；只生成其真实覆盖字段 | 每字段locator/hash；缺字段诚实invalid且不拖baseline | schema冻结后与independent observers并行 |
 | Canonical/durable checkpoint | packages/canonical-source、packages/canonical-codec、packages/durable-store、packages/checkpoint | Family/planner/execution | chain source + SQLite tx → SourceView/content/CAS root；拥有canonical、physical durability与checkpoint pointer | crash/reorg/CAS/partial-write/GC reachability事实 | contract冻结后可并行 |
 | Family SDK/catalog generator | packages/family-sdk、packages/artifact-fingerprint、packages/catalog-generator | concrete families、planner、specs/release-intent、generated手写 | build-time big definitions+BOM → narrow stage refs/catalog/impact/composition roots | authoring runtime closure=0、dependency closure、local invalidation、reproducible output | 与capability Agent并行，先于Family ports；不做LP template |
 | Strategy SDK/catalog | packages/strategy-sdk、generated/strategy-catalog、strategies/<current> | Family internals、planner/solver kernel、LP strategy | generic capability predicates+BOM → planning problem issuer refs | no protocol import/central switch、strategy-local closure | Family runtime refs稳定后并行；只做当前策略 |
@@ -3547,8 +3765,8 @@ Family switch/address/ABI/selector或compat wrapper，拒绝集成并回到capab
 
 ### 25.4 可并行与必须串行的边界
 
-[PFD] Claim/Observation/Predicate specs、qualification framework与core contract freeze必须串行在前；随后DS/
-impl reference importers、independent observers与boundary CI可并行，签发acceptance baseline后canonical/checkpoint、
+[PFD] Claim/Observation/Predicate specs、qualification framework与core contract freeze必须串行在前；随后impl
+reference importer、independent observers与boundary CI可并行，签发acceptance baseline后canonical/checkpoint、
 SDK/capability、scheduler/state、Graph store再并行；Family port在SDK release后并行；planner/exact、execution/
 final-sim在各自port稳定后并行；runtime composition、systemd dry-run与Aloha六步事实验收串行收口。
 
@@ -3562,10 +3780,10 @@ final-sim在各自port稳定后并行；runtime composition、systemd dry-run与
 1. **冻结架构无关事实语言**：定义Claim/Observation/Evidence schemas、PredicateSpecs、pass/fail/invalid、
    SemanticArtifact/ProductionReceipt与critical mutation sets；实现最小qualification runner。
    Verify：schema/spec/implementation digests、observer/verifier certificate schemas与corpus root可复算。
-2. **资格化并校准事实底座**：DS reference importer校准downstream/live/performance读取；impl importer校准
-   startup/attestation/ready/Graph读取；expected只来自qualified chain/Reth/process/math/independent EVM。
-   Verify：DS/impl不存在的事实诚实invalid；全部declared mutations拒绝；current certificates成立。impl后段
-   不要求跑通，也不以其时效性阻塞baseline。
+2. **资格化并校准事实底座**：impl importer只校准其raw artifacts真实覆盖的startup、attestation、ready、
+   Graph、restart与memo事实；expected只来自qualified chain/Reth/process/math/independent EVM。
+   Verify：impl不存在的事实诚实invalid；全部declared mutations拒绝；current certificates成立。缺失后段
+   不阻塞framework baseline，但Aloha最终仍须用自己的live事实完整通过。
 3. **签发architecture-baseline**：冻结core envelope、generic Family大模板、generated narrow refs、Strategy/
    capability ports、error taxonomy与authority/dependency rules。
    Verify：所有owner只依赖spec hashes；arbitrary future-domain extension只影响declared closure；当前无LP schema。
@@ -3666,7 +3884,7 @@ framework不等于提前写完未来所有测试；任何Agent不得先写produc
 | slowFamily拖死全局 | RPC/REVM/finalsim隔离、perFamilyquota/circuit | 每attest新daemon或singleFIFO | heavy/light progress与permit守恒 |
 | activeGraph漂移 | immutablelease + safe adoption barrier | continuous publication/secondarymerge | root/lease events stage3–6不变 |
 | 未资格化validator/observer塑造错误production | spec先行、current qualification、raw facts only | 为脚本绿改authority、target fixture | certificates、critical mutation exact coverage、independent oracle |
-| DS/impl reference被误当oracle | 两者只产untrusted witness；DS校准后段、impl校准前段 | 数量parity、要求impl跑完整后段或分支特判 | reference receipts列missing/invalid且independentOracleCount不含旧系统 |
+| impl reference被误当oracle | impl只产untrusted witness并只校准真实覆盖字段 | 数量parity、从代码形状补齐后段或producer特判 | reference receipts列missing/invalid且independentOracleCount不含旧系统 |
 | finalsim被effectsim替代 | 独立top-level strictsim与reservedworkers | global disable EIP-3607 | stage6真实receipt + program/source binding |
 | 多Agent互相覆盖 | 独立worktree、packageownership、frozen specs | sharedtree/central TODO/微补丁 | diff ownership与integration receipt |
 
@@ -3689,7 +3907,7 @@ framework不等于提前写完未来所有测试；任何Agent不得先写produc
 - planner/solver只看genericGraph与opaqueports；
 - current-source exact与final simulation无fallback；
 - standing-position/repayment/conservation是通用obligation安全门，不是中央协议分类；
-- acceptance先资格化predicate/observers，再用DS真实后段事实与impl真实前段事实校准；两者均非oracle，之后
+- acceptance先资格化predicate/observers，再用impl真实覆盖事实校准；impl不是oracle，之后
   同一spec/implementation验Aloha；
 - 成功验收只来自事实lineage；测试脚本是读者/校验器，不是truth creator；
 - 性能是correctness交付的一部分，连续100/100与绝对预算不以旧实现失败而豁免；
@@ -3709,9 +3927,9 @@ imports始终R3/R4，不能以“仍在审计”为由复制。
 
 [PFD] Aloha只在以下事实同时成立时完成：
 
-1. frozen Claim/Observation/Evidence schemas与PredicateSpecs已签current verifier/observer qualification；DS
-   downstream与impl startup reference cases按各自真实覆盖校准，critical mutation exact set全拒绝或invalid，
-   independent oracle count为正；不要求impl后段通过；
+1. frozen Claim/Observation/Evidence schemas与PredicateSpecs已签current verifier/observer qualification；impl
+   reference cases只按其真实覆盖校准，critical mutation exact set全拒绝或invalid，independent oracle count为正；
+   不要求impl缺失后段通过，但Aloha全量事实不得缺失；
 2. Aloha exact pushed SHA、clean tree、systemd/executable/PID/start/log anchor一致；
 3. generated catalog exact set的全族Universe/Instance与Edge/Graph矩阵无silent missing；
 4. readyGeneration为同一CAS，producer只持有immutableGraphView；
