@@ -49,7 +49,9 @@ const univ3RequestProgram: ExactRequestProgram<
   UniV3Route,
   UniV3ExactEvidence
 > = {
-  requirements: () => ({ transports: ["eth-call"], caller: "executor" }),
+  requirements: (input) => input.descriptor.quoterBinding.quoter === null
+    ? ({ transports: ["eth-call"] })
+    : ({ transports: ["eth-call"], caller: "executor" }),
   buildRequests(input) {
     assertRoute(input.descriptor, input.route);
     if (input.amountIn <= 0n) return [];
