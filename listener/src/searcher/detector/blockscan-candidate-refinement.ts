@@ -538,6 +538,14 @@ export async function refineBlockScanCandidates(
                 error,
               )
             : error;
+        console.log(
+          "[exact-probe-fail] idx=" + index +
+            " families=" + familyIds.join(",") +
+            " reason=" + (localTimedOut ? "probe_timeout" : "quote_error") +
+            " error=" + (error instanceof Error
+              ? error.message.slice(0, 160)
+              : String(error)),
+        );
         stageBudget.recordFailure(opportunity.seedEdges, budgetError);
         onProbe?.({
           index,
