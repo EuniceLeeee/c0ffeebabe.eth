@@ -32,6 +32,15 @@ export const UNIV3_ROUTER_INTERFACE = new ethers.Interface([
   "function exactInputSingle((address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96)) returns (uint256 amountOut)",
 ]);
 
+/** Mainnet TickLens. It reads pool tick state only and is factory-agnostic,
+ *  so quoter-less reverse-verified V3 fork pools can be quoted locally. */
+export const UNIV3_TICK_LENS = ethers.getAddress(
+  "0xbfd8137f7d1516D3ea5cA83523914859ec47F573",
+);
+export const UNIV3_TICK_LENS_INTERFACE = new ethers.Interface([
+  "function getPopulatedTicksInWord(address pool, int16 tickBitmapIndex) view returns ((int24 tick,int128 liquidityNet,uint128 liquidityGross)[])",
+]);
+
 export const UNIV3_POOL_CREATED_TOPIC = ethers.id(
   "PoolCreated(address,address,uint24,int24,address)",
 ).toLowerCase();

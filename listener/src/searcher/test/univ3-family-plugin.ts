@@ -532,14 +532,32 @@ const unknownDescriptor =
 const unknownRoute = univ3StrictFamilyPlugin.routes.project({
   descriptor: unknownDescriptor,
 })[0];
-assert.throws(
-  () => exactRequestMethod.program.buildRequests({
-    ...exactInput,
-    descriptor: unknownDescriptor,
-    route: unknownRoute,
-  }),
-  /no verified quoter binding/,
-  "unknown factory remains admitted but exact quote fails closed",
+const unknownExactInput = {
+  ...exactInput,
+  descriptor: unknownDescriptor,
+  route: unknownRoute,
+};
+const unknownExactRequests =
+  exactRequestMethod.program.buildRequests(unknownExactInput);
+assert.equal(unknownExactRequests.length, 2);
+assert.equal(unknownExactRequests[0].id, "local-slot0");
+assert.equal(unknownExactRequests[1].id, "local-liquidity");
+const unknownLocalExact = exactRequestMethod.program.decode({
+  programInput: unknownExactInput,
+  initialResults: [
+    success(
+      "local-slot0",
+      UNIV3_POOL_INTERFACE.encodeFunctionResult("slot0", [Q96, 0, 0, 0, 0, 0, true]),
+    ),
+    success("local-liquidity", UNIV3_POOL_INTERFACE.encodeFunctionResult("liquidity", [1n << 64n])),
+  ],
+  dependentEvidence: [],
+});
+assert.equal(unknownLocalExact.amountOut, 0n);
+assert.equal(
+  unknownLocalExact.evidence.quoter,
+  null,
+  "quoter-less fork pool quotes locally with null quoter evidence",
 );
 assert.equal(
   univ3StrictFamilyPlugin.swap.replay!.buildOverlay({
