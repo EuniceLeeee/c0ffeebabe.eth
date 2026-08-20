@@ -58,8 +58,11 @@ export type StableReasonCode = (typeof STABLE_REASON_CODES)[number];
 export type CoreCodecInput = string | Uint8Array | object;
 
 function parseInput(value: CoreCodecInput): unknown {
-  if (typeof value === "string" || value instanceof Uint8Array) {
+  if (typeof value === "string") {
     return decodeCanonicalJson(value);
+  }
+  if (ArrayBuffer.isView(value)) {
+    return decodeCanonicalJson(value as Uint8Array);
   }
   return value;
 }

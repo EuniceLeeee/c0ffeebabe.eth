@@ -493,6 +493,18 @@ class StrictJsonParser {
 
 function asText(input: string | Uint8Array): string {
   if (typeof input === "string") return input;
+  rejectProxy(input, "$" );
+  if (
+    !ArrayBuffer.isView(input) ||
+    Object.getPrototypeOf(input) !== Uint8Array.prototype ||
+    Object.getOwnPropertyDescriptor(input, "length") !== undefined
+  ) {
+    fail(
+      "invalid-type",
+      "binary input must be a native Uint8Array without a shadowed length",
+      "$",
+    );
+  }
   if (input.length > CANONICAL_LIMITS.maxBytes) {
     fail("invalid-json", "JSON input exceeds byte policy", "$" );
   }

@@ -172,6 +172,30 @@ test("evidence event exact bytes, descriptor hash, and deep freeze", () => {
   const event = fixture();
   const bytes = encodeEvidenceEvent(event);
   assert.deepEqual(decodeEvidenceEvent(bytes), event);
+  assert.deepEqual(encodeEvidenceEvent(decodeEvidenceEvent(bytes)), bytes);
+
+  let binaryProxyHits = 0;
+  const binaryProxy = new Proxy(bytes, {
+    get: () => {
+      binaryProxyHits += 1;
+      return undefined;
+    },
+    getOwnPropertyDescriptor: () => {
+      binaryProxyHits += 1;
+      return undefined;
+    },
+    getPrototypeOf: () => {
+      binaryProxyHits += 1;
+      return Uint8Array.prototype;
+    },
+    ownKeys: () => {
+      binaryProxyHits += 1;
+      return [];
+    },
+  });
+  assert.throws(() => decodeEvidenceEvent(binaryProxy));
+  assert.equal(binaryProxyHits, 0);
+
   assert.equal(Object.isFrozen(event), true);
   assert.equal(Object.isFrozen(event.source), true);
   assert.equal(Object.isFrozen(event.facts), true);

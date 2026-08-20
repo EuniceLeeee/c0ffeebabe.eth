@@ -10,6 +10,7 @@ import {
   canonicalJsonSchema,
   canonicalObjectSchema,
   decimalStringSchema,
+  encodeCanonicalBytes,
   encodeCanonicalJson,
   isCanonicalJson,
   hashDomain,
@@ -45,6 +46,65 @@ test("strict parser rejects duplicate keys and non-canonical forms", () => {
     () => decodeCanonicalJson(new Uint8Array([0xef, 0xbb, 0xbf, 0x7b, 0x7d])),
     errorCode("non-canonical"),
   );
+});
+
+test("binary decoders reject wrapped or shadowed typed arrays before reads", () => {
+  const bytes = new TextEncoder().encode('{"value":"ok"}');
+
+  let proxyTrapHits = 0;
+  const proxy = new Proxy(bytes, {
+    get: () => {
+      proxyTrapHits += 1;
+      return undefined;
+    },
+    getOwnPropertyDescriptor: () => {
+      proxyTrapHits += 1;
+      return undefined;
+    },
+    getPrototypeOf: () => {
+      proxyTrapHits += 1;
+      return Uint8Array.prototype;
+    },
+    ownKeys: () => {
+      proxyTrapHits += 1;
+      return [];
+    },
+  });
+  assert.throws(() => decodeCanonicalJson(proxy), errorCode("invalid-type"));
+  assert.equal(proxyTrapHits, 0);
+
+  class DerivedBytes extends Uint8Array {}
+  assert.throws(
+    () => decodeCanonicalJson(new DerivedBytes(bytes)),
+    errorCode("invalid-type"),
+  );
+
+  let lengthGetterHits = 0;
+  const shadowedLength = bytes.slice();
+  Object.defineProperty(shadowedLength, "length", {
+    configurable: true,
+    get: () => {
+      lengthGetterHits += 1;
+      return bytes.length;
+    },
+  });
+  assert.throws(
+    () => decodeCanonicalJson(shadowedLength),
+    errorCode("invalid-type"),
+  );
+  assert.equal(lengthGetterHits, 0);
+
+  const shadowedDataLength = bytes.slice();
+  Object.defineProperty(shadowedDataLength, "length", {
+    configurable: true,
+    value: bytes.length,
+  });
+  assert.throws(
+    () => decodeCanonicalJson(shadowedDataLength),
+    errorCode("invalid-type"),
+  );
+
+  assert.deepEqual(encodeCanonicalBytes(decodeCanonicalJson(bytes)), bytes);
 });
 
 test("unpaired UTF-16 surrogates are rejected while pairs remain valid", () => {

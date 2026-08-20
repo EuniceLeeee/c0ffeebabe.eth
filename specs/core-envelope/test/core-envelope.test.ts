@@ -133,6 +133,88 @@ test("locator union discriminators do not invoke accessors or proxy traps", () =
   assert.equal(proxyHits, 0);
 });
 
+test("CoreCodecInput rejects hostile bytes and nested values before reads", () => {
+  const schema = { id: "aloha.test", version: "1.2.3", schemaHash: h } as const;
+  const schemaBytes = encodeSchemaRef(schema);
+  let binaryProxyHits = 0;
+  const binaryProxy = new Proxy(schemaBytes, {
+    get: () => {
+      binaryProxyHits += 1;
+      return undefined;
+    },
+    getOwnPropertyDescriptor: () => {
+      binaryProxyHits += 1;
+      return undefined;
+    },
+    getPrototypeOf: () => {
+      binaryProxyHits += 1;
+      return Uint8Array.prototype;
+    },
+    ownKeys: () => {
+      binaryProxyHits += 1;
+      return [];
+    },
+  });
+  assert.throws(() => decodeSchemaRef(binaryProxy));
+  assert.equal(binaryProxyHits, 0);
+  assert.deepEqual(encodeSchemaRef(decodeSchemaRef(schemaBytes)), schemaBytes);
+
+  const locator = {
+    kind: "checkpoint-record" as const,
+    storeIdentityHash: h,
+    namespaceHash: h,
+    keyHash: h,
+    revision: "1",
+    recordHash: h2,
+  };
+  const artifact = artifactRef(locator);
+  let nestedProxyHits = 0;
+  const nestedProxy = new Proxy(artifact.locator, {
+    get: () => {
+      nestedProxyHits += 1;
+      return undefined;
+    },
+    getOwnPropertyDescriptor: () => {
+      nestedProxyHits += 1;
+      return undefined;
+    },
+    getPrototypeOf: () => {
+      nestedProxyHits += 1;
+      return Object.prototype;
+    },
+    ownKeys: () => {
+      nestedProxyHits += 1;
+      return [];
+    },
+  });
+  assert.throws(() => decodeReadOnlyArtifactRef({
+    ...artifact,
+    locator: nestedProxy,
+  }));
+  assert.equal(nestedProxyHits, 0);
+
+  let nestedGetterHits = 0;
+  const nestedMirror = { ...artifact.immutableMirrorLocator };
+  Object.defineProperty(nestedMirror, "objectKey", {
+    enumerable: true,
+    get: () => {
+      nestedGetterHits += 1;
+      return artifact.contentSha256;
+    },
+  });
+  assert.throws(() => decodeReadOnlyArtifactRef({
+    ...artifact,
+    immutableMirrorLocator: nestedMirror,
+  }));
+  assert.equal(nestedGetterHits, 0);
+
+  const artifactBytes = encodeReadOnlyArtifactRef(artifact);
+  assert.deepEqual(
+    encodeReadOnlyArtifactRef(decodeReadOnlyArtifactRef(artifactBytes)),
+    artifactBytes,
+  );
+});
+
 test("creators exact-decode drafts before reading fields", () => {
   const locator = {
     kind: "checkpoint-record" as const,

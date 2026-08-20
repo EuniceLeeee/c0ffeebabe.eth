@@ -64,8 +64,11 @@ export type EvidenceCodecInput = string | Uint8Array | object;
 const STAGES: readonly EvidenceStageId[] = STAGE_IDS;
 
 function parseInput(value: EvidenceCodecInput): unknown {
-  if (typeof value === "string" || value instanceof Uint8Array) {
+  if (typeof value === "string") {
     return decodeCanonicalJson(value);
+  }
+  if (ArrayBuffer.isView(value)) {
+    return decodeCanonicalJson(value as Uint8Array);
   }
   return value;
 }
