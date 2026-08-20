@@ -8,9 +8,10 @@ import {
   type Hash,
 } from "../../core-envelope/src/index.ts";
 import {
-  createArtifactResolutionResult,
-  recomputeArtifactResolutionResultId,
-  type ArtifactResolutionResultV1,
+  createArtifactResolutionClaim,
+  createObservedImmutableMirror,
+  recomputeArtifactResolutionClaimId,
+  type ArtifactResolutionClaimV1,
 } from "../../artifact-resolution/src/index.ts";
 import { computeObserverSemanticConfigDigest } from "../src/index.ts";
 import {
@@ -25,7 +26,7 @@ import {
   encodeQualifiedFactSnapshot,
   encodeQualifiedObservation,
   validateAcceptanceQueryAgainstSnapshot,
-  validateQualifiedObservation,
+  validateQualifiedObservationLineage,
   type AcceptanceQueryV1,
   type QualifiedFactSnapshotV1,
   type QualifiedObservationEnvelopeV1,
@@ -131,35 +132,36 @@ function fixture() {
     acquisitionProductionReceiptId: receipt.receiptId,
     canonicalFacts,
   });
-  const resolutions: ArtifactResolutionResultV1[] = rawArtifactRefs.map((ref) => createArtifactResolutionResult({
-    artifactRefId: ref.artifactRefId,
-    resolverPolicyHash: ref.resolverPolicyHash,
-    resolverImplementationDigest: h("5"),
-    resolverQualificationId: h("6"),
-    qualificationRegistryRoot: h("2"),
-    resolvedAtStoreEpoch: "7",
-    bytes: "0x726177",
-    observedContentSha256: ref.contentSha256,
-    observedByteLength: ref.byteLength,
-    outcome: "resolved",
-  }));
+  const artifactClaims: ArtifactResolutionClaimV1[] = rawArtifactRefs.map((ref) =>
+    createArtifactResolutionClaim({
+      artifactRefId: ref.artifactRefId,
+      resolverPolicyHash: ref.resolverPolicyHash,
+      observedMirror: createObservedImmutableMirror({
+        storeIdentityHash: ref.immutableMirrorLocator.storeIdentityHash,
+        objectKey: ref.immutableMirrorLocator.objectKey,
+        bytes: "0x726177",
+        mediaType: ref.mediaType,
+        schema: ref.schema,
+      }),
+      outcome: "content-observed",
+    })
+  );
   return {
     producer,
     receipt,
     rawArtifactRefs,
     observation,
-    resolutions,
+    artifactClaims,
     acquisitionArtifact,
-    currentQualification: {
-      observerQualificationId: h("1"),
-      observerImplementationDigest: h("f"),
-      qualificationRegistryRoot: h("2"),
-      anchorPolicyDigest: h("3"),
-      observedSchemaIds: [schema],
-      qualifiedLocatorKinds: ["file-range"] as const,
-      current: true,
-    },
   };
+}
+
+function lineageContext(value: ReturnType<typeof fixture>) {
+  return {
+    productionReceipt: value.receipt,
+    acquisitionArtifact: value.acquisitionArtifact,
+    artifactClaims: value.artifactClaims,
+  } as const;
 }
 
 test("executable qualified-fact schema hashes are stable-format golden values", () => {
@@ -168,75 +170,98 @@ test("executable qualified-fact schema hashes are stable-format golden values", 
   assert.equal(QUALIFIED_FACT_SCHEMA_MANIFESTS.acceptanceQuery.schemaHash, "0xf49824465db79bc5aadd1fb290d9074bf7a8c11a1b86e8aadb3e3e2f04fbbfa6");
 });
 
-test("observation requires current qualification, receipt and every resolved raw ref", () => {
+test("binary decoders accept only exact native Uint8Array and never invoke hostile traps", () => {
   const fixtureValue = fixture();
-  assert.equal(
-    validateQualifiedObservation(fixtureValue.observation, {
-      currentQualification: fixtureValue.currentQualification,
-      productionReceipt: fixtureValue.receipt,
-      acquisitionArtifact: fixtureValue.acquisitionArtifact,
-      resolutions: fixtureValue.resolutions,
-      currentResolverQualification: { resolverPolicyHash: fixtureValue.rawArtifactRefs[0].resolverPolicyHash, resolverImplementationDigest: h("5"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-      expectedProcessAnchorHash: hashProcessAnchor(fixtureValue.producer),
-    }).observationId,
-    fixtureValue.observation.observationId,
-  );
-  assert.throws(() => validateQualifiedObservation(fixtureValue.observation, {
-    currentQualification: fixtureValue.currentQualification,
-    productionReceipt: fixtureValue.receipt,
-    acquisitionArtifact: fixtureValue.acquisitionArtifact,
-    resolutions: fixtureValue.resolutions,
-    currentResolverQualification: { resolverPolicyHash: h("0"), resolverImplementationDigest: h("5"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-    expectedProcessAnchorHash: hashProcessAnchor(fixtureValue.producer),
+  const encoded = encodeQualifiedObservation(fixtureValue.observation);
+  assert.deepEqual(decodeQualifiedObservation(encoded), fixtureValue.observation);
+
+  assert.throws(() => decodeQualifiedObservation(Buffer.from(encoded)));
+  class DerivedBytes extends Uint8Array {}
+  assert.throws(() => decodeQualifiedObservation(new DerivedBytes(encoded)));
+
+  let proxyTrapHits = 0;
+  const proxy = new Proxy(encoded, {
+    get: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    getOwnPropertyDescriptor: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    getPrototypeOf: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    ownKeys: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+  });
+  assert.throws(() => decodeQualifiedObservation(proxy));
+  assert.equal(proxyTrapHits, 0);
+
+  let lengthGetterHits = 0;
+  const shadowedLength = encoded.slice();
+  Object.defineProperty(shadowedLength, "length", {
+    configurable: true,
+    get: () => {
+      lengthGetterHits += 1;
+      return encoded.length;
+    },
+  });
+  assert.throws(() => decodeQualifiedObservation(shadowedLength));
+  assert.equal(lengthGetterHits, 0);
+});
+
+test("observation lineage derives qualification requirements without granting authority", () => {
+  const fixtureValue = fixture();
+  const lineage = validateQualifiedObservationLineage(fixtureValue.observation, lineageContext(fixtureValue));
+  assert.equal(lineage.observation.observationId, fixtureValue.observation.observationId);
+  assert.equal(lineage.producerProcessAnchorHash, hashProcessAnchor(fixtureValue.producer));
+  assert.deepEqual(lineage.observerRequirement, {
+    observerQualificationId: h("1"),
+    observerImplementationDigest: h("f"),
+    qualificationRegistryRoot: h("2"),
+    anchorPolicyDigest: h("3"),
+    observationSchema: schema,
+    requiredLocatorKinds: ["file-range"],
+  });
+  assert.deepEqual(lineage.artifactRequirements, fixtureValue.rawArtifactRefs.map((ref, index) => ({
+    artifactRefId: ref.artifactRefId,
+    artifactClaimId: fixtureValue.artifactClaims[index].claimId,
+    resolverPolicyHash: ref.resolverPolicyHash,
+    retentionLeaseReceiptId: ref.retentionLeaseReceiptId,
+    storeIdentityHash: ref.immutableMirrorLocator.storeIdentityHash,
+    objectKey: ref.immutableMirrorLocator.objectKey,
+    contentSha256: ref.contentSha256,
+    byteLength: ref.byteLength,
+    mediaType: ref.mediaType,
+    schema: ref.schema,
+  })));
+  assert.equal(Object.isFrozen(lineage), true);
+
+  assert.throws(() => validateQualifiedObservationLineage(fixtureValue.observation, {
+    ...lineageContext(fixtureValue),
+    artifactClaims: fixtureValue.artifactClaims.slice(0, 1),
   }));
-  assert.throws(() => validateQualifiedObservation(fixtureValue.observation, {
-    currentQualification: fixtureValue.currentQualification,
-    productionReceipt: fixtureValue.receipt,
-    acquisitionArtifact: fixtureValue.acquisitionArtifact,
-    resolutions: fixtureValue.resolutions,
-    currentResolverQualification: { resolverPolicyHash: fixtureValue.rawArtifactRefs[0].resolverPolicyHash, resolverImplementationDigest: h("0"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-    expectedProcessAnchorHash: hashProcessAnchor(fixtureValue.producer),
+  assert.throws(() => validateQualifiedObservationLineage(fixtureValue.observation, {
+    ...lineageContext(fixtureValue),
+    artifactClaims: fixtureValue.artifactClaims.map((entry) => createArtifactResolutionClaim({
+      artifactRefId: entry.artifactRefId,
+      resolverPolicyHash: entry.resolverPolicyHash,
+      observedMirror: null,
+      outcome: "missing",
+    })),
   }));
-  assert.throws(() => validateQualifiedObservation(fixtureValue.observation, {
-    currentQualification: null,
-    productionReceipt: fixtureValue.receipt,
-    acquisitionArtifact: fixtureValue.acquisitionArtifact,
-    resolutions: fixtureValue.resolutions,
-    currentResolverQualification: { resolverPolicyHash: fixtureValue.rawArtifactRefs[0].resolverPolicyHash, resolverImplementationDigest: h("5"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-    expectedProcessAnchorHash: hashProcessAnchor(fixtureValue.producer),
-  }));
-  assert.throws(() => validateQualifiedObservation(fixtureValue.observation, {
-    currentQualification: { ...fixtureValue.currentQualification, observedSchemaIds: [] },
-    productionReceipt: fixtureValue.receipt,
-    acquisitionArtifact: fixtureValue.acquisitionArtifact,
-    resolutions: fixtureValue.resolutions,
-    currentResolverQualification: { resolverPolicyHash: fixtureValue.rawArtifactRefs[0].resolverPolicyHash, resolverImplementationDigest: h("5"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-    expectedProcessAnchorHash: hashProcessAnchor(fixtureValue.producer),
-  }));
-  assert.throws(() => validateQualifiedObservation(fixtureValue.observation, {
-    currentQualification: { ...fixtureValue.currentQualification, qualifiedLocatorKinds: [] },
-    productionReceipt: fixtureValue.receipt,
-    acquisitionArtifact: fixtureValue.acquisitionArtifact,
-    resolutions: fixtureValue.resolutions,
-    currentResolverQualification: { resolverPolicyHash: fixtureValue.rawArtifactRefs[0].resolverPolicyHash, resolverImplementationDigest: h("5"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-    expectedProcessAnchorHash: hashProcessAnchor(fixtureValue.producer),
-  }));
-  assert.throws(() => validateQualifiedObservation(fixtureValue.observation, {
-    currentQualification: fixtureValue.currentQualification,
-    productionReceipt: fixtureValue.receipt,
-    acquisitionArtifact: fixtureValue.acquisitionArtifact,
-    resolutions: fixtureValue.resolutions.slice(0, 1),
-    currentResolverQualification: { resolverPolicyHash: fixtureValue.rawArtifactRefs[0].resolverPolicyHash, resolverImplementationDigest: h("5"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-    expectedProcessAnchorHash: hashProcessAnchor(fixtureValue.producer),
-  }));
-  assert.throws(() => validateQualifiedObservation(fixtureValue.observation, {
-    currentQualification: fixtureValue.currentQualification,
-    productionReceipt: fixtureValue.receipt,
-    acquisitionArtifact: fixtureValue.acquisitionArtifact,
-    resolutions: fixtureValue.resolutions.map((entry) => ({ ...entry, outcome: "missing" as const })),
-    currentResolverQualification: { resolverPolicyHash: fixtureValue.rawArtifactRefs[0].resolverPolicyHash, resolverImplementationDigest: h("5"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-    expectedProcessAnchorHash: hashProcessAnchor(fixtureValue.producer),
-  }));
+  assert.throws(() => validateQualifiedObservationLineage(fixtureValue.observation, {
+    ...lineageContext(fixtureValue),
+    currentQualification: { current: true },
+  } as never));
+  assert.throws(() => validateQualifiedObservationLineage(fixtureValue.observation, {
+    ...lineageContext(fixtureValue),
+    currentResolverQualification: { current: true },
+  } as never));
 });
 
 test("receipt refs and process anchor cannot be spliced into a qualified observation", () => {
@@ -246,45 +271,26 @@ test("receipt refs and process anchor cannot be spliced into a qualified observa
     ...observationDraft(fixtureValue.observation),
     rawArtifactRefs: [fixtureValue.rawArtifactRefs[0], unrelated].sort((a, b) => a.artifactRefId.localeCompare(b.artifactRefId)),
   });
-  assert.throws(() => validateQualifiedObservation(spliced, {
-    currentQualification: fixtureValue.currentQualification,
-    productionReceipt: fixtureValue.receipt,
-    acquisitionArtifact: fixtureValue.acquisitionArtifact,
-    resolutions: fixtureValue.resolutions,
-    currentResolverQualification: { resolverPolicyHash: fixtureValue.rawArtifactRefs[0].resolverPolicyHash, resolverImplementationDigest: h("5"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-    expectedProcessAnchorHash: hashProcessAnchor(fixtureValue.producer),
-  }));
+  assert.throws(() => validateQualifiedObservationLineage(spliced, lineageContext(fixtureValue)));
   assert.throws(() => decodeQualifiedObservation({
     ...fixtureValue.observation,
     rawArtifactRefs: [...fixtureValue.rawArtifactRefs].reverse(),
   } as unknown as QualifiedObservationEnvelopeV1));
-  assert.throws(() => validateQualifiedObservation(fixtureValue.observation, {
-    currentQualification: fixtureValue.currentQualification,
-    productionReceipt: fixtureValue.receipt,
-    acquisitionArtifact: fixtureValue.acquisitionArtifact,
-    resolutions: fixtureValue.resolutions,
-    currentResolverQualification: { resolverPolicyHash: fixtureValue.rawArtifactRefs[0].resolverPolicyHash, resolverImplementationDigest: h("5"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-    expectedProcessAnchorHash: h("0"),
-  }));
 });
 
-test("observation validation decodes every resolution instead of trusting typed fields", () => {
+test("observation validation decodes every artifact claim instead of trusting typed fields", () => {
   const fixtureValue = fixture();
   const tampered = {
-    ...fixtureValue.resolutions[0],
-    bytes: "0x00",
-    resultId: h("0"),
+    ...fixtureValue.artifactClaims[0],
+    artifactRefId: h("0"),
+    claimId: h("0"),
   };
-  assert.throws(() => validateQualifiedObservation(fixtureValue.observation, {
-    currentQualification: fixtureValue.currentQualification,
-    productionReceipt: fixtureValue.receipt,
-    acquisitionArtifact: fixtureValue.acquisitionArtifact,
-    resolutions: [
-      { ...tampered, resultId: recomputeArtifactResolutionResultId(tampered) },
-      fixtureValue.resolutions[1],
+  assert.throws(() => validateQualifiedObservationLineage(fixtureValue.observation, {
+    ...lineageContext(fixtureValue),
+    artifactClaims: [
+      { ...tampered, claimId: recomputeArtifactResolutionClaimId(tampered) },
+      fixtureValue.artifactClaims[1],
     ],
-    currentResolverQualification: { resolverPolicyHash: fixtureValue.rawArtifactRefs[0].resolverPolicyHash, resolverImplementationDigest: h("5"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-    expectedProcessAnchorHash: hashProcessAnchor(fixtureValue.producer),
   }));
 });
 
@@ -312,13 +318,10 @@ test("acquisition receipt cannot be reused with a different semantic artifact cl
     ...observationDraft(fixtureValue.observation),
     acquisitionProductionReceiptId: wrongReceipt.receiptId,
   });
-  assert.throws(() => validateQualifiedObservation(wrongObservation, {
-    currentQualification: fixtureValue.currentQualification,
+  assert.throws(() => validateQualifiedObservationLineage(wrongObservation, {
     productionReceipt: wrongReceipt,
     acquisitionArtifact: wrongArtifact,
-    resolutions: fixtureValue.resolutions,
-    currentResolverQualification: { resolverPolicyHash: fixtureValue.rawArtifactRefs[0].resolverPolicyHash, resolverImplementationDigest: h("5"), resolverQualificationId: h("6"), qualificationRegistryRoot: h("2"), current: true },
-    expectedProcessAnchorHash: hashProcessAnchor(fixtureValue.producer),
+    artifactClaims: fixtureValue.artifactClaims,
   }));
 });
 

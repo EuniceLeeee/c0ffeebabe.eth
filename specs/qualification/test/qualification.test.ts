@@ -9,6 +9,7 @@ import {
   hashPredicateSpec,
   decodeObserverCertificate,
   decodeQualificationRegistry,
+  encodeQualificationRegistry,
   QUALIFICATION_SCHEMA_MANIFESTS,
   type Hash,
 } from "../src/index.ts";
@@ -103,6 +104,49 @@ test("qualification manifests are exact content-addressed schemas", () => {
     membershipInput: "0xd65b84213a03ee4aad5deeff4d9b9feffe0cd50106a939dc20d4c48220beb575",
     membershipResult: "0x135b0c34d17e046bd074563b4c69cf1a6de01304e7343912b051bea9802e75ac",
   });
+});
+
+test("binary decoders accept only exact native Uint8Array and never invoke hostile traps", () => {
+  const encoded = encodeQualificationRegistry(registry);
+  assert.deepEqual(decodeQualificationRegistry(encoded), registry);
+
+  assert.throws(() => decodeQualificationRegistry(Buffer.from(encoded)));
+  class DerivedBytes extends Uint8Array {}
+  assert.throws(() => decodeQualificationRegistry(new DerivedBytes(encoded)));
+
+  let proxyTrapHits = 0;
+  const proxy = new Proxy(encoded, {
+    get: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    getOwnPropertyDescriptor: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    getPrototypeOf: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    ownKeys: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+  });
+  assert.throws(() => decodeQualificationRegistry(proxy));
+  assert.equal(proxyTrapHits, 0);
+
+  let lengthGetterHits = 0;
+  const shadowedLength = encoded.slice();
+  Object.defineProperty(shadowedLength, "length", {
+    configurable: true,
+    get: () => {
+      lengthGetterHits += 1;
+      return encoded.length;
+    },
+  });
+  assert.throws(() => decodeQualificationRegistry(shadowedLength));
+  assert.equal(lengthGetterHits, 0);
 });
 
 test("predicate contains full role semantics and role mutation coverage is exact", () => {

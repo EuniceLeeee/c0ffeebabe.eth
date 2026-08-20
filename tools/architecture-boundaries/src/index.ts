@@ -39,6 +39,7 @@ export interface TrackedFile {
   readonly path: string;
   readonly mode: string;
   readonly blobSha: string;
+  readonly contentSha256: string;
   readonly byteLength: number;
   readonly language: Language;
   readonly fileClass: FileClass;
@@ -231,11 +232,23 @@ function classify(path: string): { language: Language; fileClass: FileClass; sou
 
 function readTrackedFiles(root: string, diagnostics: BoundaryDiagnostic[]): TrackedFile[] {
   let output: string;
+  let flagOutput: string;
   try {
     output = execFileSync("git", ["ls-files", "-s", "-z"], { cwd: root, encoding: "utf8" });
+    flagOutput = execFileSync("git", ["ls-files", "-v", "-z"], { cwd: root, encoding: "utf8" });
   } catch (error) {
     diagnostics.push(diagnostic("invalid", "git-tree-unreadable", ".", String(error)));
     return [];
+  }
+  const indexFlags = new Map<string, string>();
+  for (const record of flagOutput.split("\0")) {
+    if (!record) continue;
+    const separator = record.indexOf(" ");
+    if (separator !== 1) {
+      diagnostics.push(diagnostic("invalid", "git-index-flag-record", ".", "Malformed git ls-files -v record"));
+      continue;
+    }
+    indexFlags.set(posixPath(record.slice(2)), record[0]!);
   }
   const files: TrackedFile[] = [];
   for (const record of output.split("\0")) {
@@ -245,19 +258,39 @@ function readTrackedFiles(root: string, diagnostics: BoundaryDiagnostic[]): Trac
       diagnostics.push(diagnostic("invalid", "git-index-record", ".", "Malformed git ls-files record"));
       continue;
     }
-    const [mode, blobSha] = record.slice(0, tab).split(/\s+/);
+    const [mode, blobSha, stage] = record.slice(0, tab).split(/\s+/);
     const path = posixPath(record.slice(tab + 1));
+    if (stage !== "0") {
+      diagnostics.push(diagnostic("invalid", "nonzero-index-stage", path, "Unmerged index entries cannot enter the source denominator"));
+    }
+    if (indexFlags.get(path) !== "H") {
+      diagnostics.push(diagnostic("invalid", "noncanonical-index-flag", path, "assume-unchanged, skip-worktree, or another nonstandard index flag is forbidden"));
+    }
     if (mode === "120000") {
       diagnostics.push(diagnostic("invalid", "symlink-in-denominator", path, "Symlinks are not a reproducible source denominator"));
     }
     const metadata = classify(path);
     const filePath = abs(root, path);
     let byteLength = 0;
+    let contentSha256 = "";
     try {
       const stat = lstatSync(filePath);
-      byteLength = stat.size;
       if (stat.isSymbolicLink()) {
         diagnostics.push(diagnostic("invalid", "symlink-in-denominator", path, "Working tree path is a symlink"));
+      } else if (!stat.isFile()) {
+        diagnostics.push(diagnostic("invalid", "tracked-path-not-file", path, "Tracked denominator entry is not a regular file"));
+      } else {
+        const bytes = readFileSync(filePath);
+        byteLength = bytes.byteLength;
+        contentSha256 = `0x${createHash("sha256").update(bytes).digest("hex")}`;
+        const indexedBytes = execFileSync("git", ["cat-file", "blob", blobSha], {
+          cwd: root,
+          encoding: null,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        if (!bytes.equals(indexedBytes)) {
+          diagnostics.push(diagnostic("invalid", "worktree-index-content-mismatch", path, "Compiler-visible bytes differ from the exact indexed blob"));
+        }
       }
     } catch (error) {
       diagnostics.push(diagnostic("invalid", "tracked-file-missing", path, String(error)));
@@ -267,7 +300,7 @@ function readTrackedFiles(root: string, diagnostics: BoundaryDiagnostic[]): Trac
     if (sourceDirectory && !metadata.sourceLike && !METADATA_NAMES.has(path.slice(path.lastIndexOf("/") + 1)) && !METADATA_EXTENSIONS.has(extension)) {
       diagnostics.push(diagnostic("invalid", "unclassified-source-file", path, "File in a source root has no declared language/class"));
     }
-    files.push({ path, mode, blobSha, byteLength, language: metadata.language, fileClass: metadata.fileClass });
+    files.push({ path, mode, blobSha, contentSha256, byteLength, language: metadata.language, fileClass: metadata.fileClass });
   }
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }

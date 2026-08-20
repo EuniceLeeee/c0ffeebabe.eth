@@ -313,7 +313,9 @@ export type MembershipCertificateKind = "observer" | "verifier";
 export type CertificateMembershipMaterialV1 = Infer<typeof membershipInputPayloadSchema>["certificateMemberships"][number];
 
 function parseInput(value: QualificationCodecInput): unknown {
-  return typeof value === "string" || value instanceof Uint8Array ? decodeCanonicalJson(value) : value;
+  if (typeof value === "string") return decodeCanonicalJson(value);
+  if (ArrayBuffer.isView(value)) return decodeCanonicalJson(value as Uint8Array);
+  return value;
 }
 
 function strictSorted(values: readonly string[], path: string): void {

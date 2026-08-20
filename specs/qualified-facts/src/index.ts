@@ -3,6 +3,7 @@ import {
   assertPlainObject,
   canonicalJsonSchema,
   decodeCanonicalJson,
+  deepFreeze,
   defineSchemaManifest,
   encodeCanonicalBytes,
   encodeCanonicalJson,
@@ -18,21 +19,28 @@ import {
 } from "../../../packages/canonical-codec/src/index.ts";
 import {
   CORE_SCHEMA_MANIFESTS,
-  decodeProductionReceipt,
-  decodeSemanticArtifact,
   hashProcessAnchor,
   type ProcessAnchorV1,
   type ProductionReceiptV1,
   type ReadOnlyArtifactRefV1,
   type SchemaRef,
 } from "../../core-envelope/src/index.ts";
-import { decodeArtifactResolutionResult, type ArtifactResolutionResultV1 } from "../../artifact-resolution/src/index.ts";
+import {
+  ARTIFACT_RESOLUTION_SCHEMA_MANIFESTS,
+  type ArtifactResolutionClaimV1,
+} from "../../artifact-resolution/src/index.ts";
 
 export type { Hash } from "../../../packages/canonical-codec/src/index.ts";
 export type { ProcessAnchorV1, ProductionReceiptV1, ReadOnlyArtifactRefV1, SchemaRef } from "../../core-envelope/src/index.ts";
 
 const schemaRefSchema = CORE_SCHEMA_MANIFESTS.schemaRef.schema;
 const artifactRefSchema = CORE_SCHEMA_MANIFESTS.readOnlyArtifactRef.schema;
+
+const observationLineageContextSchema = objectSchema({
+  productionReceipt: nullableSchema(CORE_SCHEMA_MANIFESTS.productionReceipt.schema),
+  acquisitionArtifact: nullableSchema(CORE_SCHEMA_MANIFESTS.semanticArtifact.schema),
+  artifactClaims: arraySchema(ARTIFACT_RESOLUTION_SCHEMA_MANIFESTS.artifactResolutionClaim.schema),
+});
 
 const observationStructuralSchema = objectSchema({
   schemaVersion: literalSchema(1),
@@ -229,7 +237,9 @@ export function recomputeAcceptanceQueryId(value: AcceptanceQueryV1): Hash {
 }
 
 function parse(value: string | Uint8Array | object): unknown {
-  return typeof value === "string" || value instanceof Uint8Array ? decodeCanonicalJson(value) : value;
+  if (typeof value === "string") return decodeCanonicalJson(value);
+  if (ArrayBuffer.isView(value)) return decodeCanonicalJson(value as Uint8Array);
+  return value;
 }
 export function decodeQualifiedObservation(value: string | Uint8Array | object): QualifiedObservationEnvelopeV1 {
   return observationSchema.decode(parse(value));
@@ -348,81 +358,58 @@ export function computeObserverSemanticConfigDigest(value: Pick<
   });
 }
 
-export interface CurrentObserverQualification {
+export type QualifiedObservationLineageContext = Infer<typeof observationLineageContextSchema>;
+
+export interface ObserverQualificationRequirementV1 {
   readonly observerQualificationId: Hash;
   readonly observerImplementationDigest: Hash;
   readonly qualificationRegistryRoot: Hash;
   readonly anchorPolicyDigest: Hash;
-  readonly observedSchemaIds: readonly SchemaRef[];
-  readonly qualifiedLocatorKinds: readonly ReadOnlyArtifactRefV1["locator"]["kind"][];
-  readonly current: boolean;
-}
-export interface QualifiedObservationValidationContext {
-  readonly currentQualification: CurrentObserverQualification | null;
-  readonly currentResolverQualification: CurrentResolverQualification | null;
-  readonly productionReceipt: unknown | null;
-  readonly acquisitionArtifact: unknown | null;
-  readonly resolutions: readonly unknown[];
-  readonly expectedProcessAnchorHash: Hash;
+  readonly observationSchema: SchemaRef;
+  readonly requiredLocatorKinds: readonly ReadOnlyArtifactRefV1["locator"]["kind"][];
 }
 
-export interface CurrentResolverQualification {
+export interface ArtifactResolutionRequirementV1 {
+  readonly artifactRefId: Hash;
+  readonly artifactClaimId: Hash;
   readonly resolverPolicyHash: Hash;
-  readonly resolverImplementationDigest: Hash;
-  readonly resolverQualificationId: Hash;
-  readonly qualificationRegistryRoot: Hash;
-  readonly current: boolean;
+  readonly retentionLeaseReceiptId: Hash;
+  readonly storeIdentityHash: Hash;
+  readonly objectKey: Hash;
+  readonly contentSha256: Hash;
+  readonly byteLength: string;
+  readonly mediaType: string;
+  readonly schema: SchemaRef | null;
+}
+
+export interface QualifiedObservationLineageV1 {
+  readonly observation: QualifiedObservationEnvelopeV1;
+  readonly producerProcessAnchorHash: Hash;
+  readonly observerRequirement: ObserverQualificationRequirementV1;
+  readonly artifactRequirements: readonly ArtifactResolutionRequirementV1[];
 }
 
 function sameJson(left: unknown, right: unknown): boolean {
   return encodeCanonicalJson(left) === encodeCanonicalJson(right);
 }
 
-/** Pure validation after the resolver adapter has supplied all independent objects. */
-export function validateQualifiedObservation(
+/**
+ * Validates only immutable artifact lineage and derives qualification
+ * requirements. It deliberately does not decide whether any certificate is
+ * current; GateCore is the sole consumer that joins these requirements to the
+ * pinned registry, membership and revocation facts.
+ */
+export function validateQualifiedObservationLineage(
   rawValue: QualifiedObservationEnvelopeV1,
-  context: QualifiedObservationValidationContext,
-): QualifiedObservationEnvelopeV1 {
+  rawContext: QualifiedObservationLineageContext,
+): QualifiedObservationLineageV1 {
   const observation = observationSchema.decode(rawValue);
-  const qualification = context.currentQualification;
-  if (
-    qualification === null ||
-    !qualification.current ||
-    qualification.observerQualificationId !== observation.observerQualificationId ||
-    qualification.observerImplementationDigest !== observation.observerImplementationDigest ||
-    qualification.qualificationRegistryRoot !== observation.qualificationRegistryRoot ||
-    qualification.anchorPolicyDigest !== observation.anchorPolicyDigest ||
-    !qualification.observedSchemaIds.some((schema) => sameJson(schema, observation.observationSchema)) ||
-    observation.rawArtifactRefs.some((ref) => !qualification.qualifiedLocatorKinds.includes(ref.locator.kind))
-  ) {
-    throw new TypeError("observer qualification is missing, stale, or mismatched");
-  }
-  const resolverQualification = context.currentResolverQualification;
-  if (resolverQualification === null || !resolverQualification.current) {
-    throw new TypeError("resolver qualification is missing or stale");
-  }
-  let receipt: ProductionReceiptV1 | null = null;
-  if (context.productionReceipt !== null) {
-    try {
-      receipt = decodeProductionReceipt(context.productionReceipt as object);
-    } catch {
-      receipt = null;
-    }
-  }
+  const context = observationLineageContextSchema.decode(rawContext);
+  const receipt: ProductionReceiptV1 | null = context.productionReceipt;
   if (receipt === null || receipt.receiptId !== observation.acquisitionProductionReceiptId) {
     throw new TypeError("acquisition production receipt is missing or mismatched");
   }
-  if (hashProcessAnchor(receipt.producer) !== context.expectedProcessAnchorHash) {
-    throw new TypeError("acquisition receipt process anchor is not the expected observer anchor");
-  }
-  let acquisitionArtifact = null;
-  if (context.acquisitionArtifact !== null) {
-    try {
-      acquisitionArtifact = decodeSemanticArtifact(context.acquisitionArtifact as object);
-    } catch {
-      acquisitionArtifact = null;
-    }
-  }
+  const acquisitionArtifact = context.acquisitionArtifact;
   if (acquisitionArtifact === null) {
     throw new TypeError("acquisition semantic artifact is missing or invalid");
   }
@@ -446,38 +433,64 @@ export function validateQualifiedObservation(
       throw new TypeError("receipt raw/log artifact is outside observation closure");
     }
   }
-  if (context.resolutions.length !== observation.rawArtifactRefs.length) {
-    throw new TypeError("raw artifact resolution closure is incomplete");
+  if (context.artifactClaims.length !== observation.rawArtifactRefs.length) {
+    throw new TypeError("raw artifact claim closure is incomplete");
   }
-  const resolvedByArtifact = new Map<string, ArtifactResolutionResultV1>();
-  for (const rawResolution of context.resolutions) {
-    let resolution: ArtifactResolutionResultV1;
-    try {
-      resolution = decodeArtifactResolutionResult(rawResolution as object);
-    } catch {
-      throw new TypeError("raw artifact resolution is invalid");
+  const claimsByArtifact = new Map<string, ArtifactResolutionClaimV1>();
+  for (const claim of context.artifactClaims) {
+    if (claim.outcome !== "content-observed" || claim.observedMirror === null) {
+      throw new TypeError("raw artifact content was not observed");
     }
-    if (resolution.outcome !== "resolved") throw new TypeError("raw artifact is not resolved");
-    if (resolvedByArtifact.has(resolution.artifactRefId)) throw new TypeError("duplicate artifact resolution");
-    resolvedByArtifact.set(resolution.artifactRefId, resolution);
+    if (claimsByArtifact.has(claim.artifactRefId)) {
+      throw new TypeError("duplicate raw artifact claim");
+    }
+    claimsByArtifact.set(claim.artifactRefId, claim);
   }
+  const artifactRequirements: ArtifactResolutionRequirementV1[] = [];
   for (const ref of observation.rawArtifactRefs) {
-    const resolution = resolvedByArtifact.get(ref.artifactRefId);
-    if (resolution === undefined) throw new TypeError("raw artifact resolution is missing");
-    if (
-      resolution.resolverPolicyHash !== ref.resolverPolicyHash ||
-      resolution.resolverPolicyHash !== resolverQualification.resolverPolicyHash ||
-      resolution.resolverImplementationDigest !== resolverQualification.resolverImplementationDigest ||
-      resolution.resolverQualificationId !== resolverQualification.resolverQualificationId ||
-      resolution.qualificationRegistryRoot !== resolverQualification.qualificationRegistryRoot ||
-      resolverQualification.qualificationRegistryRoot !== observation.qualificationRegistryRoot ||
-      resolution.observedContentSha256 !== ref.contentSha256 ||
-      resolution.observedByteLength !== ref.byteLength
-    ) {
-      throw new TypeError("raw artifact resolution is not bound to the exact artifact ref");
+    const claim = claimsByArtifact.get(ref.artifactRefId);
+    if (claim === undefined || claim.observedMirror === null) {
+      throw new TypeError("raw artifact claim is missing");
     }
+    const mirror = claim.observedMirror;
+    if (
+      claim.resolverPolicyHash !== ref.resolverPolicyHash ||
+      mirror.storeIdentityHash !== ref.immutableMirrorLocator.storeIdentityHash ||
+      mirror.objectKey !== ref.immutableMirrorLocator.objectKey ||
+      mirror.contentSha256 !== ref.contentSha256 ||
+      mirror.byteLength !== ref.byteLength ||
+      mirror.mediaType !== ref.mediaType ||
+      !sameJson(mirror.schema, ref.schema)
+    ) {
+      throw new TypeError("raw artifact claim is not bound to the exact artifact ref");
+    }
+    artifactRequirements.push({
+      artifactRefId: ref.artifactRefId,
+      artifactClaimId: claim.claimId,
+      resolverPolicyHash: ref.resolverPolicyHash,
+      retentionLeaseReceiptId: ref.retentionLeaseReceiptId,
+      storeIdentityHash: mirror.storeIdentityHash,
+      objectKey: mirror.objectKey,
+      contentSha256: mirror.contentSha256,
+      byteLength: mirror.byteLength,
+      mediaType: mirror.mediaType,
+      schema: mirror.schema,
+    });
   }
-  return observation;
+  const requiredLocatorKinds = [...new Set(observation.rawArtifactRefs.map((ref) => ref.locator.kind))].sort();
+  return deepFreeze({
+    observation,
+    producerProcessAnchorHash: hashProcessAnchor(receipt.producer),
+    observerRequirement: {
+      observerQualificationId: observation.observerQualificationId,
+      observerImplementationDigest: observation.observerImplementationDigest,
+      qualificationRegistryRoot: observation.qualificationRegistryRoot,
+      anchorPolicyDigest: observation.anchorPolicyDigest,
+      observationSchema: observation.observationSchema,
+      requiredLocatorKinds,
+    },
+    artifactRequirements,
+  });
 }
 
 export function validateAcceptanceQueryAgainstSnapshot(

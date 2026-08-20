@@ -7,10 +7,12 @@ import {
   createResolverPolicy,
   createRetentionLeaseReceipt,
   decodeArtifactResolutionClaim,
+  decodeArtifactBytes,
   decodeObservedImmutableMirror,
   decodeResolverPolicy,
   decodeRetentionLeaseReceipt,
   encodeArtifactResolutionClaim,
+  encodeArtifactBytes,
   encodeObservedImmutableMirror,
   encodeResolverPolicy,
   encodeRetentionLeaseReceipt,
@@ -103,6 +105,70 @@ test("policy and lease preserve exact wire contracts and derived identities", ()
     validFromStoreEpoch: "21",
     validThroughStoreEpoch: "20",
   }));
+});
+
+test("binary codec accepts only exact native Uint8Array and never invokes hostile traps", () => {
+  const encoded = encodeResolverPolicy(policy);
+  assert.deepEqual(decodeResolverPolicy(encoded), policy);
+
+  assert.throws(() => decodeResolverPolicy(Buffer.from(encoded)));
+  class DerivedBytes extends Uint8Array {}
+  assert.throws(() => decodeResolverPolicy(new DerivedBytes(encoded)));
+
+  let proxyTrapHits = 0;
+  const proxy = new Proxy(encoded, {
+    get: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    getOwnPropertyDescriptor: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    getPrototypeOf: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    ownKeys: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+  });
+  assert.throws(() => decodeResolverPolicy(proxy));
+  assert.equal(proxyTrapHits, 0);
+
+  let lengthGetterHits = 0;
+  const shadowedLength = encoded.slice();
+  Object.defineProperty(shadowedLength, "length", {
+    configurable: true,
+    get: () => {
+      lengthGetterHits += 1;
+      return encoded.length;
+    },
+  });
+  assert.throws(() => decodeResolverPolicy(shadowedLength));
+  assert.equal(lengthGetterHits, 0);
+
+  const artifactBytes = new Uint8Array([0x72, 0x61, 0x77]);
+  assert.deepEqual(decodeArtifactBytes(encodeArtifactBytes(artifactBytes)), artifactBytes);
+  assert.throws(() => encodeArtifactBytes(Buffer.from(artifactBytes)));
+  assert.throws(() => encodeArtifactBytes(new DerivedBytes(artifactBytes)));
+  assert.throws(() => encodeArtifactBytes(proxy as never));
+  assert.equal(proxyTrapHits, 0);
+  assert.throws(() => encodeArtifactBytes(shadowedLength));
+  assert.equal(lengthGetterHits, 0);
+
+  let iteratorGetterHits = 0;
+  const iteratorShadow = artifactBytes.slice();
+  Object.defineProperty(iteratorShadow, Symbol.iterator, {
+    configurable: true,
+    get: () => {
+      iteratorGetterHits += 1;
+      throw new Error("iterator getter must not run");
+    },
+  });
+  assert.equal(encodeArtifactBytes(iteratorShadow), "0x726177");
+  assert.equal(iteratorGetterHits, 0);
 });
 
 test("observed mirror derives and validates exact bytes, hash and length", () => {

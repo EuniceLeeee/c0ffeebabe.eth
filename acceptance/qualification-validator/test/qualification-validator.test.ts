@@ -130,8 +130,9 @@ function proof(kind: "observer" | "verifier", certificate: { certificateId: Hash
 
 test("validator is fact-only and does not promote self-reported verdict", () => {
   const observerResult = validateObserverQualificationCertificate(registry, role, observer, proof("observer", observer), pin);
-  assert.equal(observerResult.valid, true);
+  assert.equal(observerResult.factsConsistent, true);
   assert.equal(observerResult.authority, false);
+  assert.equal("valid" in observerResult, false);
   const verifierResult = validateVerifierQualificationCertificate(
     registry,
     predicate,
@@ -140,30 +141,30 @@ test("validator is fact-only and does not promote self-reported verdict", () => 
     proof("verifier", verifier),
     pin,
   );
-  assert.equal(verifierResult.valid, true);
+  assert.equal(verifierResult.factsConsistent, true);
   assert.equal(verifierResult.authority, false);
 });
 
 test("wrong role schema, missing oracle, mutation drift, stale or revoked facts invalidate", () => {
   const wrongRole = createObserverRoleSpec({ ...role, observationSchema: { ...role.observationSchema, schemaHash: h("d") } });
   const wrong = validateObserverQualificationCertificate(registry, wrongRole, observer, proof("observer", observer), pin);
-  assert.equal(wrong.valid, false);
+  assert.equal(wrong.factsConsistent, false);
 
   assert.throws(() => createObserverQualificationCertificate({ ...observer, rejectedOrInvalidMutationIds: [] }));
 
   const staleProof = proof("observer", observer);
   const stale = validateObserverQualificationCertificate(registry, role, observer, { ...staleProof, result: { ...staleProof.result, registryEpoch: "2" } }, pin);
-  assert.equal(stale.valid, false);
+  assert.equal(stale.factsConsistent, false);
 
   const revoked = validateObserverQualificationCertificate(registry, role, observer, { ...proof("observer", observer), result: { ...proof("observer", observer).result, status: "revoked" } }, pin);
-  assert.equal(revoked.valid, false);
+  assert.equal(revoked.factsConsistent, false);
 });
 
 test("registry governance pin and certificate root splice are external facts", () => {
   const wrongPin = validateObserverQualificationCertificate(registry, role, observer, proof("observer", observer), { ...pin, expectedRegistryRoot: h("f") });
-  assert.equal(wrongPin.valid, false);
+  assert.equal(wrongPin.factsConsistent, false);
   const result = validateCurrentRegistryMembership(registry, proof("observer", observer).input, proof("observer", observer).result, pin);
-  assert.equal(result.valid, true);
+  assert.equal(result.factsConsistent, true);
   assert.equal(result.authority, false);
   const originalInput = proof("observer", observer).input;
   const { inputId: _inputId, payloadHash: _inputPayloadHash, ...originalInputPayload } = originalInput;
@@ -172,7 +173,7 @@ test("registry governance pin and certificate root splice are external facts", (
   const { resultId: _resultId, payloadHash: _resultPayloadHash, ...originalResultPayload } = originalResult;
   const tamperedResult = createMembershipResult({ ...originalResultPayload, inputId: tamperedInput.inputId });
   const tampered = validateCurrentRegistryMembership(registry, tamperedInput, tamperedResult, pin);
-  assert.equal(tampered.valid, false);
+  assert.equal(tampered.factsConsistent, false);
 
   const { inputId: _epochInputId, payloadHash: _epochPayloadHash, ...epochInputPayload } = originalInput;
   const wrongEpochInput = createMembershipInput({ ...epochInputPayload, registryEpoch: "2" });
@@ -181,7 +182,7 @@ test("registry governance pin and certificate root splice are external facts", (
     inputId: wrongEpochInput.inputId,
     registryEpoch: "2",
   });
-  assert.equal(validateCurrentRegistryMembership(registry, wrongEpochInput, wrongEpochResult, pin).valid, false);
+  assert.equal(validateCurrentRegistryMembership(registry, wrongEpochInput, wrongEpochResult, pin).factsConsistent, false);
 
   const wrongIssuerInput = createMembershipInput({ ...epochInputPayload, issuerId: "attacker" });
   const wrongIssuerResult = createMembershipResult({
@@ -189,7 +190,7 @@ test("registry governance pin and certificate root splice are external facts", (
     inputId: wrongIssuerInput.inputId,
     issuerId: "attacker",
   });
-  assert.equal(validateCurrentRegistryMembership(registry, wrongIssuerInput, wrongIssuerResult, pin).valid, false);
+  assert.equal(validateCurrentRegistryMembership(registry, wrongIssuerInput, wrongIssuerResult, pin).factsConsistent, false);
 });
 
 test("a certificate issued in an earlier epoch remains current only through exact current membership", () => {
@@ -229,7 +230,7 @@ test("a certificate issued in an earlier epoch remains current only through exac
     status: "member",
   });
   assert.equal(
-    validateObserverQualificationCertificate(nextRegistry, role, observer, { input, result }, nextPin).valid,
+    validateObserverQualificationCertificate(nextRegistry, role, observer, { input, result }, nextPin).factsConsistent,
     true,
   );
 });

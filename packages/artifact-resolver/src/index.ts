@@ -39,7 +39,21 @@ export interface ArtifactResolverIO {
   readonly contentStore: ReadOnlyContentStore;
 }
 
-function normalizeMirror(raw: unknown): ObservedImmutableMirrorV1 {
+function isConcreteUint8Array(value: unknown): value is Uint8Array {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !nodeTypes.isProxy(value) &&
+    ArrayBuffer.isView(value) &&
+    Object.getPrototypeOf(value) === Uint8Array.prototype &&
+    Object.getOwnPropertyDescriptor(value, "length") === undefined
+  );
+}
+
+function normalizeMirror(
+  raw: unknown,
+  maxByteLength: bigint,
+): ObservedImmutableMirrorV1 | null {
   assertExactKeys(
     raw,
     ["storeIdentityHash", "objectKey", "bytes", "mediaType", "schema"],
@@ -50,10 +64,14 @@ function normalizeMirror(raw: unknown): ObservedImmutableMirrorV1 {
     "bytes",
     "$.immutableMirrorRead",
   );
-  if (!(rawBytes instanceof Uint8Array) || nodeTypes.isProxy(rawBytes)) {
+  if (!isConcreteUint8Array(rawBytes)) {
     throw new TypeError("immutable mirror bytes must be a concrete Uint8Array");
   }
-  const bytes = Uint8Array.from(rawBytes);
+  if (BigInt(rawBytes.length) > maxByteLength) return null;
+  const bytes = new Uint8Array(rawBytes.length);
+  for (let index = 0; index < rawBytes.length; index += 1) {
+    bytes[index] = rawBytes[index]!;
+  }
   const rawSchema = readOwnEnumerableDataProperty(
     raw,
     "schema",
@@ -139,7 +157,10 @@ export async function resolveArtifactClaim(
   if (rawMirror === null) {
     return createClaim(ref, policy, null, "missing");
   }
-  const mirror = normalizeMirror(rawMirror);
+  const mirror = normalizeMirror(rawMirror, BigInt(policy.maxByteLength));
+  if (mirror === null) {
+    return createClaim(ref, policy, null, "content-mismatch");
+  }
   return createClaim(
     ref,
     policy,

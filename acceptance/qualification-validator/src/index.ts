@@ -42,9 +42,13 @@ export interface QualificationIssue {
   readonly path: string;
 }
 
-/** This package returns qualification facts only; it never grants production authority. */
+/**
+ * This package reports whether supplied qualification materials are mutually
+ * consistent. Only GateCore may join them to independent corpus/oracle facts
+ * and current authority; this result deliberately has no `valid` verdict.
+ */
 export interface QualificationValidationResult {
-  readonly valid: boolean;
+  readonly factsConsistent: boolean;
   readonly authority: false;
   readonly issues: readonly QualificationIssue[];
 }
@@ -60,7 +64,7 @@ export interface CertificateMembershipProof {
 }
 
 function result(issues: QualificationIssue[]): QualificationValidationResult {
-  return Object.freeze({ valid: issues.length === 0, authority: false as const, issues: Object.freeze([...issues]) });
+  return Object.freeze({ factsConsistent: issues.length === 0, authority: false as const, issues: Object.freeze([...issues]) });
 }
 
 function add(issues: QualificationIssue[], code: QualificationIssueCode, path: string): void {
@@ -230,7 +234,7 @@ export function validateVerifierQualificationCertificate(
     const declaredRole = certificate.requiredObserverRoles.find((role) => role.roleId === entry.role.roleId);
     if (declaredRole === undefined || declaredRole.observerQualificationId !== entry.certificate.certificateId) add(issues, "observer-certificate-mismatch", `$.observerRoles.${entry.role.roleId}.observerQualificationId`);
     const nested = validateObserverQualificationCertificate(registry, entry.role, entry.certificate, entry.membershipProof, pin);
-    if (!nested.valid || entry.certificate.verdict !== "qualified") add(issues, "observer-certificate-mismatch", `$.observerRoles.${entry.role.roleId}`);
+    if (!nested.factsConsistent || entry.certificate.verdict !== "qualified") add(issues, "observer-certificate-mismatch", `$.observerRoles.${entry.role.roleId}`);
   }
   if (certificate.verdict !== "qualified") add(issues, "self-reported-verdict", "$.verdict");
   else if (issues.length > 0) add(issues, "self-reported-verdict", "$.verdict");

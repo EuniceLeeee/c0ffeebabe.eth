@@ -228,7 +228,7 @@ reviewer
 才可在exact blob lock与独立事实证明后adopt；其他资产只允许提取不变量并从零实现新shell、authority、schema
 和port。不能把改名、移动文件或大段复制包装成“重写”。
 
-## 5. Legacy architecture/code reuse matrix
+## 5. impl reference architecture/code reuse matrix
 
 ### 5.1 判断代码
 
@@ -283,6 +283,8 @@ observer/verifier certificate或production acceptance pass。
 | [ASR] R1 | impl@d33c8b48 canonical-header-journal.ts、producer-generation-freeze.ts | canonical header proof 与禁止 producer publication；journal size/process state | generation-freeze.ts:1-12；canonical journal tests | packages/canonical-source + packages/producer；保留 hash/fence原则，重写为 SourceView 与 GraphView lease |
 | [ASR] R1 | impl@ccb41fbb latest-head-scheduler.ts | 单active/latest-pending coalescing、same-head revision、drop accounting；不拥有Graph/Family语义 | :23-49,61-145,147-218；旧test只作算法locator[MTM] | packages/producer/head-scheduler；保留状态机并将revision绑定immutable SourceSession/trigger context；不得用revision刷新topology |
 | [BRW] R1/R3 | impl@ccb41fbb {mempool-intake,pending-evidence-admission-queue,pending-evidence-session}.ts | full-vs-filtered targets、canonical优先、unknown per-Family queue、one-tx frozen head；旧类型依赖PoolEntry/SwapAdapter/ExecutionFamilyId | intake:5-62；queue:23-130,132-235；session:16-140 | packages/producer/backrun-intake + scheduler；从ready GraphView与generated observation owners派生目标，central只按opaque ownerRef公平；unknown evidence不可挤掉canonical，provider subset不能冒充complete intake |
+| [ASR] R1 | impl@ccb41fbb coalescing-async-writer.ts | 单writer、latest cumulative snapshot、flush与失败telemetry；若value不是完整累积envelope会丢中间authority | :1-107；本轮只读审计[MTM] | packages/durable-store；只用于完整累积snapshot或非authority telemetry，attestation每条outcome先进入同一内存envelope再coalesce写入；SIGTERM必须flush，禁止对独立增量事件latest-wins |
+| [BRW] R2/R3 | impl@ccb41fbb blockscan-pending-evidence.ts | tx/head/payload hash绑定与evidence-scoped route activation成熟；中央仍按ExecutionFamilyId、adapterId和TokenEdge映射 | :1-162；本轮只读审计[MTM] | packages/producer/trigger-session + Family trigger capability；提取tx/head/hash与exact scope-set不变量，owner签发opaque affected handles；central只做集合相交与mode accounting，不按Family/adapter分支 |
 | [BRW] R3 | impl@d33c8b48 shared/state/anvil-pool.ts、state-backend.ts、live-state-backend.ts | fork/state access 与 worker lifecycle；旧 pool、source fallback、transport ownership | state/backend/reorg/abort tests | packages/state-runtime/fork-port；提取 fork lease、reset cancellation、source pin；不得授予 topology、identity 或 exact authority |
 
 ### 5.3 Family、capability、planner 与执行资产
@@ -324,6 +326,8 @@ observer/verifier certificate或production acceptance pass。
 | [BRW] R3 | impl@d33c8b48 {systemic-live-gate,serial-systemic-live-evidence}.ts | coverage/throughput/P95 evaluator与log parser | systemic gate:37-82；serial:26-144；只证明旧计算形状，不证明Aloha预算[MTM] | acceptance/validator + acceptance/collectors；保留计算概念，改成exact process/run/root joins、P99与raw receipt set |
 | [REJ] R4 | impl@d33c8b48 architecture-migration-fixture-replay.ts、blind-*、paired-live、shadow/capture/parity与对应成功 fixtures | 迁移、target/capture、对比 authority | 不能证明production-issued对象 | 不进入 Aloha；只允许人为损坏 evidence 用于 validator negative calibration |
 | [BRW] R3 | impl@d33c8b48 scripts/deploy-node.sh 与 systemd shell | exact SHA、dry-run/live marker、wallet cap、EV gate；同时含大量旧 env/feature flags并读取私钥 | deploy-node.sh:16-23,337-380,401-480,616-696 | deploy/runtime-shell；保留 exact SHA、systemd、default dry-run、human gate；删除 legacy flags；evidence collector不得读取私钥 |
+| [ASR] R2/R3 | impl@ccb41fbb live-envelope.ts | live前EV gate、wallet cap、owner与余额fail-closed；同时硬编码ETH cap、BotVM和旧env语义 | :1-84；本轮只读审计[MTM] | packages/safety + deploy/runtime-shell；保留“构造signer/submission前验证human authorization envelope”的状态机，具体cap/asset/executor来自签名release policy；默认dry-run，acceptance collector绝不读取secret |
+| [REJ] R4 | impl@ccb41fbb route-gap-watcher.ts、force-include.ts | 日志驱动自动改allowlist/pending-deploy与地址/pool强制纳入；会把diagnostic变成admission/deploy authority | watcher:1-538；force-include:1-181[VEF] | 不进入production closure；gap分析只产untrusted diagnostic，任何新实例仍走canonical nomination+identity+attestation，部署仍走独立human/release gate |
 
 ### 5.5 Isolated declaration adoption 白名单
 
@@ -372,6 +376,7 @@ row机械覆盖的旧文件或symbol默认R4不移植。若实施中发现遗漏
 | venues/blockscan-state-capability.ts | BlockSource/ChainLog/MutationQueryDescriptor、Family state projection、mutation classification/carry proof、coverage/source facts、source-bound StateRead与retryable failure；同时承载旧schema assembly | impl@ccb41fbb source:18-75,77-183,185-223,241-286,321-380[VEF] | R2提取Family state语义与mutation/carry不变量；R3重写schema/ports | packages/state-runtime + families/<id>/state；coordinator只做batch/deadline/retry/publication，source provenance由core绑定；不得由state coordinator拥有Graph/topology或第二mutable cache |
 | blockscan-state-cache.ts | source-pinned resumable raw cache | source:9-24 | R3 schema重写 | state-runtime→packages/durable-store；key含chainId/block hash/request+codec hash |
 | blockscan-multicall.ts、blockscan-pass-deadline.ts | generic batching/deadline但输入旧Pool/Graph shapes | deadline test存在[MTM] | R2提取generic算法 | scheduler/state-runtime only；不得创建edge或coverage |
+| blockscan-pricing-source-mode.ts | CLI/env暴露current-N与N-1切换，后者是第二pricing authority | impl@ccb41fbb source:1-67[VEF] | R4完全废弃 | current SourceSession是唯一pricing/exact authority；超时返回unresolved并计入not-probed，禁止N-1 fallback |
 | venues/route-immutable-binding.ts、venues/route-instance-identity.ts | immutable binding/hash与Family-owned instance/edge/plan identity算法成熟，但旧payload含旧DTO、adapter/PoolEntry fallback与protocol fields | impl@ccb41fbb route-immutable-binding.ts:3-138；route-instance-identity.ts:12-252[VEF] | R2提取domain-separated hash/ownership/duplicate检查；R3重写payload与issued handle | packages/planner + packages/graph；identity由`FamilyInstanceKey + direction + ExecutionVariantKey + opaque route binding`组成；中央只验证hash/lease/generation，不能从PoolEntry/TokenEdge推导协议语义 |
 | blockscan-route-identity.ts | deterministic route identity思想；旧preimage含adapterId/PoolEntry fields并用JSON stringify | impl@ccb41fbb source:1-61[VEF] | R3 schema重写，R2提取domain-separated ordered identity不变量 | packages/planner；RouteId只哈希ordered canonical edge refs、directions、generation/Graph binding和strategy objective，不含协议字段 |
 | mempool-intake-refresh-signal.ts | process-local observer set；旧语义可在任意notify重连filtered subscription | impl@ccb41fbb source:1-13[VEF] | R2提取subscription primitive，R3重写adoption trigger | producer/backrun-intake只在ready generation安全adopt或provider reconnect时重建filter；notify不得改变Graph/admission authority |
@@ -382,6 +387,8 @@ row机械覆盖的旧文件或symbol默认R4不移植。若实施中发现遗漏
 | detector/blockscan-scanner-production.ts | production facade把AdapterRuntimeSnapshot/TokenEdge/pricing/funding合并并带degraded mode | source:1-90[VEF] | R3重写boundary；core scan算法沿上一行R2 | packages/producer→packages/planner，只收immutable GraphView/SourceSession；无degraded/default edge |
 | venues/swaps/view-quote-blockscan-state.ts、adaptive-view-quote-blockscan-state.ts | grouped prerequisite/dependent reads、Family-owned decode、source-pinned amount ladder与bounded rounds；旧实现仍把alternate quote写成中央fallback语义 | view-quote:22-109,125-337；adaptive:24-122,124-329[VEF] | R2提取分轮read/依赖与bounded ladder算法；R3重写schema/ports | families/<id>/quote + packages/state-runtime；healthy path只跑首选amount，失败才走capability-local bounded alternate program；zero/revert/unresolved显式返回，绝不能成为中央legacy quoter |
 | blockscan-pass-timeline.ts | state→enumeration→exact_refine→planner_solver→final_sim→EV阶段顺序、cumulative head budget、atomic timing merge | impl@ccb41fbb source:1-155[VEF] | R2提取architecture-neutral timeline/receipt算法，R3重写字段 | packages/telemetry + acceptance/collectors；只观察阶段顺序、预算与timing，不拥有routing/correctness authority，不得以timeline脚本补production事实 |
+| pool-activity-selection.ts、pool-universe-arb-relevance.ts | compatibility adapter filter与`maxPools` hard slice会把label/heuristic变成coverage authority | impl@ccb41fbb activity:1-33；relevance:1-76[VEF] | R4作为admission；纯score思想已由coarse funnel覆盖 | startup exact partition不得按mature label/loop score丢candidate；任何排序只影响work order，未处理项保持显式pending/unranked |
+| recent-call-seed-scan.ts | catalog声明call pattern是正确方向，但实现按Family首个命中early-stop并可向后扫十万块，既丢instance又违反50-block observation范围 | impl@ccb41fbb source:1-154[VEF] | R4旧scanner；R2仅保留capability-owned pattern与bounded evidence-key思想 | 当前edge observation只允许固定50-block SourcePlan并按Family+InstanceKey聚合完整log/trace identity；未来若某capability需要非edge历史identity evidence，必须新增显式、局部失效的独立SourcePlan contract，绝不能暗中扩edge窗口或整族停扫 |
 | live-backends/revm-live-backend.ts | 巨型legacy backend混合TokenEdge、compiler、victim overlay、balance slots、strict catalog与fallback | source:1-90及旧tests存在[MTM] | R4 facade；REVM transport/kernel复用已由独立rows覆盖 | state-runtime/exact/final-sim各自port；禁止重建“all-in-one backend” |
 | strict-current-runtime-coordinator.ts | large facade连接ready、Family refresh、state | source存在；证据仅源码[MTM] | R4 facade，局部session思想已在R1模块体现 | 不设对应facade；producer/state/exact分owner |
 | strict-catalog-consumer-diagnostic.ts | diagnostic直接消费旧strict catalog shape | source存在[VEF] | R4删除；不保compat CLI | acceptance只读Evidence/roots，不importproduction catalog |
@@ -420,7 +427,7 @@ absence slot或验收分支。
 新capability closure与事实门。冻结generated entry文件本身R2仅保留“exact set由generator产生”的机制，不能
 复制为Aloha composition或把22写进validator。
 
-## 6. Never-port deletion ledger
+## 6. Never-import / clean-room rejection ledger
 
 [REJ] 以下结构在 Aloha source、generated artifacts、runtime、logs 与 acceptance 中必须为零：
 
@@ -657,7 +664,9 @@ absent；该语言的第一个source进入denominator时必须先交付并qualif
 
 [PFD] 分母来自exact clean pushed Git tree、build manifests与generated output tree，不来自调用者可调的
 `sourceExtensions`、任意exclude或repository-wide `other` root；manifest、compiler、resolver、generator与
-denominator roots全部hash绑定。自写lexical scanner只可标记
+denominator roots全部hash绑定。每个tracked file同时绑定index blob与compiler实际读取bytes的SHA-256，并要求
+两者exact相等；`assume-unchanged`、`skip-worktree`、非零index stage或symlink一律invalid，不能用clean status掩盖
+工作树/index分叉。自写lexical scanner只可标记
 `coverageClass="bootstrap-lexical" / requiredCredit=false / legacyZeroCredit=false`，不得命名为最终check、挂名
 证明production closure或使baseline通过。所有mutation fixture按caseId+path+offset+diagnostic形成exact
 multiset；“出现过某个错误”不能给同文件其他漏检攻击喂绿。
@@ -1505,18 +1514,34 @@ interface CoarseEdgeProjectionV1 {
 }
 
 interface CoarseRouteAssessmentV1 {
+  readonly assessmentId: Hash;
   readonly routeId: Hash;
+  readonly routeBindingHash: Hash;
+  readonly generationId: string;
+  readonly graphRoot: Hash;
+  readonly sourceAnchorHash: Hash;
+  readonly objectiveProfileHash: Hash;
   readonly projectionRoot: Hash;
+  readonly orderedProjectionIds: readonly Hash[];
   readonly rankScore: SignedDecimalString | null;
   readonly profitUpperBound:
-    | { readonly numeraire: AssetRef; readonly amount: SignedDecimalString; readonly proofRoot: Hash }
+    | {
+        readonly numeraire: AssetRef;
+        readonly amount: SignedDecimalString;
+        readonly proofProgramRef: AuthorityProofProgramRef;
+        readonly proofRoot: Hash;
+        readonly valuationFactsRoot: Hash;
+        readonly gasUpperBoundFactRoot: Hash;
+      }
     | null;
 }
 ~~~
 
 [PFD] 每个projection必须精确绑定`edgeRef + direction + generationId + graphRoot + current number/hash/stateRoot +
 capabilityDigest + dependencyRoot`；任一不符即`unavailable`，禁止拿旧generation、旧head或另一方向的粗估。
-粗投影只用整数/fixed-point/rational canonical bytes，禁止JS floating point成为hard-prune authority。
+route assessment还必须绑定完整RouteHandle immutable binding、同一generation/graph/source、ObjectiveProfile及按route
+顺序组成的exact projection IDs/root；任一不符时该assessment无效，route只能进入bounded-unranked。粗投影只用
+整数/fixed-point/rational canonical bytes，禁止JS floating point成为hard-prune authority。
 
 [PFD] admission固定为两条队列：`Top-K rankable`加`bounded unranked`。缺coarse capability、read失败、proof缺失
 或projection unavailable的route按opaque ownerRef round-robin进入unranked预算，必须显式记`not-probed`事实，
@@ -1960,26 +1985,29 @@ interface RetentionLeaseReceiptV1 {
   readonly qualificationRegistryRoot: Hash;
 }
 
-interface ArtifactResolutionResultV1 {
-  readonly resultId: Hash;
+interface ObservedImmutableMirrorV1 {
+  readonly storeIdentityHash: Hash;
+  readonly objectKey: Hash;
+  readonly bytes: Bytes;
+  readonly contentSha256: Hash;
+  readonly byteLength: DecimalString;
+  readonly mediaType: string;
+  readonly schema: SchemaRef | null;
+}
+
+interface ArtifactResolutionClaimV1 {
+  readonly claimId: Hash;
   readonly artifactRefId: Hash;
   readonly resolverPolicyHash: Hash;
-  readonly resolverImplementationDigest: Hash;
-  readonly resolverQualificationId: Hash;
-  readonly qualificationRegistryRoot: Hash;
-  readonly resolvedAtStoreEpoch: DecimalString;
-  readonly bytes: Bytes | null;
-  readonly observedContentSha256: Hash | null;
-  readonly observedByteLength: DecimalString | null;
-  readonly outcome: "resolved" | "missing" | "mismatch" | "lease-invalid";
+  readonly observedMirror: ObservedImmutableMirrorV1 | null;
+  readonly outcome: "content-observed" | "missing" | "content-mismatch";
 }
 
 interface ReadOnlyArtifactResolver {
-  resolve(
+  observe(
     ref: ReadOnlyArtifactRefV1,
     policy: ResolverPolicyV1,
-    lease: RetentionLeaseReceiptV1,
-  ): Promise<ArtifactResolutionResultV1>;
+  ): Promise<ArtifactResolutionClaimV1>;
 }
 
 interface SemanticArtifactV1 {
@@ -2016,8 +2044,9 @@ interface ProductionReceiptV1 {
 
 [PFD] `ProductionReceipt.logRangeArtifactRef.locator`必须是`file-range`，且其`systemId`与`bootIdHash`必须
 分别等于producer anchor；log与raw-boundary artifact必须不同。跨system、跨boot、无device/inode/range的日志
-不能伪装成该process的production evidence。其immutable mirror仍须由qualified resolver证明bytes/hash/length/
-media/schema与retention lease真实可读；结构hash自洽本身不是live事实。
+不能伪装成该process的production evidence。其immutable mirror只能由只读resolver observation提供bytes/hash/length/
+media/schema claim；GateCore还必须独立复核retention lease、store epoch、issuer/registry currentness与process anchor，
+结构hash自洽本身不是live事实。
 
 [PFD] EvidenceEvent引用input/output SemanticArtifact与ProductionReceipt，形成事实lineage；它不是跨stage业务
 DTO，也不能让producer metadata改变语义artifact ID。不是每次hot-path amount search/quote都写durable
@@ -2208,9 +2237,9 @@ resolverPolicyHash =
   H("aloha/artifact-resolver-policy/v1",
     canonical(all ResolverPolicy fields except policyHash))
 
-resolutionResultId =
-  H("aloha/artifact-resolution-result/v1",
-    canonical(all ArtifactResolutionResult fields except resultId))
+artifactResolutionClaimId =
+  H("aloha/artifact-resolution-claim/v1",
+    canonical(all ArtifactResolutionClaimV1 fields except claimId))
 
 inputHash =
   H("aloha/stage-input/v1", stage.id, inputSchema, canonical(inputs))
@@ -2248,27 +2277,37 @@ ProductionReceipt精确相符。换producer但语义与依赖完全相同可以�
 ProductionReceipt的producer字段重建同一个ProcessAnchor并复算等于query.processAnchorHash。每条Event自己的
 logRangeArtifactRef仍独立校验，不能用相同process anchor掩盖跨log splice。
 
-[PFD] ObserverAdapter从exact union重算source与immutable-mirror locator IDs，通过qualified
-`ReadOnlyArtifactResolver`从mirror按`objectKey=contentSha256`重读bytes，复核contentSha256/byteLength/media/
-schema后才可封存QualifiedFactSnapshot。`file-range`必须满足`endExclusive-startInclusive == byteLength`，并与
-同一boot/device/inode对象一致；JSON pointer先验证parent content再取值。Boundary raw artifact与process log
-range使用两个独立ArtifactRef，禁止用一个含糊hash同时代表二者。
+[PFD] ObserverAdapter从exact union重算source与immutable-mirror locator IDs，通过只读
+`ReadOnlyArtifactResolver.observe`按`objectKey=contentSha256`读取bytes并封存
+`ArtifactResolutionClaimV1`；该claim和其中的`ObservedImmutableMirrorV1`都是untrusted observation，不能自报
+当前、lease有效、issuer合格或registry membership。GateCore从claim、`ReadOnlyArtifactRefV1`、原始lease、
+current store epoch、issuer qualification/registry membership、process anchor与独立raw observation重新复核，
+只有全部谓词通过才可封存QualifiedFactSnapshot。resolver必须在I/O前拒绝声明长度超过policy的ref，并在复制或
+编码前拒绝实际bytes超过policy的mirror；超限claim不能携带observed content。`file-range`必须满足
+`endExclusive-startInclusive == byteLength`，
+并与同一boot/device/inode对象一致；JSON pointer先验证parent content再取值。Boundary raw artifact与process
+log range使用两个独立ArtifactRef，禁止用一个含糊hash同时代表二者。
 
 [PFD] 所有`*ArtifactRefId`与snapshot的`orderedRawArtifactRefIds`只引用`artifactRefId`；`locatorId`仅标识“去哪里
 读取”，不绑定读取到的bytes，绝不能代替artifactRefId进入content/lineage root。
 
 [PFD] Source locator用于provenance，可能因log rotation或远端retention失效；因此collector在发出ArtifactRef前
 必须把exact bytes写入immutable content store并取得覆盖整个验收/复核期的retention lease。Resolver port只允许
-按content-object locator读取，不允许builder/planner/simulator调用；mirror缺失、lease过期、resolver policy/
-implementation未资格化或bytes不匹配均invalid。Chain/checkpoint locator的opaque hashed selector不能独立满足
-可重读性，必须依赖该immutable mirror；GateCore仍不做I/O，只消费已封存snapshot。
+按content-object locator读取，不允许builder/planner/simulator调用；它只产生claim，不拥有admission、currentness、
+lease或issuer authority。Chain/checkpoint locator的opaque hashed selector不能独立满足可重读性，必须依赖该
+immutable mirror；GateCore仍不做I/O，只消费已封存的claim、lease、registry与process observations。
 
-[PFD] Lease subject必须exact等于ArtifactRef的mirror
-`storeIdentityHash + objectKey + contentSha256`，issuer qualification在同registry current且未revoked；
-`resolvedAtStoreEpoch`必须位于lease区间，且剩余epoch满足policy。Resolution result的implementation/
-qualification、policy、registry与ArtifactRef逐项匹配，只有`resolved`且bytes/hash/length/media/schema全相等才可
-生成QualifiedObservation；其他outcome一律invalid。RetentionLeaseReceipt作为`*ReceiptV1`按§19.3绑定全部字段，
-resolver policy/result也按上式独立重算，不能靠store自报“仍可读”。
+[PFD] GateCore必须独立验证以下完整关系，不能接受resolver、store或issuer自报的布尔字段：
+`ArtifactResolutionClaimV1.artifactRefId`与`ReadOnlyArtifactRefV1` exact binding；mirror locator/object key/content
+hash、byte length、media type与schema的exact binding；RetentionLeaseReceipt的subject与有效epoch；观测时的
+store epoch在lease区间且剩余epoch满足policy；issuer在当前 qualification registry中合格且未revoked；该
+registry membership/revocation/currentness与registry root相符；QualifiedObservation声明的raw artifact exact set与
+对应claim closure一致，且`acquisitionProductionReceiptId`指向的ProductionReceipt/process anchor相符。只有
+claim outcome为
+`content-observed`且bytes/hash/length/media/schema全部通过独立复核才可生成QualifiedObservation；missing、
+mismatch、lease、issuer、registry、process或任何exact-binding失败一律invalid。RetentionLeaseReceipt作为
+`*ReceiptV1`按§19.3绑定全部字段；policy、lease、claim与observed mirror的hash都由GateCore独立重算，不能靠
+store自报“仍可读”。
 
 [PFD] outcome与reasonCode属于语义结果，必须进入outputHash；否则把verified改成rejected仍可能维持child
 commitment。Stage 1成功结果使用verified，stage 2–6过程成功使用success。
@@ -2399,7 +2438,7 @@ interface PredicateSpecV1 {
 ~~~
 
 [PFD] predicate只能读取声明的claim/observation schemas；同一canonical inputs/facts不得因producer为impl或
-Aloha而改变verdict。DS不再是本重写的reference producer或校准对象。缺load-bearing observation、unknown schema、stale qualification或不完整分母返回
+Aloha而改变verdict。除impl外不建设第二reference producer或校准路径。缺load-bearing observation、unknown schema、stale qualification或不完整分母返回
 `invalid`；已观察到违反contract的事实才返回`fail`；事实完整且predicate成立才返回`pass`。展示层可显示
 producer identity，predicate不得据此选阈值、放宽stage或改变expected result。
 
@@ -2555,6 +2594,9 @@ observer digest变化，旧证书立即stale并使verdict invalid。`declaredCri
 
 [PFD] QualificationRegistrySnapshot由release-governance冻结的受信issuer set批准；validator绑定query指定的
 exact registry root，复核certificate membership、issuer、epoch与revocation。`verdict:"qualified"`自报没有效力。
+底层qualification validator只可返回`factsConsistent + authority:false`，不得暴露容易被误用为最终结论的
+`valid:true`；只有GateCore把certificate材料与current registry、真实mutation corpus、independent oracle cases、
+lease/store epoch和process observations全部join后，才可形成acceptance三值verdict。
 每条load-bearing observation逐条复核：certificate subject implementation digest、observed schema、locator kind、
 anchor policy与envelope完全匹配，且certificate在该registry current且未revoked；不能用“系统里存在一张合格
 observer证书”替未资格化adapter背书。
@@ -2826,7 +2868,8 @@ start/end anchors复算，不能信调用者传入。顶层verdict只能由Predi
 - `new-domain-extension-isolation`：未来新增domain只能改变自己的extension specs、Family/Strategy packages、
   release-intent与generated artifacts；stable core和中央源码diff为零；
 - `coarse-authority-isolation`：coarse projection不进入Graph root、不签发exact/action；无proof score mutation只改
-  排序不改hard-prune集合，missing capability仍有bounded-unranked accounting；
+  排序不改hard-prune集合，missing capability仍有bounded-unranked accounting；route assessment换route、direction、
+  generation、graph、source、objective或projection root后只能invalid→unranked，绝不能复用旧upper bound剪枝；
 - `family-resource-bulkhead`：一个Family超时、crash或资源尖峰时，只使自己的facts unresolved，关键lane预算不失守。
 
 [PFD] 当前不创建LP template或adapter来跑`new-domain-extension-isolation`。该predicate先用schema-level arbitrary
@@ -3474,6 +3517,8 @@ exclusive gate先阻止新session acquire，再drain、CAS并重开；session中
 function admitCoarse(
   routes: readonly RouteHandle[],
   assessments: ReadonlyMap<Hash, CoarseRouteAssessmentV1>,
+  graphLease: GraphViewLease,
+  source: CanonicalSourceView,
   objective: ObjectiveProfileV1,
   budgets: { ranked: number; unranked: number },
 ): CoarseAdmissionV1 {
@@ -3481,12 +3526,26 @@ function admitCoarse(
   const rankable: RankedRoute[] = [];
   const unranked: RouteHandle[] = [];
   for (const route of routes) {
-    const assessment = assessments.get(route.routeId);
+    const claimed = assessments.get(route.routeId);
+    const assessment = claimed !== undefined && verifyCoarseAssessmentBinding(claimed, {
+      route,
+      graphLease,
+      source,
+      objective,
+    }) ? claimed : undefined;
+    if (claimed !== undefined && assessment === undefined) {
+      recordInvalidCoarseAssessment(claimed.assessmentId, route.routeId);
+    }
     if (
       assessment?.profitUpperBound !== null &&
       assessment?.profitUpperBound !== undefined &&
       assetRefHash(assessment.profitUpperBound.numeraire) === assetRefHash(objective.numeraire) &&
-      authorityProofs.verifyConservativeUpperBound(assessment) &&
+      authorityProofs.verifyConservativeUpperBound(assessment, {
+        route,
+        graphLease,
+        source,
+        objective,
+      }) &&
       BigInt(assessment.profitUpperBound.amount) < BigInt(objective.minNetGain)
     ) {
       hardPruned.push(sealPrune(route, assessment));
@@ -3528,6 +3587,8 @@ async function evaluateCandidate(
   const admission = coarseEconomics.admit({
     routes: enumerated,
     projections,
+    graphLease: session.lease,
+    source: session.source,
     objective: session.objective,
     rankedLimit: session.budgets.rankedExact,
     unrankedLimit: session.budgets.unrankedExact,

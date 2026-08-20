@@ -242,9 +242,9 @@ export const ARTIFACT_RESOLUTION_SCHEMA_MANIFESTS = Object.freeze({
 type CodecInput = string | Uint8Array | object;
 
 function parse(value: CodecInput): unknown {
-  return typeof value === "string" || value instanceof Uint8Array
-    ? decodeCanonicalJson(value)
-    : value;
+  if (typeof value === "string") return decodeCanonicalJson(value);
+  if (ArrayBuffer.isView(value)) return decodeCanonicalJson(value as Uint8Array);
+  return value;
 }
 
 export function decodeResolverPolicy(value: CodecInput): ResolverPolicyV1 {
@@ -510,9 +510,16 @@ export function decodeArtifactBytes(
 }
 
 export function encodeArtifactBytes(bytes: Uint8Array): string {
+  if (
+    !ArrayBuffer.isView(bytes) ||
+    Object.getPrototypeOf(bytes) !== Uint8Array.prototype ||
+    Object.getOwnPropertyDescriptor(bytes, "length") !== undefined
+  ) {
+    throw new TypeError("artifact bytes must be a concrete Uint8Array");
+  }
   let output = "0x";
-  for (const byte of bytes) {
-    output += byte.toString(16).padStart(2, "0");
+  for (let index = 0; index < bytes.length; index += 1) {
+    output += bytes[index]!.toString(16).padStart(2, "0");
   }
   return output;
 }

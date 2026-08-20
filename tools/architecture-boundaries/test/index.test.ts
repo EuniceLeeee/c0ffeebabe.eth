@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
   MUTATION_CORPUS,
@@ -38,6 +41,7 @@ test("boundary receipt exposes source/build facts only and never claims runtime 
   assert.equal(receipt.schemaVersion, 1);
   assert.equal(receipt.candidate.gitRoot, repoRoot);
   assert.ok(receipt.denominator.files.length > 0);
+  assert.ok(receipt.denominator.files.every((file) => /^0x[0-9a-f]{64}$/.test(file.contentSha256)));
   assert.ok(receipt.compiler.configPaths.length > 0);
   assert.ok(receipt.compiler.externalDependencies.includes("node:crypto"));
   assert.match(receipt.denominator.scannedFileSetRoot, /^0x[0-9a-f]{64}$/);
@@ -50,11 +54,55 @@ test("boundary receipt exposes source/build facts only and never claims runtime 
   assert.ok(receipt.diagnostics.every((item) => item.path.length > 0));
 });
 
+test("assume-unchanged cannot splice compiler bytes away from the indexed denominator", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-boundary-"));
+  const runGit = (...args: string[]) => execFileSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  try {
+    runGit("init", "-b", "codex/test");
+    runGit("config", "user.email", "boundary@example.invalid");
+    runGit("config", "user.name", "Boundary Test");
+    writeFileSync(join(root, "package.json"), JSON.stringify({
+      name: "boundary-fixture",
+      private: true,
+      type: "module",
+    }));
+    writeFileSync(join(root, "tsconfig.json"), JSON.stringify({
+      compilerOptions: {
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        noEmit: true,
+        strict: true,
+      },
+      include: ["index.ts"],
+    }));
+    writeFileSync(join(root, "index.ts"), "export const value = 1;\n");
+    runGit("add", ".");
+    runGit("commit", "-m", "fixture");
+    assert.equal(runBoundaryGate({ gitRoot: root, requirePushed: false }).verdict, "pass");
+
+    runGit("update-index", "--assume-unchanged", "index.ts");
+    writeFileSync(join(root, "index.ts"), "export const value = 2;\n");
+    const receipt = runBoundaryGate({ gitRoot: root, requirePushed: false });
+    assert.equal(receipt.candidate.clean, true);
+    assert.equal(receipt.verdict, "invalid");
+    const codes = receipt.diagnostics.map((item) => item.code);
+    assert.ok(codes.includes("noncanonical-index-flag"));
+    assert.ok(codes.includes("worktree-index-content-mismatch"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("generated output mutations cannot omit the hash or generator closure", () => {
   const generated = {
     path: "generated/out.ts",
     mode: "100644",
     blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
     byteLength: 1,
     language: "typescript" as const,
     fileClass: "generated" as const,
@@ -63,6 +111,7 @@ test("generated output mutations cannot omit the hash or generator closure", () 
     path: "tools/generate.ts",
     mode: "100644",
     blobSha: "b".repeat(40),
+    contentSha256: `0x${"b".repeat(64)}`,
     byteLength: 1,
     language: "typescript" as const,
     fileClass: "authoring" as const,
@@ -81,6 +130,7 @@ test("dependency attacks cannot hide behind external edges or strategy/generated
     path,
     mode: "100644",
     blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
     byteLength: 1,
     language: "typescript",
     fileClass,

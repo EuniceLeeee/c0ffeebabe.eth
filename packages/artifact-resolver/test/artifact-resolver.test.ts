@@ -216,6 +216,27 @@ test("max byte policy rejects before content I/O", async () => {
   assert.equal(reads, 0);
 });
 
+test("actual mirror bytes are bounded before copy and encoding", async () => {
+  const exactPolicy = createResolverPolicy({
+    ...policy,
+    policyHash: undefined,
+    maxByteLength: String(sourceBytes.length),
+  });
+  const claim = await resolveArtifactClaim(
+    refFor({ resolverPolicyHash: exactPolicy.policyHash }),
+    exactPolicy,
+    ioFor({
+      storeIdentityHash,
+      objectKey: contentSha256,
+      bytes: new Uint8Array(sourceBytes.length + 1),
+      mediaType: "application/octet-stream",
+      schema,
+    }),
+  );
+  assert.equal(claim.outcome, "content-mismatch");
+  assert.equal(claim.observedMirror, null);
+});
+
 test("malformed, accessor and proxy store values fail without invoking traps", async () => {
   let getterReads = 0;
   const accessorBlob = {
@@ -273,6 +294,74 @@ test("malformed, accessor and proxy store values fail without invoking traps", a
       unexpected: true,
     } as never),
   ));
+});
+
+test("mirror bytes accept only exact native Uint8Array and never invoke hostile traps", async () => {
+  const readWith = (bytes: unknown): ImmutableMirrorRead => ({
+    storeIdentityHash,
+    objectKey: contentSha256,
+    bytes: bytes as Uint8Array,
+    mediaType: "application/octet-stream",
+    schema,
+  });
+
+  const accepted = await resolveArtifactClaim(refFor(), policy, ioFor(readWith(sourceBytes)));
+  assert.equal(accepted.outcome, "content-observed");
+
+  await assert.rejects(() => resolveArtifactClaim(refFor(), policy, ioFor(readWith(Buffer.from(sourceBytes)))));
+  class DerivedBytes extends Uint8Array {}
+  await assert.rejects(() => resolveArtifactClaim(refFor(), policy, ioFor(readWith(new DerivedBytes(sourceBytes)))));
+
+  let proxyTrapHits = 0;
+  const proxy = new Proxy(sourceBytes, {
+    get: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    getOwnPropertyDescriptor: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    getPrototypeOf: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+    ownKeys: () => {
+      proxyTrapHits += 1;
+      throw new Error("proxy trap must not run");
+    },
+  });
+  await assert.rejects(() => resolveArtifactClaim(refFor(), policy, ioFor(readWith(proxy))));
+  assert.equal(proxyTrapHits, 0);
+
+  let lengthGetterHits = 0;
+  const shadowedLength = sourceBytes.slice();
+  Object.defineProperty(shadowedLength, "length", {
+    configurable: true,
+    get: () => {
+      lengthGetterHits += 1;
+      return sourceBytes.length;
+    },
+  });
+  await assert.rejects(() => resolveArtifactClaim(refFor(), policy, ioFor(readWith(shadowedLength))));
+  assert.equal(lengthGetterHits, 0);
+
+  let iteratorGetterHits = 0;
+  const iteratorShadow = sourceBytes.slice();
+  Object.defineProperty(iteratorShadow, Symbol.iterator, {
+    configurable: true,
+    get: () => {
+      iteratorGetterHits += 1;
+      throw new Error("iterator getter must not run");
+    },
+  });
+  const iteratorSafe = await resolveArtifactClaim(
+    refFor(),
+    policy,
+    ioFor(readWith(iteratorShadow)),
+  );
+  assert.equal(iteratorSafe.outcome, "content-observed");
+  assert.equal(iteratorGetterHits, 0);
 });
 
 test("I/O errors propagate and batch output is immutable", async () => {
