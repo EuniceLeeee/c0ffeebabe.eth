@@ -622,6 +622,11 @@ async function differentInstanceFailuresDoNotOpenFamilyCircuit(): Promise<void> 
     ["target-instance"],
     "three unrelated failures must not suppress the exact-positive target instance",
   );
+  assert.equal(
+    result.opportunities[0]?.searchSeed.searchCenter,
+    9n,
+    "an exact-positive route must carry its executable probe amount into solver sizing",
+  );
 }
 
 async function sameInstanceCircuitDoesNotBlockOppositeDirection(): Promise<void> {

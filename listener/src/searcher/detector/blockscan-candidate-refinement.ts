@@ -448,8 +448,22 @@ export async function refineBlockScanCandidates(
         throw probeController.signal.reason ?? new ProbeTimeoutError(localBudgetMs);
       }
       if (marginBps > 0) {
+        // The exact admission probe is deliberately cheap: it prices one
+        // small executable amount (ceiling / 1024).  Preserve that amount as
+        // the solver's search anchor.  The coarse scanner's center is a
+        // capacity estimate, not evidence that this much capital remains
+        // profitable; restoring it here can move the solver ~1000x away from
+        // the only amount that just passed exact admission.
+        const probeAmount = exactProbeAmount(opportunity);
+        const anchoredOpportunity: BlockScanOpportunity = {
+          ...opportunity,
+          searchSeed: {
+            ...opportunity.searchSeed,
+            searchCenter: probeAmount,
+          },
+        };
         ranked.push({
-          opportunity,
+          opportunity: anchoredOpportunity,
           marginBps,
           priority: exactProbePriority(opportunity, marginBps, pricedTokens),
           index,
@@ -710,7 +724,7 @@ async function exactProbeMarginBps(
   onRouteSuccess: () => void = () => {},
 ): Promise<number> {
   const ceiling = minBigint(opportunity.searchSeed.searchCenter, opportunity.searchSeed.maxInput);
-  const amountIn = maxBigint(BLOCKSCAN_MIN_EXECUTABLE_INPUT, ceiling / 1024n);
+  const amountIn = exactProbeAmount(opportunity);
   if (amountIn > ceiling || amountIn <= 0n) {
     return 0;
   }
@@ -754,6 +768,14 @@ async function exactProbeMarginBps(
   if (profit <= 0n) return 0;
   const marginBps = Number(profit) * 10_000 / Number(amountIn);
   return Number.isFinite(marginBps) && marginBps > 0 ? marginBps : 0;
+}
+
+function exactProbeAmount(opportunity: BlockScanOpportunity): bigint {
+  const ceiling = minBigint(
+    opportunity.searchSeed.searchCenter,
+    opportunity.searchSeed.maxInput,
+  );
+  return maxBigint(BLOCKSCAN_MIN_EXECUTABLE_INPUT, ceiling / 1024n);
 }
 
 function minBigint(a: bigint, b: bigint): bigint {
