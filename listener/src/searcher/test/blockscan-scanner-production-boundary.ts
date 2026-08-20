@@ -450,11 +450,32 @@ console.log("[blockscan-production-boundary] atomic funding coverage: PASS");
     [fallback.candidates[0]!.exactProbeOpportunity],
   );
   assert.equal(promoted[0]!.sourceBlock, block + 1);
+  // The refiner re-anchors exact-positive searchCenter into a new object
+  // (341e0cdf), so promotion matches by route content, not object identity.
+  // A re-anchored lookalike of the same route must still promote.
+  const anchored = {
+    ...fallback.candidates[0]!.exactProbeOpportunity,
+    searchSeed: {
+      ...fallback.candidates[0]!.exactProbeOpportunity.searchSeed,
+      searchCenter: 1n,
+    },
+  };
+  const anchoredPromoted = promoteNMinusOneExactCandidates(
+    fallback.candidates,
+    [anchored],
+  );
+  assert.equal(anchoredPromoted[0]!.sourceBlock, block + 1);
+  // A lookalike whose route (seed-edge set) differs must be rejected.
   assert.throws(
     () =>
       promoteNMinusOneExactCandidates(
         fallback.candidates,
-        [{ ...fallback.candidates[0]!.exactProbeOpportunity }],
+        [{
+          ...fallback.candidates[0]!.exactProbeOpportunity,
+          seedEdges: [
+            fallback.candidates[0]!.exactProbeOpportunity.seedEdges[0]!,
+          ],
+        }],
       ),
     /outside the exact probe set/,
   );

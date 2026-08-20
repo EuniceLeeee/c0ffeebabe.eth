@@ -201,21 +201,27 @@ export function enumerateNMinusOneCoarseCandidates(input: {
 }
 
 /**
- * Promote only object-identical probe results emitted by the exact-N refiner.
- * A coarse opportunity or a newly forged lookalike cannot cross this boundary.
+ * Promote probe results emitted by the exact-N refiner, matched by route
+ * content (seed-edge identity) instead of object identity. The refiner's
+ * exact-positive output re-anchors searchCenter to the probed amount (a new
+ * object), so object-identical matching can never succeed there; the
+ * seed-edge key sequence is the same in both views and is the boundary guard.
+ * A coarse opportunity or a newly forged lookalike cannot cross it.
  */
 export function promoteNMinusOneExactCandidates(
   envelopes: readonly NMinusOneCoarseCandidate[],
   exactPositive: readonly BlockScanOpportunity[],
 ): BlockScanOpportunity[] {
-  const envelopeByProbe = new Map(
+  const envelopeByRoute = new Map(
     envelopes.map((candidate) => [
-      candidate.exactProbeOpportunity,
+      opportunityRouteKey(candidate.exactProbeOpportunity),
       candidate,
     ] as const),
   );
   return exactPositive.map((opportunity) => {
-    const envelope = envelopeByProbe.get(opportunity);
+    const envelope = envelopeByRoute.get(
+      opportunityRouteKey(opportunity),
+    );
     if (!envelope) {
       throw new Error(
         "N-1 fallback cannot promote a candidate outside the exact probe set",
@@ -229,6 +235,14 @@ export function promoteNMinusOneExactCandidates(
     }
     return Object.freeze({ ...opportunity });
   });
+}
+
+function opportunityRouteKey(
+  opportunity: Pick<BlockScanOpportunity, "seedEdges">,
+): string {
+  return opportunity.seedEdges
+    .map((edge) => blockScanEdgeKey(edge))
+    .join(">");
 }
 
 function exactEdgeMap(edges: readonly TokenEdge[]): Map<string, TokenEdge> {
