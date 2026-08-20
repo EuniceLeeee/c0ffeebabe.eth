@@ -15,7 +15,8 @@
   ],
   "scripts": {
     "build": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present && npm run typecheck --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present && npm run typecheck --workspaces --if-present",
+    "architecture-boundary": "npm run check --workspace @aloha/boundary-gate"
   },
   "devDependencies": {
     "@types/node": "20.19.41",
