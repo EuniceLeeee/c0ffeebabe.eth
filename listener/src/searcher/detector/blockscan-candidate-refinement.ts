@@ -13,8 +13,6 @@ import {
   blockScanEdgeFamilyId,
   blockScanFailureCircuitAttribution,
   blockScanRouteFamilyIds,
-  orderByBlockScanFamily,
-  selectByBlockScanFamily,
 } from "./blockscan-family-budget.js";
 import type { StrictProductionRuntimeSession } from
   "../strict-production-runtime-session.js";
@@ -22,8 +20,7 @@ import type { RuntimeEvidence } from
   "../venues/adapter-family-plugin.js";
 
 const DEFAULT_CONCURRENCY = 24;
-const DEFAULT_FAMILY_PROBE_TIMEOUT_MS = 1_500;
-const DEFAULT_MAX_CONCURRENT_PER_FAMILY = 12;
+const DEFAULT_PROBE_TIMEOUT_MS = 1_500;
 
 export interface BlockScanRefinementResult {
   opportunities: BlockScanOpportunity[];
@@ -77,7 +74,7 @@ export interface BlockScanProbeFailureDiagnostic {
     | "family_circuit_open"
     | "instance_circuit_open"
     | "composite_circuit_open"
-    | "family_timeout"
+    | "probe_timeout"
     | "global_deadline"
     | "quote_error";
   readonly familyIds: readonly string[];
@@ -93,8 +90,8 @@ export interface BlockScanProbeFailureDiagnostic {
 }
 
 export interface BlockScanRefinementOptions {
-  readonly familyTimeoutMs?: number;
-  readonly maxConcurrentPerFamily?: number;
+  /** Uniform deadline for each exact route probe. */
+  readonly probeTimeoutMs?: number;
   /**
    * Hard exact admission floor in bps. Candidates whose coarse spread clears
    * the floor are probed; the rest are skipped and counted in
@@ -131,12 +128,12 @@ interface RankedProbe {
 }
 
 class ProbeDeadlineError extends Error {}
-class FamilyProbeDeadlineError extends Error {
-  constructor(readonly familyIds: readonly string[], timeoutMs: number) {
+class ProbeTimeoutError extends Error {
+  constructor(timeoutMs: number) {
     super(
-      `block-scan exact probe family ${familyIds.join(",")} exceeded ${timeoutMs}ms`,
+      `block-scan exact probe exceeded ${timeoutMs}ms`,
     );
-    this.name = "FamilyProbeDeadlineError";
+    this.name = "ProbeTimeoutError";
   }
 }
 
@@ -156,10 +153,10 @@ export async function refineBlockScanCandidates(
   concurrency = DEFAULT_CONCURRENCY,
   options: BlockScanRefinementOptions = {},
 ): Promise<BlockScanRefinementResult> {
-  let work = orderByBlockScanFamily(
-    opportunities.map((opportunity, index) => ({ opportunity, index })),
-    ({ opportunity }) => blockScanRouteFamilyIds(opportunity.seedEdges),
-  );
+  // The central scheduler owns one global work queue. Family IDs remain
+  // opaque attribution data only; they must not create separate queues or
+  // concurrency quotas.
+  let work = opportunities.map((opportunity, index) => ({ opportunity, index }));
   const ranked: RankedProbe[] = [];
   const fallback: Array<{ opportunity: BlockScanOpportunity; index: number }> = [];
   const stageBudget = new BlockScanFamilyStageBudget();
@@ -309,13 +306,9 @@ export async function refineBlockScanCandidates(
     }
   };
   const workerCount = Math.max(1, Math.min(concurrency, work.length));
-  const familyTimeoutMs = positiveInteger(
-    options.familyTimeoutMs ?? DEFAULT_FAMILY_PROBE_TIMEOUT_MS,
-    "family timeout",
-  );
-  const maxConcurrentPerFamily = positiveInteger(
-    options.maxConcurrentPerFamily ?? DEFAULT_MAX_CONCURRENT_PER_FAMILY,
-    "family concurrency",
+  const probeTimeoutMs = positiveInteger(
+    options.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
+    "probe timeout",
   );
   const deadlineController = new AbortController();
   const detachCaller = options.signal
@@ -336,18 +329,10 @@ export async function refineBlockScanCandidates(
       )
     : undefined;
   const pending = [...work];
-  const inFlightByFamily = new Map<string, number>();
   const active = new Set<Promise<void>>();
   const routeFamilies = (opportunity: BlockScanOpportunity): readonly string[] => {
     const familyIds = blockScanRouteFamilyIds(opportunity.seedEdges);
     return familyIds.length > 0 ? familyIds : ["<unowned-family>"];
-  };
-  const releaseFamilies = (familyIds: readonly string[]): void => {
-    for (const familyId of familyIds) {
-      const remaining = (inFlightByFamily.get(familyId) ?? 1) - 1;
-      if (remaining <= 0) inFlightByFamily.delete(familyId);
-      else inFlightByFamily.set(familyId, remaining);
-    }
   };
   const claimNext = (): typeof work[number] | null => {
     for (let index = 0; index < pending.length;) {
@@ -360,24 +345,8 @@ export async function refineBlockScanCandidates(
         index++;
         continue;
       }
-      const familyIds = routeFamilies(item.opportunity);
-      if (
-        familyIds.every(
-          (familyId) =>
-            (inFlightByFamily.get(familyId) ?? 0) <
-              maxConcurrentPerFamily,
-        )
-      ) {
-        pending.splice(index, 1);
-        for (const familyId of familyIds) {
-          inFlightByFamily.set(
-            familyId,
-            (inFlightByFamily.get(familyId) ?? 0) + 1,
-          );
-        }
-        return item;
-      }
-      index++;
+      pending.splice(index, 1);
+      return item;
     }
     return null;
   };
@@ -418,32 +387,30 @@ export async function refineBlockScanCandidates(
     familyIds: readonly string[],
   ): Promise<void> => {
     const { opportunity, index } = item;
-    const familyController = new AbortController();
+    const probeController = new AbortController();
     const detachGlobal = linkAbort(
       deadlineController.signal,
-      familyController,
+      probeController,
     );
     const startedAtMs = Date.now();
     const localBudgetMs = Math.min(
-      familyTimeoutMs,
+      probeTimeoutMs,
       Math.max(0, deadlineAtMs - startedAtMs),
     );
-    const familyDeadlineAtMs = Math.min(
+    const probeDeadlineAtMs = Math.min(
       deadlineAtMs,
       startedAtMs + localBudgetMs,
     );
     let localTimedOut = false;
-    const familyTimer = familyDeadlineAtMs < deadlineAtMs
+    const probeTimer = probeDeadlineAtMs < deadlineAtMs
       ? setTimeout(() => {
           localTimedOut = true;
-          familyController.abort(
-            new FamilyProbeDeadlineError(familyIds, localBudgetMs),
-          );
-        }, Math.max(0, familyDeadlineAtMs - Date.now()))
+          probeController.abort(new ProbeTimeoutError(localBudgetMs));
+        }, Math.max(0, probeDeadlineAtMs - Date.now()))
       : undefined;
     const controlledState = withStateCallControl(state, {
-      deadlineAtMs: familyDeadlineAtMs,
-      signal: familyController.signal,
+      deadlineAtMs: probeDeadlineAtMs,
+      signal: probeController.signal,
     });
     attempted++;
     recordShadowTotal(opportunity);
@@ -452,14 +419,14 @@ export async function refineBlockScanCandidates(
       const probe = exactProbeMarginBps(
         controlledState,
         opportunity,
-        familyDeadlineAtMs,
-        familyController.signal,
+        probeDeadlineAtMs,
+        probeController.signal,
         options.executor,
         options.strictSession,
         options.runtimeEvidence,
         () =>
-          familyDeadlineAtMs < deadlineAtMs
-            ? new FamilyProbeDeadlineError(familyIds, localBudgetMs)
+          probeDeadlineAtMs < deadlineAtMs
+          ? new ProbeTimeoutError(localBudgetMs)
             : new ProbeDeadlineError("exact probe deadline reached"),
         (edge) => stageBudget.recordEdgeSuccess(edge),
         () => stageBudget.recordRouteSuccess(opportunity.seedEdges),
@@ -476,10 +443,9 @@ export async function refineBlockScanCandidates(
       if (deadlineController.signal.aborted || Date.now() >= deadlineAtMs) {
         throw new ProbeDeadlineError("exact probe deadline reached");
       }
-      if (familyController.signal.aborted || Date.now() >= familyDeadlineAtMs) {
+      if (probeController.signal.aborted || Date.now() >= probeDeadlineAtMs) {
         localTimedOut = true;
-        throw familyController.signal.reason ??
-          new FamilyProbeDeadlineError(familyIds, localBudgetMs);
+        throw probeController.signal.reason ?? new ProbeTimeoutError(localBudgetMs);
       }
       if (marginBps > 0) {
         ranked.push({
@@ -509,10 +475,10 @@ export async function refineBlockScanCandidates(
       }
     } catch (error) {
       if (
-        error instanceof FamilyProbeDeadlineError ||
+        error instanceof ProbeTimeoutError ||
         (
-          familyDeadlineAtMs < deadlineAtMs &&
-          Date.now() >= familyDeadlineAtMs &&
+          probeDeadlineAtMs < deadlineAtMs &&
+          Date.now() >= probeDeadlineAtMs &&
           !deadlineController.signal.aborted
         )
       ) {
@@ -565,7 +531,7 @@ export async function refineBlockScanCandidates(
           marginBps: null,
           attempted: true,
           failure: probeFailureDiagnostic(
-            localTimedOut ? "family_timeout" : "quote_error",
+            localTimedOut ? "probe_timeout" : "quote_error",
             familyIds,
             budgetError,
             opportunity.seedEdges,
@@ -573,7 +539,7 @@ export async function refineBlockScanCandidates(
         });
       }
     } finally {
-      if (familyTimer !== undefined) clearTimeout(familyTimer);
+      if (probeTimer !== undefined) clearTimeout(probeTimer);
       detachGlobal();
     }
   };
@@ -608,9 +574,7 @@ export async function refineBlockScanCandidates(
         const item = claimNext();
         if (!item) break;
         const familyIds = routeFamilies(item.opportunity);
-        const task = probeOne(item, familyIds).finally(() => {
-          releaseFamilies(familyIds);
-        });
+        const task = probeOne(item, familyIds);
         active.add(task);
         void task.then(
           () => active.delete(task),
@@ -648,15 +612,10 @@ export async function refineBlockScanCandidates(
   const eligibleFallback = fallback.filter(({ opportunity }) =>
     !stageBudget.blocks(opportunity.seedEdges)
   );
-  const selectedRanked = selectByBlockScanFamily(
-    eligibleRanked,
-    maxCandidates,
-    (entry) => blockScanRouteFamilyIds(entry.opportunity.seedEdges),
-  );
-  const selectedFallback = selectByBlockScanFamily(
-    eligibleFallback,
+  const selectedRanked = eligibleRanked.slice(0, maxCandidates);
+  const selectedFallback = eligibleFallback.slice(
+    0,
     Math.max(0, maxCandidates - selectedRanked.length),
-    ({ opportunity }) => blockScanRouteFamilyIds(opportunity.seedEdges),
   );
   const selected = [
     ...selectedRanked.map((entry) => entry.opportunity),
@@ -835,7 +794,7 @@ function probeFailureDiagnostic(
     attributedInstanceCircuitKey:
       attribution?.scope === "instance" ? attribution.key : null,
     blockingCircuitScope:
-      reason === "quote_error" || reason === "family_timeout"
+      reason === "quote_error" || reason === "probe_timeout"
         ? attribution?.scope ?? null
         : null,
     stage: attributed?.stage ?? null,

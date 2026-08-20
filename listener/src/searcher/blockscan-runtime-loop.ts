@@ -2762,10 +2762,7 @@ export class BlockScanRuntimeLoop {
       }
       const planned: PlannedBlockScanSolve[] = [];
       const plannerFamilyBudget = new BlockScanFamilyStageBudget();
-      const plannerQueue = plannerFamilyBudget.order(
-        exactOpportunities,
-        (opp) => opp.seedEdges,
-      );
+      const plannerQueue = exactOpportunities;
       for (const opp of plannerQueue) {
         if (planned.length >= blockScanCfg.maxCandidates) break;
         if (plannerFamilyBudget.blocks(opp.seedEdges)) continue;
@@ -2844,10 +2841,7 @@ export class BlockScanRuntimeLoop {
       plannedCount = planned.length;
 
       const solverFamilyBudget = new BlockScanFamilyStageBudget();
-      const solverQueue = solverFamilyBudget.order(
-        planned.map((item, index) => ({ item, index })),
-        ({ item }) => item.opp.seedEdges,
-      );
+      const solverQueue = planned.map((item, index) => ({ item, index }));
       let cursor = 0;
       const finalSimulationPlanCommitments = new WeakMap<ResolvedPlan, string>();
       const finalSimulationPlanIdentity = createBotVmFinalSimulationPlanIdentity({
@@ -3061,10 +3055,7 @@ export class BlockScanRuntimeLoop {
         signalForIntent: () => passSignal,
       });
       const finalSimFamilyBudget = new BlockScanFamilyStageBudget();
-      const finalSimQueue = finalSimFamilyBudget.order(
-        exactQuoted,
-        (quoted) => quoted.item.opp.seedEdges,
-      );
+      const finalSimQueue = exactQuoted;
       const terminalQuoteSets = new Set<number>();
       try {
         for (const quoted of finalSimQueue) {

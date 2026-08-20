@@ -9,13 +9,6 @@ import { buildTokenPaths, type TokenEdge, v4PoolId } from "../planner/token-grap
 import { getAmount0Delta, getAmount1Delta } from "../solver/v3-math.js";
 import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
-import {
-  blockScanEdgeFamilyId,
-  blockScanRouteFamilyIds,
-  iterateByBlockScanFamily,
-  orderByBlockScanFamily,
-  selectByBlockScanFamily,
-} from "./blockscan-family-budget.js";
 import { edgeInstanceKey } from "../venues/route-instance-identity.js";
 import {
   validatedRouteImmutableBindingHash,
@@ -238,11 +231,7 @@ export function scanBlockStateFromResolvedMids(input: {
     const admitted = deduped.filter(
       (entry) => entry.estSpreadBps > admissionSpreadBps,
     );
-    const selected = selectByBlockScanFamily(
-      deduped,
-      input.cfg.maxCandidates,
-      (entry) => blockScanRouteFamilyIds(entry.opportunity.seedEdges),
-    );
+    const selected = deduped.slice(0, input.cfg.maxCandidates);
     const result: BlockScanOutcome = {
       outcome,
       stateBlock: input.sourceBlock,
@@ -268,14 +257,7 @@ export function scanBlockStateFromResolvedMids(input: {
     return result;
   };
 
-  const fairPairGroups = iterateByBlockScanFamily(
-    [...groups.values()],
-    (group) =>
-      blockScanRouteFamilyIds(
-        [...group.venues.values()].flatMap((edges) => edges),
-      ),
-  );
-  for (const group of fairPairGroups) {
+  for (const group of groups.values()) {
     if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
     if (group.venues.size < 2) continue;
     if (touched && !pairTouches(group, touched)) continue;
@@ -379,11 +361,8 @@ export function scanBlockStateFromResolvedMids(input: {
   }
 
   enterPhase("protocol");
-  const protocolEdges = iterateByBlockScanFamily(
-    eligibleEdges.filter(
-      (edge) => edge.slotKind === "protocol" && !edge.leavesStandingPosition,
-    ),
-    (edge) => [blockScanEdgeFamilyId(edge)],
+  const protocolEdges = eligibleEdges.filter(
+    (edge) => edge.slotKind === "protocol" && !edge.leavesStandingPosition,
   );
   for (const edge of protocolEdges) {
     anchorTokens.add(edge.tokenIn.toLowerCase());
@@ -468,7 +447,7 @@ export function scanBlockStateFromResolvedMids(input: {
   // crowded out by unrelated exits before the protocol edge is ever reached.
   for (const protocolEdge of protocolEdges) {
     if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
-    const expansionEdges = selectFamilyFairExpansionEdges({
+    const expansionEdges = selectExpansionEdges({
       edges: eligibleEdges,
       profitToken: protocolEdge.tokenIn,
       maxPoolsPerToken: 20,
@@ -488,7 +467,7 @@ export function scanBlockStateFromResolvedMids(input: {
   }
 
   enterPhase("general");
-  const generalExpansionEdges = selectFamilyFairExpansionEdges({
+  const generalExpansionEdges = selectExpansionEdges({
     edges: eligibleEdges,
     profitToken: "",
     maxPoolsPerToken: 20,
@@ -499,8 +478,8 @@ export function scanBlockStateFromResolvedMids(input: {
     if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
     const rings = buildTokenPaths(generalExpansionEdges, anchorToken, anchorToken, {
       maxHops: input.cfg.maxHops,
-      // The per-token cap was applied family-fair before DFS, so the expensive
-      // expansion cannot be monopolized by one high-score family.
+      // The per-token cap is applied once before DFS; no Family-specific
+      // scheduling or quota is applied in the central path.
       maxPoolsPerToken: Infinity,
       maxPaths: 2000,
       deadlineAtMs,
@@ -517,11 +496,11 @@ export function scanBlockStateFromResolvedMids(input: {
 }
 
 /**
- * Apply the path builder's per-token edge cap before DFS, but reserve that cap
- * family-fair. High-score edges still win within one family; they cannot remove
- * every lower-score sibling-family exit before expansion begins.
+ * Apply the path builder's per-token edge cap before DFS using only the
+ * canonical edge ranking. The central path does not partition this budget by
+ * Family; Family identity remains plugin-owned route data.
  */
-export function selectFamilyFairExpansionEdges(input: {
+export function selectExpansionEdges(input: {
   readonly edges: readonly TokenEdge[];
   readonly profitToken: string;
   readonly maxPoolsPerToken: number;
@@ -533,7 +512,7 @@ export function selectFamilyFairExpansionEdges(input: {
     input.maxPoolsPerToken <= 0
   ) {
     throw new Error(
-      `invalid family-fair expansion cap ${input.maxPoolsPerToken}`,
+      `invalid expansion cap ${input.maxPoolsPerToken}`,
     );
   }
   const profitToken = input.profitToken.toLowerCase();
@@ -573,18 +552,11 @@ export function selectFamilyFairExpansionEdges(input: {
     const rankedBudget = input.pinnedOutsideBudget
       ? input.maxPoolsPerToken
       : Math.max(0, input.maxPoolsPerToken - pinned.length);
-    const fairPinned = orderByBlockScanFamily(
-      pinned,
-      ({ edge }) => [blockScanEdgeFamilyId(edge)],
-    );
-    const fairRanked = selectByBlockScanFamily(
-      ranked,
-      rankedBudget,
-      ({ edge }) => [blockScanEdgeFamilyId(edge)],
-    );
+    const selectedPinned = pinned;
+    const selectedRanked = ranked.slice(0, rankedBudget);
     selected.push(
-      ...fairPinned.map(({ edge }) => edge),
-      ...fairRanked.map(({ edge }) => edge),
+      ...selectedPinned.map(({ edge }) => edge),
+      ...selectedRanked.map(({ edge }) => edge),
     );
   }
   return selected;

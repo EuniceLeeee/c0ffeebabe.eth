@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { performance } from "node:perf_hooks";
 import { ethers } from "ethers";
 import {
   withStateCallControl,
@@ -11,17 +10,13 @@ import {
   type BlockScanProbeDiagnostic,
   type BlockScanRefinementOptions,
 } from "../detector/blockscan-candidate-refinement.js";
-import { selectFamilyFairExpansionEdges } from "../detector/blockscan-scanner-core.js";
+import { selectExpansionEdges } from "../detector/blockscan-scanner-core.js";
 import {
   BlockScanFamilyAttributedError,
   BlockScanFamilyStageBudget,
   blockScanEdgeInstanceCircuitKey,
   blockScanEdgeFamilyId,
   blockScanFailureCircuitAttribution,
-  blockScanRouteFamilyIds,
-  iterateByBlockScanFamily,
-  orderByBlockScanFamily,
-  selectByBlockScanFamily,
 } from "../detector/blockscan-family-budget.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import { buildTokenPaths, type TokenEdge } from "../planner/token-graph.js";
@@ -277,8 +272,7 @@ assert.equal(diagnostics[0]?.failure?.reason, "global_deadline");
 assert.equal(diagnostics[0]?.failure?.attributedFamilyId, "univ2-swap");
 assert.equal(diagnostics[0]?.failure?.stage, "exact quote");
 
-familyFairAdmissionAndCircuit();
-boundedFamilySelectionStopsAtConsumedPrefix();
+familyFailureCircuitRemainsAttributionOnly();
 expiredPathSearchUnwindsAllFrames();
 instanceAttributionCannotEscapeCurrentRoute();
 singletonManagerInstancesDoNotCollide();
@@ -286,7 +280,7 @@ badFamilyHighScoreFloodCannotConsumeExpansionCap();
 await failingFamilyCannotConsumeRefinementCap();
 await differentInstanceFailuresDoNotOpenFamilyCircuit();
 await sameInstanceCircuitDoesNotBlockOppositeDirection();
-await saturatedFamilyDoesNotDelayHealthySibling();
+await globalProbeQueueUsesGlobalSlots();
 await neverSettlingFamilyUsesLocalBudget();
 await mixedRouteTimeoutIsAttributedToCurrentLeg();
 await earlyZeroDoesNotClearUnvisitedInstanceCircuit();
@@ -297,188 +291,7 @@ await admissionFloorSkipsLowSpreadProbes();
 
 console.log("blockscan-candidate-refinement PASS");
 
-function familyFairAdmissionAndCircuit(): void {
-  const items = [
-    ...Array.from({ length: 8 }, (_, index) => ({
-      id: `bad-${index}`,
-      edges: [familyEdge("bad-family", index)],
-    })),
-    ...Array.from({ length: 2 }, (_, index) => ({
-      id: `healthy-${index}`,
-      edges: [familyEdge("healthy-family", index)],
-    })),
-  ];
-  const selected = selectByBlockScanFamily(
-    items,
-    4,
-    (item) => blockScanRouteFamilyIds(item.edges),
-  );
-  assert.deepEqual(
-    selected.map((item) => item.id),
-    ["bad-0", "healthy-0", "bad-1", "healthy-1"],
-    "a large family bucket cannot consume every global admission slot",
-  );
-  assert.deepEqual(
-    selected
-      .filter((item) => item.id.startsWith("healthy-"))
-      .map((item) => item.id),
-    ["healthy-0", "healthy-1"],
-    "family admission preserves deterministic order within a healthy bucket",
-  );
-  const mixed = selectByBlockScanFamily(
-    [
-      {
-        id: "bad-with-a",
-        edges: [familyEdge("bad-family", 20), familyEdge("sibling-a", 21)],
-      },
-      {
-        id: "bad-with-b",
-        edges: [familyEdge("bad-family", 22), familyEdge("sibling-b", 23)],
-      },
-      {
-        id: "healthy-only",
-        edges: [familyEdge("healthy-family", 24)],
-      },
-    ],
-    2,
-    (item) => blockScanRouteFamilyIds(item.edges),
-  );
-  assert.deepEqual(
-    mixed.map((item) => item.id),
-    ["bad-with-a", "healthy-only"],
-    "a bad family cannot evade accounting through distinct dependency sets",
-  );
-  const sharedHealthyDependency = selectByBlockScanFamily(
-    [
-      {
-        id: "bad-and-healthy-0",
-        edges: [familyEdge("bad-family", 30), familyEdge("healthy-family", 31)],
-      },
-      {
-        id: "bad-and-healthy-1",
-        edges: [familyEdge("bad-family", 32), familyEdge("healthy-family", 33)],
-      },
-      {
-        id: "healthy-route",
-        edges: [familyEdge("healthy-family", 34)],
-      },
-    ],
-    2,
-    (item) => blockScanRouteFamilyIds(item.edges),
-  );
-  assert.deepEqual(
-    sharedHealthyDependency.map((item) => item.id),
-    ["bad-and-healthy-0", "healthy-route"],
-    "a mixed bad route cannot hide the healthy-only route behind shared-family rank",
-  );
-  const commonFlood = Array.from({ length: 600 }, (_, index) => ({
-    id: `common-${index}`,
-    edges: [familyEdge("common-family", 400 + index)],
-  }));
-  const rareMixed = Array.from({ length: 3 }, (_, index) => ({
-    id: `rare-mixed-${index}`,
-    edges: [
-      familyEdge("common-family", 1_100 + index * 2),
-      familyEdge("rare-family", 1_101 + index * 2),
-    ],
-  }));
-  const selectedFromFlood = selectByBlockScanFamily(
-    [...commonFlood, ...rareMixed],
-    512,
-    (item) => blockScanRouteFamilyIds(item.edges),
-  );
-  assert.deepEqual(
-    selectedFromFlood
-      .filter(({ id }) => id.startsWith("rare-mixed-"))
-      .map(({ id }) => id),
-    ["rare-mixed-0", "rare-mixed-1", "rare-mixed-2"],
-    "an under-served family must retain multiple economically ordered routes inside the global cap",
-  );
-  assert.equal(
-    new Set(selectedFromFlood.map(({ id }) => id)).size,
-    selectedFromFlood.length,
-    "family-fair admission must not duplicate a route",
-  );
-  assert.deepEqual(
-    selectByBlockScanFamily(
-      [...commonFlood, ...rareMixed],
-      512,
-      (item) => blockScanRouteFamilyIds(item.edges),
-    ).map(({ id }) => id),
-    selectedFromFlood.map(({ id }) => id),
-    "family-fair admission must be deterministic",
-  );
-  const rareAcrossCompositions = [
-    ...Array.from({ length: 3 }, (_, index) => ({
-      id: `rare-a-${index}`,
-      edges: [
-        familyEdge("common-family", 1_800 + index * 3),
-        familyEdge("rare-family", 1_801 + index * 3),
-      ],
-    })),
-    ...Array.from({ length: 3 }, (_, index) => ({
-      id: `rare-b-${index}`,
-      edges: [
-        familyEdge("common-family", 1_900 + index * 3),
-        familyEdge("rare-family", 1_901 + index * 3),
-        familyEdge("finite-sibling-a", 1_902 + index * 3),
-      ],
-    })),
-    ...Array.from({ length: 3 }, (_, index) => ({
-      id: `rare-c-${index}`,
-      edges: [
-        familyEdge("common-family", 2_000 + index * 3),
-        familyEdge("rare-family", 2_001 + index * 3),
-        familyEdge("finite-sibling-b", 2_002 + index * 3),
-      ],
-    })),
-  ];
-  const refinementSizedSelection = selectByBlockScanFamily(
-    [...commonFlood, ...rareAcrossCompositions],
-    100,
-    (item) => blockScanRouteFamilyIds(item.edges),
-  );
-  assert(
-    refinementSizedSelection.some(({ id }) => id === "rare-a-2"),
-    "the refinement-sized cap must retain the third route in an under-served mixed-family bucket",
-  );
-  assert.equal(
-    refinementSizedSelection.filter(({ id }) => id.startsWith("rare-")).length,
-    rareAcrossCompositions.length,
-    "finite family compositions must not hide a small rare-family cohort",
-  );
-
-  const finiteSiblingVariants = [
-    ...Array.from({ length: 200 }, (_, index) => ({
-      id: `bad-sibling-${index}`,
-      edges: [
-        familyEdge("bad-family", 1_200 + index * 2),
-        familyEdge("sibling-family", 1_201 + index * 2),
-      ],
-    })),
-    ...Array.from({ length: 4 }, (_, index) => ({
-      id: `healthy-repeat-${index}`,
-      edges: [familyEdge("healthy-family", 1_700 + index)],
-    })),
-  ];
-  const finiteSiblingSelection = selectByBlockScanFamily(
-    finiteSiblingVariants,
-    8,
-    (item) => blockScanRouteFamilyIds(item.edges),
-  );
-  assert.deepEqual(
-    finiteSiblingSelection
-      .filter(({ id }) => id.startsWith("healthy-repeat-"))
-      .map(({ id }) => id),
-    [
-      "healthy-repeat-0",
-      "healthy-repeat-1",
-      "healthy-repeat-2",
-      "healthy-repeat-3",
-    ],
-    "repeating one dependency composition cannot mint new fairness identities",
-  );
-
+function familyFailureCircuitRemainsAttributionOnly(): void {
   const mixedFailureBudget = new BlockScanFamilyStageBudget(3);
   const mixedEdges = [
     familyEdge("bad-family", 40),
@@ -525,58 +338,7 @@ function familyFairAdmissionAndCircuit(): void {
     false,
     "typed per-leg failures strike only their owner",
   );
-}
 
-function boundedFamilySelectionStopsAtConsumedPrefix(): void {
-  const fixture = Array.from({ length: 50_000 }, (_, index) => ({
-    index,
-    familyIds: [
-      `family-${index % 800}`,
-      `sibling-${(index * 17) % 800}`,
-    ].sort(),
-  }));
-  const referenceFixture = fixture.slice(0, 4_000);
-  assert.deepEqual(
-    selectByBlockScanFamily(
-      referenceFixture,
-      512,
-      (item) => item.familyIds,
-    ),
-    orderByBlockScanFamily(
-      referenceFixture,
-      (item) => item.familyIds,
-    ).slice(0, 512),
-    "bounded selection must preserve the exact prefix of the full fair order",
-  );
-  const iteratedPrefix = [];
-  for (const item of iterateByBlockScanFamily(
-    referenceFixture,
-    (entry) => entry.familyIds,
-  )) {
-    iteratedPrefix.push(item);
-    if (iteratedPrefix.length === 512) break;
-  }
-  assert.deepEqual(
-    iteratedPrefix,
-    orderByBlockScanFamily(
-      referenceFixture,
-      (item) => item.familyIds,
-    ).slice(0, 512),
-    "lazy family iteration must preserve the exact full-order prefix",
-  );
-
-  const started = performance.now();
-  const selected = selectByBlockScanFamily(
-    fixture,
-    512,
-    (item) => item.familyIds,
-  );
-  const elapsedMs = performance.now() - started;
-  assert.equal(selected.length, 512);
-  assert(
-    elapsedMs < 1_000,
-    `bounded family selection regressed to a full suffix order: ${elapsedMs}ms`,
-  );
 }
 
 function expiredPathSearchUnwindsAllFrames(): void {
@@ -848,8 +610,7 @@ async function differentInstanceFailuresDoNotOpenFamilyCircuit(): Promise<void> 
     undefined,
     1,
     {
-      familyTimeoutMs: 500,
-      maxConcurrentPerFamily: 1,
+      probeTimeoutMs: 500,
     },
   );
   assert.equal(result.attempted, 4);
@@ -921,8 +682,7 @@ async function sameInstanceCircuitDoesNotBlockOppositeDirection(): Promise<void>
     (diagnostic) => diagnostics.set(diagnostic.index, diagnostic),
     1,
     {
-      familyTimeoutMs: 500,
-      maxConcurrentPerFamily: 1,
+      probeTimeoutMs: 500,
     },
   );
   assert.equal(result.attempted, 4);
@@ -949,7 +709,7 @@ function badFamilyHighScoreFloodCannotConsumeExpansionCap(): void {
   const healthyEdge = familyEdge("healthy-family", 200, {
     score: 1,
   });
-  const selected = selectFamilyFairExpansionEdges({
+  const selected = selectExpansionEdges({
     edges: [...badEdges, healthyEdge],
     profitToken: TOKEN_18,
     maxPoolsPerToken: 20,
@@ -957,25 +717,19 @@ function badFamilyHighScoreFloodCannotConsumeExpansionCap(): void {
     preferDirectClosure: true,
   });
   assert.equal(selected.length, 20);
-  assert(
-    selected.includes(healthyEdge),
-    "one high-score family flood cannot consume the pre-DFS expansion cap",
-  );
+  assert(!selected.includes(healthyEdge), "central expansion keeps rank order without a family quota");
   const paths = buildTokenPaths(selected, TOKEN_6, TOKEN_18, {
     maxHops: 1,
     maxPoolsPerToken: Infinity,
     maxPaths: 100,
   });
   assert(
-    paths.some(({ edges }) =>
-      edges.length === 1 &&
-      blockScanEdgeFamilyId(edges[0]) === "healthy-family"
-    ),
-    "the lower-score healthy family must remain reachable by expensive DFS",
+    !paths.some(({ edges }) => edges.some((edge) => edge === healthyEdge)),
+    "the lower-ranked edge is not promoted by a family quota",
   );
 }
 
-async function saturatedFamilyDoesNotDelayHealthySibling(): Promise<void> {
+async function globalProbeQueueUsesGlobalSlots(): Promise<void> {
   const slowPoolA = "0x00000000000000000000000000000000000001b0";
   const slowPoolB = "0x00000000000000000000000000000000000001b1";
   const healthyPool = "0x00000000000000000000000000000000000001b2";
@@ -1037,19 +791,18 @@ async function saturatedFamilyDoesNotDelayHealthySibling(): Promise<void> {
     undefined,
     2,
     {
-      familyTimeoutMs: 1_000,
-      maxConcurrentPerFamily: 1,
+      probeTimeoutMs: 1_000,
     },
   );
   await firstSlowStarted.promise;
   await new Promise<void>((resolve) => setImmediate(resolve));
-  const healthyStartedWhileSlowFamilyWasSaturated = healthyStarted;
+  const healthyStartedWhileGlobalSlotsWereOccupied = healthyStarted;
   releaseSlow.resolve();
   const result = await refinement;
   assert.equal(
-    healthyStartedWhileSlowFamilyWasSaturated,
-    true,
-    "claimNext must inspect the adjacent healthy family while the first family is saturated",
+    healthyStartedWhileGlobalSlotsWereOccupied,
+    false,
+    "the global queue must not partition concurrency by Family",
   );
   assert.equal(result.deadlineHit, false);
   assert.equal(result.attempted, 3);
@@ -1132,8 +885,7 @@ async function neverSettlingFamilyUsesLocalBudget(): Promise<void> {
     undefined,
     4,
     {
-      familyTimeoutMs: 25,
-      maxConcurrentPerFamily: 1,
+      probeTimeoutMs: 25,
     },
   );
   const elapsedMs = Date.now() - startedAtMs;
@@ -1191,13 +943,12 @@ async function mixedRouteTimeoutIsAttributedToCurrentLeg(): Promise<void> {
     (diagnostic) => diagnostics.push(diagnostic),
     1,
     {
-      familyTimeoutMs: 25,
-      maxConcurrentPerFamily: 1,
+      probeTimeoutMs: 25,
     },
   );
   assert.equal(result.deadlineHit, false);
   assert.deepEqual(result.openCompositeKeys, []);
-  assert.equal(diagnostics[0]?.failure?.reason, "family_timeout");
+  assert.equal(diagnostics[0]?.failure?.reason, "probe_timeout");
   assert.equal(diagnostics[0]?.failure?.attributedFamilyId, "bad-family");
   assert.equal(diagnostics[0]?.failure?.blockingCircuitScope, "instance");
   assert.match(
@@ -1270,8 +1021,7 @@ async function earlyZeroDoesNotClearUnvisitedInstanceCircuit(): Promise<void> {
     (diagnostic) => diagnostics.set(diagnostic.index, diagnostic),
     4,
     {
-      familyTimeoutMs: 1_000,
-      maxConcurrentPerFamily: 4,
+      probeTimeoutMs: 1_000,
     },
   );
   await zeroStarted.promise;
@@ -1341,8 +1091,7 @@ async function transientCircuitWaitsForInflightRecovery(): Promise<void> {
     (diagnostic) => diagnostics.set(diagnostic.index, diagnostic),
     3,
     {
-      familyTimeoutMs: 500,
-      maxConcurrentPerFamily: 3,
+      probeTimeoutMs: 500,
     },
   );
   await Promise.all(starts.slice(0, 3).map(({ promise }) => promise));
@@ -1425,8 +1174,7 @@ async function confirmedPositiveSurvivesLaterInstanceCircuit(): Promise<void> {
     undefined,
     1,
     {
-      familyTimeoutMs: 500,
-      maxConcurrentPerFamily: 1,
+      probeTimeoutMs: 500,
     },
   );
   assert.deepEqual(result.openFamilyIds, []);
@@ -1587,8 +1335,7 @@ async function admissionFloorSkipsLowSpreadProbes(): Promise<void> {
     undefined,
     1,
     {
-      familyTimeoutMs: 500,
-      maxConcurrentPerFamily: 1,
+      probeTimeoutMs: 500,
       admissionSpreadBps: 50,
     },
   );
