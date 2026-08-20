@@ -1630,6 +1630,10 @@ canonical fence。Effect-attestation 的 impersonated internal frame 不能降�
 独立 port，必须同时满足用户授权、安全 envelope、exact runtime anchor、成功 final-sim 与 policy gate。
 本文没有提供该授权。
 
+[PFD] inclusion tracking是submission之后的非authority state machine：只接受sealed submission intent/hash、
+target block与process anchor，按bounded watch window产生included/not-included observation；RPC失败只使observation
+unresolved，永不改变已经作出的submission decision。默认dry-run没有真实tx hash，因此不伪造inclusion success。
+
 ## 17. Performance architecture and budgets
 
 ### 17.1 已验证的慢因，而非“统一接口天然慢”
