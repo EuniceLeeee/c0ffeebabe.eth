@@ -487,6 +487,12 @@ export interface BlockScanRuntimeLoopDependencies {
     },
     kind?: StrictProductionSessionKind,
     fundingAssets?: readonly string[],
+    /**
+     * Pass-scoped exact call backend.  The central strict runtime may use it
+     * for source-pinned eth_call batching; it is never a Family-specific
+     * adapter or a second authority.
+     */
+    exactCallBackend?: Pick<StateBackend, "call">,
   ) => Promise<StrictProductionRuntimeSession>;
   /**
    * Override the exact-probe quote backend. Production uses the source-hash
@@ -2521,24 +2527,6 @@ export class BlockScanRuntimeLoop {
           " -> source=" + exactSource.number + ":" +
           exactSource.generation,
       );
-      const exactSessionKind: StrictProductionSessionKind =
-        producerSnapshot !== null &&
-          producerSnapshot.sourceBlock === exactSource.number &&
-          producerSnapshot.sourceBlockHash?.toLowerCase() ===
-            exactSource.hash.toLowerCase()
-          ? "pricing"
-          : "exact";
-      const strictSession = await this.deps.strictSession(
-        exactSource,
-        Object.freeze({
-          deadlineAtMs: refineDeadline,
-          signal: passSignal,
-        }),
-        exactSessionKind,
-        exactFundingTokens,
-      );
-      const runtimeEvidence = strictSession
-        .runtimeEvidenceFromPendingExecution(executionEvidence);
       let exactYieldedMs = 0;
       const producerLagBlocks = (): number => {
         const snapshot = currentRuntimeCoordinator.latestPricingSnapshot();
@@ -2628,6 +2616,25 @@ export class BlockScanRuntimeLoop {
       if (exactQuoteState === null) {
         throw new Error("exact quote state not initialized");
       }
+      /*
+       * Exact must re-issue source-bound route handles instead of refreshing
+       * the producer's pricing session.  The pass-scoped quote backend is
+       * created first so every exact eth_call issued by this session uses the
+       * same source-pinned batch transport; the producer session remains the
+       * only pricing authority.
+       */
+      const strictSession = await this.deps.strictSession(
+        exactSource,
+        Object.freeze({
+          deadlineAtMs: refineDeadline,
+          signal: passSignal,
+        }),
+        "exact",
+        exactFundingTokens,
+        exactQuoteState,
+      );
+      const runtimeEvidence = strictSession
+        .runtimeEvidenceFromPendingExecution(executionEvidence);
       const exactQuoteStateRef: StateBackend = exactQuoteState;
       const refinement = await refineBlockScanCandidates(
         exactQuoteStateRef,

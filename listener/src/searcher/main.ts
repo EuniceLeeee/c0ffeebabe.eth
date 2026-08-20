@@ -1521,6 +1521,7 @@ async function main(): Promise<void> {
     control?: AdapterWorkControl,
     kind: StrictProductionSessionKind = "pricing",
     fundingAssets: readonly string[] = flashTokens,
+    exactCallBackend?: Pick<StateBackend, "call">,
   ): Promise<StrictProductionRuntimeSession> => {
     const fundingKey = [...new Set(fundingAssets.map((token) =>
       token.toLowerCase()
@@ -1531,7 +1532,10 @@ async function main(): Promise<void> {
       .slice(0, 16);
     const key = `${kind}:${source.number}:${source.hash.toLowerCase()}:` +
       `${source.generation}:${fundingFingerprint}`;
-    const incumbent = strictSessionCache.get(key);
+    // An exact backend is pass-scoped and is closed at the end of the block;
+    // never let a cached session retain a backend from an earlier pass.
+    const cacheable = exactCallBackend === undefined;
+    const incumbent = cacheable ? strictSessionCache.get(key) : undefined;
     if (incumbent !== undefined) {
       console.log(
         "[strict-session-cache] hit key=" + key +
@@ -1562,6 +1566,7 @@ async function main(): Promise<void> {
       }),
       verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
       executor: config.botvmAddress,
+      ...(exactCallBackend === undefined ? {} : { exactCallBackend }),
       // Shared physical-transport permit scheduler: exact/discovery share the
       // residual capacity after the N-1 producer reserve, so exact probes can
       // never starve the producer chain (same contract as the legacy runtime).
@@ -1576,12 +1581,12 @@ async function main(): Promise<void> {
       kind,
       ...(control === undefined ? {} : { control }),
     }).catch((error) => {
-      if (strictSessionCache.get(key) === pending) {
+      if (cacheable && strictSessionCache.get(key) === pending) {
         strictSessionCache.delete(key);
       }
       throw error;
     });
-    strictSessionCache.set(key, pending);
+    if (cacheable) strictSessionCache.set(key, pending);
     return pending;
   };
   currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(

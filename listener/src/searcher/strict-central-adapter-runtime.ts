@@ -22,6 +22,7 @@ import {
   hashCanonical,
   type CanonicalValue,
 } from "./venues/canonical-value.js";
+import type { StateBackend } from "../shared/state/state-backend.js";
 
 interface StrictProvider {
   call(
@@ -115,6 +116,13 @@ export function createStrictCentralAdapterRuntime(input: {
    * at caller-authority.
    */
   readonly executor?: string;
+  /**
+   * Pass-scoped source-pinned exact caller.  It owns only batching/transport
+   * for ordinary eth_call requests; authority, decoding and execution remain
+   * in this central runtime.  The backend is intentionally opaque to Family
+   * code and is never used for pricing/identity work.
+   */
+  readonly exactCallBackend?: Pick<StateBackend, "call">;
   /** Upper bound on requests admitted per work batch; default 512. */
   readonly maxRequestsPerBatch?: number;
   /**
@@ -164,6 +172,9 @@ export function createStrictCentralAdapterRuntime(input: {
             request,
             execution.source,
             issueInput.control,
+            rethLane === "exact" && input.exactCallBackend !== undefined
+              ? input.exactCallBackend
+              : undefined,
           );
           const rethBound = execution.requests.filter((request) =>
             request.kind !== "state-override-simulation" &&
@@ -195,19 +206,38 @@ export function createStrictCentralAdapterRuntime(input: {
             rethLane === "producer-bulk" ||
             rethLane === "producer-critical" ||
             rethLane === "discovery";
-          const rethResults = rethBound.length === 0
+          /*
+           * A pass-scoped exact backend already batches its eth_call items and
+           * owns the exact transport permit.  Do not wrap those calls in a
+           * second scheduler permit: nested acquisition serializes the batch
+           * behind the same residual slot and defeats the batching path.
+           * Code/storage reads still use the ordinary central permit.
+           */
+          const exactBatchOwned = rethLane === "exact" &&
+            input.exactCallBackend !== undefined;
+          const batchedExact = exactBatchOwned
+            ? rethBound.filter((request) => request.kind === "eth-call")
+            : [];
+          const directReth = exactBatchOwned
+            ? rethBound.filter((request) => request.kind !== "eth-call")
+            : rethBound;
+          const directResults = directReth.length === 0
             ? []
             : transportScheduler === undefined || producerInternal
-              ? await Promise.all(rethBound.map(runRequest))
+              ? await Promise.all(directReth.map(runRequest))
               : await transportScheduler.run(
                   rethLane,
                   issueInput.control?.signal ??
                     new AbortController().signal,
                   (lease) => {
                     queueWaitMs = Math.max(0, lease.queueWaitMs);
-                    return Promise.all(rethBound.map(runRequest));
+                    return Promise.all(directReth.map(runRequest));
                   },
                 );
+          const batchedResults = batchedExact.length === 0
+            ? []
+            : await Promise.all(batchedExact.map(runRequest));
+          const rethResults = [...directResults, ...batchedResults];
           if (rethBound.length > 0) {
             const elapsedMs = Date.now() - rethStartedAtMs;
             if (elapsedMs > 200) {
@@ -334,16 +364,22 @@ async function executeRequest(
   request: AdapterRequest,
   source: CanonicalSource,
   control?: AdapterWorkControl,
+  exactCallBackend?: Pick<StateBackend, "call">,
 ): Promise<AdapterRequestResult> {
   assertTransportControl(control);
   try {
     if (request.kind === "eth-call") {
       const outcome = await withRpcRetry(async () => {
         try {
-          const data = await provider.call({
-            to: request.to,
-            data: request.data,
-          }, source.number, control);
+          const data = exactCallBackend === undefined
+            ? await provider.call({
+                to: request.to,
+                data: request.data,
+              }, source.number, control)
+            : await exactCallBackend.call({
+                to: request.to,
+                data: request.data,
+              }, control);
           return { completion: "returned" as const, data };
         } catch (error) {
           // An execution-layer revert is chain-proven negative evidence at
