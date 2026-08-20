@@ -170,6 +170,23 @@ const artifactRefStructuralSchema = objectSchema({
   retentionLeaseReceiptId: hashSchema,
 });
 
+/*
+ * Creator inputs are a separate exact schema.  In particular, derived IDs are
+ * intentionally absent: accepting them and overwriting them after a spread
+ * would both read an attacker-controlled object too early and make a typo in
+ * a caller-supplied identity look harmless.
+ */
+const artifactRefDraftSchema = objectSchema({
+  locator: locatorSchema,
+  immutableMirrorLocator: contentObjectLocatorSchema,
+  contentSha256: hashSchema,
+  byteLength: decimalStringSchema,
+  mediaType: nonEmptyStringSchema,
+  schema: nullableSchema(schemaRefSchema),
+  resolverPolicyHash: hashSchema,
+  retentionLeaseReceiptId: hashSchema,
+});
+
 const artifactRefRefinementSpecDigest = hashDomain(
   "aloha/schema-refinement-spec/v1",
   {
@@ -199,6 +216,13 @@ const semanticArtifactStructuralSchema = objectSchema({
   canonicalPayloadHash: hashSchema,
 });
 
+const semanticArtifactDraftSchema = objectSchema({
+  schema: schemaRefSchema,
+  inputArtifactIds: arraySchema(hashSchema),
+  dependencyClosureRoot: hashSchema,
+  canonicalPayloadHash: hashSchema,
+});
+
 const semanticArtifactRefinementSpecDigest = hashDomain(
   "aloha/schema-refinement-spec/v1",
   {
@@ -217,6 +241,19 @@ const semanticArtifactSchema = refineSchema(
 
 const productionReceiptStructuralSchema = objectSchema({
   receiptId: hashSchema,
+  artifactId: hashSchema,
+  producer: processAnchorSchema,
+  logRangeArtifactRef: artifactRefSchema,
+  sourceAnchorHash: hashSchema,
+  startedMonotonicNs: decimalStringSchema,
+  finishedMonotonicNs: decimalStringSchema,
+  durationUs: decimalStringSchema,
+  rawBoundaryArtifactRef: artifactRefSchema,
+  semanticConfigDigest: hashSchema,
+  resourceMetricsHash: hashSchema,
+});
+
+const productionReceiptDraftSchema = objectSchema({
   artifactId: hashSchema,
   producer: processAnchorSchema,
   logRangeArtifactRef: artifactRefSchema,
@@ -435,24 +472,18 @@ export function encodeReadOnlyArtifactRef(
   return encodeCanonicalBytes(parseArtifactRef(value));
 }
 
-export type ReadOnlyArtifactRefDraft = Omit<
-  ReadOnlyArtifactRefV1,
-  "artifactRefId" | "locatorId" | "immutableMirrorLocatorId"
-> & {
-  readonly artifactRefId?: Hash;
-  readonly locatorId?: Hash;
-  readonly immutableMirrorLocatorId?: Hash;
-};
+export type ReadOnlyArtifactRefDraft = Infer<typeof artifactRefDraftSchema>;
 
 export function createReadOnlyArtifactRef(
   draft: ReadOnlyArtifactRefDraft,
 ): ReadOnlyArtifactRefV1 {
-  const locatorId = recomputeReadOnlyArtifactLocatorId(draft.locator);
+  const parsedDraft = artifactRefDraftSchema.decode(draft);
+  const locatorId = recomputeReadOnlyArtifactLocatorId(parsedDraft.locator);
   const immutableMirrorLocatorId = recomputeReadOnlyArtifactLocatorId(
-    draft.immutableMirrorLocator,
+    parsedDraft.immutableMirrorLocator,
   );
   const withoutId = {
-    ...draft,
+    ...parsedDraft,
     locatorId,
     immutableMirrorLocatorId,
     artifactRefId: "0x" + "0".repeat(64),
@@ -517,15 +548,14 @@ export function encodeSemanticArtifact(value: SemanticArtifactV1): Uint8Array {
   return encodeCanonicalBytes(parseSemanticArtifact(value));
 }
 
-export type SemanticArtifactDraft = Omit<SemanticArtifactV1, "artifactId"> & {
-  readonly artifactId?: Hash;
-};
+export type SemanticArtifactDraft = Infer<typeof semanticArtifactDraftSchema>;
 
 export function createSemanticArtifact(
   draft: SemanticArtifactDraft,
 ): SemanticArtifactV1 {
+  const parsedDraft = semanticArtifactDraftSchema.decode(draft);
   const withoutId = {
-    ...draft,
+    ...parsedDraft,
     artifactId: "0x" + "0".repeat(64),
   } as SemanticArtifactV1;
   const artifactId = hashDomain(
@@ -613,15 +643,14 @@ export function encodeProductionReceipt(
   return encodeCanonicalBytes(parseProductionReceipt(value));
 }
 
-export type ProductionReceiptDraft = Omit<ProductionReceiptV1, "receiptId"> & {
-  readonly receiptId?: Hash;
-};
+export type ProductionReceiptDraft = Infer<typeof productionReceiptDraftSchema>;
 
 export function createProductionReceipt(
   draft: ProductionReceiptDraft,
 ): ProductionReceiptV1 {
+  const parsedDraft = productionReceiptDraftSchema.decode(draft);
   const withoutId = {
-    ...draft,
+    ...parsedDraft,
     receiptId: "0x" + "0".repeat(64),
   } as ProductionReceiptV1;
   const receiptId = hashDomain(

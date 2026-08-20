@@ -7,9 +7,11 @@ import {
   CORE_SCHEMA_MANIFESTS,
   decodeProductionReceipt,
   decodeReadOnlyArtifactRef,
+  decodeSemanticArtifact,
   decodeSchemaRef,
   encodeProductionReceipt,
   encodeReadOnlyArtifactRef,
+  encodeSemanticArtifact,
   encodeSchemaRef,
   hashProcessAnchor,
   recomputeProductionReceiptId,
@@ -31,11 +33,11 @@ function mirror(contentSha256 = h) {
   };
 }
 
-function artifactRef(
+function artifactDraft(
   locator: ReadOnlyArtifactRefV1["locator"],
   contentSha256 = h,
-): ReadOnlyArtifactRefV1 {
-  return createReadOnlyArtifactRef({
+) {
+  return {
     locator,
     immutableMirrorLocator: mirror(contentSha256),
     contentSha256,
@@ -44,7 +46,14 @@ function artifactRef(
     schema: null,
     resolverPolicyHash: h,
     retentionLeaseReceiptId: h2,
-  });
+  };
+}
+
+function artifactRef(
+  locator: ReadOnlyArtifactRefV1["locator"],
+  contentSha256 = h,
+): ReadOnlyArtifactRefV1 {
+  return createReadOnlyArtifactRef(artifactDraft(locator, contentSha256));
 }
 
 const producer: ProcessAnchorV1 = {
@@ -90,7 +99,10 @@ test("SchemaRef and locator codecs are exact and domain addressed", () => {
   };
   const locatorId = recomputeReadOnlyArtifactLocatorId(locator);
   assert.match(locatorId, /^0x[0-9a-f]{64}$/);
-  assert.deepEqual(decodeReadOnlyArtifactRef(encodeReadOnlyArtifactRef(artifactRef(locator))).locator, locator);
+  const artifact = artifactRef(locator);
+  const encodedArtifact = encodeReadOnlyArtifactRef(artifact);
+  assert.deepEqual(decodeReadOnlyArtifactRef(encodedArtifact).locator, locator);
+  assert.deepEqual(encodeReadOnlyArtifactRef(decodeReadOnlyArtifactRef(encodedArtifact)), encodedArtifact);
 });
 
 test("locator union discriminators do not invoke accessors or proxy traps", () => {
@@ -119,6 +131,148 @@ test("locator union discriminators do not invoke accessors or proxy traps", () =
   });
   assert.throws(() => CORE_SCHEMA_MANIFESTS.readOnlyArtifactLocator.schema.decode(proxyLocator));
   assert.equal(proxyHits, 0);
+});
+
+test("creators exact-decode drafts before reading fields", () => {
+  const locator = {
+    kind: "checkpoint-record" as const,
+    storeIdentityHash: h,
+    namespaceHash: h,
+    keyHash: h,
+    revision: "1",
+    recordHash: h2,
+  };
+  const validArtifactDraft = artifactDraft(locator);
+  const validSemanticDraft = {
+    schema: { id: "stage", version: "1.0.0", schemaHash: h },
+    inputArtifactIds: [h],
+    dependencyClosureRoot: h,
+    canonicalPayloadHash: h2,
+  };
+  const validReceiptDraft = {
+    artifactId: h,
+    producer,
+    logRangeArtifactRef: artifactRef({
+      kind: "file-range" as const,
+      systemId: producer.systemId,
+      bootIdHash: producer.bootIdHash,
+      device: "1",
+      inode: "2",
+      startInclusive: "0",
+      endExclusive: "3",
+    }),
+    sourceAnchorHash: h,
+    startedMonotonicNs: "1000",
+    finishedMonotonicNs: "2000",
+    durationUs: "1",
+    rawBoundaryArtifactRef: artifactRef(locator, h2),
+    semanticConfigDigest: h,
+    resourceMetricsHash: h2,
+  };
+
+  let artifactGetterHits = 0;
+  const getterArtifactDraft = { ...validArtifactDraft };
+  Object.defineProperty(getterArtifactDraft, "locator", {
+    enumerable: true,
+    get: () => {
+      artifactGetterHits += 1;
+      return locator;
+    },
+  });
+  assert.throws(() => createReadOnlyArtifactRef(getterArtifactDraft as never));
+  assert.equal(artifactGetterHits, 0);
+
+  let semanticGetterHits = 0;
+  const getterSemanticDraft = { ...validSemanticDraft };
+  Object.defineProperty(getterSemanticDraft, "schema", {
+    enumerable: true,
+    get: () => {
+      semanticGetterHits += 1;
+      return validSemanticDraft.schema;
+    },
+  });
+  assert.throws(() => createSemanticArtifact(getterSemanticDraft as never));
+  assert.equal(semanticGetterHits, 0);
+
+  let receiptGetterHits = 0;
+  const getterReceiptDraft = { ...validReceiptDraft };
+  Object.defineProperty(getterReceiptDraft, "artifactId", {
+    enumerable: true,
+    get: () => {
+      receiptGetterHits += 1;
+      return h;
+    },
+  });
+  assert.throws(() => createProductionReceipt(getterReceiptDraft as never));
+  assert.equal(receiptGetterHits, 0);
+
+  let artifactProxyHits = 0;
+  const artifactProxy = new Proxy(validArtifactDraft, {
+    get: () => {
+      artifactProxyHits += 1;
+      return undefined;
+    },
+    ownKeys: () => {
+      artifactProxyHits += 1;
+      return [];
+    },
+  });
+  assert.throws(() => createReadOnlyArtifactRef(artifactProxy as never));
+  assert.equal(artifactProxyHits, 0);
+
+  let semanticProxyHits = 0;
+  const semanticProxy = new Proxy(validSemanticDraft, {
+    get: () => {
+      semanticProxyHits += 1;
+      return undefined;
+    },
+    ownKeys: () => {
+      semanticProxyHits += 1;
+      return [];
+    },
+  });
+  assert.throws(() => createSemanticArtifact(semanticProxy as never));
+  assert.equal(semanticProxyHits, 0);
+
+  let receiptProxyHits = 0;
+  const receiptProxy = new Proxy(validReceiptDraft, {
+    get: () => {
+      receiptProxyHits += 1;
+      return undefined;
+    },
+    ownKeys: () => {
+      receiptProxyHits += 1;
+      return [];
+    },
+  });
+  assert.throws(() => createProductionReceipt(receiptProxy as never));
+  assert.equal(receiptProxyHits, 0);
+
+  assert.throws(() =>
+    createReadOnlyArtifactRef({ ...validArtifactDraft, unknown: true } as never),
+  );
+  assert.throws(() =>
+    createSemanticArtifact({ ...validSemanticDraft, unknown: true } as never),
+  );
+  assert.throws(() =>
+    createProductionReceipt({ ...validReceiptDraft, unknown: true } as never),
+  );
+
+  assert.throws(() =>
+    createReadOnlyArtifactRef({ ...validArtifactDraft, artifactRefId: h2 } as never),
+  );
+  assert.throws(() =>
+    createReadOnlyArtifactRef({ ...validArtifactDraft, locatorId: h2 } as never),
+  );
+  assert.throws(() =>
+    createReadOnlyArtifactRef({ ...validArtifactDraft, immutableMirrorLocatorId: h2 } as never),
+  );
+  assert.throws(() =>
+    createSemanticArtifact({ ...validSemanticDraft, artifactId: h2 } as never),
+  );
+  assert.throws(() =>
+    createProductionReceipt({ ...validReceiptDraft, receiptId: h2 } as never),
+  );
 });
 
 test("unknown core fields, duplicate keys, and identity mutations fail closed", () => {
@@ -194,6 +348,8 @@ test("semantic artifacts and production receipts recompute IDs over all semantic
   });
   assert.equal(recomputeSemanticArtifactId(semantic), semantic.artifactId);
   assert.doesNotThrow(() => CORE_SCHEMA_MANIFESTS.semanticArtifact.schema.decode(semantic));
+  const encodedSemantic = encodeSemanticArtifact(semantic);
+  assert.deepEqual(encodeSemanticArtifact(decodeSemanticArtifact(encodedSemantic)), encodedSemantic);
   assert.throws(() => CORE_SCHEMA_MANIFESTS.semanticArtifact.schema.decode({ ...semantic, canonicalPayloadHash: h }));
   assert.notEqual(
     recomputeSemanticArtifactId({ ...semantic, canonicalPayloadHash: h }),
@@ -230,7 +386,8 @@ test("semantic artifacts and production receipts recompute IDs over all semantic
     resourceMetricsHash: h2,
   });
   assert.throws(() => createProductionReceipt({
-    ...receipt,
+    artifactId: receipt.artifactId,
+    producer: receipt.producer,
     logRangeArtifactRef: artifactRef({
       kind: "file-range",
       systemId: "different-system",
@@ -240,20 +397,37 @@ test("semantic artifacts and production receipts recompute IDs over all semantic
       startInclusive: "0",
       endExclusive: "3",
     }),
+    sourceAnchorHash: receipt.sourceAnchorHash,
+    startedMonotonicNs: receipt.startedMonotonicNs,
+    finishedMonotonicNs: receipt.finishedMonotonicNs,
+    durationUs: receipt.durationUs,
+    rawBoundaryArtifactRef: receipt.rawBoundaryArtifactRef,
+    semanticConfigDigest: receipt.semanticConfigDigest,
+    resourceMetricsHash: receipt.resourceMetricsHash,
   }));
   assert.throws(() => createProductionReceipt({
-    ...receipt,
+    artifactId: receipt.artifactId,
+    producer: receipt.producer,
     logRangeArtifactRef: artifactRef({
       kind: "content-object",
       storeIdentityHash: h,
       objectKey: h,
     }),
+    sourceAnchorHash: receipt.sourceAnchorHash,
+    startedMonotonicNs: receipt.startedMonotonicNs,
+    finishedMonotonicNs: receipt.finishedMonotonicNs,
+    durationUs: receipt.durationUs,
+    rawBoundaryArtifactRef: receipt.rawBoundaryArtifactRef,
+    semanticConfigDigest: receipt.semanticConfigDigest,
+    resourceMetricsHash: receipt.resourceMetricsHash,
   }));
   assert.doesNotThrow(() => CORE_SCHEMA_MANIFESTS.productionReceipt.schema.decode(receipt));
   assert.throws(() => CORE_SCHEMA_MANIFESTS.productionReceipt.schema.decode({ ...receipt, artifactId: h2 }));
   assert.equal(recomputeProductionReceiptId(receipt), receipt.receiptId);
   assert.equal(hashProcessAnchor(producer).length, 66);
-  assert.equal(decodeProductionReceipt(encodeProductionReceipt(receipt)).receiptId, receipt.receiptId);
+  const encodedReceipt = encodeProductionReceipt(receipt);
+  assert.deepEqual(encodeProductionReceipt(decodeProductionReceipt(encodedReceipt)), encodedReceipt);
+  assert.equal(decodeProductionReceipt(encodedReceipt).receiptId, receipt.receiptId);
   assert.equal(Object.isFrozen(receipt), true);
   assert.equal(Object.isFrozen(receipt.producer), true);
   assert.throws(() => {
