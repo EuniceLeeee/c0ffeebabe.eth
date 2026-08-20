@@ -3737,7 +3737,8 @@ envelope/codec、Family/Strategy/capability ports、authority/dependency rules�
 | Discovery/attestation/generation builder | packages/observation、packages/discovery、packages/attestation、packages/generation-builder、apps/operator-cli | checkpoint internals、Family语义、完整authoring definition、ready internals、apps/searcher-runtime | SourcePlans+stage-local refs+ports → exact partition/outcomes及唯一build orchestration；operator-cli仅status/read或向runtime admin port提交retryable probe，不直接开DB writer | 50-block、dedupe、once、typed outcome、无第二startup/promotion path | 依赖SDK/canonical contracts；与Graph owner按port并行 |
 | Graph/readyGeneration | packages/catalog、packages/ready-generation、packages/graph | raw universe、Family internals、startup orchestration | verified publications + PromotionCallerToken → atomic immutable GraphView | full-root closure/CAS/canonical fence/crash/lease/adoption | 与state/scheduler并行 |
 | State/scheduler/REVM | packages/scheduler、packages/shared-work、packages/state-runtime、runtime/revm-workers | Graph authority、Family math | generic work/program → source-bound facts | single-flight、quota、abort/HOL、permit守恒 | contract冻结后并行 |
-| Producer/head-session | packages/producer | Graph write、discovery/attestation、Family语义、apps composition | active ready lease + canonical heads → immutable ProducerSession/correlation；拥有session admission/barrier，不拥有topology | serving-age/release/policy fence、100/100 terminal、active lease不变 | 依赖Graph/canonical/scheduler ports；与planner并行 |
+| Producer/head-session/intake | packages/producer | Graph write、discovery/attestation、Family语义、apps composition | active ready lease + canonical heads/pending tx → immutable ProducerSession/TriggerSession/correlation；拥有session admission/barrier、latest-head与bounded intake，不拥有topology | serving-age/release/policy fence、canonical-vs-unknown bulkhead、drop accounting、100/100 terminal、active lease不变 | 依赖Graph/canonical/scheduler ports；与planner并行 |
+| Coarse/economics funnel | packages/coarse-economics、packages/economics | Graph/Family authority、exact/action、signer | owner-issued current projections + generic objective → rank/prune accounting；final sim+valuation→EconomicReceipt | binding mutation、Top-K/unranked守恒、proof-only prune、source-pinned fee/valuation/EV | 依赖state/capability ports；与planner/exact并行 |
 | Planner/exact | packages/planner、packages/solver、packages/exact | families、protocol ABI/math | GraphView+opaque ports → route/current exact | no protocol import、current-source/fallback=0 | 依赖Graph/SDK port，不依赖Family实现细节 |
 | Execution/final-sim | packages/execution-program、packages/final-sim、packages/safety、packages/submission、contracts/executor、contracts/interfaces | Family identities、signer secret | owned actions → program/real sim/unsigned receipt | action ownership、安全门、strict top-level sim | 与planner后半并行 |
 | Evidence/telemetry | packages/evidence-emitter、packages/telemetry、acceptance/collectors | validator logic、production object creation | boundary objects → immutable events/metrics | raw locator、fsync、secret redaction | 所有owner提供boundary port |
@@ -3804,14 +3805,18 @@ final-sim在各自port稳定后并行；runtime composition、systemd dry-run与
    Verify：SIGTERM中途恢复、exact partition、rejection不跨cutoff、invalidProgram阻止ready。
 7. **实现atomic readyGeneration**：publication-only Graph、coverage/Graph/catalog一次CAS、lease/adoption。
    Verify：partial write不可见、ready前producer不可创建、activegeneration不可变。
-8. **接入producer/state lanes**：blockscan/backrun共享lease，current-source reads与transport reserve。
-   Verify：producer不拥有topology write；reorg取消；permit/queue守恒。
-9. **接入planner/current-source exact**：protocol-neutralGraph、opaque handles、no fallback。
-   Verify：source-bound exact lineage；central Family/protocol import=0。
-10. **接入execution/final-sim/safety**：owned actions、obligations、reservedsim与unsigneddry-run。
-    Verify：unknown action/obligationfail；最终top-level语义；standing/repayment/conservation执行。
+8. **接入producer/state/intake lanes**：blockscan/backrun共享lease，latest-head、current-source reads、
+   canonical-vs-unknown pending bulkhead、trigger/effect session与transport reserve。
+   Verify：producer不拥有topology write；reorg取消；same-head revision不改Graph；permit/queue/drop accounting守恒。
+9. **接入coarse funnel/planner/current-source exact**：Family-owned coarse projection、Top-K+bounded-unranked、
+   protocol-neutral Graph/route、opaque handles、bounded amount search与no fallback。
+   Verify：projection完整绑定；无proof hard-prune=0；unranked不silent；source-bound exact lineage；central
+   Family/protocol import=0。
+10. **接入execution/final-sim/economics/safety**：owned actions、obligations、reservedsim、current valuation/
+    fee/gas/EV与unsigneddry-run。
+    Verify：unknown action/obligation/valuation fail；最终top-level语义；standing/repayment/conservation/EV执行。
 11. **逐symbol采用或重写Family kernels**：按reference lock/ReuseReceipt只采用已证明的isolated pure symbol或
-    declaration；reverse identity、lifecycle、schema、authority与shell全部按大模板/新ports实现。
+    declaration；reverse identity、lifecycle、coarse/trigger/exact/action schema、authority与shell全部按大模板/新ports实现。
     Verify：每Family仅修改自己目录；old symbol hash→new contract evidence；whole-file/runtime copy=0；central无分支。
 12. **完成generatedcatalog与全族矩阵**：所有Familyexactset有source/outcome/publication/edge说明。
     Verify：所有Family统一按SourcePlan/exact partition；silentmissing=0；当前BOM与catalog均无LP entry。
