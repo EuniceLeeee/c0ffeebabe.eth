@@ -2527,7 +2527,6 @@ export class BlockScanRuntimeLoop {
           " -> source=" + exactSource.number + ":" +
           exactSource.generation,
       );
-      let exactYieldedMs = 0;
       const producerLagBlocks = (): number => {
         const snapshot = currentRuntimeCoordinator.latestPricingSnapshot();
         const producerSource = snapshot?.sourceBlock ?? -1;
@@ -2535,11 +2534,17 @@ export class BlockScanRuntimeLoop {
         return Math.max(0, newestHead - producerSource);
       };
       /*
-       * Producer-lag gate for the exact probe transport. Heavy candidate
-       * blocks issue 900+ probes in 15-20s; while the background N-1 producer
-       * is behind the newest scheduled head, each exact batch yields the
-       * shared reth transport for a bounded window so the producer can
-       * publish the missing predecessor instead of waiting behind exact.
+       * The exact probe transport rides the shared reth permit scheduler
+       * directly.  The shared drain order already serves producer-critical
+       * and producer-bulk lanes before exact, and the producer reserve is
+       * carved out of the same permit pool, so exact batches can never starve
+       * the N-1 producer.  A producer-lag yield gate was removed because it
+       * starved exact instead: the N-1 producer's critical flag covers the
+       * whole 7-8s generation (header + state prep), so every exact batch
+       * yielded past the 1.5s probe budget and 32/32 probes failed with
+       * batchesSent=0.  Exact loads are 16-32 calls per block (one HTTP
+       * batch, ~50ms against local reth); direct permit acquisition is both
+       * safe and the only way exact can meet its probe deadline.
        */
       const exactTransportScheduler: Pick<
         RethTransportScheduler,
@@ -2551,42 +2556,11 @@ export class BlockScanRuntimeLoop {
               signal: AbortSignal,
               work: (lease: RethTransportLease) => Promise<T>,
             ): Promise<T> => {
-              const scheduler = this.deps.rethTransportScheduler!;
-              if (lane !== "exact") {
-                return scheduler.run(lane, signal, work);
-              }
-              const maxBatchYieldMs = Math.max(
-                0,
-                this.deps.exactProducerLagYieldMs ?? 5_000,
+              return this.deps.rethTransportScheduler!.run(
+                lane,
+                signal,
+                work,
               );
-              const maxPassYieldMs = Math.max(
-                0,
-                this.deps.exactProducerLagYieldBudgetMs ?? 10_000,
-              );
-              const batchYieldUntilAtMs = Date.now() + maxBatchYieldMs;
-              while (Date.now() < batchYieldUntilAtMs) {
-                if (signal.aborted || passSignal.aborted) break;
-                if (
-                  !exactProducerYieldShouldWait({
-                    producerCriticalActive: this.producerCriticalActive,
-                    producerLagBlocks: producerLagBlocks(),
-                  })
-                ) {
-                  break;
-                }
-                if (exactYieldedMs >= maxPassYieldMs) break;
-                await new Promise<void>((resolve) =>
-                  setTimeout(resolve, 100)
-                );
-                exactYieldedMs += 100;
-              }
-              if (!signal.aborted && !passSignal.aborted) {
-                assertExactProbeProducerAvailable({
-                  producerCriticalActive: this.producerCriticalActive,
-                  producerLagBlocks: producerLagBlocks(),
-                });
-              }
-              return scheduler.run(lane, signal, work);
             },
           })
         : undefined;
