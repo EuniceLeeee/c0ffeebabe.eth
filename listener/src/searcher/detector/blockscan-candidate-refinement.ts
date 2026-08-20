@@ -543,7 +543,7 @@ export async function refineBlockScanCandidates(
             " families=" + familyIds.join(",") +
             " reason=" + (localTimedOut ? "probe_timeout" : "quote_error") +
             " error=" + (error instanceof Error
-              ? error.message.slice(0, 160)
+              ? error.message.slice(0, 400)
               : String(error)),
         );
         stageBudget.recordFailure(opportunity.seedEdges, budgetError);
