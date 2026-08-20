@@ -1,185 +1,161 @@
+import { types as nodeTypes } from "node:util";
+import {
+  assertExactKeys,
+  encodeCanonicalJson,
+  readOwnEnumerableDataProperty,
+  type Hash,
+} from "../../canonical-codec/src/index.ts";
 import {
   decodeReadOnlyArtifactRef,
+  decodeSchemaRef,
   type ReadOnlyArtifactRefV1,
+  type SchemaRef,
 } from "../../../specs/core-envelope/src/index.ts";
 import {
-  createArtifactResolutionResult,
-  decodeRetentionLeaseReceipt,
+  createArtifactResolutionClaim,
+  createObservedImmutableMirror,
   decodeResolverPolicy,
-  type ArtifactResolutionResultV1,
-  type IssuerQualificationRegistry,
-  type LeaseStore,
-  type ReadOnlyContentStore,
+  encodeArtifactBytes,
+  type ArtifactResolutionClaimV1,
+  type ObservedImmutableMirrorV1,
   type ResolverPolicyV1,
 } from "../../../specs/artifact-resolution/src/index.ts";
-import type { Hash, RetentionLeaseReceiptV1 } from "../../../specs/artifact-resolution/src/index.ts";
-import { hashProcessAnchor, type ProductionReceiptV1 } from "../../../specs/core-envelope/src/index.ts";
-import { encodeCanonicalJson, sha256Hex } from "../../../packages/canonical-codec/src/index.ts";
 
-export interface ResolvedArtifact {
-  readonly result: ArtifactResolutionResultV1;
-  readonly bytes?: Uint8Array;
+export interface ImmutableMirrorRead {
+  readonly storeIdentityHash: Hash;
+  readonly objectKey: Hash;
+  readonly bytes: Uint8Array;
+  readonly mediaType: string;
+  readonly schema: SchemaRef | null;
 }
 
-export interface ArtifactResolverDependencies {
+export interface ReadOnlyContentStore {
+  readImmutableMirror(
+    locator: ReadOnlyArtifactRefV1["immutableMirrorLocator"],
+  ): Promise<ImmutableMirrorRead | null>;
+}
+
+export interface ArtifactResolverIO {
   readonly contentStore: ReadOnlyContentStore;
-  readonly leaseStore: LeaseStore;
-  readonly issuerRegistry: IssuerQualificationRegistry;
-  readonly resolverImplementationDigest: Hash;
-  readonly resolverQualificationId: Hash;
-  readonly qualificationRegistryRoot: Hash;
 }
 
-function hex(bytes: Uint8Array): string {
-  let output = "0x";
-  for (const byte of bytes) output += byte.toString(16).padStart(2, "0");
-  return output;
+function normalizeMirror(raw: unknown): ObservedImmutableMirrorV1 {
+  assertExactKeys(
+    raw,
+    ["storeIdentityHash", "objectKey", "bytes", "mediaType", "schema"],
+    "$.immutableMirrorRead",
+  );
+  const rawBytes = readOwnEnumerableDataProperty(
+    raw,
+    "bytes",
+    "$.immutableMirrorRead",
+  );
+  if (!(rawBytes instanceof Uint8Array) || nodeTypes.isProxy(rawBytes)) {
+    throw new TypeError("immutable mirror bytes must be a concrete Uint8Array");
+  }
+  const bytes = Uint8Array.from(rawBytes);
+  const rawSchema = readOwnEnumerableDataProperty(
+    raw,
+    "schema",
+    "$.immutableMirrorRead",
+  );
+  if (rawSchema !== null && (typeof rawSchema !== "object" || rawSchema === null)) {
+    throw new TypeError("immutable mirror schema must be an exact SchemaRef or null");
+  }
+  const schema = rawSchema === null
+    ? null
+    : decodeSchemaRef(rawSchema as object);
+  return createObservedImmutableMirror({
+    storeIdentityHash: readOwnEnumerableDataProperty(
+      raw,
+      "storeIdentityHash",
+      "$.immutableMirrorRead",
+    ) as Hash,
+    objectKey: readOwnEnumerableDataProperty(
+      raw,
+      "objectKey",
+      "$.immutableMirrorRead",
+    ) as Hash,
+    bytes: encodeArtifactBytes(bytes),
+    mediaType: readOwnEnumerableDataProperty(
+      raw,
+      "mediaType",
+      "$.immutableMirrorRead",
+    ) as string,
+    schema,
+  });
 }
 
-type ObservedFields = {
-  readonly bytes: string | null;
-  readonly observedContentSha256: Hash | null;
-  readonly observedByteLength: string | null;
-};
-
-function emptyObserved(): ObservedFields {
-  return {
-    bytes: null,
-    observedContentSha256: null,
-    observedByteLength: null,
-  } as const;
+function mirrorMatches(
+  ref: ReadOnlyArtifactRefV1,
+  mirror: ObservedImmutableMirrorV1,
+): boolean {
+  return (
+    mirror.storeIdentityHash === ref.immutableMirrorLocator.storeIdentityHash &&
+    mirror.objectKey === ref.immutableMirrorLocator.objectKey &&
+    mirror.contentSha256 === ref.contentSha256 &&
+    mirror.byteLength === ref.byteLength &&
+    mirror.mediaType === ref.mediaType &&
+    encodeCanonicalJson(mirror.schema) === encodeCanonicalJson(ref.schema)
+  );
 }
 
-function makeResult(
+function createClaim(
   ref: ReadOnlyArtifactRefV1,
   policy: ResolverPolicyV1,
-  deps: ArtifactResolverDependencies,
-  resolvedAtStoreEpoch: string,
-  outcome: ArtifactResolutionResultV1["outcome"],
-  observed: Partial<ReturnType<typeof emptyObserved>> = {},
-): ArtifactResolutionResultV1 {
-  return createArtifactResolutionResult({
+  observedMirror: ObservedImmutableMirrorV1 | null,
+  outcome: ArtifactResolutionClaimV1["outcome"],
+): ArtifactResolutionClaimV1 {
+  return createArtifactResolutionClaim({
     artifactRefId: ref.artifactRefId,
     resolverPolicyHash: policy.policyHash,
-    resolverImplementationDigest: deps.resolverImplementationDigest,
-    resolverQualificationId: deps.resolverQualificationId,
-    qualificationRegistryRoot: deps.qualificationRegistryRoot,
-    resolvedAtStoreEpoch,
+    observedMirror,
     outcome,
-    ...emptyObserved(),
-    ...observed,
   });
 }
 
-function leaseCovers(
-  lease: RetentionLeaseReceiptV1,
-  currentEpoch: string,
-  minimumRemaining: string,
-): boolean {
-  const current = BigInt(currentEpoch);
-  const from = BigInt(lease.validFromStoreEpoch);
-  const through = BigInt(lease.validThroughStoreEpoch);
-  return current >= from && current <= through && through - current >= BigInt(minimumRemaining);
-}
-
-export async function resolveArtifact(
+/**
+ * Reads immutable content and emits an untrusted, fully self-contained claim.
+ * Qualification, lease currentness and acceptance belong exclusively to
+ * GateCore and are deliberately absent from this package.
+ */
+export async function resolveArtifactClaim(
   rawRef: ReadOnlyArtifactRefV1,
   rawPolicy: ResolverPolicyV1,
-  dependencies: ArtifactResolverDependencies,
-): Promise<ResolvedArtifact> {
+  io: ArtifactResolverIO,
+): Promise<ArtifactResolutionClaimV1> {
   const ref = decodeReadOnlyArtifactRef(rawRef);
   const policy = decodeResolverPolicy(rawPolicy);
-  const currentEpoch = await dependencies.leaseStore.currentEpoch(
-    ref.immutableMirrorLocator.storeIdentityHash,
-  );
-  if (ref.resolverPolicyHash !== policy.policyHash) {
-    return { result: makeResult(ref, policy, dependencies, currentEpoch, "mismatch") };
-  }
-  if (ref.immutableMirrorLocator.kind !== policy.allowedLocatorKind) {
-    return { result: makeResult(ref, policy, dependencies, currentEpoch, "mismatch") };
-  }
-  if (BigInt(ref.byteLength) > BigInt(policy.maxByteLength)) {
-    return { result: makeResult(ref, policy, dependencies, currentEpoch, "mismatch") };
+  if (
+    ref.resolverPolicyHash !== policy.policyHash ||
+    BigInt(ref.byteLength) > BigInt(policy.maxByteLength)
+  ) {
+    return createClaim(ref, policy, null, "content-mismatch");
   }
 
-  const mirror = ref.immutableMirrorLocator;
-  if (mirror.storeIdentityHash !== dependencies.contentStore.storeIdentityHash) {
-    return { result: makeResult(ref, policy, dependencies, currentEpoch, "mismatch") };
-  }
-  const blob = await dependencies.contentStore.readImmutableMirror(mirror);
-  if (blob === null) {
-    return { result: makeResult(ref, policy, dependencies, currentEpoch, "missing") };
-  }
-  const observed = {
-    observedContentSha256: sha256Hex(blob.bytes),
-    observedByteLength: String(blob.bytes.byteLength),
-  } as const;
-  if (
-    blob.storeIdentityHash !== mirror.storeIdentityHash ||
-    blob.objectKey !== mirror.objectKey ||
-    observed.observedContentSha256 !== ref.contentSha256 ||
-    observed.observedByteLength !== ref.byteLength ||
-    blob.mediaType !== ref.mediaType ||
-    encodeCanonicalJson(blob.schema) !== encodeCanonicalJson(ref.schema)
-  ) {
-    return { result: makeResult(ref, policy, dependencies, currentEpoch, "mismatch") };
-  }
-
-  const rawLease = await dependencies.leaseStore.getLease(
-    mirror.storeIdentityHash,
-    mirror.objectKey,
-    ref.contentSha256,
+  const rawMirror = await io.contentStore.readImmutableMirror(
+    ref.immutableMirrorLocator,
   );
-  let lease: RetentionLeaseReceiptV1 | null = null;
-  if (rawLease !== null) {
-    try {
-      lease = decodeRetentionLeaseReceipt(rawLease as object);
-    } catch {
-      lease = null;
-    }
+  if (rawMirror === null) {
+    return createClaim(ref, policy, null, "missing");
   }
-  if (
-    lease === null ||
-    lease.receiptId !== ref.retentionLeaseReceiptId ||
-    lease.storeIdentityHash !== mirror.storeIdentityHash ||
-    lease.objectKey !== mirror.objectKey ||
-    lease.contentSha256 !== ref.contentSha256 ||
-    lease.qualificationRegistryRoot !== dependencies.qualificationRegistryRoot ||
-    !leaseCovers(lease, currentEpoch, policy.minimumRemainingStoreEpochs)
-  ) {
-    return { result: makeResult(ref, policy, dependencies, currentEpoch, "lease-invalid") };
-  }
-  const issuer = await dependencies.issuerRegistry.currentIssuerQualification(
-    lease.issuerQualificationId,
-    lease.qualificationRegistryRoot,
+  const mirror = normalizeMirror(rawMirror);
+  return createClaim(
+    ref,
+    policy,
+    mirror,
+    mirrorMatches(ref, mirror) ? "content-observed" : "content-mismatch",
   );
-  if (
-    issuer === null ||
-    !issuer.current ||
-    issuer.issuerId !== lease.issuerId ||
-    issuer.issuerQualificationId !== lease.issuerQualificationId ||
-    issuer.qualificationRegistryRoot !== lease.qualificationRegistryRoot
-  ) {
-    return { result: makeResult(ref, policy, dependencies, currentEpoch, "lease-invalid") };
-  }
-  const result = makeResult(ref, policy, dependencies, currentEpoch, "resolved", {
-    ...observed,
-    bytes: hex(blob.bytes),
-  });
-  return { result, bytes: blob.bytes };
 }
 
-export async function resolveArtifacts(
+export async function resolveArtifactClaims(
   refs: readonly ReadOnlyArtifactRefV1[],
   policy: ResolverPolicyV1,
-  dependencies: ArtifactResolverDependencies,
-): Promise<readonly ResolvedArtifact[]> {
-  const output: ResolvedArtifact[] = [];
-  for (const ref of refs) output.push(await resolveArtifact(ref, policy, dependencies));
-  return output;
-}
-
-/** The receipt is deliberately a separate object; this helper only binds its process anchor. */
-export function receiptProcessAnchorHash(receipt: ProductionReceiptV1): Hash {
-  return hashProcessAnchor(receipt.producer);
+  io: ArtifactResolverIO,
+): Promise<readonly ArtifactResolutionClaimV1[]> {
+  const claims: ArtifactResolutionClaimV1[] = [];
+  for (const ref of refs) {
+    claims.push(await resolveArtifactClaim(ref, policy, io));
+  }
+  return Object.freeze(claims);
 }
