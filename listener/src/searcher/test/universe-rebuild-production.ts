@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { ethers } from "ethers";
-import { UNIV4_SWAP_TOPIC } from "../venues/swaps/univ4-abi.js";
+import {
+  UNIV4_INITIALIZE_TOPIC,
+  UNIV4_SWAP_TOPIC,
+} from "../venues/swaps/univ4-abi.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
   attestationPoolFromCandidate,
@@ -726,6 +729,33 @@ async function main(): Promise<void> {
     ["address", "address", "uint24", "int24", "address"],
     [currency0, currency1, fee, tickSpacing, hooks],
   );
+  const v4Manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
+  // A real Initialize log carrying the full PoolKey (id, currency0 and
+  // currency1 are indexed; fee/tickSpacing/hooks are in the payload).
+  // Indexed address topics are left-padded to 32 bytes on chain.
+  const padded = (address: string): string =>
+    ("0x" + "00".repeat(12) + address.slice(2)).toLowerCase();
+  const initializeLog = Object.freeze({
+    address: v4Manager,
+    topics: Object.freeze([
+      UNIV4_INITIALIZE_TOPIC,
+      poolId.toLowerCase(),
+      padded(currency0),
+      padded(currency1),
+    ]),
+    data: abiCoder.encode(
+      ["uint24", "int24", "address", "uint160", "int24"],
+      [fee, tickSpacing, hooks, "0", 0],
+    ),
+    transactionHash: "0x" + "66".repeat(32),
+    transactionIndex: 0,
+    blockNumber: SOURCE.number - 50,
+    blockHash: "0x" + "55".repeat(32),
+    logIndex: 0,
+    removed: false,
+  });
+  let pmResolves = true;
+  let initLogAvailable = true;
   const stubServer = http.createServer((request, response) => {
     let body = "";
     request.on("data", (chunk: Buffer) => { body += chunk.toString("utf8"); });
@@ -763,8 +793,23 @@ async function main(): Promise<void> {
               | undefined;
             const data = transaction?.data ?? "0x";
             // V4_POSITION_MANAGER_POOL_KEYS_SELECTOR = 0x86b6be7d.
-            if (data.startsWith("0x86b6be7d")) return respond(encodedPoolKey);
+            if (data.startsWith("0x86b6be7d")) {
+              // An empty mapping slot decodes to a full zero tuple.
+              return respond(pmResolves
+                ? encodedPoolKey
+                : "0x" + "00".repeat(160));
+            }
             return respond("0x");
+          }
+          case "eth_getLogs": {
+            const filter = rpcRequest.params?.[0] as
+              | { readonly topics?: readonly (string | null)[] }
+              | undefined;
+            const topic0 = filter?.topics?.[0]?.toLowerCase() ?? "";
+            if (topic0 === UNIV4_INITIALIZE_TOPIC && initLogAvailable) {
+              return respond([initializeLog]);
+            }
+            return respond([]);
           }
           default:
             return Object.freeze({
@@ -790,9 +835,8 @@ async function main(): Promise<void> {
     const wired = createRebuildWiring({
       rpcUrl: "http://127.0.0.1:" + stubPort,
     });
-    const manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
     const v4SwapLog = Object.freeze({
-      address: manager,
+      address: v4Manager,
       topics: Object.freeze([UNIV4_SWAP_TOPIC, poolId.toLowerCase()]),
       data: "0x",
       transactionHash: "0x" + "99".repeat(32),
@@ -812,7 +856,7 @@ async function main(): Promise<void> {
     const boundCandidate = reverseBound[0] as Readonly<Record<string, unknown>>;
     assert.equal(boundCandidate.familyId, "univ4");
     assert.equal(boundCandidate.poolId, poolId.toLowerCase());
-    assert.equal(boundCandidate.address, manager);
+    assert.equal(boundCandidate.address, v4Manager);
     assert.equal(
       (boundCandidate.poolKey as Readonly<Record<string, unknown>>).currency0,
       currency0.toLowerCase(),
@@ -834,6 +878,56 @@ async function main(): Promise<void> {
       cutoff: SOURCE,
     });
     assert.equal(repeated.length, 1, "reverse-bound candidates dedupe per pool");
+    // PositionManager misses router-side pools (empty poolKeys mapping): the
+    // plugin falls back to the indexed Initialize reverse scan and resolves
+    // the same complete candidate from the pool's own Initialize log.
+    // Each scenario pins a distinct source block: ethers v6 dedups identical
+    // requests within 250ms (AbstractProvider #perform tag cache), and the
+    // fallback's getLogs filter derives from the cutoff block, so a shared
+    // cutoff would let the last scenario inherit the previous scenario's
+    // cached response instead of exercising the real chain-truth path.
+    pmResolves = false;
+    const fallbackSource = Object.freeze({
+      number: SOURCE.number - 1,
+      hash: "0x" + "b1".repeat(32),
+      generation: 1,
+    });
+    const backfilled = await wired.reverseBindOpaqueCandidates!({
+      observations: Object.freeze([v4SwapLog]),
+      cutoff: fallbackSource,
+    });
+    assert.equal(
+      backfilled.length,
+      1,
+      "Initialize-scan fallback resolves the pool",
+    );
+    const backfilledCandidate = backfilled[0] as
+      Readonly<Record<string, unknown>>;
+    assert.equal(backfilledCandidate.familyId, "univ4");
+    assert.equal(backfilledCandidate.poolId, poolId.toLowerCase());
+    assert.equal(
+      (backfilledCandidate.poolKey as Readonly<Record<string, unknown>>)
+        .currency0,
+      currency0.toLowerCase(),
+    );
+    assert.equal(
+      (backfilledCandidate.poolKey as Readonly<Record<string, unknown>>).fee,
+      fee,
+    );
+    // Neither chain-truth source resolves: the nomination stays unresolved
+    // (fail-closed, never a guessed identity). Distinct cutoff again so the
+    // 250ms request-dedup window cannot serve a stale resolved response.
+    initLogAvailable = false;
+    const missingSource = Object.freeze({
+      number: SOURCE.number - 2,
+      hash: "0x" + "c1".repeat(32),
+      generation: 1,
+    });
+    const unresolved = await wired.reverseBindOpaqueCandidates!({
+      observations: Object.freeze([v4SwapLog]),
+      cutoff: missingSource,
+    });
+    assert.equal(unresolved.length, 0, "no candidate when both sources miss");
     // A log that matches no declared reverse-binding pattern is untouched.
     const unrelated = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([

@@ -10,18 +10,25 @@ import {
   canonicalPoolId,
   canonicalPoolKey,
 } from "./codec.js";
-import { resolveV4PoolKeyViaPositionManager } from
-  "../univ4-pool-discovery.js";
+import {
+  resolveV4PoolKeyViaPositionManager,
+  resolveV4InitsBackward,
+} from "../univ4-pool-discovery.js";
+import { UNIV4_INITIALIZE_TOPIC } from "../univ4-abi.js";
 import type { V4PoolKey } from "../../../planner/token-graph.js";
 
 /**
  * Plugin-owned retain-channel reverse binding: a univ4 pool's real identity
  * is its 32-byte poolId (the manager never exposes per-pool contracts), so
- * chain truth is recovered through the PositionManager reverse lookup at the
- * source block (eth_call, no recent activity required). A candidate without
- * a poolId in its opaque payload is explicitly unsupported; a lookup that
- * fails to resolve is a failed outcome. Identity still re-verifies the pool
- * key against the manager at the source block in the family lifecycle.
+ * chain truth is recovered from the source block without requiring recent
+ * activity. Primary source: the PositionManager poolKeys reverse lookup
+ * (eth_call). Fallback: the indexed Initialize-log reverse scan (topics
+ * [Initialize, poolId]) which covers every pool, including router-side pools
+ * that never flowed through the official position manager. A candidate
+ * without a poolId in its opaque payload is explicitly unsupported; a
+ * lookup that fails to resolve is a failed outcome. Identity still
+ * re-verifies the pool key against the manager at the source block in the
+ * family lifecycle.
  */
 export async function reverseBindUniv4(input: {
   readonly nominations: readonly CaptureNominationInput[];
@@ -47,7 +54,7 @@ export async function reverseBindUniv4(input: {
       continue;
     }
     try {
-      const resolved = await resolveV4PoolKeyViaPositionManager(
+      let resolved = await resolveV4PoolKeyViaPositionManager(
         // The reverse lookup passes an AbortSignal control as the second
         // call argument; the nomination provider treats that slot as a
         // block tag, so drop it (single-call, no cancellation needed) and
@@ -58,11 +65,34 @@ export async function reverseBindUniv4(input: {
         poolId,
       );
       if (resolved === null) {
-        outcomes.push(Object.freeze({
-          status: "failed",
-          reason: "position-manager-reverse-lookup-null",
-        }));
-        continue;
+        // PositionManager reverse lookup misses pools whose liquidity never
+        // flowed through the official position manager (router-side pools).
+        // Every pool still has exactly one Initialize log carrying the full
+        // PoolKey: fall back to the indexed Initialize reverse scan (same
+        // chain truth, no recent activity needed) from the source block back
+        // toward the manager deploy block.
+        const backfilled = await resolveV4InitsBackward(
+          Object.freeze({
+            getLogs: (filter: {
+              readonly address?: string;
+              readonly fromBlock?: number;
+              readonly toBlock?: number;
+              readonly topics?: readonly (string | null)[];
+            }) => input.provider.getLogs(filter),
+          }) as never,
+          ADDR.UNISWAP_V4_POOL_MANAGER,
+          UNIV4_INITIALIZE_TOPIC,
+          [poolId],
+          input.source.number,
+        );
+        resolved = backfilled.get(poolId) ?? null;
+        if (resolved === null) {
+          outcomes.push(Object.freeze({
+            status: "failed",
+            reason: "initialize-backfill-null",
+          }));
+          continue;
+        }
       }
       const poolKey: V4PoolKey = canonicalPoolKey({
         currency0: resolved.currency0,
