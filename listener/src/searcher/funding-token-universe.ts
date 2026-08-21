@@ -14,8 +14,10 @@ import { ADDR } from "../shared/constants/addresses.js";
  * Sources (chain truth, no allowlist):
  *  - Morpho Blue: every registered market's loan token (CreateMarket
  *    events + market(id)); Morpho flash loans borrow the market loan token.
- *  - Balancer V2 Vault: every registered pool's tokens (PoolRegistered
- *    events + getPoolTokens); the Vault flash-loans the tokens it holds.
+ *  - Balancer V2 Vault: current balanceOf(vault) > 0 over the candidate
+ *    tokens - the Vault flash-loans any ERC20 it holds (its flashLoan only
+ *    checks vault balance), queried via the balanceOf interface, never via
+ *    pool-registration history.
  */
 export const FUNDING_TOKEN_UNIVERSE_FORMAT = "funding-token-universe-v1";
 
@@ -33,19 +35,15 @@ const MORPHO_BLUE_IFACE = new ethers.Interface([
     "address irm,uint256 lltv))",
 ]);
 
-const BALANCER_VAULT_IFACE = new ethers.Interface([
-  "event PoolRegistered(bytes32 indexed poolId,address indexed poolAddress," +
-    "uint8 specialization)",
-  "function getPoolTokens(bytes32 poolId) view returns " +
-    "(address[] tokens,uint256[] balances,uint256 lastChangeBlock)",
+const ERC20_BALANCE_OF_IFACE = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
 ]);
 
-// Scan origins: comfortably before the provider deploy blocks.
+// Scan origin: comfortably before the Morpho Blue deploy block.
 const MORPHO_BLUE_DEPLOY_FROM = 19_600_000;
-const BALANCER_VAULT_DEPLOY_FROM = 12_200_000;
 // reth caps eth_getLogs ranges at 100000 blocks and results at 20000.
 const SCAN_CHUNK_BLOCKS = 100_000;
-const POOL_TOKEN_CALL_CONCURRENCY = 8;
+const BALANCE_CONCURRENCY = 64;
 
 async function scanLogs(
   provider: ethers.JsonRpcProvider,
@@ -67,14 +65,24 @@ async function scanLogs(
   return logs;
 }
 
-export async function enumerateFundingTokenUniverse(
-  provider: ethers.JsonRpcProvider,
-): Promise<FundingTokenUniverseTable> {
+export async function enumerateFundingTokenUniverse(input: {
+  readonly provider: ethers.JsonRpcProvider;
+  /**
+   * Balancer balance candidates: the Vault flash-loans any ERC20 it holds
+   * (its flashLoan only checks balanceOf(vault) >= amount), so the support
+   * surface is current balances over the loop-relevant tokens - queried via
+   * the balanceOf interface, never pool-registration history (which the
+   * local node prunes).
+   */
+  readonly candidateTokens: readonly string[];
+}): Promise<FundingTokenUniverseTable> {
+  const provider = input.provider;
   const head = await provider.getBlockNumber();
   const tokens = new Set<string>();
 
   // Morpho Blue: one market entry per CreateMarket event; the flash loan
-  // borrows the market loan token.
+  // borrows the market loan token. (2024+ history, retained by the local
+  // node.)
   const marketTopic = MORPHO_BLUE_IFACE.getEvent("CreateMarket")!.topicHash;
   const marketLogs = await scanLogs(
     provider,
@@ -98,46 +106,32 @@ export async function enumerateFundingTokenUniverse(
     tokens.add(String(market.loanToken).toLowerCase());
   }
 
-  // Balancer V2 Vault: every registered pool's tokens (the Vault holds and
-  // flash-loans them).
-  const poolTopic = BALANCER_VAULT_IFACE.getEvent("PoolRegistered")!.topicHash;
-  const poolLogs = await scanLogs(
-    provider,
-    ADDR.BALANCER_VAULT,
-    poolTopic,
-    BALANCER_VAULT_DEPLOY_FROM,
-    head,
+  // Balancer V2 Vault: current balanceOf > 0 over the candidate tokens (a
+  // loan needs vault liquidity; empty balance means no flash loan).
+  const balanceOfData = ERC20_BALANCE_OF_IFACE.encodeFunctionData(
+    "balanceOf",
+    [ADDR.BALANCER_VAULT],
   );
-  const poolIds = poolLogs.flatMap((log) => {
-    const parsed = BALANCER_VAULT_IFACE.parseLog({
-      topics: log.topics,
-      data: log.data,
-    });
-    return parsed === null ? [] : [String(parsed.args[0])];
-  });
-  for (
-    let index = 0;
-    index < poolIds.length;
-    index += POOL_TOKEN_CALL_CONCURRENCY
-  ) {
+  const candidates = [...new Set(input.candidateTokens.map((token) =>
+    ethers.getAddress(token).toLowerCase()
+  ))].sort();
+  for (let index = 0; index < candidates.length; index += BALANCE_CONCURRENCY) {
     const batch = await Promise.all(
-      poolIds.slice(index, index + POOL_TOKEN_CALL_CONCURRENCY).map((poolId) =>
-        provider.call({
-          to: ADDR.BALANCER_VAULT,
-          data: BALANCER_VAULT_IFACE.encodeFunctionData(
-            "getPoolTokens",
-            [poolId],
-          ),
-        })
+      candidates.slice(index, index + BALANCE_CONCURRENCY).map((token) =>
+        provider.call({ to: token, data: balanceOfData })
+          .then((result) => ({ token, result }))
+          .catch(() => ({ token, result: "0x" })),
       ),
     );
-    for (const result of batch) {
-      const [tokenList] = BALANCER_VAULT_IFACE.decodeFunctionResult(
-        "getPoolTokens",
-        result,
-      );
-      for (const token of tokenList as readonly string[]) {
-        tokens.add(token.toLowerCase());
+    for (const item of batch) {
+      try {
+        const [balance] = ERC20_BALANCE_OF_IFACE.decodeFunctionResult(
+          "balanceOf",
+          item.result,
+        );
+        if (BigInt(balance) > 0n) tokens.add(item.token);
+      } catch {
+        // Not an ERC20 (or empty return): cannot be flash-loaned.
       }
     }
   }
@@ -195,6 +189,7 @@ export async function writeFundingTokenUniverse(
 /** Load the solidified table, or enumerate + solidify once on first boot. */
 export async function ensureFundingTokenUniverse(input: {
   readonly provider: ethers.JsonRpcProvider;
+  readonly candidateTokens: readonly string[];
   readonly path: string;
 }): Promise<readonly string[]> {
   const existing = await loadFundingTokenUniverse(input.path);
@@ -209,7 +204,10 @@ export async function ensureFundingTokenUniverse(input: {
     `[searcher/live] funding token universe: no table at ${input.path}, ` +
       "enumerating from chain truth (one-time)",
   );
-  const table = await enumerateFundingTokenUniverse(input.provider);
+  const table = await enumerateFundingTokenUniverse({
+    provider: input.provider,
+    candidateTokens: input.candidateTokens,
+  });
   await writeFundingTokenUniverse(input.path, table);
   console.log(
     `[searcher/live] funding token universe: enumerated ${table.tokens.length} ` +

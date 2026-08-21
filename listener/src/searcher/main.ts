@@ -1511,6 +1511,8 @@ async function main(): Promise<void> {
     : new ethers.JsonRpcProvider(archiveUrl);
   const flashTokens = await ensureFundingTokenUniverse({
     provider: enumerationProvider,
+    // Balancer balance candidates: the loop-relevant tokens of the graph.
+    candidateTokens: [...tokenIndex.keys()],
     path: fundingTokenUniversePath,
   });
   console.log(
