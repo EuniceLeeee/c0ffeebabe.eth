@@ -357,6 +357,52 @@ export async function rebuildUniverse(
   const uninstallSignalFlush = writer.installSignalFlush({
     terminateAfterFlush: true,
   });
+  // One verified outcome per family instance. Two candidate keys can verify
+  // to the same instance (e.g. two curve pools sharing one underlying), and
+  // the ready promotion requires a unique instance set (it fails closed on
+  // duplicates). Keep the first verified candidate per instance (sorted by
+  // key); the duplicates become terminal-rejected "duplicate-instance" so
+  // the Graph carries the instance exactly once. The pass is idempotent and
+  // also repairs an incumbent run on resume (no re-verification needed).
+  const seenInstanceKeys = new Map<string, string>();
+  const duplicateInstanceOutcomes: RunOutcome[] = [];
+  for (const [candidateKey, outcome] of Object.entries(
+    run.outcomesByCandidateKey,
+  ).sort(([left], [right]) => left.localeCompare(right))) {
+    if (outcome.status !== "verified") continue;
+    const first = seenInstanceKeys.get(outcome.familyInstanceKey);
+    if (first !== undefined) {
+      const memo = checkpoint.verifiedMemos[candidateKey];
+      duplicateInstanceOutcomes.push(Object.freeze({
+        status: "terminal-rejected",
+        familyCandidateKey: candidateKey,
+        reasonCode: "duplicate-instance",
+        familyDefinitionHash: memo?.familyDefinitionHash ??
+          "duplicate-instance",
+        requestFingerprint: "duplicate-instance:" + first,
+        trustedResultsFingerprint: "duplicate-instance:" + first,
+        authorityFingerprint: memo?.validity?.authorityFingerprint ??
+          "duplicate-instance",
+        candidateFingerprint: memo?.candidateFingerprint ??
+          "duplicate-instance",
+        cutoff: Object.freeze({
+          number: run.cutoff.number,
+          hash: run.cutoff.hash,
+        }),
+      }));
+      continue;
+    }
+    seenInstanceKeys.set(outcome.familyInstanceKey, candidateKey);
+  }
+  for (const outcome of duplicateInstanceOutcomes) writer.record(outcome);
+  // Serial gate for fresh attestations: two candidates of one instance must
+  // not both record verified when they attest concurrently.
+  let instanceGateTail: Promise<void> = Promise.resolve();
+  const instanceGate = async <T>(fn: () => Promise<T>): Promise<T> => {
+    const next = instanceGateTail.then(fn, fn);
+    instanceGateTail = next.then(() => undefined, () => undefined);
+    return next;
+  };
   const pendingCandidates = candidates.filter((candidate) => {
     const candidateKey = input.familyCandidateKey(candidate);
     const oldOutcome = run.outcomesByCandidateKey[candidateKey];
@@ -439,6 +485,32 @@ export async function rebuildUniverse(
           proofSource: cutoff,
           familyCandidateKey: candidateKey,
         });
+        let duplicateOf: string | undefined;
+        await instanceGate(async () => {
+          const first = seenInstanceKeys.get(memo.familyInstanceKey);
+          if (first !== undefined && first !== candidateKey) {
+            duplicateOf = first;
+            return;
+          }
+          seenInstanceKeys.set(memo.familyInstanceKey, candidateKey);
+        });
+        if (duplicateOf !== undefined) {
+          writer.record(Object.freeze({
+            status: "terminal-rejected",
+            familyCandidateKey: candidateKey,
+            reasonCode: "duplicate-instance",
+            familyDefinitionHash: memo.familyDefinitionHash,
+            requestFingerprint: "duplicate-instance:" + duplicateOf,
+            trustedResultsFingerprint: "duplicate-instance:" + duplicateOf,
+            authorityFingerprint: memo.validity.authorityFingerprint,
+            candidateFingerprint: memo.candidateFingerprint,
+            cutoff: Object.freeze({
+              number: cutoff.number,
+              hash: cutoff.hash,
+            }),
+          }));
+          return;
+        }
         writer.record(Object.freeze({
           status: "verified",
           familyCandidateKey: candidateKey,

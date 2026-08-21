@@ -722,6 +722,66 @@ async function main(): Promise<void> {
       1,
       "the ready instance set carries the instance exactly once",
     );
+
+    // I: two candidate keys verifying to ONE family instance (e.g. two curve
+    // pools sharing one underlying) must yield exactly one verified outcome;
+    // the second candidate becomes terminal-rejected "duplicate-instance" so
+    // the ready promotion's instance set stays unique (it fails closed on
+    // duplicates: "ready generation is not bound to completed run").
+    const sharedInstance = makeFixture(join(dir, "shared-instance"), {
+      scanSwapWindow: async (scanInput) => Object.freeze({
+        observations: Object.freeze([
+          Object.freeze({ id: "x", block: SOURCE.number }),
+          Object.freeze({ id: "y", block: SOURCE.number }),
+        ]),
+        sourceReceipts: sourceReceipts(scanInput.fromBlock),
+      }),
+      sealDurableVerifiedMemo: (input) => {
+        const id = String((input.candidate as { id: string }).id);
+        return Object.freeze({
+          familyCandidateKey: "cand:" + id,
+          familyInstanceKey: "inst:shared",
+          familyId: "univ2",
+          candidateKey: "cand:" + id,
+          instanceKey: "inst:shared",
+          candidateFingerprint: "cf:" + id,
+          familyDefinitionHash: "fdh",
+          validity: Object.freeze({
+            policy: "immutable-code",
+            authorityFingerprint: "auth",
+            proofSource: Object.freeze({
+              number: SOURCE.number,
+              hash: SOURCE.hash,
+            }),
+          }),
+          verifiedIdentity: Object.freeze({ kind: "identity" }),
+          compiledDescriptor: Object.freeze({ kind: "descriptor" }),
+          staticProjection: Object.freeze({ kind: "projection" }),
+          evidenceFingerprint: "ef:" + id,
+          memoFingerprint: "memo:" + id,
+        }) as DurableVerifiedMemo;
+      },
+    });
+    const sharedReady = await rebuildUniverse(sharedInstance.input);
+    assert.equal(
+      sharedReady.activeInstanceKeys.length,
+      1,
+      "one instance enters the ready set once",
+    );
+    const sharedStore = await sharedInstance.store.load();
+    assert.equal(
+      sharedStore?.inProgressRun?.outcomesByCandidateKey["cand:x"]?.status,
+      "verified",
+    );
+    assert.equal(
+      sharedStore?.inProgressRun?.outcomesByCandidateKey["cand:y"]?.status,
+      "terminal-rejected",
+    );
+    assert.equal(
+      (sharedStore?.inProgressRun?.outcomesByCandidateKey["cand:y"] as
+        { readonly reasonCode: string }).reasonCode,
+      "duplicate-instance",
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
