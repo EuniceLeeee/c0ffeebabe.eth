@@ -1338,19 +1338,42 @@ async function main(): Promise<void> {
   // duplicate-instance candidate keeps its memo while its outcome is
   // downgraded terminal-rejected); the runtime wants exactly one instance
   // per active key.
+  // The per-block strict session refreshes the pricing of every ready
+  // instance; the 14400-window graph (16006 instances / 31891 edges) makes
+  // the full-set refresh 6-13s+ and miss the block budget (observed
+  // stale-generation failures + stale_state). The runtime prices the top-N
+  // instances by route count (most loop-relevant first); the rest stay in
+  // the ready graph but are not per-block priced (their loops are simply
+  // not enumerated this block). Matches the earlier <10s profile (~2k
+  // instances).
+  const READY_INSTANCE_REFRESH_BUDGET = 2048;
   const seenReadyInstances = new Set<string>();
-  const readyInstances = Object.values(rebuildEnvelope.verifiedMemos)
+  const readyPairs = Object.values(rebuildEnvelope.verifiedMemos)
     .filter((memo) => activeInstanceKeys.has(memo.familyInstanceKey))
     .filter((memo) => {
       if (seenReadyInstances.has(memo.familyInstanceKey)) return false;
       seenReadyInstances.add(memo.familyInstanceKey);
       return true;
     })
-    .map((memo) => rebuildWiring.rehydrateVerifiedInstance({
+    .map((memo) => Object.freeze({
       memo,
-      cutoff: readyUniverse.cutoff,
-    }) as PreparedFamilyInstance);
-  if (readyInstances.length !== activeInstanceKeys.size) {
+      instance: rebuildWiring.rehydrateVerifiedInstance({
+        memo,
+        cutoff: readyUniverse.cutoff,
+      }) as PreparedFamilyInstance,
+    }))
+    .sort((left, right) =>
+      (right.instance.routes?.length ?? 0) - (left.instance.routes?.length ?? 0),
+    )
+    .slice(0, READY_INSTANCE_REFRESH_BUDGET);
+  const readyInstances = Object.freeze(readyPairs.map((pair) => pair.instance));
+  const refreshInstanceKeys = new Set(
+    readyPairs.map((pair) => pair.memo.familyInstanceKey),
+  );
+  if (readyInstances.length !== Math.min(
+    activeInstanceKeys.size,
+    READY_INSTANCE_REFRESH_BUDGET,
+  )) {
     throw new Error(
       "strict startup readyGeneration lost an active memo/instance",
     );
@@ -1451,7 +1474,13 @@ async function main(): Promise<void> {
   // by catalog-issued route handles and Family projectGraph during the same
   // CAS as cutoff/catalog/coverage. Backrun and blockscan consume this one
   // immutable generation; raw pool views cannot manufacture an edge.
-  let graph = strictReadyRuntime.graph as TokenEdge[];
+  // The runtime graph is the edges of the bounded instance set, so the
+  // session prices exactly what it enumerates (no "pricing missing"
+  // fail-closed).
+  const graph = (strictReadyRuntime.graph as TokenEdge[]).filter((edge) =>
+    edge.instanceKey === undefined ||
+    refreshInstanceKeys.has(edge.instanceKey)
+  );
   let blockScanGraph: TokenEdge[] | undefined = enableBlockScan
     ? graph
     : undefined;
