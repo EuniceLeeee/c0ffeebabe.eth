@@ -16,11 +16,14 @@ import {
  * SEARCHER_LIVE_RPC_URL or MAINNET_RPC_URL.
  */
 async function main(): Promise<void> {
-  const rpcUrl = process.env.SEARCHER_LIVE_RPC_URL ??
-    process.env.MAINNET_RPC_URL;
+  // The enumeration scans provider-deploy history (Balancer Vault events
+  // from 2021); the local node prunes it ("pruned history unavailable"), so
+  // prefer the archive node when available.
+  const rpcUrl = process.env.MAINNET_RPC_URL ??
+    process.env.SEARCHER_LIVE_RPC_URL;
   if (rpcUrl === undefined || rpcUrl.trim().length === 0) {
     throw new Error(
-      "funding token universe CLI requires SEARCHER_LIVE_RPC_URL or MAINNET_RPC_URL",
+      "funding token universe CLI requires MAINNET_RPC_URL or SEARCHER_LIVE_RPC_URL",
     );
   }
   const path = process.argv[2] ??

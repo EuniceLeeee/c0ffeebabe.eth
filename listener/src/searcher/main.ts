@@ -1501,8 +1501,16 @@ async function main(): Promise<void> {
   const fundingTokenUniversePath =
     process.env.SEARCHER_FUNDING_TOKEN_UNIVERSE_PATH ??
     "/opt/MEV-runtime/funding-token-universe.json";
+  // The enumeration scans provider-deploy history (Balancer Vault events
+  // from 2021); the local node prunes it, so enumerate against the archive
+  // node when available.
+  const archiveUrl = process.env.MAINNET_RPC_URL;
+  const enumerationProvider = archiveUrl === undefined ||
+      archiveUrl.trim().length === 0
+    ? provider
+    : new ethers.JsonRpcProvider(archiveUrl);
   const flashTokens = await ensureFundingTokenUniverse({
-    provider,
+    provider: enumerationProvider,
     path: fundingTokenUniversePath,
   });
   console.log(
