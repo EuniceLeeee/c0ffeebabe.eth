@@ -754,6 +754,35 @@ async function main(): Promise<void> {
     logIndex: 0,
     removed: false,
   });
+  // A second pool: the PositionManager stub only ever resolves pool 1, so
+  // pool 2 must come through the archive Initialize scan. This exercises the
+  // per-nomination admission (a single batched call would admit only one
+  // pool per Family and drop pool 2).
+  const currency0b = "0x" + "33".repeat(20);
+  const currency1b = "0x" + "44".repeat(20);
+  const poolId2 = ethers.keccak256(abiCoder.encode(
+    ["address", "address", "uint24", "int24", "address"],
+    [currency0b, currency1b, 500, 10, hooks],
+  ));
+  const initializeLog2 = Object.freeze({
+    address: v4Manager,
+    topics: Object.freeze([
+      UNIV4_INITIALIZE_TOPIC,
+      poolId2.toLowerCase(),
+      padded(currency0b),
+      padded(currency1b),
+    ]),
+    data: abiCoder.encode(
+      ["uint24", "int24", "address", "uint160", "int24"],
+      [500, 10, hooks, "0", 0],
+    ),
+    transactionHash: "0x" + "77".repeat(32),
+    transactionIndex: 0,
+    blockNumber: SOURCE.number - 51,
+    blockHash: "0x" + "58".repeat(32),
+    logIndex: 0,
+    removed: false,
+  });
   let pmResolves = true;
   let initLogAvailable = true;
   const stubServer = http.createServer((request, response) => {
@@ -806,8 +835,11 @@ async function main(): Promise<void> {
               | { readonly topics?: readonly (string | null)[] }
               | undefined;
             const topic0 = filter?.topics?.[0]?.toLowerCase() ?? "";
+            const poolId0 = filter?.topics?.[1]?.toLowerCase() ?? "";
             if (topic0 === UNIV4_INITIALIZE_TOPIC && initLogAvailable) {
-              return respond([initializeLog]);
+              if (poolId0 === poolId.toLowerCase()) return respond([initializeLog]);
+              if (poolId0 === poolId2.toLowerCase()) return respond([initializeLog2]);
+              return respond([]);
             }
             return respond([]);
           }
@@ -878,6 +910,44 @@ async function main(): Promise<void> {
       cutoff: SOURCE,
     });
     assert.equal(repeated.length, 1, "reverse-bound candidates dedupe per pool");
+    // The reverse scan runs on the archive node (MAINNET_RPC_URL) while the
+    // PositionManager read stays on the live provider; point the archive at
+    // the same stub so the whole path is exercised in-process.
+    const previousArchiveUrl = process.env.MAINNET_RPC_URL;
+    process.env.MAINNET_RPC_URL = "http://127.0.0.1:" + stubPort;
+    // Two pools in one driver call: the PositionManager stub only ever
+    // resolves pool 1, so pool 2 must come through the archive Initialize
+    // scan. A single batched executeCatalogReverseBindings call admits only
+    // one verified observation per Family and would drop pool 2; the driver
+    // must feed one nomination at a time.
+    const twoPoolSource = Object.freeze({
+      number: SOURCE.number - 3,
+      hash: "0x" + "d1".repeat(32),
+      generation: 1,
+    });
+    const v4SwapLog2 = Object.freeze({
+      address: v4Manager,
+      topics: Object.freeze([UNIV4_SWAP_TOPIC, poolId2.toLowerCase()]),
+      data: "0x",
+      transactionHash: "0x" + "9a".repeat(32),
+      blockNumber: SOURCE.number,
+      blockHash: SOURCE.hash,
+      logIndex: 0,
+    });
+    const twoPools = await wired.reverseBindOpaqueCandidates!({
+      observations: Object.freeze([v4SwapLog, v4SwapLog2]),
+      cutoff: twoPoolSource,
+    });
+    assert.equal(twoPools.length, 2, "every pool nomination is reverse-bound");
+    const twoPoolKeys = new Set(twoPools.map((candidate) => String(
+      (candidate as Readonly<Record<string, unknown>>).poolId,
+    )));
+    assert.equal(twoPoolKeys.has(poolId.toLowerCase()), true, "pool 1 admitted");
+    assert.equal(
+      twoPoolKeys.has(poolId2.toLowerCase()),
+      true,
+      "pool 2 admitted via the archive scan",
+    );
     // PositionManager misses router-side pools (empty poolKeys mapping): the
     // plugin falls back to the indexed Initialize reverse scan and resolves
     // the same complete candidate from the pool's own Initialize log.
@@ -892,11 +962,6 @@ async function main(): Promise<void> {
       hash: "0x" + "b1".repeat(32),
       generation: 1,
     });
-    // The reverse scan runs on the archive node (MAINNET_RPC_URL) while the
-    // PositionManager read stays on the live provider; point the archive at
-    // the same stub so the whole path is exercised in-process.
-    const previousArchiveUrl = process.env.MAINNET_RPC_URL;
-    process.env.MAINNET_RPC_URL = "http://127.0.0.1:" + stubPort;
     const backfilled = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: fallbackSource,

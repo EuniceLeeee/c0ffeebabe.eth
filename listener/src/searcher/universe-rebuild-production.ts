@@ -33,8 +33,10 @@ import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
 import { executeCatalogReverseBindings } from
   "./venues/capture-materialization.js";
-import type { CaptureNominationInput } from
-  "./venues/adapter-family-plugin.js";
+import type {
+  CaptureNominationInput,
+  UnifiedObservation,
+} from "./venues/adapter-family-plugin.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 
@@ -1673,12 +1675,20 @@ export function createRebuildWiring(input?: {
         }
       }
       if (nominations.length === 0) return Object.freeze([]);
-      const verified = await executeCatalogReverseBindings({
-        catalog,
-        source: reverseInput.cutoff,
-        nominations,
-        provider: providerAdapter(provider),
-      });
+      // executeCatalogReverseBindings admits ONE verified observation per
+      // Family and early-stops (its contract is one candidate at a time, the
+      // retained attestation feeds per-candidate nominations). Feeding the
+      // whole set in one call would admit a single pool per Family and drop
+      // every other nomination, so drive it one nomination at a time.
+      const verified: UnifiedObservation[] = [];
+      for (const nomination of nominations) {
+        verified.push(...await executeCatalogReverseBindings({
+          catalog,
+          source: reverseInput.cutoff,
+          nominations: Object.freeze([nomination]),
+          provider: providerAdapter(provider),
+        }));
+      }
       const byKey = new Map<string, Readonly<Record<string, unknown>>>();
       for (const observation of verified) {
         for (const match of catalog.matches(observation)) {
