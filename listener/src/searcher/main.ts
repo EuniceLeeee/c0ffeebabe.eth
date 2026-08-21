@@ -62,6 +62,7 @@ import {
   rebuildUniverse,
 } from "./universe-rebuild-runner.js";
 import { createRebuildWiring } from "./universe-rebuild-production.js";
+import { ensureFundingTokenUniverse } from "./funding-token-universe.js";
 import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
 import {
   StrictProductionRuntimeRoot,
@@ -1491,30 +1492,23 @@ async function main(): Promise<void> {
   // current-N runtime. Until that atomic snapshot publishes, planners fail
   // closed instead of consuming a timer-refreshed, differently-aged cache.
   // The funding stage reads flash liquidity per token per block, so the
-  // token set must stay bounded: the 14400-window graph carries thousands of
-  // tokens (8513 observed) and unbounded funding reads blew the per-block
-  // budget (state:prepare ~56s, stale_state). The top-N tokens by edge
-  // participation cover the loop-relevant liquidity; tokens outside the
-  // budget simply have no funding offer and the planner skips their loops.
-  const FLASH_TOKEN_BUDGET = 1024;
-  const tokenEdgeCount = new Map<string, number>();
-  for (const edge of graph) {
-    for (const token of [edge.tokenIn, edge.tokenOut]) {
-      if (!ethers.isAddress(token)) continue;
-      const key = token.toLowerCase();
-      tokenEdgeCount.set(key, (tokenEdgeCount.get(key) ?? 0) + 1);
-    }
-  }
-  const flashTokens = [...tokenEdgeCount.entries()]
-    .sort(([leftToken, leftCount], [rightToken, rightCount]) =>
-      rightCount - leftCount || leftToken.localeCompare(rightToken),
-    )
-    .slice(0, FLASH_TOKEN_BUDGET)
-    .map(([token]) => token);
+  // token set is the funding providers' real support surface, enumerated
+  // from chain truth and solidified once (Morpho market loan tokens +
+  // Balancer Vault pool tokens) - never the routing graph's token set (the
+  // 14400-window graph carries thousands of tokens; reading all of them
+  // blew the block budget and one unreadable result crashed the funding
+  // decode).
+  const fundingTokenUniversePath =
+    process.env.SEARCHER_FUNDING_TOKEN_UNIVERSE_PATH ??
+    "/opt/MEV-runtime/funding-token-universe.json";
+  const flashTokens = await ensureFundingTokenUniverse({
+    provider,
+    path: fundingTokenUniversePath,
+  });
   console.log(
     `[searcher/live] routing graph: ${graph.length} edges, ${tokenIndex.size} tokens | ` +
       `detection pool set: ${allPoolMap.size} addresses` +
-      ` | flash token budget: ${flashTokens.length}`,
+      ` | flash tokens: ${flashTokens.length}`,
   );
 
   // Now that the graph exists, wire the configured revm/hybrid backend.
