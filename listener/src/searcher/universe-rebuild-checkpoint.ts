@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  readFile,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname } from "node:path";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
@@ -212,17 +219,75 @@ export function canonicalJson(value: unknown): string {
   ).join(",") + "}";
 }
 
+/**
+ * Streaming canonical hash: feeds the exact canonicalJson byte sequence
+ * (sorted keys, no whitespace) into sha256 incrementally instead of
+ * building one giant string. A ready envelope carries hundreds of MB of
+ * snapshots; a single concatenated canonical string can exceed V8's string
+ * limit ("Invalid string length"). The byte stream is identical to
+ * canonicalJson's output, so digests stay compatible with previously
+ * sealed checkpoints.
+ */
 export function envelopeFingerprint(
   envelope: Omit<StartupCheckpointEnvelope, "checkpointFingerprint">,
 ): string {
-  return createHash("sha256")
-    .update(canonicalJson({
-      revision: envelope.revision,
-      verifiedMemos: envelope.verifiedMemos,
-      inProgressRun: envelope.inProgressRun,
-      readyGeneration: envelope.readyGeneration,
-    }))
-    .digest("hex");
+  const hash = createHash("sha256");
+  canonicalWrite(hash, {
+    revision: envelope.revision,
+    verifiedMemos: envelope.verifiedMemos,
+    inProgressRun: envelope.inProgressRun,
+    readyGeneration: envelope.readyGeneration,
+  });
+  return hash.digest("hex");
+}
+
+function canonicalWrite(
+  hash: ReturnType<typeof createHash>,
+  value: unknown,
+): void {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    hash.update(JSON.stringify(value));
+    return;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new Error("checkpoint canonical value number must be finite");
+    }
+    hash.update(JSON.stringify(value));
+    return;
+  }
+  if (typeof value !== "object") {
+    throw new Error(
+      "unsupported checkpoint canonical value type: " + typeof value,
+    );
+  }
+  if (Array.isArray(value)) {
+    hash.update("[");
+    for (let index = 0; index < value.length; index++) {
+      if (index > 0) hash.update(",");
+      canonicalWrite(hash, value[index]);
+    }
+    hash.update("]");
+    return;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error("checkpoint canonical values must be plain records");
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  hash.update("{");
+  for (let index = 0; index < keys.length; index++) {
+    if (index > 0) hash.update(",");
+    hash.update(JSON.stringify(keys[index]));
+    hash.update(":");
+    canonicalWrite(hash, record[keys[index]]);
+  }
+  hash.update("}");
 }
 
 function parseEnvelope(raw: string): StartupCheckpointEnvelope {
@@ -311,8 +376,31 @@ export class UniverseRebuildCheckpointStore {
     return parseEnvelope(raw);
   }
 
-  #serialize(envelope: StartupCheckpointEnvelope): string {
-    return JSON.stringify(envelope, null, 2) + "\n";
+  /**
+   * Write the envelope one top-level field per chunk. Stringifying the
+   * whole envelope (verifiedMemos + run outcomes + a ready generation with
+   * its catalog/graph snapshots) pretty-printed exceeds V8's single-string
+   * limit ("Invalid string length"); each field alone stays well under it.
+   * The file remains plain JSON (JSON.parse-compatible).
+   */
+  async #writeEnvelope(
+    path: string,
+    envelope: StartupCheckpointEnvelope,
+  ): Promise<void> {
+    const field = (key: string, value: unknown): string =>
+      JSON.stringify(key) + ":" + JSON.stringify(value);
+    const file = await open(path, "w", 0o600);
+    try {
+      await file.write("{");
+      await file.write(field("revision", envelope.revision) + ",");
+      await file.write(field("verifiedMemos", envelope.verifiedMemos) + ",");
+      await file.write(field("inProgressRun", envelope.inProgressRun) + ",");
+      await file.write(field("readyGeneration", envelope.readyGeneration) + ",");
+      await file.write(field("checkpointFingerprint", envelope.checkpointFingerprint));
+      await file.write("}\n");
+    } finally {
+      await file.close();
+    }
   }
 
   #withLock<T>(fn: () => Promise<T>): Promise<T> {
@@ -408,9 +496,8 @@ export class UniverseRebuildCheckpointStore {
             readyGeneration: next.readyGeneration,
           }),
         });
-        const serialized = this.#serialize(sealed);
         const tmp = this.#path + ".tmp." + process.pid;
-        await writeFile(tmp, serialized, { mode: 0o600 });
+        await this.#writeEnvelope(tmp, sealed);
         const fs = await import("node:fs/promises");
         const file = await fs.open(tmp, "r");
         try {
