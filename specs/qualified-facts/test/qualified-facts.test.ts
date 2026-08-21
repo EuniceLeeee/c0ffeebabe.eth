@@ -16,15 +16,32 @@ import {
 import { computeObserverSemanticConfigDigest } from "../src/index.ts";
 import {
   QUALIFIED_FACT_SCHEMA_MANIFESTS,
+  createAcquisitionProcessObservation,
   createAcceptanceQuery,
   createQualifiedFactSnapshot,
   createQualifiedObservation,
+  createStoreEpochObservation,
+  createTargetProcessObservation,
+  createSignedObserverInvocationSnapshot,
+  createUnsignedSignedObserverInvocationSnapshot,
+  decodeAcquisitionProcessObservation,
+  encodeAcquisitionProcessObservation,
   decodeAcceptanceQuery,
   decodeQualifiedFactSnapshot,
   decodeQualifiedObservation,
+  decodeStoreEpochObservation,
+  decodeTargetProcessObservation,
+  decodeSignedObserverInvocationSnapshot,
+  encodeStoreEpochObservation,
+  encodeTargetProcessObservation,
   encodeAcceptanceQuery,
   encodeQualifiedFactSnapshot,
   encodeQualifiedObservation,
+  encodeSignedObserverInvocationSnapshot,
+  observerInvocationSigningBytes,
+  recomputeSignedObserverInvocationSnapshotId,
+  recomputeSignedObserverInvocationSnapshotPayloadHash,
+  sealSignedObserverInvocationSnapshot,
   validateAcceptanceQueryAgainstSnapshot,
   validateQualifiedObservationLineage,
   type AcceptanceQueryV1,
@@ -168,6 +185,64 @@ test("executable qualified-fact schema hashes are stable-format golden values", 
   assert.equal(QUALIFIED_FACT_SCHEMA_MANIFESTS.observation.schemaHash, "0x1baaa76af41fb5522e82a5d6350fc9f1502c229bbad030d88e9babd860628b6b");
   assert.equal(QUALIFIED_FACT_SCHEMA_MANIFESTS.snapshot.schemaHash, "0x0306cf6254518303f582cd15c60f8157a3a117a1ee926f0003fb2203f78891d2");
   assert.equal(QUALIFIED_FACT_SCHEMA_MANIFESTS.acceptanceQuery.schemaHash, "0xf49824465db79bc5aadd1fb290d9074bf7a8c11a1b86e8aadb3e3e2f04fbbfa6");
+});
+
+test("process/store sidecars are independent typed, content-addressed observations", () => {
+  const common = {
+    schemaVersion: 1 as const,
+    observerImplementationDigest: h("1"),
+    observerQualificationId: h("2"),
+    qualificationRegistryRoot: h("3"),
+    anchorPolicyDigest: h("4"),
+  };
+  const acquisition = createAcquisitionProcessObservation({
+    ...common,
+    kind: "aloha.acquisition-process-observation",
+    observationSchema: {
+      id: QUALIFIED_FACT_SCHEMA_MANIFESTS.acquisitionProcessObservation.id,
+      version: QUALIFIED_FACT_SCHEMA_MANIFESTS.acquisitionProcessObservation.version,
+      schemaHash: QUALIFIED_FACT_SCHEMA_MANIFESTS.acquisitionProcessObservation.schemaHash,
+    },
+    roleId: "acquisition-observer-process",
+    canonicalFacts: { receiptId: h("5"), processAnchorHash: h("6"), logRangeArtifactRefId: h("7"), rawBoundaryArtifactRefId: h("8") },
+  });
+  const target = createTargetProcessObservation({
+    ...common,
+    kind: "aloha.target-process-observation",
+    observationSchema: {
+      id: QUALIFIED_FACT_SCHEMA_MANIFESTS.targetProcessObservation.id,
+      version: QUALIFIED_FACT_SCHEMA_MANIFESTS.targetProcessObservation.version,
+      schemaHash: QUALIFIED_FACT_SCHEMA_MANIFESTS.targetProcessObservation.schemaHash,
+    },
+    roleId: "target-production-process",
+    canonicalFacts: { receiptId: h("9"), processAnchorHash: h("a"), logRangeArtifactRefId: h("b"), rawBoundaryArtifactRefId: h("c") },
+  });
+  const store = createStoreEpochObservation({
+    ...common,
+    kind: "aloha.store-epoch-observation",
+    observationSchema: {
+      id: QUALIFIED_FACT_SCHEMA_MANIFESTS.storeEpochObservation.id,
+      version: QUALIFIED_FACT_SCHEMA_MANIFESTS.storeEpochObservation.version,
+      schemaHash: QUALIFIED_FACT_SCHEMA_MANIFESTS.storeEpochObservation.schemaHash,
+    },
+    roleId: "store-epoch-observation",
+    canonicalFacts: { storeIdentityHash: h("d"), currentStoreEpoch: "11", rawArtifactRefId: h("e") },
+  });
+  assert.deepEqual(decodeAcquisitionProcessObservation(encodeAcquisitionProcessObservation(acquisition)), acquisition);
+  assert.deepEqual(decodeTargetProcessObservation(encodeTargetProcessObservation(target)), target);
+  assert.deepEqual(decodeStoreEpochObservation(encodeStoreEpochObservation(store)), store);
+
+  assert.throws(() => decodeStoreEpochObservation({ ...store, canonicalFacts: { storeIdentityHash: h("d"), currentStoreEpoch: 11 } } as never));
+  assert.throws(() => decodeStoreEpochObservation({ ...store, canonicalFacts: { ...store.canonicalFacts, currentStoreEpoch: "12" } } as never));
+  assert.throws(() => decodeTargetProcessObservation({ ...target, kind: "aloha.acquisition-process-observation" } as never));
+  assert.throws(() => decodeAcquisitionProcessObservation({
+    ...acquisition,
+    observationSchema: {
+      id: QUALIFIED_FACT_SCHEMA_MANIFESTS.targetProcessObservation.id,
+      version: QUALIFIED_FACT_SCHEMA_MANIFESTS.targetProcessObservation.version,
+      schemaHash: QUALIFIED_FACT_SCHEMA_MANIFESTS.targetProcessObservation.schemaHash,
+    },
+  } as never));
 });
 
 test("binary decoders accept only exact native Uint8Array and never invoke hostile traps", () => {
@@ -435,4 +510,55 @@ test("qualified-fact objects round-trip through canonical bytes exactly", () => 
   assert.deepEqual(decodeQualifiedObservation(encodeQualifiedObservation(observation)), observation);
   assert.deepEqual(decodeQualifiedFactSnapshot(encodeQualifiedFactSnapshot(snapshot)), snapshot);
   assert.deepEqual(decodeAcceptanceQuery(encodeAcceptanceQuery(query)), query);
+});
+
+test("signed observer invocation binds exact sorted artifact and receipt sets", () => {
+  const draft = {
+    schemaVersion: 1 as const,
+    kind: "aloha.signed-observer-invocation-snapshot" as const,
+    registryRoot: h("1"),
+    registryEpoch: "7",
+    observerQualificationId: h("2"),
+    roleId: "chain-observer",
+    keyId: h("3"),
+    audienceHash: h("4"),
+    invocationNonce: h("5"),
+    issuedAtUnixNs: "100",
+    expiresAtUnixNs: "200",
+    acceptanceQueryId: h("6"),
+    qualifiedFactSnapshotId: h("7"),
+    semanticArtifactBindings: [
+      { kind: "semantic-artifact" as const, objectId: h("8"), rawArtifactRefId: h("9"), canonicalBytesSha256: h("a"), byteLength: "10" },
+    ],
+    productionReceiptBindings: [
+      { kind: "production-receipt" as const, objectId: h("b"), rawArtifactRefId: h("c"), canonicalBytesSha256: h("d"), byteLength: "11" },
+    ],
+    signatureAlgorithm: "ed25519" as const,
+  };
+  const unsigned = createUnsignedSignedObserverInvocationSnapshot(draft);
+  const signatureHex = `0x${"11".repeat(64)}`;
+  const signed = sealSignedObserverInvocationSnapshot(unsigned, signatureHex);
+  assert.deepEqual(decodeSignedObserverInvocationSnapshot(encodeSignedObserverInvocationSnapshot(signed)), signed);
+  assert.equal(recomputeSignedObserverInvocationSnapshotPayloadHash(signed), signed.payloadHash);
+  assert.equal(recomputeSignedObserverInvocationSnapshotId(signed), signed.attestationId);
+  const alteredUnsigned = createUnsignedSignedObserverInvocationSnapshot({ ...draft, registryRoot: h("f") });
+  assert.notDeepEqual(observerInvocationSigningBytes(unsigned), observerInvocationSigningBytes(alteredUnsigned));
+  assert.equal(createSignedObserverInvocationSnapshot(draft, signatureHex).attestationId, signed.attestationId);
+
+  assert.throws(() => decodeSignedObserverInvocationSnapshot({ ...signed, signatureHex: signatureHex.toUpperCase() } as never));
+  assert.throws(() => decodeSignedObserverInvocationSnapshot({ ...signed, invocationNonce: h("0") } as never));
+  assert.throws(() => decodeSignedObserverInvocationSnapshot({ ...signed, productionReceiptSetRoot: h("f") } as never));
+  for (const forbidden of ["publicKeyHex", "verdict", "checks", "expected"] as const) {
+    assert.throws(() => decodeSignedObserverInvocationSnapshot({ ...signed, [forbidden]: h("f") } as never), forbidden);
+  }
+  assert.throws(() => decodeSignedObserverInvocationSnapshot({ ...signed, unexpected: true } as never));
+  assert.throws(() => createUnsignedSignedObserverInvocationSnapshot({ ...draft, semanticArtifactBindings: [...draft.semanticArtifactBindings, draft.semanticArtifactBindings[0]] } as never));
+  assert.throws(() => createUnsignedSignedObserverInvocationSnapshot({
+    ...draft,
+    productionReceiptBindings: [{ ...draft.productionReceiptBindings[0], rawArtifactRefId: draft.semanticArtifactBindings[0].rawArtifactRefId }],
+  } as never));
+  assert.throws(() => createUnsignedSignedObserverInvocationSnapshot({
+    ...draft,
+    semanticArtifactBindings: [{ ...draft.semanticArtifactBindings[0], byteLength: "0" }],
+  } as never));
 });

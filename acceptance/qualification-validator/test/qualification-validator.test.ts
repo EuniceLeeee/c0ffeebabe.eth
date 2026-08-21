@@ -7,12 +7,21 @@ import {
   createObserverRoleSpec,
   createPredicateSpec,
   createQualificationRegistry,
+  createObserverSigningKey,
+  hashObserverSigningKeySetRoot,
+  hashRevokedObserverKeyIdsRoot,
   createVerifierQualificationCertificate,
   type Hash,
 } from "../../../specs/qualification/src/index.ts";
 import {
+  createUnsignedSignedObserverInvocationSnapshot,
+  sealSignedObserverInvocationSnapshot,
+} from "../../../specs/qualified-facts/src/index.ts";
+import {
   validateCurrentRegistryMembership,
   validateObserverQualificationCertificate,
+  validateObserverSigningKey,
+  validateUnsignedInvocationBindings,
   validateVerifierQualificationCertificate,
 } from "../src/index.ts";
 import { hashDomain } from "../../../packages/canonical-codec/src/index.ts";
@@ -71,6 +80,13 @@ const verifier = createVerifierQualificationCertificate({
   qualificationSpecDigest: predicate.verifierQualificationSpecDigest,
   predicateSpecDigest: predicate.specDigest,
   predicateImplementationDigest: h("7"),
+  predicateImplementationExportDigest: h("8"),
+  predicateProgramDescriptorDigest: h("8"),
+  oracleProgramDescriptorDigest: h("9"),
+  oracleImplementationClosureDigest: h("c"),
+  oracleImplementationExportDigest: h("d"),
+  predicateCompositionLeafDigest: h("a"),
+  gateCoreImplementationClosureDigest: h("b"),
   observerQualificationIds: [observer.certificateId],
   requiredObserverRoles: [{ ...role, observerQualificationId: observer.certificateId }],
   caseSetRoot: h("8"),
@@ -85,6 +101,18 @@ const verifier = createVerifierQualificationCertificate({
   verdict: "qualified",
 });
 
+const observerSigningKey = createObserverSigningKey({
+  schemaVersion: 1,
+  kind: "aloha.observer-signing-key",
+  observerQualificationId: observer.certificateId,
+  roleId: role.roleId,
+  algorithm: "ed25519",
+  publicKeyHex: `0x${"ab".repeat(32)}`,
+  validFromRegistryEpoch: registryEpoch,
+  validThroughRegistryEpoch: "9",
+  audienceHash: h("d"),
+});
+
 const membershipMaterial = [
   { certificateKind: "observer" as const, certificateId: observer.certificateId, certificatePayloadHash: observer.payloadHash, issuerId: observer.issuerId },
   { certificateKind: "verifier" as const, certificateId: verifier.certificateId, certificatePayloadHash: verifier.payloadHash, issuerId: verifier.issuerId },
@@ -96,10 +124,12 @@ const registry = createQualificationRegistry({
   trustedIssuerSetRoot: hashDomain("aloha/trusted-issuer-set/v1", ["trusted"]),
   certificateSetRoot: hashDomain("aloha/certificate-set/v1", membershipMaterial),
   revokedCertificateIdsRoot: hashDomain("aloha/revoked-certificate-set/v1", []),
+  observerKeySetRoot: hashObserverSigningKeySetRoot([observerSigningKey.keyId]),
+  revokedObserverKeyIdsRoot: hashRevokedObserverKeyIdsRoot([]),
   previousRegistryRoot: null,
-  governanceApprovalHash: h("e"),
+  governanceTrustAnchorHash: h("e"),
 });
-const pin = { expectedRegistryRoot: registry.registryId, expectedGovernanceApprovalHash: registry.governanceApprovalHash } as const;
+const pin = { expectedRegistryRoot: registry.registryId, expectedGovernanceTrustAnchorHash: registry.governanceTrustAnchorHash } as const;
 
 function proof(kind: "observer" | "verifier", certificate: { certificateId: Hash; payloadHash: Hash; issuerId: string }) {
   const input = createMembershipInput({
@@ -112,6 +142,8 @@ function proof(kind: "observer" | "verifier", certificate: { certificateId: Hash
     trustedIssuerIds: ["trusted"],
     certificateMemberships: membershipMaterial,
     revokedCertificateIds: [],
+    observerSigningKeys: [observerSigningKey],
+    revokedObserverKeyIds: [],
   });
   return {
     input,
@@ -132,6 +164,7 @@ test("validator is fact-only and does not promote self-reported verdict", () => 
   const observerResult = validateObserverQualificationCertificate(registry, role, observer, proof("observer", observer), pin);
   assert.equal(observerResult.factsConsistent, true);
   assert.equal(observerResult.authority, false);
+  assert.equal(observerResult.signatureVerified, false);
   assert.equal("valid" in observerResult, false);
   const verifierResult = validateVerifierQualificationCertificate(
     registry,
@@ -143,6 +176,32 @@ test("validator is fact-only and does not promote self-reported verdict", () => 
   );
   assert.equal(verifierResult.factsConsistent, true);
   assert.equal(verifierResult.authority, false);
+  assert.equal(verifierResult.signatureVerified, false);
+});
+
+test("verifier program, composition and implementation bindings fail closed when absent", () => {
+  const zeroHash = `0x${"0".repeat(64)}` as Hash;
+  for (const field of [
+    "predicateImplementationDigest",
+    "predicateImplementationExportDigest",
+    "predicateProgramDescriptorDigest",
+    "oracleProgramDescriptorDigest",
+    "oracleImplementationClosureDigest",
+    "oracleImplementationExportDigest",
+    "predicateCompositionLeafDigest",
+    "gateCoreImplementationClosureDigest",
+  ] as const) {
+    const checked = validateVerifierQualificationCertificate(
+      registry,
+      predicate,
+      { ...verifier, [field]: zeroHash },
+      [{ role, certificate: observer, membershipProof: proof("observer", observer) }],
+      proof("verifier", verifier),
+      pin,
+    );
+    assert.equal(checked.factsConsistent, false, field);
+    assert.ok(checked.issues.some((issue) => issue.code === "malformed" || issue.code === "implementation-mismatch"), field);
+  }
 });
 
 test("wrong role schema, missing oracle, mutation drift, stale or revoked facts invalidate", () => {
@@ -193,6 +252,49 @@ test("registry governance pin and certificate root splice are external facts", (
   assert.equal(validateCurrentRegistryMembership(registry, wrongIssuerInput, wrongIssuerResult, pin).factsConsistent, false);
 });
 
+test("observer signing key and invocation validation are fact-only and root/epoch bound", () => {
+  const membership = proof("observer", observer).input;
+  const keyResult = validateObserverSigningKey(registry, observerSigningKey, membership, pin);
+  assert.equal(keyResult.factsConsistent, true);
+  assert.equal(keyResult.authority, false);
+  assert.equal(keyResult.signatureVerified, false);
+
+  const unsigned = createUnsignedSignedObserverInvocationSnapshot({
+    schemaVersion: 1,
+    kind: "aloha.signed-observer-invocation-snapshot",
+    registryRoot: registry.registryId,
+    registryEpoch: registry.epoch,
+    observerQualificationId: observerSigningKey.observerQualificationId,
+    roleId: observerSigningKey.roleId,
+    keyId: observerSigningKey.keyId,
+    audienceHash: observerSigningKey.audienceHash,
+    invocationNonce: h("6"),
+    issuedAtUnixNs: "10",
+    expiresAtUnixNs: "20",
+    acceptanceQueryId: h("7"),
+    qualifiedFactSnapshotId: h("8"),
+    semanticArtifactBindings: [],
+    productionReceiptBindings: [],
+    signatureAlgorithm: "ed25519",
+  });
+  const invocation = sealSignedObserverInvocationSnapshot(unsigned, `0x${"11".repeat(64)}`);
+  const invocationResult = validateUnsignedInvocationBindings(registry, invocation, observerSigningKey, membership, pin);
+  assert.equal(invocationResult.factsConsistent, true);
+  assert.equal(invocationResult.authority, false);
+  assert.equal(invocationResult.signatureVerified, false);
+
+  const { inputId: _inputId, payloadHash: _inputPayloadHash, ...membershipPayload } = membership;
+  const wrongRoot = createMembershipInput({
+    ...membershipPayload,
+    observerSigningKeys: [],
+  });
+  assert.equal(validateObserverSigningKey(registry, observerSigningKey, wrongRoot, pin).factsConsistent, false);
+  const { keyId: _keyId, ...expiredKeyPayload } = observerSigningKey;
+  const expiredKey = createObserverSigningKey({ ...expiredKeyPayload, validFromRegistryEpoch: "0", validThroughRegistryEpoch: "0" });
+  assert.equal(validateObserverSigningKey(registry, expiredKey, membership, pin).factsConsistent, false);
+  assert.equal(validateUnsignedInvocationBindings(registry, { ...invocation, registryEpoch: "8" } as never, observerSigningKey, membership, pin).factsConsistent, false);
+});
+
 test("a certificate issued in an earlier epoch remains current only through exact current membership", () => {
   const nextRegistry = createQualificationRegistry({
     schemaVersion: 1,
@@ -201,12 +303,14 @@ test("a certificate issued in an earlier epoch remains current only through exac
     trustedIssuerSetRoot: registry.trustedIssuerSetRoot,
     certificateSetRoot: registry.certificateSetRoot,
     revokedCertificateIdsRoot: registry.revokedCertificateIdsRoot,
+    observerKeySetRoot: registry.observerKeySetRoot,
+    revokedObserverKeyIdsRoot: registry.revokedObserverKeyIdsRoot,
     previousRegistryRoot: registry.registryId,
-    governanceApprovalHash: h("d"),
+    governanceTrustAnchorHash: h("d"),
   });
   const nextPin = {
     expectedRegistryRoot: nextRegistry.registryId,
-    expectedGovernanceApprovalHash: nextRegistry.governanceApprovalHash,
+    expectedGovernanceTrustAnchorHash: nextRegistry.governanceTrustAnchorHash,
   } as const;
   const input = createMembershipInput({
     registryRoot: nextRegistry.registryId,
@@ -218,6 +322,8 @@ test("a certificate issued in an earlier epoch remains current only through exac
     trustedIssuerIds: ["trusted"],
     certificateMemberships: membershipMaterial,
     revokedCertificateIds: [],
+    observerSigningKeys: [observerSigningKey],
+    revokedObserverKeyIds: [],
   });
   const result = createMembershipResult({
     inputId: input.inputId,

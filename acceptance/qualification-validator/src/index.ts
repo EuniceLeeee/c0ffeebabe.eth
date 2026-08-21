@@ -2,19 +2,29 @@ import {
   decodeMembershipInput,
   decodeMembershipResult,
   decodeObserverCertificate,
+  decodeObserverSigningKey,
   decodeObserverRole,
   decodePredicate,
   decodeQualificationRegistry,
   decodeVerifierCertificate,
+  hashObserverSigningKeySetRoot,
+  hashRevokedObserverKeyIdsRoot,
   type CurrentRegistryMembershipInputV1,
   type CurrentRegistryMembershipResultV1,
   type Hash,
   type ObserverQualificationCertificateV1,
+  type ObserverSigningKeyV1,
   type ObserverRoleSpecV1,
   type PredicateSpecV1,
   type QualificationRegistrySnapshotV1,
   type VerifierQualificationCertificateV1,
 } from "../../../specs/qualification/src/index.ts";
+import {
+  decodeSignedObserverInvocationSnapshot,
+  recomputeSignedObserverInvocationSnapshotId,
+  recomputeSignedObserverInvocationSnapshotPayloadHash,
+  type SignedObserverInvocationSnapshotV1,
+} from "../../../specs/qualified-facts/src/index.ts";
 import { encodeCanonicalJson, hashDomain } from "../../../packages/canonical-codec/src/index.ts";
 
 export type QualificationIssueCode =
@@ -35,7 +45,16 @@ export type QualificationIssueCode =
   | "locator-coverage-mismatch"
   | "observer-certificate-mismatch"
   | "implementation-mismatch"
-  | "self-reported-verdict";
+  | "observer-key-mismatch"
+  | "invocation-mismatch"
+  | "self-reported-verdict"
+  | "external-signature-invalid"
+  | "external-key-mismatch"
+  | "external-root-mismatch"
+  | "external-audience-mismatch"
+  | "external-epoch-mismatch"
+  | "external-membership-mismatch"
+  | "external-downgrade";
 
 export interface QualificationIssue {
   readonly code: QualificationIssueCode;
@@ -50,12 +69,14 @@ export interface QualificationIssue {
 export interface QualificationValidationResult {
   readonly factsConsistent: boolean;
   readonly authority: false;
+  /** This package never verifies Ed25519 signatures. */
+  readonly signatureVerified: false;
   readonly issues: readonly QualificationIssue[];
 }
 
 export interface RegistryAuthorityPinV1 {
   readonly expectedRegistryRoot: Hash;
-  readonly expectedGovernanceApprovalHash: Hash;
+  readonly expectedGovernanceTrustAnchorHash: Hash;
 }
 
 export interface CertificateMembershipProof {
@@ -64,7 +85,7 @@ export interface CertificateMembershipProof {
 }
 
 function result(issues: QualificationIssue[]): QualificationValidationResult {
-  return Object.freeze({ factsConsistent: issues.length === 0, authority: false as const, issues: Object.freeze([...issues]) });
+  return Object.freeze({ factsConsistent: issues.length === 0, authority: false as const, signatureVerified: false as const, issues: Object.freeze([...issues]) });
 }
 
 function add(issues: QualificationIssue[], code: QualificationIssueCode, path: string): void {
@@ -86,7 +107,7 @@ function checkPin(
   issues: QualificationIssue[],
 ): void {
   if (registry.registryId === undefined || pin.expectedRegistryRoot !== registry.registryId) add(issues, "stale-registry", "$.registryRoot");
-  if (pin.expectedGovernanceApprovalHash !== registry.governanceApprovalHash) add(issues, "governance-mismatch", "$.governanceApprovalHash");
+  if (pin.expectedGovernanceTrustAnchorHash !== registry.governanceTrustAnchorHash) add(issues, "governance-mismatch", "$.governanceTrustAnchorHash");
 }
 
 function checkProof(
@@ -112,6 +133,7 @@ function checkProof(
   if (trustedRoot !== registry.trustedIssuerSetRoot) add(issues, "identity-mismatch", "$.membershipProof.trustedIssuerIds");
   if (certificateRoot !== registry.certificateSetRoot) add(issues, "identity-mismatch", "$.membershipProof.certificateMemberships");
   if (revokedRoot !== registry.revokedCertificateIdsRoot) add(issues, "identity-mismatch", "$.membershipProof.revokedCertificateIds");
+  checkObserverKeyRoots(registry, input, issues, "$.membershipProof");
   if (input.certificateKind !== kind || input.certificateId !== certificate.certificateId || input.certificatePayloadHash !== certificate.payloadHash || input.issuerId !== certificate.issuerId) add(issues, "identity-mismatch", "$.membershipProof.input");
   if (membership.inputId !== input.inputId || membership.certificateKind !== input.certificateKind || membership.certificateId !== input.certificateId || membership.certificatePayloadHash !== input.certificatePayloadHash || membership.issuerId !== input.issuerId) add(issues, "identity-mismatch", "$.membershipProof.result");
   const material = input.certificateMemberships.find((entry) => entry.certificateKind === kind && entry.certificateId === certificate.certificateId);
@@ -143,6 +165,94 @@ function roleMatches(left: ObserverRoleSpecV1, right: ObserverRoleSpecV1): boole
   return encodeCanonicalJson(left) === encodeCanonicalJson(right);
 }
 
+function checkObserverKeyRoots(
+  registry: QualificationRegistrySnapshotV1,
+  input: CurrentRegistryMembershipInputV1,
+  issues: QualificationIssue[],
+  path: string,
+): void {
+  const keyIds = input.observerSigningKeys.map((key) => key.keyId);
+  if (hashObserverSigningKeySetRoot(keyIds) !== registry.observerKeySetRoot) {
+    add(issues, "observer-key-mismatch", `${path}.observerSigningKeys`);
+  }
+  if (hashRevokedObserverKeyIdsRoot(input.revokedObserverKeyIds) !== registry.revokedObserverKeyIdsRoot) {
+    add(issues, "observer-key-mismatch", `${path}.revokedObserverKeyIds`);
+  }
+}
+
+function checkObserverKeyEpoch(
+  registry: QualificationRegistrySnapshotV1,
+  key: ObserverSigningKeyV1,
+  issues: QualificationIssue[],
+  path: string,
+): void {
+  const epoch = BigInt(registry.epoch);
+  if (epoch < BigInt(key.validFromRegistryEpoch) || epoch > BigInt(key.validThroughRegistryEpoch)) {
+    add(issues, "stale-registry", `${path}.validity`);
+  }
+}
+
+/**
+ * Validates key structure, registry key-set roots and the current epoch only.
+ * This is deliberately fact-only: it never treats an observer key as an
+ * oracle or produces an authority verdict.
+ */
+export function validateObserverSigningKey(
+  registryInput: QualificationRegistrySnapshotV1,
+  keyInput: ObserverSigningKeyV1,
+  membershipInput: CurrentRegistryMembershipInputV1,
+  pin: RegistryAuthorityPinV1,
+): QualificationValidationResult {
+  const issues: QualificationIssue[] = [];
+  const registry = decode(() => decodeQualificationRegistry(registryInput), issues, "$.registry");
+  const key = decode(() => decodeObserverSigningKey(keyInput), issues, "$.observerSigningKey");
+  const membership = decode(() => decodeMembershipInput(membershipInput), issues, "$.membership");
+  if (registry === null || key === null || membership === null) return result(issues);
+  checkPin(registry, pin, issues);
+  if (membership.registryRoot !== pin.expectedRegistryRoot || membership.registryRoot !== registry.registryId) add(issues, "stale-registry", "$.membership.registryRoot");
+  if (membership.registryEpoch !== registry.epoch) add(issues, "stale-registry", "$.membership.registryEpoch");
+  checkObserverKeyRoots(registry, membership, issues, "$.membership");
+  checkObserverKeyEpoch(registry, key, issues, "$.observerSigningKey");
+  const material = membership.observerSigningKeys.find((entry) => entry.keyId === key.keyId);
+  if (material === undefined || encodeCanonicalJson(material) !== encodeCanonicalJson(key)) add(issues, "observer-key-mismatch", "$.observerSigningKey.membership");
+  if (membership.revokedObserverKeyIds.includes(key.keyId)) add(issues, "revoked", "$.observerSigningKey.keyId");
+  const observerCertificate = membership.certificateMemberships.find(
+    (entry) => entry.certificateKind === "observer" && entry.certificateId === key.observerQualificationId,
+  );
+  if (observerCertificate === undefined || membership.revokedCertificateIds.includes(key.observerQualificationId)) {
+    add(issues, "missing-membership", "$.observerSigningKey.observerQualificationId");
+  }
+  return result(issues);
+}
+
+/** Validates an invocation's unsigned bindings; it never verifies its Ed25519 signature. */
+export function validateUnsignedInvocationBindings(
+  registryInput: QualificationRegistrySnapshotV1,
+  snapshotInput: SignedObserverInvocationSnapshotV1,
+  keyInput: ObserverSigningKeyV1,
+  membershipInput: CurrentRegistryMembershipInputV1,
+  pin: RegistryAuthorityPinV1,
+): QualificationValidationResult {
+  const issues: QualificationIssue[] = [];
+  const registry = decode(() => decodeQualificationRegistry(registryInput), issues, "$.registry");
+  const snapshot = decode(() => decodeSignedObserverInvocationSnapshot(snapshotInput), issues, "$.snapshot");
+  const key = decode(() => decodeObserverSigningKey(keyInput), issues, "$.observerSigningKey");
+  const membership = decode(() => decodeMembershipInput(membershipInput), issues, "$.membership");
+  if (registry === null || snapshot === null || key === null || membership === null) return result(issues);
+  checkPin(registry, pin, issues);
+  if (snapshot.registryRoot !== registry.registryId || snapshot.registryRoot !== pin.expectedRegistryRoot) add(issues, "stale-registry", "$.snapshot.registryRoot");
+  if (snapshot.registryEpoch !== registry.epoch) add(issues, "stale-registry", "$.snapshot.registryEpoch");
+  if (snapshot.keyId !== key.keyId || snapshot.observerQualificationId !== key.observerQualificationId || snapshot.roleId !== key.roleId || snapshot.audienceHash !== key.audienceHash) {
+    add(issues, "invocation-mismatch", "$.snapshot.observerKey");
+  }
+  if (recomputeSignedObserverInvocationSnapshotPayloadHash(snapshot) !== snapshot.payloadHash || recomputeSignedObserverInvocationSnapshotId(snapshot) !== snapshot.attestationId) {
+    add(issues, "invocation-mismatch", "$.snapshot.attestationId");
+  }
+  const keyResult = validateObserverSigningKey(registry, key, membership, pin);
+  for (const issue of keyResult.issues) add(issues, issue.code, `$.observerSigningKey${issue.path === "$" ? "" : issue.path.slice(1)}`);
+  return result(issues);
+}
+
 export function validateCurrentRegistryMembership(
   registryInput: QualificationRegistrySnapshotV1,
   inputInput: CurrentRegistryMembershipInputV1,
@@ -162,6 +272,7 @@ export function validateCurrentRegistryMembership(
   if (hashDomain("aloha/trusted-issuer-set/v1", input.trustedIssuerIds) !== registry.trustedIssuerSetRoot) add(issues, "identity-mismatch", "$.trustedIssuerIds");
   if (hashDomain("aloha/certificate-set/v1", input.certificateMemberships) !== registry.certificateSetRoot) add(issues, "identity-mismatch", "$.certificateMemberships");
   if (hashDomain("aloha/revoked-certificate-set/v1", input.revokedCertificateIds) !== registry.revokedCertificateIdsRoot) add(issues, "identity-mismatch", "$.revokedCertificateIds");
+  checkObserverKeyRoots(registry, input, issues, "$");
   const material = input.certificateMemberships.find((entry) => entry.certificateKind === input.certificateKind && entry.certificateId === input.certificateId);
   const expectedStatus = input.revokedCertificateIds.includes(input.certificateId)
     ? "revoked"
@@ -221,7 +332,19 @@ export function validateVerifierQualificationCertificate(
   checkPin(registry, pin, issues);
   checkProof(registry, certificate, "verifier", membershipProof, pin, issues);
   if (certificate.predicateSpecDigest !== predicate.specDigest) add(issues, "predicate-mismatch", "$.predicateSpecDigest");
-  if (certificate.predicateImplementationDigest === ("0x" + "0".repeat(64))) add(issues, "implementation-mismatch", "$.predicateImplementationDigest");
+  const zeroHash = "0x" + "0".repeat(64);
+  for (const field of [
+    "predicateImplementationDigest",
+    "predicateImplementationExportDigest",
+    "predicateProgramDescriptorDigest",
+    "oracleProgramDescriptorDigest",
+    "oracleImplementationClosureDigest",
+    "oracleImplementationExportDigest",
+    "predicateCompositionLeafDigest",
+    "gateCoreImplementationClosureDigest",
+  ] as const) {
+    if (certificate[field] === zeroHash) add(issues, "implementation-mismatch", `$.${field}`);
+  }
   if (certificate.qualificationSpecDigest !== predicate.verifierQualificationSpecDigest) add(issues, "spec-mismatch", "$.qualificationSpecDigest");
   if (encodeCanonicalJson(certificate.requiredObserverRoles.map(({ observerQualificationId: _id, ...role }) => role)) !== encodeCanonicalJson(predicate.requiredObserverRoles)) add(issues, "observer-role-set-mismatch", "$.requiredObserverRoles");
   if (encodeCanonicalJson(certificate.observerQualificationIds) !== encodeCanonicalJson(observerInputs.map(({ certificate: observer }) => observer.certificateId).sort())) add(issues, "observer-role-set-mismatch", "$.observerQualificationIds");
@@ -240,3 +363,5 @@ export function validateVerifierQualificationCertificate(
   else if (issues.length > 0) add(issues, "self-reported-verdict", "$.verdict");
   return result(issues);
 }
+
+export * from "./external-v2.ts";

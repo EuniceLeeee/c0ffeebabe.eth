@@ -3,10 +3,13 @@ import {
   assertPlainObject,
   canonicalJsonSchema,
   decodeCanonicalJson,
+  decimalStringSchema,
   deepFreeze,
+  defineSchema,
   defineSchemaManifest,
   encodeCanonicalBytes,
   encodeCanonicalJson,
+  enumSchema,
   hashDomain,
   hashSchema,
   literalSchema,
@@ -36,6 +39,16 @@ export type { ProcessAnchorV1, ProductionReceiptV1, ReadOnlyArtifactRefV1, Schem
 const schemaRefSchema = CORE_SCHEMA_MANIFESTS.schemaRef.schema;
 const artifactRefSchema = CORE_SCHEMA_MANIFESTS.readOnlyArtifactRef.schema;
 
+const invocationSignatureHexSchema = defineSchema<string>(
+  { kind: "ed25519-signature-hex", byteLength: 64 },
+  (value, path = "$") => {
+    if (typeof value !== "string" || !/^0x[0-9a-f]{128}$/.test(value)) {
+      throw new TypeError(`expected lowercase 64-byte 0x signature hex at ${path}`);
+    }
+    return value;
+  },
+);
+
 const observationLineageContextSchema = objectSchema({
   productionReceipt: nullableSchema(CORE_SCHEMA_MANIFESTS.productionReceipt.schema),
   acquisitionArtifact: nullableSchema(CORE_SCHEMA_MANIFESTS.semanticArtifact.schema),
@@ -57,6 +70,60 @@ const observationStructuralSchema = objectSchema({
   acquisitionProductionReceiptId: hashSchema,
   canonicalFacts: canonicalJsonSchema,
   canonicalFactsHash: hashSchema,
+});
+
+/*
+ * Process/store observations are deliberately not QualifiedObservationEnvelopeV1.
+ * They have no acquisition receipt or semantic-artifact recursion: each is a
+ * small, content-addressed core sidecar whose canonical facts are joined to
+ * the process/store pointer by GateCore.  The three kinds have distinct
+ * schemas so a raw-artifact observer certificate cannot be reused for them.
+ */
+const sidecarCommonFields = {
+  schemaVersion: literalSchema(1),
+  observationId: hashSchema,
+  payloadHash: hashSchema,
+  observationSchema: schemaRefSchema,
+  observerImplementationDigest: hashSchema,
+  observerQualificationId: hashSchema,
+  qualificationRegistryRoot: hashSchema,
+  anchorPolicyDigest: hashSchema,
+  roleId: nonEmptyStringSchema,
+  canonicalFactsHash: hashSchema,
+} as const;
+
+const processSidecarFactsSchema = objectSchema({
+  receiptId: hashSchema,
+  processAnchorHash: hashSchema,
+  logRangeArtifactRefId: hashSchema,
+  rawBoundaryArtifactRefId: hashSchema,
+});
+const storeSidecarFactsSchema = objectSchema({
+  storeIdentityHash: hashSchema,
+  currentStoreEpoch: decimalStringSchema,
+  rawArtifactRefId: hashSchema,
+});
+const storeEpochRawFactsSchema = objectSchema({
+  schemaVersion: literalSchema(1),
+  kind: literalSchema("aloha.store-epoch-raw-facts"),
+  storeIdentityHash: hashSchema,
+  currentStoreEpoch: decimalStringSchema,
+});
+
+const acquisitionProcessObservationStructuralSchema = objectSchema({
+  ...sidecarCommonFields,
+  kind: literalSchema("aloha.acquisition-process-observation"),
+  canonicalFacts: processSidecarFactsSchema,
+});
+const targetProcessObservationStructuralSchema = objectSchema({
+  ...sidecarCommonFields,
+  kind: literalSchema("aloha.target-process-observation"),
+  canonicalFacts: processSidecarFactsSchema,
+});
+const storeEpochObservationStructuralSchema = objectSchema({
+  ...sidecarCommonFields,
+  kind: literalSchema("aloha.store-epoch-observation"),
+  canonicalFacts: storeSidecarFactsSchema,
 });
 
 const snapshotStructuralSchema = objectSchema({
@@ -86,9 +153,49 @@ const queryStructuralSchema = objectSchema({
   correlationId: nullableSchema(nonEmptyStringSchema),
 });
 
+const observerInvocationBindingSchema = objectSchema({
+  kind: enumSchema(["semantic-artifact", "production-receipt"] as const),
+  objectId: hashSchema,
+  rawArtifactRefId: hashSchema,
+  canonicalBytesSha256: hashSchema,
+  byteLength: decimalStringSchema,
+});
+
+const signedObserverInvocationSnapshotStructuralSchema = objectSchema({
+  schemaVersion: literalSchema(1),
+  kind: literalSchema("aloha.signed-observer-invocation-snapshot"),
+  attestationId: hashSchema,
+  payloadHash: hashSchema,
+  registryRoot: hashSchema,
+  registryEpoch: decimalStringSchema,
+  observerQualificationId: hashSchema,
+  roleId: nonEmptyStringSchema,
+  keyId: hashSchema,
+  audienceHash: hashSchema,
+  invocationNonce: hashSchema,
+  issuedAtUnixNs: decimalStringSchema,
+  expiresAtUnixNs: decimalStringSchema,
+  acceptanceQueryId: hashSchema,
+  qualifiedFactSnapshotId: hashSchema,
+  semanticArtifactBindings: arraySchema(observerInvocationBindingSchema),
+  semanticArtifactSetRoot: hashSchema,
+  productionReceiptBindings: arraySchema(observerInvocationBindingSchema),
+  productionReceiptSetRoot: hashSchema,
+  bindingSetRoot: hashSchema,
+  signatureAlgorithm: literalSchema("ed25519"),
+  signatureHex: invocationSignatureHexSchema,
+});
+
 export type QualifiedObservationEnvelopeV1 = Infer<typeof observationStructuralSchema>;
+export type AcquisitionProcessObservationEnvelopeV1 = Infer<typeof acquisitionProcessObservationStructuralSchema>;
+export type TargetProcessObservationEnvelopeV1 = Infer<typeof targetProcessObservationStructuralSchema>;
+export type StoreEpochObservationEnvelopeV1 = Infer<typeof storeEpochObservationStructuralSchema>;
+export type StoreEpochRawFactsV1 = Infer<typeof storeEpochRawFactsSchema>;
+export type QualifiedSidecarObservationV1 = AcquisitionProcessObservationEnvelopeV1 | TargetProcessObservationEnvelopeV1 | StoreEpochObservationEnvelopeV1;
 export type QualifiedFactSnapshotV1 = Infer<typeof snapshotStructuralSchema>;
 export type AcceptanceQueryV1 = Infer<typeof queryStructuralSchema>;
+export type SignedObserverInvocationSnapshotV1 = Infer<typeof signedObserverInvocationSnapshotStructuralSchema>;
+export type ObserverInvocationBindingV1 = Infer<typeof observerInvocationBindingSchema>;
 
 function h0(): Hash { return `0x${"0".repeat(64)}` as Hash; }
 
@@ -124,12 +231,87 @@ function queryPayload(value: AcceptanceQueryV1): object {
   const { queryId: _queryId, payloadHash: _payloadHash, ...payload } = value;
   return payload;
 }
+function signedObserverInvocationPayload(value: SignedObserverInvocationSnapshotV1): object {
+  const { attestationId: _attestationId, payloadHash: _payloadHash, signatureHex: _signatureHex, ...payload } = value;
+  return payload;
+}
 
 function payloadHash(domainKind: string, payload: object): Hash {
   return hashDomain(`${domainKind}/payload/v1`, payload);
 }
 function objectId(domainKind: string, payloadDigest: Hash): Hash {
   return hashDomain(`${domainKind}/id/v1`, payloadDigest);
+}
+
+function bindingRoot(domain: string, bindings: readonly ObserverInvocationBindingV1[]): Hash {
+  return hashDomain(domain, bindings);
+}
+
+function bindingSetRoot(
+  semanticArtifactSetRoot: Hash,
+  productionReceiptSetRoot: Hash,
+): Hash {
+  return hashDomain("aloha/signed-observer-invocation-snapshot/binding-set/v1", {
+    semanticArtifactSetRoot,
+    productionReceiptSetRoot,
+  });
+}
+
+export function hashSemanticArtifactBindingSetRoot(bindings: readonly ObserverInvocationBindingV1[]): Hash {
+  assertStrictlySortedUnique(bindings.map((binding) => binding.objectId), "semanticArtifactBindings");
+  if (bindings.some((binding) => binding.kind !== "semantic-artifact")) throw new TypeError("semantic artifact binding set contains a non-semantic binding");
+  if (bindings.some((binding) => BigInt(binding.byteLength) === 0n)) throw new TypeError("semantic artifact binding byteLength must be positive");
+  if (new Set(bindings.map((binding) => binding.rawArtifactRefId)).size !== bindings.length) throw new TypeError("semantic artifact bindings reuse a raw artifact ref");
+  return bindingRoot("aloha/signed-observer-invocation-snapshot/semantic-artifact-set/v1", bindings);
+}
+
+export function hashProductionReceiptBindingSetRoot(bindings: readonly ObserverInvocationBindingV1[]): Hash {
+  assertStrictlySortedUnique(bindings.map((binding) => binding.objectId), "productionReceiptBindings");
+  if (bindings.some((binding) => binding.kind !== "production-receipt")) throw new TypeError("production receipt binding set contains a non-receipt binding");
+  if (bindings.some((binding) => BigInt(binding.byteLength) === 0n)) throw new TypeError("production receipt binding byteLength must be positive");
+  if (new Set(bindings.map((binding) => binding.rawArtifactRefId)).size !== bindings.length) throw new TypeError("production receipt bindings reuse a raw artifact ref");
+  return bindingRoot("aloha/signed-observer-invocation-snapshot/production-receipt-set/v1", bindings);
+}
+
+export function hashObserverInvocationBindingSetRoot(
+  semanticArtifactSetRoot: Hash,
+  productionReceiptSetRoot: Hash,
+): Hash {
+  return bindingSetRoot(semanticArtifactSetRoot, productionReceiptSetRoot);
+}
+
+function signedObserverInvocationAttestationId(payloadDigest: Hash, signatureHex: string): Hash {
+  return hashDomain("aloha/signed-observer-invocation-snapshot/id/v1", { payloadHash: payloadDigest, signatureHex });
+}
+
+function checkSignedObserverInvocationSnapshot(
+  value: SignedObserverInvocationSnapshotV1,
+  path: string,
+): SignedObserverInvocationSnapshotV1 {
+  const zero = `0x${"0".repeat(64)}` as Hash;
+  if (value.invocationNonce === zero) throw new TypeError(`invocationNonce must be non-zero at ${path}`);
+  if (BigInt(value.issuedAtUnixNs) >= BigInt(value.expiresAtUnixNs)) {
+    throw new TypeError(`invocation validity interval must be strictly positive at ${path}`);
+  }
+  const semanticArtifactSetRoot = hashSemanticArtifactBindingSetRoot(value.semanticArtifactBindings);
+  const productionReceiptSetRoot = hashProductionReceiptBindingSetRoot(value.productionReceiptBindings);
+  const allBindings = [...value.semanticArtifactBindings, ...value.productionReceiptBindings];
+  const bindingPairs = allBindings.map((binding) => `${binding.kind}\u0000${binding.objectId}`);
+  const rawArtifactRefIds = allBindings.map((binding) => binding.rawArtifactRefId);
+  if (new Set(bindingPairs).size !== bindingPairs.length) throw new TypeError(`duplicate observer invocation binding at ${path}`);
+  if (new Set(rawArtifactRefIds).size !== rawArtifactRefIds.length) throw new TypeError(`raw artifact ref is reused by multiple observer invocation bindings at ${path}`);
+  for (const binding of allBindings) {
+    if (BigInt(binding.byteLength) === 0n) throw new TypeError(`observer invocation binding byteLength must be positive at ${path}`);
+  }
+  const expectedBindingSetRoot = bindingSetRoot(semanticArtifactSetRoot, productionReceiptSetRoot);
+  if (value.semanticArtifactSetRoot !== semanticArtifactSetRoot) throw new TypeError(`semantic artifact binding root mismatch at ${path}`);
+  if (value.productionReceiptSetRoot !== productionReceiptSetRoot) throw new TypeError(`production receipt binding root mismatch at ${path}`);
+  if (value.bindingSetRoot !== expectedBindingSetRoot) throw new TypeError(`invocation binding root mismatch at ${path}`);
+  const expectedPayloadHash = payloadHash("aloha.signed-observer-invocation-snapshot", signedObserverInvocationPayload(value));
+  const expectedAttestationId = signedObserverInvocationAttestationId(expectedPayloadHash, value.signatureHex);
+  if (value.payloadHash !== expectedPayloadHash) throw new TypeError(`signed observer invocation payloadHash mismatch at ${path}`);
+  if (value.attestationId !== expectedAttestationId) throw new TypeError(`signed observer invocation attestationId mismatch at ${path}`);
+  return deepFreeze(value);
 }
 
 function refineObservation(value: QualifiedObservationEnvelopeV1, path: string): QualifiedObservationEnvelopeV1 {
@@ -190,6 +372,57 @@ const observationSchema = refineSchema(
   }),
   refineObservation,
 );
+
+function refineSidecarObservation<T extends QualifiedSidecarObservationV1>(
+  value: T,
+  path: string,
+  domainKind: string,
+): T {
+  if (value.observationSchema.id !== value.kind) {
+    throw new TypeError(`sidecar observation schema does not match kind at ${path}`);
+  }
+  if (value.canonicalFactsHash !== canonicalFactsHash(value.canonicalFacts)) {
+    throw new TypeError(`canonicalFactsHash does not match facts at ${path}`);
+  }
+  const { observationId: _observationId, payloadHash: _payloadHash, ...payload } = value;
+  const expectedPayloadHash = payloadHash(domainKind, payload);
+  const expectedId = objectId(domainKind, expectedPayloadHash);
+  if (value.payloadHash !== expectedPayloadHash || value.observationId !== expectedId) {
+    throw new TypeError(`sidecar observation payloadHash/observationId mismatch at ${path}`);
+  }
+  return value;
+}
+
+const acquisitionProcessObservationSchema = refineSchema(
+  acquisitionProcessObservationStructuralSchema,
+  "aloha.acquisition-process-observation.refinement.v1",
+  hashDomain("aloha/schema-refinement-spec/v1", {
+    id: "aloha.acquisition-process-observation.refinement.v1",
+    version: "1.0.0",
+    rules: ["canonical-facts-hash", "payload-and-id"],
+  }),
+  (value, path) => refineSidecarObservation(value, path, "aloha.acquisition-process-observation"),
+);
+const targetProcessObservationSchema = refineSchema(
+  targetProcessObservationStructuralSchema,
+  "aloha.target-process-observation.refinement.v1",
+  hashDomain("aloha/schema-refinement-spec/v1", {
+    id: "aloha.target-process-observation.refinement.v1",
+    version: "1.0.0",
+    rules: ["canonical-facts-hash", "payload-and-id"],
+  }),
+  (value, path) => refineSidecarObservation(value, path, "aloha.target-process-observation"),
+);
+const storeEpochObservationSchema = refineSchema(
+  storeEpochObservationStructuralSchema,
+  "aloha.store-epoch-observation.refinement.v1",
+  hashDomain("aloha/schema-refinement-spec/v1", {
+    id: "aloha.store-epoch-observation.refinement.v1",
+    version: "1.0.0",
+    rules: ["canonical-facts-hash", "payload-and-id"],
+  }),
+  (value, path) => refineSidecarObservation(value, path, "aloha.store-epoch-observation"),
+);
 const snapshotSchema = refineSchema(
   snapshotStructuralSchema,
   "aloha.qualified-fact-snapshot.refinement.v1",
@@ -210,11 +443,26 @@ const querySchema = refineSchema(
   }),
   refineQuery,
 );
+const signedObserverInvocationSnapshotSchema = refineSchema(
+  signedObserverInvocationSnapshotStructuralSchema,
+  "aloha.signed-observer-invocation-snapshot.refinement.v1",
+  hashDomain("aloha/schema-refinement-spec/v1", {
+    id: "aloha.signed-observer-invocation-snapshot.refinement.v1",
+    version: "1.0.0",
+    rules: ["payload-excludes-attestation-and-signature", "attestation-binds-payload-and-signature", "nonzero-nonce", "strict-positive-time-window"],
+  }),
+  checkSignedObserverInvocationSnapshot,
+);
 
 export const QUALIFIED_FACT_SCHEMA_MANIFESTS = Object.freeze({
   observation: defineSchemaManifest("aloha.qualified-observation", "1.0.0", observationSchema),
+  acquisitionProcessObservation: defineSchemaManifest("aloha.acquisition-process-observation", "1.0.0", acquisitionProcessObservationSchema),
+  targetProcessObservation: defineSchemaManifest("aloha.target-process-observation", "1.0.0", targetProcessObservationSchema),
+  storeEpochObservation: defineSchemaManifest("aloha.store-epoch-observation", "1.0.0", storeEpochObservationSchema),
+  storeEpochRawFacts: defineSchemaManifest("aloha.store-epoch-raw-facts", "1.0.0", storeEpochRawFactsSchema),
   snapshot: defineSchemaManifest("aloha.qualified-fact-snapshot", "1.0.0", snapshotSchema),
   acceptanceQuery: defineSchemaManifest("aloha.acceptance-query", "1.0.0", querySchema),
+  signedObserverInvocationSnapshot: defineSchemaManifest("aloha.signed-observer-invocation-snapshot", "1.0.0", signedObserverInvocationSnapshotSchema),
 });
 
 export function recomputeQualifiedObservationPayloadHash(value: QualifiedObservationEnvelopeV1): Hash {
@@ -222,6 +470,33 @@ export function recomputeQualifiedObservationPayloadHash(value: QualifiedObserva
 }
 export function recomputeQualifiedObservationId(value: QualifiedObservationEnvelopeV1): Hash {
   return objectId("aloha.qualified-observation", recomputeQualifiedObservationPayloadHash(value));
+}
+function recomputeSidecarPayloadHash<T extends QualifiedSidecarObservationV1>(
+  value: T,
+  schema: { decode(value: unknown): T },
+  domainKind: string,
+): Hash {
+  const decoded = schema.decode(value);
+  const { observationId: _observationId, payloadHash: _payloadHash, ...payload } = decoded;
+  return payloadHash(domainKind, payload);
+}
+export function recomputeAcquisitionProcessObservationPayloadHash(value: AcquisitionProcessObservationEnvelopeV1): Hash {
+  return recomputeSidecarPayloadHash(value, acquisitionProcessObservationStructuralSchema, "aloha.acquisition-process-observation");
+}
+export function recomputeAcquisitionProcessObservationId(value: AcquisitionProcessObservationEnvelopeV1): Hash {
+  return objectId("aloha.acquisition-process-observation", recomputeAcquisitionProcessObservationPayloadHash(value));
+}
+export function recomputeTargetProcessObservationPayloadHash(value: TargetProcessObservationEnvelopeV1): Hash {
+  return recomputeSidecarPayloadHash(value, targetProcessObservationStructuralSchema, "aloha.target-process-observation");
+}
+export function recomputeTargetProcessObservationId(value: TargetProcessObservationEnvelopeV1): Hash {
+  return objectId("aloha.target-process-observation", recomputeTargetProcessObservationPayloadHash(value));
+}
+export function recomputeStoreEpochObservationPayloadHash(value: StoreEpochObservationEnvelopeV1): Hash {
+  return recomputeSidecarPayloadHash(value, storeEpochObservationStructuralSchema, "aloha.store-epoch-observation");
+}
+export function recomputeStoreEpochObservationId(value: StoreEpochObservationEnvelopeV1): Hash {
+  return objectId("aloha.store-epoch-observation", recomputeStoreEpochObservationPayloadHash(value));
 }
 export function recomputeQualifiedFactSnapshotPayloadHash(value: QualifiedFactSnapshotV1): Hash {
   return payloadHash("aloha.qualified-fact-snapshot", snapshotPayload(snapshotStructuralSchema.decode(value)));
@@ -235,6 +510,13 @@ export function recomputeAcceptanceQueryPayloadHash(value: AcceptanceQueryV1): H
 export function recomputeAcceptanceQueryId(value: AcceptanceQueryV1): Hash {
   return objectId("aloha.acceptance-query", recomputeAcceptanceQueryPayloadHash(value));
 }
+export function recomputeSignedObserverInvocationSnapshotPayloadHash(value: SignedObserverInvocationSnapshotV1): Hash {
+  return payloadHash("aloha.signed-observer-invocation-snapshot", signedObserverInvocationPayload(signedObserverInvocationSnapshotStructuralSchema.decode(value)));
+}
+export function recomputeSignedObserverInvocationSnapshotId(value: SignedObserverInvocationSnapshotV1): Hash {
+  const decoded = signedObserverInvocationSnapshotStructuralSchema.decode(value);
+  return signedObserverInvocationAttestationId(recomputeSignedObserverInvocationSnapshotPayloadHash(decoded), decoded.signatureHex);
+}
 
 function parse(value: string | Uint8Array | object): unknown {
   if (typeof value === "string") return decodeCanonicalJson(value);
@@ -244,14 +526,41 @@ function parse(value: string | Uint8Array | object): unknown {
 export function decodeQualifiedObservation(value: string | Uint8Array | object): QualifiedObservationEnvelopeV1 {
   return observationSchema.decode(parse(value));
 }
+export function decodeAcquisitionProcessObservation(value: string | Uint8Array | object): AcquisitionProcessObservationEnvelopeV1 {
+  return acquisitionProcessObservationSchema.decode(parse(value));
+}
+export function decodeTargetProcessObservation(value: string | Uint8Array | object): TargetProcessObservationEnvelopeV1 {
+  return targetProcessObservationSchema.decode(parse(value));
+}
+export function decodeStoreEpochObservation(value: string | Uint8Array | object): StoreEpochObservationEnvelopeV1 {
+  return storeEpochObservationSchema.decode(parse(value));
+}
+export function decodeStoreEpochRawFacts(value: string | Uint8Array | object): StoreEpochRawFactsV1 {
+  return storeEpochRawFactsSchema.decode(parse(value));
+}
 export function decodeQualifiedFactSnapshot(value: string | Uint8Array | object): QualifiedFactSnapshotV1 {
   return snapshotSchema.decode(parse(value));
 }
 export function decodeAcceptanceQuery(value: string | Uint8Array | object): AcceptanceQueryV1 {
   return querySchema.decode(parse(value));
 }
+export function decodeSignedObserverInvocationSnapshot(value: string | Uint8Array | object): SignedObserverInvocationSnapshotV1 {
+  return signedObserverInvocationSnapshotSchema.decode(parse(value));
+}
 export function encodeQualifiedObservation(value: QualifiedObservationEnvelopeV1): Uint8Array {
   return encodeCanonicalBytes(observationSchema.decode(value));
+}
+export function encodeAcquisitionProcessObservation(value: AcquisitionProcessObservationEnvelopeV1): Uint8Array {
+  return encodeCanonicalBytes(acquisitionProcessObservationSchema.decode(value));
+}
+export function encodeTargetProcessObservation(value: TargetProcessObservationEnvelopeV1): Uint8Array {
+  return encodeCanonicalBytes(targetProcessObservationSchema.decode(value));
+}
+export function encodeStoreEpochObservation(value: StoreEpochObservationEnvelopeV1): Uint8Array {
+  return encodeCanonicalBytes(storeEpochObservationSchema.decode(value));
+}
+export function encodeStoreEpochRawFacts(value: StoreEpochRawFactsV1): Uint8Array {
+  return encodeCanonicalBytes(storeEpochRawFactsSchema.decode(value));
 }
 export function encodeQualifiedFactSnapshot(value: QualifiedFactSnapshotV1): Uint8Array {
   return encodeCanonicalBytes(snapshotSchema.decode(value));
@@ -259,8 +568,24 @@ export function encodeQualifiedFactSnapshot(value: QualifiedFactSnapshotV1): Uin
 export function encodeAcceptanceQuery(value: AcceptanceQueryV1): Uint8Array {
   return encodeCanonicalBytes(querySchema.decode(value));
 }
+export function encodeSignedObserverInvocationSnapshot(value: SignedObserverInvocationSnapshotV1): Uint8Array {
+  return encodeCanonicalBytes(signedObserverInvocationSnapshotSchema.decode(value));
+}
+
+/** The exact bytes an external Ed25519 signer must sign for this invocation. */
+export function observerInvocationSigningBytes(value: SignedObserverInvocationSnapshotV1): Uint8Array {
+  const decoded = signedObserverInvocationSnapshotSchema.decode(value);
+  return encodeCanonicalBytes({
+    domain: "aloha/signed-observer-invocation",
+    version: 1,
+    keyId: decoded.keyId,
+    registryRoot: decoded.registryRoot,
+    payloadHash: decoded.payloadHash,
+  });
+}
 
 export type QualifiedObservationDraft = Omit<QualifiedObservationEnvelopeV1, "observationId" | "payloadHash" | "canonicalFactsHash">;
+export type QualifiedSidecarObservationDraft = Omit<QualifiedSidecarObservationV1, "observationId" | "payloadHash" | "canonicalFactsHash">;
 export type QualifiedFactSnapshotDraft = Omit<QualifiedFactSnapshotV1, "snapshotId" | "payloadHash" | "claimSetRoot" | "observationSetRoot" | "rawArtifactSetRoot">;
 export type AcceptanceQueryDraft = Omit<AcceptanceQueryV1, "queryId" | "payloadHash">;
 
@@ -309,6 +634,47 @@ export function createQualifiedObservation(draft: QualifiedObservationDraft): Qu
     observationId: objectId("aloha.qualified-observation", ph),
   });
 }
+
+function createSidecarObservation<T extends QualifiedSidecarObservationV1>(
+  draft: Omit<T, "observationId" | "payloadHash" | "canonicalFactsHash">,
+  schema: { decode(value: unknown): T },
+  domainKind: string,
+): T {
+  const data = copyDraftData(
+    draft,
+    ["schemaVersion", "kind", "observationSchema", "observerImplementationDigest", "observerQualificationId", "qualificationRegistryRoot", "anchorPolicyDigest", "roleId", "canonicalFacts"],
+    ["schemaVersion", "kind", "observationSchema", "observerImplementationDigest", "observerQualificationId", "qualificationRegistryRoot", "anchorPolicyDigest", "roleId", "canonicalFacts"],
+  );
+  const withoutHashes = {
+    ...data,
+    canonicalFactsHash: canonicalFactsHash(data.canonicalFacts as T["canonicalFacts"]),
+    payloadHash: h0(),
+    observationId: h0(),
+  } as T;
+  const { observationId: _observationId, payloadHash: _payloadHash, ...payload } = withoutHashes;
+  const ph = payloadHash(domainKind, payload);
+  return schema.decode({
+    ...withoutHashes,
+    payloadHash: ph,
+    observationId: objectId(domainKind, ph),
+  });
+}
+
+export function createAcquisitionProcessObservation(
+  draft: Omit<AcquisitionProcessObservationEnvelopeV1, "observationId" | "payloadHash" | "canonicalFactsHash">,
+): AcquisitionProcessObservationEnvelopeV1 {
+  return createSidecarObservation(draft, acquisitionProcessObservationSchema, "aloha.acquisition-process-observation");
+}
+export function createTargetProcessObservation(
+  draft: Omit<TargetProcessObservationEnvelopeV1, "observationId" | "payloadHash" | "canonicalFactsHash">,
+): TargetProcessObservationEnvelopeV1 {
+  return createSidecarObservation(draft, targetProcessObservationSchema, "aloha.target-process-observation");
+}
+export function createStoreEpochObservation(
+  draft: Omit<StoreEpochObservationEnvelopeV1, "observationId" | "payloadHash" | "canonicalFactsHash">,
+): StoreEpochObservationEnvelopeV1 {
+  return createSidecarObservation(draft, storeEpochObservationSchema, "aloha.store-epoch-observation");
+}
 export function createQualifiedFactSnapshot(draft: QualifiedFactSnapshotDraft): QualifiedFactSnapshotV1 {
   const data = copyDraftData(
     draft,
@@ -343,6 +709,78 @@ export function createAcceptanceQuery(draft: AcceptanceQueryDraft): AcceptanceQu
     payloadHash: ph,
     queryId: objectId("aloha.acceptance-query", ph),
   });
+}
+
+export type SignedObserverInvocationSnapshotDraft = Omit<SignedObserverInvocationSnapshotV1, "attestationId" | "payloadHash" | "semanticArtifactSetRoot" | "productionReceiptSetRoot" | "bindingSetRoot" | "signatureHex">;
+
+const ZERO_SIGNATURE_HEX = `0x${"0".repeat(128)}`;
+
+function createSignedObserverInvocationSnapshotWithSignature(
+  draft: SignedObserverInvocationSnapshotDraft,
+  signatureHex: string,
+): SignedObserverInvocationSnapshotV1 {
+  const data = copyDraftData(
+    draft,
+    [
+      "schemaVersion", "kind", "registryRoot", "registryEpoch", "observerQualificationId", "roleId", "keyId",
+      "audienceHash", "invocationNonce", "issuedAtUnixNs", "expiresAtUnixNs", "acceptanceQueryId",
+      "qualifiedFactSnapshotId", "semanticArtifactBindings", "productionReceiptBindings", "signatureAlgorithm",
+    ],
+    [
+      "schemaVersion", "kind", "registryRoot", "registryEpoch", "observerQualificationId", "roleId", "keyId",
+      "audienceHash", "invocationNonce", "issuedAtUnixNs", "expiresAtUnixNs", "acceptanceQueryId",
+      "qualifiedFactSnapshotId", "semanticArtifactBindings", "productionReceiptBindings", "signatureAlgorithm",
+    ],
+  );
+  const unsigned = signedObserverInvocationSnapshotStructuralSchema.decode({
+    ...data,
+    semanticArtifactSetRoot: hashSemanticArtifactBindingSetRoot(data.semanticArtifactBindings as readonly ObserverInvocationBindingV1[]),
+    productionReceiptSetRoot: hashProductionReceiptBindingSetRoot(data.productionReceiptBindings as readonly ObserverInvocationBindingV1[]),
+    bindingSetRoot: bindingSetRoot(
+      hashSemanticArtifactBindingSetRoot(data.semanticArtifactBindings as readonly ObserverInvocationBindingV1[]),
+      hashProductionReceiptBindingSetRoot(data.productionReceiptBindings as readonly ObserverInvocationBindingV1[]),
+    ),
+    payloadHash: h0(),
+    attestationId: h0(),
+    signatureHex,
+  });
+  const ph = recomputeSignedObserverInvocationSnapshotPayloadHash(unsigned);
+  return signedObserverInvocationSnapshotSchema.decode({
+    ...unsigned,
+    payloadHash: ph,
+    attestationId: signedObserverInvocationAttestationId(ph, unsigned.signatureHex),
+  });
+}
+
+/** Creates a structurally valid unsigned snapshot with an all-zero signature placeholder. */
+export function createUnsignedSignedObserverInvocationSnapshot(
+  draft: SignedObserverInvocationSnapshotDraft,
+): SignedObserverInvocationSnapshotV1 {
+  return createSignedObserverInvocationSnapshotWithSignature(draft, ZERO_SIGNATURE_HEX);
+}
+
+/** Seals a previously prepared snapshot with signature bytes supplied by an external signer. */
+export function sealSignedObserverInvocationSnapshot(
+  unsigned: SignedObserverInvocationSnapshotV1,
+  signatureHex: string,
+): SignedObserverInvocationSnapshotV1 {
+  const decoded = signedObserverInvocationSnapshotStructuralSchema.decode(unsigned);
+  const checkedSignature = invocationSignatureHexSchema.decode(signatureHex);
+  const expectedPayloadHash = recomputeSignedObserverInvocationSnapshotPayloadHash(decoded);
+  if (decoded.payloadHash !== expectedPayloadHash) throw new TypeError("cannot seal a snapshot with a mismatched payloadHash");
+  return signedObserverInvocationSnapshotSchema.decode({
+    ...decoded,
+    signatureHex: checkedSignature,
+    attestationId: signedObserverInvocationAttestationId(expectedPayloadHash, checkedSignature),
+  });
+}
+
+/** Convenience wrapper for callers that already hold externally produced signature bytes. */
+export function createSignedObserverInvocationSnapshot(
+  draft: SignedObserverInvocationSnapshotDraft,
+  signatureHex: string,
+): SignedObserverInvocationSnapshotV1 {
+  return sealSignedObserverInvocationSnapshot(createUnsignedSignedObserverInvocationSnapshot(draft), signatureHex);
 }
 
 export function computeObserverSemanticConfigDigest(value: Pick<

@@ -37,6 +37,19 @@ const mutationIdArraySchema = arraySchema(nonEmptyStringSchema);
 const hashArraySchema = arraySchema(hashSchema);
 const stringArraySchema = arraySchema(nonEmptyStringSchema);
 
+/** Exact lower-case hex strings used for non-hash cryptographic material. */
+function fixedHexSchema(byteLength: number, kind: string): CodecSchema<string> {
+  const pattern = new RegExp(`^0x[0-9a-f]{${byteLength * 2}}$`);
+  return defineSchema({ kind, byteLength }, (value, path = "$") => {
+    if (typeof value !== "string" || !pattern.test(value)) {
+      throw new TypeError(`expected lowercase ${byteLength}-byte 0x hex at ${path}`);
+    }
+    return value;
+  });
+}
+
+const observerPublicKeyHexSchema = fixedHexSchema(32, "ed25519-public-key-hex");
+
 const observerRolePayloadSchema = objectSchema({
   roleId: nonEmptyStringSchema,
   observationSchema: schemaRefSchema,
@@ -100,8 +113,10 @@ const registryPayloadSchema = objectSchema({
   trustedIssuerSetRoot: hashSchema,
   certificateSetRoot: hashSchema,
   revokedCertificateIdsRoot: hashSchema,
+  observerKeySetRoot: hashSchema,
+  revokedObserverKeyIdsRoot: hashSchema,
   previousRegistryRoot: nullableSchema(hashSchema),
-  governanceApprovalHash: hashSchema,
+  governanceTrustAnchorHash: hashSchema,
 });
 
 const registrySchema = objectSchema({
@@ -118,8 +133,41 @@ function registryPayloadFields() {
     trustedIssuerSetRoot: hashSchema,
     certificateSetRoot: hashSchema,
     revokedCertificateIdsRoot: hashSchema,
+    observerKeySetRoot: hashSchema,
+    revokedObserverKeyIdsRoot: hashSchema,
     previousRegistryRoot: nullableSchema(hashSchema),
-    governanceApprovalHash: hashSchema,
+    governanceTrustAnchorHash: hashSchema,
+  } as const;
+}
+
+const observerSigningKeyPayloadSchema = objectSchema({
+  schemaVersion: enumSchema([1] as const),
+  kind: enumSchema(["aloha.observer-signing-key"] as const),
+  observerQualificationId: hashSchema,
+  roleId: nonEmptyStringSchema,
+  algorithm: enumSchema(["ed25519"] as const),
+  publicKeyHex: observerPublicKeyHexSchema,
+  validFromRegistryEpoch: decimalStringSchema,
+  validThroughRegistryEpoch: decimalStringSchema,
+  audienceHash: hashSchema,
+});
+
+const observerSigningKeySchema = objectSchema({
+  ...observerSigningKeyPayloadFields(),
+  keyId: hashSchema,
+});
+
+function observerSigningKeyPayloadFields() {
+  return {
+    schemaVersion: enumSchema([1] as const),
+    kind: enumSchema(["aloha.observer-signing-key"] as const),
+    observerQualificationId: hashSchema,
+    roleId: nonEmptyStringSchema,
+    algorithm: enumSchema(["ed25519"] as const),
+    publicKeyHex: observerPublicKeyHexSchema,
+    validFromRegistryEpoch: decimalStringSchema,
+    validThroughRegistryEpoch: decimalStringSchema,
+    audienceHash: hashSchema,
   } as const;
 }
 
@@ -187,6 +235,13 @@ const verifierCertificatePayloadSchema = objectSchema({
   qualificationSpecDigest: hashSchema,
   predicateSpecDigest: hashSchema,
   predicateImplementationDigest: hashSchema,
+  predicateImplementationExportDigest: hashSchema,
+  predicateProgramDescriptorDigest: hashSchema,
+  oracleProgramDescriptorDigest: hashSchema,
+  oracleImplementationClosureDigest: hashSchema,
+  oracleImplementationExportDigest: hashSchema,
+  predicateCompositionLeafDigest: hashSchema,
+  gateCoreImplementationClosureDigest: hashSchema,
   observerQualificationIds: hashArraySchema,
   requiredObserverRoles: arraySchema(verifierRoleSchema),
   caseSetRoot: hashSchema,
@@ -214,6 +269,13 @@ function verifierCertificatePayloadFields() {
     qualificationSpecDigest: hashSchema,
     predicateSpecDigest: hashSchema,
     predicateImplementationDigest: hashSchema,
+    predicateImplementationExportDigest: hashSchema,
+    predicateProgramDescriptorDigest: hashSchema,
+    oracleProgramDescriptorDigest: hashSchema,
+    oracleImplementationClosureDigest: hashSchema,
+    oracleImplementationExportDigest: hashSchema,
+    predicateCompositionLeafDigest: hashSchema,
+    gateCoreImplementationClosureDigest: hashSchema,
     observerQualificationIds: hashArraySchema,
     requiredObserverRoles: arraySchema(verifierRoleSchema),
     caseSetRoot: hashSchema,
@@ -244,6 +306,8 @@ const membershipInputPayloadSchema = objectSchema({
     issuerId: nonEmptyStringSchema,
   })),
   revokedCertificateIds: hashArraySchema,
+  observerSigningKeys: arraySchema(observerSigningKeySchema),
+  revokedObserverKeyIds: hashArraySchema,
 });
 
 const membershipInputSchema = objectSchema({
@@ -268,6 +332,8 @@ function membershipInputPayloadFields() {
       issuerId: nonEmptyStringSchema,
     })),
     revokedCertificateIds: hashArraySchema,
+    observerSigningKeys: arraySchema(observerSigningKeySchema),
+    revokedObserverKeyIds: hashArraySchema,
   } as const;
 }
 
@@ -304,6 +370,7 @@ function membershipResultPayloadFields() {
 export type ObserverRoleSpecV1 = Infer<typeof observerRoleSchema>;
 export type PredicateSpecV1 = Infer<typeof predicateSchema>;
 export type QualificationRegistrySnapshotV1 = Infer<typeof registrySchema>;
+export type ObserverSigningKeyV1 = Infer<typeof observerSigningKeySchema>;
 export type ObserverQualificationCertificateV1 = Infer<typeof observerCertificateSchema>;
 export type VerifierQualificationCertificateV1 = Infer<typeof verifierCertificateSchema>;
 export type CurrentRegistryMembershipInputV1 = Infer<typeof membershipInputSchema>;
@@ -311,6 +378,7 @@ export type CurrentRegistryMembershipResultV1 = Infer<typeof membershipResultSch
 export type VerifierRoleV1 = Infer<typeof verifierRoleSchema>;
 export type MembershipCertificateKind = "observer" | "verifier";
 export type CertificateMembershipMaterialV1 = Infer<typeof membershipInputPayloadSchema>["certificateMemberships"][number];
+export type ObserverSigningKeyMembershipMaterialV1 = Infer<typeof membershipInputPayloadSchema>["observerSigningKeys"][number];
 
 function parseInput(value: QualificationCodecInput): unknown {
   if (typeof value === "string") return decodeCanonicalJson(value);
@@ -359,6 +427,18 @@ function mutationSetHash(ids: readonly string[]): Hash {
   return hashDomain("aloha/critical-mutation-set/v1", ids);
 }
 
+export function hashObserverSigningKeySetRoot(keyIds: readonly Hash[]): Hash {
+  const decoded = hashArraySchema.decode(keyIds, "observerKeySetRoot.keyIds");
+  strictSorted(decoded, "observerKeySetRoot.keyIds");
+  return hashDomain("aloha/observer-signing-key-set/v1", decoded);
+}
+
+export function hashRevokedObserverKeyIdsRoot(keyIds: readonly Hash[]): Hash {
+  const decoded = hashArraySchema.decode(keyIds, "revokedObserverKeyIdsRoot.keyIds");
+  strictSorted(decoded, "revokedObserverKeyIdsRoot.keyIds");
+  return hashDomain("aloha/revoked-observer-key-set/v1", decoded);
+}
+
 function checkRole(value: ObserverRoleSpecV1, path: string): ObserverRoleSpecV1 {
   strictSorted(value.requiredCriticalMutationIds, `${path}.requiredCriticalMutationIds`);
   positiveDecimal(value.minimumIndependentOracleCases, `${path}.minimumIndependentOracleCases`, false);
@@ -375,6 +455,12 @@ function checkPredicate(value: PredicateSpecV1, path: string): PredicateSpecV1 {
   if (value.independentOracleKinds.length === 0) throw new TypeError(`independentOracleKinds must not be empty at ${path}`);
   const zero = ("0x" + "0".repeat(64)) as Hash;
   if ([value.passRuleDigest, value.failRuleDigest, value.invalidRuleDigest, value.anchorPolicyDigest, value.tolerancePolicyDigest, value.verifierQualificationSpecDigest].includes(zero)) throw new TypeError(`predicate rule digests must be non-zero at ${path}`);
+  const declaredObservationSchemas = new Set(value.observationSchemaRefs.map((schema) => encodeCanonicalJson(schema)));
+  for (const role of value.requiredObserverRoles) {
+    if (!declaredObservationSchemas.has(encodeCanonicalJson(role.observationSchema))) {
+      throw new TypeError(`required observer role schema is not declared at ${path}.requiredObserverRoles.${role.roleId}`);
+    }
+  }
   for (const [index, role] of value.requiredObserverRoles.entries()) checkRole(role, `${path}.requiredObserverRoles[${index}]`);
   if (value.observerRoleSetHash !== roleSetHash(value.requiredObserverRoles)) throw new TypeError(`observerRoleSetHash mismatch at ${path}`);
   if (value.criticalMutationSetHash !== mutationSetHash(value.criticalMutationIds)) throw new TypeError(`criticalMutationSetHash mismatch at ${path}`);
@@ -386,10 +472,22 @@ function checkPredicate(value: PredicateSpecV1, path: string): PredicateSpecV1 {
 function checkRegistry(value: QualificationRegistrySnapshotV1, path: string): QualificationRegistrySnapshotV1 {
   positiveDecimal(value.epoch, `${path}.epoch`);
   const zero = "0x" + "0".repeat(64);
-  if (value.trustedIssuerSetRoot === zero || value.certificateSetRoot === zero || value.revokedCertificateIdsRoot === zero || value.governanceApprovalHash === zero) throw new TypeError(`registry roots and governance approval must be non-zero at ${path}`);
+  if (value.trustedIssuerSetRoot === zero || value.certificateSetRoot === zero || value.revokedCertificateIdsRoot === zero || value.observerKeySetRoot === zero || value.revokedObserverKeyIdsRoot === zero || value.governanceTrustAnchorHash === zero) throw new TypeError(`registry roots and governance trust anchor must be non-zero at ${path}`);
   const expectedPayload = payloadHash("aloha/qualification-registry", value);
   if (value.payloadHash !== expectedPayload) throw new TypeError(`registry payloadHash mismatch at ${path}`);
   if (value.registryId !== objectId("aloha/qualification-registry", expectedPayload)) throw new TypeError(`registryId mismatch at ${path}`);
+  return deepFreeze(value);
+}
+
+function checkObserverSigningKey(value: ObserverSigningKeyV1, path: string): ObserverSigningKeyV1 {
+  positiveDecimal(value.validFromRegistryEpoch, `${path}.validFromRegistryEpoch`);
+  positiveDecimal(value.validThroughRegistryEpoch, `${path}.validThroughRegistryEpoch`);
+  if (BigInt(value.validFromRegistryEpoch) > BigInt(value.validThroughRegistryEpoch)) {
+    throw new TypeError(`observer signing key validity interval is inverted at ${path}`);
+  }
+  if (value.audienceHash === ("0x" + "0".repeat(64))) throw new TypeError(`observer signing key audienceHash must be non-zero at ${path}`);
+  const expected = hashDomain("aloha/observer-signing-key/v1", payloadWithout(value, ["keyId"]));
+  if (value.keyId !== expected) throw new TypeError(`observer signing key keyId mismatch at ${path}`);
   return deepFreeze(value);
 }
 
@@ -415,6 +513,19 @@ function checkVerifierCertificate(value: VerifierQualificationCertificateV1, pat
   positiveDecimal(value.independentOracleCaseCount, `${path}.independentOracleCaseCount`, false);
   positiveDecimal(value.oldReferenceCaseCount, `${path}.oldReferenceCaseCount`);
   positiveDecimal(value.issuedAtRegistryEpoch, `${path}.issuedAtRegistryEpoch`);
+  const zero = "0x" + "0".repeat(64);
+  if (
+    value.predicateImplementationDigest === zero ||
+    value.predicateImplementationExportDigest === zero ||
+    value.predicateProgramDescriptorDigest === zero ||
+    value.oracleProgramDescriptorDigest === zero ||
+    value.oracleImplementationClosureDigest === zero ||
+    value.oracleImplementationExportDigest === zero ||
+    value.predicateCompositionLeafDigest === zero ||
+    value.gateCoreImplementationClosureDigest === zero
+  ) {
+    throw new TypeError(`verifier implementation and program digests must be non-zero at ${path}`);
+  }
   for (const role of value.requiredObserverRoles) checkRole(role, `${path}.requiredObserverRoles.${role.roleId}`);
   if (encodeCanonicalJson(value.declaredCriticalMutationIds) !== encodeCanonicalJson(value.rejectedOrInvalidMutationIds)) throw new TypeError(`declared/rejected mutation sets differ at ${path}`);
   const expectedPayload = payloadHash("aloha/verifier-qualification", value);
@@ -428,7 +539,12 @@ function checkMembershipInput(value: CurrentRegistryMembershipInputV1, path: str
   strictSorted(value.trustedIssuerIds, `${path}.trustedIssuerIds`);
   strictSorted(value.revokedCertificateIds, `${path}.revokedCertificateIds`);
   strictSortedBy(value.certificateMemberships, (entry) => entry.certificateId, `${path}.certificateMemberships`);
+  strictSortedBy(value.observerSigningKeys, (entry) => entry.keyId, `${path}.observerSigningKeys`);
+  strictSorted(value.revokedObserverKeyIds, `${path}.revokedObserverKeyIds`);
   if (new Set(value.certificateMemberships.map((entry) => entry.certificateId)).size !== value.certificateMemberships.length) throw new TypeError(`duplicate certificate membership at ${path}`);
+  if (new Set(value.observerSigningKeys.map((entry) => entry.keyId)).size !== value.observerSigningKeys.length) throw new TypeError(`duplicate observer signing key at ${path}`);
+  if (new Set(value.revokedObserverKeyIds).size !== value.revokedObserverKeyIds.length) throw new TypeError(`duplicate revoked observer signing key at ${path}`);
+  for (const [index, key] of value.observerSigningKeys.entries()) checkObserverSigningKey(key, `${path}.observerSigningKeys[${index}]`);
   const expectedPayload = payloadHash("aloha/current-registry-membership-input", value);
   if (value.payloadHash !== expectedPayload) throw new TypeError(`membership input payloadHash mismatch at ${path}`);
   if (value.inputId !== objectId("aloha/current-registry-membership-input", expectedPayload)) throw new TypeError(`membership inputId mismatch at ${path}`);
@@ -451,6 +567,7 @@ export const QUALIFICATION_SCHEMAS = Object.freeze({
   observerRole: custom(observerRoleSchema, "aloha.observer-role-spec", checkRole),
   predicate: custom(predicateSchema, "aloha.predicate-spec", checkPredicate),
   registry: custom(registrySchema, "aloha.qualification-registry", checkRegistry),
+  observerSigningKey: custom(observerSigningKeySchema, "aloha.observer-signing-key", checkObserverSigningKey),
   observerCertificate: custom(observerCertificateSchema, "aloha.observer-qualification", checkObserverCertificate),
   verifierCertificate: custom(verifierCertificateSchema, "aloha.verifier-qualification", checkVerifierCertificate),
   membershipInput: custom(membershipInputSchema, "aloha.current-registry-membership-input", checkMembershipInput),
@@ -461,6 +578,7 @@ export const QUALIFICATION_SCHEMA_MANIFESTS = Object.freeze({
   observerRole: defineSchemaManifest("aloha.observer-role-spec", "1.0.0", QUALIFICATION_SCHEMAS.observerRole),
   predicate: defineSchemaManifest("aloha.predicate-spec", "1.0.0", QUALIFICATION_SCHEMAS.predicate),
   registry: defineSchemaManifest("aloha.qualification-registry", "1.0.0", QUALIFICATION_SCHEMAS.registry),
+  observerSigningKey: defineSchemaManifest("aloha.observer-signing-key", "1.0.0", QUALIFICATION_SCHEMAS.observerSigningKey),
   observerCertificate: defineSchemaManifest("aloha.observer-qualification", "1.0.0", QUALIFICATION_SCHEMAS.observerCertificate),
   verifierCertificate: defineSchemaManifest("aloha.verifier-qualification", "1.0.0", QUALIFICATION_SCHEMAS.verifierCertificate),
   membershipInput: defineSchemaManifest("aloha.current-registry-membership-input", "1.0.0", QUALIFICATION_SCHEMAS.membershipInput),
@@ -470,6 +588,7 @@ export const QUALIFICATION_SCHEMA_MANIFESTS = Object.freeze({
 export function decodeObserverRole(value: QualificationCodecInput): ObserverRoleSpecV1 { return QUALIFICATION_SCHEMAS.observerRole.decode(parseInput(value)); }
 export function decodePredicate(value: QualificationCodecInput): PredicateSpecV1 { return QUALIFICATION_SCHEMAS.predicate.decode(parseInput(value)); }
 export function decodeQualificationRegistry(value: QualificationCodecInput): QualificationRegistrySnapshotV1 { return QUALIFICATION_SCHEMAS.registry.decode(parseInput(value)); }
+export function decodeObserverSigningKey(value: QualificationCodecInput): ObserverSigningKeyV1 { return QUALIFICATION_SCHEMAS.observerSigningKey.decode(parseInput(value)); }
 export function decodeObserverCertificate(value: QualificationCodecInput): ObserverQualificationCertificateV1 { return QUALIFICATION_SCHEMAS.observerCertificate.decode(parseInput(value)); }
 export function decodeVerifierCertificate(value: QualificationCodecInput): VerifierQualificationCertificateV1 { return QUALIFICATION_SCHEMAS.verifierCertificate.decode(parseInput(value)); }
 export function decodeMembershipInput(value: QualificationCodecInput): CurrentRegistryMembershipInputV1 { return QUALIFICATION_SCHEMAS.membershipInput.decode(parseInput(value)); }
@@ -478,6 +597,7 @@ export function decodeMembershipResult(value: QualificationCodecInput): CurrentR
 export function encodeObserverRole(value: ObserverRoleSpecV1): Uint8Array { return encodeCanonicalBytes(QUALIFICATION_SCHEMAS.observerRole.decode(value)); }
 export function encodePredicate(value: PredicateSpecV1): Uint8Array { return encodeCanonicalBytes(QUALIFICATION_SCHEMAS.predicate.decode(value)); }
 export function encodeQualificationRegistry(value: QualificationRegistrySnapshotV1): Uint8Array { return encodeCanonicalBytes(QUALIFICATION_SCHEMAS.registry.decode(value)); }
+export function encodeObserverSigningKey(value: ObserverSigningKeyV1): Uint8Array { return encodeCanonicalBytes(QUALIFICATION_SCHEMAS.observerSigningKey.decode(value)); }
 export function encodeObserverCertificate(value: ObserverQualificationCertificateV1): Uint8Array { return encodeCanonicalBytes(QUALIFICATION_SCHEMAS.observerCertificate.decode(value)); }
 export function encodeVerifierCertificate(value: VerifierQualificationCertificateV1): Uint8Array { return encodeCanonicalBytes(QUALIFICATION_SCHEMAS.verifierCertificate.decode(value)); }
 export function encodeMembershipInput(value: CurrentRegistryMembershipInputV1): Uint8Array { return encodeCanonicalBytes(QUALIFICATION_SCHEMAS.membershipInput.decode(value)); }
@@ -498,6 +618,12 @@ export function createQualificationRegistry(input: Omit<QualificationRegistrySna
   const payload = registryPayloadSchema.decode(input);
   const payloadHashValue = payloadHash("aloha/qualification-registry", payload);
   return checkRegistry(registrySchema.decode({ ...payload, registryId: objectId("aloha/qualification-registry", payloadHashValue), payloadHash: payloadHashValue }), "$" );
+}
+
+export function createObserverSigningKey(input: Omit<ObserverSigningKeyV1, "keyId">): ObserverSigningKeyV1 {
+  const payload = observerSigningKeyPayloadSchema.decode(input);
+  const keyId = hashDomain("aloha/observer-signing-key/v1", payload);
+  return checkObserverSigningKey(observerSigningKeySchema.decode({ ...payload, keyId }), "$" );
 }
 
 export function createObserverQualificationCertificate(input: Omit<ObserverQualificationCertificateV1, "certificateId" | "payloadHash">): ObserverQualificationCertificateV1 {
@@ -526,5 +652,10 @@ export function createMembershipResult(input: Omit<CurrentRegistryMembershipResu
 
 export function hashPredicateSpec(value: PredicateSpecV1): Hash { return hashDomain("aloha/predicate-spec/v1", payloadWithout(decodePredicate(value), ["specDigest"])); }
 export function hashRegistryPayload(value: QualificationRegistrySnapshotV1): Hash { return payloadHash("aloha/qualification-registry", decodeQualificationRegistry(value)); }
+export function recomputeObserverSigningKeyId(value: ObserverSigningKeyV1): Hash {
+  return hashDomain("aloha/observer-signing-key/v1", payloadWithout(decodeObserverSigningKey(value), ["keyId"]));
+}
 export function hashObserverCertificatePayload(value: ObserverQualificationCertificateV1): Hash { return payloadHash("aloha/observer-qualification", decodeObserverCertificate(value)); }
 export function hashVerifierCertificatePayload(value: VerifierQualificationCertificateV1): Hash { return payloadHash("aloha/verifier-qualification", decodeVerifierCertificate(value)); }
+
+export * from "./external-v2.ts";

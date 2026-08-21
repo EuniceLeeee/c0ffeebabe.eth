@@ -4,13 +4,18 @@
 >
 > Aloha 基线：codex/aloha@0a712e515b003cd6f578727be26360a8632bfcff。
 >
-> 冻结实现参考：impl@d33c8b48d43f0191db4354ebe4192d805ac9323f。
+> 历史 reuse evidence（不是 calibration）：impl@d33c8b48d43f0191db4354ebe4192d805ac9323f。
 >
-> 补充成熟模块复用审计：impl@ccb41fbb175fefaf6c388d62521c68966cc7c4a6。旧实现只提供可定位的
-> 算法/行为样本；Aloha 性能不继承旧分支 verdict，最终只由 Aloha 自己的事实窗口证明。
+> 补充历史 reuse evidence（不是 calibration）：impl@ccb41fbb175fefaf6c388d62521c68966cc7c4a6。旧实现只提供
+> 可定位的算法/行为样本；Aloha 性能不继承旧分支 verdict，最终只由 Aloha 自己的事实窗口证明。
 >
-> 本文只定义从空仓库直接实现的最终系统；不定义迁移、shadow或legacy双轨。本轮不执行部署，文中只设计
-> future exact-SHA systemd dry-run边界；绝不授予签名或广播授权。
+> 唯一 calibration reference lock：impl@5f104cedd4b4778316c177ce4fa08a6761af85b1。`tools/reference-only/impl`
+> 只接受这个 exact SHA；它用于锁定统一 work plane、Funding、failure-budget、cycle correlation、capability
+> generator 与 discovery transport 的成熟不变量，不追随 impl 后续提交，也不把其旧 DTO、shadow、fallback 或
+> runtime authority 带入 Aloha。
+>
+> 本文约束当前实现、测试与最终 exact-SHA systemd dry-run；不定义迁移、shadow或legacy双轨。dry-run 默认无
+> signer；未经授权的交易签名、广播、提高 wallet cap 或改变安全 envelope 永远不在 scope 内。
 >
 > 本文是 Aloha 的唯一 normative architecture。外部 greenfield v1.2 bundle 与旧仓库只作为设计来源和
 > `untrusted-reference`；其 qualification、clean-room 与边界治理要求经本文明确吸收后才生效。发生冲突时，
@@ -127,7 +132,8 @@ authority。独立builder随后恢复inProgress或构建next generation，仍只
 - keeper/reward、inventory、private path、sandwich、JIT-LP；
 - 当前release的Liquidity/LP authoring template、LP capability/schema/interpreter、LP Family、LP fixture、
   LP catalog/BOM entry或LP strategy；本轮只冻结通用extension与局部失效机制，不创建placeholder/stub；
-- 本轮生产代码、测试实现、部署、进程操作、签名或广播。
+- 未经授权的交易签名、广播、提高 wallet cap、加载 signing key 或改变安全 envelope；当前实现、测试与最终
+  exact-SHA systemd dry-run均在 scope 内，且默认无 signer。
 
 [PFD] Aloha 可以继续支持当前 mission 内的 blockscan 与 public-mempool backrun，但两条 lane 必须
 消费同一个 immutable GraphView，并在 current-source exact 后才能进入执行。
@@ -141,6 +147,7 @@ authority。独立builder随后恢复inProgress或构建next generation，仍只
 | [VEF] | Aloha@0a712e515b003cd6f578727be26360a8632bfcff | 分支 codex/aloha；审计开始时仅有 AGENTS.md，工作树干净 |
 | [VEF] | impl@d33c8b48d43f0191db4354ebe4192d805ac9323f | 旧 worktree HEAD 与冻结 SHA 相同；未跟踪的 listener/src/searcher/transport-schedule-policy.ts 属于用户，未读取为稳定事实、未修改 |
 | [VEF] | impl@ccb41fbb175fefaf6c388d62521c68966cc7c4a6 | 补充成熟能力遗漏审计只从该committed Git object读取；dirty impl工作树不进入结论 |
+| [VEF] | impl@5f104cedd4b4778316c177ce4fa08a6761af85b1 | 目标模块补漏审计只从该committed Git object读取；它是reference lock，不是Aloha oracle或浮动impl HEAD |
 
 ### 3.2 关键既有事实
 
@@ -167,12 +174,19 @@ authority。独立builder随后恢复inProgress或构建next generation，仍只
 | [VEF] | impl已有canonical优先的pending evidence隔离、per-owner bounded queue、单tx冻结head与single-flight observation | impl@ccb41fbb:listener/src/searcher/pending-evidence-admission-queue.ts:23-130,132-235；pending-evidence-session.ts:16-140 |
 | [VEF] | impl latest-head scheduler在单active pass下只保留最新pending head，并显式记录coalesced/drop与same-head revision | impl@ccb41fbb:listener/src/searcher/latest-head-scheduler.ts:23-49,61-145,147-218 |
 | [VEF] | impl已有有界amount search、current-source逐leg exact propagation和链上Funding capacity refresh；旧Funding cache仍硬编码Multicall/adapter holder语义 | impl@ccb41fbb:listener/src/searcher/solver/amount-bounds.ts:7-79；amount-propagation.ts:20-137；flash-liquidity.ts:3-16,27-129 |
+| [VEF] | impl已有统一adapter work plane，把stage、framework caller authority、policy/admission、scheduler-issued executor、generation fence、decode与失败归因串成一次调用；旧shape仍携带FamilyId/旧request DTO及中央stage switch | impl@5f104ced:listener/src/searcher/adapter-work-intent.ts:28-244,396-681 |
+| [VEF] | impl Funding runtime按source独立执行并隔离sibling失败，只有generation仍current时才发布；PreparedFundingOffer由中央issuer绑定source、generation、capability与evidence，borrow/repay fragment再由owner生成 | impl@5f104ced:listener/src/searcher/adapter-funding-runtime.ts:98-190,197-341,420-498 |
+| [VEF] | impl blockscan budget已有dependency-set公平prefix、family/instance/composite typed failure attribution及连续失败breaker；旧实现从TokenEdge/canonicalEdgeId解析Family | impl@5f104ced:listener/src/searcher/detector/blockscan-family-budget.ts:92-254,257-390 |
+| [VEF] | impl capability manifest builder已有direct-import root、deterministic static imports、capability closure与incomplete fail-closed；同一文件也包含legacy/shadow migration分支，不能整体复用 | impl@5f104ced:listener/src/searcher/build-family-capability-manifest.ts:204-289,297-545 |
+| [VEF] | impl discovery transport能把deadline/AbortSignal传到underlying HTTP request并合并nested control；旧实现依赖ethers私有connection API | impl@5f104ced:listener/src/searcher/dex-discovery-transport.ts:20-129,150-241 |
+| [VEF] | impl cycle fingerprint提供token ring rotation/direction不变的纯join思想，并规定competitor block B与B-1 source join；旧实现用lowercase字符串与JSON外拼，未绑定新AssetRef codec | impl@5f104ced:listener/src/searcher/detector/cycle-fingerprint.ts:1-23 |
 | [VEF] | 旧 TokenEdge/PoolEntry 仍包含 V2/V3/V4/Curve、factory、poolId、fee、storage/taxonomy 等协议形状及 legacy registry 语义 | impl@d33c8b48:listener/src/searcher/planner/token-graph.ts:43-170,196-252 |
 | [VEF] | 旧六步具备 canonical hash、ordered prefix、cross-step commitment，但 stage 仍是 discovery/route/quote/plan/final-sim/EV | impl@d33c8b48:listener/src/shared/evidence/semantic-six-step.ts:3-22,42-90,164-258 |
 
 ### 3.3 事实边界
 
-[VEF] 上表只说明冻结代码与归档记录做过什么；不说明 Aloha 已实现、已测试、已部署或满足预算。
+[VEF] 上表只说明冻结代码与归档记录做过什么；Aloha 当前实现、测试与最终 exact-SHA systemd dry-run必须由
+本文自己的事实门验证，不能由旧 evidence 代替。
 
 [PFD] 任何旧 live 数字只用于定义回归基线和预算理由。旧实现、旧脚本、旧 fixture、旧数量与旧
 verdict 都不是 Aloha correctness oracle。
@@ -195,6 +209,10 @@ verdict 都不是 Aloha correctness oracle。
 | [MDR] | coarse economic funnel | Family-owned current-source coarse projection只负责排序；Top-K加bounded unranked lane，只有带保守proof的profit upper bound才能hard prune |
 | [MDR] | source-bound EV/valuation | next-block fee、measured gas、current valuation与bid policy分别绑定source和provider；未知valuation/gas/freshness不得通过submission EV gate |
 | [MDR] | latest-head coalescing与pending intake bulkhead | 单active+latest pending、drop accounting；canonical traffic优先，unknown evidence按owner有界隔离且不能挤掉canonical |
+| [MDR] | framework-owned unified work plane | capability只声明FrozenProgram；中央一次性绑定caller authority、source/generation fence、policy、budget、physical scheduler、decode与typed failure receipt，不能由每个Family各造一套shell |
+| [MDR] | source-isolated Funding offers | 每个Funding source独立结算；一个provider/asset失败不抹掉健康sibling，opaque offer由issuer绑定source/capability/evidence并强制borrow+repay ownership |
+| [MDR] | owner/instance/composite failure budget | 公平与breaker只消费generated opaque isolation refs；未知归因只打exact dependency composite，绝不能按Family名称分派或把一次坏route封掉整个系统 |
+| [MDR] | cycle-equivalence correlation | rotation/direction不变的token-ring key只用于competitor/research temporal join与coverage分析，不参与route/Graph/admission authority |
 | [MDR] | caller mode 局部放宽 EIP-3607 | 只允许 impersonated internal frame；最终顶层交易 simulation 始终严格 |
 | [MDR] | transport fact 与 Family decision 分离 | transport只返回returned、reverted或transportFailure；framework/plugin contract defect单独形成invalidProgram，绝不伪装成transport fact或链上否定 |
 | [MDR] | semantic hash + causal chain + process anchor | 由新 Evidence Schema 重写字段，但保留内容寻址、ordered chain、exact SHA/PID/starttime |
@@ -253,9 +271,25 @@ reviewer
 
 #### 5.1.1 Clean-room reference lock 与 reuse ledger
 
-[PFD] 新repo在任何旧代码读取或case导入前，必须创建machine-readable `reference-lock.json` 与append-only
-`reuse-ledger.yaml`。前者锁定source repository、exact commit、path、blob、license和允许的disposition；后者
-逐symbol记录新contract、adoption mode、destination、dependency closure、所需证据与review。旧仓库只能由
+[PFD] reference lock 的规范 authority 落点是后续生成的
+`generated/authority/reference-lock.json`，其 schema 与验证规则由
+`specs/governance/reference-lock` 冻结；逐symbol 的 append-only ledger 是
+`generated/authority/reuse-ledger.yaml`。lock 必须锁定 source repository、exact commit、path、blob、license
+和允许的 disposition；ledger 必须记录新 contract、adoption mode、destination、dependency closure、所需证据与
+review。`generated/authority/**` 只由受信 generator 生成，不能手工编辑。
+
+当前 reference-only 实现的实际 calibration lock 是
+`tools/reference-only/impl/src/index.ts` 导出的 `CALIBRATION_REFERENCE_IMPL_SHA`，固定为
+`impl@5f104cedd4b4778316c177ce4fa08a6761af85b1`；`tools/reference-only/impl/test/index.test.ts` 覆盖 exact
+lock、receipt decoder 与 mismatch raw record。该 importer 同时导出冻结的
+`CALIBRATION_REFERENCE_STAGE_MANIFEST = startup → ready`；它只是 impl reference calibration denominator，
+不是 Aloha 六步生产 stage manifest。subset、reordered 或额外 stage 都必须被拒绝；runtimeAnchor 与 raw refs
+仍是 untrusted observation material，不写入静态 calibration lock，真实性由后续 qualified snapshot 处理。
+此分片不在指定目录外创建 `generated/authority/**` 或 `specs/governance/**` 文件；后续集成必须把该常量、lock
+artifact 与 ledger 对齐，且不得把 `impl@d33c8b48...`/`impl@ccb41fbb...` 的历史 reuse evidence 当作 calibration
+reference。
+
+[PFD] 新repo在任何旧代码读取或case导入前，必须生成上述 machine-readable lock 与 ledger。旧仓库只能由
 `tools/reference-only/**`按lock读取，不能成为submodule、vendor tree、build input或runtime dependency。
 
 [PFD] required CI必须复核lock中的blob仍精确匹配、ledger覆盖所有production reuse、source-repository
@@ -274,6 +308,8 @@ observer/verifier certificate或production acceptance pass。
 | [REJ] R4 | impl@d33c8b48 planner/token-graph.ts 的 PoolEntry、merge/query bridge、strict-catalog-registry-projection.ts、route-leg-registry.ts | legacy-shaped Graph/registry authority；大量 protocol fields、fallback shape、中央 adapter lookup | token-graph.ts:43-170,196-252,297-313 | 不设目标 package；永不恢复。新 Graph 只含通用 routing fact 和 opaque handles |
 | [BRW] R3 | impl@d33c8b48 strict-production-runtime-session.ts | current-source session；ready instance refresh；固定 16 pool，共享 slow/fast slots | :192-223；串行 26s 根因；固定 16 未做 transport/Family isolation | packages/state-runtime；保留 deterministic per-index assembly，改为 RPC fast、REVM heavy、Family quota、explicit unresolved coverage |
 | [BRW] R3 | impl@d33c8b48 strict-central-adapter-runtime.ts | provider/simulator transport 与 caller authority；手写 provenance；错误分类 | :330-364 漏字段；:412-427 caller gap 分类不正确 | packages/request-program + packages/capability-interpreters；只执行完整FrozenProgram envelope；codec mismatch/caller mode gap为invalidProgram，RPC/deadline为retryable |
+| [BRW] R2/R3 | impl@5f104ced adapter-work-intent.ts | 一次work编排覆盖caller authority、policy/admission、scheduler executor、generation fence、decode与failure/timing receipt；旧stage→class switch和subject仍含FamilyId/InstanceKey/RouteKey | :28-244,396-681；只证明成熟choreography，未证明Aloha预算[MTM] | packages/work-plane + request-program + scheduler；R2保留phase/fence/receipt不变量，R3改为generated `ownerRef + capabilityRef + WorkClass declaration`，中央不得按Family/stage名称分派；program/schema/owner/source变化精确失效，scheduler policy不进入semantic memo |
+| [BRW] R2/R3 | impl@5f104ced dex-discovery-transport.ts | deadline/abort可下沉到underlying HTTP并合并nested control；依赖ethers `_getConnection`私有API且可绕统一scheduler | :20-129,150-241；transport行为未在Aloha实测[MTM] | packages/discovery-transport + scheduler；提取deadline/abort/link cleanup不变量，重写为公共RPC transport port并归入startup-RPC-fast permits；不得拥有source completeness、cursor、candidate或Graph authority |
 | [ASR] R1 | impl@d33c8b48 final-simulation-work-runtime.ts | final-sim admission、reserved resources、queue、fence、retire；不拥有协议语义 | :49-145,291-535,570-724；final-sim tests | packages/final-sim；保留调度不变量并按新port/queue/cancellation重写；execution program schema、source/gen、safety root 变化使 receipt 不可复用 |
 | [BRW] R3 | impl@d33c8b48 revm-sim-client.ts；listener/revm-sim/src/main.rs | single FIFO daemon 与 REVM engine；daemon/queue/prepared cache 隐藏状态 | client:175-261证明共享FIFO存在HOL结构；afcc07e8改为per-attest隔离但实际效果[MTM]；Rust仅impersonated frame放宽EIP-3607 | runtime/revm-workers + packages/request-program；提取REVM engine/caller-mode规则，重写有界worker pool、single-flight、request id、deadline、kill/reap |
 | [ASR] R1 | impl@ccb41fbb live-reth-read-priority.ts | 无 authority 的 idempotent background preemption primitive；内部 active attempts/waiters | :28-145,181-234；源码定义caller abort不重试、internal preemption重试 | packages/scheduler/src/preemptible-background.ts；保留抢占/abort不变量但按新WorkClass、queue和cancellation contract重写；旧文件不复制 |
@@ -285,6 +321,7 @@ observer/verifier certificate或production acceptance pass。
 | [BRW] R1/R3 | impl@ccb41fbb {mempool-intake,pending-evidence-admission-queue,pending-evidence-session}.ts | full-vs-filtered targets、canonical优先、unknown per-Family queue、one-tx frozen head；旧类型依赖PoolEntry/SwapAdapter/ExecutionFamilyId | intake:5-62；queue:23-130,132-235；session:16-140 | packages/producer/backrun-intake + scheduler；从ready GraphView与generated observation owners派生目标，central只按opaque ownerRef公平；unknown evidence不可挤掉canonical，provider subset不能冒充complete intake |
 | [ASR] R1 | impl@ccb41fbb coalescing-async-writer.ts | 单writer、latest cumulative snapshot、flush与失败telemetry；若value不是完整累积envelope会丢中间authority | :1-107；本轮只读审计[MTM] | packages/durable-store；只用于完整累积snapshot或非authority telemetry，attestation每条outcome先进入同一内存envelope再coalesce写入；SIGTERM必须flush，禁止对独立增量事件latest-wins |
 | [BRW] R2/R3 | impl@ccb41fbb blockscan-pending-evidence.ts | tx/head/payload hash绑定与evidence-scoped route activation成熟；中央仍按ExecutionFamilyId、adapterId和TokenEdge映射 | :1-162；本轮只读审计[MTM] | packages/producer/trigger-session + Family trigger capability；提取tx/head/hash与exact scope-set不变量，owner签发opaque affected handles；central只做集合相交与mode accounting，不按Family/adapter分支 |
+| [BRW] R2/R3 | impl@5f104ced detector/blockscan-family-budget.ts | dependency-set公平prefix、typed family/instance/composite failure attribution、per-generation breaker；旧实现从TokenEdge/canonicalEdgeId解析Family并以字符串key隐藏状态 | :92-254,257-390；refinement接入只作旧行为locator[MTM] | packages/scheduler/failure-budget + coarse-economics；R2保留least-served prefix与consecutive breaker，R3输入generated opaque `ownerRef/instanceRef/dependencySetRef`和typed failure owner；exact-positive不会被后验breaker抹掉，blocked/not-probed必须入accounting；policy版本只失效performance receipt |
 | [BRW] R3 | impl@d33c8b48 shared/state/anvil-pool.ts、state-backend.ts、live-state-backend.ts | fork/state access 与 worker lifecycle；旧 pool、source fallback、transport ownership | state/backend/reorg/abort tests | packages/state-runtime/fork-port；提取 fork lease、reset cancellation、source pin；不得授予 topology、identity 或 exact authority |
 
 ### 5.3 Family、capability、planner 与执行资产
@@ -299,8 +336,11 @@ observer/verifier certificate或production acceptance pass。
 | [ASR] R1 | impl@d33c8b48 venues/**-family/{identity,reverse-binding,instance,pricing,exact,execution,action,victim}.ts | 协议语义与链上 proof；Family authority；常依赖旧 SDK shape | 已有 Family tests；V2/V3 factory、V4 reverse binding、Curve registry 等路线成熟 | families/<family>/capabilities；算法保留、全部重绑新 SDK；canonical identity/request/action hash变化只失效本 Family |
 | [BRW] R3 | impl@d33c8b48 venues/**-family/{manifest,routes,codec,capture,discovery}.ts 与 *-family-plugin.ts | plugin assembly、old capture/route DTO 与 schema手写；Family authority | capture/parity形状与旧 catalog耦合 | families/<family>/manifest + capability-local schema-derived codec；manifest和schema重写，nomination/identity算法可调用旧提取 kernel |
 | [REJ] R4 | impl@d33c8b48 production-family-composition.ts、production-families/loader.ts、family-capability-shadow.ts、strict-catalog-registry-projection.ts | 手写中央 composition、shadow catalog与legacy facade | 新 Family 仍需碰中央 loader/registry；名称含 strict 不改变边界 | 由 build-time manifest discovery 生成 catalog；中央只 import generated artifact |
+| [BRW] R2/R3 | impl@5f104ced build-family-capability-manifest.ts | direct-import roots、deterministic static imports、exact capability/action closure与incomplete fail-closed成熟；同文件混入legacy registry/shadow supersession | :204-289,297-545；legacy/shadow branches明确不属于资产 | packages/catalog-generator + artifact-fingerprint；R2提取direct-root/exact-set/closure算法，R3按新大模板/BOM/schema重写；删除legacy、shadow与fixed domain constructor表；新增Family只改变自己的generated leaf与catalog root，不改中央source |
+| [BRW] R2/R3 | impl@5f104ced adapter-funding-runtime.ts | per-source并行、sibling failure isolation、generation-fenced publication、issuer-bound PreparedFundingOffer、borrow/repay owner检查；旧形状依赖LoadedFamilyBox/WeakMap/PlanFragment与中央publication sink | :98-190,197-341,420-545；source行为有旧test locator[MTM] | families/<id>/funding + packages/funding + solver + execution-program；每source签发opaque `FundingOfferRef`与typed outcome，unresolved不能证明empty；borrow/repay action及obligation roots由generated owners签发，中央只做capacity/asset/amount组合；仅Funding capability closure变化时失效 |
 | [BRW] R3 | impl@d33c8b48 planner/planner.ts、solver/{solver,plan-builder,quoter,pool-state-updater,victim-apply,post-impact-overrides}.ts | route enumeration、sizing、exact、victim与protocol state混合；import旧 TokenEdge/Family math | old route/solver tests和live路径可作算法参考 | packages/planner + packages/solver + packages/exact；中央只处理通用 edge、opaque choice/handle；Family math经 capability port调用 |
 | [ASR] R2/R3 | impl@ccb41fbb detector/{blockscan-scanner-core,blockscan-candidate-refinement,blockscan-mid-batch}.ts | ring enumeration、coarse score/rank、ordered bounded reads、cheap exact refine；旧实现依赖TokenEdge/协议mid fields/JS number，且deadline-unprobed可回流fallback | scanner:100-166,172-246,661-805；refinement:92-145,146-195,620-756；mid-batch:1-46 | packages/coarse-economics + planner/refinement；保留漏斗choreography与deterministic bounded batch，重写schema/ports；普通score只排序，unprobed进入bounded unranked lane且仍必须exact，绝不作为execution fallback |
+| [ASR] R2/R3 | impl@5f104ced detector/cycle-fingerprint.ts | token ring rotation/direction equivalence与competitor B→source B-1 temporal join；旧实现只lowercase字符串并用ethers UTF-8拼接 | :1-23；纯算法有旧test locator[MTM] | packages/evidence-correlation；R2保留canonical ring算法，R3用validated AssetRef、domain-separated codec与SourceAnchor重写；只用于competitor/research join和gap accounting，不得替代ordered RouteId、Graph、admission或execution identity |
 | [BRW] R1/R3 | impl@ccb41fbb {ev-evaluator,profit-token-valuation}.ts | next-block EIP-1559、gas/bid/valuation/freshness；旧中央写死Chainlink与token rule表 | ev:6-17,79-117,119-163,165-273；valuation:1-69 | packages/economics + safety；采用EIP-1559/整数舍入pure kernels，oracle/asset valuation由generated owner capability提供current-source facts；unknown valuation/gas/freshness fail-closed于EV/submission |
 | [ASR] R2 | impl@d33c8b48 solver/{amount-bounds,amount-propagation,v2-constant-product-math,v2-fee,v3-math,v4-math,curve-math}.ts | 纯数值算法与协议数学；当前位于中央 | mathematical tests；中央 import协议 math违反边界 | 通用 amount bounds留 solver；V2/V3/V4/Curve math移动对应 Family kernel，不得由中央 import |
 | [ASR] R2/R3 | impl@ccb41fbb solver/{amount-bounds,amount-propagation,flash-liquidity}.ts | bounded grid/GSS、逐leg strict exact、Funding capacity aggregation；旧flash cache硬编码Multicall和adapter holder，propagation仍依赖旧edge/session | bounds:7-79；propagation:20-137；flash:3-16,27-129 | packages/solver保留generic bounded optimizer和ordered exact propagation；Funding plugin签发source-bound CapacityFact，central只比较asset/amount/owner handle；Multicall只是generic transport batching |
@@ -364,7 +404,7 @@ row机械覆盖的旧文件或symbol默认R4不移植。若实施中发现遗漏
 | generated/production-family-entries.generated.ts | 22-entry inventory artifact；依赖旧composition | source:2-47 | R2保留generated exact-set机制，文件本身不复制 | release-intent→catalog-generator→generated/runtime-composition；BOM exact equality |
 | adapter-family-catalog-publication.ts | publication CAS/deep-freeze/carry；输出旧edge/catalog shape | 对应source与test/adapter-family-catalog-publication.ts存在[MTM] | R3边界重写、R2提取CAS/root算法 | attestation→instance catalog→ready；projection dependency root变化精确失效 |
 | adapter-family-lifecycle-content-cache.ts、adapter-family-exact-quote-cache.ts | object identity/旧DTO cache key、process maps | 对应tests存在[MTM] | R3重写 | artifact-fingerprint→packages/durable-store；exact source/request root完整绑定 |
-| adapter-family-discovery-checkpoint.ts、continuity-composition.ts、inventory-enumerator.ts、inventory-writer.ts | discovery cursor/inventory authority混合旧poolSets | 对应四个tests存在[MTM] | R3重写；仅R2提取range accounting/atomic writer | canonical SourcePlan→coverage receipt；nomination cache无omission authority |
+| adapter-family-discovery-checkpoint.ts、continuity-composition.ts、inventory-enumerator.ts、inventory-writer.ts；impl@5f104ced discovery-source-watermark.ts | discovery cursor/inventory authority混合旧poolSets；watermark另含family×source、contiguous与positive-only区分，也含禁止的producer-time predecessor choreography | 对应旧tests存在[MTM]；watermark:3-28,47-85,88-178,181-269 | R3重写；仅R2提取range accounting、family×source watermark、positive-only不推进completeness与atomic writer；`planLiveBackfillTargets` R4 | canonical SourcePlan→coverage receipt；nomination cache无omission authority；producer期间无backfill或watermark推进，只有next-generation builder可消费显式SourcePlan |
 | universe-rebuild-{probe,status}-cli.ts | probe mutates old checkpoint directly；status reads old envelope；CLI parse/process state | source存在；probe/status behavior未在本轮执行[MTM] | R3重写CLI boundary；只提取argument/status formatting R2 | apps/operator-cli通过runtime-local admin port请求同一generation-builder/writer；status只读，probe只替换retryable |
 | universe-rebuild-startup-cli.ts | standalone second startup/composition path，可动态import wiring | source存在[VEF] | R4完全废弃 | apps/searcher-runtime是唯一startup；operator CLI不得创建builder或promotion authority |
 | adapter-family-graph-runtime.ts | oldpublication→TokenEdge/Graph runtime bridge | source存在；旧Graph authority闭包[VEF] | R4完全废弃 | instance publication→packages/graph的唯一projection path |
@@ -493,9 +533,11 @@ absence slot或验收分支。
 │   ├── artifact-fingerprint/         # code/schema/interpreter closure hashes
 │   ├── catalog-generator/            # pure build tool; generated/ owns artifacts
 │   ├── request-program/              # issue/freeze/rehydrate FrozenProgram
+│   ├── work-plane/                   # generic authority/admission/fence/receipt choreography
 │   ├── scheduler/                    # lanes, permits, quotas, backpressure
 │   ├── shared-work/                  # settled + inFlight coalescing
 │   ├── discovery/                    # source plans, nomination accounting
+│   ├── discovery-transport/          # abortable RPC port; no coverage/admission authority
 │   ├── attestation/                  # fixed-cutoff lifecycle
 │   ├── generation-builder/           # sole source→attest→promotion coordinator
 │   ├── checkpoint/                   # single-writer durable CAS
@@ -508,12 +550,14 @@ absence slot或验收分支。
 │   ├── economics/                    # valuation, gas, EV and bid policy
 │   ├── planner/                      # protocol-neutral path enumeration
 │   ├── solver/                       # amount scheduling + opaque choices
+│   ├── funding/                      # source-isolated opaque offer refs + repayment binding
 │   ├── exact/                        # current-source exact coordinator
 │   ├── execution-program/            # ActionOwner compile + safety contract
 │   ├── final-sim/                    # reserved simulation runtime
 │   ├── submission/                   # unsigned dry-run / authorized port
 │   ├── safety/                       # repayment/conservation/standing/EV gates
 │   ├── evidence-emitter/             # native immutable EvidenceEvent writer
+│   ├── evidence-correlation/         # non-authoritative cycle/competitor temporal joins
 │   └── telemetry/                    # metrics only; never authority
 ├── families/
 │   └── <family-id>/
@@ -573,14 +617,18 @@ definitionCatalogRoot。apps/searcher-runtime 只 import 该content-addressed ge
 | graph | persisted generic edges与immutable GraphView lease | protocol math、live topology mutation |
 | producer | source-bound session与candidate lineage | Graph publication |
 | state-runtime | current-source sealed state facts | identity/admission |
+| work-plane | framework caller authority、generic work admission/fence与typed work receipt | Family verdict、protocol decode、Graph/coverage |
+| discovery-transport | bounded underlying RPC lifecycle与cancel settlement | source completeness、candidate/edge admission、cursor |
 | coarse-economics | source-bound coarse projection aggregation、generic rank与有proof的prune | edge creation、exact/execute authority、协议math |
 | economics | current valuation/gas/EV/bid policy与sealed economic receipt | Family pricing math、signing/broadcast authorization |
 | planner/solver | generic path与amount schedule | Family dispatch、protocol math |
+| funding | owner-issued、source/generation-bound FundingOfferRef集合 | provider地址表、协议liquidity数学、Graph写 |
 | exact | current-source exact orchestration | legacy quote fallback |
 | execution-program | owned action assembly与program hash | unknown action guessing |
 | final-sim | real simulation receipt | chain identity、quote creation |
 | submission | dry-run receipt或显式授权的external port | 签名授权本身 |
 | evidence | immutable事实记录 | 创建candidate/edge/quote/program/success |
+| evidence-correlation | content-addressed equivalence/temporal join receipts | route/Graph/admission/execution authority |
 | acceptance | fact query与validation verdict | production object creation |
 
 ### 8.2 允许依赖
@@ -655,6 +703,12 @@ reference-only工具进入runtime/validator closure；旧repo package/blob未登
 新增Family/Strategy修改中央源码；reuse ledger与实际production blob closure不一致。脚本只机械收集和比较
 这些事实，不能通过修改allowlist把违规结构声明为正确。
 
+[PFD] 不存在一个可以给任意generated tree授权的paths-only `generated-manifest.json`。除§19.5固定GateCore
+release generator外，任何新Family catalog、strategy catalog、runtime composition或其他generated output在自己的
+专用content-addressed ledger与fixed fresh-regeneration adapter进入同一machine gate之前一律`invalid`。专用合同必须
+绑定exact generator/input closure、固定output set、每个output bytes/length、semantic roots与ledger hash，并逐字
+重建；output与manifest/ledger联合手改不能获得credit。inventory-only manifest可以存在，但永远不是authority。
+
 [PFD] required credit只能来自固定Git/build分母与pinned compiler/build graph：TypeScript/JavaScript读取exact
 `tsconfig`、NodeNext resolution、workspace package exports/imports及build metafile；Rust读取locked cargo
 metadata、compiler messages/dep-info、features/build-script/proc-macro与generated inputs；Solidity读取pinned
@@ -670,6 +724,31 @@ denominator roots全部hash绑定。每个tracked file同时绑定index blob与c
 `coverageClass="bootstrap-lexical" / requiredCredit=false / legacyZeroCredit=false`，不得命名为最终check、挂名
 证明production closure或使baseline通过。所有mutation fixture按caseId+path+offset+diagnostic形成exact
 multiset；“出现过某个错误”不能给同文件其他漏检攻击喂绿。
+
+[PFD] compiler-visible implementation closure以exact `entrypointId + tsconfig`为查询键，不允许同一路径在多个
+compiler context中按排序任选一个。closure digest覆盖该entrypoint的transitive tracked source files及其index
+blob/SHA-256/byte length、resolved import/reference/lib-reference edges、exact tsconfig与normalized compiler
+options、TypeScript compiler bundle与实际读取的lib/ambient bytes、scope内package manifests、external dependency
+specifier及其exact logical install owner/lock record。真实路径只用于读取bytes，绝不能在symlink/嵌套package上
+回退猜测root lock record；无法证明owner即invalid。`declare global`、global script、`export as namespace`及命中
+该entry closure目标的module augmentation属于closure；无关augmentation、普通未引用source和已安装但未消费的
+package不得污染它。dirty/untracked、index bytes不一致、unresolved edge、untracked closure member或ambiguous
+path均返回invalid/null，不得签发closure observation；program descriptor、函数名、`Function.toString()`或调用者
+提供的手写file list都不能替代该digest。
+
+[PFD] boundary graph必须来自同一个真实TypeScript Program的usage-site resolution，不能再用独立AST scanner猜
+另一张图：NodeNext的`import`/`require`/dynamic import/`ImportTypeNode`/JSDoc import按各自resolution mode解析，
+`/// <reference types>`使用type-reference resolver，module augmentation也保留真实target edge。`parsed.fileNames`或
+Program实际读取的repository外source、realpath逃逸、symlink逃逸或未跟踪source一律invalid，不能先filter再让
+receipt通过。所有source root必须由release layout声明；`runtime/`属于production-runtime，未知root不能默认降成
+metadata。clean/pushed事实还必须证明upstream是非`.` remote的`refs/remotes/*`，本地同SHA ref不能冒充已push。
+
+[PFD] 某entrypoint的compiler closure只要实际消费`node:` builtin，就必须额外绑定当前Node executable bytes、
+`process.version/process.versions/process.release`、platform与arch；未消费Node builtin的无关closure不得被该runtime
+identity污染。当前pure governance只允许确定性的`node:crypto`与`node:util`，filesystem/process/network等仍禁止。
+TypeScript `Program`与`SourceFile` AST只是采证时的瞬态实现对象，不是receipt或authority；boundary不得按entrypoint
+长期缓存完整Program。优化前后必须在同一个tracked denominator上产生逐字相同的receipt，且真实denominator必须在
+默认4 GiB heap内完成；提高heap、删root、跳过lib、`skipLibCheck`或缩小closure都不能作为修复。
 
 ## 9. Family SDK and plugin boundary
 
@@ -755,6 +834,16 @@ type StageFamilyRefs =
 `GeneratedFamilyEntryV1`或其它stage callable。Candidate、Identity、Descriptor、RouteMemo、State、Choice与
 Action payload对中央都是schema-tagged opaque canonical bytes；中央可以校验schema/hash/size/source/issuer，
 但不能解析协议意义。
+
+[PFD] catalog generator只接受release-intent BOM中声明的Family public entry；大模板的每个present capability与
+action owner必须是可解析的direct-import root，不能是inline callback、预组装god object、动态import或另一
+capability的shared semantic root。generator从真实compiler closure生成每个capability leaf、declared-absent leaf、
+action owner leaf与stage-local static import；BOM、发现的public entries、generated output exact set必须相等，
+unknown、duplicate、stale或incomplete一律阻止build。旧shadow/legacy registry不参与generator输入或supersession。
+
+[PFD] 每个generated leaf单独绑定entrypoint/compiler closure、schema/interpreter与传递依赖；global catalog root可因
+新增Family变化，但既有未变leaf、memo与qualification不因此失效。生成器自身closure和generated manifest进入
+boundary gate，手写清单、排序后悄悄丢duplicate或只检查最终文件存在都不能替代exact regeneration check。
 
 ### 9.2 Plugin-owned keys
 
@@ -892,9 +981,17 @@ capability及传递依赖进入fingerprint。未声明或未被该artifact请求
 | final-sim safety contract变化 | execution/final-sim receipt失效；identity memo不失效 |
 | definition catalog新增独立Family | global definitionCatalogRoot变化；既有Family semantic memo仍可内容寻址复用 |
 | strategy catalog/implementation变化 | 新producer sessions、planning/exact downstream artifacts；ready Graph与Family memo不失效 |
+| 新增与既有predicate无依赖的release predicate | `predicateCompositionRoot`、`gateCoreRuntimeClosure`及新的release fact/certificate变化；既有predicate leaf、adapter/oracle/generic-core qualification与memo仍可复用，不重跑未变化predicate的mutation/oracle qualification |
+| current registry新增与既有predicate/observer dependency closure无关的observer signing key或revocation entry | `observerKeySetRoot`/`revokedObserverKeyIdsRoot`、registry/release root及依赖它们的release fact变化；未读取该key/revocation的predicate/observer qualification仍可复用，只有其requested dependency closure显式包含该材料时才精确失效 |
 
 [PFD] “commit 变化”本身不是 semantic invalidation。每次部署仍需 exact runtime SHA 与新 process
 anchor，但未受影响的 content-addressed Family memo 可以组合进新 ready generation。
+
+[PFD] 上表中的release-root变化仍必须签发新的release fact/certificate；它不能通过沿用旧的
+`RELEASE_AUTHORITY`或旧AcceptanceCertificate来“复用”。新增无关predicate只改变release composition/runtime
+root，不要求未变化predicate重新执行mutation或independent-oracle qualification。新增无关observer signing key或
+revocation entry只改变其registry/release membership roots；除非既有predicate/observer的requested dependency
+closure实际读取该key或revocation，否则其qualification corpus、observer certificate与predicate memo仍保持可复用。
 
 ### 10.4 Capability impact algorithm
 
@@ -1098,6 +1195,47 @@ epoch；stale epoch 的迟到结果必须丢弃并记录 telemetry，不能进�
 可在自己的 extension schema 中提供协议解释，但中央调度只依据 retry class、work class、deadline 与
 resource cost，不依据 Family 名称。
 
+### 12.5 Framework-owned unified work plane
+
+[PFD] 所有nomination/identity/materialization/projection/state/coarse/exact/action-proof工作都经同一个通用
+work plane；这不是让中央拥有Family语义，而是避免每个plugin shell各自复制caller、deadline、permit、fence、
+decode与failure mapping。work class由generated capability declaration提供，中央不得用stage名或FamilyId switch：
+
+~~~ts
+interface CapabilityWorkIntentV1 {
+  readonly intentId: Hash;
+  readonly ownerRef: GeneratedCapabilityOwnerRef;
+  readonly capabilityRef: GeneratedCapabilityRef;
+  readonly workClassRef: GeneratedWorkClassRef;
+  readonly source: CanonicalSourceView;
+  readonly generationLeaseRef: GenerationLeaseRef;
+  readonly frozenProgramRef: FrozenProgramRef;
+  readonly programInputRef: SemanticArtifactRef;
+  readonly consumerDeadline: MonotonicDeadline;
+}
+
+type CapabilityWorkOutcomeV1 =
+  | { kind: "resolved"; factRef: SemanticArtifactRef; receipt: WorkReceiptV1 }
+  | {
+      kind: "unresolved";
+      failureStage: "intent" | "authority" | "admission" | "queue" |
+        "transport" | "interpretation" | "pre-publication-fence";
+      failureCode: StableReasonCode;
+      retryClass: "retryable" | "invalid-program";
+      receipt: WorkReceiptV1;
+    };
+~~~
+
+[PFD] 固定顺序是：exact-decode intent→复核owner/capability/work-class membership→source/generation fence→
+framework签发caller authority→policy与budget admission→scheduler签发bounded physical executor→执行完整
+FrozenProgram→再次fence→owning interpreter解释typed facts→publication前最后fence→封存receipt。任何阶段失败
+都产生同一分母内的typed terminal work outcome；transport revert本身仍交给plugin解释，framework exception不得
+转成chain-proven rejection。final-sim使用同一receipt/fence语义但走独立reserved pool与专用entrypoint。
+
+[PFD] work plane只拥有通用控制流。program/schema/interpreter/owner/source属于semantic WorkKey；queue、lane、
+quota与scheduler policy只进入performance receipt。新增Family或capability只增加generated declaration与owner
+evaluator，不修改work-plane source，也不使未依赖该capability的memo或qualification失效。
+
 ## 13. Complete runtime sequence
 
 ### 13.1 Identity coverage 与 50-block observation 分离
@@ -1121,6 +1259,16 @@ snapshot/history、且通过连续canonical extension更新到新cutoff时，才
 [PFD] file、pinned、score、competitor hit 与 runtime observation 都只能 nomination/provenance；它们不能
 授予 omission authority。每个 SourcePlan 必须声明 completeness semantics：complete snapshot、contiguous
 history、point lookup 或 nomination-only；只有前两类可贡献对应 partition coverage。
+
+[PFD] coverage内部按`ownerRef × sourcePlanRef`保存watermark和issue attribution。`contiguous`只有在
+`from == previousAppliedThrough + 1`且该source exact partition完整时才推进；`positive-only`可以提交发现的
+candidate但永不推进omission/completeness。source失败只影响声明依赖它的owner partition，不能把整个Family或
+全部source抹成empty。watermark只由startup/next-generation builder在durable envelope内推进；producer没有
+live-backfill target、predecessor choreography或cursor writer。
+
+[PFD] discovery RPC也必须经统一scheduler的startup-RPC-fast lane。consumer deadline/AbortSignal必须真正传到
+underlying HTTP/socket并在settle后释放permit；只停止await而让请求继续占连接不算取消。transport port不得依赖
+provider私有方法，也不得因支持abort而获得source completeness、candidate admission或Graph authority。
 
 ### 13.2 Candidate 与 instance 去重
 
@@ -1459,6 +1607,12 @@ quality只能用于telemetry或soft rank，不能hard skip或形成chain-proven 
 不同事实；ordered transition、pre/post-state completeness、overlay/preCalls与replay source必须可独立复算。中央不
 能因看到topic、selector或某个空effect替Family作chain-proven否定，也不能用sender质量历史硬跳过。
 
+[PFD] competitor/research correlation另有`CycleEquivalenceKey`，把validated AssetRef ring规范为rotation与direction
+不变序列，并以domain-separated codec绑定source block。competitor tx在block B执行时只可与`source.number=B-1`
+的search opportunity作temporal join；canonical hash/reorg不符则invalid。该key只回答“是否是同一个token cycle”，
+不包含venue、direction、size或route owner，因此只能用于gap attribution/coverage分析；production RouteId仍是有序
+edge refs+directions+generation+objective的identity，CycleEquivalenceKey绝不能admit route、合并Graph或授权执行。
+
 ### 16.2 State acquisition
 
 [PFD] Family capability 声明 StateReadProgram；中央 state-runtime 合并相同 physical reads、batch、dedupe、
@@ -1550,6 +1704,16 @@ route assessment还必须绑定完整RouteHandle immutable binding、同一gener
 完整projection/proof/valuation/gas roots。任何被送入后续的route仍必须current-source exact；unprobed或粗估正值
 都不能成为execution fallback。
 
+[PFD] coarse/exact admission的公平与failure breaker按generated opaque isolation refs工作。每条route声明排序后的
+`ownerRefs + instanceRefs + dependencySetRef`；least-served prefix只在相同经济rank边界内公平选择，不改route经济
+顺序。只有owning evaluator签发、且与该route/edge exact绑定的typed failure才能打对应instance/owner breaker；
+无法归因的错误只打exact dependency-set composite，绝不能猜Family或封掉全局。breaker按generation与stage隔离，
+连续成功关闭对应key，policy阈值只进入performance receipt。
+
+[PFD] breaker只能阻止尚未probe的后续工作，不能回溯删除已经current-source exact-positive的route。所有blocked、
+selected、exact-positive、failed与not-probed必须守恒进入同一head denominator；打开circuit是显式resource/quality
+diagnostic，不是chain-proven rejection、Graph删除或下次generation的永久状态。
+
 [PFD] coarse extension是versioned optional capability：实现它的Family在自己的package提供program与interpreter，
 不实现的Family仍可走unranked lane。新增或改变coarse capability只失效该owner的coarse cache/相关performance
 qualification；不改变static Edge/Graph、identity memo，也不使无依赖的Swap/Protocol/Credit Family重验。
@@ -1605,6 +1769,33 @@ amount propagation；每个probe都走同一current-source exact coordinator。F
 StateRead/Capacity capability签发`asset + maxAmount + ownerHandle + source/proof root`，中央只比较容量并选择
 owner handle。Morpho/Balancer地址、balanceOf holder、Multicall地址或flash action不得进入solver；Multicall只可
 作为state-runtime通用batch transport。没有足够source-bound capacity时route不可执行，禁止静态allowlist猜测。
+
+[PFD] Funding不是solver里的特殊地址表，而是owner-issued source-isolated offer集合：
+
+~~~ts
+interface FundingOfferRefV1 {
+  readonly offerId: Hash;
+  readonly ownerRef: GeneratedFundingOwnerRef;
+  readonly fundingSourceRef: OpaqueFundingSourceRef;
+  readonly asset: AssetRef;
+  readonly maxAmount: U256String;
+  readonly feeFactRef: SemanticArtifactRef;
+  readonly source: CanonicalSourceView;
+  readonly generationId: string;
+  readonly capabilityDigest: Hash;
+  readonly evidenceRoot: Hash;
+  readonly borrowActionOwnerRef: GeneratedActionOwnerRef;
+  readonly repaymentObligationOwnerRef: GeneratedSafetyOwnerRef;
+}
+~~~
+
+[PFD] 每个funding source独立经unified work plane结算并产生`verified-empty | verified-offer | retryable |
+invalid-program`；一个asset/provider的失败不能压掉健康sibling。只有所有相关source都verified时，零offer才是
+可信empty；存在unresolved时保留上一份仍valid publication或使本次selection unavailable，不能发布“空流动性”。
+offer handle不可反序列化或由solver伪造，rehydrator必须按当前owner/capability/source重新签发。borrow action、
+repayment action/obligation和evidence root必须来自该offer声明的generated owners，并在execution compiler与
+final-sim再次验证。新增或修改Funding capability只失效Funding offer/route/execution依赖，不使无依赖的
+Swap、Protocol或Credit Family重验。
 
 ### 16.5 Current-source exact
 
@@ -2438,9 +2629,97 @@ interface PredicateSpecV1 {
 ~~~
 
 [PFD] predicate只能读取声明的claim/observation schemas；同一canonical inputs/facts不得因producer为impl或
-Aloha而改变verdict。除impl外不建设第二reference producer或校准路径。缺load-bearing observation、unknown schema、stale qualification或不完整分母返回
+Aloha而改变verdict。reference-producer集合严格是唯一的`impl`；不建设DS producer、DS adapter、第二
+reference adapter或第二校准路径。缺load-bearing observation、unknown schema、stale qualification或不完整分母返回
 `invalid`；已观察到违反contract的事实才返回`fail`；事实完整且predicate成立才返回`pass`。展示层可显示
 producer identity，predicate不得据此选阈值、放宽stage或改变expected result。
+
+[PFD] GateCore内部仍有两个不可合并的contract：可信的`GateCoreAuthorityPinV1`与不可信的
+`GateCoreInputV1`。authority pin固定registry root/governance/epoch、typed PredicateSpec、predicate/oracle
+program descriptors、selected predicate composition leaf、release composition root、selected predicate
+implementation closure、generic GateCore implementation closure、full release GateCore runtime closure以及当前
+Verifier qualification subject，并显式固定该predicate拥有的`signedInvocationRoleId`。input只承载query、claims、observations、raw refs/bytes、process/store material与
+`predicateFacts: readonly unknown[]`；selected evaluator负责对自己的fact bundle exact-decode。input的任何字段都
+不得选择、替换或回填authority，authority也不得从claim推导。
+
+唯一public package入口是单参数`evaluateGateCore(untrustedInput)`，且`acceptance/gate-core/package.json`的`.`
+只能导出`acceptance/gate-core/src/generated/release-runtime.ts`。该generated wrapper直接import同目录
+`predicate-composition.ts`的generated root与resolver，以及同目录fixed fail-closed `release-authority.ts`；它不得import
+authoring `release-composition.ts`、generator或qualification oracle。静态release authority不能由caller提供、
+选择、替换或从input恢复；caller也不能注入resolver、evaluator、clock或composition。
+`evaluateGateCoreRuntime(authorityPin, untrustedInput, composition, nowUnixNs)`仅是qualification/internal runtime
+contract，供受信qualification path使用，绝不是public API或兼容双参数入口。
+
+[PFD] `release-composition.ts`只拥有静态authoring intent与纯root helper，不拥有runtime map。受约束generator从
+该literal intent校验adapter/oracle named export与真实compiler closure，再生成exact evaluator imports、
+`RELEASE_PREDICATE_BINDINGS`、map、root与resolver。authoring tuple只声明`predicateId`、`predicateSpecDigest`、
+predicate/oracle program descriptor digests、`adapterVersion`、`oracleVersion`、adapter module/export及exactly one
+oracle module/export；它不得自报`compositionLeafDigest`或implementation export digest。generator从两个module的
+exact tracked bytes分别重算named-export digest，并以`aloha/predicate-composition-leaf/v2`对完整tuple派生leaf，
+generated BOM再加入两个entrypoint、两个export digest与derived leaf。oracle只进入
+qualification closure，绝不能被generated live resolver import。新增predicate只增authoring tuple与generated
+BOM entry；generic GateCore不增加predicate分支。
+
+[PFD] 当前candidate generator拥有且必须逐字生成以下exact三个generated outputs，不能扫描目录后把手写文件
+追认为generated：
+
+1. `acceptance/gate-core/src/generated/predicate-composition.ts`；
+2. `acceptance/gate-core/src/generated/release-role-manifest.ts`；
+3. `acceptance/gate-core/src/generated/release-runtime.ts`。
+
+`acceptance/gate-core/src/generated/release-authority.ts`是第四个固定candidate文件，但不属于可授予authority的
+generated output：generator只能把它渲染为exact fail-closed `RELEASE_AUTHORITY = null`，ledger把它单独记录在
+`fixedOutputs`。candidate generator不存在生成non-null authority的代码路径。完整Stage 1–6 qualification与外部
+reviewed issuance闭合前，public wrapper必须在读取untrusted input或clock前返回
+`release-authority-unavailable`；test-only authority/fixture、caller input、candidate仓库内的key/root或手改
+fixed/generated文件都不能替代外部release authority。
+
+[PFD] machine boundary同样不得接受caller传入的release-role manifest、role map或entrypoint集合。它只读取仓库中
+唯一tracked manifest及固定`acceptance/gate-core/src/release-role-manifest.ledger.json`，从当前compiler graph重算
+每个role closure，并在同一个machine gate内执行固定generator的fresh `--check`与逐字比较；测试必须在临时仓库
+生成同形manifest与ledger，不能靠test-only option绕过真实文件来源。ledger exact keys为`schemaVersion`、
+`manifestPath`、`compositionPath`、`inputFiles`、`generatorFiles`、`outputs`、`fixedOutputs`、`inputRoot`、
+`generatorRoot`、`ledgerHash`；每个file record绑定path、SHA-256与byte length，manifest output另绑定manifest
+root。`outputs`必须恰好等于上述三个generated路径，`fixedOutputs`必须恰好等于null authority路径，两者的union
+才是四个固定candidate文件。generator/input/output/fixed-output任一bytes变化都必须使fresh check失败。只记录
+路径、输出存在、output与ledger一起手改或fixture自报“generated”均不能排除陈旧/伪造输出。
+
+[PFD] release-role regeneration ledger与§5.1.1 clean-room `reuse-ledger.yaml`是两个独立authority artifact：前者
+证明本release生成输入、generator、三个generated outputs与一个fixed null-authority output逐字同源；后者记录旧symbol的允许复用与review。两者不能互相
+替代。package export target、generated manifest的releaseRuntime binding、ledger output path和真实compiler-derived
+package entrypoint必须全部指向同一个generated public wrapper，否则`invalid`。
+
+[PFD] GateCore compiler identity必须真实分成四层，不能靠注释声称隔离：
+
+1. generic core entrypoint只依赖codec/specs与纯`PredicateCompositionPort` type，不import/re-export release
+   composition或任一具体predicate；generic执行函数只供同package release wrapper调用，不是public API；
+2. selected predicate adapter拥有独立compiler closure与composition leaf；leaf绑定predicate spec、predicate/oracle
+   descriptors与adapter version；
+3. generated predicate composition root绑定当前exact leaf set；新增无关predicate只改变该root；authoring
+   composition不在live runtime closure；
+4. 唯一public generated release wrapper静态绑定generated resolver，`gateCoreRuntimeClosureDigest`覆盖
+   wrapper→generated composition→全部selected adapters的完整runtime closure，且不包含qualification oracle。
+
+Verifier qualification绑定第1、2层；generic core或selected predicate变化会使相关certificate stale。新增无关
+predicate只要求新的composition/release-runtime事实和AcceptanceCertificate，不得迫使未变化predicate重跑其
+mutation/oracle qualification。任何compiler entrypoint实际closure与所声称层级不符，qualification均为invalid。
+
+[PFD] load-bearing observer的输出schema只包含typed canonical facts、raw locator/ref、observer process
+receipt与可审计的采集材料；不得提交`outcome`、`verdict`、`checks.passed`、`expectedVerdict`或任何派生
+acceptance boolean。出现这些未声明字段即`invalid`。GateCore只对exact-decoded input执行typed、frozen
+`PredicateSpec`并机械地产生`pass`/`fail`/`invalid`；observer、resolver、脚本和展示层都不能预先提交或覆盖
+该结果。
+
+[PFD] GateCore先把artifact refs、resolution claims、resolver policies与retention leases逐项exact-decode并闭合
+exact union，再把这些normalized immutable values交给selected evaluator；evaluator不得重新读取未解码input中的
+policy/lease对象。release composition只能从静态、受release约束的代码选择evaluator，不能动态发现module、执行
+producer callback或按producer名称切换predicate。
+
+[PFD] GateCore在任何nested decoder、bytes分配或hash之前执行统一资源预检：所有顶层与嵌套数组必须是
+bounded、dense、exact enumerable data-property数组；Proxy在任何reflection/trap前直接`invalid`，accessor不得被
+执行。每个observed mirror的wire/declared byte length均不得超过canonical上限，同一input内全部mirror bytes的
+累计值也不得超过同一冻结预算。超限、稀疏、额外array key、Proxy或accessor均是`invalid`，不能通过推迟到
+predicate decoder来消耗无界资源。
 
 ### 19.6 Verifier / Observer Qualification
 
@@ -2454,8 +2733,118 @@ interface QualificationRegistrySnapshotV1 {
   readonly trustedIssuerSetRoot: Hash;
   readonly certificateSetRoot: Hash;
   readonly revokedCertificateIdsRoot: Hash;
+  readonly observerKeySetRoot: Hash;
+  readonly revokedObserverKeyIdsRoot: Hash;
   readonly previousRegistryRoot: Hash | null;
-  readonly governanceApprovalHash: Hash;
+  readonly governanceTrustAnchorHash: Hash;
+}
+
+interface ExternalQualificationIssuerKeyV2 {
+  readonly schemaVersion: 2;
+  readonly kind: "aloha.external-qualification-issuer-key";
+  readonly issuerId: string;
+  readonly algorithm: "ed25519";
+  readonly publicKeyHex: string;
+  readonly validFromRegistryEpoch: DecimalString;
+  readonly validThroughRegistryEpoch: DecimalString;
+  readonly audienceHash: Hash;
+  readonly keyId: Hash;
+}
+
+interface ExternalQualificationTrustAnchorV2 {
+  readonly schemaVersion: 2;
+  readonly kind: "aloha.external-qualification-trust-anchor";
+  readonly issuerSetRoot: Hash;
+  readonly issuerKeySetRoot: Hash;
+  readonly governanceIssuerId: string;
+  readonly governanceKeyId: Hash;
+  readonly validFromRegistryEpoch: DecimalString;
+  readonly validThroughRegistryEpoch: DecimalString;
+  readonly currentRegistryEpoch: DecimalString;
+  readonly audienceHash: Hash;
+  readonly anchorId: Hash;
+}
+
+interface SignedQualificationRegistryApprovalV2 {
+  readonly schemaVersion: 2;
+  readonly kind: "aloha.signed-qualification-registry-approval";
+  readonly registryRoot: Hash;
+  readonly registryPayloadHash: Hash;
+  readonly issuerKeySetRoot: Hash;
+  readonly epoch: DecimalString;
+  readonly audienceHash: Hash;
+  readonly issuerId: string;
+  readonly keyId: Hash;
+  readonly approvalId: Hash;
+  readonly payloadHash: Hash;
+  readonly signatureAlgorithm: "ed25519";
+  readonly signatureHex: string;
+}
+
+interface SignedQualificationCertificateV2 {
+  readonly schemaVersion: 2;
+  readonly kind: "aloha.observer-qualification" | "aloha.verifier-qualification";
+  readonly certificateId: Hash;
+  readonly payloadHash: Hash;
+  readonly registryRoot: Hash;
+  readonly epoch: DecimalString;
+  readonly audienceHash: Hash;
+  readonly issuerId: string;
+  readonly keyId: Hash;
+  readonly signatureAlgorithm: "ed25519";
+  readonly signatureHex: string;
+}
+
+interface SignedReleaseAuthorityApprovalV2 {
+  readonly schemaVersion: 2;
+  readonly kind: "aloha.signed-release-authority-approval";
+  readonly authorityPinDigest: Hash;
+  readonly externalTrustAnchorRoot: Hash;
+  readonly issuerKeySetRoot: Hash;
+  readonly registryApprovalId: Hash;
+  readonly registryRoot: Hash;
+  readonly verifierCertificateId: Hash;
+  readonly observerCertificateIds: readonly Hash[];
+  readonly observerCertificateIdsRoot: Hash;
+  readonly predicateCompositionRootDigest: Hash;
+  readonly gateCoreRuntimeClosureDigest: Hash;
+  readonly gateCoreImplementationClosureDigest: Hash;
+  readonly releaseRoleManifestRoot: Hash;
+  readonly candidateReleaseCommit: GitSha40;
+  readonly epoch: DecimalString;
+  readonly audienceHash: Hash;
+  readonly issuerId: string;
+  readonly keyId: Hash;
+  readonly approvalId: Hash;
+  readonly payloadHash: Hash;
+  readonly signatureAlgorithm: "ed25519";
+  readonly signatureHex: string;
+}
+
+interface ObserverSigningKeyV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.observer-signing-key";
+  readonly keyId: Hash;
+  readonly observerQualificationId: Hash;
+  readonly roleId: string;
+  readonly algorithm: "ed25519";
+  readonly publicKeyHex: string; // exact lowercase 32-byte 0x hex
+  readonly validFromRegistryEpoch: DecimalString;
+  readonly validThroughRegistryEpoch: DecimalString;
+  readonly audienceHash: Hash;
+}
+
+interface RegistryMembershipFactsV1 {
+  readonly trustedIssuerIds: readonly string[];
+  readonly certificateMemberships: readonly {
+    readonly certificateKind: "observer" | "verifier";
+    readonly certificateId: Hash;
+    readonly certificatePayloadHash: Hash;
+    readonly issuerId: string;
+  }[];
+  readonly revokedCertificateIds: readonly Hash[];
+  readonly observerSigningKeys: readonly ObserverSigningKeyV1[];
+  readonly revokedObserverKeyIds: readonly Hash[];
 }
 
 interface ObserverQualificationCertificateV1 {
@@ -2487,7 +2876,14 @@ interface VerifierQualificationCertificateV1 {
   readonly payloadHash: Hash;
   readonly qualificationSpecDigest: Hash;
   readonly predicateSpecDigest: Hash;
+  readonly predicateProgramDescriptorDigest: Hash;
+  readonly oracleProgramDescriptorDigest: Hash;
+  readonly oracleImplementationClosureDigest: Hash;
+  readonly oracleImplementationExportDigest: Hash;
+  readonly predicateCompositionLeafDigest: Hash;
   readonly predicateImplementationDigest: Hash;
+  readonly predicateImplementationExportDigest: Hash;
+  readonly gateCoreImplementationClosureDigest: Hash;
   readonly observerQualificationIds: readonly Hash[];
   readonly requiredObserverRoles: readonly {
     readonly roleId: string;
@@ -2554,6 +2950,39 @@ interface AcceptanceQueryV1 {
   readonly correlationId: string | null;
 }
 
+interface ObserverInvocationBindingV1 {
+  readonly kind: "semantic-artifact" | "production-receipt";
+  readonly objectId: Hash;
+  readonly rawArtifactRefId: Hash;
+  readonly canonicalBytesSha256: Hash;
+  readonly byteLength: DecimalString;
+}
+
+interface SignedObserverInvocationSnapshotV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.signed-observer-invocation-snapshot";
+  readonly attestationId: Hash;
+  readonly payloadHash: Hash;
+  readonly registryRoot: Hash;
+  readonly registryEpoch: DecimalString;
+  readonly observerQualificationId: Hash;
+  readonly roleId: string;
+  readonly keyId: Hash;
+  readonly audienceHash: Hash;
+  readonly invocationNonce: Hash;
+  readonly issuedAtUnixNs: DecimalString;
+  readonly expiresAtUnixNs: DecimalString;
+  readonly acceptanceQueryId: Hash;
+  readonly qualifiedFactSnapshotId: Hash;
+  readonly semanticArtifactBindings: readonly ObserverInvocationBindingV1[];
+  readonly semanticArtifactSetRoot: Hash;
+  readonly productionReceiptBindings: readonly ObserverInvocationBindingV1[];
+  readonly productionReceiptSetRoot: Hash;
+  readonly bindingSetRoot: Hash;
+  readonly signatureAlgorithm: "ed25519";
+  readonly signatureHex: string; // exact lowercase 64-byte 0x hex
+}
+
 interface AcceptanceCertificateV1 {
   readonly schemaVersion: 1;
   readonly kind: "aloha.acceptance-certificate";
@@ -2565,41 +2994,214 @@ interface AcceptanceCertificateV1 {
   readonly observationSetRoot: Hash;
   readonly rawArtifactSetRoot: Hash;
   readonly qualificationRegistryRoot: Hash;
+  readonly externalTrustAnchorRoot: Hash;
+  readonly externalIssuerKeySetRoot: Hash;
+  readonly qualificationRegistryApprovalId: Hash;
+  readonly releaseAuthorityApprovalId: Hash;
+  readonly authorityPinDigest: Hash;
+  readonly qualificationAudienceHash: Hash;
+  readonly releaseRoleManifestRoot: Hash;
+  readonly candidateReleaseCommit: GitSha40;
   readonly predicateSpecDigest: Hash;
+  readonly predicateProgramDescriptorDigest: Hash;
+  readonly oracleProgramDescriptorDigest: Hash;
+  readonly oracleImplementationClosureDigest: Hash;
+  readonly oracleImplementationExportDigest: Hash;
+  readonly predicateCompositionLeafDigest: Hash;
+  readonly predicateCompositionRootDigest: Hash;
+  readonly predicateImplementationClosureDigest: Hash;
+  readonly predicateImplementationExportDigest: Hash;
+  readonly gateCoreImplementationClosureDigest: Hash;
+  readonly gateCoreRuntimeClosureDigest: Hash;
   readonly verifierQualificationId: Hash;
   readonly observerQualificationIds: readonly Hash[];
+  readonly signedInvocationAttestationId: Hash;
+  readonly invocationBindingSetRoot: Hash;
   readonly reasonSetRoot: Hash;
   readonly verdict: "pass" | "fail" | "invalid";
 }
 ~~~
 
-[PFD] 上述每种对象均使用自己的domain separator：
-`payloadHash = H("<kind>/payload/v1", canonical(all fields except objectId/payloadHash))`，再以
-`objectId = H("<kind>/id/v1", payloadHash)`生成其`registryId/certificateId/observationId/snapshotId/queryId`。
-所有数组按schema声明的ordered或sorted语义exact编码；不得JSON stringify猜测、忽略未知字段或排除任意时间/commit
-字段。AcceptanceCertificate绑定exact query、claim/observation/raw roots、qualification registry与完整reason set，
-不能把旧pass certificate换一组facts重放。
+[PFD] 上述每种对象均使用自己的domain separator与exact wire schema；顶层key set必须与对应`kind`完全相等，
+unknown key、duplicate key、缺失字段、非canonical JSON或kind/schema不匹配均为`invalid`。每个schema固定自己的
+identity-exclusion set；不得由decoder任意排除时间、commit、签名、raw locator或其它字段。声明`payloadHash`的
+对象使用`H("<kind>/payload/v1", canonical(schema-defined payload))`，再以该kind规定的`.../id/v1`生成
+`registryId/certificateId/observationId/snapshotId/queryId/inputId/resultId`等identity；`PredicateSpec.specDigest`
+与`ObserverSigningKeyV1.keyId`是各自schema固定的非payloadHash identity。后者使用
+`H("aloha/observer-signing-key/v1", canonical(all key fields except keyId))`。
+
+[PFD] `SignedObserverInvocationSnapshotV1.payloadHash`覆盖除`attestationId`、`payloadHash`与`signatureHex`外的
+全部字段；`attestationId = H("aloha/signed-observer-invocation-snapshot/id/v1", { payloadHash, signatureHex })`。
+`semanticArtifactSetRoot`与`productionReceiptSetRoot`分别对各自严格按`objectId`排序且唯一的binding数组作
+domain-separated hash，`bindingSetRoot = H("aloha/signed-observer-invocation-snapshot/binding-set/v1",
+{ semanticArtifactSetRoot, productionReceiptSetRoot })`。签名者签署的bytes不是整个JSON，而是canonical object
+`{ domain: "aloha/signed-observer-invocation", version: 1, keyId, registryRoot, payloadHash }`，并使用该key声明的
+Ed25519 public key。
+
+[PFD] `ObserverInvocationBindingV1.kind`是安全的decoder selector，不是可忽略的label：
+`semantic-artifact`必须按`SemanticArtifactV1` exact schema decode并byte-identical re-encode，
+`production-receipt`必须按`ProductionReceiptV1` exact schema decode并byte-identical re-encode；两者的
+`objectId`、`canonicalBytesSha256`、`byteLength`、media type、schema ref、mirror/ref content hash都必须逐项相符。
+所有数组按schema声明的ordered或sorted语义exact编码；不得JSON stringify猜测。AcceptanceCertificate绑定exact query、
+claim/observation/raw roots、qualification registry、signed invocation与完整reason set，不能把旧pass certificate
+换一组facts重放。
+
+[PFD] signed invocation只有在`invocationNonce`非零、`issuedAtUnixNs < expiresAtUnixNs`、key的registry epoch
+位于`[validFromRegistryEpoch, validThroughRegistryEpoch]`且audience、registry、query、snapshot均exact绑定时才可
+继续验证。GateCore的时间窗口是发行时刻inclusive、过期时刻exclusive：`issuedAtUnixNs <= now < expiresAtUnixNs`，
+且`expiresAtUnixNs - issuedAtUnixNs <= maxInvocationTtlUnixNs`。GateCore目前是pure/stateless：同一个有效
+attestation/input可被幂等重复评价；不存在nonce replay ledger或one-time consumption。若未来要求一次性nonce，
+必须在GateCore外增加明确的stateful authority/runtime contract、durable replay ledger与其证据，不能把当前
+stateless行为描述成已防重放。
+
+[PFD] registry membership facts也必须是exact sorted material而非`current: boolean`：
+`observerKeySetRoot = H("aloha/observer-signing-key-set/v1", sorted(observerSigningKeys[].keyId))`，
+`revokedObserverKeyIdsRoot = H("aloha/revoked-observer-key-set/v1", sorted(revokedObserverKeyIds))`。GateCore
+逐项重算这两个roots、key identity、validity interval、audience与certificate/issuer membership；任何root mismatch、
+duplicate、revoked key或untrusted issuer均为`invalid`。
+
+[PFD] production qualification authority采用完整的External V2链，而不是把candidate仓库中的public key、root或
+`verdict:"qualified"`当作trust source：
+
+~~~text
+deployment-side expected trust-anchor root
+→ content-addressed ExternalQualificationTrustAnchorV2 + exact issuer key set
+→ Ed25519 signed registry approval
+→ Ed25519 signed observer/verifier certificate bindings
+→ Ed25519 signed release-authority approval
+~~~
+
+trust anchor自身是unsigned、content-addressed observation；其`anchorId`只有与candidate closure外的expected root、
+exact issuer-set/key-set roots、指定governance issuer/key、current epoch、validity interval与audience全部相符才有
+意义。External V2 issuer-set root与V1 registry `trustedIssuerSetRoot`使用不同domain separator，GateCore分别从同一
+strict sorted unique issuer ID material重算，禁止直接比较两个不同domain的hash。一个issuer可在exact key set中
+同时有多把轮换key；issuer-set root对unique issuer IDs求hash，key-set root仍绑定每把key的完整material。
+
+[PFD] External V2 issuer key的撤销authority是current deployment-side trust-anchor pin的原子轮换，而不是candidate
+输入里的`revoked:true`：撤销时生成删除该key的新exact key set与新content-addressed anchor，外部governance原子
+替换expected anchor/key-set roots并停止接受旧pin；新的registry/release approval只能由新anchor指定governance key
+签发。旧anchor仍被部署侧接受、只在日志里写“revoked”或仅修改candidate仓库副本均不构成撤销。未来若需要
+scheduled/effective-epoch revocation，可在外部governance material中增加versioned revocation root，但不得把V1
+`revokedObserverKeyIdsRoot`误用于External V2 issuer key。
+
+[PFD] registry approval拥有独立`payloadHash`与`approvalId`，签名bytes绑定registry root/payload、issuer key-set
+root、epoch、audience、issuer与key。它不直接携带trust-anchor root；该关系经registry payload中的
+`governanceTrustAnchorHash`、deployment pin、anchor指定governance key三方闭合。Signed observer/verifier binding
+逐项绑定V1 certificate ID/payload、registry、epoch、audience、issuer/key；release approval再绑定unsigned
+authority-pin digest、trust-anchor/key-set roots、registry approval/root、exact verifier、strict sorted unique
+observer certificate IDs及其root、composition/runtime/generic-core/role-manifest roots与candidate commit。所有签名
+只能用pinned exact issuer key set中的Ed25519 key验证；禁止callback、caller public-key override、candidate生成key
+或unsigned V1 downgrade。V2 identities分别使用
+`aloha/external-qualification-*/v2`、`aloha/signed-qualification-*/v2`与
+`aloha/signed-release-authority-approval/*/v2`的固定domain，approval ID/payload/signature exclusion由schema固定，
+不能由validator临时选择。
+
+[PFD] `RegistryAuthorityPinV1.expectedGovernanceTrustAnchorHash`、External V2 pin的
+`expectedTrustAnchorRoot`、`expectedRegistryApprovalId`与`expectedReleaseAuthorityApprovalId`是四个不同角色的
+值，绝不能互填。GateCore authority pin由candidate input/evidence之外的release/deployment boundary提供；
+`computeGateCoreAuthorityPinDigest`只排除release approval自身的ID/payload/signature，其余release与qualification
+bindings仍全部参与hash。任何self-consistent attacker key/root/registry/certificate/approval整套替换，在外部pin
+不变时必须得到`invalid`。
+
+[PFD] 外部issuance必须避免commit/approval自引用。`candidateReleaseCommit`指向预签发、immutable、仍携带
+`RELEASE_AUTHORITY = null`的candidate commit；authority-pin digest及被签runtime template closure均不得包含
+后来签发的approval bytes或non-null authority。approval只可在candidate commit、compiler closures、composition
+与role roots冻结后由candidate closure外的issuer签发。最终外部release packaging必须把该signed authority作为
+独立deployment artifact/credential绑定到candidate template，并另行形成deployed artifact/process root；不得回写
+candidate commit或让candidate generator给自己授权。当前仓库尚未实现这条non-null packaging/bootstrap路径，
+因此`release-authority.ts`继续固定为null，任何qualification-only pass都不能声称production authority已经存在。
+最终release/install gate必须从实际tracked candidate、generated role manifest、compiler closures、deployed
+artifact与process anchor重算commit/root，逐项join signed approval；GateCore input或authority object中相互一致的
+字符串不能替代当前runtime observation。全零commit、来源不明manifest root、旧approval跨commit复制或模板root与
+实际loaded object不一致均为`invalid`。
+
+[PFD] 从null转为可用production authority至少要求：current registry approval与observer/verifier certificates全部
+真实验签并current；外部issuer签发current release approval；Stage 1–6真实evidence lineage经独立fact predicates
+闭合；candidate commit、template runtime、composition、generic core与role-manifest roots逐项匹配。缺一项，public
+wrapper仍在读取input/clock前返回`release-authority-unavailable`。底层External V2 validator即使全部签名正确也只
+返回`factsConsistent/signatureVerified + authority:false`；只有外部release boundary与GateCore完整join可形成最终
+acceptance verdict。
+
+[PFD] 每个PredicateSpec与其Verifier certificate必须各自声明exactly one observation schema为
+`SignedObserverInvocationSnapshotV1`的dedicated seal role；两边该role的完整spec必须相同，snapshot、selected
+observer certificate、signing key与audience必须逐项匹配它。role ID由被release固定的PredicateSpec拥有，中央
+GateCore先按schema唯一性取得候选，再要求它与生成的release authority所固定的`signedInvocationRoleId`、
+PredicateSpec、Verifier、snapshot、observer certificate与key全部相同；不得硬编码`artifact-lineage-*`或未来其它
+predicate的具体role ID。
+零个、多个、predicate/verifier不一致或snapshot使用普通observer role均为`invalid`。这样每个predicate可拥有
+自己的seal role，同时generic GateCore合同和无关predicate qualification保持隔离。
 
 [PFD] executable schema的`schemaHash`绑定完整declarative descriptor；任何cross-field refinement还必须把
 versioned `refinementSpecDigest`写入descriptor。禁止用`Function.toString()`冒充可移植实现身份，也禁止只靠
-同名`refinementId`。Verifier certificate的`predicateImplementationDigest`是完整load-bearing verifier closure
-digest，必须覆盖canonical codec、schema refinement实现、registry/lineage validator与predicate program；其中
-任一实现变化都会使旧certificate stale。这样规范变化改变schemaHash，规范不变但实现变化也必须重新
-qualification。
+同名`refinementId`。Verifier certificate中的`predicateImplementationDigest`固定为selected predicate adapter的
+真实compiler-visible closure；`oracleImplementationClosureDigest`固定为qualification-only独立oracle entrypoint
+的真实closure；`gateCoreImplementationClosureDigest`只固定generic GateCore。三者不得互相填充、拼成手写file
+list或把oracle塞回live runtime。任一被该predicate实际依赖的closure变化都会使旧certificate stale；新增无关
+predicate只改变release composition/runtime closure，不改变既有predicate或oracle qualification。
+
+[PFD] compiler closure只证明模块与传递依赖，不能证明同一模块内究竟选中了哪个named export。predicate与oracle
+必须另外绑定`implementationExportDigest = H("aloha/implementation-export/v1", { modulePath, exportName,
+moduleContentSha256 })`；release generator与machine boundary分别从exact tracked bytes重算，authority、Verifier
+certificate、AcceptanceCertificate及generated BOM逐项绑定。把同一文件中的export A切到export B，即使module
+closure完全相同，也必须使旧qualification失效；修改无关模块或未选中的其他predicate export不得使该leaf失效。
+
+[PFD] production中一个predicate adapter role与一个qualification oracle role各自独占一个source module；新增无关
+predicate/oracle必须创建新module，不能把新export追加进既有role module。这样whole-module content identity与
+compiler closure仍能保持简单、可复核且局部失效。alternate-export只作为mutation攻击验证named-export选择；若
+未来确需同文件承载多个production role，必须先定义并资格化export-slice closure，不能偷偷放宽当前合同。
+
+[PFD] `predicateProgramDescriptorDigest`与`oracleProgramDescriptorDigest`只标识冻结的declarative program
+descriptor及其typed语义；它们绝不是implementation identity。`predicateCompositionLeafDigest`绑定该predicate的
+spec、两个program descriptor与adapter version；`predicateCompositionRootDigest`绑定release exact leaf set；
+`gateCoreRuntimeClosureDigest`则绑定唯一public wrapper到composition和全部selected live adapters的完整compiler
+closure。Acceptance authority与certificate必须逐项记录这些不同身份，不能用一个宽泛“verifier hash”掩盖实际
+失效范围。
+
+[PFD] release composition中加入一个与既有predicate无关的新leaf时，当前release的
+`predicateCompositionRootDigest`与`gateCoreRuntimeClosureDigest`以及对应release fact/AcceptanceCertificate必须
+更新，并由外部issuer签发绑定新composition/runtime roots的release approval；既有predicate的
+`predicateCompositionLeafDigest`、predicate/oracle implementation closure、observer
+qualification与mutation/oracle corpus不因该无关leaf而重跑。类似地，registry只新增一个既有predicate/observer
+requested dependency closure不读取的observer signing key或revocation entry时，只更新
+`observerKeySetRoot`/`revokedObserverKeyIdsRoot`、registry root及依赖它们的release fact；既有predicate/observer
+qualification仍可复用。只有实际读取该key/revocation的dependency closure才使对应qualification stale。
+
+[PFD] 同样，新增无交叉依赖的Family只改变自己的leaf、release-intent与global definition catalog/release roots；
+未依赖它的Family semantic memo、predicate/observer qualification与implementation closure继续按content address
+复用。只有stable Family core、generic GateCore、共享schema/interpreter，或某predicate/Family实际requested
+dependency closure读取的材料变化，才允许扩大requalification分母。当前代码合同已证明predicate leaf隔离；Family
+catalog的同等隔离仍是待实现的事实门，不能因文档声明就视为已通过。
 
 [PFD] production acceptance只能引用current qualification：predicate spec/implementation或任一load-bearing
 observer digest变化，旧证书立即stale并使verdict invalid。`declaredCriticalMutationIds`必须与
 `rejectedOrInvalidMutationIds` exact相等，且independentOracleCaseCount>0；impl witness不计入该count，
 也不能定义expected verdict。
 
+[PFD] qualification corpus是独立冻结的authority-side corpus，与本次live subject的`subjectArtifactRoot`、
+live claim、target process、producer receipt和raw/live window严格不相交；live subject不得反过来资格化
+predicate、observer或oracle。fixture只能用于schema/拒绝路径/mutation校准，fixture claim、fixture bytes或
+fixture的success形状永远不给production acceptance credit；production credit只能来自目标环境的实际raw/live
+事实与GateCore的typed predicate。
+
 [PFD] QualificationRegistrySnapshot由release-governance冻结的受信issuer set批准；validator绑定query指定的
 exact registry root，复核certificate membership、issuer、epoch与revocation。`verdict:"qualified"`自报没有效力。
 底层qualification validator只可返回`factsConsistent + authority:false`，不得暴露容易被误用为最终结论的
-`valid:true`；只有GateCore把certificate材料与current registry、真实mutation corpus、independent oracle cases、
-lease/store epoch和process observations全部join后，才可形成acceptance三值verdict。
+`valid:true`。qualification-only流程运行冻结mutation corpus和独立oracle，产出case/root/counterexample与各
+compiler closure事实，再由受信issuer签发current certificate；runner只是材料生成器，不拥有authority，也不因
+自身重排但事实完全不变就使证书失效。live GateCore只验证exact certificate payload、current registry membership/
+revocation、authority中的descriptor/closure/leaf/root及真实live facts，绝不加载、重跑或调用oracle/case corpus。
+只有这些live join全部闭合后，才可形成acceptance三值verdict。
 每条load-bearing observation逐条复核：certificate subject implementation digest、observed schema、locator kind、
 anchor policy与envelope完全匹配，且certificate在该registry current且未revoked；不能用“系统里存在一张合格
 observer证书”替未资格化adapter背书。
+
+[PFD] 同仓库的generator、boundary checker、测试和build receipt都只是untrusted source/build observation，不能
+bootstrap自己的qualification authority。受信issuer的签名能力、current registry approval与reviewed issuance
+流程必须位于候选源码及其runtime closure之外；候选仓库不得携带issuer私钥，也不得因自己输出`pass`而签发或
+批准新certificate。generator、boundary、GateCore、predicate、oracle或load-bearing observer的相关closure或
+exact export identity变化，必须使旧certificate stale；没有外部受信issuer签名和current registry membership时，
+结果只能是`authority:false`/`invalid`，不能成为production acceptance。由此，同仓工具与generated outputs即使
+一起被篡改并保持自洽，也不能取得新的production authority。
 
 [PFD] Verifier certificate的`requiredObserverRoles`是exact set；每条被predicate消费的observation必须匹配一个
 role，且其`observerQualificationId`必须属于该verifier certificate声明的exact IDs。缺role、额外load-bearing
@@ -2612,9 +3214,64 @@ required mutation exact set与minimum independent-oracle cases也必须逐项由
 `requiredObserverRoles`、`observerQualificationIds`、mutation IDs及registry certificate/revocation sets均按schema
 规定严格排序；外部乱序直接invalid，GateCore不得normalize后放行。
 
+[PFD] artifact acquisition observer process与target production process必须使用不同schema与role：前者是
+`acquisition-observer-process` schema/role，只能为`QualifiedObservationEnvelopeV1.acquisitionProductionReceiptId`
+及其raw refs提供process anchor；后者是`target-production-process` schema/role，只能满足
+`AcceptanceQueryV1.processAnchorHash`及subject的production receipt。两者的qualification、receipt、anchor与
+raw ranges不可互换；用target process替acquisition process，或用observer process替target subject，均为
+`invalid`，即使PID、commit或bytes碰巧相同也不例外。
+
+[PFD] acquisition process、target process与current store epoch各使用独立、content-addressed sidecar observation
+schema和独立Observer role/certificate；raw artifact observer证书不能给其中任一sidecar背书。每个sidecar的
+`canonicalFacts`必须先按自己的typed schema exact-decode/re-encode，再复算facts hash、payload hash与observation
+ID，并逐字段join receipt/process anchor/raw-ref或store identity/epoch。三类sidecar ID与普通QualifiedObservation
+ID共同组成snapshot的exact ordered observation denominator/root；遗漏、重复、orphan、把普通observation ID当
+sidecar ID、修改epoch/process字段但沿用旧hash，全部`invalid`。sidecar不再要求另一个acquisition receipt，避免
+“观察observer process又需要观察该观察过程”的无限递归；它的trust root是对应current observer certificate、
+registry membership与content-addressed raw/process材料，而不是producer布尔值。
+
 [PFD] Observation facts先由`observationSchema` exact decode/re-encode，再复算`canonicalFactsHash`；snapshot的
 ordered claim/observation/raw IDs与三个set roots必须exact相符。Acquisition ProductionReceipt必须属于同一
 observer implementation/process并绑定这些raw refs；任一ID不存在、重复、splice或无法定位均invalid。
+
+[PFD] snapshot的`orderedClaimIds`必须等于所有QualifiedObservation所声明的artifact-resolution claim ID的
+严格排序union，`orderedRawArtifactRefIds`必须等于这些observation的raw refs与每个claim的`artifactRefId`的
+严格排序union；每个union成员都必须真实存在且被对应observation/claim引用，不得有orphan ref、orphan claim、
+额外未列ID或缺失ID。三个roots、snapshot ID与query binding均从该exact union重算；重复、splice、仅在
+snapshot中出现或只在input中出现的成员一律`invalid`。
+
+[PFD] raw-artifact denominator必须明确分成两个互斥partition：
+
+~~~text
+signedRawArtifactRefIds = sort(unique(
+  signedInvocation.semanticArtifactBindings[].rawArtifactRefId ∪
+  signedInvocation.productionReceiptBindings[].rawArtifactRefId
+))
+
+ordinaryRawArtifactRefIds = sort(unique(
+  observation.rawArtifactRefs[].artifactRefId ∪
+  sidecar raw refs ∪
+  receipt.logRangeArtifactRef.artifactRefId ∪ receipt.rawBoundaryArtifactRef.artifactRefId ∪
+  semantic-artifact.inputArtifactIds ∪ other ordinary artifact-input refs
+))
+~~~
+
+`signedRawArtifactRefIds`必须是全部invocation binding raw refs；`ordinaryRawArtifactRefIds`来自observations、
+sidecars、receipts及artifact input closure，不能把一部分signed binding遗漏后当成ordinary。两集合必须
+disjoint，且其union必须逐项等于snapshot的`orderedRawArtifactRefIds`（及`rawArtifactSetRoot`）；任何orphan、
+重复、只出现在binding/input或只出现在snapshot的ref均为`invalid`。Subject semantic-artifact的
+`inputArtifactIds`尤其不得重用signed raw ref，即使该ref的bytes和hash仍然相同。若外部审计需要可独立看到
+分区，额外提交`signedRawArtifactRefSetRoot`与`ordinaryRawArtifactRefSetRoot`；它们不能替代现有union
+`rawArtifactSetRoot`。
+
+[PFD] GateCore必须先从完整binding set构造`signedRawArtifactRefIds`，再校验任何semantic-artifact input；不能
+边遍历边累积。`ordinaryRawArtifactRefIds`必须逐项等于全部input refs减去signed set，二者union必须逐项等于全部
+input refs与snapshot denominator。引用后续binding、额外input ref、仅在snapshot出现、仅在input出现或任一交集
+都必须`invalid`；该合同由later-binding overlap与orphan-ref攻击回归固定。
+
+[PFD] Predicate evaluator的返回值与reason set是双向合同：`fail`当且仅当存在至少一个`predicate-failed`且没有
+其它invalid reason；`pass`当且仅当reason set为空。`fail`但未给predicate failure、`pass`却写入failure、或任何
+central invalid reason与predicate failure混合时，一律输出`invalid`，中央不能猜测或修补adapter的矛盾结果。
 
 [PFD] observer也必须被证明能正确观察：canonical header至少交叉本地execution client与独立source；root/
 Graph由独立reader重算；exact由独立整数数学、第二语言或pinned fork验证；final-sim由不同engine/fork比较
@@ -2625,6 +3282,63 @@ oracle才可声称optimal。一个“不同名字但共享同一错误实现”�
 claim schema→observation schema→PredicateSpec→positive/negative/invalid/mutation cases→independent oracle→
 qualify verifier/observer→production implementation→replay/live facts推进。手写损坏case可校准拒绝路径，
 手写成功fixture永远不能提供production success。
+
+### 19.7 首个 artifact-lineage vertical slice 边界
+
+[PFD] 首个slice只冻结`claim ↔ immutable mirror/ref ↔ retention lease ↔ process anchor ↔ independent oracle`
+的事实边界；它不证明Aloha production route、planner、execution、final-sim、EV或任何production deployment
+已实现或已验收。各边界必须如下闭合：
+
+[PFD] 当前candidate-tree release boundary更严格：`RELEASE_AUTHORITY`必须保持`null`。完整qualification path以及
+Stage 1–6的真实evidence lineage（含current verifier/observer certificates、registry membership、signed invocation、
+raw partition、subject facts与六步production receipts）全部闭合并通过自己的事实门，只会允许外部issuance与
+deployment packaging继续，不允许回写这个预签发candidate commit。artifact-lineage slice的
+qualification只能证明该slice的predicate/observer contract，不能单独成为production acceptance，也不能把
+qualification-only authority或test fixture提升为public release。当前test-only authority/fixture不可生成或替换
+public wrapper的release artifact；在authority仍为`null`时，public `evaluateGateCore(untrustedInput)`必须继续
+返回`release-authority-unavailable`。
+
+[PFD] qualification source可承载冻结的public key与预签名corpus case，但不得承载private key bytes、调用signing
+API或在module load时生成签名；生成/更新这些签名的临时key只允许存在于test/tooling closure且不能进入candidate
+release、qualification verifier或live runtime closure。预签名case仍只是mutation/oracle corpus，不是issuer或
+production authority。
+
+[PFD] 当前仓库的GateCore仅覆盖qualification-only/ artifact-lineage vertical slice，尚未形成完整Stage 1–6
+production integration；该事实不能由fixture、单元测试或artifact-lineage pass隐去，正是保持
+`RELEASE_AUTHORITY === null`的原因。
+
+| 边界 | 唯一可接受的事实与权威 | 明确禁止的替代 |
+|---|---|---|
+| claim ↔ ref | claim中的`artifactRefId`、resolver policy、resolution claim与`ReadOnlyArtifactRefV1` exact绑定；resolver outcome必须为`content-observed`，`missing`/`content-mismatch`均为`invalid`；claim自身始终是untrusted input | 上游producer的业务`success`/`outcome`、日志文案或脚本布尔值升级claim为事实 |
+| mirror ↔ ref | immutable mirror locator/object key、bytes、SHA-256、byte length、media type与schema由raw observation重算，并与ref和claim exact相符 | resolver自报“可读”、mirror hash自洽但没有raw bytes、或用`locatorId`代替`artifactRefId` |
+| ref ↔ lease | ref的mirror subject、content hash与`retentionLeaseReceiptId`必须精确指向lease；GateCore独立检查store epoch、剩余租期、issuer、registry membership与revocation | store/issuer的`current`布尔值、过期lease或不在current registry的issuer |
+| process | process/runtime metadata不进入语义claim ID；acquisition observer receipt只绑定采集的raw refs与observer process，target production process走独立schema/role并只绑定subject query | 跨process/log splice、target receipt冒充acquisition receipt、相同PID/commit作为唯一证据 |
+| independent oracle | qualification-only独立实现从typed claim、raw bytes/hash/length/media/schema、locator、lease epoch与独立process事实重算expected `pass`/`fail`/`invalid`；producer outcome不进入oracle，oracle不参与live verdict | impl importer、fact script、fixture success、program descriptor digest、共享错误实现或每次live再跑reference oracle定义production verdict |
+
+[PFD] 该slice的GateCore predicate只把完整且一致的raw/live事实归为`pass`，已观察到subject内容违反contract
+归为`fail`，missing/malformed/stale/unknown/未闭合lineage归为`invalid`。independent oracle的descriptor digest
+与predicate/compiler closure digest仍分别固定；oracle case corpus与live subject严格分离。
+
+[PFD] 这里的三值边界必须保持：resolver claim的`missing`/`content-mismatch`、签名binding/ref或raw partition
+splice、malformed bytes、lease/process/registry不一致都是`invalid`；只有在全部binding、ref、lease、process与
+schema closure已闭合后，独立观察到的subject bytes仍是合法wire但其内容hash/semantic content违反subject
+contract，才由typed predicate产生`fail`（例如`subject-content-mismatch`）。不能把invalid evidence降成fail，也
+不能把已闭合且可解释的subject predicate failure包装成authority invalid。
+
+[PFD] independent oracle不得调用production predicate使用的`decodeArtifactLineage*`、schema refinement或语义
+normalizer；否则同一个decoder bug会让两边同时接受错误输入。oracle使用独立最小exact wire decoder/normalizer，
+只可共享canonical/hash primitive、公开wire常量与类型声明；oracle entrypoint的compiler closure必须证明不含
+production predicate或qualification runner。qualification corpus至少包含一个能区分共享decoder共因错误的
+结构/mutation case；必要时再以第二语言实现交叉复算。
+
+[PFD] raw mirror/resource policy必须在任何hex→bytes分配、复制或hash前执行：唯一claim decoder先只读
+resolver `maxByteLength`与mirror wire length/declared byteLength并fail closed，再进入ObservedMirror refinement；
+fact-bundle decoder不得绕开该preflight。全局canonical byte limit只是外层DoS上限，不能替代每个artifact自己的
+policy。predicate与qualification oracle都必须经该唯一预算入口，不能各写一个顺序可能分叉的补丁。
+
+[REJ] 任何事实脚本都只能辅助定位、解码、hash、格式化或生成diagnostic claim；脚本输出没有authority。脚本
+与实际raw/live事实冲突时，以可重读、content-addressed的raw/live事实为最高事实依据，修复或废弃脚本，不能
+放宽PredicateSpec、缩小分母、替换process/lease/ref或把fixture提升为production evidence。
 
 ## 20. impl-only reference-producer calibration
 
@@ -2637,10 +3351,30 @@ Aloha runtime ────────────────> native evidence 
 chain / Reth / process / math / independent EVM ──qualified observations────┘
 ~~~
 
-[PFD] acceptance package不import impl或Aloha production源码。唯一reference-only importer只把已存在的
+[PFD] acceptance package不import impl或Aloha production源码。reference-producer集合严格是唯一的`impl`；
+除`tools/reference-only/impl`外不允许DS producer、DS adapter、第二reference adapter、synthetic reference
+runtime或alternate calibration path。唯一reference-only importer只把已存在的
 raw artifacts规范化为`ReferenceWitnessReceipt { trustLevel: "untrusted-reference" }`；不能调用builder、
 planner、solver、quoter、executor或simulator补齐事实，不能改变runtime，也无权定义成功或获得independent
 oracle credit。acceptance core只读neutral claims与qualified observations，不读旧DTO。
+
+[PFD] impl importer是只读、claim-only的边界：每个locked raw artifact attempt必须产出一个
+`observed`/`missing`/`invalid` claim；每个requested stage也必须有明确denominator entry。malformed/unknown/
+duplicate/out-of-order、bytes/hash mismatch、reader error、缺失artifact与缺失stage都保留在原始分母，不能
+通过skip、Map覆盖、只保留completed或删除invalid entry缩小分母。importer只复制exact-decoded raw producer claims与
+locator/hash，不合成下游stage、expected verdict、oracle case、qualification或`checks.passed`。
+
+[PFD] requested stage manifest属于exact impl reference lock，不能为空，并以`stageManifestHash`进入receipt；
+import request不得另带一个可缩小的stage subset。已知stage只要存在invalid attempt，该stage就以invalid闭合，
+不得再追加一个synthetic missing掩盖失败；只有完全没有attempt的stage才生成missing。raw record内容在receipt中
+只能命名为`untrustedClaims`，不能命名为facts；所有invalid receipt（包括实际bytes hash/length诊断）必须能被
+同一exact decoder重读。生产package不导出raw-record factory/encoder或兼容 importer alias。
+
+[PFD] receipt decoder必须重新执行与importer相同的stage状态机，不能只看每个expected stage“似乎有一条记录”：
+`observed`必须属于manifest且stage/ordinal精确匹配并按输入artifact顺序单调；unknown stage只能是
+`invalid + unknown-stage + ordinal:null`，已知但逆序的attempt只能是`invalid + out-of-order-stage`。攻击者重算
+claim/receipt hash后构造unknown-observed、wrong ordinal或reordered-observed仍必须被decoder拒绝；content-addressed
+自洽不等于状态机合法。
 
 [REJ] 旧`semanticStages(raw.selected)`、production-replay、blind/capture/paired-live与日志KPI parser不得进入
 acceptance authority。尤其禁止从一个producer-selected对象合成`quote positive / execution success / decision
@@ -2652,6 +3386,11 @@ Family+Instance、readyGeneration、Graph、restart与memo reuse。impl没有真
 final-sim、完整性能或live downstream事实必须是`missing/invalid`；不能由代码形状、日志文案或旧脚本推成pass，
 也不能反过来降低Aloha最终验收要求。Aloha的exact、execution、final-sim、性能和完整六步lineage只能由
 Aloha自己的实际live事实证明。
+
+[PFD] 事实脚本可辅助读取、定位、解码、重算hash与生成diagnostic，但不拥有任何admission、qualification或
+acceptance authority。脚本摘要、fixture输出与旧KPI不能覆盖实际raw/live事实；当两者冲突时，actual raw/live
+locator、bytes、process anchor、chain/Reth observation与independent oracle优先，脚本必须作为stale/bug处理，
+不得改写事实分母或降低GateCore predicate。
 
 ### 20.2 校准顺序
 
@@ -3795,14 +4534,16 @@ envelope/codec、Family/Strategy/capability ports、authority/dependency rules�
 | Strategy SDK/catalog | packages/strategy-sdk、generated/strategy-catalog、strategies/<current> | Family internals、planner/solver kernel、LP strategy | generic capability predicates+BOM → planning problem issuer refs | no protocol import/central switch、strategy-local closure | Family runtime refs稳定后并行；只做当前策略 |
 | Generated artifacts（machine-only） | generated/{family-catalog,strategy-catalog,runtime-composition}仅由generator写 | 所有人手工编辑 | releaseIntentRoot+manifest roots → byte-reproducible artifacts | clean regenerate diff=0、BOM/catalog/runtime exact equality | integration owner只运行generator，不编辑产物 |
 | Capability/interpreter | packages/capability-contracts、packages/capability-interpreters、packages/request-program | concreteFamily、scheduler internals | FrozenProgram → typed facts/interpretation ports | round-trip、field mutation、error ownership | 与SDK并行 |
+| Unified work plane / discovery transport | packages/work-plane、packages/discovery-transport | Family语义、Graph/coverage/cursor、provider私有API | generated owner/work-class + FrozenProgram + source lease → caller-bound scheduled outcome/receipt；abortable RPC只拥有physical lifecycle | phase/fence顺序、typed retry/invalid、underlying abort settle、无stage/Family switch | capability contract后与scheduler并行；port冻结后不等Family实现 |
 | Discovery/attestation/generation builder | packages/observation、packages/discovery、packages/attestation、packages/generation-builder、apps/operator-cli | checkpoint internals、Family语义、完整authoring definition、ready internals、apps/searcher-runtime | SourcePlans+stage-local refs+ports → exact partition/outcomes及唯一build orchestration；operator-cli仅status/read或向runtime admin port提交retryable probe，不直接开DB writer | 50-block、dedupe、once、typed outcome、无第二startup/promotion path | 依赖SDK/canonical contracts；与Graph owner按port并行 |
 | Graph/readyGeneration | packages/catalog、packages/ready-generation、packages/graph | raw universe、Family internals、startup orchestration | verified publications + PromotionCallerToken → atomic immutable GraphView | full-root closure/CAS/canonical fence/crash/lease/adoption | 与state/scheduler并行 |
-| State/scheduler/REVM | packages/scheduler、packages/shared-work、packages/state-runtime、runtime/revm-workers | Graph authority、Family math | generic work/program → source-bound facts | single-flight、quota、abort/HOL、permit守恒 | contract冻结后并行 |
+| State/scheduler/REVM | packages/scheduler、packages/shared-work、packages/state-runtime、runtime/revm-workers | Graph authority、Family math | generic work/program → source-bound facts；opaque owner/instance/composite refs → fair prefix与stage-local breaker | single-flight、quota、abort/HOL、permit守恒、blocked/not-probed accounting、exact-positive不回溯删除 | contract冻结后并行 |
 | Producer/head-session/intake | packages/producer | Graph write、discovery/attestation、Family语义、apps composition | active ready lease + canonical heads/pending tx → immutable ProducerSession/TriggerSession/correlation；拥有session admission/barrier、latest-head与bounded intake，不拥有topology | serving-age/release/policy fence、canonical-vs-unknown bulkhead、drop accounting、100/100 terminal、active lease不变 | 依赖Graph/canonical/scheduler ports；与planner并行 |
 | Coarse/economics funnel | packages/coarse-economics、packages/economics | Graph/Family authority、exact/action、signer | owner-issued current projections + generic objective → rank/prune accounting；final sim+valuation→EconomicReceipt | binding mutation、Top-K/unranked守恒、proof-only prune、source-pinned fee/valuation/EV | 依赖state/capability ports；与planner/exact并行 |
 | Planner/exact | packages/planner、packages/solver、packages/exact | families、protocol ABI/math | GraphView+opaque ports → route/current exact | no protocol import、current-source/fallback=0 | 依赖Graph/SDK port，不依赖Family实现细节 |
+| Funding | packages/funding | provider地址/ABI、Family internals、Graph写 | owner-issued per-source facts → opaque offers+borrow/repay obligations | sibling isolation、unresolved≠empty、issuer/source/capability/action binding | capability/work-plane后与planner并行；只有Funding依赖者受变更影响 |
 | Execution/final-sim | packages/execution-program、packages/final-sim、packages/safety、packages/submission、contracts/executor、contracts/interfaces | Family identities、signer secret | owned actions → program/real sim/unsigned receipt | action ownership、安全门、strict top-level sim | 与planner后半并行 |
-| Evidence/telemetry | packages/evidence-emitter、packages/telemetry、acceptance/collectors | validator logic、production object creation | boundary objects → immutable events/metrics | raw locator、fsync、secret redaction | 所有owner提供boundary port |
+| Evidence/telemetry/correlation | packages/evidence-emitter、packages/evidence-correlation、packages/telemetry、acceptance/collectors | validator logic、production object creation、route admission | boundary objects → immutable events/metrics；validated ring+source → non-authoritative competitor join | raw locator、fsync、secret redaction、B→B-1/reorg与RouteId隔离 | 所有owner提供boundary port |
 | Family port groups | families/<assigned-set> | central packages、其他Family | locked pure kernels/invariants + big authoring template → generated narrow refs/capabilities | identity/exact/action事实、无central import | 按当前release-intent ownership cohort分组；cohort不进schema/runtime/validator；无LP cohort |
 | Runtime integration owner | apps/searcher-runtime、deploy/systemd、deploy/runtime-shell | Family内部实现、validator、release-intent、generated手写 | generated catalog+composition+ports →唯一process | dependency closure、exact SHA、dry-run lineage | 最后集成；可运行generator但不可改生成物 |
 
@@ -3932,7 +4673,8 @@ framework不等于提前写完未来所有测试；任何Agent不得先写produc
 13. operator admin port只绑定本机受限Unix socket与systemd identity；命令exact allowlist仅含status和同run
     retryable probe，不能替换candidate/cutoff、创建startup builder、promotion、signing或submission。
 
-[PFD] 本文件只设计未来exact-SHA systemd dry-run边界；本轮不部署、不停进程、不签名、不广播。
+[PFD] 当前实现、测试与最终 exact-SHA systemd dry-run均在本架构 scope 内；dry-run 默认无 signer，并且
+未经授权的交易签名、广播、提高 wallet cap、加载 signing key 或改变安全 envelope 均禁止。
 
 ## 28. Risks and explicitly resolved decisions
 

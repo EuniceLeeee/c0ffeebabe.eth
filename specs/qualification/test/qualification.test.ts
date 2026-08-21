@@ -5,11 +5,18 @@ import {
   createObserverRoleSpec,
   createPredicateSpec,
   createQualificationRegistry,
+  createObserverSigningKey,
+  decodeObserverSigningKey,
+  encodeObserverSigningKey,
   createVerifierQualificationCertificate,
   hashPredicateSpec,
   decodeObserverCertificate,
   decodeQualificationRegistry,
+  decodeVerifierCertificate,
   encodeQualificationRegistry,
+  hashObserverSigningKeySetRoot,
+  hashRevokedObserverKeyIdsRoot,
+  recomputeObserverSigningKeyId,
   QUALIFICATION_SCHEMA_MANIFESTS,
   type Hash,
 } from "../src/index.ts";
@@ -50,8 +57,10 @@ const registry = createQualificationRegistry({
   trustedIssuerSetRoot: h("b"),
   certificateSetRoot: h("c"),
   revokedCertificateIdsRoot: h("d"),
+  observerKeySetRoot: hashObserverSigningKeySetRoot([]),
+  revokedObserverKeyIdsRoot: hashRevokedObserverKeyIdsRoot([]),
   previousRegistryRoot: null,
-  governanceApprovalHash: h("e"),
+  governanceTrustAnchorHash: h("e"),
 });
 
 const observer = createObserverQualificationCertificate({
@@ -80,6 +89,13 @@ const verifier = createVerifierQualificationCertificate({
   qualificationSpecDigest: h("6"),
   predicateSpecDigest: predicate.specDigest,
   predicateImplementationDigest: h("7"),
+  predicateImplementationExportDigest: h("8"),
+  predicateProgramDescriptorDigest: h("8"),
+  oracleProgramDescriptorDigest: h("9"),
+  oracleImplementationClosureDigest: h("c"),
+  oracleImplementationExportDigest: h("d"),
+  predicateCompositionLeafDigest: h("a"),
+  gateCoreImplementationClosureDigest: h("b"),
   observerQualificationIds: [observer.certificateId],
   requiredObserverRoles: [{ ...role, observerQualificationId: observer.certificateId }],
   caseSetRoot: h("8"),
@@ -98,10 +114,11 @@ test("qualification manifests are exact content-addressed schemas", () => {
   assert.deepEqual(Object.fromEntries(Object.entries(QUALIFICATION_SCHEMA_MANIFESTS).map(([key, manifest]) => [key, manifest.schemaHash])), {
     observerRole: "0x6f155b672917c0f60a7c40778106387635f295c31ebe481366f25506b1a0b812",
     predicate: "0xad0fc85efe8a119c42dac6ee6716ea6bc36541569d385dcb9fb11ef19085b6e8",
-    registry: "0x4eded5bef651ec0a180d2b6c99e51d6fa9e05907c9d0b9a8d37e1dbf54836d45",
+    registry: "0x3b977f4f99abd223256865c8e2cb73005c351ab3483e5932bb29838063e09e0b",
+    observerSigningKey: "0x580dc3a5b894ed4bd33b754d10c7bf3f538967f0658dbc9ab2ae4062f1b998dc",
     observerCertificate: "0xb900e4889358d46dc81f19768781de094f0e66a16d0cf49b51095e74c920fe35",
-    verifierCertificate: "0x6d6f86e5bd998803173e967ddc6629cb6d6c42f91006b70753811b9bba2e4e75",
-    membershipInput: "0xd65b84213a03ee4aad5deeff4d9b9feffe0cd50106a939dc20d4c48220beb575",
+    verifierCertificate: "0x880ae1f0d8466872a6d210eb24bff690caf0dfd4af53525dda97354a8fbadbfd",
+    membershipInput: "0x210854b3c84910c4444af24e8ed5d4c7cc3c160217d601c8e58631abed6bb2a5",
     membershipResult: "0x135b0c34d17e046bd074563b4c69cf1a6de01304e7343912b051bea9802e75ac",
   });
 });
@@ -153,13 +170,47 @@ test("predicate contains full role semantics and role mutation coverage is exact
   assert.equal(predicate.requiredObserverRoles[0]?.observationSchema.schemaHash, role.observationSchema.schemaHash);
   assert.throws(() => createObserverRoleSpec({ ...role, requiredCriticalMutationIds: ["mutation-b", "mutation-a"] }));
   assert.throws(() => createPredicateSpec({ ...predicate, observerRoleSetHash: h("f") }));
+  const { specDigest: _specDigest, ...predicatePayload } = predicate;
+  assert.throws(() => createPredicateSpec({ ...predicatePayload, observationSchemaRefs: [] }), /required observer role schema is not declared/);
   assert.throws(() => decodeQualificationRegistry({ ...registry, registryId: h("f") }));
 });
 
 test("certificate id/payload and root mutation fail closed", () => {
   assert.throws(() => decodeObserverCertificate({ ...observer, payloadHash: h("f") }));
-  assert.throws(() => decodeQualificationRegistry({ ...registry, governanceApprovalHash: h("f") }));
+  assert.throws(() => decodeQualificationRegistry({ ...registry, governanceTrustAnchorHash: h("f") }));
+  for (const field of [
+    "predicateImplementationDigest",
+    "predicateImplementationExportDigest",
+    "predicateProgramDescriptorDigest",
+    "oracleProgramDescriptorDigest",
+    "oracleImplementationClosureDigest",
+    "oracleImplementationExportDigest",
+    "predicateCompositionLeafDigest",
+    "gateCoreImplementationClosureDigest",
+  ] as const) {
+    assert.throws(() => decodeVerifierCertificate({ ...verifier, [field]: h("f") }), field);
+  }
   assert.notEqual(observer.certificateId, verifier.certificateId);
+});
+
+test("every verifier program and implementation digest is non-zero and payload-bound", () => {
+  const { certificateId: _certificateId, payloadHash: _payloadHash, ...payload } = verifier;
+  const zeroHash = `0x${"0".repeat(64)}` as Hash;
+  for (const field of [
+    "predicateImplementationDigest",
+    "predicateImplementationExportDigest",
+    "predicateProgramDescriptorDigest",
+    "oracleProgramDescriptorDigest",
+    "oracleImplementationClosureDigest",
+    "oracleImplementationExportDigest",
+    "predicateCompositionLeafDigest",
+    "gateCoreImplementationClosureDigest",
+  ] as const) {
+    assert.throws(
+      () => createVerifierQualificationCertificate({ ...payload, [field]: zeroHash }),
+      field,
+    );
+  }
 });
 
 test("creators perform exact structural decode before hashing", () => {
@@ -181,4 +232,26 @@ test("creators perform exact structural decode before hashing", () => {
   Object.defineProperty(getterPredicate, "predicateId", { enumerable: true, get: () => { getterHits += 1; return predicate.predicateId; } });
   assert.throws(() => hashPredicateSpec(getterPredicate as never));
   assert.equal(getterHits, 0);
+});
+
+test("observer signing keys are exact, content-addressed membership material", () => {
+  const key = createObserverSigningKey({
+    schemaVersion: 1,
+    kind: "aloha.observer-signing-key",
+    observerQualificationId: observer.certificateId,
+    roleId: role.roleId,
+    algorithm: "ed25519",
+    publicKeyHex: `0x${"ab".repeat(32)}`,
+    validFromRegistryEpoch: "7",
+    validThroughRegistryEpoch: "9",
+    audienceHash: h("f"),
+  });
+  assert.deepEqual(decodeObserverSigningKey(encodeObserverSigningKey(key)), key);
+  assert.equal(recomputeObserverSigningKeyId(key), key.keyId);
+  assert.throws(() => createObserverSigningKey({ ...key, publicKeyHex: `0x${"AB".repeat(32)}` } as never));
+  assert.throws(() => createObserverSigningKey({ ...key, validFromRegistryEpoch: "10" } as never));
+  assert.throws(() => createObserverSigningKey({ ...key, extra: true } as never));
+  assert.throws(() => decodeObserverSigningKey({ ...key, keyId: h("0") }));
+  assert.throws(() => hashObserverSigningKeySetRoot([key.keyId, key.keyId]));
+  assert.equal(hashRevokedObserverKeyIdsRoot([]), hashRevokedObserverKeyIdsRoot([]));
 });

@@ -11,12 +11,15 @@
     "packages/*",
     "specs/*",
     "strategies/*",
-    "tools/*"
+    "tools/*",
+    "tools/reference-only/*"
   ],
   "scripts": {
     "build": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present && npm run typecheck --workspaces --if-present",
-    "architecture-boundary": "npm run check --workspace @aloha/boundary-gate"
+    "architecture-boundary": "npm run check --workspace @aloha/boundary-gate",
+    "generate-release-role-manifest": "npm run generate --workspace @aloha/release-role-manifest",
+    "check-release-role-manifest": "npm run generate --workspace @aloha/release-role-manifest -- --check"
   },
   "devDependencies": {
     "@types/node": "20.19.41",
