@@ -19,7 +19,7 @@ async function main(): Promise<void> {
       expectedRevision: 0,
       runId: "run-stale",
       cutoff: SOURCE,
-      fromBlock: SOURCE.number - 49,
+      fromBlock: SOURCE.number - 14_399,
       universeHash: "u",
       candidateSetHash: "c",
       candidateCount: 1,

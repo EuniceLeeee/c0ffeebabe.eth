@@ -79,8 +79,8 @@ async function main(): Promise<void> {
     assert.equal(envelope?.readyGeneration?.generation, 1);
     assert.equal(
       envelope?.readyGeneration?.universeRange.fromBlock,
-      SOURCE.number - 49,
-      "CLI must bind the fixed latest-50-block universe",
+      SOURCE.number - 14_399,
+      "CLI must bind the fixed latest-14400-block universe",
     );
     assert.notEqual(
       envelope?.inProgressRun,
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
     );
 
     // The production range is code-owned. Former lookback/from flags must
-    // fail closed instead of silently expanding the 50-block window.
+    // fail closed instead of silently expanding the 14400-block window.
     const overrideCheckpoint = join(dir, "override-checkpoint.json");
     let overrideCode = 0;
     try {
@@ -127,7 +127,7 @@ async function main(): Promise<void> {
       expectedRevision: 0,
       runId: "run-i",
       cutoff: SOURCE,
-      fromBlock: SOURCE.number - 49,
+      fromBlock: SOURCE.number - 14_399,
       universeHash: "u",
       candidateSetHash: "c",
       candidateCount: 1,

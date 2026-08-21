@@ -47,8 +47,8 @@ function mockProvider(options: {
       assert.equal(filter.toBlock, SOURCE.number);
       assert.equal(
         filter.fromBlock,
-        SOURCE.number - 49,
-        "plugin auxiliary nomination must use the shared exact 50-block range",
+        SOURCE.number - 14_399,
+        "plugin auxiliary nomination must use the shared exact 14400-block range",
       );
       assert.deepEqual(filter.topics, [
         UNIV4_SWAP_TOPIC.toLowerCase(),
@@ -221,7 +221,7 @@ async function main(): Promise<void> {
       provider: concurrentProvider,
     }),
   ));
-  // One build is one exact 50-block getLogs call; four concurrent cold
+  // One build is one exact 14400-block getLogs call; four concurrent cold
   // nominations must share that same in-flight build.
   assert.equal(
     concurrentGetLogsCalls,
@@ -275,7 +275,10 @@ async function main(): Promise<void> {
     getStorage: async () => "0x" + "00".repeat(32),
     getLogs: async () => {
       flakyCalls += 1;
-      if (flakyCalls === 1) throw new Error("transient rpc");
+      // The 14400-block build halves on failure (14400 -> ... -> 56, 9
+      // calls) before the hard floor rejects; fail the whole first attempt
+      // so the cache stays unpoisoned and the retry rebuilds cleanly.
+      if (flakyCalls <= 12) throw new Error("transient rpc");
       return Object.freeze([Object.freeze({
         address: ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
         topics: Object.freeze([UNIV4_SWAP_TOPIC.toLowerCase(), POOL_ID]),

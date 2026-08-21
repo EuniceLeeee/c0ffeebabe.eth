@@ -31,7 +31,7 @@ function mockProvider(logs?: readonly {
       // The query contract: pool emitter + Swap topic + retained window.
       assert.equal(filter.address, POOL.toLowerCase());
       assert.equal(filter.toBlock, SOURCE.number);
-      assert.equal(filter.fromBlock, SOURCE.number - 49);
+      assert.equal(filter.fromBlock, SOURCE.number - 14_399);
       assert.deepEqual(filter.topics, [UNIV3_SWAP_TOPIC.toLowerCase()]);
       return Object.freeze([...(logs ?? [])]);
     },

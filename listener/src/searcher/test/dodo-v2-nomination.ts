@@ -30,7 +30,7 @@ function mockProvider(logs?: readonly {
     getLogs: async (filter) => {
       assert.equal(filter.address, POOL.toLowerCase());
       assert.equal(filter.toBlock, SOURCE.number);
-      assert.equal(filter.fromBlock, SOURCE.number - 49);
+      assert.equal(filter.fromBlock, SOURCE.number - 14_399);
       assert.deepEqual(filter.topics, [DODO_V2_SWAP_TOPIC.toLowerCase()]);
       return Object.freeze([...(logs ?? [])]);
     },

@@ -25,7 +25,7 @@ const READY_GRAPH = Object.freeze({ edges: Object.freeze([]) });
 const READY_CATALOG = Object.freeze({ instances: Object.freeze([]) });
 
 function sourceReceipts(): readonly DurableSourceReceipt[] {
-  const fromBlock = SOURCE.number - 49;
+  const fromBlock = SOURCE.number - 14_399;
   return Object.freeze([Object.freeze({
     sourceKey: "1".repeat(64),
     sourceKind: "startup-candidate-union" as const,
@@ -85,7 +85,7 @@ async function main(): Promise<void> {
       expectedRevision: 0,
       runId: "run-1",
       cutoff: SOURCE,
-      fromBlock: SOURCE.number - 49,
+      fromBlock: SOURCE.number - 14_399,
       universeHash: "u1",
       candidateSetHash: "c1",
       candidateCount: 2,
@@ -102,7 +102,7 @@ async function main(): Promise<void> {
       expectedRevision: 2,
       runId: "run-1",
       cutoff: SOURCE,
-      fromBlock: SOURCE.number - 49,
+      fromBlock: SOURCE.number - 14_399,
       universeHash: "u1",
       candidateSetHash: "c1",
       candidateCount: 2,
@@ -118,7 +118,7 @@ async function main(): Promise<void> {
         expectedRevision: 2,
         runId: "run-1",
         cutoff: SOURCE,
-        fromBlock: SOURCE.number - 49,
+        fromBlock: SOURCE.number - 14_399,
         universeHash: "u-drifted",
         candidateSetHash: "c-drifted",
         candidateCount: 2,
@@ -137,7 +137,7 @@ async function main(): Promise<void> {
         expectedRevision: 2,
         runId: "run-2",
         cutoff: SOURCE,
-        fromBlock: SOURCE.number - 49,
+        fromBlock: SOURCE.number - 14_399,
         universeHash: "u1",
         candidateSetHash: "c1",
         candidateCount: 2,
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
       generation: 1,
       cutoff: SOURCE,
       universeRange: Object.freeze({
-        fromBlock: SOURCE.number - 49,
+        fromBlock: SOURCE.number - 14_399,
         toBlock: SOURCE.number,
       }),
       universeHash: "u1",
@@ -348,7 +348,7 @@ async function main(): Promise<void> {
       expectedRevision: 0,
       runId: "run-w",
       cutoff: SOURCE,
-      fromBlock: SOURCE.number - 49,
+      fromBlock: SOURCE.number - 14_399,
       universeHash: "u1",
       candidateSetHash: "c1",
       candidateCount: 30,

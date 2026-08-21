@@ -11,7 +11,7 @@ async function main(): Promise<void> {
     expectedRevision: 0,
     runId: "run-sig",
     cutoff: source,
-    fromBlock: source.number - 49,
+    fromBlock: source.number - 14_399,
     universeHash: "u",
     candidateSetHash: "c",
     candidateCount: count,
