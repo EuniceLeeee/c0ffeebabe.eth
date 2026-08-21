@@ -1425,7 +1425,7 @@
         "familyId": "flash-loan:balancer-v2",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "59362f447d29472a68a6b10052bffdaca3f6e0ac271af9b69a1a2e3d66db060f",
+        "contentHash": "0d0143e88fe44ba8780c1dc7248ed3e827392c016c44d74e341fdd92443b9843",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -1539,7 +1539,7 @@
         "familyId": "flash-loan:balancer-v2",
         "capability": "funding",
         "contractVersion": "s1-funding-v1",
-        "contentHash": "6656bd6b43c4dacaa1dfcd647e3b07fb6d6b14ed410182069bfed8ecee503e55",
+        "contentHash": "aa2d73e82cd55e8404daf4828db36e35695ea2ec6b9bc3dd3d2053f26870e443",
         "semanticDependencies": [
           "contract:adapter-family/funding@s1-funding-v1",
           "package:ethers@6.16.0",
@@ -1671,7 +1671,7 @@
         "familyId": "flash-loan:morpho",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "9486f8af8c2b8299730da2810a15a5a0e0cb368aee652c8cebc46b51ce85b4d9",
+        "contentHash": "b97ee61e50d7accf27de9509030068f354e5689ff88ceb315667fab41e6a27dd",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -1785,7 +1785,7 @@
         "familyId": "flash-loan:morpho",
         "capability": "funding",
         "contractVersion": "s1-funding-v1",
-        "contentHash": "993ea5ee4a91842fae16badf7aec6a2186f3ad4b40974e9510d45f4376d2d83d",
+        "contentHash": "f7f57fde160b715a8d2f82161d18cdbcfecce9bce4f2d284dd237083722ae801",
         "semanticDependencies": [
           "contract:adapter-family/funding@s1-funding-v1",
           "package:ethers@6.16.0",
@@ -7273,5 +7273,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "88d756ff5116a58601db9dfa57be0b55ba41eead0e013fc7b297254c22a5e823"
+  "artifactHash": "838ffc0a54319e6ae0e82d3562a5b74cc7b6c144d282cd56ff8eeecd6643fbeb"
 }

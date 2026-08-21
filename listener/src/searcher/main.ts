@@ -1490,10 +1490,31 @@ async function main(): Promise<void> {
   // Funding tokens are resolved together with graph pricing by the universal
   // current-N runtime. Until that atomic snapshot publishes, planners fail
   // closed instead of consuming a timer-refreshed, differently-aged cache.
-  const flashTokens = [...tokenIndex.keys()];
+  // The funding stage reads flash liquidity per token per block, so the
+  // token set must stay bounded: the 14400-window graph carries thousands of
+  // tokens (8513 observed) and unbounded funding reads blew the per-block
+  // budget (state:prepare ~56s, stale_state). The top-N tokens by edge
+  // participation cover the loop-relevant liquidity; tokens outside the
+  // budget simply have no funding offer and the planner skips their loops.
+  const FLASH_TOKEN_BUDGET = 1024;
+  const tokenEdgeCount = new Map<string, number>();
+  for (const edge of graph) {
+    for (const token of [edge.tokenIn, edge.tokenOut]) {
+      if (!ethers.isAddress(token)) continue;
+      const key = token.toLowerCase();
+      tokenEdgeCount.set(key, (tokenEdgeCount.get(key) ?? 0) + 1);
+    }
+  }
+  const flashTokens = [...tokenEdgeCount.entries()]
+    .sort(([leftToken, leftCount], [rightToken, rightCount]) =>
+      rightCount - leftCount || leftToken.localeCompare(rightToken),
+    )
+    .slice(0, FLASH_TOKEN_BUDGET)
+    .map(([token]) => token);
   console.log(
     `[searcher/live] routing graph: ${graph.length} edges, ${tokenIndex.size} tokens | ` +
-      `detection pool set: ${allPoolMap.size} addresses`,
+      `detection pool set: ${allPoolMap.size} addresses` +
+      ` | flash token budget: ${flashTokens.length}`,
   );
 
   // Now that the graph exists, wire the configured revm/hybrid backend.

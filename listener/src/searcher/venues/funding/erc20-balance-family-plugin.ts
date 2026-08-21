@@ -143,16 +143,27 @@ export function createErc20BalanceFundingSemantics(
             });
           })),
           decode: ({ programInput, results }) => Object.freeze({
-            balances: Object.freeze(programInput.sources.map((source) => {
-              const result = successfulResult(results, balanceRequestId(source));
-              const [balance] = ERC20.decodeFunctionResult(
-                "balanceOf",
-                result.data,
-              );
-              return Object.freeze({
-                fundingId: source.fundingId,
-                maxBorrow: BigInt(balance),
-              });
+            // One unreadable balance source (empty/reverted/timeout result)
+            // must not fail the whole funding stage: it simply yields no
+            // offer for that source. The framework's decodeCurrentBlockState
+            // behaves the same (unresolved coverage -> no offer).
+            balances: Object.freeze(programInput.sources.flatMap((source) => {
+              try {
+                const result = successfulResult(
+                  results,
+                  balanceRequestId(source),
+                );
+                const [balance] = ERC20.decodeFunctionResult(
+                  "balanceOf",
+                  result.data,
+                );
+                return [Object.freeze({
+                  fundingId: source.fundingId,
+                  maxBorrow: BigInt(balance),
+                })];
+              } catch {
+                return [];
+              }
             })),
           }),
         },
