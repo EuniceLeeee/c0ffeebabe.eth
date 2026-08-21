@@ -80,8 +80,8 @@
     },
     {
       "path": "package-lock.json",
-      "contentSha256": "0x917e110cca67745e4768e751fe0b0674a06e9573f557f7da6392b64f1fed68bb",
-      "byteLength": 3758
+      "contentSha256": "0x5a0443846a28089d9adbf3f217a93645f95e8b7dc4382ab3f5211cf85ecf8c22",
+      "byteLength": 5025
     },
     {
       "path": "package.json",
@@ -172,8 +172,8 @@
   "generatorFiles": [
     {
       "path": "package-lock.json",
-      "contentSha256": "0x917e110cca67745e4768e751fe0b0674a06e9573f557f7da6392b64f1fed68bb",
-      "byteLength": 3758
+      "contentSha256": "0x5a0443846a28089d9adbf3f217a93645f95e8b7dc4382ab3f5211cf85ecf8c22",
+      "byteLength": 5025
     },
     {
       "path": "package.json",
@@ -228,7 +228,7 @@
       "byteLength": 268
     }
   ],
-  "inputRoot": "0xfebc2cd3c3790bfd592e05c6b26c91ed9af874c0a2c2ef5dbd1b10bf6588c22d",
-  "generatorRoot": "0x21b89d0f117f44edac5c42f2bcbc42d86e1fca3279422fd700a61c54a566a8f2",
-  "ledgerHash": "0x9911aa046005ca767a7a84051f2d15f5e95250fb0343fc4b75f389a67f5097d0"
+  "inputRoot": "0x7680a2c40ec054b1fb829ba6d6ad874f42e4acfebe2fb330675f0f63fd869fdb",
+  "generatorRoot": "0x882c068216f5e3fd9ded04bb4f54220741df998226f5a11cb8f9a8773f1ca81b",
+  "ledgerHash": "0x305a2d476badb13b22e44b1e21d738aa403896aac8ce3e0d2d564d323fce9e43"
 }
