@@ -9,11 +9,12 @@
 > 5f104cedd4b4778316c177ce4fa08a6761af85b1。该 SHA 只记录重写时实际审阅的代码状态，
 > 不是部署、live、F5、100/100 或 S1 完成声明；后续实现和验收必须绑定各自新的 exact SHA。
 >
-> 2026-08-19 的 F5 性能/窗口实现以
-> cc20732658cbd77cf867208a93eb2c389d45bb3f 为父提交：本轮合同固定 startup edge/candidate
-> observation 为最近 50 blocks，并要求 current-source instance refresh 有界并行。该记录仍只是
-> implementation checkpoint；在新的 exact SHA 完成 systemd dry-run 与本文件第 16 节事实验收前，
-> 不构成 F5 或 production cutover 声明。
+> 后续实现和验收分别绑定各自的 exact SHA：硬切换（旧 Graph/runtime 物理删除，
+> b54730b8/-17k lines、0b58021f、49890a0f、6764e6f1）、50 块窗口（cc207326）、2 天窗口与流式
+> 观察哈希（9fb5864b）、univ4 retain channel 与 archive Initialize 反查（0aa7582d..b55a1631）、
+> duplicate-instance 与流式 checkpoint（efc6df7f/2aab991a/3ae1e427）、funding token universe
+> 固化表（692c7bd7..5fc974ab）。当前 edge/candidate observation 窗口为 14400 blocks（2 天）。
+> 在最终 exact SHA 完成本文件第 16 节事实验收前，不构成 production cutover 声明。
 
 ## 0. 第一要义：事实验收，直接硬切
 
@@ -457,22 +458,27 @@ cannot prove coverage, advance a cursor, admit an instance, or create a Graph ed
 The production edge/candidate observation policy is one code-owned range:
 
 ~~~ts
-const EDGE_COLLECTION_WINDOW_BLOCKS = 50;
-const fromBlock = Math.max(0, cutoff.number - 49);
+const EDGE_COLLECTION_WINDOW_BLOCKS = 14400; // 2 days at 12s slots
+const fromBlock = Math.max(0, cutoff.number - 14399);
 ~~~
 
-- a new run queries exactly `[cutoff.number - 49 .. cutoff.number]`;
+- a new run queries exactly `[cutoff.number - 14399 .. cutoff.number]`;
 - CLI flags, environment variables, legacy universe metadata, and warm-cache metadata cannot expand or
   narrow it;
 - catalog event scans and every plugin auxiliary recent-log nomination bind that same number/hash cutoff and
   range;
 - an unfinished run always resumes its original durable range and cutoff; it never changes window halfway;
 - a completed pre-policy wider run is atomically retired before startup creates and returns the current
-  50-block ready generation.
+  14400-block ready generation.
 
-The 50-block range is an observation policy, not an admission shortcut. Static reverse-verified identity,
-durable verified memos, and active startup nominations remain available across rolling windows; old files
-still cannot grant coverage or create edges.
+History: the 2-day window was parked at 50 blocks while univ4 pools could not enter the candidate partition
+(swap logs carry only poolId; the retain channel's chain-truth sources were still landing). Once the retain
+channel admitted univ4 pools (5.4), the window returned to 14400; the streaming observation hash makes the
+wide window safe (no giant concatenated string, no "Invalid string length").
+
+The window is an observation policy, not an admission shortcut. Static reverse-verified identity, durable
+verified memos, and the retain channel (5.4) remain available across rolling windows; old files still cannot
+grant coverage or create edges.
 
 ### 5.1 Full evidence identity
 
@@ -528,6 +534,60 @@ actor/pair/amount/transaction evidence.
 Within one fixed-cutoff run, a Family+Instance executes identity → materialization → projection at most once.
 All startup pool sets are merged before lifecycle work. Universe and blockscan sources cannot separately
 attest the same instance.
+
+### 5.4 Retain channel: plugin-declared reverse binding
+
+Some observations cannot form a complete candidate directly: a univ4 Swap log carries only the 32-byte
+poolId (the manager never exposes per-pool contracts), and decodeCandidate deliberately refuses to guess a
+PoolKey from a one-way hash. Such an observation is not dropped; it becomes an opaque nomination and the
+plugin's declared retain channel re-materializes chain truth.
+
+The plugin owns the declaration; the central pipeline owns the driver:
+
+~~~ts
+interface DiscoverySemantics<Candidate> {
+  readonly reverseBinding?: ReverseBindingDeclaration;
+}
+
+type ReverseBindingDeclaration =
+  | { readonly kind: "implementation";
+      readonly reverseBinding: (input: {
+        readonly nominations: readonly CaptureNominationInput[];
+        readonly source: CanonicalSource;
+        readonly provider: CaptureNominationProvider;
+      }) => Promise<readonly ReverseBindingOutcome[]> }
+  | { readonly kind: "explicitly-unsupported"; readonly reason: string };
+~~~
+
+The central rebuild driver derives opaque nominations only from plugin-declared semantics: a log pattern
+whose emitter mode is `singleton-indexed-bytes32` declares that the singleton carries the child's opaque id
+at `topics[emitter.topicIndex]`. The central pipeline never knows the protocol — no topic, selector, ABI or
+infrastructure address appears in central paths. The catalog projection
+(`hasReverseBinding`/`reverseBindingFor`) decides which families participate.
+
+Execution order (fixed-cutoff run):
+
+1. swap-window scan produces observations; `decodeCandidate` nulls are collected as opaque nominations
+   instead of being discarded;
+2. `executeCatalogReverseBindings` feeds each nomination to each Family's declared `reverseBinding`
+   one at a time (the executor admits one verified observation per Family per call — a per-candidate
+   contract, never a batch);
+3. a "verified" outcome's observation re-enters through the same `catalog.matches` + `decodeCandidate`
+   admission the scan channel uses;
+4. reverse-bound candidates merge through the alias-collapsing dedupe
+   (`rebuildFamilyInstanceDedupeKey`: Family + address + poolId), so retained and event spellings of one
+   instance enter the run once.
+
+univ4 sources (plugin-owned): primary is the PositionManager `poolKeys` reverse lookup at the source block;
+fallback is the indexed Initialize-log reverse scan (`resolveV4InitsBackward`, topics
+`[Initialize, poolId]`) on the archive node (MAINNET_RPC_URL) for router-side pools the position manager
+never saw — the local node's `eth_getLogs` caps on indexed topics[1] filters and its history is pruned.
+
+One verified outcome per family instance: two candidate keys can verify to the same instance (two curve
+pools sharing one underlying). The runner keeps the first verified candidate per instance (sorted by key)
+and downgrades the duplicates to terminal-rejected `duplicate-instance`, so the ready promotion's instance
+set is unique; the startup runtime materializes exactly one instance per active key. The pass is idempotent
+and repairs an incumbent run on resume (no re-verification).
 
 ## 6. Durable startup envelope
 
@@ -699,7 +759,7 @@ function promoteReady(
 
 Promotion never advances source facts that are not durably proven. A retryable or pending outcome keeps the
 fixed run durable and probe-closable but blocks promotion. Successful promotion clears inProgressRun while
-retaining verifiedMemos and readyGeneration; the next startup can therefore freeze a new rolling 50-block
+retaining verifiedMemos and readyGeneration; the next startup can therefore freeze a new rolling 14400-block
 cutoff instead of restoring an already-completed historical run forever.
 
 ## 7. Persisted Graph and runtime rehydration
@@ -802,6 +862,22 @@ Current-source refresh is atomic and block-cadence aware:
 The concurrency cap is a resource policy, not a Family contract. A Family plugin still issues its request
 program; the kernel only schedules independent issued programs. Adding or changing an unrelated capability
 closure therefore does not require revalidating Families that do not depend on it.
+
+Funding liquidity is read per token per block, so the funded token set must not scale with the routing
+graph's token count (the 14400-window graph carries thousands of tokens; unbounded funding reads blew the
+block budget and one unreadable result crashed the funding decode). The funded token set is the funding
+providers' real support surface, enumerated from chain truth and solidified once into a table
+(/opt/MEV-runtime/funding-token-universe.json):
+
+- Morpho Blue: every registered market's loan token (CreateMarket events + market(id)); Morpho flash loans
+  borrow the market loan token;
+- Balancer V2 Vault: current balanceOf(vault) > 0 over the candidate tokens (the graph tokens in the
+  searcher; pool-universe token0/token1 in the CLI) — the Vault flash-loans any ERC20 it holds and its
+  flashLoan only checks vault balance, so the support surface is queried via the balanceOf interface, never
+  pool-registration history (which the local node prunes).
+
+First boot enumerates once and solidifies the table; the searcher only reads it afterwards. The per-family
+balance decode skips unreadable sources (no offer for that source) instead of failing the family.
 
 ## 9. Victim observation and post-impact state
 
@@ -1198,7 +1274,7 @@ lineage.
 
 After a controlled systemd restart:
 
-- startup freezes a new current 50-block run while retaining the prior atomic readyGeneration as durable
+- startup freezes a new current 14400-block run while retaining the prior atomic readyGeneration as durable
   evidence until the new generation promotes;
 - verified memos are reused only when all fingerprints remain valid;
 - only new, invalidated, retryable, and pending differences are processed;
