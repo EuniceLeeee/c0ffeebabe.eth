@@ -41,7 +41,7 @@ function ready(): ReadyUniverseGeneration {
     generation: 1,
     cutoff: SOURCE,
     universeRange: Object.freeze({
-      fromBlock: SOURCE.number - 14_399,
+      fromBlock: SOURCE.number - 49,
       toBlock: SOURCE.number,
     }),
     universeHash: "u",

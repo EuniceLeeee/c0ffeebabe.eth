@@ -18,17 +18,39 @@ import { UNIV4_INITIALIZE_TOPIC } from "../univ4-abi.js";
 import type { V4PoolKey } from "../../../planner/token-graph.js";
 
 /**
+ * Archive provider used ONLY by the Initialize reverse scan. The local
+ * node's eth_getLogs caps on indexed topics[1] filters and the pool's
+ * Initialize may predate the retained range, so the retain channel resolves
+ * chain truth from the archive node; every other read (PositionManager
+ * poolKeys eth_call, manager code, the main event scan) stays on the live
+ * provider. Lazy per-URL singleton: one connection per process.
+ */
+const archiveLogProviders = new Map<string, ethers.JsonRpcProvider>();
+
+function archiveLogProvider(): ethers.JsonRpcProvider | null {
+  const url = process.env.MAINNET_RPC_URL;
+  if (url === undefined || url.trim().length === 0) return null;
+  let provider = archiveLogProviders.get(url);
+  if (provider === undefined) {
+    provider = new ethers.JsonRpcProvider(url);
+    archiveLogProviders.set(url, provider);
+  }
+  return provider;
+}
+
+/**
  * Plugin-owned retain-channel reverse binding: a univ4 pool's real identity
  * is its 32-byte poolId (the manager never exposes per-pool contracts), so
  * chain truth is recovered from the source block without requiring recent
  * activity. Primary source: the PositionManager poolKeys reverse lookup
- * (eth_call). Fallback: the indexed Initialize-log reverse scan (topics
- * [Initialize, poolId]) which covers every pool, including router-side pools
- * that never flowed through the official position manager. A candidate
- * without a poolId in its opaque payload is explicitly unsupported; a
- * lookup that fails to resolve is a failed outcome. Identity still
- * re-verifies the pool key against the manager at the source block in the
- * family lifecycle.
+ * (eth_call, live provider). Fallback: the indexed Initialize-log reverse
+ * scan (topics [Initialize, poolId]) on the archive node (MAINNET_RPC_URL),
+ * which covers every pool, including router-side pools that never flowed
+ * through the official position manager. Only this reverse scan uses the
+ * archive; all other reads stay on the live provider. A candidate without
+ * a poolId in its opaque payload is explicitly unsupported; a lookup that
+ * fails to resolve is a failed outcome. Identity still re-verifies the pool
+ * key against the manager at the source block in the family lifecycle.
  */
 export async function reverseBindUniv4(input: {
   readonly nominations: readonly CaptureNominationInput[];
@@ -71,15 +93,19 @@ export async function reverseBindUniv4(input: {
         // PoolKey: fall back to the indexed Initialize reverse scan (same
         // chain truth, no recent activity needed) from the source block back
         // toward the manager deploy block.
-        const backfilled = await resolveV4InitsBackward(
-          Object.freeze({
+        const archive = archiveLogProvider();
+        const logBackend = archive === null
+          ? Object.freeze({
             getLogs: (filter: {
               readonly address?: string;
               readonly fromBlock?: number;
               readonly toBlock?: number;
               readonly topics?: readonly (string | null)[];
             }) => input.provider.getLogs(filter),
-          }) as never,
+          })
+          : archive;
+        const backfilled = await resolveV4InitsBackward(
+          logBackend as never,
           ADDR.UNISWAP_V4_POOL_MANAGER,
           UNIV4_INITIALIZE_TOPIC,
           [poolId],

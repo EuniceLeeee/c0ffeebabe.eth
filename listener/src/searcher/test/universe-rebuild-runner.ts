@@ -490,7 +490,7 @@ async function main(): Promise<void> {
     assert.throws(
       () => assertReceiptsMatchCurrentSourcePlan(
         Object.freeze([Object.freeze({
-          ...sourceReceipts(SOURCE.number - 14_399)[0]!,
+          ...sourceReceipts(SOURCE.number - 49)[0]!,
           sourceKind: "unknown-source-kind" as never,
         })]),
         Object.freeze({
@@ -516,11 +516,11 @@ async function main(): Promise<void> {
     );
 
     // F: the production API has no lookback/from override. Receipts and ready
-    // bind exactly cutoff-14399..cutoff (14400-block window, 2 days at 12s);
+    // bind exactly cutoff-49..cutoff (50-block window);
     // old universe metadata cannot expand it.
     const fixedRange = makeFixture(join(dir, "fixed-range"));
     const fixedReady = await rebuildUniverse(fixedRange.input);
-    assert.equal(fixedReady.universeRange.fromBlock, SOURCE.number - 14_399);
+    assert.equal(fixedReady.universeRange.fromBlock, SOURCE.number - 49);
     assert.equal(
       fixedReady.sourceCoverage[0]?.completeThroughBlock,
       SOURCE.number,
@@ -615,7 +615,7 @@ async function main(): Promise<void> {
       expectedRevision: 0,
       runId: "run-1",
       cutoff: SOURCE,
-      fromBlock: SOURCE.number - 14_399,
+      fromBlock: SOURCE.number - 49,
       universeHash: digest(
         "universe-candidate-partition-v1:" + canonicalJson(legacyCandidates),
       ),
@@ -634,7 +634,7 @@ async function main(): Promise<void> {
     assert.notEqual(migrated?.inProgressRun, null);
     assert.equal(
       migrated?.readyGeneration?.universeRange.fromBlock,
-      SOURCE.number - 14_399,
+      SOURCE.number - 49,
       "the incumbent legacy range is preserved and promoted",
     );
     assert.equal(

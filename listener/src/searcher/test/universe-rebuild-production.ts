@@ -675,13 +675,13 @@ async function main(): Promise<void> {
     sourceKind: "catalog-event-union",
     providerIdentity: "fixture",
     queryFingerprint: "2".repeat(64),
-    fromBlock: SOURCE.number - 14_399,
+    fromBlock: SOURCE.number - 49,
     toBlock: SOURCE.number,
     cutoffNumber: SOURCE.number,
     cutoffHash: SOURCE.hash,
     coverageKeys: wiring.requiredSourceCoverageKeys(),
     completedChunks: Object.freeze([Object.freeze({
-      fromBlock: SOURCE.number - 14_399,
+      fromBlock: SOURCE.number - 49,
       toBlock: SOURCE.number,
       resultCount: 0,
       resultHash: "3".repeat(64),
@@ -892,6 +892,11 @@ async function main(): Promise<void> {
       hash: "0x" + "b1".repeat(32),
       generation: 1,
     });
+    // The reverse scan runs on the archive node (MAINNET_RPC_URL) while the
+    // PositionManager read stays on the live provider; point the archive at
+    // the same stub so the whole path is exercised in-process.
+    const previousArchiveUrl = process.env.MAINNET_RPC_URL;
+    process.env.MAINNET_RPC_URL = "http://127.0.0.1:" + stubPort;
     const backfilled = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: fallbackSource,
@@ -928,6 +933,11 @@ async function main(): Promise<void> {
       cutoff: missingSource,
     });
     assert.equal(unresolved.length, 0, "no candidate when both sources miss");
+    if (previousArchiveUrl === undefined) {
+      delete process.env.MAINNET_RPC_URL;
+    } else {
+      process.env.MAINNET_RPC_URL = previousArchiveUrl;
+    }
     // A log that matches no declared reverse-binding pattern is untouched.
     const unrelated = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([
