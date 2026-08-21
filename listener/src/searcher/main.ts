@@ -1333,8 +1333,18 @@ async function main(): Promise<void> {
   }
   const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
   const activeInstanceKeys = new Set(readyUniverse.activeInstanceKeys);
+  // The memo map can legitimately hold more than one memo per instance (a
+  // duplicate-instance candidate keeps its memo while its outcome is
+  // downgraded terminal-rejected); the runtime wants exactly one instance
+  // per active key.
+  const seenReadyInstances = new Set<string>();
   const readyInstances = Object.values(rebuildEnvelope.verifiedMemos)
     .filter((memo) => activeInstanceKeys.has(memo.familyInstanceKey))
+    .filter((memo) => {
+      if (seenReadyInstances.has(memo.familyInstanceKey)) return false;
+      seenReadyInstances.add(memo.familyInstanceKey);
+      return true;
+    })
     .map((memo) => rebuildWiring.rehydrateVerifiedInstance({
       memo,
       cutoff: readyUniverse.cutoff,
