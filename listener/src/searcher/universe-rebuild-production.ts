@@ -1506,9 +1506,19 @@ export function createRebuildWiring(input?: {
           coverageKeys: sourceCoverageKeys.events,
           familyDefinitionHashes: strictFamilyDefinitionHashes(),
         });
-        const eventObservationHash = digest(
-          "catalog-event-observations-v1:" + canonicalJson(logs),
-        );
+        // Stream each log into the digest instead of canonicalJson(logs):
+        // a widened window (e.g. 14400 blocks) can hold hundreds of
+        // thousands of logs and one giant concatenated string exceeds V8's
+        // string limit ("Invalid string length" crash). The incremental hash
+        // is order-sensitive and covers every log exactly like the old
+        // canonical form.
+        const eventHash = createHash("sha256");
+        eventHash.update("catalog-event-observations-v1:");
+        for (const log of logs) {
+          eventHash.update(canonicalJson(log));
+          eventHash.update(String.fromCharCode(0));
+        }
+        const eventObservationHash = eventHash.digest("hex");
         receipts.push(Object.freeze({
           sourceKey: digest("source-key-v1:" + canonicalJson({
             sourceKind: "catalog-event-union",

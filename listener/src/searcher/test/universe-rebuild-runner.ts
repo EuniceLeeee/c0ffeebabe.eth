@@ -516,10 +516,11 @@ async function main(): Promise<void> {
     );
 
     // F: the production API has no lookback/from override. Receipts and ready
-    // bind exactly cutoff-49..cutoff; old universe metadata cannot expand it.
+    // bind exactly cutoff-14399..cutoff (14400-block window, 2 days at 12s);
+    // old universe metadata cannot expand it.
     const fixedRange = makeFixture(join(dir, "fixed-range"));
     const fixedReady = await rebuildUniverse(fixedRange.input);
-    assert.equal(fixedReady.universeRange.fromBlock, SOURCE.number - 49);
+    assert.equal(fixedReady.universeRange.fromBlock, SOURCE.number - 14_399);
     assert.equal(
       fixedReady.sourceCoverage[0]?.completeThroughBlock,
       SOURCE.number,

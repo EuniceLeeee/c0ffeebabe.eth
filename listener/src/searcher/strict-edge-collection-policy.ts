@@ -4,12 +4,13 @@
  * nominations only: neither an environment variable nor old metadata may
  * expand this fixed canonical window.
  *
- * A wider window is not viable: a 2-day (14400-block) scan crashed with
- * "Invalid string length" and four active pools still lay outside even
- * that window (~41000 blocks before head). Active pools must reach the
- * graph via the nomination partition, not an event-scan window.
+ * 14400 blocks = 2 days at 12s slots. The observation digest streams per
+ * log (no giant concatenated string), so a widened window no longer hits
+ * "Invalid string length". Four active pools (XL1/XYO, USDT/WBTC, WBTC)
+ * lie ~41000 blocks before head; they enter the candidate partition via
+ * the event-scan window, and verified memos are durable across windows.
  */
-export const STRICT_EDGE_COLLECTION_WINDOW_BLOCKS = 50 as const;
+export const STRICT_EDGE_COLLECTION_WINDOW_BLOCKS = 14_400 as const;
 
 export function strictEdgeCollectionFromBlock(cutoffNumber: number): number {
   if (!Number.isSafeInteger(cutoffNumber) || cutoffNumber < 0) {
