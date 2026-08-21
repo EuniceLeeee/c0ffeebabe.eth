@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import { ethers } from "ethers";
+import { UNIV4_SWAP_TOPIC } from "../venues/swaps/univ4-abi.js";
+import { ADDR } from "../../shared/constants/addresses.js";
 import {
   attestationPoolFromCandidate,
   canReuseMemo,
@@ -702,6 +705,152 @@ async function main(): Promise<void> {
     row.completeThroughBlock === SOURCE.number &&
     row.completeThroughHash === SOURCE.hash
   ));
+
+  // Retain-channel driver: a univ4 Swap log (poolId only, no PoolKey) must
+  // reach the Family's declared reverseBinding through generic
+  // plugin-declared semantics (logPattern emitter singleton-indexed-bytes32 +
+  // topicIndex), and the verified observation must re-admit as a complete
+  // candidate. No protocol names live in the central wiring: the swap topic,
+  // manager address and PositionManager lookup all come from the plugin.
+  const currency0 = "0x" + "11".repeat(20);
+  const currency1 = "0x" + "22".repeat(20);
+  const fee = 3000;
+  const tickSpacing = 60;
+  const hooks = "0x" + "00".repeat(20);
+  const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+  const poolId = ethers.keccak256(abiCoder.encode(
+    ["address", "address", "uint24", "int24", "address"],
+    [currency0, currency1, fee, tickSpacing, hooks],
+  ));
+  const encodedPoolKey = abiCoder.encode(
+    ["address", "address", "uint24", "int24", "address"],
+    [currency0, currency1, fee, tickSpacing, hooks],
+  );
+  const stubServer = http.createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk: Buffer) => { body += chunk.toString("utf8"); });
+    request.on("end", () => {
+      // ethers v6 batches independent calls into one request body array.
+      const parsed = JSON.parse(body) as
+        | {
+          readonly id: number;
+          readonly method: string;
+          readonly params?: readonly unknown[];
+        }
+        | readonly {
+          readonly id: number;
+          readonly method: string;
+          readonly params?: readonly unknown[];
+        }[];
+      const batch = Array.isArray(parsed) ? parsed : [parsed];
+      const results = batch.map((rpcRequest) => {
+        const respond = (result: unknown) => Object.freeze({
+          jsonrpc: "2.0",
+          id: rpcRequest.id,
+          result,
+        });
+        switch (rpcRequest.method) {
+          case "eth_chainId":
+            return respond("0x1");
+          case "eth_blockNumber":
+            return respond("0x" + SOURCE.number.toString(16));
+          case "eth_getCode":
+            // Any deployed code satisfies the manager-code gate.
+            return respond("0x6000");
+          case "eth_call": {
+            const transaction = rpcRequest.params?.[0] as
+              | { readonly to?: string; readonly data?: string }
+              | undefined;
+            const data = transaction?.data ?? "0x";
+            // V4_POSITION_MANAGER_POOL_KEYS_SELECTOR = 0x86b6be7d.
+            if (data.startsWith("0x86b6be7d")) return respond(encodedPoolKey);
+            return respond("0x");
+          }
+          default:
+            return Object.freeze({
+              jsonrpc: "2.0",
+              id: rpcRequest.id,
+              error: {
+                code: -32601,
+                message: "unsupported:" + rpcRequest.method,
+              },
+            });
+        }
+      });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(Array.isArray(parsed) ? results : results[0]));
+    });
+  });
+  await new Promise<void>((resolve) => stubServer.listen(0, "127.0.0.1", resolve));
+  const stubAddress = stubServer.address();
+  const stubPort = typeof stubAddress === "object" && stubAddress !== null
+    ? stubAddress.port
+    : 0;
+  try {
+    const wired = createRebuildWiring({
+      rpcUrl: "http://127.0.0.1:" + stubPort,
+    });
+    const manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
+    const v4SwapLog = Object.freeze({
+      address: manager,
+      topics: Object.freeze([UNIV4_SWAP_TOPIC, poolId.toLowerCase()]),
+      data: "0x",
+      transactionHash: "0x" + "99".repeat(32),
+      blockNumber: SOURCE.number,
+      blockHash: SOURCE.hash,
+      logIndex: 0,
+    });
+    const reverseBound = await wired.reverseBindOpaqueCandidates!({
+      observations: Object.freeze([v4SwapLog]),
+      cutoff: SOURCE,
+    });
+    assert.equal(
+      reverseBound.length,
+      1,
+      "a poolId-only Swap log resolves through the declared reverse binding",
+    );
+    const boundCandidate = reverseBound[0] as Readonly<Record<string, unknown>>;
+    assert.equal(boundCandidate.familyId, "univ4");
+    assert.equal(boundCandidate.poolId, poolId.toLowerCase());
+    assert.equal(boundCandidate.address, manager);
+    assert.equal(
+      (boundCandidate.poolKey as Readonly<Record<string, unknown>>).currency0,
+      currency0.toLowerCase(),
+    );
+    assert.equal(
+      (boundCandidate.poolKey as Readonly<Record<string, unknown>>).fee,
+      fee,
+    );
+    assert.equal(
+      (boundCandidate.pluginCandidateKey as string),
+      manager + "\u001f" + poolId.toLowerCase(),
+    );
+    // Duplicate swap logs of one pool collapse to a single candidate.
+    const repeated = await wired.reverseBindOpaqueCandidates!({
+      observations: Object.freeze([
+        v4SwapLog,
+        Object.freeze({ ...v4SwapLog, logIndex: 1 }),
+      ]),
+      cutoff: SOURCE,
+    });
+    assert.equal(repeated.length, 1, "reverse-bound candidates dedupe per pool");
+    // A log that matches no declared reverse-binding pattern is untouched.
+    const unrelated = await wired.reverseBindOpaqueCandidates!({
+      observations: Object.freeze([
+        log({ address: manager, logIndex: 0 }),
+        log({ address: "0x" + "55".repeat(20), logIndex: 1 }),
+      ]),
+      cutoff: SOURCE,
+    });
+    assert.equal(unrelated.length, 0, "no reverse binding without a declared seed");
+  } finally {
+    // The JSON-RPC client keeps connections alive; force them closed so the
+    // server can actually stop.
+    stubServer.closeAllConnections();
+    await new Promise<void>((resolve, reject) => {
+      stubServer.close((error) => error === undefined ? resolve() : reject(error));
+    });
+  }
 
   console.log("universe rebuild production wiring PASS");
 }

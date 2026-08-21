@@ -31,6 +31,10 @@ import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
   "./venues/production-verified-actors.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "./venues/production-family-composition.js";
+import { executeCatalogReverseBindings } from
+  "./venues/capture-materialization.js";
+import type { CaptureNominationInput } from
+  "./venues/adapter-family-plugin.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 
@@ -1600,6 +1604,115 @@ export function createRebuildWiring(input?: {
             preferCandidateRepresentative(existing, candidate)
           ) {
             byKey.set(key, candidate);
+          }
+        }
+      }
+      return Object.freeze([...byKey.values()]);
+    },
+    reverseBindOpaqueCandidates: async (reverseInput) => {
+      // Retain-channel driver (central; no protocol semantics here). Opaque
+      // nominations are derived purely from plugin-declared semantics: a log
+      // pattern whose emitter mode "singleton-indexed-bytes32" declares that
+      // the singleton carries the child's opaque id at topics[topicIndex],
+      // for a Family that declares a reverseBinding implementation. Each
+      // Family's reverseBinding re-materializes a real observation from chain
+      // truth (no recent activity needed); verified observations re-enter
+      // through the same catalog matching + decodeCandidate admission the
+      // scan channel uses.
+      const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+      const nominations: CaptureNominationInput[] = [];
+      const seen = new Set<string>();
+      for (const raw of reverseInput.observations) {
+        if (
+          typeof raw === "object" && raw !== null &&
+          (raw as { kind?: unknown }).kind === "startup-candidate"
+        ) {
+          continue;
+        }
+        const log = raw as RebuildScanObservation;
+        const matches = catalog.matches(Object.freeze({
+          kind: "log",
+          source: Object.freeze({
+            number: log.blockNumber ?? 0,
+            hash: log.blockHash ?? "0x" + "00".repeat(32),
+            generation: log.blockNumber ?? 0,
+          }),
+          address: log.address.toLowerCase(),
+          topics: Object.freeze([...(log.topics ?? [])]),
+          data: log.data,
+        }) as never);
+        for (const match of matches) {
+          const family = catalog.forStrictFamily(match.familyId);
+          const plugin = family.plugin;
+          if (!("discovery" in plugin)) continue;
+          const discovery = plugin.discovery;
+          if (discovery.reverseBinding?.kind !== "implementation") continue;
+          const pattern = discovery.logPatterns?.find(
+            (item) => item.id === match.patternId,
+          );
+          if (pattern?.emitter?.mode !== "singleton-indexed-bytes32") {
+            continue;
+          }
+          const poolId = log.topics[pattern.emitter.topicIndex]?.toLowerCase();
+          if (
+            poolId === undefined ||
+            !/^0x[0-9a-fA-F]{64}$/.test(poolId)
+          ) {
+            continue;
+          }
+          const key = match.familyId + "\u001f" + poolId;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          nominations.push(Object.freeze({
+            address: log.address.toLowerCase(),
+            opaque: Object.freeze({
+              adapter: match.familyId,
+              poolId,
+            }),
+          }));
+        }
+      }
+      if (nominations.length === 0) return Object.freeze([]);
+      const verified = await executeCatalogReverseBindings({
+        catalog,
+        source: reverseInput.cutoff,
+        nominations,
+        provider: providerAdapter(provider),
+      });
+      const byKey = new Map<string, Readonly<Record<string, unknown>>>();
+      for (const observation of verified) {
+        for (const match of catalog.matches(observation)) {
+          const family = catalog.forStrictFamily(match.familyId);
+          const plugin = family.plugin;
+          if (!("discovery" in plugin)) continue;
+          const discovery = plugin.discovery;
+          const decoded = discovery.decodeCandidate({
+            observation: observation as never,
+            matchedPatternId: match.patternId,
+          });
+          if (decoded === null) continue;
+          const decodedRecord = typeof decoded === "object" && decoded !== null
+            ? decoded as Readonly<Record<string, unknown>>
+            : Object.freeze({ opaqueCandidate: decoded });
+          const observationAddress = observation.kind === "call"
+            ? observation.target.toLowerCase()
+            : observation.kind === "factory-log"
+              ? observation.factory.toLowerCase()
+              : observation.address.toLowerCase();
+          const candidate = Object.freeze({
+            ...decodedRecord,
+            address: observationAddress,
+            pluginCandidateKey: discovery.candidateKey(decoded as never),
+            familyId: match.familyId,
+            adapter: adapterLabelForFamily(match.familyId),
+          });
+          const candidateKey = rebuildFamilyInstanceDedupeKey(candidate);
+          const existing = byKey.get(candidateKey);
+          if (
+            existing === undefined ||
+            preferCandidateRepresentative(existing, candidate)
+          ) {
+            byKey.set(candidateKey, candidate);
           }
         }
       }

@@ -63,6 +63,22 @@ export interface UniverseRebuildDependencies {
   readonly dedupeFamilyCandidates: (
     observations: readonly unknown[],
   ) => readonly unknown[];
+  /**
+   * Optional retain-channel candidate resolution (central driver; plugin
+   * semantics).  After the event-window dedupe, opaque observations that
+   * produced no candidate (e.g. univ4 swap logs carry only a poolId, never a
+   * complete PoolKey) are handed to each Family plugin's declared
+   * reverseBinding capability, which re-materializes a real observation from
+   * chain truth (PositionManager / factory-child / registry).  The resolved
+   * observations are re-run through catalog matching + decodeCandidate and
+   * their candidates merged into the run partition.  No protocol semantics
+   * in this file: the wiring supplies the driver, plugins own the lookups.
+   */
+  readonly reverseBindOpaqueCandidates?: (input: {
+    readonly observations: readonly unknown[];
+    readonly cutoff: CanonicalSource;
+  }) => Promise<readonly unknown[]>;
+  /** JSON-safe durable form used by candidatesByKey and retry/probe resume. */
   /** JSON-safe durable form used by candidatesByKey and retry/probe resume. */
   readonly encodeCandidateSnapshot?: (candidate: unknown) => unknown;
   /** Restore the exact candidate value (including bigint/Map fields). */
@@ -248,6 +264,31 @@ export async function rebuildUniverse(
     observations = scanned.observations;
     sourceReceipts = scanned.sourceReceipts;
     candidates = input.dedupeFamilyCandidates(observations);
+    if (input.reverseBindOpaqueCandidates !== undefined) {
+      // Retain-channel candidates: opaque observations (e.g. univ4 swap
+      // logs carrying only a poolId) are resolved to complete candidates
+      // through each Family plugin's declared reverseBinding, then merged
+      // with the event-window partition. The wiring owns the driver; the
+      // plugin owns the chain lookups.
+      const reverseBound = await input.reverseBindOpaqueCandidates({
+        observations,
+        cutoff,
+      });
+      if (reverseBound.length > 0) {
+        const existing = new Set(
+          candidates.map((candidate) => input.familyCandidateKey(candidate)),
+        );
+        candidates = Object.freeze([
+          ...candidates,
+          ...reverseBound.filter((candidate) => {
+            const key = input.familyCandidateKey(candidate);
+            if (existing.has(key)) return false;
+            existing.add(key);
+            return true;
+          }),
+        ]);
+      }
+    }
   }
   log(
     "universe rebuild fixed source range: run=" + input.runId +
