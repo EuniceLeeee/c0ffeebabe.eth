@@ -68,6 +68,9 @@ function makeFixture(
     | "runId"
     | "scanSwapWindow"
     | "expectedSourcePlanFingerprints"
+    | "dedupeFamilyCandidates"
+    | "reverseBindOpaqueCandidates"
+    | "sealDurableVerifiedMemo"
   >>,
 ): Fixture {
   const store = new UniverseRebuildCheckpointStore({
@@ -641,6 +644,83 @@ async function main(): Promise<void> {
       legacy.scanCalls(),
       1,
       "legacy receipt backfill scans once and resumes the incumbent run",
+    );
+
+    // H: retain-channel candidates merge through the alias-collapsing dedupe.
+    // A reverse-bound candidate spells the same instance under a different
+    // familyCandidateKey than a retained startup entry (manager+poolId vs
+    // poolId); merging by familyCandidateKey would attest the instance twice
+    // and the ready promotion's instance set would contain duplicates
+    // ("ready generation is not bound to completed run").
+    const aliasMerge = makeFixture(join(dir, "alias-merge"), {
+      scanSwapWindow: async (scanInput) => Object.freeze({
+        observations: Object.freeze([Object.freeze({
+          id: "a",
+          block: SOURCE.number,
+        })]),
+        sourceReceipts: sourceReceipts(scanInput.fromBlock),
+      }),
+      // Simulates rebuildFamilyInstanceDedupeKey: alias spellings collapse.
+      dedupeFamilyCandidates: (obs) => {
+        const ids = new Set<string>();
+        for (const observation of obs) {
+          const item = observation as {
+            kind?: unknown;
+            candidate?: { id?: string; alias?: string };
+            id?: string;
+            alias?: string;
+          };
+          const candidate = item.kind === "startup-candidate"
+            ? item.candidate ?? {}
+            : item;
+          ids.add(String(candidate.alias ?? candidate.id));
+        }
+        return Object.freeze([...ids].map((id) => Object.freeze({ id })));
+      },
+      // Reverse-bound candidate: distinct familyCandidateKey ("cand:a-rev")
+      // but the same instance alias as the retained candidate.
+      reverseBindOpaqueCandidates: async () => Object.freeze([
+        Object.freeze({ id: "a-rev", alias: "a" }),
+      ]),
+      // Instance identity follows the alias, like the production memo
+      // sealing: both spellings mint the SAME familyInstanceKey.
+      sealDurableVerifiedMemo: (input) => {
+        const item = input.candidate as { id: string; alias?: string };
+        const instanceKey = "inst:" + (item.alias ?? item.id);
+        return Object.freeze({
+          familyCandidateKey: "cand:" + item.id,
+          familyInstanceKey: instanceKey,
+          familyId: "univ2",
+          candidateKey: "cand:" + item.id,
+          instanceKey,
+          candidateFingerprint: "cf:" + item.id,
+          familyDefinitionHash: "fdh",
+          validity: Object.freeze({
+            policy: "immutable-code",
+            authorityFingerprint: "auth",
+            proofSource: Object.freeze({
+              number: SOURCE.number,
+              hash: SOURCE.hash,
+            }),
+          }),
+          verifiedIdentity: Object.freeze({ kind: "identity" }),
+          compiledDescriptor: Object.freeze({ kind: "descriptor" }),
+          staticProjection: Object.freeze({ kind: "projection" }),
+          evidenceFingerprint: "ef:" + item.id,
+          memoFingerprint: "memo:" + item.id,
+        }) as DurableVerifiedMemo;
+      },
+    });
+    const aliasReady = await rebuildUniverse(aliasMerge.input);
+    assert.equal(
+      (await aliasMerge.store.load())?.inProgressRun?.candidateCount,
+      1,
+      "the reverse-bound alias collapses into the retained candidate",
+    );
+    assert.equal(
+      aliasReady.activeInstanceKeys.length,
+      1,
+      "the ready instance set carries the instance exactly once",
     );
   } finally {
     await rm(dir, { recursive: true, force: true });

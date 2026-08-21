@@ -275,18 +275,21 @@ export async function rebuildUniverse(
         cutoff,
       });
       if (reverseBound.length > 0) {
-        const existing = new Set(
-          candidates.map((candidate) => input.familyCandidateKey(candidate)),
-        );
-        candidates = Object.freeze([
-          ...candidates,
-          ...reverseBound.filter((candidate) => {
-            const key = input.familyCandidateKey(candidate);
-            if (existing.has(key)) return false;
-            existing.add(key);
-            return true;
-          }),
-        ]);
+        // Merge through the shared alias-collapsing dedupe
+        // (rebuildFamilyInstanceDedupeKey) instead of familyCandidateKey:
+        // a retained startup-universe entry spells a univ4 pool as
+        // address+poolId while the reverse-bound candidate spells it as
+        // manager+poolId, and familyCandidateKey keeps those spellings
+        // distinct. Two memos for one instance would then duplicate the
+        // instance key set and the ready promotion fails closed ("ready
+        // generation is not bound to completed run").
+        candidates = input.dedupeFamilyCandidates(Object.freeze([
+          ...observations,
+          ...reverseBound.map((candidate) => Object.freeze({
+            kind: "startup-candidate",
+            candidate,
+          })),
+        ]));
       }
     }
   }
