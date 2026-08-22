@@ -1,5 +1,14 @@
-import { deepFreeze, hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
-import type { CanonicalCutoffV1 } from "../../discovery/src/index.ts";
+import {
+  assertDecimalString,
+  assertHash,
+  assertNonEmptyString,
+  decodeExactObject,
+  deepFreeze,
+  fieldArray,
+  hashDomain,
+  type Hash,
+} from "../../canonical-codec/src/index.ts";
+import { decodeCanonicalCutoff, type CanonicalCutoffV1 } from "../../discovery/src/index.ts";
 
 export interface AssetPortV1 {
   readonly assetRef: Hash;
@@ -46,89 +55,112 @@ export interface InstanceCatalogV1 {
   readonly instanceCatalogRoot: Hash;
 }
 
-function assertExactRecord(value: object, keys: readonly string[], name: string): void {
-  if (Object.getPrototypeOf(value) !== Object.prototype) throw new TypeError(`${name} must be a plain record`);
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const ownKeys = Reflect.ownKeys(descriptors);
-  if (ownKeys.some(key => typeof key !== "string")) throw new TypeError(`${name} has symbol fields`);
-  const actual = (ownKeys as string[]).sort();
-  const expected = [...keys].sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
-    throw new TypeError(`${name} has unknown or missing fields`);
-  }
-  for (const key of actual) {
-    const descriptor = descriptors[key]!;
-    if (!("value" in descriptor) || !descriptor.enumerable) throw new TypeError(`${name}.${key} is not data`);
-  }
-}
+const decodeAssetPort = (value: unknown, name = "assetPort"): AssetPortV1 => decodeExactObject(value, {
+  assetRef: (field, path) => assertHash(field, path),
+  portRef: (field, path) => assertHash(field, path),
+  ordinal: (field, path) => assertDecimalString(field, path),
+}, name);
 
-function assetPort(port: AssetPortV1): AssetPortV1 {
-  assertExactRecord(port, ["assetRef", "portRef", "ordinal"], "assetPort");
-  if (!/^(0|[1-9][0-9]*)$/.test(port.ordinal)) throw new TypeError("asset port ordinal is invalid");
-  return deepFreeze({ assetRef: port.assetRef, portRef: port.portRef, ordinal: port.ordinal });
-}
+const decodeProjectionDraft = (
+  value: unknown,
+  name = "transitionProjection",
+): StaticTransitionProjectionDraftV1 => decodeExactObject(value, {
+  inputAssetPorts: (field, path) => fieldArray(field, (item, itemPath) => decodeAssetPort(item, itemPath), path),
+  outputAssetPorts: (field, path) => fieldArray(field, (item, itemPath) => decodeAssetPort(item, itemPath), path),
+  opaqueTransitionRef: (field, path) => assertHash(field, path),
+  constraintRefs: (field, path) => fieldArray(field, (item, itemPath) => assertHash(item, itemPath), path),
+  staticProjectionHash: (field, path) => assertHash(field, path),
+}, name);
 
-function projection(draft: StaticTransitionProjectionDraftV1): StaticTransitionProjectionV1 {
-  assertExactRecord(draft, [
-    "inputAssetPorts",
-    "outputAssetPorts",
-    "opaqueTransitionRef",
-    "constraintRefs",
-    "staticProjectionHash",
-  ], "transitionProjection");
-  if (draft.inputAssetPorts.length === 0 || draft.outputAssetPorts.length === 0) {
+const decodeSealedProjection = (
+  value: unknown,
+  name = "sealedTransitionProjection",
+): StaticTransitionProjectionV1 => decodeExactObject(value, {
+  inputAssetPorts: (field, path) => fieldArray(field, (item, itemPath) => decodeAssetPort(item, itemPath), path),
+  outputAssetPorts: (field, path) => fieldArray(field, (item, itemPath) => decodeAssetPort(item, itemPath), path),
+  opaqueTransitionRef: (field, path) => assertHash(field, path),
+  constraintRefs: (field, path) => fieldArray(field, (item, itemPath) => assertHash(item, itemPath), path),
+  staticProjectionHash: (field, path) => assertHash(field, path),
+  projectionHash: (field, path) => assertHash(field, path),
+}, name);
+
+const projection = (draft: unknown, name = "transitionProjection"): StaticTransitionProjectionV1 => {
+  const decoded = decodeProjectionDraft(draft, name);
+  if (decoded.inputAssetPorts.length === 0 || decoded.outputAssetPorts.length === 0) {
     throw new Error("transition-missing-asset-ports");
   }
-  const inputAssetPorts = draft.inputAssetPorts.map(assetPort);
-  const outputAssetPorts = draft.outputAssetPorts.map(assetPort);
-  const constraintRefs = [...draft.constraintRefs];
+  const inputAssetPorts = decoded.inputAssetPorts.map(assetPort => deepFreeze({ ...assetPort }));
+  const outputAssetPorts = decoded.outputAssetPorts.map(assetPort => deepFreeze({ ...assetPort }));
+  const constraintRefs = [...decoded.constraintRefs];
   if (new Set(constraintRefs).size !== constraintRefs.length) throw new Error("duplicate-constraint-ref");
   constraintRefs.sort();
   const payload = {
     inputAssetPorts,
     outputAssetPorts,
-    opaqueTransitionRef: draft.opaqueTransitionRef,
+    opaqueTransitionRef: decoded.opaqueTransitionRef,
     constraintRefs,
-    staticProjectionHash: draft.staticProjectionHash,
+    staticProjectionHash: decoded.staticProjectionHash,
   };
   return deepFreeze({ ...payload, projectionHash: hashDomain("aloha/static-transition-projection/v1", payload) });
-}
+};
+
+const decodePublicationDraft = (
+  value: unknown,
+  name = "instancePublication",
+): InstancePublicationDraftV1 => decodeExactObject(value, {
+  familyId: (field, path) => assertNonEmptyString(field, path),
+  familyDefinitionHash: (field, path) => assertHash(field, path),
+  familyCandidateKey: (field, path) => assertHash(field, path),
+  instanceKey: (field, path) => assertNonEmptyString(field, path),
+  cutoff: (field, path) => decodeCanonicalCutoff(field, path),
+  identityMemoHash: (field, path) => assertHash(field, path),
+  descriptorHash: (field, path) => assertHash(field, path),
+  staticProjectionMemoHash: (field, path) => assertHash(field, path),
+  requestedArtifactDependencyRoot: (field, path) => assertHash(field, path),
+  validityDependencyRoot: (field, path) => assertHash(field, path),
+  transitions: (field, path) => fieldArray(field, (item, itemPath) => decodeProjectionDraft(item, itemPath), path),
+  evidenceRoot: (field, path) => assertHash(field, path),
+}, name);
+
+const decodePublication = (
+  value: unknown,
+  name = "sealedInstancePublication",
+): InstancePublicationV1 => decodeExactObject(value, {
+  familyId: (field, path) => assertNonEmptyString(field, path),
+  familyDefinitionHash: (field, path) => assertHash(field, path),
+  familyCandidateKey: (field, path) => assertHash(field, path),
+  instanceKey: (field, path) => assertNonEmptyString(field, path),
+  cutoff: (field, path) => decodeCanonicalCutoff(field, path),
+  identityMemoHash: (field, path) => assertHash(field, path),
+  descriptorHash: (field, path) => assertHash(field, path),
+  staticProjectionMemoHash: (field, path) => assertHash(field, path),
+  requestedArtifactDependencyRoot: (field, path) => assertHash(field, path),
+  validityDependencyRoot: (field, path) => assertHash(field, path),
+  transitions: (field, path) => fieldArray(field, (item, itemPath) => decodeSealedProjection(item, itemPath), path),
+  evidenceRoot: (field, path) => assertHash(field, path),
+  instancePublicationHash: (field, path) => assertHash(field, path),
+}, name);
 
 export function sealInstancePublication(draft: InstancePublicationDraftV1): InstancePublicationV1 {
-  assertExactRecord(draft, [
-    "familyId",
-    "familyDefinitionHash",
-    "familyCandidateKey",
-    "instanceKey",
-    "cutoff",
-    "identityMemoHash",
-    "descriptorHash",
-    "staticProjectionMemoHash",
-    "requestedArtifactDependencyRoot",
-    "validityDependencyRoot",
-    "transitions",
-    "evidenceRoot",
-  ], "instancePublication");
-  assertExactRecord(draft.cutoff, ["chainId", "number", "hash", "stateRoot"], "publicationCutoff");
-  if (draft.familyId.length === 0 || draft.instanceKey.length === 0) throw new TypeError("publication identity is empty");
-  const transitions = draft.transitions.map(projection)
+  const decoded = decodePublicationDraft(draft);
+  const transitions = decoded.transitions.map((value, index) => projection(value, `instancePublication.transitions[${index}]`))
     .sort((left, right) => left.projectionHash < right.projectionHash ? -1 : left.projectionHash > right.projectionHash ? 1 : 0);
   if (new Set(transitions.map(value => value.projectionHash)).size !== transitions.length) {
     throw new Error("duplicate-transition-projection");
   }
   const payload = {
-    familyId: draft.familyId,
-    familyDefinitionHash: draft.familyDefinitionHash,
-    familyCandidateKey: draft.familyCandidateKey,
-    instanceKey: draft.instanceKey,
-    cutoff: deepFreeze({ ...draft.cutoff }),
-    identityMemoHash: draft.identityMemoHash,
-    descriptorHash: draft.descriptorHash,
-    staticProjectionMemoHash: draft.staticProjectionMemoHash,
-    requestedArtifactDependencyRoot: draft.requestedArtifactDependencyRoot,
-    validityDependencyRoot: draft.validityDependencyRoot,
+    familyId: decoded.familyId,
+    familyDefinitionHash: decoded.familyDefinitionHash,
+    familyCandidateKey: decoded.familyCandidateKey,
+    instanceKey: decoded.instanceKey,
+    cutoff: decoded.cutoff,
+    identityMemoHash: decoded.identityMemoHash,
+    descriptorHash: decoded.descriptorHash,
+    staticProjectionMemoHash: decoded.staticProjectionMemoHash,
+    requestedArtifactDependencyRoot: decoded.requestedArtifactDependencyRoot,
+    validityDependencyRoot: decoded.validityDependencyRoot,
     transitions,
-    evidenceRoot: draft.evidenceRoot,
+    evidenceRoot: decoded.evidenceRoot,
   };
   return deepFreeze({
     ...payload,
@@ -140,14 +172,20 @@ export function sealInstanceCatalog(
   cutoff: CanonicalCutoffV1,
   publications: readonly InstancePublicationV1[],
 ): InstanceCatalogV1 {
+  const decodedCutoff = decodeCanonicalCutoff(cutoff, "instanceCatalogCutoff");
+  const decodedPublications = fieldArray(
+    publications,
+    (value, path) => decodePublication(value, path),
+    "instanceCatalog.publications",
+  );
   const byIdentity = new Set<string>();
-  const sorted = publications.map(publication => {
+  const sorted = decodedPublications.map(publication => {
     validateInstancePublication(publication);
     if (
-      publication.cutoff.chainId !== cutoff.chainId
-      || publication.cutoff.number !== cutoff.number
-      || publication.cutoff.hash !== cutoff.hash
-      || publication.cutoff.stateRoot !== cutoff.stateRoot
+      publication.cutoff.chainId !== decodedCutoff.chainId
+      || publication.cutoff.number !== decodedCutoff.number
+      || publication.cutoff.hash !== decodedCutoff.hash
+      || publication.cutoff.stateRoot !== decodedCutoff.stateRoot
     ) throw new Error("publication-cutoff-mismatch");
     const identity = `${publication.familyDefinitionHash}:${publication.instanceKey}`;
     if (byIdentity.has(identity)) throw new Error(`duplicate-instance-publication:${identity}`);
@@ -155,11 +193,11 @@ export function sealInstanceCatalog(
     return publication;
   }).sort((left, right) => left.instancePublicationHash < right.instancePublicationHash ? -1 : 1);
   const instanceCatalogRoot = hashDomain("aloha/instance-catalog/v1", {
-    cutoff,
+    cutoff: decodedCutoff,
     publicationHashes: sorted.map(value => value.instancePublicationHash),
   });
   return deepFreeze({
-    cutoff: deepFreeze({ ...cutoff }),
+    cutoff: decodedCutoff,
     publications: sorted,
     instanceCount: String(sorted.length),
     instanceCatalogRoot,
@@ -167,65 +205,46 @@ export function sealInstanceCatalog(
 }
 
 export function validateInstancePublication(publication: InstancePublicationV1): void {
-  assertExactRecord(publication, [
-    "familyId",
-    "familyDefinitionHash",
-    "familyCandidateKey",
-    "instanceKey",
-    "cutoff",
-    "identityMemoHash",
-    "descriptorHash",
-    "staticProjectionMemoHash",
-    "requestedArtifactDependencyRoot",
-    "validityDependencyRoot",
-    "transitions",
-    "evidenceRoot",
-    "instancePublicationHash",
-  ], "sealedInstancePublication");
-  for (const value of publication.transitions) {
-    assertExactRecord(value, [
-      "inputAssetPorts",
-      "outputAssetPorts",
-      "opaqueTransitionRef",
-      "constraintRefs",
-      "staticProjectionHash",
-      "projectionHash",
-    ], "sealedTransitionProjection");
-  }
+  const decoded = decodePublication(publication);
   const resealed = sealInstancePublication({
-    familyId: publication.familyId,
-    familyDefinitionHash: publication.familyDefinitionHash,
-    familyCandidateKey: publication.familyCandidateKey,
-    instanceKey: publication.instanceKey,
-    cutoff: publication.cutoff,
-    identityMemoHash: publication.identityMemoHash,
-    descriptorHash: publication.descriptorHash,
-    staticProjectionMemoHash: publication.staticProjectionMemoHash,
-    requestedArtifactDependencyRoot: publication.requestedArtifactDependencyRoot,
-    validityDependencyRoot: publication.validityDependencyRoot,
-    transitions: publication.transitions.map(value => ({
+    familyId: decoded.familyId,
+    familyDefinitionHash: decoded.familyDefinitionHash,
+    familyCandidateKey: decoded.familyCandidateKey,
+    instanceKey: decoded.instanceKey,
+    cutoff: decoded.cutoff,
+    identityMemoHash: decoded.identityMemoHash,
+    descriptorHash: decoded.descriptorHash,
+    staticProjectionMemoHash: decoded.staticProjectionMemoHash,
+    requestedArtifactDependencyRoot: decoded.requestedArtifactDependencyRoot,
+    validityDependencyRoot: decoded.validityDependencyRoot,
+    transitions: decoded.transitions.map(value => ({
       inputAssetPorts: value.inputAssetPorts,
       outputAssetPorts: value.outputAssetPorts,
       opaqueTransitionRef: value.opaqueTransitionRef,
       constraintRefs: value.constraintRefs,
       staticProjectionHash: value.staticProjectionHash,
     })),
-    evidenceRoot: publication.evidenceRoot,
+    evidenceRoot: decoded.evidenceRoot,
   });
-  if (resealed.instancePublicationHash !== publication.instancePublicationHash) {
+  if (resealed.instancePublicationHash !== decoded.instancePublicationHash) {
     throw new Error("instance-publication-hash-mismatch");
   }
   if (
-    resealed.transitions.length !== publication.transitions.length
-    || resealed.transitions.some((value, index) => value.projectionHash !== publication.transitions[index]?.projectionHash)
+    resealed.transitions.length !== decoded.transitions.length
+    || resealed.transitions.some((value, index) => value.projectionHash !== decoded.transitions[index]?.projectionHash)
   ) throw new Error("transition-projection-hash-mismatch");
 }
 
 export function validateInstanceCatalog(catalog: InstanceCatalogV1): void {
-  assertExactRecord(catalog, ["cutoff", "publications", "instanceCount", "instanceCatalogRoot"], "instanceCatalog");
-  const resealed = sealInstanceCatalog(catalog.cutoff, catalog.publications);
+  const decoded = decodeExactObject(catalog, {
+    cutoff: (value, path) => decodeCanonicalCutoff(value, path),
+    publications: (value, path) => fieldArray(value, (item, itemPath) => decodePublication(item, itemPath), path),
+    instanceCount: (value, path) => assertDecimalString(value, path),
+    instanceCatalogRoot: (value, path) => assertHash(value, path),
+  }, "instanceCatalog");
+  const resealed = sealInstanceCatalog(decoded.cutoff, decoded.publications);
   if (
-    resealed.instanceCatalogRoot !== catalog.instanceCatalogRoot
-    || resealed.instanceCount !== catalog.instanceCount
+    resealed.instanceCatalogRoot !== decoded.instanceCatalogRoot
+    || resealed.instanceCount !== decoded.instanceCount
   ) throw new Error("instance-catalog-root-mismatch");
 }

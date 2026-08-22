@@ -71,7 +71,31 @@ test("a new plugin field cannot be silently dropped by candidate freeze", () => 
   const mutated = { ...nomination("tx-a", "1"), observeAccounts: ["0xabc"] };
   assert.throws(
     () => mergeAndDedupeNominations([mutated as unknown as CandidateNominationV1]),
-    /unknown or missing fields/,
+    /unknown field/,
+  );
+});
+
+test("candidate and coverage decoders reject accessors, proxies, and malformed hashes", () => {
+  const accessor = { ...nomination("tx-a", "1") } as Record<string, unknown>;
+  let getterCalled = false;
+  Object.defineProperty(accessor, "familyId", {
+    enumerable: true,
+    configurable: true,
+    get: () => {
+      getterCalled = true;
+      throw new Error("accessor was invoked");
+    },
+  });
+  assert.throws(() => mergeAndDedupeNominations([accessor as unknown as CandidateNominationV1]), /accessor/);
+  assert.equal(getterCalled, false);
+  assert.throws(
+    () => mergeAndDedupeNominations([new Proxy(nomination("tx-a", "1"), { get: () => { throw new Error("proxy trap"); } })]),
+    /Proxy/,
+  );
+  const malformed = execution("complete-snapshot", "100", "100", null);
+  assert.throws(
+    () => sealSourceCoverage(cutoff, [{ ...malformed.plan, ownerRef: "0x" }], [malformed]),
+    /hash/,
   );
 });
 
@@ -159,5 +183,34 @@ test("persisted coverage root and declared-plan partition are revalidated at pro
   assert.throws(
     () => validateSourceCoverageCertificate({ ...certificate, sourceCoverageRoot: h("forged") }, [value.plan]),
     /root-mismatch/,
+  );
+});
+
+test("source coverage rejects non-array entries, bad ranges, and forged completeness semantics", () => {
+  const value = execution("complete-snapshot", "100", "100", null);
+  const certificate = sealSourceCoverage(cutoff, [value.plan], [value]);
+  assert.throws(
+    () => validateSourceCoverageCertificate({ ...certificate, entries: { 0: certificate.entries[0] } } as unknown as typeof certificate, [value.plan]),
+    /array/,
+  );
+  const forgedEntry = {
+    ...certificate.entries[0]!,
+    from: "0",
+  };
+  const forgedRoot = hashDomain("aloha/source-coverage/v1", {
+    cutoff: certificate.cutoff,
+    entries: [forgedEntry],
+  });
+  assert.throws(
+    () => validateSourceCoverageCertificate(
+      { ...certificate, entries: [forgedEntry], sourceCoverageRoot: forgedRoot },
+      [value.plan],
+    ),
+    /lineage-mismatch/,
+  );
+  const outside = execution("point-lookup", "101", "102", null);
+  assert.throws(
+    () => sealSourceCoverage(cutoff, [outside.plan], [outside]),
+    /source-range-outside-cutoff/,
   );
 });

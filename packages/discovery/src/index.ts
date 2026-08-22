@@ -1,5 +1,11 @@
 import {
+  assertDecimalString,
+  assertHash,
+  assertNonEmptyString,
+  decodeExactObject,
   deepFreeze,
+  fieldArray,
+  hashCanonicalPartition,
   hashDomain,
   type Hash,
 } from "../../canonical-codec/src/index.ts";
@@ -84,28 +90,106 @@ export interface CandidateRecordV1 {
   readonly evidence: readonly CandidateEvidenceRefV1[];
 }
 
-const decimal = (value: string, name: string): bigint => {
-  if (!/^(0|[1-9][0-9]*)$/.test(value)) throw new TypeError(`${name} must be canonical decimal`);
-  return BigInt(value);
-};
+const decimal = (value: string, name: string): bigint => BigInt(assertDecimalString(value, name));
 
 const compareText = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 
-function assertExactRecord(value: object, expected: readonly string[], name: string): void {
-  if (Object.getPrototypeOf(value) !== Object.prototype) throw new TypeError(`${name} must be a plain record`);
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const keys = Reflect.ownKeys(descriptors);
-  if (keys.some(key => typeof key !== "string")) throw new TypeError(`${name} has symbol fields`);
-  const actual = (keys as string[]).sort();
-  const sortedExpected = [...expected].sort();
-  if (actual.length !== sortedExpected.length || actual.some((key, index) => key !== sortedExpected[index])) {
-    throw new TypeError(`${name} has unknown or missing fields`);
-  }
-  for (const key of actual) {
-    const descriptor = descriptors[key]!;
-    if (!("value" in descriptor) || !descriptor.enumerable) throw new TypeError(`${name}.${key} is not data`);
-  }
+const sourceCompleteness = (value: unknown, path: string): SourceCompleteness => {
+  if (
+    value !== "complete-snapshot"
+    && value !== "contiguous-history"
+    && value !== "point-lookup"
+    && value !== "nomination-only"
+  ) throw new TypeError(`${path} has an invalid source completeness`);
+  return value;
+};
+
+const sourceOutcome = (value: unknown, path: string): SourcePlanExecutionV1["outcome"] => {
+  if (
+    value !== "complete"
+    && value !== "positive-only"
+    && value !== "retryable"
+    && value !== "invalid-program"
+  ) throw new TypeError(`${path} has an invalid source outcome`);
+  return value;
+};
+
+export function decodeCanonicalCutoff(
+  value: unknown,
+  name = "canonicalCutoff",
+): CanonicalCutoffV1 {
+  return decodeExactObject(value, {
+    chainId: (field, path) => assertNonEmptyString(field, path),
+    number: (field, path) => assertDecimalString(field, path),
+    hash: (field, path) => assertHash(field, path),
+    stateRoot: (field, path) => assertHash(field, path),
+  }, name);
 }
+
+export function validateCanonicalCutoff(value: CanonicalCutoffV1, name = "canonicalCutoff"): void {
+  decodeCanonicalCutoff(value, name);
+}
+
+export function decodeCandidateEvidenceRef(
+  value: unknown,
+  name = "candidateEvidence",
+): CandidateEvidenceRefV1 {
+  return decodeExactObject(value, {
+    blockNumber: (field, path) => assertDecimalString(field, path),
+    blockHash: (field, path) => assertHash(field, path),
+    txHash: (field, path) => assertHash(field, path),
+    logIndex: (field, path) => assertDecimalString(field, path),
+    address: (field, path) => assertNonEmptyString(field, path),
+    topic: (field, path) => assertHash(field, path),
+    rawLocatorHash: (field, path) => assertHash(field, path),
+  }, name);
+}
+
+export function validateCandidateEvidenceRef(value: CandidateEvidenceRefV1, name = "candidateEvidence"): void {
+  decodeCandidateEvidenceRef(value, name);
+}
+
+export function decodeSourcePlanRef(value: unknown, name = "sourcePlanRef"): SourcePlanRefV1 {
+  return decodeExactObject(value, {
+    ownerRef: (field, path) => assertHash(field, path),
+    sourcePlanRef: (field, path) => assertHash(field, path),
+    familyDefinitionHash: (field, path) => assertHash(field, path),
+    completeness: sourceCompleteness,
+  }, name);
+}
+
+export function decodeSourcePlanExecution(
+  value: unknown,
+  name = "sourcePlanExecution",
+): SourcePlanExecutionV1 {
+  return decodeExactObject(value, {
+    plan: (field, path) => decodeSourcePlanRef(field, path),
+    cutoff: (field, path) => decodeCanonicalCutoff(field, path),
+    outcome: sourceOutcome,
+    from: (field, path) => assertDecimalString(field, path),
+    through: (field, path) => assertDecimalString(field, path),
+    previousAppliedThrough: (field, path) => field === null ? null : assertDecimalString(field, path),
+    resultPartitionRoot: (field, path) => assertHash(field, path),
+  }, name);
+}
+
+const decodeSourceCoverageEntry = (
+  value: unknown,
+  name = "sourceCoverageEntry",
+): SourceCoverageEntryV1 => decodeExactObject(value, {
+  ownerRef: (field, path) => assertHash(field, path),
+  sourcePlanRef: (field, path) => assertHash(field, path),
+  familyDefinitionHash: (field, path) => assertHash(field, path),
+  completeness: sourceCompleteness,
+  cutoffHash: (field, path) => assertHash(field, path),
+  from: (field, path) => assertDecimalString(field, path),
+  appliedThrough: (field, path) => assertDecimalString(field, path),
+  resultPartitionRoot: (field, path) => assertHash(field, path),
+  contributesOmissionAuthority: (field, path) => {
+    if (typeof field !== "boolean") throw new TypeError(`${path} must be boolean`);
+    return field;
+  },
+}, name);
 
 export function recentObservationRange(cutoffNumber: string): BlockRangeV1 {
   const cutoff = decimal(cutoffNumber, "cutoffNumber");
@@ -133,32 +217,43 @@ function evidenceKey(value: CandidateEvidenceRefV1): Hash {
   return hashDomain("aloha/candidate-evidence-ref/v1", value);
 }
 
+const decodeCandidateNomination = (
+  value: unknown,
+  name = "candidateNomination",
+): CandidateNominationV1 => decodeExactObject(value, {
+  familyId: (field, path) => assertNonEmptyString(field, path),
+  familyDefinitionHash: (field, path) => assertHash(field, path),
+  instanceNominationKey: (field, path) => assertNonEmptyString(field, path),
+  candidateSnapshotHash: (field, path) => assertHash(field, path),
+  evidence: (field, path) => decodeCandidateEvidenceRef(field, path),
+}, name);
+
+const decodeCandidateRecord = (
+  value: unknown,
+  name = "candidateRecord",
+): CandidateRecordV1 => decodeExactObject(value, {
+  familyId: (field, path) => assertNonEmptyString(field, path),
+  familyDefinitionHash: (field, path) => assertHash(field, path),
+  instanceNominationKey: (field, path) => assertNonEmptyString(field, path),
+  familyCandidateKey: (field, path) => assertHash(field, path),
+  candidateSnapshotHash: (field, path) => assertHash(field, path),
+  evidence: (field, path) => fieldArray(field, (item, itemPath) => decodeCandidateEvidenceRef(item, itemPath), path),
+}, name);
+
 export function mergeAndDedupeNominations(
   nominations: readonly CandidateNominationV1[],
 ): readonly CandidateRecordV1[] {
+  const decodedNominations = fieldArray(
+    nominations,
+    (value, path) => decodeCandidateNomination(value, path),
+    "candidateNominations",
+  );
   const groups = new Map<Hash, {
     nomination: CandidateNominationV1;
     evidence: Map<Hash, CandidateEvidenceRefV1>;
   }>();
 
-  for (const nomination of nominations) {
-    assertExactRecord(nomination, [
-      "familyId",
-      "familyDefinitionHash",
-      "instanceNominationKey",
-      "candidateSnapshotHash",
-      "evidence",
-    ], "candidateNomination");
-    assertExactRecord(nomination.evidence, [
-      "blockNumber",
-      "blockHash",
-      "txHash",
-      "logIndex",
-      "address",
-      "topic",
-      "rawLocatorHash",
-    ], "candidateEvidence");
-    if (nomination.familyId.length === 0) throw new TypeError("familyId is empty");
+  for (const nomination of decodedNominations) {
     const key = familyCandidateKey(
       nomination.familyDefinitionHash,
       nomination.instanceNominationKey,
@@ -196,66 +291,56 @@ export function mergeAndDedupeNominations(
   return deepFreeze(records);
 }
 
-function coverageEntry(execution: SourcePlanExecutionV1): SourceCoverageEntryV1 {
-  assertExactRecord(execution, [
-    "plan", "cutoff", "outcome", "from", "through", "previousAppliedThrough", "resultPartitionRoot",
-  ], "sourcePlanExecution");
-  assertExactRecord(execution.plan, [
-    "ownerRef", "sourcePlanRef", "familyDefinitionHash", "completeness",
-  ], "sourcePlanRef");
-  assertExactRecord(execution.cutoff, ["chainId", "number", "hash", "stateRoot"], "canonicalCutoff");
-  if (
-    execution.cutoff.hash.length === 0
-    || execution.cutoff.stateRoot.length === 0
-    || execution.plan.ownerRef.length === 0
-    || execution.plan.sourcePlanRef.length === 0
-  ) throw new TypeError("coverage identity is incomplete");
+function coverageEntry(execution: unknown): SourceCoverageEntryV1 {
+  const decoded = decodeSourcePlanExecution(execution);
+  const plan = decoded.plan;
+  const cutoff = decoded.cutoff;
 
-  const cutoff = decimal(execution.cutoff.number, "cutoff.number");
-  const from = decimal(execution.from, "from");
-  const through = decimal(execution.through, "through");
-  if (from > through || through > cutoff) throw new Error("source-range-outside-cutoff");
-  if (execution.outcome === "retryable") throw new Error("source-retryable");
-  if (execution.outcome === "invalid-program") throw new Error("source-invalid-program");
+  const cutoffNumber = decimal(cutoff.number, "cutoff.number");
+  const from = decimal(decoded.from, "from");
+  const through = decimal(decoded.through, "through");
+  if (from > through || through > cutoffNumber) throw new Error("source-range-outside-cutoff");
+  if (decoded.outcome === "retryable") throw new Error("source-retryable");
+  if (decoded.outcome === "invalid-program") throw new Error("source-invalid-program");
 
   let contributesOmissionAuthority = false;
-  switch (execution.plan.completeness) {
+  switch (plan.completeness) {
     case "complete-snapshot":
-      if (execution.outcome !== "complete" || from !== cutoff || through !== cutoff) {
+      if (decoded.outcome !== "complete" || from !== cutoffNumber || through !== cutoffNumber) {
         throw new Error("incomplete-snapshot-coverage");
       }
       contributesOmissionAuthority = true;
       break;
     case "contiguous-history": {
-      if (execution.outcome !== "complete" || through !== cutoff) {
+      if (decoded.outcome !== "complete" || through !== cutoffNumber) {
         throw new Error("incomplete-history-coverage");
       }
-      const previous = execution.previousAppliedThrough === null
+      const previous = decoded.previousAppliedThrough === null
         ? null
-        : decimal(execution.previousAppliedThrough, "previousAppliedThrough");
+        : decimal(decoded.previousAppliedThrough, "previousAppliedThrough");
       if (previous !== null && from !== previous + 1n) throw new Error("history-cursor-gap");
       contributesOmissionAuthority = true;
       break;
     }
     case "point-lookup":
-      if (execution.outcome !== "complete") throw new Error("point-lookup-incomplete");
+      if (decoded.outcome !== "complete") throw new Error("point-lookup-incomplete");
       break;
     case "nomination-only":
-      if (execution.outcome !== "positive-only" && execution.outcome !== "complete") {
+      if (decoded.outcome !== "positive-only" && decoded.outcome !== "complete") {
         throw new Error("nomination-only-incomplete");
       }
       break;
   }
 
   return deepFreeze({
-    ownerRef: execution.plan.ownerRef,
-    sourcePlanRef: execution.plan.sourcePlanRef,
-    familyDefinitionHash: execution.plan.familyDefinitionHash,
-    completeness: execution.plan.completeness,
-    cutoffHash: execution.cutoff.hash,
-    from: execution.from,
-    appliedThrough: execution.through,
-    resultPartitionRoot: execution.resultPartitionRoot,
+    ownerRef: plan.ownerRef,
+    sourcePlanRef: plan.sourcePlanRef,
+    familyDefinitionHash: plan.familyDefinitionHash,
+    completeness: plan.completeness,
+    cutoffHash: cutoff.hash,
+    from: decoded.from,
+    appliedThrough: decoded.through,
+    resultPartitionRoot: decoded.resultPartitionRoot,
     contributesOmissionAuthority,
   });
 }
@@ -265,20 +350,30 @@ export function sealSourceCoverage(
   declaredPlans: readonly SourcePlanRefV1[],
   executions: readonly SourcePlanExecutionV1[],
 ): SourceCoverageCertificateV1 {
+  const decodedCutoff = decodeCanonicalCutoff(cutoff, "coverageCutoff");
+  const decodedPlans = fieldArray(
+    declaredPlans,
+    (value, path) => decodeSourcePlanRef(value, path),
+    "declaredSourcePlans",
+  );
+  const decodedExecutions = fieldArray(
+    executions,
+    (value, path) => decodeSourcePlanExecution(value, path),
+    "sourcePlanExecutions",
+  );
   const declared = new Map<string, SourcePlanRefV1>();
-  for (const plan of declaredPlans) {
-    assertExactRecord(plan, ["ownerRef", "sourcePlanRef", "familyDefinitionHash", "completeness"], "declaredSourcePlan");
+  for (const plan of decodedPlans) {
     const identity = `${plan.ownerRef}:${plan.sourcePlanRef}`;
     if (declared.has(identity)) throw new Error(`duplicate-declared-source-plan:${identity}`);
     declared.set(identity, plan);
   }
   const seen = new Set<string>();
-  const entries = executions.map(execution => {
+  const entries = decodedExecutions.map(execution => {
     if (
-      execution.cutoff.chainId !== cutoff.chainId
-      || execution.cutoff.number !== cutoff.number
-      || execution.cutoff.hash !== cutoff.hash
-      || execution.cutoff.stateRoot !== cutoff.stateRoot
+      execution.cutoff.chainId !== decodedCutoff.chainId
+      || execution.cutoff.number !== decodedCutoff.number
+      || execution.cutoff.hash !== decodedCutoff.hash
+      || execution.cutoff.stateRoot !== decodedCutoff.stateRoot
     ) throw new Error("coverage-cutoff-mismatch");
     const identity = `${execution.plan.ownerRef}:${execution.plan.sourcePlanRef}`;
     if (seen.has(identity)) throw new Error(`duplicate-source-partition:${identity}`);
@@ -298,47 +393,43 @@ export function sealSourceCoverage(
     const missing = [...declared.keys()].filter(identity => !seen.has(identity)).sort();
     throw new Error(`missing-source-partition:${missing.join(",")}`);
   }
-  const sourceCoverageRoot = hashDomain("aloha/source-coverage/v1", { cutoff, entries });
-  return deepFreeze({ cutoff: deepFreeze({ ...cutoff }), entries, sourceCoverageRoot });
+  const sourceCoverageRoot = hashDomain("aloha/source-coverage/v1", { cutoff: decodedCutoff, entries });
+  return deepFreeze({ cutoff: decodedCutoff, entries, sourceCoverageRoot });
 }
 
 export function candidatePartitionRoot(records: readonly CandidateRecordV1[]): Hash {
-  for (const record of records) {
-    assertExactRecord(record, [
-      "familyId",
-      "familyDefinitionHash",
-      "instanceNominationKey",
-      "familyCandidateKey",
-      "candidateSnapshotHash",
-      "evidence",
-    ], "candidateRecord");
+  const decoded = decodeCandidateRecords(records, "candidateRecords");
+  for (const record of decoded) {
     if (
-      record.familyId.length === 0
-      || record.familyCandidateKey !== familyCandidateKey(record.familyDefinitionHash, record.instanceNominationKey)
+      record.familyCandidateKey !== familyCandidateKey(record.familyDefinitionHash, record.instanceNominationKey)
       || record.evidence.length === 0
     ) throw new Error("candidate-record-lineage-mismatch");
-    const evidenceKeys = record.evidence.map(value => {
-      assertExactRecord(value, [
-        "blockNumber", "blockHash", "txHash", "logIndex", "address", "topic", "rawLocatorHash",
-      ], "candidateEvidence");
-      return evidenceKey(value);
-    });
+    const evidenceKeys = record.evidence.map(value => evidenceKey(value));
     if (new Set(evidenceKeys).size !== evidenceKeys.length) throw new Error("duplicate-candidate-evidence");
     const sortedEvidenceKeys = [...evidenceKeys].sort(compareText);
     if (evidenceKeys.some((key, index) => key !== sortedEvidenceKeys[index])) {
       throw new Error("candidate-evidence-not-canonical-order");
     }
   }
-  const keys = records.map(record => record.familyCandidateKey);
+  const keys = decoded.map(record => record.familyCandidateKey);
   if (new Set(keys).size !== keys.length) throw new Error("duplicate-candidate-record");
-  const sorted = [...records].sort((left, right) => compareText(left.familyCandidateKey, right.familyCandidateKey));
-  return hashDomain("aloha/candidate-partition/v1", sorted);
+  const sorted = [...decoded].sort((left, right) => compareText(left.familyCandidateKey, right.familyCandidateKey));
+  return hashCanonicalPartition("aloha/candidate-partition/v1", sorted);
 }
+
+const decodeCandidateRecords = (
+  value: unknown,
+  name: string,
+): readonly CandidateRecordV1[] => fieldArray(
+  value,
+  (item, path) => decodeCandidateRecord(item, path),
+  name,
+);
 
 export function sourcePlanSetRoot(plans: readonly SourcePlanRefV1[]): Hash {
   const identities = new Set<string>();
-  const sorted = plans.map(plan => {
-    assertExactRecord(plan, ["ownerRef", "sourcePlanRef", "familyDefinitionHash", "completeness"], "sourcePlanRef");
+  const decoded = fieldArray(plans, (value, path) => decodeSourcePlanRef(value, path), "sourcePlanRefs");
+  const sorted = decoded.map(plan => {
     const identity = `${plan.ownerRef}:${plan.sourcePlanRef}`;
     if (identities.has(identity)) throw new Error("duplicate-source-plan");
     identities.add(identity);
@@ -351,41 +442,54 @@ export function validateSourceCoverageCertificate(
   certificate: SourceCoverageCertificateV1,
   declaredPlans: readonly SourcePlanRefV1[],
 ): void {
-  assertExactRecord(certificate, ["cutoff", "entries", "sourceCoverageRoot"], "sourceCoverageCertificate");
-  assertExactRecord(certificate.cutoff, ["chainId", "number", "hash", "stateRoot"], "coverageCutoff");
-  const plans = new Map(declaredPlans.map(plan => [`${plan.ownerRef}:${plan.sourcePlanRef}`, plan]));
-  if (plans.size !== declaredPlans.length) throw new Error("duplicate-declared-source-plan");
+  const decodedCertificate = decodeExactObject(certificate, {
+    cutoff: (value, path) => decodeCanonicalCutoff(value, path),
+    entries: (value, path) => fieldArray(value, (entry, entryPath) => decodeSourceCoverageEntry(entry, entryPath), path),
+    sourceCoverageRoot: (value, path) => assertHash(value, path),
+  }, "sourceCoverageCertificate");
+  const decodedPlans = fieldArray(
+    declaredPlans,
+    (value, path) => decodeSourcePlanRef(value, path),
+    "declaredSourcePlans",
+  );
+  const plans = new Map(decodedPlans.map(plan => [`${plan.ownerRef}:${plan.sourcePlanRef}`, plan]));
+  if (plans.size !== decodedPlans.length) throw new Error("duplicate-declared-source-plan");
   const seen = new Set<string>();
-  for (const entry of certificate.entries) {
-    assertExactRecord(entry, [
-      "ownerRef",
-      "sourcePlanRef",
-      "familyDefinitionHash",
-      "completeness",
-      "cutoffHash",
-      "from",
-      "appliedThrough",
-      "resultPartitionRoot",
-      "contributesOmissionAuthority",
-    ], "sourceCoverageEntry");
+  const cutoffNumber = decimal(decodedCertificate.cutoff.number, "coverageCutoff.number");
+  for (const entry of decodedCertificate.entries) {
     const identity = `${entry.ownerRef}:${entry.sourcePlanRef}`;
     const plan = plans.get(identity);
     if (!plan || seen.has(identity)) throw new Error("coverage-source-plan-partition-mismatch");
     seen.add(identity);
     const expectedOmission = plan.completeness === "complete-snapshot" || plan.completeness === "contiguous-history";
+    const from = decimal(entry.from, "sourceCoverageEntry.from");
+    const appliedThrough = decimal(entry.appliedThrough, "sourceCoverageEntry.appliedThrough");
+    if (from > appliedThrough || appliedThrough > cutoffNumber) {
+      throw new Error("coverage-entry-range-outside-cutoff");
+    }
+    const rangeMatchesCompleteness = plan.completeness === "complete-snapshot"
+      ? from === cutoffNumber && appliedThrough === cutoffNumber
+      : plan.completeness === "contiguous-history"
+        ? appliedThrough === cutoffNumber
+        : plan.completeness === "point-lookup"
+          ? from === appliedThrough
+          : true;
     if (
-      entry.familyDefinitionHash !== plan.familyDefinitionHash
+      entry.ownerRef !== plan.ownerRef
+      || entry.sourcePlanRef !== plan.sourcePlanRef
+      || entry.familyDefinitionHash !== plan.familyDefinitionHash
       || entry.completeness !== plan.completeness
-      || entry.cutoffHash !== certificate.cutoff.hash
+      || entry.cutoffHash !== decodedCertificate.cutoff.hash
       || entry.contributesOmissionAuthority !== expectedOmission
-      || (expectedOmission && entry.appliedThrough !== certificate.cutoff.number)
+      || !rangeMatchesCompleteness
+      || (expectedOmission && entry.appliedThrough !== decodedCertificate.cutoff.number)
     ) throw new Error("coverage-entry-lineage-mismatch");
   }
   if (seen.size !== plans.size) throw new Error("coverage-source-plan-partition-mismatch");
-  const sorted = [...certificate.entries].sort((left, right) => compareText(
+  const sorted = [...decodedCertificate.entries].sort((left, right) => compareText(
     `${left.ownerRef}:${left.sourcePlanRef}`,
     `${right.ownerRef}:${right.sourcePlanRef}`,
   ));
-  const expectedRoot = hashDomain("aloha/source-coverage/v1", { cutoff: certificate.cutoff, entries: sorted });
-  if (expectedRoot !== certificate.sourceCoverageRoot) throw new Error("source-coverage-root-mismatch");
+  const expectedRoot = hashDomain("aloha/source-coverage/v1", { cutoff: decodedCertificate.cutoff, entries: sorted });
+  if (expectedRoot !== decodedCertificate.sourceCoverageRoot) throw new Error("source-coverage-root-mismatch");
 }

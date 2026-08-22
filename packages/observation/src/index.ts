@@ -1,5 +1,15 @@
-import { deepFreeze, hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import {
+  assertDecimalString,
+  assertHash,
+  decodeExactObject,
+  deepFreeze,
+  fieldArray,
+  hashDomain,
+  type Hash,
+} from "../../canonical-codec/src/index.ts";
+import {
+  decodeCandidateEvidenceRef,
+  decodeCanonicalCutoff,
   recentObservationRange,
   type BlockRangeV1,
   type CandidateEvidenceRefV1,
@@ -13,6 +23,21 @@ export interface ObservedBlockV1 {
   readonly evidence: readonly CandidateEvidenceRefV1[];
 }
 
+/**
+ * Opaque, content-addressed bytes that are sufficient to re-open one raw
+ * observation in the qualified chain observer. They are transient until the
+ * checkpoint atomically roots them with the run.
+ */
+export interface RawEvidenceLocatorContentV1 {
+  readonly rawLocatorHash: Hash;
+  readonly bytes: Uint8Array;
+}
+
+export interface RecentObservationScanV1 {
+  readonly blocks: readonly ObservedBlockV1[];
+  readonly rawEvidenceLocators: readonly RawEvidenceLocatorContentV1[];
+}
+
 export interface RecentObservationReceiptV1 {
   readonly cutoff: CanonicalCutoffV1;
   readonly range: BlockRangeV1;
@@ -21,57 +46,117 @@ export interface RecentObservationReceiptV1 {
   readonly observationRoot: Hash;
 }
 
-const decimal = (value: string): bigint => {
-  if (!/^(0|[1-9][0-9]*)$/.test(value)) throw new TypeError("invalid block number");
-  return BigInt(value);
-};
+const decimal = (value: string, name: string): bigint => BigInt(assertDecimalString(value, name));
 
-function assertExactRecord(value: object, expected: readonly string[], name: string): void {
-  if (Object.getPrototypeOf(value) !== Object.prototype) throw new TypeError(`${name} must be a plain record`);
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const keys = Reflect.ownKeys(descriptors);
-  if (keys.some(key => typeof key !== "string")) throw new TypeError(`${name} has symbol fields`);
-  const actual = (keys as string[]).sort();
-  const sortedExpected = [...expected].sort();
-  if (actual.length !== sortedExpected.length || actual.some((key, index) => key !== sortedExpected[index])) {
-    throw new TypeError(`${name} has unknown or missing fields`);
-  }
-}
+const decodeBlockRange = (value: unknown, name = "observationRange"): BlockRangeV1 => decodeExactObject(value, {
+  from: (field, path) => assertDecimalString(field, path),
+  to: (field, path) => assertDecimalString(field, path),
+}, name);
+
+const decodeObservedBlock = (value: unknown, name = "observedBlock"): ObservedBlockV1 => decodeExactObject(value, {
+  number: (field, path) => assertDecimalString(field, path),
+  hash: (field, path) => assertHash(field, path),
+  parentHash: (field, path) => assertHash(field, path),
+  evidence: (field, path) => fieldArray(
+    field,
+    (item, itemPath) => decodeCandidateEvidenceRef(item, itemPath),
+    path,
+  ),
+}, name);
+
+const decodeRecentObservationReceipt = (
+  value: unknown,
+  name = "recentObservationReceipt",
+): RecentObservationReceiptV1 => decodeExactObject(value, {
+  cutoff: (field, path) => decodeCanonicalCutoff(field, path),
+  range: (field, path) => decodeBlockRange(field, path),
+  orderedBlockHashes: (field, path) => fieldArray(field, (item, itemPath) => assertHash(item, itemPath), path),
+  evidence: (field, path) => fieldArray(field, (item, itemPath) => decodeCandidateEvidenceRef(item, itemPath), path),
+  observationRoot: (field, path) => assertHash(field, path),
+}, name);
 
 export function sealRecentObservation(
   cutoff: CanonicalCutoffV1,
+  range: BlockRangeV1,
   blocks: readonly ObservedBlockV1[],
 ): RecentObservationReceiptV1 {
-  const range = recentObservationRange(cutoff.number);
-  const expectedCount = decimal(range.to) - decimal(range.from) + 1n;
-  if (BigInt(blocks.length) !== expectedCount) throw new Error("observation-range-incomplete");
+  const decodedCutoff = decodeCanonicalCutoff(cutoff, "observationCutoff");
+  const decodedRange = decodeBlockRange(range, "observationRange");
+  const decodedBlocks = fieldArray(blocks, (value, path) => decodeObservedBlock(value, path), "observedBlocks");
+  const policyRange = recentObservationRange(decodedCutoff.number);
+  if (
+    decimal(decodedRange.to, "observationRange.to") !== decimal(decodedCutoff.number, "observationCutoff.number")
+    || decimal(decodedRange.from, "observationRange.from") < decimal(policyRange.from, "policyRange.from")
+    || decimal(decodedRange.from, "observationRange.from") > decimal(decodedRange.to, "observationRange.to")
+  ) throw new Error("observation-range-outside-policy");
+  const expectedCount = decimal(decodedRange.to, "observationRange.to") - decimal(decodedRange.from, "observationRange.from") + 1n;
+  if (BigInt(decodedBlocks.length) !== expectedCount) throw new Error("observation-range-incomplete");
   let previousHash: Hash | null = null;
   const evidence = new Map<Hash, CandidateEvidenceRefV1>();
-  for (let index = 0; index < blocks.length; index += 1) {
-    const block = blocks[index]!;
-    assertExactRecord(block, ["number", "hash", "parentHash", "evidence"], "observedBlock");
-    const expectedNumber = decimal(range.from) + BigInt(index);
-    if (decimal(block.number) !== expectedNumber) throw new Error("observation-block-gap");
+  for (let index = 0; index < decodedBlocks.length; index += 1) {
+    const block = decodedBlocks[index]!;
+    const expectedNumber = decimal(decodedRange.from, "observationRange.from") + BigInt(index);
+    if (decimal(block.number, "observedBlock.number") !== expectedNumber) throw new Error("observation-block-gap");
     if (previousHash !== null && block.parentHash !== previousHash) throw new Error("observation-parent-mismatch");
     previousHash = block.hash;
     for (const item of block.evidence) {
-      assertExactRecord(item, ["blockNumber", "blockHash", "txHash", "logIndex", "address", "topic", "rawLocatorHash"], "observedEvidence");
       if (item.blockNumber !== block.number || item.blockHash !== block.hash) {
         throw new Error("observation-evidence-block-mismatch");
       }
       evidence.set(hashDomain("aloha/candidate-evidence-ref/v1", item), deepFreeze({ ...item }));
     }
   }
-  if (blocks.at(-1)?.hash !== cutoff.hash) throw new Error("observation-cutoff-hash-mismatch");
-  const orderedBlockHashes = blocks.map(block => block.hash);
+  if (decodedBlocks.at(-1)?.hash !== decodedCutoff.hash) throw new Error("observation-cutoff-hash-mismatch");
+  const orderedBlockHashes = decodedBlocks.map(block => block.hash);
   const orderedEvidence = [...evidence.entries()]
     .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
     .map(([, item]) => item);
   const observationRoot = hashDomain("aloha/recent-observation/v1", {
-    cutoff,
-    range,
+    cutoff: decodedCutoff,
+    range: decodedRange,
     orderedBlockHashes,
     evidence: orderedEvidence,
   });
-  return deepFreeze({ cutoff: deepFreeze({ ...cutoff }), range, orderedBlockHashes, evidence: orderedEvidence, observationRoot });
+  return deepFreeze({ cutoff: decodedCutoff, range: decodedRange, orderedBlockHashes, evidence: orderedEvidence, observationRoot });
+}
+
+export function validateRecentObservationReceipt(
+  receipt: RecentObservationReceiptV1,
+  expectedRange: BlockRangeV1,
+): void {
+  const decodedReceipt = decodeRecentObservationReceipt(receipt);
+  const decodedExpectedRange = decodeBlockRange(expectedRange, "expectedObservationRange");
+  if (decodedReceipt.range.from !== decodedExpectedRange.from || decodedReceipt.range.to !== decodedExpectedRange.to) {
+    throw new Error("observation-range-mismatch");
+  }
+  const expectedCount = decimal(decodedReceipt.range.to, "recentObservationReceipt.range.to") - decimal(decodedReceipt.range.from, "recentObservationReceipt.range.from") + 1n;
+  if (BigInt(decodedReceipt.orderedBlockHashes.length) !== expectedCount) {
+    throw new Error("observation-hash-partition-incomplete");
+  }
+  if (decodedReceipt.orderedBlockHashes.at(-1) !== decodedReceipt.cutoff.hash) {
+    throw new Error("observation-cutoff-hash-mismatch");
+  }
+  const evidenceKeys: Hash[] = [];
+  for (const item of decodedReceipt.evidence) {
+    const offset = decimal(item.blockNumber, "observedEvidence.blockNumber") - decimal(decodedReceipt.range.from, "recentObservationReceipt.range.from");
+    if (offset < 0n || offset >= BigInt(decodedReceipt.orderedBlockHashes.length)) {
+      throw new Error("observation-evidence-outside-range");
+    }
+    if (decodedReceipt.orderedBlockHashes[Number(offset)] !== item.blockHash) {
+      throw new Error("observation-evidence-block-mismatch");
+    }
+    evidenceKeys.push(hashDomain("aloha/candidate-evidence-ref/v1", item));
+  }
+  const sortedEvidenceKeys = [...evidenceKeys].sort();
+  if (
+    new Set(evidenceKeys).size !== evidenceKeys.length
+    || evidenceKeys.some((key, index) => key !== sortedEvidenceKeys[index])
+  ) throw new Error("observation-evidence-order-mismatch");
+  const recomputed = hashDomain("aloha/recent-observation/v1", {
+    cutoff: decodedReceipt.cutoff,
+    range: decodedReceipt.range,
+    orderedBlockHashes: decodedReceipt.orderedBlockHashes,
+    evidence: decodedReceipt.evidence,
+  });
+  if (recomputed !== decodedReceipt.observationRoot) throw new Error("observation-root-mismatch");
 }

@@ -49,7 +49,35 @@ test("unknown protocol fields cannot be silently dropped by publication freeze",
     ...draft(),
     transitions: [{ ...draft().transitions[0]!, v3Fee: 3000 }],
   } as unknown as InstancePublicationDraftV1;
-  assert.throws(() => sealInstancePublication(mutated), /unknown or missing fields/);
+  assert.throws(() => sealInstancePublication(mutated), /unknown field/);
+});
+
+test("catalog decoders reject accessors, proxies, malformed hashes, and non-arrays", () => {
+  const value = draft();
+  const accessor = { ...value } as Record<string, unknown>;
+  let getterCalled = false;
+  Object.defineProperty(accessor, "familyId", {
+    enumerable: true,
+    configurable: true,
+    get: () => {
+      getterCalled = true;
+      throw new Error("accessor was invoked");
+    },
+  });
+  assert.throws(() => sealInstancePublication(accessor as unknown as InstancePublicationDraftV1), /accessor/);
+  assert.equal(getterCalled, false);
+  assert.throws(
+    () => sealInstancePublication(new Proxy(value, { get: () => { throw new Error("proxy trap"); } })),
+    /Proxy/,
+  );
+  assert.throws(
+    () => sealInstancePublication({ ...value, evidenceRoot: "0x" } as unknown as InstancePublicationDraftV1),
+    /hash/,
+  );
+  assert.throws(
+    () => sealInstancePublication({ ...value, transitions: { 0: value.transitions[0] } } as unknown as InstancePublicationDraftV1),
+    /array/,
+  );
 });
 
 test("duplicate canonical instance publication fails closed", () => {
