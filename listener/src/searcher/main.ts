@@ -1557,6 +1557,7 @@ async function main(): Promise<void> {
     kind: StrictProductionSessionKind = "pricing",
     fundingAssets: readonly string[] = flashTokens,
     exactCallBackend?: Pick<StateBackend, "call">,
+    touchedPools?: ReadonlySet<string>,
   ): Promise<StrictProductionRuntimeSession> => {
     const fundingKey = [...new Set(fundingAssets.map((token) =>
       token.toLowerCase()
@@ -1565,8 +1566,16 @@ async function main(): Promise<void> {
       .update(fundingKey)
       .digest("hex")
       .slice(0, 16);
+    // The refresh scope is part of the session identity: the same source with
+    // a different touched set must not reuse a fully-refreshed session.
+    const touchedFingerprint = touchedPools === undefined
+      ? "all"
+      : createHash("sha256")
+          .update([...touchedPools].sort().join(","))
+          .digest("hex")
+          .slice(0, 16);
     const key = `${kind}:${source.number}:${source.hash.toLowerCase()}:` +
-      `${source.generation}:${fundingFingerprint}`;
+      `${source.generation}:${fundingFingerprint}:${touchedFingerprint}`;
     // An exact backend is pass-scoped and is closed at the end of the block;
     // never let a cached session retain a backend from an earlier pass.
     const cacheable = exactCallBackend === undefined;
@@ -1615,6 +1624,7 @@ async function main(): Promise<void> {
       fundingAssets,
       kind,
       ...(control === undefined ? {} : { control }),
+      ...(touchedPools === undefined ? {} : { touchedPools }),
     }).catch((error) => {
       if (cacheable && strictSessionCache.get(key) === pending) {
         strictSessionCache.delete(key);
@@ -1861,6 +1871,27 @@ async function main(): Promise<void> {
     solveReserveMs: blockScanSolveReserveMs,
     midConcurrency: blockScanMidConcurrency,
     executorAddress: config.botvmAddress,
+    // Physical venue identities touched by the block's own logs: pool
+    // address for pair venues, poolId for the singleton-manager venues.
+    // Victim-independent; the scanner's touched filter and the strict
+    // session's current-pricing refresh scope consume it.
+    readBlockSwapTouched: async (blockNumber) => {
+      const logs = await provider.getLogs({
+        fromBlock: blockNumber,
+        toBlock: blockNumber,
+      });
+      const touched = new Set<string>();
+      const manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
+      for (const log of logs) {
+        if (log.address.toLowerCase() === manager) {
+          const poolId = log.topics[1];
+          if (poolId !== undefined) touched.add(poolId.toLowerCase());
+        } else {
+          touched.add(log.address.toLowerCase());
+        }
+      }
+      return touched;
+    },
     currentHeadEvidenceFamilyForEdge(edgeAdapterId) {
       return PRODUCTION_STRICT_FAMILY_DECLARATIONS
         .currentHeadEvidenceFamilyForEdge(

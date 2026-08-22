@@ -31,6 +31,7 @@ import {
   type VerifiedGraphView,
 } from "./venues/blockscan-state-capability.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
+import type { StateBackend } from "../shared/state/state-backend.js";
 
 type StrictSessionProvider = (
   source: CanonicalSource,
@@ -40,6 +41,8 @@ type StrictSessionProvider = (
   },
   kind?: StrictProductionSessionKind,
   fundingAssets?: readonly string[],
+  exactCallBackend?: Pick<StateBackend, "call">,
+  touchedPools?: ReadonlySet<string>,
 ) => Promise<StrictProductionRuntimeSession>;
 
 /**
@@ -70,6 +73,7 @@ export class StrictCurrentRuntimeCoordinator
     readonly deadlineAtMs: number;
     readonly familySettleDeadlineAtMs?: number;
     readonly signal?: AbortSignal;
+    readonly touchedPools?: ReadonlySet<string>;
   }): Promise<BlockScanStatePrepareResult> {
     const settleDeadlineAtMs = Math.min(
       input.deadlineAtMs,
@@ -80,6 +84,9 @@ export class StrictCurrentRuntimeCoordinator
       sourceFor(input.graph),
       controlFor(settleDeadlineAtMs, input.signal),
       "pricing",
+      undefined,
+      undefined,
+      input.touchedPools,
     );
     assertWorkOpen(settleDeadlineAtMs, input.signal);
     const pricing = buildStrictPricingSnapshot(session, input.graph);
@@ -102,6 +109,9 @@ export class StrictCurrentRuntimeCoordinator
       source,
       controlFor(settleDeadlineAtMs, input.signal),
       "pricing",
+      undefined,
+      undefined,
+      input.touchedPools,
     );
     const executionStartedAtMs = Date.now();
     const executionPromise = input.prepareExecution === undefined

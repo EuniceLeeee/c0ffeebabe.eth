@@ -612,6 +612,13 @@ export interface BlockScanRuntimeLoopDependencies {
     provider: AnvilStateBackend["provider"],
     blockNumber: number,
   ): Promise<string>;
+  /**
+   * Physical venue identities touched by the block's transactions (pool
+   * address for pair venues, poolId for singleton-manager venues): the
+   * scanner's touched filter and the strict session's current-pricing
+   * refresh scope. Victim-independent: built from the block's own logs.
+   */
+  readBlockSwapTouched(blockNumber: number): Promise<ReadonlySet<string>>;
   formatRouteKey(opportunity: Pick<BlockScanOpportunity, "seedEdges">): string;
   formatRing(
     opportunity: Pick<BlockScanOpportunity, "seedEdges" | "affectedTokens">,
@@ -629,6 +636,7 @@ export interface CurrentSourceRuntimeCoordinator {
     readonly laggingTopologyRefreshMode?:
       BlockScanLaggingTopologyRefreshMode;
     readonly signal?: AbortSignal;
+    readonly touchedPools?: ReadonlySet<string>;
   }): Promise<BlockScanStatePrepareResult>;
   resetDynamicStateForReplay(): Promise<void>;
   prepare(
@@ -1169,9 +1177,11 @@ export class BlockScanRuntimeLoop {
         });
         let prepared: BlockScanStatePrepareResult;
         let bootstrapEscalated = false;
+        const producerTouched = await this.deps.readBlockSwapTouched(nextBlock);
         try {
         prepared = await input.coordinator.prepareCoarsePricing({
           graph: anchoredGraph,
+          touchedPools: producerTouched,
           deadlineAtMs: generationDeadlineAtMs,
           /*
            * Family-local deadlines must settle before the generation
@@ -2080,6 +2090,9 @@ export class BlockScanRuntimeLoop {
       let exactFundingTokens: readonly string[] = [];
       if (!useNMinusOneFallback) {
         this.passStageLabel = "state:prepare";
+        const touchedPools = await this.deps.readBlockSwapTouched(
+          blockNumber,
+        );
         const runtime = await currentRuntimeCoordinator.prepare({
           graph: graphView,
           fundingTokens: [...new Set([
@@ -2095,6 +2108,7 @@ export class BlockScanRuntimeLoop {
           cacheMode: startupWarmAttempt ? "warm" : "hot",
           signal: passSignal,
           prepareExecution,
+          touchedPools,
         });
         finishStage(
           "state",
@@ -2242,7 +2256,7 @@ export class BlockScanRuntimeLoop {
         beginStage("enumeration");
         const productionCoarse = detectProductionBlockScanOpportunities({
           runtime: snapshot,
-          swapTouched: null,
+          swapTouched: touchedPools as Set<string> | null,
           cfg: {
             ...blockScanCfg,
             maxCandidates: this.deps.refineCandidates,

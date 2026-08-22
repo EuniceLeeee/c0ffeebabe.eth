@@ -190,6 +190,14 @@ export interface PrepareAdapterRuntimeInput {
    * resumable-warm cache; hot generations only read from it.
    */
   readonly cacheMode?: "warm" | "hot";
+  /**
+   * Current-block touched pools (physical venue identities: pool address for
+   * pair venues, poolId for singleton-manager venues). When set, the strict
+   * session refreshes current pricing only for these instances; the other
+   * instances simply have no current mid this block (the scanner's touched
+   * filter keeps enumeration over this block's venues).
+   */
+  readonly touchedPools?: ReadonlySet<string>;
   readonly signal?: AbortSignal;
   /**
    * Current-N exact/final-sim workers (for example isolated Anvil forks).

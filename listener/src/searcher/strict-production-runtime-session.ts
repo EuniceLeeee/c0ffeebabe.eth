@@ -178,6 +178,7 @@ export class StrictProductionRuntimeRoot {
     readonly fundingAssets: readonly string[];
     readonly kind?: StrictProductionSessionKind;
     readonly control?: AdapterWorkControl;
+    readonly touchedPools?: ReadonlySet<string>;
   }): Promise<StrictProductionRuntimeSession> {
     assertCanonicalSource(input.source);
     input.runtime.generationFence.assertCurrent(
@@ -222,6 +223,16 @@ export class StrictProductionRuntimeRoot {
             const index = refreshCursor++;
             if (index >= this.#readyInstances.length) return;
             const readyInstance = this.#readyInstances[index]!;
+            if (
+              input.touchedPools !== undefined &&
+              !touchedInstanceMatches(readyInstance, input.touchedPools)
+            ) {
+              // Current pricing refreshes only this block's touched venues;
+              // untouched instances have no current mid this block and the
+              // scanner's touched filter keeps enumeration over the touched
+              // venues.
+              continue;
+            }
             refreshedOutcomes[index] = await this.refreshReadyInstancePricing({
               readyInstance,
               source: input.source,
@@ -915,6 +926,18 @@ function bindCurrentPricingToEdge(
       edges: Object.freeze([edge]) as unknown as TokenEdge[],
     }),
   });
+}
+
+function touchedInstanceMatches(
+  instance: PreparedFamilyInstance,
+  touchedPools: ReadonlySet<string>,
+): boolean {
+  // The pricing state key is the physical venue identity: pool address for
+  // pair venues (univ2/univ3), poolId for singleton-manager venues (univ4) -
+  // the same identity the scanner's touched filter uses.
+  return instance.pricingInstances.some((pricing) =>
+    touchedPools.has(String(pricing.stateKey).toLowerCase()),
+  );
 }
 
 function assertSameReadyTopology(
