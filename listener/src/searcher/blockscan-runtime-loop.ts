@@ -2502,6 +2502,17 @@ export class BlockScanRuntimeLoop {
       });
       if (!exactRefineStarted) beginStage("exact_refine");
       /*
+       * Exact sessions re-issue only the candidate instances. In the N-1 lane
+       * the candidates come from the coarse producer's snapshot of the
+       * predecessor block, so the scope is that block's touched venues (the
+       * same deterministic set the producer priced), not the current block's.
+       * The direct lane priced the current block, so its touched set is the
+       * scope.
+       */
+      const exactScopeTouchedPools = useNMinusOneFallback
+        ? await this.deps.readBlockSwapTouched(coarseSourceBlock!)
+        : passTouchedPools;
+      /*
        * Exact probes read current-N view state only. Batch them directly to
        * local reth (source-hash pinned) instead of serializing every quote
        * through one Anvil fork; Anvil stays reserved for solver/final-sim.
@@ -2627,7 +2638,7 @@ export class BlockScanRuntimeLoop {
         "exact",
         exactFundingTokens,
         exactQuoteState,
-        passTouchedPools,
+        exactScopeTouchedPools,
       );
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
@@ -2725,7 +2736,7 @@ export class BlockScanRuntimeLoop {
               deadlineAtMs: runtimeDeadlineAtMs,
               preparationSettleDeadlineAtMs,
               signal: passSignal,
-              touchedPools: passTouchedPools,
+              touchedPools: exactScopeTouchedPools,
             });
         if (exactContext.status === "incomplete") {
           finishStage("planner_solver", "failed");
