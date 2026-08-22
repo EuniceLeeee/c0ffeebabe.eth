@@ -212,8 +212,9 @@ export class StrictProductionRuntimeRoot {
       // enough to finish the full ready set within one block cadence avoids
       // turning a producer generation into a permanent N-1 backlog.
       const refreshConcurrency = Math.max(1, Math.min(128, this.#readyInstances.length));
-      const refreshedOutcomes = new Array<InstanceRefreshOutcome | null>(
-        this.#readyInstances.length,
+      const refreshedOutcomes = Array.from(
+        { length: this.#readyInstances.length },
+        () => null as InstanceRefreshOutcome | null | "skipped",
       );
       let refreshCursor = 0;
       const refreshWorkers = Array.from(
@@ -230,7 +231,9 @@ export class StrictProductionRuntimeRoot {
               // Current pricing refreshes only this block's touched venues;
               // untouched instances have no current mid this block and the
               // scanner's touched filter keeps enumeration over the touched
-              // venues.
+              // venues. Mark the slot explicitly: skipped slots must not
+              // look like a missing refresh (null throws below).
+              refreshedOutcomes[index] = "skipped";
               continue;
             }
             refreshedOutcomes[index] = await this.refreshReadyInstancePricing({
@@ -244,6 +247,7 @@ export class StrictProductionRuntimeRoot {
       );
       await Promise.all(refreshWorkers);
       for (const outcome of refreshedOutcomes) {
+        if (outcome === "skipped") continue;
         if (outcome === null) {
           throw new Error("strict ready instance refresh did not complete");
         }
