@@ -944,6 +944,12 @@ function touchedInstanceMatches(
   );
 }
 
+/**
+ * The refreshed view is the current-block touched subset of the ready
+ * graph: every view edge must exist in the ready graph with the same
+ * binding fingerprint, while the ready graph may legitimately contain more
+ * (untouched venues have no current mid this block).
+ */
 function assertSameReadyTopology(
   ready: readonly TokenEdge[],
   current: readonly TokenEdge[],
@@ -952,19 +958,12 @@ function assertSameReadyTopology(
     requiredCanonicalEdgeId(edge),
     edgeBindingFingerprint(edge),
   ]));
-  const currentById = new Map(current.map((edge) => [
-    requiredCanonicalEdgeId(edge),
-    edgeBindingFingerprint(edge),
-  ]));
-  if (readyById.size !== currentById.size) {
-    throw new Error(
-      `strict current-source topology differs from ready Graph: ` +
-        `${currentById.size} != ${readyById.size}`,
-    );
-  }
-  for (const [edgeId, fingerprint] of readyById) {
-    if (currentById.get(edgeId) !== fingerprint) {
-      throw new Error(`strict current-source topology differs at ${edgeId}`);
+  for (const edge of current) {
+    const edgeId = requiredCanonicalEdgeId(edge);
+    if (readyById.get(edgeId) !== edgeBindingFingerprint(edge)) {
+      throw new Error(
+        `strict current-source topology differs from ready Graph at ${edgeId}`,
+      );
     }
   }
 }
