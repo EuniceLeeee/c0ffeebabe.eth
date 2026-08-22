@@ -136,8 +136,11 @@ export class StrictCurrentRuntimeCoordinator
       input.graph,
     );
     const fundingCoverage = funding.coverage;
+    const completeness = pricing.coverage.unresolvedEdgeKeys.length > 0
+      ? "degraded" as const
+      : "complete" as const;
     const snapshot: AdapterRuntimeSnapshot = Object.freeze({
-      completeness: "complete" as const,
+      completeness,
       generation: input.graph.generation,
       sourceBlock: input.graph.sourceBlock,
       sourceBlockHash: input.graph.sourceBlockHash,
@@ -157,7 +160,7 @@ export class StrictCurrentRuntimeCoordinator
       finalCanonicalCasMs: 0,
     });
     return Object.freeze({
-      status: "complete" as const,
+      status: completeness,
       snapshot,
       pricing: completePricingResult(pricing),
       fundingCoverage,
@@ -229,17 +232,29 @@ function buildStrictPricingSnapshot(
   const mids = new Map<string, RouteVenueMid>();
   const coverageByEdgeKey = new Map<string, StateKeyCoverage>();
   const familyIds = new Set<string>();
+  const incompleteFamilyIds = new Set<string>();
   const expectedEdgeKeys: string[] = [];
   const resolvedEdgeKeys: string[] = [];
   const unavailableEdgeKeys: string[] = [];
+  const unresolvedEdgeKeys: string[] = [];
   for (const edge of graph.edges) {
     if (!scannerConsumesEdge(edge)) continue;
     const edgeKey = blockScanEdgeKey(edge);
     expectedEdgeKeys.push(edgeKey);
-    familyIds.add(session.familyIdForEdge(edge));
+    const familyId = session.familyIdForEdge(edge);
+    familyIds.add(familyId);
     const current = session.currentPricingForEdge(edge);
     if (current === null) {
-      throw new Error(`scanner edge ${edgeKey} has no strict pricing authority`);
+      // Untouched by this block: the touched-driven session did not refresh
+      // this edge. The enumeration resolves over the priced subset and the
+      // runtime reports degraded while the edge stays unpriced.
+      unresolvedEdgeKeys.push(edgeKey);
+      incompleteFamilyIds.add(familyId);
+      coverageByEdgeKey.set(edgeKey, Object.freeze({
+        status: "unresolved" as const,
+        reason: "untouched-this-block",
+      }));
+      continue;
     }
     if (current.status === "behavior-proven-unavailable") {
       unavailableEdgeKeys.push(edgeKey);
@@ -259,6 +274,7 @@ function buildStrictPricingSnapshot(
   expectedEdgeKeys.sort();
   resolvedEdgeKeys.sort();
   unavailableEdgeKeys.sort();
+  unresolvedEdgeKeys.sort();
   if (
     expectedEdgeKeys.length !== graph.scannerEdgeCount ||
     exactSetHash(expectedEdgeKeys) !== graph.scannerEdgeKeyHash
@@ -275,7 +291,7 @@ function buildStrictPricingSnapshot(
     expectedEdgeKeys: Object.freeze(expectedEdgeKeys),
     resolvedEdgeKeys: Object.freeze(resolvedEdgeKeys),
     unavailableEdgeKeys: Object.freeze(unavailableEdgeKeys),
-    unresolvedEdgeKeys: Object.freeze([]),
+    unresolvedEdgeKeys: Object.freeze(unresolvedEdgeKeys),
     expectedStateKeyHash: exactSetHash([]),
     resolvedStateKeyHash: exactSetHash([]),
     unresolvedStateKeyHash: exactSetHash([]),
@@ -285,7 +301,7 @@ function buildStrictPricingSnapshot(
     expectedEdgeKeyHash: exactSetHash(expectedEdgeKeys),
     resolvedEdgeKeyHash: exactSetHash(resolvedEdgeKeys),
     unavailableEdgeKeyHash: exactSetHash(unavailableEdgeKeys),
-    unresolvedEdgeKeyHash: exactSetHash([]),
+    unresolvedEdgeKeyHash: exactSetHash(unresolvedEdgeKeys),
   });
   return Object.freeze({
     generation: graph.generation,
@@ -297,8 +313,14 @@ function buildStrictPricingSnapshot(
     coverageByEdgeKey: new Map(coverageByEdgeKey),
     freshnessByReadKey: new Map(),
     stateByStateKey: new Map(),
-    resolvedFamilyIds: Object.freeze([...familyIds].sort()),
-    incompleteFamilyIds: Object.freeze([]),
+    resolvedFamilyIds: Object.freeze(
+      [...familyIds].filter((familyId) =>
+        !incompleteFamilyIds.has(familyId)
+      ).sort(),
+    ),
+    incompleteFamilyIds: Object.freeze(
+      [...incompleteFamilyIds].sort(),
+    ),
     coverage,
     laneTelemetry: Object.freeze([]),
     familyTelemetry: Object.freeze([]),
@@ -308,8 +330,9 @@ function buildStrictPricingSnapshot(
 function completePricingResult(
   snapshot: BlockScanStateSnapshot,
 ): BlockScanStatePrepareResult {
+  const degraded = snapshot.coverage.unresolvedEdgeKeys.length > 0;
   return Object.freeze({
-    status: "complete" as const,
+    status: degraded ? "degraded" as const : "complete" as const,
     generation: snapshot.generation,
     sourceBlock: snapshot.sourceBlock,
     sourceBlockHash: snapshot.sourceBlockHash,
