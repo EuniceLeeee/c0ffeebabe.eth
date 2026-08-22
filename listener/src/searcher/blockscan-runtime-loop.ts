@@ -28,7 +28,7 @@ import { BlockScanFamilyStageBudget } from "./detector/blockscan-family-budget.j
 import { BlockScanPassTimeline } from "./blockscan-pass-timeline.js";
 import { emitEvent } from "./events.js";
 import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
-import type { TokenEdge } from "./planner/token-graph.js";
+import { v4PoolId, type TokenEdge } from "./planner/token-graph.js";
 import type { ResolvedPlan } from "./solver/solver.js";
 import type { AnvilSolver } from "./solver/solver.js";
 import type { StrictProductionRuntimeSession } from
@@ -321,6 +321,13 @@ export function nMinusOneProducerCanServeLatestHead(
 ): boolean {
   return latestScheduledHead === null ||
     latestScheduledHead <= sourceBlock + 1;
+}
+
+/** Physical venue identity of an edge (same semantics as the scanner's). */
+function edgeVenueIdentity(edge: TokenEdge): string {
+  if (edge.poolId) return edge.poolId.toLowerCase();
+  if (edge.v4PoolKey) return v4PoolId(edge.v4PoolKey).toLowerCase();
+  return edge.target.toLowerCase();
 }
 
 export function blockScanCandidateFundingTokens(
@@ -1178,9 +1185,18 @@ export class BlockScanRuntimeLoop {
         let prepared: BlockScanStatePrepareResult;
         let bootstrapEscalated = false;
         const producerTouched = await this.deps.readBlockSwapTouched(nextBlock);
+        const producerGraph = producerTouched.size === 0
+          ? anchoredGraph
+          : Object.freeze({
+            ...anchoredGraph,
+            id: `blockscan-coarse-${nextBlock}-${generation}:touched`,
+            edges: Object.freeze(anchoredGraph.edges.filter((edge) =>
+              producerTouched.has(edgeVenueIdentity(edge)),
+            )),
+          });
         try {
         prepared = await input.coordinator.prepareCoarsePricing({
-          graph: anchoredGraph,
+          graph: producerGraph,
           touchedPools: producerTouched,
           deadlineAtMs: generationDeadlineAtMs,
           /*
@@ -2093,8 +2109,24 @@ export class BlockScanRuntimeLoop {
         const touchedPools = await this.deps.readBlockSwapTouched(
           blockNumber,
         );
+        // The strict session prices only this block's touched venues; the
+        // graph handed to it is the touched subgraph so the snapshot,
+        // enumeration and topology assertions all cover the same venues.
+        const passGraph = touchedPools.size === 0
+          ? graphView
+          : this.deps.buildGraphView({
+            id: `blockscan:${this.topologyKey()}:touched:${blockNumber}`,
+            generation: graphView.generation,
+            sourceBlock: graphView.sourceBlock,
+            sourceBlockHash: graphView.sourceBlockHash,
+            edges: Object.freeze(graphView.edges.filter((edge) =>
+              touchedPools.has(edgeVenueIdentity(edge)),
+            )),
+            landedCoverage: discoveryPass.landedCoverage,
+            topologyKey: this.topologyKey(),
+          });
         const runtime = await currentRuntimeCoordinator.prepare({
-          graph: graphView,
+          graph: passGraph,
           fundingTokens: [...new Set([
             ...this.deps.flashTokens(),
             ...graphEdges.flatMap((edge) => [edge.tokenIn, edge.tokenOut]),
