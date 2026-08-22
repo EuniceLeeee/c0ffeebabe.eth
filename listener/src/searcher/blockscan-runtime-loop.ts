@@ -2098,10 +2098,11 @@ export class BlockScanRuntimeLoop {
         // resolves over the priced subset.
         const runtime = await currentRuntimeCoordinator.prepare({
           graph: graphView,
-          fundingTokens: [...new Set([
-            ...this.deps.flashTokens(),
-            ...graphEdges.flatMap((edge) => [edge.tokenIn, edge.tokenOut]),
-          ])],
+          // The funding surface is the solidified funding-token universe
+          // (provider support surface, chain-truth enumerated), never the
+          // graph token set: balanceOf reads for every graph token blew the
+          // block budget and tripped the generation fence.
+          fundingTokens: [...new Set(this.deps.flashTokens())],
           deadlineAtMs: runtimeDeadlineAtMs,
           preparationSettleDeadlineAtMs,
           pricingFamilySettleDeadlineAtMs,

@@ -2130,10 +2130,9 @@ async function main(): Promise<void> {
     );
     const baseRuntime = await currentRuntimeCoordinator!.prepare({
       graph: baseGraph,
-      fundingTokens: [...new Set([
-        ...flashTokens,
-        ...blockScanGraph.flatMap((edge) => [edge.tokenIn, edge.tokenOut]),
-      ])],
+      // Blind prewarm funding surface is the solidified universe as well;
+      // graph-token expansion re-creates the balanceOf blowout.
+      fundingTokens: [...new Set(flashTokens)],
       deadlineAtMs: Date.now() + blindPrepareBudgetMs,
     });
     if (baseRuntime.status === "incomplete") {
