@@ -57,11 +57,14 @@
     "test:tx-source-shape": "node --import tsx --test src/test/tx-source-shape.ts",
     "test:blockscan-kpi": "node --import tsx --test src/test/blockscan-kpi.ts",
     "test:blockscan-window": "node --import tsx --test src/test/blockscan-window.ts",
+    "test:blockscan-pass-latency": "node --import tsx --test src/test/blockscan-pass-latency.ts",
+    "test:blockscan-pass-latency": "node --import tsx --test src/test/blockscan-pass-latency.ts",
     "build": "tsc --noEmit",
     "graph-in": "node --import tsx src/cli/graph-in.ts",
     "block-activity": "node --import tsx src/cli/block-activity.ts",
     "blockscan-kpi": "node --import tsx src/cli/blockscan-kpi.ts",
     "blockscan-window": "node --import tsx src/cli/blockscan-window.ts",
+    "blockscan-pass-latency": "node --import tsx src/cli/blockscan-pass-latency.ts",
     "discovery-lag": "node --import tsx src/cli/discovery-lag.ts"
   },
   "dependencies": {
