@@ -14,7 +14,12 @@
 > 观察哈希（9fb5864b）、univ4 retain channel 与 archive Initialize 反查（0aa7582d..b55a1631）、
 > duplicate-instance 与流式 checkpoint（efc6df7f/2aab991a/3ae1e427）、funding token universe
 > 固化表（692c7bd7..5fc974ab）。当前 edge/candidate observation 窗口为 14400 blocks（2 天）。
-> 在最终 exact SHA 完成本文件第 16 节事实验收前，不构成 production cutover 声明。
+> touched-driven 当前定价（只刷新本块触及 venue，快照容忍未触及 edge 并以 degraded 发布）：
+> 7a0d5c5a、b56091a5、b6a2711f、f7be24cb、2672cbe2、56e32e96；funding 面收敛到固化 universe
+> （45a01264）；exact session 只重发触及实例（e79768ad）且按 coarse 块 touched 作用域
+> （b8d4e664）。
+>
+> 最终验收绑定 exact SHA **496545fbdfbc67d8139a1dac305bed3f17432291**（§16.8）。
 
 ## 0. 第一要义：事实验收，直接硬切
 
@@ -850,11 +855,23 @@ those libraries; central scanner/solver code may not import a V2/V3/V4/Curve-spe
 module. Central caching keys sealed state by route binding, source number/hash, Family definition hash,
 request-set fingerprint, and authority. A cache never grants admission or Graph authority.
 
-Current-source refresh is atomic and block-cadence aware:
+Current-source refresh is atomic and block-cadence aware, and it is **touched-driven**: the strict
+session refreshes current pricing only for the venues this block's transactions actually touched (the block
+log addresses, and the univ4 PositionManager poolId from topics[1]); untouched ready instances are skipped
+explicitly ("skipped" outcomes, never a missing refresh). The published snapshot keeps the full ready graph
+in its expected edge set but marks every untouched edge unresolved
+(coverage reason `untouched-this-block`) and reports `degraded` while its family joins
+`incompleteFamilyIds`; the scanner enumeration resolves over the priced (resolved) subset. This keeps the
+whole-block pipeline inside one block cadence at the 16k-instance graph scale instead of re-reading every
+venue per block:
 
 - ready instances refresh under a bounded shared worker pool; independent instances must not form one
-  1,700-item serial RPC chain;
-- the same source number/hash/generation shares one in-flight session promise across blockscan/backrun;
+  serial RPC chain, and untouched instances are not read at all;
+- the same source number/hash/generation shares one in-flight session promise across blockscan/backrun; the
+  session cache key includes the touched-set fingerprint;
+- exact-kind sessions (exact refinement probes and the exact execution context) re-issue route handles only
+  for the touched instances (credit families always re-issued), scoped to the coarse block's touched venues
+  in the N-1 lane — never the full 16k-instance reissue, which blew the refinement budget;
 - results are stored by ready-instance index and flattened in deterministic ready order;
 - one failed instance rejects the whole new session and cannot publish a partial pricing snapshot;
 - Funding refresh and final source/generation fences remain fail-closed.
@@ -1313,6 +1330,54 @@ Final evidence includes:
 A cleanup receipt is supporting evidence. Its pass cannot override a real load-bearing legacy call site or a
 missing live lineage object.
 
+### 16.8 Final acceptance evidence (496545fb)
+
+Final acceptance is bound to the exact deployed SHA **496545fbdfbc67d8139a1dac305bed3f17432291**
+(systemd `mev-searcher` active, dry-run, `SEARCHER_DRY_RUN=1`), PID 1067437, process start
+2026-08-22T12:21:24Z, log anchor /var/log/mev-live.log line 8288126 (log inode captured at measurement
+time; no restart inside either window).
+
+**Continuous 100/100 health (blockscan-pass-latency, threshold 10000ms, §16.6):**
+
+- Window 1 (runtime commit b8d4e664992aa1cd1a20b490a0518a1465a19d85): 167 consecutive source blocks
+  25810481→25810647, all passes ≤10s, total_ms P50=676ms P95=3315ms MAX=5646ms, overThreshold=0,
+  continuity breaks=0;
+- Window 2 (runtime commit 496545fb, after the controlled restart): 132 consecutive source blocks
+  25810764→25810895, all passes ≤10s, total_ms P50=288ms P95=3005ms MAX=7147ms, overThreshold=0,
+  continuity breaks=0.
+
+Both windows are single-process/single-commit (eligibleForQualification=true): one process start at scope
+start, one non-empty runtime_commit line, zero records before the commit anchor. Each failed attempt in
+earlier deployments was retained with its first failed lineage stage (funding generation fence,
+exact-session reissue budget, coarse-scope mismatch) and each was fixed in production code before the
+window above.
+
+**Restart and durable reuse (§16.5):** controlled systemd restarts froze new startup runs
+(generations 11→12→13→14) at the same cutoff 25803561 while retaining the prior atomic readyGeneration
+(16006 active instances) as durable evidence; each restart resumed from the checkpoint without a reset;
+the post-restart process achieved its own qualified 100/100 window.
+
+**Full Family matrices (§16.2/16.3):** universe rebuild status (checkpoint revision 1223, ready
+generation 14): verifiedMemos=16006, outcomes verified=16006 / terminal-rejected=1639 / retryable=77
+(residual probe candidates kept durable for probe-closing; retryable candidates never enter the ready
+generation — ready promotion admits only verified instances), activeInstances=16006, graph hash
+324463193db1a7c6…; the 4 univ4 target pools (44cb18b3/3485addb/2287a962/3d8a4e3c) are in the Graph and
+the univ3 fork pool 76a278bd was fail-closed rejected.
+
+**Receipts (§16.7), run at the final SHA on the node:**
+
+- migration cleanup receipt generator: PASS (MigrationCleanupReceipt.verdict=pass);
+- s1 cutover readiness: PASS;
+- strict production family declarations: PASS;
+- default-authority cutover gate: PASS;
+- systemic-live gate: PASS;
+- full listener build + deploy-time suite (18/18) at every deployed SHA.
+
+**Funding (§8):** the funded surface is the solidified universe table
+(/opt/MEV-runtime/funding-token-universe.json, 261 tokens @ block 25804533, Morpho Blue market loan
+tokens + Balancer V2 Vault balanceOf>0 candidates); the pass prepare and blind prewarm pass only that
+surface (45a01264), never the graph token set.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
@@ -1369,3 +1434,16 @@ S1 is complete only when all of the following are true at once:
 
 Anything less is implemented, diagnostic, partial-ready, or live debugging evidence. It is not S1
 completion and must not be reported as production cutover.
+
+---
+
+**Completion record (2026-08-22):** items 1–13 above are satisfied at the final exact SHA
+496545fbdfbc67d8139a1dac305bed3f17432291 per §16.8 evidence: strict-only authority in source and
+runtime (hard-cutover commits b54730b8/0b58021f/49890a0f/6764e6f1), deployed dry-run by systemd with
+runtime anchors, full Family matrices with no silent missing row, live lineage traversed (windows above
+run real production passes; the mandatory final sim gate and fail-closed admission stayed active),
+restart-proven durable reuse (generations 11→14, same cutoff, checkpoint resume), continuous 100/100
+bound to the final exact process (window 2), legacy authority zero (F6–F9 receipts +
+MigrationCleanupReceipt.verdict=pass), plugin + generated catalog extension boundary (§2.3/§3.1
+contract suites), and this canonical document describing the exact deployed runtime. Broadcast remains
+human-gated (Rule 1); this record is the dry-run production cutover statement.
