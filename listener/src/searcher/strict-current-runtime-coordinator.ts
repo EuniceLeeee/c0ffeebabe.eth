@@ -186,6 +186,8 @@ export class StrictCurrentRuntimeCoordinator
       controlFor(settleDeadlineAtMs, input.signal),
       "exact",
       input.fundingTokens,
+      undefined,
+      input.touchedPools,
     );
     if (input.prepareExecution !== undefined) {
       await input.prepareExecution({

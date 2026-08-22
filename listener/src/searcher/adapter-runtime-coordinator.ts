@@ -220,6 +220,8 @@ export interface PrepareCurrentNExactExecutionContextInput {
   readonly preparationSettleDeadlineAtMs?: number;
   readonly signal?: AbortSignal;
   readonly prepareExecution?: PrepareAdapterRuntimeInput["prepareExecution"];
+  /** Venue-scope for the exact session's instance reissue; see strict session. */
+  readonly touchedPools?: ReadonlySet<string>;
 }
 
 /**

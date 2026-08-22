@@ -493,6 +493,7 @@ export interface BlockScanRuntimeLoopDependencies {
      * adapter or a second authority.
      */
     exactCallBackend?: Pick<StateBackend, "call">,
+    touchedPools?: ReadonlySet<string>,
   ) => Promise<StrictProductionRuntimeSession>;
   /**
    * Override the exact-probe quote backend. Production uses the source-hash
@@ -1832,6 +1833,10 @@ export class BlockScanRuntimeLoop {
     });
     let exactQuoteState: StateBackend | null = null;
     let exactTransportDrainMs = 0;
+    // One venue-touch scope for the whole pass: the direct session prepare,
+    // the N-1 exact refinement and the exact execution context all re-issue
+    // only this block's touched instances.
+    const passTouchedPools = await this.deps.readBlockSwapTouched(blockNumber);
     try {
       // The startup-ready topology is immutable for the lifetime of this
       // producer. Only the current canonical header and state are observed
@@ -2090,9 +2095,7 @@ export class BlockScanRuntimeLoop {
       let exactFundingTokens: readonly string[] = [];
       if (!useNMinusOneFallback) {
         this.passStageLabel = "state:prepare";
-        const touchedPools = await this.deps.readBlockSwapTouched(
-          blockNumber,
-        );
+        const touchedPools = passTouchedPools;
         // The strict session prices only this block's touched venues; the
         // snapshot marks untouched edges unresolved and the enumeration
         // resolves over the priced subset.
@@ -2624,6 +2627,7 @@ export class BlockScanRuntimeLoop {
         "exact",
         exactFundingTokens,
         exactQuoteState,
+        passTouchedPools,
       );
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
@@ -2721,6 +2725,7 @@ export class BlockScanRuntimeLoop {
               deadlineAtMs: runtimeDeadlineAtMs,
               preparationSettleDeadlineAtMs,
               signal: passSignal,
+              touchedPools: passTouchedPools,
             });
         if (exactContext.status === "incomplete") {
           finishStage("planner_solver", "failed");

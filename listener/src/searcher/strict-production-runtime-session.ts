@@ -287,6 +287,16 @@ export class StrictProductionRuntimeRoot {
           ));
           continue;
         }
+        if (
+          input.touchedPools !== undefined &&
+          !touchedInstanceMatches(readyInstance, input.touchedPools)
+        ) {
+          // Exact sessions re-issue only this block's touched pricing
+          // instances (credit instances above are always re-issued). The
+          // untouched reissue cost for the full 16k-instance ready set blew
+          // the refinement budget before funding could start.
+          continue;
+        }
         const family = this.#catalog.forFamily(readyInstance.familyId);
         const currentAuthority = reissuePreparedInstanceAuthority({
           family,
