@@ -56,6 +56,14 @@ export interface UniverseRebuildDependencies {
   }) => Promise<{
     readonly observations: readonly unknown[];
     readonly sourceReceipts: readonly DurableSourceReceipt[];
+    /**
+     * Nomination-only logs from the wider dormancy window (7 days): pools
+     * silent for the strict observation window but active within it are
+     * still nominated so durable verified memos can be reused. Never part
+     * of the catalog-event source receipts (the strict window remains the
+     * complete-observation proof).
+     */
+    readonly dormancyObservations?: readonly unknown[];
   }>;
   /** Full log identity key (block + txHash + logIndex + address + topics). */
   readonly familyCandidateKey: (candidate: unknown) => string;
@@ -223,7 +231,10 @@ export async function rebuildUniverse(
       // receipts. Never clear or replace the run/cutoff/outcomes.
       const rescanned = await input.scanSwapWindow({ fromBlock, cutoff });
       const rescannedCandidates = input.dedupeFamilyCandidates(
-        rescanned.observations,
+        Object.freeze([
+          ...rescanned.observations,
+          ...(rescanned.dormancyObservations ?? []),
+        ]),
       );
       const rescannedByKey = Object.freeze(Object.fromEntries(
         rescannedCandidates.map((candidate) => [
@@ -261,7 +272,10 @@ export async function rebuildUniverse(
     // A crash before this scan is sealed may rescan; after beginOrResumeRun,
     // the compact exact partition is durable and no scan is repeated.
     const scanned = await input.scanSwapWindow({ fromBlock, cutoff });
-    observations = scanned.observations;
+    observations = Object.freeze([
+      ...scanned.observations,
+      ...(scanned.dormancyObservations ?? []),
+    ]);
     sourceReceipts = scanned.sourceReceipts;
     candidates = input.dedupeFamilyCandidates(observations);
     if (input.reverseBindOpaqueCandidates !== undefined) {

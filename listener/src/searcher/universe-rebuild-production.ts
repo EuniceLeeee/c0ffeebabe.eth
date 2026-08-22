@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { ethers } from "ethers";
+import { dormancyNominationFromBlock } from "./strict-edge-collection-policy.js";
 import {
   canonicalJson,
   type DurableSourceChunkReceipt,
@@ -1368,6 +1369,74 @@ export function createRebuildWiring(input?: {
     scanSwapWindow: async (scanInput) => {
       const logs: RebuildScanObservation[] = [];
       const eventChunks: DurableSourceChunkReceipt[] = [];
+      // Dormancy nominations: pools silent for the strict 2-day window but
+      // active within 7 days are still nominated (nomination-only, like the
+      // startup universe files) so durable verified memos can be reused
+      // across a rebuild. These logs never enter the catalog-event source
+      // receipts: the strict [fromBlock, cutoff] window remains the complete
+      // observation proof.
+      const dormancyObservations: RebuildScanObservation[] = [];
+      const dormancyFrom = dormancyNominationFromBlock(
+        scanInput.cutoff.number,
+      );
+      if (dormancyFrom < scanInput.fromBlock) {
+        for (
+          let start = dormancyFrom;
+          start < scanInput.fromBlock;
+          start += SOURCE_SCAN_BATCH_BLOCKS
+        ) {
+          const end = Math.min(
+            scanInput.fromBlock - 1,
+            start + SOURCE_SCAN_BATCH_BLOCKS - 1,
+          );
+          const topicFilterD: Array<null | string | Array<string>> =
+            topics.length === 1 ? [topics[0]] : [[...topics]];
+          let batchSize = Math.min(
+            SOURCE_SCAN_BATCH_BLOCKS,
+            end - start + 1,
+          );
+          let fromD = start;
+          while (fromD <= end) {
+            const toD = Math.min(end, fromD + batchSize - 1);
+            try {
+              const batch = await provider.getLogs({
+                topics: topicFilterD,
+                fromBlock: fromD,
+                toBlock: toD,
+              });
+              for (const log of batch) {
+                dormancyObservations.push(Object.freeze({
+                  address: log.address.toLowerCase(),
+                  topics: Object.freeze([...log.topics]),
+                  data: log.data,
+                  ...(log.transactionHash === undefined
+                    ? {}
+                    : { transactionHash: log.transactionHash.toLowerCase() }),
+                  blockNumber: log.blockNumber,
+                  ...(log.blockHash === undefined
+                    ? {}
+                    : { blockHash: log.blockHash.toLowerCase() }),
+                  ...(log.index === undefined ? {} : { logIndex: log.index }),
+                }));
+              }
+              fromD = toD + 1;
+              batchSize = Math.min(
+                SOURCE_SCAN_BATCH_BLOCKS,
+                end - fromD + 1,
+              );
+            } catch (error) {
+              if (batchSize <= SOURCE_MIN_CHUNK_BLOCKS) {
+                throw new Error(
+                  "dormancy nomination scan failed at " + fromD + "-" +
+                    toD + ": " +
+                    (error instanceof Error ? error.message : String(error)),
+                );
+              }
+              batchSize = Math.floor(batchSize / 2);
+            }
+          }
+        }
+      }
       for (
         let start = scanInput.fromBlock;
         start <= scanInput.cutoff.number;
@@ -1559,6 +1628,7 @@ export function createRebuildWiring(input?: {
       return Object.freeze({
         observations,
         sourceReceipts: Object.freeze(receipts),
+        dormancyObservations: Object.freeze(dormancyObservations),
       });
     },
     familyCandidateKey: (candidate) =>

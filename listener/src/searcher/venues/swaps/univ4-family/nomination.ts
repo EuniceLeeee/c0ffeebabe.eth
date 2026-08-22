@@ -15,7 +15,7 @@ import {
   isUniv4OpaqueLabel,
   opaquePoolId,
 } from "./reverse-binding.js";
-import { STRICT_EDGE_COLLECTION_WINDOW_BLOCKS } from
+import { DORMANCY_NOMINATION_WINDOW_BLOCKS } from
   "../../../strict-edge-collection-policy.js";
 
 interface RecentUniv4SwapIndex {
@@ -216,8 +216,8 @@ export async function nominateUniv4(input: {
     provider: input.provider,
     manager,
     topic0: UNIV4_SWAP_TOPIC,
-    lookback: STRICT_EDGE_COLLECTION_WINDOW_BLOCKS,
-    chunk: STRICT_EDGE_COLLECTION_WINDOW_BLOCKS,
+    lookback: DORMANCY_NOMINATION_WINDOW_BLOCKS,
+    chunk: DORMANCY_NOMINATION_WINDOW_BLOCKS,
   });
   for (const nomination of input.nominations) {
     const opaque = nomination.opaque as Readonly<Record<string, unknown>>;

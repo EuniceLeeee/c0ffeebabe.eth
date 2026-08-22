@@ -25,3 +25,24 @@ export function strictEdgeCollectionFromBlock(cutoffNumber: number): number {
     cutoffNumber - STRICT_EDGE_COLLECTION_WINDOW_BLOCKS + 1,
   );
 }
+
+/**
+ * Dormancy nomination window (7 days at 12s slots). A pool dormant for the
+ * strict 2-day observation window but active within this wider window is
+ * still nominated (as a warm nomination only) so its durable verified memo
+ * can be reused across a rebuild; only pools silent for the full 7 days are
+ * dropped by a fresh run. The wider scan never enters the catalog-event
+ * source receipts (the strict 2-day window remains the complete-observation
+ * proof); it is nomination-only, exactly like the startup universe files.
+ */
+export const DORMANCY_NOMINATION_WINDOW_BLOCKS = 50_400 as const;
+
+export function dormancyNominationFromBlock(cutoffNumber: number): number {
+  if (!Number.isSafeInteger(cutoffNumber) || cutoffNumber < 0) {
+    throw new Error("dormancy nomination cutoff must be a non-negative integer");
+  }
+  return Math.max(
+    0,
+    cutoffNumber - DORMANCY_NOMINATION_WINDOW_BLOCKS + 1,
+  );
+}

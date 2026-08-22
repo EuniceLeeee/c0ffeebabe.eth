@@ -13,7 +13,9 @@
 > b54730b8/-17k lines、0b58021f、49890a0f、6764e6f1）、50 块窗口（cc207326）、2 天窗口与流式
 > 观察哈希（9fb5864b）、univ4 retain channel 与 archive Initialize 反查（0aa7582d..b55a1631）、
 > duplicate-instance 与流式 checkpoint（efc6df7f/2aab991a/3ae1e427）、funding token universe
-> 固化表（692c7bd7..5fc974ab）。当前 edge/candidate observation 窗口为 14400 blocks（2 天）。
+> 固化表（692c7bd7..5fc974ab）。当前 edge/candidate observation 窗口为 14400 blocks（2 天）；
+> 休眠提名窗口 7 天（DORMANCY_NOMINATION_WINDOW_BLOCKS=50400，提名-only，不进完整观察证明），
+> 2 天窗口内无活动但 7 天内活跃的池仍被提名并复用 verified memo，7 天无活动的池在 rebuild 时允许掉落。
 > touched-driven 当前定价（只刷新本块触及 venue，快照容忍未触及 edge 并以 degraded 发布）：
 > 7a0d5c5a、b56091a5、b6a2711f、f7be24cb、2672cbe2、56e32e96；funding 面收敛到固化 universe
 > （45a01264）；exact session 只重发触及实例（e79768ad）且按 coarse 块 touched 作用域

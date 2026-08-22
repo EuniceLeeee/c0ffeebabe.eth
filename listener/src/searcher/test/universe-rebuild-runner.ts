@@ -17,6 +17,8 @@ import {
   rebuildUniverse,
   type RebuildUniverseInput,
 } from "../universe-rebuild-runner.js";
+import { strictEdgeCollectionFromBlock } from
+  "../strict-edge-collection-policy.js";
 
 const SOURCE = Object.freeze({
   number: 25_750_000,
@@ -782,6 +784,50 @@ async function main(): Promise<void> {
         { readonly reasonCode: string }).reasonCode,
       "duplicate-instance",
     );
+    // E: first run merges dormancy nominations. Pools silent for the strict
+    // observation window but active within the wider dormancy window are
+    // still nominated (nomination-only) so durable verified memos can be
+    // reused across a rebuild; the extra observations never enter the
+    // catalog-event source receipts.
+    const dormancyDir = await mkdtemp(join(tmpdir(), "universe-rebuild-dormancy-"));
+    const fd = makeFixture(dormancyDir, {
+      scanSwapWindow: async (scanInput) => Object.freeze({
+        observations: Object.freeze([
+          Object.freeze({ id: "a", block: SOURCE.number }),
+        ]),
+        sourceReceipts: sourceReceipts(scanInput.fromBlock),
+        dormancyObservations: Object.freeze([
+          Object.freeze({ id: "b", block: SOURCE.number }),
+          Object.freeze({ id: "c", block: SOURCE.number }),
+        ]),
+      }),
+    });
+    const dormancyReady = await rebuildUniverse(fd.input);
+    assert.equal(fd.attestCalls.get("a"), 1);
+    assert.equal(fd.attestCalls.get("b"), 1);
+    assert.equal(fd.attestCalls.get("c"), 1);
+    assert.deepEqual(
+      [...dormancyReady.activeInstanceKeys].sort(),
+      ["inst:a", "inst:b", "inst:c"],
+      "dormancy-nominated pools must enter the first-run partition",
+    );
+    const dormancyCheckpoint = await fd.store.load();
+    assert.equal(
+      dormancyCheckpoint?.readyGeneration?.generation,
+      dormancyReady.generation,
+      "dormancy nominations promote with the first run",
+    );
+    const dormancyReceipts =
+      dormancyCheckpoint?.inProgressRun?.sourceReceipts ?? [];
+    assert.equal(
+      dormancyReceipts.every((receipt) =>
+        receipt.fromBlock === strictEdgeCollectionFromBlock(SOURCE.number)
+      ),
+      true,
+      "source receipts still bind the strict 2-day window only: " +
+        "dormancy observations never enter the complete-observation proof",
+    );
+    await rm(dormancyDir, { recursive: true, force: true });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
