@@ -5,7 +5,7 @@ import { analyzePassLatency } from "../blockscan-pass-latency.js";
 
 const args = parseArgs(process.argv.slice(2));
 const logPath = readString(args.log) ?? "/var/log/mev-live.log";
-const startLine = readPositiveInteger(args["start-line"]) ?? 1;
+const logStartLine = readPositiveInteger(args["start-line"]) ?? 1;
 const endLine = readPositiveInteger(args["end-line"]);
 const minRun = readPositiveInteger(args["min-run"]) ?? 100;
 const thresholdMs = readPositiveInteger(args["threshold-ms"]) ?? 10_000;
@@ -17,14 +17,15 @@ async function main(): Promise<void> {
   let lineNumber = 0;
   for await (const line of reader) {
     lineNumber++;
-    if (lineNumber < startLine) continue;
+    if (lineNumber < logStartLine) continue;
     if (endLine !== undefined && lineNumber > endLine) break;
     lines.push(line);
   }
   if (lines.at(-1) === "") lines.pop();
   const report = analyzePassLatency(lines.join("\n") + "\n", {
-    startLine,
-    endLine: endLine ?? startLine + lines.length - 1,
+    // The analyzed text is the sliced window; core numbering is relative.
+    startLine: 1,
+    logStartLine,
     minRun,
     thresholdMs,
   });

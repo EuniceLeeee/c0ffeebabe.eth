@@ -52,6 +52,8 @@ export interface PassLatencyReport {
   readonly scope: {
     readonly startLine: number;
     readonly endLine: number;
+    /** Original log line of the analyzed window start (1 when not sliced). */
+    readonly logStartLine: number;
     readonly minRun: number;
     readonly runtimeCommit: string | null;
     readonly processStartLine: number | null;
@@ -82,6 +84,8 @@ export function analyzePassLatency(
     endLine?: number;
     minRun: number;
     thresholdMs: number;
+    /** Original log line of the window start (slice anchor). */
+    logStartLine?: number;
   },
 ): PassLatencyReport {
   const lines = text.length === 0 ? [] : text.split(/\r?\n/);
@@ -214,6 +218,7 @@ export function analyzePassLatency(
     scope: {
       startLine: firstInclusive,
       endLine: lastInclusive,
+      logStartLine: options.logStartLine ?? firstInclusive,
       minRun: options.minRun,
       runtimeCommit,
       processStartLine,
