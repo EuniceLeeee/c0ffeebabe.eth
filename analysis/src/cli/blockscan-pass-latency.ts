@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
 import { parseArgs } from "../util.js";
 import { analyzePassLatency } from "../blockscan-pass-latency.js";
 
@@ -10,10 +11,20 @@ const minRun = readPositiveInteger(args["min-run"]) ?? 100;
 const thresholdMs = readPositiveInteger(args["threshold-ms"]) ?? 10_000;
 
 async function main(): Promise<void> {
-  const text = await readFile(logPath, "utf8");
-  const report = analyzePassLatency(text, {
+  const lines: string[] = [];
+  const stream = createReadStream(logPath, { encoding: "utf8" });
+  const reader = createInterface({ input: stream, crlfDelay: Infinity });
+  let lineNumber = 0;
+  for await (const line of reader) {
+    lineNumber++;
+    if (lineNumber < startLine) continue;
+    if (endLine !== undefined && lineNumber > endLine) break;
+    lines.push(line);
+  }
+  if (lines.at(-1) === "") lines.pop();
+  const report = analyzePassLatency(lines.join("\n") + "\n", {
     startLine,
-    endLine,
+    endLine: endLine ?? startLine + lines.length - 1,
     minRun,
     thresholdMs,
   });
