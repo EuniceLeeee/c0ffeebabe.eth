@@ -23,6 +23,8 @@ import type {
   "./strict-production-runtime-session.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
+import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
+  "./strict-production-family-declarations.js";
 import {
   blockScanEdgeKey,
   exactSetHash,
@@ -229,6 +231,17 @@ function buildStrictPricingSnapshot(
   graph: VerifiedGraphView,
 ): BlockScanStateSnapshot {
   assertSessionGraphSource(session, graph);
+  /*
+   * The touched-driven session binds and prices only this block's touched
+   * instances, so an edge absent from the session has no strict pricing
+   * authority this block (session accessors would throw). Classify those
+   * edges as unresolved and attribute their family from the declarations;
+   * the enumeration resolves over the priced subset and the runtime reports
+   * degraded while the edge stays unpriced.
+   */
+  const sessionCoveredEdgeIds = new Set(
+    session.edges.map((edge) => blockScanEdgeKey(edge)),
+  );
   const mids = new Map<string, RouteVenueMid>();
   const coverageByEdgeKey = new Map<string, StateKeyCoverage>();
   const familyIds = new Set<string>();
@@ -241,20 +254,24 @@ function buildStrictPricingSnapshot(
     if (!scannerConsumesEdge(edge)) continue;
     const edgeKey = blockScanEdgeKey(edge);
     expectedEdgeKeys.push(edgeKey);
-    const familyId = session.familyIdForEdge(edge);
-    familyIds.add(familyId);
-    const current = session.currentPricingForEdge(edge);
-    if (current === null) {
-      // Untouched by this block: the touched-driven session did not refresh
-      // this edge. The enumeration resolves over the priced subset and the
-      // runtime reports degraded while the edge stays unpriced.
+    if (!sessionCoveredEdgeIds.has(edgeKey)) {
       unresolvedEdgeKeys.push(edgeKey);
-      incompleteFamilyIds.add(familyId);
+      incompleteFamilyIds.add(
+        PRODUCTION_STRICT_FAMILY_DECLARATIONS.familyIdForEdge(
+          edge.adapterId,
+        ),
+      );
       coverageByEdgeKey.set(edgeKey, Object.freeze({
         status: "unresolved" as const,
         reason: "untouched-this-block",
       }));
       continue;
+    }
+    const familyId = session.familyIdForEdge(edge);
+    familyIds.add(familyId);
+    const current = session.currentPricingForEdge(edge);
+    if (current === null) {
+      throw new Error(`scanner edge ${edgeKey} has no strict pricing authority`);
     }
     if (current.status === "behavior-proven-unavailable") {
       unavailableEdgeKeys.push(edgeKey);
