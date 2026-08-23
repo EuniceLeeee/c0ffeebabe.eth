@@ -19,8 +19,9 @@ import * as entry16 from "../venues/production-families/rocksolid.production.js"
 import * as entry17 from "../venues/production-families/self-burn-native.production.js";
 import * as entry18 from "../venues/production-families/univ2-standard.production.js";
 import * as entry19 from "../venues/production-families/univ3-standard.production.js";
-import * as entry20 from "../venues/production-families/univ4.production.js";
-import * as entry21 from "../venues/production-families/wsteth.production.js";
+import * as entry20 from "../venues/production-families/univ4-fee-hook.production.js";
+import * as entry21 from "../venues/production-families/univ4.production.js";
+import * as entry22 from "../venues/production-families/wsteth.production.js";
 
 export const GENERATED_PRODUCTION_FAMILY_ENTRIES = Object.freeze([
   Object.freeze({ sourceFile: "angstrom-v4.production.ts", module: entry0 }),
@@ -43,6 +44,7 @@ export const GENERATED_PRODUCTION_FAMILY_ENTRIES = Object.freeze([
   Object.freeze({ sourceFile: "self-burn-native.production.ts", module: entry17 }),
   Object.freeze({ sourceFile: "univ2-standard.production.ts", module: entry18 }),
   Object.freeze({ sourceFile: "univ3-standard.production.ts", module: entry19 }),
-  Object.freeze({ sourceFile: "univ4.production.ts", module: entry20 }),
-  Object.freeze({ sourceFile: "wsteth.production.ts", module: entry21 }),
+  Object.freeze({ sourceFile: "univ4-fee-hook.production.ts", module: entry20 }),
+  Object.freeze({ sourceFile: "univ4.production.ts", module: entry21 }),
+  Object.freeze({ sourceFile: "wsteth.production.ts", module: entry22 }),
 ]);

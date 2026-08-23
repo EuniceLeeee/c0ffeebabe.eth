@@ -21,8 +21,8 @@ import {
   loadStrictProductionFamilyPlugins,
 } from "./production-families/loader.js";
 
-const EXPECTED_STRICT_FAMILIES = 22;
-const EXPECTED_EXACT_CAPABILITIES = 242;
+const EXPECTED_STRICT_FAMILIES = 23;
+const EXPECTED_EXACT_CAPABILITIES = 253;
 
 const shadowShape = capabilityShadowArtifact as unknown as {
   readonly complete?: unknown;

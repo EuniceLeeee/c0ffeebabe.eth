@@ -7268,10 +7268,378 @@
         ],
         "absence": null
       }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "univ4-fee-hook",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "2642c5b42ce20fa4076a4b3c34a1471fba111b42e33b52490ee6ac24d06d0881",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/pool-registry-key.ts",
+          "src/searcher/strict-edge-collection-policy.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/landed-event-registry.ts",
+          "src/searcher/venues/landed-pool-discovery.ts",
+          "src/searcher/venues/landed-pool-shared-identity.ts",
+          "src/searcher/venues/route-immutable-binding.ts",
+          "src/searcher/venues/swaps/univ4-abi.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/codec.ts",
+          "src/searcher/venues/swaps/univ4-family/discovery.ts",
+          "src/searcher/venues/swaps/univ4-family/nomination.ts",
+          "src/searcher/venues/swaps/univ4-family/reverse-binding.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/searcher/venues/swaps/univ4-pool-discovery.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/swaps/univ4-fee-hook-family/capture.ts",
+        "entryExport": "univ4FeeHookCapture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "univ4-fee-hook",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "univ4-fee-hook",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "2e250f71df4a82bd8fc714403e55507e9fa424f8c0c66d14b8b59282402eafd9",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/pool-registry-key.ts",
+          "src/searcher/strict-edge-collection-policy.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/landed-event-registry.ts",
+          "src/searcher/venues/landed-pool-discovery.ts",
+          "src/searcher/venues/landed-pool-shared-identity.ts",
+          "src/searcher/venues/route-immutable-binding.ts",
+          "src/searcher/venues/swaps/univ4-abi.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/codec.ts",
+          "src/searcher/venues/swaps/univ4-family/nomination.ts",
+          "src/searcher/venues/swaps/univ4-family/reverse-binding.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/searcher/venues/swaps/univ4-pool-discovery.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/swaps/univ4-fee-hook-family/discovery.ts",
+        "entryExport": "univ4FeeHookDiscovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "univ4-fee-hook",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "b514b49604940a7fa68df4683854c637b72d928ff5f3f95ea55fc225e49c4de7",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/swaps/univ4-abi.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/codec.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/swaps/univ4-fee-hook-family/exact.ts",
+        "entryExport": "univ4FeeHookExact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "univ4-fee-hook",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "789157bc17ede605b2394aa68b3678431eab836c3233e0609d9d9c79a69eafa8",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/univ4.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/codec.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/action.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/swaps/univ4-fee-hook-family/execution.ts",
+        "entryExport": "univ4FeeHookExecution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/univ4-fee-hook-family/action.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "univ4-fee-hook",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "univ4-fee-hook",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "d293937455e7f139569a11a55c1e478c1739cb5a069db00942c2e235c10ce321",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/univ4-abi.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/codec.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/swaps/univ4-fee-hook-family/identity.ts",
+        "entryExport": "univ4FeeHookIdentity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "univ4-fee-hook",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "26f6571cf053450ec3614784fe136a291bc597c59942e1e3064b5f649b36cfcb",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/binding.ts",
+          "src/searcher/venues/swaps/univ4-family/codec.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/swaps/univ4-fee-hook-family/instance.ts",
+        "entryExport": "univ4FeeHookInstance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "univ4-fee-hook",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "5e5552c3d6fdad98db3ce98c067278d20f6ca79c6fcab499b86afde2fcd707a4",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/blockscan-multicall.ts",
+          "src/searcher/detector/blockscan-sizing-constants.ts",
+          "src/searcher/strategy-taxonomy.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/blockscan-state-capability.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/route-immutable-binding.ts",
+          "src/searcher/venues/route-instance-identity.ts",
+          "src/searcher/venues/swaps/blockscan-state-shared.ts",
+          "src/searcher/venues/swaps/univ4-abi.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/binding.ts",
+          "src/searcher/venues/swaps/univ4-family/codec.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/swaps/univ4-fee-hook-family/pricing.ts",
+        "entryExport": "univ4FeeHookPricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "univ4-fee-hook",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "89b94cd8c6d6e46c9e7722b1772f57d10662c104d5dd091d04ac2d4e577d06da",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/binding.ts",
+          "src/searcher/venues/swaps/univ4-family/codec.ts",
+          "src/searcher/venues/swaps/univ4-family/routes.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/swaps/univ4-fee-hook-family/routes.ts",
+        "entryExport": "univ4FeeHookRoutes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "univ4-fee-hook",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "cdbc9fedd653162e6e0986882e58c6d469459eb5703bd540257dc9ca087be2b2",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "runtime:node:fs@node-es2022-v1",
+          "runtime:node:path@node-es2022-v1",
+          "runtime:node:url@node-es2022-v1",
+          "src/searcher/solver/v2-constant-product-math.ts",
+          "src/searcher/solver/v2-fee.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/landed-event-registry.ts",
+          "src/searcher/venues/swap-observation.ts",
+          "src/searcher/venues/swaps/univ4-abi.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/codec.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/swap.ts",
+          "src/searcher/venues/v2-lineage.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": "src/searcher/venues/swaps/univ4-fee-hook-family/victim.ts",
+        "entryExport": "univ4FeeHookVictimReplay",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/swap.ts"
+        ],
+        "absence": null
+      }
     }
   ],
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "efdc20f6d2d220077b4439a120e137d538b484c9f7d45c2c7338fc930b33e32c"
+  "artifactHash": "d8adacf9f730d9f821ef024e3bda2da831c1cf2dfc6ce3ac79b6ce7a7e383a8c"
 }

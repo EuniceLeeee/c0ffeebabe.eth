@@ -44,6 +44,8 @@ export interface UniV4Identity extends VerifiedIdentity {
   readonly facts: UniV4IdentityFacts;
 }
 
+export type UniV4HookPolicy = "no-hook" | "fee-hook";
+
 export interface UniV4Descriptor extends CompiledInstanceDescriptor {
   readonly familyId: FamilyId;
   readonly lineageId: LineageId;
@@ -53,7 +55,9 @@ export interface UniV4Descriptor extends CompiledInstanceDescriptor {
   readonly graphToken0: string;
   readonly graphToken1: string;
   readonly managerBinding: UniV4ManagerBinding;
-  readonly hookPolicy: "no-hook";
+  readonly hookPolicy: UniV4HookPolicy;
+  /** Present only for hook-backed descriptors (fee-hook family). */
+  readonly hook?: string;
 }
 
 export type UniV4Direction = "zero-for-one" | "one-for-zero";

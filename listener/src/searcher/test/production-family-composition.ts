@@ -14,14 +14,14 @@ import {
 
 assert.equal(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.modules.length, 0);
 assert.equal(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.issues.length, 0);
-assert.equal(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins.length, 22);
+assert.equal(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins.length, 23);
 assert.equal(
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll().length,
-  22,
+  23,
 );
 assert.equal(
   PRODUCTION_STRICT_SHADOW_GENERATED_CAPABILITY_MANIFEST.entries.length,
-  242,
+  253,
 );
 assert.equal(
   new Set(
@@ -29,7 +29,7 @@ assert.equal(
       (entry) => `${entry.familyId}\0${entry.capability}`,
     ),
   ).size,
-  242,
+  253,
 );
 
 const familyActionIds = PRODUCTION_STRICT_SHADOW_FAMILY_OWNED_ACTION_ADAPTERS.map(
