@@ -4,6 +4,10 @@ import { readFileSync, lstatSync, realpathSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
+import {
+  sealCatalogCompilerClosureFacts,
+  type CatalogCompilerClosureFactV1,
+} from "../../../specs/catalog-compiler/src/index.ts";
 
 /**
  * This package is a source/build fact collector.  It never reads a runtime
@@ -120,6 +124,18 @@ export interface ImplementationClosure {
   readonly files: readonly ImplementationClosureFile[];
   readonly edges: readonly GraphEdge[];
   readonly closureDigest: string;
+}
+
+/**
+ * The catalog compiler consumes only this narrow projection of a validated
+ * boundary receipt.  It intentionally omits source files, ASTs, and mutable
+ * compiler objects: the boundary owns those observations and the catalog
+ * generator may only exact-join the resulting identity and roots.
+ */
+export interface CatalogCompilerClosureBindingV1 {
+  readonly modulePath: string;
+  readonly exportName: string;
+  readonly entrypointId: string;
 }
 
 /**
@@ -329,6 +345,20 @@ const FAMILY_CENTRAL_IMPORT_ALLOWLIST = Object.freeze([
   // Only the separately frozen pure-contract subtree is a Family dependency;
   // the package root and closure/build helpers remain default-deny.
   "packages/artifact-fingerprint/src/pure/",
+]);
+
+// Strategy declarations are even narrower than Family code: they may depend
+// on neutral authoring/runtime-ref contracts only. Keep this exact-path
+// allowlist default-deny so a strategy cannot quietly acquire planner,
+// solver, state, execution, or authority ownership through a central package.
+const STRATEGY_CENTRAL_IMPORT_ALLOWLIST = Object.freeze([
+  "packages/capability-contracts/src/index.ts",
+  "packages/canonical-codec/src/index.ts",
+  "packages/artifact-fingerprint/src/pure/index.ts",
+  "packages/family-sdk/runtime-refs/index.ts",
+  "packages/strategy-sdk/src/index.ts",
+  "specs/capability-index/src/index.ts",
+  "specs/release-intent/src/index.ts",
 ]);
 
 // These public package roots still mix a constructor/issuer with ordinary
@@ -1715,6 +1745,7 @@ export function validateDependencyBoundaries(
   };
   const isPublicPluginEntry = (file: TrackedFile): boolean => (file.fileClass === "family" || file.fileClass === "strategy") && isFamilyPublic(file.path);
   const isFamilyAllowedCentralImport = (path: string): boolean => FAMILY_CENTRAL_IMPORT_ALLOWLIST.some((prefix) => path.startsWith(prefix));
+  const isStrategyAllowedCentralImport = (path: string): boolean => STRATEGY_CENTRAL_IMPORT_ALLOWLIST.some((allowed) => path === allowed);
   const isCentralInternalPath = (path: string): boolean => path.includes("/src/internal/");
   const isAuthorityConstructorPath = (path: string): boolean =>
     isCentralInternalPath(path) || KNOWN_AUTHORITY_CONSTRUCTOR_PATHS.has(path) || SENSITIVE_PUBLIC_CONSTRUCTOR_PATHS.has(path);
@@ -1848,11 +1879,14 @@ export function validateDependencyBoundaries(
     if (from.fileClass === "reference-only" && !isSpecs(to.path) && !isCanonicalCodec(to.path) && to.fileClass !== "reference-only") diagnostics.push(diagnostic("fail", "reference-imports-production", edge.from, `Reference-only code may only import frozen specs, canonical-codec, or local reference code: ${edge.to}`));
     if (from.fileClass === "family" && to.fileClass === "production-runtime") diagnostics.push(diagnostic("fail", "family-imports-runtime", edge.from, `Family code cannot import production runtime source ${edge.to}`));
     if (from.fileClass === "family" && to.fileClass === "central" && (isCentralInternalPath(to.path) || !isFamilyAllowedCentralImport(to.path))) diagnostics.push(diagnostic("fail", "family-imports-forbidden-central", edge.from, `Family dependencies are default-deny; only frozen runtime refs, capability contracts, canonical-codec, or the pure artifact-fingerprint contract subtree are allowed: ${edge.to}`));
+    if (from.fileClass === "strategy" && to.fileClass === "central" && !isStrategyAllowedCentralImport(to.path)) diagnostics.push(diagnostic("fail", "strategy-imports-forbidden-central", edge.from, `Strategy dependencies are default-deny; only neutral capability/runtime-ref contracts, canonical-codec, pure artifact-fingerprint, strategy-sdk, and release-intent specs are allowed: ${edge.to}`));
     if (from.fileClass === "central" && importsAuthorityConstructor && !authorityOwnerEdge) diagnostics.push(diagnostic("fail", "central-imports-authority-constructor", edge.from, `Central code cannot import an authority constructor outside its exact owner edge: ${edge.to}`));
     if (from.fileClass === "generated" && importsAuthorityConstructor && !authorityOwnerEdge) diagnostics.push(diagnostic("fail", "generated-imports-authority-constructor", edge.from, `Generated code cannot import an authority constructor outside its exact generated owner edge: ${edge.to}`));
     if (from.fileClass === "family" && to.fileClass === "family" && from.path.split("/")[1] !== to.path.split("/")[1]) diagnostics.push(diagnostic("fail", "family-imports-family", edge.from, `Family imports another Family internals ${edge.to}`));
     if (from.fileClass === "strategy" && to.fileClass === "strategy" && from.path.split("/")[1] !== to.path.split("/")[1]) diagnostics.push(diagnostic("fail", "strategy-imports-strategy", edge.from, `Strategy imports another Strategy internals ${edge.to}`));
     if (from.fileClass === "strategy" && (to.fileClass === "family" || to.fileClass === "acceptance-pure-core" || to.fileClass === "acceptance-collector")) diagnostics.push(diagnostic("fail", "strategy-imports-family-or-acceptance", edge.from, `Strategy cannot import Family or acceptance implementation ${edge.to}`));
+    if (from.fileClass === "strategy" && to.fileClass === "production-runtime") diagnostics.push(diagnostic("fail", "strategy-imports-runtime", edge.from, `Strategy cannot import production runtime or worker implementation ${edge.to}`));
+    if (from.fileClass === "strategy" && (to.fileClass === "authoring" || to.fileClass === "reference-only")) diagnostics.push(diagnostic("fail", "strategy-imports-noncontract", edge.from, `Strategy cannot import authoring or reference-only implementation ${edge.to}`));
     if (from.fileClass === "generated" && to.fileClass === "authoring") diagnostics.push(diagnostic("fail", "generated-imports-authoring", edge.from, `Generated output cannot import authoring code ${edge.to}`));
     if (from.fileClass === "generated" && (to.fileClass === "family" || to.fileClass === "strategy") && !(isGeneratedComposition(from.path) && isPublicPluginEntry(to))) diagnostics.push(diagnostic("fail", "generated-imports-plugin-internal", edge.from, `Only generated composition may import a Family/Strategy public entry ${edge.to}`));
     if (
@@ -2833,6 +2867,34 @@ export function recomputeImplementationClosureDigest(
 /** Exact entrypoint-id lookup; callers must validate the full receipt separately. */
 export function findImplementationClosureById(receipt: Pick<BoundaryReceipt, "implementationClosures">, entrypointId: string): ImplementationClosure | null {
   return receipt.implementationClosures.find((closure) => closure.entrypointId === entrypointId) ?? null;
+}
+
+/**
+ * Project exact compiler facts for a downstream catalog join.  The caller
+ * supplies only the named export binding; every digest and entrypoint identity
+ * comes from the boundary's compiler-derived closure receipt and is
+ * revalidated before it crosses this narrow port.
+ */
+export function projectCatalogCompilerClosureFacts(
+  receipt: Pick<BoundaryReceipt, "implementationClosures">,
+  bindings: readonly CatalogCompilerClosureBindingV1[],
+): readonly CatalogCompilerClosureFactV1[] {
+  const facts = bindings.map((binding, index) => {
+    if (binding === null || typeof binding !== "object") throw new TypeError(`catalog compiler binding ${index} must be an object`);
+    const closure = findImplementationClosureById(receipt, binding.entrypointId);
+    if (closure === null) throw new TypeError(`catalog compiler closure missing ${binding.entrypointId}`);
+    if (closure.entrypoint !== binding.modulePath) throw new TypeError(`catalog compiler binding path mismatch ${binding.entrypointId}`);
+    if (computeProgramInputSetRoot(closure.programInputs) !== closure.programInputSetRoot) throw new TypeError(`catalog compiler input root mismatch ${binding.entrypointId}`);
+    if (recomputeImplementationClosureDigest(closure) !== closure.closureDigest) throw new TypeError(`catalog compiler closure digest mismatch ${binding.entrypointId}`);
+    return Object.freeze({
+      modulePath: binding.modulePath,
+      exportName: binding.exportName,
+      entrypointId: closure.entrypointId,
+      closureDigest: closure.closureDigest as CatalogCompilerClosureFactV1["closureDigest"],
+      programInputSetRoot: closure.programInputSetRoot as CatalogCompilerClosureFactV1["programInputSetRoot"],
+    });
+  });
+  return sealCatalogCompilerClosureFacts(facts);
 }
 
 function isDigest(value: unknown): value is string {
@@ -4059,6 +4121,38 @@ export function validateReleaseClosureFacts(
 export interface ImplementationClosureQueryPolicy {
   /** Collector mode is explicitly non-authoritative and may inspect clean local fixtures. */
   readonly mode: "production" | "collector";
+}
+
+export interface QualifiedImplementationClosureObservationV1 {
+  readonly entrypoint: string;
+  readonly entrypointId: string;
+  readonly closureDigest: string;
+  readonly programInputSetRoot: string;
+  readonly files: readonly ImplementationClosureFile[];
+}
+
+/**
+ * Narrow compiler-fact projection for build tools. It carries no receipt,
+ * validator callback, Program, AST, or authority constructor.
+ */
+export function queryImplementationClosureObservation(
+  receipt: BoundaryReceipt,
+  entrypointId: string,
+  policy: ImplementationClosureQueryPolicy = { mode: "production" },
+): QualifiedImplementationClosureObservationV1 | null {
+  if (receipt.schemaVersion !== 1 || receipt.gate !== "aloha.machine-enforced-boundary" || receipt.claims.productionAuthority !== "not-observed") return null;
+  if (receipt.verdict !== "pass" || !receipt.candidate.clean || receipt.diagnostics.length !== 0) return null;
+  if (policy.mode !== "collector" && !receipt.candidate.pushed) return null;
+  const closure = findImplementationClosureById(receipt, entrypointId);
+  if (closure === null) return null;
+  if (computeProgramInputSetRoot(closure.programInputs) !== closure.programInputSetRoot || recomputeImplementationClosureDigest(closure) !== closure.closureDigest) return null;
+  return Object.freeze({
+    entrypoint: closure.entrypoint,
+    entrypointId: closure.entrypointId,
+    closureDigest: closure.closureDigest,
+    programInputSetRoot: closure.programInputSetRoot,
+    files: Object.freeze(closure.files.map(file => Object.freeze({ ...file }))),
+  });
 }
 
 /**

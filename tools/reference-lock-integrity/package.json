@@ -1,0 +1,16 @@
+{
+  "name": "@aloha/reference-lock-integrity",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "node --experimental-strip-types src/cli.ts"
+  },
+  "dependencies": {
+    "@aloha/reuse-ledger-spec": "*"
+  }
+}

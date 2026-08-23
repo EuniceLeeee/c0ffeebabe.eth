@@ -5023,6 +5023,16 @@ generated registry校验。只有确实改变所有模块共享含义的stable c
 schema并触发全局重验，不能把单个Family或future-domain需求包装成core升级。无关Family保持原memo与验收，不进行
 全量重跑。
 
+[PFD] Catalog generator不得创建自己的TypeScript `Program`、扫描import来证明closure，或从raw capability index
+自行mint `ownerRef`。唯一合法输入是Boundary从当前compiler-derived receipt投影的exact
+`CatalogCompilerClosureFactV1`集合，以及release-qualified `CapabilityRefV1`集合；generator只做
+`modulePath + exportName + entrypointId + closureDigest + programInputSetRoot` exact join。缺失、重复、未知closure
+fact或qualified owner不匹配一律invalid。每个Strategy leg的capability predicate必须与顶层声明exact一致，
+不能形成未进入dependency closure的隐藏需求；当前baseline版本语义是exact version，不用字符串大小近似SemVer。
+generated family/strategy output和dedicated ledger必须fresh regeneration byte-identical；即使同时手改output与ledger
+并重算自洽hash，当前compiler facts重生成仍必须发现差异。新增无关Family/Strategy只改变自己的leaf与aggregate root，
+既有leaf、qualified capability owner和未依赖closure保持byte-identical。
+
 ### 25.3 Integration protocol
 
 [PFD] 每个工作包交付一个coherent module commit，包含：

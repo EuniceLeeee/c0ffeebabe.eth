@@ -1,0 +1,13 @@
+{
+  "name": "@aloha/reuse-ledger-spec",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./current-ledger": "./src/current-ledger.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

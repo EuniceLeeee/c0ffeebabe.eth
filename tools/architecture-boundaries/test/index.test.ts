@@ -765,6 +765,68 @@ test("dependency attacks cannot hide behind external edges or strategy/generated
   ]);
 });
 
+test("Strategy dependencies are neutral-only and default-deny runtime ownership", () => {
+  const file = (path: string, fileClass: TrackedFile["fileClass"]): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass,
+  });
+  const files = [
+    file("strategies/route-cycle/src/index.ts", "strategy"),
+    file("packages/capability-contracts/src/index.ts", "central"),
+    file("packages/canonical-codec/src/index.ts", "central"),
+    file("packages/artifact-fingerprint/src/pure/index.ts", "central"),
+    file("packages/family-sdk/runtime-refs/index.ts", "central"),
+    file("packages/strategy-sdk/src/index.ts", "central"),
+    file("specs/capability-index/src/index.ts", "central"),
+    file("specs/release-intent/src/index.ts", "central"),
+    file("packages/planner/src/index.ts", "central"),
+    file("packages/state-runtime/src/index.ts", "central"),
+    file("packages/solver/src/index.ts", "central"),
+    file("specs/release-authority/src/index.ts", "central"),
+    file("runtime/revm-workers/src/index.ts", "production-runtime"),
+    file("tools/catalog-generator/src/index.ts", "authoring"),
+    file("tools/reference-only/impl.ts", "reference-only"),
+    file("families/swap/index.ts", "family"),
+    file("acceptance/gate-core/src/index.ts", "acceptance-pure-core"),
+  ];
+  const edges: GraphEdge[] = [
+    { from: "strategies/route-cycle/src/index.ts", to: "packages/capability-contracts/src/index.ts", specifier: "../../../packages/capability-contracts/src/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "packages/canonical-codec/src/index.ts", specifier: "../../../packages/canonical-codec/src/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "packages/artifact-fingerprint/src/pure/index.ts", specifier: "../../../packages/artifact-fingerprint/src/pure/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "packages/family-sdk/runtime-refs/index.ts", specifier: "../../../packages/family-sdk/runtime-refs/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "packages/strategy-sdk/src/index.ts", specifier: "../../../packages/strategy-sdk/src/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "specs/capability-index/src/index.ts", specifier: "../../../specs/capability-index/src/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "specs/release-intent/src/index.ts", specifier: "../../../specs/release-intent/src/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "packages/planner/src/index.ts", specifier: "../../../packages/planner/src/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "packages/state-runtime/src/index.ts", specifier: "../../../packages/state-runtime/src/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "packages/solver/src/index.ts", specifier: "../../../packages/solver/src/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "specs/release-authority/src/index.ts", specifier: "../../../specs/release-authority/src/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "runtime/revm-workers/src/index.ts", specifier: "../../../runtime/revm-workers/src/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "tools/catalog-generator/src/index.ts", specifier: "../../../tools/catalog-generator/src/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "tools/reference-only/impl.ts", specifier: "../../../tools/reference-only/impl.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "families/swap/index.ts", specifier: "../../../families/swap/index.ts" },
+    { from: "strategies/route-cycle/src/index.ts", to: "acceptance/gate-core/src/index.ts", specifier: "../../../acceptance/gate-core/src/index.ts" },
+  ];
+  const diagnostics: { code: string }[] = [];
+  validateDependencyBoundaries(files, edges, diagnostics as never);
+  assert.deepEqual(diagnostics.map((item) => item.code).sort(), [
+    "strategy-imports-family-or-acceptance",
+    "strategy-imports-family-or-acceptance",
+    "strategy-imports-forbidden-central",
+    "strategy-imports-forbidden-central",
+    "strategy-imports-forbidden-central",
+    "strategy-imports-forbidden-central",
+    "strategy-imports-noncontract",
+    "strategy-imports-noncontract",
+    "strategy-imports-runtime",
+  ]);
+});
+
 test("Family and authority-constructor edges are default-deny and exact-owner only", () => {
   const file = (path: string, fileClass: TrackedFile["fileClass"]): TrackedFile => ({
     path,
