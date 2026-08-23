@@ -827,6 +827,34 @@ test("Strategy dependencies are neutral-only and default-deny runtime ownership"
   ]);
 });
 
+test("request-program and interpreter authority state crosses only exact owner-consumer edges", () => {
+  const file = (path: string): TrackedFile => ({
+    path, mode: "100644", blobSha: "a".repeat(40), contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1, language: "typescript", fileClass: "central",
+  });
+  const files = [
+    file("packages/request-program/src/index.ts"),
+    file("packages/request-program/src/internal/issuer-state.ts"),
+    file("packages/request-program/src/internal/issuer-owner.ts"),
+    file("packages/capability-interpreters/src/index.ts"),
+    file("packages/capability-interpreters/src/internal/registry-state.ts"),
+    file("packages/capability-interpreters/src/internal/registry-owner.ts"),
+    file("packages/ordinary/src/index.ts"),
+  ];
+  const allowed: GraphEdge[] = [
+    { from: "packages/request-program/src/index.ts", to: "packages/request-program/src/internal/issuer-state.ts", specifier: "./internal/issuer-state.ts" },
+    { from: "packages/request-program/src/internal/issuer-owner.ts", to: "packages/request-program/src/internal/issuer-state.ts", specifier: "./issuer-state.ts" },
+    { from: "packages/capability-interpreters/src/index.ts", to: "packages/capability-interpreters/src/internal/registry-state.ts", specifier: "./internal/registry-state.ts" },
+    { from: "packages/capability-interpreters/src/internal/registry-owner.ts", to: "packages/capability-interpreters/src/internal/registry-state.ts", specifier: "./registry-state.ts" },
+  ];
+  const allowedDiagnostics: BoundaryDiagnostic[] = [];
+  validateDependencyBoundaries(files, allowed, allowedDiagnostics);
+  assert.deepEqual(allowedDiagnostics, []);
+  const forbiddenDiagnostics: BoundaryDiagnostic[] = [];
+  validateDependencyBoundaries(files, [{ from: "packages/ordinary/src/index.ts", to: "packages/request-program/src/internal/issuer-state.ts", specifier: "../request-program/src/internal/issuer-state.ts" }], forbiddenDiagnostics);
+  assert.equal(forbiddenDiagnostics.some(item => item.code === "central-imports-authority-constructor"), true);
+});
+
 test("Family and authority-constructor edges are default-deny and exact-owner only", () => {
   const file = (path: string, fileClass: TrackedFile["fileClass"]): TrackedFile => ({
     path,

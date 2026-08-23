@@ -1,0 +1,15 @@
+{
+  "name": "@aloha/family-univ3-standard",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/public.ts",
+    "./kernel/math": "./src/kernel/math.ts",
+    "./kernel/codec": "./src/kernel/codec.ts",
+    "./kernel/identity": "./src/kernel/identity.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

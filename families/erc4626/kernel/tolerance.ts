@@ -1,0 +1,1 @@
+export function erc4626RoundingTolerance(value:bigint):bigint{if(value<0n)throw new RangeError("value must not be negative");return value/1_000n+2n;}export function withinErc4626UpperRoundingBound(observed:bigint,reference:bigint):boolean{return observed>=0n&&reference>=0n&&observed<=reference+erc4626RoundingTolerance(reference);}

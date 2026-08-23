@@ -141,3 +141,14 @@ export function assertCapabilityIndexEntry(value: unknown, path = "capabilityInd
   if (decoded.dependencyIds.includes(decoded.capabilityId)) throw new TypeError(`capability self dependency at ${path}`);
   return Object.freeze({ ...decoded, dependencyIds: Object.freeze([...decoded.dependencyIds].sort()) });
 }
+
+export function assertCapabilityRef(value: unknown, path = "capabilityRef"): CapabilityRefV1 {
+  const decoded = decodeExactObject(value, {
+    capabilityId: (item, itemPath) => asCapabilityId(item as string, itemPath),
+    version: (item, itemPath) => asCapabilityVersion(item as string, itemPath),
+    schemaHash: (item, itemPath) => asSchemaRef(item as Hash, itemPath),
+    interpreterHash: (item, itemPath) => assertHash(item, itemPath),
+    ownerRef: (item, itemPath) => asOwnerRef(item as Hash, itemPath),
+  }, path);
+  return Object.freeze(decoded);
+}

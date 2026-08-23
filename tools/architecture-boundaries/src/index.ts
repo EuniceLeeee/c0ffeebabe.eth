@@ -345,6 +345,7 @@ const FAMILY_CENTRAL_IMPORT_ALLOWLIST = Object.freeze([
   // Only the separately frozen pure-contract subtree is a Family dependency;
   // the package root and closure/build helpers remain default-deny.
   "packages/artifact-fingerprint/src/pure/",
+  "packages/request-program/src/index.ts",
 ]);
 
 // Strategy declarations are even narrower than Family code: they may depend
@@ -397,6 +398,10 @@ const KNOWN_AUTHORITY_CONSTRUCTOR_PATHS = new Set([
 // Only the declaring owner may import the current internal constructor.  This
 // is an exact edge manifest, not a package-wide or wildcard exception.
 const AUTHORITY_OWNER_EDGES = new Set([
+  "packages/request-program/src/index.ts\u2192packages/request-program/src/internal/issuer-state.ts",
+  "packages/request-program/src/internal/issuer-owner.ts\u2192packages/request-program/src/internal/issuer-state.ts",
+  "packages/capability-interpreters/src/index.ts\u2192packages/capability-interpreters/src/internal/registry-state.ts",
+  "packages/capability-interpreters/src/internal/registry-owner.ts\u2192packages/capability-interpreters/src/internal/registry-state.ts",
   "packages/runtime-release-authority/src/index.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
   "packages/runtime-release-authority/src/index.ts\u2192packages/runtime-release-authority/src/internal/bootstrap.ts",
   "packages/runtime-release-authority/src/internal/authority-consumer.ts\u2192packages/runtime-release-authority/src/index.ts",

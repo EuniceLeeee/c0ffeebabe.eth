@@ -1,0 +1,1 @@
+const WAD=10n**18n; export function goldxQuote(amountIn:bigint,unitWad:bigint):bigint{if(amountIn<0n)throw new RangeError("amountIn must not be negative");if(unitWad<=0n)throw new RangeError("unitWad must be positive");return amountIn*unitWad/WAD;}

@@ -1,0 +1,1 @@
+import assert from "node:assert/strict";import test from "node:test";import{goldxQuote}from"../kernel/quote.ts";test("GOLDx quote floors multiplication by its positive unit",()=>{assert.equal(goldxQuote(3n,5n*10n**17n),1n);assert.equal(goldxQuote(10n**18n,2n*10n**18n),2n*10n**18n);assert.throws(()=>goldxQuote(1n,0n));});

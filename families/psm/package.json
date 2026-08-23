@@ -1,0 +1,1 @@
+{"name":"@aloha/family-psm","private":true,"type":"module","exports":{".":"./kernel/quote.ts"},"scripts":{"test":"node --experimental-strip-types --test test/*.test.ts","typecheck":"tsc -p tsconfig.json"}}

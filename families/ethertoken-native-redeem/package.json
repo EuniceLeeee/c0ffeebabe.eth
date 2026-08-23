@@ -1,0 +1,1 @@
+{"name":"@aloha/family-ethertoken-native-redeem","private":true,"type":"module","exports":{".":"./kernel/effects.ts"},"scripts":{"test":"node --experimental-strip-types --test test/*.test.ts","typecheck":"tsc -p tsconfig.json"}}

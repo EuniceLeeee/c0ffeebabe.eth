@@ -1,0 +1,1 @@
+{"name":"@aloha/family-erc4626","private":true,"type":"module","exports":{".":"./kernel/tolerance.ts"},"scripts":{"test":"node --experimental-strip-types --test test/*.test.ts","typecheck":"tsc -p tsconfig.json"}}

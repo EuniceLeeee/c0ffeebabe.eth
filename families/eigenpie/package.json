@@ -1,0 +1,1 @@
+{"name":"@aloha/family-eigenpie","private":true,"type":"module","exports":{".":"./kernel/codec.ts"},"scripts":{"test":"node --experimental-strip-types --test test/*.test.ts","typecheck":"tsc -p tsconfig.json"}}
