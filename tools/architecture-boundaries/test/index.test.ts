@@ -19,14 +19,20 @@ import {
   inspectSourceText,
   recomputeImplementationClosureDigest,
   runBoundaryGate,
+  validateProductionReleaseClosure,
+  validateProductionRuntimeClosures,
+  validateQualifiedExecutorAuthoritySource,
+  validateFamilyExecutionCompositionSource,
+  validateRuntimeReleaseBootstrapSources,
   validateAndQueryImplementationClosureDigest,
+  validateAttestationContractOwnershipSources,
   validateDependencyBoundaries,
   validateGateCorePackageExports,
   validateReleaseClosureFacts,
   validateReleaseRoleManifest,
   verifyMutationCorpus,
 } from "../src/index.ts";
-import type { BoundaryDiagnostic, GraphEdge, ImplementationCompilerInput, ReleaseRoleManifestV1, TrackedFile } from "../src/index.ts";
+import type { BoundaryDiagnostic, GraphEdge, ImplementationCompilerInput, ReleaseRoleManifestV1, ReleaseClosureRefV1, TrackedFile } from "../src/index.ts";
 
 function fixturePackageLock(name: string, extraPackages: Record<string, Record<string, unknown>> = {}): string {
   return `${JSON.stringify({
@@ -41,6 +47,39 @@ function fixturePackageLock(name: string, extraPackages: Record<string, Record<s
 }
 
 const sha256 = (bytes: Buffer): string => `0x${createHash("sha256").update(bytes).digest("hex")}`;
+
+test("Attestation contract ownership rejects duplicate validators, authority shapes, and public shape assertions", () => {
+  const publicPath = "packages/attestation/src/index.ts";
+  const enginePath = "packages/attestation/src/internal/engine.ts";
+  const baseline = new Map<string, string>([
+    [publicPath, "export interface AttestationValidationAuthorityV1 { readonly authorityRoot: string; }\n"],
+    [enginePath, "export function createAttestationServiceInternal(): object { return {}; }\n"],
+  ]);
+  const inspect = (sources: ReadonlyMap<string, string>): readonly BoundaryDiagnostic[] => {
+    const diagnostics: BoundaryDiagnostic[] = [];
+    validateAttestationContractOwnershipSources(sources, diagnostics);
+    return diagnostics;
+  };
+  assert.deepEqual(inspect(baseline), []);
+
+  const duplicateValidator = new Map(baseline);
+  duplicateValidator.set(enginePath, `${baseline.get(enginePath)!}function validateCandidateFinalOutcome(): void {}\n`);
+  assert.ok(inspect(duplicateValidator).some((item) => item.code === "attestation-engine-canonical-contract"));
+
+  const duplicateAuthority = new Map(baseline);
+  duplicateAuthority.set(enginePath, `${baseline.get(enginePath)!}interface AttestationValidationAuthorityV1 {}\n`);
+  const duplicateAuthorityDiagnostics = inspect(duplicateAuthority);
+  assert.ok(duplicateAuthorityDiagnostics.some((item) => item.code === "attestation-validation-authority-declaration-count"));
+  assert.ok(duplicateAuthorityDiagnostics.some((item) => item.code === "attestation-engine-canonical-contract"));
+
+  const shapeAssert = new Map(baseline);
+  shapeAssert.set(publicPath, `${baseline.get(publicPath)!}export function assertAttestationValidationAuthority(value: unknown): unknown { return value; }\n`);
+  assert.ok(inspect(shapeAssert).some((item) => item.code === "attestation-public-shape-authority-assert"));
+
+  const engineExport = new Map(baseline);
+  engineExport.set(enginePath, `${baseline.get(enginePath)!}export const validateSomethingElse = (value: unknown): unknown => value;\n`);
+  assert.ok(inspect(engineExport).some((item) => item.code === "attestation-engine-public-contract-export"));
+});
 
 function canonicalFixture(value: unknown): string {
   if (value === null || typeof value === "boolean" || typeof value === "string" || typeof value === "number") return JSON.stringify(value);
@@ -72,6 +111,118 @@ test("GateCore package exports are one exact generated runtime root", () => {
     assert.deepEqual(diagnostics.map((item) => `${item.kind}:${item.code}`), ["fail:gate-core-package-exports"], label);
     assert.equal(diagnostics[0]?.path, packagePath, label);
   }
+});
+
+test("scheduler generated authority is exact-null and rejects a hand-injected issuer", () => {
+  const valid = [
+    'import type { QualifiedExecutorAuthorityIssuer } from "../index.ts";',
+    "export const QUALIFIED_EXECUTOR_AUTHORITY: QualifiedExecutorAuthorityIssuer | null = null;",
+  ].join("\n");
+  const validDiagnostics: BoundaryDiagnostic[] = [];
+  validateQualifiedExecutorAuthoritySource(valid, validDiagnostics);
+  assert.deepEqual(validDiagnostics, []);
+
+  const forged = valid.replace("= null", "= { open() { return {}; } }");
+  const forgedDiagnostics: BoundaryDiagnostic[] = [];
+  validateQualifiedExecutorAuthoritySource(forged, forgedDiagnostics);
+  assert.ok(forgedDiagnostics.some((item) => item.code === "qualified-executor-authority-not-null"), JSON.stringify(forgedDiagnostics));
+
+  const runtimeImported = [
+    'import { createIssuer } from "../issuer.ts";',
+    "export const QUALIFIED_EXECUTOR_AUTHORITY = null;",
+  ].join("\n");
+  const runtimeDiagnostics: BoundaryDiagnostic[] = [];
+  validateQualifiedExecutorAuthoritySource(runtimeImported, runtimeDiagnostics);
+  assert.ok(runtimeDiagnostics.some((item) => item.code === "qualified-executor-authority-runtime-import"), JSON.stringify(runtimeDiagnostics));
+
+  const mutations = [
+    {
+      label: "removed type import",
+      source: valid.split("\n").slice(1).join("\n"),
+      code: "qualified-executor-authority-import-shape",
+    },
+    {
+      label: "side-effect import",
+      source: "import \"./side-effect.ts\";\n" + valid.split("\n").slice(1).join("\n"),
+      code: "qualified-executor-authority-runtime-import",
+    },
+    {
+      label: "extra const",
+      source: `${valid}\nexport const EXTRA = 1;`,
+      code: "qualified-executor-authority-extra-statement",
+    },
+    {
+      label: "extra function",
+      source: `${valid}\nexport function issuer() { return {}; }`,
+      code: "qualified-executor-authority-extra-statement",
+    },
+    {
+      label: "getter initializer",
+      source: valid.replace("= null", "= { get open() { return {}; } }").replace("| null", "| null"),
+      code: "qualified-executor-authority-not-null",
+    },
+    {
+      label: "call initializer",
+      source: valid.replace("= null", "= createIssuer()"),
+      code: "qualified-executor-authority-not-null",
+    },
+  ];
+  for (const mutation of mutations) {
+    const mutationDiagnostics: BoundaryDiagnostic[] = [];
+    validateQualifiedExecutorAuthoritySource(mutation.source, mutationDiagnostics);
+    assert.ok(mutationDiagnostics.some((item) => item.code === mutation.code), `${mutation.label}: ${JSON.stringify(mutationDiagnostics)}`);
+  }
+});
+
+test("compiler test fixtures may remain denominator facts but never enter release-runtime closure", () => {
+  const releaseRuntime: ReleaseClosureRefV1 = {
+    role: "release-runtime",
+    entrypointId: "package-entrypoint:runtime",
+    entrypoint: "acceptance/gate-core/src/generated/release-runtime.ts",
+    modulePath: "acceptance/gate-core/src/generated/release-runtime.ts",
+    exportName: "evaluateGateCore",
+    predicateId: null,
+    predicateSpecDigest: null,
+    predicateProgramDescriptorDigest: null,
+    oracleProgramDescriptorDigest: null,
+    adapterVersion: null,
+    oracleVersion: null,
+    compositionLeafDigest: null,
+    implementationExportDigest: null,
+    closureDigest: `0x${"1".repeat(64)}`,
+    programInputSetRoot: `0x${"2".repeat(64)}`,
+  };
+  const receipt = {
+    implementationClosures: [{
+      entrypointId: releaseRuntime.entrypointId,
+      files: [
+        { path: releaseRuntime.entrypoint, blobSha: "a".repeat(40), contentSha256: `0x${"a".repeat(64)}`, byteLength: 1 },
+        { path: "packages/attestation/test/authority-fixture.ts", blobSha: "b".repeat(40), contentSha256: `0x${"b".repeat(64)}`, byteLength: 1 },
+        { path: "packages/scheduler/test/fixtures/qualified-release.ts", blobSha: "c".repeat(40), contentSha256: `0x${"c".repeat(64)}`, byteLength: 1 },
+      ],
+    }],
+  } as never;
+  const diagnostics: BoundaryDiagnostic[] = [];
+  validateProductionReleaseClosure(receipt, releaseRuntime, diagnostics);
+  assert.deepEqual(diagnostics.map((item) => item.code), [
+    "release-runtime-imports-test-fixture",
+    "release-runtime-imports-test-fixture",
+  ]);
+  assert.ok(diagnostics.every((item) => item.kind === "fail"));
+
+  const runtimeReceipt = {
+    implementationClosures: [{
+      entrypointId: "compiler-root:apps/searcher.ts",
+      entrypoint: "apps/searcher.ts",
+      files: [{ path: "apps/searcher.ts", blobSha: "d".repeat(40), contentSha256: `0x${"d".repeat(64)}`, byteLength: 1 }, { path: "packages/scheduler/test/fixtures/qualified-release.ts", blobSha: "e".repeat(40), contentSha256: `0x${"e".repeat(64)}`, byteLength: 1 }],
+    }],
+  } as never;
+  const runtimeFiles: TrackedFile[] = [
+    { path: "apps/searcher.ts", mode: "100644", blobSha: "d".repeat(40), contentSha256: `0x${"d".repeat(64)}`, byteLength: 1, language: "typescript", fileClass: "production-runtime" },
+  ];
+  const runtimeDiagnostics: BoundaryDiagnostic[] = [];
+  validateProductionRuntimeClosures(runtimeReceipt, runtimeFiles, runtimeDiagnostics);
+  assert.ok(runtimeDiagnostics.some((item) => item.code === "release-runtime-imports-test-fixture"), JSON.stringify(runtimeDiagnostics));
 });
 
 test("generated BOM binds resolver values to exact named evaluator imports", async () => {
@@ -193,7 +344,10 @@ test("boundary receipt exposes source/build facts only and never claims runtime 
   assert.equal(receipt.schemaVersion, 1);
   assert.equal(receipt.candidate.gitRoot, repoRoot);
   assert.ok(receipt.denominator.files.length > 0);
-  assert.ok(receipt.denominator.files.every((file) => /^0x[0-9a-f]{64}$/.test(file.contentSha256)));
+  assert.ok(receipt.denominator.files.every((file) =>
+    /^0x[0-9a-f]{64}$/.test(file.contentSha256)
+    || receipt.diagnostics.some((item) => item.code === "tracked-file-missing" && item.path === file.path)
+  ));
   assert.ok(receipt.compiler.configPaths.length > 0);
   assert.ok(receipt.compiler.externalDependencies.includes("node:crypto"));
   assert.match(receipt.denominator.scannedFileSetRoot, /^0x[0-9a-f]{64}$/);
@@ -609,6 +763,524 @@ test("dependency attacks cannot hide behind external edges or strategy/generated
     "governance-imports-external",
     "runtime-imports-strategy",
   ]);
+});
+
+test("Family and authority-constructor edges are default-deny and exact-owner only", () => {
+  const file = (path: string, fileClass: TrackedFile["fileClass"]): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass,
+  });
+  const files = [
+    file("families/swap/index.ts", "family"),
+    file("runtime/revm-workers/src/lifecycle.ts", "production-runtime"),
+    file("apps/searcher.ts", "production-runtime"),
+    file("packages/ordinary.ts", "central"),
+    file("packages/work-plane/src/index.ts", "central"),
+    file("packages/work-plane/src/internal/family-execution-port.ts", "central"),
+    file("packages/attestation/src/index.ts", "central"),
+    file("packages/attestation/src/test-support.ts", "central"),
+    file("packages/attestation/src/internal-authority.ts", "central"),
+    file("packages/attestation/src/internal/engine.ts", "central"),
+    file("packages/attestation/src/internal/composition-resolution.ts", "central"),
+    file("packages/attestation/src/internal/composition.ts", "central"),
+    file("packages/attestation/src/internal/validation-authority-state.ts", "central"),
+    file("packages/attestation/src/internal/validation-authority-issuer.ts", "central"),
+    file("packages/attestation/src/internal/validation-authority-verifier.ts", "central"),
+    file("packages/checkpoint/src/index.ts", "central"),
+    file("packages/durable-store/src/index.ts", "central"),
+    file("packages/scheduler/src/index.ts", "central"),
+    file("packages/checkpoint/src/candidate-partition.ts", "central"),
+    file("packages/candidate-partition-runtime/src/internal/reader-state.ts", "central"),
+    file("packages/candidate-partition-runtime/src/internal/reader-issuer.ts", "central"),
+    file("packages/candidate-partition-runtime/src/internal/reader-consumer.ts", "central"),
+    file("packages/future-authority/src/internal/qualified-authority.ts", "central"),
+    file("packages/family-sdk/runtime-refs/index.ts", "central"),
+    file("packages/capability-contracts/index.ts", "central"),
+    file("packages/capability-contracts/src/internal/authority.ts", "central"),
+    file("packages/canonical-codec/src/index.ts", "central"),
+    file("packages/artifact-fingerprint/src/pure/index.ts", "central"),
+    file("packages/artifact-fingerprint/src/index.ts", "central"),
+    file("generated/not-runtime-composition.ts", "generated"),
+  ];
+  const edges: GraphEdge[] = [
+    { from: "families/swap/index.ts", to: "runtime/revm-workers/src/lifecycle.ts", specifier: "../../runtime/revm-workers/src/lifecycle.ts" },
+    { from: "families/swap/index.ts", to: "packages/future-authority/src/internal/qualified-authority.ts", specifier: "../../packages/future-authority/src/internal/qualified-authority.ts" },
+    { from: "families/swap/index.ts", to: "packages/family-sdk/runtime-refs/index.ts", specifier: "../../packages/family-sdk/runtime-refs/index.ts" },
+    { from: "families/swap/index.ts", to: "packages/capability-contracts/index.ts", specifier: "../../packages/capability-contracts/index.ts" },
+    { from: "families/swap/index.ts", to: "packages/capability-contracts/src/internal/authority.ts", specifier: "../../packages/capability-contracts/src/internal/authority.ts" },
+    { from: "families/swap/index.ts", to: "packages/canonical-codec/src/index.ts", specifier: "../../packages/canonical-codec/src/index.ts" },
+    { from: "families/swap/index.ts", to: "packages/artifact-fingerprint/src/pure/index.ts", specifier: "../../packages/artifact-fingerprint/src/pure/index.ts" },
+    { from: "families/swap/index.ts", to: "packages/artifact-fingerprint/src/index.ts", specifier: "../../packages/artifact-fingerprint/src/index.ts" },
+    { from: "packages/ordinary.ts", to: "packages/future-authority/src/internal/qualified-authority.ts", specifier: "./future-authority/src/internal/qualified-authority.ts" },
+    { from: "packages/ordinary.ts", to: "packages/checkpoint/src/index.ts", specifier: "./checkpoint/src/index.ts" },
+    { from: "packages/work-plane/src/internal/family-execution-port.ts", to: "packages/work-plane/src/index.ts", specifier: "../index.ts" },
+    { from: "packages/attestation/src/index.ts", to: "packages/attestation/src/internal-authority.ts", specifier: "./internal-authority.ts" },
+    { from: "packages/attestation/src/internal/engine.ts", to: "packages/attestation/src/internal-authority.ts", specifier: "../internal-authority.ts" },
+    { from: "packages/attestation/src/internal/composition-resolution.ts", to: "packages/attestation/src/internal-authority.ts", specifier: "../internal-authority.ts" },
+    { from: "packages/attestation/src/internal/composition.ts", to: "packages/attestation/src/internal/engine.ts", specifier: "./engine.ts" },
+    { from: "packages/attestation/src/internal/composition.ts", to: "packages/attestation/src/internal/composition-resolution.ts", specifier: "./composition-resolution.ts" },
+    { from: "packages/attestation/src/internal/engine.ts", to: "packages/attestation/src/internal/validation-authority-issuer.ts", specifier: "./validation-authority-issuer.ts" },
+    { from: "packages/attestation/src/internal/engine.ts", to: "packages/attestation/src/internal/validation-authority-state.ts", specifier: "./validation-authority-state.ts" },
+    { from: "packages/attestation/src/internal/validation-authority-issuer.ts", to: "packages/attestation/src/internal/validation-authority-state.ts", specifier: "./validation-authority-state.ts" },
+    { from: "packages/attestation/src/internal/validation-authority-verifier.ts", to: "packages/attestation/src/internal/validation-authority-state.ts", specifier: "./validation-authority-state.ts" },
+    { from: "packages/checkpoint/src/index.ts", to: "packages/attestation/src/internal/validation-authority-verifier.ts", specifier: "../../attestation/src/internal/validation-authority-verifier.ts" },
+    { from: "packages/checkpoint/src/index.ts", to: "packages/attestation/src/internal/validation-authority-issuer.ts", specifier: "../../attestation/src/internal/validation-authority-issuer.ts" },
+    { from: "packages/checkpoint/src/candidate-partition.ts", to: "packages/candidate-partition-runtime/src/internal/reader-issuer.ts", specifier: "../../candidate-partition-runtime/src/internal/reader-issuer.ts" },
+    { from: "packages/attestation/src/internal/engine.ts", to: "packages/candidate-partition-runtime/src/internal/reader-consumer.ts", specifier: "../../../candidate-partition-runtime/src/internal/reader-consumer.ts" },
+    { from: "packages/ordinary.ts", to: "packages/candidate-partition-runtime/src/internal/reader-issuer.ts", specifier: "./candidate-partition-runtime/src/internal/reader-issuer.ts" },
+    { from: "packages/attestation/src/test-support.ts", to: "packages/attestation/src/internal-authority.ts", specifier: "./internal-authority.ts" },
+    { from: "packages/ordinary.ts", to: "packages/attestation/src/internal/engine.ts", specifier: "./attestation/src/internal/engine.ts" },
+    { from: "apps/searcher.ts", to: "packages/attestation/src/internal-authority.ts", specifier: "../packages/attestation/src/internal-authority.ts" },
+    { from: "apps/searcher.ts", to: "packages/attestation/src/index.ts", specifier: "../packages/attestation/src/index.ts" },
+    { from: "apps/searcher.ts", to: "packages/attestation/src/internal/composition.ts", specifier: "../packages/attestation/src/internal/composition.ts" },
+    { from: "generated/not-runtime-composition.ts", to: "packages/attestation/src/internal/composition.ts", specifier: "../packages/attestation/src/internal/composition.ts" },
+    { from: "apps/searcher.ts", to: "packages/checkpoint/src/index.ts", specifier: "../packages/checkpoint/src/index.ts" },
+    { from: "apps/searcher.ts", to: "packages/durable-store/src/index.ts", specifier: "../packages/durable-store/src/index.ts" },
+    { from: "apps/searcher.ts", to: "packages/scheduler/src/index.ts", specifier: "../packages/scheduler/src/index.ts" },
+  ];
+  const diagnostics: BoundaryDiagnostic[] = [];
+  validateDependencyBoundaries(files, edges, diagnostics);
+  assert.deepEqual(diagnostics.map((item) => `${item.code}:${item.path}`).sort(), [
+    "central-imports-authority-constructor:packages/attestation/src/test-support.ts",
+    "central-imports-authority-constructor:packages/ordinary.ts",
+    "central-imports-authority-constructor:packages/ordinary.ts",
+    "central-imports-authority-constructor:packages/ordinary.ts",
+    "central-imports-authority-constructor:packages/ordinary.ts",
+    "central-imports-authority-constructor:packages/checkpoint/src/index.ts",
+    "generated-imports-authority-constructor:generated/not-runtime-composition.ts",
+    "family-imports-forbidden-central:families/swap/index.ts",
+    "family-imports-forbidden-central:families/swap/index.ts",
+    "family-imports-forbidden-central:families/swap/index.ts",
+    "family-imports-runtime:families/swap/index.ts",
+    "runtime-imports-authority-constructor:apps/searcher.ts",
+    "runtime-imports-authority-constructor:apps/searcher.ts",
+    "runtime-imports-authority-constructor:apps/searcher.ts",
+    "runtime-imports-authority-constructor:apps/searcher.ts",
+    "runtime-imports-authority-constructor:apps/searcher.ts",
+  ].sort());
+});
+
+test("candidate partition authority edges bind exact named issuer and consumer imports", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-reader-authority-"));
+  const checkpointPath = "packages/checkpoint/src/candidate-partition.ts";
+  const issuerPath = "packages/candidate-partition-runtime/src/internal/reader-issuer.ts";
+  const file = (path: string): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass: "central",
+  });
+  const edge: GraphEdge = {
+    from: checkpointPath,
+    to: issuerPath,
+    specifier: "../../candidate-partition-runtime/src/internal/reader-issuer.ts",
+  };
+  mkdirSync(join(root, dirname(checkpointPath)), { recursive: true });
+  try {
+    const inspect = (source: string): readonly BoundaryDiagnostic[] => {
+      writeFileSync(join(root, checkpointPath), source);
+      const diagnostics: BoundaryDiagnostic[] = [];
+      validateDependencyBoundaries([file(checkpointPath), file(issuerPath)], [edge], diagnostics, root);
+      return diagnostics;
+    };
+    assert.deepEqual(inspect(`import { issueCheckpointCandidatePartitionReader } from "${edge.specifier}";\n`), []);
+    for (const source of [
+      `import { assertIssuedCandidatePartitionReader } from "${edge.specifier}";\n`,
+      `import { issueCheckpointCandidatePartitionReader as issue } from "${edge.specifier}";\n`,
+      `import * as authority from "${edge.specifier}";\n`,
+      `import { issueCheckpointCandidatePartitionReader, extra } from "${edge.specifier}";\n`,
+    ]) {
+      assert.ok(inspect(source).some(item => item.code === "authority-named-import-mismatch"));
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runtime release attestation composition binds exact owner and consumer imports", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-runtime-release-composition-"));
+  const cases = [
+    {
+      ownerPath: "packages/runtime-release-authority/src/index.ts",
+      authorityPath: "packages/runtime-release-authority/src/internal/state.ts",
+      specifier: "./internal/state.ts",
+      allowed: "registerRuntimeReleaseAuthority, stateForRuntimeReleaseCapability",
+      forbidden: "assertIssuedRuntimeReleaseAuthorityState",
+    },
+    {
+      ownerPath: "packages/runtime-release-authority/src/internal/authority-consumer.ts",
+      authorityPath: "packages/runtime-release-authority/src/internal/state.ts",
+      specifier: "./state.ts",
+      allowed: "assertIssuedRuntimeReleaseAuthorityState",
+      forbidden: "registerRuntimeReleaseAuthority",
+    },
+    {
+      ownerPath: "packages/runtime-release-authority/src/internal/attestation-composition-consumer.ts",
+      authorityPath: "packages/runtime-release-authority/src/internal/attestation-composition-owner.ts",
+      specifier: "./attestation-composition-owner.ts",
+      allowed: "readIssuedRuntimeReleaseAttestationComposition",
+      forbidden: "issueRuntimeReleaseAttestationComposition",
+    },
+    {
+      ownerPath: "packages/attestation/src/internal/composition-resolution.ts",
+      authorityPath: "packages/runtime-release-authority/src/internal/attestation-composition-consumer.ts",
+      specifier: "../../../runtime-release-authority/src/internal/attestation-composition-consumer.ts",
+      allowed: "assertIssuedRuntimeReleaseAttestationComposition",
+      forbidden: "readIssuedRuntimeReleaseAttestationComposition",
+    },
+    {
+      ownerPath: "packages/runtime-release-authority/src/internal/attestation-proof-consumer.ts",
+      authorityPath: "packages/runtime-release-authority/src/internal/attestation-proof-owner.ts",
+      specifier: "./attestation-proof-owner.ts",
+      allowed: "readIssuedRuntimeReleaseAttestationProof",
+      forbidden: "issueRuntimeReleaseAttestationProofPort",
+    },
+  ] as const;
+  const file = (path: string): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass: "central",
+  });
+  try {
+    for (const value of cases) {
+      const edge: GraphEdge = { from: value.ownerPath, to: value.authorityPath, specifier: value.specifier };
+      mkdirSync(join(root, dirname(value.ownerPath)), { recursive: true });
+      const inspect = (source: string): readonly BoundaryDiagnostic[] => {
+        writeFileSync(join(root, value.ownerPath), source);
+        const diagnostics: BoundaryDiagnostic[] = [];
+        validateDependencyBoundaries([file(value.ownerPath), file(value.authorityPath)], [edge], diagnostics, root);
+        return diagnostics;
+      };
+      assert.deepEqual(inspect(`import { ${value.allowed} } from "${value.specifier}";\n`), []);
+      for (const source of [
+        `import { ${value.forbidden} } from "${value.specifier}";\n`,
+        `import { ${value.allowed.split(",")[0]} as authority } from "${value.specifier}";\n`,
+        `import * as authority from "${value.specifier}";\n`,
+        `import { ${value.allowed}, extra } from "${value.specifier}";\n`,
+        `import type { ${value.allowed.split(",")[0]} } from "${value.specifier}";\n`,
+      ]) {
+        assert.ok(inspect(source).some(item => item.code === "authority-named-import-mismatch"));
+      }
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sealed run authority edges bind exact named issuer and consumer imports", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-sealed-run-authority-"));
+  const cases = [
+    {
+      ownerPath: "packages/checkpoint/src/sealed-run.ts",
+      authorityPath: "packages/sealed-run-runtime/src/internal/reader-issuer.ts",
+      specifier: "../../sealed-run-runtime/src/internal/reader-issuer.ts",
+      allowed: "issueCheckpointSealedRunReader",
+      forbidden: "assertCheckpointSealedRunReader",
+    },
+    {
+      ownerPath: "packages/ready-generation/src/index.ts",
+      authorityPath: "packages/sealed-run-runtime/src/internal/reader-consumer.ts",
+      specifier: "../../sealed-run-runtime/src/internal/reader-consumer.ts",
+      allowed: "assertCheckpointSealedRunReader",
+      forbidden: "issueCheckpointSealedRunReader",
+    },
+  ] as const;
+  const file = (path: string): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass: "central",
+  });
+  try {
+    for (const value of cases) {
+      const edge: GraphEdge = {
+        from: value.ownerPath,
+        to: value.authorityPath,
+        specifier: value.specifier,
+      };
+      mkdirSync(join(root, dirname(value.ownerPath)), { recursive: true });
+      const inspect = (source: string): readonly BoundaryDiagnostic[] => {
+        writeFileSync(join(root, value.ownerPath), source);
+        const diagnostics: BoundaryDiagnostic[] = [];
+        validateDependencyBoundaries([file(value.ownerPath), file(value.authorityPath)], [edge], diagnostics, root);
+        return diagnostics;
+      };
+      assert.deepEqual(inspect(`import { ${value.allowed} } from "${value.specifier}";\n`), []);
+      for (const source of [
+        `import { ${value.forbidden} } from "${value.specifier}";\n`,
+        `import { ${value.allowed} as authority } from "${value.specifier}";\n`,
+        `import * as authority from "${value.specifier}";\n`,
+        `import { ${value.allowed}, extra } from "${value.specifier}";\n`,
+      ]) {
+        assert.ok(inspect(source).some(item => item.code === "authority-named-import-mismatch"));
+      }
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("scheduler/work-plane authority edges bind exact owner and consumer imports", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-scheduler-authority-"));
+  const cases = [
+    {
+      ownerPath: "packages/scheduler/src/internal/authority-owner.ts",
+      authorityPath: "packages/scheduler/src/internal/authority-state.ts",
+      specifier: "./authority-state.ts",
+      allowed: "registerQualifiedExecutorAuthorityIssuer",
+      forbidden: "isQualifiedExecutorAuthorityIssuer",
+    },
+    {
+      ownerPath: "packages/scheduler/src/internal/authority-consumer.ts",
+      authorityPath: "packages/scheduler/src/internal/authority-state.ts",
+      specifier: "./authority-state.ts",
+      allowed: "isQualifiedExecutorAuthorityIssuer",
+      forbidden: "registerQualifiedExecutorAuthorityIssuer",
+    },
+    {
+      ownerPath: "packages/work-plane/src/internal/family-execution-port.ts",
+      authorityPath: "packages/scheduler/src/internal/authority-consumer.ts",
+      specifier: "../../../../packages/scheduler/src/internal/authority-consumer.ts",
+      allowed: "assertIssuedQualifiedExecutorAuthorityIssuer",
+      forbidden: "isQualifiedExecutorAuthorityIssuer",
+    },
+  ] as const;
+  const file = (path: string): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass: "central",
+  });
+  try {
+    for (const value of cases) {
+      const edge: GraphEdge = {
+        from: value.ownerPath,
+        to: value.authorityPath,
+        specifier: value.specifier,
+      };
+      mkdirSync(join(root, dirname(value.ownerPath)), { recursive: true });
+      const inspect = (source: string): readonly BoundaryDiagnostic[] => {
+        writeFileSync(join(root, value.ownerPath), source);
+        const diagnostics: BoundaryDiagnostic[] = [];
+        validateDependencyBoundaries([file(value.ownerPath), file(value.authorityPath)], [edge], diagnostics, root);
+        return diagnostics;
+      };
+      assert.deepEqual(inspect(`import { ${value.allowed} } from "${value.specifier}";\n`), []);
+      for (const source of [
+        `import { ${value.forbidden} } from "${value.specifier}";\n`,
+        `import { ${value.allowed} as authority } from "${value.specifier}";\n`,
+        `import * as authority from "${value.specifier}";\n`,
+        `import { ${value.allowed}, extra } from "${value.specifier}";\n`,
+        `import type { ${value.allowed} } from "${value.specifier}";\n`,
+      ]) {
+        assert.ok(inspect(source).some(item => item.code === "authority-named-import-mismatch"));
+      }
+    }
+
+    const directStateOwner = "packages/work-plane/src/internal/family-execution-port.ts";
+    const directState = "packages/scheduler/src/internal/authority-state.ts";
+    const directStateSpecifier = "../../../../packages/scheduler/src/internal/authority-state.ts";
+    writeFileSync(join(root, directStateOwner), `import { registerQualifiedExecutorAuthorityIssuer } from "${directStateSpecifier}";\n`);
+    const diagnostics: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries(
+      [file(directStateOwner), file(directState)],
+      [{ from: directStateOwner, to: directState, specifier: directStateSpecifier }],
+      diagnostics,
+      root,
+    );
+    assert.ok(diagnostics.some(item => item.code === "central-imports-authority-constructor"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("REVM imports only the exact lease projection and rejects full release authority", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-revm-narrow-port-"));
+  const protocolPath = "runtime/revm-workers/src/protocol.ts";
+  const specPath = "specs/release-authority/src/index.ts";
+  const file = (path: string, fileClass: TrackedFile["fileClass"]): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass,
+  });
+  const specifier = "../../../specs/release-authority/src/index.ts";
+  const edge: GraphEdge = { from: protocolPath, to: specPath, specifier };
+  mkdirSync(join(root, dirname(protocolPath)), { recursive: true });
+  try {
+    const inspect = (source: string): readonly BoundaryDiagnostic[] => {
+      writeFileSync(join(root, protocolPath), source);
+      const diagnostics: BoundaryDiagnostic[] = [];
+      validateDependencyBoundaries([file(protocolPath, "production-runtime"), file(specPath, "central")], [edge], diagnostics, root);
+      return diagnostics;
+    };
+    assert.deepEqual(inspect([
+      "import {",
+      "  decodeRuntimeReleaseExecutorLeaseV1,",
+      "  type RuntimeReleaseExecutorLeaseV1,",
+      `} from \"${specifier}\";`,
+    ].join("\n")), []);
+    const fullBinding = inspect(`import { decodeRuntimeReleaseBindingV1, type RuntimeReleaseBindingV1 } from \"${specifier}\";\n`);
+    assert.ok(fullBinding.some((item) => item.code === "narrow-port-import-mismatch"), JSON.stringify(fullBinding));
+
+    const otherRevmPath = "runtime/revm-workers/src/index.ts";
+    const otherEdge: GraphEdge = { from: otherRevmPath, to: specPath, specifier };
+    writeFileSync(join(root, otherRevmPath), `import type { RuntimeReleaseBindingV1 } from \"${specifier}\";\n`);
+    const otherDiagnostics: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries([file(otherRevmPath, "production-runtime"), file(specPath, "central")], [otherEdge], otherDiagnostics, root);
+    assert.ok(otherDiagnostics.some((item) => item.code === "revm-imports-full-release-binding"), JSON.stringify(otherDiagnostics));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("owner-issued guards and the private runtime-release join cannot be bypassed", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-private-authority-join-"));
+  const readyPath = "packages/ready-generation/src/index.ts";
+  const readyConsumerPath = "packages/runtime-release-authority/src/internal/ready-binding-consumer.ts";
+  const readySpecifier = "../../runtime-release-authority/src/internal/ready-binding-consumer.ts";
+  const file = (path: string): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass: "central",
+  });
+  mkdirSync(join(root, dirname(readyPath)), { recursive: true });
+  try {
+    writeFileSync(join(root, readyPath), `import { assertIssuedRuntimeReleaseReadyBindingPort } from \"${readySpecifier}\";\n`);
+    const validDiagnostics: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries(
+      [file(readyPath), file(readyConsumerPath)],
+      [{ from: readyPath, to: readyConsumerPath, specifier: readySpecifier }],
+      validDiagnostics,
+      root,
+    );
+    assert.deepEqual(validDiagnostics, []);
+
+    writeFileSync(join(root, readyPath), `import type { RuntimeReleaseReadyBindingPortV1 } from \"../../../specs/release-authority/src/index.ts\";\n`);
+    const shapeDiagnostics: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries(
+      [file(readyPath), file("specs/release-authority/src/index.ts")],
+      [{ from: readyPath, to: "specs/release-authority/src/index.ts", specifier: "../../../specs/release-authority/src/index.ts" }],
+      shapeDiagnostics,
+      root,
+    );
+    assert.ok(shapeDiagnostics.some((item) => item.code === "ready-generation-imports-shape-only-release-port"), JSON.stringify(shapeDiagnostics));
+
+    const missingGuard: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries([file(readyPath), file(readyConsumerPath)], [], missingGuard, root);
+    assert.ok(missingGuard.some((item) => item.code === "authority-consumer-edge-missing"), JSON.stringify(missingGuard));
+
+    const sources = new Map<string, string>([
+      [
+        "packages/runtime-release-authority/src/index.ts",
+        [
+          'export { buildRuntimeReleaseComposition } from "./internal/bootstrap.ts";',
+          'export type { RuntimeReleaseCompositionServicesV1 } from "./internal/bootstrap.ts";',
+        ].join("\n"),
+      ],
+      [
+        "packages/runtime-release-authority/src/internal/bootstrap.ts",
+        [
+          "interface RuntimeReleaseCompositionServicesV1 {",
+          "  readonly attestation: object; readonly checkpoint: object; readonly familyExecution: object; readonly ready: object; readonly release: object;",
+          "}",
+          "function composeRuntimeReleasePrivatePorts(): object { return {}; }",
+          "function assertRuntimeReleasePrivatePortsCurrent(): void {}",
+          "export function buildRuntimeReleaseComposition(): RuntimeReleaseCompositionServicesV1 {",
+          "  composeRuntimeReleasePrivatePorts();",
+          "  return Object.freeze({ attestation: {}, checkpoint: {}, familyExecution: {}, ready: {}, release: {} });",
+          "}",
+        ].join("\n"),
+      ],
+    ]);
+    const bootstrapDiagnostics: BoundaryDiagnostic[] = [];
+    validateRuntimeReleaseBootstrapSources(sources, bootstrapDiagnostics);
+    assert.deepEqual(bootstrapDiagnostics, []);
+
+    const leaked = new Map(sources);
+    leaked.set("packages/runtime-release-authority/src/internal/bootstrap.ts", sources.get("packages/runtime-release-authority/src/internal/bootstrap.ts")!.replace(
+      "return Object.freeze({ attestation: {}, checkpoint: {}, familyExecution: {}, ready: {}, release: {} });",
+      "return Object.freeze({ authority, attestation: {}, checkpoint: {}, familyExecution: {}, ready: {}, release: {} });",
+    ));
+    const leakedDiagnostics: BoundaryDiagnostic[] = [];
+    validateRuntimeReleaseBootstrapSources(leaked, leakedDiagnostics);
+    assert.ok(leakedDiagnostics.some((item) => item.code === "runtime-release-bootstrap-leaks-private-port"), JSON.stringify(leakedDiagnostics));
+
+    const exportedJoin = new Map(sources);
+    exportedJoin.set("packages/runtime-release-authority/src/internal/bootstrap.ts", sources.get("packages/runtime-release-authority/src/internal/bootstrap.ts")!.replace(
+      "function composeRuntimeReleasePrivatePorts",
+      "export function composeRuntimeReleasePrivatePorts",
+    ));
+    const exportedJoinDiagnostics: BoundaryDiagnostic[] = [];
+    validateRuntimeReleaseBootstrapSources(exportedJoin, exportedJoinDiagnostics);
+    assert.ok(exportedJoinDiagnostics.some((item) => item.code === "runtime-release-bootstrap-private-join-export"), JSON.stringify(exportedJoinDiagnostics));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("all candidate executor placeholders remain exact null and cannot execute fixtures", () => {
+  const valid = [
+    'import type { FamilyFrozenProgramExecutionPort } from "../index.ts";',
+    "export const FAMILY_EXECUTION_PORT: FamilyFrozenProgramExecutionPort<unknown> | null = null;",
+  ].join("\n");
+  const diagnostics: BoundaryDiagnostic[] = [];
+  validateFamilyExecutionCompositionSource(valid, diagnostics);
+  assert.deepEqual(diagnostics, []);
+
+  for (const source of [
+    valid.replace("= null", "= { executeFrozenProgram: async () => ({}) }"),
+    valid.replace("import type", "import").replace("= null", "= null"),
+    `${valid}\nexport const FIXTURE_EXECUTOR = {};`,
+  ]) {
+    const mutationDiagnostics: BoundaryDiagnostic[] = [];
+    validateFamilyExecutionCompositionSource(source, mutationDiagnostics);
+    assert.ok(mutationDiagnostics.some((item) => item.code.startsWith("family-execution-composition-")), JSON.stringify(mutationDiagnostics));
+  }
+});
+
+test("implementation closure contexts retain derived facts, never TypeScript Programs or AST caches", () => {
+  const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  const contextStart = source.indexOf("interface CompilerContext");
+  const contextEnd = source.indexOf("interface SourceBuildGraphFacts", contextStart);
+  assert.ok(contextStart >= 0 && contextEnd > contextStart);
+  const contextSource = source.slice(contextStart, contextEnd);
+  assert.doesNotMatch(contextSource, /ts\.Program|ts\.SourceFile|ProgramCache|SourceFileCache/);
+
+  const builderStart = source.indexOf("function buildImplementationClosures(");
+  const builderEnd = source.indexOf("/** Pure recomputation;", builderStart);
+  assert.ok(builderStart >= 0 && builderEnd > builderStart);
+  const builderSource = source.slice(builderStart, builderEnd);
+  assert.doesNotMatch(builderSource, /entryProgramCache|entryProgramInputCache/);
+  assert.doesNotMatch(builderSource, /Map\s*<\s*string\s*,\s*ts\.Program\s*>/);
+  assert.doesNotMatch(builderSource, /Map\s*<\s*string\s*,\s*ts\.SourceFile\s*>/);
+  assert.match(builderSource, /const program = ts\.createProgram/);
+  assert.match(builderSource, /entryProgram = undefined/);
 });
 
 test("compiler-visible implementation closure digests are deterministic and mutation-sensitive", () => {

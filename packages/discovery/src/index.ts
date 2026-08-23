@@ -33,6 +33,12 @@ export interface SourcePlanRefV1 {
   readonly sourcePlanRef: Hash;
   readonly familyDefinitionHash: Hash;
   readonly completeness: SourceCompleteness;
+  /**
+   * The immutable lower bound of a contiguous-history source. Other source
+   * kinds must carry null so a plan cannot silently acquire history authority
+   * by being reinterpreted at validation time.
+   */
+  readonly historyStartBlock: string | null;
 }
 
 export interface SourcePlanExecutionV1 {
@@ -50,6 +56,8 @@ export interface SourceCoverageEntryV1 {
   readonly sourcePlanRef: Hash;
   readonly familyDefinitionHash: Hash;
   readonly completeness: SourceCompleteness;
+  readonly historyStartBlock: string | null;
+  readonly previousAppliedThrough: string | null;
   readonly cutoffHash: Hash;
   readonly from: string;
   readonly appliedThrough: string;
@@ -155,6 +163,7 @@ export function decodeSourcePlanRef(value: unknown, name = "sourcePlanRef"): Sou
     sourcePlanRef: (field, path) => assertHash(field, path),
     familyDefinitionHash: (field, path) => assertHash(field, path),
     completeness: sourceCompleteness,
+    historyStartBlock: (field, path) => field === null ? null : assertDecimalString(field, path),
   }, name);
 }
 
@@ -181,6 +190,8 @@ const decodeSourceCoverageEntry = (
   sourcePlanRef: (field, path) => assertHash(field, path),
   familyDefinitionHash: (field, path) => assertHash(field, path),
   completeness: sourceCompleteness,
+  historyStartBlock: (field, path) => field === null ? null : assertDecimalString(field, path),
+  previousAppliedThrough: (field, path) => field === null ? null : assertDecimalString(field, path),
   cutoffHash: (field, path) => assertHash(field, path),
   from: (field, path) => assertDecimalString(field, path),
   appliedThrough: (field, path) => assertDecimalString(field, path),
@@ -306,6 +317,9 @@ function coverageEntry(execution: unknown): SourceCoverageEntryV1 {
   let contributesOmissionAuthority = false;
   switch (plan.completeness) {
     case "complete-snapshot":
+      if (plan.historyStartBlock !== null || decoded.previousAppliedThrough !== null) {
+        throw new Error("snapshot-history-anchor-invalid");
+      }
       if (decoded.outcome !== "complete" || from !== cutoffNumber || through !== cutoffNumber) {
         throw new Error("incomplete-snapshot-coverage");
       }
@@ -315,17 +329,29 @@ function coverageEntry(execution: unknown): SourceCoverageEntryV1 {
       if (decoded.outcome !== "complete" || through !== cutoffNumber) {
         throw new Error("incomplete-history-coverage");
       }
+      if (plan.historyStartBlock === null) throw new Error("history-start-missing");
+      const historyStart = decimal(plan.historyStartBlock, "plan.historyStartBlock");
       const previous = decoded.previousAppliedThrough === null
         ? null
         : decimal(decoded.previousAppliedThrough, "previousAppliedThrough");
-      if (previous !== null && from !== previous + 1n) throw new Error("history-cursor-gap");
+      if (previous === null) {
+        if (from !== historyStart) throw new Error("history-start-gap");
+      } else {
+        if (previous < historyStart || from !== previous + 1n) throw new Error("history-cursor-gap");
+      }
       contributesOmissionAuthority = true;
       break;
     }
     case "point-lookup":
-      if (decoded.outcome !== "complete") throw new Error("point-lookup-incomplete");
+      if (plan.historyStartBlock !== null || decoded.previousAppliedThrough !== null) {
+        throw new Error("point-lookup-history-anchor-invalid");
+      }
+      if (decoded.outcome !== "complete" || from !== through) throw new Error("point-lookup-incomplete");
       break;
     case "nomination-only":
+      if (plan.historyStartBlock !== null || decoded.previousAppliedThrough !== null) {
+        throw new Error("nomination-history-anchor-invalid");
+      }
       if (decoded.outcome !== "positive-only" && decoded.outcome !== "complete") {
         throw new Error("nomination-only-incomplete");
       }
@@ -337,6 +363,8 @@ function coverageEntry(execution: unknown): SourceCoverageEntryV1 {
     sourcePlanRef: plan.sourcePlanRef,
     familyDefinitionHash: plan.familyDefinitionHash,
     completeness: plan.completeness,
+    historyStartBlock: plan.historyStartBlock,
+    previousAppliedThrough: decoded.previousAppliedThrough,
     cutoffHash: cutoff.hash,
     from: decoded.from,
     appliedThrough: decoded.through,
@@ -382,6 +410,7 @@ export function sealSourceCoverage(
       !expectedPlan
       || expectedPlan.familyDefinitionHash !== execution.plan.familyDefinitionHash
       || expectedPlan.completeness !== execution.plan.completeness
+      || expectedPlan.historyStartBlock !== execution.plan.historyStartBlock
     ) throw new Error(`undeclared-source-partition:${identity}`);
     seen.add(identity);
     return coverageEntry(execution);
@@ -479,17 +508,38 @@ export function validateSourceCoverageCertificate(
       || entry.sourcePlanRef !== plan.sourcePlanRef
       || entry.familyDefinitionHash !== plan.familyDefinitionHash
       || entry.completeness !== plan.completeness
+      || entry.historyStartBlock !== plan.historyStartBlock
       || entry.cutoffHash !== decodedCertificate.cutoff.hash
-      || entry.contributesOmissionAuthority !== expectedOmission
       || !rangeMatchesCompleteness
       || (expectedOmission && entry.appliedThrough !== decodedCertificate.cutoff.number)
     ) throw new Error("coverage-entry-lineage-mismatch");
+    const previous = entry.previousAppliedThrough === null
+      ? null
+      : decimal(entry.previousAppliedThrough, "sourceCoverageEntry.previousAppliedThrough");
+    if (plan.completeness === "contiguous-history") {
+      if (plan.historyStartBlock === null) throw new Error("coverage-history-start-missing");
+      const historyStart = decimal(plan.historyStartBlock, "sourcePlanRef.historyStartBlock");
+      if (previous === null) {
+        if (from !== historyStart) throw new Error("coverage-history-start-gap");
+      } else if (previous < historyStart || from !== previous + 1n) {
+        throw new Error("coverage-history-cursor-gap");
+      }
+    } else if (plan.historyStartBlock !== null || previous !== null) {
+      throw new Error("coverage-history-anchor-invalid");
+    }
+    const expectedContribution = plan.completeness === "complete-snapshot" || plan.completeness === "contiguous-history";
+    if (entry.contributesOmissionAuthority !== expectedContribution) {
+      throw new Error("coverage-entry-lineage-mismatch");
+    }
   }
   if (seen.size !== plans.size) throw new Error("coverage-source-plan-partition-mismatch");
   const sorted = [...decodedCertificate.entries].sort((left, right) => compareText(
     `${left.ownerRef}:${left.sourcePlanRef}`,
     `${right.ownerRef}:${right.sourcePlanRef}`,
   ));
+  if (decodedCertificate.entries.some((entry, index) => entry !== sorted[index])) {
+    throw new Error("coverage-entry-order-mismatch");
+  }
   const expectedRoot = hashDomain("aloha/source-coverage/v1", { cutoff: decodedCertificate.cutoff, entries: sorted });
   if (expectedRoot !== decodedCertificate.sourceCoverageRoot) throw new Error("source-coverage-root-mismatch");
 }

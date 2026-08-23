@@ -1,15 +1,42 @@
-import { deepFreeze, hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
-import { assertPromotablePartition, type AttestationPartitionV1 } from "../../attestation/src/index.ts";
-import type { InstanceCatalogV1 } from "../../catalog/src/index.ts";
 import {
-  recentObservationRange,
+  assertDecimalString,
+  assertExactKeys,
+  assertHash,
+  assertNonEmptyString,
+  assertPlainObject,
+  decodeCanonicalJson,
+  deepFreeze,
+  encodeCanonicalBytes,
+  hashDomain,
+  readOwnEnumerableDataProperty,
+  type Hash,
+} from "../../canonical-codec/src/index.ts";
+import { assertPromotablePartition, type AttestationPartitionV1 } from "../../attestation/src/index.ts";
+import type { InstanceCatalogV1, InstancePublicationV1 } from "../../catalog/src/index.ts";
+import {
   validateSourceCoverageCertificate,
+  validateCanonicalCutoff,
   type BlockRangeV1,
   type CanonicalCutoffV1,
   type SourceCoverageCertificateV1,
   type SourcePlanRefV1,
 } from "../../discovery/src/index.ts";
-import { buildPersistedGraph, type PersistedGraphV1 } from "../../graph/src/index.ts";
+import {
+  buildPersistedGraph,
+  type GraphLeaseBindingV1,
+  type GraphServingAdmissionGuardPort,
+  type GraphServingAdmissionV1,
+  type PersistedGraphV1,
+} from "../../graph/src/index.ts";
+import {
+  validatePromotionFreshnessReceipt,
+  CanonicalSourceError,
+  type PromotionFreshnessAuthorityV1,
+  type PromotionFreshnessReceiptV1,
+  type PromotionFreshnessRequestV1,
+} from "../../canonical-source/src/index.ts";
+import { sourcePlanSetRoot } from "../../discovery/src/index.ts";
+import { assertIssuedRuntimeReleaseReadyBindingPort } from "../../runtime-release-authority/src/internal/ready-binding-consumer.ts";
 
 export interface GenerationRefreshPolicyV1 {
   readonly observationWindowBlocks: "50";
@@ -17,6 +44,286 @@ export interface GenerationRefreshPolicyV1 {
   readonly maxServingAgeBlocks: string;
   readonly minPromotionMarginBlocks: string;
   readonly maxInProgressRuns: "1";
+}
+
+export type ReadyPromotionAbandonReasonV1 =
+  | "definition-catalog-changed"
+  | "source-plan-changed"
+  | "policy-changed"
+  | "release-binding-changed"
+  | "cutoff-revoked"
+  | "cutoff-too-old";
+
+export type ReadyPromotionFailureCodeV1 =
+  | ReadyPromotionAbandonReasonV1
+  | "ready-promotion-input-mismatch"
+  | "ready-promotion-stage-mismatch"
+  | "ready-promotion-authority-invalid"
+  | "ready-promotion-retry"
+  | "ready-promotion-fatal";
+
+/**
+ * A durable staged promotion may be discarded only for this explicit class.
+ * Integrity, storage, CAS and implementation failures deliberately remain
+ * ordinary errors: rebuilding on those failures would hide a defect and can
+ * turn startup into an unbounded abandon/rebuild loop.
+ */
+export type ReadyPromotionRecoveryKindV1 = "abandon" | "retry" | "fatal";
+
+const READY_PROMOTION_ERRORS = new WeakSet<object>();
+const READY_PROMOTION_ABANDON_AUTHORITIES = new WeakMap<object, {
+  readonly stage: ReadyStageIdentityV1;
+  readonly reason: ReadyPromotionAbandonReasonV1;
+}>();
+const READY_PROMOTION_ABANDON_CODES = new Set<ReadyPromotionAbandonReasonV1>([
+  "definition-catalog-changed",
+  "source-plan-changed",
+  "policy-changed",
+  "cutoff-revoked",
+  "cutoff-too-old",
+]);
+
+export interface ReadyPromotionAbandonAuthorizationV1 {
+  readonly opaque: object;
+}
+
+class ReadyPromotionError extends Error {
+  readonly code: ReadyPromotionFailureCodeV1;
+  readonly recovery: ReadyPromotionRecoveryKindV1;
+
+  constructor(code: ReadyPromotionFailureCodeV1, recovery: ReadyPromotionRecoveryKindV1) {
+    super(code);
+    this.name = "ReadyPromotionError";
+    this.code = code;
+    this.recovery = recovery;
+    READY_PROMOTION_ERRORS.add(this);
+  }
+}
+
+class ReadyPromotionIncompatibleError extends ReadyPromotionError {
+  constructor(code: ReadyPromotionAbandonReasonV1) {
+    super(code, "abandon");
+    this.name = "ReadyPromotionIncompatibleError";
+  }
+}
+
+export class ReadyPromotionRetryError extends ReadyPromotionError {
+  constructor(code: "ready-promotion-retry" = "ready-promotion-retry") {
+    super(code, "retry");
+    this.name = "ReadyPromotionRetryError";
+  }
+}
+
+export class ReadyPromotionFatalError extends ReadyPromotionError {
+  constructor(code: Exclude<ReadyPromotionFailureCodeV1, ReadyPromotionAbandonReasonV1 | "ready-promotion-retry"> = "ready-promotion-fatal") {
+    super(code, "fatal");
+    this.name = "ReadyPromotionFatalError";
+  }
+}
+
+export interface ReadyPromotionErrorDescriptorV1 {
+  readonly code: ReadyPromotionFailureCodeV1;
+  readonly recovery: ReadyPromotionRecoveryKindV1;
+}
+
+/**
+ * Cross-package recovery classification.  The WeakSet prevents an arbitrary
+ * object with `{ recovery: "abandon" }` from becoming an authority to delete
+ * durable state; callers must receive an error issued by this module.
+ */
+export function readReadyPromotionError(error: unknown): ReadyPromotionErrorDescriptorV1 | null {
+  if (error === null || (typeof error !== "object" && typeof error !== "function")) return null;
+  if (!READY_PROMOTION_ERRORS.has(error)) return null;
+  const value = error as { readonly code?: unknown; readonly recovery?: unknown };
+  if (
+    typeof value.code !== "string"
+    || (value.recovery !== "abandon" && value.recovery !== "retry" && value.recovery !== "fatal")
+  ) return null;
+  if (value.recovery === "abandon") {
+    if (!READY_PROMOTION_ABANDON_CODES.has(value.code as ReadyPromotionAbandonReasonV1)) return null;
+    return Object.freeze({
+      code: value.code as ReadyPromotionFailureCodeV1,
+      recovery: value.recovery,
+    });
+  }
+  return Object.freeze({ code: value.code as ReadyPromotionFailureCodeV1, recovery: value.recovery });
+}
+
+export function authorizeReadyPromotionAbandon(
+  error: unknown,
+  stage: ReadyStageIdentityV1,
+): ReadyPromotionAbandonAuthorizationV1 | null {
+  const descriptor = readReadyPromotionError(error);
+  if (descriptor?.recovery !== "abandon") return null;
+  validateReadyStageIdentity(stage);
+  const normalizedStage = decodeCanonicalJson(
+    encodeCanonicalBytes(stage),
+  ) as unknown as ReadyStageIdentityV1;
+  validateReadyStageIdentity(normalizedStage);
+  const opaque = Object.freeze({});
+  READY_PROMOTION_ABANDON_AUTHORITIES.set(opaque, deepFreeze({
+    stage: normalizedStage,
+    reason: descriptor.code as ReadyPromotionAbandonReasonV1,
+  }));
+  return Object.freeze({ opaque });
+}
+
+export function assertReadyPromotionAbandonAuthorization(
+  value: ReadyPromotionAbandonAuthorizationV1,
+  stage: ReadyStageIdentityV1,
+): ReadyPromotionAbandonReasonV1 {
+  validateReadyStageIdentity(stage);
+  if (value === null || typeof value !== "object") throw new ReadyPromotionFatalError("ready-promotion-authority-invalid");
+  if (Object.keys(value).length !== 1 || !Object.prototype.hasOwnProperty.call(value, "opaque")) {
+    throw new ReadyPromotionFatalError("ready-promotion-authority-invalid");
+  }
+  const opaque = (value as { readonly opaque?: unknown }).opaque;
+  const binding = opaque !== null && typeof opaque === "object"
+    ? READY_PROMOTION_ABANDON_AUTHORITIES.get(opaque)
+    : undefined;
+  const expectedBytes = binding ? encodeCanonicalBytes(binding.stage) : null;
+  const suppliedBytes = encodeCanonicalBytes(stage);
+  if (
+    !binding
+    || expectedBytes === null
+    || expectedBytes.byteLength !== suppliedBytes.byteLength
+    || expectedBytes.some((byte, index) => byte !== suppliedBytes[index])
+  ) {
+    throw new ReadyPromotionFatalError("ready-promotion-authority-invalid");
+  }
+  return binding.reason;
+}
+
+export interface CurrentPromotionConfigurationV1 {
+  readonly definitionCatalogRoot: Hash;
+  readonly policy: GenerationRefreshPolicyV1;
+}
+
+export interface ReadyPromotionAuthorityBindingV1 {
+  readonly expectedRevision: string;
+  readonly expectedInProgressRunId: string;
+  readonly cutoff: CanonicalCutoffV1;
+  readonly definitionCatalogRoot: Hash;
+  readonly instanceCatalogRoot: Hash;
+  readonly graphRoot: Hash;
+  readonly generationRefreshPolicyHash: Hash;
+  readonly releaseProvenanceHash: Hash;
+  readonly candidatePartitionProofStorageHash: Hash;
+}
+
+/**
+ * The durable identity of one staged promotion.  Every recovery operation
+ * receives this complete value; a bare run id or root revision is not an
+ * ownership proof and is intentionally insufficient.
+ */
+export interface ReadyStageIdentityV1 {
+  readonly stageStorageHash: Hash;
+  readonly runId: string;
+  readonly expectedRevision: string;
+  readonly sealedRevision: string;
+  readonly stageRevision: string;
+  readonly stageRecordHash: Hash;
+  readonly readyBaseHash: Hash;
+  readonly cutoff: CanonicalCutoffV1;
+  readonly generationRefreshPolicyHash: Hash;
+  readonly definitionCatalogRoot: Hash;
+  readonly releaseProvenanceHash: Hash;
+  readonly candidatePartitionProofStorageHash: Hash;
+}
+
+export function validateReadyStageIdentity(value: ReadyStageIdentityV1): void {
+  assertPlainObject(value, "readyStageIdentity");
+  assertExactKeys(value, [
+    "stageStorageHash",
+    "runId",
+    "expectedRevision",
+    "sealedRevision",
+    "stageRevision",
+    "stageRecordHash",
+    "readyBaseHash",
+    "cutoff",
+    "generationRefreshPolicyHash",
+    "definitionCatalogRoot",
+    "releaseProvenanceHash",
+    "candidatePartitionProofStorageHash",
+  ], "readyStageIdentity");
+  assertHash(value.stageStorageHash, "readyStageIdentity.stageStorageHash");
+  assertNonEmptyString(value.runId, "readyStageIdentity.runId");
+  assertDecimalString(value.expectedRevision, "readyStageIdentity.expectedRevision");
+  assertDecimalString(value.sealedRevision, "readyStageIdentity.sealedRevision");
+  assertDecimalString(value.stageRevision, "readyStageIdentity.stageRevision");
+  assertHash(value.stageRecordHash, "readyStageIdentity.stageRecordHash");
+  assertHash(value.readyBaseHash, "readyStageIdentity.readyBaseHash");
+  validateCanonicalCutoff(value.cutoff, "readyStageIdentity.cutoff");
+  assertHash(value.generationRefreshPolicyHash, "readyStageIdentity.generationRefreshPolicyHash");
+  assertHash(value.definitionCatalogRoot, "readyStageIdentity.definitionCatalogRoot");
+  assertHash(value.releaseProvenanceHash, "readyStageIdentity.releaseProvenanceHash");
+  assertHash(value.candidatePartitionProofStorageHash, "readyStageIdentity.candidatePartitionProofStorageHash");
+  if (BigInt(value.stageRevision) !== BigInt(value.expectedRevision) + 1n) {
+    throw new Error("readyStageIdentity.revision-lineage-mismatch");
+  }
+  if (value.sealedRevision !== value.expectedRevision) {
+    throw new Error("readyStageIdentity.sealed-revision-mismatch");
+  }
+}
+
+export type ReadyPromotionDurableStateV1 =
+  | {
+    readonly kind: "committed";
+    readonly stage: ReadyStageIdentityV1;
+    readonly ready: ReadyGenerationV1;
+  }
+  | {
+    readonly kind: "staged";
+    readonly stage: ReadyStageIdentityV1;
+  }
+  | {
+    readonly kind: "absent";
+    readonly stage: ReadyStageIdentityV1;
+    readonly activeReady: ReadyGenerationV1 | null;
+  };
+
+export type ReadyPromotionAbandonResultV1 =
+  | { readonly kind: "abandoned"; readonly stage: ReadyStageIdentityV1 }
+  | { readonly kind: "committed"; readonly stage: ReadyStageIdentityV1; readonly ready: ReadyGenerationV1 };
+
+export interface ReadyPromotionAuthorityV1 {
+  readonly opaque: object;
+}
+
+export interface ReadyPromotionAuthorityIssueV1 {
+  readonly expectedRevision: string;
+  readonly expectedInProgressRunId: string;
+  readonly cutoff: CanonicalCutoffV1;
+  readonly definitionCatalogRoot: Hash;
+  readonly instanceCatalogRoot: Hash;
+  readonly graphRoot: Hash;
+  readonly releaseProvenanceHash: Hash;
+  readonly candidatePartitionProofStorageHash: Hash;
+  readonly policy: GenerationRefreshPolicyV1;
+}
+
+export interface ReadyPromotionAuthorityGuardPort {
+  assertConfiguration(binding: {
+    readonly definitionCatalogRoot: Hash;
+    readonly generationRefreshPolicyHash: Hash;
+    readonly releaseProvenanceHash: Hash;
+  }): void;
+  assertActive(authority: ReadyPromotionAuthorityV1): ReadyPromotionAuthorityBindingV1;
+}
+
+export interface ReadyPromotionAuthorityPort extends ReadyPromotionAuthorityGuardPort {
+  issue(input: ReadyPromotionAuthorityIssueV1): ReadyPromotionAuthorityV1;
+  revoke(authority: ReadyPromotionAuthorityV1): void;
+}
+
+const issuedPromotionAuthorityPorts = new WeakSet<object>();
+
+export function assertIssuedReadyPromotionAuthorityPort(value: unknown): ReadyPromotionAuthorityPort {
+  if (value === null || typeof value !== "object" || !issuedPromotionAuthorityPorts.has(value)) {
+    throw new TypeError("ready promotion authority port is not issued");
+  }
+  return value as ReadyPromotionAuthorityPort;
 }
 
 export interface ReadyGenerationV1 {
@@ -28,48 +335,93 @@ export interface ReadyGenerationV1 {
   readonly definitionCatalogRoot: Hash;
   readonly sourceCoverageRoot: Hash;
   readonly candidatePartitionRoot: Hash;
+  readonly candidatePartitionProofStorageHash: Hash;
+  readonly releaseProvenanceHash: Hash;
+  readonly exactOutcomePartitionRoot: Hash;
   readonly verifiedMemoSetRoot: Hash;
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
   readonly edgeCount: string;
   readonly instanceCount: string;
+  readonly promotionFreshness: PromotionFreshnessReceiptV1;
   readonly promotionRevision: string;
   readonly promotedAtMonotonicNs: string;
   readonly readyRecordHash: Hash;
 }
 
-export interface SealedRunForPromotionV1 {
-  readonly runId: string;
-  readonly parentGenerationId: string | null;
-  readonly cutoff: CanonicalCutoffV1;
-  readonly recentObservationRange: BlockRangeV1;
-  readonly definitionCatalogRoot: Hash;
-  readonly sourceCoverage: SourceCoverageCertificateV1;
-  readonly candidatePartitionRoot: Hash;
-  readonly candidateKeys: readonly Hash[];
-  readonly verifiedMemoSetRoot: Hash;
-  readonly checkpointRevision: string;
-  readonly partition: AttestationPartitionV1;
-}
+/**
+ * The immutable generation payload that can be validated and durably staged
+ * before the final provider freshness observation.  It deliberately contains
+ * no promotion receipt, revision, or record hash: those are issued only by
+ * activation after freshness has been observed.
+ */
+export type ReadyGenerationBaseV1 = Omit<
+  ReadyGenerationV1,
+  "promotionFreshness" | "promotionRevision" | "promotedAtMonotonicNs" | "readyRecordHash"
+>;
 
-export interface CanonicalPromotionFenceV1 {
+export type {
+  SealedRunBindingV1,
+  SealedRunCapabilityV1,
+  SealedRunReaderPortV1,
+} from "../../sealed-run-runtime/src/contract.ts";
+import {
+  type SealedRunCapabilityV1,
+  type SealedRunReaderPortV1,
+  type SealedRunSnapshotV1,
+} from "../../sealed-run-runtime/src/contract.ts";
+import { assertCheckpointSealedRunReader } from "../../sealed-run-runtime/src/internal/reader-consumer.ts";
+
+export interface CanonicalFenceV1 {
+  readonly token: string;
   readonly journalEpoch: string;
+  readonly canonicalJournalRoot: Hash;
   readonly cutoff: CanonicalCutoffV1;
 }
 
-export interface CanonicalPromotionPort {
+export interface CanonicalFencePort {
   assertStillCanonical(cutoff: CanonicalCutoffV1): Promise<void>;
   ageInBlocks(cutoff: CanonicalCutoffV1): Promise<string>;
-  withPromotionFence<T>(cutoff: CanonicalCutoffV1, work: (fence: CanonicalPromotionFenceV1) => Promise<T>): Promise<T>;
+  recentObservationRange(cutoff: CanonicalCutoffV1): BlockRangeV1;
+  withCanonicalFence<T>(cutoff: CanonicalCutoffV1, work: (fence: CanonicalFenceV1) => Promise<T>): Promise<T>;
+  observePromotionFreshness(
+    fence: CanonicalFenceV1,
+    request: PromotionFreshnessRequestV1,
+  ): Promise<PromotionFreshnessAuthorityV1>;
+  assertPromotionFreshness(
+    fence: CanonicalFenceV1,
+    authority: PromotionFreshnessAuthorityV1,
+  ): void;
 }
 
-export interface ReadyCommitInputV1 {
+export interface ReadyStageInputV1 {
+  readonly authority: ReadyPromotionAuthorityV1;
+  readonly policy: GenerationRefreshPolicyV1;
   readonly expectedRevision: string;
   readonly expectedInProgressRunId: string;
-  readonly fence: CanonicalPromotionFenceV1;
+  readonly fence: CanonicalFenceV1;
   readonly graph: PersistedGraphV1;
   readonly instanceCatalog: InstanceCatalogV1;
-  readonly ready: Omit<ReadyGenerationV1, "promotionRevision" | "readyRecordHash">;
+  readonly ready: ReadyGenerationBaseV1;
+}
+
+export interface ReadyStageResultV1 {
+  readonly stage: ReadyStageIdentityV1;
+  readonly stageRevision: string;
+  readonly stageRecordHash: Hash;
+}
+
+export interface ReadyActivationInputV1 {
+  readonly authority: ReadyPromotionAuthorityV1;
+  readonly policy: GenerationRefreshPolicyV1;
+  readonly expectedRevision: string;
+  readonly expectedInProgressRunId: string;
+  readonly fence: CanonicalFenceV1;
+  readonly freshness: PromotionFreshnessAuthorityV1;
+  readonly stage: ReadyStageIdentityV1;
+  readonly stageRevision: string;
+  readonly stageRecordHash: Hash;
+  readonly promotedAtMonotonicNs: string;
 }
 
 export interface ReadyCommitResultV1 {
@@ -79,17 +431,29 @@ export interface ReadyCommitResultV1 {
 
 export interface ReadyStorePort {
   putContentAndFsync(kind: "instance-catalog" | "persisted-graph", value: object): Promise<Hash>;
-  commitReadyCAS(input: ReadyCommitInputV1): Promise<ReadyCommitResultV1>;
+  stageReadyCAS(input: ReadyStageInputV1): Promise<ReadyStageResultV1>;
+  activateReadyCAS(input: ReadyActivationInputV1): Promise<ReadyCommitResultV1>;
   loadReadyClosure(ready: ReadyGenerationV1): Promise<{
     readonly sourceCoverage: SourceCoverageCertificateV1;
     readonly instanceCatalog: InstanceCatalogV1;
     readonly graph: PersistedGraphV1;
   }>;
   assertContentRoot(kind: "candidate-partition" | "verified-memo-set", root: Hash): Promise<void>;
+  assertReadyAuthorityActive(binding: {
+    readonly generationId: string;
+    readonly readyRecordHash: Hash;
+    readonly generationRefreshPolicyHash: Hash;
+    readonly definitionCatalogRoot: Hash;
+    readonly instanceCatalogRoot: Hash;
+    readonly graphRoot: Hash;
+    readonly cutoff: CanonicalCutoffV1;
+    readonly releaseProvenanceHash: Hash;
+    readonly candidatePartitionProofStorageHash: Hash;
+  }): void;
 }
 
 export interface ReadyPromotionInputV1 {
-  readonly run: SealedRunForPromotionV1;
+  readonly sealedRun: SealedRunCapabilityV1;
   readonly instanceCatalog: InstanceCatalogV1;
   readonly parentGenerationId: string | null;
   readonly policy: GenerationRefreshPolicyV1;
@@ -104,6 +468,7 @@ export interface ServingValidationInputV1 {
 export interface CurrentDefinitionCatalogV1 {
   readonly definitionCatalogRoot: Hash;
   readonly declaredSourcePlans: readonly SourcePlanRefV1[];
+  readonly releaseProvenanceHash: Hash;
 }
 
 const decimal = (value: string, name: string): bigint => {
@@ -112,6 +477,8 @@ const decimal = (value: string, name: string): bigint => {
 };
 
 export function generationRefreshPolicyHash(policy: GenerationRefreshPolicyV1): Hash {
+  assertPlainObject(policy, "generationRefreshPolicy");
+  assertExactKeys(policy, ["observationWindowBlocks", "targetRefreshAgeBlocks", "maxServingAgeBlocks", "minPromotionMarginBlocks", "maxInProgressRuns"], "generationRefreshPolicy");
   if (policy.observationWindowBlocks !== "50" || policy.maxInProgressRuns !== "1") {
     throw new Error("unsupported-generation-policy");
   }
@@ -122,13 +489,316 @@ export function generationRefreshPolicyHash(policy: GenerationRefreshPolicyV1): 
   return hashDomain("aloha/generation-refresh-policy/v1", policy);
 }
 
+export function readyGenerationBaseHash(ready: ReadyGenerationBaseV1): Hash {
+  validateReadyGenerationBase(ready);
+  return hashDomain("aloha/ready-generation-base/v1", ready);
+}
+
+export function sourcePlanRootForCoverage(
+  sourceCoverage: SourceCoverageCertificateV1,
+): Hash {
+  return sourcePlanSetRoot(sourceCoverage.entries.map(entry => ({
+    ownerRef: entry.ownerRef,
+    sourcePlanRef: entry.sourcePlanRef,
+    familyDefinitionHash: entry.familyDefinitionHash,
+    completeness: entry.completeness,
+    historyStartBlock: entry.historyStartBlock,
+  })));
+}
+
+export function createReadyPromotionAuthority(
+  currentConfiguration: () => CurrentPromotionConfigurationV1,
+  releaseBindingPort: object,
+): ReadyPromotionAuthorityPort {
+  const issued = new WeakMap<object, ReadyPromotionAuthorityBindingV1>();
+  const currentRelease = assertIssuedRuntimeReleaseReadyBindingPort(releaseBindingPort);
+
+  const current = (): { readonly definitionCatalogRoot: Hash; readonly policyHash: Hash; readonly releaseProvenanceHash: Hash } => {
+    const value = currentConfiguration();
+    assertPlainObject(value, "currentPromotionConfiguration");
+    assertExactKeys(value, ["definitionCatalogRoot", "policy"], "currentPromotionConfiguration");
+    return deepFreeze({
+      definitionCatalogRoot: assertHash(
+        readOwnEnumerableDataProperty(value, "definitionCatalogRoot", "currentPromotionConfiguration"),
+        "currentPromotionConfiguration.definitionCatalogRoot",
+      ),
+      policyHash: generationRefreshPolicyHash(
+        readOwnEnumerableDataProperty(value, "policy", "currentPromotionConfiguration") as GenerationRefreshPolicyV1,
+      ),
+      releaseProvenanceHash: assertHash(currentRelease.currentProvenanceHash(), "currentPromotionConfiguration.releaseProvenanceHash"),
+    });
+  };
+
+  const decodeAuthority = (authority: ReadyPromotionAuthorityV1): object => {
+    assertPlainObject(authority, "readyPromotionAuthority");
+    assertExactKeys(authority, ["opaque"], "readyPromotionAuthority");
+    const opaque = readOwnEnumerableDataProperty(authority, "opaque", "readyPromotionAuthority");
+    if (opaque === null || typeof opaque !== "object") {
+      throw new TypeError("readyPromotionAuthority.opaque is invalid");
+    }
+    return opaque;
+  };
+
+  const assertBindingCurrent = (binding: ReadyPromotionAuthorityBindingV1): void => {
+    const configuration = current();
+    if (
+      binding.definitionCatalogRoot !== configuration.definitionCatalogRoot
+      || binding.generationRefreshPolicyHash !== configuration.policyHash
+      || binding.releaseProvenanceHash !== configuration.releaseProvenanceHash
+    ) {
+      throw new ReadyPromotionIncompatibleError(
+        binding.definitionCatalogRoot !== configuration.definitionCatalogRoot
+          ? "definition-catalog-changed"
+          : binding.generationRefreshPolicyHash !== configuration.policyHash
+            ? "policy-changed"
+            : "release-binding-changed",
+      );
+    }
+  };
+
+  const port = Object.freeze({
+    issue(rawInput: ReadyPromotionAuthorityIssueV1) {
+      assertPlainObject(rawInput, "readyPromotionIssue");
+      assertExactKeys(rawInput, [
+        "expectedRevision",
+        "expectedInProgressRunId",
+        "cutoff",
+        "definitionCatalogRoot",
+        "instanceCatalogRoot",
+        "graphRoot",
+        "releaseProvenanceHash",
+        "candidatePartitionProofStorageHash",
+        "policy",
+      ], "readyPromotionIssue");
+      const input = decodeCanonicalJson(encodeCanonicalBytes(rawInput)) as unknown as ReadyPromotionAuthorityIssueV1;
+      const configuration = current();
+      if (typeof input.expectedInProgressRunId !== "string" || input.expectedInProgressRunId.length === 0) {
+        throw new TypeError("readyPromotionIssue.expectedInProgressRunId is invalid");
+      }
+      const binding = deepFreeze({
+        expectedRevision: assertDecimalString(input.expectedRevision, "readyPromotionIssue.expectedRevision"),
+        expectedInProgressRunId: input.expectedInProgressRunId,
+        cutoff: deepFreeze({ ...input.cutoff }),
+        definitionCatalogRoot: assertHash(input.definitionCatalogRoot, "readyPromotionIssue.definitionCatalogRoot"),
+        instanceCatalogRoot: assertHash(input.instanceCatalogRoot, "readyPromotionIssue.instanceCatalogRoot"),
+        graphRoot: assertHash(input.graphRoot, "readyPromotionIssue.graphRoot"),
+        releaseProvenanceHash: assertHash(input.releaseProvenanceHash, "readyPromotionIssue.releaseProvenanceHash"),
+        candidatePartitionProofStorageHash: assertHash(input.candidatePartitionProofStorageHash, "readyPromotionIssue.candidatePartitionProofStorageHash"),
+        generationRefreshPolicyHash: generationRefreshPolicyHash(input.policy),
+      });
+      validateCanonicalCutoff(binding.cutoff, "readyPromotionIssue.cutoff");
+      if (
+        binding.definitionCatalogRoot !== configuration.definitionCatalogRoot
+        || binding.generationRefreshPolicyHash !== configuration.policyHash
+        || binding.releaseProvenanceHash !== configuration.releaseProvenanceHash
+      ) {
+        throw new ReadyPromotionIncompatibleError(
+          binding.definitionCatalogRoot !== configuration.definitionCatalogRoot
+            ? "definition-catalog-changed"
+            : binding.generationRefreshPolicyHash !== configuration.policyHash
+              ? "policy-changed"
+              : "release-binding-changed",
+        );
+      }
+      const opaque = Object.freeze({});
+      issued.set(opaque, binding);
+      return Object.freeze({ opaque });
+    },
+    assertConfiguration(binding: { readonly definitionCatalogRoot: Hash; readonly generationRefreshPolicyHash: Hash }) {
+      assertPlainObject(binding, "readyPromotionConfiguration");
+      assertExactKeys(binding, ["definitionCatalogRoot", "generationRefreshPolicyHash", "releaseProvenanceHash"], "readyPromotionConfiguration");
+      const configuration = current();
+      if (
+        assertHash(
+          readOwnEnumerableDataProperty(binding, "definitionCatalogRoot", "readyPromotionConfiguration"),
+          "readyPromotionConfiguration.definitionCatalogRoot",
+        ) !== configuration.definitionCatalogRoot
+        || assertHash(
+          readOwnEnumerableDataProperty(binding, "generationRefreshPolicyHash", "readyPromotionConfiguration"),
+          "readyPromotionConfiguration.generationRefreshPolicyHash",
+        ) !== configuration.policyHash
+        || assertHash(
+          readOwnEnumerableDataProperty(binding, "releaseProvenanceHash", "readyPromotionConfiguration"),
+          "readyPromotionConfiguration.releaseProvenanceHash",
+        ) !== configuration.releaseProvenanceHash
+      ) {
+        throw new ReadyPromotionIncompatibleError(
+          assertHash(
+            readOwnEnumerableDataProperty(binding, "definitionCatalogRoot", "readyPromotionConfiguration"),
+            "readyPromotionConfiguration.definitionCatalogRoot",
+          ) !== configuration.definitionCatalogRoot
+            ? "definition-catalog-changed"
+            : assertHash(
+              readOwnEnumerableDataProperty(binding, "generationRefreshPolicyHash", "readyPromotionConfiguration"),
+              "readyPromotionConfiguration.generationRefreshPolicyHash",
+            ) !== configuration.policyHash
+              ? "policy-changed"
+              : "release-binding-changed",
+        );
+      }
+    },
+    assertActive(authority: ReadyPromotionAuthorityV1) {
+      const opaque = decodeAuthority(authority);
+      const binding = issued.get(opaque);
+      if (!binding) throw new Error("ready-promotion-authority-not-issued");
+      assertBindingCurrent(binding);
+      return binding;
+    },
+    revoke(authority: ReadyPromotionAuthorityV1) {
+      issued.delete(decodeAuthority(authority));
+    },
+  });
+  issuedPromotionAuthorityPorts.add(port);
+  return port;
+}
+
+export function validateReadyGenerationBase(ready: ReadyGenerationBaseV1): void {
+  assertPlainObject(ready, "readyGenerationBase");
+  assertExactKeys(ready, [
+    "generationId",
+    "parentGenerationId",
+    "generationRefreshPolicyHash",
+    "cutoff",
+    "recentObservationRange",
+    "definitionCatalogRoot",
+    "sourceCoverageRoot",
+    "candidatePartitionRoot",
+    "candidatePartitionProofStorageHash",
+    "releaseProvenanceHash",
+    "exactOutcomePartitionRoot",
+    "verifiedMemoSetRoot",
+    "instanceCatalogRoot",
+    "graphRoot",
+    "edgeCount",
+    "instanceCount",
+  ], "readyGenerationBase");
+  assertHash(ready.generationId, "readyGenerationBase.generationId");
+  if (ready.parentGenerationId !== null) assertHash(ready.parentGenerationId, "readyGenerationBase.parentGenerationId");
+  assertHash(ready.generationRefreshPolicyHash, "readyGenerationBase.generationRefreshPolicyHash");
+  assertHash(ready.releaseProvenanceHash, "readyGenerationBase.releaseProvenanceHash");
+  validateCanonicalCutoff(ready.cutoff, "readyGenerationBase.cutoff");
+  assertPlainObject(ready.recentObservationRange, "readyGenerationBase.recentObservationRange");
+  assertExactKeys(ready.recentObservationRange, ["from", "to"], "readyGenerationBase.recentObservationRange");
+  const from = BigInt(assertDecimalString(ready.recentObservationRange.from, "readyGenerationBase.recentObservationRange.from"));
+  const to = BigInt(assertDecimalString(ready.recentObservationRange.to, "readyGenerationBase.recentObservationRange.to"));
+  if (from > to || ready.recentObservationRange.to !== ready.cutoff.number) throw new Error("ready-observation-range-mismatch");
+  for (const [name, value] of [
+    ["definitionCatalogRoot", ready.definitionCatalogRoot],
+    ["sourceCoverageRoot", ready.sourceCoverageRoot],
+    ["candidatePartitionRoot", ready.candidatePartitionRoot],
+    ["candidatePartitionProofStorageHash", ready.candidatePartitionProofStorageHash],
+    ["releaseProvenanceHash", ready.releaseProvenanceHash],
+    ["exactOutcomePartitionRoot", ready.exactOutcomePartitionRoot],
+    ["verifiedMemoSetRoot", ready.verifiedMemoSetRoot],
+    ["instanceCatalogRoot", ready.instanceCatalogRoot],
+    ["graphRoot", ready.graphRoot],
+  ] as const) assertHash(value, `readyGeneration.${name}`);
+  for (const [name, value] of [
+    ["edgeCount", ready.edgeCount],
+    ["instanceCount", ready.instanceCount],
+  ] as const) assertDecimalString(value, `readyGeneration.${name}`);
+}
+
+export function validateReadyGeneration(ready: ReadyGenerationV1): void {
+  assertPlainObject(ready, "readyGeneration");
+  assertExactKeys(ready, [
+    "generationId",
+    "parentGenerationId",
+    "generationRefreshPolicyHash",
+    "cutoff",
+    "recentObservationRange",
+    "definitionCatalogRoot",
+    "sourceCoverageRoot",
+    "candidatePartitionRoot",
+    "candidatePartitionProofStorageHash",
+    "releaseProvenanceHash",
+    "exactOutcomePartitionRoot",
+    "verifiedMemoSetRoot",
+    "instanceCatalogRoot",
+    "graphRoot",
+    "edgeCount",
+    "instanceCount",
+    "promotionFreshness",
+    "promotionRevision",
+    "promotedAtMonotonicNs",
+    "readyRecordHash",
+  ], "readyGeneration");
+  const base: ReadyGenerationBaseV1 = {
+    generationId: ready.generationId,
+    parentGenerationId: ready.parentGenerationId,
+    generationRefreshPolicyHash: ready.generationRefreshPolicyHash,
+    cutoff: ready.cutoff,
+    recentObservationRange: ready.recentObservationRange,
+    definitionCatalogRoot: ready.definitionCatalogRoot,
+    sourceCoverageRoot: ready.sourceCoverageRoot,
+    candidatePartitionRoot: ready.candidatePartitionRoot,
+    candidatePartitionProofStorageHash: ready.candidatePartitionProofStorageHash,
+    releaseProvenanceHash: ready.releaseProvenanceHash,
+    exactOutcomePartitionRoot: ready.exactOutcomePartitionRoot,
+    verifiedMemoSetRoot: ready.verifiedMemoSetRoot,
+    instanceCatalogRoot: ready.instanceCatalogRoot,
+    graphRoot: ready.graphRoot,
+    edgeCount: ready.edgeCount,
+    instanceCount: ready.instanceCount,
+  };
+  validateReadyGenerationBase(base);
+  assertHash(ready.readyRecordHash, "readyGeneration.readyRecordHash");
+  assertDecimalString(ready.promotionRevision, "readyGeneration.promotionRevision");
+  assertDecimalString(ready.promotedAtMonotonicNs, "readyGeneration.promotedAtMonotonicNs");
+  const promotionFreshness = validatePromotionFreshnessReceipt(ready.promotionFreshness);
+  if (
+    !sameCutoff(promotionFreshness.cutoff, ready.cutoff)
+    || promotionFreshness.generationRefreshPolicyHash !== ready.generationRefreshPolicyHash
+  ) throw new Error("ready-promotion-freshness-binding-mismatch");
+  const payload = {
+    generationId: ready.generationId,
+    parentGenerationId: ready.parentGenerationId,
+    generationRefreshPolicyHash: ready.generationRefreshPolicyHash,
+    cutoff: ready.cutoff,
+    recentObservationRange: ready.recentObservationRange,
+    definitionCatalogRoot: ready.definitionCatalogRoot,
+    sourceCoverageRoot: ready.sourceCoverageRoot,
+    candidatePartitionRoot: ready.candidatePartitionRoot,
+    candidatePartitionProofStorageHash: ready.candidatePartitionProofStorageHash,
+    releaseProvenanceHash: ready.releaseProvenanceHash,
+    exactOutcomePartitionRoot: ready.exactOutcomePartitionRoot,
+    verifiedMemoSetRoot: ready.verifiedMemoSetRoot,
+    instanceCatalogRoot: ready.instanceCatalogRoot,
+    graphRoot: ready.graphRoot,
+    edgeCount: ready.edgeCount,
+    instanceCount: ready.instanceCount,
+    promotionFreshness,
+    promotedAtMonotonicNs: ready.promotedAtMonotonicNs,
+    promotionRevision: ready.promotionRevision,
+  };
+  if (hashDomain("aloha/ready-generation/v1", payload) !== ready.readyRecordHash) {
+    throw new Error("ready-record-hash-mismatch");
+  }
+}
+
 function sameCutoff(left: CanonicalCutoffV1, right: CanonicalCutoffV1): boolean {
   return left.chainId === right.chainId && left.number === right.number
     && left.hash === right.hash && left.stateRoot === right.stateRoot;
 }
 
-function assertPromotionInput(input: ReadyPromotionInputV1): void {
-  const { run, instanceCatalog } = input;
+export function assertVerifiedPublicationCatalog(
+  verifiedPublications: readonly InstancePublicationV1[],
+  instanceCatalog: InstanceCatalogV1,
+): void {
+  const verifiedPublicationHashes = verifiedPublications
+    .map(publication => publication.instancePublicationHash)
+    .sort();
+  const catalogPublicationHashes = instanceCatalog.publications
+    .map(publication => publication.instancePublicationHash)
+    .sort();
+  if (
+    verifiedPublicationHashes.length !== catalogPublicationHashes.length
+    || verifiedPublicationHashes.some((hash, index) => hash !== catalogPublicationHashes[index])
+  ) throw new Error("verified-publication-catalog-mismatch");
+}
+
+function assertPromotionInput(input: ReadyPromotionInputV1, run: SealedRunSnapshotV1): void {
+  const { instanceCatalog } = input;
   if (input.parentGenerationId !== run.parentGenerationId) {
     throw new Error("parent-generation-binding-mismatch");
   }
@@ -136,59 +806,119 @@ function assertPromotionInput(input: ReadyPromotionInputV1): void {
   if (run.partition.runId !== run.runId || !sameCutoff(run.partition.cutoff, run.cutoff)) {
     throw new Error("attestation-run-binding-mismatch");
   }
+  if (run.partition.releaseProvenanceHash !== run.releaseProvenanceHash) {
+    throw new Error("attestation-release-provenance-mismatch");
+  }
   if (!sameCutoff(run.sourceCoverage.cutoff, run.cutoff)) throw new Error("coverage-cutoff-mismatch");
   if (run.sourceCoverage.sourceCoverageRoot.length === 0) throw new Error("coverage-root-missing");
   if (!sameCutoff(instanceCatalog.cutoff, run.cutoff)) throw new Error("instance-catalog-cutoff-mismatch");
-  const expectedRange = recentObservationRange(run.cutoff.number);
-  if (run.recentObservationRange.from !== expectedRange.from || run.recentObservationRange.to !== expectedRange.to) {
-    throw new Error("recent-observation-range-mismatch");
-  }
-  const verifiedPublicationHashes = run.partition.outcomes
+  const verifiedPublications = run.partition.outcomes
     .filter(outcome => outcome.kind === "verified")
-    .map(outcome => outcome.publication.instancePublicationHash)
-    .sort();
-  const catalogPublicationHashes = instanceCatalog.publications.map(value => value.instancePublicationHash).sort();
-  if (
-    verifiedPublicationHashes.length !== catalogPublicationHashes.length
-    || verifiedPublicationHashes.some((hash, index) => hash !== catalogPublicationHashes[index])
-  ) throw new Error("verified-publication-catalog-mismatch");
+    .map(outcome => outcome.publication);
+  assertVerifiedPublicationCatalog(verifiedPublications, instanceCatalog);
 }
 
-export class ReadyGenerationServiceV1 {
+function assertReadyStageResult(
+  result: ReadyStageResultV1,
+  run: SealedRunSnapshotV1,
+  instanceCatalog: InstanceCatalogV1,
+  ready: ReadyGenerationBaseV1,
+  policyHash: Hash,
+): void {
+  validateReadyStageIdentity(result.stage);
+  if (
+    result.stageRevision !== result.stage.stageRevision
+    || result.stageRecordHash !== result.stage.stageRecordHash
+    || result.stage.runId !== run.runId
+    || result.stage.expectedRevision !== run.checkpointRevision
+    || result.stage.sealedRevision !== run.checkpointRevision
+    || !sameCutoff(result.stage.cutoff, run.cutoff)
+    || result.stage.generationRefreshPolicyHash !== policyHash
+    || result.stage.definitionCatalogRoot !== run.definitionCatalogRoot
+    || result.stage.releaseProvenanceHash !== run.releaseProvenanceHash
+    || result.stage.candidatePartitionProofStorageHash !== run.candidatePartitionProofStorageHash
+    || ready.releaseProvenanceHash !== run.releaseProvenanceHash
+    || ready.candidatePartitionProofStorageHash !== run.candidatePartitionProofStorageHash
+    || result.stage.readyBaseHash !== readyGenerationBaseHash(ready)
+    || ready.instanceCatalogRoot !== instanceCatalog.instanceCatalogRoot
+  ) {
+    throw new ReadyPromotionFatalError("ready-promotion-stage-mismatch");
+  }
+}
+
+function classifyCanonicalPromotionError(error: unknown): unknown {
+  if (!(error instanceof CanonicalSourceError)) return error;
+  if (error.code === "promotion-stale") {
+    return new ReadyPromotionIncompatibleError("cutoff-too-old");
+  }
+  // A stale observation is the only canonical result that is a safe typed
+  // abandon.  Chain/number/hash/state-root/header mismatches are integrity
+  // failures: converting them to an abandon authority would let corruption
+  // or a malformed provider response delete a durable staged closure.
+  return error;
+}
+
+export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort {
   readonly #expectedCaller: object;
   readonly #store: ReadyStorePort;
-  readonly #canonical: CanonicalPromotionPort;
+  readonly #canonical: CanonicalFencePort;
   readonly #monotonicNow: () => string;
   readonly #currentDefinitionCatalog: () => CurrentDefinitionCatalogV1;
+  readonly #promotionAuthority: ReadyPromotionAuthorityPort;
+  readonly #sealedRunReader: SealedRunReaderPortV1;
+  readonly #releaseBindingPort: ReturnType<typeof assertIssuedRuntimeReleaseReadyBindingPort>;
+  readonly #servingAdmissions = new WeakMap<object, ServingValidationInputV1>();
 
   constructor(
     expectedCaller: object,
     store: ReadyStorePort,
-    canonical: CanonicalPromotionPort,
+    canonical: CanonicalFencePort,
     monotonicNow: () => string,
     currentDefinitionCatalog: () => CurrentDefinitionCatalogV1,
+    promotionAuthority: ReadyPromotionAuthorityPort,
+    sealedRunReader: SealedRunReaderPortV1,
+    releaseBindingPort: object,
   ) {
     this.#expectedCaller = expectedCaller;
     this.#store = store;
     this.#canonical = canonical;
     this.#monotonicNow = monotonicNow;
     this.#currentDefinitionCatalog = currentDefinitionCatalog;
+    this.#promotionAuthority = promotionAuthority;
+    this.#sealedRunReader = assertCheckpointSealedRunReader(sealedRunReader);
+    this.#releaseBindingPort = assertIssuedRuntimeReleaseReadyBindingPort(releaseBindingPort);
   }
 
   async promote(caller: object, input: ReadyPromotionInputV1): Promise<ReadyGenerationV1> {
     if (caller !== this.#expectedCaller) throw new Error("promotion-caller-unauthorized");
-    assertPromotionInput(input);
-    const { run, instanceCatalog, policy } = input;
+    const { instanceCatalog, policy } = input;
+    const run = this.#sealedRunReader.readForPromotion(input.sealedRun, instanceCatalog);
+    assertPromotionInput(input, run);
+    const currentReleaseProvenanceHash = this.#releaseBindingPort.currentProvenanceHash();
+    if (run.releaseProvenanceHash !== currentReleaseProvenanceHash) {
+      throw new ReadyPromotionIncompatibleError("release-binding-changed");
+    }
     const currentCatalog = this.#currentDefinitionCatalog();
     if (run.definitionCatalogRoot !== currentCatalog.definitionCatalogRoot) {
-      throw new Error("promotion-definition-catalog-mismatch");
+      throw new ReadyPromotionIncompatibleError("definition-catalog-changed");
     }
+    if (sourcePlanRootForCoverage(run.sourceCoverage) !== sourcePlanSetRoot(currentCatalog.declaredSourcePlans)) {
+      throw new ReadyPromotionIncompatibleError("source-plan-changed");
+    }
+    this.#promotionAuthority.assertConfiguration({
+      definitionCatalogRoot: run.definitionCatalogRoot,
+      generationRefreshPolicyHash: generationRefreshPolicyHash(policy),
+      releaseProvenanceHash: run.releaseProvenanceHash,
+    });
     validateSourceCoverageCertificate(run.sourceCoverage, currentCatalog.declaredSourcePlans);
-    await this.#canonical.assertStillCanonical(run.cutoff);
-    const age = decimal(await this.#canonical.ageInBlocks(run.cutoff), "promotionAge");
+    const expectedRange = this.#canonical.recentObservationRange(run.cutoff);
+    if (
+      run.recentObservationRange.from !== expectedRange.from
+      || run.recentObservationRange.to !== expectedRange.to
+    ) throw new Error("recent-observation-range-mismatch");
+    await this.#assertPromotionCanonical(run.cutoff);
     const latest = decimal(policy.maxServingAgeBlocks, "maxServingAgeBlocks")
       - decimal(policy.minPromotionMarginBlocks, "minPromotionMarginBlocks");
-    if (age > latest) throw new Error("promotion-cutoff-too-old");
 
     const graph = buildPersistedGraph(instanceCatalog);
     const instanceCatalogContentHash = await this.#store.putContentAndFsync("instance-catalog", instanceCatalog);
@@ -199,8 +929,6 @@ export class ReadyGenerationServiceV1 {
     if (graphContentHash !== graph.graphRoot) throw new Error("graph-content-hash-mismatch");
 
     const policyHash = generationRefreshPolicyHash(policy);
-    const promotedAtMonotonicNs = this.#monotonicNow();
-    decimal(promotedAtMonotonicNs, "promotedAtMonotonicNs");
     const generationId = hashDomain("aloha/ready-generation-id/v1", {
       parentGenerationId: input.parentGenerationId,
       runId: run.runId,
@@ -209,8 +937,10 @@ export class ReadyGenerationServiceV1 {
       instanceCatalogRoot: instanceCatalog.instanceCatalogRoot,
       graphRoot: graph.graphRoot,
       policyHash,
+      releaseProvenanceHash: run.releaseProvenanceHash,
+      candidatePartitionProofStorageHash: run.candidatePartitionProofStorageHash,
     });
-    const withoutRevision = deepFreeze({
+    const readyBase = deepFreeze({
       generationId,
       parentGenerationId: input.parentGenerationId,
       generationRefreshPolicyHash: policyHash,
@@ -219,39 +949,152 @@ export class ReadyGenerationServiceV1 {
       definitionCatalogRoot: run.definitionCatalogRoot,
       sourceCoverageRoot: run.sourceCoverage.sourceCoverageRoot,
       candidatePartitionRoot: run.candidatePartitionRoot,
+      candidatePartitionProofStorageHash: run.candidatePartitionProofStorageHash,
+      releaseProvenanceHash: run.releaseProvenanceHash,
+      exactOutcomePartitionRoot: run.partition.exactOutcomePartitionRoot,
       verifiedMemoSetRoot: run.verifiedMemoSetRoot,
       instanceCatalogRoot: instanceCatalog.instanceCatalogRoot,
       graphRoot: graph.graphRoot,
       edgeCount: graph.edgeCount,
       instanceCount: instanceCatalog.instanceCount,
-      promotedAtMonotonicNs,
     });
-    const committed = await this.#canonical.withPromotionFence(run.cutoff, async fence => {
+    let committed: {
+      readonly result: ReadyCommitResultV1;
+      readonly readyBase: ReadyGenerationBaseV1;
+      readonly freshness: PromotionFreshnessReceiptV1;
+      readonly promotedAtMonotonicNs: string;
+    };
+    try {
+      committed = await this.#canonical.withCanonicalFence(run.cutoff, async fence => {
+      if (this.#releaseBindingPort.currentProvenanceHash() !== run.releaseProvenanceHash) {
+        throw new ReadyPromotionIncompatibleError("release-binding-changed");
+      }
       const fencedCatalog = this.#currentDefinitionCatalog();
       if (run.definitionCatalogRoot !== fencedCatalog.definitionCatalogRoot) {
-        throw new Error("promotion-definition-catalog-mismatch");
+        throw new ReadyPromotionIncompatibleError("definition-catalog-changed");
+      }
+      if (sourcePlanRootForCoverage(run.sourceCoverage) !== sourcePlanSetRoot(fencedCatalog.declaredSourcePlans)) {
+        throw new ReadyPromotionIncompatibleError("source-plan-changed");
       }
       validateSourceCoverageCertificate(run.sourceCoverage, fencedCatalog.declaredSourcePlans);
-      return this.#store.commitReadyCAS({
+      const authority = this.#promotionAuthority.issue({
         expectedRevision: run.checkpointRevision,
         expectedInProgressRunId: run.runId,
-        fence,
-        graph,
-        instanceCatalog,
-        ready: withoutRevision,
+        cutoff: run.cutoff,
+        definitionCatalogRoot: run.definitionCatalogRoot,
+        instanceCatalogRoot: instanceCatalog.instanceCatalogRoot,
+        graphRoot: graph.graphRoot,
+        releaseProvenanceHash: run.releaseProvenanceHash,
+        candidatePartitionProofStorageHash: run.candidatePartitionProofStorageHash,
+        policy,
       });
-    });
-    const readyPayload = { ...withoutRevision, promotionRevision: committed.promotionRevision };
+      try {
+        // Stage the complete, expensive closure first.  This transaction leaves
+        // the existing ready generation and the in-progress run untouched from
+        // a serving perspective.  Only the following activation may publish it.
+        const stage = await this.#store.stageReadyCAS({
+          authority,
+          policy,
+          expectedRevision: run.checkpointRevision,
+          expectedInProgressRunId: run.runId,
+          fence,
+          graph,
+          instanceCatalog,
+          ready: readyBase,
+        });
+        assertReadyStageResult(stage, run, instanceCatalog, readyBase, policyHash);
+        const freshness = await this.#canonical.observePromotionFreshness(fence, {
+          cutoff: run.cutoff,
+          maxPromotionAgeBlocks: latest.toString(),
+          generationRefreshPolicyHash: policyHash,
+        });
+        const promotedAtMonotonicNs = this.#monotonicNow();
+        decimal(promotedAtMonotonicNs, "promotedAtMonotonicNs");
+        const result = await this.#store.activateReadyCAS({
+          authority,
+          policy,
+          expectedRevision: run.checkpointRevision,
+          expectedInProgressRunId: run.runId,
+          fence,
+          freshness,
+          stage: stage.stage,
+          stageRevision: stage.stageRevision,
+          stageRecordHash: stage.stageRecordHash,
+          promotedAtMonotonicNs,
+        });
+        return deepFreeze({ result, readyBase, freshness: freshness.receipt, promotedAtMonotonicNs });
+      } finally {
+        this.#promotionAuthority.revoke(authority);
+      }
+      });
+    } catch (error) {
+      throw classifyCanonicalPromotionError(error);
+    }
+    const readyPayload = {
+      ...committed.readyBase,
+      promotionFreshness: committed.freshness,
+      promotedAtMonotonicNs: committed.promotedAtMonotonicNs,
+      promotionRevision: committed.result.promotionRevision,
+    };
     const expectedReadyRecordHash = hashDomain("aloha/ready-generation/v1", readyPayload);
-    if (committed.readyRecordHash !== expectedReadyRecordHash) {
+    if (committed.result.readyRecordHash !== expectedReadyRecordHash) {
       throw new Error("ready-record-hash-mismatch");
     }
-    const ready = deepFreeze({ ...readyPayload, readyRecordHash: committed.readyRecordHash });
-    await this.#canonical.assertStillCanonical(run.cutoff);
+    const ready = deepFreeze({ ...readyPayload, readyRecordHash: committed.result.readyRecordHash });
+    if (this.#releaseBindingPort.currentProvenanceHash() !== ready.releaseProvenanceHash) {
+      throw new ReadyPromotionIncompatibleError("release-binding-changed");
+    }
+    await this.#assertPromotionCanonical(run.cutoff);
+    this.#store.assertReadyAuthorityActive({
+      generationId: ready.generationId,
+      readyRecordHash: ready.readyRecordHash,
+      generationRefreshPolicyHash: ready.generationRefreshPolicyHash,
+      cutoff: ready.cutoff,
+      definitionCatalogRoot: ready.definitionCatalogRoot,
+      instanceCatalogRoot: ready.instanceCatalogRoot,
+      graphRoot: ready.graphRoot,
+      releaseProvenanceHash: ready.releaseProvenanceHash,
+      candidatePartitionProofStorageHash: ready.candidatePartitionProofStorageHash,
+    });
+    await this.#assertPromotionCanonical(run.cutoff);
     return ready;
   }
 
-  async validateServing(input: ServingValidationInputV1): Promise<void> {
+  async #assertPromotionCanonical(cutoff: CanonicalCutoffV1): Promise<void> {
+    try {
+      await this.#canonical.assertStillCanonical(cutoff);
+    } catch (error) {
+      throw classifyCanonicalPromotionError(error);
+    }
+  }
+
+  async validateServing(rawInput: ServingValidationInputV1): Promise<GraphServingAdmissionV1> {
+    const input = decodeCanonicalJson(encodeCanonicalBytes(rawInput)) as unknown as ServingValidationInputV1;
+    await this.#validateServingBinding(input);
+    const opaque = Object.freeze({});
+    this.#servingAdmissions.set(opaque, deepFreeze(input));
+    return Object.freeze({ opaque });
+  }
+
+  async assertServingBindingCurrent(binding: GraphLeaseBindingV1): Promise<void> {
+    if (this.#releaseBindingPort.currentProvenanceHash() !== binding.releaseProvenanceHash) {
+      throw new Error("serving-release-binding-mismatch");
+    }
+    this.#promotionAuthority.assertConfiguration({
+      definitionCatalogRoot: binding.definitionCatalogRoot,
+      generationRefreshPolicyHash: binding.generationRefreshPolicyHash,
+      releaseProvenanceHash: binding.releaseProvenanceHash,
+    });
+    await this.#canonical.assertStillCanonical(binding.cutoff);
+    this.#store.assertReadyAuthorityActive(binding);
+    await this.#canonical.assertStillCanonical(binding.cutoff);
+    if (this.#releaseBindingPort.currentProvenanceHash() !== binding.releaseProvenanceHash) {
+      throw new Error("serving-release-binding-mismatch");
+    }
+  }
+
+  async #validateServingBinding(input: ServingValidationInputV1): Promise<GraphLeaseBindingV1> {
+    validateReadyGeneration(input.ready);
     const expectedPolicyHash = generationRefreshPolicyHash(input.policy);
     const currentCatalog = this.#currentDefinitionCatalog();
     if (
@@ -263,6 +1106,18 @@ export class ReadyGenerationServiceV1 {
     if (input.ready.generationRefreshPolicyHash !== expectedPolicyHash) {
       throw new Error("serving-policy-mismatch");
     }
+    const currentReleaseProvenanceHash = this.#releaseBindingPort.currentProvenanceHash();
+    if (
+      currentCatalog.releaseProvenanceHash !== currentReleaseProvenanceHash
+      || input.ready.releaseProvenanceHash !== currentReleaseProvenanceHash
+    ) {
+      throw new Error("serving-release-binding-mismatch");
+    }
+    this.#promotionAuthority.assertConfiguration({
+      definitionCatalogRoot: input.ready.definitionCatalogRoot,
+      generationRefreshPolicyHash: input.ready.generationRefreshPolicyHash,
+      releaseProvenanceHash: input.ready.releaseProvenanceHash,
+    });
     await this.#canonical.assertStillCanonical(input.ready.cutoff);
     const age = decimal(await this.#canonical.ageInBlocks(input.ready.cutoff), "servingAge");
     if (age > decimal(input.policy.maxServingAgeBlocks, "maxServingAgeBlocks")) {
@@ -277,11 +1132,15 @@ export class ReadyGenerationServiceV1 {
       definitionCatalogRoot: input.ready.definitionCatalogRoot,
       sourceCoverageRoot: input.ready.sourceCoverageRoot,
       candidatePartitionRoot: input.ready.candidatePartitionRoot,
+      candidatePartitionProofStorageHash: input.ready.candidatePartitionProofStorageHash,
+      releaseProvenanceHash: input.ready.releaseProvenanceHash,
+      exactOutcomePartitionRoot: input.ready.exactOutcomePartitionRoot,
       verifiedMemoSetRoot: input.ready.verifiedMemoSetRoot,
       instanceCatalogRoot: input.ready.instanceCatalogRoot,
       graphRoot: input.ready.graphRoot,
       edgeCount: input.ready.edgeCount,
       instanceCount: input.ready.instanceCount,
+      promotionFreshness: input.ready.promotionFreshness,
       promotedAtMonotonicNs: input.ready.promotedAtMonotonicNs,
       promotionRevision: input.ready.promotionRevision,
     };
@@ -310,5 +1169,42 @@ export class ReadyGenerationServiceV1 {
     ) throw new Error("serving-ready-closure-mismatch");
     await this.#store.assertContentRoot("candidate-partition", input.ready.candidatePartitionRoot);
     await this.#store.assertContentRoot("verified-memo-set", input.ready.verifiedMemoSetRoot);
+    await this.#canonical.assertStillCanonical(input.ready.cutoff);
+    this.#store.assertReadyAuthorityActive({
+      generationId: input.ready.generationId,
+      readyRecordHash: input.ready.readyRecordHash,
+      generationRefreshPolicyHash: input.ready.generationRefreshPolicyHash,
+      definitionCatalogRoot: input.ready.definitionCatalogRoot,
+      instanceCatalogRoot: input.ready.instanceCatalogRoot,
+      graphRoot: input.ready.graphRoot,
+      cutoff: input.ready.cutoff,
+      releaseProvenanceHash: input.ready.releaseProvenanceHash,
+      candidatePartitionProofStorageHash: input.ready.candidatePartitionProofStorageHash,
+    });
+    const binding = deepFreeze({
+      generationId: input.ready.generationId,
+      readyRecordHash: input.ready.readyRecordHash,
+      generationRefreshPolicyHash: input.ready.generationRefreshPolicyHash,
+      cutoff: deepFreeze({ ...input.ready.cutoff }),
+      definitionCatalogRoot: input.ready.definitionCatalogRoot,
+      instanceCatalogRoot: input.ready.instanceCatalogRoot,
+      graphRoot: input.ready.graphRoot,
+      releaseProvenanceHash: input.ready.releaseProvenanceHash,
+      candidatePartitionProofStorageHash: input.ready.candidatePartitionProofStorageHash,
+    });
+    return binding;
+  }
+
+  async consumeServingAdmission(rawAdmission: GraphServingAdmissionV1): Promise<GraphLeaseBindingV1> {
+    assertPlainObject(rawAdmission, "graphServingAdmission");
+    assertExactKeys(rawAdmission, ["opaque"], "graphServingAdmission");
+    const opaque = readOwnEnumerableDataProperty(rawAdmission, "opaque", "graphServingAdmission");
+    if (typeof opaque !== "object" || opaque === null) {
+      throw new TypeError("graphServingAdmission.opaque is invalid");
+    }
+    const input = this.#servingAdmissions.get(opaque);
+    if (!input) throw new Error("graph-serving-admission-not-issued");
+    this.#servingAdmissions.delete(opaque);
+    return this.#validateServingBinding(input);
   }
 }

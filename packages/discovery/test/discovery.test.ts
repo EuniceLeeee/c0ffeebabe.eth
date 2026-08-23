@@ -104,12 +104,14 @@ const execution = (
   from: string,
   through: string,
   previousAppliedThrough: string | null,
+  historyStartBlock: string | null = completeness === "contiguous-history" ? "0" : null,
 ): SourcePlanExecutionV1 => ({
   plan: {
     ownerRef: h(`owner:${completeness}`),
     sourcePlanRef: h(`plan:${completeness}`),
     familyDefinitionHash: h("definition"),
     completeness,
+    historyStartBlock,
   },
   cutoff,
   outcome: completeness === "nomination-only" ? "positive-only" : "complete",
@@ -139,6 +141,57 @@ test("only complete snapshot/history advance omission authority", () => {
     "point-lookup": false,
     "nomination-only": false,
   });
+});
+
+test("the first contiguous-history execution must begin at the declared history start", () => {
+  const anchored = execution("contiguous-history", "0", "100", null, "0");
+  const certificate = sealSourceCoverage(cutoff, [anchored.plan], [anchored]);
+  assert.equal(certificate.entries[0]?.historyStartBlock, "0");
+  assert.equal(certificate.entries[0]?.previousAppliedThrough, null);
+  assert.equal(certificate.entries[0]?.contributesOmissionAuthority, true);
+  assert.throws(
+    () => sealSourceCoverage(
+      cutoff,
+      [execution("contiguous-history", "0", "100", null, "0").plan],
+      [execution("contiguous-history", "1", "100", null, "0")],
+    ),
+    /history-start-gap/,
+  );
+});
+
+test("an execution cannot rewrite its declared history authority", () => {
+  const declared = execution("contiguous-history", "0", "100", null, "0");
+  const rewritten = execution("contiguous-history", "1", "100", null, "1");
+  assert.throws(
+    () => sealSourceCoverage(cutoff, [declared.plan], [rewritten]),
+    /undeclared-source-partition/,
+  );
+});
+
+test("a later contiguous-history execution must bind the prior cursor", () => {
+  const later = execution("contiguous-history", "91", "100", "90", "0");
+  const certificate = sealSourceCoverage(cutoff, [later.plan], [later]);
+  validateSourceCoverageCertificate(certificate, [later.plan]);
+  assert.throws(
+    () => sealSourceCoverage(
+      cutoff,
+      [execution("contiguous-history", "91", "100", "89", "0").plan],
+      [execution("contiguous-history", "91", "100", "89", "0")],
+    ),
+    /history-cursor-gap/,
+  );
+  const forgedEntry = { ...certificate.entries[0]!, previousAppliedThrough: null };
+  const forgedRoot = hashDomain("aloha/source-coverage/v1", {
+    cutoff: certificate.cutoff,
+    entries: [forgedEntry],
+  });
+  assert.throws(
+    () => validateSourceCoverageCertificate(
+      { ...certificate, entries: [forgedEntry], sourceCoverageRoot: forgedRoot },
+      [later.plan],
+    ),
+    /history-start-gap/,
+  );
 });
 
 test("cursor gaps and transport failures never advance coverage", () => {
@@ -186,6 +239,19 @@ test("persisted coverage root and declared-plan partition are revalidated at pro
   );
 });
 
+test("persisted coverage entries have one canonical order", () => {
+  const snapshot = execution("complete-snapshot", "100", "100", null);
+  const point = execution("point-lookup", "100", "100", null);
+  const certificate = sealSourceCoverage(cutoff, [snapshot.plan, point.plan], [snapshot, point]);
+  assert.throws(
+    () => validateSourceCoverageCertificate(
+      { ...certificate, entries: [...certificate.entries].reverse() },
+      [snapshot.plan, point.plan],
+    ),
+    /coverage-entry-order-mismatch/,
+  );
+});
+
 test("source coverage rejects non-array entries, bad ranges, and forged completeness semantics", () => {
   const value = execution("complete-snapshot", "100", "100", null);
   const certificate = sealSourceCoverage(cutoff, [value.plan], [value]);
@@ -212,5 +278,10 @@ test("source coverage rejects non-array entries, bad ranges, and forged complete
   assert.throws(
     () => sealSourceCoverage(cutoff, [outside.plan], [outside]),
     /source-range-outside-cutoff/,
+  );
+  const multiBlockPoint = execution("point-lookup", "99", "100", null);
+  assert.throws(
+    () => sealSourceCoverage(cutoff, [multiBlockPoint.plan], [multiBlockPoint]),
+    /point-lookup-incomplete/,
   );
 });

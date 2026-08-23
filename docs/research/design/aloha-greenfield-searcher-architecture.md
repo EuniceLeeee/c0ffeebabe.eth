@@ -672,6 +672,17 @@ flowchart TD
 - apps/operator-cli直接打开durable DB、构造candidate或取得PromotionCallerToken；它只能读status snapshot或经
   runtime-local admin port请求同run retryable probe；
 - Family import checkpoint、Graph internal container、submission 或 deploy；
+- Family依赖采用default-deny：只允许same-Family内部、`family-sdk/runtime-refs`、`capability-contracts`、
+  `canonical-codec`及明确冻结为纯contract/codec的artifact-fingerprint入口；其余`packages/**`、全部`apps/**`与
+  `runtime/**`一律拒绝。不得为某个Family新增中央allowlist分支；新增通用入口必须先成为独立、无authority的
+  capability contract并由受影响dependency closure精确重验；
+- `src/internal/**`下的issuer、authority constructor、physical store constructor与worker controller按exact owner
+  edge default-deny。只有machine-readable owner/composition manifest声明的生成runtime边可导入；普通central、
+  Family与production runtime都不能直接取得这些constructor。`internal/`路径名和TypeScript type-only import本身
+  都不是安全边界；
+- production runtime只能消费exact generated runtime composition提供的窄ports；它不能直接import scheduler issuer、
+  work-plane constructor、attestation/checkpoint authority、durable-store constructor或REVM worker controller。
+  Generated composition必须继续由专用ledger逐字重建，不能用手写facade把direct import重新包装；
 - telemetry 被任一 authority decision 读取；
 - generated artifact 反向 import source generator。
 
@@ -1113,15 +1124,46 @@ type TransportFact =
 
 type ProgramInterpretation<O> =
   | { kind: "verified"; output: O }
-  | { kind: "chainProvenRejected"; proof: ChainRejectionProof }
+  | { kind: "chainProvenRejected"; factSet: FrameworkFactSetCapability; decisionCode: string }
   | { kind: "retryable"; failure: RetryableFailure }
   | { kind: "invalidProgram"; defect: ProgramDefect };
 
 type AttestationOutcome =
   | { kind: "verified"; memo: VerifiedMemoDraft }
-  | { kind: "chainProvenRejected"; proof: ChainRejectionProof }
+  | { kind: "chainProvenRejected"; proof: ChainRejectionProofV2; evidence: RejectionEvidenceBundleV2 }
   | { kind: "retryable"; failure: RetryableFailure }
   | { kind: "invalidProgram"; defect: ProgramDefect };
+
+interface RejectionEvidenceBundleV2 {
+  kind: "aloha.rejection-evidence-bundle";
+  version: "2";
+  issuerId: "aloha/attestation-rejection-facts/v2";
+  runId: RunId;
+  chainId: DecimalString;
+  cutoffNumber: DecimalString;
+  cutoffHash: Hash;
+  cutoffStateRoot: Hash;
+  stage: "identity" | "materialization" | "projection";
+  familyDefinitionHash: Hash;
+  familyCandidateKey: Hash;
+  candidateSnapshotHash: Hash;
+  identitySubjectHash: Hash | null;
+  instanceNominationKey: string | null;
+  executorAuthorityRoot: Hash;
+  workerEpoch: string;
+  executorSessionHash: Hash;
+  executionSessionHash: Hash;
+  request: PersistedRequestRecordV1;
+  transportFacts: readonly PersistedTransportFactRecordV1[];
+  effectObservations: readonly PersistedEffectObservationRecordV1[];
+  decisionCode: string;
+  decisionBytesHex: BytesHex;
+  requestFingerprint: Hash;
+  orderedTransportFactsRoot: Hash;
+  effectObservationRoot: Hash;
+  decisionBytesHash: Hash;
+  evidenceBundleRoot: Hash;
+}
 ~~~
 
 [PFD] returned 0x、revert、空 effects、decode throw、同批另一个 request 的结果，都不能被中央组合成
@@ -1129,6 +1171,55 @@ terminal rejection。只有 owning plugin 对自己的完整 request/effect fact
 chainProvenRejected。Plugin throw、codec mismatch、缺 request result、非法 caller mode、ABI/program
 形状错误属于 invalidProgram；RPC、deadline、abort、queue full、worker crash、resource limit 属于
 retryable。
+
+[PFD] “完整facts”不能退化为plugin自报的几个Hash。Unified work plane从真实FrozenProgram execution产生并
+持有process-local不可伪造FrameworkFactSetCapability，exact绑定run/candidate/cutoff/stage、request program、
+ordered returned/reverted/transport facts、effect observations、source anchors、worker execution epoch与decision
+bytes。Plugin只能解释该只读fact view并把同一capability交回；中央从issuer-owned bundle真实bytes重算
+requestFingerprint、orderedFactsRoot、effectRoot、decisionBytesHash、evidenceBundleRoot和最终proof。公开的
+`sealRejectionProof(hashFields)`不是plugin API；无issuer token、clone/手写token、缺child bytes或跨request/candidate
+拼接一律变invalidProgram，绝不能terminal。
+
+[PFD] `executorAuthorityRoot`与`workerEpoch`不能由executor在普通返回对象中自报。Scheduler/work-plane先以
+release binding中的`workerEpoch`作为受签名的epoch namespace。runtime owner先让deployment-issued Scheduler
+签发一个新executor session，再从该不可预测session hash派生`<namespace>/<session-hash>`作为physical
+worker epoch，最后由Scheduler对该epoch签发独立的最终execution session。同一release内两个并存、replacement
+或process restart后的worker不得共享physical epoch；epoch和最终session同时进入request/response/receipt。
+这两次签发都是deployment-owned capability state，不是持久化topology、本地计数器或caller可注入字段；旧controller
+不得跨process复用。
+process-local opaque capability绑定qualified executor、exact cutoff、executor authority root、worker epoch与
+execution session root；transport只能通过该capability执行，source anchor由authority stamp，或逐child与authority
+exact-equal后才进入fact set。Attestation service在构造时闭包持有这个authority与terminal validator，Family每次
+调用只能取得program builder、只读facts和一次性decision token；`attestFixedCutoffPartition()`不得接受caller临时
+注入的structural executor/runtime/`validateDecision`。伪executor、伪runtime、stale/mixed epoch、跨authority child
+和freeze后context mutation全部是invalidProgram/fatal authority violation，不得生成terminal outcome。
+
+[PFD] 同样地，`AttestationProgramPort`与`InstanceLifecycleSingleFlightPort`不能作为每次调用的structural参数。
+Generated release composition在构造service时绑定exact catalog-backed program resolver、instance lifecycle与outcome
+sink；公开run方法只接收run/cutoff/exact candidate partition和signal。否则caller可实现一个fake
+`materializeAndProject()`返回hash自洽publication，再由真实Attestation service替它签发verified outcome。新增Family
+只增加generated resolver leaf，不能取得service constructor、outcome issuer或checkpoint writer。
+
+[PFD] 把issuer constructor放进`src/internal`或generated目录本身不构成release资格。Qualified executor issuer
+必须消费candidate closure之外的release boundary已经验签并签发的process-local capability；该capability绑定exact
+signed release approval、candidate commit、release-role-manifest root、executor registry root与选中的worker
+implementation leaf。普通struct `registry + releasePin`即使哈希完全自洽也不能打开issuer。Candidate repo中的
+generated authority固定为`null`并fail closed；测试issuer物理位于test-only closure，不能被production import graph
+解析。新增executor只增加外部reviewed registry leaf与generated composition，不修改Family、planner或中央dispatch。
+
+[PFD] Active run中的chainProvenRejected outcome物理引用exact一个RejectionEvidenceBundle；bundle继续exact引用
+FrozenRequest、每个ordered transport fact/raw returned-or-reverted bytes、effect observation、decision bytes记录。
+semantic roots与StorageHash分离，load/reopen/seal/promotion前全部重算child set、顺序与proof lineage。少/多/改写/
+重排任一record都fail closed。Rejection不跨cutoff复用，promotion后该bundle不进入ready closure，可按retention/GC
+回收；但在它作为terminal outcome阻止pending时必须root-reachable，只有hash没有物理事实不能算complete partition。
+
+[PFD] Checkpoint不接受raw `CandidateFinalOutcome`、raw `AttestationPartition`或caller提供的validator。Attestation
+service对每个真实完成的candidate签发一次性process-local persistence capability，并在partition完成时签发exact
+partition capability；writer只消费这些capability并把其authority root、signed release approval id、executor
+registry root、run/cutoff/candidate root与outcome/partition root写入durable closure。WeakMap只阻止同进程伪造，
+不能证明restart；重开数据库时必须以当前外部release authority验证持久化certificate和全部binding。手写或clone
+capability、另一service签发、跨run/cutoff/candidate、stale/rotated authority、自洽bundle但current registry不匹配
+全部fail closed。`retryable -> final`的probe CAS也消费同一正常attestation capability，不能保留raw replacement旁路。
 
 [PFD] invalidProgram 与 retryable 都阻止 startup ready；二者区别是 invalidProgram 需要修代码或合同，
 不得无限自动重试，retryable 可以按有界 policy 重试。二者均不是链上否定，不能永久排除实例。
@@ -1165,7 +1256,7 @@ top-level-transaction 与最终 simulation 始终保持 EIP-3607。禁止全局�
 
 ### 12.3 Plugin verdict 与 proof binding
 
-[PFD] ChainRejectionProof 必须同时绑定：
+[PFD] ChainRejectionProofV2 必须同时绑定：
 
 ~~~text
 familyDefinitionHash
@@ -1246,6 +1337,29 @@ evaluator，不修改work-plane source，也不使未依赖该capability的memo�
 recentObservationRange = [max(chainGenesis, cutoff.number - 49), cutoff.number]
 ~~~
 
+[PFD] RecentObservationReceipt持久化该范围内每一个exact ordered header：`number + hash + parentHash`，而不只
+保存一组block hash。恢复、promotion与serve都重新验证连续编号、每个`parentHash == previous.hash`、最后一个
+header等于cutoff，以及每条evidence的blockNumber/blockHash确实命中对应header。缺header、重排、parent断裂或
+evidence指向同高度另一hash均fail closed；不能用重算一个自洽root掩盖非canonical区块序列。
+
+[PFD] canonical-source把读取结果冻结为三种互斥事实：`found(header) | chainProvenAbsent(evidence) |
+unavailable(failureCode)`。`unavailable`与transport exception永远只产生retryable，不能被中央解释成链上否定；
+`chainProvenAbsent`只有在同一个CanonicalSource私有journal已签发完全相同的evidence时才成立。evidence必须绑定
+chainId、number、expected hash/stateRoot、replacement hash/stateRoot、journalEpoch与canonicalJournalRoot；provider
+返回的自声明evidence、跨source实例replay或任一字段变化都fail closed。terminal absence不跨cutoff成为永久排除。
+
+[PFD] `CanonicalFenceV1`是通用短生命周期journal fence，不是promotion专用DTO。它绑定issuer生成的不可伪造
+token、journalEpoch与完整cutoff，只能由同一CanonicalSource在active window内同步复核。promotion、probe与adoption
+可复用同一port，但不得复制成各自的兼容fence。final SQLite guard在COMMIT前最后同步点再次复核lease与fence；
+事务完成后仍必须重新读取canonical source，因为未通知reorg可能发生在任何本地CAS之后。
+
+[PFD] canonical journal本身必须是独立真实SQLite durable authority，而不是进程内Map。它持久化exact ordered
+issued-view set、revoked-view evidence、current view、journal epoch与journal root，并以CAS更新；构造CanonicalSource时
+先exact decode、重算root并恢复authority。任何已观察到的same-height hash/stateRoot变化由CanonicalSource自身在
+返回检查结果前durably revoke exact cutoff；即使provider随后重新返回旧header、进程重启或新进程取得journal，
+该cutoff也永久不能重新签发或serving。CAS冲突必须在改变任何内存epoch/current/issued状态前fail closed；未由该
+durable journal签发的view不能直接调用assert、fence或Graph lease guard。
+
 [PFD] 它只回答“近期发生了哪些可观察行为，可形成哪些 edge/activity evidence”。它不回答“链上历史
 存在过哪些实例”。完整身份 inventory 必须来自每个 Family 声明的 canonical SourcePlan：registry/
 factory 在 cutoff 的 point-in-time enumeration，或具有完整 cursor 的历史 source。历史 event scan只能
@@ -1260,8 +1374,13 @@ snapshot/history、且通过连续canonical extension更新到新cutoff时，才
 授予 omission authority。每个 SourcePlan 必须声明 completeness semantics：complete snapshot、contiguous
 history、point lookup 或 nomination-only；只有前两类可贡献对应 partition coverage。
 
-[PFD] coverage内部按`ownerRef × sourcePlanRef`保存watermark和issue attribution。`contiguous`只有在
-`from == previousAppliedThrough + 1`且该source exact partition完整时才推进；`positive-only`可以提交发现的
+[PFD] 每个contiguous-history SourcePlan还必须由owner声明固定`historyStartBlock`。第一次完整execution必须
+`from == historyStartBlock`且`previousAppliedThrough == null`；后续才允许
+`from == previousAppliedThrough + 1`。complete-snapshot、point-lookup与nomination-only不得夹带该字段。这样
+“从任意较新的cursor开始连续”不能冒充全历史omission authority。
+
+[PFD] coverage内部按`ownerRef × sourcePlanRef`保存historyStartBlock、watermark和issue attribution。
+`contiguous`只有在上述first-run或exact successor条件成立且该source exact partition完整时才推进；`positive-only`可以提交发现的
 candidate但永不推进omission/completeness。source失败只影响声明依赖它的owner partition，不能把整个Family或
 全部source抹成empty。watermark只由startup/next-generation builder在durable envelope内推进；producer没有
 live-backfill target、predecessor choreography或cursor writer。
@@ -1311,7 +1430,7 @@ nomination-key-collision invalidProgram并阻止ready，不能静默把错误key
 9. bounded workers只处理差集；single writer途中持久化；
 10. retryable/invalidProgram/pending非零时保持durable incomplete；
 11. exact partition、source coverage与canonical fence全部成立后构造catalog/Graph；
-12. 一次CAS promotion为readyGeneration，从其签发immutable GraphView，再创建producer。
+12. 先durable stage完整非active closure，final freshness后用一次minimal CAS激活readyGeneration，再从其签发immutable GraphView并创建producer。
 
 [PFD] Recent observation只有在Family声明recent-behavior capability时才进入其projection dependency root：
 例如“近期有行为”可改变active edge/priority，但“近期无行为”不能删除canonical identity。未声明该capability
@@ -1373,12 +1492,46 @@ Agent二选一。其他backend未来必须证明相同transaction/fsync/CAS语�
 revision拥有promotion pointer authority；durable-store只拥有物理durability/GC，且GC不得删除任何live root
 可达content。不每25条重写数万实例JSON。
 
+[PFD] durable-store打开文件时必须先资格化持久化store identity与schema contract：instance nonce、唯一role
+binding、schema version，以及六张core table的exact columns、indexes和规范化`sqlite_master.sql`全部进入schema
+digest，因此删除或改写CHECK/UNIQUE/FOREIGN KEY等表约束即使列/index名称不变也会fail closed。每次authority
+read/write都重新核对role marker，不能只在constructor缓存；复制identity row到另一数据库、删除/修改role或
+用同一文件冒充canonical-journal与checkpoint均拒绝。未来增加互不引用的独立表不改变core contract；任何core
+表或约束变化必须显式升schema版本，绿地runtime不提供旧版本migration reader。
+
+[PFD] durable content必须区分语义payload identity与物理storage identity，禁止同一个`Hash`概念在引用闭包中
+混用：
+
+~~~ts
+type PayloadHash = Hash; // sha256(exact bytes)，例如 rawLocatorHash
+type StorageHash = Hash; // 物理指针
+
+StorageHash = H("aloha/durable-content-envelope/v1", {
+  kind,
+  payloadHash: sha256(bytes),
+  references: sortUnique(physicalStorageHashes),
+});
+~~~
+
+[PFD] SQLite row同时保存并逐次重算`hash、payload_hash、kind、bytes、references`。相同bytes但kind或
+references不同必须得到不同StorageHash；所有root、page、record、memo与Graph物理引用只使用StorageHash。
+`rawLocatorHash`、catalogRoot、graphRoot等语义字段仍只表示PayloadHash/semantic root，必须经exact kind的
+record把语义hash映射到物理hash。GC只沿物理引用闭包遍历，绝不能把rawLocatorHash直接当storage pointer。
+
+[PFD] checkpoint的versioned executable schema manifest绑定durable envelope domain、每个record的exact fields/
+union variants、semantic hash domain、codec/refinement authority与physical reference contract；manifest hash进入
+root。release compiler closure另外绑定实际decoder/reference-validator实现，不能用`Function.toString()`或同名
+字符串替代。打开旧版本、未知schema、缺字段、额外字段或schema/hash实现不一致的数据库直接fail closed；
+绿地实现不提供migration reader、dual schema或compat wrapper。
+
 ~~~ts
 interface CheckpointRootV1 {
   revision: U64String;
   verifiedMemoRoot: Hash;
   inProgressRunId: RunId | null;
   latestMemoSeedReceiptHash: Hash | null;
+  memoSeedSequence: U64String;
+  memoSeedLineageRoot: Hash;
   readyGenerationId: GenerationId | null;
   readyGenerationRecordHash: Hash | null;
   schemaHash: Hash;
@@ -1386,14 +1539,17 @@ interface CheckpointRootV1 {
 
 interface InProgressRunV1 {
   runId: RunId;
+  parentGenerationId: GenerationId | null;
+  checkpointRevision: U64String;
+  // candidate partition创建时的不可变revision；outcome/probe推进不得改写。
+  candidatePartitionRevision: U64String;
   cutoff: CanonicalCutoff;
-  recentObservationRange: BlockRange;
-  candidateSetHash: Hash;
+  recentObservationRoot: Hash;
   candidatePartitionRoot: Hash;
   candidateRecordCount: U64String;
   sourceCoverageRoot: Hash;
   definitionCatalogRoot: Hash;
-  outcomesRoot: Hash;
+  outcomePartitionRoot: Hash;
   accounting: {
     pending: U64String;
     verified: U64String;
@@ -1403,33 +1559,116 @@ interface InProgressRunV1 {
   };
 }
 
+interface CandidatePartitionProofV1 {
+  runId: RunId;
+  cutoff: CanonicalCutoff;
+  candidatePartitionRoot: Hash;
+  candidatePartitionStorageHash: StorageHash;
+  candidateKeysRoot: Hash;
+  recordCount: U64String;
+  recentObservationRoot: Hash;
+  sourceCoverageRoot: Hash;
+  checkpointRevision: U64String; // == candidatePartitionRevision
+  releaseProvenanceHash: Hash;
+  issuerKeyId: Hash;
+  payloadHash: Hash;
+  proofId: Hash;
+  signatureAlgorithm: "ed25519";
+  signerKeyId: Hash;
+  signatureHex: Hex;
+}
+
+interface CandidatePartitionCommitmentV1 {
+  readyRecordHash: Hash;
+  runId: RunId;
+  cutoff: CanonicalCutoff;
+  candidatePartitionRoot: Hash;
+  candidatePartitionStorageHash: StorageHash;
+  candidateRecordCount: U64String;
+  candidateKeysRoot: Hash;
+  recentObservationRoot: Hash;
+  sourceCoverageRoot: Hash;
+  checkpointRevision: U64String;
+  candidatePartitionProofStorageHash: StorageHash;
+  exactOutcomePartitionRoot: Hash;
+  sealedRevision: U64String;
+  stageRevision: U64String;
+  stageRecordHash: Hash;
+  readyBaseHash: Hash;
+  // physical references = exact candidate manifest + signed proof
+}
+
 interface SealedMemoSeedReceiptV1 {
   runId: RunId;
   cutoff: CanonicalCutoff;
   definitionCatalogRoot: Hash;
-  coreEnvelopeSchemaHash: Hash;
+  checkpointSchemaHash: Hash;
   candidatePartitionRoot: Hash;
   sourceCoverageRoot: Hash;
   exactOutcomePartitionRoot: Hash;
-  carriedVerifiedMemoRoot: Hash;
+  verifiedMemoRoot: Hash;
   reason: "cutoff-too-old-for-serving";
   sealedRevision: U64String;
+  sequence: U64String;
+  priorReceiptHash: Hash | null;
+  priorLineageRoot: Hash;
+  receiptLineageRoot: Hash;
 }
 ~~~
 
 [PFD] CandidateRecord set在beginNewRun事务中以RunCandidateKey内容寻址持久化；record含compact canonical
-candidate snapshot、完整evidence refs、Family definition与nomination key。candidateSetHash证明语义exact
-set，candidatePartitionRoot使payload可恢复；只有hash没有records不能resume。它属于唯一inProgressRun
+candidate snapshot、完整evidence refs、Family definition与nomination key。candidatePartitionRoot证明语义exact
+set并使payload可恢复；只有hash没有records不能resume。它属于唯一inProgressRun
 authority，不是独立长期candidate journal，run seal/retention后按policy回收。
+
+[PFD] beginNewRun必须在同一SQLite transaction内先写完整candidate records与manifest，再让candidate外的
+release-bound issuer对`CandidatePartitionProofV1`签名并立即按current runtime release binding复验，最后把proof、
+manifest和run envelope一起纳入root物理闭包。proof绑定创建时的`candidatePartitionRevision`；后续写partial、final、
+probe或seal只推进可变`checkpointRevision`，不得重签或使未变化的candidate partition失效。restart必须从真实
+manifest/records重算root、keys/count/storage closure，再验证current release binding与Ed25519 proof，任何
+candidate+manifest+run+root联合自洽改写仍因外部签名失败。
+
+[PFD] CandidatePartition对Attestation只暴露process-local opaque capability与reader port。Checkpoint先创建一次性
+opaque bootstrap，由它产生已登记reader；Attestation用该reader构造唯一service，随后CheckpointStore消费同一个
+bootstrap完成构造。bootstrap/capability/reader均以module-private WeakMap/WeakSet membership为事实，spread、JSON、
+Proxy、跨registry或结构相同对象均无authority。runtime capability owner必须是独立package，`specs/`只保存wire
+schema与port；issuer、consumer、private state物理分文件，boundary CI精确绑定允许的from→to与named symbol：
+Checkpoint只能导入reader issuer，Attestation只能导入reader consumer，双方不得互相import implementation。
+不得以late-binding forwarding reader、公开brand字段或shape assertion解决构造顺序。
+
+[PFD] promotion前必须从真实candidate/outcome pages全量重算并验证exact partition。promotion成功后，ready
+closure继续物理引用candidate manifest/pages/records、signed proof与`CandidatePartitionCommitmentV1`；restart必须
+从这些真实bytes重算candidate root、keys root、record count与storage closure，并将proof、commitment、ReadyGeneration、
+cutoff、recent observation、source coverage、checkpoint/stage/promotion revision逐项闭合。outcome records/pages、
+attestation partition与不再被ready引用的recent-observation envelope可按policy回收，但candidate启动事实不得仅剩一个
+无法重算的hash。任何candidate record + manifest + commitment + ready closure联合自洽改写仍因旧外部签名不匹配而
+invalid；`sealedRevision + 1 == stageRevision`且`stageRevision + 1 == promotionRevision`。
 
 [PFD] records immutable/content-addressed；更新 outcomes root、accounting 与 root revision 必须在同一事务。
 DB/WAL 损坏、root 指向缺 record、hash mismatch 或 revision regression 全部 fail closed，不得退化为
 append-only 或从空开始覆盖。
 
+[PFD] root row的physical references必须等于逻辑字段唯一命名的exact set：active verified memo、可选active
+run、可选active ready closure、可选latest memo-seed receipt；缺一项或多一项都fail closed。stale/incomplete run
+清理不得留下未被root字段命名的diagnostic content；新的seed receipt替换旧receipt时必须同时替换物理引用，后续
+promotion若保留latest receipt也必须继续使其root-reachable。
+
+[PFD] 这个exact set不能从旧`record.references`过滤继承。每个SQLite writer在同一个transaction snapshot内先
+验证root、唯一active run、run exact refs、manifest→page、page→entry、candidate→raw locator、memo与attestation
+的完整物理闭包；然后从next root的逻辑字段和可用immutable records重新解析唯一physical set再CAS。read path与
+transaction path必须消费同一个reader-neutral validator；不能让seal/flush/clear/probe/promotion因只hydrate逻辑
+对象而绕过物理校验。
+
 [PFD] completed run若在finalization时已超过serving-age，只能由single writer把verified memo合并进全局
 memo root、写SealedMemoSeedReceipt，并在同一CAS清空inProgressRunId；rejection不跨cutoff carry，且绝不写
 ready pointer。下一迭代必须freeze新cutoff并建立新CandidateRecord partition。Seed receipt只是durable reuse
 provenance，不是coverage、catalog、Graph或ready authority。
+
+[PFD] Seed receipt使用固定reason并绑定run/cutoff、definition、checkpoint schema、candidate/source/exact-outcome、
+verified memo和sealed revision。每次seed把`sequence + priorReceiptHash + priorLineageRoot`加入新的
+`receiptLineageRoot`，root同时原子推进`memoSeedSequence/memoSeedLineageRoot`。后续普通run或ready可保留该latest
+receipt，但第二次seed后重挂第一次receipt必因sequence/lineage不一致而fail closed；不能仅以“memo root仍相同”
+允许跨run replay。
 
 ### 14.2 途中持久化
 
@@ -1443,8 +1682,25 @@ provenance，不是coverage、catalog、Graph或ready authority。
 - SIGTERM/SIGINT 停止领取新 work，等待有界 worker cancel/reap，强制 flush 后退出；
 - writer/DB failure 取消 builder，绝不继续到 ready。
 
+[PFD] identity partial与final是两种独立durable record。identity完成先产生release-bound issuer proof和一次性
+persistence capability；writer在事务前对整batch做两阶段claim，事务成功后commit consumption，失败则abort并允许
+同一batch重试，绝不能逐项先消费造成前N项永久丢失。partial不进入final accounting；同candidate final成功后必须
+在同一事务移除partial。restart复用只能从current release/attestation authority验证过的durable issuer proof重发一次性
+resume capability；重复load、clone、跨run/cutoff/partition/candidate/release移植全部fail closed。
+
+[PFD] 单实例probe只接Checkpoint发行的一次性opaque capability，绑定run、candidate key、candidate snapshot、
+candidate partition proof、before outcome hash与可变checkpoint revision。probe CAS在同一事务重新验证完整lineage；
+成功COMMIT后才消费capability，失败前abort可安全重试，成功后的replay、跨run、跨revision或混用另session persistence
+capability必须拒绝。普通startup writer不得替换已有final；只有probe CAS拥有该受限替换authority。
+
 [PFD] raw log/tx 只在当前 candidate evidenceRef 或未完成 batch 需要时保留。Outcome sealed 后可按审计 retention
 保留内容 hash 与外部 locator，不建立长期 raw tx inbox。人工停止后已 durable 的 outcome 不得丢失。
+
+[PFD] VerifiedMemoSet不是调用者可填写的成功数组。checkpoint只从已经通过exact partition验证的
+`verified.publication`确定性构造memo集合，并把这些verified candidate的rawLocator semantic hashes映射为exact
+raw-envelope StorageHash references。rejected-only raw没有ready后代，promotion删除candidate/outcome indexes后
+GC必须实际删除；verified raw由memo物理闭包保留。seed与ready两条路径都必须以真实SQLite执行
+promotion/clear→GC→close→reopen证明，不接受全库扫描、手写memo或fixture verdict代替。
 
 ### 14.3 Memo reuse 与精确失效
 
@@ -1506,19 +1762,49 @@ interface ReadyGenerationV1 {
   definitionCatalogRoot: Hash;
   sourceCoverageRoot: Hash;
   candidatePartitionRoot: Hash;
+  exactOutcomePartitionRoot: Hash;
   verifiedMemoSetRoot: Hash;
   instanceCatalogRoot: Hash;
   graphRoot: Hash;
   edgeCount: U64String;
   instanceCount: U64String;
+  promotionFreshness: PromotionFreshnessReceipt;
   promotionRevision: U64String;
   promotedAtMonotonicNs: U64String;
+  readyRecordHash: Hash;
 }
 ~~~
 
-[PFD] definition catalog、instance catalog、coverage、cutoff、Graph与accounting由一个transaction/CAS提升。
-Graph file 先内容寻址写完并 fsync，root row 最后原子指向；崩溃只能看见旧 ready 或完整新 ready，不能
-看见 cursor 领先 Graph。
+[PFD] Promotion使用`BUILDING → STAGED → ACTIVE`，但只有ACTIVE是runtime authority。Stage transaction先完成
+全部昂贵的candidate/outcome/memo/catalog/Graph closure验证，把catalog/Graph内容寻址写完并fsync，再把一个明确
+非ReadyGeneration的StagedPromotion record挂入同一active run物理闭包；root仍保留旧ready pointer与
+inProgressRunId。Staged record不能loadReadyClosure、签Graph admission或创建producer。stage前/中崩溃只看见原
+run，stage后崩溃只看见`old ready + inProgressRun + staged`，重启必须重新取得freshness，绝不能把stage直接adopt。
+
+[PFD] Stage完成后才从canonical provider取得最终PromotionFreshnessReceipt。随后minimal activation transaction只
+复核stage hash/revision/run/cutoff/current configuration、process-local promotion capability、canonical fence与
+freshness token，写final ready closure与candidate commitment，并在同一root CAS中指向完整新ready、清空
+inProgress/staged authority。它不得在fresh observation之后重新扫描完整partition或重建Graph。崩溃只能看见
+`old ready + staged`或`new active ready + no staged`，不能看见cursor/catalog/Graph半提升。
+
+[PFD] `readyRecordHash`从除自身外的完整ReadyGeneration payload（包括PromotionFreshnessReceipt）重算；ready
+closure把它与compact candidate commitment、source coverage、memo、catalog和Graph的exact physical closure闭合。
+Stage hash不是readyRecordHash，也不能进入active-ready binding。
+
+[PFD] Checkpoint不得把“持有某个普通caller object”当作promotion资格。唯一ReadyGenerationService在完成
+current definition/source coverage和catalog/Graph验证后，向process-local ReadyPromotionAuthority申请一次性
+capability；它精确绑定expected root revision、inProgress runId、cutoff、current definition root、current policy
+hash、instanceCatalogRoot与graphRoot。Checkpoint在transaction开始、写root前和before-COMMIT guard都重新校验
+该capability及current configuration；成功、失败或离开service调用后立即revoke。直接调用store、伪造opaque token、
+重放另一run/root/catalog/Graph或配置变化都不能promotion。Checkpoint还独立比较VerifiedMemoSet publications与
+InstanceCatalog的exact hash集合以及sealed RecentObservation range，不能只相信service的前置检查。
+
+[PFD] 普通RPC observation与SQLite COMMIT不共享线性化点，因此系统不得声称“COMMIT精确瞬间链头年龄必然不超过
+maxPromotionAge”。PromotionFreshnessReceipt只证明最后一次独立provider observation时
+`age <= maxServingAge - minPromotionMargin`；stage-first协议把该observation之后的本地窗口缩到minimal CAS，
+margin是显式预算而不是伪原子性证明。真正开始serve、每次新session/adoption仍重新读取head并以
+`maxServingAge` fail closed；若未来要求COMMIT瞬间的强原子事实，必须新增与head和root CAS共享线性化authority，
+不能用第二次precheck、扩大margin或延长timeout冒充。
 
 ### 15.2 Protocol-neutral Graph
 
@@ -1537,7 +1823,7 @@ interface RehydrationRef {
 }
 
 interface RuntimeGraphEdge extends PersistedGraphEdge {
-  issuedRouteHandle: IssuedRouteHandle; // process-local, never serialized
+  routeHandle: GraphRouteHandle; // process-local lease-owned capability, never serialized
 }
 ~~~
 
@@ -1545,6 +1831,13 @@ interface RuntimeGraphEdge extends PersistedGraphEdge {
 instance publications。每条 edge 绑定 publication hash；Graph root 是 canonical ordered edge set 的
 Merkle/content root。Promotion只持久化RehydrationRef，不持久化handle；process打开GraphView时由owning
 plugin重签IssuedRouteHandle。schema/dependency不匹配使generation invalidProgram，不能跳过后继续ready。
+
+[PFD] Family签发的原始IssuedRouteHandle不能直接挂在RuntimeGraphEdge上。GraphView为每条runtime edge生成
+module-private opaque `GraphRouteHandle`，并在该lease私有WeakMap中保存它到Family handle的映射；下游只有通过
+同一lease的`resolveRouteHandle(edgeId, graphRouteHandle)`且每次先同时核对edgeId与该edge的lease-owned handle、
+再通过canonical+active-ready guard才能取得真实Family handle。合法handle与另一条edge的metadata拼接、伪造、跨lease、
+release后、ready supersession后或canonical revoke后的handle一律拒绝。这样即使调用者曾取到runtime edge，也
+不能绕过lease继续执行；这些对象仍不进入PersistedGraph或graphRoot。
 
 ### 15.3 Coverage 不等于 current-state freshness
 
@@ -1557,7 +1850,7 @@ block/hash 写回 ready coverage，也禁止用 ready cutoff state 代替 curren
 [PFD] GraphView 是 ready root 的只读 lease：
 
 ~~~text
-GraphViewLease = H(generationId, generationRefreshPolicyHash, cutoff, definitionCatalogRoot,
+GraphViewLease = H(generationId, readyRecordHash, generationRefreshPolicyHash, cutoff, definitionCatalogRoot,
                    instanceCatalogRoot, graphRoot, processEpoch)
 ~~~
 
@@ -1565,15 +1858,29 @@ GraphViewLease = H(generationId, generationRefreshPolicyHash, cutoff, definition
 head boundary 执行 compare-and-swap：active sessions=0、old lease drain、new ready canonical fence pass，
 然后一次替换 active pointer。旧 lease 直到所有 holder 释放才回收；不得修改其对象。
 
+[PFD] GraphView lease不能只检查本地`released`位。构造handle前后以及每次`assertActive()`都必须调用同一个
+CanonicalSource issuer-owned `assertViewAuthorityActive(cutoff)`；unissued或durably revoked cutoff立即使lease
+不可用。这个同步guard不替代provider re-read：首次serve/admission仍执行完整async canonical check，观察到reorg后
+先durably revoke，再由所有现存Graph lease的同步guard共同拒绝继续使用。
+
 [PFD] 所有首次serve、每次新head session admission与adoption都调用同一个validateServingLease：复算ready
 完整root closure，验证cutoff仍canonical、definition catalog等于当前release、policy hash等于当前配置、
 generation age不超过maxServingAgeBlocks，并验证GraphView正由该ready签发。任一不满足都关闭新session
-admission并触发next-generation/recovery；不能因为active pointer已经存在就跳过。
+admission并触发next-generation/recovery；不能因为active pointer已经存在就跳过。ready closure或content root读取
+完成后还必须重读checkpoint root，exact比较开始时的envelopeHash/revision、generationId和readyRecordHash；读取期间
+发生新promotion或其它root CAS时本次结果作废并重试，不能返回旧snapshot拼接的新对象。
 
-[PFD] canonical-source提供短生命周期CanonicalFenceLease：它把本进程canonical journal更新与promotion/
+[PFD] validateServingLease只签发process-local、single-use GraphServingAdmission；GraphView不能公开同步constructor
+接收裸binding。实际`GraphViewLease.open()`必须异步consume admission，并在消费时再次完整执行canonical age、
+current definition+policy、ready closure/root和active-ready检查，然后立刻删除token。提前取得后长期保存、第二次
+消费、配置变化后消费或把serializable binding手写给Graph均失败；打开Graph后仍由同步lease guards约束每次handle
+解析。serving admission不是ready、Graph或Family authority，永不持久化。
+
+[PFD] canonical-source提供短生命周期CanonicalFenceV1：它把本进程canonical journal更新与promotion/
 adoption CAS串行化，token绑定journal epoch、number/hash/stateRoot。Graph构建不持有该锁；最终短CAS重新取得
 并在事务内校验token。它不能“冻结链”，所以CAS之后的reorg仍由head listener使lease失效；首次serve和
-每次session admission再次验证，确保stale ready即使作为历史content存在也永远不能load-bearing。
+每次session admission再次验证；ready closure读完和所有root/content checks完成后还要做最后一次canonical读取，
+确保stale ready即使作为历史content存在也永远不能load-bearing。
 
 ## 16. Producer / state / planner / exact / execution boundaries
 
@@ -3022,6 +3329,83 @@ interface AcceptanceCertificateV1 {
 }
 ~~~
 
+[PFD] `AcceptanceCertificateV1`只有一份冻结wire owner：
+`specs/acceptance-certificate/src/index.ts`。GateCore、外部release packaging与独立observer必须消费同一codec、
+payload hash和certificate ID函数；GateCore内部不得保留第二份同形schema，packager也不得复制字段表后声称一致。
+certificate自身是GateCore计算的content-addressed fact，不是外部签名authority；只有`verdict="pass"`且完整identity
+重算成功，才能作为后续RuntimeReleaseBinding的一个被签输入，不能单独打开runtime。
+
+### 19.4.1 Runtime release binding 与私有 authority composition
+
+[PFD] Candidate commit内的GateCore certificate、External V2 release approval、qualified executor registry和
+worker/session observation都是彼此独立的事实来源；任意一个都不能单独打开runtime。唯一合法的组合发生在
+candidate closure外的release packager：它先用同一External V2 verifier验签approval，再将GateCore实际产生的
+pass certificate逐字段与approval exact join，从完整registry重算root与selected member，核对worker fingerprints、
+epoch和session，最后输出固定Ed25519 signing bytes。Packager不持私钥、不签名、不把non-null authority写回candidate。
+
+~~~ts
+interface RuntimeReleaseBindingV1 {
+  readonly acceptanceCertificate: {
+    readonly certificateId: Hash;
+    readonly payloadHash: Hash;
+    readonly verdict: "pass";
+  };
+  readonly releaseAuthorityApprovalId: Hash;
+  readonly releaseAuthorityApprovalPayloadHash: Hash;
+  readonly authorityPinDigest: Hash;
+  readonly externalTrustAnchorRoot: Hash;
+  readonly externalIssuerKeySetRoot: Hash;
+  readonly qualificationRegistryApprovalId: Hash;
+  readonly qualificationRegistryRoot: Hash;
+  readonly qualificationEpoch: DecimalString;
+  readonly qualificationAudienceHash: Hash;
+  readonly predicateCompositionRootDigest: Hash;
+  readonly gateCoreRuntimeClosureDigest: Hash;
+  readonly gateCoreImplementationClosureDigest: Hash;
+  readonly qualifiedExecutorRegistryRoot: Hash;
+  readonly selectedExecutorLeafHash: Hash;
+  readonly selectedExecutor: QualifiedExecutorRegistryEntryV1;
+  readonly releaseRoleManifestRoot: Hash;
+  readonly candidateReleaseCommit: GitSha40;
+  readonly workerEpoch: string;
+  readonly executorSessionHash: Hash;
+  readonly frameworkAuthorityRoot: Hash;
+  readonly executorAuthorityRoot: Hash;
+  readonly releaseAuthorityRoot: Hash;
+  readonly attestationProofIssuerKeyId: Hash;
+  readonly candidatePartitionProofIssuerKeyId: Hash;
+  readonly bindingId: Hash;
+  readonly payloadHash: Hash;
+  readonly signerKeyId: Hash;
+  readonly signatureAlgorithm: "ed25519";
+  readonly signatureHex: string;
+}
+~~~
+
+[PFD] Candidate-side `runtime-release-authority`只能根据deployment固定的signer pin验签已签binding并发行
+process-local opaque capability。Raw binding、字段完全自洽的clone、JSON round-trip、同形resolver或caller提供的
+proof port都不是authority。该私有release state再为每个consumer发行最窄的owner/consumer capability：
+
+~~~text
+verified RuntimeReleaseBinding
+→ private runtime release state
+   ├─ Attestation composition consumer
+   ├─ Checkpoint candidate-partition proof issuer consumer
+   ├─ Scheduler/work-plane executor issuer consumer
+   ├─ ReadyGeneration release-binding consumer
+   └─ REVM executor-lease projection
+~~~
+
+这些consumer可以共享wire fact，但不得共享一个公开“万能issuer”对象；普通central、Family、planner和application
+均不能取得签发函数。每条跨package authority edge必须在boundary中以exact importer、module与named export登记，
+并有同形fake、clone、revoke/rotation反例。candidate中的GateCore与scheduler generated authority持续为`null`；
+production non-null capability只能由candidate外deployment packaging注入，不能由test fixture、raw certificate或
+candidate generator mint。Candidate-side bootstrap只验证signed binding并原子组装一次private ports；它对外只返回
+Attestation session、Checkpoint、Family execution、Ready service和非敏感lineage identity。每个返回service的读取与
+调用都必须重新检查同一process-local release authority；rotation/revoke后旧service立即fail closed，不能只在构造
+时验证。Ready构造器只能取得窄`RuntimeReleaseReadyBindingPortV1`，其结果由bootstrap包装为release-guarded facade，
+不得泄漏private composition、proof issuer、scheduler issuer、resolver、signer或rotate/revoke能力。
+
 [PFD] 上述每种对象均使用自己的domain separator与exact wire schema；顶层key set必须与对应`kind`完全相等，
 unknown key、duplicate key、缺失字段、非canonical JSON或kind/schema不匹配均为`invalid`。每个schema固定自己的
 identity-exclusion set；不得由decoder任意排除时间、commit、签名、raw locator或其它字段。声明`payloadHash`的
@@ -3108,8 +3492,13 @@ bindings仍全部参与hash。任何self-consistent attacker key/root/registry/c
 后来签发的approval bytes或non-null authority。approval只可在candidate commit、compiler closures、composition
 与role roots冻结后由candidate closure外的issuer签发。最终外部release packaging必须把该signed authority作为
 独立deployment artifact/credential绑定到candidate template，并另行形成deployed artifact/process root；不得回写
-candidate commit或让candidate generator给自己授权。当前仓库尚未实现这条non-null packaging/bootstrap路径，
-因此`release-authority.ts`继续固定为null，任何qualification-only pass都不能声称production authority已经存在。
+candidate commit或让candidate generator给自己授权。当前仓库已经实现packager、candidate-side signed-binding verifier、
+private-port composition与downstream narrow owner的绿地代码，但尚未形成被exact pushed SHA、deployment artifact、process
+anchor与真实runtime事实共同证明的production release。三个candidate generated placeholder仍必须固定为null：
+`acceptance/gate-core/src/generated/release-authority.ts`、
+`packages/scheduler/src/generated/qualified-executor-authority.ts`、
+`packages/work-plane/src/generated/family-execution-composition.ts`。任何qualification-only pass或本地测试都不能声称
+production authority已经存在。
 最终release/install gate必须从实际tracked candidate、generated role manifest、compiler closures、deployed
 artifact与process anchor重算commit/root，逐项join signed approval；GateCore input或authority object中相互一致的
 字符串不能替代当前runtime observation。全零commit、来源不明manifest root、旧approval跨commit复制或模板root与
@@ -3834,33 +4223,33 @@ async function serveWithGenerationBuilder(
 }
 
 interface CompletedBuilderRun {
-  snapshot: SealedRunSnapshot;
+  sealedRun: SealedRunCapabilityV1;
+  sealedRunBinding: SealedRunBindingV1;
+  instanceCatalog: InstanceCatalogV1;
   catalog: GeneratedCatalog;
-  cutoff: CanonicalCutoff;
 }
 
 async function buildGeneration(signal: AbortSignal): Promise<ReadyGenerationV1> {
   for (;;) {
     const completed = await buildOrResumeOneRun(signal);
-    const canonical = await canonicalSource.checkStillCanonical(completed.cutoff);
+    const canonical = await canonicalSource.checkStillCanonical(completed.sealedRunBinding.cutoff);
     if (!canonical.ok) {
       await checkpoint.sealCompletedRunStaleAndClearWithoutCarryCAS(
-        completed.snapshot, canonical.reason,
+        completed.sealedRun, canonical.reason,
       );
       continue;
     }
-    const age = await canonicalSource.ageInBlocks(completed.cutoff);
+    const age = await canonicalSource.ageInBlocks(completed.sealedRunBinding.cutoff);
     const latestPromotableAge = GENERATION_REFRESH_POLICY.maxServingAgeBlocks
       - GENERATION_REFRESH_POLICY.minPromotionMarginBlocks;
     if (age > latestPromotableAge) {
       await checkpoint.sealCompletedRunAsMemoSeedAndClearCAS({
-        snapshot: completed.snapshot,
-        carriedVerifiedMemoRoot: completed.snapshot.verifiedMemoRoot,
+        sealedRun: completed.sealedRun,
         reason: "cutoff-too-old-for-serving",
-      }); // one CAS: persist receipt + carry verified memos + clear inProgress; no ready
+      }); // Checkpoint rehydrates the bound durable memo closure; caller supplies no raw snapshot.
       continue; // freeze a fresh cutoff; rejections/coverage are not carried
     }
-    return promoteReadyGeneration(completed.snapshot, completed.catalog, completed.cutoff);
+    return promoteReadyGeneration(completed, completed.catalog);
   }
 }
 
@@ -3904,7 +4293,13 @@ async function buildOrResumeOneRun(signal: AbortSignal): Promise<CompletedBuilde
   const activeRun = requireNonNull(run);
 
   const impact = await memoStore.computeImpactWithPluginReuseProofs(catalog, activeRun.cutoff, candidates);
-  const writer = await checkpoint.startOutcomeWriterActor(activeRun.runId, {
+  const attestationSession = attestationService.openRunSession({
+    runId: activeRun.runId,
+    cutoff: activeRun.cutoff,
+    candidatePartitionRoot: activeRun.candidatePartitionRoot,
+    candidateKeys: candidates.map(candidate => candidate.familyCandidateKey),
+  }); // process-local capability; programs/lifecycle/authority are constructor-bound
+  const writer = await checkpoint.startOutcomeWriterActor(attestationSession.writerCapability, {
     flushEveryItems: 25,
     flushEveryMs: 3000,
   });
@@ -3916,13 +4311,14 @@ async function buildOrResumeOneRun(signal: AbortSignal): Promise<CompletedBuilde
       const runKey = H("aloha/run-candidate/v1", activeRun.runId, candidate.familyCandidateKey);
       const sealed = await writer.loadSealedOrPartial(runKey);
       if (sealed?.isFinal) return sealed;
-      const result = await resolveIdentityOrReuseProofOnce(candidate, activeRun.cutoff, catalog, signal);
+      const result = await attestationSession.resolveIdentityOrReuseProofOnce(candidate, signal);
       if (result.kind === "identityVerified") {
-        await writer.enqueue({ kind: "candidate-partial-identity", runKey, result });
+        await writer.enqueue(result.persistenceCapability);
       } else {
         // reusable verified memo, chain rejection, retryable and invalidProgram are
-        // final candidate outcomes here; they must leave pending accounting.
-        await writer.enqueue({ kind: "candidate-final-outcome", runKey, result });
+        // final candidate outcomes here; only the attestation-issued capability
+        // can leave pending accounting.
+        await writer.enqueue(result.persistenceCapability);
       }
       return result;
     }, signal);
@@ -3931,17 +4327,14 @@ async function buildOrResumeOneRun(signal: AbortSignal): Promise<CompletedBuilde
     const groups = groupVerifiedIdentityResultsByFamilyInstanceKey(identified);
     await boundedMapByLane(groups, async group => {
       if (group.distinctFamilyCandidateKeys.length !== 1) {
-        const proof = sealNominationKeyCollisionProof(group);
+        const issued = attestationSession.issueNominationKeyCollision(group);
         for (const candidate of group.candidates) {
-          await writer.enqueue(finalInvalidProgramForCandidate(candidate, proof));
+          await writer.enqueue(issued.forCandidate(candidate.familyCandidateKey));
         }
         return;
       }
-      const instanceOutcome = await instanceLifecycleSingleFlight.getOrBuild(
-        instanceWorkKey(activeRun, group.familyInstanceKey),
-        () => materializeAndProjectOnce(group.identity, activeRun.cutoff, catalog, signal),
-      );
-      await writer.enqueue(sealCandidateOutcomeFromInstance(group.onlyCandidate, instanceOutcome));
+      const issued = await attestationSession.materializeAndProjectOnce(group, signal);
+      await writer.enqueue(issued.persistenceCapability);
     }, signal);
   } finally {
     stopNewAttestationTaskAdmission(activeRun.runId);
@@ -3953,7 +4346,9 @@ async function buildOrResumeOneRun(signal: AbortSignal): Promise<CompletedBuilde
   const snapshot = await checkpoint.loadRun(activeRun.runId);
   assertExactPartitionAndNoUnresolved(snapshot);
   await canonicalSource.assertStillCanonical(activeRun.cutoff);
-  return { snapshot, catalog, cutoff: activeRun.cutoff };
+  const partitionCapability = attestationSession.sealExactPartition(snapshot.outcomeHashes);
+  const sealed = await checkpoint.sealAttestationPartition(partitionCapability);
+  return { snapshot: sealed, catalog, cutoff: activeRun.cutoff };
 }
 ~~~
 
@@ -3965,14 +4360,17 @@ inProgressRun是两个独立root refs：restart可立即消费旧ready，同时b
 
 ~~~ts
 class DurableOutcomeWriterActor {
-  private mailbox = new BoundedAsyncMailbox<WriterMessage>(WRITER_MAILBOX_CAP);
+  private mailbox = new BoundedAsyncMailbox<AttestationIssuedWriterCapability>(WRITER_MAILBOX_CAP);
   private pending = new Map<RunCandidateKey, CompactOutcome>();
   private lastFlush = monotonicNow();
   private accepting = true;
   private loopTask = this.runLoop(); // only this task owns pending/revision/DB writes
 
-  async enqueue(message: WriterMessage): Promise<void> {
+  async enqueue(capability: AttestationIssuedWriterCapability): Promise<void> {
     if (!this.accepting) throw new WriterClosed();
+    // consume validates the opaque issuer, run/cutoff/candidate and current
+    // external release/executor authority before any DTO enters the mailbox.
+    const message = this.attestationAuthority.consumeWriterCapability(capability);
     await this.mailbox.put(deepFreeze(message)); // workers never mutate pending directly
   }
 
@@ -4039,10 +4437,12 @@ async function probeOne(runId: RunId, candidateKey: FamilyCandidateKey): Promise
   const runKey = H("aloha/run-candidate/v1", runId, candidateKey);
   const before = await checkpoint.requireOutcome(runKey, ["retryable"]);
   const candidate = candidateSnapshotCodec.decodeExact(before.candidateSnapshotBytes);
-  const outcome = await attestationEngine.retryOneThroughNormalTwoPhaseLifecycle(
+  const outcomeCapability = await attestationEngine.retryOneThroughNormalTwoPhaseLifecycle(
     candidate, run, callerSignal,
   );
-  await checkpoint.singleWriterReplace(runKey, before.hash, compactOutcome(outcome));
+  const outcome = await checkpoint.singleWriterReplace(
+    runKey, before.hash, outcomeCapability,
+  );
   return sealProbeReceipt(run, runKey, before, outcome);
 }
 
@@ -4154,59 +4554,128 @@ permit不释放。build failure不写settled，下一调用可重试。
 
 ~~~ts
 async function promoteReadyGeneration(
-  run: SealedRunSnapshot,
+  completed: CompletedBuilderRun,
   catalog: GeneratedCatalog,
-  cutoff: CanonicalCutoff,
 ): Promise<ReadyGenerationV1> {
+  // Attestation+Checkpoint already derived this catalog from the verified
+  // publications in the durable sealed partition. ReadyGeneration does not
+  // accept a caller-written success catalog.
+  const instanceCatalog = completed.instanceCatalog;
+  // This is the only promotion-side raw snapshot read. The Checkpoint-issued
+  // reader rehydrates the durable closure, exact-compares its issued binding,
+  // and proves catalog publication hashes equal the verified outcome hashes.
+  const run = checkpoint.sealedRunReader.readForPromotion(completed.sealedRun, instanceCatalog);
+  const cutoff = completed.sealedRunBinding.cutoff;
   assertExactPartitionAndNoUnresolved(run);
   assertCoverageAppliedThroughCutoff(run.coverage, cutoff);
-  await canonicalSource.assertStillCanonical(cutoff);
-  await canonicalSource.assertPromotionAgeWithinMargin(cutoff, GENERATION_REFRESH_POLICY);
+  validateGeneratedDefinitionsForPublications(instanceCatalog.publications, catalog, cutoff);
+  const graph = graphProjector.fromPublicationRehydrationRefsOnly(instanceCatalog.publications);
+  const readyBase = sealReadyGenerationBase(run, instanceCatalog, graph, GENERATION_REFRESH_POLICY);
+  await durableStore.putContentAndFsync("instance-catalog", instanceCatalog);
+  await durableStore.putContentAndFsync("persisted-graph", graph);
 
-  const publications = validateAndLoadVerifiedPublications(run, catalog, cutoff);
-  const graph = graphProjector.fromPublicationRehydrationRefsOnly(publications);
-  const graphArtifact = await durableStore.putContentAndFsync(
-    "aloha/persisted-graph/v1", graph.canonicalBytes,
-  );
-  const next = sealReadyGeneration(run, publications, graphArtifact);
-
-  // Graph construction may be long. The final short transaction reacquires a
-  // canonical-journal fence and revalidates every referenced root.
-  await canonicalSource.withPromotionFence(cutoff, async fence => {
-    await durableStore.transaction(async tx => {
-      const root = tx.readRootForUpdate();
-      assert(root.inProgressRunId === run.runId && root.revision === run.checkpointRevision);
-      tx.requireCanonicalFence(fence);
-      tx.requirePromotionAgeWithinMargin(fence, GENERATION_REFRESH_POLICY);
-      assert(catalog.recomputeDefinitionCatalogRoot() === next.definitionCatalogRoot);
-      assert(recomputePolicyHash(GENERATION_REFRESH_POLICY) === next.generationRefreshPolicyHash);
-      tx.requireAndRehashContentRoot(run.candidatePartitionRoot, CANDIDATE_PARTITION_SCHEMA);
-      tx.requireAndRehashContentRoot(run.sourceCoverageRoot, COVERAGE_SCHEMA);
-      tx.requireAndRehashContentRoot(run.verifiedMemoRoot, VERIFIED_MEMO_SET_SCHEMA);
-      tx.requireAndRehashContentRoot(next.instanceCatalogRoot, INSTANCE_CATALOG_SCHEMA);
-      tx.requireAndRehashContentRoot(graphArtifact.hash, PERSISTED_GRAPH_SCHEMA);
-      tx.requireReadyClosureExactlyMatches(next, run, catalog, graphArtifact);
-      const readyBytes = readyGenerationCodec.encodeExact(next);
-      const readyRecordHash = tx.putContentAddressed("aloha/ready-generation/v1", readyBytes);
-      assert(readyRecordHash === H("aloha/ready-generation/v1", readyBytes));
-      tx.compareAndSwapRoot(root.revision, {
-        revision: root.revision + 1,
-        verifiedMemoRoot: run.verifiedMemoRoot,
-        inProgressRunId: null,
-        latestMemoSeedReceiptHash: root.latestMemoSeedReceiptHash,
-        readyGenerationId: next.generationId,
-        readyGenerationRecordHash: readyRecordHash,
-        schemaHash: CHECKPOINT_SCHEMA_HASH,
-      });
-    });
+  // This identity exists before the first CAS, so an error after either CAS can
+  // be resolved from durable facts rather than guessed from Error.message.
+  const attempt = sealStageRequestIdentity({
+    runId: run.runId,
+    sealedRevision: run.checkpointRevision,
+    cutoff,
+    definitionCatalogRoot: readyBase.definitionCatalogRoot,
+    generationRefreshPolicyHash: readyBase.generationRefreshPolicyHash,
+    instanceCatalogRoot: readyBase.instanceCatalogRoot,
+    graphRoot: readyBase.graphRoot,
+    readyBaseHash: H("aloha/ready-generation-base/v1", readyBase),
   });
 
-  // A reorg can occur immediately after any local transaction. Never serve merely
-  // because a ready row exists; revalidate closure/canonical/policy before returning.
-  await validateReadyClosureAndCanonical(next, catalog, GENERATION_REFRESH_POLICY);
-  return next;
+  try {
+    return await canonicalSource.withCanonicalFence(cutoff, async fence => {
+      // BUILDING → STAGED. This is the expensive transaction: it reopens and
+      // rehashes the entire candidate/outcome/memo/catalog/Graph closure. The
+      // old ready pointer remains active and the run remains in progress.
+      const stage = await checkpoint.stageReadyCAS({
+        attempt,
+        fence,
+        sealedRun: completed.sealedRun,
+        readyBase,
+        instanceCatalog,
+        graph,
+      });
+
+      // Only after STAGED is durable do we observe final provider freshness.
+      const freshness = await canonicalSource.observePromotionFreshness(fence, {
+        cutoff,
+        maxPromotionAgeBlocks: promotionMargin(GENERATION_REFRESH_POLICY),
+        generationRefreshPolicyHash: readyBase.generationRefreshPolicyHash,
+      });
+
+      // STAGED → ACTIVE. This minimal transaction checks exact stage identity,
+      // capability, fence and freshness, writes the compact commitment/ready
+      // closure, switches one root pointer, then clears run+stage. It never
+      // rescans the large closure after freshness.
+      return checkpoint.activateReadyCAS({
+        attempt,
+        stageRevision: stage.stageRevision,
+        stageRecordHash: stage.stageRecordHash,
+        freshness,
+        promotedAtMonotonicNs: monotonicNow(),
+      });
+    });
+  } catch (error) {
+    const resolution = await checkpoint.resolvePromotionAttempt(attempt);
+    if (resolution.kind === "committed") {
+      // A committed marker is not a serving object. Re-open the current durable
+      // root and re-run the same reusable/current-source admission used at startup.
+      const reopened = await readyStore.findLatestReusable({
+        currentCatalog,
+        currentPolicy: GENERATION_REFRESH_POLICY,
+        canonicalSource,
+      });
+      if (reopened === null
+        || reopened.readyRecordHash !== resolution.readyRecordHash
+        || reopened.stageRecordHash !== resolution.stageRecordHash
+        || reopened.readyBaseHash !== attempt.readyBaseHash) {
+        throw new ReadyPromotionFatalError("committed-ready-not-current-or-not-reusable");
+      }
+      return reopened.ready;
+    }
+    if (resolution.kind === "retry") throw resolution.error;
+    if (resolution.kind === "fatal") throw resolution.error;
+    // abandon is legal only when exact current catalog/policy/source-plan or
+    // canonical evidence proves this exact stage unusable. The CAS includes
+    // runId + sealed/stage revision + stageRecordHash + readyBaseHash.
+    await checkpoint.abandonStagedPromotionCAS(resolution.stage, resolution.reason);
+    throw new RebuildFromFreshCutoff(resolution.reason);
+  }
 }
 ~~~
+
+[PFD] `SealedRunSnapshotV1`是Checkpoint与ReadyGeneration内部的持久化重水化类型，不是公共central DTO，
+GenerationBuilder、runtime和Family都不得构造、复制、spread或解码它。公共composition只传
+`SealedRunCapabilityV1`、发行时的`SealedRunBindingV1`以及Checkpoint-issued只读reader port。binding精确绑定
+runId、parentGenerationId、cutoff、固定50-block recentObservationRange、definition/source coverage roots、
+candidate partition semantic与physical proof roots、exact outcome root、verified memo root、checkpoint revision及
+attestation/release/provenance/executor authority roots。Checkpoint对同一run只允许seal一次；每次read重新从durable
+closure加载、重算binding并与发行值canonical exact-compare，再返回独立deep-frozen snapshot。旧capability不能读到
+新revision，binding返回对象的修改不能改变内部state，clone/cross-store capability一律fail closed。
+
+[PFD] authority边界是exact named-import manifest：Checkpoint sealed-run owner只能调用reader issuer，
+ReadyGeneration只能调用reader consumer assertion，issuer/consumer各自只能访问中性私有state。普通central、runtime、
+Family、generated production composition和测试fixture不得调用issuer；alias、namespace或额外symbol import同样拒绝。
+新增Family或predicate不得改变这条generic capability closure，也不得触发无关Family重资格化。
+
+[PFD] Recovery outcome是稳定machine discriminant：`abandon | retry | fatal | committed`，不得用`instanceof`跨包
+猜测、不得读message/regex。只有exact definition/source-plan/policy变化、durable cutoff revocation/absence或
+`promotion-stale`可abandon；transport/writer-busy/CAS race先重读root后retry；stage/hash/child/catalog/Graph/
+authority corruption与chain-id/number provider/config错误fatal。若stage已消失但active candidate commitment精确
+绑定同一`stageRecordHash + readyBaseHash`，必须返回committed；不得把post-CAS异常误当失败后再清理。
+
+[PFD] `chain-id-mismatch`与`number-mismatch`证明的是provider/config错误，不证明原durable cutoff失效；遇到它们
+必须保留原run/stage并fatal，禁止clear后freeze新run形成重建循环。只有同一CanonicalSource durable journal证明的
+hash/state-root replacement或missing-header/absence，才允许abandon exact旧cutoff。`committed`也只证明CAS已发生，
+不能直接返回缓存的ready对象；必须重新执行current catalog/policy/source与完整durable closure的reuse admission。
+
+[PFD] `promoteReadyGeneration()`返回的对象仍不是serving lease。每次adoption/session都必须独立重新打开ACTIVE
+closure并复核canonical age、current policy、definition/catalog/Graph roots与process-local admission。
 
 ### 24.10 Immutable producer session 与 next-generation adoption
 
@@ -4239,7 +4708,7 @@ async function adoptAtSafeBoundary(next: ReadyGenerationV1): Promise<void> {
     assert(producer.barrier.activeCount() === 0);
     const nextLease = await graphStore.openImmutableLease(next);
     await validateServingLease(nextLease, generatedCatalog.loadExact(), GENERATION_REFRESH_POLICY);
-    await canonicalSource.withPromotionFence(next.cutoff, async fence => {
+    await canonicalSource.withCanonicalFence(next.cutoff, async fence => {
       await validateServingLease(nextLease, generatedCatalog.loadExact(), GENERATION_REFRESH_POLICY);
       await activeGeneration.compareAndSwap({ expected, next: nextLease, canonicalFence: fence });
     });
@@ -4605,7 +5074,7 @@ final-sim在各自port稳定后并行；runtime composition、systemd dry-run与
 6. **实现discovery/attestation/generation-builder**：declared SourcePlan、50-block observation、merged dedupe、
    typed outcomes、per-key durable writer、probe、memo impact与唯一source→promotion orchestration。
    Verify：SIGTERM中途恢复、exact partition、rejection不跨cutoff、invalidProgram阻止ready。
-7. **实现atomic readyGeneration**：publication-only Graph、coverage/Graph/catalog一次CAS、lease/adoption。
+7. **实现atomic readyGeneration**：publication-only Graph、durable non-active stage、final freshness后的minimal activation CAS、lease/adoption。
    Verify：partial write不可见、ready前producer不可创建、activegeneration不可变。
 8. **接入producer/state/intake lanes**：blockscan/backrun共享lease，latest-head、current-source reads、
    canonical-vs-unknown pending bulkhead、trigger/effect session与transport reserve。

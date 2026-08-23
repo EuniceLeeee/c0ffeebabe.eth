@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import { recentObservationRange } from "../../discovery/src/index.ts";
-import { sealRecentObservation, type ObservedBlockV1 } from "../src/index.ts";
+import { sealRecentObservation, validateRecentObservationReceipt, type ObservedBlockV1 } from "../src/index.ts";
 
 const h = (value: string): Hash => hashDomain("test/observation", value);
 
@@ -22,7 +22,35 @@ test("receipt proves the exact contiguous 50-block observation", () => {
   const cutoff = { chainId: "1", number: "49", hash: blocks[49]!.hash, stateRoot: h("state") };
   const receipt = sealRecentObservation(cutoff, recentObservationRange(cutoff.number), blocks);
   assert.deepEqual(receipt.range, { from: "0", to: "49" });
-  assert.equal(receipt.orderedBlockHashes.length, 50);
+  assert.equal(receipt.orderedHeaders.length, 50);
+  assert.deepEqual(receipt.orderedHeaders[10], blocks[10] && {
+    number: blocks[10].number,
+    hash: blocks[10].hash,
+    parentHash: blocks[10].parentHash,
+  });
+  validateRecentObservationReceipt(receipt, receipt.range);
+});
+
+test("persisted ordered headers revalidate parent links even when an attacker recomputes the root", () => {
+  const blocks = [...chain(50)];
+  const cutoff = { chainId: "1", number: "49", hash: blocks[49]!.hash, stateRoot: h("state") };
+  const receipt = sealRecentObservation(cutoff, recentObservationRange(cutoff.number), blocks);
+  const forgedHeaders = receipt.orderedHeaders.map((header, index) => index === 10
+    ? { ...header, parentHash: h("wrong-parent") }
+    : header);
+  const forgedRoot = hashDomain("aloha/recent-observation/v1", {
+    cutoff: receipt.cutoff,
+    range: receipt.range,
+    orderedHeaders: forgedHeaders,
+    evidence: receipt.evidence,
+  });
+  assert.throws(
+    () => validateRecentObservationReceipt(
+      { ...receipt, orderedHeaders: forgedHeaders, observationRoot: forgedRoot },
+      receipt.range,
+    ),
+    /header-parent-mismatch/,
+  );
 });
 
 test("a gap, parent mismatch, or wrong cutoff is rejected", () => {

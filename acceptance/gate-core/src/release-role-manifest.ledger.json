@@ -44,14 +44,9 @@
       "byteLength": 267
     },
     {
-      "path": "acceptance/gate-core/src/external-qualification.ts",
-      "contentSha256": "0x1e278bdda4f8953048c22dbc5bc3e2b5e63d95a33272342ea6c5b43aaf5bb97b",
-      "byteLength": 15443
-    },
-    {
       "path": "acceptance/gate-core/src/index.ts",
-      "contentSha256": "0x5acd8aa0607a1772891bcbbcc2e430d723eb8634b2f2f0357094fc9046d7d61a",
-      "byteLength": 120886
+      "contentSha256": "0x2ddef656c344096de754fda8ae07fae7fe681d4428d33c96bf377315ca66929b",
+      "byteLength": 116299
     },
     {
       "path": "acceptance/gate-core/src/predicate-composition.ts",
@@ -80,13 +75,13 @@
     },
     {
       "path": "package-lock.json",
-      "contentSha256": "0x5a0443846a28089d9adbf3f217a93645f95e8b7dc4382ab3f5211cf85ecf8c22",
-      "byteLength": 5025
+      "contentSha256": "0x8f84a9e51e2fee87244e9369c758ba5e6e4ae2fe90df031640e077c785e4b8a5",
+      "byteLength": 7629
     },
     {
       "path": "package.json",
-      "contentSha256": "0x04ee4af544fd87a27573a9dc1dc2867183a7d0583ecd2ba7bef5acd184655004",
-      "byteLength": 850
+      "contentSha256": "0xeae41ed293bff48ba5a0567524db40fe88112e4c15ae6c7b60143e605f9ebbf2",
+      "byteLength": 867
     },
     {
       "path": "packages/canonical-codec/package.json",
@@ -95,13 +90,43 @@
     },
     {
       "path": "packages/canonical-codec/src/index.ts",
-      "contentSha256": "0x1db18f1c911a35e31b9129e4db4e2c39fceb73064165ed6298720d19d17bbdb1",
-      "byteLength": 33448
+      "contentSha256": "0x72e317a602dbaa428a5623e1ac95836f1ab9f855634eb5b70bfbf603ccdcd136",
+      "byteLength": 34510
     },
     {
       "path": "packages/canonical-codec/tsconfig.json",
       "contentSha256": "0xfdada5c446a7516c16c395e8db80720abd3e7bfe35732650b1543e222586064d",
       "byteLength": 265
+    },
+    {
+      "path": "packages/external-qualification-verifier/package.json",
+      "contentSha256": "0xa29921c8dc50c954b11f452bd8d144b94f6866664c48a7e5bd348731f82b3862",
+      "byteLength": 188
+    },
+    {
+      "path": "packages/external-qualification-verifier/src/index.ts",
+      "contentSha256": "0x47ac6fcedbcc93c5efb9bb7710707a36d951a735ed13582bd0b973c890370f90",
+      "byteLength": 15431
+    },
+    {
+      "path": "packages/external-qualification-verifier/tsconfig.json",
+      "contentSha256": "0xbbd621f00ec10b69a0127db6727445b864dc415d07a66cc0d7aa4adbc1245f2b",
+      "byteLength": 229
+    },
+    {
+      "path": "specs/acceptance-certificate/package.json",
+      "contentSha256": "0xbd64320f9da276140beed7393a64281c37937cf78f675adfeff4e7a355caff4d",
+      "byteLength": 254
+    },
+    {
+      "path": "specs/acceptance-certificate/src/index.ts",
+      "contentSha256": "0x21d00ac44406e5bb1af4141c6f4fcf4a1da688236aa7f958c171894527d506ec",
+      "byteLength": 4870
+    },
+    {
+      "path": "specs/acceptance-certificate/tsconfig.json",
+      "contentSha256": "0xd7b530d0a2a8c1f68f6582245ec940ee9003a3a8a112d1d4aae70877f981c93f",
+      "byteLength": 245
     },
     {
       "path": "specs/artifact-resolution/package.json",
@@ -172,13 +197,13 @@
   "generatorFiles": [
     {
       "path": "package-lock.json",
-      "contentSha256": "0x5a0443846a28089d9adbf3f217a93645f95e8b7dc4382ab3f5211cf85ecf8c22",
-      "byteLength": 5025
+      "contentSha256": "0x8f84a9e51e2fee87244e9369c758ba5e6e4ae2fe90df031640e077c785e4b8a5",
+      "byteLength": 7629
     },
     {
       "path": "package.json",
-      "contentSha256": "0x04ee4af544fd87a27573a9dc1dc2867183a7d0583ecd2ba7bef5acd184655004",
-      "byteLength": 850
+      "contentSha256": "0xeae41ed293bff48ba5a0567524db40fe88112e4c15ae6c7b60143e605f9ebbf2",
+      "byteLength": 867
     },
     {
       "path": "tools/release-role-manifest/package.json",
@@ -228,7 +253,7 @@
       "byteLength": 268
     }
   ],
-  "inputRoot": "0x7680a2c40ec054b1fb829ba6d6ad874f42e4acfebe2fb330675f0f63fd869fdb",
-  "generatorRoot": "0x882c068216f5e3fd9ded04bb4f54220741df998226f5a11cb8f9a8773f1ca81b",
-  "ledgerHash": "0x305a2d476badb13b22e44b1e21d738aa403896aac8ce3e0d2d564d323fce9e43"
+  "inputRoot": "0x15c8fe5903fc315430a09aae669c3b0e2da8e9afe42a502e148c582ed13119fe",
+  "generatorRoot": "0x7fc17336d859ec94b8860a0607b1a4cef3b1bb60d022199059f76800ea809877",
+  "ledgerHash": "0x72019a35b2db2a3538e5009f4d345fc390c55b0212b346876b8166e079f001f6"
 }

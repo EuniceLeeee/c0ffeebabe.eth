@@ -33,6 +33,13 @@ export interface RawEvidenceLocatorContentV1 {
   readonly bytes: Uint8Array;
 }
 
+/** The durable header facts needed to re-open and verify the observed chain. */
+export interface ObservedHeaderV1 {
+  readonly number: string;
+  readonly hash: Hash;
+  readonly parentHash: Hash;
+}
+
 export interface RecentObservationScanV1 {
   readonly blocks: readonly ObservedBlockV1[];
   readonly rawEvidenceLocators: readonly RawEvidenceLocatorContentV1[];
@@ -41,7 +48,7 @@ export interface RecentObservationScanV1 {
 export interface RecentObservationReceiptV1 {
   readonly cutoff: CanonicalCutoffV1;
   readonly range: BlockRangeV1;
-  readonly orderedBlockHashes: readonly Hash[];
+  readonly orderedHeaders: readonly ObservedHeaderV1[];
   readonly evidence: readonly CandidateEvidenceRefV1[];
   readonly observationRoot: Hash;
 }
@@ -64,13 +71,22 @@ const decodeObservedBlock = (value: unknown, name = "observedBlock"): ObservedBl
   ),
 }, name);
 
+const decodeObservedHeader = (
+  value: unknown,
+  name = "observedHeader",
+): ObservedHeaderV1 => decodeExactObject(value, {
+  number: (field, path) => assertDecimalString(field, path),
+  hash: (field, path) => assertHash(field, path),
+  parentHash: (field, path) => assertHash(field, path),
+}, name);
+
 const decodeRecentObservationReceipt = (
   value: unknown,
   name = "recentObservationReceipt",
 ): RecentObservationReceiptV1 => decodeExactObject(value, {
   cutoff: (field, path) => decodeCanonicalCutoff(field, path),
   range: (field, path) => decodeBlockRange(field, path),
-  orderedBlockHashes: (field, path) => fieldArray(field, (item, itemPath) => assertHash(item, itemPath), path),
+  orderedHeaders: (field, path) => fieldArray(field, (item, itemPath) => decodeObservedHeader(item, itemPath), path),
   evidence: (field, path) => fieldArray(field, (item, itemPath) => decodeCandidateEvidenceRef(item, itemPath), path),
   observationRoot: (field, path) => assertHash(field, path),
 }, name);
@@ -107,17 +123,21 @@ export function sealRecentObservation(
     }
   }
   if (decodedBlocks.at(-1)?.hash !== decodedCutoff.hash) throw new Error("observation-cutoff-hash-mismatch");
-  const orderedBlockHashes = decodedBlocks.map(block => block.hash);
+  const orderedHeaders = decodedBlocks.map(block => deepFreeze({
+    number: block.number,
+    hash: block.hash,
+    parentHash: block.parentHash,
+  }));
   const orderedEvidence = [...evidence.entries()]
     .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
     .map(([, item]) => item);
   const observationRoot = hashDomain("aloha/recent-observation/v1", {
     cutoff: decodedCutoff,
     range: decodedRange,
-    orderedBlockHashes,
+    orderedHeaders,
     evidence: orderedEvidence,
   });
-  return deepFreeze({ cutoff: decodedCutoff, range: decodedRange, orderedBlockHashes, evidence: orderedEvidence, observationRoot });
+  return deepFreeze({ cutoff: decodedCutoff, range: decodedRange, orderedHeaders, evidence: orderedEvidence, observationRoot });
 }
 
 export function validateRecentObservationReceipt(
@@ -130,19 +150,33 @@ export function validateRecentObservationReceipt(
     throw new Error("observation-range-mismatch");
   }
   const expectedCount = decimal(decodedReceipt.range.to, "recentObservationReceipt.range.to") - decimal(decodedReceipt.range.from, "recentObservationReceipt.range.from") + 1n;
-  if (BigInt(decodedReceipt.orderedBlockHashes.length) !== expectedCount) {
+  if (BigInt(decodedReceipt.orderedHeaders.length) !== expectedCount) {
     throw new Error("observation-hash-partition-incomplete");
   }
-  if (decodedReceipt.orderedBlockHashes.at(-1) !== decodedReceipt.cutoff.hash) {
+  if (decodedReceipt.cutoff.number !== decodedReceipt.range.to) {
+    throw new Error("observation-cutoff-number-mismatch");
+  }
+  for (let index = 0; index < decodedReceipt.orderedHeaders.length; index += 1) {
+    const header = decodedReceipt.orderedHeaders[index]!;
+    const expectedNumber = decimal(decodedReceipt.range.from, "recentObservationReceipt.range.from") + BigInt(index);
+    if (decimal(header.number, "recentObservationHeader.number") !== expectedNumber) {
+      throw new Error("observation-header-number-gap");
+    }
+    const previous = decodedReceipt.orderedHeaders[index - 1];
+    if (previous && header.parentHash !== previous.hash) {
+      throw new Error("observation-header-parent-mismatch");
+    }
+  }
+  if (decodedReceipt.orderedHeaders.at(-1)?.hash !== decodedReceipt.cutoff.hash) {
     throw new Error("observation-cutoff-hash-mismatch");
   }
   const evidenceKeys: Hash[] = [];
   for (const item of decodedReceipt.evidence) {
     const offset = decimal(item.blockNumber, "observedEvidence.blockNumber") - decimal(decodedReceipt.range.from, "recentObservationReceipt.range.from");
-    if (offset < 0n || offset >= BigInt(decodedReceipt.orderedBlockHashes.length)) {
+    if (offset < 0n || offset >= BigInt(decodedReceipt.orderedHeaders.length)) {
       throw new Error("observation-evidence-outside-range");
     }
-    if (decodedReceipt.orderedBlockHashes[Number(offset)] !== item.blockHash) {
+    if (decodedReceipt.orderedHeaders[Number(offset)]?.hash !== item.blockHash) {
       throw new Error("observation-evidence-block-mismatch");
     }
     evidenceKeys.push(hashDomain("aloha/candidate-evidence-ref/v1", item));
@@ -155,7 +189,7 @@ export function validateRecentObservationReceipt(
   const recomputed = hashDomain("aloha/recent-observation/v1", {
     cutoff: decodedReceipt.cutoff,
     range: decodedReceipt.range,
-    orderedBlockHashes: decodedReceipt.orderedBlockHashes,
+    orderedHeaders: decodedReceipt.orderedHeaders,
     evidence: decodedReceipt.evidence,
   });
   if (recomputed !== decodedReceipt.observationRoot) throw new Error("observation-root-mismatch");

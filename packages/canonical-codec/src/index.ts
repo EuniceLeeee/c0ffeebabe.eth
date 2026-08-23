@@ -977,6 +977,35 @@ export function hashDomainBytes(domain: string, payload: Uint8Array): Hash {
   return sha256Hex(joined);
 }
 
+/**
+ * Hash a large canonical partition without ever encoding the entire set as one
+ * JSON value. Callers own canonical ordering; this function binds count, page
+ * boundaries, every leaf value, and the requested domain.
+ */
+export function hashCanonicalPartition(
+  domain: string,
+  values: readonly unknown[],
+  pageSize = 128,
+): Hash {
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 1_024) {
+    throw new RangeError("canonical partition pageSize must be 1..1024");
+  }
+  const leafHashes = values.map((value, index) => hashDomain(`${domain}/leaf/v1`, { index: String(index), value }));
+  const pageHashes: Hash[] = [];
+  for (let offset = 0; offset < leafHashes.length; offset += pageSize) {
+    pageHashes.push(hashDomain(`${domain}/page/v1`, {
+      pageIndex: String(pageHashes.length),
+      firstIndex: String(offset),
+      leafHashes: leafHashes.slice(offset, offset + pageSize),
+    }));
+  }
+  return hashDomain(`${domain}/root/v1`, {
+    count: String(values.length),
+    pageSize: String(pageSize),
+    pageHashes,
+  });
+}
+
 export interface SchemaManifest<T> {
   readonly id: string;
   readonly version: string;

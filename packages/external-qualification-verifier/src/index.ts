@@ -3,7 +3,7 @@ import {
   encodeCanonicalJson,
   hashDomain,
   type Hash,
-} from "../../../packages/canonical-codec/src/index.ts";
+} from "../../canonical-codec/src/index.ts";
 import {
   decodeExternalQualificationIssuerKeyV2,
   decodeExternalQualificationTrustAnchorV2,

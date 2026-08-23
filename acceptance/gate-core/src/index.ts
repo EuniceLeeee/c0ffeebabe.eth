@@ -26,6 +26,16 @@ import {
 import { createPublicKey, verify as verifySignature } from "node:crypto";
 import { types as nodeTypes } from "node:util";
 import {
+  ACCEPTANCE_CERTIFICATE_SCHEMA_MANIFEST,
+  acceptanceCertificateId,
+  acceptanceCertificatePayloadHash,
+  createAcceptanceCertificateV1,
+  decodeAcceptanceCertificateV1,
+  encodeAcceptanceCertificateV1,
+  type AcceptanceCertificateDraftV1,
+  type AcceptanceCertificateV1,
+} from "../../../specs/acceptance-certificate/src/index.ts";
+import {
   decodeProductionReceipt,
   decodeReadOnlyArtifactRef,
   decodeSemanticArtifact,
@@ -100,7 +110,7 @@ import {
   verifyExternalQualificationV2,
   type ExternalQualificationAuthorityPinV2,
   type ExternalQualificationEvidenceV2,
-} from "./external-qualification.ts";
+} from "../../../packages/external-qualification-verifier/src/index.ts";
 import {
   GATE_REASON_CODES,
   type GateReasonCode,
@@ -141,7 +151,7 @@ export type { StoreEpochRawFactsV1 } from "../../../specs/qualified-facts/src/in
 export type {
   ExternalQualificationAuthorityPinV2,
   ExternalQualificationEvidenceV2,
-} from "./external-qualification.ts";
+} from "../../../packages/external-qualification-verifier/src/index.ts";
 
 /**
  * The reason catalog is intentionally closed.  A caller cannot smuggle a
@@ -233,43 +243,7 @@ export interface GateCoreInputV1 {
   readonly predicateFacts: readonly unknown[];
 }
 
-export interface AcceptanceCertificateV1 {
-  readonly schemaVersion: 1;
-  readonly kind: "aloha.acceptance-certificate";
-  readonly certificateId: Hash;
-  readonly payloadHash: Hash;
-  readonly acceptanceQueryId: Hash;
-  readonly subjectArtifactRoot: Hash;
-  readonly claimSetRoot: Hash;
-  readonly observationSetRoot: Hash;
-  readonly rawArtifactSetRoot: Hash;
-  readonly qualificationRegistryRoot: Hash;
-  readonly externalTrustAnchorRoot: Hash;
-  readonly externalIssuerKeySetRoot: Hash;
-  readonly qualificationRegistryApprovalId: Hash;
-  readonly releaseAuthorityApprovalId: Hash;
-  readonly authorityPinDigest: Hash;
-  readonly qualificationAudienceHash: Hash;
-  readonly releaseRoleManifestRoot: Hash;
-  readonly candidateReleaseCommit: string;
-  readonly predicateSpecDigest: Hash;
-  readonly predicateProgramDescriptorDigest: Hash;
-  readonly oracleProgramDescriptorDigest: Hash;
-  readonly predicateCompositionLeafDigest: Hash;
-  readonly predicateCompositionRootDigest: Hash;
-  readonly predicateImplementationClosureDigest: Hash;
-  readonly predicateImplementationExportDigest: Hash;
-  readonly oracleImplementationClosureDigest: Hash;
-  readonly oracleImplementationExportDigest: Hash;
-  readonly gateCoreImplementationClosureDigest: Hash;
-  readonly gateCoreRuntimeClosureDigest: Hash;
-  readonly verifierQualificationId: Hash;
-  readonly observerQualificationIds: readonly Hash[];
-  readonly signedInvocationAttestationId: Hash;
-  readonly invocationBindingSetRoot: Hash;
-  readonly reasonSetRoot: Hash;
-  readonly verdict: GateVerdict;
-}
+export type { AcceptanceCertificateV1 } from "../../../specs/acceptance-certificate/src/index.ts";
 
 export interface GateCoreResultV1 {
   readonly verdict: GateVerdict;
@@ -277,93 +251,12 @@ export interface GateCoreResultV1 {
   readonly reasons: readonly GateReasonV1[];
 }
 
-const acceptanceCertificateStructuralSchema = objectSchema({
-  schemaVersion: literalSchema(1),
-  kind: literalSchema("aloha.acceptance-certificate"),
-  certificateId: hashSchema,
-  payloadHash: hashSchema,
-  acceptanceQueryId: hashSchema,
-  subjectArtifactRoot: hashSchema,
-  claimSetRoot: hashSchema,
-  observationSetRoot: hashSchema,
-  rawArtifactSetRoot: hashSchema,
-  qualificationRegistryRoot: hashSchema,
-  externalTrustAnchorRoot: hashSchema,
-  externalIssuerKeySetRoot: hashSchema,
-  qualificationRegistryApprovalId: hashSchema,
-  releaseAuthorityApprovalId: hashSchema,
-  authorityPinDigest: hashSchema,
-  qualificationAudienceHash: hashSchema,
-  releaseRoleManifestRoot: hashSchema,
-  candidateReleaseCommit: gitSha40Schema,
-  predicateSpecDigest: hashSchema,
-  predicateProgramDescriptorDigest: hashSchema,
-  oracleProgramDescriptorDigest: hashSchema,
-  predicateCompositionLeafDigest: hashSchema,
-  predicateCompositionRootDigest: hashSchema,
-  predicateImplementationClosureDigest: hashSchema,
-  predicateImplementationExportDigest: hashSchema,
-  oracleImplementationClosureDigest: hashSchema,
-  oracleImplementationExportDigest: hashSchema,
-  gateCoreImplementationClosureDigest: hashSchema,
-  gateCoreRuntimeClosureDigest: hashSchema,
-  verifierQualificationId: hashSchema,
-  observerQualificationIds: arraySchema(hashSchema),
-  signedInvocationAttestationId: hashSchema,
-  invocationBindingSetRoot: hashSchema,
-  reasonSetRoot: hashSchema,
-  verdict: enumSchema(["pass", "fail", "invalid"] as const),
-});
-
-function omitIdentity(value: AcceptanceCertificateV1): Record<string, unknown> {
-  const {
-    certificateId: _certificateId,
-    payloadHash: _payloadHash,
-    ...payload
-  } = value;
-  return payload;
-}
-
-function acceptancePayloadHash(value: AcceptanceCertificateV1): Hash {
-  return hashDomain(
-    "aloha.acceptance-certificate/payload/v1",
-    omitIdentity(value),
-  );
-}
-
 function reasonSetRoot(reasons: readonly GateReasonV1[]): Hash {
   return hashDomain("aloha/acceptance-certificate/reason-set/v1", reasons);
 }
 
-const acceptanceCertificateSchema = refineSchema(
-  acceptanceCertificateStructuralSchema,
-  "aloha.acceptance-certificate.refinement.v1",
-  hashDomain("aloha/schema-refinement-spec/v1", {
-    id: "aloha.acceptance-certificate.refinement.v1",
-    version: "1.0.0",
-    rules: ["sorted-observer-ids", "payload-hash", "certificate-id"],
-  }),
-  (value, path) => {
-    for (let index = 1; index < value.observerQualificationIds.length; index += 1) {
-      if (value.observerQualificationIds[index - 1]! >= value.observerQualificationIds[index]!) {
-        throw new TypeError(`observerQualificationIds must be strictly sorted at ${path}`);
-      }
-    }
-    const expectedPayload = acceptancePayloadHash(value as AcceptanceCertificateV1);
-    const expectedId = hashDomain("aloha.acceptance-certificate/id/v1", expectedPayload);
-    if (value.payloadHash !== expectedPayload || value.certificateId !== expectedId) {
-      throw new TypeError(`acceptance certificate identity mismatch at ${path}`);
-    }
-    return value;
-  },
-);
-
 export const GATE_CORE_SCHEMA_MANIFESTS = Object.freeze({
-  acceptanceCertificate: defineSchemaManifest(
-    "aloha.acceptance-certificate",
-    "1.0.0",
-    acceptanceCertificateSchema,
-  ),
+  acceptanceCertificate: ACCEPTANCE_CERTIFICATE_SCHEMA_MANIFEST,
 });
 
 function parseCodecInput(value: string | Uint8Array | object): unknown {
@@ -375,43 +268,27 @@ function parseCodecInput(value: string | Uint8Array | object): unknown {
 export function decodeAcceptanceCertificate(
   value: string | Uint8Array | object,
 ): AcceptanceCertificateV1 {
-  return acceptanceCertificateSchema.decode(parseCodecInput(value));
+  return decodeAcceptanceCertificateV1(value);
 }
 
 export function encodeAcceptanceCertificate(value: AcceptanceCertificateV1): Uint8Array {
-  return encodeCanonicalBytes(acceptanceCertificateSchema.decode(value));
+  return encodeAcceptanceCertificateV1(value);
 }
 
 export function recomputeAcceptanceCertificatePayloadHash(value: AcceptanceCertificateV1): Hash {
-  return acceptancePayloadHash(acceptanceCertificateStructuralSchema.decode(value) as AcceptanceCertificateV1);
+  return acceptanceCertificatePayloadHash(value);
 }
 
 export function recomputeAcceptanceCertificateId(value: AcceptanceCertificateV1): Hash {
-  return hashDomain(
-    "aloha.acceptance-certificate/id/v1",
-    recomputeAcceptanceCertificatePayloadHash(value),
-  );
+  return acceptanceCertificateId(value);
 }
 
-export type AcceptanceCertificateDraft = Omit<
-  AcceptanceCertificateV1,
-  "certificateId" | "payloadHash"
->;
+export type AcceptanceCertificateDraft = AcceptanceCertificateDraftV1;
 
 export function createAcceptanceCertificate(
   draft: AcceptanceCertificateDraft,
 ): AcceptanceCertificateV1 {
-  const intermediate = {
-    ...draft,
-    certificateId: zeroHash(),
-    payloadHash: zeroHash(),
-  } as AcceptanceCertificateV1;
-  const payloadHash = acceptancePayloadHash(intermediate);
-  return acceptanceCertificateSchema.decode({
-    ...intermediate,
-    payloadHash,
-    certificateId: hashDomain("aloha.acceptance-certificate/id/v1", payloadHash),
-  });
+  return createAcceptanceCertificateV1(draft);
 }
 
 export function computeSubjectArtifactRoot(

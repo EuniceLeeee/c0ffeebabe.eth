@@ -141,7 +141,7 @@ function evaluateQualificationWithComposition(
  * This builder is test-only qualification material. It is intentionally not
  * exported from production and no result from it is an acceptance oracle.
  */
-function makeLineageFixture(
+export function makeLineageFixture(
   contentMutation = false,
   includeUnrelatedExpiredKey = false,
   externalOptions: {
@@ -955,6 +955,37 @@ function makeLineageFixture(
     mainArtifactRef: sortedRefs[0]!,
     signInvocation,
   };
+}
+
+/**
+ * Test-only bridge for consumers that must prove they joined a certificate
+ * emitted by the qualified GateCore evaluation.  It deliberately returns the
+ * real evaluation result instead of manufacturing a pass-shaped certificate.
+ */
+export function evaluateQualifiedLineageFixture() {
+  const fixture = makeLineageFixture();
+  const result = evaluateQualification(fixture.authority, fixture.input);
+  assert.equal(result.verdict, "pass", JSON.stringify(result.reasons));
+  return Object.freeze({
+    fixture,
+    result,
+    externalQualification: Object.freeze({
+      pin: fixture.authority.externalQualification,
+      evidence: fixture.input.externalQualification,
+      registry: fixture.input.registry,
+      registryFacts: fixture.input.registryFacts,
+      verifierCertificate: fixture.input.verifierCertificate,
+      observerCertificates: fixture.input.observerCertificates,
+      release: Object.freeze({
+        authorityPinDigest: computeGateCoreAuthorityPinDigest(fixture.authority),
+        predicateCompositionRootDigest: fixture.authority.predicateCompositionRootDigest,
+        gateCoreRuntimeClosureDigest: fixture.authority.gateCoreRuntimeClosureDigest,
+        gateCoreImplementationClosureDigest: fixture.authority.gateCoreImplementationClosureDigest,
+        verifierQualificationId: fixture.authority.verifierQualificationId,
+        observerQualificationIds: fixture.input.observerCertificates.map(value => value.certificateId).sort(),
+      }),
+    }),
+  });
 }
 
 function unsignedInvocationWithPatch(

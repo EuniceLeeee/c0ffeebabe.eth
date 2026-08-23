@@ -1,179 +1,153 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
-import type { AttestationPartitionV1 } from "../../attestation/src/index.ts";
-import { sealInstanceCatalog, sealInstancePublication } from "../../catalog/src/index.ts";
+import { encodeCanonicalJson, hashCanonicalPartition, hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import { sealInstanceCatalog } from "../../catalog/src/index.ts";
 import { recentObservationRange, sealSourceCoverage } from "../../discovery/src/index.ts";
-import {
-  ReadyGenerationServiceV1,
-  generationRefreshPolicyHash,
-  type CanonicalPromotionPort,
-  type ReadyCommitInputV1,
-  type ReadyStorePort,
-} from "../src/index.ts";
+import { buildPersistedGraph } from "../../graph/src/index.ts";
+import { issueCheckpointSealedRunReader } from "../../sealed-run-runtime/src/internal/reader-issuer.ts";
+import type { SealedRunBindingV1, SealedRunCapabilityV1, SealedRunReaderPortV1, SealedRunSnapshotV1 } from "../../sealed-run-runtime/src/contract.ts";
+import { readyBindingPortForReleaseApproval, releaseApproval } from "../../attestation/test/authority-fixture.ts";
+import { runtimeReleaseBindingProvenanceHash } from "../../../specs/release-authority/src/index.ts";
+import { ReadyGenerationServiceV1, createReadyPromotionAuthority, readyGenerationBaseHash, type CanonicalFencePort, type ReadyActivationInputV1, type ReadyStageInputV1, type ReadyStorePort } from "../src/index.ts";
 
-const h = (value: string): Hash => hashDomain("test/ready", value);
+const h = (value: string): Hash => hashDomain("test/ready-capability", value);
 const cutoff = { chainId: "1", number: "100", hash: h("block"), stateRoot: h("state") };
-const policy = {
-  observationWindowBlocks: "50" as const,
-  targetRefreshAgeBlocks: "20",
-  maxServingAgeBlocks: "50",
-  minPromotionMarginBlocks: "2",
-  maxInProgressRuns: "1" as const,
-};
+const policy = { observationWindowBlocks: "50" as const, targetRefreshAgeBlocks: "20", maxServingAgeBlocks: "50", minPromotionMarginBlocks: "2", maxInProgressRuns: "1" as const };
+const plan = { ownerRef: h("owner"), sourcePlanRef: h("plan"), familyDefinitionHash: h("definition"), completeness: "complete-snapshot" as const, historyStartBlock: null };
+const coverage = sealSourceCoverage(cutoff, [plan], [{ plan, cutoff, outcome: "complete", from: "100", through: "100", previousAppliedThrough: null, resultPartitionRoot: h("results") }]);
+const instanceCatalog = sealInstanceCatalog(cutoff, []);
+const graph = buildPersistedGraph(instanceCatalog);
+const release = releaseApproval(h("framework"), h("executor"));
+const releaseBinding = release.resolver.resolve(release.capability).provenance.runtimeBinding;
+const releaseProvenanceHash = runtimeReleaseBindingProvenanceHash(releaseBinding);
+const releaseBindingPort = readyBindingPortForReleaseApproval(release);
 
-const publication = sealInstancePublication({
-  familyId: "family-a",
-  familyDefinitionHash: h("definition"),
-  familyCandidateKey: h("candidate"),
-  instanceKey: "instance-a",
-  cutoff,
-  identityMemoHash: h("identity"),
-  descriptorHash: h("descriptor"),
-  staticProjectionMemoHash: h("projection-memo"),
-  requestedArtifactDependencyRoot: h("dependencies"),
-  validityDependencyRoot: h("validity"),
-  transitions: [{
-    inputAssetPorts: [{ assetRef: h("in"), portRef: h("in-port"), ordinal: "0" }],
-    outputAssetPorts: [{ assetRef: h("out"), portRef: h("out-port"), ordinal: "0" }],
-    opaqueTransitionRef: h("transition"),
-    constraintRefs: [],
-    staticProjectionHash: h("projection"),
-  }],
-  evidenceRoot: h("evidence"),
-});
+function binding(): SealedRunBindingV1 {
+  const base = {
+    runId: "run-a", parentGenerationId: null, cutoff, recentObservationRange: recentObservationRange(cutoff.number),
+    definitionCatalogRoot: h("definitions"), sourceCoverageRoot: coverage.sourceCoverageRoot,
+    candidatePartitionRoot: h("candidates"), candidatePartitionStorageHash: h("candidate-storage"),
+    candidatePartitionProofStorageHash: h("candidate-proof"),
+    verifiedMemoSetRoot: h("memos"), checkpointRevision: "7", attestationAuthorityRoot: h("attestation"),
+    releaseAuthorityRoot: h("release"), releaseProvenanceHash, executorAuthorityRoot: h("executor"),
+  };
+  const exactOutcomePartitionRoot = hashDomain("aloha/exact-outcome-partition/v1", {
+    runId: base.runId, cutoff: base.cutoff, candidatePartitionRoot: base.candidatePartitionRoot,
+    attestationAuthorityRoot: base.attestationAuthorityRoot, releaseAuthorityRoot: base.releaseAuthorityRoot,
+    releaseProvenanceHash: base.releaseProvenanceHash, executorAuthorityRoot: base.executorAuthorityRoot,
+    outcomesRoot: hashCanonicalPartition("aloha/candidate-outcomes/v1", []),
+  });
+  return { ...base, exactOutcomePartitionRoot };
+}
 
-const partitionBody: Omit<AttestationPartitionV1, "exactOutcomePartitionRoot"> = {
-  runId: "run-a",
-  cutoff,
-  outcomes: [{
-    kind: "verified",
-    runCandidateKey: hashDomain("aloha/run-candidate/v1", { runId: "run-a", familyCandidateKey: publication.familyCandidateKey }),
-    familyCandidateKey: publication.familyCandidateKey,
-    instanceKey: publication.instanceKey,
-    publication,
-  }],
-  accounting: { pending: "0", verified: "1", chainProvenRejected: "0", retryable: "0", invalidProgram: "0" },
-};
-const partition: AttestationPartitionV1 = {
-  ...partitionBody,
-  exactOutcomePartitionRoot: hashDomain("aloha/exact-outcome-partition/v1", {
-    runId: partitionBody.runId,
-    cutoff: partitionBody.cutoff,
-    outcomes: partitionBody.outcomes,
-  }),
-};
+function snapshot(value = binding()): SealedRunSnapshotV1 {
+  return { ...value, sourceCoverage: coverage, candidateKeys: [], partition: {
+    runId: value.runId, cutoff: value.cutoff, candidatePartitionRoot: value.candidatePartitionRoot, outcomes: [],
+    attestationAuthorityRoot: value.attestationAuthorityRoot, releaseAuthorityRoot: value.releaseAuthorityRoot,
+    releaseProvenanceHash: value.releaseProvenanceHash, executorAuthorityRoot: value.executorAuthorityRoot,
+    accounting: { pending: "0", verified: "0", chainProvenRejected: "0", retryable: "0", invalidProgram: "0" },
+    exactOutcomePartitionRoot: value.exactOutcomePartitionRoot,
+  } };
+}
 
-const coverageExecution = {
-  plan: { ownerRef: h("owner"), sourcePlanRef: h("plan"), familyDefinitionHash: h("definition"), completeness: "complete-snapshot" },
-  cutoff,
-  outcome: "complete",
-  from: "100",
-  through: "100",
-  previousAppliedThrough: null,
-  resultPartitionRoot: h("partition"),
-} as const;
-const coverage = sealSourceCoverage(cutoff, [coverageExecution.plan], [coverageExecution]);
-const currentCatalog = () => ({
-  definitionCatalogRoot: h("definitions"),
-  declaredSourcePlans: [coverageExecution.plan],
-});
+function snapshotBinding(value: SealedRunSnapshotV1): SealedRunBindingV1 {
+  const { sourceCoverage: _coverage, candidateKeys: _keys, partition: _partition, ...rest } = value;
+  return rest;
+}
 
-const input = {
-  run: {
-    runId: "run-a",
-    parentGenerationId: null,
-    cutoff,
-    recentObservationRange: recentObservationRange(cutoff.number),
-    definitionCatalogRoot: h("definitions"),
-    sourceCoverage: coverage,
-    candidatePartitionRoot: h("candidates"),
-    candidateKeys: [publication.familyCandidateKey],
-    verifiedMemoSetRoot: h("memos"),
-    checkpointRevision: "7",
-    partition,
-  },
-  instanceCatalog: sealInstanceCatalog(cutoff, [publication]),
-  parentGenerationId: null,
-  policy,
-};
+function issuedReader(initial = snapshot()) {
+  const capability = Object.freeze({}) as SealedRunCapabilityV1;
+  let current = initial;
+  const expected = binding();
+  const reader = issueCheckpointSealedRunReader(Object.freeze({
+    binding(value: SealedRunCapabilityV1) {
+      if (value !== capability) throw new TypeError("sealed-run-capability-not-issued");
+      return expected;
+    },
+    readForPromotion(value: SealedRunCapabilityV1) {
+      if (value !== capability) throw new TypeError("sealed-run-capability-not-issued");
+      if (encodeCanonicalJson(snapshotBinding(current)) !== encodeCanonicalJson(expected)) throw new TypeError("sealed-run-capability-binding-mismatch");
+      return current;
+    },
+  } satisfies SealedRunReaderPortV1));
+  return { capability, reader, set(value: SealedRunSnapshotV1) { current = value; } };
+}
 
-class Canonical implements CanonicalPromotionPort {
-  age = "1";
-  canonical = true;
-  async assertStillCanonical(): Promise<void> { if (!this.canonical) throw new Error("reorg"); }
-  async ageInBlocks(): Promise<string> { return this.age; }
-  async withPromotionFence<T>(cutoffValue: typeof cutoff, work: (fence: { journalEpoch: string; cutoff: typeof cutoff }) => Promise<T>): Promise<T> {
-    return work({ journalEpoch: "epoch-a", cutoff: cutoffValue });
+class Canonical implements CanonicalFencePort {
+  age = "1"; events: string[] = [];
+  async assertStillCanonical() {} async ageInBlocks() { return this.age; }
+  recentObservationRange(value: typeof cutoff) { return recentObservationRange(value.number); }
+  async withCanonicalFence<T>(value: typeof cutoff, work: (fence: { token: string; journalEpoch: string; canonicalJournalRoot: Hash; cutoff: typeof cutoff }) => Promise<T>) { return work({ token: "fence", journalEpoch: "1", canonicalJournalRoot: h("journal"), cutoff: value }); }
+  async observePromotionFreshness(fence: { journalEpoch: string; canonicalJournalRoot: Hash }, request: { cutoff: typeof cutoff; maxPromotionAgeBlocks: string; generationRefreshPolicyHash: Hash }) {
+    this.events.push("freshness");
+    if (BigInt(this.age) > BigInt(request.maxPromotionAgeBlocks)) throw new Error("promotion-cutoff-too-old");
+    const payload = { cutoff: request.cutoff, observedHead: request.cutoff, observedAgeBlocks: this.age, maxPromotionAgeBlocks: request.maxPromotionAgeBlocks, generationRefreshPolicyHash: request.generationRefreshPolicyHash, journalEpoch: fence.journalEpoch, canonicalJournalRoot: fence.canonicalJournalRoot };
+    return { token: "fresh", receipt: { ...payload, freshnessReceiptHash: hashDomain("aloha/promotion-freshness-receipt/v1", payload) } };
   }
+  assertPromotionFreshness() {}
 }
 
 class Store implements ReadyStorePort {
-  ready: ReadyCommitInputV1 | null = null;
-  failCommit = false;
-  async putContentAndFsync(kind: "instance-catalog" | "persisted-graph", value: object): Promise<Hash> {
-    return kind === "instance-catalog"
-      ? (value as { instanceCatalogRoot: Hash }).instanceCatalogRoot
-      : (value as { graphRoot: Hash }).graphRoot;
+  staged: ReadyStageInputV1 | null = null; activated: ReadyActivationInputV1 | null = null; events: string[] = [];
+  async putContentAndFsync(kind: "instance-catalog" | "persisted-graph", value: object): Promise<Hash> { return kind === "instance-catalog" ? (value as typeof instanceCatalog).instanceCatalogRoot : (value as typeof graph).graphRoot; }
+  async stageReadyCAS(value: ReadyStageInputV1) {
+    this.events.push("stage"); this.staged = value;
+    return { stage: { stageStorageHash: h("stage-storage"), runId: value.expectedInProgressRunId, expectedRevision: value.expectedRevision, sealedRevision: value.expectedRevision, stageRevision: (BigInt(value.expectedRevision) + 1n).toString(), stageRecordHash: h("stage"), readyBaseHash: readyGenerationBaseHash(value.ready), cutoff: value.ready.cutoff, generationRefreshPolicyHash: value.ready.generationRefreshPolicyHash, definitionCatalogRoot: value.ready.definitionCatalogRoot, releaseProvenanceHash: value.ready.releaseProvenanceHash, candidatePartitionProofStorageHash: value.ready.candidatePartitionProofStorageHash }, stageRevision: "8", stageRecordHash: h("stage") };
   }
-  async commitReadyCAS(value: ReadyCommitInputV1) {
-    if (this.failCommit) throw new Error("cas-conflict");
-    this.ready = value;
-    const promotionRevision = "8";
-    return {
-      promotionRevision,
-      readyRecordHash: hashDomain("aloha/ready-generation/v1", { ...value.ready, promotionRevision }),
-    };
+  async activateReadyCAS(value: ReadyActivationInputV1) {
+    this.activated = value; const promotionRevision = "9";
+    const readyPayload = { ...this.staged!.ready, promotionFreshness: value.freshness.receipt, promotedAtMonotonicNs: value.promotedAtMonotonicNs, promotionRevision };
+    return { promotionRevision, readyRecordHash: hashDomain("aloha/ready-generation/v1", readyPayload) };
   }
-  async loadReadyClosure() {
-    if (!this.ready) throw new Error("ready-missing");
-    return { sourceCoverage: coverage, instanceCatalog: this.ready.instanceCatalog, graph: this.ready.graph };
-  }
-  async assertContentRoot(_kind: "candidate-partition" | "verified-memo-set", root: Hash) {
-    if (root.length === 0) throw new Error("content-root-missing");
-  }
+  async loadReadyClosure() { return { sourceCoverage: coverage, instanceCatalog, graph }; }
+  async assertContentRoot() {} assertReadyAuthorityActive() {}
 }
 
-test("one CAS binds cutoff, catalog, Graph and policy into ready authority", async () => {
-  const token = {};
-  const store = new Store();
-  const canonical = new Canonical();
-  const service = new ReadyGenerationServiceV1(token, store, canonical, () => "1000", currentCatalog);
-  const ready = await service.promote(token, input);
-  assert.equal(ready.promotionRevision, "8");
-  assert.equal(ready.instanceCatalogRoot, input.instanceCatalog.instanceCatalogRoot);
-  assert.equal(ready.graphRoot, store.ready?.graph.graphRoot);
-  assert.equal(ready.generationRefreshPolicyHash, generationRefreshPolicyHash(policy));
-  assert.equal(store.ready?.expectedRevision, "7");
+function makeService(reader: SealedRunReaderPortV1, store = new Store(), canonical = new Canonical()) {
+  const caller = {};
+  const authority = createReadyPromotionAuthority(() => ({ definitionCatalogRoot: h("definitions"), policy }), releaseBindingPort);
+  return { caller, store, canonical, service: new ReadyGenerationServiceV1(caller, store, canonical, () => "1000", () => ({ definitionCatalogRoot: h("definitions"), declaredSourcePlans: [plan], releaseProvenanceHash }), authority, reader, releaseBindingPort) };
+}
+
+const promotionInput = (sealedRun: SealedRunCapabilityV1) => ({ sealedRun, instanceCatalog, parentGenerationId: null, policy });
+
+test("public ReadyGeneration API does not re-export the durable sealed-run snapshot", () => {
+  const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  const file = source.replace(/import\s+[\s\S]*?from\s+["'][^"']+["'];?/g, "");
+  assert.doesNotMatch(file, /export\s+(?:type\s+)?\{[^}]*\bSealedRunSnapshotV1\b[^}]*\}/s);
+  assert.doesNotMatch(file, /export\s+(?:interface|type|class|const|function)\s+SealedRunSnapshotV1\b/);
 });
 
-test("unauthorized caller and unresolved partition fail before promotion", async () => {
-  const token = {};
-  const store = new Store();
-  const service = new ReadyGenerationServiceV1(token, store, new Canonical(), () => "1000", currentCatalog);
-  await assert.rejects(() => service.promote({}, input), /unauthorized/);
-  await assert.rejects(() => service.promote(token, {
-    ...input,
-    run: { ...input.run, partition: { ...partition, accounting: { ...partition.accounting, retryable: "1", verified: "0" } } },
-  }), /retryable-outcomes/);
-  assert.equal(store.ready, null);
+test("opaque sealed run promotes only through a checkpoint-issued reader", async () => {
+  const issued = issuedReader(); const value = makeService(issued.reader);
+  const ready = await value.service.promote(value.caller, promotionInput(issued.capability));
+  assert.equal(ready.candidatePartitionRoot, binding().candidatePartitionRoot);
+  assert.equal(value.store.staged?.expectedRevision, "7"); assert.ok(value.store.activated);
 });
 
-test("content written before a failed CAS never becomes visible ready authority", async () => {
-  const token = {};
-  const store = new Store();
-  store.failCommit = true;
-  const service = new ReadyGenerationServiceV1(token, store, new Canonical(), () => "1000", currentCatalog);
-  await assert.rejects(() => service.promote(token, input), /cas-conflict/);
-  assert.equal(store.ready, null);
+test("fake reader and fake, cloned, or foreign capability fail closed", async () => {
+  assert.throws(() => makeService({ binding: (() => binding()) as never, readForPromotion: (() => snapshot()) as never }), /not checkpoint-issued/);
+  const first = issuedReader(); const second = issuedReader(); const value = makeService(first.reader);
+  for (const capability of [{}, { ...first.capability }, second.capability]) await assert.rejects(() => value.service.promote(value.caller, promotionInput(capability)), /not-issued/);
 });
 
-test("every serving admission rechecks canonical age and policy", async () => {
-  const token = {};
-  const store = new Store();
-  const canonical = new Canonical();
-  const service = new ReadyGenerationServiceV1(token, store, canonical, () => "1000", currentCatalog);
-  const ready = await service.promote(token, input);
-  canonical.age = "51";
-  await assert.rejects(() => service.validateServing({ ready, expectedDefinitionCatalogRoot: h("definitions"), policy }), /stale/);
+test("sealed run binding drift is rejected before stage or freshness", async () => {
+  const issued = issuedReader(); issued.set(snapshot({ ...binding(), checkpointRevision: "8" })); const value = makeService(issued.reader);
+  await assert.rejects(() => value.service.promote(value.caller, promotionInput(issued.capability)), /binding-mismatch/);
+  assert.equal(value.store.staged, null); assert.deepEqual(value.canonical.events, []);
+});
+
+test("stage is durable before freshness and stale freshness never activates", async () => {
+  const issued = issuedReader(); const store = new Store(); const canonical = new Canonical(); store.events = canonical.events;
+  const value = makeService(issued.reader, store, canonical); await value.service.promote(value.caller, promotionInput(issued.capability));
+  assert.deepEqual(canonical.events, ["stage", "freshness"]);
+  const staleStore = new Store(); const staleCanonical = new Canonical(); staleCanonical.age = "49"; const stale = makeService(issued.reader, staleStore, staleCanonical);
+  await assert.rejects(() => stale.service.promote(stale.caller, promotionInput(issued.capability)), /too-old/); assert.equal(staleStore.activated, null);
+});
+
+test("caller authority cannot substitute sealed run authority", async () => {
+  const issued = issuedReader(); const value = makeService(issued.reader);
+  await assert.rejects(() => value.service.promote({}, promotionInput(issued.capability)), /unauthorized/);
+  await assert.rejects(() => value.service.promote(value.caller, promotionInput({})), /not-issued/);
 });

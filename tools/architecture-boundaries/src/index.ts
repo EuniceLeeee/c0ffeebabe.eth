@@ -295,6 +295,19 @@ const GATE_CORE_RELEASE_TARGET = "./src/generated/release-runtime.ts";
 const RELEASE_COMPOSITION_PATH = "acceptance/gate-core/src/release-composition.ts";
 const RELEASE_PREDICATE_COMPOSITION_PATH = "acceptance/gate-core/src/generated/predicate-composition.ts";
 const RELEASE_AUTHORITY_PATH = "acceptance/gate-core/src/generated/release-authority.ts";
+const SCHEDULER_AUTHORITY_PATH = "packages/scheduler/src/generated/qualified-executor-authority.ts";
+const FAMILY_EXECUTION_COMPOSITION_PATH = "packages/work-plane/src/generated/family-execution-composition.ts";
+const RUNTIME_RELEASE_PUBLIC_PATH = "packages/runtime-release-authority/src/index.ts";
+const RUNTIME_RELEASE_BOOTSTRAP_PATH = "packages/runtime-release-authority/src/internal/bootstrap.ts";
+const RUNTIME_RELEASE_REVM_OWNER_PATH = "packages/runtime-release-authority/src/internal/revm-worker-owner.ts";
+const RUNTIME_RELEASE_READY_BINDING_OWNER_PATH = "packages/runtime-release-authority/src/internal/ready-binding-owner.ts";
+const RUNTIME_RELEASE_READY_BINDING_CONSUMER_PATH = "packages/runtime-release-authority/src/internal/ready-binding-consumer.ts";
+const REVM_WORKER_PROTOCOL_PATH = "runtime/revm-workers/src/protocol.ts";
+const REVM_WORKER_LIFECYCLE_PATH = "runtime/revm-workers/src/lifecycle.ts";
+const REVM_WORKER_AUTHORITY_PATH = "runtime/revm-workers/src/internal/authority.ts";
+const RELEASE_AUTHORITY_SPEC_PATH = "specs/release-authority/src/index.ts";
+const ATTESTATION_PUBLIC_CONTRACT_PATH = "packages/attestation/src/index.ts";
+const ATTESTATION_ENGINE_PATH = "packages/attestation/src/internal/engine.ts";
 const RELEASE_LEDGER_PATH = "acceptance/gate-core/src/release-role-manifest.ledger.json";
 const RELEASE_GENERATOR_CLI_PATH = "tools/release-role-manifest/src/cli.ts";
 const RELEASE_GENERATOR_INDEX_PATH = "tools/release-role-manifest/src/index.ts";
@@ -305,6 +318,299 @@ const RELEASE_GENERATED_OUTPUT_PATHS = Object.freeze([
 ].sort());
 const RELEASE_FIXED_OUTPUT_PATHS = Object.freeze([RELEASE_AUTHORITY_PATH].sort());
 const RELEASE_OUTPUT_PATHS = Object.freeze([...RELEASE_GENERATED_OUTPUT_PATHS, ...RELEASE_FIXED_OUTPUT_PATHS].sort());
+
+// Family code is intentionally default-deny against the central tree.  These
+// are protocol-neutral contracts/codecs only; adding a concrete package here
+// would turn a Family-specific dependency into a central escape hatch.
+const FAMILY_CENTRAL_IMPORT_ALLOWLIST = Object.freeze([
+  "packages/family-sdk/runtime-refs/",
+  "packages/capability-contracts/",
+  "packages/canonical-codec/",
+  // Only the separately frozen pure-contract subtree is a Family dependency;
+  // the package root and closure/build helpers remain default-deny.
+  "packages/artifact-fingerprint/src/pure/",
+]);
+
+// These public package roots still mix a constructor/issuer with ordinary
+// ports.  They are sensitive until physically split; listing them here makes
+// direct runtime imports fail closed instead of hiding behind a public index.
+const SENSITIVE_PUBLIC_CONSTRUCTOR_PATHS = new Set([
+  "packages/checkpoint/src/index.ts",
+  "packages/durable-store/src/index.ts",
+  "packages/scheduler/src/index.ts",
+  "packages/work-plane/src/index.ts",
+]);
+
+// These are current non-public constructor/issuer paths.  `/src/internal/`
+// itself is also sensitive below, so a future internal constructor cannot be
+// reached merely because it was omitted from this list.
+const KNOWN_AUTHORITY_CONSTRUCTOR_PATHS = new Set([
+  "packages/runtime-release-authority/src/index.ts",
+  "packages/runtime-release-authority/src/internal/bootstrap.ts",
+  "packages/runtime-release-authority/src/internal/candidate-partition-proof-owner.ts",
+  "packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts",
+  "packages/attestation/src/internal-authority.ts",
+  "packages/work-plane/src/internal/family-execution-port.ts",
+  "packages/candidate-partition-runtime/src/internal/reader-state.ts",
+  "packages/candidate-partition-runtime/src/internal/reader-issuer.ts",
+  "packages/candidate-partition-runtime/src/internal/reader-consumer.ts",
+  "packages/checkpoint/src/candidate-partition.ts",
+  "packages/checkpoint/src/sealed-run.ts",
+  "packages/sealed-run-runtime/src/internal/reader-state.ts",
+  "packages/sealed-run-runtime/src/internal/reader-issuer.ts",
+  "packages/sealed-run-runtime/src/internal/reader-consumer.ts",
+  "specs/candidate-partition-authority/src/internal/issuer-state.ts",
+  "specs/candidate-partition-authority/src/internal/issuer-owner.ts",
+  "specs/candidate-partition-authority/src/internal/issuer-consumer.ts",
+]);
+
+// Only the declaring owner may import the current internal constructor.  This
+// is an exact edge manifest, not a package-wide or wildcard exception.
+const AUTHORITY_OWNER_EDGES = new Set([
+  "packages/runtime-release-authority/src/index.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
+  "packages/runtime-release-authority/src/index.ts\u2192packages/runtime-release-authority/src/internal/bootstrap.ts",
+  "packages/runtime-release-authority/src/internal/authority-consumer.ts\u2192packages/runtime-release-authority/src/index.ts",
+  "packages/runtime-release-authority/src/internal/authority-consumer.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
+  "packages/runtime-release-authority/src/internal/attestation-composition-owner.ts\u2192packages/runtime-release-authority/src/index.ts",
+  "packages/runtime-release-authority/src/internal/attestation-composition-owner.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
+  "packages/runtime-release-authority/src/internal/attestation-composition-owner.ts\u2192packages/runtime-release-authority/src/internal/attestation-proof-consumer.ts",
+  "packages/runtime-release-authority/src/internal/attestation-composition-consumer.ts\u2192packages/runtime-release-authority/src/internal/attestation-composition-owner.ts",
+  "packages/runtime-release-authority/src/internal/attestation-composition-consumer.ts\u2192packages/runtime-release-authority/src/internal/attestation-proof-consumer.ts",
+  "packages/runtime-release-authority/src/internal/attestation-proof-owner.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
+  "packages/runtime-release-authority/src/internal/attestation-proof-consumer.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
+  "packages/runtime-release-authority/src/internal/attestation-proof-consumer.ts\u2192packages/runtime-release-authority/src/internal/attestation-proof-owner.ts",
+  "packages/runtime-release-authority/src/internal/candidate-partition-proof-owner.ts\u2192packages/runtime-release-authority/src/index.ts",
+  "packages/runtime-release-authority/src/internal/candidate-partition-proof-owner.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
+  "packages/runtime-release-authority/src/internal/candidate-partition-proof-owner.ts\u2192specs/candidate-partition-authority/src/internal/issuer-owner.ts",
+  "packages/runtime-release-authority/src/internal/candidate-partition-proof-owner.ts\u2192specs/candidate-partition-authority/src/internal/issuer-consumer.ts",
+  "packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts\u2192packages/runtime-release-authority/src/index.ts",
+  "packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
+  "packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts\u2192packages/scheduler/src/internal/authority-owner.ts",
+  "packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts\u2192packages/scheduler/src/internal/authority-consumer.ts",
+  "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/runtime-release-authority/src/index.ts",
+  "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/runtime-release-authority/src/internal/attestation-composition-owner.ts",
+  "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/runtime-release-authority/src/internal/attestation-proof-owner.ts",
+  "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/runtime-release-authority/src/internal/candidate-partition-proof-owner.ts",
+  "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts",
+  "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/attestation/src/internal/composition.ts",
+  "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/checkpoint/src/candidate-partition.ts",
+  "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/checkpoint/src/index.ts",
+  "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/work-plane/src/internal/family-execution-port.ts",
+  `packages/runtime-release-authority/src/internal/bootstrap.ts\u2192${RUNTIME_RELEASE_REVM_OWNER_PATH}`,
+  `packages/runtime-release-authority/src/index.ts\u2192${RUNTIME_RELEASE_READY_BINDING_OWNER_PATH}`,
+  `packages/runtime-release-authority/src/internal/ready-binding-consumer.ts\u2192${RUNTIME_RELEASE_READY_BINDING_OWNER_PATH}`,
+  `packages/ready-generation/src/index.ts\u2192${RUNTIME_RELEASE_READY_BINDING_CONSUMER_PATH}`,
+  `${RUNTIME_RELEASE_REVM_OWNER_PATH}\u2192packages/scheduler/src/internal/authority-consumer.ts`,
+  `${RUNTIME_RELEASE_REVM_OWNER_PATH}\u2192${REVM_WORKER_AUTHORITY_PATH}`,
+  `${REVM_WORKER_LIFECYCLE_PATH}\u2192${REVM_WORKER_AUTHORITY_PATH}`,
+  "packages/attestation/src/internal/composition-resolution.ts\u2192packages/runtime-release-authority/src/internal/attestation-composition-consumer.ts",
+  "packages/attestation/src/index.ts\u2192packages/attestation/src/internal-authority.ts",
+  "packages/attestation/src/index.ts\u2192packages/attestation/src/internal/identity-proof.ts",
+  "packages/attestation/src/index.ts\u2192packages/attestation/src/internal/outcome-proof.ts",
+  "packages/attestation/src/internal/engine.ts\u2192packages/attestation/src/internal-authority.ts",
+  "packages/attestation/src/internal/composition-resolution.ts\u2192packages/attestation/src/internal-authority.ts",
+  "packages/attestation/src/internal/composition.ts\u2192packages/attestation/src/internal/engine.ts",
+  "packages/attestation/src/internal/composition.ts\u2192packages/attestation/src/internal/composition-resolution.ts",
+  "packages/attestation/src/internal/engine.ts\u2192packages/attestation/src/internal/validation-authority-issuer.ts",
+  "packages/attestation/src/internal/engine.ts\u2192packages/attestation/src/internal/validation-authority-state.ts",
+  "packages/attestation/src/internal/validation-authority-issuer.ts\u2192packages/attestation/src/internal/validation-authority-state.ts",
+  "packages/attestation/src/internal/validation-authority-verifier.ts\u2192packages/attestation/src/internal/validation-authority-state.ts",
+  "packages/checkpoint/src/index.ts\u2192packages/attestation/src/internal/validation-authority-verifier.ts",
+  "packages/checkpoint/src/index.ts\u2192packages/attestation/src/internal/validation-authority-rehydrator.ts",
+  "packages/work-plane/src/internal/family-execution-port.ts\u2192packages/work-plane/src/index.ts",
+  "packages/checkpoint/src/index.ts\u2192packages/checkpoint/src/candidate-partition.ts",
+  "packages/checkpoint/src/candidate-partition.ts\u2192packages/candidate-partition-runtime/src/internal/reader-issuer.ts",
+  "packages/attestation/src/internal/engine.ts\u2192packages/candidate-partition-runtime/src/internal/reader-consumer.ts",
+  "packages/scheduler/src/internal/authority-owner.ts\u2192packages/scheduler/src/internal/authority-state.ts",
+  "packages/scheduler/src/internal/authority-consumer.ts\u2192packages/scheduler/src/internal/authority-state.ts",
+  "packages/work-plane/src/internal/family-execution-port.ts\u2192packages/scheduler/src/internal/authority-consumer.ts",
+  "packages/candidate-partition-runtime/src/internal/reader-issuer.ts\u2192packages/candidate-partition-runtime/src/internal/reader-state.ts",
+  "packages/candidate-partition-runtime/src/internal/reader-consumer.ts\u2192packages/candidate-partition-runtime/src/internal/reader-state.ts",
+  "packages/checkpoint/src/index.ts\u2192packages/checkpoint/src/sealed-run.ts",
+  "packages/checkpoint/src/sealed-run.ts\u2192packages/sealed-run-runtime/src/internal/reader-issuer.ts",
+  "packages/ready-generation/src/index.ts\u2192packages/sealed-run-runtime/src/internal/reader-consumer.ts",
+  "packages/sealed-run-runtime/src/internal/reader-issuer.ts\u2192packages/sealed-run-runtime/src/internal/reader-state.ts",
+  "packages/sealed-run-runtime/src/internal/reader-consumer.ts\u2192packages/sealed-run-runtime/src/internal/reader-state.ts",
+  "packages/checkpoint/src/index.ts\u2192specs/candidate-partition-authority/src/internal/issuer-consumer.ts",
+  "packages/checkpoint/test/candidate-partition-authority-fixture.ts\u2192specs/candidate-partition-authority/src/internal/issuer-owner.ts",
+  "specs/candidate-partition-authority/src/internal/issuer-owner.ts\u2192specs/candidate-partition-authority/src/internal/issuer-state.ts",
+  "specs/candidate-partition-authority/src/internal/issuer-consumer.ts\u2192specs/candidate-partition-authority/src/internal/issuer-state.ts",
+]);
+
+const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
+  [
+    "packages/runtime-release-authority/src/index.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
+    ["registerRuntimeReleaseAuthority", "stateForRuntimeReleaseCapability"],
+  ],
+  [
+    "packages/runtime-release-authority/src/index.ts\u2192packages/runtime-release-authority/src/internal/bootstrap.ts",
+    ["buildRuntimeReleaseComposition"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/candidate-partition-proof-owner.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
+    ["assertActiveRuntimeReleaseAuthorityState"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/candidate-partition-proof-owner.ts\u2192specs/candidate-partition-authority/src/internal/issuer-owner.ts",
+    ["issueCandidatePartitionProofIssuerPort"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/candidate-partition-proof-owner.ts\u2192specs/candidate-partition-authority/src/internal/issuer-consumer.ts",
+    ["assertIssuedCandidatePartitionProofIssuer"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
+    ["assertActiveRuntimeReleaseAuthorityState"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts\u2192packages/scheduler/src/internal/authority-owner.ts",
+    ["issueQualifiedExecutorAuthorityIssuer"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts\u2192packages/scheduler/src/internal/authority-consumer.ts",
+    ["assertIssuedQualifiedExecutorAuthorityIssuer"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/runtime-release-authority/src/internal/attestation-composition-owner.ts",
+    ["issueRuntimeReleaseAttestationComposition"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/runtime-release-authority/src/internal/attestation-proof-owner.ts",
+    ["issueRuntimeReleaseAttestationProofPort"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/runtime-release-authority/src/internal/candidate-partition-proof-owner.ts",
+    ["issueRuntimeReleaseCandidatePartitionProofIssuer"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts",
+    [
+      "assertRuntimeReleaseQualifiedExecutorAuthorityInitialCapability",
+      "issueRuntimeReleaseQualifiedExecutorAuthorityIssuer",
+    ],
+  ],
+  [
+    `packages/runtime-release-authority/src/internal/bootstrap.ts\u2192${RUNTIME_RELEASE_REVM_OWNER_PATH}`,
+    ["issueRuntimeReleaseExecutorLeaseV1"],
+  ],
+  [
+    `packages/runtime-release-authority/src/index.ts\u2192${RUNTIME_RELEASE_READY_BINDING_OWNER_PATH}`,
+    ["issueRuntimeReleaseReadyBindingPort"],
+  ],
+  [
+    `packages/runtime-release-authority/src/internal/ready-binding-consumer.ts\u2192${RUNTIME_RELEASE_READY_BINDING_OWNER_PATH}`,
+    ["isIssuedRuntimeReleaseReadyBindingPort"],
+  ],
+  [
+    `packages/ready-generation/src/index.ts\u2192${RUNTIME_RELEASE_READY_BINDING_CONSUMER_PATH}`,
+    ["assertIssuedRuntimeReleaseReadyBindingPort"],
+  ],
+  [
+    `${RUNTIME_RELEASE_REVM_OWNER_PATH}\u2192packages/scheduler/src/internal/authority-consumer.ts`,
+    ["assertIssuedQualifiedExecutorAuthorityIssuer"],
+  ],
+  [
+    `${RUNTIME_RELEASE_REVM_OWNER_PATH}\u2192${REVM_WORKER_AUTHORITY_PATH}`,
+    ["issueRevmWorkerAuthorityIssuer", "readIssuedRevmWorkerDeploymentPort"],
+  ],
+  [
+    `${REVM_WORKER_LIFECYCLE_PATH}\u2192${REVM_WORKER_AUTHORITY_PATH}`,
+    ["assertIssuedRevmWorkerAuthorityIssuer"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/attestation/src/internal/composition.ts",
+    ["createAttestationService"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/checkpoint/src/candidate-partition.ts",
+    ["createCandidatePartitionBootstrap", "candidatePartitionBootstrapReader"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/checkpoint/src/index.ts",
+    ["createCheckpointStore"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/work-plane/src/internal/family-execution-port.ts",
+    ["createSchedulerOwnedFamilyExecutionPort"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/authority-consumer.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
+    ["assertIssuedRuntimeReleaseAuthorityState"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/attestation-composition-consumer.ts\u2192packages/runtime-release-authority/src/internal/attestation-composition-owner.ts",
+    ["readIssuedRuntimeReleaseAttestationComposition"],
+  ],
+  [
+    "packages/runtime-release-authority/src/internal/attestation-proof-consumer.ts\u2192packages/runtime-release-authority/src/internal/attestation-proof-owner.ts",
+    ["readIssuedRuntimeReleaseAttestationProof"],
+  ],
+  [
+    "packages/attestation/src/internal/composition-resolution.ts\u2192packages/runtime-release-authority/src/internal/attestation-composition-consumer.ts",
+    ["assertIssuedRuntimeReleaseAttestationComposition"],
+  ],
+  [
+    "packages/checkpoint/src/candidate-partition.ts\u2192packages/candidate-partition-runtime/src/internal/reader-issuer.ts",
+    ["issueCheckpointCandidatePartitionReader"],
+  ],
+  [
+    "packages/attestation/src/internal/engine.ts\u2192packages/candidate-partition-runtime/src/internal/reader-consumer.ts",
+    ["assertIssuedCandidatePartitionReader"],
+  ],
+  [
+    "packages/scheduler/src/internal/authority-owner.ts\u2192packages/scheduler/src/internal/authority-state.ts",
+    ["registerQualifiedExecutorAuthorityIssuer"],
+  ],
+  [
+    "packages/scheduler/src/internal/authority-consumer.ts\u2192packages/scheduler/src/internal/authority-state.ts",
+    ["isQualifiedExecutorAuthorityIssuer"],
+  ],
+  [
+    "packages/work-plane/src/internal/family-execution-port.ts\u2192packages/scheduler/src/internal/authority-consumer.ts",
+    ["assertIssuedQualifiedExecutorAuthorityIssuer"],
+  ],
+  [
+    "packages/candidate-partition-runtime/src/internal/reader-issuer.ts\u2192packages/candidate-partition-runtime/src/internal/reader-state.ts",
+    ["registerIssuedReader"],
+  ],
+  [
+    "packages/candidate-partition-runtime/src/internal/reader-consumer.ts\u2192packages/candidate-partition-runtime/src/internal/reader-state.ts",
+    ["isIssuedReader"],
+  ],
+  ["packages/checkpoint/src/sealed-run.ts\u2192packages/sealed-run-runtime/src/internal/reader-issuer.ts", ["issueCheckpointSealedRunReader"]],
+  ["packages/ready-generation/src/index.ts\u2192packages/sealed-run-runtime/src/internal/reader-consumer.ts", ["assertCheckpointSealedRunReader"]],
+  ["packages/sealed-run-runtime/src/internal/reader-issuer.ts\u2192packages/sealed-run-runtime/src/internal/reader-state.ts", ["registerSealedRunReader"]],
+  ["packages/sealed-run-runtime/src/internal/reader-consumer.ts\u2192packages/sealed-run-runtime/src/internal/reader-state.ts", ["isSealedRunReader"]],
+  ["packages/checkpoint/src/index.ts\u2192specs/candidate-partition-authority/src/internal/issuer-consumer.ts", ["assertIssuedCandidatePartitionProofIssuer"]],
+  ["specs/candidate-partition-authority/src/internal/issuer-owner.ts\u2192specs/candidate-partition-authority/src/internal/issuer-state.ts", ["registerCandidatePartitionProofIssuer"]],
+  ["specs/candidate-partition-authority/src/internal/issuer-consumer.ts\u2192specs/candidate-partition-authority/src/internal/issuer-state.ts", ["isCandidatePartitionProofIssuer"]],
+]);
+
+/**
+ * REVM receives only the schema-owned worker lease projection.  Keep the
+ * mixed value/type import exact: accepting the whole release binding here
+ * would move signer/certificate authority across the worker boundary.
+ */
+const REVM_NARROW_PORT_IMPORTS = new Map<string, readonly { readonly name: string; readonly typeOnly: boolean }[]>([
+  [
+    `${REVM_WORKER_PROTOCOL_PATH}\u2192${RELEASE_AUTHORITY_SPEC_PATH}`,
+    [
+      { name: "decodeRuntimeReleaseExecutorLeaseV1", typeOnly: false },
+      { name: "RuntimeReleaseExecutorLeaseV1", typeOnly: true },
+    ],
+  ],
+]);
+
+/** Consumers that must pass an owner-issued process-local port through an
+ * exact consumer guard.  A matching structural TypeScript interface is not
+ * enough and must not silently become a second authority path. */
+const REQUIRED_AUTHORITY_IMPORT_EDGES = new Set([
+  `packages/ready-generation/src/index.ts\u2192${RUNTIME_RELEASE_READY_BINDING_CONSUMER_PATH}`,
+  "packages/checkpoint/src/index.ts\u2192specs/candidate-partition-authority/src/internal/issuer-consumer.ts",
+  "packages/attestation/src/internal/composition-resolution.ts\u2192packages/runtime-release-authority/src/internal/attestation-composition-consumer.ts",
+  `${REVM_WORKER_LIFECYCLE_PATH}\u2192${REVM_WORKER_AUTHORITY_PATH}`,
+  `${RUNTIME_RELEASE_REVM_OWNER_PATH}\u2192${REVM_WORKER_AUTHORITY_PATH}`,
+]);
 
 function canonical(value: unknown): string {
   if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
@@ -464,6 +770,22 @@ function classify(path: string): { language: Language; fileClass: FileClass; sou
   else fileClass = "metadata";
   const sourceLike = SOURCE_EXTENSIONS.has(extension) || CONFIG_NAMES.has(base);
   return { language, fileClass, sourceLike };
+}
+
+/**
+ * Test/compiler fixtures are valid denominator inputs, but never valid
+ * production release inputs.  Keep this path predicate independent from the
+ * compiler graph: a fixture that is accidentally pulled into a production
+ * closure must be rejected even when its import edge is hidden behind a
+ * generated or package entrypoint.
+ */
+function isTestOrFixturePath(path: string): boolean {
+  const normalized = posixPath(path);
+  const base = normalized.slice(normalized.lastIndexOf("/") + 1);
+  return /(?:^|\/)(?:test|tests|fixture|fixtures)\//.test(normalized) ||
+    /(?:^|\.)test\.[^.]+$/.test(normalized) ||
+    /(?:^|\.)spec\.[^.]+$/.test(normalized) ||
+    /(?:^|[-_.])(?:test|tests|fixture|fixtures)(?:[-_.]|$)/.test(base);
 }
 
 function readTrackedFiles(root: string, diagnostics: BoundaryDiagnostic[]): TrackedFile[] {
@@ -1313,7 +1635,11 @@ function validateGeneratedTree(root: string, files: readonly TrackedFile[], requ
   const releaseTreeTracked = files.some((file) => file.path === RELEASE_LEDGER_PATH || file.path === "acceptance/gate-core/src/generated/release-role-manifest.ts") ||
     (files.some((file) => file.path === "acceptance/gate-core/package.json") && generated.some((file) => file.path === RELEASE_RUNTIME_PATH));
   const genericGenerated = releaseTreeTracked
-    ? generated.filter((file) => !RELEASE_OUTPUT_PATHS.includes(file.path))
+    // The scheduler authority is a separately fixed fail-closed placeholder,
+    // not a release-role generator output.  It is validated by the exact-null
+    // check in runBoundaryGate and must not be mistaken for an unqualified
+    // hand-authored generated tree.
+    ? generated.filter((file) => !RELEASE_OUTPUT_PATHS.includes(file.path) && file.path !== SCHEDULER_AUTHORITY_PATH)
     : generated;
   if (genericGenerated.length === 0) return generatorPaths;
   diagnostics.push(diagnostic(
@@ -1370,8 +1696,14 @@ export function validateDependencyBoundaries(
   files: readonly TrackedFile[],
   edges: readonly GraphEdge[],
   diagnostics: BoundaryDiagnostic[],
+  sourceRoot = process.cwd(),
 ): void {
   const byPath = new Map(files.map((file) => [file.path, file]));
+  // Dependency graph treatment intentionally follows the historical compiler
+  // denominator convention.  A source named `test-support.ts` is still a
+  // production-classified central source until the closure-specific check
+  // below proves it is a fixture; changing this here would hide constructor
+  // edges rather than report them.
   const testOrFixture = (path: string): boolean =>
     /(?:^|\/)(?:test|tests|fixture|fixtures)\//.test(path) || /(?:^|\.)test\.[^.]+$/.test(path) || /(?:^|\.)spec\.[^.]+$/.test(path);
   const isSpecs = (path: string): boolean => path.startsWith("specs/");
@@ -1382,6 +1714,73 @@ export function validateDependencyBoundaries(
     return base === "index.ts" || base === "index.js" || base.endsWith("-public.ts") || path.includes("/public/");
   };
   const isPublicPluginEntry = (file: TrackedFile): boolean => (file.fileClass === "family" || file.fileClass === "strategy") && isFamilyPublic(file.path);
+  const isFamilyAllowedCentralImport = (path: string): boolean => FAMILY_CENTRAL_IMPORT_ALLOWLIST.some((prefix) => path.startsWith(prefix));
+  const isCentralInternalPath = (path: string): boolean => path.includes("/src/internal/");
+  const isAuthorityConstructorPath = (path: string): boolean =>
+    isCentralInternalPath(path) || KNOWN_AUTHORITY_CONSTRUCTOR_PATHS.has(path) || SENSITIVE_PUBLIC_CONSTRUCTOR_PATHS.has(path);
+  const validateAuthorityNamedImport = (edge: GraphEdge, expected: readonly string[]): void => {
+    const source = byPath.get(edge.from);
+    if (!source) return;
+    let sourceText: string;
+    try {
+      sourceText = readFileSync(resolve(sourceRoot, source.path), "utf8");
+    } catch {
+      return;
+    }
+    const sourceFile = ts.createSourceFile(source.path, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const matching = sourceFile.statements.filter((statement): statement is ts.ImportDeclaration =>
+      ts.isImportDeclaration(statement)
+      && ts.isStringLiteral(statement.moduleSpecifier)
+      && statement.moduleSpecifier.text === edge.specifier);
+    const imported = matching.flatMap(statement => {
+      const clause = statement.importClause;
+      if (!clause || clause.isTypeOnly || clause.name || !clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) return ["<non-exact>"];
+      return clause.namedBindings.elements.map(element =>
+        element.isTypeOnly || element.name.text !== (element.propertyName?.text ?? element.name.text)
+          ? "<non-exact>"
+          : element.name.text);
+    }).sort();
+    if (canonical(imported) !== canonical([...expected].sort())) {
+      diagnostics.push(diagnostic("fail", "authority-named-import-mismatch", edge.from, `Authority edge must import exactly ${expected.join(", ")} from ${edge.to}`));
+    }
+  };
+  const validateNarrowPortImport = (
+    edge: GraphEdge,
+    expected: readonly { readonly name: string; readonly typeOnly: boolean }[],
+  ): void => {
+    const source = byPath.get(edge.from);
+    if (!source) return;
+    let sourceText: string;
+    try {
+      sourceText = readFileSync(resolve(sourceRoot, source.path), "utf8");
+    } catch {
+      return;
+    }
+    const sourceFile = ts.createSourceFile(source.path, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const matching = sourceFile.statements.filter((statement): statement is ts.ImportDeclaration =>
+      ts.isImportDeclaration(statement)
+      && ts.isStringLiteral(statement.moduleSpecifier)
+      && statement.moduleSpecifier.text === edge.specifier);
+    const imported = matching.flatMap((statement) => {
+      const clause = statement.importClause;
+      if (!clause || clause.name || !clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) {
+        return [{ name: "<non-exact>", typeOnly: false }];
+      }
+      return clause.namedBindings.elements.map((element) => ({
+        name: element.name.text === (element.propertyName?.text ?? element.name.text) ? element.name.text : "<non-exact>",
+        typeOnly: clause.isTypeOnly || element.isTypeOnly,
+      }));
+    }).sort((left, right) => `${left.typeOnly}:${left.name}`.localeCompare(`${right.typeOnly}:${right.name}`));
+    const normalizedExpected = [...expected].sort((left, right) => `${left.typeOnly}:${left.name}`.localeCompare(`${right.typeOnly}:${right.name}`));
+    if (canonical(imported) !== canonical(normalizedExpected)) {
+      diagnostics.push(diagnostic(
+        "fail",
+        "narrow-port-import-mismatch",
+        edge.from,
+        `Narrow authority edge must import exactly the owner-issued projection from ${edge.to}`,
+      ));
+    }
+  };
   for (const edge of edges) {
     const from = byPath.get(edge.from);
     const to = byPath.get(edge.to);
@@ -1403,6 +1802,32 @@ export function validateDependencyBoundaries(
     if (!to) continue;
     const generatedReleaseAuthorityImport = from.path === RELEASE_RUNTIME_PATH && to.path === RELEASE_AUTHORITY_PATH;
     const productionReleaseRuntimeImport = from.fileClass === "production-runtime" && to.path === RELEASE_RUNTIME_PATH;
+    const authorityOwnerEdge = AUTHORITY_OWNER_EDGES.has(`${edge.from}\u2192${edge.to}`);
+    const authorityNamedImports = AUTHORITY_NAMED_IMPORTS.get(`${edge.from}\u2192${edge.to}`);
+    if (authorityNamedImports) validateAuthorityNamedImport(edge, authorityNamedImports);
+    const narrowPortImports = REVM_NARROW_PORT_IMPORTS.get(`${edge.from}\u2192${edge.to}`);
+    if (narrowPortImports) validateNarrowPortImport(edge, narrowPortImports);
+    if (
+      from.path.startsWith("runtime/revm-workers/src/")
+      && to.path === RELEASE_AUTHORITY_SPEC_PATH
+      && narrowPortImports === undefined
+    ) {
+      diagnostics.push(diagnostic(
+        "fail",
+        "revm-imports-full-release-binding",
+        edge.from,
+        "REVM worker code may consume only the schema-owned RuntimeReleaseExecutorLeaseV1 projection; full release binding/certificate authority must remain outside the worker boundary",
+      ));
+    }
+    if (from.path === "packages/ready-generation/src/index.ts" && to.path === RELEASE_AUTHORITY_SPEC_PATH) {
+      diagnostics.push(diagnostic(
+        "fail",
+        "ready-generation-imports-shape-only-release-port",
+        edge.from,
+        "ReadyGeneration must consume the runtime-release-authority-issued ready binding consumer, not a structural release port imported from the wire specs",
+      ));
+    }
+    const importsAuthorityConstructor = isAuthorityConstructorPath(to.path);
     if (testOrFixture(to.path)) diagnostics.push(diagnostic("fail", "production-imports-test-fixture", edge.from, `Non-test source imports test/fixture source ${edge.to}`));
     if (from.fileClass === "central") {
       if (to.fileClass === "family") diagnostics.push(diagnostic("fail", "central-imports-family", edge.from, `Central code imports Family source ${edge.to}`));
@@ -1416,10 +1841,15 @@ export function validateDependencyBoundaries(
       if (to.fileClass === "authoring" || to.fileClass === "reference-only") diagnostics.push(diagnostic("fail", "runtime-imports-authoring", edge.from, `Runtime imports ${to.fileClass} source ${edge.to}`));
       if (to.fileClass === "family" || to.fileClass === "acceptance-pure-core" || to.fileClass === "acceptance-collector") diagnostics.push(diagnostic("fail", "runtime-imports-family-or-acceptance", edge.from, `Runtime cannot import Family or acceptance implementation ${edge.to}`));
       if (to.fileClass === "strategy") diagnostics.push(diagnostic("fail", "runtime-imports-strategy", edge.from, `Runtime must consume generated composition, not concrete Strategy source ${edge.to}`));
+      if (importsAuthorityConstructor && !authorityOwnerEdge) diagnostics.push(diagnostic("fail", "runtime-imports-authority-constructor", edge.from, `Production runtime cannot import an authority constructor directly: ${edge.to}`));
     }
     if (from.fileClass === "acceptance-pure-core" && to.fileClass !== "acceptance-pure-core" && !isSpecs(to.path) && !isCanonicalCodec(to.path) && !generatedReleaseAuthorityImport) diagnostics.push(diagnostic("fail", "acceptance-imports-production", edge.from, `Acceptance pure core may only import itself, frozen specs, canonical-codec, or the exact generated release authority: ${edge.to}`));
     if (from.fileClass === "acceptance-collector" && (to.fileClass === "production-runtime" || to.fileClass === "family" || to.fileClass === "reference-only")) diagnostics.push(diagnostic("fail", "collector-imports-production", edge.from, `Collector cannot import production or reference-only implementation ${edge.to}`));
     if (from.fileClass === "reference-only" && !isSpecs(to.path) && !isCanonicalCodec(to.path) && to.fileClass !== "reference-only") diagnostics.push(diagnostic("fail", "reference-imports-production", edge.from, `Reference-only code may only import frozen specs, canonical-codec, or local reference code: ${edge.to}`));
+    if (from.fileClass === "family" && to.fileClass === "production-runtime") diagnostics.push(diagnostic("fail", "family-imports-runtime", edge.from, `Family code cannot import production runtime source ${edge.to}`));
+    if (from.fileClass === "family" && to.fileClass === "central" && (isCentralInternalPath(to.path) || !isFamilyAllowedCentralImport(to.path))) diagnostics.push(diagnostic("fail", "family-imports-forbidden-central", edge.from, `Family dependencies are default-deny; only frozen runtime refs, capability contracts, canonical-codec, or the pure artifact-fingerprint contract subtree are allowed: ${edge.to}`));
+    if (from.fileClass === "central" && importsAuthorityConstructor && !authorityOwnerEdge) diagnostics.push(diagnostic("fail", "central-imports-authority-constructor", edge.from, `Central code cannot import an authority constructor outside its exact owner edge: ${edge.to}`));
+    if (from.fileClass === "generated" && importsAuthorityConstructor && !authorityOwnerEdge) diagnostics.push(diagnostic("fail", "generated-imports-authority-constructor", edge.from, `Generated code cannot import an authority constructor outside its exact generated owner edge: ${edge.to}`));
     if (from.fileClass === "family" && to.fileClass === "family" && from.path.split("/")[1] !== to.path.split("/")[1]) diagnostics.push(diagnostic("fail", "family-imports-family", edge.from, `Family imports another Family internals ${edge.to}`));
     if (from.fileClass === "strategy" && to.fileClass === "strategy" && from.path.split("/")[1] !== to.path.split("/")[1]) diagnostics.push(diagnostic("fail", "strategy-imports-strategy", edge.from, `Strategy imports another Strategy internals ${edge.to}`));
     if (from.fileClass === "strategy" && (to.fileClass === "family" || to.fileClass === "acceptance-pure-core" || to.fileClass === "acceptance-collector")) diagnostics.push(diagnostic("fail", "strategy-imports-family-or-acceptance", edge.from, `Strategy cannot import Family or acceptance implementation ${edge.to}`));
@@ -1433,6 +1863,18 @@ export function validateDependencyBoundaries(
       !generatedReleaseAuthorityImport
     ) {
       diagnostics.push(diagnostic("fail", "generated-consumer-boundary", edge.from, `Only generated modules may compose generated artifacts, and apps may consume runtime composition only: ${edge.to}`));
+    }
+  }
+  for (const requiredEdge of REQUIRED_AUTHORITY_IMPORT_EDGES) {
+    const [fromPath, toPath] = requiredEdge.split("\u2192");
+    if (!byPath.has(fromPath) || !byPath.has(toPath)) continue;
+    if (!edges.some((edge) => edge.from === fromPath && edge.to === toPath)) {
+      diagnostics.push(diagnostic(
+        "fail",
+        "authority-consumer-edge-missing",
+        fromPath,
+        `Required owner-issued authority consumer edge is missing: ${fromPath} → ${toPath}`,
+      ));
     }
   }
 }
@@ -1990,7 +2432,7 @@ function sourceBuildGraph(
   for (const generator of requiredGenerators) {
     if (!uniqueNodes.some((node) => node.path === generator)) diagnostics.push(diagnostic("invalid", "generator-outside-compiler-graph", generator, "Every generated output generator must be present in the pinned compiler graph"));
   }
-  validateDependencyBoundaries(files, uniqueEdges, diagnostics);
+  validateDependencyBoundaries(files, uniqueEdges, diagnostics, root);
   const compilerRoot = hashDomain("aloha/boundary/compiler-graph/v1", {
     version: ts.version,
     configs: configRoots.map((config) => ({ path: config.path, options: config.options, roots: [...config.roots].sort() })),
@@ -2256,6 +2698,12 @@ function buildImplementationClosures(
   lockFiles: readonly TrackedFile[],
   diagnostics: BoundaryDiagnostic[],
 ): ImplementationClosure[] {
+  // A TypeScript Program owns the complete AST graph for its root set.  It is
+  // therefore an entry-local observation, never a CompilerContext member or a
+  // closure receipt field.  Keep only the final Program needed to derive this
+  // entry's immutable inputs/edges, and drop that reference before advancing
+  // to the next entry.  In particular, augmentation probes must not populate
+  // a cross-entry Program cache.
   const tracked = new Map(files.map((file) => [file.path, file]));
   const repoPhysicalRoot = physicalRoot(root, diagnostics) ?? resolve(root);
   const npmLock = readNpmLockFacts(root, lockFiles, diagnostics);
@@ -2294,20 +2742,29 @@ function buildImplementationClosures(
       continue;
     }
     const selectedAugmentationRoots = new Set<string>();
-    let entryProgram: ts.Program;
+    let entryProgram: ts.Program | undefined;
     while (true) {
       const entryRootNames = Array.from(new Set([
         abs(root, entry.path),
         ...context.universalGlobalRootNames,
         ...selectedAugmentationRoots,
       ])).sort();
-      entryProgram = ts.createProgram({ rootNames: entryRootNames, options: context.options });
-      const sourceIdentities = new Set(entryProgram.getSourceFiles().map((source) => compilerFileIdentity(source.fileName)));
+      // `program` is deliberately block-scoped.  If this augmentation probe
+      // is superseded, no reference to its AST graph survives the iteration.
+      const program = ts.createProgram({ rootNames: entryRootNames, options: context.options });
+      const sourceIdentities = new Set(program.getSourceFiles().map((source) => compilerFileIdentity(source.fileName)));
       const additions = context.moduleAugmentations
         .filter((augmentation) => !selectedAugmentationRoots.has(augmentation.rootName))
         .filter((augmentation) => augmentation.targetNames.some((target) => sourceIdentities.has(target)));
-      if (additions.length === 0) break;
+      if (additions.length === 0) {
+        entryProgram = program;
+        break;
+      }
       for (const augmentation of additions) selectedAugmentationRoots.add(augmentation.rootName);
+    }
+    if (entryProgram === undefined) {
+      diagnostics.push(diagnostic("invalid", "closure-program-missing", entry.path, `No isolated TypeScript Program was retained for ${entry.id}`));
+      continue;
     }
     const selectedAugmentationPaths = context.moduleAugmentations
       .filter((augmentation) => selectedAugmentationRoots.has(augmentation.rootName) && augmentation.rootPath !== null)
@@ -2323,6 +2780,7 @@ function buildImplementationClosures(
       .map((input) => input.logicalPath.slice("repo/".length)));
     if (!paths.has(entry.path)) {
       diagnostics.push(diagnostic("invalid", "closure-entrypoint-input-missing", entry.path, `Entrypoint ${entry.id} was not consumed by its isolated TypeScript Program`));
+      entryProgram = undefined;
       continue;
     }
     const edges = isolatedProgramEdges(root, repoPhysicalRoot, entryProgram, context.options, tracked, paths, diagnostics);
@@ -2354,6 +2812,9 @@ function buildImplementationClosures(
       edges,
     };
     result.push({ ...base, closureDigest: implementationClosureDigest(base) });
+    // Do not let the previous entry's AST graph remain reachable while the
+    // next isolated root is built.  All receipt facts above are plain records.
+    entryProgram = undefined;
   }
   return result.sort((a, b) => a.entrypointId.localeCompare(b.entrypointId));
 }
@@ -2464,8 +2925,47 @@ function releaseClosureRoleRef(
   };
 }
 
-function releaseClosurePaths(receipt: Pick<BoundaryReceipt, "implementationClosures">, ref: ReleaseClosureRefV1): ReadonlySet<string> {
+function releaseClosurePaths(receipt: Pick<BoundaryReceipt, "implementationClosures">, ref: Pick<ReleaseClosureRefV1, "entrypointId">): ReadonlySet<string> {
   return new Set(findImplementationClosureById(receipt, ref.entrypointId)?.files.map((file) => file.path) ?? []);
+}
+
+/**
+ * The release-runtime closure is the production implementation closure.  It
+ * may contain compiler/test facts in the denominator, but it may never own a
+ * test issuer, fixture, or test-only helper.  This is checked from the
+ * compiler-derived closure itself, rather than inferred from import edges or
+ * filename-selected role metadata.
+ */
+export function validateProductionReleaseClosure(
+  receipt: Pick<BoundaryReceipt, "implementationClosures">,
+  releaseRuntime: Pick<ReleaseClosureRefV1, "entrypointId">,
+  diagnostics: BoundaryDiagnostic[],
+): void {
+  const forbidden = [...releaseClosurePaths(receipt, releaseRuntime)]
+    .filter(isTestOrFixturePath)
+    .sort();
+  for (const path of forbidden) {
+    diagnostics.push(diagnostic("fail", "release-runtime-imports-test-fixture", releaseRuntime.entrypointId, `Production release-runtime closure contains test/fixture source ${path}`));
+  }
+}
+
+/**
+ * Apply the same exclusion to every compiler-derived application/runtime
+ * closure.  The GateCore generated release runtime is not classified as an
+ * application runtime, so it is checked separately by the release-role
+ * derivation above; this covers apps/ and runtime/ entrypoints that could
+ * otherwise bypass that role map.
+ */
+export function validateProductionRuntimeClosures(
+  receipt: Pick<BoundaryReceipt, "implementationClosures">,
+  files: readonly TrackedFile[],
+  diagnostics: BoundaryDiagnostic[],
+): void {
+  const productionEntrypoints = new Set(files.filter((file) => file.fileClass === "production-runtime").map((file) => file.path));
+  for (const closure of receipt.implementationClosures) {
+    if (!productionEntrypoints.has(closure.entrypoint) || isTestOrFixturePath(closure.entrypoint)) continue;
+    validateProductionReleaseClosure(receipt, { entrypointId: closure.entrypointId }, diagnostics);
+  }
 }
 
 function assertReleaseClosureExcludesEntrypoint(
@@ -3069,6 +3569,251 @@ function validateReleaseAuthoritySource(sourceText: string, diagnostics: Boundar
   }
 }
 
+/**
+ * Candidate repositories never mint executor authority.  The scheduler's
+ * generated module is deliberately an exact null placeholder; a qualified
+ * non-null issuer is supplied only by the external release composition.  Do
+ * not validate this by executing the module or by trusting its type: both
+ * would allow a hand-edited value to become a production authority.
+ */
+export function validateQualifiedExecutorAuthoritySource(sourceText: string, diagnostics: BoundaryDiagnostic[]): void {
+  const sourceFile = ts.createSourceFile(SCHEDULER_AUTHORITY_PATH, sourceText, ts.ScriptTarget.Latest, true);
+  const imports = sourceFile.statements.filter((statement): statement is ts.ImportDeclaration => ts.isImportDeclaration(statement));
+  const runtimeImports = imports.filter((statement) => statement.importClause === undefined || !statement.importClause.isTypeOnly);
+  if (runtimeImports.length > 0) {
+    diagnostics.push(diagnostic("fail", "qualified-executor-authority-runtime-import", SCHEDULER_AUTHORITY_PATH, "Generated scheduler authority placeholder may not execute a runtime or side-effect import"));
+  }
+  const typeImports = imports.filter((statement) => statement.importClause !== undefined && statement.importClause.isTypeOnly);
+  const exactTypeImport = typeImports.length === 1 && (() => {
+    const statement = typeImports[0]!;
+    if (!ts.isStringLiteral(statement.moduleSpecifier) || statement.moduleSpecifier.text !== "../index.ts") return false;
+    const clause = statement.importClause;
+    if (clause === undefined || clause.name !== undefined || clause.namedBindings === undefined || !ts.isNamedImports(clause.namedBindings) || clause.namedBindings.elements.length !== 1) return false;
+    const element = clause.namedBindings.elements[0]!;
+    return (clause.isTypeOnly || element.isTypeOnly) && element.name.text === "QualifiedExecutorAuthorityIssuer" && (element.propertyName?.text ?? element.name.text) === "QualifiedExecutorAuthorityIssuer";
+  })();
+  if (!exactTypeImport) {
+    diagnostics.push(diagnostic("invalid", "qualified-executor-authority-import-shape", SCHEDULER_AUTHORITY_PATH, "Generated scheduler authority may contain at most the exact type-only QualifiedExecutorAuthorityIssuer import"));
+  }
+  const declarations = sourceFile.statements
+    .filter((statement): statement is ts.VariableStatement =>
+      ts.isVariableStatement(statement) &&
+      Boolean(statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) &&
+      (statement.declarationList.flags & ts.NodeFlags.Const) !== 0,
+    )
+    .flatMap((statement) => statement.declarationList.declarations)
+    .filter((declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === "QUALIFIED_EXECUTOR_AUTHORITY");
+  const declaration = declarations.length === 1 ? declarations[0]! : null;
+  const typeText = declaration?.type?.getText(sourceFile).replace(/\s|_/g, "") ?? null;
+  const exactDeclaration = declaration !== null &&
+    declaration.type !== undefined &&
+    typeText === "QualifiedExecutorAuthorityIssuer|null" &&
+    declaration.initializer?.kind === ts.SyntaxKind.NullKeyword;
+  if (!exactDeclaration) {
+    diagnostics.push(diagnostic("invalid", "qualified-executor-authority-not-null", SCHEDULER_AUTHORITY_PATH, "Generated scheduler authority must remain the unique null placeholder until external qualification is injected"));
+  }
+  const declarationStatements = sourceFile.statements.filter((statement): statement is ts.VariableStatement =>
+    ts.isVariableStatement(statement) && statement.declarationList.declarations.some((candidate) => candidate === declaration),
+  );
+  const allowedStatements = new Set<ts.Statement>([...imports, ...declarationStatements]);
+  if (declarationStatements.length !== 1 || declarationStatements[0]!.declarationList.declarations.length !== 1) {
+    diagnostics.push(diagnostic("invalid", "qualified-executor-authority-extra-declaration", SCHEDULER_AUTHORITY_PATH, "Generated scheduler authority placeholder must contain exactly one exported const declaration"));
+  }
+  if (sourceFile.statements.some((statement) => !allowedStatements.has(statement))) {
+    diagnostics.push(diagnostic("invalid", "qualified-executor-authority-extra-statement", SCHEDULER_AUTHORITY_PATH, "Generated scheduler authority placeholder may contain no runtime statements or additional exports"));
+  }
+}
+
+/**
+ * The Family execution composition is the third candidate-side authority
+ * placeholder.  It must remain an exact type-only import plus `null`; a
+ * generated non-null port would let a test or candidate package install an
+ * executor without the private runtime-release join.
+ */
+export function validateFamilyExecutionCompositionSource(sourceText: string, diagnostics: BoundaryDiagnostic[]): void {
+  const sourceFile = ts.createSourceFile(FAMILY_EXECUTION_COMPOSITION_PATH, sourceText, ts.ScriptTarget.Latest, true);
+  const imports = sourceFile.statements.filter((statement): statement is ts.ImportDeclaration => ts.isImportDeclaration(statement));
+  const runtimeImports = imports.filter((statement) => statement.importClause === undefined || !statement.importClause.isTypeOnly);
+  if (runtimeImports.length > 0) {
+    diagnostics.push(diagnostic("fail", "family-execution-composition-runtime-import", FAMILY_EXECUTION_COMPOSITION_PATH, "Generated Family execution composition may not execute a runtime or side-effect import"));
+  }
+  const typeImports = imports.filter((statement) => statement.importClause !== undefined && statement.importClause.isTypeOnly);
+  const exactTypeImport = typeImports.length === 1 && (() => {
+    const statement = typeImports[0]!;
+    if (!ts.isStringLiteral(statement.moduleSpecifier) || statement.moduleSpecifier.text !== "../index.ts") return false;
+    const clause = statement.importClause;
+    if (clause === undefined || clause.name !== undefined || clause.namedBindings === undefined || !ts.isNamedImports(clause.namedBindings) || clause.namedBindings.elements.length !== 1) return false;
+    const element = clause.namedBindings.elements[0]!;
+    return (clause.isTypeOnly || element.isTypeOnly) && element.name.text === "FamilyFrozenProgramExecutionPort" && (element.propertyName?.text ?? element.name.text) === "FamilyFrozenProgramExecutionPort";
+  })();
+  if (!exactTypeImport) {
+    diagnostics.push(diagnostic("invalid", "family-execution-composition-import-shape", FAMILY_EXECUTION_COMPOSITION_PATH, "Generated Family execution composition may contain at most the exact type-only FamilyFrozenProgramExecutionPort import"));
+  }
+  const declarations = sourceFile.statements
+    .filter((statement): statement is ts.VariableStatement =>
+      ts.isVariableStatement(statement)
+      && Boolean(statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword))
+      && (statement.declarationList.flags & ts.NodeFlags.Const) !== 0,
+    )
+    .flatMap((statement) => statement.declarationList.declarations)
+    .filter((declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === "FAMILY_EXECUTION_PORT");
+  const declaration = declarations.length === 1 ? declarations[0]! : null;
+  const typeText = declaration?.type?.getText(sourceFile).replace(/\s|_/g, "") ?? null;
+  const exactDeclaration = declaration !== null
+    && declaration.type !== undefined
+    && typeText === "FamilyFrozenProgramExecutionPort<unknown>|null"
+    && declaration.initializer?.kind === ts.SyntaxKind.NullKeyword;
+  if (!exactDeclaration) {
+    diagnostics.push(diagnostic("invalid", "family-execution-composition-not-null", FAMILY_EXECUTION_COMPOSITION_PATH, "Generated Family execution composition must remain the unique null placeholder until private runtime qualification is injected"));
+  }
+  const declarationStatements = sourceFile.statements.filter((statement): statement is ts.VariableStatement =>
+    ts.isVariableStatement(statement) && statement.declarationList.declarations.some((candidate) => candidate === declaration),
+  );
+  const allowedStatements = new Set<ts.Statement>([...imports, ...declarationStatements]);
+  if (declarationStatements.length !== 1 || declarationStatements[0]!.declarationList.declarations.length !== 1) {
+    diagnostics.push(diagnostic("invalid", "family-execution-composition-extra-declaration", FAMILY_EXECUTION_COMPOSITION_PATH, "Generated Family execution composition must contain exactly one exported const declaration"));
+  }
+  if (sourceFile.statements.some((statement) => !allowedStatements.has(statement))) {
+    diagnostics.push(diagnostic("invalid", "family-execution-composition-extra-statement", FAMILY_EXECUTION_COMPOSITION_PATH, "Generated Family execution composition may contain no runtime statements or additional exports"));
+  }
+}
+
+const RUNTIME_RELEASE_BOOTSTRAP_PUBLIC_EXPORTS = new Set([
+  "buildRuntimeReleaseComposition",
+  "RuntimeReleaseCheckpointInputV1",
+  "RuntimeReleaseSchedulerInputV1",
+  "RuntimeReleaseReadyInputV1",
+  "RuntimeReleaseCompositionInputV1",
+  "RuntimeReleaseCompositionServicesV1",
+]);
+
+const PRIVATE_RUNTIME_RELEASE_NAMES = new Set([
+  "authority",
+  "capability",
+  "issuer",
+  "proof",
+  "proofPort",
+  "resolver",
+  "signer",
+  "rotate",
+  "revoke",
+  "privatePorts",
+  "attestationComposition",
+  "candidatePartitionProofIssuer",
+  "schedulerIssuer",
+  "readyBinding",
+]);
+
+/**
+ * Keep the deployment bootstrap as the sole private join.  The public package
+ * may expose the final composition constructor and its input/output types,
+ * but neither private-port helpers nor a returned authority/issuer field may
+ * escape.  This is deliberately source based: executing a forged bootstrap
+ * would make the boundary depend on the very authority it is qualifying.
+ */
+export function validateRuntimeReleaseBootstrapSources(
+  sources: ReadonlyMap<string, string>,
+  diagnostics: BoundaryDiagnostic[],
+): void {
+  const publicSource = sources.get(RUNTIME_RELEASE_PUBLIC_PATH);
+  if (publicSource !== undefined) {
+    const sourceFile = ts.createSourceFile(RUNTIME_RELEASE_PUBLIC_PATH, publicSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    for (const statement of sourceFile.statements) {
+      if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier === undefined || !ts.isStringLiteral(statement.moduleSpecifier) || statement.moduleSpecifier.text !== "./internal/bootstrap.ts") continue;
+      if (statement.exportClause === undefined || !ts.isNamedExports(statement.exportClause)) {
+        diagnostics.push(diagnostic("fail", "runtime-release-public-bootstrap-leak", RUNTIME_RELEASE_PUBLIC_PATH, "Runtime release public API may not wildcard-re-export the private bootstrap"));
+        continue;
+      }
+      for (const element of statement.exportClause.elements) {
+        const exported = element.name.text;
+        const original = element.propertyName?.text ?? exported;
+        if (original !== exported || !RUNTIME_RELEASE_BOOTSTRAP_PUBLIC_EXPORTS.has(exported)) {
+          diagnostics.push(diagnostic("fail", "runtime-release-public-bootstrap-leak", RUNTIME_RELEASE_PUBLIC_PATH, `Private runtime-release bootstrap symbol ${original} is not a public export`, element.getStart(sourceFile)));
+        }
+      }
+    }
+  }
+
+  const bootstrapSource = sources.get(RUNTIME_RELEASE_BOOTSTRAP_PATH);
+  if (bootstrapSource === undefined) return;
+  const sourceFile = ts.createSourceFile(RUNTIME_RELEASE_BOOTSTRAP_PATH, bootstrapSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const privateJoinNames = new Set(["composeRuntimeReleasePrivatePorts", "assertRuntimeReleasePrivatePortsCurrent"]);
+  for (const statement of sourceFile.statements) {
+    if (!ts.isFunctionDeclaration(statement) || statement.name === undefined || !privateJoinNames.has(statement.name.text)) continue;
+    if (hasExportModifier(statement)) {
+      diagnostics.push(diagnostic("fail", "runtime-release-bootstrap-private-join-export", RUNTIME_RELEASE_BOOTSTRAP_PATH, `Private runtime-release join ${statement.name.text} must not be exported`, statement.name.getStart(sourceFile)));
+    }
+  }
+
+  const servicesInterface = sourceFile.statements.find((statement): statement is ts.InterfaceDeclaration =>
+    ts.isInterfaceDeclaration(statement) && statement.name.text === "RuntimeReleaseCompositionServicesV1");
+  if (servicesInterface !== undefined) {
+    for (const member of servicesInterface.members) {
+      if (!ts.isPropertySignature(member) || !member.name || !ts.isIdentifier(member.name)) continue;
+      if (PRIVATE_RUNTIME_RELEASE_NAMES.has(member.name.text)) {
+        diagnostics.push(diagnostic("fail", "runtime-release-bootstrap-leaks-private-port", RUNTIME_RELEASE_BOOTSTRAP_PATH, `Runtime release service surface leaks private authority/issuer field ${member.name.text}`, member.name.getStart(sourceFile)));
+      }
+    }
+  }
+
+  const buildFunction = sourceFile.statements.find((statement): statement is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(statement) && statement.name?.text === "buildRuntimeReleaseComposition");
+  if (buildFunction === undefined) {
+    diagnostics.push(diagnostic("invalid", "runtime-release-bootstrap-missing", RUNTIME_RELEASE_BOOTSTRAP_PATH, "Runtime release bootstrap must own one buildRuntimeReleaseComposition function"));
+    return;
+  }
+  const buildReturnObjects: ts.ObjectLiteralExpression[] = [];
+  const visitBuild = (node: ts.Node): void => {
+    if (ts.isReturnStatement(node) && node.expression && ts.isCallExpression(node.expression) && ts.isPropertyAccessExpression(node.expression.expression) && node.expression.expression.name.text === "freeze") {
+      const candidate = node.expression.arguments[0];
+      if (candidate && ts.isObjectLiteralExpression(candidate)) buildReturnObjects.push(candidate);
+    }
+    ts.forEachChild(node, visitBuild);
+  };
+  visitBuild(buildFunction);
+  for (const object of buildReturnObjects) {
+    for (const property of object.properties) {
+      if (ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && PRIVATE_RUNTIME_RELEASE_NAMES.has(property.name.text)) {
+        diagnostics.push(diagnostic("fail", "runtime-release-bootstrap-leaks-private-port", RUNTIME_RELEASE_BOOTSTRAP_PATH, `Runtime release bootstrap return leaks private authority/issuer field ${property.name.text}`, property.name.getStart(sourceFile)));
+      }
+      if (ts.isShorthandPropertyAssignment(property) && PRIVATE_RUNTIME_RELEASE_NAMES.has(property.name.text)) {
+        diagnostics.push(diagnostic("fail", "runtime-release-bootstrap-leaks-private-port", RUNTIME_RELEASE_BOOTSTRAP_PATH, `Runtime release bootstrap return leaks private authority/issuer field ${property.name.text}`, property.name.getStart(sourceFile)));
+      }
+      if (ts.isSpreadAssignment(property) && ts.isIdentifier(property.expression) && PRIVATE_RUNTIME_RELEASE_NAMES.has(property.expression.text)) {
+        diagnostics.push(diagnostic("fail", "runtime-release-bootstrap-leaks-private-port", RUNTIME_RELEASE_BOOTSTRAP_PATH, `Runtime release bootstrap return spreads private authority/issuer value ${property.expression.text}`, property.expression.getStart(sourceFile)));
+      }
+    }
+  }
+
+  const functionFor = (node: ts.Node): ts.FunctionLikeDeclaration | null => {
+    let current: ts.Node | undefined = node.parent;
+    while (current !== undefined) {
+      if (
+        ts.isFunctionDeclaration(current)
+        || ts.isFunctionExpression(current)
+        || ts.isArrowFunction(current)
+        || ts.isMethodDeclaration(current)
+        || ts.isGetAccessorDeclaration(current)
+        || ts.isSetAccessorDeclaration(current)
+        || ts.isConstructorDeclaration(current)
+      ) return current;
+      current = current.parent;
+    }
+    return null;
+  };
+  const visitJoins = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && /^issueRuntimeRelease/.test(node.expression.text)) {
+      const owner = functionFor(node);
+      const ownerName = owner && ts.isFunctionDeclaration(owner) ? owner.name?.text : null;
+      if (ownerName !== "composeRuntimeReleasePrivatePorts") {
+        diagnostics.push(diagnostic("fail", "runtime-release-private-join-bypass", RUNTIME_RELEASE_BOOTSTRAP_PATH, `Runtime release owner ${node.expression.text} must be called only by composeRuntimeReleasePrivatePorts`, node.expression.getStart(sourceFile)));
+      }
+    }
+    ts.forEachChild(node, visitJoins);
+  };
+  visitJoins(sourceFile);
+}
+
 function validateReleaseRoleManifestSource(
   root: string,
   files: readonly TrackedFile[],
@@ -3173,6 +3918,7 @@ export function deriveReleaseClosureFacts(
   if (genericCore === null || releaseRuntime === null || predicateAdapters.length !== manifest.predicateAdapters.length || qualificationOracles.length !== manifest.predicateAdapters.length || diagnostics.length > 0) {
     return { facts: null, diagnostics: uniqueDiagnostics(diagnostics) };
   }
+  validateProductionReleaseClosure(receipt, releaseRuntime, diagnostics);
   for (const adapter of predicateAdapters) assertReleaseOwnedClosuresDisjoint(receipt, genericCore, adapter, diagnostics);
   for (let left = 0; left < predicateAdapters.length; left += 1) {
     for (let right = left + 1; right < predicateAdapters.length; right += 1) {
@@ -3291,6 +4037,7 @@ export function validateReleaseClosureFacts(
   }
   assertReleaseClosureContains(receipt, facts.releaseRuntime, facts.genericCore, diagnostics);
   for (const adapter of facts.predicateAdapters) assertReleaseClosureContains(receipt, facts.releaseRuntime, adapter, diagnostics);
+  validateProductionReleaseClosure(receipt, facts.releaseRuntime, diagnostics);
   const base = {
     schemaVersion: 1 as const,
     genericCore: facts.genericCore,
@@ -3416,6 +4163,169 @@ export const MUTATION_CORPUS: readonly MutationCase[] = Object.freeze([
   },
 ]);
 
+interface AttestationNamedDeclaration {
+  readonly path: string;
+  readonly name: string;
+  readonly kind: ts.SyntaxKind;
+  readonly exported: boolean;
+  readonly offset: number;
+}
+
+const ATTESTATION_ENGINE_RUNTIME_EXPORTS = new Set([
+  "createRejectionExecutorAuthorityIssuerInternal",
+  "createRejectionFactRuntimeInternal",
+  "createFrameworkFailureRuntimeInternal",
+  "createAttestationServiceInternal",
+  "probeRetryableCandidate",
+  "probeRetryableCategory",
+]);
+
+const ATTESTATION_ENGINE_CANONICAL_NAMES = new Set([
+  "AttestationValidationAuthorityV1",
+  "validateCandidateFinalOutcome",
+  "validateAttestationPartition",
+  "assertPromotablePartition",
+  "validateIdentityObservation",
+  "identityObservationSemanticHash",
+  "validateVerifiedPublication",
+  "verifiedIdentitySubjectHash",
+  "validateProbeReceipt",
+]);
+
+function hasExportModifier(node: ts.Node): boolean {
+  return ts.canHaveModifiers(node)
+    && (ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false);
+}
+
+function attestationNamedDeclarations(path: string, source: string): readonly AttestationNamedDeclaration[] {
+  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declarations: AttestationNamedDeclaration[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      (ts.isInterfaceDeclaration(node)
+        || ts.isTypeAliasDeclaration(node)
+        || ts.isClassDeclaration(node)
+        || ts.isEnumDeclaration(node)
+        || ts.isFunctionDeclaration(node))
+      && node.name !== undefined
+    ) {
+      declarations.push({
+        path,
+        name: node.name.text,
+        kind: node.kind,
+        exported: hasExportModifier(node),
+        offset: node.name.getStart(sourceFile),
+      });
+    } else if (ts.isVariableStatement(node)) {
+      for (const declaration of node.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name)) continue;
+        declarations.push({
+          path,
+          name: declaration.name.text,
+          kind: declaration.kind,
+          exported: hasExportModifier(node),
+          offset: declaration.name.getStart(sourceFile),
+        });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return declarations;
+}
+
+/**
+ * Machine-enforced ownership for the Attestation contract surface.  Runtime
+ * implementation may consume the public contract, but it cannot redeclare or
+ * export a second validator/authority shape that checkpoint code could trust.
+ */
+export function validateAttestationContractOwnershipSources(
+  sources: ReadonlyMap<string, string>,
+  diagnostics: BoundaryDiagnostic[],
+): void {
+  const declarations = [...sources.entries()]
+    .filter(([path]) => path.startsWith("packages/attestation/src/") && /\.[cm]?[jt]sx?$/.test(path))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([path, source]) => attestationNamedDeclarations(path, source));
+  const authorityDeclarations = declarations.filter((item) => item.name === "AttestationValidationAuthorityV1");
+  if (authorityDeclarations.length !== 1) {
+    diagnostics.push(diagnostic(
+      "fail",
+      "attestation-validation-authority-declaration-count",
+      ATTESTATION_PUBLIC_CONTRACT_PATH,
+      `AttestationValidationAuthorityV1 must have one production declaration; observed ${authorityDeclarations.length}`,
+    ));
+  }
+  const authority = authorityDeclarations[0];
+  if (
+    authority !== undefined
+    && (
+      authority.path !== ATTESTATION_PUBLIC_CONTRACT_PATH
+      || authority.kind !== ts.SyntaxKind.InterfaceDeclaration
+      || !authority.exported
+    )
+  ) {
+    diagnostics.push(diagnostic(
+      "fail",
+      "attestation-validation-authority-owner",
+      authority.path,
+      "The unique AttestationValidationAuthorityV1 must be the exported interface owned by packages/attestation/src/index.ts",
+      authority.offset,
+    ));
+  }
+
+  const engineSource = sources.get(ATTESTATION_ENGINE_PATH);
+  if (engineSource !== undefined) {
+    const engineFile = ts.createSourceFile(ATTESTATION_ENGINE_PATH, engineSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const engineDeclarations = declarations.filter((item) => item.path === ATTESTATION_ENGINE_PATH);
+    for (const declaration of engineDeclarations) {
+      if (ATTESTATION_ENGINE_CANONICAL_NAMES.has(declaration.name)) {
+        diagnostics.push(diagnostic(
+          "fail",
+          "attestation-engine-canonical-contract",
+          ATTESTATION_ENGINE_PATH,
+          `Runtime engine redeclares canonical Attestation contract ${declaration.name}`,
+          declaration.offset,
+        ));
+      }
+      if (declaration.exported && !ATTESTATION_ENGINE_RUNTIME_EXPORTS.has(declaration.name)) {
+        diagnostics.push(diagnostic(
+          "fail",
+          "attestation-engine-public-contract-export",
+          ATTESTATION_ENGINE_PATH,
+          `Runtime engine exports undeclared contract surface ${declaration.name}`,
+          declaration.offset,
+        ));
+      }
+    }
+    for (const statement of engineFile.statements) {
+      if (ts.isExportAssignment(statement) || ts.isExportDeclaration(statement)) {
+        diagnostics.push(diagnostic(
+          "fail",
+          "attestation-engine-public-contract-export",
+          ATTESTATION_ENGINE_PATH,
+          "Runtime engine may export only its exact named runtime constructors and probe entrypoints",
+          statement.getStart(engineFile),
+        ));
+      }
+    }
+  }
+
+  const publicShapeAssert = declarations.find((item) => (
+    item.path === ATTESTATION_PUBLIC_CONTRACT_PATH
+    && item.name === "assertAttestationValidationAuthority"
+  ));
+  if (publicShapeAssert !== undefined) {
+    diagnostics.push(diagnostic(
+      "fail",
+      "attestation-public-shape-authority-assert",
+      ATTESTATION_PUBLIC_CONTRACT_PATH,
+      "The public contract may not expose a shape-only Attestation authority assertion",
+      publicShapeAssert.offset,
+    ));
+  }
+}
+
 export function runBoundaryGate(options: BoundaryOptions = {}): BoundaryReceipt {
   const root = resolve(options.gitRoot ?? fileURLToPath(new URL("../../..", import.meta.url)));
   const requirePushed = options.requirePushed ?? true;
@@ -3423,12 +4333,67 @@ export function runBoundaryGate(options: BoundaryOptions = {}): BoundaryReceipt 
   const candidate = exactGitState(root, requirePushed, diagnostics);
   const files = readTrackedFiles(root, diagnostics);
   if (files.length === 0) diagnostics.push(diagnostic("invalid", "empty-git-denominator", ".", "An empty or unreadable Git tree cannot receive boundary credit"));
+  const attestationSources = new Map<string, string>();
+  for (const file of files) {
+    if (!file.path.startsWith("packages/attestation/src/") || (file.language !== "typescript" && file.language !== "javascript")) continue;
+    try {
+      attestationSources.set(file.path, readFileSync(abs(root, file.path), "utf8"));
+    } catch (error) {
+      diagnostics.push(diagnostic("invalid", "attestation-contract-source-unreadable", file.path, String(error)));
+    }
+  }
+  if (attestationSources.size > 0) validateAttestationContractOwnershipSources(attestationSources, diagnostics);
+  const runtimeReleaseSources = new Map<string, string>();
+  for (const path of [RUNTIME_RELEASE_PUBLIC_PATH, RUNTIME_RELEASE_BOOTSTRAP_PATH] as const) {
+    try {
+      runtimeReleaseSources.set(path, readFileSync(abs(root, path), "utf8"));
+    } catch {
+      // The source graph below reports missing production inputs.  Keep this
+      // small source-only check non-authoritative when a local slice is absent.
+    }
+  }
+  if (runtimeReleaseSources.size > 0) validateRuntimeReleaseBootstrapSources(runtimeReleaseSources, diagnostics);
   const packageData = readPackageManifests(root, files, diagnostics);
   const gateCorePackage = packageData.manifests.get(GATE_CORE_PACKAGE_PATH);
   if (gateCorePackage !== undefined) {
     validateGateCorePackageExports(GATE_CORE_PACKAGE_PATH, gateCorePackage, diagnostics);
   } else if (requirePushed) {
     diagnostics.push(diagnostic("invalid", "gate-core-package-required", GATE_CORE_PACKAGE_PATH, "The production boundary requires the fixed GateCore package and its exact generated runtime export"));
+  }
+  const schedulerTreeTracked = files.some((file) => file.path === "packages/scheduler/package.json" || file.path === "packages/scheduler/src/index.ts");
+  let schedulerAuthoritySource: string | null = null;
+  try {
+    // Read the worktree path even while it is not yet in the Git denominator:
+    // a hand-edited generated authority must be diagnosed specifically, not
+    // hidden behind the generic dirty-tree result.
+    schedulerAuthoritySource = readFileSync(abs(root, SCHEDULER_AUTHORITY_PATH), "utf8");
+  } catch {
+    schedulerAuthoritySource = null;
+  }
+  if (schedulerAuthoritySource !== null) {
+    try {
+      validateQualifiedExecutorAuthoritySource(schedulerAuthoritySource, diagnostics);
+    } catch (error) {
+      diagnostics.push(diagnostic("invalid", "qualified-executor-authority-unreadable", SCHEDULER_AUTHORITY_PATH, String(error)));
+    }
+  } else if (requirePushed || schedulerTreeTracked) {
+    diagnostics.push(diagnostic("invalid", "qualified-executor-authority-missing", SCHEDULER_AUTHORITY_PATH, "The scheduler production tree requires its exact generated null authority placeholder"));
+  }
+  const workPlaneTreeTracked = files.some((file) => file.path === "packages/work-plane/package.json" || file.path === "packages/work-plane/src/index.ts");
+  let familyExecutionCompositionSource: string | null = null;
+  try {
+    familyExecutionCompositionSource = readFileSync(abs(root, FAMILY_EXECUTION_COMPOSITION_PATH), "utf8");
+  } catch {
+    familyExecutionCompositionSource = null;
+  }
+  if (familyExecutionCompositionSource !== null) {
+    try {
+      validateFamilyExecutionCompositionSource(familyExecutionCompositionSource, diagnostics);
+    } catch (error) {
+      diagnostics.push(diagnostic("invalid", "family-execution-composition-unreadable", FAMILY_EXECUTION_COMPOSITION_PATH, String(error)));
+    }
+  } else if (requirePushed || workPlaneTreeTracked) {
+    diagnostics.push(diagnostic("invalid", "family-execution-composition-missing", FAMILY_EXECUTION_COMPOSITION_PATH, "The work-plane production tree requires its exact generated null composition placeholder"));
   }
   const generatedGenerators = validateGeneratedTree(root, files, requirePushed, diagnostics);
   languageAdapterCheck(files, diagnostics);
@@ -3454,6 +4419,7 @@ export function runBoundaryGate(options: BoundaryOptions = {}): BoundaryReceipt 
     lockFiles,
     diagnostics,
   );
+  validateProductionRuntimeClosures({ implementationClosures }, files, diagnostics);
   validateReleaseGeneratorCompilerClosure(root, files, implementationClosures, diagnostics);
   const releaseRoleManifest = readGeneratedReleaseRoleManifest(root, files, diagnostics);
   const releaseRoleManifestCandidates = files.filter((file) => /(?:^|\/)(?:release-role|role)-manifest(?:\.generated)?\.(?:json|ts)$/.test(file.path));
