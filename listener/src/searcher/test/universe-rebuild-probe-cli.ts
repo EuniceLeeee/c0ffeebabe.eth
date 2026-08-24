@@ -5,8 +5,15 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   UniverseRebuildCheckpointStore,
+  type DurableSourceReceipt,
   type DurableVerifiedMemo,
+  type ReadyUniverseGeneration,
 } from "../universe-rebuild-checkpoint.js";
+import {
+  hashReadyCatalogSnapshot,
+  hashReadyGraphSnapshot,
+  hashReadyPublicationSet,
+} from "../universe-rebuild-runner.js";
 
 const SOURCE = Object.freeze({
   number: 25_750_000,
@@ -43,6 +50,72 @@ async function main(): Promise<void> {
       attemptCount: 1,
       lastAttemptAt: "2026-08-17T00:00:00.000Z",
     })]));
+    const fromBlock = SOURCE.number - 14_399;
+    const receipts = Object.freeze([Object.freeze({
+      sourceKey: "1".repeat(64),
+      sourceKind: "startup-candidate-union" as const,
+      providerIdentity: "fixture",
+      queryFingerprint: "2".repeat(64),
+      fromBlock,
+      toBlock: SOURCE.number,
+      cutoffNumber: SOURCE.number,
+      cutoffHash: SOURCE.hash,
+      coverageKeys: Object.freeze(["univ2|startup-universe"]),
+      completedChunks: Object.freeze([Object.freeze({
+        fromBlock,
+        toBlock: SOURCE.number,
+        resultCount: 1,
+        resultHash: "3".repeat(64),
+      })]),
+      observationSetHash: "4".repeat(64),
+      observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+      appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+      retryableCount: 0 as const,
+      status: "complete" as const,
+    })]) satisfies readonly DurableSourceReceipt[];
+    const withReceipts = await store.casSetRunSourceReceipts({
+      expectedRevision: (await store.load())!.revision,
+      runId: "run-1",
+      sourceReceipts: receipts,
+    });
+    const graphSnapshot = Object.freeze({ edges: Object.freeze([]) });
+    const catalogSnapshot = Object.freeze({ instances: Object.freeze([]) });
+    await store.casCommitReadyGeneration({
+      expectedRevision: withReceipts.revision,
+      runId: "run-1",
+      ready: Object.freeze({
+        generation: 1,
+        cutoff: SOURCE,
+        universeRange: Object.freeze({ fromBlock, toBlock: SOURCE.number }),
+        universeHash: "u1",
+        catalogHash: hashReadyCatalogSnapshot(catalogSnapshot),
+        activeInstanceKeys: Object.freeze([]),
+        publicationSetHash: hashReadyPublicationSet(catalogSnapshot),
+        candidateAccounting: Object.freeze({
+          total: 1,
+          verified: 0,
+          terminalRejected: 0,
+          retryable: 1,
+          remainingUnaccounted: 0 as const,
+        }),
+        observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+        appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+        sourceCoverage: Object.freeze([Object.freeze({
+          familyId: "univ2",
+          sourceId: "startup-universe",
+          completeThroughBlock: SOURCE.number,
+          completeThroughHash: SOURCE.hash,
+        })]),
+        graphSnapshot,
+        graphHash: hashReadyGraphSnapshot(graphSnapshot),
+        catalogSnapshot,
+      }) as ReadyUniverseGeneration,
+    });
+    assert.equal((await store.load())?.inProgressRun, null);
+    assert.equal(
+      (await store.load())?.retryableAttemptsByCandidateKey["cand:a"]?.status,
+      "retryable",
+    );
 
     // Mock wiring module: fixes the retryable key on probe.
     const wiring = join(dir, "wiring.mjs");
@@ -90,8 +163,9 @@ async function main(): Promise<void> {
     assert.match(out, /cand:a -> verified/, out);
     const after = await store.load();
     assert.equal(
-      after?.inProgressRun?.outcomesByCandidateKey["cand:a"]?.status,
-      "verified",
+      after?.retryableAttemptsByCandidateKey["cand:a"],
+      undefined,
+      "probe success removes the independent queued retryable",
     );
     assert.equal(
       after?.verifiedMemos["cand:a"]?.familyInstanceKey,

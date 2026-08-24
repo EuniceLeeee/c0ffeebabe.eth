@@ -1,4 +1,7 @@
-import { UniverseRebuildCheckpointStore } from "./universe-rebuild-checkpoint.js";
+import {
+  UniverseRebuildCheckpointStore,
+  type RetryableAttempt,
+} from "./universe-rebuild-checkpoint.js";
 import { probeOneFailure } from "./universe-rebuild-runner.js";
 
 /**
@@ -9,7 +12,7 @@ import { probeOneFailure } from "./universe-rebuild-runner.js";
  *   npm run searcher:universe-rebuild-probe -- \
  *     --checkpoint <path> --run-id <runId> --failure-code rpc --limit 20
  *
- * Retries exactly the target retryable key(s) at the run's original fixed
+ * Retries exactly the target retryable key(s) at their original fixed
  * cutoff, using the saved candidateSnapshot + evidenceRef; never rescans
  * the window and never touches the other candidates. The attestation
  * wiring is supplied by the caller hook (production integration wires the
@@ -102,12 +105,22 @@ async function main(): Promise<void> {
     throw new Error("no universe rebuild checkpoint at " + args.checkpoint);
   }
   const run = checkpoint.inProgressRun;
-  if (run === null || run.runId !== args.runId) {
-    throw new Error("no in-progress run " + args.runId);
+  const targetsByKey = new Map<string, RetryableAttempt>();
+  if (run !== null && run.runId === args.runId) {
+    for (const outcome of Object.values(run.outcomesByCandidateKey)) {
+      if (outcome.status === "retryable") {
+        targetsByKey.set(outcome.familyCandidateKey, outcome);
+      }
+    }
   }
-  const targets = Object.values(run.outcomesByCandidateKey).filter(
-    (outcome) => outcome.status === "retryable",
-  ).filter((outcome) =>
+  for (const queued of Object.values(
+    checkpoint.retryableAttemptsByCandidateKey,
+  )) {
+    if (queued.runId === args.runId) {
+      targetsByKey.set(queued.familyCandidateKey, queued);
+    }
+  }
+  const targets = [...targetsByKey.values()].filter((outcome) =>
     args.familyCandidateKey !== undefined
       ? outcome.familyCandidateKey === args.familyCandidateKey
       : outcome.failureCode === args.failureCode

@@ -12,10 +12,11 @@ import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 
 /**
- * Durable universe-rebuild checkpoint (adversarial audit §1-§4). Three
- * durable states only:
+ * Durable universe-rebuild checkpoint (adversarial audit §1-§4). Four
+ * durable state classes only:
  * - verifiedMemos: cross-rebuild reusable Family + InstanceKey proofs;
  * - inProgressRun: the single unfinished rebuild at one fixed cutoff;
+ * - retryableAttemptsByCandidateKey: independent one-candidate repair queue;
  * - readyGeneration: the last complete usable Graph/catalog snapshot.
  * No long-term raw tx inbox, no recovery from progress counters, no
  * permanent candidate journal.
@@ -65,6 +66,16 @@ export interface RetryableAttempt {
   readonly reasonCode: string;
   readonly attemptCount: number;
   readonly lastAttemptAt: string;
+}
+
+/**
+ * Retryable work is durable, but it is not an unfinished rebuild.  Once an
+ * exact candidate partition is promoted, retryables move here with the
+ * canonical cutoff needed by the one-candidate probe.
+ */
+export interface DurableRetryableQueueEntry extends RetryableAttempt {
+  readonly runId: string;
+  readonly cutoff: CanonicalSource;
 }
 
 export type RunOutcome =
@@ -162,6 +173,13 @@ export interface ReadyUniverseGeneration {
   readonly catalogHash: string;
   readonly activeInstanceKeys: readonly string[];
   readonly publicationSetHash: string;
+  readonly candidateAccounting: {
+    readonly total: number;
+    readonly verified: number;
+    readonly terminalRejected: number;
+    readonly retryable: number;
+    readonly remainingUnaccounted: 0;
+  };
   readonly observedThrough: { readonly number: number; readonly hash: string };
   readonly appliedThrough: { readonly number: number; readonly hash: string };
   readonly sourceCoverage: readonly {
@@ -185,6 +203,9 @@ export interface StartupCheckpointEnvelope {
   readonly revision: number;
   readonly verifiedMemos: Readonly<Record<string, DurableVerifiedMemo>>;
   readonly inProgressRun: InProgressUniverseRun | null;
+  readonly retryableAttemptsByCandidateKey: Readonly<
+    Record<string, DurableRetryableQueueEntry>
+  >;
   readonly readyGeneration: ReadyUniverseGeneration | null;
   readonly checkpointFingerprint: string;
 }
@@ -219,6 +240,69 @@ export function canonicalJson(value: unknown): string {
   ).join(",") + "}";
 }
 
+function retryableAttemptFromQueueEntry(
+  entry: DurableRetryableQueueEntry,
+): RetryableAttempt {
+  const attempt = { ...entry } as Record<string, unknown>;
+  delete attempt.runId;
+  delete attempt.cutoff;
+  return Object.freeze(attempt) as unknown as RetryableAttempt;
+}
+
+function queueEntryMatchesOutcome(
+  entry: DurableRetryableQueueEntry,
+  outcome: RetryableAttempt,
+): boolean {
+  return canonicalJson(retryableAttemptFromQueueEntry(entry)) ===
+    canonicalJson(outcome);
+}
+
+function inheritedQueuedRetryables(
+  queue: Readonly<Record<string, DurableRetryableQueueEntry>>,
+  candidatesByKey: Readonly<Record<string, unknown>>,
+): Record<string, RunOutcome> {
+  const inherited: Record<string, RunOutcome> = {};
+  for (const [candidateKey, candidateSnapshot] of Object.entries(
+    candidatesByKey,
+  )) {
+    const queued = queue[candidateKey];
+    if (
+      queued !== undefined &&
+      canonicalJson(queued.candidateSnapshot) === canonicalJson(candidateSnapshot)
+    ) {
+      inherited[candidateKey] = retryableAttemptFromQueueEntry(queued);
+    }
+  }
+  return inherited;
+}
+
+function assertRetryableQueue(
+  queue: Readonly<Record<string, DurableRetryableQueueEntry>>,
+): void {
+  for (const [candidateKey, entry] of Object.entries(queue)) {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      entry.status !== "retryable" ||
+      entry.familyCandidateKey !== candidateKey ||
+      typeof entry.runId !== "string" ||
+      entry.runId.length === 0 ||
+      !Number.isSafeInteger(entry.cutoff?.number) ||
+      entry.cutoff.number < 0 ||
+      typeof entry.cutoff.hash !== "string" ||
+      !Number.isSafeInteger(entry.cutoff.generation) ||
+      !Number.isSafeInteger(entry.attemptCount) ||
+      entry.attemptCount < 1 ||
+      typeof entry.lastAttemptAt !== "string" ||
+      !("candidateSnapshot" in entry)
+    ) {
+      throw new Error(
+        "universe rebuild retryable queue entry is invalid: " + candidateKey,
+      );
+    }
+  }
+}
+
 /**
  * Streaming canonical hash: feeds the exact canonicalJson byte sequence
  * (sorted keys, no whitespace) into sha256 incrementally instead of
@@ -231,14 +315,34 @@ export function canonicalJson(value: unknown): string {
 export function envelopeFingerprint(
   envelope: Omit<StartupCheckpointEnvelope, "checkpointFingerprint">,
 ): string {
-  const hash = createHash("sha256");
-  canonicalWrite(hash, {
+  return fingerprintProjection({
     revision: envelope.revision,
     verifiedMemos: envelope.verifiedMemos,
     inProgressRun: envelope.inProgressRun,
+    retryableAttemptsByCandidateKey:
+      envelope.retryableAttemptsByCandidateKey,
     readyGeneration: envelope.readyGeneration,
   });
+}
+
+function fingerprintProjection(projection: unknown): string {
+  const hash = createHash("sha256");
+  canonicalWrite(hash, projection);
   return hash.digest("hex");
+}
+
+function legacyEnvelopeFingerprint(input: {
+  readonly revision: number;
+  readonly verifiedMemos: Readonly<Record<string, DurableVerifiedMemo>>;
+  readonly inProgressRun: InProgressUniverseRun | null;
+  readonly readyGeneration: ReadyUniverseGeneration | null;
+}): string {
+  return fingerprintProjection({
+    revision: input.revision,
+    verifiedMemos: input.verifiedMemos,
+    inProgressRun: input.inProgressRun,
+    readyGeneration: input.readyGeneration,
+  });
 }
 
 function canonicalWrite(
@@ -315,18 +419,54 @@ function parseEnvelope(raw: string): StartupCheckpointEnvelope {
   ) {
     throw new Error("universe rebuild checkpoint fields are invalid");
   }
-  const envelope = record as unknown as StartupCheckpointEnvelope;
+  const legacyEnvelope = record as unknown as Omit<
+    StartupCheckpointEnvelope,
+    "retryableAttemptsByCandidateKey"
+  >;
+  const hasRetryableQueue = Object.prototype.hasOwnProperty.call(
+    record,
+    "retryableAttemptsByCandidateKey",
+  );
+  const retryableQueue = hasRetryableQueue
+    ? record.retryableAttemptsByCandidateKey
+    : {};
   if (
-    envelopeFingerprint({
-      revision: envelope.revision,
-      verifiedMemos: envelope.verifiedMemos,
-      inProgressRun: envelope.inProgressRun ?? null,
-      readyGeneration: envelope.readyGeneration ?? null,
-    }) !== envelope.checkpointFingerprint
+    typeof retryableQueue !== "object" ||
+    retryableQueue === null ||
+    Array.isArray(retryableQueue)
   ) {
+    throw new Error("universe rebuild retryable queue is invalid");
+  }
+  const actualFingerprint = hasRetryableQueue
+    ? envelopeFingerprint({
+        revision: legacyEnvelope.revision,
+        verifiedMemos: legacyEnvelope.verifiedMemos,
+        inProgressRun: legacyEnvelope.inProgressRun ?? null,
+        retryableAttemptsByCandidateKey: retryableQueue as Readonly<
+          Record<string, DurableRetryableQueueEntry>
+        >,
+        readyGeneration: legacyEnvelope.readyGeneration ?? null,
+      })
+    : legacyEnvelopeFingerprint({
+        revision: legacyEnvelope.revision,
+        verifiedMemos: legacyEnvelope.verifiedMemos,
+        inProgressRun: legacyEnvelope.inProgressRun ?? null,
+        readyGeneration: legacyEnvelope.readyGeneration ?? null,
+      });
+  if (actualFingerprint !== legacyEnvelope.checkpointFingerprint) {
     throw new Error("universe rebuild checkpoint fingerprint mismatch");
   }
-  return Object.freeze(envelope);
+  assertRetryableQueue(
+    retryableQueue as Readonly<Record<string, DurableRetryableQueueEntry>>,
+  );
+  return Object.freeze({
+    ...legacyEnvelope,
+    inProgressRun: legacyEnvelope.inProgressRun ?? null,
+    retryableAttemptsByCandidateKey: Object.freeze({
+      ...(retryableQueue as Readonly<Record<string, DurableRetryableQueueEntry>>),
+    }),
+    readyGeneration: legacyEnvelope.readyGeneration ?? null,
+  });
 }
 
 /**
@@ -395,6 +535,12 @@ export class UniverseRebuildCheckpointStore {
       await file.write(field("revision", envelope.revision) + ",");
       await file.write(field("verifiedMemos", envelope.verifiedMemos) + ",");
       await file.write(field("inProgressRun", envelope.inProgressRun) + ",");
+      await file.write(
+        field(
+          "retryableAttemptsByCandidateKey",
+          envelope.retryableAttemptsByCandidateKey,
+        ) + ",",
+      );
       await file.write(field("readyGeneration", envelope.readyGeneration) + ",");
       await file.write(field("checkpointFingerprint", envelope.checkpointFingerprint));
       await file.write("}\n");
@@ -493,6 +639,8 @@ export class UniverseRebuildCheckpointStore {
             revision: next.revision,
             verifiedMemos: next.verifiedMemos,
             inProgressRun: next.inProgressRun,
+            retryableAttemptsByCandidateKey:
+              next.retryableAttemptsByCandidateKey,
             readyGeneration: next.readyGeneration,
           }),
         });
@@ -658,6 +806,91 @@ export class UniverseRebuildCheckpointStore {
     });
   }
 
+  /**
+   * Replace one independently queued retryable.  A successful or terminal
+   * probe removes it from the queue; a retryable result replaces it.  When a
+   * rolling run inherited the same queue item, update that run outcome in the
+   * same CAS so promotion cannot publish a stale retryable view.
+   */
+  async casReplaceQueuedRetryable(input: {
+    readonly runId: string;
+    readonly familyCandidateKey: string;
+    readonly expectedAttemptCount: number;
+    readonly nextOutcome: RunOutcome;
+    readonly memo?: DurableVerifiedMemo;
+  }): Promise<StartupCheckpointEnvelope> {
+    return this.#cas(undefined, (current) => {
+      const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
+      const old = base.retryableAttemptsByCandidateKey[
+        input.familyCandidateKey
+      ];
+      if (
+        old === undefined ||
+        old.runId !== input.runId ||
+        old.attemptCount !== input.expectedAttemptCount
+      ) {
+        throw new Error(
+          "universe rebuild checkpoint: queued probe CAS conflict for " +
+            input.familyCandidateKey,
+        );
+      }
+      const memos: Record<string, DurableVerifiedMemo> = {
+        ...base.verifiedMemos,
+      };
+      if (input.memo !== undefined) {
+        assertMemoMatchesVerifiedOutcome(input.memo, input.nextOutcome);
+        memos[input.memo.familyCandidateKey] = Object.freeze(input.memo);
+      }
+      if (input.nextOutcome.status === "verified") {
+        const durableMemo = memos[input.familyCandidateKey];
+        if (durableMemo === undefined) {
+          throw new Error(
+            "universe rebuild checkpoint: verified queued probe has no memo",
+          );
+        }
+        assertMemoMatchesVerifiedOutcome(durableMemo, input.nextOutcome);
+      } else if (input.memo !== undefined) {
+        throw new Error(
+          "universe rebuild checkpoint: non-verified queued probe carried memo",
+        );
+      }
+      const retryableQueue: Record<string, DurableRetryableQueueEntry> = {
+        ...base.retryableAttemptsByCandidateKey,
+      };
+      if (input.nextOutcome.status === "retryable") {
+        retryableQueue[input.familyCandidateKey] = Object.freeze({
+          ...input.nextOutcome,
+          runId: old.runId,
+          cutoff: Object.freeze({ ...old.cutoff }),
+        });
+      } else {
+        delete retryableQueue[input.familyCandidateKey];
+      }
+      const run = base.inProgressRun;
+      const runOutcome = run?.outcomesByCandidateKey[
+        input.familyCandidateKey
+      ];
+      const updateRun = run !== null &&
+        runOutcome?.status === "retryable" &&
+        runOutcome.attemptCount === input.expectedAttemptCount;
+      return Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        verifiedMemos: Object.freeze(memos),
+        retryableAttemptsByCandidateKey: Object.freeze(retryableQueue),
+        inProgressRun: updateRun
+          ? Object.freeze({
+              ...run,
+              outcomesByCandidateKey: Object.freeze({
+                ...run.outcomesByCandidateKey,
+                [input.familyCandidateKey]: input.nextOutcome,
+              }),
+            })
+          : run,
+      });
+    });
+  }
+
   /** Atomically promote the completed run to the ready generation. */
   async casCommitReadyGeneration(input: {
     readonly expectedRevision: number;
@@ -674,14 +907,34 @@ export class UniverseRebuildCheckpointStore {
         );
       }
       assertReadyPromotion(base, run, input.ready);
+      const retryableQueue: Record<string, DurableRetryableQueueEntry> = {
+        ...base.retryableAttemptsByCandidateKey,
+      };
+      for (const candidateKey of Object.keys(run.candidatesByKey)) {
+        delete retryableQueue[candidateKey];
+      }
+      for (const outcome of Object.values(run.outcomesByCandidateKey)) {
+        if (outcome.status !== "retryable") continue;
+        const incumbent = base.retryableAttemptsByCandidateKey[
+          outcome.familyCandidateKey
+        ];
+        retryableQueue[outcome.familyCandidateKey] =
+          incumbent !== undefined && queueEntryMatchesOutcome(incumbent, outcome)
+            ? incumbent
+            : Object.freeze({
+                ...outcome,
+                runId: run.runId,
+                cutoff: Object.freeze({ ...run.cutoff }),
+              });
+      }
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
-        // The run is KEPT (not nulled) so any residual retryable outcomes
-        // stay durable and can be closed by the probe after startup. Ready
-        // only admits verified instances; retryable candidates never enter
-        // the Graph and never block an otherwise complete generation.
-        inProgressRun: run,
+        // Every candidate is now accounted. Retryables remain durable in the
+        // independent queue, while the completed run is no longer "in
+        // progress" and the next startup may freeze a new rolling cutoff.
+        inProgressRun: null,
+        retryableAttemptsByCandidateKey: Object.freeze(retryableQueue),
         readyGeneration: Object.freeze(input.ready),
       });
     });
@@ -788,6 +1041,10 @@ export class UniverseRebuildCheckpointStore {
         }
         return base;
       }
+      const inheritedOutcomes = inheritedQueuedRetryables(
+        base.retryableAttemptsByCandidateKey,
+        input.candidatesByKey,
+      );
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
@@ -806,7 +1063,7 @@ export class UniverseRebuildCheckpointStore {
                 sourceReceipts: Object.freeze([...input.sourceReceipts]),
               }),
           appliedThrough: null,
-          outcomesByCandidateKey: Object.freeze({}),
+          outcomesByCandidateKey: Object.freeze(inheritedOutcomes),
         }),
       });
     });
@@ -879,6 +1136,12 @@ export class UniverseRebuildCheckpointStore {
       for (const [key, outcome] of Object.entries(run.outcomesByCandidateKey)) {
         if (keptKeys.has(key)) keptOutcomes[key] = outcome;
       }
+      for (const [key, outcome] of Object.entries(inheritedQueuedRetryables(
+        base.retryableAttemptsByCandidateKey,
+        input.candidatesByKey,
+      ))) {
+        if (keptOutcomes[key] === undefined) keptOutcomes[key] = outcome;
+      }
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
@@ -919,6 +1182,7 @@ export class UniverseRebuildCheckpointStore {
       revision: 0,
       verifiedMemos: Object.freeze({}),
       inProgressRun: null,
+      retryableAttemptsByCandidateKey: Object.freeze({}),
       readyGeneration: null,
     });
     return Object.freeze({
@@ -1057,13 +1321,11 @@ function assertReadyPromotion(
   const outcomes = outcomeEntries.map(([, outcome]) => outcome);
   if (
     candidateKeys.length !== run.candidateCount ||
-    // Outcomes may be a strict subset of the candidate partition: candidates
-    // that have not been attested yet stay pending (no outcome) and are
-    // simply absent from the Graph — they never block a ready that admits
-    // every currently-verified instance. Residual retryable outcomes are
-    // preserved (probe-closable) and also never enter the Graph.
-    outcomes.length > run.candidateCount ||
-    outcomeEntries.some(([key, outcome], index) =>
+    // Ready means the candidate partition is fully accounted. Retryable is a
+    // real outcome (and stays out of Graph); a missing outcome is still
+    // unaccounted and must keep the run in progress.
+    outcomes.length !== run.candidateCount ||
+    outcomeEntries.some(([key, outcome]) =>
       !candidateKeys.includes(key) ||
       outcome.familyCandidateKey !== key ||
       (outcome.status !== "verified" &&
@@ -1079,6 +1341,20 @@ function assertReadyPromotion(
     RunOutcome,
     { readonly status: "verified" }
   > => outcome.status === "verified");
+  const terminalRejected = outcomes.filter((outcome) =>
+    outcome.status === "terminal-rejected"
+  ).length;
+  const retryable = outcomes.filter((outcome) =>
+    outcome.status === "retryable"
+  ).length;
+  const accountingMatches = canonicalJson(ready.candidateAccounting) ===
+    canonicalJson({
+      total: run.candidateCount,
+      verified: verified.length,
+      terminalRejected,
+      retryable,
+      remainingUnaccounted: 0,
+    });
   const expectedInstances = verified.map((outcome) => {
     const memo = envelope.verifiedMemos[outcome.familyCandidateKey];
     if (memo === undefined) {
@@ -1126,6 +1402,7 @@ function assertReadyPromotion(
     [...requiredCoverageKeys].every((key) => coverageKeys.has(key));
   if (
     !sameCutoff || !observedMatches || !appliedAtCutoff || !sameInstances ||
+    !accountingMatches ||
     !graphRootMatches || !catalogRootMatches || !publicationRootMatches ||
     ready.universeRange.fromBlock !== run.fromBlock ||
     ready.universeRange.toBlock !== run.cutoff.number ||

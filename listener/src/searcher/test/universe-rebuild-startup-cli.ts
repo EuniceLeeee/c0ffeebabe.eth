@@ -82,11 +82,14 @@ async function main(): Promise<void> {
       SOURCE.number - 14_399,
       "CLI must bind the fixed latest-14400-block universe",
     );
-    assert.notEqual(
+    assert.equal(
       envelope?.inProgressRun,
       null,
-      "completed CLI run is kept so residual retryable outcomes stay " +
-        "durable and probe-closable",
+      "completed CLI run must clear after every candidate is accounted",
+    );
+    assert.equal(
+      envelope?.readyGeneration?.candidateAccounting.remainingUnaccounted,
+      0,
     );
     assert.equal(
       Object.keys(envelope?.verifiedMemos ?? {}).length,

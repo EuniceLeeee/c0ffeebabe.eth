@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -253,9 +253,9 @@ function makeFixture(
 async function main(): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "universe-rebuild-runner-"));
   try {
-    // A: retryable does NOT block ready: the verified partition is published,
-    // residual retryable outcomes stay durable in the kept run and are closed
-    // later by the probe. Resume skips verified keys and preserves retryable.
+    // A: retryable counts as an accounted outcome: the verified partition is
+    // published, the completed run clears, and retryable work moves to the
+    // independent probe queue.
     const f = makeFixture(dir);
     f.failKeys.add("c");
     const firstReady = await rebuildUniverse(f.input);
@@ -274,27 +274,31 @@ async function main(): Promise<void> {
       "ready generation is promoted despite residual retryable",
     );
     assert.equal(
-      checkpoint?.inProgressRun?.outcomesByCandidateKey["cand:c"]?.status,
+      checkpoint?.retryableAttemptsByCandidateKey["cand:c"]?.status,
       "retryable",
       "RPC failure is persisted as retryable, never as rejected",
     );
     assert.equal(
-      checkpoint?.inProgressRun?.outcomesByCandidateKey["cand:c"]
-        ?.status === "retryable" &&
-        (checkpoint?.inProgressRun?.outcomesByCandidateKey["cand:c"] as {
-          attemptCount: number;
-        }).attemptCount,
+      checkpoint?.retryableAttemptsByCandidateKey["cand:c"]?.attemptCount,
       1,
     );
+    assert.equal(checkpoint?.inProgressRun, null);
+    assert.deepEqual(firstReady.candidateAccounting, {
+      total: 3,
+      verified: 2,
+      terminalRejected: 0,
+      retryable: 1,
+      remainingUnaccounted: 0,
+    });
 
-    // Resume: verified keys are skipped (no identity RPC), retryable keys are
-    // preserved (not re-attested) so startup never blocks on them.
+    // A new rolling run scans a fresh partition, reuses verified memos, and
+    // inherits the independent retryable without re-attesting it on startup.
     const resumedReady = await rebuildUniverse(f.input);
     assert.equal(resumedReady.generation, firstReady.generation + 1);
     assert.equal(
       f.scanCalls(),
-      1,
-      "resume must use the durable exact candidate partition without rescanning",
+      2,
+      "a completed run must not pin startup to the old fixed window",
     );
     assert.equal(
       f.attestCalls.get("a"),
@@ -318,7 +322,27 @@ async function main(): Promise<void> {
     assert.equal(f.attestCalls.get("b"), 1);
     f.invalidReusableKeys.delete("a");
 
-    // Probe: only the target key, at the fixed cutoff.
+    // Probe: only the target key, at the queued fixed cutoff. A repeated RPC
+    // failure replaces the queue item; success later removes it.
+    const stillRetryable = await probeOneFailure({
+      store: f.store,
+      runId: "run-1",
+      familyCandidateKey: "cand:c",
+      attestFamilyInstanceOnce: f.input.attestFamilyInstanceOnce,
+      sealDurableVerifiedMemo: f.input.sealDurableVerifiedMemo,
+      assertCanonicalHead: async () => undefined,
+      decodeCandidateSnapshot: (snapshot) => snapshot as { id: string },
+    });
+    assert.equal(stillRetryable.status, "retryable");
+    assert.equal(
+      stillRetryable.status === "retryable" && stillRetryable.attemptCount,
+      2,
+    );
+    assert.equal(
+      (await f.store.load())?.retryableAttemptsByCandidateKey["cand:c"]
+        ?.cutoff.number,
+      SOURCE.number,
+    );
     const probeBefore = f.attestCalls.get("c") ?? 0;
     f.failKeys.delete("c");
     const probed = await probeOneFailure({
@@ -337,9 +361,8 @@ async function main(): Promise<void> {
       "probe must attest exactly the target key",
     );
 
-    // The residual retryable ("cand:c") stays out of the Graph: the ready
-    // generation admits only verified instances, and the run is kept so the
-    // probe can close the retryable later.
+    // Once the independent probe closes cand:c, the next rolling run reuses
+    // its memo and admits the instance into the Graph.
     const aCallsBeforeFinalize = f.attestCalls.get("a");
     const finalizedReady = await rebuildUniverse(f.input);
     assert.equal(finalizedReady.generation, firstReady.generation + 3);
@@ -354,11 +377,11 @@ async function main(): Promise<void> {
       "one family publication must retain all verified instance pools",
     );
     checkpoint = await f.store.load();
-    assert.notEqual(checkpoint?.inProgressRun, null);
+    assert.equal(checkpoint?.inProgressRun, null);
     assert.equal(
-      checkpoint?.inProgressRun?.outcomesByCandidateKey["cand:c"]?.status,
-      "verified",
-      "the probe-closed instance stays durable in the kept run",
+      checkpoint?.retryableAttemptsByCandidateKey["cand:c"],
+      undefined,
+      "the probe-closed instance leaves the independent retryable queue",
     );
     assert.equal(checkpoint?.readyGeneration?.generation, firstReady.generation + 3);
     assert.equal(
@@ -366,6 +389,75 @@ async function main(): Promise<void> {
       aCallsBeforeFinalize,
       "a valid durable memo must not re-attest during finalization",
     );
+
+    // A deployed checkpoint may already have Ready while the old runtime
+    // still keeps the completed run. It must migrate locally before source-
+    // plan checks, then start one fresh rolling scan; it must not re-adopt the
+    // old historical range as if the run were unfinished.
+    const keptDir = join(dir, "already-ready-kept-run");
+    const kept = makeFixture(keptDir);
+    const keptReady = await rebuildUniverse(kept.input);
+    const keptEnvelope = (await kept.store.load())!;
+    const keptCandidates = Object.freeze(Object.fromEntries(
+      ["a", "b", "c"].map((id) => [
+        "cand:" + id,
+        Object.freeze({ id }),
+      ]),
+    ));
+    const legacyReady = { ...keptReady } as Record<string, unknown>;
+    delete legacyReady.candidateAccounting;
+    const legacyProjection = Object.freeze({
+      revision: keptEnvelope.revision + 1,
+      verifiedMemos: keptEnvelope.verifiedMemos,
+      inProgressRun: Object.freeze({
+        runId: "run-1",
+        cutoff: SOURCE,
+        fromBlock: SOURCE.number - 14_399,
+        universeHash: keptReady.universeHash,
+        candidateSetHash: createHash("sha256")
+          .update("candidate-set-v1:cand:a,cand:b,cand:c")
+          .digest("hex"),
+        candidateCount: 3,
+        candidatesByKey: keptCandidates,
+        observedThrough: Object.freeze({
+          number: SOURCE.number,
+          hash: SOURCE.hash,
+        }),
+        sourceReceipts: sourceReceipts(SOURCE.number - 14_399),
+        appliedThrough: null,
+        outcomesByCandidateKey: Object.freeze(Object.fromEntries(
+          ["a", "b", "c"].map((id) => [
+            "cand:" + id,
+            Object.freeze({
+              status: "verified",
+              familyCandidateKey: "cand:" + id,
+              familyInstanceKey: "inst:" + id,
+              memoFingerprint: "memo:" + id,
+            }),
+          ]),
+        )),
+      }),
+      readyGeneration: Object.freeze(legacyReady),
+    });
+    const legacyFingerprint = createHash("sha256")
+      .update(canonicalJson(legacyProjection))
+      .digest("hex");
+    await writeFile(
+      join(keptDir, "checkpoint.json"),
+      JSON.stringify({
+        ...legacyProjection,
+        checkpointFingerprint: legacyFingerprint,
+      }) + "\n",
+    );
+    const migrationLogs: string[] = [];
+    const rolledReady = await rebuildUniverse(Object.freeze({
+      ...kept.input,
+      log: (message: string) => migrationLogs.push(message),
+    }));
+    assert.equal(rolledReady.generation, 2);
+    assert.equal(kept.scanCalls(), 2);
+    assert.match(migrationLogs.join("\n"), /migrated already-ready kept run/);
+    assert.equal((await kept.store.load())?.inProgressRun, null);
 
 
     // B: a NEW deployment (fresh checkpoint dir) has no durable memos, so
@@ -578,14 +670,9 @@ async function main(): Promise<void> {
       null,
       "a stale-plan receipt must not begin a durable run",
     );
-    // Resume drift: receipts were durable under plan X; the discovery
-    // surface changed (new family/capability set) so plan Y re-adopts
-    // incrementally: discovery re-runs over the SAME fixed range with the
-    // current catalog and the SAME run is reconciled (runId/cutoff/fromBlock
-    // immutable), while the durable verified-memo table is carried so
-    // unchanged Family instances reuse their prior proofs and only new
-    // candidates are attested. Memo reuse is still per-memo revalidated;
-    // nothing silently attests the old partition to ready.
+    // After promotion, a changed discovery surface starts a new rolling run.
+    // The durable verified-memo table is carried so unchanged Family
+    // instances reuse their prior proofs and only new candidates attest.
     const resumeDrift = planReceiptFixture(join(dir, "resume-drift"), "c".repeat(64));
     const planC = () => Object.freeze({
       startup: "c".repeat(64),
@@ -633,16 +720,12 @@ async function main(): Promise<void> {
     }
     const driftEnvelope = await driftReadopt.store.load();
     assert.equal(driftEnvelope?.readyGeneration?.generation, 2);
-    // Layer 1 invariant: the run's time world never changed across the plan
-    // drift — same runId, same cutoff, same fromBlock.
-    assert.equal(driftEnvelope?.inProgressRun?.runId, "run-1");
-    assert.equal(driftEnvelope?.inProgressRun?.cutoff?.number, SOURCE.number);
+    assert.equal(driftEnvelope?.inProgressRun, null);
+    assert.equal(driftEnvelope?.readyGeneration?.candidateAccounting.total, 4);
     assert.equal(
-      driftEnvelope?.inProgressRun?.cutoff?.hash?.toLowerCase(),
-      SOURCE.hash.toLowerCase(),
+      driftEnvelope?.readyGeneration?.candidateAccounting.remainingUnaccounted,
+      0,
     );
-    assert.equal(driftEnvelope?.inProgressRun?.fromBlock, SOURCE.number - 14_399);
-    assert.equal(driftEnvelope?.inProgressRun?.candidateCount, 4);
 
     // G: the deployed pre-receipt fixed checkpoint is upgraded in place.
     // The runner replays the original fixed range, requires the exact same
@@ -675,7 +758,7 @@ async function main(): Promise<void> {
     });
     await rebuildUniverse(legacy.input);
     const migrated = await legacy.store.load();
-    assert.notEqual(migrated?.inProgressRun, null);
+    assert.equal(migrated?.inProgressRun, null);
     assert.equal(
       migrated?.readyGeneration?.universeRange.fromBlock,
       SOURCE.number - 14_399,
@@ -754,7 +837,7 @@ async function main(): Promise<void> {
     });
     const aliasReady = await rebuildUniverse(aliasMerge.input);
     assert.equal(
-      (await aliasMerge.store.load())?.inProgressRun?.candidateCount,
+      aliasReady.candidateAccounting.total,
       1,
       "the reverse-bound alias collapses into the retained candidate",
     );
@@ -811,17 +894,17 @@ async function main(): Promise<void> {
     );
     const sharedStore = await sharedInstance.store.load();
     assert.equal(
-      sharedStore?.inProgressRun?.outcomesByCandidateKey["cand:x"]?.status,
-      "verified",
+      sharedStore?.readyGeneration?.candidateAccounting.verified,
+      1,
     );
     assert.equal(
-      sharedStore?.inProgressRun?.outcomesByCandidateKey["cand:y"]?.status,
-      "terminal-rejected",
+      sharedStore?.readyGeneration?.candidateAccounting.terminalRejected,
+      1,
     );
     assert.equal(
-      (sharedStore?.inProgressRun?.outcomesByCandidateKey["cand:y"] as
-        { readonly reasonCode: string }).reasonCode,
-      "duplicate-instance",
+      sharedStore?.inProgressRun,
+      null,
+      "the duplicate is accounted before the completed run clears",
     );
     // E: first run merges dormancy nominations. Pools silent for the strict
     // observation window but active within the wider dormancy window are
@@ -856,13 +939,9 @@ async function main(): Promise<void> {
       dormancyReady.generation,
       "dormancy nominations promote with the first run",
     );
-    const dormancyReceipts =
-      dormancyCheckpoint?.inProgressRun?.sourceReceipts ?? [];
     assert.equal(
-      dormancyReceipts.every((receipt) =>
-        receipt.fromBlock === strictEdgeCollectionFromBlock(SOURCE.number)
-      ),
-      true,
+      dormancyCheckpoint?.readyGeneration?.universeRange.fromBlock,
+      strictEdgeCollectionFromBlock(SOURCE.number),
       "source receipts still bind the strict 2-day window only: " +
         "dormancy observations never enter the complete-observation proof",
     );

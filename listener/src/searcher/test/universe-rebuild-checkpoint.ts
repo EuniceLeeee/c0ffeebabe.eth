@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AttestationCheckpointWriter,
   UniverseRebuildCheckpointStore,
+  canonicalJson,
   type DurableVerifiedMemo,
   type DurableSourceReceipt,
   type ReadyUniverseGeneration,
@@ -450,6 +452,13 @@ async function main(): Promise<void> {
       catalogHash: hashReadyCatalogSnapshot(READY_CATALOG),
       activeInstanceKeys: Object.freeze(["inst-a", "inst-b"]),
       publicationSetHash: hashReadyPublicationSet(READY_CATALOG),
+      candidateAccounting: Object.freeze({
+        total: 2,
+        verified: 2,
+        terminalRejected: 0,
+        retryable: 0,
+        remainingUnaccounted: 0 as const,
+      }),
       observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
       appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
       sourceCoverage: Object.freeze([Object.freeze({ familyId: "univ2", sourceId: "startup-universe", completeThroughBlock: SOURCE.number, completeThroughHash: SOURCE.hash })]),
@@ -516,16 +525,51 @@ async function main(): Promise<void> {
       runId: "run-1",
       ready: readyGeneration,
     });
-    assert.notEqual(
+    assert.equal(
       ready.inProgressRun,
       null,
-      "the completed run is kept after atomic ready promotion so residual " +
-        "retryable outcomes stay durable and probe-closable",
+      "a fully accounted run must clear after atomic ready promotion",
+    );
+    assert.equal(
+      Object.keys(ready.retryableAttemptsByCandidateKey).length,
+      0,
     );
     assert.equal(ready.readyGeneration?.generation, 1);
     assert.equal(ready.verifiedMemos["a"]?.familyInstanceKey, "inst-a");
     // Reload after ready: fingerprint still verifies.
     assert.equal((await store.load())?.readyGeneration?.generation, 1);
+
+    // A deployed pre-queue envelope keeps its legacy fingerprint on disk.
+    // Loading normalizes an empty queue; the next CAS rewrites the new sealed
+    // shape without requiring a checkpoint reset.
+    const legacyPath = join(dir, "legacy-envelope.json");
+    const legacyProjection = Object.freeze({
+      revision: 2,
+      verifiedMemos: Object.freeze({}),
+      inProgressRun: null,
+      readyGeneration: null,
+    });
+    const legacyFingerprint = createHash("sha256")
+      .update(canonicalJson(legacyProjection))
+      .digest("hex");
+    await writeFile(
+      legacyPath,
+      JSON.stringify({
+        ...legacyProjection,
+        checkpointFingerprint: legacyFingerprint,
+      }) + "\n",
+      { mode: 0o600 },
+    );
+    const legacyStore = new UniverseRebuildCheckpointStore({ path: legacyPath });
+    assert.deepEqual(
+      (await legacyStore.load())?.retryableAttemptsByCandidateKey,
+      {},
+    );
+    await legacyStore.casUpsertMemo(memoFor("legacy"));
+    assert.match(
+      await readFile(legacyPath, "utf8"),
+      /"retryableAttemptsByCandidateKey":\{\}/,
+    );
 
     // Corruption fails closed.
     const corruptPath = join(dir, "corrupt.json");

@@ -492,7 +492,7 @@ function canonicalCandidateSnapshot(
   // require fields beyond address/poolId (PoolKey, payout token, actor,
   // amounts, etc.); dropping them makes a single-pool retry impossible. The
   // durable codec is JSON-safe and this snapshot lives only in the current
-  // in-progress run, not in a permanent raw-transaction inbox.
+  // run or its bounded one-candidate retry queue, never a raw-tx inbox.
   return encodeDurableValue(candidate);
 }
 

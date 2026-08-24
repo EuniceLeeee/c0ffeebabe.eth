@@ -21,8 +21,9 @@ import { strictEdgeCollectionFromBlock } from
  * scans exactly the latest production edge window at a frozen canonical cutoff,
  * restores the fixed-cutoff run by durable candidate key, verifies only the
  * diff (new / invalidated / failed candidates), persists outcomes through
- * the serial writer, and - only when retryable is empty and the candidate
- * partition is exact - seals the ready generation with one final CAS.
+ * the serial writer, and - only when every candidate is accounted as
+ * verified, terminal-rejected, or retryable - seals the ready generation
+ * with one final CAS. Retryable is durable work, not an unfinished run.
  *
  * The runner is dependency-injected so the flow contract is testable
  * without live RPC: scan/dedupe/attest/seal/rehydrate/graph are typed
@@ -31,14 +32,17 @@ import { strictEdgeCollectionFromBlock } from
 
 export class UniverseRunIncomplete extends Error {
   readonly runId: string;
-  readonly retryableCount: number;
-  constructor(input: { readonly runId: string; readonly retryableCount: number }) {
+  readonly remainingUnaccounted: number;
+  constructor(input: {
+    readonly runId: string;
+    readonly remainingUnaccounted: number;
+  }) {
     super(
-      "universe rebuild incomplete: " + input.retryableCount +
-        " retryable outcome(s) remain for run " + input.runId,
+      "universe rebuild incomplete: " + input.remainingUnaccounted +
+        " candidate(s) remain unaccounted for run " + input.runId,
     );
     this.runId = input.runId;
-    this.retryableCount = input.retryableCount;
+    this.remainingUnaccounted = input.remainingUnaccounted;
   }
 }
 
@@ -202,6 +206,7 @@ export async function rebuildUniverse(
   const encodeCandidate = input.encodeCandidateSnapshot ?? ((value) => value);
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value) => value);
   let checkpoint = await input.store.load() ?? null;
+  checkpoint = await migrateAlreadyReadyKeptRun(input.store, checkpoint, log);
   const incumbentRun = checkpoint?.inProgressRun ?? null;
   // Layered re-adoption model:
   // 1. An unfinished fixed run keeps its time world forever — same runId,
@@ -678,25 +683,20 @@ export async function rebuildUniverse(
   if (currentRun === null || currentRun.runId !== input.runId) {
     throw new Error("universe rebuild: run lost after flush");
   }
-  const pending = Object.values(currentRun.outcomesByCandidateKey).filter(
+  const retryable = Object.values(currentRun.outcomesByCandidateKey).filter(
     (item) => item.status === "retryable",
   );
-  if (pending.length > 0) {
-    // Residual retryable outcomes no longer block ready: the verified
-    // partition is complete and published; retryable candidates simply stay
-    // out of the Graph and remain durable in the kept run for the probe to
-    // close after startup. (UniverseRunIncomplete is still thrown when the
-    // run is lost below, i.e. no ready can be formed at all.)
+  if (retryable.length > 0) {
     log(
-      "universe rebuild ready with " + pending.length +
+      "universe rebuild ready with " + retryable.length +
         " residual retryable outcome(s); they stay out of the Graph " +
-        "and remain probe-closable",
+        "and move to the independent probe queue",
     );
   }
 
-  // 5. Exact partition: every active candidate is verified or chain-proven
-  //    terminal-rejected, nothing else.
-  assertExactCandidatePartition(
+  // 5. Exact accounting: retryable counts as handled for this run; only a
+  //    candidate with no outcome remains unaccounted and blocks Ready.
+  const candidateAccounting = assertExactCandidatePartition(
     currentRun,
     candidates,
     input.familyCandidateKey,
@@ -738,6 +738,7 @@ export async function rebuildUniverse(
       memo.familyInstanceKey
     ).sort()),
     publicationSetHash: hashReadyPublicationSet(catalogSnapshot),
+    candidateAccounting,
     observedThrough: Object.freeze({ ...currentRun.observedThrough }),
     appliedThrough: Object.freeze({
       number: cutoff.number,
@@ -761,13 +762,9 @@ export async function rebuildUniverse(
       " instances=" + ready.activeInstanceKeys.length +
       " candidates=" + candidates.length,
   );
-  // The run is KEPT (never cleared) so residual retryable outcomes stay
-  // durable and probe-closable after startup, and an incumbent run always
-  // keeps its already-durable fromBlock: resume continues the same fixed
-  // window instead of re-freezing a new one. There is no legacy-range
-  // recursion — a wider pre-policy run is promoted as-is and its receipts
-  // are backfilled in place (assertSourceReceiptsBindRun still enforces the
-  // exact candidate partition and receipt range).
+  // Promotion clears inProgressRun. Residual retryables remain durable in a
+  // separate queue, so the next startup freezes a new rolling cutoff instead
+  // of repeatedly publishing the same completed historical run.
   return ready;
 }
 
@@ -838,10 +835,23 @@ function assertExactCandidatePartition(
   run: InProgressUniverseRun,
   candidates: readonly unknown[],
   familyCandidateKey: (candidate: unknown) => string,
-): void {
+): ReadyUniverseGeneration["candidateAccounting"] {
   const active = new Set(candidates.map((candidate) =>
     familyCandidateKey(candidate)
   ));
+  return exactCandidateAccounting(run, active);
+}
+
+function exactCandidateAccounting(
+  run: InProgressUniverseRun,
+  active: ReadonlySet<string>,
+): ReadyUniverseGeneration["candidateAccounting"] {
+  if (active.size !== run.candidateCount) {
+    throw new Error(
+      "universe rebuild: candidate partition/count mismatch: " +
+        active.size + " != " + run.candidateCount,
+    );
+  }
   const accounted = new Set<string>();
   for (const [key, outcome] of Object.entries(run.outcomesByCandidateKey)) {
     if (!active.has(key)) {
@@ -864,10 +874,76 @@ function assertExactCandidatePartition(
   }
   if (accounted.size !== active.size) {
     const missing = [...active].filter((key) => !accounted.has(key)).sort();
-    throw new Error(
-      "universe rebuild: exact candidate partition has pending outcome(s): " +
-        missing.join(","),
+    throw new UniverseRunIncomplete({
+      runId: run.runId,
+      remainingUnaccounted: missing.length,
+    });
+  }
+  const outcomes = Object.values(run.outcomesByCandidateKey);
+  return Object.freeze({
+    total: run.candidateCount,
+    verified: outcomes.filter((outcome) => outcome.status === "verified").length,
+    terminalRejected: outcomes.filter((outcome) =>
+      outcome.status === "terminal-rejected"
+    ).length,
+    retryable: outcomes.filter((outcome) => outcome.status === "retryable").length,
+    remainingUnaccounted: 0 as const,
+  });
+}
+
+async function migrateAlreadyReadyKeptRun(
+  store: UniverseRebuildCheckpointStore,
+  checkpoint: StartupCheckpointEnvelope | null,
+  log: (message: string) => void,
+): Promise<StartupCheckpointEnvelope | null> {
+  const run = checkpoint?.inProgressRun;
+  const ready = checkpoint?.readyGeneration;
+  if (checkpoint === null || run === null || run === undefined || ready == null) {
+    return checkpoint;
+  }
+  if (
+    ready.cutoff.number !== run.cutoff.number ||
+    ready.cutoff.hash.toLowerCase() !== run.cutoff.hash.toLowerCase() ||
+    ready.cutoff.generation !== run.cutoff.generation
+  ) {
+    return checkpoint;
+  }
+  let candidateAccounting: ReadyUniverseGeneration["candidateAccounting"];
+  try {
+    candidateAccounting = exactCandidateAccounting(
+      run,
+      new Set(Object.keys(run.candidatesByKey)),
     );
+  } catch (error) {
+    log(
+      "universe rebuild kept-run migration skipped: " +
+        (error instanceof Error ? error.message : String(error)),
+    );
+    return checkpoint;
+  }
+  try {
+    const migrated = await store.casCommitReadyGeneration({
+      expectedRevision: checkpoint.revision,
+      runId: run.runId,
+      ready: Object.freeze({ ...ready, candidateAccounting }),
+    });
+    log(
+      "universe rebuild migrated already-ready kept run: run=" + run.runId +
+        " retryableQueue=" + candidateAccounting.retryable,
+    );
+    return migrated;
+  } catch (error) {
+    // A run can have changed after its last Ready (for example, a successful
+    // probe added a memo). In that case the existing roots/instance set no
+    // longer bind the run, so normal fixed-run recovery must rebuild it.
+    log(
+      "universe rebuild kept-run migration requires normal recovery: " +
+        (error instanceof Error ? error.message : String(error)),
+    );
+    const reloaded = await store.load();
+    return reloaded === null || reloaded.revision === checkpoint.revision
+      ? checkpoint
+      : reloaded;
   }
 }
 
@@ -884,10 +960,10 @@ async function findMemoByKey(
 }
 
 /**
- * Audit §6: probe exactly one retryable failure at the run's fixed cutoff.
+ * Audit §6: probe exactly one retryable failure at its fixed cutoff.
  * Uses the saved candidateSnapshot + evidenceRef, never rescanning the
  * window or re-attesting the other candidates; success writes the verified
- * memo and the run outcome in the same CAS sequence.
+ * memo and removes the independently queued retryable in the same CAS.
  */
 export async function probeOneFailure(input: {
   readonly store: UniverseRebuildCheckpointStore;
@@ -907,22 +983,25 @@ export async function probeOneFailure(input: {
     throw new Error("universe rebuild probe: no checkpoint");
   }
   const run = checkpoint.inProgressRun;
-  if (run === null || run.runId !== input.runId) {
-    throw new Error(
-      "universe rebuild probe: no in-progress run " + input.runId,
-    );
-  }
-  // The probe must continue at the original fixed cutoff.
-  await input.assertCanonicalHead(run.cutoff);
-  const old = run.outcomesByCandidateKey[input.familyCandidateKey];
+  const queued = checkpoint.retryableAttemptsByCandidateKey[
+    input.familyCandidateKey
+  ];
+  const queuedTarget = queued !== undefined && queued.runId === input.runId;
+  const runOutcome = run?.runId === input.runId
+    ? run.outcomesByCandidateKey[input.familyCandidateKey]
+    : undefined;
+  const old = queuedTarget ? queued : runOutcome;
   if (old === undefined || old.status !== "retryable") {
     throw new Error(
       "universe rebuild probe: target is not a retryable failure",
     );
   }
+  const cutoff = queuedTarget ? queued.cutoff : run!.cutoff;
+  // The probe must continue at the retryable's original fixed cutoff.
+  await input.assertCanonicalHead(cutoff);
   const result = await input.attestFamilyInstanceOnce({
     candidate: input.decodeCandidateSnapshot(old.candidateSnapshot),
-    cutoff: run.cutoff,
+    cutoff,
     ...(old.evidenceRef === undefined
       ? {}
       : { evidenceRef: old.evidenceRef }),
@@ -933,7 +1012,7 @@ export async function probeOneFailure(input: {
     const memo = input.sealDurableVerifiedMemo({
       candidate: input.decodeCandidateSnapshot(old.candidateSnapshot),
       result: result.result,
-      proofSource: run.cutoff,
+      proofSource: cutoff,
       familyCandidateKey: input.familyCandidateKey,
     });
     verifiedMemo = memo;
@@ -977,13 +1056,18 @@ export async function probeOneFailure(input: {
       lastAttemptAt: new Date().toISOString(),
     });
   }
-  await input.store.casReplaceRunOutcome({
+  const write = {
     runId: input.runId,
     familyCandidateKey: input.familyCandidateKey,
     expectedAttemptCount: old.attemptCount,
     nextOutcome: next,
     ...(verifiedMemo === undefined ? {} : { memo: verifiedMemo }),
-  });
+  };
+  if (queuedTarget) {
+    await input.store.casReplaceQueuedRetryable(write);
+  } else {
+    await input.store.casReplaceRunOutcome(write);
+  }
   return next;
 }
 

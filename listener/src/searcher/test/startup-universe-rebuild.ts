@@ -23,6 +23,13 @@ function ready(): ReadyUniverseGeneration {
     catalogHash: "c",
     activeInstanceKeys: Object.freeze(["inst:a", "inst:b"]),
     publicationSetHash: "p",
+    candidateAccounting: Object.freeze({
+      total: 2,
+      verified: 2,
+      terminalRejected: 0,
+      retryable: 0,
+      remainingUnaccounted: 0 as const,
+    }),
     observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
     appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
     sourceCoverage: Object.freeze([]),

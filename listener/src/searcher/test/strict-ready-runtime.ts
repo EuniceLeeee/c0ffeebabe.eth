@@ -48,6 +48,13 @@ function ready(): ReadyUniverseGeneration {
     catalogHash: hashReadyCatalogSnapshot(catalogSnapshot),
     activeInstanceKeys: Object.freeze(["family-instance:1"]),
     publicationSetHash: hashReadyPublicationSet(catalogSnapshot),
+    candidateAccounting: Object.freeze({
+      total: 1,
+      verified: 1,
+      terminalRejected: 0,
+      retryable: 0,
+      remainingUnaccounted: 0 as const,
+    }),
     observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
     appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
     sourceCoverage: Object.freeze([Object.freeze({

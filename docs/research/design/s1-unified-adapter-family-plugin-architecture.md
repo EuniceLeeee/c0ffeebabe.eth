@@ -89,14 +89,19 @@ Discovery coverage and attestation completeness are separate facts.
 
 - sourceCoverage.appliedThrough == cutoff proves the declared source range was consumed.
 - It does not prove that every nominated instance verified.
-- A durable inProgressRun may contain the safe verified subset for diagnosis, while every omitted candidate
-  remains explicitly terminal-rejected, retryable, or pending in that same envelope.
-- Only verified publications enter a candidate Graph/catalog snapshot. Retryable and pending candidates
-  never enter Graph.
-- An incomplete snapshot is not a readyGeneration and cannot create a producer, including in dry-run.
-- Final S1 acceptance requires no silent missing candidate and no unresolved pending/retryable candidate in
-  the declared final partition. Funding and Credit may have no live instance only with explicit capability
-  and absence evidence.
+- A durable `inProgressRun` contains the fixed candidate partition and every outcome completed so far.
+  `verified`, `terminal-rejected`, and `retryable` are all accounted outcomes; a candidate with no outcome is
+  the only pending/unaccounted state.
+- Completion is `remainingUnaccounted = candidateCount - accountedCandidateCount = 0`. It is not
+  `retryableCount = 0`.
+- Only verified publications enter a candidate Graph/catalog snapshot. Retryable and pending candidates never
+  enter Graph.
+- Once the partition is fully accounted, promotion atomically publishes the verified-only generation, moves
+  retryables to the independent durable probe queue, and clears `inProgressRun`. A queued retryable therefore
+  does not pin startup forever to an already-completed historical cutoff.
+- Final S1 acceptance requires no silent missing candidate and `remainingUnaccounted=0`; queued retryables are
+  disclosed separately and never represented as verified coverage. Funding and Credit may have no live
+  instance only with explicit capability and absence evidence.
 
 Single-pool probe and checkpoint inspection expose Family failures without discarding already verified work
 or falsely claiming that a verified subset is the complete universe. Live begins only after the partition is
@@ -629,7 +634,15 @@ interface StartupCheckpointEnvelope {
   readonly revision: bigint;
   readonly verifiedMemos: Readonly<Record<FamilyCandidateKey, DurableVerifiedMemo>>;
   readonly inProgressRun: DurableAttestationRun | null;
+  readonly retryableAttemptsByCandidateKey: Readonly<
+    Record<FamilyCandidateKey, DurableRetryableQueueEntry>
+  >;
   readonly readyGeneration: ReadyGeneration | null;
+}
+
+interface DurableRetryableQueueEntry extends DurableRetryableOutcome {
+  readonly runId: string;
+  readonly cutoff: CanonicalCutoff;
 }
 
 interface DurableAttestationRun {
@@ -760,7 +773,7 @@ interface ReadyGeneration {
     readonly verified: number;
     readonly terminalRejected: number;
     readonly retryable: number;
-    readonly pending: number;
+    readonly remainingUnaccounted: 0;
   };
   readonly completeness: "complete";
   readonly instances: readonly PersistedFamilyInstance[];
@@ -774,23 +787,33 @@ function promoteReady(
   assertCanonicalHash(run.cutoff);
   assertAllSourceReceiptsBound(run);
   assertExactCandidatePartition(run);
-  assertRetryableAndPendingEqualZero(run);
+  assertRemainingUnaccountedZero(run);
 
   const verified = verifiedOutcomes(run);
   const ready = buildVerifiedOnlyReadyGeneration(run, verified);
+  const retryableQueue = moveRetryablesToIndependentQueue(
+    envelope.retryableAttemptsByCandidateKey,
+    run,
+  );
 
   return compareAndSwapEnvelope(envelope.revision, {
     ...envelope,
     inProgressRun: null,
+    retryableAttemptsByCandidateKey: retryableQueue,
     readyGeneration: ready,
   });
 }
 ~~~
 
-Promotion never advances source facts that are not durably proven. A retryable or pending outcome keeps the
-fixed run durable and probe-closable but blocks promotion. Successful promotion clears inProgressRun while
-retaining verifiedMemos and readyGeneration; the next startup can therefore freeze a new rolling 14400-block
+Promotion never advances source facts that are not durably proven. A missing outcome keeps the fixed run
+durable and blocks promotion; a retryable is an explicit accounted result that remains outside Graph and moves
+to the independent probe queue. Successful promotion clears `inProgressRun` while retaining verified memos,
+queued retries, and the ready generation; the next startup can therefore freeze a new rolling 14400-block
 cutoff instead of restoring an already-completed historical run forever.
+A pre-queue checkpoint that already contains a Ready bound exactly to its kept run is migrated locally before
+source-plan reconciliation: the same promotion checks must pass, then retryables move to the queue and the run
+clears. Any root, instance-set, receipt, or accounting mismatch skips this fast path and enters normal
+fail-closed recovery.
 
 ## 7. Persisted Graph and runtime rehydration
 
@@ -1279,8 +1302,9 @@ For every generated production Family:
 
 - declared source plans and source receipts are visible;
 - candidates are counted by exact partition;
-- every candidate is verified, chain-proven rejected, retryable, or pending;
-- final acceptance has zero pending/retryable;
+- every candidate is verified, chain-proven rejected, or retryable;
+- final acceptance has `remainingUnaccounted=0`; queued retryables are reported separately and never counted
+  as active instances;
 - verified candidates bind publications and instances;
 - no candidate or Family silently disappears.
 
@@ -1319,7 +1343,8 @@ After a controlled systemd restart:
 - startup freezes a new current 14400-block run while retaining the prior atomic readyGeneration as durable
   evidence until the new generation promotes;
 - verified memos are reused only when all fingerprints remain valid;
-- only new, invalidated, retryable, and pending differences are processed;
+- only new and invalidated candidates are processed in the startup run; an unchanged queued retryable is
+  inherited as accounted and retried only by the independent single-candidate probe;
 - an original-cutoff single-pool probe updates only its FamilyCandidateKey;
 - source/candidate/Graph cursors never advance ahead of durable facts;
 - topology remains frozen after producer creation.
@@ -1377,15 +1402,17 @@ earlier deployments was retained with its first failed lineage stage (funding ge
 exact-session reissue budget, coarse-scope mismatch) and each was fixed in production code before the
 window above.
 
-**Restart and durable reuse (§16.5):** controlled systemd restarts froze new startup runs
-(generations 11→12→13→14) at the same cutoff 25803561 while retaining the prior atomic readyGeneration
-(16006 active instances) as durable evidence; each restart resumed from the checkpoint without a reset;
-the post-restart process achieved its own qualified 100/100 window.
+**Restart and durable reuse (§16.5, historical evidence at 496545fb):** controlled systemd restarts
+(generations 11→12→13→14) reused cutoff 25803561 under the then-current kept-run implementation while
+retaining the prior atomic readyGeneration (16006 active instances) as durable evidence; each restart resumed
+from the checkpoint without a reset and the post-restart process achieved its own qualified 100/100 window.
+That kept-run behavior is superseded by the `remainingUnaccounted=0` completion rule above: completed runs now
+clear and residual retryables live in the independent queue.
 
 **Full Family matrices (§16.2/16.3):** universe rebuild status (checkpoint revision 1223, ready
 generation 14): verifiedMemos=16006, outcomes verified=16006 / terminal-rejected=1639 / retryable=77
-(residual probe candidates kept durable for probe-closing; retryable candidates never enter the ready
-generation — ready promotion admits only verified instances), activeInstances=16006, graph hash
+(historically retained in the run; under the current contract these move to the independent probe queue;
+retryable candidates never enter the ready generation), activeInstances=16006, graph hash
 324463193db1a7c6…; the 4 univ4 target pools (44cb18b3/3485addb/2287a962/3d8a4e3c) are in the Graph and
 the univ3 fork pool 76a278bd was fail-closed rejected.
 

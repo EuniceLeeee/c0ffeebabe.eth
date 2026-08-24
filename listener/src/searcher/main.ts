@@ -1318,8 +1318,8 @@ async function main(): Promise<void> {
     if (error instanceof UniverseRunIncomplete) {
       throw new Error(
         "strict startup rebuild incomplete: run=" + error.runId +
-          " retryable=" + error.retryableCount +
-          " (probe durable failures before producer start)",
+          " remainingUnaccounted=" + error.remainingUnaccounted +
+          " (resume the durable run before producer start)",
       );
     }
     throw error;

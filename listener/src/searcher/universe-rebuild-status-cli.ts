@@ -66,6 +66,17 @@ async function main(): Promise<void> {
   console.log(
     "  verifiedMemos=" + Object.keys(envelope.verifiedMemos).length,
   );
+  const queuedRetryables = Object.values(
+    envelope.retryableAttemptsByCandidateKey,
+  );
+  console.log("  retryableQueue=" + queuedRetryables.length);
+  if (queuedRetryables.length > 0) {
+    console.log(
+      "  retryable (probe candidates): " + queuedRetryables.map((item) =>
+        item.familyCandidateKey + "@" + item.cutoff.number
+      ).join(", "),
+    );
+  }
   if (run === null) {
     console.log("  inProgressRun: none");
   } else {
@@ -82,21 +93,19 @@ async function main(): Promise<void> {
           .join(" ") +
         (outcomes.length === 0 ? " (none yet)" : ""),
     );
-    const retryable = outcomes.filter((item) => item.status === "retryable");
-    if (retryable.length > 0) {
-      console.log(
-        "  retryable (probe candidates): " +
-          retryable.map((item) => item.familyCandidateKey).join(", "),
-      );
-    }
   }
   if (ready === null) {
     console.log("  readyGeneration: none (no complete rebuild yet)");
   } else {
+    const accounting = ready.candidateAccounting;
     console.log(
       "  readyGeneration: " + ready.generation +
         " cutoff=" + ready.cutoff.number +
         " activeInstances=" + ready.activeInstanceKeys.length +
+        (accounting === undefined
+          ? " candidateAccounting=legacy-unavailable"
+          : " accounted=" + accounting.total +
+            " remainingUnaccounted=" + accounting.remainingUnaccounted) +
         " graphHash=" + ready.graphHash.slice(0, 16) + "...",
     );
   }

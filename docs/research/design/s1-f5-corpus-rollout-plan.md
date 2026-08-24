@@ -1123,3 +1123,20 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   增量窗口）；这不是 Angstrom 语义修复，也没有改变本次 255/257 事实。
   工作树中尚未提交的 nomination bridge 不得计入验收，必须完成完整部署纪律
   后再重跑。F5 live、F9 cleanup receipt 仍未终态关闭。
+
+### Universe rebuild 完成语义收口（2026-08-24，用户裁定）
+
+- 本轮完成条件固定为 `remainingUnaccounted === 0`，其中 accounted 是
+  `verified + terminal-rejected + retryable`。`retryable === 0` 不是 run
+  completion 条件；source receipt 内的 `retryableCount: 0` 仍只证明该 source
+  query 自身完整，二者不得混用。
+- Ready promotion 仅发布 verified instance；terminal-rejected 与 retryable
+  均不进入 Graph。分区 fully accounted 后，原子提交同时写入
+  `candidateAccounting.remainingUnaccounted=0`、清除 `inProgressRun`，并把
+  retryable 转入独立耐久 probe queue。
+- 新 rolling run 可继承候选快照未变化的 queued retryable 作为 accounted，
+  不在每次 startup 重跑同一批重活；单候选 probe 在原 fixed cutoff 重试，成功
+  时原子写 verified memo 并出队，随后由下一 rolling generation 正常入图。
+- 该收口修复“Ready 已发布但 completed run 仍长期占据 inProgressRun，导致每次
+  重启反复恢复同一历史 cutoff”的半迁移状态；pending/无 outcome 仍 fail-closed，
+  不得借 retryable 语义放行。

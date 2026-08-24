@@ -90,8 +90,8 @@ async function main(): Promise<void> {
     if (error instanceof UniverseRunIncomplete) {
       console.error(
         "[universe-rebuild] INCOMPLETE run=" + error.runId +
-          " retryable=" + error.retryableCount +
-          " (durable; use searcher:universe-rebuild-probe)",
+          " remainingUnaccounted=" + error.remainingUnaccounted +
+          " (durable; resume the same run)",
       );
       process.exitCode = 2;
       return;
