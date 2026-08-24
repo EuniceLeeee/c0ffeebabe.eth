@@ -24,8 +24,9 @@ const SOURCE = Object.freeze({
 const READY_GRAPH = Object.freeze({ edges: Object.freeze([]) });
 const READY_CATALOG = Object.freeze({ instances: Object.freeze([]) });
 
-function sourceReceipts(): readonly DurableSourceReceipt[] {
-  const fromBlock = SOURCE.number - 14_399;
+function sourceReceipts(
+  fromBlock = SOURCE.number - 14_399,
+): readonly DurableSourceReceipt[] {
   return Object.freeze([Object.freeze({
     sourceKey: "1".repeat(64),
     sourceKind: "startup-candidate-union" as const,
@@ -131,6 +132,210 @@ async function main(): Promise<void> {
       /different fixed input/,
       "same runId must not attach a different cutoff/candidate partition",
     );
+
+    // reconcileFixedRunPlan: discovery plan change reconciles the SAME run's
+    // partition/receipts; runId/cutoff/fromBlock/observedThrough are immutable.
+    // Self-contained store so the main flow's receipt-less promotion case is
+    // unaffected.
+    const recStore = new UniverseRebuildCheckpointStore({
+      path: join(dir, "reconcile.json"),
+    });
+    await recStore.beginOrResumeRun({
+      expectedRevision: 0,
+      runId: "run-1",
+      cutoff: SOURCE,
+      fromBlock: SOURCE.number - 14_399,
+      universeHash: "u1",
+      candidateSetHash: "c1",
+      candidateCount: 2,
+      candidatesByKey: Object.freeze({
+        a: Object.freeze({ id: "a" }),
+        b: Object.freeze({ id: "b" }),
+      }),
+      observedThrough: Object.freeze({
+        number: SOURCE.number,
+        hash: SOURCE.hash,
+      }),
+    });
+    const reconciles = await recStore.reconcileFixedRunPlan({
+      expectedRevision: 2,
+      runId: "run-1",
+      cutoff: SOURCE,
+      fromBlock: SOURCE.number - 14_399,
+      universeHash: "u-reconciled",
+      candidateSetHash: "c-reconciled",
+      candidateCount: 3,
+      candidatesByKey: Object.freeze({
+        a: Object.freeze({ id: "a" }),
+        b: Object.freeze({ id: "b" }),
+        d: Object.freeze({ id: "d" }),
+      }),
+      observedThrough: Object.freeze({
+        number: SOURCE.number,
+        hash: SOURCE.hash,
+      }),
+      sourceReceipts: sourceReceipts(),
+    });
+    assert.equal(reconciles.revision, 3);
+    assert.equal(reconciles.inProgressRun?.runId, "run-1");
+    assert.equal(reconciles.inProgressRun?.cutoff?.number, SOURCE.number);
+    assert.equal(reconciles.inProgressRun?.fromBlock, SOURCE.number - 14_399);
+    assert.equal(reconciles.inProgressRun?.candidateCount, 3);
+    assert.equal(reconciles.inProgressRun?.candidateSetHash, "c-reconciled");
+    // A different cutoff / fromBlock / runId is refused: the fixed range is
+    // the run's identity.
+    await assert.rejects(
+      () => recStore.reconcileFixedRunPlan({
+        expectedRevision: reconciles.revision,
+        runId: "run-1",
+        cutoff: Object.freeze({
+          number: SOURCE.number + 1,
+          hash: SOURCE.hash,
+          generation: 1,
+        }),
+        fromBlock: SOURCE.number - 14_399,
+        universeHash: "u2",
+        candidateSetHash: "c2",
+        candidateCount: 1,
+        candidatesByKey: Object.freeze({ a: Object.freeze({ id: "a" }) }),
+        observedThrough: Object.freeze({
+          number: SOURCE.number,
+          hash: SOURCE.hash,
+        }),
+        sourceReceipts: sourceReceipts(),
+      }),
+      /cannot change the fixed run range/,
+      "reconcile must not move the cutoff",
+    );
+    await assert.rejects(
+      () => recStore.reconcileFixedRunPlan({
+        expectedRevision: reconciles.revision,
+        runId: "run-1",
+        cutoff: SOURCE,
+        fromBlock: SOURCE.number - 14_398,
+        universeHash: "u2",
+        candidateSetHash: "c2",
+        candidateCount: 1,
+        candidatesByKey: Object.freeze({ a: Object.freeze({ id: "a" }) }),
+        observedThrough: Object.freeze({
+          number: SOURCE.number,
+          hash: SOURCE.hash,
+        }),
+        sourceReceipts: sourceReceipts(SOURCE.number - 14_398),
+      }),
+      /cannot change the fixed run range/,
+      "reconcile must not move fromBlock",
+    );
+    await assert.rejects(
+      () => recStore.reconcileFixedRunPlan({
+        expectedRevision: reconciles.revision,
+        runId: "run-other",
+        cutoff: SOURCE,
+        fromBlock: SOURCE.number - 14_399,
+        universeHash: "u2",
+        candidateSetHash: "c2",
+        candidateCount: 1,
+        candidatesByKey: Object.freeze({ a: Object.freeze({ id: "a" }) }),
+        observedThrough: Object.freeze({
+          number: SOURCE.number,
+          hash: SOURCE.hash,
+        }),
+        sourceReceipts: sourceReceipts(),
+      }),
+      /reconcile run id mismatch/,
+      "reconcile must refuse a different runId",
+    );
+    // Reconcile drops outcomes for candidates absent from the new partition.
+    const recWithOutcomes = await recStore.casMergeAttestationWrites(
+      "run-1",
+      Object.freeze([
+        Object.freeze({
+          outcome: Object.freeze({
+            status: "verified",
+            familyCandidateKey: "b",
+            familyInstanceKey: "inst-b",
+            memoFingerprint: "fp-b",
+          }) as RunOutcome,
+          memo: memoFor("b"),
+        }),
+        Object.freeze({
+          outcome: Object.freeze({
+            status: "terminal-rejected",
+            familyCandidateKey: "x",
+            reasonCode: "identity_rejected:fixture",
+            familyDefinitionHash: "fdh",
+            requestFingerprint: "req",
+            trustedResultsFingerprint: "res",
+            authorityFingerprint: "auth",
+            candidateFingerprint: "cf",
+            cutoff: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+          }) as RunOutcome,
+        }),
+      ]),
+    );
+    assert.equal(
+      recWithOutcomes.inProgressRun?.outcomesByCandidateKey["b"]?.status,
+      "verified",
+    );
+    assert.equal(
+      recWithOutcomes.inProgressRun?.outcomesByCandidateKey["x"]?.status,
+      "terminal-rejected",
+    );
+    const rec2 = await recStore.reconcileFixedRunPlan({
+      expectedRevision: recWithOutcomes.revision,
+      runId: "run-1",
+      cutoff: SOURCE,
+      fromBlock: SOURCE.number - 14_399,
+      universeHash: "u-reconciled-2",
+      candidateSetHash: "c-reconciled-2",
+      candidateCount: 2,
+      candidatesByKey: Object.freeze({
+        a: Object.freeze({ id: "a" }),
+        b: Object.freeze({ id: "b" }),
+      }),
+      observedThrough: Object.freeze({
+        number: SOURCE.number,
+        hash: SOURCE.hash,
+      }),
+      sourceReceipts: sourceReceipts(),
+    });
+    assert.equal(
+      rec2.inProgressRun?.outcomesByCandidateKey["b"]?.status,
+      "verified",
+      "outcomes bound to the new partition are kept",
+    );
+    assert.equal(
+      rec2.inProgressRun?.outcomesByCandidateKey["x"],
+      undefined,
+      "outcomes for dropped candidates are not verification authority",
+    );
+    // Reconcile keeps verified memos (the reuse table is never cleared).
+    const withRecMemo = await recStore.casUpsertMemo(memoFor("a"));
+    const rec3 = await recStore.reconcileFixedRunPlan({
+      expectedRevision: withRecMemo.revision,
+      runId: "run-1",
+      cutoff: SOURCE,
+      fromBlock: SOURCE.number - 14_399,
+      universeHash: "u-reconciled-3",
+      candidateSetHash: "c-reconciled-3",
+      candidateCount: 2,
+      candidatesByKey: Object.freeze({
+        a: Object.freeze({ id: "a" }),
+        b: Object.freeze({ id: "b" }),
+      }),
+      observedThrough: Object.freeze({
+        number: SOURCE.number,
+        hash: SOURCE.hash,
+      }),
+      sourceReceipts: sourceReceipts(),
+    });
+    assert.notEqual(
+      rec3.verifiedMemos["a"],
+      undefined,
+      "verifiedMemos survive reconcile",
+    );
+    assert.equal(rec3.verifiedMemos["a"]?.memoFingerprint, "fp-a");
+
     // A different run id while one is in progress fails closed.
     await assert.rejects(
       () => store.beginOrResumeRun({

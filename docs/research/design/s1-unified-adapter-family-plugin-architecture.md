@@ -487,16 +487,28 @@ The window is an observation policy, not an admission shortcut. Static reverse-v
 verified memos, and the retain channel (5.4) remain available across rolling windows; old files still cannot
 grant coverage or create edges.
 
-**Plan change = incremental re-adoption, not a full rebuild.** Adding or changing a Family moves the
-source-plan fingerprint (family definition hashes bind every receipt). The runner detects the drift against
-the incumbent run's sealed receipts and starts a fresh fixed run at the current head with the current
-catalog, while the durable verified-memo table is carried (`replaceRun` keeps `verifiedMemos`; the run
-cutoff/partition/receipts are replaced). Unchanged Family instances are reused through the existing
-per-memo revalidation (Family definition hash, candidate fingerprint, chain authority at the new cutoff,
-proof-source block hash); only new/affected candidates (e.g. a newly added Family's pools) are attested.
-Terminal-rejected outcomes are not carried — they are re-attested, so a previously fail-closed pool can be
-admitted by a new Family only through a fresh chain proof. A different runId is still refused; this path is
-only reachable through an explicit plan-drift re-adoption in the runner.
+**Discovery plan change = same-range re-adoption, never a new run.** The runner is layered:
+
+1. **Run lifecycle**: an unfinished fixed run keeps its time world forever — same runId, same cutoff, same
+   fromBlock. Only with no unfinished run does the runner freeze a new head and create a run.
+2. **Discovery**: the source-plan fingerprint binds only each Family's discovery surface
+   (`familyDiscoveryDefinitionHash` = capture/discovery capabilities; pricing/exact/execution changes do
+   not move it). When the incumbent run's sealed receipts still match, the durable partition is restored
+   with no scan. When they drift, discovery re-runs over the SAME fixed range with the current catalog and
+   the SAME run is reconciled (`reconcileFixedRunPlan`: runId/cutoff/fromBlock/observedThrough immutable;
+   only the partition hashes, candidatesByKey, sourceReceipts and outcomes are replaced). Outcomes for
+   candidates dropped from the new partition are discarded (old outcomes are never verification authority
+   under a new discovery plan); verifiedMemos are carried untouched.
+3. **Verification**: every candidate re-enters `findReusableMemo` — a pure local binding check (Family id,
+   candidate fingerprint, memo-scoped definition hash, proof policy, proof-source bound) first, then the
+   same-run fast path (local compares only) or chain authority revalidation (code/storage/blockHash RPC).
+   Valid memo → reuse; otherwise attest. A previously fail-closed pool is re-adopted by a new Family only
+   through a fresh chain proof (its old terminal outcome is keyed to the old Family and does not carry).
+
+Memo validity binds `familyMemoDefinitionHash` (identity/instance/routes/pricing capabilities), so
+changing exact quoting or execution never invalidates an identity memo; memos sealed before the hash split
+remain valid under the conservative full-definition branch. This is why no global/family-local/none change
+classification is needed: each memo decides its own validity cheaply.
 
 ### 5.1 Full evidence identity
 

@@ -741,15 +741,6 @@ export class UniverseRebuildCheckpointStore {
     readonly candidatesByKey: Readonly<Record<string, unknown>>;
     readonly observedThrough: { readonly number: number; readonly hash: string };
     readonly sourceReceipts?: readonly DurableSourceReceipt[];
-    /**
-     * Plan-change re-adoption: replace the existing fixed run (new cutoff,
-     * new candidate partition) while keeping the durable verified-memo
-     * table. Only the rebuild runner sets this, and only after it proved the
-     * incumbent run's receipts were sealed by a different source plan
-     * (new family/capability/topic set); per-memo revalidation gates every
-     * reuse. A different runId is still refused.
-     */
-    readonly replaceRun?: boolean;
   }): Promise<StartupCheckpointEnvelope> {
     if (Object.keys(input.candidatesByKey).length !== input.candidateCount) {
       throw new Error(
@@ -773,12 +764,7 @@ export class UniverseRebuildCheckpointStore {
               existing.runId + ")",
           );
         }
-        if (input.replaceRun === true) {
-          // Plan-change re-adoption: fall through to the fresh-run branch so
-          // the run (cutoff/partition/receipts) is replaced; verifiedMemos
-          // are carried by the spread below.
-        } else {
-          if (
+        if (
           existing.cutoff.number !== input.cutoff.number ||
           existing.cutoff.hash.toLowerCase() !== input.cutoff.hash.toLowerCase() ||
           existing.cutoff.generation !== input.cutoff.generation ||
@@ -800,8 +786,7 @@ export class UniverseRebuildCheckpointStore {
             "universe rebuild checkpoint: runId resumed with different fixed input",
           );
         }
-          return base;
-        }
+        return base;
       }
       return Object.freeze({
         ...base,
@@ -826,6 +811,90 @@ export class UniverseRebuildCheckpointStore {
       });
     });
   }
+  /**
+   * Discovery plan-change reconciliation: replace the SAME fixed run's
+   * candidate partition and source receipts after a same-range re-scan with
+   * the current catalog. The run's time identity is immutable — runId,
+   * cutoff, fromBlock and observedThrough must be byte-identical — and only
+   * universeHash/candidateSetHash/candidateCount/candidatesByKey/
+   * sourceReceipts/outcomesByCandidateKey may change. Outcomes no longer
+   * bound to the new partition are dropped (old outcomes are never
+   * verification authority under a new discovery plan); verifiedMemos are
+   * carried and every candidate re-enters findReusableMemo.
+   */
+  async reconcileFixedRunPlan(input: {
+    readonly expectedRevision: number;
+    readonly runId: string;
+    readonly cutoff: CanonicalSource;
+    readonly fromBlock: number;
+    readonly universeHash: string;
+    readonly candidateSetHash: string;
+    readonly candidateCount: number;
+    readonly candidatesByKey: Readonly<Record<string, unknown>>;
+    readonly observedThrough: { readonly number: number; readonly hash: string };
+    readonly sourceReceipts: readonly DurableSourceReceipt[];
+  }): Promise<StartupCheckpointEnvelope> {
+    if (Object.keys(input.candidatesByKey).length !== input.candidateCount) {
+      throw new Error(
+        "universe rebuild checkpoint: candidate partition/count mismatch",
+      );
+    }
+    return this.#cas(input.expectedRevision, (current) => {
+      const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
+      const run = base.inProgressRun;
+      if (run === null) {
+        throw new Error("universe rebuild checkpoint: no run to reconcile");
+      }
+      if (run.runId !== input.runId) {
+        throw new Error(
+          "universe rebuild checkpoint: reconcile run id mismatch",
+        );
+      }
+      // The run's time identity is checked FIRST: reconcile can never move
+      // the cutoff/range, regardless of what the receipts claim.
+      if (
+        run.cutoff.number !== input.cutoff.number ||
+        run.cutoff.hash.toLowerCase() !== input.cutoff.hash.toLowerCase() ||
+        run.cutoff.generation !== input.cutoff.generation ||
+        run.fromBlock !== input.fromBlock ||
+        run.observedThrough.number !== input.observedThrough.number ||
+        run.observedThrough.hash.toLowerCase() !==
+          input.observedThrough.hash.toLowerCase()
+      ) {
+        throw new Error(
+          "universe rebuild checkpoint: reconcile cannot change the fixed run range",
+        );
+      }
+      assertCompleteSourceReceipts(input.sourceReceipts);
+      assertSourceReceiptsBindRun(input.sourceReceipts, {
+        cutoff: input.cutoff,
+        fromBlock: input.fromBlock,
+      });
+      // Old outcomes are not verification authority under the new discovery
+      // plan: keep only outcomes still bound to the new partition (their
+      // verified memos stay and re-enter findReusableMemo; terminal outcomes
+      // stay terminal; everything else is re-attested naturally).
+      const keptKeys = new Set(Object.keys(input.candidatesByKey));
+      const keptOutcomes: Record<string, RunOutcome> = {};
+      for (const [key, outcome] of Object.entries(run.outcomesByCandidateKey)) {
+        if (keptKeys.has(key)) keptOutcomes[key] = outcome;
+      }
+      return Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        inProgressRun: Object.freeze({
+          ...run,
+          universeHash: input.universeHash,
+          candidateSetHash: input.candidateSetHash,
+          candidateCount: input.candidateCount,
+          candidatesByKey: Object.freeze({ ...input.candidatesByKey }),
+          sourceReceipts: Object.freeze([...input.sourceReceipts]),
+          outcomesByCandidateKey: Object.freeze(keptOutcomes),
+        }),
+      });
+    });
+  }
+
 
   /** Add/refresh one durable verified memo. */
   async casUpsertMemo(

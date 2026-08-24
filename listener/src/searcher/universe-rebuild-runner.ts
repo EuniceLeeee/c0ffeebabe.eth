@@ -203,44 +203,31 @@ export async function rebuildUniverse(
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value) => value);
   let checkpoint = await input.store.load() ?? null;
   const incumbentRun = checkpoint?.inProgressRun ?? null;
-  // Plan drift (a new family/capability/topic set since the run sealed its
-  // receipts): re-adopt incrementally instead of failing closed. The fresh
-  // fixed run below re-scans the window with the current catalog while the
-  // durable verified-memo table is carried, so instances of unchanged
-  // Families reuse their prior proofs (per-memo revalidation) instead of
-  // being re-attested; only new/affected candidates are verified.
+  // Layered re-adoption model:
+  // 1. An unfinished fixed run keeps its time world forever — same runId,
+  //    same cutoff, same fromBlock. Only with NO unfinished run do we freeze
+  //    a new head and create a new run.
+  // 2. Discovery plan drift (a new/changed discovery surface since the run
+  //    sealed its receipts) only decides whether the SAME fixed range must be
+  //    re-scanned with the current catalog; it never changes the run.
+  // 3. Per-candidate verification reuses memos via findReusableMemo: a valid
+  //    memo skips the lifecycle, anything else is attested.
   let planChanged = false;
-  if (incumbentRun !== null && incumbentRun.sourceReceipts !== undefined) {
-    try {
-      assertReceiptsMatchCurrentSourcePlan(
-        incumbentRun.sourceReceipts,
-        input.expectedSourcePlanFingerprints(),
-      );
-    } catch {
-      planChanged = true;
-    }
-  }
   let cutoff: CanonicalSource;
   let fromBlock: number;
   let observations: readonly unknown[];
   let candidates: readonly unknown[];
   let sourceReceipts: readonly DurableSourceReceipt[];
-  if (incumbentRun !== null && !planChanged) {
+  if (incumbentRun !== null) {
     if (incumbentRun.runId !== input.runId) {
       throw new Error(
         "universe rebuild checkpoint: another run is in progress (" +
           incumbentRun.runId + ")",
       );
     }
-    // Once observedThrough is durable, resume the exact compact partition at
-    // its original cutoff. Never rescan a moving window or depend on an
-    // array index such as "8000".
+    // ★ The unfinished run's time world never changes.
     cutoff = incumbentRun.cutoff;
     fromBlock = incumbentRun.fromBlock;
-    observations = Object.freeze([]);
-    candidates = Object.freeze(Object.entries(incumbentRun.candidatesByKey)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([, candidate]) => decodeCandidate(candidate)));
     if (incumbentRun.sourceReceipts === undefined) {
       // Backward-compatible migration for the already-running fixed
       // checkpoint: re-run only the exact historical source query, require
@@ -279,18 +266,71 @@ export async function rebuildUniverse(
         runId: input.runId,
         sourceReceipts: rescanned.sourceReceipts,
       });
+      observations = Object.freeze([]);
+      candidates = Object.freeze(Object.entries(incumbentRun.candidatesByKey)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([, candidate]) => decodeCandidate(candidate)));
       sourceReceipts = rescanned.sourceReceipts;
-    } else {
+    } else if (receiptsMatchCurrentSourcePlan(
+      incumbentRun.sourceReceipts,
+      input.expectedSourcePlanFingerprints(),
+    )) {
+      // Layer 2 fast path: the discovery source plan is unchanged, so the
+      // durable partition is restored without any rescan.
+      observations = Object.freeze([]);
+      candidates = Object.freeze(Object.entries(incumbentRun.candidatesByKey)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([, candidate]) => decodeCandidate(candidate)));
       sourceReceipts = incumbentRun.sourceReceipts;
+    } else {
+      // ★ Layer 2 slow path: discovery plan drift — re-run discovery over the
+      // SAME fixed range with the current catalog; the run identity
+      // (runId/cutoff/fromBlock) stays untouched and verified memos are
+      // reused per candidate.
+      planChanged = true;
+      log(
+        "universe rebuild discovery plan change: re-running discovery over " +
+          "the same fixed range " + fromBlock + ".." + cutoff.number +
+          ":" + cutoff.hash + "; verified memos are reused per candidate",
+      );
+      const rescanned = await input.scanSwapWindow({ fromBlock, cutoff });
+      observations = Object.freeze([
+        ...rescanned.observations,
+        ...(rescanned.dormancyObservations ?? []),
+      ]);
+      sourceReceipts = rescanned.sourceReceipts;
+      candidates = input.dedupeFamilyCandidates(observations);
+      if (input.reverseBindOpaqueCandidates !== undefined) {
+        // Retain-channel candidates: opaque observations (e.g. univ4 swap
+        // logs carrying only a poolId) are resolved to complete candidates
+        // through each Family plugin's declared reverseBinding, then merged
+        // with the event-window partition. The wiring owns the driver; the
+        // plugin owns the chain lookups.
+        const reverseBound = await input.reverseBindOpaqueCandidates({
+          observations,
+          cutoff,
+        });
+        if (reverseBound.length > 0) {
+          // Merge through the shared alias-collapsing dedupe
+          // (rebuildFamilyInstanceDedupeKey) instead of familyCandidateKey:
+          // a retained startup-universe entry spells a univ4 pool as
+          // address+poolId while the reverse-bound candidate spells it as
+          // manager+poolId, and familyCandidateKey keeps those spellings
+          // distinct. Two memos for one instance would then duplicate the
+          // instance key set and the ready promotion fails closed ("ready
+          // generation is not bound to completed run").
+          candidates = input.dedupeFamilyCandidates(Object.freeze([
+            ...observations,
+            ...reverseBound.map((candidate) => Object.freeze({
+              kind: "startup-candidate",
+              candidate,
+            })),
+          ]));
+        }
+      }
     }
   } else {
-    if (planChanged) {
-      log(
-        "universe rebuild plan change: fresh fixed run with carried verified " +
-          "memos; unchanged Family instances reuse prior proofs, new " +
-          "candidates are attested",
-      );
-    }
+    // ★ Only with no unfinished run do we create a new time world.
     cutoff = await input.freezeCanonicalHead();
     fromBlock = strictEdgeCollectionFromBlock(cutoff.number);
     // A crash before this scan is sealed may rescan; after beginOrResumeRun,
@@ -334,7 +374,8 @@ export async function rebuildUniverse(
   log(
     "universe rebuild fixed source range: run=" + input.runId +
       " from=" + fromBlock + " cutoff=" + cutoff.number + ":" + cutoff.hash +
-      " resumed=" + String(incumbentRun !== null && !planChanged),
+      " resumed=" + String(incumbentRun !== null && !planChanged) +
+      " planChanged=" + String(planChanged),
   );
   const candidatesByKey = Object.freeze(Object.fromEntries(
     candidates.map((candidate) => [
@@ -356,23 +397,39 @@ export async function rebuildUniverse(
     input.expectedSourcePlanFingerprints(),
   );
 
-  // 2. Create or resume the same fixed-cutoff run.
-  checkpoint = await input.store.beginOrResumeRun({
-    expectedRevision: checkpoint?.revision ?? 0,
-    runId: input.runId,
-    cutoff,
-    fromBlock,
-    universeHash: hashUniverseCandidatePartition(candidatesByKey),
-    candidateSetHash: hashCandidateSet(candidates, input.familyCandidateKey),
-    candidateCount: candidates.length,
-    candidatesByKey,
-    observedThrough: Object.freeze({
-      number: cutoff.number,
-      hash: cutoff.hash,
-    }),
-    sourceReceipts,
-    ...(planChanged ? { replaceRun: true as const } : {}),
-  });
+  // 2. Create or resume the same fixed-cutoff run; a discovery plan change
+  // reconciles the SAME run's partition/receipts (time identity immutable).
+  checkpoint = planChanged
+    ? await input.store.reconcileFixedRunPlan({
+        expectedRevision: checkpoint?.revision ?? 0,
+        runId: input.runId,
+        cutoff,
+        fromBlock,
+        universeHash: hashUniverseCandidatePartition(candidatesByKey),
+        candidateSetHash: hashCandidateSet(candidates, input.familyCandidateKey),
+        candidateCount: candidates.length,
+        candidatesByKey,
+        observedThrough: Object.freeze({
+          number: cutoff.number,
+          hash: cutoff.hash,
+        }),
+        sourceReceipts,
+      })
+    : await input.store.beginOrResumeRun({
+        expectedRevision: checkpoint?.revision ?? 0,
+        runId: input.runId,
+        cutoff,
+        fromBlock,
+        universeHash: hashUniverseCandidatePartition(candidatesByKey),
+        candidateSetHash: hashCandidateSet(candidates, input.familyCandidateKey),
+        candidateCount: candidates.length,
+        candidatesByKey,
+        observedThrough: Object.freeze({
+          number: cutoff.number,
+          hash: cutoff.hash,
+        }),
+        sourceReceipts,
+      });
   const run = checkpoint.inProgressRun;
   if (run === null || run.runId !== input.runId) {
     throw new Error("universe rebuild: run did not begin");
@@ -721,6 +778,19 @@ export async function rebuildUniverse(
  * emitter or discovery capability changed) fails closed so a stale receipt
  * can never prove a source complete for the current code.
  */
+/** Non-throwing plan match probe used by the layered runner. */
+export function receiptsMatchCurrentSourcePlan(
+  receipts: readonly DurableSourceReceipt[],
+  plan: { readonly startup: string; readonly events: string },
+): boolean {
+  try {
+    assertReceiptsMatchCurrentSourcePlan(receipts, plan);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function assertReceiptsMatchCurrentSourcePlan(
   receipts: readonly DurableSourceReceipt[],
   plan: { readonly startup: string; readonly events: string },

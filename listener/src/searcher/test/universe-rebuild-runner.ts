@@ -578,13 +578,14 @@ async function main(): Promise<void> {
       null,
       "a stale-plan receipt must not begin a durable run",
     );
-    // Resume drift: receipts were durable under plan X; the catalog changed
-    // (new family/capability set) so plan Y re-adopts incrementally: a fresh
-    // fixed run at the current head re-scans with the current catalog while
-    // the durable verified-memo table is carried, so unchanged Family
-    // instances reuse their prior proofs and only new candidates are
-    // attested. Memo reuse is still per-memo revalidated; nothing silently
-    // attests the old partition to ready.
+    // Resume drift: receipts were durable under plan X; the discovery
+    // surface changed (new family/capability set) so plan Y re-adopts
+    // incrementally: discovery re-runs over the SAME fixed range with the
+    // current catalog and the SAME run is reconciled (runId/cutoff/fromBlock
+    // immutable), while the durable verified-memo table is carried so
+    // unchanged Family instances reuse their prior proofs and only new
+    // candidates are attested. Memo reuse is still per-memo revalidated;
+    // nothing silently attests the old partition to ready.
     const resumeDrift = planReceiptFixture(join(dir, "resume-drift"), "c".repeat(64));
     const planC = () => Object.freeze({
       startup: "c".repeat(64),
@@ -632,6 +633,16 @@ async function main(): Promise<void> {
     }
     const driftEnvelope = await driftReadopt.store.load();
     assert.equal(driftEnvelope?.readyGeneration?.generation, 2);
+    // Layer 1 invariant: the run's time world never changed across the plan
+    // drift — same runId, same cutoff, same fromBlock.
+    assert.equal(driftEnvelope?.inProgressRun?.runId, "run-1");
+    assert.equal(driftEnvelope?.inProgressRun?.cutoff?.number, SOURCE.number);
+    assert.equal(
+      driftEnvelope?.inProgressRun?.cutoff?.hash?.toLowerCase(),
+      SOURCE.hash.toLowerCase(),
+    );
+    assert.equal(driftEnvelope?.inProgressRun?.fromBlock, SOURCE.number - 14_399);
+    assert.equal(driftEnvelope?.inProgressRun?.candidateCount, 4);
 
     // G: the deployed pre-receipt fixed checkpoint is upgraded in place.
     // The runner replays the original fixed range, requires the exact same

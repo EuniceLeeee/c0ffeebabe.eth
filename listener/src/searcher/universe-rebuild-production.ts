@@ -40,6 +40,8 @@ import type {
 } from "./venues/adapter-family-plugin.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
+import type { FamilyCapabilityIdentitySet } from
+  "./venues/family-capability-catalog.js";
 
 /**
  * Production wiring for the durable universe rebuild (audit §6/§9). The
@@ -70,6 +72,27 @@ export function memoAuthorityFingerprint(input: {
 }): string {
   return digest("memo-authority-v1:" + canonicalJson({
     familyDefinitionHash: familyDefinitionHash(input.familyId),
+    address: input.address.toLowerCase(),
+    codeHash: ethers.keccak256(input.code),
+    implementationWord: input.implementationWord.toLowerCase(),
+  }));
+}
+
+/**
+ * Memo-scoped chain authority: same structure as memoAuthorityFingerprint but
+ * bound to the memo-scoped definition hash (identity/instance/routes/pricing).
+ * Memos sealed before the hash split (full familyDefinitionHash scheme) match
+ * memoAuthorityFingerprint; memos sealed after match this one. Revalidation
+ * accepts either.
+ */
+export function memoAuthorityFingerprintMemoScope(input: {
+  readonly familyId: string;
+  readonly address: string;
+  readonly code: string;
+  readonly implementationWord: string;
+}): string {
+  return digest("memo-authority-v1:" + canonicalJson({
+    familyDefinitionHash: familyMemoDefinitionHash(input.familyId),
     address: input.address.toLowerCase(),
     codeHash: ethers.keccak256(input.code),
     implementationWord: input.implementationWord.toLowerCase(),
@@ -242,6 +265,70 @@ export function familyDefinitionHash(
         family.hashes[capability].semanticDependencies,
     })),
   }));
+}
+
+/**
+ * Capabilities that can change a Family's discovery/nomination/reverse-binding
+ * surface — the only authority a source receipt may bind. pricing/exact/
+ * execution changes must not force a historical window rescan.
+ */
+const DISCOVERY_DEFINITION_CAPABILITIES = Object.freeze([
+  "capture",
+  "discovery",
+] as const);
+
+/**
+ * Capabilities that shape a verified static instance (identity proof,
+ * materialization, routes/pricing projection) — the only authority a verified
+ * memo may bind. Changing exact quoting or execution must not invalidate an
+ * identity memo.
+ */
+const MEMO_DEFINITION_CAPABILITIES = Object.freeze([
+  "identity",
+  "instance",
+  "routes",
+  "pricing",
+] as const);
+
+function scopedFamilyDefinitionHash(
+  seed: string,
+  familyId: string,
+  capabilities: readonly (keyof FamilyCapabilityIdentitySet)[],
+): string {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .forStrictFamily(familyId as never);
+  const applicable = new Set(family.applicableCapabilities);
+  const bound = capabilities
+    .filter((capability) => applicable.has(capability))
+    .map((capability) => ({
+      capability,
+      contractVersion: family.hashes[capability].contractVersion,
+      contentHash: family.hashes[capability].contentHash,
+      semanticDependencies:
+        family.hashes[capability].semanticDependencies,
+    }));
+  return digest(seed + ":" + canonicalJson({
+    familyId,
+    capabilities: bound,
+  }));
+}
+
+/** Source-plan authority for one Family (discovery/nomination surface). */
+export function familyDiscoveryDefinitionHash(familyId: string): string {
+  return scopedFamilyDefinitionHash(
+    "family-discovery-def-v1",
+    familyId,
+    DISCOVERY_DEFINITION_CAPABILITIES,
+  );
+}
+
+/** Verified-memo authority for one Family (static instance surface). */
+export function familyMemoDefinitionHash(familyId: string): string {
+  return scopedFamilyDefinitionHash(
+    "family-memo-def-v1",
+    familyId,
+    MEMO_DEFINITION_CAPABILITIES,
+  );
 }
 
 function familyIdForCandidate(
@@ -537,7 +624,7 @@ function sealMemoFromPublication(input: {
     candidateKey: candidateInstanceIdentity(input.candidate),
     instanceKey: input.instanceKey,
     candidateFingerprint: input.candidateFingerprint,
-    familyDefinitionHash: familyDefinitionHash(input.familyId),
+    familyDefinitionHash: familyMemoDefinitionHash(input.familyId),
     validity: Object.freeze({
       policy: "immutable-code",
       authorityFingerprint: input.authorityFingerprint,
@@ -1014,6 +1101,19 @@ export function strictFamilyDefinitionHashes(): readonly string[] {
 }
 
 /**
+ * Source-plan authority across all Families: only discovery-surface hashes.
+ * pricing/exact/execution-only deploys keep the plan fingerprints stable, so
+ * an incumbent fixed run resumes without a historical rescan.
+ */
+export function strictFamilyDiscoveryDefinitionHashes(): readonly string[] {
+  return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .listAll()
+    .map((family) => family.plugin.manifest.familyId)
+    .sort()
+    .map((familyId) => familyDiscoveryDefinitionHash(familyId));
+}
+
+/**
  * Plan identity of the startup nomination source. Binds code identity only:
  * coverage keys + current family definitions. The input snapshot itself is
  * bound by the receipt's observationSetHash; a startup-universe key proves
@@ -1059,7 +1159,7 @@ export function expectedSourcePlanFingerprints(): {
   readonly events: string;
 } {
   const coverageKeys = strictCatalogSourceCoverageKeys();
-  const familyDefinitionHashes = strictFamilyDefinitionHashes();
+  const familyDefinitionHashes = strictFamilyDiscoveryDefinitionHashes();
   return Object.freeze({
     startup: startupSourcePlanFingerprint({
       coverageKeys: coverageKeys.startup,
@@ -1294,6 +1394,38 @@ export function candidateFingerprint(
   }));
 }
 
+/**
+ * Pure local memo binding check (no RPC): Family id, candidate fingerprint,
+ * memo-scoped (or legacy full-scope) definition hash, proof policy and the
+ * proof-source bound. Any mismatch makes the memo unusable without touching
+ * the chain; the authority/proof revalidation only runs when this passes.
+ */
+export function memoCheapBindingValid(input: {
+  readonly memo: DurableVerifiedMemo;
+  readonly candidate: Readonly<Record<string, unknown>>;
+  readonly cutoff: CanonicalSource;
+  readonly familyId: string;
+}): boolean {
+  if (input.memo.familyId !== input.familyId) return false;
+  if (input.memo.candidateFingerprint !== candidateFingerprint(input.candidate)) {
+    return false;
+  }
+  // Memos sealed before the discovery/memo hash split carry the full
+  // familyDefinitionHash; memos sealed after carry the memo-scoped hash.
+  // Accept either: the full-scheme branch stays conservative (any capability
+  // change invalidates such a memo), the memo-scoped branch is the narrow
+  // authority (exact/execution changes do not invalidate identity memos).
+  const definitionMatches =
+    input.memo.familyDefinitionHash === familyDefinitionHash(input.familyId) ||
+    input.memo.familyDefinitionHash === familyMemoDefinitionHash(input.familyId);
+  if (!definitionMatches) return false;
+  if (input.memo.validity.policy !== "immutable-code") return false;
+  if (input.memo.validity.proofSource.number > input.cutoff.number) return false;
+  return input.memo.validity.proofSource.number !== input.cutoff.number ||
+    input.memo.validity.proofSource.hash.toLowerCase() ===
+      input.cutoff.hash.toLowerCase();
+}
+
 export function canReuseMemo(input: {
   readonly memo: DurableVerifiedMemo;
   readonly candidate: Readonly<Record<string, unknown>>;
@@ -1301,22 +1433,9 @@ export function canReuseMemo(input: {
   readonly familyId: string;
   readonly currentAuthorityFingerprint: string;
 }): boolean {
-  if (
-    input.memo.familyId !== input.familyId ||
-    input.memo.candidateFingerprint !== candidateFingerprint(input.candidate) ||
-    input.memo.familyDefinitionHash !== familyDefinitionHash(input.familyId) ||
-    input.memo.validity.authorityFingerprint !==
-      input.currentAuthorityFingerprint
-  ) {
-    return false;
-  }
-  if (input.memo.validity.policy !== "immutable-code") {
-    return false;
-  }
-  if (input.memo.validity.proofSource.number > input.cutoff.number) return false;
-  return input.memo.validity.proofSource.number !== input.cutoff.number ||
-    input.memo.validity.proofSource.hash.toLowerCase() ===
-      input.cutoff.hash.toLowerCase();
+  if (!memoCheapBindingValid(input)) return false;
+  return input.memo.validity.authorityFingerprint ===
+    input.currentAuthorityFingerprint;
 }
 
 export function createRebuildWiring(input?: {
@@ -1533,7 +1652,7 @@ export function createRebuildWiring(input?: {
       // against the current plan and fails closed on any code drift.
       const startupQueryFingerprint = startupSourcePlanFingerprint({
         coverageKeys: sourceCoverageKeys.startup,
-        familyDefinitionHashes: strictFamilyDefinitionHashes(),
+        familyDefinitionHashes: strictFamilyDiscoveryDefinitionHashes(),
       });
       const startupObservationHash = digest(
         "startup-candidate-observations-v1:" + canonicalJson(startupSnapshot),
@@ -1579,7 +1698,7 @@ export function createRebuildWiring(input?: {
         const eventQueryFingerprint = catalogEventSourcePlanFingerprint({
           topics,
           coverageKeys: sourceCoverageKeys.events,
-          familyDefinitionHashes: strictFamilyDefinitionHashes(),
+          familyDefinitionHashes: strictFamilyDiscoveryDefinitionHashes(),
         });
         // Stream each log into the digest instead of canonicalJson(logs):
         // a widened window (e.g. 14400 blocks) can hold hundreds of
@@ -1824,6 +1943,16 @@ export function createRebuildWiring(input?: {
       const candidateKey = rebuildFamilyCandidateKey(candidate);
       const memo = memoInput.checkpoint.verifiedMemos[candidateKey];
       if (memo === undefined) return null;
+      // Phase 1 — pure local binding check (Family, candidate fingerprint,
+      // memo definition, policy, proof-source bound): no RPC at all. A
+      // changed Family definition, candidate shape or policy short-circuits
+      // here, so the old authority RPCs are never wasted.
+      if (!memoCheapBindingValid({
+        memo,
+        candidate,
+        cutoff: memoInput.cutoff,
+        familyId,
+      })) return null;
       const run = memoInput.checkpoint.inProgressRun;
       const oldOutcome = run?.outcomesByCandidateKey[candidateKey];
       const sameFixedRun = run !== null && run !== undefined &&
@@ -1851,6 +1980,10 @@ export function createRebuildWiring(input?: {
       ) {
         return memo;
       }
+      // Phase 2 — chain authority revalidation (only reached when the local
+      // binding passed): re-read code/implementation at the cutoff and accept
+      // either the current memo-scoped authority or the legacy full-scope
+      // authority (memos sealed before the hash split).
       const address = String(candidate.address ?? "");
       if (!ethers.isAddress(address)) return null;
       const [code, implementationWord] = await Promise.all([
@@ -1861,18 +1994,30 @@ export function createRebuildWiring(input?: {
           memoInput.cutoff.number,
         ),
       ]);
-      const currentAuthorityFingerprint = memoAuthorityFingerprint({
+      const authority = memoAuthorityFingerprint({
         familyId,
         address,
         code,
         implementationWord,
       });
+      const authorityMemoScope = memoAuthorityFingerprintMemoScope({
+        familyId,
+        address,
+        code,
+        implementationWord,
+      });
+      if (
+        memo.validity.authorityFingerprint !== authority &&
+        memo.validity.authorityFingerprint !== authorityMemoScope
+      ) {
+        return null;
+      }
       if (!canReuseMemo({
         memo,
         candidate,
         cutoff: memoInput.cutoff,
         familyId,
-        currentAuthorityFingerprint,
+        currentAuthorityFingerprint: memo.validity.authorityFingerprint,
       })) return null;
       const proofHash = await readBlockHash(
         provider,
