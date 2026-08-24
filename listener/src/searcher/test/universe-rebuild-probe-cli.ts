@@ -26,30 +26,6 @@ async function main(): Promise<void> {
   try {
     const checkpoint = join(dir, "checkpoint.json");
     const store = new UniverseRebuildCheckpointStore({ path: checkpoint });
-    await store.beginOrResumeRun({
-      expectedRevision: 0,
-      runId: "run-1",
-      cutoff: SOURCE,
-      fromBlock: SOURCE.number - 14_399,
-      universeHash: "u1",
-      candidateSetHash: "c1",
-      candidateCount: 1,
-      candidatesByKey: Object.freeze({
-        "cand:a": Object.freeze({ address: "0x" + "11".repeat(20) }),
-      }),
-      observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
-    });
-    await store.casMergeRunOutcomes("run-1", Object.freeze([Object.freeze({
-      status: "retryable",
-      familyCandidateKey: "cand:a",
-      familyId: "univ2",
-      candidateSnapshot: Object.freeze({ address: "0x" + "11".repeat(20) }),
-      stage: "identity",
-      failureCode: "rpc",
-      reasonCode: "factory-child-reverse-binding:rpc",
-      attemptCount: 1,
-      lastAttemptAt: "2026-08-17T00:00:00.000Z",
-    })]));
     const fromBlock = SOURCE.number - 14_399;
     const receipts = Object.freeze([Object.freeze({
       sourceKey: "1".repeat(64),
@@ -73,11 +49,34 @@ async function main(): Promise<void> {
       retryableCount: 0 as const,
       status: "complete" as const,
     })]) satisfies readonly DurableSourceReceipt[];
-    const withReceipts = await store.casSetRunSourceReceipts({
-      expectedRevision: (await store.load())!.revision,
+    await store.beginOrResumeRun({
+      expectedRevision: 0,
       runId: "run-1",
+      cutoff: SOURCE,
+      fromBlock,
+      universeHash: "u1",
+      candidateSetHash: "c1",
+      candidateCount: 1,
+      candidatesByKey: Object.freeze({
+        "cand:a": Object.freeze({ address: "0x" + "11".repeat(20) }),
+      }),
+      observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
       sourceReceipts: receipts,
     });
+    const withReceipts = await store.casMergeRunOutcomes(
+      "run-1",
+      Object.freeze([Object.freeze({
+        status: "retryable",
+        familyCandidateKey: "cand:a",
+        familyId: "univ2",
+        candidateSnapshot: Object.freeze({ address: "0x" + "11".repeat(20) }),
+        stage: "identity",
+        failureCode: "rpc",
+        reasonCode: "factory-child-reverse-binding:rpc",
+        attemptCount: 1,
+        lastAttemptAt: "2026-08-17T00:00:00.000Z",
+      })]),
+    );
     const graphSnapshot = Object.freeze({ edges: Object.freeze([]) });
     const catalogSnapshot = Object.freeze({ instances: Object.freeze([]) });
     await store.casCommitReadyGeneration({

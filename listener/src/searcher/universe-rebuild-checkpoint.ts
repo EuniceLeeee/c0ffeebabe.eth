@@ -18,8 +18,10 @@ import type { CanonicalSource } from
  * - inProgressRun: the single unfinished rebuild at one fixed cutoff;
  * - retryableAttemptsByCandidateKey: independent one-candidate repair queue;
  * - readyGeneration: the last complete usable Graph/catalog snapshot.
- * No long-term raw tx inbox, no recovery from progress counters, no
- * permanent candidate journal.
+ * No long-term raw tx inbox and no recovery from progress counters. A
+ * verified memo owns the one complete candidate snapshot needed to retain
+ * that verified instance across rolling discovery windows; there is no
+ * separate candidate journal or second admission authority.
  */
 
 export interface DurableVerifiedMemo {
@@ -41,8 +43,16 @@ export interface DurableVerifiedMemo {
   readonly compiledDescriptor: unknown;
   readonly staticProjection: unknown;
   readonly evidenceFingerprint: string;
+  /** Complete JSON-safe candidate needed for permanent cross-window retention. */
+  readonly candidateSnapshot: unknown;
   readonly memoFingerprint: string;
 }
+
+/** Read-only compatibility shape accepted only by the one-time upgrader. */
+export type LegacyDurableVerifiedMemo = Omit<
+  DurableVerifiedMemo,
+  "candidateSnapshot"
+>;
 
 export interface RetryableAttempt {
   readonly status: "retryable";
@@ -147,12 +157,7 @@ export interface InProgressUniverseRun {
   readonly candidatesByKey: Readonly<Record<string, unknown>>;
   /** Swap range fully scanned; never advances appliedThrough by itself. */
   readonly observedThrough: { readonly number: number; readonly hash: string };
-  /**
-   * Optional only for backward-compatible loading of a pre-receipt fixed run.
-   * Such a run cannot promote until an exact fixed-range rescan attaches the
-   * receipts with casSetRunSourceReceipts().
-   */
-  readonly sourceReceipts?: readonly DurableSourceReceipt[];
+  readonly sourceReceipts: readonly DurableSourceReceipt[];
   /**
    * Null until the completed exact partition is promoted.  An in-progress
    * run must never advertise an applied cursor merely because observation or
@@ -238,6 +243,52 @@ export function canonicalJson(value: unknown): string {
   return "{" + keys.map((key) =>
     JSON.stringify(key) + ":" + canonicalJson(record[key])
   ).join(",") + "}";
+}
+
+export function hasDurableCandidateSnapshot(
+  memo: DurableVerifiedMemo | LegacyDurableVerifiedMemo,
+): memo is DurableVerifiedMemo {
+  return Object.prototype.hasOwnProperty.call(memo, "candidateSnapshot") &&
+    (memo as { readonly candidateSnapshot?: unknown }).candidateSnapshot !==
+      undefined;
+}
+
+/**
+ * One fingerprint projection for both deployed legacy memos and the current
+ * retained-candidate shape. The legacy projection omits candidateSnapshot;
+ * every newly sealed/upgraded memo includes it in the same projection and is
+ * therefore cryptographically bound to the candidate it can restore.
+ */
+export function durableVerifiedMemoFingerprint(
+  memo: DurableVerifiedMemo | LegacyDurableVerifiedMemo,
+): string {
+  return createHash("sha256")
+    .update("memo-v1:" + canonicalJson({
+      familyCandidateKey: memo.familyCandidateKey,
+      familyInstanceKey: memo.familyInstanceKey,
+      candidateFingerprint: memo.candidateFingerprint,
+      familyDefinitionHash: memo.familyDefinitionHash,
+      validity: memo.validity,
+      verifiedIdentity: memo.verifiedIdentity,
+      compiledDescriptor: memo.compiledDescriptor,
+      staticProjection: memo.staticProjection,
+      evidenceFingerprint: memo.evidenceFingerprint,
+      ...(hasDurableCandidateSnapshot(memo)
+        ? { candidateSnapshot: memo.candidateSnapshot }
+        : {}),
+    }))
+    .digest("hex");
+}
+
+export function assertDurableVerifiedMemoFingerprint(
+  memo: DurableVerifiedMemo | LegacyDurableVerifiedMemo,
+): void {
+  if (memo.memoFingerprint !== durableVerifiedMemoFingerprint(memo)) {
+    throw new Error(
+      "universe rebuild checkpoint: verified memo fingerprint mismatch " +
+        memo.familyCandidateKey,
+    );
+  }
 }
 
 function retryableAttemptFromQueueEntry(
@@ -456,12 +507,25 @@ function parseEnvelope(raw: string): StartupCheckpointEnvelope {
   if (actualFingerprint !== legacyEnvelope.checkpointFingerprint) {
     throw new Error("universe rebuild checkpoint fingerprint mismatch");
   }
+  const inProgressRun = legacyEnvelope.inProgressRun ?? null;
+  if (
+    inProgressRun !== null &&
+    !Array.isArray(inProgressRun.sourceReceipts)
+  ) {
+    throw new Error(
+      "universe rebuild checkpoint: in-progress run source receipts are absent",
+    );
+  }
+  if (inProgressRun !== null) {
+    assertCompleteSourceReceipts(inProgressRun.sourceReceipts);
+    assertSourceReceiptsBindRun(inProgressRun.sourceReceipts, inProgressRun);
+  }
   assertRetryableQueue(
     retryableQueue as Readonly<Record<string, DurableRetryableQueueEntry>>,
   );
   return Object.freeze({
     ...legacyEnvelope,
-    inProgressRun: legacyEnvelope.inProgressRun ?? null,
+    inProgressRun,
     retryableAttemptsByCandidateKey: Object.freeze({
       ...(retryableQueue as Readonly<Record<string, DurableRetryableQueueEntry>>),
     }),
@@ -724,10 +788,17 @@ export class UniverseRebuildCheckpointStore {
             );
           }
           assertMemoMatchesVerifiedOutcome(durableMemo, outcome);
-        } else if (memo !== undefined) {
-          throw new Error(
-            "universe rebuild checkpoint: non-verified outcome carried memo",
-          );
+        } else {
+          if (memo !== undefined) {
+            throw new Error(
+              "universe rebuild checkpoint: non-verified outcome carried memo",
+            );
+          }
+          if (outcome.status === "terminal-rejected") {
+            // A chain-proven invalidation revokes permanent retention in the
+            // same atomic write as the terminal outcome.
+            delete memos[outcome.familyCandidateKey];
+          }
         }
         merged[outcome.familyCandidateKey] = outcome;
       }
@@ -786,10 +857,15 @@ export class UniverseRebuildCheckpointStore {
           );
         }
         assertMemoMatchesVerifiedOutcome(durableMemo, input.nextOutcome);
-      } else if (input.memo !== undefined) {
-        throw new Error(
-          "universe rebuild checkpoint: non-verified probe carried memo",
-        );
+      } else {
+        if (input.memo !== undefined) {
+          throw new Error(
+            "universe rebuild checkpoint: non-verified probe carried memo",
+          );
+        }
+        if (input.nextOutcome.status === "terminal-rejected") {
+          delete memos[input.familyCandidateKey];
+        }
       }
       return Object.freeze({
         ...base,
@@ -849,10 +925,15 @@ export class UniverseRebuildCheckpointStore {
           );
         }
         assertMemoMatchesVerifiedOutcome(durableMemo, input.nextOutcome);
-      } else if (input.memo !== undefined) {
-        throw new Error(
-          "universe rebuild checkpoint: non-verified queued probe carried memo",
-        );
+      } else {
+        if (input.memo !== undefined) {
+          throw new Error(
+            "universe rebuild checkpoint: non-verified queued probe carried memo",
+          );
+        }
+        if (input.nextOutcome.status === "terminal-rejected") {
+          delete memos[input.familyCandidateKey];
+        }
       }
       const retryableQueue: Record<string, DurableRetryableQueueEntry> = {
         ...base.retryableAttemptsByCandidateKey,
@@ -940,48 +1021,6 @@ export class UniverseRebuildCheckpointStore {
     });
   }
 
-  /**
-   * Backfill source receipts for a pre-receipt fixed run after an exact
-   * fixed-cutoff rescan. Existing receipts are immutable and must match.
-   */
-  async casSetRunSourceReceipts(input: {
-    readonly expectedRevision: number;
-    readonly runId: string;
-    readonly sourceReceipts: readonly DurableSourceReceipt[];
-  }): Promise<StartupCheckpointEnvelope> {
-    assertCompleteSourceReceipts(input.sourceReceipts);
-    return this.#cas(input.expectedRevision, (current) => {
-      const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
-      const run = base.inProgressRun;
-      if (run === null || run.runId !== input.runId) {
-        throw new Error(
-          "universe rebuild checkpoint: no matching in-progress run " +
-            input.runId,
-        );
-      }
-      assertSourceReceiptsBindRun(input.sourceReceipts, run);
-      if (run.sourceReceipts !== undefined) {
-        if (
-          canonicalJson(run.sourceReceipts) !==
-            canonicalJson(input.sourceReceipts)
-        ) {
-          throw new Error(
-            "universe rebuild checkpoint: source receipts are immutable",
-          );
-        }
-        return base;
-      }
-      return Object.freeze({
-        ...base,
-        revision: base.revision + 1,
-        inProgressRun: Object.freeze({
-          ...run,
-          sourceReceipts: Object.freeze([...input.sourceReceipts]),
-        }),
-      });
-    });
-  }
-
   /** Create the fixed-cutoff run or return the existing one for it. */
   async beginOrResumeRun(input: {
     readonly expectedRevision: number;
@@ -993,20 +1032,18 @@ export class UniverseRebuildCheckpointStore {
     readonly candidateCount: number;
     readonly candidatesByKey: Readonly<Record<string, unknown>>;
     readonly observedThrough: { readonly number: number; readonly hash: string };
-    readonly sourceReceipts?: readonly DurableSourceReceipt[];
+    readonly sourceReceipts: readonly DurableSourceReceipt[];
   }): Promise<StartupCheckpointEnvelope> {
     if (Object.keys(input.candidatesByKey).length !== input.candidateCount) {
       throw new Error(
         "universe rebuild checkpoint: candidate partition/count mismatch",
       );
     }
-    if (input.sourceReceipts !== undefined) {
-      assertCompleteSourceReceipts(input.sourceReceipts);
-      assertSourceReceiptsBindRun(input.sourceReceipts, {
-        cutoff: input.cutoff,
-        fromBlock: input.fromBlock,
-      });
-    }
+    assertCompleteSourceReceipts(input.sourceReceipts);
+    assertSourceReceiptsBindRun(input.sourceReceipts, {
+      cutoff: input.cutoff,
+      fromBlock: input.fromBlock,
+    });
     return this.#cas(input.expectedRevision, (current) => {
       const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
       const existing = base.inProgressRun;
@@ -1030,10 +1067,8 @@ export class UniverseRebuildCheckpointStore {
           existing.observedThrough.number !== input.observedThrough.number ||
           existing.observedThrough.hash.toLowerCase() !==
             input.observedThrough.hash.toLowerCase() ||
-          (existing.sourceReceipts !== undefined &&
-            input.sourceReceipts !== undefined &&
-            canonicalJson(existing.sourceReceipts) !==
-              canonicalJson(input.sourceReceipts))
+          canonicalJson(existing.sourceReceipts) !==
+            canonicalJson(input.sourceReceipts)
         ) {
           throw new Error(
             "universe rebuild checkpoint: runId resumed with different fixed input",
@@ -1057,11 +1092,7 @@ export class UniverseRebuildCheckpointStore {
           candidateCount: input.candidateCount,
           candidatesByKey: Object.freeze({ ...input.candidatesByKey }),
           observedThrough: Object.freeze({ ...input.observedThrough }),
-          ...(input.sourceReceipts === undefined
-            ? {}
-            : {
-                sourceReceipts: Object.freeze([...input.sourceReceipts]),
-              }),
+          sourceReceipts: Object.freeze([...input.sourceReceipts]),
           appliedThrough: null,
           outcomesByCandidateKey: Object.freeze(inheritedOutcomes),
         }),
@@ -1154,6 +1185,95 @@ export class UniverseRebuildCheckpointStore {
           sourceReceipts: Object.freeze([...input.sourceReceipts]),
           outcomesByCandidateKey: Object.freeze(keptOutcomes),
         }),
+      });
+    });
+  }
+
+  /**
+   * One-time, atomic migration from deployed memos that predate permanent
+   * candidate retention. The caller reconstructs the snapshot; this store
+   * proves the old fingerprint, permits no other field drift, proves the new
+   * snapshot-bound fingerprint, and updates any matching verified run outcome
+   * in the same CAS.
+   */
+  async casUpgradeLegacyVerifiedMemos(input: {
+    readonly expectedRevision: number;
+    readonly upgrades: Readonly<Record<string, DurableVerifiedMemo>>;
+  }): Promise<StartupCheckpointEnvelope> {
+    return this.#cas(input.expectedRevision, (current) => {
+      const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
+      const legacyEntries = Object.entries(base.verifiedMemos).filter(
+        ([, memo]) => !hasDurableCandidateSnapshot(memo),
+      );
+      const legacyKeys = legacyEntries.map(([key]) => key).sort();
+      const upgradeKeys = Object.keys(input.upgrades).sort();
+      if (
+        legacyKeys.length !== upgradeKeys.length ||
+        legacyKeys.some((key, index) => key !== upgradeKeys[index])
+      ) {
+        throw new Error(
+          "universe rebuild checkpoint: legacy memo upgrade set mismatch",
+        );
+      }
+      if (legacyKeys.length === 0) return base;
+
+      const memos: Record<string, DurableVerifiedMemo> = {
+        ...base.verifiedMemos,
+      };
+      const outcomes = base.inProgressRun === null
+        ? null
+        : { ...base.inProgressRun.outcomesByCandidateKey };
+      for (const [candidateKey, incumbent] of legacyEntries) {
+        const legacy = incumbent as unknown as LegacyDurableVerifiedMemo;
+        assertDurableVerifiedMemoFingerprint(legacy);
+        const upgraded = input.upgrades[candidateKey];
+        if (
+          upgraded === undefined ||
+          upgraded.familyCandidateKey !== candidateKey ||
+          !hasDurableCandidateSnapshot(upgraded)
+        ) {
+          throw new Error(
+            "universe rebuild checkpoint: invalid upgraded memo " + candidateKey,
+          );
+        }
+        const oldStable = { ...legacy } as Record<string, unknown>;
+        const newStable = { ...upgraded } as Record<string, unknown>;
+        delete oldStable.memoFingerprint;
+        delete newStable.memoFingerprint;
+        delete newStable.candidateSnapshot;
+        if (canonicalJson(oldStable) !== canonicalJson(newStable)) {
+          throw new Error(
+            "universe rebuild checkpoint: legacy memo upgrade changed authority " +
+              candidateKey,
+          );
+        }
+        assertDurableVerifiedMemoFingerprint(upgraded);
+        memos[candidateKey] = Object.freeze(upgraded);
+
+        const outcome = outcomes?.[candidateKey];
+        if (outcome?.status === "verified") {
+          if (outcome.memoFingerprint !== legacy.memoFingerprint) {
+            throw new Error(
+              "universe rebuild checkpoint: legacy memo outcome mismatch " +
+                candidateKey,
+            );
+          }
+          outcomes![candidateKey] = Object.freeze({
+            ...outcome,
+            memoFingerprint: upgraded.memoFingerprint,
+          });
+        }
+      }
+      return Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        verifiedMemos: Object.freeze(memos),
+        inProgressRun: base.inProgressRun === null
+          ? null
+          : Object.freeze({
+              ...base.inProgressRun,
+              outcomesByCandidateKey: Object.freeze(outcomes!),
+            }),
       });
     });
   }
@@ -1389,7 +1509,7 @@ function assertReadyPromotion(
     createHash("sha256")
       .update("publications-v2:" + canonicalJson(ready.catalogSnapshot))
       .digest("hex");
-  const sourceReceipts = run.sourceReceipts ?? [];
+  const sourceReceipts = run.sourceReceipts;
   assertCompleteSourceReceipts(sourceReceipts);
   assertSourceReceiptsBindRun(sourceReceipts, run);
   const requiredCoverageKeys = new Set(sourceReceipts.flatMap((receipt) =>

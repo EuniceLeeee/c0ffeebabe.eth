@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import { ethers } from "ethers";
-import { dormancyNominationFromBlock } from "./strict-edge-collection-policy.js";
 import {
+  assertDurableVerifiedMemoFingerprint,
   canonicalJson,
+  durableVerifiedMemoFingerprint,
   type DurableSourceChunkReceipt,
   type DurableSourceReceipt,
   type DurableVerifiedMemo,
+  type LegacyDurableVerifiedMemo,
   type ReadyUniverseGeneration,
   type RetryableAttempt,
 } from "./universe-rebuild-checkpoint.js";
@@ -490,9 +492,10 @@ function canonicalCandidateSnapshot(
 ): unknown {
   // Keep the complete plugin-owned candidate. Event-dependent Families can
   // require fields beyond address/poolId (PoolKey, payout token, actor,
-  // amounts, etc.); dropping them makes a single-pool retry impossible. The
-  // durable codec is JSON-safe and this snapshot lives only in the current
-  // run or its bounded one-candidate retry queue, never a raw-tx inbox.
+  // amounts, etc.); dropping them makes retained-memo reuse or a single-pool
+  // retry impossible. The durable codec is JSON-safe; the snapshot is bound
+  // into the verified memo or bounded retry entry, never a raw-tx inbox or a
+  // second admission authority.
   return encodeDurableValue(candidate);
 }
 
@@ -637,24 +640,132 @@ function sealMemoFromPublication(input: {
     compiledDescriptor: encodeDurableValue(input.compiledDescriptor),
     staticProjection: encodeDurableValue(input.staticProjection),
     evidenceFingerprint: input.evidenceFingerprint,
+    candidateSnapshot: canonicalCandidateSnapshot(input.candidate),
     memoFingerprint: "",
   });
   return Object.freeze({
     ...memo,
-    memoFingerprint: digest(
-      "memo-v1:" + canonicalJson({
-        familyCandidateKey: memo.familyCandidateKey,
-        familyInstanceKey: memo.familyInstanceKey,
-        candidateFingerprint: memo.candidateFingerprint,
-        familyDefinitionHash: memo.familyDefinitionHash,
-        validity: memo.validity,
-        verifiedIdentity: memo.verifiedIdentity,
-        compiledDescriptor: memo.compiledDescriptor,
-        staticProjection: memo.staticProjection,
-        evidenceFingerprint: memo.evidenceFingerprint,
-      }),
-    ),
+    memoFingerprint: durableVerifiedMemoFingerprint(memo),
   });
+}
+
+function uniqueCandidateValues(
+  values: readonly (string | undefined)[],
+): readonly (string | undefined)[] {
+  const seen = new Set<string>();
+  const result: (string | undefined)[] = [];
+  for (const value of values) {
+    const key = value === undefined ? "<undefined>" : "string:" + value;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return Object.freeze(result);
+}
+
+function stringField(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined {
+  const value = record[key];
+  return typeof value === "string" && value.trim().length > 0
+    ? value
+    : undefined;
+}
+
+/**
+ * Reconstruct the deployed pre-snapshot memo's canonical candidate without a
+ * Family switch. Candidate spellings come from chain-verified memo data and
+ * adapter labels come only from the loaded plugin manifest. Both the durable
+ * FamilyCandidateKey and the original candidate fingerprint must match.
+ */
+export function upgradeLegacyVerifiedMemo(
+  memo: LegacyDurableVerifiedMemo,
+): DurableVerifiedMemo {
+  assertDurableVerifiedMemoFingerprint(memo);
+  const descriptorValue = decodeDurableValue(memo.compiledDescriptor);
+  const identityValue = decodeDurableValue(memo.verifiedIdentity);
+  const descriptor = typeof descriptorValue === "object" &&
+      descriptorValue !== null && !Array.isArray(descriptorValue)
+    ? descriptorValue as Readonly<Record<string, unknown>>
+    : Object.freeze({}) as Readonly<Record<string, unknown>>;
+  const identity = typeof identityValue === "object" &&
+      identityValue !== null && !Array.isArray(identityValue)
+    ? identityValue as Readonly<Record<string, unknown>>
+    : Object.freeze({}) as Readonly<Record<string, unknown>>;
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .forStrictFamily(memo.familyId as never);
+
+  // Candidate envelope fields are the only central shape interpreted here.
+  // Protocol descriptor fields stay opaque: the chain-verified identity owns
+  // the subject, while the generated manifest owns every adapter spelling.
+  const rawAddress = stringField(identity, "subject") ??
+    stringField(descriptor, "address");
+  const addresses = uniqueCandidateValues(
+    rawAddress === undefined ? [] : [rawAddress, rawAddress.toLowerCase()],
+  ).filter((value): value is string => value !== undefined);
+  const rawPoolId = stringField(descriptor, "poolId");
+  const poolIds = uniqueCandidateValues([
+    undefined,
+    ...(rawPoolId === undefined
+      ? []
+      : [rawPoolId, rawPoolId.toLowerCase()]),
+  ]);
+  const manifest = family.plugin.manifest;
+  const adapters = uniqueCandidateValues([
+    undefined,
+    ...(manifest.poolAdapterIds ?? []),
+    ...manifest.ownedActionAdapterIds,
+    memo.familyId,
+  ]);
+  const pluginCandidateKeys = uniqueCandidateValues([
+    undefined,
+    memo.candidateKey,
+    memo.candidateKey.toLowerCase(),
+  ]);
+  const payload = { ...descriptor } as Record<string, unknown>;
+  delete payload.address;
+  delete payload.familyId;
+  delete payload.poolId;
+  delete payload.adapter;
+  delete payload.pluginCandidateKey;
+
+  for (const address of addresses) {
+    for (const poolId of poolIds) {
+      for (const adapter of adapters) {
+        for (const pluginCandidateKey of pluginCandidateKeys) {
+          const candidate = Object.freeze({
+            ...payload,
+            address,
+            familyId: memo.familyId,
+            ...(poolId === undefined ? {} : { poolId }),
+            ...(adapter === undefined ? {} : { adapter }),
+            ...(pluginCandidateKey === undefined
+              ? {}
+              : { pluginCandidateKey }),
+          });
+          if (
+            rebuildFamilyCandidateKey(candidate) === memo.familyCandidateKey &&
+            candidateFingerprint(candidate) === memo.candidateFingerprint
+          ) {
+            const upgraded = Object.freeze({
+              ...memo,
+              candidateSnapshot: canonicalCandidateSnapshot(candidate),
+              memoFingerprint: "",
+            });
+            return Object.freeze({
+              ...upgraded,
+              memoFingerprint: durableVerifiedMemoFingerprint(upgraded),
+            });
+          }
+        }
+      }
+    }
+  }
+  throw new Error(
+    "universe rebuild: cannot reconstruct legacy verified memo candidate " +
+      memo.familyCandidateKey + " family=" + memo.familyId,
+  );
 }
 
 export function createProbeWiring(
@@ -1492,6 +1603,7 @@ export function createRebuildWiring(input?: {
       encodeDurableValue(candidate),
     decodeCandidateSnapshot: (snapshot) =>
       decodeDurableValue(snapshot),
+    upgradeLegacyVerifiedMemo,
     requiredSourceCoverageKeys: () => Object.freeze([
       ...sourceCoverageKeys.startup,
       ...sourceCoverageKeys.events,
@@ -1514,74 +1626,6 @@ export function createRebuildWiring(input?: {
     scanSwapWindow: async (scanInput) => {
       const logs: RebuildScanObservation[] = [];
       const eventChunks: DurableSourceChunkReceipt[] = [];
-      // Dormancy nominations: pools silent for the strict 2-day window but
-      // active within 7 days are still nominated (nomination-only, like the
-      // startup universe files) so durable verified memos can be reused
-      // across a rebuild. These logs never enter the catalog-event source
-      // receipts: the strict [fromBlock, cutoff] window remains the complete
-      // observation proof.
-      const dormancyObservations: RebuildScanObservation[] = [];
-      const dormancyFrom = dormancyNominationFromBlock(
-        scanInput.cutoff.number,
-      );
-      if (dormancyFrom < scanInput.fromBlock) {
-        for (
-          let start = dormancyFrom;
-          start < scanInput.fromBlock;
-          start += SOURCE_SCAN_BATCH_BLOCKS
-        ) {
-          const end = Math.min(
-            scanInput.fromBlock - 1,
-            start + SOURCE_SCAN_BATCH_BLOCKS - 1,
-          );
-          const topicFilterD: Array<null | string | Array<string>> =
-            topics.length === 1 ? [topics[0]] : [[...topics]];
-          let batchSize = Math.min(
-            SOURCE_SCAN_BATCH_BLOCKS,
-            end - start + 1,
-          );
-          let fromD = start;
-          while (fromD <= end) {
-            const toD = Math.min(end, fromD + batchSize - 1);
-            try {
-              const batch = await provider.getLogs({
-                topics: topicFilterD,
-                fromBlock: fromD,
-                toBlock: toD,
-              });
-              for (const log of batch) {
-                dormancyObservations.push(Object.freeze({
-                  address: log.address.toLowerCase(),
-                  topics: Object.freeze([...log.topics]),
-                  data: log.data,
-                  ...(log.transactionHash === undefined
-                    ? {}
-                    : { transactionHash: log.transactionHash.toLowerCase() }),
-                  blockNumber: log.blockNumber,
-                  ...(log.blockHash === undefined
-                    ? {}
-                    : { blockHash: log.blockHash.toLowerCase() }),
-                  ...(log.index === undefined ? {} : { logIndex: log.index }),
-                }));
-              }
-              fromD = toD + 1;
-              batchSize = Math.min(
-                SOURCE_SCAN_BATCH_BLOCKS,
-                end - fromD + 1,
-              );
-            } catch (error) {
-              if (batchSize <= SOURCE_MIN_CHUNK_BLOCKS) {
-                throw new Error(
-                  "dormancy nomination scan failed at " + fromD + "-" +
-                    toD + ": " +
-                    (error instanceof Error ? error.message : String(error)),
-                );
-              }
-              batchSize = Math.floor(batchSize / 2);
-            }
-          }
-        }
-      }
       for (
         let start = scanInput.fromBlock;
         start <= scanInput.cutoff.number;
@@ -1773,7 +1817,6 @@ export function createRebuildWiring(input?: {
       return Object.freeze({
         observations,
         sourceReceipts: Object.freeze(receipts),
-        dormancyObservations: Object.freeze(dormancyObservations),
       });
     },
     familyCandidateKey: (candidate) =>

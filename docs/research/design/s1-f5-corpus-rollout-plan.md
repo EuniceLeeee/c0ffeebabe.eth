@@ -1140,3 +1140,31 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
 - 该收口修复“Ready 已发布但 completed run 仍长期占据 inProgressRun，导致每次
   重启反复恢复同一历史 cutoff”的半迁移状态；pending/无 outcome 仍 fail-closed，
   不得借 retryable 语义放行。
+
+### Universe discovery/retention 收口（2026-08-24，用户裁定，当前实现）
+
+- **唯一链上 discovery window = 2 天**：每个新 rolling run 只查询
+  `[cutoff-14399 .. cutoff]`。已删除 7 天 dormancy nomination 常量、额外
+  `getLogs` 扫描、`dormancyObservations` 返回面和 pre-receipt rescan 桥；univ4
+  auxiliary recent scan 同样固定 14,400 blocks。
+- **历史 verified candidate 永久保留**：`DurableVerifiedMemo` 现在必须携带完整、
+  JSON-safe 的 `candidateSnapshot`，且 `memoFingerprint` 对其绑定。新 run 的候选集合为
+  “当前 2 天 observations + startup candidates + 全部 verified memo snapshots + 当前
+  reverse-bound candidates”，之后只做通用 dedupe。snapshot 仅用于 nomination/reuse，
+  不扩大 source receipt、不替代链上身份、不直接创建 edge，因此不存在第二 candidate
+  authority。
+- **复用仍然 fail-closed**：retained candidate 进入现有 `findReusableMemo`；memo 有效
+  就复用，失效就重新 attest。真正 `terminal-rejected` 时，三条 outcome CAS 路径都在
+  同一原子写中删除对应 memo；下一个 rolling run 不再把它带回。retryable 继续只在独立
+  durable queue 中保存，不塞回已完成 run。
+- **线上旧 checkpoint 兼容**：部署前 checkpoint 有 22,011 个 verified memos、全部尚无
+  `candidateSnapshot`。一次性升级先验证旧 memo fingerprint，再只用通用 candidate envelope
+  与 generated plugin manifest 重构；必须同时匹配原 `FamilyCandidateKey` 与
+  `candidateFingerprint`，memo 和 incumbent verified outcome fingerprint 在同一 CAS 更新，
+  任一条无法重构即整体 fail closed。
+- **pre-deploy 验证**：17 项 universe/cutover targeted regression 全部 PASS，完整 listener
+  build PASS，`migration-cleanup-receipt` PASS，`git diff --check` PASS。当前
+  `adapter-family-shared-surface` 门仍被基线已有的 generated JSON Family 字面量、infra
+  selector、旧 registry/import closure 等已知边界阻断；本 slice 新增生产代码不含按
+  Family/协议/地址/selector/topic 的中央分支。exact-SHA 节点升级与 live checkpoint
+  证据在本 slice 部署后回写。

@@ -27,6 +27,28 @@ async function main(): Promise<void> {
         "stale:0": Object.freeze({ address: "0x" + "11".repeat(20) }),
       }),
       observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+      sourceReceipts: Object.freeze([Object.freeze({
+        sourceKey: "1".repeat(64),
+        sourceKind: "startup-candidate-union" as const,
+        providerIdentity: "fixture",
+        queryFingerprint: "2".repeat(64),
+        fromBlock: SOURCE.number - 14_399,
+        toBlock: SOURCE.number,
+        cutoffNumber: SOURCE.number,
+        cutoffHash: SOURCE.hash,
+        coverageKeys: Object.freeze(["univ2-standard|startup-universe"]),
+        completedChunks: Object.freeze([Object.freeze({
+          fromBlock: SOURCE.number - 14_399,
+          toBlock: SOURCE.number,
+          resultCount: 1,
+          resultHash: "3".repeat(64),
+        })]),
+        observationSetHash: "4".repeat(64),
+        observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+        appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+        retryableCount: 0 as const,
+        status: "complete" as const,
+      })]),
     });
     // Simulate a killed writer: a lock file naming a dead PID. The next
     // CAS must reclaim it (kill -9 leaves the lock behind; the run must

@@ -20,13 +20,17 @@ import {
   memoAuthorityFingerprint,
   rebuildFamilyCandidateKey,
   rebuildFamilyInstanceDedupeKey,
+  upgradeLegacyVerifiedMemo,
   validateObservedSenderEvidence,
   type RebuildScanObservation,
 } from "../universe-rebuild-production.js";
 import type {
   DurableSourceReceipt,
   DurableVerifiedMemo,
+  LegacyDurableVerifiedMemo,
 } from "../universe-rebuild-checkpoint.js";
+import { durableVerifiedMemoFingerprint } from
+  "../universe-rebuild-checkpoint.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
 
@@ -101,9 +105,18 @@ function makeMemo(
     compiledDescriptor: Object.freeze({}),
     staticProjection: Object.freeze({}),
     evidenceFingerprint: "ef",
-    memoFingerprint: "mf",
+    candidateSnapshot: candidate,
+    memoFingerprint: "",
   });
-  return Object.freeze({ ...base, ...overrides }) as DurableVerifiedMemo;
+  const unsigned = Object.freeze({
+    ...base,
+    ...overrides,
+    memoFingerprint: "",
+  }) as DurableVerifiedMemo;
+  return Object.freeze({
+    ...unsigned,
+    memoFingerprint: durableVerifiedMemoFingerprint(unsigned),
+  });
 }
 
 function authorityFor(
@@ -486,7 +499,10 @@ async function main(): Promise<void> {
       authorityFingerprint: authorityFor(candidate),
       instance: Object.freeze({
         instanceKey: "canonical-instance",
-        descriptor: Object.freeze({}),
+        descriptor: Object.freeze({
+          pool: String(candidate.address),
+          lineageId: familyId,
+        }),
         routes: Object.freeze([]),
         pricingInstances: Object.freeze([Object.freeze({
           routes: Object.freeze([]),
@@ -500,6 +516,50 @@ async function main(): Promise<void> {
     familyCandidateKey: rebuildFamilyCandidateKey(candidate),
   });
   assert.equal(sealed.candidateFingerprint, candidateFingerprint(candidate));
+  const {
+    candidateSnapshot: _candidateSnapshot,
+    memoFingerprint: _memoFingerprint,
+    ...legacyFields
+  } = sealed;
+  const legacyUnsigned = Object.freeze({
+    ...legacyFields,
+    memoFingerprint: "",
+  }) as LegacyDurableVerifiedMemo;
+  const legacyMemo = Object.freeze({
+    ...legacyUnsigned,
+    memoFingerprint: durableVerifiedMemoFingerprint(legacyUnsigned),
+  });
+  const upgradedLegacyMemo = upgradeLegacyVerifiedMemo(legacyMemo);
+  const upgradedLegacyCandidate = wiring.decodeCandidateSnapshot!(
+    upgradedLegacyMemo.candidateSnapshot,
+  ) as Readonly<Record<string, unknown>>;
+  assert.equal(
+    rebuildFamilyCandidateKey(upgradedLegacyCandidate),
+    legacyMemo.familyCandidateKey,
+    "legacy memo upgrade reconstructs the exact durable candidate key",
+  );
+  assert.equal(
+    candidateFingerprint(upgradedLegacyCandidate),
+    legacyMemo.candidateFingerprint,
+    "legacy memo upgrade reconstructs the exact original candidate fingerprint",
+  );
+  assert.equal(
+    upgradedLegacyMemo.memoFingerprint,
+    durableVerifiedMemoFingerprint(upgradedLegacyMemo),
+    "upgraded memo fingerprint binds its candidate snapshot",
+  );
+  assert.notEqual(
+    upgradedLegacyMemo.memoFingerprint,
+    legacyMemo.memoFingerprint,
+  );
+  assert.throws(
+    () => upgradeLegacyVerifiedMemo(Object.freeze({
+      ...legacyMemo,
+      memoFingerprint: "0".repeat(64),
+    })),
+    /verified memo fingerprint mismatch/,
+    "legacy memo migration fails closed before candidate reconstruction",
+  );
   const decodedProjection = wiring.decodeCandidateSnapshot!(
     sealed.staticProjection,
   ) as {

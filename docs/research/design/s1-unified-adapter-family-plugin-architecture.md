@@ -14,8 +14,10 @@
 > 观察哈希（9fb5864b）、univ4 retain channel 与 archive Initialize 反查（0aa7582d..b55a1631）、
 > duplicate-instance 与流式 checkpoint（efc6df7f/2aab991a/3ae1e427）、funding token universe
 > 固化表（692c7bd7..5fc974ab）。当前 edge/candidate observation 窗口为 14400 blocks（2 天）；
-> 休眠提名窗口 7 天（DORMANCY_NOMINATION_WINDOW_BLOCKS=50400，提名-only，不进完整观察证明），
-> 2 天窗口内无活动但 7 天内活跃的池仍被提名并复用 verified memo，7 天无活动的池在 rebuild 时允许掉落。
+> 不再存在 7 天 dormancy scan。新实例只由最近 2 天的链上 discovery 发现；所有既有 verified
+> memo 通过其 fingerprint-bound `candidateSnapshot` 永久带回候选分区，且只有明确的
+> `terminal-rejected` 原子撤销该 memo。memo snapshot 只是提名与复用材料，不是第二准入权威，
+> 也不能扩张 2 天 source coverage。
 > touched-driven 当前定价（只刷新本块触及 venue，快照容忍未触及 edge 并以 degraded 发布）：
 > 7a0d5c5a、b56091a5、b6a2711f、f7be24cb、2672cbe2、56e32e96；funding 面收敛到固化 universe
 > （45a01264）；exact session 只重发触及实例（e79768ad）且按 coarse 块 touched 作用域
@@ -464,8 +466,8 @@ interface CanonicalCutoff {
 ~~~
 
 All declared discovery sources bind explicit fromBlock..cutoff ranges and source-plan fingerprints. Source
-plans come from the generated Family catalog. A candidate journal or warm cache may nominate work, but it
-cannot prove coverage, advance a cursor, admit an instance, or create a Graph edge.
+plans come from the generated Family catalog. A verified memo snapshot may nominate previously admitted work,
+but it cannot prove coverage, advance a cursor, admit an instance, or create a Graph edge.
 
 The production edge/candidate observation policy is one code-owned range:
 
@@ -479,6 +481,7 @@ const fromBlock = Math.max(0, cutoff.number - 14399);
   narrow it;
 - catalog event scans and every plugin auxiliary recent-log nomination bind that same number/hash cutoff and
   range;
+- there is no 2-to-7-day dormancy scan or other wider nomination query;
 - an unfinished run always resumes its original durable range and cutoff; it never changes window halfway;
 - a completed pre-policy wider run is atomically retired before startup creates and returns the current
   14400-block ready generation.
@@ -488,9 +491,23 @@ History: the 2-day window was parked at 50 blocks while univ4 pools could not en
 channel admitted univ4 pools (5.4), the window returned to 14400; the streaming observation hash makes the
 wide window safe (no giant concatenated string, no "Invalid string length").
 
-The window is an observation policy, not an admission shortcut. Static reverse-verified identity, durable
-verified memos, and the retain channel (5.4) remain available across rolling windows; old files still cannot
-grant coverage or create edges.
+The window is an observation policy, not an admission shortcut. Every new rolling run forms its exact
+candidate partition as:
+
+~~~text
+current 14400-block observations
++ startup candidates
++ every verified memo candidateSnapshot
++ current plugin-declared reverse bindings
+→ generic dedupe
+~~~
+
+The memo snapshots retain previously verified candidates indefinitely even when they are silent in every
+later two-day window. Each still passes `findReusableMemo`: a valid memo is reused, an invalid memo is
+re-attested, and an explicit terminal outcome removes the memo in the same checkpoint CAS so it cannot be
+retained into the following run. Thus permanent retention preserves topology without making an old file,
+warm cache, or memo a coverage/admission/edge authority. Static reverse-verified identity and the plugin
+retain channel (5.4) remain available independently.
 
 **Discovery plan change = same-range re-adoption, never a new run.** The runner is layered:
 
@@ -501,9 +518,10 @@ grant coverage or create edges.
    not move it). When the incumbent run's sealed receipts still match, the durable partition is restored
    with no scan. When they drift, discovery re-runs over the SAME fixed range with the current catalog and
    the SAME run is reconciled (`reconcileFixedRunPlan`: runId/cutoff/fromBlock/observedThrough immutable;
-   only the partition hashes, candidatesByKey, sourceReceipts and outcomes are replaced). Outcomes for
-   candidates dropped from the new partition are discarded (old outcomes are never verification authority
-   under a new discovery plan); verifiedMemos are carried untouched.
+   only the partition hashes, candidatesByKey, sourceReceipts and outcomes are replaced). The reconciled
+   partition includes every retained verified memo snapshot; outcomes outside that exact partition are
+   discarded because old outcomes are never verification authority under a new discovery plan. Verified
+   memos remain until an explicit terminal outcome revokes the corresponding candidate.
 3. **Verification**: every candidate re-enters `findReusableMemo` — a pure local binding check (Family id,
    candidate fingerprint, memo-scoped definition hash, proof policy, proof-source bound) first, then the
    same-run fast path (local compares only) or chain authority revalidation (code/storage/blockHash RPC).
@@ -640,6 +658,20 @@ interface StartupCheckpointEnvelope {
   readonly readyGeneration: ReadyGeneration | null;
 }
 
+interface DurableVerifiedMemo {
+  readonly familyCandidateKey: FamilyCandidateKey;
+  readonly familyInstanceKey: FamilyInstanceKey;
+  readonly candidateFingerprint: Hash;
+  readonly familyDefinitionHash: Hash;
+  readonly validity: DurableMemoValidity;
+  readonly verifiedIdentity: unknown;
+  readonly compiledDescriptor: unknown;
+  readonly staticProjection: unknown;
+  readonly evidenceFingerprint: Hash;
+  readonly candidateSnapshot: CandidateSnapshot;
+  readonly memoFingerprint: Hash;
+}
+
 interface DurableRetryableQueueEntry extends DurableRetryableOutcome {
   readonly runId: string;
   readonly cutoff: CanonicalCutoff;
@@ -671,8 +703,12 @@ The writer persists completed outcomes during the run, not only at the end:
 - resume by FamilyCandidateKey, never by array index or a number such as "8000".
 
 Verified memos retain canonical identity, descriptor/static projection memo, proof fingerprints, Family
-definition hash, implementation authority, source binding, and evidence references. Live route handles are
-not serialized.
+definition hash, implementation authority, source binding, evidence references, and the complete JSON-safe
+plugin candidate snapshot needed for cross-window nomination. `memoFingerprint` binds the snapshot along
+with the proof fields. Deployed pre-snapshot memos are accepted only after their old fingerprints verify;
+the generated catalog/manifest reconstructs a candidate whose `FamilyCandidateKey` and candidate fingerprint
+both match, then memo plus any incumbent verified outcome fingerprint upgrade in one CAS. Live route handles
+are not serialized. There is no separate permanent candidate journal.
 
 ### 6.1 Typed Family decisions
 
@@ -1342,8 +1378,11 @@ After a controlled systemd restart:
 
 - startup freezes a new current 14400-block run while retaining the prior atomic readyGeneration as durable
   evidence until the new generation promotes;
-- verified memos are reused only when all fingerprints remain valid;
-- only new and invalidated candidates are processed in the startup run; an unchanged queued retryable is
+- chain discovery still reads only the new 14400-block range; the candidate partition additionally carries
+  every fingerprint-bound verified memo snapshot, regardless of how long the instance has been inactive;
+- verified memos are reused only when all fingerprints remain valid; an invalid memo is re-attested, while
+  an explicit terminal outcome deletes it atomically so the next rolling run no longer retains it;
+- only newly discovered and invalidated candidates execute fresh lifecycle work; an unchanged queued retryable is
   inherited as accounted and retried only by the independent single-candidate probe;
 - an original-cutoff single-pool probe updates only its FamilyCandidateKey;
 - source/candidate/Graph cursors never advance ahead of durable facts;

@@ -13,6 +13,32 @@ const SOURCE = Object.freeze({
   generation: 1,
 });
 
+function sourceReceipts() {
+  const fromBlock = SOURCE.number - 14_399;
+  return Object.freeze([Object.freeze({
+    sourceKey: "1".repeat(64),
+    sourceKind: "startup-candidate-union" as const,
+    providerIdentity: "fixture",
+    queryFingerprint: "2".repeat(64),
+    fromBlock,
+    toBlock: SOURCE.number,
+    cutoffNumber: SOURCE.number,
+    cutoffHash: SOURCE.hash,
+    coverageKeys: Object.freeze(["univ2-standard|startup-universe"]),
+    completedChunks: Object.freeze([Object.freeze({
+      fromBlock,
+      toBlock: SOURCE.number,
+      resultCount: 1,
+      resultHash: "3".repeat(64),
+    })]),
+    observationSetHash: "4".repeat(64),
+    observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+    appliedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+    retryableCount: 0 as const,
+    status: "complete" as const,
+  })]);
+}
+
 // Fixture wiring module: every candidate verifies immediately.
 const wiringSource = [
   "import { createHash } from 'node:crypto';",
@@ -44,6 +70,7 @@ const wiringSource = [
   "      compiledDescriptor: Object.freeze({}),",
   "      staticProjection: Object.freeze({}),",
   "      evidenceFingerprint: 'ef',",
+  "      candidateSnapshot: Object.freeze(input.candidate),",
   "      memoFingerprint: digest('memo:' + input.familyCandidateKey),",
   "    }),",
   "    rehydrateVerifiedInstance: (input) => Object.freeze({ familyId: 'univ2-standard', familyInstanceKey: input.memo.familyInstanceKey, instanceKey: input.memo.instanceKey }),",
@@ -138,6 +165,7 @@ async function main(): Promise<void> {
         "cand:x": Object.freeze({ address: "0x" + "11".repeat(20) }),
       }),
       observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+      sourceReceipts: sourceReceipts(),
     });
     await store2.casMergeRunOutcomes("run-i", Object.freeze([Object.freeze({
       status: "retryable",

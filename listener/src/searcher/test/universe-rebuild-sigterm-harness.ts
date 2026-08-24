@@ -22,6 +22,28 @@ async function main(): Promise<void> {
       ]),
     )),
     observedThrough: Object.freeze({ number: source.number, hash: source.hash }),
+    sourceReceipts: Object.freeze([Object.freeze({
+      sourceKey: "1".repeat(64),
+      sourceKind: "startup-candidate-union" as const,
+      providerIdentity: "fixture",
+      queryFingerprint: "2".repeat(64),
+      fromBlock: source.number - 14_399,
+      toBlock: source.number,
+      cutoffNumber: source.number,
+      cutoffHash: source.hash,
+      coverageKeys: Object.freeze(["univ2-standard|startup-universe"]),
+      completedChunks: Object.freeze([Object.freeze({
+        fromBlock: source.number - 14_399,
+        toBlock: source.number,
+        resultCount: count,
+        resultHash: "3".repeat(64),
+      })]),
+      observationSetHash: "4".repeat(64),
+      observedThrough: Object.freeze({ number: source.number, hash: source.hash }),
+      appliedThrough: Object.freeze({ number: source.number, hash: source.hash }),
+      retryableCount: 0 as const,
+      status: "complete" as const,
+    })]),
   });
   // batchSize above the outcome count: nothing auto-flushes; the SIGTERM
   // handler must persist every completed outcome in one flush.
@@ -55,6 +77,7 @@ async function main(): Promise<void> {
       compiledDescriptor: Object.freeze({ key }),
       staticProjection: Object.freeze({ routes: Object.freeze([]) }),
       evidenceFingerprint: "evidence:" + i,
+      candidateSnapshot: Object.freeze({ id: key }),
       memoFingerprint: "memo:" + i,
     }) as DurableVerifiedMemo;
     writer.record(Object.freeze({

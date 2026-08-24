@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   UniverseRebuildCheckpointStore,
   canonicalJson,
+  durableVerifiedMemoFingerprint,
   type DurableSourceReceipt,
   type DurableVerifiedMemo,
   type StartupCheckpointEnvelope,
@@ -25,6 +26,16 @@ const SOURCE = Object.freeze({
   hash: "0x" + "a1".repeat(32),
   generation: 1,
 });
+
+function sealFixtureMemo(
+  input: Omit<DurableVerifiedMemo, "memoFingerprint">,
+): DurableVerifiedMemo {
+  const unsigned = Object.freeze({ ...input, memoFingerprint: "" });
+  return Object.freeze({
+    ...unsigned,
+    memoFingerprint: durableVerifiedMemoFingerprint(unsigned),
+  });
+}
 
 function sourceReceipts(fromBlock: number): readonly DurableSourceReceipt[] {
   return Object.freeze([Object.freeze({
@@ -109,7 +120,18 @@ function makeFixture(
     }),
     dedupeFamilyCandidates: (obs) =>
       candidates(
-        [...new Set(obs.map((o) => String((o as { id: string }).id)))],
+        [...new Set(obs.map((o) => {
+          const item = o as {
+            readonly kind?: unknown;
+            readonly candidate?: { readonly id?: unknown };
+            readonly id?: unknown;
+          };
+          return String(
+            item.kind === "startup-candidate"
+              ? item.candidate?.id
+              : item.id,
+          );
+        }))],
       ),
     findReusableMemo: async (input) => {
       const key = (input.candidate as { id: string }).id;
@@ -161,7 +183,7 @@ function makeFixture(
     },
     sealDurableVerifiedMemo: (input) => {
       const id = String((input.candidate as { id: string }).id);
-      return Object.freeze({
+      return sealFixtureMemo({
         familyCandidateKey: "cand:" + id,
         familyInstanceKey: "inst:" + id,
         familyId: "univ2",
@@ -178,8 +200,8 @@ function makeFixture(
         compiledDescriptor: Object.freeze({ kind: "descriptor" }),
         staticProjection: Object.freeze({ kind: "projection" }),
         evidenceFingerprint: "ef:" + id,
-        memoFingerprint: "memo:" + id,
-      }) as DurableVerifiedMemo;
+        candidateSnapshot: Object.freeze({ id }),
+      });
     },
     rehydrateVerifiedInstance: (input) =>
       Object.freeze({
@@ -432,7 +454,8 @@ async function main(): Promise<void> {
               status: "verified",
               familyCandidateKey: "cand:" + id,
               familyInstanceKey: "inst:" + id,
-              memoFingerprint: "memo:" + id,
+              memoFingerprint: keptEnvelope.verifiedMemos["cand:" + id]!
+                .memoFingerprint,
             }),
           ]),
         )),
@@ -727,49 +750,6 @@ async function main(): Promise<void> {
       0,
     );
 
-    // G: the deployed pre-receipt fixed checkpoint is upgraded in place.
-    // The runner replays the original fixed range, requires the exact same
-    // candidate partition, attaches receipts, and preserves runId/cutoff.
-    const legacy = makeFixture(join(dir, "legacy-source-receipt"));
-    const legacyCandidates = Object.freeze({
-      "cand:a": Object.freeze({ id: "a" }),
-      "cand:b": Object.freeze({ id: "b" }),
-      "cand:c": Object.freeze({ id: "c" }),
-    });
-    const digest = (value: string): string =>
-      createHash("sha256").update(value).digest("hex");
-    await legacy.store.beginOrResumeRun({
-      expectedRevision: 0,
-      runId: "run-1",
-      cutoff: SOURCE,
-      fromBlock: SOURCE.number - 14_399,
-      universeHash: digest(
-        "universe-candidate-partition-v1:" + canonicalJson(legacyCandidates),
-      ),
-      candidateSetHash: digest(
-        "candidate-set-v1:cand:a,cand:b,cand:c",
-      ),
-      candidateCount: 3,
-      candidatesByKey: legacyCandidates,
-      observedThrough: Object.freeze({
-        number: SOURCE.number,
-        hash: SOURCE.hash,
-      }),
-    });
-    await rebuildUniverse(legacy.input);
-    const migrated = await legacy.store.load();
-    assert.equal(migrated?.inProgressRun, null);
-    assert.equal(
-      migrated?.readyGeneration?.universeRange.fromBlock,
-      SOURCE.number - 14_399,
-      "the incumbent legacy range is preserved and promoted",
-    );
-    assert.equal(
-      legacy.scanCalls(),
-      1,
-      "legacy receipt backfill scans once and resumes the incumbent run",
-    );
-
     // H: retain-channel candidates merge through the alias-collapsing dedupe.
     // A reverse-bound candidate spells the same instance under a different
     // familyCandidateKey than a retained startup entry (manager+poolId vs
@@ -811,7 +791,7 @@ async function main(): Promise<void> {
       sealDurableVerifiedMemo: (input) => {
         const item = input.candidate as { id: string; alias?: string };
         const instanceKey = "inst:" + (item.alias ?? item.id);
-        return Object.freeze({
+        return sealFixtureMemo({
           familyCandidateKey: "cand:" + item.id,
           familyInstanceKey: instanceKey,
           familyId: "univ2",
@@ -831,8 +811,8 @@ async function main(): Promise<void> {
           compiledDescriptor: Object.freeze({ kind: "descriptor" }),
           staticProjection: Object.freeze({ kind: "projection" }),
           evidenceFingerprint: "ef:" + item.id,
-          memoFingerprint: "memo:" + item.id,
-        }) as DurableVerifiedMemo;
+          candidateSnapshot: Object.freeze({ ...item }),
+        });
       },
     });
     const aliasReady = await rebuildUniverse(aliasMerge.input);
@@ -862,7 +842,7 @@ async function main(): Promise<void> {
       }),
       sealDurableVerifiedMemo: (input) => {
         const id = String((input.candidate as { id: string }).id);
-        return Object.freeze({
+        return sealFixtureMemo({
           familyCandidateKey: "cand:" + id,
           familyInstanceKey: "inst:shared",
           familyId: "univ2",
@@ -882,8 +862,8 @@ async function main(): Promise<void> {
           compiledDescriptor: Object.freeze({ kind: "descriptor" }),
           staticProjection: Object.freeze({ kind: "projection" }),
           evidenceFingerprint: "ef:" + id,
-          memoFingerprint: "memo:" + id,
-        }) as DurableVerifiedMemo;
+          candidateSnapshot: Object.freeze({ id }),
+        });
       },
     });
     const sharedReady = await rebuildUniverse(sharedInstance.input);
@@ -906,46 +886,73 @@ async function main(): Promise<void> {
       null,
       "the duplicate is accounted before the completed run clears",
     );
-    // E: first run merges dormancy nominations. Pools silent for the strict
-    // observation window but active within the wider dormancy window are
-    // still nominated (nomination-only) so durable verified memos can be
-    // reused across a rebuild; the extra observations never enter the
-    // catalog-event source receipts.
-    const dormancyDir = await mkdtemp(join(tmpdir(), "universe-rebuild-dormancy-"));
-    const fd = makeFixture(dormancyDir, {
-      scanSwapWindow: async (scanInput) => Object.freeze({
-        observations: Object.freeze([
-          Object.freeze({ id: "a", block: SOURCE.number }),
-        ]),
-        sourceReceipts: sourceReceipts(scanInput.fromBlock),
-        dormancyObservations: Object.freeze([
-          Object.freeze({ id: "b", block: SOURCE.number }),
-          Object.freeze({ id: "c", block: SOURCE.number }),
-        ]),
-      }),
+    // E: discovery is always the strict two-day range, while verified memo
+    // snapshots retain pools indefinitely across rolling windows.
+    const retentionDir = await mkdtemp(
+      join(tmpdir(), "universe-rebuild-permanent-retention-"),
+    );
+    let retentionScan = 0;
+    const scannedFromBlocks: number[] = [];
+    const retained = makeFixture(retentionDir, {
+      scanSwapWindow: async (scanInput) => {
+        scannedFromBlocks.push(scanInput.fromBlock);
+        const ids = retentionScan++ === 0
+          ? ["a", "b", "c"]
+          : ["a", "d"];
+        return Object.freeze({
+          observations: Object.freeze(ids.map((id) => Object.freeze({
+            id,
+            block: SOURCE.number,
+          }))),
+          sourceReceipts: sourceReceipts(scanInput.fromBlock),
+        });
+      },
     });
-    const dormancyReady = await rebuildUniverse(fd.input);
-    assert.equal(fd.attestCalls.get("a"), 1);
-    assert.equal(fd.attestCalls.get("b"), 1);
-    assert.equal(fd.attestCalls.get("c"), 1);
+    const retainedFirst = await rebuildUniverse(retained.input);
     assert.deepEqual(
-      [...dormancyReady.activeInstanceKeys].sort(),
+      [...retainedFirst.activeInstanceKeys].sort(),
       ["inst:a", "inst:b", "inst:c"],
-      "dormancy-nominated pools must enter the first-run partition",
     );
-    const dormancyCheckpoint = await fd.store.load();
+    const retainedSecond = await rebuildUniverse(retained.input);
+    assert.deepEqual(
+      [...retainedSecond.activeInstanceKeys].sort(),
+      ["inst:a", "inst:b", "inst:c", "inst:d"],
+      "A/D current discovery plus A/B/C memo retention yields A/B/C/D",
+    );
+    assert.equal(retained.attestCalls.get("b"), 1);
+    assert.equal(retained.attestCalls.get("c"), 1);
+    assert.equal(retained.attestCalls.get("d"), 1);
+    assert.ok(
+      scannedFromBlocks.every((fromBlock) =>
+        fromBlock === strictEdgeCollectionFromBlock(SOURCE.number)
+      ),
+      "retention must never issue a 2-to-7-day source scan",
+    );
+
+    retained.invalidReusableKeys.add("b");
+    await rebuildUniverse(retained.input);
     assert.equal(
-      dormancyCheckpoint?.readyGeneration?.generation,
-      dormancyReady.generation,
-      "dormancy nominations promote with the first run",
+      retained.attestCalls.get("b"),
+      2,
+      "an invalid retained memo is re-attested",
     );
+    retained.terminalKeys.add("b");
+    await rebuildUniverse(retained.input);
+    const terminalCheckpoint = await retained.store.load();
     assert.equal(
-      dormancyCheckpoint?.readyGeneration?.universeRange.fromBlock,
-      strictEdgeCollectionFromBlock(SOURCE.number),
-      "source receipts still bind the strict 2-day window only: " +
-        "dormancy observations never enter the complete-observation proof",
+      terminalCheckpoint?.verifiedMemos["cand:b"],
+      undefined,
+      "terminal rejection removes the old verified memo atomically",
     );
-    await rm(dormancyDir, { recursive: true, force: true });
+    const bCallsAfterTerminal = retained.attestCalls.get("b");
+    const afterRemoval = await rebuildUniverse(retained.input);
+    assert.deepEqual(
+      [...afterRemoval.activeInstanceKeys].sort(),
+      ["inst:a", "inst:c", "inst:d"],
+      "a terminally invalidated memo is not retained into the next run",
+    );
+    assert.equal(retained.attestCalls.get("b"), bCallsAfterTerminal);
+    await rm(retentionDir, { recursive: true, force: true });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

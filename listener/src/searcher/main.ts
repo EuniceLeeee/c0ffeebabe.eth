@@ -1334,10 +1334,10 @@ async function main(): Promise<void> {
   }
   const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
   const activeInstanceKeys = new Set(readyUniverse.activeInstanceKeys);
-  // The memo map can legitimately hold more than one memo per instance (a
-  // duplicate-instance candidate keeps its memo while its outcome is
-  // downgraded terminal-rejected); the runtime wants exactly one instance
-  // per active key.
+  // Historical checkpoints can contain more than one memo per instance.
+  // Current terminal outcomes revoke their candidate memo atomically, while
+  // this defensive dedupe keeps runtime rehydration one-instance-per-key
+  // during the one-time checkpoint transition.
   const seenReadyInstances = new Set<string>();
   const readyInstances = Object.values(rebuildEnvelope.verifiedMemos)
     .filter((memo) => activeInstanceKeys.has(memo.familyInstanceKey))

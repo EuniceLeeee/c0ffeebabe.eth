@@ -47,9 +47,8 @@ function mockProvider(options: {
       assert.equal(filter.toBlock, SOURCE.number);
       assert.equal(
         filter.fromBlock,
-        SOURCE.number - 50_399,
-        "plugin auxiliary nomination must use the shared exact 7-day " +
-          "dormancy nomination range",
+        SOURCE.number - 14_399,
+        "plugin auxiliary nomination must use the shared exact 2-day range",
       );
       assert.deepEqual(filter.topics, [
         UNIV4_SWAP_TOPIC.toLowerCase(),

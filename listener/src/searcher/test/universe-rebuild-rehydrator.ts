@@ -58,6 +58,10 @@ function memoFor(): DurableVerifiedMemo {
     }),
     staticProjection: Object.freeze({ routes: Object.freeze([routeDescriptor()]) }),
     evidenceFingerprint: "ef",
+    candidateSnapshot: Object.freeze({
+      address: INSTANCE_KEY,
+      familyId: FAMILY_ID,
+    }),
     memoFingerprint: "mf",
   }) as DurableVerifiedMemo;
 }

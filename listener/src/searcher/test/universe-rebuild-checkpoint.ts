@@ -7,7 +7,9 @@ import {
   AttestationCheckpointWriter,
   UniverseRebuildCheckpointStore,
   canonicalJson,
+  durableVerifiedMemoFingerprint,
   type DurableVerifiedMemo,
+  type LegacyDurableVerifiedMemo,
   type DurableSourceReceipt,
   type ReadyUniverseGeneration,
   type RunOutcome,
@@ -72,7 +74,22 @@ function memoFor(key: string): DurableVerifiedMemo {
     compiledDescriptor: Object.freeze({ kind: "descriptor", key }),
     staticProjection: Object.freeze({ kind: "projection", key }),
     evidenceFingerprint: "ef-" + key,
+    candidateSnapshot: Object.freeze({ id: key }),
     memoFingerprint: fp,
+  });
+}
+
+function terminalFor(key: string): RunOutcome {
+  return Object.freeze({
+    status: "terminal-rejected",
+    familyCandidateKey: key,
+    reasonCode: "identity_rejected:fixture",
+    familyDefinitionHash: "fdh",
+    requestFingerprint: "request",
+    trustedResultsFingerprint: "results",
+    authorityFingerprint: "auth",
+    candidateFingerprint: "cf-" + key,
+    cutoff: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
   });
 }
 
@@ -97,6 +114,7 @@ async function main(): Promise<void> {
         number: SOURCE.number,
         hash: SOURCE.hash,
       }),
+      sourceReceipts: sourceReceipts(),
     });
     assert.equal(begun.revision, 2);
     assert.equal(begun.inProgressRun?.runId, "run-1");
@@ -114,6 +132,7 @@ async function main(): Promise<void> {
         number: SOURCE.number,
         hash: SOURCE.hash,
       }),
+      sourceReceipts: sourceReceipts(),
     });
     assert.equal(resumed.revision, 2, "resume of the same run must not bump");
     await assert.rejects(
@@ -130,6 +149,7 @@ async function main(): Promise<void> {
           number: SOURCE.number,
           hash: SOURCE.hash,
         }),
+        sourceReceipts: sourceReceipts(),
       }),
       /different fixed input/,
       "same runId must not attach a different cutoff/candidate partition",
@@ -137,8 +157,7 @@ async function main(): Promise<void> {
 
     // reconcileFixedRunPlan: discovery plan change reconciles the SAME run's
     // partition/receipts; runId/cutoff/fromBlock/observedThrough are immutable.
-    // Self-contained store so the main flow's receipt-less promotion case is
-    // unaffected.
+    // Self-contained store so discovery-plan reconciliation is isolated.
     const recStore = new UniverseRebuildCheckpointStore({
       path: join(dir, "reconcile.json"),
     });
@@ -158,6 +177,7 @@ async function main(): Promise<void> {
         number: SOURCE.number,
         hash: SOURCE.hash,
       }),
+      sourceReceipts: sourceReceipts(),
     });
     const reconciles = await recStore.reconcileFixedRunPlan({
       expectedRevision: 2,
@@ -353,6 +373,7 @@ async function main(): Promise<void> {
           number: SOURCE.number,
           hash: SOURCE.hash,
         }),
+        sourceReceipts: sourceReceipts(),
       }),
       /another run is in progress/,
     );
@@ -467,20 +488,24 @@ async function main(): Promise<void> {
       catalogSnapshot: READY_CATALOG,
     }) as ReadyUniverseGeneration;
 
-    await assert.rejects(
-      () => store.casCommitReadyGeneration({
-        expectedRevision: withMemo.revision,
-        runId: "run-1",
-        ready: readyGeneration,
-      }),
-      /source completion receipts are absent/,
-      "catalog-shaped coverage cannot promote without durable source receipts",
-    );
     const partialReceipt = sourceReceipts()[0]!;
+    const partialStore = new UniverseRebuildCheckpointStore({
+      path: join(dir, "partial-source.json"),
+    });
     await assert.rejects(
-      () => store.casSetRunSourceReceipts({
-        expectedRevision: withMemo.revision,
+      () => partialStore.beginOrResumeRun({
+        expectedRevision: 0,
         runId: "run-1",
+        cutoff: SOURCE,
+        fromBlock: SOURCE.number - 14_399,
+        universeHash: "partial",
+        candidateSetHash: "partial",
+        candidateCount: 0,
+        candidatesByKey: Object.freeze({}),
+        observedThrough: Object.freeze({
+          number: SOURCE.number,
+          hash: SOURCE.hash,
+        }),
         sourceReceipts: Object.freeze([Object.freeze({
           ...partialReceipt,
           completedChunks: Object.freeze([Object.freeze({
@@ -490,14 +515,9 @@ async function main(): Promise<void> {
         })]),
       }),
       /do not cover exact range/,
-      "a partial source chunk write cannot grant cutoff coverage",
+      "a partial source query cannot create an in-progress run",
     );
-    const withReceipts = await store.casSetRunSourceReceipts({
-      expectedRevision: withMemo.revision,
-      runId: "run-1",
-      sourceReceipts: sourceReceipts(),
-    });
-    const currentRevision = withReceipts.revision;
+    const currentRevision = withMemo.revision;
 
     // Ready commit with a stale revision fails closed.
     await assert.rejects(
@@ -571,6 +591,240 @@ async function main(): Promise<void> {
       /"retryableAttemptsByCandidateKey":\{\}/,
     );
 
+    // Deployed pre-snapshot memos upgrade atomically. The old fingerprint is
+    // verified first; the new fingerprint includes candidateSnapshot.
+    const memoMigrationPath = join(dir, "legacy-memo.json");
+    const currentMemo = memoFor("migrate");
+    const {
+      candidateSnapshot: _candidateSnapshot,
+      memoFingerprint: _memoFingerprint,
+      ...legacyMemoFields
+    } = currentMemo;
+    const legacyMemoUnsigned = Object.freeze({
+      ...legacyMemoFields,
+      memoFingerprint: "",
+    }) as LegacyDurableVerifiedMemo;
+    const legacyMemo = Object.freeze({
+      ...legacyMemoUnsigned,
+      memoFingerprint: durableVerifiedMemoFingerprint(legacyMemoUnsigned),
+    });
+    const memoMigrationProjection = Object.freeze({
+      revision: 1,
+      verifiedMemos: Object.freeze({ migrate: legacyMemo }),
+      inProgressRun: Object.freeze({
+        runId: "memo-migration-run",
+        cutoff: SOURCE,
+        fromBlock: SOURCE.number - 14_399,
+        universeHash: "memo-migration-universe",
+        candidateSetHash: "memo-migration-candidates",
+        candidateCount: 1,
+        candidatesByKey: Object.freeze({
+          migrate: Object.freeze({ id: "migrate" }),
+        }),
+        observedThrough: Object.freeze({
+          number: SOURCE.number,
+          hash: SOURCE.hash,
+        }),
+        sourceReceipts: sourceReceipts(),
+        appliedThrough: null,
+        outcomesByCandidateKey: Object.freeze({
+          migrate: Object.freeze({
+            status: "verified" as const,
+            familyCandidateKey: "migrate",
+            familyInstanceKey: legacyMemo.familyInstanceKey,
+            memoFingerprint: legacyMemo.memoFingerprint,
+          }),
+        }),
+      }),
+      retryableAttemptsByCandidateKey: Object.freeze({}),
+      readyGeneration: null,
+    });
+    await writeFile(memoMigrationPath, JSON.stringify({
+      ...memoMigrationProjection,
+      checkpointFingerprint: createHash("sha256")
+        .update(canonicalJson(memoMigrationProjection))
+        .digest("hex"),
+    }) + "\n");
+    const memoMigrationStore = new UniverseRebuildCheckpointStore({
+      path: memoMigrationPath,
+    });
+    const upgradedUnsigned = Object.freeze({
+      ...legacyMemo,
+      candidateSnapshot: Object.freeze({ id: "migrate" }),
+      memoFingerprint: "",
+    }) as DurableVerifiedMemo;
+    const upgradedMemo = Object.freeze({
+      ...upgradedUnsigned,
+      memoFingerprint: durableVerifiedMemoFingerprint(upgradedUnsigned),
+    });
+    const upgradedEnvelope = await memoMigrationStore
+      .casUpgradeLegacyVerifiedMemos({
+        expectedRevision: 1,
+        upgrades: Object.freeze({ migrate: upgradedMemo }),
+      });
+    assert.deepEqual(
+      upgradedEnvelope.verifiedMemos.migrate?.candidateSnapshot,
+      { id: "migrate" },
+    );
+    assert.notEqual(
+      upgradedEnvelope.verifiedMemos.migrate?.memoFingerprint,
+      legacyMemo.memoFingerprint,
+    );
+    assert.equal(
+      upgradedEnvelope.inProgressRun?.outcomesByCandidateKey.migrate
+        ?.status === "verified"
+        ? upgradedEnvelope.inProgressRun.outcomesByCandidateKey.migrate
+          .memoFingerprint
+        : null,
+      upgradedMemo.memoFingerprint,
+      "memo and incumbent verified outcome fingerprints upgrade in one CAS",
+    );
+
+    const preReceiptPath = join(dir, "pre-receipt-run.json");
+    const preReceiptProjection = Object.freeze({
+      revision: 1,
+      verifiedMemos: Object.freeze({}),
+      inProgressRun: Object.freeze({
+        runId: "old-run",
+        cutoff: SOURCE,
+        fromBlock: SOURCE.number - 14_399,
+        universeHash: "old",
+        candidateSetHash: "old",
+        candidateCount: 0,
+        candidatesByKey: Object.freeze({}),
+        observedThrough: Object.freeze({
+          number: SOURCE.number,
+          hash: SOURCE.hash,
+        }),
+        appliedThrough: null,
+        outcomesByCandidateKey: Object.freeze({}),
+      }),
+      retryableAttemptsByCandidateKey: Object.freeze({}),
+      readyGeneration: null,
+    });
+    await writeFile(preReceiptPath, JSON.stringify({
+      ...preReceiptProjection,
+      checkpointFingerprint: createHash("sha256")
+        .update(canonicalJson(preReceiptProjection))
+        .digest("hex"),
+    }) + "\n");
+    await assert.rejects(
+      () => new UniverseRebuildCheckpointStore({ path: preReceiptPath }).load(),
+      /in-progress run source receipts are absent/,
+      "pre-receipt fixed runs are no longer migrated or trusted",
+    );
+
+    // Every path that makes a candidate terminal revokes its retained memo in
+    // the same CAS, including the independent retry queue.
+    const terminalStore = new UniverseRebuildCheckpointStore({
+      path: join(dir, "terminal-memo.json"),
+    });
+    await terminalStore.beginOrResumeRun({
+      expectedRevision: 0,
+      runId: "terminal-run",
+      cutoff: SOURCE,
+      fromBlock: SOURCE.number - 14_399,
+      universeHash: "terminal",
+      candidateSetHash: "terminal",
+      candidateCount: 1,
+      candidatesByKey: Object.freeze({ t: Object.freeze({ id: "t" }) }),
+      observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+      sourceReceipts: sourceReceipts(),
+    });
+    await terminalStore.casMergeAttestationWrites(
+      "terminal-run",
+      Object.freeze([Object.freeze({
+        outcome: Object.freeze({
+          status: "verified",
+          familyCandidateKey: "t",
+          familyInstanceKey: "inst-t",
+          memoFingerprint: "fp-t",
+        }),
+        memo: memoFor("t"),
+      })]),
+    );
+    const batchTerminal = await terminalStore.casMergeRunOutcomes(
+      "terminal-run",
+      Object.freeze([terminalFor("t")]),
+    );
+    assert.equal(batchTerminal.verifiedMemos.t, undefined);
+
+    const runProbeStore = new UniverseRebuildCheckpointStore({
+      path: join(dir, "run-probe-terminal-memo.json"),
+    });
+    await runProbeStore.beginOrResumeRun({
+      expectedRevision: 0,
+      runId: "probe-run",
+      cutoff: SOURCE,
+      fromBlock: SOURCE.number - 14_399,
+      universeHash: "probe",
+      candidateSetHash: "probe",
+      candidateCount: 1,
+      candidatesByKey: Object.freeze({ r: Object.freeze({ id: "r" }) }),
+      observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+      sourceReceipts: sourceReceipts(),
+    });
+    await runProbeStore.casUpsertMemo(memoFor("r"));
+    await runProbeStore.casMergeRunOutcomes("probe-run", Object.freeze([
+      Object.freeze({
+        status: "retryable",
+        familyCandidateKey: "r",
+        familyId: "univ2",
+        candidateSnapshot: Object.freeze({ id: "r" }),
+        stage: "identity",
+        failureCode: "rpc",
+        reasonCode: "rpc",
+        attemptCount: 1,
+        lastAttemptAt: "2026-08-24T00:00:00.000Z",
+      }),
+    ]));
+    const runProbeTerminal = await runProbeStore.casReplaceRunOutcome({
+      runId: "probe-run",
+      familyCandidateKey: "r",
+      expectedAttemptCount: 1,
+      nextOutcome: terminalFor("r"),
+    });
+    assert.equal(runProbeTerminal.verifiedMemos.r, undefined);
+
+    const queuedPath = join(dir, "queued-terminal-memo.json");
+    const queuedProjection = Object.freeze({
+      revision: 1,
+      verifiedMemos: Object.freeze({ q: memoFor("q") }),
+      inProgressRun: null,
+      retryableAttemptsByCandidateKey: Object.freeze({
+        q: Object.freeze({
+          status: "retryable" as const,
+          familyCandidateKey: "q",
+          familyId: "univ2",
+          candidateSnapshot: Object.freeze({ id: "q" }),
+          stage: "identity" as const,
+          failureCode: "rpc" as const,
+          reasonCode: "rpc",
+          attemptCount: 1,
+          lastAttemptAt: "2026-08-24T00:00:00.000Z",
+          runId: "queued-run",
+          cutoff: SOURCE,
+        }),
+      }),
+      readyGeneration: null,
+    });
+    await writeFile(queuedPath, JSON.stringify({
+      ...queuedProjection,
+      checkpointFingerprint: createHash("sha256")
+        .update(canonicalJson(queuedProjection))
+        .digest("hex"),
+    }) + "\n");
+    const queuedTerminal = await new UniverseRebuildCheckpointStore({
+      path: queuedPath,
+    }).casReplaceQueuedRetryable({
+      runId: "queued-run",
+      familyCandidateKey: "q",
+      expectedAttemptCount: 1,
+      nextOutcome: terminalFor("q"),
+    });
+    assert.equal(queuedTerminal.verifiedMemos.q, undefined);
+    assert.equal(queuedTerminal.retryableAttemptsByCandidateKey.q, undefined);
+
     // Corruption fails closed.
     const corruptPath = join(dir, "corrupt.json");
     const corruptStore = new UniverseRebuildCheckpointStore({ path: corruptPath });
@@ -611,6 +865,7 @@ async function main(): Promise<void> {
         number: SOURCE.number,
         hash: SOURCE.hash,
       }),
+      sourceReceipts: sourceReceipts(),
     });
     const writer = new AttestationCheckpointWriter({
       store: writerStore,
