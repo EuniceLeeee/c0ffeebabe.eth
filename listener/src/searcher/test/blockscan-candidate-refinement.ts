@@ -10,7 +10,6 @@ import {
   type BlockScanProbeDiagnostic,
   type BlockScanRefinementOptions,
 } from "../detector/blockscan-candidate-refinement.js";
-import { selectExpansionEdges } from "../detector/blockscan-scanner-core.js";
 import {
   BlockScanFamilyAttributedError,
   BlockScanFamilyStageBudget,
@@ -276,7 +275,6 @@ familyFailureCircuitRemainsAttributionOnly();
 expiredPathSearchUnwindsAllFrames();
 instanceAttributionCannotEscapeCurrentRoute();
 singletonManagerInstancesDoNotCollide();
-badFamilyHighScoreFloodCannotConsumeExpansionCap();
 await failingFamilyCannotConsumeRefinementCap();
 await differentInstanceFailuresDoNotOpenFamilyCircuit();
 await sameInstanceCircuitDoesNotBlockOppositeDirection();
@@ -702,35 +700,6 @@ async function sameInstanceCircuitDoesNotBlockOppositeDirection(): Promise<void>
     result.opportunities.map(({ cycleId }) => cycleId),
     ["reverse-target"],
     "a directed-edge circuit must not suppress the same pool in the opposite direction",
-  );
-}
-
-function badFamilyHighScoreFloodCannotConsumeExpansionCap(): void {
-  const badEdges = Array.from({ length: 40 }, (_, index) =>
-    familyEdge("bad-family", 100 + index, {
-      score: 10_000 - index,
-    })
-  );
-  const healthyEdge = familyEdge("healthy-family", 200, {
-    score: 1,
-  });
-  const selected = selectExpansionEdges({
-    edges: [...badEdges, healthyEdge],
-    profitToken: TOKEN_18,
-    maxPoolsPerToken: 20,
-    pinnedOutsideBudget: false,
-    preferDirectClosure: true,
-  });
-  assert.equal(selected.length, 20);
-  assert(!selected.includes(healthyEdge), "central expansion keeps rank order without a family quota");
-  const paths = buildTokenPaths(selected, TOKEN_6, TOKEN_18, {
-    maxHops: 1,
-    maxPoolsPerToken: Infinity,
-    maxPaths: 100,
-  });
-  assert(
-    !paths.some(({ edges }) => edges.some((edge) => edge === healthyEdge)),
-    "the lower-ranked edge is not promoted by a family quota",
   );
 }
 

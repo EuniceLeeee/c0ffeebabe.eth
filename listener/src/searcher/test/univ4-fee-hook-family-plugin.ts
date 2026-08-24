@@ -6,6 +6,8 @@ import type { CanonicalSource } from "../venues/adapter-request-program.js";
 import { univ4FeeHookStrictFamilyPlugin } from "../venues/swaps/univ4-fee-hook-family-plugin.js";
 import { UNIV4_POOL_MANAGER_INTERFACE } from "../venues/swaps/univ4-abi.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
+import { poolKeyFingerprint } from
+  "../venues/swaps/univ4-family/codec.js";
 import {
   UNIV4_FEE_HOOK_ADDRESS,
   UNIV4_FEE_HOOK_CODE_HASH,
@@ -80,11 +82,10 @@ const verified = identityVariant.decide({
   },
 });
 assert.equal(verified.status, "verified");
-if (verified.status === "verified") {
-  assert.equal(verified.identity.facts.poolKey.hooks.toLowerCase(), UNIV4_FEE_HOOK_ADDRESS.toLowerCase());
-  assert.equal(verified.identity.facts.hookCodeHash.toLowerCase(), UNIV4_FEE_HOOK_CODE_HASH.toLowerCase());
-  assert.equal(verified.identity.familyId, "univ4-fee-hook");
-}
+if (verified.status !== "verified") throw new Error("fee-hook identity fixture");
+assert.equal(verified.identity.facts.poolKey.hooks.toLowerCase(), UNIV4_FEE_HOOK_ADDRESS.toLowerCase());
+assert.equal(verified.identity.facts.hookCodeHash.toLowerCase(), UNIV4_FEE_HOOK_CODE_HASH.toLowerCase());
+assert.equal(verified.identity.familyId, "univ4-fee-hook");
 assert.deepEqual(
   identityVariant.decide({
     candidate,
@@ -106,4 +107,55 @@ assert(summary.ownedActionAdapterIds.includes("univ4-fee-hook-unlock"));
 assert(summary.ownedActionAdapterIds.includes("univ4-fee-hook-swap"));
 assert.equal(univ4FeeHookStrictFamilyPlugin.actionAdapters.length, 6);
 
+const draft = univ4FeeHookStrictFamilyPlugin.instance.compileDraft(
+  verified.identity,
+);
+const descriptor = univ4FeeHookStrictFamilyPlugin.instance.finalizeDescriptor({
+  identity: verified.identity,
+  draft,
+  sharedBindings: [],
+});
+const route = univ4FeeHookStrictFamilyPlugin.routes.project({ descriptor })[0];
+const amountIn = 1_000_000n;
+const amountOut = 1_001_000n;
+const fragment = univ4FeeHookStrictFamilyPlugin.execution.buildFragment({
+  descriptor,
+  route,
+  amountIn,
+  quotedAmountOut: amountOut,
+  minAmountOut: amountOut,
+  exactEvidence: Object.freeze({
+    kind: "univ4-fee-hook-quoter" as const,
+    source: SOURCE,
+    poolId: descriptor.poolId,
+    poolKeyFingerprint: poolKeyFingerprint(descriptor.poolKey),
+    quoter: descriptor.managerBinding.quoter,
+    tokenIn: route.tokenIn,
+    tokenOut: route.tokenOut,
+    amountIn,
+    amountOut,
+    gasEstimate: 80_000n,
+    hookData: "0x" as const,
+  }),
+  executor: "0x3000000000000000000000000000000000000003",
+  runtimeEvidence: [],
+});
+assertPlanTokensAreCanonical(fragment.nodes);
+
 console.log("univ4 fee-hook strict Family plugin tests passed");
+
+function assertPlanTokensAreCanonical(
+  nodes: readonly { readonly tokenIn: string; readonly tokenOut: string; readonly children: readonly unknown[] }[],
+): void {
+  const pending = [...nodes] as Array<{
+    readonly tokenIn: string;
+    readonly tokenOut: string;
+    readonly children: readonly unknown[];
+  }>;
+  while (pending.length > 0) {
+    const node = pending.pop()!;
+    assert.match(node.tokenIn, /^0x[0-9a-fA-F]{40}$/);
+    assert.match(node.tokenOut, /^0x[0-9a-fA-F]{40}$/);
+    pending.push(...node.children as typeof pending);
+  }
+}

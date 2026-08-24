@@ -69,7 +69,6 @@ const cfg: BlockScanConfig = {
   maxCandidates: 20,
   budgetMs: 10_000,
   pricedTokens: new Map([[ADDR.WETH.toLowerCase(), { maxBorrow: 10_000n * unit }]]),
-  pinnedOutsideBudget: true,
 };
 const mids = buildMids();
 const runtime = buildRuntime(edges, mids);

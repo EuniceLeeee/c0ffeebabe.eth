@@ -652,7 +652,6 @@ function scannerConfig() {
     pricedTokens: new Map([[tokenA.toLowerCase(), {
       maxBorrow: 1_000n * unit,
     }]]),
-    pinnedOutsideBudget: true,
   };
 }
 

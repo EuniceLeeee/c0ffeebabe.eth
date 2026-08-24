@@ -110,7 +110,9 @@ export const univ4Execution = {
           adapterId: "univ4-sync",
           target: input.descriptor.managerBinding.manager,
           tokenIn: input.route.realTokenIn,
-          tokenOut: "",
+          // sync has no transfer output, but the common plan schema requires
+          // a canonical token shell. The encoder reads params.currency.
+          tokenOut: input.route.tokenOut,
           amount: 0n,
           params: { currency: input.route.realTokenIn },
           children: [],
@@ -130,8 +132,10 @@ export const univ4Execution = {
         {
           adapterId: "univ4-settle",
           target: input.descriptor.managerBinding.manager,
-          tokenIn: "",
-          tokenOut: "",
+          // settle consumes the route input balance already transferred to
+          // the manager; the encoder does not read these shell fields.
+          tokenIn: input.route.tokenIn,
+          tokenOut: input.route.tokenOut,
           amount: 0n,
           params: {},
           children: [],

@@ -812,7 +812,7 @@ async function main(): Promise<void> {
   );
   const blockScanCfg: BlockScanCoreConfig | undefined = enableBlockScan
     ? {
-        maxHops: Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "4"),
+        maxHops: Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "6"),
         minSpreadBps: blockScanMinSpreadBps,
         /*
          * No hard performance gate at 50/100bps: enumeration floor and exact

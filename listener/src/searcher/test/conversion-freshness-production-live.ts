@@ -278,7 +278,6 @@ function componentScannerConfig(
     maxCandidates: 200,
     budgetMs: 10_000,
     pricedTokens: tokens,
-    pinnedOutsideBudget: true,
   };
 }
 

@@ -307,6 +307,7 @@ const fragment = univ4StrictFamilyPlugin.execution.buildFragment({
   runtimeEvidence: [],
 });
 assert.equal(fragment.nodes[0].adapterId, "univ4-unlock");
+assertPlanTokensAreCanonical(fragment.nodes);
 assert.throws(
   () => univ4StrictFamilyPlugin.execution.buildFragment({
     descriptor,
@@ -372,6 +373,22 @@ const summary = definedFamilyPluginContractSummary(univ4StrictFamilyPlugin);
 assert.equal(summary.familyId, "univ4");
 assert.equal(new Set(summary.ownedActionAdapterIds).size, 6);
 console.log("univ4 strict Family plugin tests passed");
+
+function assertPlanTokensAreCanonical(
+  nodes: readonly { readonly tokenIn: string; readonly tokenOut: string; readonly children: readonly unknown[] }[],
+): void {
+  const pending = [...nodes] as Array<{
+    readonly tokenIn: string;
+    readonly tokenOut: string;
+    readonly children: readonly unknown[];
+  }>;
+  while (pending.length > 0) {
+    const node = pending.pop()!;
+    assert.match(node.tokenIn, /^0x[0-9a-fA-F]{40}$/);
+    assert.match(node.tokenOut, /^0x[0-9a-fA-F]{40}$/);
+    pending.push(...node.children as typeof pending);
+  }
+}
 
 function success(
   id: string,

@@ -14,6 +14,7 @@ import {
 import {
   diagnoseResolvedRingScore,
   estimateResolvedRingSpreadBps,
+  scanBlockStateFromResolvedMids,
   type ResolvedBlockScanMid,
 } from "../detector/blockscan-scanner-core.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
@@ -528,6 +529,141 @@ const tests: TestCase[] = [
       assert(actualPools.join(",") === ringPools.sort().join(","), "3-hop ring pools");
       assert(ring.searchSeed.searchCenter > 8n, "3-hop ring search center is usable");
       console.log("[blockscan-scanner] 3-hop cycle found: PASS");
+    },
+  },
+  {
+    name: "price search recalls a six-hop ring behind an outgoing-edge flood",
+    run: () => {
+      const intermediate = Array.from(
+        { length: 5 },
+        (_, index) => tokenAt(110 + index),
+      );
+      const tokens = [WETH, ...intermediate, WETH];
+      const ring = Array.from({ length: 6 }, (_, index) => ({
+        ...swap(
+          tokens[index],
+          tokens[index + 1],
+          poolAt(210 + index, 0),
+        ),
+        score: 0,
+      }));
+      const decoys = Array.from({ length: 3_000 }, (_, index) => ({
+        ...swap(
+          WETH,
+          tokenAt(1_000 + index),
+          poolAt(1_000 + index, 0),
+        ),
+        score: 10_000 - index,
+      }));
+      const midEntries: Array<[
+        edge: TokenEdge,
+        mid: number,
+        depth?: bigint | null,
+      ]> = [
+        ...decoys.map((edge) => [edge, 1] as [TokenEdge, number]),
+        ...ring.map((edge, index) => [
+          edge,
+          index === ring.length - 1 ? 1.02 : 1,
+        ] as [TokenEdge, number]),
+      ];
+      const mids = resolvedMids(midEntries);
+      const scan = (touched: Set<string> | null) =>
+        scanBlockStateFromResolvedMids({
+          edges: [...decoys, ...ring],
+          sourceBlock: BLOCK,
+          swapTouched: touched,
+          cfg: cfg({ maxHops: 6 }),
+          mids,
+        });
+      const hasRing = (outcome: ReturnType<typeof scan>): boolean =>
+        outcome.opportunities.some((opportunity) =>
+          opportunity.seedEdges.length === ring.length &&
+          ring.every((edge) =>
+            opportunity.seedEdges.some(
+              (candidate) => candidate.target.toLowerCase() ===
+                edge.target.toLowerCase(),
+            )
+          )
+        );
+
+      const standing = scan(null);
+      assert(standing.outcome === "ran", "price search should finish its bounded work");
+      assert(
+        hasRing(standing),
+        "a profitable route must not depend on its activity rank among WETH exits",
+      );
+
+      const observed = scan(new Set([ring[3].target.toLowerCase()]));
+      assert(
+        hasRing(observed),
+        "an observed edge must seed causal search before any global budget",
+      );
+      console.log(
+        "[blockscan-scanner] price-ranked six-hop flood recall: PASS",
+      );
+    },
+  },
+  {
+    name: "executable capacity outranks high-spread dust-ring flood",
+    run: () => {
+      const targetIntermediate = Array.from(
+        { length: 5 },
+        (_, index) => tokenAt(310 + index),
+      );
+      const targetTokens = [WETH, ...targetIntermediate, WETH];
+      const targetRing = Array.from({ length: 6 }, (_, index) => ({
+        ...swap(
+          targetTokens[index],
+          targetTokens[index + 1],
+          poolAt(410 + index, 0),
+        ),
+        score: 0,
+      }));
+      const dustRings = Array.from({ length: 2_500 }, (_, index) => {
+        const tokenA = tokenAt(5_000 + index * 2);
+        const tokenB = tokenAt(5_001 + index * 2);
+        return [
+          swap(WETH, tokenA, poolAt(5_000 + index * 3, 0)),
+          swap(tokenA, tokenB, poolAt(5_001 + index * 3, 0)),
+          swap(tokenB, WETH, poolAt(5_002 + index * 3, 0)),
+        ];
+      });
+      const dustEdges = dustRings.flat();
+      const mids = resolvedMids([
+        ...dustRings.flatMap((ring) => ring.map((edge, index) => [
+          edge,
+          index === ring.length - 1 ? 1.05 : 1,
+          100n,
+        ] as [TokenEdge, number, bigint])),
+        ...targetRing.map((edge, index) => [
+          edge,
+          index === targetRing.length - 1 ? 1.02 : 1,
+          1_000_000n * UNIT,
+        ] as [TokenEdge, number, bigint]),
+      ]);
+      const outcome = scanBlockStateFromResolvedMids({
+        edges: [...dustEdges, ...targetRing],
+        sourceBlock: BLOCK,
+        swapTouched: null,
+        cfg: cfg({ maxHops: 6, budgetMs: 5_000 }),
+        mids,
+      });
+      const targetPools = new Set(
+        targetRing.map((edge) => edge.target.toLowerCase()),
+      );
+      assert(outcome.outcome === "ran", "capacity-ranked search should finish");
+      assert(
+        outcome.opportunities.some((opportunity) =>
+          opportunity.seedEdges.length === targetRing.length &&
+          opportunity.seedEdges.every((edge) =>
+            targetPools.has(edge.target.toLowerCase())
+          )
+        ),
+        "executable route must survive more than 2,000 higher-spread dust rings",
+      );
+      console.log(
+        "[blockscan-scanner] capacity-ranked dust flood recall: PASS",
+      );
     },
   },
   {

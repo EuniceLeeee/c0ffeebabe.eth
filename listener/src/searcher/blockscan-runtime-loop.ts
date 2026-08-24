@@ -2267,7 +2267,6 @@ export class BlockScanRuntimeLoop {
           cfg: {
             ...blockScanCfg,
             maxCandidates: this.deps.refineCandidates,
-            pinnedOutsideBudget: true,
           },
           routeEligible,
           edgeEligible,
@@ -2360,7 +2359,6 @@ export class BlockScanRuntimeLoop {
           cfg: {
             ...blockScanCfg,
             maxCandidates: this.deps.refineCandidates,
-            pinnedOutsideBudget: true,
           },
           routeEligible,
           edgeEligible,

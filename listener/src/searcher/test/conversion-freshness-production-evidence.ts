@@ -372,7 +372,6 @@ export function conversionProductionScannerConfigSha256(
     minSpreadBps: config.minSpreadBps,
     maxCandidates: config.maxCandidates,
     budgetMs: config.budgetMs,
-    pinnedOutsideBudget: config.pinnedOutsideBudget === true,
     pricedTokens: [...config.pricedTokens.entries()]
       .map(([token, value]) => ({
         token: token.toLowerCase(),

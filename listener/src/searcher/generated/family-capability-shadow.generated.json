@@ -7043,7 +7043,7 @@
         "familyId": "univ4",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "4d78fc9b3dc7cd21dad24e14b929dee5f30e6106a9dd1582398e111c5a9210fc",
+        "contentHash": "b4c7446785c59b0b6b48787e692f3810773e210551d6b6a4d78e4a84a12b4a60",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -7412,7 +7412,7 @@
         "familyId": "univ4-fee-hook",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "ebb9fb15bda12dda481b7412806e26f3c451c75af27c6efdfc54f86e557866da",
+        "contentHash": "38330492f53771325b5620c7c9afc46f4b1da6cc93c25a9cbda2d998766e1c7e",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -7648,5 +7648,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "0871ed0cc9fcedfbe4d1b0bc75a75ee3160a41b0bdb4566d195c5ad4ad83e1f3"
+  "artifactHash": "0e605178cc219517c934b41bb1333fecfa67f58869135e4964c406fe47807b64"
 }
