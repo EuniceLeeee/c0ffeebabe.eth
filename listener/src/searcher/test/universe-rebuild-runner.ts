@@ -886,6 +886,72 @@ async function main(): Promise<void> {
       null,
       "the duplicate is accounted before the completed run clears",
     );
+    // J: retained memos also pass through the shared instance gate. A new run
+    // starts with no outcomes, reuses both memos, and still publishes only one
+    // instance without re-running either lifecycle.
+    const retainedDuplicateDir = await mkdtemp(
+      join(tmpdir(), "universe-rebuild-retained-duplicate-"),
+    );
+    const retainedDuplicate = makeFixture(retainedDuplicateDir, {
+      scanSwapWindow: async (scanInput) => Object.freeze({
+        observations: Object.freeze([
+          Object.freeze({ id: "retained-x", block: SOURCE.number }),
+          Object.freeze({ id: "retained-y", block: SOURCE.number }),
+        ]),
+        sourceReceipts: sourceReceipts(scanInput.fromBlock),
+      }),
+    });
+    const retainedDuplicateMemo = (id: string): DurableVerifiedMemo =>
+      sealFixtureMemo({
+        familyCandidateKey: "cand:" + id,
+        familyInstanceKey: "inst:retained-shared",
+        familyId: "univ2",
+        candidateKey: "cand:" + id,
+        instanceKey: "inst:retained-shared",
+        candidateFingerprint: "cf:" + id,
+        familyDefinitionHash: "fdh",
+        validity: Object.freeze({
+          policy: "immutable-code",
+          authorityFingerprint: "auth",
+          proofSource: Object.freeze({
+            number: SOURCE.number,
+            hash: SOURCE.hash,
+          }),
+        }),
+        verifiedIdentity: Object.freeze({ kind: "identity" }),
+        compiledDescriptor: Object.freeze({ kind: "descriptor" }),
+        staticProjection: Object.freeze({ kind: "projection" }),
+        evidenceFingerprint: "ef:" + id,
+        candidateSnapshot: Object.freeze({ id }),
+      });
+    await retainedDuplicate.store.casUpsertMemo(
+      retainedDuplicateMemo("retained-x"),
+    );
+    await retainedDuplicate.store.casUpsertMemo(
+      retainedDuplicateMemo("retained-y"),
+    );
+    const retainedDuplicateReady = await rebuildUniverse(
+      retainedDuplicate.input,
+    );
+    assert.deepEqual(retainedDuplicateReady.candidateAccounting, {
+      total: 2,
+      verified: 1,
+      terminalRejected: 1,
+      retryable: 0,
+      remainingUnaccounted: 0,
+    });
+    assert.equal(retainedDuplicateReady.activeInstanceKeys.length, 1);
+    assert.equal(retainedDuplicate.attestCalls.size, 0);
+    const retainedDuplicateCheckpoint = await retainedDuplicate.store.load();
+    assert.equal(retainedDuplicateCheckpoint?.inProgressRun, null);
+    assert.equal(
+      Object.keys(retainedDuplicateCheckpoint?.verifiedMemos ?? {}).filter(
+        (key) => key === "cand:retained-x" || key === "cand:retained-y",
+      ).length,
+      1,
+      "the duplicate retained memo is deleted by the terminal outcome",
+    );
+    await rm(retainedDuplicateDir, { recursive: true, force: true });
     // E: discovery is always the strict two-day range, while verified memo
     // snapshots retain pools indefinitely across rolling windows.
     const retentionDir = await mkdtemp(

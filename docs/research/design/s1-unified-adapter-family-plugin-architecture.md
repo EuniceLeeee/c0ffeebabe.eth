@@ -560,6 +560,23 @@ tail is ignored before the next compaction. The universe/cutover targeted suite 
 build, cleanup receipt and diff check pass; exact-SHA live resume evidence remains required before this
 storage fix is called deployed.
 
+The first exact-SHA resume at `2c351197` then proved the storage path at production scale: it replayed the
+existing base plus journal without rescanning, accounted all 23,990 candidates and left the 538,737,677-byte
+base untouched while the journal grew by incremental records. Ready promotion nevertheless failed closed
+because two retained candidate keys resolved to one `familyInstanceKey`; the completed partition contained
+22,555 verified outcomes but only 22,554 unique verified instances. The one duplicate happened to be in
+`curve-underlying`, but the defect was central and protocol-independent: the reusable-memo fast path wrote a
+verified outcome without entering the same instance-uniqueness gate used by fresh attestations.
+
+All verified paths now share one serialized `familyInstanceKey` claim. The first candidate remains verified;
+a later alias becomes terminal `duplicate-instance`, and that terminal outcome removes only its duplicate
+memo in the same durable write. The existing resume repair remains as crash/old-checkpoint defense, but a new
+run no longer needs to fail once before repairing retained aliases. A regression starts with two valid
+retained memos, distinct candidate keys, one instance key and no run outcomes; it proves zero lifecycle calls,
+one verified outcome, one terminal duplicate, one active instance, `remainingUnaccounted=0`, and successful
+Ready promotion. No Family ID, protocol, address, selector or topic branch was added. Exact-SHA checkpoint
+recovery is still required before this follow-up is called deployed.
+
 ### 5.1 Full evidence identity
 
 Log dedupe preserves block number, block hash, transaction hash, log index, emitter address, topic identity,

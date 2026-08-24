@@ -516,6 +516,33 @@ export async function rebuildUniverse(
     instanceGateTail = next.then(() => undefined, () => undefined);
     return next;
   };
+  const claimInstanceKey = async (
+    familyInstanceKey: string,
+    candidateKey: string,
+  ): Promise<string | undefined> => await instanceGate(async () => {
+    const first = seenInstanceKeys.get(familyInstanceKey);
+    if (first !== undefined && first !== candidateKey) return first;
+    seenInstanceKeys.set(familyInstanceKey, candidateKey);
+    return undefined;
+  });
+  const recordDuplicateInstance = (
+    candidateKey: string,
+    memo: DurableVerifiedMemo,
+    duplicateOf: string,
+  ): void => writer.record(Object.freeze({
+    status: "terminal-rejected",
+    familyCandidateKey: candidateKey,
+    reasonCode: "duplicate-instance",
+    familyDefinitionHash: memo.familyDefinitionHash,
+    requestFingerprint: "duplicate-instance:" + duplicateOf,
+    trustedResultsFingerprint: "duplicate-instance:" + duplicateOf,
+    authorityFingerprint: memo.validity.authorityFingerprint,
+    candidateFingerprint: memo.candidateFingerprint,
+    cutoff: Object.freeze({
+      number: cutoff.number,
+      hash: cutoff.hash,
+    }),
+  }));
   const pendingCandidates = candidates.filter((candidate) => {
     const candidateKey = input.familyCandidateKey(candidate);
     const oldOutcome = run.outcomesByCandidateKey[candidateKey];
@@ -565,6 +592,14 @@ export async function rebuildUniverse(
       );
     }
     if (reusableMemo !== null) {
+      const duplicateOf = await claimInstanceKey(
+        reusableMemo.familyInstanceKey,
+        candidateKey,
+      );
+      if (duplicateOf !== undefined) {
+        recordDuplicateInstance(candidateKey, reusableMemo, duplicateOf);
+        return;
+      }
       if (
         oldOutcome?.status === "verified" &&
         oldOutcome.familyInstanceKey === reusableMemo.familyInstanceKey &&
@@ -598,30 +633,12 @@ export async function rebuildUniverse(
           proofSource: cutoff,
           familyCandidateKey: candidateKey,
         });
-        let duplicateOf: string | undefined;
-        await instanceGate(async () => {
-          const first = seenInstanceKeys.get(memo.familyInstanceKey);
-          if (first !== undefined && first !== candidateKey) {
-            duplicateOf = first;
-            return;
-          }
-          seenInstanceKeys.set(memo.familyInstanceKey, candidateKey);
-        });
+        const duplicateOf = await claimInstanceKey(
+          memo.familyInstanceKey,
+          candidateKey,
+        );
         if (duplicateOf !== undefined) {
-          writer.record(Object.freeze({
-            status: "terminal-rejected",
-            familyCandidateKey: candidateKey,
-            reasonCode: "duplicate-instance",
-            familyDefinitionHash: memo.familyDefinitionHash,
-            requestFingerprint: "duplicate-instance:" + duplicateOf,
-            trustedResultsFingerprint: "duplicate-instance:" + duplicateOf,
-            authorityFingerprint: memo.validity.authorityFingerprint,
-            candidateFingerprint: memo.candidateFingerprint,
-            cutoff: Object.freeze({
-              number: cutoff.number,
-              hash: cutoff.hash,
-            }),
-          }));
+          recordDuplicateInstance(candidateKey, memo, duplicateOf);
           return;
         }
         writer.record(Object.freeze({

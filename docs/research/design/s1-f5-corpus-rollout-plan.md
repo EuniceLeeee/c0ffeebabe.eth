@@ -1193,3 +1193,24 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   exact SHA 必须在不删除/重置现有 checkpoint 的前提下恢复同一 23,990-candidate fixed run，并
   证明 `remainingUnaccounted=0`、`inProgressRun=null`、新 Ready generation、22,011/22,011
   snapshots 保持、retryable queue 独立及节点/capture/runtime SHA 一致。
+
+### Permanent-retention 第二个 live blocker：retained alias 重复实例（2026-08-25）
+
+- `2c351197` 已在节点 exact-SHA 恢复同一 fixed run，未重扫 discovery。base 保持
+  538,737,677 bytes，journal 增量完成全部 23,990 candidates；总分区为 verified 22,555 / terminal
+  1,377 / retryable 58 / remaining 0。这里的 58 包含 base 原有 38 条和 journal 新增 20 条，均是
+  accounted，不能再把 journal-only 的 20 误写成整个 run 的 retryable 总数。
+- Ready promotion 随后 fail closed：22,555 verified outcomes 只有 22,554 个唯一
+  `familyInstanceKey`。诊断精确找到 1 个重复：两个不同 candidate key 对应同一个
+  `curve-underlying` instance。族名只是数据样本，根因是中央 reusable-memo fast path 绕过了 fresh
+  attestation 已使用的 instance uniqueness gate；不是 Curve 特判缺失。
+- 修复让 reusable memo 与 fresh attestation 共用同一个串行 instance claim：第一条保持 verified，
+  后续 alias 写 `terminal-rejected: duplicate-instance`，并由既有原子 outcome/memo 规则删除重复
+  memo。resume repair 继续保留，用于修复已经写入的旧 checkpoint；新 run 不再先失败一次。
+- 新回归从“两个 retained memos、两个 candidate key、同一 instance、run 无 outcome”开始，证明
+  lifecycle 调用为 0、verified=1、terminal=1、active instance=1、`inProgressRun=null`。完整 S1
+  regression sweep 17 项（含 build）和 `migration-cleanup-receipt` PASS；shared-surface AST 门仍只报
+  分支既有 generated JSON / infra selector / legacy import-closure 基线，本 diff 未新增中央协议判断。
+- 当前 follow-up 状态为 **implemented, exact-SHA deployment pending**。部署不得删除或替换现有
+  checkpoint/journal；必须直接 replay 并证明 duplicate repair 只追加必要 delta，随后 Ready 原子压实、
+  `inProgressRun=null`、retryable 独立入队、source receipts 仍为 `25811511..25825910`。
