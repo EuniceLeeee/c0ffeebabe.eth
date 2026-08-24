@@ -250,7 +250,8 @@
     "searcher:strict-identity-attestation": "node --import tsx src/searcher/test/strict-identity-attestation.ts",
     "searcher:strict-universe-source-fingerprints": "node --import tsx src/searcher/test/strict-universe-source-fingerprints.ts",
     "searcher:migration-cleanup-receipt": "node --import tsx src/searcher/test/migration-cleanup-receipt.ts",
-    "searcher:production-family-reverse-binding": "node --import tsx src/searcher/test/production-family-reverse-binding.ts"
+    "searcher:production-family-reverse-binding": "node --import tsx src/searcher/test/production-family-reverse-binding.ts",
+    "searcher:univ4-fee-hook-live-probe": "node --import tsx src/searcher/test/univ4-fee-hook-live-probe.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"
