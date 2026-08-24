@@ -1211,6 +1211,18 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   lifecycle 调用为 0、verified=1、terminal=1、active instance=1、`inProgressRun=null`。完整 S1
   regression sweep 17 项（含 build）和 `migration-cleanup-receipt` PASS；shared-surface AST 门仍只报
   分支既有 generated JSON / infra selector / legacy import-closure 基线，本 diff 未新增中央协议判断。
-- 当前 follow-up 状态为 **implemented, exact-SHA deployment pending**。部署不得删除或替换现有
-  checkpoint/journal；必须直接 replay 并证明 duplicate repair 只追加必要 delta，随后 Ready 原子压实、
-  `inProgressRun=null`、retryable 独立入队、source receipts 仍为 `25811511..25825910`。
+- **exact-SHA live 恢复已通过**：`3f8db9da40c08d4cbcaf2617326960057270246c`（部署 SSM
+  `573bb6cd-4b30-47c0-8c4e-6b922c3fc412`）直接 replay 原 checkpoint/journal，日志明确
+  `resumed=true discoveryPlanChanged=false`，没有重扫 discovery。duplicate repair 只追加必要 delta，
+  随后 Ready generation 10 原子压实；journal 已移除，base 从 538,737,677 bytes 压实到
+  524,906,882 bytes。
+- 最终 checkpoint revision 4167：23,990 accounted = verified 22,554 / terminal 1,378 / 本轮
+  retryable 58 / remaining 0；`inProgressRun=null`；verified memo snapshot 22,554/22,554；memo instance
+  与 active instance 都是 22,554/22,554 唯一；range 仍为 `25811511..25825910`，51 条 source coverage
+  全部 complete through 25825910。独立 retryable queue 总数为 73，其中 58 属本轮，另外 15 是更早
+  rolling run 保留且不在本轮 partition 的独立工作，不能把 queue 总数与本轮 accounting 混写。
+- 节点 `/opt/MEV`、capture `/opt/MEV-impl-capture` 与进程 `SEARCHER_RUNTIME_COMMIT` 全部等于
+  `3f8db9da...`，进程 active、`SEARCHER_DRY_RUN=1`。strict Ready Graph 已载入 generation 10 / 44,967
+  edges，blockscan 在后续 canonical heads 连续发出 `outcome=ran`。因此本 permanent-retention +
+  Ready-completion slice 状态为 **deployed and live-verified**；这不把后续 market/exact/finalSim 结果
+  冒充为新的 F5/S1 终态判定。

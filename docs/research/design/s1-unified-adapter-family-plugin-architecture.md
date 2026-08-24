@@ -575,7 +575,14 @@ run no longer needs to fail once before repairing retained aliases. A regression
 retained memos, distinct candidate keys, one instance key and no run outcomes; it proves zero lifecycle calls,
 one verified outcome, one terminal duplicate, one active instance, `remainingUnaccounted=0`, and successful
 Ready promotion. No Family ID, protocol, address, selector or topic branch was added. Exact-SHA checkpoint
-recovery is still required before this follow-up is called deployed.
+recovery at `3f8db9da40c08d4cbcaf2617326960057270246c` then passed without deleting, replacing or rescanning the
+checkpoint. The process appended only the duplicate repair delta, promoted generation 10 and compacted the
+journal into a 524,906,882-byte base. Final state is: 23,990 accounted = 22,554 verified + 1,378 terminal +
+58 retryable, `remainingUnaccounted=0`, `inProgressRun=null`, 22,554/22,554 memo snapshots present and
+22,554/22,554 active instance keys unique. The independent retry queue contains 73 entries: the current run's
+58 plus 15 candidates retained from earlier rolling runs. Node checkout, capture checkout and runtime commit
+all equal the exact SHA under `SEARCHER_DRY_RUN=1`; the strict Ready Graph loaded 44,967 edges and blockscan
+resumed on successive canonical heads.
 
 ### 5.1 Full evidence identity
 
