@@ -2247,7 +2247,8 @@ export function buildFamilyExecutionFragment(
         input,
         resolved,
         status,
-        `${status === "rejected" ? "action-ownership" : "execution-build"}:` +
+        (status === "rejected" ? "action-ownership" : "execution-build") + ":" +
+          input.family.plugin.manifest.familyId + ":" +
           errorMessage(error),
       ),
     });
@@ -4360,7 +4361,16 @@ function validateResolvedPlanNode(
   canonicalKey(node.adapterId, "plan node adapterId");
   canonicalKey(node.target, "plan node target");
   canonicalKey(node.tokenIn, "plan node tokenIn");
-  canonicalKey(node.tokenOut, "plan node tokenOut");
+  if (
+    typeof node.tokenOut !== "string" ||
+    node.tokenOut.length === 0 ||
+    node.tokenOut.trim() !== node.tokenOut
+  ) {
+    throw new Error(
+      "plan node tokenOut must be a non-empty canonical string " +
+        "(adapterId=" + String(node.adapterId) + ")",
+    );
+  }
   if (typeof node.amount !== "bigint" || node.amount < 0n) {
     throw new Error("plan node amount must be a non-negative bigint");
   }
