@@ -18,19 +18,18 @@ import {
   canonicalAddress,
   canonicalPoolId,
   canonicalPoolKey,
-  UNIV4_INITIALIZE_PATTERN_ID,
-  UNIV4_MODIFY_LIQUIDITY_PATTERN_ID,
-  UNIV4_SWAP_CALL_PATTERN_ID,
-  UNIV4_SWAP_LOG_PATTERN_ID,
+  UNIV4_PATTERN_IDS,
+  type UniV4PatternIds,
 } from "./codec.js";
 import type { V4PoolKey } from "../../../planner/token-graph.js";
 import type { UniV4Candidate } from "./types.js";
 import { nominateUniv4 } from "./nomination.js";
 import { reverseBindUniv4 } from "./reverse-binding.js";
 
-export const UNIV4_POOL_SURFACE_PATTERN_ID = "univ4-pool-surface";
-
-export const univ4Discovery = {
+export function createUniv4Discovery(
+  ids: UniV4PatternIds,
+): DiscoverySemantics<UniV4Candidate> {
+  return {
   evidenceChannel: "nominate" as const,
   sources: ["factory-log", "landed-log", "observed-call"],
   canonicalIntakeTargets: [
@@ -39,14 +38,14 @@ export const univ4Discovery = {
     "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
   ],
   callPatterns: [{
-    id: UNIV4_SWAP_CALL_PATTERN_ID,
+    id: ids.swapCall,
     selector: UNIV4_SWAP_SELECTOR,
     signature:
       "swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)",
     candidateAddress: { from: "call-target" },
   }],
   logPatterns: [{
-    id: UNIV4_INITIALIZE_PATTERN_ID,
+    id: ids.initialize,
     topic: UNIV4_INITIALIZE_TOPIC as `0x${string}`,
     signature:
       "Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)",
@@ -57,7 +56,7 @@ export const univ4Discovery = {
       fromBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
     },
   }, {
-    id: UNIV4_SWAP_LOG_PATTERN_ID,
+    id: ids.swapLog,
     topic: UNIV4_SWAP_TOPIC as `0x${string}`,
     signature: UNIV4_SWAP_SIGNATURE,
     emitter: {
@@ -67,7 +66,7 @@ export const univ4Discovery = {
       fromBlock: UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
     },
   }, {
-    id: UNIV4_MODIFY_LIQUIDITY_PATTERN_ID,
+    id: ids.modifyLiquidity,
     topic: UNIV4_MODIFY_LIQUIDITY_TOPIC as `0x${string}`,
     signature: UNIV4_MODIFY_LIQUIDITY_SIGNATURE,
     emitter: {
@@ -78,13 +77,13 @@ export const univ4Discovery = {
     },
   }],
   addressSurfaces: [Object.freeze({
-    id: UNIV4_POOL_SURFACE_PATTERN_ID,
+    id: ids.poolSurface,
     kind: "interface" as const,
     fingerprint: "univ4-pool-surface-v1",
   })],
   decodeCandidate({ observation, matchedPatternId }) {
     try {
-      return decodeCandidate(observation, matchedPatternId);
+      return decodeUniv4Candidate(observation, matchedPatternId, ids);
     } catch {
       return null;
     }
@@ -97,14 +96,18 @@ export const univ4Discovery = {
     reverseBinding: reverseBindUniv4,
   }),
 } satisfies DiscoverySemantics<UniV4Candidate>;
+}
 
-function decodeCandidate(
+export const univ4Discovery = createUniv4Discovery(UNIV4_PATTERN_IDS);
+
+export function decodeUniv4Candidate(
   observation: UnifiedObservation,
   matchedPatternId: string,
+  ids: UniV4PatternIds,
 ): UniV4Candidate | null {
   if (
     observation.kind === "address-surface" &&
-    matchedPatternId === UNIV4_POOL_SURFACE_PATTERN_ID
+    matchedPatternId === ids.poolSurface
   ) {
     const opaque = observation.opaque as Readonly<Record<string, unknown>>;
     const poolId = canonicalPoolId(String(opaque.poolId ?? ""));
@@ -127,7 +130,7 @@ function decodeCandidate(
   }
   if (
     observation.kind === "log" &&
-    matchedPatternId === UNIV4_INITIALIZE_PATTERN_ID
+    matchedPatternId === ids.initialize
   ) {
     const decoded = UNIV4_POOL_MANAGER_INTERFACE.decodeEventLog(
       "Initialize",
@@ -151,7 +154,7 @@ function decodeCandidate(
   }
   if (
     observation.kind === "call" &&
-    matchedPatternId === UNIV4_SWAP_CALL_PATTERN_ID
+    matchedPatternId === ids.swapCall
   ) {
     const decoded = UNIV4_POOL_MANAGER_INTERFACE.decodeFunctionData(
       "swap",

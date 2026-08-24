@@ -1,5 +1,6 @@
 import type { FamilyManifest } from "../../adapter-family-plugin.js";
 import { familyId, lineageId } from "../../adapter-family-identifiers.js";
+import type { UniV4PatternIds } from "../univ4-family/codec.js";
 
 export const UNIV4_FEE_HOOK_FAMILY_ID = familyId("univ4-fee-hook");
 export const UNIV4_FEE_HOOK_LINEAGE_ID = lineageId(
@@ -16,6 +17,20 @@ export const UNIV4_FEE_HOOK_ADDRESS =
   "0xfa439315b015a4c283ded9815a4af6cef0b90880";
 export const UNIV4_FEE_HOOK_CODE_HASH =
   "0x95f45883ea4c59deaeb445e6fb6e07383b72a1f5cc046e3f22bfbca4f9aa521d";
+
+/**
+ * This Family shares the manager event surface (topics/emitters) with the
+ * standard univ4 Family, so it must own its pattern ids: the landed-event
+ * registry keys declarations by id and rejects a second family reusing the
+ * standard family's ids with different discovery bindings.
+ */
+export const UNIV4_FEE_HOOK_PATTERN_IDS: UniV4PatternIds = Object.freeze({
+  initialize: "univ4-fee-hook-pool-initialize",
+  swapCall: "univ4-fee-hook-manager-swap-call",
+  swapLog: "univ4-fee-hook-manager-swap-log",
+  modifyLiquidity: "univ4-fee-hook-manager-modify-liquidity",
+  poolSurface: "univ4-fee-hook-pool-surface",
+});
 
 export const univ4FeeHookFamilyManifest = {
   familyId: UNIV4_FEE_HOOK_FAMILY_ID,

@@ -15,20 +15,21 @@ import {
   canonicalPoolId,
   canonicalPoolKey,
   poolKeyProjection,
-  UNIV4_INITIALIZE_PATTERN_ID,
-  UNIV4_MODIFY_LIQUIDITY_PATTERN_ID,
-  UNIV4_SWAP_CALL_PATTERN_ID,
-  UNIV4_SWAP_LOG_PATTERN_ID,
+  UNIV4_PATTERN_IDS,
+  type UniV4PatternIds,
 } from "./codec.js";
 import type { UniV4Descriptor, UniV4Route } from "./types.js";
 import { univ4VictimReplay } from "./victim.js";
 import { createUniV4SwapObservation } from "../../swap-observation.js";
 
-export const univ4Swap = {
+export function createUniv4Swap(
+  ids: UniV4PatternIds,
+): SwapDomainSemantics<UniV4Descriptor, UniV4Route> {
+  return {
   landedEvents: {
     patternIds: [
-      UNIV4_SWAP_LOG_PATTERN_ID,
-      UNIV4_MODIFY_LIQUIDITY_PATTERN_ID,
+      ids.swapLog,
+      ids.modifyLiquidity,
     ],
     classify({ observation }) {
       if (observation.kind !== "log") return null;
@@ -39,7 +40,7 @@ export const univ4Swap = {
     },
   },
   observation: {
-    patternIds: [UNIV4_SWAP_CALL_PATTERN_ID, UNIV4_SWAP_LOG_PATTERN_ID],
+    patternIds: [ids.swapCall, ids.swapLog],
     decode: ({ observation }) => decodeEffects(observation),
   },
   receiptObservation: createUniV4SwapObservation({
@@ -54,7 +55,7 @@ export const univ4Swap = {
   victimSupport: "replay",
   replay: univ4VictimReplay,
   poolMaterialization: {
-    patternIds: [UNIV4_INITIALIZE_PATTERN_ID],
+    patternIds: [ids.initialize],
     candidateBinding({ observation }) {
       if (
         observation.kind !== "log" ||
@@ -87,6 +88,19 @@ export const univ4Swap = {
       }
     },
   },
+} satisfies SwapDomainSemantics<UniV4Descriptor, UniV4Route>;
+}
+
+/**
+ * The standard Family's swap root stays a static object literal (the
+ * parameterized factory plus literal victim bindings) because the capability
+ * manifest generator requires a statically resolvable swap root with a literal
+ * victimSupport for direct-root production entries.
+ */
+export const univ4Swap = {
+  ...createUniv4Swap(UNIV4_PATTERN_IDS),
+  victimSupport: "replay" as const,
+  replay: univ4VictimReplay,
 } satisfies SwapDomainSemantics<UniV4Descriptor, UniV4Route>;
 
 function decodeEffects(

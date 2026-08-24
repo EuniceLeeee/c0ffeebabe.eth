@@ -1,18 +1,19 @@
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import { createUniV4SwapObservation } from "../../swap-observation.js";
 import { UNIV4_SWAP_TOPIC } from "../univ4-abi.js";
-import { univ4Swap as baseSwap } from "../univ4-family/swap.js";
-import { deepGuardCopy } from "./guard-copy.js";
+import { createUniv4Swap } from "../univ4-family/swap.js";
+import { UNIV4_FEE_HOOK_PATTERN_IDS } from "./manifest.js";
 import { univ4FeeHookVictimReplay } from "./victim.js";
 
 /**
  * Same swap semantics as the standard univ4 Family; the receipt observation
  * binds the fee-hook owned unlock adapter id and the replay binds the
  * fee-hook victim spec. The remaining fields are a deep copy of the shared
- * implementation (landed events, observation decode, pool materialization).
+ * implementation (landed events, observation decode, pool materialization),
+ * instantiated with this Family's own pattern ids.
  */
 export const univ4FeeHookSwap = {
-  ...deepGuardCopy(baseSwap),
+  ...createUniv4Swap(UNIV4_FEE_HOOK_PATTERN_IDS),
   victimSupport: "replay" as const,
   replay: univ4FeeHookVictimReplay,
   receiptObservation: createUniV4SwapObservation({

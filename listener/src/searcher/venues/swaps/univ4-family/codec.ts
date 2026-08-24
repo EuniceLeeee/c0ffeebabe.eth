@@ -17,6 +17,29 @@ export const UNIV4_SWAP_CALL_PATTERN_ID = "univ4-manager-swap-call";
 export const UNIV4_SWAP_LOG_PATTERN_ID = "univ4-manager-swap-log";
 export const UNIV4_MODIFY_LIQUIDITY_PATTERN_ID =
   "univ4-manager-modify-liquidity";
+export const UNIV4_POOL_SURFACE_PATTERN_ID = "univ4-pool-surface";
+
+/**
+ * One id per discovery pattern a UniV4-shaped Family declares. A family must
+ * own its ids: the landed-event registry keys shared event surfaces by id, so
+ * two families observing the same topics (standard univ4 vs the fee-hook
+ * family) must never reuse another family's pattern ids.
+ */
+export interface UniV4PatternIds {
+  readonly initialize: string;
+  readonly swapCall: string;
+  readonly swapLog: string;
+  readonly modifyLiquidity: string;
+  readonly poolSurface: string;
+}
+
+export const UNIV4_PATTERN_IDS: UniV4PatternIds = Object.freeze({
+  initialize: UNIV4_INITIALIZE_PATTERN_ID,
+  swapCall: UNIV4_SWAP_CALL_PATTERN_ID,
+  swapLog: UNIV4_SWAP_LOG_PATTERN_ID,
+  modifyLiquidity: UNIV4_MODIFY_LIQUIDITY_PATTERN_ID,
+  poolSurface: UNIV4_POOL_SURFACE_PATTERN_ID,
+});
 
 export function canonicalAddress(value: string): string {
   return ethers.getAddress(value);

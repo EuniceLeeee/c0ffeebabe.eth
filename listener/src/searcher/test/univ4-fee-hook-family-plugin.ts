@@ -4,12 +4,12 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import type { UnifiedObservation } from "../venues/adapter-family-plugin.js";
 import type { CanonicalSource } from "../venues/adapter-request-program.js";
 import { univ4FeeHookStrictFamilyPlugin } from "../venues/swaps/univ4-fee-hook-family-plugin.js";
-import { UNIV4_INITIALIZE_PATTERN_ID } from "../venues/swaps/univ4-family/codec.js";
 import { UNIV4_POOL_MANAGER_INTERFACE } from "../venues/swaps/univ4-abi.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
 import {
   UNIV4_FEE_HOOK_ADDRESS,
   UNIV4_FEE_HOOK_CODE_HASH,
+  UNIV4_FEE_HOOK_PATTERN_IDS,
 } from "../venues/swaps/univ4-fee-hook-family/manifest.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
@@ -44,7 +44,7 @@ const initializeObservation: UnifiedObservation = Object.freeze({
 });
 const candidate = univ4FeeHookStrictFamilyPlugin.discovery.decodeCandidate({
   observation: initializeObservation,
-  matchedPatternId: UNIV4_INITIALIZE_PATTERN_ID,
+  matchedPatternId: UNIV4_FEE_HOOK_PATTERN_IDS.initialize,
 });
 assert(candidate !== null);
 assert.equal(candidate.poolId, POOL_ID);
