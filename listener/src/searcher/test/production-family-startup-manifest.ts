@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import {
-  EXPECTED_PRODUCTION_CAPABILITY_COUNT,
-  EXPECTED_PRODUCTION_FAMILY_COUNT,
   PRODUCTION_FAMILY_STARTUP_MANIFEST_FORMAT,
   productionFamilyStartupManifest,
 } from "../production-family-startup-manifest.js";
@@ -14,8 +12,11 @@ function main(): void {
   const first = productionFamilyStartupManifest();
   const second = productionFamilyStartupManifest();
   assert.equal(first.format, PRODUCTION_FAMILY_STARTUP_MANIFEST_FORMAT);
-  assert.equal(first.familyCount, EXPECTED_PRODUCTION_FAMILY_COUNT);
-  assert.equal(first.capabilityCount, EXPECTED_PRODUCTION_CAPABILITY_COUNT);
+  assert.equal(first.familyCount, first.families.length);
+  assert.equal(
+    first.capabilityCount,
+    first.familyCount * FAMILY_CAPABILITY_NAMES.length,
+  );
   assert.equal(first.manifestHash, second.manifestHash);
   assert(Object.isFrozen(first));
   assert(Object.isFrozen(first.families));
@@ -64,13 +65,15 @@ function main(): void {
     ])),
     applicableCapabilities: FAMILY_CAPABILITY_NAMES,
   }];
-  assert.throws(() => productionFamilyStartupManifest({
+  const oneFamily = productionFamilyStartupManifest({
     listAll: () => single,
-  } as unknown as FamilyCapabilityCatalog), /requires 22 Families/);
+  } as unknown as FamilyCapabilityCatalog);
+  assert.equal(oneFamily.familyCount, 1);
+  assert.equal(oneFamily.capabilityCount, FAMILY_CAPABILITY_NAMES.length);
 
   assert.throws(() => productionFamilyStartupManifest({
-    listAll: () => [fakeFamily, fakeFamily],
-  } as unknown as FamilyCapabilityCatalog), /lacks capability hash/);
+    listAll: () => [single[0]!, single[0]!],
+  } as unknown as FamilyCapabilityCatalog), /duplicate Family/);
 
   console.log("production family startup manifest PASS");
 }

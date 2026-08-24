@@ -1,11 +1,8 @@
 import type {
   ProductionFamilyStartupManifest,
 } from "./production-family-startup-manifest.js";
-import {
-  EXPECTED_PRODUCTION_CAPABILITY_COUNT,
-  EXPECTED_PRODUCTION_FAMILY_COUNT,
-  productionFamilyStartupManifest,
-} from "./production-family-startup-manifest.js";
+import { productionFamilyStartupManifest } from
+  "./production-family-startup-manifest.js";
 import type {
   SystemicLiveGateVerdict,
 } from "./systemic-live-gate.js";
@@ -40,7 +37,7 @@ export function evaluateS1CutoverReadiness(
 ): S1CutoverReadinessVerdict {
   const reasons: string[] = [];
   if (!input.batchParityPass) {
-    reasons.push("22-family batch parity receipt is not pass");
+    reasons.push("catalog batch parity receipt is not pass");
   }
   if (!input.heldOutNegativesPass) {
     reasons.push("held-out negative fixtures did not all mismatch");
@@ -51,9 +48,8 @@ export function evaluateS1CutoverReadiness(
   try {
     const current = productionFamilyStartupManifest();
     if (
-      input.startupManifest.familyCount !== EXPECTED_PRODUCTION_FAMILY_COUNT ||
-      input.startupManifest.capabilityCount !==
-        EXPECTED_PRODUCTION_CAPABILITY_COUNT ||
+      input.startupManifest.familyCount !== current.familyCount ||
+      input.startupManifest.capabilityCount !== current.capabilityCount ||
       input.startupManifest.manifestHash !== current.manifestHash
     ) {
       reasons.push("startup manifest is stale or mismatches the catalog");

@@ -15,8 +15,6 @@ import {
 
 export const PRODUCTION_FAMILY_STARTUP_MANIFEST_FORMAT =
   "production-family-startup-manifest-v1" as const;
-export const EXPECTED_PRODUCTION_FAMILY_COUNT = 22;
-export const EXPECTED_PRODUCTION_CAPABILITY_COUNT = 242;
 
 export interface ProductionFamilyStartupEntry {
   readonly familyId: FamilyId;
@@ -79,13 +77,6 @@ export function productionFamilyStartupManifest(
   }).sort((left, right) =>
     left.familyId.localeCompare(right.familyId)
   );
-  if (families.length !== EXPECTED_PRODUCTION_FAMILY_COUNT) {
-    throw new Error(
-      `production startup manifest requires ` +
-        `${EXPECTED_PRODUCTION_FAMILY_COUNT} Families, ` +
-        `received ${families.length}`,
-    );
-  }
   const seen = new Set<string>();
   for (const family of families) {
     if (seen.has(family.familyId)) {
@@ -99,13 +90,6 @@ export function productionFamilyStartupManifest(
     (total, family) => total + FAMILY_CAPABILITY_NAMES.length,
     0,
   );
-  if (capabilityCount !== EXPECTED_PRODUCTION_CAPABILITY_COUNT) {
-    throw new Error(
-      `production startup manifest requires ` +
-        `${EXPECTED_PRODUCTION_CAPABILITY_COUNT} capabilities, ` +
-        `received ${capabilityCount}`,
-    );
-  }
   const projection = families.map((family) => ({
     familyId: family.familyId,
     sourceFile: family.sourceFile,

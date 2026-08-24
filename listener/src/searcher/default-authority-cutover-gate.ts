@@ -38,7 +38,7 @@ export function evaluateDefaultAuthorityCutoverGate(
     );
   }
   if (!input.batchParityPass) {
-    reasons.push("22-family batch parity receipt is not pass");
+    reasons.push("catalog batch parity receipt is not pass");
   }
   if (!input.heldOutNegativesPass) {
     reasons.push("held-out negative fixtures did not all mismatch");
