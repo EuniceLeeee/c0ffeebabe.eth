@@ -487,6 +487,17 @@ The window is an observation policy, not an admission shortcut. Static reverse-v
 verified memos, and the retain channel (5.4) remain available across rolling windows; old files still cannot
 grant coverage or create edges.
 
+**Plan change = incremental re-adoption, not a full rebuild.** Adding or changing a Family moves the
+source-plan fingerprint (family definition hashes bind every receipt). The runner detects the drift against
+the incumbent run's sealed receipts and starts a fresh fixed run at the current head with the current
+catalog, while the durable verified-memo table is carried (`replaceRun` keeps `verifiedMemos`; the run
+cutoff/partition/receipts are replaced). Unchanged Family instances are reused through the existing
+per-memo revalidation (Family definition hash, candidate fingerprint, chain authority at the new cutoff,
+proof-source block hash); only new/affected candidates (e.g. a newly added Family's pools) are attested.
+Terminal-rejected outcomes are not carried — they are re-attested, so a previously fail-closed pool can be
+admitted by a new Family only through a fresh chain proof. A different runId is still refused; this path is
+only reachable through an explicit plan-drift re-adoption in the runner.
+
 ### 5.1 Full evidence identity
 
 Log dedupe preserves block number, block hash, transaction hash, log index, emitter address, topic identity,

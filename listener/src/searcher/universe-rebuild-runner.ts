@@ -203,12 +203,29 @@ export async function rebuildUniverse(
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value) => value);
   let checkpoint = await input.store.load() ?? null;
   const incumbentRun = checkpoint?.inProgressRun ?? null;
+  // Plan drift (a new family/capability/topic set since the run sealed its
+  // receipts): re-adopt incrementally instead of failing closed. The fresh
+  // fixed run below re-scans the window with the current catalog while the
+  // durable verified-memo table is carried, so instances of unchanged
+  // Families reuse their prior proofs (per-memo revalidation) instead of
+  // being re-attested; only new/affected candidates are verified.
+  let planChanged = false;
+  if (incumbentRun !== null && incumbentRun.sourceReceipts !== undefined) {
+    try {
+      assertReceiptsMatchCurrentSourcePlan(
+        incumbentRun.sourceReceipts,
+        input.expectedSourcePlanFingerprints(),
+      );
+    } catch {
+      planChanged = true;
+    }
+  }
   let cutoff: CanonicalSource;
   let fromBlock: number;
   let observations: readonly unknown[];
   let candidates: readonly unknown[];
   let sourceReceipts: readonly DurableSourceReceipt[];
-  if (incumbentRun !== null) {
+  if (incumbentRun !== null && !planChanged) {
     if (incumbentRun.runId !== input.runId) {
       throw new Error(
         "universe rebuild checkpoint: another run is in progress (" +
@@ -267,6 +284,13 @@ export async function rebuildUniverse(
       sourceReceipts = incumbentRun.sourceReceipts;
     }
   } else {
+    if (planChanged) {
+      log(
+        "universe rebuild plan change: fresh fixed run with carried verified " +
+          "memos; unchanged Family instances reuse prior proofs, new " +
+          "candidates are attested",
+      );
+    }
     cutoff = await input.freezeCanonicalHead();
     fromBlock = strictEdgeCollectionFromBlock(cutoff.number);
     // A crash before this scan is sealed may rescan; after beginOrResumeRun,
@@ -310,7 +334,7 @@ export async function rebuildUniverse(
   log(
     "universe rebuild fixed source range: run=" + input.runId +
       " from=" + fromBlock + " cutoff=" + cutoff.number + ":" + cutoff.hash +
-      " resumed=" + String(incumbentRun !== null),
+      " resumed=" + String(incumbentRun !== null && !planChanged),
   );
   const candidatesByKey = Object.freeze(Object.fromEntries(
     candidates.map((candidate) => [
@@ -347,12 +371,13 @@ export async function rebuildUniverse(
       hash: cutoff.hash,
     }),
     sourceReceipts,
+    ...(planChanged ? { replaceRun: true as const } : {}),
   });
   const run = checkpoint.inProgressRun;
   if (run === null || run.runId !== input.runId) {
     throw new Error("universe rebuild: run did not begin");
   }
-  if (incumbentRun !== null) {
+  if (incumbentRun !== null && !planChanged) {
     // One canonical fence per resume is sufficient for same-run memos: their
     // authority proof is already bound to this exact historical cutoff.
     // Re-reading code/storage/proof hash for every verified instance would

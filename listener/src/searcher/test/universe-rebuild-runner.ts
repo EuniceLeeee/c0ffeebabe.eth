@@ -579,8 +579,12 @@ async function main(): Promise<void> {
       "a stale-plan receipt must not begin a durable run",
     );
     // Resume drift: receipts were durable under plan X; the catalog changed
-    // (same pattern ids, new implementation) so plan Y must reject the old
-    // receipts instead of silently attesting the old partition to ready.
+    // (new family/capability set) so plan Y re-adopts incrementally: a fresh
+    // fixed run at the current head re-scans with the current catalog while
+    // the durable verified-memo table is carried, so unchanged Family
+    // instances reuse their prior proofs and only new candidates are
+    // attested. Memo reuse is still per-memo revalidated; nothing silently
+    // attests the old partition to ready.
     const resumeDrift = planReceiptFixture(join(dir, "resume-drift"), "c".repeat(64));
     const planC = () => Object.freeze({
       startup: "c".repeat(64),
@@ -595,15 +599,39 @@ async function main(): Promise<void> {
       1,
       "first run seals and promotes receipts under plan c",
     );
-    await assert.rejects(
-      () => rebuildUniverse(Object.freeze({
-        ...resumeDrift.input,
-        expectedSourcePlanFingerprints: () =>
-          Object.freeze({ startup: "d".repeat(64), events: "d".repeat(64) }),
-      })),
-      /does not match the current source plan/,
-      "resume must reject receipts sealed by a different code version",
+    const driftReadopt = makeFixture(join(dir, "resume-drift"), {
+      scanSwapWindow: async (scanInput) => Object.freeze({
+        observations: Object.freeze(["a", "b", "c", "d"].map((id) =>
+          Object.freeze({ id, block: SOURCE.number }),
+        )),
+        sourceReceipts: Object.freeze([Object.freeze({
+          ...sourceReceipts(scanInput.fromBlock)[0]!,
+          queryFingerprint: "d".repeat(64),
+        })]),
+      }),
+      expectedSourcePlanFingerprints: () =>
+        Object.freeze({ startup: "d".repeat(64), events: "d".repeat(64) }),
+    });
+    const readopted = await rebuildUniverse(driftReadopt.input);
+    assert.equal(
+      readopted.generation,
+      2,
+      "plan change promotes a fresh generation instead of rejecting",
     );
+    assert.equal(
+      driftReadopt.attestCalls.get("d"),
+      1,
+      "the new catalog candidate is attested fresh",
+    );
+    for (const id of ["a", "b", "c"]) {
+      assert.equal(
+        driftReadopt.attestCalls.has(id),
+        false,
+        "unchanged instances reuse carried memos under the new plan",
+      );
+    }
+    const driftEnvelope = await driftReadopt.store.load();
+    assert.equal(driftEnvelope?.readyGeneration?.generation, 2);
 
     // G: the deployed pre-receipt fixed checkpoint is upgraded in place.
     // The runner replays the original fixed range, requires the exact same

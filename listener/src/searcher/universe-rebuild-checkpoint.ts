@@ -741,6 +741,15 @@ export class UniverseRebuildCheckpointStore {
     readonly candidatesByKey: Readonly<Record<string, unknown>>;
     readonly observedThrough: { readonly number: number; readonly hash: string };
     readonly sourceReceipts?: readonly DurableSourceReceipt[];
+    /**
+     * Plan-change re-adoption: replace the existing fixed run (new cutoff,
+     * new candidate partition) while keeping the durable verified-memo
+     * table. Only the rebuild runner sets this, and only after it proved the
+     * incumbent run's receipts were sealed by a different source plan
+     * (new family/capability/topic set); per-memo revalidation gates every
+     * reuse. A different runId is still refused.
+     */
+    readonly replaceRun?: boolean;
   }): Promise<StartupCheckpointEnvelope> {
     if (Object.keys(input.candidatesByKey).length !== input.candidateCount) {
       throw new Error(
@@ -764,7 +773,12 @@ export class UniverseRebuildCheckpointStore {
               existing.runId + ")",
           );
         }
-        if (
+        if (input.replaceRun === true) {
+          // Plan-change re-adoption: fall through to the fresh-run branch so
+          // the run (cutoff/partition/receipts) is replaced; verifiedMemos
+          // are carried by the spread below.
+        } else {
+          if (
           existing.cutoff.number !== input.cutoff.number ||
           existing.cutoff.hash.toLowerCase() !== input.cutoff.hash.toLowerCase() ||
           existing.cutoff.generation !== input.cutoff.generation ||
@@ -786,7 +800,8 @@ export class UniverseRebuildCheckpointStore {
             "universe rebuild checkpoint: runId resumed with different fixed input",
           );
         }
-        return base;
+          return base;
+        }
       }
       return Object.freeze({
         ...base,
