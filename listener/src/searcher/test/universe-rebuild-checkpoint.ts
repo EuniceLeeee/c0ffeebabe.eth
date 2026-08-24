@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -421,10 +421,36 @@ async function main(): Promise<void> {
       (merged.inProgressRun?.outcomesByCandidateKey["b"] as { attemptCount: number }).attemptCount,
       1,
     );
-    // Reload verifies the fingerprint (round-trip intact).
-    const loaded = await store.load();
+    assert.match(
+      await readFile(path + ".attestation-journal", "utf8"),
+      /"version":1/,
+      "attestation batches persist as an fsynced delta instead of rewriting the base",
+    );
+    assert.equal(
+      JSON.parse(await readFile(path, "utf8")).revision,
+      2,
+      "an attestation delta must not rewrite the large base checkpoint",
+    );
+    // A fresh process reads top-level fields incrementally and replays the
+    // journal. Seven-byte chunks split field names, escapes and values.
+    const tinyChunkStore = new UniverseRebuildCheckpointStore({
+      path,
+      readChunkBytes: 7,
+    });
+    const loaded = await tinyChunkStore.load();
     assert.equal(loaded?.revision, merged.revision);
     assert.equal(loaded?.inProgressRun?.outcomesByCandidateKey["a"]?.status, "verified");
+    // A killed append can leave one unterminated suffix. It is uncommitted,
+    // so recovery ignores it; the next non-journal CAS compacts only the
+    // fingerprint-verified complete records.
+    await appendFile(path + ".attestation-journal", "{\"version\":");
+    assert.equal(
+      (await new UniverseRebuildCheckpointStore({
+        path,
+        readChunkBytes: 5,
+      }).load())?.revision,
+      merged.revision,
+    );
 
     // Probe CAS guard: wrong attempt count fails closed.
     await assert.rejects(
@@ -459,6 +485,11 @@ async function main(): Promise<void> {
       memo: memoFor("b"),
     });
     assert.equal(replaced.inProgressRun?.outcomesByCandidateKey["b"]?.status, "verified");
+    await assert.rejects(
+      () => readFile(path + ".attestation-journal", "utf8"),
+      (error: unknown) => (error as { code?: string }).code === "ENOENT",
+      "a non-attestation CAS must compact and remove the included journal",
+    );
 
     // Memo upsert.
     const withMemo = await store.casUpsertMemo(memoFor("a"));
@@ -842,6 +873,42 @@ async function main(): Promise<void> {
     await assert.rejects(
       () => corruptStore.load(),
       /fingerprint mismatch/,
+    );
+
+    const corruptJournalPath = join(dir, "corrupt-journal.json");
+    const corruptJournalStore = new UniverseRebuildCheckpointStore({
+      path: corruptJournalPath,
+    });
+    await corruptJournalStore.beginOrResumeRun({
+      expectedRevision: 0,
+      runId: "journal-run",
+      cutoff: SOURCE,
+      fromBlock: SOURCE.number - 14_399,
+      universeHash: "journal",
+      candidateSetHash: "journal",
+      candidateCount: 1,
+      candidatesByKey: Object.freeze({ j: Object.freeze({ id: "j" }) }),
+      observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
+      sourceReceipts: sourceReceipts(),
+    });
+    await corruptJournalStore.casMergeRunOutcomes(
+      "journal-run",
+      Object.freeze([terminalFor("j")]),
+    );
+    const journalPath = corruptJournalPath + ".attestation-journal";
+    await writeFile(
+      journalPath,
+      (await readFile(journalPath, "utf8")).replace(
+        /"reasonCode":"identity_rejected:fixture"/,
+        '"reasonCode":"tampered"',
+      ),
+    );
+    await assert.rejects(
+      () => new UniverseRebuildCheckpointStore({
+        path: corruptJournalPath,
+      }).load(),
+      /journal fingerprint mismatch/,
+      "a complete tampered delta must fail closed",
     );
 
     // Writer batching: 25 outcomes flush automatically on the batch boundary.

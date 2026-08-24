@@ -1168,3 +1168,28 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   selector、旧 registry/import closure 等已知边界阻断；本 slice 新增生产代码不含按
   Family/协议/地址/selector/topic 的中央分支。exact-SHA 节点升级与 live checkpoint
   证据在本 slice 部署后回写。
+
+### Permanent-retention 首次部署失败与 checkpoint 存储修复（2026-08-24）
+
+- 节点已 exact-checkout `301cb8e83fd27e631670a89f2766a19b0a027ab9`，并真实完成 22,011
+  个 legacy memo 的 `candidateSnapshot` 原子升级；fixed source receipt 为
+  `25811511..25825910`，严格等于 14,400 blocks。新 run 已封存 23,990 candidates，说明
+  discovery/retention 语义生效。
+- 该次启动未成功：attestation 写入 38 outcomes 后，进程在
+  `UniverseRebuildCheckpointStore.load()` 的 Node `readFileHandle` 退出，错误为
+  `RangeError: Invalid string length`。checkpoint 为 538,737,677 bytes（514 MiB）；不是
+  OOM（systemd peak 5.3 GB、内核无 OOM、退出后仍约 13 GB available），也不是 funding/RPC。
+- 根因是存储实现同时存在两处全量行为：load 把整份 checkpoint 转成一个 V8 string；每 25
+  个 attestation outcomes 又整份 CAS 重写一次。永久 retention 把原有 341 MiB ready/memo
+  状态推过 V8 单字符串上限，暴露了这个中央 durable-store bug。
+- 修复改为：① base checkpoint 按顶层字段流式解析；② attestation memo/outcome 对写入 fsync
+  的 fingerprint-chain delta journal；③ 未换行的 crash tail 视为未提交，完整行必须逐条通过
+  record/revision/result fingerprint；④ Ready 或其他非 attestation CAS 才原子压实一次 base。
+  journal 不是 discovery/candidate/Graph 权威，只是同一个 CAS 的 write-ahead 表示。
+- 修复回归：18 项 universe/cutover targeted commands 全 PASS；完整 listener build、
+  `migration-cleanup-receipt`、`git diff --check` PASS；5/7-byte 分片读取、fresh-process journal
+  replay、base 不随 attestation batch 重写、partial-tail recovery 均有确定性测试。
+- 当前状态仍是 **implemented, deployment pending**。不得把 `301cb8e8` 的失败启动写成完成；下一
+  exact SHA 必须在不删除/重置现有 checkpoint 的前提下恢复同一 23,990-candidate fixed run，并
+  证明 `remainingUnaccounted=0`、`inProgressRun=null`、新 Ready generation、22,011/22,011
+  snapshots 保持、retryable queue 独立及节点/capture/runtime SHA 一致。

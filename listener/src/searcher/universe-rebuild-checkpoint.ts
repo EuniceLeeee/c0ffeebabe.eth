@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import {
   mkdir,
   open,
   readFile,
   rename,
+  stat,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -445,16 +447,7 @@ function canonicalWrite(
   hash.update("}");
 }
 
-function parseEnvelope(raw: string): StartupCheckpointEnvelope {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    throw new Error(
-      "universe rebuild checkpoint is not valid JSON: " +
-        (error instanceof Error ? error.message : String(error)),
-    );
-  }
+function parseEnvelopeValue(parsed: unknown): StartupCheckpointEnvelope {
   const record = parsed as Record<string, unknown>;
   if (typeof record !== "object" || record === null) {
     throw new Error("universe rebuild checkpoint must be an object");
@@ -534,6 +527,310 @@ function parseEnvelope(raw: string): StartupCheckpointEnvelope {
 }
 
 /**
+ * Parse one top-level JSON field at a time. A production checkpoint contains
+ * two independently large objects (verified memos and the last ready graph),
+ * and their combined file can exceed V8's maximum string length even though
+ * each field is valid and individually parseable. This reader never creates
+ * a string for the whole file; it retains only the current field's source
+ * text until JSON.parse has materialized that field.
+ */
+async function readTopLevelJsonObject(
+  path: string,
+  chunkBytes: number,
+): Promise<Record<string, unknown> | null> {
+  const fields: Record<string, unknown> = {};
+  let rootStarted = false;
+  let done = false;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  let sawNonWhitespace = false;
+  let fieldParts: string[] = [];
+
+  const whitespace = (char: string): boolean =>
+    char === " " || char === "\n" || char === "\r" || char === "\t";
+  const invalid = (detail: string): never => {
+    throw new Error("universe rebuild checkpoint is not valid JSON: " + detail);
+  };
+  const completeField = (): void => {
+    const raw = fieldParts.join("").trim();
+    fieldParts = [];
+    if (raw.length === 0) invalid("empty top-level field");
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse("{" + raw + "}") as Record<string, unknown>;
+    } catch (error) {
+      invalid(error instanceof Error ? error.message : String(error));
+    }
+    const keys = Object.keys(parsed!);
+    if (keys.length !== 1) invalid("top-level field is malformed");
+    const key = keys[0]!;
+    if (Object.prototype.hasOwnProperty.call(fields, key)) {
+      invalid("duplicate top-level field " + key);
+    }
+    fields[key] = parsed![key];
+  };
+
+  const stream = createReadStream(path, {
+    encoding: "utf8",
+    highWaterMark: chunkBytes,
+  });
+  for await (const rawChunk of stream) {
+    const chunk = String(rawChunk);
+    let index = 0;
+    let segmentStart = rootStarted && !done ? 0 : -1;
+    while (index < chunk.length) {
+      const char = chunk[index]!;
+      if (!whitespace(char)) sawNonWhitespace = true;
+
+      if (!rootStarted) {
+        if (whitespace(char)) {
+          index++;
+          continue;
+        }
+        if (char !== "{") invalid("top-level value must be an object");
+        rootStarted = true;
+        depth = 1;
+        segmentStart = index + 1;
+        index++;
+        continue;
+      }
+
+      if (done) {
+        if (!whitespace(char)) invalid("trailing content after top-level object");
+        index++;
+        continue;
+      }
+
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (char === "\\") {
+          escape = true;
+        } else if (char === "\"") {
+          inString = false;
+        }
+        index++;
+        continue;
+      }
+      if (char === "\"") {
+        inString = true;
+        index++;
+        continue;
+      }
+      if (char === "{" || char === "[") {
+        depth++;
+        index++;
+        continue;
+      }
+      if (char === "}" && depth === 1) {
+        const tail = chunk.slice(segmentStart, index);
+        if (tail.trim().length > 0 || fieldParts.length > 0) {
+          fieldParts.push(tail);
+          completeField();
+        }
+        segmentStart = -1;
+        depth = 0;
+        done = true;
+        index++;
+        continue;
+      }
+      if (char === "}" || char === "]") {
+        depth--;
+        if (depth < 1) invalid("unbalanced JSON container");
+        index++;
+        continue;
+      }
+      if (char === "," && depth === 1) {
+        fieldParts.push(chunk.slice(segmentStart, index));
+        completeField();
+        segmentStart = index + 1;
+        index++;
+        continue;
+      }
+      index++;
+    }
+    if (rootStarted && !done && segmentStart >= 0) {
+      fieldParts.push(chunk.slice(segmentStart));
+    }
+  }
+
+  if (!sawNonWhitespace) return null;
+  if (!done || inString || depth !== 0) invalid("unexpected end of file");
+  return fields;
+}
+
+interface AttestationJournalRecord {
+  readonly version: 1;
+  readonly expectedRevision: number;
+  readonly resultRevision: number;
+  readonly expectedCheckpointFingerprint: string;
+  readonly resultCheckpointFingerprint: string;
+  readonly runId: string;
+  readonly writes: readonly AttestationCheckpointWrite[];
+  readonly recordFingerprint: string;
+}
+
+function sealEnvelope(
+  next: StartupCheckpointEnvelope,
+): StartupCheckpointEnvelope {
+  return Object.freeze({
+    ...next,
+    checkpointFingerprint: envelopeFingerprint({
+      revision: next.revision,
+      verifiedMemos: next.verifiedMemos,
+      inProgressRun: next.inProgressRun,
+      retryableAttemptsByCandidateKey:
+        next.retryableAttemptsByCandidateKey,
+      readyGeneration: next.readyGeneration,
+    }),
+  });
+}
+
+function mergeAttestationWrites(
+  current: StartupCheckpointEnvelope | null,
+  runId: string,
+  writes: readonly AttestationCheckpointWrite[],
+): StartupCheckpointEnvelope {
+  if (writes.length === 0) {
+    throw new Error("universe rebuild checkpoint: empty outcome batch");
+  }
+  if (current === null) {
+    throw new Error(
+      "universe rebuild checkpoint: no matching in-progress run " + runId,
+    );
+  }
+  const run = current.inProgressRun;
+  if (run === null || run.runId !== runId) {
+    throw new Error(
+      "universe rebuild checkpoint: no matching in-progress run " + runId,
+    );
+  }
+  const merged: Record<string, RunOutcome> = {
+    ...run.outcomesByCandidateKey,
+  };
+  let memos: Readonly<Record<string, DurableVerifiedMemo>> =
+    current.verifiedMemos;
+  let mutableMemos: Record<string, DurableVerifiedMemo> | null = null;
+  const writableMemos = (): Record<string, DurableVerifiedMemo> => {
+    if (mutableMemos === null) {
+      mutableMemos = { ...memos };
+      memos = mutableMemos;
+    }
+    return mutableMemos;
+  };
+  for (const write of writes) {
+    const { outcome, memo } = write;
+    if (memo !== undefined) {
+      assertMemoMatchesVerifiedOutcome(memo, outcome);
+      writableMemos()[memo.familyCandidateKey] = Object.freeze(memo);
+    }
+    if (outcome.status === "verified") {
+      const durableMemo = memos[outcome.familyCandidateKey];
+      if (durableMemo === undefined) {
+        throw new Error(
+          "universe rebuild checkpoint: verified outcome has no memo " +
+            outcome.familyCandidateKey,
+        );
+      }
+      assertMemoMatchesVerifiedOutcome(durableMemo, outcome);
+    } else {
+      if (memo !== undefined) {
+        throw new Error(
+          "universe rebuild checkpoint: non-verified outcome carried memo",
+        );
+      }
+      if (outcome.status === "terminal-rejected") {
+        delete writableMemos()[outcome.familyCandidateKey];
+      }
+    }
+    merged[outcome.familyCandidateKey] = outcome;
+  }
+  return Object.freeze({
+    ...current,
+    revision: current.revision + 1,
+    verifiedMemos: mutableMemos === null
+      ? current.verifiedMemos
+      : Object.freeze(mutableMemos),
+    inProgressRun: Object.freeze({
+      ...run,
+      outcomesByCandidateKey: Object.freeze(merged),
+    }),
+  });
+}
+
+function journalRecordFingerprint(
+  record: Omit<
+    AttestationJournalRecord,
+    "recordFingerprint" | "resultCheckpointFingerprint"
+  >,
+): string {
+  return createHash("sha256")
+    .update("universe-attestation-journal-v1:" + canonicalJson(record))
+    .digest("hex");
+}
+
+function journalResultFingerprint(
+  expectedCheckpointFingerprint: string,
+  recordFingerprint: string,
+): string {
+  return createHash("sha256")
+    .update(
+      "universe-attestation-journal-state-v1:" +
+        expectedCheckpointFingerprint + ":" + recordFingerprint,
+    )
+    .digest("hex");
+}
+
+function parseJournalRecord(line: string): AttestationJournalRecord {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch (error) {
+    throw new Error(
+      "universe rebuild attestation journal is not valid JSON: " +
+        (error instanceof Error ? error.message : String(error)),
+    );
+  }
+  const record = parsed as AttestationJournalRecord;
+  if (
+    typeof record !== "object" ||
+    record === null ||
+    record.version !== 1 ||
+    !Number.isSafeInteger(record.expectedRevision) ||
+    !Number.isSafeInteger(record.resultRevision) ||
+    record.resultRevision !== record.expectedRevision + 1 ||
+    typeof record.expectedCheckpointFingerprint !== "string" ||
+    typeof record.resultCheckpointFingerprint !== "string" ||
+    typeof record.runId !== "string" ||
+    record.runId.length === 0 ||
+    !Array.isArray(record.writes) ||
+    record.writes.length === 0 ||
+    typeof record.recordFingerprint !== "string"
+  ) {
+    throw new Error("universe rebuild attestation journal record is invalid");
+  }
+  const {
+    recordFingerprint,
+    resultCheckpointFingerprint,
+    ...unsigned
+  } = record;
+  if (
+    !/^[0-9a-f]{64}$/.test(recordFingerprint) ||
+    journalRecordFingerprint(unsigned) !== recordFingerprint ||
+    journalResultFingerprint(
+      record.expectedCheckpointFingerprint,
+      recordFingerprint,
+    ) !== resultCheckpointFingerprint
+  ) {
+    throw new Error(
+      "universe rebuild attestation journal fingerprint mismatch",
+    );
+  }
+  return record;
+}
+
+/**
  * Single-writer file-backed CAS store. Every mutation is read-verify-apply
  * with an expected revision, temp-file + fsync + atomic rename + directory
  * fsync, and a sidecar lock file (matching the discovery checkpoint
@@ -542,33 +839,64 @@ function parseEnvelope(raw: string): StartupCheckpointEnvelope {
  */
 export class UniverseRebuildCheckpointStore {
   readonly #path: string;
+  readonly #journalPath: string;
   readonly #lockPath: string;
   readonly #lockWaitTimeoutMs: number;
   readonly #lockRetryMs: number;
+  readonly #readChunkBytes: number;
   #mutex: Promise<void> = Promise.resolve();
+  #cachedEnvelope: StartupCheckpointEnvelope | null | undefined;
+  #cachedBaseSignature: string | null = null;
+  #cachedJournalSignature: string | null = null;
+  #journalCommittedBytes = 0;
+  #journalTotalBytes = 0;
 
   constructor(input: {
     readonly path: string;
     /** Bound for a different process's short atomic-write critical section. */
     readonly lockWaitTimeoutMs?: number;
     readonly lockRetryMs?: number;
+    /** Test seam for proving that every JSON token may cross read chunks. */
+    readonly readChunkBytes?: number;
   }) {
     this.#path = input.path;
+    this.#journalPath = input.path + ".attestation-journal";
     this.#lockPath = input.path + ".lock";
     this.#lockWaitTimeoutMs = input.lockWaitTimeoutMs ?? 5_000;
     this.#lockRetryMs = input.lockRetryMs ?? 10;
+    this.#readChunkBytes = input.readChunkBytes ?? 1024 * 1024;
     if (!Number.isSafeInteger(this.#lockWaitTimeoutMs) || this.#lockWaitTimeoutMs < 1) {
       throw new Error("universe rebuild checkpoint lock wait must be positive");
     }
     if (!Number.isSafeInteger(this.#lockRetryMs) || this.#lockRetryMs < 1) {
       throw new Error("universe rebuild checkpoint lock retry must be positive");
     }
+    if (!Number.isSafeInteger(this.#readChunkBytes) || this.#readChunkBytes < 1) {
+      throw new Error("universe rebuild checkpoint read chunk must be positive");
+    }
   }
 
   async load(): Promise<StartupCheckpointEnvelope | null> {
-    let raw: string;
+    return this.#withLock(async () => {
+      await mkdir(dirname(this.#path), { recursive: true, mode: 0o700 });
+      await this.#acquireLock();
+      try {
+        return await this.#loadUnlocked();
+      } finally {
+        await unlink(this.#lockPath).catch(() => undefined);
+      }
+    });
+  }
+
+  async #fileSignature(path: string): Promise<string | null> {
     try {
-      raw = await readFile(this.#path, "utf8");
+      const value = await stat(path);
+      return [
+        value.dev,
+        value.ino,
+        value.size,
+        value.mtimeMs,
+      ].join(":");
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error
         ? String((error as { code?: unknown }).code)
@@ -576,8 +904,114 @@ export class UniverseRebuildCheckpointStore {
       if (code === "ENOENT") return null;
       throw error;
     }
-    if (raw.trim().length === 0) return null;
-    return parseEnvelope(raw);
+  }
+
+  async #remember(
+    envelope: StartupCheckpointEnvelope | null,
+  ): Promise<void> {
+    this.#cachedEnvelope = envelope;
+    [this.#cachedBaseSignature, this.#cachedJournalSignature] =
+      await Promise.all([
+        this.#fileSignature(this.#path),
+        this.#fileSignature(this.#journalPath),
+      ]);
+  }
+
+  async #loadUnlocked(): Promise<StartupCheckpointEnvelope | null> {
+    const [baseSignature, journalSignature] = await Promise.all([
+      this.#fileSignature(this.#path),
+      this.#fileSignature(this.#journalPath),
+    ]);
+    if (
+      this.#cachedEnvelope !== undefined &&
+      baseSignature === this.#cachedBaseSignature &&
+      journalSignature === this.#cachedJournalSignature
+    ) {
+      return this.#cachedEnvelope;
+    }
+
+    let parsed: Record<string, unknown> | null;
+    try {
+      parsed = await readTopLevelJsonObject(this.#path, this.#readChunkBytes);
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code)
+        : "";
+      if (code !== "ENOENT") throw error;
+      parsed = null;
+    }
+    let envelope = parsed === null ? null : parseEnvelopeValue(parsed);
+    envelope = await this.#replayAttestationJournal(envelope);
+    this.#cachedEnvelope = envelope;
+    this.#cachedBaseSignature = baseSignature;
+    this.#cachedJournalSignature = journalSignature;
+    return envelope;
+  }
+
+  async #replayAttestationJournal(
+    base: StartupCheckpointEnvelope | null,
+  ): Promise<StartupCheckpointEnvelope | null> {
+    let raw: Buffer;
+    try {
+      raw = await readFile(this.#journalPath);
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code)
+        : "";
+      if (code === "ENOENT") {
+        this.#journalCommittedBytes = 0;
+        this.#journalTotalBytes = 0;
+        return base;
+      }
+      throw error;
+    }
+    this.#journalTotalBytes = raw.byteLength;
+    const lastNewline = raw.lastIndexOf(0x0a);
+    this.#journalCommittedBytes = lastNewline < 0 ? 0 : lastNewline + 1;
+    const committed = raw.subarray(0, this.#journalCommittedBytes)
+      .toString("utf8");
+    let current = base;
+    for (const line of committed.split("\n")) {
+      if (line.length === 0) continue;
+      const record = parseJournalRecord(line);
+      if (current === null) {
+        throw new Error(
+          "universe rebuild attestation journal has no base checkpoint",
+        );
+      }
+      if (record.resultRevision <= current.revision) {
+        if (record.resultRevision === current.revision) {
+          throw new Error(
+            "universe rebuild attestation journal compacted-state mismatch",
+          );
+        }
+        continue;
+      }
+      if (
+        record.expectedRevision !== current.revision ||
+        record.expectedCheckpointFingerprint !==
+          current.checkpointFingerprint
+      ) {
+        throw new Error(
+          "universe rebuild attestation journal revision conflict",
+        );
+      }
+      const next = mergeAttestationWrites(
+        current,
+        record.runId,
+        record.writes,
+      );
+      if (next.revision !== record.resultRevision) {
+        throw new Error(
+          "universe rebuild attestation journal result mismatch",
+        );
+      }
+      current = Object.freeze({
+        ...next,
+        checkpointFingerprint: record.resultCheckpointFingerprint,
+      });
+    }
+    return current;
   }
 
   /**
@@ -686,7 +1120,7 @@ export class UniverseRebuildCheckpointStore {
       await mkdir(dirname(this.#path), { recursive: true, mode: 0o700 });
       await this.#acquireLock();
       try {
-        const current = await this.load();
+        const current = await this.#loadUnlocked();
         if (
           expectedRevision !== undefined &&
           (current?.revision ?? 0) !== expectedRevision
@@ -697,17 +1131,8 @@ export class UniverseRebuildCheckpointStore {
           );
         }
         const next = mutate(current);
-        const sealed = Object.freeze({
-          ...next,
-          checkpointFingerprint: envelopeFingerprint({
-            revision: next.revision,
-            verifiedMemos: next.verifiedMemos,
-            inProgressRun: next.inProgressRun,
-            retryableAttemptsByCandidateKey:
-              next.retryableAttemptsByCandidateKey,
-            readyGeneration: next.readyGeneration,
-          }),
-        });
+        if (next === current) return next;
+        const sealed = sealEnvelope(next);
         const tmp = this.#path + ".tmp." + process.pid;
         await this.#writeEnvelope(tmp, sealed);
         const fs = await import("node:fs/promises");
@@ -718,6 +1143,16 @@ export class UniverseRebuildCheckpointStore {
           await file.close();
         }
         await rename(tmp, this.#path);
+        // The base now includes every replayed attestation delta. Removing
+        // the old journal after the atomic rename is crash-safe: if a crash
+        // happens between the two operations, replay skips records whose
+        // result revision is already present in the new base.
+        await unlink(this.#journalPath).catch((error) => {
+          const code = error && typeof error === "object" && "code" in error
+            ? String((error as { code?: unknown }).code)
+            : "";
+          if (code !== "ENOENT") throw error;
+        });
         await fs.open(dirname(this.#path), "r").then(async (dir) => {
           try {
             await dir.sync();
@@ -727,6 +1162,9 @@ export class UniverseRebuildCheckpointStore {
         }).catch(() => {
           // Directory fsync is best-effort on platforms that refuse it.
         });
+        this.#journalCommittedBytes = 0;
+        this.#journalTotalBytes = 0;
+        await this.#remember(sealed);
         return sealed;
       } finally {
         await import("node:fs/promises").then((fs) =>
@@ -759,58 +1197,64 @@ export class UniverseRebuildCheckpointStore {
     if (writes.length === 0) {
       throw new Error("universe rebuild checkpoint: empty outcome batch");
     }
-    return this.#cas(undefined, (current) => {
-      const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
-      const run = base.inProgressRun;
-      if (run === null || run.runId !== runId) {
-        throw new Error(
-          "universe rebuild checkpoint: no matching in-progress run " + runId,
+    return this.#withLock(async () => {
+      await mkdir(dirname(this.#path), { recursive: true, mode: 0o700 });
+      await this.#acquireLock();
+      try {
+        const current = await this.#loadUnlocked();
+        const next = mergeAttestationWrites(current, runId, writes);
+
+        // A killed append may leave one unterminated suffix. It was never a
+        // committed journal record, so remove it before extending the log;
+        // every newline-terminated record was fingerprint-checked on load.
+        if (this.#journalTotalBytes > this.#journalCommittedBytes) {
+          const repair = await open(this.#journalPath, "r+");
+          try {
+            await repair.truncate(this.#journalCommittedBytes);
+            await repair.sync();
+          } finally {
+            await repair.close();
+          }
+        }
+
+        const unsigned = Object.freeze({
+          version: 1 as const,
+          expectedRevision: current!.revision,
+          resultRevision: next.revision,
+          expectedCheckpointFingerprint: current!.checkpointFingerprint,
+          runId,
+          writes: Object.freeze([...writes]),
+        });
+        const recordFingerprint = journalRecordFingerprint(unsigned);
+        const resultCheckpointFingerprint = journalResultFingerprint(
+          current!.checkpointFingerprint,
+          recordFingerprint,
         );
-      }
-      const merged: Record<string, RunOutcome> = {
-        ...run.outcomesByCandidateKey,
-      };
-      const memos: Record<string, DurableVerifiedMemo> = {
-        ...base.verifiedMemos,
-      };
-      for (const write of writes) {
-        const { outcome, memo } = write;
-        if (memo !== undefined) {
-          assertMemoMatchesVerifiedOutcome(memo, outcome);
-          memos[memo.familyCandidateKey] = Object.freeze(memo);
+        const record: AttestationJournalRecord = Object.freeze({
+          ...unsigned,
+          resultCheckpointFingerprint,
+          recordFingerprint,
+        });
+        const journal = await open(this.#journalPath, "a", 0o600);
+        try {
+          await journal.writeFile(JSON.stringify(record) + "\n", "utf8");
+          await journal.sync();
+        } finally {
+          await journal.close();
         }
-        if (outcome.status === "verified") {
-          const durableMemo = memos[outcome.familyCandidateKey];
-          if (durableMemo === undefined) {
-            throw new Error(
-              "universe rebuild checkpoint: verified outcome has no memo " +
-                outcome.familyCandidateKey,
-            );
-          }
-          assertMemoMatchesVerifiedOutcome(durableMemo, outcome);
-        } else {
-          if (memo !== undefined) {
-            throw new Error(
-              "universe rebuild checkpoint: non-verified outcome carried memo",
-            );
-          }
-          if (outcome.status === "terminal-rejected") {
-            // A chain-proven invalidation revokes permanent retention in the
-            // same atomic write as the terminal outcome.
-            delete memos[outcome.familyCandidateKey];
-          }
-        }
-        merged[outcome.familyCandidateKey] = outcome;
+        const journaled = Object.freeze({
+          ...next,
+          checkpointFingerprint: resultCheckpointFingerprint,
+        });
+        await this.#remember(journaled);
+        this.#journalCommittedBytes = Number(
+          (await stat(this.#journalPath)).size,
+        );
+        this.#journalTotalBytes = this.#journalCommittedBytes;
+        return journaled;
+      } finally {
+        await unlink(this.#lockPath).catch(() => undefined);
       }
-      return Object.freeze({
-        ...base,
-        revision: base.revision + 1,
-        verifiedMemos: Object.freeze(memos),
-        inProgressRun: Object.freeze({
-          ...run,
-          outcomesByCandidateKey: Object.freeze(merged),
-        }),
-      });
     });
   }
 

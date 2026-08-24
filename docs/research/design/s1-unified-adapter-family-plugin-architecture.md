@@ -533,6 +533,33 @@ changing exact quoting or execution never invalidates an identity memo; memos se
 remain valid under the conservative full-definition branch. This is why no global/family-local/none change
 classification is needed: each memo decides its own validity cheaply.
 
+**Checkpoint scale and crash recovery.** The first permanent-retention deployment at `301cb8e8` proved the
+candidate model but exposed a storage defect: after upgrading 22,011 memos and sealing a 23,990-candidate
+run, the checkpoint was 538,737,677 bytes. Its independently valid top-level fields were approximately
+263.0 MB verified memos, 20.7 MB in-progress run, 0.1 MB retry queue and 255.0 MB prior ready generation.
+The old `readFile(..., "utf8")` attempted to create one 514 MB V8 string and exited after 38 outcomes with
+`RangeError: Invalid string length`; this was not RPC failure, OOM or a corrupt candidate.
+
+The durable store therefore has two physical layers but still one logical authority:
+
+- the base checkpoint is parsed one top-level JSON field at a time, so no whole-file string exists;
+- attestation batches append newline-committed, fsynced delta records. Each record binds the prior logical
+  checkpoint fingerprint, revision, run id, memo/outcome pair and its own fingerprint; the resulting state
+  fingerprint forms a hash chain from the canonical base;
+- a crash may leave only one unterminated suffix, which is uncommitted and discarded. Every complete record
+  is fingerprint-checked and replayed; revision or chain divergence fails closed;
+- any non-attestation CAS (including Ready promotion) atomically writes one canonical compacted base, then
+  removes the already-included journal. A crash between rename and journal removal is safe because records
+  below the compacted revision are recognized as historical;
+- the journal is only a write-ahead representation of the same memo/outcome CAS. It is not a candidate
+  journal, discovery source, admission authority or second Graph.
+
+The regression forces field names, escapes and values across 5/7-byte read chunks, proves an attestation
+batch does not rewrite the large base, proves a fresh store replays the hash chain, and proves an incomplete
+tail is ignored before the next compaction. The universe/cutover targeted suite (18 commands), full listener
+build, cleanup receipt and diff check pass; exact-SHA live resume evidence remains required before this
+storage fix is called deployed.
+
 ### 5.1 Full evidence identity
 
 Log dedupe preserves block number, block hash, transaction hash, log index, emitter address, topic identity,
