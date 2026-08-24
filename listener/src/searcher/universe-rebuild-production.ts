@@ -1452,6 +1452,32 @@ export function createRebuildWiring(input?: {
     );
   }
   const provider = new ethers.JsonRpcProvider(rpcUrl);
+  // Cross-run memo revalidation usually checks tens of thousands of
+  // instances sealed at one shared proof source. The proof-source block hash
+  // is a property of the fixed canonical chain, not of an individual
+  // instance, so read it once per (current cutoff, proof block) instead of
+  // issuing the same RPC once per memo. Including the current cutoff in the
+  // key prevents a later rebuild from inheriting a value across a reorg; the
+  // final cutoff assertion still fences the whole promotion atomically.
+  const proofHashByFixedRun = new Map<string, Promise<string>>();
+  const readMemoProofHash = (
+    proofNumber: number,
+    cutoff: CanonicalSource,
+  ): Promise<string> => {
+    const key = cutoff.number + ":" + cutoff.hash.toLowerCase() + ":" +
+      proofNumber;
+    const incumbent = proofHashByFixedRun.get(key);
+    if (incumbent !== undefined) return incumbent;
+    let pending: Promise<string>;
+    pending = readBlockHash(provider, proofNumber).catch((error) => {
+      if (proofHashByFixedRun.get(key) === pending) {
+        proofHashByFixedRun.delete(key);
+      }
+      throw error;
+    });
+    proofHashByFixedRun.set(key, pending);
+    return pending;
+  };
   const topics = strictCatalogLogTopics();
   const sourceCoverageKeys = strictCatalogSourceCoverageKeys();
   // reth caps eth_getLogs at 20000 results; the strict-topic union is
@@ -2019,9 +2045,9 @@ export function createRebuildWiring(input?: {
         familyId,
         currentAuthorityFingerprint: memo.validity.authorityFingerprint,
       })) return null;
-      const proofHash = await readBlockHash(
-        provider,
+      const proofHash = await readMemoProofHash(
         memo.validity.proofSource.number,
+        memoInput.cutoff,
       );
       return proofHash.toLowerCase() ===
           memo.validity.proofSource.hash.toLowerCase()

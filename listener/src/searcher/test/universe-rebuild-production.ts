@@ -117,6 +117,36 @@ function authorityFor(
   });
 }
 
+function rpcBlockFixture(number: number, hash: string): object {
+  const zeroHash = "0x" + "00".repeat(32);
+  return {
+    number: "0x" + number.toString(16),
+    hash,
+    parentHash: zeroHash,
+    nonce: "0x0000000000000000",
+    sha3Uncles: zeroHash,
+    logsBloom: "0x" + "00".repeat(256),
+    transactionsRoot: zeroHash,
+    stateRoot: zeroHash,
+    receiptsRoot: zeroHash,
+    miner: "0x" + "00".repeat(20),
+    difficulty: "0x0",
+    totalDifficulty: "0x0",
+    extraData: "0x",
+    size: "0x1",
+    gasLimit: "0x1c9c380",
+    gasUsed: "0x0",
+    timestamp: "0x1",
+    transactions: [],
+    uncles: [],
+    baseFeePerGas: "0x1",
+    mixHash: zeroHash,
+    withdrawals: [],
+    blobGasUsed: "0x0",
+    excessBlobGas: "0x0",
+  };
+}
+
 async function main(): Promise<void> {
   // Full log identity: two pools in one transaction never collapse.
   const a = log({ address: "0x" + "11".repeat(20), logIndex: 0 });
@@ -785,6 +815,8 @@ async function main(): Promise<void> {
   });
   let pmResolves = true;
   let initLogAvailable = true;
+  const memoProofHash = "0x" + "b2".repeat(32);
+  let memoProofHashReads = 0;
   const stubServer = http.createServer((request, response) => {
     let body = "";
     request.on("data", (chunk: Buffer) => { body += chunk.toString("utf8"); });
@@ -816,6 +848,16 @@ async function main(): Promise<void> {
           case "eth_getCode":
             // Any deployed code satisfies the manager-code gate.
             return respond("0x6000");
+          case "eth_getStorageAt":
+            return respond("0x" + "00".repeat(32));
+          case "eth_getBlockByNumber": {
+            const number = Number(BigInt(String(rpcRequest.params?.[0])));
+            if (number === SOURCE.number - 1) memoProofHashReads += 1;
+            return respond(rpcBlockFixture(
+              number,
+              number === SOURCE.number - 1 ? memoProofHash : SOURCE.hash,
+            ));
+          }
           case "eth_call": {
             const transaction = rpcRequest.params?.[0] as
               | { readonly to?: string; readonly data?: string }
@@ -867,6 +909,57 @@ async function main(): Promise<void> {
     const wired = createRebuildWiring({
       rpcUrl: "http://127.0.0.1:" + stubPort,
     });
+    // Thousands of immutable memos normally share one proof block. Instance
+    // authority (code + implementation) is still checked per candidate, but
+    // the shared canonical block hash must be read only once for this fixed
+    // cutoff, including across calls outside ethers' short request cache.
+    const memoCandidateA = candidateFromLog(a);
+    const memoCandidateB = candidateFromLog(b);
+    const memoCandidateKeyA = rebuildFamilyCandidateKey(memoCandidateA);
+    const memoCandidateKeyB = rebuildFamilyCandidateKey(memoCandidateB);
+    const crossRunMemo = (
+      memoCandidate: Readonly<Record<string, unknown>>,
+      familyCandidateKey: string,
+    ): DurableVerifiedMemo => makeMemo(memoCandidate, {
+      familyCandidateKey,
+      validity: Object.freeze({
+        policy: "immutable-code",
+        authorityFingerprint: authorityFor(memoCandidate),
+        proofSource: Object.freeze({
+          number: SOURCE.number - 1,
+          hash: memoProofHash,
+        }),
+      }),
+    });
+    const memoA = crossRunMemo(memoCandidateA, memoCandidateKeyA);
+    const memoB = crossRunMemo(memoCandidateB, memoCandidateKeyB);
+    const memoCheckpoint = Object.freeze({
+      revision: 1,
+      verifiedMemos: Object.freeze({
+        [memoCandidateKeyA]: memoA,
+        [memoCandidateKeyB]: memoB,
+      }),
+      retryableAttemptsByCandidateKey: Object.freeze({}),
+      inProgressRun: null,
+      readyGeneration: null,
+      checkpointFingerprint: "f".repeat(64),
+    }) as never;
+    assert.equal(await wired.findReusableMemo({
+      candidate: memoCandidateA,
+      checkpoint: memoCheckpoint,
+      cutoff: SOURCE,
+    }), memoA);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(await wired.findReusableMemo({
+      candidate: memoCandidateB,
+      checkpoint: memoCheckpoint,
+      cutoff: SOURCE,
+    }), memoB);
+    assert.equal(
+      memoProofHashReads,
+      1,
+      "one fixed-run proof block hash is shared by every memo revalidation",
+    );
     const v4SwapLog = Object.freeze({
       address: v4Manager,
       topics: Object.freeze([UNIV4_SWAP_TOPIC, poolId.toLowerCase()]),
