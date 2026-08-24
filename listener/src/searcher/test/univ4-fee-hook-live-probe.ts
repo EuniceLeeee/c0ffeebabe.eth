@@ -210,9 +210,6 @@ const program = method.program;
 const exactRequests = (program as { buildRequests(input: unknown): readonly unknown[] })
   .buildRequests({ descriptor, route, amountIn, source });
 assert.equal(exactRequests.length, 1);
-const quoteResults = Object.freeze(await Promise.all(exactRequests.map((request) =>
-  runRequest(request as never, source, swap.blockNumber),
-)));
 // The pinned quoter (0x52F0E24D...) rejects quotes for this pool with its own
 // custom error (0x7a5ed734 + poolId, present in the quoter's bytecode, absent
 // from the hook's). This is a live finding for the exact path (affects the
@@ -221,6 +218,9 @@ const quoteResults = Object.freeze(await Promise.all(exactRequests.map((request)
 // probe.
 let quoteOutcome = "n/a";
 try {
+  const quoteResults = Object.freeze(await Promise.all(exactRequests.map((request) =>
+    runRequest(request as never, source, swap.blockNumber),
+  )));
   const quote = (program as {
     decode(input: { programInput: unknown; initialResults: readonly unknown[] }): unknown;
   }).decode({ programInput: { descriptor, route, amountIn, source }, initialResults: quoteResults });
