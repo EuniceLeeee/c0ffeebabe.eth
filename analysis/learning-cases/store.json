@@ -503,6 +503,34 @@
       },
       "created_at": "2026-08-08T23:36:00.000Z",
       "updated_at": "2026-08-08T23:52:00.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260825-blockscan-hunt-tx149-production-authority",
+      "status": "applied",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "none_tooling_only",
+      "gap_detail": "pinned_hunt_was_misindexed_as_target_blind_production_replay",
+      "evidence": {
+        "manual": "blockscan-hunt-tx149 is explicitly a pinned tx149 fixture: it embeds the expected route, venue addresses, token addresses and historical block, widens hunt budgets, and invokes a diagnostic hunt closure instead of the real src/searcher/main.ts production entry",
+        "canonical_before": "the generated tool index nevertheless curated listener:searcher:blockscan-hunt-tx149 with pinned-replay and production-stage authority, so capability selection could treat fixture-guided output as proof of natural production enumeration",
+        "regression": "tool-index now leaves blockscan-hunt-tx149 uncurated and selects listener:searcher:historical-live-production-replay for block-scan+pinned-replay+production-stage+target-blind; the replacement launches the real production entry and rejects target/expected/winner/search-center controls"
+      },
+      "tooling_defect": {
+        "tool": "analysis:tool-index + listener:searcher:blockscan-hunt-tx149",
+        "issue": "a fixture-pinned alternate hunt pipeline was advertised as production-stage replay authority, allowing expected-route knowledge and non-production budgets to masquerade as target-blind live-funnel evidence",
+        "evidence": "blockscan-hunt-tx149 contains EXPECTED_ROUTE plus fixed pool/token/block constants and hunt-specific caps; its source comment calls it a pinned test fixture, while the old curated metadata granted production-stage capability",
+        "codify_target": "remove production-stage authority from the pinned diagnostic and add a real-main target-blind historical replay with exact-SHA, state-anchor, checkpoint/universe/funding look-ahead, environment-injection and finalSim evidence bindings",
+        "codify_commit": "b36b090cddde92b9c0d303a9cceac8c8ab7c6eaf",
+        "status": "codified"
+      },
+      "created_at": "2026-08-25T02:35:54Z",
+      "updated_at": "2026-08-25T02:35:54Z"
     }
   ]
 }
