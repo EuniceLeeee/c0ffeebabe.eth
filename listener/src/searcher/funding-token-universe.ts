@@ -1,6 +1,10 @@
 import { ethers } from "ethers";
 import { readFile, writeFile } from "node:fs/promises";
 import { ADDR } from "../shared/constants/addresses.js";
+import {
+  BLOCKSCAN_MULTICALL3,
+  blockScanMulticallIface,
+} from "./blockscan-multicall.js";
 
 /**
  * Funding token universe: the flash-loan tokens the funding families can
@@ -43,7 +47,18 @@ const ERC20_BALANCE_OF_IFACE = new ethers.Interface([
 const MORPHO_BLUE_DEPLOY_FROM = 19_600_000;
 // reth caps eth_getLogs ranges at 100000 blocks and results at 20000.
 const SCAN_CHUNK_BLOCKS = 100_000;
-const BALANCE_CONCURRENCY = 64;
+const SCAN_CONCURRENCY = 8;
+const MULTICALL_BATCH_SIZE = 256;
+
+interface FundingRead {
+  readonly target: string;
+  readonly callData: string;
+}
+
+interface FundingReadResult {
+  readonly success: boolean;
+  readonly returnData: string;
+}
 
 async function scanLogs(
   provider: ethers.JsonRpcProvider,
@@ -51,18 +66,134 @@ async function scanLogs(
   topic: string,
   from0: number,
   toBlock: number,
+  label: string,
 ): Promise<readonly ethers.Log[]> {
-  const logs: ethers.Log[] = [];
-  for (let from = from0; from < toBlock; from += SCAN_CHUNK_BLOCKS) {
-    const batch = await provider.getLogs({
-      address,
-      topics: [topic],
+  const ranges: Array<{ readonly fromBlock: number; readonly toBlock: number }> = [];
+  for (let from = from0; from <= toBlock; from += SCAN_CHUNK_BLOCKS) {
+    ranges.push(Object.freeze({
       fromBlock: from,
       toBlock: Math.min(toBlock, from + SCAN_CHUNK_BLOCKS - 1),
-    });
-    logs.push(...batch);
+    }));
   }
-  return logs;
+  const batches = new Array<readonly ethers.Log[]>(ranges.length);
+  let nextRange = 0;
+  let completed = 0;
+  console.log(
+    `[searcher/live] funding token universe: ${label} log scan ` +
+      `ranges=${ranges.length} concurrency=${SCAN_CONCURRENCY}`,
+  );
+  await Promise.all(Array.from(
+    { length: Math.min(SCAN_CONCURRENCY, Math.max(1, ranges.length)) },
+    async () => {
+      while (true) {
+        const index = nextRange++;
+        if (index >= ranges.length) return;
+        const range = ranges[index];
+        batches[index] = await provider.getLogs({
+          address,
+          topics: [topic],
+          fromBlock: range.fromBlock,
+          toBlock: range.toBlock,
+        });
+        completed++;
+        if (
+          completed === 1 ||
+          completed % 16 === 0 ||
+          completed === ranges.length
+        ) {
+          console.log(
+            `[searcher/live] funding token universe: ${label} log scan ` +
+              `completed=${completed}/${ranges.length}`,
+          );
+        }
+      }
+    },
+  ));
+  return Object.freeze(batches.flatMap((batch) => [...batch]));
+}
+
+async function executeFundingReads(
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+  reads: readonly FundingRead[],
+  label: string,
+): Promise<readonly FundingReadResult[]> {
+  const results: FundingReadResult[] = [];
+  const batches = Math.ceil(reads.length / MULTICALL_BATCH_SIZE);
+  console.log(
+    `[searcher/live] funding token universe: ${label} reads=${reads.length} ` +
+      `multicallBatches=${batches}`,
+  );
+  for (let index = 0; index < reads.length; index += MULTICALL_BATCH_SIZE) {
+    const chunk = reads.slice(index, index + MULTICALL_BATCH_SIZE);
+    let decoded: readonly FundingReadResult[];
+    try {
+      const raw = await provider.call({
+        to: BLOCKSCAN_MULTICALL3,
+        data: blockScanMulticallIface.encodeFunctionData("aggregate3", [
+          chunk.map((read) => Object.freeze({
+            target: read.target,
+            allowFailure: true,
+            callData: read.callData,
+          })),
+        ]),
+        blockTag: blockNumber,
+      });
+      const [multicallResults] = blockScanMulticallIface.decodeFunctionResult(
+        "aggregate3",
+        raw,
+      ) as unknown as [readonly FundingReadResult[]];
+      if (multicallResults.length !== chunk.length) {
+        throw new Error(`${label} Multicall3 result cardinality mismatch`);
+      }
+      decoded = multicallResults;
+    } catch (error) {
+      // One adversarial/non-standard token can make the outer aggregate call
+      // fail. Preserve the old per-token isolation for that bounded chunk;
+      // this fallback changes transport only, never which failures are kept.
+      console.log(
+        `[searcher/live] funding token universe: ${label} Multicall3 ` +
+          `fallback offset=${index} reason=${error instanceof Error
+            ? error.message.slice(0, 160)
+            : String(error).slice(0, 160)}`,
+      );
+      const direct: FundingReadResult[] = [];
+      for (let directIndex = 0; directIndex < chunk.length; directIndex += 64) {
+        direct.push(...await Promise.all(
+          chunk.slice(directIndex, directIndex + 64).map(async (read) => {
+            try {
+              return Object.freeze({
+                success: true,
+                returnData: await provider.call({
+                  to: read.target,
+                  data: read.callData,
+                  blockTag: blockNumber,
+                }),
+              });
+            } catch {
+              return Object.freeze({ success: false, returnData: "0x" });
+            }
+          }),
+        ));
+      }
+      decoded = direct;
+    }
+    results.push(...decoded.map((result) => Object.freeze({
+      success: result.success,
+      returnData: result.returnData,
+    })));
+    const completed = Math.min(index + chunk.length, reads.length);
+    if (
+      completed === reads.length ||
+      Math.floor(index / MULTICALL_BATCH_SIZE) % 16 === 0
+    ) {
+      console.log(
+        `[searcher/live] funding token universe: ${label} progress ` +
+          `${completed}/${reads.length}`,
+      );
+    }
+  }
+  return Object.freeze(results);
 }
 
 export async function enumerateFundingTokenUniverse(input: {
@@ -90,19 +221,33 @@ export async function enumerateFundingTokenUniverse(input: {
     marketTopic,
     MORPHO_BLUE_DEPLOY_FROM,
     head,
+    "morpho-market",
   );
-  for (const log of marketLogs) {
+  const marketIds = marketLogs.flatMap((log) => {
     const parsed = MORPHO_BLUE_IFACE.parseLog({
       topics: log.topics,
       data: log.data,
     });
-    if (parsed === null) continue;
-    const id = parsed.args[0] as bigint;
-    const result = await provider.call({
-      to: ADDR.MORPHO,
-      data: MORPHO_BLUE_IFACE.encodeFunctionData("market", [id]),
-    });
-    const [market] = MORPHO_BLUE_IFACE.decodeFunctionResult("market", result);
+    return parsed === null ? [] : [parsed.args[0] as bigint];
+  });
+  const marketResults = await executeFundingReads(
+    provider,
+    head,
+    marketIds.map((id) => Object.freeze({
+      target: ADDR.MORPHO,
+      callData: MORPHO_BLUE_IFACE.encodeFunctionData("market", [id]),
+    })),
+    "morpho-market",
+  );
+  for (let index = 0; index < marketResults.length; index++) {
+    const result = marketResults[index];
+    if (!result.success) {
+      throw new Error(`Morpho market(${marketIds[index]}) lookup failed`);
+    }
+    const [market] = MORPHO_BLUE_IFACE.decodeFunctionResult(
+      "market",
+      result.returnData,
+    );
     tokens.add(String(market.loanToken).toLowerCase());
   }
 
@@ -115,24 +260,26 @@ export async function enumerateFundingTokenUniverse(input: {
   const candidates = [...new Set(input.candidateTokens.map((token) =>
     ethers.getAddress(token).toLowerCase()
   ))].sort();
-  for (let index = 0; index < candidates.length; index += BALANCE_CONCURRENCY) {
-    const batch = await Promise.all(
-      candidates.slice(index, index + BALANCE_CONCURRENCY).map((token) =>
-        provider.call({ to: token, data: balanceOfData })
-          .then((result) => ({ token, result }))
-          .catch(() => ({ token, result: "0x" })),
-      ),
-    );
-    for (const item of batch) {
-      try {
-        const [balance] = ERC20_BALANCE_OF_IFACE.decodeFunctionResult(
-          "balanceOf",
-          item.result,
-        );
-        if (BigInt(balance) > 0n) tokens.add(item.token);
-      } catch {
-        // Not an ERC20 (or empty return): cannot be flash-loaned.
-      }
+  const balanceResults = await executeFundingReads(
+    provider,
+    head,
+    candidates.map((token) => Object.freeze({
+      target: token,
+      callData: balanceOfData,
+    })),
+    "balancer-balance",
+  );
+  for (let index = 0; index < balanceResults.length; index++) {
+    const result = balanceResults[index];
+    if (!result.success) continue;
+    try {
+      const [balance] = ERC20_BALANCE_OF_IFACE.decodeFunctionResult(
+        "balanceOf",
+        result.returnData,
+      );
+      if (BigInt(balance) > 0n) tokens.add(candidates[index]);
+    } catch {
+      // Not an ERC20 (or empty return): cannot be flash-loaned.
     }
   }
 
