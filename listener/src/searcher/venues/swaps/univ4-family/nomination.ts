@@ -1,22 +1,24 @@
-import { ethers } from "ethers";
 import type {
   CaptureNominationInput,
   CaptureNominationProvider,
   UnifiedObservation,
 } from "../../adapter-family-plugin.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
-import {
-  UNIV4_SWAP_SELECTOR,
-  UNIV4_SWAP_TOPIC,
-} from "../../swaps/univ4-abi.js";
+import { UNIV4_SWAP_TOPIC } from "../../swaps/univ4-abi.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import { canonicalPoolId } from "./codec.js";
 import {
   isUniv4OpaqueLabel,
   opaquePoolId,
 } from "./reverse-binding.js";
+import {
+  nominationTransactionHash,
+  univ4SwapObservationFromTransaction,
+} from "./trace-evidence.js";
 import { STRICT_EDGE_COLLECTION_WINDOW_BLOCKS } from
   "../../../strict-edge-collection-policy.js";
+
+const UNIV4_NOMINATION_SCAN_CHUNK_BLOCKS = 500;
 
 interface RecentUniv4SwapIndex {
   /**
@@ -211,37 +213,46 @@ export async function nominateUniv4(input: {
     return Object.freeze(results);
   }
   const manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
-  const poolIdToTxHash = await recentUniv4SwapTxHashByPoolId({
-    source: input.source,
-    provider: input.provider,
-    manager,
-    topic0: UNIV4_SWAP_TOPIC,
-    lookback: STRICT_EDGE_COLLECTION_WINDOW_BLOCKS,
-    chunk: STRICT_EDGE_COLLECTION_WINDOW_BLOCKS,
-  });
-  for (const nomination of input.nominations) {
+  const owned = input.nominations.flatMap((nomination) => {
     const opaque = nomination.opaque as Readonly<Record<string, unknown>>;
-    if (!isUniv4OpaqueLabel(opaque)) continue;
+    if (!isUniv4OpaqueLabel(opaque)) return [];
     const poolId = opaquePoolId(opaque);
-    if (poolId === null) continue;
+    if (poolId === null) return [];
+    return [Object.freeze({
+      nomination,
+      poolId,
+      transactionHash: nominationTransactionHash(nomination),
+    })];
+  });
+  // Building the shared index is a source-level read: if it fails, propagate
+  // the retryable failure instead of turning every affected candidate into a
+  // false empty result. Exact nomination evidence bypasses this read entirely.
+  const poolIdToTxHash = owned.some((item) => item.transactionHash === null)
+    ? await recentUniv4SwapTxHashByPoolId({
+        source: input.source,
+        provider: input.provider,
+        manager,
+        topic0: UNIV4_SWAP_TOPIC,
+        lookback: STRICT_EDGE_COLLECTION_WINDOW_BLOCKS,
+        chunk: UNIV4_NOMINATION_SCAN_CHUNK_BLOCKS,
+      })
+    : null;
+  for (const item of owned) {
     try {
-      const transactionHash = poolIdToTxHash.get(poolId.toLowerCase());
-      if (transactionHash !== undefined &&
-        input.provider.traceTransaction !== undefined
-      ) {
-        const trace = await input.provider.traceTransaction(
+      let transactionHash = item.transactionHash;
+      if (transactionHash === null) {
+        transactionHash = poolIdToTxHash?.get(item.poolId.toLowerCase()) ?? null;
+      }
+      if (transactionHash !== null) {
+        const observation = await univ4SwapObservationFromTransaction({
           transactionHash,
-        );
-        const frame = findManagerSwapFrame(trace, manager);
-        if (frame !== null) {
-          results.push(Object.freeze({
-            kind: "call" as const,
-            source: input.source,
-            target: manager,
-            sender: frame.from.toLowerCase(),
-            data: frame.input.toLowerCase(),
-            transactionHash,
-          }));
+          poolId: item.poolId,
+          manager,
+          source: input.source,
+          provider: input.provider,
+        });
+        if (observation !== null) {
+          results.push(observation);
           continue;
         }
       }
@@ -256,39 +267,4 @@ export async function nominateUniv4(input: {
     }
   }
   return Object.freeze(results);
-}
-
-function findManagerSwapFrame(
-  raw: unknown,
-  manager: string,
-): { readonly from: string; readonly input: string } | null {
-  if (raw === null || typeof raw !== "object") return null;
-  const frame = raw as {
-    readonly to?: unknown;
-    readonly from?: unknown;
-    readonly input?: unknown;
-    readonly calls?: unknown;
-  };
-  if (
-    typeof frame.to === "string" &&
-    frame.to.toLowerCase() === manager &&
-    typeof frame.input === "string" &&
-    ethers.isHexString(frame.input) &&
-    frame.input.length >= 10
-  ) {
-    // swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)
-    if (frame.input.slice(0, 10).toLowerCase() === UNIV4_SWAP_SELECTOR) {
-      if (typeof frame.from !== "string" || !ethers.isAddress(frame.from)) {
-        return null;
-      }
-      return { from: ethers.getAddress(frame.from), input: frame.input };
-    }
-  }
-  if (Array.isArray(frame.calls)) {
-    for (const call of frame.calls) {
-      const found = findManagerSwapFrame(call, manager);
-      if (found !== null) return found;
-    }
-  }
-  return null;
 }

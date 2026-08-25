@@ -217,6 +217,18 @@ export interface CaptureMaterializationSemantics {
 export interface CaptureNominationInput {
   readonly address: string;
   readonly opaque: CanonicalValue;
+  /**
+   * Exact source observation that nominated this opaque candidate. The
+   * framework only transports these canonical coordinates; a Family may use
+   * them to recover protocol-owned calldata/identity without rescanning the
+   * same history window. Retained candidates legitimately omit evidence.
+   */
+  readonly evidence?: {
+    readonly transactionHash?: string;
+    readonly blockNumber?: number;
+    readonly blockHash?: string;
+    readonly logIndex?: number;
+  };
 }
 
 export interface CaptureNominationProvider {

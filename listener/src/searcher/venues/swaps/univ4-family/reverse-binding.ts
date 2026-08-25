@@ -7,50 +7,28 @@ import type {
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import {
+  assertPoolKeyIdentity,
   canonicalPoolId,
   canonicalPoolKey,
 } from "./codec.js";
-import {
-  resolveV4PoolKeyViaPositionManager,
-  resolveV4InitsBackward,
-} from "../univ4-pool-discovery.js";
-import { UNIV4_INITIALIZE_TOPIC } from "../univ4-abi.js";
+import { resolveV4PoolKeyViaPositionManager } from
+  "../univ4-pool-discovery.js";
 import type { V4PoolKey } from "../../../planner/token-graph.js";
-
-/**
- * Archive provider used ONLY by the Initialize reverse scan. The local
- * node's eth_getLogs caps on indexed topics[1] filters and the pool's
- * Initialize may predate the retained range, so the retain channel resolves
- * chain truth from the archive node; every other read (PositionManager
- * poolKeys eth_call, manager code, the main event scan) stays on the live
- * provider. Lazy per-URL singleton: one connection per process.
- */
-const archiveLogProviders = new Map<string, ethers.JsonRpcProvider>();
-
-function archiveLogProvider(): ethers.JsonRpcProvider | null {
-  const url = process.env.MAINNET_RPC_URL;
-  if (url === undefined || url.trim().length === 0) return null;
-  let provider = archiveLogProviders.get(url);
-  if (provider === undefined) {
-    provider = new ethers.JsonRpcProvider(url);
-    archiveLogProviders.set(url, provider);
-  }
-  return provider;
-}
+import {
+  nominationTransactionHash,
+  univ4SwapObservationFromTransaction,
+} from "./trace-evidence.js";
 
 /**
  * Plugin-owned retain-channel reverse binding: a univ4 pool's real identity
  * is its 32-byte poolId (the manager never exposes per-pool contracts), so
  * chain truth is recovered from the source block without requiring recent
- * activity. Primary source: the PositionManager poolKeys reverse lookup
- * (eth_call, live provider). Fallback: the indexed Initialize-log reverse
- * scan (topics [Initialize, poolId]) on the archive node (MAINNET_RPC_URL),
- * which covers every pool, including router-side pools that never flowed
- * through the official position manager. Only this reverse scan uses the
- * archive; all other reads stay on the live provider. A candidate without
- * a poolId in its opaque payload is explicitly unsupported; a lookup that
- * fails to resolve is a failed outcome. Identity still re-verifies the pool
- * key against the manager at the source block in the family lifecycle.
+ * activity. A retained candidate already carries its hash-bound PoolKey; a
+ * fresh mutation carries the exact transaction that nominated it, whose real
+ * PoolManager.swap frame recovers that PoolKey. PositionManager.poolKeys is
+ * the remaining cheap chain source. No path performs an unbounded historical
+ * scan: the Family lifecycle independently checks poolId/PoolKey consistency
+ * and active manager state at the fixed source block.
  */
 export async function reverseBindUniv4(input: {
   readonly nominations: readonly CaptureNominationInput[];
@@ -76,57 +54,47 @@ export async function reverseBindUniv4(input: {
       continue;
     }
     try {
-      let resolved = await resolveV4PoolKeyViaPositionManager(
-        // The reverse lookup passes an AbortSignal control as the second
-        // call argument; the nomination provider treats that slot as a
-        // block tag, so drop it (single-call, no cancellation needed) and
-        // pin the read to the source block.
-        { call: (req: { to: string; data: string }) =>
-            input.provider.call(req, input.source.number) } as never,
-        ADDR.UNISWAP_V4_POSITION_MANAGER,
-        poolId,
-      );
+      let resolved = poolKeyFromOpaque(opaque, poolId);
       if (resolved === null) {
-        // PositionManager reverse lookup misses pools whose liquidity never
-        // flowed through the official position manager (router-side pools).
-        // Every pool still has exactly one Initialize log carrying the full
-        // PoolKey: fall back to the indexed Initialize reverse scan (same
-        // chain truth, no recent activity needed) from the source block back
-        // toward the manager deploy block.
-        const archive = archiveLogProvider();
-        const logBackend = archive === null
-          ? Object.freeze({
-            getLogs: (filter: {
-              readonly address?: string;
-              readonly fromBlock?: number;
-              readonly toBlock?: number;
-              readonly topics?: readonly (string | null)[];
-            }) => input.provider.getLogs(filter),
-          })
-          : archive;
-        const backfilled = await resolveV4InitsBackward(
-          logBackend as never,
-          ADDR.UNISWAP_V4_POOL_MANAGER,
-          UNIV4_INITIALIZE_TOPIC,
-          [poolId],
-          input.source.number,
+        const viaPositionManager = await resolveV4PoolKeyViaPositionManager(
+          // The reverse lookup passes an AbortSignal control as the second
+          // call argument; the nomination provider treats that slot as a
+          // block tag, so drop it (single-call, no cancellation needed) and
+          // pin the read to the source block.
+          { call: (req: { to: string; data: string }) =>
+              input.provider.call(req, input.source.number) } as never,
+          ADDR.UNISWAP_V4_POSITION_MANAGER,
+          poolId,
         );
-        resolved = backfilled.get(poolId) ?? null;
-        if (resolved === null) {
-          outcomes.push(Object.freeze({
-            status: "failed",
-            reason: "initialize-backfill-null",
-          }));
-          continue;
-        }
+        resolved = viaPositionManager === null
+          ? null
+          : canonicalPoolKey(viaPositionManager);
       }
-      const poolKey: V4PoolKey = canonicalPoolKey({
-        currency0: resolved.currency0,
-        currency1: resolved.currency1,
-        fee: resolved.fee,
-        tickSpacing: resolved.tickSpacing,
-        hooks: resolved.hooks,
-      });
+      if (resolved === null) {
+        const transactionHash = nominationTransactionHash(nomination);
+        if (transactionHash !== null) {
+          const observation = await univ4SwapObservationFromTransaction({
+            transactionHash,
+            poolId,
+            manager: ADDR.UNISWAP_V4_POOL_MANAGER,
+            source: input.source,
+            provider: input.provider,
+          });
+          if (observation !== null) {
+            outcomes.push(Object.freeze({
+              status: "verified",
+              observation,
+            }));
+            continue;
+          }
+        }
+        outcomes.push(Object.freeze({
+          status: "failed",
+          reason: "poolkey-unresolved",
+        }));
+        continue;
+      }
+      const poolKey: V4PoolKey = canonicalPoolKey(resolved);
       const code = await input.provider.getCode(
         ADDR.UNISWAP_V4_POOL_MANAGER,
         input.source.number,
@@ -163,6 +131,28 @@ export async function reverseBindUniv4(input: {
     }
   }
   return Object.freeze(outcomes);
+}
+
+function poolKeyFromOpaque(
+  opaque: Readonly<Record<string, unknown>>,
+  poolId: string,
+): V4PoolKey | null {
+  const raw = opaque.poolKey;
+  if (raw === null || typeof raw !== "object") return null;
+  const key = raw as Readonly<Record<string, unknown>>;
+  try {
+    const poolKey = canonicalPoolKey({
+      currency0: String(key.currency0),
+      currency1: String(key.currency1),
+      fee: Number(key.fee),
+      tickSpacing: Number(key.tickSpacing),
+      hooks: String(key.hooks),
+    });
+    assertPoolKeyIdentity(poolId, poolKey);
+    return poolKey;
+  } catch {
+    return null;
+  }
 }
 
 export function isUniv4OpaqueLabel(

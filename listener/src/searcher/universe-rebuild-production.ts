@@ -473,6 +473,11 @@ function providerAdapter(
           readonly transactionHash?: string;
         }[];
       } | null,
+    traceTransaction: async (transactionHash) =>
+      provider.send("debug_traceTransaction", [
+        transactionHash,
+        Object.freeze({ tracer: "callTracer" }),
+      ]),
   };
 }
 
@@ -1196,6 +1201,7 @@ export function strictCatalogSourceCoverageKeys(): {
 export const SOURCE_SCAN_BATCH_BLOCKS = 500;
 export const SOURCE_MIN_CHUNK_BLOCKS = 64;
 export const SOURCE_SCAN_CONCURRENCY = 4;
+export const REVERSE_BINDING_CONCURRENCY = 24;
 
 /**
  * Ordered current-code identity of every strict family. Any capability
@@ -2008,6 +2014,20 @@ export function createRebuildWiring(input?: {
               adapter: match.familyId,
               poolId,
             }),
+            evidence: Object.freeze({
+              ...(log.transactionHash === undefined
+                ? {}
+                : { transactionHash: log.transactionHash.toLowerCase() }),
+              ...(log.blockNumber === undefined
+                ? {}
+                : { blockNumber: log.blockNumber }),
+              ...(log.blockHash === undefined
+                ? {}
+                : { blockHash: log.blockHash.toLowerCase() }),
+              ...(log.logIndex === undefined
+                ? {}
+                : { logIndex: log.logIndex }),
+            }),
           }));
         }
       }
@@ -2016,15 +2036,55 @@ export function createRebuildWiring(input?: {
       // Family and early-stops (its contract is one candidate at a time, the
       // retained attestation feeds per-candidate nominations). Feeding the
       // whole set in one call would admit a single pool per Family and drop
-      // every other nomination, so drive it one nomination at a time.
+      // every other nomination. Drive the one-candidate calls through one
+      // global bounded queue: no Family partitioning, deterministic output
+      // order, and no serial RPC tail across thousands of opaque pools.
       const verified: UnifiedObservation[] = [];
-      for (const nomination of nominations) {
-        verified.push(...await executeCatalogReverseBindings({
-          catalog,
-          source: reverseInput.cutoff,
-          nominations: Object.freeze([nomination]),
-          provider: providerAdapter(provider),
-        }));
+      const providerFacade = providerAdapter(provider);
+      const resolved = new Array<readonly UnifiedObservation[]>(
+        nominations.length,
+      );
+      let nextNomination = 0;
+      let completedNominations = 0;
+      console.log(
+        "[universe-rebuild/reverse-binding] start nominations=" +
+          nominations.length + " concurrency=" + REVERSE_BINDING_CONCURRENCY,
+      );
+      await Promise.all(Array.from(
+        {
+          length: Math.min(
+            REVERSE_BINDING_CONCURRENCY,
+            nominations.length,
+          ),
+        },
+        async () => {
+          while (true) {
+            const index = nextNomination++;
+            if (index >= nominations.length) return;
+            resolved[index] = await executeCatalogReverseBindings({
+              catalog,
+              source: reverseInput.cutoff,
+              nominations: Object.freeze([nominations[index]]),
+              provider: providerFacade,
+            });
+            completedNominations++;
+            if (
+              completedNominations === 1 ||
+              completedNominations % 100 === 0 ||
+              completedNominations === nominations.length
+            ) {
+              console.log(
+                "[universe-rebuild/reverse-binding] progress processed=" +
+                  completedNominations + "/" + nominations.length +
+                  " pending=" +
+                  (nominations.length - completedNominations),
+              );
+            }
+          }
+        },
+      ));
+      for (const observations of resolved) {
+        verified.push(...observations);
       }
       const byKey = new Map<string, Readonly<Record<string, unknown>>>();
       for (const observation of verified) {

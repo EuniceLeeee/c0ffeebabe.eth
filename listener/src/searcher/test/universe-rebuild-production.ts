@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { ethers } from "ethers";
 import {
-  UNIV4_INITIALIZE_TOPIC,
+  UNIV4_POOL_MANAGER_INTERFACE,
   UNIV4_SWAP_TOPIC,
 } from "../venues/swaps/univ4-abi.js";
 import { ADDR } from "../../shared/constants/addresses.js";
@@ -820,61 +820,57 @@ async function main(): Promise<void> {
     [currency0, currency1, fee, tickSpacing, hooks],
   );
   const v4Manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
-  // A real Initialize log carrying the full PoolKey (id, currency0 and
-  // currency1 are indexed; fee/tickSpacing/hooks are in the payload).
-  // Indexed address topics are left-padded to 32 bytes on chain.
-  const padded = (address: string): string =>
-    ("0x" + "00".repeat(12) + address.slice(2)).toLowerCase();
-  const initializeLog = Object.freeze({
-    address: v4Manager,
-    topics: Object.freeze([
-      UNIV4_INITIALIZE_TOPIC,
-      poolId.toLowerCase(),
-      padded(currency0),
-      padded(currency1),
-    ]),
-    data: abiCoder.encode(
-      ["uint24", "int24", "address", "uint160", "int24"],
-      [fee, tickSpacing, hooks, "0", 0],
-    ),
-    transactionHash: "0x" + "66".repeat(32),
-    transactionIndex: 0,
-    blockNumber: SOURCE.number - 50,
-    blockHash: "0x" + "55".repeat(32),
-    logIndex: 0,
-    removed: false,
-  });
-  // A second pool: the PositionManager stub only ever resolves pool 1, so
-  // pool 2 must come through the archive Initialize scan. This exercises the
-  // per-nomination admission (a single batched call would admit only one
-  // pool per Family and drop pool 2).
+  // A second pool: the PositionManager stub resolves only pool 1, so pool 2
+  // must recover its PoolKey from the exact transaction that emitted its
+  // nomination log. This exercises the per-nomination admission without any
+  // historical Initialize backscan.
   const currency0b = "0x" + "33".repeat(20);
   const currency1b = "0x" + "44".repeat(20);
+  const fee2 = 500;
+  const tickSpacing2 = 10;
   const poolId2 = ethers.keccak256(abiCoder.encode(
     ["address", "address", "uint24", "int24", "address"],
-    [currency0b, currency1b, 500, 10, hooks],
+    [currency0b, currency1b, fee2, tickSpacing2, hooks],
   ));
-  const initializeLog2 = Object.freeze({
-    address: v4Manager,
-    topics: Object.freeze([
-      UNIV4_INITIALIZE_TOPIC,
-      poolId2.toLowerCase(),
-      padded(currency0b),
-      padded(currency1b),
-    ]),
-    data: abiCoder.encode(
-      ["uint24", "int24", "address", "uint160", "int24"],
-      [500, 10, hooks, "0", 0],
-    ),
-    transactionHash: "0x" + "77".repeat(32),
-    transactionIndex: 0,
-    blockNumber: SOURCE.number - 51,
-    blockHash: "0x" + "58".repeat(32),
-    logIndex: 0,
-    removed: false,
-  });
-  let pmResolves = true;
-  let initLogAvailable = true;
+  const swapInput = (
+    key: Readonly<{
+      readonly currency0: string;
+      readonly currency1: string;
+      readonly fee: number;
+      readonly tickSpacing: number;
+      readonly hooks: string;
+    }>,
+  ): string => UNIV4_POOL_MANAGER_INTERFACE.encodeFunctionData("swap", [
+    key,
+    Object.freeze({
+      zeroForOne: true,
+      amountSpecified: -1_000n,
+      sqrtPriceLimitX96: 4_295_128_740n,
+    }),
+    "0x",
+  ]);
+  const pool1SwapInput = swapInput(Object.freeze({
+    currency0,
+    currency1,
+    fee,
+    tickSpacing,
+    hooks,
+  }));
+  const pool2SwapInput = swapInput(Object.freeze({
+    currency0: currency0b,
+    currency1: currency1b,
+    fee: fee2,
+    tickSpacing: tickSpacing2,
+    hooks,
+  }));
+  const pool1Tx = "0x" + "99".repeat(32);
+  const pool2Tx = "0x" + "9a".repeat(32);
+  const traceSender = "0x" + "ab".repeat(20);
+  let pmResolvesPool1 = true;
+  let traceAvailable = true;
+  let traceReads = 0;
+  const tracedTransactions: string[] = [];
+  let historicalLogReads = 0;
   const memoProofHash = "0x" + "b2".repeat(32);
   let memoProofHashReads = 0;
   const stubServer = http.createServer((request, response) => {
@@ -925,24 +921,47 @@ async function main(): Promise<void> {
             const data = transaction?.data ?? "0x";
             // V4_POSITION_MANAGER_POOL_KEYS_SELECTOR = 0x86b6be7d.
             if (data.startsWith("0x86b6be7d")) {
-              // An empty mapping slot decodes to a full zero tuple.
-              return respond(pmResolves
-                ? encodedPoolKey
-                : "0x" + "00".repeat(160));
+              // PositionManager keys by the leading bytes25 of poolId.
+              const requestedPoolIdPrefix =
+                ("0x" + data.slice(10, 60)).toLowerCase();
+              // An empty mapping slot decodes to a full zero tuple. Resolve
+              // pool 1 only; pool 2 must use its exact nomination trace.
+              if (
+                pmResolvesPool1 &&
+                requestedPoolIdPrefix === poolId.slice(0, 52).toLowerCase()
+              ) {
+                return respond(encodedPoolKey);
+              }
+              if (
+                requestedPoolIdPrefix === poolId2.slice(0, 52).toLowerCase()
+              ) {
+                return respond("0x" + "00".repeat(160));
+              }
+              return respond("0x" + "00".repeat(160));
             }
             return respond("0x");
           }
+          case "debug_traceTransaction": {
+            traceReads++;
+            const transactionHash = String(rpcRequest.params?.[0]).toLowerCase();
+            tracedTransactions.push(transactionHash);
+            if (!traceAvailable) return respond(null);
+            const input = transactionHash === pool1Tx.toLowerCase()
+              ? pool1SwapInput
+              : transactionHash === pool2Tx.toLowerCase()
+                ? pool2SwapInput
+                : null;
+            if (input === null) return respond(null);
+            return respond(Object.freeze({
+              type: "CALL",
+              from: traceSender,
+              to: v4Manager,
+              input,
+              calls: Object.freeze([]),
+            }));
+          }
           case "eth_getLogs": {
-            const filter = rpcRequest.params?.[0] as
-              | { readonly topics?: readonly (string | null)[] }
-              | undefined;
-            const topic0 = filter?.topics?.[0]?.toLowerCase() ?? "";
-            const poolId0 = filter?.topics?.[1]?.toLowerCase() ?? "";
-            if (topic0 === UNIV4_INITIALIZE_TOPIC && initLogAvailable) {
-              if (poolId0 === poolId.toLowerCase()) return respond([initializeLog]);
-              if (poolId0 === poolId2.toLowerCase()) return respond([initializeLog2]);
-              return respond([]);
-            }
+            historicalLogReads++;
             return respond([]);
           }
           default:
@@ -1024,7 +1043,7 @@ async function main(): Promise<void> {
       address: v4Manager,
       topics: Object.freeze([UNIV4_SWAP_TOPIC, poolId.toLowerCase()]),
       data: "0x",
-      transactionHash: "0x" + "99".repeat(32),
+      transactionHash: pool1Tx,
       blockNumber: SOURCE.number,
       blockHash: SOURCE.hash,
       logIndex: 0,
@@ -1063,16 +1082,15 @@ async function main(): Promise<void> {
       cutoff: SOURCE,
     });
     assert.equal(repeated.length, 1, "reverse-bound candidates dedupe per pool");
-    // The reverse scan runs on the archive node (MAINNET_RPC_URL) while the
-    // PositionManager read stays on the live provider; point the archive at
-    // the same stub so the whole path is exercised in-process.
-    const previousArchiveUrl = process.env.MAINNET_RPC_URL;
-    process.env.MAINNET_RPC_URL = "http://127.0.0.1:" + stubPort;
-    // Two pools in one driver call: the PositionManager stub only ever
-    // resolves pool 1, so pool 2 must come through the archive Initialize
-    // scan. A single batched executeCatalogReverseBindings call admits only
-    // one verified observation per Family and would drop pool 2; the driver
-    // must feed one nomination at a time.
+    assert.equal(
+      traceReads,
+      0,
+      "PositionManager-resolved candidates do not pay for transaction trace",
+    );
+    // Two pools in one driver call: the PositionManager resolves pool 1;
+    // pool 2 is recovered from the exact transaction attached to its Swap
+    // nomination. The global queue must preserve both candidates and input
+    // order without a Family-partitioned driver.
     const twoPoolSource = Object.freeze({
       number: SOURCE.number - 3,
       hash: "0x" + "d1".repeat(32),
@@ -1082,7 +1100,7 @@ async function main(): Promise<void> {
       address: v4Manager,
       topics: Object.freeze([UNIV4_SWAP_TOPIC, poolId2.toLowerCase()]),
       data: "0x",
-      transactionHash: "0x" + "9a".repeat(32),
+      transactionHash: pool2Tx,
       blockNumber: SOURCE.number,
       blockHash: SOURCE.hash,
       logIndex: 0,
@@ -1092,6 +1110,16 @@ async function main(): Promise<void> {
       cutoff: twoPoolSource,
     });
     assert.equal(twoPools.length, 2, "every pool nomination is reverse-bound");
+    assert.equal(
+      String((twoPools[0] as Readonly<Record<string, unknown>>).poolId),
+      poolId.toLowerCase(),
+      "global concurrent reverse binding preserves input order",
+    );
+    assert.equal(
+      String((twoPools[1] as Readonly<Record<string, unknown>>).poolId),
+      poolId2.toLowerCase(),
+      "trace-derived pool follows its nomination",
+    );
     const twoPoolKeys = new Set(twoPools.map((candidate) => String(
       (candidate as Readonly<Record<string, unknown>>).poolId,
     )));
@@ -1099,48 +1127,53 @@ async function main(): Promise<void> {
     assert.equal(
       twoPoolKeys.has(poolId2.toLowerCase()),
       true,
-      "pool 2 admitted via the archive scan",
+      "pool 2 admitted via its exact transaction trace",
     );
-    // PositionManager misses router-side pools (empty poolKeys mapping): the
-    // plugin falls back to the indexed Initialize reverse scan and resolves
-    // the same complete candidate from the pool's own Initialize log.
-    // Each scenario pins a distinct source block: ethers v6 dedups identical
-    // requests within 250ms (AbstractProvider #perform tag cache), and the
-    // fallback's getLogs filter derives from the cutoff block, so a shared
-    // cutoff would let the last scenario inherit the previous scenario's
-    // cached response instead of exercising the real chain-truth path.
-    pmResolves = false;
+    assert.equal(traceReads, 2, "both V4-shaped plugin capabilities inspect the miss");
+    assert.deepEqual(
+      tracedTransactions,
+      [pool2Tx.toLowerCase(), pool2Tx.toLowerCase()],
+      "only the PositionManager-missed pool transaction is traced",
+    );
+    // PositionManager misses router-side pools: the exact nomination trace
+    // resolves the same complete candidate without any history backscan.
+    pmResolvesPool1 = false;
     const fallbackSource = Object.freeze({
       number: SOURCE.number - 1,
       hash: "0x" + "b1".repeat(32),
       generation: 1,
     });
-    const backfilled = await wired.reverseBindOpaqueCandidates!({
+    const traced = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: fallbackSource,
     });
     assert.equal(
-      backfilled.length,
+      traced.length,
       1,
-      "Initialize-scan fallback resolves the pool",
+      "exact nomination trace resolves the pool",
     );
-    const backfilledCandidate = backfilled[0] as
+    const tracedCandidate = traced[0] as
       Readonly<Record<string, unknown>>;
-    assert.equal(backfilledCandidate.familyId, "univ4");
-    assert.equal(backfilledCandidate.poolId, poolId.toLowerCase());
+    assert.equal(tracedCandidate.familyId, "univ4");
+    assert.equal(tracedCandidate.poolId, poolId.toLowerCase());
     assert.equal(
-      (backfilledCandidate.poolKey as Readonly<Record<string, unknown>>)
+      (tracedCandidate.poolKey as Readonly<Record<string, unknown>>)
         .currency0,
       currency0.toLowerCase(),
     );
     assert.equal(
-      (backfilledCandidate.poolKey as Readonly<Record<string, unknown>>).fee,
+      (tracedCandidate.poolKey as Readonly<Record<string, unknown>>).fee,
       fee,
     );
-    // Neither chain-truth source resolves: the nomination stays unresolved
-    // (fail-closed, never a guessed identity). Distinct cutoff again so the
-    // 250ms request-dedup window cannot serve a stale resolved response.
-    initLogAvailable = false;
+    assert.equal(traceReads, 4, "router-side pool uses its exact trace per capability");
+    assert.equal(
+      historicalLogReads,
+      0,
+      "reverse binding never performs a historical Initialize scan",
+    );
+    // Neither cheap chain truth nor exact trace resolves: the nomination
+    // stays unresolved (fail-closed, never a guessed identity).
+    traceAvailable = false;
     const missingSource = Object.freeze({
       number: SOURCE.number - 2,
       hash: "0x" + "c1".repeat(32),
@@ -1151,11 +1184,7 @@ async function main(): Promise<void> {
       cutoff: missingSource,
     });
     assert.equal(unresolved.length, 0, "no candidate when both sources miss");
-    if (previousArchiveUrl === undefined) {
-      delete process.env.MAINNET_RPC_URL;
-    } else {
-      process.env.MAINNET_RPC_URL = previousArchiveUrl;
-    }
+    assert.equal(historicalLogReads, 0, "unresolved identity does not deep-scan");
     // A log that matches no declared reverse-binding pattern is untouched.
     const unrelated = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([

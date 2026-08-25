@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   defineProtocolFamily,
   definedFamilyPluginContractSummary,
+  explicitReverseBindingUnsupported,
   type FamilyOwnedActionAdapter,
   type ProtocolFamilyPlugin,
 } from "../venues/adapter-family-plugin.js";
@@ -104,6 +105,9 @@ function defineFixture(
         ? { candidateKind: "fixture", address: observation.address }
         : null,
       candidateKey: (candidate) => candidate.address,
+      reverseBinding: explicitReverseBindingUnsupported(
+        "synthetic fixture has no reverse-binding source",
+      ),
     },
     identity: {
       variants: [{

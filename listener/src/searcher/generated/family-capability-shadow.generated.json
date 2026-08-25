@@ -6908,7 +6908,7 @@
         "familyId": "univ4",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "05dff27fecfad460805bc32d94463b669fe5a5ec908a024ae8950654f56f275f",
+        "contentHash": "064d12cc543eb9a1011150ffc4946cf11c1116f4df8795dfca644088edb26812",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6929,6 +6929,7 @@
           "src/searcher/venues/swaps/univ4-family/manifest.ts",
           "src/searcher/venues/swaps/univ4-family/nomination.ts",
           "src/searcher/venues/swaps/univ4-family/reverse-binding.ts",
+          "src/searcher/venues/swaps/univ4-family/trace-evidence.ts",
           "src/searcher/venues/swaps/univ4-pool-discovery.ts",
           "src/shared/constants/addresses.ts"
         ],
@@ -6970,7 +6971,7 @@
         "familyId": "univ4",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "74eda329dd7797a11e50f57ccc72f0877cd1f6f5c334cef067e5cd56481dab76",
+        "contentHash": "c19ccc584c40cda7287611098f7a6bef0136630a49e76061e1ec0a5c10907a79",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -6989,6 +6990,7 @@
           "src/searcher/venues/swaps/univ4-family/manifest.ts",
           "src/searcher/venues/swaps/univ4-family/nomination.ts",
           "src/searcher/venues/swaps/univ4-family/reverse-binding.ts",
+          "src/searcher/venues/swaps/univ4-family/trace-evidence.ts",
           "src/searcher/venues/swaps/univ4-pool-discovery.ts",
           "src/shared/constants/addresses.ts"
         ],
@@ -7275,7 +7277,7 @@
         "familyId": "univ4-fee-hook",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "5fda7d422820a53b5003bb3d3758d298918411ac48d3e4c46f15935dad87ace4",
+        "contentHash": "6ff5f786254fad9bb30f32174a28291f45268475be0cc683552c5ea7ecd8b7e6",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -7295,6 +7297,7 @@
           "src/searcher/venues/swaps/univ4-family/discovery.ts",
           "src/searcher/venues/swaps/univ4-family/nomination.ts",
           "src/searcher/venues/swaps/univ4-family/reverse-binding.ts",
+          "src/searcher/venues/swaps/univ4-family/trace-evidence.ts",
           "src/searcher/venues/swaps/univ4-fee-hook-family/discovery.ts",
           "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
           "src/searcher/venues/swaps/univ4-pool-discovery.ts",
@@ -7338,7 +7341,7 @@
         "familyId": "univ4-fee-hook",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "c940a1d3d288894b9d6926ce4b50ef505841c0be4eccea51cacaa3917ee126d4",
+        "contentHash": "748e45fab42591ca915bec478eb866154d5e94908431f8e93afd3f5a5a7e64e7",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -7357,6 +7360,7 @@
           "src/searcher/venues/swaps/univ4-family/discovery.ts",
           "src/searcher/venues/swaps/univ4-family/nomination.ts",
           "src/searcher/venues/swaps/univ4-family/reverse-binding.ts",
+          "src/searcher/venues/swaps/univ4-family/trace-evidence.ts",
           "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
           "src/searcher/venues/swaps/univ4-pool-discovery.ts",
           "src/shared/constants/addresses.ts"
@@ -7648,5 +7652,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "512d83a97ccfa43c0a4a72c663a604bf0715a2909b0ce0630daca7281d8e0dea"
+  "artifactHash": "affd4d0deabe84b0e6e9a1a9100e55b5236ee0927a8bf55047f6fc26b5f67185"
 }

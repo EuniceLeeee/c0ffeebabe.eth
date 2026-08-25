@@ -9,8 +9,10 @@ import type {
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
 import {
+  UNIV4_POOL_MANAGER_INTERFACE,
   UNIV4_SWAP_TOPIC,
 } from "../venues/swaps/univ4-abi.js";
+import { v4PoolId } from "../venues/swaps/univ4-common.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
@@ -18,11 +20,35 @@ const SOURCE: CanonicalSource = Object.freeze({
   hash: `0x${"a1".repeat(32)}`,
   generation: 1,
 });
-const POOL_ID = `0x${"e1".repeat(32)}`;
 const TX = `0x${"d1".repeat(32)}`;
 const SENDER = `0x${"f1".repeat(20)}`;
-const SWAP_CALLDATA =
-  "0xf3cd914c" + "00".repeat(32) + "11".repeat(32) + "22".repeat(32);
+const POOL_KEY = Object.freeze({
+  currency0: `0x${"11".repeat(20)}`,
+  currency1: `0x${"22".repeat(20)}`,
+  fee: 500,
+  tickSpacing: 10,
+  hooks: ethers.ZeroAddress,
+});
+const POOL_ID = v4PoolId(POOL_KEY);
+const SWAP_CALLDATA = UNIV4_POOL_MANAGER_INTERFACE.encodeFunctionData(
+  "swap",
+  [POOL_KEY, Object.freeze({
+    zeroForOne: true,
+    amountSpecified: -1_000n,
+    sqrtPriceLimitX96: 4_295_128_740n,
+  }), "0x"],
+);
+const OTHER_SWAP_CALLDATA = UNIV4_POOL_MANAGER_INTERFACE.encodeFunctionData(
+  "swap",
+  [Object.freeze({
+    ...POOL_KEY,
+    currency1: `0x${"33".repeat(20)}`,
+  }), Object.freeze({
+    zeroForOne: true,
+    amountSpecified: -1_000n,
+    sqrtPriceLimitX96: 4_295_128_740n,
+  }), "0x"],
+);
 
 function mockProvider(options: {
   readonly logs?: readonly {
@@ -32,23 +58,26 @@ function mockProvider(options: {
     readonly transactionHash: string;
   }[];
   readonly trace?: unknown;
+  readonly onGetLogs?: () => void;
 }): CaptureNominationProvider {
   return {
     call: async () => "0x",
     getCode: async () => "0x01",
     getStorage: async () => `0x${"00".repeat(32)}`,
     getLogs: async (filter) => {
+      options.onGetLogs?.();
       // Plugin-owned batched reverse lookup: one manager-wide Swap scan per
       // source block indexes poolId -> newest tx; per-pool trace follows.
       assert.equal(
         filter.address?.toLowerCase(),
         ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
       );
-      assert.equal(filter.toBlock, SOURCE.number);
-      assert.equal(
-        filter.fromBlock,
-        SOURCE.number - 14_399,
-        "plugin auxiliary nomination must use the shared exact 2-day range",
+      assert.ok(
+        Number(filter.fromBlock) >= SOURCE.number - 14_399 &&
+          Number(filter.toBlock) <= SOURCE.number &&
+          Number(filter.toBlock) - Number(filter.fromBlock) + 1 <= 500,
+        "plugin auxiliary nomination must cover the shared two-day range " +
+          "through bounded slices",
       );
       assert.deepEqual(filter.topics, [
         UNIV4_SWAP_TOPIC.toLowerCase(),
@@ -71,10 +100,12 @@ function managerSwapTrace(): unknown {
 
 async function main(): Promise<void> {
   // Positive: Swap log -> trace -> real PoolManager.swap calldata frame.
+  let directEvidenceGetLogs = 0;
   const positive = await nominateUniv4({
     nominations: Object.freeze([Object.freeze({
       address: ADDR.UNISWAP_V4_POOL_MANAGER,
       opaque: Object.freeze({ adapter: "univ4", poolId: POOL_ID }),
+      evidence: Object.freeze({ transactionHash: TX }),
     })]),
     source: SOURCE,
     provider: mockProvider({
@@ -88,6 +119,7 @@ async function main(): Promise<void> {
         transactionHash: TX.toLowerCase(),
       })],
       trace: managerSwapTrace(),
+      onGetLogs: () => directEvidenceGetLogs++,
     }),
   });
   assert.equal(positive.length, 1);
@@ -99,12 +131,18 @@ async function main(): Promise<void> {
   assert.equal(observation.target, ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase());
   assert.equal(observation.data, SWAP_CALLDATA.toLowerCase());
   assert.equal(observation.transactionHash, TX.toLowerCase());
+  assert.equal(
+    directEvidenceGetLogs,
+    0,
+    "an exact nomination transaction must not rescan the history window",
+  );
 
   // Trace frame nested inside calls is found recursively.
   const nested = await nominateUniv4({
     nominations: Object.freeze([Object.freeze({
       address: ADDR.UNISWAP_V4_POOL_MANAGER,
       opaque: Object.freeze({ adapter: "univ4", poolId: POOL_ID }),
+      evidence: Object.freeze({ transactionHash: TX }),
     })]),
     source: SOURCE,
     provider: mockProvider({
@@ -134,6 +172,7 @@ async function main(): Promise<void> {
     nominations: Object.freeze([Object.freeze({
       address: ADDR.UNISWAP_V4_POOL_MANAGER,
       opaque: Object.freeze({ adapter: "univ4", poolId: POOL_ID }),
+      evidence: Object.freeze({ transactionHash: TX }),
     })]),
     source: SOURCE,
     provider: mockProvider({
@@ -155,6 +194,26 @@ async function main(): Promise<void> {
     }),
   });
   assert.equal(noFrame.length, 0);
+
+  // A multi-pool transaction cannot lend an unrelated V4 frame to this
+  // poolId: calldata-derived PoolKey identity must match the nomination.
+  const wrongPoolFrame = await nominateUniv4({
+    nominations: Object.freeze([Object.freeze({
+      address: ADDR.UNISWAP_V4_POOL_MANAGER,
+      opaque: Object.freeze({ adapter: "univ4", poolId: POOL_ID }),
+      evidence: Object.freeze({ transactionHash: TX }),
+    })]),
+    source: SOURCE,
+    provider: mockProvider({
+      trace: Object.freeze({
+        to: ADDR.UNISWAP_V4_POOL_MANAGER,
+        from: SENDER,
+        input: OTHER_SWAP_CALLDATA,
+        calls: Object.freeze([]),
+      }),
+    }),
+  });
+  assert.equal(wrongPoolFrame.length, 0);
 
   // Missing poolId fails closed.
   const badPoolId = await nominateUniv4({
@@ -221,11 +280,11 @@ async function main(): Promise<void> {
       provider: concurrentProvider,
     }),
   ));
-  // One build is one exact 14400-block getLogs call; four concurrent cold
-  // nominations must share that same in-flight build.
+  // One build is the same exact two-day range split into 29 bounded slices;
+  // four concurrent cold nominations must share that one in-flight build.
   assert.equal(
     concurrentGetLogsCalls,
-    1,
+    29,
     "concurrent cold nominations must share one window build",
   );
   assert.equal(concurrent[0].length, 1);
@@ -262,7 +321,7 @@ async function main(): Promise<void> {
   const afterDiffHash = diffHashGetLogsCalls;
   assert.equal(
     afterDiffHash,
-    1,
+    29,
     "a different source hash must build its own exact-range index",
   );
 
@@ -275,10 +334,10 @@ async function main(): Promise<void> {
     getStorage: async () => "0x" + "00".repeat(32),
     getLogs: async () => {
       flakyCalls += 1;
-      // The 14400-block build halves on failure (14400 -> ... -> 56, 9
-      // calls) before the hard floor rejects; fail the whole first attempt
+      // The 500-block slice halves on failure (500 -> 250 -> 125 -> 62,
+      // four calls) before the hard floor rejects; fail the first attempt
       // so the cache stays unpoisoned and the retry rebuilds cleanly.
-      if (flakyCalls <= 12) throw new Error("transient rpc");
+      if (flakyCalls <= 4) throw new Error("transient rpc");
       return Object.freeze([Object.freeze({
         address: ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
         topics: Object.freeze([UNIV4_SWAP_TOPIC.toLowerCase(), POOL_ID]),
