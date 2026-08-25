@@ -123,6 +123,26 @@ test("capability selection chooses the canonical deep transaction analyzer", () 
   assert.equal(tools[0]?.id, "analysis:bundle-postmortem");
 });
 
+test("a wrapper whose retired transitive hunt entry is missing is not production replay authority", () => {
+  const tools = discoverToolIndex(repoRoot);
+  const retired = tools.find((tool) =>
+    tool.id === "listener:searcher:blockscan-hunt-tx149"
+  );
+  assert.equal(retired?.curated, false);
+  assert.equal(retired?.capabilities.includes("pinned-replay"), false);
+  assert.equal(retired?.capabilities.includes("production-stage"), false);
+  const selected = selectTools(tools, [
+    "block-scan",
+    "pinned-replay",
+    "production-stage",
+    "target-blind",
+  ]);
+  assert.equal(
+    selected[0]?.id,
+    "listener:searcher:historical-live-production-replay",
+  );
+});
+
 test("fixture calibration cannot satisfy live competitor-window evidence", () => {
   const tools = discoverToolIndex(repoRoot);
   const calibration = tools.find((tool) => tool.id === "analysis:competitor-calibration");

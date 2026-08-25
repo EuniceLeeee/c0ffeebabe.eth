@@ -64,6 +64,8 @@
     "searcher:fluid-dex-verify": "node --import tsx src/searcher/test/fluid-dex-verify.ts",
     "searcher:six-step-diagnose:tx149": "node --import tsx src/searcher/test/blockscan-hunt-tx149.ts --diagnostic-max-candidates 5000 --diagnostic-scan-budget-ms 600000 --diagnostic-pass-budget-ms 1200000",
     "searcher:blockscan-hunt-tx149": "node --import tsx src/searcher/test/blockscan-hunt-tx149.ts",
+    "searcher:historical-live-production-replay": "node --import tsx src/searcher/test/historical-live-production-replay.mjs",
+    "searcher:historical-live-production-replay-contract": "node --import tsx src/searcher/test/historical-live-production-replay-contract-test.ts",
     "searcher:bundle-router-safety": "node --import tsx src/searcher/test/bundle-router-safety.ts",
     "searcher:bribe-mode": "node --import tsx src/searcher/test/bribe-mode.ts",
     "searcher:live-envelope": "node --import tsx src/searcher/test/live-envelope.ts",

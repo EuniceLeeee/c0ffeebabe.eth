@@ -6,6 +6,12 @@ import { ethers } from "ethers";
 import "../shared/adapters/index.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
+import {
+  forkBotVmInstallationEnabled,
+  forkBotVmRuntimeReceipt,
+  installForkBotVm,
+  type ForkBotVmRuntimeReceipt,
+} from "../shared/executor/botvm-executor.js";
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
 import type { BlockScanCoreConfig } from "./detector/blockscan-scanner-core.js";
 import {
@@ -62,7 +68,10 @@ import {
   rebuildUniverse,
 } from "./universe-rebuild-runner.js";
 import { createRebuildWiring } from "./universe-rebuild-production.js";
-import { ensureFundingTokenUniverse } from "./funding-token-universe.js";
+import {
+  ensureFundingTokenUniverse,
+  loadFundingTokenUniverse,
+} from "./funding-token-universe.js";
 import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
 import {
   StrictProductionRuntimeRoot,
@@ -142,7 +151,9 @@ import { StrictReadyGraphViewCoordinator } from
   "./strict-ready-graph-view.js";
 import {
   BlockScanRuntimeLoop,
+  prepareBlockScanExecutionWorkerFork,
   type BlockScanAtomicResult,
+  type BlockScanExecutionWorker,
   type BlockScanPendingEvidenceTrigger,
   type BlockScanRejectBlacklistEntry,
   type BlockScanRejectBlacklistState,
@@ -738,6 +749,15 @@ async function main(): Promise<void> {
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
+  const blindForkBotVmFlag = process.env.SEARCHER_BLIND_INSTALL_FORK_BOTVM;
+  const blindInstallForkBotVm = forkBotVmInstallationEnabled(
+    blindProductionAudit,
+    blindForkBotVmFlag,
+  );
+  const blindForkBotVmReceipt: ForkBotVmRuntimeReceipt | null =
+    blindInstallForkBotVm
+      ? forkBotVmRuntimeReceipt(config.wallet.address, config.botvmAddress)
+      : null;
   const blindPrepareBudgetRaw = Number(
     process.env.SEARCHER_BLIND_PREPARE_BUDGET_MS ?? "120000",
   );
@@ -838,16 +858,8 @@ async function main(): Promise<void> {
   const liveRethReadPriority = new LiveRethReadPriority();
   let blockScanStateReadBackend:
     JsonRpcBlockScanStateReadBackend | undefined;
-  const blockScanExecutionWorkers: Array<{
-    readonly state: AnvilStateBackend;
-    readonly solver: AnvilSolver;
-    readonly simulator: BotVMSimulator;
-  }> = [];
-  const blockScanFinalSimulationWorkers: Array<{
-    readonly state: AnvilStateBackend;
-    readonly solver: AnvilSolver;
-    readonly simulator: BotVMSimulator;
-  }> = [];
+  const blockScanExecutionWorkers: BlockScanExecutionWorker[] = [];
+  const blockScanFinalSimulationWorkers: BlockScanExecutionWorker[] = [];
   const blockScanRuntimeAbort = new AbortController();
   let shuttingDown = false;
   const blockScanPassBudgetRaw = Number(
@@ -972,10 +984,25 @@ async function main(): Promise<void> {
       config.botvmAddress,
       config.wallet.address,
     );
+    const forkPreparation = (
+      workerState: AnvilStateBackend,
+    ): Pick<BlockScanExecutionWorker, "prepareFork"> | Record<string, never> =>
+      blindInstallForkBotVm
+        ? {
+            prepareFork: async (): Promise<void> => {
+              await installForkBotVm(
+                workerState.provider,
+                config.wallet.address,
+                config.botvmAddress,
+              );
+            },
+          }
+        : {};
     blockScanExecutionWorkers.push({
       state: isolatedState,
       solver: isolatedSolver,
       simulator: isolatedSimulator,
+      ...forkPreparation(isolatedState),
     });
     for (let worker = 1; worker < blockScanSolveConcurrency; worker++) {
       const port = blockScanAnvilPort + worker;
@@ -992,6 +1019,7 @@ async function main(): Promise<void> {
           config.botvmAddress,
           config.wallet.address,
         ),
+        ...forkPreparation(workerState),
       });
     }
     for (
@@ -1013,6 +1041,7 @@ async function main(): Promise<void> {
           config.botvmAddress,
           config.wallet.address,
         ),
+        ...forkPreparation(workerState),
       });
     }
     const blockScanStateRpcConcurrency = Math.max(
@@ -1515,6 +1544,18 @@ async function main(): Promise<void> {
     candidateTokens: [...tokenIndex.keys()],
     path: fundingTokenUniversePath,
   });
+  const fundingTokenUniverseBinding = blindProductionAudit
+    ? await loadFundingTokenUniverse(fundingTokenUniversePath).then((table) => {
+        if (table === null) {
+          throw new Error("funding token universe was not durably solidified");
+        }
+        return Object.freeze({
+          enumeratedAtBlock: table.enumeratedAtBlock,
+          tokenCount: table.tokens.length,
+          tokenSetSha256: blindProductionAuditHash(table.tokens),
+        });
+      })
+    : null;
   console.log(
     `[searcher/live] routing graph: ${graph.length} edges, ${tokenIndex.size} tokens | ` +
       `detection pool set: ${allPoolMap.size} addresses` +
@@ -2007,6 +2048,8 @@ async function main(): Promise<void> {
   const blindEffectiveConfig = normalizeBlindArtifactValue({
     config: blindPublicConfig,
     executorAddress: blindWallet.address.toLowerCase(),
+    forkBotVmInstallation: blindForkBotVmReceipt,
+    fundingTokenUniverse: fundingTokenUniverseBinding,
     forceInclude: {
       count: blindForceIncludePoolIds.length,
       contentSha256: blindProductionAuditHash(
@@ -2104,13 +2147,14 @@ async function main(): Promise<void> {
       ...blockScanExecutionWorkers,
       ...blockScanFinalSimulationWorkers,
     ].map(async (worker) => {
-      await worker.state.forkAt(control.base.number);
-      const forkHash = await readBlockHash(worker.state.provider, control.base.number);
-      if (forkHash.toLowerCase() !== control.base.hash.toLowerCase()) {
-        throw new Error(
-          `blind worker base hash mismatch ${forkHash} != ${control.base.hash}`,
-        );
-      }
+      await prepareBlockScanExecutionWorkerFork({
+        worker,
+        sourceBlock: control.base.number,
+        sourceBlockHash: control.base.hash,
+        deadlineAtMs: Date.now() + blindPrepareBudgetMs,
+        signal: blockScanRuntimeAbort.signal,
+        readBlockHash,
+      });
     }));
     if (!blockScanGraph) {
       throw new Error("blind production prepare has no block-scan graph");

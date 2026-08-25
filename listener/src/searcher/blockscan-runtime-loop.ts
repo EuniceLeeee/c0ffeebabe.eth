@@ -379,6 +379,54 @@ export interface BlockScanExecutionWorker {
   readonly state: AnvilStateBackend;
   readonly solver: AnvilSolver;
   readonly simulator: BotVMSimulator;
+  /** Optional generic fork-local infrastructure installation. */
+  readonly prepareFork?: () => Promise<void>;
+}
+
+export async function prepareBlockScanExecutionWorkerFork(input: {
+  readonly worker: BlockScanExecutionWorker;
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+  readonly deadlineAtMs: number;
+  readonly signal: AbortSignal;
+  readonly readBlockHash: (
+    provider: AnvilStateBackend["provider"],
+    blockNumber: number,
+  ) => Promise<string>;
+  readonly isShuttingDown?: () => boolean;
+}): Promise<void> {
+  const { worker } = input;
+  const interrupted = (): boolean =>
+    input.signal.aborted || input.isShuttingDown?.() === true;
+  if (interrupted()) throw input.signal.reason;
+  await worker.state.forkAt(input.sourceBlock, {
+    deadlineAtMs: input.deadlineAtMs,
+    signal: input.signal,
+  });
+  if (interrupted()) throw input.signal.reason;
+  const forkHash = await awaitBlockScanDeadline(
+    input.readBlockHash(worker.state.provider, input.sourceBlock),
+    input.deadlineAtMs,
+    "execution worker fork hash",
+    () => worker.state.stop(),
+    input.signal,
+  );
+  if (interrupted()) throw input.signal.reason;
+  if (forkHash !== input.sourceBlockHash) {
+    throw new Error(
+      `worker fork hash mismatch ${forkHash} != ${input.sourceBlockHash}`,
+    );
+  }
+  if (worker.prepareFork !== undefined) {
+    await awaitBlockScanDeadline(
+      worker.prepareFork(),
+      input.deadlineAtMs,
+      "execution worker fork preparation",
+      () => worker.state.stop(),
+      input.signal,
+    );
+    if (interrupted()) throw input.signal.reason;
+  }
 }
 
 export interface BlockScanAtomicExecutionInput {
@@ -2012,34 +2060,15 @@ export class BlockScanRuntimeLoop {
         const resetStartedAtMs = Date.now();
         let status: "complete" | "failed" = "failed";
         try {
-          if (this.deps.isShuttingDown() || input.signal.aborted) {
-            throw input.signal.reason;
-          }
-          await worker.state.forkAt(input.sourceBlock, {
+          await prepareBlockScanExecutionWorkerFork({
+            worker,
+            sourceBlock: input.sourceBlock,
+            sourceBlockHash: input.sourceBlockHash,
             deadlineAtMs: input.deadlineAtMs,
             signal: input.signal,
+            readBlockHash: this.deps.readBlockHash,
+            isShuttingDown: this.deps.isShuttingDown,
           });
-          if (this.deps.isShuttingDown() || input.signal.aborted) {
-            throw input.signal.reason;
-          }
-          const forkHash = await awaitBlockScanDeadline(
-            this.deps.readBlockHash(
-              worker.state.provider,
-              input.sourceBlock,
-            ),
-            input.deadlineAtMs,
-            "execution worker fork hash",
-            () => worker.state.stop(),
-            input.signal,
-          );
-          if (this.deps.isShuttingDown() || input.signal.aborted) {
-            throw input.signal.reason;
-          }
-          if (forkHash !== input.sourceBlockHash) {
-            throw new Error(
-              `worker fork hash mismatch ${forkHash} != ${input.sourceBlockHash}`,
-            );
-          }
           status = "complete";
         } finally {
           workerResetTimings.push(Object.freeze({
