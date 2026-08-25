@@ -1,6 +1,5 @@
 import type {
   AdapterGenerationFence,
-  CentralAdapterRuntime,
 } from "./adapter-work-intent.js";
 import type {
   AdapterFamilyDiscoveryCheckpointCandidateIssuer,
@@ -17,8 +16,6 @@ import {
   type AdapterFamilySnapshotInventoryIncumbentInput,
   type PreparedAdapterFamilySnapshotInventoryClosure,
 } from "./adapter-family-snapshot-inventory-closure.js";
-import { catalogInstancePublicationKey } from
-  "./adapter-family-catalog-publication.js";
 import {
   advanceDiscoveryFamilySourceWatermarks,
   createDiscoveryFamilySourceWatermarks,
@@ -40,16 +37,12 @@ import {
   type CanonicalValue,
 } from "./venues/canonical-value.js";
 import {
-  executeAdapterFamilyLifecycleBatch,
-  executeCreditFamilyInstanceLifecycle,
-  type AdapterFamilyPublication,
   type AdapterInstanceOutcome,
   type FamilyLifecycleMatch,
 } from "./venues/adapter-family-runtime.js";
 import {
   type FamilyCapabilityCatalog,
   type LoadedFamilyBox,
-  type LoadedFamilyPlugin,
 } from "./venues/family-capability-catalog.js";
 
 export type AdapterFamilyShadowScanMode =
@@ -1079,7 +1072,7 @@ export class AdapterFamilyObservationShadowIngress {
       let candidateKey: string;
       try {
         candidateKey = nonempty(
-          family.plugin.discovery.candidateKey(candidate),
+          family.plugin.discovery.candidateKey(candidate as never),
           "strict Family candidate key",
         );
       } catch (error) {
@@ -1501,7 +1494,7 @@ export class AdapterFamilyObservationShadowIngress {
   }): readonly AdapterFamilyShadowFamilyResult[] {
     return Object.freeze(this.#catalog.listAll().map((family) => {
       const familyId = family.plugin.manifest.familyId;
-      if (!("discovery" in family.plugin)) {
+      if (!family.applicableCapabilities.includes("discovery")) {
         return Object.freeze({
           familyId,
           domain: family.plugin.manifest.domain,
@@ -1567,117 +1560,6 @@ export class AdapterFamilyObservationShadowIngress {
       coverageAuthority: watermark.coverageAuthority,
     }));
   }
-}
-
-/** Bind strict lifecycle to the shadow ingress without a production sink. */
-export function createRuntimeAdapterFamilyShadowReattestor(
-  runtime: CentralAdapterRuntime,
-): AdapterFamilyShadowReattestor {
-  return Object.freeze({
-    async reattest(
-      input: AdapterFamilyShadowReattestationInput,
-    ): Promise<AdapterFamilyShadowReattestationResult> {
-      const domain = input.family.plugin.manifest.domain;
-      if (domain === "funding") {
-        throw new Error("Funding Family has no observation lifecycle");
-      }
-      if (domain === "credit") {
-        const results = await Promise.all(input.matches.map((match) =>
-          executeCreditFamilyInstanceLifecycle({
-            family: input.family,
-            match,
-            source: input.source,
-            generation: input.source.generation,
-            runtime,
-          })
-        ));
-        const outcomes = Object.freeze(results.flatMap((result) => result.outcomes));
-        return Object.freeze({
-          familyId: input.family.plugin.manifest.familyId,
-          sourceId: input.sourceId,
-          source: snapshotSource(input.source),
-          subjectKey: input.subjectKey,
-          candidateTerminalKeys: terminalCandidateKeys(input.candidateKeys, outcomes),
-          outcomes,
-          admittedInstanceKeys: Object.freeze(sortedUnique(results.flatMap(
-            (result) => result.instance === null
-              ? []
-              : [result.instance.instanceKey],
-          ), "Credit instance keys")),
-          admittedInstancePublicationKeys: Object.freeze(sortedUnique(
-            results.flatMap((result) =>
-              result.instance === null
-                ? []
-                : [catalogInstancePublicationKey(result.instance)]
-            ),
-            "Credit instance publication keys",
-          )),
-          publicationFingerprints: Object.freeze([]),
-        });
-      }
-      let capturedFingerprint: string | null = null;
-      const result = await executeAdapterFamilyLifecycleBatch({
-        family: input.family as LoadedFamilyPlugin,
-        matches: input.matches,
-        source: input.source,
-        generation: input.source.generation,
-        runtime,
-        publisher: Object.freeze({
-          publish(publication: AdapterFamilyPublication): void {
-            if (capturedFingerprint !== null) {
-              throw new Error("shadow lifecycle published more than once");
-            }
-            capturedFingerprint = publication.publicationFingerprint;
-          },
-        }),
-      });
-      if (
-        (result.publication === null) !== (capturedFingerprint === null) ||
-        (result.publication !== null &&
-          result.publication.publicationFingerprint !== capturedFingerprint)
-      ) {
-        throw new Error("shadow lifecycle publication capture diverged");
-      }
-      return Object.freeze({
-        familyId: result.familyId,
-        sourceId: input.sourceId,
-        source: snapshotSource(result.source),
-        subjectKey: input.subjectKey,
-        candidateTerminalKeys: terminalCandidateKeys(
-          input.candidateKeys,
-          result.outcomes,
-        ),
-        outcomes: result.outcomes,
-        admittedInstanceKeys: Object.freeze(sortedUnique(
-          result.publication?.instances.map((instance) => instance.instanceKey)
-            ?? [],
-          "published instance keys",
-        )),
-        admittedInstancePublicationKeys: Object.freeze(sortedUnique(
-          result.publication?.instances.map(catalogInstancePublicationKey) ?? [],
-          "published instance publication keys",
-        )),
-        publicationFingerprints: capturedFingerprint === null
-          ? Object.freeze([])
-          : Object.freeze([capturedFingerprint]),
-      });
-    },
-  });
-}
-
-function terminalCandidateKeys(
-  candidateKeys: readonly string[],
-  outcomes: readonly AdapterInstanceOutcome[],
-): readonly string[] {
-  return Object.freeze(candidateKeys.filter((candidateKey) => {
-    const candidateOutcomes = outcomes.filter((outcome) =>
-      outcome.candidateKey === candidateKey
-    );
-    return candidateOutcomes.some((outcome) => outcome.status !== "candidate") &&
-      candidateOutcomes.every((outcome) =>
-        outcome.status !== "failed" && outcome.status !== "unresolved"
-      );
-  }).sort());
 }
 
 function terminalOutcomeFingerprint(

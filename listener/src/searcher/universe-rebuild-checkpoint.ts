@@ -71,6 +71,7 @@ export interface RetryableAttempt {
   readonly stage:
     | "nomination"
     | "identity"
+    | "funding"
     | "materialization"
     | "projection";
   readonly failureCode: "rpc" | "deadline" | "aborted" | "resource-limited";

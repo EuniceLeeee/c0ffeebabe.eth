@@ -123,6 +123,9 @@ try {
   await writeFixtureFile("src/funding.ts", `
     export const funding = { liquidity: {}, repayment: {} } as const;
   `);
+  await writeFixtureFile("src/discovery.ts", `
+    export const discovery = { logPatterns: [] } as const;
+  `);
   await writeFundingProductionEntry();
   const fundingArtifact = await buildFamilyCapabilityShadowArtifact({
     rootDirectory: fixtureRoot,
@@ -138,8 +141,8 @@ try {
     fundingArtifact.exact
       .filter((record) => record.root.absence === null)
       .map((record) => record.identity.capability),
-    ["capture", "funding"],
-    "Funding must hash capture+funding without fake route/pricing roots",
+    ["capture", "discovery", "funding"],
+    "Funding must hash discovery+funding without fake route/pricing roots",
   );
   assert(
     fundingArtifact.exact.find((record) =>
@@ -566,11 +569,13 @@ async function writeFundingProductionEntry(): Promise<void> {
     import { defineFundingFamily } from "../framework.js";
     import { manifest } from "../manifest.js";
     import { capture } from "../capture.js";
+    import { discovery } from "../discovery.js";
     import { funding } from "../funding.js";
     import { action } from "../action.js";
     export const plugin = defineFundingFamily({
       manifest,
       capture,
+      discovery,
       funding,
       actionAdapters: [action],
     });

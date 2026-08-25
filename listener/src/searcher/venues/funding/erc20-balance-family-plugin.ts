@@ -3,6 +3,7 @@ import type { Lineage } from "../../../adapters/adapter-descriptors.js";
 import type { ActionAdapter, ResolvedPlanNode } from "../../../types.js";
 import {
   defineFundingFamily,
+  type DiscoverySemantics,
   type DefinedFamilyPlugin,
   type FamilyManifest,
   type FamilyOwnedActionAdapter,
@@ -10,6 +11,7 @@ import {
   type FundingFamilyPlugin,
   type FundingOfferDescriptor,
   type FundingSourceDescriptor,
+  type FundingTokenCandidate,
 } from "../adapter-family-plugin.js";
 import {
   familyId,
@@ -41,6 +43,20 @@ export interface Erc20BalanceFundingEvidence {
   }[];
 }
 
+export interface Erc20BalanceFundingCandidate extends FundingTokenCandidate {
+  readonly candidateKind: "observed-funding-token";
+  readonly provider: string;
+}
+
+export interface Erc20BalanceFundingDiscoveryEvent {
+  readonly id: string;
+  readonly signature: string;
+  /** Indexed event topic containing the borrowed ERC20 address. */
+  readonly tokenTopicIndex: number;
+  /** Provenance only; the central rebuild still owns the bounded window. */
+  readonly providerFromBlock: number;
+}
+
 export interface Erc20BalanceFundingFamilyConfig {
   readonly familyId: string;
   readonly lineageId: Lineage;
@@ -52,6 +68,7 @@ export interface Erc20BalanceFundingFamilyConfig {
   readonly planningPriority: number;
   readonly liquidityPriority: number;
   readonly requiredInfraActionAdapterIds: readonly string[];
+  readonly discoveryEvent: Erc20BalanceFundingDiscoveryEvent;
 }
 
 /**
@@ -63,12 +80,83 @@ export function createErc20BalanceFundingFamily(
   input: Erc20BalanceFundingFamilyConfig,
 ): DefinedFamilyPlugin<FundingFamilyPlugin<
   Erc20BalanceFundingSource,
-  Erc20BalanceFundingEvidence
+  Erc20BalanceFundingEvidence,
+  Erc20BalanceFundingCandidate
 >> {
   return defineFundingFamily({
     manifest: createErc20BalanceFundingManifest(input),
+    discovery: createErc20BalanceFundingDiscovery(input),
     funding: createErc20BalanceFundingSemantics(input),
     actionAdapters: [createErc20BalanceFundingOwnedAction(input)],
+  });
+}
+
+/**
+ * Family-owned FlashLoan-event discovery. The shared two-day rebuild scans
+ * the topic union once; this decoder authenticates the provider emitter and
+ * projects only the observed ERC20 asset into the Funding table.
+ */
+export function createErc20BalanceFundingDiscovery(
+  input: Erc20BalanceFundingFamilyConfig,
+): DiscoverySemantics<Erc20BalanceFundingCandidate> {
+  const provider = ethers.getAddress(input.target);
+  const event = input.discoveryEvent;
+  const topic = ethers.id(event.signature).toLowerCase() as `0x${string}`;
+  if (
+    !Number.isSafeInteger(event.tokenTopicIndex) ||
+    event.tokenTopicIndex < 1 ||
+    !Number.isSafeInteger(event.providerFromBlock) ||
+    event.providerFromBlock < 0
+  ) {
+    throw new Error("Funding discovery event declaration is invalid");
+  }
+  return Object.freeze({
+    evidenceChannel: "tx-evidence" as const,
+    sources: Object.freeze(["landed-log" as const]),
+    logPatterns: Object.freeze([Object.freeze({
+      id: event.id,
+      topic,
+      signature: event.signature,
+      emitter: Object.freeze({
+        mode: "singleton-indexed-address" as const,
+        address: provider,
+        topicIndex: event.tokenTopicIndex,
+        fromBlock: event.providerFromBlock,
+      }),
+    })]),
+    decodeCandidate(input: Parameters<
+      DiscoverySemantics<Erc20BalanceFundingCandidate>["decodeCandidate"]
+    >[0]) {
+      const { observation, matchedPatternId } = input;
+      if (
+        matchedPatternId !== event.id ||
+        observation.kind !== "log" ||
+        observation.address.toLowerCase() !== provider.toLowerCase() ||
+        observation.topics[0]?.toLowerCase() !== topic
+      ) {
+        return null;
+      }
+      const tokenWord = observation.topics[event.tokenTopicIndex];
+      if (
+        tokenWord === undefined ||
+        !/^0x[0-9a-fA-F]{64}$/.test(tokenWord)
+      ) {
+        return null;
+      }
+      try {
+        const asset = ethers.getAddress("0x" + tokenWord.slice(-40));
+        if (asset === ethers.ZeroAddress) return null;
+        return Object.freeze({
+          candidateKind: "observed-funding-token" as const,
+          provider,
+          asset,
+        });
+      } catch {
+        return null;
+      }
+    },
+    candidateKey: (candidate: Erc20BalanceFundingCandidate) =>
+      provider.toLowerCase() + ":" + candidate.asset.toLowerCase(),
   });
 }
 

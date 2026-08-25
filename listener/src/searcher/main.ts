@@ -68,10 +68,6 @@ import {
   rebuildUniverse,
 } from "./universe-rebuild-runner.js";
 import { createRebuildWiring } from "./universe-rebuild-production.js";
-import {
-  ensureFundingTokenUniverse,
-  loadFundingTokenUniverse,
-} from "./funding-token-universe.js";
 import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
 import {
   StrictProductionRuntimeRoot,
@@ -645,6 +641,12 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   }
   const dryRun = process.env.SEARCHER_DRY_RUN === "1";
   const maxHops = Number(process.env.SEARCHER_MAX_HOPS ?? "3");
+  const finalVerifyMaxHops = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1"
+    ? Math.max(
+        maxHops,
+        Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "6"),
+      )
+    : maxHops;
   const quoteSafetyBps = BigInt(process.env.SEARCHER_QUOTE_SAFETY_BPS ?? "9999");
   const forceIncludePoolIdsPath =
     process.env.SEARCHER_FORCE_INCLUDE_POOLIDS_PATH ?? DEFAULT_FORCE_INCLUDE_POOLIDS_PATH;
@@ -694,7 +696,10 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     ),
     finalVerifyFloorBps: BigInt(
       process.env.SEARCHER_FINAL_VERIFY_FLOOR_BPS ??
-        defaultFinalVerifyFloorBps(quoteSafetyBps, maxHops).toString(),
+        defaultFinalVerifyFloorBps(
+          quoteSafetyBps,
+          finalVerifyMaxHops,
+        ).toString(),
     ),
     revmPrewarmRouteHops: Number(process.env.SEARCHER_REVM_PREWARM_ROUTE_HOPS ?? "0"),
     stateUpdaterEnabled: process.env.SEARCHER_STATE_UPDATER_ENABLED !== "0",
@@ -812,6 +817,9 @@ async function main(): Promise<void> {
   const maxHops = Number(process.env.SEARCHER_MAX_HOPS ?? "3");
   const maxPoolsPerToken = Number(process.env.SEARCHER_MAX_POOLS_PER_TOKEN ?? "8");
   const maxRotationsPerPath = Number(process.env.SEARCHER_MAX_ROTATIONS_PER_PATH ?? "3");
+  const blockScanMaxHops = Number(
+    process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "6",
+  );
   const enableBlockScan = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1";
   const blockScanPricingSource = resolveBlockScanPricingSourceMode(
     process.argv.slice(2),
@@ -832,7 +840,7 @@ async function main(): Promise<void> {
   );
   const blockScanCfg: BlockScanCoreConfig | undefined = enableBlockScan
     ? {
-        maxHops: Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "6"),
+        maxHops: blockScanMaxHops,
         minSpreadBps: blockScanMinSpreadBps,
         /*
          * No hard performance gate at 50/100bps: enumeration floor and exact
@@ -974,8 +982,6 @@ async function main(): Promise<void> {
     const isolatedPlanner = new TemplatePlanner();
     isolatedPlanner.setProfitTokenValuation(profitTokenValuation);
     isolatedPlanner.setMaxCandidates(maxCandidates);
-    isolatedPlanner.setMaxHops(maxHops);
-    isolatedPlanner.setMaxPoolsPerToken(maxPoolsPerToken);
     isolatedPlanner.setMaxRotationsPerPath(maxRotationsPerPath);
     blockScanPlanner = isolatedPlanner;
     const isolatedSolver = new AnvilSolver();
@@ -1208,7 +1214,8 @@ async function main(): Promise<void> {
   console.log(`[searcher/live] maxCandidates=${maxCandidates}`);
   console.log(
     `[searcher/live] maxHops=${maxHops} maxPoolsPerToken=${maxPoolsPerToken} ` +
-      `maxRotationsPerPath=${maxRotationsPerPath}`,
+      `maxRotationsPerPath=${maxRotationsPerPath} ` +
+      `blockScanScannerMaxHops=${blockScanMaxHops}`,
   );
   console.log(`[searcher/live] revmPrewarmRouteHops=${config.revmPrewarmRouteHops}`);
   console.log(
@@ -1341,6 +1348,13 @@ async function main(): Promise<void> {
       store: rebuildStore,
       runId: process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID ??
         "strict-startup-rebuild",
+      ...(process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS === undefined
+        ? {}
+        : {
+            observationWindowBlocks: Number(
+              process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS,
+            ),
+          }),
       log: (message) => console.log("[searcher/startup] " + message),
     });
   } catch (error) {
@@ -1368,20 +1382,53 @@ async function main(): Promise<void> {
   // this defensive dedupe keeps runtime rehydration one-instance-per-key
   // during the one-time checkpoint transition.
   const seenReadyInstances = new Set<string>();
-  const readyInstances = Object.values(rebuildEnvelope.verifiedMemos)
+  const activeReadyMemos = Object.values(rebuildEnvelope.verifiedMemos)
     .filter((memo) => activeInstanceKeys.has(memo.familyInstanceKey))
     .filter((memo) => {
       if (seenReadyInstances.has(memo.familyInstanceKey)) return false;
       seenReadyInstances.add(memo.familyInstanceKey);
       return true;
-    })
+    });
+  const routeReadyMemos = activeReadyMemos.filter((memo) =>
+    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+      .forStrictFamily(memo.familyId as never).plugin.manifest.domain !==
+        "funding"
+  );
+  const fundingReadyMemos = activeReadyMemos.filter((memo) =>
+    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+      .forStrictFamily(memo.familyId as never).plugin.manifest.domain ===
+        "funding"
+  );
+  const readyInstances = routeReadyMemos
     .map((memo) => rebuildWiring.rehydrateVerifiedInstance({
       memo,
       cutoff: readyUniverse.cutoff,
     }) as PreparedFamilyInstance);
-  if (readyInstances.length !== activeInstanceKeys.size) {
+  const fundingReadyEntries = fundingReadyMemos.map((memo) =>
+    rebuildWiring.rehydrateVerifiedInstance({
+      memo,
+      cutoff: readyUniverse.cutoff,
+    }) as {
+      readonly domain: "funding";
+      readonly familyId: string;
+      readonly instanceKey: string;
+      readonly asset: string;
+    }
+  );
+  if (
+    readyInstances.length + fundingReadyEntries.length !==
+      activeInstanceKeys.size
+  ) {
     throw new Error(
       "strict startup readyGeneration lost an active memo/instance",
+    );
+  }
+  const flashTokens = Object.freeze([...new Set(fundingReadyEntries.map(
+    (entry) => ethers.getAddress(entry.asset).toLowerCase(),
+  ))].sort());
+  if (flashTokens.length === 0) {
+    throw new Error(
+      "strict startup rebuild produced no observed/retained funding token",
     );
   }
   const strictRuntimeRoot = new StrictProductionRuntimeRoot({
@@ -1389,6 +1436,10 @@ async function main(): Promise<void> {
     readySource: readyUniverse.cutoff,
     readyGraph: strictReadyRuntime.graph,
     readyInstances,
+    readyFundingAssets: fundingReadyEntries.map((entry) => Object.freeze({
+      familyId: entry.familyId as never,
+      asset: entry.asset,
+    })),
   });
   // Transition-only pool views remain useful for detector metadata, but no
   // longer grant identity or Graph admission. readyGeneration is the sole
@@ -1517,43 +1568,15 @@ async function main(): Promise<void> {
   detector.setTokenQuery(mainnetBackend);
   planner.setGraph(graph);
 
-  // Funding tokens are resolved together with graph pricing by the universal
-  // current-N runtime. Until that atomic snapshot publishes, planners fail
-  // closed instead of consuming a timer-refreshed, differently-aged cache.
-  // The funding stage reads flash liquidity per token per block, so the
-  // token set is the funding providers' real support surface, enumerated
-  // from chain truth and solidified once (Morpho market loan tokens +
-  // Balancer Vault pool tokens) - never the routing graph's token set (the
-  // 14400-window graph carries thousands of tokens; reading all of them
-  // blew the block budget and one unreadable result crashed the funding
-  // decode).
-  const fundingTokenUniversePath =
-    process.env.SEARCHER_FUNDING_TOKEN_UNIVERSE_PATH ??
-    "/opt/MEV-runtime/funding-token-universe.json";
-  // The enumeration scans provider-deploy history (Balancer Vault events
-  // from 2021); the local node prunes it, so enumerate against the archive
-  // node when available.
-  const archiveUrl = process.env.MAINNET_RPC_URL;
-  const enumerationProvider = archiveUrl === undefined ||
-      archiveUrl.trim().length === 0
-    ? provider
-    : new ethers.JsonRpcProvider(archiveUrl);
-  const flashTokens = await ensureFundingTokenUniverse({
-    provider: enumerationProvider,
-    // Balancer balance candidates: the loop-relevant tokens of the graph.
-    candidateTokens: [...tokenIndex.keys()],
-    path: fundingTokenUniversePath,
-  });
+  // Funding tokens are a second Ready projection of the same two-day strict
+  // rebuild: funding plugins decode real FlashLoan observations, durable
+  // verified memos retain prior tokens, and current-N funding programs attest
+  // liquidity. No provider history rescan and no graph-token candidate sweep.
   const fundingTokenUniverseBinding = blindProductionAudit
-    ? await loadFundingTokenUniverse(fundingTokenUniversePath).then((table) => {
-        if (table === null) {
-          throw new Error("funding token universe was not durably solidified");
-        }
-        return Object.freeze({
-          enumeratedAtBlock: table.enumeratedAtBlock,
-          tokenCount: table.tokens.length,
-          tokenSetSha256: blindProductionAuditHash(table.tokens),
-        });
+    ? Object.freeze({
+        enumeratedAtBlock: readyUniverse.cutoff.number,
+        tokenCount: flashTokens.length,
+        tokenSetSha256: blindProductionAuditHash(flashTokens),
       })
     : null;
   console.log(

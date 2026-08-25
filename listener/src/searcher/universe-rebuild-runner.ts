@@ -192,6 +192,11 @@ export interface UniverseRebuildDependencies {
 export interface RebuildUniverseInput extends UniverseRebuildDependencies {
   readonly store: UniverseRebuildCheckpointStore;
   readonly runId: string;
+  /**
+   * Same production scan with a bounded shorter window for preflight smoke.
+   * Omit for the canonical 14,400-block rebuild; values may never widen it.
+   */
+  readonly observationWindowBlocks?: number;
   /** Bounded identity/materialization workers; defaults to 24. */
   readonly attestationConcurrency?: number;
   /** Optional progress logging. */
@@ -347,7 +352,10 @@ export async function rebuildUniverse(
   } else {
     // ★ Only with no unfinished run do we create a new time world.
     cutoff = await input.freezeCanonicalHead();
-    fromBlock = strictEdgeCollectionFromBlock(cutoff.number);
+    fromBlock = strictEdgeCollectionFromBlock(
+      cutoff.number,
+      input.observationWindowBlocks,
+    );
     // A crash before this scan is sealed may rescan; after beginOrResumeRun,
     // the compact exact partition is durable and no scan is repeated.
     const scanned = await input.scanSwapWindow({ fromBlock, cutoff });

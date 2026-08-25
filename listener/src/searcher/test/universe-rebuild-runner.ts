@@ -273,6 +273,16 @@ function makeFixture(
 }
 
 async function main(): Promise<void> {
+  assert.equal(
+    strictEdgeCollectionFromBlock(SOURCE.number, 100),
+    SOURCE.number - 99,
+    "a smoke run uses the same bounded production window calculation",
+  );
+  assert.throws(
+    () => strictEdgeCollectionFromBlock(SOURCE.number, 14_401),
+    /integer in \[1, 14400\]/,
+    "a smoke override can never widen the canonical production window",
+  );
   const dir = await mkdtemp(join(tmpdir(), "universe-rebuild-runner-"));
   try {
     // A: retryable counts as an accounted outcome: the verified partition is

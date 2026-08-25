@@ -53,7 +53,7 @@ export const FAMILY_CAPABILITIES_BY_DOMAIN: Readonly<
     "execution",
     "victim",
   ] as const),
-  funding: Object.freeze(["capture", "funding"] as const),
+  funding: Object.freeze(["capture", "discovery", "funding"] as const),
   credit: Object.freeze([
     "capture",
     "discovery",

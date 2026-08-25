@@ -12,18 +12,21 @@
 > 后续实现和验收分别绑定各自的 exact SHA：硬切换（旧 Graph/runtime 物理删除，
 > b54730b8/-17k lines、0b58021f、49890a0f、6764e6f1）、50 块窗口（cc207326）、2 天窗口与流式
 > 观察哈希（9fb5864b）、univ4 retain channel 与 archive Initialize 反查（0aa7582d..b55a1631）、
-> duplicate-instance 与流式 checkpoint（efc6df7f/2aab991a/3ae1e427）、funding token universe
-> 固化表（692c7bd7..5fc974ab）。当前 edge/candidate observation 窗口为 14400 blocks（2 天）；
+> duplicate-instance 与流式 checkpoint（efc6df7f/2aab991a/3ae1e427）。曾使用的 funding token
+> universe 固化表（692c7bd7..5fc974ab）已经退役，只保留为对应 SHA 的历史证据。当前
+> edge/candidate observation 窗口为 14400 blocks（2 天）；
 > 不再存在 7 天 dormancy scan。新实例只由最近 2 天的链上 discovery 发现；所有既有 verified
 > memo 通过其 fingerprint-bound `candidateSnapshot` 永久带回候选分区，且只有明确的
 > `terminal-rejected` 原子撤销该 memo。memo snapshot 只是提名与复用材料，不是第二准入权威，
 > 也不能扩张 2 天 source coverage。
 > touched-driven 当前定价（只刷新本块触及 venue，快照容忍未触及 edge 并以 degraded 发布）：
-> 7a0d5c5a、b56091a5、b6a2711f、f7be24cb、2672cbe2、56e32e96；funding 面收敛到固化 universe
-> （45a01264）；exact session 只重发触及实例（e79768ad）且按 coarse 块 touched 作用域
+> 7a0d5c5a、b56091a5、b6a2711f、f7be24cb、2672cbe2、56e32e96；旧 funding 固化表路径
+> （45a01264）已由 §8 的 catalog observation → Funding Ready 取代；exact session 只重发触及实例（e79768ad）且按 coarse 块 touched 作用域
 > （b8d4e664）。
 >
-> 最终验收绑定 exact SHA **496545fbdfbc67d8139a1dac305bed3f17432291**（§16.8）。
+> exact SHA **496545fbdfbc67d8139a1dac305bed3f17432291** 是旧 Funding 表架构的历史验收锚
+> （§16.8），不是当前 Funding Ready/blockscan replay slice 的终态验收；当前终态必须绑定本次
+> exact-SHA rebuild、target-blind replay 与 dry-run 部署证据。
 
 ## 0. 第一要义：事实验收，直接硬切
 
@@ -1015,21 +1018,24 @@ The concurrency cap is a resource policy, not a Family contract. A Family plugin
 program; the kernel only schedules independent issued programs. Adding or changing an unrelated capability
 closure therefore does not require revalidating Families that do not depend on it.
 
-Funding liquidity is read per token per block, so the funded token set must not scale with the routing
-graph's token count (the 14400-window graph carries thousands of tokens; unbounded funding reads blew the
-block budget and one unreadable result crashed the funding decode). The funded token set is the funding
-providers' real support surface, enumerated from chain truth and solidified once into a table
-(/opt/MEV-runtime/funding-token-universe.json):
+Funding discovery uses the same fixed-window rebuild as Swap and Protocol discovery, but projects into a
+separate Funding Ready table rather than the routing Graph:
 
-- Morpho Blue: every registered market's loan token (CreateMarket events + market(id)); Morpho flash loans
-  borrow the market loan token;
-- Balancer V2 Vault: current balanceOf(vault) > 0 over the candidate tokens (the graph tokens in the
-  searcher; pool-universe token0/token1 in the CLI) — the Vault flash-loans any ERC20 it holds and its
-  flashLoan only checks vault balance, so the support surface is queried via the balanceOf interface, never
-  pool-registration history (which the local node prunes).
+- the central scanner reads the union of plugin-declared observation patterns once over the canonical
+  14,400-block window; a preflight may shrink this same production scan (for example to 100 blocks) but can
+  never widen it, and a shortened run is not terminal acceptance evidence;
+- each Funding plugin owns its FlashLoan event signature, trusted singleton emitter and token-field decoder;
+  central code sees only a generic `familyId + asset` candidate and contains no lender/topic branch;
+- the durable key retains the provider-Family/token pair across rolling windows, while the
+  `dependency-proof` validity policy forces a fresh current-cutoff liquidity attestation on every rebuild;
+- only a readable, positive current balance enters Funding Ready. Zero/unreadable liquidity remains
+  retryable and cannot become a borrow offer or Graph authority;
+- current-source refresh preserves `familyId -> assets[]`; it never queries every Funding Family for every
+  other Family's observed token.
 
-First boot enumerates once and solidifies the table; the searcher only reads it afterwards. The per-family
-balance decode skips unreadable sources (no offer for that source) instead of failing the family.
+There is no external funding-token JSON, provider-deployment backscan, or graph-token balance sweep. Route
+memos alone enter Graph construction; Funding memos participate in the same Ready CAS but are consumed only
+by the Funding runtime projection.
 
 ## 9. Victim observation and post-impact state
 
@@ -1470,7 +1476,7 @@ Final evidence includes:
 A cleanup receipt is supporting evidence. Its pass cannot override a real load-bearing legacy call site or a
 missing live lineage object.
 
-### 16.8 Final acceptance evidence (496545fb)
+### 16.8 Historical final acceptance evidence (496545fb; superseded Funding path)
 
 Final acceptance is bound to the exact deployed SHA **496545fbdfbc67d8139a1dac305bed3f17432291**
 (systemd `mev-searcher` active, dry-run, `SEARCHER_DRY_RUN=1`), PID 1067437, process start
@@ -1515,10 +1521,11 @@ the univ3 fork pool 76a278bd was fail-closed rejected.
 - systemic-live gate: PASS;
 - full listener build + deploy-time suite (18/18) at every deployed SHA.
 
-**Funding (§8):** the funded surface is the solidified universe table
-(/opt/MEV-runtime/funding-token-universe.json, 261 tokens @ block 25804533, Morpho Blue market loan
-tokens + Balancer V2 Vault balanceOf>0 candidates); the pass prepare and blind prewarm pass only that
-surface (45a01264), never the graph token set.
+**Funding (§8):** the 496545fb historical run used a now-retired external funding-token table. That artifact
+remains historical evidence for that SHA only and is not acceptance evidence for the current architecture.
+Current acceptance requires the catalog FlashLoan observation -> Family/token candidate -> positive
+current-cutoff attestation -> Funding Ready lineage from the same rebuild; pass prepare and blind prewarm
+consume that Ready projection, never an external JSON or the routing graph's token set.
 
 ## 17. Role of tests and tools
 
@@ -1579,13 +1586,14 @@ completion and must not be reported as production cutover.
 
 ---
 
-**Completion record (2026-08-22):** items 1–13 above are satisfied at the final exact SHA
+**Historical completion record (2026-08-22):** items 1–13 above were satisfied at exact SHA
 496545fbdfbc67d8139a1dac305bed3f17432291 per §16.8 evidence: strict-only authority in source and
 runtime (hard-cutover commits b54730b8/0b58021f/49890a0f/6764e6f1), deployed dry-run by systemd with
 runtime anchors, full Family matrices with no silent missing row, live lineage traversed (windows above
 run real production passes; the mandatory final sim gate and fail-closed admission stayed active),
 restart-proven durable reuse (generations 11→14, same cutoff, checkpoint resume), continuous 100/100
-bound to the final exact process (window 2), legacy authority zero (F6–F9 receipts +
+bound to that exact process (window 2), legacy authority zero (F6–F9 receipts +
 MigrationCleanupReceipt.verdict=pass), plugin + generated catalog extension boundary (§2.3/§3.1
 contract suites), and this canonical document describing the exact deployed runtime. Broadcast remains
-human-gated (Rule 1); this record is the dry-run production cutover statement.
+human-gated (Rule 1). The Funding source used by that SHA is now retired; this historical record cannot
+certify the current §8 Funding Ready implementation or the current blockscan/V4 replay objective.

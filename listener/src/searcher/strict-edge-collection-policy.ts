@@ -11,12 +11,24 @@
  */
 export const STRICT_EDGE_COLLECTION_WINDOW_BLOCKS = 14_400 as const;
 
-export function strictEdgeCollectionFromBlock(cutoffNumber: number): number {
+export function strictEdgeCollectionFromBlock(
+  cutoffNumber: number,
+  windowBlocks: number = STRICT_EDGE_COLLECTION_WINDOW_BLOCKS,
+): number {
   if (!Number.isSafeInteger(cutoffNumber) || cutoffNumber < 0) {
     throw new Error("strict edge collection cutoff must be a non-negative integer");
   }
+  if (
+    !Number.isSafeInteger(windowBlocks) ||
+    windowBlocks < 1 ||
+    windowBlocks > STRICT_EDGE_COLLECTION_WINDOW_BLOCKS
+  ) {
+    throw new Error(
+      "strict edge collection window must be an integer in [1, 14400]",
+    );
+  }
   return Math.max(
     0,
-    cutoffNumber - STRICT_EDGE_COLLECTION_WINDOW_BLOCKS + 1,
+    cutoffNumber - windowBlocks + 1,
   );
 }

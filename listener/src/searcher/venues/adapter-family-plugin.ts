@@ -353,6 +353,15 @@ export interface FamilyCandidate {
   readonly candidateKind: string;
 }
 
+/**
+ * Canonical output of Funding discovery. Protocol-specific event layouts stay
+ * inside the owning plugin; after decode the central rebuild only needs the
+ * ERC20 asset that was proven by the observed funding event.
+ */
+export interface FundingTokenCandidate extends FamilyCandidate {
+  readonly asset: string;
+}
+
 export type DiscoveryEvidenceChannel =
   | "nominate"
   | "tx-evidence";
@@ -1474,7 +1483,7 @@ export const FAMILY_CAPABILITY_APPLICABILITY = Object.freeze({
   funding: Object.freeze({
     manifest: "required",
     capture: "optional",
-    discovery: "never",
+    discovery: "required",
     identity: "never",
     instance: "never",
     routes: "never",
@@ -1670,9 +1679,10 @@ export type CreditFamilyPlugin<
 export type FundingFamilyPlugin<
   Source extends FundingSourceDescriptor,
   LiquidityEvidence,
+  Candidate extends FundingTokenCandidate = FundingTokenCandidate,
 > = MasterTemplate<
   "funding",
-  FamilyCandidate,
+  Candidate,
   VerifiedIdentity,
   CompiledInstanceDescriptor,
   FamilyRouteDescriptor,
@@ -1799,7 +1809,8 @@ export type AnyCreditFamilyPlugin = CreditFamilyPlugin<
 
 export type AnyFundingFamilyPlugin = FundingFamilyPlugin<
   FundingSourceDescriptor,
-  unknown
+  unknown,
+  FundingTokenCandidate
 >;
 
 export type AnyStrictFamilyPlugin =
@@ -1926,9 +1937,10 @@ export function defineProtocolFamily<
 export function defineFundingFamily<
   S extends FundingSourceDescriptor,
   E,
+  C extends FundingTokenCandidate,
 >(
-  plugin: FundingFamilyPlugin<S, E>,
-): DefinedFamilyPlugin<FundingFamilyPlugin<S, E>> {
+  plugin: FundingFamilyPlugin<S, E, C>,
+): DefinedFamilyPlugin<FundingFamilyPlugin<S, E, C>> {
   return defineFamily(plugin);
 }
 
@@ -2503,6 +2515,7 @@ function validateFamilyPlugin(
   if (plugin.capture !== undefined) validateCapture(plugin.capture);
   if (expectedDomain === "funding") {
     const fundingPlugin = pluginForDomain(plugin, "funding");
+    validateDiscovery(fundingPlugin.discovery, expectedDomain);
     validateFundingDomain(
       fundingPlugin.funding,
       manifest,
@@ -2565,8 +2578,8 @@ function validateFamilyPlugin(
   const taxonomy = Object.freeze(
     manifest.allowedTaxonomy.map(taxonomyKey).sort(),
   );
-  const routedPlugin = expectedDomain === "funding"
-    ? null
+  const discoveryPlugin = expectedDomain === "funding"
+    ? pluginForDomain(plugin, "funding")
     : expectedDomain === "credit"
     ? pluginForDomain(plugin, "credit")
     : expectedDomain === "swap"
@@ -2583,6 +2596,19 @@ function validateFamilyPlugin(
       : expectedDomain === "protocol"
       ? pricedOptionalCapabilityNames(pluginForDomain(plugin, "protocol"))
       : [];
+  const identityVariants = expectedDomain === "funding"
+    ? []
+    : (expectedDomain === "credit"
+      ? pluginForDomain(plugin, "credit")
+      : expectedDomain === "swap"
+      ? pluginForDomain(plugin, "swap")
+      : pluginForDomain(plugin, "protocol")).identity.variants
+      .map((variant) => ({
+        id: variant.id,
+        kind: variant.kind,
+        lineageId: variant.lineageId,
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id));
   const boundary: CanonicalValue = {
     contractKind: "defined-family-plugin",
     familyId: manifest.familyId,
@@ -2600,18 +2626,9 @@ function validateFamilyPlugin(
       .sort((left, right) => left.id.localeCompare(right.id)),
     taxonomy,
     capture: plugin.capture === undefined ? null : "plugin-materialized-v1",
-    discoveryPatternIds: routedPlugin === null
-      ? []
-      : [...discoveryPatternIds(routedPlugin.discovery)].sort(),
-    identityVariants: routedPlugin === null
-      ? []
-      : routedPlugin.identity.variants
-        .map((variant) => ({
-          id: variant.id,
-          kind: variant.kind,
-          lineageId: variant.lineageId,
-        }))
-        .sort((left, right) => left.id.localeCompare(right.id)),
+    discoveryPatternIds:
+      [...discoveryPatternIds(discoveryPlugin.discovery)].sort(),
+    identityVariants,
     domainPolicy,
     optionalCapabilities,
   };

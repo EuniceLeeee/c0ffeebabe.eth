@@ -5,10 +5,13 @@ import {
   morphoFlashFunding,
   morphoFlashManifest,
 } from "../funding/morpho-flash-family/parts.js";
+import { morphoFlashDiscovery } from
+  "../funding/morpho-flash-family/discovery.js";
 
 export const plugin = defineFundingFamily({
   manifest: morphoFlashManifest,
   capture: morphoFlashCapture,
+  discovery: morphoFlashDiscovery,
   funding: morphoFlashFunding,
   actionAdapters: [morphoFlashFamilyOwnedAction],
 });

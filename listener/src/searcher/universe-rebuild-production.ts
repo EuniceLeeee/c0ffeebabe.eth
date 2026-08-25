@@ -15,6 +15,7 @@ import type { UniverseRebuildProbeWiring } from "./universe-rebuild-probe-cli.js
 import type { UniverseRebuildDependencies } from "./universe-rebuild-runner.js";
 import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
 import { buildFamilyRouteGraphView } from "./adapter-family-graph-runtime.js";
+import { executeFundingFamilyLiquidity } from "./adapter-funding-runtime.js";
 import { reissuePreparedInstanceRouteHandles } from
   "./venues/adapter-family-runtime.js";
 import { reissuePreparedInstanceAuthority } from
@@ -290,6 +291,7 @@ const MEMO_DEFINITION_CAPABILITIES = Object.freeze([
   "instance",
   "routes",
   "pricing",
+  "funding",
 ] as const);
 
 function scopedFamilyDefinitionHash(
@@ -620,6 +622,7 @@ function sealMemoFromPublication(input: {
   readonly proofSource: CanonicalSource;
   readonly candidateFingerprint: string;
   readonly authorityFingerprint: string;
+  readonly validityPolicy?: DurableVerifiedMemo["validity"]["policy"];
 }): DurableVerifiedMemo {
   const familyCandidateKey = hashFamilyCandidateKey(
     input.familyId,
@@ -634,7 +637,7 @@ function sealMemoFromPublication(input: {
     candidateFingerprint: input.candidateFingerprint,
     familyDefinitionHash: familyMemoDefinitionHash(input.familyId),
     validity: Object.freeze({
-      policy: "immutable-code",
+      policy: input.validityPolicy ?? "immutable-code",
       authorityFingerprint: input.authorityFingerprint,
       proofSource: Object.freeze({
         number: input.proofSource.number,
@@ -883,6 +886,89 @@ export function createProbeWiring(
       attestInput: Parameters<AttestOnce>[0],
     ): Promise<Awaited<ReturnType<AttestOnce>>> => {
       const candidate = attestInput.candidate as Readonly<Record<string, unknown>>;
+      const candidateFamilyId = typeof candidate.familyId === "string"
+        ? candidate.familyId
+        : familyIdForCandidate(candidate);
+      const candidateFamily = catalog.forStrictFamily(candidateFamilyId as never);
+      if (candidateFamily.plugin.manifest.domain === "funding") {
+        const asset = candidate.asset;
+        if (typeof asset !== "string" || !ethers.isAddress(asset)) {
+          return terminalRejected("invalid_funding_asset", {
+            familyDefinitionHash: familyDefinitionHash(candidateFamilyId),
+            requestFingerprint: "",
+            trustedResultsFingerprint: "",
+            authorityFingerprint: "",
+            candidateFingerprint: candidateFingerprint(candidate),
+            cutoff: Object.freeze({
+              number: attestInput.cutoff.number,
+              hash: attestInput.cutoff.hash,
+            }),
+          });
+        }
+        try {
+          const funding = await executeFundingFamilyLiquidity({
+            family: candidateFamily,
+            assets: Object.freeze([ethers.getAddress(asset)]),
+            source: attestInput.cutoff,
+            generation: attestInput.cutoff.generation,
+            runtime: runtimeFor(attestInput.cutoff),
+            publisher: Object.freeze({ publish() {} }),
+          });
+          const outcome = funding.outcomes[0];
+          const positiveOffer = funding.offers.find((offer) =>
+            offer.asset.toLowerCase() ===
+              ethers.getAddress(asset).toLowerCase() &&
+            offer.maxBorrow > 0n
+          );
+          if (
+            outcome === undefined ||
+            outcome.status !== "verified" ||
+            positiveOffer === undefined
+          ) {
+            const reason = outcome === undefined
+              ? "funding attestation produced no outcome"
+              : outcome.status !== "verified"
+              ? outcome.reasonCode
+              : "funding attestation found no positive current liquidity";
+            return retryable({
+              candidate,
+              reasonCode: reason,
+              stage: "funding",
+              failureCode: classifyFailure(reason),
+              ...(attestInput.evidenceRef === undefined
+                ? {}
+                : { evidenceRef: attestInput.evidenceRef }),
+            });
+          }
+          return verified(Object.freeze({
+            domain: "funding" as const,
+            familyId: candidateFamilyId,
+            asset: ethers.getAddress(asset),
+            fundingId: positiveOffer.fundingId,
+            evidenceRefs: positiveOffer.evidenceRefs,
+            authorityFingerprint: digest(
+              "funding-attestation-v1:" + canonicalJson({
+                familyId: candidateFamilyId,
+                asset: ethers.getAddress(asset).toLowerCase(),
+                source: attestInput.cutoff,
+                evidenceRefs: positiveOffer.evidenceRefs,
+              }),
+            ),
+            candidate: canonicalCandidateSnapshot(candidate),
+          }));
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          return retryable({
+            candidate,
+            reasonCode: reason.slice(0, 200),
+            stage: "funding",
+            failureCode: classifyFailure(reason),
+            ...(attestInput.evidenceRef === undefined
+              ? {}
+              : { evidenceRef: attestInput.evidenceRef }),
+          });
+        }
+      }
       const pool = attestationPoolFromCandidate(candidate);
       if (!ethers.isAddress(pool.address)) {
         return terminalRejected("invalid_candidate_address", {
@@ -1063,6 +1149,59 @@ export function createProbeWiring(
         UniverseRebuildProbeWiring["sealDurableVerifiedMemo"]
       >>[0],
     ) => {
+      const candidate = sealInput.candidate as Readonly<Record<string, unknown>>;
+      const domainResult = sealInput.result as {
+        readonly domain?: unknown;
+        readonly familyId?: unknown;
+        readonly asset?: unknown;
+        readonly fundingId?: unknown;
+        readonly evidenceRefs?: readonly string[];
+        readonly authorityFingerprint?: unknown;
+      };
+      if (domainResult.domain === "funding") {
+        const familyId = String(domainResult.familyId ?? "");
+        const asset = ethers.getAddress(String(domainResult.asset ?? ""));
+        const instanceKey = String(
+          domainResult.fundingId ?? familyId + "\u001f" + asset.toLowerCase(),
+        );
+        const familyInstanceKey = digest(
+          "family-instance-v1:" + familyId + "|" + instanceKey,
+        );
+        const evidenceRefs = Object.freeze([
+          ...(domainResult.evidenceRefs ?? []),
+        ]);
+        return sealMemoFromPublication({
+          candidate,
+          familyId,
+          familyInstanceKey,
+          instanceKey,
+          verifiedIdentity: Object.freeze({
+            domain: "funding",
+            familyId,
+            asset,
+            source: Object.freeze(sealInput.proofSource),
+          }),
+          compiledDescriptor: Object.freeze({
+            domain: "funding",
+            asset,
+          }),
+          staticProjection: Object.freeze({
+            format: "prepared-funding-token-v1",
+            domain: "funding",
+            asset,
+            evidenceRefs,
+          }),
+          evidenceFingerprint: digest(
+            "evidence:" + canonicalJson(evidenceRefs),
+          ),
+          proofSource: sealInput.proofSource,
+          candidateFingerprint: candidateFingerprint(candidate),
+          authorityFingerprint: String(
+            domainResult.authorityFingerprint ?? "",
+          ),
+          validityPolicy: "dependency-proof",
+        });
+      }
       const result = sealInput.result as {
         readonly accepted: {
           readonly familyId: string;
@@ -1083,7 +1222,6 @@ export function createProbeWiring(
         } | null;
       };
       const familyId = result.accepted.familyId;
-      const candidate = sealInput.candidate as Readonly<Record<string, unknown>>;
       const instanceKey = result.instance?.instanceKey ??
         digest("instance:" + familyId + "|" + candidateInstanceIdentity(candidate));
       const familyInstanceKey = digest(
@@ -2253,6 +2391,21 @@ export function createRebuildWiring(input?: {
         readonly staticEvidenceFingerprint?: string;
         readonly evidenceRefs?: readonly string[];
       };
+      const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .forStrictFamily(rehydrateInput.memo.familyId as never);
+      if (family.plugin.manifest.domain === "funding") {
+        const descriptor = decodeDurableValue(
+          rehydrateInput.memo.compiledDescriptor,
+        ) as { readonly asset?: unknown } | null;
+        const asset = ethers.getAddress(String(descriptor?.asset ?? ""));
+        return Object.freeze({
+          domain: "funding" as const,
+          familyId: rehydrateInput.memo.familyId,
+          instanceKey: rehydrateInput.memo.instanceKey,
+          asset,
+          evidenceRefs: Object.freeze(projection?.evidenceRefs ?? []),
+        });
+      }
       const routes = projection?.routes ?? [];
       const instance = Object.freeze({
         familyId: rehydrateInput.memo.familyId,
@@ -2273,8 +2426,6 @@ export function createRebuildWiring(input?: {
           rehydrateInput.memo.evidenceFingerprint,
         evidenceRefs: Object.freeze(projection?.evidenceRefs ?? []),
       }) as never;
-      const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-        .forStrictFamily(rehydrateInput.memo.familyId as never);
       const rehydrated = family.plugin.manifest.domain === "credit"
         ? reissuePreparedInstanceAuthority({
             family,
@@ -2323,6 +2474,9 @@ export function createRebuildWiring(input?: {
       for (const publication of publications) {
         const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
           .forStrictFamily(publication.familyId as never);
+        if (family.plugin.manifest.domain === "funding") {
+          continue;
+        }
         if (family.plugin.manifest.domain === "credit") {
           for (const rawInstance of publication.instances) {
             const instance = rawInstance as never;

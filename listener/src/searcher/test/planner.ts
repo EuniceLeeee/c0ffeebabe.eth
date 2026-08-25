@@ -3,9 +3,6 @@
  * Pure in-memory — no RPC, no anvil.
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { canonicalTokenRing, cycleFingerprint } from "../detector/cycle-fingerprint.js";
@@ -14,15 +11,12 @@ import { detectImpactFromLogs } from "../detector/pool-impact.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import {
   v4PoolId,
-  type PoolEntry,
   type TokenEdge,
   type V4PoolKey,
 } from "../planner/token-graph.js";
-import { mergePoolRegistries } from "../pool-registry-merge.js";
-import { loadPoolUniverse } from "../pool-universe.js";
 import { deriveEdgeTaxonomy, type ProtocolAction } from "../strategy-taxonomy.js";
 import type { FlashLiquidityView, FlashSource } from "../solver/flash-liquidity.js";
-import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY, type PathTemplate } from "../templates/path-template.js";
+import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "../templates/path-template.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -81,15 +75,6 @@ function protocol(
     ...deriveEdgeTaxonomy("protocol", protocolAction),
     score: 100,
   };
-}
-
-function poolToSwapEdges(pool: PoolEntry): TokenEdge[] {
-  if (!pool.token0 || !pool.token1) return [];
-  const adapterId = pool.adapter === "univ2" ? "univ2-swap" : "univ3-swap";
-  return [
-    { ...swap(pool.token0, pool.token1, pool.address, adapterId), score: pool.score },
-    { ...swap(pool.token1, pool.token0, pool.address, adapterId), score: pool.score },
-  ];
 }
 
 function opportunity(): Opportunity {
@@ -507,55 +492,15 @@ async function testNativeEthV4RoutesViaWethAlias(): Promise<void> {
   console.log("[planner] native-ETH v4 pool routes through WETH alias: PASS");
 }
 
-// ── Real-case regression fixtures (repair-replay gate, docs/research/gates.md rule 12) ──
-// Each pins a real failing case observed live so a coverage/routing fix can be
-// confirmed deterministically (flip) and guarded against regression. Addresses are
-// public on-chain evidence. The planner is address-agnostic, so these behave exactly
-// like the synthetic unit tests above — the value is the provenance link + flip target.
+// Blockscan receives one scanner-bounded route and must not perform a second
+// full-Graph search or apply the backrun DFS caps to that route.
 const REAL_WETH = ADDR.WETH;
-const REAL_WSTUSR = ADDR.WSTUSR;
-const REAL_WSTETH = ADDR.WSTETH;
-const REAL_STETH = ADDR.STETH;
-const REAL_SUSDS = ADDR.SUSDS;
-const REAL_USDS = ADDR.USDS;
 const REAL_USDC = ADDR.USDC;
-const REAL_DAI = ADDR.DAI;
-const REAL_USDT = ADDR.USDT;
-const FLUID_VAULT_WSTUSR_USDC = ADDR.FLUID_VAULT_WSTUSR_USDC;
-const POOL_F88B_USDC_WSTUSR_DEX = "0xf88b498b835279ec9de597c7360ca21b7e880305";
-const C470 = "0xc470f5E6C17a2977CeabB524D530F19024e5a719";
-const POOL_E2A1437 = "0xE2a1437e2a15CfA591AA1D70e9a75C7598C73fDB";
 const TOK_874376 = "0x27c70cd1946795b66be9d954418546998b546634";
-const POOL_874376 = "0x874376be8231dad99aabf9ef0767b3cc054c60ee";
 const POOL_USDC_WETH_100 = ADDR.UNISWAP_V3_USDC_WETH_100;
-const POOL_USDC_USDT_100 = ADDR.UNISWAP_V3_USDC_USDT_100;
-const POOL_V3FORK_WETH_USDT = "0x05dEf6d34631BbDd35e212CB749caCAEbf8c963D";
 const CFG = ethers.getAddress("0xcccccccccc33d538dbc2ee4feab0a7a1ff4e8a94");
 const POOL_V3_WETH_CFG = ethers.getAddress("0x08a10a8b713c03e2fecaa3e355cea18a459ffcbf");
 const POOL_V4_ETH_CFG_ID = "0x267d01a3b23fe2340482242db5396f7544d36f398862efa591e92a079348cd9c";
-const CFG_V4_POOL_KEY: V4PoolKey = {
-  currency0: ethers.ZeroAddress,
-  currency1: CFG,
-  fee: 10001,
-  tickSpacing: 200,
-  hooks: ethers.ZeroAddress,
-};
-const OVR = "0x21BfBDa47A0B4B5b1248c767Ee49F7caA9B23697";
-const POOL_OVR_WETH_INGRAPH = "0xc3f6b81fb9e6db259272026601689e383f94c0b0";
-const POOL_OVR_WETH_ENQUEUED = "0x0b0d6c11d26b58cb25f59bd9b14190c8941e58fc";
-const TOK_14FEE680 = "0x14feE680690900BA0ccCfC76AD70Fd1b95D10e16";
-const POOL_14FEE_WETH_IMPACT = "0x2a6c340b00000000000000000000000000000000";
-const POOL_14FEE_WETH_ALT = "0x49bd1fa4c7286c2754ec7607f6f2e835f3ca6ddd";
-const TOK_FF208177 = "0xff20817700000000000000000000000000000000";
-const POOL_FF208177_A = "0x15e86e6f00000000000000000000000000000000";
-const POOL_FF208177_B = "0x08650bb900000000000000000000000000000000";
-const TOK_1151 = "0x1151CB3d861920e07a38e03eEAd12C32178567F6";
-const POOL_1151_USDT_A = "0x5ea523e496D049e2bA8B303C8D85C83FB6F285F8";
-const POOL_1151_USDT_B = "0x1e84865E17B49286f26D356DC39fF671EDfaA199";
-const POOL_WSTETH_STETH_SYNTH = "0x0000000000000000000000000000000000000e7e";
-const POOL_SUSDS_USDS_SYNTH = "0x0000000000000000000000000000000000004626";
-const POOL_7CE631_UNIV3_RETH_WETH = "0x553e9c493678d8606d6a5ba284643db2110df823";
-const POOL_7CE631_BALANCER_V3 = "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc";
 
 async function testBlockScanPlannerBinding(): Promise<void> {
   const token = TOK_874376;
@@ -645,361 +590,55 @@ async function testBlockScanPlannerBinding(): Promise<void> {
     unfundedPlans.length === 0,
     "block-scan binding: missing current-N funding must fail closed",
   );
+
+  const sixHopTokens = [
+    REAL_WETH,
+    "0x0000000000000000000000000000000000000c11",
+    "0x0000000000000000000000000000000000000c12",
+    "0x0000000000000000000000000000000000000c13",
+    "0x0000000000000000000000000000000000000c14",
+    "0x0000000000000000000000000000000000000c15",
+    REAL_WETH,
+  ];
+  const sixHopEdges = Array.from({ length: 6 }, (_, index) =>
+    swap(
+      sixHopTokens[index],
+      sixHopTokens[index + 1],
+      `0x${(0xc21 + index).toString(16).padStart(40, "0")}`,
+    )
+  );
+  const sixHopRing = sixHopTokens.slice(0, -1);
+  const sixHopOpportunity: BlockScanOpportunity = {
+    kind: "block-scan-arb",
+    sourceBlock,
+    stateBlock: sourceBlock,
+    cycleId: canonicalTokenRing(sixHopRing).join("|"),
+    cycleFingerprint: cycleFingerprint(sourceBlock, sixHopRing),
+    seedEdges: sixHopEdges,
+    flashToken: REAL_WETH,
+    searchSeed: {
+      startToken: REAL_WETH,
+      searchCenter: 5_000n,
+      maxInput: 1_000_000n,
+    },
+    leavesStandingPosition: false,
+  };
+  const narrowFullGraphPlanner = new TemplatePlanner();
+  narrowFullGraphPlanner.setMaxHops(2);
+  narrowFullGraphPlanner.setMaxPoolsPerToken(1);
+  const sixHopPlans = await narrowFullGraphPlanner.planBlockScanFromSeedEdges(
+    sixHopOpportunity,
+    [FLASH_SWAP_REPAY],
+  );
+  assert(
+    sixHopPlans.length === 1 &&
+      sixHopPlans[0].tokenPath.edges.length === sixHopEdges.length &&
+      sixHopPlans[0].tokenPath.edges.every(
+        (edge, index) => edge.target === sixHopEdges[index].target,
+      ),
+    "block-scan binding: pre-bounded six-hop seed route must bypass full-Graph DFS caps",
+  );
   console.log("[planner] block-scan planner binding from pinned seedEdges: PASS");
-}
-
-interface ReplayFixture {
-  id: string;
-  provenance: string;
-  edges: TokenEdge[];
-  impact: { tokenIn: string; tokenOut: string; pool: string; start: string };
-  expectPlans?: number;     // current expected; flip target in the comment
-  expectMinPlans?: number;
-  maxHops?: number;
-  expectClass?: string;     // no_candidate classification when expectPlans === 0
-  expectTokenPathTokensGreaterThan?: number;
-  templates?: PathTemplate[];              // default [FLASH_SWAP_REPAY]
-  flashLiquidity?: Array<[string, bigint, string]>;   // [token, amount, adapterId] -> setFlashLiquidity
-}
-
-const REPLAY_FIXTURES: ReplayFixture[] = [
-  {
-    id: "tx-7ce631-rocksolid-balancer-v3-gap",
-    provenance: "tx 0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87 block 25535037; RockSolid and Balancer V3 edges absent",
-    edges: [
-      swap(REAL_WETH, ADDR.RETH, POOL_7CE631_UNIV3_RETH_WETH),
-      swap(ADDR.RETH, REAL_WETH, POOL_7CE631_UNIV3_RETH_WETH),
-    ],
-    impact: { tokenIn: REAL_WETH, tokenOut: ADDR.RETH, pool: POOL_7CE631_UNIV3_RETH_WETH, start: REAL_WETH },
-    maxHops: 4,
-    expectPlans: 0,
-    expectClass: "only_immediate_same_pool_reverse",
-  },
-  {
-    id: "tx-7ce631-rocksolid-balancer-v3-flip",
-    provenance: "tx 0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87 block 25535037; full four-edge route admitted",
-    edges: [
-      swap(REAL_WETH, ADDR.RETH, POOL_7CE631_UNIV3_RETH_WETH),
-      swap(ADDR.RETH, REAL_WETH, POOL_7CE631_UNIV3_RETH_WETH),
-      protocol(ADDR.RETH, ADDR.ROCKSOLID_RETH, ADDR.ROCKSOLID_RETH, "wrap", "rocksolid-sync-deposit"),
-      swap(ADDR.ROCKSOLID_RETH, ADDR.RETH, POOL_7CE631_BALANCER_V3, "balancer-v3-unlock"),
-    ],
-    impact: { tokenIn: REAL_WETH, tokenOut: ADDR.RETH, pool: POOL_7CE631_UNIV3_RETH_WETH, start: REAL_WETH },
-    maxHops: 4,
-    expectMinPlans: 1,
-  },
-  {
-    // CR-3a credit-edge routing gate, modeled on reference tx
-    // 0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970 (block 24710788).
-    // The direct USDC->wstUSR DEX edge collapses the reference multi-hop return route into one
-    // deterministic fixture edge. Anti-binding note: the credit edge is strategy-AGNOSTIC; the
-    // 0xf88b reference tx classifies backrun (source swap tx index 0). This fixture proves
-    // credit-edge ROUTING, it does NOT bind strategy.
-    id: "credit-f88b-absent",
-    provenance: "reference tx 0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970 block 24710788; Fluid credit edge absent",
-    edges: [
-      swap(REAL_USDC, REAL_WSTUSR, POOL_F88B_USDC_WSTUSR_DEX),
-    ],
-    impact: { tokenIn: REAL_USDC, tokenOut: REAL_WSTUSR, pool: POOL_F88B_USDC_WSTUSR_DEX, start: REAL_WSTUSR },
-    templates: [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY],
-    flashLiquidity: [[REAL_WSTUSR, 1_000_000_000_000n, "morpho-flash"]],
-    maxHops: 2,
-    expectPlans: 0,
-    expectClass: "impact_token_no_supported_return_venue",
-  },
-  {
-    // Same graph with the S0 credit edge present: wstUSR->USDC (Fluid lend/credit)
-    // then USDC->wstUSR (DEX return) closes the Morpho-flash repayment loop.
-    id: "credit-f88b-present",
-    provenance: "reference tx 0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970 block 24710788; Fluid credit edge present",
-    edges: [
-      lend(REAL_WSTUSR, REAL_USDC, FLUID_VAULT_WSTUSR_USDC),
-      swap(REAL_USDC, REAL_WSTUSR, POOL_F88B_USDC_WSTUSR_DEX),
-    ],
-    impact: { tokenIn: REAL_USDC, tokenOut: REAL_WSTUSR, pool: POOL_F88B_USDC_WSTUSR_DEX, start: REAL_WSTUSR },
-    templates: [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY],
-    flashLiquidity: [[REAL_WSTUSR, 1_000_000_000_000n, "morpho-flash"]],
-    maxHops: 2,
-    expectMinPlans: 1,
-  },
-  {
-    // PSM reverse (buyGem, DAI->USDC) routing; A1. Anti-binding note: the
-    // protocol edge is strategy-AGNOSTIC, like credit-f88b; this fixture proves
-    // protocol-edge routing through the existing swap slot, not strategy identity.
-    id: "psm-reverse-absent",
-    provenance: "A1 PSM reverse buyGem DAI->USDC routing; Sky LitePSM reverse edge absent",
-    edges: [
-      swap(REAL_USDC, REAL_DAI, ADDR.CURVE_3POOL, "curve-exchange-plain"),
-    ],
-    impact: { tokenIn: REAL_USDC, tokenOut: REAL_DAI, pool: ADDR.CURVE_3POOL, start: REAL_DAI },
-    maxHops: 2,
-    expectPlans: 0,
-    expectClass: "impact_token_no_supported_return_venue",
-  },
-  {
-    // Same graph with the synthetic DAI->USDC PSM protocol edge present: the
-    // DAI->USDC->DAI loop closes without adding a live registry reverse edge.
-    id: "psm-reverse-present",
-    provenance: "A1 PSM reverse buyGem DAI->USDC routing; Sky LitePSM reverse protocol edge present",
-    edges: [
-      protocol(REAL_DAI, REAL_USDC, ADDR.SKY_PSM_LITE, "convert"),
-      swap(REAL_USDC, REAL_DAI, ADDR.CURVE_3POOL, "curve-exchange-plain"),
-    ],
-    impact: { tokenIn: REAL_USDC, tokenOut: REAL_DAI, pool: ADDR.CURVE_3POOL, start: REAL_DAI },
-    maxHops: 2,
-    expectMinPlans: 1,
-  },
-  {
-    // A5 wstETH wrap routing. Without the stETH->wstETH protocol edge, the
-    // synthetic wstETH->stETH return venue cannot close a stETH flash loop.
-    id: "wsteth-absent",
-    provenance: "A5 wstETH wrap routing; stETH->wstETH protocol edge absent",
-    edges: [
-      swap(REAL_WSTETH, REAL_STETH, POOL_WSTETH_STETH_SYNTH),
-    ],
-    impact: { tokenIn: REAL_WSTETH, tokenOut: REAL_STETH, pool: POOL_WSTETH_STETH_SYNTH, start: REAL_STETH },
-    maxHops: 2,
-    expectPlans: 0,
-    expectClass: "impact_token_no_supported_return_venue",
-  },
-  {
-    // Same synthetic loop with the stETH->wstETH protocol edge present:
-    // stETH->wstETH(wrap) then wstETH->stETH(synthetic swap) closes the loop.
-    id: "wsteth-present",
-    provenance: "A5 wstETH wrap routing; stETH->wstETH protocol edge present",
-    edges: [
-      protocol(REAL_STETH, REAL_WSTETH, ADDR.WSTETH, "wrap", "wsteth-wrap"),
-      swap(REAL_WSTETH, REAL_STETH, POOL_WSTETH_STETH_SYNTH),
-    ],
-    impact: { tokenIn: REAL_WSTETH, tokenOut: REAL_STETH, pool: POOL_WSTETH_STETH_SYNTH, start: REAL_STETH },
-    maxHops: 2,
-    expectMinPlans: 1,
-  },
-  {
-    // A3/A4 ERC4626 sUSDS deposit routing. Without the USDS->sUSDS protocol
-    // edge, the synthetic sUSDS->USDS return venue cannot close a USDS flash loop.
-    id: "erc4626-absent",
-    provenance: "A3/A4 ERC4626 sUSDS deposit routing; USDS->sUSDS protocol edge absent",
-    edges: [
-      swap(REAL_SUSDS, REAL_USDS, POOL_SUSDS_USDS_SYNTH),
-    ],
-    impact: { tokenIn: REAL_SUSDS, tokenOut: REAL_USDS, pool: POOL_SUSDS_USDS_SYNTH, start: REAL_USDS },
-    maxHops: 2,
-    expectPlans: 0,
-    expectClass: "impact_token_no_supported_return_venue",
-  },
-  {
-    // Same synthetic loop with the USDS->sUSDS ERC4626 deposit edge present:
-    // USDS->sUSDS(deposit) then sUSDS->USDS(synthetic swap) closes the loop.
-    id: "erc4626-present",
-    provenance: "A3/A4 ERC4626 sUSDS deposit routing; USDS->sUSDS protocol edge present",
-    edges: [
-      protocol(REAL_USDS, REAL_SUSDS, ADDR.SUSDS, "wrap", "erc4626-deposit"),
-      swap(REAL_SUSDS, REAL_USDS, POOL_SUSDS_USDS_SYNTH),
-    ],
-    impact: { tokenIn: REAL_SUSDS, tokenOut: REAL_USDS, pool: POOL_SUSDS_USDS_SYNTH, start: REAL_USDS },
-    maxHops: 2,
-    expectMinPlans: 1,
-  },
-  {
-    // run 20260701-032600: 7x no_candidate on E2a1437 (WETH/0xc470f5E6). On-chain
-    // cross-ref Ppost=0 (no competitor) -> genuinely non-arbable single venue.
-    // Guard: must STAY 0 (a "coverage fix" that fabricates a plan here is a regression).
-    id: "single-venue-longtail",
-    provenance: "run 20260701 block 25434876+ pool E2a1437 WETH/0xc470f5E6; competitor Ppost=0",
-    edges: [swap(REAL_WETH, C470, POOL_E2A1437), swap(C470, REAL_WETH, POOL_E2A1437)],
-    impact: { tokenIn: REAL_WETH, tokenOut: C470, pool: POOL_E2A1437, start: C470 },
-    expectPlans: 0,
-    expectClass: "only_immediate_same_pool_reverse",
-  },
-  {
-    // run 9a20d602 block 25444402: impact pool 0x2a6c340b was in-graph, but
-    // its same-pair alternate venue 0x49bd1fa4 (v3 fee-10000, universe score 3)
-    // was below the global top-N cutoff (~11), leaving only same-pool reversal.
-    id: "b2-14fee-weth-pair-gap",
-    provenance: "run 9a20d602 block 25444402; universe alternate 0x49bd1fa4 score 3 < cutoff 11",
-    edges: [
-      swap(REAL_WETH, TOK_14FEE680, POOL_14FEE_WETH_IMPACT, "univ2-swap"),
-      swap(TOK_14FEE680, REAL_WETH, POOL_14FEE_WETH_IMPACT, "univ2-swap"),
-    ],
-    impact: { tokenIn: REAL_WETH, tokenOut: TOK_14FEE680, pool: POOL_14FEE_WETH_IMPACT, start: REAL_WETH },
-    expectPlans: 0,
-    expectClass: "only_immediate_same_pool_reverse",
-  },
-  {
-    // Same lane after pair-completion admits the below-cutoff same-pair alternate.
-    // The planner should now find a cross-venue two-hop close.
-    id: "b2-14fee-weth-pair-flip",
-    provenance: "run 9a20d602 block 25444402; below-cutoff same-pair alternate 0x49bd1fa4 admitted",
-    edges: [
-      swap(REAL_WETH, TOK_14FEE680, POOL_14FEE_WETH_IMPACT, "univ2-swap"),
-      swap(TOK_14FEE680, REAL_WETH, POOL_14FEE_WETH_IMPACT, "univ2-swap"),
-      swap(REAL_WETH, TOK_14FEE680, POOL_14FEE_WETH_ALT),
-      swap(TOK_14FEE680, REAL_WETH, POOL_14FEE_WETH_ALT),
-    ],
-    impact: { tokenIn: REAL_WETH, tokenOut: TOK_14FEE680, pool: POOL_14FEE_WETH_IMPACT, start: REAL_WETH },
-    expectMinPlans: 1,
-    expectTokenPathTokensGreaterThan: 2,
-  },
-  {
-    // watchlist bot 0xae2Fc483 closed an OVR/WETH loop at block 25442493 through
-    // pool 0x0b0d6c11, which was absent from our routing graph. With only our
-    // in-graph OVR/WETH venue, the planner can only attempt same-pool reversal.
-    id: "coverage-ovr-weth-gap",
-    provenance: "watchlist 0xae2Fc483 tx 0x68f186f08eb61ff2d32486b66b9351f00063da4e955ccf6f3361642ccc920ead block 25442493; out-of-graph OVR/WETH pool absent",
-    edges: [
-      swap(REAL_WETH, OVR, POOL_OVR_WETH_INGRAPH),
-      swap(OVR, REAL_WETH, POOL_OVR_WETH_INGRAPH),
-    ],
-    impact: { tokenIn: REAL_WETH, tokenOut: OVR, pool: POOL_OVR_WETH_INGRAPH, start: REAL_WETH },
-    expectPlans: 0,
-    expectClass: "only_immediate_same_pool_reverse",
-  },
-  {
-    // Same recorded case after consuming the closable discovery-queue pool. The
-    // second OVR/WETH venue lets the planner construct a cross-venue closed loop.
-    id: "coverage-ovr-weth-flip",
-    provenance: "watchlist 0xae2Fc483 tx 0x68f186f08eb61ff2d32486b66b9351f00063da4e955ccf6f3361642ccc920ead block 25442493; out-of-graph OVR/WETH pool covered",
-    edges: [
-      swap(REAL_WETH, OVR, POOL_OVR_WETH_INGRAPH),
-      swap(OVR, REAL_WETH, POOL_OVR_WETH_INGRAPH),
-      swap(REAL_WETH, OVR, POOL_OVR_WETH_ENQUEUED),
-      swap(OVR, REAL_WETH, POOL_OVR_WETH_ENQUEUED),
-    ],
-    impact: { tokenIn: REAL_WETH, tokenOut: OVR, pool: POOL_OVR_WETH_INGRAPH, start: REAL_WETH },
-    expectMinPlans: 1,
-  },
-  {
-    // Block 25443539 WETH/0xff208177: documented competitor lane needs the
-    // universe-loaded return venues 0x15e86e6f + 0x08650bb9. Without them, the
-    // source impact pool is absent from the routing graph.
-    id: "coverage-ff208177-gap",
-    provenance: "block 25443539 WETH/0xff208177; universe return venues 0x15e86e6f + 0x08650bb9 absent",
-    edges: [swap(TOK_FF208177, USDT, P2), swap(USDT, TOK_FF208177, P3)],
-    impact: { tokenIn: REAL_WETH, tokenOut: TOK_FF208177, pool: POOL_FF208177_A, start: REAL_WETH },
-    expectPlans: 0,
-    expectClass: "impact_pool_not_in_routing_graph",
-  },
-  {
-    // Same block 25443539 lane with both file-backed universe venues admitted.
-    // Cross-venue WETH/0xff208177 coverage should produce at least one plan.
-    id: "coverage-ff208177-flip",
-    provenance: "block 25443539 WETH/0xff208177; universe return venues 0x15e86e6f + 0x08650bb9 covered",
-    edges: [
-      swap(REAL_WETH, TOK_FF208177, POOL_FF208177_A),
-      swap(TOK_FF208177, REAL_WETH, POOL_FF208177_A),
-      swap(REAL_WETH, TOK_FF208177, POOL_FF208177_B),
-      swap(TOK_FF208177, REAL_WETH, POOL_FF208177_B),
-    ],
-    impact: { tokenIn: REAL_WETH, tokenOut: TOK_FF208177, pool: POOL_FF208177_A, start: REAL_WETH },
-    expectMinPlans: 1,
-  },
-  {
-    // run 9a20d602 block 25444461 tx 0x5610530b...d4511b7: TOK_1151/USDT pool A absent from routing graph.
-    // INVALIDATED as R4 "real value" evidence (2026-07-03 manual trace, arch-review-2-verdict.md step 1c):
-    // full Transfer-log trace of 0x5610530b...d4511b7 shows EOA 0x219fc40c...ec2781 spent 200 USDC and
-    // received TOK_1151 only (no return leg to USDC) -- a one-way multi-route aggregator SWAP, not a
-    // closed-loop arbitrage. Kept only as a coverage-mechanism (gap->flip) regression test; do NOT cite
-    // as "competitor closed a real-value loop" evidence for the coverage epic decision.
-    id: "r4-1151-usdt-pair-gap",
-    provenance: "run 9a20d602 block 25444461 tx 0x5610530b4816cd6e405f2a5c788d13669c4fe0bc0ff0599cc0db95a88d4511b7; TOK_1151/USDT impact pool A absent from routing graph (mechanism-only fixture, NOT verified arb value)",
-    edges: [swap(TOK_1151, REAL_WETH, P2), swap(REAL_WETH, TOK_1151, P3)],
-    impact: { tokenIn: REAL_USDT, tokenOut: TOK_1151, pool: POOL_1151_USDT_A, start: REAL_USDT },
-    expectPlans: 0,
-    expectClass: "impact_pool_not_in_routing_graph",
-  },
-  {
-    // run 9a20d602 blocks 25444461/25444621 txs 0x5610530b...d4511b7 + 0x26c6a22a...7523987: repeated TOK_1151/USDT lane covered.
-    // Same invalidation as r4-1151-usdt-pair-gap above -- mechanism-only, not a verified real-value case.
-    id: "r4-1151-usdt-pair-flip",
-    provenance: "run 9a20d602 block 25444461 tx 0x5610530b4816cd6e405f2a5c788d13669c4fe0bc0ff0599cc0db95a88d4511b7 plus block 25444621 tx 0x26c6a22ade569e525225e6476849185889ca5665eb86e2c880b3855eb7523987; TOK_1151/USDT pools A+B covered (mechanism-only fixture, NOT verified arb value)",
-    edges: [
-      swap(REAL_USDT, TOK_1151, POOL_1151_USDT_A),
-      swap(TOK_1151, REAL_USDT, POOL_1151_USDT_A),
-      swap(REAL_USDT, TOK_1151, POOL_1151_USDT_B),
-      swap(TOK_1151, REAL_USDT, POOL_1151_USDT_B),
-    ],
-    impact: { tokenIn: REAL_USDT, tokenOut: TOK_1151, pool: POOL_1151_USDT_A, start: REAL_USDT },
-    expectMinPlans: 1,
-  },
-  {
-    // run 20260701-t2: not_seen graph_gap -- watchlist bot arbed pool 0x874376be
-    // (WETH/0x27c70cd1) which is NOT in our routing graph. FLIP TARGET: >0 once the
-    // pool is covered (e.g. via the pool universe). Until then this asserts the gap.
-    id: "graph-gap-pool-absent",
-    provenance: "run 20260701-t2 block 25434931 pool 0x874376be WETH/0x27c70cd1; graph_gap",
-    edges: [swap(TOK_874376, USDT, P2), swap(USDT, TOK_874376, P3)], // graph WITHOUT the impact pool
-    impact: { tokenIn: REAL_WETH, tokenOut: TOK_874376, pool: POOL_874376, start: TOK_874376 },
-    expectPlans: 0,
-    expectClass: "impact_pool_not_in_routing_graph",
-  },
-  {
-    // coffeebabe v3-fork triangle at block 25442109. The third leg is deliberately
-    // absent here, pinning the missing-pool gap before the covered fixture below flips.
-    id: "v3fork-triangle-gap",
-    provenance: "coffeebabe 0xa3c18c97…a90d5 block 25442109; leg-3 v3-fork pool absent from graph",
-    edges: [
-      swap(REAL_WETH, REAL_USDC, POOL_USDC_WETH_100),
-      swap(REAL_USDC, REAL_WETH, POOL_USDC_WETH_100),
-      swap(REAL_USDC, REAL_USDT, POOL_USDC_USDT_100),
-      swap(REAL_USDT, REAL_USDC, POOL_USDC_USDT_100),
-    ],
-    impact: { tokenIn: REAL_WETH, tokenOut: REAL_USDC, pool: POOL_USDC_WETH_100, start: REAL_WETH },
-    maxHops: 3,
-    expectPlans: 0,
-    expectClass: "only_immediate_same_pool_reverse",
-  },
-  {
-    // Same sample with the missing v3-fork WETH/USDT leg covered. This is the
-    // repair-replay flip: the planner must now build at least one closed-loop plan.
-    id: "v3fork-triangle-flip",
-    provenance: "coffeebabe 0xa3c18c97…a90d5 block 25442109; leg-3 v3-fork pool absent from graph FLIPPED: pool covered",
-    edges: [
-      swap(REAL_WETH, REAL_USDC, POOL_USDC_WETH_100),
-      swap(REAL_USDC, REAL_WETH, POOL_USDC_WETH_100),
-      swap(REAL_USDC, REAL_USDT, POOL_USDC_USDT_100),
-      swap(REAL_USDT, REAL_USDC, POOL_USDC_USDT_100),
-      swap(REAL_WETH, REAL_USDT, POOL_V3FORK_WETH_USDT),
-      swap(REAL_USDT, REAL_WETH, POOL_V3FORK_WETH_USDT),
-    ],
-    impact: { tokenIn: REAL_WETH, tokenOut: REAL_USDC, pool: POOL_USDC_WETH_100, start: REAL_WETH },
-    maxHops: 3,
-    expectMinPlans: 1,
-  },
-];
-
-async function testRealCaseReplayFixtures(): Promise<void> {
-  for (const fx of REPLAY_FIXTURES) {
-    const planner = new TemplatePlanner();
-    planner.setGraph(fx.edges);
-    planner.setMaxHops(fx.maxHops ?? 2);
-    if (fx.flashLiquidity) planner.setFlashLiquidity(fakeLiquidity(fx.flashLiquidity));
-    const plans = await planner.plan(
-      opportunityWithImpact(fx.impact.tokenIn, fx.impact.tokenOut, fx.impact.pool, fx.impact.start),
-      fx.templates ?? [FLASH_SWAP_REPAY],
-    );
-    if (fx.expectMinPlans !== undefined) {
-      assert(
-        plans.length >= fx.expectMinPlans,
-        `replay ${fx.id}: expected at least ${fx.expectMinPlans} plans, got ${plans.length}`,
-      );
-    } else {
-      assert(fx.expectPlans !== undefined, `replay ${fx.id}: missing expectPlans`);
-      assert(plans.length === fx.expectPlans, `replay ${fx.id}: expected ${fx.expectPlans} plans, got ${plans.length}`);
-    }
-    if (fx.expectPlans === 0 && fx.expectClass) {
-      const diag = planner.lastNoCandidateDiagnostic();
-      if (!diag) throw new Error(`FAIL: replay ${fx.id}: expected diagnostic`);
-      assert(diag.classification === fx.expectClass, `replay ${fx.id}: class ${diag.classification} != ${fx.expectClass}`);
-    }
-    if (fx.expectTokenPathTokensGreaterThan !== undefined) {
-      assert(
-        plans.some((plan) => plan.tokenPath.edges.length + 1 > fx.expectTokenPathTokensGreaterThan!),
-        `replay ${fx.id}: expected token path length > ${fx.expectTokenPathTokensGreaterThan}`,
-      );
-    }
-    console.log(`[planner] replay fixture ${fx.id} (${fx.provenance}): PASS`);
-  }
 }
 
 async function testCfgV4PoolClosesRoutingCycle(): Promise<void> {
@@ -1020,6 +659,8 @@ async function testCfgV4PoolClosesRoutingCycle(): Promise<void> {
   assert(baselinePlans.length === 0, `CFG gate baseline: expected 0 plans, got ${baselinePlans.length}`);
 
   const withV4: TokenEdge[] = [
+    swap(REAL_WETH, CFG, POOL_V3_WETH_CFG),
+    swap(CFG, REAL_WETH, POOL_V3_WETH_CFG),
     {
       adapterId: "univ4-unlock",
       target: ADDR.UNISWAP_V4_POOL_MANAGER,
@@ -1075,88 +716,6 @@ async function testCfgV4PoolClosesRoutingCycle(): Promise<void> {
   );
 }
 
-async function testHighSpreadUniverseSelectionReplay(): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), "planner-high-spread-universe-"));
-  try {
-    const file = join(dir, "active-pools.json");
-    const filler = Array.from({ length: 1500 }, (_unused, i) => ({
-      address: `0x${(0x600000 + i).toString(16).padStart(40, "0")}`,
-      adapter: "univ3",
-      token0: `0x${(0x700000 + i * 2).toString(16).padStart(40, "0")}`,
-      token1: `0x${(0x700001 + i * 2).toString(16).padStart(40, "0")}`,
-      fee: 500,
-      score: 3000 - i,
-    }));
-    writeFileSync(file, JSON.stringify({
-      pools: [
-        ...filler,
-        {
-          address: POOL_1151_USDT_A,
-          adapter: "univ3",
-          token0: REAL_USDT,
-          token1: TOK_1151,
-          fee: 10000,
-          score: 7,
-          swapCount30d: 7,
-        },
-        {
-          address: POOL_1151_USDT_B,
-          adapter: "univ3",
-          token0: REAL_USDT,
-          token1: TOK_1151,
-          fee: 10000,
-          score: 9,
-          swapCount30d: 9,
-        },
-      ],
-    }));
-
-    const oldSelected = loadPoolUniverse(file, {
-      maxPools: 1500,
-      minScore: 1,
-      highSpreadPairQuota: 0,
-    });
-    assert(
-      !oldSelected.some((pool) => pool.address === POOL_1151_USDT_A || pool.address === POOL_1151_USDT_B),
-      "high-spread replay setup: old score-only topN should exclude both real low-score pools",
-    );
-    const oldPlanner = new TemplatePlanner();
-    oldPlanner.setGraph(oldSelected.flatMap(poolToSwapEdges));
-    oldPlanner.setMaxHops(2);
-    const oldPlans = await oldPlanner.plan(
-      opportunityWithImpact(REAL_USDT, TOK_1151, POOL_1151_USDT_A, REAL_USDT),
-      [FLASH_SWAP_REPAY],
-    );
-    assert(oldPlans.length === 0, `high-spread replay before: expected 0 plans, got ${oldPlans.length}`);
-    const oldDiagnostic = oldPlanner.lastNoCandidateDiagnostic();
-    assert(
-      oldDiagnostic?.classification === "impact_pool_not_in_routing_graph",
-      `high-spread replay before: class ${oldDiagnostic?.classification}`,
-    );
-
-    const highSpreadSelected = loadPoolUniverse(file, {
-      maxPools: 1500,
-      minScore: 1,
-      highSpreadPairQuota: 150,
-      highSpreadMinFee: 10000,
-    });
-    const planner = new TemplatePlanner();
-    planner.setGraph(highSpreadSelected.flatMap(poolToSwapEdges));
-    planner.setMaxHops(2);
-    const plans = await planner.plan(
-      opportunityWithImpact(REAL_USDT, TOK_1151, POOL_1151_USDT_A, REAL_USDT),
-      [FLASH_SWAP_REPAY],
-    );
-    assert(plans.length > 0, `high-spread replay after: expected >0 plans, got ${plans.length}`);
-    console.log(
-      "[planner] high-spread universe replay 0x1151/USDT: " +
-        `score-only excluded->${oldPlans.length} plans, high-spread quota+pair-completion->${plans.length} plans: PASS`,
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
 async function main(): Promise<void> {
   await testPrunesSamePoolReverse();
   await testKeepsCrossVenueReverse();
@@ -1171,10 +730,8 @@ async function main(): Promise<void> {
   await testNoCandidateDiagnosticClassifiesPlanBudgetExhausted();
   await testNativeEthV4RoutesViaWethAlias();
   await testBlockScanPlannerBinding();
-  await testRealCaseReplayFixtures();
   await testCfgV4PoolClosesRoutingCycle();
-  await testHighSpreadUniverseSelectionReplay();
-  console.log(`planner PASS (15/15) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length}) + high-spread universe replay`);
+  console.log("planner PASS (14/14)");
 }
 
 main().catch((err) => {

@@ -1226,3 +1226,25 @@ unresolved 阻塞 eligible 判定；其采集状态如实记录在 checkpoint（
   edges，blockscan 在后续 canonical heads 连续发出 `outcome=ran`。因此本 permanent-retention +
   Ready-completion slice 状态为 **deployed and live-verified**；这不把后续 market/exact/finalSim 结果
   冒充为新的 F5/S1 终态判定。
+
+### Funding discovery 与 blockscan planner 接缝收口（2026-08-25，部署前）
+
+- Funding 不再维护外部 token JSON，也不回扫 lender 部署历史或遍历 Graph token。Morpho/Balancer
+  plugin 各自声明真实 FlashLoan topic、singleton emitter 与 indexed token 解码；中央 14,400-block
+  catalog union scan 只产出通用 `familyId + asset` candidate。
+- Funding candidate 与 route candidate 进入同一 rebuild accounting/Ready CAS，但投影分离：route memo
+  进入 Graph，Funding memo 进入 `familyId -> assets[]` Ready 表。Funding memo 使用
+  `dependency-proof`，每轮在 cutoff 重新读取当前余额；只有 readable 且 `maxBorrow > 0` 才进入
+  Ready，零余额/不可读保持 retryable。
+- 删除旧 `funding-token-universe` CLI/文件与 shadow runtime reattestor 兼容桥；生产 current-N session
+  只查询对应 Funding Family 已准入的 token，不再形成 lender×token 笛卡尔积。
+- blockscan scanner 以 `SEARCHER_BLOCKSCAN_MAX_HOPS`（默认 6）完成 bounded price/depth ring search，
+  再把完整 `seedEdges` 交给 blockscan planner。`planBlockScanFromSeedEdges()` 直接消费该路径，原本就不
+  读取 backrun full-Graph DFS 的 `maxHops/maxPoolsPerToken`；因此不增加无效 setter 或第二套兼容配置。
+  行为测试固定证明：即使普通 DFS 配成 2-hop/top-1，scanner 交出的六跳 seed route 仍完整进入计划。
+- 同一 `rebuildUniverse()` 新增只缩不扩的 preflight 窗口（1..14,400）。先用独立 checkpoint 跑
+  100 blocks；仅当 Funding observation→attestation→Ready、Graph 分离及 live dry-run 无结构性错误时，
+  才以默认 14,400 blocks 跑正式重建。100-block 结果不得作为终态 eligible 证据。
+- 部署前本地：完整 `build`、`build:live`、Funding discovery/runtime、universe production/runner、
+  strict production session、production composition、default-authority、cutover-readiness 与
+  MigrationCleanupReceipt 均 PASS。节点 exact-SHA 与 100/14,400 证据待本 slice 提交后回写。

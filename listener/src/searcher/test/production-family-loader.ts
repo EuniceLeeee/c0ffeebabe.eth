@@ -11,6 +11,7 @@ import { dodoV2Adapter } from "../venues/swaps/dodo-v2.js";
 import { univ2StandardAdapter } from "../venues/swaps/univ2-standard.js";
 import {
   defineSwapFamily,
+  explicitReverseBindingUnsupported,
   type CompiledInstanceDescriptor,
   type FamilyCandidate,
   type FamilyOwnedActionAdapter,
@@ -125,6 +126,9 @@ function strictDefinition(
     discovery: {
       evidenceChannel: "tx-evidence" as const,
       sources: ["landed-log"],
+      reverseBinding: explicitReverseBindingUnsupported(
+        "synthetic loader fixture has no retained chain identity",
+      ),
       logPatterns: [{
         id: patternId,
         topic: HASH,
@@ -247,6 +251,12 @@ function strictDefinition(
       observation: {
         patternIds: [patternId],
         decode: () => [{ kind: "swap", canonicalPayload: { ok: true } }],
+      },
+      receiptObservation: {
+        topics: [HASH],
+        canonicalIntakeTargets: [],
+        observedPoolIdentity: () => null,
+        decodeReceiptImpacts: async () => ({ status: "no-match" }),
       },
       victimSupport: "none",
     },

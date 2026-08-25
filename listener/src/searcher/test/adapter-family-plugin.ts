@@ -7,6 +7,7 @@ import {
   defineProtocolFamily,
   defineSwapFamily,
   definedFamilyPluginContractSummary,
+  explicitReverseBindingUnsupported,
   type CompiledInstanceDescriptor,
   type FamilyCandidate,
   type FamilyCaptureDescriptor,
@@ -143,6 +144,9 @@ function core(input: {
   return {
     discovery: {
       ...observationPattern,
+      reverseBinding: explicitReverseBindingUnsupported(
+        "synthetic contract fixture has no retained chain identity",
+      ),
       decodeCandidate: () => ({
         candidateKind: "test-pool",
         pool: ADDRESS,
@@ -293,6 +297,12 @@ function swapDefinition(): SwapFamilyPlugin<
         patternIds: ["test-observation"],
         decode: () => [{ kind: "swap", canonicalPayload: { ok: true } }],
       },
+      receiptObservation: {
+        topics: [HASH],
+        canonicalIntakeTargets: [],
+        observedPoolIdentity: () => null,
+        decodeReceiptImpacts: async () => ({ status: "no-match" }),
+      },
       victimSupport: "none",
     },
   };
@@ -372,13 +382,14 @@ if (false) {
   const creditPlugin = {} as TestCreditPlugin;
   // @ts-expect-error credit forbids the swap slot.
   void creditPlugin.swap;
-  // funding forbids the public discovery/identity/instance/routes slices.
+  // funding participates in discovery but forbids route identity/instance.
   const fundingPlugin = {} as FundingFamilyPlugin<
     FundingSourceDescriptor,
     unknown
   >;
-  // @ts-expect-error funding forbids the discovery slot.
   void fundingPlugin.discovery;
+  // @ts-expect-error funding forbids the identity slot.
+  void fundingPlugin.identity;
 }
 
 const rawSwap = swapDefinition();

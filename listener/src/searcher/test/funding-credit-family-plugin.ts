@@ -56,6 +56,11 @@ interface TestFundingSource extends FundingSourceDescriptor {
   readonly fundingId: "fixture:funding";
 }
 
+interface TestFundingCandidate extends FamilyCandidate {
+  readonly candidateKind: "funding-token";
+  readonly asset: string;
+}
+
 interface TestCandidate extends FamilyCandidate {
   readonly candidateKind: "credit-vault";
   readonly address: string;
@@ -103,7 +108,8 @@ function ownedAction(input: {
 
 function fundingDefinition(): FundingFamilyPlugin<
   TestFundingSource,
-  { readonly balance: bigint }
+  { readonly balance: bigint },
+  TestFundingCandidate
 > {
   const fundingFamilyId = familyId("flash-loan:fixture");
   const fundingLineage = lineageId("funding:fixture");
@@ -115,6 +121,19 @@ function fundingDefinition(): FundingFamilyPlugin<
       requiredInfraActionAdapterIds: [],
       allowedTaxonomy: [{ slotKind: "flash" }],
       supportedLineages: [fundingLineage],
+    },
+    discovery: {
+      evidenceChannel: "tx-evidence",
+      sources: ["landed-log"],
+      logPatterns: [{
+        id: "fixture-flash-loan",
+        topic: `0x${"44".repeat(32)}`,
+        signature: "FlashLoan(address)",
+      }],
+      decodeCandidate: ({ observation }) => observation.kind === "log"
+        ? { candidateKind: "funding-token", asset: TOKEN0 }
+        : null,
+      candidateKey: (candidate) => candidate.asset.toLowerCase(),
     },
     funding: {
       liquidity: {
@@ -407,7 +426,7 @@ assert.match(
 assert.deepEqual(
   catalog.forStrictFamily(familyId("flash-loan:fixture"))
     .applicableCapabilities,
-  ["capture", "funding"],
+  ["capture", "discovery", "funding"],
 );
 assert.deepEqual(
   catalog.forStrictFamily(familyId("credit:fixture")).applicableCapabilities,

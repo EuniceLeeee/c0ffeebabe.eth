@@ -9,7 +9,6 @@ import {
   physicalRequestSetFingerprint,
   FamilyDecodeError,
   runRequestProgram,
-  RequiredAdapterRequestError,
   type AdapterRequest,
   type AdapterRequestResult,
   type BoundedRequestExecutor,
@@ -19,6 +18,8 @@ import {
   type RequestRequirements,
   type StaticEvidenceProgramLike,
 } from "./venues/adapter-request-program.js";
+import { RequiredAdapterRequestError } from
+  "./venues/adapter-request-failure.js";
 import { hashCanonical } from "./venues/canonical-value.js";
 import type { AdapterFamilyLifecycleContentCache } from
   "./adapter-family-lifecycle-content-cache.js";

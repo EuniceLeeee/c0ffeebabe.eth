@@ -78,11 +78,20 @@ const startupView = buildFamilyRouteGraphView({
     }))
   ),
 });
+const readyFundingAssets = Object.freeze(
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll()
+    .filter((candidate) => candidate.plugin.manifest.domain === "funding")
+    .map((candidate) => Object.freeze({
+      familyId: candidate.plugin.manifest.familyId,
+      asset: UNIV2_FIXTURE_TOKEN0,
+    })),
+);
 const root = new StrictProductionRuntimeRoot({
   catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
   readySource: STARTUP,
   readyGraph: startupView.edges,
   readyInstances: publication.instances,
+  readyFundingAssets,
 });
 
 function runtime(
@@ -96,6 +105,7 @@ function runtime(
     readonly onCurrentPricingRead?: () => void;
     readonly onCurrentPricingReadStart?: (target: string) => void;
     readonly onCurrentPricingReadEnd?: (target: string) => void;
+    readonly onFundingRead?: () => void;
     readonly currentPricingDelayMs?: number;
     readonly failCurrentPricing?: boolean;
     readonly failFunding?: boolean;
@@ -137,6 +147,7 @@ function runtime(
         if (options.failFunding === true) {
           throw new Error("current Funding transport failed");
         }
+        options.onFundingRead?.();
         return ERC20_BALANCE.encodeFunctionResult("balanceOf", [10n ** 24n]);
       },
       getCode: async () => "0x01",
@@ -184,6 +195,29 @@ const session = await root.createSession({
   fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
 });
 
+let familyScopedFundingReads = 0;
+const oneFundingFamilyRoot = new StrictProductionRuntimeRoot({
+  catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+  readySource: STARTUP,
+  readyGraph: startupView.edges,
+  readyInstances: publication.instances,
+  readyFundingAssets: Object.freeze([readyFundingAssets[0]!]),
+});
+await oneFundingFamilyRoot.createSession({
+  source: CURRENT,
+  runtime: runtime(CURRENT, {
+    onFundingRead() {
+      familyScopedFundingReads++;
+    },
+  }),
+  fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+});
+assert.equal(
+  familyScopedFundingReads,
+  1,
+  "a Funding Family may query only assets admitted for that Family",
+);
+
 // Performance contract: independent ready instances refresh under the
 // bounded pool, each exactly once, while the resulting strict topology keeps
 // deterministic ready order. This checks concurrency directly rather than
@@ -213,6 +247,7 @@ const parallelRoot = new StrictProductionRuntimeRoot({
   readySource: STARTUP,
   readyGraph: parallelStartupView.edges,
   readyInstances: parallelReadyInstances,
+  readyFundingAssets,
 });
 let activePricingReads = 0;
 let maxActivePricingReads = 0;
@@ -657,6 +692,7 @@ await assert.rejects(
     readySource: STARTUP,
     readyGraph: startupView.edges.slice(1),
     readyInstances: publication.instances,
+    readyFundingAssets,
   }).createSession({
     source: CURRENT,
     runtime: strictRuntime,

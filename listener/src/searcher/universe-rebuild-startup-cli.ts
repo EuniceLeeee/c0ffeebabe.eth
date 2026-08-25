@@ -19,12 +19,14 @@ interface Args {
   readonly checkpoint: string;
   readonly rpcUrl?: string;
   readonly runId: string;
+  readonly windowBlocks?: number;
 }
 
 function parseArgs(argv: readonly string[]): Args {
   let checkpoint = "";
   let rpcUrl: string | undefined;
   let runId = "startup-rebuild";
+  let windowBlocks: number | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const next = (): string => {
@@ -36,18 +38,20 @@ function parseArgs(argv: readonly string[]): Args {
     if (arg === "--checkpoint") checkpoint = next();
     else if (arg === "--rpc-url") rpcUrl = next();
     else if (arg === "--run-id") runId = next();
+    else if (arg === "--window-blocks") windowBlocks = Number(next());
     else throw new Error("unknown argument " + arg);
   }
   if (checkpoint.trim().length === 0) {
     throw new Error(
       "usage: searcher:universe-rebuild-startup --checkpoint <path> " +
-        "[--rpc-url <url>] [--run-id <id>]",
+        "[--rpc-url <url>] [--run-id <id>] [--window-blocks <1..14400>]",
     );
   }
   return {
     checkpoint,
     rpcUrl,
     runId,
+    windowBlocks,
   };
 }
 
@@ -77,6 +81,9 @@ async function main(): Promise<void> {
       ...wiring,
       store,
       runId: args.runId,
+      ...(args.windowBlocks === undefined
+        ? {}
+        : { observationWindowBlocks: args.windowBlocks }),
       log: (message) => console.log("[universe-rebuild] " + message),
     });
     console.log(

@@ -5,7 +5,7 @@ import type {
   AdapterRequestResult,
 } from "../../adapter-request-program.js";
 import { RequiredAdapterRequestError } from
-  "../../adapter-request-program.js";
+  "../../adapter-request-failure.js";
 import { hashCanonical } from "../../canonical-value.js";
 import {
   assertSameSource,

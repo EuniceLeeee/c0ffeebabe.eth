@@ -3,6 +3,8 @@ import {
   hashCanonical,
   type CanonicalValue,
 } from "./canonical-value.js";
+import { RequiredAdapterRequestError } from
+  "./adapter-request-failure.js";
 
 export type AdapterTransport =
   | "eth-call"
@@ -213,20 +215,6 @@ export class FamilyDecodeError extends Error {
     super(message);
     this.name = "FamilyDecodeError";
     this.uncertainty = uncertainty;
-  }
-}
-
-/** A required transport failure is unresolved and must never reach decode. */
-export class RequiredAdapterRequestError extends Error {
-  readonly failureCode: Extract<
-    AdapterRequestResult,
-    { readonly ok: false }
-  >["failure"];
-
-  constructor(result: Extract<AdapterRequestResult, { readonly ok: false }>) {
-    super(`required adapter request ${result.id} failed: ${result.failure}`);
-    this.name = "RequiredAdapterRequestError";
-    this.failureCode = result.failure;
   }
 }
 

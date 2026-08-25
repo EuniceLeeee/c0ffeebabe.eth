@@ -42,6 +42,9 @@ const SOURCE: CanonicalSource = Object.freeze({
 const SWAP_TOPIC = ethers.id(
   "Swap(address,uint256,uint256,uint256,uint256,address)",
 ).toLowerCase();
+const ERC20_BALANCE = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
+]);
 
 class TestSealedReadonlyMap<Key, Value> implements ReadonlyMap<Key, Value> {
   readonly #values: Map<Key, Value>;
@@ -871,6 +874,7 @@ async function main(): Promise<void> {
   let traceReads = 0;
   const tracedTransactions: string[] = [];
   let historicalLogReads = 0;
+  let fundingBalance = 1_000_000n;
   const memoProofHash = "0x" + "b2".repeat(32);
   let memoProofHashReads = 0;
   const stubServer = http.createServer((request, response) => {
@@ -919,6 +923,15 @@ async function main(): Promise<void> {
               | { readonly to?: string; readonly data?: string }
               | undefined;
             const data = transaction?.data ?? "0x";
+            if (
+              data.slice(0, 10).toLowerCase() ===
+                ERC20_BALANCE.getFunction("balanceOf")!.selector.toLowerCase()
+            ) {
+              return respond(ERC20_BALANCE.encodeFunctionResult(
+                "balanceOf",
+                [fundingBalance],
+              ));
+            }
             // V4_POSITION_MANAGER_POOL_KEYS_SELECTOR = 0x86b6be7d.
             if (data.startsWith("0x86b6be7d")) {
               // PositionManager keys by the leading bytes25 of poolId.
@@ -988,6 +1001,41 @@ async function main(): Promise<void> {
     const wired = createRebuildWiring({
       rpcUrl: "http://127.0.0.1:" + stubPort,
     });
+    const fundingToken = ethers.getAddress("0x" + "f1".repeat(20));
+    const fundingCandidate = candidatesFromLog(Object.freeze({
+      address: ADDR.MORPHO,
+      topics: Object.freeze([
+        ethers.id("FlashLoan(address,address,uint256)"),
+        ethers.zeroPadValue(ethers.ZeroAddress, 32),
+        ethers.zeroPadValue(fundingToken, 32),
+      ]),
+      data: ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [1n]),
+      transactionHash: "0x" + "f2".repeat(32),
+      blockNumber: SOURCE.number,
+      blockHash: SOURCE.hash,
+      logIndex: 9,
+    }))[0]!;
+    const funded = await wired.attestFamilyInstanceOnce({
+      candidate: fundingCandidate,
+      cutoff: SOURCE,
+    });
+    assert.equal(
+      funded.status,
+      "verified",
+      "an observed Funding token enters Ready only with positive current liquidity",
+    );
+    fundingBalance = 0n;
+    const emptyFunding = await wired.attestFamilyInstanceOnce({
+      candidate: fundingCandidate,
+      cutoff: SOURCE,
+    });
+    assert.equal(emptyFunding.status, "retryable");
+    assert.match(
+      emptyFunding.status === "retryable" ? emptyFunding.reasonCode : "",
+      /no positive current liquidity/,
+      "an observed token with zero current lender balance stays outside Ready",
+    );
+    fundingBalance = 1_000_000n;
     // Thousands of immutable memos normally share one proof block. Instance
     // authority (code + implementation) is still checked per candidate, but
     // the shared canonical block hash must be read only once for this fixed

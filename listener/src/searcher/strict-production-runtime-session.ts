@@ -49,7 +49,10 @@ import type { CanonicalValue } from "./venues/canonical-value.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
-import { familyId } from "./venues/adapter-family-identifiers.js";
+import {
+  familyId,
+  type FamilyId,
+} from "./venues/adapter-family-identifiers.js";
 import type { PendingExecutionEvidence } from
   "./venues/route-leg-adapter.js";
 import type { CanonicalEdgeId } from
@@ -126,6 +129,11 @@ interface FundingBinding {
   readonly offer: PreparedFundingOffer;
 }
 
+export interface StrictReadyFundingAsset {
+  readonly familyId: FamilyId;
+  readonly asset: string;
+}
+
 /**
  * Immutable startup authority used to mint one current-source execution
  * session. It owns only the instances admitted by the atomic readyGeneration;
@@ -137,12 +145,17 @@ export class StrictProductionRuntimeRoot {
   readonly #readySource: CanonicalSource;
   readonly #readyGraph: readonly TokenEdge[];
   readonly #readyInstances: readonly PreparedFamilyInstance[];
+  readonly #readyFundingAssetsByFamily: ReadonlyMap<
+    FamilyId,
+    readonly string[]
+  >;
 
   constructor(input: {
     readonly catalog: FamilyCapabilityCatalog;
     readonly readySource: CanonicalSource;
     readonly readyGraph: readonly TokenEdge[];
     readonly readyInstances: readonly PreparedFamilyInstance[];
+    readonly readyFundingAssets: readonly StrictReadyFundingAsset[];
   }) {
     assertCanonicalSource(input.readySource);
     const graphIds = new Set<string>();
@@ -165,10 +178,29 @@ export class StrictProductionRuntimeRoot {
       }
       instanceKeys.add(key);
     }
+    const fundingAssetsByFamily = new Map<FamilyId, Set<string>>();
+    for (const entry of input.readyFundingAssets) {
+      const family = input.catalog.forStrictFamily(entry.familyId);
+      if (family.plugin.manifest.domain !== "funding") {
+        throw new Error(
+          `strict ready Funding asset references non-Funding ${entry.familyId}`,
+        );
+      }
+      const asset = ethers.getAddress(entry.asset).toLowerCase();
+      const assets = fundingAssetsByFamily.get(entry.familyId) ?? new Set();
+      assets.add(asset);
+      fundingAssetsByFamily.set(entry.familyId, assets);
+    }
     this.#catalog = input.catalog;
     this.#readySource = Object.freeze({ ...input.readySource });
     this.#readyGraph = Object.freeze([...input.readyGraph]);
     this.#readyInstances = Object.freeze([...input.readyInstances]);
+    this.#readyFundingAssetsByFamily = new Map(
+      [...fundingAssetsByFamily.entries()].map(([id, assets]) => [
+        id,
+        Object.freeze([...assets].sort()),
+      ]),
+    );
     Object.freeze(this);
   }
 
@@ -360,12 +392,19 @@ export class StrictProductionRuntimeRoot {
       }
     }
 
+    const requestedFundingAssets = new Set(input.fundingAssets.map((asset) =>
+      ethers.getAddress(asset).toLowerCase()
+    ));
     const fundingBindings: FundingBinding[] = [];
     for (const family of this.#catalog.listAll()) {
       if (family.plugin.manifest.domain !== "funding") continue;
+      const assets = (this.#readyFundingAssetsByFamily.get(
+        family.plugin.manifest.familyId,
+      ) ?? []).filter((asset) => requestedFundingAssets.has(asset));
+      if (assets.length === 0) continue;
       const result = await executeFundingFamilyLiquidity({
         family,
-        assets: input.fundingAssets,
+        assets,
         source: input.source,
         generation: input.source.generation,
         runtime: input.runtime,

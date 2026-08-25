@@ -34,6 +34,7 @@ import { balancerFlashPlugin } from
   "../venues/funding/balancer-flash-family-plugin.js";
 import {
   morphoFlashFamilyOwnedAction,
+  morphoFlashDiscovery,
   morphoFlashFunding,
   morphoFlashManifest,
   morphoFlashPlugin,
@@ -139,6 +140,7 @@ async function publicationFailureCannotLeakPreparedOffers(): Promise<void> {
 async function successfulEmptyGenerationPublishesTombstone(): Promise<void> {
   const emptyPlugin = defineFundingFamily({
     manifest: morphoFlashManifest,
+    discovery: morphoFlashDiscovery,
     funding: {
       liquidity: {
         sources: (assets) => morphoFlashFunding.liquidity.sources(assets),
@@ -402,6 +404,7 @@ async function issuerSnapshotsFamilyInputsAndOnlyUnsealsPrivateOffer():
 
   const hardenedFixture = defineFundingFamily({
     manifest: morphoFlashManifest,
+    discovery: morphoFlashDiscovery,
     funding: {
       liquidity: {
         sources(assets: readonly string[]) {

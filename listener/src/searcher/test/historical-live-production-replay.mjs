@@ -279,11 +279,6 @@ if (poolUniverseSource === undefined) {
 }
 const emptyListPath = resolve(runDir, "empty-list.json");
 writeFileSync(emptyListPath, "[]\n", { mode: 0o600 });
-const fundingTokenUniversePath = resolve(
-  runDir,
-  "funding-token-universe.json",
-);
-
 async function rpcOn(url, method, params) {
   const response = await fetch(url, {
     method: "POST",
@@ -602,7 +597,6 @@ try {
     SEARCHER_POOL_UNIVERSE_PATH: poolUniversePath,
     SEARCHER_PINNED_WARM_POOLS: emptyListPath,
     SEARCHER_FORCE_INCLUDE_POOLIDS_PATH: emptyListPath,
-    SEARCHER_FUNDING_TOKEN_UNIVERSE_PATH: fundingTokenUniversePath,
     SEARCHER_POOL_UNIVERSE_FORCE_INCLUDE: "",
     SEARCHER_RECORD_LIVE_FIXTURES: "0",
     SEARCHER_RUNTIME_COMMIT: productionCommit,
@@ -732,24 +726,43 @@ try {
   if (raw.selectionMode !== "production" || raw.forcedSelectionCount !== 0) {
     throw new Error("blind replay used a non-production or forced selection path");
   }
-  const fundingTokenUniverse = JSON.parse(
-    readFileSync(fundingTokenUniversePath, "utf8"),
-  );
+  const completedStore = new UniverseRebuildCheckpointStore({
+    path: checkpointPath,
+  });
+  const completedEnvelope = await completedStore.load();
+  const completedReady = completedEnvelope?.readyGeneration ?? null;
   if (
-    fundingTokenUniverse.format !== "funding-token-universe-v1" ||
-    !Number.isSafeInteger(fundingTokenUniverse.enumeratedAtBlock) ||
-    fundingTokenUniverse.enumeratedAtBlock > baseNumber ||
-    !Array.isArray(fundingTokenUniverse.tokens)
+    completedEnvelope === null ||
+    completedReady === null ||
+    completedReady.cutoff.number > baseNumber
   ) {
-    throw new Error("historical funding token universe used future authority");
+    throw new Error("historical Funding Ready table used future authority");
+  }
+  const activeFundingKeys = new Set(completedReady.activeInstanceKeys);
+  const fundingTokens = [...new Set(Object.values(
+    completedEnvelope.verifiedMemos,
+  ).flatMap((memo) => {
+    if (!activeFundingKeys.has(memo.familyInstanceKey)) return [];
+    const descriptor = memo.compiledDescriptor;
+    if (
+      descriptor === null ||
+      typeof descriptor !== "object" ||
+      descriptor.domain !== "funding" ||
+      typeof descriptor.asset !== "string" ||
+      !/^0x[0-9a-fA-F]{40}$/.test(descriptor.asset)
+    ) return [];
+    return [descriptor.asset.toLowerCase()];
+  }))].sort();
+  if (fundingTokens.length === 0) {
+    throw new Error("historical rebuild produced no Funding Ready tokens");
   }
   const fundingTokenEvidence = Object.freeze({
-    enumeratedAtBlock: fundingTokenUniverse.enumeratedAtBlock,
-    tokenCount: fundingTokenUniverse.tokens.length,
+    enumeratedAtBlock: completedReady.cutoff.number,
+    tokenCount: fundingTokens.length,
     tokenSetSha256: blindProductionAuditHash(
-      [...fundingTokenUniverse.tokens].sort(),
+      fundingTokens,
     ),
-    fileSha256: fileSha256(fundingTokenUniversePath),
+    checkpointFingerprint: completedEnvelope.checkpointFingerprint,
   });
   const effectiveFunding = ready.artifactDocuments.resolvedConfig.payload
     .effectiveConfig?.fundingTokenUniverse;

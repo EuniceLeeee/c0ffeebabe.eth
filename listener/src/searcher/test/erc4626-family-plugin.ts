@@ -6,7 +6,7 @@ import type {
   ObservedEffects,
 } from "../venues/adapter-request-program.js";
 import { RequiredAdapterRequestError } from
-  "../venues/adapter-request-program.js";
+  "../venues/adapter-request-failure.js";
 import {
   ERC4626_ERC20_INTERFACE,
   ERC4626_INTERFACE,
