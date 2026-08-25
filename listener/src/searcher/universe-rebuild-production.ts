@@ -1193,8 +1193,9 @@ export function strictCatalogSourceCoverageKeys(): {
 }
 
 /** Source scan chunk policy; bound into the event plan fingerprint. */
-export const SOURCE_SCAN_BATCH_BLOCKS = 1_000;
+export const SOURCE_SCAN_BATCH_BLOCKS = 500;
 export const SOURCE_MIN_CHUNK_BLOCKS = 64;
+export const SOURCE_SCAN_CONCURRENCY = 4;
 
 /**
  * Ordered current-code identity of every strict family. Any capability
@@ -1261,6 +1262,7 @@ export function catalogEventSourcePlanFingerprint(input: {
     familyDefinitionHashes: input.familyDefinitionHashes,
     initialChunkBlocks: SOURCE_SCAN_BATCH_BLOCKS,
     minimumChunkBlocks: SOURCE_MIN_CHUNK_BLOCKS,
+    maxConcurrentChunks: SOURCE_SCAN_CONCURRENCY,
   }));
 }
 
@@ -1626,82 +1628,159 @@ export function createRebuildWiring(input?: {
     scanSwapWindow: async (scanInput) => {
       const logs: RebuildScanObservation[] = [];
       const eventChunks: DurableSourceChunkReceipt[] = [];
+      const totalBlocks = scanInput.cutoff.number - scanInput.fromBlock + 1;
+      let completedBlocks = 0;
+      const ranges: Array<{ readonly fromBlock: number; readonly toBlock: number }> = [];
       for (
         let start = scanInput.fromBlock;
         start <= scanInput.cutoff.number;
         start += SOURCE_SCAN_BATCH_BLOCKS
       ) {
-        const end = Math.min(
-          scanInput.cutoff.number,
-          start + SOURCE_SCAN_BATCH_BLOCKS - 1,
+        ranges.push(Object.freeze({
+          fromBlock: start,
+          toBlock: Math.min(
+            scanInput.cutoff.number,
+            start + SOURCE_SCAN_BATCH_BLOCKS - 1,
+          ),
+        }));
+      }
+      const topicFilter: Array<null | string | Array<string>> =
+        topics.length === 1 ? [topics[0]] : [[...topics]];
+      // Keep at most four local-reth reads in flight, then merge completed
+      // slices in block order. Parallel completion can never reorder the
+      // observation digest or durable source chunks.
+      for (
+        let groupStart = 0;
+        groupStart < ranges.length;
+        groupStart += SOURCE_SCAN_CONCURRENCY
+      ) {
+        const slices = await Promise.all(
+          ranges.slice(groupStart, groupStart + SOURCE_SCAN_CONCURRENCY).map(
+            async (range, groupIndex) => {
+              const slice = groupStart + groupIndex + 1;
+              const sliceLogs: RebuildScanObservation[] = [];
+              const sliceChunks: DurableSourceChunkReceipt[] = [];
+              let batchSize = range.toBlock - range.fromBlock + 1;
+              let from = range.fromBlock;
+              let attempt = 0;
+              while (from <= range.toBlock) {
+                const to = Math.min(
+                  range.toBlock,
+                  from + batchSize - 1,
+                );
+                attempt++;
+                const requestStartedAtMs = Date.now();
+                console.log(
+                  "[universe-rebuild/scan] request slice=" + slice +
+                    "/" + ranges.length +
+                    " attempt=" + attempt +
+                    " range=" + from + "-" + to +
+                    " span=" + (to - from + 1),
+                );
+                try {
+                  const batch = await provider.getLogs({
+                    topics: topicFilter,
+                    fromBlock: from,
+                    toBlock: to,
+                  });
+                  const normalizedBatch = batch.map((log) => Object.freeze({
+                    address: log.address.toLowerCase(),
+                    topics: Object.freeze([...log.topics].map((topic) =>
+                      topic.toLowerCase()
+                    )),
+                    data: log.data.toLowerCase(),
+                    transactionHash:
+                      log.transactionHash?.toLowerCase() ?? null,
+                    blockNumber: log.blockNumber,
+                    blockHash: log.blockHash?.toLowerCase() ?? null,
+                    logIndex: log.index ?? null,
+                  }));
+                  sliceChunks.push(Object.freeze({
+                    fromBlock: from,
+                    toBlock: to,
+                    resultCount: normalizedBatch.length,
+                    resultHash: digest(
+                      "source-chunk-v1:" + canonicalJson(normalizedBatch),
+                    ),
+                  }));
+                  for (const log of batch) {
+                    sliceLogs.push(Object.freeze({
+                      address: log.address.toLowerCase(),
+                      topics: Object.freeze([...log.topics]),
+                      data: log.data,
+                      ...(log.transactionHash === undefined
+                        ? {}
+                        : {
+                            transactionHash:
+                              log.transactionHash.toLowerCase(),
+                          }),
+                      blockNumber: log.blockNumber,
+                      ...(log.blockHash === undefined
+                        ? {}
+                        : { blockHash: log.blockHash.toLowerCase() }),
+                      ...(log.index === undefined
+                        ? {}
+                        : { logIndex: log.index }),
+                    }));
+                  }
+                  console.log(
+                    "[universe-rebuild/scan] completed slice=" + slice +
+                      "/" + ranges.length +
+                      " attempt=" + attempt +
+                      " range=" + from + "-" + to +
+                      " logs=" + batch.length +
+                      " elapsedMs=" + (Date.now() - requestStartedAtMs) +
+                      " sliceLogs=" + sliceLogs.length,
+                  );
+                  from = to + 1;
+                  batchSize = Math.min(
+                    SOURCE_SCAN_BATCH_BLOCKS,
+                    range.toBlock - from + 1,
+                  );
+                } catch (error) {
+                  if (batchSize <= SOURCE_MIN_CHUNK_BLOCKS) {
+                    throw new Error(
+                      "swap window scan failed at " + from + "-" + to +
+                        ": " + (error instanceof Error
+                          ? error.message
+                          : String(error)),
+                    );
+                  }
+                  const nextBatchSize = Math.floor(batchSize / 2);
+                  console.log(
+                    "[universe-rebuild/scan] split slice=" + slice +
+                      "/" + ranges.length +
+                      " attempt=" + attempt +
+                      " range=" + from + "-" + to +
+                      " elapsedMs=" + (Date.now() - requestStartedAtMs) +
+                      " nextSpan=" + nextBatchSize +
+                      " reason=" + (error instanceof Error
+                        ? error.message
+                        : String(error)).slice(0, 240),
+                  );
+                  batchSize = nextBatchSize;
+                }
+              }
+              return Object.freeze({
+                range,
+                logs: Object.freeze(sliceLogs),
+                chunks: Object.freeze(sliceChunks),
+              });
+            },
+          ),
         );
-        const topicFilter: Array<null | string | Array<string>> =
-          topics.length === 1 ? [topics[0]] : [[...topics]];
-        // reth's eth_getLogs caps at 20000 results: halve the slice on the
-        // max-results error and retry the same range; a hard floor keeps
-        // progress fail-closed.
-        let batchSize = Math.min(
-          SOURCE_SCAN_BATCH_BLOCKS,
-          end - start + 1,
-        );
-        let from = start;
-        while (from <= end) {
-          const to = Math.min(end, from + batchSize - 1);
-          try {
-            const batch = await provider.getLogs({
-              topics: topicFilter,
-              fromBlock: from,
-              toBlock: to,
-            });
-            const normalizedBatch = batch.map((log) => Object.freeze({
-              address: log.address.toLowerCase(),
-              topics: Object.freeze([...log.topics].map((topic) =>
-                topic.toLowerCase()
-              )),
-              data: log.data.toLowerCase(),
-              transactionHash: log.transactionHash?.toLowerCase() ?? null,
-              blockNumber: log.blockNumber,
-              blockHash: log.blockHash?.toLowerCase() ?? null,
-              logIndex: log.index ?? null,
-            }));
-            eventChunks.push(Object.freeze({
-              fromBlock: from,
-              toBlock: to,
-              resultCount: normalizedBatch.length,
-              resultHash: digest(
-                "source-chunk-v1:" + canonicalJson(normalizedBatch),
-              ),
-            }));
-            for (const log of batch) {
-              logs.push(Object.freeze({
-                address: log.address.toLowerCase(),
-                topics: Object.freeze([...log.topics]),
-                data: log.data,
-                ...(log.transactionHash === undefined
-                  ? {}
-                  : { transactionHash: log.transactionHash.toLowerCase() }),
-                blockNumber: log.blockNumber,
-                ...(log.blockHash === undefined
-                  ? {}
-                  : { blockHash: log.blockHash.toLowerCase() }),
-                ...(log.index === undefined ? {} : { logIndex: log.index }),
-              }));
-            }
-            from = to + 1;
-            batchSize = Math.min(
-              SOURCE_SCAN_BATCH_BLOCKS,
-              end - from + 1,
-            );
-          } catch (error) {
-            if (batchSize <= SOURCE_MIN_CHUNK_BLOCKS) {
-              throw new Error(
-                "swap window scan failed at " + from + "-" + to + ": " +
-                  (error instanceof Error ? error.message : String(error)),
-              );
-            }
-            batchSize = Math.floor(batchSize / 2);
-          }
+        for (const slice of slices) {
+          logs.push(...slice.logs);
+          eventChunks.push(...slice.chunks);
+          completedBlocks += slice.range.toBlock - slice.range.fromBlock + 1;
         }
+        console.log(
+          "[universe-rebuild/scan] mergedSlices=" +
+            Math.min(groupStart + slices.length, ranges.length) +
+            "/" + ranges.length +
+            " completedBlocks=" + completedBlocks + "/" + totalBlocks +
+            " cumulativeLogs=" + logs.length,
+        );
       }
       const observations = Object.freeze([
         ...(input?.startupCandidates ?? []).map((candidate) => Object.freeze({

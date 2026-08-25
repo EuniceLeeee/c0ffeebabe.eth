@@ -574,8 +574,49 @@ export async function rebuildUniverse(
     }
     return false;
   });
+  const pendingCandidateKeys = new Set(
+    pendingCandidates.map((candidate) => input.familyCandidateKey(candidate)),
+  );
+  const attestationCounts: Record<RunOutcome["status"], number> = {
+    verified: 0,
+    "terminal-rejected": 0,
+    retryable: 0,
+  };
+  for (const candidate of candidates) {
+    const candidateKey = input.familyCandidateKey(candidate);
+    if (pendingCandidateKeys.has(candidateKey)) continue;
+    const outcome = run.outcomesByCandidateKey[candidateKey];
+    if (outcome !== undefined) attestationCounts[outcome.status]++;
+  }
+  const initiallyAccounted = candidates.length - pendingCandidates.length;
+  let completedPending = 0;
+  const logAttestationProgress = (phase: "start" | "progress"): void => {
+    const processed = initiallyAccounted + completedPending;
+    log(
+      "universe rebuild attestation " + phase + ": processed=" + processed +
+        "/" + candidates.length +
+        " pending=" + (pendingCandidates.length - completedPending) +
+        " verified=" + attestationCounts.verified +
+        " terminalRejected=" + attestationCounts["terminal-rejected"] +
+        " retryable=" + attestationCounts.retryable,
+    );
+  };
+  logAttestationProgress("start");
+  const recordAttestationProgress = (status: RunOutcome["status"]): void => {
+    attestationCounts[status]++;
+    completedPending++;
+    if (
+      completedPending === 1 ||
+      completedPending % 100 === 0 ||
+      completedPending === pendingCandidates.length
+    ) {
+      logAttestationProgress("progress");
+    }
+  };
   let nextCandidate = 0;
-  const processCandidate = async (candidate: unknown): Promise<void> => {
+  const processCandidate = async (
+    candidate: unknown,
+  ): Promise<RunOutcome["status"]> => {
     const candidateKey = input.familyCandidateKey(candidate);
     const oldOutcome = run.outcomesByCandidateKey[candidateKey];
     let reusableMemo: DurableVerifiedMemo | null = null;
@@ -598,14 +639,14 @@ export async function rebuildUniverse(
       );
       if (duplicateOf !== undefined) {
         recordDuplicateInstance(candidateKey, reusableMemo, duplicateOf);
-        return;
+        return "terminal-rejected";
       }
       if (
         oldOutcome?.status === "verified" &&
         oldOutcome.familyInstanceKey === reusableMemo.familyInstanceKey &&
         oldOutcome.memoFingerprint === reusableMemo.memoFingerprint
       ) {
-        return;
+        return "verified";
       }
       writer.record(Object.freeze({
         status: "verified",
@@ -613,7 +654,7 @@ export async function rebuildUniverse(
         familyInstanceKey: reusableMemo.familyInstanceKey,
         memoFingerprint: reusableMemo.memoFingerprint,
       }));
-      return;
+      return "verified";
     }
     const evidenceRef = oldOutcome?.status === "retryable"
       ? oldOutcome.evidenceRef
@@ -626,63 +667,64 @@ export async function rebuildUniverse(
       cutoff,
       ...(evidenceRef === undefined ? {} : { evidenceRef }),
     });
-      if (result.status === "verified") {
-        const memo = input.sealDurableVerifiedMemo({
-          candidate,
-          result: result.result,
-          proofSource: cutoff,
-          familyCandidateKey: candidateKey,
-        });
-        const duplicateOf = await claimInstanceKey(
-          memo.familyInstanceKey,
-          candidateKey,
-        );
-        if (duplicateOf !== undefined) {
-          recordDuplicateInstance(candidateKey, memo, duplicateOf);
-          return;
-        }
-        writer.record(Object.freeze({
-          status: "verified",
-          familyCandidateKey: candidateKey,
-          familyInstanceKey: memo.familyInstanceKey,
-          memoFingerprint: memo.memoFingerprint,
-        }), memo);
-        return;
-      }
-      if (result.status === "terminal-rejected") {
-        writer.record(Object.freeze({
-          status: "terminal-rejected",
-          familyCandidateKey: candidateKey,
-          reasonCode: result.reasonCode,
-          familyDefinitionHash: result.binding.familyDefinitionHash,
-          requestFingerprint: result.binding.requestFingerprint,
-          trustedResultsFingerprint: result.binding.trustedResultsFingerprint,
-          authorityFingerprint: result.binding.authorityFingerprint,
-          candidateFingerprint: result.binding.candidateFingerprint,
-          cutoff: Object.freeze({
-            number: result.binding.cutoff.number,
-            hash: result.binding.cutoff.hash,
-          }),
-        }));
-        return;
+    if (result.status === "verified") {
+      const memo = input.sealDurableVerifiedMemo({
+        candidate,
+        result: result.result,
+        proofSource: cutoff,
+        familyCandidateKey: candidateKey,
+      });
+      const duplicateOf = await claimInstanceKey(
+        memo.familyInstanceKey,
+        candidateKey,
+      );
+      if (duplicateOf !== undefined) {
+        recordDuplicateInstance(candidateKey, memo, duplicateOf);
+        return "terminal-rejected";
       }
       writer.record(Object.freeze({
-        status: "retryable",
+        status: "verified",
         familyCandidateKey: candidateKey,
-        familyId: String((candidate as { familyId?: unknown }).familyId ?? ""),
-        candidateSnapshot: result.candidateSnapshot,
-        ...(result.evidenceRef === undefined
-          ? {}
-          : { evidenceRef: Object.freeze(result.evidenceRef) }),
-        stage: result.stage,
-        failureCode: result.failureCode,
-        ...(result.requestFingerprint === undefined
-          ? {}
-          : { requestFingerprint: result.requestFingerprint }),
+        familyInstanceKey: memo.familyInstanceKey,
+        memoFingerprint: memo.memoFingerprint,
+      }), memo);
+      return "verified";
+    }
+    if (result.status === "terminal-rejected") {
+      writer.record(Object.freeze({
+        status: "terminal-rejected",
+        familyCandidateKey: candidateKey,
         reasonCode: result.reasonCode,
-        attemptCount: attemptCount + 1,
-        lastAttemptAt: new Date().toISOString(),
+        familyDefinitionHash: result.binding.familyDefinitionHash,
+        requestFingerprint: result.binding.requestFingerprint,
+        trustedResultsFingerprint: result.binding.trustedResultsFingerprint,
+        authorityFingerprint: result.binding.authorityFingerprint,
+        candidateFingerprint: result.binding.candidateFingerprint,
+        cutoff: Object.freeze({
+          number: result.binding.cutoff.number,
+          hash: result.binding.cutoff.hash,
+        }),
       }));
+      return "terminal-rejected";
+    }
+    writer.record(Object.freeze({
+      status: "retryable",
+      familyCandidateKey: candidateKey,
+      familyId: String((candidate as { familyId?: unknown }).familyId ?? ""),
+      candidateSnapshot: result.candidateSnapshot,
+      ...(result.evidenceRef === undefined
+        ? {}
+        : { evidenceRef: Object.freeze(result.evidenceRef) }),
+      stage: result.stage,
+      failureCode: result.failureCode,
+      ...(result.requestFingerprint === undefined
+        ? {}
+        : { requestFingerprint: result.requestFingerprint }),
+      reasonCode: result.reasonCode,
+      attemptCount: attemptCount + 1,
+      lastAttemptAt: new Date().toISOString(),
+    }));
+    return "retryable";
   };
   const requestedConcurrency = input.attestationConcurrency ?? 24;
   if (!Number.isSafeInteger(requestedConcurrency) || requestedConcurrency < 1) {
@@ -695,7 +737,22 @@ export async function rebuildUniverse(
       while (true) {
         const index = nextCandidate++;
         if (index >= pendingCandidates.length) return;
-        await processCandidate(pendingCandidates[index]);
+        const candidate = pendingCandidates[index];
+        try {
+          recordAttestationProgress(await processCandidate(candidate));
+        } catch (error) {
+          log(
+            "universe rebuild attestation failed: candidate=" +
+              input.familyCandidateKey(candidate) +
+              " processed=" + (initiallyAccounted + completedPending) +
+              "/" + candidates.length +
+              " pending=" + (pendingCandidates.length - completedPending) +
+              " error=" + (error instanceof Error
+                ? error.message
+                : String(error)),
+          );
+          throw error;
+        }
       }
     }));
   } finally {
