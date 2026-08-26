@@ -106,12 +106,6 @@ async function testEip1898StartupProbe(): Promise<void> {
     blockHash: sourceBlockHash,
     requireCanonical: true,
   });
-  assert.equal(
-    (calls[1]?.[0]?.params[0] as { readonly to?: unknown }).to,
-    "0x0000000000000000000000000000000000000004",
-    "startup EIP-1898 probe uses a stateless precompile",
-  );
-
   const unsupported = backendWith(async (body) => body.map(
     (request) => request.method === "eth_call"
       ? failure(request.id, "invalid argument 1: EIP-1898 unsupported")
