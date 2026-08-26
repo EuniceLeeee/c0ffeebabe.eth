@@ -3414,6 +3414,14 @@ function validateDiscovery(
       );
     }
     if (
+      discovery.reverseBinding.kind === "implementation" &&
+      typeof discovery.instanceNominationKey !== "function"
+    ) {
+      throw new Error(
+        "discovery reverseBinding implementation must declare instanceNominationKey",
+      );
+    }
+    if (
       discovery.reverseBinding.kind === "explicitly-unsupported" &&
       (typeof discovery.reverseBinding.reason !== "string" ||
         discovery.reverseBinding.reason.trim().length === 0)

@@ -59,6 +59,10 @@ export const univ2Discovery = {
     }
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
+  instanceNominationKey: (candidate) => {
+    const value = candidate as Readonly<Record<string, unknown>>;
+    return lowerAddress(String(value.pool ?? value.address ?? ""));
+  },
   nominate: { nominate: nominateUniv2 },
   reverseBinding: Object.freeze({
     kind: "implementation" as const,

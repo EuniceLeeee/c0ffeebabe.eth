@@ -31,6 +31,11 @@ async function main(): Promise<void> {
     );
     if (declaration.kind === "implementation") {
       implementationCount += 1;
+      assert.equal(
+        typeof plugin.discovery.instanceNominationKey,
+        "function",
+        `${plugin.manifest.familyId} reverse binding declares instance nomination identity`,
+      );
       assert(
         catalog.hasReverseBinding(plugin.manifest.familyId),
         `${plugin.manifest.familyId} catalog projection hasReverseBinding`,

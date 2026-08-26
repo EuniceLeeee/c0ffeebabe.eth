@@ -1020,10 +1020,7 @@ async function main(): Promise<void> {
     const wired = createRebuildWiring({
       rpcUrl: "http://127.0.0.1:" + stubPort,
     });
-    const noRetainedCandidates = Object.freeze([]) as readonly unknown[];
-    const noReusableMemo = async (
-      _candidate: unknown,
-    ): Promise<DurableVerifiedMemo | null> => null;
+    const noKnownCandidates = Object.freeze([]) as readonly unknown[];
     const fundingToken = ethers.getAddress("0x" + "f1".repeat(20));
     const fundingCandidate = candidatesFromLog(Object.freeze({
       address: ADDR.MORPHO,
@@ -1122,8 +1119,7 @@ async function main(): Promise<void> {
     const reverseBound = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: SOURCE,
-      retainedCandidates: noRetainedCandidates,
-      findReusableMemo: noReusableMemo,
+      knownCandidates: noKnownCandidates,
     });
     assert.equal(
       reverseBound.length,
@@ -1147,25 +1143,16 @@ async function main(): Promise<void> {
       manager + "\u001f" + poolId.toLowerCase(),
     );
     const positionManagerReadsBeforeMemoReuse = positionManagerReads;
-    let reverseMemoLookups = 0;
     const reusedReverseBinding = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: SOURCE,
-      retainedCandidates: Object.freeze([boundCandidate]),
-      findReusableMemo: async (candidate) => {
-        reverseMemoLookups++;
-        assert.equal(candidate, boundCandidate);
-        return makeMemo(boundCandidate, {
-          familyCandidateKey: rebuildFamilyCandidateKey(boundCandidate),
-        });
-      },
+      knownCandidates: Object.freeze([boundCandidate]),
     });
     assert.equal(
       reusedReverseBinding.length,
       0,
       "a reusable retained candidate stays in the main partition without rebinding",
     );
-    assert.equal(reverseMemoLookups, 1, "reverse binding consults shared memo authority");
     assert.equal(
       positionManagerReads,
       positionManagerReadsBeforeMemoReuse,
@@ -1178,8 +1165,7 @@ async function main(): Promise<void> {
         Object.freeze({ ...v4SwapLog, logIndex: 1 }),
       ]),
       cutoff: SOURCE,
-      retainedCandidates: noRetainedCandidates,
-      findReusableMemo: noReusableMemo,
+      knownCandidates: noKnownCandidates,
     });
     assert.equal(repeated.length, 1, "reverse-bound candidates dedupe per pool");
     assert.equal(
@@ -1208,8 +1194,7 @@ async function main(): Promise<void> {
     const twoPools = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog, v4SwapLog2]),
       cutoff: twoPoolSource,
-      retainedCandidates: noRetainedCandidates,
-      findReusableMemo: noReusableMemo,
+      knownCandidates: noKnownCandidates,
     });
     assert.equal(twoPools.length, 2, "every pool nomination is reverse-bound");
     assert.equal(
@@ -1248,8 +1233,7 @@ async function main(): Promise<void> {
     const traced = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: fallbackSource,
-      retainedCandidates: noRetainedCandidates,
-      findReusableMemo: noReusableMemo,
+      knownCandidates: noKnownCandidates,
     });
     assert.equal(
       traced.length,
@@ -1286,8 +1270,7 @@ async function main(): Promise<void> {
     const unresolved = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: missingSource,
-      retainedCandidates: noRetainedCandidates,
-      findReusableMemo: noReusableMemo,
+      knownCandidates: noKnownCandidates,
     });
     assert.equal(unresolved.length, 0, "no candidate when both sources miss");
     assert.equal(historicalLogReads, 0, "unresolved identity does not deep-scan");
@@ -1298,8 +1281,7 @@ async function main(): Promise<void> {
         log({ address: "0x" + "55".repeat(20), logIndex: 1 }),
       ]),
       cutoff: SOURCE,
-      retainedCandidates: noRetainedCandidates,
-      findReusableMemo: noReusableMemo,
+      knownCandidates: noKnownCandidates,
     });
     assert.equal(unrelated.length, 0, "no reverse binding without a declared seed");
   } finally {

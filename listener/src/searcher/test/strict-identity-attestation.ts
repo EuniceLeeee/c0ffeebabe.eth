@@ -263,6 +263,7 @@ async function main(): Promise<void> {
           ? Object.freeze({ candidateKind: "synthetic" as const })
           : null,
         candidateKey: () => POOL.toLowerCase(),
+        instanceNominationKey: () => POOL.toLowerCase(),
         reverseBinding: Object.freeze({
           kind: "implementation" as const,
           reverseBinding: async (input: {

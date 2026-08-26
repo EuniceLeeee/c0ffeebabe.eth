@@ -90,6 +90,14 @@ export function createUniv4Discovery(
   },
   candidateKey: (candidate) =>
     `${candidate.manager.toLowerCase()}\u001f${candidate.poolId}`,
+  instanceNominationKey: (candidate) => {
+    const value = candidate as Readonly<Record<string, unknown>>;
+    const manager = canonicalAddress(String(
+      value.manager ?? value.address ?? "",
+    ));
+    const poolId = canonicalPoolId(String(value.poolId ?? ""));
+    return manager.toLowerCase() + "\u001f" + poolId.toLowerCase();
+  },
   nominate: { nominate: nominateUniv4 },
   reverseBinding: Object.freeze({
     kind: "implementation" as const,

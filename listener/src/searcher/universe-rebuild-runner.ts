@@ -84,12 +84,8 @@ export interface UniverseRebuildDependencies {
   readonly reverseBindOpaqueCandidates?: (input: {
     readonly observations: readonly unknown[];
     readonly cutoff: CanonicalSource;
-    /** Full candidates restored from durable verified memos. */
-    readonly retainedCandidates: readonly unknown[];
-    /** The same memo authority used by the later attestation partition. */
-    readonly findReusableMemo: (
-      candidate: unknown,
-    ) => Promise<DurableVerifiedMemo | null>;
+    /** Complete candidates decoded directly or restored from durable memos. */
+    readonly knownCandidates: readonly unknown[];
   }) => Promise<readonly unknown[]>;
   /** JSON-safe durable form used by candidatesByKey and retry/probe resume. */
   /** JSON-safe durable form used by candidatesByKey and retry/probe resume. */
@@ -337,10 +333,7 @@ export async function rebuildUniverse(
         const reverseBound = await input.reverseBindOpaqueCandidates({
           observations,
           cutoff,
-          retainedCandidates,
-          findReusableMemo: (candidate) => checkpoint === null
-            ? Promise.resolve(null)
-            : input.findReusableMemo({ candidate, checkpoint, cutoff }),
+          knownCandidates: candidates,
         });
         if (reverseBound.length > 0) {
           // Merge through the shared alias-collapsing dedupe
@@ -387,10 +380,7 @@ export async function rebuildUniverse(
       const reverseBound = await input.reverseBindOpaqueCandidates({
         observations,
         cutoff,
-        retainedCandidates,
-        findReusableMemo: (candidate) => checkpoint === null
-          ? Promise.resolve(null)
-          : input.findReusableMemo({ candidate, checkpoint, cutoff }),
+        knownCandidates: candidates,
       });
       if (reverseBound.length > 0) {
         // Merge through the shared alias-collapsing dedupe

@@ -72,6 +72,10 @@ export const curveUnderlyingDiscovery = {
     }
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
+  instanceNominationKey: (candidate) => {
+    const value = candidate as Readonly<Record<string, unknown>>;
+    return lowerAddress(String(value.pool ?? value.address ?? ""));
+  },
   nominate: createTxEvidenceNomination({
     opaqueLabels: Object.freeze(["curve-underlying"]),
     logPatterns: Object.freeze([{
