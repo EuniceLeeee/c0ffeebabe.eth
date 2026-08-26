@@ -4,8 +4,18 @@
  * per-item deadline rejection. No real reth or anvil involved.
  */
 
+import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { once } from "node:events";
+import {
+  appendFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   isStateCallAbortedError,
 } from "../../shared/state/state-backend.js";
@@ -106,6 +116,7 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
 async function run(): Promise<void> {
   const { server, state, port } = await startStub();
   const rpcUrl = `http://127.0.0.1:${port}`;
+  const tempDir = mkdtempSync(join(tmpdir(), "pinned-reth-cache-"));
   try {
     {
       const backend = new PinnedRethQuoteBackend(rpcUrl, HASH);
@@ -236,9 +247,149 @@ async function run(): Promise<void> {
       state.holdResponses = false;
       console.log("[pinned-reth-quote-backend] pass abort + drain: PASS");
     }
+
+    {
+      const cachePath = join(tempDir, "calls.jsonl");
+      const request = { to: OK_A, data: "0xcafe" };
+      const upstreamBefore = state.batches.length + state.singles.length;
+      const first = new PinnedRethQuoteBackend(rpcUrl, HASH, {
+        persistentEthCallCachePath: cachePath,
+      });
+      assert(await first.call(request) === RESULT, "persistent first result");
+      await first.closeAndDrain();
+      const firstStats = first.stats();
+      assert(
+        firstStats.persistentCacheWrites === 1 &&
+          firstStats.persistentCacheEntries === 1,
+        "persistent first run writes one entry",
+      );
+      const upstreamAfterFirst = state.batches.length + state.singles.length;
+      assert(
+        upstreamAfterFirst === upstreamBefore + 1,
+        "persistent first run reaches upstream",
+      );
+
+      const second = new PinnedRethQuoteBackend(rpcUrl, HASH, {
+        persistentEthCallCachePath: cachePath,
+      });
+      assert(await second.call(request) === RESULT, "persistent second result");
+      await second.closeAndDrain();
+      const secondStats = second.stats();
+      assert(
+        state.batches.length + state.singles.length === upstreamAfterFirst,
+        "persistent second run makes zero upstream calls",
+      );
+      assert(
+        secondStats.persistentCacheHits === 1 &&
+          secondStats.persistentCacheWrites === 0,
+        "persistent second run reports a durable hit",
+      );
+
+      let sourceMismatch: unknown = null;
+      try {
+        new PinnedRethQuoteBackend(rpcUrl, "0x" + "cd".repeat(32), {
+          persistentEthCallCachePath: cachePath,
+        });
+      } catch (error) {
+        sourceMismatch = error;
+      }
+      assert(
+        sourceMismatch instanceof Error &&
+          /different source hash/.test(sourceMismatch.message),
+        "persistent cache rejects a different source hash",
+      );
+
+      const original = readFileSync(cachePath, "utf8");
+      const corruptPath = join(tempDir, "corrupt.jsonl");
+      writeFileSync(corruptPath, original, { mode: 0o600 });
+      appendFileSync(corruptPath, '{"bad":true}\n');
+      let corruption: unknown = null;
+      try {
+        new PinnedRethQuoteBackend(rpcUrl, HASH, {
+          persistentEthCallCachePath: corruptPath,
+        });
+      } catch (error) {
+        corruption = error;
+      }
+      assert(
+        corruption instanceof Error &&
+          /unexpected fields/.test(corruption.message),
+        "persistent cache rejects a complete invalid row",
+      );
+
+      const conflictPath = join(tempDir, "conflict.jsonl");
+      writeFileSync(conflictPath, original, { mode: 0o600 });
+      const entry = JSON.parse(original.trimEnd().split("\n")[1]!) as
+        Record<string, unknown>;
+      entry.result = "0x" + "22".repeat(32);
+      entry.entrySha256 = createHash("sha256").update(JSON.stringify([
+        entry.schemaVersion,
+        entry.profile,
+        entry.sourceBlockHash,
+        entry.target,
+        entry.calldata,
+        entry.caller,
+        entry.key,
+        entry.result,
+      ])).digest("hex");
+      appendFileSync(conflictPath, `${JSON.stringify(entry)}\n`);
+      let conflict: unknown = null;
+      try {
+        new PinnedRethQuoteBackend(rpcUrl, HASH, {
+          persistentEthCallCachePath: conflictPath,
+        });
+      } catch (error) {
+        conflict = error;
+      }
+      assert(
+        conflict instanceof Error &&
+          /conflicting row/.test(conflict.message),
+        "persistent cache rejects conflicting results",
+      );
+
+      const truncatedPath = join(tempDir, "truncated.jsonl");
+      writeFileSync(truncatedPath, original, { mode: 0o600 });
+      appendFileSync(truncatedPath, '{"partial"');
+      const truncated = new PinnedRethQuoteBackend(rpcUrl, HASH, {
+        persistentEthCallCachePath: truncatedPath,
+      });
+      const upstreamBeforeTruncated =
+        state.batches.length + state.singles.length;
+      assert(
+        await truncated.call(request) === RESULT,
+        "truncated final row preserves complete entries",
+      );
+      const newRequest = { to: OK_B, data: "0xbeef" };
+      assert(
+        await truncated.call(newRequest) === RESULT,
+        "truncated cache accepts a new upstream result after repair",
+      );
+      await truncated.closeAndDrain();
+      assert(
+        state.batches.length + state.singles.length ===
+          upstreamBeforeTruncated + 1,
+        "truncated final row permits hits and only one new upstream call",
+      );
+      const reopened = new PinnedRethQuoteBackend(rpcUrl, HASH, {
+        persistentEthCallCachePath: truncatedPath,
+      });
+      const upstreamBeforeReopen =
+        state.batches.length + state.singles.length;
+      assert(await reopened.call(request) === RESULT, "reopened old result");
+      assert(await reopened.call(newRequest) === RESULT, "reopened new result");
+      await reopened.closeAndDrain();
+      assert(
+        state.batches.length + state.singles.length === upstreamBeforeReopen,
+        "repaired cache remains valid and serves both rows",
+      );
+      console.log(
+        "[pinned-reth-quote-backend] persistent replay cache: PASS",
+      );
+    }
   } finally {
     server.close();
     await once(server, "close").catch(() => undefined);
+    rmSync(tempDir, { recursive: true, force: true });
   }
 }
 

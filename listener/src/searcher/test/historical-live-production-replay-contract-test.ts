@@ -102,12 +102,14 @@ const forwarded = forwardedProductionEnvironment({
   SEARCHER_BLOCKSCAN_MAX_CANDIDATES: "100",
   SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS: "10",
   SEARCHER_BLIND_PREPARE_BUDGET_MS: "999999",
+  SEARCHER_BLIND_BASE_PRICING_CACHE_PATH: "/tmp/cache.jsonl",
   SEARCHER_BLIND_USE_INCUMBENT_READY: "1",
   SEARCHER_FORCE_INCLUDE_POOLIDS_PATH: "/future.json",
 });
 assert.equal(forwarded.SEARCHER_BLOCKSCAN_MAX_CANDIDATES, "100");
 assert.equal(forwarded.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS, "10");
 assert.equal(forwarded.SEARCHER_BLIND_PREPARE_BUDGET_MS, undefined);
+assert.equal(forwarded.SEARCHER_BLIND_BASE_PRICING_CACHE_PATH, undefined);
 assert.equal(forwarded.SEARCHER_BLIND_USE_INCUMBENT_READY, undefined);
 assert.equal(forwarded.SEARCHER_FORCE_INCLUDE_POOLIDS_PATH, undefined);
 assert.equal(forwarded.BLIND_PREFIX_THROUGH_INDEX, undefined);
@@ -225,6 +227,10 @@ assert.match(
 assert.match(
   replaySource,
   /SEARCHER_BLIND_BASE_PRICING_RPC_URL:\s*controllerUpstreamRpc/,
+);
+assert.match(
+  replaySource,
+  /SEARCHER_BLIND_BASE_PRICING_CACHE_PATH/,
 );
 assert.doesNotMatch(replaySource, /SEARCHER_BLOCKSCAN_MAX_HOPS:\s*"6"/);
 const negativeBase = spawnSync(

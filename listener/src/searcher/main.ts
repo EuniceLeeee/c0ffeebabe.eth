@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import "../shared/adapters/index.js";
@@ -784,10 +784,24 @@ async function main(): Promise<void> {
       : 120_000;
   const blindBasePricingRpcUrl =
     process.env.SEARCHER_BLIND_BASE_PRICING_RPC_URL;
+  const blindBasePricingCachePath =
+    process.env.SEARCHER_BLIND_BASE_PRICING_CACHE_PATH;
   if (blindBasePricingRpcUrl !== undefined && !blindProductionAudit) {
     throw new Error(
       "SEARCHER_BLIND_BASE_PRICING_RPC_URL is replay-only",
     );
+  }
+  if (blindBasePricingCachePath !== undefined) {
+    if (
+      !blindProductionAudit ||
+      blindBasePricingRpcUrl === undefined ||
+      !isAbsolute(blindBasePricingCachePath)
+    ) {
+      throw new Error(
+        "SEARCHER_BLIND_BASE_PRICING_CACHE_PATH requires replay-only " +
+          "base pricing and an absolute path",
+      );
+    }
   }
   if (blindProductionAudit && !config.dryRun) {
     throw new Error("blind production audit requires SEARCHER_DRY_RUN=1");
@@ -2259,6 +2273,12 @@ async function main(): Promise<void> {
                   "4",
               ),
             ),
+            ...(blindBasePricingCachePath === undefined
+              ? {}
+              : {
+                  persistentEthCallCachePath:
+                    blindBasePricingCachePath,
+                }),
           },
         );
     const baseRuntime = await (async () => {
@@ -2275,6 +2295,15 @@ async function main(): Promise<void> {
         });
       } finally {
         await basePricingBackend?.closeAndDrain();
+        if (
+          basePricingBackend !== null &&
+          blindBasePricingCachePath !== undefined
+        ) {
+          process.stdout.write(
+            "BLIND_BASE_PRICING_CACHE=" +
+              `${blindProductionCanonicalJson(basePricingBackend.stats())}\n`,
+          );
+        }
       }
     })();
     if (baseRuntime.status === "incomplete") {

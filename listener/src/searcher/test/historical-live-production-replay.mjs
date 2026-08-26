@@ -32,6 +32,8 @@ const sourceNumber = Number(process.env.BLIND_SOURCE_NUMBER);
 const runDir = process.env.BLIND_RUN_DIR;
 const checkpointSource = process.env.BLIND_CHECKPOINT_SOURCE;
 const poolUniverseSource = process.env.BLIND_POOL_UNIVERSE_SOURCE;
+const basePricingCachePath =
+  process.env.BLIND_BASE_PRICING_CACHE_PATH;
 const productionCommit = process.env.BLIND_PRODUCTION_COMMIT;
 const checkpointRunId = process.env.BLIND_CHECKPOINT_RUN_ID ??
   `historical-live-${baseNumber}-${sourceNumber}`;
@@ -73,6 +75,8 @@ if (
   !Number.isSafeInteger(prepareBudgetMs) ||
   prepareBudgetMs < 1_000 ||
   prepareBudgetMs > timeoutMs ||
+  (basePricingCachePath !== undefined &&
+    !isAbsolute(basePricingCachePath)) ||
   (prefixThroughIndex !== null && (
     !Number.isSafeInteger(prefixThroughIndex) ||
     prefixThroughIndex < 0 ||
@@ -600,6 +604,12 @@ try {
     SEARCHER_BLIND_USE_INCUMBENT_READY: "1",
     SEARCHER_BLIND_PREPARE_BUDGET_MS: String(prepareBudgetMs),
     SEARCHER_BLIND_BASE_PRICING_RPC_URL: controllerUpstreamRpc,
+    ...(basePricingCachePath === undefined
+      ? {}
+      : {
+          SEARCHER_BLIND_BASE_PRICING_CACHE_PATH:
+            basePricingCachePath,
+        }),
     SEARCHER_DRY_RUN: "1",
     SEARCHER_ENABLE_BLOCK_SCAN: "1",
     SEARCHER_BLOCKSCAN_SUBMIT: "1",
@@ -644,6 +654,7 @@ try {
   const queues = new Map();
   const waiters = new Map();
   const stderrTail = [];
+  const basePricingCacheAttempts = [];
   function accept(prefix, raw) {
     const waiter = waiters.get(prefix);
     if (waiter) {
@@ -687,6 +698,10 @@ try {
       );
     } else if (line.startsWith(BLIND_PRODUCTION_RAW_PREFIX)) {
       accept(BLIND_PRODUCTION_RAW_PREFIX, line.slice(BLIND_PRODUCTION_RAW_PREFIX.length));
+    } else if (line.startsWith("BLIND_BASE_PRICING_CACHE=")) {
+      basePricingCacheAttempts.push(JSON.parse(
+        line.slice("BLIND_BASE_PRICING_CACHE=".length),
+      ));
     }
   });
   createInterface({ input: child.stderr }).on("line", (line) => {
@@ -740,6 +755,40 @@ try {
     },
   });
   validateProductionReadyRecord(ready, prepareControl);
+  let basePricingCacheEvidence = null;
+  if (basePricingCachePath !== undefined) {
+    const latestCache = basePricingCacheAttempts.at(-1);
+    if (
+      latestCache === undefined ||
+      latestCache.persistentCacheConfigured !== true ||
+      latestCache.persistentCacheSourceBlockHash !== base.hash ||
+      !Number.isSafeInteger(latestCache.persistentCacheEntries) ||
+      latestCache.persistentCacheEntries < 0 ||
+      !Number.isSafeInteger(latestCache.persistentCacheHits) ||
+      latestCache.persistentCacheHits < 0 ||
+      !Number.isSafeInteger(latestCache.persistentCacheWrites) ||
+      latestCache.persistentCacheWrites < 0 ||
+      !existsSync(basePricingCachePath)
+    ) {
+      throw new Error("production base-pricing cache evidence is invalid");
+    }
+    const contentSha256 = fileSha256(basePricingCachePath);
+    if (latestCache.persistentCacheContentSha256 !== contentSha256) {
+      throw new Error("production base-pricing cache content hash mismatch");
+    }
+    basePricingCacheEvidence = Object.freeze({
+      sourceBlockHash: base.hash,
+      contentSha256,
+      bytes: statSync(basePricingCachePath).size,
+      entries: latestCache.persistentCacheEntries,
+      attempts: basePricingCacheAttempts.map((attempt) => Object.freeze({
+        hits: attempt.persistentCacheHits,
+        writes: attempt.persistentCacheWrites,
+        entries: attempt.persistentCacheEntries,
+        contentSha256: attempt.persistentCacheContentSha256,
+      })),
+    });
+  }
   const effectiveForkBotVm = ready.artifactDocuments.resolvedConfig.payload
     .effectiveConfig?.forkBotVmInstallation;
   if (
@@ -902,6 +951,7 @@ try {
       loopbackRpcCalls: finished.loopbackRpcCalls,
       nonLoopbackUpstreamRpcCalls: finished.nonLoopbackUpstreamRpcCalls,
     },
+    basePricingCache: basePricingCacheEvidence,
     ...(prefixEvidence === null
       ? {}
       : {

@@ -1,3 +1,17 @@
+import { createHash } from "node:crypto";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  statSync,
+  truncateSync,
+  writeSync,
+} from "node:fs";
+import { open as openFile } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import { ethers } from "ethers";
 import {
   decodeUintCall,
@@ -63,6 +77,11 @@ export interface PinnedRethQuoteBackendOptions {
   readonly signal?: AbortSignal;
   readonly deadlineAtMs?: number;
   readonly transportScheduler?: Pick<RethTransportScheduler, "run">;
+  /**
+   * Replay-only durable cache for successful deterministic eth_call results.
+   * Ordinary live passes never supply this option.
+   */
+  readonly persistentEthCallCachePath?: string;
 }
 
 export class PinnedRethQuoteBackend
@@ -88,6 +107,9 @@ export class PinnedRethQuoteBackend
 
   private readonly balanceSlotMemo = new Map<string, string>();
   private readonly callMemo = new Map<string, Promise<string>>();
+  private readonly persistentCallCache:
+    | PersistentPinnedEthCallCache
+    | undefined;
 
   private totalCalls = 0;
   private memoHits = 0;
@@ -119,6 +141,12 @@ export class PinnedRethQuoteBackend
     this.maxConcurrentBatchesProvider =
       options.maxConcurrentBatchesProvider;
     this.blockSpecifier = eip1898BlockSpecifier(sourceBlockHash);
+    this.persistentCallCache = options.persistentEthCallCachePath === undefined
+      ? undefined
+      : new PersistentPinnedEthCallCache(
+          options.persistentEthCallCachePath,
+          this.blockSpecifier.blockHash,
+        );
 
     if (options.signal) {
       const onAbort = (): void => this.abort(options.signal!.reason);
@@ -184,13 +212,21 @@ export class PinnedRethQuoteBackend
     req: { to: string; data: string; from?: string },
     control: StateCallControl = {},
   ): Promise<string> {
-    const memoKey =
-      `${req.to.toLowerCase()}|${req.data}|` +
-      `${(req.from ?? "").toLowerCase()}`;
+    const identity = persistentCallIdentity(
+      this.blockSpecifier.blockHash,
+      req,
+    );
+    const memoKey = identity.key;
     const memoized = this.callMemo.get(memoKey);
     if (memoized !== undefined) {
       this.memoHits++;
       return memoized;
+    }
+    const persisted = this.persistentCallCache?.get(identity);
+    if (persisted !== undefined) {
+      const result = Promise.resolve(persisted);
+      this.callMemo.set(memoKey, result);
+      return result;
     }
     this.totalCalls++;
     const promise = new Promise<string>((resolve, reject) => {
@@ -367,6 +403,8 @@ export class PinnedRethQuoteBackend
       await Promise.allSettled(active);
     }
 
+    await this.persistentCallCache?.closeAndDrain();
+
     this.detachParentAbort();
     if (this.scopeDeadlineTimer !== undefined) {
       clearTimeout(this.scopeDeadlineTimer);
@@ -391,7 +429,14 @@ export class PinnedRethQuoteBackend
     completedAfterScopeAbort: number;
     transportQueueWaitMs: number;
     drainMs: number;
+    persistentCacheContentSha256: string | null;
+    persistentCacheConfigured: boolean;
+    persistentCacheEntries: number;
+    persistentCacheHits: number;
+    persistentCacheSourceBlockHash: string | null;
+    persistentCacheWrites: number;
   }> {
+    const persistent = this.persistentCallCache?.stats();
     return Object.freeze({
       totalCalls: this.totalCalls,
       memoHits: this.memoHits,
@@ -406,6 +451,14 @@ export class PinnedRethQuoteBackend
       completedAfterScopeAbort: this.completedAfterScopeAbort,
       transportQueueWaitMs: this.transportQueueWaitMs,
       drainMs: this.lastDrainMs,
+      persistentCacheContentSha256:
+        persistent?.contentSha256 ?? null,
+      persistentCacheConfigured: persistent !== undefined,
+      persistentCacheEntries: persistent?.entries ?? 0,
+      persistentCacheHits: persistent?.hits ?? 0,
+      persistentCacheSourceBlockHash:
+        persistent?.sourceBlockHash ?? null,
+      persistentCacheWrites: persistent?.writes ?? 0,
     });
   }
 
@@ -478,7 +531,25 @@ export class PinnedRethQuoteBackend
     item.settled = true;
     item.detachControl();
     this.liveItems.delete(item);
-    item.resolve(value);
+    try {
+      if (item.kind === "eth_call") {
+        if (typeof value !== "string") {
+          throw new Error(
+            `eth_call ${item.req.to} returned a non-string result`,
+          );
+        }
+        this.persistentCallCache?.record(
+          persistentCallIdentity(
+            this.blockSpecifier.blockHash,
+            item.req,
+          ),
+          value,
+        );
+      }
+      item.resolve(value);
+    } catch (error) {
+      item.reject(error);
+    }
   }
 
   private rejectItem(item: PendingQuoteItem, error: unknown): void {
@@ -1078,6 +1149,497 @@ export class PinnedRethQuoteBackend
       return false;
     }
   }
+}
+
+const PERSISTENT_CALL_CACHE_PROFILE =
+  "pinned-reth-eth-call-cache-v1" as const;
+const PERSISTENT_CALL_CACHE_FLUSH_ROWS = 256;
+
+interface PersistentCallIdentity {
+  readonly sourceBlockHash: string;
+  readonly target: string;
+  readonly calldata: string;
+  readonly caller: string | null;
+  readonly key: string;
+}
+
+interface PersistentCallCacheHeader {
+  readonly schemaVersion: 1;
+  readonly profile: typeof PERSISTENT_CALL_CACHE_PROFILE;
+  readonly sourceBlockHash: string;
+  readonly headerSha256: string;
+}
+
+interface PersistentCallCacheEntry extends PersistentCallIdentity {
+  readonly schemaVersion: 1;
+  readonly profile: typeof PERSISTENT_CALL_CACHE_PROFILE;
+  readonly result: string;
+  readonly entrySha256: string;
+}
+
+/**
+ * Append-only replay cache. It is deliberately below the Family/runtime
+ * layer: a row is only the deterministic answer to one source-hash pinned
+ * eth_call. It cannot admit an instance, create an edge or supply a fallback
+ * at another source hash.
+ */
+class PersistentPinnedEthCallCache {
+  private readonly entries = new Map<string, string>();
+  private readonly pendingRows: string[] = [];
+  private writeTail: Promise<void> = Promise.resolve();
+  private hits = 0;
+  private writes = 0;
+  private contentSha256: string;
+
+  constructor(
+    private readonly path: string,
+    private readonly sourceBlockHash: string,
+  ) {
+    if (!isAbsolute(path)) {
+      throw new Error("persistent eth_call cache path must be absolute");
+    }
+    const normalizedSource = normalizedHash32(
+      sourceBlockHash,
+      "persistent eth_call cache source hash",
+    );
+    if (normalizedSource !== sourceBlockHash) {
+      throw new Error("persistent eth_call cache source hash is not canonical");
+    }
+    if (!existsSync(path)) {
+      createPersistentCallCache(path, normalizedSource);
+    }
+    assertOwnerOnlyRegularFile(path);
+    const contents = readFileSync(path, "utf8");
+    const repair = this.load(contents, normalizedSource);
+    if (repair === "truncate") {
+      const validPrefix = contents.slice(
+        0,
+        contents.lastIndexOf("\n") + 1,
+      );
+      truncateSync(path, Buffer.byteLength(validPrefix, "utf8"));
+      const fd = openSync(path, "r+");
+      try {
+        fsyncSync(fd);
+      } finally {
+        closeSync(fd);
+      }
+    } else if (repair === "newline") {
+      const fd = openSync(path, "a", 0o600);
+      try {
+        writeSync(fd, "\n", undefined, "utf8");
+        fsyncSync(fd);
+      } finally {
+        closeSync(fd);
+      }
+    }
+    this.contentSha256 = sha256(readFileSync(path));
+  }
+
+  get(identity: PersistentCallIdentity): string | undefined {
+    this.assertIdentitySource(identity);
+    const result = this.entries.get(identity.key);
+    if (result !== undefined) this.hits++;
+    return result;
+  }
+
+  record(identity: PersistentCallIdentity, result: string): void {
+    this.assertIdentitySource(identity);
+    const normalizedResult = normalizedHex(
+      result,
+      "persistent eth_call result",
+    );
+    const existing = this.entries.get(identity.key);
+    if (existing !== undefined) {
+      if (existing !== normalizedResult) {
+        throw new Error(
+          `persistent eth_call cache conflict for ${identity.key}`,
+        );
+      }
+      return;
+    }
+    const row = persistentCallCacheEntry(identity, normalizedResult);
+    this.entries.set(identity.key, normalizedResult);
+    this.pendingRows.push(`${JSON.stringify(row)}\n`);
+    this.writes++;
+    if (this.pendingRows.length >= PERSISTENT_CALL_CACHE_FLUSH_ROWS) {
+      void this.flush().catch(() => {
+        // closeAndDrain awaits the same writeTail and reports the failure at
+        // the replay attempt boundary; avoid a detached rejection meanwhile.
+      });
+    }
+  }
+
+  async closeAndDrain(): Promise<void> {
+    await this.flush();
+    await this.writeTail;
+    assertOwnerOnlyRegularFile(this.path);
+    this.contentSha256 = sha256(readFileSync(this.path));
+  }
+
+  stats(): Readonly<{
+    sourceBlockHash: string;
+    entries: number;
+    hits: number;
+    writes: number;
+    contentSha256: string;
+  }> {
+    return Object.freeze({
+      sourceBlockHash: this.sourceBlockHash,
+      entries: this.entries.size,
+      hits: this.hits,
+      writes: this.writes,
+      contentSha256: this.contentSha256,
+    });
+  }
+
+  private flush(): Promise<void> {
+    if (this.pendingRows.length === 0) return this.writeTail;
+    const payload = this.pendingRows.splice(0).join("");
+    this.writeTail = this.writeTail.then(() =>
+      serializedOwnerOnlyAppend(this.path, payload)
+    );
+    return this.writeTail;
+  }
+
+  private assertIdentitySource(identity: PersistentCallIdentity): void {
+    if (identity.sourceBlockHash !== this.sourceBlockHash) {
+      throw new Error(
+        "persistent eth_call cache identity escaped its source hash",
+      );
+    }
+  }
+
+  private load(
+    contents: string,
+    expectedSourceBlockHash: string,
+  ): "truncate" | "newline" | null {
+    const trailingNewline = contents.endsWith("\n");
+    const lines = contents.split("\n");
+    if (trailingNewline) lines.pop();
+    if (lines.length === 0 || lines[0]?.trim() === "") {
+      throw new Error("persistent eth_call cache header is missing");
+    }
+    const values: unknown[] = [];
+    let ignoredTruncatedRow = false;
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index]!;
+      if (line.trim() === "") {
+        throw new Error(
+          `persistent eth_call cache has an empty row at ${index + 1}`,
+        );
+      }
+      try {
+        values.push(JSON.parse(line));
+      } catch (error) {
+        if (!trailingNewline && index === lines.length - 1) {
+          // The process may have died between write(2) and the terminating
+          // newline. Only a syntactically truncated final row is ignored.
+          ignoredTruncatedRow = true;
+          break;
+        }
+        throw new Error(
+          `persistent eth_call cache JSON row ${index + 1} is invalid`,
+          { cause: error },
+        );
+      }
+    }
+    const header = validatePersistentCallCacheHeader(
+      values[0],
+      expectedSourceBlockHash,
+    );
+    if (header.sourceBlockHash !== this.sourceBlockHash) {
+      throw new Error("persistent eth_call cache header source mismatch");
+    }
+    for (let index = 1; index < values.length; index++) {
+      const row = validatePersistentCallCacheEntry(
+        values[index],
+        expectedSourceBlockHash,
+        index + 1,
+      );
+      const existing = this.entries.get(row.key);
+      if (existing !== undefined && existing !== row.result) {
+        throw new Error(
+          `persistent eth_call cache conflicting row for ${row.key}`,
+        );
+      }
+      this.entries.set(row.key, row.result);
+    }
+    if (ignoredTruncatedRow) return "truncate";
+    return trailingNewline ? null : "newline";
+  }
+}
+
+const persistentAppendTails = new Map<string, Promise<void>>();
+
+function serializedOwnerOnlyAppend(
+  path: string,
+  payload: string,
+): Promise<void> {
+  const prior = persistentAppendTails.get(path) ?? Promise.resolve();
+  const next = prior.then(async () => {
+    assertOwnerOnlyRegularFile(path);
+    const handle = await openFile(path, "a", 0o600);
+    try {
+      await handle.writeFile(payload, "utf8");
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  });
+  persistentAppendTails.set(path, next);
+  void next.then(
+    () => {
+      if (persistentAppendTails.get(path) === next) {
+        persistentAppendTails.delete(path);
+      }
+    },
+    () => {
+      if (persistentAppendTails.get(path) === next) {
+        persistentAppendTails.delete(path);
+      }
+    },
+  );
+  return next;
+}
+
+function createPersistentCallCache(
+  path: string,
+  sourceBlockHash: string,
+): void {
+  const headerBody = {
+    schemaVersion: 1 as const,
+    profile: PERSISTENT_CALL_CACHE_PROFILE,
+    sourceBlockHash,
+  };
+  const header: PersistentCallCacheHeader = Object.freeze({
+    ...headerBody,
+    headerSha256: sha256CanonicalTuple([
+      headerBody.schemaVersion,
+      headerBody.profile,
+      headerBody.sourceBlockHash,
+    ]),
+  });
+  const fd = openSync(path, "wx", 0o600);
+  try {
+    writeSync(fd, `${JSON.stringify(header)}\n`, undefined, "utf8");
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function validatePersistentCallCacheHeader(
+  value: unknown,
+  expectedSourceBlockHash: string,
+): PersistentCallCacheHeader {
+  const record = objectRecord(value, "persistent eth_call cache header");
+  assertExactKeys(record, [
+    "headerSha256",
+    "profile",
+    "schemaVersion",
+    "sourceBlockHash",
+  ], "persistent eth_call cache header");
+  if (
+    record.schemaVersion !== 1 ||
+    record.profile !== PERSISTENT_CALL_CACHE_PROFILE
+  ) {
+    throw new Error("persistent eth_call cache header profile is invalid");
+  }
+  const sourceBlockHash = normalizedHash32(
+    record.sourceBlockHash,
+    "persistent eth_call cache header source hash",
+  );
+  if (sourceBlockHash !== expectedSourceBlockHash) {
+    throw new Error(
+      "persistent eth_call cache belongs to a different source hash",
+    );
+  }
+  const expectedHeaderSha256 = sha256CanonicalTuple([
+    1,
+    PERSISTENT_CALL_CACHE_PROFILE,
+    sourceBlockHash,
+  ]);
+  if (record.headerSha256 !== expectedHeaderSha256) {
+    throw new Error("persistent eth_call cache header hash is invalid");
+  }
+  return Object.freeze({
+    schemaVersion: 1,
+    profile: PERSISTENT_CALL_CACHE_PROFILE,
+    sourceBlockHash,
+    headerSha256: expectedHeaderSha256,
+  });
+}
+
+function validatePersistentCallCacheEntry(
+  value: unknown,
+  expectedSourceBlockHash: string,
+  rowNumber: number,
+): PersistentCallCacheEntry {
+  const label = `persistent eth_call cache row ${rowNumber}`;
+  const record = objectRecord(value, label);
+  assertExactKeys(record, [
+    "calldata",
+    "caller",
+    "entrySha256",
+    "key",
+    "profile",
+    "result",
+    "schemaVersion",
+    "sourceBlockHash",
+    "target",
+  ], label);
+  if (
+    record.schemaVersion !== 1 ||
+    record.profile !== PERSISTENT_CALL_CACHE_PROFILE
+  ) {
+    throw new Error(`${label} profile is invalid`);
+  }
+  const identity = persistentCallIdentity(expectedSourceBlockHash, {
+    to: String(record.target),
+    data: String(record.calldata),
+    ...(record.caller === null ? {} : { from: String(record.caller) }),
+  });
+  if (
+    record.sourceBlockHash !== identity.sourceBlockHash ||
+    record.target !== identity.target ||
+    record.calldata !== identity.calldata ||
+    record.caller !== identity.caller ||
+    record.key !== identity.key
+  ) {
+    throw new Error(`${label} identity is not canonical`);
+  }
+  const result = normalizedHex(record.result, `${label} result`);
+  const expectedEntrySha256 = persistentCallEntrySha256(identity, result);
+  if (record.entrySha256 !== expectedEntrySha256) {
+    throw new Error(`${label} content hash is invalid`);
+  }
+  return Object.freeze({
+    schemaVersion: 1,
+    profile: PERSISTENT_CALL_CACHE_PROFILE,
+    ...identity,
+    result,
+    entrySha256: expectedEntrySha256,
+  });
+}
+
+function persistentCallCacheEntry(
+  identity: PersistentCallIdentity,
+  result: string,
+): PersistentCallCacheEntry {
+  return Object.freeze({
+    schemaVersion: 1,
+    profile: PERSISTENT_CALL_CACHE_PROFILE,
+    ...identity,
+    result,
+    entrySha256: persistentCallEntrySha256(identity, result),
+  });
+}
+
+function persistentCallEntrySha256(
+  identity: PersistentCallIdentity,
+  result: string,
+): string {
+  return sha256CanonicalTuple([
+    1,
+    PERSISTENT_CALL_CACHE_PROFILE,
+    identity.sourceBlockHash,
+    identity.target,
+    identity.calldata,
+    identity.caller,
+    identity.key,
+    result,
+  ]);
+}
+
+function persistentCallIdentity(
+  sourceBlockHash: string,
+  req: { readonly to: string; readonly data: string; readonly from?: string },
+): PersistentCallIdentity {
+  const source = normalizedHash32(
+    sourceBlockHash,
+    "persistent eth_call source hash",
+  );
+  const target = normalizedAddress(req.to, "persistent eth_call target");
+  const calldata = normalizedHex(req.data, "persistent eth_call calldata");
+  const caller = req.from === undefined
+    ? null
+    : normalizedAddress(req.from, "persistent eth_call caller");
+  return Object.freeze({
+    sourceBlockHash: source,
+    target,
+    calldata,
+    caller,
+    key: sha256CanonicalTuple([source, target, calldata, caller]),
+  });
+}
+
+function assertOwnerOnlyRegularFile(path: string): void {
+  const link = lstatSync(path);
+  if (!link.isFile() || link.isSymbolicLink()) {
+    throw new Error("persistent eth_call cache must be a regular file");
+  }
+  const stat = statSync(path);
+  if ((stat.mode & 0o077) !== 0) {
+    throw new Error("persistent eth_call cache permissions must be owner-only");
+  }
+  const currentUid = process.getuid?.();
+  if (currentUid !== undefined && stat.uid !== currentUid) {
+    throw new Error("persistent eth_call cache owner does not match runtime");
+  }
+}
+
+function objectRecord(
+  value: unknown,
+  label: string,
+): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertExactKeys(
+  record: Record<string, unknown>,
+  expected: readonly string[],
+  label: string,
+): void {
+  const actual = Object.keys(record).sort();
+  const wanted = [...expected].sort();
+  if (JSON.stringify(actual) !== JSON.stringify(wanted)) {
+    throw new Error(`${label} has unexpected fields`);
+  }
+}
+
+function normalizedAddress(value: unknown, label: string): string {
+  if (typeof value !== "string" || !ethers.isAddress(value)) {
+    throw new Error(`${label} is invalid`);
+  }
+  return value.toLowerCase();
+}
+
+function normalizedHash32(value: unknown, label: string): string {
+  if (typeof value !== "string" || !ethers.isHexString(value, 32)) {
+    throw new Error(`${label} is invalid`);
+  }
+  return value.toLowerCase();
+}
+
+function normalizedHex(value: unknown, label: string): string {
+  if (
+    typeof value !== "string" ||
+    !/^0x(?:[0-9a-fA-F]{2})*$/.test(value)
+  ) {
+    throw new Error(`${label} is invalid`);
+  }
+  return value.toLowerCase();
+}
+
+function sha256CanonicalTuple(value: readonly unknown[]): string {
+  return sha256(Buffer.from(JSON.stringify(value), "utf8"));
+}
+
+function sha256(value: string | Buffer): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 interface PendingQuoteItem {
