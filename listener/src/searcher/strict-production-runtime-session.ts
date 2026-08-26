@@ -283,7 +283,17 @@ export class StrictProductionRuntimeRoot {
           }
         },
       );
-      await Promise.all(refreshWorkers);
+      // A rejected worker must not leave sibling refresh loops running after
+      // createSession() has failed. Replay resets and live next-generation
+      // preparation both assume the previous generation has fully quiesced;
+      // Promise.all() returned on the first rejection and let those siblings
+      // leak I/O into the next generation.
+      const refreshSettled = await Promise.allSettled(refreshWorkers);
+      const refreshFailure = refreshSettled.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (refreshFailure !== undefined) throw refreshFailure.reason;
       for (const outcome of refreshedOutcomes) {
         if (outcome === "skipped") continue;
         if (outcome === null) {

@@ -108,8 +108,9 @@ function runtime(
     readonly onCurrentPricingReadStart?: (target: string) => void;
     readonly onCurrentPricingReadEnd?: (target: string) => void;
     readonly onFundingRead?: () => void;
-    readonly currentPricingDelayMs?: number;
+    readonly currentPricingDelayMs?: number | ((target: string) => number);
     readonly failCurrentPricing?: boolean;
+    readonly failCurrentPricingTarget?: string;
     readonly failFunding?: boolean;
     readonly fundingBalance?: bigint;
   } = {},
@@ -125,14 +126,21 @@ function runtime(
           const target = request.to.toLowerCase();
           options.onCurrentPricingReadStart?.(target);
           try {
-            if ((options.currentPricingDelayMs ?? 0) > 0) {
+            const pricingDelayMs = typeof options.currentPricingDelayMs ===
+                "function"
+              ? options.currentPricingDelayMs(target)
+              : options.currentPricingDelayMs ?? 0;
+            if (pricingDelayMs > 0) {
               await new Promise((resolve) => setTimeout(
                 resolve,
-                options.currentPricingDelayMs,
+                pricingDelayMs,
               ));
             }
             options.onCurrentPricingRead?.();
-            if (options.failCurrentPricing === true) {
+            if (
+              options.failCurrentPricing === true ||
+              options.failCurrentPricingTarget === target
+            ) {
               throw new Error("current pricing transport failed");
             }
             return UNIV2_PAIR_INTERFACE.encodeFunctionResult(
@@ -343,6 +351,32 @@ assert.deepEqual(
   parallelSession.edges.map((candidate) => candidate.canonicalEdgeId),
   parallelStartupView.edges.map((candidate) => candidate.canonicalEdgeId),
   "concurrent refresh must preserve deterministic ready edge order",
+);
+
+let activeFailedRefreshReads = 0;
+const firstParallelTarget = parallelReadyInstances[0]!.instanceKey.toLowerCase();
+await assert.rejects(
+  parallelRoot.createSession({
+    source: CURRENT,
+    runtime: runtime(CURRENT, {
+      currentPricingDelayMs: (target) =>
+        target === firstParallelTarget ? 0 : 25,
+      failCurrentPricingTarget: firstParallelTarget,
+      onCurrentPricingReadStart() {
+        activeFailedRefreshReads++;
+      },
+      onCurrentPricingReadEnd() {
+        activeFailedRefreshReads--;
+      },
+    }),
+    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+  }),
+  /strict current pricing incomplete/,
+);
+assert.equal(
+  activeFailedRefreshReads,
+  0,
+  "failed session must drain every sibling refresh before returning",
 );
 let exactPricingReads = 0;
 const exactSession = await parallelRoot.createSession({
