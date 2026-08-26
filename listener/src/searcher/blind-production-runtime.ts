@@ -9,7 +9,10 @@ import type {
 } from "./blockscan-pass-timeline.js";
 import {
   blindProductionAuditHash,
+  blindProductionCanonicalJson,
+  blindProductionControlFailureRecord,
   blindProductionDeepSeal,
+  BLIND_PRODUCTION_CONTROL_FAILURE_PREFIX,
   BLIND_PRODUCTION_CONTROL_PREFIX,
   BLIND_PRODUCTION_RAW_PROFILE,
   BLIND_PRODUCTION_STAGE_NAMES,
@@ -442,10 +445,21 @@ export function installBlindProductionControlInput(input: {
         const control = validateBlindProductionControl(JSON.parse(
           line.slice(BLIND_PRODUCTION_CONTROL_PREFIX.length),
         ));
-        if (control.type === "prepare") {
-          await input.prepare(control);
-        } else {
-          await input.sourceHead(control);
+        try {
+          if (control.type === "prepare") {
+            await input.prepare(control);
+          } else {
+            await input.sourceHead(control);
+          }
+        } catch (error) {
+          const failure = blindProductionControlFailureRecord(control, error);
+          console.error(
+            `[searcher/blind-audit] control failed: ${failure.message}`,
+          );
+          process.stdout.write(
+            `${BLIND_PRODUCTION_CONTROL_FAILURE_PREFIX}` +
+              `${blindProductionCanonicalJson(failure)}\n`,
+          );
         }
       })
       .catch((error) => {

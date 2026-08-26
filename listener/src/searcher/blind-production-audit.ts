@@ -7,6 +7,8 @@ import type {
 export const BLIND_PRODUCTION_RAW_PROFILE =
   "adapter-family-production-raw-v2" as const;
 export const BLIND_PRODUCTION_CONTROL_PREFIX = "BLIND_PRODUCTION_CONTROL=";
+export const BLIND_PRODUCTION_CONTROL_FAILURE_PREFIX =
+  "BLIND_PRODUCTION_CONTROL_FAILURE=";
 export const BLIND_PRODUCTION_READY_PREFIX = "BLIND_PRODUCTION_READY=";
 export const BLIND_PRODUCTION_RAW_PREFIX = "BLIND_PRODUCTION_RAW=";
 
@@ -33,6 +35,14 @@ export interface BlindProductionSourceHeadControl {
 export type BlindProductionControl =
   | BlindProductionPrepareControl
   | BlindProductionSourceHeadControl;
+
+export interface BlindProductionControlFailureRecord {
+  readonly type: "control_failure";
+  readonly profile: typeof BLIND_PRODUCTION_RAW_PROFILE;
+  readonly controlType: BlindProductionControl["type"];
+  readonly attemptNonce: string;
+  readonly message: string;
+}
 
 export interface BlindProductionReadyRecord {
   readonly type: "ready";
@@ -354,6 +364,47 @@ export function validateBlindProductionControl(
     return control as BlindProductionSourceHeadControl;
   }
   throw new Error("blind production control type");
+}
+
+export function blindProductionControlFailureRecord(
+  control: BlindProductionControl,
+  error: unknown,
+): BlindProductionControlFailureRecord {
+  const message = error instanceof Error ? error.message : String(error);
+  return Object.freeze({
+    type: "control_failure",
+    profile: BLIND_PRODUCTION_RAW_PROFILE,
+    controlType: control.type,
+    attemptNonce: control.attemptNonce,
+    message: message.slice(0, 2_000) || "unknown control failure",
+  });
+}
+
+export function validateBlindProductionControlFailureRecord(
+  value: unknown,
+  expected: BlindProductionControl,
+): BlindProductionControlFailureRecord {
+  if (!value || typeof value !== "object") {
+    throw new Error("blind production control failure must be an object");
+  }
+  const failure = value as Partial<BlindProductionControlFailureRecord>;
+  assertExactKeys(
+    failure,
+    ["attemptNonce", "controlType", "message", "profile", "type"],
+    "blind production control failure",
+  );
+  if (
+    failure.type !== "control_failure" ||
+    failure.profile !== BLIND_PRODUCTION_RAW_PROFILE ||
+    failure.controlType !== expected.type ||
+    failure.attemptNonce !== expected.attemptNonce ||
+    typeof failure.message !== "string" ||
+    failure.message.length === 0 ||
+    failure.message.length > 2_000
+  ) {
+    throw new Error("blind production control failure mismatch");
+  }
+  return failure as BlindProductionControlFailureRecord;
 }
 
 function validateAnchor(

@@ -46,6 +46,9 @@ const prefixTriggerIndex = process.env.BLIND_PREFIX_TRIGGER_INDEX === undefined
   : Number(process.env.BLIND_PREFIX_TRIGGER_INDEX);
 const prefixAnvilPort = Number(process.env.BLIND_PREFIX_ANVIL_PORT ?? "8580");
 const timeoutMs = Number(process.env.BLIND_TIMEOUT_MS ?? "3600000");
+const prepareMaxAttempts = Number(
+  process.env.BLIND_PREPARE_MAX_ATTEMPTS ?? "5",
+);
 const issuerKeyPath = process.env.BLIND_BACKEND_ISSUER_KEY_PATH ??
   "/root/.mev-historical-gap-hmac-v1";
 const anvilBin = process.env.BLIND_ANVIL_BIN ?? "/usr/local/bin/anvil";
@@ -61,6 +64,9 @@ if (
   !["local-reth", "local-snapshot"].includes(upstreamKind) ||
   !Number.isSafeInteger(timeoutMs) ||
   timeoutMs <= 0 ||
+  !Number.isSafeInteger(prepareMaxAttempts) ||
+  prepareMaxAttempts < 1 ||
+  prepareMaxAttempts > 10 ||
   (prefixThroughIndex !== null && (
     !Number.isSafeInteger(prefixThroughIndex) ||
     prefixThroughIndex < 0 ||
@@ -163,15 +169,18 @@ const {
   forwardedProductionEnvironment,
   historicalCheckpointEvidence,
   historicalPoolUniverseEvidence,
+  runBoundedHistoricalPrepare,
 } = replayContractModule;
 const { forkBotVmRuntimeReceipt } = botVmModule;
 const {
+  BLIND_PRODUCTION_CONTROL_FAILURE_PREFIX,
   BLIND_PRODUCTION_CONTROL_PREFIX,
   BLIND_PRODUCTION_RAW_PREFIX,
   BLIND_PRODUCTION_RAW_PROFILE,
   BLIND_PRODUCTION_READY_PREFIX,
   blindProductionAuditHash,
   blindProductionCanonicalJson,
+  validateBlindProductionControlFailureRecord,
 } = auditModule;
 
 assertTargetBlindReplayEnvironment(process.env);
@@ -653,10 +662,21 @@ try {
       waiters.set(prefix, { resolve: resolveValue, reject: rejectValue, timer });
     });
   }
+  function cancel(prefix) {
+    const waiter = waiters.get(prefix);
+    if (!waiter) return;
+    waiters.delete(prefix);
+    clearTimeout(waiter.timer);
+  }
   createInterface({ input: child.stdout }).on("line", (line) => {
     stdoutFile.write(`${line}\n`);
     if (line.startsWith(BLIND_PRODUCTION_READY_PREFIX)) {
       accept(BLIND_PRODUCTION_READY_PREFIX, line.slice(BLIND_PRODUCTION_READY_PREFIX.length));
+    } else if (line.startsWith(BLIND_PRODUCTION_CONTROL_FAILURE_PREFIX)) {
+      accept(
+        BLIND_PRODUCTION_CONTROL_FAILURE_PREFIX,
+        line.slice(BLIND_PRODUCTION_CONTROL_FAILURE_PREFIX.length),
+      );
     } else if (line.startsWith(BLIND_PRODUCTION_RAW_PREFIX)) {
       accept(BLIND_PRODUCTION_RAW_PREFIX, line.slice(BLIND_PRODUCTION_RAW_PREFIX.length));
     }
@@ -674,11 +694,43 @@ try {
     )));
   });
 
-  const readyPromise = next(BLIND_PRODUCTION_READY_PREFIX);
-  child.stdin.write(
-    `${BLIND_PRODUCTION_CONTROL_PREFIX}${blindProductionCanonicalJson(prepareControl)}\n`,
-  );
-  const ready = await Promise.race([readyPromise, childExit]);
+  const ready = await runBoundedHistoricalPrepare({
+    maxAttempts: prepareMaxAttempts,
+    async attempt(attemptNumber) {
+      const readyPromise = next(BLIND_PRODUCTION_READY_PREFIX);
+      const failurePromise = next(BLIND_PRODUCTION_CONTROL_FAILURE_PREFIX);
+      child.stdin.write(
+        `${BLIND_PRODUCTION_CONTROL_PREFIX}` +
+          `${blindProductionCanonicalJson(prepareControl)}\n`,
+      );
+      try {
+        return await Promise.race([
+          readyPromise.then((value) => ({ status: "ready", value })),
+          failurePromise.then((value) => {
+            const failure = validateBlindProductionControlFailureRecord(
+              value,
+              prepareControl,
+            );
+            return { status: "failed", message: failure.message };
+          }),
+          childExit,
+        ]);
+      } finally {
+        cancel(BLIND_PRODUCTION_READY_PREFIX);
+        cancel(BLIND_PRODUCTION_CONTROL_FAILURE_PREFIX);
+        process.stdout.write(
+          `[historical-live] prepare attempt=${attemptNumber}/${prepareMaxAttempts} completed\n`,
+        );
+      }
+    },
+    async beforeRetry(attemptNumber, message) {
+      process.stdout.write(
+        `[historical-live] prepare retry after attempt=${attemptNumber} ` +
+          `reason=${JSON.stringify(message)}\n`,
+      );
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_000));
+    },
+  });
   validateProductionReadyRecord(ready, prepareControl);
   const effectiveForkBotVm = ready.artifactDocuments.resolvedConfig.payload
     .effectiveConfig?.forkBotVmInstallation;
@@ -706,10 +758,27 @@ try {
   });
 
   const rawPromise = next(BLIND_PRODUCTION_RAW_PREFIX);
+  const sourceFailurePromise = next(BLIND_PRODUCTION_CONTROL_FAILURE_PREFIX);
   child.stdin.write(
     `${BLIND_PRODUCTION_CONTROL_PREFIX}${blindProductionCanonicalJson(sourceControl)}\n`,
   );
-  const raw = await Promise.race([rawPromise, childExit]);
+  let raw;
+  try {
+    raw = await Promise.race([
+      rawPromise,
+      sourceFailurePromise.then((value) => {
+        const failure = validateBlindProductionControlFailureRecord(
+          value,
+          sourceControl,
+        );
+        throw new Error(`production source-head failed: ${failure.message}`);
+      }),
+      childExit,
+    ]);
+  } finally {
+    cancel(BLIND_PRODUCTION_RAW_PREFIX);
+    cancel(BLIND_PRODUCTION_CONTROL_FAILURE_PREFIX);
+  }
   const finished = await post(controllerEndpoints.controlUrl, {
     type: "finish",
     profile: BLIND_PRODUCTION_RAW_PROFILE,

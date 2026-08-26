@@ -11,6 +11,7 @@ import {
   forwardedProductionEnvironment,
   historicalCheckpointEvidence,
   historicalPoolUniverseEvidence,
+  runBoundedHistoricalPrepare,
 } from "./historical-live-production-replay-contract.js";
 import {
   forkBotVmInstallationEnabled,
@@ -21,6 +22,12 @@ import {
 } from "../blockscan-runtime-loop.js";
 import type { StartupCheckpointEnvelope } from
   "../universe-rebuild-checkpoint.js";
+import {
+  BLIND_PRODUCTION_RAW_PROFILE,
+  blindProductionControlFailureRecord,
+  validateBlindProductionControlFailureRecord,
+  type BlindProductionPrepareControl,
+} from "../blind-production-audit.js";
 
 const HASH = `0x${"1".repeat(64)}`;
 const listenerRoot = resolve(
@@ -31,6 +38,54 @@ const listenerRoot = resolve(
 assert.throws(
   () => assertTargetBlindReplayEnvironment({ AB_EXPECTED_ROUTE: "[]" }),
   /target-specific environment AB_EXPECTED_ROUTE/,
+);
+
+const prepareAttempts: number[] = [];
+const prepareControl: BlindProductionPrepareControl = {
+  type: "prepare",
+  profile: BLIND_PRODUCTION_RAW_PROFILE,
+  attemptNonce: "ab".repeat(32),
+  base: { number: 20, hash: HASH, stateRoot: HASH },
+};
+const controlFailure = blindProductionControlFailureRecord(
+  prepareControl,
+  new Error("transient"),
+);
+assert.equal(
+  validateBlindProductionControlFailureRecord(
+    controlFailure,
+    prepareControl,
+  ).attemptNonce,
+  prepareControl.attemptNonce,
+);
+assert.throws(
+  () => validateBlindProductionControlFailureRecord(controlFailure, {
+    ...prepareControl,
+    attemptNonce: "cd".repeat(32),
+  }),
+  /control failure mismatch/,
+);
+assert.equal(
+  await runBoundedHistoricalPrepare({
+    maxAttempts: 3,
+    async attempt(attemptNumber) {
+      prepareAttempts.push(attemptNumber);
+      return attemptNumber === 1
+        ? { status: "failed", message: "transient" }
+        : { status: "ready", value: "ready" };
+    },
+  }),
+  "ready",
+);
+assert.deepEqual(prepareAttempts, [1, 2]);
+await assert.rejects(
+  runBoundedHistoricalPrepare({
+    maxAttempts: 2,
+    async attempt() {
+      return { status: "failed", message: "still unavailable" };
+    },
+  }),
+  /failed after 2 attempts: still unavailable/,
 );
 assert.throws(
   () => assertTargetBlindReplayEnvironment({ SEARCHER_TARGET_POOL: "0x1" }),

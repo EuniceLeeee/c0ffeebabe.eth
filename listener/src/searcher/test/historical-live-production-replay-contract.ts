@@ -104,6 +104,38 @@ export interface HistoricalCheckpointEvidence {
   readonly retryableAttempts: number;
 }
 
+export type HistoricalPrepareAttemptResult<T> =
+  | { readonly status: "ready"; readonly value: T }
+  | { readonly status: "failed"; readonly message: string };
+
+/** Retry only the replay prepare control; source-head execution stays one-shot. */
+export async function runBoundedHistoricalPrepare<T>(input: {
+  readonly maxAttempts: number;
+  readonly attempt: (
+    attemptNumber: number,
+  ) => Promise<HistoricalPrepareAttemptResult<T>>;
+  readonly beforeRetry?: (
+    attemptNumber: number,
+    message: string,
+  ) => Promise<void>;
+}): Promise<T> {
+  if (!Number.isSafeInteger(input.maxAttempts) || input.maxAttempts < 1) {
+    throw new Error("historical prepare maxAttempts must be positive");
+  }
+  let lastMessage = "unknown prepare failure";
+  for (let attemptNumber = 1; attemptNumber <= input.maxAttempts; attemptNumber += 1) {
+    const result = await input.attempt(attemptNumber);
+    if (result.status === "ready") return result.value;
+    lastMessage = result.message;
+    if (attemptNumber < input.maxAttempts) {
+      await input.beforeRetry?.(attemptNumber, result.message);
+    }
+  }
+  throw new Error(
+    `production prepare failed after ${input.maxAttempts} attempts: ${lastMessage}`,
+  );
+}
+
 /** A supplied durable universe may never contain authority newer than base. */
 export function historicalCheckpointEvidence(
   checkpoint: StartupCheckpointEnvelope,
