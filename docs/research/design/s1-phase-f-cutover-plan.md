@@ -699,3 +699,39 @@ full-prefix positive；只有 natural enumeration → exact → execution → ma
 finalSim 产出正毛利且 state anchor 因果正确，才能把该 production gap 写成
 fixed。
 
+## Candidate materialization 单管线与历史 replay 阻塞（2026-08-26）
+
+当前 candidate materialization 已按单一收敛合同落地，不存在 V4 第二条验证
+管线：
+
+- `reverseBindOpaqueCandidates` 接收普通解码与 durable memo 恢复出的
+  `knownCandidates`；plugin-owned `instanceNominationKey` 已命中的实例不再做
+  opaque reverse binding，只有缺失的 `poolId` 才反查一次；
+- direct、retained、reverse-bound candidate 合并为唯一 partition，随后统一进入
+  `findReusableMemo → rehydrate / attest`；中央没有 V4 Family 分支、地址/topic
+  表或第二份 reverse-binding cache；
+- 同一 canonical proof source（number+hash）的 durable memo 在新 run 中也零 RPC
+  复用；cutoff 更新后才读取 code/implementation slot 做 authority revalidation。
+
+实现 commits 为 `9935d8aa`（same-proof-source memo reuse）与 `72abb49b`
+（known-candidate materialization reuse）。公开 archive 诊断由约
+7,700–8,568 个 opaque nominations 降为 4,705，证明跨 run known-candidate
+过滤实际生效。`candidateMaterialization.discoveryDefinitionHash` 仍是可选 P1
+失效策略加固，不是本轮 P0 replay 门；加入前必须保证旧 retained candidate 在
+定义变化时通用地重新 materialize，而不是被静默丢弃。
+
+`82918b6c` 尝试以 Identity precompile 规避历史 fork 的 caller account 读取，
+但真实 Anvil 实测 `to=0x04` 仍读取默认 caller，`from=0x04` 与 state override
+也会先读取历史账户，因此该方案已由 `308e8d1f` 撤回。`308e8d1f` 的本地与
+节点证据：完整 build、build:live、五项定向合同、MigrationCleanupReceipt
+合同、`s1-regression-sweep.sh` 17/17 全绿；local/remote 与节点
+`/opt/MEV-impl-capture` exact SHA 一致且工作树干净，production live 未被触碰。
+
+剩余 replay 阻塞是外部历史状态能力，不是 candidate/V4 逻辑：配置的 archive
+对历史 block/code 请求返回月度容量 429；本地 reth 对同一 cutoff 的
+`eth_getStorageAt` 明确返回 state pruned；公共 Blast archive 在 4,705/4,705
+reverse binding 后推进到 8,986/20,922 attestation，随后在真实 storage/state
+负载下持续 429，只能作诊断，不能冒充最终稳定上游。恢复稳定 archive 后从
+standing `25821053→25821054`、boundary `25821044→25821045`、full-prefix
+`25821045→25821046`（through index 105、trigger index 103）依次续跑；在三组
+target-blind receipts 完成前仍不得声明 `production_gap_fixed`。

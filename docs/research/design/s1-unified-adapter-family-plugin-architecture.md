@@ -526,10 +526,12 @@ retain channel (5.4) remain available independently.
    discarded because old outcomes are never verification authority under a new discovery plan. Verified
    memos remain until an explicit terminal outcome revokes the corresponding candidate.
 3. **Verification**: every candidate re-enters `findReusableMemo` — a pure local binding check (Family id,
-   candidate fingerprint, memo-scoped definition hash, proof policy, proof-source bound) first, then the
-   same-run fast path (local compares only) or chain authority revalidation (code/storage/blockHash RPC).
-   Valid memo → reuse; otherwise attest. A previously fail-closed pool is re-adopted by a new Family only
-   through a fresh chain proof (its old terminal outcome is keyed to the old Family and does not carry).
+   candidate fingerprint, memo-scoped definition hash, proof policy, proof-source bound) first. A memo whose
+   proof source is the exact same canonical number+hash as the fixed cutoff is reused with zero authority
+   RPC even when bookkeeping has started a new run; only a newer cutoff performs chain authority
+   revalidation (code/storage/blockHash RPC). Valid memo → reuse; otherwise attest. A previously fail-closed
+   pool is re-adopted by a new Family only through a fresh chain proof (its old terminal outcome is keyed to
+   the old Family and does not carry).
 
 Memo validity binds `familyMemoDefinitionHash` (identity/instance/routes/pricing capabilities), so
 changing exact quoting or execution never invalidates an identity memo; memos sealed before the hash split
