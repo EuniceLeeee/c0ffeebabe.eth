@@ -9,6 +9,7 @@ import {
 import {
   buildFundingBorrowFragment,
   executeFundingFamilyLiquidity,
+  type FundingInstanceOutcome,
   type PreparedFundingOffer,
 } from "./adapter-funding-runtime.js";
 import {
@@ -127,6 +128,11 @@ interface InstanceRefreshOutcome {
 interface FundingBinding {
   readonly family: LoadedFamilyBox;
   readonly offer: PreparedFundingOffer;
+}
+
+export interface StrictFundingRuntimeProjection {
+  readonly outcomes: readonly FundingInstanceOutcome[];
+  readonly sources: ReadonlyMap<string, FlashSource>;
 }
 
 export interface StrictReadyFundingAsset {
@@ -396,6 +402,7 @@ export class StrictProductionRuntimeRoot {
       ethers.getAddress(asset).toLowerCase()
     ));
     const fundingBindings: FundingBinding[] = [];
+    const fundingOutcomes: FundingInstanceOutcome[] = [];
     for (const family of this.#catalog.listAll()) {
       if (family.plugin.manifest.domain !== "funding") continue;
       const assets = (this.#readyFundingAssetsByFamily.get(
@@ -411,16 +418,7 @@ export class StrictProductionRuntimeRoot {
         ...(input.control === undefined ? {} : { control: input.control }),
         publisher: Object.freeze({ publish() {} }),
       });
-      const incomplete = result.outcomes.filter((outcome) =>
-        outcome.status !== "verified"
-      );
-      if (incomplete.length > 0) {
-        throw new Error(
-          `strict current Funding incomplete for ` +
-            `${family.plugin.manifest.familyId} (` +
-            `${incomplete.map((outcome) => outcome.reasonCode).sort().join(",")})`,
-        );
-      }
+      fundingOutcomes.push(...result.outcomes);
       fundingBindings.push(...result.offers.map((offer) => Object.freeze({
         family,
         offer,
@@ -435,6 +433,7 @@ export class StrictProductionRuntimeRoot {
       bindings,
       currentPricing,
       fundingBindings,
+      fundingOutcomes,
       pricingComplete: kind === "pricing",
     });
   }
@@ -548,6 +547,7 @@ export class StrictProductionRuntimeSession {
     StrictCurrentRoutePricing
   >;
   readonly #fundingBindings: readonly FundingBinding[];
+  readonly #fundingOutcomes: readonly FundingInstanceOutcome[];
   readonly #pricingComplete: boolean;
   readonly #exactBindings = new WeakMap<object, ExactBinding>();
 
@@ -563,6 +563,7 @@ export class StrictProductionRuntimeSession {
       StrictCurrentRoutePricing
     >;
     readonly fundingBindings: readonly FundingBinding[];
+    readonly fundingOutcomes: readonly FundingInstanceOutcome[];
     readonly pricingComplete?: boolean;
   }) {
     this.#catalog = input.catalog;
@@ -573,6 +574,7 @@ export class StrictProductionRuntimeSession {
     this.#bindings = new Map(input.bindings);
     this.#currentPricing = new Map(input.currentPricing);
     this.#fundingBindings = Object.freeze([...input.fundingBindings]);
+    this.#fundingOutcomes = Object.freeze([...input.fundingOutcomes]);
     this.#pricingComplete = input.pricingComplete ?? true;
     Object.freeze(this);
   }
@@ -662,22 +664,70 @@ export class StrictProductionRuntimeSession {
   }
 
   /** Planner-only projection; executable Funding authority remains private. */
-  fundingLiquidityView(): FlashLiquidityView {
-    const sources = new Map<string, FlashSource>();
-    for (const { offer } of this.#fundingBindings) {
+  fundingProjection(): StrictFundingRuntimeProjection {
+    const outcomeByFundingId = new Map<string, FundingInstanceOutcome>();
+    for (const outcome of this.#fundingOutcomes) {
+      if (
+        outcome.source.number !== this.source.number ||
+        outcome.source.hash.toLowerCase() !== this.source.hash.toLowerCase() ||
+        outcome.source.generation !== this.source.generation
+      ) {
+        throw new Error("strict Funding outcome differs from session source");
+      }
+      if (outcomeByFundingId.has(outcome.fundingId)) {
+        throw new Error(`strict Funding duplicates ${outcome.fundingId}`);
+      }
+      outcomeByFundingId.set(outcome.fundingId, outcome);
+    }
+    const bestByAsset = new Map<string, FundingBinding>();
+    for (const binding of this.#fundingBindings) {
+      const { offer } = binding;
+      const outcome = outcomeByFundingId.get(offer.fundingId);
+      if (
+        outcome?.status !== "verified" ||
+        outcome.familyId !== offer.familyId ||
+        outcome.familyId !== binding.family.plugin.manifest.familyId ||
+        outcome.asset.toLowerCase() !== offer.asset.toLowerCase() ||
+        offer.source.number !== this.source.number ||
+        offer.source.hash.toLowerCase() !== this.source.hash.toLowerCase() ||
+        offer.source.generation !== this.source.generation ||
+        offer.generation !== this.source.generation
+      ) {
+        throw new Error(
+          `strict Funding offer lacks verified outcome ${offer.fundingId}`,
+        );
+      }
+      if (offer.maxBorrow <= 0n) continue;
       const asset = offer.asset.toLowerCase();
-      const incumbent = sources.get(asset);
+      const incumbent = bestByAsset.get(asset);
       if (
         incumbent === undefined ||
-        offer.maxBorrow > incumbent.amount
+        offer.maxBorrow > incumbent.offer.maxBorrow ||
+        offer.maxBorrow === incumbent.offer.maxBorrow &&
+          (offer.liquidityPriority < incumbent.offer.liquidityPriority ||
+            offer.liquidityPriority === incumbent.offer.liquidityPriority &&
+              offer.actionAdapterId < incumbent.offer.actionAdapterId)
       ) {
-        sources.set(asset, Object.freeze({
-          amount: offer.maxBorrow,
-          adapterId: offer.actionAdapterId,
-          fundingId: offer.fundingId,
-        }));
+        bestByAsset.set(asset, binding);
       }
     }
+    const sources = new Map<string, FlashSource>();
+    for (const [asset, { offer }] of bestByAsset) {
+      sources.set(asset, Object.freeze({
+        amount: offer.maxBorrow,
+        adapterId: offer.actionAdapterId,
+        fundingId: offer.fundingId,
+      }));
+    }
+    return Object.freeze({
+      outcomes: Object.freeze([...this.#fundingOutcomes]),
+      sources: new Map(sources),
+    });
+  }
+
+  /** Compatibility-free planner view derived from the strict projection. */
+  fundingLiquidityView(): FlashLiquidityView {
+    const { sources } = this.fundingProjection();
     return Object.freeze({
       borrowable(token: string): bigint {
         return sources.get(token.toLowerCase())?.amount ?? 0n;

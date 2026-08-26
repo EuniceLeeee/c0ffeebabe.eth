@@ -1,11 +1,13 @@
-import type {
-  AdapterRuntimePrepareResult,
-  AdapterRuntimePrepareTiming,
-  AdapterRuntimeSnapshot,
-  CurrentNExactExecutionContextResult,
-  FlashFundingCoverage,
-  PrepareAdapterRuntimeInput,
-  PrepareCurrentNExactExecutionContextInput,
+import {
+  FlashFundingSnapshot,
+  type AdapterRuntimePrepareResult,
+  type AdapterRuntimePrepareTiming,
+  type AdapterRuntimeSnapshot,
+  type CurrentNExactExecutionContextResult,
+  type FlashFundingCoverage,
+  type FlashFundingFreshnessProof,
+  type PrepareAdapterRuntimeInput,
+  type PrepareCurrentNExactExecutionContextInput,
 } from "./adapter-runtime-coordinator.js";
 import type { CurrentSourceRuntimeCoordinator } from
   "./blockscan-runtime-loop.js";
@@ -14,9 +16,8 @@ import type {
   BlockScanStatePrepareResult,
   BlockScanStateSnapshot,
 } from "./blockscan-state-coordinator.js";
-import type { FlashLiquidityView, FlashSource } from
-  "./solver/flash-liquidity.js";
 import type {
+  StrictFundingRuntimeProjection,
   StrictProductionRuntimeSession,
   StrictProductionSessionKind,
 } from
@@ -28,7 +29,6 @@ import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
 import {
   blockScanEdgeKey,
   exactSetHash,
-  type StateFreshnessProof,
   type StateKeyCoverage,
   type VerifiedGraphView,
 } from "./venues/blockscan-state-capability.js";
@@ -111,7 +111,7 @@ export class StrictCurrentRuntimeCoordinator
       source,
       controlFor(settleDeadlineAtMs, input.signal),
       "pricing",
-      undefined,
+      input.fundingTokens,
       undefined,
       input.touchedPools,
     );
@@ -133,12 +133,12 @@ export class StrictCurrentRuntimeCoordinator
     const pricingMs = Math.max(0, Date.now() - pricingStartedAtMs) +
       Math.max(0, pricingStartedAtMs - sessionStartedAtMs);
     const funding = buildStrictFundingSnapshot(
-      session.fundingLiquidityView(),
-      input.fundingTokens,
+      session.fundingProjection(),
       input.graph,
     );
     const fundingCoverage = funding.coverage;
-    const completeness = pricing.coverage.unresolvedEdgeKeys.length > 0
+    const completeness = pricing.coverage.unresolvedEdgeKeys.length > 0 ||
+        fundingCoverage.unresolvedKeys.length > 0
       ? "degraded" as const
       : "complete" as const;
     const snapshot: AdapterRuntimeSnapshot = Object.freeze({
@@ -200,13 +200,14 @@ export class StrictCurrentRuntimeCoordinator
     }
     assertWorkOpen(input.deadlineAtMs, input.signal);
     const funding = buildStrictFundingSnapshot(
-      session.fundingLiquidityView(),
-      input.fundingTokens,
+      session.fundingProjection(),
       input.graph,
     );
     const finishedAtMs = Date.now();
     return Object.freeze({
-      status: "complete" as const,
+      status: funding.coverage.unresolvedKeys.length > 0
+        ? "degraded" as const
+        : "complete" as const,
       context: Object.freeze({
         generation: input.graph.generation,
         sourceBlock: input.graph.sourceBlock,
@@ -363,61 +364,103 @@ function completePricingResult(
   });
 }
 
-class StrictFundingSnapshot implements FlashLiquidityView {
-  readonly sources: ReadonlyMap<string, FlashSource>;
-  readonly coverageByFundingId: ReadonlyMap<string, StateKeyCoverage> =
-    new Map();
-  readonly freshnessByFundingId: ReadonlyMap<
-    string,
-    ReadonlyMap<string, StateFreshnessProof>
-  > = new Map();
-
-  constructor(
-    readonly generation: number,
-    readonly sourceBlock: number,
-    readonly sourceBlockHash: string,
-    readonly coverage: FlashFundingCoverage,
-    sources: ReadonlyMap<string, FlashSource>,
-  ) {
-    this.sources = new Map(sources);
-    Object.freeze(this);
-  }
-
-  borrowable(token: string): bigint {
-    return this.sources.get(token.toLowerCase())?.amount ?? 0n;
-  }
-
-  source(token: string): FlashSource | null {
-    return this.sources.get(token.toLowerCase()) ?? null;
-  }
-}
-
 function buildStrictFundingSnapshot(
-  view: FlashLiquidityView,
-  fundingTokens: readonly string[],
+  projection: StrictFundingRuntimeProjection,
   graph: VerifiedGraphView,
-): StrictFundingSnapshot {
-  const expectedKeys = [...new Set(fundingTokens.map((token) =>
-    token.toLowerCase()
-  ))].sort();
-  const sources = new Map<string, FlashSource>();
-  for (const token of expectedKeys) {
-    const source = view.source(token);
-    if (source !== null) sources.set(token, Object.freeze({ ...source }));
+): FlashFundingSnapshot {
+  const coverageByFundingId = new Map<string, StateKeyCoverage>();
+  const freshnessByFundingId = new Map<
+    string,
+    ReadonlyMap<string, FlashFundingFreshnessProof>
+  >();
+  const expectedKeys: string[] = [];
+  const resolvedKeys: string[] = [];
+  const unresolvedKeys: string[] = [];
+  for (const outcome of projection.outcomes) {
+    if (
+      outcome.source.number !== graph.sourceBlock ||
+      outcome.source.hash.toLowerCase() !== graph.sourceBlockHash.toLowerCase() ||
+      outcome.source.generation !== graph.generation
+    ) {
+      throw new Error("strict Funding projection differs from ready Graph source");
+    }
+    if (coverageByFundingId.has(outcome.fundingId)) {
+      throw new Error(`strict Funding projection duplicates ${outcome.fundingId}`);
+    }
+    expectedKeys.push(outcome.fundingId);
+    if (outcome.status !== "verified") {
+      unresolvedKeys.push(outcome.fundingId);
+      coverageByFundingId.set(outcome.fundingId, Object.freeze({
+        status: "unresolved" as const,
+        reason: `${outcome.status}:${outcome.reasonCode}`,
+      }));
+      continue;
+    }
+    const receipt = outcome.workReceipt;
+    if (
+      receipt === null ||
+      receipt.stage !== "pricing-current" ||
+      receipt.familyId !== outcome.familyId ||
+      receipt.source.number !== outcome.source.number ||
+      receipt.source.hash.toLowerCase() !== outcome.source.hash.toLowerCase() ||
+      receipt.source.generation !== outcome.source.generation ||
+      receipt.generation !== outcome.source.generation ||
+      receipt.failureStage !== null ||
+      receipt.subjectKey.length === 0 ||
+      receipt.dedupeKey === null ||
+      receipt.dedupeKey.length === 0 ||
+      outcome.trustedResultsFingerprint === null ||
+      outcome.trustedResultsFingerprint.length === 0 ||
+      outcome.evidenceRefs.length === 0
+    ) {
+      throw new Error(
+        `verified strict Funding lacks work provenance ${outcome.fundingId}`,
+      );
+    }
+    resolvedKeys.push(outcome.fundingId);
+    coverageByFundingId.set(
+      outcome.fundingId,
+      Object.freeze({ status: "resolved" as const }),
+    );
+    freshnessByFundingId.set(outcome.fundingId, new Map([[outcome.stateKey,
+      Object.freeze({
+        kind: "strict-work" as const,
+        source: Object.freeze({ ...outcome.source }),
+        subjectKey: receipt.subjectKey,
+        dedupeKey: receipt.dedupeKey,
+        trustedResultsFingerprint: outcome.trustedResultsFingerprint,
+        evidenceFingerprint: exactSetHash(outcome.evidenceRefs),
+      }),
+    ]]));
+  }
+  expectedKeys.sort();
+  resolvedKeys.sort();
+  unresolvedKeys.sort();
+  const sources = new Map(projection.sources);
+  for (const [token, source] of sources) {
+    if (
+      source.amount <= 0n ||
+      source.fundingId === undefined ||
+      coverageByFundingId.get(source.fundingId)?.status !== "resolved"
+    ) {
+      throw new Error(`strict Funding source is not resolved for ${token}`);
+    }
   }
   const coverage: FlashFundingCoverage = Object.freeze({
     expectedKeys: Object.freeze(expectedKeys),
-    resolvedKeys: Object.freeze([...expectedKeys]),
-    unresolvedKeys: Object.freeze([]),
+    resolvedKeys: Object.freeze(resolvedKeys),
+    unresolvedKeys: Object.freeze(unresolvedKeys),
     expectedHash: exactSetHash(expectedKeys),
-    resolvedHash: exactSetHash(expectedKeys),
-    unresolvedHash: exactSetHash([]),
+    resolvedHash: exactSetHash(resolvedKeys),
+    unresolvedHash: exactSetHash(unresolvedKeys),
   });
-  return new StrictFundingSnapshot(
+  return new FlashFundingSnapshot(
     graph.generation,
     graph.sourceBlock,
     graph.sourceBlockHash,
     coverage,
+    coverageByFundingId,
+    freshnessByFundingId,
     sources,
   );
 }

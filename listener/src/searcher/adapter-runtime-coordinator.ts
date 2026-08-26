@@ -11,6 +11,7 @@ import type { FlashLiquidityView, FlashSource } from "./solver/flash-liquidity.j
 import type { AdapterFamilyRegistry } from "./venues/adapter-family-registry.js";
 import {
   exactSetHash,
+  type BlockSource,
   type StateFreshnessProof,
   type StateKeyCoverage,
   type StateReadResult,
@@ -33,6 +34,16 @@ export interface FlashFundingCoverage {
   readonly unresolvedHash: string;
 }
 
+export type FlashFundingFreshnessProof = StateFreshnessProof | {
+  /** Source-pinned RequestProgram completion issued by the central runtime. */
+  readonly kind: "strict-work";
+  readonly source: BlockSource;
+  readonly subjectKey: string;
+  readonly dedupeKey: string;
+  readonly trustedResultsFingerprint: string;
+  readonly evidenceFingerprint: string;
+};
+
 export class FlashFundingSnapshot implements FlashLiquidityView {
   readonly sources: ReadonlyMap<string, FlashSource>;
 
@@ -44,7 +55,7 @@ export class FlashFundingSnapshot implements FlashLiquidityView {
     readonly coverageByFundingId: ReadonlyMap<string, StateKeyCoverage>,
     readonly freshnessByFundingId: ReadonlyMap<
       string,
-      ReadonlyMap<string, StateFreshnessProof>
+      ReadonlyMap<string, FlashFundingFreshnessProof>
     >,
     sources: ReadonlyMap<string, FlashSource>,
   ) {

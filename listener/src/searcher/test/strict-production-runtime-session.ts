@@ -16,6 +16,8 @@ import { StrictProductionRuntimeRoot } from
   "../strict-production-runtime-session.js";
 import { StrictCurrentRuntimeCoordinator } from
   "../strict-current-runtime-coordinator.js";
+import { assertAtomicBlockScanRuntime } from
+  "../detector/blockscan-scanner-production.js";
 import { PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND } from
   "../runtime-evidence.js";
 import { executeFamilyExactQuote } from
@@ -109,6 +111,7 @@ function runtime(
     readonly currentPricingDelayMs?: number;
     readonly failCurrentPricing?: boolean;
     readonly failFunding?: boolean;
+    readonly fundingBalance?: bigint;
   } = {},
 ) {
   const reserves = options.reserves ?? pool.reserves;
@@ -148,7 +151,10 @@ function runtime(
           throw new Error("current Funding transport failed");
         }
         options.onFundingRead?.();
-        return ERC20_BALANCE.encodeFunctionResult("balanceOf", [10n ** 24n]);
+        return ERC20_BALANCE.encodeFunctionResult(
+          "balanceOf",
+          [options.fundingBalance ?? 10n ** 24n],
+        );
       },
       getCode: async () => "0x01",
       getStorage: async () => `0x${"00".repeat(32)}`,
@@ -217,6 +223,54 @@ assert.equal(
   1,
   "a Funding Family may query only assets admitted for that Family",
 );
+
+const zeroLiquiditySession = await root.createSession({
+  source: CURRENT,
+  runtime: runtime(CURRENT, { fundingBalance: 0n }),
+  fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+});
+const zeroLiquidityProjection = zeroLiquiditySession.fundingProjection();
+assert.ok(zeroLiquidityProjection.outcomes.length > 0);
+assert.ok(zeroLiquidityProjection.outcomes.every((outcome) =>
+  outcome.status === "verified" &&
+  outcome.reasonCode === "funding-offer-derived"
+));
+assert.equal(
+  zeroLiquidityProjection.sources.size,
+  0,
+  "verified zero-liquidity sources are resolved coverage, not planner offers",
+);
+
+const twoTokenReadyFundingAssets = Object.freeze(
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll()
+    .filter((candidate) => candidate.plugin.manifest.domain === "funding")
+    .flatMap((candidate) => [UNIV2_FIXTURE_TOKEN0, UNIV2_FIXTURE_TOKEN1]
+      .map((asset) => Object.freeze({
+        familyId: candidate.plugin.manifest.familyId,
+        asset,
+      }))),
+);
+const twoTokenFundingRoot = new StrictProductionRuntimeRoot({
+  catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+  readySource: STARTUP,
+  readyGraph: startupView.edges,
+  readyInstances: publication.instances,
+  readyFundingAssets: twoTokenReadyFundingAssets,
+});
+const twoTokenFundingProjection = (await twoTokenFundingRoot.createSession({
+  source: CURRENT,
+  runtime: runtime(CURRENT),
+  fundingAssets: Object.freeze([
+    UNIV2_FIXTURE_TOKEN0,
+    UNIV2_FIXTURE_TOKEN1,
+  ]),
+})).fundingProjection();
+assert.equal(
+  twoTokenFundingProjection.outcomes.length,
+  twoTokenReadyFundingAssets.length,
+  "Funding outcomes partition every dynamically cataloged provider/token source",
+);
+assert.equal(twoTokenFundingProjection.sources.size, 2);
 
 // Performance contract: independent ready instances refresh under the
 // bounded pool, each exactly once, while the resulting strict topology keeps
@@ -477,6 +531,47 @@ const currentRuntime = await currentCoordinator.prepare({
 });
 assert.equal(currentRuntime.status, "complete");
 assert.equal(currentRuntime.snapshot.graph, currentGraph);
+const currentFunding = currentRuntime.snapshot.funding;
+assert.equal(
+  currentFunding.coverage.expectedKeys.length,
+  readyFundingAssets.length,
+  "strict Funding coverage is keyed by every dynamic provider/asset source",
+);
+assert.equal(
+  currentFunding.coverageByFundingId.size,
+  currentFunding.coverage.expectedKeys.length,
+);
+assert.equal(
+  currentFunding.freshnessByFundingId.size,
+  currentFunding.coverage.resolvedKeys.length,
+);
+assert.ok(
+  currentFunding.coverage.expectedKeys.every((fundingId) =>
+    fundingId !== UNIV2_FIXTURE_TOKEN0.toLowerCase() &&
+    currentFunding.coverageByFundingId.get(fundingId)?.status === "resolved" &&
+    [...(currentFunding.freshnessByFundingId.get(fundingId)?.values() ?? [])]
+      .every((proof) =>
+        proof.kind === "strict-work" &&
+        proof.source.number === CURRENT.number &&
+        proof.source.hash === CURRENT.hash
+      )
+  ),
+  "token lookup keys must not masquerade as Funding coverage/freshness keys",
+);
+assert.doesNotThrow(() => assertAtomicBlockScanRuntime(currentRuntime.snapshot));
+assert.throws(
+  () => assertAtomicBlockScanRuntime(Object.freeze({
+    ...currentRuntime.snapshot,
+    funding: Object.freeze({
+      ...currentFunding,
+      borrowable: currentFunding.borrowable.bind(currentFunding),
+      source: currentFunding.source.bind(currentFunding),
+      freshnessByFundingId: new Map(),
+    }),
+  })),
+  /rejected funding coverage\/freshness/,
+  "production boundary must reject a strict Funding snapshot without freshness",
+);
 assert.equal(
   currentRuntime.snapshot.pricing.coverage.expectedEdgeKeys.length,
   currentGraph.scannerEdgeCount,
@@ -557,18 +652,27 @@ const failingFundingCoordinator = new StrictCurrentRuntimeCoordinator(
   }),
   () => {},
 );
-await assert.rejects(
-  failingFundingCoordinator.prepare({
-    graph: currentGraph,
-    fundingTokens: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
-    deadlineAtMs: Date.now() + 10_000,
-  }),
-  /strict current Funding incomplete/,
+const unresolvedFunding = await failingFundingCoordinator.prepare({
+  graph: currentGraph,
+  fundingTokens: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(unresolvedFunding.status, "degraded");
+assert.equal(
+  unresolvedFunding.snapshot.funding.coverage.unresolvedKeys.length,
+  readyFundingAssets.length,
+);
+assert.equal(unresolvedFunding.snapshot.funding.sources.size, 0);
+assert.equal(unresolvedFunding.snapshot.funding.freshnessByFundingId.size, 0);
+assert.ok([...unresolvedFunding.snapshot.funding.coverageByFundingId.values()]
+  .every((coverage) => coverage.status === "unresolved"));
+assert.doesNotThrow(() =>
+  assertAtomicBlockScanRuntime(unresolvedFunding.snapshot)
 );
 assert.equal(
   failingFundingCoordinator.latestPricingSnapshot(),
-  null,
-  "Funding failure cannot publish pricing with invented zero liquidity",
+  unresolvedFunding.snapshot.pricing,
+  "healthy pricing may publish while unresolved Funding remains fail-closed",
 );
 assert(session.supportsVictimReplay(edge));
 const victim = session.replayVictim({

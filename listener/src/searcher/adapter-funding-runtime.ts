@@ -71,6 +71,8 @@ export interface FundingInstanceOutcome {
   readonly reasonCode: string;
   readonly source: CanonicalSource;
   readonly workReceipt: AdapterWorkReceipt | null;
+  /** Central-issued fingerprint of the trusted current-source result set. */
+  readonly trustedResultsFingerprint: string | null;
   readonly evidenceRefs: readonly string[];
 }
 
@@ -285,6 +287,7 @@ async function executeFundingSource(input: {
         status: "unresolved",
         reasonCode: `adapter-work:${work.failure.stage}:${work.failure.code}`,
         workReceipt: work.receipt,
+        trustedResultsFingerprint: null,
         evidenceRefs: Object.freeze([]),
       }),
     });
@@ -319,6 +322,7 @@ async function executeFundingSource(input: {
         status: "failed",
         reasonCode: `funding-derive:${errorMessage(error)}`,
         workReceipt: work.receipt,
+        trustedResultsFingerprint: work.executed.trustedResultsFingerprint,
         evidenceRefs: Object.freeze([evidenceRef]),
       }),
     });
@@ -342,6 +346,7 @@ async function executeFundingSource(input: {
         ? "funding-no-offer"
         : "funding-offer-derived",
       workReceipt: work.receipt,
+      trustedResultsFingerprint: work.executed.trustedResultsFingerprint,
       evidenceRefs: Object.freeze([evidenceRef]),
     }),
   });
@@ -365,6 +370,7 @@ function assertFundingSources(
   assets: readonly string[],
 ): void {
   const assetSet = new Set(assets.map((asset) => asset.toLowerCase()));
+  const coveredAssets = new Set<string>();
   const fundingIds = new Set<string>();
   const stateKeys = new Set<string>();
   for (const source of sources) {
@@ -378,6 +384,7 @@ function assertFundingSources(
     if (!assetSet.has(asset.toLowerCase())) {
       throw new Error(`Funding source ${source.fundingId} invented asset ${asset}`);
     }
+    coveredAssets.add(asset.toLowerCase());
     if (!Array.isArray(source.requiredReadKeys) || source.requiredReadKeys.length === 0) {
       throw new Error(`Funding source ${source.fundingId} has no required reads`);
     }
@@ -389,6 +396,12 @@ function assertFundingSources(
     }
     fundingIds.add(source.fundingId);
     stateKeys.add(source.stateKey);
+  }
+  if (
+    coveredAssets.size !== assetSet.size ||
+    [...assetSet].some((asset) => !coveredAssets.has(asset))
+  ) {
+    throw new Error("Funding sources omitted a requested asset");
   }
 }
 
@@ -721,7 +734,7 @@ function declarationFailure(
 ): FundingInstanceOutcome {
   return freezeOutcome({
     familyId,
-    fundingId: "funding-source-declaration",
+    fundingId: `${familyId}\u001ffunding-source-declaration`,
     instanceKey: familyId,
     stateKey: familyId,
     asset: ethers.ZeroAddress,
@@ -729,6 +742,7 @@ function declarationFailure(
     reasonCode: `funding-sources:${errorMessage(error)}`,
     source: Object.freeze({ ...source }),
     workReceipt: null,
+    trustedResultsFingerprint: null,
     evidenceRefs: Object.freeze([]),
   });
 }

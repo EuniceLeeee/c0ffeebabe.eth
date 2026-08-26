@@ -56,6 +56,7 @@ const ERC20 = new ethers.Interface([
 await siblingFailureDoesNotSuppressHealthyOffer();
 await successfulEmptyGenerationPublishesTombstone();
 await failedEmptyGenerationPreservesCurrentPublication();
+await omittedRequestedAssetFailsClosed();
 await publicationFailureCannotLeakPreparedOffers();
 await centralPlanBoundaryAcceptsOnlyOwnedBorrowAndDeclaredRepayment();
 await preparedOfferAuthorityRejectsEveryStructuralEscape();
@@ -224,6 +225,56 @@ async function failedEmptyGenerationPreservesCurrentPublication(): Promise<void>
   assert.equal(result.publication, null);
   assert.equal(publishCalls, 0);
   assert.strictEqual(observedCurrent, current);
+}
+
+async function omittedRequestedAssetFailsClosed(): Promise<void> {
+  const incompletePlugin = defineFundingFamily({
+    manifest: morphoFlashManifest,
+    discovery: morphoFlashDiscovery,
+    funding: {
+      liquidity: {
+        sources: (assets) =>
+          morphoFlashFunding.liquidity.sources(assets.slice(0, 1)),
+        program: {
+          requirements: (input) =>
+            morphoFlashFunding.liquidity.program.requirements(input),
+          buildRequests: (input) =>
+            morphoFlashFunding.liquidity.program.buildRequests(input),
+          decode: (input) =>
+            morphoFlashFunding.liquidity.program.decode(input),
+        },
+        deriveOffers: (input) =>
+          morphoFlashFunding.liquidity.deriveOffers(input),
+      },
+      repayment: {
+        target: morphoFlashFunding.repayment.target,
+        liquidityHolder: morphoFlashFunding.repayment.liquidityHolder,
+        mode: morphoFlashFunding.repayment.mode,
+        paramShape: morphoFlashFunding.repayment.paramShape,
+        buildBorrowFragment: (input) =>
+          morphoFlashFunding.repayment.buildBorrowFragment(input),
+        buildRepaymentFragment: (input) =>
+          morphoFlashFunding.repayment.buildRepaymentFragment(input),
+      },
+    },
+    actionAdapters: [morphoFlashFamilyOwnedAction],
+  });
+  const result = await executeFundingFamilyLiquidity({
+    family: loadedFunding(incompletePlugin),
+    assets: [TOKEN_A, TOKEN_B],
+    source: SOURCE,
+    generation: SOURCE.generation,
+    runtime: runtimeHarness({ balances: new Map() }).runtime,
+    publisher: { publish() {} },
+  });
+  assert.deepEqual(result.offers, []);
+  assert.equal(result.publication, null);
+  assert.equal(result.outcomes.length, 1);
+  assert.equal(result.outcomes[0]?.status, "failed");
+  assert.match(
+    result.outcomes[0]?.reasonCode ?? "",
+    /Funding sources omitted a requested asset/,
+  );
 }
 
 async function centralPlanBoundaryAcceptsOnlyOwnedBorrowAndDeclaredRepayment(): Promise<void> {
