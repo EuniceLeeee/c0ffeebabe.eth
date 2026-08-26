@@ -326,8 +326,7 @@ function assertGraphPayload(
 function assertNoSecretMaterial(value: unknown): void {
   const serialized = blindProductionCanonicalJson(value);
   const keys = collectKeys(value);
-  const secretName = /(?:private|secret|mnemonic|password|api|access|signer|wallet)[-_]?(?:key|token)?/i;
-  if (keys.some((key) => secretName.test(key))) {
+  if (keys.some(isSecretShapedKey)) {
     throw new Error("resolved config contains a secret-shaped field");
   }
   if (/0x[0-9a-f]{64}/i.test(serialized)) {
@@ -340,6 +339,25 @@ function assertNoSecretMaterial(value: unknown): void {
       throw new Error("resolved config contains credential-bearing URL material");
     }
   }
+}
+
+function isSecretShapedKey(key: string): boolean {
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 0);
+  const sensitiveWords = new Set([
+    "access",
+    "api",
+    "mnemonic",
+    "password",
+    "private",
+    "secret",
+    "signer",
+    "wallet",
+  ]);
+  return words.some((word) => sensitiveWords.has(word));
 }
 
 function collectKeys(value: unknown): string[] {

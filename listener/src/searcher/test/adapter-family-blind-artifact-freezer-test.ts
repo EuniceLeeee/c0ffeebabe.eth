@@ -52,6 +52,27 @@ import {
 const root = mkdtempSync(resolve(tmpdir(), "blind-artifact-freezer-"));
 
 async function main(): Promise<void> {
+  const capitalConfig = { minCapitalFraction: 0.001 };
+  assert.doesNotThrow(
+    () => createBlindProductionArtifact("resolved-config", {
+      configLoaderFingerprint: hash("capital-config-loader"),
+      effectiveConfig: capitalConfig,
+      effectiveConfigSha256:
+        blindProductionArtifactPayloadHash(capitalConfig),
+    }),
+    "capital must not be mistaken for an API credential",
+  );
+  const secretConfig = { apiKey: "redacted" };
+  assert.throws(
+    () => createBlindProductionArtifact("resolved-config", {
+      configLoaderFingerprint: hash("secret-config-loader"),
+      effectiveConfig: secretConfig,
+      effectiveConfigSha256:
+        blindProductionArtifactPayloadHash(secretConfig),
+    }),
+    /secret-shaped field/,
+    "an actual API credential field must remain fail closed",
+  );
   const primary = {
     base: anchor(99, "primary-base"),
     source: anchor(100, "primary-source"),
