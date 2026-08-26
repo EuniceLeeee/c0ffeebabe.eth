@@ -218,6 +218,10 @@ assert.match(
   replaySource,
   /SEARCHER_BLIND_USE_INCUMBENT_READY:\s*"1"/,
 );
+assert.match(
+  replaySource,
+  /SEARCHER_BLIND_PREPARE_BUDGET_MS:\s*String\(prepareBudgetMs\)/,
+);
 assert.doesNotMatch(replaySource, /SEARCHER_BLOCKSCAN_MAX_HOPS:\s*"6"/);
 const negativeBase = spawnSync(
   process.execPath,

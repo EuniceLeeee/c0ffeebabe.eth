@@ -49,6 +49,9 @@ const timeoutMs = Number(process.env.BLIND_TIMEOUT_MS ?? "3600000");
 const prepareMaxAttempts = Number(
   process.env.BLIND_PREPARE_MAX_ATTEMPTS ?? "5",
 );
+const prepareBudgetMs = Number(
+  process.env.BLIND_PREPARE_BUDGET_MS ?? "600000",
+);
 const issuerKeyPath = process.env.BLIND_BACKEND_ISSUER_KEY_PATH ??
   "/root/.mev-historical-gap-hmac-v1";
 const anvilBin = process.env.BLIND_ANVIL_BIN ?? "/usr/local/bin/anvil";
@@ -67,6 +70,9 @@ if (
   !Number.isSafeInteger(prepareMaxAttempts) ||
   prepareMaxAttempts < 1 ||
   prepareMaxAttempts > 10 ||
+  !Number.isSafeInteger(prepareBudgetMs) ||
+  prepareBudgetMs < 1_000 ||
+  prepareBudgetMs > timeoutMs ||
   (prefixThroughIndex !== null && (
     !Number.isSafeInteger(prefixThroughIndex) ||
     prefixThroughIndex < 0 ||
@@ -592,6 +598,7 @@ try {
     SEARCHER_BLIND_RAW_AUDIT: "1",
     SEARCHER_BLIND_INSTALL_FORK_BOTVM: "1",
     SEARCHER_BLIND_USE_INCUMBENT_READY: "1",
+    SEARCHER_BLIND_PREPARE_BUDGET_MS: String(prepareBudgetMs),
     SEARCHER_DRY_RUN: "1",
     SEARCHER_ENABLE_BLOCK_SCAN: "1",
     SEARCHER_BLOCKSCAN_SUBMIT: "1",
