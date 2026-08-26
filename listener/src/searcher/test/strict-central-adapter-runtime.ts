@@ -182,6 +182,41 @@ async function main(): Promise<void> {
   assert.equal(revertResults[1]!.completion, "reverted-as-declared");
   assert.equal(revertResults[1]!.data, "0xdeadbeef");
 
+  let directProducerCalls = 0;
+  let batchedProducerCalls = 0;
+  const producerBatchRuntime = createStrictCentralAdapterRuntime({
+    provider: {
+      ...mockProvider(),
+      async call() {
+        directProducerCalls++;
+        throw new Error("producer eth_call bypassed batch transport");
+      },
+    } as never,
+    producerCallBackend: Object.freeze({
+      async call() {
+        batchedProducerCalls++;
+        return "0x1234";
+      },
+    }),
+    generationFence: Object.freeze({ assertCurrent() {} }),
+  });
+  const producerBatchExecutor = producerBatchRuntime.scheduler.issueExecutor({
+    schedule: Object.freeze({ rethLane: "producer-bulk" }),
+  } as never);
+  const producerBatchResults = await producerBatchExecutor.executor.execute({
+    requests: Object.freeze([Object.freeze({
+      id: "producer-batch-call",
+      kind: "eth-call" as const,
+      to: WSTETH,
+      data: "0x12345678",
+      completion: "return-data" as const,
+    })]),
+    source: SOURCE,
+  } as never);
+  assert.equal(producerBatchResults[0]!.ok, true);
+  assert.equal(batchedProducerCalls, 1);
+  assert.equal(directProducerCalls, 0);
+
   const failingSimulatorRuntime = createStrictCentralAdapterRuntime({
     provider: mockProvider() as never,
     generationFence: Object.freeze({ assertCurrent() {} }),

@@ -123,6 +123,12 @@ export function createStrictCentralAdapterRuntime(input: {
    * code and is never used for pricing/identity work.
    */
   readonly exactCallBackend?: Pick<StateBackend, "call">;
+  /**
+   * Optional source-pinned batch transport for producer pricing eth_call
+   * work. It changes only physical transport; the central runtime retains
+   * scheduling, decoding, publication and generation authority.
+   */
+  readonly producerCallBackend?: Pick<StateBackend, "call">;
   /** Upper bound on requests admitted per work batch; default 512. */
   readonly maxRequestsPerBatch?: number;
   /**
@@ -156,6 +162,17 @@ export function createStrictCentralAdapterRuntime(input: {
         },
         execute: async (execution) => {
           const startedAtMs = Date.now();
+          // issueExecutor is the central contract entry; direct harness calls may
+          // omit schedule entirely, so resolve the lane defensively.
+          const rethLane = (issueInput.schedule as
+            Partial<CentralScheduleDecision> | undefined)?.rethLane ?? "exact";
+          const producerCallBackend =
+            rethLane === "producer-bulk" || rethLane === "producer-critical"
+              ? input.producerCallBackend
+              : undefined;
+          const callBackend = rethLane === "exact"
+            ? input.exactCallBackend
+            : producerCallBackend;
           /*
            * Simulation requests hit the revm-sim daemon (not reth) and must
            * NOT consume a reth transport permit; only eth-call / get-code /
@@ -172,9 +189,7 @@ export function createStrictCentralAdapterRuntime(input: {
             request,
             execution.source,
             issueInput.control,
-            rethLane === "exact" && input.exactCallBackend !== undefined
-              ? input.exactCallBackend
-              : undefined,
+            callBackend,
           );
           const rethBound = execution.requests.filter((request) =>
             request.kind !== "state-override-simulation" &&
@@ -185,10 +200,6 @@ export function createStrictCentralAdapterRuntime(input: {
             request.kind === "effect-delta-simulation"
           );
           const transportScheduler = input.transportScheduler;
-          // issueExecutor is the central contract entry; direct harness calls may
-          // omit schedule entirely, so resolve the lane defensively.
-          const rethLane = (issueInput.schedule as
-            Partial<CentralScheduleDecision> | undefined)?.rethLane ?? "exact";
           const rethStartedAtMs = Date.now();
           let queueWaitMs = 0;
           /*
@@ -213,12 +224,11 @@ export function createStrictCentralAdapterRuntime(input: {
            * behind the same residual slot and defeats the batching path.
            * Code/storage reads still use the ordinary central permit.
            */
-          const exactBatchOwned = rethLane === "exact" &&
-            input.exactCallBackend !== undefined;
-          const batchedExact = exactBatchOwned
+          const callBatchOwned = callBackend !== undefined;
+          const batchedCalls = callBatchOwned
             ? rethBound.filter((request) => request.kind === "eth-call")
             : [];
-          const directReth = exactBatchOwned
+          const directReth = callBatchOwned
             ? rethBound.filter((request) => request.kind !== "eth-call")
             : rethBound;
           const directResults = directReth.length === 0
@@ -234,9 +244,9 @@ export function createStrictCentralAdapterRuntime(input: {
                     return Promise.all(directReth.map(runRequest));
                   },
                 );
-          const batchedResults = batchedExact.length === 0
+          const batchedResults = batchedCalls.length === 0
             ? []
-            : await Promise.all(batchedExact.map(runRequest));
+            : await Promise.all(batchedCalls.map(runRequest));
           const rethResults = [...directResults, ...batchedResults];
           if (rethBound.length > 0) {
             const elapsedMs = Date.now() - rethStartedAtMs;

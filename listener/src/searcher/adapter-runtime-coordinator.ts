@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import type { StateBackend } from "../shared/state/state-backend.js";
 import {
   BlockScanStateCoordinator,
   type BlockScanLaggingTopologyRefreshMode,
@@ -209,6 +210,8 @@ export interface PrepareAdapterRuntimeInput {
    * filter keeps enumeration over this block's venues).
    */
   readonly touchedPools?: ReadonlySet<string>;
+  /** Optional source-pinned physical transport for producer eth_call batching. */
+  readonly pricingCallBackend?: Pick<StateBackend, "call">;
   readonly signal?: AbortSignal;
   /**
    * Current-N exact/final-sim workers (for example isolated Anvil forks).

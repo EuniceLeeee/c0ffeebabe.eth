@@ -195,6 +195,7 @@ import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
 import { HybridLiveBackend } from "./live-backends/hybrid-live-backend.js";
 import { RethTransportScheduler } from "./reth-transport-scheduler.js";
+import { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 import { replayVictimSwapOnAnvil } from "./live-backends/rpc-victim-replay.js";
 import {
   eventPostImpactSeedForSettled,
@@ -781,6 +782,13 @@ async function main(): Promise<void> {
     Number.isSafeInteger(blindPrepareBudgetRaw) && blindPrepareBudgetRaw > 0
       ? blindPrepareBudgetRaw
       : 120_000;
+  const blindBasePricingRpcUrl =
+    process.env.SEARCHER_BLIND_BASE_PRICING_RPC_URL;
+  if (blindBasePricingRpcUrl !== undefined && !blindProductionAudit) {
+    throw new Error(
+      "SEARCHER_BLIND_BASE_PRICING_RPC_URL is replay-only",
+    );
+  }
   if (blindProductionAudit && !config.dryRun) {
     throw new Error("blind production audit requires SEARCHER_DRY_RUN=1");
   }
@@ -1654,6 +1662,7 @@ async function main(): Promise<void> {
     fundingAssets: readonly string[] = flashTokens,
     exactCallBackend?: Pick<StateBackend, "call">,
     touchedPools?: ReadonlySet<string>,
+    pricingCallBackend?: Pick<StateBackend, "call">,
   ): Promise<StrictProductionRuntimeSession> => {
     const fundingKey = [...new Set(fundingAssets.map((token) =>
       token.toLowerCase()
@@ -1674,7 +1683,8 @@ async function main(): Promise<void> {
       `${source.generation}:${fundingFingerprint}:${touchedFingerprint}`;
     // An exact backend is pass-scoped and is closed at the end of the block;
     // never let a cached session retain a backend from an earlier pass.
-    const cacheable = exactCallBackend === undefined;
+    const cacheable = exactCallBackend === undefined &&
+      pricingCallBackend === undefined;
     const incumbent = cacheable ? strictSessionCache.get(key) : undefined;
     if (incumbent !== undefined) {
       console.log(
@@ -1707,6 +1717,9 @@ async function main(): Promise<void> {
       verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
       executor: config.botvmAddress,
       ...(exactCallBackend === undefined ? {} : { exactCallBackend }),
+      ...(pricingCallBackend === undefined
+        ? {}
+        : { producerCallBackend: pricingCallBackend }),
       // Shared physical-transport permit scheduler: exact/discovery share the
       // residual capacity after the N-1 producer reserve, so exact probes can
       // never starve the producer chain (same contract as the legacy runtime).
@@ -2227,13 +2240,43 @@ async function main(): Promise<void> {
       "base-graph-view",
       blindGraphArtifactPayload(baseGraph),
     );
-    const baseRuntime = await currentRuntimeCoordinator!.prepare({
-      graph: baseGraph,
-      // Blind prewarm funding surface is the solidified universe as well;
-      // graph-token expansion re-creates the balanceOf blowout.
-      fundingTokens: [...new Set(flashTokens)],
-      deadlineAtMs: Date.now() + blindPrepareBudgetMs,
-    });
+    const basePricingBackend = blindBasePricingRpcUrl === undefined
+      ? null
+      : new PinnedRethQuoteBackend(
+          blindBasePricingRpcUrl,
+          control.base.hash,
+          {
+            signal: blockScanRuntimeAbort.signal,
+            deadlineAtMs: Date.now() + blindPrepareBudgetMs,
+            maxBatchSize: Math.max(
+              1,
+              Number(process.env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_SIZE ?? "32"),
+            ),
+            maxConcurrentBatches: Math.max(
+              1,
+              Number(
+                process.env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ??
+                  "4",
+              ),
+            ),
+          },
+        );
+    const baseRuntime = await (async () => {
+      try {
+        return await currentRuntimeCoordinator!.prepare({
+          graph: baseGraph,
+          // Blind prewarm funding surface is the solidified universe as well;
+          // graph-token expansion re-creates the balanceOf blowout.
+          fundingTokens: [...new Set(flashTokens)],
+          deadlineAtMs: Date.now() + blindPrepareBudgetMs,
+          ...(basePricingBackend === null
+            ? {}
+            : { pricingCallBackend: basePricingBackend }),
+        });
+      } finally {
+        await basePricingBackend?.closeAndDrain();
+      }
+    })();
     if (baseRuntime.status === "incomplete") {
       throw new Error(
         `blind production N-1 prewarm is ${baseRuntime.status}: ` +

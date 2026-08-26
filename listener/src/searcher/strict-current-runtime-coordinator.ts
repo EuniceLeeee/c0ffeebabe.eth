@@ -45,6 +45,7 @@ type StrictSessionProvider = (
   fundingAssets?: readonly string[],
   exactCallBackend?: Pick<StateBackend, "call">,
   touchedPools?: ReadonlySet<string>,
+  pricingCallBackend?: Pick<StateBackend, "call">,
 ) => Promise<StrictProductionRuntimeSession>;
 
 /**
@@ -114,6 +115,7 @@ export class StrictCurrentRuntimeCoordinator
       input.fundingTokens,
       undefined,
       input.touchedPools,
+      input.pricingCallBackend,
     );
     const executionStartedAtMs = Date.now();
     const executionPromise = input.prepareExecution === undefined
