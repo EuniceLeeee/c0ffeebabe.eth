@@ -7,6 +7,9 @@ import {
   FAMILY_CAPABILITY_NAMES,
   type FamilyCapabilityCatalog,
 } from "../venues/family-capability-catalog.js";
+import {
+  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+} from "../venues/production-family-composition.js";
 
 function main(): void {
   const first = productionFamilyStartupManifest();
@@ -29,16 +32,27 @@ function main(): void {
       family.declaredAbsentCapabilities.length ===
       FAMILY_CAPABILITY_NAMES.length
   ));
-  const funding = first.families.find((family) =>
-    family.familyId === "flash-loan:morpho"
-  )!;
-  assert.deepEqual(funding.applicableCapabilities, ["capture", "funding"]);
-  const credit = first.families.find((family) =>
-    family.familyId === "credit:fluid"
-  )!;
-  assert(credit.applicableCapabilities.includes("credit"));
-  assert(credit.declaredAbsentCapabilities.includes("pricing"));
-  assert(credit.declaredAbsentCapabilities.includes("exact"));
+  const catalogFamilies = new Map(
+    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll().map(
+      (family) => [family.plugin.manifest.familyId, family] as const,
+    ),
+  );
+  for (const family of first.families) {
+    const catalogFamily = catalogFamilies.get(family.familyId);
+    assert(catalogFamily);
+    assert.deepEqual(
+      family.applicableCapabilities,
+      FAMILY_CAPABILITY_NAMES.filter((capability) =>
+        catalogFamily.applicableCapabilities.includes(capability)
+      ),
+    );
+    assert.deepEqual(
+      family.declaredAbsentCapabilities,
+      FAMILY_CAPABILITY_NAMES.filter((capability) =>
+        !catalogFamily.applicableCapabilities.includes(capability)
+      ),
+    );
+  }
 
   const fakeFamily = {
     sourceFile: "fixture.ts",

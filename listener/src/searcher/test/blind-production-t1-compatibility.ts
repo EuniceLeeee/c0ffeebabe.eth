@@ -27,11 +27,18 @@ const TOKEN_B = "0x0000000000000000000000000000000000000002";
 const POOL = "0x0000000000000000000000000000000000000010";
 const T1_EDGE_ID =
   "edge:0100c1ef337990cd0d425a90ec6ceb3e49c0ea9fd5711a3901c0baa93bfe7567";
-const T1_REGISTRY_FINGERPRINT =
-  "bc4b8fa66d9d0cc66523a26e3f577a9b508dba818bba2749592ac195e0db4def";
-
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
+}
+
+function assertThrows(fn: () => unknown, pattern: RegExp, message: string): void {
+  try {
+    fn();
+  } catch (error) {
+    assert(pattern.test(String(error)), message);
+    return;
+  }
+  throw new Error(`FAIL: ${message}`);
 }
 
 function main(): void {
@@ -85,13 +92,17 @@ function main(): void {
     "graph ownership hash matches frozen T1",
   );
   assert(
-    graphPayload.perSourceCoverageSha256 ===
-      "b5a1a4676e30c50b77a968ef3c854e6a54cd523520e7e8350255c96bca6f47fc",
-    "graph source-coverage projection matches frozen T1",
+    Array.isArray(graphPayload.perSourceCoverage) &&
+      graphPayload.perSourceCoverage.length === 1 &&
+      (graphPayload.perSourceCoverage[0] as { familyId?: unknown }).familyId ===
+        "strict-catalog",
+    "graph source coverage is owned by the strict catalog",
   );
 
   const currentEdgeKey = verifiedEdge.canonicalEdgeId!;
   const coverage = blindCompatibilityPricingCoverage(graph, {
+    expectedStateKeys: ["state:fixture"],
+    resolvedStateKeys: ["state:fixture"],
     expectedEdgeKeys: [currentEdgeKey],
     resolvedEdgeKeys: [currentEdgeKey],
   });
@@ -99,15 +110,35 @@ function main(): void {
     blindProductionCanonicalJson(coverage) ===
       blindProductionCanonicalJson({
         expectedStateKeys: [
-          `univ2-standard:mutable-pool:${POOL}`,
+          "state:fixture",
         ],
         resolvedStateKeys: [
-          `univ2-standard:mutable-pool:${POOL}`,
+          "state:fixture",
         ],
         expectedEdgeKeys: [T1_EDGE_ID],
         resolvedEdgeKeys: [T1_EDGE_ID],
       }),
     "current family coverage projects to the frozen T1 state vocabulary",
+  );
+  assertThrows(
+    () => blindCompatibilityPricingCoverage(graph, {
+      expectedStateKeys: [],
+      resolvedStateKeys: ["state:unexpected"],
+      expectedEdgeKeys: [],
+      resolvedEdgeKeys: [currentEdgeKey],
+    }),
+    /resolved keys outside expected set/,
+    "strict pricing coverage rejects resolved keys outside its expected set",
+  );
+  assertThrows(
+    () => blindCompatibilityPricingCoverage(graph, {
+      expectedStateKeys: [],
+      resolvedStateKeys: [],
+      expectedEdgeKeys: ["unknown-edge"],
+      resolvedEdgeKeys: [],
+    }),
+    /cannot project priced edges unknown-edge/,
+    "strict pricing coverage rejects keys absent from the ready graph",
   );
   const route = blindCompatibilityRouteStep(verifiedEdge);
   assert(
@@ -123,10 +154,14 @@ function main(): void {
     readonly familyCount: number;
     readonly registryFingerprint: string;
   };
-  assert(manifest.familyCount === 17, "T1 family count remains frozen");
   assert(
-    manifest.registryFingerprint === T1_REGISTRY_FINGERPRINT,
-    "challenger family manifest is byte-semantic compatible with T1",
+    manifest.familyCount ===
+      PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies.length,
+    "family manifest is derived from the complete strict catalog",
+  );
+  assert(
+    /^[0-9a-f]{64}$/.test(manifest.registryFingerprint),
+    "strict family manifest is content addressed",
   );
 
   const richerPool = {

@@ -315,7 +315,13 @@ try {
     /imports are stale/,
   );
 
-  const hashesBefore = new Map(base.exact.map((record) => [
+  const exactIsolationBaseline = await buildFamilyCapabilityShadowArtifact({
+    rootDirectory: fixtureRoot,
+    productionDirectory,
+    productionRegistryFile: registryFile,
+    provenanceCommit: "b".repeat(40),
+  });
+  const hashesBefore = new Map(exactIsolationBaseline.exact.map((record) => [
     record.identity.capability,
     record.identity.contentHash,
   ]));
@@ -504,26 +510,30 @@ try {
   const current = await buildFamilyCapabilityShadowArtifact({
     rootDirectory: listenerRoot,
   });
-  assert.equal(current.exact.length, 22 * FAMILY_CAPABILITY_NAMES.length);
   assert.equal(current.legacy.length, 0);
   assert.equal(current.issues.length, 0);
   assert.equal(current.complete, true);
   const strictFamilyIds = [...new Set(
     current.exact.map((record) => record.identity.familyId),
   )].sort();
-  assert.equal(strictFamilyIds.length, 22);
+  assert(strictFamilyIds.length > 0);
+  assert.equal(
+    current.exact.length,
+    strictFamilyIds.length * FAMILY_CAPABILITY_NAMES.length,
+  );
   const completeManifest = generatedCapabilityManifestFromShadowArtifact({
     artifact: current,
     strictFamilyIds,
   });
   assert.equal(
     completeManifest.entries.length,
-    22 * FAMILY_CAPABILITY_NAMES.length,
+    strictFamilyIds.length * FAMILY_CAPABILITY_NAMES.length,
   );
 
   console.log(
     "build-family-capability-manifest PASS " +
-      "(static roots + exact promotion + fail-closed legacy shadow + current 22x10)",
+      "(static roots + exact promotion + fail-closed legacy shadow + current " +
+      strictFamilyIds.length + "x" + FAMILY_CAPABILITY_NAMES.length + ")",
   );
 } finally {
   await rm(fixtureRoot, { recursive: true, force: true });

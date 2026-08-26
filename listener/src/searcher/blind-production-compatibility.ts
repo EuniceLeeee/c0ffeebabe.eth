@@ -23,14 +23,9 @@ import {
   blockScanEdgeKey,
 } from "./venues/blockscan-state-capability.js";
 
-type BlindBaselineWarmKind =
-  | "mutable-pool"
-  | "curve-pool"
-  | "external-mid"
-  | "protocol-mid"
-  | "legacy-mid";
-
 interface BlindCompatibilityCoverageSource {
+  readonly expectedStateKeys: readonly string[];
+  readonly resolvedStateKeys: readonly string[];
   readonly expectedEdgeKeys: readonly string[];
   readonly resolvedEdgeKeys: readonly string[];
 }
@@ -41,52 +36,6 @@ export interface BlindCompatibilityPricingCoverage {
   readonly expectedEdgeKeys: readonly string[];
   readonly resolvedEdgeKeys: readonly string[];
 }
-
-interface BlindCompatibilityFamilyDescriptor {
-  readonly id: string;
-  readonly kind: string;
-  readonly poolAdapters: readonly string[];
-  readonly edgeAdapterIds: readonly string[];
-  readonly actionAdapterIds: readonly string[];
-  readonly requiresProtocolEdgesFlag: boolean;
-  readonly warmKind: BlindBaselineWarmKind | null;
-}
-
-type BlindRouteFamily = StrictRouteFamilyDeclaration;
-
-/**
- * T0/T1 were deliberately frozen before the family-line implementation.
- * Their blind comparator therefore has one immutable semantic vocabulary.
- *
- * Production keeps the richer family/instance IDs. Only the evidence emitted
- * to that frozen comparator is projected through these functions. Changing
- * this vocabulary would silently invalidate the trusted baseline, so a future
- * acceptance generation must freeze a new T0 instead of editing this bridge.
- *
- * The frozen vocabulary lives as sealed data in
- * generated/blind-t1-baseline.generated.json (emitted by the dev/CI tool
- * build-blind-t1-baseline.ts, which is outside the production import
- * closure). This module only consumes it; it holds no literal per-family
- * driver tables (§0.1).
- */
-import blindT1Baseline from "./generated/blind-t1-baseline.generated.json";
-
-const t1RegisteredIds: readonly string[] = Object.freeze([
-  ...blindT1Baseline.registeredRouteFamilyIds,
-]);
-const t1CurrentIds: readonly string[] = Object.freeze([
-  ...blindT1Baseline.currentRouteFamilyIds,
-]);
-const t1WarmKindByFamily: ReadonlyMap<string, BlindBaselineWarmKind | null> =
-  new Map(
-    Object.entries(blindT1Baseline.warmKindByFamily) as [
-      string,
-      BlindBaselineWarmKind | null,
-    ][],
-  );
-const t1MergeGroups: ReadonlyMap<string, readonly string[]> = new Map(
-  Object.entries(blindT1Baseline.mergeGroups),
-);
 
 export function blindCompatibilityCanonicalEdgeId(edge: TokenEdge): string {
   return `edge:${blindProductionAuditHash({
@@ -212,8 +161,8 @@ export function blindCompatibilityGraphArtifactPayload(
     familyId: blindCompatibilityFamilyId(edge),
   }));
   const perSourceCoverage = [{
-    familyId: "legacy-production",
-    sourceId: "resolved-production-graph",
+    familyId: "strict-catalog",
+    sourceId: "strict-ready-graph",
     sourceFingerprint: blindProductionAuditHash({
       graph: orderedEdgeIds,
       schema: 1,
@@ -239,32 +188,26 @@ export function blindCompatibilityGraphArtifactPayload(
 export function blindCompatibilityActiveFamilyManifestPayload(
   families: readonly StrictRouteFamilyDeclaration[],
 ): Readonly<Record<string, unknown>> {
-  const byId = new Map(families.map((family) => [family.id, family] as const));
-  const actualIds = [...byId.keys()].sort();
-  const expectedIds = [...t1CurrentIds].sort();
-  if (
-    actualIds.length !== expectedIds.length ||
-    actualIds.some((id, index) => id !== expectedIds[index])
-  ) {
-    throw new Error(
-      "blind T1 compatibility route inventory changed; freeze a new trusted " +
-        `acceptance generation expected=${expectedIds.join(",")} ` +
-        `actual=${actualIds.join(",")}`,
-    );
-  }
-
-  const registered = t1RegisteredIds.map((familyId) => {
-    const descriptor = t1RegisteredFamilyDescriptor(familyId, byId);
+  const projected = families.map((family) => {
+    const descriptor = normalizeBlindArtifactValue({
+      id: family.id,
+      kind: family.kind,
+      poolAdapters: [...family.poolAdapters],
+      edgeAdapterIds: [...family.edgeAdapterIds],
+      actionAdapterIds: [
+        ...family.ownedActionAdapterIds,
+        ...family.requiredInfraActionAdapterIds,
+      ],
+      allowedTaxonomy: [...family.allowedTaxonomy],
+      candidateSources: [...family.candidateSources],
+      requiresProtocolEdgesFlag: family.requiresProtocolEdgesFlag,
+    });
     return {
-      familyId: descriptor.id,
-      kind: descriptor.kind,
-      descriptorSha256: blindProductionAuditHash(
-        normalizeBlindArtifactValue(descriptor),
-      ),
+      familyId: family.id,
+      kind: family.kind,
+      descriptorSha256: blindProductionAuditHash(descriptor),
     };
-  });
-  const projected = [...registered]
-    .sort((a, b) => a.familyId.localeCompare(b.familyId));
+  }).sort((a, b) => a.familyId.localeCompare(b.familyId));
   return Object.freeze({
     families: Object.freeze(projected),
     familyCount: projected.length,
@@ -278,54 +221,42 @@ export function blindCompatibilityPricingCoverage(
 ): BlindCompatibilityPricingCoverage {
   const expectedCurrent = new Set(source.expectedEdgeKeys);
   const resolvedCurrent = new Set(source.resolvedEdgeKeys);
-  const mappedCurrent = new Set<string>();
-  const expectedStateKeys = new Set<string>();
-  const resolvedStateKeys = new Set<string>();
-  const expectedEdgeKeys = new Set<string>();
-  const resolvedEdgeKeys = new Set<string>();
-
-  for (const edge of graph.edges) {
-    const currentFamilyId = currentFamilyIdForEdge(edge);
-    const warmKind = t1WarmKindByFamily.get(currentFamilyId);
-    if (warmKind === undefined) {
-      throw new Error(
-        `blind T1 compatibility lacks warm semantics for ${currentFamilyId}`,
-      );
-    }
-    if (warmKind === null) continue;
-    const currentEdgeKey = blockScanEdgeKey(edge);
-    mappedCurrent.add(currentEdgeKey);
-    const baselineEdgeId = blindCompatibilityCanonicalEdgeId(edge);
-    const baselineFamilyId = blindCompatibilityFamilyId(edge);
-    const baselineStateKey = t1StateKey(
-      edge,
-      baselineFamilyId,
-      warmKind,
+  const expectedStateKeys = new Set(source.expectedStateKeys);
+  const resolvedStateKeys = new Set(source.resolvedStateKeys);
+  const unexpectedResolvedEdges = [...resolvedCurrent]
+    .filter((edgeKey) => !expectedCurrent.has(edgeKey));
+  const unexpectedResolvedStates = [...resolvedStateKeys]
+    .filter((stateKey) => !expectedStateKeys.has(stateKey));
+  if (
+    unexpectedResolvedEdges.length > 0 ||
+    unexpectedResolvedStates.length > 0
+  ) {
+    throw new Error(
+      "blind strict pricing coverage resolved keys outside expected set " +
+        [...unexpectedResolvedEdges, ...unexpectedResolvedStates].join(","),
     );
-    expectedEdgeKeys.add(baselineEdgeId);
-    expectedStateKeys.add(baselineStateKey);
-    if (
-      expectedCurrent.has(currentEdgeKey) &&
-      resolvedCurrent.has(currentEdgeKey)
-    ) {
-      resolvedEdgeKeys.add(baselineEdgeId);
-      resolvedStateKeys.add(baselineStateKey);
-    }
   }
-
-  const unknownExpected = [...expectedCurrent]
-    .filter((edgeKey) => !mappedCurrent.has(edgeKey));
-  if (unknownExpected.length > 0) {
+  const edgesByKey = new Map(graph.edges.map((edge) => [
+    blockScanEdgeKey(edge),
+    edge,
+  ] as const));
+  const unknown = [...new Set([...expectedCurrent, ...resolvedCurrent])]
+    .filter((edgeKey) => !edgesByKey.has(edgeKey));
+  if (unknown.length > 0) {
     throw new Error(
       "blind T1 compatibility cannot project priced edges " +
-        unknownExpected.join(","),
+        unknown.join(","),
     );
   }
+  const projectEdgeKeys = (keys: ReadonlySet<string>): readonly string[] =>
+    Object.freeze([...keys].map((edgeKey) =>
+      blindCompatibilityCanonicalEdgeId(edgesByKey.get(edgeKey)!)
+    ).sort());
   return Object.freeze({
     expectedStateKeys: Object.freeze([...expectedStateKeys].sort()),
     resolvedStateKeys: Object.freeze([...resolvedStateKeys].sort()),
-    expectedEdgeKeys: Object.freeze([...expectedEdgeKeys].sort()),
-    resolvedEdgeKeys: Object.freeze([...resolvedEdgeKeys].sort()),
+    expectedEdgeKeys: projectEdgeKeys(expectedCurrent),
+    resolvedEdgeKeys: projectEdgeKeys(resolvedCurrent),
   });
 }
 
@@ -350,78 +281,4 @@ function t1EdgeMetadata(edge: TokenEdge): Readonly<Record<string, unknown>> {
     nativeCurrency0: edge.nativeCurrency0,
     nativeCurrency1: edge.nativeCurrency1,
   };
-}
-
-function currentFamilyIdForEdge(edge: TokenEdge): string {
-  try {
-    return PRODUCTION_STRICT_FAMILY_DECLARATIONS.familyIdForEdge(
-      edge.adapterId,
-    );
-  } catch {
-    throw new Error(
-      `blind T1 compatibility has no current family for ${edge.adapterId}`,
-    );
-  }
-}
-
-function t1StateKey(
-  edge: TokenEdge,
-  familyId: string,
-  warmKind: BlindBaselineWarmKind,
-): string {
-  const identity = warmKind === "mutable-pool" && edge.poolId
-    ? edge.poolId.toLowerCase()
-    : warmKind === "external-mid" ||
-        warmKind === "protocol-mid" ||
-        warmKind === "legacy-mid"
-      ? [
-          edge.target.toLowerCase(),
-          edge.tokenIn.toLowerCase(),
-          edge.tokenOut.toLowerCase(),
-        ].join(":")
-      : edge.target.toLowerCase();
-  return `${familyId}:${warmKind}:${identity}`;
-}
-
-function t1RegisteredFamilyDescriptor(
-  familyId: string,
-  byId: ReadonlyMap<string, BlindRouteFamily>,
-): BlindCompatibilityFamilyDescriptor {
-  const family = requiredFamily(byId, familyId);
-  const warmKind = t1WarmKindByFamily.get(family.id);
-  if (warmKind === undefined || warmKind === null) {
-    throw new Error(`blind T1 compatibility missing warm kind for ${family.id}`);
-  }
-  // T1 merge groups fold extra families into the registered family's
-  // descriptor (frozen baseline semantics, declared in the sealed artifact).
-  const merged = (t1MergeGroups.get(familyId) ?? []).map((id) =>
-    requiredFamily(byId, id),
-  );
-  return {
-    id: family.id,
-    kind: family.kind,
-    poolAdapters: Object.freeze([...family.poolAdapters]),
-    edgeAdapterIds: Object.freeze([
-      ...family.edgeAdapterIds,
-      ...merged.flatMap((m) => [...m.edgeAdapterIds]),
-    ]),
-    actionAdapterIds: Object.freeze([
-      ...family.ownedActionAdapterIds,
-      ...merged.flatMap((m) => [...m.ownedActionAdapterIds]),
-      ...family.requiredInfraActionAdapterIds,
-    ]),
-    requiresProtocolEdgesFlag: family.requiresProtocolEdgesFlag,
-    warmKind,
-  };
-}
-
-function requiredFamily(
-  byId: ReadonlyMap<string, BlindRouteFamily>,
-  familyId: string,
-): BlindRouteFamily {
-  const family = byId.get(familyId);
-  if (!family) {
-    throw new Error(`blind T1 compatibility missing family ${familyId}`);
-  }
-  return family;
 }

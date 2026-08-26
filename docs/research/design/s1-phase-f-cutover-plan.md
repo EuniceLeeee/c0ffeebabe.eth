@@ -665,4 +665,37 @@ reason。节点无 `searcher/state/discovery-continuity-checkpoint.json`
 代码上成立。待 reason 到手后修复（本地 dbg-checkpoint.ts 复现 harness
 已就绪）。
 
+## Target-blind production replay strict-catalog closure（2026-08-26）
+
+`fb77f897` 的 standing replay 已完成真实两日 rebuild（21,290 candidates，
+19,820 verified，39,408 graph edges），随后在 production pass 启动前被旧
+`blind-production-compatibility` 的手写 T1 Family 库存拒绝：旧表仍期待已从
+strict catalog 删除的 Family，同时不知道新增的 strict/Funding Family。该
+失败是中央兼容桥缺陷，不是 Family identity/exact/execution 缺陷。
+
+本轮源码修复已完成，历史 production replay 复验尚未完成，因此本节不宣称
+`production_gap_fixed`：
+
+- active Family manifest 直接由调用者传入的 generated strict declarations
+  内容寻址生成；删除 frozen Family id、warm-kind、merge-group 和协议别名表；
+- pricing coverage 直接绑定当前 Ready graph 的 canonical edge，保留生产
+  current-state keys，并对 unknown edge、`resolved ⊄ expected` fail closed；
+- graph source authority 标记为 `strict-catalog/strict-ready-graph`，不再冒充
+  `legacy-production`；
+- 删除不再被读取但仍在 prebuild 执行的
+  `build-blind-t1-baseline.ts` 与生成 JSON；
+- capability/startup-manifest 框架测试改为动态枚举 catalog，当前实测
+  `23 Families × 11 capabilities`，不再写死 22 族或点名 Funding/Credit 族；
+- 完整 listener build、build:live、blockscan scanner 22/22、production
+  boundary、candidate refinement、planner 14/14、Uniswap V4/V4 hook、strict
+  runtime session、universe/checkpoint/production、shadow suite 和
+  `s1-regression-sweep.sh` 17/17 均通过；production import closure 为 543
+  files、0 unresolved imports、0 legacy symbol hits、0 central Family literal
+  branches。
+
+下一门为：提交/push 后节点 fail-closed checkout exact SHA，复用已完成的
+Ready checkpoint 依次跑 standing target-blind、父块 boundary negative、
+full-prefix positive；只有 natural enumeration → exact → execution → mandatory
+finalSim 产出正毛利且 state anchor 因果正确，才能把该 production gap 写成
+fixed。
 

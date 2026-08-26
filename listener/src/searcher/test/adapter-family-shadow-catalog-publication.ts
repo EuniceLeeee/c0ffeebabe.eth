@@ -223,13 +223,15 @@ function stages(input: {
 function anchors(input: {
   readonly canonical: CanonicalSource;
   readonly completeFamilyId?: FamilyId;
+  readonly completeFamilyIds?: readonly FamilyId[];
 }) {
   return CATALOG.listAll().flatMap((family) => {
     const familyId = family.plugin.manifest.familyId;
     const sourceIds = "discovery" in family.plugin
       ? family.plugin.discovery.sources
       : [];
-    const complete = familyId === input.completeFamilyId;
+    const complete = familyId === input.completeFamilyId ||
+      input.completeFamilyIds?.includes(familyId) === true;
     return sourceIds.map((sourceId) => Object.freeze({
       familyId,
       sourceId,
@@ -1170,7 +1172,7 @@ async function main(): Promise<void> {
     stages: fundingStages,
     sourceAnchors: anchors({
       canonical: fundingSource,
-      completeFamilyId: UNIV2_FAMILY_ID,
+      completeFamilyIds: [UNIV2_FAMILY_ID, fundingFamilyId],
     }),
   });
   await publish(fundingRoot, null, fundingPrepared);
@@ -1345,7 +1347,7 @@ async function main(): Promise<void> {
     stages: offersStages,
     sourceAnchors: anchors({
       canonical: offersSource,
-      completeFamilyId: UNIV2_FAMILY_ID,
+      completeFamilyIds: [UNIV2_FAMILY_ID, fundingFamilyId],
     }),
     sourceTransitionProof: transitionProof(
       fundingHarness.transitionIssuer,
@@ -1471,7 +1473,7 @@ async function main(): Promise<void> {
     stages: tombstoneAgainStages,
     sourceAnchors: anchors({
       canonical: tombstoneAgainSource,
-      completeFamilyId: UNIV2_FAMILY_ID,
+      completeFamilyIds: [UNIV2_FAMILY_ID, fundingFamilyId],
     }),
     sourceTransitionProof: transitionProof(
       fundingHarness.transitionIssuer,
