@@ -749,6 +749,17 @@ async function main(): Promise<void> {
     }
   }
   const blindProductionAudit = blindAuditProcessValue === "1";
+  const blindUseIncumbentReadyValue =
+    process.env.SEARCHER_BLIND_USE_INCUMBENT_READY;
+  if (
+    blindUseIncumbentReadyValue !== undefined &&
+    (!blindProductionAudit || blindUseIncumbentReadyValue !== "1")
+  ) {
+    throw new Error(
+      "SEARCHER_BLIND_USE_INCUMBENT_READY=1 is replay-only",
+    );
+  }
+  const blindUseIncumbentReady = blindUseIncumbentReadyValue === "1";
 
   const rpcUrl = liveRpcUrl();
 
@@ -1341,33 +1352,54 @@ async function main(): Promise<void> {
     rpcUrl: config.rpcUrl,
     startupCandidates,
   });
+  let rebuildEnvelope = await rebuildStore.load();
   let readyUniverse;
-  try {
-    readyUniverse = await rebuildUniverse({
-      ...rebuildWiring,
-      store: rebuildStore,
-      runId: process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID ??
-        "strict-startup-rebuild",
-      ...(process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS === undefined
-        ? {}
-        : {
-            observationWindowBlocks: Number(
-              process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS,
-            ),
-          }),
-      log: (message) => console.log("[searcher/startup] " + message),
-    });
-  } catch (error) {
-    if (error instanceof UniverseRunIncomplete) {
+  if (blindUseIncumbentReady) {
+    if (
+      rebuildEnvelope === null ||
+      rebuildEnvelope.readyGeneration === null ||
+      rebuildEnvelope.inProgressRun !== null
+    ) {
       throw new Error(
-        "strict startup rebuild incomplete: run=" + error.runId +
-          " remainingUnaccounted=" + error.remainingUnaccounted +
-          " (resume the durable run before producer start)",
+        "blind incumbent-ready replay requires one complete Ready checkpoint",
       );
     }
-    throw error;
+    readyUniverse = rebuildEnvelope.readyGeneration;
+    console.log(
+      "[searcher/startup] blind replay uses incumbent readyGeneration=" +
+        readyUniverse.generation + " cutoff=" + readyUniverse.cutoff.number +
+        " activeInstances=" + readyUniverse.activeInstanceKeys.length +
+        " retryableQueue=" +
+        Object.keys(rebuildEnvelope.retryableAttemptsByCandidateKey).length,
+    );
+  } else {
+    try {
+      readyUniverse = await rebuildUniverse({
+        ...rebuildWiring,
+        store: rebuildStore,
+        runId: process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID ??
+          "strict-startup-rebuild",
+        ...(process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS === undefined
+          ? {}
+          : {
+              observationWindowBlocks: Number(
+                process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS,
+              ),
+            }),
+        log: (message) => console.log("[searcher/startup] " + message),
+      });
+    } catch (error) {
+      if (error instanceof UniverseRunIncomplete) {
+        throw new Error(
+          "strict startup rebuild incomplete: run=" + error.runId +
+            " remainingUnaccounted=" + error.remainingUnaccounted +
+            " (resume the durable run before producer start)",
+        );
+      }
+      throw error;
+    }
+    rebuildEnvelope = await rebuildStore.load();
   }
-  const rebuildEnvelope = await rebuildStore.load();
   if (
     rebuildEnvelope === null ||
     rebuildEnvelope.readyGeneration === null ||

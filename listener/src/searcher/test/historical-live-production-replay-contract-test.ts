@@ -47,11 +47,13 @@ const forwarded = forwardedProductionEnvironment({
   SEARCHER_BLOCKSCAN_MAX_CANDIDATES: "100",
   SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS: "10",
   SEARCHER_BLIND_PREPARE_BUDGET_MS: "999999",
+  SEARCHER_BLIND_USE_INCUMBENT_READY: "1",
   SEARCHER_FORCE_INCLUDE_POOLIDS_PATH: "/future.json",
 });
 assert.equal(forwarded.SEARCHER_BLOCKSCAN_MAX_CANDIDATES, "100");
 assert.equal(forwarded.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS, "10");
 assert.equal(forwarded.SEARCHER_BLIND_PREPARE_BUDGET_MS, undefined);
+assert.equal(forwarded.SEARCHER_BLIND_USE_INCUMBENT_READY, undefined);
 assert.equal(forwarded.SEARCHER_FORCE_INCLUDE_POOLIDS_PATH, undefined);
 assert.equal(forwarded.BLIND_PREFIX_THROUGH_INDEX, undefined);
 assert.equal(forwarded.NODE_OPTIONS, undefined);
@@ -157,6 +159,10 @@ assert.match(
   replaySource,
   /BLIND_PRODUCTION_READY_PREFIX,\s*blindProductionAuditHash,/,
 );
+assert.match(
+  replaySource,
+  /SEARCHER_BLIND_USE_INCUMBENT_READY:\s*"1"/,
+);
 assert.doesNotMatch(replaySource, /SEARCHER_BLOCKSCAN_MAX_HOPS:\s*"6"/);
 const negativeBase = spawnSync(
   process.execPath,
@@ -201,6 +207,25 @@ assert.match(
   `${invoked.stdout}\n${invoked.stderr}`,
   /PRIVATE_KEY or OWNER_PRIVATE_KEY required/,
   "the replay entry must remain the real production main",
+);
+const incumbentOutsideReplay = spawnSync(
+  process.execPath,
+  ["--import", "tsx", HISTORICAL_LIVE_PRODUCTION_ENTRY],
+  {
+    cwd: listenerRoot,
+    encoding: "utf8",
+    timeout: 30_000,
+    env: {
+      PATH: process.env.PATH,
+      SEARCHER_TEST_DISABLE_DOTENV: "1",
+      SEARCHER_BLIND_USE_INCUMBENT_READY: "1",
+    },
+  },
+);
+assert.equal(incumbentOutsideReplay.status, 1);
+assert.match(
+  `${incumbentOutsideReplay.stdout}\n${incumbentOutsideReplay.stderr}`,
+  /SEARCHER_BLIND_USE_INCUMBENT_READY=1 is replay-only/,
 );
 
 console.log("historical-live-production-replay-contract PASS");
