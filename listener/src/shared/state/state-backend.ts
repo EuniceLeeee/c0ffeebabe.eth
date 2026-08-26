@@ -201,13 +201,17 @@ export class AnvilStateBackend implements StateBackend {
     await this.stopBarrier;
     await assertLoopbackPortAvailable(this.port);
     this.resetProvider();
+    let stderrTail = "";
     const proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
       "--port", String(this.port),
       "--silent",
       "--no-mining",
       "--order", "fifo",
-    ], { stdio: "ignore" });
+    ], { stdio: ["ignore", "ignore", "pipe"] });
+    proc.stderr?.on("data", (chunk: Buffer | string) => {
+      stderrTail = (stderrTail + String(chunk)).slice(-4_096);
+    });
     this.proc = proc;
     proc.on("exit", () => {
       if (this.proc === proc) this.proc = null;
@@ -223,7 +227,12 @@ export class AnvilStateBackend implements StateBackend {
       );
     } catch (error) {
       if (this.proc === proc) await this.stopAndWait();
-      throw error;
+      const detail = redactSpawnDiagnostic(stderrTail.trim());
+      throw new Error(
+        (error instanceof Error ? error.message : String(error)) +
+          (detail.length === 0 ? "" : `; anvil stderr=${detail}`),
+        { cause: error },
+      );
     }
   }
 
@@ -1013,6 +1022,13 @@ export class AnvilStateBackend implements StateBackend {
     const result = await this.call({ to: token, data });
     return BigInt(result);
   }
+}
+
+function redactSpawnDiagnostic(value: string): string {
+  return value
+    .replace(/(?:https?|wss?):\/\/[^\s"'`]+/gi, "<redacted-url>")
+    .replace(/[\r\n]+/g, " | ")
+    .slice(-2_000);
 }
 
 async function traceRevert(provider: ethers.JsonRpcProvider, txHash: string): Promise<string> {
