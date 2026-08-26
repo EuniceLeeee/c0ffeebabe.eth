@@ -204,6 +204,7 @@ export class AnvilStateBackend implements StateBackend {
     let stderrTail = "";
     const proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
+      "--accounts", "0",
       "--port", String(this.port),
       "--silent",
       "--no-mining",
@@ -366,6 +367,7 @@ export class AnvilStateBackend implements StateBackend {
     const proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
       "--fork-block-number", String(blockNumber),
+      "--accounts", "0",
       "--port", String(this.port),
       "--silent",
       "--no-mining",
@@ -408,6 +410,7 @@ export class AnvilStateBackend implements StateBackend {
     const proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
       "--fork-transaction-hash", txHash,
+      "--accounts", "0",
       "--port", String(this.port),
       "--silent",
       "--no-mining",
