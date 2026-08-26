@@ -868,8 +868,10 @@ export class JsonRpcBlockScanStateReadBackend
 
   /**
    * Startup capability probe. A number/hash comparison alone does not prove
-   * that eth_call accepts EIP-1898. Execute one harmless no-code call with the
-   * exact canonical-hash object and fail startup if the node rejects it.
+   * that eth_call accepts EIP-1898. Execute one harmless, stateless Identity
+   * precompile call with the exact canonical-hash object and fail startup if
+   * the node rejects it. A zero/no-code account would force a lazy historical
+   * fork to fetch arbitrary account state merely to run this capability probe.
    */
   async probeEip1898(
     source: BlockSource,
@@ -883,7 +885,7 @@ export class JsonRpcBlockScanStateReadBackend
       method: "eth_call",
       params: [
         {
-          to: "0x0000000000000000000000000000000000000000",
+          to: "0x0000000000000000000000000000000000000004",
           data: "0x",
         },
         eip1898BlockSpecifier(source.hash),
