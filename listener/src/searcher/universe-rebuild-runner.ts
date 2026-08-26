@@ -84,6 +84,12 @@ export interface UniverseRebuildDependencies {
   readonly reverseBindOpaqueCandidates?: (input: {
     readonly observations: readonly unknown[];
     readonly cutoff: CanonicalSource;
+    /** Full candidates restored from durable verified memos. */
+    readonly retainedCandidates: readonly unknown[];
+    /** The same memo authority used by the later attestation partition. */
+    readonly findReusableMemo: (
+      candidate: unknown,
+    ) => Promise<DurableVerifiedMemo | null>;
   }) => Promise<readonly unknown[]>;
   /** JSON-safe durable form used by candidatesByKey and retry/probe resume. */
   /** JSON-safe durable form used by candidatesByKey and retry/probe resume. */
@@ -255,15 +261,18 @@ export async function rebuildUniverse(
   }
   checkpoint = await migrateAlreadyReadyKeptRun(input.store, checkpoint, log);
   const incumbentRun = checkpoint?.inProgressRun ?? null;
-  const retainedCandidateInputs = Object.freeze(
+  const retainedCandidates = Object.freeze(
     Object.values(checkpoint?.verifiedMemos ?? {})
       .sort((left, right) =>
         left.familyCandidateKey.localeCompare(right.familyCandidateKey)
       )
-      .map((memo) => Object.freeze({
-        kind: "startup-candidate",
-        candidate: decodeCandidate(memo.candidateSnapshot),
-      })),
+      .map((memo) => decodeCandidate(memo.candidateSnapshot)),
+  );
+  const retainedCandidateInputs = Object.freeze(
+    retainedCandidates.map((candidate) => Object.freeze({
+      kind: "startup-candidate",
+      candidate,
+    })),
   );
   // Layered re-adoption model:
   // 1. An unfinished fixed run keeps its time world forever — same runId,
@@ -328,6 +337,10 @@ export async function rebuildUniverse(
         const reverseBound = await input.reverseBindOpaqueCandidates({
           observations,
           cutoff,
+          retainedCandidates,
+          findReusableMemo: (candidate) => checkpoint === null
+            ? Promise.resolve(null)
+            : input.findReusableMemo({ candidate, checkpoint, cutoff }),
         });
         if (reverseBound.length > 0) {
           // Merge through the shared alias-collapsing dedupe
@@ -374,6 +387,10 @@ export async function rebuildUniverse(
       const reverseBound = await input.reverseBindOpaqueCandidates({
         observations,
         cutoff,
+        retainedCandidates,
+        findReusableMemo: (candidate) => checkpoint === null
+          ? Promise.resolve(null)
+          : input.findReusableMemo({ candidate, checkpoint, cutoff }),
       });
       if (reverseBound.length > 0) {
         // Merge through the shared alias-collapsing dedupe

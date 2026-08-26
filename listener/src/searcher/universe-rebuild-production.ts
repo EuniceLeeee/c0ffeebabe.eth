@@ -1737,6 +1737,12 @@ export function createRebuildWiring(input?: {
   };
   const topics = strictCatalogLogTopics();
   const sourceCoverageKeys = strictCatalogSourceCoverageKeys();
+  // Reverse binding and the later candidate partition deliberately converge
+  // through the same memo authority. Cache only successful validations,
+  // bound to the exact cutoff + memo + candidate fingerprints, so a retained
+  // nomination does not repeat code/storage RPC when candidate processing
+  // reaches it later in the same rebuild.
+  const reusableMemoByBinding = new Map<string, DurableVerifiedMemo>();
   // reth caps eth_getLogs at 20000 results; the strict-topic union is
   // high-volume, so start small and halve on the max-results error. The
   // chunk policy is a plan-bound constant (SOURCE_SCAN_BATCH_BLOCKS /
@@ -2103,7 +2109,28 @@ export function createRebuildWiring(input?: {
       // through the same catalog matching + decodeCandidate admission the
       // scan channel uses.
       const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
-      const nominations: CaptureNominationInput[] = [];
+      const retainedByAlias = new Map<
+        string,
+        Readonly<Record<string, unknown>>
+      >();
+      for (const raw of reverseInput.retainedCandidates) {
+        if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+          continue;
+        }
+        const candidate = raw as Readonly<Record<string, unknown>>;
+        const alias = rebuildFamilyInstanceDedupeKey(candidate);
+        const existing = retainedByAlias.get(alias);
+        if (
+          existing === undefined ||
+          preferCandidateRepresentative(existing, candidate)
+        ) {
+          retainedByAlias.set(alias, candidate);
+        }
+      }
+      const nominations: {
+        readonly nomination: CaptureNominationInput;
+        readonly retainedCandidate?: Readonly<Record<string, unknown>>;
+      }[] = [];
       const seen = new Set<string>();
       for (const raw of reverseInput.observations) {
         if (
@@ -2146,7 +2173,7 @@ export function createRebuildWiring(input?: {
           const key = match.familyId + "\u001f" + poolId;
           if (seen.has(key)) continue;
           seen.add(key);
-          nominations.push(Object.freeze({
+          const nomination = Object.freeze({
             address: log.address.toLowerCase(),
             opaque: Object.freeze({
               adapter: match.familyId,
@@ -2166,6 +2193,18 @@ export function createRebuildWiring(input?: {
                 ? {}
                 : { logIndex: log.logIndex }),
             }),
+          });
+          const alias = rebuildFamilyInstanceDedupeKey(Object.freeze({
+            familyId: match.familyId,
+            address: log.address.toLowerCase(),
+            poolId,
+          }));
+          const retainedCandidate = retainedByAlias.get(alias);
+          nominations.push(Object.freeze({
+            nomination,
+            ...(retainedCandidate === undefined
+              ? {}
+              : { retainedCandidate }),
           }));
         }
       }
@@ -2184,6 +2223,7 @@ export function createRebuildWiring(input?: {
       );
       let nextNomination = 0;
       let completedNominations = 0;
+      let reusedMemos = 0;
       console.log(
         "[universe-rebuild/reverse-binding] start nominations=" +
           nominations.length + " concurrency=" + REVERSE_BINDING_CONCURRENCY,
@@ -2199,12 +2239,25 @@ export function createRebuildWiring(input?: {
           while (true) {
             const index = nextNomination++;
             if (index >= nominations.length) return;
-            resolved[index] = await executeCatalogReverseBindings({
-              catalog,
-              source: reverseInput.cutoff,
-              nominations: Object.freeze([nominations[index]]),
-              provider: providerFacade,
-            });
+            const item = nominations[index];
+            const reusableMemo = item.retainedCandidate === undefined
+              ? null
+              : await reverseInput.findReusableMemo(item.retainedCandidate);
+            if (reusableMemo !== null) {
+              // The retained candidate is already in the main partition and
+              // the shared memo authority accepted it at this cutoff. Skip
+              // only the redundant reverse lookup; later candidate handling
+              // converges through the same findReusableMemo path.
+              resolved[index] = Object.freeze([]);
+              reusedMemos++;
+            } else {
+              resolved[index] = await executeCatalogReverseBindings({
+                catalog,
+                source: reverseInput.cutoff,
+                nominations: Object.freeze([item.nomination]),
+                provider: providerFacade,
+              });
+            }
             completedNominations++;
             if (
               completedNominations === 1 ||
@@ -2215,7 +2268,8 @@ export function createRebuildWiring(input?: {
                 "[universe-rebuild/reverse-binding] progress processed=" +
                   completedNominations + "/" + nominations.length +
                   " pending=" +
-                  (nominations.length - completedNominations),
+                  (nominations.length - completedNominations) +
+                  " memoReused=" + reusedMemos,
               );
             }
           }
@@ -2289,6 +2343,16 @@ export function createRebuildWiring(input?: {
       const candidateKey = rebuildFamilyCandidateKey(candidate);
       const memo = memoInput.checkpoint.verifiedMemos[candidateKey];
       if (memo === undefined) return null;
+      const reuseBindingKey = [
+        memoInput.cutoff.number,
+        memoInput.cutoff.hash.toLowerCase(),
+        memoInput.cutoff.generation,
+        candidateKey,
+        candidateFingerprint(candidate),
+        memo.memoFingerprint,
+      ].join("\u001f");
+      const cached = reusableMemoByBinding.get(reuseBindingKey);
+      if (cached !== undefined) return cached;
       // Phase 1 — pure local binding check (Family, candidate fingerprint,
       // memo definition, policy, proof-source bound): no RPC at all. A
       // changed Family definition, candidate shape or policy short-circuits
@@ -2299,31 +2363,26 @@ export function createRebuildWiring(input?: {
         cutoff: memoInput.cutoff,
         familyId,
       })) return null;
-      const run = memoInput.checkpoint.inProgressRun;
-      const oldOutcome = run?.outcomesByCandidateKey[candidateKey];
-      const sameFixedRun = run !== null && run !== undefined &&
-        run.cutoff.number === memoInput.cutoff.number &&
-        run.cutoff.hash.toLowerCase() === memoInput.cutoff.hash.toLowerCase() &&
-        run.cutoff.generation === memoInput.cutoff.generation;
-      if (
-        sameFixedRun &&
-        oldOutcome?.status === "verified" &&
-        oldOutcome.memoFingerprint === memo.memoFingerprint &&
+      const proofSourceIsCutoff =
         memo.validity.proofSource.number === memoInput.cutoff.number &&
         memo.validity.proofSource.hash.toLowerCase() ===
-          memoInput.cutoff.hash.toLowerCase() &&
+          memoInput.cutoff.hash.toLowerCase();
+      if (
+        proofSourceIsCutoff &&
         canReuseMemo({
           memo,
           candidate,
           cutoff: memoInput.cutoff,
           familyId,
-          // The run's canonical hash is asserted once before resume. At the
-          // same historical source, the already sealed code/implementation
-          // authority cannot change; only candidate/Family hashes need the
-          // pure canReuseMemo recheck here.
+          // The memo already proves this exact block hash. A completed run
+          // may start another target-blind replay at the same historical
+          // cutoff with no old in-progress outcome to consult; re-reading
+          // every account at the identical state is redundant. The runner's
+          // final canonical fence still prevents publication across a reorg.
           currentAuthorityFingerprint: memo.validity.authorityFingerprint,
         })
       ) {
+        reusableMemoByBinding.set(reuseBindingKey, memo);
         return memo;
       }
       // Phase 2 — chain authority revalidation (only reached when the local
@@ -2369,10 +2428,12 @@ export function createRebuildWiring(input?: {
         memo.validity.proofSource.number,
         memoInput.cutoff,
       );
-      return proofHash.toLowerCase() ===
+      if (
+        proofHash.toLowerCase() !==
           memo.validity.proofSource.hash.toLowerCase()
-        ? memo
-        : null;
+      ) return null;
+      reusableMemoByBinding.set(reuseBindingKey, memo);
+      return memo;
     },
     attestFamilyInstanceOnce: probe.attestFamilyInstanceOnce,
     sealDurableVerifiedMemo: probe.sealDurableVerifiedMemo,

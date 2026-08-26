@@ -5,7 +5,7 @@ import {
 
 /**
  * Retain-channel declaration contract (F6 Pair B slice): every Family that
- * declares discovery semantics (swap/protocol/credit) must declare a retain
+ * is non-funding and declares discovery semantics must declare a retain
  * channel — either a real reverse-binding implementation or an explicit
  * unsupported declaration. The validator enforces presence at definition
  * time; this test asserts the projection across the whole production
@@ -22,6 +22,7 @@ async function main(): Promise<void> {
   for (const family of families) {
     const plugin = family.plugin;
     if (!("discovery" in plugin)) continue;
+    if (plugin.manifest.domain === "funding") continue;
     discoveryCount += 1;
     const declaration = plugin.discovery.reverseBinding;
     assert(
@@ -62,9 +63,9 @@ async function main(): Promise<void> {
       `${plugin.manifest.familyId} discovery must declare fresh nomination`,
     );
   }
-  // Funding families (e.g. balancer-flash, morpho-flash) declare no
-  // discovery semantics and are excluded by the loop above; every discovery
-  // family must have declared a retain channel (asserted per-family above).
+  // Funding discovery populates a separate lender-asset inventory and does
+  // not participate in the venue-instance retain channel. Every non-funding
+  // discovery family must have declared one (asserted per-family above).
   assert(discoveryCount > 0, "production catalog has discovery families");
 
   assert(implementationCount > 0, "at least one family implements reverse binding");

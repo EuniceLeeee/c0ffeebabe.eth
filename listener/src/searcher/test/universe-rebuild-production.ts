@@ -615,6 +615,23 @@ async function main(): Promise<void> {
     sealed,
     "same fixed run reuses its sealed memo without per-instance authority RPC",
   );
+  const sameProofSourceMemo = await wiring.findReusableMemo({
+    candidate,
+    cutoff: SOURCE,
+    checkpoint: Object.freeze({
+      revision: 3,
+      verifiedMemos: Object.freeze({ [sameRunCandidateKey]: sealed }),
+      retryableAttemptsByCandidateKey: Object.freeze({}),
+      inProgressRun: null,
+      readyGeneration: null,
+      checkpointFingerprint: "f".repeat(64),
+    }) as never,
+  });
+  assert.equal(
+    sameProofSourceMemo,
+    sealed,
+    "a completed run reuses a memo sealed at the identical cutoff without RPC",
+  );
   const aliasSealed = probeWiring.sealDurableVerifiedMemo({
     candidate: Object.freeze({
       ...candidate,
@@ -872,6 +889,7 @@ async function main(): Promise<void> {
   let pmResolvesPool1 = true;
   let traceAvailable = true;
   let traceReads = 0;
+  let positionManagerReads = 0;
   const tracedTransactions: string[] = [];
   let historicalLogReads = 0;
   let fundingBalance = 1_000_000n;
@@ -934,6 +952,7 @@ async function main(): Promise<void> {
             }
             // V4_POSITION_MANAGER_POOL_KEYS_SELECTOR = 0x86b6be7d.
             if (data.startsWith("0x86b6be7d")) {
+              positionManagerReads++;
               // PositionManager keys by the leading bytes25 of poolId.
               const requestedPoolIdPrefix =
                 ("0x" + data.slice(10, 60)).toLowerCase();
@@ -1001,6 +1020,10 @@ async function main(): Promise<void> {
     const wired = createRebuildWiring({
       rpcUrl: "http://127.0.0.1:" + stubPort,
     });
+    const noRetainedCandidates = Object.freeze([]) as readonly unknown[];
+    const noReusableMemo = async (
+      _candidate: unknown,
+    ): Promise<DurableVerifiedMemo | null> => null;
     const fundingToken = ethers.getAddress("0x" + "f1".repeat(20));
     const fundingCandidate = candidatesFromLog(Object.freeze({
       address: ADDR.MORPHO,
@@ -1099,6 +1122,8 @@ async function main(): Promise<void> {
     const reverseBound = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: SOURCE,
+      retainedCandidates: noRetainedCandidates,
+      findReusableMemo: noReusableMemo,
     });
     assert.equal(
       reverseBound.length,
@@ -1121,6 +1146,31 @@ async function main(): Promise<void> {
       (boundCandidate.pluginCandidateKey as string),
       manager + "\u001f" + poolId.toLowerCase(),
     );
+    const positionManagerReadsBeforeMemoReuse = positionManagerReads;
+    let reverseMemoLookups = 0;
+    const reusedReverseBinding = await wired.reverseBindOpaqueCandidates!({
+      observations: Object.freeze([v4SwapLog]),
+      cutoff: SOURCE,
+      retainedCandidates: Object.freeze([boundCandidate]),
+      findReusableMemo: async (candidate) => {
+        reverseMemoLookups++;
+        assert.equal(candidate, boundCandidate);
+        return makeMemo(boundCandidate, {
+          familyCandidateKey: rebuildFamilyCandidateKey(boundCandidate),
+        });
+      },
+    });
+    assert.equal(
+      reusedReverseBinding.length,
+      0,
+      "a reusable retained candidate stays in the main partition without rebinding",
+    );
+    assert.equal(reverseMemoLookups, 1, "reverse binding consults shared memo authority");
+    assert.equal(
+      positionManagerReads,
+      positionManagerReadsBeforeMemoReuse,
+      "a reusable reverse-bound candidate performs no repeated reverse lookup",
+    );
     // Duplicate swap logs of one pool collapse to a single candidate.
     const repeated = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([
@@ -1128,6 +1178,8 @@ async function main(): Promise<void> {
         Object.freeze({ ...v4SwapLog, logIndex: 1 }),
       ]),
       cutoff: SOURCE,
+      retainedCandidates: noRetainedCandidates,
+      findReusableMemo: noReusableMemo,
     });
     assert.equal(repeated.length, 1, "reverse-bound candidates dedupe per pool");
     assert.equal(
@@ -1156,6 +1208,8 @@ async function main(): Promise<void> {
     const twoPools = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog, v4SwapLog2]),
       cutoff: twoPoolSource,
+      retainedCandidates: noRetainedCandidates,
+      findReusableMemo: noReusableMemo,
     });
     assert.equal(twoPools.length, 2, "every pool nomination is reverse-bound");
     assert.equal(
@@ -1194,6 +1248,8 @@ async function main(): Promise<void> {
     const traced = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: fallbackSource,
+      retainedCandidates: noRetainedCandidates,
+      findReusableMemo: noReusableMemo,
     });
     assert.equal(
       traced.length,
@@ -1230,6 +1286,8 @@ async function main(): Promise<void> {
     const unresolved = await wired.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: missingSource,
+      retainedCandidates: noRetainedCandidates,
+      findReusableMemo: noReusableMemo,
     });
     assert.equal(unresolved.length, 0, "no candidate when both sources miss");
     assert.equal(historicalLogReads, 0, "unresolved identity does not deep-scan");
@@ -1240,6 +1298,8 @@ async function main(): Promise<void> {
         log({ address: "0x" + "55".repeat(20), logIndex: 1 }),
       ]),
       cutoff: SOURCE,
+      retainedCandidates: noRetainedCandidates,
+      findReusableMemo: noReusableMemo,
     });
     assert.equal(unrelated.length, 0, "no reverse binding without a declared seed");
   } finally {

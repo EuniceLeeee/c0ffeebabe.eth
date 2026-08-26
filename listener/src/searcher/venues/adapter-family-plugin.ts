@@ -3383,9 +3383,10 @@ function validateDiscovery(
   }
   // Retain-channel declaration is mandatory for every non-funding Family
   // (swap/protocol/credit): either a real reverse-binding implementation or
-  // an explicit unsupported declaration. Funding families have no discovery
-  // semantics at all. A missing declaration is a definition-time failure, so
-  // a family can never silently pass as "no retain channel".
+  // an explicit unsupported declaration. Funding discovery produces the
+  // lender asset inventory and does not materialize venue instances through
+  // this retain channel. A missing declaration is therefore a definition-
+  // time failure only for non-funding families.
   if (domain !== "funding" && discovery.reverseBinding === undefined) {
     throw new Error(
       "discovery must declare reverseBinding (implementation or " +
