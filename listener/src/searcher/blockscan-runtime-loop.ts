@@ -33,6 +33,8 @@ import type { ResolvedPlan } from "./solver/solver.js";
 import type { AnvilSolver } from "./solver/solver.js";
 import type { StrictProductionRuntimeSession } from
   "./strict-production-runtime-session.js";
+import type { StrictCanonicalActivityProof } from
+  "./strict-current-runtime-coordinator.js";
 import type { StrictProductionSessionKind } from
   "./strict-production-runtime-session.js";
 import type { CanonicalSource } from
@@ -542,6 +544,8 @@ export interface BlockScanRuntimeLoopDependencies {
      */
     exactCallBackend?: Pick<StateBackend, "call">,
     touchedPools?: ReadonlySet<string>,
+    pricingCallBackend?: Pick<StateBackend, "call">,
+    requiredEdgeIds?: ReadonlySet<string>,
   ) => Promise<StrictProductionRuntimeSession>;
   /**
    * Override the exact-probe quote backend. Production uses the source-hash
@@ -686,6 +690,7 @@ export interface CurrentSourceRuntimeCoordinator {
       BlockScanLaggingTopologyRefreshMode;
     readonly signal?: AbortSignal;
     readonly touchedPools?: ReadonlySet<string>;
+    readonly canonicalActivity?: StrictCanonicalActivityProof;
   }): Promise<BlockScanStatePrepareResult>;
   resetDynamicStateForReplay(): Promise<void>;
   prepare(
@@ -1227,10 +1232,20 @@ export class BlockScanRuntimeLoop {
         let prepared: BlockScanStatePrepareResult;
         let bootstrapEscalated = false;
         const producerTouched = await this.deps.readBlockSwapTouched(nextBlock);
+        const producerActivity: StrictCanonicalActivityProof = Object.freeze({
+          source: Object.freeze({
+            number: anchoredGraph.sourceBlock,
+            hash: anchoredGraph.sourceBlockHash,
+            generation: anchoredGraph.generation,
+          }),
+          touchedStateKeys: producerTouched,
+          complete: true,
+        });
         try {
         prepared = await input.coordinator.prepareCoarsePricing({
           graph: anchoredGraph,
           touchedPools: producerTouched,
+          canonicalActivity: producerActivity,
           deadlineAtMs: generationDeadlineAtMs,
           /*
            * Family-local deadlines must settle before the generation
@@ -1276,6 +1291,7 @@ export class BlockScanRuntimeLoop {
             deadlineAtMs: bootstrapDeadlineAtMs,
             familySettleDeadlineAtMs: bootstrapFamilySettleDeadlineAtMs,
             laggingTopologyRefreshMode: "startup-bootstrap",
+            canonicalActivity: producerActivity,
             signal: this.deps.runtimeAbort.signal,
           });
           bootstrapEscalated = true;
@@ -2125,9 +2141,15 @@ export class BlockScanRuntimeLoop {
       if (!useNMinusOneFallback) {
         this.passStageLabel = "state:prepare";
         const touchedPools = passTouchedPools;
-        // The strict session prices only this block's touched venues; the
-        // snapshot marks untouched edges unresolved and the enumeration
-        // resolves over the priced subset.
+        const canonicalActivity: StrictCanonicalActivityProof = Object.freeze({
+          source: Object.freeze({
+            number: graphView.sourceBlock,
+            hash: graphView.sourceBlockHash,
+            generation: graphView.generation,
+          }),
+          touchedStateKeys: touchedPools,
+          complete: true,
+        });
         const runtime = await currentRuntimeCoordinator.prepare({
           graph: graphView,
           // The funding surface is the solidified funding-token universe
@@ -2145,6 +2167,7 @@ export class BlockScanRuntimeLoop {
           signal: passSignal,
           prepareExecution,
           touchedPools,
+          canonicalActivity,
         });
         finishStage(
           "state",
@@ -2292,7 +2315,9 @@ export class BlockScanRuntimeLoop {
         beginStage("enumeration");
         const productionCoarse = detectProductionBlockScanOpportunities({
           runtime: snapshot,
-          swapTouched: touchedPools as Set<string> | null,
+          // Touched state controls refresh work only; the dense snapshot is
+          // the complete candidate input after safe carry-forward.
+          swapTouched: null,
           cfg: {
             ...blockScanCfg,
             maxCandidates: this.deps.refineCandidates,
@@ -2502,6 +2527,7 @@ export class BlockScanRuntimeLoop {
       sealAuditBoundary("enumeration_done", "enumeration");
       scannedPairs = coarse.scannedPairs;
       candidates = coarse.opportunities.length;
+      const requiredEdgeIds = requiredCanonicalEdgeIds(coarse.opportunities);
       // The exact/solver session only needs Funding authority for the
       // candidate start tokens.  Passing this bounded set avoids re-running
       // provider reads for the entire graph when the coarse producer is
@@ -2528,17 +2554,9 @@ export class BlockScanRuntimeLoop {
           : { hardBudgetMs: this.deps.exactRefineHardBudgetMs }),
       });
       if (!exactRefineStarted) beginStage("exact_refine");
-      /*
-       * Exact sessions re-issue only the candidate instances. In the N-1 lane
-       * the candidates come from the coarse producer's snapshot of the
-       * predecessor block, so the scope is that block's touched venues (the
-       * same deterministic set the producer priced), not the current block's.
-       * The direct lane priced the current block, so its touched set is the
-       * scope.
-       */
-      const exactScopeTouchedPools = useNMinusOneFallback
-        ? await this.deps.readBlockSwapTouched(coarseSourceBlock!)
-        : passTouchedPools;
+      /* Exact scope is the complete edge closure emitted by coarse
+       * enumeration. Touched state is a refresh input only and cannot remove
+       * a clean closing leg from exact. */
       /*
        * Exact probes read current-N view state only. Batch them directly to
        * local reth (source-hash pinned) instead of serializing every quote
@@ -2665,7 +2683,9 @@ export class BlockScanRuntimeLoop {
         "exact",
         exactFundingTokens,
         exactQuoteState,
-        exactScopeTouchedPools,
+        undefined,
+        undefined,
+        requiredEdgeIds,
       );
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
@@ -2763,7 +2783,7 @@ export class BlockScanRuntimeLoop {
               deadlineAtMs: runtimeDeadlineAtMs,
               preparationSettleDeadlineAtMs,
               signal: passSignal,
-              touchedPools: exactScopeTouchedPools,
+              requiredEdgeIds,
             });
         if (exactContext.status === "incomplete") {
           finishStage("planner_solver", "failed");
@@ -3499,4 +3519,22 @@ export function resolveExactRefineDeadline(input: {
     ),
     input.nowMs + hardBudgetMs,
   );
+}
+
+function requiredCanonicalEdgeIds(
+  opportunities: readonly BlockScanOpportunity[],
+): ReadonlySet<string> {
+  const required = new Set<string>();
+  for (const opportunity of opportunities) {
+    for (const edge of opportunity.seedEdges) {
+      if (
+        typeof edge.canonicalEdgeId !== "string" ||
+        edge.canonicalEdgeId.length === 0
+      ) {
+        throw new Error("coarse candidate seed edge lacks canonicalEdgeId");
+      }
+      required.add(edge.canonicalEdgeId);
+    }
+  }
+  return required;
 }

@@ -210,6 +210,12 @@ export interface PrepareAdapterRuntimeInput {
    * filter keeps enumeration over this block's venues).
    */
   readonly touchedPools?: ReadonlySet<string>;
+  /** Canonical block activity proof used for strict sparse-read carry. */
+  readonly canonicalActivity?: {
+    readonly source: BlockSource;
+    readonly touchedStateKeys: ReadonlySet<string>;
+    readonly complete: true;
+  };
   /** Optional source-pinned physical transport for producer eth_call batching. */
   readonly pricingCallBackend?: Pick<StateBackend, "call">;
   readonly signal?: AbortSignal;
@@ -236,6 +242,7 @@ export interface PrepareCurrentNExactExecutionContextInput {
   readonly prepareExecution?: PrepareAdapterRuntimeInput["prepareExecution"];
   /** Venue-scope for the exact session's instance reissue; see strict session. */
   readonly touchedPools?: ReadonlySet<string>;
+  readonly requiredEdgeIds?: ReadonlySet<string>;
 }
 
 /**

@@ -46,7 +46,14 @@ type StrictSessionProvider = (
   exactCallBackend?: Pick<StateBackend, "call">,
   touchedPools?: ReadonlySet<string>,
   pricingCallBackend?: Pick<StateBackend, "call">,
+  requiredEdgeIds?: ReadonlySet<string>,
 ) => Promise<StrictProductionRuntimeSession>;
+
+export interface StrictCanonicalActivityProof {
+  readonly source: CanonicalSource;
+  readonly touchedStateKeys: ReadonlySet<string>;
+  readonly complete: true;
+}
 
 /**
  * Atomic producer snapshot built only from one current-source strict session.
@@ -77,22 +84,27 @@ export class StrictCurrentRuntimeCoordinator
     readonly familySettleDeadlineAtMs?: number;
     readonly signal?: AbortSignal;
     readonly touchedPools?: ReadonlySet<string>;
+    readonly canonicalActivity?: StrictCanonicalActivityProof;
   }): Promise<BlockScanStatePrepareResult> {
     const settleDeadlineAtMs = Math.min(
       input.deadlineAtMs,
       input.familySettleDeadlineAtMs ?? input.deadlineAtMs,
     );
     assertWorkOpen(settleDeadlineAtMs, input.signal);
+    const previous = this.publishedPricing;
     const session = await this.sessionFor(
       sourceFor(input.graph),
       controlFor(settleDeadlineAtMs, input.signal),
       "pricing",
       undefined,
       undefined,
-      input.touchedPools,
+      previous === null ? undefined : input.touchedPools,
     );
     assertWorkOpen(settleDeadlineAtMs, input.signal);
-    const pricing = buildStrictPricingSnapshot(session, input.graph);
+    const pricing = buildStrictPricingSnapshot(session, input.graph, {
+      previous,
+      canonicalActivity: input.canonicalActivity,
+    });
     this.publishedPricing = pricing;
     return completePricingResult(pricing);
   }
@@ -108,13 +120,14 @@ export class StrictCurrentRuntimeCoordinator
     assertWorkOpen(settleDeadlineAtMs, input.signal);
     const source = sourceFor(input.graph);
     const sessionStartedAtMs = Date.now();
+    const previous = this.publishedPricing;
     const sessionPromise = this.sessionFor(
       source,
       controlFor(settleDeadlineAtMs, input.signal),
       "pricing",
       input.fundingTokens,
       undefined,
-      input.touchedPools,
+      previous === null ? undefined : input.touchedPools,
       input.pricingCallBackend,
     );
     const executionStartedAtMs = Date.now();
@@ -131,7 +144,10 @@ export class StrictCurrentRuntimeCoordinator
     const executionMs = Math.max(0, Date.now() - executionStartedAtMs);
     assertWorkOpen(input.deadlineAtMs, input.signal);
     const pricingStartedAtMs = Date.now();
-    const pricing = buildStrictPricingSnapshot(session, input.graph);
+    const pricing = buildStrictPricingSnapshot(session, input.graph, {
+      previous,
+      canonicalActivity: input.canonicalActivity,
+    });
     const pricingMs = Math.max(0, Date.now() - pricingStartedAtMs) +
       Math.max(0, pricingStartedAtMs - sessionStartedAtMs);
     const funding = buildStrictFundingSnapshot(
@@ -189,7 +205,9 @@ export class StrictCurrentRuntimeCoordinator
       "exact",
       input.fundingTokens,
       undefined,
-      input.touchedPools,
+      undefined,
+      undefined,
+      input.requiredEdgeIds,
     );
     if (input.prepareExecution !== undefined) {
       await input.prepareExecution({
@@ -234,23 +252,31 @@ export class StrictCurrentRuntimeCoordinator
 function buildStrictPricingSnapshot(
   session: StrictProductionRuntimeSession,
   graph: VerifiedGraphView,
+  input: {
+    readonly previous: BlockScanStateSnapshot | null;
+    readonly canonicalActivity?: StrictCanonicalActivityProof;
+  },
 ): BlockScanStateSnapshot {
   assertSessionGraphSource(session, graph);
-  /*
-   * The touched-driven session binds and prices only this block's touched
-   * instances, so an edge absent from the session has no strict pricing
-   * authority this block (session accessors would throw). Classify those
-   * edges as unresolved and attribute their family from the declarations;
-   * the enumeration resolves over the priced subset and the runtime reports
-   * degraded while the edge stays unpriced.
-   */
-  const sessionCoveredEdgeIds = new Set(
-    session.edges.map((edge) => blockScanEdgeKey(edge)),
+  const sessionCoveredEdgeIds = new Set(session.edges.map(blockScanEdgeKey));
+  const previousEdgeByKey = new Map(
+    (input.previous?.graph.edges ?? []).map((edge) => [
+      blockScanEdgeKey(edge),
+      edge,
+    ] as const),
   );
   const mids = new Map<string, RouteVenueMid>();
   const coverageByEdgeKey = new Map<string, StateKeyCoverage>();
+  const pricingProvenanceByEdgeKey = new Map<
+    string,
+    "refreshed" | "carried" | "unavailable" | "unresolved"
+  >();
+  const pricingStateKeyByEdgeKey = new Map<string, string>();
+  const pricingFamilyIdByEdgeKey = new Map<string, string>();
   const familyIds = new Set<string>();
   const incompleteFamilyIds = new Set<string>();
+  const refreshedEdgeKeys: string[] = [];
+  const carriedEdgeKeys: string[] = [];
   const expectedEdgeKeys: string[] = [];
   const resolvedEdgeKeys: string[] = [];
   const unavailableEdgeKeys: string[] = [];
@@ -259,27 +285,64 @@ function buildStrictPricingSnapshot(
     if (!scannerConsumesEdge(edge)) continue;
     const edgeKey = blockScanEdgeKey(edge);
     expectedEdgeKeys.push(edgeKey);
-    if (!sessionCoveredEdgeIds.has(edgeKey)) {
+    const familyId = sessionCoveredEdgeIds.has(edgeKey)
+      ? session.familyIdForEdge(edge)
+      : PRODUCTION_STRICT_FAMILY_DECLARATIONS.familyIdForEdge(edge.adapterId);
+    familyIds.add(familyId);
+    const stateKey = sessionCoveredEdgeIds.has(edgeKey)
+      ? session.stateKeyForEdge(edge)
+      : null;
+    if (stateKey !== null) pricingStateKeyByEdgeKey.set(edgeKey, stateKey);
+    pricingFamilyIdByEdgeKey.set(edgeKey, familyId);
+    const current = sessionCoveredEdgeIds.has(edgeKey)
+      ? session.currentPricingForEdge(edge)
+      : null;
+    if (current === null) {
+      const carried = compatibleCarryForEdge({
+        edge,
+        edgeKey,
+        stateKey,
+        previous: input.previous,
+        previousEdge: previousEdgeByKey.get(edgeKey),
+        canonicalActivity: input.canonicalActivity,
+        source: sourceFor(graph),
+        familyId,
+      });
+      if (carried !== null) {
+        mids.set(edgeKey, Object.freeze({
+          ...carried.mid,
+          edges: [edge],
+        }));
+        resolvedEdgeKeys.push(edgeKey);
+        carriedEdgeKeys.push(edgeKey);
+        pricingProvenanceByEdgeKey.set(edgeKey, "carried");
+        coverageByEdgeKey.set(edgeKey, Object.freeze({ status: "resolved" as const }));
+        continue;
+      }
       unresolvedEdgeKeys.push(edgeKey);
-      incompleteFamilyIds.add(
-        PRODUCTION_STRICT_FAMILY_DECLARATIONS.familyIdForEdge(
-          edge.adapterId,
-        ),
-      );
+      incompleteFamilyIds.add(familyId);
+      pricingProvenanceByEdgeKey.set(edgeKey, "unresolved");
       coverageByEdgeKey.set(edgeKey, Object.freeze({
         status: "unresolved" as const,
-        reason: "untouched-this-block",
+        reason: input.previous === null
+          ? "bootstrap-missing-current-pricing"
+          : "no-compatible-carry-base",
       }));
       continue;
     }
-    const familyId = session.familyIdForEdge(edge);
-    familyIds.add(familyId);
-    const current = session.currentPricingForEdge(edge);
-    if (current === null) {
-      throw new Error(`scanner edge ${edgeKey} has no strict pricing authority`);
+    if (current.status === "unresolved") {
+      unresolvedEdgeKeys.push(edgeKey);
+      incompleteFamilyIds.add(familyId);
+      pricingProvenanceByEdgeKey.set(edgeKey, "unresolved");
+      coverageByEdgeKey.set(edgeKey, Object.freeze({
+        status: "unresolved" as const,
+        reason: current.reason,
+      }));
+      continue;
     }
     if (current.status === "behavior-proven-unavailable") {
       unavailableEdgeKeys.push(edgeKey);
+      pricingProvenanceByEdgeKey.set(edgeKey, "unavailable");
       coverageByEdgeKey.set(edgeKey, Object.freeze({
         status: "rejected" as const,
         reason: current.reason,
@@ -287,6 +350,8 @@ function buildStrictPricingSnapshot(
       continue;
     }
     resolvedEdgeKeys.push(edgeKey);
+    refreshedEdgeKeys.push(edgeKey);
+    pricingProvenanceByEdgeKey.set(edgeKey, "refreshed");
     coverageByEdgeKey.set(edgeKey, Object.freeze({ status: "resolved" as const }));
     mids.set(edgeKey, Object.freeze({
       ...current.mid,
@@ -297,6 +362,15 @@ function buildStrictPricingSnapshot(
   resolvedEdgeKeys.sort();
   unavailableEdgeKeys.sort();
   unresolvedEdgeKeys.sort();
+  refreshedEdgeKeys.sort();
+  carriedEdgeKeys.sort();
+  if (
+    refreshedEdgeKeys.length + carriedEdgeKeys.length +
+        unavailableEdgeKeys.length + unresolvedEdgeKeys.length !==
+      expectedEdgeKeys.length
+  ) {
+    throw new Error("strict pricing edge partition violates expected count invariant");
+  }
   if (
     expectedEdgeKeys.length !== graph.scannerEdgeCount ||
     exactSetHash(expectedEdgeKeys) !== graph.scannerEdgeKeyHash
@@ -324,6 +398,10 @@ function buildStrictPricingSnapshot(
     resolvedEdgeKeyHash: exactSetHash(resolvedEdgeKeys),
     unavailableEdgeKeyHash: exactSetHash(unavailableEdgeKeys),
     unresolvedEdgeKeyHash: exactSetHash(unresolvedEdgeKeys),
+    refreshedEdgeKeys: Object.freeze(refreshedEdgeKeys),
+    carriedEdgeKeys: Object.freeze(carriedEdgeKeys),
+    refreshedEdgeKeyHash: exactSetHash(refreshedEdgeKeys),
+    carriedEdgeKeyHash: exactSetHash(carriedEdgeKeys),
   });
   return Object.freeze({
     generation: graph.generation,
@@ -344,6 +422,9 @@ function buildStrictPricingSnapshot(
       [...incompleteFamilyIds].sort(),
     ),
     coverage,
+    pricingProvenanceByEdgeKey: new Map(pricingProvenanceByEdgeKey),
+    pricingStateKeyByEdgeKey: new Map(pricingStateKeyByEdgeKey),
+    pricingFamilyIdByEdgeKey: new Map(pricingFamilyIdByEdgeKey),
     laneTelemetry: Object.freeze([]),
     familyTelemetry: Object.freeze([]),
   });
@@ -364,6 +445,74 @@ function completePricingResult(
     familyTelemetry: Object.freeze([]),
     snapshot,
   });
+}
+
+function compatibleCarryForEdge(input: {
+  readonly edge: VerifiedGraphView["edges"][number];
+  readonly edgeKey: string;
+  readonly stateKey: string | null;
+  readonly previous: BlockScanStateSnapshot | null;
+  readonly previousEdge: VerifiedGraphView["edges"][number] | undefined;
+  readonly canonicalActivity: StrictCanonicalActivityProof | undefined;
+  readonly source: CanonicalSource;
+  readonly familyId: string;
+}): { readonly mid: RouteVenueMid } | null {
+  const {
+    edge,
+    edgeKey,
+    stateKey,
+    previous,
+    previousEdge,
+    canonicalActivity,
+    source,
+    familyId,
+  } = input;
+  if (
+    previous === null ||
+    previousEdge === undefined ||
+    stateKey === null ||
+    canonicalActivity === undefined ||
+    canonicalActivity.complete !== true ||
+    !sameCanonicalSource(canonicalActivity.source, source) ||
+    source.number <= previous.sourceBlock ||
+    source.generation <= previous.generation ||
+    !sameEdgeContract(previousEdge, edge)
+  ) return null;
+  if (canonicalActivity.touchedStateKeys.has(stateKey)) return null;
+  const previousStateKey = previous.pricingStateKeyByEdgeKey?.get(edgeKey);
+  if (previousStateKey !== stateKey) return null;
+  const previousFamilyId = previous.pricingFamilyIdByEdgeKey?.get(edgeKey);
+  if (previousFamilyId !== familyId) return null;
+  const previousProvenance = previous.pricingProvenanceByEdgeKey?.get(edgeKey);
+  if (previousProvenance !== "refreshed" && previousProvenance !== "carried") {
+    return null;
+  }
+  if (previous.coverageByEdgeKey.get(edgeKey)?.status !== "resolved") return null;
+  const mid = previous.mids.get(edgeKey);
+  return mid === undefined ? null : { mid };
+}
+
+function sameCanonicalSource(left: CanonicalSource, right: CanonicalSource): boolean {
+  return left.number === right.number &&
+    left.generation === right.generation &&
+    left.hash.toLowerCase() === right.hash.toLowerCase();
+}
+
+function sameEdgeContract(
+  left: VerifiedGraphView["edges"][number],
+  right: VerifiedGraphView["edges"][number],
+): boolean {
+  return blockScanEdgeKey(left) === blockScanEdgeKey(right) &&
+    left.adapterId === right.adapterId &&
+    left.target.toLowerCase() === right.target.toLowerCase() &&
+    left.tokenIn.toLowerCase() === right.tokenIn.toLowerCase() &&
+    left.tokenOut.toLowerCase() === right.tokenOut.toLowerCase() &&
+    left.slotKind === right.slotKind &&
+    (left.protocolAction ?? "") === (right.protocolAction ?? "") &&
+    left.edgeKind === right.edgeKind &&
+    left.leavesStandingPosition === right.leavesStandingPosition &&
+    (left.instanceKey ?? "") === (right.instanceKey ?? "") &&
+    (left.executionVariantKey ?? "") === (right.executionVariantKey ?? "");
 }
 
 function buildStrictFundingSnapshot(

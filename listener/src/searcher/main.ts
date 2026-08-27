@@ -1677,6 +1677,7 @@ async function main(): Promise<void> {
     exactCallBackend?: Pick<StateBackend, "call">,
     touchedPools?: ReadonlySet<string>,
     pricingCallBackend?: Pick<StateBackend, "call">,
+    requiredEdgeIds?: ReadonlySet<string>,
   ): Promise<StrictProductionRuntimeSession> => {
     const fundingKey = [...new Set(fundingAssets.map((token) =>
       token.toLowerCase()
@@ -1693,8 +1694,15 @@ async function main(): Promise<void> {
           .update([...touchedPools].sort().join(","))
           .digest("hex")
           .slice(0, 16);
+    const requiredEdgeFingerprint = requiredEdgeIds === undefined
+      ? "all-edges"
+      : createHash("sha256")
+          .update([...requiredEdgeIds].sort().join(","))
+          .digest("hex")
+          .slice(0, 16);
     const key = `${kind}:${source.number}:${source.hash.toLowerCase()}:` +
-      `${source.generation}:${fundingFingerprint}:${touchedFingerprint}`;
+      `${source.generation}:${fundingFingerprint}:${touchedFingerprint}:` +
+      `${requiredEdgeFingerprint}`;
     // An exact backend is pass-scoped and is closed at the end of the block;
     // never let a cached session retain a backend from an earlier pass.
     const cacheable = exactCallBackend === undefined &&
@@ -1748,6 +1756,7 @@ async function main(): Promise<void> {
       kind,
       ...(control === undefined ? {} : { control }),
       ...(touchedPools === undefined ? {} : { touchedPools }),
+      ...(requiredEdgeIds === undefined ? {} : { requiredEdgeIds }),
     }).catch((error) => {
       if (cacheable && strictSessionCache.get(key) === pending) {
         strictSessionCache.delete(key);

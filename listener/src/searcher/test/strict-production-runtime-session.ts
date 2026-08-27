@@ -34,6 +34,8 @@ import type {
 } from "../venues/route-leg-adapter.js";
 import { UNIV2_PAIR_INTERFACE } from
   "../venues/swaps/univ2-family/codec.js";
+import { scanBlockStateFromResolvedMids } from
+  "../detector/blockscan-scanner-core.js";
 
 const STARTUP: CanonicalSource = Object.freeze({
   number: 25_800_000,
@@ -104,6 +106,11 @@ function runtime(
       readonly reserve1: bigint;
       readonly blockTimestampLast: number;
     }>;
+    readonly reservesByTarget?: ReadonlyMap<string, Readonly<{
+      readonly reserve0: bigint;
+      readonly reserve1: bigint;
+      readonly blockTimestampLast: number;
+    }>>;
     readonly onCurrentPricingRead?: () => void;
     readonly onCurrentPricingReadStart?: (target: string) => void;
     readonly onCurrentPricingReadEnd?: (target: string) => void;
@@ -143,12 +150,13 @@ function runtime(
             ) {
               throw new Error("current pricing transport failed");
             }
+            const targetReserves = options.reservesByTarget?.get(target) ?? reserves;
             return UNIV2_PAIR_INTERFACE.encodeFunctionResult(
               "getReserves",
               [
-                reserves.reserve0,
-                reserves.reserve1,
-                reserves.blockTimestampLast,
+                targetReserves.reserve0,
+                targetReserves.reserve1,
+                targetReserves.blockTimestampLast,
               ],
             );
           } finally {
@@ -355,8 +363,225 @@ assert.deepEqual(
 
 let activeFailedRefreshReads = 0;
 const firstParallelTarget = parallelReadyInstances[0]!.instanceKey.toLowerCase();
+const secondParallelTarget = parallelReadyInstances[1]!.instanceKey.toLowerCase();
+const carryNextSource: CanonicalSource = Object.freeze({
+  number: CURRENT.number + 1,
+  hash: `0x${"63".repeat(32)}`,
+  generation: CURRENT.generation + 1,
+});
+const carryBaseGraph = createVerifiedGraphView({
+  id: "strict-carry-base",
+  generation: CURRENT.generation,
+  sourceBlock: CURRENT.number,
+  sourceBlockHash: CURRENT.hash,
+  completenessWatermark: CURRENT.number,
+  perSourceCoverage: Object.freeze([Object.freeze({
+    familyId: publication.familyId,
+    sourceId: "strict-carry-test",
+    sourceFingerprint: "strict-carry-test-v1",
+    completeThroughBlock: CURRENT.number,
+    completeThroughHash: CURRENT.hash,
+  })]),
+  familyIdForEdge: () => publication.familyId,
+  edges: parallelStartupView.edges,
+});
+const carryNextGraph = createVerifiedGraphView({
+  id: "strict-carry-next",
+  generation: carryNextSource.generation,
+  sourceBlock: carryNextSource.number,
+  sourceBlockHash: carryNextSource.hash,
+  completenessWatermark: carryNextSource.number,
+  perSourceCoverage: Object.freeze([Object.freeze({
+    familyId: publication.familyId,
+    sourceId: "strict-carry-test",
+    sourceFingerprint: "strict-carry-test-v1",
+    completeThroughBlock: carryNextSource.number,
+    completeThroughHash: carryNextSource.hash,
+  })]),
+  familyIdForEdge: () => publication.familyId,
+  edges: parallelStartupView.edges,
+});
+const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
+  async (source, control, kind, fundingAssets, exactCallBackend, touchedPools, pricingCallBackend, requiredEdgeIds) =>
+    parallelRoot.createSession({
+      source,
+      runtime: runtime(source, {
+        reservesByTarget: new Map<string, Readonly<{
+          reserve0: bigint;
+          reserve1: bigint;
+          blockTimestampLast: number;
+        }>>([
+          [firstParallelTarget, Object.freeze({ reserve0: 1_000_000_000n, reserve1: 3_000_000_000n, blockTimestampLast: 1 })],
+          [secondParallelTarget, Object.freeze({ reserve0: 3_000_000_000n, reserve1: 1_000_000_000n, blockTimestampLast: 1 })],
+        ]),
+      }),
+      fundingAssets: fundingAssets ?? Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+      ...(kind === undefined ? {} : { kind }),
+      ...(control === undefined ? {} : { control }),
+      ...(exactCallBackend === undefined ? {} : { exactCallBackend }),
+      ...(touchedPools === undefined ? {} : { touchedPools }),
+      ...(pricingCallBackend === undefined ? {} : { pricingCallBackend }),
+      ...(requiredEdgeIds === undefined ? {} : { requiredEdgeIds }),
+    }),
+  () => {},
+);
+const carryBase = await carryBaseCoordinator.prepareCoarsePricing({
+  graph: carryBaseGraph,
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(carryBase.status, "complete");
+const bootstrapCoordinator = new StrictCurrentRuntimeCoordinator(
+  async (source, control) => parallelRoot.createSession({
+    source,
+    runtime: runtime(source),
+    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+    ...(control === undefined ? {} : { control }),
+  }),
+  () => {},
+);
+const bootstrap = await bootstrapCoordinator.prepareCoarsePricing({
+  graph: carryBaseGraph,
+  touchedPools: new Set([firstParallelTarget]),
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(bootstrap.status, "complete");
+assert.equal(bootstrap.snapshot.coverage.carriedEdgeKeys?.length, 0);
+assert.equal(
+  bootstrap.snapshot.coverage.refreshedEdgeKeys?.length,
+  carryBaseGraph.scannerEdgeCount,
+  "without a baseline, bootstrap refreshes the complete graph",
+);
+const edgeA = carryBaseGraph.edges.find((candidate) =>
+  candidate.instanceKey?.toLowerCase() === firstParallelTarget
+)!;
+const edgeB = carryBaseGraph.edges.find((candidate) =>
+  candidate.instanceKey?.toLowerCase() === secondParallelTarget
+)!;
+const touchedA = new Set([firstParallelTarget]);
+const carried = await carryBaseCoordinator.prepareCoarsePricing({
+  graph: carryNextGraph,
+  touchedPools: touchedA,
+  canonicalActivity: Object.freeze({
+    source: carryNextSource,
+    touchedStateKeys: touchedA,
+    complete: true,
+  }),
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(carried.status, "complete");
+const carriedPricing = carried.snapshot;
+assert.equal(
+  carriedPricing.pricingProvenanceByEdgeKey?.get(edgeA.canonicalEdgeId!),
+  "refreshed",
+);
+assert.equal(
+  carriedPricing.pricingProvenanceByEdgeKey?.get(edgeB.canonicalEdgeId!),
+  "carried",
+);
+assert.equal(carriedPricing.coverage.carriedEdgeKeys?.length, 38);
+assert.equal(carriedPricing.coverage.unresolvedEdgeKeys.length, 0);
+assert.ok(carriedPricing.mids.has(edgeA.canonicalEdgeId!));
+assert.ok(carriedPricing.mids.has(edgeB.canonicalEdgeId!));
+const enumerated = scanBlockStateFromResolvedMids({
+  edges: [...carryNextGraph.edges],
+  sourceBlock: carryNextSource.number,
+  swapTouched: null,
+  cfg: {
+    maxHops: 2,
+    minSpreadBps: 1,
+    maxCandidates: 20,
+    budgetMs: 1_000,
+    pricedTokens: new Map([
+      [UNIV2_FIXTURE_TOKEN0.toLowerCase(), { maxBorrow: 10n ** 18n }],
+      [UNIV2_FIXTURE_TOKEN1.toLowerCase(), { maxBorrow: 10n ** 18n }],
+    ]),
+  },
+  mids: carriedPricing.mids,
+});
+assert.ok(
+  enumerated.opportunities.some((opportunity) =>
+    opportunity.seedEdges.some((candidate) => candidate.instanceKey?.toLowerCase() === firstParallelTarget) &&
+    opportunity.seedEdges.some((candidate) => candidate.instanceKey?.toLowerCase() === secondParallelTarget)
+  ),
+  "A→B→A remains enumerable from the dense coarse snapshot",
+);
+const requiredCarryEdges = new Set([edgeA.canonicalEdgeId!, edgeB.canonicalEdgeId!]);
+const exactCarrySession = await parallelRoot.createSession({
+  source: carryNextSource,
+  runtime: runtime(carryNextSource, {
+    reservesByTarget: new Map<string, Readonly<{
+      reserve0: bigint;
+      reserve1: bigint;
+      blockTimestampLast: number;
+    }>>([
+      [firstParallelTarget, Object.freeze({ reserve0: 1_000_000_000n, reserve1: 3_000_000_000n, blockTimestampLast: 2 })],
+      [secondParallelTarget, Object.freeze({ reserve0: 3_000_000_000n, reserve1: 1_000_000_000n, blockTimestampLast: 2 })],
+    ]),
+  }),
+  fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+  kind: "exact",
+  requiredEdgeIds: requiredCarryEdges,
+});
+assert.ok(exactCarrySession.edges.some((candidate) => candidate.canonicalEdgeId === edgeA.canonicalEdgeId));
+assert.ok(exactCarrySession.edges.some((candidate) => candidate.canonicalEdgeId === edgeB.canonicalEdgeId));
+for (const candidate of [edgeA, edgeB]) {
+  const exactCarry = await exactCarrySession.issueExact({
+    edge: exactCarrySession.edges.find((item) => item.canonicalEdgeId === candidate.canonicalEdgeId)!,
+    amountIn: 1_000_000n,
+    executor: EXECUTOR,
+    runtimeEvidence: Object.freeze([]),
+  });
+  assert.equal(exactCarry.status, "resolved");
+}
 await assert.rejects(
   parallelRoot.createSession({
+    source: carryNextSource,
+    runtime: runtime(carryNextSource),
+    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+    kind: "exact",
+    requiredEdgeIds: new Set(["missing-canonical-edge"]),
+  }),
+  /missing required edge ids/,
+  "exact must fail closed when the candidate closure is missing from the session",
+);
+
+const reorgCoordinator = new StrictCurrentRuntimeCoordinator(
+  async (source, control, kind, fundingAssets, exactCallBackend, touchedPools) => parallelRoot.createSession({
+    source,
+    runtime: runtime(source),
+    fundingAssets: fundingAssets ?? Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+    ...(kind === undefined ? {} : { kind }),
+    ...(control === undefined ? {} : { control }),
+    ...(exactCallBackend === undefined ? {} : { exactCallBackend }),
+    ...(touchedPools === undefined ? {} : { touchedPools }),
+  }),
+  () => {},
+);
+await reorgCoordinator.prepareCoarsePricing({
+  graph: carryBaseGraph,
+  deadlineAtMs: Date.now() + 10_000,
+});
+const reorg = await reorgCoordinator.prepareCoarsePricing({
+  graph: carryNextGraph,
+  touchedPools: touchedA,
+  canonicalActivity: Object.freeze({
+    source: Object.freeze({
+      ...carryNextSource,
+      hash: `0x${"64".repeat(32)}`,
+    }),
+    touchedStateKeys: touchedA,
+    complete: true,
+  }),
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(reorg.status, "degraded");
+assert.equal(
+  reorg.snapshot.pricingProvenanceByEdgeKey?.get(edgeB.canonicalEdgeId!),
+  "unresolved",
+  "a reorg/mismatched canonical activity proof cannot authorize carry",
+);
+
+const failedParallelSession = await parallelRoot.createSession({
     source: CURRENT,
     runtime: runtime(CURRENT, {
       currentPricingDelayMs: (target) =>
@@ -370,13 +595,16 @@ await assert.rejects(
       },
     }),
     fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
-  }),
-  /strict current pricing incomplete/,
-);
+  });
 assert.equal(
   activeFailedRefreshReads,
   0,
   "failed session must drain every sibling refresh before returning",
+);
+assert.equal(
+  failedParallelSession.currentPricingForEdge(failedParallelSession.edges[0]!)?.status,
+  "unresolved",
+  "a failed dirty refresh remains explicitly unresolved",
 );
 let exactPricingReads = 0;
 const exactSession = await parallelRoot.createSession({
@@ -634,17 +862,16 @@ const failingCoordinator = new StrictCurrentRuntimeCoordinator(
   }),
   () => {},
 );
-await assert.rejects(
-  failingCoordinator.prepareCoarsePricing({
+const failedCoarse = await failingCoordinator.prepareCoarsePricing({
     graph: currentGraph,
     deadlineAtMs: Date.now() + 10_000,
-  }),
-  /strict current pricing incomplete/,
-);
+  });
+assert.equal(failedCoarse.status, "degraded");
+assert.ok(failingCoordinator.latestPricingSnapshot());
 assert.equal(
-  failingCoordinator.latestPricingSnapshot(),
-  null,
-  "failed strict pricing cannot publish a partial snapshot",
+  failedCoarse.snapshot.coverage.unresolvedEdgeKeys.length,
+  currentGraph.scannerEdgeCount,
+  "failed strict pricing is published as explicit unresolved coverage",
 );
 let failAfterPublication = false;
 const retainingCoordinator = new StrictCurrentRuntimeCoordinator(
@@ -665,17 +892,15 @@ await retainingCoordinator.prepareCoarsePricing({
 const retainedPricing = retainingCoordinator.latestPricingSnapshot();
 assert(retainedPricing);
 failAfterPublication = true;
-await assert.rejects(
-  retainingCoordinator.prepareCoarsePricing({
+const failedAfterPublication = await retainingCoordinator.prepareCoarsePricing({
     graph: currentGraph,
     deadlineAtMs: Date.now() + 10_000,
-  }),
-  /strict current pricing incomplete/,
-);
-assert.strictEqual(
+  });
+assert.equal(failedAfterPublication.status, "degraded");
+assert.notStrictEqual(
   retainingCoordinator.latestPricingSnapshot(),
   retainedPricing,
-  "failed strict refresh cannot replace the last atomic pricing snapshot",
+  "failed strict refresh is visible as an explicit degraded generation",
 );
 const failingFundingCoordinator = new StrictCurrentRuntimeCoordinator(
   async (source, control) => await root.createSession({
@@ -815,13 +1040,14 @@ assert.equal(
   "behavior-proven-unavailable",
 );
 
-await assert.rejects(
-  root.createSession({
+const failedSession = await root.createSession({
     source: CURRENT,
     runtime: runtime(CURRENT, { failCurrentPricing: true }),
     fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
-  }),
-  /strict current pricing incomplete/,
+  });
+assert.equal(
+  failedSession.currentPricingForEdge(failedSession.edges[0]!)?.status,
+  "unresolved",
 );
 
 await assert.rejects(

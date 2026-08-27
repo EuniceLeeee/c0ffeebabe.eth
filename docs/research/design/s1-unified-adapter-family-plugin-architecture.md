@@ -995,26 +995,11 @@ those libraries; central scanner/solver code may not import a V2/V3/V4/Curve-spe
 module. Central caching keys sealed state by route binding, source number/hash, Family definition hash,
 request-set fingerprint, and authority. A cache never grants admission or Graph authority.
 
-Current-source refresh is atomic and block-cadence aware, and it is **touched-driven**: the strict
-session refreshes current pricing only for the venues this block's transactions actually touched (the block
-log addresses, and the univ4 PositionManager poolId from topics[1]); untouched ready instances are skipped
-explicitly ("skipped" outcomes, never a missing refresh). The published snapshot keeps the full ready graph
-in its expected edge set but marks every untouched edge unresolved
-(coverage reason `untouched-this-block`) and reports `degraded` while its family joins
-`incompleteFamilyIds`; the scanner enumeration resolves over the priced (resolved) subset. This keeps the
-whole-block pipeline inside one block cadence at the 16k-instance graph scale instead of re-reading every
-venue per block:
-
-- ready instances refresh under a bounded shared worker pool; independent instances must not form one
-  serial RPC chain, and untouched instances are not read at all;
-- the same source number/hash/generation shares one in-flight session promise across blockscan/backrun; the
-  session cache key includes the touched-set fingerprint;
-- exact-kind sessions (exact refinement probes and the exact execution context) re-issue route handles only
-  for the touched instances (credit families always re-issued), scoped to the coarse block's touched venues
-  in the N-1 lane — never the full 16k-instance reissue, which blew the refinement budget;
-- results are stored by ready-instance index and flattened in deterministic ready order;
-- one failed instance rejects the whole new session and cannot publish a partial pricing snapshot;
-- Funding refresh and final source/generation fences remain fail-closed.
+Current-source refresh is atomic and block-cadence aware. It uses the sparse-read/dense-publication contract
+defined in §11.1: the canonical activity/touched set controls refresh work only, while the complete ready
+Graph remains the snapshot and enumeration input. A failed dirty refresh is an explicit unresolved result;
+it is not silently replaced by a prior price. Funding refresh and final source/generation fences remain
+fail-closed.
 
 The concurrency cap is a resource policy, not a Family contract. A Family plugin still issues its request
 program; the kernel only schedules independent issued programs. Adding or changing an unrelated capability
@@ -1195,6 +1180,22 @@ During the producer lifetime:
 
 Generic in-flight dedupe, batching, caching, and backpressure may continue. They do not own admission,
 coverage, cursor, Graph creation, or publication.
+
+### 11.1 Current-source pricing continuity
+
+The current-source coarse publisher uses sparse reads and dense publication. A block's touched state-key set
+is only the refresh set; it never defines the edge set or the candidate input. With no prior safe base, the
+publisher takes the bootstrap branch and refreshes the complete ready pricing surface. Once a base exists,
+each untouched edge may carry only when its canonical edge contract, Family id, Family stateKey, prior
+resolved pricing provenance, and source-bound canonical activity proof all match. A touched refresh failure
+remains explicitly unresolved and is never substituted with a prior price. Behavior-proven unavailable
+remains a separate terminal category.
+
+Every published coarse snapshot records the disjoint pricing partition
+`refreshed + carried + unavailable + unresolved = expected`; degraded publication does not relax the final
+fail-closed gate. Exact scope is derived from the complete canonical edge closure of the coarse candidates'
+`seedEdges` through `requiredEdgeIds`. The exact session must contain every required edge and fails closed
+when any required edge is absent; it does not use an independent touched-pool scope.
 
 ## 12. Physical deletion closure
 

@@ -191,6 +191,11 @@ export interface BlockScanStateCoverage {
   readonly resolvedEdgeKeyHash: string;
   readonly unavailableEdgeKeyHash: string;
   readonly unresolvedEdgeKeyHash: string;
+  /** Strict current-source pricing provenance, when supplied by the strict coordinator. */
+  readonly refreshedEdgeKeys?: readonly string[];
+  readonly carriedEdgeKeys?: readonly string[];
+  readonly refreshedEdgeKeyHash?: string;
+  readonly carriedEdgeKeyHash?: string;
 }
 
 export type BlockScanLaggingTopologyRefreshMode =
@@ -297,6 +302,13 @@ export interface BlockScanStateSnapshot {
   readonly resolvedFamilyIds: readonly string[];
   readonly incompleteFamilyIds: readonly string[];
   readonly coverage: BlockScanStateCoverage;
+  /** Per-edge provenance for strict sparse-read/dense-publication snapshots. */
+  readonly pricingProvenanceByEdgeKey?: ReadonlyMap<
+    string,
+    "refreshed" | "carried" | "unavailable" | "unresolved"
+  >;
+  readonly pricingStateKeyByEdgeKey?: ReadonlyMap<string, string>;
+  readonly pricingFamilyIdByEdgeKey?: ReadonlyMap<string, string>;
   readonly laneTelemetry: readonly BlockScanLaneTelemetry[];
   /** Optional for compatibility with persisted snapshots created before this field. */
   readonly familyTelemetry?: readonly BlockScanFamilyTelemetry[];

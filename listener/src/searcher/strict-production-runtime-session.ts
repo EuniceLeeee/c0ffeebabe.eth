@@ -103,6 +103,10 @@ export type StrictCurrentRoutePricing =
   | {
       readonly status: "behavior-proven-unavailable";
       readonly reason: string;
+    }
+  | {
+      readonly status: "unresolved";
+      readonly reason: string;
     };
 
 interface ExactBinding {
@@ -217,6 +221,8 @@ export class StrictProductionRuntimeRoot {
     readonly kind?: StrictProductionSessionKind;
     readonly control?: AdapterWorkControl;
     readonly touchedPools?: ReadonlySet<string>;
+    /** Exact refinement scope inherited from the coarse candidates' edge closure. */
+    readonly requiredEdgeIds?: ReadonlySet<string>;
   }): Promise<StrictProductionRuntimeSession> {
     assertCanonicalSource(input.source);
     input.runtime.generationFence.assertCurrent(
@@ -237,6 +243,10 @@ export class StrictProductionRuntimeRoot {
     >();
 
     const kind = input.kind ?? "pricing";
+    const requiredEdgeIds = input.requiredEdgeIds;
+    const requiredInstanceKeys = requiredEdgeIds === undefined
+      ? undefined
+      : requiredInstanceKeysForEdges(this.#readyGraph, requiredEdgeIds);
     if (kind === "pricing") {
       /*
        * Ready instances refresh independently through the shared transport
@@ -252,7 +262,7 @@ export class StrictProductionRuntimeRoot {
       const refreshConcurrency = Math.max(1, Math.min(128, this.#readyInstances.length));
       const refreshedOutcomes = Array.from(
         { length: this.#readyInstances.length },
-        () => null as InstanceRefreshOutcome | null | "skipped",
+        () => null as InstanceRefreshOutcome | null,
       );
       let refreshCursor = 0;
       const refreshWorkers = Array.from(
@@ -266,20 +276,31 @@ export class StrictProductionRuntimeRoot {
               input.touchedPools !== undefined &&
               !touchedInstanceMatches(readyInstance, input.touchedPools)
             ) {
-              // Current pricing refreshes only this block's touched venues;
-              // untouched instances have no current mid this block and the
-              // scanner's touched filter keeps enumeration over the touched
-              // venues. Mark the slot explicitly: skipped slots must not
-              // look like a missing refresh (null throws below).
-              refreshedOutcomes[index] = "skipped";
+              // Touched state controls refresh work only. Re-issue the
+              // source-bound route shell so the dense snapshot can carry a
+              // compatible clean price from the preceding generation.
+              refreshedOutcomes[index] = this.unpricedInstanceRoutes({
+                readyInstance,
+                source: input.source,
+              });
               continue;
             }
-            refreshedOutcomes[index] = await this.refreshReadyInstancePricing({
-              readyInstance,
-              source: input.source,
-              runtime: input.runtime,
-              ...(input.control === undefined ? {} : { control: input.control }),
-            });
+            try {
+              refreshedOutcomes[index] = await this.refreshReadyInstancePricing({
+                readyInstance,
+                source: input.source,
+                runtime: input.runtime,
+                ...(input.control === undefined ? {} : { control: input.control }),
+              });
+            } catch (error) {
+              // A dirty read failure is a real unresolved result. Keep the
+              // edge shell, but never turn it into a carried price.
+              refreshedOutcomes[index] = this.unresolvedInstanceRoutes({
+                readyInstance,
+                source: input.source,
+                reason: error instanceof Error ? error.message : String(error),
+              });
+            }
           }
         },
       );
@@ -295,7 +316,6 @@ export class StrictProductionRuntimeRoot {
       );
       if (refreshFailure !== undefined) throw refreshFailure.reason;
       for (const outcome of refreshedOutcomes) {
-        if (outcome === "skipped") continue;
         if (outcome === null) {
           throw new Error("strict ready instance refresh did not complete");
         }
@@ -318,6 +338,10 @@ export class StrictProductionRuntimeRoot {
           readyInstance.familyId,
         );
         if (strictFamily.plugin.manifest.domain === "credit") {
+          if (
+            requiredInstanceKeys !== undefined &&
+            !requiredInstanceKeys.has(instanceKeyFor(readyInstance))
+          ) continue;
           const currentInstance = reissuePreparedInstanceAuthority({
             family: strictFamily,
             instance: readyInstance,
@@ -336,13 +360,11 @@ export class StrictProductionRuntimeRoot {
           continue;
         }
         if (
-          input.touchedPools !== undefined &&
-          !touchedInstanceMatches(readyInstance, input.touchedPools)
+          requiredInstanceKeys !== undefined &&
+          !requiredInstanceKeys.has(instanceKeyFor(readyInstance))
         ) {
-          // Exact sessions re-issue only this block's touched pricing
-          // instances (credit instances above are always re-issued). The
-          // untouched reissue cost for the full 16k-instance ready set blew
-          // the refinement budget before funding could start.
+          // Exact sessions re-issue the complete edge closure requested by
+          // coarse enumeration, never an independent touched-pool scope.
           continue;
         }
         const family = this.#catalog.forFamily(readyInstance.familyId);
@@ -369,11 +391,24 @@ export class StrictProductionRuntimeRoot {
 
     const view = buildFamilyRouteGraphView({ routes, creditRoutes });
     assertSameReadyTopology(this.#readyGraph, view.edges);
+    assertRequiredEdgeIdsPresent(view.edges, requiredEdgeIds);
     const bindings = new Map<CanonicalEdgeId, StrictRouteBinding>();
     const currentPricing = new Map<
       CanonicalEdgeId,
       StrictCurrentRoutePricing
     >();
+    const stateKeyByInstance = new Map<string, string>();
+    for (const readyInstance of this.#readyInstances) {
+      for (const pricing of readyInstance.pricingInstances) {
+        const key = instanceKeyFor(readyInstance);
+        const previous = stateKeyByInstance.get(key);
+        if (previous !== undefined && previous !== pricing.stateKey) {
+          throw new Error(`strict instance has conflicting pricing state keys ${key}`);
+        }
+        stateKeyByInstance.set(key, pricing.stateKey);
+      }
+    }
+    const stateKeyByEdge = new Map<CanonicalEdgeId, string>();
     for (const projected of view.routes) {
       const strictFamily = this.#catalog.forStrictFamily(
         projected.handle.familyId,
@@ -392,13 +427,12 @@ export class StrictProductionRuntimeRoot {
             edge: projected.edge,
           });
       bindings.set(projected.edge.canonicalEdgeId, binding);
+      const stateKey = stateKeyByInstance.get(instanceKeyForHandle(projected.handle));
+      if (stateKey !== undefined) {
+        stateKeyByEdge.set(projected.edge.canonicalEdgeId, stateKey);
+      }
       if (binding.kind === "route") {
         const pricing = pricingByHandle.get(binding.handle);
-        if (pricing === undefined && kind === "pricing") {
-          throw new Error(
-            `strict current pricing missing for ${projected.edge.canonicalEdgeId}`,
-          );
-        }
         if (pricing !== undefined) {
           currentPricing.set(
             projected.edge.canonicalEdgeId,
@@ -442,9 +476,80 @@ export class StrictProductionRuntimeRoot {
       edges: view.edges,
       bindings,
       currentPricing,
+      stateKeyByEdge,
       fundingBindings,
       fundingOutcomes,
       pricingComplete: kind === "pricing",
+    });
+  }
+
+  private unpricedInstanceRoutes(input: {
+    readonly readyInstance: PreparedFamilyInstance;
+    readonly source: CanonicalSource;
+  }): InstanceRefreshOutcome {
+    const strictFamily = this.#catalog.forStrictFamily(input.readyInstance.familyId);
+    if (strictFamily.plugin.manifest.domain === "credit") {
+      const currentInstance = reissuePreparedInstanceAuthority({
+        family: strictFamily,
+        instance: input.readyInstance,
+        source: input.source,
+        generation: input.source.generation,
+      });
+      const publication = prepareCreditFamilyRoutes({
+        family: strictFamily,
+        instance: currentInstance,
+        source: input.source,
+        generation: input.source.generation,
+      });
+      return Object.freeze({
+        routes: Object.freeze([]),
+        creditRoutes: Object.freeze(publication.routes.map((route) =>
+          projectCreditRouteGraph({ family: strictFamily, route })
+        )),
+        pricing: Object.freeze([]),
+      });
+    }
+    const family = this.#catalog.forFamily(input.readyInstance.familyId);
+    const currentAuthority = reissuePreparedInstanceAuthority({
+      family,
+      instance: input.readyInstance,
+      source: input.source,
+      generation: input.source.generation,
+    });
+    const currentInstance = reissuePreparedInstanceRouteHandles({
+      family,
+      instance: currentAuthority,
+      source: input.source,
+      generation: input.source.generation,
+    });
+    return Object.freeze({
+      routes: Object.freeze(currentInstance.routes.map((route, index) => ({
+        family,
+        descriptor: currentInstance.descriptor,
+        route,
+        handle: currentInstance.routeHandles[index]!,
+      }))),
+      creditRoutes: Object.freeze([]),
+      pricing: Object.freeze([]),
+    });
+  }
+
+  private unresolvedInstanceRoutes(input: {
+    readonly readyInstance: PreparedFamilyInstance;
+    readonly source: CanonicalSource;
+    readonly reason: string;
+  }): InstanceRefreshOutcome {
+    const unpriced = this.unpricedInstanceRoutes(input);
+    if (unpriced.routes.length === 0) return unpriced;
+    return Object.freeze({
+      ...unpriced,
+      pricing: Object.freeze(unpriced.routes.map(({ handle }) => [
+        handle,
+        Object.freeze({
+          status: "unresolved" as const,
+          reason: input.reason,
+        }),
+      ] as [FamilyRouteRuntimeHandle, StrictCurrentRoutePricing])),
     });
   }
 
@@ -556,9 +661,9 @@ export class StrictProductionRuntimeSession {
     CanonicalEdgeId,
     StrictCurrentRoutePricing
   >;
+  readonly #stateKeyByEdge: ReadonlyMap<CanonicalEdgeId, string>;
   readonly #fundingBindings: readonly FundingBinding[];
   readonly #fundingOutcomes: readonly FundingInstanceOutcome[];
-  readonly #pricingComplete: boolean;
   readonly #exactBindings = new WeakMap<object, ExactBinding>();
 
   constructor(input: {
@@ -572,6 +677,7 @@ export class StrictProductionRuntimeSession {
       CanonicalEdgeId,
       StrictCurrentRoutePricing
     >;
+    readonly stateKeyByEdge?: ReadonlyMap<CanonicalEdgeId, string>;
     readonly fundingBindings: readonly FundingBinding[];
     readonly fundingOutcomes: readonly FundingInstanceOutcome[];
     readonly pricingComplete?: boolean;
@@ -583,9 +689,9 @@ export class StrictProductionRuntimeSession {
     this.edges = Object.freeze([...input.edges]);
     this.#bindings = new Map(input.bindings);
     this.#currentPricing = new Map(input.currentPricing);
+    this.#stateKeyByEdge = new Map(input.stateKeyByEdge ?? []);
     this.#fundingBindings = Object.freeze([...input.fundingBindings]);
     this.#fundingOutcomes = Object.freeze([...input.fundingOutcomes]);
-    this.#pricingComplete = input.pricingComplete ?? true;
     Object.freeze(this);
   }
 
@@ -605,13 +711,12 @@ export class StrictProductionRuntimeSession {
     const binding = this.#resolve(edge);
     if (binding.kind === "credit") return null;
     const pricing = this.#currentPricing.get(binding.edge.canonicalEdgeId);
-    if (pricing === undefined) {
-      if (!this.#pricingComplete) return null;
-      throw new Error(
-        `strict session has no current pricing for ${binding.edge.canonicalEdgeId}`,
-      );
-    }
-    return pricing;
+    return pricing ?? null;
+  }
+
+  /** Family-declared state identity used by the coordinator's carry contract. */
+  stateKeyForEdge(edge: TokenEdge): string | null {
+    return this.#stateKeyByEdge.get(this.#resolve(edge).edge.canonicalEdgeId) ?? null;
   }
 
   /**
@@ -1027,11 +1132,50 @@ function currentPricingForRoute(
     : Object.freeze({ status: "priced" as const, mid });
 }
 
+function instanceKeyFor(instance: PreparedFamilyInstance): string {
+  return String(instance.instanceKey);
+}
+
+function instanceKeyForHandle(
+  handle: FamilyRouteRuntimeHandle | CreditRouteRuntimeHandle,
+): string {
+  return String(handle.instanceKey);
+}
+
+function requiredInstanceKeysForEdges(
+  graph: readonly TokenEdge[],
+  requiredEdgeIds: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const instanceKeys = new Set<string>();
+  for (const edge of graph) {
+    if (!requiredEdgeIds.has(requiredCanonicalEdgeId(edge))) continue;
+    if (edge.instanceKey === undefined || edge.instanceKey.length === 0) {
+      throw new Error("required exact edge lacks instanceKey");
+    }
+    instanceKeys.add(edge.instanceKey);
+  }
+  return instanceKeys;
+}
+
+function assertRequiredEdgeIdsPresent(
+  edges: readonly TokenEdge[],
+  requiredEdgeIds: ReadonlySet<string> | undefined,
+): void {
+  if (requiredEdgeIds === undefined) return;
+  const available = new Set(edges.map((edge) => requiredCanonicalEdgeId(edge)));
+  const missing = [...requiredEdgeIds].filter((edgeId) =>
+    !available.has(edgeId as CanonicalEdgeId)
+  );
+  if (missing.length > 0) {
+    throw new Error(`strict exact session is missing required edge ids: ${missing.sort().join(",")}`);
+  }
+}
+
 function bindCurrentPricingToEdge(
   pricing: StrictCurrentRoutePricing,
   edge: TokenEdge,
 ): StrictCurrentRoutePricing {
-  if (pricing.status === "behavior-proven-unavailable") return pricing;
+  if (pricing.status !== "priced") return pricing;
   return Object.freeze({
     status: "priced" as const,
     mid: Object.freeze({
