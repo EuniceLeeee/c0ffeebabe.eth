@@ -83,6 +83,7 @@ function makeFixture(
     | "expectedSourcePlanFingerprints"
     | "dedupeFamilyCandidates"
     | "reverseBindOpaqueCandidates"
+    | "preAttestationRetryable"
     | "sealDurableVerifiedMemo"
   >>,
 ): Fixture {
@@ -837,7 +838,41 @@ async function main(): Promise<void> {
       "the ready instance set carries the instance exactly once",
     );
 
-    // I: two candidate keys verifying to ONE family instance (e.g. two curve
+    // I: a source/reverse-binding miss is accounted as retryable before the
+    // Family lifecycle. It stays out of the Graph but cannot keep the exact
+    // candidate partition in progress.
+    const sourceRetry = makeFixture(join(dir, "source-retryable"), {
+      scanSwapWindow: async (scanInput) => Object.freeze({
+        observations: Object.freeze([Object.freeze({
+          id: "opaque",
+          block: SOURCE.number,
+          sourceRetryable: true,
+        })]),
+        sourceReceipts: sourceReceipts(scanInput.fromBlock),
+      }),
+      preAttestationRetryable: (candidate) =>
+        (candidate as { id?: string }).id === "opaque"
+          ? Object.freeze({
+              status: "retryable" as const,
+              candidateSnapshot: candidate,
+              stage: "nomination" as const,
+              failureCode: "rpc" as const,
+              reasonCode: "reverse-binding-unresolved",
+            })
+          : null,
+    });
+    const sourceRetryReady = await rebuildUniverse(sourceRetry.input);
+    const sourceRetryCheckpoint = await sourceRetry.store.load();
+    assert.equal(sourceRetryReady.candidateAccounting.retryable, 1);
+    assert.equal(sourceRetryCheckpoint?.inProgressRun, null);
+    assert.equal(sourceRetry.attestCalls.get("opaque") ?? 0, 0);
+    assert.equal(
+      sourceRetryCheckpoint?.retryableAttemptsByCandidateKey["cand:opaque"]
+        ?.stage,
+      "nomination",
+    );
+
+    // J: two candidate keys verifying to ONE family instance (e.g. two curve
     // pools sharing one underlying) must yield exactly one verified outcome;
     // the second candidate becomes terminal-rejected "duplicate-instance" so
     // the ready promotion's instance set stays unique (it fails closed on
@@ -896,7 +931,7 @@ async function main(): Promise<void> {
       null,
       "the duplicate is accounted before the completed run clears",
     );
-    // J: retained memos also pass through the shared instance gate. A new run
+    // K: retained memos also pass through the shared instance gate. A new run
     // starts with no outcomes, reuses both memos, and still publishes only one
     // instance without re-running either lifecycle.
     const retainedDuplicateDir = await mkdtemp(

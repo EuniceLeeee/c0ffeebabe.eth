@@ -9,6 +9,7 @@ import type {
   FamilyCaptureDescriptor,
   FundingCaptureVector,
   RouteCaptureVector,
+  ReverseBindingOutcome,
   RuntimeEvidence,
   UnifiedObservation,
 } from "./adapter-family-plugin.js";
@@ -112,11 +113,24 @@ export async function executeCatalogReverseBindings(input: {
   readonly nominations: readonly CaptureNominationInput[];
   readonly provider: CaptureNominationProvider;
   readonly alreadyAdmitted?: ReadonlySet<FamilyId>;
+  /** Optional generic narrowing when the caller already matched a Family. */
+  readonly onlyFamilyId?: FamilyId;
+  /** Framework outcome telemetry; it carries no protocol interpretation. */
+  readonly onOutcome?: (input: {
+    readonly familyId: FamilyId;
+    readonly nomination: CaptureNominationInput;
+    readonly outcome: ReverseBindingOutcome | undefined;
+    readonly accepted: boolean;
+  }) => void;
 }): Promise<readonly UnifiedObservation[]> {
   const observations: UnifiedObservation[] = [];
   const admitted = new Set(input.alreadyAdmitted ?? []);
   for (const family of input.catalog.listAll()) {
     const plugin = family.plugin;
+    if (
+      input.onlyFamilyId !== undefined &&
+      plugin.manifest.familyId !== input.onlyFamilyId
+    ) continue;
     if (!("discovery" in plugin)) continue;
     const declaration = plugin.discovery.reverseBinding;
     if (declaration?.kind !== "implementation") continue;
@@ -128,7 +142,15 @@ export async function executeCatalogReverseBindings(input: {
         provider: input.provider,
       });
       const outcome = derived[0];
-      if (outcome === undefined || outcome.status !== "verified") continue;
+      if (outcome === undefined || outcome.status !== "verified") {
+        input.onOutcome?.({
+          familyId: plugin.manifest.familyId,
+          nomination,
+          outcome,
+          accepted: false,
+        });
+        continue;
+      }
       const observation = outcome.observation;
       const matches = input.catalog.matches(observation);
       const accepted = matches.some((match) =>
@@ -138,6 +160,12 @@ export async function executeCatalogReverseBindings(input: {
           matchedPatternId: match.patternId,
         }) !== null
       );
+      input.onOutcome?.({
+        familyId: plugin.manifest.familyId,
+        nomination,
+        outcome,
+        accepted,
+      });
       if (!accepted) continue;
       observations.push(observation);
       admitted.add(plugin.manifest.familyId);

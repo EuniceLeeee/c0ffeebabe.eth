@@ -123,6 +123,16 @@ export interface UniverseRebuildDependencies {
     readonly logIndex?: number;
   } | undefined;
   /**
+   * A source-stage candidate that is complete enough to identify and retry,
+   * but not complete enough to enter the Family lifecycle yet. This keeps a
+   * failed reverse binding in exact accounting without making it a Ready
+   * generation barrier.
+   */
+  readonly preAttestationRetryable?: (candidate: unknown) =>
+    | (Omit<RetryableAttempt, "status" | "familyCandidateKey" | "familyId" |
+        "attemptCount" | "lastAttemptAt"> & { readonly status: "retryable" })
+    | null;
+  /**
    * Cross-run memo reuse: returns a memo only when Family + InstanceKey,
    * candidate fingerprint and per-Family definition hash all match and the
    * proof source is still canonical.
@@ -670,6 +680,21 @@ export async function rebuildUniverse(
         memoFingerprint: reusableMemo.memoFingerprint,
       }));
       return "verified";
+    }
+    const sourceRetryable = input.preAttestationRetryable?.(candidate) ?? null;
+    if (sourceRetryable !== null) {
+      const attemptCount = oldOutcome?.status === "retryable"
+        ? oldOutcome.attemptCount
+        : 0;
+      writer.record(Object.freeze({
+        ...sourceRetryable,
+        status: "retryable" as const,
+        familyCandidateKey: candidateKey,
+        familyId: String((candidate as { familyId?: unknown }).familyId ?? ""),
+        attemptCount: attemptCount + 1,
+        lastAttemptAt: new Date().toISOString(),
+      }));
+      return "retryable";
     }
     const evidenceRef = oldOutcome?.status === "retryable"
       ? oldOutcome.evidenceRef

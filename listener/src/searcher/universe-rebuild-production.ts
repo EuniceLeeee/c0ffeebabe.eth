@@ -45,6 +45,7 @@ import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import type { FamilyCapabilityIdentitySet } from
   "./venues/family-capability-catalog.js";
+import type { FamilyId } from "./venues/adapter-family-identifiers.js";
 
 /**
  * Production wiring for the durable universe rebuild (audit §6/§9). The
@@ -61,6 +62,38 @@ function digest(seed: string): string {
 
 const EIP1967_IMPLEMENTATION_SLOT =
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+
+const DISCOVERY_RETRYABLE_FIELD = "__universeRebuildDiscoveryRetryable";
+
+interface DiscoveryRetryableMarker {
+  readonly stage: "nomination";
+  readonly failureCode: "rpc" | "deadline" | "aborted" | "resource-limited";
+  readonly reasonCode: string;
+}
+
+function discoveryRetryableMarker(
+  candidate: Readonly<Record<string, unknown>>,
+): DiscoveryRetryableMarker | null {
+  const marker = candidate[DISCOVERY_RETRYABLE_FIELD];
+  if (marker === null || typeof marker !== "object" || Array.isArray(marker)) {
+    return null;
+  }
+  const item = marker as Readonly<Record<string, unknown>>;
+  if (
+    item.stage !== "nomination" ||
+    !["rpc", "deadline", "aborted", "resource-limited"].includes(
+      String(item.failureCode),
+    ) ||
+    typeof item.reasonCode !== "string" || item.reasonCode.length === 0
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    stage: "nomination",
+    failureCode: item.failureCode as DiscoveryRetryableMarker["failureCode"],
+    reasonCode: item.reasonCode,
+  });
+}
 
 /**
  * Current chain authority for durable memo reuse. Family code changes are
@@ -2152,7 +2185,9 @@ export function createRebuildWiring(input?: {
         if (key !== null) knownMaterializations.add(key);
       }
       const nominations: {
+        readonly familyId: FamilyId;
         readonly nomination: CaptureNominationInput;
+        readonly retryableCandidate: Readonly<Record<string, unknown>>;
       }[] = [];
       const seen = new Set<string>();
       for (const raw of reverseInput.observations) {
@@ -2223,7 +2258,32 @@ export function createRebuildWiring(input?: {
                 : { logIndex: log.logIndex }),
             }),
           });
-          nominations.push(Object.freeze({ nomination }));
+          nominations.push(Object.freeze({
+            familyId: match.familyId,
+            nomination,
+            retryableCandidate: Object.freeze({
+              familyId: match.familyId,
+              address: log.address.toLowerCase(),
+              poolId,
+              pluginCandidateKey: key.slice(match.familyId.length + 1),
+              adapter: adapterLabelForFamily(match.familyId),
+              ...(log.transactionHash === undefined
+                ? {}
+                : { transactionHash: log.transactionHash.toLowerCase() }),
+              ...(log.blockNumber === undefined
+                ? {}
+                : { blockNumber: log.blockNumber }),
+              ...(log.blockHash === undefined
+                ? {}
+                : { blockHash: log.blockHash.toLowerCase() }),
+              ...(log.logIndex === undefined ? {} : { logIndex: log.logIndex }),
+              [DISCOVERY_RETRYABLE_FIELD]: Object.freeze({
+                stage: "nomination" as const,
+                failureCode: "rpc" as const,
+                reasonCode: "reverse-binding-unresolved",
+              }),
+            }),
+          }));
         }
       }
       if (nominations.length === 0) return Object.freeze([]);
@@ -2239,6 +2299,9 @@ export function createRebuildWiring(input?: {
       const resolved = new Array<readonly UnifiedObservation[]>(
         nominations.length,
       );
+      const unresolved = new Array<Readonly<Record<string, unknown>> | null>(
+        nominations.length,
+      ).fill(null);
       let nextNomination = 0;
       let completedNominations = 0;
       console.log(
@@ -2257,12 +2320,51 @@ export function createRebuildWiring(input?: {
             const index = nextNomination++;
             if (index >= nominations.length) return;
             const item = nominations[index];
-            resolved[index] = await executeCatalogReverseBindings({
-              catalog,
-              source: reverseInput.cutoff,
-              nominations: Object.freeze([item.nomination]),
-              provider: providerFacade,
-            });
+            try {
+              let outcomeStatus: "verified" | "unsupported" | "failed" |
+                undefined;
+              let outcomeReason = "reverse-binding-unresolved";
+              resolved[index] = await executeCatalogReverseBindings({
+                catalog,
+                source: reverseInput.cutoff,
+                nominations: Object.freeze([item.nomination]),
+                provider: providerFacade,
+                onlyFamilyId: item.familyId,
+                onOutcome: ({ outcome }) => {
+                  outcomeStatus = outcome?.status;
+                  if (
+                    outcome !== undefined &&
+                    outcome.status !== "verified"
+                  ) outcomeReason = outcome.reason;
+                },
+              });
+              if (
+                resolved[index].length === 0 &&
+                (outcomeStatus === "failed" || outcomeStatus === undefined)
+              ) {
+                unresolved[index] = Object.freeze({
+                  ...item.retryableCandidate,
+                  [DISCOVERY_RETRYABLE_FIELD]: Object.freeze({
+                    stage: "nomination" as const,
+                    failureCode: "rpc" as const,
+                    reasonCode: outcomeReason,
+                  }),
+                });
+              }
+            } catch (error) {
+              unresolved[index] = Object.freeze({
+                ...item.retryableCandidate,
+                [DISCOVERY_RETRYABLE_FIELD]: Object.freeze({
+                  stage: "nomination" as const,
+                  failureCode: "rpc" as const,
+                  reasonCode: "reverse-binding-rpc:" +
+                    (error instanceof Error
+                      ? error.message.slice(0, 120)
+                      : "unknown"),
+                }),
+              });
+              resolved[index] = Object.freeze([]);
+            }
             completedNominations++;
             if (
               completedNominations === 1 ||
@@ -2319,6 +2421,11 @@ export function createRebuildWiring(input?: {
           }
         }
       }
+      for (const candidate of unresolved) {
+        if (candidate === null) continue;
+        const candidateKey = rebuildFamilyInstanceDedupeKey(candidate);
+        if (!byKey.has(candidateKey)) byKey.set(candidateKey, candidate);
+      }
       return Object.freeze([...byKey.values()]);
     },
     candidateEvidenceRef: (candidate) => {
@@ -2336,6 +2443,18 @@ export function createRebuildWiring(input?: {
         ...(Number.isSafeInteger(item.logIndex)
           ? { logIndex: Number(item.logIndex) }
           : {}),
+      });
+    },
+    preAttestationRetryable: (candidate) => {
+      const item = candidate as Readonly<Record<string, unknown>>;
+      const marker = discoveryRetryableMarker(item);
+      if (marker === null) return null;
+      return Object.freeze({
+        status: "retryable" as const,
+        candidateSnapshot: Object.freeze({ ...item }),
+        stage: marker.stage,
+        failureCode: marker.failureCode,
+        reasonCode: marker.reasonCode,
       });
     },
     findReusableMemo: async (memoInput) => {

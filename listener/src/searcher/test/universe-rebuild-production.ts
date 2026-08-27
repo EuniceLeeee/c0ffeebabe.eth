@@ -1216,10 +1216,14 @@ async function main(): Promise<void> {
       true,
       "pool 2 admitted via its exact transaction trace",
     );
-    assert.equal(traceReads, 2, "both V4-shaped plugin capabilities inspect the miss");
+    assert.equal(
+      traceReads,
+      1,
+      "only the catalog-matched Family capability inspects the miss",
+    );
     assert.deepEqual(
       tracedTransactions,
-      [pool2Tx.toLowerCase(), pool2Tx.toLowerCase()],
+      [pool2Tx.toLowerCase()],
       "only the PositionManager-missed pool transaction is traced",
     );
     // PositionManager misses router-side pools: the exact nomination trace
@@ -1253,14 +1257,15 @@ async function main(): Promise<void> {
       (tracedCandidate.poolKey as Readonly<Record<string, unknown>>).fee,
       fee,
     );
-    assert.equal(traceReads, 4, "router-side pool uses its exact trace per capability");
+    assert.equal(traceReads, 2, "router-side pool uses its exact Family trace");
     assert.equal(
       historicalLogReads,
       0,
       "reverse binding never performs a historical Initialize scan",
     );
-    // Neither cheap chain truth nor exact trace resolves: the nomination
-    // stays unresolved (fail-closed, never a guessed identity).
+    // Neither cheap chain truth nor exact trace resolves: the nomination is
+    // durable retryable (fail-closed, never a guessed identity), so it cannot
+    // block an otherwise complete Ready generation.
     traceAvailable = false;
     const missingSource = Object.freeze({
       number: SOURCE.number - 2,
@@ -1272,7 +1277,18 @@ async function main(): Promise<void> {
       cutoff: missingSource,
       knownCandidates: noKnownCandidates,
     });
-    assert.equal(unresolved.length, 0, "no candidate when both sources miss");
+    assert.equal(unresolved.length, 1, "unresolved identity becomes retryable");
+    const unresolvedCandidate = unresolved[0] as
+      Readonly<Record<string, unknown>>;
+    assert.equal(unresolvedCandidate.poolId, poolId.toLowerCase());
+    assert.equal(
+      wired.preAttestationRetryable?.(unresolvedCandidate)?.stage,
+      "nomination",
+    );
+    assert.equal(
+      wired.preAttestationRetryable?.(unresolvedCandidate)?.reasonCode,
+      "poolkey-unresolved",
+    );
     assert.equal(historicalLogReads, 0, "unresolved identity does not deep-scan");
     // A log that matches no declared reverse-binding pattern is untouched.
     const unrelated = await wired.reverseBindOpaqueCandidates!({
