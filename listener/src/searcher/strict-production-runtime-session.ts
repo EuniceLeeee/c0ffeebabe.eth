@@ -397,15 +397,21 @@ export class StrictProductionRuntimeRoot {
       CanonicalEdgeId,
       StrictCurrentRoutePricing
     >();
-    const stateKeyByInstance = new Map<string, string>();
+    // One physical instance can legitimately own multiple pricing state
+    // shards (for example, one shard per direction).  State identity is a
+    // route/edge contract, not an instance-wide scalar.
+    const stateKeyByRoute = new Map<string, string>();
     for (const readyInstance of this.#readyInstances) {
       for (const pricing of readyInstance.pricingInstances) {
-        const key = instanceKeyFor(readyInstance);
-        const previous = stateKeyByInstance.get(key);
-        if (previous !== undefined && previous !== pricing.stateKey) {
-          throw new Error(`strict instance has conflicting pricing state keys ${key}`);
+        for (const route of pricing.routes) {
+          const previous = stateKeyByRoute.get(route.routeKey);
+          if (previous !== undefined && previous !== pricing.stateKey) {
+            throw new Error(
+              `strict route has conflicting pricing state keys ${route.routeKey}`,
+            );
+          }
+          stateKeyByRoute.set(route.routeKey, pricing.stateKey);
         }
-        stateKeyByInstance.set(key, pricing.stateKey);
       }
     }
     const stateKeyByEdge = new Map<CanonicalEdgeId, string>();
@@ -427,7 +433,7 @@ export class StrictProductionRuntimeRoot {
             edge: projected.edge,
           });
       bindings.set(projected.edge.canonicalEdgeId, binding);
-      const stateKey = stateKeyByInstance.get(instanceKeyForHandle(projected.handle));
+      const stateKey = stateKeyByRoute.get(projected.handle.routeKey);
       if (stateKey !== undefined) {
         stateKeyByEdge.set(projected.edge.canonicalEdgeId, stateKey);
       }

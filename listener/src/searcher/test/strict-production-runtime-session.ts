@@ -4,7 +4,9 @@ import {
   buildFamilyRouteGraphView,
 } from "../adapter-family-graph-runtime.js";
 import {
+  fluidDexFixtureRuntime,
   runUniv2Lifecycle,
+  runFluidDexLifecycle,
   UNIV2_FIXTURE_FACTORY,
   UNIV2_FIXTURE_POOL,
   UNIV2_FIXTURE_TOKEN0,
@@ -216,6 +218,46 @@ const session = await root.createSession({
   runtime: strictRuntime,
   fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
 });
+
+// A single physical Fluid DEX instance owns one pricing state per direction.
+// The strict session must preserve those route-local state identities instead
+// of rejecting the instance as internally contradictory.
+const fluidPublication = await runFluidDexLifecycle(STARTUP);
+const fluidFamily = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
+  fluidPublication.familyId,
+);
+const fluidView = buildFamilyRouteGraphView({
+  routes: fluidPublication.instances.flatMap((instance) =>
+    instance.routes.map((route, index) => ({
+      family: fluidFamily,
+      descriptor: instance.descriptor,
+      route,
+      handle: instance.routeHandles[index],
+    }))
+  ),
+});
+const fluidRoot = new StrictProductionRuntimeRoot({
+  catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+  readySource: STARTUP,
+  readyGraph: fluidView.edges,
+  readyInstances: fluidPublication.instances,
+  readyFundingAssets: Object.freeze([]),
+});
+const fluidSession = await fluidRoot.createSession({
+  source: CURRENT,
+  runtime: fluidDexFixtureRuntime(),
+  fundingAssets: Object.freeze([]),
+});
+const fluidStateKeys = new Set(
+  fluidSession.edges.map((edge) => fluidSession.stateKeyForEdge(edge)),
+);
+assert.equal(fluidStateKeys.size, 2, "Fluid directions keep distinct state keys");
+assert.ok(
+  fluidSession.edges.every((edge) =>
+    fluidSession.currentPricingForEdge(edge)?.status === "priced"
+  ),
+  "Fluid directions remain currently priced",
+);
 
 let familyScopedFundingReads = 0;
 const oneFundingFamilyRoot = new StrictProductionRuntimeRoot({
