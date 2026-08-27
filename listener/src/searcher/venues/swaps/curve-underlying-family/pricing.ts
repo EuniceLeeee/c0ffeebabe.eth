@@ -92,6 +92,7 @@ export const curveUnderlyingPricing = {
             "get_underlying_decimals",
             [descriptor.pool],
           ),
+          required: false,
           completion: "return-data" as const,
         }),
         Object.freeze({
@@ -102,6 +103,7 @@ export const curveUnderlyingPricing = {
             "get_underlying_balances",
             [descriptor.pool],
           ),
+          required: false,
           completion: "return-data" as const,
         }),
         Object.freeze({
@@ -109,6 +111,7 @@ export const curveUnderlyingPricing = {
           kind: "eth-call" as const,
           to: descriptor.route.tokenIn,
           data: CURVE_UNDERLYING_ERC20_INTERFACE.encodeFunctionData("decimals"),
+          required: false,
           completion: "return-data" as const,
         }),
       ]);

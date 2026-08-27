@@ -150,6 +150,10 @@ assert.deepEqual(currentRequests.map((request) => request.id), [
   "current-registry-balances",
   "current-token-decimals",
 ]);
+assert(
+  currentRequests.every((request) => request.required === false),
+  "registry scale and token decimals are independent optional fallbacks",
+);
 const initialResults = [
   success(
     "current-registry-decimals",
@@ -201,6 +205,28 @@ assert.equal(
     routes: [route],
   }).size,
   1,
+);
+const nonStandardTokenSnapshot =
+  curveUnderlyingStrictFamilyPlugin.pricing.current.decodeSnapshot({
+    descriptor: pricingDescriptor,
+    initialResults: Object.freeze([
+      initialResults[0],
+      initialResults[1],
+      Object.freeze({
+        id: "current-token-decimals",
+        ok: false as const,
+        source: SOURCE,
+        failure: "rpc" as const,
+      }),
+    ]),
+    dependentEvidence: [dependentProgram.decode([
+      success("current-get-dy:0", quoteData),
+    ])],
+  });
+assert.equal(
+  nonStandardTokenSnapshot.amountIn,
+  snapshot.amountIn,
+  "MetaRegistry scale keeps a non-standard token decimals revert quotable",
 );
 
 const amountIn = 5_000_000n;

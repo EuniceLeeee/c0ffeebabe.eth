@@ -515,7 +515,7 @@
         "familyId": "curve-underlying",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "bd8f48d3a0185be046302ef223326a1e3635c23166850243593b9e130c0fe832",
+        "contentHash": "2d9cdbd439d33c36f1fd974264c5762e7abff3b1cd2e1549be31b45f76307087",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -7684,5 +7684,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "dc74bfe8142d340e31f60a1a3bf9ce6de68731d147b31dd8f9b9ed86e6bb9aeb"
+  "artifactHash": "02269b7f3fda384254a0982a97ccb52d5c824b5a47c9a682c50c9a700d678e1b"
 }
