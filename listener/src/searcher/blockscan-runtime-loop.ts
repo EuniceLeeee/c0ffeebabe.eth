@@ -2172,25 +2172,76 @@ export class BlockScanRuntimeLoop {
           touchedStateKeys: touchedPools,
           complete: true,
         });
-        const runtime = await currentRuntimeCoordinator.prepare({
-          graph: graphView,
-          // The funding surface is the solidified funding-token universe
-          // (provider support surface, chain-truth enumerated), never the
-          // graph token set: balanceOf reads for every graph token blew the
-          // block budget and tripped the generation fence.
-          fundingTokens: [...new Set(this.deps.flashTokens())],
-          deadlineAtMs: runtimeDeadlineAtMs,
-          preparationSettleDeadlineAtMs,
-          pricingFamilySettleDeadlineAtMs,
-          pricingLaggingTopologyRefreshMode: startupWarmAttempt
-            ? "startup-bootstrap"
-            : "proof-scoped",
-          cacheMode: startupWarmAttempt ? "warm" : "hot",
-          signal: passSignal,
-          prepareExecution,
-          touchedPools,
-          canonicalActivity,
-        });
+        /*
+         * Source-N is also a producer generation. Keep its pricing calls on
+         * the same source-hash-pinned producer-bulk transport as N-1; without
+         * this pass-scoped backend the central runtime falls back to one RPC
+         * request per logical quote even though the N-1 path is batched.
+         * Funding and execution preparation share the session, so the backend
+         * remains open through the preparation-settle boundary and is drained
+         * before state publication can hand control to exact work.
+         */
+        const sourcePricingStartedAtMs = Date.now();
+        const sourcePricingBackend = new PinnedRethQuoteBackend(
+          this.deps.rpcUrl,
+          graphView.sourceBlockHash,
+          {
+            signal: passSignal,
+            deadlineAtMs: preparationSettleDeadlineAtMs,
+            maxBatchSize: 128,
+            maxConcurrentBatches: 4,
+            transportLane: "producer-bulk",
+            scopeLabel:
+              `block-scan source-N pricing block ${blockNumber} ` +
+              `generation ${generation}`,
+            allowSingleCallFallback: false,
+            ...(this.deps.rethTransportScheduler === undefined
+              ? {}
+              : { transportScheduler: this.deps.rethTransportScheduler }),
+          },
+        );
+        let runtime: AdapterRuntimePrepareResult;
+        try {
+          runtime = await currentRuntimeCoordinator.prepare({
+            graph: graphView,
+            // The funding surface is the solidified funding-token universe
+            // (provider support surface, chain-truth enumerated), never the
+            // graph token set: balanceOf reads for every graph token blew the
+            // block budget and tripped the generation fence.
+            fundingTokens: [...new Set(this.deps.flashTokens())],
+            deadlineAtMs: runtimeDeadlineAtMs,
+            preparationSettleDeadlineAtMs,
+            pricingFamilySettleDeadlineAtMs,
+            pricingLaggingTopologyRefreshMode: startupWarmAttempt
+              ? "startup-bootstrap"
+              : "proof-scoped",
+            cacheMode: startupWarmAttempt ? "warm" : "hot",
+            signal: passSignal,
+            prepareExecution,
+            touchedPools,
+            canonicalActivity,
+            pricingCallBackend: sourcePricingBackend,
+          });
+        } finally {
+          try {
+            await sourcePricingBackend.closeAndDrain(
+              passSignal.reason ??
+                new Error(
+                  `block-scan source-N pricing generation ${generation} completed`,
+                ),
+            );
+          } finally {
+            console.log(
+              `[searcher/blockscan-source-n-call-stats] ${JSON.stringify({
+                sourceBlock: graphView.sourceBlock,
+                sourceBlockHash: graphView.sourceBlockHash,
+                generation,
+                wallMs: Math.max(0, Date.now() - sourcePricingStartedAtMs),
+                ...sourcePricingBackend.stats(),
+              })}`,
+            );
+          }
+        }
         finishStage(
           "state",
           runtime.status === "incomplete" ? "failed" : "ran",
