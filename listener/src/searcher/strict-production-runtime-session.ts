@@ -144,6 +144,21 @@ export interface StrictReadyFundingAsset {
   readonly asset: string;
 }
 
+/** Compact, non-authoritative timing/counts exposed for live diagnosis. */
+export interface StrictProductionSessionCreationTiming {
+  readonly readyInstanceCount: number;
+  readonly selectedInstanceCount: number;
+  readonly refreshedInstanceCount: number;
+  readonly failedInstanceCount: number;
+  readonly requestedFundingAssetCount: number;
+  readonly fundingOfferCount: number;
+  readonly pricingMs: number;
+  readonly fundingMs: number;
+  readonly routeProjectionMs: number;
+  readonly totalMs: number;
+  readonly heapUsedBytes: number;
+}
+
 /**
  * Immutable startup authority used to mint one current-source execution
  * session. It owns only the instances admitted by the atomic readyGeneration;
@@ -224,6 +239,7 @@ export class StrictProductionRuntimeRoot {
     /** Exact refinement scope inherited from the coarse candidates' edge closure. */
     readonly requiredEdgeIds?: ReadonlySet<string>;
   }): Promise<StrictProductionRuntimeSession> {
+    const sessionStartedAtMs = Date.now();
     assertCanonicalSource(input.source);
     input.runtime.generationFence.assertCurrent(
       input.source.generation,
@@ -241,12 +257,16 @@ export class StrictProductionRuntimeRoot {
       FamilyRouteRuntimeHandle,
       StrictCurrentRoutePricing
     >();
+    let refreshedInstanceCount = 0;
+    let failedInstanceCount = 0;
+    let pricingMs = 0;
 
     const kind = input.kind ?? "pricing";
     const requiredEdgeIds = input.requiredEdgeIds;
     const requiredInstanceKeys = requiredEdgeIds === undefined
       ? undefined
       : requiredInstanceKeysForEdges(this.#readyGraph, requiredEdgeIds);
+    const pricingStartedAtMs = Date.now();
     if (kind === "pricing") {
       /*
        * Ready instances refresh independently through the shared transport
@@ -286,6 +306,7 @@ export class StrictProductionRuntimeRoot {
               continue;
             }
             try {
+              refreshedInstanceCount++;
               refreshedOutcomes[index] = await this.refreshReadyInstancePricing({
                 readyInstance,
                 source: input.source,
@@ -293,6 +314,7 @@ export class StrictProductionRuntimeRoot {
                 ...(input.control === undefined ? {} : { control: input.control }),
               });
             } catch (error) {
+              failedInstanceCount++;
               // A dirty read failure is a real unresolved result. Keep the
               // edge shell, but never turn it into a carried price.
               refreshedOutcomes[index] = this.unresolvedInstanceRoutes({
@@ -389,6 +411,10 @@ export class StrictProductionRuntimeRoot {
       }
     }
 
+    pricingMs = kind === "pricing"
+      ? Math.max(0, Date.now() - pricingStartedAtMs)
+      : 0;
+    const routeProjectionStartedAtMs = Date.now();
     const view = buildFamilyRouteGraphView({ routes, creditRoutes });
     assertSameReadyTopology(this.#readyGraph, view.edges);
     assertRequiredEdgeIdsPresent(view.edges, requiredEdgeIds);
@@ -448,6 +474,11 @@ export class StrictProductionRuntimeRoot {
       }
     }
 
+    const routeProjectionMs = Math.max(
+      0,
+      Date.now() - routeProjectionStartedAtMs,
+    );
+    const fundingStartedAtMs = Date.now();
     const requestedFundingAssets = new Set(input.fundingAssets.map((asset) =>
       ethers.getAddress(asset).toLowerCase()
     ));
@@ -474,6 +505,25 @@ export class StrictProductionRuntimeRoot {
         offer,
       })));
     }
+    const fundingMs = Math.max(0, Date.now() - fundingStartedAtMs);
+    const selectedInstanceCount = requiredInstanceKeys === undefined
+      ? this.#readyInstances.length
+      : this.#readyInstances.filter((instance) =>
+          requiredInstanceKeys.has(instanceKeyFor(instance))
+        ).length;
+    const creationTiming: StrictProductionSessionCreationTiming = Object.freeze({
+      readyInstanceCount: this.#readyInstances.length,
+      selectedInstanceCount,
+      refreshedInstanceCount,
+      failedInstanceCount,
+      requestedFundingAssetCount: requestedFundingAssets.size,
+      fundingOfferCount: fundingBindings.length,
+      pricingMs,
+      fundingMs,
+      routeProjectionMs,
+      totalMs: Math.max(0, Date.now() - sessionStartedAtMs),
+      heapUsedBytes: process.memoryUsage().heapUsed,
+    });
     return new StrictProductionRuntimeSession({
       catalog: this.#catalog,
       source: input.source,
@@ -486,6 +536,7 @@ export class StrictProductionRuntimeRoot {
       fundingBindings,
       fundingOutcomes,
       pricingComplete: kind === "pricing",
+      creationTiming,
     });
   }
 
@@ -660,6 +711,7 @@ export class StrictProductionRuntimeSession {
   readonly source: CanonicalSource;
   readonly edges: readonly TokenEdge[];
   readonly readySource: CanonicalSource;
+  readonly creationTiming: StrictProductionSessionCreationTiming;
   readonly #catalog: FamilyCapabilityCatalog;
   readonly #runtime: CentralAdapterRuntime;
   readonly #bindings: ReadonlyMap<CanonicalEdgeId, StrictRouteBinding>;
@@ -687,10 +739,12 @@ export class StrictProductionRuntimeSession {
     readonly fundingBindings: readonly FundingBinding[];
     readonly fundingOutcomes: readonly FundingInstanceOutcome[];
     readonly pricingComplete?: boolean;
+    readonly creationTiming: StrictProductionSessionCreationTiming;
   }) {
     this.#catalog = input.catalog;
     this.source = Object.freeze({ ...input.source });
     this.readySource = Object.freeze({ ...input.readySource });
+    this.creationTiming = input.creationTiming;
     this.#runtime = input.runtime;
     this.edges = Object.freeze([...input.edges]);
     this.#bindings = new Map(input.bindings);

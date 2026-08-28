@@ -33,10 +33,11 @@ import type { ResolvedPlan } from "./solver/solver.js";
 import type { AnvilSolver } from "./solver/solver.js";
 import type { StrictProductionRuntimeSession } from
   "./strict-production-runtime-session.js";
-import type { StrictCanonicalActivityProof } from
+import type {
+  StrictCanonicalActivityProof,
+  StrictSessionProvider,
+} from
   "./strict-current-runtime-coordinator.js";
-import type { StrictProductionSessionKind } from
-  "./strict-production-runtime-session.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import {
@@ -529,24 +530,7 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly finalSimulationWorkers: readonly BlockScanExecutionWorker[];
   readonly rpcUrl: string;
   /** Sole current-source Family/exact/execution/Funding authority. */
-  readonly strictSession?: (
-    source: CanonicalSource,
-    control?: {
-      readonly deadlineAtMs?: number;
-      readonly signal?: AbortSignal;
-    },
-    kind?: StrictProductionSessionKind,
-    fundingAssets?: readonly string[],
-    /**
-     * Pass-scoped exact call backend.  The central strict runtime may use it
-     * for source-pinned eth_call batching; it is never a Family-specific
-     * adapter or a second authority.
-     */
-    exactCallBackend?: Pick<StateBackend, "call">,
-    touchedPools?: ReadonlySet<string>,
-    pricingCallBackend?: Pick<StateBackend, "call">,
-    requiredEdgeIds?: ReadonlySet<string>,
-  ) => Promise<StrictProductionRuntimeSession>;
+  readonly strictSession?: StrictSessionProvider;
   /**
    * Override the exact-probe quote backend. Production uses the source-hash
    * pinned reth micro-batch backend; harnesses inject a deterministic fake.
@@ -2674,19 +2658,17 @@ export class BlockScanRuntimeLoop {
        * same source-pinned batch transport; the producer session remains the
        * only pricing authority.
        */
-      const strictSession = await this.deps.strictSession(
-        exactSource,
-        Object.freeze({
+      const strictSession = await this.deps.strictSession({
+        purpose: "exact-execution",
+        source: exactSource,
+        control: Object.freeze({
           deadlineAtMs: refineDeadline,
           signal: passSignal,
         }),
-        "exact",
-        exactFundingTokens,
-        exactQuoteState,
-        undefined,
-        undefined,
+        fundingAssets: exactFundingTokens,
+        exactCallBackend: exactQuoteState,
         requiredEdgeIds,
-      );
+      });
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
       const exactQuoteStateRef: StateBackend = exactQuoteState;

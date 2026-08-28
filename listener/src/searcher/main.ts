@@ -72,7 +72,6 @@ import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
 import {
   StrictProductionRuntimeRoot,
   type StrictProductionRuntimeSession,
-  type StrictProductionSessionKind,
 } from "./strict-production-runtime-session.js";
 import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
   "./strict-production-family-declarations.js";
@@ -141,7 +140,11 @@ import {
 } from "./blockscan-backrun-state-bridge.js";
 import { JsonRpcBlockScanStateReadBackend } from "./blockscan-state-read-backend.js";
 import { LiveRethReadPriority } from "./live-reth-read-priority.js";
-import { StrictCurrentRuntimeCoordinator } from
+import {
+  StrictCurrentRuntimeCoordinator,
+  type StrictSessionProvider,
+  type StrictSessionRequest,
+} from
   "./strict-current-runtime-coordinator.js";
 import { StrictReadyGraphViewCoordinator } from
   "./strict-ready-graph-view.js";
@@ -1669,16 +1672,36 @@ async function main(): Promise<void> {
     string,
     Promise<StrictProductionRuntimeSession>
   >();
-  const strictSessionFor = (
-    source: CanonicalSource,
-    control?: AdapterWorkControl,
-    kind: StrictProductionSessionKind = "pricing",
-    fundingAssets: readonly string[] = flashTokens,
-    exactCallBackend?: Pick<StateBackend, "call">,
-    touchedPools?: ReadonlySet<string>,
-    pricingCallBackend?: Pick<StateBackend, "call">,
-    requiredEdgeIds?: ReadonlySet<string>,
+  const strictSessionFor: StrictSessionProvider = (
+    request: StrictSessionRequest,
   ): Promise<StrictProductionRuntimeSession> => {
+    if (
+      request.purpose === "coarse-pricing" &&
+      request.fundingAssets.length !== 0
+    ) {
+      throw new Error(
+        "coarse-pricing strict session must not request Funding assets",
+      );
+    }
+    if (
+      request.purpose === "exact-execution" &&
+      request.requiredEdgeIds === undefined
+    ) {
+      throw new Error(
+        "exact-execution strict session requires requiredEdgeIds",
+      );
+    }
+    if (
+      request.purpose === "exact-execution" &&
+      request.touchedPools !== undefined
+    ) {
+      throw new Error(
+        "exact-execution strict session cannot use touchedPools as scope",
+      );
+    }
+    const source = request.source;
+    const kind = request.purpose === "exact-execution" ? "exact" : "pricing";
+    const fundingAssets = request.fundingAssets;
     const fundingKey = [...new Set(fundingAssets.map((token) =>
       token.toLowerCase()
     ))].sort().join(",");
@@ -1688,25 +1711,26 @@ async function main(): Promise<void> {
       .slice(0, 16);
     // The refresh scope is part of the session identity: the same source with
     // a different touched set must not reuse a fully-refreshed session.
-    const touchedFingerprint = touchedPools === undefined
+    const touchedFingerprint = request.touchedPools === undefined
       ? "all"
       : createHash("sha256")
-          .update([...touchedPools].sort().join(","))
+          .update([...request.touchedPools].sort().join(","))
           .digest("hex")
           .slice(0, 16);
-    const requiredEdgeFingerprint = requiredEdgeIds === undefined
+    const requiredEdgeFingerprint = request.requiredEdgeIds === undefined
       ? "all-edges"
       : createHash("sha256")
-          .update([...requiredEdgeIds].sort().join(","))
+          .update([...request.requiredEdgeIds].sort().join(","))
           .digest("hex")
           .slice(0, 16);
-    const key = `${kind}:${source.number}:${source.hash.toLowerCase()}:` +
+    const key = `${request.purpose}:${source.number}:${source.hash.toLowerCase()}:` +
       `${source.generation}:${fundingFingerprint}:${touchedFingerprint}:` +
       `${requiredEdgeFingerprint}`;
-    // An exact backend is pass-scoped and is closed at the end of the block;
-    // never let a cached session retain a backend from an earlier pass.
-    const cacheable = exactCallBackend === undefined &&
-      pricingCallBackend === undefined;
+    // Custom backends are pass-scoped and must never be retained by the
+    // coalescing cache. Even ordinary sessions are removed after settlement;
+    // this map is an in-flight de-duplication guard, not a history cache.
+    const cacheable = request.exactCallBackend === undefined &&
+      request.pricingCallBackend === undefined;
     const incumbent = cacheable ? strictSessionCache.get(key) : undefined;
     if (incumbent !== undefined) {
       console.log(
@@ -1738,10 +1762,12 @@ async function main(): Promise<void> {
       }),
       verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
       executor: config.botvmAddress,
-      ...(exactCallBackend === undefined ? {} : { exactCallBackend }),
-      ...(pricingCallBackend === undefined
+      ...(request.exactCallBackend === undefined
         ? {}
-        : { producerCallBackend: pricingCallBackend }),
+        : { exactCallBackend: request.exactCallBackend }),
+      ...(request.pricingCallBackend === undefined
+        ? {}
+        : { producerCallBackend: request.pricingCallBackend }),
       // Shared physical-transport permit scheduler: exact/discovery share the
       // residual capacity after the N-1 producer reserve, so exact probes can
       // never starve the producer chain (same contract as the legacy runtime).
@@ -1749,21 +1775,59 @@ async function main(): Promise<void> {
         ? {}
         : { transportScheduler: blockScanRethTransportScheduler }),
     });
-    const pending = strictRuntimeRoot.createSession({
+    const createStartedAtMs = Date.now();
+    const created = strictRuntimeRoot.createSession({
       source,
       runtime,
       fundingAssets,
       kind,
-      ...(control === undefined ? {} : { control }),
-      ...(touchedPools === undefined ? {} : { touchedPools }),
-      ...(requiredEdgeIds === undefined ? {} : { requiredEdgeIds }),
-    }).catch((error) => {
-      if (cacheable && strictSessionCache.get(key) === pending) {
-        strictSessionCache.delete(key);
-      }
+      ...(request.control === undefined ? {} : { control: request.control }),
+      ...(request.touchedPools === undefined
+        ? {}
+        : { touchedPools: request.touchedPools }),
+      ...(request.requiredEdgeIds === undefined
+        ? {}
+        : { requiredEdgeIds: request.requiredEdgeIds }),
+    }).then((session) => {
+      console.log(
+        `[searcher/strict-session-timing] ${JSON.stringify({
+          purpose: request.purpose,
+          status: "complete",
+          sourceBlock: source.number,
+          generation: source.generation,
+          requestedFundingAssets: new Set(fundingAssets.map((token) =>
+            token.toLowerCase()
+          )).size,
+          ...session.creationTiming,
+        })}`,
+      );
+      return session;
+    }, (error: unknown) => {
+      console.log(
+        `[searcher/strict-session-timing] ${JSON.stringify({
+          purpose: request.purpose,
+          status: "failed",
+          sourceBlock: source.number,
+          generation: source.generation,
+          requestedFundingAssets: new Set(fundingAssets.map((token) =>
+            token.toLowerCase()
+          )).size,
+          totalMs: Math.max(0, Date.now() - createStartedAtMs),
+          error: (error instanceof Error ? error.message : String(error))
+            .replace(/\s+/g, " ")
+            .slice(0, 160),
+        })}`,
+      );
       throw error;
     });
-    if (cacheable) strictSessionCache.set(key, pending);
+    if (!cacheable) return created;
+    let pending: Promise<StrictProductionRuntimeSession>;
+    pending = created.finally(() => {
+      if (strictSessionCache.get(key) === pending) {
+        strictSessionCache.delete(key);
+      }
+    });
+    strictSessionCache.set(key, pending);
     return pending;
   };
   currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(
@@ -2531,6 +2595,7 @@ async function main(): Promise<void> {
             recentWarmPools,
             pinnedWarmTargets,
             blockTracker,
+            fundingAssets: flashTokens,
             strictSessionFor,
           });
         } catch (err) {
@@ -2584,9 +2649,9 @@ interface HandleCtx {
   pinnedWarmTargets: Set<string>;
   /** Latest mined block, kept fresh by the WS newHeads stream (no per-hint poll). */
   blockTracker: { latest: number };
-  strictSessionFor(
-    source: CanonicalSource,
-  ): Promise<StrictProductionRuntimeSession>;
+  /** Explicit support universe used by source-N runtime sessions. */
+  fundingAssets: readonly string[];
+  strictSessionFor: StrictSessionProvider;
 }
 
 /**
@@ -3322,11 +3387,15 @@ async function processOpportunities(
       ctx.provider,
       prepareBaseBlock,
     );
-    const strictSession = await ctx.strictSessionFor(Object.freeze({
-      number: prepareBaseBlock,
-      hash: prepareBaseBlockHash,
-      generation: prepareBaseBlock,
-    }));
+    const strictSession = await ctx.strictSessionFor({
+      purpose: "source-n-runtime",
+      source: Object.freeze({
+        number: prepareBaseBlock,
+        hash: prepareBaseBlockHash,
+        generation: prepareBaseBlock,
+      }),
+      fundingAssets: ctx.fundingAssets,
+    });
     if (fixturePath === "hash-only" && opp.victimEffect.kind === "swap") {
       const generation = oppImpact?.sourceGeneration;
       const transitionGeneration = opp.victimEffect.transition?.sourceGeneration;

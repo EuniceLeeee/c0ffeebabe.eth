@@ -19,10 +19,12 @@
 > memo 通过其 fingerprint-bound `candidateSnapshot` 永久带回候选分区，且只有明确的
 > `terminal-rejected` 原子撤销该 memo。memo snapshot 只是提名与复用材料，不是第二准入权威，
 > 也不能扩张 2 天 source coverage。
-> touched-driven 当前定价（只刷新本块触及 venue，快照容忍未触及 edge 并以 degraded 发布）：
-> 7a0d5c5a、b56091a5、b6a2711f、f7be24cb、2672cbe2、56e32e96；旧 funding 固化表路径
-> （45a01264）已由 §8 的 catalog observation → Funding Ready 取代；exact session 只重发触及实例（e79768ad）且按 coarse 块 touched 作用域
-> （b8d4e664）。
+> touched-driven 当前定价采用稀疏读取、稠密发布：只刷新本块触及的 state，完整 ready Graph
+> 仍是快照与枚举输入；未触及 edge 只能按 §11.1 的 canonical activity proof 携带上一代安全价格，
+> 不能被自动改写为 unresolved。旧 funding 固化表路径（45a01264）已由 §8 的 catalog
+> observation → Funding Ready 取代；coarse pricing session 明确排除 Funding，source-N 与 exact
+> session 通过显式 request API 传入各自的 Funding 集合。exact session 继承 coarse candidate 的
+> 完整 edge closure（requiredEdgeIds），不再按 touched pool 截断，并对缺失 edge fail closed。
 >
 > exact SHA **496545fbdfbc67d8139a1dac305bed3f17432291** 是旧 Funding 表架构的历史验收锚
 > （§16.8），不是当前 Funding Ready/blockscan replay slice 的终态验收；当前终态必须绑定本次
@@ -999,7 +1001,9 @@ Current-source refresh is atomic and block-cadence aware. It uses the sparse-rea
 defined in §11.1: the canonical activity/touched set controls refresh work only, while the complete ready
 Graph remains the snapshot and enumeration input. A failed dirty refresh is an explicit unresolved result;
 it is not silently replaced by a prior price. Funding refresh and final source/generation fences remain
-fail-closed.
+fail-closed. Strict-session coalescing is in-flight-only: a settled session is never retained as a historical
+cache entry. Creation telemetry reports pricing, Funding, route projection, total wall time, selected/failed
+counts, and heap usage, but never relaxes a production gate.
 
 The concurrency cap is a resource policy, not a Family contract. A Family plugin still issues its request
 program; the kernel only schedules independent issued programs. Adding or changing an unrelated capability

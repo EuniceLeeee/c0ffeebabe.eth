@@ -16,7 +16,10 @@ import { createStrictCentralAdapterRuntime } from
   "../strict-central-adapter-runtime.js";
 import { StrictProductionRuntimeRoot } from
   "../strict-production-runtime-session.js";
-import { StrictCurrentRuntimeCoordinator } from
+import {
+  StrictCurrentRuntimeCoordinator,
+  type StrictSessionRequest,
+} from
   "../strict-current-runtime-coordinator.js";
 import { assertAtomicBlockScanRuntime } from
   "../detector/blockscan-scanner-production.js";
@@ -397,6 +400,25 @@ assert.ok(
   maxActivePricingReads <= 128,
   "ready instance refresh must respect the bounded concurrency cap",
 );
+assert.equal(
+  parallelSession.creationTiming.readyInstanceCount,
+  parallelReadyInstances.length,
+);
+assert.equal(
+  parallelSession.creationTiming.selectedInstanceCount,
+  parallelReadyInstances.length,
+);
+assert.equal(
+  parallelSession.creationTiming.refreshedInstanceCount,
+  parallelReadyInstances.length,
+);
+assert.equal(parallelSession.creationTiming.failedInstanceCount, 0);
+assert.equal(parallelSession.creationTiming.requestedFundingAssetCount, 1);
+assert.ok(parallelSession.creationTiming.pricingMs >= 0);
+assert.ok(parallelSession.creationTiming.fundingMs >= 0);
+assert.ok(parallelSession.creationTiming.routeProjectionMs >= 0);
+assert.ok(parallelSession.creationTiming.totalMs >= 0);
+assert.ok(parallelSession.creationTiming.heapUsedBytes > 0);
 assert.deepEqual(
   parallelSession.edges.map((candidate) => candidate.canonicalEdgeId),
   parallelStartupView.edges.map((candidate) => candidate.canonicalEdgeId),
@@ -444,10 +466,12 @@ const carryNextGraph = createVerifiedGraphView({
   edges: parallelStartupView.edges,
 });
 const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
-  async (source, control, kind, fundingAssets, exactCallBackend, touchedPools, pricingCallBackend, requiredEdgeIds) =>
-    parallelRoot.createSession({
-      source,
-      runtime: runtime(source, {
+  async (request: StrictSessionRequest) => {
+    assert.equal(request.purpose, "coarse-pricing");
+    assert.deepEqual(request.fundingAssets, [], "coarse pricing excludes Funding");
+    return parallelRoot.createSession({
+      source: request.source,
+      runtime: runtime(request.source, {
         reservesByTarget: new Map<string, Readonly<{
           reserve0: bigint;
           reserve1: bigint;
@@ -457,14 +481,23 @@ const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
           [secondParallelTarget, Object.freeze({ reserve0: 3_000_000_000n, reserve1: 1_000_000_000n, blockTimestampLast: 1 })],
         ]),
       }),
-      fundingAssets: fundingAssets ?? Object.freeze([UNIV2_FIXTURE_TOKEN0]),
-      ...(kind === undefined ? {} : { kind }),
-      ...(control === undefined ? {} : { control }),
-      ...(exactCallBackend === undefined ? {} : { exactCallBackend }),
-      ...(touchedPools === undefined ? {} : { touchedPools }),
-      ...(pricingCallBackend === undefined ? {} : { pricingCallBackend }),
-      ...(requiredEdgeIds === undefined ? {} : { requiredEdgeIds }),
-    }),
+      fundingAssets: request.fundingAssets,
+      kind: "pricing",
+      ...(request.control === undefined ? {} : { control: request.control }),
+      ...(request.exactCallBackend === undefined
+        ? {}
+        : { exactCallBackend: request.exactCallBackend }),
+      ...(request.touchedPools === undefined
+        ? {}
+        : { touchedPools: request.touchedPools }),
+      ...(request.pricingCallBackend === undefined
+        ? {}
+        : { pricingCallBackend: request.pricingCallBackend }),
+      ...(request.requiredEdgeIds === undefined
+        ? {}
+        : { requiredEdgeIds: request.requiredEdgeIds }),
+    });
+  },
   () => {},
 );
 const carryBase = await carryBaseCoordinator.prepareCoarsePricing({
@@ -473,12 +506,18 @@ const carryBase = await carryBaseCoordinator.prepareCoarsePricing({
 });
 assert.equal(carryBase.status, "complete");
 const bootstrapCoordinator = new StrictCurrentRuntimeCoordinator(
-  async (source, control) => parallelRoot.createSession({
-    source,
-    runtime: runtime(source),
-    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
-    ...(control === undefined ? {} : { control }),
-  }),
+  async (request: StrictSessionRequest) => {
+    assert.equal(request.purpose, "coarse-pricing");
+    assert.deepEqual(request.fundingAssets, [], "bootstrap excludes Funding");
+    assert.equal(request.touchedPools, undefined, "bootstrap refreshes all instances");
+    return parallelRoot.createSession({
+      source: request.source,
+      runtime: runtime(request.source),
+      fundingAssets: request.fundingAssets,
+      kind: "pricing",
+      ...(request.control === undefined ? {} : { control: request.control }),
+    });
+  },
   () => {},
 );
 const bootstrap = await bootstrapCoordinator.prepareCoarsePricing({
@@ -588,14 +627,24 @@ await assert.rejects(
 );
 
 const reorgCoordinator = new StrictCurrentRuntimeCoordinator(
-  async (source, control, kind, fundingAssets, exactCallBackend, touchedPools) => parallelRoot.createSession({
-    source,
-    runtime: runtime(source),
-    fundingAssets: fundingAssets ?? Object.freeze([UNIV2_FIXTURE_TOKEN0]),
-    ...(kind === undefined ? {} : { kind }),
-    ...(control === undefined ? {} : { control }),
-    ...(exactCallBackend === undefined ? {} : { exactCallBackend }),
-    ...(touchedPools === undefined ? {} : { touchedPools }),
+  async (request: StrictSessionRequest) => parallelRoot.createSession({
+    source: request.source,
+    runtime: runtime(request.source),
+    fundingAssets: request.fundingAssets,
+    kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+    ...(request.control === undefined ? {} : { control: request.control }),
+    ...(request.exactCallBackend === undefined
+      ? {}
+      : { exactCallBackend: request.exactCallBackend }),
+    ...(request.touchedPools === undefined
+      ? {}
+      : { touchedPools: request.touchedPools }),
+    ...(request.pricingCallBackend === undefined
+      ? {}
+      : { pricingCallBackend: request.pricingCallBackend }),
+    ...(request.requiredEdgeIds === undefined
+      ? {}
+      : { requiredEdgeIds: request.requiredEdgeIds }),
   }),
   () => {},
 );
@@ -818,12 +867,18 @@ const currentGraph = createVerifiedGraphView({
 });
 let resetCount = 0;
 const currentCoordinator = new StrictCurrentRuntimeCoordinator(
-  async (source, control) => await root.createSession({
-    source,
-    runtime: strictRuntime,
-    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
-    ...(control === undefined ? {} : { control }),
-  }),
+  async (request: StrictSessionRequest) => {
+    if (request.purpose === "source-n-runtime") {
+      assert.deepEqual(request.fundingAssets, [UNIV2_FIXTURE_TOKEN0]);
+    }
+    return root.createSession({
+      source: request.source,
+      runtime: strictRuntime,
+      fundingAssets: request.fundingAssets,
+      kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+      ...(request.control === undefined ? {} : { control: request.control }),
+    });
+  },
   () => {
     resetCount++;
   },
@@ -894,13 +949,23 @@ assert.equal(
 await currentCoordinator.resetDynamicStateForReplay();
 assert.equal(currentCoordinator.latestPricingSnapshot(), null);
 assert.equal(resetCount, 1);
+await assert.rejects(
+  currentCoordinator.prepareCurrentNExactExecutionContext({
+    graph: currentGraph,
+    fundingTokens: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
+    deadlineAtMs: Date.now() + 10_000,
+  }),
+  /requires requiredEdgeIds/,
+  "strict exact context must receive an explicit candidate edge closure",
+);
 
 const failingCoordinator = new StrictCurrentRuntimeCoordinator(
-  async (source, control) => await root.createSession({
-    source,
-    runtime: runtime(CURRENT, { failCurrentPricing: true }),
-    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
-    ...(control === undefined ? {} : { control }),
+  async (request: StrictSessionRequest) => await root.createSession({
+    source: request.source,
+    runtime: runtime(request.source, { failCurrentPricing: true }),
+    fundingAssets: request.fundingAssets,
+    kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+    ...(request.control === undefined ? {} : { control: request.control }),
   }),
   () => {},
 );
@@ -917,13 +982,14 @@ assert.equal(
 );
 let failAfterPublication = false;
 const retainingCoordinator = new StrictCurrentRuntimeCoordinator(
-  async (source, control) => await root.createSession({
-    source,
-    runtime: runtime(CURRENT, {
+  async (request: StrictSessionRequest) => await root.createSession({
+    source: request.source,
+    runtime: runtime(request.source, {
       failCurrentPricing: failAfterPublication,
     }),
-    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
-    ...(control === undefined ? {} : { control }),
+    fundingAssets: request.fundingAssets,
+    kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+    ...(request.control === undefined ? {} : { control: request.control }),
   }),
   () => {},
 );
@@ -945,11 +1011,12 @@ assert.notStrictEqual(
   "failed strict refresh is visible as an explicit degraded generation",
 );
 const failingFundingCoordinator = new StrictCurrentRuntimeCoordinator(
-  async (source, control) => await root.createSession({
-    source,
-    runtime: runtime(CURRENT, { failFunding: true }),
-    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
-    ...(control === undefined ? {} : { control }),
+  async (request: StrictSessionRequest) => await root.createSession({
+    source: request.source,
+    runtime: runtime(request.source, { failFunding: true }),
+    fundingAssets: request.fundingAssets,
+    kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+    ...(request.control === undefined ? {} : { control: request.control }),
   }),
   () => {},
 );

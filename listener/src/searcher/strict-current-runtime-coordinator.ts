@@ -19,7 +19,6 @@ import type {
 import type {
   StrictFundingRuntimeProjection,
   StrictProductionRuntimeSession,
-  StrictProductionSessionKind,
 } from
   "./strict-production-runtime-session.js";
 import type { CanonicalSource } from
@@ -35,19 +34,32 @@ import {
 import type { RouteVenueMid } from "./venues/mid-readers.js";
 import type { StateBackend } from "../shared/state/state-backend.js";
 
-type StrictSessionProvider = (
-  source: CanonicalSource,
-  control?: {
+export type StrictSessionPurpose =
+  | "coarse-pricing"
+  | "source-n-runtime"
+  | "exact-execution";
+
+export interface StrictSessionRequest {
+  readonly purpose: StrictSessionPurpose;
+  readonly source: CanonicalSource;
+  readonly control?: {
     readonly deadlineAtMs?: number;
     readonly signal?: AbortSignal;
-  },
-  kind?: StrictProductionSessionKind,
-  fundingAssets?: readonly string[],
-  exactCallBackend?: Pick<StateBackend, "call">,
-  touchedPools?: ReadonlySet<string>,
-  pricingCallBackend?: Pick<StateBackend, "call">,
-  requiredEdgeIds?: ReadonlySet<string>,
+  };
+  /** Explicit on every call; coarse-pricing must pass an empty array. */
+  readonly fundingAssets: readonly string[];
+  readonly touchedPools?: ReadonlySet<string>;
+  readonly exactCallBackend?: Pick<StateBackend, "call">;
+  readonly pricingCallBackend?: Pick<StateBackend, "call">;
+  /** Required for exact-execution; inherited from coarse candidate closure. */
+  readonly requiredEdgeIds?: ReadonlySet<string>;
+}
+
+export type StrictSessionProvider = (
+  request: StrictSessionRequest,
 ) => Promise<StrictProductionRuntimeSession>;
+
+const EMPTY_FUNDING_ASSETS: readonly string[] = Object.freeze([]);
 
 export interface StrictCanonicalActivityProof {
   readonly source: CanonicalSource;
@@ -92,14 +104,15 @@ export class StrictCurrentRuntimeCoordinator
     );
     assertWorkOpen(settleDeadlineAtMs, input.signal);
     const previous = this.publishedPricing;
-    const session = await this.sessionFor(
-      sourceFor(input.graph),
-      controlFor(settleDeadlineAtMs, input.signal),
-      "pricing",
-      undefined,
-      undefined,
-      previous === null ? undefined : input.touchedPools,
-    );
+    const session = await this.sessionFor({
+      purpose: "coarse-pricing",
+      source: sourceFor(input.graph),
+      control: controlFor(settleDeadlineAtMs, input.signal),
+      fundingAssets: EMPTY_FUNDING_ASSETS,
+      ...(previous === null || input.touchedPools === undefined
+        ? {}
+        : { touchedPools: input.touchedPools }),
+    });
     assertWorkOpen(settleDeadlineAtMs, input.signal);
     const pricing = buildStrictPricingSnapshot(session, input.graph, {
       previous,
@@ -121,15 +134,18 @@ export class StrictCurrentRuntimeCoordinator
     const source = sourceFor(input.graph);
     const sessionStartedAtMs = Date.now();
     const previous = this.publishedPricing;
-    const sessionPromise = this.sessionFor(
+    const sessionPromise = this.sessionFor({
+      purpose: "source-n-runtime",
       source,
-      controlFor(settleDeadlineAtMs, input.signal),
-      "pricing",
-      input.fundingTokens,
-      undefined,
-      previous === null ? undefined : input.touchedPools,
-      input.pricingCallBackend,
-    );
+      control: controlFor(settleDeadlineAtMs, input.signal),
+      fundingAssets: input.fundingTokens,
+      ...(previous === null || input.touchedPools === undefined
+        ? {}
+        : { touchedPools: input.touchedPools }),
+      ...(input.pricingCallBackend === undefined
+        ? {}
+        : { pricingCallBackend: input.pricingCallBackend }),
+    });
     const executionStartedAtMs = Date.now();
     const executionPromise = input.prepareExecution === undefined
       ? Promise.resolve()
@@ -199,16 +215,18 @@ export class StrictCurrentRuntimeCoordinator
     );
     assertWorkOpen(settleDeadlineAtMs, input.signal);
     const source = sourceFor(input.graph);
-    const session = await this.sessionFor(
+    if (input.requiredEdgeIds === undefined) {
+      throw new Error(
+        "strict exact execution requires requiredEdgeIds from candidate closure",
+      );
+    }
+    const session = await this.sessionFor({
+      purpose: "exact-execution",
       source,
-      controlFor(settleDeadlineAtMs, input.signal),
-      "exact",
-      input.fundingTokens,
-      undefined,
-      undefined,
-      undefined,
-      input.requiredEdgeIds,
-    );
+      control: controlFor(settleDeadlineAtMs, input.signal),
+      fundingAssets: input.fundingTokens,
+      requiredEdgeIds: input.requiredEdgeIds,
+    });
     if (input.prepareExecution !== undefined) {
       await input.prepareExecution({
         generation: source.generation,
