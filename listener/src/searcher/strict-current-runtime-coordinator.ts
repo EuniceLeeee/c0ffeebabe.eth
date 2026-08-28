@@ -21,10 +21,10 @@ import type {
   StrictProductionRuntimeSession,
 } from
   "./strict-production-runtime-session.js";
+import { strictReadyGraphContractFingerprint } from
+  "./strict-production-runtime-session.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
-import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
-  "./strict-production-family-declarations.js";
 import {
   blockScanEdgeKey,
   exactSetHash,
@@ -281,6 +281,15 @@ function buildStrictPricingSnapshot(
 ): BlockScanStateSnapshot {
   assertSessionGraphSource(session, graph);
   const sessionCoveredEdgeIds = new Set(session.edges.map(blockScanEdgeKey));
+  const pricingIndex = session.pricingIndex();
+  if (
+    pricingIndex.expectedEdgeKeys.length !== graph.scannerEdgeCount ||
+    pricingIndex.expectedEdgeKeyHash !== graph.scannerEdgeKeyHash ||
+    pricingIndex.readyGraphContractFingerprint !==
+      strictReadyGraphContractFingerprint(graph.edges)
+  ) {
+    throw new Error("strict pricing index differs from ready Graph");
+  }
   const previousEdgeByKey = new Map(
     (input.previous?.graph.edges ?? []).map((edge) => [
       blockScanEdgeKey(edge),
@@ -307,16 +316,24 @@ function buildStrictPricingSnapshot(
     if (!scannerConsumesEdge(edge)) continue;
     const edgeKey = blockScanEdgeKey(edge);
     expectedEdgeKeys.push(edgeKey);
-    const familyId = sessionCoveredEdgeIds.has(edgeKey)
-      ? session.familyIdForEdge(edge)
-      : PRODUCTION_STRICT_FAMILY_DECLARATIONS.familyIdForEdge(edge.adapterId);
+    const covered = sessionCoveredEdgeIds.has(edgeKey);
+    const familyId = pricingIndex.familyIdByEdgeKey.get(edgeKey);
+    const stateKey = pricingIndex.stateKeyByEdgeKey.get(edgeKey);
+    if (familyId === undefined || stateKey === undefined) {
+      throw new Error(`strict ready pricing index omits ${edgeKey}`);
+    }
+    if (covered) {
+      if (
+        session.familyIdForEdge(edge) !== familyId ||
+        session.stateKeyForEdge(edge) !== stateKey
+      ) {
+        throw new Error(`strict pricing session contract differs at ${edgeKey}`);
+      }
+    }
     familyIds.add(familyId);
-    const stateKey = sessionCoveredEdgeIds.has(edgeKey)
-      ? session.stateKeyForEdge(edge)
-      : null;
-    if (stateKey !== null) pricingStateKeyByEdgeKey.set(edgeKey, stateKey);
+    pricingStateKeyByEdgeKey.set(edgeKey, stateKey);
     pricingFamilyIdByEdgeKey.set(edgeKey, familyId);
-    const current = sessionCoveredEdgeIds.has(edgeKey)
+    const current = covered
       ? session.currentPricingForEdge(edge)
       : null;
     if (current === null) {
@@ -330,7 +347,7 @@ function buildStrictPricingSnapshot(
         source: sourceFor(graph),
         familyId,
       });
-      if (carried !== null) {
+      if (carried?.kind === "priced") {
         mids.set(edgeKey, Object.freeze({
           ...carried.mid,
           edges: [edge],
@@ -339,6 +356,15 @@ function buildStrictPricingSnapshot(
         carriedEdgeKeys.push(edgeKey);
         pricingProvenanceByEdgeKey.set(edgeKey, "carried");
         coverageByEdgeKey.set(edgeKey, Object.freeze({ status: "resolved" as const }));
+        continue;
+      }
+      if (carried?.kind === "unavailable") {
+        unavailableEdgeKeys.push(edgeKey);
+        pricingProvenanceByEdgeKey.set(edgeKey, "unavailable");
+        coverageByEdgeKey.set(edgeKey, Object.freeze({
+          status: "rejected" as const,
+          reason: carried.reason,
+        }));
         continue;
       }
       unresolvedEdgeKeys.push(edgeKey);
@@ -478,7 +504,10 @@ function compatibleCarryForEdge(input: {
   readonly canonicalActivity: StrictCanonicalActivityProof | undefined;
   readonly source: CanonicalSource;
   readonly familyId: string;
-}): { readonly mid: RouteVenueMid } | null {
+}):
+  | { readonly kind: "priced"; readonly mid: RouteVenueMid }
+  | { readonly kind: "unavailable"; readonly reason: string }
+  | null {
   const {
     edge,
     edgeKey,
@@ -506,12 +535,24 @@ function compatibleCarryForEdge(input: {
   const previousFamilyId = previous.pricingFamilyIdByEdgeKey?.get(edgeKey);
   if (previousFamilyId !== familyId) return null;
   const previousProvenance = previous.pricingProvenanceByEdgeKey?.get(edgeKey);
+  if (
+    previousProvenance === "unavailable" &&
+    previous.coverageByEdgeKey.get(edgeKey)?.status === "rejected"
+  ) {
+    const previousCoverage = previous.coverageByEdgeKey.get(edgeKey);
+    if (previousCoverage?.status === "rejected") {
+      const reason = previousCoverage.reason;
+      return reason.trim().length > 0
+        ? { kind: "unavailable", reason }
+        : null;
+    }
+  }
   if (previousProvenance !== "refreshed" && previousProvenance !== "carried") {
     return null;
   }
   if (previous.coverageByEdgeKey.get(edgeKey)?.status !== "resolved") return null;
   const mid = previous.mids.get(edgeKey);
-  return mid === undefined ? null : { mid };
+  return mid === undefined ? null : { kind: "priced", mid };
 }
 
 function sameCanonicalSource(left: CanonicalSource, right: CanonicalSource): boolean {

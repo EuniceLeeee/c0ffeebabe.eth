@@ -58,6 +58,11 @@ import type { PendingExecutionEvidence } from
   "./venues/route-leg-adapter.js";
 import type { CanonicalEdgeId } from
   "./venues/blockscan-state-capability.js";
+import {
+  blockScanEdgeMetadataFingerprint,
+  deterministicHash,
+  exactSetHash,
+} from "./venues/blockscan-state-capability.js";
 import type {
   FamilyCapabilityCatalog,
   LoadedFamilyBox,
@@ -149,14 +154,35 @@ export interface StrictProductionSessionCreationTiming {
   readonly readyInstanceCount: number;
   readonly selectedInstanceCount: number;
   readonly refreshedInstanceCount: number;
+  readonly skippedCleanInstanceCount: number;
   readonly failedInstanceCount: number;
   readonly requestedFundingAssetCount: number;
   readonly fundingOfferCount: number;
+  readonly projectedRouteCount: number;
+  readonly cleanAuthorityReissueCount: number;
   readonly pricingMs: number;
   readonly fundingMs: number;
   readonly routeProjectionMs: number;
   readonly totalMs: number;
   readonly heapUsedBytes: number;
+}
+
+/**
+ * Immutable ready-generation pricing metadata. Route projection and state
+ * ownership are established once at startup; coarse generations only use
+ * this index to map dirty results back onto the dense ready Graph.
+ */
+export interface StrictReadyPricingIndex {
+  readonly familyIdByEdgeKey: ReadonlyMap<string, string>;
+  readonly stateKeyByEdgeKey: ReadonlyMap<string, string>;
+  readonly instanceKeyByEdgeKey: ReadonlyMap<string, string>;
+  readonly edgeIdsByInstanceKey: ReadonlyMap<string, readonly string[]>;
+  readonly edgeIdByRouteIdentity: ReadonlyMap<string, string>;
+  readonly stateKeyByRouteIdentity: ReadonlyMap<string, string>;
+  readonly instanceIndexesByStateKey: ReadonlyMap<string, readonly number[]>;
+  readonly expectedEdgeKeys: readonly string[];
+  readonly expectedEdgeKeyHash: string;
+  readonly readyGraphContractFingerprint: string;
 }
 
 /**
@@ -170,6 +196,7 @@ export class StrictProductionRuntimeRoot {
   readonly #readySource: CanonicalSource;
   readonly #readyGraph: readonly TokenEdge[];
   readonly #readyInstances: readonly PreparedFamilyInstance[];
+  readonly #pricingIndex: StrictReadyPricingIndex;
   readonly #readyFundingAssetsByFamily: ReadonlyMap<
     FamilyId,
     readonly string[]
@@ -192,7 +219,10 @@ export class StrictProductionRuntimeRoot {
       graphIds.add(edgeId);
     }
     const instanceKeys = new Set<string>();
-    for (const instance of input.readyInstances) {
+    const stateKeyByRouteIdentity = new Map<string, string>();
+    const instanceIndexesByStateKey = new Map<string, number[]>();
+    for (let index = 0; index < input.readyInstances.length; index++) {
+      const instance = input.readyInstances[index]!;
       const family = input.catalog.forStrictFamily(instance.familyId);
       if (family.plugin.manifest.domain === "funding") {
         throw new Error("Funding Family cannot enter the ready instance set");
@@ -202,7 +232,34 @@ export class StrictProductionRuntimeRoot {
         throw new Error(`strict ready instances duplicate ${key}`);
       }
       instanceKeys.add(key);
+      for (const pricing of instance.pricingInstances) {
+        const stateKey = String(pricing.stateKey).toLowerCase();
+        const stateIndexes = instanceIndexesByStateKey.get(stateKey) ?? [];
+        if (!stateIndexes.includes(index)) stateIndexes.push(index);
+        instanceIndexesByStateKey.set(stateKey, stateIndexes);
+        for (const route of pricing.routes) {
+          const routeIdentity = routeIdentityKey(
+            instance.familyId,
+            instance.instanceKey,
+            route.routeKey,
+          );
+          const previous = stateKeyByRouteIdentity.get(routeIdentity);
+          if (previous !== undefined && previous !== stateKey) {
+            throw new Error(
+              `strict route has conflicting pricing state keys ${routeIdentity}`,
+            );
+          }
+          stateKeyByRouteIdentity.set(routeIdentity, stateKey);
+        }
+      }
     }
+    this.#pricingIndex = buildStrictReadyPricingIndex({
+      catalog: input.catalog,
+      graph: input.readyGraph,
+      instances: input.readyInstances,
+      stateKeyByRouteIdentity,
+      instanceIndexesByStateKey,
+    });
     const fundingAssetsByFamily = new Map<FamilyId, Set<string>>();
     for (const entry of input.readyFundingAssets) {
       const family = input.catalog.forStrictFamily(entry.familyId);
@@ -257,15 +314,30 @@ export class StrictProductionRuntimeRoot {
       FamilyRouteRuntimeHandle,
       StrictCurrentRoutePricing
     >();
-    let refreshedInstanceCount = 0;
-    let failedInstanceCount = 0;
-    let pricingMs = 0;
-
     const kind = input.kind ?? "pricing";
     const requiredEdgeIds = input.requiredEdgeIds;
     const requiredInstanceKeys = requiredEdgeIds === undefined
       ? undefined
-      : requiredInstanceKeysForEdges(this.#readyGraph, requiredEdgeIds);
+      : requiredInstanceKeysForEdges(
+          this.#pricingIndex.instanceKeyByEdgeKey,
+          requiredEdgeIds,
+        );
+    const selectedPricingInstanceIndexes = kind === "pricing"
+      ? input.touchedPools === undefined
+        ? Array.from({ length: this.#readyInstances.length }, (_, index) => index)
+        : selectedInstanceIndexesForTouchedPools(
+            this.#pricingIndex.instanceIndexesByStateKey,
+            input.touchedPools,
+          )
+      : [];
+    let refreshedInstanceCount = 0;
+    const skippedCleanInstanceCount = kind === "pricing" &&
+        input.touchedPools !== undefined
+      ? this.#readyInstances.length - selectedPricingInstanceIndexes.length
+      : 0;
+    let failedInstanceCount = 0;
+    let pricingMs = 0;
+
     const pricingStartedAtMs = Date.now();
     if (kind === "pricing") {
       /*
@@ -279,49 +351,37 @@ export class StrictProductionRuntimeRoot {
       // local Reth endpoint sustains this bounded fan-out; keeping it high
       // enough to finish the full ready set within one block cadence avoids
       // turning a producer generation into a permanent N-1 backlog.
-      const refreshConcurrency = Math.max(1, Math.min(128, this.#readyInstances.length));
-      const refreshedOutcomes = Array.from(
-        { length: this.#readyInstances.length },
-        () => null as InstanceRefreshOutcome | null,
+      const refreshConcurrency = Math.max(
+        1,
+        Math.min(128, selectedPricingInstanceIndexes.length),
       );
+      const refreshedOutcomes = new Map<number, InstanceRefreshOutcome>();
       let refreshCursor = 0;
       const refreshWorkers = Array.from(
         { length: refreshConcurrency },
         async () => {
           for (;;) {
-            const index = refreshCursor++;
-            if (index >= this.#readyInstances.length) return;
+            const selectedIndex = refreshCursor++;
+            if (selectedIndex >= selectedPricingInstanceIndexes.length) return;
+            const index = selectedPricingInstanceIndexes[selectedIndex]!;
             const readyInstance = this.#readyInstances[index]!;
-            if (
-              input.touchedPools !== undefined &&
-              !touchedInstanceMatches(readyInstance, input.touchedPools)
-            ) {
-              // Touched state controls refresh work only. Re-issue the
-              // source-bound route shell so the dense snapshot can carry a
-              // compatible clean price from the preceding generation.
-              refreshedOutcomes[index] = this.unpricedInstanceRoutes({
-                readyInstance,
-                source: input.source,
-              });
-              continue;
-            }
             try {
               refreshedInstanceCount++;
-              refreshedOutcomes[index] = await this.refreshReadyInstancePricing({
+              refreshedOutcomes.set(index, await this.refreshReadyInstancePricing({
                 readyInstance,
                 source: input.source,
                 runtime: input.runtime,
                 ...(input.control === undefined ? {} : { control: input.control }),
-              });
+              }));
             } catch (error) {
               failedInstanceCount++;
               // A dirty read failure is a real unresolved result. Keep the
               // edge shell, but never turn it into a carried price.
-              refreshedOutcomes[index] = this.unresolvedInstanceRoutes({
+              refreshedOutcomes.set(index, this.unresolvedInstanceRoutes({
                 readyInstance,
                 source: input.source,
                 reason: error instanceof Error ? error.message : String(error),
-              });
+              }));
             }
           }
         },
@@ -337,8 +397,9 @@ export class StrictProductionRuntimeRoot {
           result.status === "rejected",
       );
       if (refreshFailure !== undefined) throw refreshFailure.reason;
-      for (const outcome of refreshedOutcomes) {
-        if (outcome === null) {
+      for (const index of selectedPricingInstanceIndexes) {
+        const outcome = refreshedOutcomes.get(index);
+        if (outcome === undefined) {
           throw new Error("strict ready instance refresh did not complete");
         }
         routes.push(...outcome.routes);
@@ -423,23 +484,6 @@ export class StrictProductionRuntimeRoot {
       CanonicalEdgeId,
       StrictCurrentRoutePricing
     >();
-    // One physical instance can legitimately own multiple pricing state
-    // shards (for example, one shard per direction).  State identity is a
-    // route/edge contract, not an instance-wide scalar.
-    const stateKeyByRoute = new Map<string, string>();
-    for (const readyInstance of this.#readyInstances) {
-      for (const pricing of readyInstance.pricingInstances) {
-        for (const route of pricing.routes) {
-          const previous = stateKeyByRoute.get(route.routeKey);
-          if (previous !== undefined && previous !== pricing.stateKey) {
-            throw new Error(
-              `strict route has conflicting pricing state keys ${route.routeKey}`,
-            );
-          }
-          stateKeyByRoute.set(route.routeKey, pricing.stateKey);
-        }
-      }
-    }
     const stateKeyByEdge = new Map<CanonicalEdgeId, string>();
     for (const projected of view.routes) {
       const strictFamily = this.#catalog.forStrictFamily(
@@ -459,7 +503,13 @@ export class StrictProductionRuntimeRoot {
             edge: projected.edge,
           });
       bindings.set(projected.edge.canonicalEdgeId, binding);
-      const stateKey = stateKeyByRoute.get(projected.handle.routeKey);
+      const stateKey = this.#pricingIndex.stateKeyByRouteIdentity.get(
+        routeIdentityKey(
+          projected.handle.familyId,
+          projected.handle.instanceKey,
+          projected.handle.routeKey,
+        ),
+      );
       if (stateKey !== undefined) {
         stateKeyByEdge.set(projected.edge.canonicalEdgeId, stateKey);
       }
@@ -506,8 +556,10 @@ export class StrictProductionRuntimeRoot {
       })));
     }
     const fundingMs = Math.max(0, Date.now() - fundingStartedAtMs);
-    const selectedInstanceCount = requiredInstanceKeys === undefined
-      ? this.#readyInstances.length
+    const selectedInstanceCount = kind === "pricing"
+      ? selectedPricingInstanceIndexes.length
+      : requiredInstanceKeys === undefined
+        ? this.#readyInstances.length
       : this.#readyInstances.filter((instance) =>
           requiredInstanceKeys.has(instanceKeyFor(instance))
         ).length;
@@ -515,9 +567,12 @@ export class StrictProductionRuntimeRoot {
       readyInstanceCount: this.#readyInstances.length,
       selectedInstanceCount,
       refreshedInstanceCount,
+      skippedCleanInstanceCount,
       failedInstanceCount,
       requestedFundingAssetCount: requestedFundingAssets.size,
       fundingOfferCount: fundingBindings.length,
+      projectedRouteCount: view.routes.length,
+      cleanAuthorityReissueCount: 0,
       pricingMs,
       fundingMs,
       routeProjectionMs,
@@ -537,7 +592,13 @@ export class StrictProductionRuntimeRoot {
       fundingOutcomes,
       pricingComplete: kind === "pricing",
       creationTiming,
+      pricingIndex: this.#pricingIndex,
     });
+  }
+
+  /** Static ownership/index data shared by all source-bound sessions. */
+  pricingIndex(): StrictReadyPricingIndex {
+    return this.#pricingIndex;
   }
 
   private unpricedInstanceRoutes(input: {
@@ -712,6 +773,7 @@ export class StrictProductionRuntimeSession {
   readonly edges: readonly TokenEdge[];
   readonly readySource: CanonicalSource;
   readonly creationTiming: StrictProductionSessionCreationTiming;
+  readonly #pricingIndex: StrictReadyPricingIndex;
   readonly #catalog: FamilyCapabilityCatalog;
   readonly #runtime: CentralAdapterRuntime;
   readonly #bindings: ReadonlyMap<CanonicalEdgeId, StrictRouteBinding>;
@@ -740,11 +802,13 @@ export class StrictProductionRuntimeSession {
     readonly fundingOutcomes: readonly FundingInstanceOutcome[];
     readonly pricingComplete?: boolean;
     readonly creationTiming: StrictProductionSessionCreationTiming;
+    readonly pricingIndex: StrictReadyPricingIndex;
   }) {
     this.#catalog = input.catalog;
     this.source = Object.freeze({ ...input.source });
     this.readySource = Object.freeze({ ...input.readySource });
     this.creationTiming = input.creationTiming;
+    this.#pricingIndex = input.pricingIndex;
     this.#runtime = input.runtime;
     this.edges = Object.freeze([...input.edges]);
     this.#bindings = new Map(input.bindings);
@@ -777,6 +841,11 @@ export class StrictProductionRuntimeSession {
   /** Family-declared state identity used by the coordinator's carry contract. */
   stateKeyForEdge(edge: TokenEdge): string | null {
     return this.#stateKeyByEdge.get(this.#resolve(edge).edge.canonicalEdgeId) ?? null;
+  }
+
+  /** Static ownership/index data shared by this source-bound session. */
+  pricingIndex(): StrictReadyPricingIndex {
+    return this.#pricingIndex;
   }
 
   /**
@@ -1192,6 +1261,155 @@ function currentPricingForRoute(
     : Object.freeze({ status: "priced" as const, mid });
 }
 
+function buildStrictReadyPricingIndex(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly graph: readonly TokenEdge[];
+  readonly instances: readonly PreparedFamilyInstance[];
+  readonly stateKeyByRouteIdentity: ReadonlyMap<string, string>;
+  readonly instanceIndexesByStateKey: ReadonlyMap<string, readonly number[]>;
+}): StrictReadyPricingIndex {
+  const graphByEdgeKey = new Map<string, TokenEdge>();
+  const instanceKeyByEdgeKey = new Map<string, string>();
+  const edgeIdsByInstanceKey = new Map<string, string[]>();
+  const expectedEdgeKeys = input.graph
+    .filter((edge) => scannerConsumesPricingEdge(edge))
+    .map((edge) => {
+      const edgeKey = requiredCanonicalEdgeId(edge);
+      if (graphByEdgeKey.has(edgeKey)) {
+        throw new Error(`strict ready pricing index duplicates ${edgeKey}`);
+      }
+      graphByEdgeKey.set(edgeKey, edge);
+      if (edge.instanceKey === undefined || edge.instanceKey.length === 0) {
+        throw new Error(`strict ready pricing edge lacks instanceKey ${edgeKey}`);
+      }
+      instanceKeyByEdgeKey.set(edgeKey, edge.instanceKey);
+      const edgeIds = edgeIdsByInstanceKey.get(edge.instanceKey) ?? [];
+      edgeIds.push(edgeKey);
+      edgeIdsByInstanceKey.set(edge.instanceKey, edgeIds);
+      return edgeKey;
+    })
+    .sort();
+
+  // Include non-scanner edges in the instance closure used by exact sessions.
+  // Credit/lend edges do not own coarse pricing state, but they still need an
+  // instance binding when a candidate's complete closure requests them.
+  for (const edge of input.graph) {
+    const edgeKey = requiredCanonicalEdgeId(edge);
+    if (graphByEdgeKey.has(edgeKey)) continue;
+    graphByEdgeKey.set(edgeKey, edge);
+    if (edge.instanceKey === undefined || edge.instanceKey.length === 0) {
+      throw new Error(`strict ready edge lacks instanceKey ${edgeKey}`);
+    }
+    instanceKeyByEdgeKey.set(edgeKey, edge.instanceKey);
+    const edgeIds = edgeIdsByInstanceKey.get(edge.instanceKey) ?? [];
+    edgeIds.push(edgeKey);
+    edgeIdsByInstanceKey.set(edge.instanceKey, edgeIds);
+  }
+
+  const familyIdByEdgeKey = new Map<string, string>();
+  const stateKeyByEdgeKey = new Map<string, string>();
+  const edgeIdByRouteIdentity = new Map<string, string>();
+  for (const instance of input.instances) {
+    const strictFamily = input.catalog.forStrictFamily(instance.familyId);
+    if (
+      strictFamily.plugin.manifest.domain !== "swap" &&
+      strictFamily.plugin.manifest.domain !== "protocol"
+    ) continue;
+    const family = input.catalog.forFamily(instance.familyId);
+    const routeInputs = instance.routes.map((route, index) => {
+      const handle = instance.routeHandles[index];
+      if (handle === undefined) {
+        throw new Error(
+          `strict ready pricing route lacks authority ${instance.familyId}:` +
+            `${instance.instanceKey}:${route.routeKey}`,
+        );
+      }
+      return {
+        family,
+        descriptor: instance.descriptor,
+        route,
+        handle,
+      };
+    });
+    const projected = buildFamilyRouteGraphView({ routes: routeInputs });
+    for (const item of projected.routes) {
+      const edgeKey = requiredCanonicalEdgeId(item.edge);
+      const readyEdge = graphByEdgeKey.get(edgeKey);
+      if (readyEdge === undefined) {
+        throw new Error(
+          `strict ready pricing route is absent from Graph ${edgeKey}`,
+        );
+      }
+      if (edgeBindingFingerprint(readyEdge) !== edgeBindingFingerprint(item.edge)) {
+        throw new Error(
+          `strict ready pricing route contract differs at ${edgeKey}`,
+        );
+      }
+      const routeIdentity = routeIdentityKey(
+        item.handle.familyId,
+        item.handle.instanceKey,
+        item.handle.routeKey,
+      );
+      const stateKey = input.stateKeyByRouteIdentity.get(routeIdentity);
+      if (stateKey === undefined) {
+        throw new Error(`strict ready pricing index lacks ${routeIdentity}`);
+      }
+      const previousFamilyId = familyIdByEdgeKey.get(edgeKey);
+      if (previousFamilyId !== undefined && previousFamilyId !== instance.familyId) {
+        throw new Error(`strict ready pricing index family conflict ${edgeKey}`);
+      }
+      const previousStateKey = stateKeyByEdgeKey.get(edgeKey);
+      if (previousStateKey !== undefined && previousStateKey !== stateKey) {
+        throw new Error(`strict ready pricing index state conflict ${edgeKey}`);
+      }
+      familyIdByEdgeKey.set(edgeKey, instance.familyId);
+      stateKeyByEdgeKey.set(edgeKey, stateKey);
+      edgeIdByRouteIdentity.set(routeIdentity, edgeKey);
+    }
+  }
+
+  for (const edgeKey of expectedEdgeKeys) {
+    if (
+      familyIdByEdgeKey.get(edgeKey) === undefined ||
+      stateKeyByEdgeKey.get(edgeKey) === undefined
+    ) {
+      throw new Error(`strict ready pricing index omits ${edgeKey}`);
+    }
+  }
+
+  return Object.freeze({
+    familyIdByEdgeKey: new Map(familyIdByEdgeKey),
+    stateKeyByEdgeKey: new Map(stateKeyByEdgeKey),
+    instanceKeyByEdgeKey: new Map(instanceKeyByEdgeKey),
+    edgeIdsByInstanceKey: new Map(
+      [...edgeIdsByInstanceKey.entries()].map(([instanceKey, edgeIds]) => [
+        instanceKey,
+        Object.freeze([...edgeIds].sort()),
+      ]),
+    ),
+    edgeIdByRouteIdentity: new Map(edgeIdByRouteIdentity),
+    stateKeyByRouteIdentity: new Map(input.stateKeyByRouteIdentity),
+    instanceIndexesByStateKey: new Map(
+      [...input.instanceIndexesByStateKey.entries()].map(([stateKey, indexes]) => [
+        stateKey,
+        Object.freeze([...indexes].sort((left, right) => left - right)),
+      ]),
+    ),
+    expectedEdgeKeys: Object.freeze(expectedEdgeKeys),
+    expectedEdgeKeyHash: exactSetHash(expectedEdgeKeys),
+    readyGraphContractFingerprint: strictReadyGraphContractFingerprint(
+      input.graph,
+    ),
+  });
+}
+
+/** Full ordered ready-edge contract used to reject a mixed Graph generation. */
+export function strictReadyGraphContractFingerprint(
+  edges: readonly TokenEdge[],
+): string {
+  return deterministicHash(edges.map(blockScanEdgeMetadataFingerprint));
+}
+
 function instanceKeyFor(instance: PreparedFamilyInstance): string {
   return String(instance.instanceKey);
 }
@@ -1203,16 +1421,18 @@ function instanceKeyForHandle(
 }
 
 function requiredInstanceKeysForEdges(
-  graph: readonly TokenEdge[],
+  instanceKeyByEdgeKey: ReadonlyMap<string, string>,
   requiredEdgeIds: ReadonlySet<string>,
 ): ReadonlySet<string> {
   const instanceKeys = new Set<string>();
-  for (const edge of graph) {
-    if (!requiredEdgeIds.has(requiredCanonicalEdgeId(edge))) continue;
-    if (edge.instanceKey === undefined || edge.instanceKey.length === 0) {
-      throw new Error("required exact edge lacks instanceKey");
+  for (const edgeId of requiredEdgeIds) {
+    const instanceKey = instanceKeyByEdgeKey.get(edgeId);
+    if (instanceKey === undefined || instanceKey.length === 0) {
+      throw new Error(
+        `strict exact session is missing required edge ids: ${edgeId}`,
+      );
     }
-    instanceKeys.add(edge.instanceKey);
+    instanceKeys.add(instanceKey);
   }
   return instanceKeys;
 }
@@ -1245,16 +1465,35 @@ function bindCurrentPricingToEdge(
   });
 }
 
-function touchedInstanceMatches(
-  instance: PreparedFamilyInstance,
+function selectedInstanceIndexesForTouchedPools(
+  instanceIndexesByStateKey: ReadonlyMap<string, readonly number[]>,
   touchedPools: ReadonlySet<string>,
-): boolean {
-  // The pricing state key is the physical venue identity: pool address for
-  // pair venues (univ2/univ3), poolId for singleton-manager venues (univ4) -
-  // the same identity the scanner's touched filter uses.
-  return instance.pricingInstances.some((pricing) =>
-    touchedPools.has(String(pricing.stateKey).toLowerCase()),
-  );
+): readonly number[] {
+  const selected = new Set<number>();
+  for (const touchedPool of touchedPools) {
+    for (const index of instanceIndexesByStateKey.get(
+      String(touchedPool).toLowerCase(),
+    ) ?? []) {
+      selected.add(index);
+    }
+  }
+  return Object.freeze([...selected].sort((left, right) => left - right));
+}
+
+function routeIdentityKey(
+  familyId: string,
+  instanceKey: string,
+  routeKey: string,
+): string {
+  return `${familyId}\u0000${instanceKey}\u0000${routeKey}`;
+}
+
+function scannerConsumesPricingEdge(edge: {
+  readonly slotKind: string;
+  readonly leavesStandingPosition: boolean;
+}): boolean {
+  return edge.slotKind === "swap" ||
+    (edge.slotKind === "protocol" && !edge.leavesStandingPosition);
 }
 
 /**

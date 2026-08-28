@@ -16,6 +16,8 @@ import { createStrictCentralAdapterRuntime } from
   "../strict-central-adapter-runtime.js";
 import { StrictProductionRuntimeRoot } from
   "../strict-production-runtime-session.js";
+import { StrictProductionRuntimeSession } from
+  "../strict-production-runtime-session.js";
 import {
   StrictCurrentRuntimeCoordinator,
   type StrictSessionRequest,
@@ -470,6 +472,7 @@ const producerPricingBackend = Object.freeze({
     throw new Error("producer pricing backend should be transport-only in this test");
   },
 });
+let sparseCarrySession: StrictProductionRuntimeSession | null = null;
 const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
   async (request: StrictSessionRequest) => {
     assert.equal(request.purpose, "coarse-pricing");
@@ -479,7 +482,7 @@ const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
       producerPricingBackend,
       "coarse coordinator forwards its generation-scoped pricing backend",
     );
-    return parallelRoot.createSession({
+    const created = parallelRoot.createSession({
       source: request.source,
       runtime: runtime(request.source, {
         reservesByTarget: new Map<string, Readonly<{
@@ -507,6 +510,11 @@ const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
         ? {}
         : { requiredEdgeIds: request.requiredEdgeIds }),
     });
+    if (request.source.number === carryNextSource.number) {
+      sparseCarrySession = await created;
+      return sparseCarrySession;
+    }
+    return created;
   },
   () => {},
 );
@@ -575,6 +583,83 @@ assert.equal(carriedPricing.coverage.carriedEdgeKeys?.length, 38);
 assert.equal(carriedPricing.coverage.unresolvedEdgeKeys.length, 0);
 assert.ok(carriedPricing.mids.has(edgeA.canonicalEdgeId!));
 assert.ok(carriedPricing.mids.has(edgeB.canonicalEdgeId!));
+
+const unavailableCarryCoordinator = new StrictCurrentRuntimeCoordinator(
+  async (request: StrictSessionRequest) => parallelRoot.createSession({
+    source: request.source,
+    runtime: runtime(request.source, {
+      reservesByTarget: new Map([
+        [secondParallelTarget, Object.freeze({
+          reserve0: 0n,
+          reserve1: 1_000_000_000n,
+          blockTimestampLast: 1,
+        })],
+      ]),
+    }),
+    fundingAssets: request.fundingAssets,
+    kind: "pricing",
+    ...(request.control === undefined ? {} : { control: request.control }),
+    ...(request.touchedPools === undefined
+      ? {}
+      : { touchedPools: request.touchedPools }),
+    ...(request.pricingCallBackend === undefined
+      ? {}
+      : { pricingCallBackend: request.pricingCallBackend }),
+  }),
+  () => {},
+);
+const unavailableBase = await unavailableCarryCoordinator.prepareCoarsePricing({
+  graph: carryBaseGraph,
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(unavailableBase.status, "complete");
+const unavailableNext = await unavailableCarryCoordinator.prepareCoarsePricing({
+  graph: carryNextGraph,
+  touchedPools: touchedA,
+  canonicalActivity: Object.freeze({
+    source: carryNextSource,
+    touchedStateKeys: touchedA,
+    complete: true,
+  }),
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(unavailableNext.status, "complete");
+assert.equal(
+  unavailableNext.snapshot.pricingProvenanceByEdgeKey?.get(
+    edgeB.canonicalEdgeId!,
+  ),
+  "unavailable",
+  "a clean behavior-proven unavailable edge remains terminal when carried",
+);
+assert.equal(
+  unavailableNext.snapshot.coverageByEdgeKey.get(edgeB.canonicalEdgeId!)?.status,
+  "rejected",
+);
+assert.ok(
+  unavailableNext.snapshot.coverage.unavailableEdgeKeys.includes(
+    edgeB.canonicalEdgeId!,
+  ),
+);
+assert.equal(unavailableNext.snapshot.mids.has(edgeB.canonicalEdgeId!), false);
+const sparseSession = sparseCarrySession!;
+assert.equal(
+  sparseSession.creationTiming.skippedCleanInstanceCount,
+  parallelReadyInstances.length - 1,
+  "clean instances are not reissued in a sparse coarse session",
+);
+assert.equal(
+  sparseSession.creationTiming.cleanAuthorityReissueCount,
+  0,
+);
+assert.equal(
+  sparseSession.creationTiming.projectedRouteCount,
+  2,
+  "coarse projection is limited to the touched instance routes",
+);
+assert.equal(
+  sparseSession.creationTiming.selectedInstanceCount,
+  1,
+);
 const enumerated = scanBlockStateFromResolvedMids({
   edges: [...carryNextGraph.edges],
   sourceBlock: carryNextSource.number,
@@ -1171,19 +1256,16 @@ assert.equal(
   "unresolved",
 );
 
-await assert.rejects(
-  new StrictProductionRuntimeRoot({
-    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    readySource: STARTUP,
-    readyGraph: startupView.edges.slice(1),
-    readyInstances: publication.instances,
-    readyFundingAssets,
-  }).createSession({
-    source: CURRENT,
-    runtime: strictRuntime,
-    fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
-  }),
-  /topology differs/,
+assert.throws(
+  () => new StrictProductionRuntimeRoot({
+      catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+      readySource: STARTUP,
+      readyGraph: startupView.edges.slice(1),
+      readyInstances: publication.instances,
+      readyFundingAssets,
+    }),
+  /absent from Graph/,
+  "the ready pricing index must reject a graph missing a pricing route",
 );
 
 console.log("strict production runtime session contract: PASS");
