@@ -1201,6 +1201,17 @@ fail-closed gate. Exact scope is derived from the complete canonical edge closur
 `seedEdges` through `requiredEdgeIds`. The exact session must contain every required edge and fails closed
 when any required edge is absent; it does not use an independent touched-pool scope.
 
+### 11.2 Producer transport contract
+
+Each coarse generation owns one source-hash-pinned `producer-bulk` call backend. Pricing `eth_call` work is
+coalesced into physical JSON-RPC batches of at most 128 items, with at most four batches in flight. The
+backend uses the shared Reth transport scheduler's producer-bulk lane when configured, keeps the EIP-1898
+source hash on every item, and rejects a failed producer batch as a batch; it never expands that failure into
+one single-call request per item. The backend is closed and drained before the generation's call statistics
+are published. Exact refinement uses a separate exact-scoped backend and retains its own bounded fallback
+policy. Producer batch count, item count, batch latency, scheduler queue wait, batch failures, and fallback
+count are diagnostic telemetry only and cannot relax a deadline, coverage, or final fail-closed gate.
+
 ## 12. Physical deletion closure
 
 The strict-only source closure must not contain any of the following authorities, even under a new name:

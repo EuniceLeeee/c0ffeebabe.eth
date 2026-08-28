@@ -31,8 +31,8 @@ import type {
 } from "./reth-transport-scheduler.js";
 
 /**
- * Pass-scoped source-hash pinned quote backend for the block-scan exact
- * probe stage.
+ * Pass-scoped source-hash pinned quote backend for block-scan producer and
+ * exact work.
  *
  * All quote calls are coalesced into JSON-RPC batches (NOT Multicall3) sent
  * directly to local reth. Every batch item keeps its own to/data/from and the
@@ -41,7 +41,8 @@ import type {
  * that need real execution (self-burn / ethertoken native redemption) are
  * grouped into a separate eth_simulateV1 batch.
  *
- * Lifecycle: the backend is created per pass, bound to the pass signal and
+ * Lifecycle: the backend is created per producer generation or exact pass,
+ * bound to that scope's signal and
  * deadline. abort() rejects every outstanding item and stops all in-flight
  * transports; closeAndDrain() waits for the transports to actually settle
  * before the pass is recorded, so an old exact batch can never keep running
@@ -74,6 +75,16 @@ export interface PinnedRethQuoteBackendOptions {
    * the normal limit. When absent the static maxConcurrentBatches applies.
    */
   readonly maxConcurrentBatchesProvider?: () => number;
+  /** Physical lane used when acquiring the shared reth transport permit. */
+  readonly transportLane?: "producer-bulk" | "exact";
+  /** Human-readable scope included in diagnostics and abort errors. */
+  readonly scopeLabel?: string;
+  /**
+   * Transport failure policy. Exact keeps the historical per-item fallback;
+   * producer-bulk rejects the whole failed batch so a transport incident
+   * cannot fan out into one physical request per logical work item.
+   */
+  readonly allowSingleCallFallback?: boolean;
   readonly signal?: AbortSignal;
   readonly deadlineAtMs?: number;
   readonly transportScheduler?: Pick<RethTransportScheduler, "run">;
@@ -92,6 +103,9 @@ export class PinnedRethQuoteBackend
   private readonly maxConcurrentBatchesProvider:
     | (() => number)
     | undefined;
+  private readonly transportLane: "producer-bulk" | "exact";
+  private readonly scopeLabel: string;
+  private readonly allowSingleCallFallback: boolean;
   private readonly pending: PendingQuoteItem[] = [];
   private readonly liveItems = new Set<PendingQuoteItem>();
   private readonly activeFlushes = new Set<Promise<void>>();
@@ -119,6 +133,8 @@ export class PinnedRethQuoteBackend
   private abortedBatches = 0;
   private completedAfterScopeAbort = 0;
   private transportQueueWaitMs = 0;
+  private batchFailures = 0;
+  private singleCallFallbacks = 0;
   private lastDrainMs = 0;
 
   private readonly blockSpecifier: {
@@ -140,6 +156,10 @@ export class PinnedRethQuoteBackend
     this.maxConcurrentBatches = options.maxConcurrentBatches ?? 8;
     this.maxConcurrentBatchesProvider =
       options.maxConcurrentBatchesProvider;
+    this.transportLane = options.transportLane ?? "exact";
+    this.scopeLabel = options.scopeLabel ?? "exact quote";
+    this.allowSingleCallFallback = options.allowSingleCallFallback ??
+      this.transportLane === "exact";
     this.blockSpecifier = eip1898BlockSpecifier(sourceBlockHash);
     this.persistentCallCache = options.persistentEthCallCachePath === undefined
       ? undefined
@@ -416,6 +436,9 @@ export class PinnedRethQuoteBackend
   }
 
   stats(): Readonly<{
+    lane: "producer-bulk" | "exact";
+    scopeLabel: string;
+    allowSingleCallFallback: boolean;
     totalCalls: number;
     memoHits: number;
     batchesSent: number;
@@ -428,6 +451,8 @@ export class PinnedRethQuoteBackend
     abortedBatches: number;
     completedAfterScopeAbort: number;
     transportQueueWaitMs: number;
+    batchFailures: number;
+    singleCallFallbacks: number;
     drainMs: number;
     persistentCacheContentSha256: string | null;
     persistentCacheConfigured: boolean;
@@ -438,6 +463,9 @@ export class PinnedRethQuoteBackend
   }> {
     const persistent = this.persistentCallCache?.stats();
     return Object.freeze({
+      lane: this.transportLane,
+      scopeLabel: this.scopeLabel,
+      allowSingleCallFallback: this.allowSingleCallFallback,
       totalCalls: this.totalCalls,
       memoHits: this.memoHits,
       batchesSent: this.batchesSent,
@@ -450,6 +478,8 @@ export class PinnedRethQuoteBackend
       abortedBatches: this.abortedBatches,
       completedAfterScopeAbort: this.completedAfterScopeAbort,
       transportQueueWaitMs: this.transportQueueWaitMs,
+      batchFailures: this.batchFailures,
+      singleCallFallbacks: this.singleCallFallbacks,
       drainMs: this.lastDrainMs,
       persistentCacheContentSha256:
         persistent?.contentSha256 ?? null,
@@ -564,7 +594,7 @@ export class PinnedRethQuoteBackend
     const reason = this.scopeController.signal.reason;
     if (isStateCallAbortedError(reason)) return reason;
     return new StateCallAbortedError(
-      `exact quote ${label} aborted: pass scope closed`,
+      `${this.scopeLabel} ${label} aborted: scope closed`,
       "signal",
       reason,
     );
@@ -575,78 +605,78 @@ export class PinnedRethQuoteBackend
     this.flushScheduled = true;
     setImmediate(() => {
       this.flushScheduled = false;
-      if (this.closed) return;
-      const task = this.flush();
-      this.activeFlushes.add(task);
-      void task
-        .finally(() => {
-          this.activeFlushes.delete(task);
-        })
-        .catch(() => {
-          // flush() rejects items individually; this only prevents detached
-          // rejections from surfacing as unhandled.
-        });
+      this.pump();
     });
   }
 
-  private async flush(): Promise<void> {
+  private pump(): void {
     const concurrencyLimit = Math.max(
       1,
       Math.floor(
         this.maxConcurrentBatchesProvider?.() ??
-          this.maxConcurrentBatches,
+        this.maxConcurrentBatches,
       ),
     );
-    if (this.inFlightBatches >= concurrencyLimit) return;
-    if (this.pending.length === 0) return;
-    const now = Date.now();
-    const batch = this.pending.splice(0, this.maxBatchSize);
-    const alive: PendingQuoteItem[] = [];
-    for (const item of batch) {
-      const deadline = item.control.deadlineAtMs;
-      if (deadline !== undefined && deadline <= now) {
-        this.rejectItem(
-          item,
-          new StateCallAbortedError(
-            `eth_call ${item.req.to} aborted: absolute deadline reached`,
-            "deadline",
-          ),
-        );
-        continue;
+    while (
+      !this.closed &&
+      this.pending.length > 0 &&
+      this.inFlightBatches < concurrencyLimit
+    ) {
+      const now = Date.now();
+      const batch = this.pending.splice(0, this.maxBatchSize);
+      const alive: PendingQuoteItem[] = [];
+      for (const item of batch) {
+        const deadline = item.control.deadlineAtMs;
+        if (deadline !== undefined && deadline <= now) {
+          this.rejectItem(
+            item,
+            new StateCallAbortedError(
+              `eth_call ${item.req.to} aborted: absolute deadline reached`,
+              "deadline",
+            ),
+          );
+          continue;
+        }
+        if (item.control.signal?.aborted) {
+          this.rejectItem(
+            item,
+            new StateCallAbortedError(
+              `eth_call ${item.req.to} aborted: caller signal aborted`,
+              "signal",
+              item.control.signal.reason,
+            ),
+          );
+          continue;
+        }
+        alive.push(item);
       }
-      if (item.control.signal?.aborted) {
-        this.rejectItem(
-          item,
-          new StateCallAbortedError(
-            `eth_call ${item.req.to} aborted: caller signal aborted`,
-            "signal",
-            item.control.signal.reason,
-          ),
-        );
-        continue;
-      }
-      alive.push(item);
+      if (alive.length === 0) continue;
+
+      this.inFlightBatches++;
+      const task = this.flushBatch(alive).finally(() => {
+        this.inFlightBatches--;
+        this.activeFlushes.delete(task);
+        this.scheduleFlush();
+      });
+      this.activeFlushes.add(task);
+      void task.catch(() => {
+        // flushBatch rejects items individually; this only prevents detached
+        // rejections from surfacing as unhandled.
+      });
     }
-    if (alive.length === 0) {
-      this.scheduleFlush();
-      return;
-    }
-    this.inFlightBatches++;
-    try {
-      const calls = alive.filter((item) => item.kind === "eth_call");
-      const simulations = alive.filter(
-        (item) => item.kind === "eth_simulateV1",
-      );
-      await Promise.all([
-        ...(calls.length > 0 ? [this.sendCallBatch(calls)] : []),
-        ...(simulations.length > 0
-          ? [this.sendSimulationBatch(simulations)]
-          : []),
-      ]);
-    } finally {
-      this.inFlightBatches--;
-      this.scheduleFlush();
-    }
+  }
+
+  private async flushBatch(alive: PendingQuoteItem[]): Promise<void> {
+    const calls = alive.filter((item) => item.kind === "eth_call");
+    const simulations = alive.filter(
+      (item) => item.kind === "eth_simulateV1",
+    );
+    await Promise.all([
+      ...(calls.length > 0 ? [this.sendCallBatch(calls)] : []),
+      ...(simulations.length > 0
+        ? [this.sendSimulationBatch(simulations)]
+        : []),
+    ]);
   }
 
   private async runTransport<T>(
@@ -655,7 +685,7 @@ export class PinnedRethQuoteBackend
   ): Promise<T> {
     const operation = this.options.transportScheduler
       ? this.options.transportScheduler.run(
-          "exact",
+          this.transportLane,
           signal,
           async ({ queueWaitMs }) => {
             this.transportQueueWaitMs += queueWaitMs;
@@ -743,12 +773,13 @@ export class PinnedRethQuoteBackend
     );
 
     const batchStartedAtMs = Date.now();
-    this.inFlightBatches++;
     let response: JsonRpcHttpResponse;
     try {
-      response = await this.runTransport(controller.signal, () =>
-        postJsonRpc(this.rpcUrl, payloads as never, controller.signal),
-      );
+      response = await this.runTransport(controller.signal, () => {
+        this.batchesSent++;
+        this.batchedItems += items.length;
+        return postJsonRpc(this.rpcUrl, payloads as never, controller.signal);
+      });
     } catch (transportError) {
       /*
        * Pass/head/deadline abort must never fall back to single calls:
@@ -765,16 +796,11 @@ export class PinnedRethQuoteBackend
         for (const item of items) this.rejectItem(item, error);
         return;
       }
-      await Promise.allSettled(
-        items
-          .filter((item) => !item.settled)
-          .map((item) =>
-            this.retryItemSingle(item, method, transportError),
-          ),
-      );
+      this.batchFailures++;
+      await this.handleBatchFailure(items, method, transportError);
       return;
     } finally {
-      this.inFlightBatches--;
+      this.batchLatencyMs += Math.max(0, Date.now() - batchStartedAtMs);
       clearTimeout(timeout);
       this.scopeController.signal.removeEventListener(
         "abort",
@@ -789,29 +815,20 @@ export class PinnedRethQuoteBackend
       return;
     }
 
-    this.batchesSent++;
-    this.batchedItems += items.length;
-    this.batchLatencyMs += Date.now() - batchStartedAtMs;
-
     const body = Array.isArray(response.body) ? response.body : null;
     if (
       response.statusCode < 200 ||
       response.statusCode >= 300 ||
       body === null
     ) {
-      await Promise.allSettled(
-        items
-          .filter((item) => !item.settled)
-          .map((item) =>
-            this.retryItemSingle(
-              item,
-              method,
-              new Error(
-                `JSON-RPC batch ${method} HTTP ` +
-                  `${response.statusCode} ${response.statusMessage}`,
-              ),
-            ),
-          ),
+      this.batchFailures++;
+      await this.handleBatchFailure(
+        items,
+        method,
+        new Error(
+          `JSON-RPC batch ${method} HTTP ` +
+            `${response.statusCode} ${response.statusMessage}`,
+        ),
       );
       return;
     }
@@ -851,13 +868,42 @@ export class PinnedRethQuoteBackend
 
     for (const item of items) {
       if (item.settled || settledIds.has(item.id)) continue;
-      this.rejectItem(
-        item,
-        new Error(
-          `JSON-RPC batch ${method} missing response for id ${item.id}`,
-        ),
+      const error = new Error(
+        `JSON-RPC batch ${method} missing response for id ${item.id}`,
       );
+      this.batchFailures++;
+      if (this.allowSingleCallFallback) {
+        this.singleCallFallbacks++;
+        await this.retryItemSingle(item, method, error);
+      } else {
+        this.rejectItem(item, error);
+      }
     }
+  }
+
+  private async handleBatchFailure(
+    items: PendingQuoteItem[],
+    method: string,
+    error: unknown,
+  ): Promise<void> {
+    const live = items.filter((item) => !item.settled);
+    if (!this.allowSingleCallFallback) {
+      const message = error instanceof Error ? error.message : String(error);
+      for (const item of live) {
+        this.rejectItem(
+          item,
+          new Error(
+            `${this.scopeLabel} batch ${method} failed: ${message}`,
+            { cause: error },
+          ),
+        );
+      }
+      return;
+    }
+    await Promise.allSettled(live.map((item) => {
+      this.singleCallFallbacks++;
+      return this.retryItemSingle(item, method, error);
+    }));
   }
 
   private async retryItemSingle(

@@ -675,6 +675,8 @@ export interface CurrentSourceRuntimeCoordinator {
     readonly signal?: AbortSignal;
     readonly touchedPools?: ReadonlySet<string>;
     readonly canonicalActivity?: StrictCanonicalActivityProof;
+    /** Generation-scoped source-pinned producer transport. */
+    readonly pricingCallBackend?: Pick<StateBackend, "call">;
   }): Promise<BlockScanStatePrepareResult>;
   resetDynamicStateForReplay(): Promise<void>;
   prepare(
@@ -1225,64 +1227,100 @@ export class BlockScanRuntimeLoop {
           touchedStateKeys: producerTouched,
           complete: true,
         });
+        const producerPricingBackend = new PinnedRethQuoteBackend(
+          this.deps.rpcUrl,
+          anchoredGraph.sourceBlockHash,
+          {
+            signal: this.deps.runtimeAbort.signal,
+            maxBatchSize: 128,
+            maxConcurrentBatches: 4,
+            transportLane: "producer-bulk",
+            scopeLabel: `block-scan producer generation ${generation}`,
+            allowSingleCallFallback: false,
+            ...(this.deps.rethTransportScheduler === undefined
+              ? {}
+              : { transportScheduler: this.deps.rethTransportScheduler }),
+          },
+        );
         try {
-        prepared = await input.coordinator.prepareCoarsePricing({
-          graph: anchoredGraph,
-          touchedPools: producerTouched,
-          canonicalActivity: producerActivity,
-          deadlineAtMs: generationDeadlineAtMs,
-          /*
-           * Family-local deadlines must settle before the generation
-           * deadline; the outer abort wins the same instant as a slow family.
-           */
-          familySettleDeadlineAtMs: generationFamilySettleDeadlineAtMs,
-          laggingTopologyRefreshMode: "proof-scoped",
-          signal: this.deps.runtimeAbort.signal,
-        });
-        if (prepared.status === "incomplete") {
-          /*
-           * A topology change (e.g. the overnight universe reindex) invalidates
-           * every family's compiled static schema. The hot 80s budget cannot
-           * finish the full recompile + bootstrap direct read, so the chain
-           * retries the same block forever with 0 resolved keys. Escalate once
-           * to the startup-warm budget and bootstrap mode, which commits the
-           * rebuilt schema and lets the hot chain resume from this block.
-           */
-          const bootstrapBudgetMs = Math.max(
-            stateBudgetMs,
-            this.deps.startupWarmBudgetMs ?? 300_000,
-          );
-          const bootstrapDeadlineAtMs = Date.now() + bootstrapBudgetMs;
-          const bootstrapFamilySettleDeadlineAtMs = Math.min(
-            bootstrapDeadlineAtMs,
-            Math.max(
-              Date.now(),
-              bootstrapDeadlineAtMs - publicationReserveMs,
-            ),
-          );
-          console.log(
-            `[searcher/blockscan-nminus1-state] ${JSON.stringify({
-              sourceBlock: nextBlock,
-              generation,
-              status: "bootstrap-escalated",
-              budgetMs: bootstrapBudgetMs,
-              wallMs: Math.max(0, Date.now() - generationStartedAtMs),
-              armWallMs: Math.max(0, Date.now() - startedAtMs),
-            })}`,
-          );
           prepared = await input.coordinator.prepareCoarsePricing({
             graph: anchoredGraph,
-            deadlineAtMs: bootstrapDeadlineAtMs,
-            familySettleDeadlineAtMs: bootstrapFamilySettleDeadlineAtMs,
-            laggingTopologyRefreshMode: "startup-bootstrap",
+            touchedPools: producerTouched,
             canonicalActivity: producerActivity,
+            deadlineAtMs: generationDeadlineAtMs,
+            /*
+             * Family-local deadlines must settle before the generation
+             * deadline; the outer abort wins the same instant as a slow family.
+             */
+            familySettleDeadlineAtMs: generationFamilySettleDeadlineAtMs,
+            laggingTopologyRefreshMode: "proof-scoped",
+            pricingCallBackend: producerPricingBackend,
             signal: this.deps.runtimeAbort.signal,
           });
-          bootstrapEscalated = true;
-        }
-        result = prepared;
+          if (prepared.status === "incomplete") {
+            /*
+             * A topology change (e.g. the overnight universe reindex) invalidates
+             * every family's compiled static schema. The hot 80s budget cannot
+             * finish the full recompile + bootstrap direct read, so the chain
+             * retries the same block forever with 0 resolved keys. Escalate once
+             * to the startup-warm budget and bootstrap mode, which commits the
+             * rebuilt schema and lets the hot chain resume from this block.
+             */
+            const bootstrapBudgetMs = Math.max(
+              stateBudgetMs,
+              this.deps.startupWarmBudgetMs ?? 300_000,
+            );
+            const bootstrapDeadlineAtMs = Date.now() + bootstrapBudgetMs;
+            const bootstrapFamilySettleDeadlineAtMs = Math.min(
+              bootstrapDeadlineAtMs,
+              Math.max(
+                Date.now(),
+                bootstrapDeadlineAtMs - publicationReserveMs,
+              ),
+            );
+            console.log(
+              `[searcher/blockscan-nminus1-state] ${JSON.stringify({
+                sourceBlock: nextBlock,
+                generation,
+                status: "bootstrap-escalated",
+                budgetMs: bootstrapBudgetMs,
+                wallMs: Math.max(0, Date.now() - generationStartedAtMs),
+                armWallMs: Math.max(0, Date.now() - startedAtMs),
+              })}`,
+            );
+            prepared = await input.coordinator.prepareCoarsePricing({
+              graph: anchoredGraph,
+              pricingCallBackend: producerPricingBackend,
+              deadlineAtMs: bootstrapDeadlineAtMs,
+              familySettleDeadlineAtMs: bootstrapFamilySettleDeadlineAtMs,
+              laggingTopologyRefreshMode: "startup-bootstrap",
+              canonicalActivity: producerActivity,
+              signal: this.deps.runtimeAbort.signal,
+            });
+            bootstrapEscalated = true;
+          }
+          result = prepared;
         } finally {
-          this.producerCriticalActive = false;
+          try {
+            try {
+              await producerPricingBackend.closeAndDrain(
+                this.deps.runtimeAbort.signal.reason ??
+                  new Error(`block-scan producer generation ${generation} completed`),
+              );
+            } finally {
+              console.log(
+                `[searcher/blockscan-producer-call-stats] ${JSON.stringify({
+                  sourceBlock: anchoredGraph.sourceBlock,
+                  sourceBlockHash: anchoredGraph.sourceBlockHash,
+                  generation,
+                  wallMs: Math.max(0, Date.now() - generationStartedAtMs),
+                  ...producerPricingBackend.stats(),
+                })}`,
+              );
+            }
+          } finally {
+            this.producerCriticalActive = false;
+          }
         }
         const recoveryPending = blockScanStateHasRecoveryBacklog(
           prepared,

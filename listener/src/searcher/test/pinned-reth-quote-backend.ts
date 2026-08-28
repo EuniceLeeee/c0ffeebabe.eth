@@ -37,7 +37,10 @@ interface StubState {
   batches: Array<Array<Record<string, unknown>>>;
   singles: Array<Record<string, unknown>>;
   failNextBatch: boolean;
+  failAllBatches: boolean;
   holdResponses: boolean;
+  activeBatches: number;
+  maxActiveBatches: number;
 }
 
 function startStub(): Promise<{ server: Server; state: StubState; port: number }> {
@@ -45,7 +48,10 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
     batches: [],
     singles: [],
     failNextBatch: false,
+    failAllBatches: false,
     holdResponses: false,
+    activeBatches: 0,
+    maxActiveBatches: 0,
   };
   const server = createServer((req, res) => {
     const chunks: Buffer[] = [];
@@ -68,33 +74,40 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
         }
       };
       if (Array.isArray(body)) {
-        if (state.failNextBatch) {
-          state.failNextBatch = false;
+        if (state.failNextBatch || state.failAllBatches) {
+          if (state.failNextBatch) state.failNextBatch = false;
+          state.batches.push(body);
           res.writeHead(500, { "content-type": "application/json" });
           res.end(JSON.stringify({ error: "boom" }));
           return;
         }
         state.batches.push(body);
-        maybeHold(() =>
-          reply(body.map((entry) => {
-            const item = entry as { id?: unknown; params?: unknown[] };
-            const tx = Array.isArray(item.params)
-              ? item.params[0] as { to?: unknown }
-              : null;
-            if (tx?.to === REVERT) {
-              return {
-                jsonrpc: "2.0",
-                id: item.id,
-                error: {
-                  code: 3,
-                  message: "execution reverted",
-                  data: REVERT_DATA,
-                },
-              };
-            }
-            return { jsonrpc: "2.0", id: item.id, result: RESULT };
-          })),
+        state.activeBatches++;
+        state.maxActiveBatches = Math.max(
+          state.maxActiveBatches,
+          state.activeBatches,
         );
+        maybeHold(() => {
+          state.activeBatches--;
+          reply(body.map((entry) => {
+              const item = entry as { id?: unknown; params?: unknown[] };
+              const tx = Array.isArray(item.params)
+                ? item.params[0] as { to?: unknown }
+                : null;
+              if (tx?.to === REVERT) {
+                return {
+                  jsonrpc: "2.0",
+                  id: item.id,
+                  error: {
+                    code: 3,
+                    message: "execution reverted",
+                    data: REVERT_DATA,
+                  },
+                };
+              }
+              return { jsonrpc: "2.0", id: item.id, result: RESULT };
+            }));
+        });
         return;
       }
       const single = body as { id?: unknown };
@@ -246,6 +259,86 @@ async function run(): Promise<void> {
       assert(stats.abortedBatches >= 1, "aborted batch must be counted");
       state.holdResponses = false;
       console.log("[pinned-reth-quote-backend] pass abort + drain: PASS");
+    }
+
+    {
+      const backend = new PinnedRethQuoteBackend(rpcUrl, HASH, {
+        maxBatchSize: 128,
+        maxConcurrentBatches: 4,
+        transportLane: "producer-bulk",
+        scopeLabel: "producer-bulk test",
+        allowSingleCallFallback: false,
+      });
+      const batchesBefore = state.batches.length;
+      state.holdResponses = true;
+      const results = await Promise.all(Array.from({ length: 300 }, (_, index) =>
+        backend.call({
+          to: OK_A,
+          data: `0x${(index + 1).toString(16).padStart(4, "0")}`,
+        })
+      ));
+      assert(
+        results.every((result) => result === RESULT),
+        "producer-bulk concurrent batch results",
+      );
+      const batches = state.batches.slice(batchesBefore);
+      assert(
+        batches.length === 3 &&
+          batches.map((batch) => batch.length).sort((a, b) => a - b)
+            .join(",") === "44,128,128",
+        "producer-bulk uses 128-item physical batches",
+      );
+      assert(
+        state.maxActiveBatches >= 3 && state.maxActiveBatches <= 4,
+        "producer-bulk honors concurrent batch bound",
+      );
+      const stats = backend.stats();
+      assert(
+        stats.lane === "producer-bulk" &&
+          stats.allowSingleCallFallback === false &&
+          stats.batchesSent === 3 &&
+          stats.batchedItems === 300 &&
+          stats.singleCallFallbacks === 0,
+        "producer-bulk stats",
+      );
+      await backend.closeAndDrain();
+      state.holdResponses = false;
+      console.log("[pinned-reth-quote-backend] producer-bulk batching: PASS");
+    }
+
+    {
+      const backend = new PinnedRethQuoteBackend(rpcUrl, HASH, {
+        maxBatchSize: 128,
+        maxConcurrentBatches: 4,
+        transportLane: "producer-bulk",
+        scopeLabel: "producer-bulk failure test",
+        allowSingleCallFallback: false,
+      });
+      state.failNextBatch = true;
+      const singlesBefore = state.singles.length;
+      const settled = await Promise.all([
+        backend.call({ to: OK_A, data: "0x31" }).then(
+          () => null,
+          (error) => error,
+        ),
+        backend.call({ to: OK_B, data: "0x32" }).then(
+          () => null,
+          (error) => error,
+        ),
+      ]);
+      assert(
+        settled.every((error) => error instanceof Error),
+        "producer-bulk failed batch rejects every item",
+      );
+      const stats = backend.stats();
+      assert(
+        stats.batchFailures === 1 &&
+          stats.singleCallFallbacks === 0 &&
+          state.singles.length === singlesBefore,
+        "producer-bulk failure must not add single-call fallback requests",
+      );
+      await backend.closeAndDrain();
+      console.log("[pinned-reth-quote-backend] producer-bulk failure policy: PASS");
     }
 
     {

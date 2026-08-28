@@ -465,10 +465,20 @@ const carryNextGraph = createVerifiedGraphView({
   familyIdForEdge: () => publication.familyId,
   edges: parallelStartupView.edges,
 });
+const producerPricingBackend = Object.freeze({
+  call: async () => {
+    throw new Error("producer pricing backend should be transport-only in this test");
+  },
+});
 const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
   async (request: StrictSessionRequest) => {
     assert.equal(request.purpose, "coarse-pricing");
     assert.deepEqual(request.fundingAssets, [], "coarse pricing excludes Funding");
+    assert.equal(
+      request.pricingCallBackend,
+      producerPricingBackend,
+      "coarse coordinator forwards its generation-scoped pricing backend",
+    );
     return parallelRoot.createSession({
       source: request.source,
       runtime: runtime(request.source, {
@@ -502,6 +512,7 @@ const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
 );
 const carryBase = await carryBaseCoordinator.prepareCoarsePricing({
   graph: carryBaseGraph,
+  pricingCallBackend: producerPricingBackend,
   deadlineAtMs: Date.now() + 10_000,
 });
 assert.equal(carryBase.status, "complete");
@@ -541,6 +552,7 @@ const edgeB = carryBaseGraph.edges.find((candidate) =>
 const touchedA = new Set([firstParallelTarget]);
 const carried = await carryBaseCoordinator.prepareCoarsePricing({
   graph: carryNextGraph,
+  pricingCallBackend: producerPricingBackend,
   touchedPools: touchedA,
   canonicalActivity: Object.freeze({
     source: carryNextSource,

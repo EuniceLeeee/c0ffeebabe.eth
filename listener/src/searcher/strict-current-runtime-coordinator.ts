@@ -97,6 +97,7 @@ export class StrictCurrentRuntimeCoordinator
     readonly signal?: AbortSignal;
     readonly touchedPools?: ReadonlySet<string>;
     readonly canonicalActivity?: StrictCanonicalActivityProof;
+    readonly pricingCallBackend?: Pick<StateBackend, "call">;
   }): Promise<BlockScanStatePrepareResult> {
     const settleDeadlineAtMs = Math.min(
       input.deadlineAtMs,
@@ -109,6 +110,9 @@ export class StrictCurrentRuntimeCoordinator
       source: sourceFor(input.graph),
       control: controlFor(settleDeadlineAtMs, input.signal),
       fundingAssets: EMPTY_FUNDING_ASSETS,
+      ...(input.pricingCallBackend === undefined
+        ? {}
+        : { pricingCallBackend: input.pricingCallBackend }),
       ...(previous === null || input.touchedPools === undefined
         ? {}
         : { touchedPools: input.touchedPools }),
