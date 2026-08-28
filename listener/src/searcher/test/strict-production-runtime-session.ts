@@ -584,17 +584,105 @@ assert.equal(carriedPricing.coverage.unresolvedEdgeKeys.length, 0);
 assert.ok(carriedPricing.mids.has(edgeA.canonicalEdgeId!));
 assert.ok(carriedPricing.mids.has(edgeB.canonicalEdgeId!));
 
+const carryThirdSource: CanonicalSource = Object.freeze({
+  number: carryNextSource.number + 1,
+  hash: `0x${"65".repeat(32)}`,
+  generation: carryNextSource.generation + 1,
+});
+const carryThirdGraph = createVerifiedGraphView({
+  id: "strict-carry-third",
+  generation: carryThirdSource.generation,
+  sourceBlock: carryThirdSource.number,
+  sourceBlockHash: carryThirdSource.hash,
+  completenessWatermark: carryThirdSource.number,
+  perSourceCoverage: Object.freeze([Object.freeze({
+    familyId: publication.familyId,
+    sourceId: "strict-carry-test",
+    sourceFingerprint: "strict-carry-test-v1",
+    completeThroughBlock: carryThirdSource.number,
+    completeThroughHash: carryThirdSource.hash,
+  })]),
+  familyIdForEdge: () => publication.familyId,
+  edges: parallelStartupView.edges,
+});
+const carriedAgain = await carryBaseCoordinator.prepareCoarsePricing({
+  graph: carryThirdGraph,
+  pricingCallBackend: producerPricingBackend,
+  touchedPools: touchedA,
+  canonicalActivity: Object.freeze({
+    source: carryThirdSource,
+    touchedStateKeys: touchedA,
+    complete: true,
+  }),
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(carriedAgain.status, "complete");
+assert.strictEqual(
+  carriedAgain.snapshot.coverageByEdgeKey,
+  carriedPricing.coverageByEdgeKey,
+  "unchanged coverage categories reuse the prior coverage map",
+);
+assert.strictEqual(
+  carriedAgain.snapshot.pricingStateKeyByEdgeKey,
+  carriedPricing.pricingStateKeyByEdgeKey,
+  "unchanged topology reuses the prior state-key index",
+);
+assert.strictEqual(
+  carriedAgain.snapshot.pricingFamilyIdByEdgeKey,
+  carriedPricing.pricingFamilyIdByEdgeKey,
+  "unchanged topology reuses the prior Family index",
+);
+assert.strictEqual(
+  carriedAgain.snapshot.pricingProvenanceByEdgeKey,
+  carriedPricing.pricingProvenanceByEdgeKey,
+  "unchanged refreshed/carried classification reuses provenance",
+);
+assert.strictEqual(
+  carriedAgain.snapshot.mids.get(edgeB.canonicalEdgeId!),
+  carriedPricing.mids.get(edgeB.canonicalEdgeId!),
+  "a clean carried mid is reused directly",
+);
+assert.notStrictEqual(
+  carriedAgain.snapshot.mids,
+  carriedPricing.mids,
+  "the refreshed A entry still publishes a new delta map",
+);
+
+await carryBaseCoordinator.resetDynamicStateForReplay();
+const fullRebuild = await carryBaseCoordinator.prepareCoarsePricing({
+  graph: carryThirdGraph,
+  pricingCallBackend: producerPricingBackend,
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(fullRebuild.status, "complete");
+assert.deepEqual(
+  [...fullRebuild.snapshot.coverageByEdgeKey.entries()],
+  [...carriedAgain.snapshot.coverageByEdgeKey.entries()],
+  "delta publication preserves the full coverage result",
+);
+for (const candidate of [edgeA, edgeB]) {
+  assert.equal(
+    fullRebuild.snapshot.mids.get(candidate.canonicalEdgeId!)?.mid,
+    carriedAgain.snapshot.mids.get(candidate.canonicalEdgeId!)?.mid,
+    "delta publication preserves full-rebuild mid values",
+  );
+}
+
 const unavailableCarryCoordinator = new StrictCurrentRuntimeCoordinator(
   async (request: StrictSessionRequest) => parallelRoot.createSession({
     source: request.source,
     runtime: runtime(request.source, {
-      reservesByTarget: new Map([
-        [secondParallelTarget, Object.freeze({
-          reserve0: 0n,
-          reserve1: 1_000_000_000n,
-          blockTimestampLast: 1,
-        })],
-      ]),
+      ...(request.source.number === carryNextSource.number
+        ? {
+            reservesByTarget: new Map([
+              [secondParallelTarget, Object.freeze({
+                reserve0: 0n,
+                reserve1: 1_000_000_000n,
+                blockTimestampLast: 1,
+              })],
+            ]),
+          }
+        : {}),
     }),
     fundingAssets: request.fundingAssets,
     kind: "pricing",
@@ -615,10 +703,10 @@ const unavailableBase = await unavailableCarryCoordinator.prepareCoarsePricing({
 assert.equal(unavailableBase.status, "complete");
 const unavailableNext = await unavailableCarryCoordinator.prepareCoarsePricing({
   graph: carryNextGraph,
-  touchedPools: touchedA,
+  touchedPools: new Set([firstParallelTarget, secondParallelTarget]),
   canonicalActivity: Object.freeze({
     source: carryNextSource,
-    touchedStateKeys: touchedA,
+    touchedStateKeys: new Set([firstParallelTarget, secondParallelTarget]),
     complete: true,
   }),
   deadlineAtMs: Date.now() + 10_000,
@@ -641,6 +729,16 @@ assert.ok(
   ),
 );
 assert.equal(unavailableNext.snapshot.mids.has(edgeB.canonicalEdgeId!), false);
+assert.notStrictEqual(
+  unavailableNext.snapshot.coverageByEdgeKey,
+  unavailableBase.snapshot.coverageByEdgeKey,
+  "a newly unavailable edge updates the coverage delta",
+);
+assert.notStrictEqual(
+  unavailableNext.snapshot.mids,
+  unavailableBase.snapshot.mids,
+  "a newly unavailable edge is deleted from the published mids",
+);
 const sparseSession = sparseCarrySession!;
 assert.equal(
   sparseSession.creationTiming.skippedCleanInstanceCount,
@@ -767,6 +865,11 @@ assert.equal(
   reorg.snapshot.pricingProvenanceByEdgeKey?.get(edgeB.canonicalEdgeId!),
   "unresolved",
   "a reorg/mismatched canonical activity proof cannot authorize carry",
+);
+assert.equal(
+  reorg.snapshot.mids.has(edgeB.canonicalEdgeId!),
+  false,
+  "an unresolved edge is deleted from the published mids",
 );
 
 const failedParallelSession = await parallelRoot.createSession({

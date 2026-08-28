@@ -1201,6 +1201,16 @@ fail-closed gate. Exact scope is derived from the complete canonical edge closur
 `seedEdges` through `requiredEdgeIds`. The exact session must contain every required edge and fails closed
 when any required edge is absent; it does not use an independent touched-pool scope.
 
+The ready generation also owns one static pricing index: route projection, Family ownership, state-key
+identity, and the ready-edge contract are established once and reused across source generations. A steady
+same-topology publication starts from the prior safe snapshot and applies only the current delta: refreshed
+edges replace their mids, untouched compatible edges retain their prior mids, and a newly unavailable or truly
+unresolved edge removes its old mid while publishing its new terminal classification. The resulting maps are
+still dense over the complete ready pricing edge set and are equivalent to a full rebuild; sharing an
+unchanged map is an allocation optimization, never a coverage or fail-closed shortcut. Bootstrap and topology
+changes use full assembly, and all carry decisions still require the source-bound canonical activity proof and
+the Family/state-key/edge-contract checks above.
+
 ### 11.2 Producer transport contract
 
 Each coarse generation owns one source-hash-pinned `producer-bulk` call backend. Pricing `eth_call` work is

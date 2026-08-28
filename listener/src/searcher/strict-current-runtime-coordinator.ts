@@ -67,6 +67,12 @@ export interface StrictCanonicalActivityProof {
   readonly complete: true;
 }
 
+type StrictPricingProvenance =
+  | "refreshed"
+  | "carried"
+  | "unavailable"
+  | "unresolved";
+
 /**
  * Atomic producer snapshot built only from one current-source strict session.
  * It intentionally implements the temporary scanner result shape while
@@ -282,6 +288,7 @@ function buildStrictPricingSnapshot(
   assertSessionGraphSource(session, graph);
   const sessionCoveredEdgeIds = new Set(session.edges.map(blockScanEdgeKey));
   const pricingIndex = session.pricingIndex();
+  const graphFingerprint = strictGraphPublicationFingerprint(graph);
   if (
     pricingIndex.expectedEdgeKeys.length !== graph.scannerEdgeCount ||
     pricingIndex.expectedEdgeKeyHash !== graph.scannerEdgeKeyHash ||
@@ -296,14 +303,85 @@ function buildStrictPricingSnapshot(
       edge,
     ] as const),
   );
-  const mids = new Map<string, RouteVenueMid>();
-  const coverageByEdgeKey = new Map<string, StateKeyCoverage>();
-  const pricingProvenanceByEdgeKey = new Map<
-    string,
-    "refreshed" | "carried" | "unavailable" | "unresolved"
-  >();
-  const pricingStateKeyByEdgeKey = new Map<string, string>();
-  const pricingFamilyIdByEdgeKey = new Map<string, string>();
+  /*
+   * A strict ready Graph is immutable between source generations. Once that
+   * publication fingerprint and the expected edge set are unchanged, retain
+   * the previous maps and delta only refreshed/status-changing entries. A
+   * bootstrap or topology change uses the full assembly below; no carry is
+   * authorized merely because a map happens to be available.
+   */
+  const previous = input.previous;
+  const canDeltaPublish = previous !== null &&
+    strictGraphPublicationFingerprint(previous.graph) === graphFingerprint &&
+    previous.coverage.expectedEdgeKeys.length === graph.scannerEdgeCount &&
+    previous.coverage.expectedEdgeKeyHash === graph.scannerEdgeKeyHash &&
+    previous.coverageByEdgeKey.size === graph.scannerEdgeCount &&
+    previous.pricingProvenanceByEdgeKey !== undefined &&
+    previous.pricingProvenanceByEdgeKey.size === graph.scannerEdgeCount &&
+    previous.pricingStateKeyByEdgeKey !== undefined &&
+    previous.pricingStateKeyByEdgeKey.size === graph.scannerEdgeCount &&
+    previous.pricingFamilyIdByEdgeKey !== undefined &&
+    previous.pricingFamilyIdByEdgeKey.size === graph.scannerEdgeCount;
+  const previousForDelta = canDeltaPublish ? previous : null;
+  const fullMids = canDeltaPublish ? null : new Map<string, RouteVenueMid>();
+  const midUpdates: [string, RouteVenueMid][] = [];
+  const midRemovals: string[] = [];
+  const fullCoverageByEdgeKey = canDeltaPublish
+    ? null
+    : new Map<string, StateKeyCoverage>();
+  const coverageUpdates: [string, StateKeyCoverage][] = [];
+  const fullPricingProvenanceByEdgeKey = canDeltaPublish
+    ? null
+    : new Map<string, StrictPricingProvenance>();
+  const pricingProvenanceUpdates: [string, StrictPricingProvenance][] = [];
+  const fullPricingStateKeyByEdgeKey = canDeltaPublish
+    ? null
+    : new Map<string, string>();
+  const fullPricingFamilyIdByEdgeKey = canDeltaPublish
+    ? null
+    : new Map<string, string>();
+  const recordCoverage = (
+    edgeKey: string,
+    coverage: StateKeyCoverage,
+  ): void => {
+    if (canDeltaPublish) {
+      const previousCoverage = previousForDelta!.coverageByEdgeKey.get(edgeKey);
+      if (!sameStateKeyCoverage(previousCoverage, coverage)) {
+        coverageUpdates.push([edgeKey, coverage]);
+      }
+      return;
+    }
+    fullCoverageByEdgeKey!.set(edgeKey, coverage);
+  };
+  const recordProvenance = (
+    edgeKey: string,
+    provenance: StrictPricingProvenance,
+  ): void => {
+    if (canDeltaPublish) {
+      if (
+        previousForDelta!.pricingProvenanceByEdgeKey!.get(edgeKey) !==
+          provenance
+      ) {
+        pricingProvenanceUpdates.push([edgeKey, provenance]);
+      }
+      return;
+    }
+    fullPricingProvenanceByEdgeKey!.set(edgeKey, provenance);
+  };
+  const recordMid = (edgeKey: string, mid: RouteVenueMid): void => {
+    if (canDeltaPublish) {
+      if (previousForDelta!.mids.get(edgeKey) !== mid) {
+        midUpdates.push([edgeKey, mid]);
+      }
+      return;
+    }
+    fullMids!.set(edgeKey, mid);
+  };
+  const removeMid = (edgeKey: string): void => {
+    if (canDeltaPublish && previousForDelta!.mids.has(edgeKey)) {
+      midRemovals.push(edgeKey);
+    }
+  };
   const familyIds = new Set<string>();
   const incompleteFamilyIds = new Set<string>();
   const refreshedEdgeKeys: string[] = [];
@@ -331,8 +409,10 @@ function buildStrictPricingSnapshot(
       }
     }
     familyIds.add(familyId);
-    pricingStateKeyByEdgeKey.set(edgeKey, stateKey);
-    pricingFamilyIdByEdgeKey.set(edgeKey, familyId);
+    if (!canDeltaPublish) {
+      fullPricingStateKeyByEdgeKey!.set(edgeKey, stateKey);
+      fullPricingFamilyIdByEdgeKey!.set(edgeKey, familyId);
+    }
     const current = covered
       ? session.currentPricingForEdge(edge)
       : null;
@@ -348,20 +428,21 @@ function buildStrictPricingSnapshot(
         familyId,
       });
       if (carried?.kind === "priced") {
-        mids.set(edgeKey, Object.freeze({
-          ...carried.mid,
-          edges: [edge],
-        }));
+        const mid = canDeltaPublish
+          ? previousForDelta!.mids.get(edgeKey) ?? strictMidForEdge(carried.mid, edge)
+          : strictMidForEdge(carried.mid, edge);
+        recordMid(edgeKey, mid);
         resolvedEdgeKeys.push(edgeKey);
         carriedEdgeKeys.push(edgeKey);
-        pricingProvenanceByEdgeKey.set(edgeKey, "carried");
-        coverageByEdgeKey.set(edgeKey, Object.freeze({ status: "resolved" as const }));
+        recordProvenance(edgeKey, "carried");
+        recordCoverage(edgeKey, Object.freeze({ status: "resolved" as const }));
         continue;
       }
       if (carried?.kind === "unavailable") {
         unavailableEdgeKeys.push(edgeKey);
-        pricingProvenanceByEdgeKey.set(edgeKey, "unavailable");
-        coverageByEdgeKey.set(edgeKey, Object.freeze({
+        removeMid(edgeKey);
+        recordProvenance(edgeKey, "unavailable");
+        recordCoverage(edgeKey, Object.freeze({
           status: "rejected" as const,
           reason: carried.reason,
         }));
@@ -369,20 +450,23 @@ function buildStrictPricingSnapshot(
       }
       unresolvedEdgeKeys.push(edgeKey);
       incompleteFamilyIds.add(familyId);
-      pricingProvenanceByEdgeKey.set(edgeKey, "unresolved");
-      coverageByEdgeKey.set(edgeKey, Object.freeze({
+      const reason = input.previous === null
+        ? "bootstrap-missing-current-pricing"
+        : "no-compatible-carry-base";
+      removeMid(edgeKey);
+      recordProvenance(edgeKey, "unresolved");
+      recordCoverage(edgeKey, Object.freeze({
         status: "unresolved" as const,
-        reason: input.previous === null
-          ? "bootstrap-missing-current-pricing"
-          : "no-compatible-carry-base",
+        reason,
       }));
       continue;
     }
     if (current.status === "unresolved") {
       unresolvedEdgeKeys.push(edgeKey);
       incompleteFamilyIds.add(familyId);
-      pricingProvenanceByEdgeKey.set(edgeKey, "unresolved");
-      coverageByEdgeKey.set(edgeKey, Object.freeze({
+      removeMid(edgeKey);
+      recordProvenance(edgeKey, "unresolved");
+      recordCoverage(edgeKey, Object.freeze({
         status: "unresolved" as const,
         reason: current.reason,
       }));
@@ -390,8 +474,9 @@ function buildStrictPricingSnapshot(
     }
     if (current.status === "behavior-proven-unavailable") {
       unavailableEdgeKeys.push(edgeKey);
-      pricingProvenanceByEdgeKey.set(edgeKey, "unavailable");
-      coverageByEdgeKey.set(edgeKey, Object.freeze({
+      removeMid(edgeKey);
+      recordProvenance(edgeKey, "unavailable");
+      recordCoverage(edgeKey, Object.freeze({
         status: "rejected" as const,
         reason: current.reason,
       }));
@@ -399,12 +484,9 @@ function buildStrictPricingSnapshot(
     }
     resolvedEdgeKeys.push(edgeKey);
     refreshedEdgeKeys.push(edgeKey);
-    pricingProvenanceByEdgeKey.set(edgeKey, "refreshed");
-    coverageByEdgeKey.set(edgeKey, Object.freeze({ status: "resolved" as const }));
-    mids.set(edgeKey, Object.freeze({
-      ...current.mid,
-      edges: [edge],
-    }));
+    recordProvenance(edgeKey, "refreshed");
+    recordCoverage(edgeKey, Object.freeze({ status: "resolved" as const }));
+    recordMid(edgeKey, strictMidForEdge(current.mid, edge));
   }
   expectedEdgeKeys.sort();
   resolvedEdgeKeys.sort();
@@ -412,6 +494,10 @@ function buildStrictPricingSnapshot(
   unresolvedEdgeKeys.sort();
   refreshedEdgeKeys.sort();
   carriedEdgeKeys.sort();
+  const expectedEdgeKeyHash = exactSetHash(expectedEdgeKeys);
+  const resolvedEdgeKeyHash = exactSetHash(resolvedEdgeKeys);
+  const unavailableEdgeKeyHash = exactSetHash(unavailableEdgeKeys);
+  const unresolvedEdgeKeyHash = exactSetHash(unresolvedEdgeKeys);
   if (
     refreshedEdgeKeys.length + carriedEdgeKeys.length +
         unavailableEdgeKeys.length + unresolvedEdgeKeys.length !==
@@ -421,10 +507,53 @@ function buildStrictPricingSnapshot(
   }
   if (
     expectedEdgeKeys.length !== graph.scannerEdgeCount ||
-    exactSetHash(expectedEdgeKeys) !== graph.scannerEdgeKeyHash
+    expectedEdgeKeyHash !== graph.scannerEdgeKeyHash
   ) {
     throw new Error("strict pricing edge partition differs from ready Graph");
   }
+  const coverageMapsUnchanged = canDeltaPublish &&
+    previousForDelta!.coverage.expectedEdgeKeyHash ===
+      expectedEdgeKeyHash &&
+    previousForDelta!.coverage.resolvedEdgeKeyHash ===
+      resolvedEdgeKeyHash &&
+    previousForDelta!.coverage.unavailableEdgeKeyHash ===
+      unavailableEdgeKeyHash &&
+    previousForDelta!.coverage.unresolvedEdgeKeyHash ===
+      unresolvedEdgeKeyHash &&
+    coverageUpdates.length === 0;
+  const coverageByEdgeKey = coverageMapsUnchanged
+    ? previousForDelta!.coverageByEdgeKey
+    : canDeltaPublish
+      ? deltaMap(previousForDelta!.coverageByEdgeKey, coverageUpdates, [])
+      : fullCoverageByEdgeKey!;
+  const mids = canDeltaPublish
+    ? deltaMap(previousForDelta!.mids, midUpdates, midRemovals)
+    : fullMids!;
+  const pricingProvenanceByEdgeKey = canDeltaPublish
+    ? deltaMap(
+        previousForDelta!.pricingProvenanceByEdgeKey!,
+        pricingProvenanceUpdates,
+        [],
+      )
+    : fullPricingProvenanceByEdgeKey!;
+  const pricingStateKeyByEdgeKey = canDeltaPublish
+    ? previousForDelta!.pricingStateKeyByEdgeKey!
+    : fullPricingStateKeyByEdgeKey!;
+  const pricingFamilyIdByEdgeKey = canDeltaPublish
+    ? previousForDelta!.pricingFamilyIdByEdgeKey!
+    : fullPricingFamilyIdByEdgeKey!;
+  const coverageByReadKey = canDeltaPublish &&
+      previousForDelta!.coverageByReadKey.size === 0
+    ? previousForDelta!.coverageByReadKey
+    : new Map();
+  const freshnessByReadKey = canDeltaPublish &&
+      previousForDelta!.freshnessByReadKey.size === 0
+    ? previousForDelta!.freshnessByReadKey
+    : new Map();
+  const stateByStateKey = canDeltaPublish &&
+      previousForDelta!.stateByStateKey.size === 0
+    ? previousForDelta!.stateByStateKey
+    : new Map();
   const coverage: BlockScanStateCoverage = Object.freeze({
     expectedStateKeys: Object.freeze([]),
     resolvedStateKeys: Object.freeze([]),
@@ -442,10 +571,10 @@ function buildStrictPricingSnapshot(
     expectedReadKeyHash: exactSetHash([]),
     resolvedReadKeyHash: exactSetHash([]),
     unresolvedReadKeyHash: exactSetHash([]),
-    expectedEdgeKeyHash: exactSetHash(expectedEdgeKeys),
-    resolvedEdgeKeyHash: exactSetHash(resolvedEdgeKeys),
-    unavailableEdgeKeyHash: exactSetHash(unavailableEdgeKeys),
-    unresolvedEdgeKeyHash: exactSetHash(unresolvedEdgeKeys),
+    expectedEdgeKeyHash,
+    resolvedEdgeKeyHash,
+    unavailableEdgeKeyHash,
+    unresolvedEdgeKeyHash,
     refreshedEdgeKeys: Object.freeze(refreshedEdgeKeys),
     carriedEdgeKeys: Object.freeze(carriedEdgeKeys),
     refreshedEdgeKeyHash: exactSetHash(refreshedEdgeKeys),
@@ -456,11 +585,11 @@ function buildStrictPricingSnapshot(
     sourceBlock: graph.sourceBlock,
     sourceBlockHash: graph.sourceBlockHash,
     graph,
-    mids: new Map(mids),
-    coverageByReadKey: new Map(),
-    coverageByEdgeKey: new Map(coverageByEdgeKey),
-    freshnessByReadKey: new Map(),
-    stateByStateKey: new Map(),
+    mids,
+    coverageByReadKey,
+    coverageByEdgeKey,
+    freshnessByReadKey,
+    stateByStateKey,
     resolvedFamilyIds: Object.freeze(
       [...familyIds].filter((familyId) =>
         !incompleteFamilyIds.has(familyId)
@@ -470,9 +599,9 @@ function buildStrictPricingSnapshot(
       [...incompleteFamilyIds].sort(),
     ),
     coverage,
-    pricingProvenanceByEdgeKey: new Map(pricingProvenanceByEdgeKey),
-    pricingStateKeyByEdgeKey: new Map(pricingStateKeyByEdgeKey),
-    pricingFamilyIdByEdgeKey: new Map(pricingFamilyIdByEdgeKey),
+    pricingProvenanceByEdgeKey,
+    pricingStateKeyByEdgeKey,
+    pricingFamilyIdByEdgeKey,
     laneTelemetry: Object.freeze([]),
     familyTelemetry: Object.freeze([]),
   });
@@ -493,6 +622,47 @@ function completePricingResult(
     familyTelemetry: Object.freeze([]),
     snapshot,
   });
+}
+
+function strictGraphPublicationFingerprint(graph: VerifiedGraphView): string {
+  return [
+    graph.orderedEdgeHash,
+    graph.metadataHash,
+    graph.ownershipHash,
+    String(graph.scannerEdgeCount),
+    graph.scannerEdgeKeyHash,
+  ].join("\u001f");
+}
+
+function strictMidForEdge(
+  mid: RouteVenueMid,
+  edge: VerifiedGraphView["edges"][number],
+): RouteVenueMid {
+  return Object.freeze({
+    ...mid,
+    edges: [edge],
+  });
+}
+
+function sameStateKeyCoverage(
+  left: StateKeyCoverage | undefined,
+  right: StateKeyCoverage,
+): boolean {
+  if (left === undefined || left.status !== right.status) return false;
+  if (right.status === "resolved") return true;
+  return "reason" in left && left.reason === right.reason;
+}
+
+function deltaMap<K, V>(
+  previous: ReadonlyMap<K, V>,
+  updates: readonly (readonly [K, V])[],
+  removals: readonly K[],
+): ReadonlyMap<K, V> {
+  if (updates.length === 0 && removals.length === 0) return previous;
+  const next = new Map(previous);
+  for (const [key, value] of updates) next.set(key, value);
+  for (const key of removals) next.delete(key);
+  return next;
 }
 
 function compatibleCarryForEdge(input: {
